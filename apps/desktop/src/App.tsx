@@ -59,6 +59,13 @@ import {
   rememberStage6Context,
   type Stage6MemoryInspector,
 } from "./runtime/stage6Memory";
+import {
+  applyStage7ProjectionStatuses,
+  createStage7BackupSnapshot,
+  getArtifactContent,
+  getObsidianArtifact,
+  type Stage7BackupSnapshot,
+} from "./runtime/stage7Backup";
 import type {
   AgentProfile,
   BackupProjection,
@@ -477,6 +484,28 @@ export function App() {
       }),
     [codingPacketState, conversationMessages, eventLog, memoryRecords, runtimeSnapshotState.updatedAt, selectedProvider],
   );
+  const backupSnapshot = useMemo(
+    () =>
+      createStage7BackupSnapshot({
+        messages: conversationMessages,
+        packet: codingPacketState,
+        events: eventLog,
+        projections: backupProjectionsState,
+        runtime: runtimeSnapshotState,
+        agentRun: agentRunState,
+        memoryInspector,
+        createdAt: runtimeSnapshotState.updatedAt,
+      }),
+    [
+      agentRunState,
+      backupProjectionsState,
+      codingPacketState,
+      conversationMessages,
+      eventLog,
+      memoryInspector,
+      runtimeSnapshotState,
+    ],
+  );
 
   function appendEvent<T>(type: string, payload: T) {
     const event = createDesktopEvent(type, payload);
@@ -609,31 +638,46 @@ export function App() {
     });
   }
 
-  function handleExportObsidianProjection() {
-    const markdown = renderObsidianMarkdown({
+  function handleExportBackupProjections() {
+    const snapshot = createStage7BackupSnapshot({
       messages: conversationMessages,
       packet: codingPacketState,
       events: eventLog,
+      projections: backupProjectionsState,
+      runtime: runtimeSnapshotState,
+      agentRun: agentRunState,
+      memoryInspector,
     });
+    const obsidianArtifact = getObsidianArtifact(snapshot);
+    const markdown =
+      getArtifactContent(snapshot, obsidianArtifact?.id) ||
+      renderObsidianMarkdown({
+        messages: conversationMessages,
+        packet: codingPacketState,
+        events: eventLog,
+      });
 
     setObsidianMarkdownPreview(markdown);
-    setBackupProjectionsState((projections) =>
-      projections.map((projection) =>
-        projection.target === "obsidian"
-          ? {
-              ...projection,
-              status: "synced",
-              lastSyncedAt: new Date().toISOString(),
-              redactionApplied: true,
-            }
-          : projection,
-      ),
-    );
-    appendEvent("backup.exported", {
-      target: "obsidian",
-      projection: "markdown",
-      bytes: markdown.length,
-      redaction: "applied",
+    setBackupProjectionsState((projections) => applyStage7ProjectionStatuses(projections, snapshot));
+    appendEvent("backup.projection.generated", {
+      snapshotId: snapshot.id,
+      artifactCount: snapshot.artifacts.length,
+      ready: snapshot.summary.ready,
+      queued: snapshot.summary.queued,
+      blocked: snapshot.summary.blocked,
+      redacted: snapshot.summary.redacted,
+    });
+    appendEvent("backup.queue.updated", {
+      snapshotId: snapshot.id,
+      queue: snapshot.queue.map((item) => ({
+        target: item.target,
+        status: item.status,
+        reason: item.reason,
+      })),
+    });
+    appendEvent("mobile.projection.policy.updated", {
+      snapshotId: snapshot.id,
+      policy: snapshot.mobilePolicy,
     });
   }
 
@@ -1106,7 +1150,7 @@ export function App() {
               agents={agents}
               draftMessage={draftMessage}
               messages={conversationMessages}
-              onBackupProjection={handleExportObsidianProjection}
+              onBackupProjection={handleExportBackupProjections}
               onCreateAgentRun={handleCreateAgentRun}
               onCreateCodingPacket={handleCreateCodingPacket}
               onDraftMessageChange={setDraftMessage}
@@ -1153,7 +1197,12 @@ export function App() {
             onPin={handlePinMemory}
             onRemember={handleRememberCurrentContext}
           />
-          <BackupPanel projectionPreview={obsidianMarkdownPreview} projections={backupProjectionsState} />
+          <BackupPanel
+            onExport={handleExportBackupProjections}
+            projectionPreview={obsidianMarkdownPreview}
+            projections={backupProjectionsState}
+            snapshot={backupSnapshot}
+          />
         </aside>
       </main>
       <TerminalDock agentRun={agentRunState} dgxBridge={dgxBridgeState} events={eventLog} slots={terminalSlots} />
@@ -1768,17 +1817,24 @@ function MemoryInspectorPanel({
 }
 
 function BackupPanel({
+  onExport,
   projectionPreview,
   projections,
+  snapshot,
 }: {
+  onExport: () => void;
   projectionPreview: string;
   projections: BackupProjection[];
+  snapshot: Stage7BackupSnapshot;
 }) {
   return (
     <section className="side-panel compact">
       <header className="panel-title">
         <ShieldCheck size={17} />
         <h2>Backup</h2>
+        <button aria-label="backup projection 생성" className="icon-button" onClick={onExport} type="button">
+          <Archive size={15} />
+        </button>
       </header>
       <div className="backup-grid">
         {projections.map((projection) => (
@@ -1787,6 +1843,37 @@ function BackupPanel({
             <strong>{projection.status}</strong>
           </div>
         ))}
+      </div>
+      <div className="backup-summary">
+        <div>
+          <span>ready</span>
+          <strong>{snapshot.summary.ready}</strong>
+        </div>
+        <div>
+          <span>queued</span>
+          <strong>{snapshot.summary.queued}</strong>
+        </div>
+        <div>
+          <span>redacted</span>
+          <strong>{snapshot.summary.redacted}</strong>
+        </div>
+      </div>
+      <div className="backup-artifact-list" aria-label="Backup artifacts">
+        {snapshot.artifacts.map((artifact) => (
+          <article className={artifact.status} key={artifact.id}>
+            <div>
+              <strong>{artifact.title}</strong>
+              <span>{artifact.destination}</span>
+            </div>
+            <em>{artifact.status}</em>
+            <small>{artifact.format} / {artifact.byteLength} bytes</small>
+          </article>
+        ))}
+      </div>
+      <div className="mobile-policy-list">
+        <span>Mobile</span>
+        <strong>read / approve / stop / retry</strong>
+        <em>terminal, secrets, merge/push denied</em>
       </div>
       <div className="backup-preview">
         <span>Obsidian projection</span>

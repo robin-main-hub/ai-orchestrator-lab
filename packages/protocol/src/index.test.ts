@@ -3,7 +3,9 @@ import {
   codingPacketSchema,
   eventEnvelopeSchema,
   providerProfileSchema,
+  type BackupProjectionArtifact,
   type CodingPacket,
+  type MobileActionPolicy,
   type MemoryTrace,
   type RemoteExecutionRequest,
   type RemoteExecutionResponse,
@@ -121,5 +123,35 @@ describe("protocol schemas", () => {
 
     expect(trace.policy.blockedLayers).toContain("project_memory");
     expect(trace.results[0]?.usedInDecision).toBe(false);
+  });
+
+  it("models backup projection artifacts and mobile restrictions", () => {
+    const artifact: BackupProjectionArtifact = {
+      id: "backup_artifact_1",
+      sessionId: "session_1",
+      target: "obsidian",
+      kind: "session_log",
+      format: "markdown",
+      title: "Session Log",
+      destination: "AI-Orchestrator/projects/lab/sessions/session_1.md",
+      redactionApplied: true,
+      status: "ready",
+      byteLength: 512,
+      createdAt: "2026-05-24T00:00:00.000Z",
+      contentPreview: "# Session",
+    };
+    const mobilePolicy: MobileActionPolicy = {
+      canRead: true,
+      canApprove: true,
+      canStop: true,
+      canRetry: true,
+      canTypeTerminal: false,
+      canViewSecrets: false,
+      canMergeOrPush: false,
+    };
+
+    expect(artifact.redactionApplied).toBe(true);
+    expect(mobilePolicy.canTypeTerminal).toBe(false);
+    expect(mobilePolicy.canViewSecrets).toBe(false);
   });
 });

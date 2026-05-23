@@ -942,6 +942,9 @@ button {
 
 .side-panel.compact {
   align-self: stretch;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+  padding: 10px;
+  overflow: hidden;
 }
 
 .side-panel.memory-panel {
@@ -1372,6 +1375,115 @@ button {
 .backup-cell strong {
   margin-top: 4px;
   font-size: 13px;
+}
+
+.backup-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.backup-summary div {
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #0d0d0c;
+}
+
+.backup-summary span,
+.backup-summary strong {
+  display: block;
+}
+
+.backup-summary span {
+  color: var(--subtle);
+  font-size: 9px;
+}
+
+.backup-summary strong {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.backup-artifact-list {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+  margin-top: 7px;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.backup-artifact-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #002f38;
+}
+
+.backup-artifact-list article.ready {
+  border-color: rgba(84, 224, 160, 0.34);
+}
+
+.backup-artifact-list article.queued {
+  border-color: rgba(216, 198, 93, 0.34);
+}
+
+.backup-artifact-list strong,
+.backup-artifact-list span,
+.backup-artifact-list small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backup-artifact-list strong {
+  display: block;
+  font-size: 11px;
+}
+
+.backup-artifact-list span,
+.backup-artifact-list small {
+  color: var(--subtle);
+  font-size: 9px;
+}
+
+.backup-artifact-list em {
+  color: var(--amber);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.backup-artifact-list small {
+  grid-column: 1 / -1;
+}
+
+.mobile-policy-list {
+  display: grid;
+  gap: 2px;
+  margin-top: 7px;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #141311;
+}
+
+.mobile-policy-list span,
+.mobile-policy-list em {
+  color: var(--subtle);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.mobile-policy-list strong {
+  color: var(--cyan);
+  font-size: 11px;
 }
 
 .backup-preview {
