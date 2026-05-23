@@ -57,11 +57,27 @@ Telegram
 
 - 토론 토글: On이면 Debate Table, Off이면 Conversation Workbench
 - 대화 상대 선택: OpenClaw, Claude, Codex, 로컬 모델, 커스텀 에이전트
+- 대화 상대 roster는 고정 개수가 아니라 사용자가 추가/제거할 수 있어야 한다.
+- 선택된 봇의 provider/model/API/OAuth binding을 대화창 상단에 표시한다.
 - 대화 중 `토론으로 전환` 버튼
 - 대화 중 `코딩 패킷 만들기` 버튼
 - 대화 중 `실행 슬롯으로 보내기` 버튼
 - 대화 중 `메모리에 저장` 버튼
 - 대화 중 `Obsidian/Notion에 백업` 상태 표시
+
+## 대화 대상 봇과 인증 바인딩
+
+Conversation Workbench는 하나의 고정 챗봇이 아니다. 사용자는 우측 Agent roster에서 대화할 봇을 선택하고, 필요하면 새 봇을 추가하거나 제거한다.
+
+각 봇은 실행 바인딩을 가진다.
+
+- `provider_profile`: API key 또는 custom base URL이 연결된 provider profile을 사용한다.
+- `oauth`: OpenClaw, Codex, Claude Desktop 같은 OAuth/session 기반 도구 연결을 사용한다.
+- `local`: Ollama, LM Studio, mock/local runtime처럼 로컬 실행을 사용한다.
+
+UI는 선택된 봇의 이름, 역할, provider/model, credential binding을 대화창 상단에 표시한다. 실제 API key나 OAuth token 원문은 표시하지 않고 `secretRef`, `oauthRef`만 표시한다.
+
+초기 구현에서는 실제 네트워크 호출을 하지 않고 stub 응답으로 Event Store 경계만 확인한다. 이후 provider adapter가 연결되면 선택된 봇의 `authBinding`을 통해 해당 API/OAuth 세션을 resolve한 뒤 메시지를 전송한다.
 
 ## 세션 모델
 

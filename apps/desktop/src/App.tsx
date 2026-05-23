@@ -10,14 +10,17 @@ import {
   GitBranch,
   KeyRound,
   LayoutDashboard,
+  Link2,
   MessageSquare,
   Play,
+  Plus,
   RadioTower,
   Send,
   Server,
   ShieldCheck,
   Smartphone,
   Terminal,
+  Trash2,
 } from "lucide-react";
 import {
   createCodingPacketDraft,
@@ -27,14 +30,17 @@ import {
 } from "@ai-orchestrator/agents";
 import { MockProviderAdapter, createProviderProfile } from "@ai-orchestrator/providers";
 import type {
+  AgentProfile,
   BackupProjection,
   CodingPacket,
+  ConversationMessage,
   ProviderProfile,
   RuntimeSnapshot,
   TerminalSlot,
 } from "@ai-orchestrator/protocol";
 
 type CenterMode = "conversation" | "debate";
+type WorkbenchAgent = AgentProfile;
 
 const now = new Date("2026-05-24T00:20:00.000+09:00").toISOString();
 
@@ -201,12 +207,174 @@ const navItems = [
   { label: "백업", icon: Archive, active: false },
 ];
 
+const seededAgentProfiles: WorkbenchAgent[] = defaultAgentProfiles.map((agent, index) => {
+  const bindings: Array<Required<Pick<WorkbenchAgent, "providerProfileId" | "modelId" | "authBinding">>> = [
+    {
+      providerProfileId: "provider_mock_local",
+      modelId: "mock-orchestrator",
+      authBinding: {
+        mode: "local",
+        label: "local mock runtime",
+        providerProfileId: "provider_mock_local",
+      },
+    },
+    {
+      providerProfileId: "provider_openai_compat",
+      modelId: "gpt-5.5-pro",
+      authBinding: {
+        mode: "provider_profile",
+        label: "API secretRef",
+        providerProfileId: "provider_openai_compat",
+        secretRefId: "session secret",
+      },
+    },
+    {
+      providerProfileId: "provider_openai_compat",
+      modelId: "gpt-5.5-pro",
+      authBinding: {
+        mode: "oauth",
+        label: "OAuth ref",
+        providerProfileId: "provider_openai_compat",
+        oauthRef: "oauth_codex_placeholder",
+      },
+    },
+    {
+      providerProfileId: "provider_mock_local",
+      modelId: "mock-orchestrator",
+      authBinding: {
+        mode: "local",
+        label: "local executor stub",
+        providerProfileId: "provider_mock_local",
+      },
+    },
+  ];
+
+  return {
+    ...agent,
+    ...bindings[index % bindings.length],
+  };
+});
+
+const initialConversationMessages: ConversationMessage[] = [
+  {
+    id: "message_seed_user",
+    sessionId: "session_desktop_001",
+    role: "user",
+    content: "문서에 맞춰 첫 구현 골격을 만들자. 토론으로 확대할 수 있게 경계도 살려줘.",
+    createdAt: now,
+  },
+  {
+    id: "message_seed_orchestrator",
+    sessionId: "session_desktop_001",
+    role: "assistant",
+    content: "protocol, provider stub, agent runtime stub, desktop board를 먼저 연결하고 실제 모델 호출은 막아둔다.",
+    createdAt: now,
+    metadata: {
+      agentName: "Orchestrator",
+      providerProfileId: "provider_mock_local",
+    },
+  },
+];
+
 export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
+  const [agents, setAgents] = useState<WorkbenchAgent[]>(seededAgentProfiles);
+  const [selectedAgentId, setSelectedAgentId] = useState(seededAgentProfiles[0]?.id ?? "");
+  const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
+  const [draftMessage, setDraftMessage] = useState("");
   const activeProvider = useMemo(
     () => providerProfiles.find((profile) => profile.id === runtimeSnapshot.activeProviderProfileId),
     [],
   );
+  const selectedAgent = useMemo(
+    () => agents.find((agent) => agent.id === selectedAgentId) ?? agents[0],
+    [agents, selectedAgentId],
+  );
+  const selectedProvider = useMemo(
+    () =>
+      providerProfiles.find((profile) => profile.id === selectedAgent?.providerProfileId) ??
+      activeProvider ??
+      providerProfiles[0],
+    [activeProvider, selectedAgent],
+  );
+
+  function handleSendMessage() {
+    const content = draftMessage.trim();
+    if (!content || !selectedAgent || !selectedProvider) {
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    const authLabel = selectedAgent.authBinding?.label ?? "credential pending";
+    const authMode = selectedAgent.authBinding?.mode ?? "provider_profile";
+    const reply =
+      `${selectedAgent.name}가 ${selectedProvider.name} / ${selectedAgent.modelId ?? selectedProvider.defaultModel ?? "model pending"} ` +
+      `(${authMode}: ${authLabel}) 바인딩으로 응답할 준비가 됐어. 지금은 실제 네트워크 호출 없이 Event Store에 남길 대화 stub으로 처리한다.`;
+
+    setConversationMessages((messages) => [
+      ...messages,
+      {
+        id: `message_user_${crypto.randomUUID()}`,
+        sessionId: "session_desktop_001",
+        role: "user",
+        content,
+        createdAt,
+      },
+      {
+        id: `message_agent_${crypto.randomUUID()}`,
+        sessionId: "session_desktop_001",
+        role: "assistant",
+        content: reply,
+        createdAt: new Date().toISOString(),
+        metadata: {
+          agentName: selectedAgent.name,
+          providerProfileId: selectedProvider.id,
+          authMode,
+        },
+      },
+    ]);
+    setDraftMessage("");
+  }
+
+  function handleAddAgent() {
+    const nextIndex = agents.length + 1;
+    const provider = selectedProvider ?? providerProfiles[0];
+    const nextAgent: WorkbenchAgent = {
+      id: `agent_custom_${crypto.randomUUID()}`,
+      name: `Custom Agent ${nextIndex}`,
+      kind: "virtual",
+      role: "builder",
+      providerProfileId: provider?.id,
+      modelId: provider?.defaultModel,
+      soulMode: "off",
+      authBinding: {
+        mode: provider?.kind === "custom" ? "provider_profile" : "oauth",
+        label: provider?.kind === "custom" ? "API secretRef" : "OAuth/API profile",
+        providerProfileId: provider?.id,
+        secretRefId: provider?.secretRef?.id,
+        oauthRef: provider?.kind === "custom" ? undefined : "oauth_pending",
+      },
+      enabled: true,
+      permissionLevel: "read_only",
+    };
+
+    setAgents((currentAgents) => [...currentAgents, nextAgent]);
+    setSelectedAgentId(nextAgent.id);
+  }
+
+  function handleRemoveAgent(agentId: string) {
+    setAgents((currentAgents) => {
+      if (currentAgents.length <= 1) {
+        return currentAgents;
+      }
+
+      const nextAgents = currentAgents.filter((agent) => agent.id !== agentId);
+      if (selectedAgentId === agentId) {
+        setSelectedAgentId(nextAgents[0]?.id ?? "");
+      }
+      return nextAgents;
+    });
+  }
 
   return (
     <div className="app-shell">
@@ -319,14 +487,32 @@ export function App() {
             </div>
           </div>
 
-          {mode === "conversation" ? <ConversationWorkbench /> : <DebateTable />}
+          {mode === "conversation" ? (
+            <ConversationWorkbench
+              draftMessage={draftMessage}
+              messages={conversationMessages}
+              onDraftMessageChange={setDraftMessage}
+              onSendMessage={handleSendMessage}
+              selectedAgent={selectedAgent}
+              selectedProvider={selectedProvider}
+            />
+          ) : (
+            <DebateTable />
+          )}
 
           <CodingPacketPanel packet={codingPacket} />
         </section>
 
         <aside className="right-rail" aria-label="모델과 에이전트 상태">
           <ProviderProfilesPanel profiles={providerProfiles} />
-          <AgentStatePanel />
+          <AgentStatePanel
+            agents={agents}
+            onAddAgent={handleAddAgent}
+            onRemoveAgent={handleRemoveAgent}
+            onSelectAgent={setSelectedAgentId}
+            profiles={providerProfiles}
+            selectedAgentId={selectedAgent?.id}
+          />
           <BackupPanel projections={backupProjections} />
         </aside>
       </main>
@@ -374,21 +560,72 @@ function statusTone(status: RuntimeSnapshot["status"]) {
   return "warn";
 }
 
-function ConversationWorkbench() {
+function ConversationWorkbench({
+  draftMessage,
+  messages,
+  onDraftMessageChange,
+  onSendMessage,
+  selectedAgent,
+  selectedProvider,
+}: {
+  draftMessage: string;
+  messages: ConversationMessage[];
+  onDraftMessageChange: (value: string) => void;
+  onSendMessage: () => void;
+  selectedAgent?: WorkbenchAgent;
+  selectedProvider?: ProviderProfile;
+}) {
+  const authMode = selectedAgent?.authBinding?.mode ?? "provider_profile";
+  const authLabel = selectedAgent?.authBinding?.label ?? "credential pending";
+
   return (
     <section className="workbench-panel">
+      <header className="conversation-agent-bar">
+        <div>
+          <span>현재 대화 상대</span>
+          <strong>{selectedAgent?.name ?? "봇 선택 필요"}</strong>
+          <em>
+            {selectedAgent?.role ?? "agent"} / {selectedProvider?.name ?? "provider pending"}
+          </em>
+        </div>
+        <div className="credential-binding">
+          <Link2 size={15} />
+          <span>{authMode}</span>
+          <strong>{authLabel}</strong>
+        </div>
+      </header>
       <div className="conversation-stream" aria-label="대화 기록" tabIndex={0}>
-        <article className="message user">
-          <span>사용자</span>
-          <p>문서에 맞춰 첫 구현 골격을 만들자. 토론으로 확대할 수 있게 경계도 살려줘.</p>
-        </article>
-        <article className="message assistant">
-          <span>Orchestrator</span>
-          <p>
-            protocol, provider stub, agent runtime stub, desktop board를 먼저 연결하고 실제 모델 호출은 막아둔다.
-          </p>
-        </article>
+        {messages.map((message) => (
+          <article className={`message ${message.role === "user" ? "user" : "assistant"}`} key={message.id}>
+            <span>{messageLabel(message, selectedAgent)}</span>
+            <p>{message.content}</p>
+          </article>
+        ))}
       </div>
+      <form
+        className="chat-composer"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSendMessage();
+        }}
+      >
+        <textarea
+          aria-label="오케스트레이터에게 메시지 보내기"
+          onChange={(event) => onDraftMessageChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              onSendMessage();
+            }
+          }}
+          placeholder={`${selectedAgent?.name ?? "봇"}에게 말 걸기`}
+          value={draftMessage}
+        />
+        <button className="primary-button" disabled={!draftMessage.trim() || !selectedAgent} type="submit">
+          <Send size={16} />
+          보내기
+        </button>
+      </form>
       <div className="action-strip">
         <button type="button">
           <GitBranch size={16} />
@@ -413,6 +650,19 @@ function ConversationWorkbench() {
       </div>
     </section>
   );
+}
+
+function messageLabel(message: ConversationMessage, selectedAgent?: WorkbenchAgent) {
+  if (message.role === "user") {
+    return "사용자";
+  }
+
+  const agentName = message.metadata?.agentName;
+  if (typeof agentName === "string") {
+    return agentName;
+  }
+
+  return selectedAgent?.name ?? "Assistant";
 }
 
 function DebateTable() {
@@ -470,22 +720,55 @@ function ProviderProfilesPanel({ profiles }: { profiles: ProviderProfile[] }) {
   );
 }
 
-function AgentStatePanel() {
+function AgentStatePanel({
+  agents,
+  onAddAgent,
+  onRemoveAgent,
+  onSelectAgent,
+  profiles,
+  selectedAgentId,
+}: {
+  agents: WorkbenchAgent[];
+  onAddAgent: () => void;
+  onRemoveAgent: (agentId: string) => void;
+  onSelectAgent: (agentId: string) => void;
+  profiles: ProviderProfile[];
+  selectedAgentId?: string;
+}) {
   return (
     <section className="side-panel compact">
       <header className="panel-title">
         <Bot size={17} />
         <h2>Agents</h2>
+        <button className="icon-button" onClick={onAddAgent} type="button" aria-label="봇 추가">
+          <Plus size={15} />
+        </button>
       </header>
       <div className="agent-list">
-        {defaultAgentProfiles.map((agent) => (
-          <div className="agent-row" key={agent.id}>
-            <span className={agent.enabled ? "agent-dot enabled" : "agent-dot"} />
-            <strong>{agent.name}</strong>
-            <span>{agent.role}</span>
-            <em>soul:{agent.soulMode}</em>
+        {agents.map((agent) => {
+          const provider = profiles.find((profile) => profile.id === agent.providerProfileId);
+          return (
+          <div className={`agent-row ${agent.id === selectedAgentId ? "selected" : ""}`} key={agent.id}>
+            <button className="agent-select-button" onClick={() => onSelectAgent(agent.id)} type="button">
+              <span className={agent.enabled ? "agent-dot enabled" : "agent-dot"} />
+              <strong>{agent.name}</strong>
+              <span>{agent.role} / {provider?.name ?? "provider pending"}</span>
+              <em>
+                {agent.authBinding?.mode ?? "provider_profile"} / soul:{agent.soulMode}
+              </em>
+            </button>
+            <button
+              aria-label={`${agent.name} 제거`}
+              className="agent-remove-button"
+              disabled={agents.length <= 1}
+              onClick={() => onRemoveAgent(agent.id)}
+              type="button"
+            >
+              <Trash2 size={14} />
+            </button>
           </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
