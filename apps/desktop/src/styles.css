@@ -160,7 +160,7 @@ button {
 
 .right-rail {
   display: grid;
-  grid-template-rows: minmax(170px, 0.95fr) minmax(230px, 1.1fr) auto;
+  grid-template-rows: minmax(128px, 0.52fr) minmax(310px, 1.48fr) auto;
   gap: 12px;
   overflow: hidden;
   border-right: 0;
@@ -470,9 +470,9 @@ button {
 }
 
 .conversation-agent-bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 260px) minmax(170px, 260px);
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
@@ -525,6 +525,17 @@ button {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.conversation-agent-select {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #002f38;
+  color: var(--text);
 }
 
 .conversation-stream {
@@ -720,9 +731,9 @@ button {
 
 .provider-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 8px;
-  padding: 10px;
+  padding: 8px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   background: #141311;
@@ -730,8 +741,7 @@ button {
 
 .provider-row strong,
 .provider-row span,
-.provider-row code,
-.provider-row small {
+.provider-row code {
   min-width: 0;
 }
 
@@ -747,12 +757,6 @@ button {
   grid-column: 1 / -1;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.provider-row small {
-  grid-column: 1 / -1;
-  color: var(--subtle);
-  font-size: 11px;
 }
 
 .provider-row.in-use {
@@ -783,7 +787,7 @@ button {
 
 .agent-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: stretch;
   padding: 0 0 8px;
@@ -831,7 +835,9 @@ button {
 }
 
 .agent-remove-button,
+.agent-rename-button,
 .provider-remove-button,
+.provider-rename-button,
 .icon-button {
   display: grid;
   place-items: center;
@@ -846,17 +852,20 @@ button {
 }
 
 .agent-remove-button,
+.agent-rename-button,
 .provider-remove-button {
   align-self: center;
 }
 
 .agent-remove-button:disabled,
+.agent-rename-button:disabled,
 .provider-remove-button:disabled {
   cursor: not-allowed;
   opacity: 0.35;
 }
 
-.agent-provider-select {
+.agent-provider-select,
+.agent-model-select {
   grid-column: 1 / -1;
   width: 100%;
   min-width: 0;
@@ -866,6 +875,35 @@ button {
   border-radius: 7px;
   background: #002f38;
   color: var(--muted);
+}
+
+.agent-model-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 30px minmax(0, 1fr) 30px;
+  gap: 8px;
+}
+
+.agent-model-select {
+  grid-column: auto;
+}
+
+.model-shift-button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  min-width: 30px;
+  height: 32px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #00313a;
+  color: var(--cyan);
+  cursor: pointer;
+}
+
+.model-shift-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.32;
 }
 
 .agent-dot {
