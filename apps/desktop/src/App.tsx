@@ -40,6 +40,7 @@ import type {
 } from "@ai-orchestrator/protocol";
 
 type CenterMode = "conversation" | "debate";
+type AgentActivityStatus = "idle" | "preparing" | "responding";
 type WorkbenchAgent = AgentProfile;
 
 const now = new Date("2026-05-24T00:20:00.000+09:00").toISOString();
@@ -290,6 +291,7 @@ export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(seededProviderProfiles);
   const [agents, setAgents] = useState<WorkbenchAgent[]>(seededAgentProfiles);
+  const [agentActivityById, setAgentActivityById] = useState<Record<string, AgentActivityStatus>>({});
   const [selectedAgentId, setSelectedAgentId] = useState(seededAgentProfiles[0]?.id ?? "");
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
   const [draftMessage, setDraftMessage] = useState("");
@@ -331,6 +333,7 @@ export function App() {
       `${selectedAgent.name}가 ${selectedProvider.name} / ${selectedAgent.modelId ?? selectedProvider.defaultModel ?? "model pending"} ` +
       `(${authMode}: ${authLabel}) 바인딩으로 응답할 준비가 됐어. 지금은 실제 네트워크 호출 없이 Event Store에 남길 대화 stub으로 처리한다.`;
 
+    setAgentActivity(selectedAgent.id, "preparing");
     setConversationMessages((messages) => [
       ...messages,
       {
@@ -354,6 +357,19 @@ export function App() {
       },
     ]);
     setDraftMessage("");
+    window.setTimeout(() => {
+      setAgentActivity(selectedAgent.id, "responding");
+    }, 250);
+    window.setTimeout(() => {
+      setAgentActivity(selectedAgent.id, "idle");
+    }, 950);
+  }
+
+  function setAgentActivity(agentId: string, status: AgentActivityStatus) {
+    setAgentActivityById((currentStatus) => ({
+      ...currentStatus,
+      [agentId]: status,
+    }));
   }
 
   function handleAddAgent() {
@@ -391,6 +407,10 @@ export function App() {
       if (selectedAgentId === agentId) {
         setSelectedAgentId(nextAgents[0]?.id ?? "");
       }
+      setAgentActivityById((currentStatus) => {
+        const { [agentId]: _removedStatus, ...remainingStatus } = currentStatus;
+        return remainingStatus;
+      });
       return nextAgents;
     });
   }
@@ -602,6 +622,7 @@ export function App() {
           />
           <AgentStatePanel
             agents={agents}
+            agentActivityById={agentActivityById}
             onAddAgent={handleAddAgent}
             onAssignProvider={handleAssignProvider}
             onRemoveAgent={handleRemoveAgent}
@@ -845,6 +866,7 @@ function ProviderProfilesManagerPanel({
 
 function AgentStatePanel({
   agents,
+  agentActivityById,
   onAddAgent,
   onAssignProvider,
   onRemoveAgent,
@@ -853,6 +875,7 @@ function AgentStatePanel({
   selectedAgentId,
 }: {
   agents: WorkbenchAgent[];
+  agentActivityById: Record<string, AgentActivityStatus>;
   onAddAgent: () => void;
   onAssignProvider: (agentId: string, providerId: string) => void;
   onRemoveAgent: (agentId: string) => void;
@@ -872,6 +895,7 @@ function AgentStatePanel({
       <div className="agent-list">
         {agents.map((agent) => {
           const provider = profiles.find((profile) => profile.id === agent.providerProfileId);
+          const activityStatus = agentActivityById[agent.id] ?? "idle";
           const occupiedProviderIds = new Set(
             agents
               .filter((otherAgent) => otherAgent.id !== agent.id)
@@ -881,7 +905,11 @@ function AgentStatePanel({
           return (
             <div className={`agent-row ${agent.id === selectedAgentId ? "selected" : ""}`} key={agent.id}>
             <button className="agent-select-button" onClick={() => onSelectAgent(agent.id)} type="button">
-              <span className={agent.enabled ? "agent-dot enabled" : "agent-dot"} />
+              <span
+                aria-label={`${agent.name} ${activityStatus}`}
+                className={`agent-dot ${agent.enabled ? "enabled" : ""} ${activityStatus}`}
+                title={activityStatus}
+              />
               <strong>{agent.name}</strong>
               <span>{agent.role} / {provider?.name ?? "provider pending"}</span>
               <em>
