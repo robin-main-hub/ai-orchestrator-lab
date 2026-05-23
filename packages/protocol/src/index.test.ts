@@ -4,6 +4,7 @@ import {
   eventEnvelopeSchema,
   providerProfileSchema,
   type CodingPacket,
+  type MemoryTrace,
   type RemoteExecutionRequest,
   type RemoteExecutionResponse,
 } from "./index";
@@ -84,5 +85,41 @@ describe("protocol schemas", () => {
 
     expect(response.status).toBe("blocked");
     expect(response.fallbackMode).toBe("local_cli");
+  });
+
+  it("models memory recall policy and trace visibility", () => {
+    const trace: MemoryTrace = {
+      id: "memory_trace_1",
+      sessionId: "session_1",
+      query: "DGX local fallback",
+      createdAt: "2026-05-24T00:00:00.000Z",
+      policy: {
+        providerProfileId: "provider_reseller",
+        providerTrustLevel: "untrusted",
+        autoRecallAllowed: false,
+        blockedLayers: ["project_memory", "user_memory"],
+        reason: "untrusted provider blocks project/user memory auto recall",
+      },
+      results: [
+        {
+          record: {
+            id: "memory_1",
+            layer: "project_memory",
+            title: "DGX authority",
+            content: "DGX-02 owns the server event store.",
+            sourceChannel: "desktop",
+            trustLevel: "trusted",
+            createdAt: "2026-05-24T00:00:00.000Z",
+            pinned: true,
+          },
+          score: 0.92,
+          usedInDecision: false,
+          reason: "blocked by provider trust policy",
+        },
+      ],
+    };
+
+    expect(trace.policy.blockedLayers).toContain("project_memory");
+    expect(trace.results[0]?.usedInDecision).toBe(false);
   });
 });

@@ -279,6 +279,23 @@ export type RecallResult = {
   reason: string;
 };
 
+export type MemoryRecallPolicy = {
+  providerProfileId?: string;
+  providerTrustLevel: ProviderTrustLevel;
+  autoRecallAllowed: boolean;
+  blockedLayers: MemoryLayer[];
+  reason: string;
+};
+
+export type MemoryTrace = {
+  id: string;
+  sessionId: string;
+  query: string;
+  results: RecallResult[];
+  policy: MemoryRecallPolicy;
+  createdAt: string;
+};
+
 export type MemoryInput = {
   layer: MemoryLayer;
   title: string;
