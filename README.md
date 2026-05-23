@@ -72,6 +72,7 @@ docs/
   13-event-store-permission-redaction.md
   14-product-strategy-vertical-slice.md
   15-agent-topology-and-ingress-guards.md
+  16-codex-implementation-handoff.md
   review-board.md
   research-notes.md
 ```
