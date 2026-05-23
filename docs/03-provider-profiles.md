@@ -16,6 +16,7 @@ export type ProviderProfile = {
   authHeader?: string;
   modelDiscoveryEndpoint?: string;
   defaultModel?: string;
+  trustLevel: "trusted" | "limited" | "untrusted";
   enabled: boolean;
   tags: string[];
 };
@@ -92,6 +93,18 @@ $env:ANTHROPIC_AUTH_TOKEN="sk-..."
 | LM Studio | `GET /v1/models` |
 | Custom | 사용자가 endpoint 직접 지정 |
 
+## Provider Trust
+
+프로바이더마다 신뢰도를 둔다.
+
+| trustLevel | 대상 | 기본 정책 |
+| --- | --- | --- |
+| trusted | 공식 API, 로컬 Ollama/LM Studio | 일반 실행과 memory recall 허용 |
+| limited | 검증된 호환 API, 사용자가 신뢰한 사설 서버 | 민감 메모리 recall은 사용자 확인 후 허용 |
+| untrusted | 리셀러, 출처 불명 base URL, 임시 프록시 | User/Project Memory 자동 전달 차단 |
+
+리셀러/커스텀 base URL은 편의 기능이지만, 프롬프트와 메모리가 외부 프록시에 기록될 수 있다. 앱은 사용자가 해당 프로파일을 만들 때 경고를 표시하고, 기본값을 `limited` 또는 `untrusted`로 둔다.
+
 ## 보안 원칙
 
 - 키는 평문으로 로그에 남기지 않는다.
@@ -100,3 +113,4 @@ $env:ANTHROPIC_AUTH_TOKEN="sk-..."
 - 사용자가 임시/1회용 키라고 표시하면 세션 종료 시 자동 삭제 옵션을 제공한다.
 - 리셀러 키도 정식 프로파일처럼 취급하되, base URL과 헤더 이름을 명확히 표시한다.
 - 붙여넣은 원문 환경변수 블록은 event emit 전 Redaction Layer를 통과한다.
+- `untrusted` provider에는 장기 memory recall을 자동 주입하지 않는다.

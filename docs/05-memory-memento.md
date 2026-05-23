@@ -26,6 +26,30 @@ export type MemoryAPI = {
 };
 ```
 
+## 메모리 신뢰도
+
+모든 memory record에는 출처와 신뢰도를 붙인다. Telegram, 외부 API, 리셀러 provider에서 나온 내용은 기본적으로 `untrusted` 또는 `limited`로 저장한다.
+
+```ts
+export type MemoryRecord = {
+  id: string;
+  content: string;
+  sourceChannel: "desktop" | "telegram" | "mobile" | "api" | "server" | "system";
+  trustLevel: "trusted" | "limited" | "untrusted";
+  projectId?: string;
+  createdAt: string;
+  revisionId: string;
+};
+```
+
+Recall 기본 정책:
+
+- `trusted`: 일반 recall 대상
+- `limited`: 사용자가 허용한 프로젝트/세션에서만 recall
+- `untrusted`: 자동 recall 금지. Memory Curator 또는 사용자 승인 후 승격 가능
+
+이 정책은 Telegram context poisoning과 리셀러 프록시로 인한 장기 메모리 유출을 줄이기 위한 기본 방어선이다.
+
 ## Recall Trace
 
 오케스트레이터는 어떤 기억을 사용했는지 숨기지 않는다.
@@ -44,12 +68,23 @@ export type MemoryAPI = {
 
 - 검색
 - 프로젝트별 필터
+- source channel/trust level 필터
 - 중요도 조정
+- trust level 승격/강등
 - pin/unpin
 - 삭제
 - 병합
 - 잘못된 기억 신고
 
+## Forget 정책
+
+Event Store가 append-only이면 `forget`은 단순 삭제가 아니다.
+
+- 메모리 record는 tombstone 처리한다.
+- projection에서는 해당 내용을 제거하거나 `[FORGOTTEN]`으로 대체한다.
+- 관련 Obsidian/Notion export는 다음 동기화에서 소급 수정한다.
+- secret은 secret storage에서 실제 삭제한다.
+
 ## DGX와 로컬의 관계
 
-DGX가 연결되어 있으면 중앙 Memento 서버를 사용한다. DGX가 끊기면 데스크톱은 마지막으로 동기화된 로컬 캐시를 읽기 전용으로 사용하고, 새 기억은 로컬 pending queue에 쌓는다. 서버가 복구되면 충돌 검사를 거쳐 동기화한다.
+DGX가 연결되어 있으면 중앙 Memento 서버를 사용한다. DGX가 끊기면 데스크톱은 마지막으로 동기화된 로컬 캐시를 읽기 전용으로 사용하고, 새 기억은 로컬 pending queue에 쌓는다. 서버가 복구되면 충돌 검사를 거쳐 동기화한다. 초기 충돌 해결은 복잡한 CRDT 대신 revision id와 last-write-wins, conflict event 기록으로 시작한다.

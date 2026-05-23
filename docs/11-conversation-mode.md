@@ -114,9 +114,11 @@ Conversation Mode에서는 raw transcript 전체를 계속 넣지 않는다. 기
 1. 현재 사용자 메시지
 2. 최근 대화 요약
 3. 작업에 필요한 프로젝트 컨텍스트
-4. 관련 Memento recall 결과
-5. agent soul summary 또는 retrieved soul
+4. 사용자가 허용했거나 오케스트레이터가 제안한 Memento recall 결과
+5. agent soul summary
 6. 긴 과거 transcript 링크
+
+Conversation Mode의 기본값은 `soul: Off` 또는 `soul: Summary`다. `Retrieved`와 `Full`은 사용자가 명시적으로 선택하거나 특정 에이전트 역할이 필요할 때만 사용한다. Recall Trace와 Memory Inspector는 기본 접힘 상태로 두고, 사용자가 클릭할 때 자세히 보여준다.
 
 ## 권한과 안전
 
@@ -127,6 +129,7 @@ Conversation Mode는 편하게 말할 수 있어야 하지만, 실행 권한은 
 - 터미널 실행은 권한 정책에 따름
 - API 키와 토큰은 대화 로그/백업에서 제거
 - Telegram에서 온 명령은 위험 작업 전에 데스크톱 또는 모바일 승인 필요
+- Telegram에서 온 내용은 기본적으로 `untrusted` memory candidate로 저장하고 자동 recall하지 않는다.
 
 ## 결론
 

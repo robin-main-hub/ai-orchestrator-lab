@@ -12,6 +12,7 @@
 - soul은 작업 지시보다 상위의 성향과 판단 기준을 담는다.
 - 프로젝트별 soul과 개인별 soul을 분리한다.
 - soul은 실행마다 통째로 넣지 않고, 필요하면 요약/압축/관련 부분만 주입한다.
+- Conversation Mode 기본값은 soul Off 또는 Summary다.
 - 사용자는 soul을 직접 읽고 편집할 수 있어야 한다.
 - soul은 모델의 실제 의식이 아니라, 일관된 역할 수행을 위한 장기 페르소나 파일이다.
 
@@ -130,3 +131,5 @@ agents/
 ## 결론
 
 `soul.md`는 이 앱의 중요한 차별점이 될 수 있다. 단순히 여러 모델을 병렬 호출하는 것이 아니라, 반복해서 함께 일하는 에이전트들이 각자의 장기 성향을 갖고 프로젝트에 참여하는 형태가 된다.
+
+다만 v0의 필수 경로는 아니다. 먼저 Conversation Workbench, Event Store, Coding Packet, 기록 보기, Obsidian 백업이 작동해야 한다. soul은 그 뒤에 Summary 모드부터 얹고, Full/Retrieved는 고급 설정으로 확장한다.
