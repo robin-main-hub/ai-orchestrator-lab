@@ -72,6 +72,44 @@ const runtimeSnapshot: RuntimeSnapshot = {
       contextWindow: 128_000,
     },
   ],
+  syncTopology: {
+    authorityNodeId: "dgx-02",
+    authorityLabel: "DGX-02",
+    eventStoreMode: "server_authoritative_with_local_outbox",
+    offlineWritePolicy: "append_local_outbox",
+    conflictPolicy: "server_revision_lww_with_conflict_events",
+    clients: [
+      {
+        id: "client_macbook",
+        label: "MacBook",
+        kind: "macbook",
+        status: "online",
+        syncRole: "client_replica",
+        localStore: "sqlite",
+        outboxCount: 0,
+        lastSeenAt: now,
+      },
+      {
+        id: "client_home_pc",
+        label: "Home PC",
+        kind: "desktop_pc",
+        status: "degraded",
+        syncRole: "client_replica",
+        localStore: "sqlite",
+        outboxCount: 2,
+        lastSeenAt: now,
+      },
+      {
+        id: "dgx-02",
+        label: "DGX-02",
+        kind: "server",
+        status: "offline",
+        syncRole: "authority",
+        localStore: "sqlite",
+        outboxCount: 0,
+      },
+    ],
+  },
   activeProviderProfileId: "provider_mock_local",
   recentError: "dgx-02 heartbeat pending",
   updatedAt: now,
@@ -225,6 +263,23 @@ export function App() {
               <span>Memento/장기기억과 로컬 캐시 동기화 상태</span>
               <em className={statusTone(runtimeSnapshot.memorySyncStatus)}>{runtimeSnapshot.memorySyncStatus}</em>
             </div>
+            <div className="sync-authority-note">
+              <strong>Event Store Authority</strong>
+              <span>{runtimeSnapshot.syncTopology.authorityLabel}</span>
+              <em>central</em>
+            </div>
+            <div className="client-sync-list">
+              <span>Client Sync</span>
+              {runtimeSnapshot.syncTopology.clients
+                .filter((client) => client.syncRole === "client_replica")
+                .map((client) => (
+                  <div className="client-sync-row" key={client.id}>
+                    <strong>{client.label}</strong>
+                    <span>{client.localStore} / outbox {client.outboxCount}</span>
+                    <em className={statusTone(client.status)}>{client.status}</em>
+                  </div>
+                ))}
+            </div>
           </section>
         </aside>
 
@@ -292,6 +347,8 @@ function RuntimeStatusBar({ snapshot, providerName }: { snapshot: RuntimeSnapsho
       </div>
       <div className="status-meta">
         <span>{providerName}</span>
+        <span>Data: {snapshot.syncTopology.authorityLabel} authoritative</span>
+        <span>Clients: MacBook / Home PC</span>
         <span>{snapshot.recentError}</span>
       </div>
     </header>

@@ -325,6 +325,30 @@ export type LocalModelRuntime = {
   contextWindow?: number;
 };
 
+export type ClientDeviceKind = "macbook" | "desktop_pc" | "mobile" | "server";
+
+export type SyncRole = "authority" | "client_replica";
+
+export type ClientDevice = {
+  id: string;
+  label: string;
+  kind: ClientDeviceKind;
+  status: RuntimeStatus;
+  syncRole: SyncRole;
+  localStore: "sqlite" | "none";
+  outboxCount: number;
+  lastSeenAt?: string;
+};
+
+export type SyncTopology = {
+  authorityNodeId: string;
+  authorityLabel: string;
+  eventStoreMode: "server_authoritative_with_local_outbox";
+  offlineWritePolicy: "append_local_outbox" | "read_only";
+  conflictPolicy: "server_revision_lww_with_conflict_events" | "manual_review";
+  clients: ClientDevice[];
+};
+
 export type RuntimeSnapshot = {
   status: RuntimeStatus;
   dgxStatus: RuntimeStatus;
@@ -332,6 +356,7 @@ export type RuntimeSnapshot = {
   memorySyncStatus: RuntimeStatus;
   runtimeNodes: RuntimeNode[];
   localModels: LocalModelRuntime[];
+  syncTopology: SyncTopology;
   activeProviderProfileId?: string;
   recentError?: string;
   updatedAt: string;
