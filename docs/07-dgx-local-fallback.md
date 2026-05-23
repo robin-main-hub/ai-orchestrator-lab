@@ -21,6 +21,16 @@
 - 메모리 서버 ping
 - 워크스페이스 실행 권한 확인
 
+## Stage5 구현 경계
+
+현재 구현은 실제 DGX 명령을 실행하지 않고 다음 경계만 먼저 고정한다.
+
+- `RuntimeSnapshot`은 DGX-01, DGX-02, 로컬 모델, MacBook/Home PC client sync 상태를 한 번에 표현한다.
+- `DgxHeartbeat`은 DGX-02 authority가 reachable인지 확인하는 이벤트 단위다.
+- `RemoteExecutionRequest`는 run id, target node, command preview, approval state만 담고 원문 명령 실행은 하지 않는다.
+- `RemoteExecutionResponse`는 approval 전에는 `blocked`, DGX가 죽으면 `fallback_required`, 연결/승인 조건이 맞으면 `queued`로만 표현한다.
+- 데스크톱은 DGX가 unreachable이면 로컬 CLI/local model outbox를 유지하고, 온라인 복구 시 server snapshot을 merge한다.
+
 ## Offline에서 가능한 것
 
 - 로컬 모델로 오케스트레이션
