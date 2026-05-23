@@ -242,6 +242,68 @@ export const permissionRequestSchema = z.object({
 });
 export type PermissionRequest = z.infer<typeof permissionRequestSchema>;
 
+export type ExternalChannel = "telegram" | "openclaw" | "mobile" | "api" | "webhook";
+
+export type IngressAuthorType = "user" | "bot" | "manager" | "system";
+
+export type IngressGuardName =
+  | "shape_unification"
+  | "noise_filter"
+  | "self_response_prevention"
+  | "debounce"
+  | "pii_secret_block"
+  | "guard_logging"
+  | "checklist_injection";
+
+export type IngressGuardStatus = "passed" | "blocked" | "queued" | "skipped";
+
+export type IngressConfidence = "high" | "medium" | "low";
+
+export type IngressEvent = {
+  id: string;
+  channel: ExternalChannel;
+  source: EventSource;
+  sourceTrust: SourceTrust;
+  authorType: IngressAuthorType;
+  rawText: string;
+  normalizedText: string;
+  eventType: "message" | "system_event" | "bot_reply" | "unknown";
+  requestedPermissions: PermissionLevel[];
+  confidence: IngressConfidence;
+  requiresApproval: boolean;
+  redacted: boolean;
+  createdAt: string;
+};
+
+export type IngressGuardStep = {
+  name: IngressGuardName;
+  status: IngressGuardStatus;
+  reason: string;
+};
+
+export type IngressGuardResult = {
+  id: string;
+  inputId: string;
+  accepted: boolean;
+  earlyReturn: boolean;
+  confidence: IngressConfidence;
+  normalizedEvent?: IngressEvent;
+  guardSteps: IngressGuardStep[];
+  approvalState: ApprovalState;
+  reason: string;
+  createdAt: string;
+};
+
+export type ExternalApprovalItem = {
+  id: string;
+  ingressEventId: string;
+  channel: ExternalChannel;
+  summary: string;
+  permissions: PermissionLevel[];
+  state: ApprovalState;
+  createdAt: string;
+};
+
 export const memoryLayerSchema = z.enum([
   "fragment",
   "episode",

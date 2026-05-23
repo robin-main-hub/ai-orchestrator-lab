@@ -5,6 +5,7 @@ import {
   providerProfileSchema,
   type BackupProjectionArtifact,
   type CodingPacket,
+  type IngressGuardResult,
   type MobileActionPolicy,
   type MemoryTrace,
   type RemoteExecutionRequest,
@@ -153,5 +154,49 @@ describe("protocol schemas", () => {
     expect(artifact.redactionApplied).toBe(true);
     expect(mobilePolicy.canTypeTerminal).toBe(false);
     expect(mobilePolicy.canViewSecrets).toBe(false);
+  });
+
+  it("models guarded external ingress before session handoff", () => {
+    const result: IngressGuardResult = {
+      id: "ingress_result_1",
+      inputId: "telegram_input_1",
+      accepted: true,
+      earlyReturn: false,
+      confidence: "low",
+      approvalState: "required",
+      reason: "external command requests terminal execution",
+      createdAt: "2026-05-24T00:00:00.000Z",
+      guardSteps: [
+        {
+          name: "shape_unification",
+          status: "passed",
+          reason: "payload normalized",
+        },
+        {
+          name: "pii_secret_block",
+          status: "queued",
+          reason: "approval required before secret or terminal handling",
+        },
+      ],
+      normalizedEvent: {
+        id: "ingress_event_1",
+        channel: "telegram",
+        source: "telegram",
+        sourceTrust: "untrusted",
+        authorType: "user",
+        rawText: "run pnpm test",
+        normalizedText: "run pnpm test",
+        eventType: "message",
+        requestedPermissions: ["run_safe_commands"],
+        confidence: "low",
+        requiresApproval: true,
+        redacted: false,
+        createdAt: "2026-05-24T00:00:00.000Z",
+      },
+    };
+
+    expect(result.normalizedEvent?.sourceTrust).toBe("untrusted");
+    expect(result.approvalState).toBe("required");
+    expect(result.guardSteps.some((step) => step.name === "pii_secret_block")).toBe(true);
   });
 });
