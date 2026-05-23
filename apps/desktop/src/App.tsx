@@ -5,6 +5,7 @@ import {
   Bot,
   Brain,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Database,
   GitBranch,
@@ -14,6 +15,7 @@ import {
   MessageSquare,
   Play,
   Plus,
+  Pencil,
   RadioTower,
   Send,
   Server,
@@ -34,6 +36,7 @@ import type {
   BackupProjection,
   CodingPacket,
   ConversationMessage,
+  ModelDescriptor,
   ProviderProfile,
   RuntimeSnapshot,
   TerminalSlot,
@@ -42,6 +45,9 @@ import type {
 type CenterMode = "conversation" | "debate";
 type AgentActivityStatus = "idle" | "preparing" | "responding";
 type WorkbenchAgent = AgentProfile;
+type ModelCatalog = Record<string, ModelDescriptor[]>;
+
+const modelWindowSize = 8;
 
 const now = new Date("2026-05-24T00:20:00.000+09:00").toISOString();
 
@@ -154,6 +160,62 @@ const seededProviderProfiles: ProviderProfile[] = [
     trustLevel: "limited",
   }),
 ];
+
+function createModel(providerProfileId: string, id: string, tags: string[] = []): ModelDescriptor {
+  return {
+    id,
+    name: id,
+    providerProfileId,
+    contextWindow: 128_000,
+    supportsStreaming: true,
+    supportsTools: tags.includes("tools"),
+    tags,
+  };
+}
+
+const seededModelCatalog: ModelCatalog = {
+  provider_mock_local: [
+    createModel("provider_mock_local", "mock-orchestrator", ["conversation", "debate"]),
+    createModel("provider_mock_local", "mock-reviewer", ["review"]),
+    createModel("provider_mock_local", "mock-builder", ["coding"]),
+  ],
+  provider_openai_compat: [
+    "gpt-5.5-pro",
+    "gpt-5.5-coder",
+    "gpt-5.5-mini",
+    "gpt-5.5-reasoning",
+    "gpt-5.1-pro",
+    "gpt-5.1-mini",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "o4-mini",
+    "o3",
+    "computer-use-preview",
+    "realtime-preview",
+  ].map((id) => createModel("provider_openai_compat", id, ["openai"])),
+  provider_reseller_custom: [
+    "claude-code-compatible",
+    "claude-opus-reseller",
+    "claude-sonnet-reseller",
+    "deepseek-r1-proxy",
+    "qwen3-coder-proxy",
+    "gemini-proxy",
+    "kimi-k2-proxy",
+    "glm-4.5-proxy",
+    "grok-proxy",
+  ].map((id) => createModel("provider_reseller_custom", id, ["proxy"])),
+  provider_codex_oauth: [
+    "codex-session",
+    "codex-high",
+    "codex-medium",
+    "codex-low",
+    "codex-review",
+    "codex-apply-patch",
+    "codex-browser",
+    "codex-local",
+    "codex-dgx",
+  ].map((id) => createModel("provider_codex_oauth", id, ["oauth"])),
+};
 
 const debateContext: DebateContext = {
   sessionId: "session_desktop_001",
@@ -290,8 +352,10 @@ const initialConversationMessages: ConversationMessage[] = [
 export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(seededProviderProfiles);
+  const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(seededModelCatalog);
   const [agents, setAgents] = useState<WorkbenchAgent[]>(seededAgentProfiles);
   const [agentActivityById, setAgentActivityById] = useState<Record<string, AgentActivityStatus>>({});
+  const [modelWindowStartByAgentId, setModelWindowStartByAgentId] = useState<Record<string, number>>({});
   const [selectedAgentId, setSelectedAgentId] = useState(seededAgentProfiles[0]?.id ?? "");
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
   const [draftMessage, setDraftMessage] = useState("");
@@ -454,6 +518,10 @@ export function App() {
     });
 
     setProviderProfiles((profiles) => [...profiles, nextProvider]);
+    setModelCatalog((catalog) => ({
+      ...catalog,
+      [nextProvider.id]: [createModel(nextProvider.id, nextProvider.defaultModel ?? `custom-model-${nextIndex}`, ["custom"])],
+    }));
   }
 
   function handleRemoveProvider(providerId: string) {
@@ -463,6 +531,36 @@ export function App() {
     }
 
     setProviderProfiles((profiles) => profiles.filter((profile) => profile.id !== providerId));
+    setModelCatalog((catalog) => {
+      const { [providerId]: _removedModels, ...remainingCatalog } = catalog;
+      return remainingCatalog;
+    });
+  }
+
+  function handleRenameProvider(providerId: string) {
+    const provider = providerProfiles.find((profile) => profile.id === providerId);
+    const nextName = window.prompt("Provider 이름", provider?.name ?? "");
+    if (!nextName?.trim()) {
+      return;
+    }
+
+    setProviderProfiles((profiles) =>
+      profiles.map((profile) => (profile.id === providerId ? { ...profile, name: nextName.trim() } : profile)),
+    );
+  }
+
+  function handleRenameAgent(agentId: string) {
+    const agent = agents.find((profile) => profile.id === agentId);
+    const nextName = window.prompt("Agent 이름", agent?.name ?? "");
+    if (!nextName?.trim()) {
+      return;
+    }
+
+    setAgents((currentAgents) =>
+      currentAgents.map((agentProfile) =>
+        agentProfile.id === agentId ? { ...agentProfile, name: nextName.trim() } : agentProfile,
+      ),
+    );
   }
 
   function handleAssignProvider(agentId: string, providerId: string) {
@@ -478,12 +576,38 @@ export function App() {
           ? {
               ...agent,
               providerProfileId: provider.id,
-              modelId: provider.defaultModel,
+              modelId: modelCatalog[provider.id]?.[0]?.id ?? provider.defaultModel,
               authBinding: createAuthBinding(provider),
             }
           : agent,
       ),
     );
+    setModelWindowStartByAgentId((windowStart) => ({
+      ...windowStart,
+      [agentId]: 0,
+    }));
+  }
+
+  function handleAssignModel(agentId: string, modelId: string) {
+    setAgents((currentAgents) =>
+      currentAgents.map((agent) => (agent.id === agentId ? { ...agent, modelId } : agent)),
+    );
+  }
+
+  function handleShiftModelWindow(agentId: string, direction: -1 | 1) {
+    const agent = agents.find((candidate) => candidate.id === agentId);
+    const providerId = agent?.providerProfileId;
+    const models = providerId ? (modelCatalog[providerId] ?? []) : [];
+    const maxStart = Math.max(models.length - modelWindowSize, 0);
+
+    setModelWindowStartByAgentId((windowStart) => {
+      const currentStart = windowStart[agentId] ?? 0;
+      const nextStart = Math.min(Math.max(currentStart + direction * modelWindowSize, 0), maxStart);
+      return {
+        ...windowStart,
+        [agentId]: nextStart,
+      };
+    });
   }
 
   return (
@@ -599,11 +723,14 @@ export function App() {
 
           {mode === "conversation" ? (
             <ConversationWorkbench
+              agents={agents}
               draftMessage={draftMessage}
               messages={conversationMessages}
               onDraftMessageChange={setDraftMessage}
+              onSelectAgent={setSelectedAgentId}
               onSendMessage={handleSendMessage}
               selectedAgent={selectedAgent}
+              selectedAgentId={selectedAgent?.id}
               selectedProvider={selectedProvider}
             />
           ) : (
@@ -616,6 +743,7 @@ export function App() {
         <aside className="right-rail" aria-label="모델과 에이전트 상태">
           <ProviderProfilesManagerPanel
             onAddProvider={handleAddProvider}
+            onRenameProvider={handleRenameProvider}
             onRemoveProvider={handleRemoveProvider}
             profiles={providerProfiles}
             usedProviderIds={usedProviderIds}
@@ -623,10 +751,15 @@ export function App() {
           <AgentStatePanel
             agents={agents}
             agentActivityById={agentActivityById}
+            modelCatalog={modelCatalog}
+            modelWindowStartByAgentId={modelWindowStartByAgentId}
             onAddAgent={handleAddAgent}
+            onAssignModel={handleAssignModel}
             onAssignProvider={handleAssignProvider}
+            onRenameAgent={handleRenameAgent}
             onRemoveAgent={handleRemoveAgent}
             onSelectAgent={setSelectedAgentId}
+            onShiftModelWindow={handleShiftModelWindow}
             profiles={providerProfiles}
             selectedAgentId={selectedAgent?.id}
           />
@@ -678,18 +811,24 @@ function statusTone(status: RuntimeSnapshot["status"]) {
 }
 
 function ConversationWorkbench({
+  agents,
   draftMessage,
   messages,
   onDraftMessageChange,
+  onSelectAgent,
   onSendMessage,
   selectedAgent,
+  selectedAgentId,
   selectedProvider,
 }: {
+  agents: WorkbenchAgent[];
   draftMessage: string;
   messages: ConversationMessage[];
   onDraftMessageChange: (value: string) => void;
+  onSelectAgent: (agentId: string) => void;
   onSendMessage: () => void;
   selectedAgent?: WorkbenchAgent;
+  selectedAgentId?: string;
   selectedProvider?: ProviderProfile;
 }) {
   const authMode = selectedAgent?.authBinding?.mode ?? "provider_profile";
@@ -702,9 +841,22 @@ function ConversationWorkbench({
           <span>현재 대화 상대</span>
           <strong>{selectedAgent?.name ?? "봇 선택 필요"}</strong>
           <em>
-            {selectedAgent?.role ?? "agent"} / {selectedProvider?.name ?? "provider pending"}
+            {selectedAgent?.role ?? "agent"} / {selectedProvider?.name ?? "provider pending"} /{" "}
+            {selectedAgent?.modelId ?? selectedProvider?.defaultModel ?? "model pending"}
           </em>
         </div>
+        <select
+          aria-label="현재 대화 봇 선택"
+          className="conversation-agent-select"
+          onChange={(event) => onSelectAgent(event.target.value)}
+          value={selectedAgentId ?? ""}
+        >
+          {agents.map((agent) => (
+            <option key={agent.id} value={agent.id}>
+              {agent.name} / {agent.modelId ?? "model pending"}
+            </option>
+          ))}
+        </select>
         <div className="credential-binding">
           <Link2 size={15} />
           <span>{authMode}</span>
@@ -816,11 +968,13 @@ function DebateTable() {
 
 function ProviderProfilesManagerPanel({
   onAddProvider,
+  onRenameProvider,
   onRemoveProvider,
   profiles,
   usedProviderIds,
 }: {
   onAddProvider: () => void;
+  onRenameProvider: (providerId: string) => void;
   onRemoveProvider: (providerId: string) => void;
   profiles: ProviderProfile[];
   usedProviderIds: Set<string>;
@@ -845,6 +999,15 @@ function ProviderProfilesManagerPanel({
               </div>
               <span className={`trust ${profile.trustLevel}`}>{profile.trustLevel}</span>
               <button
+                aria-label={`${profile.name} 이름 변경`}
+                className="provider-rename-button"
+                onClick={() => onRenameProvider(profile.id)}
+                title="provider 이름 변경"
+                type="button"
+              >
+                <Pencil size={13} />
+              </button>
+              <button
                 aria-label={`${profile.name} 삭제`}
                 className="provider-remove-button"
                 disabled={isInUse || profiles.length <= 1}
@@ -855,7 +1018,6 @@ function ProviderProfilesManagerPanel({
                 <Trash2 size={13} />
               </button>
               <code>{profile.secretRef?.redactedPreview ?? "secretRef 없음"}</code>
-              <small>{isInUse ? "assigned to agent" : "available"}</small>
             </article>
           );
         })}
@@ -867,19 +1029,29 @@ function ProviderProfilesManagerPanel({
 function AgentStatePanel({
   agents,
   agentActivityById,
+  modelCatalog,
+  modelWindowStartByAgentId,
   onAddAgent,
+  onAssignModel,
   onAssignProvider,
+  onRenameAgent,
   onRemoveAgent,
   onSelectAgent,
+  onShiftModelWindow,
   profiles,
   selectedAgentId,
 }: {
   agents: WorkbenchAgent[];
   agentActivityById: Record<string, AgentActivityStatus>;
+  modelCatalog: ModelCatalog;
+  modelWindowStartByAgentId: Record<string, number>;
   onAddAgent: () => void;
+  onAssignModel: (agentId: string, modelId: string) => void;
   onAssignProvider: (agentId: string, providerId: string) => void;
+  onRenameAgent: (agentId: string) => void;
   onRemoveAgent: (agentId: string) => void;
   onSelectAgent: (agentId: string) => void;
+  onShiftModelWindow: (agentId: string, direction: -1 | 1) => void;
   profiles: ProviderProfile[];
   selectedAgentId?: string;
 }) {
@@ -896,6 +1068,12 @@ function AgentStatePanel({
         {agents.map((agent) => {
           const provider = profiles.find((profile) => profile.id === agent.providerProfileId);
           const activityStatus = agentActivityById[agent.id] ?? "idle";
+          const providerModels = agent.providerProfileId ? (modelCatalog[agent.providerProfileId] ?? []) : [];
+          const modelWindowStart = modelWindowStartByAgentId[agent.id] ?? 0;
+          const visibleModels = providerModels.slice(modelWindowStart, modelWindowStart + modelWindowSize);
+          const hasModelOverflow = providerModels.length > modelWindowSize;
+          const canShiftModelsLeft = hasModelOverflow && modelWindowStart > 0;
+          const canShiftModelsRight = hasModelOverflow && modelWindowStart + modelWindowSize < providerModels.length;
           const occupiedProviderIds = new Set(
             agents
               .filter((otherAgent) => otherAgent.id !== agent.id)
@@ -915,6 +1093,15 @@ function AgentStatePanel({
               <em>
                 {agent.authBinding?.mode ?? "provider_profile"} / soul:{agent.soulMode}
               </em>
+            </button>
+            <button
+              aria-label={`${agent.name} 이름 변경`}
+              className="agent-rename-button"
+              onClick={() => onRenameAgent(agent.id)}
+              title="agent 이름 변경"
+              type="button"
+            >
+              <Pencil size={14} />
             </button>
             <button
               aria-label={`${agent.name} 제거`}
@@ -943,6 +1130,42 @@ function AgentStatePanel({
                 );
               })}
             </select>
+            <div className="agent-model-row">
+              <button
+                aria-label={`${agent.name} model 이전`}
+                className="model-shift-button"
+                disabled={!canShiftModelsLeft}
+                onClick={() => onShiftModelWindow(agent.id, -1)}
+                type="button"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <select
+                aria-label={`${agent.name} model 선택`}
+                className="agent-model-select"
+                disabled={providerModels.length === 0}
+                onChange={(event) => onAssignModel(agent.id, event.target.value)}
+                value={agent.modelId ?? visibleModels[0]?.id ?? ""}
+              >
+                {visibleModels.length === 0 ? (
+                  <option value="">model pending</option>
+                ) : null}
+                {visibleModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                aria-label={`${agent.name} model 다음`}
+                className="model-shift-button"
+                disabled={!canShiftModelsRight}
+                onClick={() => onShiftModelWindow(agent.id, 1)}
+                type="button"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
             </div>
           );
         })}
