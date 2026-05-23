@@ -122,3 +122,14 @@ $env:ANTHROPIC_AUTH_TOKEN="sk-..."
 - agent 선택 영역에서는 등록된 provider 중 하나를 선택할 수 있다.
 - 다른 agent가 이미 점유한 provider는 선택 목록에서 비활성화한다.
 - provider가 부족한 상태에서 agent를 추가하면 credential pending 상태로 만들고, 사용자가 provider를 추가한 뒤 연결한다.
+## Stage10 구현 경계
+
+Stage10에서는 실제 네트워크 호출 전에 credential parser와 mock model discovery를 먼저 연결한다.
+
+- 단순 API key, shell `export`, PowerShell `$env:`, VSCode/Claude Code `settings.json`의 `env` 블록을 파싱한다.
+- 원문 키는 반환하지 않고 `SecretRef.redactedPreview`만 ProviderProfile에 남긴다.
+- custom base URL과 리셀러 endpoint는 기본 `untrusted`로 표시하고 민감 메모리 자동 recall을 막는 경고를 붙인다.
+- `discoverModelsForProfile`은 아직 원격 `/models`를 호출하지 않고 provider kind/trust level 기반의 stub model list를 만든다.
+- 데스크톱 Provider Profiles 패널의 refresh 버튼은 discovery snapshot을 만들고, agent model selector가 그 결과를 바로 사용한다.
+
+실제 OS Keychain 저장, DGX secret vault, 원격 model discovery HTTP 호출은 다음 단계에서 붙인다.

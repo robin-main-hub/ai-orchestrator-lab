@@ -977,7 +977,7 @@ button {
 
 .provider-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
   gap: 6px;
   padding: 7px;
   border: 1px solid var(--line-soft);
@@ -997,6 +997,15 @@ button {
   line-height: 1.2;
   overflow-wrap: anywhere;
   white-space: normal;
+}
+
+.provider-model-summary {
+  display: block;
+  margin-top: 3px;
+  color: var(--subtle);
+  font-size: 9px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .provider-row div span,
@@ -1087,6 +1096,7 @@ button {
 
 .agent-remove-button,
 .agent-rename-button,
+.provider-discovery-button,
 .provider-remove-button,
 .provider-rename-button,
 .icon-button {
@@ -1104,12 +1114,14 @@ button {
 
 .agent-remove-button,
 .agent-rename-button,
+.provider-discovery-button,
 .provider-remove-button {
   align-self: center;
 }
 
 .agent-remove-button:disabled,
 .agent-rename-button:disabled,
+.provider-discovery-button:disabled,
 .provider-remove-button:disabled,
 .icon-button:disabled {
   cursor: not-allowed;

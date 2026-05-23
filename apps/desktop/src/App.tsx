@@ -18,6 +18,7 @@ import {
   Plus,
   Pencil,
   RadioTower,
+  RefreshCw,
   Send,
   Server,
   ShieldCheck,
@@ -31,7 +32,12 @@ import {
   defaultAgentProfiles,
   type DebateContext,
 } from "@ai-orchestrator/agents";
-import { MockProviderAdapter, createProviderProfile } from "@ai-orchestrator/providers";
+import {
+  MockProviderAdapter,
+  createProviderProfile,
+  createProviderProfileFromCredentialInput,
+  discoverModelsForProfile,
+} from "@ai-orchestrator/providers";
 import {
   appendEventToLog,
   buildMockAssistantReply,
@@ -87,6 +93,7 @@ import type {
   EventSource,
   MemoryRecord,
   ModelDescriptor,
+  ModelDiscoverySnapshot,
   PermissionMatrixSnapshot,
   ProviderProfile,
   RuntimeSnapshot,
@@ -442,6 +449,7 @@ export function App() {
   const [runtimeSnapshotState, setRuntimeSnapshotState] = useState<RuntimeSnapshot>(runtimeSnapshot);
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(seededProviderProfiles);
   const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(seededModelCatalog);
+  const [modelDiscoveryByProviderId, setModelDiscoveryByProviderId] = useState<Record<string, ModelDiscoverySnapshot>>({});
   const [agents, setAgents] = useState<WorkbenchAgent[]>(seededAgentProfiles);
   const [agentActivityById, setAgentActivityById] = useState<Record<string, AgentActivityStatus>>({});
   const [modelWindowStartByAgentId, setModelWindowStartByAgentId] = useState<Record<string, number>>({});
@@ -1130,22 +1138,88 @@ export function App() {
 
   function handleAddProvider() {
     const nextIndex = providerProfiles.length + 1;
-    const nextProvider = createProviderProfile({
-      id: `provider_custom_${crypto.randomUUID()}`,
-      name: `Custom Provider ${nextIndex}`,
-      kind: "custom",
-      baseUrl: "https://api.example.local/v1",
-      rawSecret: `sk-placeholder-provider-${nextIndex}`,
-      defaultModel: `custom-model-${nextIndex}`,
-      tags: ["custom"],
-      trustLevel: "limited",
-    });
+    const rawInput =
+      window.prompt(
+        "API key / env / Claude Code JSON 붙여넣기",
+        'export ANTHROPIC_BASE_URL="https://api.apikey.fun"\nexport ANTHROPIC_AUTH_TOKEN="sk-session-placeholder"',
+      ) ?? "";
+    const nextProvider =
+      rawInput.trim().length > 0
+        ? createProviderProfileFromCredentialInput({
+            id: `provider_custom_${crypto.randomUUID()}`,
+            rawInput,
+          }).profile
+        : createProviderProfile({
+            id: `provider_custom_${crypto.randomUUID()}`,
+            name: `Custom Provider ${nextIndex}`,
+            kind: "custom",
+            baseUrl: "https://api.example.local/v1",
+            rawSecret: `sk-placeholder-provider-${nextIndex}`,
+            defaultModel: `custom-model-${nextIndex}`,
+            tags: ["custom"],
+            trustLevel: "limited",
+          });
+    const discovery = discoverModelsForProfile(nextProvider);
 
     setProviderProfiles((profiles) => [...profiles, nextProvider]);
     setModelCatalog((catalog) => ({
       ...catalog,
-      [nextProvider.id]: [createModel(nextProvider.id, nextProvider.defaultModel ?? `custom-model-${nextIndex}`, ["custom"])],
+      [nextProvider.id]: discovery.models,
     }));
+    setModelDiscoveryByProviderId((current) => ({
+      ...current,
+      [nextProvider.id]: discovery,
+    }));
+    appendEvent("provider.profile.imported", {
+      providerProfileId: nextProvider.id,
+      kind: nextProvider.kind,
+      trustLevel: nextProvider.trustLevel,
+      secretRef: nextProvider.secretRef?.redactedPreview ?? "pending",
+      modelCount: discovery.models.length,
+    });
+    appendEvent("provider.models.discovered", {
+      providerProfileId: nextProvider.id,
+      status: discovery.status,
+      modelCount: discovery.models.length,
+      source: discovery.source,
+      redactionApplied: discovery.redactionApplied,
+    });
+  }
+
+  function handleDiscoverProviderModels(providerId: string) {
+    const provider = providerProfiles.find((profile) => profile.id === providerId);
+    if (!provider) {
+      return;
+    }
+
+    const discovery = discoverModelsForProfile(provider);
+    setModelCatalog((catalog) => ({
+      ...catalog,
+      [provider.id]: discovery.models,
+    }));
+    setModelDiscoveryByProviderId((current) => ({
+      ...current,
+      [provider.id]: discovery,
+    }));
+    setProviderProfiles((profiles) =>
+      profiles.map((profile) =>
+        profile.id === provider.id
+          ? {
+              ...profile,
+              defaultModel: discovery.selectedModelId ?? profile.defaultModel,
+              modelDiscoveryEndpoint: profile.modelDiscoveryEndpoint ?? provider.modelDiscoveryEndpoint,
+            }
+          : profile,
+      ),
+    );
+    appendEvent("provider.models.discovered", {
+      providerProfileId: provider.id,
+      status: discovery.status,
+      modelCount: discovery.models.length,
+      source: discovery.source,
+      redactionApplied: discovery.redactionApplied,
+      warnings: discovery.warnings,
+    });
   }
 
   function handleRemoveProvider(providerId: string) {
@@ -1158,6 +1232,10 @@ export function App() {
     setModelCatalog((catalog) => {
       const { [providerId]: _removedModels, ...remainingCatalog } = catalog;
       return remainingCatalog;
+    });
+    setModelDiscoveryByProviderId((discoveries) => {
+      const { [providerId]: _removedDiscovery, ...remainingDiscoveries } = discoveries;
+      return remainingDiscoveries;
     });
   }
 
@@ -1375,7 +1453,10 @@ export function App() {
 
         <aside className="right-rail" aria-label="모델과 에이전트 상태">
           <ProviderProfilesManagerPanel
+            modelCatalog={modelCatalog}
+            modelDiscoveryByProviderId={modelDiscoveryByProviderId}
             onAddProvider={handleAddProvider}
+            onDiscoverModels={handleDiscoverProviderModels}
             onRenameProvider={handleRenameProvider}
             onRemoveProvider={handleRemoveProvider}
             profiles={providerProfiles}
@@ -1739,13 +1820,19 @@ function debateTagLabel(tag: DebateTag) {
 }
 
 function ProviderProfilesManagerPanel({
+  modelCatalog,
+  modelDiscoveryByProviderId,
   onAddProvider,
+  onDiscoverModels,
   onRenameProvider,
   onRemoveProvider,
   profiles,
   usedProviderIds,
 }: {
+  modelCatalog: ModelCatalog;
+  modelDiscoveryByProviderId: Record<string, ModelDiscoverySnapshot>;
   onAddProvider: () => void;
+  onDiscoverModels: (providerId: string) => void;
   onRenameProvider: (providerId: string) => void;
   onRemoveProvider: (providerId: string) => void;
   profiles: ProviderProfile[];
@@ -1763,12 +1850,26 @@ function ProviderProfilesManagerPanel({
       <div className="provider-list">
         {profiles.map((profile) => {
           const isInUse = usedProviderIds.has(profile.id);
+          const discovery = modelDiscoveryByProviderId[profile.id];
+          const models = modelCatalog[profile.id] ?? [];
           return (
             <article className={`provider-row ${isInUse ? "in-use" : ""}`} key={profile.id}>
               <div>
                 <strong>{profile.name}</strong>
+                <small className="provider-model-summary">
+                  {models.length} models / {discovery?.status ?? "cached"} / {discovery?.source ?? "seed"}
+                </small>
               </div>
               <span className={`trust ${profile.trustLevel}`}>{profile.trustLevel}</span>
+              <button
+                aria-label={`${profile.name} model discovery`}
+                className="provider-discovery-button"
+                onClick={() => onDiscoverModels(profile.id)}
+                title="model discovery"
+                type="button"
+              >
+                <RefreshCw size={13} />
+              </button>
               <button
                 aria-label={`${profile.name} 이름 변경`}
                 className="provider-rename-button"

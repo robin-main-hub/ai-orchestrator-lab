@@ -8,7 +8,9 @@ import {
   type IngressGuardResult,
   type MobileActionPolicy,
   type MemoryTrace,
+  type ModelDiscoverySnapshot,
   type PermissionMatrixSnapshot,
+  type ProviderCredentialParseResult,
   type RemoteExecutionRequest,
   type RemoteExecutionResponse,
 } from "./index";
@@ -257,5 +259,51 @@ describe("protocol schemas", () => {
 
     expect(snapshot.queue[0]?.permissions).toContain("run_safe_commands");
     expect(snapshot.items[1]?.decision).toBe("deny");
+  });
+
+  it("models provider credential parsing and model discovery without raw keys", () => {
+    const parse: ProviderCredentialParseResult = {
+      id: "provider_parse_1",
+      format: "claude_code_settings_json",
+      providerKind: "anthropic",
+      profileName: "Claude Code 호환 프로파일",
+      baseUrl: "https://api.apikey.fun",
+      secretRef: {
+        id: "secret_1",
+        label: "session secret",
+        scope: "session",
+        redactedPreview: "sk-...42f0",
+        transient: true,
+      },
+      defaultModel: "claude-code-compatible",
+      tags: ["claude_code_settings_json", "untrusted"],
+      trustLevel: "untrusted",
+      warnings: ["custom or reseller endpoint blocks automatic sensitive memory recall"],
+      createdAt: "2026-05-24T00:00:00.000Z",
+    };
+    const discovery: ModelDiscoverySnapshot = {
+      id: "model_discovery_1",
+      providerProfileId: "provider_1",
+      status: "succeeded",
+      source: "remote_stub",
+      selectedModelId: "claude-code-compatible",
+      redactionApplied: true,
+      warnings: ["remote model list is a stub until trusted"],
+      createdAt: "2026-05-24T00:00:00.000Z",
+      models: [
+        {
+          id: "claude-code-compatible",
+          name: "claude-code-compatible",
+          providerProfileId: "provider_1",
+          supportsStreaming: true,
+          supportsTools: true,
+          tags: ["anthropic", "untrusted"],
+        },
+      ],
+    };
+
+    expect(parse.secretRef?.redactedPreview).toBe("sk-...42f0");
+    expect(JSON.stringify(parse)).not.toContain("sk-bf59");
+    expect(discovery.models[0]?.providerProfileId).toBe("provider_1");
   });
 });
