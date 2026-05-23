@@ -31,6 +31,13 @@ import {
   type DebateContext,
 } from "@ai-orchestrator/agents";
 import { MockProviderAdapter, createProviderProfile } from "@ai-orchestrator/providers";
+import {
+  appendEventToLog,
+  buildMockAssistantReply,
+  createCodingPacketFromConversation,
+  createStage2Event,
+  renderObsidianMarkdown,
+} from "./runtime/stage2Runtime";
 import type {
   AgentProfile,
   BackupProjection,
@@ -351,16 +358,7 @@ const initialConversationMessages: ConversationMessage[] = [
 ];
 
 function createDesktopEvent<T>(type: string, payload: T, createdAt = new Date().toISOString()): EventEnvelope<T> {
-  return {
-    id: `event_${crypto.randomUUID()}`,
-    sessionId: "session_desktop_001",
-    type,
-    payload,
-    createdAt,
-    source: "desktop",
-    sourceTrust: "trusted",
-    redacted: true,
-  };
+  return createStage2Event({ type, payload, createdAt });
 }
 
 const initialEventLog: EventEnvelope[] = initialConversationMessages.map((message) =>
@@ -385,6 +383,9 @@ export function App() {
   const [selectedAgentId, setSelectedAgentId] = useState(seededAgentProfiles[0]?.id ?? "");
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
   const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
+  const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
+  const [backupProjectionsState, setBackupProjectionsState] = useState<BackupProjection[]>(backupProjections);
+  const [obsidianMarkdownPreview, setObsidianMarkdownPreview] = useState("");
   const [draftMessage, setDraftMessage] = useState("");
   const activeProvider = useMemo(
     () => providerProfiles.find((profile) => profile.id === runtimeSnapshot.activeProviderProfileId),
@@ -413,11 +414,11 @@ export function App() {
 
   function appendEvent<T>(type: string, payload: T) {
     const event = createDesktopEvent(type, payload);
-    setEventLog((events) => [event, ...events].slice(0, 24));
+    setEventLog((events) => appendEventToLog(events, event));
     return event;
   }
 
-  function handleSendMessage() {
+  function handleSendMessageStage2() {
     const content = draftMessage.trim();
     if (!content || !selectedAgent || !selectedProvider) {
       return;
@@ -426,34 +427,35 @@ export function App() {
     const createdAt = new Date().toISOString();
     const authLabel = selectedAgent.authBinding?.label ?? "credential pending";
     const authMode = selectedAgent.authBinding?.mode ?? "provider_profile";
-    const reply =
-      `${selectedAgent.name}가 ${selectedProvider.name} / ${selectedAgent.modelId ?? selectedProvider.defaultModel ?? "model pending"} ` +
-      `(${authMode}: ${authLabel}) 바인딩으로 응답할 준비가 됐어. 지금은 실제 네트워크 호출 없이 Event Store에 남길 대화 stub으로 처리한다.`;
+    const reply = buildMockAssistantReply({
+      content,
+      agent: selectedAgent,
+      provider: selectedProvider,
+    });
+    const userMessage: ConversationMessage = {
+      id: `message_user_${crypto.randomUUID()}`,
+      sessionId: "session_desktop_001",
+      role: "user",
+      content,
+      createdAt,
+    };
+    const assistantMessage: ConversationMessage = {
+      id: `message_agent_${crypto.randomUUID()}`,
+      sessionId: "session_desktop_001",
+      role: "assistant",
+      content: reply,
+      createdAt: new Date().toISOString(),
+      metadata: {
+        agentName: selectedAgent.name,
+        providerProfileId: selectedProvider.id,
+        authMode,
+      },
+    };
 
     setAgentActivity(selectedAgent.id, "preparing");
-    setConversationMessages((messages) => [
-      ...messages,
-      {
-        id: `message_user_${crypto.randomUUID()}`,
-        sessionId: "session_desktop_001",
-        role: "user",
-        content,
-        createdAt,
-      },
-      {
-        id: `message_agent_${crypto.randomUUID()}`,
-        sessionId: "session_desktop_001",
-        role: "assistant",
-        content: reply,
-        createdAt: new Date().toISOString(),
-        metadata: {
-          agentName: selectedAgent.name,
-          providerProfileId: selectedProvider.id,
-          authMode,
-        },
-      },
-    ]);
+    setConversationMessages((messages) => [...messages, userMessage, assistantMessage]);
     appendEvent("conversation.message.created", {
+      messageId: userMessage.id,
       role: "user",
       contentLength: content.length,
       redaction: "applied",
@@ -462,8 +464,11 @@ export function App() {
       agentId: selectedAgent.id,
       providerProfileId: selectedProvider.id,
       modelId: selectedAgent.modelId ?? selectedProvider.defaultModel,
+      authMode,
+      authLabel,
     });
     appendEvent("conversation.message.created", {
+      messageId: assistantMessage.id,
       role: "assistant",
       contentLength: reply.length,
       redaction: "applied",
@@ -475,6 +480,50 @@ export function App() {
     window.setTimeout(() => {
       setAgentActivity(selectedAgent.id, "idle");
     }, 950);
+  }
+
+  function handleCreateCodingPacket() {
+    const packet = createCodingPacketFromConversation({
+      messages: conversationMessages,
+      agent: selectedAgent,
+      provider: selectedProvider,
+    });
+
+    setCodingPacketState(packet);
+    appendEvent("coding_packet.created", {
+      goal: packet.goal,
+      contextCount: packet.context.length,
+      decisionCount: packet.decisions.length,
+      filesToInspect: packet.filesToInspect,
+    });
+  }
+
+  function handleExportObsidianProjection() {
+    const markdown = renderObsidianMarkdown({
+      messages: conversationMessages,
+      packet: codingPacketState,
+      events: eventLog,
+    });
+
+    setObsidianMarkdownPreview(markdown);
+    setBackupProjectionsState((projections) =>
+      projections.map((projection) =>
+        projection.target === "obsidian"
+          ? {
+              ...projection,
+              status: "synced",
+              lastSyncedAt: new Date().toISOString(),
+              redactionApplied: true,
+            }
+          : projection,
+      ),
+    );
+    appendEvent("backup.exported", {
+      target: "obsidian",
+      projection: "markdown",
+      bytes: markdown.length,
+      redaction: "applied",
+    });
   }
 
   function setAgentActivity(agentId: string, status: AgentActivityStatus) {
@@ -762,7 +811,7 @@ export function App() {
                 <Database size={16} />
                 Memory
               </button>
-              <button className="primary-button" type="button">
+              <button className="primary-button" onClick={handleCreateCodingPacket} type="button">
                 <Send size={16} />
                 Coding Packet
               </button>
@@ -774,9 +823,12 @@ export function App() {
               agents={agents}
               draftMessage={draftMessage}
               messages={conversationMessages}
+              onBackupProjection={handleExportObsidianProjection}
+              onCreateCodingPacket={handleCreateCodingPacket}
               onDraftMessageChange={setDraftMessage}
+              onPromoteToDebate={() => setMode("debate")}
               onSelectAgent={setSelectedAgentId}
-              onSendMessage={handleSendMessage}
+              onSendMessage={handleSendMessageStage2}
               selectedAgent={selectedAgent}
               selectedAgentId={selectedAgent?.id}
               selectedProvider={selectedProvider}
@@ -785,7 +837,7 @@ export function App() {
             <DebateTable />
           )}
 
-          <CodingPacketPanel packet={codingPacket} />
+          <CodingPacketPanel packet={codingPacketState} />
         </section>
 
         <aside className="right-rail" aria-label="모델과 에이전트 상태">
@@ -811,7 +863,7 @@ export function App() {
             profiles={providerProfiles}
             selectedAgentId={selectedAgent?.id}
           />
-          <BackupPanel projections={backupProjections} />
+          <BackupPanel projectionPreview={obsidianMarkdownPreview} projections={backupProjectionsState} />
         </aside>
       </main>
       <TerminalDock events={eventLog} slots={terminalSlots} />
@@ -855,7 +907,10 @@ function ConversationWorkbench({
   agents,
   draftMessage,
   messages,
+  onBackupProjection,
+  onCreateCodingPacket,
   onDraftMessageChange,
+  onPromoteToDebate,
   onSelectAgent,
   onSendMessage,
   selectedAgent,
@@ -865,7 +920,10 @@ function ConversationWorkbench({
   agents: WorkbenchAgent[];
   draftMessage: string;
   messages: ConversationMessage[];
+  onBackupProjection: () => void;
+  onCreateCodingPacket: () => void;
   onDraftMessageChange: (value: string) => void;
+  onPromoteToDebate: () => void;
   onSelectAgent: (agentId: string) => void;
   onSendMessage: () => void;
   selectedAgent?: WorkbenchAgent;
@@ -937,11 +995,11 @@ function ConversationWorkbench({
         </button>
       </form>
       <div className="action-strip">
-        <button type="button">
+        <button onClick={onPromoteToDebate} type="button">
           <GitBranch size={16} />
           토론 전환
         </button>
-        <button type="button">
+        <button onClick={onCreateCodingPacket} type="button">
           <Send size={16} />
           패킷 생성
         </button>
@@ -949,7 +1007,7 @@ function ConversationWorkbench({
           <Play size={16} />
           실행 슬롯
         </button>
-        <button type="button">
+        <button onClick={onBackupProjection} type="button">
           <Archive size={16} />
           백업 상태
         </button>
@@ -1036,7 +1094,6 @@ function ProviderProfilesManagerPanel({
             <article className={`provider-row ${isInUse ? "in-use" : ""}`} key={profile.id}>
               <div>
                 <strong>{profile.name}</strong>
-                <span>{profile.kind} / {profile.defaultModel ?? "model pending"}</span>
               </div>
               <span className={`trust ${profile.trustLevel}`}>{profile.trustLevel}</span>
               <button
@@ -1058,7 +1115,6 @@ function ProviderProfilesManagerPanel({
               >
                 <Trash2 size={13} />
               </button>
-              <code>{profile.secretRef?.redactedPreview ?? "secretRef 없음"}</code>
             </article>
           );
         })}
@@ -1215,7 +1271,13 @@ function AgentStatePanel({
   );
 }
 
-function BackupPanel({ projections }: { projections: BackupProjection[] }) {
+function BackupPanel({
+  projectionPreview,
+  projections,
+}: {
+  projectionPreview: string;
+  projections: BackupProjection[];
+}) {
   return (
     <section className="side-panel compact">
       <header className="panel-title">
@@ -1229,6 +1291,10 @@ function BackupPanel({ projections }: { projections: BackupProjection[] }) {
             <strong>{projection.status}</strong>
           </div>
         ))}
+      </div>
+      <div className="backup-preview">
+        <span>Obsidian projection</span>
+        <strong>{projectionPreview ? `${projectionPreview.length} chars ready` : "not rendered"}</strong>
       </div>
     </section>
   );

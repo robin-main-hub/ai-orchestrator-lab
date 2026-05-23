@@ -1004,6 +1004,30 @@ button {
   font-size: 13px;
 }
 
+.backup-preview {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #002f38;
+}
+
+.backup-preview span,
+.backup-preview strong {
+  display: block;
+}
+
+.backup-preview span {
+  color: var(--subtle);
+  font-size: 11px;
+}
+
+.backup-preview strong {
+  margin-top: 3px;
+  color: var(--cyan);
+  font-size: 12px;
+}
+
 .coding-packet {
   min-height: 0;
   overflow: hidden;
