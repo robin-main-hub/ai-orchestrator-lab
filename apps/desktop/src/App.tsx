@@ -1379,7 +1379,19 @@ export function App() {
             ))}
           </nav>
 
-          <section className="mini-panel">
+          <RuntimeRailPanel onProbeDgx={handleProbeDgx} snapshot={runtimeSnapshotState} />
+          <OperationsRailPanel
+            backupSnapshot={backupSnapshot}
+            ingressSnapshot={ingressSnapshot}
+            onCheckProviderVault={handleCheckProviderVault}
+            onExportBackup={handleExportBackupProjections}
+            onImportTelegram={handleImportTelegramIngress}
+            permissionSnapshot={permissionSnapshot}
+            providerReadiness={providerReadiness}
+            secretVaultSnapshot={secretVaultSnapshot}
+          />
+
+          <section className="mini-panel legacy-runtime-panel">
             <header>
               <Server size={16} />
               <span>Runtime</span>
@@ -1521,13 +1533,6 @@ export function App() {
             onPin={handlePinMemory}
             onRemember={handleRememberCurrentContext}
           />
-          <IngressGuardPanel onImportTelegram={handleImportTelegramIngress} snapshot={ingressSnapshot} />
-          <BackupPanel
-            onExport={handleExportBackupProjections}
-            projectionPreview={obsidianMarkdownPreview}
-            projections={backupProjectionsState}
-            snapshot={backupSnapshot}
-          />
         </aside>
       </main>
       <TerminalDock
@@ -1546,6 +1551,123 @@ export function App() {
   );
 }
 
+function RuntimeRailPanel({
+  onProbeDgx,
+  snapshot,
+}: {
+  onProbeDgx: () => void;
+  snapshot: RuntimeSnapshot;
+}) {
+  const clientOutbox = snapshot.syncTopology.clients
+    .filter((client) => client.syncRole === "client_replica")
+    .reduce((sum, client) => sum + client.outboxCount, 0);
+
+  return (
+    <section className="mini-panel rail-panel">
+      <header>
+        <Server size={16} />
+        <span>Systems</span>
+        <button className="rail-icon-button" onClick={onProbeDgx} title="Probe DGX-02" type="button">
+          <RefreshCw size={13} />
+        </button>
+      </header>
+      <div className="rail-node-grid">
+        {snapshot.runtimeNodes.map((node) => (
+          <article className={node.id === "dgx-01" ? "locked" : ""} key={node.id}>
+            <span>{node.label}</span>
+            <strong>{node.id === "dgx-01" ? "locked" : node.isPrimary ? "main" : node.role}</strong>
+            <em className={statusTone(node.status)}>{node.status}</em>
+          </article>
+        ))}
+      </div>
+      <div className="rail-stat-list">
+        <div>
+          <span>authority</span>
+          <strong>{snapshot.syncTopology.authorityLabel}</strong>
+        </div>
+        <div>
+          <span>local models</span>
+          <strong>{snapshot.localModels.length}</strong>
+        </div>
+        <div>
+          <span>memento</span>
+          <strong className={statusTone(snapshot.memorySyncStatus)}>{snapshot.memorySyncStatus}</strong>
+        </div>
+        <div>
+          <span>client outbox</span>
+          <strong>{clientOutbox}</strong>
+        </div>
+        <div>
+          <span>heartbeat</span>
+          <strong>{snapshot.recentError ?? "connected"}</strong>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function OperationsRailPanel({
+  backupSnapshot,
+  ingressSnapshot,
+  onCheckProviderVault,
+  onExportBackup,
+  onImportTelegram,
+  permissionSnapshot,
+  providerReadiness,
+  secretVaultSnapshot,
+}: {
+  backupSnapshot: Stage7BackupSnapshot;
+  ingressSnapshot: Stage8IngressSnapshot;
+  onCheckProviderVault: () => void;
+  onExportBackup: () => void;
+  onImportTelegram: () => void;
+  permissionSnapshot: PermissionMatrixSnapshot;
+  providerReadiness: ProviderRuntimeReadiness;
+  secretVaultSnapshot: SecretVaultSnapshot;
+}) {
+  return (
+    <section className="mini-panel rail-panel ops-rail-panel">
+      <header>
+        <ShieldCheck size={16} />
+        <span>Ops</span>
+        <div className="rail-action-row">
+          <button className="rail-icon-button" onClick={onImportTelegram} title="Import Telegram" type="button">
+            <Smartphone size={13} />
+          </button>
+          <button className="rail-icon-button" onClick={onExportBackup} title="Export Backup" type="button">
+            <Archive size={13} />
+          </button>
+          <button className="rail-icon-button" onClick={onCheckProviderVault} title="Check Provider Vault" type="button">
+            <KeyRound size={13} />
+          </button>
+        </div>
+      </header>
+      <div className="rail-stat-list">
+        <div>
+          <span>permission</span>
+          <strong>{permissionSnapshot.summary.pending} pending</strong>
+        </div>
+        <div>
+          <span>ingress</span>
+          <strong>{ingressSnapshot.result.confidence} / {ingressSnapshot.result.approvalState}</strong>
+        </div>
+        <div>
+          <span>backup</span>
+          <strong>{backupSnapshot.summary.ready} ready / {backupSnapshot.summary.queued} queued</strong>
+        </div>
+        <div>
+          <span>provider</span>
+          <strong>{providerReadiness.status}</strong>
+        </div>
+        <div>
+          <span>vault</span>
+          <strong>{secretVaultSnapshot.summary.available}/{secretVaultSnapshot.entries.length} available</strong>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function RuntimeStatusBar({
   onProbeDgx,
   providerName,
@@ -1555,13 +1677,15 @@ function RuntimeStatusBar({
   providerName: string;
   snapshot: RuntimeSnapshot;
 }) {
+  const primaryNode = snapshot.runtimeNodes.find((node) => node.isPrimary);
+
   return (
     <header className="status-bar">
       <div className="status-meta">
-        <span>{providerName}</span>
-        <span>Data: {snapshot.syncTopology.authorityLabel} authoritative</span>
-        <span>Clients: MacBook / Home PC</span>
-        <span>{snapshot.recentError ?? "dgx-02 heartbeat connected"}</span>
+        <span>Active: {providerName}</span>
+        <span>{primaryNode?.label ?? snapshot.syncTopology.authorityLabel}: {snapshot.dgxStatus}</span>
+        <span>Local: {snapshot.localModelStatus}</span>
+        <span>{snapshot.recentError ?? "ready"}</span>
       </div>
       <button className="status-action" onClick={onProbeDgx} type="button">
         Probe DGX
@@ -1902,34 +2026,36 @@ function ProviderProfilesManagerPanel({
                 </small>
               </div>
               <span className={`trust ${profile.trustLevel}`}>{profile.trustLevel}</span>
-              <button
-                aria-label={`${profile.name} model discovery`}
-                className="provider-discovery-button"
-                onClick={() => onDiscoverModels(profile.id)}
-                title="model discovery"
-                type="button"
-              >
-                <RefreshCw size={13} />
-              </button>
-              <button
-                aria-label={`${profile.name} 이름 변경`}
-                className="provider-rename-button"
-                onClick={() => onRenameProvider(profile.id)}
-                title="provider 이름 변경"
-                type="button"
-              >
-                <Pencil size={13} />
-              </button>
-              <button
-                aria-label={`${profile.name} 삭제`}
-                className="provider-remove-button"
-                disabled={isInUse || profiles.length <= 1}
-                onClick={() => onRemoveProvider(profile.id)}
-                title={isInUse ? "agent가 사용 중이라 삭제할 수 없음" : "provider 삭제"}
-                type="button"
-              >
-                <Trash2 size={13} />
-              </button>
+              <div className="provider-actions">
+                <button
+                  aria-label={`${profile.name} model discovery`}
+                  className="provider-discovery-button"
+                  onClick={() => onDiscoverModels(profile.id)}
+                  title="model discovery"
+                  type="button"
+                >
+                  <RefreshCw size={13} />
+                </button>
+                <button
+                  aria-label={`${profile.name} 이름 변경`}
+                  className="provider-rename-button"
+                  onClick={() => onRenameProvider(profile.id)}
+                  title="provider 이름 변경"
+                  type="button"
+                >
+                  <Pencil size={13} />
+                </button>
+                <button
+                  aria-label={`${profile.name} 삭제`}
+                  className="provider-remove-button"
+                  disabled={isInUse || profiles.length <= 1}
+                  onClick={() => onRemoveProvider(profile.id)}
+                  title={isInUse ? "agent가 사용 중이라 삭제할 수 없음" : "provider 삭제"}
+                  type="button"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
             </article>
           );
         })}

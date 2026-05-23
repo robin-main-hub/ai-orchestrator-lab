@@ -66,7 +66,7 @@ button {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) 292px;
+  grid-template-columns: 264px minmax(0, 1fr) 280px;
   grid-template-rows: 42px minmax(0, 1fr) 136px;
   width: 100vw;
   height: 100vh;
@@ -174,7 +174,7 @@ button {
 
 .right-rail {
   display: grid;
-  grid-template-rows: minmax(130px, 0.36fr) minmax(190px, 0.58fr) minmax(160px, 0.48fr) minmax(260px, 0.86fr) minmax(220px, 0.72fr);
+  grid-template-rows: minmax(150px, 0.55fr) minmax(320px, 1fr) minmax(238px, 0.66fr);
   gap: 12px;
   overflow: hidden;
   border-right: 0;
@@ -197,6 +197,9 @@ button {
 .left-rail {
   grid-column: 1;
   grid-row: 1 / 4;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .right-rail {
@@ -209,7 +212,7 @@ button {
   grid-template-columns: 42px 1fr;
   align-items: center;
   gap: 10px;
-  margin-bottom: 18px;
+  margin-bottom: 2px;
 }
 
 .brand-block strong,
@@ -238,7 +241,7 @@ button {
 
 .nav-stack {
   display: grid;
-  gap: 6px;
+  gap: 5px;
 }
 
 .nav-item,
@@ -260,6 +263,7 @@ button {
 .nav-item {
   justify-content: flex-start;
   width: 100%;
+  min-height: 32px;
   padding: 0 10px;
   color: var(--muted);
 }
@@ -286,8 +290,12 @@ button {
 }
 
 .mini-panel {
-  margin-top: 16px;
-  padding: 12px;
+  margin-top: 0;
+  padding: 10px;
+}
+
+.legacy-runtime-panel {
+  display: none;
 }
 
 .mini-panel header {
@@ -296,6 +304,130 @@ button {
   align-items: center;
   color: var(--amber);
   font-size: 13px;
+}
+
+.rail-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 0;
+  padding: 10px;
+}
+
+.rail-panel header {
+  min-width: 0;
+}
+
+.rail-panel header > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-icon-button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #00313a;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.rail-panel header .rail-icon-button {
+  margin-left: auto;
+}
+
+.rail-action-row {
+  display: flex;
+  gap: 5px;
+  margin-left: auto;
+}
+
+.rail-node-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.rail-node-grid article {
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #141311;
+}
+
+.rail-node-grid article.locked {
+  border-color: rgba(255, 125, 144, 0.34);
+}
+
+.rail-node-grid span,
+.rail-node-grid strong,
+.rail-node-grid em {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-node-grid span {
+  color: var(--subtle);
+  font-size: 10px;
+}
+
+.rail-node-grid strong {
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.rail-node-grid em {
+  margin-top: 4px;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.rail-stat-list {
+  display: grid;
+  gap: 6px;
+}
+
+.rail-stat-list div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #002f38;
+}
+
+.rail-stat-list span,
+.rail-stat-list strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-stat-list span {
+  color: var(--subtle);
+  font-size: 10px;
+}
+
+.rail-stat-list strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.ops-rail-panel {
+  margin-top: 0;
 }
 
 .kv-list {
@@ -977,7 +1109,7 @@ button {
 
 .provider-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
   padding: 7px;
   border: 1px solid var(--line-soft);
@@ -1021,6 +1153,13 @@ button {
 
 .provider-row.in-use {
   border-color: rgba(41, 215, 230, 0.32);
+}
+
+.provider-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .trust {
@@ -2013,6 +2152,8 @@ button {
 .local-model,
 .memory-sync-note,
 .sync-authority-note,
+.rail-node-grid article,
+.rail-stat-list div,
 .message,
 .debate-card,
 .provider-row,
@@ -2049,7 +2190,7 @@ button {
   }
 
   .app-shell {
-    grid-template-columns: 230px minmax(0, 1fr) 300px;
+    grid-template-columns: 248px minmax(0, 1fr) 280px;
   }
 
   .action-strip {
