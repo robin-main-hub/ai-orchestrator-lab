@@ -66,6 +66,11 @@ import {
   getObsidianArtifact,
   type Stage7BackupSnapshot,
 } from "./runtime/stage7Backup";
+import {
+  createStage8IngressSnapshot,
+  createTelegramDemoInput,
+  type Stage8IngressSnapshot,
+} from "./runtime/stage8Ingress";
 import type {
   AgentProfile,
   BackupProjection,
@@ -73,10 +78,12 @@ import type {
   ConversationMessage,
   DebateTag,
   EventEnvelope,
+  EventSource,
   MemoryRecord,
   ModelDescriptor,
   ProviderProfile,
   RuntimeSnapshot,
+  SourceTrust,
   TerminalSlot,
 } from "@ai-orchestrator/protocol";
 
@@ -419,6 +426,9 @@ const initialDgxBridge = createStage5DgxBridge({
 });
 
 const initialMemoryRecords = createSeedMemoryRecords(now);
+const initialIngressSnapshot = createStage8IngressSnapshot(
+  createTelegramDemoInput(new Date("2026-05-24T00:23:00.000+09:00").toISOString()),
+);
 
 export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
@@ -432,6 +442,7 @@ export function App() {
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
   const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
   const [memoryRecords, setMemoryRecords] = useState<MemoryRecord[]>(initialMemoryRecords);
+  const [ingressSnapshot, setIngressSnapshot] = useState<Stage8IngressSnapshot>(initialIngressSnapshot);
   const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
   const [debateSession, setDebateSession] = useState<Stage3DebateSession>(() =>
     createStage3DebateSession({
@@ -507,8 +518,22 @@ export function App() {
     ],
   );
 
-  function appendEvent<T>(type: string, payload: T) {
-    const event = createDesktopEvent(type, payload);
+  function appendEvent<T>(
+    type: string,
+    payload: T,
+    options?: {
+      source?: EventSource;
+      sourceTrust?: SourceTrust;
+      correlationId?: string;
+    },
+  ) {
+    const event = createStage2Event({
+      type,
+      payload,
+      source: options?.source,
+      sourceTrust: options?.sourceTrust,
+      correlationId: options?.correlationId,
+    });
     setEventLog((events) => appendEventToLog(events, event));
     return event;
   }
@@ -679,6 +704,123 @@ export function App() {
       snapshotId: snapshot.id,
       policy: snapshot.mobilePolicy,
     });
+  }
+
+  function handleImportTelegramIngress() {
+    const receivedAt = new Date().toISOString();
+    const snapshot = createStage8IngressSnapshot(createTelegramDemoInput(receivedAt));
+    const normalizedEvent = snapshot.result.normalizedEvent;
+
+    setIngressSnapshot(snapshot);
+    appendEvent(
+      "ingress.guard.evaluated",
+      {
+        snapshotId: snapshot.id,
+        channel: snapshot.channel,
+        accepted: snapshot.result.accepted,
+        confidence: snapshot.result.confidence,
+        approvalState: snapshot.result.approvalState,
+        guardSteps: snapshot.result.guardSteps.map((step) => ({
+          name: step.name,
+          status: step.status,
+        })),
+      },
+      {
+        source: "telegram",
+        sourceTrust: "untrusted",
+        correlationId: snapshot.id,
+      },
+    );
+
+    if (!normalizedEvent) {
+      appendEvent(
+        "ingress.guard.blocked",
+        {
+          snapshotId: snapshot.id,
+          reason: snapshot.result.reason,
+        },
+        {
+          source: "telegram",
+          sourceTrust: "untrusted",
+          correlationId: snapshot.id,
+        },
+      );
+      return;
+    }
+
+    const telegramMessage: ConversationMessage = {
+      id: `message_telegram_${crypto.randomUUID()}`,
+      sessionId: "session_desktop_001",
+      role: "user",
+      content: normalizedEvent.normalizedText,
+      createdAt: receivedAt,
+      metadata: {
+        channel: normalizedEvent.channel,
+        ingressEventId: normalizedEvent.id,
+        approvalState: snapshot.result.approvalState,
+        sourceTrust: normalizedEvent.sourceTrust,
+      },
+    };
+
+    setConversationMessages((messages) => [...messages, telegramMessage]);
+    setMemoryRecords((records) => [
+      {
+        id: `memory_ingress_${normalizedEvent.id}`,
+        layer: "fragment",
+        title: "Telegram ingress candidate",
+        content: normalizedEvent.normalizedText,
+        sourceChannel: "telegram",
+        trustLevel: "untrusted",
+        createdAt: receivedAt,
+        pinned: false,
+      },
+      ...records,
+    ]);
+    appendEvent(
+      "conversation.message.created",
+      {
+        messageId: telegramMessage.id,
+        role: "user",
+        channel: normalizedEvent.channel,
+        ingressEventId: normalizedEvent.id,
+        redaction: normalizedEvent.redacted ? "applied" : "none",
+      },
+      {
+        source: "telegram",
+        sourceTrust: "untrusted",
+        correlationId: snapshot.id,
+      },
+    );
+    appendEvent(
+      "memory.candidate.created",
+      {
+        recordId: `memory_ingress_${normalizedEvent.id}`,
+        sourceChannel: "telegram",
+        trustLevel: "untrusted",
+        autoRecall: false,
+      },
+      {
+        source: "telegram",
+        sourceTrust: "untrusted",
+        correlationId: snapshot.id,
+      },
+    );
+
+    if (snapshot.approvals.length > 0) {
+      appendEvent(
+        "permission.requested",
+        {
+          approvalIds: snapshot.approvals.map((approval) => approval.id),
+          permissions: snapshot.approvals.flatMap((approval) => approval.permissions),
+          channel: snapshot.channel,
+        },
+        {
+          source: "telegram",
+          sourceTrust: "untrusted",
+          correlationId: snapshot.id,
+        },
+      );
+    }
   }
 
   function handleRememberCurrentContext() {
@@ -1154,6 +1296,7 @@ export function App() {
               onCreateAgentRun={handleCreateAgentRun}
               onCreateCodingPacket={handleCreateCodingPacket}
               onDraftMessageChange={setDraftMessage}
+              onImportTelegram={handleImportTelegramIngress}
               onPromoteToDebate={handlePromoteToDebate}
               onSelectAgent={setSelectedAgentId}
               onSendMessage={handleSendMessageStage2}
@@ -1197,6 +1340,7 @@ export function App() {
             onPin={handlePinMemory}
             onRemember={handleRememberCurrentContext}
           />
+          <IngressGuardPanel onImportTelegram={handleImportTelegramIngress} snapshot={ingressSnapshot} />
           <BackupPanel
             onExport={handleExportBackupProjections}
             projectionPreview={obsidianMarkdownPreview}
@@ -1261,6 +1405,7 @@ function ConversationWorkbench({
   onCreateAgentRun,
   onCreateCodingPacket,
   onDraftMessageChange,
+  onImportTelegram,
   onPromoteToDebate,
   onSelectAgent,
   onSendMessage,
@@ -1275,6 +1420,7 @@ function ConversationWorkbench({
   onCreateAgentRun: () => void;
   onCreateCodingPacket: () => void;
   onDraftMessageChange: (value: string) => void;
+  onImportTelegram: () => void;
   onPromoteToDebate: () => void;
   onSelectAgent: (agentId: string) => void;
   onSendMessage: () => void;
@@ -1363,7 +1509,7 @@ function ConversationWorkbench({
           <Archive size={16} />
           백업 상태
         </button>
-        <button type="button">
+        <button onClick={onImportTelegram} type="button">
           <Smartphone size={16} />
           Telegram
         </button>
@@ -1814,6 +1960,84 @@ function MemoryInspectorPanel({
       </div>
     </section>
   );
+}
+
+function IngressGuardPanel({
+  onImportTelegram,
+  snapshot,
+}: {
+  onImportTelegram: () => void;
+  snapshot: Stage8IngressSnapshot;
+}) {
+  const visibleSteps = snapshot.result.guardSteps.slice(0, 7);
+
+  return (
+    <section className="side-panel ingress-panel">
+      <header className="panel-title">
+        <RadioTower size={17} />
+        <h2>Ingress Guard</h2>
+        <button aria-label="Telegram 가져오기" className="icon-button" onClick={onImportTelegram} type="button">
+          <Smartphone size={15} />
+        </button>
+      </header>
+      <div className="ingress-summary">
+        <div>
+          <span>channel</span>
+          <strong>{snapshot.channel}</strong>
+        </div>
+        <div>
+          <span>confidence</span>
+          <strong>{snapshot.result.confidence}</strong>
+        </div>
+        <div>
+          <span>approval</span>
+          <strong>{snapshot.result.approvalState}</strong>
+        </div>
+      </div>
+      <div className="guard-step-list" aria-label="Ingress guard steps">
+        {visibleSteps.map((step) => (
+          <article className={step.status} key={step.name}>
+            <strong>{guardStepLabel(step.name)}</strong>
+            <em>{step.status}</em>
+            <span>{step.reason}</span>
+          </article>
+        ))}
+      </div>
+      <div className="approval-queue-list">
+        <span>Approval Queue</span>
+        {snapshot.approvals.length === 0 ? (
+          <strong>empty</strong>
+        ) : (
+          snapshot.approvals.map((approval) => (
+            <article key={approval.id}>
+              <strong>{approval.state}</strong>
+              <em>{approval.permissions.join(", ")}</em>
+            </article>
+          ))
+        )}
+      </div>
+      <div className="zero-token-note">
+        <span>0-token safety</span>
+        <strong>
+          {snapshot.zeroTokenSafety.cadence} / pending {snapshot.zeroTokenSafety.pendingCount}
+        </strong>
+      </div>
+    </section>
+  );
+}
+
+function guardStepLabel(step: Stage8IngressSnapshot["result"]["guardSteps"][number]["name"]) {
+  const labels: Record<Stage8IngressSnapshot["result"]["guardSteps"][number]["name"], string> = {
+    shape_unification: "Shape",
+    noise_filter: "Noise",
+    self_response_prevention: "Self-loop",
+    debounce: "Debounce",
+    pii_secret_block: "PII/Secret",
+    guard_logging: "Logging",
+    checklist_injection: "Checklist",
+  };
+
+  return labels[step];
 }
 
 function BackupPanel({

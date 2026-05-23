@@ -214,6 +214,18 @@ v0에서 바로 구현할 것:
 - Redaction/Permission 연결
 - Guard 적용 로그
 
+## Stage8 구현 경계
+
+현재 구현은 실제 Telegram Bot API나 OpenClaw 세션 연결 전에, 외부 입력이 앱 내부 세션으로 들어오는 보안 경계를 먼저 고정한다.
+
+- `IngressEvent`는 channel, source trust, author type, normalized/redacted text, requested permissions, confidence를 가진다.
+- `IngressGuardResult`는 7단계 guard의 pass/queued/blocked 상태와 approval state를 기록한다.
+- Telegram/OpenClaw demo input은 Event Store에 들어가기 전에 secret/env 값을 redaction하고 `sourceTrust: untrusted`로 표시한다.
+- terminal/write/secret 요청은 `ExternalApprovalItem`으로 approval queue에 들어간다.
+- self-response/bot reply는 세션 handoff 전에 차단한다.
+- Conversation Workbench의 `Telegram` 버튼은 guarded external message를 현재 세션에 추가하고, untrusted memory candidate로 격리한다.
+- Ingress Guard 패널은 confidence, approval, guard steps, approval queue, 0-token safety pending count를 보여준다.
+
 v0 이후:
 
 - Debounce
