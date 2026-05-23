@@ -2,17 +2,18 @@
 
 ## 목표
 
-AI Orchestrator Lab의 모든 대화, 토론, 실행, 백업, 모바일 승인, Telegram 브리지 이벤트는 하나의 Event Store를 기준으로 기록된다. Event Store는 단일 진실 공급원이며, Obsidian, Notion, 모바일 대시보드, 서버 동기화는 모두 projection이다.
+AI Orchestrator Lab의 모든 대화, 토론, 실행, 백업, 모바일 승인, Telegram 브리지 이벤트는 하나의 Event Store 계열을 기준으로 기록된다. 중앙 권위는 DGX-02 Event Store이며, 맥북과 집 PC는 로컬 SQLite cache/outbox를 가진 client replica로 동작한다. Obsidian, Notion, 모바일 대시보드는 모두 projection이다.
 
 이 문서는 구현 초기에 반드시 고정해야 할 세 가지를 정의한다.
 
-- Event Store
+- DGX-02 Event Store authority
+- client local SQLite cache/outbox
 - Redaction Layer
 - Permission Matrix
 
 ## 핵심 원칙
 
-- Event Store에는 평문 API 키, auth token, bearer token, `.env` secret을 저장하지 않는다.
+- DGX-02 Event Store와 client local cache/outbox에는 평문 API 키, auth token, bearer token, `.env` secret을 저장하지 않는다.
 - Redaction은 저장 직전이 아니라 event emit 직전에 수행한다.
 - 실행성 이벤트는 Permission Matrix를 통과해야 한다.
 - Telegram, 모바일, API에서 들어온 위험 명령은 기본적으로 `pending approval`이다.
@@ -20,16 +21,36 @@ AI Orchestrator Lab의 모든 대화, 토론, 실행, 백업, 모바일 승인, 
 
 ## 저장소 선택
 
-초기 저장소는 데스크톱 로컬 SQLite를 기본으로 한다.
+초기 저장소는 DGX-02의 중앙 Event Store와 각 클라이언트의 로컬 SQLite outbox/cache를 기본으로 한다.
 
 | 후보 | 판단 |
 | --- | --- |
-| SQLite | 1차 선택. 데스크톱 로컬, WAL, transaction, 검색, migration이 쉽다. |
+| SQLite | 1차 선택. DGX-02 authority와 클라이언트 로컬 outbox/cache 모두에 적용하기 쉽다. |
 | JSONL | export와 debug에는 좋지만 query와 sync conflict 관리가 약하다. |
-| Postgres | DGX 서버에서는 좋지만 맥북 로컬 원본으로는 무겁다. |
+| Postgres | DGX 서버에서는 장기적으로 좋지만 첫 구현에는 SQLite authority로 충분하다. |
 | CRDT | 멀티 디바이스 동시 편집에는 강하지만 초기 복잡도가 크다. 보류한다. |
 
-기본 구조는 `SQLite append-only events + artifact files + optional server sync`로 시작한다.
+기본 구조는 `DGX-02 SQLite authority + client SQLite append-only outbox + artifact files + server sync`로 시작한다. DGX-02는 추후 Postgres로 승격할 수 있게 event envelope를 저장소 독립적으로 유지한다.
+
+## 멀티 클라이언트 동기화 모델
+
+맥북과 집 PC는 둘 다 같은 DGX-02에 접속한다.
+
+```text
+MacBook local SQLite outbox
+  -> DGX-02 Event Store authority
+  -> Home PC local SQLite cache
+  -> Obsidian/Notion/Mobile projections
+```
+
+원칙:
+
+- DGX-02가 온라인이면 모든 이벤트의 최종 authority는 DGX-02다.
+- 맥북이 오프라인이면 로컬 SQLite outbox에 append한다.
+- 온라인 복구 시 `client_id`, `device_id`, `idempotency_key`, `base_revision`을 함께 보내 DGX-02에 동기화한다.
+- 충돌은 초기에는 server revision + last-write-wins + `sync.conflict.detected` 이벤트로 처리한다.
+- 사용자가 직접 작성한 결정, Coding Packet, memory pin/forget처럼 의미 충돌이 큰 이벤트는 자동 덮어쓰기보다 conflict UI에서 확인한다.
+- 집 PC는 같은 방식으로 DGX-02에서 pull하고, 필요한 경우 자기 local outbox를 push한다.
 
 ## Event Envelope
 

@@ -9,6 +9,7 @@
 - 데스크톱 앱이 전체 지휘실 역할을 한다.
 - `dgx-02`는 강한 모델, 로컬 LLM 서버, 장기 메모리, 원격 작업 실행을 담당한다.
 - 서버 접속이 불가능하면 맥북의 로컬 모델과 로컬 CLI만으로 오케스트레이션/토론을 계속한다.
+- DGX-02를 중앙 데이터 권위로 두고, 맥북과 집 PC는 로컬 SQLite 캐시/outbox를 통해 오프라인 후 온라인 복구 시 동기화한다.
 - 토론 기능을 끈 상태에서는 OpenClaw/Claude/Codex/로컬 모델과 1:1 대화하듯 작업한다.
 - 하나의 API 또는 하나의 모델에서도 여러 가상 에이전트를 만들어 병렬 토론과 역할 분담을 수행한다.
 - 여러 프로바이더 프로파일을 동시에 등록하고, 실행마다 모델/API 키/검증 모델을 바꿀 수 있다.
@@ -30,7 +31,7 @@
 - 사용 가능 모델 자동 조회
 - 강한 모델 검증 또는 동일 로컬 모델 검증
 - DGX 원격 실행 및 로컬 폴백
-- SQLite Event Store, Redaction Layer, Permission Matrix
+- DGX-02 Event Store authority, client SQLite outbox, Redaction Layer, Permission Matrix
 - External Ingress Guard와 confidence routing
 - Memento-MCP 스타일 장기 메모리
 - 에이전트별 `soul.md` 정체성 파일

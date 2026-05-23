@@ -361,16 +361,53 @@ button {
   font-weight: 700;
 }
 
-.memory-sync-note {
+.memory-sync-note,
+.sync-authority-note {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 2px 10px;
   margin-top: 8px;
 }
 
-.memory-sync-note span {
+.memory-sync-note span,
+.sync-authority-note span {
   grid-column: 1 / -1;
   line-height: 1.35;
+}
+
+.client-sync-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.client-sync-list > span {
+  color: var(--subtle);
+  font-size: 12px;
+}
+
+.client-sync-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 10px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #002f38;
+}
+
+.client-sync-row span {
+  grid-column: 1 / -1;
+  color: var(--subtle);
+  font-size: 12px;
+}
+
+.client-sync-row em,
+.sync-authority-note em {
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
 }
 
 .board-toolbar {
@@ -848,6 +885,7 @@ button {
 .runtime-node,
 .local-model,
 .memory-sync-note,
+.sync-authority-note,
 .message,
 .debate-card,
 .provider-row,

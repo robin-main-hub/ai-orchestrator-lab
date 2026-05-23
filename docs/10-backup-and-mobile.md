@@ -6,7 +6,7 @@
 
 ## 원본 저장소 원칙
 
-Notion이나 Obsidian을 원본으로 두지 않는다. 앱 내부 Event Store가 원본이고, Obsidian/Notion은 export projection이다.
+Notion이나 Obsidian을 원본으로 두지 않는다. DGX-02 Event Store가 중앙 원본이고, 맥북/집 PC의 로컬 SQLite는 offline cache/outbox다. Obsidian/Notion은 export projection이다.
 
 ```text
 Event Store
