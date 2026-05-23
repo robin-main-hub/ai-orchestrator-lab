@@ -305,11 +305,33 @@ export type EventStore = {
   markRedacted(eventId: string, reason: string): Promise<void>;
 };
 
+export type RuntimeNodeRole = "main_server" | "compute" | "local";
+
+export type RuntimeNode = {
+  id: string;
+  label: string;
+  role: RuntimeNodeRole;
+  status: RuntimeStatus;
+  isPrimary: boolean;
+  endpoint?: string;
+  models: string[];
+};
+
+export type LocalModelRuntime = {
+  id: string;
+  name: string;
+  runner: "ollama" | "lmstudio" | "vllm" | "llamacpp" | "mock" | "custom";
+  status: RuntimeStatus;
+  contextWindow?: number;
+};
+
 export type RuntimeSnapshot = {
   status: RuntimeStatus;
   dgxStatus: RuntimeStatus;
   localModelStatus: RuntimeStatus;
   memorySyncStatus: RuntimeStatus;
+  runtimeNodes: RuntimeNode[];
+  localModels: LocalModelRuntime[];
   activeProviderProfileId?: string;
   recentError?: string;
   updatedAt: string;

@@ -43,6 +43,35 @@ const runtimeSnapshot: RuntimeSnapshot = {
   dgxStatus: "offline",
   localModelStatus: "online",
   memorySyncStatus: "syncing",
+  runtimeNodes: [
+    {
+      id: "dgx-01",
+      label: "DGX-01",
+      role: "compute",
+      status: "offline",
+      isPrimary: false,
+      endpoint: "dgx-01",
+      models: ["연결 대기"],
+    },
+    {
+      id: "dgx-02",
+      label: "DGX-02",
+      role: "main_server",
+      status: "offline",
+      isPrimary: true,
+      endpoint: "dgx-02",
+      models: ["메인 서버", "원격 실행 대기"],
+    },
+  ],
+  localModels: [
+    {
+      id: "mock-orchestrator",
+      name: "mock-orchestrator",
+      runner: "mock",
+      status: "online",
+      contextWindow: 128_000,
+    },
+  ],
   activeProviderProfileId: "provider_mock_local",
   recentError: "dgx-02 heartbeat pending",
   updatedAt: now,
@@ -171,20 +200,31 @@ export function App() {
               <Server size={16} />
               <span>Runtime</span>
             </header>
-            <dl className="kv-list">
-              <div>
-                <dt>DGX</dt>
-                <dd className="danger">offline</dd>
-              </div>
-              <div>
-                <dt>Local</dt>
-                <dd className="ok">online</dd>
-              </div>
-              <div>
-                <dt>Memory</dt>
-                <dd className="warn">syncing</dd>
-              </div>
-            </dl>
+            <div className="runtime-node-list">
+              {runtimeSnapshot.runtimeNodes.map((node) => (
+                <div className="runtime-node" key={node.id}>
+                  <div>
+                    <strong>{node.label}</strong>
+                    {node.isPrimary ? <span>main server</span> : <span>{node.role}</span>}
+                  </div>
+                  <em className={statusTone(node.status)}>{node.status}</em>
+                </div>
+              ))}
+            </div>
+            <div className="local-model-list">
+              <span>Local Models</span>
+              {runtimeSnapshot.localModels.map((model) => (
+                <div className="local-model" key={model.id}>
+                  <strong>{model.name}</strong>
+                  <em className={statusTone(model.status)}>{model.runner}</em>
+                </div>
+              ))}
+            </div>
+            <div className="memory-sync-note">
+              <strong>Memory Sync</strong>
+              <span>Memento/장기기억과 로컬 캐시 동기화 상태</span>
+              <em className={statusTone(runtimeSnapshot.memorySyncStatus)}>{runtimeSnapshot.memorySyncStatus}</em>
+            </div>
           </section>
         </aside>
 
@@ -245,9 +285,10 @@ function RuntimeStatusBar({ snapshot, providerName }: { snapshot: RuntimeSnapsho
     <header className="status-bar">
       <div className="status-cluster">
         <StatusPill label="App" status={snapshot.status} />
-        <StatusPill label="DGX" status={snapshot.dgxStatus} />
-        <StatusPill label="Local" status={snapshot.localModelStatus} />
-        <StatusPill label="Memory" status={snapshot.memorySyncStatus} />
+        <StatusPill label="DGX-02 Server" status={snapshot.dgxStatus} />
+        <StatusPill label="DGX-01" status={snapshot.runtimeNodes.find((node) => node.id === "dgx-01")?.status ?? "offline"} />
+        <StatusPill label="Local Model" status={snapshot.localModelStatus} />
+        <StatusPill label="Memory Sync" status={snapshot.memorySyncStatus} />
       </div>
       <div className="status-meta">
         <span>{providerName}</span>
@@ -264,6 +305,16 @@ function StatusPill({ label, status }: { label: string; status: RuntimeSnapshot[
       {label}: {status}
     </span>
   );
+}
+
+function statusTone(status: RuntimeSnapshot["status"]) {
+  if (status === "online") {
+    return "ok";
+  }
+  if (status === "offline") {
+    return "danger";
+  }
+  return "warn";
 }
 
 function ConversationWorkbench() {
