@@ -12,6 +12,17 @@
 - 커스텀 CLI
 - 로컬 스크립트 실행자
 
+### 계층형 에이전트
+
+제품이 커지면 다음 계층을 사용한다.
+
+- Orchestrator: 상위 관리자. 작업 분배, 승인 요청, 사용자 보고
+- Worker: 실무 실행자. 대화, 코딩 패킷, 제한된 실행 준비
+- External Agent: Telegram/API/webhook 담당. read-only 중심, 위험 도구 차단
+- Auditor: 로그와 병목을 분석하는 read-only 개선 제안자
+
+v0에서는 Orchestrator와 Worker만 필수다. External Agent와 Auditor는 외부 채널과 운영 자동화가 붙을 때 활성화한다.
+
 ### 가상 에이전트
 
 하나의 API 또는 하나의 모델을 여러 역할로 나누어 실행한다.
@@ -96,6 +107,18 @@ export type CodingPacket = {
 - 메모리 슬롯
 
 각 슬롯은 독립적으로 실행되지만, 오케스트레이터가 전체 세션 ID로 묶는다.
+
+## 비공개 세션 통신과 Human Peek
+
+에이전트 간 지시와 결과 보고는 공개 채널 대신 세션 이벤트로 기록한다.
+
+- `sessions.spawn`: 하위 에이전트 세션 생성
+- `sessions.send`: 기존 세션으로 메시지 전달
+- `sessions.yield`: 결과, 승인, 이벤트를 기다림
+
+비공개 세션은 블랙박스가 되기 쉽기 때문에 Human Peek 패널에서 세션 트리, 지시, 응답, approval 상태를 볼 수 있어야 한다.
+
+자세한 외부 채널과 세션 통신 설계는 `docs/15-agent-topology-and-ingress-guards.md`에 둔다.
 
 ## 기록 보기와 재실행
 

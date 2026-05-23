@@ -31,6 +31,7 @@
 - 강한 모델 검증 또는 동일 로컬 모델 검증
 - DGX 원격 실행 및 로컬 폴백
 - SQLite Event Store, Redaction Layer, Permission Matrix
+- External Ingress Guard와 confidence routing
 - Memento-MCP 스타일 장기 메모리
 - 에이전트별 `soul.md` 정체성 파일
 - Obsidian 로컬 백업과 Notion 요약 동기화
@@ -70,6 +71,7 @@ docs/
   12-external-review-plan.md
   13-event-store-permission-redaction.md
   14-product-strategy-vertical-slice.md
+  15-agent-topology-and-ingress-guards.md
   review-board.md
   research-notes.md
 ```

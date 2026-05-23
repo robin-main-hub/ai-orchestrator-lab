@@ -80,8 +80,15 @@ export const EventEnvelopeSchema = z.object({
 | 이벤트 | 예시 |
 | --- | --- |
 | `conversation.message.created` | 사용자가 Conversation Workbench에 메시지 입력 |
+| `ingress.received` | 외부 채널/webhook 입력 수신 |
+| `ingress.guard.applied` | Ingress Guard 적용 결과 |
+| `ingress.blocked` | guard 또는 permission에 의해 외부 입력 차단 |
+| `confidence.classified` | 외부 응답 confidence 분류 |
 | `debate.round.started` | 토론 라운드 시작 |
 | `agent.response.received` | 모델/에이전트 응답 수신 |
+| `agent.session.spawned` | 하위 에이전트 세션 생성 |
+| `agent.session.message.sent` | 에이전트 세션 간 메시지 전달 |
+| `agent.session.yielded` | 하위 세션 결과 대기 |
 | `coding_packet.created` | 대화/토론 결과를 코딩 패킷으로 변환 |
 | `run.requested` | 터미널/CLI 실행 요청 |
 | `run.approval.requested` | 위험 작업 승인 요청 |
@@ -93,6 +100,7 @@ export const EventEnvelopeSchema = z.object({
 | `sync.conflict.detected` | Offline 이후 동기화 충돌 발견 |
 | `record.viewed` | 이전 기록 보기 |
 | `run.rerun.requested` | 과거 실행을 새 조건으로 재실행 요청 |
+| `safety_cron.missing_alert.detected` | 0-token safety cron이 누락 요청 감지 |
 
 ## Redaction Layer
 
@@ -178,6 +186,21 @@ run.requested
 ```
 
 Telegram에서 온 명령은 파일 쓰기, 터미널 실행, 네트워크 호출을 모두 pending으로 둔다.
+
+## Ingress Guard 연결
+
+외부 입력은 Redaction/Permission 전에 Shape Unification과 Noise Filter를 먼저 통과한다.
+
+```text
+external payload
+  -> shape unification
+  -> noise/self-response/debounce guards
+  -> redaction
+  -> permission classification
+  -> Event Store
+```
+
+Guard 적용 결과는 `ingress.guard.applied` 이벤트로 남긴다. 차단된 입력은 `ingress.blocked`로 기록하되, payload는 redacted 형태만 저장한다.
 
 ## Conflict 처리
 
