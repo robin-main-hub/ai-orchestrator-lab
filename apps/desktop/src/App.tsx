@@ -284,11 +284,11 @@ function RuntimeStatusBar({ snapshot, providerName }: { snapshot: RuntimeSnapsho
   return (
     <header className="status-bar">
       <div className="status-cluster">
-        <StatusPill label="App" status={snapshot.status} />
-        <StatusPill label="DGX-02 Server" status={snapshot.dgxStatus} />
         <StatusPill label="DGX-01" status={snapshot.runtimeNodes.find((node) => node.id === "dgx-01")?.status ?? "offline"} />
+        <StatusPill label="DGX-02 Server" status={snapshot.dgxStatus} />
         <StatusPill label="Local Model" status={snapshot.localModelStatus} />
         <StatusPill label="Memory Sync" status={snapshot.memorySyncStatus} />
+        <StatusPill label="App" status={snapshot.status} />
       </div>
       <div className="status-meta">
         <span>{providerName}</span>

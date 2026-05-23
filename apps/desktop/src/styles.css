@@ -1,30 +1,31 @@
 :root {
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #f4efe6;
-  background: #10100f;
+  color: #d7eef2;
+  background: #002d35;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --bg: #10100f;
-  --panel: #181715;
-  --panel-strong: #211f1b;
-  --line: #38342c;
-  --line-soft: #2a2722;
-  --text: #f4efe6;
-  --muted: #b8aea0;
-  --subtle: #7f7669;
-  --amber: #f5b74f;
-  --teal: #63d2bd;
-  --rose: #f08a8a;
-  --violet: #a99bff;
-  --green: #8bd88b;
-  --blue: #8ab8ff;
+  --bg: #002d35;
+  --panel: #00343d;
+  --panel-strong: #004250;
+  --line: #0a5a68;
+  --line-soft: #064852;
+  --text: #d7eef2;
+  --muted: #8ebbc3;
+  --subtle: #5f8c96;
+  --amber: #d8c65d;
+  --teal: #18b8b0;
+  --rose: #ff7d90;
+  --violet: #83a8ff;
+  --green: #54e0a0;
+  --blue: #2aa7e8;
+  --cyan: #29d7e6;
 }
 
 * {
   box-sizing: border-box;
-  scrollbar-color: #4a4237 transparent;
+  scrollbar-color: #0b6d7d transparent;
   scrollbar-width: thin;
 }
 
@@ -40,7 +41,7 @@
 *::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: #4a4237;
+  background: #0b6d7d;
   background-clip: padding-box;
 }
 
@@ -49,7 +50,7 @@ body {
   min-height: 760px;
   margin: 0;
   background:
-    linear-gradient(180deg, rgba(245, 183, 79, 0.08), transparent 260px),
+    linear-gradient(180deg, rgba(42, 167, 232, 0.14), transparent 260px),
     var(--bg);
 }
 
@@ -794,6 +795,86 @@ button {
 .event-log {
   flex: 1;
   min-width: 360px;
+}
+
+.status-bar {
+  border-bottom-color: #087083;
+  background: #003440;
+}
+
+.status-pill {
+  background: #002f38;
+}
+
+.left-rail,
+.right-rail {
+  background: #00343d;
+}
+
+.center-board {
+  background:
+    linear-gradient(90deg, rgba(42, 167, 232, 0.08), transparent 34%),
+    #002f38;
+}
+
+.brand-mark {
+  border-color: #0b7182;
+  background: #004552;
+  color: var(--cyan);
+}
+
+.nav-item,
+.mode-switch button,
+.ghost-button,
+.primary-button,
+.action-strip button {
+  background: #00313a;
+}
+
+.nav-item.active,
+.mode-switch button.active {
+  border-color: #1697ad;
+  background: #005363;
+}
+
+.mini-panel header,
+.coding-packet header span,
+.round-chip.running,
+.debate-card header span,
+.terminal-slot em {
+  color: var(--cyan);
+}
+
+.runtime-node,
+.local-model,
+.memory-sync-note,
+.message,
+.debate-card,
+.provider-row,
+.backup-cell,
+.packet-column {
+  background: #002f38;
+}
+
+.message.user {
+  border-color: #0e7284;
+  background: #00414d;
+}
+
+.message.assistant {
+  border-color: #0d7774;
+  background: #00353f;
+}
+
+.primary-button {
+  border-color: #1fa8c1;
+  background: #005263;
+  color: #dffbff;
+}
+
+.terminal-slot,
+.event-log {
+  background: #00262d;
 }
 
 @media (max-width: 1240px) {
