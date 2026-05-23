@@ -38,11 +38,16 @@ import {
   createStage2Event,
   renderObsidianMarkdown,
 } from "./runtime/stage2Runtime";
+import {
+  createStage3DebateSession,
+  type Stage3DebateSession,
+} from "./runtime/stage3Runtime";
 import type {
   AgentProfile,
   BackupProjection,
   CodingPacket,
   ConversationMessage,
+  DebateTag,
   EventEnvelope,
   ModelDescriptor,
   ProviderProfile,
@@ -384,6 +389,16 @@ export function App() {
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
   const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
   const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
+  const [debateSession, setDebateSession] = useState<Stage3DebateSession>(() =>
+    createStage3DebateSession({
+      messages: initialConversationMessages,
+      agents: seededAgentProfiles,
+      providers: seededProviderProfiles,
+      events: initialEventLog,
+      runtime: runtimeSnapshot,
+      createdAt: now,
+    }),
+  );
   const [backupProjectionsState, setBackupProjectionsState] = useState<BackupProjection[]>(backupProjections);
   const [obsidianMarkdownPreview, setObsidianMarkdownPreview] = useState("");
   const [draftMessage, setDraftMessage] = useState("");
@@ -483,11 +498,32 @@ export function App() {
   }
 
   function handleCreateCodingPacket() {
-    const packet = createCodingPacketFromConversation({
+    const basePacket = createCodingPacketFromConversation({
       messages: conversationMessages,
       agent: selectedAgent,
       provider: selectedProvider,
     });
+    const debateDecisions = debateSession.rounds
+      .flatMap((round) => round.utterances)
+      .filter((utterance) => utterance.tags.some((tag) => tag === "agreement" || tag === "coding_impact"))
+      .map((utterance) => utterance.content)
+      .slice(0, 5);
+    const packet =
+      mode === "debate"
+        ? {
+            ...basePacket,
+            context: [
+              ...basePacket.context,
+              `Stage3 Debate: ${debateSession.summary}`,
+              ...debateSession.contextPreview,
+            ],
+            decisions: [...debateDecisions, ...basePacket.decisions],
+            reviewerNotes: [
+              ...basePacket.reviewerNotes,
+              `Debate ${debateSession.id}에서 ${debateSession.rounds.length}개 라운드를 반영함`,
+            ],
+          }
+        : basePacket;
 
     setCodingPacketState(packet);
     appendEvent("coding_packet.created", {
@@ -495,6 +531,30 @@ export function App() {
       contextCount: packet.context.length,
       decisionCount: packet.decisions.length,
       filesToInspect: packet.filesToInspect,
+    });
+  }
+
+  function handlePromoteToDebate() {
+    const session = createStage3DebateSession({
+      messages: conversationMessages,
+      agents,
+      providers: providerProfiles,
+      events: eventLog,
+      runtime: runtimeSnapshot,
+    });
+
+    setDebateSession(session);
+    setMode("debate");
+    appendEvent("debate.context.promoted", {
+      debateId: session.id,
+      participantCount: session.participants.length,
+      roundCount: session.rounds.length,
+      problemLength: session.problem.length,
+    });
+    appendEvent("debate.round.started", {
+      debateId: session.id,
+      roundId: session.rounds[0]?.id,
+      kind: session.rounds[0]?.kind,
     });
   }
 
@@ -826,7 +886,7 @@ export function App() {
               onBackupProjection={handleExportObsidianProjection}
               onCreateCodingPacket={handleCreateCodingPacket}
               onDraftMessageChange={setDraftMessage}
-              onPromoteToDebate={() => setMode("debate")}
+              onPromoteToDebate={handlePromoteToDebate}
               onSelectAgent={setSelectedAgentId}
               onSendMessage={handleSendMessageStage2}
               selectedAgent={selectedAgent}
@@ -834,7 +894,7 @@ export function App() {
               selectedProvider={selectedProvider}
             />
           ) : (
-            <DebateTable />
+            <Stage3DebateTable onCreateCodingPacket={handleCreateCodingPacket} session={debateSession} />
           )}
 
           <CodingPacketPanel packet={codingPacketState} />
@@ -1063,6 +1123,111 @@ function DebateTable() {
       </div>
     </section>
   );
+}
+
+function Stage3DebateTable({
+  onCreateCodingPacket,
+  session,
+}: {
+  onCreateCodingPacket: () => void;
+  session: Stage3DebateSession;
+}) {
+  const utterances = session.rounds.flatMap((round) =>
+    round.utterances.map((utterance) => ({
+      ...utterance,
+      roundTitle: round.title,
+      agentName: session.participants.find((participant) => participant.agentId === utterance.agentId)?.name ?? utterance.agentId,
+    })),
+  );
+
+  return (
+    <section className="debate-panel stage3">
+      <header className="debate-context">
+        <div>
+          <span>Debate Context</span>
+          <strong>{session.problem}</strong>
+          <p>{session.summary}</p>
+        </div>
+        <button className="primary-button" onClick={onCreateCodingPacket} type="button">
+          <Send size={15} />
+          패킷 반영
+        </button>
+      </header>
+      <div className="round-strip">
+        {session.rounds.map((round) => (
+          <span className={`round-chip ${round.status}`} key={round.id}>
+            {round.title}
+          </span>
+        ))}
+      </div>
+      <div className="debate-workspace">
+        <div className="debate-grid">
+          {utterances.map((utterance) => (
+            <article className="debate-card" key={utterance.id}>
+              <header>
+                <Bot size={16} />
+                <strong>{utterance.agentName}</strong>
+                <span>{utterance.roundTitle}</span>
+              </header>
+              <div className="debate-tags">
+                {utterance.tags.map((tag) => (
+                  <em className={`debate-tag ${tag}`} key={tag}>
+                    {debateTagLabel(tag)}
+                  </em>
+                ))}
+              </div>
+              <p>{utterance.content}</p>
+            </article>
+          ))}
+        </div>
+        <aside className="human-peek-panel">
+          <section>
+            <header>
+              <Activity size={15} />
+              <strong>Status Hub</strong>
+            </header>
+            <div className="status-hub-grid">
+              {session.statusHub.map((item) => (
+                <div className={`status-hub-cell ${item.tone}`} key={item.id}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section>
+            <header>
+              <GitBranch size={15} />
+              <strong>Human Peek</strong>
+            </header>
+            <div className="peek-list">
+              {session.humanPeek.map((entry) => (
+                <article className={`peek-row ${entry.state}`} key={entry.id}>
+                  <span>{entry.kind}</span>
+                  <strong>
+                    {entry.actor} → {entry.target}
+                  </strong>
+                  <p>{entry.summary}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function debateTagLabel(tag: DebateTag) {
+  const labels: Record<DebateTag, string> = {
+    agreement: "합의",
+    objection: "반대",
+    evidence: "근거",
+    risk: "리스크",
+    coding_impact: "코딩 영향",
+  };
+
+  return labels[tag];
 }
 
 function ProviderProfilesManagerPanel({
