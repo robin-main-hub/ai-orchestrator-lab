@@ -65,6 +65,8 @@ docs/
   09-agent-soul.md
   10-backup-and-mobile.md
   11-conversation-mode.md
+  12-external-review-plan.md
+  review-board.md
   research-notes.md
 ```
 
