@@ -377,7 +377,7 @@ function statusTone(status: RuntimeSnapshot["status"]) {
 function ConversationWorkbench() {
   return (
     <section className="workbench-panel">
-      <div className="conversation-stream">
+      <div className="conversation-stream" aria-label="대화 기록" tabIndex={0}>
         <article className="message user">
           <span>사용자</span>
           <p>문서에 맞춰 첫 구현 골격을 만들자. 토론으로 확대할 수 있게 경계도 살려줘.</p>
