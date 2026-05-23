@@ -173,7 +173,7 @@ button {
   grid-column: 2;
   grid-row: 2;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) 108px;
+  grid-template-rows: auto minmax(0, 1fr) clamp(168px, 22vh, 196px);
   gap: 8px;
   padding: 10px;
   overflow: hidden;
@@ -1031,14 +1031,14 @@ button {
 .coding-packet {
   min-height: 0;
   overflow: hidden;
-  padding: 9px;
+  padding: 7px;
 }
 
 .coding-packet header {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 5px;
 }
 
 .coding-packet header span {
@@ -1048,34 +1048,44 @@ button {
 
 .coding-packet h2 {
   margin-top: 2px;
-  font-size: 12px;
-  line-height: 1.25;
+  font-size: 11px;
+  line-height: 1.18;
+}
+
+.coding-packet header .ghost-button {
+  min-height: 30px;
+  padding: 0 10px;
 }
 
 .packet-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 7px;
-  height: calc(100% - 38px);
-  overflow: auto;
+  gap: 6px;
+  height: calc(100% - 33px);
+  overflow: hidden;
 }
 
 .packet-column {
   min-width: 0;
-  padding: 8px;
+  padding: 6px 7px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   background: #141311;
 }
 
+.packet-column strong {
+  font-size: 12px;
+  line-height: 1.1;
+}
+
 .packet-column ul {
   display: grid;
-  gap: 5px;
-  margin: 6px 0 0;
-  padding-left: 18px;
+  gap: 3px;
+  margin: 4px 0 0;
+  padding-left: 15px;
   color: var(--muted);
-  font-size: 10px;
-  line-height: 1.32;
+  font-size: 9.5px;
+  line-height: 1.18;
 }
 
 .terminal-dock {
