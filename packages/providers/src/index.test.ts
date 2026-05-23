@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   createProviderProfileFromCredentialInput,
+  createProviderRuntimeReadiness,
+  createSecretVaultSnapshot,
   discoverModelsForProfile,
   parseProviderCredentialInput,
 } from "./index";
@@ -58,5 +60,29 @@ describe("provider credential parsing and model discovery", () => {
     expect(discovery.models.length).toBeGreaterThan(8);
     expect(discovery.redactionApplied).toBe(true);
     expect(discovery.models.every((model) => model.providerProfileId === profile.id)).toBe(true);
+  });
+
+  it("models secret vault availability and provider runtime readiness", () => {
+    const { profile } = createProviderProfileFromCredentialInput({
+      id: "provider_reseller",
+      rawInput: 'export ANTHROPIC_BASE_URL="https://api.apikey.fun"\nexport ANTHROPIC_AUTH_TOKEN="sk-reseller-secret"',
+      createdAt,
+    });
+    const discovery = discoverModelsForProfile(profile, createdAt);
+    const vault = createSecretVaultSnapshot([profile], createdAt);
+    const readiness = createProviderRuntimeReadiness({
+      profile,
+      models: discovery.models,
+      vault,
+      selectedModelId: discovery.selectedModelId,
+      createdAt,
+    });
+
+    expect(vault.rawSecretPersisted).toBe(false);
+    expect(vault.summary.available).toBe(1);
+    expect(vault.entries[0]?.redactedPreview).toBe("sk-...cret");
+    expect(JSON.stringify(vault)).not.toContain("reseller-secret");
+    expect(readiness.status).toBe("needs_approval");
+    expect(readiness.canUseAutomaticMemory).toBe(false);
   });
 });

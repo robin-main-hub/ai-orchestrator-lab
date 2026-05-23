@@ -1751,7 +1751,8 @@ button {
 .event-log,
 .dgx-bridge-card,
 .agent-runtime-card,
-.permission-matrix-card {
+.permission-matrix-card,
+.secret-vault-card {
   min-width: 220px;
   height: 86px;
   padding: 8px;
@@ -1764,7 +1765,8 @@ button {
 .event-log header,
 .dgx-bridge-card header,
 .agent-runtime-card header,
-.permission-matrix-card header {
+.permission-matrix-card header,
+.secret-vault-card header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1775,7 +1777,8 @@ button {
 .terminal-slot em,
 .dgx-bridge-card em,
 .agent-runtime-card em,
-.permission-matrix-card em {
+.permission-matrix-card em,
+.secret-vault-card em {
   color: var(--amber);
   font-size: 12px;
   font-style: normal;
@@ -1787,33 +1790,39 @@ button {
 .event-log p,
 .event-log small,
 .permission-matrix-card p,
-.permission-matrix-card small {
+.permission-matrix-card small,
+.secret-vault-card p,
+.secret-vault-card small {
   margin: 0;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.32;
 }
 
-.permission-matrix-card {
+.permission-matrix-card,
+.secret-vault-card {
   min-width: 284px;
   display: grid;
   grid-template-rows: auto auto auto auto;
   gap: 3px;
 }
 
-.permission-matrix-card header span {
+.permission-matrix-card header span,
+.secret-vault-card header span {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
-.permission-summary-grid {
+.permission-summary-grid,
+.vault-summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 5px;
 }
 
-.permission-summary-grid p {
+.permission-summary-grid p,
+.vault-summary-grid p {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1825,12 +1834,14 @@ button {
   background: #002f38;
 }
 
-.permission-summary-grid strong {
+.permission-summary-grid strong,
+.vault-summary-grid strong {
   color: var(--cyan);
   font-size: 11px;
 }
 
-.permission-queue-preview {
+.permission-queue-preview,
+.vault-preview {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
@@ -1838,14 +1849,17 @@ button {
 }
 
 .permission-queue-preview span,
-.permission-queue-preview small {
+.permission-queue-preview small,
+.vault-preview span,
+.vault-preview small {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.permission-queue-preview span {
+.permission-queue-preview span,
+.vault-preview span {
   color: var(--text);
   font-size: 10px;
 }

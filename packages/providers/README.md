@@ -30,3 +30,8 @@
 - `parseProviderCredentialInput`: plain key, shell export, PowerShell env, Claude Code JSON env block을 `SecretRef` 중심 profile metadata로 변환한다.
 - `createProviderProfileFromCredentialInput`: 원문 secret 없이 ProviderProfile을 만든다.
 - `discoverModelsForProfile`: 실제 `/models` 호출 전 단계의 mock discovery snapshot을 만든다.
+
+## Stage11
+
+- `createSecretVaultSnapshot`: provider profile의 secretRef를 session/keychain/DGX vault 상태로 모델링한다.
+- `createProviderRuntimeReadiness`: 선택 provider가 completion 직전 단계에서 ready/approval/credential_required/blocked 중 어디인지 계산한다.

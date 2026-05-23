@@ -133,3 +133,15 @@ Stage10에서는 실제 네트워크 호출 전에 credential parser와 mock mod
 - 데스크톱 Provider Profiles 패널의 refresh 버튼은 discovery snapshot을 만들고, agent model selector가 그 결과를 바로 사용한다.
 
 실제 OS Keychain 저장, DGX secret vault, 원격 model discovery HTTP 호출은 다음 단계에서 붙인다.
+
+## Stage11 구현 경계
+
+Stage11에서는 실제 OS Keychain/DGX vault 저장 전에, 앱 내부가 참조할 secret vault/readiness 모델을 먼저 고정한다.
+
+- `SecretVaultSnapshot`은 provider별 secretRef의 storage, availability, transient 여부를 기록한다.
+- `rawSecretPersisted`는 항상 `false`로 둔다. Event Store와 UI에는 원문 key/token을 넣지 않는다.
+- `ProviderRuntimeReadiness`는 선택 provider가 지금 completion을 실행할 수 있는지, untrusted라 approval이 필요한지, 자동 memory recall이 가능한지를 계산한다.
+- 데스크톱 하단 dock의 Provider Vault 카드는 secret availability, model count, memory mode, readiness reason을 보여준다.
+- `check` 버튼은 `secret.vault.checked`, `provider.runtime.readiness.checked` 이벤트만 남기고 실제 secret 조회나 모델 호출은 하지 않는다.
+
+다음 단계에서 이 readiness를 실제 provider completion 호출 직전 gate로 연결한다.

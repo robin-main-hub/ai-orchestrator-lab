@@ -103,6 +103,55 @@ export type ModelDiscoverySnapshot = {
   createdAt: string;
 };
 
+export type SecretStorageKind = "session_memory" | "macos_keychain" | "dgx_vault" | "oauth_session";
+
+export type SecretAvailability = "available" | "missing" | "expired" | "revoked";
+
+export type SecretVaultEntry = {
+  id: string;
+  providerProfileId: string;
+  secretRefId?: string;
+  storage: SecretStorageKind;
+  availability: SecretAvailability;
+  redactedPreview?: string;
+  transient: boolean;
+  createdAt: string;
+  expiresAt?: string;
+};
+
+export type SecretVaultSnapshot = {
+  id: string;
+  entries: SecretVaultEntry[];
+  summary: {
+    available: number;
+    missing: number;
+    transient: number;
+    keychainReady: number;
+    dgxVaultReady: number;
+  };
+  rawSecretPersisted: false;
+  createdAt: string;
+};
+
+export type ProviderExecutionMode = "mock" | "local" | "remote";
+
+export type ProviderReadinessStatus = "ready" | "credential_required" | "needs_approval" | "blocked";
+
+export type ProviderRuntimeReadiness = {
+  id: string;
+  providerProfileId: string;
+  status: ProviderReadinessStatus;
+  executionMode: ProviderExecutionMode;
+  modelCount: number;
+  selectedModelId?: string;
+  secretAvailability: SecretAvailability;
+  canRunCompletion: boolean;
+  canUseAutomaticMemory: boolean;
+  reason: string;
+  warnings: string[];
+  createdAt: string;
+};
+
 export const agentKindSchema = z.enum(["real", "virtual"]);
 export type AgentKind = z.infer<typeof agentKindSchema>;
 

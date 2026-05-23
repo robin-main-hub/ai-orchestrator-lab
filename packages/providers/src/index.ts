@@ -5,8 +5,11 @@ import type {
   ProviderCredentialParseResult,
   ProviderKind,
   ProviderProfile,
+  ProviderRuntimeReadiness,
   ProviderTrustLevel,
   SecretRef,
+  SecretVaultEntry,
+  SecretVaultSnapshot,
 } from "@ai-orchestrator/protocol";
 
 export type ProviderChatMessage = {
@@ -164,6 +167,67 @@ export function discoverModelsForProfile(
   };
 }
 
+export function createSecretVaultSnapshot(
+  profiles: ProviderProfile[],
+  createdAt = new Date().toISOString(),
+): SecretVaultSnapshot {
+  const entries = profiles.map((profile) => createSecretVaultEntry(profile, createdAt));
+
+  return {
+    id: `secret_vault_${stableId(entries.map((entry) => `${entry.id}:${entry.availability}`).join("|"))}`,
+    entries,
+    summary: {
+      available: entries.filter((entry) => entry.availability === "available").length,
+      missing: entries.filter((entry) => entry.availability === "missing").length,
+      transient: entries.filter((entry) => entry.transient).length,
+      keychainReady: entries.filter((entry) => entry.storage === "macos_keychain" && entry.availability === "available").length,
+      dgxVaultReady: entries.filter((entry) => entry.storage === "dgx_vault" && entry.availability === "available").length,
+    },
+    rawSecretPersisted: false,
+    createdAt,
+  };
+}
+
+export function createProviderRuntimeReadiness(params: {
+  profile?: ProviderProfile;
+  models: ModelDescriptor[];
+  vault: SecretVaultSnapshot;
+  selectedModelId?: string;
+  createdAt?: string;
+}): ProviderRuntimeReadiness {
+  const createdAt = params.createdAt ?? new Date().toISOString();
+  const profile = params.profile;
+  const vaultEntry = profile
+    ? params.vault.entries.find((entry) => entry.providerProfileId === profile.id)
+    : undefined;
+  const executionMode = profile?.tags.includes("mock")
+    ? "mock"
+    : profile?.kind === "ollama" || profile?.kind === "lmstudio"
+      ? "local"
+      : "remote";
+  const secretAvailability =
+    executionMode === "local" || executionMode === "mock" ? "available" : vaultEntry?.availability ?? "missing";
+  const modelCount = params.models.length;
+  const status = createReadinessStatus({ profile, modelCount, secretAvailability });
+  const canRunCompletion = status === "ready" || status === "needs_approval";
+  const canUseAutomaticMemory = profile?.trustLevel === "trusted" || executionMode === "local" || executionMode === "mock";
+
+  return {
+    id: `provider_readiness_${stableId(`${profile?.id ?? "none"}:${status}:${params.selectedModelId ?? ""}`)}`,
+    providerProfileId: profile?.id ?? "provider_pending",
+    status,
+    executionMode,
+    modelCount,
+    selectedModelId: params.selectedModelId ?? params.models[0]?.id ?? profile?.defaultModel,
+    secretAvailability,
+    canRunCompletion,
+    canUseAutomaticMemory,
+    reason: createReadinessReason({ profile, modelCount, secretAvailability, status }),
+    warnings: createReadinessWarnings({ profile, canUseAutomaticMemory, secretAvailability }),
+    createdAt,
+  };
+}
+
 export class MockProviderAdapter implements ProviderAdapter {
   readonly profile: ProviderProfile;
 
@@ -215,6 +279,109 @@ export class MockProviderAdapter implements ProviderAdapter {
       },
     };
   }
+}
+
+function createSecretVaultEntry(profile: ProviderProfile, createdAt: string): SecretVaultEntry {
+  const storage = profile.tags.includes("oauth")
+    ? "oauth_session"
+    : profile.trustLevel === "trusted" && profile.secretRef?.scope !== "session"
+      ? "macos_keychain"
+      : profile.trustLevel === "untrusted"
+        ? "session_memory"
+        : "session_memory";
+
+  return {
+    id: `vault_entry_${stableId(`${profile.id}:${profile.secretRef?.id ?? "missing"}`)}`,
+    providerProfileId: profile.id,
+    secretRefId: profile.secretRef?.id,
+    storage,
+    availability:
+      profile.kind === "ollama" || profile.kind === "lmstudio" || profile.tags.includes("mock") || profile.secretRef
+        ? "available"
+        : "missing",
+    redactedPreview: profile.secretRef?.redactedPreview,
+    transient: profile.secretRef?.transient ?? profile.trustLevel !== "trusted",
+    createdAt: profile.secretRef?.createdAt ?? createdAt,
+    expiresAt: profile.secretRef?.expiresAt,
+  };
+}
+
+function createReadinessStatus(params: {
+  profile?: ProviderProfile;
+  modelCount: number;
+  secretAvailability: SecretVaultEntry["availability"];
+}): ProviderRuntimeReadiness["status"] {
+  if (!params.profile || !params.profile.enabled) {
+    return "blocked";
+  }
+
+  if (params.modelCount === 0) {
+    return "blocked";
+  }
+
+  if (params.secretAvailability !== "available") {
+    return "credential_required";
+  }
+
+  if (params.profile.trustLevel === "untrusted") {
+    return "needs_approval";
+  }
+
+  return "ready";
+}
+
+function createReadinessReason(params: {
+  profile?: ProviderProfile;
+  modelCount: number;
+  secretAvailability: SecretVaultEntry["availability"];
+  status: ProviderRuntimeReadiness["status"];
+}) {
+  if (!params.profile) {
+    return "provider not selected";
+  }
+
+  if (!params.profile.enabled) {
+    return "provider disabled";
+  }
+
+  if (params.modelCount === 0) {
+    return "model discovery has no selectable models";
+  }
+
+  if (params.secretAvailability !== "available") {
+    return "credential is missing from secret vault";
+  }
+
+  if (params.status === "needs_approval") {
+    return "untrusted provider can run only after explicit approval and reduced memory context";
+  }
+
+  return "provider has model metadata and a non-persisted secret reference";
+}
+
+function createReadinessWarnings(params: {
+  profile?: ProviderProfile;
+  canUseAutomaticMemory: boolean;
+  secretAvailability: SecretVaultEntry["availability"];
+}) {
+  const warnings: string[] = [];
+  if (!params.profile) {
+    return ["provider pending"];
+  }
+
+  if (!params.canUseAutomaticMemory) {
+    warnings.push("automatic project/user memory recall is blocked for this provider");
+  }
+
+  if (params.secretAvailability !== "available") {
+    warnings.push("secret must be resolved before provider completion");
+  }
+
+  if (params.profile.trustLevel === "untrusted") {
+    warnings.push("prompt and memory may pass through a custom/reseller endpoint");
+  }
+
+  return warnings;
 }
 
 function parseJsonEnv(raw: string): Record<string, string> {
