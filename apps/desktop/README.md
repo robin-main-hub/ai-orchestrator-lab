@@ -22,3 +22,13 @@
 - WebSocket event stream
 
 초기 구현에서는 UI 반응성과 로컬 시스템 접근성을 우선합니다.
+
+## 현재 구현
+
+- Vite + React + TypeScript 기반 작업판
+- 상단 Runtime Status Bar
+- 좌측 네비게이션
+- Conversation/Debate 중앙 전환
+- Provider Profiles stub
+- Agent/Memory/Backup 상태 패널
+- 실제 명령 실행이 없는 Terminal/Run Log 슬롯

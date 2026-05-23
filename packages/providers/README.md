@@ -19,3 +19,9 @@
 - 토큰/비용 추정
 - 오류 정규화
 - API 키/환경변수 파싱
+
+## 현재 구현
+
+- `ProviderAdapter` 인터페이스
+- 실제 네트워크 호출이 없는 `MockProviderAdapter`
+- 원문 키를 저장하지 않는 `SecretRef` 생성 helper
