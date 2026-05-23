@@ -10,6 +10,7 @@
 - 세션, 이벤트, 에이전트, 프로바이더, 모델, 메모리 스키마 정의
 - Event Store envelope 정의
 - Redaction rule과 Permission Matrix 정의
+- Ingress Guard와 confidence routing 스키마 정의
 - memory trust level과 source channel 정의
 - 기록 보기와 재실행 이벤트 분리
 - 기본 테스트 환경 구성
@@ -20,6 +21,7 @@
 - event emit 직전 Redaction Layer
 - OS keychain 기반 secret reference
 - Permission Matrix와 pending approval 상태
+- 외부 입력 Shape Unification/Noise Filter/Self-Response Prevention
 - Obsidian/Notion/mobile exporter가 읽을 projection 경계
 - Offline pending queue와 sync conflict 기본 모델
 
@@ -47,6 +49,7 @@
 - Anthropic/Claude Code 리셀러 형식 파서
 - OpenRouter 어댑터
 - 비용/토큰 추적
+- Human Peek 기본 패널 설계
 
 ## 4단계: 에이전트 런타임
 
@@ -76,6 +79,15 @@
 - Memory Inspector
 - 로컬 캐시와 pending queue
 - trust level 기반 recall 제한
+
+## 6.5단계: 외부 채널 운영 안정화
+
+- External Agent workspace
+- Ingress Guard 전체 체인
+- Confidence Routing
+- 0-token safety cron
+- SSOT provider 추상화
+- Human Peek 고도화
 
 ## 7단계: 실제 코딩 워크플로우
 

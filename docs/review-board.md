@@ -11,7 +11,7 @@ Claude, GPT, Gemini, 로컬 모델, 코딩 특화 모델의 검토 결과를 한
 | Grok 종합 리뷰 | 완료 | 사용자 제공 원문 | 복잡도, 폴백 경계, Event Store, Redaction, Permission, Conversation 기본 모드 지적 |
 | Claude 계열 | 완료 | 사용자 제공 원문 | 제품 범위, UX 무게, soul 우선순위, memory trust, 리셀러 위험, replay 용어 지적 |
 | GPT 계열 | 대기 |  |  |
-| Gemini 계열 | 대기 |  |  |
+| Gemini 계열 | 완료 | 사용자 제공 원문 | GPTers/OpenClaw 레퍼런스 기반 에이전트 토폴로지, 세션 통신, 7중 guard, confidence routing 제안 |
 | 로컬 모델 | 대기 |  |  |
 | 코딩 특화 모델 | 대기 |  |  |
 
@@ -25,6 +25,8 @@ Claude, GPT, Gemini, 로컬 모델, 코딩 특화 모델의 검토 결과를 한
 - 1인 프로젝트에서 전체 범위를 한 번에 구현하려 하면 실제로 매일 쓰는 제품이 되기 전에 배관만 커질 수 있다.
 - 리셀러/커스텀 base URL과 장기 메모리 recall이 결합되면 누적된 민감 맥락이 신뢰 낮은 프록시로 흘러갈 수 있다.
 - Telegram 같은 외부 채널은 실행 승인만으로는 충분하지 않고, memory/context poisoning을 막기 위한 trust 정책이 필요하다.
+- 외부 채널은 AI에 직접 연결하지 말고 guard pipeline과 confidence routing을 통과해야 한다.
+- 비공개 agent-to-agent 세션은 Human Peek 같은 관찰 UI 없이는 블랙박스가 된다.
 
 ## 모델별 고유 지적
 
@@ -45,6 +47,15 @@ Claude, GPT, Gemini, 로컬 모델, 코딩 특화 모델의 검토 결과를 한
 - `Replay`라는 단어는 기록 보기와 재실행을 혼동시킨다. UI 용어를 `기록 보기`와 `재실행`으로 분리해야 한다.
 - 같은 모델에서 만든 가상 에이전트의 합의는 독립적 합의가 아니라 상관된 출력일 수 있음을 명시해야 한다.
 
+### Gemini 전략/레퍼런스 리뷰
+
+- 상위 관리자, 실무 실행자, 외부 채널 담당, 감사 에이전트의 계층형 토폴로지는 우리 Orchestrator/Worker/External/Auditor 구조에 적용 가능하다.
+- `sessions.spawn`, `sessions.send`, `sessions.yield` 같은 비공개 세션 통신은 공개 채널 소음을 줄이지만 Human Peek가 필요하다.
+- 외부 채널은 n8n 같은 proxy 또는 webhook receiver 뒤에서 Shape Unification, Noise Filter, Self-Response Prevention, Debounce, PII Block, Logging, Checklist Injection을 통과해야 한다.
+- HIGH/LOW confidence routing은 자동 응답과 인간 승인을 나누는 좋은 기준이다.
+- 0-token safety cron은 LLM 장애에도 누락 요청을 잡는 비-AI 안전망으로 유용하다.
+- Linear 강제 SSOT는 우리 제품에는 과하므로, 프로젝트별 SSOT provider 추상화로 받아들인다.
+
 ## 바로 반영할 것
 
 - protocol 단계에서 Zod 스키마를 함께 정의한다.
@@ -60,6 +71,10 @@ Claude, GPT, Gemini, 로컬 모델, 코딩 특화 모델의 검토 결과를 한
 - memory record에 `source_channel`, `trust_level`을 추가하고 Telegram 등 untrusted 출처의 자동 recall을 제한한다.
 - `Replay`를 `Record View`와 `Re-run`으로 분리한다.
 - 리셀러/커스텀 base URL 사용 시 memory 전송 위험 경고와 라우팅 제한을 제공한다.
+- External Agent는 기본 read-only, exec/write/browser/secret denied로 시작한다.
+- 외부 유입 요청용 Ingress Guard 스키마와 guard 적용 로그를 protocol에 포함한다.
+- 비공개 세션 통신 이벤트와 Human Peek 패널을 설계에 추가한다.
+- 0-token safety cron을 LLM 장애 감시와 pending 요청 누락 감지용으로 추가한다.
 
 ## 보류할 것
 
@@ -68,6 +83,8 @@ Claude, GPT, Gemini, 로컬 모델, 코딩 특화 모델의 검토 결과를 한
 - Soul 전체 자동 주입: 기본값은 Summary 또는 Retrieved로 두고 Full은 명시 선택으로 둔다.
 - soul.md 시스템은 설계는 유지하되 v0의 필수 경로에서는 제외한다.
 - 분산 메모리 충돌 해결은 초기에 LWW + 충돌 기록으로 시작하고, 복잡한 merge UI는 뒤로 미룬다.
+- ChannelTalk/n8n/Linear 특정 구현은 보류하고 provider 추상화로 둔다.
+- External Agent와 Auditor는 v0 필수 경로에서 제외한다.
 
 ## 반영하지 않을 것
 
@@ -82,6 +99,8 @@ Claude, GPT, Gemini, 로컬 모델, 코딩 특화 모델의 검토 결과를 한
 5. Adopt/Reject는 git worktree, patch file, branch 중 무엇을 기본 단위로 삼을 것인가?
 6. 프로젝트 목적을 "쓰려고 만든다"로 고정할 때, 첫 수직 슬라이스의 완료 기준은 무엇인가?
 7. 리셀러/커스텀 프로바이더에서 memory recall을 기본 차단할 것인가, 경고 후 허용할 것인가?
+8. Human Peek는 데스크톱 UI의 어느 위치에 들어가야 하는가?
+9. SSOT provider의 v0 기본값은 로컬 Markdown, GitHub Issues, Notion 중 무엇인가?
 
 ## 반영 결정 로그
 
@@ -94,3 +113,4 @@ Claude, GPT, Gemini, 로컬 모델, 코딩 특화 모델의 검토 결과를 한
 | 2026-05-24 | Claude 제품/UX 리뷰를 기록 | 실제 사용 흐름, 범위 관리, soul/memory UX 위험을 보완함 | `docs/review-board.md` |
 | 2026-05-24 | 제품 목적을 "쓰려고 만든다"로 확정 | 학습은 수단이며, 사용 가능한 수직 슬라이스를 먼저 관통시켜야 함 | `docs/14-product-strategy-vertical-slice.md` |
 | 2026-05-24 | memory trust level을 채택 | Telegram/context poisoning과 리셀러 프록시 유출을 줄이기 위함 | `docs/13-event-store-permission-redaction.md`, `docs/05-memory-memento.md` |
+| 2026-05-24 | Gemini 레퍼런스 리뷰를 기록 | 외부 채널 guard, 계층형 에이전트, 0-token safety cron이 보안/운영 안정성에 유용함 | `docs/15-agent-topology-and-ingress-guards.md` |

@@ -20,6 +20,8 @@
 | 가상 에이전트 | 하나의 모델/API에서 여러 역할을 만든 뒤 라운드 참여 |
 | 합의 한계 표시 | 같은 모델 기반 가상 에이전트 합의가 독립 검증이 아님을 표시 |
 | 단일 대화 에이전트 | 토론 없이 한 에이전트와 대화하며 작업을 진행 |
+| External Agent | 외부 채널 담당. read-only 중심, 위험 도구 기본 차단 |
+| Auditor Agent | 실행 로그와 병목을 분석하는 read-only 개선 제안자 |
 | 역할 템플릿 | 설계자, 구현자, 리뷰어, 반대자, 보안 검토자, 비용 감시자 |
 | 모델별 에이전트 | OpenAI/Anthropic/OpenRouter/Ollama 등 서로 다른 모델을 한 판에 배치 |
 | 검증자 | 강한 모델 또는 같은 로컬 모델로 최종 검증 |
@@ -32,6 +34,8 @@
 | Telegram 브리지 | Telegram/OpenClaw 대화를 오케스트레이터 세션으로 기록하고 이어받기 |
 | 모바일 대시보드 | 폰에서 세션 읽기, 승인, 중단, 재시도 수행 |
 | 채널 승격 | 대화 세션을 토론/코딩/리뷰 세션으로 전환 |
+| Ingress Guard | 외부 webhook/API/Telegram 입력을 정규화, 필터링, 권한 분류 후 Event Store로 전달 |
+| Confidence Routing | HIGH/MEDIUM/LOW 신뢰도에 따라 자동 응답, 빠른 승인, 검토 대기로 분기 |
 
 ## Event Store와 권한
 
@@ -43,6 +47,7 @@
 | Permission Matrix | 채널과 액션별 allowed/pending/denied 정책 |
 | Approval Queue | Telegram/mobile/위험 실행 요청을 승인 대기 상태로 관리 |
 | Sync Conflict | Offline 이후 soul, memory, session, artifact 충돌 감지 |
+| Guard Log | 외부 입력 guard 적용 결과와 차단 이유 기록 |
 
 ## 프로바이더
 
