@@ -1316,7 +1316,8 @@ button {
 }
 
 .terminal-slot,
-.event-log {
+.event-log,
+.agent-runtime-card {
   min-width: 240px;
   height: 78px;
   padding: 8px;
@@ -1326,7 +1327,8 @@ button {
 }
 
 .terminal-slot header,
-.event-log header {
+.event-log header,
+.agent-runtime-card header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1334,7 +1336,8 @@ button {
   margin-bottom: 6px;
 }
 
-.terminal-slot em {
+.terminal-slot em,
+.agent-runtime-card em {
   color: var(--amber);
   font-size: 12px;
   font-style: normal;
@@ -1370,6 +1373,38 @@ button {
 .event-log-list small {
   flex: 0 0 auto;
   color: var(--subtle);
+}
+
+.agent-runtime-card {
+  flex: 1 1 300px;
+  min-width: 280px;
+}
+
+.runtime-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 8px;
+}
+
+.runtime-card-grid p,
+.runtime-card-grid span,
+.runtime-card-grid strong {
+  display: block;
+  margin: 0;
+  min-width: 0;
+}
+
+.runtime-card-grid span {
+  color: var(--subtle);
+  font-size: 9px;
+}
+
+.runtime-card-grid strong {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .terminal-slot small {
@@ -1460,7 +1495,8 @@ button {
 }
 
 .terminal-slot,
-.event-log {
+.event-log,
+.agent-runtime-card {
   background: #00262d;
 }
 

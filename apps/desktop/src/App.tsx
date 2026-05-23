@@ -42,6 +42,10 @@ import {
   createStage3DebateSession,
   type Stage3DebateSession,
 } from "./runtime/stage3Runtime";
+import {
+  createStage4AgentRun,
+  type Stage4AgentRun,
+} from "./runtime/stage4Runtime";
 import type {
   AgentProfile,
   BackupProjection,
@@ -399,6 +403,16 @@ export function App() {
       createdAt: now,
     }),
   );
+  const [agentRunState, setAgentRunState] = useState<Stage4AgentRun>(() =>
+    createStage4AgentRun({
+      packet: codingPacket,
+      primaryAgent: seededAgentProfiles[0],
+      agents: seededAgentProfiles,
+      messages: initialConversationMessages,
+      events: initialEventLog,
+      createdAt: now,
+    }),
+  );
   const [backupProjectionsState, setBackupProjectionsState] = useState<BackupProjection[]>(backupProjections);
   const [obsidianMarkdownPreview, setObsidianMarkdownPreview] = useState("");
   const [draftMessage, setDraftMessage] = useState("");
@@ -583,6 +597,49 @@ export function App() {
       projection: "markdown",
       bytes: markdown.length,
       redaction: "applied",
+    });
+  }
+
+  function handleCreateAgentRun() {
+    const run = createStage4AgentRun({
+      packet: codingPacketState,
+      primaryAgent: selectedAgent,
+      agents,
+      messages: conversationMessages,
+      events: eventLog,
+    });
+
+    setAgentRunState(run);
+    if (selectedAgent) {
+      setAgentActivity(selectedAgent.id, "preparing");
+      window.setTimeout(() => {
+        setAgentActivity(selectedAgent.id, "responding");
+      }, 220);
+      window.setTimeout(() => {
+        setAgentActivity(selectedAgent.id, "idle");
+      }, 900);
+    }
+    appendEvent("agent.run.planned", {
+      runId: run.id,
+      primaryAgentId: run.primaryAgentId,
+      status: run.status,
+      stepCount: run.steps.length,
+      verifierStatus: run.verifier.status,
+    });
+    appendEvent("soul.summary.injected", {
+      runId: run.id,
+      primaryAgentId: run.primaryAgentId,
+      mode: selectedAgent?.soulMode ?? "off",
+    });
+    appendEvent("memory.recall.used", {
+      runId: run.id,
+      traceCount: run.recallTrace.length,
+      usedCount: run.recallTrace.filter((trace) => trace.usedInDecision).length,
+    });
+    appendEvent("run.replay.prepared", {
+      runId: run.id,
+      replayId: run.replay.id,
+      eventCount: run.replay.eventIds.length,
     });
   }
 
@@ -884,6 +941,7 @@ export function App() {
               draftMessage={draftMessage}
               messages={conversationMessages}
               onBackupProjection={handleExportObsidianProjection}
+              onCreateAgentRun={handleCreateAgentRun}
               onCreateCodingPacket={handleCreateCodingPacket}
               onDraftMessageChange={setDraftMessage}
               onPromoteToDebate={handlePromoteToDebate}
@@ -926,7 +984,7 @@ export function App() {
           <BackupPanel projectionPreview={obsidianMarkdownPreview} projections={backupProjectionsState} />
         </aside>
       </main>
-      <TerminalDock events={eventLog} slots={terminalSlots} />
+      <TerminalDock agentRun={agentRunState} events={eventLog} slots={terminalSlots} />
     </div>
   );
 }
@@ -968,6 +1026,7 @@ function ConversationWorkbench({
   draftMessage,
   messages,
   onBackupProjection,
+  onCreateAgentRun,
   onCreateCodingPacket,
   onDraftMessageChange,
   onPromoteToDebate,
@@ -981,6 +1040,7 @@ function ConversationWorkbench({
   draftMessage: string;
   messages: ConversationMessage[];
   onBackupProjection: () => void;
+  onCreateAgentRun: () => void;
   onCreateCodingPacket: () => void;
   onDraftMessageChange: (value: string) => void;
   onPromoteToDebate: () => void;
@@ -1063,7 +1123,7 @@ function ConversationWorkbench({
           <Send size={16} />
           패킷 생성
         </button>
-        <button type="button">
+        <button onClick={onCreateAgentRun} type="button">
           <Play size={16} />
           실행 슬롯
         </button>
@@ -1501,7 +1561,15 @@ function CodingPacketPanel({ packet }: { packet: CodingPacket }) {
   );
 }
 
-function TerminalDock({ events, slots }: { events: EventEnvelope[]; slots: TerminalSlot[] }) {
+function TerminalDock({
+  agentRun,
+  events,
+  slots,
+}: {
+  agentRun: Stage4AgentRun;
+  events: EventEnvelope[];
+  slots: TerminalSlot[];
+}) {
   const visibleEvents = events.slice(0, 4);
 
   return (
@@ -1522,6 +1590,30 @@ function TerminalDock({ events, slots }: { events: EventEnvelope[]; slots: Termi
             <small>approval: {slot.permissionState}</small>
           </article>
         ))}
+        <article className="agent-runtime-card">
+          <header>
+            <span>Agent Runtime</span>
+            <em>{agentRun.status}</em>
+          </header>
+          <div className="runtime-card-grid">
+            <p>
+              <span>soul</span>
+              <strong>{agentRun.soulSummary}</strong>
+            </p>
+            <p>
+              <span>memento</span>
+              <strong>{agentRun.recallTrace.length} recall / {agentRun.recallTrace.filter((trace) => trace.usedInDecision).length} used</strong>
+            </p>
+            <p>
+              <span>verifier</span>
+              <strong>{agentRun.verifier.status}</strong>
+            </p>
+            <p>
+              <span>replay</span>
+              <strong>{agentRun.replay.eventIds.length} events</strong>
+            </p>
+          </div>
+        </article>
         <article className="event-log">
           <header>
             <Activity size={15} />
