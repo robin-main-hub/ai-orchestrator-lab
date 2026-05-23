@@ -51,6 +51,14 @@ import {
   mergeDgxRuntimeSnapshot,
   type Stage5DgxBridge,
 } from "./runtime/stage5Runtime";
+import {
+  createSeedMemoryRecords,
+  createStage6MemoryInspector,
+  forgetMemoryRecord,
+  pinMemoryRecord,
+  rememberStage6Context,
+  type Stage6MemoryInspector,
+} from "./runtime/stage6Memory";
 import type {
   AgentProfile,
   BackupProjection,
@@ -58,6 +66,7 @@ import type {
   ConversationMessage,
   DebateTag,
   EventEnvelope,
+  MemoryRecord,
   ModelDescriptor,
   ProviderProfile,
   RuntimeSnapshot,
@@ -402,6 +411,8 @@ const initialDgxBridge = createStage5DgxBridge({
   createdAt: now,
 });
 
+const initialMemoryRecords = createSeedMemoryRecords(now);
+
 export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
   const [runtimeSnapshotState, setRuntimeSnapshotState] = useState<RuntimeSnapshot>(runtimeSnapshot);
@@ -413,6 +424,7 @@ export function App() {
   const [selectedAgentId, setSelectedAgentId] = useState(seededAgentProfiles[0]?.id ?? "");
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
   const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
+  const [memoryRecords, setMemoryRecords] = useState<MemoryRecord[]>(initialMemoryRecords);
   const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
   const [debateSession, setDebateSession] = useState<Stage3DebateSession>(() =>
     createStage3DebateSession({
@@ -452,6 +464,18 @@ export function App() {
       activeProvider ??
       providerProfiles[0],
     [activeProvider, providerProfiles, selectedAgent],
+  );
+  const memoryInspector = useMemo(
+    () =>
+      createStage6MemoryInspector({
+        records: memoryRecords,
+        messages: conversationMessages,
+        packet: codingPacketState,
+        events: eventLog,
+        provider: selectedProvider,
+        createdAt: runtimeSnapshotState.updatedAt,
+      }),
+    [codingPacketState, conversationMessages, eventLog, memoryRecords, runtimeSnapshotState.updatedAt, selectedProvider],
   );
 
   function appendEvent<T>(type: string, payload: T) {
@@ -613,6 +637,55 @@ export function App() {
     });
   }
 
+  function handleRememberCurrentContext() {
+    const createdAt = new Date().toISOString();
+    const candidates = rememberStage6Context({
+      messages: conversationMessages,
+      packet: codingPacketState,
+      provider: selectedProvider,
+      createdAt,
+    });
+
+    setMemoryRecords((records) => {
+      const existingIds = new Set(records.map((record) => record.id));
+      return [...candidates.filter((record) => !existingIds.has(record.id)), ...records];
+    });
+    setRuntimeSnapshotState((snapshot) => ({
+      ...snapshot,
+      memorySyncStatus: snapshot.dgxStatus === "online" ? "syncing" : "degraded",
+      updatedAt: createdAt,
+    }));
+    appendEvent("memory.candidate.created", {
+      recordIds: candidates.map((record) => record.id),
+      count: candidates.length,
+      sourceChannel: "desktop",
+      trustLevel: selectedProvider?.trustLevel ?? "limited",
+      providerProfileId: selectedProvider?.id,
+    });
+    appendEvent("memory.recall.trace.updated", {
+      traceId: memoryInspector.trace.id,
+      resultCount: memoryInspector.trace.results.length,
+      usedCount: memoryInspector.trace.results.filter((result) => result.usedInDecision).length,
+      blockedCount: memoryInspector.blockedCount,
+    });
+  }
+
+  function handlePinMemory(recordId: string) {
+    setMemoryRecords((records) => pinMemoryRecord(records, recordId));
+    appendEvent("memory.pin.updated", {
+      recordId,
+      pinned: true,
+    });
+  }
+
+  function handleForgetMemory(recordId: string) {
+    setMemoryRecords((records) => forgetMemoryRecord(records, recordId));
+    appendEvent("memory.forget.requested", {
+      recordId,
+      policy: "tombstone_projection",
+    });
+  }
+
   function handleCreateAgentRun() {
     const run = createStage4AgentRun({
       packet: codingPacketState,
@@ -653,6 +726,9 @@ export function App() {
       runId: run.id,
       traceCount: run.recallTrace.length,
       usedCount: run.recallTrace.filter((trace) => trace.usedInDecision).length,
+      stage6TraceId: memoryInspector.trace.id,
+      policy: memoryInspector.trace.policy.reason,
+      blockedCount: memoryInspector.blockedCount,
     });
     appendEvent("run.replay.prepared", {
       runId: run.id,
@@ -1014,7 +1090,7 @@ export function App() {
               </button>
             </div>
             <div className="toolbar-actions">
-              <button className="ghost-button" type="button">
+              <button className="ghost-button" onClick={handleRememberCurrentContext} type="button">
                 <Database size={16} />
                 Memory
               </button>
@@ -1070,6 +1146,12 @@ export function App() {
             onShiftModelWindow={handleShiftModelWindow}
             profiles={providerProfiles}
             selectedAgentId={selectedAgent?.id}
+          />
+          <MemoryInspectorPanel
+            inspector={memoryInspector}
+            onForget={handleForgetMemory}
+            onPin={handlePinMemory}
+            onRemember={handleRememberCurrentContext}
           />
           <BackupPanel projectionPreview={obsidianMarkdownPreview} projections={backupProjectionsState} />
         </aside>
@@ -1592,6 +1674,94 @@ function AgentStatePanel({
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+function MemoryInspectorPanel({
+  inspector,
+  onForget,
+  onPin,
+  onRemember,
+}: {
+  inspector: Stage6MemoryInspector;
+  onForget: (recordId: string) => void;
+  onPin: (recordId: string) => void;
+  onRemember: () => void;
+}) {
+  const visibleTrace = inspector.trace.results.slice(0, 4);
+  const visibleRecords = inspector.records.slice(0, 5);
+
+  return (
+    <section className="side-panel memory-panel">
+      <header className="panel-title">
+        <Database size={17} />
+        <h2>Memento</h2>
+        <button aria-label="현재 맥락 기억" className="icon-button" onClick={onRemember} type="button">
+          <Plus size={15} />
+        </button>
+      </header>
+      <div className="memory-policy">
+        <strong>{inspector.trace.policy.autoRecallAllowed ? "auto recall" : "manual recall"}</strong>
+        <span>{inspector.trace.policy.reason}</span>
+      </div>
+      <div className="memory-stat-grid">
+        <div>
+          <span>records</span>
+          <strong>{inspector.records.length}</strong>
+        </div>
+        <div>
+          <span>pinned</span>
+          <strong>{inspector.pinnedCount}</strong>
+        </div>
+        <div>
+          <span>blocked</span>
+          <strong>{inspector.blockedCount}</strong>
+        </div>
+      </div>
+      <div className="recall-trace-list" aria-label="Recall Trace">
+        {visibleTrace.map((result) => (
+          <article className={result.usedInDecision ? "used" : "blocked"} key={result.record.id}>
+            <div>
+              <strong>{result.record.title}</strong>
+              <span>
+                {result.record.layer} / {(result.score * 100).toFixed(0)}%
+              </span>
+            </div>
+            <em>{result.usedInDecision ? "used" : "blocked"}</em>
+            <p>{result.reason}</p>
+          </article>
+        ))}
+      </div>
+      <div className="memory-record-list" aria-label="Memory Records">
+        {visibleRecords.map((record) => (
+          <article key={record.id}>
+            <div>
+              <strong>{record.title}</strong>
+              <span>
+                {record.layer} / {record.trustLevel}
+              </span>
+            </div>
+            <button
+              aria-label={`${record.title} 고정`}
+              className={`icon-button tiny ${record.pinned ? "active" : ""}`}
+              disabled={record.pinned}
+              onClick={() => onPin(record.id)}
+              type="button"
+            >
+              <CheckCircle2 size={13} />
+            </button>
+            <button
+              aria-label={`${record.title} 삭제`}
+              className="icon-button tiny"
+              onClick={() => onForget(record.id)}
+              type="button"
+            >
+              <Trash2 size={13} />
+            </button>
+          </article>
+        ))}
       </div>
     </section>
   );

@@ -97,10 +97,10 @@ corepack pnpm dev
 
 첫 코드 골격을 구현 중입니다.
 
-- `packages/protocol`: 공통 타입, Zod 스키마, EventStore/Permission/Memory/DGX 실행 인터페이스
+- `packages/protocol`: 공통 타입, Zod 스키마, EventStore/Permission/MemoryTrace/DGX 실행 인터페이스
 - `packages/providers`: provider adapter interface와 mock provider
 - `packages/agents`: debate round template과 CodingPacket draft builder
-- `apps/desktop`: Orchestrator Board UI skeleton, Conversation/Debate/Coding Packet, Agent Runtime, DGX Bridge 카드
+- `apps/desktop`: Orchestrator Board UI skeleton, Conversation/Debate/Coding Packet, Agent Runtime, DGX Bridge 카드, Memento Inspector
 - `apps/server`: DGX 서버 health/runtime/heartbeat/remote-run placeholder
 
 실제 API 키는 저장하지 않고 `SecretRef` 개념으로만 표시합니다. 실제 모델 호출과 터미널 실행은 보안/권한 경계가 더 잡힌 뒤 연결합니다.

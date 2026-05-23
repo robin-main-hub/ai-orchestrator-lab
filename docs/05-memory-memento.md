@@ -76,6 +76,16 @@ Recall 기본 정책:
 - 병합
 - 잘못된 기억 신고
 
+## Stage6 구현 경계
+
+현재 구현은 실제 Memento-MCP 서버나 벡터 DB를 붙이지 않고, 데스크톱 런타임에서 다음 경계를 먼저 고정한다.
+
+- `MemoryTrace`는 query, recall results, provider trust policy, 사용/차단 여부를 하나로 묶는다.
+- `MemoryRecallPolicy`는 리셀러/custom 같은 `untrusted` provider에서 `Project Memory`, `User Memory` 자동 recall을 차단한다.
+- Memento Inspector는 record 수, pinned 수, blocked recall 수, Recall Trace, Memory Records를 오른쪽 패널에 표시한다.
+- `Memory` 버튼은 현재 대화와 Coding Packet에서 episode/reflection 후보를 만들고 Event Store에 `memory.candidate.created` 이벤트를 남긴다.
+- `pin`은 기억을 수동 고정하고, `forget`은 물리 삭제가 아니라 tombstone projection으로 처리한다.
+
 ## Forget 정책
 
 Event Store가 append-only이면 `forget`은 단순 삭제가 아니다.
