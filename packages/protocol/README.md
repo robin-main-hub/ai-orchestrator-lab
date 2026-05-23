@@ -15,3 +15,13 @@
 - TerminalEvent
 
 모든 장기 저장 데이터와 네트워크 이벤트는 여기서 먼저 정의합니다.
+
+## 현재 구현
+
+- 핵심 타입과 Zod 스키마
+- `CodingPacket`
+- `ProviderProfile` + `SecretRef`
+- `EventEnvelope` + `sourceTrust`
+- `PermissionLevel` / `ApprovalState`
+- `MemoryAPI` 타입
+- `EventStore` 인터페이스

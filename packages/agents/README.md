@@ -11,3 +11,10 @@
 - 코딩 전달 패킷 생성
 - 검증자 실행
 - 실행 리플레이 이벤트 생성
+
+## 현재 구현
+
+- 라운드 기반 debate template
+- mock utterance helper
+- `CodingPacket` draft builder
+- 기본 agent profile seed

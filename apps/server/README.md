@@ -21,3 +21,10 @@
 - vLLM/Ollama/LM Studio/OpenAI 호환 모델 서버
 
 서버는 없어도 앱이 최소 로컬 모드로 작동해야 하므로, 모든 서버 API에는 폴백 정책이 붙습니다.
+
+## 현재 구현
+
+- Node HTTP 기반 `/health` placeholder
+- `RuntimeSnapshot` 반환
+- 원격 실행과 메모리 동기화는 capability 이름만 노출
+- 실제 DGX 실행, WebSocket, job queue는 아직 구현하지 않음

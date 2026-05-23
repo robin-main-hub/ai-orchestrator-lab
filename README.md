@@ -77,6 +77,29 @@ docs/
   research-notes.md
 ```
 
+## 실행 방법
+
+초기 구현은 `pnpm` workspace를 기준으로 합니다.
+
+```bash
+corepack prepare pnpm@10.11.0 --activate
+corepack pnpm install
+corepack pnpm typecheck
+corepack pnpm test
+corepack pnpm build
+corepack pnpm dev
+```
+
+데스크톱 앱은 현재 Vite 기반 프론트엔드 골격입니다. 실제 Tauri/Electron 네이티브 래퍼, 모델 호출, 터미널 실행, DGX 원격 실행은 아직 연결하지 않았습니다.
+
 ## 현재 상태
 
-초기 설계 저장소입니다. 먼저 전체 제품 방향과 시스템 구조를 한국어 문서로 고정한 뒤, 데스크톱 앱/서버/프로토콜 패키지를 순서대로 구현합니다.
+첫 코드 골격을 구현 중입니다.
+
+- `packages/protocol`: 공통 타입, Zod 스키마, EventStore/Permission/Memory 인터페이스
+- `packages/providers`: provider adapter interface와 mock provider
+- `packages/agents`: debate round template과 CodingPacket draft builder
+- `apps/desktop`: Orchestrator Board UI skeleton
+- `apps/server`: DGX 서버 health placeholder
+
+실제 API 키는 저장하지 않고 `SecretRef` 개념으로만 표시합니다. 실제 모델 호출과 터미널 실행은 보안/권한 경계가 더 잡힌 뒤 연결합니다.

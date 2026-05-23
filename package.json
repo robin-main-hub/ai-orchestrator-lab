@@ -1,0 +1,19 @@
+{
+  "name": "ai-orchestrator-lab",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.11.0",
+  "scripts": {
+    "dev": "corepack pnpm --filter @ai-orchestrator/desktop dev",
+    "build": "corepack pnpm -r --sort build",
+    "typecheck": "corepack pnpm --filter @ai-orchestrator/protocol build && corepack pnpm --filter @ai-orchestrator/providers build && corepack pnpm --filter @ai-orchestrator/agents build && corepack pnpm --filter @ai-orchestrator/server typecheck && corepack pnpm --filter @ai-orchestrator/desktop typecheck",
+    "test": "corepack pnpm build && corepack pnpm -r --if-present test",
+    "lint": "corepack pnpm typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
