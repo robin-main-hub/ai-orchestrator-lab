@@ -12,6 +12,7 @@ import {
   KeyRound,
   LayoutDashboard,
   Link2,
+  LockKeyhole,
   MessageSquare,
   Play,
   Plus,
@@ -71,8 +72,13 @@ import {
   createTelegramDemoInput,
   type Stage8IngressSnapshot,
 } from "./runtime/stage8Ingress";
+import {
+  createStage9PermissionSnapshot,
+  nextRequiredPermission,
+} from "./runtime/stage9Permission";
 import type {
   AgentProfile,
+  ApprovalState,
   BackupProjection,
   CodingPacket,
   ConversationMessage,
@@ -81,6 +87,7 @@ import type {
   EventSource,
   MemoryRecord,
   ModelDescriptor,
+  PermissionMatrixSnapshot,
   ProviderProfile,
   RuntimeSnapshot,
   SourceTrust,
@@ -443,6 +450,7 @@ export function App() {
   const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
   const [memoryRecords, setMemoryRecords] = useState<MemoryRecord[]>(initialMemoryRecords);
   const [ingressSnapshot, setIngressSnapshot] = useState<Stage8IngressSnapshot>(initialIngressSnapshot);
+  const [approvalStateByItemId, setApprovalStateByItemId] = useState<Record<string, ApprovalState>>({});
   const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
   const [debateSession, setDebateSession] = useState<Stage3DebateSession>(() =>
     createStage3DebateSession({
@@ -516,6 +524,20 @@ export function App() {
       memoryInspector,
       runtimeSnapshotState,
     ],
+  );
+  const permissionSnapshot = useMemo(
+    () =>
+      createStage9PermissionSnapshot({
+        sessionId: "session_desktop_001",
+        externalApprovals: ingressSnapshot.approvals,
+        terminalSlots,
+        agentRun: agentRunState,
+        runtime: runtimeSnapshotState,
+        mobilePolicy: backupSnapshot.mobilePolicy,
+        decisions: approvalStateByItemId,
+        createdAt: runtimeSnapshotState.updatedAt,
+      }),
+    [agentRunState, approvalStateByItemId, backupSnapshot.mobilePolicy, ingressSnapshot.approvals, runtimeSnapshotState],
   );
 
   function appendEvent<T>(
@@ -820,6 +842,46 @@ export function App() {
           correlationId: snapshot.id,
         },
       );
+    }
+  }
+
+  function handleResolveNextPermission(state: Extract<ApprovalState, "approved" | "rejected">) {
+    const pendingItem = nextRequiredPermission(permissionSnapshot);
+    if (!pendingItem) {
+      return;
+    }
+
+    const decidedAt = new Date().toISOString();
+    setApprovalStateByItemId((decisions) => ({
+      ...decisions,
+      [pendingItem.sourceItemId]: state,
+    }));
+    appendEvent(`permission.${state}`, {
+      queueItemId: pendingItem.id,
+      sourceItemId: pendingItem.sourceItemId,
+      permissions: pendingItem.permissions,
+      requestedBy: pendingItem.requestedBy,
+    });
+    appendEvent("permission.queue.updated", {
+      snapshotId: permissionSnapshot.id,
+      sourceItemId: pendingItem.sourceItemId,
+      state,
+      decidedAt,
+    });
+
+    if (state === "approved" && pendingItem.permissions.includes("remote_workspace")) {
+      const bridge = createStage5DgxBridge({
+        run: agentRunState,
+        runtime: runtimeSnapshotState,
+        approvalOverride: "approved",
+        createdAt: decidedAt,
+      });
+      setDgxBridgeState(bridge);
+      appendEvent("dgx.remote_run.approval_applied", {
+        bridgeId: bridge.id,
+        responseStatus: bridge.response.status,
+        fallbackMode: bridge.response.fallbackMode,
+      });
     }
   }
 
@@ -1349,7 +1411,15 @@ export function App() {
           />
         </aside>
       </main>
-      <TerminalDock agentRun={agentRunState} dgxBridge={dgxBridgeState} events={eventLog} slots={terminalSlots} />
+      <TerminalDock
+        agentRun={agentRunState}
+        dgxBridge={dgxBridgeState}
+        events={eventLog}
+        onApproveNext={() => handleResolveNextPermission("approved")}
+        onRejectNext={() => handleResolveNextPermission("rejected")}
+        permissionSnapshot={permissionSnapshot}
+        slots={terminalSlots}
+      />
     </div>
   );
 }
@@ -2147,14 +2217,21 @@ function TerminalDock({
   agentRun,
   dgxBridge,
   events,
+  onApproveNext,
+  onRejectNext,
+  permissionSnapshot,
   slots,
 }: {
   agentRun: Stage4AgentRun;
   dgxBridge: Stage5DgxBridge;
   events: EventEnvelope[];
+  onApproveNext: () => void;
+  onRejectNext: () => void;
+  permissionSnapshot: PermissionMatrixSnapshot;
   slots: TerminalSlot[];
 }) {
   const visibleEvents = events.slice(0, 4);
+  const pendingPermission = permissionSnapshot.queue[0];
 
   return (
     <footer className="terminal-dock">
@@ -2220,6 +2297,41 @@ function TerminalDock({
               <span>replay</span>
               <strong>{agentRun.replay.eventIds.length} events</strong>
             </p>
+          </div>
+        </article>
+        <article className="permission-matrix-card">
+          <header>
+            <span>
+              <LockKeyhole size={14} />
+              Permission Matrix
+            </span>
+            <em>{permissionSnapshot.summary.pending} pending</em>
+          </header>
+          <div className="permission-summary-grid">
+            <p>
+              <span>allow</span>
+              <strong>{permissionSnapshot.summary.allowed}</strong>
+            </p>
+            <p>
+              <span>approved</span>
+              <strong>{permissionSnapshot.summary.approved}</strong>
+            </p>
+            <p>
+              <span>deny</span>
+              <strong>{permissionSnapshot.summary.denied}</strong>
+            </p>
+          </div>
+          <div className="permission-queue-preview">
+            <span>{pendingPermission ? pendingPermission.summary : "queue empty"}</span>
+            <small>{pendingPermission ? pendingPermission.permissions.join(", ") : "execution stays display-only"}</small>
+          </div>
+          <div className="permission-actions">
+            <button disabled={!pendingPermission} onClick={onApproveNext} type="button">
+              approve
+            </button>
+            <button disabled={!pendingPermission} onClick={onRejectNext} type="button">
+              reject
+            </button>
           </div>
         </article>
         <article className="event-log">

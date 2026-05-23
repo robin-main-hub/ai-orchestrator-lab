@@ -8,6 +8,7 @@ import {
   type IngressGuardResult,
   type MobileActionPolicy,
   type MemoryTrace,
+  type PermissionMatrixSnapshot,
   type RemoteExecutionRequest,
   type RemoteExecutionResponse,
 } from "./index";
@@ -198,5 +199,63 @@ describe("protocol schemas", () => {
     expect(result.normalizedEvent?.sourceTrust).toBe("untrusted");
     expect(result.approvalState).toBe("required");
     expect(result.guardSteps.some((step) => step.name === "pii_secret_block")).toBe(true);
+  });
+
+  it("models permission matrix decisions and approval queue", () => {
+    const snapshot: PermissionMatrixSnapshot = {
+      id: "permission_snapshot_1",
+      sessionId: "session_1",
+      createdAt: "2026-05-24T00:00:00.000Z",
+      summary: {
+        allowed: 1,
+        pending: 1,
+        approved: 0,
+        denied: 1,
+      },
+      items: [
+        {
+          id: "permission_external_1",
+          sessionId: "session_1",
+          subjectId: "ingress_event_1",
+          actor: "external_channel",
+          channel: "telegram",
+          sourceTrust: "untrusted",
+          action: "terminal_run",
+          requestedLevels: ["run_safe_commands"],
+          state: "required",
+          decision: "approval_required",
+          reason: "external command waits for approval",
+          createdAt: "2026-05-24T00:00:00.000Z",
+        },
+        {
+          id: "permission_mobile_secret",
+          sessionId: "session_1",
+          subjectId: "mobile_dashboard",
+          actor: "mobile",
+          channel: "mobile",
+          sourceTrust: "limited",
+          action: "secret_view",
+          requestedLevels: ["secret_access"],
+          state: "rejected",
+          decision: "deny",
+          reason: "phone cannot view raw secrets",
+          createdAt: "2026-05-24T00:00:00.000Z",
+        },
+      ],
+      queue: [
+        {
+          id: "queue_permission_external_1",
+          sourceItemId: "permission_external_1",
+          summary: "terminal_run from external_channel",
+          requestedBy: "external_channel",
+          permissions: ["run_safe_commands"],
+          state: "required",
+          createdAt: "2026-05-24T00:00:00.000Z",
+        },
+      ],
+    };
+
+    expect(snapshot.queue[0]?.permissions).toContain("run_safe_commands");
+    expect(snapshot.items[1]?.decision).toBe("deny");
   });
 });

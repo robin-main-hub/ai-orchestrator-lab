@@ -67,7 +67,7 @@ button {
 .app-shell {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr) 292px;
-  grid-template-rows: 42px minmax(0, 1fr) 126px;
+  grid-template-rows: 42px minmax(0, 1fr) 136px;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
@@ -1738,9 +1738,10 @@ button {
 .terminal-slot,
 .event-log,
 .dgx-bridge-card,
-.agent-runtime-card {
+.agent-runtime-card,
+.permission-matrix-card {
   min-width: 220px;
-  height: 78px;
+  height: 86px;
   padding: 8px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
@@ -1750,7 +1751,8 @@ button {
 .terminal-slot header,
 .event-log header,
 .dgx-bridge-card header,
-.agent-runtime-card header {
+.agent-runtime-card header,
+.permission-matrix-card header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1760,7 +1762,8 @@ button {
 
 .terminal-slot em,
 .dgx-bridge-card em,
-.agent-runtime-card em {
+.agent-runtime-card em,
+.permission-matrix-card em {
   color: var(--amber);
   font-size: 12px;
   font-style: normal;
@@ -1770,11 +1773,91 @@ button {
 .terminal-slot small,
 .dgx-bridge-card p,
 .event-log p,
-.event-log small {
+.event-log small,
+.permission-matrix-card p,
+.permission-matrix-card small {
   margin: 0;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.32;
+}
+
+.permission-matrix-card {
+  min-width: 284px;
+  display: grid;
+  grid-template-rows: auto auto auto auto;
+  gap: 3px;
+}
+
+.permission-matrix-card header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.permission-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.permission-summary-grid p {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px 5px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: #002f38;
+}
+
+.permission-summary-grid strong {
+  color: var(--cyan);
+  font-size: 11px;
+}
+
+.permission-queue-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  min-width: 0;
+}
+
+.permission-queue-preview span,
+.permission-queue-preview small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.permission-queue-preview span {
+  color: var(--text);
+  font-size: 10px;
+}
+
+.permission-actions {
+  display: flex;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+.permission-actions button {
+  min-height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #002f38;
+  color: var(--cyan);
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.permission-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
 }
 
 .event-log-list {
