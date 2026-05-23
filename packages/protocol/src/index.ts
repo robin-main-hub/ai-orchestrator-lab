@@ -304,6 +304,60 @@ export type ExternalApprovalItem = {
   createdAt: string;
 };
 
+export type PermissionAction =
+  | "conversation_reply"
+  | "memory_write"
+  | "backup_export"
+  | "terminal_run"
+  | "file_write"
+  | "remote_workspace"
+  | "secret_view"
+  | "mobile_approval";
+
+export type PermissionActor = "user" | "agent" | "external_channel" | "mobile" | "server";
+
+export type PermissionDecision = "allow" | "approval_required" | "deny";
+
+export type PermissionMatrixItem = {
+  id: string;
+  sessionId: string;
+  subjectId: string;
+  actor: PermissionActor;
+  channel: EventSource;
+  sourceTrust: SourceTrust;
+  action: PermissionAction;
+  requestedLevels: PermissionLevel[];
+  state: ApprovalState;
+  decision: PermissionDecision;
+  reason: string;
+  createdAt: string;
+};
+
+export type ApprovalQueueItem = {
+  id: string;
+  sourceItemId: string;
+  summary: string;
+  requestedBy: PermissionActor;
+  permissions: PermissionLevel[];
+  state: ApprovalState;
+  createdAt: string;
+  expiresAt?: string;
+};
+
+export type PermissionMatrixSnapshot = {
+  id: string;
+  sessionId: string;
+  items: PermissionMatrixItem[];
+  queue: ApprovalQueueItem[];
+  summary: {
+    allowed: number;
+    pending: number;
+    approved: number;
+    denied: number;
+  };
+  createdAt: string;
+};
+
 export const memoryLayerSchema = z.enum([
   "fragment",
   "episode",
