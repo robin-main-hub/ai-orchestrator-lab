@@ -114,3 +114,11 @@ $env:ANTHROPIC_AUTH_TOKEN="sk-..."
 - 리셀러 키도 정식 프로파일처럼 취급하되, base URL과 헤더 이름을 명확히 표시한다.
 - 붙여넣은 원문 환경변수 블록은 event emit 전 Redaction Layer를 통과한다.
 - `untrusted` provider에는 장기 memory recall을 자동 주입하지 않는다.
+
+## Agent Binding UI
+
+- Provider Profiles 패널은 독립 스크롤 영역으로 둔다.
+- provider는 추가/삭제할 수 있지만, agent가 점유 중인 provider는 삭제할 수 없다.
+- agent 선택 영역에서는 등록된 provider 중 하나를 선택할 수 있다.
+- 다른 agent가 이미 점유한 provider는 선택 목록에서 비활성화한다.
+- provider가 부족한 상태에서 agent를 추가하면 credential pending 상태로 만들고, 사용자가 provider를 추가한 뒤 연결한다.

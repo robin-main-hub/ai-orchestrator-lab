@@ -160,7 +160,9 @@ button {
 
 .right-rail {
   display: grid;
+  grid-template-rows: minmax(170px, 0.95fr) minmax(230px, 1.1fr) auto;
   gap: 12px;
+  overflow: hidden;
   border-right: 0;
   border-left: 1px solid var(--line);
 }
@@ -682,12 +684,15 @@ button {
 }
 
 .side-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   padding: 13px;
+  overflow: hidden;
 }
 
 .side-panel.compact {
-  align-self: start;
+  align-self: stretch;
 }
 
 .panel-title {
@@ -706,12 +711,16 @@ button {
 .provider-list,
 .agent-list {
   display: grid;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
   gap: 10px;
+  scrollbar-gutter: stable;
 }
 
 .provider-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
   padding: 10px;
   border: 1px solid var(--line-soft);
@@ -721,7 +730,8 @@ button {
 
 .provider-row strong,
 .provider-row span,
-.provider-row code {
+.provider-row code,
+.provider-row small {
   min-width: 0;
 }
 
@@ -737,6 +747,16 @@ button {
   grid-column: 1 / -1;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.provider-row small {
+  grid-column: 1 / -1;
+  color: var(--subtle);
+  font-size: 11px;
+}
+
+.provider-row.in-use {
+  border-color: rgba(41, 215, 230, 0.32);
 }
 
 .trust {
@@ -811,6 +831,7 @@ button {
 }
 
 .agent-remove-button,
+.provider-remove-button,
 .icon-button {
   display: grid;
   place-items: center;
@@ -824,13 +845,27 @@ button {
   cursor: pointer;
 }
 
-.agent-remove-button {
+.agent-remove-button,
+.provider-remove-button {
   align-self: center;
 }
 
-.agent-remove-button:disabled {
+.agent-remove-button:disabled,
+.provider-remove-button:disabled {
   cursor: not-allowed;
   opacity: 0.35;
+}
+
+.agent-provider-select {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #002f38;
+  color: var(--muted);
 }
 
 .agent-dot {

@@ -121,7 +121,7 @@ const runtimeSnapshot: RuntimeSnapshot = {
   updatedAt: now,
 };
 
-const providerProfiles: ProviderProfile[] = [
+const seededProviderProfiles: ProviderProfile[] = [
   new MockProviderAdapter().profile,
   createProviderProfile({
     id: "provider_openai_compat",
@@ -142,6 +142,15 @@ const providerProfiles: ProviderProfile[] = [
     defaultModel: "claude-code-compatible",
     tags: ["임시", "주의"],
     trustLevel: "untrusted",
+  }),
+  createProviderProfile({
+    id: "provider_codex_oauth",
+    name: "Codex OAuth Session",
+    kind: "custom",
+    baseUrl: "https://oauth.local/codex",
+    defaultModel: "codex-session",
+    tags: ["oauth", "session"],
+    trustLevel: "limited",
   }),
 ];
 
@@ -229,22 +238,23 @@ const seededAgentProfiles: WorkbenchAgent[] = defaultAgentProfiles.map((agent, i
       },
     },
     {
-      providerProfileId: "provider_openai_compat",
-      modelId: "gpt-5.5-pro",
+      providerProfileId: "provider_codex_oauth",
+      modelId: "codex-session",
       authBinding: {
         mode: "oauth",
         label: "OAuth ref",
-        providerProfileId: "provider_openai_compat",
+        providerProfileId: "provider_codex_oauth",
         oauthRef: "oauth_codex_placeholder",
       },
     },
     {
-      providerProfileId: "provider_mock_local",
-      modelId: "mock-orchestrator",
+      providerProfileId: "provider_reseller_custom",
+      modelId: "claude-code-compatible",
       authBinding: {
-        mode: "local",
-        label: "local executor stub",
-        providerProfileId: "provider_mock_local",
+        mode: "provider_profile",
+        label: "reseller secretRef",
+        providerProfileId: "provider_reseller_custom",
+        secretRefId: "session reseller secret",
       },
     },
   ];
@@ -278,13 +288,23 @@ const initialConversationMessages: ConversationMessage[] = [
 
 export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
+  const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(seededProviderProfiles);
   const [agents, setAgents] = useState<WorkbenchAgent[]>(seededAgentProfiles);
   const [selectedAgentId, setSelectedAgentId] = useState(seededAgentProfiles[0]?.id ?? "");
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
   const [draftMessage, setDraftMessage] = useState("");
   const activeProvider = useMemo(
     () => providerProfiles.find((profile) => profile.id === runtimeSnapshot.activeProviderProfileId),
-    [],
+    [providerProfiles],
+  );
+  const usedProviderIds = useMemo(
+    () =>
+      new Set(
+        agents
+          .map((agent) => agent.providerProfileId)
+          .filter((providerId): providerId is string => Boolean(providerId)),
+      ),
+    [agents],
   );
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.id === selectedAgentId) ?? agents[0],
@@ -295,7 +315,7 @@ export function App() {
       providerProfiles.find((profile) => profile.id === selectedAgent?.providerProfileId) ??
       activeProvider ??
       providerProfiles[0],
-    [activeProvider, selectedAgent],
+    [activeProvider, providerProfiles, selectedAgent],
   );
 
   function handleSendMessage() {
@@ -338,7 +358,12 @@ export function App() {
 
   function handleAddAgent() {
     const nextIndex = agents.length + 1;
-    const provider = selectedProvider ?? providerProfiles[0];
+    const occupiedProviderIds = new Set(
+      agents
+        .map((agent) => agent.providerProfileId)
+        .filter((providerId): providerId is string => Boolean(providerId)),
+    );
+    const provider = providerProfiles.find((profile) => !occupiedProviderIds.has(profile.id));
     const nextAgent: WorkbenchAgent = {
       id: `agent_custom_${crypto.randomUUID()}`,
       name: `Custom Agent ${nextIndex}`,
@@ -347,13 +372,7 @@ export function App() {
       providerProfileId: provider?.id,
       modelId: provider?.defaultModel,
       soulMode: "off",
-      authBinding: {
-        mode: provider?.kind === "custom" ? "provider_profile" : "oauth",
-        label: provider?.kind === "custom" ? "API secretRef" : "OAuth/API profile",
-        providerProfileId: provider?.id,
-        secretRefId: provider?.secretRef?.id,
-        oauthRef: provider?.kind === "custom" ? undefined : "oauth_pending",
-      },
+      authBinding: createAuthBinding(provider),
       enabled: true,
       permissionLevel: "read_only",
     };
@@ -374,6 +393,77 @@ export function App() {
       }
       return nextAgents;
     });
+  }
+
+  function createAuthBinding(provider?: ProviderProfile): WorkbenchAgent["authBinding"] {
+    if (!provider) {
+      return {
+        mode: "provider_profile",
+        label: "credential pending",
+      };
+    }
+
+    if (provider.id === "provider_mock_local") {
+      return {
+        mode: "local",
+        label: "local runtime",
+        providerProfileId: provider.id,
+      };
+    }
+
+    return {
+      mode: provider.tags.includes("oauth") ? "oauth" : "provider_profile",
+      label: provider.tags.includes("oauth") ? "OAuth/API profile" : "API secretRef",
+      providerProfileId: provider.id,
+      secretRefId: provider.secretRef?.id,
+      oauthRef: provider.tags.includes("oauth") ? "oauth_pending" : undefined,
+    };
+  }
+
+  function handleAddProvider() {
+    const nextIndex = providerProfiles.length + 1;
+    const nextProvider = createProviderProfile({
+      id: `provider_custom_${crypto.randomUUID()}`,
+      name: `Custom Provider ${nextIndex}`,
+      kind: "custom",
+      baseUrl: "https://api.example.local/v1",
+      rawSecret: `sk-placeholder-provider-${nextIndex}`,
+      defaultModel: `custom-model-${nextIndex}`,
+      tags: ["custom"],
+      trustLevel: "limited",
+    });
+
+    setProviderProfiles((profiles) => [...profiles, nextProvider]);
+  }
+
+  function handleRemoveProvider(providerId: string) {
+    const isInUse = agents.some((agent) => agent.providerProfileId === providerId);
+    if (providerProfiles.length <= 1 || isInUse) {
+      return;
+    }
+
+    setProviderProfiles((profiles) => profiles.filter((profile) => profile.id !== providerId));
+  }
+
+  function handleAssignProvider(agentId: string, providerId: string) {
+    const provider = providerProfiles.find((profile) => profile.id === providerId);
+    const isOccupied = agents.some((agent) => agent.id !== agentId && agent.providerProfileId === providerId);
+    if (!provider || isOccupied) {
+      return;
+    }
+
+    setAgents((currentAgents) =>
+      currentAgents.map((agent) =>
+        agent.id === agentId
+          ? {
+              ...agent,
+              providerProfileId: provider.id,
+              modelId: provider.defaultModel,
+              authBinding: createAuthBinding(provider),
+            }
+          : agent,
+      ),
+    );
   }
 
   return (
@@ -504,10 +594,16 @@ export function App() {
         </section>
 
         <aside className="right-rail" aria-label="모델과 에이전트 상태">
-          <ProviderProfilesPanel profiles={providerProfiles} />
+          <ProviderProfilesManagerPanel
+            onAddProvider={handleAddProvider}
+            onRemoveProvider={handleRemoveProvider}
+            profiles={providerProfiles}
+            usedProviderIds={usedProviderIds}
+          />
           <AgentStatePanel
             agents={agents}
             onAddAgent={handleAddAgent}
+            onAssignProvider={handleAssignProvider}
             onRemoveAgent={handleRemoveAgent}
             onSelectAgent={setSelectedAgentId}
             profiles={providerProfiles}
@@ -697,24 +793,51 @@ function DebateTable() {
   );
 }
 
-function ProviderProfilesPanel({ profiles }: { profiles: ProviderProfile[] }) {
+function ProviderProfilesManagerPanel({
+  onAddProvider,
+  onRemoveProvider,
+  profiles,
+  usedProviderIds,
+}: {
+  onAddProvider: () => void;
+  onRemoveProvider: (providerId: string) => void;
+  profiles: ProviderProfile[];
+  usedProviderIds: Set<string>;
+}) {
   return (
     <section className="side-panel">
       <header className="panel-title">
         <KeyRound size={17} />
         <h2>Provider Profiles</h2>
+        <button aria-label="provider 추가" className="icon-button" onClick={onAddProvider} type="button">
+          <Plus size={15} />
+        </button>
       </header>
       <div className="provider-list">
-        {profiles.map((profile) => (
-          <article className="provider-row" key={profile.id}>
-            <div>
-              <strong>{profile.name}</strong>
-              <span>{profile.kind} / {profile.defaultModel ?? "model pending"}</span>
-            </div>
-            <span className={`trust ${profile.trustLevel}`}>{profile.trustLevel}</span>
-            <code>{profile.secretRef?.redactedPreview ?? "secretRef 없음"}</code>
-          </article>
-        ))}
+        {profiles.map((profile) => {
+          const isInUse = usedProviderIds.has(profile.id);
+          return (
+            <article className={`provider-row ${isInUse ? "in-use" : ""}`} key={profile.id}>
+              <div>
+                <strong>{profile.name}</strong>
+                <span>{profile.kind} / {profile.defaultModel ?? "model pending"}</span>
+              </div>
+              <span className={`trust ${profile.trustLevel}`}>{profile.trustLevel}</span>
+              <button
+                aria-label={`${profile.name} 삭제`}
+                className="provider-remove-button"
+                disabled={isInUse || profiles.length <= 1}
+                onClick={() => onRemoveProvider(profile.id)}
+                title={isInUse ? "agent가 사용 중이라 삭제할 수 없음" : "provider 삭제"}
+                type="button"
+              >
+                <Trash2 size={13} />
+              </button>
+              <code>{profile.secretRef?.redactedPreview ?? "secretRef 없음"}</code>
+              <small>{isInUse ? "assigned to agent" : "available"}</small>
+            </article>
+          );
+        })}
       </div>
     </section>
   );
@@ -723,6 +846,7 @@ function ProviderProfilesPanel({ profiles }: { profiles: ProviderProfile[] }) {
 function AgentStatePanel({
   agents,
   onAddAgent,
+  onAssignProvider,
   onRemoveAgent,
   onSelectAgent,
   profiles,
@@ -730,6 +854,7 @@ function AgentStatePanel({
 }: {
   agents: WorkbenchAgent[];
   onAddAgent: () => void;
+  onAssignProvider: (agentId: string, providerId: string) => void;
   onRemoveAgent: (agentId: string) => void;
   onSelectAgent: (agentId: string) => void;
   profiles: ProviderProfile[];
@@ -747,8 +872,14 @@ function AgentStatePanel({
       <div className="agent-list">
         {agents.map((agent) => {
           const provider = profiles.find((profile) => profile.id === agent.providerProfileId);
+          const occupiedProviderIds = new Set(
+            agents
+              .filter((otherAgent) => otherAgent.id !== agent.id)
+              .map((otherAgent) => otherAgent.providerProfileId)
+              .filter((providerId): providerId is string => Boolean(providerId)),
+          );
           return (
-          <div className={`agent-row ${agent.id === selectedAgentId ? "selected" : ""}`} key={agent.id}>
+            <div className={`agent-row ${agent.id === selectedAgentId ? "selected" : ""}`} key={agent.id}>
             <button className="agent-select-button" onClick={() => onSelectAgent(agent.id)} type="button">
               <span className={agent.enabled ? "agent-dot enabled" : "agent-dot"} />
               <strong>{agent.name}</strong>
@@ -766,7 +897,25 @@ function AgentStatePanel({
             >
               <Trash2 size={14} />
             </button>
-          </div>
+            <select
+              aria-label={`${agent.name} provider 선택`}
+              className="agent-provider-select"
+              onChange={(event) => onAssignProvider(agent.id, event.target.value)}
+              value={agent.providerProfileId ?? ""}
+            >
+              <option disabled value="">
+                provider 선택
+              </option>
+              {profiles.map((profile) => {
+                const isOccupied = occupiedProviderIds.has(profile.id);
+                return (
+                  <option disabled={isOccupied} key={profile.id} value={profile.id}>
+                    {profile.name}{isOccupied ? " (in use)" : ""}
+                  </option>
+                );
+              })}
+            </select>
+            </div>
           );
         })}
       </div>
