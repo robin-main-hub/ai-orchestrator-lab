@@ -24,6 +24,24 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-color: #4a4237 transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #4a4237;
+  background-clip: padding-box;
 }
 
 body {
@@ -282,6 +300,76 @@ button {
 
 .danger {
   color: var(--rose);
+}
+
+.runtime-node-list,
+.local-model-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.runtime-node,
+.local-model,
+.memory-sync-note {
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #141311;
+}
+
+.runtime-node,
+.local-model {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.runtime-node strong,
+.runtime-node span,
+.local-model strong,
+.local-model-list > span,
+.memory-sync-note strong,
+.memory-sync-note span {
+  display: block;
+}
+
+.runtime-node strong,
+.local-model strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-node span,
+.local-model-list > span,
+.memory-sync-note span {
+  margin-top: 3px;
+  color: var(--subtle);
+  font-size: 12px;
+}
+
+.runtime-node em,
+.local-model em,
+.memory-sync-note em {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.memory-sync-note {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 10px;
+  margin-top: 8px;
+}
+
+.memory-sync-note span {
+  grid-column: 1 / -1;
+  line-height: 1.35;
 }
 
 .board-toolbar {

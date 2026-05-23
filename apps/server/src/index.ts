@@ -24,6 +24,18 @@ export function createHealthResponse(): ServerHealthResponse {
       dgxStatus: "online",
       localModelStatus: "offline",
       memorySyncStatus: "syncing",
+      runtimeNodes: [
+        {
+          id: "dgx-02",
+          label: "DGX-02",
+          role: "main_server",
+          status: "online",
+          isPrimary: true,
+          endpoint: "dgx-02",
+          models: [],
+        },
+      ],
+      localModels: [],
       activeProviderProfileId: undefined,
       recentError: "remote execution layer is a placeholder",
       updatedAt: new Date().toISOString(),
