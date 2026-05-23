@@ -65,6 +65,44 @@ export const modelDescriptorSchema = z.object({
 });
 export type ModelDescriptor = z.infer<typeof modelDescriptorSchema>;
 
+export type ProviderCredentialInputFormat =
+  | "plain_api_key"
+  | "openai_env"
+  | "anthropic_env"
+  | "powershell_env"
+  | "claude_code_settings_json"
+  | "custom_base_url"
+  | "unknown";
+
+export type ProviderCredentialParseResult = {
+  id: string;
+  format: ProviderCredentialInputFormat;
+  providerKind: ProviderKind;
+  profileName: string;
+  baseUrl?: string;
+  authHeader?: string;
+  secretRef?: SecretRef;
+  defaultModel?: string;
+  tags: string[];
+  trustLevel: ProviderTrustLevel;
+  warnings: string[];
+  createdAt: string;
+};
+
+export type ModelDiscoveryStatus = "idle" | "loading" | "succeeded" | "failed" | "blocked";
+
+export type ModelDiscoverySnapshot = {
+  id: string;
+  providerProfileId: string;
+  status: ModelDiscoveryStatus;
+  source: "mock" | "local" | "remote_stub";
+  models: ModelDescriptor[];
+  selectedModelId?: string;
+  redactionApplied: boolean;
+  warnings: string[];
+  createdAt: string;
+};
+
 export const agentKindSchema = z.enum(["real", "virtual"]);
 export type AgentKind = z.infer<typeof agentKindSchema>;
 

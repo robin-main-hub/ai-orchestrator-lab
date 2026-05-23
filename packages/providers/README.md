@@ -25,3 +25,8 @@
 - `ProviderAdapter` 인터페이스
 - 실제 네트워크 호출이 없는 `MockProviderAdapter`
 - 원문 키를 저장하지 않는 `SecretRef` 생성 helper
+## Stage10
+
+- `parseProviderCredentialInput`: plain key, shell export, PowerShell env, Claude Code JSON env block을 `SecretRef` 중심 profile metadata로 변환한다.
+- `createProviderProfileFromCredentialInput`: 원문 secret 없이 ProviderProfile을 만든다.
+- `discoverModelsForProfile`: 실제 `/models` 호출 전 단계의 mock discovery snapshot을 만든다.
