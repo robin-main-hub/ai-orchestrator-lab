@@ -439,3 +439,37 @@ export type BackupProjection = {
   lastSyncedAt?: string;
   redactionApplied: boolean;
 };
+
+export type BackupArtifactKind =
+  | "session_log"
+  | "decision_record"
+  | "coding_packet"
+  | "run_artifact"
+  | "memory_trace";
+
+export type BackupProjectionFormat = "markdown" | "notion_summary" | "mobile_dashboard";
+
+export type BackupProjectionArtifact = {
+  id: string;
+  sessionId: string;
+  target: BackupProjectionTarget;
+  kind: BackupArtifactKind;
+  format: BackupProjectionFormat;
+  title: string;
+  destination: string;
+  redactionApplied: boolean;
+  status: "ready" | "queued" | "blocked";
+  byteLength: number;
+  createdAt: string;
+  contentPreview: string;
+};
+
+export type MobileActionPolicy = {
+  canRead: boolean;
+  canApprove: boolean;
+  canStop: boolean;
+  canRetry: boolean;
+  canTypeTerminal: boolean;
+  canViewSecrets: boolean;
+  canMergeOrPush: boolean;
+};

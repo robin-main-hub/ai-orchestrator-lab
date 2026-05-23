@@ -105,6 +105,17 @@ Notion이나 모바일 서버가 꺼져 있으면 export 작업은 큐에 쌓는
 4. 연결 복구 후 재시도
 5. 성공/실패 상태를 세션에 표시
 
+## Stage7 구현 경계
+
+현재 구현은 실제 Obsidian 파일 쓰기나 Notion API 호출 전에 projection artifact와 queue 경계를 먼저 고정한다.
+
+- `BackupProjectionArtifact`는 target, kind, format, destination, redaction status, byte length, ready/queued/blocked 상태를 가진다.
+- Obsidian artifact는 Markdown이며 offline에서도 `ready`가 될 수 있다.
+- Notion artifact는 요약 JSON/DB row에 가까운 `notion_summary`이며 DGX/network adapter가 없으면 `queued`로 남긴다.
+- Mobile artifact는 전체 조작 앱이 아니라 read/approve/stop/retry 중심의 `mobile_dashboard`다.
+- `MobileActionPolicy`는 terminal typing, secret viewing, 검증 없는 merge/push를 명시적으로 막는다.
+- Backup 패널은 Event Store에서 파생된 artifact, queue, redaction 결과만 보여주며 원본 저장소 역할을 하지 않는다.
+
 ## 결론
 
 Obsidian은 맥북의 장기 작업 노트이고, Notion은 사람이 보기 좋은 대시보드이며, 모바일은 읽기와 승인 중심의 얇은 제어판이다. 이 세 가지를 원본 저장소가 아니라 Event Store의 파생 뷰로 다루면 기록 안정성과 확장성을 둘 다 얻을 수 있다.
