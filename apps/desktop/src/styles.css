@@ -78,7 +78,7 @@ button {
   grid-row: 1;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 18px;
   padding: 0 12px;
   border-bottom: 1px solid var(--line);
@@ -106,6 +106,18 @@ button {
   color: var(--muted);
   font-size: 11px;
   justify-content: flex-start;
+}
+
+.status-action {
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #002f38;
+  color: var(--cyan);
+  cursor: pointer;
+  font-size: 11px;
 }
 
 .status-pill {
@@ -1312,13 +1324,15 @@ button {
 .slot-list {
   gap: 10px;
   min-width: 0;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .terminal-slot,
 .event-log,
+.dgx-bridge-card,
 .agent-runtime-card {
-  min-width: 240px;
+  min-width: 220px;
   height: 78px;
   padding: 8px;
   border: 1px solid var(--line-soft);
@@ -1328,6 +1342,7 @@ button {
 
 .terminal-slot header,
 .event-log header,
+.dgx-bridge-card header,
 .agent-runtime-card header {
   display: flex;
   align-items: center;
@@ -1337,6 +1352,7 @@ button {
 }
 
 .terminal-slot em,
+.dgx-bridge-card em,
 .agent-runtime-card em {
   color: var(--amber);
   font-size: 12px;
@@ -1345,6 +1361,7 @@ button {
 
 .terminal-slot p,
 .terminal-slot small,
+.dgx-bridge-card p,
 .event-log p,
 .event-log small {
   margin: 0;
@@ -1380,12 +1397,20 @@ button {
   min-width: 280px;
 }
 
+.dgx-bridge-card {
+  flex: 0 0 250px;
+}
+
+.bridge-card-grid,
 .runtime-card-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px 8px;
 }
 
+.bridge-card-grid p,
+.bridge-card-grid span,
+.bridge-card-grid strong,
 .runtime-card-grid p,
 .runtime-card-grid span,
 .runtime-card-grid strong {
@@ -1394,11 +1419,13 @@ button {
   min-width: 0;
 }
 
+.bridge-card-grid span,
 .runtime-card-grid span {
   color: var(--subtle);
   font-size: 9px;
 }
 
+.bridge-card-grid strong,
 .runtime-card-grid strong {
   overflow: hidden;
   color: var(--muted);

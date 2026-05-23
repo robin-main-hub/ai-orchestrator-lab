@@ -91,16 +91,16 @@ corepack pnpm build
 corepack pnpm dev
 ```
 
-데스크톱 앱은 현재 Vite 기반 프론트엔드 골격입니다. 실제 Tauri/Electron 네이티브 래퍼, 모델 호출, 터미널 실행, DGX 원격 실행은 아직 연결하지 않았습니다.
+데스크톱 앱은 현재 Vite 기반 프론트엔드 골격입니다. 실제 Tauri/Electron 네이티브 래퍼, 모델 호출, 터미널 실행은 아직 연결하지 않았습니다. DGX 원격 실행은 실제 명령 실행 없이 heartbeat, remote-run request, approval gate, local fallback 경계를 타입과 mock runtime으로만 연결했습니다.
 
 ## 현재 상태
 
 첫 코드 골격을 구현 중입니다.
 
-- `packages/protocol`: 공통 타입, Zod 스키마, EventStore/Permission/Memory 인터페이스
+- `packages/protocol`: 공통 타입, Zod 스키마, EventStore/Permission/Memory/DGX 실행 인터페이스
 - `packages/providers`: provider adapter interface와 mock provider
 - `packages/agents`: debate round template과 CodingPacket draft builder
-- `apps/desktop`: Orchestrator Board UI skeleton
-- `apps/server`: DGX 서버 health placeholder
+- `apps/desktop`: Orchestrator Board UI skeleton, Conversation/Debate/Coding Packet, Agent Runtime, DGX Bridge 카드
+- `apps/server`: DGX 서버 health/runtime/heartbeat/remote-run placeholder
 
 실제 API 키는 저장하지 않고 `SecretRef` 개념으로만 표시합니다. 실제 모델 호출과 터미널 실행은 보안/권한 경계가 더 잡힌 뒤 연결합니다.

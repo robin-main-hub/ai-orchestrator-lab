@@ -372,6 +372,38 @@ export type RuntimeSnapshot = {
   updatedAt: string;
 };
 
+export type DgxConnectionStatus = "connected" | "unreachable" | "fallback_local" | "pending";
+
+export type DgxHeartbeat = {
+  nodeId: string;
+  status: DgxConnectionStatus;
+  latencyMs?: number;
+  checkedAt: string;
+  message: string;
+};
+
+export type RemoteExecutionKind = "model_inference" | "workspace_run" | "event_sync";
+
+export type RemoteExecutionRequest = {
+  id: string;
+  runId: string;
+  kind: RemoteExecutionKind;
+  targetNodeId: string;
+  commandPreview: string;
+  approvalState: ApprovalState;
+  createdAt: string;
+};
+
+export type RemoteExecutionResponse = {
+  id: string;
+  requestId: string;
+  status: "accepted" | "queued" | "blocked" | "fallback_required";
+  targetNodeId: string;
+  fallbackMode: "none" | "local_model" | "local_cli";
+  message: string;
+  createdAt: string;
+};
+
 export type TerminalSlot = {
   id: string;
   label: string;

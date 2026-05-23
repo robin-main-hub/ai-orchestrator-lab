@@ -4,6 +4,8 @@ import {
   eventEnvelopeSchema,
   providerProfileSchema,
   type CodingPacket,
+  type RemoteExecutionRequest,
+  type RemoteExecutionResponse,
 } from "./index";
 
 describe("protocol schemas", () => {
@@ -58,5 +60,29 @@ describe("protocol schemas", () => {
 
     expect(event.redacted).toBe(false);
     expect(event.sourceTrust).toBe("untrusted");
+  });
+
+  it("models remote execution without raw command execution", () => {
+    const request: RemoteExecutionRequest = {
+      id: "remote_request_1",
+      runId: "run_1",
+      kind: "workspace_run",
+      targetNodeId: "dgx-02",
+      commandPreview: "pnpm test",
+      approvalState: "required",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    };
+    const response: RemoteExecutionResponse = {
+      id: "remote_response_1",
+      requestId: request.id,
+      status: "blocked",
+      targetNodeId: request.targetNodeId,
+      fallbackMode: "local_cli",
+      message: "approval required before remote execution",
+      createdAt: request.createdAt,
+    };
+
+    expect(response.status).toBe("blocked");
+    expect(response.fallbackMode).toBe("local_cli");
   });
 });

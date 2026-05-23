@@ -46,6 +46,11 @@ import {
   createStage4AgentRun,
   type Stage4AgentRun,
 } from "./runtime/stage4Runtime";
+import {
+  createStage5DgxBridge,
+  mergeDgxRuntimeSnapshot,
+  type Stage5DgxBridge,
+} from "./runtime/stage5Runtime";
 import type {
   AgentProfile,
   BackupProjection,
@@ -382,8 +387,24 @@ const initialEventLog: EventEnvelope[] = initialConversationMessages.map((messag
   ),
 );
 
+const initialAgentRun = createStage4AgentRun({
+  packet: codingPacket,
+  primaryAgent: seededAgentProfiles[0],
+  agents: seededAgentProfiles,
+  messages: initialConversationMessages,
+  events: initialEventLog,
+  createdAt: now,
+});
+
+const initialDgxBridge = createStage5DgxBridge({
+  run: initialAgentRun,
+  runtime: runtimeSnapshot,
+  createdAt: now,
+});
+
 export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
+  const [runtimeSnapshotState, setRuntimeSnapshotState] = useState<RuntimeSnapshot>(runtimeSnapshot);
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(seededProviderProfiles);
   const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(seededModelCatalog);
   const [agents, setAgents] = useState<WorkbenchAgent[]>(seededAgentProfiles);
@@ -403,22 +424,14 @@ export function App() {
       createdAt: now,
     }),
   );
-  const [agentRunState, setAgentRunState] = useState<Stage4AgentRun>(() =>
-    createStage4AgentRun({
-      packet: codingPacket,
-      primaryAgent: seededAgentProfiles[0],
-      agents: seededAgentProfiles,
-      messages: initialConversationMessages,
-      events: initialEventLog,
-      createdAt: now,
-    }),
-  );
+  const [agentRunState, setAgentRunState] = useState<Stage4AgentRun>(initialAgentRun);
+  const [dgxBridgeState, setDgxBridgeState] = useState<Stage5DgxBridge>(initialDgxBridge);
   const [backupProjectionsState, setBackupProjectionsState] = useState<BackupProjection[]>(backupProjections);
   const [obsidianMarkdownPreview, setObsidianMarkdownPreview] = useState("");
   const [draftMessage, setDraftMessage] = useState("");
   const activeProvider = useMemo(
-    () => providerProfiles.find((profile) => profile.id === runtimeSnapshot.activeProviderProfileId),
-    [providerProfiles],
+    () => providerProfiles.find((profile) => profile.id === runtimeSnapshotState.activeProviderProfileId),
+    [providerProfiles, runtimeSnapshotState.activeProviderProfileId],
   );
   const usedProviderIds = useMemo(
     () =>
@@ -554,7 +567,7 @@ export function App() {
       agents,
       providers: providerProfiles,
       events: eventLog,
-      runtime: runtimeSnapshot,
+      runtime: runtimeSnapshotState,
     });
 
     setDebateSession(session);
@@ -610,6 +623,11 @@ export function App() {
     });
 
     setAgentRunState(run);
+    const bridge = createStage5DgxBridge({
+      run,
+      runtime: runtimeSnapshotState,
+    });
+    setDgxBridgeState(bridge);
     if (selectedAgent) {
       setAgentActivity(selectedAgent.id, "preparing");
       window.setTimeout(() => {
@@ -640,6 +658,74 @@ export function App() {
       runId: run.id,
       replayId: run.replay.id,
       eventCount: run.replay.eventIds.length,
+    });
+    appendEvent("dgx.remote_run.planned", {
+      bridgeId: bridge.id,
+      runId: run.id,
+      targetNodeId: bridge.request.targetNodeId,
+      responseStatus: bridge.response.status,
+      fallbackMode: bridge.response.fallbackMode,
+    });
+    if (bridge.localFallbackEnabled) {
+      appendEvent("runtime.local_fallback.ready", {
+        bridgeId: bridge.id,
+        reason: bridge.response.message,
+        fallbackMode: bridge.response.fallbackMode,
+      });
+    }
+  }
+
+  function handleProbeDgx() {
+    const checkedAt = new Date().toISOString();
+    const authorityNodeId = runtimeSnapshotState.syncTopology.authorityNodeId;
+    const serverRuntime: RuntimeSnapshot = {
+      ...runtimeSnapshotState,
+      status: "online",
+      dgxStatus: "online",
+      memorySyncStatus: "syncing",
+      runtimeNodes: runtimeSnapshotState.runtimeNodes.map((node) =>
+        node.id === authorityNodeId
+          ? {
+              ...node,
+              status: "online",
+              models: Array.from(new Set([...node.models, "remote-workspace", "event-store-authority"])),
+            }
+          : node,
+      ),
+      syncTopology: {
+        ...runtimeSnapshotState.syncTopology,
+        clients: runtimeSnapshotState.syncTopology.clients.map((client) =>
+          client.id === authorityNodeId
+            ? {
+                ...client,
+                status: "online",
+                outboxCount: 0,
+                lastSeenAt: checkedAt,
+              }
+            : client,
+        ),
+      },
+      recentError: undefined,
+      updatedAt: checkedAt,
+    };
+    const mergedRuntime = mergeDgxRuntimeSnapshot(runtimeSnapshotState, serverRuntime);
+    const bridge = createStage5DgxBridge({
+      run: agentRunState,
+      runtime: mergedRuntime,
+      createdAt: checkedAt,
+    });
+
+    setRuntimeSnapshotState(mergedRuntime);
+    setDgxBridgeState(bridge);
+    appendEvent("dgx.heartbeat.checked", {
+      nodeId: bridge.heartbeat.nodeId,
+      status: bridge.heartbeat.status,
+      latencyMs: bridge.heartbeat.latencyMs,
+    });
+    appendEvent("runtime.snapshot.merged", {
+      authorityNodeId,
+      dgxStatus: mergedRuntime.dgxStatus,
+      eventStoreMode: mergedRuntime.syncTopology.eventStoreMode,
     });
   }
 
@@ -826,7 +912,11 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <RuntimeStatusBar snapshot={runtimeSnapshot} providerName={activeProvider?.name ?? "미선택"} />
+      <RuntimeStatusBar
+        onProbeDgx={handleProbeDgx}
+        providerName={activeProvider?.name ?? "미선택"}
+        snapshot={runtimeSnapshotState}
+      />
       <main className="workspace-grid">
         <aside className="left-rail" aria-label="오케스트레이터 네비게이션">
           <div className="brand-block">
@@ -855,7 +945,7 @@ export function App() {
               <span>Runtime</span>
             </header>
             <div className="runtime-node-list">
-              {runtimeSnapshot.runtimeNodes.map((node) => (
+              {runtimeSnapshotState.runtimeNodes.map((node) => (
                 <div className="runtime-node" key={node.id}>
                   <div>
                     <strong>{node.label}</strong>
@@ -867,7 +957,7 @@ export function App() {
             </div>
             <div className="local-model-list">
               <span>Local Models</span>
-              {runtimeSnapshot.localModels.map((model) => (
+              {runtimeSnapshotState.localModels.map((model) => (
                 <div className="local-model" key={model.id}>
                   <strong>{model.name}</strong>
                   <em className={statusTone(model.status)}>{model.runner}</em>
@@ -877,16 +967,16 @@ export function App() {
             <div className="memory-sync-note">
               <strong>Memory Sync</strong>
               <span>Memento/장기기억과 로컬 캐시 동기화 상태</span>
-              <em className={statusTone(runtimeSnapshot.memorySyncStatus)}>{runtimeSnapshot.memorySyncStatus}</em>
+              <em className={statusTone(runtimeSnapshotState.memorySyncStatus)}>{runtimeSnapshotState.memorySyncStatus}</em>
             </div>
             <div className="sync-authority-note">
               <strong>Event Store Authority</strong>
-              <span>{runtimeSnapshot.syncTopology.authorityLabel}</span>
+              <span>{runtimeSnapshotState.syncTopology.authorityLabel}</span>
               <em>central</em>
             </div>
             <div className="client-sync-list">
               <span>Client Sync</span>
-              {runtimeSnapshot.syncTopology.clients
+              {runtimeSnapshotState.syncTopology.clients
                 .filter((client) => client.syncRole === "client_replica")
                 .map((client) => (
                   <div className="client-sync-row" key={client.id}>
@@ -984,20 +1074,31 @@ export function App() {
           <BackupPanel projectionPreview={obsidianMarkdownPreview} projections={backupProjectionsState} />
         </aside>
       </main>
-      <TerminalDock agentRun={agentRunState} events={eventLog} slots={terminalSlots} />
+      <TerminalDock agentRun={agentRunState} dgxBridge={dgxBridgeState} events={eventLog} slots={terminalSlots} />
     </div>
   );
 }
 
-function RuntimeStatusBar({ snapshot, providerName }: { snapshot: RuntimeSnapshot; providerName: string }) {
+function RuntimeStatusBar({
+  onProbeDgx,
+  providerName,
+  snapshot,
+}: {
+  onProbeDgx: () => void;
+  providerName: string;
+  snapshot: RuntimeSnapshot;
+}) {
   return (
     <header className="status-bar">
       <div className="status-meta">
         <span>{providerName}</span>
         <span>Data: {snapshot.syncTopology.authorityLabel} authoritative</span>
         <span>Clients: MacBook / Home PC</span>
-        <span>{snapshot.recentError}</span>
+        <span>{snapshot.recentError ?? "dgx-02 heartbeat connected"}</span>
       </div>
+      <button className="status-action" onClick={onProbeDgx} type="button">
+        Probe DGX
+      </button>
     </header>
   );
 }
@@ -1563,10 +1664,12 @@ function CodingPacketPanel({ packet }: { packet: CodingPacket }) {
 
 function TerminalDock({
   agentRun,
+  dgxBridge,
   events,
   slots,
 }: {
   agentRun: Stage4AgentRun;
+  dgxBridge: Stage5DgxBridge;
   events: EventEnvelope[];
   slots: TerminalSlot[];
 }) {
@@ -1590,6 +1693,30 @@ function TerminalDock({
             <small>approval: {slot.permissionState}</small>
           </article>
         ))}
+        <article className="dgx-bridge-card">
+          <header>
+            <span>DGX Bridge</span>
+            <em>{dgxBridge.heartbeat.status}</em>
+          </header>
+          <div className="bridge-card-grid">
+            <p>
+              <span>authority</span>
+              <strong>{dgxBridge.authorityNodeId}</strong>
+            </p>
+            <p>
+              <span>remote</span>
+              <strong>{dgxBridge.response.status}</strong>
+            </p>
+            <p>
+              <span>fallback</span>
+              <strong>{dgxBridge.localFallbackEnabled ? dgxBridge.response.fallbackMode : "none"}</strong>
+            </p>
+            <p>
+              <span>sync</span>
+              <strong>{dgxBridge.syncMode}</strong>
+            </p>
+          </div>
+        </article>
         <article className="agent-runtime-card">
           <header>
             <span>Agent Runtime</span>
