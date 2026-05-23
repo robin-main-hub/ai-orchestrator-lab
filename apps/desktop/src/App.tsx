@@ -36,6 +36,7 @@ import type {
   BackupProjection,
   CodingPacket,
   ConversationMessage,
+  EventEnvelope,
   ModelDescriptor,
   ProviderProfile,
   RuntimeSnapshot,
@@ -349,6 +350,31 @@ const initialConversationMessages: ConversationMessage[] = [
   },
 ];
 
+function createDesktopEvent<T>(type: string, payload: T, createdAt = new Date().toISOString()): EventEnvelope<T> {
+  return {
+    id: `event_${crypto.randomUUID()}`,
+    sessionId: "session_desktop_001",
+    type,
+    payload,
+    createdAt,
+    source: "desktop",
+    sourceTrust: "trusted",
+    redacted: true,
+  };
+}
+
+const initialEventLog: EventEnvelope[] = initialConversationMessages.map((message) =>
+  createDesktopEvent(
+    "conversation.message.created",
+    {
+      messageId: message.id,
+      role: message.role,
+      redaction: "applied",
+    },
+    message.createdAt,
+  ),
+);
+
 export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(seededProviderProfiles);
@@ -358,6 +384,7 @@ export function App() {
   const [modelWindowStartByAgentId, setModelWindowStartByAgentId] = useState<Record<string, number>>({});
   const [selectedAgentId, setSelectedAgentId] = useState(seededAgentProfiles[0]?.id ?? "");
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
+  const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
   const [draftMessage, setDraftMessage] = useState("");
   const activeProvider = useMemo(
     () => providerProfiles.find((profile) => profile.id === runtimeSnapshot.activeProviderProfileId),
@@ -383,6 +410,12 @@ export function App() {
       providerProfiles[0],
     [activeProvider, providerProfiles, selectedAgent],
   );
+
+  function appendEvent<T>(type: string, payload: T) {
+    const event = createDesktopEvent(type, payload);
+    setEventLog((events) => [event, ...events].slice(0, 24));
+    return event;
+  }
 
   function handleSendMessage() {
     const content = draftMessage.trim();
@@ -420,6 +453,21 @@ export function App() {
         },
       },
     ]);
+    appendEvent("conversation.message.created", {
+      role: "user",
+      contentLength: content.length,
+      redaction: "applied",
+    });
+    appendEvent("provider.completion.mocked", {
+      agentId: selectedAgent.id,
+      providerProfileId: selectedProvider.id,
+      modelId: selectedAgent.modelId ?? selectedProvider.defaultModel,
+    });
+    appendEvent("conversation.message.created", {
+      role: "assistant",
+      contentLength: reply.length,
+      redaction: "applied",
+    });
     setDraftMessage("");
     window.setTimeout(() => {
       setAgentActivity(selectedAgent.id, "responding");
@@ -766,7 +814,7 @@ export function App() {
           <BackupPanel projections={backupProjections} />
         </aside>
       </main>
-      <TerminalDock slots={terminalSlots} />
+      <TerminalDock events={eventLog} slots={terminalSlots} />
     </div>
   );
 }
@@ -774,13 +822,6 @@ export function App() {
 function RuntimeStatusBar({ snapshot, providerName }: { snapshot: RuntimeSnapshot; providerName: string }) {
   return (
     <header className="status-bar">
-      <div className="status-cluster">
-        <StatusPill label="DGX-01" status={snapshot.runtimeNodes.find((node) => node.id === "dgx-01")?.status ?? "offline"} />
-        <StatusPill label="DGX-02 Server" status={snapshot.dgxStatus} />
-        <StatusPill label="Local Model" status={snapshot.localModelStatus} />
-        <StatusPill label="Memory Sync" status={snapshot.memorySyncStatus} />
-        <StatusPill label="App" status={snapshot.status} />
-      </div>
       <div className="status-meta">
         <span>{providerName}</span>
         <span>Data: {snapshot.syncTopology.authorityLabel} authoritative</span>
@@ -1229,7 +1270,9 @@ function CodingPacketPanel({ packet }: { packet: CodingPacket }) {
   );
 }
 
-function TerminalDock({ slots }: { slots: TerminalSlot[] }) {
+function TerminalDock({ events, slots }: { events: EventEnvelope[]; slots: TerminalSlot[] }) {
+  const visibleEvents = events.slice(0, 4);
+
   return (
     <footer className="terminal-dock">
       <div className="dock-title">
@@ -1253,7 +1296,14 @@ function TerminalDock({ slots }: { slots: TerminalSlot[] }) {
             <Activity size={15} />
             <span>Event Store</span>
           </header>
-          <p>{"conversation.message.created -> redaction.pending -> coding_packet.draft.created"}</p>
+          <div className="event-log-list">
+            {visibleEvents.map((event) => (
+              <p key={event.id}>
+                <span>{event.type}</span>
+                <small>{new Date(event.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</small>
+              </p>
+            ))}
+          </div>
         </article>
       </div>
     </footer>
