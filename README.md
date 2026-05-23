@@ -15,6 +15,7 @@
 - 토론은 의사결정뿐 아니라 코딩 작업을 위한 구현 지시서, 컨텍스트 팩, 리뷰 패킷으로 이어진다.
 - 일부 에이전트는 `soul.md`를 통해 장기 정체성과 판단 기준을 유지한다.
 - 토론 결과와 실행 기록은 Obsidian/Notion으로 자동 백업하고, 폰에서는 읽기와 제한적 승인 중심으로 접근한다.
+- 제품 목적은 "쓰려고 만든다"로 두고, 학습은 수단으로 삼는다.
 
 ## 핵심 기능
 
@@ -68,6 +69,7 @@ docs/
   11-conversation-mode.md
   12-external-review-plan.md
   13-event-store-permission-redaction.md
+  14-product-strategy-vertical-slice.md
   review-board.md
   research-notes.md
 ```
