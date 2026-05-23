@@ -12,12 +12,18 @@ export type ProviderProfile = {
   name: string;
   kind: "openai" | "anthropic" | "openrouter" | "ollama" | "lmstudio" | "custom";
   baseUrl?: string;
-  apiKey?: string;
+  secretRef?: SecretRef;
   authHeader?: string;
   modelDiscoveryEndpoint?: string;
   defaultModel?: string;
   enabled: boolean;
   tags: string[];
+};
+
+export type SecretRef = {
+  providerProfileId: string;
+  secretKey: "apiKey" | "authToken";
+  storage: "macos-keychain" | "session-memory" | "dgx-vault";
 };
 ```
 
@@ -26,10 +32,12 @@ export type ProviderProfile = {
 1. 사용자가 API 키 또는 환경변수 블록을 붙여넣는다.
 2. 앱이 형식을 자동 감지한다.
 3. base URL, token, provider kind를 추출한다.
-4. 사용자가 `모델 불러오기`를 누른다.
-5. 앱이 `/models` 또는 provider별 모델 조회 API를 호출한다.
-6. 사용 가능한 모델 목록을 보여준다.
-7. 사용자가 기본 모델과 검증 모델을 고른다.
+4. token은 Event Store에 저장하지 않고 secret storage에 저장한다.
+5. 프로파일에는 `secretRef`만 남긴다.
+6. 사용자가 `모델 불러오기`를 누른다.
+7. 앱이 `/models` 또는 provider별 모델 조회 API를 호출한다.
+8. 사용 가능한 모델 목록을 보여준다.
+9. 사용자가 기본 모델과 검증 모델을 고른다.
 
 ## 지원해야 하는 입력 형식
 
@@ -87,6 +95,8 @@ $env:ANTHROPIC_AUTH_TOKEN="sk-..."
 ## 보안 원칙
 
 - 키는 평문으로 로그에 남기지 않는다.
+- 키는 Event Store에 저장하지 않고 secret reference만 저장한다.
 - UI에는 마지막 몇 글자만 표시한다.
 - 사용자가 임시/1회용 키라고 표시하면 세션 종료 시 자동 삭제 옵션을 제공한다.
 - 리셀러 키도 정식 프로파일처럼 취급하되, base URL과 헤더 이름을 명확히 표시한다.
+- 붙여넣은 원문 환경변수 블록은 event emit 전 Redaction Layer를 통과한다.

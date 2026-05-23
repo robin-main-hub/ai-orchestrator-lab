@@ -12,7 +12,9 @@ flowchart LR
   DGX --> Memory[Memento-MCP 메모리]
   DGX --> Workspaces[원격 워크스페이스 / 터미널 세션]
   Desktop --> Profiles[프로바이더 프로파일 저장소]
-  Desktop --> Sessions[세션 로그 / 리플레이]
+  Desktop --> EventStore[SQLite Event Store]
+  EventStore --> Sessions[세션 로그 / 리플레이]
+  EventStore --> Exports[Obsidian / Notion / Mobile Projection]
 ```
 
 ## 데스크톱 앱
@@ -20,6 +22,8 @@ flowchart LR
 데스크톱 앱은 사용자가 실제로 보는 지휘실이다. 모델 선택, 프로바이더 프로파일 관리, 토론 패널, 코딩 전달, 터미널 세션, 메모리 조회, 실행 리플레이를 담당한다.
 
 예상 기술 스택은 Tauri 또는 Electron + React + TypeScript다. 로컬 시스템 접근과 맥북 배포 안정성을 고려해 초기에는 Tauri를 우선 검토한다.
+
+데스크톱 앱은 로컬 SQLite Event Store를 1차 원본으로 사용한다. 대화, 토론, 실행, 승인, 백업 이벤트는 먼저 Event Store에 append되고, Obsidian/Notion/mobile/DGX 동기화는 projection으로 처리한다.
 
 ## dgx-02 서버
 
@@ -58,6 +62,14 @@ flowchart LR
 - 터미널: PTY 스트림
 - 에이전트 실행: job id 기반 비동기 실행
 - 메모리: recall/remember/reflect API
+
+## Event Store와 권한
+
+Event Store는 단일 진실 공급원이다. API 키와 토큰은 Event Store에 평문 저장하지 않고 OS keychain 또는 DGX secret vault에 secret reference로만 연결한다.
+
+모든 event는 저장 전에 Redaction Layer와 Permission Matrix를 통과한다. Telegram, 모바일, 외부 API에서 들어온 파일 쓰기/터미널 실행/네트워크 실행 요청은 기본적으로 `pending approval` 상태가 된다.
+
+자세한 설계는 `docs/13-event-store-permission-redaction.md`에 둔다.
 
 ## 패키지 경계
 

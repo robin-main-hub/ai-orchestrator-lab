@@ -6,12 +6,18 @@
 
 대화형 작업 모드는 단순 채팅방이 아니다. 겉으로는 AI와 대화하지만, 뒤에서는 세션 기록, Memento recall, 코딩 전달 패킷, Obsidian/Notion 백업, 실행 승인, 터미널 슬롯 연결이 계속 작동한다.
 
+## 기본 모드 원칙
+
+Conversation Mode는 기본 작업 모드다. 사용자는 먼저 한 AI와 대화하듯 작업을 시작하고, 문제가 복잡해지거나 여러 관점이 필요할 때 Debate Mode로 승격한다.
+
+토론은 항상 켜져 있는 회의실이 아니라, 대화 중 필요할 때 호출하는 구조화된 도구다.
+
 ## 모드 정의
 
 | 모드 | 설명 |
 | --- | --- |
-| Debate Mode | 여러 에이전트가 라운드 기반으로 토론한다. |
 | Conversation Mode | 사용자가 선택한 한 AI 또는 한 에이전트와 대화한다. |
+| Debate Mode | Conversation에서 승격되어 여러 에이전트가 라운드 기반으로 토론한다. |
 | Coding Mode | 대화나 토론 결과를 실제 코딩 에이전트/터미널에 전달한다. |
 | Review Mode | 변경사항, 계획, 결과를 검토한다. |
 
@@ -90,7 +96,7 @@ export type ConversationSession = {
 
 ## Coding으로 전달
 
-대화가 충분히 정리되면 바로 Coding Packet으로 바꾼다.
+대화가 충분히 정리되면 `코딩 패킷 만들기` 액션으로 Coding Packet을 만든다. 오케스트레이터는 자동 제안을 할 수 있지만, 실제 전달은 사용자의 명시 액션을 기본으로 한다.
 
 - 목표
 - 배경
@@ -100,6 +106,17 @@ export type ConversationSession = {
 - 검증 계획
 - 위험 요소
 - 사용자 승인 여부
+
+## 토큰 예산
+
+Conversation Mode에서는 raw transcript 전체를 계속 넣지 않는다. 기본 컨텍스트 우선순위는 다음과 같다.
+
+1. 현재 사용자 메시지
+2. 최근 대화 요약
+3. 작업에 필요한 프로젝트 컨텍스트
+4. 관련 Memento recall 결과
+5. agent soul summary 또는 retrieved soul
+6. 긴 과거 transcript 링크
 
 ## 권한과 안전
 

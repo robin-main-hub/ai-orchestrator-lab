@@ -31,6 +31,17 @@
 | 모바일 대시보드 | 폰에서 세션 읽기, 승인, 중단, 재시도 수행 |
 | 채널 승격 | 대화 세션을 토론/코딩/리뷰 세션으로 전환 |
 
+## Event Store와 권한
+
+| 기능 | 설명 |
+| --- | --- |
+| 단일 Event Store | 대화, 토론, 실행, 승인, 백업 이벤트의 원본 저장소 |
+| Redaction Layer | event emit 직전에 API key, token, `.env` secret 제거 |
+| Secret Reference | API 키 원문 대신 OS keychain/DGX vault 참조만 저장 |
+| Permission Matrix | 채널과 액션별 allowed/pending/denied 정책 |
+| Approval Queue | Telegram/mobile/위험 실행 요청을 승인 대기 상태로 관리 |
+| Sync Conflict | Offline 이후 soul, memory, session, artifact 충돌 감지 |
+
 ## 프로바이더
 
 | 기능 | 설명 |
@@ -60,4 +71,4 @@
 | 모델 패널 | 각 모델/에이전트의 상태와 발언을 분리 표시 |
 | 터미널 슬롯 | 여러 CLI 에이전트를 카드가 아닌 작업 슬롯으로 표시 |
 | 전달 버튼 | 대화/토론 결과를 바로 구현/리뷰/검증으로 넘김 |
-| 서버 상태 표시 | DGX 연결, 로컬 폴백, 프로바이더 상태를 한눈에 표시 |
+| Status Hub | DGX, 로컬 모델, 비용, 권한, 백업, 메모리 상태를 한곳에 요약 |
