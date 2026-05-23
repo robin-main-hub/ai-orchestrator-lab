@@ -11,8 +11,10 @@ import {
   type ModelDiscoverySnapshot,
   type PermissionMatrixSnapshot,
   type ProviderCredentialParseResult,
+  type ProviderRuntimeReadiness,
   type RemoteExecutionRequest,
   type RemoteExecutionResponse,
+  type SecretVaultSnapshot,
 } from "./index";
 
 describe("protocol schemas", () => {
@@ -305,5 +307,51 @@ describe("protocol schemas", () => {
     expect(parse.secretRef?.redactedPreview).toBe("sk-...42f0");
     expect(JSON.stringify(parse)).not.toContain("sk-bf59");
     expect(discovery.models[0]?.providerProfileId).toBe("provider_1");
+  });
+
+  it("models secret vault and provider runtime readiness", () => {
+    const vault: SecretVaultSnapshot = {
+      id: "secret_vault_1",
+      rawSecretPersisted: false,
+      createdAt: "2026-05-24T00:00:00.000Z",
+      summary: {
+        available: 1,
+        missing: 1,
+        transient: 1,
+        keychainReady: 0,
+        dgxVaultReady: 0,
+      },
+      entries: [
+        {
+          id: "vault_entry_1",
+          providerProfileId: "provider_reseller",
+          secretRefId: "secret_1",
+          storage: "session_memory",
+          availability: "available",
+          redactedPreview: "sk-...42f0",
+          transient: true,
+          createdAt: "2026-05-24T00:00:00.000Z",
+        },
+      ],
+    };
+    const readiness: ProviderRuntimeReadiness = {
+      id: "provider_readiness_1",
+      providerProfileId: "provider_reseller",
+      status: "needs_approval",
+      executionMode: "remote",
+      modelCount: 4,
+      selectedModelId: "claude-code-compatible",
+      secretAvailability: "available",
+      canRunCompletion: true,
+      canUseAutomaticMemory: false,
+      reason: "untrusted provider can run only after explicit approval and reduced memory context",
+      warnings: ["automatic project/user memory recall is blocked for this provider"],
+      createdAt: "2026-05-24T00:00:00.000Z",
+    };
+
+    expect(vault.rawSecretPersisted).toBe(false);
+    expect(vault.entries[0]?.storage).toBe("session_memory");
+    expect(readiness.canUseAutomaticMemory).toBe(false);
+    expect(readiness.status).toBe("needs_approval");
   });
 });

@@ -36,6 +36,8 @@ import {
   MockProviderAdapter,
   createProviderProfile,
   createProviderProfileFromCredentialInput,
+  createProviderRuntimeReadiness,
+  createSecretVaultSnapshot,
   discoverModelsForProfile,
 } from "@ai-orchestrator/providers";
 import {
@@ -96,7 +98,9 @@ import type {
   ModelDiscoverySnapshot,
   PermissionMatrixSnapshot,
   ProviderProfile,
+  ProviderRuntimeReadiness,
   RuntimeSnapshot,
+  SecretVaultSnapshot,
   SourceTrust,
   TerminalSlot,
 } from "@ai-orchestrator/protocol";
@@ -498,6 +502,21 @@ export function App() {
       activeProvider ??
       providerProfiles[0],
     [activeProvider, providerProfiles, selectedAgent],
+  );
+  const secretVaultSnapshot = useMemo(
+    () => createSecretVaultSnapshot(providerProfiles, runtimeSnapshotState.updatedAt),
+    [providerProfiles, runtimeSnapshotState.updatedAt],
+  );
+  const providerReadiness = useMemo(
+    () =>
+      createProviderRuntimeReadiness({
+        profile: selectedProvider,
+        models: selectedProvider ? (modelCatalog[selectedProvider.id] ?? []) : [],
+        vault: secretVaultSnapshot,
+        selectedModelId: selectedAgent?.modelId ?? selectedProvider?.defaultModel,
+        createdAt: runtimeSnapshotState.updatedAt,
+      }),
+    [modelCatalog, runtimeSnapshotState.updatedAt, secretVaultSnapshot, selectedAgent, selectedProvider],
   );
   const memoryInspector = useMemo(
     () =>
@@ -1222,6 +1241,25 @@ export function App() {
     });
   }
 
+  function handleCheckProviderVault() {
+    appendEvent("secret.vault.checked", {
+      snapshotId: secretVaultSnapshot.id,
+      available: secretVaultSnapshot.summary.available,
+      missing: secretVaultSnapshot.summary.missing,
+      transient: secretVaultSnapshot.summary.transient,
+      rawSecretPersisted: secretVaultSnapshot.rawSecretPersisted,
+    });
+    appendEvent("provider.runtime.readiness.checked", {
+      readinessId: providerReadiness.id,
+      providerProfileId: providerReadiness.providerProfileId,
+      status: providerReadiness.status,
+      executionMode: providerReadiness.executionMode,
+      canRunCompletion: providerReadiness.canRunCompletion,
+      canUseAutomaticMemory: providerReadiness.canUseAutomaticMemory,
+      reason: providerReadiness.reason,
+    });
+  }
+
   function handleRemoveProvider(providerId: string) {
     const isInUse = agents.some((agent) => agent.providerProfileId === providerId);
     if (providerProfiles.length <= 1 || isInUse) {
@@ -1497,8 +1535,11 @@ export function App() {
         dgxBridge={dgxBridgeState}
         events={eventLog}
         onApproveNext={() => handleResolveNextPermission("approved")}
+        onCheckProviderVault={handleCheckProviderVault}
         onRejectNext={() => handleResolveNextPermission("rejected")}
         permissionSnapshot={permissionSnapshot}
+        providerReadiness={providerReadiness}
+        secretVaultSnapshot={secretVaultSnapshot}
         slots={terminalSlots}
       />
     </div>
@@ -2319,16 +2360,22 @@ function TerminalDock({
   dgxBridge,
   events,
   onApproveNext,
+  onCheckProviderVault,
   onRejectNext,
   permissionSnapshot,
+  providerReadiness,
+  secretVaultSnapshot,
   slots,
 }: {
   agentRun: Stage4AgentRun;
   dgxBridge: Stage5DgxBridge;
   events: EventEnvelope[];
   onApproveNext: () => void;
+  onCheckProviderVault: () => void;
   onRejectNext: () => void;
   permissionSnapshot: PermissionMatrixSnapshot;
+  providerReadiness: ProviderRuntimeReadiness;
+  secretVaultSnapshot: SecretVaultSnapshot;
   slots: TerminalSlot[];
 }) {
   const visibleEvents = events.slice(0, 4);
@@ -2432,6 +2479,40 @@ function TerminalDock({
             </button>
             <button disabled={!pendingPermission} onClick={onRejectNext} type="button">
               reject
+            </button>
+          </div>
+        </article>
+        <article className="secret-vault-card">
+          <header>
+            <span>
+              <KeyRound size={14} />
+              Provider Vault
+            </span>
+            <em>{providerReadiness.status}</em>
+          </header>
+          <div className="vault-summary-grid">
+            <p>
+              <span>secret</span>
+              <strong>{providerReadiness.secretAvailability}</strong>
+            </p>
+            <p>
+              <span>models</span>
+              <strong>{providerReadiness.modelCount}</strong>
+            </p>
+            <p>
+              <span>memory</span>
+              <strong>{providerReadiness.canUseAutomaticMemory ? "auto" : "manual"}</strong>
+            </p>
+          </div>
+          <div className="vault-preview">
+            <span>{providerReadiness.reason}</span>
+            <small>
+              vault {secretVaultSnapshot.summary.available}/{secretVaultSnapshot.entries.length} available · raw persisted: no
+            </small>
+          </div>
+          <div className="permission-actions">
+            <button onClick={onCheckProviderVault} type="button">
+              check
             </button>
           </div>
         </article>
