@@ -6,7 +6,7 @@
 
 ## 원본 저장소 원칙
 
-Notion이나 Obsidian을 원본으로 두지 않는다. 앱 내부 event store가 원본이고, Obsidian/Notion은 export projection이다.
+Notion이나 Obsidian을 원본으로 두지 않는다. 앱 내부 Event Store가 원본이고, Obsidian/Notion은 export projection이다.
 
 ```text
 Event Store
@@ -84,7 +84,7 @@ Notion에는 긴 raw log 전체보다 요약, 핵심 결정, 링크, 상태, 태
 
 ## Redaction Layer
 
-외부 백업 전에는 반드시 민감정보 제거 계층을 통과한다.
+민감정보 제거는 외부 백업 직전에만 수행하지 않는다. 모든 이벤트는 Event Store에 저장되기 전, event emit 단계에서 Redaction Layer를 통과한다. Obsidian/Notion exporter는 이미 정제된 이벤트만 읽는다.
 
 - API key 제거
 - bearer token 제거
@@ -93,11 +93,13 @@ Notion에는 긴 raw log 전체보다 요약, 핵심 결정, 링크, 상태, 태
 - 필요 시 base URL 마스킹
 - raw terminal log의 민감한 줄 제거
 
+자세한 규칙은 `docs/13-event-store-permission-redaction.md`에 둔다.
+
 ## Offline Queue
 
 Notion이나 모바일 서버가 꺼져 있으면 export 작업은 큐에 쌓는다.
 
-1. event store에 원본 저장
+1. Event Store에 redacted event 저장
 2. Obsidian 로컬 export 시도
 3. Notion export 실패 시 pending queue에 저장
 4. 연결 복구 후 재시도
@@ -105,4 +107,4 @@ Notion이나 모바일 서버가 꺼져 있으면 export 작업은 큐에 쌓는
 
 ## 결론
 
-Obsidian은 맥북의 장기 작업 노트이고, Notion은 사람이 보기 좋은 대시보드이며, 모바일은 읽기와 승인 중심의 얇은 제어판이다. 이 세 가지를 원본 저장소가 아니라 event store의 파생 뷰로 다루면 기록 안정성과 확장성을 둘 다 얻을 수 있다.
+Obsidian은 맥북의 장기 작업 노트이고, Notion은 사람이 보기 좋은 대시보드이며, 모바일은 읽기와 승인 중심의 얇은 제어판이다. 이 세 가지를 원본 저장소가 아니라 Event Store의 파생 뷰로 다루면 기록 안정성과 확장성을 둘 다 얻을 수 있다.

@@ -6,19 +6,22 @@
 
 - 모노레포 구성
 - 공통 타입 패키지
-- 세션, 에이전트, 프로바이더, 모델, 메모리 스키마 정의
+- Zod 기반 런타임 검증 스키마
+- 세션, 이벤트, 에이전트, 프로바이더, 모델, 메모리 스키마 정의
+- Event Store envelope 정의
+- Redaction rule과 Permission Matrix 정의
 - 기본 테스트 환경 구성
 
-## 2단계: 데스크톱 프론트엔드 골격
+## 1.5단계: Event Store, Redaction, Permission
 
-- 오케스트레이터 중심 레이아웃
-- 프로바이더 프로파일 화면
-- 모델 선택 화면
-- 토론 라운드테이블 화면
-- 실행 슬롯/터미널 슬롯 UI
-- DGX 연결 상태 표시
+- SQLite append-only Event Store
+- event emit 직전 Redaction Layer
+- OS keychain 기반 secret reference
+- Permission Matrix와 pending approval 상태
+- Obsidian/Notion/mobile exporter가 읽을 projection 경계
+- Offline pending queue와 sync conflict 기본 모델
 
-## 3단계: 프로바이더 어댑터
+## 2단계: 프로바이더 프로파일과 모델 discovery
 
 - OpenAI 호환 어댑터
 - Anthropic/Claude Code 리셀러 형식 파서
@@ -26,12 +29,27 @@
 - Ollama/LM Studio 로컬 어댑터
 - 모델 목록 조회
 - 비용/토큰 추적
+- 프로파일별 secret reference 저장
+
+## 3단계: 데스크톱 프론트엔드 골격
+
+- Conversation Workbench 기본 화면
+- Debate Mode 승격 UI
+- 오케스트레이터 중심 레이아웃
+- 프로바이더 프로파일 화면
+- 모델 선택 화면
+- Status Hub
+- 얇은 PTY/터미널 슬롯 프로토타입
+- DGX 연결 상태 표시
 
 ## 4단계: 에이전트 런타임
 
 - 가상 에이전트 생성
+- 단일 대화 에이전트 실행
 - 라운드 기반 토론 엔진
 - 코딩 전달 패킷 생성
+- soul Summary/Retrieved 주입
+- Memento recall/remember 1차 연동
 - 검증자 실행
 - 실행 리플레이 저장
 
@@ -44,10 +62,10 @@
 - 서버 상태 감지
 - 로컬 폴백 전환
 
-## 6단계: 메모리
+## 6단계: 메모리 고도화
 
 - Memento-MCP 연동
-- recall/remember/reflect 흐름
+- reflect 흐름
 - Recall Trace UI
 - Memory Inspector
 - 로컬 캐시와 pending queue
