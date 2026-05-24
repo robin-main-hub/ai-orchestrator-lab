@@ -1,6 +1,8 @@
 const baseUrlCandidates = process.env.DGX_SERVER_BASE_URL
   ? [process.env.DGX_SERVER_BASE_URL]
   : ["https://orchestrator.endruin.com", "http://dgx-02:4317"];
+const apiToken = (process.env.ORCHESTRATOR_API_TOKEN ?? "dev-orchestrator-token").trim();
+const authHeader = { authorization: `Bearer ${apiToken}` };
 const baseUrl = await selectReachableBaseUrl(baseUrlCandidates);
 const smokeSessionId = process.env.SMOKE_SESSION_ID ?? "session_smoke";
 const smokeEventId = process.env.SMOKE_EVENT_ID ?? `event_smoke_${Date.now()}`;
@@ -95,7 +97,8 @@ console.log(
 );
 
 async function readJson(url, init) {
-  const response = await fetch(url, init);
+  const mergedHeaders = { ...authHeader, ...(init?.headers ?? {}) };
+  const response = await fetch(url, { ...init, headers: mergedHeaders });
   const rawText = await response.text();
   if (!response.ok) {
     throw new Error(`${url} failed: ${response.status} ${rawText.slice(0, 400)}`);
