@@ -1,18 +1,26 @@
+import { readFile } from "node:fs/promises";
+
+await loadDotEnvIfPresent();
+
 const baseUrlCandidates = process.env.DGX_SERVER_BASE_URL
   ? [process.env.DGX_SERVER_BASE_URL]
-  : ["https://orchestrator.endruin.com", "http://dgx-02:4317"];
+  : ["http://dgx-02:4317", "http://127.0.0.1:4317", "https://orchestrator.endruin.com"];
 const apiToken = (process.env.ORCHESTRATOR_API_TOKEN ?? "dev-orchestrator-token").trim();
 const authHeader = { authorization: `Bearer ${apiToken}` };
 const baseUrl = await selectReachableBaseUrl(baseUrlCandidates);
 const smokeSessionId = process.env.SMOKE_SESSION_ID ?? "session_smoke";
 const smokeEventId = process.env.SMOKE_EVENT_ID ?? `event_smoke_${Date.now()}`;
+const smokeProviderProfileId = process.env.SMOKE_PROVIDER_PROFILE_ID ?? "provider_codex_oauth";
+const smokeModelId = process.env.SMOKE_MODEL_ID ?? "codex-session";
+const smokePrompt =
+  process.env.SMOKE_PROMPT ?? `Reply with exactly this Korean word and nothing else: ${"\uc815\uc0c1"}`;
 
 const completionRequest = {
   id: `provider_completion_smoke_${Date.now()}`,
   sessionId: smokeSessionId,
-  providerProfileId: "provider_dgx02_vllm",
-  modelId: "qwen36-gio-wiki-rag-prisma",
-  messages: [{ role: "user", content: "Reply OK only" }],
+  providerProfileId: smokeProviderProfileId,
+  modelId: smokeModelId,
+  messages: [{ role: "user", content: smokePrompt }],
   source: "desktop",
   routePreference: "server_proxy",
   createdAt: new Date().toISOString(),
@@ -66,6 +74,8 @@ console.log(
         eventStorage: health.eventStorage,
       },
       completion: {
+        providerProfileId: completion.providerProfileId,
+        modelId: completion.modelId,
         status: completion.status,
         route: completion.route,
         content: completion.content,
@@ -95,6 +105,30 @@ console.log(
     2,
   ),
 );
+
+async function loadDotEnvIfPresent() {
+  const envUrl = new URL("../.env", import.meta.url);
+  let text = "";
+  try {
+    text = await readFile(envUrl, "utf8");
+  } catch {
+    return;
+  }
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#") || !line.includes("=")) {
+      continue;
+    }
+    const [rawKey, ...rawValueParts] = line.split("=");
+    const key = rawKey.trim();
+    if (!key || process.env[key] !== undefined) {
+      continue;
+    }
+    const rawValue = rawValueParts.join("=").trim();
+    process.env[key] = rawValue.replace(/^["']|["']$/g, "");
+  }
+}
 
 async function readJson(url, init) {
   const mergedHeaders = { ...authHeader, ...(init?.headers ?? {}) };
