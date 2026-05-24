@@ -6,4 +6,4 @@ export {
   type CodexExecResult,
   type CodexExecRunner,
   type CodexExecRunnerParams,
-} from "./codexCliOAuthAdapter";
+} from "./codexCliOAuthAdapter.js";
