@@ -1,12 +1,12 @@
 import type { ConversationMessage, EventEnvelope, EventSyncPullResponse } from "@ai-orchestrator/protocol";
-import { DEFAULT_DGX_SERVER_BASE_URL } from "./stage30DgxEndpoints";
+import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
 
 export type Stage18EventReplayStatus = "restored" | "empty" | "failed";
 
 export type Stage18EventReplayInput = {
   sessionId?: string;
   afterRevision?: number;
-  serverBaseUrl?: string;
+  serverBaseUrl?: string | string[];
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 };
@@ -33,50 +33,54 @@ type ConversationMessageCreatedPayload = {
   sourceTrust?: string;
 };
 
-const DEFAULT_DGX_EVENT_REPLAY_BASE_URL = DEFAULT_DGX_SERVER_BASE_URL;
-
 export async function pullAndReplayDgxEventStorage({
   sessionId = "session_desktop_001",
   afterRevision,
-  serverBaseUrl = DEFAULT_DGX_EVENT_REPLAY_BASE_URL,
+  serverBaseUrl,
   fetchImpl = fetch,
   timeoutMs = 1_500,
 }: Stage18EventReplayInput = {}): Promise<Stage18EventReplayResult> {
-  const endpoint = new URL(`${serverBaseUrl.replace(/\/$/, "")}/events`);
-  endpoint.searchParams.set("sessionId", sessionId);
-  if (typeof afterRevision === "number") {
-    endpoint.searchParams.set("afterRevision", String(afterRevision));
-  }
+  const errors: string[] = [];
 
-  try {
-    const response = await fetchWithTimeout(fetchImpl, endpoint.toString(), timeoutMs);
-    const rawText = await response.text();
-
-    if (!response.ok) {
-      throw new Error(`DGX-02 Event Storage replay failed: ${response.status} ${rawText.slice(0, 240)}`);
+  for (const baseUrl of resolveDgxServerBaseUrls(serverBaseUrl)) {
+    const endpoint = new URL(`${baseUrl}/events`);
+    endpoint.searchParams.set("sessionId", sessionId);
+    if (typeof afterRevision === "number") {
+      endpoint.searchParams.set("afterRevision", String(afterRevision));
     }
 
-    const pullResponse = JSON.parse(rawText) as EventSyncPullResponse;
-    const events = sortEventsOldestFirst(pullResponse.events ?? []);
-    const messages = rebuildConversationMessagesFromEvents(events);
+    try {
+      const response = await fetchWithTimeout(fetchImpl, endpoint.toString(), timeoutMs);
+      const rawText = await response.text();
 
-    return {
-      status: events.length === 0 ? "empty" : "restored",
-      events,
-      messages,
-      serverRevision: pullResponse.serverRevision,
-      importedCount: events.length,
-      createdAt: pullResponse.createdAt,
-    };
-  } catch (error) {
-    return {
-      status: "failed",
-      events: [],
-      messages: [],
-      importedCount: 0,
-      error: error instanceof Error ? error.message : String(error),
-    };
+      if (!response.ok) {
+        throw new Error(`DGX-02 Event Storage replay failed: ${response.status} ${rawText.slice(0, 240)}`);
+      }
+
+      const pullResponse = JSON.parse(rawText) as EventSyncPullResponse;
+      const events = sortEventsOldestFirst(pullResponse.events ?? []);
+      const messages = rebuildConversationMessagesFromEvents(events);
+
+      return {
+        status: events.length === 0 ? "empty" : "restored",
+        events,
+        messages,
+        serverRevision: pullResponse.serverRevision,
+        importedCount: events.length,
+        createdAt: pullResponse.createdAt,
+      };
+    } catch (error) {
+      errors.push(`${baseUrl}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
+
+  return {
+    status: "failed",
+    events: [],
+    messages: [],
+    importedCount: 0,
+    error: errors.join(" | ") || "DGX-02 Event Storage replay unavailable",
+  };
 }
 
 export function rebuildConversationMessagesFromEvents(events: EventEnvelope[]): ConversationMessage[] {

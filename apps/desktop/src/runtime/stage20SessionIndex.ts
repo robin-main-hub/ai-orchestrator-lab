@@ -1,5 +1,5 @@
 import type { EventStorageSessionIndexItem, EventStorageSessionIndexResponse } from "@ai-orchestrator/protocol";
-import { DEFAULT_DGX_SERVER_BASE_URL } from "./stage30DgxEndpoints";
+import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
 
 export type Stage20SessionIndexStatus = "loaded" | "empty" | "failed";
 
@@ -12,12 +12,10 @@ export type Stage20SessionIndexState = {
 };
 
 export type Stage20SessionIndexInput = {
-  serverBaseUrl?: string;
+  serverBaseUrl?: string | string[];
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 };
-
-const DEFAULT_DGX_SESSION_INDEX_BASE_URL = DEFAULT_DGX_SERVER_BASE_URL;
 
 export function createInitialSessionIndexState(): Stage20SessionIndexState {
   return {
@@ -27,35 +25,41 @@ export function createInitialSessionIndexState(): Stage20SessionIndexState {
 }
 
 export async function fetchDgxSessionIndex({
-  serverBaseUrl = DEFAULT_DGX_SESSION_INDEX_BASE_URL,
+  serverBaseUrl,
   fetchImpl = fetch,
   timeoutMs = 1_500,
 }: Stage20SessionIndexInput = {}): Promise<Stage20SessionIndexState> {
-  const endpoint = `${serverBaseUrl.replace(/\/$/, "")}/sessions`;
+  const errors: string[] = [];
 
-  try {
-    const response = await fetchWithTimeout(fetchImpl, endpoint, timeoutMs);
-    const rawText = await response.text();
+  for (const baseUrl of resolveDgxServerBaseUrls(serverBaseUrl)) {
+    const endpoint = `${baseUrl}/sessions`;
 
-    if (!response.ok) {
-      throw new Error(`DGX-02 session index failed: ${response.status} ${rawText.slice(0, 240)}`);
+    try {
+      const response = await fetchWithTimeout(fetchImpl, endpoint, timeoutMs);
+      const rawText = await response.text();
+
+      if (!response.ok) {
+        throw new Error(`DGX-02 session index failed: ${response.status} ${rawText.slice(0, 240)}`);
+      }
+
+      const index = JSON.parse(rawText) as EventStorageSessionIndexResponse;
+
+      return {
+        status: index.sessions.length > 0 ? "loaded" : "empty",
+        sessions: index.sessions,
+        serverRevision: index.serverRevision,
+        lastLoadedAt: index.createdAt,
+      };
+    } catch (error) {
+      errors.push(`${baseUrl}: ${error instanceof Error ? error.message : String(error)}`);
     }
-
-    const index = JSON.parse(rawText) as EventStorageSessionIndexResponse;
-
-    return {
-      status: index.sessions.length > 0 ? "loaded" : "empty",
-      sessions: index.sessions,
-      serverRevision: index.serverRevision,
-      lastLoadedAt: index.createdAt,
-    };
-  } catch (error) {
-    return {
-      status: "failed",
-      sessions: [],
-      error: error instanceof Error ? error.message : String(error),
-    };
   }
+
+  return {
+    status: "failed",
+    sessions: [],
+    error: errors.join(" | ") || "DGX-02 session index unavailable",
+  };
 }
 
 async function fetchWithTimeout(fetchImpl: typeof fetch, input: string, timeoutMs: number) {

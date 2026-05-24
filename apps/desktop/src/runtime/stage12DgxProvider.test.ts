@@ -60,7 +60,7 @@ describe("stage12 DGX provider completion", () => {
 
   it("uses the DGX server proxy before direct provider calls", async () => {
     const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(url)).toBe(`${ENDRUIN_ORCHESTRATOR_BASE_URL}/provider-completions`);
+      expect(String(url)).toBe(`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`);
       expect(String(init?.body)).not.toContain("sk-");
       expect(String(init?.body)).not.toContain("http://dgx-02:8001");
       return new Response(
@@ -118,8 +118,8 @@ describe("stage12 DGX provider completion", () => {
     });
 
     expect(calls).toEqual([
-      `${ENDRUIN_ORCHESTRATOR_BASE_URL}/provider-completions`,
       `${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`,
+      `${ENDRUIN_ORCHESTRATOR_BASE_URL}/provider-completions`,
       "http://dgx-02:8001/v1/chat/completions",
     ]);
     expect(result.route).toBe("direct_provider");
@@ -153,8 +153,8 @@ describe("stage12 DGX provider completion", () => {
     ).rejects.toThrow("DGX-02 server proxy failed");
 
     expect(calls).toEqual([
-      `${ENDRUIN_ORCHESTRATOR_BASE_URL}/provider-completions`,
       `${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`,
+      `${ENDRUIN_ORCHESTRATOR_BASE_URL}/provider-completions`,
     ]);
   });
 });

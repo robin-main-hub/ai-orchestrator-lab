@@ -4,7 +4,7 @@ import type {
   EventSyncPushRequest,
   EventSyncPushResponse,
 } from "@ai-orchestrator/protocol";
-import { DEFAULT_DGX_SERVER_BASE_URL } from "./stage30DgxEndpoints";
+import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
 
 export type Stage14EventSyncStatus = "synced" | "syncing" | "queued" | "failed";
 
@@ -28,13 +28,11 @@ export type Stage14EventSyncInput = {
   events: EventEnvelope[];
   clientId?: string;
   sessionId?: string;
-  serverBaseUrl?: string;
+  serverBaseUrl?: string | string[];
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   createdAt?: string;
 };
-
-const DEFAULT_DGX_EVENT_SYNC_BASE_URL = DEFAULT_DGX_SERVER_BASE_URL;
 
 export function createInitialEventSyncState(outboxCount = 0): Stage14EventSyncState {
   return {
@@ -63,7 +61,7 @@ export async function pushEventsToDgxEventStorage({
   events,
   clientId = "client_macbook",
   sessionId = events[0]?.sessionId ?? "session_desktop_001",
-  serverBaseUrl = DEFAULT_DGX_EVENT_SYNC_BASE_URL,
+  serverBaseUrl,
   fetchImpl = fetch,
   timeoutMs = 1_500,
   createdAt = new Date().toISOString(),
@@ -82,46 +80,52 @@ export async function pushEventsToDgxEventStorage({
     sessionId,
     createdAt,
   });
-  const endpoint = `${serverBaseUrl.replace(/\/$/, "")}/events/sync`;
+  const errors: string[] = [];
 
-  try {
-    const response = await fetchWithTimeout(
-      fetchImpl,
-      endpoint,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
+  for (const baseUrl of resolveDgxServerBaseUrls(serverBaseUrl)) {
+    const endpoint = `${baseUrl}/events/sync`;
+
+    try {
+      const response = await fetchWithTimeout(
+        fetchImpl,
+        endpoint,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(request),
         },
-        body: JSON.stringify(request),
-      },
-      timeoutMs,
-    );
-    const rawText = await response.text();
+        timeoutMs,
+      );
+      const rawText = await response.text();
 
-    if (!response.ok) {
-      throw new Error(`DGX-02 Event Storage sync failed: ${response.status} ${rawText.slice(0, 240)}`);
+      if (!response.ok) {
+        throw new Error(`DGX-02 Event Storage sync failed: ${response.status} ${rawText.slice(0, 240)}`);
+      }
+
+      const syncResponse = JSON.parse(rawText) as EventSyncPushResponse;
+      const syncedEventIds = getSyncedEventIds(syncResponse.results);
+      const queuedEvents = events.filter((event) => !syncedEventIds.includes(event.id));
+
+      return {
+        status: queuedEvents.length === 0 ? "synced" : "failed",
+        response: syncResponse,
+        queuedEvents,
+        syncedEventIds,
+        error: queuedEvents.length > 0 ? `${queuedEvents.length} events need conflict review` : undefined,
+      };
+    } catch (error) {
+      errors.push(`${baseUrl}: ${error instanceof Error ? error.message : String(error)}`);
     }
-
-    const syncResponse = JSON.parse(rawText) as EventSyncPushResponse;
-    const syncedEventIds = getSyncedEventIds(syncResponse.results);
-    const queuedEvents = events.filter((event) => !syncedEventIds.includes(event.id));
-
-    return {
-      status: queuedEvents.length === 0 ? "synced" : "failed",
-      response: syncResponse,
-      queuedEvents,
-      syncedEventIds,
-      error: queuedEvents.length > 0 ? `${queuedEvents.length} events need conflict review` : undefined,
-    };
-  } catch (error) {
-    return {
-      status: "queued",
-      queuedEvents: events,
-      syncedEventIds: [],
-      error: error instanceof Error ? error.message : String(error),
-    };
   }
+
+  return {
+    status: "queued",
+    queuedEvents: events,
+    syncedEventIds: [],
+    error: errors.join(" | ") || "DGX-02 Event Storage sync unavailable",
+  };
 }
 
 export function reduceEventSyncState(
