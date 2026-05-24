@@ -2710,6 +2710,11 @@ button {
   padding: 10px;
 }
 
+.side-panel.memento-panel {
+  grid-template-rows: auto auto auto auto auto minmax(0, 1fr) auto;
+  gap: 7px;
+}
+
 .panel-title {
   gap: 8px;
   margin-bottom: 12px;
@@ -3001,6 +3006,139 @@ button {
   font-size: 13px;
 }
 
+.memento-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.memento-tool-grid div,
+.memory-context-card,
+.memory-relation-list article,
+.memory-reflection-list article {
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #141311;
+}
+
+.memento-tool-grid span,
+.memento-tool-grid strong,
+.memory-context-card span,
+.memory-context-card strong,
+.memory-context-card p,
+.memory-relation-list strong,
+.memory-relation-list span,
+.memory-reflection-list strong,
+.memory-reflection-list span {
+  display: block;
+  min-width: 0;
+}
+
+.memento-tool-grid span,
+.memory-context-card span,
+.memory-relation-list span,
+.memory-reflection-list span {
+  color: var(--subtle);
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.memento-tool-grid strong {
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memento-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 0;
+}
+
+.memento-stats div {
+  padding: 6px;
+}
+
+.memory-context-card {
+  border-color: rgba(41, 215, 230, 0.24);
+}
+
+.memory-context-card.watch {
+  border-color: rgba(245, 183, 79, 0.38);
+}
+
+.memory-context-card.needs_review {
+  border-color: rgba(240, 138, 138, 0.42);
+}
+
+.memory-context-card strong {
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.memory-context-card p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.memento-scroll {
+  display: grid;
+  gap: 7px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.memento-section {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.memento-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.memento-section > header strong {
+  color: var(--cyan);
+}
+
+.memory-relation-list,
+.memory-reflection-list {
+  display: grid;
+  gap: 5px;
+}
+
+.memory-relation-list strong,
+.memory-reflection-list strong {
+  color: var(--text);
+  font-size: 10px;
+}
+
+.memory-reflection-list article.high {
+  border-color: rgba(240, 138, 138, 0.42);
+}
+
+.memory-reflection-list article.medium {
+  border-color: rgba(245, 183, 79, 0.42);
+}
+
+.memory-reflection-list article.good {
+  border-color: rgba(84, 224, 160, 0.34);
+}
+
 .recall-trace-list,
 .memory-record-list {
   display: grid;
@@ -3022,6 +3160,13 @@ button {
 .side-panel.memory-panel .recall-trace-list,
 .side-panel.memory-panel .memory-record-list {
   max-height: none;
+}
+
+.memento-panel .recall-trace-list,
+.memento-panel .memory-record-list {
+  margin-top: 0;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .recall-trace-list article {
@@ -3090,6 +3235,10 @@ button {
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   background: #002f38;
+}
+
+.memento-panel .memory-record-list article {
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
 }
 
 .side-panel.ingress-panel {

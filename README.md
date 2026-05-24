@@ -74,6 +74,8 @@ docs/
   14-product-strategy-vertical-slice.md
   15-agent-topology-and-ingress-guards.md
   16-codex-implementation-handoff.md
+  17-role-based-tmux-agent-swarm.md
+  18-memento-mcp-structure-check.md
   review-board.md
   research-notes.md
 ```
