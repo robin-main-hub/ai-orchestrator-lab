@@ -32,7 +32,6 @@ import {
   CodexCliOAuthAdapter,
   type CodexExecRunner,
 } from "@ai-orchestrator/providers/node";
-import { createAdapterContext } from "@ai-orchestrator/providers";
 
 export type ServerCapability =
   | "health"
@@ -990,14 +989,15 @@ export async function createServerProviderProxyCompletionResponse(
         ...request,
         routePreference: "server_proxy",
       },
-      createAdapterContext({
+      {
+        resolveSecret: async () => undefined,
         timeoutMs: parsePositiveInteger(process.env.CODEX_CLI_TIMEOUT_MS) ?? 30_000,
         onRawError(status, redactedSnippet) {
           if (redactedSnippet) {
             console.warn(`Codex OAuth CLI adapter warning (${status}): ${redactedSnippet}`);
           }
         },
-      }),
+      },
     );
   }
 

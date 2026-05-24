@@ -7,8 +7,8 @@ import type {
   ProviderCompletionRequest,
   ProviderCompletionResponse,
 } from "@ai-orchestrator/protocol";
-import type { AdapterRuntimeContext, LlmAdapter } from "../adapter";
-import { AdapterError, redactSecretsForLog, truncateForLog } from "../errors";
+import type { AdapterRuntimeContext, LlmAdapter } from "../adapter.js";
+import { AdapterError, redactSecretsForLog, truncateForLog } from "../errors.js";
 
 export type CodexCliOAuthAdapterOptions = {
   profileId?: string;
