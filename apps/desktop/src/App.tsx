@@ -94,6 +94,12 @@ import {
   reduceEventSyncState,
   type Stage14EventSyncState,
 } from "./runtime/stage14EventSync";
+import {
+  createBrowserEventOutboxStorage,
+  mergeOutboxEvents,
+  removeSyncedOutboxEvents,
+  type Stage16OutboxStorage,
+} from "./runtime/stage16LocalOutbox";
 import type {
   AgentProfile,
   ApprovalState,
@@ -123,6 +129,14 @@ type ModelCatalog = Record<string, ModelDescriptor[]>;
 const modelWindowSize = 8;
 
 const now = new Date("2026-05-24T00:20:00.000+09:00").toISOString();
+
+function createDesktopOutboxStorage(): Stage16OutboxStorage {
+  try {
+    return createBrowserEventOutboxStorage(typeof window === "undefined" ? undefined : window.localStorage);
+  } catch {
+    return createBrowserEventOutboxStorage();
+  }
+}
 
 const runtimeSnapshot: RuntimeSnapshot = {
   status: "degraded",
@@ -172,6 +186,8 @@ const runtimeSnapshot: RuntimeSnapshot = {
         status: "online",
         syncRole: "client_replica",
         localStore: "sqlite",
+        outboxMode: "persistent_local",
+        failurePolicy: "local_queue",
         outboxCount: 0,
         lastSeenAt: now,
       },
@@ -179,10 +195,12 @@ const runtimeSnapshot: RuntimeSnapshot = {
         id: "client_home_pc",
         label: "Home PC",
         kind: "desktop_pc",
-        status: "degraded",
+        status: "online",
         syncRole: "client_replica",
-        localStore: "sqlite",
-        outboxCount: 2,
+        localStore: "none",
+        outboxMode: "online_only",
+        failurePolicy: "requires_dgx",
+        outboxCount: 0,
         lastSeenAt: now,
       },
       {
@@ -192,6 +210,8 @@ const runtimeSnapshot: RuntimeSnapshot = {
         status: "offline",
         syncRole: "authority",
         localStore: "sqlite",
+        outboxMode: "authority",
+        failurePolicy: "authority_recovery",
         outboxCount: 0,
       },
     ],
@@ -472,6 +492,8 @@ const initialIngressSnapshot = createStage8IngressSnapshot(
 export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
   const [runtimeSnapshotState, setRuntimeSnapshotState] = useState<RuntimeSnapshot>(runtimeSnapshot);
+  const eventOutboxStorage = useMemo(() => createDesktopOutboxStorage(), []);
+  const [eventOutbox, setEventOutbox] = useState<EventEnvelope[]>(() => eventOutboxStorage.load());
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(seededProviderProfiles);
   const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(seededModelCatalog);
   const [modelDiscoveryByProviderId, setModelDiscoveryByProviderId] = useState<Record<string, ModelDiscoverySnapshot>>({});
@@ -482,7 +504,7 @@ export function App() {
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
   const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
   const [eventSyncState, setEventSyncState] = useState<Stage14EventSyncState>(() =>
-    createInitialEventSyncState(initialEventLog.length),
+    createInitialEventSyncState(eventOutboxStorage.load().length),
   );
   const [syncedEventIds, setSyncedEventIds] = useState<Record<string, true>>({});
   const [memoryRecords, setMemoryRecords] = useState<MemoryRecord[]>(initialMemoryRecords);
@@ -593,6 +615,13 @@ export function App() {
   );
 
   useEffect(() => {
+    const queuedEvents = eventOutboxStorage.load();
+    if (queuedEvents.length > 0) {
+      setEventOutbox(queuedEvents);
+      void syncEventsToDgx(queuedEvents);
+      return;
+    }
+
     void syncEventsToDgx(initialEventLog);
   }, []);
 
@@ -634,38 +663,75 @@ export function App() {
     const result = await pushEventsToDgxEventStorage({
       events: eventsToSync,
     });
+    const currentOutbox = eventOutboxStorage.load();
+    const nextOutbox = mergeOutboxEvents(
+      removeSyncedOutboxEvents(currentOutbox, result.syncedEventIds),
+      result.queuedEvents,
+    );
+    eventOutboxStorage.save(nextOutbox);
+    setEventOutbox(nextOutbox);
 
-    setEventSyncState((state) => reduceEventSyncState(state, result));
+    setEventSyncState((state) => {
+      const nextState = reduceEventSyncState(state, result);
+      return {
+        ...nextState,
+        status: nextOutbox.length > 0 && nextState.status === "synced" ? "queued" : nextState.status,
+        outboxCount: nextOutbox.length,
+      };
+    });
     if (result.syncedEventIds.length > 0) {
       setSyncedEventIds((current) => ({
         ...current,
         ...Object.fromEntries(result.syncedEventIds.map((eventId) => [eventId, true])),
       }));
     }
+    const dgxReachable = Boolean(result.response);
     setRuntimeSnapshotState((snapshot) => ({
       ...snapshot,
-      memorySyncStatus: result.status === "synced" ? "online" : snapshot.memorySyncStatus,
+      status: dgxReachable && nextOutbox.length === 0 ? "online" : "degraded",
+      dgxStatus: dgxReachable ? "online" : "offline",
+      memorySyncStatus: result.status === "synced" && nextOutbox.length === 0 ? "online" : "degraded",
+      runtimeNodes: snapshot.runtimeNodes.map((node) =>
+        node.id === snapshot.syncTopology.authorityNodeId
+          ? {
+              ...node,
+              status: dgxReachable ? "online" : "offline",
+            }
+          : node,
+      ),
       syncTopology: {
         ...snapshot.syncTopology,
         clients: snapshot.syncTopology.clients.map((client) =>
-          client.id === "macbook"
+          client.id === "client_macbook"
             ? {
                 ...client,
-                status: result.status === "synced" ? "online" : "degraded",
-                outboxCount: result.queuedEvents.length,
+                status: nextOutbox.length === 0 ? "online" : "degraded",
+                outboxCount: nextOutbox.length,
                 lastSeenAt: result.response?.createdAt ?? client.lastSeenAt,
               }
+            : client.id === "client_home_pc"
+              ? {
+                  ...client,
+                  status: dgxReachable ? "online" : "degraded",
+                  outboxCount: 0,
+                  lastSeenAt: result.response?.createdAt ?? client.lastSeenAt,
+                }
             : client,
         ),
       },
-      recentError: result.status === "queued" || result.status === "failed" ? result.error : snapshot.recentError,
+      recentError:
+        result.status === "queued"
+          ? `DGX-02 Event Storage unavailable; MacBook local outbox active, Home PC waits for DGX recovery. ${result.error ?? ""}`
+          : result.status === "failed"
+            ? `Event Storage sync needs review. ${result.error ?? ""}`
+            : undefined,
       updatedAt: result.response?.createdAt ?? new Date().toISOString(),
     }));
   }
 
   function handleSyncEventStorage() {
     const unsyncedEvents = eventLog.filter((event) => !syncedEventIds[event.id]);
-    void syncEventsToDgx(unsyncedEvents);
+    void syncEventsToDgx(mergeOutboxEvents(eventOutbox, unsyncedEvents));
   }
 
   async function handleSendMessageStage2() {
@@ -1693,9 +1759,9 @@ function RuntimeRailPanel({
   onProbeDgx: () => void;
   snapshot: RuntimeSnapshot;
 }) {
-  const clientOutbox = snapshot.syncTopology.clients
-    .filter((client) => client.syncRole === "client_replica")
-    .reduce((sum, client) => sum + client.outboxCount, 0);
+  const macbookClient = snapshot.syncTopology.clients.find((client) => client.id === "client_macbook");
+  const homePcClient = snapshot.syncTopology.clients.find((client) => client.id === "client_home_pc");
+  const macbookOutbox = macbookClient?.outboxCount ?? 0;
 
   return (
     <section className="mini-panel rail-panel">
@@ -1729,8 +1795,14 @@ function RuntimeRailPanel({
           <strong className={statusTone(snapshot.memorySyncStatus)}>{snapshot.memorySyncStatus}</strong>
         </div>
         <div>
-          <span>client outbox</span>
-          <strong>{clientOutbox}</strong>
+          <span>mac outbox</span>
+          <strong>{macbookOutbox}</strong>
+        </div>
+        <div>
+          <span>home pc</span>
+          <strong className={statusTone(homePcClient?.status ?? "degraded")}>
+            {homePcClient?.status === "online" ? "online-only" : "needs DGX"}
+          </strong>
         </div>
         <div>
           <span>heartbeat</span>

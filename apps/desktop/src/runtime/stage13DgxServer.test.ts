@@ -27,13 +27,37 @@ const localRuntime: RuntimeSnapshot = {
     conflictPolicy: "server_revision_lww_with_conflict_events",
     clients: [
       {
+        id: "client_macbook",
+        label: "MacBook",
+        kind: "macbook",
+        status: "online",
+        syncRole: "client_replica",
+        localStore: "sqlite",
+        outboxMode: "persistent_local",
+        failurePolicy: "local_queue",
+        outboxCount: 2,
+      },
+      {
+        id: "client_home_pc",
+        label: "Home PC",
+        kind: "desktop_pc",
+        status: "online",
+        syncRole: "client_replica",
+        localStore: "none",
+        outboxMode: "online_only",
+        failurePolicy: "requires_dgx",
+        outboxCount: 0,
+      },
+      {
         id: "dgx-02",
         label: "DGX-02",
         kind: "server",
         status: "offline",
         syncRole: "authority",
         localStore: "sqlite",
-        outboxCount: 2,
+        outboxMode: "authority",
+        failurePolicy: "authority_recovery",
+        outboxCount: 0,
       },
     ],
   },
@@ -56,7 +80,7 @@ describe("stage13 DGX server probing", () => {
             runtimeNodes: [{ ...localRuntime.runtimeNodes[0]!, status: "online", models: ["qwen36-domain-wiki-rag-prisma"] }],
             syncTopology: {
               ...localRuntime.syncTopology,
-              clients: [{ ...localRuntime.syncTopology.clients[0]!, status: "online", outboxCount: 0 }],
+              clients: [{ ...localRuntime.syncTopology.clients[2]!, status: "online", outboxCount: 0 }],
             },
             updatedAt: "2026-05-24T00:01:00.000Z",
           },
@@ -119,7 +143,8 @@ describe("stage13 DGX server probing", () => {
     expect(probe.runtime.dgxStatus).toBe("offline");
     expect(probe.runtime.memorySyncStatus).toBe("degraded");
     expect(probe.heartbeat.status).toBe("unreachable");
-    expect(probe.runtime.recentError).toContain("direct vLLM fallback");
+    expect(probe.runtime.recentError).toContain("Home PC waits for DGX-02 recovery");
+    expect(probe.runtime.syncTopology.clients.find((client) => client.id === "client_home_pc")?.status).toBe("degraded");
   });
 });
 

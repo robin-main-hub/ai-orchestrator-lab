@@ -67,7 +67,7 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       id: "memory_seed_dgx",
       layer: "project_memory",
       title: "DGX-02 원본 서버",
-      content: "DGX-02는 메인 서버이며 MacBook과 Home PC는 로컬 SQLite outbox를 통해 복구 시 동기화한다.",
+      content: "DGX-02는 메인 서버다. MacBook은 로컬 outbox로 복구 동기화하고, Home PC는 DGX-02 상시 연결 클라이언트로 취급한다.",
       sourceChannel: "desktop",
       trustLevel: "trusted",
       createdAt,

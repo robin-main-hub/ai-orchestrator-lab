@@ -115,6 +115,8 @@ export function createRuntimeSnapshot(now = new Date().toISOString(), probe?: Dg
           status: vllmReachable ? "online" : "degraded",
           syncRole: "authority",
           localStore: "sqlite",
+          outboxMode: "authority",
+          failurePolicy: "authority_recovery",
           outboxCount: 0,
           lastSeenAt: now,
         },

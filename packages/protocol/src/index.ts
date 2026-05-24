@@ -646,6 +646,10 @@ export type ClientDeviceKind = "macbook" | "desktop_pc" | "mobile" | "server";
 
 export type SyncRole = "authority" | "client_replica";
 
+export type ClientOutboxMode = "persistent_local" | "online_only" | "authority";
+
+export type ClientFailurePolicy = "local_queue" | "requires_dgx" | "authority_recovery";
+
 export type ClientDevice = {
   id: string;
   label: string;
@@ -653,6 +657,8 @@ export type ClientDevice = {
   status: RuntimeStatus;
   syncRole: SyncRole;
   localStore: "sqlite" | "none";
+  outboxMode?: ClientOutboxMode;
+  failurePolicy?: ClientFailurePolicy;
   outboxCount: number;
   lastSeenAt?: string;
 };

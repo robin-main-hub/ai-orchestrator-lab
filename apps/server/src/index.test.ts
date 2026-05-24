@@ -167,10 +167,10 @@ describe("server health placeholder", () => {
     };
     const request = {
       id: "sync_request_1",
-      clientId: "macbook",
+      clientId: "client_macbook",
       sessionId: "session_1",
       events: [event],
-      idempotencyKey: "macbook:session_1:event_sync_1",
+      idempotencyKey: "client_macbook:session_1:event_sync_1",
       createdAt: event.createdAt,
     };
 
@@ -199,9 +199,9 @@ describe("server health placeholder", () => {
     const response = pushEventsToServerStorage(
       {
         id: "sync_request_secret",
-        clientId: "macbook",
+        clientId: "client_macbook",
         sessionId: "session_1",
-        idempotencyKey: "macbook:session_1:event_secret",
+        idempotencyKey: "client_macbook:session_1:event_secret",
         createdAt: "2026-05-24T00:00:00.000Z",
         events: [
           {

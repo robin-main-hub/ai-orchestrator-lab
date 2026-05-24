@@ -145,7 +145,7 @@ export function createCodingPacketFromConversation({ messages, agent, provider }
     ],
     constraints: [
       "API key, bearer token, auth token은 event emit 직전 redaction을 통과해야 한다.",
-      "DGX-02가 offline이면 로컬 outbox와 mock/local model 흐름만 활성화한다.",
+      "DGX-02가 내려가면 MacBook은 로컬 outbox와 mock/local model 흐름으로 버티고, Home PC는 DGX 복구 대기 상태로 둔다.",
       "터미널 실행은 approval state가 붙기 전까지 UI slot으로만 표시한다.",
     ],
     filesToInspect: [
@@ -167,7 +167,7 @@ export function createCodingPacketFromConversation({ messages, agent, provider }
     ],
     reviewerNotes: [
       "Stage2는 실제 비밀키 저장소나 모델 호출을 만들지 않는다.",
-      "Event Store authority는 DGX-02로 유지하고 MacBook/Home PC는 client replica 전제로 둔다.",
+      "Event Storage authority는 DGX-02로 유지하고 MacBook은 persistent local outbox, Home PC는 online-only client로 둔다.",
     ],
   };
 }

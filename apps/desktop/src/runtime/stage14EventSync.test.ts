@@ -22,13 +22,13 @@ describe("stage14 Event Storage sync", () => {
   it("builds a deterministic client push envelope", () => {
     const request = createEventSyncPushRequest({
       events: [event],
-      clientId: "macbook",
+      clientId: "client_macbook",
       sessionId: "session_1",
       createdAt: event.createdAt,
     });
 
     expect(request.sessionId).toBe("session_1");
-    expect(request.idempotencyKey).toBe("macbook:session_1:event_sync_1");
+    expect(request.idempotencyKey).toBe("client_macbook:session_1:event_sync_1");
     expect(request.events[0]?.redacted).toBe(true);
   });
 

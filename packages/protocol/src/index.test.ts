@@ -88,10 +88,10 @@ describe("protocol schemas", () => {
     });
     const request = eventSyncPushRequestSchema.parse({
       id: "event_sync_request_1",
-      clientId: "macbook",
+      clientId: "client_macbook",
       sessionId: "session_1",
       events: [event],
-      idempotencyKey: "macbook:session_1:event_sync_1",
+      idempotencyKey: "client_macbook:session_1:event_sync_1",
       createdAt: event.createdAt,
     });
     const response = eventSyncPushResponseSchema.parse({
@@ -109,6 +109,35 @@ describe("protocol schemas", () => {
 
     expect(response.accepted).toBe(1);
     expect(response.results[0]?.status).toBe("accepted");
+  });
+
+  it("separates MacBook offline queue from Home PC online-only access", () => {
+    const macbook = {
+      id: "client_macbook",
+      label: "MacBook",
+      kind: "macbook" as const,
+      status: "online" as const,
+      syncRole: "client_replica" as const,
+      localStore: "sqlite" as const,
+      outboxMode: "persistent_local" as const,
+      failurePolicy: "local_queue" as const,
+      outboxCount: 2,
+    };
+    const homePc = {
+      id: "client_home_pc",
+      label: "Home PC",
+      kind: "desktop_pc" as const,
+      status: "online" as const,
+      syncRole: "client_replica" as const,
+      localStore: "none" as const,
+      outboxMode: "online_only" as const,
+      failurePolicy: "requires_dgx" as const,
+      outboxCount: 0,
+    };
+
+    expect(macbook.outboxMode).toBe("persistent_local");
+    expect(homePc.failurePolicy).toBe("requires_dgx");
+    expect(homePc.outboxCount).toBe(0);
   });
 
   it("models remote execution without raw command execution", () => {
