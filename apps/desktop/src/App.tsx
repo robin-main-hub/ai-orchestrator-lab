@@ -3819,6 +3819,7 @@ function ConversationWorkbench({
         <AgentProfileStrip
           contextPackTier={contextPackTier}
           memoryMode={memoryMode}
+          onContextPackTierChange={onContextPackTierChange}
           onOpen={onOpenAgentConfig}
           persona={persona}
           selectedAgent={selectedAgent}
@@ -3837,34 +3838,6 @@ function ConversationWorkbench({
         />
       ) : null}
       <WindowChecklist items={auditItems} title="대화 창 점검" />
-      <section className="context-branch-panel" aria-label="ContextPack and branch controls">
-        <div className="context-tier-buttons">
-          <span>ContextPack</span>
-          {(["lite", "standard", "full"] as ContextPackTier[]).map((tier) => (
-            <button
-              className={contextPackTier === tier ? "active" : ""}
-              key={tier}
-              onClick={() => onContextPackTierChange(tier)}
-              type="button"
-            >
-              {contextPackTierLabel(tier)}
-            </button>
-          ))}
-        </div>
-        <div className="branch-adopt-panel">
-          <div>
-            <span>Branch / Adopt</span>
-            <strong>{branchExperiments.length} branches / {adoptedBranchCount} adopted</strong>
-            <em>{latestBranch ? `${latestBranch.title} - ${branchStatusLabel(latestBranch.status)}` : "shadow branch 없음"}</em>
-          </div>
-          <button onClick={onCreateBranch} type="button">
-            분기 생성
-          </button>
-          <button disabled={!branchExperiments.some((branch) => branch.status !== "adopted")} onClick={onAdoptBranch} type="button">
-            요약 채택
-          </button>
-        </div>
-      </section>
       <div className="conversation-stream" aria-label="대화 기록" tabIndex={0}>
         {messages.map((message) => {
           const attachments = getMessageAttachments(message);
@@ -3974,6 +3947,18 @@ function ConversationWorkbench({
           <Smartphone size={16} />
           Telegram
         </button>
+        <div className="branch-action-group" aria-label="Branch and summary adoption controls">
+          <span>
+            Branch {branchExperiments.length} / 채택 {adoptedBranchCount}
+            {latestBranch ? <em title={latestBranch.summary}>{branchStatusLabel(latestBranch.status)}</em> : null}
+          </span>
+          <button onClick={onCreateBranch} type="button">
+            분기
+          </button>
+          <button disabled={!branchExperiments.some((branch) => branch.status !== "adopted")} onClick={onAdoptBranch} type="button">
+            채택
+          </button>
+        </div>
       </div>
     </section>
   );
@@ -3996,16 +3981,24 @@ function AttachmentChips({ attachments }: { attachments: ConversationAttachment[
 function AgentProfileStrip({
   contextPackTier,
   memoryMode,
+  onContextPackTierChange,
   onOpen,
   persona,
   selectedAgent,
 }: {
   contextPackTier: ContextPackTier;
   memoryMode: string;
+  onContextPackTierChange: (tier: ContextPackTier) => void;
   onOpen: (tab: AgentConfigTab) => void;
   persona?: AgentPersonaSettings;
   selectedAgent?: WorkbenchAgent;
 }) {
+  const cycleContextPackTier = () => {
+    const order: ContextPackTier[] = ["lite", "standard", "full"];
+    const currentIndex = order.indexOf(contextPackTier);
+    const nextTier = order[(currentIndex + 1) % order.length] ?? "standard";
+    onContextPackTierChange(nextTier);
+  };
   const chips: Array<{ tab: AgentConfigTab; label: string; value: string }> = [
     { tab: "profile", label: "Profile", value: selectedAgent ? agentRoleLabel(selectedAgent.role) : "대기" },
     { tab: "soul", label: "SOUL.md", value: selectedAgent ? soulModeLabel(selectedAgent.soulMode) : "off" },
@@ -4028,7 +4021,12 @@ function AgentProfileStrip({
   return (
     <div className="agent-profile-strip" aria-label="Agent profile and soul controls">
       {chips.map((chip) => (
-        <button key={`${chip.label}-${chip.tab}`} onClick={() => onOpen(chip.tab)} type="button">
+        <button
+          key={`${chip.label}-${chip.tab}`}
+          onClick={() => (chip.label === "Context" ? cycleContextPackTier() : onOpen(chip.tab))}
+          title={chip.label === "Context" ? "ContextPack: Lite -> Standard -> Full" : undefined}
+          type="button"
+        >
           <span>{chip.label}</span>
           <strong>{chip.value}</strong>
         </button>
