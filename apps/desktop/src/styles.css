@@ -976,30 +976,6 @@ button {
   white-space: nowrap;
 }
 
-.agent-config-tabs {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 4px;
-  padding: 7px;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.agent-config-tabs button {
-  min-width: 0;
-  min-height: 26px;
-  border: 1px solid var(--line-soft);
-  border-radius: 6px;
-  background: #002f38;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 10px;
-}
-
-.agent-config-tabs button.active {
-  border-color: var(--cyan);
-  color: var(--text);
-}
-
 .agent-config-body {
   min-height: 0;
   overflow-y: auto;
@@ -1054,6 +1030,46 @@ button {
   min-height: 86px;
   resize: vertical;
   padding: 8px;
+}
+
+.soul-config-panel textarea {
+  min-height: 112px;
+}
+
+.creativity-options {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.creativity-options button {
+  display: grid;
+  gap: 2px;
+  min-height: 46px;
+  padding: 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #002f38;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.creativity-options button.active {
+  border-color: var(--cyan);
+  background: #003a43;
+  color: var(--text);
+}
+
+.creativity-options strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.creativity-options span {
+  color: var(--subtle);
+  font-size: 9px;
 }
 
 .agent-config-note {

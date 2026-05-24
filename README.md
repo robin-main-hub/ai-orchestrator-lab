@@ -238,7 +238,14 @@ corepack pnpm dev
 
 ## Stage31
 
-- Conversation 입력창에 최대 3개 이미지/문서 첨부 UI를 추가했다.
+- Conversation 입력창에 최대 5개 이미지/문서 첨부 UI를 추가했다.
 - `ModelDescriptor.inputModalities`를 protocol에 추가해 선택된 모델이 `image` 또는 `document` 입력을 지원할 때만 첨부 버튼이 활성화된다.
 - 첨부 원본 파일은 아직 저장하지 않고, 파일명/종류/크기/mime type만 `metadata_only`로 메시지와 Event Storage payload에 기록한다.
 - 전송된 메시지에는 첨부 chip이 함께 표시되어 이후 DGX object storage, Obsidian projection, 모바일 승인 화면으로 확장할 수 있다.
+
+## Stage32
+
+- Agent Profile drawer 내부의 7개 탭을 제거하고, 중앙 컨트롤 바에서 선택한 항목 하나만 단독 설정 화면으로 열리게 정리했다.
+- `SOUL.md` 화면은 경로, 본문, 예시 대화, SOUL.md가 없을 때 쓸 제안 소울, soul injection mode만 다루도록 좁혔다.
+- 기존 `Voice` 메뉴는 제거하고, 같은 위치에 `창의성` 설정을 배치했다.
+- 창의성은 `보수적`, `신중`, `균형`, `창의적`, `실험적` 5단계로 고르고 각 단계가 temperature 값으로 표시된다.
