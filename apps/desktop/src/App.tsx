@@ -105,6 +105,7 @@ import {
   mergeEventReplayLogs,
   pullAndReplayDgxEventStorage,
 } from "./runtime/stage18EventReplay";
+import { extractLatestCodingPacketFromEvents } from "./runtime/stage19CodingPacketReplay";
 import type {
   AgentProfile,
   ApprovalState,
@@ -769,6 +770,10 @@ export function App() {
 
     setEventLog((events) => mergeEventReplayLogs(events, result.events));
     setConversationMessages((messages) => mergeConversationMessages(messages, result.messages));
+    const packetReplay = extractLatestCodingPacketFromEvents(result.events);
+    if (packetReplay.status === "restored" && packetReplay.packet) {
+      setCodingPacketState(packetReplay.packet);
+    }
     setSyncedEventIds((current) => ({
       ...current,
       ...Object.fromEntries(result.events.map((event) => [event.id, true])),
@@ -937,6 +942,7 @@ export function App() {
 
     setCodingPacketState(packet);
     appendEvent("coding_packet.created", {
+      packet,
       goal: packet.goal,
       contextCount: packet.context.length,
       decisionCount: packet.decisions.length,

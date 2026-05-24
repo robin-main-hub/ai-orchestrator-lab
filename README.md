@@ -159,3 +159,9 @@ corepack pnpm dev
 - `apps/desktop/src/runtime/stage18EventReplay.ts`에서 DGX-02 `/events?sessionId=...` pull, Conversation message 재구성, local message/event dedupe merge를 담당한다.
 - Terminal dock의 Event Storage 카드에 `pull` 버튼을 추가해 MacBook 또는 Home PC 화면에서 DGX-02에 저장된 세션 이벤트를 다시 불러올 수 있다.
 - 오래된 이벤트처럼 content가 없는 message event는 안전하게 건너뛰고, 앞으로 생성되는 메시지는 redaction layer를 통과한 본문만 저장한다.
+
+## Stage19
+
+- `coding_packet.created` 이벤트 payload에 전체 `CodingPacket` 구조를 포함해, 코딩 전달 상태도 DGX-02 Event Storage에서 복원할 수 있게 했다.
+- `apps/desktop/src/runtime/stage19CodingPacketReplay.ts`는 최신 유효 packet 이벤트를 찾고 Zod schema로 검증한 뒤 UI 상태로 되돌린다.
+- content가 없는 구형 packet 이벤트는 건너뛰고, schema가 깨진 packet은 `invalid`로 분리해 나중에 conflict/review UI로 넘길 수 있게 했다.
