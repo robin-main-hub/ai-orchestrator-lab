@@ -25,6 +25,7 @@ import {
   pushEventsToServerStorage,
   redactInternalPathsForPublicHealth,
   resolveAllowedOrigins,
+  startServer,
 } from "./index";
 
 describe("server health placeholder", () => {
@@ -749,5 +750,58 @@ describe("public health storage redaction", () => {
     expect(redacted.loadedAt).toBe("2026-05-25T00:00:00.000Z");
     // original must not be mutated
     expect(original.storageDir).toBe("/home/robin/secret-vault");
+  });
+});
+
+describe("HTTP request limits", () => {
+  it("returns 413 for oversized authorized JSON bodies without dropping the socket", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/provider-completions`, {
+        body: JSON.stringify({ x: "a".repeat(2_000_000) }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(response.status).toBe(413);
+      await expect(response.json()).resolves.toMatchObject({
+        error: "payload_too_large",
+        limit: 1_048_576,
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
   });
 });
