@@ -152,3 +152,10 @@ corepack pnpm dev
 - 서버 재시작 후에도 event id, revision, duplicate/conflict 판정이 유지된다.
 - `GET /event-storage`로 storage mode, JSONL path, revision, event/session count를 확인할 수 있다.
 - `scripts/smoke-dgx-server.mjs`는 `/event-storage`와 `/events` pull 결과까지 함께 확인한다.
+
+## Stage18
+
+- Conversation message event payload에 redacted `content`를 포함해 DGX-02 Event Storage가 실제 대화 복원의 원본이 되도록 했다.
+- `apps/desktop/src/runtime/stage18EventReplay.ts`에서 DGX-02 `/events?sessionId=...` pull, Conversation message 재구성, local message/event dedupe merge를 담당한다.
+- Terminal dock의 Event Storage 카드에 `pull` 버튼을 추가해 MacBook 또는 Home PC 화면에서 DGX-02에 저장된 세션 이벤트를 다시 불러올 수 있다.
+- 오래된 이벤트처럼 content가 없는 message event는 안전하게 건너뛰고, 앞으로 생성되는 메시지는 redaction layer를 통과한 본문만 저장한다.
