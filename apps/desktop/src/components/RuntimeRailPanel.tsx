@@ -1,15 +1,18 @@
 import { Power, RefreshCw, Server } from "lucide-react";
 import type { DeviceRebootRequest, DeviceRebootWatchdog, RuntimeSnapshot } from "@ai-orchestrator/protocol";
+import type { Stage32DgxRouteDiagnosticSnapshot } from "../runtime/stage32DgxRouteDiagnostics";
 import { statusTone } from "../lib/uiLabels";
 import type { WindowAuditItem } from "../types";
 import { WindowChecklist } from "./WindowChecklist";
 
 export function RuntimeRailPanel({
+  dgxRouteDiagnostics,
   onProbeDgx,
   onRequestReboot,
   rebootWatchdogs,
   snapshot,
 }: {
+  dgxRouteDiagnostics?: Stage32DgxRouteDiagnosticSnapshot;
   onProbeDgx: () => void;
   onRequestReboot: (targetNodeId: DeviceRebootRequest["targetNodeId"]) => void;
   rebootWatchdogs: DeviceRebootWatchdog[];
@@ -101,6 +104,20 @@ export function RuntimeRailPanel({
           <strong>{activeWatchdog ? `${activeWatchdog.targetNodeId} ${activeWatchdog.status}` : "ready"}</strong>
         </div>
       </div>
+      {dgxRouteDiagnostics ? (
+        <div className="dgx-route-diagnostic-list">
+          {dgxRouteDiagnostics.routes.map((route) => (
+            <article key={route.baseUrl}>
+              <strong>{route.baseUrl.replace(/^https?:\/\//, "")}</strong>
+              <span>
+                health {route.health.status}
+                {route.health.httpStatus ? `/${route.health.httpStatus}` : ""} · provider {route.providerPreflight.status}
+                {route.providerPreflight.httpStatus ? `/${route.providerPreflight.httpStatus}` : ""}
+              </span>
+            </article>
+          ))}
+        </div>
+      ) : null}
       <WindowChecklist items={auditItems} title="시스템 창 점검" />
     </section>
   );
