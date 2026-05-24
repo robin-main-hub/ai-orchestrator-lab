@@ -93,7 +93,7 @@ type ServerProviderProxyConfig = {
   supportsModelList?: boolean;
   oauthAuthFileEnvName?: string;
   defaultOAuthAuthFile?: string;
-  oauthAccountEmail?: string;
+  oauthAccountLabel?: string;
 };
 
 const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
@@ -156,7 +156,7 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     supportsModelList: true,
     oauthAuthFileEnvName: "GROK_OAUTH_1_AUTH_FILE",
     defaultOAuthAuthFile: "~/.grok/auth.json",
-    oauthAccountEmail: "choiminwoong@gmail.com",
+    oauthAccountLabel: "grok-oauth-1",
   },
   {
     providerProfileId: "provider_grok_oauth_dgx_2",
@@ -168,7 +168,7 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     supportsModelList: true,
     oauthAuthFileEnvName: "GROK_OAUTH_2_AUTH_FILE",
     defaultOAuthAuthFile: "~/.grok2/auth.json",
-    oauthAccountEmail: "choiminwoongj@gmail.com",
+    oauthAccountLabel: "grok-oauth-2",
   },
   {
     providerProfileId: "provider_openclaw_dgx",
@@ -641,8 +641,8 @@ function createServerProviderDisplayName(providerProfileId: string) {
     provider_apifun_claude: "APIKey.fun Claude A",
     provider_apifun_claude_b: "APIKey.fun Claude B",
     provider_apikeyfun_codex: "APIKey.fun Codex/GPT",
-    provider_grok_oauth_dgx: "Grok OAuth #1 (choiminwoong@gmail.com)",
-    provider_grok_oauth_dgx_2: "Grok OAuth #2 (choiminwoongj@gmail.com)",
+    provider_grok_oauth_dgx: "Grok OAuth #1",
+    provider_grok_oauth_dgx_2: "Grok OAuth #2",
     provider_openclaw_dgx: "DGX-02 OpenClaw vLLM",
   };
 
@@ -732,7 +732,7 @@ function createServerProviderSecretSourceRefs(
 
   if (authMode === "oauth_session") {
     return [
-      ...(config.oauthAccountEmail ? [`account:${config.oauthAccountEmail}`] : []),
+      ...(config.oauthAccountLabel ? [`account:${config.oauthAccountLabel}`] : []),
       ...(getServerProviderOAuthAuthFilePath(config) ? [`file:${getServerProviderOAuthAuthFilePath(config)}`] : []),
     ];
   }

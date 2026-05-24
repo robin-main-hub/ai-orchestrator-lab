@@ -2816,6 +2816,54 @@ button {
   border-color: rgba(45, 198, 182, 0.5);
 }
 
+.inbox-strip {
+  grid-template-columns: minmax(0, 170px) minmax(0, 1fr);
+  min-height: 92px;
+  max-height: 120px;
+}
+
+.inbox-strip .work-handoff-grid {
+  grid-template-columns: repeat(7, minmax(118px, 1fr));
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.work-handoff-card.inbox-lane {
+  min-height: 74px;
+}
+
+.work-handoff-card.inbox-lane.ask,
+.work-handoff-card.inbox-lane.approve {
+  border-color: rgba(255, 204, 102, 0.54);
+}
+
+.work-handoff-card.inbox-lane.blocked {
+  border-color: rgba(255, 111, 117, 0.55);
+}
+
+.inbox-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.inbox-card-actions button {
+  min-height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: #00313a;
+  color: var(--muted);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.inbox-card-actions button:hover {
+  border-color: var(--line-strong);
+  color: var(--cyan);
+}
+
 .side-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
