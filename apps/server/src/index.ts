@@ -15,6 +15,7 @@ export type ServerCapability =
   | "health"
   | "model-registry"
   | "provider-completion-proxy"
+  | "vllm-health"
   | "runtime-status"
   | "remote-run-request"
   | "remote-event-stream-placeholder"
@@ -27,10 +28,50 @@ export type ServerHealthResponse = {
   capabilities: ServerCapability[];
 };
 
-export function createRuntimeSnapshot(now = new Date().toISOString()): RuntimeSnapshot {
+type FetchLike = (
+  input: string,
+  init?: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+    signal?: AbortSignal;
+  },
+) => Promise<{
+  ok: boolean;
+  status: number;
+  text(): Promise<string>;
+}>;
+
+export type DgxVllmProbeStatus = "connected" | "unreachable";
+
+export type DgxVllmProbe = {
+  status: DgxVllmProbeStatus;
+  baseUrl: string;
+  checkedAt: string;
+  latencyMs?: number;
+  modelIds: string[];
+  error?: string;
+};
+
+export type DgxVllmProbeOptions = {
+  now?: string;
+  vllmBaseUrl?: string;
+  fetchImpl?: FetchLike;
+  timeoutMs?: number;
+};
+
+const DEFAULT_DGX02_VLLM_BASE_URL = "http://dgx-02:8001/v1";
+const DEFAULT_DGX_MODEL_ID = "qwen36-domain-wiki-rag-prisma";
+
+export function createRuntimeSnapshot(now = new Date().toISOString(), probe?: DgxVllmProbe): RuntimeSnapshot {
+  const vllmReachable = probe?.status !== "unreachable";
+  const modelIds = vllmReachable
+    ? Array.from(new Set(["remote-workspace", "remote-model-queue", ...(probe?.modelIds.length ? probe.modelIds : [DEFAULT_DGX_MODEL_ID])]))
+    : ["remote-workspace", "remote-model-queue"];
+
   return {
     status: "degraded",
-    dgxStatus: "online",
+    dgxStatus: vllmReachable ? "online" : "degraded",
     localModelStatus: "offline",
     memorySyncStatus: "syncing",
     runtimeNodes: [
@@ -38,10 +79,10 @@ export function createRuntimeSnapshot(now = new Date().toISOString()): RuntimeSn
         id: "dgx-02",
         label: "DGX-02",
         role: "main_server",
-        status: "online",
+        status: vllmReachable ? "online" : "degraded",
         isPrimary: true,
         endpoint: "dgx-02",
-        models: ["remote-workspace", "remote-model-queue", "qwen36-domain-wiki-rag-prisma"],
+        models: modelIds,
       },
     ],
     localModels: [],
@@ -56,7 +97,7 @@ export function createRuntimeSnapshot(now = new Date().toISOString()): RuntimeSn
           id: "dgx-02",
           label: "DGX-02",
           kind: "server",
-          status: "online",
+          status: vllmReachable ? "online" : "degraded",
           syncRole: "authority",
           localStore: "sqlite",
           outboxCount: 0,
@@ -65,20 +106,23 @@ export function createRuntimeSnapshot(now = new Date().toISOString()): RuntimeSn
       ],
     },
     activeProviderProfileId: undefined,
-    recentError: "remote execution waits for approval tokens",
+    recentError: vllmReachable
+      ? "remote execution waits for approval tokens"
+      : `DGX-02 server reachable but vLLM probe failed: ${probe?.error ?? "unknown error"}`,
     updatedAt: now,
   };
 }
 
-export function createHealthResponse(now = new Date().toISOString()): ServerHealthResponse {
+export function createHealthResponse(now = new Date().toISOString(), probe?: DgxVllmProbe): ServerHealthResponse {
   return {
     service: "ai-orchestrator-dgx-server",
     status: "ok",
-    runtime: createRuntimeSnapshot(now),
+    runtime: createRuntimeSnapshot(now, probe),
     capabilities: [
       "health",
       "model-registry",
       "provider-completion-proxy",
+      "vllm-health",
       "runtime-status",
       "remote-run-request",
       "remote-event-stream-placeholder",
@@ -87,42 +131,92 @@ export function createHealthResponse(now = new Date().toISOString()): ServerHeal
   };
 }
 
-export function createDgxModelDiscovery(now = new Date().toISOString()): ModelDiscoverySnapshot {
+export function createDgxModelDiscovery(now = new Date().toISOString(), probe?: DgxVllmProbe): ModelDiscoverySnapshot {
+  const vllmReachable = probe?.status !== "unreachable";
+  const modelIds = vllmReachable ? (probe?.modelIds.length ? probe.modelIds : [DEFAULT_DGX_MODEL_ID]) : [];
+
   return {
     id: "model_discovery_dgx02_vllm_qwen36",
     providerProfileId: "provider_dgx02_vllm",
-    status: "succeeded",
+    status: vllmReachable ? "succeeded" : "failed",
     source: "remote_probe",
-    selectedModelId: "qwen36-domain-wiki-rag-prisma",
+    selectedModelId: modelIds[0],
     redactionApplied: true,
-    warnings: ["DGX-02 vLLM registry; completion still requires runtime approval"],
+    warnings: vllmReachable
+      ? ["DGX-02 vLLM registry; completion still requires runtime approval"]
+      : [`DGX-02 vLLM probe failed: ${probe?.error ?? "unknown error"}`],
     createdAt: now,
-    models: [
-      {
-        id: "qwen36-domain-wiki-rag-prisma",
-        name: "qwen36-domain-wiki-rag-prisma",
-        providerProfileId: "provider_dgx02_vllm",
-        contextWindow: 65_536,
-        supportsStreaming: true,
-        supportsTools: false,
-        tags: ["dgx", "vllm", "rag", "qwen"],
-      },
-    ],
+    models: modelIds.map((modelId) => createDgxModelDescriptor(modelId)),
   };
 }
 
-type FetchLike = (
-  input: string,
-  init?: {
-    method?: string;
-    headers?: Record<string, string>;
-    body?: string;
-  },
-) => Promise<{
-  ok: boolean;
-  status: number;
-  text(): Promise<string>;
-}>;
+export async function probeDgxVllm({
+  now = new Date().toISOString(),
+  vllmBaseUrl = process.env.DGX02_VLLM_BASE_URL ?? DEFAULT_DGX02_VLLM_BASE_URL,
+  fetchImpl = fetch,
+  timeoutMs = 1_500,
+}: DgxVllmProbeOptions = {}): Promise<DgxVllmProbe> {
+  const baseUrl = vllmBaseUrl.replace(/\/$/, "");
+  const startedAt = Date.now();
+
+  try {
+    const response = await fetchWithTimeout(fetchImpl, `${baseUrl}/models`, { method: "GET" }, timeoutMs);
+    const rawText = await response.text();
+    if (!response.ok) {
+      throw new Error(`vLLM /models failed: ${response.status} ${rawText.slice(0, 240)}`);
+    }
+
+    const parsed = JSON.parse(rawText) as { data?: Array<{ id?: string }> };
+    const modelIds = (parsed.data ?? []).map((model) => model.id).filter((modelId): modelId is string => Boolean(modelId));
+
+    return {
+      status: "connected",
+      baseUrl,
+      checkedAt: now,
+      latencyMs: Date.now() - startedAt,
+      modelIds: modelIds.length ? modelIds : [DEFAULT_DGX_MODEL_ID],
+    };
+  } catch (error) {
+    return {
+      status: "unreachable",
+      baseUrl,
+      checkedAt: now,
+      latencyMs: Date.now() - startedAt,
+      modelIds: [],
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function createLiveHealthResponse(options: DgxVllmProbeOptions = {}): Promise<ServerHealthResponse> {
+  const checkedAt = options.now ?? new Date().toISOString();
+  const probe = await probeDgxVllm({ ...options, now: checkedAt });
+  return createHealthResponse(checkedAt, probe);
+}
+
+export async function createLiveRuntimeSnapshot(options: DgxVllmProbeOptions = {}): Promise<RuntimeSnapshot> {
+  const checkedAt = options.now ?? new Date().toISOString();
+  const probe = await probeDgxVllm({ ...options, now: checkedAt });
+  return createRuntimeSnapshot(checkedAt, probe);
+}
+
+export async function createLiveDgxModelDiscovery(options: DgxVllmProbeOptions = {}): Promise<ModelDiscoverySnapshot> {
+  const checkedAt = options.now ?? new Date().toISOString();
+  const probe = await probeDgxVllm({ ...options, now: checkedAt });
+  return createDgxModelDiscovery(checkedAt, probe);
+}
+
+function createDgxModelDescriptor(modelId: string): ModelDiscoverySnapshot["models"][number] {
+  return {
+    id: modelId,
+    name: modelId,
+    providerProfileId: "provider_dgx02_vllm",
+    contextWindow: 65_536,
+    supportsStreaming: true,
+    supportsTools: false,
+    tags: ["dgx", "vllm", ...(modelId.includes("qwen") ? ["qwen"] : []), ...(modelId.includes("rag") ? ["rag"] : [])],
+  };
+}
 
 type DgxCompletionResponse = {
   choices?: Array<{
@@ -148,7 +242,7 @@ export async function createDgxProviderCompletionResponse(
   options: DgxProviderCompletionOptions = {},
 ): Promise<ProviderCompletionResponse> {
   const createdAt = options.now ?? new Date().toISOString();
-  const vllmBaseUrl = options.vllmBaseUrl ?? process.env.DGX02_VLLM_BASE_URL ?? "http://dgx-02:8001/v1";
+  const vllmBaseUrl = options.vllmBaseUrl ?? process.env.DGX02_VLLM_BASE_URL ?? DEFAULT_DGX02_VLLM_BASE_URL;
   const endpoint = `${vllmBaseUrl.replace(/\/$/, "")}/chat/completions`;
   const fetchImpl = options.fetchImpl ?? fetch;
 
@@ -255,13 +349,21 @@ function createServerDgxVllmRequestBody(modelId: string, messages: ProviderCompl
   };
 }
 
-export function createDgxHeartbeat(runtime = createRuntimeSnapshot()): DgxHeartbeat {
+export function createDgxHeartbeat(runtime = createRuntimeSnapshot(), checkedAt = new Date().toISOString()): DgxHeartbeat {
+  const status =
+    runtime.dgxStatus === "online" ? "connected" : runtime.dgxStatus === "degraded" ? "pending" : "unreachable";
+
   return {
     nodeId: "dgx-02",
-    status: runtime.dgxStatus === "online" ? "connected" : "unreachable",
+    status,
     latencyMs: runtime.dgxStatus === "online" ? 12 : undefined,
-    checkedAt: new Date().toISOString(),
-    message: runtime.dgxStatus === "online" ? "dgx-02 authority reachable" : "dgx-02 unreachable; local fallback required",
+    checkedAt,
+    message:
+      status === "connected"
+        ? "dgx-02 authority reachable"
+        : status === "pending"
+          ? "dgx-02 server reachable; vLLM probe is degraded"
+          : "dgx-02 unreachable; local fallback required",
   };
 }
 
@@ -315,22 +417,23 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     }
 
     if (pathname === "/health") {
-      writeJson(response, 200, createHealthResponse());
+      writeJson(response, 200, await createLiveHealthResponse());
       return;
     }
 
     if (pathname === "/runtime") {
-      writeJson(response, 200, createRuntimeSnapshot());
+      writeJson(response, 200, await createLiveRuntimeSnapshot());
       return;
     }
 
     if (pathname === "/heartbeat") {
-      writeJson(response, 200, createDgxHeartbeat());
+      const runtime = await createLiveRuntimeSnapshot();
+      writeJson(response, 200, createDgxHeartbeat(runtime));
       return;
     }
 
     if (pathname === "/models") {
-      writeJson(response, 200, createDgxModelDiscovery());
+      writeJson(response, 200, await createLiveDgxModelDiscovery());
       return;
     }
 
@@ -362,6 +465,22 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
 
   server.listen(port, "0.0.0.0");
   return server;
+}
+
+async function fetchWithTimeout(fetchImpl: FetchLike, input: string, init: Parameters<FetchLike>[1], timeoutMs: number) {
+  const controller = new AbortController();
+  const timeoutId = globalThis.setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetchImpl(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    globalThis.clearTimeout(timeoutId);
+  }
 }
 
 async function readJsonBody(request: IncomingMessage) {

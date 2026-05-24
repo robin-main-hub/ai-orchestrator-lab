@@ -4,8 +4,10 @@ import {
   createDgxHeartbeat,
   createDgxModelDiscovery,
   createHealthResponse,
+  createLiveHealthResponse,
   createRemoteRunResponse,
   createRuntimeSnapshot,
+  probeDgxVllm,
 } from "./index";
 
 describe("server health placeholder", () => {
@@ -17,6 +19,7 @@ describe("server health placeholder", () => {
     expect(health.runtime.syncTopology.authorityNodeId).toBe("dgx-02");
     expect(health.capabilities).toContain("remote-run-request");
     expect(health.capabilities).toContain("model-registry");
+    expect(health.capabilities).toContain("vllm-health");
   });
 
   it("publishes the DGX-02 vLLM model registry", () => {
@@ -102,5 +105,47 @@ describe("server health placeholder", () => {
     expect(response.route).toBe("server_proxy");
     expect(response.content).toBe("OK");
     expect(response.usage?.totalTokens).toBe(14);
+  });
+
+  it("probes vLLM /models before publishing live health", async () => {
+    const fetchImpl = async (url: string) => {
+      expect(url).toBe("http://127.0.0.1:8001/v1/models");
+      return {
+        ok: true,
+        status: 200,
+        async text() {
+          return JSON.stringify({ data: [{ id: "qwen36-domain-wiki-rag-prisma" }] });
+        },
+      };
+    };
+
+    const probe = await probeDgxVllm({
+      now: "2026-05-24T00:00:00.000Z",
+      vllmBaseUrl: "http://127.0.0.1:8001/v1",
+      fetchImpl,
+    });
+    const health = await createLiveHealthResponse({
+      now: "2026-05-24T00:00:00.000Z",
+      vllmBaseUrl: "http://127.0.0.1:8001/v1",
+      fetchImpl,
+    });
+
+    expect(probe.status).toBe("connected");
+    expect(health.runtime.dgxStatus).toBe("online");
+    expect(health.runtime.runtimeNodes[0]?.models).toContain("qwen36-domain-wiki-rag-prisma");
+  });
+
+  it("marks the server degraded when vLLM is not reachable", async () => {
+    const health = await createLiveHealthResponse({
+      now: "2026-05-24T00:00:00.000Z",
+      vllmBaseUrl: "http://127.0.0.1:8001/v1",
+      fetchImpl: async () => {
+        throw new Error("ECONNREFUSED");
+      },
+    });
+
+    expect(health.runtime.dgxStatus).toBe("degraded");
+    expect(health.runtime.runtimeNodes[0]?.status).toBe("degraded");
+    expect(health.runtime.recentError).toContain("vLLM probe failed");
   });
 });

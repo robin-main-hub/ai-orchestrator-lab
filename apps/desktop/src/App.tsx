@@ -57,7 +57,6 @@ import {
 } from "./runtime/stage4Runtime";
 import {
   createStage5DgxBridge,
-  mergeDgxRuntimeSnapshot,
   type Stage5DgxBridge,
 } from "./runtime/stage5Runtime";
 import {
@@ -88,6 +87,7 @@ import {
   isDgxVllmProvider,
   requestDgxVllmCompletion,
 } from "./runtime/stage12DgxProvider";
+import { probeDgxOrchestratorServer } from "./runtime/stage13DgxServer";
 import type {
   AgentProfile,
   ApprovalState,
@@ -1090,53 +1090,31 @@ export function App() {
     }
   }
 
-  function handleProbeDgx() {
+  async function handleProbeDgx() {
     const checkedAt = new Date().toISOString();
     const authorityNodeId = runtimeSnapshotState.syncTopology.authorityNodeId;
-    const serverRuntime: RuntimeSnapshot = {
-      ...runtimeSnapshotState,
-      status: "online",
-      dgxStatus: "online",
-      memorySyncStatus: "syncing",
-      runtimeNodes: runtimeSnapshotState.runtimeNodes.map((node) =>
-        node.id === authorityNodeId
-          ? {
-              ...node,
-              status: "online",
-              models: Array.from(
-                new Set([...node.models, "remote-workspace", "event-store-authority", "qwen36-domain-wiki-rag-prisma"]),
-              ),
-            }
-          : node,
-      ),
-      syncTopology: {
-        ...runtimeSnapshotState.syncTopology,
-        clients: runtimeSnapshotState.syncTopology.clients.map((client) =>
-          client.id === authorityNodeId
-            ? {
-                ...client,
-                status: "online",
-                outboxCount: 0,
-                lastSeenAt: checkedAt,
-              }
-            : client,
-        ),
-      },
-      recentError: undefined,
-      updatedAt: checkedAt,
-    };
-    const mergedRuntime = mergeDgxRuntimeSnapshot(runtimeSnapshotState, serverRuntime);
+
+    appendEvent("dgx.server_probe.started", {
+      authorityNodeId,
+      endpoint: "http://dgx-02:4317",
+    });
+
+    const probe = await probeDgxOrchestratorServer({
+      localRuntime: runtimeSnapshotState,
+      checkedAt,
+    });
+    const mergedRuntime = probe.runtime;
     const bridge = createStage5DgxBridge({
       run: agentRunState,
       runtime: mergedRuntime,
       createdAt: checkedAt,
     });
     const dgxProvider = providerProfiles.find((profile) => profile.id === "provider_dgx02_vllm");
-    const dgxDiscovery = dgxProvider ? discoverModelsForProfile(dgxProvider, checkedAt) : undefined;
+    const dgxDiscovery = probe.modelDiscovery ?? (dgxProvider ? discoverModelsForProfile(dgxProvider, checkedAt) : undefined);
 
     setRuntimeSnapshotState(mergedRuntime);
     setDgxBridgeState(bridge);
-    if (dgxDiscovery) {
+    if (probe.status === "online" && dgxDiscovery) {
       setModelCatalog((catalog) => ({
         ...catalog,
         [dgxDiscovery.providerProfileId]: dgxDiscovery.models,
@@ -1147,16 +1125,19 @@ export function App() {
       }));
     }
     appendEvent("dgx.heartbeat.checked", {
-      nodeId: bridge.heartbeat.nodeId,
-      status: bridge.heartbeat.status,
-      latencyMs: bridge.heartbeat.latencyMs,
+      nodeId: probe.heartbeat.nodeId,
+      status: probe.heartbeat.status,
+      latencyMs: probe.heartbeat.latencyMs ?? probe.latencyMs,
+      serverStatus: probe.status,
+      error: probe.error,
     });
     appendEvent("runtime.snapshot.merged", {
       authorityNodeId,
       dgxStatus: mergedRuntime.dgxStatus,
       eventStoreMode: mergedRuntime.syncTopology.eventStoreMode,
+      source: probe.status === "online" ? "dgx_server" : "local_fallback",
     });
-    if (dgxDiscovery) {
+    if (probe.status === "online" && dgxDiscovery) {
       appendEvent("provider.models.remote_probe.merged", {
         providerProfileId: dgxDiscovery.providerProfileId,
         source: dgxDiscovery.source,

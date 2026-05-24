@@ -24,8 +24,8 @@
 
 ## 현재 구현
 
-- Node HTTP 기반 `/health` placeholder
-- `RuntimeSnapshot` 반환
+- Node HTTP 기반 `/health`, `/runtime`, `/heartbeat`
+- vLLM `/models` probe 기반 `RuntimeSnapshot` 반환
 - `/models`에서 DGX-02 vLLM 모델 레지스트리 제공
 - `POST /provider-completions`에서 DGX-02 vLLM completion 프록시 제공
 - CORS preflight 처리
@@ -34,9 +34,17 @@
 
 ## DGX-02 completion proxy
 
-데스크톱은 raw vLLM endpoint나 secret을 request body에 넣지 않고 `providerProfileId`, `modelId`, 메시지만 보냅니다. 서버는 `DGX02_VLLM_BASE_URL` 환경변수가 있으면 그 값을 쓰고, 없으면 `http://dgx-02:8001/v1`로 vLLM에 연결합니다.
+데스크톱은 raw vLLM endpoint나 secret을 request body에 넣지 않고 `providerProfileId`, `modelId`, 메시지만 보냅니다. 서버는 `DGX02_VLLM_BASE_URL` 환경변수가 있으면 그 값을 쓰고, 없으면 `http://dgx-02:8001/v1`로 vLLM에 연결합니다. DGX-02에서 상시 구동할 때는 `scripts/dgx-02/run-server.sh`가 `http://127.0.0.1:8001/v1`을 기본 vLLM 주소로 사용합니다.
 
 ```bash
 corepack pnpm --filter @ai-orchestrator/server build
 corepack pnpm --filter @ai-orchestrator/server start
 ```
+
+Smoke test:
+
+```bash
+corepack pnpm server:smoke
+```
+
+DGX-02 user service 예시는 `scripts/dgx-02/ai-orchestrator-server.service`에 있습니다.

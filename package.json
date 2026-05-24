@@ -9,7 +9,10 @@
     "build": "corepack pnpm -r --sort build",
     "typecheck": "corepack pnpm --filter @ai-orchestrator/protocol build && corepack pnpm --filter @ai-orchestrator/providers build && corepack pnpm --filter @ai-orchestrator/agents build && corepack pnpm --filter @ai-orchestrator/server typecheck && corepack pnpm --filter @ai-orchestrator/desktop typecheck",
     "test": "corepack pnpm build && corepack pnpm -r --if-present test",
-    "lint": "corepack pnpm typecheck"
+    "lint": "corepack pnpm typecheck",
+    "server:build": "corepack pnpm --filter @ai-orchestrator/server build",
+    "server:start": "corepack pnpm --filter @ai-orchestrator/server start",
+    "server:smoke": "node scripts/smoke-dgx-server.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
