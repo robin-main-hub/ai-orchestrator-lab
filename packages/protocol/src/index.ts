@@ -639,14 +639,43 @@ export const memoryLayerSchema = z.enum([
 ]);
 export type MemoryLayer = z.infer<typeof memoryLayerSchema>;
 
+export const memoryScopeSchema = z.enum(["global", "project", "session"]);
+export type MemoryScope = z.infer<typeof memoryScopeSchema>;
+
+export const memoryKindSchema = z.enum([
+  "preference",
+  "architecture",
+  "pattern",
+  "decision",
+  "context",
+  "workflow",
+  "relationship",
+  "learning",
+]);
+export type MemoryKind = z.infer<typeof memoryKindSchema>;
+
+export const memoryRelationKindSchema = z.enum(["related", "supports", "contradicts", "supersedes", "depends_on"]);
+export type MemoryRelationKind = z.infer<typeof memoryRelationKindSchema>;
+
+export const memoryActivationStateSchema = z.enum(["inactive", "suggested", "active", "quarantined"]);
+export type MemoryActivationState = z.infer<typeof memoryActivationStateSchema>;
+
 export const memoryRecordSchema = z.object({
   id: z.string(),
   layer: memoryLayerSchema,
+  scope: memoryScopeSchema.optional(),
+  kind: memoryKindSchema.optional(),
   title: z.string(),
   content: z.string(),
   sourceChannel: z.enum(["desktop", "telegram", "mobile", "api", "agent"]),
   trustLevel: sourceTrustSchema,
+  projectId: z.string().optional(),
+  sessionId: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  activationState: memoryActivationStateSchema.optional(),
   createdAt: z.string(),
+  updatedAt: z.string().optional(),
+  lastAccessedAt: z.string().optional(),
   pinned: z.boolean(),
   tombstonedAt: z.string().optional(),
 });
@@ -654,8 +683,11 @@ export type MemoryRecord = z.infer<typeof memoryRecordSchema>;
 
 export type RecallQuery = {
   sessionId?: string;
+  projectId?: string;
   query: string;
   layers?: MemoryLayer[];
+  scopes?: MemoryScope[];
+  kinds?: MemoryKind[];
   includeUntrusted?: boolean;
   limit?: number;
 };
@@ -664,6 +696,7 @@ export type RecallResult = {
   record: MemoryRecord;
   score: number;
   usedInDecision: boolean;
+  activationState?: MemoryActivationState;
   reason: string;
 };
 
@@ -684,12 +717,58 @@ export type MemoryTrace = {
   createdAt: string;
 };
 
+export type MemoryRelation = {
+  id: string;
+  fromRecordId: string;
+  toRecordId: string;
+  kind: MemoryRelationKind;
+  confidence: number;
+  reason: string;
+  createdAt: string;
+};
+
+export type MemoryContextPacket = {
+  id: string;
+  sessionId: string;
+  query: string;
+  activeRecordIds: string[];
+  blockedRecordIds: string[];
+  relationIds: string[];
+  summary: string;
+  createdAt: string;
+};
+
+export type MemoryReflectionIssue = {
+  id: string;
+  kind: "duplicate" | "contradiction" | "stale" | "untrusted_active" | "missing_relation";
+  recordIds: string[];
+  severity: "low" | "medium" | "high";
+  recommendation: string;
+};
+
+export type MemoryStats = {
+  totalRecords: number;
+  activeRecords: number;
+  pinnedRecords: number;
+  quarantinedRecords: number;
+  relationCount: number;
+  duplicateCandidates: number;
+  contradictionCandidates: number;
+  staleCandidates: number;
+  health: "good" | "watch" | "needs_review";
+};
+
 export type MemoryInput = {
   layer: MemoryLayer;
+  scope?: MemoryScope;
+  kind?: MemoryKind;
   title: string;
   content: string;
   sourceChannel: MemoryRecord["sourceChannel"];
   trustLevel: SourceTrust;
+  projectId?: string;
+  sessionId?: string;
+  tags?: string[];
 };
 
 export type Reflection = {
@@ -704,6 +783,10 @@ export type MemoryAPI = {
   recall(query: RecallQuery): Promise<RecallResult[]>;
   remember(input: MemoryInput): Promise<MemoryRecord>;
   reflect(sessionId: string): Promise<Reflection>;
+  memoryContext(query: RecallQuery): Promise<MemoryContextPacket>;
+  stats(): Promise<MemoryStats>;
+  createRelations(recordIds: string[]): Promise<MemoryRelation[]>;
+  activateMemories(recordIds: string[]): Promise<void>;
   pin(recordId: string): Promise<void>;
   forget(recordId: string): Promise<void>;
 };

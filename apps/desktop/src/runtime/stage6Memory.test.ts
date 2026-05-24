@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CodingPacket, ConversationMessage, EventEnvelope, ProviderProfile } from "@ai-orchestrator/protocol";
 import {
+  activateMemoryRecord,
   createSeedMemoryRecords,
   createStage6MemoryInspector,
   forgetMemoryRecord,
@@ -76,6 +77,8 @@ describe("stage6 memory inspector", () => {
 
     expect(inspector.trace.policy.autoRecallAllowed).toBe(true);
     expect(inspector.trace.results.some((result) => result.usedInDecision)).toBe(true);
+    expect(inspector.contextPacket.activeRecordIds.length).toBeGreaterThan(0);
+    expect(inspector.stats.relationCount).toBeGreaterThan(0);
     expect(inspector.pinnedCount).toBeGreaterThan(0);
   });
 
@@ -94,6 +97,7 @@ describe("stage6 memory inspector", () => {
     const projectResults = inspector.trace.results.filter((result) => result.record.layer === "project_memory");
 
     expect(projectResults.every((result) => !result.usedInDecision)).toBe(true);
+    expect(inspector.contextPacket.blockedRecordIds.length).toBeGreaterThan(0);
   });
 
   it("creates remember candidates and supports pin/forget actions", () => {
@@ -103,10 +107,12 @@ describe("stage6 memory inspector", () => {
       provider: trustedProvider,
       createdAt,
     });
+    const activated = activateMemoryRecord(candidates, candidates[0]!.id, createdAt);
     const pinned = pinMemoryRecord(candidates, candidates[0]!.id);
     const forgotten = forgetMemoryRecord(pinned, candidates[0]!.id, createdAt);
 
     expect(candidates).toHaveLength(2);
+    expect(activated[0]?.activationState).toBe("active");
     expect(pinned[0]?.pinned).toBe(true);
     expect(forgotten[0]?.tombstonedAt).toBe(createdAt);
   });
