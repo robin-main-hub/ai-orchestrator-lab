@@ -271,3 +271,9 @@ corepack pnpm dev
 - 에이전트 연필 버튼을 이름/역할/프로필 이미지 설정 패널로 바꿨다.
 - 프로필 이미지는 로컬 파일 경로가 아니라 embedded data URL로 보관해 원격 접속 화면에서 경로 깨짐을 피할 수 있게 준비했다.
 - 실제 tmux 실행 전 필요한 게이트를 화면에 표시했다: 이벤트 저장소 mapping, Permission + Redaction, Gemini CLI 연결 금지, 첫 runner 미정, agent profile asset 저장 방식.
+
+## Stage36
+
+- Tmux 모드에서는 왼쪽 rail, 오른쪽 rail, 상단 runtime status bar, 하단 terminal dock, 우측 toolbar action을 모두 접는다.
+- 중앙 작업판은 `grid-column: 1 / -1`, `grid-row: 1 / -1`로 확장되어 화면 왼쪽과 아래까지 모두 사용한다.
+- Conversation/Debate/Tmux 전환 버튼만 남겨 tmux 화면에서 빠져나올 수 있게 했다.
