@@ -171,3 +171,9 @@ corepack pnpm dev
 - `packages/protocol`에 Event Storage session index response 타입을 추가했다.
 - DGX-02 서버는 `GET /sessions`로 sessionId, event count, 최신 이벤트 타입, source/trust 요약을 내려준다.
 - Desktop 좌측 레일에 Sessions 패널을 추가해 DGX-02 revision과 최근 세션을 확인하고, 현재 세션 replay를 바로 실행할 수 있게 했다.
+
+## Stage21
+
+- Desktop의 메시지 생성, Telegram ingress, permission snapshot, Event Storage replay를 `activeSessionId` 기준으로 전환했다.
+- Sessions 패널에서 특정 sessionId를 누르면 해당 세션의 이벤트와 메시지를 DGX-02에서 pull하고, 선택된 세션을 active 상태로 표시한다.
+- 새 메시지와 새 이벤트는 현재 active session에 기록되므로 MacBook/Home PC 간 세션 이동의 기본 경계가 생겼다.

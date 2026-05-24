@@ -45,6 +45,7 @@ import {
   buildMockAssistantReply,
   createCodingPacketFromConversation,
   createStage2Event,
+  DEFAULT_SESSION_ID,
   renderObsidianMarkdown,
 } from "./runtime/stage2Runtime";
 import {
@@ -334,7 +335,7 @@ const seededModelCatalog: ModelCatalog = {
 };
 
 const debateContext: DebateContext = {
-  sessionId: "session_desktop_001",
+  sessionId: DEFAULT_SESSION_ID,
   problem: "AI Orchestrator Lab 초기 모노레포 골격을 구현한다.",
   conversationSummary: "문서화된 제품 방향을 유지하면서 protocol-first 구조와 데스크톱 작업판을 먼저 만든다.",
   constraints: ["실제 모델 호출 제외", "터미널 실행 제외", "API 키 원문 저장 금지"],
@@ -366,21 +367,21 @@ const terminalSlots: TerminalSlot[] = [
 const backupProjections: BackupProjection[] = [
   {
     id: "backup_obsidian",
-    sessionId: "session_desktop_001",
+    sessionId: DEFAULT_SESSION_ID,
     target: "obsidian",
     status: "pending",
     redactionApplied: true,
   },
   {
     id: "backup_notion",
-    sessionId: "session_desktop_001",
+    sessionId: DEFAULT_SESSION_ID,
     target: "notion",
     status: "pending",
     redactionApplied: true,
   },
   {
     id: "backup_mobile",
-    sessionId: "session_desktop_001",
+    sessionId: DEFAULT_SESSION_ID,
     target: "mobile",
     status: "failed",
     redactionApplied: true,
@@ -446,14 +447,14 @@ const seededAgentProfiles: WorkbenchAgent[] = defaultAgentProfiles.map((agent, i
 const initialConversationMessages: ConversationMessage[] = [
   {
     id: "message_seed_user",
-    sessionId: "session_desktop_001",
+    sessionId: DEFAULT_SESSION_ID,
     role: "user",
     content: "문서에 맞춰 첫 구현 골격을 만들자. 토론으로 확대할 수 있게 경계도 살려줘.",
     createdAt: now,
   },
   {
     id: "message_seed_orchestrator",
-    sessionId: "session_desktop_001",
+    sessionId: DEFAULT_SESSION_ID,
     role: "assistant",
     content: "protocol, provider stub, agent runtime stub, desktop board를 먼저 연결하고 실제 모델 호출은 막아둔다.",
     createdAt: now,
@@ -516,6 +517,7 @@ export function App() {
   const [selectedAgentId, setSelectedAgentId] = useState(seededAgentProfiles[0]?.id ?? "");
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
   const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
+  const [activeSessionId, setActiveSessionId] = useState(DEFAULT_SESSION_ID);
   const [eventSyncState, setEventSyncState] = useState<Stage14EventSyncState>(() =>
     createInitialEventSyncState(eventOutboxStorage.load().length),
   );
@@ -618,7 +620,7 @@ export function App() {
   const permissionSnapshot = useMemo(
     () =>
       createStage9PermissionSnapshot({
-        sessionId: "session_desktop_001",
+        sessionId: activeSessionId,
         externalApprovals: ingressSnapshot.approvals,
         terminalSlots,
         agentRun: agentRunState,
@@ -627,7 +629,14 @@ export function App() {
         decisions: approvalStateByItemId,
         createdAt: runtimeSnapshotState.updatedAt,
       }),
-    [agentRunState, approvalStateByItemId, backupSnapshot.mobilePolicy, ingressSnapshot.approvals, runtimeSnapshotState],
+    [
+      activeSessionId,
+      agentRunState,
+      approvalStateByItemId,
+      backupSnapshot.mobilePolicy,
+      ingressSnapshot.approvals,
+      runtimeSnapshotState,
+    ],
   );
 
   useEffect(() => {
@@ -654,6 +663,7 @@ export function App() {
     },
   ) {
     const event = createStage2Event({
+      sessionId: activeSessionId,
       type,
       payload,
       source: options?.source,
@@ -768,14 +778,14 @@ export function App() {
     }
   }
 
-  async function handleReplayEventStorage() {
+  async function handleReplayEventStorage(sessionId = activeSessionId) {
     setEventSyncState((state) => ({
       ...state,
       status: "syncing",
     }));
 
     const result = await pullAndReplayDgxEventStorage({
-      sessionId: "session_desktop_001",
+      sessionId,
     });
 
     if (result.status === "failed") {
@@ -794,8 +804,12 @@ export function App() {
       return;
     }
 
-    setEventLog((events) => mergeEventReplayLogs(events, result.events));
-    setConversationMessages((messages) => mergeConversationMessages(messages, result.messages));
+    const switchingSessions = sessionId !== activeSessionId;
+    setEventLog((events) => mergeEventReplayLogs(switchingSessions ? [] : events, result.events));
+    setActiveSessionId(sessionId);
+    setConversationMessages((messages) =>
+      switchingSessions ? result.messages : mergeConversationMessages(messages, result.messages),
+    );
     const packetReplay = extractLatestCodingPacketFromEvents(result.events);
     if (packetReplay.status === "restored" && packetReplay.packet) {
       setCodingPacketState(packetReplay.packet);
@@ -832,7 +846,7 @@ export function App() {
     const modelId = selectedAgent.modelId ?? selectedProvider.defaultModel ?? "model pending";
     const userMessage: ConversationMessage = {
       id: `message_user_${crypto.randomUUID()}`,
-      sessionId: "session_desktop_001",
+      sessionId: activeSessionId,
       role: "user",
       content,
       createdAt,
@@ -909,7 +923,7 @@ export function App() {
 
     const assistantMessage: ConversationMessage = {
       id: `message_agent_${crypto.randomUUID()}`,
-      sessionId: "session_desktop_001",
+      sessionId: activeSessionId,
       role: "assistant",
       content: reply,
       createdAt: new Date().toISOString(),
@@ -1014,6 +1028,7 @@ export function App() {
     const markdown =
       getArtifactContent(snapshot, obsidianArtifact?.id) ||
       renderObsidianMarkdown({
+        sessionId: activeSessionId,
         messages: conversationMessages,
         packet: codingPacketState,
         events: eventLog,
@@ -1087,7 +1102,7 @@ export function App() {
 
     const telegramMessage: ConversationMessage = {
       id: `message_telegram_${crypto.randomUUID()}`,
-      sessionId: "session_desktop_001",
+      sessionId: activeSessionId,
       role: "user",
       content: normalizedEvent.normalizedText,
       createdAt: receivedAt,
@@ -1683,9 +1698,10 @@ export function App() {
           </nav>
 
           <SessionIndexRailPanel
+            activeSessionId={activeSessionId}
             index={sessionIndexState}
             onRefresh={handleRefreshSessionIndex}
-            onReplayCurrent={handleReplayEventStorage}
+            onReplaySession={handleReplayEventStorage}
           />
           <RuntimeRailPanel onProbeDgx={handleProbeDgx} snapshot={runtimeSnapshotState} />
           <OperationsRailPanel
@@ -1787,6 +1803,7 @@ export function App() {
 
           {mode === "conversation" ? (
             <ConversationWorkbench
+              activeSessionId={activeSessionId}
               agents={agents}
               draftMessage={draftMessage}
               messages={conversationMessages}
@@ -1863,13 +1880,15 @@ export function App() {
 }
 
 function SessionIndexRailPanel({
+  activeSessionId,
   index,
   onRefresh,
-  onReplayCurrent,
+  onReplaySession,
 }: {
+  activeSessionId: string;
   index: Stage20SessionIndexState;
   onRefresh: () => void;
-  onReplayCurrent: () => void;
+  onReplaySession: (sessionId: string) => void;
 }) {
   const visibleSessions = index.sessions.slice(0, 3);
 
@@ -1891,7 +1910,12 @@ function SessionIndexRailPanel({
           <p>DGX-02 session index pending</p>
         ) : (
           visibleSessions.map((session) => (
-            <button key={session.sessionId} onClick={onReplayCurrent} type="button">
+            <button
+              className={session.sessionId === activeSessionId ? "active" : ""}
+              key={session.sessionId}
+              onClick={() => onReplaySession(session.sessionId)}
+              type="button"
+            >
               <strong>{session.sessionId}</strong>
               <span>{session.eventCount} events / {session.lastEventType ?? "event"}</span>
             </button>
@@ -2124,6 +2148,7 @@ function recallReasonLabel(reason: string) {
 }
 
 function ConversationWorkbench({
+  activeSessionId,
   agents,
   draftMessage,
   messages,
@@ -2139,6 +2164,7 @@ function ConversationWorkbench({
   selectedAgentId,
   selectedProvider,
 }: {
+  activeSessionId: string;
   agents: WorkbenchAgent[];
   draftMessage: string;
   messages: ConversationMessage[];
@@ -2164,7 +2190,7 @@ function ConversationWorkbench({
           <span>현재 대화 상대</span>
           <strong>{selectedAgent?.name ?? "봇 선택 필요"}</strong>
           <em>
-            {selectedAgent?.role ?? "agent"} / {selectedProvider?.name ?? "provider pending"} /{" "}
+            {activeSessionId} / {selectedAgent?.role ?? "agent"} / {selectedProvider?.name ?? "provider pending"} /{" "}
             {selectedAgent?.modelId ?? selectedProvider?.defaultModel ?? "model pending"}
           </em>
         </div>
