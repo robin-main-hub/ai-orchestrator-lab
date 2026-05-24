@@ -232,6 +232,7 @@ import { BackupPanel } from "./components/BackupPanel";
 import { BackupRailMenu } from "./components/BackupRailMenu";
 import { CodingPacketPanel } from "./components/CodingPacketPanel";
 import { IngressGuardPanel } from "./components/IngressGuardPanel";
+import { RuntimeStatusBar } from "./components/RuntimeStatusBar";
 import { TmuxPaneCard } from "./components/TmuxPaneCard";
 import { auditStatusLabel, WindowChecklist } from "./components/WindowChecklist";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
@@ -3381,32 +3382,6 @@ function ChannelRailPanel({
       </div>
       <WindowChecklist items={auditItems} title="채널 창 점검" />
     </section>
-  );
-}
-
-function RuntimeStatusBar({
-  onProbeDgx,
-  providerName,
-  snapshot,
-}: {
-  onProbeDgx: () => void;
-  providerName: string;
-  snapshot: RuntimeSnapshot;
-}) {
-  const primaryNode = snapshot.runtimeNodes.find((node) => node.isPrimary);
-
-  return (
-    <header className="status-bar">
-      <div className="status-meta">
-        <span>Active: {providerName}</span>
-        <span>{primaryNode?.label ?? snapshot.syncTopology.authorityLabel}: {snapshot.dgxStatus}</span>
-        <span>Local: {snapshot.localModelStatus}</span>
-        <span>{snapshot.recentError ?? "ready"}</span>
-      </div>
-      <button className="status-action" onClick={onProbeDgx} type="button">
-        Probe DGX
-      </button>
-    </header>
   );
 }
 
