@@ -7,6 +7,10 @@ import {
   requestDgxProviderCompletion,
   requestDgxVllmCompletion,
 } from "./stage12DgxProvider";
+import {
+  DGX02_LAN_ORCHESTRATOR_BASE_URL,
+  ENDRUIN_ORCHESTRATOR_BASE_URL,
+} from "./stage30DgxEndpoints";
 import type { ConversationMessage, ProviderProfile } from "@ai-orchestrator/protocol";
 
 const provider: ProviderProfile = {
@@ -56,7 +60,7 @@ describe("stage12 DGX provider completion", () => {
 
   it("uses the DGX server proxy before direct provider calls", async () => {
     const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(url)).toBe("http://dgx-02:4317/provider-completions");
+      expect(String(url)).toBe(`${ENDRUIN_ORCHESTRATOR_BASE_URL}/provider-completions`);
       expect(String(init?.body)).not.toContain("sk-");
       expect(String(init?.body)).not.toContain("http://dgx-02:8001");
       return new Response(
@@ -113,7 +117,11 @@ describe("stage12 DGX provider completion", () => {
       fetchImpl,
     });
 
-    expect(calls).toEqual(["http://dgx-02:4317/provider-completions", "http://dgx-02:8001/v1/chat/completions"]);
+    expect(calls).toEqual([
+      `${ENDRUIN_ORCHESTRATOR_BASE_URL}/provider-completions`,
+      `${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`,
+      "http://dgx-02:8001/v1/chat/completions",
+    ]);
     expect(result.route).toBe("direct_provider");
     expect(result.fallbackReason).toContain("DGX-02 server proxy failed");
   });
@@ -144,6 +152,9 @@ describe("stage12 DGX provider completion", () => {
       }),
     ).rejects.toThrow("DGX-02 server proxy failed");
 
-    expect(calls).toEqual(["http://dgx-02:4317/provider-completions"]);
+    expect(calls).toEqual([
+      `${ENDRUIN_ORCHESTRATOR_BASE_URL}/provider-completions`,
+      `${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`,
+    ]);
   });
 });

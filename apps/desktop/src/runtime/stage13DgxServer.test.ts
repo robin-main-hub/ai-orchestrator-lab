@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import { fetchDgxProviderModelDiscovery, probeDgxOrchestratorServer } from "./stage13DgxServer";
+import { ENDRUIN_ORCHESTRATOR_BASE_URL } from "./stage30DgxEndpoints";
 
 const localRuntime: RuntimeSnapshot = {
   status: "degraded",
@@ -169,7 +170,7 @@ describe("stage13 DGX server probing", () => {
         trustLevel: "limited",
       },
       fetchImpl: async (url) => {
-        expect(String(url)).toBe("http://dgx-02:4317/provider-models?providerProfileId=provider_deepseek_dgx");
+        expect(String(url)).toBe(`${ENDRUIN_ORCHESTRATOR_BASE_URL}/provider-models?providerProfileId=provider_deepseek_dgx`);
         return jsonResponse({
           id: "model_discovery_deepseek",
           providerProfileId: "provider_deepseek_dgx",

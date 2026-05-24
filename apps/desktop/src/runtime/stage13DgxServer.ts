@@ -5,6 +5,7 @@ import type {
   RuntimeSnapshot,
 } from "@ai-orchestrator/protocol";
 import { mergeDgxRuntimeSnapshot } from "./stage5Runtime";
+import { DEFAULT_DGX_SERVER_BASE_URL, resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
 
 type DgxServerHealthResponse = {
   service: "ai-orchestrator-dgx-server";
@@ -41,7 +42,7 @@ export type Stage13DgxServerProbe = {
 
 export type Stage13DgxServerProbeInput = {
   localRuntime: RuntimeSnapshot;
-  serverBaseUrl?: string;
+  serverBaseUrl?: string | string[];
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   checkedAt?: string;
@@ -54,8 +55,6 @@ export type Stage13ProviderModelDiscoveryInput = {
   timeoutMs?: number;
 };
 
-const DEFAULT_DGX_SERVER_BASE_URL = "http://dgx-02:4317";
-
 export async function probeDgxOrchestratorServer({
   localRuntime,
   serverBaseUrl = DEFAULT_DGX_SERVER_BASE_URL,
@@ -63,27 +62,35 @@ export async function probeDgxOrchestratorServer({
   timeoutMs = 1_500,
   checkedAt = new Date().toISOString(),
 }: Stage13DgxServerProbeInput): Promise<Stage13DgxServerProbe> {
-  const baseUrl = serverBaseUrl.replace(/\/$/, "");
   const startedAt = Date.now();
+  const errors: string[] = [];
 
-  try {
-    const health = await fetchJson<DgxServerHealthResponse>(fetchImpl, `${baseUrl}/health`, timeoutMs);
-    const heartbeat = await fetchJson<DgxHeartbeat>(fetchImpl, `${baseUrl}/heartbeat`, timeoutMs);
-    const modelDiscovery = await fetchJson<ModelDiscoverySnapshot>(fetchImpl, `${baseUrl}/models`, timeoutMs);
-    const runtime = mergeDgxRuntimeSnapshot(localRuntime, health.runtime);
+  for (const baseUrl of resolveDgxServerBaseUrls(serverBaseUrl)) {
+    try {
+      const health = await fetchJson<DgxServerHealthResponse>(fetchImpl, `${baseUrl}/health`, timeoutMs);
+      const heartbeat = await fetchJson<DgxHeartbeat>(fetchImpl, `${baseUrl}/heartbeat`, timeoutMs);
+      const modelDiscovery = await fetchJson<ModelDiscoverySnapshot>(fetchImpl, `${baseUrl}/models`, timeoutMs);
+      const runtime = mergeDgxRuntimeSnapshot(localRuntime, health.runtime);
 
-    return {
-      status: "online",
-      baseUrl,
-      runtime,
-      heartbeat,
-      modelDiscovery,
-      eventStorage: health.eventStorage,
-      checkedAt,
-      latencyMs: Date.now() - startedAt,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "online",
+        baseUrl,
+        runtime,
+        heartbeat,
+        modelDiscovery,
+        eventStorage: health.eventStorage,
+        checkedAt,
+        latencyMs: Date.now() - startedAt,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(`${baseUrl}: ${message}`);
+    }
+  }
+
+  {
+    const baseUrl = resolveDgxServerBaseUrls(serverBaseUrl)[0] ?? DEFAULT_DGX_SERVER_BASE_URL;
+    const message = errors.join(" | ") || "DGX-02 orchestrator server unavailable";
     const runtime = createUnreachableRuntime(localRuntime, checkedAt, message);
 
     return {

@@ -1,4 +1,5 @@
 import type { EventStorageSessionIndexItem, EventStorageSessionIndexResponse } from "@ai-orchestrator/protocol";
+import { DEFAULT_DGX_SERVER_BASE_URL } from "./stage30DgxEndpoints";
 
 export type Stage20SessionIndexStatus = "loaded" | "empty" | "failed";
 
@@ -16,7 +17,7 @@ export type Stage20SessionIndexInput = {
   timeoutMs?: number;
 };
 
-const DEFAULT_DGX_SESSION_INDEX_BASE_URL = "http://dgx-02:4317";
+const DEFAULT_DGX_SESSION_INDEX_BASE_URL = DEFAULT_DGX_SERVER_BASE_URL;
 
 export function createInitialSessionIndexState(): Stage20SessionIndexState {
   return {
