@@ -84,6 +84,10 @@ import {
   createStage9PermissionSnapshot,
   nextRequiredPermission,
 } from "./runtime/stage9Permission";
+import {
+  isDgxVllmProvider,
+  requestDgxVllmCompletion,
+} from "./runtime/stage12DgxProvider";
 import type {
   AgentProfile,
   ApprovalState,
@@ -598,7 +602,7 @@ export function App() {
     return event;
   }
 
-  function handleSendMessageStage2() {
+  async function handleSendMessageStage2() {
     const content = draftMessage.trim();
     if (!content || !selectedAgent || !selectedProvider) {
       return;
@@ -607,11 +611,7 @@ export function App() {
     const createdAt = new Date().toISOString();
     const authLabel = selectedAgent.authBinding?.label ?? "credential pending";
     const authMode = selectedAgent.authBinding?.mode ?? "provider_profile";
-    const reply = buildMockAssistantReply({
-      content,
-      agent: selectedAgent,
-      provider: selectedProvider,
-    });
+    const modelId = selectedAgent.modelId ?? selectedProvider.defaultModel ?? "model pending";
     const userMessage: ConversationMessage = {
       id: `message_user_${crypto.randomUUID()}`,
       sessionId: "session_desktop_001",
@@ -619,6 +619,70 @@ export function App() {
       content,
       createdAt,
     };
+
+    setAgentActivity(selectedAgent.id, "preparing");
+    setConversationMessages((messages) => [...messages, userMessage]);
+    setDraftMessage("");
+    appendEvent("conversation.message.created", {
+      messageId: userMessage.id,
+      role: "user",
+      contentLength: content.length,
+      redaction: "applied",
+    });
+    appendEvent(isDgxVllmProvider(selectedProvider) ? "provider.completion.dgx.requested" : "provider.completion.mocked", {
+      agentId: selectedAgent.id,
+      providerProfileId: selectedProvider.id,
+      modelId,
+      authMode,
+      authLabel,
+    });
+
+    let reply = "";
+    let completionMetadata: Record<string, unknown> = {};
+    try {
+      if (isDgxVllmProvider(selectedProvider)) {
+        const result = await requestDgxVllmCompletion({
+          provider: selectedProvider,
+          modelId,
+          messages: [...conversationMessages, userMessage],
+        });
+        reply = result.content;
+        completionMetadata = {
+          endpoint: result.endpoint,
+          usage: result.usage,
+          realProviderCall: true,
+        };
+        appendEvent("provider.completion.dgx.succeeded", {
+          agentId: selectedAgent.id,
+          providerProfileId: selectedProvider.id,
+          modelId,
+          endpoint: result.endpoint,
+          usage: result.usage,
+        });
+      } else {
+        reply = buildMockAssistantReply({
+          content,
+          agent: selectedAgent,
+          provider: selectedProvider,
+        });
+        completionMetadata = {
+          realProviderCall: false,
+        };
+      }
+    } catch (error) {
+      reply = `DGX-02 vLLM 호출에 실패했어. ${error instanceof Error ? error.message : String(error)}`;
+      completionMetadata = {
+        error: error instanceof Error ? error.message : String(error),
+        realProviderCall: false,
+      };
+      appendEvent("provider.completion.dgx.failed", {
+        agentId: selectedAgent.id,
+        providerProfileId: selectedProvider.id,
+        modelId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     const assistantMessage: ConversationMessage = {
       id: `message_agent_${crypto.randomUUID()}`,
       sessionId: "session_desktop_001",
@@ -629,37 +693,21 @@ export function App() {
         agentName: selectedAgent.name,
         providerProfileId: selectedProvider.id,
         authMode,
+        ...completionMetadata,
       },
     };
 
-    setAgentActivity(selectedAgent.id, "preparing");
-    setConversationMessages((messages) => [...messages, userMessage, assistantMessage]);
-    appendEvent("conversation.message.created", {
-      messageId: userMessage.id,
-      role: "user",
-      contentLength: content.length,
-      redaction: "applied",
-    });
-    appendEvent("provider.completion.mocked", {
-      agentId: selectedAgent.id,
-      providerProfileId: selectedProvider.id,
-      modelId: selectedAgent.modelId ?? selectedProvider.defaultModel,
-      authMode,
-      authLabel,
-    });
+    setAgentActivity(selectedAgent.id, "responding");
+    setConversationMessages((messages) => [...messages, assistantMessage]);
     appendEvent("conversation.message.created", {
       messageId: assistantMessage.id,
       role: "assistant",
       contentLength: reply.length,
       redaction: "applied",
     });
-    setDraftMessage("");
-    window.setTimeout(() => {
-      setAgentActivity(selectedAgent.id, "responding");
-    }, 250);
     window.setTimeout(() => {
       setAgentActivity(selectedAgent.id, "idle");
-    }, 950);
+    }, 450);
   }
 
   function handleCreateCodingPacket() {
