@@ -101,9 +101,9 @@ corepack pnpm dev
 - `packages/providers`: provider adapter interface, credential parser, mock model discovery, secret vault/readiness snapshot
 - `packages/agents`: debate round template과 CodingPacket draft builder
 - `apps/desktop`: Orchestrator Board UI skeleton, Conversation/Debate/Coding Packet, Agent Runtime, DGX Bridge 카드, Memento Inspector, Backup Projection 패널, Ingress Guard 패널, Permission Matrix dock, Provider model discovery, Provider Vault readiness
-- `apps/server`: DGX 서버 health/runtime/heartbeat/remote-run placeholder
+- `apps/server`: DGX 서버 health/runtime/heartbeat/model registry/completion proxy, vLLM probe, remote-run placeholder
 
-실제 API 키는 저장하지 않고 `SecretRef` 개념으로만 표시합니다. 실제 모델 호출과 터미널 실행은 보안/권한 경계가 더 잡힌 뒤 연결합니다.
+실제 API 키는 저장하지 않고 `SecretRef` 개념으로만 표시합니다. DGX-02 vLLM 모델 호출은 server proxy 우선, direct fallback 보조 경로로 연결되어 있습니다. 터미널 실행은 보안/권한 경계가 더 잡힌 뒤 연결합니다.
 ## Stage12
 
 - `DGX-02 vLLM` provider profile을 기본 등록한다.
@@ -119,3 +119,11 @@ corepack pnpm dev
 - DGX-02 vLLM 실제 endpoint와 secret/base URL은 데스크톱 요청 body에 넣지 않는다.
 - 데스크톱은 DGX provider 호출 시 `http://dgx-02:4317/provider-completions`를 먼저 시도하고, 서버 프록시가 아직 떠 있지 않으면 `http://dgx-02:8001/v1/chat/completions` 직접 호출로 fallback한다.
 - 서버 프록시는 CORS preflight를 처리하며, `chat_template_kwargs.enable_thinking=false`를 강제해 reasoning/thinking 로그가 대화창에 새지 않게 한다.
+
+## Stage14
+
+- `apps/server` health/runtime/model registry는 vLLM `/models`를 probe해 DGX-02 모델 런타임 상태를 반영한다.
+- 데스크톱의 `Probe DGX`는 더 이상 가짜 online 상태를 만들지 않고, `http://dgx-02:4317`의 `/health`, `/heartbeat`, `/models`를 실제 조회한다.
+- `dgx-02:4317`이 닫혀 있으면 데스크톱은 DGX를 offline/degraded로 표시하고 direct vLLM fallback 가능성을 event log에 남긴다.
+- `scripts/dgx-02/run-server.sh`와 `scripts/dgx-02/ai-orchestrator-server.service`를 추가해 DGX-02에서 서버를 상시 프로세스로 띄울 준비를 했다.
+- `corepack pnpm server:smoke`는 `/health`와 `/provider-completions`를 확인하는 smoke test로 사용한다.
