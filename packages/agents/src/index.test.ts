@@ -188,6 +188,39 @@ describe("validateCodingPacketSafety", () => {
   });
 });
 
+describe("validateCodingPacketSafety — goal", () => {
+  it("rejects an empty goal", () => {
+    const result = validateCodingPacketSafety(basePacket({ goal: "" }));
+    expect(result.safe).toBe(false);
+    expect(result.sanitized.goal).toBe("");
+    expect(result.violations.join(" ")).toMatch(/goal:.*empty/);
+  });
+
+  it("rejects a goal containing a null byte", () => {
+    const result = validateCodingPacketSafety(
+      basePacket({ goal: `valid goal${NULL_CHAR}smuggled` }),
+    );
+    expect(result.safe).toBe(false);
+    expect(result.sanitized.goal).toBe("");
+    expect(result.violations.join(" ")).toMatch(/goal:.*null byte/);
+  });
+
+  it("rejects an overlong goal", () => {
+    const result = validateCodingPacketSafety(
+      basePacket({ goal: "x".repeat(4001) }),
+    );
+    expect(result.safe).toBe(false);
+    expect(result.sanitized.goal).toBe("");
+    expect(result.violations.join(" ")).toMatch(/goal:.*exceeds 4000/);
+  });
+
+  it("keeps a safe goal as-is", () => {
+    const result = validateCodingPacketSafety(basePacket({ goal: "ship vertical slice" }));
+    expect(result.safe).toBe(true);
+    expect(result.sanitized.goal).toBe("ship vertical slice");
+  });
+});
+
 describe("assertSafeCodingPacket", () => {
   it("returns the sanitized packet when safe", () => {
     const sanitized = assertSafeCodingPacket(basePacket());
@@ -197,6 +230,12 @@ describe("assertSafeCodingPacket", () => {
   it("throws when unsafe", () => {
     expect(() =>
       assertSafeCodingPacket(basePacket({ filesToInspect: ["/etc/passwd"] })),
+    ).toThrow(/unsafe coding packet/);
+  });
+
+  it("throws when goal is unsafe", () => {
+    expect(() =>
+      assertSafeCodingPacket(basePacket({ goal: "" })),
     ).toThrow(/unsafe coding packet/);
   });
 });

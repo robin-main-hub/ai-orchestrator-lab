@@ -191,8 +191,13 @@ export function validateCodingPacketSafety(packet: CodingPacket): CodingPacketSa
     });
   };
 
+  const goalReason = isUnsafeText(packet.goal);
+  if (goalReason) {
+    violations.push(`goal: ${goalReason}`);
+  }
+
   const sanitized: CodingPacket = {
-    goal: packet.goal,
+    goal: goalReason ? "" : packet.goal,
     context: sanitizeTextList("context", packet.context),
     decisions: sanitizeTextList("decisions", packet.decisions),
     rejectedOptions: sanitizeTextList("rejectedOptions", packet.rejectedOptions),
