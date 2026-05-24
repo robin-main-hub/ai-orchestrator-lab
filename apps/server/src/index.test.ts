@@ -7,7 +7,10 @@ import {
   createLiveHealthResponse,
   createRemoteRunResponse,
   createRuntimeSnapshot,
+  createServerEventStorageState,
+  pullEventsFromServerStorage,
   probeDgxVllm,
+  pushEventsToServerStorage,
 } from "./index";
 
 describe("server health placeholder", () => {
@@ -20,6 +23,7 @@ describe("server health placeholder", () => {
     expect(health.capabilities).toContain("remote-run-request");
     expect(health.capabilities).toContain("model-registry");
     expect(health.capabilities).toContain("vllm-health");
+    expect(health.capabilities).toContain("event-storage-sync");
   });
 
   it("publishes the DGX-02 vLLM model registry", () => {
@@ -147,5 +151,76 @@ describe("server health placeholder", () => {
     expect(health.runtime.dgxStatus).toBe("degraded");
     expect(health.runtime.runtimeNodes[0]?.status).toBe("degraded");
     expect(health.runtime.recentError).toContain("vLLM probe failed");
+  });
+
+  it("accepts Event Storage sync pushes idempotently", () => {
+    const state = createServerEventStorageState();
+    const event = {
+      id: "event_sync_1",
+      sessionId: "session_1",
+      type: "conversation.message.created",
+      payload: { messageId: "message_1", redaction: "applied" },
+      createdAt: "2026-05-24T00:00:00.000Z",
+      source: "desktop" as const,
+      sourceTrust: "trusted" as const,
+      redacted: true,
+    };
+    const request = {
+      id: "sync_request_1",
+      clientId: "macbook",
+      sessionId: "session_1",
+      events: [event],
+      idempotencyKey: "macbook:session_1:event_sync_1",
+      createdAt: event.createdAt,
+    };
+
+    const first = pushEventsToServerStorage(request, state, event.createdAt);
+    const duplicate = pushEventsToServerStorage({ ...request, id: "sync_request_2" }, state, event.createdAt);
+    const conflict = pushEventsToServerStorage(
+      {
+        ...request,
+        id: "sync_request_3",
+        events: [{ ...event, type: "conversation.message.edited" }],
+      },
+      state,
+      event.createdAt,
+    );
+    const pulled = pullEventsFromServerStorage("session_1", state, event.createdAt);
+
+    expect(first.accepted).toBe(1);
+    expect(duplicate.duplicates).toBe(1);
+    expect(conflict.conflicts).toBe(1);
+    expect(pulled.serverRevision).toBe(1);
+    expect(pulled.events[0]?.id).toBe(event.id);
+  });
+
+  it("rejects raw secret shaped Event Storage payloads", () => {
+    const state = createServerEventStorageState();
+    const response = pushEventsToServerStorage(
+      {
+        id: "sync_request_secret",
+        clientId: "macbook",
+        sessionId: "session_1",
+        idempotencyKey: "macbook:session_1:event_secret",
+        createdAt: "2026-05-24T00:00:00.000Z",
+        events: [
+          {
+            id: "event_secret",
+            sessionId: "session_1",
+            type: "provider.profile.imported",
+            payload: { raw: "sk-secret-should-not-sync" },
+            createdAt: "2026-05-24T00:00:00.000Z",
+            source: "desktop",
+            sourceTrust: "trusted",
+            redacted: false,
+          },
+        ],
+      },
+      state,
+      "2026-05-24T00:00:00.000Z",
+    );
+
+    expect(response.failed).toBe(1);
+    expect(response.results[0]?.reason).toBe("raw_secret_pattern_detected");
   });
 });

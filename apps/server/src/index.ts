@@ -2,6 +2,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { pathToFileURL } from "node:url";
 import type {
   DgxHeartbeat,
+  EventEnvelope,
+  EventSyncPullResponse,
+  EventSyncPushRequest,
+  EventSyncPushResponse,
   ModelDiscoverySnapshot,
   ProviderCompletionMessage,
   ProviderCompletionRequest,
@@ -10,6 +14,7 @@ import type {
   RemoteExecutionResponse,
   RuntimeSnapshot,
 } from "@ai-orchestrator/protocol";
+import { eventSyncPushRequestSchema } from "@ai-orchestrator/protocol";
 
 export type ServerCapability =
   | "health"
@@ -18,6 +23,7 @@ export type ServerCapability =
   | "vllm-health"
   | "runtime-status"
   | "remote-run-request"
+  | "event-storage-sync"
   | "remote-event-stream-placeholder"
   | "memory-sync-placeholder";
 
@@ -62,6 +68,15 @@ export type DgxVllmProbeOptions = {
 
 const DEFAULT_DGX02_VLLM_BASE_URL = "http://dgx-02:8001/v1";
 const DEFAULT_DGX_MODEL_ID = "qwen36-gio-wiki-rag-prisma";
+
+export type ServerEventStorageState = {
+  revision: number;
+  eventsById: Map<string, EventEnvelope>;
+  eventRevisionsById: Map<string, number>;
+  eventsBySession: Map<string, string[]>;
+};
+
+const defaultEventStorageState = createServerEventStorageState();
 
 export function createRuntimeSnapshot(now = new Date().toISOString(), probe?: DgxVllmProbe): RuntimeSnapshot {
   const vllmReachable = probe?.status !== "unreachable";
@@ -125,6 +140,7 @@ export function createHealthResponse(now = new Date().toISOString(), probe?: Dgx
       "vllm-health",
       "runtime-status",
       "remote-run-request",
+      "event-storage-sync",
       "remote-event-stream-placeholder",
       "memory-sync-placeholder",
     ],
@@ -406,9 +422,109 @@ export function createRemoteRunResponse(
   };
 }
 
+export function createServerEventStorageState(): ServerEventStorageState {
+  return {
+    revision: 0,
+    eventsById: new Map(),
+    eventRevisionsById: new Map(),
+    eventsBySession: new Map(),
+  };
+}
+
+export function pushEventsToServerStorage(
+  request: EventSyncPushRequest,
+  state = defaultEventStorageState,
+  now = new Date().toISOString(),
+): EventSyncPushResponse {
+  const results = request.events.map((event) => {
+    if (event.sessionId !== request.sessionId) {
+      return {
+        eventId: event.id,
+        status: "failed" as const,
+        reason: "event_session_mismatch",
+      };
+    }
+
+    if (containsSecretLikeText(event)) {
+      return {
+        eventId: event.id,
+        status: "failed" as const,
+        reason: "raw_secret_pattern_detected",
+      };
+    }
+
+    const existingEvent = state.eventsById.get(event.id);
+    if (!existingEvent) {
+      state.revision += 1;
+      state.eventsById.set(event.id, event);
+      state.eventRevisionsById.set(event.id, state.revision);
+      const sessionEvents = state.eventsBySession.get(event.sessionId) ?? [];
+      sessionEvents.push(event.id);
+      state.eventsBySession.set(event.sessionId, sessionEvents);
+
+      return {
+        eventId: event.id,
+        status: "accepted" as const,
+        serverRevision: state.revision,
+      };
+    }
+
+    const existingRevision = state.eventRevisionsById.get(event.id) ?? state.revision;
+    if (fingerprintEvent(existingEvent) === fingerprintEvent(event)) {
+      return {
+        eventId: event.id,
+        status: "duplicate" as const,
+        serverRevision: existingRevision,
+      };
+    }
+
+    return {
+      eventId: event.id,
+      status: "conflict" as const,
+      serverRevision: existingRevision,
+      reason: "same_event_id_different_payload",
+    };
+  });
+
+  return {
+    id: `event_sync_response_${crypto.randomUUID()}`,
+    requestId: request.id,
+    sessionId: request.sessionId,
+    serverRevision: state.revision,
+    accepted: results.filter((result) => result.status === "accepted").length,
+    duplicates: results.filter((result) => result.status === "duplicate").length,
+    conflicts: results.filter((result) => result.status === "conflict").length,
+    failed: results.filter((result) => result.status === "failed").length,
+    results,
+    createdAt: now,
+  };
+}
+
+export function pullEventsFromServerStorage(
+  sessionId: string,
+  state = defaultEventStorageState,
+  now = new Date().toISOString(),
+  afterRevision = 0,
+): EventSyncPullResponse {
+  const eventIds = state.eventsBySession.get(sessionId) ?? [];
+  const events = eventIds
+    .filter((eventId) => (state.eventRevisionsById.get(eventId) ?? 0) > afterRevision)
+    .map((eventId) => state.eventsById.get(eventId))
+    .filter((event): event is EventEnvelope => Boolean(event))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
+  return {
+    sessionId,
+    serverRevision: state.revision,
+    events,
+    createdAt: now,
+  };
+}
+
 export function startServer(port = Number(process.env.PORT ?? 4317)) {
   const server = createServer(async (request, response) => {
-    const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+    const requestUrl = new URL(request.url ?? "/", "http://localhost");
+    const pathname = requestUrl.pathname;
 
     if (request.method === "OPTIONS") {
       response.writeHead(204, createCorsHeaders());
@@ -447,6 +563,26 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     if (pathname === "/remote-runs" && request.method === "POST") {
       const payload = (await readJsonBody(request)) as RemoteExecutionRequest;
       writeJson(response, 202, createRemoteRunResponse(payload));
+      return;
+    }
+
+    if (pathname === "/events/sync" && request.method === "POST") {
+      try {
+        const payload = eventSyncPushRequestSchema.parse(await readJsonBody(request)) as EventSyncPushRequest;
+        writeJson(response, 202, pushEventsToServerStorage(payload));
+      } catch (error) {
+        writeJson(response, 400, {
+          error: "invalid_event_sync_payload",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return;
+    }
+
+    if (pathname === "/events" && request.method === "GET") {
+      const sessionId = requestUrl.searchParams.get("sessionId") ?? "session_desktop_001";
+      const afterRevision = Number(requestUrl.searchParams.get("afterRevision") ?? 0);
+      writeJson(response, 200, pullEventsFromServerStorage(sessionId, defaultEventStorageState, undefined, afterRevision));
       return;
     }
 
@@ -508,6 +644,32 @@ function writeJson(response: ServerResponse, statusCode: number, payload: unknow
     ...createCorsHeaders(),
   });
   response.end(JSON.stringify(payload));
+}
+
+function containsSecretLikeText(value: unknown): boolean {
+  const text = fingerprintEvent(value);
+  return /\bsk-[A-Za-z0-9_-]{8,}\b/.test(text) ||
+    /\bBearer\s+[A-Za-z0-9._~+/=-]+\b/i.test(text) ||
+    /\b(?:API_KEY|AUTH_TOKEN|SECRET|TOKEN)\s*=\s*[^"'\s]+/i.test(text);
+}
+
+function fingerprintEvent(value: unknown): string {
+  return stableStringify(value);
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableStringify(entry)).join(",")}]`;
+  }
+
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
+      .join(",")}}`;
+  }
+
+  return JSON.stringify(value) ?? String(value);
 }
 
 const entryPoint = process.argv[1] ? pathToFileURL(process.argv[1]).href : undefined;

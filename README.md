@@ -31,7 +31,7 @@
 - 사용 가능 모델 자동 조회
 - 강한 모델 검증 또는 동일 로컬 모델 검증
 - DGX 원격 실행 및 로컬 폴백
-- DGX-02 Event Store authority, client SQLite outbox, Redaction Layer, Permission Matrix
+- DGX-02 Event Storage authority, client SQLite outbox, Redaction Layer, Permission Matrix
 - External Ingress Guard와 confidence routing
 - Memento-MCP 스타일 장기 메모리
 - 에이전트별 `soul.md` 정체성 파일
@@ -127,3 +127,12 @@ corepack pnpm dev
 - `dgx-02:4317`이 닫혀 있으면 데스크톱은 DGX를 offline/degraded로 표시하고 direct vLLM fallback 가능성을 event log에 남긴다.
 - `scripts/dgx-02/run-server.sh`와 `scripts/dgx-02/ai-orchestrator-server.service`를 추가해 DGX-02에서 서버를 상시 프로세스로 띄울 준비를 했다.
 - `corepack pnpm server:smoke`는 `/health`와 `/provider-completions`를 확인하는 smoke test로 사용한다.
+
+## Stage15
+
+- `packages/protocol`에 Event Storage push/pull sync envelope를 추가했다.
+- `apps/server`는 `POST /events/sync`로 desktop/MacBook/Home PC client replica 이벤트를 받고, 같은 event id 재전송은 duplicate로 처리한다.
+- 서버는 같은 event id의 다른 payload를 conflict로 분리하고, raw secret 패턴이 보이는 이벤트는 failed로 막는다.
+- `apps/desktop`은 이벤트를 만들 때 DGX-02 Event Storage로 sync를 시도하고, 실패하면 local outbox 상태로 남긴다.
+- Terminal dock의 Event Storage 카드에서 DGX-02 revision, outbox count, 수동 sync 버튼을 볼 수 있다.
+- `scripts/smoke-dgx-server.mjs`는 `/health`, `/provider-completions`, `/events/sync`를 함께 확인한다.
