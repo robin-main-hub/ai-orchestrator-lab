@@ -108,15 +108,18 @@ export const seededProviderProfiles: ProviderProfile[] = [
     }),
     modelDiscoveryEndpoint: "http://dgx-02:8004/v1/models",
   },
-  createProviderProfile({
-    id: "provider_codex_oauth",
-    name: "Codex OAuth Session",
-    kind: "custom",
-    baseUrl: "https://oauth.local/codex",
-    defaultModel: "codex-session",
-    tags: ["oauth", "session"],
-    trustLevel: "limited",
-  }),
+  {
+    ...createProviderProfile({
+      id: "provider_codex_oauth",
+      name: "Codex OAuth Session",
+      kind: "custom",
+      baseUrl: "codex-oauth://dgx-02",
+      defaultModel: "codex-session",
+      tags: ["oauth", "codex", "dgx", "session"],
+      trustLevel: "trusted",
+    }),
+    secretRef: createDgxVaultSecretRef("secret_dgx02_codex_oauth", "DGX-02 Codex OAuth Session", "dgx-02:~/.codex/auth.json"),
+  },
 ];
 
 export function createInitialProviderProfiles() {
@@ -170,6 +173,21 @@ function sanitizeProviderProfile(profile: ProviderProfile): ProviderProfile {
     return {
       ...profile,
       name: "Grok OAuth #2",
+    };
+  }
+
+  if (profile.id === "provider_codex_oauth") {
+    return {
+      ...profile,
+      name: "Codex OAuth Session",
+      kind: "custom",
+      baseUrl: "codex-oauth://dgx-02",
+      defaultModel: "codex-session",
+      secretRef:
+        profile.secretRef ??
+        createDgxVaultSecretRef("secret_dgx02_codex_oauth", "DGX-02 Codex OAuth Session", "dgx-02:~/.codex/auth.json"),
+      tags: Array.from(new Set([...profile.tags, "oauth", "codex", "dgx", "session"])),
+      trustLevel: "trusted",
     };
   }
 
@@ -292,7 +310,7 @@ export const seededModelCatalog: ModelCatalog = {
     "codex-browser",
     "codex-local",
     "codex-dgx",
-  ].map((id) => createModel("provider_codex_oauth", id, ["oauth"])),
+  ].map((id) => createModel("provider_codex_oauth", id, ["oauth", "codex", "dgx", "session"])),
 };
 
 function createProviderProfileFromRegistryEntry(entry: ProviderRegistryEntry): ProviderProfile {

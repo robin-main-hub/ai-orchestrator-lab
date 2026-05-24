@@ -4,12 +4,13 @@ import type { WorkbenchAgent } from "../types";
 export const seededAgentProfiles: WorkbenchAgent[] = defaultAgentProfiles.map((agent, index) => {
   const bindings: Array<Required<Pick<WorkbenchAgent, "providerProfileId" | "modelId" | "authBinding">>> = [
     {
-      providerProfileId: "provider_dgx02_vllm",
-      modelId: "qwen36-gio-wiki-rag-prisma",
+      providerProfileId: "provider_codex_oauth",
+      modelId: "codex-session",
       authBinding: {
-        mode: "provider_profile",
-        label: "DGX-02 vLLM route",
-        providerProfileId: "provider_dgx02_vllm",
+        mode: "oauth",
+        label: "Codex OAuth",
+        providerProfileId: "provider_codex_oauth",
+        oauthRef: "oauth_codex_dgx02",
       },
     },
     {
@@ -23,13 +24,13 @@ export const seededAgentProfiles: WorkbenchAgent[] = defaultAgentProfiles.map((a
       },
     },
     {
-      providerProfileId: "provider_codex_oauth",
-      modelId: "codex-session",
+      providerProfileId: "provider_apifun_claude",
+      modelId: "claude-opus-4-6",
       authBinding: {
-        mode: "oauth",
-        label: "OAuth ref",
-        providerProfileId: "provider_codex_oauth",
-        oauthRef: "oauth_codex_placeholder",
+        mode: "provider_profile",
+        label: "APIKey.fun Claude A",
+        providerProfileId: "provider_apifun_claude",
+        secretRefId: "dgx-02:ANTHROPIC_API_KEY",
       },
     },
     {
