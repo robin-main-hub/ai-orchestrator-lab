@@ -95,7 +95,7 @@ import {
   isDgxRoutedProvider,
   requestDgxProviderCompletion,
 } from "./runtime/stage12DgxProvider";
-import { fetchDgxProviderModelDiscovery, probeDgxOrchestratorServer } from "./runtime/stage13DgxServer";
+import { fetchDgxProviderModelDiscovery, fetchDgxProviderRegistry, probeDgxOrchestratorServer } from "./runtime/stage13DgxServer";
 import { DEFAULT_DGX_SERVER_BASE_URL } from "./runtime/stage30DgxEndpoints";
 import {
   createInitialEventSyncState,
@@ -147,6 +147,8 @@ import type {
   ModelDiscoverySnapshot,
   PermissionMatrixSnapshot,
   ProviderProfile,
+  ProviderRegistryEntry,
+  ProviderRegistrySnapshot,
   ProviderRuntimeReadiness,
   ReviewMode,
   RuntimeSnapshot,
@@ -728,14 +730,14 @@ const seededProviderProfiles: ProviderProfile[] = [
   {
     ...createProviderProfile({
       id: "provider_apifun_claude",
-      name: "APIFun Claude Reseller",
+      name: "APIKey.fun Claude A",
       kind: "anthropic",
       baseUrl: "https://api.apikey.fun",
-      defaultModel: "claude-code-compatible",
-      tags: ["dgx-secret-ref", "server-proxy", "apifun", "reseller"],
+      defaultModel: "claude-opus-4-6",
+      tags: ["dgx-secret-ref", "server-proxy", "apikey.fun", "reseller"],
       trustLevel: "untrusted",
     }),
-    secretRef: createDgxVaultSecretRef("secret_dgx02_apifun", "DGX-02 apifun.key", "dgx-02:apifun.key"),
+    secretRef: createDgxVaultSecretRef("secret_dgx02_apikeyfun_claude_a", "DGX-02 APIKey.fun Claude A", "dgx-02:ANTHROPIC_API_KEY"),
     modelDiscoveryEndpoint: "https://api.apikey.fun/v1/models",
   },
   {
@@ -899,11 +901,11 @@ const seededModelCatalog: ModelCatalog = {
     "deepseek-v3",
   ].map((id) => createModel("provider_deepseek_dgx", id, ["deepseek", "server-proxy"])),
   provider_apifun_claude: [
+    "claude-opus-4-6",
     "claude-code-compatible",
-    "claude-opus-reseller",
     "claude-sonnet-reseller",
     "claude-haiku-reseller",
-  ].map((id) => createModel("provider_apifun_claude", id, ["apifun", "reseller", "server-proxy"])),
+  ].map((id) => createModel("provider_apifun_claude", id, ["apikey.fun", "reseller", "server-proxy"])),
   provider_grok_oauth_dgx: [
     "grok-oauth-session",
     "grok-4",
@@ -926,6 +928,76 @@ const seededModelCatalog: ModelCatalog = {
     "codex-dgx",
   ].map((id) => createModel("provider_codex_oauth", id, ["oauth"])),
 };
+
+function createProviderProfileFromRegistryEntry(entry: ProviderRegistryEntry): ProviderProfile {
+  return {
+    id: entry.providerProfileId,
+    name: entry.name,
+    kind: entry.kind,
+    baseUrl: entry.baseUrl,
+    secretRef:
+      entry.authMode === "none"
+        ? undefined
+        : createDgxVaultSecretRef(
+            `secret_${entry.providerProfileId}`,
+            `${entry.name} DGX-02 credential`,
+            entry.secretRefPreview ?? `dgx-02:${entry.providerProfileId}`,
+          ),
+    modelDiscoveryEndpoint: entry.modelDiscoveryEndpoint,
+    defaultModel: entry.selectedModelId ?? entry.defaultModelIds[0],
+    enabled: true,
+    tags: entry.tags,
+    trustLevel: entry.trustLevel,
+  };
+}
+
+function createModelDiscoveryFromRegistryEntry(entry: ProviderRegistryEntry): ModelDiscoverySnapshot {
+  const models = entry.defaultModelIds.map((modelId) => createModel(entry.providerProfileId, modelId, entry.tags));
+  return {
+    id: `model_discovery_registry_${entry.providerProfileId}`,
+    providerProfileId: entry.providerProfileId,
+    status: entry.secretAvailability === "missing" ? "failed" : "succeeded",
+    source: "remote_probe",
+    models,
+    selectedModelId: entry.selectedModelId ?? models[0]?.id,
+    redactionApplied: true,
+    warnings:
+      entry.secretAvailability === "missing"
+        ? ["DGX-02 registry reports missing provider secret; keep profile selectable but block completion."]
+        : ["DGX-02 provider registry metadata merged; raw secrets stay on DGX-02."],
+    createdAt: entry.updatedAt,
+  };
+}
+
+function mergeProviderProfilesFromRegistry(
+  currentProfiles: ProviderProfile[],
+  registry: ProviderRegistrySnapshot,
+): ProviderProfile[] {
+  const registryProfiles = registry.entries.map(createProviderProfileFromRegistryEntry);
+  const registryProfilesById = new Map(registryProfiles.map((profile) => [profile.id, profile]));
+  const currentIds = new Set(currentProfiles.map((profile) => profile.id));
+  const mergedCurrent = currentProfiles.map((profile) => {
+    const registryProfile = registryProfilesById.get(profile.id);
+    if (!registryProfile) {
+      return profile;
+    }
+
+    return {
+      ...profile,
+      kind: registryProfile.kind,
+      baseUrl: registryProfile.baseUrl ?? profile.baseUrl,
+      secretRef: registryProfile.secretRef ?? profile.secretRef,
+      modelDiscoveryEndpoint: registryProfile.modelDiscoveryEndpoint ?? profile.modelDiscoveryEndpoint,
+      defaultModel: registryProfile.defaultModel ?? profile.defaultModel,
+      enabled: profile.enabled,
+      tags: Array.from(new Set([...profile.tags, ...registryProfile.tags])),
+      trustLevel: registryProfile.trustLevel,
+    };
+  });
+  const missingRegistryProfiles = registryProfiles.filter((profile) => !currentIds.has(profile.id));
+
+  return [...mergedCurrent, ...missingRegistryProfiles];
+}
 
 const debateContext: DebateContext = {
   sessionId: DEFAULT_SESSION_ID,
@@ -1792,6 +1864,14 @@ export function App() {
     const modelId = selectedAgent.modelId ?? selectedProvider.defaultModel ?? "model pending";
     const messageContent = content || `첨부 ${attachments.length}개`;
     const attachmentMetadata = attachments.map((attachment) => ({ ...attachment }));
+    const userMessage: ConversationMessage = {
+      id: `message_user_${crypto.randomUUID()}`,
+      sessionId: activeSessionId,
+      role: "user",
+      content: messageContent,
+      createdAt,
+      metadata: attachmentMetadata.length > 0 ? { attachments: attachmentMetadata } : undefined,
+    };
     const providerPermissionId = `permission_provider_${selectedProvider.id}`;
     const providerApprovalState = approvalStateByItemId[providerPermissionId];
     const providerNeedsApproval = providerReadiness.status === "needs_approval" && providerApprovalState !== "approved";
@@ -1816,7 +1896,20 @@ export function App() {
         },
       };
 
-      setConversationMessages((messages) => [...messages, blockedMessage]);
+      setConversationMessages((messages) => [...messages, userMessage, blockedMessage]);
+      setDraftMessage("");
+      setDraftAttachments([]);
+      appendEvent("conversation.message.created", {
+        messageId: userMessage.id,
+        role: "user",
+        content: messageContent,
+        metadata: userMessage.metadata,
+        contentLength: messageContent.length,
+        attachmentCount: attachmentMetadata.length,
+        attachments: attachmentMetadata,
+        attachmentStorage: "metadata_only",
+        redaction: "applied",
+      });
       appendEvent("provider.completion.blocked", {
         agentId: selectedAgent.id,
         providerProfileId: selectedProvider.id,
@@ -1828,17 +1921,16 @@ export function App() {
         attachmentCount: attachmentMetadata.length,
         redaction: "applied",
       });
+      appendEvent("conversation.message.created", {
+        messageId: blockedMessage.id,
+        role: "assistant",
+        content: blockedMessage.content,
+        metadata: blockedMessage.metadata,
+        providerProfileId: selectedProvider.id,
+        redaction: "applied",
+      });
       return;
     }
-
-    const userMessage: ConversationMessage = {
-      id: `message_user_${crypto.randomUUID()}`,
-      sessionId: activeSessionId,
-      role: "user",
-      content: messageContent,
-      createdAt,
-      metadata: attachmentMetadata.length > 0 ? { attachments: attachmentMetadata } : undefined,
-    };
 
     setAgentActivity(selectedAgent.id, "preparing");
     setConversationMessages((messages) => [...messages, userMessage]);
@@ -3111,7 +3203,7 @@ export function App() {
     });
   }
 
-  function handleCheckProviderVault() {
+  async function handleCheckProviderVault() {
     appendEvent("secret.vault.checked", {
       snapshotId: secretVaultSnapshot.id,
       available: secretVaultSnapshot.summary.available,
@@ -3128,6 +3220,46 @@ export function App() {
       canUseAutomaticMemory: providerReadiness.canUseAutomaticMemory,
       reason: providerReadiness.reason,
     });
+
+    try {
+      const registry = await fetchDgxProviderRegistry();
+      setProviderProfiles((profiles) => mergeProviderProfilesFromRegistry(profiles, registry));
+      setModelCatalog((catalog) => ({
+        ...catalog,
+        ...Object.fromEntries(
+          registry.entries.map((entry) => [
+            entry.providerProfileId,
+            createModelDiscoveryFromRegistryEntry(entry).models,
+          ]),
+        ),
+      }));
+      setModelDiscoveryByProviderId((discoveries) => ({
+        ...discoveries,
+        ...Object.fromEntries(
+          registry.entries.map((entry) => [
+            entry.providerProfileId,
+            createModelDiscoveryFromRegistryEntry(entry),
+          ]),
+        ),
+      }));
+      appendEvent("provider.registry.loaded", {
+        registryId: registry.id,
+        authorityNodeId: registry.authorityNodeId,
+        summary: registry.summary,
+        entries: registry.entries.map((entry) => ({
+          providerProfileId: entry.providerProfileId,
+          authMode: entry.authMode,
+          secretAvailability: entry.secretAvailability,
+          defaultModelIds: entry.defaultModelIds,
+          rawSecretPersisted: false,
+        })),
+      });
+    } catch (error) {
+      appendEvent("provider.registry.failed", {
+        authorityNodeId: "dgx-02",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   function handleRemoveProvider(providerId: string) {
@@ -3145,6 +3277,11 @@ export function App() {
       const { [providerId]: _removedDiscovery, ...remainingDiscoveries } = discoveries;
       return remainingDiscoveries;
     });
+    appendEvent("provider.profile.removed", {
+      providerProfileId: providerId,
+      inUse: false,
+      rawSecretPersisted: false,
+    });
   }
 
   function handleRenameProvider(providerId: string) {
@@ -3157,6 +3294,12 @@ export function App() {
     setProviderProfiles((profiles) =>
       profiles.map((profile) => (profile.id === providerId ? { ...profile, name: nextName.trim() } : profile)),
     );
+    appendEvent("provider.profile.renamed", {
+      providerProfileId: providerId,
+      previousName: provider?.name,
+      nextName: nextName.trim(),
+      rawSecretPersisted: false,
+    });
   }
 
   function handleOpenAgentSettings(agentId: string) {

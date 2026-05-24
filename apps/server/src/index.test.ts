@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -10,6 +10,7 @@ import {
   createHealthResponse,
   createJsonlServerEventStorage,
   createLiveHealthResponse,
+  createServerProviderRegistrySnapshot,
   createServerProviderModelDiscoveryResponse,
   createRemoteRunResponse,
   createRuntimeSnapshot,
@@ -203,6 +204,120 @@ describe("server health placeholder", () => {
       } else {
         process.env.DEEPSEEK_API_KEY = previousKey;
       }
+    }
+  });
+
+  it("publishes a DGX-02 provider registry without raw secrets", async () => {
+    const previousDeepSeekKey = process.env.DEEPSEEK_API_KEY;
+    const previousAnthropicKey = process.env.ANTHROPIC_API_KEY;
+    const previousAnthropicKeyAlt = process.env.ANTHROPIC_API_KEY_ALT;
+    const previousApifunKey = process.env.APIFUN_API_KEY;
+    const previousApifunKeyFile = process.env.APIFUN_API_KEY_FILE;
+    process.env.DEEPSEEK_API_KEY = "deepseek-test-secret";
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY_ALT;
+    delete process.env.APIFUN_API_KEY;
+    process.env.APIFUN_API_KEY_FILE = "/tmp/ai-orchestrator-missing-apifun.key";
+
+    try {
+      const registry = await createServerProviderRegistrySnapshot({
+        now: "2026-05-24T00:00:00.000Z",
+      });
+
+      const deepseek = registry.entries.find((entry) => entry.providerProfileId === "provider_deepseek_dgx");
+      const apifun = registry.entries.find((entry) => entry.providerProfileId === "provider_apifun_claude");
+      const grok = registry.entries.find((entry) => entry.providerProfileId === "provider_grok_oauth_dgx");
+
+      expect(registry.authorityNodeId).toBe("dgx-02");
+      expect(registry.rawSecretPersisted).toBe(false);
+      expect(registry.summary.total).toBeGreaterThanOrEqual(7);
+      expect(deepseek?.authMode).toBe("dgx_secret_ref");
+      expect(deepseek?.secretAvailability).toBe("available");
+      expect(apifun?.name).toBe("APIKey.fun Claude A");
+      expect(apifun?.secretAvailability).toBe("missing");
+      expect(apifun?.secretSourceRefs).toContain("env:ANTHROPIC_API_KEY");
+      expect(grok?.authMode).toBe("oauth_session");
+      expect(JSON.stringify(registry)).not.toContain("deepseek-test-secret");
+    } finally {
+      if (previousDeepSeekKey === undefined) {
+        delete process.env.DEEPSEEK_API_KEY;
+      } else {
+        process.env.DEEPSEEK_API_KEY = previousDeepSeekKey;
+      }
+      if (previousAnthropicKey === undefined) {
+        delete process.env.ANTHROPIC_API_KEY;
+      } else {
+        process.env.ANTHROPIC_API_KEY = previousAnthropicKey;
+      }
+      if (previousAnthropicKeyAlt === undefined) {
+        delete process.env.ANTHROPIC_API_KEY_ALT;
+      } else {
+        process.env.ANTHROPIC_API_KEY_ALT = previousAnthropicKeyAlt;
+      }
+      if (previousApifunKey === undefined) {
+        delete process.env.APIFUN_API_KEY;
+      } else {
+        process.env.APIFUN_API_KEY = previousApifunKey;
+      }
+      if (previousApifunKeyFile === undefined) {
+        delete process.env.APIFUN_API_KEY_FILE;
+      } else {
+        process.env.APIFUN_API_KEY_FILE = previousApifunKeyFile;
+      }
+    }
+  });
+
+  it("loads provider keys from the OpenClaw slot env file without exposing raw values", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "ai-orchestrator-env-"));
+    const envFile = join(tempRoot, "openclaw-slot.env");
+    const previousSlotEnv = process.env.OPENCLAW_SLOT_ENV_FILE;
+    const previousDeepSeekKey = process.env.DEEPSEEK_API_KEY;
+
+    delete process.env.DEEPSEEK_API_KEY;
+    process.env.OPENCLAW_SLOT_ENV_FILE = envFile;
+
+    try {
+      await writeFile(
+        envFile,
+        [
+          'DEEPSEEK_API_KEY="deepseek-env-file-secret"',
+          'ANTHROPIC_API_KEY="apikeyfun-claude-a-secret"',
+          'ANTHROPIC_API_KEY_ALT="apikeyfun-claude-b-secret"',
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const registry = await createServerProviderRegistrySnapshot({
+        now: "2026-05-24T00:00:00.000Z",
+      });
+      const deepseek = registry.entries.find((entry) => entry.providerProfileId === "provider_deepseek_dgx");
+      const claudeA = registry.entries.find((entry) => entry.providerProfileId === "provider_apifun_claude");
+      const claudeB = registry.entries.find((entry) => entry.providerProfileId === "provider_apifun_claude_b");
+
+      expect(deepseek?.secretAvailability).toBe("available");
+      expect(claudeA?.name).toBe("APIKey.fun Claude A");
+      expect(claudeA?.selectedModelId).toBe("claude-opus-4-6");
+      expect(claudeA?.secretAvailability).toBe("available");
+      expect(claudeA?.secretRefPreview).toBe("dgx-02:ANTHROPIC_API_KEY");
+      expect(claudeB?.name).toBe("APIKey.fun Claude B");
+      expect(claudeB?.secretAvailability).toBe("available");
+      expect(claudeB?.secretRefPreview).toBe("dgx-02:ANTHROPIC_API_KEY_ALT");
+      expect(JSON.stringify(registry)).not.toContain("deepseek-env-file-secret");
+      expect(JSON.stringify(registry)).not.toContain("apikeyfun-claude-a-secret");
+      expect(JSON.stringify(registry)).not.toContain("apikeyfun-claude-b-secret");
+    } finally {
+      if (previousSlotEnv === undefined) {
+        delete process.env.OPENCLAW_SLOT_ENV_FILE;
+      } else {
+        process.env.OPENCLAW_SLOT_ENV_FILE = previousSlotEnv;
+      }
+      if (previousDeepSeekKey === undefined) {
+        delete process.env.DEEPSEEK_API_KEY;
+      } else {
+        process.env.DEEPSEEK_API_KEY = previousDeepSeekKey;
+      }
+      await rm(tempRoot, { recursive: true, force: true });
     }
   });
 

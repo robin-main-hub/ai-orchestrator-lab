@@ -173,6 +173,7 @@ corepack pnpm dev
 - Windows Obsidian export defaults to `F:/obsidian/ai-headquarter`.
 - Tauri is the accepted shell direction for Windows/macOS packaging; see `docs/21-tauri-desktop-shell.md`.
 - DGX-02 public endpoint is `https://orchestrator.endruin.com`; see `docs/22-endruin-domain-dgx02.md`.
+- DGX-02 provider registry source mapping is documented in `docs/23-dgx02-provider-registry.md`.
 
 ## Stage18
 
