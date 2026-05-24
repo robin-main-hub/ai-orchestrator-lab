@@ -16,14 +16,20 @@ export type {
   AdapterRuntimeContext,
   CreateAdapterContextParams,
   LlmAdapter,
-} from "./adapter";
-export { createAdapterContext } from "./adapter";
+} from "./adapter.js";
+export { createAdapterContext } from "./adapter.js";
 export type {
   AdapterErrorCategory,
   AdapterErrorOptions,
-} from "./errors";
-export { AdapterError, redactSecretsForLog, truncateForLog } from "./errors";
-export { MockLlmAdapter, type MockLlmAdapterOptions } from "./mockLlmAdapter";
+} from "./errors.js";
+export { AdapterError, redactSecretsForLog, truncateForLog } from "./errors.js";
+export { MockLlmAdapter, type MockLlmAdapterOptions } from "./mockLlmAdapter.js";
+export {
+  createOpenAIChatMessages,
+  OpenAICompatibleAdapter,
+  type AdapterFetchLike,
+  type OpenAICompatibleAdapterOptions,
+} from "./openAiCompatibleAdapter.js";
 
 /**
  * @deprecated The legacy adapter shape. New adapters should implement
