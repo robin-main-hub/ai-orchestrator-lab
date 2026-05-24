@@ -156,53 +156,25 @@ import type {
   WorkItem,
   WorkItemHandoff,
 } from "@ai-orchestrator/protocol";
-
-type CenterMode = "conversation" | "debate" | "tmux";
-type AgentActivityStatus = "idle" | "preparing" | "responding";
-type WorkbenchAgent = AgentProfile;
-type ModelCatalog = Record<string, ModelDescriptor[]>;
-type ProviderRegistrationMode = "api_key" | "cli" | "oauth";
-type AgentConfigTab = "profile" | "soul" | "agents_md" | "creativity" | "injection" | "preview" | "edit";
-type AgentVoicePreset = "direct" | "calm" | "architect" | "reviewer" | "executor";
-type AgentCreativityLevel = "strict" | "focused" | "balanced" | "creative" | "experimental";
-type DraftAttachment = ConversationAttachment;
-type Stage3DebateUtteranceView = DebateUtterance & {
-  roundTitle: string;
-  agentName: string;
-};
-type AgentPersonaSettings = {
-  voicePreset: AgentVoicePreset;
-  creativityLevel: AgentCreativityLevel;
-  agentsMdPath: string;
-  soulMdPath: string;
-  soulSummary: string;
-  soulExampleDialogue: string;
-  agentsInstruction: string;
-  forbiddenStyle: string;
-};
-type AgentVisualSettings = {
-  avatarDataUrl?: string;
-  avatarUpdatedAt?: string;
-};
-type NavItemId = "sessions" | "projects" | "providers" | "channels" | "backup";
-type NavItem = {
-  id: NavItemId;
-  label: string;
-  icon: LucideIcon;
-};
-type WindowAuditStatus = "ready" | "partial" | "blocked";
-type WindowAuditItem = {
-  id: string;
-  label: string;
-  status: WindowAuditStatus;
-  detail: string;
-};
-type MetaOnboardingSignal = {
-  id: string;
-  label: string;
-  status: WindowAuditStatus;
-  suggestion: string;
-};
+import type {
+  AgentActivityStatus,
+  AgentConfigTab,
+  AgentCreativityLevel,
+  AgentPersonaSettings,
+  AgentVisualSettings,
+  AgentVoicePreset,
+  CenterMode,
+  DraftAttachment,
+  MetaOnboardingSignal,
+  ModelCatalog,
+  NavItem,
+  NavItemId,
+  ProviderRegistrationMode,
+  Stage3DebateUtteranceView,
+  WindowAuditItem,
+  WindowAuditStatus,
+  WorkbenchAgent,
+} from "./types";
 
 const modelWindowSize = 8;
 const maxDraftAttachments = 5;
