@@ -30,6 +30,7 @@ import {
 } from "@ai-orchestrator/protocol";
 import {
   CodexCliOAuthAdapter,
+  OpenAICompatibleAdapter,
   type CodexExecRunner,
 } from "@ai-orchestrator/providers/node";
 
@@ -121,6 +122,31 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     defaultKeyFile: "~/.openclaw/secrets/deepseek.key",
     apiStyle: "openai_chat",
     defaultModelIds: ["deepseek-v4-flash", "deepseek-v4-pro"],
+    supportsModelList: true,
+  },
+  {
+    providerProfileId: "provider_openai_compat",
+    baseUrl: process.env.OPENAI_COMPAT_BASE_URL ?? process.env.OPENAI_OFFICIAL_BASE_URL ?? "https://api.openai.com/v1",
+    apiKeyEnvNames: ["OPENAI_OFFICIAL_API_KEY", "ORCHESTRATOR_OPENAI_API_KEY"],
+    apiKeyFileEnvName: "OPENAI_OFFICIAL_API_KEY_FILE",
+    apiStyle: "openai_chat",
+    defaultModelIds: ["gpt-5.5-pro", "gpt-5.5-coder", "gpt-5.5-mini", "gpt-4.1", "o4-mini", "o3"],
+    supportsModelList: true,
+  },
+  {
+    providerProfileId: "provider_openrouter_dgx",
+    baseUrl: process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
+    apiKeyEnvNames: ["OPENROUTER_API_KEY"],
+    apiKeyFileEnvName: "OPENROUTER_API_KEY_FILE",
+    defaultKeyFile: "~/.openclaw/secrets/openrouter.key",
+    apiStyle: "openai_chat",
+    defaultModelIds: [
+      "openrouter/auto",
+      "anthropic/claude-opus-4.7",
+      "openai/gpt-5.5-pro",
+      "x-ai/grok-4",
+      "deepseek/deepseek-r1",
+    ],
     supportsModelList: true,
   },
   {
@@ -483,6 +509,41 @@ export async function createServerProviderModelDiscoveryResponse(
     };
   }
 
+  if (config.apiStyle !== "anthropic_messages") {
+    const rawErrors: string[] = [];
+    const adapter = new OpenAICompatibleAdapter({
+      profileId: config.providerProfileId,
+      kind: createServerProviderKind(config),
+      baseUrl: config.baseUrl,
+      modelIds: config.defaultModelIds,
+      supportsModelList: config.supportsModelList,
+      requiresAuth: !config.noAuth,
+      fetchImpl: options.fetchImpl ?? fetch,
+    });
+    const models = await adapter.discoverModels({
+      resolveSecret: async () => apiKey,
+      timeoutMs: options.timeoutMs ?? 1_500,
+      onRawError(status, redactedSnippet) {
+        rawErrors.push(`${status} ${redactedSnippet}`.trim());
+      },
+    });
+    const fallbackIds = new Set(fallbackModels.map((model) => model.id));
+    const fellBackToStatic =
+      rawErrors.length > 0 && models.length === fallbackModels.length && models.every((model) => fallbackIds.has(model.id));
+
+    return {
+      id: `model_discovery_${providerProfileId}_${models.length || "fallback"}`,
+      providerProfileId,
+      status: "succeeded",
+      source: "remote_probe",
+      models: models.length ? models : fallbackModels,
+      selectedModelId: (models[0] ?? fallbackModels[0])?.id,
+      redactionApplied: true,
+      warnings: fellBackToStatic ? [`remote /models failed; using static model fallback: ${rawErrors[0]}`] : [],
+      createdAt,
+    };
+  }
+
   const endpoint = `${config.baseUrl.replace(/\/$/, "")}/models`;
   try {
     const response = await fetchWithTimeout(
@@ -672,6 +733,8 @@ function createServerProviderDisplayName(providerProfileId: string) {
     provider_apifun_claude: "APIKey.fun Claude A",
     provider_apifun_claude_b: "APIKey.fun Claude B",
     provider_apikeyfun_codex: "APIKey.fun Codex/GPT",
+    provider_openai_compat: "OpenAI Official",
+    provider_openrouter_dgx: "OpenRouter DGX-02 Key",
     provider_codex_oauth: "Codex OAuth Session",
     provider_grok_oauth_dgx: "Grok OAuth #1",
     provider_grok_oauth_dgx_2: "Grok OAuth #2",
@@ -686,6 +749,10 @@ function createServerProviderKind(config: ServerProviderProxyConfig): ProviderKi
     return "anthropic";
   }
 
+  if (config.providerProfileId.includes("openrouter")) {
+    return "openrouter";
+  }
+
   if (config.providerProfileId.includes("grok") || config.providerProfileId.includes("codex_oauth")) {
     return "custom";
   }
@@ -698,7 +765,7 @@ function createServerProviderTrustLevel(providerProfileId: string): ProviderTrus
     return "untrusted";
   }
 
-  if (providerProfileId.includes("apikeyfun")) {
+  if (providerProfileId.includes("openrouter") || providerProfileId.includes("apikeyfun")) {
     return "limited";
   }
 
@@ -724,6 +791,14 @@ function createServerProviderTags(providerProfileId: string) {
 
   if (providerProfileId.includes("apikeyfun")) {
     return ["dgx-secret-ref", "server-proxy", "apikey.fun", "codex", "openai-compatible"];
+  }
+
+  if (providerProfileId.includes("openrouter")) {
+    return ["dgx-secret-ref", "server-proxy", "openrouter", "openai-compatible"];
+  }
+
+  if (providerProfileId.includes("openai_compat")) {
+    return ["dgx-secret-ref", "server-proxy", "openai", "openai-compatible"];
   }
 
   if (providerProfileId.includes("codex_oauth")) {
@@ -873,82 +948,27 @@ export async function createDgxProviderCompletionResponse(
   request: ProviderCompletionRequest,
   options: DgxProviderCompletionOptions = {},
 ): Promise<ProviderCompletionResponse> {
-  const createdAt = options.now ?? new Date().toISOString();
   const vllmBaseUrl = options.vllmBaseUrl ?? process.env.DGX02_VLLM_BASE_URL ?? DEFAULT_DGX02_VLLM_BASE_URL;
-  const endpoint = `${vllmBaseUrl.replace(/\/$/, "")}/chat/completions`;
   const fetchImpl = options.fetchImpl ?? fetch;
 
   if (request.providerProfileId !== "provider_dgx02_vllm") {
     return createServerProviderProxyCompletionResponse(request, options);
   }
 
-  try {
-    const response = await fetchImpl(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(createServerDgxVllmRequestBody(request.modelId, request.messages)),
-    });
-    const rawText = await response.text();
-
-    if (!response.ok) {
-      return {
-        id: `provider_completion_response_${crypto.randomUUID()}`,
-        requestId: request.id,
-        providerProfileId: request.providerProfileId,
-        modelId: request.modelId,
-        route: "server_proxy",
-        status: "failed",
-        endpoint,
-        error: `DGX-02 vLLM request failed: ${response.status} ${redactSecretsForLog(rawText.slice(0, 240))}`,
-        createdAt,
-      };
-    }
-
-    const parsed = JSON.parse(rawText) as DgxCompletionResponse;
-    const content = parsed.choices?.[0]?.message?.content?.trim();
-    if (!content) {
-      return {
-        id: `provider_completion_response_${crypto.randomUUID()}`,
-        requestId: request.id,
-        providerProfileId: request.providerProfileId,
-        modelId: request.modelId,
-        route: "server_proxy",
-        status: "failed",
-        endpoint,
-        error: "DGX-02 vLLM returned an empty response",
-        createdAt,
-      };
-    }
-
-    return {
-      id: `provider_completion_response_${crypto.randomUUID()}`,
-      requestId: request.id,
-      providerProfileId: request.providerProfileId,
-      modelId: request.modelId,
-      route: "server_proxy",
-      status: "succeeded",
-      content,
-      endpoint,
-      usage: {
-        inputTokens: parsed.usage?.prompt_tokens,
-        outputTokens: parsed.usage?.completion_tokens,
-        totalTokens: parsed.usage?.total_tokens,
+  return createOpenAICompatibleServerCompletion({
+    request,
+    profileId: "provider_dgx02_vllm",
+    kind: "openai",
+    baseUrl: vllmBaseUrl,
+    modelIds: [DEFAULT_DGX_MODEL_ID],
+    requiresAuth: false,
+    fetchImpl,
+    extraBody: {
+      chat_template_kwargs: {
+        enable_thinking: false,
       },
-      createdAt,
-    };
-  } catch (error) {
-    return {
-      id: `provider_completion_response_${crypto.randomUUID()}`,
-      requestId: request.id,
-      providerProfileId: request.providerProfileId,
-      modelId: request.modelId,
-      route: "server_proxy",
-      status: "failed",
-      endpoint,
-      error: error instanceof Error ? error.message : String(error),
-      createdAt,
-    };
-  }
+    },
+  });
 }
 
 export async function createServerProviderProxyCompletionResponse(
@@ -1016,6 +1036,20 @@ export async function createServerProviderProxyCompletionResponse(
   }
 
   const endpoint = createServerProviderEndpoint(config);
+  if (config.apiStyle !== "anthropic_messages") {
+    return createOpenAICompatibleServerCompletion({
+      request,
+      profileId: config.providerProfileId,
+      kind: createServerProviderKind(config),
+      baseUrl: config.baseUrl,
+      modelIds: config.defaultModelIds,
+      supportsModelList: config.supportsModelList,
+      requiresAuth: !config.noAuth,
+      apiKey,
+      fetchImpl,
+    });
+  }
+
   try {
     const response = await fetchImpl(endpoint, {
       method: "POST",
@@ -1079,6 +1113,49 @@ export async function createServerProviderProxyCompletionResponse(
       createdAt,
     };
   }
+}
+
+function createOpenAICompatibleServerCompletion(params: {
+  request: ProviderCompletionRequest;
+  profileId: string;
+  kind: ProviderKind;
+  baseUrl: string;
+  modelIds: string[];
+  supportsModelList?: boolean;
+  requiresAuth: boolean;
+  apiKey?: string;
+  fetchImpl: FetchLike;
+  extraBody?: Record<string, unknown>;
+}) {
+  const adapter = new OpenAICompatibleAdapter({
+    profileId: params.profileId,
+    kind: params.kind,
+    baseUrl: params.baseUrl,
+    modelIds: params.modelIds,
+    supportsModelList: params.supportsModelList,
+    requiresAuth: params.requiresAuth,
+    defaultSystemPrompt: defaultDgxSystemPrompt,
+    maxTokens: 512,
+    temperature: 0.2,
+    extraBody: params.extraBody,
+    fetchImpl: params.fetchImpl,
+  });
+
+  return adapter.complete(
+    {
+      ...params.request,
+      routePreference: "server_proxy",
+    },
+    {
+      resolveSecret: async () => params.apiKey,
+      timeoutMs: 30_000,
+      onRawError(status, redactedSnippet) {
+        if (redactedSnippet) {
+          console.warn(`OpenAI-compatible adapter warning (${status}): ${redactedSnippet}`);
+        }
+      },
+    },
+  );
 }
 
 function createServerProviderEndpoint(config: ServerProviderProxyConfig) {

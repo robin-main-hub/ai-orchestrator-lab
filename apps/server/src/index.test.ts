@@ -219,6 +219,61 @@ describe("server health placeholder", () => {
     }
   });
 
+  it("routes DeepSeek through the OpenAI-compatible adapter without leaking the token into the request body", async () => {
+    const previousKey = process.env.DEEPSEEK_API_KEY;
+    process.env.DEEPSEEK_API_KEY = "deepseek-test-secret";
+
+    try {
+      const response = await createDgxProviderCompletionResponse(
+        {
+          id: "provider_completion_request_deepseek",
+          sessionId: "session_1",
+          providerProfileId: "provider_deepseek_dgx",
+          modelId: "deepseek-v4-flash",
+          messages: [
+            { role: "system", content: "Use concise Korean." },
+            { role: "user", content: "Reply OK only" },
+          ],
+          source: "desktop",
+          routePreference: "server_proxy",
+          createdAt: "2026-05-24T00:00:00.000Z",
+        },
+        {
+          now: "2026-05-24T00:00:00.000Z",
+          fetchImpl: async (url, init) => {
+            expect(url).toBe("https://api.deepseek.com/v1/chat/completions");
+            expect(init?.headers?.authorization).toBe("Bearer deepseek-test-secret");
+            expect(String(init?.body)).not.toContain("deepseek-test-secret");
+            const body = JSON.parse(String(init?.body)) as { model: string; messages: Array<{ role: string; content: string }> };
+            expect(body.model).toBe("deepseek-v4-flash");
+            expect(body.messages.filter((message) => message.role === "system")).toHaveLength(1);
+            expect(body.messages[0]?.content).toContain("Use concise Korean.");
+            return {
+              ok: true,
+              status: 200,
+              async text() {
+                return JSON.stringify({
+                  choices: [{ message: { content: "DeepSeek OK" } }],
+                  usage: { prompt_tokens: 9, completion_tokens: 2, total_tokens: 11 },
+                });
+              },
+            };
+          },
+        },
+      );
+
+      expect(response.status).toBe("succeeded");
+      expect(response.content).toBe("DeepSeek OK");
+      expect(response.usage?.totalTokens).toBe(11);
+    } finally {
+      if (previousKey === undefined) {
+        delete process.env.DEEPSEEK_API_KEY;
+      } else {
+        process.env.DEEPSEEK_API_KEY = previousKey;
+      }
+    }
+  });
+
   it("routes Codex OAuth completions through the CLI adapter without calling HTTP fetch", async () => {
     const response = await createDgxProviderCompletionResponse(
       {
