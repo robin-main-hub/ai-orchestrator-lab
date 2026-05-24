@@ -23,7 +23,11 @@ import type {
   RuntimeSnapshot,
   SecretAvailability,
 } from "@ai-orchestrator/protocol";
-import { eventSyncPushRequestSchema } from "@ai-orchestrator/protocol";
+import {
+  eventSyncPushRequestSchema,
+  providerCompletionRequestSchema,
+  remoteExecutionRequestSchema,
+} from "@ai-orchestrator/protocol";
 
 export type ServerCapability =
   | "health"
@@ -352,7 +356,7 @@ export async function probeDgxVllm({
     const response = await fetchWithTimeout(fetchImpl, `${baseUrl}/models`, { method: "GET" }, timeoutMs);
     const rawText = await response.text();
     if (!response.ok) {
-      throw new Error(`vLLM /models failed: ${response.status} ${rawText.slice(0, 240)}`);
+      throw new Error(`vLLM /models failed: ${response.status} ${redactSecretsForLog(rawText.slice(0, 240))}`);
     }
 
     const parsed = JSON.parse(rawText) as { data?: Array<{ id?: string }> };
@@ -466,7 +470,7 @@ export async function createServerProviderModelDiscoveryResponse(
     );
     const rawText = await response.text();
     if (!response.ok) {
-      throw new Error(`${response.status} ${rawText.slice(0, 180)}`);
+      throw new Error(`${response.status} ${redactSecretsForLog(rawText.slice(0, 180))}`);
     }
 
     const parsed = JSON.parse(rawText) as { data?: Array<{ id?: string }> };
@@ -858,7 +862,7 @@ export async function createDgxProviderCompletionResponse(
         route: "server_proxy",
         status: "failed",
         endpoint,
-        error: `DGX-02 vLLM request failed: ${response.status} ${rawText.slice(0, 240)}`,
+        error: `DGX-02 vLLM request failed: ${response.status} ${redactSecretsForLog(rawText.slice(0, 240))}`,
         createdAt,
       };
     }
@@ -963,7 +967,7 @@ export async function createServerProviderProxyCompletionResponse(
         route: "server_proxy",
         status: "failed",
         endpoint,
-        error: `DGX-02 provider proxy failed: ${response.status} ${rawText.slice(0, 240)}`,
+        error: `DGX-02 provider proxy failed: ${response.status} ${redactSecretsForLog(rawText.slice(0, 240))}`,
         createdAt,
       };
     }
@@ -1605,14 +1609,40 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     }
 
     if (pathname === "/provider-completions" && request.method === "POST") {
-      const payload = (await readJsonBody(request)) as ProviderCompletionRequest;
+      let payload: ProviderCompletionRequest;
+      try {
+        payload = providerCompletionRequestSchema.parse(await readJsonBody(request)) as ProviderCompletionRequest;
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) {
+          respondJson(413, { error: "payload_too_large", limit: error.limit });
+          return;
+        }
+        respondJson(400, {
+          error: "invalid_provider_completion_payload",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
       const completion = await createDgxProviderCompletionResponse(payload);
       respondJson(completion.status === "succeeded" ? 200 : 502, completion);
       return;
     }
 
     if (pathname === "/remote-runs" && request.method === "POST") {
-      const payload = (await readJsonBody(request)) as RemoteExecutionRequest;
+      let payload: RemoteExecutionRequest;
+      try {
+        payload = remoteExecutionRequestSchema.parse(await readJsonBody(request)) as RemoteExecutionRequest;
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) {
+          respondJson(413, { error: "payload_too_large", limit: error.limit });
+          return;
+        }
+        respondJson(400, {
+          error: "invalid_remote_execution_payload",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
       respondJson(202, createRemoteRunResponse(payload));
       return;
     }
@@ -1622,6 +1652,10 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       try {
         payload = eventSyncPushRequestSchema.parse(await readJsonBody(request)) as EventSyncPushRequest;
       } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) {
+          respondJson(413, { error: "payload_too_large", limit: error.limit });
+          return;
+        }
         respondJson(400, {
           error: "invalid_event_sync_payload",
           message: error instanceof Error ? error.message : String(error),
@@ -1690,10 +1724,26 @@ async function fetchWithTimeout(fetchImpl: FetchLike, input: string, init: Param
   }
 }
 
+const MAX_JSON_BODY_BYTES = 1_048_576;
+
+class RequestBodyTooLargeError extends Error {
+  constructor(public limit: number) {
+    super(`request body exceeds ${limit} byte limit`);
+    this.name = "RequestBodyTooLargeError";
+  }
+}
+
 async function readJsonBody(request: IncomingMessage) {
   const chunks: Buffer[] = [];
+  let total = 0;
   for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buf.length;
+    if (total > MAX_JSON_BODY_BYTES) {
+      request.destroy();
+      throw new RequestBodyTooLargeError(MAX_JSON_BODY_BYTES);
+    }
+    chunks.push(buf);
   }
 
   const rawBody = Buffer.concat(chunks).toString("utf8");
@@ -1855,11 +1905,25 @@ function getDefaultEventStorageDir() {
   return process.env.EVENT_STORAGE_DIR ?? join(process.cwd(), "data", "events");
 }
 
+const SECRET_LIKE_PATTERNS: ReadonlyArray<RegExp> = [
+  /\bsk-[A-Za-z0-9_-]{16,}\b/,
+  /\b(?:claude|anthropic|grok|xai|deepseek|ghp|gho|ghs|ghr|ghu|glpat|pat)[-_][A-Za-z0-9_-]{16,}\b/i,
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b/i,
+  /\b(?:API_KEY|AUTH_TOKEN|SECRET|TOKEN|PASSWORD|PRIVATE_KEY)\s*[:=]\s*[^"'\s,}]{4,}/i,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+];
+
 function containsSecretLikeText(value: unknown): boolean {
   const text = fingerprintEvent(value);
-  return /\bsk-[A-Za-z0-9_-]{8,}\b/.test(text) ||
-    /\bBearer\s+[A-Za-z0-9._~+/=-]+\b/i.test(text) ||
-    /\b(?:API_KEY|AUTH_TOKEN|SECRET|TOKEN)\s*=\s*[^"'\s]+/i.test(text);
+  return SECRET_LIKE_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function redactSecretsForLog(text: string): string {
+  let masked = text;
+  for (const pattern of SECRET_LIKE_PATTERNS) {
+    masked = masked.replace(new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`), "<redacted>");
+  }
+  return masked;
 }
 
 function fingerprintEvent(value: unknown): string {
