@@ -1568,9 +1568,10 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     }
 
     if (pathname === "/health") {
+      const storageSnapshot = await createPersistentEventStorageSnapshot(eventStorage);
       respondJson(200, {
         ...(await createLiveHealthResponse()),
-        eventStorage: await createPersistentEventStorageSnapshot(eventStorage),
+        eventStorage: redactInternalPathsForPublicHealth(storageSnapshot),
       } satisfies ServerHealthResponse);
       return;
     }
@@ -1700,12 +1701,23 @@ async function readJsonBody(request: IncomingMessage) {
   return rawBody ? JSON.parse(rawBody) : {};
 }
 
-const ALLOWED_ORIGINS = new Set<string>([
+const DEFAULT_ALLOWED_ORIGINS: ReadonlyArray<string> = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5174",
   "https://orchestrator.endruin.com",
-]);
+];
 
+export function resolveAllowedOrigins(): Set<string> {
+  const extras = (process.env.ORCHESTRATOR_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return new Set<string>([...DEFAULT_ALLOWED_ORIGINS, ...extras]);
+}
+
+const ALLOWED_ORIGINS = resolveAllowedOrigins();
 const FALLBACK_ALLOWED_ORIGIN = "http://localhost:5173";
 const ALLOWED_METHODS = "GET, HEAD, OPTIONS, POST";
 
@@ -1727,8 +1739,18 @@ function resolveOrchestratorApiToken(): string {
   return devToken;
 }
 
-function pickAllowedOrigin(originHeader?: string): string {
-  return originHeader && ALLOWED_ORIGINS.has(originHeader) ? originHeader : FALLBACK_ALLOWED_ORIGIN;
+export function pickAllowedOrigin(originHeader: string | undefined, allowed: Set<string> = ALLOWED_ORIGINS): string {
+  return originHeader && allowed.has(originHeader) ? originHeader : FALLBACK_ALLOWED_ORIGIN;
+}
+
+export function redactInternalPathsForPublicHealth(
+  snapshot: ServerEventStorageSnapshot,
+): ServerEventStorageSnapshot {
+  return {
+    ...snapshot,
+    storageDir: "",
+    eventLogPath: "",
+  };
 }
 
 function createCorsHeaders(originHeader?: string) {
