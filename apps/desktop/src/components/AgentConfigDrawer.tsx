@@ -2,11 +2,23 @@ import { X } from "lucide-react";
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
 import { createDefaultPersonaSettings, agentRoleLabel } from "../lib/helpers";
 import { agentConfigPanelTitle, configSourceLabel, creativityLevelLabel, creativityTemperature, voicePresetLabel } from "../lib/uiLabels";
-import type { AgentConfigTab, AgentCreativityLevel, AgentPersonaSettings, AgentVoicePreset, WorkbenchAgent } from "../types";
+import type {
+  AgentConfigFile,
+  AgentConfigTab,
+  AgentCreativityLevel,
+  AgentPersonaSettings,
+  AgentVoicePreset,
+  WorkbenchAgent,
+} from "../types";
+
+function configFileOptionLabel(file: AgentConfigFile) {
+  return `${file.label} / ${file.path}`;
+}
 
 export function AgentConfigDrawer({
   activeTab,
   agent,
+  configFiles,
   memoryMode,
   onClose,
   onUpdateAgentConfig,
@@ -16,6 +28,7 @@ export function AgentConfigDrawer({
 }: {
   activeTab: AgentConfigTab;
   agent: WorkbenchAgent;
+  configFiles: AgentConfigFile[];
   memoryMode: string;
   onClose: () => void;
   onUpdateAgentConfig: (patch: Partial<Pick<WorkbenchAgent, "configSource" | "soulMode">>) => void;
@@ -23,6 +36,9 @@ export function AgentConfigDrawer({
   persona: AgentPersonaSettings;
   provider?: ProviderProfile;
 }) {
+  const soulFiles = configFiles.filter((file) => file.kind === "soul");
+  const agentsFiles = configFiles.filter((file) => file.kind === "agents");
+
   return (
     <aside className="agent-config-drawer" aria-label="Agent profile settings">
       <header>
@@ -64,6 +80,29 @@ export function AgentConfigDrawer({
         ) : null}
         {activeTab === "soul" ? (
           <div className="agent-config-stack soul-config-panel">
+            <label>
+              <span>라이브러리에서 선택</span>
+              <select
+                value={soulFiles.find((file) => file.path === persona.soulMdPath)?.id ?? ""}
+                onChange={(event) => {
+                  const file = soulFiles.find((candidate) => candidate.id === event.target.value);
+                  if (!file) {
+                    return;
+                  }
+                  onUpdatePersona({
+                    soulMdPath: file.path,
+                    soulSummary: file.body,
+                  });
+                }}
+              >
+                <option value="">직접 입력</option>
+                {soulFiles.map((file) => (
+                  <option key={file.id} value={file.id}>
+                    {configFileOptionLabel(file)}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label>
               <span>SOUL.md 경로</span>
               <input value={persona.soulMdPath} onChange={(event) => onUpdatePersona({ soulMdPath: event.target.value })} />
@@ -115,6 +154,29 @@ export function AgentConfigDrawer({
         ) : null}
         {activeTab === "agents_md" ? (
           <div className="agent-config-stack">
+            <label>
+              <span>라이브러리에서 선택</span>
+              <select
+                value={agentsFiles.find((file) => file.path === persona.agentsMdPath)?.id ?? ""}
+                onChange={(event) => {
+                  const file = agentsFiles.find((candidate) => candidate.id === event.target.value);
+                  if (!file) {
+                    return;
+                  }
+                  onUpdatePersona({
+                    agentsInstruction: file.body,
+                    agentsMdPath: file.path,
+                  });
+                }}
+              >
+                <option value="">직접 입력</option>
+                {agentsFiles.map((file) => (
+                  <option key={file.id} value={file.id}>
+                    {configFileOptionLabel(file)}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label>
               <span>AGENTS.md 경로</span>
               <input
