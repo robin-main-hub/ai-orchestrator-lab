@@ -808,6 +808,9 @@ type DgxCompletionResponse = {
   };
 };
 
+const defaultDgxSystemPrompt =
+  "Answer directly in Korean when the user writes Korean. Do not reveal reasoning or a thinking process.";
+
 type AnthropicMessageResponse = {
   content?: Array<{
     type?: string;
@@ -1184,22 +1187,43 @@ function expandHomePath(value: string) {
 function createServerDgxVllmRequestBody(modelId: string, messages: ProviderCompletionMessage[]) {
   return {
     model: modelId,
-    messages: [
-      {
-        role: "system",
-        content: "Answer directly in Korean when the user writes Korean. Do not reveal reasoning or a thinking process.",
-      },
-      ...messages.slice(-8).map((message) => ({
-        role: message.role === "assistant" || message.role === "system" || message.role === "tool" ? message.role : "user",
-        content: message.content,
-      })),
-    ],
+    messages: createServerDgxChatMessages(messages),
     max_tokens: 512,
     temperature: 0.2,
     chat_template_kwargs: {
       enable_thinking: false,
     },
   };
+}
+
+function createServerDgxChatMessages(messages: ProviderCompletionMessage[]) {
+  const systemParts = [defaultDgxSystemPrompt];
+  const chatMessages: Array<{ role: "assistant" | "user"; content: string }> = [];
+
+  for (const message of messages) {
+    const content = message.content.trim();
+    if (!content) {
+      continue;
+    }
+
+    if (message.role === "system") {
+      systemParts.push(content);
+      continue;
+    }
+
+    chatMessages.push({
+      role: message.role === "assistant" ? "assistant" : "user",
+      content,
+    });
+  }
+
+  return [
+    {
+      role: "system" as const,
+      content: systemParts.join("\n\n"),
+    },
+    ...chatMessages.slice(-8),
+  ];
 }
 
 export function createDgxHeartbeat(runtime = createRuntimeSnapshot(), checkedAt = new Date().toISOString()): DgxHeartbeat {

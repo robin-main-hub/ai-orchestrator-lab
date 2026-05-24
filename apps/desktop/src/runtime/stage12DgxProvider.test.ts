@@ -50,6 +50,17 @@ describe("stage12 DGX provider completion", () => {
     expect(body.messages[1]?.content).toBe("Can DGX answer now?");
   });
 
+  it("keeps desktop pipeline system prompts inside the leading vLLM system message", () => {
+    const body = createDgxVllmRequestBody("qwen36-gio-wiki-rag-prisma", [
+      { ...messages[0]!, role: "system", content: "Desktop pipeline context." },
+      ...messages,
+    ]);
+
+    expect(body.messages.filter((message) => message.role === "system")).toHaveLength(1);
+    expect(body.messages[0]?.content).toContain("Desktop pipeline context.");
+    expect(body.messages[1]?.role).toBe("user");
+  });
+
   it("builds a server proxy request without raw provider endpoints", () => {
     const request = createProviderCompletionProxyRequest(provider, "qwen36-gio-wiki-rag-prisma", messages);
 

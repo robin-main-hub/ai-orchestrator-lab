@@ -125,6 +125,47 @@ describe("server health placeholder", () => {
     expect(response.usage?.totalTokens).toBe(14);
   });
 
+  it("merges desktop system prompts before proxying to strict vLLM chat templates", async () => {
+    const response = await createDgxProviderCompletionResponse(
+      {
+        id: "provider_completion_request_system_merge",
+        sessionId: "session_1",
+        providerProfileId: "provider_dgx02_vllm",
+        modelId: "qwen36-gio-wiki-rag-prisma",
+        messages: [
+          { role: "system", content: "Desktop pipeline context." },
+          { role: "user", content: "Reply OK only" },
+        ],
+        source: "desktop",
+        routePreference: "server_proxy",
+        createdAt: "2026-05-24T00:00:00.000Z",
+      },
+      {
+        now: "2026-05-24T00:00:00.000Z",
+        vllmBaseUrl: "http://127.0.0.1:8001/v1",
+        fetchImpl: async (_url, init) => {
+          const body = JSON.parse(String(init?.body)) as { messages: Array<{ role: string; content: string }> };
+          expect(body.messages.filter((message) => message.role === "system")).toHaveLength(1);
+          expect(body.messages[0]?.content).toContain("Desktop pipeline context.");
+          expect(body.messages[1]?.role).toBe("user");
+          return {
+            ok: true,
+            status: 200,
+            async text() {
+              return JSON.stringify({
+                choices: [{ message: { content: "OK" } }],
+                usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+              });
+            },
+          };
+        },
+      },
+    );
+
+    expect(response.status).toBe("succeeded");
+    expect(response.content).toBe("OK");
+  });
+
   it("routes APIFun Claude through DGX-02 secret refs without leaking the token into the request body", async () => {
     const previousKey = process.env.APIFUN_API_KEY;
     process.env.APIFUN_API_KEY = "apifun-test-secret";
