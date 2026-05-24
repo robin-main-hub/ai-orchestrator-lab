@@ -128,10 +128,16 @@ function createUnreachableRuntime(localRuntime: RuntimeSnapshot, checkedAt: stri
               status: "offline",
               lastSeenAt: checkedAt,
             }
+          : client.outboxMode === "online_only"
+            ? {
+                ...client,
+                status: "degraded",
+                lastSeenAt: checkedAt,
+              }
           : client,
       ),
     },
-    recentError: `dgx-02:4317 unavailable; direct vLLM fallback remains available. ${error}`,
+    recentError: `dgx-02:4317 unavailable; MacBook keeps local outbox, Home PC waits for DGX-02 recovery. ${error}`,
     updatedAt: checkedAt,
   };
 }

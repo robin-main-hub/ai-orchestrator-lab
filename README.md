@@ -9,7 +9,7 @@
 - 데스크톱 앱이 전체 지휘실 역할을 한다.
 - `dgx-02`는 강한 모델, 로컬 LLM 서버, 장기 메모리, 원격 작업 실행을 담당한다.
 - 서버 접속이 불가능하면 맥북의 로컬 모델과 로컬 CLI만으로 오케스트레이션/토론을 계속한다.
-- DGX-02를 중앙 데이터 권위로 두고, 맥북과 집 PC는 로컬 SQLite 캐시/outbox를 통해 오프라인 후 온라인 복구 시 동기화한다.
+- DGX-02를 중앙 데이터 권위로 두고, 맥북은 로컬 SQLite 캐시/outbox로 복구 동기화한다. 집 PC는 DGX-02 상시 연결 클라이언트로 보고, DGX-02 장애 시에는 비상 degraded 상태로 둔다.
 - 토론 기능을 끈 상태에서는 OpenClaw/Claude/Codex/로컬 모델과 1:1 대화하듯 작업한다.
 - 하나의 API 또는 하나의 모델에서도 여러 가상 에이전트를 만들어 병렬 토론과 역할 분담을 수행한다.
 - 여러 프로바이더 프로파일을 동시에 등록하고, 실행마다 모델/API 키/검증 모델을 바꿀 수 있다.
@@ -136,3 +136,11 @@ corepack pnpm dev
 - `apps/desktop`은 이벤트를 만들 때 DGX-02 Event Storage로 sync를 시도하고, 실패하면 local outbox 상태로 남긴다.
 - Terminal dock의 Event Storage 카드에서 DGX-02 revision, outbox count, 수동 sync 버튼을 볼 수 있다.
 - `scripts/smoke-dgx-server.mjs`는 `/health`, `/provider-completions`, `/events/sync`를 함께 확인한다.
+
+## Stage16
+
+- MacBook client id를 `client_macbook`으로 통일하고, Event Storage sync가 실제 MacBook outbox count를 갱신하도록 수정했다.
+- Home PC는 offline-first outbox 대상이 아니라 `online_only` / `requires_dgx` 클라이언트로 분리했다.
+- DGX-02 서버가 내려가면 MacBook은 local outbox로 큐잉하고, Home PC는 DGX 복구 대기 degraded 상태로 표시한다.
+- 데스크톱 앱에 browser localStorage 기반 Event outbox adapter를 추가했다. 이후 Tauri/Electron 단계에서 같은 인터페이스를 SQLite로 교체하면 된다.
+- 앱 새로고침 후에도 MacBook outbox에 남은 이벤트를 다시 DGX-02 `/events/sync`로 밀어넣는다.

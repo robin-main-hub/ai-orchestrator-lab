@@ -44,7 +44,7 @@ export function createInitialEventSyncState(outboxCount = 0): Stage14EventSyncSt
 
 export function createEventSyncPushRequest({
   events,
-  clientId = "macbook",
+  clientId = "client_macbook",
   sessionId = events[0]?.sessionId ?? "session_desktop_001",
   createdAt = new Date().toISOString(),
 }: Pick<Stage14EventSyncInput, "events" | "clientId" | "sessionId" | "createdAt">): EventSyncPushRequest {
@@ -60,7 +60,7 @@ export function createEventSyncPushRequest({
 
 export async function pushEventsToDgxEventStorage({
   events,
-  clientId = "macbook",
+  clientId = "client_macbook",
   sessionId = events[0]?.sessionId ?? "session_desktop_001",
   serverBaseUrl = DEFAULT_DGX_EVENT_SYNC_BASE_URL,
   fetchImpl = fetch,

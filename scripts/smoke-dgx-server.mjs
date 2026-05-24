@@ -13,9 +13,9 @@ const completionRequest = {
 
 const eventSyncRequest = {
   id: `event_sync_smoke_${Date.now()}`,
-  clientId: "macbook",
+  clientId: "client_macbook",
   sessionId: "session_smoke",
-  idempotencyKey: `macbook:session_smoke:event_sync_smoke_${Date.now()}`,
+  idempotencyKey: `client_macbook:session_smoke:event_sync_smoke_${Date.now()}`,
   createdAt: new Date().toISOString(),
   events: [
     {
