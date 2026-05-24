@@ -374,6 +374,7 @@ button {
 .provider-registration-list article {
   display: grid;
   grid-template-columns: minmax(0, 1fr) repeat(3, 26px);
+  grid-template-rows: auto auto;
   align-items: center;
   gap: 5px;
   min-width: 0;
@@ -391,20 +392,25 @@ button {
 .provider-registration-list span {
   display: block;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .provider-registration-list strong {
   color: var(--text);
   font-size: 11px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .provider-registration-list span {
+  grid-column: 1 / -1;
   margin-top: 2px;
   color: var(--subtle);
   font-size: 9px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .mini-panel,
