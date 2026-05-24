@@ -5,7 +5,7 @@ export const maxDraftAttachments = 5;
 export const agentVisualStorageKey = "ai-orchestrator-lab.agent-visuals.v1";
 export const providerProfilesStorageKey = "ai-orchestrator-lab.provider-profiles.v1";
 export const providerProfilesSeedVersionKey = "ai-orchestrator-lab.provider-profiles.seed-version";
-export const providerProfilesSeedVersion = "2026-05-25-grok-pii-redacted";
+export const providerProfilesSeedVersion = "2026-05-25-codex-oauth-main";
 export const defaultObsidianVaultRoot = "F:/obsidian/ai-headquarter";
 
 export const agentRoleOptions: WorkbenchAgent["role"][] = [
