@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MobileAttachment, MobileMessage, MobileSoul } from "../types";
 import { Composer } from "../components/Composer";
 import { MessageList } from "../components/MessageList";
@@ -8,6 +8,8 @@ import {
   type MobileSessionEntry,
 } from "../components/SessionListSheet";
 import { useSoulBackground } from "../hooks/useBackgroundImage";
+import { requestChatCompletion } from "../lib/chatCompletion";
+import { MobileApiError } from "../lib/api";
 
 type Props = {
   souls: MobileSoul[];
@@ -22,6 +24,7 @@ export function Chat({ souls, activeSoulId, onChangeSoul }: Props) {
   const [sessionListOpen, setSessionListOpen] = useState(false);
   const [sessions, setSessions] = useState<MobileSessionEntry[]>([]);
   const [chatNonce, setChatNonce] = useState(0);
+  const sessionIdRef = useRef<string>(generateSessionId(activeSoulId));
 
   // Re-apply background each time the active SOUL changes.
   useSoulBackground(activeSoulId);
@@ -33,48 +36,73 @@ export function Chat({ souls, activeSoulId, onChangeSoul }: Props) {
 
   // Reset transient chat state whenever the user switches SOULs or starts a
   // new conversation. (Persisted message history will come from event sync in
-  // the backend wiring PR.)
+  // a follow-up PR.) Each reset also rolls a fresh sessionId so server-side
+  // /events/sync can keep turns grouped correctly.
   useEffect(() => {
     setMessages([]);
+    sessionIdRef.current = generateSessionId(activeSoulId);
   }, [activeSoulId, chatNonce]);
 
-  const handleSend = (text: string, attachments: MobileAttachment[]) => {
+  const handleSend = async (text: string, attachments: MobileAttachment[]) => {
     const now = new Date().toISOString();
+    const userContent = text || (attachments.length > 0 ? "(파일 첨부)" : "");
     const userMessage: MobileMessage = {
       id: `msg_${crypto.randomUUID()}`,
       role: "user",
-      content: text || (attachments.length > 0 ? "(파일 첨부)" : ""),
+      content: userContent,
       attachments: attachments.length > 0 ? attachments : undefined,
       createdAt: now,
     };
     setMessages((prev) => [...prev, userMessage]);
     setPending(true);
 
-    window.setTimeout(() => {
-      const reply: MobileMessage = {
-        id: `msg_${crypto.randomUUID()}`,
-        role: "assistant",
-        content: `${activeSoul.avatarEmoji} ${activeSoul.name}: mock 응답 — "${text || "파일 받음"}"`,
-        createdAt: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, reply]);
-      setPending(false);
+    const history = messages.map((m) => ({
+      role: m.role,
+      // Attachments are not yet uploaded server-side; for now we surface a
+      // text marker in history so the model knows files were attached.
+      content: m.attachments?.length
+        ? `${m.content}\n[첨부 ${m.attachments.length}개]`
+        : m.content,
+    }));
 
-      // Roll a tiny session list so the sheet has something to show until the
-      // real event-sync feed lands.
-      setSessions((prev) => {
-        const id = `session_${activeSoul.id}_${prev.length + 1}`;
-        const entry: MobileSessionEntry = {
-          id,
-          title: text.slice(0, 30) || `${activeSoul.name}와 대화`,
-          soulId: activeSoul.id,
-          lastMessagePreview: reply.content,
-          updatedAt: reply.createdAt,
-        };
-        const filtered = prev.filter((s) => s.id !== id);
-        return [entry, ...filtered].slice(0, 20);
+    let replyContent: string;
+    try {
+      const response = await requestChatCompletion({
+        sessionId: sessionIdRef.current,
+        soul: activeSoul,
+        history,
+        userText: userContent,
       });
-    }, 500);
+      if (response.status === "succeeded" && response.content) {
+        replyContent = response.content;
+      } else {
+        replyContent = `⚠️ ${response.error ?? "응답을 받지 못했습니다."}`;
+      }
+    } catch (err) {
+      replyContent = formatChatError(err, activeSoul);
+    }
+
+    const reply: MobileMessage = {
+      id: `msg_${crypto.randomUUID()}`,
+      role: "assistant",
+      content: replyContent,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, reply]);
+    setPending(false);
+
+    setSessions((prev) => {
+      const id = sessionIdRef.current;
+      const entry: MobileSessionEntry = {
+        id,
+        title: text.slice(0, 30) || `${activeSoul.name}와 대화`,
+        soulId: activeSoul.id,
+        lastMessagePreview: reply.content,
+        updatedAt: reply.createdAt,
+      };
+      const filtered = prev.filter((s) => s.id !== id);
+      return [entry, ...filtered].slice(0, 20);
+    });
   };
 
   const handleNewSession = () => {
@@ -152,4 +180,16 @@ export function Chat({ souls, activeSoulId, onChangeSoul }: Props) {
       />
     </div>
   );
+}
+
+function generateSessionId(soulId: string): string {
+  return `session_mobile_${soulId}_${Date.now().toString(36)}`;
+}
+
+function formatChatError(err: unknown, soul: MobileSoul): string {
+  if (err instanceof MobileApiError) {
+    return `⚠️ ${soul.name}: ${err.userMessage}`;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return `⚠️ ${soul.name}: 예상치 못한 오류 — ${message}`;
 }

@@ -6,6 +6,12 @@ import {
   seedHandoffs,
   seedMemory,
 } from "../seeds";
+import {
+  loadConnectionSettings,
+  resetConnectionSettings,
+  saveConnectionSettings,
+  type ConnectionSettings,
+} from "../lib/connection";
 
 type Props = {
   onSignOut: () => void;
@@ -298,39 +304,14 @@ function GeneralSettings({ onBack }: { onBack: () => void }) {
   );
 }
 
-const CONNECTION_STORAGE = "mobile.settings.connection";
-type ConnectionSettingsValue = {
-  baseUrlPrimary: string;
-  baseUrlFallback: string;
-  apiToken: string;
-};
-const CONNECTION_DEFAULT: ConnectionSettingsValue = {
-  baseUrlPrimary: "https://orchestrator.endruin.com",
-  baseUrlFallback: "http://dgx-02:4317",
-  apiToken: "",
-};
-
 function ConnectionSettings({ onBack }: { onBack: () => void }) {
-  const [value, setValue] = useState<ConnectionSettingsValue>(() => {
-    if (typeof localStorage === "undefined") return CONNECTION_DEFAULT;
-    const raw = localStorage.getItem(CONNECTION_STORAGE);
-    if (!raw) return CONNECTION_DEFAULT;
-    try {
-      return { ...CONNECTION_DEFAULT, ...(JSON.parse(raw) as Partial<ConnectionSettingsValue>) };
-    } catch {
-      return CONNECTION_DEFAULT;
-    }
-  });
+  const [value, setValue] = useState<ConnectionSettings>(() => loadConnectionSettings());
   const [showToken, setShowToken] = useState(false);
 
-  const update = <K extends keyof ConnectionSettingsValue>(key: K, v: ConnectionSettingsValue[K]) => {
+  const update = <K extends keyof ConnectionSettings>(key: K, v: ConnectionSettings[K]) => {
     const next = { ...value, [key]: v };
     setValue(next);
-    try {
-      localStorage.setItem(CONNECTION_STORAGE, JSON.stringify(next));
-    } catch (err) {
-      console.warn("[mobile] failed to persist connection settings", err);
-    }
+    saveConnectionSettings(next);
   };
 
   return (
@@ -390,8 +371,8 @@ function ConnectionSettings({ onBack }: { onBack: () => void }) {
             type="button"
             className="button button--danger"
             onClick={() => {
-              setValue(CONNECTION_DEFAULT);
-              localStorage.removeItem(CONNECTION_STORAGE);
+              resetConnectionSettings();
+              setValue(loadConnectionSettings());
             }}
           >
             기본값으로 초기화
