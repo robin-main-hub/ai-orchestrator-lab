@@ -253,14 +253,14 @@ corepack pnpm dev
 ## Stage33
 
 - 중앙 작업판의 큰 모드를 `Conversation`, `Debate`, `Tmux` 3개로 확장했다.
-- `Tmux` 모드는 `docs/17-role-based-tmux-agent-swarm.md`의 8-pane 역할 구조를 화면으로 보여주는 future runtime preview다.
+- `Tmux` 모드는 `docs/17-role-based-tmux-agent-swarm.md`의 4~10 pane 역할 구조를 화면으로 보여주는 future runtime preview다.
 - 실제 tmux 명령 실행은 여전히 비활성화되어 있으며, Event Storage / Permission / Redaction / Execution Slot 기반이 안정화된 뒤에만 구현한다.
 
 ## Stage34
 
 - `Tmux` 탭을 Conversation/Debate 아래로 떨어지지 않게 중앙 상단 우측에 별도 모드 버튼으로 고정했다.
 - Tmux 화면을 중앙 작업판 안에서 완전히 다른 인터페이스로 바꿨다.
-- 왼쪽은 작은 글씨의 Operator Chat으로 최근 대화를 모니터링하고, 오른쪽은 8개 logical pane의 agent 작업상태와 중요 메시지를 보여준다.
+- 왼쪽은 작은 글씨의 Operator Chat으로 최근 대화를 모니터링하고, 오른쪽은 최대 10개 logical pane의 agent 작업상태와 중요 메시지를 보여준다.
 - `packages/protocol`에 `ExecutionSlot`, `AgentSession`, `RunRequestedEventPayload`, `RunCompletedEventPayload` 타입 기반을 추가했다.
 - Gemini CLI는 연결 금지 상태로 표시하고, 실제 tmux command dispatch는 계속 비활성화했다.
 
@@ -286,3 +286,11 @@ corepack pnpm dev
 - 백업 메뉴는 Obsidian/Notion/Mobile projection과 redaction 상태, artifact destination을 보여준다.
 - `scripts/setup-agent-swarm.sh`와 `scripts/swarm-send.sh`를 추가해 `ai-swarm` tmux 세션 생성과 역할별 pane 명령 전송을 지원한다.
 - tmux helper는 pane id를 `.ai-swarm/ai-swarm.env`에 저장하고, obvious secret이 포함된 명령은 전송을 거부한다.
+
+## Stage38
+
+- Tmux Workbench에 오케스트레이터 추천 배치 패널을 추가했다.
+- Coding Packet과 최근 대화의 복잡도, 서버/DGX, 권한, redaction, 백업, memory, tmux 키워드를 기준으로 `light / standard / complex / critical` 난이도를 계산한다.
+- 난이도에 따라 4명, 6명, 8명, 10명 배치를 추천하고, 현재 추천 역할 chip을 화면에 표시한다.
+- tmux pane 후보를 `Research Scout`와 `Memory Curator`까지 확장해 최대 10개 pane을 지원한다.
+- `scripts/setup-agent-swarm.sh --panes 4..10` 옵션을 추가하고 기본값을 10개 pane으로 변경했다.

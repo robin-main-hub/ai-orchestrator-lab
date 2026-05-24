@@ -20,6 +20,7 @@ Conversation Workbench
 The first implemented tmux layer is deliberately conservative:
 
 - `scripts/setup-agent-swarm.sh` creates the local `ai-swarm` session and records pane ids.
+- `scripts/setup-agent-swarm.sh --panes 4..10` controls the swarm size. The default is 10 panes.
 - `scripts/swarm-send.sh` dispatches to stored pane ids by role.
 - Gemini CLI remains disconnected until CLI setup is done.
 - The helper refuses obvious secret-bearing command text.
@@ -192,6 +193,26 @@ Purpose:
 - destructive command safety;
 - regression checks.
 
+### Logical Pane 8: Agent - Research Scout
+
+Purpose:
+
+- external documentation;
+- repository reference checks;
+- architecture examples;
+- provider/model capability comparison;
+- upstream changelog risk.
+
+### Logical Pane 9: Agent - Memory Curator
+
+Purpose:
+
+- Memento recall;
+- decision record cleanup;
+- handoff state maintenance;
+- Obsidian/Notion projection review;
+- long-running project continuity.
+
 ## Relationship to Current v0
 
 In v0, the real tmux swarm is not implemented.
@@ -298,7 +319,7 @@ This script:
 
 1. create or reset the `ai-swarm` tmux session;
 2. build the two-zone layout;
-3. create 8 logical panes;
+3. create 4 to 10 logical panes;
 4. title each pane clearly;
 5. use visible pane labels;
 6. save actual tmux pane IDs to a local env file;
@@ -338,6 +359,8 @@ architect
 frontend
 backend
 qa
+research
+memory
 ```
 
 Example future command shape:
@@ -347,6 +370,8 @@ scripts/swarm-send.sh architect "codex 'Review packages/protocol and propose Eve
 scripts/swarm-send.sh frontend "codex 'Implement Execution Slot UI stub in apps/desktop'"
 scripts/swarm-send.sh backend "codex 'Implement SQLite Event Store adapter skeleton'"
 scripts/swarm-send.sh qa "pnpm typecheck && pnpm test"
+scripts/swarm-send.sh research "codex 'Check upstream docs for tmux pane title behavior'"
+scripts/swarm-send.sh memory "codex 'Summarize this run into handoff notes'"
 ```
 
 The helper is role-based and uses stored pane ids instead of fragile pane indexes. It also refuses command text that appears to contain API keys, bearer tokens, or private key material.
@@ -450,6 +475,7 @@ The preview UI should:
 - remove the normal right rail while Tmux mode is active;
 - use the expanded center surface for agent pane status;
 - show each logical pane with agent name, role, selected model, current status, and important message;
+- let the orchestrator recommend 4, 6, 8, or 10 panes based on task difficulty;
 - show implementation gates for the event storage, Permission Matrix, Redaction, Gemini CLI lockout, runner selection, and profile asset storage;
 - keep real command dispatch disabled.
 

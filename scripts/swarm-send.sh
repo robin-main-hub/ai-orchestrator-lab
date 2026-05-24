@@ -19,6 +19,8 @@ Roles:
   frontend
   backend
   qa
+  research
+  memory
 
 Examples:
   scripts/swarm-send.sh architect "codex 'Review protocol boundaries'"
@@ -27,6 +29,11 @@ Examples:
 The helper sends text to the stored tmux pane id, then presses Enter.
 USAGE
 }
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
 
 if [[ $# -lt 2 ]]; then
   usage >&2
