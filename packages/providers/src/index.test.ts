@@ -123,6 +123,42 @@ describe("provider credential parsing and model discovery", () => {
     expect(readiness.executionMode).toBe("remote");
   });
 
+  it("discovers DGX-02 server-proxy providers for DeepSeek, APIFun, and Grok", () => {
+    const profiles = [
+      createProviderProfile({
+        id: "provider_deepseek_dgx",
+        name: "DeepSeek DGX-02 Key",
+        kind: "openai",
+        defaultModel: "deepseek-chat",
+        tags: ["server-proxy", "deepseek"],
+        trustLevel: "limited",
+      }),
+      createProviderProfile({
+        id: "provider_apifun_claude",
+        name: "APIFun Claude Reseller",
+        kind: "anthropic",
+        defaultModel: "claude-code-compatible",
+        tags: ["server-proxy", "apifun", "reseller"],
+        trustLevel: "untrusted",
+      }),
+      createProviderProfile({
+        id: "provider_grok_oauth_dgx",
+        name: "Grok OAuth on DGX-02",
+        kind: "custom",
+        defaultModel: "grok-oauth-session",
+        tags: ["server-proxy", "grok", "oauth"],
+        trustLevel: "limited",
+      }),
+    ];
+
+    const discoveries = profiles.map((profile) => discoverModelsForProfile(profile, createdAt));
+
+    expect(discoveries.map((discovery) => discovery.source)).toEqual(["remote_probe", "remote_probe", "remote_probe"]);
+    expect(discoveries[0]?.models.map((model) => model.id)).toContain("deepseek-chat");
+    expect(discoveries[1]?.models.map((model) => model.id)).toContain("claude-code-compatible");
+    expect(discoveries[2]?.models.map((model) => model.id)).toContain("grok-oauth-session");
+  });
+
   it("registers CLI and OAuth providers as session bindings without raw secrets", () => {
     const cliProfile = createProviderProfile({
       id: "provider_codex_cli",

@@ -43,10 +43,15 @@ describe("stage2 runtime helpers", () => {
     const redacted = redactForEventStore({
       apiKey: "sk-thisshouldnotpersist",
       command: "Authorization: Bearer abc.def.ghi",
+      env: "DEEPSEEK_API_KEY=deepseek-secret APIFUN_API_KEY=apifun-secret",
+      pem: "-----BEGIN PRIVATE KEY-----\nabc123\n-----END PRIVATE KEY-----",
     });
 
     expect(JSON.stringify(redacted)).not.toContain("sk-thisshouldnotpersist");
     expect(JSON.stringify(redacted)).not.toContain("abc.def.ghi");
+    expect(JSON.stringify(redacted)).not.toContain("deepseek-secret");
+    expect(JSON.stringify(redacted)).not.toContain("apifun-secret");
+    expect(JSON.stringify(redacted)).not.toContain("abc123");
   });
 
   it("creates coding packets from the current conversation state", () => {
