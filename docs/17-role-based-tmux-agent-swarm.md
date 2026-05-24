@@ -205,6 +205,24 @@ v0 should only prepare the following foundations:
 
 The real tmux script must wait until these are stable.
 
+## Current Desktop Preview
+
+The desktop app may expose a `Tmux` top-level mode before real tmux execution exists.
+
+This preview is allowed because it is only a UI/runtime concept boundary.
+
+The preview should keep the same center board and change the interface inside it:
+
+- left side: compact Operator Chat with small text, recent user/orchestrator messages, and planning context;
+- right side: agent work-status board showing each logical pane, assigned role, current state, and important message;
+- bottom/status areas: implementation gate, pending decisions, and disabled real command dispatch notice.
+
+The preview must not send commands to tmux.
+
+The preview must show unresolved decisions as blanks or `미정` so the user can decide later without blocking unrelated implementation.
+
+Gemini CLI must remain disconnected until CLI setup is explicitly completed.
+
 ## Hard Rule: Event Store First
 
 The tmux swarm must never become an untracked side channel.

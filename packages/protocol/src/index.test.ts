@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   agentProfileSchema,
+  agentSessionSchema,
   codingPacketSchema,
   eventEnvelopeSchema,
   eventStorageSessionIndexResponseSchema,
   eventSyncPushRequestSchema,
   eventSyncPushResponseSchema,
+  executionSlotSchema,
   providerProfileSchema,
   type BackupProjectionArtifact,
   type CodingPacket,
+  type RunCompletedEventPayload,
+  type RunRequestedEventPayload,
   type IngressGuardResult,
   type MobileActionPolicy,
   type MemoryTrace,
@@ -405,6 +409,55 @@ describe("protocol schemas", () => {
 
     expect(snapshot.queue[0]?.permissions).toContain("run_safe_commands");
     expect(snapshot.items[1]?.decision).toBe("deny");
+  });
+
+  it("models future tmux execution slots without allowing raw execution", () => {
+    const agentSession = agentSessionSchema.parse({
+      id: "agent_session_architect",
+      sessionId: "session_1",
+      role: "architect",
+      backend: "tmux",
+      paneId: "%4",
+      status: "planned",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+    const slot = executionSlotSchema.parse({
+      id: "slot_architect",
+      sessionId: "session_1",
+      label: "Agent - Architect",
+      role: "architect",
+      backend: "ui_stub",
+      status: "placeholder",
+      approvalState: "required",
+      requestedPermissions: ["run_safe_commands", "write_files"],
+      commandPreview: "codex 'Review packages/protocol'",
+      decisionRequired: true,
+      blockedReason: "real tmux execution is gated until Event Store and Permission Matrix are stable",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+    const requested: RunRequestedEventPayload = {
+      runId: "run_1",
+      sessionId: "session_1",
+      executionSlotId: slot.id,
+      requestedBy: "agent",
+      backend: "tmux",
+      commandPreview: slot.commandPreview ?? "",
+      requestedPermissions: slot.requestedPermissions,
+      approvalState: slot.approvalState,
+      redactionApplied: true,
+    };
+    const completed: RunCompletedEventPayload = {
+      runId: "run_1",
+      executionSlotId: slot.id,
+      status: "blocked",
+      outputPreview: "permission required",
+      redactionApplied: true,
+    };
+
+    expect(agentSession.role).toBe("architect");
+    expect(slot.status).toBe("placeholder");
+    expect(requested.redactionApplied).toBe(true);
+    expect(completed.status).toBe("blocked");
   });
 
   it("models provider credential parsing and model discovery without raw keys", () => {
