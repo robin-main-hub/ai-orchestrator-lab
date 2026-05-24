@@ -228,3 +228,10 @@ corepack pnpm dev
 - `internal`과 `markdown`을 동시에 실행 프롬프트에 주입하지 않도록 프로토콜 테스트를 추가했다.
 - 좌측 레일에서 `프로바이더`를 선택하면 세션/시스템/ops 패널을 숨기고 provider 등록/관리 화면만 보이게 했다.
 - Provider 관리 목록은 provider 모드에서 남은 왼쪽 높이를 모두 사용한다.
+
+## Stage30
+
+- Conversation 중앙 상단에 `Profile`, `Soul`, `Voice`, `Memory`, `AGENTS.md`, `SOUL.md`, `Preview`, `Edit` 컨트롤 바를 추가했다.
+- 선택된 에이전트별 voice preset, AGENTS.md 경로, SOUL.md 경로, soul 요약, 운영 지침을 앱 내부 상태로 관리한다.
+- 컨트롤 바 클릭 시 Agent Profile / Soul 설정 drawer가 열리고 `Profile`, `SOUL.md`, `AGENTS.md`, `Voice`, `Injection`, `Preview`, `Edit` 탭을 전환할 수 있다.
+- `Injection` 탭에서 `internal`, `markdown`, `off` 중 하나만 실행 소스로 선택하게 해 markdown과 내부 설정 동시 주입을 피한다.

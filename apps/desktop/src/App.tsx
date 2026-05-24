@@ -140,6 +140,16 @@ type AgentActivityStatus = "idle" | "preparing" | "responding";
 type WorkbenchAgent = AgentProfile;
 type ModelCatalog = Record<string, ModelDescriptor[]>;
 type ProviderRegistrationMode = "api_key" | "cli" | "oauth";
+type AgentConfigTab = "profile" | "soul" | "agents_md" | "voice" | "injection" | "preview" | "edit";
+type AgentVoicePreset = "direct" | "calm" | "architect" | "reviewer" | "executor";
+type AgentPersonaSettings = {
+  voicePreset: AgentVoicePreset;
+  agentsMdPath: string;
+  soulMdPath: string;
+  soulSummary: string;
+  agentsInstruction: string;
+  forbiddenStyle: string;
+};
 type NavItemId = "sessions" | "projects" | "providers" | "channels" | "backup";
 type NavItem = {
   id: NavItemId;
@@ -158,6 +168,18 @@ function slugifyProviderName(value: string, fallback: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return slug || fallback;
+}
+
+function createDefaultPersonaSettings(agent: WorkbenchAgent): AgentPersonaSettings {
+  const slug = slugifyProviderName(agent.name, agent.id);
+  return {
+    voicePreset: agent.role === "reviewer" ? "reviewer" : agent.role === "executor" ? "executor" : "direct",
+    agentsMdPath: `agents/${slug}/AGENTS.md`,
+    soulMdPath: `agents/${slug}/SOUL.md`,
+    soulSummary: `${agent.name}는 ${agentRoleLabel(agent.role)} 역할로, 현재 세션의 목표를 끝까지 작업 결과로 연결한다.`,
+    agentsInstruction: "권한 경계, provider 선택, 실행 승인, 검증 계획을 먼저 확인한다.",
+    forbiddenStyle: "근거 없는 확신, 장황한 말투, 승인 없는 실행",
+  };
 }
 
 function createDesktopOutboxStorage(): Stage16OutboxStorage {
@@ -534,6 +556,13 @@ export function App() {
   const [agentActivityById, setAgentActivityById] = useState<Record<string, AgentActivityStatus>>({});
   const [modelWindowStartByAgentId, setModelWindowStartByAgentId] = useState<Record<string, number>>({});
   const [selectedAgentId, setSelectedAgentId] = useState(seededAgentProfiles[0]?.id ?? "");
+  const [agentConfigPanel, setAgentConfigPanel] = useState<{ open: boolean; tab: AgentConfigTab }>({
+    open: false,
+    tab: "profile",
+  });
+  const [agentPersonaById, setAgentPersonaById] = useState<Record<string, AgentPersonaSettings>>(() =>
+    Object.fromEntries(seededAgentProfiles.map((agent) => [agent.id, createDefaultPersonaSettings(agent)])),
+  );
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
   const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
   const [activeSessionId, setActiveSessionId] = useState(DEFAULT_SESSION_ID);
@@ -580,6 +609,7 @@ export function App() {
     () => agents.find((agent) => agent.id === selectedAgentId) ?? agents[0],
     [agents, selectedAgentId],
   );
+  const selectedAgentPersona = selectedAgent ? agentPersonaById[selectedAgent.id] : undefined;
   const selectedProvider = useMemo(
     () =>
       providerProfiles.find((profile) => profile.id === selectedAgent?.providerProfileId) ??
@@ -1474,6 +1504,41 @@ export function App() {
     }));
   }
 
+  function openAgentConfigPanel(tab: AgentConfigTab) {
+    setAgentConfigPanel({ open: true, tab });
+  }
+
+  function updateSelectedAgentConfig(patch: Partial<Pick<WorkbenchAgent, "configSource" | "soulMode">>) {
+    if (!selectedAgent) {
+      return;
+    }
+
+    const nextPatch = patch.configSource === "off" ? { ...patch, soulMode: "off" as const } : patch;
+    setAgents((currentAgents) =>
+      currentAgents.map((agent) => (agent.id === selectedAgent.id ? { ...agent, ...nextPatch } : agent)),
+    );
+    appendEvent("agent.config.updated", {
+      agentId: selectedAgent.id,
+      configSource: nextPatch.configSource ?? selectedAgent.configSource,
+      soulMode: nextPatch.soulMode ?? selectedAgent.soulMode,
+      singleSourcePolicy: true,
+    });
+  }
+
+  function updateSelectedAgentPersona(patch: Partial<AgentPersonaSettings>) {
+    if (!selectedAgent) {
+      return;
+    }
+
+    setAgentPersonaById((currentSettings) => ({
+      ...currentSettings,
+      [selectedAgent.id]: {
+        ...(currentSettings[selectedAgent.id] ?? createDefaultPersonaSettings(selectedAgent)),
+        ...patch,
+      },
+    }));
+  }
+
   function handleAddAgent() {
     const nextIndex = agents.length + 1;
     const occupiedProviderIds = new Set(
@@ -1497,6 +1562,10 @@ export function App() {
     };
 
     setAgents((currentAgents) => [...currentAgents, nextAgent]);
+    setAgentPersonaById((currentSettings) => ({
+      ...currentSettings,
+      [nextAgent.id]: createDefaultPersonaSettings(nextAgent),
+    }));
     setSelectedAgentId(nextAgent.id);
   }
 
@@ -1513,6 +1582,10 @@ export function App() {
       setAgentActivityById((currentStatus) => {
         const { [agentId]: _removedStatus, ...remainingStatus } = currentStatus;
         return remainingStatus;
+      });
+      setAgentPersonaById((currentSettings) => {
+        const { [agentId]: _removedPersona, ...remainingSettings } = currentSettings;
+        return remainingSettings;
       });
       return nextAgents;
     });
@@ -1969,6 +2042,8 @@ export function App() {
           {mode === "conversation" ? (
             <ConversationWorkbench
               activeSessionId={activeSessionId}
+              agentConfigPanel={agentConfigPanel}
+              agentPersona={selectedAgentPersona}
               agents={agents}
               draftMessage={draftMessage}
               messages={conversationMessages}
@@ -1979,7 +2054,12 @@ export function App() {
               onImportTelegram={handleImportTelegramIngress}
               onPromoteToDebate={handlePromoteToDebate}
               onSelectAgent={setSelectedAgentId}
+              onSelectAgentConfigTab={(tab) => setAgentConfigPanel((panel) => ({ ...panel, tab }))}
               onSendMessage={handleSendMessageStage2}
+              onCloseAgentConfig={() => setAgentConfigPanel((panel) => ({ ...panel, open: false }))}
+              onOpenAgentConfig={openAgentConfigPanel}
+              onUpdateAgentConfig={updateSelectedAgentConfig}
+              onUpdateAgentPersona={updateSelectedAgentPersona}
               selectedAgent={selectedAgent}
               selectedAgentId={selectedAgent?.id}
               selectedProvider={selectedProvider}
@@ -2276,6 +2356,39 @@ function agentRoleLabel(role: WorkbenchAgent["role"]) {
   return labels[role];
 }
 
+function soulModeLabel(mode: WorkbenchAgent["soulMode"]) {
+  const labels: Record<WorkbenchAgent["soulMode"], string> = {
+    full: "full",
+    summary: "summary",
+    retrieved: "retrieved",
+    off: "off",
+  };
+
+  return labels[mode];
+}
+
+function configSourceLabel(source: WorkbenchAgent["configSource"]) {
+  const labels: Record<WorkbenchAgent["configSource"], string> = {
+    internal: "앱 내부 설정",
+    markdown: "AGENTS.md / SOUL.md",
+    off: "주입 안 함",
+  };
+
+  return labels[source];
+}
+
+function voicePresetLabel(preset: AgentVoicePreset) {
+  const labels: Record<AgentVoicePreset, string> = {
+    architect: "설계자형",
+    calm: "차분함",
+    direct: "직설적",
+    executor: "실행자형",
+    reviewer: "검토자형",
+  };
+
+  return labels[preset];
+}
+
 function memoryLayerLabel(layer: MemoryRecord["layer"]) {
   const labels: Record<MemoryRecord["layer"], string> = {
     episode: "작업 에피소드",
@@ -2314,6 +2427,8 @@ function recallReasonLabel(reason: string) {
 
 function ConversationWorkbench({
   activeSessionId,
+  agentConfigPanel,
+  agentPersona,
   agents,
   draftMessage,
   messages,
@@ -2324,12 +2439,19 @@ function ConversationWorkbench({
   onImportTelegram,
   onPromoteToDebate,
   onSelectAgent,
+  onSelectAgentConfigTab,
   onSendMessage,
+  onCloseAgentConfig,
+  onOpenAgentConfig,
+  onUpdateAgentConfig,
+  onUpdateAgentPersona,
   selectedAgent,
   selectedAgentId,
   selectedProvider,
 }: {
   activeSessionId: string;
+  agentConfigPanel: { open: boolean; tab: AgentConfigTab };
+  agentPersona?: AgentPersonaSettings;
   agents: WorkbenchAgent[];
   draftMessage: string;
   messages: ConversationMessage[];
@@ -2340,13 +2462,20 @@ function ConversationWorkbench({
   onImportTelegram: () => void;
   onPromoteToDebate: () => void;
   onSelectAgent: (agentId: string) => void;
+  onSelectAgentConfigTab: (tab: AgentConfigTab) => void;
   onSendMessage: () => void;
+  onCloseAgentConfig: () => void;
+  onOpenAgentConfig: (tab: AgentConfigTab) => void;
+  onUpdateAgentConfig: (patch: Partial<Pick<WorkbenchAgent, "configSource" | "soulMode">>) => void;
+  onUpdateAgentPersona: (patch: Partial<AgentPersonaSettings>) => void;
   selectedAgent?: WorkbenchAgent;
   selectedAgentId?: string;
   selectedProvider?: ProviderProfile;
 }) {
   const authMode = selectedAgent?.authBinding?.mode ?? "provider_profile";
   const authLabel = selectedAgent?.authBinding?.label ?? "credential pending";
+  const persona = agentPersona ?? (selectedAgent ? createDefaultPersonaSettings(selectedAgent) : undefined);
+  const memoryMode = selectedProvider?.trustLevel === "trusted" ? "auto" : "manual";
 
   return (
     <section className="workbench-panel">
@@ -2376,7 +2505,26 @@ function ConversationWorkbench({
           <span>{authMode}</span>
           <strong>{authLabel}</strong>
         </div>
+        <AgentProfileStrip
+          memoryMode={memoryMode}
+          onOpen={onOpenAgentConfig}
+          persona={persona}
+          selectedAgent={selectedAgent}
+        />
       </header>
+      {agentConfigPanel.open && selectedAgent && persona ? (
+        <AgentConfigDrawer
+          activeTab={agentConfigPanel.tab}
+          agent={selectedAgent}
+          memoryMode={memoryMode}
+          onClose={onCloseAgentConfig}
+          onSelectTab={onSelectAgentConfigTab}
+          onUpdateAgentConfig={onUpdateAgentConfig}
+          onUpdatePersona={onUpdateAgentPersona}
+          persona={persona}
+          provider={selectedProvider}
+        />
+      ) : null}
       <div className="conversation-stream" aria-label="대화 기록" tabIndex={0}>
         {messages.map((message) => (
           <article className={`message ${message.role === "user" ? "user" : "assistant"}`} key={message.id}>
@@ -2432,6 +2580,247 @@ function ConversationWorkbench({
         </button>
       </div>
     </section>
+  );
+}
+
+function AgentProfileStrip({
+  memoryMode,
+  onOpen,
+  persona,
+  selectedAgent,
+}: {
+  memoryMode: string;
+  onOpen: (tab: AgentConfigTab) => void;
+  persona?: AgentPersonaSettings;
+  selectedAgent?: WorkbenchAgent;
+}) {
+  const chips: Array<{ tab: AgentConfigTab; label: string; value: string }> = [
+    { tab: "profile", label: "Profile", value: selectedAgent ? agentRoleLabel(selectedAgent.role) : "대기" },
+    { tab: "soul", label: "Soul", value: selectedAgent ? soulModeLabel(selectedAgent.soulMode) : "off" },
+    { tab: "voice", label: "Voice", value: persona ? voicePresetLabel(persona.voicePreset) : "기본" },
+    { tab: "injection", label: "Memory", value: memoryMode },
+    {
+      tab: "agents_md",
+      label: "AGENTS.md",
+      value: selectedAgent?.configSource === "markdown" ? "active" : "view",
+    },
+    { tab: "soul", label: "SOUL.md", value: persona?.soulMdPath.split("/").at(-1) ?? "view" },
+    { tab: "preview", label: "Preview", value: selectedAgent?.configSource ?? "off" },
+    { tab: "edit", label: "Edit", value: "settings" },
+  ];
+
+  return (
+    <div className="agent-profile-strip" aria-label="Agent profile and soul controls">
+      {chips.map((chip) => (
+        <button key={`${chip.label}-${chip.tab}`} onClick={() => onOpen(chip.tab)} type="button">
+          <span>{chip.label}</span>
+          <strong>{chip.value}</strong>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AgentConfigDrawer({
+  activeTab,
+  agent,
+  memoryMode,
+  onClose,
+  onSelectTab,
+  onUpdateAgentConfig,
+  onUpdatePersona,
+  persona,
+  provider,
+}: {
+  activeTab: AgentConfigTab;
+  agent: WorkbenchAgent;
+  memoryMode: string;
+  onClose: () => void;
+  onSelectTab: (tab: AgentConfigTab) => void;
+  onUpdateAgentConfig: (patch: Partial<Pick<WorkbenchAgent, "configSource" | "soulMode">>) => void;
+  onUpdatePersona: (patch: Partial<AgentPersonaSettings>) => void;
+  persona: AgentPersonaSettings;
+  provider?: ProviderProfile;
+}) {
+  const tabs: Array<{ id: AgentConfigTab; label: string }> = [
+    { id: "profile", label: "Profile" },
+    { id: "soul", label: "SOUL.md" },
+    { id: "agents_md", label: "AGENTS.md" },
+    { id: "voice", label: "Voice" },
+    { id: "injection", label: "Injection" },
+    { id: "preview", label: "Preview" },
+    { id: "edit", label: "Edit" },
+  ];
+
+  return (
+    <aside className="agent-config-drawer" aria-label="Agent profile settings">
+      <header>
+        <div>
+          <span>Agent Profile / Soul</span>
+          <strong>{agent.name}</strong>
+        </div>
+        <button aria-label="Agent 설정 닫기" className="rail-icon-button" onClick={onClose} type="button">
+          <ChevronRight size={14} />
+        </button>
+      </header>
+      <div className="agent-config-tabs" role="tablist" aria-label="Agent config tabs">
+        {tabs.map((tab) => (
+          <button
+            aria-selected={activeTab === tab.id}
+            className={activeTab === tab.id ? "active" : ""}
+            key={tab.id}
+            onClick={() => onSelectTab(tab.id)}
+            role="tab"
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div className="agent-config-body">
+        {activeTab === "profile" ? (
+          <div className="agent-config-grid">
+            <label>
+              <span>이름</span>
+              <input readOnly value={agent.name} />
+            </label>
+            <label>
+              <span>역할</span>
+              <input readOnly value={agentRoleLabel(agent.role)} />
+            </label>
+            <label>
+              <span>Provider</span>
+              <input readOnly value={provider?.name ?? "provider pending"} />
+            </label>
+            <label>
+              <span>Model</span>
+              <input readOnly value={agent.modelId ?? provider?.defaultModel ?? "model pending"} />
+            </label>
+          </div>
+        ) : null}
+        {activeTab === "soul" ? (
+          <div className="agent-config-stack">
+            <label>
+              <span>SOUL.md 경로</span>
+              <input value={persona.soulMdPath} onChange={(event) => onUpdatePersona({ soulMdPath: event.target.value })} />
+            </label>
+            <label>
+              <span>정체성 요약</span>
+              <textarea
+                value={persona.soulSummary}
+                onChange={(event) => onUpdatePersona({ soulSummary: event.target.value })}
+              />
+            </label>
+          </div>
+        ) : null}
+        {activeTab === "agents_md" ? (
+          <div className="agent-config-stack">
+            <label>
+              <span>AGENTS.md 경로</span>
+              <input
+                value={persona.agentsMdPath}
+                onChange={(event) => onUpdatePersona({ agentsMdPath: event.target.value })}
+              />
+            </label>
+            <label>
+              <span>운영 지침</span>
+              <textarea
+                value={persona.agentsInstruction}
+                onChange={(event) => onUpdatePersona({ agentsInstruction: event.target.value })}
+              />
+            </label>
+          </div>
+        ) : null}
+        {activeTab === "voice" ? (
+          <div className="agent-config-stack">
+            <label>
+              <span>Voice preset</span>
+              <select
+                value={persona.voicePreset}
+                onChange={(event) => onUpdatePersona({ voicePreset: event.target.value as AgentVoicePreset })}
+              >
+                {(["direct", "calm", "architect", "reviewer", "executor"] as AgentVoicePreset[]).map((preset) => (
+                  <option key={preset} value={preset}>
+                    {voicePresetLabel(preset)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>금기 / 피할 말투</span>
+              <textarea
+                value={persona.forbiddenStyle}
+                onChange={(event) => onUpdatePersona({ forbiddenStyle: event.target.value })}
+              />
+            </label>
+          </div>
+        ) : null}
+        {activeTab === "injection" ? (
+          <div className="agent-config-grid">
+            <label>
+              <span>Config Source</span>
+              <select
+                value={agent.configSource}
+                onChange={(event) =>
+                  onUpdateAgentConfig({ configSource: event.target.value as WorkbenchAgent["configSource"] })
+                }
+              >
+                <option value="internal">internal</option>
+                <option value="markdown">markdown</option>
+                <option value="off">off</option>
+              </select>
+            </label>
+            <label>
+              <span>Soul Mode</span>
+              <select
+                value={agent.soulMode}
+                onChange={(event) => onUpdateAgentConfig({ soulMode: event.target.value as WorkbenchAgent["soulMode"] })}
+                disabled={agent.configSource === "off"}
+              >
+                <option value="full">full</option>
+                <option value="summary">summary</option>
+                <option value="retrieved">retrieved</option>
+                <option value="off">off</option>
+              </select>
+            </label>
+            <p className="agent-config-note">
+              현재 실행에는 {configSourceLabel(agent.configSource)} 하나만 주입됩니다. Memory는 {memoryMode}입니다.
+            </p>
+          </div>
+        ) : null}
+        {activeTab === "preview" ? (
+          <pre className="agent-config-preview">
+{`source: ${agent.configSource}
+soulMode: ${agent.soulMode}
+voice: ${voicePresetLabel(persona.voicePreset)}
+AGENTS.md: ${agent.configSource === "markdown" ? persona.agentsMdPath : "not injected"}
+SOUL.md: ${agent.configSource === "markdown" ? persona.soulMdPath : "not injected"}
+
+${agent.configSource === "internal" ? persona.soulSummary : "markdown source selected; file content will be loaded by path"}
+${persona.agentsInstruction}
+avoid: ${persona.forbiddenStyle}`}
+          </pre>
+        ) : null}
+        {activeTab === "edit" ? (
+          <div className="agent-config-stack">
+            <label>
+              <span>Config Source</span>
+              <select
+                value={agent.configSource}
+                onChange={(event) =>
+                  onUpdateAgentConfig({ configSource: event.target.value as WorkbenchAgent["configSource"] })
+                }
+              >
+                <option value="internal">앱 내부 설정</option>
+                <option value="markdown">AGENTS.md / SOUL.md</option>
+                <option value="off">사용 안 함</option>
+              </select>
+            </label>
+            <p className="agent-config-note">둘 다 저장할 수는 있지만, 한 턴에 주입되는 설정 소스는 반드시 하나입니다.</p>
+          </div>
+        ) : null}
+      </div>
+    </aside>
   );
 }
 
