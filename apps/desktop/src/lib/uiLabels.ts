@@ -1,4 +1,5 @@
 import type { InsightCategory, ReviewMode } from "@ai-orchestrator/protocol";
+import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
 
 export function reviewModeLabel(mode: ReviewMode) {
@@ -21,6 +22,16 @@ export function insightCategoryLabel(category: InsightCategory) {
   };
 
   return labels[category];
+}
+
+export function statusTone(status: RuntimeSnapshot["status"]) {
+  if (status === "online") {
+    return "ok";
+  }
+  if (status === "offline") {
+    return "danger";
+  }
+  return "warn";
 }
 
 export function guardStepLabel(step: Stage8IngressSnapshot["result"]["guardSteps"][number]["name"]) {
