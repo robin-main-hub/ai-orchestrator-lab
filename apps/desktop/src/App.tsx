@@ -8,12 +8,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Database,
+  FileText,
   GitBranch,
+  ImageIcon,
   KeyRound,
   LayoutDashboard,
   Link2,
   LockKeyhole,
   MessageSquare,
+  Paperclip,
   Play,
   Plus,
   Pencil,
@@ -25,6 +28,7 @@ import {
   Smartphone,
   Terminal,
   Trash2,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -119,6 +123,7 @@ import type {
   ApprovalState,
   BackupProjection,
   CodingPacket,
+  ConversationAttachment,
   ConversationMessage,
   DebateTag,
   EventEnvelope,
@@ -142,6 +147,7 @@ type ModelCatalog = Record<string, ModelDescriptor[]>;
 type ProviderRegistrationMode = "api_key" | "cli" | "oauth";
 type AgentConfigTab = "profile" | "soul" | "agents_md" | "voice" | "injection" | "preview" | "edit";
 type AgentVoicePreset = "direct" | "calm" | "architect" | "reviewer" | "executor";
+type DraftAttachment = ConversationAttachment;
 type AgentPersonaSettings = {
   voicePreset: AgentVoicePreset;
   agentsMdPath: string;
@@ -158,6 +164,7 @@ type NavItem = {
 };
 
 const modelWindowSize = 8;
+const maxDraftAttachments = 3;
 
 const now = new Date("2026-05-24T00:20:00.000+09:00").toISOString();
 
@@ -168,6 +175,94 @@ function slugifyProviderName(value: string, fallback: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return slug || fallback;
+}
+
+function classifyDraftAttachment(file: File): ConversationAttachment["kind"] {
+  return file.type.startsWith("image/") ? "image" : "document";
+}
+
+function createDraftAttachment(file: File): DraftAttachment {
+  return {
+    id: `attachment_${crypto.randomUUID()}`,
+    name: file.name,
+    kind: classifyDraftAttachment(file),
+    mimeType: file.type || "application/octet-stream",
+    size: file.size,
+    storage: "metadata_only",
+  };
+}
+
+function formatAttachmentSize(size: number) {
+  if (size < 1024) {
+    return `${size} B`;
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function getMessageAttachments(message: ConversationMessage): ConversationAttachment[] {
+  const attachments = message.metadata?.attachments;
+  if (!Array.isArray(attachments)) {
+    return [];
+  }
+
+  return attachments
+    .filter((attachment): attachment is ConversationAttachment => {
+      if (!attachment || typeof attachment !== "object") {
+        return false;
+      }
+      const candidate = attachment as ConversationAttachment;
+      return (
+        typeof candidate.id === "string" &&
+        typeof candidate.name === "string" &&
+        (candidate.kind === "image" || candidate.kind === "document") &&
+        typeof candidate.mimeType === "string" &&
+        typeof candidate.size === "number" &&
+        typeof candidate.storage === "string"
+      );
+    })
+    .slice(0, maxDraftAttachments);
+}
+
+function getModelInputModalities(model?: ModelDescriptor): NonNullable<ModelDescriptor["inputModalities"]> {
+  return model?.inputModalities?.length ? model.inputModalities : ["text"];
+}
+
+function modelSupportsAttachmentKind(model: ModelDescriptor | undefined, kind: ConversationAttachment["kind"]) {
+  return getModelInputModalities(model).includes(kind);
+}
+
+function modelSupportsAnyAttachment(model?: ModelDescriptor) {
+  const modalities = getModelInputModalities(model);
+  return modalities.includes("image") || modalities.includes("document");
+}
+
+function attachmentAcceptForModel(model?: ModelDescriptor) {
+  const accept: string[] = [];
+  if (modelSupportsAttachmentKind(model, "image")) {
+    accept.push("image/*");
+  }
+  if (modelSupportsAttachmentKind(model, "document")) {
+    accept.push(".pdf", ".doc", ".docx", ".txt", ".md", ".csv", ".json");
+  }
+
+  return accept.join(",");
+}
+
+function attachmentCapabilityLabel(model?: ModelDescriptor) {
+  if (!model) {
+    return "모델 메타데이터 없음";
+  }
+
+  const modalities = getModelInputModalities(model);
+  const labels = [
+    modalities.includes("image") ? "이미지" : undefined,
+    modalities.includes("document") ? "문서" : undefined,
+  ].filter(Boolean);
+
+  return labels.length > 0 ? `${labels.join(" / ")} 입력 가능` : "텍스트 전용";
 }
 
 function createDefaultPersonaSettings(agent: WorkbenchAgent): AgentPersonaSettings {
@@ -315,6 +410,39 @@ const seededProviderProfiles: ProviderProfile[] = [
   }),
 ];
 
+function inferModelInputModalities(modelId: string): ModelDescriptor["inputModalities"] {
+  const id = modelId.toLowerCase();
+  const modalities: NonNullable<ModelDescriptor["inputModalities"]> = ["text"];
+
+  if (
+    id.includes("mock-orchestrator") ||
+    id.includes("gpt-5.5-pro") ||
+    id.includes("gpt-4.1") ||
+    id.includes("gemini") ||
+    id.includes("grok") ||
+    id.includes("claude") ||
+    id.includes("vision") ||
+    id.includes("multimodal")
+  ) {
+    modalities.push("image", "document");
+    return Array.from(new Set(modalities));
+  }
+
+  if (
+    id.includes("rag") ||
+    id.includes("coder") ||
+    id.includes("qwen") ||
+    id.includes("deepseek") ||
+    id.includes("kimi") ||
+    id.includes("codex") ||
+    id.includes("reviewer")
+  ) {
+    modalities.push("document");
+  }
+
+  return Array.from(new Set(modalities));
+}
+
 function createModel(providerProfileId: string, id: string, tags: string[] = []): ModelDescriptor {
   return {
     id,
@@ -323,6 +451,7 @@ function createModel(providerProfileId: string, id: string, tags: string[] = [])
     contextWindow: 128_000,
     supportsStreaming: true,
     supportsTools: tags.includes("tools"),
+    inputModalities: inferModelInputModalities(id),
     tags,
   };
 }
@@ -592,6 +721,7 @@ export function App() {
   const [backupProjectionsState, setBackupProjectionsState] = useState<BackupProjection[]>(backupProjections);
   const [obsidianMarkdownPreview, setObsidianMarkdownPreview] = useState("");
   const [draftMessage, setDraftMessage] = useState("");
+  const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([]);
   const activeProvider = useMemo(
     () => providerProfiles.find((profile) => profile.id === runtimeSnapshotState.activeProviderProfileId),
     [providerProfiles, runtimeSnapshotState.activeProviderProfileId],
@@ -617,6 +747,14 @@ export function App() {
       providerProfiles[0],
     [activeProvider, providerProfiles, selectedAgent],
   );
+  const selectedModel = useMemo(() => {
+    const providerModels = selectedProvider ? (modelCatalog[selectedProvider.id] ?? []) : [];
+    return (
+      providerModels.find((model) => model.id === selectedAgent?.modelId) ??
+      providerModels.find((model) => model.id === selectedProvider?.defaultModel) ??
+      providerModels[0]
+    );
+  }, [modelCatalog, selectedAgent, selectedProvider]);
   const secretVaultSnapshot = useMemo(
     () => createSecretVaultSnapshot(providerProfiles, runtimeSnapshotState.updatedAt),
     [providerProfiles, runtimeSnapshotState.updatedAt],
@@ -702,6 +840,12 @@ export function App() {
     void syncEventsToDgx(initialEventLog);
     void handleRefreshSessionIndex();
   }, []);
+
+  useEffect(() => {
+    setDraftAttachments((current) =>
+      current.filter((attachment) => modelSupportsAttachmentKind(selectedModel, attachment.kind)),
+    );
+  }, [selectedModel?.id, selectedModel?.providerProfileId]);
 
   function appendEvent<T>(
     type: string,
@@ -838,6 +982,7 @@ export function App() {
     setConversationMessages([]);
     setEventLog([]);
     setDraftMessage("");
+    setDraftAttachments([]);
 
     appendEvent(
       "session.created",
@@ -924,9 +1069,53 @@ export function App() {
     }));
   }
 
+  function handleAddDraftAttachments(fileList: FileList | null) {
+    if (!fileList || !selectedModel || !modelSupportsAnyAttachment(selectedModel)) {
+      appendEvent("conversation.attachment.blocked", {
+        selectedModelId: selectedModel?.id ?? "model pending",
+        reason: "selected model does not advertise image/document input",
+        attachmentStorage: "metadata_only",
+      });
+      return;
+    }
+
+    const incomingFiles = Array.from(fileList);
+    const supportedFiles = incomingFiles.filter((file) =>
+      modelSupportsAttachmentKind(selectedModel, classifyDraftAttachment(file)),
+    );
+    const remainingSlots = Math.max(0, maxDraftAttachments - draftAttachments.length);
+    const nextAttachments = supportedFiles.slice(0, remainingSlots).map(createDraftAttachment);
+
+    if (nextAttachments.length === 0) {
+      appendEvent("conversation.attachment.blocked", {
+        selectedModelId: selectedModel.id,
+        reason: remainingSlots === 0 ? "attachment limit reached" : "file kind is not supported by selected model",
+        attemptedCount: incomingFiles.length,
+        attachmentStorage: "metadata_only",
+      });
+      return;
+    }
+
+    setDraftAttachments((current) => [...current, ...nextAttachments].slice(0, maxDraftAttachments));
+    appendEvent("conversation.attachment.queued", {
+      selectedModelId: selectedModel.id,
+      attachmentCount: nextAttachments.length,
+      maxAttachmentCount: maxDraftAttachments,
+      attachments: nextAttachments,
+      attachmentStorage: "metadata_only",
+      blockedCount: incomingFiles.length - nextAttachments.length,
+      redaction: "metadata_only",
+    });
+  }
+
+  function handleRemoveDraftAttachment(attachmentId: string) {
+    setDraftAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
+  }
+
   async function handleSendMessageStage2() {
     const content = draftMessage.trim();
-    if (!content || !selectedAgent || !selectedProvider) {
+    const attachments = draftAttachments;
+    if ((!content && attachments.length === 0) || !selectedAgent || !selectedProvider) {
       return;
     }
 
@@ -934,22 +1123,30 @@ export function App() {
     const authLabel = selectedAgent.authBinding?.label ?? "credential pending";
     const authMode = selectedAgent.authBinding?.mode ?? "provider_profile";
     const modelId = selectedAgent.modelId ?? selectedProvider.defaultModel ?? "model pending";
+    const messageContent = content || `첨부 ${attachments.length}개`;
+    const attachmentMetadata = attachments.map((attachment) => ({ ...attachment }));
     const userMessage: ConversationMessage = {
       id: `message_user_${crypto.randomUUID()}`,
       sessionId: activeSessionId,
       role: "user",
-      content,
+      content: messageContent,
       createdAt,
+      metadata: attachmentMetadata.length > 0 ? { attachments: attachmentMetadata } : undefined,
     };
 
     setAgentActivity(selectedAgent.id, "preparing");
     setConversationMessages((messages) => [...messages, userMessage]);
     setDraftMessage("");
+    setDraftAttachments([]);
     appendEvent("conversation.message.created", {
       messageId: userMessage.id,
       role: "user",
-      content,
-      contentLength: content.length,
+      content: messageContent,
+      metadata: userMessage.metadata,
+      contentLength: messageContent.length,
+      attachmentCount: attachmentMetadata.length,
+      attachments: attachmentMetadata,
+      attachmentStorage: "metadata_only",
       redaction: "applied",
     });
     appendEvent(isDgxVllmProvider(selectedProvider) ? "provider.completion.dgx.requested" : "provider.completion.mocked", {
@@ -989,7 +1186,7 @@ export function App() {
         });
       } else {
         reply = buildMockAssistantReply({
-          content,
+          content: messageContent,
           agent: selectedAgent,
           provider: selectedProvider,
         });
@@ -2045,14 +2242,18 @@ export function App() {
               agentConfigPanel={agentConfigPanel}
               agentPersona={selectedAgentPersona}
               agents={agents}
+              draftAttachments={draftAttachments}
               draftMessage={draftMessage}
+              maxDraftAttachments={maxDraftAttachments}
               messages={conversationMessages}
+              onAddDraftAttachments={handleAddDraftAttachments}
               onBackupProjection={handleExportBackupProjections}
               onCreateAgentRun={handleCreateAgentRun}
               onCreateCodingPacket={handleCreateCodingPacket}
               onDraftMessageChange={setDraftMessage}
               onImportTelegram={handleImportTelegramIngress}
               onPromoteToDebate={handlePromoteToDebate}
+              onRemoveDraftAttachment={handleRemoveDraftAttachment}
               onSelectAgent={setSelectedAgentId}
               onSelectAgentConfigTab={(tab) => setAgentConfigPanel((panel) => ({ ...panel, tab }))}
               onSendMessage={handleSendMessageStage2}
@@ -2062,6 +2263,7 @@ export function App() {
               onUpdateAgentPersona={updateSelectedAgentPersona}
               selectedAgent={selectedAgent}
               selectedAgentId={selectedAgent?.id}
+              selectedModel={selectedModel}
               selectedProvider={selectedProvider}
             />
           ) : (
@@ -2430,14 +2632,18 @@ function ConversationWorkbench({
   agentConfigPanel,
   agentPersona,
   agents,
+  draftAttachments,
   draftMessage,
+  maxDraftAttachments,
   messages,
+  onAddDraftAttachments,
   onBackupProjection,
   onCreateAgentRun,
   onCreateCodingPacket,
   onDraftMessageChange,
   onImportTelegram,
   onPromoteToDebate,
+  onRemoveDraftAttachment,
   onSelectAgent,
   onSelectAgentConfigTab,
   onSendMessage,
@@ -2447,20 +2653,25 @@ function ConversationWorkbench({
   onUpdateAgentPersona,
   selectedAgent,
   selectedAgentId,
+  selectedModel,
   selectedProvider,
 }: {
   activeSessionId: string;
   agentConfigPanel: { open: boolean; tab: AgentConfigTab };
   agentPersona?: AgentPersonaSettings;
   agents: WorkbenchAgent[];
+  draftAttachments: DraftAttachment[];
   draftMessage: string;
+  maxDraftAttachments: number;
   messages: ConversationMessage[];
+  onAddDraftAttachments: (files: FileList | null) => void;
   onBackupProjection: () => void;
   onCreateAgentRun: () => void;
   onCreateCodingPacket: () => void;
   onDraftMessageChange: (value: string) => void;
   onImportTelegram: () => void;
   onPromoteToDebate: () => void;
+  onRemoveDraftAttachment: (attachmentId: string) => void;
   onSelectAgent: (agentId: string) => void;
   onSelectAgentConfigTab: (tab: AgentConfigTab) => void;
   onSendMessage: () => void;
@@ -2470,12 +2681,16 @@ function ConversationWorkbench({
   onUpdateAgentPersona: (patch: Partial<AgentPersonaSettings>) => void;
   selectedAgent?: WorkbenchAgent;
   selectedAgentId?: string;
+  selectedModel?: ModelDescriptor;
   selectedProvider?: ProviderProfile;
 }) {
   const authMode = selectedAgent?.authBinding?.mode ?? "provider_profile";
   const authLabel = selectedAgent?.authBinding?.label ?? "credential pending";
   const persona = agentPersona ?? (selectedAgent ? createDefaultPersonaSettings(selectedAgent) : undefined);
   const memoryMode = selectedProvider?.trustLevel === "trusted" ? "auto" : "manual";
+  const attachmentEnabled = Boolean(selectedAgent && modelSupportsAnyAttachment(selectedModel));
+  const attachmentAccept = attachmentAcceptForModel(selectedModel);
+  const attachmentLimitReached = draftAttachments.length >= maxDraftAttachments;
 
   return (
     <section className="workbench-panel">
@@ -2526,12 +2741,16 @@ function ConversationWorkbench({
         />
       ) : null}
       <div className="conversation-stream" aria-label="대화 기록" tabIndex={0}>
-        {messages.map((message) => (
-          <article className={`message ${message.role === "user" ? "user" : "assistant"}`} key={message.id}>
-            <span>{messageLabel(message, selectedAgent)}</span>
-            <p>{message.content}</p>
-          </article>
-        ))}
+        {messages.map((message) => {
+          const attachments = getMessageAttachments(message);
+          return (
+            <article className={`message ${message.role === "user" ? "user" : "assistant"}`} key={message.id}>
+              <span>{messageLabel(message, selectedAgent)}</span>
+              <p>{message.content}</p>
+              {attachments.length > 0 ? <AttachmentChips attachments={attachments} /> : null}
+            </article>
+          );
+        })}
       </div>
       <form
         className="chat-composer"
@@ -2540,19 +2759,71 @@ function ConversationWorkbench({
           onSendMessage();
         }}
       >
-        <textarea
-          aria-label="오케스트레이터에게 메시지 보내기"
-          onChange={(event) => onDraftMessageChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-              event.preventDefault();
-              onSendMessage();
-            }
-          }}
-          placeholder={`${selectedAgent?.name ?? "봇"}에게 말 걸기`}
-          value={draftMessage}
-        />
-        <button className="primary-button" disabled={!draftMessage.trim() || !selectedAgent} type="submit">
+        <div className="composer-main">
+          <div className="attachment-composer-row">
+            <input
+              accept={attachmentAccept}
+              className="attachment-input"
+              disabled={!attachmentEnabled || attachmentLimitReached}
+              id="conversation-attachment-input"
+              multiple
+              onChange={(event) => {
+                onAddDraftAttachments(event.currentTarget.files);
+                event.currentTarget.value = "";
+              }}
+              type="file"
+            />
+            <label
+              aria-disabled={!attachmentEnabled || attachmentLimitReached}
+              className={`attachment-button ${!attachmentEnabled || attachmentLimitReached ? "disabled" : ""}`}
+              htmlFor="conversation-attachment-input"
+              title={attachmentCapabilityLabel(selectedModel)}
+            >
+              <Paperclip size={13} />
+              첨부 {draftAttachments.length}/{maxDraftAttachments}
+            </label>
+            <span className={`attachment-capability ${attachmentEnabled ? "enabled" : "disabled"}`}>
+              {attachmentCapabilityLabel(selectedModel)}
+            </span>
+            {draftAttachments.length > 0 ? (
+              <div className="draft-attachment-list">
+                {draftAttachments.map((attachment) => (
+                  <span className="draft-attachment-chip" key={attachment.id}>
+                    {attachment.kind === "image" ? <ImageIcon size={13} /> : <FileText size={13} />}
+                    <span>
+                      <strong>{attachment.name}</strong>
+                      <em>{formatAttachmentSize(attachment.size)}</em>
+                    </span>
+                    <button
+                      aria-label={`${attachment.name} 첨부 제거`}
+                      onClick={() => onRemoveDraftAttachment(attachment.id)}
+                      type="button"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          <textarea
+            aria-label="오케스트레이터에게 메시지 보내기"
+            onChange={(event) => onDraftMessageChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                onSendMessage();
+              }
+            }}
+            placeholder={`${selectedAgent?.name ?? "봇"}에게 말 걸기`}
+            value={draftMessage}
+          />
+        </div>
+        <button
+          className="primary-button"
+          disabled={(!draftMessage.trim() && draftAttachments.length === 0) || !selectedAgent}
+          type="submit"
+        >
           <Send size={16} />
           보내기
         </button>
@@ -2580,6 +2851,20 @@ function ConversationWorkbench({
         </button>
       </div>
     </section>
+  );
+}
+
+function AttachmentChips({ attachments }: { attachments: ConversationAttachment[] }) {
+  return (
+    <div className="message-attachments" aria-label="첨부 파일">
+      {attachments.map((attachment) => (
+        <span className="message-attachment-chip" key={attachment.id}>
+          {attachment.kind === "image" ? <ImageIcon size={12} /> : <FileText size={12} />}
+          <strong>{attachment.name}</strong>
+          <em>{formatAttachmentSize(attachment.size)}</em>
+        </span>
+      ))}
+    </div>
   );
 }
 

@@ -235,3 +235,10 @@ corepack pnpm dev
 - 선택된 에이전트별 voice preset, AGENTS.md 경로, SOUL.md 경로, soul 요약, 운영 지침을 앱 내부 상태로 관리한다.
 - 컨트롤 바 클릭 시 Agent Profile / Soul 설정 drawer가 열리고 `Profile`, `SOUL.md`, `AGENTS.md`, `Voice`, `Injection`, `Preview`, `Edit` 탭을 전환할 수 있다.
 - `Injection` 탭에서 `internal`, `markdown`, `off` 중 하나만 실행 소스로 선택하게 해 markdown과 내부 설정 동시 주입을 피한다.
+
+## Stage31
+
+- Conversation 입력창에 최대 3개 이미지/문서 첨부 UI를 추가했다.
+- `ModelDescriptor.inputModalities`를 protocol에 추가해 선택된 모델이 `image` 또는 `document` 입력을 지원할 때만 첨부 버튼이 활성화된다.
+- 첨부 원본 파일은 아직 저장하지 않고, 파일명/종류/크기/mime type만 `metadata_only`로 메시지와 Event Storage payload에 기록한다.
+- 전송된 메시지에는 첨부 chip이 함께 표시되어 이후 DGX object storage, Obsidian projection, 모바일 승인 화면으로 확장할 수 있다.

@@ -54,6 +54,9 @@ export const providerProfileSchema = z.object({
 });
 export type ProviderProfile = z.infer<typeof providerProfileSchema>;
 
+export const modelInputModalitySchema = z.enum(["text", "image", "document"]);
+export type ModelInputModality = z.infer<typeof modelInputModalitySchema>;
+
 export const modelDescriptorSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -61,6 +64,7 @@ export const modelDescriptorSchema = z.object({
   contextWindow: z.number().int().positive().optional(),
   supportsStreaming: z.boolean(),
   supportsTools: z.boolean(),
+  inputModalities: z.array(modelInputModalitySchema).optional(),
   tags: z.array(z.string()),
 });
 export type ModelDescriptor = z.infer<typeof modelDescriptorSchema>;
@@ -201,6 +205,22 @@ export type AgentProfile = z.infer<typeof agentProfileSchema>;
 
 export const backupStatusSchema = z.enum(["pending", "synced", "failed"]);
 export type BackupStatus = z.infer<typeof backupStatusSchema>;
+
+export const conversationAttachmentKindSchema = z.enum(["image", "document"]);
+export type ConversationAttachmentKind = z.infer<typeof conversationAttachmentKindSchema>;
+
+export const conversationAttachmentStorageSchema = z.enum(["metadata_only", "local_cache", "dgx_object_storage"]);
+export type ConversationAttachmentStorage = z.infer<typeof conversationAttachmentStorageSchema>;
+
+export const conversationAttachmentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  kind: conversationAttachmentKindSchema,
+  mimeType: z.string(),
+  size: z.number().nonnegative(),
+  storage: conversationAttachmentStorageSchema,
+});
+export type ConversationAttachment = z.infer<typeof conversationAttachmentSchema>;
 
 export const conversationMessageSchema = z.object({
   id: z.string(),
