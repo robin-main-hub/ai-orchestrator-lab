@@ -189,3 +189,9 @@ corepack pnpm dev
 - Event Storage session index 항목에 `title`과 `createdByClient`를 추가했다.
 - DGX-02 서버는 `session.created` 이벤트 payload의 title/sourceClient를 세션 인덱스 메타데이터로 승격한다.
 - Desktop Sessions 패널은 sessionId 대신 사람이 읽을 수 있는 title을 우선 표시하고, 세부 줄에 sessionId와 event count를 함께 보여준다.
+
+## Stage24
+
+- 세션 이름 변경을 `session.renamed` 이벤트로 기록한다.
+- DGX-02 session index projection은 `session.created`와 최신 `session.renamed` 이벤트를 함께 읽어 title을 계산한다.
+- Desktop Sessions 패널에 active session 이름 변경 버튼을 추가했다.

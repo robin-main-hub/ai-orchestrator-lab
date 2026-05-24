@@ -69,3 +69,4 @@ DGX-02 user service 예시는 `scripts/dgx-02/ai-orchestrator-server.service`에
 - 각 항목은 `sessionId`, `eventCount`, `firstEventAt`, `lastEventAt`, `lastEventType`, `sources`, `sourceTrust`를 포함합니다.
 - MacBook/Home PC 클라이언트는 이 인덱스를 먼저 읽고 필요한 세션만 `/events?sessionId=...`로 복원합니다.
 - Stage23부터 `session.created` 이벤트가 있으면 `title`과 `createdByClient`도 session index에 포함합니다.
+- Stage24부터 `session.renamed` 이벤트가 있으면 최신 rename title을 session index의 title로 사용합니다.

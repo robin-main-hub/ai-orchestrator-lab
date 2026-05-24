@@ -801,6 +801,22 @@ export function App() {
     );
   }
 
+  function handleRenameActiveSession() {
+    const currentTitle =
+      sessionIndexState.sessions.find((session) => session.sessionId === activeSessionId)?.title ?? activeSessionId;
+    const nextTitle = window.prompt("세션 이름 바꾸기", currentTitle)?.trim();
+    if (!nextTitle || nextTitle === currentTitle) {
+      return;
+    }
+
+    appendEvent("session.renamed", {
+      sessionId: activeSessionId,
+      title: nextTitle,
+      previousTitle: currentTitle,
+      sourceClient: "client_macbook",
+    });
+  }
+
   async function handleReplayEventStorage(sessionId = activeSessionId) {
     setEventSyncState((state) => ({
       ...state,
@@ -1725,6 +1741,7 @@ export function App() {
             index={sessionIndexState}
             onCreateSession={handleCreateSession}
             onRefresh={handleRefreshSessionIndex}
+            onRenameActiveSession={handleRenameActiveSession}
             onReplaySession={handleReplayEventStorage}
           />
           <RuntimeRailPanel onProbeDgx={handleProbeDgx} snapshot={runtimeSnapshotState} />
@@ -1908,12 +1925,14 @@ function SessionIndexRailPanel({
   index,
   onCreateSession,
   onRefresh,
+  onRenameActiveSession,
   onReplaySession,
 }: {
   activeSessionId: string;
   index: Stage20SessionIndexState;
   onCreateSession: () => void;
   onRefresh: () => void;
+  onRenameActiveSession: () => void;
   onReplaySession: (sessionId: string) => void;
 }) {
   const visibleSessions = index.sessions.slice(0, 3);
@@ -1925,6 +1944,9 @@ function SessionIndexRailPanel({
         <span>Sessions</span>
         <button className="rail-icon-button" onClick={onCreateSession} title="Create a new session" type="button">
           <Plus size={13} />
+        </button>
+        <button className="rail-icon-button" onClick={onRenameActiveSession} title="Rename active session" type="button">
+          <Pencil size={13} />
         </button>
         <button className="rail-icon-button" onClick={onRefresh} title="Refresh sessions from DGX-02" type="button">
           <RefreshCw size={13} />

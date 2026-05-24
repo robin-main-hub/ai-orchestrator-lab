@@ -690,8 +690,7 @@ export function listEventStorageSessions(
         .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
       const firstEvent = events[0];
       const lastEvent = events[events.length - 1];
-      const sessionCreatedEvent = events.find((event) => event.type === "session.created");
-      const sessionMetadata = getSessionCreatedMetadata(sessionCreatedEvent);
+      const sessionMetadata = getSessionMetadata(events);
 
       return {
         sessionId,
@@ -928,7 +927,30 @@ function uniqueValues<T extends string>(values: T[]): T[] {
   return [...new Set(values)];
 }
 
-function getSessionCreatedMetadata(event: EventEnvelope | undefined): { title?: string; createdByClient?: string } {
+function getSessionMetadata(events: EventEnvelope[]): { title?: string; createdByClient?: string } {
+  const createdEvent = events.find((event) => event.type === "session.created");
+  const titleEvent = [...events]
+    .filter((event) => event.type === "session.created" || event.type === "session.renamed")
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+  const createdPayload = asSessionMetadataPayload(createdEvent);
+  const titlePayload = asSessionMetadataPayload(titleEvent);
+
+  return {
+    title: titlePayload.title,
+    createdByClient:
+      typeof createdPayload.createdByClient === "string"
+        ? createdPayload.createdByClient
+        : typeof createdPayload.sourceClient === "string"
+          ? createdPayload.sourceClient
+          : undefined,
+  };
+}
+
+function asSessionMetadataPayload(event: EventEnvelope | undefined): {
+  title?: string;
+  sourceClient?: string;
+  createdByClient?: string;
+} {
   if (!event || !event.payload || typeof event.payload !== "object") {
     return {};
   }
@@ -936,12 +958,8 @@ function getSessionCreatedMetadata(event: EventEnvelope | undefined): { title?: 
   const payload = event.payload as { title?: unknown; sourceClient?: unknown; createdByClient?: unknown };
   return {
     title: typeof payload.title === "string" ? payload.title : undefined,
-    createdByClient:
-      typeof payload.createdByClient === "string"
-        ? payload.createdByClient
-        : typeof payload.sourceClient === "string"
-          ? payload.sourceClient
-          : undefined,
+    sourceClient: typeof payload.sourceClient === "string" ? payload.sourceClient : undefined,
+    createdByClient: typeof payload.createdByClient === "string" ? payload.createdByClient : undefined,
   };
 }
 
