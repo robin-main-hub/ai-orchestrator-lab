@@ -1,5 +1,4 @@
-import type { InsightCategory, ReviewMode } from "@ai-orchestrator/protocol";
-import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
+import type { BranchExperiment, InsightCategory, ReviewMode, RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
 
 export function reviewModeLabel(mode: ReviewMode) {
@@ -24,6 +23,15 @@ export function insightCategoryLabel(category: InsightCategory) {
   return labels[category];
 }
 
+export function branchStatusLabel(status: BranchExperiment["status"]) {
+  const labels: Record<BranchExperiment["status"], string> = {
+    adopted: "채택됨",
+    drafting: "작성중",
+    ready: "채택 후보",
+  };
+
+  return labels[status];
+}
 export function statusTone(status: RuntimeSnapshot["status"]) {
   if (status === "online") {
     return "ok";
