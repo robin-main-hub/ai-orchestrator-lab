@@ -290,14 +290,18 @@ export class MockProviderAdapter implements ProviderAdapter {
 
 function createSecretVaultEntry(profile: ProviderProfile, createdAt: string): SecretVaultEntry {
   const isDgxNoAuth = profile.tags.includes("dgx") && profile.tags.includes("no-auth");
+  const isCliSession = profile.tags.includes("cli");
+  const isOAuthSession = profile.tags.includes("oauth");
   const storage = isDgxNoAuth
     ? "dgx_vault"
-    : profile.tags.includes("oauth")
-    ? "oauth_session"
-    : profile.trustLevel === "trusted" && profile.secretRef?.scope !== "session"
-      ? "macos_keychain"
-      : profile.trustLevel === "untrusted"
+    : isOAuthSession
+      ? "oauth_session"
+      : isCliSession
         ? "session_memory"
+      : profile.trustLevel === "trusted" && profile.secretRef?.scope !== "session"
+        ? "macos_keychain"
+        : profile.trustLevel === "untrusted"
+          ? "session_memory"
         : "session_memory";
 
   return {
@@ -306,11 +310,21 @@ function createSecretVaultEntry(profile: ProviderProfile, createdAt: string): Se
     secretRefId: profile.secretRef?.id,
     storage,
     availability:
-      isDgxNoAuth || profile.kind === "ollama" || profile.kind === "lmstudio" || profile.tags.includes("mock") || profile.secretRef
+      isDgxNoAuth ||
+      isCliSession ||
+      isOAuthSession ||
+      profile.kind === "ollama" ||
+      profile.kind === "lmstudio" ||
+      profile.tags.includes("mock") ||
+      profile.secretRef
         ? "available"
         : "missing",
     redactedPreview: profile.secretRef?.redactedPreview,
-    transient: isDgxNoAuth ? false : (profile.secretRef?.transient ?? profile.trustLevel !== "trusted"),
+    transient: isDgxNoAuth
+      ? false
+      : isCliSession || isOAuthSession
+        ? true
+        : (profile.secretRef?.transient ?? profile.trustLevel !== "trusted"),
     createdAt: profile.secretRef?.createdAt ?? createdAt,
     expiresAt: profile.secretRef?.expiresAt,
   };
@@ -629,7 +643,23 @@ function createModelDiscoveryEndpoint(providerKind: ProviderKind, baseUrl?: stri
 
 function createDiscoveredModels(profile: ProviderProfile): ModelDescriptor[] {
   const modelIds =
-    profile.tags.includes("dgx") || profile.tags.includes("vllm")
+    profile.tags.includes("cli")
+      ? [
+          profile.defaultModel ?? "cli-session",
+          "codex-cli",
+          "claude-code-cli",
+          "openclaw-cli",
+          "local-shell-agent",
+        ]
+      : profile.tags.includes("oauth")
+        ? [
+            profile.defaultModel ?? "oauth-session",
+            "codex-session",
+            "codex-high",
+            "codex-review",
+            "claude-oauth-session",
+          ]
+        : profile.tags.includes("dgx") || profile.tags.includes("vllm")
       ? [
           profile.defaultModel ?? "qwen36-domain-wiki-rag-prisma",
           "qwen36-domain-wiki-rag-prisma",
@@ -690,6 +720,14 @@ function createDiscoveredModels(profile: ProviderProfile): ModelDescriptor[] {
 function createDiscoveryWarnings(profile: ProviderProfile): string[] {
   if (profile.tags.includes("dgx") || profile.tags.includes("vllm")) {
     return ["DGX-02 model registry is trusted; completion still goes through the runtime approval gate"];
+  }
+
+  if (profile.tags.includes("cli")) {
+    return ["CLI provider is registered as a local/session binding until a runner is attached"];
+  }
+
+  if (profile.tags.includes("oauth")) {
+    return ["OAuth provider is registered as a session binding; raw tokens stay outside the event log"];
   }
 
   if (profile.trustLevel === "untrusted") {

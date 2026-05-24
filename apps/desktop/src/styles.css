@@ -278,6 +278,75 @@ button {
   color: var(--text);
 }
 
+.provider-registration-menu {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #002f38;
+}
+
+.provider-registration-menu header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.provider-registration-menu header span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provider-registration-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.provider-registration-actions button {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 0.7fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #00313a;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.provider-registration-actions button:hover {
+  border-color: #1db4c8;
+}
+
+.provider-registration-actions span,
+.provider-registration-actions small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provider-registration-actions span {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.provider-registration-actions small {
+  color: var(--subtle);
+  font-size: 10px;
+}
+
 .mini-panel,
 .side-panel,
 .workbench-panel,

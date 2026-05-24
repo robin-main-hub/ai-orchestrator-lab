@@ -207,3 +207,10 @@ corepack pnpm dev
 - Obsidian vault export plan runtime을 추가했다.
 - Obsidian artifact destination은 vault 내부 markdown 상대 경로만 허용하고, `.`/`..` traversal은 차단한다.
 - Desktop 백업 생성 이벤트에 Obsidian export plan 메타데이터를 포함해 이후 Tauri/Electron 파일 writer와 바로 연결할 수 있게 했다.
+
+## Stage27
+
+- 좌측 네비게이션의 `프로바이더`를 등록 런처로 승격했다.
+- 등록 메뉴에서 API Key/환경변수/Claude Code JSON, CLI 세션, OAuth 세션을 각각 추가할 수 있다.
+- CLI/OAuth provider는 raw secret 없이 세션 바인딩으로 등록되고, 모델 discovery stub과 vault readiness가 바로 생성된다.
+- 오른쪽 `Provider Profiles`의 기존 `+` 버튼은 API key/env 등록 단축 동작으로 유지한다.

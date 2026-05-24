@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createProviderProfile,
   createProviderProfileFromCredentialInput,
   createProviderRuntimeReadiness,
   createSecretVaultSnapshot,
@@ -114,5 +115,33 @@ describe("provider credential parsing and model discovery", () => {
     expect(vault.rawSecretPersisted).toBe(false);
     expect(readiness.status).toBe("ready");
     expect(readiness.executionMode).toBe("remote");
+  });
+
+  it("registers CLI and OAuth providers as session bindings without raw secrets", () => {
+    const cliProfile = createProviderProfile({
+      id: "provider_codex_cli",
+      name: "Codex CLI",
+      kind: "custom",
+      defaultModel: "codex-cli",
+      tags: ["cli", "local"],
+      trustLevel: "trusted",
+    });
+    const oauthProfile = createProviderProfile({
+      id: "provider_codex_oauth",
+      name: "Codex OAuth",
+      kind: "custom",
+      defaultModel: "codex-session",
+      tags: ["oauth", "session"],
+      trustLevel: "trusted",
+    });
+    const vault = createSecretVaultSnapshot([cliProfile, oauthProfile], createdAt);
+    const cliDiscovery = discoverModelsForProfile(cliProfile, createdAt);
+    const oauthDiscovery = discoverModelsForProfile(oauthProfile, createdAt);
+
+    expect(vault.summary.available).toBe(2);
+    expect(vault.entries.map((entry) => entry.storage)).toEqual(["session_memory", "oauth_session"]);
+    expect(cliDiscovery.models.map((model) => model.id)).toContain("codex-cli");
+    expect(oauthDiscovery.models.map((model) => model.id)).toContain("codex-session");
+    expect(JSON.stringify(vault)).not.toContain("sk-");
   });
 });
