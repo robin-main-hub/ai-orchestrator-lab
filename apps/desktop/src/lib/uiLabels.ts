@@ -1,4 +1,4 @@
-import type { BranchExperiment, ContextPackTier, InsightCategory, ReviewMode, RuntimeSnapshot } from "@ai-orchestrator/protocol";
+import type { BranchExperiment, ContextPackTier, ConversationMessage, InsightCategory, ReviewMode, RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import type { AgentConfigTab, AgentCreativityLevel, AgentVoicePreset, WorkbenchAgent } from "../types";
 import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
 
@@ -136,4 +136,17 @@ export function contextPackTierLabel(tier: ContextPackTier) {
   };
 
   return labels[tier];
+}
+
+export function messageLabel(message: ConversationMessage, selectedAgent?: WorkbenchAgent) {
+  if (message.role === "user") {
+    return "사용자";
+  }
+
+  const agentName = message.metadata?.agentName;
+  if (typeof agentName === "string") {
+    return agentName;
+  }
+
+  return selectedAgent?.name ?? "Assistant";
 }
