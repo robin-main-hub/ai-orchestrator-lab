@@ -26,5 +26,17 @@
 
 - Node HTTP 기반 `/health` placeholder
 - `RuntimeSnapshot` 반환
-- 원격 실행과 메모리 동기화는 capability 이름만 노출
-- 실제 DGX 실행, WebSocket, job queue는 아직 구현하지 않음
+- `/models`에서 DGX-02 vLLM 모델 레지스트리 제공
+- `POST /provider-completions`에서 DGX-02 vLLM completion 프록시 제공
+- CORS preflight 처리
+- 원격 workspace 실행과 메모리 동기화는 capability 이름만 노출
+- WebSocket, job queue는 아직 구현하지 않음
+
+## DGX-02 completion proxy
+
+데스크톱은 raw vLLM endpoint나 secret을 request body에 넣지 않고 `providerProfileId`, `modelId`, 메시지만 보냅니다. 서버는 `DGX02_VLLM_BASE_URL` 환경변수가 있으면 그 값을 쓰고, 없으면 `http://dgx-02:8001/v1`로 vLLM에 연결합니다.
+
+```bash
+corepack pnpm --filter @ai-orchestrator/server build
+corepack pnpm --filter @ai-orchestrator/server start
+```

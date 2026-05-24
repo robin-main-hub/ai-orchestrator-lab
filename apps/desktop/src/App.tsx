@@ -635,6 +635,7 @@ export function App() {
       modelId,
       authMode,
       authLabel,
+      routePreference: isDgxVllmProvider(selectedProvider) ? "server_proxy" : "mock",
     });
 
     let reply = "";
@@ -649,6 +650,8 @@ export function App() {
         reply = result.content;
         completionMetadata = {
           endpoint: result.endpoint,
+          route: result.route,
+          fallbackReason: result.fallbackReason,
           usage: result.usage,
           realProviderCall: true,
         };
@@ -657,6 +660,8 @@ export function App() {
           providerProfileId: selectedProvider.id,
           modelId,
           endpoint: result.endpoint,
+          route: result.route,
+          fallbackReason: result.fallbackReason,
           usage: result.usage,
         });
       } else {
