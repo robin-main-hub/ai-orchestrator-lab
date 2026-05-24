@@ -158,6 +158,9 @@ export type AgentKind = z.infer<typeof agentKindSchema>;
 export const soulInjectionModeSchema = z.enum(["full", "summary", "retrieved", "off"]);
 export type SoulInjectionMode = z.infer<typeof soulInjectionModeSchema>;
 
+export const agentConfigSourceSchema = z.enum(["internal", "markdown", "off"]);
+export type AgentConfigSource = z.infer<typeof agentConfigSourceSchema>;
+
 export const agentAuthBindingSchema = z.object({
   mode: z.enum(["provider_profile", "oauth", "local"]),
   label: z.string(),
@@ -189,6 +192,7 @@ export const agentProfileSchema = z.object({
   providerProfileId: z.string().optional(),
   modelId: z.string().optional(),
   soulMode: soulInjectionModeSchema,
+  configSource: agentConfigSourceSchema,
   authBinding: agentAuthBindingSchema.optional(),
   enabled: z.boolean(),
   permissionLevel: z.string().optional(),

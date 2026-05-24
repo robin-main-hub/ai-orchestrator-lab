@@ -1490,6 +1490,7 @@ export function App() {
       providerProfileId: provider?.id,
       modelId: provider?.defaultModel,
       soulMode: "off",
+      configSource: "off",
       authBinding: createAuthBinding(provider),
       enabled: true,
       permissionLevel: "read_only",
@@ -1805,7 +1806,10 @@ export function App() {
         snapshot={runtimeSnapshotState}
       />
       <main className="workspace-grid">
-        <aside className="left-rail" aria-label="오케스트레이터 네비게이션">
+        <aside
+          className={`left-rail ${providerRegistrationOpen ? "provider-mode" : ""}`}
+          aria-label="오케스트레이터 네비게이션"
+        >
           <div className="brand-block">
             <div className="brand-mark">
               <Brain size={22} />
@@ -1852,25 +1856,29 @@ export function App() {
             />
           ) : null}
 
-          <SessionIndexRailPanel
-            activeSessionId={activeSessionId}
-            index={sessionIndexState}
-            onCreateSession={handleCreateSession}
-            onRefresh={handleRefreshSessionIndex}
-            onRenameActiveSession={handleRenameActiveSession}
-            onReplaySession={handleReplayEventStorage}
-          />
-          <RuntimeRailPanel onProbeDgx={handleProbeDgx} snapshot={runtimeSnapshotState} />
-          <OperationsRailPanel
-            backupSnapshot={backupSnapshot}
-            ingressSnapshot={ingressSnapshot}
-            onCheckProviderVault={handleCheckProviderVault}
-            onExportBackup={handleExportBackupProjections}
-            onImportTelegram={handleImportTelegramIngress}
-            permissionSnapshot={permissionSnapshot}
-            providerReadiness={providerReadiness}
-            secretVaultSnapshot={secretVaultSnapshot}
-          />
+          {!providerRegistrationOpen ? (
+            <>
+              <SessionIndexRailPanel
+                activeSessionId={activeSessionId}
+                index={sessionIndexState}
+                onCreateSession={handleCreateSession}
+                onRefresh={handleRefreshSessionIndex}
+                onRenameActiveSession={handleRenameActiveSession}
+                onReplaySession={handleReplayEventStorage}
+              />
+              <RuntimeRailPanel onProbeDgx={handleProbeDgx} snapshot={runtimeSnapshotState} />
+              <OperationsRailPanel
+                backupSnapshot={backupSnapshot}
+                ingressSnapshot={ingressSnapshot}
+                onCheckProviderVault={handleCheckProviderVault}
+                onExportBackup={handleExportBackupProjections}
+                onImportTelegram={handleImportTelegramIngress}
+                permissionSnapshot={permissionSnapshot}
+                providerReadiness={providerReadiness}
+                secretVaultSnapshot={secretVaultSnapshot}
+              />
+            </>
+          ) : null}
 
           <section className="mini-panel legacy-runtime-panel">
             <header>

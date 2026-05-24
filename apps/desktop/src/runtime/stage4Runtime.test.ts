@@ -21,6 +21,7 @@ const agents: AgentProfile[] = [
     kind: "virtual",
     role: "orchestrator",
     soulMode: "summary",
+    configSource: "internal",
     enabled: true,
   },
   {
@@ -29,6 +30,7 @@ const agents: AgentProfile[] = [
     kind: "virtual",
     role: "reviewer",
     soulMode: "retrieved",
+    configSource: "internal",
     enabled: true,
   },
   {
@@ -37,6 +39,7 @@ const agents: AgentProfile[] = [
     kind: "real",
     role: "executor",
     soulMode: "off",
+    configSource: "off",
     enabled: true,
   },
 ];
