@@ -1512,6 +1512,43 @@ export function App() {
     );
   }, [selectedModel?.id, selectedModel?.providerProfileId]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    let lastProviderRegistryRefreshAt = 0;
+    const refreshWithThrottle = (trigger: string) => {
+      const now = Date.now();
+      if (now - lastProviderRegistryRefreshAt < 10_000) {
+        return;
+      }
+
+      lastProviderRegistryRefreshAt = now;
+      void refreshDgxProviderRegistry(trigger, { quiet: true });
+    };
+    const handleWindowFocus = () => refreshWithThrottle("window_focus");
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshWithThrottle("visibility_visible");
+      }
+    };
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "hidden") {
+        refreshWithThrottle("interval");
+      }
+    }, 120_000);
+
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
   function appendEvent<T>(
     type: string,
     payload: T,
@@ -2872,6 +2909,9 @@ export function App() {
         selectedModelId: dgxDiscovery.selectedModelId,
       });
     }
+    if (probe.status === "online") {
+      void refreshDgxProviderRegistry("probe_dgx", { quiet: true });
+    }
   }
 
   function setAgentActivity(agentId: string, status: AgentActivityStatus) {
@@ -3219,24 +3259,7 @@ export function App() {
     });
   }
 
-  async function handleCheckProviderVault() {
-    appendEvent("secret.vault.checked", {
-      snapshotId: secretVaultSnapshot.id,
-      available: secretVaultSnapshot.summary.available,
-      missing: secretVaultSnapshot.summary.missing,
-      transient: secretVaultSnapshot.summary.transient,
-      rawSecretPersisted: secretVaultSnapshot.rawSecretPersisted,
-    });
-    appendEvent("provider.runtime.readiness.checked", {
-      readinessId: providerReadiness.id,
-      providerProfileId: providerReadiness.providerProfileId,
-      status: providerReadiness.status,
-      executionMode: providerReadiness.executionMode,
-      canRunCompletion: providerReadiness.canRunCompletion,
-      canUseAutomaticMemory: providerReadiness.canUseAutomaticMemory,
-      reason: providerReadiness.reason,
-    });
-
+  async function refreshDgxProviderRegistry(trigger: string, options: { quiet?: boolean } = {}) {
     try {
       const registry = await fetchDgxProviderRegistry();
       setProviderProfiles((profiles) => mergeProviderProfilesFromRegistry(profiles, registry));
@@ -3258,24 +3281,51 @@ export function App() {
           ]),
         ),
       }));
-      appendEvent("provider.registry.loaded", {
+      appendEvent(options.quiet ? "provider.registry.refreshed" : "provider.registry.loaded", {
         registryId: registry.id,
         authorityNodeId: registry.authorityNodeId,
+        trigger,
         summary: registry.summary,
         entries: registry.entries.map((entry) => ({
           providerProfileId: entry.providerProfileId,
+          name: entry.name,
           authMode: entry.authMode,
           secretAvailability: entry.secretAvailability,
+          secretRefPreview: entry.secretRefPreview,
           defaultModelIds: entry.defaultModelIds,
           rawSecretPersisted: false,
         })),
       });
+      return registry;
     } catch (error) {
       appendEvent("provider.registry.failed", {
         authorityNodeId: "dgx-02",
+        trigger,
         error: error instanceof Error ? error.message : String(error),
       });
+      return undefined;
     }
+  }
+
+  async function handleCheckProviderVault() {
+    appendEvent("secret.vault.checked", {
+      snapshotId: secretVaultSnapshot.id,
+      available: secretVaultSnapshot.summary.available,
+      missing: secretVaultSnapshot.summary.missing,
+      transient: secretVaultSnapshot.summary.transient,
+      rawSecretPersisted: secretVaultSnapshot.rawSecretPersisted,
+    });
+    appendEvent("provider.runtime.readiness.checked", {
+      readinessId: providerReadiness.id,
+      providerProfileId: providerReadiness.providerProfileId,
+      status: providerReadiness.status,
+      executionMode: providerReadiness.executionMode,
+      canRunCompletion: providerReadiness.canRunCompletion,
+      canUseAutomaticMemory: providerReadiness.canUseAutomaticMemory,
+      reason: providerReadiness.reason,
+    });
+
+    await refreshDgxProviderRegistry("manual_provider_vault");
   }
 
   function handleRemoveProvider(providerId: string) {
