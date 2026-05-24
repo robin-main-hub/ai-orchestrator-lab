@@ -575,6 +575,53 @@ export type EventStore = {
   markRedacted(eventId: string, reason: string): Promise<void>;
 };
 
+export const eventSyncStatusSchema = z.enum(["accepted", "duplicate", "conflict", "failed"]);
+export type EventSyncStatus = z.infer<typeof eventSyncStatusSchema>;
+
+export const eventSyncItemResultSchema = z.object({
+  eventId: z.string(),
+  status: eventSyncStatusSchema,
+  serverRevision: z.number().int().nonnegative().optional(),
+  reason: z.string().optional(),
+});
+export type EventSyncItemResult = z.infer<typeof eventSyncItemResultSchema>;
+
+export const eventSyncPushRequestSchema = z.object({
+  id: z.string(),
+  clientId: z.string(),
+  sessionId: z.string(),
+  events: z.array(eventEnvelopeSchema),
+  idempotencyKey: z.string(),
+  createdAt: z.string(),
+});
+export type EventSyncPushRequest = Omit<z.infer<typeof eventSyncPushRequestSchema>, "events"> & {
+  events: EventEnvelope[];
+};
+
+export const eventSyncPushResponseSchema = z.object({
+  id: z.string(),
+  requestId: z.string(),
+  sessionId: z.string(),
+  serverRevision: z.number().int().nonnegative(),
+  accepted: z.number().int().nonnegative(),
+  duplicates: z.number().int().nonnegative(),
+  conflicts: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  results: z.array(eventSyncItemResultSchema),
+  createdAt: z.string(),
+});
+export type EventSyncPushResponse = z.infer<typeof eventSyncPushResponseSchema>;
+
+export const eventSyncPullResponseSchema = z.object({
+  sessionId: z.string(),
+  serverRevision: z.number().int().nonnegative(),
+  events: z.array(eventEnvelopeSchema),
+  createdAt: z.string(),
+});
+export type EventSyncPullResponse = Omit<z.infer<typeof eventSyncPullResponseSchema>, "events"> & {
+  events: EventEnvelope[];
+};
+
 export type RuntimeNodeRole = "main_server" | "compute" | "local";
 
 export type RuntimeNode = {

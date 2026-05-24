@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   codingPacketSchema,
   eventEnvelopeSchema,
+  eventSyncPushRequestSchema,
+  eventSyncPushResponseSchema,
   providerProfileSchema,
   type BackupProjectionArtifact,
   type CodingPacket,
@@ -71,6 +73,42 @@ describe("protocol schemas", () => {
 
     expect(event.redacted).toBe(false);
     expect(event.sourceTrust).toBe("untrusted");
+  });
+
+  it("models Event Storage push sync with per-event outcomes", () => {
+    const event = eventEnvelopeSchema.parse({
+      id: "event_sync_1",
+      sessionId: "session_1",
+      type: "conversation.message.created",
+      payload: { contentLength: 12, redaction: "applied" },
+      createdAt: "2026-05-24T00:00:00.000Z",
+      source: "desktop",
+      sourceTrust: "trusted",
+      redacted: true,
+    });
+    const request = eventSyncPushRequestSchema.parse({
+      id: "event_sync_request_1",
+      clientId: "macbook",
+      sessionId: "session_1",
+      events: [event],
+      idempotencyKey: "macbook:session_1:event_sync_1",
+      createdAt: event.createdAt,
+    });
+    const response = eventSyncPushResponseSchema.parse({
+      id: "event_sync_response_1",
+      requestId: request.id,
+      sessionId: request.sessionId,
+      serverRevision: 1,
+      accepted: 1,
+      duplicates: 0,
+      conflicts: 0,
+      failed: 0,
+      results: [{ eventId: event.id, status: "accepted", serverRevision: 1 }],
+      createdAt: event.createdAt,
+    });
+
+    expect(response.accepted).toBe(1);
+    expect(response.results[0]?.status).toBe("accepted");
   });
 
   it("models remote execution without raw command execution", () => {

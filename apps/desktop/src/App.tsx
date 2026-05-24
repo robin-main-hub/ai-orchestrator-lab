@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   Archive,
@@ -88,6 +88,12 @@ import {
   requestDgxVllmCompletion,
 } from "./runtime/stage12DgxProvider";
 import { probeDgxOrchestratorServer } from "./runtime/stage13DgxServer";
+import {
+  createInitialEventSyncState,
+  pushEventsToDgxEventStorage,
+  reduceEventSyncState,
+  type Stage14EventSyncState,
+} from "./runtime/stage14EventSync";
 import type {
   AgentProfile,
   ApprovalState,
@@ -475,6 +481,10 @@ export function App() {
   const [selectedAgentId, setSelectedAgentId] = useState(seededAgentProfiles[0]?.id ?? "");
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
   const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
+  const [eventSyncState, setEventSyncState] = useState<Stage14EventSyncState>(() =>
+    createInitialEventSyncState(initialEventLog.length),
+  );
+  const [syncedEventIds, setSyncedEventIds] = useState<Record<string, true>>({});
   const [memoryRecords, setMemoryRecords] = useState<MemoryRecord[]>(initialMemoryRecords);
   const [ingressSnapshot, setIngressSnapshot] = useState<Stage8IngressSnapshot>(initialIngressSnapshot);
   const [approvalStateByItemId, setApprovalStateByItemId] = useState<Record<string, ApprovalState>>({});
@@ -582,6 +592,10 @@ export function App() {
     [agentRunState, approvalStateByItemId, backupSnapshot.mobilePolicy, ingressSnapshot.approvals, runtimeSnapshotState],
   );
 
+  useEffect(() => {
+    void syncEventsToDgx(initialEventLog);
+  }, []);
+
   function appendEvent<T>(
     type: string,
     payload: T,
@@ -589,6 +603,7 @@ export function App() {
       source?: EventSource;
       sourceTrust?: SourceTrust;
       correlationId?: string;
+      skipRemoteSync?: boolean;
     },
   ) {
     const event = createStage2Event({
@@ -599,7 +614,58 @@ export function App() {
       correlationId: options?.correlationId,
     });
     setEventLog((events) => appendEventToLog(events, event));
+    if (!options?.skipRemoteSync) {
+      void syncEventsToDgx([event]);
+    }
     return event;
+  }
+
+  async function syncEventsToDgx(eventsToSync: EventEnvelope[]) {
+    if (eventsToSync.length === 0) {
+      return;
+    }
+
+    setEventSyncState((state) => ({
+      ...state,
+      status: "syncing",
+      outboxCount: Math.max(state.outboxCount, eventsToSync.length),
+    }));
+
+    const result = await pushEventsToDgxEventStorage({
+      events: eventsToSync,
+    });
+
+    setEventSyncState((state) => reduceEventSyncState(state, result));
+    if (result.syncedEventIds.length > 0) {
+      setSyncedEventIds((current) => ({
+        ...current,
+        ...Object.fromEntries(result.syncedEventIds.map((eventId) => [eventId, true])),
+      }));
+    }
+    setRuntimeSnapshotState((snapshot) => ({
+      ...snapshot,
+      memorySyncStatus: result.status === "synced" ? "online" : snapshot.memorySyncStatus,
+      syncTopology: {
+        ...snapshot.syncTopology,
+        clients: snapshot.syncTopology.clients.map((client) =>
+          client.id === "macbook"
+            ? {
+                ...client,
+                status: result.status === "synced" ? "online" : "degraded",
+                outboxCount: result.queuedEvents.length,
+                lastSeenAt: result.response?.createdAt ?? client.lastSeenAt,
+              }
+            : client,
+        ),
+      },
+      recentError: result.status === "queued" || result.status === "failed" ? result.error : snapshot.recentError,
+      updatedAt: result.response?.createdAt ?? new Date().toISOString(),
+    }));
+  }
+
+  function handleSyncEventStorage() {
+    const unsyncedEvents = eventLog.filter((event) => !syncedEventIds[event.id]);
+    void syncEventsToDgx(unsyncedEvents);
   }
 
   async function handleSendMessageStage2() {
@@ -1489,7 +1555,7 @@ export function App() {
               <em className={statusTone(runtimeSnapshotState.memorySyncStatus)}>{runtimeSnapshotState.memorySyncStatus}</em>
             </div>
             <div className="sync-authority-note">
-              <strong>Event Store Authority</strong>
+              <strong>Event Storage Authority</strong>
               <span>{runtimeSnapshotState.syncTopology.authorityLabel}</span>
               <em>central</em>
             </div>
@@ -1605,10 +1671,12 @@ export function App() {
       <TerminalDock
         agentRun={agentRunState}
         dgxBridge={dgxBridgeState}
+        eventSyncState={eventSyncState}
         events={eventLog}
         onApproveNext={() => handleResolveNextPermission("approved")}
         onCheckProviderVault={handleCheckProviderVault}
         onRejectNext={() => handleResolveNextPermission("rejected")}
+        onSyncEvents={handleSyncEventStorage}
         permissionSnapshot={permissionSnapshot}
         providerReadiness={providerReadiness}
         secretVaultSnapshot={secretVaultSnapshot}
@@ -2603,10 +2671,12 @@ function CodingPacketPanel({ packet }: { packet: CodingPacket }) {
 function TerminalDock({
   agentRun,
   dgxBridge,
+  eventSyncState,
   events,
   onApproveNext,
   onCheckProviderVault,
   onRejectNext,
+  onSyncEvents,
   permissionSnapshot,
   providerReadiness,
   secretVaultSnapshot,
@@ -2614,10 +2684,12 @@ function TerminalDock({
 }: {
   agentRun: Stage4AgentRun;
   dgxBridge: Stage5DgxBridge;
+  eventSyncState: Stage14EventSyncState;
   events: EventEnvelope[];
   onApproveNext: () => void;
   onCheckProviderVault: () => void;
   onRejectNext: () => void;
+  onSyncEvents: () => void;
   permissionSnapshot: PermissionMatrixSnapshot;
   providerReadiness: ProviderRuntimeReadiness;
   secretVaultSnapshot: SecretVaultSnapshot;
@@ -2763,9 +2835,19 @@ function TerminalDock({
         </article>
         <article className="event-log">
           <header>
-            <Activity size={15} />
-            <span>이벤트 저장소</span>
+            <span>
+              <Activity size={15} />
+              Event Storage
+            </span>
+            <em className={eventSyncState.status === "synced" ? "positive" : "warning"}>{eventSyncState.status}</em>
           </header>
+          <div className="event-sync-summary">
+            <span>DGX-02 rev {eventSyncState.serverRevision ?? "-"}</span>
+            <small>outbox {eventSyncState.outboxCount}</small>
+            <button onClick={onSyncEvents} type="button">
+              sync
+            </button>
+          </div>
           <div className="event-log-list">
             {visibleEvents.map((event) => (
               <p key={event.id}>

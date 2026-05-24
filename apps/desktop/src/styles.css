@@ -1912,6 +1912,12 @@ button {
   margin-bottom: 6px;
 }
 
+.event-log header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .terminal-slot em,
 .dgx-bridge-card em,
 .agent-runtime-card em,
@@ -2029,6 +2035,43 @@ button {
   gap: 3px;
 }
 
+.event-sync-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.event-sync-summary span,
+.event-sync-summary small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-sync-summary button {
+  min-height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #002f38;
+  color: var(--cyan);
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.positive {
+  color: var(--green) !important;
+}
+
+.warning {
+  color: var(--amber) !important;
+}
+
 .event-log-list p {
   display: flex;
   justify-content: space-between;
@@ -2096,7 +2139,7 @@ button {
 .event-log {
   flex: 0 1 clamp(280px, 34vw, 460px);
   min-width: 260px;
-  height: 78px;
+  height: 86px;
 }
 
 .status-bar {
