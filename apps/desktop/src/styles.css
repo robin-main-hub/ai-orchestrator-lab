@@ -359,7 +359,8 @@ button {
 
 .provider-registration-list {
   display: grid;
-  gap: 6px;
+  align-content: start;
+  gap: 4px;
   max-height: 210px;
   min-height: 0;
   overflow-y: auto;
@@ -373,15 +374,19 @@ button {
 
 .provider-registration-list article {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(3, 26px);
+  grid-template-columns: minmax(0, 1fr) repeat(3, 24px);
   grid-template-rows: auto auto;
   align-items: center;
-  gap: 5px;
+  gap: 3px 5px;
   min-width: 0;
-  padding: 6px;
+  padding: 5px 6px;
   border: 1px solid var(--line-soft);
   border-radius: 7px;
   background: #00313a;
+}
+
+.provider-registration-list article > div {
+  display: contents;
 }
 
 .provider-registration-list article.in-use {
@@ -398,19 +403,33 @@ button {
 }
 
 .provider-registration-list strong {
+  grid-column: 1 / 2;
+  grid-row: 1;
+  align-self: center;
   color: var(--text);
-  font-size: 11px;
-  line-height: 1.25;
+  font-size: 10.5px;
+  line-height: 1.15;
   overflow-wrap: anywhere;
 }
 
 .provider-registration-list span {
   grid-column: 1 / -1;
-  margin-top: 2px;
+  grid-row: 2;
+  align-self: start;
+  margin-top: 0;
   color: var(--subtle);
-  font-size: 9px;
-  line-height: 1.25;
+  font-size: 8.5px;
+  line-height: 1.2;
   overflow-wrap: anywhere;
+}
+
+.provider-registration-list .rail-icon-button {
+  grid-row: 1;
+  align-self: center;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 6px;
 }
 
 .mini-panel,
