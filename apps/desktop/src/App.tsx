@@ -4557,8 +4557,12 @@ function ConversationWorkbench({
             aria-label="오케스트레이터에게 메시지 보내기"
             onChange={(event) => onDraftMessageChange(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                event.preventDefault();
+              if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+                return;
+              }
+
+              event.preventDefault();
+              if ((draftMessage.trim() || draftAttachments.length > 0) && selectedAgent) {
                 onSendMessage();
               }
             }}
