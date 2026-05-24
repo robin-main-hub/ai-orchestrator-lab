@@ -73,6 +73,29 @@ This is still a local structural implementation.
 It does not yet run a real Memento MCP server, Qdrant vector database, or embedding model.
 The current retrieval is a deterministic local heuristic so the product can verify data flow, Event Storage mapping, trust isolation, and UI behavior before adding the real vector backend.
 
+## Current Product Decision
+
+As of 2026-05-25, DGX-02 is the authoritative shared data server.
+
+That means:
+
+- Memento memory writes should eventually land on DGX-02 first.
+- MacBook keeps a local cache/outbox and can continue with local models while offline.
+- Home PC normally works as a DGX-02-connected client.
+- Memento MCP is a future adapter, not the immediate source of truth.
+- The app's `MemoryAPI` boundary must remain stable so a later MCP adapter can be attached without changing Conversation Workbench, Debate Table, or backup projections.
+
+The next memory backend should therefore be shaped like:
+
+```text
+Event Storage on DGX-02
+  -> memory events
+  -> MemoryAPI
+  -> local deterministic adapter for fallback
+  -> future Memento MCP adapter
+  -> future vector index
+```
+
 ## Next Proper Implementation Step
 
 When Event Storage persistence is stable, replace or complement the local adapter with real memory backends:

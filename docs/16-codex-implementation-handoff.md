@@ -178,13 +178,15 @@ Still gated:
 
 ## PR0 Authority / Permission Update
 
-Implementation note added on 2026-05-24:
+Implementation note updated on 2026-05-25:
 
-- MacBook is the authoritative local Event Storage owner.
-- DGX-02 is a projection and compute server, not the source of truth.
-- Home PC is a thin online surface and can degrade when DGX-02 projection is unavailable.
-- Conflict policy is `macbook_authority_wins`.
-- Offline write policy is `append_authoritative_local`.
+- DGX-02 is the authoritative shared Event Storage and memory server.
+- MacBook is a cache client with a persistent local outbox and can continue with local models when DGX-02 is offline.
+- Home PC is also a cache client, but normal operation assumes DGX-02 is online.
+- Conflict policy is `dgx02_authority_wins`.
+- Offline write policy is `append_local_outbox_when_offline`.
 - Legacy Telegram ingress remains visible in the UI as Telegram, but persisted protocol values use `legacy_telegram`.
-- Unknown external effects are denied by default; customer replies and email sends require approval.
-- `stage29LocalEventStore` separates permanent local events from the DGX projection outbox.
+- Unknown external effects are denied by default; customer replies, email sends, provider execution, device reboot, and terminal actions require approval.
+- `stage29LocalEventStore` remains a client-side cache/outbox layer until the DGX-02 Event Storage adapter is fully wired.
+- Memento MCP remains a future adapter. DGX-02 Event Storage remains the memory source of truth.
+- The Windows Obsidian default vault root is `F:/obsidian/ai-headquarter`.

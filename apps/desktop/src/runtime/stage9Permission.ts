@@ -292,6 +292,11 @@ function eventSourceForExternalChannel(channel: ExternalApprovalItem["channel"])
 }
 
 function actionFromExternalApproval(approval: ExternalApprovalItem): PermissionAction {
+  const summaryText = approval.summary.toLowerCase();
+  if (/(reboot|restart|watchdog|재부팅|다시\s*시작)/i.test(summaryText)) {
+    return "device_reboot";
+  }
+
   const permissionAction = actionFromPermissions(approval.permissions);
   if (permissionAction !== "unknown_external_effect") {
     return permissionAction;

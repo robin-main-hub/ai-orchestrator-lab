@@ -20,20 +20,20 @@ const localRuntime: RuntimeSnapshot = {
   ],
   localModels: [],
   syncTopology: {
-    authorityNodeId: "client_macbook",
-    authorityLabel: "MacBook",
-    eventStoreMode: "macbook_authoritative_with_dgx_projection",
-    offlineWritePolicy: "append_authoritative_local",
-    conflictPolicy: "macbook_authority_wins",
+    authorityNodeId: "dgx-02",
+    authorityLabel: "DGX-02",
+    eventStoreMode: "dgx02_authoritative_with_client_cache",
+    offlineWritePolicy: "append_local_outbox_when_offline",
+    conflictPolicy: "dgx02_authority_wins",
     clients: [
       {
         id: "client_macbook",
         label: "MacBook",
         kind: "macbook",
         status: "online",
-        syncRole: "authority",
+        syncRole: "cache_client",
         localStore: "sqlite",
-        outboxMode: "authoritative_local",
+        outboxMode: "offline_cache_outbox",
         failurePolicy: "continue_locally",
         outboxCount: 2,
       },
@@ -42,9 +42,9 @@ const localRuntime: RuntimeSnapshot = {
         label: "Home PC",
         kind: "desktop_pc",
         status: "online",
-        syncRole: "thin_surface",
-        localStore: "none",
-        outboxMode: "stateless",
+        syncRole: "cache_client",
+        localStore: "sqlite",
+        outboxMode: "offline_cache_outbox",
         failurePolicy: "unavailable_without_dgx",
         outboxCount: 0,
       },
@@ -53,9 +53,9 @@ const localRuntime: RuntimeSnapshot = {
         label: "DGX-02",
         kind: "server",
         status: "offline",
-        syncRole: "projection_server",
+        syncRole: "authority",
         localStore: "sqlite",
-        outboxMode: "projection_outbox",
+        outboxMode: "stateless",
         failurePolicy: "compute_degraded",
         outboxCount: 0,
       },
@@ -154,7 +154,7 @@ describe("stage13 DGX server probing", () => {
     expect(probe.runtime.dgxStatus).toBe("offline");
     expect(probe.runtime.memorySyncStatus).toBe("degraded");
     expect(probe.heartbeat.status).toBe("unreachable");
-    expect(probe.runtime.recentError).toContain("Home PC waits for DGX-02 projection recovery");
+    expect(probe.runtime.recentError).toContain("Home PC degrades until DGX-02 authority returns");
     expect(probe.runtime.syncTopology.clients.find((client) => client.id === "client_home_pc")?.status).toBe("degraded");
   });
 

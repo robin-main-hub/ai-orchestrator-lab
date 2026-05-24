@@ -653,6 +653,7 @@ export type PermissionAction =
   | "file_write"
   | "remote_workspace"
   | "provider_completion"
+  | "device_reboot"
   | "secret_view"
   | "mobile_approval"
   | "email_send"
@@ -1135,11 +1136,13 @@ export type LocalModelRuntime = {
 
 export type ClientDeviceKind = "macbook" | "desktop_pc" | "mobile" | "server";
 
-export type EventStoreAuthorityMode = "macbook_authoritative_with_dgx_projection";
+export type EventStoreAuthorityMode =
+  | "dgx02_authoritative_with_client_cache"
+  | "macbook_authoritative_with_dgx_projection";
 
-export type SyncRole = "authority" | "projection_server" | "thin_surface" | "compute_node";
+export type SyncRole = "authority" | "cache_client" | "projection_server" | "thin_surface" | "compute_node";
 
-export type ClientOutboxMode = "authoritative_local" | "projection_outbox" | "stateless";
+export type ClientOutboxMode = "offline_cache_outbox" | "authoritative_local" | "projection_outbox" | "stateless";
 
 export type ClientFailurePolicy = "continue_locally" | "unavailable_without_dgx" | "compute_degraded";
 
@@ -1160,8 +1163,8 @@ export type SyncTopology = {
   authorityNodeId: string;
   authorityLabel: string;
   eventStoreMode: EventStoreAuthorityMode;
-  offlineWritePolicy: "append_authoritative_local" | "read_only";
-  conflictPolicy: "macbook_authority_wins" | "manual_review";
+  offlineWritePolicy: "append_local_outbox_when_offline" | "append_authoritative_local" | "read_only";
+  conflictPolicy: "dgx02_authority_wins" | "macbook_authority_wins" | "manual_review";
   clients: ClientDevice[];
 };
 
@@ -1208,6 +1211,28 @@ export type RemoteExecutionResponse = {
   fallbackMode: "none" | "local_model" | "local_cli";
   message: string;
   createdAt: string;
+};
+
+export type DeviceRebootTarget = "dgx-01" | "dgx-02" | "client_macbook" | "client_home_pc";
+
+export type DeviceRebootRequest = {
+  id: string;
+  targetNodeId: DeviceRebootTarget;
+  requestedBy: "desktop" | "mobile" | "agent" | "api";
+  approvalState: ApprovalState;
+  reason: string;
+  preflightChecks: string[];
+  createdAt: string;
+};
+
+export type DeviceRebootWatchdog = {
+  id: string;
+  targetNodeId: DeviceRebootTarget;
+  requiredServices: string[];
+  reconnectTimeoutSeconds: number;
+  status: "armed" | "waiting_reconnect" | "reconnected" | "failed" | "cancelled";
+  createdAt: string;
+  lastHeartbeatAt?: string;
 };
 
 export type TerminalSlot = {
