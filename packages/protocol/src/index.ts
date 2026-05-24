@@ -351,15 +351,150 @@ export type EventSource = z.infer<typeof eventSourceSchema>;
 export const workSourceSchema = z.enum(["desktop_manual", "mobile_manual", "legacy_telegram"]);
 export type WorkSource = z.infer<typeof workSourceSchema>;
 
-export type WorkSourceRef = {
-  source: WorkSource;
-  externalId?: string;
-  url?: string;
-  title?: string;
-  observedAt: string;
-  contentHash?: string;
-  revision?: string;
-};
+export const workSourceRefSchema = z.object({
+  source: workSourceSchema,
+  externalId: z.string().optional(),
+  url: z.string().url().optional(),
+  title: z.string().optional(),
+  observedAt: z.string(),
+  contentHash: z.string().optional(),
+  revision: z.string().optional(),
+});
+export type WorkSourceRef = z.infer<typeof workSourceRefSchema>;
+
+export const workLaneSchema = z.enum([
+  "inbox",
+  "conversation",
+  "debate",
+  "coding",
+  "review",
+  "execution",
+  "memory",
+  "backup",
+]);
+export type WorkLane = z.infer<typeof workLaneSchema>;
+
+// Temporary PR1 taxonomy until routine and automation semantics are designed.
+export const workItemKindSchema = z.enum([
+  "conversation",
+  "decision",
+  "coding_packet",
+  "execution",
+  "review",
+  "research",
+  "memory",
+  "backup",
+  "external_request",
+  "approval",
+]);
+export type WorkItemKind = z.infer<typeof workItemKindSchema>;
+
+export const workItemStatusSchema = z.enum([
+  "captured",
+  "triaged",
+  "planned",
+  "in_progress",
+  "blocked",
+  "ready_for_review",
+  "done",
+  "archived",
+]);
+export type WorkItemStatus = z.infer<typeof workItemStatusSchema>;
+
+export const evidenceKindSchema = z.enum([
+  "event",
+  "memory",
+  "ssot_reference",
+  "file_reference",
+  "url_reference",
+  "message",
+  "artifact",
+  "routine_reference",
+]);
+export type EvidenceKind = z.infer<typeof evidenceKindSchema>;
+
+export const evidenceRefSchema = z
+  .object({
+    id: z.string(),
+    kind: evidenceKindSchema,
+    reference: z.string(),
+    title: z.string().optional(),
+    summary: z.string(),
+    contentHash: z.string().optional(),
+    revision: z.string().optional(),
+    observedAt: z.string().optional(),
+  })
+  .strict();
+export type EvidenceRef = z.infer<typeof evidenceRefSchema>;
+
+export const missingInfoSlotSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  reason: z.string(),
+  required: z.boolean(),
+  status: z.enum(["missing", "provided", "waived"]),
+  resolvedByRef: z.string().optional(),
+});
+export type MissingInfoSlot = z.infer<typeof missingInfoSlotSchema>;
+
+export const handoffTargetSurfaceSchema = z.enum([
+  "conversation",
+  "debate",
+  "coding_packet",
+  "execution_slot",
+  "tmux",
+  "obsidian",
+  "notion",
+  "mobile",
+]);
+export type HandoffTargetSurface = z.infer<typeof handoffTargetSurfaceSchema>;
+
+export const workItemSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  title: z.string(),
+  kind: workItemKindSchema,
+  lane: workLaneSchema,
+  status: workItemStatusSchema,
+  summary: z.string(),
+  sourceRefs: z.array(workSourceRefSchema),
+  evidenceRefs: z.array(evidenceRefSchema),
+  missingInfo: z.array(missingInfoSlotSchema),
+  ownerAgentId: z.string().optional(),
+  priority: z.enum(["low", "normal", "high", "urgent"]).default("normal"),
+  createdAt: z.string(),
+  updatedAt: z.string().optional(),
+});
+export type WorkItem = z.infer<typeof workItemSchema>;
+
+export const assistantDraftSchema = z.object({
+  id: z.string(),
+  workItemId: z.string(),
+  sessionId: z.string(),
+  title: z.string(),
+  body: z.string(),
+  targetSurface: handoffTargetSurfaceSchema,
+  status: z.enum(["draft", "ready_for_review", "approved", "rejected", "sent"]),
+  confidence: z.enum(["high", "medium", "low"]),
+  evidenceRefs: z.array(evidenceRefSchema),
+  missingInfo: z.array(missingInfoSlotSchema),
+  createdAt: z.string(),
+  updatedAt: z.string().optional(),
+});
+export type AssistantDraft = z.infer<typeof assistantDraftSchema>;
+
+export const workItemHandoffSchema = z.object({
+  id: z.string(),
+  workItemId: z.string(),
+  targetSurface: handoffTargetSurfaceSchema,
+  summary: z.string(),
+  payloadRef: z.string().optional(),
+  evidenceRefs: z.array(evidenceRefSchema),
+  missingInfo: z.array(missingInfoSlotSchema),
+  approvalState: z.enum(["not_required", "required", "approved", "rejected", "expired"]),
+  createdAt: z.string(),
+});
+export type WorkItemHandoff = z.infer<typeof workItemHandoffSchema>;
 
 export const eventEnvelopeSchema = z.object({
   id: z.string(),
