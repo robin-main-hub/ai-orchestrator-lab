@@ -153,7 +153,7 @@ function createUnreachableRuntime(localRuntime: RuntimeSnapshot, checkedAt: stri
     syncTopology: {
       ...localRuntime.syncTopology,
       clients: localRuntime.syncTopology.clients.map((client) =>
-        client.syncRole === "projection_server" || client.id === "dgx-02"
+        client.syncRole === "authority" || client.id === "dgx-02"
           ? {
               ...client,
               status: "offline",
@@ -168,7 +168,7 @@ function createUnreachableRuntime(localRuntime: RuntimeSnapshot, checkedAt: stri
           : client,
       ),
     },
-    recentError: `dgx-02:4317 unavailable; MacBook remains authoritative locally, Home PC waits for DGX-02 projection recovery. ${error}`,
+    recentError: `dgx-02:4317 unavailable; MacBook can continue with local model/outbox, Home PC degrades until DGX-02 authority returns. ${error}`,
     updatedAt: checkedAt,
   };
 }

@@ -20,6 +20,7 @@ import {
   Play,
   Plus,
   Pencil,
+  Power,
   RadioTower,
   RefreshCw,
   Send,
@@ -133,8 +134,11 @@ import type {
   ContextPackTier,
   DebateTag,
   DebateUtterance,
+  DeviceRebootRequest,
+  DeviceRebootWatchdog,
   EventEnvelope,
   EventSource,
+  ExternalApprovalItem,
   InsightCategory,
   InsightFinding,
   MemoryRecord,
@@ -203,6 +207,10 @@ type MetaOnboardingSignal = {
 const modelWindowSize = 8;
 const maxDraftAttachments = 5;
 const agentVisualStorageKey = "ai-orchestrator-lab.agent-visuals.v1";
+const providerProfilesStorageKey = "ai-orchestrator-lab.provider-profiles.v1";
+const providerProfilesSeedVersionKey = "ai-orchestrator-lab.provider-profiles.seed-version";
+const providerProfilesSeedVersion = "2026-05-25-dgx-provider-seeds";
+const defaultObsidianVaultRoot = "F:/obsidian/ai-headquarter";
 
 const agentRoleOptions: WorkbenchAgent["role"][] = [
   "orchestrator",
@@ -626,20 +634,20 @@ const runtimeSnapshot: RuntimeSnapshot = {
     },
   ],
   syncTopology: {
-    authorityNodeId: "client_macbook",
-    authorityLabel: "MacBook",
-    eventStoreMode: "macbook_authoritative_with_dgx_projection",
-    offlineWritePolicy: "append_authoritative_local",
-    conflictPolicy: "macbook_authority_wins",
+    authorityNodeId: "dgx-02",
+    authorityLabel: "DGX-02",
+    eventStoreMode: "dgx02_authoritative_with_client_cache",
+    offlineWritePolicy: "append_local_outbox_when_offline",
+    conflictPolicy: "dgx02_authority_wins",
     clients: [
       {
         id: "client_macbook",
         label: "MacBook",
         kind: "macbook",
         status: "online",
-        syncRole: "authority",
+        syncRole: "cache_client",
         localStore: "sqlite",
-        outboxMode: "authoritative_local",
+        outboxMode: "offline_cache_outbox",
         failurePolicy: "continue_locally",
         outboxCount: 0,
         lastSeenAt: now,
@@ -649,9 +657,9 @@ const runtimeSnapshot: RuntimeSnapshot = {
         label: "Home PC",
         kind: "desktop_pc",
         status: "online",
-        syncRole: "thin_surface",
-        localStore: "none",
-        outboxMode: "stateless",
+        syncRole: "cache_client",
+        localStore: "sqlite",
+        outboxMode: "offline_cache_outbox",
         failurePolicy: "unavailable_without_dgx",
         outboxCount: 0,
         lastSeenAt: now,
@@ -661,15 +669,15 @@ const runtimeSnapshot: RuntimeSnapshot = {
         label: "DGX-02",
         kind: "server",
         status: "offline",
-        syncRole: "projection_server",
+        syncRole: "authority",
         localStore: "sqlite",
-        outboxMode: "projection_outbox",
+        outboxMode: "stateless",
         failurePolicy: "compute_degraded",
         outboxCount: 0,
       },
     ],
   },
-  activeProviderProfileId: "provider_mock_local",
+  activeProviderProfileId: "provider_dgx02_vllm",
   recentError: "dgx-02 heartbeat pending",
   updatedAt: now,
 };
@@ -763,6 +771,45 @@ const seededProviderProfiles: ProviderProfile[] = [
     trustLevel: "limited",
   }),
 ];
+
+function createInitialProviderProfiles() {
+  try {
+    if (typeof window === "undefined") {
+      return seededProviderProfiles;
+    }
+
+    const stored = window.localStorage.getItem(providerProfilesStorageKey);
+    if (!stored) {
+      window.localStorage.setItem(providerProfilesSeedVersionKey, providerProfilesSeedVersion);
+      return seededProviderProfiles;
+    }
+
+    const parsed = JSON.parse(stored) as ProviderProfile[];
+    if (!Array.isArray(parsed)) {
+      return seededProviderProfiles;
+    }
+
+    const storedProfiles = parsed.filter(
+      (profile): profile is ProviderProfile =>
+        Boolean(profile) &&
+        typeof profile.id === "string" &&
+        typeof profile.name === "string" &&
+        typeof profile.kind === "string" &&
+        typeof profile.enabled === "boolean" &&
+        Array.isArray(profile.tags),
+    );
+    if (window.localStorage.getItem(providerProfilesSeedVersionKey) !== providerProfilesSeedVersion) {
+      const storedIds = new Set(storedProfiles.map((profile) => profile.id));
+      const missingSeeds = seededProviderProfiles.filter((profile) => !storedIds.has(profile.id));
+      window.localStorage.setItem(providerProfilesSeedVersionKey, providerProfilesSeedVersion);
+      return [...storedProfiles, ...missingSeeds];
+    }
+
+    return storedProfiles.length > 0 ? storedProfiles : seededProviderProfiles;
+  } catch {
+    return seededProviderProfiles;
+  }
+}
 
 function inferModelInputModalities(modelId: string): ModelDescriptor["inputModalities"] {
   const id = modelId.toLowerCase();
@@ -944,12 +991,12 @@ const navItems: NavItem[] = [
 const seededAgentProfiles: WorkbenchAgent[] = defaultAgentProfiles.map((agent, index) => {
   const bindings: Array<Required<Pick<WorkbenchAgent, "providerProfileId" | "modelId" | "authBinding">>> = [
     {
-      providerProfileId: "provider_mock_local",
-      modelId: "mock-orchestrator",
+      providerProfileId: "provider_dgx02_vllm",
+      modelId: "qwen36-gio-wiki-rag-prisma",
       authBinding: {
-        mode: "local",
-        label: "local mock runtime",
-        providerProfileId: "provider_mock_local",
+        mode: "provider_profile",
+        label: "DGX-02 vLLM route",
+        providerProfileId: "provider_dgx02_vllm",
       },
     },
     {
@@ -973,12 +1020,12 @@ const seededAgentProfiles: WorkbenchAgent[] = defaultAgentProfiles.map((agent, i
       },
     },
     {
-      providerProfileId: "provider_dgx02_vllm",
-      modelId: "qwen36-gio-wiki-rag-prisma",
+      providerProfileId: "provider_mock_local",
+      modelId: "mock-builder",
       authBinding: {
-        mode: "provider_profile",
-        label: "DGX-02 vLLM route",
-        providerProfileId: "provider_dgx02_vllm",
+        mode: "local",
+        label: "local mock runtime",
+        providerProfileId: "provider_mock_local",
       },
     },
   ];
@@ -1135,7 +1182,7 @@ export function App() {
   const [eventOutbox, setEventOutbox] = useState<EventEnvelope[]>(() => eventOutboxStorage.load());
   const [activeNavItem, setActiveNavItem] = useState<NavItemId>("sessions");
   const [providerRegistrationOpen, setProviderRegistrationOpen] = useState(false);
-  const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(seededProviderProfiles);
+  const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(createInitialProviderProfiles);
   const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(seededModelCatalog);
   const [modelDiscoveryByProviderId, setModelDiscoveryByProviderId] = useState<Record<string, ModelDiscoverySnapshot>>({});
   const [agents, setAgents] = useState<WorkbenchAgent[]>(seededAgentProfiles);
@@ -1165,6 +1212,8 @@ export function App() {
   const [syncedEventIds, setSyncedEventIds] = useState<Record<string, true>>({});
   const [memoryRecords, setMemoryRecords] = useState<MemoryRecord[]>(initialMemoryRecords);
   const [ingressSnapshot, setIngressSnapshot] = useState<Stage8IngressSnapshot>(initialIngressSnapshot);
+  const [rebootApprovals, setRebootApprovals] = useState<ExternalApprovalItem[]>([]);
+  const [rebootWatchdogs, setRebootWatchdogs] = useState<DeviceRebootWatchdog[]>([]);
   const [approvalStateByItemId, setApprovalStateByItemId] = useState<Record<string, ApprovalState>>({});
   const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
   const [contextPackTier, setContextPackTier] = useState<ContextPackTier>("standard");
@@ -1264,6 +1313,7 @@ export function App() {
         runtime: runtimeSnapshotState,
         agentRun: agentRunState,
         memoryInspector,
+        obsidianVaultRoot: defaultObsidianVaultRoot,
         createdAt: runtimeSnapshotState.updatedAt,
       }),
     [
@@ -1281,7 +1331,7 @@ export function App() {
     () =>
       createStage9PermissionSnapshot({
         sessionId: activeSessionId,
-        externalApprovals: ingressSnapshot.approvals,
+        externalApprovals: [...rebootApprovals, ...ingressSnapshot.approvals],
         terminalSlots,
         agentRun: agentRunState,
         runtime: runtimeSnapshotState,
@@ -1297,6 +1347,7 @@ export function App() {
       backupSnapshot.mobilePolicy,
       ingressSnapshot.approvals,
       providerReadiness,
+      rebootApprovals,
       runtimeSnapshotState,
     ],
   );
@@ -1355,6 +1406,16 @@ export function App() {
       // Avatar persistence is convenience-only; Event Storage remains the source of truth.
     }
   }, [agentVisualsById]);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(providerProfilesStorageKey, JSON.stringify(providerProfiles));
+      }
+    } catch {
+      // Provider entries are also represented as Event Storage records; localStorage is only a client cache.
+    }
+  }, [providerProfiles]);
 
   useEffect(() => {
     setDraftAttachments((current) =>
@@ -1665,6 +1726,58 @@ export function App() {
     setDraftAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
   }
 
+  function createConversationPipelineMessages({
+    agent,
+    memory,
+    modelId,
+    persona,
+    provider,
+    userMessage,
+  }: {
+    agent: WorkbenchAgent;
+    memory: Stage6MemoryInspector;
+    modelId: string;
+    persona?: AgentPersonaSettings;
+    provider: ProviderProfile;
+    userMessage: ConversationMessage;
+  }) {
+    const recalledMemories = memory.trace.results
+      .filter((result) => result.usedInDecision)
+      .slice(0, 5)
+      .map((result, index) => `${index + 1}. ${result.record.title}: ${result.record.content} (score ${result.score.toFixed(2)})`);
+    const systemContent = [
+      "AI Orchestrator Lab conversation pipeline.",
+      "Reply in Korean unless the user explicitly asks for another language.",
+      `Agent: ${agent.name} / role: ${agent.role}`,
+      `Provider: ${provider.name} / model: ${modelId}`,
+      persona
+        ? `SOUL.md: ${persona.soulSummary}\nAGENTS.md: ${persona.agentsInstruction}\nCreativity: ${persona.creativityLevel}`
+        : "SOUL.md: default role profile",
+      recalledMemories.length > 0
+        ? `Memento recall:\n${recalledMemories.join("\n")}`
+        : "Memento recall: no selected records",
+      "Do not claim terminal/file execution happened unless an execution event exists.",
+      "If the next step needs code work, mention the Coding Packet boundary explicitly.",
+    ].join("\n\n");
+
+    const systemMessage: ConversationMessage = {
+      id: `message_system_pipeline_${crypto.randomUUID()}`,
+      sessionId: userMessage.sessionId,
+      role: "system",
+      content: systemContent,
+      createdAt: userMessage.createdAt,
+      metadata: {
+        agentId: agent.id,
+        providerProfileId: provider.id,
+        modelId,
+        memoryTraceId: memory.trace.id,
+        recalledMemoryCount: recalledMemories.length,
+      },
+    };
+
+    return [systemMessage, ...conversationMessages.slice(-8), userMessage];
+  }
+
   async function handleSendMessageStage2() {
     const content = draftMessage.trim();
     const attachments = draftAttachments;
@@ -1785,10 +1898,28 @@ export function App() {
     let completionMetadata: Record<string, unknown> = {};
     try {
       if (isDgxRoutedProvider(selectedProvider)) {
+        const pipelineMessages = createConversationPipelineMessages({
+          agent: selectedAgent,
+          memory: memoryInspector,
+          modelId,
+          persona: selectedAgentPersona,
+          provider: selectedProvider,
+          userMessage,
+        });
+        appendEvent("prompt.pipeline.assembled", {
+          agentId: selectedAgent.id,
+          providerProfileId: selectedProvider.id,
+          modelId,
+          messageCount: pipelineMessages.length,
+          memoryTraceId: memoryInspector.trace.id,
+          usedMemoryCount: memoryInspector.trace.results.filter((result) => result.usedInDecision).length,
+          soulMode: selectedAgent.soulMode,
+          redaction: "applied",
+        });
         const result = await requestDgxProviderCompletion({
           provider: selectedProvider,
           modelId,
-          messages: [...conversationMessages, userMessage],
+          messages: pipelineMessages,
         });
         reply = result.content;
         completionMetadata = {
@@ -2147,6 +2278,7 @@ export function App() {
       runtime: runtimeSnapshotState,
       agentRun: agentRunState,
       memoryInspector,
+      obsidianVaultRoot: defaultObsidianVaultRoot,
     });
     const obsidianArtifact = getObsidianArtifact(snapshot);
     const markdown =
@@ -2161,7 +2293,7 @@ export function App() {
     setObsidianMarkdownPreview(markdown);
     const obsidianExportPlan = obsidianArtifact
       ? createObsidianExportPlan({
-          vaultRoot: "~/Obsidian",
+          vaultRoot: defaultObsidianVaultRoot,
           artifact: obsidianArtifact,
           content: markdown,
         })
@@ -2310,6 +2442,77 @@ export function App() {
     }
   }
 
+  function createDeviceRebootRequest(targetNodeId: DeviceRebootRequest["targetNodeId"], createdAt: string): DeviceRebootRequest {
+    return {
+      id: `reboot_request_${targetNodeId}_${crypto.randomUUID()}`,
+      targetNodeId,
+      requestedBy: "desktop",
+      approvalState: "required",
+      reason:
+        targetNodeId === "dgx-02"
+          ? "DGX-02 main server reboot with Event Storage/watchdog preflight"
+          : targetNodeId === "dgx-01"
+            ? "DGX-01 guarded reboot request; operator approval and watchdog required"
+            : "Client reboot request with local outbox preservation",
+      preflightChecks: [
+        "record reboot intent in Event Storage",
+        "flush or preserve local outbox",
+        "arm reconnect watchdog",
+        "block direct execution until approval",
+      ],
+      createdAt,
+    };
+  }
+
+  function createDeviceRebootWatchdog(
+    targetNodeId: DeviceRebootWatchdog["targetNodeId"],
+    createdAt: string,
+  ): DeviceRebootWatchdog {
+    const requiredServices =
+      targetNodeId === "dgx-02"
+        ? ["ai-orchestrator-server", "event-storage-api", "vllm-qwen36"]
+        : targetNodeId === "dgx-01"
+          ? ["ssh-heartbeat", "operator-confirmation"]
+          : ["desktop-app", "event-outbox-cache"];
+
+    return {
+      id: `watchdog_${targetNodeId}_${crypto.randomUUID()}`,
+      targetNodeId,
+      requiredServices,
+      reconnectTimeoutSeconds: targetNodeId === "dgx-02" ? 300 : 180,
+      status: "armed",
+      createdAt,
+    };
+  }
+
+  function handleRequestDeviceReboot(targetNodeId: DeviceRebootRequest["targetNodeId"]) {
+    const createdAt = new Date().toISOString();
+    const request = createDeviceRebootRequest(targetNodeId, createdAt);
+    const watchdog = createDeviceRebootWatchdog(targetNodeId, createdAt);
+    const approval: ExternalApprovalItem = {
+      id: `external_${request.id}`,
+      ingressEventId: request.id,
+      channel: "api",
+      summary: `${targetNodeId} reboot requested with watchdog`,
+      permissions: ["run_dangerous_commands", "remote_workspace"],
+      state: "required",
+      createdAt,
+    };
+
+    setRebootApprovals((items) => [approval, ...items].slice(0, 8));
+    setRebootWatchdogs((items) => [watchdog, ...items].slice(0, 8));
+    appendEvent("device.reboot.requested", {
+      request,
+      watchdogId: watchdog.id,
+      approvalId: approval.id,
+      redaction: "applied",
+    });
+    appendEvent("device.watchdog.armed", {
+      watchdog,
+      redaction: "applied",
+    });
+  }
+
   function handleResolveNextPermission(state: Extract<ApprovalState, "approved" | "rejected">) {
     const pendingItem = nextRequiredPermission(permissionSnapshot);
     if (!pendingItem) {
@@ -2334,7 +2537,31 @@ export function App() {
       decidedAt,
     });
 
-    if (state === "approved" && pendingItem.permissions.includes("remote_workspace")) {
+    if (pendingItem.sourceItemId.includes("reboot_request_")) {
+      const matchedWatchdog = rebootWatchdogs.find((watchdog) =>
+        pendingItem.sourceItemId.includes(watchdog.targetNodeId),
+      );
+      const nextWatchdogStatus: DeviceRebootWatchdog["status"] = state === "approved" ? "waiting_reconnect" : "cancelled";
+      setRebootWatchdogs((watchdogs) =>
+        watchdogs.map((watchdog) =>
+          matchedWatchdog && watchdog.id === matchedWatchdog.id
+            ? { ...watchdog, status: nextWatchdogStatus, lastHeartbeatAt: decidedAt }
+            : watchdog,
+        ),
+      );
+      appendEvent(`device.reboot.${state}`, {
+        sourceItemId: pendingItem.sourceItemId,
+        watchdogId: matchedWatchdog?.id,
+        watchdogStatus: nextWatchdogStatus,
+        redaction: "applied",
+      });
+    }
+
+    if (
+      state === "approved" &&
+      pendingItem.permissions.includes("remote_workspace") &&
+      !pendingItem.sourceItemId.includes("reboot_request_")
+    ) {
       const bridge = createStage5DgxBridge({
         run: agentRunState,
         runtime: runtimeSnapshotState,
@@ -3113,7 +3340,12 @@ export function App() {
                 onRenameActiveSession={handleRenameActiveSession}
                 onReplaySession={handleReplayEventStorage}
               />
-              <RuntimeRailPanel onProbeDgx={handleProbeDgx} snapshot={runtimeSnapshotState} />
+              <RuntimeRailPanel
+                onProbeDgx={handleProbeDgx}
+                onRequestReboot={handleRequestDeviceReboot}
+                rebootWatchdogs={rebootWatchdogs}
+                snapshot={runtimeSnapshotState}
+              />
               <OperationsRailPanel
                 backupSnapshot={backupSnapshot}
                 ingressSnapshot={ingressSnapshot}
@@ -3471,15 +3703,20 @@ function SessionIndexRailPanel({
 
 function RuntimeRailPanel({
   onProbeDgx,
+  onRequestReboot,
+  rebootWatchdogs,
   snapshot,
 }: {
   onProbeDgx: () => void;
+  onRequestReboot: (targetNodeId: DeviceRebootRequest["targetNodeId"]) => void;
+  rebootWatchdogs: DeviceRebootWatchdog[];
   snapshot: RuntimeSnapshot;
 }) {
   const macbookClient = snapshot.syncTopology.clients.find((client) => client.id === "client_macbook");
   const homePcClient = snapshot.syncTopology.clients.find((client) => client.id === "client_home_pc");
   const macbookOutbox = macbookClient?.outboxCount ?? 0;
   const dgx02 = snapshot.runtimeNodes.find((node) => node.id === "dgx-02");
+  const activeWatchdog = rebootWatchdogs[0];
   const auditItems: WindowAuditItem[] = [
     {
       id: "dgx01-locked",
@@ -3513,8 +3750,18 @@ function RuntimeRailPanel({
       <div className="rail-node-grid">
         {snapshot.runtimeNodes.map((node) => (
           <article className={node.id === "dgx-01" ? "locked" : ""} key={node.id}>
-            <span>{node.label}</span>
-            <strong>{node.id === "dgx-01" ? "locked" : node.isPrimary ? "main" : node.role}</strong>
+            <div className="rail-node-head">
+              <span>{node.label}</span>
+              <button
+                className="rail-icon-button"
+                onClick={() => onRequestReboot(node.id as DeviceRebootRequest["targetNodeId"])}
+                title={`${node.label} reboot approval`}
+                type="button"
+              >
+                <Power size={12} />
+              </button>
+            </div>
+            <strong>{node.id === "dgx-01" ? "guarded" : node.isPrimary ? "main" : node.role}</strong>
             <em className={statusTone(node.status)}>{node.status}</em>
           </article>
         ))}
@@ -3545,6 +3792,10 @@ function RuntimeRailPanel({
         <div>
           <span>heartbeat</span>
           <strong>{snapshot.recentError ?? "connected"}</strong>
+        </div>
+        <div>
+          <span>watchdog</span>
+          <strong>{activeWatchdog ? `${activeWatchdog.targetNodeId} ${activeWatchdog.status}` : "ready"}</strong>
         </div>
       </div>
       <WindowChecklist items={auditItems} title="시스템 창 점검" />

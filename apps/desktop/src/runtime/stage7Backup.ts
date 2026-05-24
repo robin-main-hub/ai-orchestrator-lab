@@ -44,13 +44,16 @@ export type Stage7BackupInput = {
   runtime: RuntimeSnapshot;
   agentRun?: Stage4AgentRun;
   memoryInspector: Stage6MemoryInspector;
+  obsidianVaultRoot?: string;
   createdAt?: string;
 };
 
 const defaultSessionId = "session_desktop_001";
+export const defaultObsidianVaultRoot = "F:/obsidian/ai-headquarter";
 
-function createObsidianDestination(sessionId: string) {
-  return `AI-Orchestrator/projects/ai-orchestrator-lab/sessions/${sessionId}.md`;
+function createObsidianDestination(sessionId: string, vaultRoot = defaultObsidianVaultRoot) {
+  const normalizedRoot = vaultRoot.replace(/[\\/]$/, "");
+  return `${normalizedRoot}/AI-Orchestrator/projects/ai-orchestrator-lab/sessions/${sessionId}.md`;
 }
 
 export function createStage7BackupSnapshot({
@@ -62,6 +65,7 @@ export function createStage7BackupSnapshot({
   runtime,
   agentRun,
   memoryInspector,
+  obsidianVaultRoot = defaultObsidianVaultRoot,
   createdAt = new Date().toISOString(),
 }: Stage7BackupInput): Stage7BackupSnapshot {
   const mobilePolicy = createMobilePolicy();
@@ -94,7 +98,7 @@ export function createStage7BackupSnapshot({
       kind: "session_log",
       format: "markdown",
       title: "Obsidian Session Markdown",
-      destination: createObsidianDestination(sessionId),
+      destination: createObsidianDestination(sessionId, obsidianVaultRoot),
       content: obsidianContent,
       status: "ready",
       sessionId,

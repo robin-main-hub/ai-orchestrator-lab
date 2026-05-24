@@ -15,7 +15,8 @@
     "server:smoke": "node scripts/smoke-dgx-server.mjs",
     "swarm:setup": "bash scripts/setup-agent-swarm.sh",
     "swarm:reset": "bash scripts/setup-agent-swarm.sh --reset",
-    "swarm:send": "bash scripts/swarm-send.sh"
+    "swarm:send": "bash scripts/swarm-send.sh",
+    "swarm:capture": "bash scripts/swarm-capture.sh"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

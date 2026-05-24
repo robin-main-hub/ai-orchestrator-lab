@@ -36,8 +36,12 @@ export function createObsidianExportPlan({
   }
 
   const safeVaultRoot = normalizePath(vaultRoot);
-  const relativePath = normalizeRelativePath(artifact.destination);
-  const absolutePath = joinVaultPath(safeVaultRoot, relativePath);
+  const normalizedDestination = normalizePath(artifact.destination);
+  const destinationIsInsideVault = normalizedDestination.startsWith(`${safeVaultRoot}/`);
+  const relativePath = destinationIsInsideVault
+    ? normalizeRelativePath(normalizedDestination.slice(safeVaultRoot.length + 1))
+    : normalizeRelativePath(artifact.destination);
+  const absolutePath = destinationIsInsideVault ? normalizedDestination : joinVaultPath(safeVaultRoot, relativePath);
 
   return {
     target: "obsidian",

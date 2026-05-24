@@ -547,6 +547,19 @@ button {
   border-color: rgba(255, 125, 144, 0.34);
 }
 
+.rail-node-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rail-node-head .rail-icon-button {
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+}
+
 .rail-node-grid span,
 .rail-node-grid strong,
 .rail-node-grid em {

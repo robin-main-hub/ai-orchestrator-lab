@@ -163,13 +163,15 @@ corepack pnpm dev
 
 ## PR0 Authority Correction
 
-- MacBook is now the authoritative local Event Storage owner.
-- DGX-02 is treated as a projection and compute server, not the source of truth.
-- Home PC remains a thin online surface that depends on DGX-02 projection availability.
-- Conflict handling uses `macbook_authority_wins`.
-- Local offline writes use `append_authoritative_local`; DGX sync is a projection queue, not authority recovery.
+- DGX-02 is now the authoritative shared Event Storage and memory server.
+- MacBook keeps a local SQLite cache/outbox and can continue with local models when DGX-02 is unavailable.
+- Home PC also keeps a client cache, but normal operation assumes DGX-02 is online.
+- Conflict handling uses `dgx02_authority_wins`.
+- Local offline writes use `append_local_outbox_when_offline`; clients replay to DGX-02 when the authority returns.
 - External legacy Telegram input is represented as `legacy_telegram` in persisted protocol data while UI labels may still say Telegram.
-- Unknown external effects are denied by default in the Permission Matrix.
+- Unknown external effects, device reboot, provider execution, secret access, and terminal actions are denied by default unless the Permission Matrix approves them.
+- Windows Obsidian export defaults to `F:/obsidian/ai-headquarter`.
+- Tauri is the accepted shell direction for Windows/macOS packaging; see `docs/21-tauri-desktop-shell.md`.
 
 ## Stage18
 
