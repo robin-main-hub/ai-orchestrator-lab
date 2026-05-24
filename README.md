@@ -183,3 +183,9 @@ corepack pnpm dev
 - Sessions 패널에 새 세션 생성 버튼을 추가했다.
 - 새 세션을 만들면 `session.created` 이벤트가 현재 active session으로 기록되고 DGX-02 Event Storage에 sync된다.
 - 생성 직후 대화창과 이벤트 로그는 새 세션 기준으로 비워져, 이후 메시지와 코딩 패킷이 해당 sessionId 아래에 쌓인다.
+
+## Stage23
+
+- Event Storage session index 항목에 `title`과 `createdByClient`를 추가했다.
+- DGX-02 서버는 `session.created` 이벤트 payload의 title/sourceClient를 세션 인덱스 메타데이터로 승격한다.
+- Desktop Sessions 패널은 sessionId 대신 사람이 읽을 수 있는 title을 우선 표시하고, 세부 줄에 sessionId와 event count를 함께 보여준다.

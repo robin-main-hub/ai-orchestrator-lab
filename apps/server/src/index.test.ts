@@ -227,6 +227,16 @@ describe("server health placeholder", () => {
       sourceTrust: "trusted" as const,
       redacted: true,
     };
+    const secondCreatedEvent = {
+      id: "event_session_new_created",
+      sessionId: "session_new",
+      type: "session.created",
+      payload: { title: "New Session", sourceClient: "client_home_pc" },
+      createdAt: "2026-05-24T00:00:30.000Z",
+      source: "desktop" as const,
+      sourceTrust: "trusted" as const,
+      redacted: true,
+    };
 
     pushEventsToServerStorage(
       {
@@ -245,8 +255,8 @@ describe("server health placeholder", () => {
         id: "sync_sessions_2",
         clientId: "client_home_pc",
         sessionId: secondEvent.sessionId,
-        events: [secondEvent],
-        idempotencyKey: "client_home_pc:session_new:event_session_second",
+        events: [secondCreatedEvent, secondEvent],
+        idempotencyKey: "client_home_pc:session_new:event_session_new_created,event_session_second",
         createdAt: secondEvent.createdAt,
       },
       state,
@@ -255,10 +265,12 @@ describe("server health placeholder", () => {
 
     const index = listEventStorageSessions(state, "2026-05-24T00:02:00.000Z");
 
-    expect(index.serverRevision).toBe(2);
+    expect(index.serverRevision).toBe(3);
     expect(index.sessions.map((session) => session.sessionId)).toEqual(["session_new", "session_old"]);
     expect(index.sessions[0]?.lastEventType).toBe("coding_packet.created");
-    expect(index.sessions[0]?.sources).toEqual(["agent"]);
+    expect(index.sessions[0]?.title).toBe("New Session");
+    expect(index.sessions[0]?.createdByClient).toBe("client_home_pc");
+    expect(index.sessions[0]?.sources).toEqual(["desktop", "agent"]);
   });
 
   it("persists Event Storage records to JSONL and reloads duplicate state", async () => {

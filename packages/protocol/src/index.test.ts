@@ -119,6 +119,8 @@ describe("protocol schemas", () => {
       sessions: [
         {
           sessionId: "session_desktop_001",
+          title: "Desktop Workbench",
+          createdByClient: "client_macbook",
           eventCount: 2,
           firstEventAt: "2026-05-24T00:00:00.000Z",
           lastEventAt: "2026-05-24T00:00:03.000Z",
@@ -130,6 +132,7 @@ describe("protocol schemas", () => {
     });
 
     expect(index.sessions[0]?.sessionId).toBe("session_desktop_001");
+    expect(index.sessions[0]?.title).toBe("Desktop Workbench");
     expect(index.sessions[0]?.sources).toContain("desktop");
   });
 

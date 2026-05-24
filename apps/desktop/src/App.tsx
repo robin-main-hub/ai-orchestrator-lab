@@ -781,6 +781,7 @@ export function App() {
 
   function handleCreateSession() {
     const createdAt = new Date().toISOString();
+    const title = window.prompt("새 세션 이름", "새 작업 세션")?.trim() || "새 작업 세션";
     const nextSessionId = `session_${createdAt.replace(/[-:.TZ]/g, "").slice(0, 14)}_${crypto.randomUUID().slice(0, 8)}`;
     setActiveSessionId(nextSessionId);
     setConversationMessages([]);
@@ -791,7 +792,7 @@ export function App() {
       "session.created",
       {
         sessionId: nextSessionId,
-        title: "새 작업 세션",
+        title,
         sourceClient: "client_macbook",
       },
       {
@@ -1944,8 +1945,8 @@ function SessionIndexRailPanel({
               onClick={() => onReplaySession(session.sessionId)}
               type="button"
             >
-              <strong>{session.sessionId}</strong>
-              <span>{session.eventCount} events / {session.lastEventType ?? "event"}</span>
+              <strong>{session.title ?? session.sessionId}</strong>
+              <span>{session.sessionId} / {session.eventCount} events / {session.lastEventType ?? "event"}</span>
             </button>
           ))
         )}
