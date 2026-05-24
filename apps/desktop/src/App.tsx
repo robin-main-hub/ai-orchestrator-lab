@@ -25,6 +25,7 @@ import {
   Smartphone,
   Terminal,
   Trash2,
+  type LucideIcon,
 } from "lucide-react";
 import {
   createCodingPacketDraft,
@@ -138,10 +139,26 @@ type CenterMode = "conversation" | "debate";
 type AgentActivityStatus = "idle" | "preparing" | "responding";
 type WorkbenchAgent = AgentProfile;
 type ModelCatalog = Record<string, ModelDescriptor[]>;
+type ProviderRegistrationMode = "api_key" | "cli" | "oauth";
+type NavItemId = "sessions" | "projects" | "providers" | "channels" | "backup";
+type NavItem = {
+  id: NavItemId;
+  label: string;
+  icon: LucideIcon;
+};
 
 const modelWindowSize = 8;
 
 const now = new Date("2026-05-24T00:20:00.000+09:00").toISOString();
+
+function slugifyProviderName(value: string, fallback: string) {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || fallback;
+}
 
 function createDesktopOutboxStorage(): Stage16OutboxStorage {
   try {
@@ -389,12 +406,12 @@ const backupProjections: BackupProjection[] = [
   },
 ];
 
-const navItems = [
-  { label: "세션", icon: MessageSquare, active: true },
-  { label: "프로젝트", icon: LayoutDashboard, active: false },
-  { label: "프로바이더", icon: KeyRound, active: false },
-  { label: "채널", icon: RadioTower, active: false },
-  { label: "백업", icon: Archive, active: false },
+const navItems: NavItem[] = [
+  { id: "sessions", label: "세션", icon: MessageSquare },
+  { id: "projects", label: "프로젝트", icon: LayoutDashboard },
+  { id: "providers", label: "프로바이더", icon: KeyRound },
+  { id: "channels", label: "채널", icon: RadioTower },
+  { id: "backup", label: "백업", icon: Archive },
 ];
 
 const seededAgentProfiles: WorkbenchAgent[] = defaultAgentProfiles.map((agent, index) => {
@@ -509,6 +526,7 @@ export function App() {
   const [runtimeSnapshotState, setRuntimeSnapshotState] = useState<RuntimeSnapshot>(runtimeSnapshot);
   const eventOutboxStorage = useMemo(() => createDesktopOutboxStorage(), []);
   const [eventOutbox, setEventOutbox] = useState<EventEnvelope[]>(() => eventOutboxStorage.load());
+  const [providerRegistrationOpen, setProviderRegistrationOpen] = useState(false);
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(seededProviderProfiles);
   const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(seededModelCatalog);
   const [modelDiscoveryByProviderId, setModelDiscoveryByProviderId] = useState<Record<string, ModelDiscoverySnapshot>>({});
@@ -1524,31 +1542,8 @@ export function App() {
     };
   }
 
-  function handleAddProvider() {
-    const nextIndex = providerProfiles.length + 1;
-    const rawInput =
-      window.prompt(
-        "API key / env / Claude Code JSON 붙여넣기",
-        'export ANTHROPIC_BASE_URL="https://api.apikey.fun"\nexport ANTHROPIC_AUTH_TOKEN="sk-session-placeholder"',
-      ) ?? "";
-    const nextProvider =
-      rawInput.trim().length > 0
-        ? createProviderProfileFromCredentialInput({
-            id: `provider_custom_${crypto.randomUUID()}`,
-            rawInput,
-          }).profile
-        : createProviderProfile({
-            id: `provider_custom_${crypto.randomUUID()}`,
-            name: `Custom Provider ${nextIndex}`,
-            kind: "custom",
-            baseUrl: "https://api.example.local/v1",
-            rawSecret: `sk-placeholder-provider-${nextIndex}`,
-            defaultModel: `custom-model-${nextIndex}`,
-            tags: ["custom"],
-            trustLevel: "limited",
-          });
+  function registerProviderProfile(nextProvider: ProviderProfile, registrationMode: ProviderRegistrationMode) {
     const discovery = discoverModelsForProfile(nextProvider);
-
     setProviderProfiles((profiles) => [...profiles, nextProvider]);
     setModelCatalog((catalog) => ({
       ...catalog,
@@ -1563,6 +1558,7 @@ export function App() {
       kind: nextProvider.kind,
       trustLevel: nextProvider.trustLevel,
       secretRef: nextProvider.secretRef?.redactedPreview ?? "pending",
+      registrationMode,
       modelCount: discovery.models.length,
     });
     appendEvent("provider.models.discovered", {
@@ -1572,6 +1568,88 @@ export function App() {
       source: discovery.source,
       redactionApplied: discovery.redactionApplied,
     });
+    setProviderRegistrationOpen(false);
+  }
+
+  function handleRegisterProvider(mode: ProviderRegistrationMode) {
+    const nextIndex = providerProfiles.length + 1;
+
+    if (mode === "api_key") {
+      const rawInput = window.prompt(
+        "API key / env / Claude Code JSON 붙여넣기",
+        'export ANTHROPIC_BASE_URL="https://api.apikey.fun"\nexport ANTHROPIC_AUTH_TOKEN="sk-session-placeholder"',
+      );
+
+      if (rawInput === null) {
+        return;
+      }
+
+      const nextProvider =
+        rawInput.trim().length > 0
+          ? createProviderProfileFromCredentialInput({
+              id: `provider_custom_${crypto.randomUUID()}`,
+              rawInput,
+            }).profile
+          : createProviderProfile({
+              id: `provider_custom_${crypto.randomUUID()}`,
+              name: `Custom Provider ${nextIndex}`,
+              kind: "custom",
+              baseUrl: "https://api.example.local/v1",
+              rawSecret: `sk-placeholder-provider-${nextIndex}`,
+              defaultModel: `custom-model-${nextIndex}`,
+              tags: ["custom"],
+              trustLevel: "limited",
+            });
+      registerProviderProfile(nextProvider, "api_key");
+      return;
+    }
+
+    if (mode === "cli") {
+      const rawName = window.prompt("CLI 이름 또는 세션 이름", `Codex CLI ${nextIndex}`);
+
+      if (rawName === null) {
+        return;
+      }
+
+      const name = rawName.trim() || `Codex CLI ${nextIndex}`;
+      const slug = slugifyProviderName(name, `cli-${nextIndex}`);
+      registerProviderProfile(
+        createProviderProfile({
+          id: `provider_cli_${crypto.randomUUID()}`,
+          name,
+          kind: "custom",
+          defaultModel: `${slug}-session`,
+          tags: ["cli", "local"],
+          trustLevel: "trusted",
+        }),
+        "cli",
+      );
+      return;
+    }
+
+    const rawName = window.prompt("OAuth 세션 이름", `Codex OAuth ${nextIndex}`);
+
+    if (rawName === null) {
+      return;
+    }
+
+    const name = rawName.trim() || `Codex OAuth ${nextIndex}`;
+    const slug = slugifyProviderName(name, `oauth-${nextIndex}`);
+    registerProviderProfile(
+      createProviderProfile({
+        id: `provider_oauth_${crypto.randomUUID()}`,
+        name,
+        kind: "custom",
+        defaultModel: `${slug}-session`,
+        tags: ["oauth", "session"],
+        trustLevel: "trusted",
+      }),
+      "oauth",
+    );
+  }
+
+  function handleAddProvider() {
+    handleRegisterProvider("api_key");
   }
 
   function handleDiscoverProviderModels(providerId: string) {
@@ -1739,14 +1817,33 @@ export function App() {
           </div>
 
           <nav className="nav-stack">
-            {navItems.map((item) => (
-              <button className={`nav-item ${item.active ? "active" : ""}`} key={item.label} type="button">
-                <item.icon size={18} />
-                <span>{item.label}</span>
-                {item.active ? <ChevronRight size={16} /> : null}
-              </button>
-            ))}
+            {navItems.map((item) => {
+              const isActive =
+                item.id === "providers" ? providerRegistrationOpen : item.id === "sessions" && !providerRegistrationOpen;
+              return (
+                <button
+                  aria-expanded={item.id === "providers" ? providerRegistrationOpen : undefined}
+                  className={`nav-item ${isActive ? "active" : ""}`}
+                  key={item.id}
+                  onClick={
+                    item.id === "providers" ? () => setProviderRegistrationOpen((current) => !current) : undefined
+                  }
+                  title={item.id === "providers" ? "provider 등록 메뉴" : item.label}
+                  type="button"
+                >
+                  <item.icon size={18} />
+                  <span>{item.label}</span>
+                  {isActive ? <ChevronRight size={16} /> : null}
+                </button>
+              );
+            })}
           </nav>
+          {providerRegistrationOpen ? (
+            <ProviderRegistrationMenu
+              onClose={() => setProviderRegistrationOpen(false)}
+              onRegister={handleRegisterProvider}
+            />
+          ) : null}
 
           <SessionIndexRailPanel
             activeSessionId={activeSessionId}
@@ -2481,6 +2578,45 @@ function debateTagLabel(tag: DebateTag) {
   };
 
   return labels[tag];
+}
+
+function ProviderRegistrationMenu({
+  onClose,
+  onRegister,
+}: {
+  onClose: () => void;
+  onRegister: (mode: ProviderRegistrationMode) => void;
+}) {
+  const options: Array<{
+    mode: ProviderRegistrationMode;
+    label: string;
+    detail: string;
+    icon: LucideIcon;
+  }> = [
+    { mode: "api_key", label: "API Key", detail: "env / JSON / base URL", icon: KeyRound },
+    { mode: "cli", label: "CLI", detail: "Codex / Claude Code / OpenClaw", icon: Terminal },
+    { mode: "oauth", label: "OAuth", detail: "session / account binding", icon: LockKeyhole },
+  ];
+
+  return (
+    <section className="provider-registration-menu" aria-label="provider registration menu">
+      <header>
+        <span>Provider 등록</span>
+        <button aria-label="provider 등록 메뉴 닫기" className="rail-icon-button" onClick={onClose} type="button">
+          <ChevronLeft size={14} />
+        </button>
+      </header>
+      <div className="provider-registration-actions">
+        {options.map((option) => (
+          <button key={option.mode} onClick={() => onRegister(option.mode)} type="button">
+            <option.icon size={15} />
+            <span>{option.label}</span>
+            <small>{option.detail}</small>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function ProviderProfilesManagerPanel({
