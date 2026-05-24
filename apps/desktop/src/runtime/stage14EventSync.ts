@@ -5,6 +5,7 @@ import type {
   EventSyncPushResponse,
 } from "@ai-orchestrator/protocol";
 import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
+import { createDgxOrchestratorJsonHeaders } from "./stage31DgxAuth";
 
 export type Stage14EventSyncStatus = "synced" | "syncing" | "queued" | "failed";
 
@@ -91,9 +92,7 @@ export async function pushEventsToDgxEventStorage({
         endpoint,
         {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
+          headers: createDgxOrchestratorJsonHeaders(),
           body: JSON.stringify(request),
         },
         timeoutMs,

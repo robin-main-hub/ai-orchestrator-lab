@@ -72,6 +72,7 @@ describe("stage12 DGX provider completion", () => {
   it("uses the DGX server proxy before direct provider calls", async () => {
     const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
       expect(String(url)).toBe(`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`);
+      expect((init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
       expect(String(init?.body)).not.toContain("sk-");
       expect(String(init?.body)).not.toContain("http://dgx-02:8001");
       return new Response(

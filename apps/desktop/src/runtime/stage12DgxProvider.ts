@@ -7,6 +7,7 @@ import type {
   ProviderProfile,
 } from "@ai-orchestrator/protocol";
 import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
+import { createDgxOrchestratorJsonHeaders } from "./stage31DgxAuth";
 
 type DgxCompletionChoice = {
   message?: {
@@ -189,9 +190,7 @@ async function requestDgxVllmCompletionViaProxy({
     endpoint,
     {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
+      headers: createDgxOrchestratorJsonHeaders(),
       body: JSON.stringify(createProviderCompletionProxyRequest(provider, modelId, messages)),
     },
     proxyTimeoutMs,

@@ -8,6 +8,7 @@ describe("stage20 session index", () => {
       fetchImpl: async (url, init) => {
         expect(url).toBe("http://dgx-02:4317/sessions");
         expect(init?.method).toBe("GET");
+        expect((init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
         return {
           ok: true,
           status: 200,
