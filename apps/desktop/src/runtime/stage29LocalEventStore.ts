@@ -1,13 +1,21 @@
 import type { EventEnvelope } from "@ai-orchestrator/protocol";
-import type { Stage16StorageLike } from "./stage16LocalOutbox";
 
 export type ProjectionTarget = "dgx-02";
+
+export type ClientEventStorageLike = Pick<Storage, "getItem" | "setItem">;
 
 export type LocalClientEventCache = {
   append(event: EventEnvelope): Promise<void>;
   listBySession(sessionId: string): Promise<EventEnvelope[]>;
   listUnsynced(): Promise<EventEnvelope[]>;
   markProjected(eventIds: string[], projectionTarget: ProjectionTarget): Promise<void>;
+};
+
+export type LocalClientOutboxSnapshot = {
+  clientId: string;
+  projectionTarget: ProjectionTarget;
+  events: EventEnvelope[];
+  updatedAt: string;
 };
 
 type StoredClientCachedEvent = {
@@ -18,7 +26,7 @@ type StoredClientCachedEvent = {
 const defaultStoreKey = "ai-orchestrator:local-event-cache:client_macbook";
 
 export function createLocalClientEventCache(
-  storage?: Stage16StorageLike,
+  storage?: ClientEventStorageLike,
   key = defaultStoreKey,
 ): LocalClientEventCache {
   let memoryRecords: StoredClientCachedEvent[] = [];
@@ -77,6 +85,27 @@ export function createLocalClientEventCache(
   };
 }
 
+export function createLocalClientOutboxSnapshot(
+  events: EventEnvelope[],
+  clientId = "client_macbook",
+  projectionTarget: ProjectionTarget = "dgx-02",
+  updatedAt = new Date().toISOString(),
+): LocalClientOutboxSnapshot {
+  return {
+    clientId,
+    projectionTarget,
+    events: mergeClientEventOutboxEvents([], events),
+    updatedAt,
+  };
+}
+
+export function mergeClientEventOutboxEvents(
+  currentEvents: EventEnvelope[],
+  nextEvents: EventEnvelope[],
+): EventEnvelope[] {
+  return dedupeEvents([...nextEvents, ...currentEvents]).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
 function parseRecords(rawValue: string | null): StoredClientCachedEvent[] {
   if (!rawValue) {
     return [];
@@ -96,6 +125,10 @@ function parseRecords(rawValue: string | null): StoredClientCachedEvent[] {
 
 function dedupeRecords(records: StoredClientCachedEvent[]): StoredClientCachedEvent[] {
   return Array.from(new Map(records.map((record) => [record.event.id, record])).values());
+}
+
+function dedupeEvents(events: EventEnvelope[]): EventEnvelope[] {
+  return Array.from(new Map(events.map((event) => [event.id, event])).values());
 }
 
 function isStoredClientCachedEvent(value: unknown): value is StoredClientCachedEvent {

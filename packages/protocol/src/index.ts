@@ -405,6 +405,11 @@ export const workSourceRefSchema = z.object({
 export type WorkSourceRef = z.infer<typeof workSourceRefSchema>;
 
 export const workLaneSchema = z.enum([
+  "auto",
+  "check",
+  "ask",
+  "approve",
+  "blocked",
   "inbox",
   "conversation",
   "debate",
@@ -418,6 +423,18 @@ export type WorkLane = z.infer<typeof workLaneSchema>;
 
 // Temporary PR1 taxonomy until routine and automation semantics are designed.
 export const workItemKindSchema = z.enum([
+  // TEMP PR1 taxonomy. Keep business kinds grouped here until workflow/routine semantics stabilize.
+  "customer_inquiry",
+  "quote_request",
+  "price_nego",
+  "lead_time",
+  "sample_request",
+  "claim",
+  "order",
+  "spec_doc",
+  "internal_coord",
+  "report",
+  "general",
   "conversation",
   "decision",
   "coding_packet",
@@ -432,8 +449,13 @@ export const workItemKindSchema = z.enum([
 export type WorkItemKind = z.infer<typeof workItemKindSchema>;
 
 export const workItemStatusSchema = z.enum([
+  "inbox",
   "captured",
   "triaged",
+  "waiting_input",
+  "drafted",
+  "running",
+  "waiting_approval",
   "planned",
   "in_progress",
   "blocked",

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { EventEnvelope } from "@ai-orchestrator/protocol";
-import { createLocalClientEventCache } from "./stage29LocalEventStore";
+import {
+  createLocalClientEventCache,
+  createLocalClientOutboxSnapshot,
+  mergeClientEventOutboxEvents,
+} from "./stage29LocalEventStore";
 
 const eventA: EventEnvelope = {
   id: "event_a",
@@ -61,5 +65,15 @@ describe("stage29 local client event cache", () => {
     expect(await secondStore.listUnsynced()).toHaveLength(1);
     await secondStore.markProjected(["event_a"], "dgx-02");
     expect(await secondStore.listUnsynced()).toHaveLength(0);
+  });
+
+  it("is the single client projection outbox source for unsynced events", async () => {
+    const outbox = mergeClientEventOutboxEvents([eventA], [eventA, eventB]);
+    const snapshot = createLocalClientOutboxSnapshot(outbox, "client_macbook", "dgx-02", "2026-05-24T00:02:00.000Z");
+
+    expect(outbox.map((event) => event.id)).toEqual(["event_b", "event_a"]);
+    expect(snapshot.clientId).toBe("client_macbook");
+    expect(snapshot.projectionTarget).toBe("dgx-02");
+    expect(snapshot.events).toHaveLength(2);
   });
 });

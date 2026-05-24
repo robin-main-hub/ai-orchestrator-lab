@@ -104,12 +104,9 @@ import {
   type Stage14EventSyncState,
 } from "./runtime/stage14EventSync";
 import {
-  createBrowserEventOutboxStorage,
-  mergeOutboxEvents,
-  removeSyncedOutboxEvents,
-  type Stage16OutboxStorage,
-} from "./runtime/stage16LocalOutbox";
-import { createLocalClientEventCache } from "./runtime/stage29LocalEventStore";
+  createLocalClientEventCache,
+  mergeClientEventOutboxEvents,
+} from "./runtime/stage29LocalEventStore";
 import {
   mergeConversationMessages,
   mergeEventReplayLogs,
@@ -212,7 +209,7 @@ const maxDraftAttachments = 5;
 const agentVisualStorageKey = "ai-orchestrator-lab.agent-visuals.v1";
 const providerProfilesStorageKey = "ai-orchestrator-lab.provider-profiles.v1";
 const providerProfilesSeedVersionKey = "ai-orchestrator-lab.provider-profiles.seed-version";
-const providerProfilesSeedVersion = "2026-05-25-endruin-domain-seeds";
+const providerProfilesSeedVersion = "2026-05-25-grok-pii-redacted";
 const defaultObsidianVaultRoot = "F:/obsidian/ai-headquarter";
 
 const agentRoleOptions: WorkbenchAgent["role"][] = [
@@ -583,14 +580,6 @@ function createInitialAgentVisualSettings(agents: WorkbenchAgent[]): Record<stri
   }
 }
 
-function createDesktopOutboxStorage(): Stage16OutboxStorage {
-  try {
-    return createBrowserEventOutboxStorage(typeof window === "undefined" ? undefined : window.localStorage);
-  } catch {
-    return createBrowserEventOutboxStorage();
-  }
-}
-
 function createDgxVaultSecretRef(id: string, label: string, redactedPreview: string): SecretRef {
   return {
     id,
@@ -743,7 +732,7 @@ const seededProviderProfiles: ProviderProfile[] = [
   {
     ...createProviderProfile({
       id: "provider_grok_oauth_dgx",
-      name: "Grok OAuth #1 (choiminwoong@gmail.com)",
+      name: "Grok OAuth #1",
       kind: "custom",
       baseUrl: "http://127.0.0.1:18111/v1",
       defaultModel: "grok-oauth-session",
@@ -755,7 +744,7 @@ const seededProviderProfiles: ProviderProfile[] = [
   {
     ...createProviderProfile({
       id: "provider_grok_oauth_dgx_2",
-      name: "Grok OAuth #2 (choiminwoongj@gmail.com)",
+      name: "Grok OAuth #2",
       kind: "custom",
       baseUrl: "http://127.0.0.1:18112/v1",
       defaultModel: "grok-oauth-session",
@@ -812,18 +801,36 @@ function createInitialProviderProfiles() {
         typeof profile.kind === "string" &&
         typeof profile.enabled === "boolean" &&
         Array.isArray(profile.tags),
-    );
+    ).map(sanitizeProviderProfile);
     if (window.localStorage.getItem(providerProfilesSeedVersionKey) !== providerProfilesSeedVersion) {
       const storedIds = new Set(storedProfiles.map((profile) => profile.id));
       const missingSeeds = seededProviderProfiles.filter((profile) => !storedIds.has(profile.id));
       window.localStorage.setItem(providerProfilesSeedVersionKey, providerProfilesSeedVersion);
-      return [...storedProfiles, ...missingSeeds];
+      return [...storedProfiles, ...missingSeeds].map(sanitizeProviderProfile);
     }
 
     return storedProfiles.length > 0 ? storedProfiles : seededProviderProfiles;
   } catch {
     return seededProviderProfiles;
   }
+}
+
+function sanitizeProviderProfile(profile: ProviderProfile): ProviderProfile {
+  if (profile.id === "provider_grok_oauth_dgx") {
+    return {
+      ...profile,
+      name: "Grok OAuth #1",
+    };
+  }
+
+  if (profile.id === "provider_grok_oauth_dgx_2") {
+    return {
+      ...profile,
+      name: "Grok OAuth #2",
+    };
+  }
+
+  return profile;
 }
 
 function inferModelInputModalities(modelId: string): ModelDescriptor["inputModalities"] {
@@ -1211,8 +1218,8 @@ const initialWorkItems: WorkItem[] = [
     sessionId: DEFAULT_SESSION_ID,
     title: "DGX-02 Event Storage authority",
     kind: "review",
-    lane: "execution",
-    status: "in_progress",
+    lane: "check",
+    status: "running",
     summary: "DGX-02 is authoritative; MacBook and Home PC keep client cache/outbox records.",
     sourceRefs: [{ source: "desktop_manual", observedAt: now, title: "PR0 authority cleanup" }],
     evidenceRefs: [
@@ -1263,12 +1270,11 @@ const initialWorkItemHandoffs: WorkItemHandoff[] = [
 export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
   const [runtimeSnapshotState, setRuntimeSnapshotState] = useState<RuntimeSnapshot>(runtimeSnapshot);
-  const eventOutboxStorage = useMemo(() => createDesktopOutboxStorage(), []);
   const localClientEventCache = useMemo(
     () => createLocalClientEventCache(typeof window === "undefined" ? undefined : window.localStorage),
     [],
   );
-  const [eventOutbox, setEventOutbox] = useState<EventEnvelope[]>(() => eventOutboxStorage.load());
+  const [eventOutbox, setEventOutbox] = useState<EventEnvelope[]>([]);
   const [activeNavItem, setActiveNavItem] = useState<NavItemId>("sessions");
   const [providerRegistrationOpen, setProviderRegistrationOpen] = useState(false);
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(createInitialProviderProfiles);
@@ -1293,7 +1299,7 @@ export function App() {
   const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
   const [activeSessionId, setActiveSessionId] = useState(DEFAULT_SESSION_ID);
   const [eventSyncState, setEventSyncState] = useState<Stage14EventSyncState>(() =>
-    createInitialEventSyncState(eventOutboxStorage.load().length),
+    createInitialEventSyncState(0),
   );
   const [sessionIndexState, setSessionIndexState] = useState<Stage20SessionIndexState>(() =>
     createInitialSessionIndexState(),
@@ -1473,8 +1479,7 @@ export function App() {
 
     const localEvents = await localClientEventCache.listBySession(activeSessionId);
     const localUnsyncedEvents = await localClientEventCache.listUnsynced();
-    const queuedEvents = mergeOutboxEvents(eventOutboxStorage.load(), localUnsyncedEvents);
-    eventOutboxStorage.save(queuedEvents);
+    const queuedEvents = mergeClientEventOutboxEvents([], localUnsyncedEvents);
     setEventLog((events) => mergeEventReplayLogs(events, localEvents));
     setEventOutbox(queuedEvents);
 
@@ -1599,12 +1604,7 @@ export function App() {
     }
 
     const localUnsyncedEvents = await localClientEventCache.listUnsynced();
-    const currentOutbox = eventOutboxStorage.load();
-    const nextOutbox = mergeOutboxEvents(
-      removeSyncedOutboxEvents(currentOutbox, result.syncedEventIds),
-      mergeOutboxEvents(localUnsyncedEvents, result.queuedEvents),
-    );
-    eventOutboxStorage.save(nextOutbox);
+    const nextOutbox = mergeClientEventOutboxEvents(localUnsyncedEvents, result.queuedEvents);
     setEventOutbox(nextOutbox);
 
     setEventSyncState((state) => {
@@ -1669,9 +1669,51 @@ export function App() {
     }
   }
 
-  function handleSyncEventStorage() {
+  async function handleSyncEventStorage() {
     const unsyncedEvents = eventLog.filter((event) => !syncedEventIds[event.id]);
-    void syncEventsToDgx(mergeOutboxEvents(eventOutbox, unsyncedEvents));
+    const localUnsyncedEvents = await localClientEventCache.listUnsynced();
+    void syncEventsToDgx(
+      mergeClientEventOutboxEvents(eventOutbox, mergeClientEventOutboxEvents(localUnsyncedEvents, unsyncedEvents)),
+    );
+  }
+
+  function handleRouteWorkItem(workItemId: string, lane: WorkItem["lane"]) {
+    const updatedAt = new Date().toISOString();
+    setWorkItems((items) =>
+      items.map((item) =>
+        item.id === workItemId
+          ? {
+              ...item,
+              lane,
+              status: statusForWorkLane(lane),
+              updatedAt,
+            }
+          : item,
+      ),
+    );
+    appendEvent("work_item.routed", {
+      workItemId,
+      lane,
+      status: statusForWorkLane(lane),
+    });
+  }
+
+  function handleArchiveWorkItem(workItemId: string) {
+    const updatedAt = new Date().toISOString();
+    setWorkItems((items) =>
+      items.map((item) =>
+        item.id === workItemId
+          ? {
+              ...item,
+              status: "archived",
+              updatedAt,
+            }
+          : item,
+      ),
+    );
+    appendEvent("work_item.archived", {
+      workItemId,
+    });
   }
 
   async function handleRefreshSessionIndex() {
@@ -2005,8 +2047,8 @@ export function App() {
       sessionId: activeSessionId,
       title: messageContent.slice(0, 64) || "Attachment request",
       kind: "conversation",
-      lane: "conversation",
-      status: "captured",
+      lane: "check",
+      status: "triaged",
       summary: messageContent.slice(0, 220) || `${attachmentMetadata.length} attachment(s) queued`,
       sourceRefs: [
         {
@@ -2138,6 +2180,18 @@ export function App() {
       createdAt: assistantMessage.createdAt,
     };
     setAssistantDrafts((drafts) => [assistantDraft, ...drafts].slice(0, 12));
+    setWorkItems((items) =>
+      items.map((item) =>
+        item.id === workItem.id
+          ? {
+              ...item,
+              lane: completionMetadata.realProviderCall ? "check" : "ask",
+              status: completionMetadata.realProviderCall ? "drafted" : "waiting_input",
+              updatedAt: assistantMessage.createdAt,
+            }
+          : item,
+      ),
+    );
     appendEvent("conversation.message.created", {
       messageId: assistantMessage.id,
       role: "assistant",
@@ -2202,8 +2256,8 @@ export function App() {
       sessionId: activeSessionId,
       title: nextPacket.goal.slice(0, 72),
       kind: "coding_packet",
-      lane: "coding",
-      status: "planned",
+      lane: "approve",
+      status: "waiting_approval",
       summary: `${nextPacket.decisions.length} decisions / ${nextPacket.implementationPlan.length} implementation steps`,
       sourceRefs: [{ source: "desktop_manual", observedAt: createdAt, title: "Coding Packet" }],
       evidenceRefs: [
@@ -2372,7 +2426,7 @@ export function App() {
       sessionId: activeSessionId,
       title: `${utterance.agentName} 발언 후속 대화`,
       kind: "decision",
-      lane: "debate",
+      lane: "check",
       status: "triaged",
       summary: utterance.content.slice(0, 220),
       sourceRefs: [
@@ -3757,6 +3811,8 @@ export function App() {
               drafts={assistantDrafts}
               handoffs={workItemHandoffs}
               items={workItems}
+              onArchiveItem={handleArchiveWorkItem}
+              onRouteItem={handleRouteWorkItem}
             />
           )}
 
@@ -4637,6 +4693,59 @@ function branchStatusLabel(status: BranchExperiment["status"]) {
   };
 
   return labels[status];
+}
+
+function statusForWorkLane(lane: WorkItem["lane"]): WorkItem["status"] {
+  const statuses: Partial<Record<WorkItem["lane"], WorkItem["status"]>> = {
+    auto: "running",
+    check: "drafted",
+    ask: "waiting_input",
+    approve: "waiting_approval",
+    blocked: "blocked",
+    inbox: "inbox",
+  };
+
+  return statuses[lane] ?? "triaged";
+}
+
+function workLaneLabel(lane: WorkItem["lane"]) {
+  const labels: Partial<Record<WorkItem["lane"], string>> = {
+    auto: "자동",
+    check: "검토",
+    ask: "질문",
+    approve: "승인",
+    blocked: "차단",
+    inbox: "수신",
+    conversation: "대화",
+    debate: "토론",
+    coding: "코딩",
+    review: "리뷰",
+    execution: "실행",
+    memory: "기억",
+    backup: "백업",
+  };
+
+  return labels[lane] ?? lane;
+}
+
+function getInboxLane(item: WorkItem): "auto" | "check" | "ask" | "approve" | "blocked" {
+  if (item.status === "blocked" || item.lane === "blocked") {
+    return "blocked";
+  }
+
+  if (item.missingInfo.some((slot) => slot.required && slot.status === "missing") || item.lane === "ask") {
+    return "ask";
+  }
+
+  if (item.status === "waiting_approval" || item.kind === "approval" || item.lane === "approve") {
+    return "approve";
+  }
+
+  if (item.lane === "auto") {
+    return "auto";
+  }
+
+  return "check";
 }
 
 function insightCategoryLabel(category: InsightCategory) {
@@ -5581,47 +5690,77 @@ function WorkItemHandoffPanel({
   drafts,
   handoffs,
   items,
+  onArchiveItem,
+  onRouteItem,
 }: {
   drafts: AssistantDraft[];
   handoffs: WorkItemHandoff[];
   items: WorkItem[];
+  onArchiveItem: (workItemId: string) => void;
+  onRouteItem: (workItemId: string, lane: WorkItem["lane"]) => void;
 }) {
-  const visibleItems = items.slice(0, 3);
-  const visibleDrafts = drafts.slice(0, 1);
-  const visibleHandoffs = handoffs.slice(0, 1);
+  const activeItems = items.filter((item) => item.status !== "archived").slice(0, 12);
+  const lanes = [
+    { id: "auto" as const, label: workLaneLabel("auto") },
+    { id: "check" as const, label: workLaneLabel("check") },
+    { id: "ask" as const, label: workLaneLabel("ask") },
+    { id: "approve" as const, label: workLaneLabel("approve") },
+    { id: "blocked" as const, label: workLaneLabel("blocked") },
+  ];
+  const laneItems = Object.fromEntries(
+    lanes.map((lane) => [lane.id, activeItems.filter((item) => getInboxLane(item) === lane.id)]),
+  ) as Record<(typeof lanes)[number]["id"], WorkItem[]>;
+  const visibleDrafts = drafts.slice(0, 2);
   const pendingHandoffs = handoffs.filter((handoff) => handoff.approvalState === "required").length;
+  const waitingInput = laneItems.ask.length;
 
   return (
-    <section className="work-handoff-strip" aria-label="작업 대기열과 전달 상태">
+    <section className="work-handoff-strip inbox-strip" aria-label="Assistant Inbox">
       <header>
         <div>
-          <span>WorkItems / Drafts / Handoff</span>
+          <span>Assistant Inbox</span>
           <strong>
-            {items.length} tasks · {drafts.length} drafts · {pendingHandoffs} approvals
+            {activeItems.length} tasks / {visibleDrafts.length} drafts / {pendingHandoffs} approvals
           </strong>
         </div>
-        <em>Event Storage first</em>
+        <em>{waitingInput > 0 ? `${waitingInput} questions pending` : "WorkItem first"}</em>
       </header>
       <div className="work-handoff-grid">
-        {visibleItems.map((item) => (
-          <article className={`work-handoff-card ${item.priority}`} key={item.id}>
-            <span>{item.lane} / {item.status}</span>
-            <strong>{item.title}</strong>
-            <p>{item.summary}</p>
-          </article>
-        ))}
+        {lanes.map((lane) => {
+          const firstItem = laneItems[lane.id][0];
+
+          return (
+            <article className={`work-handoff-card inbox-lane ${lane.id}`} key={lane.id}>
+              <span>
+                {lane.label} / {laneItems[lane.id].length}
+              </span>
+              <strong>{firstItem?.title ?? "No waiting item"}</strong>
+              <p>{firstItem?.summary ?? "New WorkItems will be classified here."}</p>
+              {firstItem ? (
+                <div className="inbox-card-actions">
+                  {lane.id !== "check" ? (
+                    <button onClick={() => onRouteItem(firstItem.id, "check")} type="button">
+                      Check
+                    </button>
+                  ) : null}
+                  {lane.id !== "approve" ? (
+                    <button onClick={() => onRouteItem(firstItem.id, "approve")} type="button">
+                      Approve
+                    </button>
+                  ) : null}
+                  <button onClick={() => onArchiveItem(firstItem.id)} type="button">
+                    Archive
+                  </button>
+                </div>
+              ) : null}
+            </article>
+          );
+        })}
         {visibleDrafts.map((draft) => (
           <article className="work-handoff-card draft" key={draft.id}>
             <span>{draft.targetSurface} / {draft.confidence}</span>
             <strong>{draft.title}</strong>
             <p>{draft.body}</p>
-          </article>
-        ))}
-        {visibleHandoffs.map((handoff) => (
-          <article className={`work-handoff-card ${handoff.approvalState}`} key={handoff.id}>
-            <span>{handoff.targetSurface} / {handoff.approvalState}</span>
-            <strong>{handoff.payloadRef ?? "payload pending"}</strong>
-            <p>{handoff.summary}</p>
           </article>
         ))}
       </div>

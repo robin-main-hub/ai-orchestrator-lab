@@ -574,6 +574,49 @@ describe("protocol schemas", () => {
     ).toThrow();
   });
 
+  it("supports PR1 assistant inbox routing without broad source sprawl", () => {
+    const askItem = workItemSchema.parse({
+      id: "work_item_ask_1",
+      sessionId: "session_1",
+      title: "Ask for missing lead time",
+      kind: "lead_time",
+      lane: "ask",
+      status: "waiting_input",
+      summary: "Need confirmed lead time before sending an external reply.",
+      sourceRefs: [
+        {
+          source: "desktop_manual",
+          observedAt: "2026-05-24T00:00:00.000Z",
+          contentHash: "sha256:lead-time-request",
+        },
+      ],
+      evidenceRefs: [
+        {
+          id: "evidence_previous_answer_1",
+          kind: "event",
+          reference: "event://message_1",
+          summary: "Customer asked for delivery timing; no raw message body is stored.",
+          observedAt: "2026-05-24T00:00:00.000Z",
+        },
+      ],
+      missingInfo: [
+        {
+          id: "missing_lead_time",
+          label: "Lead time",
+          reason: "Required before external send",
+          required: true,
+          status: "missing",
+        },
+      ],
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+
+    expect(askItem.lane).toBe("ask");
+    expect(askItem.status).toBe("waiting_input");
+    expect(askItem.kind).toBe("lead_time");
+    expect(workSourceSchema.options).toEqual(["desktop_manual", "mobile_manual", "legacy_telegram"]);
+  });
+
   it("models assistant drafts and handoffs to target surfaces", () => {
     const evidence = {
       id: "evidence_event_1",

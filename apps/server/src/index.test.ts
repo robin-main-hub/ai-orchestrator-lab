@@ -336,7 +336,6 @@ describe("server health placeholder", () => {
         grok1,
         JSON.stringify({
           "https://auth.x.ai::demo": {
-            email: "choiminwoong@gmail.com",
             team_id: "team-1",
             refresh_token: "grok-refresh-token-1",
             expires_at: "2026-05-25T00:00:00.000Z",
@@ -348,7 +347,6 @@ describe("server health placeholder", () => {
         grok2,
         JSON.stringify({
           "https://auth.x.ai::demo": {
-            email: "choiminwoongj@gmail.com",
             team_id: "team-2",
             refresh_token: "grok-refresh-token-2",
             expires_at: "2026-05-16T00:00:00.000Z",
@@ -363,13 +361,13 @@ describe("server health placeholder", () => {
       const grokAccount1 = registry.entries.find((entry) => entry.providerProfileId === "provider_grok_oauth_dgx");
       const grokAccount2 = registry.entries.find((entry) => entry.providerProfileId === "provider_grok_oauth_dgx_2");
 
-      expect(grokAccount1?.name).toContain("choiminwoong@gmail.com");
+      expect(grokAccount1?.name).toBe("Grok OAuth #1");
       expect(grokAccount1?.secretAvailability).toBe("available");
-      expect(grokAccount1?.secretSourceRefs).toContain("account:choiminwoong@gmail.com");
-      expect(grokAccount2?.name).toContain("choiminwoongj@gmail.com");
+      expect(grokAccount1?.secretSourceRefs).toContain("account:grok-oauth-1");
+      expect(grokAccount2?.name).toBe("Grok OAuth #2");
       expect(grokAccount2?.secretAvailability).toBe("expired");
       expect(grokAccount2?.tags).toContain("oauth-expired");
-      expect(grokAccount2?.secretSourceRefs).toContain("account:choiminwoongj@gmail.com");
+      expect(grokAccount2?.secretSourceRefs).toContain("account:grok-oauth-2");
       expect(JSON.stringify(registry)).not.toContain("grok-refresh-token");
     } finally {
       if (previousGrok1 === undefined) {
