@@ -1,4 +1,5 @@
 import type { InsightCategory, ReviewMode } from "@ai-orchestrator/protocol";
+import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
 
 export function reviewModeLabel(mode: ReviewMode) {
   const labels: Record<ReviewMode, string> = {
@@ -20,4 +21,18 @@ export function insightCategoryLabel(category: InsightCategory) {
   };
 
   return labels[category];
+}
+
+export function guardStepLabel(step: Stage8IngressSnapshot["result"]["guardSteps"][number]["name"]) {
+  const labels: Record<Stage8IngressSnapshot["result"]["guardSteps"][number]["name"], string> = {
+    shape_unification: "Shape",
+    noise_filter: "Noise",
+    self_response_prevention: "Self-loop",
+    debounce: "Debounce",
+    pii_secret_block: "PII/Secret",
+    guard_logging: "Logging",
+    checklist_injection: "Checklist",
+  };
+
+  return labels[step];
 }

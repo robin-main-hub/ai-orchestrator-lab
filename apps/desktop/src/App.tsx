@@ -196,7 +196,7 @@ import {
   modelSupportsAttachmentKind,
   slugifyProviderName,
 } from "./lib/helpers";
-import { insightCategoryLabel, reviewModeLabel } from "./lib/uiLabels";
+import { guardStepLabel, insightCategoryLabel, reviewModeLabel } from "./lib/uiLabels";
 import {
   createInitialProviderProfiles,
   createModelDiscoveryFromRegistryEntry,
@@ -230,6 +230,7 @@ import {
 import { AgentAvatar } from "./components/AgentAvatar";
 import { BackupRailMenu } from "./components/BackupRailMenu";
 import { CodingPacketPanel } from "./components/CodingPacketPanel";
+import { IngressGuardPanel } from "./components/IngressGuardPanel";
 import { TmuxPaneCard } from "./components/TmuxPaneCard";
 import { auditStatusLabel, WindowChecklist } from "./components/WindowChecklist";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
@@ -5565,84 +5566,6 @@ function mementoHealthLabel(health: Stage6MemoryInspector["stats"]["health"]) {
   };
 
   return labels[health];
-}
-
-function IngressGuardPanel({
-  onImportTelegram,
-  snapshot,
-}: {
-  onImportTelegram: () => void;
-  snapshot: Stage8IngressSnapshot;
-}) {
-  const visibleSteps = snapshot.result.guardSteps.slice(0, 7);
-
-  return (
-    <section className="side-panel ingress-panel">
-      <header className="panel-title">
-        <RadioTower size={17} />
-        <h2>Ingress Guard</h2>
-        <button aria-label="Telegram 가져오기" className="icon-button" onClick={onImportTelegram} type="button">
-          <Smartphone size={15} />
-        </button>
-      </header>
-      <div className="ingress-summary">
-        <div>
-          <span>channel</span>
-          <strong>{snapshot.channel}</strong>
-        </div>
-        <div>
-          <span>confidence</span>
-          <strong>{snapshot.result.confidence}</strong>
-        </div>
-        <div>
-          <span>approval</span>
-          <strong>{snapshot.result.approvalState}</strong>
-        </div>
-      </div>
-      <div className="guard-step-list" aria-label="Ingress guard steps">
-        {visibleSteps.map((step) => (
-          <article className={step.status} key={step.name}>
-            <strong>{guardStepLabel(step.name)}</strong>
-            <em>{step.status}</em>
-            <span>{step.reason}</span>
-          </article>
-        ))}
-      </div>
-      <div className="approval-queue-list">
-        <span>Approval Queue</span>
-        {snapshot.approvals.length === 0 ? (
-          <strong>empty</strong>
-        ) : (
-          snapshot.approvals.map((approval) => (
-            <article key={approval.id}>
-              <strong>{approval.state}</strong>
-              <em>{approval.permissions.join(", ")}</em>
-            </article>
-          ))
-        )}
-      </div>
-      <div className="zero-token-note">
-        <span>0-token safety</span>
-        <strong>
-          {snapshot.zeroTokenSafety.cadence} / pending {snapshot.zeroTokenSafety.pendingCount}
-        </strong>
-      </div>
-    </section>
-  );
-}
-
-function guardStepLabel(step: Stage8IngressSnapshot["result"]["guardSteps"][number]["name"]) {
-  const labels: Record<Stage8IngressSnapshot["result"]["guardSteps"][number]["name"], string> = {
-    shape_unification: "Shape",
-    noise_filter: "Noise",
-    self_response_prevention: "Self-loop",
-    debounce: "Debounce",
-    pii_secret_block: "PII/Secret",
-    guard_logging: "Logging",
-    checklist_injection: "Checklist",
-  };
-
-  return labels[step];
 }
 
 function BackupPanel({
