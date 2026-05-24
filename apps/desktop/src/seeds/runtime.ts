@@ -1,5 +1,11 @@
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import { now } from "../lib/appConstants";
+import { createStage5DgxBridge } from "../runtime/stage5Runtime";
+import {
+  createStage8IngressSnapshot,
+  createTelegramDemoInput,
+} from "../runtime/stage8Ingress";
+import { initialAgentRun } from "./conversation";
 
 export const runtimeSnapshot: RuntimeSnapshot = {
   status: "degraded",
@@ -83,3 +89,13 @@ export const runtimeSnapshot: RuntimeSnapshot = {
   recentError: "dgx-02 heartbeat pending",
   updatedAt: now,
 };
+
+export const initialDgxBridge = createStage5DgxBridge({
+  run: initialAgentRun,
+  runtime: runtimeSnapshot,
+  createdAt: now,
+});
+
+export const initialIngressSnapshot = createStage8IngressSnapshot(
+  createTelegramDemoInput(new Date("2026-05-24T00:23:00.000+09:00").toISOString()),
+);
