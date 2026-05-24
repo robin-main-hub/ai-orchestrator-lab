@@ -2458,6 +2458,7 @@ export function App() {
               agentVisualsById={agentVisualsById}
               agents={agents}
               messages={conversationMessages}
+              packet={codingPacketState}
             />
           )}
 
@@ -3840,18 +3841,22 @@ function TmuxSwarmBoard({
   agentVisualsById,
   agents,
   messages,
+  packet,
 }: {
   activeSessionId: string;
   agentActivityById: Record<string, AgentActivityStatus>;
   agentVisualsById: Record<string, AgentVisualSettings>;
   agents: WorkbenchAgent[];
   messages: ConversationMessage[];
+  packet: CodingPacket;
 }) {
   const recentMessages = messages.slice(-6);
   const roleAgent = (role: WorkbenchAgent["role"]) => agents.find((agent) => agent.role === role);
+  const recommendation = createTmuxSwarmRecommendation(packet, messages);
   const panes = [
     {
       id: "pane-0",
+      roleKey: "discussion",
       title: "Discussion & Planning",
       role: "요구사항 / 제품 / 아키텍처 논의",
       state: "chat active",
@@ -3860,6 +3865,7 @@ function TmuxSwarmBoard({
     },
     {
       id: "pane-1",
+      roleKey: "orchestrator",
       title: "Orchestrator Control",
       role: "작업 분해 / 역할 배정 / 지휘",
       state: "dispatch locked",
@@ -3868,6 +3874,7 @@ function TmuxSwarmBoard({
     },
     {
       id: "pane-2",
+      roleKey: "status",
       title: "Status & Monitor",
       role: "진행 로그 / 테스트 / stuck run 감시",
       state: "watch only",
@@ -3875,6 +3882,7 @@ function TmuxSwarmBoard({
     },
     {
       id: "pane-3",
+      roleKey: "code",
       title: "Agent - Code Expert",
       role: "핵심 로직 / 리팩터링 / 복잡 구현",
       state: "idle",
@@ -3883,6 +3891,7 @@ function TmuxSwarmBoard({
     },
     {
       id: "pane-4",
+      roleKey: "architect",
       title: "Agent - Architect",
       role: "protocol / Event Storage / 타입 경계",
       state: "ready",
@@ -3891,6 +3900,7 @@ function TmuxSwarmBoard({
     },
     {
       id: "pane-5",
+      roleKey: "frontend",
       title: "Agent - Frontend Dev",
       role: "desktop UI / Workbench / Execution Slot",
       state: "active",
@@ -3898,6 +3908,7 @@ function TmuxSwarmBoard({
     },
     {
       id: "pane-6",
+      roleKey: "backend",
       title: "Agent - Backend Dev",
       role: "server / sync / DGX 연결 지점",
       state: "idle",
@@ -3905,13 +3916,33 @@ function TmuxSwarmBoard({
     },
     {
       id: "pane-7",
+      roleKey: "qa",
       title: "Agent - QA & Security",
       role: "테스트 / 권한 / redaction / 회귀검사",
       state: "guarding",
       agent: roleAgent("reviewer") ?? roleAgent("verifier"),
       signal: "Gemini CLI 연결 금지. Secret/command redaction 우선.",
     },
+    {
+      id: "pane-8",
+      roleKey: "research",
+      title: "Agent - Research Scout",
+      role: "외부 문서 / repo / 레퍼런스 조사",
+      state: recommendation.recommendedRoles.includes("research") ? "recommended" : "standby",
+      agent: roleAgent("skeptic"),
+      signal: "새 API/라이브러리/외부 설계 검토가 필요할 때만 투입.",
+    },
+    {
+      id: "pane-9",
+      roleKey: "memory",
+      title: "Agent - Memory Curator",
+      role: "Memento recall / 결정 기록 / handoff 정리",
+      state: recommendation.recommendedRoles.includes("memory") ? "recommended" : "standby",
+      agent: roleAgent("memory_curator"),
+      signal: "장기 프로젝트, 백업, handoff가 걸리면 기억 정리 전담.",
+    },
   ];
+  const visiblePanes = panes.slice(0, recommendation.recommendedCount);
 
   return (
     <section className="tmux-panel" aria-label="Role-Based Tmux Agent Swarm">
@@ -3927,6 +3958,23 @@ function TmuxSwarmBoard({
           <strong>이벤트 저장소 / Permission / Redaction 먼저</strong>
         </div>
       </header>
+      <section className="tmux-recommendation-panel" aria-label="Orchestrator swarm recommendation">
+        <div>
+          <span>Orchestrator 추천 배치</span>
+          <strong>{recommendation.recommendedCount}명 / 최대 10명</strong>
+          <p>{recommendation.summary}</p>
+        </div>
+        <div className="tmux-recommendation-meter">
+          <span>난이도</span>
+          <strong>{recommendation.difficulty}</strong>
+          <em>score {recommendation.score}</em>
+        </div>
+        <div className="tmux-role-chip-list">
+          {recommendation.recommendedRoles.map((role) => (
+            <span key={role}>{role}</span>
+          ))}
+        </div>
+      </section>
       <div className="tmux-workbench">
         <section className="tmux-operator-chat">
           <header>
@@ -3949,10 +3997,10 @@ function TmuxSwarmBoard({
         <section className="tmux-agent-board">
           <header>
             <span>Agent Work Status</span>
-            <strong>8 panes / detailed monitor</strong>
+            <strong>{recommendation.recommendedCount} panes / max 10</strong>
           </header>
           <div className="tmux-agent-grid">
-            {panes.map((pane) => (
+            {visiblePanes.map((pane) => (
               <TmuxPaneCard
                 key={pane.id}
                 pane={{
@@ -3989,11 +4037,76 @@ function TmuxSwarmBoard({
       </div>
       <footer className="tmux-footer">
         <span>tmux session: ai-swarm</span>
-        <span>runtime backend: future local execution layer</span>
+        <span>runtime backend: local tmux / 4-10 panes</span>
         <span>real command dispatch: disabled</span>
       </footer>
     </section>
   );
+}
+
+type TmuxSwarmDifficulty = "light" | "standard" | "complex" | "critical";
+
+function createTmuxSwarmRecommendation(packet: CodingPacket, messages: ConversationMessage[]) {
+  const text = [
+    packet.goal,
+    ...packet.context,
+    ...packet.decisions,
+    ...packet.constraints,
+    ...packet.implementationPlan,
+    ...packet.verificationPlan,
+    ...messages.slice(-6).map((message) => message.content),
+  ]
+    .join(" ")
+    .toLowerCase();
+  const keywordWeights: Array<[string, number]> = [
+    ["tmux", 2],
+    ["dgx", 2],
+    ["server", 1],
+    ["permission", 2],
+    ["redaction", 2],
+    ["보안", 2],
+    ["백업", 1],
+    ["provider", 1],
+    ["프로바이더", 1],
+    ["memory", 1],
+    ["memento", 1],
+    ["event", 1],
+    ["테스트", 1],
+    ["끝까지", 2],
+    ["전부", 2],
+  ];
+  const score =
+    2 +
+    packet.implementationPlan.length +
+    packet.verificationPlan.length +
+    packet.constraints.length +
+    keywordWeights.reduce((total, [keyword, weight]) => total + (text.includes(keyword) ? weight : 0), 0);
+  const difficulty: TmuxSwarmDifficulty =
+    score >= 15 ? "critical" : score >= 10 ? "complex" : score >= 6 ? "standard" : "light";
+  const recommendedCount = difficulty === "critical" ? 10 : difficulty === "complex" ? 8 : difficulty === "standard" ? 6 : 4;
+  const baseRoles = ["discussion", "orchestrator", "status", "architect"];
+  const byDifficulty: Record<TmuxSwarmDifficulty, string[]> = {
+    light: ["frontend"],
+    standard: ["frontend", "backend", "qa"],
+    complex: ["code", "architect", "frontend", "backend", "qa"],
+    critical: ["code", "architect", "frontend", "backend", "qa", "research", "memory"],
+  };
+  const recommendedRoles = Array.from(new Set([...baseRoles, ...byDifficulty[difficulty]])).slice(0, recommendedCount);
+
+  return {
+    difficulty,
+    recommendedCount,
+    recommendedRoles,
+    score,
+    summary:
+      difficulty === "critical"
+        ? "서버/권한/기억/백업/실행이 함께 걸린 작업이라 10인 편성이 안전하다."
+        : difficulty === "complex"
+          ? "프론트와 백엔드, 검증이 동시에 필요한 복합 작업이라 8인 편성을 추천한다."
+          : difficulty === "standard"
+            ? "구현과 검증이 함께 필요한 일반 작업이라 6인 편성을 추천한다."
+            : "작은 수정이나 검토 중심 작업이라 4인 편성으로 충분하다.",
+  };
 }
 
 function TmuxPaneCard({
@@ -4002,6 +4115,7 @@ function TmuxPaneCard({
 }: {
   pane: {
     id: string;
+    roleKey: string;
     title: string;
     role: string;
     state: string;
