@@ -1713,6 +1713,23 @@ function statusTone(status: RuntimeSnapshot["status"]) {
   return "warn";
 }
 
+function agentRoleLabel(role: WorkbenchAgent["role"]) {
+  const labels: Record<WorkbenchAgent["role"], string> = {
+    architect: "설계자",
+    auditor: "감사자",
+    builder: "구현자",
+    executor: "실행자",
+    external: "외부 응대자",
+    memory_curator: "기억 관리자",
+    orchestrator: "지휘자",
+    reviewer: "검토자",
+    skeptic: "비판자",
+    verifier: "검증자",
+  };
+
+  return labels[role];
+}
+
 function ConversationWorkbench({
   agents,
   draftMessage,
@@ -2104,7 +2121,6 @@ function AgentStatePanel({
       </header>
       <div className="agent-list">
         {agents.map((agent) => {
-          const provider = profiles.find((profile) => profile.id === agent.providerProfileId);
           const activityStatus = agentActivityById[agent.id] ?? "idle";
           const providerModels = agent.providerProfileId ? (modelCatalog[agent.providerProfileId] ?? []) : [];
           const modelWindowStart = modelWindowStartByAgentId[agent.id] ?? 0;
@@ -2118,6 +2134,7 @@ function AgentStatePanel({
               .map((otherAgent) => otherAgent.providerProfileId)
               .filter((providerId): providerId is string => Boolean(providerId)),
           );
+          const agentSummary = agentRoleLabel(agent.role);
           return (
             <div className={`agent-row ${agent.id === selectedAgentId ? "selected" : ""}`} key={agent.id}>
             <button className="agent-select-button" onClick={() => onSelectAgent(agent.id)} type="button">
@@ -2127,10 +2144,9 @@ function AgentStatePanel({
                 title={activityStatus}
               />
               <strong>{agent.name}</strong>
-              <span>{agent.role} / {provider?.name ?? "provider pending"}</span>
-              <em>
-                {agent.authBinding?.mode ?? "provider_profile"} / soul:{agent.soulMode}
-              </em>
+              <span className="agent-summary-line" title={agentSummary}>
+                {agentSummary}
+              </span>
             </button>
             <button
               aria-label={`${agent.name} 이름 변경`}
