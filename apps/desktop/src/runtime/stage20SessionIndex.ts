@@ -1,5 +1,6 @@
 import type { EventStorageSessionIndexItem, EventStorageSessionIndexResponse } from "@ai-orchestrator/protocol";
 import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
+import { createDgxOrchestratorAuthHeaders } from "./stage31DgxAuth";
 
 export type Stage20SessionIndexStatus = "loaded" | "empty" | "failed";
 
@@ -71,6 +72,7 @@ async function fetchWithTimeout(fetchImpl: typeof fetch, input: string, timeoutM
   try {
     return await fetchImpl(input, {
       method: "GET",
+      headers: createDgxOrchestratorAuthHeaders(),
       signal: controller.signal,
     });
   } finally {

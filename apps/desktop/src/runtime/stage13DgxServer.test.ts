@@ -68,8 +68,9 @@ const localRuntime: RuntimeSnapshot = {
 
 describe("stage13 DGX server probing", () => {
   it("merges live DGX server health, heartbeat, and model discovery", async () => {
-    const fetchImpl = async (url: RequestInfo | URL) => {
+    const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
       const path = String(url);
+      expect((init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
       if (path.endsWith("/health")) {
         return jsonResponse({
           service: "ai-orchestrator-dgx-server",
@@ -169,8 +170,9 @@ describe("stage13 DGX server probing", () => {
         tags: ["server-proxy", "deepseek"],
         trustLevel: "limited",
       },
-      fetchImpl: async (url) => {
+      fetchImpl: async (url, init) => {
         expect(String(url)).toBe(`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-models?providerProfileId=provider_deepseek_dgx`);
+        expect((init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
         return jsonResponse({
           id: "model_discovery_deepseek",
           providerProfileId: "provider_deepseek_dgx",
@@ -200,8 +202,9 @@ describe("stage13 DGX server probing", () => {
 
   it("fetches the DGX provider registry for reusable provider selection", async () => {
     const registry = await fetchDgxProviderRegistry({
-      fetchImpl: async (url) => {
+      fetchImpl: async (url, init) => {
         expect(String(url)).toBe(`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-registry`);
+        expect((init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
         return jsonResponse({
           id: "provider_registry_dgx02_1",
           authorityNodeId: "dgx-02",
