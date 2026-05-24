@@ -4718,7 +4718,7 @@ function AgentConfigDrawer({
           기본값
         </button>
         <button aria-label="Agent 설정 닫기" className="rail-icon-button" onClick={onClose} type="button">
-          <ChevronRight size={14} />
+          <X size={14} />
         </button>
       </header>
       <div className="agent-config-body">
