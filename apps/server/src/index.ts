@@ -151,6 +151,28 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     supportsModelList: true,
   },
   {
+    providerProfileId: "provider_codex_oauth",
+    baseUrl: process.env.CODEX_OAUTH_BASE_URL ?? "codex-oauth://dgx-02",
+    apiKeyEnvNames: [],
+    noAuth: true,
+    apiStyle: "openai_chat",
+    defaultModelIds: [
+      "codex-session",
+      "codex-high",
+      "codex-medium",
+      "codex-low",
+      "codex-review",
+      "codex-apply-patch",
+      "codex-browser",
+      "codex-local",
+      "codex-dgx",
+    ],
+    supportsModelList: false,
+    oauthAuthFileEnvName: "CODEX_OAUTH_AUTH_FILE",
+    defaultOAuthAuthFile: "~/.codex/auth.json",
+    oauthAccountLabel: "codex-oauth",
+  },
+  {
     providerProfileId: "provider_grok_oauth_dgx",
     baseUrl: process.env.GROK_OPENAI_PROXY_1_BASE_URL ?? process.env.GROK_OPENAI_PROXY_BASE_URL ?? "http://127.0.0.1:18111/v1",
     apiKeyEnvNames: [],
@@ -608,12 +630,12 @@ function createServerProviderModelDescriptor(
   config: ServerProviderProxyConfig,
   modelId: string,
 ): ModelDiscoverySnapshot["models"][number] {
-  const multimodal = /gpt-4o|vision|gemini|claude|grok-4/i.test(modelId);
+  const multimodal = /gpt-4o|vision|gemini|claude|grok-4|codex-browser/i.test(modelId);
   return {
     id: modelId,
     name: modelId,
     providerProfileId: config.providerProfileId,
-    contextWindow: /deepseek|r1/i.test(modelId) ? 64_000 : /claude|grok/i.test(modelId) ? 128_000 : 65_536,
+    contextWindow: /deepseek|r1/i.test(modelId) ? 64_000 : /claude|grok|codex/i.test(modelId) ? 128_000 : 65_536,
     supportsStreaming: true,
     supportsTools: false,
     inputModalities: multimodal ? ["text", "image", "document"] : ["text", "document"],
@@ -621,6 +643,7 @@ function createServerProviderModelDescriptor(
       "server-proxy",
       ...(config.providerProfileId.includes("deepseek") ? ["deepseek"] : []),
       ...(config.providerProfileId.includes("apifun") ? ["apikey.fun", "reseller"] : []),
+      ...(config.providerProfileId.includes("codex_oauth") ? ["codex", "oauth", "dgx"] : []),
       ...(config.providerProfileId.includes("grok") ? ["grok", "oauth"] : []),
       ...(config.providerProfileId.includes("openclaw") ? ["openclaw", "dgx", "vllm"] : []),
     ],
@@ -628,7 +651,7 @@ function createServerProviderModelDescriptor(
 }
 
 function createServerProviderRegistryAuthMode(config: ServerProviderProxyConfig): ProviderRegistryAuthMode {
-  if (config.providerProfileId.includes("grok_oauth")) {
+  if (config.providerProfileId.includes("grok_oauth") || config.providerProfileId.includes("codex_oauth")) {
     return "oauth_session";
   }
 
@@ -645,6 +668,7 @@ function createServerProviderDisplayName(providerProfileId: string) {
     provider_apifun_claude: "APIKey.fun Claude A",
     provider_apifun_claude_b: "APIKey.fun Claude B",
     provider_apikeyfun_codex: "APIKey.fun Codex/GPT",
+    provider_codex_oauth: "Codex OAuth Session",
     provider_grok_oauth_dgx: "Grok OAuth #1",
     provider_grok_oauth_dgx_2: "Grok OAuth #2",
     provider_openclaw_dgx: "DGX-02 OpenClaw vLLM",
@@ -658,7 +682,7 @@ function createServerProviderKind(config: ServerProviderProxyConfig): ProviderKi
     return "anthropic";
   }
 
-  if (config.providerProfileId.includes("grok")) {
+  if (config.providerProfileId.includes("grok") || config.providerProfileId.includes("codex_oauth")) {
     return "custom";
   }
 
@@ -678,6 +702,10 @@ function createServerProviderTrustLevel(providerProfileId: string): ProviderTrus
     return "limited";
   }
 
+  if (providerProfileId.includes("codex_oauth")) {
+    return "trusted";
+  }
+
   return "trusted";
 }
 
@@ -692,6 +720,10 @@ function createServerProviderTags(providerProfileId: string) {
 
   if (providerProfileId.includes("apikeyfun")) {
     return ["dgx-secret-ref", "server-proxy", "apikey.fun", "codex", "openai-compatible"];
+  }
+
+  if (providerProfileId.includes("codex_oauth")) {
+    return ["oauth", "codex", "server-proxy", "dgx", "session"];
   }
 
   if (providerProfileId.includes("grok")) {
@@ -931,6 +963,19 @@ export async function createServerProviderProxyCompletionResponse(
       route: "server_proxy",
       status: "failed",
       error: "provider is not registered in the DGX-02 proxy allowlist",
+      createdAt,
+    };
+  }
+
+  if (config.providerProfileId === "provider_codex_oauth") {
+    return {
+      id: `provider_completion_response_${crypto.randomUUID()}`,
+      requestId: request.id,
+      providerProfileId: request.providerProfileId,
+      modelId: request.modelId,
+      route: "server_proxy",
+      status: "failed",
+      error: "Codex OAuth Session is registered as the main provider, but the Codex CLI/OAuth completion adapter is not enabled yet.",
       createdAt,
     };
   }
