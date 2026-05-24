@@ -177,3 +177,9 @@ corepack pnpm dev
 - Desktop의 메시지 생성, Telegram ingress, permission snapshot, Event Storage replay를 `activeSessionId` 기준으로 전환했다.
 - Sessions 패널에서 특정 sessionId를 누르면 해당 세션의 이벤트와 메시지를 DGX-02에서 pull하고, 선택된 세션을 active 상태로 표시한다.
 - 새 메시지와 새 이벤트는 현재 active session에 기록되므로 MacBook/Home PC 간 세션 이동의 기본 경계가 생겼다.
+
+## Stage22
+
+- Sessions 패널에 새 세션 생성 버튼을 추가했다.
+- 새 세션을 만들면 `session.created` 이벤트가 현재 active session으로 기록되고 DGX-02 Event Storage에 sync된다.
+- 생성 직후 대화창과 이벤트 로그는 새 세션 기준으로 비워져, 이후 메시지와 코딩 패킷이 해당 sessionId 아래에 쌓인다.

@@ -656,6 +656,7 @@ export function App() {
     type: string,
     payload: T,
     options?: {
+      sessionId?: string;
       source?: EventSource;
       sourceTrust?: SourceTrust;
       correlationId?: string;
@@ -663,7 +664,7 @@ export function App() {
     },
   ) {
     const event = createStage2Event({
-      sessionId: activeSessionId,
+      sessionId: options?.sessionId ?? activeSessionId,
       type,
       payload,
       source: options?.source,
@@ -776,6 +777,27 @@ export function App() {
         lastSyncedAt: result.lastLoadedAt ?? state.lastSyncedAt,
       }));
     }
+  }
+
+  function handleCreateSession() {
+    const createdAt = new Date().toISOString();
+    const nextSessionId = `session_${createdAt.replace(/[-:.TZ]/g, "").slice(0, 14)}_${crypto.randomUUID().slice(0, 8)}`;
+    setActiveSessionId(nextSessionId);
+    setConversationMessages([]);
+    setEventLog([]);
+    setDraftMessage("");
+
+    appendEvent(
+      "session.created",
+      {
+        sessionId: nextSessionId,
+        title: "새 작업 세션",
+        sourceClient: "client_macbook",
+      },
+      {
+        sessionId: nextSessionId,
+      },
+    );
   }
 
   async function handleReplayEventStorage(sessionId = activeSessionId) {
@@ -1700,6 +1722,7 @@ export function App() {
           <SessionIndexRailPanel
             activeSessionId={activeSessionId}
             index={sessionIndexState}
+            onCreateSession={handleCreateSession}
             onRefresh={handleRefreshSessionIndex}
             onReplaySession={handleReplayEventStorage}
           />
@@ -1882,11 +1905,13 @@ export function App() {
 function SessionIndexRailPanel({
   activeSessionId,
   index,
+  onCreateSession,
   onRefresh,
   onReplaySession,
 }: {
   activeSessionId: string;
   index: Stage20SessionIndexState;
+  onCreateSession: () => void;
   onRefresh: () => void;
   onReplaySession: (sessionId: string) => void;
 }) {
@@ -1897,6 +1922,9 @@ function SessionIndexRailPanel({
       <header>
         <Database size={16} />
         <span>Sessions</span>
+        <button className="rail-icon-button" onClick={onCreateSession} title="Create a new session" type="button">
+          <Plus size={13} />
+        </button>
         <button className="rail-icon-button" onClick={onRefresh} title="Refresh sessions from DGX-02" type="button">
           <RefreshCw size={13} />
         </button>
