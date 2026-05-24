@@ -1840,8 +1840,15 @@ export function App() {
           </nav>
           {providerRegistrationOpen ? (
             <ProviderRegistrationMenu
+              modelCatalog={modelCatalog}
+              modelDiscoveryByProviderId={modelDiscoveryByProviderId}
               onClose={() => setProviderRegistrationOpen(false)}
+              onDiscoverModels={handleDiscoverProviderModels}
+              onRemoveProvider={handleRemoveProvider}
+              onRenameProvider={handleRenameProvider}
               onRegister={handleRegisterProvider}
+              profiles={providerProfiles}
+              usedProviderIds={usedProviderIds}
             />
           ) : null}
 
@@ -1977,16 +1984,6 @@ export function App() {
         </section>
 
         <aside className="right-rail" aria-label="모델과 에이전트 상태">
-          <ProviderProfilesManagerPanel
-            modelCatalog={modelCatalog}
-            modelDiscoveryByProviderId={modelDiscoveryByProviderId}
-            onAddProvider={handleAddProvider}
-            onDiscoverModels={handleDiscoverProviderModels}
-            onRenameProvider={handleRenameProvider}
-            onRemoveProvider={handleRemoveProvider}
-            profiles={providerProfiles}
-            usedProviderIds={usedProviderIds}
-          />
           <AgentStatePanel
             agents={agents}
             agentActivityById={agentActivityById}
@@ -2581,11 +2578,25 @@ function debateTagLabel(tag: DebateTag) {
 }
 
 function ProviderRegistrationMenu({
+  modelCatalog,
+  modelDiscoveryByProviderId,
   onClose,
+  onDiscoverModels,
+  onRemoveProvider,
+  onRenameProvider,
   onRegister,
+  profiles,
+  usedProviderIds,
 }: {
+  modelCatalog: ModelCatalog;
+  modelDiscoveryByProviderId: Record<string, ModelDiscoverySnapshot>;
   onClose: () => void;
+  onDiscoverModels: (providerId: string) => void;
+  onRemoveProvider: (providerId: string) => void;
+  onRenameProvider: (providerId: string) => void;
   onRegister: (mode: ProviderRegistrationMode) => void;
+  profiles: ProviderProfile[];
+  usedProviderIds: Set<string>;
 }) {
   const options: Array<{
     mode: ProviderRegistrationMode;
@@ -2614,6 +2625,51 @@ function ProviderRegistrationMenu({
             <small>{option.detail}</small>
           </button>
         ))}
+      </div>
+      <div className="provider-registration-list" aria-label="registered providers">
+        {profiles.map((profile) => {
+          const isInUse = usedProviderIds.has(profile.id);
+          const modelCount = modelCatalog[profile.id]?.length ?? 0;
+          const discovery = modelDiscoveryByProviderId[profile.id];
+          return (
+            <article className={isInUse ? "in-use" : ""} key={profile.id}>
+              <div>
+                <strong>{profile.name}</strong>
+                <span>
+                  {profile.trustLevel} / {modelCount} models / {discovery?.status ?? "cached"}
+                </span>
+              </div>
+              <button
+                aria-label={`${profile.name} model discovery`}
+                className="rail-icon-button"
+                onClick={() => onDiscoverModels(profile.id)}
+                title="model discovery"
+                type="button"
+              >
+                <RefreshCw size={13} />
+              </button>
+              <button
+                aria-label={`${profile.name} 이름 변경`}
+                className="rail-icon-button"
+                onClick={() => onRenameProvider(profile.id)}
+                title="provider 이름 변경"
+                type="button"
+              >
+                <Pencil size={13} />
+              </button>
+              <button
+                aria-label={`${profile.name} 삭제`}
+                className="rail-icon-button"
+                disabled={isInUse || profiles.length <= 1}
+                onClick={() => onRemoveProvider(profile.id)}
+                title={isInUse ? "agent가 사용 중이라 삭제할 수 없음" : "provider 삭제"}
+                type="button"
+              >
+                <Trash2 size={13} />
+              </button>
+            </article>
+          );
+        })}
       </div>
     </section>
   );
@@ -2857,8 +2913,8 @@ function MemoryInspectorPanel({
   onPin: (recordId: string) => void;
   onRemember: () => void;
 }) {
-  const visibleTrace = inspector.trace.results.slice(0, 4);
-  const visibleRecords = inspector.records.slice(0, 5);
+  const visibleTrace = inspector.trace.results.slice(0, 6);
+  const visibleRecords = inspector.records.slice(0, 8);
 
   return (
     <section className="side-panel memory-panel">

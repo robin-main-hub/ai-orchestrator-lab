@@ -174,7 +174,7 @@ button {
 
 .right-rail {
   display: grid;
-  grid-template-rows: minmax(150px, 0.55fr) minmax(320px, 1fr) minmax(238px, 0.66fr);
+  grid-template-rows: clamp(430px, 47vh, 480px) minmax(0, 1fr);
   gap: 12px;
   overflow: hidden;
   border-right: 0;
@@ -347,6 +347,52 @@ button {
   font-size: 10px;
 }
 
+.provider-registration-list {
+  display: grid;
+  gap: 6px;
+  max-height: 210px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 3px;
+  scrollbar-gutter: stable;
+}
+
+.provider-registration-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 26px);
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #00313a;
+}
+
+.provider-registration-list article.in-use {
+  border-color: rgba(41, 215, 230, 0.36);
+}
+
+.provider-registration-list strong,
+.provider-registration-list span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provider-registration-list strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.provider-registration-list span {
+  margin-top: 2px;
+  color: var(--subtle);
+  font-size: 9px;
+}
+
 .mini-panel,
 .side-panel,
 .workbench-panel,
@@ -403,6 +449,11 @@ button {
   background: #00313a;
   color: var(--muted);
   cursor: pointer;
+}
+
+.rail-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
 }
 
 .rail-panel header .rail-icon-button {
@@ -1539,6 +1590,11 @@ button {
 
 .memory-record-list {
   max-height: 120px;
+}
+
+.side-panel.memory-panel .recall-trace-list,
+.side-panel.memory-panel .memory-record-list {
+  max-height: none;
 }
 
 .recall-trace-list article {
