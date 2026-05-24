@@ -1,0 +1,24 @@
+import type { WorkbenchAgent } from "../types";
+
+export const modelWindowSize = 8;
+export const maxDraftAttachments = 5;
+export const agentVisualStorageKey = "ai-orchestrator-lab.agent-visuals.v1";
+export const providerProfilesStorageKey = "ai-orchestrator-lab.provider-profiles.v1";
+export const providerProfilesSeedVersionKey = "ai-orchestrator-lab.provider-profiles.seed-version";
+export const providerProfilesSeedVersion = "2026-05-25-grok-pii-redacted";
+export const defaultObsidianVaultRoot = "F:/obsidian/ai-headquarter";
+
+export const agentRoleOptions: WorkbenchAgent["role"][] = [
+  "orchestrator",
+  "architect",
+  "builder",
+  "reviewer",
+  "skeptic",
+  "verifier",
+  "memory_curator",
+  "executor",
+  "external",
+  "auditor",
+];
+
+export const now = new Date("2026-05-24T00:20:00.000+09:00").toISOString();
