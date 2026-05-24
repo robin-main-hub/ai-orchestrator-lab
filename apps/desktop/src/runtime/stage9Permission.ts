@@ -10,6 +10,7 @@ import type {
   PermissionLevel,
   PermissionMatrixItem,
   PermissionMatrixSnapshot,
+  ProviderRuntimeReadiness,
   RuntimeSnapshot,
   TerminalSlot,
 } from "@ai-orchestrator/protocol";
@@ -22,6 +23,7 @@ export type Stage9PermissionInput = {
   agentRun: Stage4AgentRun;
   runtime: RuntimeSnapshot;
   mobilePolicy: MobileActionPolicy;
+  providerReadiness?: ProviderRuntimeReadiness;
   decisions?: Record<string, ApprovalState>;
   createdAt?: string;
 };
@@ -33,10 +35,12 @@ export function createStage9PermissionSnapshot({
   agentRun,
   runtime,
   mobilePolicy,
+  providerReadiness,
   decisions = {},
   createdAt = new Date().toISOString(),
 }: Stage9PermissionInput): PermissionMatrixSnapshot {
   const items = [
+    ...(providerReadiness ? [createProviderReadinessItem(sessionId, providerReadiness, decisions, createdAt)] : []),
     ...externalApprovals.map((approval) => createExternalApprovalItem(sessionId, approval, decisions, createdAt)),
     ...terminalSlots.map((slot) => createTerminalSlotItem(sessionId, slot, decisions, createdAt)),
     ...agentRun.steps.map((step) => createRunStepItem(sessionId, step, agentRun.id, runtime, decisions, createdAt)),
@@ -91,6 +95,41 @@ function createExternalApprovalItem(
         : state === "approved"
           ? "external request approved by operator"
           : "external request waits behind approval gate",
+    createdAt,
+  };
+}
+
+function createProviderReadinessItem(
+  sessionId: string,
+  readiness: ProviderRuntimeReadiness,
+  decisions: Record<string, ApprovalState>,
+  createdAt: string,
+): PermissionMatrixItem {
+  const itemId = `permission_provider_${readiness.providerProfileId}`;
+  const requestedState =
+    readiness.status === "ready"
+      ? "not_required"
+      : readiness.status === "needs_approval"
+        ? decisions[itemId] ?? "required"
+        : "rejected";
+
+  return {
+    id: itemId,
+    sessionId,
+    subjectId: readiness.providerProfileId,
+    actor: "agent",
+    channel: "agent",
+    sourceTrust: readiness.status === "needs_approval" ? "limited" : "trusted",
+    action: "provider_completion",
+    requestedLevels: readiness.executionMode === "remote" ? ["network_access", "secret_access"] : ["read_only"],
+    state: requestedState,
+    decision: decisionFromState(requestedState),
+    reason:
+      readiness.status === "ready"
+        ? "provider is ready for completion"
+        : readiness.status === "needs_approval"
+          ? "provider requires explicit approval before completion"
+          : readiness.reason,
     createdAt,
   };
 }

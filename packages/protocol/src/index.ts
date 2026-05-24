@@ -652,6 +652,7 @@ export type PermissionAction =
   | "terminal_run"
   | "file_write"
   | "remote_workspace"
+  | "provider_completion"
   | "secret_view"
   | "mobile_approval"
   | "email_send"

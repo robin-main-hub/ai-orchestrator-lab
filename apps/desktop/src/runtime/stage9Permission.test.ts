@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MobileActionPolicy, RuntimeSnapshot, TerminalSlot } from "@ai-orchestrator/protocol";
+import type { MobileActionPolicy, ProviderRuntimeReadiness, RuntimeSnapshot, TerminalSlot } from "@ai-orchestrator/protocol";
 import { createStage4AgentRun } from "./stage4Runtime";
 import { createTelegramDemoInput, createStage8IngressSnapshot } from "./stage8Ingress";
 import { createStage9PermissionSnapshot, nextRequiredPermission } from "./stage9Permission";
@@ -189,5 +189,38 @@ describe("stage9 permission matrix", () => {
     expect(unknown?.state).toBe("rejected");
     expect(unknown?.decision).toBe("deny");
     expect(snapshot.queue.some((item) => item.sourceItemId === unknown?.id)).toBe(false);
+  });
+
+  it("adds provider completion approval when runtime readiness needs approval", () => {
+    const providerReadiness: ProviderRuntimeReadiness = {
+      id: "provider_readiness_apifun",
+      providerProfileId: "provider_apifun_claude",
+      status: "needs_approval",
+      executionMode: "remote",
+      modelCount: 4,
+      selectedModelId: "claude-code-compatible",
+      secretAvailability: "available",
+      canRunCompletion: true,
+      canUseAutomaticMemory: false,
+      reason: "untrusted provider can run only after explicit approval and reduced memory context",
+      warnings: ["prompt and memory may pass through a custom/reseller endpoint"],
+      createdAt,
+    };
+
+    const snapshot = createStage9PermissionSnapshot({
+      sessionId: "session_desktop_001",
+      externalApprovals: [],
+      terminalSlots: [],
+      agentRun,
+      runtime,
+      mobilePolicy,
+      providerReadiness,
+      createdAt,
+    });
+
+    const providerItem = snapshot.items.find((item) => item.action === "provider_completion");
+    expect(providerItem?.state).toBe("required");
+    expect(providerItem?.requestedLevels).toEqual(["network_access", "secret_access"]);
+    expect(snapshot.queue.some((item) => item.sourceItemId === providerItem?.id)).toBe(true);
   });
 });

@@ -94,7 +94,7 @@ import {
   isDgxRoutedProvider,
   requestDgxProviderCompletion,
 } from "./runtime/stage12DgxProvider";
-import { probeDgxOrchestratorServer } from "./runtime/stage13DgxServer";
+import { fetchDgxProviderModelDiscovery, probeDgxOrchestratorServer } from "./runtime/stage13DgxServer";
 import {
   createInitialEventSyncState,
   pushEventsToDgxEventStorage,
@@ -1080,6 +1080,7 @@ export function App() {
         agentRun: agentRunState,
         runtime: runtimeSnapshotState,
         mobilePolicy: backupSnapshot.mobilePolicy,
+        providerReadiness,
         decisions: approvalStateByItemId,
         createdAt: runtimeSnapshotState.updatedAt,
       }),
@@ -1089,6 +1090,7 @@ export function App() {
       approvalStateByItemId,
       backupSnapshot.mobilePolicy,
       ingressSnapshot.approvals,
+      providerReadiness,
       runtimeSnapshotState,
     ],
   );
@@ -1470,6 +1472,45 @@ export function App() {
     const modelId = selectedAgent.modelId ?? selectedProvider.defaultModel ?? "model pending";
     const messageContent = content || `첨부 ${attachments.length}개`;
     const attachmentMetadata = attachments.map((attachment) => ({ ...attachment }));
+    const providerPermissionId = `permission_provider_${selectedProvider.id}`;
+    const providerApprovalState = approvalStateByItemId[providerPermissionId];
+    const providerNeedsApproval = providerReadiness.status === "needs_approval" && providerApprovalState !== "approved";
+    const providerBlocked =
+      providerReadiness.status === "blocked" ||
+      providerReadiness.status === "credential_required" ||
+      providerNeedsApproval;
+
+    if (providerBlocked) {
+      const blockedMessage: ConversationMessage = {
+        id: `message_provider_blocked_${crypto.randomUUID()}`,
+        sessionId: activeSessionId,
+        role: "assistant",
+        content: providerNeedsApproval
+          ? `${selectedProvider.name}는 승인 후 사용할 수 있어. 하단 Permission 대기열에서 provider_completion을 승인하면 바로 이어서 보낼 수 있어.`
+          : `${selectedProvider.name}는 아직 실행 준비가 안 됐어: ${providerReadiness.reason}`,
+        createdAt,
+        metadata: {
+          providerProfileId: selectedProvider.id,
+          readinessStatus: providerReadiness.status,
+          permissionItemId: providerPermissionId,
+        },
+      };
+
+      setConversationMessages((messages) => [...messages, blockedMessage]);
+      appendEvent("provider.completion.blocked", {
+        agentId: selectedAgent.id,
+        providerProfileId: selectedProvider.id,
+        modelId,
+        readinessStatus: providerReadiness.status,
+        permissionItemId: providerPermissionId,
+        reason: providerReadiness.reason,
+        requestedMessageLength: messageContent.length,
+        attachmentCount: attachmentMetadata.length,
+        redaction: "applied",
+      });
+      return;
+    }
+
     const userMessage: ConversationMessage = {
       id: `message_user_${crypto.randomUUID()}`,
       sessionId: activeSessionId,
@@ -2501,7 +2542,7 @@ export function App() {
     if (mode === "api_key") {
       const rawInput = window.prompt(
         "API key / env / Claude Code JSON 붙여넣기",
-        'export ANTHROPIC_BASE_URL="https://api.apikey.fun"\nexport ANTHROPIC_AUTH_TOKEN="sk-session-placeholder"',
+        'export ANTHROPIC_BASE_URL="https://api.apikey.fun"\nexport ANTHROPIC_AUTH_TOKEN=""',
       );
 
       if (rawInput === null) {
@@ -2519,7 +2560,6 @@ export function App() {
               name: `Custom Provider ${nextIndex}`,
               kind: "custom",
               baseUrl: "https://api.example.local/v1",
-              rawSecret: `sk-placeholder-provider-${nextIndex}`,
               defaultModel: `custom-model-${nextIndex}`,
               tags: ["custom"],
               trustLevel: "limited",
@@ -2576,13 +2616,37 @@ export function App() {
     handleRegisterProvider("api_key");
   }
 
-  function handleDiscoverProviderModels(providerId: string) {
+  async function handleDiscoverProviderModels(providerId: string) {
     const provider = providerProfiles.find((profile) => profile.id === providerId);
     if (!provider) {
       return;
     }
 
-    const discovery = discoverModelsForProfile(provider);
+    const localDiscovery = discoverModelsForProfile(provider);
+    let discovery = localDiscovery;
+    let route: "dgx_provider_proxy" | "local_adapter" = "local_adapter";
+    if (isDgxRoutedProvider(provider)) {
+      try {
+        discovery = await fetchDgxProviderModelDiscovery({ provider });
+        route = "dgx_provider_proxy";
+      } catch (error) {
+        discovery = {
+          ...localDiscovery,
+          warnings: [
+            ...localDiscovery.warnings,
+            `DGX-02 provider model discovery failed; using local adapter metadata: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          ],
+        };
+        appendEvent("provider.models.discovery_failed", {
+          providerProfileId: provider.id,
+          route: "dgx_provider_proxy",
+          error: error instanceof Error ? error.message : String(error),
+          fallback: "local_adapter",
+        });
+      }
+    }
     setModelCatalog((catalog) => ({
       ...catalog,
       [provider.id]: discovery.models,
@@ -2607,6 +2671,7 @@ export function App() {
       status: discovery.status,
       modelCount: discovery.models.length,
       source: discovery.source,
+      route,
       redactionApplied: discovery.redactionApplied,
       warnings: discovery.warnings,
     });

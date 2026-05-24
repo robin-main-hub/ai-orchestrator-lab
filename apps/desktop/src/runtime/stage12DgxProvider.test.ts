@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   createDgxVllmRequestBody,
   createProviderCompletionProxyRequest,
+  isDgxRoutedProvider,
   isDgxVllmProvider,
+  requestDgxProviderCompletion,
   requestDgxVllmCompletion,
 } from "./stage12DgxProvider";
 import type { ConversationMessage, ProviderProfile } from "@ai-orchestrator/protocol";
@@ -32,6 +34,7 @@ describe("stage12 DGX provider completion", () => {
   it("detects DGX vLLM providers", () => {
     expect(isDgxVllmProvider(provider)).toBe(true);
     expect(isDgxVllmProvider({ ...provider, tags: ["mock"] })).toBe(false);
+    expect(isDgxRoutedProvider({ ...provider, id: "provider_deepseek_dgx", tags: ["server-proxy", "deepseek"] })).toBe(true);
   });
 
   it("builds a vLLM request with thinking disabled", () => {
@@ -113,5 +116,34 @@ describe("stage12 DGX provider completion", () => {
     expect(calls).toEqual(["http://dgx-02:4317/provider-completions", "http://dgx-02:8001/v1/chat/completions"]);
     expect(result.route).toBe("direct_provider");
     expect(result.fallbackReason).toContain("DGX-02 server proxy failed");
+  });
+
+  it("does not direct-fallback for server-proxy API key providers", async () => {
+    const deepseekProvider: ProviderProfile = {
+      id: "provider_deepseek_dgx",
+      name: "DeepSeek DGX-02 Key",
+      kind: "openai",
+      baseUrl: "https://api.deepseek.com/v1",
+      defaultModel: "deepseek-chat",
+      enabled: true,
+      tags: ["server-proxy", "deepseek"],
+      trustLevel: "limited",
+    };
+    const calls: string[] = [];
+    const fetchImpl = async (url: RequestInfo | URL) => {
+      calls.push(String(url));
+      return new Response(JSON.stringify({ error: "proxy offline" }), { status: 502 });
+    };
+
+    await expect(
+      requestDgxProviderCompletion({
+        provider: deepseekProvider,
+        modelId: "deepseek-chat",
+        messages,
+        fetchImpl,
+      }),
+    ).rejects.toThrow("DGX-02 server proxy failed");
+
+    expect(calls).toEqual(["http://dgx-02:4317/provider-completions"]);
   });
 });

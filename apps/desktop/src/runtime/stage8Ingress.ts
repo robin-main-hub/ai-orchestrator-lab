@@ -19,6 +19,8 @@ export type Stage8RawIngressInput = {
   eventType: IngressEvent["eventType"];
   text: string;
   receivedAt: string;
+  debounceWindowMs?: number;
+  recentTexts?: string[];
 };
 
 export type Stage8IngressSnapshot = {
@@ -47,7 +49,7 @@ export function createTelegramDemoInput(receivedAt = new Date().toISOString()): 
 }
 
 export function createStage8IngressSnapshot(input = createTelegramDemoInput()): Stage8IngressSnapshot {
-  const normalizedText = normalizeText(input.text);
+  const normalizedText = normalizeText([...(input.recentTexts ?? []), input.text].join(" "));
   const redactedText = redactForEventStore(normalizedText) as string;
   const requestedPermissions = detectPermissions(normalizedText);
   const confidence = classifyConfidence(normalizedText, requestedPermissions);
@@ -68,7 +70,7 @@ export function createStage8IngressSnapshot(input = createTelegramDemoInput()): 
         source: eventSourceForChannel(input.channel),
         sourceTrust: sourceTrustForChannel(input.channel),
         authorType: input.authorType,
-        rawText: input.text,
+        rawText: "[QUARANTINED_RAW_PAYLOAD]",
         normalizedText: redactedText,
         eventType: input.eventType,
         requestedPermissions,
@@ -141,7 +143,9 @@ function createGuardSteps(params: {
     {
       name: "debounce",
       status: "passed",
-      reason: "single demo message; merge window clear",
+      reason: params.input.recentTexts?.length
+        ? `${params.input.recentTexts.length + 1} messages merged in ${params.input.debounceWindowMs ?? 30_000}ms window`
+        : "single message; merge window clear",
     },
     {
       name: "pii_secret_block",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
-import { probeDgxOrchestratorServer } from "./stage13DgxServer";
+import { fetchDgxProviderModelDiscovery, probeDgxOrchestratorServer } from "./stage13DgxServer";
 
 const localRuntime: RuntimeSnapshot = {
   status: "degraded",
@@ -156,6 +156,45 @@ describe("stage13 DGX server probing", () => {
     expect(probe.heartbeat.status).toBe("unreachable");
     expect(probe.runtime.recentError).toContain("Home PC waits for DGX-02 projection recovery");
     expect(probe.runtime.syncTopology.clients.find((client) => client.id === "client_home_pc")?.status).toBe("degraded");
+  });
+
+  it("fetches provider-specific model discovery through the DGX server", async () => {
+    const discovery = await fetchDgxProviderModelDiscovery({
+      provider: {
+        id: "provider_deepseek_dgx",
+        name: "DeepSeek DGX-02 Key",
+        kind: "openai",
+        enabled: true,
+        tags: ["server-proxy", "deepseek"],
+        trustLevel: "limited",
+      },
+      fetchImpl: async (url) => {
+        expect(String(url)).toBe("http://dgx-02:4317/provider-models?providerProfileId=provider_deepseek_dgx");
+        return jsonResponse({
+          id: "model_discovery_deepseek",
+          providerProfileId: "provider_deepseek_dgx",
+          status: "succeeded",
+          source: "remote_probe",
+          selectedModelId: "deepseek-chat",
+          redactionApplied: true,
+          warnings: [],
+          createdAt: "2026-05-24T00:01:00.000Z",
+          models: [
+            {
+              id: "deepseek-chat",
+              name: "deepseek-chat",
+              providerProfileId: "provider_deepseek_dgx",
+              supportsStreaming: true,
+              supportsTools: false,
+              tags: ["server-proxy", "deepseek"],
+            },
+          ],
+        });
+      },
+    });
+
+    expect(discovery.providerProfileId).toBe("provider_deepseek_dgx");
+    expect(discovery.models[0]?.id).toBe("deepseek-chat");
   });
 });
 
