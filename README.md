@@ -277,3 +277,12 @@ corepack pnpm dev
 - Tmux 모드에서는 왼쪽 rail, 오른쪽 rail, 상단 runtime status bar, 하단 terminal dock, 우측 toolbar action을 모두 접는다.
 - 중앙 작업판은 `grid-column: 1 / -1`, `grid-row: 1 / -1`로 확장되어 화면 왼쪽과 아래까지 모두 사용한다.
 - Conversation/Debate/Tmux 전환 버튼만 남겨 tmux 화면에서 빠져나올 수 있게 했다.
+
+## Stage37
+
+- 좌측 네비게이션을 `세션`, `프로젝트`, `프로바이더`, `채널`, `백업` 각각의 독립 화면으로 분리했다.
+- 프로젝트 메뉴는 현재 session, Coding Packet, agent run step, memory recall, event count를 보여준다.
+- 채널 메뉴는 Telegram/OpenClaw/Mobile/API 진입점, 7중 ingress guard, approval queue, 0-token safety를 보여준다.
+- 백업 메뉴는 Obsidian/Notion/Mobile projection과 redaction 상태, artifact destination을 보여준다.
+- `scripts/setup-agent-swarm.sh`와 `scripts/swarm-send.sh`를 추가해 `ai-swarm` tmux 세션 생성과 역할별 pane 명령 전송을 지원한다.
+- tmux helper는 pane id를 `.ai-swarm/ai-swarm.env`에 저장하고, obvious secret이 포함된 명령은 전송을 거부한다.

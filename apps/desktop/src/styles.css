@@ -688,6 +688,114 @@ button {
   margin-top: 0;
 }
 
+.project-rail-panel,
+.channel-rail-panel,
+.backup-rail-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rail-hero-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #141311;
+}
+
+.rail-hero-card span,
+.rail-hero-card p {
+  color: var(--subtle);
+  font-size: 10px;
+}
+
+.rail-hero-card strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-hero-card p {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.rail-card-list {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.rail-card-list.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: visible;
+  padding-right: 0;
+}
+
+.rail-card-list article {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #002f38;
+}
+
+.rail-card-list article.passed,
+.rail-card-list article.ready {
+  border-color: rgba(84, 224, 160, 0.28);
+}
+
+.rail-card-list article.queued {
+  border-color: rgba(216, 198, 93, 0.36);
+}
+
+.rail-card-list article.blocked {
+  border-color: rgba(255, 125, 144, 0.42);
+}
+
+.rail-card-list strong,
+.rail-card-list span,
+.rail-card-list p {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rail-card-list strong,
+.rail-card-list span {
+  white-space: nowrap;
+}
+
+.rail-card-list strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.rail-card-list span {
+  color: var(--cyan);
+  font-size: 9.5px;
+}
+
+.rail-card-list p {
+  display: -webkit-box;
+  margin: 0;
+  color: var(--subtle);
+  font-size: 9px;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .kv-list {
   display: grid;
   gap: 9px;
