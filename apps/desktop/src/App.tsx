@@ -112,6 +112,7 @@ import {
   fetchDgxSessionIndex,
   type Stage20SessionIndexState,
 } from "./runtime/stage20SessionIndex";
+import { createObsidianExportPlan } from "./runtime/stage26ObsidianExport";
 import type {
   AgentProfile,
   ApprovalState,
@@ -1077,6 +1078,13 @@ export function App() {
       });
 
     setObsidianMarkdownPreview(markdown);
+    const obsidianExportPlan = obsidianArtifact
+      ? createObsidianExportPlan({
+          vaultRoot: "~/Obsidian",
+          artifact: obsidianArtifact,
+          content: markdown,
+        })
+      : undefined;
     setBackupProjectionsState((projections) => applyStage7ProjectionStatuses(projections, snapshot));
     appendEvent("backup.projection.generated", {
       snapshotId: snapshot.id,
@@ -1085,6 +1093,7 @@ export function App() {
       queued: snapshot.summary.queued,
       blocked: snapshot.summary.blocked,
       redacted: snapshot.summary.redacted,
+      obsidianExportPlan,
     });
     appendEvent("backup.queue.updated", {
       snapshotId: snapshot.id,

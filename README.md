@@ -201,3 +201,9 @@ corepack pnpm dev
 - Backup projection snapshot과 Obsidian markdown destination을 `activeSessionId` 기준으로 생성한다.
 - `applyStage7ProjectionStatuses`는 projection status를 되돌릴 때도 snapshot sessionId를 반영한다.
 - 세션을 전환한 뒤 백업을 실행해도 다른 세션의 Obsidian/Notion/Mobile projection으로 섞이지 않게 했다.
+
+## Stage26
+
+- Obsidian vault export plan runtime을 추가했다.
+- Obsidian artifact destination은 vault 내부 markdown 상대 경로만 허용하고, `.`/`..` traversal은 차단한다.
+- Desktop 백업 생성 이벤트에 Obsidian export plan 메타데이터를 포함해 이후 Tauri/Electron 파일 writer와 바로 연결할 수 있게 했다.
