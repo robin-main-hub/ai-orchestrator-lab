@@ -67,7 +67,6 @@ import {
 } from "./runtime/stage5Runtime";
 import {
   activateMemoryRecord,
-  createSeedMemoryRecords,
   createStage6MemoryInspector,
   forgetMemoryRecord,
   pinMemoryRecord,
@@ -218,6 +217,7 @@ import {
   navItems,
   terminalSlots,
 } from "./seeds/conversation";
+import { initialMemoryRecords } from "./seeds/memory";
 
 
 
@@ -229,7 +229,6 @@ const initialDgxBridge = createStage5DgxBridge({
   createdAt: now,
 });
 
-const initialMemoryRecords = createSeedMemoryRecords(now);
 const initialIngressSnapshot = createStage8IngressSnapshot(
   createTelegramDemoInput(new Date("2026-05-24T00:23:00.000+09:00").toISOString()),
 );
