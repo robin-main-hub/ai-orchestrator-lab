@@ -33,19 +33,22 @@
 ```text
 agents/
   orchestrator/
-    soul.md
-    prompt.md
-    tools.json
+    SOUL.md
+    AGENTS.md
   architect/
-    soul.md
-    prompt.md
+    SOUL.md
+    AGENTS.md
   reviewer/
-    soul.md
-    prompt.md
+    SOUL.md
+    AGENTS.md
   skeptic/
-    soul.md
-    prompt.md
+    SOUL.md
+    AGENTS.md
 ```
+
+현재 저장소에는 기본 예시로 `agents/orchestrator/SOUL.md`와 `agents/orchestrator/AGENTS.md`를 둔다. 이 기본 프로필은 API 없이 로컬 파일과 앱 내부 persona 설정만으로 사용할 수 있다.
+
+실제 모델 호출은 사용자가 선택한 provider/model로 대화할 때만 필요하다. SOUL/AGENTS 파일을 만들거나 편집하는 작업 자체에는 API key가 필요 없다.
 
 ## soul.md 예시 구조
 
