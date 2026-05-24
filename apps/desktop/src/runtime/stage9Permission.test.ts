@@ -68,6 +68,7 @@ const agentRun = createStage4AgentRun({
       kind: "virtual",
       role: "orchestrator",
       soulMode: "summary",
+      configSource: "internal",
       enabled: true,
     },
   ],

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  agentProfileSchema,
   codingPacketSchema,
   eventEnvelopeSchema,
   eventStorageSessionIndexResponseSchema,
@@ -59,6 +60,26 @@ describe("protocol schemas", () => {
 
     expect(profile.secretRef?.redactedPreview).toBe("sk-...42f0");
     expect(JSON.stringify(profile)).not.toContain("raw");
+  });
+
+  it("requires one active agent config source", () => {
+    const agent = agentProfileSchema.parse({
+      id: "agent_orchestrator",
+      name: "Orchestrator",
+      kind: "virtual",
+      role: "orchestrator",
+      soulMode: "summary",
+      configSource: "markdown",
+      enabled: true,
+    });
+
+    expect(agent.configSource).toBe("markdown");
+    expect(() =>
+      agentProfileSchema.parse({
+        ...agent,
+        configSource: "internal+markdown",
+      }),
+    ).toThrow();
   });
 
   it("requires a source trust level for persisted events", () => {

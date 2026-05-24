@@ -202,6 +202,10 @@ button {
   gap: 10px;
 }
 
+.left-rail.provider-mode {
+  overflow: hidden;
+}
+
 .right-rail {
   grid-column: 3;
   grid-row: 1 / 4;
@@ -281,10 +285,16 @@ button {
 .provider-registration-menu {
   display: grid;
   gap: 8px;
+  min-height: 0;
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #002f38;
+}
+
+.left-rail.provider-mode .provider-registration-menu {
+  flex: 1 1 auto;
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .provider-registration-menu header {
@@ -355,6 +365,10 @@ button {
   overflow-y: auto;
   padding-right: 3px;
   scrollbar-gutter: stable;
+}
+
+.left-rail.provider-mode .provider-registration-list {
+  max-height: none;
 }
 
 .provider-registration-list article {

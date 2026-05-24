@@ -221,3 +221,10 @@ corepack pnpm dev
 - 오른쪽 레일은 `Agents`와 `Memento` 2단 구조로 바꿨다.
 - `Agents` 패널은 3개 에이전트가 잘리지 않도록 높이를 확보하고, 남는 공간은 `Memento`에 배정했다.
 - `Memento` 내부 리스트 높이 제한을 풀고 recall trace와 memory record 표시 개수를 늘렸다.
+
+## Stage29
+
+- 에이전트 설정 소스를 `internal`, `markdown`, `off` 중 하나만 선택하는 `configSource` 타입으로 명시했다.
+- `internal`과 `markdown`을 동시에 실행 프롬프트에 주입하지 않도록 프로토콜 테스트를 추가했다.
+- 좌측 레일에서 `프로바이더`를 선택하면 세션/시스템/ops 패널을 숨기고 provider 등록/관리 화면만 보이게 했다.
+- Provider 관리 목록은 provider 모드에서 남은 왼쪽 높이를 모두 사용한다.

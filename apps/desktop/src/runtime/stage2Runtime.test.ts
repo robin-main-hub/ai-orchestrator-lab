@@ -14,6 +14,7 @@ const agent: AgentProfile = {
   kind: "virtual",
   role: "orchestrator",
   soulMode: "summary",
+  configSource: "internal",
   enabled: true,
 };
 

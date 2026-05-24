@@ -27,6 +27,7 @@ const agents: AgentProfile[] = [
     providerProfileId: "provider_mock",
     modelId: "mock-orchestrator",
     soulMode: "summary",
+    configSource: "internal",
     enabled: true,
   },
   {
@@ -37,6 +38,7 @@ const agents: AgentProfile[] = [
     providerProfileId: "provider_mock",
     modelId: "mock-architect",
     soulMode: "summary",
+    configSource: "internal",
     enabled: true,
   },
   {
@@ -47,6 +49,7 @@ const agents: AgentProfile[] = [
     providerProfileId: "provider_mock",
     modelId: "mock-reviewer",
     soulMode: "retrieved",
+    configSource: "internal",
     enabled: true,
   },
 ];
