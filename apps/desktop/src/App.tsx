@@ -191,7 +191,6 @@ import {
   createDraftAttachment,
   createInitialAgentVisualSettings,
   formatAttachmentSize,
-  getAgentInitials,
   getMessageAttachments,
   modelSupportsAnyAttachment,
   modelSupportsAttachmentKind,
@@ -227,6 +226,8 @@ import {
   initialWorkItemHandoffs,
   initialWorkItems,
 } from "./seeds/workItems";
+import { AgentAvatar } from "./components/AgentAvatar";
+import { TmuxPaneCard } from "./components/TmuxPaneCard";
 
 export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
@@ -4712,23 +4713,6 @@ function WorkItemHandoffPanel({
   );
 }
 
-function AgentAvatar({
-  agent,
-  size = "medium",
-  visual,
-}: {
-  agent?: WorkbenchAgent;
-  size?: "small" | "medium" | "large";
-  visual?: AgentVisualSettings;
-}) {
-  const label = agent ? getAgentInitials(agent.name) : "AI";
-  return (
-    <span className={`agent-avatar ${size} ${visual?.avatarDataUrl ? "has-image" : ""}`}>
-      {visual?.avatarDataUrl ? <img alt={`${agent?.name ?? "Agent"} avatar`} src={visual.avatarDataUrl} /> : label}
-    </span>
-  );
-}
-
 function AgentSettingsPanel({
   agent,
   onClearAvatar,
@@ -5166,42 +5150,6 @@ function createTmuxSwarmRecommendation(packet: CodingPacket, messages: Conversat
             ? "구현과 검증이 함께 필요한 일반 작업이라 6인 편성을 추천한다."
             : "작은 수정이나 검토 중심 작업이라 4인 편성으로 충분하다.",
   };
-}
-
-function TmuxPaneCard({
-  pane,
-  visual,
-}: {
-  pane: {
-    id: string;
-    roleKey: string;
-    title: string;
-    role: string;
-    state: string;
-    agent?: WorkbenchAgent;
-    signal: string;
-  };
-  visual?: AgentVisualSettings;
-}) {
-  return (
-    <article className="tmux-pane-card">
-      <header>
-        <AgentAvatar agent={pane.agent} size="small" visual={visual} />
-        <div>
-          <span>{pane.id}</span>
-          <strong>{pane.title}</strong>
-        </div>
-        <em>{pane.state}</em>
-      </header>
-      <p>{pane.role}</p>
-      <div className="tmux-pane-agent-line">
-        <strong>{pane.agent ? pane.agent.name : "담당 agent 미정"}</strong>
-        <span>{pane.agent ? agentRoleLabel(pane.agent.role) : "future slot"}</span>
-        <small>{pane.agent?.modelId ?? "model pending"}</small>
-      </div>
-      <code>{pane.signal}</code>
-    </article>
-  );
 }
 
 function ProviderRegistrationMenu({
