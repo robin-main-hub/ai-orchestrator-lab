@@ -28,6 +28,11 @@ import {
   providerCompletionRequestSchema,
   remoteExecutionRequestSchema,
 } from "@ai-orchestrator/protocol";
+import {
+  CodexCliOAuthAdapter,
+  type CodexExecRunner,
+} from "@ai-orchestrator/providers/node";
+import { createAdapterContext } from "@ai-orchestrator/providers";
 
 export type ServerCapability =
   | "health"
@@ -862,6 +867,7 @@ export type DgxProviderCompletionOptions = {
   now?: string;
   vllmBaseUrl?: string;
   fetchImpl?: FetchLike;
+  codexCliRunner?: CodexExecRunner;
 };
 
 export async function createDgxProviderCompletionResponse(
@@ -968,16 +974,31 @@ export async function createServerProviderProxyCompletionResponse(
   }
 
   if (config.providerProfileId === "provider_codex_oauth") {
-    return {
-      id: `provider_completion_response_${crypto.randomUUID()}`,
-      requestId: request.id,
-      providerProfileId: request.providerProfileId,
-      modelId: request.modelId,
-      route: "server_proxy",
-      status: "failed",
-      error: "Codex OAuth Session is registered as the main provider, but the Codex CLI/OAuth completion adapter is not enabled yet.",
-      createdAt,
-    };
+    const adapter = new CodexCliOAuthAdapter({
+      profileId: config.providerProfileId,
+      codexBinPath:
+        process.env.CODEX_BIN_PATH ??
+        "~/.codex/packages/standalone/releases/0.132.0-aarch64-unknown-linux-musl/codex",
+      codexHome: process.env.CODEX_OAUTH_HOME ?? "~/.codex",
+      cwd: process.env.CODEX_OAUTH_CWD,
+      defaultTimeoutMs: parsePositiveInteger(process.env.CODEX_CLI_TIMEOUT_MS) ?? 30_000,
+      modelIds: config.defaultModelIds,
+      runCodexExec: options.codexCliRunner,
+    });
+    return adapter.complete(
+      {
+        ...request,
+        routePreference: "server_proxy",
+      },
+      createAdapterContext({
+        timeoutMs: parsePositiveInteger(process.env.CODEX_CLI_TIMEOUT_MS) ?? 30_000,
+        onRawError(status, redactedSnippet) {
+          if (redactedSnippet) {
+            console.warn(`Codex OAuth CLI adapter warning (${status}): ${redactedSnippet}`);
+          }
+        },
+      }),
+    );
   }
 
   const apiKey = config.noAuth ? undefined : await resolveServerProviderApiKey(config);
@@ -1139,6 +1160,15 @@ function extractServerProviderUsage(
     outputTokens: usage?.completion_tokens,
     totalTokens: usage?.total_tokens,
   };
+}
+
+function parsePositiveInteger(value: string | undefined): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 async function resolveServerProviderApiKey(config: ServerProviderProxyConfig): Promise<string | undefined> {
