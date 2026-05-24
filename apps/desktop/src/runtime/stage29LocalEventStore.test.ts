@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EventEnvelope } from "@ai-orchestrator/protocol";
-import { createLocalAuthoritativeEventStore } from "./stage29LocalEventStore";
+import { createLocalClientEventCache } from "./stage29LocalEventStore";
 
 const eventA: EventEnvelope = {
   id: "event_a",
@@ -17,16 +17,16 @@ const eventB: EventEnvelope = {
   id: "event_b",
   sessionId: "session_desktop_001",
   type: "coding_packet.created",
-  payload: { goal: "ship local authoritative store" },
+  payload: { goal: "ship local client cache" },
   createdAt: "2026-05-24T00:01:00.000Z",
   source: "agent",
   sourceTrust: "trusted",
   redacted: true,
 };
 
-describe("stage29 local authoritative event store", () => {
-  it("keeps MacBook events locally and lists them by session", async () => {
-    const store = createLocalAuthoritativeEventStore();
+describe("stage29 local client event cache", () => {
+  it("keeps MacBook cache events locally and lists them by session", async () => {
+    const store = createLocalClientEventCache();
 
     await store.append(eventB);
     await store.append(eventA);
@@ -36,7 +36,7 @@ describe("stage29 local authoritative event store", () => {
   });
 
   it("treats unsynced events as projection outbox until DGX-02 is marked", async () => {
-    const store = createLocalAuthoritativeEventStore();
+    const store = createLocalClientEventCache();
 
     await store.append(eventA);
     await store.append(eventB);
@@ -46,7 +46,7 @@ describe("stage29 local authoritative event store", () => {
     expect(unsynced.map((event) => event.id)).toEqual(["event_b"]);
   });
 
-  it("persists through a localStorage-compatible adapter without giving DGX authority", async () => {
+  it("persists through a localStorage-compatible adapter without taking DGX authority", async () => {
     const memoryStorage = new Map<string, string>();
     const storage = {
       getItem: (key: string) => memoryStorage.get(key) ?? null,
@@ -54,10 +54,10 @@ describe("stage29 local authoritative event store", () => {
       removeItem: (key: string) => memoryStorage.delete(key),
     };
 
-    const firstStore = createLocalAuthoritativeEventStore(storage);
+    const firstStore = createLocalClientEventCache(storage);
     await firstStore.append(eventA);
 
-    const secondStore = createLocalAuthoritativeEventStore(storage);
+    const secondStore = createLocalClientEventCache(storage);
     expect(await secondStore.listUnsynced()).toHaveLength(1);
     await secondStore.markProjected(["event_a"], "dgx-02");
     expect(await secondStore.listUnsynced()).toHaveLength(0);

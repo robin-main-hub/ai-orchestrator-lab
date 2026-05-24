@@ -171,15 +171,15 @@ describe("protocol schemas", () => {
     expect(index.sessions[0]?.sources).toContain("desktop");
   });
 
-  it("separates MacBook offline queue from Home PC online-only access", () => {
+  it("separates client offline queues from DGX-02 authority", () => {
     const macbook = {
       id: "client_macbook",
       label: "MacBook",
       kind: "macbook" as const,
       status: "online" as const,
-      syncRole: "authority" as const,
+      syncRole: "cache_client" as const,
       localStore: "sqlite" as const,
-      outboxMode: "authoritative_local" as const,
+      outboxMode: "offline_cache_outbox" as const,
       failurePolicy: "continue_locally" as const,
       outboxCount: 2,
     };
@@ -188,14 +188,14 @@ describe("protocol schemas", () => {
       label: "Home PC",
       kind: "desktop_pc" as const,
       status: "online" as const,
-      syncRole: "thin_surface" as const,
-      localStore: "none" as const,
-      outboxMode: "stateless" as const,
+      syncRole: "cache_client" as const,
+      localStore: "sqlite" as const,
+      outboxMode: "offline_cache_outbox" as const,
       failurePolicy: "unavailable_without_dgx" as const,
       outboxCount: 0,
     };
 
-    expect(macbook.outboxMode).toBe("authoritative_local");
+    expect(macbook.outboxMode).toBe("offline_cache_outbox");
     expect(homePc.failurePolicy).toBe("unavailable_without_dgx");
     expect(homePc.outboxCount).toBe(0);
   });

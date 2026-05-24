@@ -109,7 +109,7 @@ import {
   removeSyncedOutboxEvents,
   type Stage16OutboxStorage,
 } from "./runtime/stage16LocalOutbox";
-import { createLocalAuthoritativeEventStore } from "./runtime/stage29LocalEventStore";
+import { createLocalClientEventCache } from "./runtime/stage29LocalEventStore";
 import {
   mergeConversationMessages,
   mergeEventReplayLogs,
@@ -1121,18 +1121,18 @@ const initialWorkItems: WorkItem[] = [
   {
     id: "work_item_bootstrap_event_storage",
     sessionId: DEFAULT_SESSION_ID,
-    title: "MacBook Event Storage authority",
+    title: "DGX-02 Event Storage authority",
     kind: "review",
     lane: "execution",
     status: "in_progress",
-    summary: "MacBook local events are authoritative; DGX-02 is projection and compute.",
-    sourceRefs: [{ source: "desktop_manual", observedAt: now, title: "PR0 authority correction" }],
+    summary: "DGX-02 is authoritative; MacBook and Home PC keep client cache/outbox records.",
+    sourceRefs: [{ source: "desktop_manual", observedAt: now, title: "PR0 authority cleanup" }],
     evidenceRefs: [
       {
         id: "evidence_authority_type",
         kind: "file_reference",
         reference: "packages/protocol/src/index.ts",
-        summary: "SyncTopology uses macbook_authoritative_with_dgx_projection.",
+        summary: "SyncTopology uses dgx02_authoritative_with_client_cache.",
         observedAt: now,
       },
     ],
@@ -1148,7 +1148,7 @@ const initialAssistantDrafts: AssistantDraft[] = [
     workItemId: "work_item_bootstrap_event_storage",
     sessionId: DEFAULT_SESSION_ID,
     title: "Authority summary draft",
-    body: "MacBook owns permanent events; DGX-02 receives projections after redaction.",
+    body: "DGX-02 owns shared events; MacBook keeps a client cache/outbox and flushes after redaction.",
     targetSurface: "conversation",
     status: "ready_for_review",
     confidence: "high",
@@ -1176,8 +1176,8 @@ export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
   const [runtimeSnapshotState, setRuntimeSnapshotState] = useState<RuntimeSnapshot>(runtimeSnapshot);
   const eventOutboxStorage = useMemo(() => createDesktopOutboxStorage(), []);
-  const localAuthoritativeEventStore = useMemo(
-    () => createLocalAuthoritativeEventStore(typeof window === "undefined" ? undefined : window.localStorage),
+  const localClientEventCache = useMemo(
+    () => createLocalClientEventCache(typeof window === "undefined" ? undefined : window.localStorage),
     [],
   );
   const [eventOutbox, setEventOutbox] = useState<EventEnvelope[]>(() => eventOutboxStorage.load());
@@ -1380,11 +1380,11 @@ export function App() {
 
   async function bootstrapLocalEventStorage() {
     for (const event of initialEventLog) {
-      await localAuthoritativeEventStore.append(event);
+      await localClientEventCache.append(event);
     }
 
-    const localEvents = await localAuthoritativeEventStore.listBySession(activeSessionId);
-    const localUnsyncedEvents = await localAuthoritativeEventStore.listUnsynced();
+    const localEvents = await localClientEventCache.listBySession(activeSessionId);
+    const localUnsyncedEvents = await localClientEventCache.listUnsynced();
     const queuedEvents = mergeOutboxEvents(eventOutboxStorage.load(), localUnsyncedEvents);
     eventOutboxStorage.save(queuedEvents);
     setEventLog((events) => mergeEventReplayLogs(events, localEvents));
@@ -1444,7 +1444,7 @@ export function App() {
       correlationId: options?.correlationId,
     });
     setEventLog((events) => appendEventToLog(events, event));
-    void localAuthoritativeEventStore.append(event);
+    void localClientEventCache.append(event);
     if (!options?.skipRemoteSync) {
       void syncEventsToDgx([event]);
     }
@@ -1457,7 +1457,7 @@ export function App() {
     }
 
     for (const event of eventsToSync) {
-      await localAuthoritativeEventStore.append(event);
+      await localClientEventCache.append(event);
     }
 
     setEventSyncState((state) => ({
@@ -1470,10 +1470,10 @@ export function App() {
       events: eventsToSync,
     });
     if (result.syncedEventIds.length > 0) {
-      await localAuthoritativeEventStore.markProjected(result.syncedEventIds, "dgx-02");
+      await localClientEventCache.markProjected(result.syncedEventIds, "dgx-02");
     }
 
-    const localUnsyncedEvents = await localAuthoritativeEventStore.listUnsynced();
+    const localUnsyncedEvents = await localClientEventCache.listUnsynced();
     const currentOutbox = eventOutboxStorage.load();
     const nextOutbox = mergeOutboxEvents(
       removeSyncedOutboxEvents(currentOutbox, result.syncedEventIds),
@@ -1606,7 +1606,7 @@ export function App() {
       status: "syncing",
     }));
 
-    const localEvents = await localAuthoritativeEventStore.listBySession(sessionId);
+    const localEvents = await localClientEventCache.listBySession(sessionId);
     const result = await pullAndReplayDgxEventStorage({
       sessionId,
     });
@@ -1621,7 +1621,7 @@ export function App() {
         setEventSyncState((state) => ({
           ...state,
           status: "queued",
-          lastError: `DGX-02 replay failed; restored from MacBook authoritative events. ${result.error ?? ""}`,
+          lastError: `DGX-02 replay failed; restored from MacBook client cache. ${result.error ?? ""}`,
         }));
         return;
       }
@@ -1641,24 +1641,24 @@ export function App() {
     }
 
     for (const event of result.events) {
-      await localAuthoritativeEventStore.append(event);
+      await localClientEventCache.append(event);
     }
     if (result.events.length > 0) {
-      await localAuthoritativeEventStore.markProjected(
+      await localClientEventCache.markProjected(
         result.events.map((event) => event.id),
         "dgx-02",
       );
     }
-    const mergedAuthoritativeEvents = mergeEventReplayLogs(localEvents, result.events, 512);
-    const authoritativeMessages = mergeConversationMessages(
+    const mergedCachedEvents = mergeEventReplayLogs(localEvents, result.events, 512);
+    const cachedMessages = mergeConversationMessages(
       rebuildConversationMessagesFromEvents(localEvents),
       result.messages,
     );
     const switchingSessions = sessionId !== activeSessionId;
-    setEventLog((events) => mergeEventReplayLogs(switchingSessions ? [] : events, mergedAuthoritativeEvents));
+    setEventLog((events) => mergeEventReplayLogs(switchingSessions ? [] : events, mergedCachedEvents));
     setActiveSessionId(sessionId);
     setConversationMessages((messages) =>
-      switchingSessions ? authoritativeMessages : mergeConversationMessages(messages, authoritativeMessages),
+      switchingSessions ? cachedMessages : mergeConversationMessages(messages, cachedMessages),
     );
     const packetReplay = extractLatestCodingPacketFromEvents(result.events);
     if (packetReplay.status === "restored" && packetReplay.packet) {
