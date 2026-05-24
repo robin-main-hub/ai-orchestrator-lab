@@ -25,6 +25,10 @@
 | 역할 템플릿 | 설계자, 구현자, 리뷰어, 반대자, 보안 검토자, 비용 감시자 |
 | 모델별 에이전트 | OpenAI/Anthropic/OpenRouter/Ollama 등 서로 다른 모델을 한 판에 배치 |
 | 검증자 | 강한 모델 또는 같은 로컬 모델로 최종 검증 |
+| tmux 세션 런타임 | local Mac 또는 DGX-02의 `ai-swarm` tmux session을 실행 슬롯 backend로 사용 |
+| pane read-only capture | `tmux capture-pane` 출력은 redaction 후 Event Store 후보 이벤트로 기록 |
+| Command Intent | `send-keys` 전에 명령 의도, 권한, 승인 상태, redacted preview를 먼저 남김 |
+| tmux Control Mode | 실시간 pane stream parser는 basic capture와 permission flow 이후 단계로 보류 |
 
 ## 채널
 

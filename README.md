@@ -76,6 +76,8 @@ docs/
   16-codex-implementation-handoff.md
   17-role-based-tmux-agent-swarm.md
   18-memento-mcp-structure-check.md
+  19-tmux-session-runtime.md
+  20-dcinside-reference-1185913.md
   review-board.md
   research-notes.md
 ```
@@ -99,10 +101,10 @@ corepack pnpm dev
 
 첫 코드 골격을 구현 중입니다.
 
-- `packages/protocol`: 공통 타입, Zod 스키마, EventStore/Permission/MemoryTrace/DGX 실행/Backup Projection/Ingress Guard/Permission Matrix 인터페이스
+- `packages/protocol`: 공통 타입, Zod 스키마, EventStore/Permission/MemoryTrace/DGX 실행/Backup Projection/Ingress Guard/Permission Matrix/tmux terminal runtime 인터페이스
 - `packages/providers`: provider adapter interface, credential parser, mock model discovery, secret vault/readiness snapshot
 - `packages/agents`: debate round template과 CodingPacket draft builder
-- `apps/desktop`: Orchestrator Board UI skeleton, Conversation/Debate/Coding Packet, Agent Runtime, DGX Bridge 카드, Memento Inspector/API adapter, Backup Projection 패널, Ingress Guard 패널, Permission Matrix dock, Provider model discovery, Provider Vault readiness
+- `apps/desktop`: Orchestrator Board UI skeleton, Conversation/Debate/Coding Packet/Tmux preview, Agent Runtime, DGX Bridge 카드, Memento Inspector/API adapter, Backup Projection 패널, Ingress Guard 패널, Permission Matrix dock, Provider model discovery, Provider Vault readiness
 - `apps/server`: DGX 서버 health/runtime/heartbeat/model registry/completion proxy, vLLM probe, remote-run placeholder
 
 실제 API 키는 저장하지 않고 `SecretRef` 개념으로만 표시합니다. DGX-02 vLLM 모델 호출은 server proxy 우선, direct fallback 보조 경로로 연결되어 있습니다. 터미널 실행은 보안/권한 경계가 더 잡힌 뒤 연결합니다.
@@ -311,3 +313,13 @@ corepack pnpm dev
 - Coding Packet 하단에 `Quick / Deep Review`, 4D rubric(`plan_coverage`, `code_quality`, `test_coverage`, `convention`)과 `invariant_checks` UI를 추가했다.
 - Insight 6분류(`Stability`, `Testing`, `Architecture`, `Performance`, `Security`, `Tech Debt`)를 추가해 패킷/이벤트/권한/메모리 상태를 빠르게 훑을 수 있게 했다.
 - Project 메뉴에 Meta Agent Onboarding 신호와 적용 버튼을 추가해 현재 provider/model/agent 구성을 보고 빠진 역할을 추천 및 추가할 수 있게 했다.
+
+## Stage41
+
+- tmux를 단순 화면 미리보기가 아니라 `Terminal Session Runtime`으로 문서화했다.
+- `packages/protocol`에 `TmuxSessionRef`, `TerminalPane`, `TerminalCommandIntent` 타입과 captured output event payload를 추가했다.
+- tmux pane 역할을 `Research Scout`, `Memory Curator`까지 포함하는 10-pane 구조로 protocol에서도 고정했다.
+- `scripts/swarm-capture.sh`를 추가해 `.ai-swarm/ai-swarm.env`의 pane id를 기준으로 read-only capture를 수행하고, obvious secret을 출력 전에 redaction한다.
+- 실제 `send-keys` 자동 실행은 여전히 Permission Matrix, Redaction Layer, Event Storage mapping, approval gate 뒤에 둔다.
+- `docs/19-tmux-session-runtime.md`에는 attach/detach/reconnect, pane capture, terminal.* event mapping, DGX-02/DGX-01 규칙을 정리했다.
+- `docs/20-dcinside-reference-1185913.md`에는 아직 본문 확인이 끝나지 않은 DCInside 추가 레퍼런스를 검증 대기 상태로 등록했다.

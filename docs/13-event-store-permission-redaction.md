@@ -111,6 +111,15 @@ export const EventEnvelopeSchema = z.object({
 | `agent.session.message.sent` | 에이전트 세션 간 메시지 전달 |
 | `agent.session.yielded` | 하위 세션 결과 대기 |
 | `coding_packet.created` | 대화/토론 결과를 코딩 패킷으로 변환 |
+| `terminal.session.detected` | tmux session 발견 |
+| `terminal.session.attached` | tmux session attach 또는 UI 연결 |
+| `terminal.session.detached` | tmux session detach. session은 백그라운드에 유지 |
+| `terminal.pane.detected` | tmux pane id/title/role 발견 |
+| `terminal.command.intent.created` | 실제 전송 전 command intent 기록 |
+| `terminal.command.blocked` | 권한, redaction, 정책으로 command dispatch 차단 |
+| `terminal.command.sent` | 승인된 command를 pane에 전송 |
+| `terminal.pane.output.captured` | pane output을 read-only capture하고 redaction 적용 |
+| `terminal.pane.stale` | pane 출력이 오래 갱신되지 않음 |
 | `run.requested` | 터미널/CLI 실행 요청 |
 | `run.approval.requested` | 위험 작업 승인 요청 |
 | `run.completed` | 실행 종료 |
@@ -146,6 +155,7 @@ Redaction 대상:
 - private key block
 - cookie/session token
 - 사용자가 민감 경로로 지정한 문자열
+- tmux pane output, shell history, command preview 안의 secret/token/env 값
 
 Redaction 결과는 원문을 대체한다.
 
@@ -192,6 +202,13 @@ type SecretRef = {
 | Telegram | allowed | pending | pending | pending | denied | denied |
 | Server agent | allowed | pending/allowed | pending/allowed | allowed | denied by default | pending |
 | Exporter | allowed | denied | denied | allowed | denied | denied |
+
+tmux runtime policy:
+
+- `terminal.command.intent.created` may be recorded after redaction even when dispatch is not allowed.
+- `terminal.command.sent` requires approval whenever the command touches files, terminal execution, network, secret, destructive operations, or remote workspace.
+- `terminal.pane.output.captured` is read-only but still must pass redaction before persistence/export.
+- Telegram, mobile, and external API events must never go directly to `tmux send-keys`; they must become permissioned command intents first.
 
 정책은 프로젝트와 에이전트별로 더 좁힐 수 있어야 한다.
 

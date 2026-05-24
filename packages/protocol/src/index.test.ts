@@ -9,8 +9,12 @@ import {
   eventSyncPushResponseSchema,
   executionSlotSchema,
   providerProfileSchema,
+  terminalCommandIntentSchema,
+  terminalPaneSchema,
+  tmuxSessionRefSchema,
   type BackupProjectionArtifact,
   type CodingPacket,
+  type TerminalPaneOutputCapturedEventPayload,
   type RunCompletedEventPayload,
   type RunRequestedEventPayload,
   type IngressGuardResult,
@@ -458,6 +462,58 @@ describe("protocol schemas", () => {
     expect(slot.status).toBe("placeholder");
     expect(requested.redactionApplied).toBe(true);
     expect(completed.status).toBe("blocked");
+  });
+
+  it("models tmux terminal sessions, panes, command intents and captured output", () => {
+    const tmuxSession = tmuxSessionRefSchema.parse({
+      id: "terminal_session_ai_swarm",
+      sessionName: "ai-swarm",
+      host: "local_mac",
+      backend: "tmux",
+      attachCommand: "tmux attach -t ai-swarm",
+      controlMode: false,
+      paneCount: 10,
+      createdAt: "2026-05-24T00:00:00.000Z",
+      status: "detached",
+    });
+    const pane = terminalPaneSchema.parse({
+      id: "terminal_pane_research",
+      sessionId: "session_1",
+      terminalSessionId: tmuxSession.id,
+      role: "research",
+      host: "local_mac",
+      paneId: "%8",
+      title: "Agent - Research Scout",
+      status: "idle",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+    const intent = terminalCommandIntentSchema.parse({
+      id: "terminal_intent_1",
+      sessionId: "session_1",
+      terminalSessionId: tmuxSession.id,
+      paneId: pane.paneId,
+      requestedBy: "agent",
+      commandPreview: "codex 'Read tmux docs and summarize'",
+      redactedCommandPreview: "codex 'Read tmux docs and summarize'",
+      requestedPermissions: ["run_safe_commands", "network_access"],
+      approvalState: "required",
+      dispatchState: "pending_approval",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+    const captured: TerminalPaneOutputCapturedEventPayload = {
+      terminalSessionId: tmuxSession.id,
+      paneId: pane.paneId,
+      role: pane.role,
+      outputPreview: "[REDACTED:api_key] captured from pane",
+      lineCount: 20,
+      redactionApplied: true,
+      capturedAt: "2026-05-24T00:00:00.000Z",
+    };
+
+    expect(tmuxSession.paneCount).toBe(10);
+    expect(pane.role).toBe("research");
+    expect(intent.dispatchState).toBe("pending_approval");
+    expect(captured.redactionApplied).toBe(true);
   });
 
   it("models provider credential parsing and model discovery without raw keys", () => {

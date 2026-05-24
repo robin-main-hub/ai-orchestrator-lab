@@ -153,10 +153,25 @@ A future role-based tmux workflow is defined in:
 
 ```text
 docs/17-role-based-tmux-agent-swarm.md
+docs/19-tmux-session-runtime.md
 ```
 
 This is not part of the v0 required implementation path.
 
 Codex must not implement real tmux execution until the protocol package, Event Store, Redaction Layer, Permission Matrix, Coding Packet flow, and execution slot UI stub are stable.
 
-For now, Codex may only prepare types, UI concepts, and documentation that make future swarm integration possible.
+For now, Codex may prepare types, UI concepts, documentation, and read-only pane capture helpers that make future swarm integration possible.
+
+Allowed now:
+
+- `TmuxSessionRef`, `TerminalPane`, and `TerminalCommandIntent` protocol boundaries
+- tmux preview UI
+- read-only `capture-pane` helper with redaction
+- terminal event mapping
+
+Still gated:
+
+- automatic `tmux send-keys`
+- Gemini CLI connection
+- commands from Telegram/mobile/API
+- destructive or secret-bearing commands

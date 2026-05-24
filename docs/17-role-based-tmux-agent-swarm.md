@@ -6,6 +6,12 @@ This document defines a future development and execution workflow for AI Orchest
 
 The desktop preview and safe shell helpers are now part of the implementation path.
 
+The lower-level terminal session runtime, event mapping, read-only capture boundary, and DGX host rules are defined in:
+
+```text
+docs/19-tmux-session-runtime.md
+```
+
 The v0 priority remains:
 
 ```text
@@ -22,6 +28,7 @@ The first implemented tmux layer is deliberately conservative:
 - `scripts/setup-agent-swarm.sh` creates the local `ai-swarm` session and records pane ids.
 - `scripts/setup-agent-swarm.sh --panes 4..10` controls the swarm size. The default is 10 panes.
 - `scripts/swarm-send.sh` dispatches to stored pane ids by role.
+- `scripts/swarm-capture.sh` captures pane output read-only and redacts obvious secrets.
 - Gemini CLI remains disconnected until CLI setup is done.
 - The helper refuses obvious secret-bearing command text.
 - The desktop UI still treats tmux as a permissioned execution backend, not an untracked side channel.

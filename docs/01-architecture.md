@@ -8,7 +8,9 @@ flowchart LR
   Desktop --> LocalRuntime[로컬 런타임]
   Desktop --> DGX[dgx-02 오케스트레이션 서버]
   LocalRuntime --> LocalModels[Ollama / LM Studio / 로컬 CLI]
+  LocalRuntime --> LocalTmux[local tmux / CLI agent panes]
   DGX --> RemoteModels[vLLM / 원격 모델 서버]
+  DGX --> DgxTmux[DGX-02 tmux / remote CLI panes]
   DGX --> Memory[Memento-MCP 메모리]
   DGX --> Workspaces[원격 워크스페이스 / 터미널 세션]
   Desktop --> Profiles[프로바이더 프로파일 저장소]
@@ -64,6 +66,7 @@ Obsidian/Notion/mobile은 여전히 원본 저장소가 아니라 Event Store의
 - 데스크톱과 서버: WebSocket + HTTP API
 - 긴 실행 로그: streaming event
 - 터미널: PTY 스트림
+- tmux terminal runtime: session/pane ref, read-only capture, permissioned command intent
 - 에이전트 실행: job id 기반 비동기 실행
 - 메모리: recall/remember/reflect API
 

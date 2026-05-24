@@ -12,6 +12,8 @@
 - Redaction rule과 Permission Matrix 정의
 - Ingress Guard와 confidence routing 스키마 정의
 - memory trust level과 source channel 정의
+- TmuxSessionRef, TerminalPane, TerminalCommandIntent 타입 정의
+- terminal.* event mapping 정의
 - 기록 보기와 재실행 이벤트 분리
 - 기본 테스트 환경 구성
 
@@ -45,6 +47,7 @@
 - 모델 선택 화면
 - Status Hub
 - 얇은 PTY/터미널 슬롯 프로토타입
+- tmux session inspector와 read-only capture helper
 - DGX 연결 상태 표시
 - Anthropic/Claude Code 리셀러 형식 파서
 - OpenRouter 어댑터
@@ -93,6 +96,8 @@
 
 - CLI 에이전트 연결
 - 터미널 슬롯 제어
+- tmux attach/detach/reconnect와 pane output capture
+- permissioned command intent -> 승인 -> dispatch 흐름
 - 브랜치/작업 디렉터리 관리
 - Adopt/Reject 플로우
 - 리뷰와 검증 자동화
