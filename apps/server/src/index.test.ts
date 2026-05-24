@@ -219,6 +219,44 @@ describe("server health placeholder", () => {
     }
   });
 
+  it("routes Codex OAuth completions through the CLI adapter without calling HTTP fetch", async () => {
+    const response = await createDgxProviderCompletionResponse(
+      {
+        id: "provider_completion_request_codex_oauth",
+        sessionId: "session_1",
+        providerProfileId: "provider_codex_oauth",
+        modelId: "codex-session",
+        messages: [{ role: "user", content: "안녕?" }],
+        source: "desktop",
+        routePreference: "server_proxy",
+        createdAt: "2026-05-24T00:00:00.000Z",
+      },
+      {
+        now: "2026-05-24T00:00:00.000Z",
+        fetchImpl: async () => {
+          throw new Error("Codex OAuth must not use HTTP fetch");
+        },
+        codexCliRunner: async (params) => {
+          expect(params.codexHome).toBe("~/.codex");
+          expect(params.codexBinPath).toContain("codex");
+          expect(params.prompt).toContain("USER: 안녕?");
+          expect(params.cliModelId).toBeUndefined();
+          return {
+            exitCode: 0,
+            signal: null,
+            stdout: "",
+            stderr: "",
+            lastMessage: "Codex OAuth OK",
+          };
+        },
+      },
+    );
+
+    expect(response.status).toBe("succeeded");
+    expect(response.content).toBe("Codex OAuth OK");
+    expect(response.route).toBe("server_proxy");
+  });
+
   it("discovers DeepSeek models through the DGX-02 provider model proxy", async () => {
     const previousKey = process.env.DEEPSEEK_API_KEY;
     process.env.DEEPSEEK_API_KEY = "deepseek-test-secret";
