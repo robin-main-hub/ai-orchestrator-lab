@@ -206,6 +206,10 @@ button {
   padding: 8px;
 }
 
+.center-board.config-center-board {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .tmux-focus-shell .left-rail,
 .tmux-focus-shell .right-rail,
 .tmux-focus-shell .status-bar,
@@ -703,10 +707,299 @@ button {
 
 .project-rail-panel,
 .channel-rail-panel,
-.backup-rail-panel {
+.backup-rail-panel,
+.config-library-panel {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+}
+
+.config-library-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+  gap: 8px;
+}
+
+.config-library-workbench {
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+  height: 100%;
+  overflow: hidden;
+}
+
+.config-kind-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.config-kind-tabs button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #002f38;
+  color: var(--muted);
+  cursor: pointer;
+  text-align: left;
+}
+
+.config-kind-tabs button.active {
+  border-color: var(--cyan);
+  background: #003a43;
+  color: var(--text);
+}
+
+.config-kind-tabs span,
+.config-kind-tabs strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-kind-tabs span {
+  font-size: 9.5px;
+}
+
+.config-kind-tabs strong {
+  color: var(--cyan);
+  font-size: 10px;
+}
+
+.config-library-body {
+  display: grid;
+  grid-template-rows: minmax(88px, 0.42fr) minmax(0, 1fr);
+  gap: 8px;
+  min-height: 0;
+}
+
+.config-library-workbench .config-library-body {
+  grid-template-columns: minmax(250px, 0.4fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.config-file-list {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.config-file-list button {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #141311;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.config-file-list button.active {
+  border-color: var(--cyan);
+  background: #00343d;
+}
+
+.config-file-list strong,
+.config-file-list span,
+.config-file-list em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-file-list strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.config-file-list span,
+.config-file-list em {
+  color: var(--subtle);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.config-file-editor {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.config-editor-toolbar,
+.config-section-title,
+.config-rule-strip span,
+.config-save-note {
+  display: flex;
+  align-items: center;
+}
+
+.config-editor-toolbar {
+  gap: 6px;
+}
+
+.config-editor-toolbar span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--cyan);
+  font-size: 10px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-file-toolbar-label {
+  cursor: pointer;
+}
+
+.config-file-toolbar-label input {
+  display: none;
+}
+
+.config-file-editor label {
+  display: grid;
+  gap: 4px;
+}
+
+.config-file-editor label span {
+  color: var(--subtle);
+  font-size: 9.5px;
+}
+
+.config-file-editor input,
+.config-file-editor select,
+.config-file-editor textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #002f38;
+  color: var(--text);
+}
+
+.config-file-editor input,
+.config-file-editor select {
+  min-height: 28px;
+  padding: 0 7px;
+}
+
+.config-file-editor textarea {
+  min-height: 132px;
+  resize: vertical;
+  padding: 8px;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.config-library-workbench .config-file-editor textarea {
+  min-height: 300px;
+}
+
+.config-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 74px;
+  gap: 6px;
+}
+
+.config-save-note {
+  gap: 6px;
+  padding: 7px;
+  border: 1px solid #6b4e24;
+  border-radius: 8px;
+  background: #141311;
+  color: var(--amber);
+  font-size: 9.5px;
+  line-height: 1.35;
+}
+
+.config-profile-pack-list {
+  display: grid;
+  gap: 5px;
+  min-height: 0;
+}
+
+.config-library-workbench .config-profile-pack-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.config-library-workbench .config-section-title {
+  grid-column: 1 / -1;
+}
+
+.config-section-title {
+  gap: 6px;
+  color: var(--cyan);
+  font-size: 11px;
+}
+
+.config-profile-pack-list article {
+  display: grid;
+  gap: 3px;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #002f38;
+}
+
+.config-profile-pack-list strong,
+.config-profile-pack-list span,
+.config-profile-pack-list p,
+.config-profile-pack-list em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.config-profile-pack-list strong,
+.config-profile-pack-list span,
+.config-profile-pack-list em {
+  white-space: nowrap;
+}
+
+.config-profile-pack-list strong {
+  color: var(--text);
+  font-size: 10.5px;
+}
+
+.config-profile-pack-list span,
+.config-profile-pack-list em,
+.config-profile-pack-list p {
+  color: var(--subtle);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.config-profile-pack-list p {
+  margin: 0;
+}
+
+.config-rule-strip {
+  display: grid;
+  gap: 5px;
+}
+
+.config-rule-strip span {
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #001f25;
+  color: var(--muted);
+  font-size: 9.5px;
 }
 
 .rail-hero-card {

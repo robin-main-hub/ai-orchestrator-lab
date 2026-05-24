@@ -39,6 +39,7 @@ describe("stage14 Event Storage sync", () => {
       fetchImpl: async (url, init) => {
         expect(url).toBe("http://dgx-02:4317/events/sync");
         expect(init?.method).toBe("POST");
+        expect((init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
         expect(String(init?.body)).not.toContain("sk-secret");
         return {
           ok: true,
