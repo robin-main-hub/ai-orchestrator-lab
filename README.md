@@ -102,7 +102,7 @@ corepack pnpm dev
 - `packages/protocol`: 공통 타입, Zod 스키마, EventStore/Permission/MemoryTrace/DGX 실행/Backup Projection/Ingress Guard/Permission Matrix 인터페이스
 - `packages/providers`: provider adapter interface, credential parser, mock model discovery, secret vault/readiness snapshot
 - `packages/agents`: debate round template과 CodingPacket draft builder
-- `apps/desktop`: Orchestrator Board UI skeleton, Conversation/Debate/Coding Packet, Agent Runtime, DGX Bridge 카드, Memento Inspector, Backup Projection 패널, Ingress Guard 패널, Permission Matrix dock, Provider model discovery, Provider Vault readiness
+- `apps/desktop`: Orchestrator Board UI skeleton, Conversation/Debate/Coding Packet, Agent Runtime, DGX Bridge 카드, Memento Inspector/API adapter, Backup Projection 패널, Ingress Guard 패널, Permission Matrix dock, Provider model discovery, Provider Vault readiness
 - `apps/server`: DGX 서버 health/runtime/heartbeat/model registry/completion proxy, vLLM probe, remote-run placeholder
 
 실제 API 키는 저장하지 않고 `SecretRef` 개념으로만 표시합니다. DGX-02 vLLM 모델 호출은 server proxy 우선, direct fallback 보조 경로로 연결되어 있습니다. 터미널 실행은 보안/권한 경계가 더 잡힌 뒤 연결합니다.

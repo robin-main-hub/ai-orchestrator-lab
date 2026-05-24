@@ -117,6 +117,9 @@ describe("stage7 backup projections", () => {
     expect(obsidian?.destination).toContain("session_desktop_001.md");
     expect(obsidian?.contentPreview).toContain("[REDACTED:api_key]");
     expect(obsidianContent).not.toContain("sk-super-secret-token");
+    expect(obsidianContent).toContain("## Memory Context");
+    expect(obsidianContent).toContain("## Memory Relations");
+    expect(obsidianContent).toContain("## Memory Reflection Issues");
     expect(snapshot.artifacts.find((artifact) => artifact.target === "notion")?.status).toBe("queued");
     expect(snapshot.mobilePolicy.canTypeTerminal).toBe(false);
     expect(snapshot.mobilePolicy.canViewSecrets).toBe(false);
@@ -139,5 +142,27 @@ describe("stage7 backup projections", () => {
     expect(updated.every((projection) => projection.sessionId === "session_custom_001")).toBe(true);
     expect(updated.find((projection) => projection.target === "obsidian")?.status).toBe("synced");
     expect(updated.find((projection) => projection.target === "notion")?.status).toBe("synced");
+  });
+
+  it("includes memento context, relation and health metadata in remote summaries", () => {
+    const snapshot = createStage7BackupSnapshot({
+      messages,
+      packet,
+      events,
+      projections,
+      runtime: { ...runtime, dgxStatus: "online" },
+      memoryInspector,
+      createdAt,
+    });
+    const notionArtifact = snapshot.artifacts.find((artifact) => artifact.target === "notion");
+    const mobileArtifact = snapshot.artifacts.find((artifact) => artifact.target === "mobile");
+    const notionContent = getArtifactContent(snapshot, notionArtifact?.id);
+    const mobileContent = getArtifactContent(snapshot, mobileArtifact?.id);
+
+    expect(notionContent).toContain("memoryContext");
+    expect(notionContent).toContain("memoryRelations");
+    expect(notionContent).toContain("memoryIssues");
+    expect(mobileContent).toContain("relationLinks");
+    expect(mobileContent).toContain("health");
   });
 });
