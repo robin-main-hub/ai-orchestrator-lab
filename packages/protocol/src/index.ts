@@ -95,7 +95,7 @@ export type ModelDiscoverySnapshot = {
   id: string;
   providerProfileId: string;
   status: ModelDiscoveryStatus;
-  source: "mock" | "local" | "remote_stub";
+  source: "mock" | "local" | "remote_stub" | "remote_probe";
   models: ModelDescriptor[];
   selectedModelId?: string;
   redactionApplied: boolean;

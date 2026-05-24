@@ -85,4 +85,34 @@ describe("provider credential parsing and model discovery", () => {
     expect(readiness.status).toBe("needs_approval");
     expect(readiness.canUseAutomaticMemory).toBe(false);
   });
+
+  it("registers DGX-02 vLLM as a trusted remote provider without raw secrets", () => {
+    const profile = {
+      id: "provider_dgx02_vllm",
+      name: "DGX-02 vLLM",
+      kind: "openai" as const,
+      baseUrl: "http://dgx-02:8001/v1",
+      defaultModel: "qwen36-domain-wiki-rag-prisma",
+      enabled: true,
+      tags: ["dgx", "vllm", "no-auth"],
+      trustLevel: "trusted" as const,
+    };
+    const discovery = discoverModelsForProfile(profile, createdAt);
+    const vault = createSecretVaultSnapshot([profile], createdAt);
+    const readiness = createProviderRuntimeReadiness({
+      profile,
+      models: discovery.models,
+      vault,
+      selectedModelId: discovery.selectedModelId,
+      createdAt,
+    });
+
+    expect(discovery.source).toBe("remote_probe");
+    expect(discovery.models[0]?.id).toBe("qwen36-domain-wiki-rag-prisma");
+    expect(vault.entries[0]?.storage).toBe("dgx_vault");
+    expect(vault.entries[0]?.availability).toBe("available");
+    expect(vault.rawSecretPersisted).toBe(false);
+    expect(readiness.status).toBe("ready");
+    expect(readiness.executionMode).toBe("remote");
+  });
 });
