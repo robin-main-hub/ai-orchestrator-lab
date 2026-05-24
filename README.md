@@ -214,3 +214,10 @@ corepack pnpm dev
 - 등록 메뉴에서 API Key/환경변수/Claude Code JSON, CLI 세션, OAuth 세션을 각각 추가할 수 있다.
 - CLI/OAuth provider는 raw secret 없이 세션 바인딩으로 등록되고, 모델 discovery stub과 vault readiness가 바로 생성된다.
 - 오른쪽 `Provider Profiles`의 기존 `+` 버튼은 API key/env 등록 단축 동작으로 유지한다.
+
+## Stage28
+
+- 오른쪽 레일의 `Provider Profiles` 패널을 제거하고, provider 등록/이름 변경/모델 discovery/삭제 관리를 좌측 `프로바이더` 메뉴로 이동했다.
+- 오른쪽 레일은 `Agents`와 `Memento` 2단 구조로 바꿨다.
+- `Agents` 패널은 3개 에이전트가 잘리지 않도록 높이를 확보하고, 남는 공간은 `Memento`에 배정했다.
+- `Memento` 내부 리스트 높이 제한을 풀고 recall trace와 memory record 표시 개수를 늘렸다.
