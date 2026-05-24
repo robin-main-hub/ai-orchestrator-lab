@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -17,11 +17,14 @@ import {
   createServerEventStorageState,
   listEventStorageSessions,
   loadServerEventStorageStateFromJsonl,
+  pickAllowedOrigin,
   pullEventsFromServerStorage,
   probeDgxVllm,
   pullEventsFromPersistentServerStorage,
   pushEventsToPersistentServerStorage,
   pushEventsToServerStorage,
+  redactInternalPathsForPublicHealth,
+  resolveAllowedOrigins,
 } from "./index";
 
 describe("server health placeholder", () => {
@@ -683,5 +686,68 @@ describe("server health placeholder", () => {
 
     expect(response.failed).toBe(1);
     expect(response.results[0]?.reason).toBe("raw_secret_pattern_detected");
+  });
+});
+
+describe("CORS allowed origins", () => {
+  const originalEnv = process.env.ORCHESTRATOR_ALLOWED_ORIGINS;
+  afterAll(() => {
+    if (originalEnv === undefined) {
+      delete process.env.ORCHESTRATOR_ALLOWED_ORIGINS;
+    } else {
+      process.env.ORCHESTRATOR_ALLOWED_ORIGINS = originalEnv;
+    }
+  });
+
+  it("includes both 5173 and 5174 vite dev ports by default", () => {
+    delete process.env.ORCHESTRATOR_ALLOWED_ORIGINS;
+    const allowed = resolveAllowedOrigins();
+    expect(allowed.has("http://localhost:5173")).toBe(true);
+    expect(allowed.has("http://127.0.0.1:5173")).toBe(true);
+    expect(allowed.has("http://localhost:5174")).toBe(true);
+    expect(allowed.has("http://127.0.0.1:5174")).toBe(true);
+    expect(allowed.has("https://orchestrator.endruin.com")).toBe(true);
+  });
+
+  it("appends extra origins from ORCHESTRATOR_ALLOWED_ORIGINS env", () => {
+    process.env.ORCHESTRATOR_ALLOWED_ORIGINS = "http://localhost:5175, https://staging.example.com ,";
+    const allowed = resolveAllowedOrigins();
+    expect(allowed.has("http://localhost:5175")).toBe(true);
+    expect(allowed.has("https://staging.example.com")).toBe(true);
+    // built-ins must still be present
+    expect(allowed.has("http://localhost:5174")).toBe(true);
+  });
+
+  it("pickAllowedOrigin echoes a matching origin and falls back otherwise", () => {
+    const allowed = new Set<string>(["http://localhost:5173", "http://localhost:5174"]);
+    expect(pickAllowedOrigin("http://localhost:5174", allowed)).toBe("http://localhost:5174");
+    expect(pickAllowedOrigin("http://evil.example.com", allowed)).toBe("http://localhost:5173");
+    expect(pickAllowedOrigin(undefined, allowed)).toBe("http://localhost:5173");
+  });
+});
+
+describe("public health storage redaction", () => {
+  it("strips storageDir and eventLogPath while keeping operational fields", () => {
+    const original = {
+      mode: "jsonl" as const,
+      storageDir: "/home/robin/secret-vault",
+      eventLogPath: "/home/robin/secret-vault/events.jsonl",
+      revision: 42,
+      eventCount: 17,
+      sessionCount: 3,
+      lastStoredAt: "2026-05-25T01:00:00.000Z",
+      loadedAt: "2026-05-25T00:00:00.000Z",
+    };
+    const redacted = redactInternalPathsForPublicHealth(original);
+    expect(redacted.storageDir).toBe("");
+    expect(redacted.eventLogPath).toBe("");
+    expect(redacted.mode).toBe("jsonl");
+    expect(redacted.revision).toBe(42);
+    expect(redacted.eventCount).toBe(17);
+    expect(redacted.sessionCount).toBe(3);
+    expect(redacted.lastStoredAt).toBe("2026-05-25T01:00:00.000Z");
+    expect(redacted.loadedAt).toBe("2026-05-25T00:00:00.000Z");
+    // original must not be mutated
+    expect(original.storageDir).toBe("/home/robin/secret-vault");
   });
 });
