@@ -190,7 +190,7 @@ button {
   grid-column: 2;
   grid-row: 2;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) clamp(168px, 22vh, 196px);
+  grid-template-rows: auto minmax(0, 1fr) auto clamp(138px, 16vh, 168px);
   gap: 8px;
   padding: 10px;
   overflow: hidden;
@@ -2557,6 +2557,17 @@ button {
   line-height: 1.35;
 }
 
+.debate-card.selectable {
+  cursor: pointer;
+}
+
+.debate-card.selectable:hover,
+.debate-card.selectable:focus-visible {
+  border-color: var(--cyan);
+  outline: none;
+  background: #003b44;
+}
+
 .debate-tags {
   display: flex;
   flex-wrap: wrap;
@@ -2684,6 +2695,93 @@ button {
   color: var(--muted);
   font-size: 10px;
   line-height: 1.28;
+}
+
+.work-handoff-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 160px) minmax(0, 1fr);
+  gap: 8px;
+  min-height: 72px;
+  max-height: 92px;
+  padding: 8px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #002f38;
+}
+
+.work-handoff-strip > header {
+  display: grid;
+  align-content: space-between;
+  min-width: 0;
+}
+
+.work-handoff-strip > header span,
+.work-handoff-card span {
+  color: var(--subtle);
+  font-size: 9px;
+}
+
+.work-handoff-strip > header strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.work-handoff-strip > header em {
+  color: var(--amber);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.work-handoff-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.work-handoff-card {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #141311;
+}
+
+.work-handoff-card strong,
+.work-handoff-card p {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-handoff-card strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.work-handoff-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.work-handoff-card.high,
+.work-handoff-card.urgent,
+.work-handoff-card.required {
+  border-color: rgba(255, 204, 102, 0.54);
+}
+
+.work-handoff-card.draft {
+  border-color: rgba(45, 198, 182, 0.5);
 }
 
 .side-panel {

@@ -26,8 +26,23 @@ const redactionRules = [
   },
   {
     name: "env_secret",
-    pattern: /\b(ANTHROPIC_AUTH_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY)\s*=\s*[^\s"']+/gi,
+    pattern: /\b(ANTHROPIC_AUTH_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|OPENROUTER_API_KEY|DEEPSEEK_API_KEY|APIFUN_API_KEY|GROK_API_KEY|GROK_OAUTH_TOKEN|XAI_API_KEY)\s*[:=]\s*["']?[^\s"']+["']?/gi,
     replacement: "$1=[REDACTED:env_secret]",
+  },
+  {
+    name: "generic_env_secret",
+    pattern: /\b[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|COOKIE)[A-Z0-9_]*\s*=\s*["']?[^\s"']+["']?/g,
+    replacement: "[REDACTED:env_secret]",
+  },
+  {
+    name: "private_key_block",
+    pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+    replacement: "[REDACTED:private_key_block]",
+  },
+  {
+    name: "url_basic_auth",
+    pattern: /(https?:\/\/)[^:@/\s]+:[^@/\s]+@/gi,
+    replacement: "$1[REDACTED:url_auth]@",
   },
 ];
 

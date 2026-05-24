@@ -91,8 +91,8 @@ import {
   nextRequiredPermission,
 } from "./runtime/stage9Permission";
 import {
-  isDgxVllmProvider,
-  requestDgxVllmCompletion,
+  isDgxRoutedProvider,
+  requestDgxProviderCompletion,
 } from "./runtime/stage12DgxProvider";
 import { probeDgxOrchestratorServer } from "./runtime/stage13DgxServer";
 import {
@@ -107,10 +107,12 @@ import {
   removeSyncedOutboxEvents,
   type Stage16OutboxStorage,
 } from "./runtime/stage16LocalOutbox";
+import { createLocalAuthoritativeEventStore } from "./runtime/stage29LocalEventStore";
 import {
   mergeConversationMessages,
   mergeEventReplayLogs,
   pullAndReplayDgxEventStorage,
+  rebuildConversationMessagesFromEvents,
 } from "./runtime/stage18EventReplay";
 import { extractLatestCodingPacketFromEvents } from "./runtime/stage19CodingPacketReplay";
 import {
@@ -121,6 +123,7 @@ import {
 import { createObsidianExportPlan } from "./runtime/stage26ObsidianExport";
 import type {
   AgentProfile,
+  AssistantDraft,
   ApprovalState,
   BackupProjection,
   BranchExperiment,
@@ -129,6 +132,7 @@ import type {
   ConversationMessage,
   ContextPackTier,
   DebateTag,
+  DebateUtterance,
   EventEnvelope,
   EventSource,
   InsightCategory,
@@ -141,9 +145,12 @@ import type {
   ProviderRuntimeReadiness,
   ReviewMode,
   RuntimeSnapshot,
+  SecretRef,
   SecretVaultSnapshot,
   SourceTrust,
   TerminalSlot,
+  WorkItem,
+  WorkItemHandoff,
 } from "@ai-orchestrator/protocol";
 
 type CenterMode = "conversation" | "debate" | "tmux";
@@ -155,6 +162,10 @@ type AgentConfigTab = "profile" | "soul" | "agents_md" | "creativity" | "injecti
 type AgentVoicePreset = "direct" | "calm" | "architect" | "reviewer" | "executor";
 type AgentCreativityLevel = "strict" | "focused" | "balanced" | "creative" | "experimental";
 type DraftAttachment = ConversationAttachment;
+type Stage3DebateUtteranceView = DebateUtterance & {
+  roundTitle: string;
+  agentName: string;
+};
 type AgentPersonaSettings = {
   voicePreset: AgentVoicePreset;
   creativityLevel: AgentCreativityLevel;
@@ -363,6 +374,17 @@ function createDesktopOutboxStorage(): Stage16OutboxStorage {
   }
 }
 
+function createDgxVaultSecretRef(id: string, label: string, redactedPreview: string): SecretRef {
+  return {
+    id,
+    label,
+    scope: "workspace",
+    redactedPreview,
+    transient: false,
+    createdAt: now,
+  };
+}
+
 const runtimeSnapshot: RuntimeSnapshot = {
   status: "degraded",
   dgxStatus: "offline",
@@ -462,7 +484,6 @@ const seededProviderProfiles: ProviderProfile[] = [
     name: "OpenAI 호환 프로파일",
     kind: "openai",
     baseUrl: "https://api.openai.com/v1",
-    rawSecret: "sk-placeholder-session-key",
     defaultModel: "gpt-5.5-pro",
     tags: ["검증", "강한 모델"],
     trustLevel: "trusted",
@@ -472,11 +493,60 @@ const seededProviderProfiles: ProviderProfile[] = [
     name: "리셀러 호환 API",
     kind: "custom",
     baseUrl: "https://api.apikey.fun",
-    rawSecret: "sk-reseller-placeholder-42f0",
     defaultModel: "claude-code-compatible",
     tags: ["임시", "주의"],
     trustLevel: "untrusted",
   }),
+  {
+    ...createProviderProfile({
+      id: "provider_deepseek_dgx",
+      name: "DeepSeek DGX-02 Key",
+      kind: "openai",
+      baseUrl: "https://api.deepseek.com/v1",
+      defaultModel: "deepseek-chat",
+      tags: ["dgx-secret-ref", "server-proxy", "deepseek"],
+      trustLevel: "limited",
+    }),
+    secretRef: createDgxVaultSecretRef("secret_dgx02_deepseek", "DGX-02 DeepSeek API key", "dgx-02:DEEPSEEK_API_KEY"),
+    modelDiscoveryEndpoint: "https://api.deepseek.com/v1/models",
+  },
+  {
+    ...createProviderProfile({
+      id: "provider_apifun_claude",
+      name: "APIFun Claude Reseller",
+      kind: "anthropic",
+      baseUrl: "https://api.apikey.fun",
+      defaultModel: "claude-code-compatible",
+      tags: ["dgx-secret-ref", "server-proxy", "apifun", "reseller"],
+      trustLevel: "untrusted",
+    }),
+    secretRef: createDgxVaultSecretRef("secret_dgx02_apifun", "DGX-02 apifun.key", "dgx-02:apifun.key"),
+    modelDiscoveryEndpoint: "https://api.apikey.fun/v1/models",
+  },
+  {
+    ...createProviderProfile({
+      id: "provider_grok_oauth_dgx",
+      name: "Grok OAuth on DGX-02",
+      kind: "custom",
+      baseUrl: "http://dgx-02:4317/provider-proxy/grok",
+      defaultModel: "grok-oauth-session",
+      tags: ["oauth", "grok", "server-proxy", "dgx"],
+      trustLevel: "limited",
+    }),
+    secretRef: createDgxVaultSecretRef("secret_dgx02_grok_oauth", "DGX-02 Grok OAuth session", "dgx-02:grok-oauth"),
+  },
+  {
+    ...createProviderProfile({
+      id: "provider_openclaw_dgx",
+      name: "DGX-02 OpenClaw vLLM",
+      kind: "openai",
+      baseUrl: "http://dgx-02:8004/v1",
+      defaultModel: "qwen36-heretic",
+      tags: ["openclaw", "dgx", "vllm", "server-proxy", "no-auth"],
+      trustLevel: "trusted",
+    }),
+    modelDiscoveryEndpoint: "http://dgx-02:8004/v1/models",
+  },
   createProviderProfile({
     id: "provider_codex_oauth",
     name: "Codex OAuth Session",
@@ -568,6 +638,28 @@ const seededModelCatalog: ModelCatalog = {
     "glm-4.5-proxy",
     "grok-proxy",
   ].map((id) => createModel("provider_reseller_custom", id, ["proxy"])),
+  provider_deepseek_dgx: [
+    "deepseek-chat",
+    "deepseek-reasoner",
+    "deepseek-r1",
+    "deepseek-v3",
+  ].map((id) => createModel("provider_deepseek_dgx", id, ["deepseek", "server-proxy"])),
+  provider_apifun_claude: [
+    "claude-code-compatible",
+    "claude-opus-reseller",
+    "claude-sonnet-reseller",
+    "claude-haiku-reseller",
+  ].map((id) => createModel("provider_apifun_claude", id, ["apifun", "reseller", "server-proxy"])),
+  provider_grok_oauth_dgx: [
+    "grok-oauth-session",
+    "grok-4",
+    "grok-4-fast",
+    "grok-code",
+  ].map((id) => createModel("provider_grok_oauth_dgx", id, ["grok", "oauth", "server-proxy"])),
+  provider_openclaw_dgx: [
+    "qwen36-heretic",
+    "qwen36-gio-wiki-rag-prisma",
+  ].map((id) => createModel("provider_openclaw_dgx", id, ["openclaw", "dgx", "vllm"])),
   provider_codex_oauth: [
     "codex-session",
     "codex-high",
@@ -771,10 +863,69 @@ const initialIngressSnapshot = createStage8IngressSnapshot(
   createTelegramDemoInput(new Date("2026-05-24T00:23:00.000+09:00").toISOString()),
 );
 
+const initialWorkItems: WorkItem[] = [
+  {
+    id: "work_item_bootstrap_event_storage",
+    sessionId: DEFAULT_SESSION_ID,
+    title: "MacBook Event Storage authority",
+    kind: "review",
+    lane: "execution",
+    status: "in_progress",
+    summary: "MacBook local events are authoritative; DGX-02 is projection and compute.",
+    sourceRefs: [{ source: "desktop_manual", observedAt: now, title: "PR0 authority correction" }],
+    evidenceRefs: [
+      {
+        id: "evidence_authority_type",
+        kind: "file_reference",
+        reference: "packages/protocol/src/index.ts",
+        summary: "SyncTopology uses macbook_authoritative_with_dgx_projection.",
+        observedAt: now,
+      },
+    ],
+    missingInfo: [],
+    priority: "high",
+    createdAt: now,
+  },
+];
+
+const initialAssistantDrafts: AssistantDraft[] = [
+  {
+    id: "draft_bootstrap_handoff",
+    workItemId: "work_item_bootstrap_event_storage",
+    sessionId: DEFAULT_SESSION_ID,
+    title: "Authority summary draft",
+    body: "MacBook owns permanent events; DGX-02 receives projections after redaction.",
+    targetSurface: "conversation",
+    status: "ready_for_review",
+    confidence: "high",
+    evidenceRefs: initialWorkItems[0]?.evidenceRefs ?? [],
+    missingInfo: [],
+    createdAt: now,
+  },
+];
+
+const initialWorkItemHandoffs: WorkItemHandoff[] = [
+  {
+    id: "handoff_bootstrap_packet",
+    workItemId: "work_item_bootstrap_event_storage",
+    targetSurface: "coding_packet",
+    summary: "Use authority model as a coding packet constraint.",
+    payloadRef: "coding_packet://initial",
+    evidenceRefs: initialWorkItems[0]?.evidenceRefs ?? [],
+    missingInfo: [],
+    approvalState: "not_required",
+    createdAt: now,
+  },
+];
+
 export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
   const [runtimeSnapshotState, setRuntimeSnapshotState] = useState<RuntimeSnapshot>(runtimeSnapshot);
   const eventOutboxStorage = useMemo(() => createDesktopOutboxStorage(), []);
+  const localAuthoritativeEventStore = useMemo(
+    () => createLocalAuthoritativeEventStore(typeof window === "undefined" ? undefined : window.localStorage),
+    [],
+  );
   const [eventOutbox, setEventOutbox] = useState<EventEnvelope[]>(() => eventOutboxStorage.load());
   const [activeNavItem, setActiveNavItem] = useState<NavItemId>("sessions");
   const [providerRegistrationOpen, setProviderRegistrationOpen] = useState(false);
@@ -813,6 +964,9 @@ export function App() {
   const [contextPackTier, setContextPackTier] = useState<ContextPackTier>("standard");
   const [reviewMode, setReviewMode] = useState<ReviewMode>("quick");
   const [branchExperiments, setBranchExperiments] = useState<BranchExperiment[]>(initialBranchExperiments);
+  const [workItems, setWorkItems] = useState<WorkItem[]>(initialWorkItems);
+  const [assistantDrafts, setAssistantDrafts] = useState<AssistantDraft[]>(initialAssistantDrafts);
+  const [workItemHandoffs, setWorkItemHandoffs] = useState<WorkItemHandoff[]>(initialWorkItemHandoffs);
   const [debateSession, setDebateSession] = useState<Stage3DebateSession>(() =>
     createStage3DebateSession({
       messages: initialConversationMessages,
@@ -961,17 +1115,28 @@ export function App() {
   );
 
   useEffect(() => {
-    const queuedEvents = eventOutboxStorage.load();
-    if (queuedEvents.length > 0) {
-      setEventOutbox(queuedEvents);
-      void syncEventsToDgx(queuedEvents);
-      void handleRefreshSessionIndex();
-      return;
+    void bootstrapLocalEventStorage();
+  }, []);
+
+  async function bootstrapLocalEventStorage() {
+    for (const event of initialEventLog) {
+      await localAuthoritativeEventStore.append(event);
     }
 
-    void syncEventsToDgx(initialEventLog);
+    const localEvents = await localAuthoritativeEventStore.listBySession(activeSessionId);
+    const localUnsyncedEvents = await localAuthoritativeEventStore.listUnsynced();
+    const queuedEvents = mergeOutboxEvents(eventOutboxStorage.load(), localUnsyncedEvents);
+    eventOutboxStorage.save(queuedEvents);
+    setEventLog((events) => mergeEventReplayLogs(events, localEvents));
+    setEventOutbox(queuedEvents);
+
+    if (queuedEvents.length > 0) {
+      void syncEventsToDgx(queuedEvents);
+    } else {
+      void syncEventsToDgx(initialEventLog);
+    }
     void handleRefreshSessionIndex();
-  }, []);
+  }
 
   useEffect(() => {
     try {
@@ -1009,6 +1174,7 @@ export function App() {
       correlationId: options?.correlationId,
     });
     setEventLog((events) => appendEventToLog(events, event));
+    void localAuthoritativeEventStore.append(event);
     if (!options?.skipRemoteSync) {
       void syncEventsToDgx([event]);
     }
@@ -1020,6 +1186,10 @@ export function App() {
       return;
     }
 
+    for (const event of eventsToSync) {
+      await localAuthoritativeEventStore.append(event);
+    }
+
     setEventSyncState((state) => ({
       ...state,
       status: "syncing",
@@ -1029,10 +1199,15 @@ export function App() {
     const result = await pushEventsToDgxEventStorage({
       events: eventsToSync,
     });
+    if (result.syncedEventIds.length > 0) {
+      await localAuthoritativeEventStore.markProjected(result.syncedEventIds, "dgx-02");
+    }
+
+    const localUnsyncedEvents = await localAuthoritativeEventStore.listUnsynced();
     const currentOutbox = eventOutboxStorage.load();
     const nextOutbox = mergeOutboxEvents(
       removeSyncedOutboxEvents(currentOutbox, result.syncedEventIds),
-      result.queuedEvents,
+      mergeOutboxEvents(localUnsyncedEvents, result.queuedEvents),
     );
     eventOutboxStorage.save(nextOutbox);
     setEventOutbox(nextOutbox);
@@ -1058,7 +1233,7 @@ export function App() {
       dgxStatus: dgxReachable ? "online" : "offline",
       memorySyncStatus: result.status === "synced" && nextOutbox.length === 0 ? "online" : "degraded",
       runtimeNodes: snapshot.runtimeNodes.map((node) =>
-        node.id === snapshot.syncTopology.authorityNodeId
+        node.id === "dgx-02"
           ? {
               ...node,
               status: dgxReachable ? "online" : "offline",
@@ -1161,11 +1336,25 @@ export function App() {
       status: "syncing",
     }));
 
+    const localEvents = await localAuthoritativeEventStore.listBySession(sessionId);
     const result = await pullAndReplayDgxEventStorage({
       sessionId,
     });
 
     if (result.status === "failed") {
+      if (localEvents.length > 0) {
+        const localMessages = rebuildConversationMessagesFromEvents(localEvents);
+        const switchingSessions = sessionId !== activeSessionId;
+        setEventLog((events) => mergeEventReplayLogs(switchingSessions ? [] : events, localEvents));
+        setActiveSessionId(sessionId);
+        setConversationMessages((messages) => (switchingSessions ? localMessages : mergeConversationMessages(messages, localMessages)));
+        setEventSyncState((state) => ({
+          ...state,
+          status: "queued",
+          lastError: `DGX-02 replay failed; restored from MacBook authoritative events. ${result.error ?? ""}`,
+        }));
+        return;
+      }
       setEventSyncState((state) => ({
         ...state,
         status: "failed",
@@ -1181,11 +1370,25 @@ export function App() {
       return;
     }
 
+    for (const event of result.events) {
+      await localAuthoritativeEventStore.append(event);
+    }
+    if (result.events.length > 0) {
+      await localAuthoritativeEventStore.markProjected(
+        result.events.map((event) => event.id),
+        "dgx-02",
+      );
+    }
+    const mergedAuthoritativeEvents = mergeEventReplayLogs(localEvents, result.events, 512);
+    const authoritativeMessages = mergeConversationMessages(
+      rebuildConversationMessagesFromEvents(localEvents),
+      result.messages,
+    );
     const switchingSessions = sessionId !== activeSessionId;
-    setEventLog((events) => mergeEventReplayLogs(switchingSessions ? [] : events, result.events));
+    setEventLog((events) => mergeEventReplayLogs(switchingSessions ? [] : events, mergedAuthoritativeEvents));
     setActiveSessionId(sessionId);
     setConversationMessages((messages) =>
-      switchingSessions ? result.messages : mergeConversationMessages(messages, result.messages),
+      switchingSessions ? authoritativeMessages : mergeConversationMessages(messages, authoritativeMessages),
     );
     const packetReplay = extractLatestCodingPacketFromEvents(result.events);
     if (packetReplay.status === "restored" && packetReplay.packet) {
@@ -1291,20 +1494,51 @@ export function App() {
       attachmentStorage: "metadata_only",
       redaction: "applied",
     });
-    appendEvent(isDgxVllmProvider(selectedProvider) ? "provider.completion.dgx.requested" : "provider.completion.mocked", {
+    const workItem: WorkItem = {
+      id: `work_item_message_${crypto.randomUUID()}`,
+      sessionId: activeSessionId,
+      title: messageContent.slice(0, 64) || "Attachment request",
+      kind: "conversation",
+      lane: "conversation",
+      status: "captured",
+      summary: messageContent.slice(0, 220) || `${attachmentMetadata.length} attachment(s) queued`,
+      sourceRefs: [
+        {
+          source: "desktop_manual",
+          externalId: userMessage.id,
+          observedAt: createdAt,
+          title: "Conversation Workbench message",
+        },
+      ],
+      evidenceRefs: [
+        {
+          id: `evidence_message_${userMessage.id}`,
+          kind: "message",
+          reference: `message://${userMessage.id}`,
+          summary: `User message captured with ${attachmentMetadata.length} attachment(s).`,
+          observedAt: createdAt,
+        },
+      ],
+      missingInfo: [],
+      ownerAgentId: selectedAgent.id,
+      priority: attachmentMetadata.length > 0 ? "high" : "normal",
+      createdAt,
+    };
+    setWorkItems((items) => [workItem, ...items].slice(0, 12));
+    appendEvent(isDgxRoutedProvider(selectedProvider) ? "provider.completion.dgx.requested" : "provider.completion.mocked", {
       agentId: selectedAgent.id,
       providerProfileId: selectedProvider.id,
       modelId,
       authMode,
       authLabel,
-      routePreference: isDgxVllmProvider(selectedProvider) ? "server_proxy" : "mock",
+      routePreference: isDgxRoutedProvider(selectedProvider) ? "server_proxy" : "mock",
     });
 
     let reply = "";
     let completionMetadata: Record<string, unknown> = {};
     try {
-      if (isDgxVllmProvider(selectedProvider)) {
-        const result = await requestDgxVllmCompletion({
+      if (isDgxRoutedProvider(selectedProvider)) {
+        const result = await requestDgxProviderCompletion({
           provider: selectedProvider,
           modelId,
           messages: [...conversationMessages, userMessage],
@@ -1366,6 +1600,20 @@ export function App() {
 
     setAgentActivity(selectedAgent.id, "responding");
     setConversationMessages((messages) => [...messages, assistantMessage]);
+    const assistantDraft: AssistantDraft = {
+      id: `draft_reply_${crypto.randomUUID()}`,
+      workItemId: workItem.id,
+      sessionId: activeSessionId,
+      title: `${selectedAgent.name} reply`,
+      body: reply.slice(0, 1200),
+      targetSurface: "conversation",
+      status: "sent",
+      confidence: completionMetadata.realProviderCall ? "medium" : "low",
+      evidenceRefs: workItem.evidenceRefs,
+      missingInfo: [],
+      createdAt: assistantMessage.createdAt,
+    };
+    setAssistantDrafts((drafts) => [assistantDraft, ...drafts].slice(0, 12));
     appendEvent("conversation.message.created", {
       messageId: assistantMessage.id,
       role: "assistant",
@@ -1424,6 +1672,53 @@ export function App() {
           };
 
     setCodingPacketState(nextPacket);
+    const createdAt = new Date().toISOString();
+    const workItem: WorkItem = {
+      id: `work_item_packet_${crypto.randomUUID()}`,
+      sessionId: activeSessionId,
+      title: nextPacket.goal.slice(0, 72),
+      kind: "coding_packet",
+      lane: "coding",
+      status: "planned",
+      summary: `${nextPacket.decisions.length} decisions / ${nextPacket.implementationPlan.length} implementation steps`,
+      sourceRefs: [{ source: "desktop_manual", observedAt: createdAt, title: "Coding Packet" }],
+      evidenceRefs: [
+        {
+          id: `evidence_packet_${crypto.randomUUID()}`,
+          kind: "artifact",
+          reference: `coding_packet://${activeSessionId}`,
+          summary: "Structured CodingPacket created from conversation/debate.",
+          observedAt: createdAt,
+        },
+      ],
+      missingInfo: nextPacket.filesToInspect.length === 0
+        ? [
+            {
+              id: `missing_files_${crypto.randomUUID()}`,
+              label: "Files to inspect",
+              reason: "Coding handoff is safer with explicit file targets.",
+              required: false,
+              status: "missing",
+            },
+          ]
+        : [],
+      ownerAgentId: selectedAgent?.id,
+      priority: mode === "debate" ? "high" : "normal",
+      createdAt,
+    };
+    setWorkItems((items) => [workItem, ...items].slice(0, 12));
+    const handoff: WorkItemHandoff = {
+      id: `handoff_packet_${crypto.randomUUID()}`,
+      workItemId: workItem.id,
+      targetSurface: "execution_slot",
+      summary: "Coding Packet is ready to route into execution slots after approval.",
+      payloadRef: `coding_packet://${activeSessionId}`,
+      evidenceRefs: workItem.evidenceRefs,
+      missingInfo: workItem.missingInfo,
+      approvalState: "required",
+      createdAt,
+    };
+    setWorkItemHandoffs((handoffs) => [handoff, ...handoffs].slice(0, 12));
     appendEvent("coding_packet.created", {
       packet: nextPacket,
       goal: nextPacket.goal,
@@ -1534,6 +1829,64 @@ export function App() {
       debateId: session.id,
       roundId: session.rounds[0]?.id,
       kind: session.rounds[0]?.kind,
+    });
+  }
+
+  function handleSelectDebateUtterance(utterance: Stage3DebateUtteranceView) {
+    const agent = agents.find((candidate) => candidate.id === utterance.agentId);
+    const createdAt = new Date().toISOString();
+    const prompt = [
+      "방금 토론 발언을 이어서 너와 직접 얘기하고 싶어.",
+      "",
+      `[${utterance.agentName} / ${utterance.roundTitle}]`,
+      utterance.content,
+      "",
+      "이 발언의 근거, 리스크, 코딩 영향을 더 구체적으로 설명해줘.",
+    ].join("\n");
+    const workItem: WorkItem = {
+      id: `work_item_debate_${crypto.randomUUID()}`,
+      sessionId: activeSessionId,
+      title: `${utterance.agentName} 발언 후속 대화`,
+      kind: "decision",
+      lane: "debate",
+      status: "triaged",
+      summary: utterance.content.slice(0, 220),
+      sourceRefs: [
+        {
+          source: "desktop_manual",
+          externalId: utterance.id,
+          observedAt: createdAt,
+          title: "Debate utterance selected",
+        },
+      ],
+      evidenceRefs: [
+        {
+          id: `evidence_debate_${utterance.id}`,
+          kind: "event",
+          reference: `debate_utterance://${utterance.id}`,
+          summary: `${utterance.agentName} / ${utterance.roundTitle} 발언을 후속 대화로 선택함.`,
+          observedAt: createdAt,
+        },
+      ],
+      missingInfo: [],
+      ownerAgentId: agent?.id,
+      priority: utterance.tags.includes("risk") ? "high" : "normal",
+      createdAt,
+    };
+
+    if (agent) {
+      setSelectedAgentId(agent.id);
+    }
+    setDraftMessage(prompt);
+    setMode("conversation");
+    setWorkItems((items) => [workItem, ...items].slice(0, 12));
+    appendEvent("debate.utterance.selected", {
+      debateId: debateSession.id,
+      utteranceId: utterance.id,
+      agentId: utterance.agentId,
+      roundTitle: utterance.roundTitle,
+      tags: utterance.tags,
+      handoff: "conversation_draft",
     });
   }
 
@@ -2670,7 +3023,11 @@ export function App() {
               selectedProvider={selectedProvider}
             />
           ) : mode === "debate" ? (
-            <Stage3DebateTable onCreateCodingPacket={handleCreateCodingPacket} session={debateSession} />
+            <Stage3DebateTable
+              onCreateCodingPacket={handleCreateCodingPacket}
+              onSelectUtterance={handleSelectDebateUtterance}
+              session={debateSession}
+            />
           ) : (
             <TmuxSwarmBoard
               activeSessionId={activeSessionId}
@@ -2679,6 +3036,14 @@ export function App() {
               agents={agents}
               messages={conversationMessages}
               packet={codingPacketState}
+            />
+          )}
+
+          {mode === "tmux" ? null : (
+            <WorkItemHandoffPanel
+              drafts={assistantDrafts}
+              handoffs={workItemHandoffs}
+              items={workItems}
             />
           )}
 
@@ -4317,12 +4682,14 @@ function DebateTable() {
 
 function Stage3DebateTable({
   onCreateCodingPacket,
+  onSelectUtterance,
   session,
 }: {
   onCreateCodingPacket: () => void;
+  onSelectUtterance?: (utterance: Stage3DebateUtteranceView) => void;
   session: Stage3DebateSession;
 }) {
-  const utterances = session.rounds.flatMap((round) =>
+  const utterances: Stage3DebateUtteranceView[] = session.rounds.flatMap((round) =>
     round.utterances.map((utterance) => ({
       ...utterance,
       roundTitle: round.title,
@@ -4387,7 +4754,20 @@ function Stage3DebateTable({
       <div className="debate-workspace">
         <div className="debate-grid">
           {utterances.map((utterance) => (
-            <article className="debate-card" key={utterance.id}>
+            <article
+              className={`debate-card ${onSelectUtterance ? "selectable" : ""}`}
+              key={utterance.id}
+              onClick={() => onSelectUtterance?.(utterance)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelectUtterance?.(utterance);
+                }
+              }}
+              role={onSelectUtterance ? "button" : undefined}
+              tabIndex={onSelectUtterance ? 0 : undefined}
+              title="이 발언자와 Conversation에서 이어서 대화"
+            >
               <header>
                 <Bot size={16} />
                 <strong>{utterance.agentName}</strong>
@@ -4452,6 +4832,58 @@ function debateTagLabel(tag: DebateTag) {
   };
 
   return labels[tag];
+}
+
+function WorkItemHandoffPanel({
+  drafts,
+  handoffs,
+  items,
+}: {
+  drafts: AssistantDraft[];
+  handoffs: WorkItemHandoff[];
+  items: WorkItem[];
+}) {
+  const visibleItems = items.slice(0, 3);
+  const visibleDrafts = drafts.slice(0, 1);
+  const visibleHandoffs = handoffs.slice(0, 1);
+  const pendingHandoffs = handoffs.filter((handoff) => handoff.approvalState === "required").length;
+
+  return (
+    <section className="work-handoff-strip" aria-label="작업 대기열과 전달 상태">
+      <header>
+        <div>
+          <span>WorkItems / Drafts / Handoff</span>
+          <strong>
+            {items.length} tasks · {drafts.length} drafts · {pendingHandoffs} approvals
+          </strong>
+        </div>
+        <em>Event Storage first</em>
+      </header>
+      <div className="work-handoff-grid">
+        {visibleItems.map((item) => (
+          <article className={`work-handoff-card ${item.priority}`} key={item.id}>
+            <span>{item.lane} / {item.status}</span>
+            <strong>{item.title}</strong>
+            <p>{item.summary}</p>
+          </article>
+        ))}
+        {visibleDrafts.map((draft) => (
+          <article className="work-handoff-card draft" key={draft.id}>
+            <span>{draft.targetSurface} / {draft.confidence}</span>
+            <strong>{draft.title}</strong>
+            <p>{draft.body}</p>
+          </article>
+        ))}
+        {visibleHandoffs.map((handoff) => (
+          <article className={`work-handoff-card ${handoff.approvalState}`} key={handoff.id}>
+            <span>{handoff.targetSurface} / {handoff.approvalState}</span>
+            <strong>{handoff.payloadRef ?? "payload pending"}</strong>
+            <p>{handoff.summary}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function AgentAvatar({

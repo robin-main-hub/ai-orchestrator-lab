@@ -123,6 +123,55 @@ describe("server health placeholder", () => {
     expect(response.usage?.totalTokens).toBe(14);
   });
 
+  it("routes APIFun Claude through DGX-02 secret refs without leaking the token into the request body", async () => {
+    const previousKey = process.env.APIFUN_API_KEY;
+    process.env.APIFUN_API_KEY = "apifun-test-secret";
+
+    try {
+      const response = await createDgxProviderCompletionResponse(
+        {
+          id: "provider_completion_request_apifun",
+          sessionId: "session_1",
+          providerProfileId: "provider_apifun_claude",
+          modelId: "claude-code-compatible",
+          messages: [{ role: "user", content: "테스트 응답" }],
+          source: "desktop",
+          routePreference: "server_proxy",
+          createdAt: "2026-05-24T00:00:00.000Z",
+        },
+        {
+          now: "2026-05-24T00:00:00.000Z",
+          fetchImpl: async (url, init) => {
+            expect(url).toBe("https://api.apikey.fun/v1/messages");
+            expect(init?.headers?.authorization).toBe("Bearer apifun-test-secret");
+            expect(String(init?.body)).not.toContain("apifun-test-secret");
+            expect(String(init?.body)).toContain("\"model\":\"claude-code-compatible\"");
+            return {
+              ok: true,
+              status: 200,
+              async text() {
+                return JSON.stringify({
+                  content: [{ type: "text", text: "APIFun OK" }],
+                  usage: { input_tokens: 10, output_tokens: 3 },
+                });
+              },
+            };
+          },
+        },
+      );
+
+      expect(response.status).toBe("succeeded");
+      expect(response.content).toBe("APIFun OK");
+      expect(response.usage?.totalTokens).toBe(13);
+    } finally {
+      if (previousKey === undefined) {
+        delete process.env.APIFUN_API_KEY;
+      } else {
+        process.env.APIFUN_API_KEY = previousKey;
+      }
+    }
+  });
+
   it("probes vLLM /models before publishing live health", async () => {
     const fetchImpl = async (url: string) => {
       expect(url).toBe("http://127.0.0.1:8001/v1/models");

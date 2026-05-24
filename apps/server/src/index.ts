@@ -73,6 +73,50 @@ export type DgxVllmProbeOptions = {
 const DEFAULT_DGX02_VLLM_BASE_URL = "http://dgx-02:8001/v1";
 const DEFAULT_DGX_MODEL_ID = "qwen36-gio-wiki-rag-prisma";
 
+type ServerProviderProxyConfig = {
+  providerProfileId: string;
+  baseUrl: string;
+  apiKeyEnvNames: string[];
+  apiKeyFileEnvName?: string;
+  defaultKeyFile?: string;
+  noAuth?: boolean;
+  apiStyle?: "openai_chat" | "anthropic_messages";
+};
+
+const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
+  {
+    providerProfileId: "provider_deepseek_dgx",
+    baseUrl: process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/v1",
+    apiKeyEnvNames: ["DEEPSEEK_API_KEY"],
+    apiKeyFileEnvName: "DEEPSEEK_API_KEY_FILE",
+    defaultKeyFile: "~/.openclaw/secrets/deepseek.key",
+    apiStyle: "openai_chat",
+  },
+  {
+    providerProfileId: "provider_apifun_claude",
+    baseUrl: process.env.APIFUN_BASE_URL ?? "https://api.apikey.fun",
+    apiKeyEnvNames: ["APIFUN_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"],
+    apiKeyFileEnvName: "APIFUN_API_KEY_FILE",
+    defaultKeyFile: "~/.openclaw/secrets/apifun.key",
+    apiStyle: "anthropic_messages",
+  },
+  {
+    providerProfileId: "provider_grok_oauth_dgx",
+    baseUrl: process.env.GROK_OPENAI_PROXY_BASE_URL ?? "http://127.0.0.1:8000/v1",
+    apiKeyEnvNames: [],
+    noAuth: true,
+    apiStyle: "openai_chat",
+  },
+  {
+    providerProfileId: "provider_openclaw_dgx",
+    baseUrl: process.env.OPENCLAW_VLLM_BASE_URL ?? "http://127.0.0.1:8004/v1",
+    apiKeyEnvNames: ["OPENCLAW_VLLM_API_KEY"],
+    apiKeyFileEnvName: "OPENCLAW_VLLM_API_KEY_FILE",
+    noAuth: true,
+    apiStyle: "openai_chat",
+  },
+];
+
 export type ServerEventStorageState = {
   revision: number;
   eventsById: Map<string, EventEnvelope>;
@@ -286,6 +330,17 @@ type DgxCompletionResponse = {
   };
 };
 
+type AnthropicMessageResponse = {
+  content?: Array<{
+    type?: string;
+    text?: string;
+  }>;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+  };
+};
+
 export type DgxProviderCompletionOptions = {
   now?: string;
   vllmBaseUrl?: string;
@@ -302,16 +357,7 @@ export async function createDgxProviderCompletionResponse(
   const fetchImpl = options.fetchImpl ?? fetch;
 
   if (request.providerProfileId !== "provider_dgx02_vllm") {
-    return {
-      id: `provider_completion_response_${crypto.randomUUID()}`,
-      requestId: request.id,
-      providerProfileId: request.providerProfileId,
-      modelId: request.modelId,
-      route: "server_proxy",
-      status: "failed",
-      error: "server proxy only accepts provider_dgx02_vllm in this stage",
-      createdAt,
-    };
+    return createServerProviderProxyCompletionResponse(request, options);
   }
 
   try {
@@ -381,6 +427,217 @@ export async function createDgxProviderCompletionResponse(
       createdAt,
     };
   }
+}
+
+export async function createServerProviderProxyCompletionResponse(
+  request: ProviderCompletionRequest,
+  options: DgxProviderCompletionOptions = {},
+): Promise<ProviderCompletionResponse> {
+  const createdAt = options.now ?? new Date().toISOString();
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const config = serverProviderProxyConfigs.find((candidate) => candidate.providerProfileId === request.providerProfileId);
+
+  if (!config) {
+    return {
+      id: `provider_completion_response_${crypto.randomUUID()}`,
+      requestId: request.id,
+      providerProfileId: request.providerProfileId,
+      modelId: request.modelId,
+      route: "server_proxy",
+      status: "failed",
+      error: "provider is not registered in the DGX-02 proxy allowlist",
+      createdAt,
+    };
+  }
+
+  const apiKey = config.noAuth ? undefined : await resolveServerProviderApiKey(config);
+  if (!config.noAuth && !apiKey) {
+    return {
+      id: `provider_completion_response_${crypto.randomUUID()}`,
+      requestId: request.id,
+      providerProfileId: request.providerProfileId,
+      modelId: request.modelId,
+      route: "server_proxy",
+      status: "failed",
+      error: "DGX-02 provider secret was not resolved from env or key file",
+      createdAt,
+    };
+  }
+
+  const endpoint = createServerProviderEndpoint(config);
+  try {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: createServerProviderHeaders(config, apiKey),
+      body: JSON.stringify(createServerProviderRequestBody(config, request.modelId, request.messages)),
+    });
+    const rawText = await response.text();
+
+    if (!response.ok) {
+      return {
+        id: `provider_completion_response_${crypto.randomUUID()}`,
+        requestId: request.id,
+        providerProfileId: request.providerProfileId,
+        modelId: request.modelId,
+        route: "server_proxy",
+        status: "failed",
+        endpoint,
+        error: `DGX-02 provider proxy failed: ${response.status} ${rawText.slice(0, 240)}`,
+        createdAt,
+      };
+    }
+
+    const parsed = JSON.parse(rawText) as DgxCompletionResponse | AnthropicMessageResponse;
+    const content = extractServerProviderContent(config, parsed);
+    if (!content) {
+      return {
+        id: `provider_completion_response_${crypto.randomUUID()}`,
+        requestId: request.id,
+        providerProfileId: request.providerProfileId,
+        modelId: request.modelId,
+        route: "server_proxy",
+        status: "failed",
+        endpoint,
+        error: "DGX-02 provider proxy returned an empty response",
+        createdAt,
+      };
+    }
+
+    return {
+      id: `provider_completion_response_${crypto.randomUUID()}`,
+      requestId: request.id,
+      providerProfileId: request.providerProfileId,
+      modelId: request.modelId,
+      route: "server_proxy",
+      status: "succeeded",
+      content,
+      endpoint,
+      usage: extractServerProviderUsage(config, parsed),
+      createdAt,
+    };
+  } catch (error) {
+    return {
+      id: `provider_completion_response_${crypto.randomUUID()}`,
+      requestId: request.id,
+      providerProfileId: request.providerProfileId,
+      modelId: request.modelId,
+      route: "server_proxy",
+      status: "failed",
+      endpoint,
+      error: error instanceof Error ? error.message : String(error),
+      createdAt,
+    };
+  }
+}
+
+function createServerProviderEndpoint(config: ServerProviderProxyConfig) {
+  const baseUrl = config.baseUrl.replace(/\/$/, "");
+  return config.apiStyle === "anthropic_messages" ? `${baseUrl}/v1/messages` : `${baseUrl}/chat/completions`;
+}
+
+function createServerProviderHeaders(config: ServerProviderProxyConfig, apiKey?: string) {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+
+  if (config.apiStyle === "anthropic_messages") {
+    headers["anthropic-version"] = "2023-06-01";
+  }
+
+  if (apiKey) {
+    headers.authorization = `Bearer ${apiKey}`;
+  }
+
+  return headers;
+}
+
+function createServerProviderRequestBody(
+  config: ServerProviderProxyConfig,
+  modelId: string,
+  messages: ProviderCompletionMessage[],
+) {
+  if (config.apiStyle === "anthropic_messages") {
+    return {
+      model: modelId,
+      system: "Answer directly in Korean when the user writes Korean. Do not reveal reasoning or a thinking process.",
+      messages: messages.slice(-8).map((message) => ({
+        role: message.role === "assistant" ? "assistant" : "user",
+        content: message.content,
+      })),
+      max_tokens: 512,
+      temperature: 0.2,
+    };
+  }
+
+  return createServerDgxVllmRequestBody(modelId, messages);
+}
+
+function extractServerProviderContent(
+  config: ServerProviderProxyConfig,
+  parsed: DgxCompletionResponse | AnthropicMessageResponse,
+) {
+  if (config.apiStyle === "anthropic_messages") {
+    return (parsed as AnthropicMessageResponse).content
+      ?.map((entry) => entry.text)
+      .filter((text): text is string => Boolean(text?.trim()))
+      .join("\n")
+      .trim();
+  }
+
+  return (parsed as DgxCompletionResponse).choices?.[0]?.message?.content?.trim();
+}
+
+function extractServerProviderUsage(
+  config: ServerProviderProxyConfig,
+  parsed: DgxCompletionResponse | AnthropicMessageResponse,
+) {
+  if (config.apiStyle === "anthropic_messages") {
+    const usage = (parsed as AnthropicMessageResponse).usage;
+    return {
+      inputTokens: usage?.input_tokens,
+      outputTokens: usage?.output_tokens,
+      totalTokens:
+        typeof usage?.input_tokens === "number" && typeof usage.output_tokens === "number"
+          ? usage.input_tokens + usage.output_tokens
+          : undefined,
+    };
+  }
+
+  const usage = (parsed as DgxCompletionResponse).usage;
+  return {
+    inputTokens: usage?.prompt_tokens,
+    outputTokens: usage?.completion_tokens,
+    totalTokens: usage?.total_tokens,
+  };
+}
+
+async function resolveServerProviderApiKey(config: ServerProviderProxyConfig): Promise<string | undefined> {
+  for (const envName of config.apiKeyEnvNames) {
+    const envValue = process.env[envName]?.trim();
+    if (envValue) {
+      return envValue;
+    }
+  }
+
+  const keyFile = (config.apiKeyFileEnvName ? process.env[config.apiKeyFileEnvName] : undefined) ?? config.defaultKeyFile;
+  if (!keyFile) {
+    return undefined;
+  }
+
+  try {
+    const raw = await readFile(expandHomePath(keyFile), "utf8");
+    return raw.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function expandHomePath(value: string) {
+  if (!value.startsWith("~/")) {
+    return value;
+  }
+
+  return join(process.env.HOME ?? "/home/robin", value.slice(2));
 }
 
 function createServerDgxVllmRequestBody(modelId: string, messages: ProviderCompletionMessage[]) {

@@ -157,7 +157,7 @@ export function discoverModelsForProfile(
     ? "local"
     : profile.tags.includes("mock")
       ? "mock"
-      : profile.tags.includes("dgx") || profile.tags.includes("vllm")
+      : profile.tags.includes("dgx") || profile.tags.includes("vllm") || profile.tags.includes("server-proxy")
         ? "remote_probe"
         : "remote_stub";
 
@@ -645,7 +645,36 @@ function createModelDiscoveryEndpoint(providerKind: ProviderKind, baseUrl?: stri
 
 function createDiscoveredModels(profile: ProviderProfile): ModelDescriptor[] {
   const modelIds =
-    profile.tags.includes("cli")
+    profile.tags.includes("deepseek")
+      ? [
+          profile.defaultModel ?? "deepseek-chat",
+          "deepseek-chat",
+          "deepseek-reasoner",
+          "deepseek-r1",
+          "deepseek-v3",
+        ]
+      : profile.tags.includes("apifun")
+        ? [
+            profile.defaultModel ?? "claude-code-compatible",
+            "claude-code-compatible",
+            "claude-opus-reseller",
+            "claude-sonnet-reseller",
+            "claude-haiku-reseller",
+          ]
+        : profile.tags.includes("grok")
+          ? [
+              profile.defaultModel ?? "grok-oauth-session",
+              "grok-4",
+              "grok-4-fast",
+              "grok-code",
+            ]
+          : profile.tags.includes("openclaw")
+            ? [
+                profile.defaultModel ?? "qwen36-heretic",
+                "qwen36-heretic",
+                "qwen36-gio-wiki-rag-prisma",
+              ]
+            : profile.tags.includes("cli")
       ? [
           profile.defaultModel ?? "cli-session",
           "codex-cli",

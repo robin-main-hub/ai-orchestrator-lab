@@ -46,6 +46,10 @@ export function isDgxVllmProvider(provider?: ProviderProfile) {
   return Boolean(provider?.tags.includes("dgx") && provider.tags.includes("vllm"));
 }
 
+export function isDgxRoutedProvider(provider?: ProviderProfile) {
+  return Boolean(provider && (isDgxVllmProvider(provider) || provider.tags.includes("server-proxy")));
+}
+
 export async function requestDgxVllmCompletion({
   provider,
   modelId,
@@ -80,6 +84,35 @@ export async function requestDgxVllmCompletion({
       fallbackReason: proxyError instanceof Error ? proxyError.message : String(proxyError),
     };
   }
+}
+
+export async function requestDgxProviderCompletion({
+  provider,
+  modelId,
+  messages,
+  fetchImpl = fetch,
+  proxyBaseUrl = DEFAULT_DGX_PROXY_BASE_URL,
+  proxyTimeoutMs = 1_500,
+}: Stage12DgxCompletionInput): Promise<Stage12DgxCompletionResult> {
+  if (isDgxVllmProvider(provider)) {
+    return requestDgxVllmCompletion({
+      provider,
+      modelId,
+      messages,
+      fetchImpl,
+      proxyBaseUrl,
+      proxyTimeoutMs,
+    });
+  }
+
+  return requestDgxVllmCompletionViaProxy({
+    provider,
+    modelId,
+    messages,
+    fetchImpl,
+    proxyBaseUrl,
+    proxyTimeoutMs,
+  });
 }
 
 export function createProviderCompletionProxyRequest(
