@@ -7,6 +7,7 @@ import type {
 } from "@ai-orchestrator/protocol";
 import { mergeDgxRuntimeSnapshot } from "./stage5Runtime";
 import { DEFAULT_DGX_SERVER_BASE_URL, resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
+import { createDgxOrchestratorJsonHeaders } from "./stage31DgxAuth";
 
 type DgxServerHealthResponse = {
   service: "ai-orchestrator-dgx-server";
@@ -164,7 +165,7 @@ async function fetchJson<T>(fetchImpl: typeof fetch, url: string, timeoutMs: num
 
   try {
     const response = await fetchImpl(url, {
-      headers: { "content-type": "application/json" },
+      headers: createDgxOrchestratorJsonHeaders(),
       signal: controller.signal,
     });
     const rawText = await response.text();
