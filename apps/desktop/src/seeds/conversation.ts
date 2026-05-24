@@ -1,5 +1,6 @@
 import {
   Archive,
+  FileText,
   KeyRound,
   LayoutDashboard,
   MessageSquare,
@@ -82,6 +83,7 @@ export const navItems: NavItem[] = [
   { id: "sessions", label: "세션", icon: MessageSquare },
   { id: "projects", label: "프로젝트", icon: LayoutDashboard },
   { id: "providers", label: "프로바이더", icon: KeyRound },
+  { id: "config_files", label: "설정파일", icon: FileText },
   { id: "channels", label: "채널", icon: RadioTower },
   { id: "backup", label: "백업", icon: Archive },
 ];

@@ -2,13 +2,14 @@ import { Archive, FileText, GitBranch, ImageIcon, Link2, Paperclip, Play, Send, 
 import type { BranchExperiment, ContextPackTier, ConversationAttachment, ConversationMessage, ModelDescriptor, ProviderProfile } from "@ai-orchestrator/protocol";
 import { attachmentAcceptForModel, attachmentCapabilityLabel, createDefaultPersonaSettings, formatAttachmentSize, getMessageAttachments, modelSupportsAnyAttachment, agentRoleLabel } from "../lib/helpers";
 import { branchStatusLabel, contextPackTierLabel, creativityLevelLabel, messageLabel, soulModeLabel } from "../lib/uiLabels";
-import type { AgentConfigTab, AgentPersonaSettings, DraftAttachment, WindowAuditItem, WorkbenchAgent } from "../types";
+import type { AgentConfigFile, AgentConfigTab, AgentPersonaSettings, DraftAttachment, WindowAuditItem, WorkbenchAgent } from "../types";
 import { AgentConfigDrawer } from "./AgentConfigDrawer";
 import { WindowChecklist } from "./WindowChecklist";
 
 export function ConversationWorkbench({
   activeSessionId,
   agentConfigPanel,
+  configFiles,
   agentPersona,
   agents,
   branchExperiments,
@@ -41,6 +42,7 @@ export function ConversationWorkbench({
 }: {
   activeSessionId: string;
   agentConfigPanel: { open: boolean; tab: AgentConfigTab };
+  configFiles: AgentConfigFile[];
   agentPersona?: AgentPersonaSettings;
   agents: WorkbenchAgent[];
   branchExperiments: BranchExperiment[];
@@ -150,6 +152,7 @@ export function ConversationWorkbench({
         <AgentConfigDrawer
           activeTab={agentConfigPanel.tab}
           agent={selectedAgent}
+          configFiles={configFiles}
           memoryMode={memoryMode}
           onClose={onCloseAgentConfig}
           onUpdateAgentConfig={onUpdateAgentConfig}
