@@ -48,11 +48,22 @@ Implemented now:
   - reflection issues
   - stats and health
   - activation/pin/forget transitions
+- `apps/desktop/src/runtime/stage27MemoryApi.ts` provides a local `MemoryAPI` adapter boundary:
+  - `remember`
+  - `recall`
+  - `memoryContext`
+  - `reflect`
+  - `stats`
+  - `createRelations`
+  - `activateMemories`
+  - `pin`
+  - `forget`
 - The Memento panel now shows:
   - remember / recall / memory_context / reflect / stats / relations / activate coverage
   - active/blocked context counts
   - relation links
   - reflection issues
+- Backup projection now includes memory context, relation links, stats, and reflection issues in Obsidian/Notion/Mobile artifacts.
   - activation button per memory record
 
 ## Important Limitation
@@ -64,7 +75,7 @@ The current retrieval is a deterministic local heuristic so the product can veri
 
 ## Next Proper Implementation Step
 
-When Event Storage persistence is stable, add a real memory backend adapter:
+When Event Storage persistence is stable, replace or complement the local adapter with real memory backends:
 
 ```text
 MemoryAPI

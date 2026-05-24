@@ -226,6 +226,25 @@ function renderStage7ObsidianMarkdown({
       `- ${result.usedInDecision ? "used" : "blocked"} :: ${result.record.title} (${result.record.layer}, ${result.reason})`,
     ),
     "",
+    "## Memory Context",
+    `- summary: ${memoryInspector.contextPacket.summary}`,
+    `- active: ${memoryInspector.contextPacket.activeRecordIds.length}`,
+    `- blocked: ${memoryInspector.contextPacket.blockedRecordIds.length}`,
+    `- related links: ${memoryInspector.contextPacket.relationIds.length}`,
+    "",
+    "## Memory Stats",
+    `- health: ${memoryInspector.stats.health}`,
+    `- records: ${memoryInspector.stats.totalRecords}`,
+    `- active: ${memoryInspector.stats.activeRecords}`,
+    `- quarantined: ${memoryInspector.stats.quarantinedRecords}`,
+    `- relations: ${memoryInspector.stats.relationCount}`,
+    "",
+    "## Memory Relations",
+    ...formatMemoryRelations(memoryInspector).slice(0, 8),
+    "",
+    "## Memory Reflection Issues",
+    ...formatMemoryIssues(memoryInspector).slice(0, 8),
+    "",
     "## Conversation",
     ...safeMessages.map((message) => `- **${message.role}**: ${message.content}`),
     "",
@@ -257,6 +276,26 @@ function renderStage7NotionSummary({
         used: memoryInspector.trace.results.filter((result) => result.usedInDecision).length,
         blocked: memoryInspector.blockedCount,
       },
+      memoryContext: {
+        id: memoryInspector.contextPacket.id,
+        summary: memoryInspector.contextPacket.summary,
+        active: memoryInspector.contextPacket.activeRecordIds.length,
+        blocked: memoryInspector.contextPacket.blockedRecordIds.length,
+        relationLinks: memoryInspector.contextPacket.relationIds.length,
+      },
+      memoryStats: memoryInspector.stats,
+      memoryRelations: memoryInspector.relations.slice(0, 8).map((relation) => ({
+        kind: relation.kind,
+        confidence: relation.confidence,
+        from: relation.fromRecordId,
+        to: relation.toRecordId,
+      })),
+      memoryIssues: memoryInspector.issues.slice(0, 8).map((issue) => ({
+        kind: issue.kind,
+        severity: issue.severity,
+        records: issue.recordIds,
+        recommendation: issue.recommendation,
+      })),
     },
     null,
     2,
@@ -289,10 +328,35 @@ function renderStage7MobileDashboard({
       memory: {
         records: memoryInspector.records.length,
         blocked: memoryInspector.blockedCount,
+        active: memoryInspector.contextPacket.activeRecordIds.length,
+        relationLinks: memoryInspector.contextPacket.relationIds.length,
+        health: memoryInspector.stats.health,
+        issues: memoryInspector.issues.length,
       },
     },
     null,
     2,
+  );
+}
+
+function formatMemoryRelations(memoryInspector: Stage6MemoryInspector) {
+  if (memoryInspector.relations.length === 0) {
+    return ["- none"];
+  }
+
+  return memoryInspector.relations.map(
+    (relation) =>
+      `- ${relation.kind} (${Math.round(relation.confidence * 100)}%) :: ${relation.fromRecordId} -> ${relation.toRecordId}`,
+  );
+}
+
+function formatMemoryIssues(memoryInspector: Stage6MemoryInspector) {
+  if (memoryInspector.issues.length === 0) {
+    return ["- none"];
+  }
+
+  return memoryInspector.issues.map(
+    (issue) => `- ${issue.severity} / ${issue.kind} :: ${issue.recordIds.join(", ")} :: ${issue.recommendation}`,
   );
 }
 
