@@ -624,6 +624,8 @@ export type EventSyncPullResponse = Omit<z.infer<typeof eventSyncPullResponseSch
 
 export const eventStorageSessionIndexItemSchema = z.object({
   sessionId: z.string(),
+  title: z.string().optional(),
+  createdByClient: z.string().optional(),
   eventCount: z.number().int().nonnegative(),
   firstEventAt: z.string().optional(),
   lastEventAt: z.string().optional(),

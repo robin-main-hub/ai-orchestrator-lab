@@ -690,9 +690,13 @@ export function listEventStorageSessions(
         .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
       const firstEvent = events[0];
       const lastEvent = events[events.length - 1];
+      const sessionCreatedEvent = events.find((event) => event.type === "session.created");
+      const sessionMetadata = getSessionCreatedMetadata(sessionCreatedEvent);
 
       return {
         sessionId,
+        title: sessionMetadata.title,
+        createdByClient: sessionMetadata.createdByClient,
         eventCount: events.length,
         firstEventAt: firstEvent?.createdAt,
         lastEventAt: lastEvent?.createdAt,
@@ -922,6 +926,23 @@ function parseEventStorageRecord(line: string): ServerEventStorageRecord | undef
 
 function uniqueValues<T extends string>(values: T[]): T[] {
   return [...new Set(values)];
+}
+
+function getSessionCreatedMetadata(event: EventEnvelope | undefined): { title?: string; createdByClient?: string } {
+  if (!event || !event.payload || typeof event.payload !== "object") {
+    return {};
+  }
+
+  const payload = event.payload as { title?: unknown; sourceClient?: unknown; createdByClient?: unknown };
+  return {
+    title: typeof payload.title === "string" ? payload.title : undefined,
+    createdByClient:
+      typeof payload.createdByClient === "string"
+        ? payload.createdByClient
+        : typeof payload.sourceClient === "string"
+          ? payload.sourceClient
+          : undefined,
+  };
 }
 
 function getDefaultEventStorageDir() {

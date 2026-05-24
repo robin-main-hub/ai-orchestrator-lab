@@ -18,6 +18,8 @@ describe("stage20 session index", () => {
               sessions: [
                 {
                   sessionId: "session_desktop_001",
+                  title: "Desktop Workbench",
+                  createdByClient: "client_macbook",
                   eventCount: 7,
                   firstEventAt: "2026-05-24T00:00:00.000Z",
                   lastEventAt: "2026-05-24T00:01:00.000Z",
@@ -35,6 +37,7 @@ describe("stage20 session index", () => {
     expect(result.status).toBe("loaded");
     expect(result.serverRevision).toBe(9);
     expect(result.sessions[0]?.sessionId).toBe("session_desktop_001");
+    expect(result.sessions[0]?.title).toBe("Desktop Workbench");
   });
 
   it("returns failed when DGX-02 is unavailable", async () => {
