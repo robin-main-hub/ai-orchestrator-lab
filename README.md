@@ -301,3 +301,11 @@ corepack pnpm dev
 - 각 창은 `준비 / 보강 / 잠금` 상태와 짧은 사유를 함께 보여줘 기능 누락, 보류, 의도적 잠금을 화면에서 바로 확인할 수 있다.
 - 프로젝트 창에는 inspect 파일 후보와 verification 후보를 별도 리스트로 추가해 Coding Packet의 실행 준비 상태를 더 잘 보이게 했다.
 - Terminal/Run Log에는 실행 잠금, 승인 대기열, Event Storage 동기화 상태를 별도 점검 카드로 넣어 실제 명령 dispatch 전에 빠진 게 없는지 확인하게 했다.
+
+## Stage40
+
+- 최초 Hada/tunaFlow 문서에서 빠져 있던 Branch/Adopt 모델을 Conversation Workbench에 추가했다. shadow branch는 별도 후보로 두고, `요약 채택` 시 summary만 main conversation에 주입한다.
+- ContextPack `Lite / Standard / Full` tier를 추가해 engine을 바꿔도 identity, recent context, memory, skills, tool results 조립 정책을 한 곳에서 다룰 수 있게 했다.
+- Coding Packet 하단에 `Quick / Deep Review`, 4D rubric(`plan_coverage`, `code_quality`, `test_coverage`, `convention`)과 `invariant_checks` UI를 추가했다.
+- Insight 6분류(`Stability`, `Testing`, `Architecture`, `Performance`, `Security`, `Tech Debt`)를 추가해 패킷/이벤트/권한/메모리 상태를 빠르게 훑을 수 있게 했다.
+- Project 메뉴에 Meta Agent Onboarding 신호와 적용 버튼을 추가해 현재 provider/model/agent 구성을 보고 빠진 역할을 추천 및 추가할 수 있게 했다.

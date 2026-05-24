@@ -300,6 +300,48 @@ export const codingPacketSchema = z.object({
 });
 export type CodingPacket = z.infer<typeof codingPacketSchema>;
 
+export const contextPackTierSchema = z.enum(["lite", "standard", "full"]);
+export type ContextPackTier = z.infer<typeof contextPackTierSchema>;
+
+export const reviewModeSchema = z.enum(["quick", "deep"]);
+export type ReviewMode = z.infer<typeof reviewModeSchema>;
+
+export const branchExperimentStatusSchema = z.enum(["drafting", "ready", "adopted"]);
+export type BranchExperimentStatus = z.infer<typeof branchExperimentStatusSchema>;
+
+export const branchExperimentSchema = z.object({
+  id: z.string(),
+  sourceSessionId: z.string(),
+  title: z.string(),
+  agentName: z.string(),
+  status: branchExperimentStatusSchema,
+  summary: z.string(),
+  createdAt: z.string(),
+});
+export type BranchExperiment = z.infer<typeof branchExperimentSchema>;
+
+export const insightCategorySchema = z.enum([
+  "stability",
+  "testing",
+  "architecture",
+  "performance",
+  "security",
+  "tech_debt",
+]);
+export type InsightCategory = z.infer<typeof insightCategorySchema>;
+
+export const insightFindingStatusSchema = z.enum(["ok", "watch", "quick_win"]);
+export type InsightFindingStatus = z.infer<typeof insightFindingStatusSchema>;
+
+export const insightFindingSchema = z.object({
+  id: z.string(),
+  category: insightCategorySchema,
+  status: insightFindingStatusSchema,
+  label: z.string(),
+  summary: z.string(),
+});
+export type InsightFinding = z.infer<typeof insightFindingSchema>;
+
 export const sourceTrustSchema = z.enum(["trusted", "limited", "untrusted"]);
 export type SourceTrust = z.infer<typeof sourceTrustSchema>;
 
