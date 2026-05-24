@@ -98,4 +98,40 @@ describe("stage5 dgx bridge", () => {
     expect(bridge.response.status).toBe("queued");
     expect(bridge.localFallbackEnabled).toBe(false);
   });
+
+  it("normalizes older DGX server authority fields before merging into desktop state", () => {
+    const merged = mergeDgxRuntimeSnapshot(runtime, {
+      ...runtime,
+      dgxStatus: "online",
+      runtimeNodes: [{ ...runtime.runtimeNodes[0]!, status: "online", role: "compute" }],
+      syncTopology: {
+        ...runtime.syncTopology,
+        eventStoreMode: "server_authoritative_with_local_outbox",
+        offlineWritePolicy: "append_local_outbox",
+        conflictPolicy: "server_revision_lww_with_conflict_events",
+        clients: [
+          {
+            id: "dgx-02",
+            label: "DGX-02",
+            kind: "server",
+            status: "online",
+            syncRole: "authority",
+            localStore: "sqlite",
+            outboxMode: "authority",
+            failurePolicy: "authority_recovery",
+            outboxCount: 0,
+          },
+        ],
+      },
+      updatedAt: "2026-05-24T00:02:00.000Z",
+    } as unknown as RuntimeSnapshot);
+    const authorityClient = merged.syncTopology.clients.find((client) => client.id === "dgx-02");
+
+    expect(merged.syncTopology.eventStoreMode).toBe("dgx02_authoritative_with_client_cache");
+    expect(merged.syncTopology.offlineWritePolicy).toBe("append_local_outbox_when_offline");
+    expect(merged.syncTopology.conflictPolicy).toBe("dgx02_authority_wins");
+    expect(authorityClient?.outboxMode).toBe("stateless");
+    expect(authorityClient?.failurePolicy).toBe("compute_degraded");
+    expect(merged.runtimeNodes[0]?.role).toBe("main_server");
+  });
 });
