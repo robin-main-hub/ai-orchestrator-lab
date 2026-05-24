@@ -195,3 +195,9 @@ corepack pnpm dev
 - 세션 이름 변경을 `session.renamed` 이벤트로 기록한다.
 - DGX-02 session index projection은 `session.created`와 최신 `session.renamed` 이벤트를 함께 읽어 title을 계산한다.
 - Desktop Sessions 패널에 active session 이름 변경 버튼을 추가했다.
+
+## Stage25
+
+- Backup projection snapshot과 Obsidian markdown destination을 `activeSessionId` 기준으로 생성한다.
+- `applyStage7ProjectionStatuses`는 projection status를 되돌릴 때도 snapshot sessionId를 반영한다.
+- 세션을 전환한 뒤 백업을 실행해도 다른 세션의 Obsidian/Notion/Mobile projection으로 섞이지 않게 했다.

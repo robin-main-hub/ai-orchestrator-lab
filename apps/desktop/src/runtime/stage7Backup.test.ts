@@ -112,7 +112,9 @@ describe("stage7 backup projections", () => {
     const obsidianContent = getArtifactContent(snapshot, obsidian?.id);
 
     expect(snapshot.artifacts).toHaveLength(3);
+    expect(snapshot.sessionId).toBe("session_desktop_001");
     expect(obsidian?.status).toBe("ready");
+    expect(obsidian?.destination).toContain("session_desktop_001.md");
     expect(obsidian?.contentPreview).toContain("[REDACTED:api_key]");
     expect(obsidianContent).not.toContain("sk-super-secret-token");
     expect(snapshot.artifacts.find((artifact) => artifact.target === "notion")?.status).toBe("queued");
@@ -122,6 +124,7 @@ describe("stage7 backup projections", () => {
 
   it("maps projection artifact states back to backup status chips", () => {
     const snapshot = createStage7BackupSnapshot({
+      sessionId: "session_custom_001",
       messages,
       packet,
       events,
@@ -133,6 +136,7 @@ describe("stage7 backup projections", () => {
     const updated = applyStage7ProjectionStatuses(projections, snapshot);
 
     expect(updated.every((projection) => projection.redactionApplied)).toBe(true);
+    expect(updated.every((projection) => projection.sessionId === "session_custom_001")).toBe(true);
     expect(updated.find((projection) => projection.target === "obsidian")?.status).toBe("synced");
     expect(updated.find((projection) => projection.target === "notion")?.status).toBe("synced");
   });

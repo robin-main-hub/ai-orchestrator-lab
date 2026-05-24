@@ -598,6 +598,7 @@ export function App() {
   const backupSnapshot = useMemo(
     () =>
       createStage7BackupSnapshot({
+        sessionId: activeSessionId,
         messages: conversationMessages,
         packet: codingPacketState,
         events: eventLog,
@@ -609,6 +610,7 @@ export function App() {
       }),
     [
       agentRunState,
+      activeSessionId,
       backupProjectionsState,
       codingPacketState,
       conversationMessages,
@@ -1055,6 +1057,7 @@ export function App() {
 
   function handleExportBackupProjections() {
     const snapshot = createStage7BackupSnapshot({
+      sessionId: activeSessionId,
       messages: conversationMessages,
       packet: codingPacketState,
       events: eventLog,
