@@ -207,141 +207,21 @@ import {
 } from "./seeds/providers";
 import { runtimeSnapshot } from "./seeds/runtime";
 import { seededAgentProfiles } from "./seeds/agents";
+import {
+  backupProjections,
+  codingPacket,
+  debateRounds,
+  initialAgentRun,
+  initialBranchExperiments,
+  initialConversationMessages,
+  initialEventLog,
+  navItems,
+  terminalSlots,
+} from "./seeds/conversation";
 
 
 
-const debateContext: DebateContext = {
-  sessionId: DEFAULT_SESSION_ID,
-  problem: "AI Orchestrator Lab 초기 모노레포 골격을 구현한다.",
-  conversationSummary: "문서화된 제품 방향을 유지하면서 protocol-first 구조와 데스크톱 작업판을 먼저 만든다.",
-  constraints: ["실제 모델 호출 제외", "터미널 실행 제외", "API 키 원문 저장 금지"],
-  openQuestions: ["Tauri 전환 시점", "DGX sync protocol 세부안"],
-  userPreferences: ["한국어 UI", "작업실 같은 어두운 패널", "토론 결과는 Coding Packet으로 연결"],
-  memoryTraceIds: ["trace_memory_001", "trace_review_003"],
-};
 
-const codingPacket: CodingPacket = createCodingPacketDraft(debateContext);
-const debateRounds = createDebateRounds("debate_initial_skeleton");
-
-const terminalSlots: TerminalSlot[] = [
-  {
-    id: "slot_local_cli",
-    label: "Local CLI",
-    status: "idle",
-    permissionState: "not_required",
-    lastCommandPreview: "대기",
-  },
-  {
-    id: "slot_dgx_remote",
-    label: "DGX Remote",
-    status: "pending_approval",
-    permissionState: "required",
-    lastCommandPreview: "remote workspace 연결 요청",
-  },
-];
-
-const backupProjections: BackupProjection[] = [
-  {
-    id: "backup_obsidian",
-    sessionId: DEFAULT_SESSION_ID,
-    target: "obsidian",
-    status: "pending",
-    redactionApplied: true,
-  },
-  {
-    id: "backup_notion",
-    sessionId: DEFAULT_SESSION_ID,
-    target: "notion",
-    status: "pending",
-    redactionApplied: true,
-  },
-  {
-    id: "backup_mobile",
-    sessionId: DEFAULT_SESSION_ID,
-    target: "mobile",
-    status: "failed",
-    redactionApplied: true,
-  },
-];
-
-const navItems: NavItem[] = [
-  { id: "sessions", label: "세션", icon: MessageSquare },
-  { id: "projects", label: "프로젝트", icon: LayoutDashboard },
-  { id: "providers", label: "프로바이더", icon: KeyRound },
-  { id: "channels", label: "채널", icon: RadioTower },
-  { id: "backup", label: "백업", icon: Archive },
-];
-
-
-
-const initialConversationMessages: ConversationMessage[] = [
-  {
-    id: "message_seed_user",
-    sessionId: DEFAULT_SESSION_ID,
-    role: "user",
-    content: "문서에 맞춰 첫 구현 골격을 만들자. 토론으로 확대할 수 있게 경계도 살려줘.",
-    createdAt: now,
-  },
-  {
-    id: "message_seed_orchestrator",
-    sessionId: DEFAULT_SESSION_ID,
-    role: "assistant",
-    content: "protocol, provider stub, agent runtime stub, desktop board를 먼저 연결하고 실제 모델 호출은 막아둔다.",
-    createdAt: now,
-    metadata: {
-      agentName: "Orchestrator",
-      providerProfileId: "provider_mock_local",
-    },
-  },
-];
-
-const initialBranchExperiments: BranchExperiment[] = [
-  {
-    id: "branch_shadow_architect",
-    sourceSessionId: DEFAULT_SESSION_ID,
-    title: "shadow: protocol-first 구조 검토",
-    agentName: "Architect",
-    status: "ready",
-    summary: "메인 대화는 깨끗하게 유지하고, protocol/Event Storage 경계만 요약해서 채택 후보로 둔다.",
-    createdAt: now,
-  },
-  {
-    id: "branch_shadow_reviewer",
-    sourceSessionId: DEFAULT_SESSION_ID,
-    title: "shadow: 보안/권한 반대 검토",
-    agentName: "Reviewer",
-    status: "drafting",
-    summary: "권한, redaction, provider trust가 흔들리는 지점을 별도 branch에서 검토한다.",
-    createdAt: now,
-  },
-];
-
-function createDesktopEvent<T>(type: string, payload: T, createdAt = new Date().toISOString()): EventEnvelope<T> {
-  return createStage2Event({ type, payload, createdAt });
-}
-
-const initialEventLog: EventEnvelope[] = initialConversationMessages.map((message) =>
-  createDesktopEvent(
-    "conversation.message.created",
-    {
-      messageId: message.id,
-      role: message.role,
-      content: message.content,
-      metadata: message.metadata,
-      redaction: "applied",
-    },
-    message.createdAt,
-  ),
-);
-
-const initialAgentRun = createStage4AgentRun({
-  packet: codingPacket,
-  primaryAgent: seededAgentProfiles[0],
-  agents: seededAgentProfiles,
-  messages: initialConversationMessages,
-  events: initialEventLog,
-  createdAt: now,
-});
 
 const initialDgxBridge = createStage5DgxBridge({
   run: initialAgentRun,
