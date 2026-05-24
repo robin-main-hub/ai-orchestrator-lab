@@ -57,7 +57,7 @@ export type Stage13ProviderModelDiscoveryInput = {
 
 export async function probeDgxOrchestratorServer({
   localRuntime,
-  serverBaseUrl = DEFAULT_DGX_SERVER_BASE_URL,
+  serverBaseUrl,
   fetchImpl = fetch,
   timeoutMs = 1_500,
   checkedAt = new Date().toISOString(),
@@ -112,13 +112,22 @@ export async function probeDgxOrchestratorServer({
 
 export async function fetchDgxProviderModelDiscovery({
   provider,
-  serverBaseUrl = DEFAULT_DGX_SERVER_BASE_URL,
+  serverBaseUrl,
   fetchImpl = fetch,
   timeoutMs = 1_500,
 }: Stage13ProviderModelDiscoveryInput): Promise<ModelDiscoverySnapshot> {
-  const baseUrl = serverBaseUrl.replace(/\/$/, "");
-  const endpoint = `${baseUrl}/provider-models?providerProfileId=${encodeURIComponent(provider.id)}`;
-  return fetchJson<ModelDiscoverySnapshot>(fetchImpl, endpoint, timeoutMs);
+  let lastError: unknown;
+
+  for (const baseUrl of resolveDgxServerBaseUrls(serverBaseUrl)) {
+    const endpoint = `${baseUrl}/provider-models?providerProfileId=${encodeURIComponent(provider.id)}`;
+    try {
+      return await fetchJson<ModelDiscoverySnapshot>(fetchImpl, endpoint, timeoutMs);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("DGX-02 provider model discovery unavailable");
 }
 
 async function fetchJson<T>(fetchImpl: typeof fetch, url: string, timeoutMs: number): Promise<T> {

@@ -1,10 +1,10 @@
 export const ENDRUIN_ORCHESTRATOR_BASE_URL = "https://orchestrator.endruin.com";
 export const DGX02_LAN_ORCHESTRATOR_BASE_URL = "http://dgx-02:4317";
 
-export const DEFAULT_DGX_SERVER_BASE_URL = ENDRUIN_ORCHESTRATOR_BASE_URL;
+export const DEFAULT_DGX_SERVER_BASE_URL = DGX02_LAN_ORCHESTRATOR_BASE_URL;
 export const DEFAULT_DGX_SERVER_FALLBACK_BASE_URLS = [
-  ENDRUIN_ORCHESTRATOR_BASE_URL,
   DGX02_LAN_ORCHESTRATOR_BASE_URL,
+  ENDRUIN_ORCHESTRATOR_BASE_URL,
 ] as const;
 
 export function resolveDgxServerBaseUrls(baseUrl?: string | string[]) {
@@ -20,4 +20,3 @@ export function resolveDgxServerBaseUrls(baseUrl?: string | string[]) {
 export function normalizeDgxServerBaseUrl(baseUrl: string) {
   return baseUrl.trim().replace(/\/$/, "");
 }
-
