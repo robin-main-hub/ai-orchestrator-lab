@@ -575,25 +575,28 @@ export type EventEnvelope<T = unknown> = Omit<z.infer<typeof eventEnvelopeSchema
   payload: T;
 };
 
-export type ProviderCompletionRoute = "server_proxy" | "direct_provider" | "local_fallback";
+export const providerCompletionRouteSchema = z.enum(["server_proxy", "direct_provider", "local_fallback"]);
+export type ProviderCompletionRoute = z.infer<typeof providerCompletionRouteSchema>;
 
 export type ProviderCompletionStatus = "succeeded" | "failed" | "fallback_required";
 
-export type ProviderCompletionMessage = {
-  role: ConversationMessage["role"];
-  content: string;
-};
+export const providerCompletionMessageSchema = z.object({
+  role: z.enum(["user", "assistant", "system", "tool"]),
+  content: z.string().max(200_000),
+});
+export type ProviderCompletionMessage = z.infer<typeof providerCompletionMessageSchema>;
 
-export type ProviderCompletionRequest = {
-  id: string;
-  sessionId: string;
-  providerProfileId: string;
-  modelId: string;
-  messages: ProviderCompletionMessage[];
-  source: EventSource;
-  routePreference: ProviderCompletionRoute;
-  createdAt: string;
-};
+export const providerCompletionRequestSchema = z.object({
+  id: z.string().min(1).max(256),
+  sessionId: z.string().min(1).max(256),
+  providerProfileId: z.string().min(1).max(256),
+  modelId: z.string().min(1).max(256),
+  messages: z.array(providerCompletionMessageSchema).min(1).max(200),
+  source: eventSourceSchema,
+  routePreference: providerCompletionRouteSchema,
+  createdAt: z.string().min(1).max(64),
+});
+export type ProviderCompletionRequest = z.infer<typeof providerCompletionRequestSchema>;
 
 export type ProviderCompletionUsage = {
   inputTokens?: number;
@@ -1253,17 +1256,19 @@ export type DgxHeartbeat = {
   message: string;
 };
 
-export type RemoteExecutionKind = "model_inference" | "workspace_run" | "event_sync";
+export const remoteExecutionKindSchema = z.enum(["model_inference", "workspace_run", "event_sync"]);
+export type RemoteExecutionKind = z.infer<typeof remoteExecutionKindSchema>;
 
-export type RemoteExecutionRequest = {
-  id: string;
-  runId: string;
-  kind: RemoteExecutionKind;
-  targetNodeId: string;
-  commandPreview: string;
-  approvalState: ApprovalState;
-  createdAt: string;
-};
+export const remoteExecutionRequestSchema = z.object({
+  id: z.string().min(1).max(256),
+  runId: z.string().min(1).max(256),
+  kind: remoteExecutionKindSchema,
+  targetNodeId: z.string().min(1).max(128),
+  commandPreview: z.string().max(10_000),
+  approvalState: approvalStateSchema,
+  createdAt: z.string().min(1).max(64),
+});
+export type RemoteExecutionRequest = z.infer<typeof remoteExecutionRequestSchema>;
 
 export type RemoteExecutionResponse = {
   id: string;
