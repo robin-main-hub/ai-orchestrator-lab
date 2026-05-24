@@ -1538,61 +1538,83 @@ export function listEventStorageSessions(
 
 export function startServer(port = Number(process.env.PORT ?? 4317)) {
   const eventStorage = createJsonlServerEventStorage();
+  const apiToken = resolveOrchestratorApiToken();
+  const expectedAuthorization = `Bearer ${apiToken}`;
+
   const server = createServer(async (request, response) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
     const pathname = requestUrl.pathname;
+    const originHeader = typeof request.headers.origin === "string" ? request.headers.origin : undefined;
+    const corsHeaders = createCorsHeaders(originHeader);
+
+    const respondJson = (statusCode: number, payload: unknown) => {
+      response.writeHead(statusCode, {
+        "content-type": "application/json; charset=utf-8",
+        ...corsHeaders,
+      });
+      response.end(JSON.stringify(payload));
+    };
+
+    const requireAuth = (): boolean => {
+      if (request.headers.authorization === expectedAuthorization) return true;
+      respondJson(401, { error: "unauthorized" });
+      return false;
+    };
 
     if (request.method === "OPTIONS") {
-      response.writeHead(204, createCorsHeaders());
+      response.writeHead(204, corsHeaders);
       response.end();
       return;
     }
 
     if (pathname === "/health") {
-      writeJson(response, 200, {
+      const storageSnapshot = await createPersistentEventStorageSnapshot(eventStorage);
+      respondJson(200, {
         ...(await createLiveHealthResponse()),
-        eventStorage: await createPersistentEventStorageSnapshot(eventStorage),
+        eventStorage: redactInternalPathsForPublicHealth(storageSnapshot),
       } satisfies ServerHealthResponse);
       return;
     }
 
+    if (!requireAuth()) return;
+
     if (pathname === "/runtime") {
-      writeJson(response, 200, await createLiveRuntimeSnapshot());
+      respondJson(200, await createLiveRuntimeSnapshot());
       return;
     }
 
     if (pathname === "/heartbeat") {
       const runtime = await createLiveRuntimeSnapshot();
-      writeJson(response, 200, createDgxHeartbeat(runtime));
+      respondJson(200, createDgxHeartbeat(runtime));
       return;
     }
 
     if (pathname === "/models") {
-      writeJson(response, 200, await createLiveDgxModelDiscovery());
+      respondJson(200, await createLiveDgxModelDiscovery());
       return;
     }
 
     if (pathname === "/provider-models") {
       const providerProfileId = requestUrl.searchParams.get("providerProfileId") ?? "provider_dgx02_vllm";
-      writeJson(response, 200, await createServerProviderModelDiscoveryResponse(providerProfileId));
+      respondJson(200, await createServerProviderModelDiscoveryResponse(providerProfileId));
       return;
     }
 
     if (pathname === "/provider-registry") {
-      writeJson(response, 200, await createServerProviderRegistrySnapshot());
+      respondJson(200, await createServerProviderRegistrySnapshot());
       return;
     }
 
     if (pathname === "/provider-completions" && request.method === "POST") {
       const payload = (await readJsonBody(request)) as ProviderCompletionRequest;
       const completion = await createDgxProviderCompletionResponse(payload);
-      writeJson(response, completion.status === "succeeded" ? 200 : 502, completion);
+      respondJson(completion.status === "succeeded" ? 200 : 502, completion);
       return;
     }
 
     if (pathname === "/remote-runs" && request.method === "POST") {
       const payload = (await readJsonBody(request)) as RemoteExecutionRequest;
-      writeJson(response, 202, createRemoteRunResponse(payload));
+      respondJson(202, createRemoteRunResponse(payload));
       return;
     }
 
@@ -1601,7 +1623,7 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       try {
         payload = eventSyncPushRequestSchema.parse(await readJsonBody(request)) as EventSyncPushRequest;
       } catch (error) {
-        writeJson(response, 400, {
+        respondJson(400, {
           error: "invalid_event_sync_payload",
           message: error instanceof Error ? error.message : String(error),
         });
@@ -1609,9 +1631,9 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       }
 
       try {
-        writeJson(response, 202, await pushEventsToPersistentServerStorage(payload, eventStorage));
+        respondJson(202, await pushEventsToPersistentServerStorage(payload, eventStorage));
       } catch (error) {
-        writeJson(response, 500, {
+        respondJson(500, {
           error: "event_storage_write_failed",
           message: error instanceof Error ? error.message : String(error),
         });
@@ -1622,17 +1644,17 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     if (pathname === "/events" && request.method === "GET") {
       const sessionId = requestUrl.searchParams.get("sessionId") ?? "session_desktop_001";
       const afterRevision = Number(requestUrl.searchParams.get("afterRevision") ?? 0);
-      writeJson(response, 200, await pullEventsFromPersistentServerStorage(sessionId, eventStorage, undefined, afterRevision));
+      respondJson(200, await pullEventsFromPersistentServerStorage(sessionId, eventStorage, undefined, afterRevision));
       return;
     }
 
     if (pathname === "/sessions" && request.method === "GET") {
-      writeJson(response, 200, await listPersistentEventStorageSessions(eventStorage));
+      respondJson(200, await listPersistentEventStorageSessions(eventStorage));
       return;
     }
 
     if (pathname === "/event-storage" && request.method === "GET") {
-      writeJson(response, 200, await createPersistentEventStorageSnapshot(eventStorage));
+      respondJson(200, await createPersistentEventStorageSnapshot(eventStorage));
       return;
     }
 
@@ -1640,13 +1662,13 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       response.writeHead(200, {
         "cache-control": "no-cache",
         "content-type": "text/event-stream; charset=utf-8",
-        ...createCorsHeaders(),
+        ...corsHeaders,
       });
       response.end(`event: heartbeat\ndata: ${JSON.stringify(createDgxHeartbeat())}\n\n`);
       return;
     }
 
-    writeJson(response, 404, { error: "not_found" });
+    respondJson(404, { error: "not_found" });
   });
 
   server.listen(port, "0.0.0.0");
@@ -1679,11 +1701,64 @@ async function readJsonBody(request: IncomingMessage) {
   return rawBody ? JSON.parse(rawBody) : {};
 }
 
-function createCorsHeaders() {
+const DEFAULT_ALLOWED_ORIGINS: ReadonlyArray<string> = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5174",
+  "https://orchestrator.endruin.com",
+];
+
+export function resolveAllowedOrigins(): Set<string> {
+  const extras = (process.env.ORCHESTRATOR_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return new Set<string>([...DEFAULT_ALLOWED_ORIGINS, ...extras]);
+}
+
+const ALLOWED_ORIGINS = resolveAllowedOrigins();
+const FALLBACK_ALLOWED_ORIGIN = "http://localhost:5173";
+const ALLOWED_METHODS = "GET, HEAD, OPTIONS, POST";
+
+function resolveOrchestratorApiToken(): string {
+  const fromEnv = process.env.ORCHESTRATOR_API_TOKEN?.trim();
+  if (fromEnv) return fromEnv;
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "ORCHESTRATOR_API_TOKEN is required in production. Refusing to start without it.",
+    );
+  }
+
+  const devToken = "dev-orchestrator-token";
+  console.warn(
+    `[orchestrator-server] ORCHESTRATOR_API_TOKEN not set. Using dev fallback "${devToken}". ` +
+      "Do not deploy without setting a real token.",
+  );
+  return devToken;
+}
+
+export function pickAllowedOrigin(originHeader: string | undefined, allowed: Set<string> = ALLOWED_ORIGINS): string {
+  return originHeader && allowed.has(originHeader) ? originHeader : FALLBACK_ALLOWED_ORIGIN;
+}
+
+export function redactInternalPathsForPublicHealth(
+  snapshot: ServerEventStorageSnapshot,
+): ServerEventStorageSnapshot {
+  return {
+    ...snapshot,
+    storageDir: "",
+    eventLogPath: "",
+  };
+}
+
+function createCorsHeaders(originHeader?: string) {
   return {
     "access-control-allow-headers": "content-type,authorization",
-    "access-control-allow-methods": "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT",
-    "access-control-allow-origin": "*",
+    "access-control-allow-methods": ALLOWED_METHODS,
+    "access-control-allow-origin": pickAllowedOrigin(originHeader),
+    "access-control-allow-credentials": "true",
     "access-control-allow-private-network": "true",
     "access-control-max-age": "600",
     "vary": "Origin, Access-Control-Request-Method, Access-Control-Request-Headers, Access-Control-Request-Private-Network",
