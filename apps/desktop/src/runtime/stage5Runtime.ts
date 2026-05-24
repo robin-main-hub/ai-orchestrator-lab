@@ -1,4 +1,5 @@
 import type {
+  ClientDevice,
   DgxHeartbeat,
   RemoteExecutionRequest,
   RemoteExecutionResponse,
@@ -56,6 +57,8 @@ export function createStage5DgxBridge({
 }
 
 export function mergeDgxRuntimeSnapshot(localRuntime: RuntimeSnapshot, serverRuntime: RuntimeSnapshot): RuntimeSnapshot {
+  const serverRuntimeNodes = normalizeServerRuntimeNodes(serverRuntime);
+
   return {
     ...localRuntime,
     status: serverRuntime.status === "online" ? "online" : localRuntime.status,
@@ -66,7 +69,10 @@ export function mergeDgxRuntimeSnapshot(localRuntime: RuntimeSnapshot, serverRun
       authorityLabel: serverRuntime.syncTopology.authorityLabel,
       clients: mergeClients(localRuntime, serverRuntime),
     },
-    runtimeNodes: mergeRuntimeNodes(localRuntime, serverRuntime),
+    runtimeNodes: mergeRuntimeNodes(localRuntime, {
+      ...serverRuntime,
+      runtimeNodes: serverRuntimeNodes,
+    }),
     recentError: serverRuntime.dgxStatus === "online" ? undefined : localRuntime.recentError,
     updatedAt: serverRuntime.updatedAt,
   };
@@ -129,9 +135,10 @@ function createCommandPreview(run: Stage4AgentRun): string {
 }
 
 function mergeClients(localRuntime: RuntimeSnapshot, serverRuntime: RuntimeSnapshot) {
-  const serverClientIds = new Set(serverRuntime.syncTopology.clients.map((client) => client.id));
+  const serverClients = serverRuntime.syncTopology.clients.map((client) => normalizeServerClient(client));
+  const serverClientIds = new Set(serverClients.map((client) => client.id));
   return [
-    ...serverRuntime.syncTopology.clients,
+    ...serverClients,
     ...localRuntime.syncTopology.clients.filter((client) => !serverClientIds.has(client.id)),
   ];
 }
@@ -146,4 +153,47 @@ function mergeRuntimeNodes(localRuntime: RuntimeSnapshot, serverRuntime: Runtime
     ),
     ...serverRuntime.runtimeNodes.filter((node) => !localNodeIds.has(node.id)),
   ];
+}
+
+function normalizeServerRuntimeNodes(serverRuntime: RuntimeSnapshot) {
+  return serverRuntime.runtimeNodes.map((node) =>
+    node.id === serverRuntime.syncTopology.authorityNodeId
+      ? {
+          ...node,
+          role: "main_server" as const,
+          isPrimary: true,
+        }
+      : node,
+  );
+}
+
+function normalizeServerClient(client: ClientDevice): ClientDevice {
+  if (client.id !== "dgx-02" && client.syncRole !== "authority") {
+    return normalizeCacheClient(client);
+  }
+
+  return {
+    ...client,
+    id: "dgx-02",
+    label: client.label || "DGX-02",
+    kind: "server",
+    syncRole: "authority",
+    localStore: client.localStore === "none" ? "sqlite" : client.localStore,
+    outboxMode: "stateless",
+    failurePolicy: "compute_degraded",
+  };
+}
+
+function normalizeCacheClient(client: ClientDevice): ClientDevice {
+  return {
+    ...client,
+    syncRole: "cache_client",
+    outboxMode: client.outboxMode === "stateless" ? "stateless" : "offline_cache_outbox",
+    failurePolicy:
+      client.kind === "desktop_pc"
+        ? "unavailable_without_dgx"
+        : client.failurePolicy === "compute_degraded"
+          ? "compute_degraded"
+          : "continue_locally",
+  };
 }
