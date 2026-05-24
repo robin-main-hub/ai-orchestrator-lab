@@ -219,6 +219,44 @@ describe("server health placeholder", () => {
     }
   });
 
+  it("routes Codex OAuth completions through the CLI adapter without calling HTTP fetch", async () => {
+    const response = await createDgxProviderCompletionResponse(
+      {
+        id: "provider_completion_request_codex_oauth",
+        sessionId: "session_1",
+        providerProfileId: "provider_codex_oauth",
+        modelId: "codex-session",
+        messages: [{ role: "user", content: "안녕?" }],
+        source: "desktop",
+        routePreference: "server_proxy",
+        createdAt: "2026-05-24T00:00:00.000Z",
+      },
+      {
+        now: "2026-05-24T00:00:00.000Z",
+        fetchImpl: async () => {
+          throw new Error("Codex OAuth must not use HTTP fetch");
+        },
+        codexCliRunner: async (params) => {
+          expect(params.codexHome).toBe("~/.codex");
+          expect(params.codexBinPath).toContain("codex");
+          expect(params.prompt).toContain("USER: 안녕?");
+          expect(params.cliModelId).toBeUndefined();
+          return {
+            exitCode: 0,
+            signal: null,
+            stdout: "",
+            stderr: "",
+            lastMessage: "Codex OAuth OK",
+          };
+        },
+      },
+    );
+
+    expect(response.status).toBe("succeeded");
+    expect(response.content).toBe("Codex OAuth OK");
+    expect(response.route).toBe("server_proxy");
+  });
+
   it("discovers DeepSeek models through the DGX-02 provider model proxy", async () => {
     const previousKey = process.env.DEEPSEEK_API_KEY;
     process.env.DEEPSEEK_API_KEY = "deepseek-test-secret";
@@ -271,16 +309,20 @@ describe("server health placeholder", () => {
 
       const deepseek = registry.entries.find((entry) => entry.providerProfileId === "provider_deepseek_dgx");
       const apifun = registry.entries.find((entry) => entry.providerProfileId === "provider_apifun_claude");
+      const codexOauth = registry.entries.find((entry) => entry.providerProfileId === "provider_codex_oauth");
       const grok = registry.entries.find((entry) => entry.providerProfileId === "provider_grok_oauth_dgx");
 
       expect(registry.authorityNodeId).toBe("dgx-02");
       expect(registry.rawSecretPersisted).toBe(false);
-      expect(registry.summary.total).toBeGreaterThanOrEqual(7);
+      expect(registry.summary.total).toBeGreaterThanOrEqual(8);
       expect(deepseek?.authMode).toBe("dgx_secret_ref");
       expect(deepseek?.secretAvailability).toBe("available");
       expect(apifun?.name).toBe("APIKey.fun Claude A");
       expect(apifun?.secretAvailability).toBe("missing");
       expect(apifun?.secretSourceRefs).toContain("env:ANTHROPIC_API_KEY");
+      expect(codexOauth?.name).toBe("Codex OAuth Session");
+      expect(codexOauth?.authMode).toBe("oauth_session");
+      expect(codexOauth?.tags).toContain("codex");
       expect(grok?.authMode).toBe("oauth_session");
       expect(JSON.stringify(registry)).not.toContain("deepseek-test-secret");
     } finally {
@@ -424,6 +466,54 @@ describe("server health placeholder", () => {
         delete process.env.GROK_OAUTH_2_AUTH_FILE;
       } else {
         process.env.GROK_OAUTH_2_AUTH_FILE = previousGrok2;
+      }
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("registers Codex OAuth as a separate DGX session provider without using APIKey.fun", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "ai-orchestrator-codex-oauth-"));
+    const codexAuth = join(tempRoot, "codex-auth.json");
+    const previousCodexAuthFile = process.env.CODEX_OAUTH_AUTH_FILE;
+
+    process.env.CODEX_OAUTH_AUTH_FILE = codexAuth;
+
+    try {
+      await writeFile(
+        codexAuth,
+        JSON.stringify({
+          tokens: {
+            access_token: "codex-oauth-access-token",
+            refresh_token: "codex-oauth-refresh-token",
+          },
+        }),
+        "utf8",
+      );
+
+      const registry = await createServerProviderRegistrySnapshot({
+        now: "2026-05-24T00:00:00.000Z",
+      });
+      const codexOauth = registry.entries.find((entry) => entry.providerProfileId === "provider_codex_oauth");
+      const apiKeyFunCodex = registry.entries.find((entry) => entry.providerProfileId === "provider_apikeyfun_codex");
+
+      expect(codexOauth?.name).toBe("Codex OAuth Session");
+      expect(codexOauth?.kind).toBe("custom");
+      expect(codexOauth?.baseUrl).toBe("codex-oauth://dgx-02");
+      expect(codexOauth?.authMode).toBe("oauth_session");
+      expect(codexOauth?.secretAvailability).toBe("available");
+      expect(codexOauth?.defaultModelIds).toContain("codex-session");
+      expect(codexOauth?.secretSourceRefs).toContain("account:codex-oauth");
+      expect(codexOauth?.secretSourceRefs).toContain(`file:${codexAuth}`);
+      expect(codexOauth?.tags).toEqual(expect.arrayContaining(["oauth", "codex", "dgx", "session"]));
+      expect(apiKeyFunCodex?.authMode).toBe("dgx_secret_ref");
+      expect(apiKeyFunCodex?.tags).toContain("openai-compatible");
+      expect(JSON.stringify(registry)).not.toContain("codex-oauth-access-token");
+      expect(JSON.stringify(registry)).not.toContain("codex-oauth-refresh-token");
+    } finally {
+      if (previousCodexAuthFile === undefined) {
+        delete process.env.CODEX_OAUTH_AUTH_FILE;
+      } else {
+        process.env.CODEX_OAUTH_AUTH_FILE = previousCodexAuthFile;
       }
       await rm(tempRoot, { recursive: true, force: true });
     }

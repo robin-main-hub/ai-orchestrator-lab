@@ -57,6 +57,9 @@ importers:
       '@ai-orchestrator/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@ai-orchestrator/providers':
+        specifier: workspace:*
+        version: link:../../packages/providers
 
   packages/agents:
     dependencies:

@@ -28,6 +28,11 @@ import {
   providerCompletionRequestSchema,
   remoteExecutionRequestSchema,
 } from "@ai-orchestrator/protocol";
+import {
+  CodexCliOAuthAdapter,
+  type CodexExecRunner,
+} from "@ai-orchestrator/providers/node";
+import { createAdapterContext } from "@ai-orchestrator/providers";
 
 export type ServerCapability =
   | "health"
@@ -149,6 +154,28 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     apiStyle: "openai_chat",
     defaultModelIds: ["gpt-5.5-pro", "gpt-5.5-coder", "gpt-5.5-mini", "gpt-5.5-reasoning"],
     supportsModelList: true,
+  },
+  {
+    providerProfileId: "provider_codex_oauth",
+    baseUrl: process.env.CODEX_OAUTH_BASE_URL ?? "codex-oauth://dgx-02",
+    apiKeyEnvNames: [],
+    noAuth: true,
+    apiStyle: "openai_chat",
+    defaultModelIds: [
+      "codex-session",
+      "codex-high",
+      "codex-medium",
+      "codex-low",
+      "codex-review",
+      "codex-apply-patch",
+      "codex-browser",
+      "codex-local",
+      "codex-dgx",
+    ],
+    supportsModelList: false,
+    oauthAuthFileEnvName: "CODEX_OAUTH_AUTH_FILE",
+    defaultOAuthAuthFile: "~/.codex/auth.json",
+    oauthAccountLabel: "codex-oauth",
   },
   {
     providerProfileId: "provider_grok_oauth_dgx",
@@ -608,12 +635,12 @@ function createServerProviderModelDescriptor(
   config: ServerProviderProxyConfig,
   modelId: string,
 ): ModelDiscoverySnapshot["models"][number] {
-  const multimodal = /gpt-4o|vision|gemini|claude|grok-4/i.test(modelId);
+  const multimodal = /gpt-4o|vision|gemini|claude|grok-4|codex-browser/i.test(modelId);
   return {
     id: modelId,
     name: modelId,
     providerProfileId: config.providerProfileId,
-    contextWindow: /deepseek|r1/i.test(modelId) ? 64_000 : /claude|grok/i.test(modelId) ? 128_000 : 65_536,
+    contextWindow: /deepseek|r1/i.test(modelId) ? 64_000 : /claude|grok|codex/i.test(modelId) ? 128_000 : 65_536,
     supportsStreaming: true,
     supportsTools: false,
     inputModalities: multimodal ? ["text", "image", "document"] : ["text", "document"],
@@ -621,6 +648,7 @@ function createServerProviderModelDescriptor(
       "server-proxy",
       ...(config.providerProfileId.includes("deepseek") ? ["deepseek"] : []),
       ...(config.providerProfileId.includes("apifun") ? ["apikey.fun", "reseller"] : []),
+      ...(config.providerProfileId.includes("codex_oauth") ? ["codex", "oauth", "dgx"] : []),
       ...(config.providerProfileId.includes("grok") ? ["grok", "oauth"] : []),
       ...(config.providerProfileId.includes("openclaw") ? ["openclaw", "dgx", "vllm"] : []),
     ],
@@ -628,7 +656,7 @@ function createServerProviderModelDescriptor(
 }
 
 function createServerProviderRegistryAuthMode(config: ServerProviderProxyConfig): ProviderRegistryAuthMode {
-  if (config.providerProfileId.includes("grok_oauth")) {
+  if (config.providerProfileId.includes("grok_oauth") || config.providerProfileId.includes("codex_oauth")) {
     return "oauth_session";
   }
 
@@ -645,6 +673,7 @@ function createServerProviderDisplayName(providerProfileId: string) {
     provider_apifun_claude: "APIKey.fun Claude A",
     provider_apifun_claude_b: "APIKey.fun Claude B",
     provider_apikeyfun_codex: "APIKey.fun Codex/GPT",
+    provider_codex_oauth: "Codex OAuth Session",
     provider_grok_oauth_dgx: "Grok OAuth #1",
     provider_grok_oauth_dgx_2: "Grok OAuth #2",
     provider_openclaw_dgx: "DGX-02 OpenClaw vLLM",
@@ -658,7 +687,7 @@ function createServerProviderKind(config: ServerProviderProxyConfig): ProviderKi
     return "anthropic";
   }
 
-  if (config.providerProfileId.includes("grok")) {
+  if (config.providerProfileId.includes("grok") || config.providerProfileId.includes("codex_oauth")) {
     return "custom";
   }
 
@@ -678,6 +707,10 @@ function createServerProviderTrustLevel(providerProfileId: string): ProviderTrus
     return "limited";
   }
 
+  if (providerProfileId.includes("codex_oauth")) {
+    return "trusted";
+  }
+
   return "trusted";
 }
 
@@ -692,6 +725,10 @@ function createServerProviderTags(providerProfileId: string) {
 
   if (providerProfileId.includes("apikeyfun")) {
     return ["dgx-secret-ref", "server-proxy", "apikey.fun", "codex", "openai-compatible"];
+  }
+
+  if (providerProfileId.includes("codex_oauth")) {
+    return ["oauth", "codex", "server-proxy", "dgx", "session"];
   }
 
   if (providerProfileId.includes("grok")) {
@@ -830,6 +867,7 @@ export type DgxProviderCompletionOptions = {
   now?: string;
   vllmBaseUrl?: string;
   fetchImpl?: FetchLike;
+  codexCliRunner?: CodexExecRunner;
 };
 
 export async function createDgxProviderCompletionResponse(
@@ -933,6 +971,34 @@ export async function createServerProviderProxyCompletionResponse(
       error: "provider is not registered in the DGX-02 proxy allowlist",
       createdAt,
     };
+  }
+
+  if (config.providerProfileId === "provider_codex_oauth") {
+    const adapter = new CodexCliOAuthAdapter({
+      profileId: config.providerProfileId,
+      codexBinPath:
+        process.env.CODEX_BIN_PATH ??
+        "~/.codex/packages/standalone/releases/0.132.0-aarch64-unknown-linux-musl/codex",
+      codexHome: process.env.CODEX_OAUTH_HOME ?? "~/.codex",
+      cwd: process.env.CODEX_OAUTH_CWD,
+      defaultTimeoutMs: parsePositiveInteger(process.env.CODEX_CLI_TIMEOUT_MS) ?? 30_000,
+      modelIds: config.defaultModelIds,
+      runCodexExec: options.codexCliRunner,
+    });
+    return adapter.complete(
+      {
+        ...request,
+        routePreference: "server_proxy",
+      },
+      createAdapterContext({
+        timeoutMs: parsePositiveInteger(process.env.CODEX_CLI_TIMEOUT_MS) ?? 30_000,
+        onRawError(status, redactedSnippet) {
+          if (redactedSnippet) {
+            console.warn(`Codex OAuth CLI adapter warning (${status}): ${redactedSnippet}`);
+          }
+        },
+      }),
+    );
   }
 
   const apiKey = config.noAuth ? undefined : await resolveServerProviderApiKey(config);
@@ -1094,6 +1160,15 @@ function extractServerProviderUsage(
     outputTokens: usage?.completion_tokens,
     totalTokens: usage?.total_tokens,
   };
+}
+
+function parsePositiveInteger(value: string | undefined): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 async function resolveServerProviderApiKey(config: ServerProviderProxyConfig): Promise<string | undefined> {
