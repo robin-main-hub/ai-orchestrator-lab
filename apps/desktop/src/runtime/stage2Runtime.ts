@@ -10,7 +10,7 @@ import type {
   SourceTrust,
 } from "@ai-orchestrator/protocol";
 
-const sessionId = "session_desktop_001";
+export const DEFAULT_SESSION_ID = "session_desktop_001";
 
 const sensitiveKeyPattern = /(api[-_]?key|auth[-_]?header|authorization|bearer|cookie|password|secret|token)/i;
 const redactionRules = [
@@ -32,6 +32,7 @@ const redactionRules = [
 ];
 
 export type Stage2EventInput<T> = {
+  sessionId?: string;
   type: string;
   payload: T;
   source?: EventSource;
@@ -47,6 +48,7 @@ export type CodingPacketInput = {
 };
 
 export type ObsidianProjectionInput = {
+  sessionId?: string;
   messages: ConversationMessage[];
   packet: CodingPacket;
   events: EventEnvelope[];
@@ -54,6 +56,7 @@ export type ObsidianProjectionInput = {
 };
 
 export function createStage2Event<T>({
+  sessionId = DEFAULT_SESSION_ID,
   type,
   payload,
   source = "desktop",
@@ -173,6 +176,7 @@ export function createCodingPacketFromConversation({ messages, agent, provider }
 }
 
 export function renderObsidianMarkdown({
+  sessionId = DEFAULT_SESSION_ID,
   messages,
   packet,
   events,

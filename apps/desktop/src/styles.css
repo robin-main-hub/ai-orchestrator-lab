@@ -478,6 +478,11 @@ button {
   cursor: pointer;
 }
 
+.session-index-list button.active {
+  border-color: var(--cyan);
+  background: #003b44;
+}
+
 .session-index-list strong,
 .session-index-list span {
   min-width: 0;
