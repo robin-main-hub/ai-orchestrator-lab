@@ -8,6 +8,10 @@
 - connect-ai: https://github.com/wonseokjung/connect-ai
 - Memento-MCP 글: https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1206711
 - Memento-MCP GitHub: https://github.com/JinHo-von-Choi/memento-mcp
+- tmux Wiki: https://github.com/tmux/tmux/wiki
+- OpenBSD tmux manual: https://man.openbsd.org/tmux.1
+- tmux Control Mode: https://github.com/tmux/tmux/wiki/Control-Mode
+- DCInside pending reference 1185913: https://m.dcinside.com/board/thesingularity/1185913
 
 ## tunaFlow에서 가져올 방향
 
@@ -34,3 +38,12 @@
 - 회상, 저장, 반성, 검토 큐가 필요하다.
 - 장기 기억은 프로젝트/사용자/세션 단위로 격리되어야 한다.
 - 어떤 기억이 결정에 영향을 줬는지 추적 가능해야 한다.
+
+## tmux에서 가져올 방향
+
+- detach/reattach 가능한 오래 사는 CLI agent session을 지원한다.
+- MacBook 앱이 꺼지거나 SSH가 끊겨도 pane 상태를 다시 붙일 수 있게 한다.
+- pane index보다 stable pane id를 우선한다.
+- 실제 command dispatch 전에 read-only capture와 Event Store mapping을 먼저 만든다.
+- control mode는 실시간 stream parser가 필요해진 뒤에 붙인다.
+- DGX-02는 remote tmux host 후보이고, DGX-01은 사용자가 명시적으로 풀기 전까지 locked로 둔다.

@@ -507,7 +507,8 @@ export type PermissionAction =
   | "secret_view"
   | "mobile_approval";
 
-export type PermissionActor = "user" | "agent" | "external_channel" | "mobile" | "server";
+export const permissionActorSchema = z.enum(["user", "agent", "external_channel", "mobile", "server"]);
+export type PermissionActor = z.infer<typeof permissionActorSchema>;
 
 export type PermissionDecision = "allow" | "approval_required" | "deny";
 
@@ -574,6 +575,8 @@ export const tmuxPaneRoleSchema = z.enum([
   "frontend",
   "backend",
   "qa",
+  "research",
+  "memory",
 ]);
 export type TmuxPaneRole = z.infer<typeof tmuxPaneRoleSchema>;
 
@@ -608,6 +611,85 @@ export const executionSlotSchema = z.object({
   createdAt: z.string(),
 });
 export type ExecutionSlot = z.infer<typeof executionSlotSchema>;
+
+export const terminalHostKindSchema = z.enum(["local_mac", "home_pc", "dgx_02", "dgx_01_locked"]);
+export type TerminalHostKind = z.infer<typeof terminalHostKindSchema>;
+
+export const terminalSessionStatusSchema = z.enum(["planned", "starting", "attached", "detached", "unreachable", "closed"]);
+export type TerminalSessionStatus = z.infer<typeof terminalSessionStatusSchema>;
+
+export const terminalPaneStatusSchema = z.enum(["planned", "idle", "running", "blocked", "capturing", "stale", "closed"]);
+export type TerminalPaneStatus = z.infer<typeof terminalPaneStatusSchema>;
+
+export const terminalCommandDispatchStateSchema = z.enum(["recorded", "pending_approval", "blocked", "sent", "failed"]);
+export type TerminalCommandDispatchState = z.infer<typeof terminalCommandDispatchStateSchema>;
+
+export const tmuxSessionRefSchema = z.object({
+  id: z.string(),
+  sessionName: z.string(),
+  host: terminalHostKindSchema,
+  backend: z.literal("tmux"),
+  socketName: z.string().optional(),
+  attachCommand: z.string(),
+  controlMode: z.boolean(),
+  paneCount: z.number().int().min(0),
+  createdAt: z.string(),
+  lastSeenAt: z.string().optional(),
+  status: terminalSessionStatusSchema,
+});
+export type TmuxSessionRef = z.infer<typeof tmuxSessionRefSchema>;
+
+export const terminalPaneSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  terminalSessionId: z.string(),
+  role: tmuxPaneRoleSchema,
+  host: terminalHostKindSchema,
+  paneId: z.string(),
+  windowId: z.string().optional(),
+  title: z.string(),
+  agentId: z.string().optional(),
+  cwd: z.string().optional(),
+  status: terminalPaneStatusSchema,
+  lastOutputAt: z.string().optional(),
+  createdAt: z.string(),
+});
+export type TerminalPane = z.infer<typeof terminalPaneSchema>;
+
+export const terminalCommandIntentSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  terminalSessionId: z.string(),
+  paneId: z.string(),
+  requestedBy: permissionActorSchema,
+  commandPreview: z.string(),
+  redactedCommandPreview: z.string(),
+  requestedPermissions: z.array(permissionLevelSchema),
+  approvalState: approvalStateSchema,
+  dispatchState: terminalCommandDispatchStateSchema,
+  blockedReason: z.string().optional(),
+  createdAt: z.string(),
+});
+export type TerminalCommandIntent = z.infer<typeof terminalCommandIntentSchema>;
+
+export type TerminalSessionAttachedEventPayload = {
+  terminalSession: TmuxSessionRef;
+  panes: TerminalPane[];
+};
+
+export type TerminalPaneOutputCapturedEventPayload = {
+  terminalSessionId: string;
+  paneId: string;
+  role: TmuxPaneRole;
+  outputPreview: string;
+  lineCount: number;
+  redactionApplied: boolean;
+  capturedAt: string;
+};
+
+export type TerminalCommandIntentEventPayload = {
+  intent: TerminalCommandIntent;
+};
 
 export type RunRequestedEventPayload = {
   runId: string;
