@@ -36,6 +36,7 @@ export type Stage7BackupQueueItem = {
 };
 
 export type Stage7BackupInput = {
+  sessionId?: string;
   messages: ConversationMessage[];
   packet: CodingPacket;
   events: EventEnvelope[];
@@ -46,10 +47,14 @@ export type Stage7BackupInput = {
   createdAt?: string;
 };
 
-const sessionId = "session_desktop_001";
-const obsidianDestination = "AI-Orchestrator/projects/ai-orchestrator-lab/sessions/session_desktop_001.md";
+const defaultSessionId = "session_desktop_001";
+
+function createObsidianDestination(sessionId: string) {
+  return `AI-Orchestrator/projects/ai-orchestrator-lab/sessions/${sessionId}.md`;
+}
 
 export function createStage7BackupSnapshot({
+  sessionId = defaultSessionId,
   messages,
   packet,
   events,
@@ -66,6 +71,7 @@ export function createStage7BackupSnapshot({
     events,
     agentRun,
     memoryInspector,
+    sessionId,
     createdAt,
   });
   const notionContent = renderStage7NotionSummary({
@@ -88,9 +94,10 @@ export function createStage7BackupSnapshot({
       kind: "session_log",
       format: "markdown",
       title: "Obsidian Session Markdown",
-      destination: obsidianDestination,
+      destination: createObsidianDestination(sessionId),
       content: obsidianContent,
       status: "ready",
+      sessionId,
       createdAt,
     }),
     createArtifact({
@@ -101,6 +108,7 @@ export function createStage7BackupSnapshot({
       destination: "Notion: AI Orchestrator / Sessions",
       content: notionContent,
       status: runtime.dgxStatus === "online" ? "ready" : "queued",
+      sessionId,
       createdAt,
     }),
     createArtifact({
@@ -111,6 +119,7 @@ export function createStage7BackupSnapshot({
       destination: "Mobile PWA: read/approve/stop/retry",
       content: mobileContent,
       status: runtime.dgxStatus === "online" ? "ready" : "queued",
+      sessionId,
       createdAt,
     }),
   ];
@@ -155,6 +164,7 @@ export function applyStage7ProjectionStatuses(
 
     return {
       ...projection,
+      sessionId: snapshot.sessionId,
       status: artifact.status === "ready" ? "synced" : artifact.status === "queued" ? "pending" : "failed",
       lastSyncedAt: artifact.status === "ready" ? artifact.createdAt : projection.lastSyncedAt,
       redactionApplied: artifact.redactionApplied,
@@ -176,8 +186,9 @@ function renderStage7ObsidianMarkdown({
   events,
   agentRun,
   memoryInspector,
+  sessionId,
   createdAt,
-}: Omit<Stage7BackupInput, "projections" | "runtime"> & { createdAt: string }): string {
+}: Omit<Stage7BackupInput, "projections" | "runtime"> & { sessionId: string; createdAt: string }): string {
   const safeMessages = redactForEventStore(messages) as ConversationMessage[];
   const safePacket = redactForEventStore(packet) as CodingPacket;
   const safeEvents = redactForEventStore(events.slice(0, 10)) as EventEnvelope[];
@@ -286,6 +297,7 @@ function renderStage7MobileDashboard({
 }
 
 function createArtifact(params: {
+  sessionId: string;
   target: BackupProjectionTarget;
   kind: BackupProjectionArtifact["kind"];
   format: BackupProjectionArtifact["format"];
@@ -298,7 +310,7 @@ function createArtifact(params: {
   const safeContent = redactForEventStore(params.content) as string;
   return {
     id: `backup_artifact_${params.target}_${stableId(`${params.title}:${params.createdAt}`)}`,
-    sessionId,
+    sessionId: params.sessionId,
     target: params.target,
     kind: params.kind,
     format: params.format,
