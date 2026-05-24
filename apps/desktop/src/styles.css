@@ -1200,8 +1200,9 @@ button {
 
 .agent-select-button {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 4px 8px;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 3px 8px;
+  align-items: center;
   min-width: 0;
   padding: 8px;
   border: 1px solid transparent;
@@ -1213,8 +1214,7 @@ button {
 }
 
 .agent-select-button strong,
-.agent-select-button span,
-.agent-select-button em {
+.agent-select-button span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1225,12 +1225,11 @@ button {
   align-self: center;
 }
 
-.agent-select-button span,
-.agent-select-button em {
+.agent-summary-line {
   grid-column: 2 / -1;
   color: var(--subtle);
   font-size: 12px;
-  font-style: normal;
+  line-height: 1.25;
 }
 
 .agent-remove-button,
