@@ -74,6 +74,15 @@ describe("stage13 DGX server probing", () => {
           service: "ai-orchestrator-dgx-server",
           status: "ok",
           capabilities: ["health", "provider-completion-proxy", "vllm-health"],
+          eventStorage: {
+            mode: "jsonl",
+            storageDir: "/home/robin/ai-orchestrator-lab/data/events",
+            eventLogPath: "/home/robin/ai-orchestrator-lab/data/events/events.jsonl",
+            revision: 42,
+            eventCount: 12,
+            sessionCount: 2,
+            loadedAt: "2026-05-24T00:01:00.000Z",
+          },
           runtime: {
             ...localRuntime,
             dgxStatus: "online",
@@ -127,6 +136,8 @@ describe("stage13 DGX server probing", () => {
     expect(probe.status).toBe("online");
     expect(probe.heartbeat.status).toBe("connected");
     expect(probe.runtime.dgxStatus).toBe("online");
+    expect(probe.eventStorage?.mode).toBe("jsonl");
+    expect(probe.eventStorage?.revision).toBe(42);
     expect(probe.modelDiscovery?.models[0]?.id).toBe("qwen36-gio-wiki-rag-prisma");
   });
 

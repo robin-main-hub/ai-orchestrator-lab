@@ -144,3 +144,11 @@ corepack pnpm dev
 - DGX-02 서버가 내려가면 MacBook은 local outbox로 큐잉하고, Home PC는 DGX 복구 대기 degraded 상태로 표시한다.
 - 데스크톱 앱에 browser localStorage 기반 Event outbox adapter를 추가했다. 이후 Tauri/Electron 단계에서 같은 인터페이스를 SQLite로 교체하면 된다.
 - 앱 새로고침 후에도 MacBook outbox에 남은 이벤트를 다시 DGX-02 `/events/sync`로 밀어넣는다.
+
+## Stage17
+
+- DGX-02 서버 Event Storage를 프로세스 메모리에서 append-only JSONL 파일로 승격했다.
+- 기본 저장 위치는 `data/events/events.jsonl`이고, `EVENT_STORAGE_DIR`로 바꿀 수 있다.
+- 서버 재시작 후에도 event id, revision, duplicate/conflict 판정이 유지된다.
+- `GET /event-storage`로 storage mode, JSONL path, revision, event/session count를 확인할 수 있다.
+- `scripts/smoke-dgx-server.mjs`는 `/event-storage`와 `/events` pull 결과까지 함께 확인한다.

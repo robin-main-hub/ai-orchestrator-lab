@@ -1,15 +1,23 @@
 import { describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import {
+  createEventStorageSnapshot,
   createDgxProviderCompletionResponse,
   createDgxHeartbeat,
   createDgxModelDiscovery,
   createHealthResponse,
+  createJsonlServerEventStorage,
   createLiveHealthResponse,
   createRemoteRunResponse,
   createRuntimeSnapshot,
   createServerEventStorageState,
+  loadServerEventStorageStateFromJsonl,
   pullEventsFromServerStorage,
   probeDgxVllm,
+  pullEventsFromPersistentServerStorage,
+  pushEventsToPersistentServerStorage,
   pushEventsToServerStorage,
 } from "./index";
 
@@ -24,6 +32,8 @@ describe("server health placeholder", () => {
     expect(health.capabilities).toContain("model-registry");
     expect(health.capabilities).toContain("vllm-health");
     expect(health.capabilities).toContain("event-storage-sync");
+    expect(health.eventStorage.mode).toBe("memory");
+    expect(health.eventStorage.revision).toBe(0);
   });
 
   it("publishes the DGX-02 vLLM model registry", () => {
@@ -192,6 +202,62 @@ describe("server health placeholder", () => {
     expect(conflict.conflicts).toBe(1);
     expect(pulled.serverRevision).toBe(1);
     expect(pulled.events[0]?.id).toBe(event.id);
+  });
+
+  it("persists Event Storage records to JSONL and reloads duplicate state", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-events-"));
+    try {
+      const storage = createJsonlServerEventStorage(tempDir);
+      const event = {
+        id: "event_persist_1",
+        sessionId: "session_persist",
+        type: "conversation.message.created",
+        payload: { messageId: "message_1", redaction: "applied" },
+        createdAt: "2026-05-24T00:00:00.000Z",
+        source: "desktop" as const,
+        sourceTrust: "trusted" as const,
+        redacted: true,
+      };
+      const request = {
+        id: "sync_request_persist_1",
+        clientId: "client_macbook",
+        sessionId: event.sessionId,
+        events: [event],
+        idempotencyKey: "client_macbook:session_persist:event_persist_1",
+        createdAt: event.createdAt,
+      };
+
+      const first = await pushEventsToPersistentServerStorage(request, storage, event.createdAt);
+      const reloadedState = await loadServerEventStorageStateFromJsonl(storage.eventLogPath);
+      const duplicate = pushEventsToServerStorage(
+        { ...request, id: "sync_request_persist_2" },
+        reloadedState,
+        event.createdAt,
+      );
+      const pulled = await pullEventsFromPersistentServerStorage(
+        "session_persist",
+        {
+          ...storage,
+          statePromise: Promise.resolve(reloadedState),
+        },
+        event.createdAt,
+      );
+      const snapshot = createEventStorageSnapshot(reloadedState, {
+        mode: "jsonl",
+        storageDir: storage.storageDir,
+        eventLogPath: storage.eventLogPath,
+        loadedAt: storage.loadedAt,
+      });
+
+      expect(first.accepted).toBe(1);
+      expect(duplicate.duplicates).toBe(1);
+      expect(pulled.events[0]?.id).toBe(event.id);
+      expect(snapshot.revision).toBe(1);
+      expect(snapshot.eventCount).toBe(1);
+      expect(snapshot.eventLogPath).toContain("events.jsonl");
+    } finally {
+      await rm(tempDir, { force: true, recursive: true });
+    }
   });
 
   it("rejects raw secret shaped Event Storage payloads", () => {

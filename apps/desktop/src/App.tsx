@@ -1256,12 +1256,21 @@ export function App() {
         [dgxDiscovery.providerProfileId]: dgxDiscovery,
       }));
     }
+    if (probe.eventStorage) {
+      setEventSyncState((state) => ({
+        ...state,
+        serverRevision: probe.eventStorage?.revision ?? state.serverRevision,
+        lastSyncedAt: probe.eventStorage?.lastStoredAt ?? state.lastSyncedAt,
+      }));
+    }
     appendEvent("dgx.heartbeat.checked", {
       nodeId: probe.heartbeat.nodeId,
       status: probe.heartbeat.status,
       latencyMs: probe.heartbeat.latencyMs ?? probe.latencyMs,
       serverStatus: probe.status,
       error: probe.error,
+      eventStorageRevision: probe.eventStorage?.revision,
+      eventStorageMode: probe.eventStorage?.mode,
     });
     appendEvent("runtime.snapshot.merged", {
       authorityNodeId,

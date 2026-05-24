@@ -42,3 +42,4 @@ venv/
 .cache/
 models/
 runs/
+data/events/
