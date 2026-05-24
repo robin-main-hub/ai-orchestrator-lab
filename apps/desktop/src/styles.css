@@ -426,6 +426,76 @@ button {
   font-size: 11px;
 }
 
+.session-index-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #141311;
+}
+
+.session-index-summary strong,
+.session-index-summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-index-summary strong {
+  color: var(--green);
+  font-size: 11px;
+}
+
+.session-index-summary span {
+  color: var(--subtle);
+  font-size: 10px;
+}
+
+.session-index-list {
+  display: grid;
+  gap: 5px;
+}
+
+.session-index-list button,
+.session-index-list p {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  margin: 0;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #002f38;
+  color: var(--text);
+  text-align: left;
+}
+
+.session-index-list button {
+  cursor: pointer;
+}
+
+.session-index-list strong,
+.session-index-list span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-index-list strong {
+  font-size: 11px;
+}
+
+.session-index-list span,
+.session-index-list p {
+  color: var(--subtle);
+  font-size: 10px;
+}
+
 .ops-rail-panel {
   margin-top: 0;
 }

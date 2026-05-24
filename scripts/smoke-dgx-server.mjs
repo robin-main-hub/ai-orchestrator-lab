@@ -46,6 +46,7 @@ const eventSync = await readJson(`${baseUrl}/events/sync`, {
   body: JSON.stringify(eventSyncRequest),
 });
 const storageAfter = await readJson(`${baseUrl}/event-storage`);
+const sessions = await readJson(`${baseUrl}/sessions`);
 const pulledEvents = await readJson(`${baseUrl}/events?sessionId=${encodeURIComponent(smokeSessionId)}`);
 
 console.log(
@@ -79,6 +80,8 @@ console.log(
         eventCount: storageAfter.eventCount,
         sessionCount: storageAfter.sessionCount,
         eventLogPath: storageAfter.eventLogPath,
+        sessionIndexCount: sessions.sessions?.length ?? 0,
+        sessionIndexHasSmokeSession: Boolean(sessions.sessions?.some((session) => session.sessionId === smokeSessionId)),
         pulledCount: pulledEvents.events?.length ?? 0,
         pulledHasSmokeEvent: Boolean(pulledEvents.events?.some((event) => event.id === smokeEventId)),
       },

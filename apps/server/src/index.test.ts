@@ -13,6 +13,7 @@ import {
   createRemoteRunResponse,
   createRuntimeSnapshot,
   createServerEventStorageState,
+  listEventStorageSessions,
   loadServerEventStorageStateFromJsonl,
   pullEventsFromServerStorage,
   probeDgxVllm,
@@ -202,6 +203,62 @@ describe("server health placeholder", () => {
     expect(conflict.conflicts).toBe(1);
     expect(pulled.serverRevision).toBe(1);
     expect(pulled.events[0]?.id).toBe(event.id);
+  });
+
+  it("lists Event Storage sessions newest first", () => {
+    const state = createServerEventStorageState();
+    const firstEvent = {
+      id: "event_session_first",
+      sessionId: "session_old",
+      type: "conversation.message.created",
+      payload: { messageId: "message_old", content: "old", redaction: "applied" },
+      createdAt: "2026-05-24T00:00:00.000Z",
+      source: "desktop" as const,
+      sourceTrust: "trusted" as const,
+      redacted: true,
+    };
+    const secondEvent = {
+      id: "event_session_second",
+      sessionId: "session_new",
+      type: "coding_packet.created",
+      payload: { goal: "new packet" },
+      createdAt: "2026-05-24T00:01:00.000Z",
+      source: "agent" as const,
+      sourceTrust: "trusted" as const,
+      redacted: true,
+    };
+
+    pushEventsToServerStorage(
+      {
+        id: "sync_sessions_1",
+        clientId: "client_macbook",
+        sessionId: firstEvent.sessionId,
+        events: [firstEvent],
+        idempotencyKey: "client_macbook:session_old:event_session_first",
+        createdAt: firstEvent.createdAt,
+      },
+      state,
+      firstEvent.createdAt,
+    );
+    pushEventsToServerStorage(
+      {
+        id: "sync_sessions_2",
+        clientId: "client_home_pc",
+        sessionId: secondEvent.sessionId,
+        events: [secondEvent],
+        idempotencyKey: "client_home_pc:session_new:event_session_second",
+        createdAt: secondEvent.createdAt,
+      },
+      state,
+      secondEvent.createdAt,
+    );
+
+    const index = listEventStorageSessions(state, "2026-05-24T00:02:00.000Z");
+
+    expect(index.serverRevision).toBe(2);
+    expect(index.sessions.map((session) => session.sessionId)).toEqual(["session_new", "session_old"]);
+    expect(index.sessions[0]?.lastEventType).toBe("coding_packet.created");
+    expect(index.sessions[0]?.sources).toEqual(["agent"]);
   });
 
   it("persists Event Storage records to JSONL and reloads duplicate state", async () => {

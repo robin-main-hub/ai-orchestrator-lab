@@ -622,6 +622,24 @@ export type EventSyncPullResponse = Omit<z.infer<typeof eventSyncPullResponseSch
   events: EventEnvelope[];
 };
 
+export const eventStorageSessionIndexItemSchema = z.object({
+  sessionId: z.string(),
+  eventCount: z.number().int().nonnegative(),
+  firstEventAt: z.string().optional(),
+  lastEventAt: z.string().optional(),
+  lastEventType: z.string().optional(),
+  sources: z.array(eventSourceSchema),
+  sourceTrust: z.array(sourceTrustSchema),
+});
+export type EventStorageSessionIndexItem = z.infer<typeof eventStorageSessionIndexItemSchema>;
+
+export const eventStorageSessionIndexResponseSchema = z.object({
+  serverRevision: z.number().int().nonnegative(),
+  sessions: z.array(eventStorageSessionIndexItemSchema),
+  createdAt: z.string(),
+});
+export type EventStorageSessionIndexResponse = z.infer<typeof eventStorageSessionIndexResponseSchema>;
+
 export type RuntimeNodeRole = "main_server" | "compute" | "local";
 
 export type RuntimeNode = {
