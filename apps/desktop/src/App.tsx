@@ -159,6 +159,10 @@ type AgentPersonaSettings = {
   agentsInstruction: string;
   forbiddenStyle: string;
 };
+type AgentVisualSettings = {
+  avatarDataUrl?: string;
+  avatarUpdatedAt?: string;
+};
 type NavItemId = "sessions" | "projects" | "providers" | "channels" | "backup";
 type NavItem = {
   id: NavItemId;
@@ -168,6 +172,20 @@ type NavItem = {
 
 const modelWindowSize = 8;
 const maxDraftAttachments = 5;
+const agentVisualStorageKey = "ai-orchestrator-lab.agent-visuals.v1";
+
+const agentRoleOptions: WorkbenchAgent["role"][] = [
+  "orchestrator",
+  "architect",
+  "builder",
+  "reviewer",
+  "skeptic",
+  "verifier",
+  "memory_curator",
+  "executor",
+  "external",
+  "auditor",
+];
 
 const now = new Date("2026-05-24T00:20:00.000+09:00").toISOString();
 
@@ -280,6 +298,42 @@ function createDefaultPersonaSettings(agent: WorkbenchAgent): AgentPersonaSettin
     agentsInstruction: "권한 경계, provider 선택, 실행 승인, 검증 계획을 먼저 확인한다.",
     forbiddenStyle: "근거 없는 확신, 장황한 말투, 승인 없는 실행",
   };
+}
+
+function getAgentInitials(name: string) {
+  const normalized = name.trim();
+  if (!normalized) {
+    return "AI";
+  }
+
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  if (tokens.length === 1) {
+    return (tokens[0] ?? "AI").slice(0, 2).toUpperCase();
+  }
+
+  return `${tokens[0]?.[0] ?? ""}${tokens[1]?.[0] ?? ""}`.toUpperCase();
+}
+
+function createInitialAgentVisualSettings(agents: WorkbenchAgent[]): Record<string, AgentVisualSettings> {
+  const defaults = Object.fromEntries(agents.map((agent) => [agent.id, {} satisfies AgentVisualSettings]));
+  try {
+    if (typeof window === "undefined") {
+      return defaults;
+    }
+
+    const stored = window.localStorage.getItem(agentVisualStorageKey);
+    if (!stored) {
+      return defaults;
+    }
+
+    const parsed = JSON.parse(stored) as Record<string, AgentVisualSettings>;
+    return {
+      ...defaults,
+      ...parsed,
+    };
+  } catch {
+    return defaults;
+  }
 }
 
 function createDesktopOutboxStorage(): Stage16OutboxStorage {
@@ -688,8 +742,12 @@ export function App() {
   const [modelDiscoveryByProviderId, setModelDiscoveryByProviderId] = useState<Record<string, ModelDiscoverySnapshot>>({});
   const [agents, setAgents] = useState<WorkbenchAgent[]>(seededAgentProfiles);
   const [agentActivityById, setAgentActivityById] = useState<Record<string, AgentActivityStatus>>({});
+  const [agentVisualsById, setAgentVisualsById] = useState<Record<string, AgentVisualSettings>>(() =>
+    createInitialAgentVisualSettings(seededAgentProfiles),
+  );
   const [modelWindowStartByAgentId, setModelWindowStartByAgentId] = useState<Record<string, number>>({});
   const [selectedAgentId, setSelectedAgentId] = useState(seededAgentProfiles[0]?.id ?? "");
+  const [agentSettingsAgentId, setAgentSettingsAgentId] = useState<string | undefined>();
   const [agentConfigPanel, setAgentConfigPanel] = useState<{ open: boolean; tab: AgentConfigTab }>({
     open: false,
     tab: "profile",
@@ -743,6 +801,10 @@ export function App() {
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.id === selectedAgentId) ?? agents[0],
     [agents, selectedAgentId],
+  );
+  const settingsAgent = useMemo(
+    () => agents.find((agent) => agent.id === agentSettingsAgentId),
+    [agentSettingsAgentId, agents],
   );
   const selectedAgentPersona = selectedAgent ? agentPersonaById[selectedAgent.id] : undefined;
   const selectedProvider = useMemo(
@@ -845,6 +907,16 @@ export function App() {
     void syncEventsToDgx(initialEventLog);
     void handleRefreshSessionIndex();
   }, []);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(agentVisualStorageKey, JSON.stringify(agentVisualsById));
+      }
+    } catch {
+      // Avatar persistence is convenience-only; Event Storage remains the source of truth.
+    }
+  }, [agentVisualsById]);
 
   useEffect(() => {
     setDraftAttachments((current) =>
@@ -1768,7 +1840,12 @@ export function App() {
       ...currentSettings,
       [nextAgent.id]: createDefaultPersonaSettings(nextAgent),
     }));
+    setAgentVisualsById((currentSettings) => ({
+      ...currentSettings,
+      [nextAgent.id]: {},
+    }));
     setSelectedAgentId(nextAgent.id);
+    setAgentSettingsAgentId(nextAgent.id);
   }
 
   function handleRemoveAgent(agentId: string) {
@@ -1789,6 +1866,13 @@ export function App() {
         const { [agentId]: _removedPersona, ...remainingSettings } = currentSettings;
         return remainingSettings;
       });
+      setAgentVisualsById((currentSettings) => {
+        const { [agentId]: _removedVisual, ...remainingSettings } = currentSettings;
+        return remainingSettings;
+      });
+      if (agentSettingsAgentId === agentId) {
+        setAgentSettingsAgentId(undefined);
+      }
       return nextAgents;
     });
   }
@@ -2012,18 +2096,68 @@ export function App() {
     );
   }
 
-  function handleRenameAgent(agentId: string) {
-    const agent = agents.find((profile) => profile.id === agentId);
-    const nextName = window.prompt("Agent 이름", agent?.name ?? "");
-    if (!nextName?.trim()) {
+  function handleOpenAgentSettings(agentId: string) {
+    setSelectedAgentId(agentId);
+    setAgentSettingsAgentId(agentId);
+  }
+
+  function handleUpdateAgentProfile(agentId: string, patch: Partial<Pick<WorkbenchAgent, "name" | "role">>) {
+    setAgents((currentAgents) =>
+      currentAgents.map((agentProfile) => (agentProfile.id === agentId ? { ...agentProfile, ...patch } : agentProfile)),
+    );
+    appendEvent(
+      "agent.profile.updated",
+      {
+        agentId,
+        name: patch.name,
+        role: patch.role,
+        avatarStorage: "unchanged",
+      },
+      { skipRemoteSync: false },
+    );
+  }
+
+  function handleUploadAgentAvatar(agentId: string, file: File) {
+    if (!file.type.startsWith("image/")) {
       return;
     }
 
-    setAgents((currentAgents) =>
-      currentAgents.map((agentProfile) =>
-        agentProfile.id === agentId ? { ...agentProfile, name: nextName.trim() } : agentProfile,
-      ),
-    );
+    const reader = new FileReader();
+    reader.onload = () => {
+      const avatarDataUrl = typeof reader.result === "string" ? reader.result : undefined;
+      if (!avatarDataUrl) {
+        return;
+      }
+
+      const avatarUpdatedAt = new Date().toISOString();
+      setAgentVisualsById((currentSettings) => ({
+        ...currentSettings,
+        [agentId]: {
+          avatarDataUrl,
+          avatarUpdatedAt,
+        },
+      }));
+      appendEvent("agent.avatar.updated", {
+        agentId,
+        fileName: file.name,
+        mimeType: file.type,
+        size: file.size,
+        storage: "embedded_data_url",
+        avatarDataUrl,
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleClearAgentAvatar(agentId: string) {
+    setAgentVisualsById((currentSettings) => ({
+      ...currentSettings,
+      [agentId]: {},
+    }));
+    appendEvent("agent.avatar.cleared", {
+      agentId,
+      storage: "embedded_data_url",
+    });
   }
 
   function handleAssignProvider(agentId: string, providerId: string) {
@@ -2074,7 +2208,7 @@ export function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${mode === "tmux" ? "tmux-focus-shell" : ""}`}>
       <RuntimeStatusBar
         onProbeDgx={handleProbeDgx}
         providerName={activeProvider?.name ?? "미선택"}
@@ -2205,7 +2339,7 @@ export function App() {
           </section>
         </aside>
 
-        <section className="center-board">
+        <section className={`center-board ${mode === "tmux" ? "tmux-center-board" : ""}`}>
           <div className="board-toolbar">
             <div className="mode-area" role="tablist" aria-label="작업 모드">
               <div className="mode-switch">
@@ -2288,6 +2422,7 @@ export function App() {
             <TmuxSwarmBoard
               activeSessionId={activeSessionId}
               agentActivityById={agentActivityById}
+              agentVisualsById={agentVisualsById}
               agents={agents}
               messages={conversationMessages}
             />
@@ -2296,29 +2431,32 @@ export function App() {
           {mode === "tmux" ? null : <CodingPacketPanel packet={codingPacketState} />}
         </section>
 
-        <aside className="right-rail" aria-label="모델과 에이전트 상태">
-          <AgentStatePanel
-            agents={agents}
-            agentActivityById={agentActivityById}
-            modelCatalog={modelCatalog}
-            modelWindowStartByAgentId={modelWindowStartByAgentId}
-            onAddAgent={handleAddAgent}
-            onAssignModel={handleAssignModel}
-            onAssignProvider={handleAssignProvider}
-            onRenameAgent={handleRenameAgent}
-            onRemoveAgent={handleRemoveAgent}
-            onSelectAgent={setSelectedAgentId}
-            onShiftModelWindow={handleShiftModelWindow}
-            profiles={providerProfiles}
-            selectedAgentId={selectedAgent?.id}
-          />
-          <MemoryInspectorPanel
-            inspector={memoryInspector}
-            onForget={handleForgetMemory}
-            onPin={handlePinMemory}
-            onRemember={handleRememberCurrentContext}
-          />
-        </aside>
+        {mode === "tmux" ? null : (
+          <aside className="right-rail" aria-label="모델과 에이전트 상태">
+            <AgentStatePanel
+              agents={agents}
+              agentActivityById={agentActivityById}
+              agentVisualsById={agentVisualsById}
+              modelCatalog={modelCatalog}
+              modelWindowStartByAgentId={modelWindowStartByAgentId}
+              onAddAgent={handleAddAgent}
+              onAssignModel={handleAssignModel}
+              onAssignProvider={handleAssignProvider}
+              onOpenAgentSettings={handleOpenAgentSettings}
+              onRemoveAgent={handleRemoveAgent}
+              onSelectAgent={setSelectedAgentId}
+              onShiftModelWindow={handleShiftModelWindow}
+              profiles={providerProfiles}
+              selectedAgentId={selectedAgent?.id}
+            />
+            <MemoryInspectorPanel
+              inspector={memoryInspector}
+              onForget={handleForgetMemory}
+              onPin={handlePinMemory}
+              onRemember={handleRememberCurrentContext}
+            />
+          </aside>
+        )}
       </main>
       <TerminalDock
         agentRun={agentRunState}
@@ -2335,6 +2473,16 @@ export function App() {
         secretVaultSnapshot={secretVaultSnapshot}
         slots={terminalSlots}
       />
+      {settingsAgent ? (
+        <AgentSettingsPanel
+          agent={settingsAgent}
+          onClearAvatar={handleClearAgentAvatar}
+          onClose={() => setAgentSettingsAgentId(undefined)}
+          onUpdateAgent={handleUpdateAgentProfile}
+          onUploadAvatar={handleUploadAgentAvatar}
+          visual={agentVisualsById[settingsAgent.id] ?? {}}
+        />
+      ) : null}
     </div>
   );
 }
@@ -3339,14 +3487,144 @@ function debateTagLabel(tag: DebateTag) {
   return labels[tag];
 }
 
+function AgentAvatar({
+  agent,
+  size = "medium",
+  visual,
+}: {
+  agent?: WorkbenchAgent;
+  size?: "small" | "medium" | "large";
+  visual?: AgentVisualSettings;
+}) {
+  const label = agent ? getAgentInitials(agent.name) : "AI";
+  return (
+    <span className={`agent-avatar ${size} ${visual?.avatarDataUrl ? "has-image" : ""}`}>
+      {visual?.avatarDataUrl ? <img alt={`${agent?.name ?? "Agent"} avatar`} src={visual.avatarDataUrl} /> : label}
+    </span>
+  );
+}
+
+function AgentSettingsPanel({
+  agent,
+  onClearAvatar,
+  onClose,
+  onUpdateAgent,
+  onUploadAvatar,
+  visual,
+}: {
+  agent: WorkbenchAgent;
+  onClearAvatar: (agentId: string) => void;
+  onClose: () => void;
+  onUpdateAgent: (agentId: string, patch: Partial<Pick<WorkbenchAgent, "name" | "role">>) => void;
+  onUploadAvatar: (agentId: string, file: File) => void;
+  visual: AgentVisualSettings;
+}) {
+  const [draftName, setDraftName] = useState(agent.name);
+
+  useEffect(() => {
+    setDraftName(agent.name);
+  }, [agent.id, agent.name]);
+
+  function commitName() {
+    const nextName = draftName.trim();
+    if (!nextName) {
+      setDraftName(agent.name);
+      return;
+    }
+    if (nextName !== agent.name) {
+      onUpdateAgent(agent.id, { name: nextName });
+    }
+  }
+
+  return (
+    <section className="agent-settings-modal" aria-label="Agent profile settings">
+      <header>
+        <div className="agent-settings-title">
+          <AgentAvatar agent={agent} size="large" visual={visual} />
+          <div>
+            <span>Agent Settings</span>
+            <strong>{agent.name}</strong>
+          </div>
+        </div>
+        <button aria-label="agent settings close" className="icon-button" onClick={onClose} type="button">
+          <X size={14} />
+        </button>
+      </header>
+      <div className="agent-settings-body">
+        <label>
+          <span>이름</span>
+          <input
+            onBlur={commitName}
+            onChange={(event) => setDraftName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.currentTarget.blur();
+              }
+            }}
+            value={draftName}
+          />
+        </label>
+        <label>
+          <span>역할</span>
+          <select
+            onChange={(event) =>
+              onUpdateAgent(agent.id, {
+                role: event.target.value as WorkbenchAgent["role"],
+              })
+            }
+            value={agent.role}
+          >
+            {agentRoleOptions.map((role) => (
+              <option key={role} value={role}>
+                {agentRoleLabel(role)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="agent-avatar-editor">
+          <div>
+            <span>프로필 사진</span>
+            <strong>{visual.avatarDataUrl ? "embedded data URL" : "기본 이니셜"}</strong>
+            <p>로컬 파일 경로가 아니라 이미지 데이터를 저장해서 집 밖 접속에서도 깨지지 않게 이어갈 수 있게 한다.</p>
+          </div>
+          <label className="avatar-upload-button">
+            <ImageIcon size={14} />
+            업로드
+            <input
+              accept="image/*"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  onUploadAvatar(agent.id, file);
+                }
+                event.currentTarget.value = "";
+              }}
+              type="file"
+            />
+          </label>
+          <button className="ghost-button" disabled={!visual.avatarDataUrl} onClick={() => onClearAvatar(agent.id)} type="button">
+            초기화
+          </button>
+        </div>
+        <div className="agent-settings-note">
+          <span>tmux 준비 상태</span>
+          <strong>이름 / 역할 / avatar는 Event Storage에 기록되고, 실제 tmux runner 연결 전까지 UI와 handoff 기록에서 먼저 사용한다.</strong>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function TmuxSwarmBoard({
   activeSessionId,
   agentActivityById,
+  agentVisualsById,
   agents,
   messages,
 }: {
   activeSessionId: string;
   agentActivityById: Record<string, AgentActivityStatus>;
+  agentVisualsById: Record<string, AgentVisualSettings>;
   agents: WorkbenchAgent[];
   messages: ConversationMessage[];
 }) {
@@ -3427,7 +3705,7 @@ function TmuxSwarmBoard({
         <div className="tmux-gate">
           <LockKeyhole size={15} />
           <span>Implementation Gate</span>
-          <strong>Event Storage / Permission / Redaction 먼저</strong>
+          <strong>이벤트 저장소 / Permission / Redaction 먼저</strong>
         </div>
       </header>
       <div className="tmux-workbench">
@@ -3452,7 +3730,7 @@ function TmuxSwarmBoard({
         <section className="tmux-agent-board">
           <header>
             <span>Agent Work Status</span>
-            <strong>8 logical panes</strong>
+            <strong>8 panes / detailed monitor</strong>
           </header>
           <div className="tmux-agent-grid">
             {panes.map((pane) => (
@@ -3462,12 +3740,21 @@ function TmuxSwarmBoard({
                   ...pane,
                   state: pane.agent ? (agentActivityById[pane.agent.id] ?? pane.state) : pane.state,
                 }}
+                visual={pane.agent ? agentVisualsById[pane.agent.id] : undefined}
               />
             ))}
           </div>
         </section>
       </div>
       <div className="tmux-decision-row">
+        <div>
+          <span>이벤트 저장소 mapping</span>
+          <strong>run intent / pane status 준비</strong>
+        </div>
+        <div>
+          <span>Permission + Redaction</span>
+          <strong>실행 전 승인, 기록 전 제거</strong>
+        </div>
         <div>
           <span>Gemini CLI</span>
           <strong>연결 금지 - CLI 설정 후 결정</strong>
@@ -3477,8 +3764,8 @@ function TmuxSwarmBoard({
           <strong>미정</strong>
         </div>
         <div>
-          <span>approval threshold</span>
-          <strong>미정</strong>
+          <span>Agent profile assets</span>
+          <strong>data URL 저장 / 경로 의존 없음</strong>
         </div>
       </div>
       <footer className="tmux-footer">
@@ -3492,6 +3779,7 @@ function TmuxSwarmBoard({
 
 function TmuxPaneCard({
   pane,
+  visual,
 }: {
   pane: {
     id: string;
@@ -3501,17 +3789,24 @@ function TmuxPaneCard({
     agent?: WorkbenchAgent;
     signal: string;
   };
+  visual?: AgentVisualSettings;
 }) {
   return (
     <article className="tmux-pane-card">
       <header>
-        <Terminal size={14} />
-        <span>{pane.id}</span>
+        <AgentAvatar agent={pane.agent} size="small" visual={visual} />
+        <div>
+          <span>{pane.id}</span>
+          <strong>{pane.title}</strong>
+        </div>
         <em>{pane.state}</em>
       </header>
-      <strong>{pane.title}</strong>
       <p>{pane.role}</p>
-      <p>{pane.agent ? `${pane.agent.name} / ${pane.agent.modelId ?? "model pending"}` : "담당 agent 미정"}</p>
+      <div className="tmux-pane-agent-line">
+        <strong>{pane.agent ? pane.agent.name : "담당 agent 미정"}</strong>
+        <span>{pane.agent ? agentRoleLabel(pane.agent.role) : "future slot"}</span>
+        <small>{pane.agent?.modelId ?? "model pending"}</small>
+      </div>
       <code>{pane.signal}</code>
     </article>
   );
@@ -3698,12 +3993,13 @@ function ProviderProfilesManagerPanel({
 function AgentStatePanel({
   agents,
   agentActivityById,
+  agentVisualsById,
   modelCatalog,
   modelWindowStartByAgentId,
   onAddAgent,
   onAssignModel,
   onAssignProvider,
-  onRenameAgent,
+  onOpenAgentSettings,
   onRemoveAgent,
   onSelectAgent,
   onShiftModelWindow,
@@ -3712,12 +4008,13 @@ function AgentStatePanel({
 }: {
   agents: WorkbenchAgent[];
   agentActivityById: Record<string, AgentActivityStatus>;
+  agentVisualsById: Record<string, AgentVisualSettings>;
   modelCatalog: ModelCatalog;
   modelWindowStartByAgentId: Record<string, number>;
   onAddAgent: () => void;
   onAssignModel: (agentId: string, modelId: string) => void;
   onAssignProvider: (agentId: string, providerId: string) => void;
-  onRenameAgent: (agentId: string) => void;
+  onOpenAgentSettings: (agentId: string) => void;
   onRemoveAgent: (agentId: string) => void;
   onSelectAgent: (agentId: string) => void;
   onShiftModelWindow: (agentId: string, direction: -1 | 1) => void;
@@ -3752,21 +4049,24 @@ function AgentStatePanel({
           return (
             <div className={`agent-row ${agent.id === selectedAgentId ? "selected" : ""}`} key={agent.id}>
             <button className="agent-select-button" onClick={() => onSelectAgent(agent.id)} type="button">
-              <span
-                aria-label={`${agent.name} ${activityStatus}`}
-                className={`agent-dot ${agent.enabled ? "enabled" : ""} ${activityStatus}`}
-                title={activityStatus}
-              />
+              <span className="agent-avatar-status">
+                <AgentAvatar agent={agent} size="small" visual={agentVisualsById[agent.id]} />
+                <span
+                  aria-label={`${agent.name} ${activityStatus}`}
+                  className={`agent-dot ${agent.enabled ? "enabled" : ""} ${activityStatus}`}
+                  title={activityStatus}
+                />
+              </span>
               <strong>{agent.name}</strong>
               <span className="agent-summary-line" title={agentSummary}>
                 {agentSummary}
               </span>
             </button>
             <button
-              aria-label={`${agent.name} 이름 변경`}
+              aria-label={`${agent.name} 설정`}
               className="agent-rename-button"
-              onClick={() => onRenameAgent(agent.id)}
-              title="agent 이름 변경"
+              onClick={() => onOpenAgentSettings(agent.id)}
+              title="agent 설정"
               type="button"
             >
               <Pencil size={14} />

@@ -436,6 +436,28 @@ Codex may only implement the real tmux swarm when all of the following are true:
 
 Until then, this document is a future architecture and operations specification only.
 
+## Current Desktop Preview Requirements
+
+Before real tmux execution exists, the desktop Tmux mode must still make the future workflow visible.
+
+The preview UI should:
+
+- keep the operator conversation on the left in compact text;
+- remove the normal right rail while Tmux mode is active;
+- use the expanded center surface for agent pane status;
+- show each logical pane with agent name, role, selected model, current status, and important message;
+- show implementation gates for the event storage, Permission Matrix, Redaction, Gemini CLI lockout, runner selection, and profile asset storage;
+- keep real command dispatch disabled.
+
+Agent profile images are supported as embedded data URLs in the desktop state and profile update events. The preview must not depend on local file paths because MacBook, Home PC, and remote/mobile views may not share the same filesystem.
+
+Agent setting controls must allow:
+
+- editing the agent display name;
+- changing the agent role;
+- uploading or clearing the profile image;
+- preserving the profile image in a path-independent form.
+
 ## Summary
 
 The Role-Based Tmux Agent Swarm fits AI Orchestrator Lab, but it is not the first implementation target.
