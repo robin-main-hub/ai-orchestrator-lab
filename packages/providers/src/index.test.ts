@@ -130,7 +130,7 @@ describe("provider credential parsing and model discovery", () => {
           id: "provider_deepseek_dgx",
           name: "DeepSeek DGX-02 Key",
           kind: "openai",
-          defaultModel: "deepseek-chat",
+          defaultModel: "deepseek-v4-flash",
           tags: ["server-proxy", "deepseek", "dgx-secret-ref"],
           trustLevel: "limited",
         }),
@@ -174,7 +174,7 @@ describe("provider credential parsing and model discovery", () => {
     const discoveries = profiles.map((profile) => discoverModelsForProfile(profile, createdAt));
 
     expect(discoveries.map((discovery) => discovery.source)).toEqual(["remote_probe", "remote_probe", "remote_probe"]);
-    expect(discoveries[0]?.models.map((model) => model.id)).toContain("deepseek-chat");
+    expect(discoveries[0]?.models.map((model) => model.id)).toContain("deepseek-v4-flash");
     expect(discoveries[1]?.models.map((model) => model.id)).toContain("claude-code-compatible");
     expect(discoveries[2]?.models.map((model) => model.id)).toContain("grok-oauth-session");
 
@@ -184,6 +184,45 @@ describe("provider credential parsing and model discovery", () => {
     expect(vault.entries[1]?.storage).toBe("dgx_vault");
     expect(vault.summary.dgxVaultReady).toBe(2);
     expect(JSON.stringify(vault)).not.toContain("sk-");
+  });
+
+  it("blocks expired Grok OAuth sessions until refresh", () => {
+    const profile = {
+      ...createProviderProfile({
+        id: "provider_grok_oauth_dgx_2",
+        name: "Grok OAuth #2",
+        kind: "custom",
+        defaultModel: "grok-oauth-session",
+        tags: ["server-proxy", "grok", "oauth", "oauth-expired"],
+        trustLevel: "limited",
+      }),
+      secretRef: {
+        id: "secret_grok_2",
+        label: "DGX-02 Grok OAuth #2",
+        scope: "workspace" as const,
+        redactedPreview: "dgx-02:~/.grok2/auth.json",
+        transient: false,
+        createdAt,
+      },
+    };
+    const vault = createSecretVaultSnapshot([profile], createdAt);
+    const readiness = createProviderRuntimeReadiness({
+      profile,
+      models: [{
+        id: "grok-oauth-session",
+        name: "grok-oauth-session",
+        providerProfileId: profile.id,
+        supportsStreaming: true,
+        supportsTools: false,
+        tags: [],
+      }],
+      vault,
+      selectedModelId: "grok-oauth-session",
+      createdAt,
+    });
+
+    expect(vault.entries[0]?.availability).toBe("expired");
+    expect(readiness.status).toBe("credential_required");
   });
 
   it("registers CLI and OAuth providers as session bindings without raw secrets", () => {

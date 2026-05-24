@@ -36,10 +36,26 @@ secretSourceRefs: env:ANTHROPIC_API_KEY, file:~/openclaws/2/env
 secretSourceRefs: env:ANTHROPIC_API_KEY_ALT, file:~/openclaws/2/env
 ```
 
+## Grok OAuth 계정
+
+현재 registry는 Grok OAuth를 계정별 provider로 분리한다.
+
+| 구분 | Provider ID | 표시 이름 | OAuth 파일 | 기본 proxy |
+| --- | --- | --- | --- | --- |
+| Grok #1 | `provider_grok_oauth_dgx` | `Grok OAuth #1 (choiminwoong@gmail.com)` | `~/.grok/auth.json` | `http://127.0.0.1:18111/v1` |
+| Grok #2 | `provider_grok_oauth_dgx_2` | `Grok OAuth #2 (choiminwoongj@gmail.com)` | `~/.grok2/auth.json` | `http://127.0.0.1:18112/v1` |
+
+DGX-02 확인 기준:
+
+- `~/.grok/auth.json`은 `choiminwoong@gmail.com` 계정이다.
+- `~/.grok2/auth.json`은 `choiminwoongj@gmail.com` 계정이다.
+- 두 파일 모두 refresh token은 있지만, 현재 access token expiry가 지난 상태라 registry에서는 `expired`로 표시할 수 있다.
+- 세 번째 Grok 계정은 `provider_grok_oauth_dgx_3`, `~/.grok3/auth.json`, `GROK_OPENAI_PROXY_3_BASE_URL` 패턴으로 추가한다.
+
 ## 현재 Registry 원칙
 
 - DGX-02가 provider registry의 authoritative source다.
 - 데스크톱은 `GET /provider-registry`로 provider/profile/model metadata를 가져온다.
 - `GET /provider-models?providerProfileId=...`로 모델 목록을 가져오며, APIKey.fun Claude A/B처럼 `/models`가 안정적이지 않은 provider는 static allowlist를 쓴다.
 - Gemini CLI는 아직 연결하지 않는다. `agy -p` 설정을 함께 확정한 뒤 등록한다.
-- Grok OAuth는 별도 proxy/session provider로 유지하되, 토큰 만료 감지는 별도 단계에서 보강한다.
+- Grok OAuth는 계정별 proxy/session provider로 유지하고, token expiry가 지나면 `oauth-expired` tag와 `expired` credential 상태를 내려준다.

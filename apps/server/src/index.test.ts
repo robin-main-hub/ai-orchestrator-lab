@@ -321,6 +321,71 @@ describe("server health placeholder", () => {
     }
   });
 
+  it("separates Grok OAuth accounts and reports expired sessions without token output", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "ai-orchestrator-grok-"));
+    const grok1 = join(tempRoot, "grok1-auth.json");
+    const grok2 = join(tempRoot, "grok2-auth.json");
+    const previousGrok1 = process.env.GROK_OAUTH_1_AUTH_FILE;
+    const previousGrok2 = process.env.GROK_OAUTH_2_AUTH_FILE;
+
+    process.env.GROK_OAUTH_1_AUTH_FILE = grok1;
+    process.env.GROK_OAUTH_2_AUTH_FILE = grok2;
+
+    try {
+      await writeFile(
+        grok1,
+        JSON.stringify({
+          "https://auth.x.ai::demo": {
+            email: "choiminwoong@gmail.com",
+            team_id: "team-1",
+            refresh_token: "grok-refresh-token-1",
+            expires_at: "2026-05-25T00:00:00.000Z",
+          },
+        }),
+        "utf8",
+      );
+      await writeFile(
+        grok2,
+        JSON.stringify({
+          "https://auth.x.ai::demo": {
+            email: "choiminwoongj@gmail.com",
+            team_id: "team-2",
+            refresh_token: "grok-refresh-token-2",
+            expires_at: "2026-05-16T00:00:00.000Z",
+          },
+        }),
+        "utf8",
+      );
+
+      const registry = await createServerProviderRegistrySnapshot({
+        now: "2026-05-24T00:00:00.000Z",
+      });
+      const grokAccount1 = registry.entries.find((entry) => entry.providerProfileId === "provider_grok_oauth_dgx");
+      const grokAccount2 = registry.entries.find((entry) => entry.providerProfileId === "provider_grok_oauth_dgx_2");
+
+      expect(grokAccount1?.name).toContain("choiminwoong@gmail.com");
+      expect(grokAccount1?.secretAvailability).toBe("available");
+      expect(grokAccount1?.secretSourceRefs).toContain("account:choiminwoong@gmail.com");
+      expect(grokAccount2?.name).toContain("choiminwoongj@gmail.com");
+      expect(grokAccount2?.secretAvailability).toBe("expired");
+      expect(grokAccount2?.tags).toContain("oauth-expired");
+      expect(grokAccount2?.secretSourceRefs).toContain("account:choiminwoongj@gmail.com");
+      expect(JSON.stringify(registry)).not.toContain("grok-refresh-token");
+    } finally {
+      if (previousGrok1 === undefined) {
+        delete process.env.GROK_OAUTH_1_AUTH_FILE;
+      } else {
+        process.env.GROK_OAUTH_1_AUTH_FILE = previousGrok1;
+      }
+      if (previousGrok2 === undefined) {
+        delete process.env.GROK_OAUTH_2_AUTH_FILE;
+      } else {
+        process.env.GROK_OAUTH_2_AUTH_FILE = previousGrok2;
+      }
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it("uses static APIFun model allowlist without calling remote /models", async () => {
     const discovery = await createServerProviderModelDiscoveryResponse("provider_apifun_claude", {
       now: "2026-05-24T00:00:00.000Z",
