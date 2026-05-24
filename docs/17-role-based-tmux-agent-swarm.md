@@ -4,7 +4,7 @@
 
 This document defines a future development and execution workflow for AI Orchestrator Lab.
 
-This is **not part of the v0 required implementation path**.
+The desktop preview and safe shell helpers are now part of the implementation path.
 
 The v0 priority remains:
 
@@ -17,9 +17,13 @@ Conversation Workbench
 -> Obsidian Markdown Export
 ```
 
-Until the protocol package, permission model, Event Store, redaction layer, and basic execution slot UI are stable, Codex must **not** implement real tmux execution.
+The first implemented tmux layer is deliberately conservative:
 
-Codex may only prepare types, documentation, UI concepts, and execution-slot abstractions that make future tmux swarm integration possible.
+- `scripts/setup-agent-swarm.sh` creates the local `ai-swarm` session and records pane ids.
+- `scripts/swarm-send.sh` dispatches to stored pane ids by role.
+- Gemini CLI remains disconnected until CLI setup is done.
+- The helper refuses obvious secret-bearing command text.
+- The desktop UI still treats tmux as a permissioned execution backend, not an untracked side channel.
 
 ## Why This Fits the Product
 
@@ -282,15 +286,15 @@ The system must redact:
 
 If a command contains secrets, only redacted command text may be recorded.
 
-## Future Setup Script
+## Setup Script
 
-When the execution foundation is ready, Codex may create:
+The repository includes:
 
 ```text
 scripts/setup-agent-swarm.sh
 ```
 
-This script should:
+This script:
 
 1. create or reset the `ai-swarm` tmux session;
 2. build the two-zone layout;
@@ -313,9 +317,9 @@ printf "\033]2;%s\033\\"
 
 The script should prefer stored pane IDs like `%3`, `%4`, etc. over assumptions such as `ai-swarm:0.6`.
 
-## Future Helper Script
+## Helper Script
 
-When the swarm is implemented, Codex may also create:
+The repository includes:
 
 ```text
 scripts/swarm-send.sh
@@ -345,7 +349,7 @@ scripts/swarm-send.sh backend "codex 'Implement SQLite Event Store adapter skele
 scripts/swarm-send.sh qa "pnpm typecheck && pnpm test"
 ```
 
-This is only allowed after the permission and event model are stable enough to record these actions.
+The helper is role-based and uses stored pane ids instead of fragile pane indexes. It also refuses command text that appears to contain API keys, bearer tokens, or private key material.
 
 ## Orchestration Rules
 
@@ -460,8 +464,6 @@ Agent setting controls must allow:
 
 ## Summary
 
-The Role-Based Tmux Agent Swarm fits AI Orchestrator Lab, but it is not the first implementation target.
+The Role-Based Tmux Agent Swarm fits AI Orchestrator Lab and now has a safe local helper implementation.
 
-It should eventually become the local runtime layer for role-based CLI agents.
-
-For now, Codex should preserve the product direction, prepare compatible types and UI boundaries, and avoid implementing real tmux execution too early.
+It is still governed by the Event Store, Permission Matrix, Redaction Layer, and human-visible orchestration rules.

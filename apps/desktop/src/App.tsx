@@ -736,6 +736,7 @@ export function App() {
   const [runtimeSnapshotState, setRuntimeSnapshotState] = useState<RuntimeSnapshot>(runtimeSnapshot);
   const eventOutboxStorage = useMemo(() => createDesktopOutboxStorage(), []);
   const [eventOutbox, setEventOutbox] = useState<EventEnvelope[]>(() => eventOutboxStorage.load());
+  const [activeNavItem, setActiveNavItem] = useState<NavItemId>("sessions");
   const [providerRegistrationOpen, setProviderRegistrationOpen] = useState(false);
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(seededProviderProfiles);
   const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(seededModelCatalog);
@@ -2231,17 +2232,17 @@ export function App() {
 
           <nav className="nav-stack">
             {navItems.map((item) => {
-              const isActive =
-                item.id === "providers" ? providerRegistrationOpen : item.id === "sessions" && !providerRegistrationOpen;
+              const isActive = activeNavItem === item.id;
               return (
                 <button
-                  aria-expanded={item.id === "providers" ? providerRegistrationOpen : undefined}
+                  aria-expanded={isActive}
                   className={`nav-item ${isActive ? "active" : ""}`}
                   key={item.id}
-                  onClick={
-                    item.id === "providers" ? () => setProviderRegistrationOpen((current) => !current) : undefined
-                  }
-                  title={item.id === "providers" ? "provider 등록 메뉴" : item.label}
+                  onClick={() => {
+                    setActiveNavItem(item.id);
+                    setProviderRegistrationOpen(item.id === "providers");
+                  }}
+                  title={`${item.label} 메뉴`}
                   type="button"
                 >
                   <item.icon size={18} />
@@ -2255,7 +2256,10 @@ export function App() {
             <ProviderRegistrationMenu
               modelCatalog={modelCatalog}
               modelDiscoveryByProviderId={modelDiscoveryByProviderId}
-              onClose={() => setProviderRegistrationOpen(false)}
+              onClose={() => {
+                setProviderRegistrationOpen(false);
+                setActiveNavItem("sessions");
+              }}
               onDiscoverModels={handleDiscoverProviderModels}
               onRemoveProvider={handleRemoveProvider}
               onRenameProvider={handleRenameProvider}
@@ -2265,7 +2269,7 @@ export function App() {
             />
           ) : null}
 
-          {!providerRegistrationOpen ? (
+          {activeNavItem === "sessions" ? (
             <>
               <SessionIndexRailPanel
                 activeSessionId={activeSessionId}
@@ -2287,6 +2291,35 @@ export function App() {
                 secretVaultSnapshot={secretVaultSnapshot}
               />
             </>
+          ) : null}
+
+          {activeNavItem === "projects" ? (
+            <ProjectRailPanel
+              agentRun={agentRunState}
+              eventCount={eventLog.length}
+              memoryInspector={memoryInspector}
+              onCreateAgentRun={handleCreateAgentRun}
+              onCreateCodingPacket={handleCreateCodingPacket}
+              packet={codingPacketState}
+              sessionId={activeSessionId}
+            />
+          ) : null}
+
+          {activeNavItem === "channels" ? (
+            <ChannelRailPanel
+              ingressSnapshot={ingressSnapshot}
+              onImportTelegram={handleImportTelegramIngress}
+              permissionSnapshot={permissionSnapshot}
+              runtime={runtimeSnapshotState}
+            />
+          ) : null}
+
+          {activeNavItem === "backup" ? (
+            <BackupRailMenu
+              onExportBackup={handleExportBackupProjections}
+              projections={backupProjectionsState}
+              snapshot={backupSnapshot}
+            />
           ) : null}
 
           <section className="mini-panel legacy-runtime-panel">
@@ -2662,6 +2695,192 @@ function OperationsRailPanel({
           <span>vault</span>
           <strong>{secretVaultSnapshot.summary.available}/{secretVaultSnapshot.entries.length} available</strong>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function ProjectRailPanel({
+  agentRun,
+  eventCount,
+  memoryInspector,
+  onCreateAgentRun,
+  onCreateCodingPacket,
+  packet,
+  sessionId,
+}: {
+  agentRun: Stage4AgentRun;
+  eventCount: number;
+  memoryInspector: Stage6MemoryInspector;
+  onCreateAgentRun: () => void;
+  onCreateCodingPacket: () => void;
+  packet: CodingPacket;
+  sessionId: string;
+}) {
+  const visibleSteps = agentRun.steps.slice(0, 4);
+
+  return (
+    <section className="mini-panel rail-panel project-rail-panel">
+      <header>
+        <LayoutDashboard size={16} />
+        <span>Project</span>
+        <div className="rail-action-row">
+          <button className="rail-icon-button" onClick={onCreateCodingPacket} title="Coding Packet 생성" type="button">
+            <Send size={13} />
+          </button>
+          <button className="rail-icon-button" onClick={onCreateAgentRun} title="Agent Run 준비" type="button">
+            <Play size={13} />
+          </button>
+        </div>
+      </header>
+      <div className="rail-hero-card">
+        <span>active session</span>
+        <strong>{sessionId}</strong>
+        <p>{packet.goal}</p>
+      </div>
+      <div className="rail-stat-list">
+        <div>
+          <span>events</span>
+          <strong>{eventCount}</strong>
+        </div>
+        <div>
+          <span>decisions</span>
+          <strong>{packet.decisions.length}</strong>
+        </div>
+        <div>
+          <span>memory recall</span>
+          <strong>{memoryInspector.trace.results.length}</strong>
+        </div>
+        <div>
+          <span>run status</span>
+          <strong>{agentRun.status}</strong>
+        </div>
+      </div>
+      <div className="rail-card-list">
+        {visibleSteps.map((step) => (
+          <article key={step.id}>
+            <strong>{step.title}</strong>
+            <span>{step.status} / {step.permissionState}</span>
+            <p>{step.summary}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ChannelRailPanel({
+  ingressSnapshot,
+  onImportTelegram,
+  permissionSnapshot,
+  runtime,
+}: {
+  ingressSnapshot: Stage8IngressSnapshot;
+  onImportTelegram: () => void;
+  permissionSnapshot: PermissionMatrixSnapshot;
+  runtime: RuntimeSnapshot;
+}) {
+  const visibleSteps = ingressSnapshot.result.guardSteps.slice(0, 7);
+  const channels = [
+    { label: "Telegram", status: ingressSnapshot.channel === "telegram" ? "linked" : "ready" },
+    { label: "OpenClaw Bridge", status: "pending adapter" },
+    { label: "Mobile", status: runtime.dgxStatus === "online" ? "approval ready" : "read-only pending" },
+    { label: "API", status: "guarded ingress" },
+  ];
+
+  return (
+    <section className="mini-panel rail-panel channel-rail-panel">
+      <header>
+        <RadioTower size={16} />
+        <span>Channels</span>
+        <button className="rail-icon-button" onClick={onImportTelegram} title="Telegram에서 이어받기" type="button">
+          <Smartphone size={13} />
+        </button>
+      </header>
+      <div className="rail-card-list compact">
+        {channels.map((channel) => (
+          <article key={channel.label}>
+            <strong>{channel.label}</strong>
+            <span>{channel.status}</span>
+          </article>
+        ))}
+      </div>
+      <div className="rail-hero-card">
+        <span>ingress confidence</span>
+        <strong>{ingressSnapshot.result.confidence} / {ingressSnapshot.result.approvalState}</strong>
+        <p>{ingressSnapshot.result.reason}</p>
+      </div>
+      <div className="rail-card-list">
+        {visibleSteps.map((step) => (
+          <article className={step.status} key={step.name}>
+            <strong>{guardStepLabel(step.name)}</strong>
+            <span>{step.status}</span>
+            <p>{step.reason}</p>
+          </article>
+        ))}
+      </div>
+      <div className="rail-stat-list">
+        <div>
+          <span>permission queue</span>
+          <strong>{permissionSnapshot.summary.pending}</strong>
+        </div>
+        <div>
+          <span>0-token safety</span>
+          <strong>{ingressSnapshot.zeroTokenSafety.enabled ? ingressSnapshot.zeroTokenSafety.cadence : "off"}</strong>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function BackupRailMenu({
+  onExportBackup,
+  projections,
+  snapshot,
+}: {
+  onExportBackup: () => void;
+  projections: BackupProjection[];
+  snapshot: Stage7BackupSnapshot;
+}) {
+  return (
+    <section className="mini-panel rail-panel backup-rail-panel">
+      <header>
+        <Archive size={16} />
+        <span>Backup</span>
+        <button className="rail-icon-button" onClick={onExportBackup} title="Projection 생성" type="button">
+          <RefreshCw size={13} />
+        </button>
+      </header>
+      <div className="rail-stat-list">
+        <div>
+          <span>ready</span>
+          <strong>{snapshot.summary.ready}</strong>
+        </div>
+        <div>
+          <span>queued</span>
+          <strong>{snapshot.summary.queued}</strong>
+        </div>
+        <div>
+          <span>redacted</span>
+          <strong>{snapshot.summary.redacted}</strong>
+        </div>
+      </div>
+      <div className="rail-card-list compact">
+        {projections.map((projection) => (
+          <article key={projection.id}>
+            <strong>{projection.target}</strong>
+            <span>{projection.status} / redaction {projection.redactionApplied ? "on" : "off"}</span>
+          </article>
+        ))}
+      </div>
+      <div className="rail-card-list">
+        {snapshot.artifacts.map((artifact) => (
+          <article className={artifact.status} key={artifact.id}>
+            <strong>{artifact.title}</strong>
+            <span>{artifact.target} / {artifact.format}</span>
+            <p>{artifact.destination}</p>
+          </article>
+        ))}
       </div>
     </section>
   );
