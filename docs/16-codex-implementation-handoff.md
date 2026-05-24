@@ -147,3 +147,16 @@ Debate Mode는 모델별 말풍선 나열이 아니라 의사결정 엔진이다
 - Runtime Status Bar는 online/degraded/offline/syncing 상태를 표현한다.
 - EventStore interface와 permission 타입이 protocol에 존재한다.
 
+## Future Local Agent Swarm
+
+A future role-based tmux workflow is defined in:
+
+```text
+docs/17-role-based-tmux-agent-swarm.md
+```
+
+This is not part of the v0 required implementation path.
+
+Codex must not implement real tmux execution until the protocol package, Event Store, Redaction Layer, Permission Matrix, Coding Packet flow, and execution slot UI stub are stable.
+
+For now, Codex may only prepare types, UI concepts, and documentation that make future swarm integration possible.
