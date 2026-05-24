@@ -145,14 +145,17 @@ type AgentActivityStatus = "idle" | "preparing" | "responding";
 type WorkbenchAgent = AgentProfile;
 type ModelCatalog = Record<string, ModelDescriptor[]>;
 type ProviderRegistrationMode = "api_key" | "cli" | "oauth";
-type AgentConfigTab = "profile" | "soul" | "agents_md" | "voice" | "injection" | "preview" | "edit";
+type AgentConfigTab = "profile" | "soul" | "agents_md" | "creativity" | "injection" | "preview" | "edit";
 type AgentVoicePreset = "direct" | "calm" | "architect" | "reviewer" | "executor";
+type AgentCreativityLevel = "strict" | "focused" | "balanced" | "creative" | "experimental";
 type DraftAttachment = ConversationAttachment;
 type AgentPersonaSettings = {
   voicePreset: AgentVoicePreset;
+  creativityLevel: AgentCreativityLevel;
   agentsMdPath: string;
   soulMdPath: string;
   soulSummary: string;
+  soulExampleDialogue: string;
   agentsInstruction: string;
   forbiddenStyle: string;
 };
@@ -164,7 +167,7 @@ type NavItem = {
 };
 
 const modelWindowSize = 8;
-const maxDraftAttachments = 3;
+const maxDraftAttachments = 5;
 
 const now = new Date("2026-05-24T00:20:00.000+09:00").toISOString();
 
@@ -269,9 +272,11 @@ function createDefaultPersonaSettings(agent: WorkbenchAgent): AgentPersonaSettin
   const slug = slugifyProviderName(agent.name, agent.id);
   return {
     voicePreset: agent.role === "reviewer" ? "reviewer" : agent.role === "executor" ? "executor" : "direct",
+    creativityLevel: agent.role === "architect" || agent.role === "skeptic" ? "creative" : "balanced",
     agentsMdPath: `agents/${slug}/AGENTS.md`,
     soulMdPath: `agents/${slug}/SOUL.md`,
     soulSummary: `${agent.name}는 ${agentRoleLabel(agent.role)} 역할로, 현재 세션의 목표를 끝까지 작업 결과로 연결한다.`,
+    soulExampleDialogue: `사용자: 이 방향 괜찮아?\n${agent.name}: 먼저 결정 기준을 짚고, 위험한 가정은 분리해서 말하겠습니다.`,
     agentsInstruction: "권한 경계, provider 선택, 실행 승인, 검증 계획을 먼저 확인한다.",
     forbiddenStyle: "근거 없는 확신, 장황한 말투, 승인 없는 실행",
   };
@@ -2255,7 +2260,6 @@ export function App() {
               onPromoteToDebate={handlePromoteToDebate}
               onRemoveDraftAttachment={handleRemoveDraftAttachment}
               onSelectAgent={setSelectedAgentId}
-              onSelectAgentConfigTab={(tab) => setAgentConfigPanel((panel) => ({ ...panel, tab }))}
               onSendMessage={handleSendMessageStage2}
               onCloseAgentConfig={() => setAgentConfigPanel((panel) => ({ ...panel, open: false }))}
               onOpenAgentConfig={openAgentConfigPanel}
@@ -2591,6 +2595,44 @@ function voicePresetLabel(preset: AgentVoicePreset) {
   return labels[preset];
 }
 
+function creativityLevelLabel(level: AgentCreativityLevel) {
+  const labels: Record<AgentCreativityLevel, string> = {
+    strict: "보수적",
+    focused: "신중",
+    balanced: "균형",
+    creative: "창의적",
+    experimental: "실험적",
+  };
+
+  return labels[level];
+}
+
+function creativityTemperature(level: AgentCreativityLevel) {
+  const temperatures: Record<AgentCreativityLevel, number> = {
+    strict: 0.2,
+    focused: 0.4,
+    balanced: 0.7,
+    creative: 1,
+    experimental: 1.2,
+  };
+
+  return temperatures[level];
+}
+
+function agentConfigPanelTitle(tab: AgentConfigTab) {
+  const labels: Record<AgentConfigTab, string> = {
+    agents_md: "AGENTS.md 설정",
+    creativity: "창의성 설정",
+    edit: "설정 소스",
+    injection: "주입 방식",
+    preview: "프롬프트 미리보기",
+    profile: "프로필",
+    soul: "SOUL.md 설정",
+  };
+
+  return labels[tab];
+}
+
 function memoryLayerLabel(layer: MemoryRecord["layer"]) {
   const labels: Record<MemoryRecord["layer"], string> = {
     episode: "작업 에피소드",
@@ -2645,7 +2687,6 @@ function ConversationWorkbench({
   onPromoteToDebate,
   onRemoveDraftAttachment,
   onSelectAgent,
-  onSelectAgentConfigTab,
   onSendMessage,
   onCloseAgentConfig,
   onOpenAgentConfig,
@@ -2673,7 +2714,6 @@ function ConversationWorkbench({
   onPromoteToDebate: () => void;
   onRemoveDraftAttachment: (attachmentId: string) => void;
   onSelectAgent: (agentId: string) => void;
-  onSelectAgentConfigTab: (tab: AgentConfigTab) => void;
   onSendMessage: () => void;
   onCloseAgentConfig: () => void;
   onOpenAgentConfig: (tab: AgentConfigTab) => void;
@@ -2733,7 +2773,6 @@ function ConversationWorkbench({
           agent={selectedAgent}
           memoryMode={memoryMode}
           onClose={onCloseAgentConfig}
-          onSelectTab={onSelectAgentConfigTab}
           onUpdateAgentConfig={onUpdateAgentConfig}
           onUpdatePersona={onUpdateAgentPersona}
           persona={persona}
@@ -2881,15 +2920,18 @@ function AgentProfileStrip({
 }) {
   const chips: Array<{ tab: AgentConfigTab; label: string; value: string }> = [
     { tab: "profile", label: "Profile", value: selectedAgent ? agentRoleLabel(selectedAgent.role) : "대기" },
-    { tab: "soul", label: "Soul", value: selectedAgent ? soulModeLabel(selectedAgent.soulMode) : "off" },
-    { tab: "voice", label: "Voice", value: persona ? voicePresetLabel(persona.voicePreset) : "기본" },
+    { tab: "soul", label: "SOUL.md", value: selectedAgent ? soulModeLabel(selectedAgent.soulMode) : "off" },
+    {
+      tab: "creativity",
+      label: "창의성",
+      value: persona ? creativityLevelLabel(persona.creativityLevel) : "균형",
+    },
     { tab: "injection", label: "Memory", value: memoryMode },
     {
       tab: "agents_md",
       label: "AGENTS.md",
       value: selectedAgent?.configSource === "markdown" ? "active" : "view",
     },
-    { tab: "soul", label: "SOUL.md", value: persona?.soulMdPath.split("/").at(-1) ?? "view" },
     { tab: "preview", label: "Preview", value: selectedAgent?.configSource ?? "off" },
     { tab: "edit", label: "Edit", value: "settings" },
   ];
@@ -2911,7 +2953,6 @@ function AgentConfigDrawer({
   agent,
   memoryMode,
   onClose,
-  onSelectTab,
   onUpdateAgentConfig,
   onUpdatePersona,
   persona,
@@ -2921,47 +2962,22 @@ function AgentConfigDrawer({
   agent: WorkbenchAgent;
   memoryMode: string;
   onClose: () => void;
-  onSelectTab: (tab: AgentConfigTab) => void;
   onUpdateAgentConfig: (patch: Partial<Pick<WorkbenchAgent, "configSource" | "soulMode">>) => void;
   onUpdatePersona: (patch: Partial<AgentPersonaSettings>) => void;
   persona: AgentPersonaSettings;
   provider?: ProviderProfile;
 }) {
-  const tabs: Array<{ id: AgentConfigTab; label: string }> = [
-    { id: "profile", label: "Profile" },
-    { id: "soul", label: "SOUL.md" },
-    { id: "agents_md", label: "AGENTS.md" },
-    { id: "voice", label: "Voice" },
-    { id: "injection", label: "Injection" },
-    { id: "preview", label: "Preview" },
-    { id: "edit", label: "Edit" },
-  ];
-
   return (
     <aside className="agent-config-drawer" aria-label="Agent profile settings">
       <header>
         <div>
-          <span>Agent Profile / Soul</span>
+          <span>{agentConfigPanelTitle(activeTab)}</span>
           <strong>{agent.name}</strong>
         </div>
         <button aria-label="Agent 설정 닫기" className="rail-icon-button" onClick={onClose} type="button">
           <ChevronRight size={14} />
         </button>
       </header>
-      <div className="agent-config-tabs" role="tablist" aria-label="Agent config tabs">
-        {tabs.map((tab) => (
-          <button
-            aria-selected={activeTab === tab.id}
-            className={activeTab === tab.id ? "active" : ""}
-            key={tab.id}
-            onClick={() => onSelectTab(tab.id)}
-            role="tab"
-            type="button"
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
       <div className="agent-config-body">
         {activeTab === "profile" ? (
           <div className="agent-config-grid">
@@ -2984,18 +3000,54 @@ function AgentConfigDrawer({
           </div>
         ) : null}
         {activeTab === "soul" ? (
-          <div className="agent-config-stack">
+          <div className="agent-config-stack soul-config-panel">
             <label>
               <span>SOUL.md 경로</span>
               <input value={persona.soulMdPath} onChange={(event) => onUpdatePersona({ soulMdPath: event.target.value })} />
             </label>
             <label>
-              <span>정체성 요약</span>
+              <span>SOUL.md 본문</span>
               <textarea
                 value={persona.soulSummary}
                 onChange={(event) => onUpdatePersona({ soulSummary: event.target.value })}
               />
             </label>
+            <label>
+              <span>예시 대화</span>
+              <textarea
+                value={persona.soulExampleDialogue}
+                onChange={(event) => onUpdatePersona({ soulExampleDialogue: event.target.value })}
+              />
+            </label>
+            <label>
+              <span>SOUL.md가 없을 때 쓸 제안 소울</span>
+              <select
+                value={persona.voicePreset}
+                onChange={(event) => onUpdatePersona({ voicePreset: event.target.value as AgentVoicePreset })}
+              >
+                {(["direct", "calm", "architect", "reviewer", "executor"] as AgentVoicePreset[]).map((preset) => (
+                  <option key={preset} value={preset}>
+                    {voicePresetLabel(preset)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Soul Mode</span>
+              <select
+                value={agent.soulMode}
+                onChange={(event) => onUpdateAgentConfig({ soulMode: event.target.value as WorkbenchAgent["soulMode"] })}
+                disabled={agent.configSource === "off"}
+              >
+                <option value="full">full</option>
+                <option value="summary">summary</option>
+                <option value="retrieved">retrieved</option>
+                <option value="off">off</option>
+              </select>
+            </label>
+            <p className="agent-config-note">
+              이 화면은 SOUL.md만 다룹니다. AGENTS.md, 권한, 실행 소스는 중앙 컨트롤 바에서 각각 따로 열어 수정합니다.
+            </p>
           </div>
         ) : null}
         {activeTab === "agents_md" ? (
@@ -3016,21 +3068,26 @@ function AgentConfigDrawer({
             </label>
           </div>
         ) : null}
-        {activeTab === "voice" ? (
+        {activeTab === "creativity" ? (
           <div className="agent-config-stack">
-            <label>
-              <span>Voice preset</span>
-              <select
-                value={persona.voicePreset}
-                onChange={(event) => onUpdatePersona({ voicePreset: event.target.value as AgentVoicePreset })}
-              >
-                {(["direct", "calm", "architect", "reviewer", "executor"] as AgentVoicePreset[]).map((preset) => (
-                  <option key={preset} value={preset}>
-                    {voicePresetLabel(preset)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="creativity-options" role="radiogroup" aria-label="창의성 단계">
+              {(["strict", "focused", "balanced", "creative", "experimental"] as AgentCreativityLevel[]).map((level) => (
+                <button
+                  aria-checked={persona.creativityLevel === level}
+                  className={persona.creativityLevel === level ? "active" : ""}
+                  key={level}
+                  onClick={() => onUpdatePersona({ creativityLevel: level })}
+                  role="radio"
+                  type="button"
+                >
+                  <strong>{creativityLevelLabel(level)}</strong>
+                  <span>temp {creativityTemperature(level).toFixed(1)}</span>
+                </button>
+              ))}
+            </div>
+            <p className="agent-config-note">
+              보수적일수록 검증과 일관성을 우선하고, 창의적일수록 새로운 제안과 대안을 더 적극적으로 냅니다.
+            </p>
             <label>
               <span>금기 / 피할 말투</span>
               <textarea
@@ -3077,11 +3134,15 @@ function AgentConfigDrawer({
           <pre className="agent-config-preview">
 {`source: ${agent.configSource}
 soulMode: ${agent.soulMode}
-voice: ${voicePresetLabel(persona.voicePreset)}
+fallbackSoul: ${voicePresetLabel(persona.voicePreset)}
+creativity: ${creativityLevelLabel(persona.creativityLevel)} / temperature ${creativityTemperature(persona.creativityLevel).toFixed(1)}
 AGENTS.md: ${agent.configSource === "markdown" ? persona.agentsMdPath : "not injected"}
 SOUL.md: ${agent.configSource === "markdown" ? persona.soulMdPath : "not injected"}
 
 ${agent.configSource === "internal" ? persona.soulSummary : "markdown source selected; file content will be loaded by path"}
+example:
+${persona.soulExampleDialogue}
+
 ${persona.agentsInstruction}
 avoid: ${persona.forbiddenStyle}`}
           </pre>
