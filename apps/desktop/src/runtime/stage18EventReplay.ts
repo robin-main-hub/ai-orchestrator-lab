@@ -1,4 +1,5 @@
 import type { ConversationMessage, EventEnvelope, EventSyncPullResponse } from "@ai-orchestrator/protocol";
+import { DEFAULT_DGX_SERVER_BASE_URL } from "./stage30DgxEndpoints";
 
 export type Stage18EventReplayStatus = "restored" | "empty" | "failed";
 
@@ -32,7 +33,7 @@ type ConversationMessageCreatedPayload = {
   sourceTrust?: string;
 };
 
-const DEFAULT_DGX_EVENT_REPLAY_BASE_URL = "http://dgx-02:4317";
+const DEFAULT_DGX_EVENT_REPLAY_BASE_URL = DEFAULT_DGX_SERVER_BASE_URL;
 
 export async function pullAndReplayDgxEventStorage({
   sessionId = "session_desktop_001",

@@ -1,4 +1,7 @@
-const baseUrl = process.env.DGX_SERVER_BASE_URL ?? "http://dgx-02:4317";
+const baseUrlCandidates = process.env.DGX_SERVER_BASE_URL
+  ? [process.env.DGX_SERVER_BASE_URL]
+  : ["https://orchestrator.endruin.com", "http://dgx-02:4317"];
+const baseUrl = await selectReachableBaseUrl(baseUrlCandidates);
 const smokeSessionId = process.env.SMOKE_SESSION_ID ?? "session_smoke";
 const smokeEventId = process.env.SMOKE_EVENT_ID ?? `event_smoke_${Date.now()}`;
 
@@ -99,4 +102,19 @@ async function readJson(url, init) {
   }
 
   return JSON.parse(rawText);
+}
+
+async function selectReachableBaseUrl(candidates) {
+  const errors = [];
+  for (const candidate of candidates) {
+    const normalized = candidate.replace(/\/$/, "");
+    try {
+      await readJson(`${normalized}/health`);
+      return normalized;
+    } catch (error) {
+      errors.push(`${normalized}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  throw new Error(`No DGX server base URL reachable. ${errors.join(" | ")}`);
 }

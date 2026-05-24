@@ -6,6 +6,7 @@ import type {
   ProviderCompletionUsage,
   ProviderProfile,
 } from "@ai-orchestrator/protocol";
+import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
 
 type DgxCompletionChoice = {
   message?: {
@@ -27,7 +28,7 @@ export type Stage12DgxCompletionInput = {
   modelId: string;
   messages: ConversationMessage[];
   fetchImpl?: typeof fetch;
-  proxyBaseUrl?: string;
+  proxyBaseUrl?: string | string[];
   proxyTimeoutMs?: number;
   allowDirectFallback?: boolean;
 };
@@ -39,8 +40,6 @@ export type Stage12DgxCompletionResult = {
   usage?: ProviderCompletionUsage;
   fallbackReason?: string;
 };
-
-const DEFAULT_DGX_PROXY_BASE_URL = "http://dgx-02:4317";
 
 export function isDgxVllmProvider(provider?: ProviderProfile) {
   return Boolean(provider?.tags.includes("dgx") && provider.tags.includes("vllm"));
@@ -55,12 +54,12 @@ export async function requestDgxVllmCompletion({
   modelId,
   messages,
   fetchImpl = fetch,
-  proxyBaseUrl = DEFAULT_DGX_PROXY_BASE_URL,
+  proxyBaseUrl,
   proxyTimeoutMs = 1_500,
   allowDirectFallback = true,
 }: Stage12DgxCompletionInput): Promise<Stage12DgxCompletionResult> {
   try {
-    return await requestDgxVllmCompletionViaProxy({
+    return await requestDgxProviderCompletionViaProxyFallback({
       provider,
       modelId,
       messages,
@@ -91,7 +90,7 @@ export async function requestDgxProviderCompletion({
   modelId,
   messages,
   fetchImpl = fetch,
-  proxyBaseUrl = DEFAULT_DGX_PROXY_BASE_URL,
+  proxyBaseUrl,
   proxyTimeoutMs = 1_500,
 }: Stage12DgxCompletionInput): Promise<Stage12DgxCompletionResult> {
   if (isDgxVllmProvider(provider)) {
@@ -105,7 +104,7 @@ export async function requestDgxProviderCompletion({
     });
   }
 
-  return requestDgxVllmCompletionViaProxy({
+  return requestDgxProviderCompletionViaProxyFallback({
     provider,
     modelId,
     messages,
@@ -135,6 +134,34 @@ export function createProviderCompletionProxyRequest(
   };
 }
 
+async function requestDgxProviderCompletionViaProxyFallback({
+  provider,
+  modelId,
+  messages,
+  fetchImpl,
+  proxyBaseUrl,
+  proxyTimeoutMs,
+}: Required<Pick<Stage12DgxCompletionInput, "provider" | "modelId" | "messages" | "fetchImpl" | "proxyTimeoutMs">> &
+  Pick<Stage12DgxCompletionInput, "proxyBaseUrl">): Promise<Stage12DgxCompletionResult> {
+  let lastError: unknown;
+  for (const baseUrl of resolveDgxServerBaseUrls(proxyBaseUrl)) {
+    try {
+      return await requestDgxVllmCompletionViaProxy({
+        provider,
+        modelId,
+        messages,
+        fetchImpl,
+        proxyBaseUrl: baseUrl,
+        proxyTimeoutMs,
+      });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? "DGX-02 server proxy unavailable"));
+}
+
 async function requestDgxVllmCompletionViaProxy({
   provider,
   modelId,
@@ -143,7 +170,7 @@ async function requestDgxVllmCompletionViaProxy({
   proxyBaseUrl,
   proxyTimeoutMs,
 }: Required<Pick<Stage12DgxCompletionInput, "provider" | "modelId" | "messages" | "fetchImpl" | "proxyBaseUrl" | "proxyTimeoutMs">>): Promise<Stage12DgxCompletionResult> {
-  const endpoint = `${proxyBaseUrl.replace(/\/$/, "")}/provider-completions`;
+  const endpoint = `${String(proxyBaseUrl).replace(/\/$/, "")}/provider-completions`;
   const response = await fetchWithTimeout(
     fetchImpl,
     endpoint,

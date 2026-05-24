@@ -4,6 +4,7 @@ import type {
   EventSyncPushRequest,
   EventSyncPushResponse,
 } from "@ai-orchestrator/protocol";
+import { DEFAULT_DGX_SERVER_BASE_URL } from "./stage30DgxEndpoints";
 
 export type Stage14EventSyncStatus = "synced" | "syncing" | "queued" | "failed";
 
@@ -33,7 +34,7 @@ export type Stage14EventSyncInput = {
   createdAt?: string;
 };
 
-const DEFAULT_DGX_EVENT_SYNC_BASE_URL = "http://dgx-02:4317";
+const DEFAULT_DGX_EVENT_SYNC_BASE_URL = DEFAULT_DGX_SERVER_BASE_URL;
 
 export function createInitialEventSyncState(outboxCount = 0): Stage14EventSyncState {
   return {

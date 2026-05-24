@@ -96,6 +96,7 @@ import {
   requestDgxProviderCompletion,
 } from "./runtime/stage12DgxProvider";
 import { fetchDgxProviderModelDiscovery, probeDgxOrchestratorServer } from "./runtime/stage13DgxServer";
+import { DEFAULT_DGX_SERVER_BASE_URL } from "./runtime/stage30DgxEndpoints";
 import {
   createInitialEventSyncState,
   pushEventsToDgxEventStorage,
@@ -209,7 +210,7 @@ const maxDraftAttachments = 5;
 const agentVisualStorageKey = "ai-orchestrator-lab.agent-visuals.v1";
 const providerProfilesStorageKey = "ai-orchestrator-lab.provider-profiles.v1";
 const providerProfilesSeedVersionKey = "ai-orchestrator-lab.provider-profiles.seed-version";
-const providerProfilesSeedVersion = "2026-05-25-dgx-provider-seeds";
+const providerProfilesSeedVersion = "2026-05-25-endruin-domain-seeds";
 const defaultObsidianVaultRoot = "F:/obsidian/ai-headquarter";
 
 const agentRoleOptions: WorkbenchAgent["role"][] = [
@@ -742,7 +743,7 @@ const seededProviderProfiles: ProviderProfile[] = [
       id: "provider_grok_oauth_dgx",
       name: "Grok OAuth on DGX-02",
       kind: "custom",
-      baseUrl: "http://dgx-02:4317/provider-proxy/grok",
+      baseUrl: `${DEFAULT_DGX_SERVER_BASE_URL}/provider-proxy/grok`,
       defaultModel: "grok-oauth-session",
       tags: ["oauth", "grok", "server-proxy", "dgx"],
       trustLevel: "limited",
@@ -2705,7 +2706,7 @@ export function App() {
 
     appendEvent("dgx.server_probe.started", {
       authorityNodeId,
-      endpoint: "http://dgx-02:4317",
+      endpoint: DEFAULT_DGX_SERVER_BASE_URL,
     });
 
     const probe = await probeDgxOrchestratorServer({
