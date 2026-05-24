@@ -340,6 +340,10 @@ button {
   margin-left: auto;
 }
 
+.rail-panel header .rail-icon-button + .rail-icon-button {
+  margin-left: 0;
+}
+
 .rail-action-row {
   display: flex;
   gap: 5px;
