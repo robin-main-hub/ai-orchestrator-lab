@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   agentProfileSchema,
   agentSessionSchema,
+  assistantDraftSchema,
   codingPacketSchema,
+  evidenceRefSchema,
   eventEnvelopeSchema,
   eventStorageSessionIndexResponseSchema,
   eventSyncPushRequestSchema,
@@ -12,6 +14,8 @@ import {
   terminalCommandIntentSchema,
   terminalPaneSchema,
   tmuxSessionRefSchema,
+  workItemHandoffSchema,
+  workItemSchema,
   workSourceSchema,
   type BackupProjectionArtifact,
   type CodingPacket,
@@ -476,6 +480,101 @@ describe("protocol schemas", () => {
 
     expect(workSourceSchema.parse(source.source)).toBe("legacy_telegram");
     expect(() => workSourceSchema.parse("telegram")).toThrow();
+  });
+
+  it("models work items without storing raw SSOT evidence bodies", () => {
+    const evidence = evidenceRefSchema.parse({
+      id: "evidence_ssot_1",
+      kind: "ssot_reference",
+      reference: "linear://AI-123",
+      title: "Provider policy",
+      summary: "Provider keys must not be persisted raw.",
+      contentHash: "sha256:policy",
+      revision: "rev-7",
+      observedAt: "2026-05-24T00:00:00.000Z",
+    });
+    const item = workItemSchema.parse({
+      id: "work_item_1",
+      sessionId: "session_1",
+      title: "Review provider credential flow",
+      kind: "review",
+      lane: "review",
+      status: "triaged",
+      summary: "Check provider profile handling before live calls.",
+      sourceRefs: [
+        {
+          source: "desktop_manual",
+          observedAt: "2026-05-24T00:00:00.000Z",
+        },
+      ],
+      evidenceRefs: [evidence],
+      missingInfo: [
+        {
+          id: "missing_1",
+          label: "DGX vault path",
+          reason: "Needed before real secret persistence",
+          required: true,
+          status: "missing",
+        },
+      ],
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+
+    expect(item.priority).toBe("normal");
+    expect(item.evidenceRefs[0]?.summary).toContain("Provider keys");
+    expect(() =>
+      evidenceRefSchema.parse({
+        id: "bad_evidence",
+        kind: "ssot_reference",
+        reference: "linear://AI-999",
+        summary: "should reject raw body",
+        rawBody: "full SSOT body must not be stored here",
+      }),
+    ).toThrow();
+  });
+
+  it("models assistant drafts and handoffs to target surfaces", () => {
+    const evidence = {
+      id: "evidence_event_1",
+      kind: "event" as const,
+      reference: "event://event_1",
+      summary: "User asked to create a coding packet.",
+    };
+    const missingInfo = {
+      id: "missing_approval",
+      label: "Operator approval",
+      reason: "External send target requires approval",
+      required: true,
+      status: "missing" as const,
+    };
+    const draft = assistantDraftSchema.parse({
+      id: "draft_1",
+      workItemId: "work_item_1",
+      sessionId: "session_1",
+      title: "Customer reply draft",
+      body: "I will check this and follow up.",
+      targetSurface: "conversation",
+      status: "ready_for_review",
+      confidence: "medium",
+      evidenceRefs: [evidence],
+      missingInfo: [missingInfo],
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+    const handoff = workItemHandoffSchema.parse({
+      id: "handoff_1",
+      workItemId: draft.workItemId,
+      targetSurface: "coding_packet",
+      summary: "Convert reviewed decision into a coding packet.",
+      payloadRef: "coding_packet://packet_1",
+      evidenceRefs: [evidence],
+      missingInfo: [],
+      approvalState: "required",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+
+    expect(draft.status).toBe("ready_for_review");
+    expect(handoff.targetSurface).toBe("coding_packet");
+    expect(handoff.approvalState).toBe("required");
   });
 
   it("models tmux terminal sessions, panes, command intents and captured output", () => {
