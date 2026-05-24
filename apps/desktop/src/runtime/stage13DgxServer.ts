@@ -10,9 +10,21 @@ type DgxServerHealthResponse = {
   status: "ok";
   runtime: RuntimeSnapshot;
   capabilities: string[];
+  eventStorage?: DgxServerEventStorageSnapshot;
 };
 
 export type Stage13DgxServerProbeStatus = "online" | "unreachable";
+
+export type DgxServerEventStorageSnapshot = {
+  mode: "memory" | "jsonl";
+  storageDir: string;
+  eventLogPath: string;
+  revision: number;
+  eventCount: number;
+  sessionCount: number;
+  lastStoredAt?: string;
+  loadedAt: string;
+};
 
 export type Stage13DgxServerProbe = {
   status: Stage13DgxServerProbeStatus;
@@ -20,6 +32,7 @@ export type Stage13DgxServerProbe = {
   runtime: RuntimeSnapshot;
   heartbeat: DgxHeartbeat;
   modelDiscovery?: ModelDiscoverySnapshot;
+  eventStorage?: DgxServerEventStorageSnapshot;
   error?: string;
   checkedAt: string;
   latencyMs?: number;
@@ -57,6 +70,7 @@ export async function probeDgxOrchestratorServer({
       runtime,
       heartbeat,
       modelDiscovery,
+      eventStorage: health.eventStorage,
       checkedAt,
       latencyMs: Date.now() - startedAt,
     };

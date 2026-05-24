@@ -48,3 +48,11 @@ corepack pnpm server:smoke
 ```
 
 DGX-02 user service 예시는 `scripts/dgx-02/ai-orchestrator-server.service`에 있습니다.
+
+## Stage17 Event Storage
+
+- `POST /events/sync`는 accepted 이벤트를 `data/events/events.jsonl`에 append-only로 저장합니다.
+- `GET /events?sessionId=...&afterRevision=...`는 JSONL에서 복원된 서버 revision 기준으로 이벤트를 반환합니다.
+- `GET /event-storage`는 현재 storage mode, JSONL path, revision, event/session count를 반환합니다.
+- `EVENT_STORAGE_DIR=/path/to/events` 환경변수로 저장 위치를 바꿀 수 있습니다.
+- 같은 `SMOKE_EVENT_ID`로 `corepack pnpm server:smoke`를 재실행하면 서버 재시작 후에도 duplicate 판정이 유지되는지 확인할 수 있습니다.

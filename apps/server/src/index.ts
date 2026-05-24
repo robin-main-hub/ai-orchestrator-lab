@@ -1,4 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { mkdir, readFile, appendFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
   DgxHeartbeat,
@@ -32,6 +34,7 @@ export type ServerHealthResponse = {
   status: "ok";
   runtime: RuntimeSnapshot;
   capabilities: ServerCapability[];
+  eventStorage: ServerEventStorageSnapshot;
 };
 
 type FetchLike = (
@@ -74,9 +77,36 @@ export type ServerEventStorageState = {
   eventsById: Map<string, EventEnvelope>;
   eventRevisionsById: Map<string, number>;
   eventsBySession: Map<string, string[]>;
+  lastStoredAt?: string;
 };
 
 const defaultEventStorageState = createServerEventStorageState();
+
+export type ServerEventStorageRecord = {
+  revision: number;
+  storedAt: string;
+  event: EventEnvelope;
+};
+
+export type ServerEventStorageSnapshot = {
+  mode: "memory" | "jsonl";
+  storageDir: string;
+  eventLogPath: string;
+  revision: number;
+  eventCount: number;
+  sessionCount: number;
+  lastStoredAt?: string;
+  loadedAt: string;
+};
+
+export type JsonlServerEventStorage = {
+  mode: "jsonl";
+  storageDir: string;
+  eventLogPath: string;
+  loadedAt: string;
+  statePromise: Promise<ServerEventStorageState>;
+  queue: Promise<void>;
+};
 
 export function createRuntimeSnapshot(now = new Date().toISOString(), probe?: DgxVllmProbe): RuntimeSnapshot {
   const vllmReachable = probe?.status !== "unreachable";
@@ -146,6 +176,12 @@ export function createHealthResponse(now = new Date().toISOString(), probe?: Dgx
       "remote-event-stream-placeholder",
       "memory-sync-placeholder",
     ],
+    eventStorage: createEventStorageSnapshot(defaultEventStorageState, {
+      mode: "memory",
+      storageDir: "memory",
+      eventLogPath: "memory",
+      loadedAt: now,
+    }),
   };
 }
 
@@ -433,6 +469,115 @@ export function createServerEventStorageState(): ServerEventStorageState {
   };
 }
 
+export function createJsonlServerEventStorage(storageDir = getDefaultEventStorageDir()): JsonlServerEventStorage {
+  const resolvedStorageDir = resolve(storageDir);
+  const eventLogPath = join(resolvedStorageDir, "events.jsonl");
+  return {
+    mode: "jsonl",
+    storageDir: resolvedStorageDir,
+    eventLogPath,
+    loadedAt: new Date().toISOString(),
+    statePromise: loadServerEventStorageStateFromJsonl(eventLogPath),
+    queue: Promise.resolve(),
+  };
+}
+
+export async function loadServerEventStorageStateFromJsonl(eventLogPath: string): Promise<ServerEventStorageState> {
+  const state = createServerEventStorageState();
+  let rawText = "";
+
+  try {
+    rawText = await readFile(eventLogPath, "utf8");
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code === "ENOENT") {
+      return state;
+    }
+
+    throw error;
+  }
+
+  for (const line of rawText.split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+
+    const record = parseEventStorageRecord(line);
+    if (!record || state.eventsById.has(record.event.id)) {
+      continue;
+    }
+
+    state.revision = Math.max(state.revision, record.revision);
+    state.eventsById.set(record.event.id, record.event);
+    state.eventRevisionsById.set(record.event.id, record.revision);
+    const sessionEvents = state.eventsBySession.get(record.event.sessionId) ?? [];
+    sessionEvents.push(record.event.id);
+    state.eventsBySession.set(record.event.sessionId, sessionEvents);
+    state.lastStoredAt = record.storedAt;
+  }
+
+  return state;
+}
+
+export async function pushEventsToPersistentServerStorage(
+  request: EventSyncPushRequest,
+  storage: JsonlServerEventStorage,
+  now = new Date().toISOString(),
+): Promise<EventSyncPushResponse> {
+  return enqueueStorageTask(storage, async () => {
+    const state = await storage.statePromise;
+    const response = pushEventsToServerStorage(request, state, now);
+    await appendAcceptedEventsToJsonl(request, response, storage.eventLogPath, now);
+    return response;
+  });
+}
+
+export async function pullEventsFromPersistentServerStorage(
+  sessionId: string,
+  storage: JsonlServerEventStorage,
+  now = new Date().toISOString(),
+  afterRevision = 0,
+): Promise<EventSyncPullResponse> {
+  const state = await storage.statePromise;
+  return pullEventsFromServerStorage(sessionId, state, now, afterRevision);
+}
+
+export async function createPersistentEventStorageSnapshot(
+  storage: JsonlServerEventStorage,
+  now = new Date().toISOString(),
+): Promise<ServerEventStorageSnapshot> {
+  const state = await storage.statePromise;
+  return createEventStorageSnapshot(state, {
+    mode: storage.mode,
+    storageDir: storage.storageDir,
+    eventLogPath: storage.eventLogPath,
+    loadedAt: storage.loadedAt,
+    now,
+  });
+}
+
+export function createEventStorageSnapshot(
+  state: ServerEventStorageState,
+  metadata: {
+    mode: ServerEventStorageSnapshot["mode"];
+    storageDir: string;
+    eventLogPath: string;
+    loadedAt: string;
+    now?: string;
+  },
+): ServerEventStorageSnapshot {
+  return {
+    mode: metadata.mode,
+    storageDir: metadata.storageDir,
+    eventLogPath: metadata.eventLogPath,
+    revision: state.revision,
+    eventCount: state.eventsById.size,
+    sessionCount: state.eventsBySession.size,
+    lastStoredAt: state.lastStoredAt,
+    loadedAt: metadata.loadedAt,
+  };
+}
+
 export function pushEventsToServerStorage(
   request: EventSyncPushRequest,
   state = defaultEventStorageState,
@@ -463,6 +608,7 @@ export function pushEventsToServerStorage(
       const sessionEvents = state.eventsBySession.get(event.sessionId) ?? [];
       sessionEvents.push(event.id);
       state.eventsBySession.set(event.sessionId, sessionEvents);
+      state.lastStoredAt = now;
 
       return {
         eventId: event.id,
@@ -524,6 +670,7 @@ export function pullEventsFromServerStorage(
 }
 
 export function startServer(port = Number(process.env.PORT ?? 4317)) {
+  const eventStorage = createJsonlServerEventStorage();
   const server = createServer(async (request, response) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
     const pathname = requestUrl.pathname;
@@ -535,7 +682,10 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     }
 
     if (pathname === "/health") {
-      writeJson(response, 200, await createLiveHealthResponse());
+      writeJson(response, 200, {
+        ...(await createLiveHealthResponse()),
+        eventStorage: await createPersistentEventStorageSnapshot(eventStorage),
+      } satisfies ServerHealthResponse);
       return;
     }
 
@@ -569,12 +719,22 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     }
 
     if (pathname === "/events/sync" && request.method === "POST") {
+      let payload: EventSyncPushRequest;
       try {
-        const payload = eventSyncPushRequestSchema.parse(await readJsonBody(request)) as EventSyncPushRequest;
-        writeJson(response, 202, pushEventsToServerStorage(payload));
+        payload = eventSyncPushRequestSchema.parse(await readJsonBody(request)) as EventSyncPushRequest;
       } catch (error) {
         writeJson(response, 400, {
           error: "invalid_event_sync_payload",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+
+      try {
+        writeJson(response, 202, await pushEventsToPersistentServerStorage(payload, eventStorage));
+      } catch (error) {
+        writeJson(response, 500, {
+          error: "event_storage_write_failed",
           message: error instanceof Error ? error.message : String(error),
         });
       }
@@ -584,7 +744,12 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     if (pathname === "/events" && request.method === "GET") {
       const sessionId = requestUrl.searchParams.get("sessionId") ?? "session_desktop_001";
       const afterRevision = Number(requestUrl.searchParams.get("afterRevision") ?? 0);
-      writeJson(response, 200, pullEventsFromServerStorage(sessionId, defaultEventStorageState, undefined, afterRevision));
+      writeJson(response, 200, await pullEventsFromPersistentServerStorage(sessionId, eventStorage, undefined, afterRevision));
+      return;
+    }
+
+    if (pathname === "/event-storage" && request.method === "GET") {
+      writeJson(response, 200, await createPersistentEventStorageSnapshot(eventStorage));
       return;
     }
 
@@ -646,6 +811,70 @@ function writeJson(response: ServerResponse, statusCode: number, payload: unknow
     ...createCorsHeaders(),
   });
   response.end(JSON.stringify(payload));
+}
+
+async function appendAcceptedEventsToJsonl(
+  request: EventSyncPushRequest,
+  response: EventSyncPushResponse,
+  eventLogPath: string,
+  storedAt: string,
+) {
+  const records = response.results
+    .filter((result) => result.status === "accepted" && typeof result.serverRevision === "number")
+    .map((result): ServerEventStorageRecord | undefined => {
+      const event = request.events.find((candidate) => candidate.id === result.eventId);
+      if (!event || typeof result.serverRevision !== "number") {
+        return undefined;
+      }
+
+      return {
+        revision: result.serverRevision,
+        storedAt,
+        event,
+      };
+    })
+    .filter((record): record is ServerEventStorageRecord => Boolean(record));
+
+  if (records.length === 0) {
+    return;
+  }
+
+  await mkdir(dirname(eventLogPath), { recursive: true });
+  await appendFile(eventLogPath, `${records.map((record) => JSON.stringify(record)).join("\n")}\n`, "utf8");
+}
+
+async function enqueueStorageTask<T>(storage: JsonlServerEventStorage, task: () => Promise<T>): Promise<T> {
+  const nextTask = storage.queue.catch(() => undefined).then(task);
+  storage.queue = nextTask.then(
+    () => undefined,
+    () => undefined,
+  );
+
+  return nextTask;
+}
+
+function parseEventStorageRecord(line: string): ServerEventStorageRecord | undefined {
+  try {
+    const parsed = JSON.parse(line) as ServerEventStorageRecord;
+    if (
+      typeof parsed.revision !== "number" ||
+      typeof parsed.storedAt !== "string" ||
+      !parsed.event ||
+      typeof parsed.event.id !== "string" ||
+      typeof parsed.event.sessionId !== "string" ||
+      typeof parsed.event.type !== "string"
+    ) {
+      return undefined;
+    }
+
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+function getDefaultEventStorageDir() {
+  return process.env.EVENT_STORAGE_DIR ?? join(process.cwd(), "data", "events");
 }
 
 function containsSecretLikeText(value: unknown): boolean {
