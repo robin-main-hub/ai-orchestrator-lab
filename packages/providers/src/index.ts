@@ -12,17 +12,45 @@ import type {
   SecretVaultSnapshot,
 } from "@ai-orchestrator/protocol";
 
+export type {
+  AdapterRuntimeContext,
+  CreateAdapterContextParams,
+  LlmAdapter,
+} from "./adapter";
+export { createAdapterContext } from "./adapter";
+export type {
+  AdapterErrorCategory,
+  AdapterErrorOptions,
+} from "./errors";
+export { AdapterError, redactSecretsForLog, truncateForLog } from "./errors";
+export { MockLlmAdapter, type MockLlmAdapterOptions } from "./mockLlmAdapter";
+
+/**
+ * @deprecated The legacy adapter shape. New adapters should implement
+ * `LlmAdapter` from "./adapter" instead, which aligns with the
+ * `ProviderCompletionRequest` schema in @ai-orchestrator/protocol.
+ * Removed once every call site migrates (docs/24 decision #6).
+ */
 export type ProviderChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
 };
 
+/**
+ * @deprecated Use `ProviderCompletionRequest` from
+ * "@ai-orchestrator/protocol" instead. The two types collided under the
+ * same name; the protocol one is the SSOT.
+ */
 export type ProviderCompletionRequest = {
   modelId: string;
   messages: ProviderChatMessage[];
   temperature?: number;
 };
 
+/**
+ * @deprecated Use `ProviderCompletionResponse` from
+ * "@ai-orchestrator/protocol" instead.
+ */
 export type ProviderCompletionResult = {
   content: string;
   modelId: string;
@@ -32,6 +60,12 @@ export type ProviderCompletionResult = {
   };
 };
 
+/**
+ * @deprecated Use `LlmAdapter` from "./adapter" instead. Kept as a
+ * compatibility alias for `seededProviderProfiles[0]` and any other
+ * caller that still reads `.profile`. Removed once those callers
+ * migrate (docs/24 decision #6).
+ */
 export type ProviderAdapter = {
   profile: ProviderProfile;
   discoverModels(): Promise<ModelDescriptor[]>;
