@@ -2,6 +2,7 @@ import type {
   DgxHeartbeat,
   ModelDiscoverySnapshot,
   ProviderProfile,
+  ProviderRegistrySnapshot,
   RuntimeSnapshot,
 } from "@ai-orchestrator/protocol";
 import { mergeDgxRuntimeSnapshot } from "./stage5Runtime";
@@ -51,6 +52,12 @@ export type Stage13DgxServerProbeInput = {
 export type Stage13ProviderModelDiscoveryInput = {
   provider: ProviderProfile;
   serverBaseUrl?: string;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+};
+
+export type Stage13ProviderRegistryInput = {
+  serverBaseUrl?: string | string[];
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 };
@@ -128,6 +135,25 @@ export async function fetchDgxProviderModelDiscovery({
   }
 
   throw lastError instanceof Error ? lastError : new Error("DGX-02 provider model discovery unavailable");
+}
+
+export async function fetchDgxProviderRegistry({
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 1_500,
+}: Stage13ProviderRegistryInput = {}): Promise<ProviderRegistrySnapshot> {
+  let lastError: unknown;
+
+  for (const baseUrl of resolveDgxServerBaseUrls(serverBaseUrl)) {
+    const endpoint = `${baseUrl}/provider-registry`;
+    try {
+      return await fetchJson<ProviderRegistrySnapshot>(fetchImpl, endpoint, timeoutMs);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("DGX-02 provider registry unavailable");
 }
 
 async function fetchJson<T>(fetchImpl: typeof fetch, url: string, timeoutMs: number): Promise<T> {

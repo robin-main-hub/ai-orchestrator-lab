@@ -30,6 +30,7 @@ import {
   type ProviderCredentialParseResult,
   type ProviderCompletionRequest,
   type ProviderCompletionResponse,
+  type ProviderRegistrySnapshot,
   type ProviderRuntimeReadiness,
   type RemoteExecutionRequest,
   type RemoteExecutionResponse,
@@ -251,6 +252,46 @@ describe("protocol schemas", () => {
     expect(request.routePreference).toBe("server_proxy");
     expect(response.route).toBe("server_proxy");
     expect(JSON.stringify(request)).not.toContain("http://dgx-02:8001");
+  });
+
+  it("models DGX provider registry sources without raw API keys", () => {
+    const registry: ProviderRegistrySnapshot = {
+      id: "provider_registry_1",
+      authorityNodeId: "dgx-02",
+      entries: [
+        {
+          providerProfileId: "provider_apifun_claude",
+          name: "APIKey.fun Claude A",
+          kind: "anthropic",
+          baseUrl: "https://api.apikey.fun",
+          trustLevel: "untrusted",
+          tags: ["dgx-secret-ref", "server-proxy", "apikey.fun", "reseller"],
+          defaultModelIds: ["claude-opus-4-6"],
+          selectedModelId: "claude-opus-4-6",
+          supportsModelList: false,
+          apiStyle: "anthropic_messages",
+          authMode: "dgx_secret_ref",
+          secretAvailability: "available",
+          secretRefPreview: "dgx-02:ANTHROPIC_API_KEY",
+          secretSourceRefs: ["env:ANTHROPIC_API_KEY", "file:~/openclaws/2/env"],
+          updatedAt: "2026-05-24T00:00:00.000Z",
+        },
+      ],
+      summary: {
+        total: 1,
+        ready: 1,
+        missingSecrets: 0,
+        dgxVaultBacked: 1,
+        oauthSessions: 0,
+        noAuth: 0,
+      },
+      rawSecretPersisted: false,
+      createdAt: "2026-05-24T00:00:00.000Z",
+    };
+
+    expect(registry.entries[0]?.name).toBe("APIKey.fun Claude A");
+    expect(registry.entries[0]?.secretSourceRefs).toContain("env:ANTHROPIC_API_KEY");
+    expect(JSON.stringify(registry)).not.toContain("sk-");
   });
 
   it("models memory recall policy and trace visibility", () => {

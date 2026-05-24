@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
-import { fetchDgxProviderModelDiscovery, probeDgxOrchestratorServer } from "./stage13DgxServer";
+import { fetchDgxProviderModelDiscovery, fetchDgxProviderRegistry, probeDgxOrchestratorServer } from "./stage13DgxServer";
 import { DGX02_LAN_ORCHESTRATOR_BASE_URL } from "./stage30DgxEndpoints";
 
 const localRuntime: RuntimeSnapshot = {
@@ -196,6 +196,49 @@ describe("stage13 DGX server probing", () => {
 
     expect(discovery.providerProfileId).toBe("provider_deepseek_dgx");
     expect(discovery.models[0]?.id).toBe("deepseek-chat");
+  });
+
+  it("fetches the DGX provider registry for reusable provider selection", async () => {
+    const registry = await fetchDgxProviderRegistry({
+      fetchImpl: async (url) => {
+        expect(String(url)).toBe(`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-registry`);
+        return jsonResponse({
+          id: "provider_registry_dgx02_1",
+          authorityNodeId: "dgx-02",
+          rawSecretPersisted: false,
+          createdAt: "2026-05-24T00:01:00.000Z",
+          summary: {
+            total: 2,
+            ready: 2,
+            missingSecrets: 0,
+            dgxVaultBacked: 1,
+            oauthSessions: 0,
+            noAuth: 1,
+          },
+          entries: [
+            {
+              providerProfileId: "provider_dgx02_vllm",
+              name: "DGX-02 vLLM",
+              kind: "openai",
+              baseUrl: "http://dgx-02:8001/v1",
+              trustLevel: "trusted",
+              tags: ["dgx", "vllm", "no-auth"],
+              defaultModelIds: ["qwen36-domain-wiki-rag-prisma"],
+              selectedModelId: "qwen36-domain-wiki-rag-prisma",
+              supportsModelList: true,
+              apiStyle: "openai_chat",
+              authMode: "none",
+              secretAvailability: "available",
+              updatedAt: "2026-05-24T00:01:00.000Z",
+            },
+          ],
+        });
+      },
+    });
+
+    expect(registry.authorityNodeId).toBe("dgx-02");
+    expect(registry.rawSecretPersisted).toBe(false);
+    expect(registry.entries[0]?.providerProfileId).toBe("provider_dgx02_vllm");
   });
 });
 

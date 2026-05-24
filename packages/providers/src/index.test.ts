@@ -125,22 +125,42 @@ describe("provider credential parsing and model discovery", () => {
 
   it("discovers DGX-02 server-proxy providers for DeepSeek, APIFun, and Grok", () => {
     const profiles = [
-      createProviderProfile({
-        id: "provider_deepseek_dgx",
-        name: "DeepSeek DGX-02 Key",
-        kind: "openai",
-        defaultModel: "deepseek-chat",
-        tags: ["server-proxy", "deepseek"],
-        trustLevel: "limited",
-      }),
-      createProviderProfile({
-        id: "provider_apifun_claude",
-        name: "APIFun Claude Reseller",
-        kind: "anthropic",
-        defaultModel: "claude-code-compatible",
-        tags: ["server-proxy", "apifun", "reseller"],
-        trustLevel: "untrusted",
-      }),
+      {
+        ...createProviderProfile({
+          id: "provider_deepseek_dgx",
+          name: "DeepSeek DGX-02 Key",
+          kind: "openai",
+          defaultModel: "deepseek-chat",
+          tags: ["server-proxy", "deepseek", "dgx-secret-ref"],
+          trustLevel: "limited",
+        }),
+        secretRef: {
+          id: "secret_dgx02_deepseek",
+          label: "DGX-02 DeepSeek API key",
+          scope: "workspace" as const,
+          redactedPreview: "dgx-02:DEEPSEEK_API_KEY",
+          transient: false,
+          createdAt,
+        },
+      },
+      {
+        ...createProviderProfile({
+          id: "provider_apifun_claude",
+          name: "APIKey.fun Claude A",
+          kind: "anthropic",
+          defaultModel: "claude-opus-4-6",
+          tags: ["server-proxy", "apikey.fun", "reseller", "dgx-secret-ref"],
+          trustLevel: "untrusted",
+        }),
+        secretRef: {
+          id: "secret_dgx02_apikeyfun_claude_a",
+          label: "DGX-02 APIKey.fun Claude A",
+          scope: "workspace" as const,
+          redactedPreview: "dgx-02:ANTHROPIC_API_KEY",
+          transient: false,
+          createdAt,
+        },
+      },
       createProviderProfile({
         id: "provider_grok_oauth_dgx",
         name: "Grok OAuth on DGX-02",
@@ -157,6 +177,13 @@ describe("provider credential parsing and model discovery", () => {
     expect(discoveries[0]?.models.map((model) => model.id)).toContain("deepseek-chat");
     expect(discoveries[1]?.models.map((model) => model.id)).toContain("claude-code-compatible");
     expect(discoveries[2]?.models.map((model) => model.id)).toContain("grok-oauth-session");
+
+    const vault = createSecretVaultSnapshot(profiles, createdAt);
+    expect(vault.entries[0]?.storage).toBe("dgx_vault");
+    expect(vault.entries[0]?.transient).toBe(false);
+    expect(vault.entries[1]?.storage).toBe("dgx_vault");
+    expect(vault.summary.dgxVaultReady).toBe(2);
+    expect(JSON.stringify(vault)).not.toContain("sk-");
   });
 
   it("registers CLI and OAuth providers as session bindings without raw secrets", () => {

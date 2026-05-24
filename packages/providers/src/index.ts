@@ -292,9 +292,10 @@ export class MockProviderAdapter implements ProviderAdapter {
 
 function createSecretVaultEntry(profile: ProviderProfile, createdAt: string): SecretVaultEntry {
   const isDgxNoAuth = profile.tags.includes("dgx") && profile.tags.includes("no-auth");
+  const isDgxSecretRef = profile.tags.includes("dgx-secret-ref") || profile.secretRef?.redactedPreview.startsWith("dgx-02:");
   const isCliSession = profile.tags.includes("cli");
   const isOAuthSession = profile.tags.includes("oauth");
-  const storage = isDgxNoAuth
+  const storage = isDgxNoAuth || isDgxSecretRef
     ? "dgx_vault"
     : isOAuthSession
       ? "oauth_session"
@@ -313,6 +314,7 @@ function createSecretVaultEntry(profile: ProviderProfile, createdAt: string): Se
     storage,
     availability:
       isDgxNoAuth ||
+      isDgxSecretRef ||
       isCliSession ||
       isOAuthSession ||
       profile.kind === "ollama" ||
@@ -322,7 +324,7 @@ function createSecretVaultEntry(profile: ProviderProfile, createdAt: string): Se
         ? "available"
         : "missing",
     redactedPreview: profile.secretRef?.redactedPreview,
-    transient: isDgxNoAuth
+    transient: isDgxNoAuth || isDgxSecretRef
       ? false
       : isCliSession || isOAuthSession
         ? true

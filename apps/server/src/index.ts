@@ -13,6 +13,11 @@ import type {
   ProviderCompletionMessage,
   ProviderCompletionRequest,
   ProviderCompletionResponse,
+  ProviderKind,
+  ProviderRegistryAuthMode,
+  ProviderRegistryEntry,
+  ProviderRegistrySnapshot,
+  ProviderTrustLevel,
   RemoteExecutionRequest,
   RemoteExecutionResponse,
   RuntimeSnapshot,
@@ -22,6 +27,7 @@ import { eventSyncPushRequestSchema } from "@ai-orchestrator/protocol";
 export type ServerCapability =
   | "health"
   | "model-registry"
+  | "provider-registry"
   | "provider-completion-proxy"
   | "vllm-health"
   | "runtime-status"
@@ -77,6 +83,7 @@ type ServerProviderProxyConfig = {
   providerProfileId: string;
   baseUrl: string;
   apiKeyEnvNames: string[];
+  envFilePaths?: string[];
   apiKeyFileEnvName?: string;
   defaultKeyFile?: string;
   noAuth?: boolean;
@@ -90,6 +97,14 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     providerProfileId: "provider_deepseek_dgx",
     baseUrl: process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/v1",
     apiKeyEnvNames: ["DEEPSEEK_API_KEY"],
+    envFilePaths: [
+      "~/openclaws/2/env",
+      "~/robinclaw/.env",
+      "~/openclaws/7/env",
+      "~/openclaws/8/env",
+      "~/nanoclaw-tg/.env",
+      "~/.hermes/.env",
+    ],
     apiKeyFileEnvName: "DEEPSEEK_API_KEY_FILE",
     defaultKeyFile: "~/.openclaw/secrets/deepseek.key",
     apiStyle: "openai_chat",
@@ -98,13 +113,34 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
   },
   {
     providerProfileId: "provider_apifun_claude",
-    baseUrl: process.env.APIFUN_BASE_URL ?? "https://api.apikey.fun",
-    apiKeyEnvNames: ["APIFUN_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"],
+    baseUrl: process.env.APIKEYFUN_ANTHROPIC_BASE_URL ?? process.env.APIFUN_BASE_URL ?? "https://api.apikey.fun",
+    apiKeyEnvNames: ["ANTHROPIC_API_KEY", "APIKEYFUN_CLAUDE_A_KEY", "APIFUN_API_KEY", "ANTHROPIC_AUTH_TOKEN"],
+    envFilePaths: ["~/openclaws/2/env"],
     apiKeyFileEnvName: "APIFUN_API_KEY_FILE",
     defaultKeyFile: "~/.openclaw/secrets/apifun.key",
     apiStyle: "anthropic_messages",
-    defaultModelIds: ["claude-code-compatible", "claude-opus-reseller", "claude-sonnet-reseller", "claude-haiku-reseller"],
+    defaultModelIds: ["claude-opus-4-6", "claude-code-compatible", "claude-sonnet-reseller", "claude-haiku-reseller"],
     supportsModelList: false,
+  },
+  {
+    providerProfileId: "provider_apifun_claude_b",
+    baseUrl: process.env.APIKEYFUN_ANTHROPIC_BASE_URL ?? process.env.APIFUN_BASE_URL ?? "https://api.apikey.fun",
+    apiKeyEnvNames: ["ANTHROPIC_API_KEY_ALT", "APIKEYFUN_CLAUDE_B_KEY"],
+    envFilePaths: ["~/openclaws/2/env"],
+    apiKeyFileEnvName: "APIFUN_CLAUDE_B_API_KEY_FILE",
+    apiStyle: "anthropic_messages",
+    defaultModelIds: ["claude-opus-4-6", "claude-code-compatible", "claude-sonnet-reseller", "claude-haiku-reseller"],
+    supportsModelList: false,
+  },
+  {
+    providerProfileId: "provider_apikeyfun_codex",
+    baseUrl: process.env.APIKEYFUN_OPENAI_BASE_URL ?? "https://api.apikey.fun/v1",
+    apiKeyEnvNames: ["OPENAI_API_KEY", "APIKEYFUN_OPENAI_API_KEY"],
+    envFilePaths: ["~/openclaws/2/env"],
+    apiKeyFileEnvName: "APIKEYFUN_OPENAI_API_KEY_FILE",
+    apiStyle: "openai_chat",
+    defaultModelIds: ["gpt-5.5-pro", "gpt-5.5-coder", "gpt-5.5-mini", "gpt-5.5-reasoning"],
+    supportsModelList: true,
   },
   {
     providerProfileId: "provider_grok_oauth_dgx",
@@ -247,6 +283,7 @@ export function createHealthResponse(now = new Date().toISOString(), probe?: Dgx
     capabilities: [
       "health",
       "model-registry",
+      "provider-registry",
       "provider-completion-proxy",
       "vllm-health",
       "runtime-status",
@@ -445,6 +482,79 @@ export async function createServerProviderModelDiscoveryResponse(
   }
 }
 
+export async function createServerProviderRegistrySnapshot(
+  options: DgxProviderCompletionOptions = {},
+): Promise<ProviderRegistrySnapshot> {
+  const createdAt = options.now ?? new Date().toISOString();
+  const vllmEntry: ProviderRegistryEntry = {
+    providerProfileId: "provider_dgx02_vllm",
+    name: "DGX-02 vLLM",
+    kind: "openai",
+    baseUrl: process.env.DGX02_VLLM_BASE_URL ?? DEFAULT_DGX02_VLLM_BASE_URL,
+    trustLevel: "trusted",
+    tags: ["dgx", "vllm", "no-auth"],
+    defaultModelIds: [DEFAULT_DGX_MODEL_ID],
+    selectedModelId: DEFAULT_DGX_MODEL_ID,
+    supportsModelList: true,
+    apiStyle: "openai_chat",
+    authMode: "none",
+    secretAvailability: "available",
+    modelDiscoveryEndpoint: `${(process.env.DGX02_VLLM_BASE_URL ?? DEFAULT_DGX02_VLLM_BASE_URL).replace(/\/$/, "")}/models`,
+    updatedAt: createdAt,
+  };
+  const proxyEntries = await Promise.all(
+    serverProviderProxyConfigs.map((config) => createServerProviderRegistryEntry(config, createdAt)),
+  );
+  const entries = [vllmEntry, ...proxyEntries];
+
+  return {
+    id: `provider_registry_dgx02_${createdAt.replace(/[-:.TZ]/g, "")}`,
+    authorityNodeId: "dgx-02",
+    entries,
+    summary: {
+      total: entries.length,
+      ready: entries.filter((entry) => entry.secretAvailability === "available").length,
+      missingSecrets: entries.filter((entry) => entry.secretAvailability === "missing").length,
+      dgxVaultBacked: entries.filter((entry) => entry.authMode === "dgx_secret_ref").length,
+      oauthSessions: entries.filter((entry) => entry.authMode === "oauth_session").length,
+      noAuth: entries.filter((entry) => entry.authMode === "none").length,
+    },
+    rawSecretPersisted: false,
+    createdAt,
+  };
+}
+
+async function createServerProviderRegistryEntry(
+  config: ServerProviderProxyConfig,
+  updatedAt: string,
+): Promise<ProviderRegistryEntry> {
+  const authMode = createServerProviderRegistryAuthMode(config);
+  const secretAvailability = authMode === "none" || authMode === "oauth_session"
+    ? "available"
+    : (await resolveServerProviderApiKey(config))
+      ? "available"
+      : "missing";
+
+  return {
+    providerProfileId: config.providerProfileId,
+    name: createServerProviderDisplayName(config.providerProfileId),
+    kind: createServerProviderKind(config),
+    baseUrl: config.baseUrl,
+    trustLevel: createServerProviderTrustLevel(config.providerProfileId),
+    tags: createServerProviderTags(config.providerProfileId),
+    defaultModelIds: config.defaultModelIds,
+    selectedModelId: config.defaultModelIds[0],
+    supportsModelList: Boolean(config.supportsModelList),
+    apiStyle: config.apiStyle ?? "openai_chat",
+    authMode,
+    secretAvailability,
+    secretRefPreview: createServerProviderSecretRefPreview(config, authMode),
+    secretSourceRefs: createServerProviderSecretSourceRefs(config, authMode),
+    modelDiscoveryEndpoint: config.supportsModelList ? `${config.baseUrl.replace(/\/$/, "")}/models` : undefined,
+    updatedAt,
+  };
+}
+
 function createDgxModelDescriptor(modelId: string): ModelDiscoverySnapshot["models"][number] {
   return {
     id: modelId,
@@ -473,11 +583,131 @@ function createServerProviderModelDescriptor(
     tags: [
       "server-proxy",
       ...(config.providerProfileId.includes("deepseek") ? ["deepseek"] : []),
-      ...(config.providerProfileId.includes("apifun") ? ["apifun", "reseller"] : []),
+      ...(config.providerProfileId.includes("apifun") ? ["apikey.fun", "reseller"] : []),
       ...(config.providerProfileId.includes("grok") ? ["grok", "oauth"] : []),
       ...(config.providerProfileId.includes("openclaw") ? ["openclaw", "dgx", "vllm"] : []),
     ],
   };
+}
+
+function createServerProviderRegistryAuthMode(config: ServerProviderProxyConfig): ProviderRegistryAuthMode {
+  if (config.providerProfileId.includes("grok_oauth")) {
+    return "oauth_session";
+  }
+
+  if (config.noAuth) {
+    return "none";
+  }
+
+  return "dgx_secret_ref";
+}
+
+function createServerProviderDisplayName(providerProfileId: string) {
+  const names: Record<string, string> = {
+    provider_deepseek_dgx: "DeepSeek DGX-02 Key",
+    provider_apifun_claude: "APIKey.fun Claude A",
+    provider_apifun_claude_b: "APIKey.fun Claude B",
+    provider_apikeyfun_codex: "APIKey.fun Codex/GPT",
+    provider_grok_oauth_dgx: "Grok OAuth on DGX-02",
+    provider_openclaw_dgx: "DGX-02 OpenClaw vLLM",
+  };
+
+  return names[providerProfileId] ?? providerProfileId;
+}
+
+function createServerProviderKind(config: ServerProviderProxyConfig): ProviderKind {
+  if (config.apiStyle === "anthropic_messages") {
+    return "anthropic";
+  }
+
+  if (config.providerProfileId.includes("grok")) {
+    return "custom";
+  }
+
+  return "openai";
+}
+
+function createServerProviderTrustLevel(providerProfileId: string): ProviderTrustLevel {
+  if (providerProfileId.includes("apifun")) {
+    return "untrusted";
+  }
+
+  if (providerProfileId.includes("apikeyfun")) {
+    return "limited";
+  }
+
+  if (providerProfileId.includes("grok")) {
+    return "limited";
+  }
+
+  return "trusted";
+}
+
+function createServerProviderTags(providerProfileId: string) {
+  if (providerProfileId.includes("deepseek")) {
+    return ["dgx-secret-ref", "server-proxy", "deepseek"];
+  }
+
+  if (providerProfileId.includes("apifun")) {
+    return ["dgx-secret-ref", "server-proxy", "apikey.fun", "reseller"];
+  }
+
+  if (providerProfileId.includes("apikeyfun")) {
+    return ["dgx-secret-ref", "server-proxy", "apikey.fun", "codex", "openai-compatible"];
+  }
+
+  if (providerProfileId.includes("grok")) {
+    return ["oauth", "grok", "server-proxy", "dgx"];
+  }
+
+  if (providerProfileId.includes("openclaw")) {
+    return ["openclaw", "dgx", "vllm", "server-proxy", "no-auth"];
+  }
+
+  return ["server-proxy"];
+}
+
+function createServerProviderSecretRefPreview(
+  config: ServerProviderProxyConfig,
+  authMode: ProviderRegistryAuthMode,
+) {
+  if (authMode === "none") {
+    return undefined;
+  }
+
+  if (authMode === "oauth_session") {
+    return "dgx-02:oauth-session";
+  }
+
+  return `dgx-02:${config.apiKeyEnvNames[0] ?? config.defaultKeyFile ?? "provider-secret"}`;
+}
+
+function createServerProviderSecretSourceRefs(
+  config: ServerProviderProxyConfig,
+  authMode: ProviderRegistryAuthMode,
+): string[] | undefined {
+  if (authMode === "none") {
+    return undefined;
+  }
+
+  if (authMode === "oauth_session") {
+    return ["~/.grok/auth.json", "~/.grok2/auth.json"];
+  }
+
+  const refs = [
+    ...config.apiKeyEnvNames.map((envName) => `env:${envName}`),
+    ...getServerProviderEnvFilePaths(config).map((path) => `file:${path}`),
+  ];
+
+  if (config.apiKeyFileEnvName) {
+    refs.push(`env:${config.apiKeyFileEnvName}`);
+  }
+
+  if (config.defaultKeyFile) {
+    refs.push(`file:${config.defaultKeyFile}`);
+  }
+
+  return Array.from(new Set(refs));
 }
 
 type DgxCompletionResponse = {
@@ -782,6 +1012,11 @@ async function resolveServerProviderApiKey(config: ServerProviderProxyConfig): P
     }
   }
 
+  const envFileValue = await resolveServerProviderApiKeyFromEnvFiles(config);
+  if (envFileValue) {
+    return envFileValue;
+  }
+
   const keyFile = (config.apiKeyFileEnvName ? process.env[config.apiKeyFileEnvName] : undefined) ?? config.defaultKeyFile;
   if (!keyFile) {
     return undefined;
@@ -793,6 +1028,64 @@ async function resolveServerProviderApiKey(config: ServerProviderProxyConfig): P
   } catch {
     return undefined;
   }
+}
+
+async function resolveServerProviderApiKeyFromEnvFiles(config: ServerProviderProxyConfig): Promise<string | undefined> {
+  for (const envFilePath of getServerProviderEnvFilePaths(config)) {
+    const env = await readServerProviderEnvFile(envFilePath);
+    for (const envName of config.apiKeyEnvNames) {
+      const value = env[envName]?.trim();
+      if (value) {
+        return value;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function getServerProviderEnvFilePaths(config: ServerProviderProxyConfig) {
+  return [
+    process.env.OPENCLAW_SLOT_ENV_FILE,
+    process.env.OPENCLAW_ENV_FILE,
+    ...(config.envFilePaths ?? []),
+  ].filter((value): value is string => Boolean(value));
+}
+
+async function readServerProviderEnvFile(envFilePath: string): Promise<Record<string, string>> {
+  try {
+    const raw = await readFile(expandHomePath(envFilePath), "utf8");
+    return Object.fromEntries(
+      raw
+        .split(/\r?\n/)
+        .map(parseEnvFileLine)
+        .filter((entry): entry is [string, string] => Boolean(entry)),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function parseEnvFileLine(line: string): [string, string] | undefined {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith("#")) {
+    return undefined;
+  }
+
+  const withoutExport = trimmed.startsWith("export ") ? trimmed.slice(7).trim() : trimmed;
+  const separatorIndex = withoutExport.indexOf("=");
+  if (separatorIndex <= 0) {
+    return undefined;
+  }
+
+  const key = withoutExport.slice(0, separatorIndex).trim();
+  const rawValue = withoutExport.slice(separatorIndex + 1).trim();
+  const value =
+    (rawValue.startsWith('"') && rawValue.endsWith('"')) || (rawValue.startsWith("'") && rawValue.endsWith("'"))
+      ? rawValue.slice(1, -1)
+      : rawValue;
+
+  return [key, value];
 }
 
 function expandHomePath(value: string) {
@@ -1173,6 +1466,11 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     if (pathname === "/provider-models") {
       const providerProfileId = requestUrl.searchParams.get("providerProfileId") ?? "provider_dgx02_vllm";
       writeJson(response, 200, await createServerProviderModelDiscoveryResponse(providerProfileId));
+      return;
+    }
+
+    if (pathname === "/provider-registry") {
+      writeJson(response, 200, await createServerProviderRegistrySnapshot());
       return;
     }
 

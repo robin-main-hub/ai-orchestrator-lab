@@ -137,6 +137,48 @@ export type SecretVaultSnapshot = {
   createdAt: string;
 };
 
+export type ProviderRegistryAuthMode =
+  | "none"
+  | "dgx_secret_ref"
+  | "oauth_session"
+  | "local_cli"
+  | "api_key_required";
+
+export type ProviderRegistryEntry = {
+  providerProfileId: string;
+  name: string;
+  kind: ProviderKind;
+  baseUrl?: string;
+  trustLevel: ProviderTrustLevel;
+  tags: string[];
+  defaultModelIds: string[];
+  selectedModelId?: string;
+  supportsModelList: boolean;
+  apiStyle?: "openai_chat" | "anthropic_messages";
+  authMode: ProviderRegistryAuthMode;
+  secretAvailability: SecretAvailability;
+  secretRefPreview?: string;
+  secretSourceRefs?: string[];
+  modelDiscoveryEndpoint?: string;
+  updatedAt: string;
+};
+
+export type ProviderRegistrySnapshot = {
+  id: string;
+  authorityNodeId: "dgx-02";
+  entries: ProviderRegistryEntry[];
+  summary: {
+    total: number;
+    ready: number;
+    missingSecrets: number;
+    dgxVaultBacked: number;
+    oauthSessions: number;
+    noAuth: number;
+  };
+  rawSecretPersisted: false;
+  createdAt: string;
+};
+
 export type ProviderExecutionMode = "mock" | "local" | "remote";
 
 export type ProviderReadinessStatus = "ready" | "credential_required" | "needs_approval" | "blocked";
