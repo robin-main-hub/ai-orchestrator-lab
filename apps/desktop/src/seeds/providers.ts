@@ -61,6 +61,19 @@ export const seededProviderProfiles: ProviderProfile[] = [
   },
   {
     ...createProviderProfile({
+      id: "provider_openrouter_dgx",
+      name: "OpenRouter DGX-02 Key",
+      kind: "openrouter",
+      baseUrl: "https://openrouter.ai/api/v1",
+      defaultModel: "openrouter/auto",
+      tags: ["dgx-secret-ref", "server-proxy", "openrouter", "openai-compatible"],
+      trustLevel: "limited",
+    }),
+    secretRef: createDgxVaultSecretRef("secret_dgx02_openrouter", "DGX-02 OpenRouter API key", "dgx-02:OPENROUTER_API_KEY"),
+    modelDiscoveryEndpoint: "https://openrouter.ai/api/v1/models",
+  },
+  {
+    ...createProviderProfile({
       id: "provider_apifun_claude",
       name: "APIKey.fun Claude A",
       kind: "anthropic",
@@ -278,6 +291,13 @@ export const seededModelCatalog: ModelCatalog = {
     "deepseek-v4-flash",
     "deepseek-v4-pro",
   ].map((id) => createModel("provider_deepseek_dgx", id, ["deepseek", "server-proxy"])),
+  provider_openrouter_dgx: [
+    "openrouter/auto",
+    "anthropic/claude-opus-4.7",
+    "openai/gpt-5.5-pro",
+    "x-ai/grok-4",
+    "deepseek/deepseek-r1",
+  ].map((id) => createModel("provider_openrouter_dgx", id, ["openrouter", "server-proxy"])),
   provider_apifun_claude: [
     "claude-opus-4-6",
     "claude-code-compatible",
