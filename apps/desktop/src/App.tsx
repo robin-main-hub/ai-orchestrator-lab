@@ -72,6 +72,7 @@ import {
 } from "./runtime/stage12DgxProvider";
 import { fetchDgxProviderModelDiscovery, fetchDgxProviderRegistry, probeDgxOrchestratorServer } from "./runtime/stage13DgxServer";
 import { DEFAULT_DGX_SERVER_BASE_URL } from "./runtime/stage30DgxEndpoints";
+import { probeDgxProviderRoutes, type Stage32DgxRouteDiagnosticSnapshot } from "./runtime/stage32DgxRouteDiagnostics";
 import {
   createInitialEventSyncState,
   pushEventsToDgxEventStorage,
@@ -210,6 +211,7 @@ import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
   const [runtimeSnapshotState, setRuntimeSnapshotState] = useState<RuntimeSnapshot>(runtimeSnapshot);
+  const [dgxRouteDiagnostics, setDgxRouteDiagnostics] = useState<Stage32DgxRouteDiagnosticSnapshot>();
   const localClientEventCache = useMemo(
     () => createLocalClientEventCache(typeof window === "undefined" ? undefined : window.localStorage),
     [],
@@ -1852,6 +1854,8 @@ export function App() {
       endpoint: DEFAULT_DGX_SERVER_BASE_URL,
     });
 
+    const routeDiagnostics = await probeDgxProviderRoutes({ checkedAt });
+    setDgxRouteDiagnostics(routeDiagnostics);
     const probe = await probeDgxOrchestratorServer({
       localRuntime: runtimeSnapshotState,
       checkedAt,
@@ -1892,6 +1896,25 @@ export function App() {
       error: probe.error,
       eventStorageRevision: probe.eventStorage?.revision,
       eventStorageMode: probe.eventStorage?.mode,
+    });
+    appendEvent("dgx.provider_routes.diagnosed", {
+      checkedAt: routeDiagnostics.checkedAt,
+      summary: routeDiagnostics.summary,
+      routes: routeDiagnostics.routes.map((route) => ({
+        baseUrl: route.baseUrl,
+        health: {
+          status: route.health.status,
+          httpStatus: route.health.httpStatus,
+          error: route.health.error,
+          latencyMs: route.health.latencyMs,
+        },
+        providerPreflight: {
+          status: route.providerPreflight.status,
+          httpStatus: route.providerPreflight.httpStatus,
+          error: route.providerPreflight.error,
+          latencyMs: route.providerPreflight.latencyMs,
+        },
+      })),
     });
     appendEvent("runtime.snapshot.merged", {
       authorityNodeId,
@@ -2678,6 +2701,7 @@ export function App() {
                 onReplaySession={handleReplayEventStorage}
               />
               <RuntimeRailPanel
+                dgxRouteDiagnostics={dgxRouteDiagnostics}
                 onProbeDgx={handleProbeDgx}
                 onRequestReboot={handleRequestDeviceReboot}
                 rebootWatchdogs={rebootWatchdogs}

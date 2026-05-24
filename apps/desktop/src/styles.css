@@ -626,6 +626,39 @@ button {
   font-size: 11px;
 }
 
+.dgx-route-diagnostic-list {
+  display: grid;
+  gap: 5px;
+}
+
+.dgx-route-diagnostic-list article {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #001f25;
+}
+
+.dgx-route-diagnostic-list strong,
+.dgx-route-diagnostic-list span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dgx-route-diagnostic-list strong {
+  color: var(--cyan);
+  font-size: 10px;
+}
+
+.dgx-route-diagnostic-list span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
 .session-index-summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
