@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   codingPacketSchema,
   eventEnvelopeSchema,
+  eventStorageSessionIndexResponseSchema,
   eventSyncPushRequestSchema,
   eventSyncPushResponseSchema,
   providerProfileSchema,
@@ -109,6 +110,27 @@ describe("protocol schemas", () => {
 
     expect(response.accepted).toBe(1);
     expect(response.results[0]?.status).toBe("accepted");
+  });
+
+  it("models Event Storage session index responses", () => {
+    const index = eventStorageSessionIndexResponseSchema.parse({
+      serverRevision: 3,
+      createdAt: "2026-05-24T00:00:00.000Z",
+      sessions: [
+        {
+          sessionId: "session_desktop_001",
+          eventCount: 2,
+          firstEventAt: "2026-05-24T00:00:00.000Z",
+          lastEventAt: "2026-05-24T00:00:03.000Z",
+          lastEventType: "coding_packet.created",
+          sources: ["desktop", "agent"],
+          sourceTrust: ["trusted"],
+        },
+      ],
+    });
+
+    expect(index.sessions[0]?.sessionId).toBe("session_desktop_001");
+    expect(index.sessions[0]?.sources).toContain("desktop");
   });
 
   it("separates MacBook offline queue from Home PC online-only access", () => {

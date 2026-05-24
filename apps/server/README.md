@@ -62,3 +62,9 @@ DGX-02 user service 예시는 `scripts/dgx-02/ai-orchestrator-server.service`에
 - Desktop은 `GET /events?sessionId=...`를 사용해 DGX-02 Event Storage에서 세션 이벤트를 다시 가져옵니다.
 - `conversation.message.created` 이벤트 payload에 `messageId`, `role`, redacted `content`, `metadata`가 있으면 데스크톱 대화창으로 복원할 수 있습니다.
 - 서버는 이벤트 원본을 append-only JSONL로 보관하고, MacBook/Home PC 화면 복원은 클라이언트 projection으로 처리합니다.
+
+## Stage20 Session Index
+
+- `GET /sessions`는 DGX-02 Event Storage에 저장된 세션 목록을 최신 이벤트 순서로 반환합니다.
+- 각 항목은 `sessionId`, `eventCount`, `firstEventAt`, `lastEventAt`, `lastEventType`, `sources`, `sourceTrust`를 포함합니다.
+- MacBook/Home PC 클라이언트는 이 인덱스를 먼저 읽고 필요한 세션만 `/events?sessionId=...`로 복원합니다.

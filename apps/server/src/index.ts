@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import type {
   DgxHeartbeat,
   EventEnvelope,
+  EventStorageSessionIndexResponse,
   EventSyncPullResponse,
   EventSyncPushRequest,
   EventSyncPushResponse,
@@ -542,6 +543,14 @@ export async function pullEventsFromPersistentServerStorage(
   return pullEventsFromServerStorage(sessionId, state, now, afterRevision);
 }
 
+export async function listPersistentEventStorageSessions(
+  storage: JsonlServerEventStorage,
+  now = new Date().toISOString(),
+): Promise<EventStorageSessionIndexResponse> {
+  const state = await storage.statePromise;
+  return listEventStorageSessions(state, now);
+}
+
 export async function createPersistentEventStorageSnapshot(
   storage: JsonlServerEventStorage,
   now = new Date().toISOString(),
@@ -669,6 +678,39 @@ export function pullEventsFromServerStorage(
   };
 }
 
+export function listEventStorageSessions(
+  state = defaultEventStorageState,
+  now = new Date().toISOString(),
+): EventStorageSessionIndexResponse {
+  const sessions = [...state.eventsBySession.entries()]
+    .map(([sessionId, eventIds]) => {
+      const events = eventIds
+        .map((eventId) => state.eventsById.get(eventId))
+        .filter((event): event is EventEnvelope => Boolean(event))
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+      const firstEvent = events[0];
+      const lastEvent = events[events.length - 1];
+
+      return {
+        sessionId,
+        eventCount: events.length,
+        firstEventAt: firstEvent?.createdAt,
+        lastEventAt: lastEvent?.createdAt,
+        lastEventType: lastEvent?.type,
+        sources: uniqueValues(events.map((event) => event.source)),
+        sourceTrust: uniqueValues(events.map((event) => event.sourceTrust)),
+      };
+    })
+    .filter((session) => session.eventCount > 0)
+    .sort((left, right) => (right.lastEventAt ?? "").localeCompare(left.lastEventAt ?? ""));
+
+  return {
+    serverRevision: state.revision,
+    sessions,
+    createdAt: now,
+  };
+}
+
 export function startServer(port = Number(process.env.PORT ?? 4317)) {
   const eventStorage = createJsonlServerEventStorage();
   const server = createServer(async (request, response) => {
@@ -745,6 +787,11 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       const sessionId = requestUrl.searchParams.get("sessionId") ?? "session_desktop_001";
       const afterRevision = Number(requestUrl.searchParams.get("afterRevision") ?? 0);
       writeJson(response, 200, await pullEventsFromPersistentServerStorage(sessionId, eventStorage, undefined, afterRevision));
+      return;
+    }
+
+    if (pathname === "/sessions" && request.method === "GET") {
+      writeJson(response, 200, await listPersistentEventStorageSessions(eventStorage));
       return;
     }
 
@@ -871,6 +918,10 @@ function parseEventStorageRecord(line: string): ServerEventStorageRecord | undef
   } catch {
     return undefined;
   }
+}
+
+function uniqueValues<T extends string>(values: T[]): T[] {
+  return [...new Set(values)];
 }
 
 function getDefaultEventStorageDir() {

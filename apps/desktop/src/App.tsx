@@ -106,6 +106,11 @@ import {
   pullAndReplayDgxEventStorage,
 } from "./runtime/stage18EventReplay";
 import { extractLatestCodingPacketFromEvents } from "./runtime/stage19CodingPacketReplay";
+import {
+  createInitialSessionIndexState,
+  fetchDgxSessionIndex,
+  type Stage20SessionIndexState,
+} from "./runtime/stage20SessionIndex";
 import type {
   AgentProfile,
   ApprovalState,
@@ -514,6 +519,9 @@ export function App() {
   const [eventSyncState, setEventSyncState] = useState<Stage14EventSyncState>(() =>
     createInitialEventSyncState(eventOutboxStorage.load().length),
   );
+  const [sessionIndexState, setSessionIndexState] = useState<Stage20SessionIndexState>(() =>
+    createInitialSessionIndexState(),
+  );
   const [syncedEventIds, setSyncedEventIds] = useState<Record<string, true>>({});
   const [memoryRecords, setMemoryRecords] = useState<MemoryRecord[]>(initialMemoryRecords);
   const [ingressSnapshot, setIngressSnapshot] = useState<Stage8IngressSnapshot>(initialIngressSnapshot);
@@ -627,10 +635,12 @@ export function App() {
     if (queuedEvents.length > 0) {
       setEventOutbox(queuedEvents);
       void syncEventsToDgx(queuedEvents);
+      void handleRefreshSessionIndex();
       return;
     }
 
     void syncEventsToDgx(initialEventLog);
+    void handleRefreshSessionIndex();
   }, []);
 
   function appendEvent<T>(
@@ -735,11 +745,27 @@ export function App() {
             : undefined,
       updatedAt: result.response?.createdAt ?? new Date().toISOString(),
     }));
+
+    if (dgxReachable) {
+      void handleRefreshSessionIndex();
+    }
   }
 
   function handleSyncEventStorage() {
     const unsyncedEvents = eventLog.filter((event) => !syncedEventIds[event.id]);
     void syncEventsToDgx(mergeOutboxEvents(eventOutbox, unsyncedEvents));
+  }
+
+  async function handleRefreshSessionIndex() {
+    const result = await fetchDgxSessionIndex();
+    setSessionIndexState(result);
+    if (result.status === "loaded") {
+      setEventSyncState((state) => ({
+        ...state,
+        serverRevision: result.serverRevision ?? state.serverRevision,
+        lastSyncedAt: result.lastLoadedAt ?? state.lastSyncedAt,
+      }));
+    }
   }
 
   async function handleReplayEventStorage() {
@@ -1656,6 +1682,11 @@ export function App() {
             ))}
           </nav>
 
+          <SessionIndexRailPanel
+            index={sessionIndexState}
+            onRefresh={handleRefreshSessionIndex}
+            onReplayCurrent={handleReplayEventStorage}
+          />
           <RuntimeRailPanel onProbeDgx={handleProbeDgx} snapshot={runtimeSnapshotState} />
           <OperationsRailPanel
             backupSnapshot={backupSnapshot}
@@ -1828,6 +1859,46 @@ export function App() {
         slots={terminalSlots}
       />
     </div>
+  );
+}
+
+function SessionIndexRailPanel({
+  index,
+  onRefresh,
+  onReplayCurrent,
+}: {
+  index: Stage20SessionIndexState;
+  onRefresh: () => void;
+  onReplayCurrent: () => void;
+}) {
+  const visibleSessions = index.sessions.slice(0, 3);
+
+  return (
+    <section className="mini-panel rail-panel session-index-panel">
+      <header>
+        <Database size={16} />
+        <span>Sessions</span>
+        <button className="rail-icon-button" onClick={onRefresh} title="Refresh sessions from DGX-02" type="button">
+          <RefreshCw size={13} />
+        </button>
+      </header>
+      <div className="session-index-summary">
+        <strong>{index.status}</strong>
+        <span>DGX-02 rev {index.serverRevision ?? "-"}</span>
+      </div>
+      <div className="session-index-list">
+        {visibleSessions.length === 0 ? (
+          <p>DGX-02 session index pending</p>
+        ) : (
+          visibleSessions.map((session) => (
+            <button key={session.sessionId} onClick={onReplayCurrent} type="button">
+              <strong>{session.sessionId}</strong>
+              <span>{session.eventCount} events / {session.lastEventType ?? "event"}</span>
+            </button>
+          ))
+        )}
+      </div>
+    </section>
   );
 }
 

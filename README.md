@@ -165,3 +165,9 @@ corepack pnpm dev
 - `coding_packet.created` 이벤트 payload에 전체 `CodingPacket` 구조를 포함해, 코딩 전달 상태도 DGX-02 Event Storage에서 복원할 수 있게 했다.
 - `apps/desktop/src/runtime/stage19CodingPacketReplay.ts`는 최신 유효 packet 이벤트를 찾고 Zod schema로 검증한 뒤 UI 상태로 되돌린다.
 - content가 없는 구형 packet 이벤트는 건너뛰고, schema가 깨진 packet은 `invalid`로 분리해 나중에 conflict/review UI로 넘길 수 있게 했다.
+
+## Stage20
+
+- `packages/protocol`에 Event Storage session index response 타입을 추가했다.
+- DGX-02 서버는 `GET /sessions`로 sessionId, event count, 최신 이벤트 타입, source/trust 요약을 내려준다.
+- Desktop 좌측 레일에 Sessions 패널을 추가해 DGX-02 revision과 최근 세션을 확인하고, 현재 세션 replay를 바로 실행할 수 있게 했다.
