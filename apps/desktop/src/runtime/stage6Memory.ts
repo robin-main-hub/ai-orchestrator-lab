@@ -56,7 +56,7 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
     {
       id: "memory_seed_event_store",
       layer: "project_memory",
-      title: "Event Store first",
+      title: "이벤트 저장소 우선",
       content: "세션 로그, 토론, 코딩 패킷, 실행 기록, 백업은 Event Store를 원본으로 두고 projection으로 내보낸다.",
       sourceChannel: "desktop",
       trustLevel: "trusted",
@@ -66,7 +66,7 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
     {
       id: "memory_seed_dgx",
       layer: "project_memory",
-      title: "DGX-02 authority",
+      title: "DGX-02 원본 서버",
       content: "DGX-02는 메인 서버이며 MacBook과 Home PC는 로컬 SQLite outbox를 통해 복구 시 동기화한다.",
       sourceChannel: "desktop",
       trustLevel: "trusted",
@@ -76,7 +76,7 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
     {
       id: "memory_seed_proxy",
       layer: "reflection",
-      title: "Untrusted provider guard",
+      title: "비신뢰 프로바이더 보호",
       content: "리셀러나 custom base URL은 장기 User/Project Memory 자동 전달을 막고, 필요한 selected memory만 승인 후 전달한다.",
       sourceChannel: "agent",
       trustLevel: "trusted",
@@ -86,7 +86,7 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
     {
       id: "memory_seed_telegram",
       layer: "fragment",
-      title: "Telegram ingress quarantine",
+      title: "Telegram 입력 격리",
       content: "Telegram에서 들어온 명령은 위험 작업 전에 승인을 요구하고 memory candidate는 untrusted로 격리한다.",
       sourceChannel: "telegram",
       trustLevel: "untrusted",
