@@ -260,6 +260,7 @@ export class MockProviderAdapter implements ProviderAdapter {
         contextWindow: 128_000,
         supportsStreaming: true,
         supportsTools: false,
+        inputModalities: ["text", "image", "document"],
         tags: ["conversation", "debate"],
       },
       {
@@ -269,6 +270,7 @@ export class MockProviderAdapter implements ProviderAdapter {
         contextWindow: 64_000,
         supportsStreaming: false,
         supportsTools: false,
+        inputModalities: ["text", "document"],
         tags: ["review", "verification"],
       },
     ];
@@ -713,8 +715,40 @@ function createDiscoveredModels(profile: ProviderProfile): ModelDescriptor[] {
     contextWindow: profile.trustLevel === "untrusted" ? 64_000 : 128_000,
     supportsStreaming: true,
     supportsTools: !id.includes("mini") && !id.includes("haiku"),
+    inputModalities: inferModelInputModalities(id),
     tags: [profile.kind, profile.trustLevel],
   }));
+}
+
+function inferModelInputModalities(modelId: string): Array<"text" | "image" | "document"> {
+  const id = modelId.toLowerCase();
+  const modalities: Array<"text" | "image" | "document"> = ["text"];
+
+  if (
+    id.includes("gpt-5.5-pro") ||
+    id.includes("gpt-4.1") ||
+    id.includes("gemini") ||
+    id.includes("grok") ||
+    id.includes("claude") ||
+    id.includes("vision") ||
+    id.includes("multimodal")
+  ) {
+    modalities.push("image", "document");
+    return modalities;
+  }
+
+  if (
+    id.includes("rag") ||
+    id.includes("coder") ||
+    id.includes("qwen") ||
+    id.includes("deepseek") ||
+    id.includes("kimi") ||
+    id.includes("codex")
+  ) {
+    modalities.push("document");
+  }
+
+  return Array.from(new Set(modalities));
 }
 
 function createDiscoveryWarnings(profile: ProviderProfile): string[] {

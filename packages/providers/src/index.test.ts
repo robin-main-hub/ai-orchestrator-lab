@@ -61,6 +61,11 @@ describe("provider credential parsing and model discovery", () => {
     expect(discovery.models.length).toBeGreaterThan(8);
     expect(discovery.redactionApplied).toBe(true);
     expect(discovery.models.every((model) => model.providerProfileId === profile.id)).toBe(true);
+    expect(discovery.models.find((model) => model.id === "google/gemini-2.5-pro")?.inputModalities).toEqual([
+      "text",
+      "image",
+      "document",
+    ]);
   });
 
   it("models secret vault availability and provider runtime readiness", () => {
@@ -110,6 +115,7 @@ describe("provider credential parsing and model discovery", () => {
 
     expect(discovery.source).toBe("remote_probe");
     expect(discovery.models[0]?.id).toBe("qwen36-domain-wiki-rag-prisma");
+    expect(discovery.models[0]?.inputModalities).toEqual(["text", "document"]);
     expect(vault.entries[0]?.storage).toBe("dgx_vault");
     expect(vault.entries[0]?.availability).toBe("available");
     expect(vault.rawSecretPersisted).toBe(false);
