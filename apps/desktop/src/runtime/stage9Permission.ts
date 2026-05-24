@@ -6,6 +6,7 @@ import type {
   PermissionAction,
   PermissionActor,
   PermissionDecision,
+  EventSource,
   PermissionLevel,
   PermissionMatrixItem,
   PermissionMatrixSnapshot,
@@ -69,20 +70,27 @@ function createExternalApprovalItem(
   createdAt: string,
 ): PermissionMatrixItem {
   const itemId = `permission_external_${approval.id}`;
-  const state = decisions[itemId] ?? approval.state;
+  const action = actionFromExternalApproval(approval);
+  const requestedState = decisions[itemId] ?? approval.state;
+  const state: ApprovalState = action === "unknown_external_effect" ? "rejected" : requestedState;
 
   return {
     id: itemId,
     sessionId,
     subjectId: approval.ingressEventId,
     actor: "external_channel",
-    channel: approval.channel === "telegram" ? "telegram" : approval.channel === "mobile" ? "mobile" : "api",
-    sourceTrust: approval.channel === "telegram" || approval.channel === "webhook" ? "untrusted" : "limited",
-    action: actionFromPermissions(approval.permissions),
+    channel: eventSourceForExternalChannel(approval.channel),
+    sourceTrust: approval.channel === "legacy_telegram" || approval.channel === "webhook" ? "untrusted" : "limited",
+    action,
     requestedLevels: approval.permissions,
     state,
-    decision: decisionFromState(state),
-    reason: state === "approved" ? "external request approved by operator" : "external request waits behind approval gate",
+    decision: decisionFromActionAndState(action, state),
+    reason:
+      action === "unknown_external_effect"
+        ? "unknown external effect is denied by default"
+        : state === "approved"
+          ? "external request approved by operator"
+          : "external request waits behind approval gate",
     createdAt,
   };
 }
@@ -224,6 +232,80 @@ function decisionFromState(state: ApprovalState): PermissionDecision {
   return "approval_required";
 }
 
+function decisionFromActionAndState(action: PermissionAction, state: ApprovalState): PermissionDecision {
+  if (action === "unknown_external_effect") {
+    return "deny";
+  }
+
+  return decisionFromState(state);
+}
+
+function eventSourceForExternalChannel(channel: ExternalApprovalItem["channel"]): EventSource {
+  if (channel === "legacy_telegram") {
+    return "legacy_telegram";
+  }
+
+  if (channel === "mobile") {
+    return "mobile";
+  }
+
+  return "api";
+}
+
+function actionFromExternalApproval(approval: ExternalApprovalItem): PermissionAction {
+  const permissionAction = actionFromPermissions(approval.permissions);
+  if (permissionAction !== "unknown_external_effect") {
+    return permissionAction;
+  }
+
+  const summary = approval.summary.toLowerCase();
+  if (/(email|mail|메일|이메일)/i.test(summary)) {
+    return "email_send";
+  }
+
+  if (/(customer|고객|문의|cs|reply|답변|응답|channeltalk|채널톡)/i.test(summary)) {
+    return "customer_reply";
+  }
+
+  if (/(slack|telegram|message|dm|카톡|텔레그램|메시지)/i.test(summary)) {
+    return "external_message_send";
+  }
+
+  if (/(share|공유|document|문서)/i.test(summary)) {
+    return "document_share";
+  }
+
+  if (/(calendar|일정|meeting|회의)/i.test(summary)) {
+    return "calendar_create";
+  }
+
+  if (/(quote|견적)/i.test(summary)) {
+    return "quote_send";
+  }
+
+  if (/(invoice|청구|세금계산서)/i.test(summary)) {
+    return "invoice_create";
+  }
+
+  if (/(payment|refund|결제|환불)/i.test(summary)) {
+    return "payment_action";
+  }
+
+  if (/(contract|계약|legal|법무)/i.test(summary)) {
+    return "contract_review";
+  }
+
+  if (/(deploy|배포|release)/i.test(summary)) {
+    return "deploy";
+  }
+
+  if (/(git push|push|푸시)/i.test(summary)) {
+    return "git_push";
+  }
+
+  return "unknown_external_effect";
+}
+
 function actionFromPermissions(permissions: PermissionLevel[]): PermissionAction {
   if (permissions.includes("secret_access")) {
     return "secret_view";
@@ -241,7 +323,7 @@ function actionFromPermissions(permissions: PermissionLevel[]): PermissionAction
     return "terminal_run";
   }
 
-  return "conversation_reply";
+  return "unknown_external_effect";
 }
 
 function actionForRunStep(step: Stage4RunStep): PermissionAction {

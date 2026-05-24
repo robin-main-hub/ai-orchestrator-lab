@@ -83,7 +83,7 @@ export async function probeDgxOrchestratorServer({
       baseUrl,
       runtime,
       heartbeat: {
-        nodeId: localRuntime.syncTopology.authorityNodeId,
+        nodeId: "dgx-02",
         status: "unreachable",
         checkedAt,
         message: `dgx-02 orchestrator server unreachable: ${message}`,
@@ -118,15 +118,13 @@ async function fetchJson<T>(fetchImpl: typeof fetch, url: string, timeoutMs: num
 }
 
 function createUnreachableRuntime(localRuntime: RuntimeSnapshot, checkedAt: string, error: string): RuntimeSnapshot {
-  const authorityNodeId = localRuntime.syncTopology.authorityNodeId;
-
   return {
     ...localRuntime,
     status: "degraded",
     dgxStatus: "offline",
     memorySyncStatus: "degraded",
     runtimeNodes: localRuntime.runtimeNodes.map((node) =>
-      node.id === authorityNodeId
+      node.id === "dgx-02"
         ? {
             ...node,
             status: "offline",
@@ -136,13 +134,13 @@ function createUnreachableRuntime(localRuntime: RuntimeSnapshot, checkedAt: stri
     syncTopology: {
       ...localRuntime.syncTopology,
       clients: localRuntime.syncTopology.clients.map((client) =>
-        client.id === authorityNodeId
+        client.syncRole === "projection_server" || client.id === "dgx-02"
           ? {
               ...client,
               status: "offline",
               lastSeenAt: checkedAt,
             }
-          : client.outboxMode === "online_only"
+          : client.failurePolicy === "unavailable_without_dgx"
             ? {
                 ...client,
                 status: "degraded",
@@ -151,7 +149,7 @@ function createUnreachableRuntime(localRuntime: RuntimeSnapshot, checkedAt: stri
           : client,
       ),
     },
-    recentError: `dgx-02:4317 unavailable; MacBook keeps local outbox, Home PC waits for DGX-02 recovery. ${error}`,
+    recentError: `dgx-02:4317 unavailable; MacBook remains authoritative locally, Home PC waits for DGX-02 projection recovery. ${error}`,
     updatedAt: checkedAt,
   };
 }

@@ -20,21 +20,21 @@ const localRuntime: RuntimeSnapshot = {
   ],
   localModels: [],
   syncTopology: {
-    authorityNodeId: "dgx-02",
-    authorityLabel: "DGX-02",
-    eventStoreMode: "server_authoritative_with_local_outbox",
-    offlineWritePolicy: "append_local_outbox",
-    conflictPolicy: "server_revision_lww_with_conflict_events",
+    authorityNodeId: "client_macbook",
+    authorityLabel: "MacBook",
+    eventStoreMode: "macbook_authoritative_with_dgx_projection",
+    offlineWritePolicy: "append_authoritative_local",
+    conflictPolicy: "macbook_authority_wins",
     clients: [
       {
         id: "client_macbook",
         label: "MacBook",
         kind: "macbook",
         status: "online",
-        syncRole: "client_replica",
+        syncRole: "authority",
         localStore: "sqlite",
-        outboxMode: "persistent_local",
-        failurePolicy: "local_queue",
+        outboxMode: "authoritative_local",
+        failurePolicy: "continue_locally",
         outboxCount: 2,
       },
       {
@@ -42,10 +42,10 @@ const localRuntime: RuntimeSnapshot = {
         label: "Home PC",
         kind: "desktop_pc",
         status: "online",
-        syncRole: "client_replica",
+        syncRole: "thin_surface",
         localStore: "none",
-        outboxMode: "online_only",
-        failurePolicy: "requires_dgx",
+        outboxMode: "stateless",
+        failurePolicy: "unavailable_without_dgx",
         outboxCount: 0,
       },
       {
@@ -53,10 +53,10 @@ const localRuntime: RuntimeSnapshot = {
         label: "DGX-02",
         kind: "server",
         status: "offline",
-        syncRole: "authority",
+        syncRole: "projection_server",
         localStore: "sqlite",
-        outboxMode: "authority",
-        failurePolicy: "authority_recovery",
+        outboxMode: "projection_outbox",
+        failurePolicy: "compute_degraded",
         outboxCount: 0,
       },
     ],
@@ -101,7 +101,7 @@ describe("stage13 DGX server probing", () => {
           nodeId: "dgx-02",
           status: "connected",
           checkedAt: "2026-05-24T00:01:00.000Z",
-          message: "dgx-02 authority reachable",
+          message: "dgx-02 projection server reachable",
         });
       }
 
@@ -154,7 +154,7 @@ describe("stage13 DGX server probing", () => {
     expect(probe.runtime.dgxStatus).toBe("offline");
     expect(probe.runtime.memorySyncStatus).toBe("degraded");
     expect(probe.heartbeat.status).toBe("unreachable");
-    expect(probe.runtime.recentError).toContain("Home PC waits for DGX-02 recovery");
+    expect(probe.runtime.recentError).toContain("Home PC waits for DGX-02 projection recovery");
     expect(probe.runtime.syncTopology.clients.find((client) => client.id === "client_home_pc")?.status).toBe("degraded");
   });
 });

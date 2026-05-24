@@ -235,7 +235,7 @@ export type ConversationMessage = z.infer<typeof conversationMessageSchema>;
 export const conversationSessionSchema = z.object({
   id: z.string(),
   mode: z.literal("conversation"),
-  channel: z.enum(["desktop", "telegram", "mobile", "api"]),
+  channel: z.enum(["desktop", "legacy_telegram", "mobile", "api"]),
   primaryAgentId: z.string(),
   providerProfileId: z.string().optional(),
   modelId: z.string().optional(),
@@ -345,8 +345,21 @@ export type InsightFinding = z.infer<typeof insightFindingSchema>;
 export const sourceTrustSchema = z.enum(["trusted", "limited", "untrusted"]);
 export type SourceTrust = z.infer<typeof sourceTrustSchema>;
 
-export const eventSourceSchema = z.enum(["desktop", "server", "telegram", "mobile", "agent", "api"]);
+export const eventSourceSchema = z.enum(["desktop", "server", "legacy_telegram", "mobile", "agent", "api"]);
 export type EventSource = z.infer<typeof eventSourceSchema>;
+
+export const workSourceSchema = z.enum(["desktop_manual", "mobile_manual", "legacy_telegram"]);
+export type WorkSource = z.infer<typeof workSourceSchema>;
+
+export type WorkSourceRef = {
+  source: WorkSource;
+  externalId?: string;
+  url?: string;
+  title?: string;
+  observedAt: string;
+  contentHash?: string;
+  revision?: string;
+};
 
 export const eventEnvelopeSchema = z.object({
   id: z.string(),
@@ -435,7 +448,7 @@ export const permissionRequestSchema = z.object({
 });
 export type PermissionRequest = z.infer<typeof permissionRequestSchema>;
 
-export type ExternalChannel = "telegram" | "openclaw" | "mobile" | "api" | "webhook";
+export type ExternalChannel = "legacy_telegram" | "mobile" | "api" | "webhook";
 
 export type IngressAuthorType = "user" | "bot" | "manager" | "system";
 
@@ -505,7 +518,19 @@ export type PermissionAction =
   | "file_write"
   | "remote_workspace"
   | "secret_view"
-  | "mobile_approval";
+  | "mobile_approval"
+  | "email_send"
+  | "customer_reply"
+  | "external_message_send"
+  | "document_share"
+  | "calendar_create"
+  | "quote_send"
+  | "invoice_create"
+  | "payment_action"
+  | "contract_review"
+  | "deploy"
+  | "git_push"
+  | "unknown_external_effect";
 
 export const permissionActorSchema = z.enum(["user", "agent", "external_channel", "mobile", "server"]);
 export type PermissionActor = z.infer<typeof permissionActorSchema>;
@@ -749,7 +774,7 @@ export const memoryRecordSchema = z.object({
   kind: memoryKindSchema.optional(),
   title: z.string(),
   content: z.string(),
-  sourceChannel: z.enum(["desktop", "telegram", "mobile", "api", "agent"]),
+  sourceChannel: z.enum(["desktop", "legacy_telegram", "mobile", "api", "agent"]),
   trustLevel: sourceTrustSchema,
   projectId: z.string().optional(),
   sessionId: z.string().optional(),
@@ -974,11 +999,13 @@ export type LocalModelRuntime = {
 
 export type ClientDeviceKind = "macbook" | "desktop_pc" | "mobile" | "server";
 
-export type SyncRole = "authority" | "client_replica";
+export type EventStoreAuthorityMode = "macbook_authoritative_with_dgx_projection";
 
-export type ClientOutboxMode = "persistent_local" | "online_only" | "authority";
+export type SyncRole = "authority" | "projection_server" | "thin_surface" | "compute_node";
 
-export type ClientFailurePolicy = "local_queue" | "requires_dgx" | "authority_recovery";
+export type ClientOutboxMode = "authoritative_local" | "projection_outbox" | "stateless";
+
+export type ClientFailurePolicy = "continue_locally" | "unavailable_without_dgx" | "compute_degraded";
 
 export type ClientDevice = {
   id: string;
@@ -996,9 +1023,9 @@ export type ClientDevice = {
 export type SyncTopology = {
   authorityNodeId: string;
   authorityLabel: string;
-  eventStoreMode: "server_authoritative_with_local_outbox";
-  offlineWritePolicy: "append_local_outbox" | "read_only";
-  conflictPolicy: "server_revision_lww_with_conflict_events" | "manual_review";
+  eventStoreMode: EventStoreAuthorityMode;
+  offlineWritePolicy: "append_authoritative_local" | "read_only";
+  conflictPolicy: "macbook_authority_wins" | "manual_review";
   clients: ClientDevice[];
 };
 
@@ -1071,7 +1098,12 @@ export type BackupArtifactKind =
   | "decision_record"
   | "coding_packet"
   | "run_artifact"
-  | "memory_trace";
+  | "memory_trace"
+  | "work_item"
+  | "assistant_draft"
+  | "routine"
+  | "daily_briefing"
+  | "approval_record";
 
 export type BackupProjectionFormat = "markdown" | "notion_summary" | "mobile_dashboard";
 

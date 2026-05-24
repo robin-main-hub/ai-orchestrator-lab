@@ -398,21 +398,21 @@ const runtimeSnapshot: RuntimeSnapshot = {
     },
   ],
   syncTopology: {
-    authorityNodeId: "dgx-02",
-    authorityLabel: "DGX-02",
-    eventStoreMode: "server_authoritative_with_local_outbox",
-    offlineWritePolicy: "append_local_outbox",
-    conflictPolicy: "server_revision_lww_with_conflict_events",
+    authorityNodeId: "client_macbook",
+    authorityLabel: "MacBook",
+    eventStoreMode: "macbook_authoritative_with_dgx_projection",
+    offlineWritePolicy: "append_authoritative_local",
+    conflictPolicy: "macbook_authority_wins",
     clients: [
       {
         id: "client_macbook",
         label: "MacBook",
         kind: "macbook",
         status: "online",
-        syncRole: "client_replica",
+        syncRole: "authority",
         localStore: "sqlite",
-        outboxMode: "persistent_local",
-        failurePolicy: "local_queue",
+        outboxMode: "authoritative_local",
+        failurePolicy: "continue_locally",
         outboxCount: 0,
         lastSeenAt: now,
       },
@@ -421,10 +421,10 @@ const runtimeSnapshot: RuntimeSnapshot = {
         label: "Home PC",
         kind: "desktop_pc",
         status: "online",
-        syncRole: "client_replica",
+        syncRole: "thin_surface",
         localStore: "none",
-        outboxMode: "online_only",
-        failurePolicy: "requires_dgx",
+        outboxMode: "stateless",
+        failurePolicy: "unavailable_without_dgx",
         outboxCount: 0,
         lastSeenAt: now,
       },
@@ -433,10 +433,10 @@ const runtimeSnapshot: RuntimeSnapshot = {
         label: "DGX-02",
         kind: "server",
         status: "offline",
-        syncRole: "authority",
+        syncRole: "projection_server",
         localStore: "sqlite",
-        outboxMode: "authority",
-        failurePolicy: "authority_recovery",
+        outboxMode: "projection_outbox",
+        failurePolicy: "compute_degraded",
         outboxCount: 0,
       },
     ],
@@ -1610,7 +1610,7 @@ export function App() {
         })),
       },
       {
-        source: "telegram",
+        source: "legacy_telegram",
         sourceTrust: "untrusted",
         correlationId: snapshot.id,
       },
@@ -1624,7 +1624,7 @@ export function App() {
           reason: snapshot.result.reason,
         },
         {
-          source: "telegram",
+          source: "legacy_telegram",
           sourceTrust: "untrusted",
           correlationId: snapshot.id,
         },
@@ -1653,7 +1653,7 @@ export function App() {
         layer: "fragment",
         title: "Telegram ingress candidate",
         content: normalizedEvent.normalizedText,
-        sourceChannel: "telegram",
+        sourceChannel: "legacy_telegram",
         trustLevel: "untrusted",
         createdAt: receivedAt,
         pinned: false,
@@ -1673,7 +1673,7 @@ export function App() {
         redaction: normalizedEvent.redacted ? "applied" : "none",
       },
       {
-        source: "telegram",
+        source: "legacy_telegram",
         sourceTrust: "untrusted",
         correlationId: snapshot.id,
       },
@@ -1682,12 +1682,12 @@ export function App() {
       "memory.candidate.created",
       {
         recordId: `memory_ingress_${normalizedEvent.id}`,
-        sourceChannel: "telegram",
+        sourceChannel: "legacy_telegram",
         trustLevel: "untrusted",
         autoRecall: false,
       },
       {
-        source: "telegram",
+        source: "legacy_telegram",
         sourceTrust: "untrusted",
         correlationId: snapshot.id,
       },
@@ -1702,7 +1702,7 @@ export function App() {
           channel: snapshot.channel,
         },
         {
-          source: "telegram",
+          source: "legacy_telegram",
           sourceTrust: "untrusted",
           correlationId: snapshot.id,
         },
@@ -2570,12 +2570,12 @@ export function App() {
             <div className="sync-authority-note">
               <strong>Event Storage Authority</strong>
               <span>{runtimeSnapshotState.syncTopology.authorityLabel}</span>
-              <em>central</em>
+              <em>source</em>
             </div>
             <div className="client-sync-list">
-              <span>Client Sync</span>
+              <span>Projection / Clients</span>
               {runtimeSnapshotState.syncTopology.clients
-                .filter((client) => client.syncRole === "client_replica")
+                .filter((client) => client.id !== runtimeSnapshotState.syncTopology.authorityNodeId)
                 .map((client) => (
                   <div className="client-sync-row" key={client.id}>
                     <strong>{client.label}</strong>
@@ -3184,7 +3184,7 @@ function ChannelRailPanel({
 }) {
   const visibleSteps = ingressSnapshot.result.guardSteps.slice(0, 7);
   const channels = [
-    { label: "Telegram", status: ingressSnapshot.channel === "telegram" ? "linked" : "ready" },
+    { label: "Telegram", status: ingressSnapshot.channel === "legacy_telegram" ? "linked" : "ready" },
     { label: "OpenClaw Bridge", status: "pending adapter" },
     { label: "Mobile", status: runtime.dgxStatus === "online" ? "approval ready" : "read-only pending" },
     { label: "API", status: "guarded ingress" },

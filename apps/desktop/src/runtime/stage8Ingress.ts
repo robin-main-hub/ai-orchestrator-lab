@@ -38,7 +38,7 @@ export type Stage8IngressSnapshot = {
 export function createTelegramDemoInput(receivedAt = new Date().toISOString()): Stage8RawIngressInput {
   return {
     id: `telegram_input_${stableId(receivedAt)}`,
-    channel: "telegram",
+    channel: "legacy_telegram",
     authorType: "user",
     eventType: "message",
     text: "OpenClaw에서 이어받기: 현재 대화를 코딩 패킷으로 정리하고 터미널에서 pnpm test 실행 준비해줘. OPENAI_API_KEY=sk-stage8-demo-secret",
@@ -65,7 +65,7 @@ export function createStage8IngressSnapshot(input = createTelegramDemoInput()): 
     : {
         id: `ingress_event_${stableId(`${input.id}:${redactedText}`)}`,
         channel: input.channel,
-        source: input.channel === "telegram" ? "telegram" : input.channel === "mobile" ? "mobile" : "api",
+        source: eventSourceForChannel(input.channel),
         sourceTrust: sourceTrustForChannel(input.channel),
         authorType: input.authorType,
         rawText: input.text,
@@ -214,7 +214,19 @@ function classifyConfidence(value: string, permissions: PermissionLevel[]): Ingr
 }
 
 function sourceTrustForChannel(channel: ExternalChannel): SourceTrust {
-  return channel === "telegram" || channel === "webhook" ? "untrusted" : "limited";
+  return channel === "legacy_telegram" || channel === "webhook" ? "untrusted" : "limited";
+}
+
+function eventSourceForChannel(channel: ExternalChannel) {
+  if (channel === "legacy_telegram") {
+    return "legacy_telegram";
+  }
+
+  if (channel === "mobile") {
+    return "mobile";
+  }
+
+  return "api";
 }
 
 function createResultReason(blocked: boolean, requiresApproval: boolean, confidence: IngressConfidence) {

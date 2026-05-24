@@ -34,7 +34,7 @@ export type MemoryAPI = {
 export type MemoryRecord = {
   id: string;
   content: string;
-  sourceChannel: "desktop" | "telegram" | "mobile" | "api" | "server" | "system";
+  sourceChannel: "desktop" | "legacy_telegram" | "mobile" | "api" | "server" | "system";
   trustLevel: "trusted" | "limited" | "untrusted";
   projectId?: string;
   createdAt: string;

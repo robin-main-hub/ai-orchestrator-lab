@@ -23,12 +23,13 @@ import {
 } from "./index";
 
 describe("server health placeholder", () => {
-  it("returns a DGX-02 authority runtime status", () => {
+  it("returns MacBook authority with DGX-02 projection runtime status", () => {
     const health = createHealthResponse();
 
     expect(health.status).toBe("ok");
     expect(health.runtime.status).toBe("degraded");
-    expect(health.runtime.syncTopology.authorityNodeId).toBe("dgx-02");
+    expect(health.runtime.syncTopology.authorityNodeId).toBe("client_macbook");
+    expect(health.runtime.syncTopology.conflictPolicy).toBe("macbook_authority_wins");
     expect(health.capabilities).toContain("remote-run-request");
     expect(health.capabilities).toContain("model-registry");
     expect(health.capabilities).toContain("vllm-health");

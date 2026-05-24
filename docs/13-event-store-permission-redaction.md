@@ -61,7 +61,7 @@ export const EventEnvelopeSchema = z.object({
   eventType: z.string(),
   sessionId: z.string().uuid(),
   projectId: z.string().optional(),
-  source: z.enum(["desktop", "server", "telegram", "mobile", "api", "system"]),
+  source: z.enum(["desktop", "server", "legacy_telegram", "mobile", "api", "system"]),
   sourceTrust: z.enum(["trusted", "limited", "untrusted"]),
   actorId: z.string(),
   createdAt: z.string().datetime(),

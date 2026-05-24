@@ -24,7 +24,7 @@ The memory record needs more than text:
 - layer: fragment, episode, reflection, project memory, user memory.
 - scope: global, project, session.
 - kind: preference, architecture, pattern, decision, context, workflow, relationship, learning.
-- source and trust: desktop, telegram, mobile, api, agent plus trusted, limited, untrusted.
+- source and trust: desktop, legacy_telegram, mobile, api, agent plus trusted, limited, untrusted.
 - activation state: inactive, suggested, active, quarantined.
 - relation graph and reflection issues.
 

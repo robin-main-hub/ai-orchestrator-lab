@@ -12,6 +12,7 @@ import {
   terminalCommandIntentSchema,
   terminalPaneSchema,
   tmuxSessionRefSchema,
+  workSourceSchema,
   type BackupProjectionArtifact,
   type CodingPacket,
   type TerminalPaneOutputCapturedEventPayload,
@@ -29,6 +30,7 @@ import {
   type RemoteExecutionRequest,
   type RemoteExecutionResponse,
   type SecretVaultSnapshot,
+  type WorkSourceRef,
 } from "./index";
 
 describe("protocol schemas", () => {
@@ -97,7 +99,7 @@ describe("protocol schemas", () => {
       type: "conversation.message.created",
       payload: { text: "토론으로 돌려봐" },
       createdAt: new Date("2026-05-24T00:00:00.000Z").toISOString(),
-      source: "telegram",
+      source: "legacy_telegram",
       sourceTrust: "untrusted",
     });
 
@@ -171,10 +173,10 @@ describe("protocol schemas", () => {
       label: "MacBook",
       kind: "macbook" as const,
       status: "online" as const,
-      syncRole: "client_replica" as const,
+      syncRole: "authority" as const,
       localStore: "sqlite" as const,
-      outboxMode: "persistent_local" as const,
-      failurePolicy: "local_queue" as const,
+      outboxMode: "authoritative_local" as const,
+      failurePolicy: "continue_locally" as const,
       outboxCount: 2,
     };
     const homePc = {
@@ -182,15 +184,15 @@ describe("protocol schemas", () => {
       label: "Home PC",
       kind: "desktop_pc" as const,
       status: "online" as const,
-      syncRole: "client_replica" as const,
+      syncRole: "thin_surface" as const,
       localStore: "none" as const,
-      outboxMode: "online_only" as const,
-      failurePolicy: "requires_dgx" as const,
+      outboxMode: "stateless" as const,
+      failurePolicy: "unavailable_without_dgx" as const,
       outboxCount: 0,
     };
 
-    expect(macbook.outboxMode).toBe("persistent_local");
-    expect(homePc.failurePolicy).toBe("requires_dgx");
+    expect(macbook.outboxMode).toBe("authoritative_local");
+    expect(homePc.failurePolicy).toBe("unavailable_without_dgx");
     expect(homePc.outboxCount).toBe(0);
   });
 
@@ -337,8 +339,8 @@ describe("protocol schemas", () => {
       ],
       normalizedEvent: {
         id: "ingress_event_1",
-        channel: "telegram",
-        source: "telegram",
+        channel: "legacy_telegram",
+        source: "legacy_telegram",
         sourceTrust: "untrusted",
         authorType: "user",
         rawText: "run pnpm test",
@@ -374,7 +376,7 @@ describe("protocol schemas", () => {
           sessionId: "session_1",
           subjectId: "ingress_event_1",
           actor: "external_channel",
-          channel: "telegram",
+          channel: "legacy_telegram",
           sourceTrust: "untrusted",
           action: "terminal_run",
           requestedLevels: ["run_safe_commands"],
@@ -462,6 +464,18 @@ describe("protocol schemas", () => {
     expect(slot.status).toBe("placeholder");
     expect(requested.redactionApplied).toBe(true);
     expect(completed.status).toBe("blocked");
+  });
+
+  it("uses narrow work source references for manual and legacy ingress", () => {
+    const source: WorkSourceRef = {
+      source: "legacy_telegram",
+      externalId: "telegram_input_1",
+      observedAt: "2026-05-24T00:00:00.000Z",
+      contentHash: "sha256:demo",
+    };
+
+    expect(workSourceSchema.parse(source.source)).toBe("legacy_telegram");
+    expect(() => workSourceSchema.parse("telegram")).toThrow();
   });
 
   it("models tmux terminal sessions, panes, command intents and captured output", () => {

@@ -85,7 +85,7 @@ UI는 선택된 봇의 이름, 역할, provider/model, credential binding을 대
 export type ConversationSession = {
   id: string;
   mode: "conversation";
-  channel: "desktop" | "telegram" | "mobile" | "api";
+  channel: "desktop" | "legacy_telegram" | "mobile" | "api";
   primaryAgentId: string;
   providerProfileId?: string;
   modelId?: string;
