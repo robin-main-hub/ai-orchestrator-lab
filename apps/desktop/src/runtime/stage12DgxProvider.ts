@@ -72,16 +72,24 @@ export async function requestDgxVllmCompletion({
       throw proxyError;
     }
 
-    const direct = await requestDgxVllmCompletionDirect({
-      provider,
-      modelId,
-      messages,
-      fetchImpl,
-    });
-    return {
-      ...direct,
-      fallbackReason: proxyError instanceof Error ? proxyError.message : String(proxyError),
-    };
+    try {
+      const direct = await requestDgxVllmCompletionDirect({
+        provider,
+        modelId,
+        messages,
+        fetchImpl,
+      });
+      return {
+        ...direct,
+        fallbackReason: formatCompletionError(proxyError),
+      };
+    } catch (directError) {
+      throw new Error(
+        `DGX provider call failed. Server proxy: ${formatCompletionError(proxyError)}. Direct fallback: ${formatCompletionError(
+          directError,
+        )}`,
+      );
+    }
   }
 }
 
@@ -144,6 +152,7 @@ async function requestDgxProviderCompletionViaProxyFallback({
 }: Required<Pick<Stage12DgxCompletionInput, "provider" | "modelId" | "messages" | "fetchImpl" | "proxyTimeoutMs">> &
   Pick<Stage12DgxCompletionInput, "proxyBaseUrl">): Promise<Stage12DgxCompletionResult> {
   let lastError: unknown;
+  const errors: string[] = [];
   for (const baseUrl of resolveDgxServerBaseUrls(proxyBaseUrl)) {
     try {
       return await requestDgxVllmCompletionViaProxy({
@@ -156,10 +165,11 @@ async function requestDgxProviderCompletionViaProxyFallback({
       });
     } catch (error) {
       lastError = error;
+      errors.push(`${baseUrl}: ${formatCompletionError(error)}`);
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? "DGX-02 server proxy unavailable"));
+  throw new Error(errors.length > 0 ? errors.join(" | ") : formatCompletionError(lastError ?? "DGX-02 server proxy unavailable"));
 }
 
 async function requestDgxVllmCompletionViaProxy({
@@ -258,6 +268,14 @@ async function fetchWithTimeout(fetchImpl: typeof fetch, input: string, init: Re
   } finally {
     globalThis.clearTimeout(timeoutId);
   }
+}
+
+function formatCompletionError(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
 }
 
 export function createDgxVllmRequestBody(modelId: string, messages: ConversationMessage[]) {
