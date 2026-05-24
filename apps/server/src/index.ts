@@ -81,6 +81,8 @@ type ServerProviderProxyConfig = {
   defaultKeyFile?: string;
   noAuth?: boolean;
   apiStyle?: "openai_chat" | "anthropic_messages";
+  defaultModelIds: string[];
+  supportsModelList?: boolean;
 };
 
 const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
@@ -91,6 +93,8 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     apiKeyFileEnvName: "DEEPSEEK_API_KEY_FILE",
     defaultKeyFile: "~/.openclaw/secrets/deepseek.key",
     apiStyle: "openai_chat",
+    defaultModelIds: ["deepseek-chat", "deepseek-reasoner", "deepseek-r1", "deepseek-v3"],
+    supportsModelList: true,
   },
   {
     providerProfileId: "provider_apifun_claude",
@@ -99,6 +103,8 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     apiKeyFileEnvName: "APIFUN_API_KEY_FILE",
     defaultKeyFile: "~/.openclaw/secrets/apifun.key",
     apiStyle: "anthropic_messages",
+    defaultModelIds: ["claude-code-compatible", "claude-opus-reseller", "claude-sonnet-reseller", "claude-haiku-reseller"],
+    supportsModelList: false,
   },
   {
     providerProfileId: "provider_grok_oauth_dgx",
@@ -106,6 +112,8 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     apiKeyEnvNames: [],
     noAuth: true,
     apiStyle: "openai_chat",
+    defaultModelIds: ["grok-oauth-session", "grok-4", "grok-4-fast", "grok-code"],
+    supportsModelList: true,
   },
   {
     providerProfileId: "provider_openclaw_dgx",
@@ -114,6 +122,8 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     apiKeyFileEnvName: "OPENCLAW_VLLM_API_KEY_FILE",
     noAuth: true,
     apiStyle: "openai_chat",
+    defaultModelIds: ["qwen36-heretic", "qwen36-gio-wiki-rag-prisma"],
+    supportsModelList: true,
   },
 ];
 
@@ -305,6 +315,112 @@ export async function createLiveDgxModelDiscovery(options: DgxVllmProbeOptions =
   return createDgxModelDiscovery(checkedAt, probe);
 }
 
+export async function createServerProviderModelDiscoveryResponse(
+  providerProfileId: string,
+  options: DgxProviderCompletionOptions & { timeoutMs?: number } = {},
+): Promise<ModelDiscoverySnapshot> {
+  const createdAt = options.now ?? new Date().toISOString();
+  if (providerProfileId === "provider_dgx02_vllm") {
+    return createLiveDgxModelDiscovery({
+      now: createdAt,
+      vllmBaseUrl: options.vllmBaseUrl,
+      fetchImpl: options.fetchImpl,
+      timeoutMs: options.timeoutMs,
+    });
+  }
+
+  const config = serverProviderProxyConfigs.find((candidate) => candidate.providerProfileId === providerProfileId);
+  if (!config) {
+    return {
+      id: `model_discovery_${providerProfileId}_blocked`,
+      providerProfileId,
+      status: "blocked",
+      source: "remote_probe",
+      models: [],
+      redactionApplied: true,
+      warnings: ["provider is not registered in the DGX-02 model discovery allowlist"],
+      createdAt,
+    };
+  }
+
+  const fallbackModels = config.defaultModelIds.map((modelId) => createServerProviderModelDescriptor(config, modelId));
+  if (!config.supportsModelList) {
+    return {
+      id: `model_discovery_${providerProfileId}_static`,
+      providerProfileId,
+      status: "succeeded",
+      source: "remote_probe",
+      models: fallbackModels,
+      selectedModelId: fallbackModels[0]?.id,
+      redactionApplied: true,
+      warnings: ["provider uses DGX-02 static model allowlist; remote /models is not required"],
+      createdAt,
+    };
+  }
+
+  const apiKey = config.noAuth ? undefined : await resolveServerProviderApiKey(config);
+  if (!config.noAuth && !apiKey) {
+    return {
+      id: `model_discovery_${providerProfileId}_secret_missing`,
+      providerProfileId,
+      status: "failed",
+      source: "remote_probe",
+      models: fallbackModels,
+      selectedModelId: fallbackModels[0]?.id,
+      redactionApplied: true,
+      warnings: ["DGX-02 provider secret was not resolved; using static model fallback"],
+      createdAt,
+    };
+  }
+
+  const endpoint = `${config.baseUrl.replace(/\/$/, "")}/models`;
+  try {
+    const response = await fetchWithTimeout(
+      options.fetchImpl ?? fetch,
+      endpoint,
+      {
+        method: "GET",
+        headers: createServerProviderHeaders(config, apiKey),
+      },
+      options.timeoutMs ?? 1_500,
+    );
+    const rawText = await response.text();
+    if (!response.ok) {
+      throw new Error(`${response.status} ${rawText.slice(0, 180)}`);
+    }
+
+    const parsed = JSON.parse(rawText) as { data?: Array<{ id?: string }> };
+    const models = (parsed.data ?? [])
+      .map((model) => model.id)
+      .filter((modelId): modelId is string => Boolean(modelId))
+      .map((modelId) => createServerProviderModelDescriptor(config, modelId));
+
+    return {
+      id: `model_discovery_${providerProfileId}_${models.length || "fallback"}`,
+      providerProfileId,
+      status: "succeeded",
+      source: "remote_probe",
+      models: models.length ? models : fallbackModels,
+      selectedModelId: (models[0] ?? fallbackModels[0])?.id,
+      redactionApplied: true,
+      warnings: models.length ? [] : ["remote /models returned no models; using static model fallback"],
+      createdAt,
+    };
+  } catch (error) {
+    return {
+      id: `model_discovery_${providerProfileId}_fallback`,
+      providerProfileId,
+      status: "succeeded",
+      source: "remote_probe",
+      models: fallbackModels,
+      selectedModelId: fallbackModels[0]?.id,
+      redactionApplied: true,
+      warnings: [`remote /models failed; using static model fallback: ${error instanceof Error ? error.message : String(error)}`],
+      createdAt,
+    };
+  }
+}
+
 function createDgxModelDescriptor(modelId: string): ModelDiscoverySnapshot["models"][number] {
   return {
     id: modelId,
@@ -314,6 +430,29 @@ function createDgxModelDescriptor(modelId: string): ModelDiscoverySnapshot["mode
     supportsStreaming: true,
     supportsTools: false,
     tags: ["dgx", "vllm", ...(modelId.includes("qwen") ? ["qwen"] : []), ...(modelId.includes("rag") ? ["rag"] : [])],
+  };
+}
+
+function createServerProviderModelDescriptor(
+  config: ServerProviderProxyConfig,
+  modelId: string,
+): ModelDiscoverySnapshot["models"][number] {
+  const multimodal = /gpt-4o|vision|gemini|claude|grok-4/i.test(modelId);
+  return {
+    id: modelId,
+    name: modelId,
+    providerProfileId: config.providerProfileId,
+    contextWindow: /deepseek|r1/i.test(modelId) ? 64_000 : /claude|grok/i.test(modelId) ? 128_000 : 65_536,
+    supportsStreaming: true,
+    supportsTools: false,
+    inputModalities: multimodal ? ["text", "image", "document"] : ["text", "document"],
+    tags: [
+      "server-proxy",
+      ...(config.providerProfileId.includes("deepseek") ? ["deepseek"] : []),
+      ...(config.providerProfileId.includes("apifun") ? ["apifun", "reseller"] : []),
+      ...(config.providerProfileId.includes("grok") ? ["grok", "oauth"] : []),
+      ...(config.providerProfileId.includes("openclaw") ? ["openclaw", "dgx", "vllm"] : []),
+    ],
   };
 }
 
@@ -1004,6 +1143,12 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
 
     if (pathname === "/models") {
       writeJson(response, 200, await createLiveDgxModelDiscovery());
+      return;
+    }
+
+    if (pathname === "/provider-models") {
+      const providerProfileId = requestUrl.searchParams.get("providerProfileId") ?? "provider_dgx02_vllm";
+      writeJson(response, 200, await createServerProviderModelDiscoveryResponse(providerProfileId));
       return;
     }
 

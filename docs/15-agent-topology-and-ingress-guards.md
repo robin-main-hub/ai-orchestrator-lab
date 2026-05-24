@@ -221,6 +221,8 @@ v0에서 바로 구현할 것:
 - `IngressEvent`는 channel, source trust, author type, normalized/redacted text, requested permissions, confidence를 가진다.
 - `IngressGuardResult`는 7단계 guard의 pass/queued/blocked 상태와 approval state를 기록한다.
 - Telegram/OpenClaw demo input은 Event Store에 들어가기 전에 secret/env 값을 redaction하고 `sourceTrust: untrusted`로 표시한다.
+- 외부 입력의 원문 payload는 일반 Event Store에 그대로 남기지 않고 `rawText: [QUARANTINED_RAW_PAYLOAD]`로 격리한다.
+- 짧은 시간 안에 연달아 들어온 외부 snippet은 `recentTexts`와 함께 debounce window에서 하나의 normalized text로 병합한다.
 - terminal/write/secret 요청은 `ExternalApprovalItem`으로 approval queue에 들어간다.
 - self-response/bot reply는 세션 handoff 전에 차단한다.
 - Conversation Workbench의 `Telegram` 버튼은 guarded external message를 현재 세션에 추가하고, untrusted memory candidate로 격리한다.

@@ -315,6 +315,7 @@ Stage9에서는 `PermissionMatrixSnapshot`을 protocol에 추가하고, desktop 
 - Telegram/OpenClaw 등 외부 채널에서 온 실행성 요청은 `external_channel` actor로 기록한다.
 - terminal/run slot은 실제 명령을 실행하지 않고 `terminal_run` permission item으로만 표현한다.
 - Coding handoff run step은 `write_files`, `run_safe_commands`, `remote_workspace` 권한을 요구하는 approval item으로 표현한다.
+- provider completion도 Permission Matrix에 들어간다. `ready` provider는 `not_required`, untrusted provider는 `provider_completion` approval item, credential missing/blocked provider는 deny 상태가 된다.
 - mobile dashboard는 read/approve/stop/retry만 허용하고 terminal typing과 secret view는 `deny` 상태로 남긴다.
 - approve/reject 버튼은 Event Store에 `permission.approved`, `permission.rejected`, `permission.queue.updated` 이벤트를 남긴다.
 

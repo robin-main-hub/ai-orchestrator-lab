@@ -10,6 +10,7 @@ import {
   createHealthResponse,
   createJsonlServerEventStorage,
   createLiveHealthResponse,
+  createServerProviderModelDiscoveryResponse,
   createRemoteRunResponse,
   createRuntimeSnapshot,
   createServerEventStorageState,
@@ -170,6 +171,52 @@ describe("server health placeholder", () => {
         process.env.APIFUN_API_KEY = previousKey;
       }
     }
+  });
+
+  it("discovers DeepSeek models through the DGX-02 provider model proxy", async () => {
+    const previousKey = process.env.DEEPSEEK_API_KEY;
+    process.env.DEEPSEEK_API_KEY = "deepseek-test-secret";
+
+    try {
+      const discovery = await createServerProviderModelDiscoveryResponse("provider_deepseek_dgx", {
+        now: "2026-05-24T00:00:00.000Z",
+        fetchImpl: async (url, init) => {
+          expect(url).toBe("https://api.deepseek.com/v1/models");
+          expect(init?.headers?.authorization).toBe("Bearer deepseek-test-secret");
+          return {
+            ok: true,
+            status: 200,
+            async text() {
+              return JSON.stringify({ data: [{ id: "deepseek-chat" }, { id: "deepseek-reasoner" }] });
+            },
+          };
+        },
+      });
+
+      expect(discovery.status).toBe("succeeded");
+      expect(discovery.source).toBe("remote_probe");
+      expect(discovery.models.map((model) => model.id)).toEqual(["deepseek-chat", "deepseek-reasoner"]);
+      expect(JSON.stringify(discovery)).not.toContain("deepseek-test-secret");
+    } finally {
+      if (previousKey === undefined) {
+        delete process.env.DEEPSEEK_API_KEY;
+      } else {
+        process.env.DEEPSEEK_API_KEY = previousKey;
+      }
+    }
+  });
+
+  it("uses static APIFun model allowlist without calling remote /models", async () => {
+    const discovery = await createServerProviderModelDiscoveryResponse("provider_apifun_claude", {
+      now: "2026-05-24T00:00:00.000Z",
+      fetchImpl: async () => {
+        throw new Error("should not call APIFun /models");
+      },
+    });
+
+    expect(discovery.status).toBe("succeeded");
+    expect(discovery.models.map((model) => model.id)).toContain("claude-code-compatible");
+    expect(discovery.warnings.join(" ")).toContain("static model allowlist");
   });
 
   it("probes vLLM /models before publishing live health", async () => {

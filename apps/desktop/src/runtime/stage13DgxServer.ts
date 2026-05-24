@@ -1,6 +1,7 @@
 import type {
   DgxHeartbeat,
   ModelDiscoverySnapshot,
+  ProviderProfile,
   RuntimeSnapshot,
 } from "@ai-orchestrator/protocol";
 import { mergeDgxRuntimeSnapshot } from "./stage5Runtime";
@@ -44,6 +45,13 @@ export type Stage13DgxServerProbeInput = {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   checkedAt?: string;
+};
+
+export type Stage13ProviderModelDiscoveryInput = {
+  provider: ProviderProfile;
+  serverBaseUrl?: string;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 };
 
 const DEFAULT_DGX_SERVER_BASE_URL = "http://dgx-02:4317";
@@ -93,6 +101,17 @@ export async function probeDgxOrchestratorServer({
       latencyMs: Date.now() - startedAt,
     };
   }
+}
+
+export async function fetchDgxProviderModelDiscovery({
+  provider,
+  serverBaseUrl = DEFAULT_DGX_SERVER_BASE_URL,
+  fetchImpl = fetch,
+  timeoutMs = 1_500,
+}: Stage13ProviderModelDiscoveryInput): Promise<ModelDiscoverySnapshot> {
+  const baseUrl = serverBaseUrl.replace(/\/$/, "");
+  const endpoint = `${baseUrl}/provider-models?providerProfileId=${encodeURIComponent(provider.id)}`;
+  return fetchJson<ModelDiscoverySnapshot>(fetchImpl, endpoint, timeoutMs);
 }
 
 async function fetchJson<T>(fetchImpl: typeof fetch, url: string, timeoutMs: number): Promise<T> {
