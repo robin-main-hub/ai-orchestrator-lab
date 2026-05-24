@@ -56,6 +56,8 @@ packages/
   protocol/       # 데스크톱-서버-에이전트 공통 스키마
   providers/      # OpenAI/Anthropic/OpenRouter/Ollama/리셀러 API 어댑터
   agents/         # 에이전트 런타임, 토론 엔진, 코딩 전달 엔진
+agents/
+  orchestrator/   # 기본 SOUL.md / AGENTS.md 프로필 파일
 docs/
   00-product-brief.md
   01-architecture.md
@@ -247,9 +249,9 @@ corepack pnpm dev
 
 ## Stage30
 
-- Conversation 중앙 상단에 `Profile`, `Soul`, `Voice`, `Memory`, `AGENTS.md`, `SOUL.md`, `Preview`, `Edit` 컨트롤 바를 추가했다.
+- Conversation 중앙 상단에 `Profile`, `SOUL.md`, `창의성`, `Memory`, `AGENTS.md`, `Preview`, `Edit` 컨트롤 바를 추가했다.
 - 선택된 에이전트별 voice preset, AGENTS.md 경로, SOUL.md 경로, soul 요약, 운영 지침을 앱 내부 상태로 관리한다.
-- 컨트롤 바 클릭 시 Agent Profile / Soul 설정 drawer가 열리고 `Profile`, `SOUL.md`, `AGENTS.md`, `Voice`, `Injection`, `Preview`, `Edit` 탭을 전환할 수 있다.
+- 컨트롤 바 클릭 시 Agent Profile / Soul 설정 drawer가 열리고 `Profile`, `SOUL.md`, `AGENTS.md`, `창의성`, `Injection`, `Preview`, `Edit` 항목을 전환할 수 있다.
 - `Injection` 탭에서 `internal`, `markdown`, `off` 중 하나만 실행 소스로 선택하게 해 markdown과 내부 설정 동시 주입을 피한다.
 
 ## Stage31
@@ -334,4 +336,11 @@ corepack pnpm dev
 - `scripts/swarm-capture.sh`를 추가해 `.ai-swarm/ai-swarm.env`의 pane id를 기준으로 read-only capture를 수행하고, obvious secret을 출력 전에 redaction한다.
 - 실제 `send-keys` 자동 실행은 여전히 Permission Matrix, Redaction Layer, Event Storage mapping, approval gate 뒤에 둔다.
 - `docs/19-tmux-session-runtime.md`에는 attach/detach/reconnect, pane capture, terminal.* event mapping, DGX-02/DGX-01 규칙을 정리했다.
+
+## Stage42
+
+- `agents/orchestrator/SOUL.md`와 `agents/orchestrator/AGENTS.md` 기본 프로필을 추가했다.
+- 기본 프로필은 API 없이 로컬 Markdown과 앱 내부 persona 설정만으로 편집할 수 있다.
+- Conversation의 Agent Profile drawer에 `기본값` 버튼을 추가해 선택된 에이전트의 SOUL/AGENTS/창의성 기본값을 다시 불러올 수 있게 했다.
+- 기본 persona seed는 에이전트 이름이 아니라 역할 기반 경로(`agents/orchestrator/SOUL.md`)를 사용한다.
 - `docs/20-dcinside-reference-1185913.md`에는 아직 본문 확인이 끝나지 않은 DCInside 추가 레퍼런스를 검증 대기 상태로 등록했다.

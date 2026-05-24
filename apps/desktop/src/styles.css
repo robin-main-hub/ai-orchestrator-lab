@@ -1576,6 +1576,25 @@ button {
   white-space: nowrap;
 }
 
+.agent-config-reset-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #002f38;
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.agent-config-reset-button:hover {
+  border-color: var(--cyan);
+  color: var(--text);
+}
+
 .agent-config-body {
   min-height: 0;
   overflow-y: auto;
