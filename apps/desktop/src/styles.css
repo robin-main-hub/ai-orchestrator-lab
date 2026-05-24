@@ -796,6 +796,198 @@ button {
   -webkit-line-clamp: 2;
 }
 
+.rail-split-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.rail-split-list section {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #001f25;
+}
+
+.rail-split-list strong,
+.rail-split-list span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-split-list strong {
+  color: var(--amber);
+  font-size: 9px;
+}
+
+.rail-split-list span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.window-checklist {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #001f25;
+}
+
+.window-checklist-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.window-checklist-head strong,
+.window-checklist-head span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.window-checklist-head strong {
+  color: var(--text);
+  font-size: 10px;
+}
+
+.window-checklist-head span {
+  color: var(--cyan);
+  font-size: 10px;
+}
+
+.window-checklist-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 5px;
+  min-width: 0;
+}
+
+.rail-panel .window-checklist-list,
+.side-panel .window-checklist-list,
+.agent-settings-modal .window-checklist-list {
+  grid-template-columns: minmax(0, 1fr);
+  max-height: 132px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.window-checklist article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #141311;
+}
+
+.window-checklist article.ready {
+  border-color: rgba(84, 224, 160, 0.28);
+}
+
+.window-checklist article.partial {
+  border-color: rgba(216, 198, 93, 0.34);
+}
+
+.window-checklist article.blocked {
+  border-color: rgba(255, 125, 144, 0.38);
+}
+
+.window-checklist article div {
+  min-width: 0;
+}
+
+.window-checklist article strong,
+.window-checklist article p,
+.window-checklist article em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.window-checklist article strong,
+.window-checklist article em {
+  white-space: nowrap;
+}
+
+.window-checklist article strong {
+  display: block;
+  color: var(--text);
+  font-size: 9.5px;
+}
+
+.window-checklist article p {
+  display: -webkit-box;
+  margin: 2px 0 0;
+  color: var(--subtle);
+  font-size: 8.5px;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.window-checklist article em {
+  align-self: start;
+  padding: 2px 5px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-style: normal;
+}
+
+.window-checklist article.ready em {
+  color: var(--green);
+  background: rgba(84, 224, 160, 0.1);
+}
+
+.window-checklist article.partial em {
+  color: var(--amber);
+  background: rgba(216, 198, 93, 0.1);
+}
+
+.window-checklist article.blocked em {
+  color: var(--rose);
+  background: rgba(255, 125, 144, 0.1);
+}
+
+.workbench-panel > .window-checklist,
+.debate-panel.stage3 > .window-checklist,
+.coding-packet > .window-checklist,
+.tmux-panel > .window-checklist {
+  margin: 0 10px;
+  padding: 6px;
+}
+
+.workbench-panel > .window-checklist {
+  margin-top: 8px;
+}
+
+.coding-packet > .window-checklist,
+.tmux-panel > .window-checklist {
+  margin: 0;
+}
+
+.workbench-panel > .window-checklist .window-checklist-list,
+.tmux-panel > .window-checklist .window-checklist-list {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.debate-panel.stage3 > .window-checklist .window-checklist-list,
+.coding-packet > .window-checklist .window-checklist-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .kv-list {
   display: grid;
   gap: 9px;
@@ -1023,7 +1215,7 @@ button {
 .workbench-panel {
   position: relative;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   min-height: 0;
   max-height: 100%;
   overflow: hidden;
@@ -1792,7 +1984,7 @@ button {
 
 .tmux-panel {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
   gap: 8px;
   min-height: 0;
   padding: 10px;
@@ -3092,6 +3284,9 @@ button {
 }
 
 .coding-packet {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 5px;
   min-height: 0;
   overflow: hidden;
   padding: 7px;
@@ -3101,7 +3296,6 @@ button {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 5px;
 }
 
 .coding-packet header span {
@@ -3124,7 +3318,7 @@ button {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
-  height: calc(100% - 33px);
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -3185,7 +3379,8 @@ button {
 .dgx-bridge-card,
 .agent-runtime-card,
 .permission-matrix-card,
-.secret-vault-card {
+.secret-vault-card,
+.dock-check-card {
   min-width: 220px;
   height: 86px;
   padding: 8px;
@@ -3199,7 +3394,8 @@ button {
 .dgx-bridge-card header,
 .agent-runtime-card header,
 .permission-matrix-card header,
-.secret-vault-card header {
+.secret-vault-card header,
+.dock-check-card header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3207,7 +3403,8 @@ button {
   margin-bottom: 6px;
 }
 
-.event-log header span {
+.event-log header span,
+.dock-check-card header span {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -3217,7 +3414,8 @@ button {
 .dgx-bridge-card em,
 .agent-runtime-card em,
 .permission-matrix-card em,
-.secret-vault-card em {
+.secret-vault-card em,
+.dock-check-card em {
   color: var(--amber);
   font-size: 12px;
   font-style: normal;
@@ -3231,11 +3429,58 @@ button {
 .permission-matrix-card p,
 .permission-matrix-card small,
 .secret-vault-card p,
-.secret-vault-card small {
+.secret-vault-card small,
+.dock-check-card p,
+.dock-check-card small {
   margin: 0;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.32;
+}
+
+.dock-check-card {
+  min-width: 288px;
+  overflow: hidden;
+}
+
+.dock-check-card p {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.dock-check-card p + p {
+  border-top: 1px solid rgba(6, 72, 82, 0.55);
+}
+
+.dock-check-card p span,
+.dock-check-card p strong,
+.dock-check-card p small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-check-card p strong {
+  color: var(--green);
+  font-size: 10px;
+}
+
+.dock-check-card p.partial strong {
+  color: var(--amber);
+}
+
+.dock-check-card p.blocked strong {
+  color: var(--rose);
+}
+
+.dock-check-card p small {
+  grid-column: 1 / -1;
+  color: var(--subtle);
+  font-size: 9px;
 }
 
 .permission-matrix-card,
