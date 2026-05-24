@@ -3,25 +3,25 @@ import type { Stage16StorageLike } from "./stage16LocalOutbox";
 
 export type ProjectionTarget = "dgx-02";
 
-export type LocalAuthoritativeEventStore = {
+export type LocalClientEventCache = {
   append(event: EventEnvelope): Promise<void>;
   listBySession(sessionId: string): Promise<EventEnvelope[]>;
   listUnsynced(): Promise<EventEnvelope[]>;
   markProjected(eventIds: string[], projectionTarget: ProjectionTarget): Promise<void>;
 };
 
-type StoredAuthoritativeEvent = {
+type StoredClientCachedEvent = {
   event: EventEnvelope;
   projectedTo: Partial<Record<ProjectionTarget, string>>;
 };
 
-const defaultStoreKey = "ai-orchestrator:local-authoritative-event-store:client_macbook";
+const defaultStoreKey = "ai-orchestrator:local-event-cache:client_macbook";
 
-export function createLocalAuthoritativeEventStore(
+export function createLocalClientEventCache(
   storage?: Stage16StorageLike,
   key = defaultStoreKey,
-): LocalAuthoritativeEventStore {
-  let memoryRecords: StoredAuthoritativeEvent[] = [];
+): LocalClientEventCache {
+  let memoryRecords: StoredClientCachedEvent[] = [];
 
   const load = () => {
     if (!storage) {
@@ -31,7 +31,7 @@ export function createLocalAuthoritativeEventStore(
     return parseRecords(storage.getItem(key));
   };
 
-  const save = (records: StoredAuthoritativeEvent[]) => {
+  const save = (records: StoredClientCachedEvent[]) => {
     const deduped = dedupeRecords(records);
     if (!storage) {
       memoryRecords = deduped;
@@ -77,7 +77,7 @@ export function createLocalAuthoritativeEventStore(
   };
 }
 
-function parseRecords(rawValue: string | null): StoredAuthoritativeEvent[] {
+function parseRecords(rawValue: string | null): StoredClientCachedEvent[] {
   if (!rawValue) {
     return [];
   }
@@ -88,22 +88,22 @@ function parseRecords(rawValue: string | null): StoredAuthoritativeEvent[] {
       return [];
     }
 
-    return parsed.filter(isStoredAuthoritativeEvent);
+    return parsed.filter(isStoredClientCachedEvent);
   } catch {
     return [];
   }
 }
 
-function dedupeRecords(records: StoredAuthoritativeEvent[]): StoredAuthoritativeEvent[] {
+function dedupeRecords(records: StoredClientCachedEvent[]): StoredClientCachedEvent[] {
   return Array.from(new Map(records.map((record) => [record.event.id, record])).values());
 }
 
-function isStoredAuthoritativeEvent(value: unknown): value is StoredAuthoritativeEvent {
+function isStoredClientCachedEvent(value: unknown): value is StoredClientCachedEvent {
   if (!value || typeof value !== "object") {
     return false;
   }
 
-  const candidate = value as StoredAuthoritativeEvent;
+  const candidate = value as StoredClientCachedEvent;
   return Boolean(
     candidate.event &&
       candidate.event.id &&

@@ -1136,13 +1136,11 @@ export type LocalModelRuntime = {
 
 export type ClientDeviceKind = "macbook" | "desktop_pc" | "mobile" | "server";
 
-export type EventStoreAuthorityMode =
-  | "dgx02_authoritative_with_client_cache"
-  | "macbook_authoritative_with_dgx_projection";
+export type EventStoreAuthorityMode = "dgx02_authoritative_with_client_cache";
 
-export type SyncRole = "authority" | "cache_client" | "projection_server" | "thin_surface" | "compute_node";
+export type SyncRole = "authority" | "cache_client" | "compute_node";
 
-export type ClientOutboxMode = "offline_cache_outbox" | "authoritative_local" | "projection_outbox" | "stateless";
+export type ClientOutboxMode = "offline_cache_outbox" | "stateless";
 
 export type ClientFailurePolicy = "continue_locally" | "unavailable_without_dgx" | "compute_degraded";
 
@@ -1163,8 +1161,8 @@ export type SyncTopology = {
   authorityNodeId: string;
   authorityLabel: string;
   eventStoreMode: EventStoreAuthorityMode;
-  offlineWritePolicy: "append_local_outbox_when_offline" | "append_authoritative_local" | "read_only";
-  conflictPolicy: "dgx02_authority_wins" | "macbook_authority_wins" | "manual_review";
+  offlineWritePolicy: "append_local_outbox_when_offline" | "read_only";
+  conflictPolicy: "dgx02_authority_wins" | "manual_review";
   clients: ClientDevice[];
 };
 
