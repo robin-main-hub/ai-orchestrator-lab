@@ -116,19 +116,19 @@ function createRecallTrace(
   const seeds: Array<Pick<MemoryRecord, "layer" | "title" | "content" | "trustLevel">> = [
     {
       layer: "project_memory",
-      title: "Event Store first",
+      title: "이벤트 저장소 우선",
       content: "대화, 토론, 실행, 백업은 Event Store를 원본으로 삼고 projection으로 내보낸다.",
       trustLevel: "trusted",
     },
     {
       layer: "user_memory",
-      title: "Desktop command room preference",
+      title: "데스크톱 작업실 선호",
       content: "사용자는 맥북 중심의 어두운 작업실 UI와 DGX-02 authority 구조를 선호한다.",
       trustLevel: "trusted",
     },
     {
       layer: "reflection",
-      title: "Coding handoff discipline",
+      title: "코딩 전달 원칙",
       content: "토론 결과는 자연어 요약이 아니라 CodingPacket 구조로 넘겨야 한다.",
       trustLevel: "trusted",
     },

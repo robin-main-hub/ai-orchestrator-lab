@@ -1730,6 +1730,42 @@ function agentRoleLabel(role: WorkbenchAgent["role"]) {
   return labels[role];
 }
 
+function memoryLayerLabel(layer: MemoryRecord["layer"]) {
+  const labels: Record<MemoryRecord["layer"], string> = {
+    episode: "작업 에피소드",
+    fragment: "짧은 기억",
+    project_memory: "프로젝트 기억",
+    reflection: "회고",
+    user_memory: "사용자 기억",
+  };
+
+  return labels[layer];
+}
+
+function trustLevelLabel(trustLevel: MemoryRecord["trustLevel"]) {
+  const labels: Record<MemoryRecord["trustLevel"], string> = {
+    limited: "제한됨",
+    trusted: "신뢰됨",
+    untrusted: "격리됨",
+  };
+
+  return labels[trustLevel];
+}
+
+function recallReasonLabel(reason: string) {
+  const labels: Record<string, string> = {
+    "blocked by provider trust policy": "프로바이더 신뢰 정책으로 보류됨",
+    "low query overlap": "현재 작업과 관련도가 낮음",
+    "provider pending: limited recall preview": "프로바이더가 정해지기 전이라 제한된 기억만 미리 봄",
+    "provider trust allows automatic recall trace": "신뢰된 프로바이더라 관련 기억을 자동으로 불러옴",
+    "query overlap and trust policy passed": "현재 작업과 관련 있고 신뢰 정책을 통과함",
+    "untrusted provider: project/user memory requires explicit selection": "신뢰되지 않은 프로바이더는 프로젝트/사용자 기억을 자동으로 받지 않음",
+    "untrusted memory is quarantined until pinned": "신뢰되지 않은 기억은 고정 전까지 격리됨",
+  };
+
+  return labels[reason] ?? reason;
+}
+
 function ConversationWorkbench({
   agents,
   draftMessage,
@@ -2252,20 +2288,20 @@ function MemoryInspectorPanel({
         </button>
       </header>
       <div className="memory-policy">
-        <strong>{inspector.trace.policy.autoRecallAllowed ? "auto recall" : "manual recall"}</strong>
-        <span>{inspector.trace.policy.reason}</span>
+        <strong>{inspector.trace.policy.autoRecallAllowed ? "자동 불러오기" : "수동 불러오기"}</strong>
+        <span>{recallReasonLabel(inspector.trace.policy.reason)}</span>
       </div>
       <div className="memory-stat-grid">
         <div>
-          <span>records</span>
+          <span>기억</span>
           <strong>{inspector.records.length}</strong>
         </div>
         <div>
-          <span>pinned</span>
+          <span>고정</span>
           <strong>{inspector.pinnedCount}</strong>
         </div>
         <div>
-          <span>blocked</span>
+          <span>보류</span>
           <strong>{inspector.blockedCount}</strong>
         </div>
       </div>
@@ -2275,11 +2311,11 @@ function MemoryInspectorPanel({
             <div>
               <strong>{result.record.title}</strong>
               <span>
-                {result.record.layer} / {(result.score * 100).toFixed(0)}%
+                {memoryLayerLabel(result.record.layer)} / 관련도 {(result.score * 100).toFixed(0)}%
               </span>
             </div>
-            <em>{result.usedInDecision ? "used" : "blocked"}</em>
-            <p>{result.reason}</p>
+            <em>{result.usedInDecision ? "사용됨" : "보류"}</em>
+            <p>{recallReasonLabel(result.reason)}</p>
           </article>
         ))}
       </div>
@@ -2289,7 +2325,7 @@ function MemoryInspectorPanel({
             <div>
               <strong>{record.title}</strong>
               <span>
-                {record.layer} / {record.trustLevel}
+                {memoryLayerLabel(record.layer)} / {trustLevelLabel(record.trustLevel)}
               </span>
             </div>
             <button
@@ -2661,7 +2697,7 @@ function TerminalDock({
         <article className="event-log">
           <header>
             <Activity size={15} />
-            <span>Event Store</span>
+            <span>이벤트 저장소</span>
           </header>
           <div className="event-log-list">
             {visibleEvents.map((event) => (
