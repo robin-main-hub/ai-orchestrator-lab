@@ -1,4 +1,11 @@
-import type { ConversationMessage, ProviderProfile } from "@ai-orchestrator/protocol";
+import type {
+  ConversationMessage,
+  ProviderCompletionRequest,
+  ProviderCompletionResponse,
+  ProviderCompletionRoute,
+  ProviderCompletionUsage,
+  ProviderProfile,
+} from "@ai-orchestrator/protocol";
 
 type DgxCompletionChoice = {
   message?: {
@@ -20,17 +27,20 @@ export type Stage12DgxCompletionInput = {
   modelId: string;
   messages: ConversationMessage[];
   fetchImpl?: typeof fetch;
+  proxyBaseUrl?: string;
+  proxyTimeoutMs?: number;
+  allowDirectFallback?: boolean;
 };
 
 export type Stage12DgxCompletionResult = {
   content: string;
   endpoint: string;
-  usage?: {
-    inputTokens?: number;
-    outputTokens?: number;
-    totalTokens?: number;
-  };
+  route: ProviderCompletionRoute;
+  usage?: ProviderCompletionUsage;
+  fallbackReason?: string;
 };
+
+const DEFAULT_DGX_PROXY_BASE_URL = "http://dgx-02:4317";
 
 export function isDgxVllmProvider(provider?: ProviderProfile) {
   return Boolean(provider?.tags.includes("dgx") && provider.tags.includes("vllm"));
@@ -41,7 +51,103 @@ export async function requestDgxVllmCompletion({
   modelId,
   messages,
   fetchImpl = fetch,
+  proxyBaseUrl = DEFAULT_DGX_PROXY_BASE_URL,
+  proxyTimeoutMs = 1_500,
+  allowDirectFallback = true,
 }: Stage12DgxCompletionInput): Promise<Stage12DgxCompletionResult> {
+  try {
+    return await requestDgxVllmCompletionViaProxy({
+      provider,
+      modelId,
+      messages,
+      fetchImpl,
+      proxyBaseUrl,
+      proxyTimeoutMs,
+    });
+  } catch (proxyError) {
+    if (!allowDirectFallback) {
+      throw proxyError;
+    }
+
+    const direct = await requestDgxVllmCompletionDirect({
+      provider,
+      modelId,
+      messages,
+      fetchImpl,
+    });
+    return {
+      ...direct,
+      fallbackReason: proxyError instanceof Error ? proxyError.message : String(proxyError),
+    };
+  }
+}
+
+export function createProviderCompletionProxyRequest(
+  provider: ProviderProfile,
+  modelId: string,
+  messages: ConversationMessage[],
+): ProviderCompletionRequest {
+  return {
+    id: `provider_completion_request_${crypto.randomUUID()}`,
+    sessionId: messages.at(-1)?.sessionId ?? "session_desktop_001",
+    providerProfileId: provider.id,
+    modelId,
+    messages: messages.slice(-8).map((message) => ({
+      role: message.role,
+      content: message.content,
+    })),
+    source: "desktop",
+    routePreference: "server_proxy",
+    createdAt: new Date().toISOString(),
+  };
+}
+
+async function requestDgxVllmCompletionViaProxy({
+  provider,
+  modelId,
+  messages,
+  fetchImpl,
+  proxyBaseUrl,
+  proxyTimeoutMs,
+}: Required<Pick<Stage12DgxCompletionInput, "provider" | "modelId" | "messages" | "fetchImpl" | "proxyBaseUrl" | "proxyTimeoutMs">>): Promise<Stage12DgxCompletionResult> {
+  const endpoint = `${proxyBaseUrl.replace(/\/$/, "")}/provider-completions`;
+  const response = await fetchWithTimeout(
+    fetchImpl,
+    endpoint,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(createProviderCompletionProxyRequest(provider, modelId, messages)),
+    },
+    proxyTimeoutMs,
+  );
+
+  const rawText = await response.text();
+  if (!response.ok) {
+    throw new Error(`DGX-02 server proxy failed: ${response.status} ${rawText.slice(0, 240)}`);
+  }
+
+  const parsed = JSON.parse(rawText) as ProviderCompletionResponse;
+  if (parsed.status !== "succeeded" || !parsed.content) {
+    throw new Error(parsed.error ?? "DGX-02 server proxy returned no completion");
+  }
+
+  return {
+    content: parsed.content.trim(),
+    endpoint: parsed.endpoint ?? endpoint,
+    route: parsed.route,
+    usage: parsed.usage,
+  };
+}
+
+async function requestDgxVllmCompletionDirect({
+  provider,
+  modelId,
+  messages,
+  fetchImpl,
+}: Required<Pick<Stage12DgxCompletionInput, "provider" | "modelId" | "messages" | "fetchImpl">>): Promise<Stage12DgxCompletionResult> {
   if (!provider.baseUrl) {
     throw new Error("DGX-02 vLLM base URL is missing");
   }
@@ -69,12 +175,29 @@ export async function requestDgxVllmCompletion({
   return {
     content,
     endpoint,
+    route: "direct_provider",
     usage: {
       inputTokens: parsed.usage?.prompt_tokens,
       outputTokens: parsed.usage?.completion_tokens,
       totalTokens: parsed.usage?.total_tokens,
     },
   };
+}
+
+async function fetchWithTimeout(fetchImpl: typeof fetch, input: string, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeoutId = globalThis.setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetchImpl(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    globalThis.clearTimeout(timeoutId);
+  }
 }
 
 export function createDgxVllmRequestBody(modelId: string, messages: ConversationMessage[]) {

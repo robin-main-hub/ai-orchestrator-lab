@@ -40,4 +40,4 @@
 - `DGX-02 vLLM`을 `dgx/vllm/no-auth` 태그를 가진 trusted provider로 모델링한다.
 - `discoverModelsForProfile`은 DGX/vLLM provider에 대해 `remote_probe` source와 `qwen36-domain-wiki-rag-prisma` 모델을 반환한다.
 - `createSecretVaultSnapshot`은 DGX no-auth route를 `dgx_vault` available 상태로 다룬다.
-- 실제 completion 전송은 다음 단계의 runtime approval/server proxy 뒤에 붙인다.
+- 실제 completion 전송은 `apps/server`의 `/provider-completions` 프록시를 우선 사용하고, 서버가 없을 때만 desktop direct fallback으로 이어진다.

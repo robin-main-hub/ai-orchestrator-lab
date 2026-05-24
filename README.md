@@ -111,3 +111,11 @@ corepack pnpm dev
 - `Probe DGX`는 DGX-02 런타임 상태와 provider model discovery snapshot을 함께 갱신한다.
 - `apps/server`는 `/models`에서 DGX-02 모델 레지스트리 placeholder를 제공한다.
 - 실제 프롬프트 전송은 아직 브라우저에서 직접 하지 않고, 다음 단계의 runtime approval/server proxy를 통과하도록 남겨둔다.
+
+## Stage13
+
+- `packages/protocol`에 `ProviderCompletionRequest`와 `ProviderCompletionResponse`를 추가해 completion도 공통 타입 경계를 타게 했다.
+- `apps/server`는 `POST /provider-completions`를 제공하고, 데스크톱에서 받은 `providerProfileId`, `modelId`, 메시지만으로 DGX-02 vLLM에 프록시한다.
+- DGX-02 vLLM 실제 endpoint와 secret/base URL은 데스크톱 요청 body에 넣지 않는다.
+- 데스크톱은 DGX provider 호출 시 `http://dgx-02:4317/provider-completions`를 먼저 시도하고, 서버 프록시가 아직 떠 있지 않으면 `http://dgx-02:8001/v1/chat/completions` 직접 호출로 fallback한다.
+- 서버 프록시는 CORS preflight를 처리하며, `chat_template_kwargs.enable_thinking=false`를 강제해 reasoning/thinking 로그가 대화창에 새지 않게 한다.

@@ -1,8 +1,11 @@
-import { createServer, type IncomingMessage } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { pathToFileURL } from "node:url";
 import type {
   DgxHeartbeat,
   ModelDiscoverySnapshot,
+  ProviderCompletionMessage,
+  ProviderCompletionRequest,
+  ProviderCompletionResponse,
   RemoteExecutionRequest,
   RemoteExecutionResponse,
   RuntimeSnapshot,
@@ -11,6 +14,7 @@ import type {
 export type ServerCapability =
   | "health"
   | "model-registry"
+  | "provider-completion-proxy"
   | "runtime-status"
   | "remote-run-request"
   | "remote-event-stream-placeholder"
@@ -74,6 +78,7 @@ export function createHealthResponse(now = new Date().toISOString()): ServerHeal
     capabilities: [
       "health",
       "model-registry",
+      "provider-completion-proxy",
       "runtime-status",
       "remote-run-request",
       "remote-event-stream-placeholder",
@@ -103,6 +108,150 @@ export function createDgxModelDiscovery(now = new Date().toISOString()): ModelDi
         tags: ["dgx", "vllm", "rag", "qwen"],
       },
     ],
+  };
+}
+
+type FetchLike = (
+  input: string,
+  init?: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+  },
+) => Promise<{
+  ok: boolean;
+  status: number;
+  text(): Promise<string>;
+}>;
+
+type DgxCompletionResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string;
+    };
+  }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+};
+
+export type DgxProviderCompletionOptions = {
+  now?: string;
+  vllmBaseUrl?: string;
+  fetchImpl?: FetchLike;
+};
+
+export async function createDgxProviderCompletionResponse(
+  request: ProviderCompletionRequest,
+  options: DgxProviderCompletionOptions = {},
+): Promise<ProviderCompletionResponse> {
+  const createdAt = options.now ?? new Date().toISOString();
+  const vllmBaseUrl = options.vllmBaseUrl ?? process.env.DGX02_VLLM_BASE_URL ?? "http://dgx-02:8001/v1";
+  const endpoint = `${vllmBaseUrl.replace(/\/$/, "")}/chat/completions`;
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  if (request.providerProfileId !== "provider_dgx02_vllm") {
+    return {
+      id: `provider_completion_response_${crypto.randomUUID()}`,
+      requestId: request.id,
+      providerProfileId: request.providerProfileId,
+      modelId: request.modelId,
+      route: "server_proxy",
+      status: "failed",
+      error: "server proxy only accepts provider_dgx02_vllm in this stage",
+      createdAt,
+    };
+  }
+
+  try {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(createServerDgxVllmRequestBody(request.modelId, request.messages)),
+    });
+    const rawText = await response.text();
+
+    if (!response.ok) {
+      return {
+        id: `provider_completion_response_${crypto.randomUUID()}`,
+        requestId: request.id,
+        providerProfileId: request.providerProfileId,
+        modelId: request.modelId,
+        route: "server_proxy",
+        status: "failed",
+        endpoint,
+        error: `DGX-02 vLLM request failed: ${response.status} ${rawText.slice(0, 240)}`,
+        createdAt,
+      };
+    }
+
+    const parsed = JSON.parse(rawText) as DgxCompletionResponse;
+    const content = parsed.choices?.[0]?.message?.content?.trim();
+    if (!content) {
+      return {
+        id: `provider_completion_response_${crypto.randomUUID()}`,
+        requestId: request.id,
+        providerProfileId: request.providerProfileId,
+        modelId: request.modelId,
+        route: "server_proxy",
+        status: "failed",
+        endpoint,
+        error: "DGX-02 vLLM returned an empty response",
+        createdAt,
+      };
+    }
+
+    return {
+      id: `provider_completion_response_${crypto.randomUUID()}`,
+      requestId: request.id,
+      providerProfileId: request.providerProfileId,
+      modelId: request.modelId,
+      route: "server_proxy",
+      status: "succeeded",
+      content,
+      endpoint,
+      usage: {
+        inputTokens: parsed.usage?.prompt_tokens,
+        outputTokens: parsed.usage?.completion_tokens,
+        totalTokens: parsed.usage?.total_tokens,
+      },
+      createdAt,
+    };
+  } catch (error) {
+    return {
+      id: `provider_completion_response_${crypto.randomUUID()}`,
+      requestId: request.id,
+      providerProfileId: request.providerProfileId,
+      modelId: request.modelId,
+      route: "server_proxy",
+      status: "failed",
+      endpoint,
+      error: error instanceof Error ? error.message : String(error),
+      createdAt,
+    };
+  }
+}
+
+function createServerDgxVllmRequestBody(modelId: string, messages: ProviderCompletionMessage[]) {
+  return {
+    model: modelId,
+    messages: [
+      {
+        role: "system",
+        content: "Answer directly in Korean when the user writes Korean. Do not reveal reasoning or a thinking process.",
+      },
+      ...messages.slice(-8).map((message) => ({
+        role: message.role === "assistant" || message.role === "system" || message.role === "tool" ? message.role : "user",
+        content: message.content,
+      })),
+    ],
+    max_tokens: 512,
+    temperature: 0.2,
+    chat_template_kwargs: {
+      enable_thinking: false,
+    },
   };
 }
 
@@ -157,48 +306,58 @@ export function createRemoteRunResponse(
 
 export function startServer(port = Number(process.env.PORT ?? 4317)) {
   const server = createServer(async (request, response) => {
-    if (request.url === "/health") {
-      response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-      response.end(JSON.stringify(createHealthResponse()));
+    const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+
+    if (request.method === "OPTIONS") {
+      response.writeHead(204, createCorsHeaders());
+      response.end();
       return;
     }
 
-    if (request.url === "/runtime") {
-      response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-      response.end(JSON.stringify(createRuntimeSnapshot()));
+    if (pathname === "/health") {
+      writeJson(response, 200, createHealthResponse());
       return;
     }
 
-    if (request.url === "/heartbeat") {
-      response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-      response.end(JSON.stringify(createDgxHeartbeat()));
+    if (pathname === "/runtime") {
+      writeJson(response, 200, createRuntimeSnapshot());
       return;
     }
 
-    if (request.url === "/models") {
-      response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-      response.end(JSON.stringify(createDgxModelDiscovery()));
+    if (pathname === "/heartbeat") {
+      writeJson(response, 200, createDgxHeartbeat());
       return;
     }
 
-    if (request.url === "/remote-runs" && request.method === "POST") {
+    if (pathname === "/models") {
+      writeJson(response, 200, createDgxModelDiscovery());
+      return;
+    }
+
+    if (pathname === "/provider-completions" && request.method === "POST") {
+      const payload = (await readJsonBody(request)) as ProviderCompletionRequest;
+      const completion = await createDgxProviderCompletionResponse(payload);
+      writeJson(response, completion.status === "succeeded" ? 200 : 502, completion);
+      return;
+    }
+
+    if (pathname === "/remote-runs" && request.method === "POST") {
       const payload = (await readJsonBody(request)) as RemoteExecutionRequest;
-      response.writeHead(202, { "content-type": "application/json; charset=utf-8" });
-      response.end(JSON.stringify(createRemoteRunResponse(payload)));
+      writeJson(response, 202, createRemoteRunResponse(payload));
       return;
     }
 
-    if (request.url === "/events/stream") {
+    if (pathname === "/events/stream") {
       response.writeHead(200, {
         "cache-control": "no-cache",
         "content-type": "text/event-stream; charset=utf-8",
+        ...createCorsHeaders(),
       });
       response.end(`event: heartbeat\ndata: ${JSON.stringify(createDgxHeartbeat())}\n\n`);
       return;
     }
 
-    response.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-    response.end(JSON.stringify({ error: "not_found" }));
+    writeJson(response, 404, { error: "not_found" });
   });
 
   server.listen(port, "0.0.0.0");
@@ -213,6 +372,23 @@ async function readJsonBody(request: IncomingMessage) {
 
   const rawBody = Buffer.concat(chunks).toString("utf8");
   return rawBody ? JSON.parse(rawBody) : {};
+}
+
+function createCorsHeaders() {
+  return {
+    "access-control-allow-headers": "content-type,authorization",
+    "access-control-allow-methods": "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT",
+    "access-control-allow-origin": "*",
+    "access-control-max-age": "600",
+  };
+}
+
+function writeJson(response: ServerResponse, statusCode: number, payload: unknown) {
+  response.writeHead(statusCode, {
+    "content-type": "application/json; charset=utf-8",
+    ...createCorsHeaders(),
+  });
+  response.end(JSON.stringify(payload));
 }
 
 const entryPoint = process.argv[1] ? pathToFileURL(process.argv[1]).href : undefined;

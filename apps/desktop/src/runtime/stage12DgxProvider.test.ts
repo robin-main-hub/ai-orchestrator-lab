@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createDgxVllmRequestBody, isDgxVllmProvider, requestDgxVllmCompletion } from "./stage12DgxProvider";
+import {
+  createDgxVllmRequestBody,
+  createProviderCompletionProxyRequest,
+  isDgxVllmProvider,
+  requestDgxVllmCompletion,
+} from "./stage12DgxProvider";
 import type { ConversationMessage, ProviderProfile } from "@ai-orchestrator/protocol";
 
 const provider: ProviderProfile = {
@@ -38,14 +43,31 @@ describe("stage12 DGX provider completion", () => {
     expect(body.messages[1]?.content).toBe("Can DGX answer now?");
   });
 
-  it("extracts a completion response without storing secrets", async () => {
+  it("builds a server proxy request without raw provider endpoints", () => {
+    const request = createProviderCompletionProxyRequest(provider, "qwen36-domain-wiki-rag-prisma", messages);
+
+    expect(request.providerProfileId).toBe("provider_dgx02_vllm");
+    expect(request.routePreference).toBe("server_proxy");
+    expect(JSON.stringify(request)).not.toContain("http://dgx-02:8001");
+  });
+
+  it("uses the DGX server proxy before direct provider calls", async () => {
     const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(url)).toBe("http://dgx-02:8001/v1/chat/completions");
+      expect(String(url)).toBe("http://dgx-02:4317/provider-completions");
       expect(String(init?.body)).not.toContain("sk-");
+      expect(String(init?.body)).not.toContain("http://dgx-02:8001");
       return new Response(
         JSON.stringify({
-          choices: [{ message: { content: "DGX is ready." } }],
-          usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 },
+          id: "provider_completion_response_1",
+          requestId: "provider_completion_request_1",
+          providerProfileId: "provider_dgx02_vllm",
+          modelId: "qwen36-domain-wiki-rag-prisma",
+          route: "server_proxy",
+          status: "succeeded",
+          content: "DGX is ready.",
+          endpoint: "http://dgx-02:8001/v1/chat/completions",
+          usage: { inputTokens: 12, outputTokens: 8, totalTokens: 20 },
+          createdAt: "2026-05-24T00:00:00.000Z",
         }),
         { status: 200 },
       );
@@ -59,6 +81,37 @@ describe("stage12 DGX provider completion", () => {
     });
 
     expect(result.content).toBe("DGX is ready.");
+    expect(result.route).toBe("server_proxy");
     expect(result.usage?.totalTokens).toBe(20);
+  });
+
+  it("falls back to the direct DGX provider when the server proxy is unavailable", async () => {
+    const calls: string[] = [];
+    const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(String(url));
+      if (String(url).includes("/provider-completions")) {
+        return new Response(JSON.stringify({ error: "proxy offline" }), { status: 502 });
+      }
+
+      expect(String(init?.body)).not.toContain("sk-");
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "Direct DGX fallback ready." } }],
+          usage: { prompt_tokens: 10, completion_tokens: 6, total_tokens: 16 },
+        }),
+        { status: 200 },
+      );
+    };
+
+    const result = await requestDgxVllmCompletion({
+      provider,
+      modelId: "qwen36-domain-wiki-rag-prisma",
+      messages,
+      fetchImpl,
+    });
+
+    expect(calls).toEqual(["http://dgx-02:4317/provider-completions", "http://dgx-02:8001/v1/chat/completions"]);
+    expect(result.route).toBe("direct_provider");
+    expect(result.fallbackReason).toContain("DGX-02 server proxy failed");
   });
 });

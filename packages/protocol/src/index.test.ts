@@ -11,6 +11,8 @@ import {
   type ModelDiscoverySnapshot,
   type PermissionMatrixSnapshot,
   type ProviderCredentialParseResult,
+  type ProviderCompletionRequest,
+  type ProviderCompletionResponse,
   type ProviderRuntimeReadiness,
   type RemoteExecutionRequest,
   type RemoteExecutionResponse,
@@ -93,6 +95,35 @@ describe("protocol schemas", () => {
 
     expect(response.status).toBe("blocked");
     expect(response.fallbackMode).toBe("local_cli");
+  });
+
+  it("models provider completion through the DGX server proxy", () => {
+    const request: ProviderCompletionRequest = {
+      id: "provider_completion_request_1",
+      sessionId: "session_1",
+      providerProfileId: "provider_dgx02_vllm",
+      modelId: "qwen36-domain-wiki-rag-prisma",
+      messages: [{ role: "user", content: "Reply OK only" }],
+      source: "desktop",
+      routePreference: "server_proxy",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    };
+    const response: ProviderCompletionResponse = {
+      id: "provider_completion_response_1",
+      requestId: request.id,
+      providerProfileId: request.providerProfileId,
+      modelId: request.modelId,
+      route: "server_proxy",
+      status: "succeeded",
+      content: "OK",
+      endpoint: "dgx-02:4317/provider-completions",
+      usage: { inputTokens: 12, outputTokens: 2, totalTokens: 14 },
+      createdAt: request.createdAt,
+    };
+
+    expect(request.routePreference).toBe("server_proxy");
+    expect(response.route).toBe("server_proxy");
+    expect(JSON.stringify(request)).not.toContain("http://dgx-02:8001");
   });
 
   it("models memory recall policy and trace visibility", () => {

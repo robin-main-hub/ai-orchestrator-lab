@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createDgxProviderCompletionResponse,
   createDgxHeartbeat,
   createDgxModelDiscovery,
   createHealthResponse,
@@ -62,5 +63,44 @@ describe("server health placeholder", () => {
 
     expect(heartbeat.nodeId).toBe("dgx-02");
     expect(heartbeat.status).toBe("connected");
+  });
+
+  it("proxies DGX-02 vLLM completions without receiving raw endpoints from desktop", async () => {
+    const response = await createDgxProviderCompletionResponse(
+      {
+        id: "provider_completion_request_1",
+        sessionId: "session_1",
+        providerProfileId: "provider_dgx02_vllm",
+        modelId: "qwen36-domain-wiki-rag-prisma",
+        messages: [{ role: "user", content: "Reply OK only" }],
+        source: "desktop",
+        routePreference: "server_proxy",
+        createdAt: "2026-05-24T00:00:00.000Z",
+      },
+      {
+        now: "2026-05-24T00:00:00.000Z",
+        vllmBaseUrl: "http://127.0.0.1:8001/v1",
+        fetchImpl: async (url, init) => {
+          expect(url).toBe("http://127.0.0.1:8001/v1/chat/completions");
+          expect(String(init?.body)).not.toContain("sk-");
+          expect(String(init?.body)).toContain("\"enable_thinking\":false");
+          return {
+            ok: true,
+            status: 200,
+            async text() {
+              return JSON.stringify({
+                choices: [{ message: { content: "OK" } }],
+                usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+              });
+            },
+          };
+        },
+      },
+    );
+
+    expect(response.status).toBe("succeeded");
+    expect(response.route).toBe("server_proxy");
+    expect(response.content).toBe("OK");
+    expect(response.usage?.totalTokens).toBe(14);
   });
 });

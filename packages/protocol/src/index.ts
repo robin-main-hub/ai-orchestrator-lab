@@ -297,6 +297,46 @@ export type EventEnvelope<T = unknown> = Omit<z.infer<typeof eventEnvelopeSchema
   payload: T;
 };
 
+export type ProviderCompletionRoute = "server_proxy" | "direct_provider" | "local_fallback";
+
+export type ProviderCompletionStatus = "succeeded" | "failed" | "fallback_required";
+
+export type ProviderCompletionMessage = {
+  role: ConversationMessage["role"];
+  content: string;
+};
+
+export type ProviderCompletionRequest = {
+  id: string;
+  sessionId: string;
+  providerProfileId: string;
+  modelId: string;
+  messages: ProviderCompletionMessage[];
+  source: EventSource;
+  routePreference: ProviderCompletionRoute;
+  createdAt: string;
+};
+
+export type ProviderCompletionUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+};
+
+export type ProviderCompletionResponse = {
+  id: string;
+  requestId: string;
+  providerProfileId: string;
+  modelId: string;
+  route: ProviderCompletionRoute;
+  status: ProviderCompletionStatus;
+  content?: string;
+  endpoint?: string;
+  usage?: ProviderCompletionUsage;
+  error?: string;
+  createdAt: string;
+};
+
 export const permissionLevelSchema = z.enum([
   "read_only",
   "write_files",
