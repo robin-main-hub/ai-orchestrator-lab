@@ -1660,7 +1660,9 @@ function createCorsHeaders() {
     "access-control-allow-headers": "content-type,authorization",
     "access-control-allow-methods": "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT",
     "access-control-allow-origin": "*",
+    "access-control-allow-private-network": "true",
     "access-control-max-age": "600",
+    "vary": "Origin, Access-Control-Request-Method, Access-Control-Request-Headers, Access-Control-Request-Private-Network",
   };
 }
 
