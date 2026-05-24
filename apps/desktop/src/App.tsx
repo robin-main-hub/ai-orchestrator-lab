@@ -1,36 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Activity,
-  Archive,
-  Bot,
   Brain,
-  CheckCircle2,
-  ChevronLeft,
   ChevronRight,
   Database,
-  FileText,
   GitBranch,
-  ImageIcon,
-  KeyRound,
-  LayoutDashboard,
-  Link2,
-  LockKeyhole,
   MessageSquare,
-  Paperclip,
-  Play,
-  Plus,
-  Pencil,
-  Power,
-  RadioTower,
-  RefreshCw,
   Send,
   Server,
-  ShieldCheck,
-  Smartphone,
   Terminal,
-  Trash2,
-  X,
-  type LucideIcon,
 } from "lucide-react";
 import {
   createCodingPacketDraft,
@@ -119,84 +96,59 @@ import {
 } from "./runtime/stage20SessionIndex";
 import { createObsidianExportPlan } from "./runtime/stage26ObsidianExport";
 import type {
-  AgentProfile,
   AssistantDraft,
   ApprovalState,
   BackupProjection,
   BranchExperiment,
   CodingPacket,
-  ConversationAttachment,
   ConversationMessage,
   ContextPackTier,
-  DebateTag,
-  DebateUtterance,
   DeviceRebootRequest,
   DeviceRebootWatchdog,
   EventEnvelope,
   EventSource,
   ExternalApprovalItem,
-  InsightCategory,
-  InsightFinding,
   MemoryRecord,
-  ModelDescriptor,
   ModelDiscoverySnapshot,
-  PermissionMatrixSnapshot,
   ProviderProfile,
-  ProviderRuntimeReadiness,
   ReviewMode,
   RuntimeSnapshot,
-  SecretRef,
-  SecretVaultSnapshot,
   SourceTrust,
-  TerminalSlot,
   WorkItem,
   WorkItemHandoff,
 } from "@ai-orchestrator/protocol";
 import type {
   AgentActivityStatus,
   AgentConfigTab,
-  AgentCreativityLevel,
   AgentPersonaSettings,
   AgentVisualSettings,
-  AgentVoicePreset,
   CenterMode,
   DraftAttachment,
-  MetaOnboardingSignal,
   ModelCatalog,
-  NavItem,
   NavItemId,
   ProviderRegistrationMode,
   Stage3DebateUtteranceView,
-  WindowAuditItem,
-  WindowAuditStatus,
   WorkbenchAgent,
 } from "./types";
 import {
-  agentRoleOptions,
   agentVisualStorageKey,
   defaultObsidianVaultRoot,
   maxDraftAttachments,
   modelWindowSize,
   now,
-  providerProfilesSeedVersion,
-  providerProfilesSeedVersionKey,
   providerProfilesStorageKey,
 } from "./lib/appConstants";
 import {
   agentRoleLabel,
-  attachmentAcceptForModel,
-  attachmentCapabilityLabel,
   classifyDraftAttachment,
   createDefaultPersonaSettings,
   createDraftAttachment,
   createInitialAgentVisualSettings,
-  formatAttachmentSize,
-  getMessageAttachments,
   modelSupportsAnyAttachment,
   modelSupportsAttachmentKind,
   slugifyProviderName,
 } from "./lib/helpers";
-import { agentConfigPanelTitle, branchStatusLabel, configSourceLabel, contextPackTierLabel, creativityLevelLabel, creativityTemperature, guardStepLabel, insightCategoryLabel, messageLabel, reviewModeLabel, soulModeLabel, statusTone, voicePresetLabel } from "./lib/uiLabels";
+import { statusTone } from "./lib/uiLabels";
 import {
   createInitialProviderProfiles,
   createModelDiscoveryFromRegistryEntry,
@@ -227,7 +179,6 @@ import {
   initialWorkItemHandoffs,
   initialWorkItems,
 } from "./seeds/workItems";
-import { AgentAvatar } from "./components/AgentAvatar";
 import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
 import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
 import { AgentStatePanel } from "./components/AgentStatePanel";
@@ -248,7 +199,6 @@ import { SessionIndexRailPanel } from "./components/SessionIndexRailPanel";
 import { Stage3DebateTable } from "./components/Stage3DebateTable";
 import { TerminalDock } from "./components/TerminalDock";
 import { TmuxSwarmBoard } from "./components/TmuxSwarmBoard";
-import { auditStatusLabel, WindowChecklist } from "./components/WindowChecklist";
 import { createInsightFindings, createMetaOnboardingSignals, statusForWorkLane } from "./lib/workbenchDerived";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 
@@ -2866,25 +2816,4 @@ export function App() {
       ) : null}
     </div>
   );
-}
-
-function StatusPill({ label, status }: { label: string; status: RuntimeSnapshot["status"] }) {
-  return (
-    <span className={`status-pill ${status}`}>
-      <span className="dot" />
-      {label}: {status}
-    </span>
-  );
-}
-
-function memoryLayerLabel(layer: MemoryRecord["layer"]) {
-  const labels: Record<MemoryRecord["layer"], string> = {
-    episode: "작업 에피소드",
-    fragment: "짧은 기억",
-    project_memory: "프로젝트 기억",
-    reflection: "회고",
-    user_memory: "사용자 기억",
-  };
-
-  return labels[layer];
 }
