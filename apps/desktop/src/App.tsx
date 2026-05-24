@@ -204,7 +204,11 @@ import {
   seededModelCatalog,
   seededProviderProfiles,
 } from "./seeds/providers";
-import { runtimeSnapshot } from "./seeds/runtime";
+import {
+  initialDgxBridge,
+  initialIngressSnapshot,
+  runtimeSnapshot,
+} from "./seeds/runtime";
 import { seededAgentProfiles } from "./seeds/agents";
 import {
   backupProjections,
@@ -223,22 +227,6 @@ import {
   initialWorkItemHandoffs,
   initialWorkItems,
 } from "./seeds/workItems";
-
-
-
-
-
-const initialDgxBridge = createStage5DgxBridge({
-  run: initialAgentRun,
-  runtime: runtimeSnapshot,
-  createdAt: now,
-});
-
-const initialIngressSnapshot = createStage8IngressSnapshot(
-  createTelegramDemoInput(new Date("2026-05-24T00:23:00.000+09:00").toISOString()),
-);
-
-
 
 export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
