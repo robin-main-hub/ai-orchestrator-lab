@@ -35,3 +35,9 @@
 
 - `createSecretVaultSnapshot`: provider profile의 secretRef를 session/keychain/DGX vault 상태로 모델링한다.
 - `createProviderRuntimeReadiness`: 선택 provider가 completion 직전 단계에서 ready/approval/credential_required/blocked 중 어디인지 계산한다.
+## Stage12
+
+- `DGX-02 vLLM`을 `dgx/vllm/no-auth` 태그를 가진 trusted provider로 모델링한다.
+- `discoverModelsForProfile`은 DGX/vLLM provider에 대해 `remote_probe` source와 `qwen36-gio-wiki-rag-prisma` 모델을 반환한다.
+- `createSecretVaultSnapshot`은 DGX no-auth route를 `dgx_vault` available 상태로 다룬다.
+- 실제 completion 전송은 다음 단계의 runtime approval/server proxy 뒤에 붙인다.

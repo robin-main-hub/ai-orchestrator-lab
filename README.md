@@ -104,3 +104,10 @@ corepack pnpm dev
 - `apps/server`: DGX 서버 health/runtime/heartbeat/remote-run placeholder
 
 실제 API 키는 저장하지 않고 `SecretRef` 개념으로만 표시합니다. 실제 모델 호출과 터미널 실행은 보안/권한 경계가 더 잡힌 뒤 연결합니다.
+## Stage12
+
+- `DGX-02 vLLM` provider profile을 기본 등록한다.
+- DGX-02 모델 레지스트리는 `qwen36-gio-wiki-rag-prisma`를 노출한다.
+- `Probe DGX`는 DGX-02 런타임 상태와 provider model discovery snapshot을 함께 갱신한다.
+- `apps/server`는 `/models`에서 DGX-02 모델 레지스트리 placeholder를 제공한다.
+- 실제 프롬프트 전송은 아직 브라우저에서 직접 하지 않고, 다음 단계의 runtime approval/server proxy를 통과하도록 남겨둔다.

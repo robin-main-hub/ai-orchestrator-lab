@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage } from "node:http";
 import { pathToFileURL } from "node:url";
 import type {
   DgxHeartbeat,
+  ModelDiscoverySnapshot,
   RemoteExecutionRequest,
   RemoteExecutionResponse,
   RuntimeSnapshot,
@@ -9,6 +10,7 @@ import type {
 
 export type ServerCapability =
   | "health"
+  | "model-registry"
   | "runtime-status"
   | "remote-run-request"
   | "remote-event-stream-placeholder"
@@ -35,7 +37,7 @@ export function createRuntimeSnapshot(now = new Date().toISOString()): RuntimeSn
         status: "online",
         isPrimary: true,
         endpoint: "dgx-02",
-        models: ["remote-workspace", "remote-model-queue"],
+        models: ["remote-workspace", "remote-model-queue", "qwen36-gio-wiki-rag-prisma"],
       },
     ],
     localModels: [],
@@ -71,10 +73,35 @@ export function createHealthResponse(now = new Date().toISOString()): ServerHeal
     runtime: createRuntimeSnapshot(now),
     capabilities: [
       "health",
+      "model-registry",
       "runtime-status",
       "remote-run-request",
       "remote-event-stream-placeholder",
       "memory-sync-placeholder",
+    ],
+  };
+}
+
+export function createDgxModelDiscovery(now = new Date().toISOString()): ModelDiscoverySnapshot {
+  return {
+    id: "model_discovery_dgx02_vllm_qwen36",
+    providerProfileId: "provider_dgx02_vllm",
+    status: "succeeded",
+    source: "remote_probe",
+    selectedModelId: "qwen36-gio-wiki-rag-prisma",
+    redactionApplied: true,
+    warnings: ["DGX-02 vLLM registry; completion still requires runtime approval"],
+    createdAt: now,
+    models: [
+      {
+        id: "qwen36-gio-wiki-rag-prisma",
+        name: "qwen36-gio-wiki-rag-prisma",
+        providerProfileId: "provider_dgx02_vllm",
+        contextWindow: 65_536,
+        supportsStreaming: true,
+        supportsTools: false,
+        tags: ["dgx", "vllm", "rag", "qwen"],
+      },
     ],
   };
 }
@@ -145,6 +172,12 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     if (request.url === "/heartbeat") {
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       response.end(JSON.stringify(createDgxHeartbeat()));
+      return;
+    }
+
+    if (request.url === "/models") {
+      response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify(createDgxModelDiscovery()));
       return;
     }
 

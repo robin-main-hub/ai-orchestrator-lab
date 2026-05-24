@@ -153,12 +153,19 @@ export function discoverModelsForProfile(
   createdAt = new Date().toISOString(),
 ): ModelDiscoverySnapshot {
   const models = createDiscoveredModels(profile);
+  const source = profile.kind === "ollama" || profile.kind === "lmstudio"
+    ? "local"
+    : profile.tags.includes("mock")
+      ? "mock"
+      : profile.tags.includes("dgx") || profile.tags.includes("vllm")
+        ? "remote_probe"
+        : "remote_stub";
 
   return {
     id: `model_discovery_${stableId(`${profile.id}:${models.map((model) => model.id).join("|")}`)}`,
     providerProfileId: profile.id,
     status: profile.enabled ? "succeeded" : "blocked",
-    source: profile.kind === "ollama" || profile.kind === "lmstudio" ? "local" : profile.tags.includes("mock") ? "mock" : "remote_stub",
+    source,
     models,
     selectedModelId: models[0]?.id,
     redactionApplied: true,
@@ -282,7 +289,10 @@ export class MockProviderAdapter implements ProviderAdapter {
 }
 
 function createSecretVaultEntry(profile: ProviderProfile, createdAt: string): SecretVaultEntry {
-  const storage = profile.tags.includes("oauth")
+  const isDgxNoAuth = profile.tags.includes("dgx") && profile.tags.includes("no-auth");
+  const storage = isDgxNoAuth
+    ? "dgx_vault"
+    : profile.tags.includes("oauth")
     ? "oauth_session"
     : profile.trustLevel === "trusted" && profile.secretRef?.scope !== "session"
       ? "macos_keychain"
@@ -296,11 +306,11 @@ function createSecretVaultEntry(profile: ProviderProfile, createdAt: string): Se
     secretRefId: profile.secretRef?.id,
     storage,
     availability:
-      profile.kind === "ollama" || profile.kind === "lmstudio" || profile.tags.includes("mock") || profile.secretRef
+      isDgxNoAuth || profile.kind === "ollama" || profile.kind === "lmstudio" || profile.tags.includes("mock") || profile.secretRef
         ? "available"
         : "missing",
     redactedPreview: profile.secretRef?.redactedPreview,
-    transient: profile.secretRef?.transient ?? profile.trustLevel !== "trusted",
+    transient: isDgxNoAuth ? false : (profile.secretRef?.transient ?? profile.trustLevel !== "trusted"),
     createdAt: profile.secretRef?.createdAt ?? createdAt,
     expiresAt: profile.secretRef?.expiresAt,
   };
@@ -354,6 +364,10 @@ function createReadinessReason(params: {
 
   if (params.status === "needs_approval") {
     return "untrusted provider can run only after explicit approval and reduced memory context";
+  }
+
+  if (params.profile.tags.includes("dgx") || params.profile.tags.includes("vllm")) {
+    return "DGX-02 trusted vLLM provider is reachable through the remote runtime gate";
   }
 
   return "provider has model metadata and a non-persisted secret reference";
@@ -615,7 +629,12 @@ function createModelDiscoveryEndpoint(providerKind: ProviderKind, baseUrl?: stri
 
 function createDiscoveredModels(profile: ProviderProfile): ModelDescriptor[] {
   const modelIds =
-    profile.kind === "openrouter"
+    profile.tags.includes("dgx") || profile.tags.includes("vllm")
+      ? [
+          profile.defaultModel ?? "qwen36-gio-wiki-rag-prisma",
+          "qwen36-gio-wiki-rag-prisma",
+        ]
+      : profile.kind === "openrouter"
       ? [
           "openrouter/auto",
           "anthropic/claude-opus-4.7",
@@ -669,6 +688,10 @@ function createDiscoveredModels(profile: ProviderProfile): ModelDescriptor[] {
 }
 
 function createDiscoveryWarnings(profile: ProviderProfile): string[] {
+  if (profile.tags.includes("dgx") || profile.tags.includes("vllm")) {
+    return ["DGX-02 model registry is trusted; completion still goes through the runtime approval gate"];
+  }
+
   if (profile.trustLevel === "untrusted") {
     return ["remote model list is a stub until this endpoint is explicitly trusted"];
   }

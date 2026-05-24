@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createDgxHeartbeat,
+  createDgxModelDiscovery,
   createHealthResponse,
   createRemoteRunResponse,
   createRuntimeSnapshot,
@@ -14,6 +15,16 @@ describe("server health placeholder", () => {
     expect(health.runtime.status).toBe("degraded");
     expect(health.runtime.syncTopology.authorityNodeId).toBe("dgx-02");
     expect(health.capabilities).toContain("remote-run-request");
+    expect(health.capabilities).toContain("model-registry");
+  });
+
+  it("publishes the DGX-02 vLLM model registry", () => {
+    const discovery = createDgxModelDiscovery("2026-05-24T00:00:00.000Z");
+
+    expect(discovery.providerProfileId).toBe("provider_dgx02_vllm");
+    expect(discovery.source).toBe("remote_probe");
+    expect(discovery.models[0]?.id).toBe("qwen36-gio-wiki-rag-prisma");
+    expect(discovery.redactionApplied).toBe(true);
   });
 
   it("blocks remote runs until approval is granted", () => {

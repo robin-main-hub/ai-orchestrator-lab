@@ -194,6 +194,15 @@ const runtimeSnapshot: RuntimeSnapshot = {
 const seededProviderProfiles: ProviderProfile[] = [
   new MockProviderAdapter().profile,
   createProviderProfile({
+    id: "provider_dgx02_vllm",
+    name: "DGX-02 vLLM",
+    kind: "openai",
+    baseUrl: "http://dgx-02:8001/v1",
+    defaultModel: "qwen36-gio-wiki-rag-prisma",
+    tags: ["dgx", "vllm", "no-auth"],
+    trustLevel: "trusted",
+  }),
+  createProviderProfile({
     id: "provider_openai_compat",
     name: "OpenAI 호환 프로파일",
     kind: "openai",
@@ -241,6 +250,9 @@ const seededModelCatalog: ModelCatalog = {
     createModel("provider_mock_local", "mock-orchestrator", ["conversation", "debate"]),
     createModel("provider_mock_local", "mock-reviewer", ["review"]),
     createModel("provider_mock_local", "mock-builder", ["coding"]),
+  ],
+  provider_dgx02_vllm: [
+    createModel("provider_dgx02_vllm", "qwen36-gio-wiki-rag-prisma", ["dgx", "vllm", "rag"]),
   ],
   provider_openai_compat: [
     "gpt-5.5-pro",
@@ -374,13 +386,12 @@ const seededAgentProfiles: WorkbenchAgent[] = defaultAgentProfiles.map((agent, i
       },
     },
     {
-      providerProfileId: "provider_reseller_custom",
-      modelId: "claude-code-compatible",
+      providerProfileId: "provider_dgx02_vllm",
+      modelId: "qwen36-gio-wiki-rag-prisma",
       authBinding: {
         mode: "provider_profile",
-        label: "reseller secretRef",
-        providerProfileId: "provider_reseller_custom",
-        secretRefId: "session reseller secret",
+        label: "DGX-02 vLLM route",
+        providerProfileId: "provider_dgx02_vllm",
       },
     },
   ];
@@ -1039,7 +1050,9 @@ export function App() {
           ? {
               ...node,
               status: "online",
-              models: Array.from(new Set([...node.models, "remote-workspace", "event-store-authority"])),
+              models: Array.from(
+                new Set([...node.models, "remote-workspace", "event-store-authority", "qwen36-gio-wiki-rag-prisma"]),
+              ),
             }
           : node,
       ),
@@ -1065,9 +1078,21 @@ export function App() {
       runtime: mergedRuntime,
       createdAt: checkedAt,
     });
+    const dgxProvider = providerProfiles.find((profile) => profile.id === "provider_dgx02_vllm");
+    const dgxDiscovery = dgxProvider ? discoverModelsForProfile(dgxProvider, checkedAt) : undefined;
 
     setRuntimeSnapshotState(mergedRuntime);
     setDgxBridgeState(bridge);
+    if (dgxDiscovery) {
+      setModelCatalog((catalog) => ({
+        ...catalog,
+        [dgxDiscovery.providerProfileId]: dgxDiscovery.models,
+      }));
+      setModelDiscoveryByProviderId((discoveries) => ({
+        ...discoveries,
+        [dgxDiscovery.providerProfileId]: dgxDiscovery,
+      }));
+    }
     appendEvent("dgx.heartbeat.checked", {
       nodeId: bridge.heartbeat.nodeId,
       status: bridge.heartbeat.status,
@@ -1078,6 +1103,14 @@ export function App() {
       dgxStatus: mergedRuntime.dgxStatus,
       eventStoreMode: mergedRuntime.syncTopology.eventStoreMode,
     });
+    if (dgxDiscovery) {
+      appendEvent("provider.models.remote_probe.merged", {
+        providerProfileId: dgxDiscovery.providerProfileId,
+        source: dgxDiscovery.source,
+        modelCount: dgxDiscovery.models.length,
+        selectedModelId: dgxDiscovery.selectedModelId,
+      });
+    }
   }
 
   function setAgentActivity(agentId: string, status: AgentActivityStatus) {
