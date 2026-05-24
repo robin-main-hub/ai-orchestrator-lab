@@ -169,6 +169,13 @@ type NavItem = {
   label: string;
   icon: LucideIcon;
 };
+type WindowAuditStatus = "ready" | "partial" | "blocked";
+type WindowAuditItem = {
+  id: string;
+  label: string;
+  status: WindowAuditStatus;
+  detail: string;
+};
 
 const modelWindowSize = 8;
 const maxDraftAttachments = 5;
@@ -2537,6 +2544,32 @@ function SessionIndexRailPanel({
   onReplaySession: (sessionId: string) => void;
 }) {
   const visibleSessions = index.sessions.slice(0, 3);
+  const auditItems: WindowAuditItem[] = [
+    {
+      id: "session-select",
+      label: "세션 선택",
+      status: index.sessions.length > 0 ? "ready" : "partial",
+      detail: index.sessions.length > 0 ? "DGX-02 인덱스에서 세션을 고르고 즉시 replay합니다." : "DGX-02 세션 인덱스가 아직 비어 있습니다.",
+    },
+    {
+      id: "session-create",
+      label: "새 작업 세션",
+      status: "ready",
+      detail: "맥북 outbox에 먼저 남기고 온라인이면 DGX-02로 동기화합니다.",
+    },
+    {
+      id: "session-rename",
+      label: "이름 변경",
+      status: activeSessionId ? "ready" : "partial",
+      detail: "현재 세션명을 이벤트로 남겨 다른 클라이언트에서도 같은 이름을 봅니다.",
+    },
+    {
+      id: "session-delete",
+      label: "삭제/보존",
+      status: "blocked",
+      detail: "Event Storage 원본 삭제는 아직 막고, forget/tombstone 정책 확정 후 엽니다.",
+    },
+  ];
 
   return (
     <section className="mini-panel rail-panel session-index-panel">
@@ -2574,6 +2607,7 @@ function SessionIndexRailPanel({
           ))
         )}
       </div>
+      <WindowChecklist items={auditItems} title="세션 창 점검" />
     </section>
   );
 }
@@ -2588,6 +2622,27 @@ function RuntimeRailPanel({
   const macbookClient = snapshot.syncTopology.clients.find((client) => client.id === "client_macbook");
   const homePcClient = snapshot.syncTopology.clients.find((client) => client.id === "client_home_pc");
   const macbookOutbox = macbookClient?.outboxCount ?? 0;
+  const dgx02 = snapshot.runtimeNodes.find((node) => node.id === "dgx-02");
+  const auditItems: WindowAuditItem[] = [
+    {
+      id: "dgx01-locked",
+      label: "DGX-01 보호",
+      status: "ready",
+      detail: "DGX-01은 locked로만 표시하고 작업 대상으로 잡지 않습니다.",
+    },
+    {
+      id: "dgx02-authority",
+      label: "DGX-02 원본",
+      status: dgx02?.isPrimary ? "ready" : "blocked",
+      detail: "세션/이벤트/공유 데이터의 authoritative server입니다.",
+    },
+    {
+      id: "local-fallback",
+      label: "로컬 폴백",
+      status: snapshot.localModelStatus === "online" ? "ready" : "partial",
+      detail: "DGX-02가 내려가면 로컬 모델, 로컬 로그, outbox만 살아납니다.",
+    },
+  ];
 
   return (
     <section className="mini-panel rail-panel">
@@ -2635,6 +2690,7 @@ function RuntimeRailPanel({
           <strong>{snapshot.recentError ?? "connected"}</strong>
         </div>
       </div>
+      <WindowChecklist items={auditItems} title="시스템 창 점검" />
     </section>
   );
 }
@@ -2658,6 +2714,36 @@ function OperationsRailPanel({
   providerReadiness: ProviderRuntimeReadiness;
   secretVaultSnapshot: SecretVaultSnapshot;
 }) {
+  const auditItems: WindowAuditItem[] = [
+    {
+      id: "permission",
+      label: "승인 대기열",
+      status: permissionSnapshot.summary.pending > 0 ? "partial" : "ready",
+      detail:
+        permissionSnapshot.summary.pending > 0
+          ? `${permissionSnapshot.summary.pending}개 작업이 승인 전 대기 중입니다.`
+          : "위험 실행은 모두 권한 정책을 통과했거나 대기열이 비어 있습니다.",
+    },
+    {
+      id: "ingress",
+      label: "외부 입력",
+      status: ingressSnapshot.result.approvalState === "required" ? "partial" : "ready",
+      detail: "Telegram/Mobile/API 입력은 ingress guard와 승인 상태를 먼저 거칩니다.",
+    },
+    {
+      id: "secret",
+      label: "비밀값",
+      status: secretVaultSnapshot.summary.missing > 0 ? "partial" : "ready",
+      detail: "키 원문은 UI와 로그에 남기지 않고 vault ref 상태만 표시합니다.",
+    },
+    {
+      id: "gemini",
+      label: "Gemini CLI",
+      status: "blocked",
+      detail: "사용자 지시대로 agy -p 설정 전까지 연결하지 않습니다.",
+    },
+  ];
+
   return (
     <section className="mini-panel rail-panel ops-rail-panel">
       <header>
@@ -2697,6 +2783,7 @@ function OperationsRailPanel({
           <strong>{secretVaultSnapshot.summary.available}/{secretVaultSnapshot.entries.length} available</strong>
         </div>
       </div>
+      <WindowChecklist items={auditItems} title="Ops 창 점검" />
     </section>
   );
 }
@@ -2719,6 +2806,34 @@ function ProjectRailPanel({
   sessionId: string;
 }) {
   const visibleSteps = agentRun.steps.slice(0, 4);
+  const visibleFiles = packet.filesToInspect.slice(0, 3);
+  const visibleChecks = packet.verificationPlan.slice(0, 3);
+  const auditItems: WindowAuditItem[] = [
+    {
+      id: "packet",
+      label: "Coding Packet",
+      status: packet.goal ? "ready" : "partial",
+      detail: "대화/토론 결과를 goal, decisions, constraints, verification으로 구조화합니다.",
+    },
+    {
+      id: "files",
+      label: "파일 후보",
+      status: packet.filesToInspect.length > 0 ? "ready" : "partial",
+      detail: packet.filesToInspect.length > 0 ? `${packet.filesToInspect.length}개 inspect 후보가 있습니다.` : "아직 inspect 후보가 없습니다.",
+    },
+    {
+      id: "run",
+      label: "실행 기록",
+      status: agentRun.steps.some((step) => step.status === "blocked") ? "blocked" : "ready",
+      detail: "실행은 바로 터미널로 보내지 않고 run intent와 권한 상태를 먼저 남깁니다.",
+    },
+    {
+      id: "verify",
+      label: "검증 계획",
+      status: packet.verificationPlan.length > 0 ? "ready" : "partial",
+      detail: "typecheck/test/브라우저 확인 같은 검증 단계를 패킷과 함께 유지합니다.",
+    },
+  ];
 
   return (
     <section className="mini-panel rail-panel project-rail-panel">
@@ -2766,6 +2881,17 @@ function ProjectRailPanel({
           </article>
         ))}
       </div>
+      <div className="rail-split-list">
+        <section>
+          <strong>inspect</strong>
+          {visibleFiles.length > 0 ? visibleFiles.map((file) => <span key={file}>{file}</span>) : <span>대상 없음</span>}
+        </section>
+        <section>
+          <strong>verify</strong>
+          {visibleChecks.length > 0 ? visibleChecks.map((check) => <span key={check}>{check}</span>) : <span>대상 없음</span>}
+        </section>
+      </div>
+      <WindowChecklist items={auditItems} title="프로젝트 창 점검" />
     </section>
   );
 }
@@ -2787,6 +2913,32 @@ function ChannelRailPanel({
     { label: "OpenClaw Bridge", status: "pending adapter" },
     { label: "Mobile", status: runtime.dgxStatus === "online" ? "approval ready" : "read-only pending" },
     { label: "API", status: "guarded ingress" },
+  ];
+  const auditItems: WindowAuditItem[] = [
+    {
+      id: "telegram",
+      label: "Telegram 이어받기",
+      status: "ready",
+      detail: "대화 세션으로 가져오되 위험 작업은 permission queue로 보냅니다.",
+    },
+    {
+      id: "mobile",
+      label: "모바일 권한",
+      status: runtime.dgxStatus === "online" ? "ready" : "partial",
+      detail: "폰은 읽기, 승인, 중단, 재시도 중심이고 터미널 직접 입력은 막습니다.",
+    },
+    {
+      id: "ingress-guard",
+      label: "7중 가드",
+      status: visibleSteps.every((step) => step.status === "passed") ? "ready" : "partial",
+      detail: "noise/self-response/debounce/PII/checklist를 통과한 입력만 agent로 보냅니다.",
+    },
+    {
+      id: "zero-token",
+      label: "0-token 안전망",
+      status: ingressSnapshot.zeroTokenSafety.enabled ? "ready" : "partial",
+      detail: "LLM 없이 누락 문의와 미승인 항목을 감시하는 비상 루틴입니다.",
+    },
   ];
 
   return (
@@ -2830,6 +2982,7 @@ function ChannelRailPanel({
           <strong>{ingressSnapshot.zeroTokenSafety.enabled ? ingressSnapshot.zeroTokenSafety.cadence : "off"}</strong>
         </div>
       </div>
+      <WindowChecklist items={auditItems} title="채널 창 점검" />
     </section>
   );
 }
@@ -2843,6 +2996,34 @@ function BackupRailMenu({
   projections: BackupProjection[];
   snapshot: Stage7BackupSnapshot;
 }) {
+  const redactionReady = projections.every((projection) => projection.redactionApplied);
+  const auditItems: WindowAuditItem[] = [
+    {
+      id: "source",
+      label: "원본 위치",
+      status: "ready",
+      detail: "Obsidian/Notion/Mobile은 projection이고 원본은 Event Storage입니다.",
+    },
+    {
+      id: "redaction",
+      label: "Redaction",
+      status: redactionReady ? "ready" : "blocked",
+      detail: "API key, bearer token, terminal secret은 export 전에 제거합니다.",
+    },
+    {
+      id: "obsidian",
+      label: "Obsidian",
+      status: projections.some((projection) => projection.target === "obsidian") ? "ready" : "partial",
+      detail: "맥북 vault에는 markdown artifact로 남길 수 있게 유지합니다.",
+    },
+    {
+      id: "mobile",
+      label: "Mobile",
+      status: projections.some((projection) => projection.target === "mobile") ? "partial" : "blocked",
+      detail: "폰은 읽기/승인/중단/재시도만 허용하고 파일/터미널 직접 조작은 막습니다.",
+    },
+  ];
+
   return (
     <section className="mini-panel rail-panel backup-rail-panel">
       <header>
@@ -2883,6 +3064,7 @@ function BackupRailMenu({
           </article>
         ))}
       </div>
+      <WindowChecklist items={auditItems} title="백업 창 점검" />
     </section>
   );
 }
@@ -3056,6 +3238,42 @@ function recallReasonLabel(reason: string) {
   return labels[reason] ?? reason;
 }
 
+function auditStatusLabel(status: WindowAuditStatus) {
+  const labels: Record<WindowAuditStatus, string> = {
+    blocked: "잠금",
+    partial: "보강",
+    ready: "준비",
+  };
+
+  return labels[status];
+}
+
+function WindowChecklist({ items, title }: { items: WindowAuditItem[]; title: string }) {
+  const readyCount = items.filter((item) => item.status === "ready").length;
+
+  return (
+    <section className="window-checklist" aria-label={`${title} completeness checklist`}>
+      <div className="window-checklist-head">
+        <strong>{title}</strong>
+        <span>
+          {readyCount}/{items.length}
+        </span>
+      </div>
+      <div className="window-checklist-list">
+        {items.map((item) => (
+          <article className={item.status} key={item.id}>
+            <div>
+              <strong>{item.label}</strong>
+              <p>{item.detail}</p>
+            </div>
+            <em>{auditStatusLabel(item.status)}</em>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ConversationWorkbench({
   activeSessionId,
   agentConfigPanel,
@@ -3118,6 +3336,34 @@ function ConversationWorkbench({
   const attachmentEnabled = Boolean(selectedAgent && modelSupportsAnyAttachment(selectedModel));
   const attachmentAccept = attachmentAcceptForModel(selectedModel);
   const attachmentLimitReached = draftAttachments.length >= maxDraftAttachments;
+  const auditItems: WindowAuditItem[] = [
+    {
+      id: "chat",
+      label: "대화",
+      status: selectedAgent ? "ready" : "partial",
+      detail: "선택한 agent/provider/model 조합으로 같은 세션 안에서 이어서 대화합니다.",
+    },
+    {
+      id: "attachments",
+      label: "첨부",
+      status: attachmentEnabled ? "ready" : "blocked",
+      detail: attachmentEnabled
+        ? `현재 모델은 ${attachmentCapabilityLabel(selectedModel)}이고 최대 ${maxDraftAttachments}개까지 붙입니다.`
+        : "선택 모델이 멀티모달을 지원하지 않아 첨부를 막았습니다.",
+    },
+    {
+      id: "handoff",
+      label: "토론/패킷",
+      status: "ready",
+      detail: "현재 대화를 Debate Context와 Coding Packet으로 승격할 수 있습니다.",
+    },
+    {
+      id: "backup",
+      label: "백업/채널",
+      status: "ready",
+      detail: "Obsidian/Notion projection과 Telegram 이어받기 버튼이 같은 흐름에 묶여 있습니다.",
+    },
+  ];
 
   return (
     <section className="workbench-panel">
@@ -3166,6 +3412,7 @@ function ConversationWorkbench({
           provider={selectedProvider}
         />
       ) : null}
+      <WindowChecklist items={auditItems} title="대화 창 점검" />
       <div className="conversation-stream" aria-label="대화 기록" tabIndex={0}>
         {messages.map((message) => {
           const attachments = getMessageAttachments(message);
@@ -3616,6 +3863,32 @@ function Stage3DebateTable({
       agentName: session.participants.find((participant) => participant.agentId === utterance.agentId)?.name ?? utterance.agentId,
     })),
   );
+  const auditItems: WindowAuditItem[] = [
+    {
+      id: "rounds",
+      label: "토론 라운드",
+      status: session.rounds.length >= 6 ? "ready" : "partial",
+      detail: "문제 정의, 제안, 비판, 요약, 보완, 최종 결정 흐름을 유지합니다.",
+    },
+    {
+      id: "tags",
+      label: "발언 태그",
+      status: utterances.every((utterance) => utterance.tags.length > 0) ? "ready" : "partial",
+      detail: "합의/반대/근거/리스크/코딩 영향 태그로 말싸움이 아니라 의사결정을 만듭니다.",
+    },
+    {
+      id: "peek",
+      label: "Human Peek",
+      status: session.humanPeek.length > 0 ? "ready" : "partial",
+      detail: "비공개 에이전트 흐름을 사용자가 감시할 수 있게 남깁니다.",
+    },
+    {
+      id: "coding-packet",
+      label: "패킷 반영",
+      status: "ready",
+      detail: "토론은 요약으로 끝나지 않고 Coding Packet 갱신 버튼으로 이어집니다.",
+    },
+  ];
 
   return (
     <section className="debate-panel stage3">
@@ -3637,6 +3910,7 @@ function Stage3DebateTable({
           </span>
         ))}
       </div>
+      <WindowChecklist items={auditItems} title="토론 창 점검" />
       <div className="debate-workspace">
         <div className="debate-grid">
           {utterances.map((utterance) => (
@@ -3755,6 +4029,32 @@ function AgentSettingsPanel({
       onUpdateAgent(agent.id, { name: nextName });
     }
   }
+  const auditItems: WindowAuditItem[] = [
+    {
+      id: "name",
+      label: "이름",
+      status: draftName.trim() ? "ready" : "partial",
+      detail: "에이전트 표시명은 tmux pane, 대화 상대, 기록에 함께 반영됩니다.",
+    },
+    {
+      id: "role",
+      label: "역할",
+      status: "ready",
+      detail: "지휘자/설계자/검토자/실행자 같은 역할을 여기서 바꿉니다.",
+    },
+    {
+      id: "avatar",
+      label: "프로필 사진",
+      status: visual.avatarDataUrl ? "ready" : "partial",
+      detail: "업로드 이미지는 data URL로 저장해 외부 접속에서도 경로가 깨지지 않게 합니다.",
+    },
+    {
+      id: "event-record",
+      label: "설정 기록",
+      status: "ready",
+      detail: "이름, 역할, 이미지 변경은 Event Storage에 남길 준비가 되어 있습니다.",
+    },
+  ];
 
   return (
     <section className="agent-settings-modal" aria-label="Agent profile settings">
@@ -3831,6 +4131,7 @@ function AgentSettingsPanel({
           <strong>이름 / 역할 / avatar는 Event Storage에 기록되고, 실제 tmux runner 연결 전까지 UI와 handoff 기록에서 먼저 사용한다.</strong>
         </div>
       </div>
+      <WindowChecklist items={auditItems} title="에이전트 설정 점검" />
     </section>
   );
 }
@@ -3943,6 +4244,32 @@ function TmuxSwarmBoard({
     },
   ];
   const visiblePanes = panes.slice(0, recommendation.recommendedCount);
+  const auditItems: WindowAuditItem[] = [
+    {
+      id: "layout",
+      label: "tmux 화면",
+      status: "ready",
+      detail: "tmux 모드에서는 좌우 rail과 하단 dock을 밀고 중앙 workbench를 전체 화면으로 씁니다.",
+    },
+    {
+      id: "pane-count",
+      label: "4-10 pane",
+      status: "ready",
+      detail: `오케스트레이터가 난이도 ${recommendation.difficulty}로 보고 ${recommendation.recommendedCount}개 pane을 추천했습니다.`,
+    },
+    {
+      id: "scripts",
+      label: "실제 tmux 스크립트",
+      status: "partial",
+      detail: "scripts/setup-agent-swarm.sh와 swarm-send.sh는 준비됐고, 실제 dispatch는 permission 안정화 뒤 켭니다.",
+    },
+    {
+      id: "gemini",
+      label: "Gemini 연결",
+      status: "blocked",
+      detail: "Gemini CLI는 agy -p 설정 전까지 의도적으로 연결 금지 상태입니다.",
+    },
+  ];
 
   return (
     <section className="tmux-panel" aria-label="Role-Based Tmux Agent Swarm">
@@ -3975,6 +4302,7 @@ function TmuxSwarmBoard({
           ))}
         </div>
       </section>
+      <WindowChecklist items={auditItems} title="tmux 창 점검" />
       <div className="tmux-workbench">
         <section className="tmux-operator-chat">
           <header>
@@ -4176,6 +4504,32 @@ function ProviderRegistrationMenu({
     { mode: "cli", label: "CLI", detail: "Codex / Claude Code / OpenClaw", icon: Terminal },
     { mode: "oauth", label: "OAuth", detail: "session / account binding", icon: LockKeyhole },
   ];
+  const auditItems: WindowAuditItem[] = [
+    {
+      id: "api",
+      label: "API Key",
+      status: "ready",
+      detail: "단순 키, env export, Claude Code JSON, custom base URL을 같은 secret ref로 받습니다.",
+    },
+    {
+      id: "cli",
+      label: "CLI Provider",
+      status: "partial",
+      detail: "Codex/Claude/OpenClaw CLI는 등록 준비됨. Gemini agy -p는 설정 전까지 잠금입니다.",
+    },
+    {
+      id: "oauth",
+      label: "OAuth",
+      status: "ready",
+      detail: "계정 세션형 provider를 이름 붙여 저장하고 agent에서 선택할 수 있습니다.",
+    },
+    {
+      id: "models",
+      label: "모델 목록",
+      status: profiles.length > 0 ? "ready" : "partial",
+      detail: "프로바이더별 discovery/cached 모델을 agent 모델 선택창으로 넘깁니다.",
+    },
+  ];
 
   return (
     <section className="provider-registration-menu" aria-label="provider registration menu">
@@ -4239,6 +4593,7 @@ function ProviderRegistrationMenu({
           );
         })}
       </div>
+      <WindowChecklist items={auditItems} title="프로바이더 창 점검" />
     </section>
   );
 }
@@ -4354,6 +4709,33 @@ function AgentStatePanel({
   profiles: ProviderProfile[];
   selectedAgentId?: string;
 }) {
+  const auditItems: WindowAuditItem[] = [
+    {
+      id: "dynamic-agents",
+      label: "추가/삭제",
+      status: "ready",
+      detail: "에이전트 수는 고정 4명이 아니라 필요할 때 계속 늘리고 줄입니다.",
+    },
+    {
+      id: "provider-lock",
+      label: "Provider 점유",
+      status: "ready",
+      detail: "다른 agent가 쓰는 provider는 선택창에서 비활성화합니다.",
+    },
+    {
+      id: "model-window",
+      label: "모델 선택",
+      status: "ready",
+      detail: "모델이 8개를 넘으면 좌우 이동으로 고를 수 있습니다.",
+    },
+    {
+      id: "agent-profile",
+      label: "프로필/Soul",
+      status: "ready",
+      detail: "연필 메뉴에서 이름, 역할, 프로필 사진을 바꾸고 중앙에서 SOUL.md/AGENTS.md를 다룹니다.",
+    },
+  ];
+
   return (
     <section className="side-panel compact">
       <header className="panel-title">
@@ -4471,6 +4853,7 @@ function AgentStatePanel({
           );
         })}
       </div>
+      <WindowChecklist items={auditItems} title="Agents 창 점검" />
     </section>
   );
 }
@@ -4488,6 +4871,32 @@ function MemoryInspectorPanel({
 }) {
   const visibleTrace = inspector.trace.results.slice(0, 6);
   const visibleRecords = inspector.records.slice(0, 8);
+  const auditItems: WindowAuditItem[] = [
+    {
+      id: "recall-trace",
+      label: "Recall Trace",
+      status: visibleTrace.length > 0 ? "ready" : "partial",
+      detail: "어떤 기억이 점수 몇으로 쓰였는지 숨기지 않습니다.",
+    },
+    {
+      id: "pin",
+      label: "고정",
+      status: "ready",
+      detail: "중요한 기억은 pin 처리해 다음 recall에서 우선 보존합니다.",
+    },
+    {
+      id: "forget",
+      label: "삭제 요청",
+      status: "partial",
+      detail: "현재는 UI에서 forget 가능. append-only 원장 tombstone 정책은 별도 확정이 필요합니다.",
+    },
+    {
+      id: "trust",
+      label: "신뢰 격리",
+      status: inspector.blockedCount > 0 ? "ready" : "partial",
+      detail: "비신뢰 provider/Telegram 기억은 자동 recall 전에 격리합니다.",
+    },
+  ];
 
   return (
     <section className="side-panel memory-panel">
@@ -4559,6 +4968,7 @@ function MemoryInspectorPanel({
           </article>
         ))}
       </div>
+      <WindowChecklist items={auditItems} title="Memento 창 점검" />
     </section>
   );
 }
@@ -4715,6 +5125,26 @@ function CodingPacketPanel({ packet }: { packet: CodingPacket }) {
     ["구현", packet.implementationPlan],
     ["검증", packet.verificationPlan],
   ] as const;
+  const auditItems: WindowAuditItem[] = [
+    {
+      id: "structure",
+      label: "구조",
+      status: packet.goal && packet.decisions.length > 0 ? "ready" : "partial",
+      detail: "자연어 요약 대신 goal/context/decisions/rejected/constraints/files/verify를 유지합니다.",
+    },
+    {
+      id: "verification",
+      label: "검증",
+      status: packet.verificationPlan.length > 0 ? "ready" : "partial",
+      detail: "패킷마다 검증 방법을 붙여 코딩 전달이 실행 기록으로 이어지게 합니다.",
+    },
+    {
+      id: "handoff",
+      label: "Codex 전달",
+      status: "ready",
+      detail: "실행 전 Event Storage에 packet.created/run.requested 이벤트로 남길 수 있습니다.",
+    },
+  ];
 
   return (
     <section className="coding-packet">
@@ -4728,6 +5158,7 @@ function CodingPacketPanel({ packet }: { packet: CodingPacket }) {
           구조 검증
         </button>
       </header>
+      <WindowChecklist items={auditItems} title="패킷 창 점검" />
       <div className="packet-grid">
         {columns.map(([title, items]) => (
           <div className="packet-column" key={title}>
@@ -4775,6 +5206,26 @@ function TerminalDock({
 }) {
   const visibleEvents = events.slice(0, 4);
   const pendingPermission = permissionSnapshot.queue[0];
+  const auditItems: WindowAuditItem[] = [
+    {
+      id: "execution-disabled",
+      label: "실행 잠금",
+      status: "ready",
+      detail: "실제 명령 실행은 tmux/permission/redaction 안정화 전까지 막습니다.",
+    },
+    {
+      id: "approval",
+      label: "승인",
+      status: pendingPermission ? "partial" : "ready",
+      detail: pendingPermission ? "승인 대기 작업이 있습니다." : "승인 대기열이 비어 있습니다.",
+    },
+    {
+      id: "event-sync",
+      label: "동기화",
+      status: eventSyncState.status === "synced" ? "ready" : "partial",
+      detail: `DGX-02 rev ${eventSyncState.serverRevision ?? "-"} / outbox ${eventSyncState.outboxCount}`,
+    },
+  ];
 
   return (
     <footer className="terminal-dock">
@@ -4784,6 +5235,22 @@ function TerminalDock({
         <span>execution disabled</span>
       </div>
       <div className="slot-list">
+        <article className="dock-check-card">
+          <header>
+            <span>
+              <CheckCircle2 size={14} />
+              창 점검
+            </span>
+            <em>{auditItems.filter((item) => item.status === "ready").length}/{auditItems.length}</em>
+          </header>
+          {auditItems.map((item) => (
+            <p className={item.status} key={item.id}>
+              <span>{item.label}</span>
+              <strong>{auditStatusLabel(item.status)}</strong>
+              <small>{item.detail}</small>
+            </p>
+          ))}
+        </article>
         {slots.map((slot) => (
           <article className="terminal-slot" key={slot.id}>
             <header>

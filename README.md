@@ -294,3 +294,10 @@ corepack pnpm dev
 - 난이도에 따라 4명, 6명, 8명, 10명 배치를 추천하고, 현재 추천 역할 chip을 화면에 표시한다.
 - tmux pane 후보를 `Research Scout`와 `Memory Curator`까지 확장해 최대 10개 pane을 지원한다.
 - `scripts/setup-agent-swarm.sh --panes 4..10` 옵션을 추가하고 기본값을 10개 pane으로 변경했다.
+
+## Stage39
+
+- 세션, 시스템, Ops, 프로젝트, 채널, 백업, 대화, 토론, tmux, 프로바이더, Agents, Memento, Coding Packet, Terminal/Run Log 창에 공통 `창 점검` UI를 추가했다.
+- 각 창은 `준비 / 보강 / 잠금` 상태와 짧은 사유를 함께 보여줘 기능 누락, 보류, 의도적 잠금을 화면에서 바로 확인할 수 있다.
+- 프로젝트 창에는 inspect 파일 후보와 verification 후보를 별도 리스트로 추가해 Coding Packet의 실행 준비 상태를 더 잘 보이게 했다.
+- Terminal/Run Log에는 실행 잠금, 승인 대기열, Event Storage 동기화 상태를 별도 점검 카드로 넣어 실제 명령 dispatch 전에 빠진 게 없는지 확인하게 했다.
