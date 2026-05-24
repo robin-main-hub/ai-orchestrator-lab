@@ -157,6 +157,16 @@ corepack pnpm dev
 - `GET /event-storage`로 storage mode, JSONL path, revision, event/session count를 확인할 수 있다.
 - `scripts/smoke-dgx-server.mjs`는 `/event-storage`와 `/events` pull 결과까지 함께 확인한다.
 
+## PR0 Authority Correction
+
+- MacBook is now the authoritative local Event Storage owner.
+- DGX-02 is treated as a projection and compute server, not the source of truth.
+- Home PC remains a thin online surface that depends on DGX-02 projection availability.
+- Conflict handling uses `macbook_authority_wins`.
+- Local offline writes use `append_authoritative_local`; DGX sync is a projection queue, not authority recovery.
+- External legacy Telegram input is represented as `legacy_telegram` in persisted protocol data while UI labels may still say Telegram.
+- Unknown external effects are denied by default in the Permission Matrix.
+
 ## Stage18
 
 - Conversation message event payload에 redacted `content`를 포함해 DGX-02 Event Storage가 실제 대화 복원의 원본이 되도록 했다.

@@ -175,3 +175,16 @@ Still gated:
 - Gemini CLI connection
 - commands from Telegram/mobile/API
 - destructive or secret-bearing commands
+
+## PR0 Authority / Permission Update
+
+Implementation note added on 2026-05-24:
+
+- MacBook is the authoritative local Event Storage owner.
+- DGX-02 is a projection and compute server, not the source of truth.
+- Home PC is a thin online surface and can degrade when DGX-02 projection is unavailable.
+- Conflict policy is `macbook_authority_wins`.
+- Offline write policy is `append_authoritative_local`.
+- Legacy Telegram ingress remains visible in the UI as Telegram, but persisted protocol values use `legacy_telegram`.
+- Unknown external effects are denied by default; customer replies and email sends require approval.
+- `stage29LocalEventStore` separates permanent local events from the DGX projection outbox.

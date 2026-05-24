@@ -18,7 +18,7 @@ describe("stage8 ingress guard", () => {
   it("blocks bot self responses before session handoff", () => {
     const snapshot = createStage8IngressSnapshot({
       id: "telegram_bot_loop",
-      channel: "telegram",
+      channel: "legacy_telegram",
       authorType: "bot",
       eventType: "bot_reply",
       text: "I already answered",

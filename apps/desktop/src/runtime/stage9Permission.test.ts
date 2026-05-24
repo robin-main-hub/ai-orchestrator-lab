@@ -14,11 +14,11 @@ const runtime: RuntimeSnapshot = {
   runtimeNodes: [],
   localModels: [],
   syncTopology: {
-    authorityNodeId: "dgx-02",
-    authorityLabel: "DGX-02",
-    eventStoreMode: "server_authoritative_with_local_outbox",
-    offlineWritePolicy: "append_local_outbox",
-    conflictPolicy: "server_revision_lww_with_conflict_events",
+    authorityNodeId: "client_macbook",
+    authorityLabel: "MacBook",
+    eventStoreMode: "macbook_authoritative_with_dgx_projection",
+    offlineWritePolicy: "append_authoritative_local",
+    conflictPolicy: "macbook_authority_wins",
     clients: [],
   },
   updatedAt: createdAt,
@@ -125,5 +125,69 @@ describe("stage9 permission matrix", () => {
     expect(approvedSnapshot.summary.approved).toBe(1);
     expect(approvedSnapshot.summary.denied).toBe(2);
     expect(approvedSnapshot.queue.length).toBe(pendingSnapshot.queue.length - 1);
+  });
+
+  it("requires approval for customer replies and email sends from external channels", () => {
+    const snapshot = createStage9PermissionSnapshot({
+      sessionId: "session_desktop_001",
+      externalApprovals: [
+        {
+          id: "approval_customer_reply",
+          ingressEventId: "ingress_customer_reply",
+          channel: "legacy_telegram",
+          summary: "send customer reply about refund policy",
+          permissions: [],
+          state: "required",
+          createdAt,
+        },
+        {
+          id: "approval_email_send",
+          ingressEventId: "ingress_email_send",
+          channel: "api",
+          summary: "email the customer a status update",
+          permissions: [],
+          state: "required",
+          createdAt,
+        },
+      ],
+      terminalSlots: [],
+      agentRun,
+      runtime,
+      mobilePolicy,
+      createdAt,
+    });
+
+    const actions = snapshot.items.map((item) => item.action);
+    expect(actions).toContain("customer_reply");
+    expect(actions).toContain("email_send");
+    expect(snapshot.items.find((item) => item.action === "customer_reply")?.decision).toBe("approval_required");
+    expect(snapshot.items.find((item) => item.action === "email_send")?.decision).toBe("approval_required");
+  });
+
+  it("denies unknown external effects by default", () => {
+    const snapshot = createStage9PermissionSnapshot({
+      sessionId: "session_desktop_001",
+      externalApprovals: [
+        {
+          id: "approval_unknown_effect",
+          ingressEventId: "ingress_unknown_effect",
+          channel: "webhook",
+          summary: "do the strange outside thing",
+          permissions: [],
+          state: "required",
+          createdAt,
+        },
+      ],
+      terminalSlots: [],
+      agentRun,
+      runtime,
+      mobilePolicy,
+      createdAt,
+    });
+
+    const unknown = snapshot.items.find((item) => item.action === "unknown_external_effect");
+    expect(unknown?.state).toBe("rejected");
+    expect(unknown?.decision).toBe("deny");
+    expect(snapshot.queue.some((item) => item.sourceItemId === unknown?.id)).toBe(false);
   });
 });
