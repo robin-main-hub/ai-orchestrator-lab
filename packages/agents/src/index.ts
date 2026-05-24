@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   AgentProfile,
   CodingPacket,
   DebateRound,
@@ -51,6 +51,171 @@ export function createMockUtterance(params: {
     tags: [params.tag],
     createdAt: new Date().toISOString(),
   };
+}
+
+export type DebateRoundAdvanceResult = {
+  rounds: DebateRound[];
+  finished: boolean;
+  nextRunningRoundId?: string;
+};
+
+export function getActiveDebateRound(rounds: DebateRound[]): DebateRound | undefined {
+  return rounds.find((round) => round.status === "running");
+}
+
+export function advanceDebateRound(
+  rounds: DebateRound[],
+  completedRoundId: string,
+): DebateRoundAdvanceResult {
+  const targetIndex = rounds.findIndex((round) => round.id === completedRoundId);
+  if (targetIndex === -1) {
+    throw new Error(`debate round not found: ${completedRoundId}`);
+  }
+
+  const target = rounds[targetIndex]!;
+  if (target.status === "completed") {
+    throw new Error(`debate round already completed: ${completedRoundId}`);
+  }
+  if (target.status === "blocked") {
+    throw new Error(`debate round is blocked, cannot advance: ${completedRoundId}`);
+  }
+
+  const next = rounds.map((round, index): DebateRound => {
+    if (index === targetIndex) {
+      return { ...round, status: "completed" };
+    }
+    return round;
+  });
+
+  const nextPendingIndex = next.findIndex(
+    (round, index) => index > targetIndex && round.status === "pending",
+  );
+
+  if (nextPendingIndex === -1) {
+    return { rounds: next, finished: true };
+  }
+
+  const activated = next.map((round, index): DebateRound => {
+    if (index === nextPendingIndex) {
+      return { ...round, status: "running" };
+    }
+    return round;
+  });
+
+  return {
+    rounds: activated,
+    finished: false,
+    nextRunningRoundId: activated[nextPendingIndex]!.id,
+  };
+}
+
+export function blockDebateRound(rounds: DebateRound[], roundId: string): DebateRound[] {
+  const targetIndex = rounds.findIndex((round) => round.id === roundId);
+  if (targetIndex === -1) {
+    throw new Error(`debate round not found: ${roundId}`);
+  }
+  const target = rounds[targetIndex]!;
+  if (target.status === "completed") {
+    throw new Error(`cannot block completed round: ${roundId}`);
+  }
+  return rounds.map((round, index): DebateRound => {
+    if (index === targetIndex) {
+      return { ...round, status: "blocked" };
+    }
+    return round;
+  });
+}
+
+export type CodingPacketSafetyResult = {
+  safe: boolean;
+  violations: string[];
+  sanitized: CodingPacket;
+};
+
+const MAX_PACKET_LIST_LENGTH = 100;
+const MAX_PACKET_PATH_LENGTH = 512;
+const MAX_PACKET_TEXT_LENGTH = 4000;
+
+const PATH_TRAVERSAL_PATTERN = /(^|[\\/])\.\.(?:[\\/]|$)/;
+const ABSOLUTE_PATH_PATTERN = /^(?:[a-zA-Z]:[\\/]|[\\/])/;
+const NULL_CHARACTER = String.fromCharCode(0);
+
+function isUnsafeRelativePath(path: string): string | undefined {
+  if (typeof path !== "string") return "non-string entry";
+  if (path.length === 0) return "empty path";
+  if (path.length > MAX_PACKET_PATH_LENGTH) return `path exceeds ${MAX_PACKET_PATH_LENGTH} chars`;
+  if (path.includes(NULL_CHARACTER)) return "null byte in path";
+  if (ABSOLUTE_PATH_PATTERN.test(path)) return "absolute path";
+  if (PATH_TRAVERSAL_PATTERN.test(path)) return "parent-directory traversal";
+  return undefined;
+}
+
+function isUnsafeText(value: string): string | undefined {
+  if (typeof value !== "string") return "non-string entry";
+  if (value.length === 0) return "empty entry";
+  if (value.length > MAX_PACKET_TEXT_LENGTH) return `entry exceeds ${MAX_PACKET_TEXT_LENGTH} chars`;
+  if (value.includes(NULL_CHARACTER)) return "null byte";
+  return undefined;
+}
+
+export function validateCodingPacketSafety(packet: CodingPacket): CodingPacketSafetyResult {
+  const violations: string[] = [];
+
+  const sanitizePathList = (label: string, values: string[]): string[] => {
+    if (values.length > MAX_PACKET_LIST_LENGTH) {
+      violations.push(`${label}: list exceeds ${MAX_PACKET_LIST_LENGTH} entries (kept first ${MAX_PACKET_LIST_LENGTH})`);
+    }
+    const truncated = values.slice(0, MAX_PACKET_LIST_LENGTH);
+    return truncated.filter((value, index) => {
+      const reason = isUnsafeRelativePath(value);
+      if (reason) {
+        violations.push(`${label}[${index}]: ${reason}`);
+        return false;
+      }
+      return true;
+    });
+  };
+
+  const sanitizeTextList = (label: string, values: string[]): string[] => {
+    if (values.length > MAX_PACKET_LIST_LENGTH) {
+      violations.push(`${label}: list exceeds ${MAX_PACKET_LIST_LENGTH} entries (kept first ${MAX_PACKET_LIST_LENGTH})`);
+    }
+    const truncated = values.slice(0, MAX_PACKET_LIST_LENGTH);
+    return truncated.filter((value, index) => {
+      const reason = isUnsafeText(value);
+      if (reason) {
+        violations.push(`${label}[${index}]: ${reason}`);
+        return false;
+      }
+      return true;
+    });
+  };
+
+  const sanitized: CodingPacket = {
+    goal: packet.goal,
+    context: sanitizeTextList("context", packet.context),
+    decisions: sanitizeTextList("decisions", packet.decisions),
+    rejectedOptions: sanitizeTextList("rejectedOptions", packet.rejectedOptions),
+    constraints: sanitizeTextList("constraints", packet.constraints),
+    filesToInspect: sanitizePathList("filesToInspect", packet.filesToInspect),
+    implementationPlan: sanitizeTextList("implementationPlan", packet.implementationPlan),
+    verificationPlan: sanitizeTextList("verificationPlan", packet.verificationPlan),
+    reviewerNotes: sanitizeTextList("reviewerNotes", packet.reviewerNotes),
+  };
+
+  return {
+    safe: violations.length === 0,
+    violations,
+    sanitized,
+  };
+}
+
+export function assertSafeCodingPacket(packet: CodingPacket): CodingPacket {
+  const result = validateCodingPacketSafety(packet);
+  if (!result.safe) {
+    throw new Error(`unsafe coding packet: ${result.violations.join("; ")}`);
+  }
+  return result.sanitized;
 }
 
 export function createCodingPacketDraft(context: DebateContext): CodingPacket {
