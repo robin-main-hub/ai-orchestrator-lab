@@ -295,6 +295,7 @@ function createSecretVaultEntry(profile: ProviderProfile, createdAt: string): Se
   const isDgxSecretRef = profile.tags.includes("dgx-secret-ref") || profile.secretRef?.redactedPreview.startsWith("dgx-02:");
   const isCliSession = profile.tags.includes("cli");
   const isOAuthSession = profile.tags.includes("oauth");
+  const isExpiredSession = profile.tags.includes("oauth-expired");
   const storage = isDgxNoAuth || isDgxSecretRef
     ? "dgx_vault"
     : isOAuthSession
@@ -313,16 +314,18 @@ function createSecretVaultEntry(profile: ProviderProfile, createdAt: string): Se
     secretRefId: profile.secretRef?.id,
     storage,
     availability:
-      isDgxNoAuth ||
-      isDgxSecretRef ||
-      isCliSession ||
-      isOAuthSession ||
-      profile.kind === "ollama" ||
-      profile.kind === "lmstudio" ||
-      profile.tags.includes("mock") ||
-      profile.secretRef
-        ? "available"
-        : "missing",
+      isExpiredSession
+        ? "expired"
+        : isDgxNoAuth ||
+            isDgxSecretRef ||
+            isCliSession ||
+            isOAuthSession ||
+            profile.kind === "ollama" ||
+            profile.kind === "lmstudio" ||
+            profile.tags.includes("mock") ||
+            profile.secretRef
+          ? "available"
+          : "missing",
     redactedPreview: profile.secretRef?.redactedPreview,
     transient: isDgxNoAuth || isDgxSecretRef
       ? false
@@ -649,17 +652,15 @@ function createDiscoveredModels(profile: ProviderProfile): ModelDescriptor[] {
   const modelIds =
     profile.tags.includes("deepseek")
       ? [
-          profile.defaultModel ?? "deepseek-chat",
-          "deepseek-chat",
-          "deepseek-reasoner",
-          "deepseek-r1",
-          "deepseek-v3",
+          profile.defaultModel ?? "deepseek-v4-flash",
+          "deepseek-v4-flash",
+          "deepseek-v4-pro",
         ]
-      : profile.tags.includes("apifun")
+      : profile.tags.includes("apifun") || profile.tags.includes("apikey.fun")
         ? [
-            profile.defaultModel ?? "claude-code-compatible",
+            profile.defaultModel ?? "claude-opus-4-6",
+            "claude-opus-4-6",
             "claude-code-compatible",
-            "claude-opus-reseller",
             "claude-sonnet-reseller",
             "claude-haiku-reseller",
           ]

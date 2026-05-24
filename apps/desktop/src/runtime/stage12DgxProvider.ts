@@ -55,7 +55,7 @@ export async function requestDgxVllmCompletion({
   messages,
   fetchImpl = fetch,
   proxyBaseUrl,
-  proxyTimeoutMs = 1_500,
+  proxyTimeoutMs = 30_000,
   allowDirectFallback = true,
 }: Stage12DgxCompletionInput): Promise<Stage12DgxCompletionResult> {
   try {
@@ -91,7 +91,7 @@ export async function requestDgxProviderCompletion({
   messages,
   fetchImpl = fetch,
   proxyBaseUrl,
-  proxyTimeoutMs = 1_500,
+  proxyTimeoutMs = 30_000,
 }: Stage12DgxCompletionInput): Promise<Stage12DgxCompletionResult> {
   if (isDgxVllmProvider(provider)) {
     return requestDgxVllmCompletion({

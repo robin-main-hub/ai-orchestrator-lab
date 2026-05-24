@@ -21,6 +21,7 @@ import type {
   RemoteExecutionRequest,
   RemoteExecutionResponse,
   RuntimeSnapshot,
+  SecretAvailability,
 } from "@ai-orchestrator/protocol";
 import { eventSyncPushRequestSchema } from "@ai-orchestrator/protocol";
 
@@ -90,6 +91,9 @@ type ServerProviderProxyConfig = {
   apiStyle?: "openai_chat" | "anthropic_messages";
   defaultModelIds: string[];
   supportsModelList?: boolean;
+  oauthAuthFileEnvName?: string;
+  defaultOAuthAuthFile?: string;
+  oauthAccountEmail?: string;
 };
 
 const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
@@ -108,7 +112,7 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     apiKeyFileEnvName: "DEEPSEEK_API_KEY_FILE",
     defaultKeyFile: "~/.openclaw/secrets/deepseek.key",
     apiStyle: "openai_chat",
-    defaultModelIds: ["deepseek-chat", "deepseek-reasoner", "deepseek-r1", "deepseek-v3"],
+    defaultModelIds: ["deepseek-v4-flash", "deepseek-v4-pro"],
     supportsModelList: true,
   },
   {
@@ -144,12 +148,27 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
   },
   {
     providerProfileId: "provider_grok_oauth_dgx",
-    baseUrl: process.env.GROK_OPENAI_PROXY_BASE_URL ?? "http://127.0.0.1:8000/v1",
+    baseUrl: process.env.GROK_OPENAI_PROXY_1_BASE_URL ?? process.env.GROK_OPENAI_PROXY_BASE_URL ?? "http://127.0.0.1:18111/v1",
     apiKeyEnvNames: [],
     noAuth: true,
     apiStyle: "openai_chat",
     defaultModelIds: ["grok-oauth-session", "grok-4", "grok-4-fast", "grok-code"],
     supportsModelList: true,
+    oauthAuthFileEnvName: "GROK_OAUTH_1_AUTH_FILE",
+    defaultOAuthAuthFile: "~/.grok/auth.json",
+    oauthAccountEmail: "choiminwoong@gmail.com",
+  },
+  {
+    providerProfileId: "provider_grok_oauth_dgx_2",
+    baseUrl: process.env.GROK_OPENAI_PROXY_2_BASE_URL ?? "http://127.0.0.1:18112/v1",
+    apiKeyEnvNames: [],
+    noAuth: true,
+    apiStyle: "openai_chat",
+    defaultModelIds: ["grok-oauth-session", "grok-4", "grok-4-fast", "grok-code"],
+    supportsModelList: true,
+    oauthAuthFileEnvName: "GROK_OAUTH_2_AUTH_FILE",
+    defaultOAuthAuthFile: "~/.grok2/auth.json",
+    oauthAccountEmail: "choiminwoongj@gmail.com",
   },
   {
     providerProfileId: "provider_openclaw_dgx",
@@ -529,11 +548,9 @@ async function createServerProviderRegistryEntry(
   updatedAt: string,
 ): Promise<ProviderRegistryEntry> {
   const authMode = createServerProviderRegistryAuthMode(config);
-  const secretAvailability = authMode === "none" || authMode === "oauth_session"
-    ? "available"
-    : (await resolveServerProviderApiKey(config))
-      ? "available"
-      : "missing";
+  const secretAvailability = await createServerProviderSecretAvailability(config, authMode, updatedAt);
+  const baseTags = createServerProviderTags(config.providerProfileId);
+  const tags = secretAvailability === "expired" ? Array.from(new Set([...baseTags, "oauth-expired"])) : baseTags;
 
   return {
     providerProfileId: config.providerProfileId,
@@ -541,7 +558,7 @@ async function createServerProviderRegistryEntry(
     kind: createServerProviderKind(config),
     baseUrl: config.baseUrl,
     trustLevel: createServerProviderTrustLevel(config.providerProfileId),
-    tags: createServerProviderTags(config.providerProfileId),
+    tags,
     defaultModelIds: config.defaultModelIds,
     selectedModelId: config.defaultModelIds[0],
     supportsModelList: Boolean(config.supportsModelList),
@@ -553,6 +570,22 @@ async function createServerProviderRegistryEntry(
     modelDiscoveryEndpoint: config.supportsModelList ? `${config.baseUrl.replace(/\/$/, "")}/models` : undefined,
     updatedAt,
   };
+}
+
+async function createServerProviderSecretAvailability(
+  config: ServerProviderProxyConfig,
+  authMode: ProviderRegistryAuthMode,
+  now: string,
+): Promise<SecretAvailability> {
+  if (authMode === "none") {
+    return "available";
+  }
+
+  if (authMode === "oauth_session") {
+    return resolveServerProviderOAuthAvailability(config, now);
+  }
+
+  return (await resolveServerProviderApiKey(config)) ? "available" : "missing";
 }
 
 function createDgxModelDescriptor(modelId: string): ModelDiscoverySnapshot["models"][number] {
@@ -608,7 +641,8 @@ function createServerProviderDisplayName(providerProfileId: string) {
     provider_apifun_claude: "APIKey.fun Claude A",
     provider_apifun_claude_b: "APIKey.fun Claude B",
     provider_apikeyfun_codex: "APIKey.fun Codex/GPT",
-    provider_grok_oauth_dgx: "Grok OAuth on DGX-02",
+    provider_grok_oauth_dgx: "Grok OAuth #1 (choiminwoong@gmail.com)",
+    provider_grok_oauth_dgx_2: "Grok OAuth #2 (choiminwoongj@gmail.com)",
     provider_openclaw_dgx: "DGX-02 OpenClaw vLLM",
   };
 
@@ -657,7 +691,13 @@ function createServerProviderTags(providerProfileId: string) {
   }
 
   if (providerProfileId.includes("grok")) {
-    return ["oauth", "grok", "server-proxy", "dgx"];
+    return [
+      "oauth",
+      "grok",
+      "server-proxy",
+      "dgx",
+      providerProfileId.endsWith("_2") ? "grok-account-2" : "grok-account-1",
+    ];
   }
 
   if (providerProfileId.includes("openclaw")) {
@@ -676,7 +716,7 @@ function createServerProviderSecretRefPreview(
   }
 
   if (authMode === "oauth_session") {
-    return "dgx-02:oauth-session";
+    return `dgx-02:${getServerProviderOAuthAuthFilePath(config) ?? "oauth-session"}`;
   }
 
   return `dgx-02:${config.apiKeyEnvNames[0] ?? config.defaultKeyFile ?? "provider-secret"}`;
@@ -691,7 +731,10 @@ function createServerProviderSecretSourceRefs(
   }
 
   if (authMode === "oauth_session") {
-    return ["~/.grok/auth.json", "~/.grok2/auth.json"];
+    return [
+      ...(config.oauthAccountEmail ? [`account:${config.oauthAccountEmail}`] : []),
+      ...(getServerProviderOAuthAuthFilePath(config) ? [`file:${getServerProviderOAuthAuthFilePath(config)}`] : []),
+    ];
   }
 
   const refs = [
@@ -708,6 +751,48 @@ function createServerProviderSecretSourceRefs(
   }
 
   return Array.from(new Set(refs));
+}
+
+function getServerProviderOAuthAuthFilePath(config: ServerProviderProxyConfig) {
+  return config.oauthAuthFileEnvName
+    ? process.env[config.oauthAuthFileEnvName] ?? config.defaultOAuthAuthFile
+    : config.defaultOAuthAuthFile;
+}
+
+async function resolveServerProviderOAuthAvailability(
+  config: ServerProviderProxyConfig,
+  now: string,
+): Promise<SecretAvailability> {
+  const authFilePath = getServerProviderOAuthAuthFilePath(config);
+  if (!authFilePath) {
+    return "missing";
+  }
+
+  try {
+    const raw = await readFile(expandHomePath(authFilePath), "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    const entries = parsed && typeof parsed === "object" ? Object.values(parsed as Record<string, unknown>) : [];
+    const authRecord = entries.find((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === "object"));
+    const expiresAt = typeof authRecord?.expires_at === "string"
+      ? authRecord.expires_at
+      : typeof authRecord?.expiresAt === "string"
+        ? authRecord.expiresAt
+        : undefined;
+
+    if (!expiresAt) {
+      return "available";
+    }
+
+    const expiresAtMs = Date.parse(expiresAt);
+    const nowMs = Date.parse(now);
+    if (Number.isFinite(expiresAtMs) && Number.isFinite(nowMs) && expiresAtMs <= nowMs) {
+      return "expired";
+    }
+
+    return "available";
+  } catch {
+    return "missing";
+  }
 }
 
 type DgxCompletionResponse = {

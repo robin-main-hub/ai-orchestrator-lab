@@ -720,7 +720,7 @@ const seededProviderProfiles: ProviderProfile[] = [
       name: "DeepSeek DGX-02 Key",
       kind: "openai",
       baseUrl: "https://api.deepseek.com/v1",
-      defaultModel: "deepseek-chat",
+      defaultModel: "deepseek-v4-flash",
       tags: ["dgx-secret-ref", "server-proxy", "deepseek"],
       trustLevel: "limited",
     }),
@@ -743,14 +743,26 @@ const seededProviderProfiles: ProviderProfile[] = [
   {
     ...createProviderProfile({
       id: "provider_grok_oauth_dgx",
-      name: "Grok OAuth on DGX-02",
+      name: "Grok OAuth #1 (choiminwoong@gmail.com)",
       kind: "custom",
-      baseUrl: `${DEFAULT_DGX_SERVER_BASE_URL}/provider-proxy/grok`,
+      baseUrl: "http://127.0.0.1:18111/v1",
       defaultModel: "grok-oauth-session",
-      tags: ["oauth", "grok", "server-proxy", "dgx"],
+      tags: ["oauth", "grok", "server-proxy", "dgx", "grok-account-1"],
       trustLevel: "limited",
     }),
-    secretRef: createDgxVaultSecretRef("secret_dgx02_grok_oauth", "DGX-02 Grok OAuth session", "dgx-02:grok-oauth"),
+    secretRef: createDgxVaultSecretRef("secret_dgx02_grok_oauth_1", "DGX-02 Grok OAuth #1", "dgx-02:~/.grok/auth.json"),
+  },
+  {
+    ...createProviderProfile({
+      id: "provider_grok_oauth_dgx_2",
+      name: "Grok OAuth #2 (choiminwoongj@gmail.com)",
+      kind: "custom",
+      baseUrl: "http://127.0.0.1:18112/v1",
+      defaultModel: "grok-oauth-session",
+      tags: ["oauth", "grok", "server-proxy", "dgx", "grok-account-2"],
+      trustLevel: "limited",
+    }),
+    secretRef: createDgxVaultSecretRef("secret_dgx02_grok_oauth_2", "DGX-02 Grok OAuth #2", "dgx-02:~/.grok2/auth.json"),
   },
   {
     ...createProviderProfile({
@@ -895,10 +907,8 @@ const seededModelCatalog: ModelCatalog = {
     "grok-proxy",
   ].map((id) => createModel("provider_reseller_custom", id, ["proxy"])),
   provider_deepseek_dgx: [
-    "deepseek-chat",
-    "deepseek-reasoner",
-    "deepseek-r1",
-    "deepseek-v3",
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
   ].map((id) => createModel("provider_deepseek_dgx", id, ["deepseek", "server-proxy"])),
   provider_apifun_claude: [
     "claude-opus-4-6",
@@ -911,7 +921,13 @@ const seededModelCatalog: ModelCatalog = {
     "grok-4",
     "grok-4-fast",
     "grok-code",
-  ].map((id) => createModel("provider_grok_oauth_dgx", id, ["grok", "oauth", "server-proxy"])),
+  ].map((id) => createModel("provider_grok_oauth_dgx", id, ["grok", "oauth", "server-proxy", "grok-account-1"])),
+  provider_grok_oauth_dgx_2: [
+    "grok-oauth-session",
+    "grok-4",
+    "grok-4-fast",
+    "grok-code",
+  ].map((id) => createModel("provider_grok_oauth_dgx_2", id, ["grok", "oauth", "server-proxy", "grok-account-2"])),
   provider_openclaw_dgx: [
     "qwen36-heretic",
     "qwen36-gio-wiki-rag-prisma",
@@ -956,15 +972,15 @@ function createModelDiscoveryFromRegistryEntry(entry: ProviderRegistryEntry): Mo
   return {
     id: `model_discovery_registry_${entry.providerProfileId}`,
     providerProfileId: entry.providerProfileId,
-    status: entry.secretAvailability === "missing" ? "failed" : "succeeded",
+    status: entry.secretAvailability === "available" ? "succeeded" : "failed",
     source: "remote_probe",
     models,
     selectedModelId: entry.selectedModelId ?? models[0]?.id,
     redactionApplied: true,
     warnings:
-      entry.secretAvailability === "missing"
-        ? ["DGX-02 registry reports missing provider secret; keep profile selectable but block completion."]
-        : ["DGX-02 provider registry metadata merged; raw secrets stay on DGX-02."],
+      entry.secretAvailability === "available"
+        ? ["DGX-02 provider registry metadata merged; raw secrets stay on DGX-02."]
+        : [`DGX-02 registry reports ${entry.secretAvailability} provider credential; keep profile selectable but block completion.`],
     createdAt: entry.updatedAt,
   };
 }
@@ -1861,7 +1877,7 @@ export function App() {
     const createdAt = new Date().toISOString();
     const authLabel = selectedAgent.authBinding?.label ?? "credential pending";
     const authMode = selectedAgent.authBinding?.mode ?? "provider_profile";
-    const modelId = selectedAgent.modelId ?? selectedProvider.defaultModel ?? "model pending";
+    const modelId = selectedModel?.id ?? selectedAgent.modelId ?? selectedProvider.defaultModel ?? "model pending";
     const messageContent = content || `첨부 ${attachments.length}개`;
     const attachmentMetadata = attachments.map((attachment) => ({ ...attachment }));
     const userMessage: ConversationMessage = {
@@ -2042,7 +2058,7 @@ export function App() {
         };
       }
     } catch (error) {
-      reply = `DGX-02 vLLM 호출에 실패했어. ${error instanceof Error ? error.message : String(error)}`;
+      reply = `${selectedProvider.name} 호출에 실패했어. ${error instanceof Error ? error.message : String(error)}`;
       completionMetadata = {
         error: error instanceof Error ? error.message : String(error),
         realProviderCall: false,
@@ -4840,7 +4856,7 @@ function ConversationWorkbench({
           <strong>{selectedAgent?.name ?? "봇 선택 필요"}</strong>
           <em>
             {activeSessionId} / {selectedAgent?.role ?? "agent"} / {selectedProvider?.name ?? "provider pending"} /{" "}
-            {selectedAgent?.modelId ?? selectedProvider?.defaultModel ?? "model pending"}
+            {selectedModel?.id ?? selectedAgent?.modelId ?? selectedProvider?.defaultModel ?? "model pending"}
           </em>
         </div>
         <select
@@ -4851,7 +4867,7 @@ function ConversationWorkbench({
         >
           {agents.map((agent) => (
             <option key={agent.id} value={agent.id}>
-              {agent.name} / {agent.modelId ?? "model pending"}
+              {agent.name} / {agent.id === selectedAgentId ? (selectedModel?.id ?? agent.modelId ?? "model pending") : (agent.modelId ?? "model pending")}
             </option>
           ))}
         </select>
