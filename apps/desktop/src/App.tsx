@@ -122,18 +122,23 @@ import type {
   AgentProfile,
   ApprovalState,
   BackupProjection,
+  BranchExperiment,
   CodingPacket,
   ConversationAttachment,
   ConversationMessage,
+  ContextPackTier,
   DebateTag,
   EventEnvelope,
   EventSource,
+  InsightCategory,
+  InsightFinding,
   MemoryRecord,
   ModelDescriptor,
   ModelDiscoverySnapshot,
   PermissionMatrixSnapshot,
   ProviderProfile,
   ProviderRuntimeReadiness,
+  ReviewMode,
   RuntimeSnapshot,
   SecretVaultSnapshot,
   SourceTrust,
@@ -175,6 +180,12 @@ type WindowAuditItem = {
   label: string;
   status: WindowAuditStatus;
   detail: string;
+};
+type MetaOnboardingSignal = {
+  id: string;
+  label: string;
+  status: WindowAuditStatus;
+  suggestion: string;
 };
 
 const modelWindowSize = 8;
@@ -700,6 +711,27 @@ const initialConversationMessages: ConversationMessage[] = [
   },
 ];
 
+const initialBranchExperiments: BranchExperiment[] = [
+  {
+    id: "branch_shadow_architect",
+    sourceSessionId: DEFAULT_SESSION_ID,
+    title: "shadow: protocol-first 구조 검토",
+    agentName: "Architect",
+    status: "ready",
+    summary: "메인 대화는 깨끗하게 유지하고, protocol/Event Storage 경계만 요약해서 채택 후보로 둔다.",
+    createdAt: now,
+  },
+  {
+    id: "branch_shadow_reviewer",
+    sourceSessionId: DEFAULT_SESSION_ID,
+    title: "shadow: 보안/권한 반대 검토",
+    agentName: "Reviewer",
+    status: "drafting",
+    summary: "권한, redaction, provider trust가 흔들리는 지점을 별도 branch에서 검토한다.",
+    createdAt: now,
+  },
+];
+
 function createDesktopEvent<T>(type: string, payload: T, createdAt = new Date().toISOString()): EventEnvelope<T> {
   return createStage2Event({ type, payload, createdAt });
 }
@@ -777,6 +809,9 @@ export function App() {
   const [ingressSnapshot, setIngressSnapshot] = useState<Stage8IngressSnapshot>(initialIngressSnapshot);
   const [approvalStateByItemId, setApprovalStateByItemId] = useState<Record<string, ApprovalState>>({});
   const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
+  const [contextPackTier, setContextPackTier] = useState<ContextPackTier>("standard");
+  const [reviewMode, setReviewMode] = useState<ReviewMode>("quick");
+  const [branchExperiments, setBranchExperiments] = useState<BranchExperiment[]>(initialBranchExperiments);
   const [debateSession, setDebateSession] = useState<Stage3DebateSession>(() =>
     createStage3DebateSession({
       messages: initialConversationMessages,
@@ -901,6 +936,27 @@ export function App() {
       ingressSnapshot.approvals,
       runtimeSnapshotState,
     ],
+  );
+  const insightFindings = useMemo(
+    () =>
+      createInsightFindings({
+        packet: codingPacketState,
+        eventCount: eventLog.length,
+        permissionSnapshot,
+        providerReadiness,
+        memoryInspector,
+      }),
+    [codingPacketState, eventLog.length, memoryInspector, permissionSnapshot, providerReadiness],
+  );
+  const metaOnboardingSignals = useMemo(
+    () =>
+      createMetaOnboardingSignals({
+        agents,
+        providers: providerProfiles,
+        models: modelCatalog,
+        runtime: runtimeSnapshotState,
+      }),
+    [agents, modelCatalog, providerProfiles, runtimeSnapshotState],
   );
 
   useEffect(() => {
@@ -1330,6 +1386,10 @@ export function App() {
       agent: selectedAgent,
       provider: selectedProvider,
     });
+    const adoptedBranchSummaries = branchExperiments
+      .filter((branch) => branch.status === "adopted")
+      .map((branch) => `Adopted branch ${branch.title}: ${branch.summary}`)
+      .slice(0, 3);
     const debateDecisions = debateSession.rounds
       .flatMap((round) => round.utterances)
       .filter((utterance) => utterance.tags.some((tag) => tag === "agreement" || tag === "coding_impact"))
@@ -1340,6 +1400,8 @@ export function App() {
         ? {
             ...basePacket,
             context: [
+              `ContextPack tier: ${contextPackTier}`,
+              ...adoptedBranchSummaries,
               ...basePacket.context,
               `Stage3 Debate: ${debateSession.summary}`,
               ...debateSession.contextPreview,
@@ -1352,13 +1414,101 @@ export function App() {
           }
         : basePacket;
 
-    setCodingPacketState(packet);
+    const nextPacket =
+      mode === "debate"
+        ? packet
+        : {
+            ...packet,
+            context: [`ContextPack tier: ${contextPackTier}`, ...adoptedBranchSummaries, ...packet.context],
+          };
+
+    setCodingPacketState(nextPacket);
     appendEvent("coding_packet.created", {
-      packet,
-      goal: packet.goal,
-      contextCount: packet.context.length,
-      decisionCount: packet.decisions.length,
-      filesToInspect: packet.filesToInspect,
+      packet: nextPacket,
+      goal: nextPacket.goal,
+      contextPackTier,
+      adoptedBranchCount: adoptedBranchSummaries.length,
+      contextCount: nextPacket.context.length,
+      decisionCount: nextPacket.decisions.length,
+      filesToInspect: nextPacket.filesToInspect,
+    });
+  }
+
+  function handleContextPackTierChange(tier: ContextPackTier) {
+    setContextPackTier(tier);
+    appendEvent("context_pack.tier.changed", {
+      tier,
+      assembly: ["identity", "recent_context", "long_term_memory", "skills", "tool_results"],
+      redundancyPolicy: "avoid duplicate session-buffer context",
+    });
+  }
+
+  function handleReviewModeChange(mode: ReviewMode) {
+    setReviewMode(mode);
+    appendEvent("review.mode.changed", {
+      mode,
+      reviewerPolicy: mode === "deep" ? "cross_vendor_roundtable" : "single_reviewer_fast_path",
+      rubric: ["plan_coverage", "code_quality", "test_coverage", "convention"],
+      invariantChecks: true,
+    });
+  }
+
+  function handleCreateBranchExperiment() {
+    const createdAt = new Date().toISOString();
+    const nextBranch: BranchExperiment = {
+      id: `branch_${crypto.randomUUID()}`,
+      sourceSessionId: activeSessionId,
+      title: `shadow: ${selectedAgent?.name ?? "Agent"} ${branchExperiments.length + 1}`,
+      agentName: selectedAgent?.name ?? "Agent",
+      status: "ready",
+      summary: `${selectedAgent?.name ?? "Agent"}가 ${contextPackTier} ContextPack으로 현재 요구사항을 별도 shadow conversation에서 검토한다.`,
+      createdAt,
+    };
+
+    setBranchExperiments((branches) => [nextBranch, ...branches].slice(0, 8));
+    appendEvent("conversation.branch.created", {
+      branch: nextBranch,
+      contextPackTier,
+      adoptPolicy: "summary_only",
+    });
+  }
+
+  function handleAdoptBranchExperiment() {
+    const branch = branchExperiments.find((candidate) => candidate.status !== "adopted");
+    if (!branch) {
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    const adoptionMessage: ConversationMessage = {
+      id: `message_branch_adopted_${crypto.randomUUID()}`,
+      sessionId: activeSessionId,
+      role: "assistant",
+      content: `Branch 채택: ${branch.title} - ${branch.summary}`,
+      createdAt,
+      metadata: {
+        branchId: branch.id,
+        branchAdopted: true,
+        contextPolicy: "summary_only",
+      },
+    };
+
+    setBranchExperiments((branches) =>
+      branches.map((candidate) => (candidate.id === branch.id ? { ...candidate, status: "adopted" } : candidate)),
+    );
+    setConversationMessages((messages) => [...messages, adoptionMessage]);
+    appendEvent("conversation.branch.adopted", {
+      branchId: branch.id,
+      title: branch.title,
+      summary: branch.summary,
+      contextPolicy: "summary_only",
+    });
+    appendEvent("conversation.message.created", {
+      messageId: adoptionMessage.id,
+      role: adoptionMessage.role,
+      content: adoptionMessage.content,
+      metadata: adoptionMessage.metadata,
+      redaction: "applied",
     });
   }
 
@@ -1910,6 +2060,50 @@ export function App() {
     };
   }
 
+  function handleRunMetaOnboarding() {
+    const preferredRoles: WorkbenchAgent["role"][] = ["verifier", "memory_curator", "skeptic"];
+    const missingRole = preferredRoles.find((role) => !agents.some((agent) => agent.role === role));
+    appendEvent("meta_agent.onboarding.scanned", {
+      agentCount: agents.length,
+      providerCount: providerProfiles.length,
+      missingRole: missingRole ?? "none",
+      signals: metaOnboardingSignals,
+    });
+
+    if (!missingRole) {
+      return;
+    }
+
+    const provider = selectedProvider ?? providerProfiles[0];
+    const modelId = provider ? (modelCatalog[provider.id]?.[0]?.id ?? provider.defaultModel) : undefined;
+    const roleName = agentRoleLabel(missingRole);
+    const nextAgent: WorkbenchAgent = {
+      id: `agent_meta_${missingRole}_${crypto.randomUUID().slice(0, 8)}`,
+      name: roleName,
+      kind: "virtual",
+      role: missingRole,
+      providerProfileId: provider?.id,
+      modelId,
+      soulMode: missingRole === "memory_curator" ? "retrieved" : "summary",
+      configSource: "internal",
+      enabled: true,
+      authBinding: createAuthBinding(provider),
+    };
+
+    setAgents((currentAgents) => [...currentAgents, nextAgent]);
+    setAgentPersonaById((settings) => ({
+      ...settings,
+      [nextAgent.id]: createDefaultPersonaSettings(nextAgent),
+    }));
+    appendEvent("meta_agent.onboarding.applied", {
+      agentId: nextAgent.id,
+      role: nextAgent.role,
+      providerProfileId: nextAgent.providerProfileId,
+      modelId: nextAgent.modelId,
+      reason: "missing tunaFlow-style orchestration role",
+    });
+  }
+
   function registerProviderProfile(nextProvider: ProviderProfile, registrationMode: ProviderRegistrationMode) {
     const discovery = discoverModelsForProfile(nextProvider);
     setProviderProfiles((profiles) => [...profiles, nextProvider]);
@@ -2303,11 +2497,16 @@ export function App() {
           {activeNavItem === "projects" ? (
             <ProjectRailPanel
               agentRun={agentRunState}
+              branchExperiments={branchExperiments}
               eventCount={eventLog.length}
+              insightFindings={insightFindings}
+              metaOnboardingSignals={metaOnboardingSignals}
               memoryInspector={memoryInspector}
               onCreateAgentRun={handleCreateAgentRun}
               onCreateCodingPacket={handleCreateCodingPacket}
+              onRunMetaOnboarding={handleRunMetaOnboarding}
               packet={codingPacketState}
+              reviewMode={reviewMode}
               sessionId={activeSessionId}
             />
           ) : null}
@@ -2433,12 +2632,17 @@ export function App() {
               agentConfigPanel={agentConfigPanel}
               agentPersona={selectedAgentPersona}
               agents={agents}
+              branchExperiments={branchExperiments}
+              contextPackTier={contextPackTier}
               draftAttachments={draftAttachments}
               draftMessage={draftMessage}
               maxDraftAttachments={maxDraftAttachments}
               messages={conversationMessages}
               onAddDraftAttachments={handleAddDraftAttachments}
+              onAdoptBranch={handleAdoptBranchExperiment}
               onBackupProjection={handleExportBackupProjections}
+              onContextPackTierChange={handleContextPackTierChange}
+              onCreateBranch={handleCreateBranchExperiment}
               onCreateAgentRun={handleCreateAgentRun}
               onCreateCodingPacket={handleCreateCodingPacket}
               onDraftMessageChange={setDraftMessage}
@@ -2469,7 +2673,14 @@ export function App() {
             />
           )}
 
-          {mode === "tmux" ? null : <CodingPacketPanel packet={codingPacketState} />}
+          {mode === "tmux" ? null : (
+            <CodingPacketPanel
+              insightFindings={insightFindings}
+              onReviewModeChange={handleReviewModeChange}
+              packet={codingPacketState}
+              reviewMode={reviewMode}
+            />
+          )}
         </section>
 
         {mode === "tmux" ? null : (
@@ -2790,24 +3001,37 @@ function OperationsRailPanel({
 
 function ProjectRailPanel({
   agentRun,
+  branchExperiments,
   eventCount,
+  insightFindings,
+  metaOnboardingSignals,
   memoryInspector,
   onCreateAgentRun,
   onCreateCodingPacket,
+  onRunMetaOnboarding,
   packet,
+  reviewMode,
   sessionId,
 }: {
   agentRun: Stage4AgentRun;
+  branchExperiments: BranchExperiment[];
   eventCount: number;
+  insightFindings: InsightFinding[];
+  metaOnboardingSignals: MetaOnboardingSignal[];
   memoryInspector: Stage6MemoryInspector;
   onCreateAgentRun: () => void;
   onCreateCodingPacket: () => void;
+  onRunMetaOnboarding: () => void;
   packet: CodingPacket;
+  reviewMode: ReviewMode;
   sessionId: string;
 }) {
   const visibleSteps = agentRun.steps.slice(0, 4);
   const visibleFiles = packet.filesToInspect.slice(0, 3);
   const visibleChecks = packet.verificationPlan.slice(0, 3);
+  const visibleBranches = branchExperiments.slice(0, 3);
+  const visibleInsights = insightFindings.slice(0, 4);
+  const visibleMetaSignals = metaOnboardingSignals.slice(0, 3);
   const auditItems: WindowAuditItem[] = [
     {
       id: "packet",
@@ -2830,8 +3054,20 @@ function ProjectRailPanel({
     {
       id: "verify",
       label: "검증 계획",
-      status: packet.verificationPlan.length > 0 ? "ready" : "partial",
-      detail: "typecheck/test/브라우저 확인 같은 검증 단계를 패킷과 함께 유지합니다.",
+      status: reviewMode === "deep" ? "ready" : "partial",
+      detail: `${reviewModeLabel(reviewMode)} 리뷰와 4D rubric/invariant checks를 함께 표시합니다.`,
+    },
+    {
+      id: "branch-adopt",
+      label: "Branch/Adopt",
+      status: branchExperiments.some((branch) => branch.status === "adopted") ? "ready" : "partial",
+      detail: "shadow conversation은 요약만 메인 세션에 채택하도록 분리합니다.",
+    },
+    {
+      id: "meta-onboarding",
+      label: "Meta Onboarding",
+      status: metaOnboardingSignals.every((signal) => signal.status === "ready") ? "ready" : "partial",
+      detail: "프로젝트 스택과 현재 provider/agent를 보고 빠진 역할을 추천합니다.",
     },
   ];
 
@@ -2881,6 +3117,14 @@ function ProjectRailPanel({
           </article>
         ))}
       </div>
+      <div className="rail-card-list compact">
+        {visibleBranches.map((branch) => (
+          <article key={branch.id}>
+            <strong>{branch.title}</strong>
+            <span>{branchStatusLabel(branch.status)} / {branch.agentName}</span>
+          </article>
+        ))}
+      </div>
       <div className="rail-split-list">
         <section>
           <strong>inspect</strong>
@@ -2890,6 +3134,27 @@ function ProjectRailPanel({
           <strong>verify</strong>
           {visibleChecks.length > 0 ? visibleChecks.map((check) => <span key={check}>{check}</span>) : <span>대상 없음</span>}
         </section>
+      </div>
+      <div className="rail-insight-list">
+        {visibleInsights.map((finding) => (
+          <article className={finding.status} key={finding.id}>
+            <strong>{insightCategoryLabel(finding.category)}</strong>
+            <span>{finding.label}</span>
+          </article>
+        ))}
+      </div>
+      <div className="meta-onboarding-box">
+        <button className="rail-icon-button" onClick={onRunMetaOnboarding} title="Meta Agent Onboarding" type="button">
+          <Bot size={13} />
+        </button>
+        <div>
+          <strong>Meta Agent Onboarding</strong>
+          {visibleMetaSignals.map((signal) => (
+            <span className={signal.status} key={signal.id}>
+              {signal.label}: {signal.suggestion}
+            </span>
+          ))}
+        </div>
       </div>
       <WindowChecklist items={auditItems} title="프로젝트 창 점검" />
     </section>
@@ -3238,6 +3503,142 @@ function recallReasonLabel(reason: string) {
   return labels[reason] ?? reason;
 }
 
+function contextPackTierLabel(tier: ContextPackTier) {
+  const labels: Record<ContextPackTier, string> = {
+    full: "Full",
+    lite: "Lite",
+    standard: "Standard",
+  };
+
+  return labels[tier];
+}
+
+function reviewModeLabel(mode: ReviewMode) {
+  const labels: Record<ReviewMode, string> = {
+    deep: "Deep",
+    quick: "Quick",
+  };
+
+  return labels[mode];
+}
+
+function branchStatusLabel(status: BranchExperiment["status"]) {
+  const labels: Record<BranchExperiment["status"], string> = {
+    adopted: "채택됨",
+    drafting: "작성중",
+    ready: "채택 후보",
+  };
+
+  return labels[status];
+}
+
+function insightCategoryLabel(category: InsightCategory) {
+  const labels: Record<InsightCategory, string> = {
+    architecture: "Architecture",
+    performance: "Performance",
+    security: "Security",
+    stability: "Stability",
+    tech_debt: "Tech Debt",
+    testing: "Testing",
+  };
+
+  return labels[category];
+}
+
+function createInsightFindings({
+  eventCount,
+  memoryInspector,
+  packet,
+  permissionSnapshot,
+  providerReadiness,
+}: {
+  eventCount: number;
+  memoryInspector: Stage6MemoryInspector;
+  packet: CodingPacket;
+  permissionSnapshot: PermissionMatrixSnapshot;
+  providerReadiness: ProviderRuntimeReadiness;
+}): InsightFinding[] {
+  return [
+    {
+      id: "insight_stability",
+      category: "stability",
+      status: eventCount > 0 ? "ok" : "watch",
+      label: `${eventCount} events`,
+      summary: "Event Storage에 세션 흐름이 남는지 확인한다.",
+    },
+    {
+      id: "insight_testing",
+      category: "testing",
+      status: packet.verificationPlan.length > 1 ? "ok" : "quick_win",
+      label: `${packet.verificationPlan.length} checks`,
+      summary: "검증 계획이 부족하면 Quick Wins로 typecheck/test를 먼저 주입한다.",
+    },
+    {
+      id: "insight_architecture",
+      category: "architecture",
+      status: packet.context.some((item) => item.toLowerCase().includes("protocol")) ? "ok" : "watch",
+      label: "protocol boundary",
+      summary: "공통 타입과 이벤트 경계가 패킷에 들어갔는지 본다.",
+    },
+    {
+      id: "insight_performance",
+      category: "performance",
+      status: memoryInspector.trace.results.length > 5 ? "watch" : "ok",
+      label: `${memoryInspector.trace.results.length} recalls`,
+      summary: "중복 recall이 많아지면 ContextPack tier를 낮춘다.",
+    },
+    {
+      id: "insight_security",
+      category: "security",
+      status: permissionSnapshot.summary.pending > 0 || providerReadiness.status === "blocked" ? "watch" : "ok",
+      label: `${permissionSnapshot.summary.pending} pending`,
+      summary: "승인 대기, secret, provider trust를 배포 전에 확인한다.",
+    },
+    {
+      id: "insight_tech_debt",
+      category: "tech_debt",
+      status: packet.rejectedOptions.length > 0 ? "ok" : "quick_win",
+      label: `${packet.rejectedOptions.length} rejected`,
+      summary: "버린 선택지를 남기면 이후 재논의를 줄일 수 있다.",
+    },
+  ];
+}
+
+function createMetaOnboardingSignals({
+  agents,
+  models,
+  providers,
+  runtime,
+}: {
+  agents: WorkbenchAgent[];
+  models: ModelCatalog;
+  providers: ProviderProfile[];
+  runtime: RuntimeSnapshot;
+}): MetaOnboardingSignal[] {
+  const roles = new Set(agents.map((agent) => agent.role));
+  const modelCount = Object.values(models).reduce((total, providerModels) => total + providerModels.length, 0);
+  return [
+    {
+      id: "meta_roles",
+      label: "역할 구성",
+      status: roles.has("verifier") && roles.has("memory_curator") ? "ready" : "partial",
+      suggestion: roles.has("verifier") ? "검증 역할 있음" : "Verifier 추가 추천",
+    },
+    {
+      id: "meta_engines",
+      label: "엔진 감지",
+      status: providers.length >= 3 && modelCount > 4 ? "ready" : "partial",
+      suggestion: `${providers.length} providers / ${modelCount} models`,
+    },
+    {
+      id: "meta_runtime",
+      label: "실행 환경",
+      status: runtime.dgxStatus === "online" || runtime.localModelStatus === "online" ? "ready" : "blocked",
+      suggestion: runtime.dgxStatus === "online" ? "DGX-02 사용 가능" : "로컬 폴백 중심",
+    },
+  ];
+}
+
 function auditStatusLabel(status: WindowAuditStatus) {
   const labels: Record<WindowAuditStatus, string> = {
     blocked: "잠금",
@@ -3279,12 +3680,17 @@ function ConversationWorkbench({
   agentConfigPanel,
   agentPersona,
   agents,
+  branchExperiments,
+  contextPackTier,
   draftAttachments,
   draftMessage,
   maxDraftAttachments,
   messages,
   onAddDraftAttachments,
+  onAdoptBranch,
   onBackupProjection,
+  onContextPackTierChange,
+  onCreateBranch,
   onCreateAgentRun,
   onCreateCodingPacket,
   onDraftMessageChange,
@@ -3306,12 +3712,17 @@ function ConversationWorkbench({
   agentConfigPanel: { open: boolean; tab: AgentConfigTab };
   agentPersona?: AgentPersonaSettings;
   agents: WorkbenchAgent[];
+  branchExperiments: BranchExperiment[];
+  contextPackTier: ContextPackTier;
   draftAttachments: DraftAttachment[];
   draftMessage: string;
   maxDraftAttachments: number;
   messages: ConversationMessage[];
   onAddDraftAttachments: (files: FileList | null) => void;
+  onAdoptBranch: () => void;
   onBackupProjection: () => void;
+  onContextPackTierChange: (tier: ContextPackTier) => void;
+  onCreateBranch: () => void;
   onCreateAgentRun: () => void;
   onCreateCodingPacket: () => void;
   onDraftMessageChange: (value: string) => void;
@@ -3336,6 +3747,8 @@ function ConversationWorkbench({
   const attachmentEnabled = Boolean(selectedAgent && modelSupportsAnyAttachment(selectedModel));
   const attachmentAccept = attachmentAcceptForModel(selectedModel);
   const attachmentLimitReached = draftAttachments.length >= maxDraftAttachments;
+  const adoptedBranchCount = branchExperiments.filter((branch) => branch.status === "adopted").length;
+  const latestBranch = branchExperiments[0];
   const auditItems: WindowAuditItem[] = [
     {
       id: "chat",
@@ -3394,6 +3807,7 @@ function ConversationWorkbench({
           <strong>{authLabel}</strong>
         </div>
         <AgentProfileStrip
+          contextPackTier={contextPackTier}
           memoryMode={memoryMode}
           onOpen={onOpenAgentConfig}
           persona={persona}
@@ -3413,6 +3827,34 @@ function ConversationWorkbench({
         />
       ) : null}
       <WindowChecklist items={auditItems} title="대화 창 점검" />
+      <section className="context-branch-panel" aria-label="ContextPack and branch controls">
+        <div className="context-tier-buttons">
+          <span>ContextPack</span>
+          {(["lite", "standard", "full"] as ContextPackTier[]).map((tier) => (
+            <button
+              className={contextPackTier === tier ? "active" : ""}
+              key={tier}
+              onClick={() => onContextPackTierChange(tier)}
+              type="button"
+            >
+              {contextPackTierLabel(tier)}
+            </button>
+          ))}
+        </div>
+        <div className="branch-adopt-panel">
+          <div>
+            <span>Branch / Adopt</span>
+            <strong>{branchExperiments.length} branches / {adoptedBranchCount} adopted</strong>
+            <em>{latestBranch ? `${latestBranch.title} - ${branchStatusLabel(latestBranch.status)}` : "shadow branch 없음"}</em>
+          </div>
+          <button onClick={onCreateBranch} type="button">
+            분기 생성
+          </button>
+          <button disabled={!branchExperiments.some((branch) => branch.status !== "adopted")} onClick={onAdoptBranch} type="button">
+            요약 채택
+          </button>
+        </div>
+      </section>
       <div className="conversation-stream" aria-label="대화 기록" tabIndex={0}>
         {messages.map((message) => {
           const attachments = getMessageAttachments(message);
@@ -3542,11 +3984,13 @@ function AttachmentChips({ attachments }: { attachments: ConversationAttachment[
 }
 
 function AgentProfileStrip({
+  contextPackTier,
   memoryMode,
   onOpen,
   persona,
   selectedAgent,
 }: {
+  contextPackTier: ContextPackTier;
   memoryMode: string;
   onOpen: (tab: AgentConfigTab) => void;
   persona?: AgentPersonaSettings;
@@ -3567,6 +4011,7 @@ function AgentProfileStrip({
       value: selectedAgent?.configSource === "markdown" ? "active" : "view",
     },
     { tab: "preview", label: "Preview", value: selectedAgent?.configSource ?? "off" },
+    { tab: "preview", label: "Context", value: contextPackTierLabel(contextPackTier) },
     { tab: "edit", label: "Edit", value: "settings" },
   ];
 
@@ -3909,6 +4354,13 @@ function Stage3DebateTable({
             {round.title}
           </span>
         ))}
+      </div>
+      <div className="roundtable-mode-strip">
+        <span>Roundtable</span>
+        <strong>Branch 확장 모델</strong>
+        <em>Sequential</em>
+        <em>Deliberative</em>
+        <small>토론 transcript 전체가 아니라 채택 요약만 main context로 돌아옵니다.</small>
       </div>
       <WindowChecklist items={auditItems} title="토론 창 점검" />
       <div className="debate-workspace">
@@ -5118,7 +5570,17 @@ function BackupPanel({
   );
 }
 
-function CodingPacketPanel({ packet }: { packet: CodingPacket }) {
+function CodingPacketPanel({
+  insightFindings,
+  onReviewModeChange,
+  packet,
+  reviewMode,
+}: {
+  insightFindings: InsightFinding[];
+  onReviewModeChange: (mode: ReviewMode) => void;
+  packet: CodingPacket;
+  reviewMode: ReviewMode;
+}) {
   const columns = [
     ["결정", packet.decisions],
     ["제약", packet.constraints],
@@ -5135,8 +5597,8 @@ function CodingPacketPanel({ packet }: { packet: CodingPacket }) {
     {
       id: "verification",
       label: "검증",
-      status: packet.verificationPlan.length > 0 ? "ready" : "partial",
-      detail: "패킷마다 검증 방법을 붙여 코딩 전달이 실행 기록으로 이어지게 합니다.",
+      status: reviewMode === "deep" ? "ready" : "partial",
+      detail: `${reviewModeLabel(reviewMode)} 리뷰와 invariant checks로 코딩 전달을 거릅니다.`,
     },
     {
       id: "handoff",
@@ -5159,6 +5621,33 @@ function CodingPacketPanel({ packet }: { packet: CodingPacket }) {
         </button>
       </header>
       <WindowChecklist items={auditItems} title="패킷 창 점검" />
+      <section className="review-insight-panel" aria-label="Review and insight controls">
+        <div className="review-mode-toggle">
+          <span>Review</span>
+          {(["quick", "deep"] as ReviewMode[]).map((mode) => (
+            <button
+              className={reviewMode === mode ? "active" : ""}
+              key={mode}
+              onClick={() => onReviewModeChange(mode)}
+              type="button"
+            >
+              {reviewModeLabel(mode)}
+            </button>
+          ))}
+        </div>
+        <div className="rubric-chip-list">
+          {["plan_coverage", "code_quality", "test_coverage", "convention", "invariant_checks"].map((rubric) => (
+            <span key={rubric}>{rubric}</span>
+          ))}
+        </div>
+        <div className="insight-chip-list">
+          {insightFindings.slice(0, 6).map((finding) => (
+            <span className={finding.status} key={finding.id}>
+              {insightCategoryLabel(finding.category)}
+            </span>
+          ))}
+        </div>
+      </section>
       <div className="packet-grid">
         {columns.map(([title, items]) => (
           <div className="packet-column" key={title}>
