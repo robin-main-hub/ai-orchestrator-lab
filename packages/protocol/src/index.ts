@@ -509,6 +509,85 @@ export type PermissionMatrixSnapshot = {
   createdAt: string;
 };
 
+export const executionRuntimeBackendSchema = z.enum(["ui_stub", "tmux", "local_cli", "dgx_remote"]);
+export type ExecutionRuntimeBackend = z.infer<typeof executionRuntimeBackendSchema>;
+
+export const executionSlotStatusSchema = z.enum([
+  "placeholder",
+  "idle",
+  "pending_approval",
+  "running",
+  "completed",
+  "failed",
+  "blocked",
+]);
+export type ExecutionSlotStatus = z.infer<typeof executionSlotStatusSchema>;
+
+export const tmuxPaneRoleSchema = z.enum([
+  "discussion",
+  "orchestrator",
+  "status",
+  "code",
+  "architect",
+  "frontend",
+  "backend",
+  "qa",
+]);
+export type TmuxPaneRole = z.infer<typeof tmuxPaneRoleSchema>;
+
+export const agentSessionStatusSchema = z.enum(["planned", "spawned", "running", "yielded", "completed", "failed"]);
+export type AgentSessionStatus = z.infer<typeof agentSessionStatusSchema>;
+
+export const agentSessionSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  agentId: z.string().optional(),
+  role: tmuxPaneRoleSchema,
+  backend: executionRuntimeBackendSchema,
+  paneId: z.string().optional(),
+  status: agentSessionStatusSchema,
+  createdAt: z.string(),
+  lastEventAt: z.string().optional(),
+});
+export type AgentSession = z.infer<typeof agentSessionSchema>;
+
+export const executionSlotSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  label: z.string(),
+  role: tmuxPaneRoleSchema,
+  backend: executionRuntimeBackendSchema,
+  status: executionSlotStatusSchema,
+  approvalState: approvalStateSchema,
+  requestedPermissions: z.array(permissionLevelSchema),
+  commandPreview: z.string().optional(),
+  decisionRequired: z.boolean(),
+  blockedReason: z.string().optional(),
+  createdAt: z.string(),
+});
+export type ExecutionSlot = z.infer<typeof executionSlotSchema>;
+
+export type RunRequestedEventPayload = {
+  runId: string;
+  sessionId: string;
+  executionSlotId: string;
+  requestedBy: PermissionActor;
+  backend: ExecutionRuntimeBackend;
+  commandPreview: string;
+  requestedPermissions: PermissionLevel[];
+  approvalState: ApprovalState;
+  redactionApplied: boolean;
+};
+
+export type RunCompletedEventPayload = {
+  runId: string;
+  executionSlotId: string;
+  status: "completed" | "failed" | "blocked";
+  exitCode?: number;
+  outputPreview?: string;
+  redactionApplied: boolean;
+};
+
 export const memoryLayerSchema = z.enum([
   "fragment",
   "episode",

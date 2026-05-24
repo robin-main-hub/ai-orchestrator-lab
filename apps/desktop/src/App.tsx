@@ -140,7 +140,7 @@ import type {
   TerminalSlot,
 } from "@ai-orchestrator/protocol";
 
-type CenterMode = "conversation" | "debate";
+type CenterMode = "conversation" | "debate" | "tmux";
 type AgentActivityStatus = "idle" | "preparing" | "responding";
 type WorkbenchAgent = AgentProfile;
 type ModelCatalog = Record<string, ModelDescriptor[]>;
@@ -2207,26 +2207,38 @@ export function App() {
 
         <section className="center-board">
           <div className="board-toolbar">
-            <div className="mode-switch" role="tablist" aria-label="작업 모드">
+            <div className="mode-area" role="tablist" aria-label="작업 모드">
+              <div className="mode-switch">
+                <button
+                  aria-selected={mode === "conversation"}
+                  className={mode === "conversation" ? "active" : ""}
+                  onClick={() => setMode("conversation")}
+                  role="tab"
+                  type="button"
+                >
+                  <MessageSquare size={16} />
+                  Conversation
+                </button>
+                <button
+                  aria-selected={mode === "debate"}
+                  className={mode === "debate" ? "active" : ""}
+                  onClick={() => setMode("debate")}
+                  role="tab"
+                  type="button"
+                >
+                  <GitBranch size={16} />
+                  Debate
+                </button>
+              </div>
               <button
-                aria-selected={mode === "conversation"}
-                className={mode === "conversation" ? "active" : ""}
-                onClick={() => setMode("conversation")}
+                aria-selected={mode === "tmux"}
+                className={`tmux-mode-button ${mode === "tmux" ? "active" : ""}`}
+                onClick={() => setMode("tmux")}
                 role="tab"
                 type="button"
               >
-                <MessageSquare size={16} />
-                Conversation
-              </button>
-              <button
-                aria-selected={mode === "debate"}
-                className={mode === "debate" ? "active" : ""}
-                onClick={() => setMode("debate")}
-                role="tab"
-                type="button"
-              >
-                <GitBranch size={16} />
-                Debate
+                <Terminal size={16} />
+                Tmux
               </button>
             </div>
             <div className="toolbar-actions">
@@ -2270,11 +2282,18 @@ export function App() {
               selectedModel={selectedModel}
               selectedProvider={selectedProvider}
             />
-          ) : (
+          ) : mode === "debate" ? (
             <Stage3DebateTable onCreateCodingPacket={handleCreateCodingPacket} session={debateSession} />
+          ) : (
+            <TmuxSwarmBoard
+              activeSessionId={activeSessionId}
+              agentActivityById={agentActivityById}
+              agents={agents}
+              messages={conversationMessages}
+            />
           )}
 
-          <CodingPacketPanel packet={codingPacketState} />
+          {mode === "tmux" ? null : <CodingPacketPanel packet={codingPacketState} />}
         </section>
 
         <aside className="right-rail" aria-label="모델과 에이전트 상태">
@@ -3318,6 +3337,184 @@ function debateTagLabel(tag: DebateTag) {
   };
 
   return labels[tag];
+}
+
+function TmuxSwarmBoard({
+  activeSessionId,
+  agentActivityById,
+  agents,
+  messages,
+}: {
+  activeSessionId: string;
+  agentActivityById: Record<string, AgentActivityStatus>;
+  agents: WorkbenchAgent[];
+  messages: ConversationMessage[];
+}) {
+  const recentMessages = messages.slice(-6);
+  const roleAgent = (role: WorkbenchAgent["role"]) => agents.find((agent) => agent.role === role);
+  const panes = [
+    {
+      id: "pane-0",
+      title: "Discussion & Planning",
+      role: "요구사항 / 제품 / 아키텍처 논의",
+      state: "chat active",
+      agent: roleAgent("orchestrator"),
+      signal: "사용자와 먼저 논의하고, 바로 실행하지 않는다.",
+    },
+    {
+      id: "pane-1",
+      title: "Orchestrator Control",
+      role: "작업 분해 / 역할 배정 / 지휘",
+      state: "dispatch locked",
+      agent: roleAgent("orchestrator"),
+      signal: "실제 tmux send는 Permission Matrix 안정화 전까지 잠김.",
+    },
+    {
+      id: "pane-2",
+      title: "Status & Monitor",
+      role: "진행 로그 / 테스트 / stuck run 감시",
+      state: "watch only",
+      signal: "Event Storage에 기록 가능한 run intent만 준비.",
+    },
+    {
+      id: "pane-3",
+      title: "Agent - Code Expert",
+      role: "핵심 로직 / 리팩터링 / 복잡 구현",
+      state: "idle",
+      agent: roleAgent("builder"),
+      signal: "Coding Packet이 생기면 core logic 작업 후보.",
+    },
+    {
+      id: "pane-4",
+      title: "Agent - Architect",
+      role: "protocol / Event Storage / 타입 경계",
+      state: "ready",
+      agent: roleAgent("architect"),
+      signal: "ExecutionSlot / AgentSession / run event 타입 경계 담당.",
+    },
+    {
+      id: "pane-5",
+      title: "Agent - Frontend Dev",
+      role: "desktop UI / Workbench / Execution Slot",
+      state: "active",
+      signal: "현재 tmux workbench preview를 담당.",
+    },
+    {
+      id: "pane-6",
+      title: "Agent - Backend Dev",
+      role: "server / sync / DGX 연결 지점",
+      state: "idle",
+      signal: "DGX-02만 대상. DGX-01은 잠금.",
+    },
+    {
+      id: "pane-7",
+      title: "Agent - QA & Security",
+      role: "테스트 / 권한 / redaction / 회귀검사",
+      state: "guarding",
+      agent: roleAgent("reviewer") ?? roleAgent("verifier"),
+      signal: "Gemini CLI 연결 금지. Secret/command redaction 우선.",
+    },
+  ];
+
+  return (
+    <section className="tmux-panel" aria-label="Role-Based Tmux Agent Swarm">
+      <header className="tmux-header">
+        <div>
+          <span>Future Runtime Preview</span>
+          <strong>ai-swarm</strong>
+          <p>왼쪽은 지휘자 대화, 오른쪽은 agent pane별 상태와 중요 메시지를 본다.</p>
+        </div>
+        <div className="tmux-gate">
+          <LockKeyhole size={15} />
+          <span>Implementation Gate</span>
+          <strong>Event Storage / Permission / Redaction 먼저</strong>
+        </div>
+      </header>
+      <div className="tmux-workbench">
+        <section className="tmux-operator-chat">
+          <header>
+            <span>Operator Chat</span>
+            <strong>{activeSessionId}</strong>
+          </header>
+          <div className="tmux-chat-stream">
+            {recentMessages.map((message) => (
+              <article className={message.role === "user" ? "user" : "assistant"} key={message.id}>
+                <span>{message.role === "user" ? "사용자" : messageLabel(message)}</span>
+                <p>{message.content}</p>
+              </article>
+            ))}
+          </div>
+          <div className="tmux-chat-note">
+            <span>main chat stays here</span>
+            <strong>small text / monitor first</strong>
+          </div>
+        </section>
+        <section className="tmux-agent-board">
+          <header>
+            <span>Agent Work Status</span>
+            <strong>8 logical panes</strong>
+          </header>
+          <div className="tmux-agent-grid">
+            {panes.map((pane) => (
+              <TmuxPaneCard
+                key={pane.id}
+                pane={{
+                  ...pane,
+                  state: pane.agent ? (agentActivityById[pane.agent.id] ?? pane.state) : pane.state,
+                }}
+              />
+            ))}
+          </div>
+        </section>
+      </div>
+      <div className="tmux-decision-row">
+        <div>
+          <span>Gemini CLI</span>
+          <strong>연결 금지 - CLI 설정 후 결정</strong>
+        </div>
+        <div>
+          <span>첫 실제 tmux runner</span>
+          <strong>미정</strong>
+        </div>
+        <div>
+          <span>approval threshold</span>
+          <strong>미정</strong>
+        </div>
+      </div>
+      <footer className="tmux-footer">
+        <span>tmux session: ai-swarm</span>
+        <span>runtime backend: future local execution layer</span>
+        <span>real command dispatch: disabled</span>
+      </footer>
+    </section>
+  );
+}
+
+function TmuxPaneCard({
+  pane,
+}: {
+  pane: {
+    id: string;
+    title: string;
+    role: string;
+    state: string;
+    agent?: WorkbenchAgent;
+    signal: string;
+  };
+}) {
+  return (
+    <article className="tmux-pane-card">
+      <header>
+        <Terminal size={14} />
+        <span>{pane.id}</span>
+        <em>{pane.state}</em>
+      </header>
+      <strong>{pane.title}</strong>
+      <p>{pane.role}</p>
+      <p>{pane.agent ? `${pane.agent.name} / ${pane.agent.modelId ?? "model pending"}` : "담당 agent 미정"}</p>
+      <code>{pane.signal}</code>
+    </article>
+  );
 }
 
 function ProviderRegistrationMenu({

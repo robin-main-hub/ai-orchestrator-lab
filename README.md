@@ -249,3 +249,17 @@ corepack pnpm dev
 - `SOUL.md` 화면은 경로, 본문, 예시 대화, SOUL.md가 없을 때 쓸 제안 소울, soul injection mode만 다루도록 좁혔다.
 - 기존 `Voice` 메뉴는 제거하고, 같은 위치에 `창의성` 설정을 배치했다.
 - 창의성은 `보수적`, `신중`, `균형`, `창의적`, `실험적` 5단계로 고르고 각 단계가 temperature 값으로 표시된다.
+
+## Stage33
+
+- 중앙 작업판의 큰 모드를 `Conversation`, `Debate`, `Tmux` 3개로 확장했다.
+- `Tmux` 모드는 `docs/17-role-based-tmux-agent-swarm.md`의 8-pane 역할 구조를 화면으로 보여주는 future runtime preview다.
+- 실제 tmux 명령 실행은 여전히 비활성화되어 있으며, Event Storage / Permission / Redaction / Execution Slot 기반이 안정화된 뒤에만 구현한다.
+
+## Stage34
+
+- `Tmux` 탭을 Conversation/Debate 아래로 떨어지지 않게 중앙 상단 우측에 별도 모드 버튼으로 고정했다.
+- Tmux 화면을 중앙 작업판 안에서 완전히 다른 인터페이스로 바꿨다.
+- 왼쪽은 작은 글씨의 Operator Chat으로 최근 대화를 모니터링하고, 오른쪽은 8개 logical pane의 agent 작업상태와 중요 메시지를 보여준다.
+- `packages/protocol`에 `ExecutionSlot`, `AgentSession`, `RunRequestedEventPayload`, `RunCompletedEventPayload` 타입 기반을 추가했다.
+- Gemini CLI는 연결 금지 상태로 표시하고, 실제 tmux command dispatch는 계속 비활성화했다.
