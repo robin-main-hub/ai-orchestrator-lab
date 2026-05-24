@@ -100,6 +100,11 @@ import {
   removeSyncedOutboxEvents,
   type Stage16OutboxStorage,
 } from "./runtime/stage16LocalOutbox";
+import {
+  mergeConversationMessages,
+  mergeEventReplayLogs,
+  pullAndReplayDgxEventStorage,
+} from "./runtime/stage18EventReplay";
 import type {
   AgentProfile,
   ApprovalState,
@@ -463,6 +468,8 @@ const initialEventLog: EventEnvelope[] = initialConversationMessages.map((messag
     {
       messageId: message.id,
       role: message.role,
+      content: message.content,
+      metadata: message.metadata,
       redaction: "applied",
     },
     message.createdAt,
@@ -734,6 +741,54 @@ export function App() {
     void syncEventsToDgx(mergeOutboxEvents(eventOutbox, unsyncedEvents));
   }
 
+  async function handleReplayEventStorage() {
+    setEventSyncState((state) => ({
+      ...state,
+      status: "syncing",
+    }));
+
+    const result = await pullAndReplayDgxEventStorage({
+      sessionId: "session_desktop_001",
+    });
+
+    if (result.status === "failed") {
+      setEventSyncState((state) => ({
+        ...state,
+        status: "failed",
+        lastError: result.error,
+      }));
+      setRuntimeSnapshotState((snapshot) => ({
+        ...snapshot,
+        status: "degraded",
+        dgxStatus: "offline",
+        recentError: `DGX-02 Event Storage replay failed. ${result.error ?? ""}`,
+        updatedAt: new Date().toISOString(),
+      }));
+      return;
+    }
+
+    setEventLog((events) => mergeEventReplayLogs(events, result.events));
+    setConversationMessages((messages) => mergeConversationMessages(messages, result.messages));
+    setSyncedEventIds((current) => ({
+      ...current,
+      ...Object.fromEntries(result.events.map((event) => [event.id, true])),
+    }));
+    setEventSyncState((state) => ({
+      ...state,
+      status: eventOutbox.length > 0 ? "queued" : "synced",
+      serverRevision: result.serverRevision ?? state.serverRevision,
+      lastSyncedAt: result.createdAt ?? state.lastSyncedAt,
+      lastError: result.status === "empty" ? "DGX-02 Event Storage has no replayable events for this session" : undefined,
+    }));
+    setRuntimeSnapshotState((snapshot) => ({
+      ...snapshot,
+      status: eventOutbox.length > 0 ? "degraded" : "online",
+      dgxStatus: "online",
+      memorySyncStatus: eventOutbox.length > 0 ? "degraded" : "online",
+      updatedAt: result.createdAt ?? new Date().toISOString(),
+    }));
+  }
+
   async function handleSendMessageStage2() {
     const content = draftMessage.trim();
     if (!content || !selectedAgent || !selectedProvider) {
@@ -758,6 +813,7 @@ export function App() {
     appendEvent("conversation.message.created", {
       messageId: userMessage.id,
       role: "user",
+      content,
       contentLength: content.length,
       redaction: "applied",
     });
@@ -839,6 +895,10 @@ export function App() {
     appendEvent("conversation.message.created", {
       messageId: assistantMessage.id,
       role: "assistant",
+      content: reply,
+      metadata: assistantMessage.metadata,
+      agentName: selectedAgent.name,
+      providerProfileId: selectedProvider.id,
       contentLength: reply.length,
       redaction: "applied",
     });
@@ -1026,8 +1086,11 @@ export function App() {
       {
         messageId: telegramMessage.id,
         role: "user",
+        content: normalizedEvent.normalizedText,
+        metadata: telegramMessage.metadata,
         channel: normalizedEvent.channel,
         ingressEventId: normalizedEvent.id,
+        sourceTrust: normalizedEvent.sourceTrust,
         redaction: normalizedEvent.redacted ? "applied" : "none",
       },
       {
@@ -1751,6 +1814,7 @@ export function App() {
         onApproveNext={() => handleResolveNextPermission("approved")}
         onCheckProviderVault={handleCheckProviderVault}
         onRejectNext={() => handleResolveNextPermission("rejected")}
+        onReplayEvents={handleReplayEventStorage}
         onSyncEvents={handleSyncEventStorage}
         permissionSnapshot={permissionSnapshot}
         providerReadiness={providerReadiness}
@@ -2757,6 +2821,7 @@ function TerminalDock({
   onApproveNext,
   onCheckProviderVault,
   onRejectNext,
+  onReplayEvents,
   onSyncEvents,
   permissionSnapshot,
   providerReadiness,
@@ -2770,6 +2835,7 @@ function TerminalDock({
   onApproveNext: () => void;
   onCheckProviderVault: () => void;
   onRejectNext: () => void;
+  onReplayEvents: () => void;
   onSyncEvents: () => void;
   permissionSnapshot: PermissionMatrixSnapshot;
   providerReadiness: ProviderRuntimeReadiness;
@@ -2927,6 +2993,9 @@ function TerminalDock({
             <small>outbox {eventSyncState.outboxCount}</small>
             <button onClick={onSyncEvents} type="button">
               sync
+            </button>
+            <button onClick={onReplayEvents} type="button">
+              pull
             </button>
           </div>
           <div className="event-log-list">

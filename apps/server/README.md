@@ -56,3 +56,9 @@ DGX-02 user service 예시는 `scripts/dgx-02/ai-orchestrator-server.service`에
 - `GET /event-storage`는 현재 storage mode, JSONL path, revision, event/session count를 반환합니다.
 - `EVENT_STORAGE_DIR=/path/to/events` 환경변수로 저장 위치를 바꿀 수 있습니다.
 - 같은 `SMOKE_EVENT_ID`로 `corepack pnpm server:smoke`를 재실행하면 서버 재시작 후에도 duplicate 판정이 유지되는지 확인할 수 있습니다.
+
+## Stage18 Replay Contract
+
+- Desktop은 `GET /events?sessionId=...`를 사용해 DGX-02 Event Storage에서 세션 이벤트를 다시 가져옵니다.
+- `conversation.message.created` 이벤트 payload에 `messageId`, `role`, redacted `content`, `metadata`가 있으면 데스크톱 대화창으로 복원할 수 있습니다.
+- 서버는 이벤트 원본을 append-only JSONL로 보관하고, MacBook/Home PC 화면 복원은 클라이언트 projection으로 처리합니다.

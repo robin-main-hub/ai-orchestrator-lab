@@ -43,3 +43,4 @@ venv/
 models/
 runs/
 data/events/
+apps/server/data/events/
