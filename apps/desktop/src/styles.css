@@ -73,6 +73,10 @@ button {
   overflow: hidden;
 }
 
+.app-shell.tmux-focus-shell {
+  grid-template-columns: 264px minmax(0, 1fr);
+}
+
 .status-bar {
   grid-column: 2;
   grid-row: 1;
@@ -192,6 +196,10 @@ button {
   background:
     linear-gradient(90deg, rgba(99, 210, 189, 0.04), transparent 34%),
     #12110f;
+}
+
+.center-board.tmux-center-board {
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .left-rail {
@@ -972,6 +980,143 @@ button {
   overflow: hidden;
 }
 
+.agent-settings-modal {
+  position: fixed;
+  z-index: 20;
+  top: 58px;
+  right: 22px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(430px, calc(100vw - 44px));
+  max-height: calc(100vh - 118px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #00343d;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.agent-settings-modal > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.agent-settings-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.agent-settings-title span {
+  color: var(--subtle);
+  font-size: 10px;
+}
+
+.agent-settings-title strong {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-settings-body {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  padding: 10px;
+  overflow: auto;
+}
+
+.agent-settings-body label {
+  display: grid;
+  gap: 5px;
+}
+
+.agent-settings-body label span,
+.agent-avatar-editor span,
+.agent-settings-note span {
+  color: var(--subtle);
+  font-size: 10px;
+}
+
+.agent-settings-body input,
+.agent-settings-body select {
+  min-height: 34px;
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #002f38;
+  color: var(--text);
+  padding: 0 10px;
+}
+
+.agent-avatar-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #002f38;
+}
+
+.agent-avatar-editor strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--cyan);
+  font-size: 12px;
+}
+
+.agent-avatar-editor p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.avatar-upload-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #00313a;
+  color: var(--cyan);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.avatar-upload-button input {
+  display: none;
+}
+
+.agent-settings-note {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid #6b4e24;
+  border-radius: 8px;
+  background: #141311;
+}
+
+.agent-settings-note strong {
+  color: var(--amber);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .agent-config-drawer > header {
   display: flex;
   align-items: center;
@@ -1607,7 +1752,7 @@ button {
 
 .tmux-workbench {
   display: grid;
-  grid-template-columns: minmax(250px, 34%) minmax(0, 1fr);
+  grid-template-columns: minmax(270px, 30%) minmax(0, 1fr);
   gap: 8px;
   min-height: 0;
 }
@@ -1735,11 +1880,22 @@ button {
 
 .tmux-pane-card header {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
-  gap: 6px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
   align-items: center;
   color: var(--muted);
   font-size: 10px;
+}
+
+.tmux-pane-card header div {
+  min-width: 0;
+}
+
+.tmux-pane-card header span,
+.tmux-pane-card header strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tmux-pane-card header em {
@@ -1748,11 +1904,46 @@ button {
   font-style: normal;
 }
 
-.tmux-pane-card strong,
 .tmux-pane-card p,
 .tmux-pane-card code {
   overflow: hidden;
   overflow-wrap: anywhere;
+}
+
+.tmux-pane-agent-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #00343d;
+}
+
+.tmux-pane-agent-line strong,
+.tmux-pane-agent-line span,
+.tmux-pane-agent-line small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tmux-pane-agent-line strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.tmux-pane-agent-line span {
+  color: var(--cyan);
+  font-size: 10px;
+}
+
+.tmux-pane-agent-line small {
+  grid-column: 1 / -1;
+  color: var(--subtle);
+  font-size: 9px;
 }
 
 .tmux-pane-card code {
@@ -1762,7 +1953,7 @@ button {
 
 .tmux-decision-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   padding: 7px 9px;
 }
@@ -2066,7 +2257,7 @@ button {
 
 .agent-select-button {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr);
   gap: 3px 8px;
   align-items: center;
   min-width: 0;
@@ -2492,6 +2683,61 @@ button {
   background: var(--blue);
   animation: agent-dot-pulse 900ms ease-in-out infinite;
   box-shadow: 0 0 0 4px rgba(42, 167, 232, 0.16);
+}
+
+.agent-avatar {
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #00343d;
+  color: var(--cyan);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.agent-avatar.small {
+  width: 24px;
+  height: 24px;
+  font-size: 9px;
+}
+
+.agent-avatar.medium {
+  width: 34px;
+  height: 34px;
+  font-size: 11px;
+}
+
+.agent-avatar.large {
+  width: 48px;
+  height: 48px;
+  font-size: 15px;
+}
+
+.agent-avatar.has-image {
+  background: #0d0d0c;
+  color: transparent;
+}
+
+.agent-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.agent-avatar-status {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+
+.agent-avatar-status .agent-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  border: 2px solid #00343d;
 }
 
 @keyframes agent-dot-pulse {

@@ -263,3 +263,11 @@ corepack pnpm dev
 - 왼쪽은 작은 글씨의 Operator Chat으로 최근 대화를 모니터링하고, 오른쪽은 8개 logical pane의 agent 작업상태와 중요 메시지를 보여준다.
 - `packages/protocol`에 `ExecutionSlot`, `AgentSession`, `RunRequestedEventPayload`, `RunCompletedEventPayload` 타입 기반을 추가했다.
 - Gemini CLI는 연결 금지 상태로 표시하고, 실제 tmux command dispatch는 계속 비활성화했다.
+
+## Stage35
+
+- Tmux 모드에서는 기존 오른쪽 rail을 제거하고 중앙 작업판이 전체 폭을 쓰도록 바꿨다.
+- Tmux 화면 오른쪽은 채팅 분할창이 아니라 agent pane별 세부 상태판으로 유지한다.
+- 에이전트 연필 버튼을 이름/역할/프로필 이미지 설정 패널로 바꿨다.
+- 프로필 이미지는 로컬 파일 경로가 아니라 embedded data URL로 보관해 원격 접속 화면에서 경로 깨짐을 피할 수 있게 준비했다.
+- 실제 tmux 실행 전 필요한 게이트를 화면에 표시했다: 이벤트 저장소 mapping, Permission + Redaction, Gemini CLI 연결 금지, 첫 runner 미정, agent profile asset 저장 방식.
