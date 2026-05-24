@@ -5273,16 +5273,18 @@ function AgentStatePanel({
                 );
               })}
             </select>
-            <div className="agent-model-row">
-              <button
-                aria-label={`${agent.name} model 이전`}
-                className="model-shift-button"
-                disabled={!canShiftModelsLeft}
-                onClick={() => onShiftModelWindow(agent.id, -1)}
-                type="button"
-              >
-                <ChevronLeft size={14} />
-              </button>
+            <div className={`agent-model-row ${hasModelOverflow ? "with-window-controls" : "single-window"}`}>
+              {hasModelOverflow ? (
+                <button
+                  aria-label={`${agent.name} model 이전`}
+                  className="model-shift-button"
+                  disabled={!canShiftModelsLeft}
+                  onClick={() => onShiftModelWindow(agent.id, -1)}
+                  type="button"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+              ) : null}
               <select
                 aria-label={`${agent.name} model 선택`}
                 className="agent-model-select"
@@ -5299,15 +5301,17 @@ function AgentStatePanel({
                   </option>
                 ))}
               </select>
-              <button
-                aria-label={`${agent.name} model 다음`}
-                className="model-shift-button"
-                disabled={!canShiftModelsRight}
-                onClick={() => onShiftModelWindow(agent.id, 1)}
-                type="button"
-              >
-                <ChevronRight size={14} />
-              </button>
+              {hasModelOverflow ? (
+                <button
+                  aria-label={`${agent.name} model 다음`}
+                  className="model-shift-button"
+                  disabled={!canShiftModelsRight}
+                  onClick={() => onShiftModelWindow(agent.id, 1)}
+                  type="button"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              ) : null}
             </div>
             </div>
           );

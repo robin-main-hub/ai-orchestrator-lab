@@ -2898,8 +2898,15 @@ button {
 .agent-model-row {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: 30px minmax(0, 1fr) 30px;
   gap: 8px;
+}
+
+.agent-model-row.with-window-controls {
+  grid-template-columns: 30px minmax(0, 1fr) 30px;
+}
+
+.agent-model-row.single-window {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .agent-model-select {
