@@ -4288,29 +4288,41 @@ button {
   overflow: hidden;
   flex: 0 0 auto;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #00343d;
+  border-radius: 12px;
+  /* When no avatarDataUrl is set we fall back to initials on a soft
+     teal gradient — gives each agent more visual presence than the
+     prior flat fill, especially in dark-on-dark theme contexts. */
+  background: linear-gradient(135deg, #0a4f5a 0%, #003741 100%);
   color: var(--cyan);
   font-weight: 800;
   line-height: 1;
+  letter-spacing: 0.02em;
 }
 
+/* small: 24 → 36. Used inline next to compact text (tmux pane cards,
+   agent state side-list). Was visibly squashed before; 36 fits 2~3
+   characters of initials at a readable size. */
 .agent-avatar.small {
-  width: 24px;
-  height: 24px;
-  font-size: 9px;
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+  border-radius: 10px;
 }
 
+/* medium: 34 → 48. The default everywhere else. */
 .agent-avatar.medium {
-  width: 34px;
-  height: 34px;
-  font-size: 11px;
-}
-
-.agent-avatar.large {
   width: 48px;
   height: 48px;
-  font-size: 15px;
+  font-size: 17px;
+}
+
+/* large: 48 → 72. Settings drawer / persona inspector — primary
+   identity slot, should read as a real profile picture. */
+.agent-avatar.large {
+  width: 72px;
+  height: 72px;
+  font-size: 24px;
+  border-radius: 16px;
 }
 
 .agent-avatar.has-image {

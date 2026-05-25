@@ -33,7 +33,7 @@ export function TmuxPaneCard({
   return (
     <article className="tmux-pane-card">
       <header>
-        <AgentAvatar agent={pane.agent} size="small" visual={visual} />
+        <AgentAvatar agent={pane.agent} size="medium" visual={visual} />
         <div>
           <span>{pane.id}</span>
           <strong>{pane.title}</strong>
