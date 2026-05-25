@@ -18,6 +18,7 @@ import {
   eventSyncPushResponseSchema,
   executionSlotSchema,
   parseAgentDelegationEventPayload,
+  projectAgentDelegationTimeline,
   providerProfileSchema,
   redactionRuleSchema,
   terminalCommandIntentSchema,
@@ -28,6 +29,7 @@ import {
   workSourceSchema,
   type BackupProjectionArtifact,
   type CodingPacket,
+  type EventEnvelope,
   type TerminalPaneOutputCapturedEventPayload,
   type RunCompletedEventPayload,
   type RunRequestedEventPayload,
@@ -241,6 +243,126 @@ describe("protocol schemas", () => {
     expect(succeeded.route).toBe("server_proxy");
     expect(followup.blockedCount).toBe(1);
     expect(parsedPayload).toEqual(dispatched);
+  });
+
+  it("projects delegation events into a reusable timeline", () => {
+    const baseEvent = {
+      sessionId: "session_desktop_001",
+      source: "desktop" as const,
+      sourceTrust: "trusted" as const,
+      redacted: true,
+    };
+    const delegationEvent = (input: unknown) => eventEnvelopeSchema.parse(input) as EventEnvelope;
+    const events: EventEnvelope[] = [
+      delegationEvent({
+        ...baseEvent,
+        id: "event_detected",
+        type: "agent.delegation.detected",
+        payload: {
+          sourceAgentId: "agent_chae_arin",
+          sourceAgentName: "채아린",
+          sourceRole: "companion",
+          sourcePersonaName: "chae_arin",
+          authorityLevel: "orchestrator_plus",
+          targets: ["researcher", "ghost"],
+          count: 2,
+          depthLimit: 1,
+        },
+        createdAt: "2026-05-25T00:00:00.000Z",
+      }),
+      delegationEvent({
+        ...baseEvent,
+        id: "event_unknown",
+        type: "agent.delegation.unknown_target",
+        payload: {
+          sourceAgentId: "agent_chae_arin",
+          target: "ghost",
+          promptLength: 12,
+        },
+        createdAt: "2026-05-25T00:00:01.000Z",
+      }),
+      delegationEvent({
+        ...baseEvent,
+        id: "event_dispatch",
+        type: "agent.delegation.dispatched",
+        payload: {
+          sourceAgentId: "agent_chae_arin",
+          sourceAgentName: "채아린",
+          targetAgentId: "agent_maomao",
+          targetAgentName: "Maomao",
+          targetRole: "researcher",
+          targetPersonaName: "maomao",
+          providerProfileId: "provider_codex_oauth",
+          modelId: "codex-session",
+          promptLength: 88,
+          authorityLevel: "orchestrator_plus",
+          depthLimit: 1,
+        },
+        createdAt: "2026-05-25T00:00:02.000Z",
+      }),
+      delegationEvent({
+        ...baseEvent,
+        id: "event_success",
+        type: "agent.delegation.succeeded",
+        payload: {
+          sourceAgentId: "agent_chae_arin",
+          targetAgentId: "agent_maomao",
+          targetAgentName: "Maomao",
+          targetRole: "researcher",
+          providerProfileId: "provider_codex_oauth",
+          modelId: "codex-session",
+          responseLength: 240,
+          route: "server_proxy",
+          realProviderCall: true,
+        },
+        createdAt: "2026-05-25T00:00:03.000Z",
+      }),
+      delegationEvent({
+        ...baseEvent,
+        id: "event_followup",
+        type: "agent.delegation.followup.completed",
+        payload: {
+          sourceAgentId: "agent_chae_arin",
+          sourceAgentName: "채아린",
+          outcomeCount: 2,
+          succeededCount: 1,
+          blockedCount: 1,
+          responseLength: 420,
+        },
+        createdAt: "2026-05-25T00:00:04.000Z",
+      }),
+    ];
+
+    const projection = projectAgentDelegationTimeline(events);
+    const maomao = projection.items.find((item) => item.targetAgentId === "agent_maomao");
+    const ghost = projection.items.find((item) => item.target === "ghost");
+
+    expect(projection.summary).toMatchObject({
+      blocked: 1,
+      failed: 0,
+      inFlight: 0,
+      pending: 0,
+      succeeded: 1,
+      total: 2,
+    });
+    expect(maomao).toMatchObject({
+      authorityLevel: "orchestrator_plus",
+      eventIds: ["event_detected", "event_dispatch", "event_success"],
+      providerProfileId: "provider_codex_oauth",
+      route: "server_proxy",
+      status: "succeeded",
+      targetRole: "researcher",
+    });
+    expect(ghost).toMatchObject({
+      eventIds: ["event_detected", "event_unknown"],
+      reason: "unknown delegation target",
+      status: "unknown_target",
+    });
+    expect(projection.followups[0]).toMatchObject({
+      eventId: "event_followup",
+      status: "completed",
+      succeededCount: 1,
+    });
   });
 
   it("separates client offline queues from DGX-02 authority", () => {
