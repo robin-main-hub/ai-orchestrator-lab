@@ -2,7 +2,9 @@
 
 ## 기본 전제
 
-프로그램은 맥북에서 실행된다. 강한 실행은 `dgx-02` 서버가 담당한다. 하지만 서버 접속이 불가능할 때도 완전히 멈추지 않고, 로컬 모델과 로컬 CLI 중심으로 기능이 축소되어야 한다.
+프로그램은 주로 MacBook에서 실행된다. MacBook은 원본 작업기이자 canonical Event Store/MemoryRecord의 주인이다. `dgx-02`는 강한 실행, always-on continuity mirror, projection server, SimpleMem index host를 담당한다.
+
+서버 접속이 불가능할 때도 앱은 완전히 멈추지 않고, 로컬 모델과 로컬 CLI 중심으로 기능이 축소되어야 한다. 반대로 MacBook을 못 쓰는 시간에는 Phone/Home PC가 DGX-02 projection을 통해 읽기, 승인, 중단, 재시도, remote input을 남기고, 이 입력은 MacBook 복귀 후 authoritative import 대상이 된다.
 
 ## 상태 모델
 
@@ -26,7 +28,7 @@
 현재 구현은 실제 DGX 명령을 실행하지 않고 다음 경계만 먼저 고정한다.
 
 - `RuntimeSnapshot`은 DGX-01, DGX-02, 로컬 모델, MacBook/Home PC client sync 상태를 한 번에 표현한다.
-- `DgxHeartbeat`은 DGX-02 authority가 reachable인지 확인하는 이벤트 단위다.
+- `DgxHeartbeat`은 DGX-02 continuity mirror와 compute/projection server가 reachable인지 확인하는 이벤트 단위다.
 - `RemoteExecutionRequest`는 run id, target node, command preview, approval state만 담고 원문 명령 실행은 하지 않는다.
 - `RemoteExecutionResponse`는 approval 전에는 `blocked`, DGX가 죽으면 `fallback_required`, 연결/승인 조건이 맞으면 `queued`로만 표현한다.
 - 데스크톱은 DGX가 unreachable이면 로컬 CLI/local model outbox를 유지하고, 온라인 복구 시 server snapshot을 merge한다.

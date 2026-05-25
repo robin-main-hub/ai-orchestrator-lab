@@ -7,9 +7,9 @@
 ## 목표
 
 - 데스크톱 앱이 전체 지휘실 역할을 한다.
-- `dgx-02`는 강한 모델, 로컬 LLM 서버, 장기 메모리, 원격 작업 실행을 담당한다.
+- `dgx-02`는 강한 모델, 로컬 LLM 서버, 원격 작업 실행, 모바일/원격 continuity mirror, SimpleMem 검색 인덱스를 담당한다.
 - 서버 접속이 불가능하면 맥북의 로컬 모델과 로컬 CLI만으로 오케스트레이션/토론을 계속한다.
-- DGX-02를 중앙 데이터 권위로 두고, 맥북은 로컬 SQLite 캐시/outbox로 복구 동기화한다. 집 PC는 DGX-02 상시 연결 클라이언트로 보고, DGX-02 장애 시에는 비상 degraded 상태로 둔다.
+- MacBook을 원본 작업기와 canonical Event Store/MemoryRecord 주인으로 두고, DGX-02는 always-on continuity mirror와 연산/검색 서버로 둔다. 집 PC와 폰은 DGX projection을 보고 입력/승인을 남기며, MacBook 복귀 시 authoritative import/merge를 수행한다.
 - 토론 기능을 끈 상태에서는 OpenClaw/Claude/Codex/로컬 모델과 1:1 대화하듯 작업한다.
 - 하나의 API 또는 하나의 모델에서도 여러 가상 에이전트를 만들어 병렬 토론과 역할 분담을 수행한다.
 - 여러 프로바이더 프로파일을 동시에 등록하고, 실행마다 모델/API 키/검증 모델을 바꿀 수 있다.
@@ -31,9 +31,9 @@
 - 사용 가능 모델 자동 조회
 - 강한 모델 검증 또는 동일 로컬 모델 검증
 - DGX 원격 실행 및 로컬 폴백
-- DGX-02 Event Storage authority, client SQLite outbox, Redaction Layer, Permission Matrix
+- MacBook canonical Event Store, DGX-02 continuity mirror, client outbox, Redaction Layer, Permission Matrix
 - External Ingress Guard와 confidence routing
-- Memento-MCP 스타일 장기 메모리
+- Memento-MCP 스타일 장기 메모리와 DGX-02 SimpleMem 검색 인덱스
 - 에이전트별 `soul.md` 정체성 파일
 - Obsidian 로컬 백업과 Notion 요약 동기화
 - 모바일 읽기/승인 대시보드
@@ -80,6 +80,14 @@ docs/
   18-memento-mcp-structure-check.md
   19-tmux-session-runtime.md
   20-dcinside-reference-1185913.md
+  21-tauri-desktop-shell.md
+  22-endruin-domain-dgx02.md
+  23-dgx02-provider-registry.md
+  24-provider-adapters.md
+  25-anthropic-adapter-spec.md
+  26-dgx-proxy-diagnostics.md
+  27-vertical-slice-test-plan.md
+  28-simplemem-continuity-memory.md
   review-board.md
   research-notes.md
 ```
@@ -163,17 +171,18 @@ corepack pnpm dev
 
 ## PR0 Authority Correction
 
-- DGX-02 is now the authoritative shared Event Storage and memory server.
-- MacBook keeps a local SQLite cache/outbox and can continue with local models when DGX-02 is unavailable.
-- Home PC also keeps a client cache, but normal operation assumes DGX-02 is online.
-- Conflict handling uses `dgx02_authority_wins`.
-- Local offline writes use `append_local_outbox_when_offline`; clients replay to DGX-02 when the authority returns.
+- MacBook is the authoritative work machine and canonical source for Event Store, MemoryRecord, WorkItem, approvals, and drafts.
+- DGX-02 is the always-on continuity mirror, compute node, projection server, and SimpleMem index host.
+- Home PC and Phone are clients over the DGX-02 projection; inputs created while MacBook is unavailable remain pending remote inputs until MacBook imports them.
+- Conflict handling must prefer MacBook canonical import or manual review, not silent DGX ownership.
+- Local/remote writes use pending queues and replay/import when the MacBook authority returns.
 - External legacy Telegram input is represented as `legacy_telegram` in persisted protocol data while UI labels may still say Telegram.
 - Unknown external effects, device reboot, provider execution, secret access, and terminal actions are denied by default unless the Permission Matrix approves them.
 - Windows Obsidian export defaults to `F:/obsidian/ai-headquarter`.
 - Tauri is the accepted shell direction for Windows/macOS packaging; see `docs/21-tauri-desktop-shell.md`.
 - DGX-02 public endpoint is `https://orchestrator.endruin.com`; see `docs/22-endruin-domain-dgx02.md`.
 - DGX-02 provider registry source mapping is documented in `docs/23-dgx02-provider-registry.md`.
+- SimpleMem continuity memory is documented in `docs/28-simplemem-continuity-memory.md`.
 
 ## Stage18
 

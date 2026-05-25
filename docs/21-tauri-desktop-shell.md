@@ -16,7 +16,7 @@ Electron is not the default path unless Tauri blocks a critical native capabilit
 
 ## Why
 
-The app needs to run mainly on a MacBook, but also from the Windows home PC. The shared data authority is DGX-02. Clients should keep a local cache and outbox, then sync when DGX-02 is reachable.
+The app needs to run mainly on a MacBook, but also from the Windows home PC and phone. The MacBook is the canonical work machine and owns the canonical Event Store and MemoryRecord records. DGX-02 is the always-on continuity mirror, compute node, projection server, and SimpleMem index host. Clients should keep a local cache/outbox or thin projection, then sync or import through the MacBook authority.
 
 Tauri fits this shape because it gives the UI a small native shell while still allowing platform-specific integrations:
 
@@ -29,13 +29,14 @@ Tauri fits this shape because it gives the UI a small native shell while still a
 
 ## Data Authority
 
-DGX-02 remains the source of truth for shared Event Storage and Memento memory.
+MacBook remains the source of truth for shared Event Storage, MemoryRecord, WorkItem, approvals, and drafts.
 
 Client behavior:
 
-- MacBook: local SQLite cache and offline outbox, can continue with local models when DGX-02 is down.
-- Home PC: local cache/outbox exists, but normal operation assumes DGX-02 is online.
-- Mobile: read, approve, stop, retry only.
+- MacBook: canonical SQLite store plus local model fallback.
+- DGX-02: continuity mirror, projection server, compute server, SimpleMem index host.
+- Home PC: local cache/outbox exists, but normal operation assumes DGX-02 projection is online.
+- Mobile: read, approve, stop, retry, and pending remote input only.
 
 ## Secret Handling
 
