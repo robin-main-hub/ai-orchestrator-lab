@@ -12,6 +12,7 @@ import {
 import type { MemoryRecord, RecallResult } from "@ai-orchestrator/protocol";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
+import { StatusBadge } from "@/ui/status-badge";
 import type { Stage6MemoryInspector } from "../runtime/stage6Memory";
 
 /**
@@ -234,9 +235,9 @@ function RecallTraceRow({ result }: { result: RecallResult }) {
               {result.record.title}
             </span>
             {result.usedInDecision ? (
-              <span className="shrink-0 rounded bg-primary/15 px-1 py-0.5 text-[9px] text-primary">
+              <StatusBadge variant="primary" size="sm">
                 사용됨
-              </span>
+              </StatusBadge>
             ) : null}
           </div>
           <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
