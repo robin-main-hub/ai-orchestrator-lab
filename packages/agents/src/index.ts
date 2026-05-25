@@ -380,6 +380,22 @@ export const defaultAgentProfiles: AgentProfile[] = [
     permissionLevel: "read_only",
   },
   {
+    id: "agent_auditor_sora",
+    name: "Compliance Sentinel (Sora)",
+    kind: "virtual",
+    role: "auditor",
+    // Auditor is intentionally an outlier in the swarm — independent
+    // oversight that doesn't depend on peer agents' self-reports.
+    // Sora's quiet intensity + dedication maps onto independent audit
+    // duty when redirected from possessive obsession toward truth-
+    // serving the user/Orchestrator directly. Reports outside the
+    // normal peer-collaboration channels (사용자님 / Orchestrator 직보).
+    soulMode: "summary",
+    configSource: "internal",
+    enabled: true,
+    permissionLevel: "read_only",
+  },
+  {
     id: "agent_executor",
     name: "Executor",
     kind: "real",
