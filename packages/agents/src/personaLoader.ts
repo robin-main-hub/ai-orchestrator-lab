@@ -108,12 +108,8 @@ const AGENTS_FILENAME = "AGENTS.md";
  */
 const PERSONA_IMAGE_EXTENSIONS = ["svg", "png", "jpg", "jpeg", "webp"] as const;
 
-function avatarCandidates(personaName: string): string[] {
-  return PERSONA_IMAGE_EXTENSIONS.map((ext) => `agents/${personaName}/avatar.${ext}`);
-}
-
-function backgroundCandidates(personaName: string): string[] {
-  return PERSONA_IMAGE_EXTENSIONS.map((ext) => `agents/${personaName}/background.${ext}`);
+function assetCandidates(personaName: string, basename: "avatar" | "background"): string[] {
+  return PERSONA_IMAGE_EXTENSIONS.map((ext) => `agents/${personaName}/${basename}.${ext}`);
 }
 
 /**
@@ -160,8 +156,8 @@ export async function loadPersona(
   // chose not to inject the markdown body still wants to show the
   // persona's face / background.
   const [avatarPath, chatBackgroundPath] = await Promise.all([
-    discoverAsset(source, avatarCandidates(personaName)),
-    discoverAsset(source, backgroundCandidates(personaName)),
+    discoverAsset(source, assetCandidates(personaName, "avatar")),
+    discoverAsset(source, assetCandidates(personaName, "background")),
   ]);
 
   if (mode === "off") {
