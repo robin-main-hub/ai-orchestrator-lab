@@ -1,5 +1,6 @@
 import type {
   AgentProfile,
+  AgentRole,
   ProviderCompletionMessage,
   ProviderCompletionRequest,
   ProviderCompletionResponse,
@@ -28,12 +29,13 @@ import type { DebateEngineAgentSlot, LlmCompletionFn } from "./debateEngine";
  *     of "delegate → follow-up" total. If the follow-up tries to
  *     delegate again it just becomes literal text in the final output.
  *
- * Security defaults:
- *   - executor / external / auditor are in `DEFAULT_BLOCKED_TARGETS`.
- *     - executor: real command execution requires explicit approval.
- *     - external: sending to outside channels needs ingress/egress guard.
- *     - auditor: independent compliance role — must not be summoned by
- *       the agent it might be auditing.
+ * Safety defaults:
+ *   - executor / external / auditor are completion-only gated targets.
+ *     - executor: can draft/plan only; real command execution needs approval.
+ *     - external: can draft only; outside channel sends need egress guard.
+ *     - auditor: can produce a completion-only review; escalation still
+ *       needs the approval queue.
+ *     - all side effects stay behind Event Store / Permission / Redaction / Approval.
  *   - Callers can pass a custom `blockedTargets` list.
  *   - The companion CANNOT delegate to itself (loop guard).
  *
@@ -47,10 +49,76 @@ const DELEGATE_TAG_PATTERN =
   /<delegate\s+to="([a-zA-Z_][a-zA-Z0-9_-]*)"\s*>([\s\S]*?)<\/delegate>/g;
 
 export const DEFAULT_BLOCKED_TARGETS: ReadonlySet<string> = new Set([
+]);
+
+export const COMPLETION_ONLY_TARGET_ROLES: ReadonlySet<AgentRole> = new Set([
   "executor",
   "external",
   "auditor",
 ]);
+
+export type DelegationTargetEffect = "completion_only";
+
+export type DelegationAuthorityLevel = "agent" | "orchestrator_plus";
+
+export type DelegationPolicyDecision = {
+  allowed: boolean;
+  authorityLevel: DelegationAuthorityLevel;
+  targetEffect: DelegationTargetEffect;
+  sideEffectsRequireApproval: boolean;
+  reason?: string;
+};
+
+export function delegationAuthorityLevel(
+  caller: Pick<AgentProfile, "role">,
+): DelegationAuthorityLevel {
+  if (caller.role === "companion" || caller.role === "orchestrator") {
+    return "orchestrator_plus";
+  }
+  return "agent";
+}
+
+export function evaluateDelegationPolicy(params: {
+  caller: Pick<AgentProfile, "role">;
+  target: Pick<AgentProfile, "role">;
+  targetKey?: string;
+  blockedTargets?: ReadonlySet<string>;
+}): DelegationPolicyDecision {
+  const authorityLevel = delegationAuthorityLevel(params.caller);
+  const blockedTargets = params.blockedTargets ?? DEFAULT_BLOCKED_TARGETS;
+  const sideEffectsRequireApproval = COMPLETION_ONLY_TARGET_ROLES.has(params.target.role);
+  const targetEffect: DelegationTargetEffect = "completion_only";
+
+  if (
+    (params.targetKey && blockedTargets.has(params.targetKey)) ||
+    blockedTargets.has(params.target.role)
+  ) {
+    return {
+      allowed: false,
+      authorityLevel,
+      targetEffect,
+      sideEffectsRequireApproval,
+      reason: `target "${params.targetKey ?? params.target.role}" is in blocked list`,
+    };
+  }
+
+  if (sideEffectsRequireApproval && authorityLevel !== "orchestrator_plus") {
+    return {
+      allowed: false,
+      authorityLevel,
+      targetEffect,
+      sideEffectsRequireApproval,
+      reason: `target role "${params.target.role}" requires orchestrator_plus authority`,
+    };
+  }
+
+  return {
+    allowed: true,
+    authorityLevel,
+    targetEffect,
+    sideEffectsRequireApproval,
+  };
+}
 
 /** A single parsed delegate tag inside a caller's raw response. */
 export type DelegateTag = {
@@ -84,8 +152,22 @@ export function parseDelegateTags(content: string): DelegateTag[] {
 }
 
 export type DelegateOutcome =
-  | { kind: "succeeded"; tag: DelegateTag; targetAgentId: string; response: string }
-  | { kind: "blocked"; tag: DelegateTag; reason: string }
+  | {
+      kind: "succeeded";
+      tag: DelegateTag;
+      targetAgentId: string;
+      response: string;
+      authorityLevel: DelegationAuthorityLevel;
+      targetEffect: DelegationTargetEffect;
+      sideEffectsRequireApproval: boolean;
+    }
+  | {
+      kind: "blocked";
+      tag: DelegateTag;
+      reason: string;
+      authorityLevel?: DelegationAuthorityLevel;
+      sideEffectsRequireApproval?: boolean;
+    }
   | { kind: "unknown_target"; tag: DelegateTag }
   | { kind: "self_delegation"; tag: DelegateTag }
   | { kind: "failed"; tag: DelegateTag; targetAgentId: string; reason: string };
@@ -215,6 +297,22 @@ export async function runCompanionTurn(
       outcomes.push({ kind: "unknown_target", tag });
       continue;
     }
+    const policy = evaluateDelegationPolicy({
+      caller: input.caller.agent,
+      target: targetSlot.agent,
+      targetKey: tag.target,
+      blockedTargets: blocked,
+    });
+    if (!policy.allowed) {
+      outcomes.push({
+        kind: "blocked",
+        tag,
+        reason: policy.reason ?? "delegation policy denied target",
+        authorityLevel: policy.authorityLevel,
+        sideEffectsRequireApproval: policy.sideEffectsRequireApproval,
+      });
+      continue;
+    }
 
     try {
       const response = await callAdapter({
@@ -222,7 +320,7 @@ export async function runCompanionTurn(
         sessionId: input.context.sessionId,
         messages: [
           { role: "system", content: targetSlot.systemPrompt },
-          { role: "user", content: buildSubAgentPrompt(input.caller.agent, tag.prompt) },
+          { role: "user", content: buildSubAgentPrompt(input.caller.agent, tag.prompt, policy) },
         ],
         requestIdSuffix: `companion_delegate_${tag.target}_${generateId()}`,
         route,
@@ -234,6 +332,9 @@ export async function runCompanionTurn(
         tag,
         targetAgentId: targetSlot.agent.id,
         response,
+        authorityLevel: policy.authorityLevel,
+        targetEffect: policy.targetEffect,
+        sideEffectsRequireApproval: policy.sideEffectsRequireApproval,
       });
     } catch (err) {
       outcomes.push({
@@ -273,15 +374,27 @@ export async function runCompanionTurn(
   };
 }
 
-function buildSubAgentPrompt(caller: AgentProfile, taskPrompt: string): string {
+function buildSubAgentPrompt(
+  caller: AgentProfile,
+  taskPrompt: string,
+  policy: DelegationPolicyDecision,
+): string {
   const callerLabel = caller.personaName ?? caller.role;
   return [
     `[Delegated by ${callerLabel} (${caller.role})]`,
+    `Authority: ${policy.authorityLevel}`,
+    `Target effect: ${policy.targetEffect}`,
     "",
     taskPrompt,
     "",
     "Respond in your own voice and role. The companion will re-package your output for the user — speak as the specialist you are, not as the companion.",
     "Do not include `<delegate>` tags in your response (depth=1 only).",
+    ...(policy.sideEffectsRequireApproval
+      ? [
+          "Safety: this is completion-only. Do not execute terminal commands, write files, send external messages, reboot systems, access secrets, or claim that those side effects happened.",
+          "Return only analysis, a draft, a plan, or an approval request. Any side effect must go through Event Store, Permission, Redaction, and Approval gates.",
+        ]
+      : []),
   ].join("\n");
 }
 
