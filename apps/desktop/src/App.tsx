@@ -155,7 +155,7 @@ import {
 import { ApprovalDrawer } from "./components/ApprovalDrawer";
 import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
 import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
-import { AgentStatePanel } from "./components/AgentStatePanel";
+import { AgentsSidebar } from "./components/AgentsSidebar";
 import { BackupPanel } from "./components/BackupPanel";
 import { BackupRailMenu } from "./components/BackupRailMenu";
 import { ChannelRailPanel } from "./components/ChannelRailPanel";
@@ -2592,7 +2592,7 @@ export function App() {
 
         {mode === "tmux" ? null : (
           <aside className="right-rail" aria-label="모델과 에이전트 상태">
-            <AgentStatePanel
+            <AgentsSidebar
               agents={agents}
               agentActivityById={agentActivityById}
               agentVisualsById={agentVisualsById}
