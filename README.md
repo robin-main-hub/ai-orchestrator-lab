@@ -113,7 +113,7 @@ corepack pnpm dev
 ## Stage12
 
 - `DGX-02 vLLM` provider profile을 기본 등록한다.
-- DGX-02 모델 레지스트리는 `qwen36-gio-wiki-rag-prisma`를 노출한다.
+- DGX-02 모델 레지스트리는 `qwen36-gio-lora-v5-prisma`를 노출한다.
 - `Probe DGX`는 DGX-02 런타임 상태와 provider model discovery snapshot을 함께 갱신한다.
 - `apps/server`는 `/models`에서 DGX-02 모델 레지스트리 placeholder를 제공한다.
 - 실제 프롬프트 전송은 브라우저에서 provider secret을 들고 직접 호출하지 않고, DGX-02 `POST /provider-completions` server proxy를 통과한다.

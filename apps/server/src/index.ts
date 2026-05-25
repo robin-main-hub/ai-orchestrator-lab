@@ -87,7 +87,7 @@ export type DgxVllmProbeOptions = {
 };
 
 const DEFAULT_DGX02_VLLM_BASE_URL = "http://dgx-02:8001/v1";
-const DEFAULT_DGX_MODEL_ID = "qwen36-gio-wiki-rag-prisma";
+const DEFAULT_DGX_MODEL_ID = "qwen36-gio-lora-v5-prisma";
 
 type ServerProviderProxyConfig = {
   providerProfileId: string;
@@ -233,7 +233,7 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     apiKeyFileEnvName: "OPENCLAW_VLLM_API_KEY_FILE",
     noAuth: true,
     apiStyle: "openai_chat",
-    defaultModelIds: ["qwen36-heretic", "qwen36-gio-wiki-rag-prisma"],
+    defaultModelIds: ["qwen36-heretic", "qwen36-gio-lora-v5-prisma"],
     supportsModelList: true,
   },
 ];

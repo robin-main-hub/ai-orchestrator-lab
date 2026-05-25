@@ -24,7 +24,7 @@ export const seededProviderProfiles: ProviderProfile[] = [
     name: "DGX-02 vLLM",
     kind: "openai",
     baseUrl: "http://dgx-02:8001/v1",
-    defaultModel: "qwen36-gio-wiki-rag-prisma",
+    defaultModel: "qwen36-gio-lora-v5-prisma",
     tags: ["dgx", "vllm", "no-auth"],
     trustLevel: "trusted",
   }),
@@ -260,7 +260,7 @@ export const seededModelCatalog: ModelCatalog = {
     createModel("provider_mock_local", "mock-builder", ["coding"]),
   ],
   provider_dgx02_vllm: [
-    createModel("provider_dgx02_vllm", "qwen36-gio-wiki-rag-prisma", ["dgx", "vllm", "rag"]),
+    createModel("provider_dgx02_vllm", "qwen36-gio-lora-v5-prisma", ["dgx", "vllm", "rag"]),
   ],
   provider_openai_compat: [
     "gpt-5.5-pro",
@@ -318,7 +318,7 @@ export const seededModelCatalog: ModelCatalog = {
   ].map((id) => createModel("provider_grok_oauth_dgx_2", id, ["grok", "oauth", "server-proxy", "grok-account-2"])),
   provider_openclaw_dgx: [
     "qwen36-heretic",
-    "qwen36-gio-wiki-rag-prisma",
+    "qwen36-gio-lora-v5-prisma",
   ].map((id) => createModel("provider_openclaw_dgx", id, ["openclaw", "dgx", "vllm"])),
   provider_codex_oauth: [
     "codex-session",
