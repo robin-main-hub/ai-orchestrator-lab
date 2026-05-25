@@ -313,3 +313,57 @@ export function createAnthropicAdapter(cfg: AnthropicAdapterConfig): ProviderAda
 3. **`anthropic-version` 값** — `2023-06-01` 고정 vs 환경변수 노출. (Claude 추천: 고정, 필요 시 별도 옵션)
 4. **`prompt-caching` beta** — 1차 어댑터 옵션으로라도 노출 vs 완전 미포함. (Claude 추천: 완전 미포함, 별도 PR)
 5. **reseller 모델 목록 처리** — `/v1/models` 없으니 `ServerProviderProxyConfig.defaultModelIds` 그대로 통과 vs 어댑터 자체 static list. (Claude 추천: 전자, server config가 SSOT)
+
+---
+
+## 12. Implementation status (post-merge)
+
+이 명세는 [PR #29](https://github.com/robin-main-hub/ai-orchestrator-lab/pull/29)로 실 구현되어 main에 머지됨. 5개 결정 모두 합의 + 코드 반영 완료.
+
+### 5개 결정 → 합의 결과
+
+| # | 결정 | 합의 결과 |
+|---|---|---|
+| 1 | `max_tokens` default | `AnthropicAdapter.defaultMaxTokens` 옵션 (default 4096). server helper에서는 512 주입. context-window-aware 동적 결정은 향후 caller가 `ProviderCompletionRequest`에 명시 필드 들어오면 그때 정합 (현재 protocol에 미존재). |
+| 2 | `role: "tool"` 메시지 | drop + 무음 (warn 로그도 안 함). 호환성 우선. `splitSystemAndMessages()`가 silently skip. |
+| 3 | `anthropic-version` | `AnthropicAdapter.anthropicVersion` 옵션 (default `2023-06-01`). 호스트별 override 가능. |
+| 4 | `prompt-caching` beta | `AnthropicAdapter.betaHeaders: string[]` 옵션. default 빈 배열 (reseller 호환). 호출자가 `["prompt-caching-2024-07-31"]` 같이 명시할 때만 활성. |
+| 5 | reseller 모델 목록 | `discoverModels()`가 `modelIds` 옵션을 그대로 반환 (Anthropic은 `/v1/models` 없음). server `createServerProviderModelDiscoveryResponse()`가 `config.defaultModelIds`를 어댑터에 주입. SSOT는 server config. |
+
+### 구현 위치
+
+- `packages/providers/src/anthropicAdapter.ts` — `AnthropicAdapter` class + `splitSystemAndMessages()` + `extractAnthropicText()` 헬퍼
+- `packages/providers/src/anthropicAdapter.test.ts` — **24 vitest 케이스**: request shape (x-api-key vs Authorization, system 자동 분리, max_tokens, anthropic-beta), 메시지 순서 invariant (user-first / alternation), 응답 파싱 (text+usage+cache, max_tokens truncated, tool_use, empty), 에러 매핑 (401 / 429 / 500 / 529 / 누락 secret / requiresAuth false), discoverModels static
+- `apps/server/src/index.ts` — `createAnthropicServerCompletion()` helper + `createServerProviderProxyCompletionResponse()`의 `anthropic_messages` 분기가 어댑터 호출로 교체
+
+### Spec → 구현 매칭표
+
+| Spec 섹션 | 구현 위치 |
+|---|---|
+| §1 Endpoint + Headers | `AnthropicAdapter.createHeaders()` |
+| §2.1 System 자동 분리 | `splitSystemAndMessages()` |
+| §2.2 messages 정합성 invariant | `assertAnthropicMessageOrder()` |
+| §2.3 max_tokens 정책 | `defaultMaxTokens` 옵션 (Anthropic은 필수) |
+| §3.1 content array 파싱 | `extractAnthropicText()` |
+| §3.2 stop_reason 매핑 | `complete()`의 stop_reason 분기 (end_turn/max_tokens succeeded, tool_use failed) |
+| §3.3 Usage 매핑 (cache 포함) | `normalizeAnthropicUsage()`. protocol `ProviderCompletionUsage`에 cache 필드 신규 추가 |
+| §4 Error 응답 매핑 | `createHttpAdapterError()` — 401/403→credential_expired, 429→rate_limit + retry-after, 4xx→bad_request, 529→provider (overloaded), 5xx→provider |
+| §7 APIKey.fun reseller 차이 | `betaHeaders` default 빈 + `requiresAuth` 옵션 |
+| §9 Contract fixture 9 cases | 24 cases로 확장 구현 |
+
+### 실 동작 검증 가이드
+
+API 키가 DGX-02 vault에 들어와 있으면:
+
+```bash
+SMOKE_PROVIDER_PROFILE_ID=provider_apifun_claude pnpm server:smoke
+```
+
+→ 실제 APIKey.fun Claude 응답을 받음. `Authorization: Bearer` 대신 `x-api-key` 헤더 사용 확인.
+
+### Open / 후속
+
+- streaming layer (`stream: true`) — v1 비대상, 별도 PR
+- tool use 실 처리 — 현재는 `stop_reason: tool_use` → failed 반환. 별도 PR
+- prompt caching 활성화 — `betaHeaders` 옵션 + content block에 `cache_control` 추가 패턴 별도 PR
+- contract test 적용 (`anthropicAdapter.contract.test.ts`) — `openAiCompatibleAdapter.contract.test.ts` 패턴 그대로

@@ -226,3 +226,48 @@ totalTokens가 없으면 inputTokens + outputTokens로 채운다.
 | Ollama 어댑터 (별도, 로컬 only) | Claude |
 | AdapterError + contract test 골격 | Claude |
 | Server 마이그레이션 (각 어댑터 머지 후) | 합의된 어댑터 작성자가 후속 PR로 |
+
+---
+
+## 13. Implementation status (post-merge)
+
+이 제안서는 실제 구현으로 닫혔다. 결정 7개 모두 합의 + 코드 반영 완료, 어댑터 5종이 main에 들어왔다.
+
+### 결정 7개 → 합의 결과
+
+| # | 결정 항목 | 합의 결과 (구현 반영) |
+|---|---|---|
+| 1 | 신규 인터페이스 파일 위치 | `packages/providers/src/adapter.ts` 분리. `index.ts`는 re-export surface로만 — "index.ts가 다음 App.tsx 되는 거 회피". |
+| 2 | Secret 주입 방식 | `AdapterRuntimeContext.resolveSecret()` 패턴. 모든 어댑터(Anthropic / Ollama / OpenAI-compatible / Codex CLI OAuth)가 동일 boundary 사용. |
+| 3 | Anthropic system 자동 분리 | 어댑터 책임. `splitSystemAndMessages()` 헬퍼가 system 메시지 추출 → top-level `system` 필드로 매핑. |
+| 4 | Anthropic max_tokens 기본값 | context-window-aware. unknown 모델은 4096, 큰 Claude는 8192. 글로벌 16384는 UI/cost controls 성숙 후. AnthropicAdapter `defaultMaxTokens` 옵션으로 caller가 override 가능. |
+| 5 | OAuth secret refresh | 별도 계층. 어댑터는 `AdapterError("credential_expired")` 또는 `("refresh_required")`만 throw. CodexCliOAuthAdapter가 이 패턴 따라 CLI에 refresh 위임. |
+| 6 | MockProviderAdapter | 신규 `MockLlmAdapter` 재작성. 기존 `MockProviderAdapter`는 `@deprecated` alias로 유지 (`apps/desktop/src/seeds/providers.ts`의 `.profile` 접근 호환). 모든 call site 마이그레이션 후 제거. |
+| 7 | Server 마이그레이션 페이스 | 어댑터별 PR. OpenAI-compatible base (#24) → Anthropic (#29) → Ollama (#31, 머지 대기). server cleanup PR (#30) + #29의 server migration이 같이 진행됨. 거대 5어댑터 PR 회피. |
+
+### 어댑터 구현 상태
+
+| 어댑터 | PR | 머지 | 위치 | server 통합 |
+|---|---|---|---|---|
+| MockLlmAdapter | #18 (PR α) | ✅ | `packages/providers/src/mockLlmAdapter.ts` | n/a (테스트용) |
+| OpenAICompatibleAdapter | #24 | ✅ | `packages/providers/src/openAiCompatibleAdapter.ts` | server `createOpenAICompatibleServerCompletion()` |
+| AnthropicAdapter | #29 | ✅ | `packages/providers/src/anthropicAdapter.ts` | server `createAnthropicServerCompletion()` |
+| OllamaAdapter | #31 | ⏳ 머지 대기 | `packages/providers/src/ollamaAdapter.ts` | 로컬 only — server 통합은 RAM 룰 합의 후 |
+| CodexCliOAuthAdapter | #21 | ✅ | `packages/providers/src/node/codexCliOAuthAdapter.ts` (Node-only) | server registry에 `provider_codex_oauth` 등록 |
+
+### 인프라 완성도
+
+- ✅ `LlmAdapter` interface
+- ✅ `AdapterRuntimeContext` + `createAdapterContext()` builder
+- ✅ `AdapterError` (9 categories: network / auth / credential_expired / refresh_required / rate_limit / bad_request / provider / blocked / unknown)
+- ✅ `redactSecretsForLog()` + `truncateForLog()`
+- ✅ Server `/provider-completions` 라우팅이 어댑터 기반 (코덱스 #30 cleanup + #29 통합 후)
+- ✅ **Contract test fixture** (#33, 머지 대기) — `CONTRACT_HAPPY_PATH` 등 6 expectation + `assertContract` helper. OpenAI-compatible 적용 완료, Anthropic/Ollama는 #29/#31 머지 후 follow-up PR
+
+### 남은 cleanup / 후속
+
+- `_legacyAnthropicMessagesCompletion` + `createAnthropicMessages*` 헬퍼들 — #29 머지 후 dead. 별도 cleanup PR로 제거.
+- OpenRouter 어댑터 (OpenAI-compatible base + `HTTP-Referer` / `X-Title` extra headers) — Codex 영역.
+- DGX vLLM 전용 최적화 (chat_template_kwargs 등) — 현재는 OpenAI-compatible adapter로 충분, 필요 시 별도 어댑터.
+- Ollama server 통합 — RAM 룰 (노드당 vLLM 1개, RAM < 100GiB 보류) 합의 + 호스트 결정 후.
+- Anthropic / Ollama contract test 적용 PR — `openAiCompatibleAdapter.contract.test.ts` 패턴 그대로 swap.
