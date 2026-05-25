@@ -47,7 +47,6 @@ import type {
   TmuxPaneRole,
 } from "@ai-orchestrator/protocol";
 import {
-  approvalDecisionRequestSchema,
   approvalRequestSchema,
   eventSyncPushRequestSchema,
   providerCompletionRequestSchema,
@@ -60,6 +59,8 @@ import {
   OpenAICompatibleAdapter,
   type CodexExecRunner,
 } from "@ai-orchestrator/providers/node";
+import { handleApprovalRoute } from "./routes/approvals";
+import { handleTmuxRoute } from "./routes/tmux";
 
 export type ServerCapability =
   | "health"
@@ -3340,8 +3341,20 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       return;
     }
 
-    if ((pathname === "/approvals" || pathname === "/approvals/list") && request.method === "GET") {
-      respondJson(200, await listApprovalsFromPersistentServerStorage(eventStorage));
+    if (
+      await handleApprovalRoute({
+        eventStorage,
+        request,
+        pathname,
+        method: request.method,
+        readJsonBody,
+        isRequestBodyTooLargeError: (error): error is RequestBodyTooLargeError =>
+          error instanceof RequestBodyTooLargeError,
+        listApprovals: listApprovalsFromPersistentServerStorage,
+        decideApproval: decideApprovalInPersistentServerStorage,
+        respondJson,
+      })
+    ) {
       return;
     }
 
@@ -3372,83 +3385,24 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       return;
     }
 
-    if (pathname === "/tmux/dispatch" && request.method === "POST") {
-      let payload: ServerTmuxDispatchRequest;
-      try {
-        payload = parseServerTmuxDispatchRequest(await readJsonBody(request));
-      } catch (error) {
-        if (error instanceof RequestBodyTooLargeError) {
-          respondJson(413, { error: "payload_too_large", limit: error.limit });
-          return;
-        }
-        respondJson(400, {
-          error: "invalid_tmux_dispatch_payload",
-          message: error instanceof Error ? error.message : String(error),
-        });
-        return;
-      }
-
-      try {
-        const result = await recordServerTmuxDispatchToPersistentServerStorage(payload, eventStorage);
-        const status =
-          result.permission.decision === "deny" ? 403 : result.permission.decision === "approval_required" ? 202 : 202;
-        respondJson(status, result);
-      } catch (error) {
-        respondJson(500, {
-          error: "tmux_dispatch_record_failed",
-          message: error instanceof Error ? error.message : String(error),
-        });
-      }
-      return;
-    }
-
-    if (pathname === "/tmux/capture" && request.method === "POST") {
-      let payload: ServerTmuxCaptureRequest;
-      try {
-        payload = parseServerTmuxCaptureRequest(await readJsonBody(request));
-      } catch (error) {
-        if (error instanceof RequestBodyTooLargeError) {
-          respondJson(413, { error: "payload_too_large", limit: error.limit });
-          return;
-        }
-        respondJson(400, {
-          error: "invalid_tmux_capture_payload",
-          message: error instanceof Error ? error.message : String(error),
-        });
-        return;
-      }
-
-      try {
-        const result = await recordServerTmuxCaptureToPersistentServerStorage(payload, eventStorage);
-        respondJson(result.status === "failed" ? 502 : 202, result);
-      } catch (error) {
-        respondJson(500, {
-          error: "tmux_capture_failed",
-          message: error instanceof Error ? error.message : String(error),
-        });
-      }
-      return;
-    }
-
-    if ((pathname === "/approvals/grant" || pathname === "/approvals/reject") && request.method === "POST") {
-      let payload: ApprovalDecisionRequest;
-      try {
-        payload = approvalDecisionRequestSchema.parse(await readJsonBody(request)) as ApprovalDecisionRequest;
-      } catch (error) {
-        if (error instanceof RequestBodyTooLargeError) {
-          respondJson(413, { error: "payload_too_large", limit: error.limit });
-          return;
-        }
-        respondJson(400, {
-          error: "invalid_approval_decision_payload",
-          message: error instanceof Error ? error.message : String(error),
-        });
-        return;
-      }
-
-      const decision = pathname === "/approvals/grant" ? "approved" : "rejected";
-      const result = await decideApprovalInPersistentServerStorage(payload, decision, eventStorage);
-      respondJson(result.statusCode, result.payload);
+    if (
+      await handleTmuxRoute({
+        eventStorage,
+        request,
+        pathname,
+        method: request.method,
+        readJsonBody,
+        isRequestBodyTooLargeError: (error): error is RequestBodyTooLargeError =>
+          error instanceof RequestBodyTooLargeError,
+        parseDispatchRequest: parseServerTmuxDispatchRequest,
+        recordDispatch: recordServerTmuxDispatchToPersistentServerStorage,
+        dispatchStatusCode: (result) => (result.permission.decision === "deny" ? 403 : 202),
+        parseCaptureRequest: parseServerTmuxCaptureRequest,
+        recordCapture: recordServerTmuxCaptureToPersistentServerStorage,
+        captureStatusCode: (result) => (result.status === "failed" ? 502 : 202),
+        respondJson,
+      })
+    ) {
       return;
     }
 
