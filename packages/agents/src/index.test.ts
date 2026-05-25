@@ -5,6 +5,7 @@ import {
   assertSafeCodingPacket,
   blockDebateRound,
   createDebateRounds,
+  defaultAgentProfiles,
   getActiveDebateRound,
   validateCodingPacketSafety,
 } from "./index";
@@ -247,5 +248,46 @@ describe("assertSafeCodingPacket", () => {
     expect(() =>
       assertSafeCodingPacket(basePacket({ goal: "" })),
     ).toThrow(/unsafe coding packet/);
+  });
+});
+
+describe("defaultAgentProfiles", () => {
+  it("ships 7 profiles: orchestrator + 5 debate personas + executor", () => {
+    expect(defaultAgentProfiles).toHaveLength(7);
+  });
+
+  it("covers every persona that has a SOUL.md directory under agents/", () => {
+    // Mirrors the 5 SOUL files added in PR #48 (architect/reviewer/skeptic/
+    // verifier/memory_curator) plus the pre-existing orchestrator.
+    // Regression guard: if someone removes one of these the test fails
+    // with a specific role name, not a vague "missing item".
+    const roles = defaultAgentProfiles.map((p) => p.role);
+    expect(roles).toContain("orchestrator");
+    expect(roles).toContain("architect");
+    expect(roles).toContain("reviewer");
+    expect(roles).toContain("skeptic");
+    expect(roles).toContain("verifier");
+    expect(roles).toContain("memory_curator");
+  });
+
+  it("keeps the executor disabled by default (requires F2 permission gate)", () => {
+    const executor = defaultAgentProfiles.find((p) => p.role === "executor");
+    expect(executor).toBeDefined();
+    expect(executor!.enabled).toBe(false);
+    expect(executor!.permissionLevel).toBe("run_safe_commands");
+  });
+
+  it("all virtual personas have unique ids", () => {
+    const ids = defaultAgentProfiles.map((p) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("default configSource is internal for the virtual personas (embedded summary, not file load)", () => {
+    // Callers that want the full SOUL/AGENTS markdown should flip
+    // `configSource: "markdown"` per profile and run loadPersona.
+    const virtuals = defaultAgentProfiles.filter((p) => p.kind === "virtual");
+    for (const profile of virtuals) {
+      expect(profile.configSource).toBe("internal");
+    }
   });
 });

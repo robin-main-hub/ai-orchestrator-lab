@@ -6,6 +6,23 @@
   DebateUtterance,
 } from "@ai-orchestrator/protocol";
 
+export {
+  buildPersonaPromptFragment,
+  createInMemoryPersonaSource,
+  inferModeFromConfigSource,
+  loadPersona,
+  personaNameForProfile,
+  PersonaFragmentMissingError,
+} from "./personaLoader.js";
+export type {
+  LoadedPersona,
+  PersonaFileSource,
+  PersonaFragment,
+  PersonaFragmentSource,
+  PersonaPromptOptions,
+  PersonaSourceMode,
+} from "./personaLoader.js";
+
 export type DebateContext = {
   sessionId: string;
   problem: string;
@@ -255,6 +272,21 @@ export function createCodingPacketDraft(context: DebateContext): CodingPacket {
   };
 }
 
+/**
+ * Built-in agent profile seed. Covers the 6 virtual roles that ship with
+ * `agents/<role>/SOUL.md` + `AGENTS.md` (orchestrator + the 5 debate
+ * personas from PR #48) plus one disabled real-executor stub.
+ *
+ * All virtual entries default to `configSource: "internal"` so the
+ * embedded persona summary is used at runtime. Callers that want to
+ * inject the full SOUL/AGENTS markdown should flip `configSource` to
+ * `"markdown"` per profile and run the result through `loadPersona()`
+ * (see `./personaLoader.ts`).
+ *
+ * The `executor` profile stays disabled by default — it requires
+ * `run_safe_commands` permission which is gated by the F2 evaluator
+ * (`docs/29-permission-engine-spec.md`).
+ */
 export const defaultAgentProfiles: AgentProfile[] = [
   {
     id: "agent_orchestrator",
@@ -282,6 +314,39 @@ export const defaultAgentProfiles: AgentProfile[] = [
     kind: "virtual",
     role: "reviewer",
     soulMode: "retrieved",
+    configSource: "internal",
+    enabled: true,
+    permissionLevel: "read_only",
+  },
+  {
+    id: "agent_skeptic",
+    name: "Skeptic",
+    kind: "virtual",
+    role: "skeptic",
+    soulMode: "summary",
+    configSource: "internal",
+    enabled: true,
+    permissionLevel: "read_only",
+  },
+  {
+    id: "agent_verifier",
+    name: "Verifier",
+    kind: "virtual",
+    role: "verifier",
+    soulMode: "summary",
+    configSource: "internal",
+    enabled: true,
+    permissionLevel: "read_only",
+  },
+  {
+    id: "agent_memory_curator",
+    name: "Memory Curator",
+    kind: "virtual",
+    role: "memory_curator",
+    // memory_curator works with the recall layer but its own prompt only
+    // needs the small SOUL summary — heavy recall happens through the
+    // MemoryAdapter (docs/32), not through the persona prompt itself.
+    soulMode: "summary",
     configSource: "internal",
     enabled: true,
     permissionLevel: "read_only",
