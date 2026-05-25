@@ -1,0 +1,450 @@
+import { describe, expect, it } from "vitest";
+import type {
+  AgentProfile,
+  AgentRole,
+  DebateRound,
+  DebateRoundKind,
+  ProviderCompletionRequest,
+  ProviderCompletionResponse,
+} from "@ai-orchestrator/protocol";
+import {
+  buildRoundUserPrompt,
+  createDebateRounds,
+  inferUtteranceTag,
+  pickAgentsForRound,
+  runDebateRound,
+  type DebateContext,
+  type DebateEngineAgentSlot,
+  type LlmCompletionFn,
+} from "./index";
+
+function makeProfile(overrides: Partial<AgentProfile> & { role: AgentRole; id: string }): AgentProfile {
+  return {
+    name: overrides.name ?? overrides.id,
+    kind: "virtual",
+    soulMode: "summary",
+    configSource: "internal",
+    enabled: overrides.enabled ?? true,
+    permissionLevel: "read_only",
+    ...overrides,
+  };
+}
+
+function makeContext(overrides: Partial<DebateContext> = {}): DebateContext {
+  return {
+    sessionId: "session_test",
+    problem: "어떻게 하면 debate engine을 작게 시작할 수 있는가?",
+    conversationSummary: "사용자가 protocol-first 접근을 선호한다.",
+    constraints: ["packages/agents는 providers에 의존하지 않는다."],
+    openQuestions: ["라운드당 발화자 상한은 몇 명인가?"],
+    userPreferences: ["테스트 가능한 인터페이스"],
+    memoryTraceIds: [],
+    ...overrides,
+  };
+}
+
+function makeCompleteReturning(content: string): LlmCompletionFn {
+  return async (request: ProviderCompletionRequest): Promise<ProviderCompletionResponse> => ({
+    id: `resp_${request.id}`,
+    requestId: request.id,
+    providerProfileId: request.providerProfileId,
+    modelId: request.modelId,
+    route: request.routePreference,
+    status: "succeeded",
+    content,
+    createdAt: request.createdAt,
+  });
+}
+
+function makeCompleteFailing(status: "failed" | "fallback_required" = "failed", error = "synthetic"): LlmCompletionFn {
+  return async (request: ProviderCompletionRequest): Promise<ProviderCompletionResponse> => ({
+    id: `resp_${request.id}`,
+    requestId: request.id,
+    providerProfileId: request.providerProfileId,
+    modelId: request.modelId,
+    route: request.routePreference,
+    status,
+    error,
+    createdAt: request.createdAt,
+  });
+}
+
+function makeCompleteThrowing(message: string): LlmCompletionFn {
+  return async () => {
+    throw new Error(message);
+  };
+}
+
+function defaultIdSeq(): () => string {
+  let n = 0;
+  return () => {
+    n += 1;
+    return `id${n}`;
+  };
+}
+
+function defaultNowFrozen(): () => Date {
+  return () => new Date("2026-05-25T00:00:00.000Z");
+}
+
+function makeSlot(profile: AgentProfile, content: string): DebateEngineAgentSlot {
+  return {
+    agent: profile,
+    complete: makeCompleteReturning(content),
+    systemPrompt: `you are ${profile.name}`,
+    modelId: "mock-model",
+  };
+}
+
+describe("pickAgentsForRound", () => {
+  it("invites only roles listed for the round kind, in priority order", () => {
+    const slots: DebateEngineAgentSlot[] = [
+      makeSlot(makeProfile({ id: "a", role: "architect" }), "x"),
+      // executor is NOT in any ROUND_ROLE_PRIORITY entry (intentional)
+      makeSlot(makeProfile({ id: "e", role: "executor" }), "x"),
+      makeSlot(makeProfile({ id: "o", role: "orchestrator" }), "x"),
+      makeSlot(makeProfile({ id: "b", role: "builder" }), "x"),
+    ];
+    const picked = pickAgentsForRound("coding_packet", slots, 4);
+    const roles = picked.map((s) => s.agent.role);
+    expect(roles).not.toContain("executor");
+    expect(roles[0]).toBe("orchestrator");
+    expect(roles).toContain("architect");
+    expect(roles).toContain("builder");
+  });
+
+  it("caps at the supplied max", () => {
+    const slots: DebateEngineAgentSlot[] = [
+      makeSlot(makeProfile({ id: "o", role: "orchestrator" }), "x"),
+      makeSlot(makeProfile({ id: "a", role: "architect" }), "x"),
+      makeSlot(makeProfile({ id: "b", role: "builder" }), "x"),
+      makeSlot(makeProfile({ id: "s", role: "skeptic" }), "x"),
+      makeSlot(makeProfile({ id: "r", role: "reviewer" }), "x"),
+    ];
+    const picked = pickAgentsForRound("initial_proposals", slots, 2);
+    expect(picked).toHaveLength(2);
+  });
+
+  it("hard-caps at 6 even if a caller asks for more", () => {
+    const slots: DebateEngineAgentSlot[] = Array.from({ length: 10 }, (_, i) =>
+      makeSlot(makeProfile({ id: `o${i}`, role: "orchestrator" }), "x"),
+    );
+    const picked = pickAgentsForRound("problem_definition", slots, 99);
+    expect(picked.length).toBeLessThanOrEqual(6);
+  });
+
+  it("skips disabled agents", () => {
+    const slots: DebateEngineAgentSlot[] = [
+      makeSlot(makeProfile({ id: "off", role: "orchestrator", enabled: false }), "x"),
+      makeSlot(makeProfile({ id: "on", role: "orchestrator" }), "x"),
+    ];
+    const picked = pickAgentsForRound("problem_definition", slots, 4);
+    expect(picked.map((s) => s.agent.id)).toEqual(["on"]);
+  });
+
+  it("falls back to empty when no eligible role matches", () => {
+    const slots: DebateEngineAgentSlot[] = [
+      makeSlot(makeProfile({ id: "ext", role: "external" }), "x"),
+    ];
+    // external is not in any ROUND_ROLE_PRIORITY entry (intentional)
+    const picked = pickAgentsForRound("coding_packet", slots, 4);
+    expect(picked).toEqual([]);
+  });
+});
+
+describe("inferUtteranceTag", () => {
+  it("uses the explicit [[tag:...]] marker when present", () => {
+    expect(inferUtteranceTag("blah blah [[tag:objection]]", "initial_proposals")).toBe("objection");
+    expect(inferUtteranceTag("text [[tag:risk]] more", "refinement")).toBe("risk");
+  });
+
+  it("falls back to round-kind default when no marker is present", () => {
+    expect(inferUtteranceTag("no marker here", "cross_critique")).toBe("objection");
+    expect(inferUtteranceTag("no marker", "coding_packet")).toBe("coding_impact");
+    expect(inferUtteranceTag("no marker", "final_decision")).toBe("agreement");
+  });
+
+  it("is case-insensitive on the marker keyword", () => {
+    expect(inferUtteranceTag("X [[TAG:EVIDENCE]]", "initial_proposals")).toBe("evidence");
+  });
+
+  it("ignores unknown tag values and falls back", () => {
+    expect(inferUtteranceTag("[[tag:nonsense]]", "initial_proposals")).toBe("evidence");
+  });
+});
+
+describe("buildRoundUserPrompt", () => {
+  it("includes round title, kind, problem, and the agent name", () => {
+    const rounds = createDebateRounds("debate_x");
+    const ctx = makeContext();
+    const profile = makeProfile({ id: "a", name: "Architect", role: "architect" });
+    const prompt = buildRoundUserPrompt(rounds[0]!, ctx, profile);
+    expect(prompt).toContain(rounds[0]!.title);
+    expect(prompt).toContain(rounds[0]!.kind);
+    expect(prompt).toContain(ctx.problem);
+    expect(prompt).toContain("Architect");
+    expect(prompt).toContain("architect");
+    expect(prompt).toContain("[[tag:");
+  });
+
+  it("includes prior utterances when present", () => {
+    const rounds = createDebateRounds("debate_y");
+    const round: DebateRound = {
+      ...rounds[0]!,
+      utterances: [
+        {
+          id: "u1",
+          agentId: "agent_x",
+          roundId: rounds[0]!.id,
+          content: "이전 발언입니다.",
+          tags: ["evidence"],
+          createdAt: "2026-05-25T00:00:00.000Z",
+        },
+      ],
+    };
+    const prompt = buildRoundUserPrompt(round, makeContext(), makeProfile({ id: "a", role: "architect" }));
+    expect(prompt).toContain("이전 발언입니다.");
+  });
+
+  it("truncates an overlong prior utterance", () => {
+    const rounds = createDebateRounds("debate_z");
+    const long = "x".repeat(2000);
+    const round: DebateRound = {
+      ...rounds[0]!,
+      utterances: [
+        {
+          id: "u1",
+          agentId: "agent_x",
+          roundId: rounds[0]!.id,
+          content: long,
+          tags: ["evidence"],
+          createdAt: "2026-05-25T00:00:00.000Z",
+        },
+      ],
+    };
+    const prompt = buildRoundUserPrompt(round, makeContext(), makeProfile({ id: "a", role: "architect" }));
+    expect(prompt).toContain("…");
+    expect(prompt.length).toBeLessThan(long.length + 1500);
+  });
+});
+
+describe("runDebateRound", () => {
+  function freshRound(kind: DebateRoundKind = "problem_definition"): DebateRound {
+    const rounds = createDebateRounds("debate_run");
+    const found = rounds.find((r) => r.kind === kind);
+    if (!found) throw new Error(`no round of kind ${kind}`);
+    return found;
+  }
+
+  it("collects one utterance per invited agent on the happy path", async () => {
+    const slots: DebateEngineAgentSlot[] = [
+      makeSlot(makeProfile({ id: "o", role: "orchestrator" }), "오케스트레이터의 응답"),
+      makeSlot(makeProfile({ id: "a", role: "architect" }), "아키텍트의 응답 [[tag:evidence]]"),
+      makeSlot(makeProfile({ id: "s", role: "skeptic" }), "스켑틱 [[tag:objection]]"),
+    ];
+    const result = await runDebateRound({
+      debateId: "debate_run",
+      round: freshRound("problem_definition"),
+      context: makeContext(),
+      slots,
+      options: { now: defaultNowFrozen(), generateId: defaultIdSeq() },
+    });
+    expect(result.agentErrors).toEqual([]);
+    expect(result.utterances).toHaveLength(3);
+    const byAgent = new Map(result.utterances.map((u) => [u.agentId, u]));
+    expect(byAgent.get("a")!.tags[0]).toBe("evidence");
+    expect(byAgent.get("s")!.tags[0]).toBe("objection");
+    // orchestrator had no marker, uses round-kind default
+    expect(byAgent.get("o")!.tags[0]).toBe("evidence");
+  });
+
+  it("isolates a single throwing adapter without blocking the others", async () => {
+    const slots: DebateEngineAgentSlot[] = [
+      makeSlot(makeProfile({ id: "o", role: "orchestrator" }), "ok"),
+      {
+        agent: makeProfile({ id: "a", role: "architect" }),
+        complete: makeCompleteThrowing("boom"),
+        systemPrompt: "x",
+        modelId: "mock",
+      },
+      makeSlot(makeProfile({ id: "s", role: "skeptic" }), "ok2"),
+    ];
+    const result = await runDebateRound({
+      debateId: "debate_run",
+      round: freshRound("problem_definition"),
+      context: makeContext(),
+      slots,
+      options: { generateId: defaultIdSeq() },
+    });
+    expect(result.utterances).toHaveLength(2);
+    expect(result.agentErrors).toEqual([{ agentId: "a", reason: "boom" }]);
+  });
+
+  it("records a failed-status response as agentError rather than utterance", async () => {
+    const slots: DebateEngineAgentSlot[] = [
+      {
+        agent: makeProfile({ id: "o", role: "orchestrator" }),
+        complete: makeCompleteFailing("failed", "rate-limited"),
+        systemPrompt: "x",
+        modelId: "mock",
+      },
+      makeSlot(makeProfile({ id: "a", role: "architect" }), "ok"),
+    ];
+    const result = await runDebateRound({
+      debateId: "debate_run",
+      round: freshRound("problem_definition"),
+      context: makeContext(),
+      slots,
+      options: { generateId: defaultIdSeq() },
+    });
+    expect(result.utterances.map((u) => u.agentId)).toEqual(["a"]);
+    expect(result.agentErrors).toEqual([{ agentId: "o", reason: "rate-limited" }]);
+  });
+
+  it("records a fallback_required response as an agentError too", async () => {
+    const slots: DebateEngineAgentSlot[] = [
+      {
+        agent: makeProfile({ id: "o", role: "orchestrator" }),
+        complete: makeCompleteFailing("fallback_required", "primary down"),
+        systemPrompt: "x",
+        modelId: "mock",
+      },
+    ];
+    const result = await runDebateRound({
+      debateId: "debate_run",
+      round: freshRound("problem_definition"),
+      context: makeContext(),
+      slots,
+      options: { generateId: defaultIdSeq() },
+    });
+    expect(result.utterances).toEqual([]);
+    expect(result.agentErrors[0]!.reason).toBe("primary down");
+  });
+
+  it("forwards modelId, sessionId, and routePreference into the request", async () => {
+    let seen: ProviderCompletionRequest | undefined;
+    const slots: DebateEngineAgentSlot[] = [
+      {
+        agent: makeProfile({ id: "o", role: "orchestrator", providerProfileId: "prov_x" }),
+        complete: async (req) => {
+          seen = req;
+          return {
+            id: "x",
+            requestId: req.id,
+            providerProfileId: req.providerProfileId,
+            modelId: req.modelId,
+            route: req.routePreference,
+            status: "succeeded",
+            content: "ok",
+            createdAt: req.createdAt,
+          };
+        },
+        systemPrompt: "system here",
+        modelId: "claude-sonnet-x",
+      },
+    ];
+    await runDebateRound({
+      debateId: "debate_run",
+      round: freshRound("problem_definition"),
+      context: makeContext({ sessionId: "session_xyz" }),
+      slots,
+      options: { routePreference: "direct_provider", generateId: defaultIdSeq() },
+    });
+    expect(seen).toBeDefined();
+    expect(seen!.sessionId).toBe("session_xyz");
+    expect(seen!.modelId).toBe("claude-sonnet-x");
+    expect(seen!.routePreference).toBe("direct_provider");
+    expect(seen!.providerProfileId).toBe("prov_x");
+    expect(seen!.source).toBe("agent");
+    // first message is the system prompt
+    expect(seen!.messages[0]!.role).toBe("system");
+    expect(seen!.messages[0]!.content).toBe("system here");
+    // second message contains the round user prompt
+    expect(seen!.messages[1]!.role).toBe("user");
+    expect(seen!.messages[1]!.content).toContain("문제 정의");
+  });
+
+  it("respects maxUtterancesPerRound", async () => {
+    const slots: DebateEngineAgentSlot[] = [
+      makeSlot(makeProfile({ id: "o", role: "orchestrator" }), "ok"),
+      makeSlot(makeProfile({ id: "a", role: "architect" }), "ok"),
+      makeSlot(makeProfile({ id: "s", role: "skeptic" }), "ok"),
+    ];
+    const result = await runDebateRound({
+      debateId: "debate_run",
+      round: freshRound("problem_definition"),
+      context: makeContext(),
+      slots,
+      options: { maxUtterancesPerRound: 2, generateId: defaultIdSeq() },
+    });
+    expect(result.utterances).toHaveLength(2);
+  });
+
+  it("forwards timeoutMs to the adapter context", async () => {
+    let seenTimeout: number | undefined;
+    const slots: DebateEngineAgentSlot[] = [
+      {
+        agent: makeProfile({ id: "o", role: "orchestrator" }),
+        complete: async (req, ctx) => {
+          seenTimeout = ctx.timeoutMs;
+          return {
+            id: "x",
+            requestId: req.id,
+            providerProfileId: req.providerProfileId,
+            modelId: req.modelId,
+            route: req.routePreference,
+            status: "succeeded",
+            content: "ok",
+            createdAt: req.createdAt,
+          };
+        },
+        systemPrompt: "x",
+        modelId: "mock",
+      },
+    ];
+    await runDebateRound({
+      debateId: "debate_run",
+      round: freshRound("problem_definition"),
+      context: makeContext(),
+      slots,
+      options: { perAgentTimeoutMs: 1234, generateId: defaultIdSeq() },
+    });
+    expect(seenTimeout).toBe(1234);
+  });
+
+  it("calls resolveSecret when provided", async () => {
+    let resolved = false;
+    const slots: DebateEngineAgentSlot[] = [
+      {
+        agent: makeProfile({ id: "o", role: "orchestrator" }),
+        complete: async (req, ctx) => {
+          await ctx.resolveSecret();
+          return {
+            id: "x",
+            requestId: req.id,
+            providerProfileId: req.providerProfileId,
+            modelId: req.modelId,
+            route: req.routePreference,
+            status: "succeeded",
+            content: "ok",
+            createdAt: req.createdAt,
+          };
+        },
+        systemPrompt: "x",
+        modelId: "mock",
+        resolveSecret: async () => {
+          resolved = true;
+          return "tok";
+        },
+      },
+    ];
+    await runDebateRound({
+      debateId: "debate_run",
+      round: freshRound("problem_definition"),
+      context: makeContext(),
+      slots,
+      options: { generateId: defaultIdSeq() },
+    });
+    expect(resolved).toBe(true);
+  });
+});
