@@ -7,6 +7,7 @@ type Props = {
 };
 
 const MAX_PREVIEW_BYTES = 5 * 1024 * 1024; // 5MB inline preview cap
+const MAX_ATTACHMENTS = 5;
 
 async function fileToAttachment(file: File): Promise<MobileAttachment> {
   const id = `att_${crypto.randomUUID()}`;
@@ -69,7 +70,11 @@ export function Composer({ onSend, disabled }: Props) {
         console.warn("[mobile] failed to read file attachment", err);
       }
     }
-    setAttachments((prev) => [...prev, ...next]);
+    setAttachments((prev) => {
+      const slotsLeft = MAX_ATTACHMENTS - prev.length;
+      if (slotsLeft <= 0) return prev;
+      return [...prev, ...next.slice(0, slotsLeft)];
+    });
     // Reset so selecting the same file twice still fires onChange.
     event.target.value = "";
   };
@@ -105,7 +110,11 @@ export function Composer({ onSend, disabled }: Props) {
       }
     }
     if (next.length > 0) {
-      setAttachments((prev) => [...prev, ...next]);
+      setAttachments((prev) => {
+        const slotsLeft = MAX_ATTACHMENTS - prev.length;
+        if (slotsLeft <= 0) return prev;
+        return [...prev, ...next.slice(0, slotsLeft)];
+      });
     }
   };
 
@@ -143,6 +152,7 @@ export function Composer({ onSend, disabled }: Props) {
           type="button"
           className="composer__file-button"
           onClick={() => fileInputRef.current?.click()}
+          disabled={disabled || attachments.length >= MAX_ATTACHMENTS}
           aria-label="파일 첨부"
         >
           +
