@@ -1,8 +1,12 @@
 import { useState } from "react";
 import { LockKeyhole } from "lucide-react";
-import type { CodingPacket, ConversationMessage, TmuxPaneRole } from "@ai-orchestrator/protocol";
+import type { ApprovalRequest, CodingPacket, ConversationMessage, TmuxPaneRole } from "@ai-orchestrator/protocol";
 import { messageLabel } from "../lib/uiLabels";
-import { requestTmuxCapture, requestTmuxDispatch } from "../runtime/stage33TmuxServer";
+import {
+  requestTmuxCapture,
+  requestTmuxDispatch,
+  type DesktopTmuxDispatchRequest,
+} from "../runtime/stage33TmuxServer";
 import type { AgentActivityStatus, AgentVisualSettings, WindowAuditItem, WorkbenchAgent } from "../types";
 import { TmuxPaneCard } from "./TmuxPaneCard";
 import { WindowChecklist } from "./WindowChecklist";
@@ -19,12 +23,18 @@ type TmuxPaneDefinition = {
 
 type PaneBusyState = "capture" | "dispatch";
 
+export type TmuxApprovalQueuedInput = {
+  approval: ApprovalRequest;
+  request: DesktopTmuxDispatchRequest;
+};
+
 export function TmuxSwarmBoard({
   activeSessionId,
   agentActivityById,
   agentVisualsById,
   agents,
   messages,
+  onApprovalQueued,
   packet,
 }: {
   activeSessionId: string;
@@ -32,6 +42,7 @@ export function TmuxSwarmBoard({
   agentVisualsById: Record<string, AgentVisualSettings>;
   agents: WorkbenchAgent[];
   messages: ConversationMessage[];
+  onApprovalQueued?: (input: TmuxApprovalQueuedInput) => void;
   packet: CodingPacket;
 }) {
   const recentMessages = messages.slice(-6);
@@ -41,7 +52,9 @@ export function TmuxSwarmBoard({
   const [runtimeStatusByRole, setRuntimeStatusByRole] = useState<Record<string, string>>({});
   const [paneOutputByRole, setPaneOutputByRole] = useState<Record<string, string>>({});
   const [busyByRole, setBusyByRole] = useState<Record<string, PaneBusyState | undefined>>({});
-  const [boardNotice, setBoardNotice] = useState("DGX-02 tmux 게이트 준비됨. 실제 send-keys는 서버 env gate와 승인 이후에만 실행됩니다.");
+  const [boardNotice, setBoardNotice] = useState(
+    "DGX-02 tmux 게이트 준비됨. 실제 send-keys는 서버 env gate와 승인 이후에만 실행됩니다.",
+  );
   const panes = createTmuxPanes(roleAgent, recommendation);
   const visiblePanes = panes.slice(0, recommendation.recommendedCount);
   const auditItems: WindowAuditItem[] = [
@@ -49,7 +62,7 @@ export function TmuxSwarmBoard({
       id: "layout",
       label: "tmux 화면",
       status: "ready",
-      detail: "tmux 모드에서는 좌우 rail과 하단 dock을 밀고 중앙 workbench를 전체 화면으로 씁니다.",
+      detail: "tmux 모드에서는 좌우 rail과 하단 dock을 비우고 중앙 workbench를 전체 화면으로 엽니다.",
     },
     {
       id: "pane-count",
@@ -113,24 +126,24 @@ export function TmuxSwarmBoard({
 
   async function handleDispatchPane(pane: TmuxPaneDefinition) {
     const commandPreview = (commandDraftByRole[pane.roleKey] || defaultTmuxCommandForRole(pane.roleKey)).trim();
+    const request: DesktopTmuxDispatchRequest = {
+      id: `tmux_dispatch_${pane.roleKey}_${Date.now()}`,
+      sessionId: activeSessionId,
+      terminalSessionId: "terminal_session_ai_swarm",
+      role: pane.roleKey,
+      host: "dgx_02",
+      paneId: `role:${pane.roleKey}`,
+      commandPreview,
+      approvalState: "required",
+      dispatchMode: "execute_if_approved",
+      tmuxSessionName: "ai-swarm",
+      createdAt: new Date().toISOString(),
+    };
+
     setBusyByRole((current) => ({ ...current, [pane.roleKey]: "dispatch" }));
     setRuntimeStatusByRole((current) => ({ ...current, [pane.roleKey]: "dispatching" }));
     try {
-      const result = await requestTmuxDispatch({
-        request: {
-          id: `tmux_dispatch_${pane.roleKey}_${Date.now()}`,
-          sessionId: activeSessionId,
-          terminalSessionId: "terminal_session_ai_swarm",
-          role: pane.roleKey,
-          host: "dgx_02",
-          paneId: `role:${pane.roleKey}`,
-          commandPreview,
-          approvalState: "required",
-          dispatchMode: "execute_if_approved",
-          tmuxSessionName: "ai-swarm",
-          createdAt: new Date().toISOString(),
-        },
-      });
+      const result = await requestTmuxDispatch({ request });
       setRuntimeStatusByRole((current) => ({ ...current, [pane.roleKey]: result.dispatch.status }));
       setPaneOutputByRole((current) => ({
         ...current,
@@ -138,6 +151,9 @@ export function TmuxSwarmBoard({
           ? `승인 대기: ${result.approval.reason}`
           : `${result.dispatch.status}: ${result.dispatch.reason}`,
       }));
+      if (result.approval) {
+        onApprovalQueued?.({ approval: result.approval, request });
+      }
       setBoardNotice(`${pane.title}: ${result.dispatch.reason}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -262,7 +278,7 @@ function createTmuxPanes(
       role: "요구사항 / 제품 / 아키텍처 논의",
       state: "chat active",
       agent: roleAgent("orchestrator"),
-      signal: "사용자와 먼저 논의하고 바로 실행하지 않습니다.",
+      signal: "사용자와 먼저 논의하고, 바로 실행하지 않습니다.",
     },
     {
       id: "pane-1",
@@ -305,7 +321,7 @@ function createTmuxPanes(
       title: "Agent - Frontend Dev",
       role: "desktop UI / Workbench / Execution Slot",
       state: "active",
-      signal: "현재 tmux workbench와 desktop wiring을 담당합니다.",
+      signal: "현재 tmux workbench와 approval UX wiring을 담당합니다.",
     },
     {
       id: "pane-6",
