@@ -124,6 +124,7 @@ export type ServerPermissionGateResult = {
   decision: PermissionDecision;
   requestedLevels: PermissionLevel[];
   reason: string;
+  costEstimateTokens?: number;
 };
 
 export type ServerApprovalDecisionEventPayload = {
@@ -823,6 +824,8 @@ export function evaluateServerProviderCompletionPermission(
   const config = serverProviderProxyConfigs.find((candidate) => candidate.providerProfileId === request.providerProfileId);
   const trustLevel = resolveServerProviderTrustLevel(request.providerProfileId);
   const requestedLevels: PermissionLevel[] = ["network_access"];
+  const costEstimateTokens = estimateProviderCompletionBudgetTokens(request.messages);
+  const budgetPolicy = resolveProviderBudgetPolicy();
 
   if (request.providerProfileId !== "provider_dgx02_vllm" && !config?.noAuth) {
     requestedLevels.push("secret_access");
@@ -835,6 +838,7 @@ export function evaluateServerProviderCompletionPermission(
       decision: "deny",
       requestedLevels,
       reason: "provider completion was denied or its approval expired",
+      costEstimateTokens,
     };
   }
 
@@ -845,6 +849,18 @@ export function evaluateServerProviderCompletionPermission(
       decision: "deny",
       requestedLevels,
       reason: "provider is not registered in the DGX-02 proxy allowlist",
+      costEstimateTokens,
+    };
+  }
+
+  if (costEstimateTokens > budgetPolicy.hardLimitTokens) {
+    return {
+      action: "provider_completion",
+      approvalState: "rejected",
+      decision: "deny",
+      requestedLevels,
+      reason: `provider completion estimate ${costEstimateTokens} tokens exceeds hard limit ${budgetPolicy.hardLimitTokens}`,
+      costEstimateTokens,
     };
   }
 
@@ -855,6 +871,18 @@ export function evaluateServerProviderCompletionPermission(
       decision: "allow",
       requestedLevels,
       reason: "provider completion was explicitly approved",
+      costEstimateTokens,
+    };
+  }
+
+  if (costEstimateTokens >= budgetPolicy.approvalThresholdTokens) {
+    return {
+      action: "provider_completion",
+      approvalState: "required",
+      decision: "approval_required",
+      requestedLevels,
+      reason: `provider completion estimate ${costEstimateTokens} tokens requires budget approval`,
+      costEstimateTokens,
     };
   }
 
@@ -865,6 +893,7 @@ export function evaluateServerProviderCompletionPermission(
       decision: "allow",
       requestedLevels,
       reason: "trusted DGX-02 provider can run without an extra approval",
+      costEstimateTokens,
     };
   }
 
@@ -874,7 +903,44 @@ export function evaluateServerProviderCompletionPermission(
     decision: "approval_required",
     requestedLevels,
     reason: `${trustLevel} provider completion requires explicit approval before DGX-02 uses its credential`,
+    costEstimateTokens,
   };
+}
+
+const DEFAULT_PROVIDER_BUDGET_APPROVAL_TOKENS = 24_000;
+const DEFAULT_PROVIDER_BUDGET_HARD_LIMIT_TOKENS = 128_000;
+const DEFAULT_PROVIDER_BUDGET_OUTPUT_RESERVE_TOKENS = 1_024;
+const PROVIDER_MESSAGE_TOKEN_OVERHEAD = 8;
+
+export function estimateProviderCompletionBudgetTokens(messages: ProviderCompletionRequest["messages"]): number {
+  const inputEstimate = messages.reduce((sum, message) => {
+    return sum + Math.ceil(message.content.length / 4) + PROVIDER_MESSAGE_TOKEN_OVERHEAD;
+  }, 0);
+  return inputEstimate + readPositiveIntegerEnv("ORCHESTRATOR_PROVIDER_BUDGET_OUTPUT_RESERVE_TOKENS", DEFAULT_PROVIDER_BUDGET_OUTPUT_RESERVE_TOKENS);
+}
+
+function resolveProviderBudgetPolicy() {
+  const approvalThresholdTokens = readPositiveIntegerEnv(
+    "ORCHESTRATOR_PROVIDER_BUDGET_APPROVAL_TOKENS",
+    DEFAULT_PROVIDER_BUDGET_APPROVAL_TOKENS,
+  );
+  const hardLimitTokens = Math.max(
+    approvalThresholdTokens,
+    readPositiveIntegerEnv("ORCHESTRATOR_PROVIDER_BUDGET_HARD_LIMIT_TOKENS", DEFAULT_PROVIDER_BUDGET_HARD_LIMIT_TOKENS),
+  );
+  return {
+    approvalThresholdTokens,
+    hardLimitTokens,
+  };
+}
+
+function readPositiveIntegerEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 export function evaluateServerRemoteRunPermission(request: RemoteExecutionRequest): ServerPermissionGateResult {
@@ -930,6 +996,7 @@ export function createProviderCompletionApprovalRequest(
     decision: permission.decision,
     state: permission.approvalState,
     reason: permission.reason,
+    costEstimateTokens: permission.costEstimateTokens,
     ttlSeconds: DEFAULT_APPROVAL_TTL_SECONDS,
     createdAt: now,
     expiresAt: addSecondsIso(now, DEFAULT_APPROVAL_TTL_SECONDS),
