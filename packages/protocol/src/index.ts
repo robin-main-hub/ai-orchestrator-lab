@@ -663,6 +663,161 @@ export type ProviderCompletionResponse = {
   createdAt: string;
 };
 
+export const agentDelegationEventTypeSchema = z.enum([
+  "agent.delegation.detected",
+  "agent.delegation.blocked",
+  "agent.delegation.unknown_target",
+  "agent.delegation.self_blocked",
+  "agent.delegation.dispatched",
+  "agent.delegation.succeeded",
+  "agent.delegation.failed",
+  "agent.delegation.followup.completed",
+  "agent.delegation.followup.failed",
+]);
+export type AgentDelegationEventType = z.infer<typeof agentDelegationEventTypeSchema>;
+
+export const agentDelegationAuthorityLevelSchema = z.enum(["agent", "orchestrator", "orchestrator_plus"]);
+export type AgentDelegationAuthorityLevel = z.infer<typeof agentDelegationAuthorityLevelSchema>;
+
+export const agentDelegationCompletionRouteSchema = z.enum(["server_proxy", "direct_provider", "local_fallback", "mock"]);
+export type AgentDelegationCompletionRoute = z.infer<typeof agentDelegationCompletionRouteSchema>;
+
+export const agentDelegationBasePayloadSchema = z
+  .object({
+    sourceAgentId: z.string().min(1),
+    sourceAgentName: z.string().optional(),
+    sourceRole: agentRoleSchema.optional(),
+    sourcePersonaName: z.string().optional(),
+    authorityLevel: agentDelegationAuthorityLevelSchema.optional(),
+    depthLimit: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+export type AgentDelegationBasePayload = z.infer<typeof agentDelegationBasePayloadSchema>;
+
+export const agentDelegationDetectedPayloadSchema = agentDelegationBasePayloadSchema
+  .extend({
+    sourceAgentName: z.string().min(1),
+    sourceRole: agentRoleSchema,
+    authorityLevel: agentDelegationAuthorityLevelSchema,
+    targets: z.array(z.string().min(1)).max(32),
+    count: z.number().int().nonnegative(),
+    depthLimit: z.number().int().nonnegative(),
+  })
+  .strict();
+export type AgentDelegationDetectedPayload = z.infer<typeof agentDelegationDetectedPayloadSchema>;
+
+export const agentDelegationBlockedPayloadSchema = agentDelegationBasePayloadSchema
+  .extend({
+    target: z.string().min(1),
+    reason: z.string().min(1).max(4_000),
+  })
+  .strict();
+export type AgentDelegationBlockedPayload = z.infer<typeof agentDelegationBlockedPayloadSchema>;
+
+export const agentDelegationUnknownTargetPayloadSchema = agentDelegationBasePayloadSchema
+  .extend({
+    target: z.string().min(1),
+    promptLength: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+export type AgentDelegationUnknownTargetPayload = z.infer<typeof agentDelegationUnknownTargetPayloadSchema>;
+
+export const agentDelegationSelfBlockedPayloadSchema = agentDelegationBasePayloadSchema
+  .extend({
+    target: z.string().min(1),
+  })
+  .strict();
+export type AgentDelegationSelfBlockedPayload = z.infer<typeof agentDelegationSelfBlockedPayloadSchema>;
+
+export const agentDelegationDispatchedPayloadSchema = agentDelegationBasePayloadSchema
+  .extend({
+    sourceAgentName: z.string().min(1),
+    targetAgentId: z.string().min(1),
+    targetAgentName: z.string().min(1),
+    targetRole: agentRoleSchema,
+    targetPersonaName: z.string().optional(),
+    providerProfileId: z.string().min(1),
+    modelId: z.string().min(1),
+    promptLength: z.number().int().nonnegative(),
+    authorityLevel: agentDelegationAuthorityLevelSchema,
+    depthLimit: z.number().int().nonnegative(),
+  })
+  .strict();
+export type AgentDelegationDispatchedPayload = z.infer<typeof agentDelegationDispatchedPayloadSchema>;
+
+export const agentDelegationSucceededPayloadSchema = agentDelegationBasePayloadSchema
+  .extend({
+    targetAgentId: z.string().min(1),
+    targetAgentName: z.string().min(1),
+    targetRole: agentRoleSchema,
+    providerProfileId: z.string().min(1),
+    modelId: z.string().min(1),
+    responseLength: z.number().int().nonnegative(),
+    route: agentDelegationCompletionRouteSchema.optional(),
+    realProviderCall: z.boolean().optional(),
+  })
+  .strict();
+export type AgentDelegationSucceededPayload = z.infer<typeof agentDelegationSucceededPayloadSchema>;
+
+export const agentDelegationFailedPayloadSchema = agentDelegationBasePayloadSchema
+  .extend({
+    targetAgentId: z.string().min(1),
+    targetAgentName: z.string().min(1),
+    targetRole: agentRoleSchema,
+    providerProfileId: z.string().min(1),
+    modelId: z.string().min(1),
+    error: z.string().min(1).max(20_000),
+  })
+  .strict();
+export type AgentDelegationFailedPayload = z.infer<typeof agentDelegationFailedPayloadSchema>;
+
+export const agentDelegationFollowupCompletedPayloadSchema = agentDelegationBasePayloadSchema
+  .extend({
+    sourceAgentName: z.string().min(1),
+    outcomeCount: z.number().int().nonnegative(),
+    succeededCount: z.number().int().nonnegative(),
+    blockedCount: z.number().int().nonnegative(),
+    responseLength: z.number().int().nonnegative(),
+  })
+  .strict();
+export type AgentDelegationFollowupCompletedPayload = z.infer<typeof agentDelegationFollowupCompletedPayloadSchema>;
+
+export const agentDelegationFollowupFailedPayloadSchema = agentDelegationBasePayloadSchema
+  .extend({
+    sourceAgentName: z.string().min(1),
+    outcomeCount: z.number().int().nonnegative(),
+    error: z.string().min(1).max(20_000),
+  })
+  .strict();
+export type AgentDelegationFollowupFailedPayload = z.infer<typeof agentDelegationFollowupFailedPayloadSchema>;
+
+export const agentDelegationEventPayloadSchemaByType = {
+  "agent.delegation.blocked": agentDelegationBlockedPayloadSchema,
+  "agent.delegation.detected": agentDelegationDetectedPayloadSchema,
+  "agent.delegation.dispatched": agentDelegationDispatchedPayloadSchema,
+  "agent.delegation.failed": agentDelegationFailedPayloadSchema,
+  "agent.delegation.followup.completed": agentDelegationFollowupCompletedPayloadSchema,
+  "agent.delegation.followup.failed": agentDelegationFollowupFailedPayloadSchema,
+  "agent.delegation.self_blocked": agentDelegationSelfBlockedPayloadSchema,
+  "agent.delegation.succeeded": agentDelegationSucceededPayloadSchema,
+  "agent.delegation.unknown_target": agentDelegationUnknownTargetPayloadSchema,
+} satisfies Record<AgentDelegationEventType, z.ZodTypeAny>;
+
+export type AgentDelegationEventPayload =
+  | AgentDelegationBlockedPayload
+  | AgentDelegationDetectedPayload
+  | AgentDelegationDispatchedPayload
+  | AgentDelegationFailedPayload
+  | AgentDelegationFollowupCompletedPayload
+  | AgentDelegationFollowupFailedPayload
+  | AgentDelegationSelfBlockedPayload
+  | AgentDelegationSucceededPayload
+  | AgentDelegationUnknownTargetPayload;
+
+export function parseAgentDelegationEventPayload(type: AgentDelegationEventType, payload: unknown) {
+  return agentDelegationEventPayloadSchemaByType[type].parse(payload) as AgentDelegationEventPayload;
+}
+
 export const permissionLevelSchema = z.enum([
   "read_only",
   "write_files",
