@@ -64,7 +64,7 @@ export async function requestDgxVllmCompletion({
   fetchImpl = fetch,
   proxyBaseUrl,
   proxyTimeoutMs = 30_000,
-  allowDirectFallback = true,
+  allowDirectFallback = false,
   approvalState,
   permissionDecision,
 }: Stage12DgxCompletionInput): Promise<Stage12DgxCompletionResult> {

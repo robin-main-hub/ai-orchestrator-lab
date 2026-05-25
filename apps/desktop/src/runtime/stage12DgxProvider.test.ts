@@ -114,7 +114,29 @@ describe("stage12 DGX provider completion", () => {
     expect(result.usage?.totalTokens).toBe(20);
   });
 
-  it("falls back to the direct DGX provider when the server proxy is unavailable", async () => {
+  it("does not direct-fallback by default when the DGX server proxy is unavailable", async () => {
+    const calls: string[] = [];
+    const fetchImpl = async (url: RequestInfo | URL) => {
+      calls.push(String(url));
+      return new Response(JSON.stringify({ error: "proxy offline" }), { status: 502 });
+    };
+
+    await expect(
+      requestDgxVllmCompletion({
+        provider,
+        modelId: "qwen36-domain-lora-v5-prisma",
+        messages,
+        fetchImpl,
+      }),
+    ).rejects.toThrow("DGX-02 server proxy failed");
+
+    expect(calls).toEqual([
+      `${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`,
+      `${ENDRUIN_ORCHESTRATOR_BASE_URL}/provider-completions`,
+    ]);
+  });
+
+  it("falls back to the direct DGX provider only when explicitly allowed", async () => {
     const calls: string[] = [];
     const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
       calls.push(String(url));
@@ -137,6 +159,7 @@ describe("stage12 DGX provider completion", () => {
       modelId: "qwen36-domain-lora-v5-prisma",
       messages,
       fetchImpl,
+      allowDirectFallback: true,
     });
 
     expect(calls).toEqual([
