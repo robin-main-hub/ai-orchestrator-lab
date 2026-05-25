@@ -47,6 +47,8 @@ import type {
   RuntimeSnapshot,
   SecretAvailability,
   SourceTrust,
+  TerminalCommandEventPayload,
+  TerminalCommandEventType,
   TerminalCommandIntent,
   TerminalCommandDispatchState,
   TerminalHostKind,
@@ -59,6 +61,7 @@ import {
   approvalRequestSchema,
   eventSyncPushRequestSchema,
   parseAgentDelegationEventPayload,
+  parseTerminalCommandEventPayload,
   providerCompletionRequestSchema,
   remoteExecutionRequestSchema,
   terminalCommandIntentSchema,
@@ -183,7 +186,7 @@ export type ServerApprovalReplayResponse =
       status: "replayed";
       approval: ApprovalRequest;
       replay: ApprovalReplayRequest;
-      result: ServerAgentDelegationExecuteResponse;
+      result: ServerAgentDelegationExecuteResponse | ServerTmuxDispatchResponse;
       eventSync?: EventSyncPushResponse;
     }
   | {
@@ -1783,6 +1786,7 @@ export async function recordServerTmuxDispatchToPersistentServerStorage(
   if (
     dispatch.status === "sent" ||
     dispatch.status === "failed" ||
+    dispatch.status === "dry_run" ||
     (dispatch.status === "blocked" && snapshot.permission.decision === "allow" && request.dispatchMode === "execute_if_approved")
   ) {
     const dispatchEvent =
@@ -1790,7 +1794,9 @@ export async function recordServerTmuxDispatchToPersistentServerStorage(
         ? createTmuxCommandSentEvent(snapshot.intent, dispatch, request.role, request.host, now)
         : dispatch.status === "failed"
           ? createTmuxCommandFailedEvent(snapshot.intent, dispatch, request.role, request.host, now)
-          : createTmuxCommandBlockedEvent(snapshot.intent, dispatch.reason, request.role, request.host, now);
+          : dispatch.status === "dry_run"
+            ? createTmuxCommandDryRunEvent(snapshot.intent, dispatch, request.role, request.host, now)
+            : createTmuxCommandBlockedEvent(snapshot.intent, dispatch.reason, request.role, request.host, now);
     dispatchEventSync = await pushEventsToPersistentServerStorage(
       createTmuxDispatchEventSyncRequest(request, [dispatchEvent], now),
       storage,
@@ -2139,6 +2145,25 @@ export async function replayApprovedRequestFromPersistentServerStorage(
         status: "not_replayed",
         reason: "approval_has_no_replay_payload",
         approval,
+      },
+    };
+  }
+
+  if (approval.replay.kind === "tmux_dispatch") {
+    const dispatchRequest = parseServerTmuxDispatchRequest({
+      ...(approval.replay.payload as Record<string, unknown>),
+      approvalState: "approved",
+    });
+    const result = await recordServerTmuxDispatchToPersistentServerStorage(dispatchRequest, storage, now);
+
+    return {
+      statusCode: 202,
+      payload: {
+        status: "replayed",
+        approval,
+        replay: approval.replay,
+        result,
+        eventSync: result.dispatchEventSync ?? result.eventSync,
       },
     };
   }
@@ -3040,6 +3065,20 @@ function createTmuxDispatchApprovalRequest(
     ttlSeconds: DEFAULT_APPROVAL_TTL_SECONDS,
     createdAt: now,
     expiresAt: addSecondsIso(now, DEFAULT_APPROVAL_TTL_SECONDS),
+    replay: createTmuxDispatchApprovalReplay(request),
+  };
+}
+
+function createTmuxDispatchApprovalReplay(request: ServerTmuxDispatchRequest): ApprovalReplayRequest {
+  return {
+    kind: "tmux_dispatch",
+    endpoint: "/tmux/dispatch",
+    method: "POST",
+    payload: {
+      ...request,
+      approvalState: "approved",
+      dispatchMode: request.dispatchMode,
+    } satisfies ServerTmuxDispatchRequest,
   };
 }
 
@@ -3057,22 +3096,44 @@ function createTmuxCommandIntentEvent(
   host: TerminalHostKind,
   tmuxSessionName: string,
 ): EventEnvelope {
-  return {
-    id: `event_tmux_intent_${intent.id}`,
-    sessionId: intent.sessionId,
-    type: "terminal.command.intent.created",
-    payload: {
+  return createTerminalCommandEvent(
+    "terminal.command.intent.created",
+    {
       intent,
       role,
       host,
       tmuxSessionName,
       rawCommandQuarantined: true,
     },
-    createdAt: intent.createdAt,
+    {
+      id: `event_tmux_intent_${intent.id}`,
+      sessionId: intent.sessionId,
+      createdAt: intent.createdAt,
+      correlationId: intent.id,
+    },
+  );
+}
+
+function createTerminalCommandEvent(
+  type: TerminalCommandEventType,
+  payload: TerminalCommandEventPayload,
+  options: {
+    id: string;
+    sessionId: string;
+    createdAt: string;
+    correlationId: string;
+  },
+): EventEnvelope {
+  return {
+    id: options.id,
+    sessionId: options.sessionId,
+    type,
+    payload: parseTerminalCommandEventPayload(type, payload),
+    createdAt: options.createdAt,
     source: "server",
     sourceTrust: "trusted",
     redacted: true,
-    correlationId: intent.id,
+    correlationId: options.correlationId,
   };
 }
 
@@ -3083,11 +3144,9 @@ function createTmuxCommandBlockedEvent(
   host: TerminalHostKind,
   createdAt: string,
 ): EventEnvelope {
-  return {
-    id: `event_tmux_blocked_${intent.id}_${stableServerId(reason)}`,
-    sessionId: intent.sessionId,
-    type: "terminal.command.blocked",
-    payload: {
+  return createTerminalCommandEvent(
+    "terminal.command.blocked",
+    {
       intentId: intent.id,
       terminalSessionId: intent.terminalSessionId,
       paneId: intent.paneId,
@@ -3096,12 +3155,41 @@ function createTmuxCommandBlockedEvent(
       reason,
       redactedCommandPreview: intent.redactedCommandPreview,
     },
-    createdAt,
-    source: "server",
-    sourceTrust: "trusted",
-    redacted: true,
-    correlationId: intent.id,
-  };
+    {
+      id: `event_tmux_blocked_${intent.id}_${stableServerId(reason)}`,
+      sessionId: intent.sessionId,
+      createdAt,
+      correlationId: intent.id,
+    },
+  );
+}
+
+function createTmuxCommandDryRunEvent(
+  intent: TerminalCommandIntent,
+  dispatch: ServerTmuxDispatchResult,
+  role: TmuxPaneRole,
+  host: TerminalHostKind,
+  createdAt: string,
+): EventEnvelope {
+  return createTerminalCommandEvent(
+    "terminal.command.dry_run",
+    {
+      intentId: intent.id,
+      terminalSessionId: intent.terminalSessionId,
+      paneId: intent.paneId,
+      role,
+      host,
+      reason: dispatch.reason,
+      attempted: false,
+      redactedCommandPreview: intent.redactedCommandPreview,
+    },
+    {
+      id: `event_tmux_dry_run_${intent.id}_${stableServerId(createdAt)}`,
+      sessionId: intent.sessionId,
+      createdAt,
+      correlationId: intent.id,
+    },
+  );
 }
 
 function createTmuxCommandSentEvent(
@@ -3111,11 +3199,9 @@ function createTmuxCommandSentEvent(
   host: TerminalHostKind,
   createdAt: string,
 ): EventEnvelope {
-  return {
-    id: `event_tmux_sent_${intent.id}_${stableServerId(createdAt)}`,
-    sessionId: intent.sessionId,
-    type: "terminal.command.sent",
-    payload: {
+  return createTerminalCommandEvent(
+    "terminal.command.sent",
+    {
       intentId: intent.id,
       terminalSessionId: intent.terminalSessionId,
       paneId: intent.paneId,
@@ -3124,12 +3210,13 @@ function createTmuxCommandSentEvent(
       stdoutPreview: dispatch.stdoutPreview,
       stderrPreview: dispatch.stderrPreview,
     },
-    createdAt,
-    source: "server",
-    sourceTrust: "trusted",
-    redacted: true,
-    correlationId: intent.id,
-  };
+    {
+      id: `event_tmux_sent_${intent.id}_${stableServerId(createdAt)}`,
+      sessionId: intent.sessionId,
+      createdAt,
+      correlationId: intent.id,
+    },
+  );
 }
 
 function createTmuxCommandFailedEvent(
@@ -3139,11 +3226,9 @@ function createTmuxCommandFailedEvent(
   host: TerminalHostKind,
   createdAt: string,
 ): EventEnvelope {
-  return {
-    id: `event_tmux_failed_${intent.id}_${stableServerId(dispatch.reason)}`,
-    sessionId: intent.sessionId,
-    type: "terminal.command.failed",
-    payload: {
+  return createTerminalCommandEvent(
+    "terminal.command.failed",
+    {
       intentId: intent.id,
       terminalSessionId: intent.terminalSessionId,
       paneId: intent.paneId,
@@ -3153,12 +3238,13 @@ function createTmuxCommandFailedEvent(
       stdoutPreview: dispatch.stdoutPreview,
       stderrPreview: dispatch.stderrPreview,
     },
-    createdAt,
-    source: "server",
-    sourceTrust: "trusted",
-    redacted: true,
-    correlationId: intent.id,
-  };
+    {
+      id: `event_tmux_failed_${intent.id}_${stableServerId(dispatch.reason)}`,
+      sessionId: intent.sessionId,
+      createdAt,
+      correlationId: intent.id,
+    },
+  );
 }
 
 function createTmuxDispatchEventSyncRequest(
@@ -3208,7 +3294,7 @@ async function dispatchServerTmuxCommandIfAllowed(
   if (process.env.ORCHESTRATOR_TMUX_DRY_RUN === "1") {
     return {
       attempted: false,
-      status: "recorded",
+      status: "dry_run",
       reason: "ORCHESTRATOR_TMUX_DRY_RUN accepted approved tmux dispatch without send-keys",
     };
   }

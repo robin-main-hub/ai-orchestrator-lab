@@ -1449,7 +1449,14 @@ export type TerminalSessionStatus = z.infer<typeof terminalSessionStatusSchema>;
 export const terminalPaneStatusSchema = z.enum(["planned", "idle", "running", "blocked", "capturing", "stale", "closed"]);
 export type TerminalPaneStatus = z.infer<typeof terminalPaneStatusSchema>;
 
-export const terminalCommandDispatchStateSchema = z.enum(["recorded", "pending_approval", "blocked", "sent", "failed"]);
+export const terminalCommandDispatchStateSchema = z.enum([
+  "recorded",
+  "pending_approval",
+  "blocked",
+  "dry_run",
+  "sent",
+  "failed",
+]);
 export type TerminalCommandDispatchState = z.infer<typeof terminalCommandDispatchStateSchema>;
 
 export const tmuxSessionRefSchema = z.object({
@@ -1515,9 +1522,98 @@ export type TerminalPaneOutputCapturedEventPayload = {
   capturedAt: string;
 };
 
-export type TerminalCommandIntentEventPayload = {
-  intent: TerminalCommandIntent;
-};
+export const terminalCommandEventTypeSchema = z.enum([
+  "terminal.command.intent.created",
+  "terminal.command.blocked",
+  "terminal.command.dry_run",
+  "terminal.command.sent",
+  "terminal.command.failed",
+]);
+export type TerminalCommandEventType = z.infer<typeof terminalCommandEventTypeSchema>;
+
+export const terminalCommandIntentEventPayloadSchema = z
+  .object({
+    intent: terminalCommandIntentSchema,
+    role: tmuxPaneRoleSchema,
+    host: terminalHostKindSchema,
+    tmuxSessionName: z.string(),
+    rawCommandQuarantined: z.boolean(),
+  })
+  .strict();
+export type TerminalCommandIntentEventPayload = z.infer<typeof terminalCommandIntentEventPayloadSchema>;
+
+export const terminalCommandBlockedEventPayloadSchema = z
+  .object({
+    intentId: z.string(),
+    terminalSessionId: z.string(),
+    paneId: z.string(),
+    role: tmuxPaneRoleSchema,
+    host: terminalHostKindSchema,
+    reason: z.string(),
+    redactedCommandPreview: z.string(),
+  })
+  .strict();
+export type TerminalCommandBlockedEventPayload = z.infer<typeof terminalCommandBlockedEventPayloadSchema>;
+
+export const terminalCommandDryRunEventPayloadSchema = z
+  .object({
+    intentId: z.string(),
+    terminalSessionId: z.string(),
+    paneId: z.string(),
+    role: tmuxPaneRoleSchema,
+    host: terminalHostKindSchema,
+    reason: z.string(),
+    attempted: z.literal(false),
+    redactedCommandPreview: z.string(),
+  })
+  .strict();
+export type TerminalCommandDryRunEventPayload = z.infer<typeof terminalCommandDryRunEventPayloadSchema>;
+
+export const terminalCommandSentEventPayloadSchema = z
+  .object({
+    intentId: z.string(),
+    terminalSessionId: z.string(),
+    paneId: z.string(),
+    role: tmuxPaneRoleSchema,
+    host: terminalHostKindSchema,
+    stdoutPreview: z.string().optional(),
+    stderrPreview: z.string().optional(),
+  })
+  .strict();
+export type TerminalCommandSentEventPayload = z.infer<typeof terminalCommandSentEventPayloadSchema>;
+
+export const terminalCommandFailedEventPayloadSchema = terminalCommandSentEventPayloadSchema
+  .extend({
+    reason: z.string(),
+  })
+  .strict();
+export type TerminalCommandFailedEventPayload = z.infer<typeof terminalCommandFailedEventPayloadSchema>;
+
+export type TerminalCommandEventPayload =
+  | TerminalCommandIntentEventPayload
+  | TerminalCommandBlockedEventPayload
+  | TerminalCommandDryRunEventPayload
+  | TerminalCommandSentEventPayload
+  | TerminalCommandFailedEventPayload;
+
+export function parseTerminalCommandEventPayload(
+  type: TerminalCommandEventType,
+  payload: unknown,
+): TerminalCommandEventPayload {
+  if (type === "terminal.command.intent.created") {
+    return terminalCommandIntentEventPayloadSchema.parse(payload);
+  }
+  if (type === "terminal.command.blocked") {
+    return terminalCommandBlockedEventPayloadSchema.parse(payload);
+  }
+  if (type === "terminal.command.dry_run") {
+    return terminalCommandDryRunEventPayloadSchema.parse(payload);
+  }
+  if (type === "terminal.command.sent") {
+    return terminalCommandSentEventPayloadSchema.parse(payload);
+  }
+  return terminalCommandFailedEventPayloadSchema.parse(payload);
+}
 
 export type RunRequestedEventPayload = {
   runId: string;

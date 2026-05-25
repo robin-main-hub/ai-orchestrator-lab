@@ -21,7 +21,9 @@ import {
   projectAgentDelegationTimeline,
   providerProfileSchema,
   redactionRuleSchema,
+  parseTerminalCommandEventPayload,
   terminalCommandIntentSchema,
+  terminalCommandEventTypeSchema,
   terminalPaneSchema,
   tmuxSessionRefSchema,
   workItemHandoffSchema,
@@ -904,6 +906,80 @@ describe("protocol schemas", () => {
     expect(pane.role).toBe("research");
     expect(intent.dispatchState).toBe("pending_approval");
     expect(captured.redactionApplied).toBe(true);
+  });
+
+  it("validates tmux command audit events before persistence", () => {
+    const base = {
+      intentId: "terminal_intent_1",
+      terminalSessionId: "terminal_session_ai_swarm",
+      paneId: "%8",
+      role: "research",
+      host: "local_mac",
+    };
+    const intent = terminalCommandIntentSchema.parse({
+      id: base.intentId,
+      sessionId: "session_1",
+      terminalSessionId: base.terminalSessionId,
+      paneId: base.paneId,
+      requestedBy: "agent",
+      commandPreview: "codex 'dry run this'",
+      redactedCommandPreview: "codex 'dry run this'",
+      requestedPermissions: ["run_safe_commands"],
+      approvalState: "approved",
+      dispatchState: "dry_run",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+    const cases = [
+      {
+        type: "terminal.command.intent.created",
+        payload: {
+          intent,
+          role: "research",
+          host: "local_mac",
+          tmuxSessionName: "ai-swarm",
+          rawCommandQuarantined: true,
+        },
+      },
+      {
+        type: "terminal.command.blocked",
+        payload: {
+          ...base,
+          reason: "approval required",
+          redactedCommandPreview: "codex 'dry run this'",
+        },
+      },
+      {
+        type: "terminal.command.dry_run",
+        payload: {
+          ...base,
+          reason: "dry run",
+          attempted: false,
+          redactedCommandPreview: "codex 'dry run this'",
+        },
+      },
+      {
+        type: "terminal.command.sent",
+        payload: {
+          ...base,
+          stdoutPreview: "ok",
+          stderrPreview: "",
+        },
+      },
+      {
+        type: "terminal.command.failed",
+        payload: {
+          ...base,
+          reason: "script failed",
+          stdoutPreview: "",
+          stderrPreview: "no tmux",
+        },
+      },
+    ] as const;
+
+    for (const event of cases) {
+      const type = terminalCommandEventTypeSchema.parse(event.type);
+      expect(() => parseTerminalCommandEventPayload(type, event.payload)).not.toThrow();
+    }
   });
 
   it("models provider credential parsing and model discovery without raw keys", () => {
