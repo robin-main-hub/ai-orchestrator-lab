@@ -67,6 +67,16 @@ describe("stage29 local client event cache", () => {
     expect(await secondStore.listUnsynced()).toHaveLength(0);
   });
 
+  it("does not resurrect a projected event when the local cache re-appends it", async () => {
+    const store = createLocalClientEventCache();
+
+    await store.append(eventA);
+    await store.markProjected(["event_a"], "dgx-02");
+    await store.append(eventA);
+
+    expect(await store.listUnsynced()).toHaveLength(0);
+  });
+
   it("is the single client projection outbox source for unsynced events", async () => {
     const outbox = mergeClientEventOutboxEvents([eventA], [eventA, eventB]);
     const snapshot = createLocalClientOutboxSnapshot(outbox, "client_macbook", "dgx-02", "2026-05-24T00:02:00.000Z");
