@@ -88,7 +88,7 @@ describe("stage13 DGX server probing", () => {
           runtime: {
             ...localRuntime,
             dgxStatus: "online",
-            runtimeNodes: [{ ...localRuntime.runtimeNodes[0]!, status: "online", models: ["qwen36-domain-wiki-rag-prisma"] }],
+            runtimeNodes: [{ ...localRuntime.runtimeNodes[0]!, status: "online", models: ["qwen36-domain-lora-v5-prisma"] }],
             syncTopology: {
               ...localRuntime.syncTopology,
               clients: [{ ...localRuntime.syncTopology.clients[2]!, status: "online", outboxCount: 0 }],
@@ -112,14 +112,14 @@ describe("stage13 DGX server probing", () => {
         providerProfileId: "provider_dgx02_vllm",
         status: "succeeded",
         source: "remote_probe",
-        selectedModelId: "qwen36-domain-wiki-rag-prisma",
+        selectedModelId: "qwen36-domain-lora-v5-prisma",
         redactionApplied: true,
         warnings: [],
         createdAt: "2026-05-24T00:01:00.000Z",
         models: [
           {
-            id: "qwen36-domain-wiki-rag-prisma",
-            name: "qwen36-domain-wiki-rag-prisma",
+            id: "qwen36-domain-lora-v5-prisma",
+            name: "qwen36-domain-lora-v5-prisma",
             providerProfileId: "provider_dgx02_vllm",
             supportsStreaming: true,
             supportsTools: false,
@@ -140,7 +140,7 @@ describe("stage13 DGX server probing", () => {
     expect(probe.runtime.dgxStatus).toBe("online");
     expect(probe.eventStorage?.mode).toBe("jsonl");
     expect(probe.eventStorage?.revision).toBe(42);
-    expect(probe.modelDiscovery?.models[0]?.id).toBe("qwen36-domain-wiki-rag-prisma");
+    expect(probe.modelDiscovery?.models[0]?.id).toBe("qwen36-domain-lora-v5-prisma");
   });
 
   it("keeps the desktop in local fallback when dgx-02:4317 is unavailable", async () => {
@@ -226,8 +226,8 @@ describe("stage13 DGX server probing", () => {
               baseUrl: "http://dgx-02:8001/v1",
               trustLevel: "trusted",
               tags: ["dgx", "vllm", "no-auth"],
-              defaultModelIds: ["qwen36-domain-wiki-rag-prisma"],
-              selectedModelId: "qwen36-domain-wiki-rag-prisma",
+              defaultModelIds: ["qwen36-domain-lora-v5-prisma"],
+              selectedModelId: "qwen36-domain-lora-v5-prisma",
               supportsModelList: true,
               apiStyle: "openai_chat",
               authMode: "none",
