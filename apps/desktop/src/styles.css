@@ -3372,6 +3372,198 @@ button {
   white-space: pre-wrap;
 }
 
+/* ── Stage 2-6 Tmux block model UI — Warp timeline per pane ── */
+
+.tmux-pane-timeline {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #00171c;
+}
+
+.tmux-pane-timeline__head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--subtle);
+  font-size: 10px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tmux-pane-timeline__head em {
+  margin-left: auto;
+  color: var(--muted);
+  font-style: normal;
+}
+
+.tmux-pane-timeline__empty {
+  margin: 0;
+  padding: 6px 4px;
+  color: var(--subtle);
+  font-size: 9.5px;
+  text-align: center;
+}
+
+.tmux-pane-timeline__list {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tmux-block {
+  display: grid;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--line-soft);
+  border-radius: 5px;
+  background: rgba(0, 47, 56, 0.4);
+}
+
+.tmux-block--ok {
+  border-left-color: var(--cyan);
+}
+
+.tmux-block--warn {
+  border-left-color: var(--amber);
+}
+
+.tmux-block--bad {
+  border-left-color: var(--rose);
+}
+
+.tmux-block--neutral {
+  border-left-color: rgba(255, 255, 255, 0.16);
+}
+
+.tmux-block__head {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.tmux-block__head:disabled {
+  cursor: default;
+}
+
+.tmux-block__stamp {
+  color: var(--subtle);
+  font-size: 9px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+}
+
+.tmux-block__kind-icon {
+  color: var(--muted);
+}
+
+.tmux-block__kind-label {
+  color: var(--subtle);
+  font-size: 9px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tmux-block__title {
+  color: var(--text);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tmux-block__status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.tmux-block__status-dot--ok {
+  background: var(--cyan);
+}
+
+.tmux-block__status-dot--warn {
+  background: var(--amber);
+  box-shadow: 0 0 4px rgba(245, 191, 92, 0.6);
+}
+
+.tmux-block__status-dot--bad {
+  background: var(--rose);
+  box-shadow: 0 0 4px rgba(255, 95, 109, 0.6);
+}
+
+.tmux-block__status-dot--neutral {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.tmux-block__chevron {
+  color: var(--subtle);
+  transition: transform 140ms ease;
+}
+
+.tmux-block__chevron--closed {
+  transform: rotate(-90deg);
+}
+
+.tmux-block__detail {
+  display: grid;
+  gap: 4px;
+  margin-top: 3px;
+  padding: 5px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.tmux-block__summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.32;
+}
+
+.tmux-block__output {
+  margin: 0;
+  padding: 5px 6px;
+  max-height: 72px;
+  overflow: auto;
+  border-radius: 4px;
+  background: #000;
+  color: var(--muted);
+  font: 9.5px/1.35 var(--mono);
+  white-space: pre-wrap;
+}
+
+.tmux-block__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--subtle);
+  font-size: 9px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+}
+
+.tmux-block__meta em {
+  color: var(--rose);
+  font-style: normal;
+}
+
 .tmux-decision-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
