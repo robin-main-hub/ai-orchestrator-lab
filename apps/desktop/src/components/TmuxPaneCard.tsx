@@ -1,9 +1,25 @@
-import { Eye, Loader2, SendHorizontal } from "lucide-react";
+import { Eye, Loader2, Send } from "lucide-react";
 import type { TerminalTimelineBlock } from "@ai-orchestrator/protocol";
 import type { AgentVisualSettings, WorkbenchAgent } from "../types";
 import { agentRoleLabel } from "../lib/helpers";
+import { cn } from "@/lib/utils";
+import { Button } from "@/ui/button";
 import { AgentAvatar } from "./AgentAvatar";
 import { TmuxPaneTimeline } from "./TmuxPaneTimeline";
+
+/**
+ * Tmux pane card — strict v0 port.
+ * source: docs/v0/v0-output/components/tmux/agent-pane.tsx
+ *
+ * Layout:
+ *   header: avatar + subtitle/title + status badge
+ *   role description row
+ *   agent assignment row (name / model)
+ *   signal text line
+ *   command input row (input + 읽기 + 보내기)
+ *   optional output preview
+ *   optional Warp-style timeline blocks
+ */
 
 export function TmuxPaneCard({
   busy,
@@ -35,43 +51,136 @@ export function TmuxPaneCard({
   timelineBlocks?: TerminalTimelineBlock[];
   visual?: AgentVisualSettings;
 }) {
+  const isIdle = pane.state === "idle";
   return (
-    <article className="tmux-pane-card">
-      <header>
-        <AgentAvatar agent={pane.agent} size="medium" visual={visual} />
-        <div>
-          <span>{pane.id}</span>
-          <strong>{pane.title}</strong>
+    <div className="flex flex-col rounded-lg border border-border bg-card">
+      {/* Header: avatar + title + status */}
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <AgentAvatar agent={pane.agent} size="small" visual={visual} />
+          <div className="min-w-0">
+            <div className="truncate text-[10px] text-muted-foreground">
+              {pane.id}
+            </div>
+            <div className="truncate text-sm font-medium text-foreground">
+              {pane.title}
+            </div>
+          </div>
         </div>
-        <em>{pane.state}</em>
-      </header>
-      <p>{pane.role}</p>
-      <div className="tmux-pane-agent-line">
-        <strong>{pane.agent ? pane.agent.name : "담당 agent 미정"}</strong>
-        <span>{pane.agent ? agentRoleLabel(pane.agent.role) : "future slot"}</span>
-        <small>{pane.agent?.modelId ?? "model pending"}</small>
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center rounded-full border px-1.5 py-0 text-[9px] font-mono",
+            stateToneClasses(pane.state),
+          )}
+        >
+          {pane.state}
+        </span>
       </div>
-      <code>{pane.signal}</code>
+
+      {/* Role description */}
+      <div className="border-b border-border/50 px-3 py-2">
+        <p className="text-[10px] text-muted-foreground line-clamp-2">{pane.role}</p>
+      </div>
+
+      {/* Agent assignment */}
+      <div className="flex items-center justify-between gap-2 border-b border-border/50 px-3 py-2">
+        <div className="min-w-0">
+          <span className="text-[10px] text-muted-foreground">
+            {pane.agent ? agentRoleLabel(pane.agent.role) : "future slot"}
+          </span>
+          <div className="truncate text-[11px] font-medium text-foreground">
+            {pane.agent?.name ?? "담당 agent 미정"}
+          </div>
+        </div>
+        <span className="text-[10px] font-mono text-muted-foreground">
+          {pane.agent?.modelId ?? "model pending"}
+        </span>
+      </div>
+
+      {/* Signal text */}
+      <p className="px-3 py-2 text-[10px] text-muted-foreground line-clamp-2">
+        {pane.signal}
+      </p>
+
+      {/* Command controls */}
       {onCapture || onDispatch ? (
-        <div className="tmux-pane-controls">
-          <input
-            aria-label={`${pane.title} command preview`}
-            onChange={(event) => onCommandDraftChange?.(event.target.value)}
-            placeholder="명령 의도"
-            value={commandDraft ?? ""}
-          />
-          <button aria-label={`${pane.title} capture`} disabled={Boolean(busy)} onClick={onCapture} type="button">
-            {busy === "capture" ? <Loader2 size={13} /> : <Eye size={13} />}
-            <span>읽기</span>
-          </button>
-          <button aria-label={`${pane.title} dispatch`} disabled={Boolean(busy)} onClick={onDispatch} type="button">
-            {busy === "dispatch" ? <Loader2 size={13} /> : <SendHorizontal size={13} />}
-            <span>보내기</span>
-          </button>
+        <div className="border-t border-border p-2">
+          <div className="flex items-center gap-1">
+            <input
+              aria-label={`${pane.title} command preview`}
+              className={cn(
+                "h-7 flex-1 min-w-0 rounded-md border border-border bg-card/40 px-2 font-mono text-[10px] text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none",
+                isIdle && "cursor-not-allowed opacity-50",
+              )}
+              disabled={isIdle}
+              onChange={(event) => onCommandDraftChange?.(event.target.value)}
+              placeholder={isIdle ? "" : "codex 'command...'"}
+              value={commandDraft ?? ""}
+            />
+            <Button
+              aria-label={`${pane.title} capture`}
+              className="h-7 gap-1 px-2 text-[10px]"
+              disabled={Boolean(busy) || isIdle}
+              onClick={onCapture}
+              size="sm"
+              variant="ghost"
+            >
+              {busy === "capture" ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Eye className="h-3 w-3" />
+              )}
+              읽기
+            </Button>
+            <Button
+              aria-label={`${pane.title} dispatch`}
+              className="h-7 gap-1 px-2 text-[10px] text-primary"
+              disabled={Boolean(busy) || isIdle}
+              onClick={onDispatch}
+              size="sm"
+              variant="ghost"
+            >
+              {busy === "dispatch" ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Send className="h-3 w-3" />
+              )}
+              보내기
+            </Button>
+          </div>
         </div>
       ) : null}
-      {lastOutput ? <pre className="tmux-pane-output">{lastOutput}</pre> : null}
-      {timelineBlocks ? <TmuxPaneTimeline blocks={timelineBlocks} /> : null}
-    </article>
+
+      {/* Output preview */}
+      {lastOutput ? (
+        <pre className="mx-2 mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded border border-border bg-background/60 p-2 font-mono text-[10px] text-muted-foreground">
+          {lastOutput}
+        </pre>
+      ) : null}
+
+      {/* Timeline blocks (Stage 2-6) */}
+      {timelineBlocks ? (
+        <div className="mx-2 mb-2">
+          <TmuxPaneTimeline blocks={timelineBlocks} />
+        </div>
+      ) : null}
+    </div>
   );
+}
+
+function stateToneClasses(state: string): string {
+  if (state === "chat active" || state === "active") {
+    return "border-primary/45 text-primary bg-primary/10";
+  }
+  if (state === "ready") {
+    return "border-success/45 text-success bg-success/10";
+  }
+  if (state === "dispatch gated" || state === "pending_approval") {
+    return "border-warning/45 text-warning bg-warning/10";
+  }
+  if (state === "guarding" || state === "failed" || state === "dispatch failed") {
+    return "border-destructive/45 text-destructive bg-destructive/10";
+  }
+  // idle / watch only / default
+  return "border-border text-muted-foreground bg-card/40";
 }
