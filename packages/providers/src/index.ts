@@ -715,7 +715,7 @@ function createDiscoveredModels(profile: ProviderProfile): ModelDescriptor[] {
             ? [
                 profile.defaultModel ?? "qwen36-heretic",
                 "qwen36-heretic",
-                "qwen36-domain-wiki-rag-prisma",
+                "qwen36-domain-lora-v5-prisma",
               ]
             : profile.tags.includes("cli")
       ? [
@@ -735,8 +735,8 @@ function createDiscoveredModels(profile: ProviderProfile): ModelDescriptor[] {
           ]
         : profile.tags.includes("dgx") || profile.tags.includes("vllm")
       ? [
-          profile.defaultModel ?? "qwen36-domain-wiki-rag-prisma",
-          "qwen36-domain-wiki-rag-prisma",
+          profile.defaultModel ?? "qwen36-domain-lora-v5-prisma",
+          "qwen36-domain-lora-v5-prisma",
         ]
       : profile.kind === "openrouter"
       ? [
