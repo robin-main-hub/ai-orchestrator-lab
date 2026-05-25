@@ -24,6 +24,7 @@ export function OperationsRailPanel({
   onImportTelegram,
   onRefreshApprovals,
   onResolveServerApproval,
+  pendingTmuxApprovalKeys = [],
   permissionSnapshot,
   providerReadiness,
   secretVaultSnapshot,
@@ -39,12 +40,18 @@ export function OperationsRailPanel({
   onImportTelegram: () => void;
   onRefreshApprovals: () => void;
   onResolveServerApproval: (approval: ApprovalRequest, state: Extract<ApprovalState, "approved" | "rejected">) => void;
+  pendingTmuxApprovalKeys?: string[];
   permissionSnapshot: PermissionMatrixSnapshot;
   providerReadiness: ProviderRuntimeReadiness;
   secretVaultSnapshot: SecretVaultSnapshot;
 }) {
   const serverPending = approvalServerSnapshot?.queue.length ?? 0;
   const visibleApprovals = approvalServerSnapshot?.approvals.filter((approval) => approval.state === "required").slice(0, 4) ?? [];
+  const pendingTmuxApprovalKeySet = new Set(pendingTmuxApprovalKeys);
+  const tmuxRedispatchPending = visibleApprovals.filter((approval) =>
+    pendingTmuxApprovalKeySet.has(approval.id) ||
+    (approval.sourceItemId ? pendingTmuxApprovalKeySet.has(approval.sourceItemId) : false),
+  ).length;
   const auditItems: WindowAuditItem[] = [
     {
       id: "permission",
@@ -120,7 +127,11 @@ export function OperationsRailPanel({
       <div className="server-approval-queue">
         <header>
           <span>DGX 승인 큐</span>
-          <strong>{approvalServerStatus === "loading" ? "loading" : `${serverPending} pending`}</strong>
+          <strong>
+            {approvalServerStatus === "loading"
+              ? "loading"
+              : `${serverPending} pending${tmuxRedispatchPending > 0 ? ` / ${tmuxRedispatchPending} tmux` : ""}`}
+          </strong>
         </header>
         {approvalError ? <p className="server-approval-error">{approvalError}</p> : null}
         {visibleApprovals.length === 0 ? (
@@ -129,11 +140,23 @@ export function OperationsRailPanel({
           </p>
         ) : (
           visibleApprovals.map((approval) => (
-            <article key={approval.id}>
+            <article
+              className={
+                pendingTmuxApprovalKeySet.has(approval.id) ||
+                (approval.sourceItemId ? pendingTmuxApprovalKeySet.has(approval.sourceItemId) : false)
+                  ? "server-approval-queue-tmux"
+                  : undefined
+              }
+              key={approval.id}
+            >
               <div>
                 <strong>{approval.action}</strong>
                 <span>{approval.reason}</span>
                 <small>{approval.requestedLevels.join(", ") || "policy review"}</small>
+                {pendingTmuxApprovalKeySet.has(approval.id) ||
+                (approval.sourceItemId ? pendingTmuxApprovalKeySet.has(approval.sourceItemId) : false) ? (
+                  <em>승인 후 tmux 재전송</em>
+                ) : null}
               </div>
               <div className="server-approval-actions">
                 <button
