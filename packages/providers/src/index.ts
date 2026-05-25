@@ -47,6 +47,11 @@ export {
   STANDARD_CONTRACT_CASES,
   type ContractExpectation,
 } from "./contractTestFixtures.js";
+export {
+  createOllamaMessages,
+  OllamaAdapter,
+  type OllamaAdapterOptions,
+} from "./ollamaAdapter.js";
 
 /**
  * @deprecated The legacy adapter shape. New adapters should implement
