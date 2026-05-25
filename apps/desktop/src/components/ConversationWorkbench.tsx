@@ -1,8 +1,8 @@
-import { Archive, FileText, GitBranch, ImageIcon, Link2, Paperclip, Play, Send, Smartphone, X } from "lucide-react";
-import type { BranchExperiment, ContextPackTier, ConversationAttachment, ConversationMessage, ModelDescriptor, ProviderProfile } from "@ai-orchestrator/protocol";
+import { Archive, CheckCircle2, FileText, GitBranch, ImageIcon, Link2, Paperclip, Play, Send, ShieldAlert, Smartphone, X } from "lucide-react";
+import type { ApprovalQueueItem, BranchExperiment, ContextPackTier, ConversationAttachment, ConversationMessage, ModelDescriptor, PermissionMatrixSnapshot, ProviderProfile } from "@ai-orchestrator/protocol";
 import { attachmentAcceptForModel, attachmentCapabilityLabel, createDefaultPersonaSettings, formatAttachmentSize, getMessageAttachments, modelSupportsAnyAttachment, agentRoleLabel } from "../lib/helpers";
 import { branchStatusLabel, contextPackTierLabel, creativityLevelLabel, messageLabel, soulModeLabel } from "../lib/uiLabels";
-import type { AgentConfigFile, AgentConfigTab, AgentPersonaSettings, DraftAttachment, WindowAuditItem, WorkbenchAgent } from "../types";
+import type { AgentConfigFile, AgentConfigTab, AgentPersonaSettings, DraftAttachment, PendingProviderRetry, WindowAuditItem, WorkbenchAgent } from "../types";
 import { AgentConfigDrawer } from "./AgentConfigDrawer";
 import { WindowChecklist } from "./WindowChecklist";
 
@@ -20,6 +20,7 @@ export function ConversationWorkbench({
   messages,
   onAddDraftAttachments,
   onAdoptBranch,
+  onApprovePermission,
   onBackupProjection,
   onContextPackTierChange,
   onCreateBranch,
@@ -28,6 +29,7 @@ export function ConversationWorkbench({
   onDraftMessageChange,
   onImportTelegram,
   onPromoteToDebate,
+  onRejectPermission,
   onRemoveDraftAttachment,
   onSelectAgent,
   onSendMessage,
@@ -35,6 +37,8 @@ export function ConversationWorkbench({
   onOpenAgentConfig,
   onUpdateAgentConfig,
   onUpdateAgentPersona,
+  pendingProviderRetry,
+  permissionSnapshot,
   selectedAgent,
   selectedAgentId,
   selectedModel,
@@ -53,6 +57,7 @@ export function ConversationWorkbench({
   messages: ConversationMessage[];
   onAddDraftAttachments: (files: FileList | null) => void;
   onAdoptBranch: () => void;
+  onApprovePermission: (sourceItemId: string) => void;
   onBackupProjection: () => void;
   onContextPackTierChange: (tier: ContextPackTier) => void;
   onCreateBranch: () => void;
@@ -61,6 +66,7 @@ export function ConversationWorkbench({
   onDraftMessageChange: (value: string) => void;
   onImportTelegram: () => void;
   onPromoteToDebate: () => void;
+  onRejectPermission: (sourceItemId: string) => void;
   onRemoveDraftAttachment: (attachmentId: string) => void;
   onSelectAgent: (agentId: string) => void;
   onSendMessage: () => void;
@@ -68,6 +74,8 @@ export function ConversationWorkbench({
   onOpenAgentConfig: (tab: AgentConfigTab) => void;
   onUpdateAgentConfig: (patch: Partial<Pick<WorkbenchAgent, "configSource" | "soulMode">>) => void;
   onUpdateAgentPersona: (patch: Partial<AgentPersonaSettings>) => void;
+  pendingProviderRetry?: PendingProviderRetry;
+  permissionSnapshot: PermissionMatrixSnapshot;
   selectedAgent?: WorkbenchAgent;
   selectedAgentId?: string;
   selectedModel?: ModelDescriptor;
@@ -163,6 +171,12 @@ export function ConversationWorkbench({
       ) : null}
       <WindowChecklist items={auditItems} title="대화 창 점검" />
       <div className="conversation-stream" aria-label="대화 기록" tabIndex={0}>
+        <ApprovalQueueInlinePanel
+          onApprove={onApprovePermission}
+          onReject={onRejectPermission}
+          pendingProviderRetry={pendingProviderRetry}
+          queue={permissionSnapshot.queue}
+        />
         {messages.map((message) => {
           const attachments = getMessageAttachments(message);
           return (
@@ -287,6 +301,61 @@ export function ConversationWorkbench({
             채택
           </button>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function ApprovalQueueInlinePanel({
+  onApprove,
+  onReject,
+  pendingProviderRetry,
+  queue,
+}: {
+  onApprove: (sourceItemId: string) => void;
+  onReject: (sourceItemId: string) => void;
+  pendingProviderRetry?: PendingProviderRetry;
+  queue: ApprovalQueueItem[];
+}) {
+  const visibleQueue = queue.slice(0, 3);
+  if (visibleQueue.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="conversation-approval-panel" aria-label="Permission approval queue">
+      <header>
+        <span>
+          <ShieldAlert size={14} />
+          승인 대기
+        </span>
+        <em>{queue.length} pending</em>
+      </header>
+      <div className="conversation-approval-list">
+        {visibleQueue.map((item) => {
+          const restoresDraft = pendingProviderRetry?.permissionItemId === item.sourceItemId;
+          return (
+            <article key={item.id}>
+              <div>
+                <strong>{item.summary}</strong>
+                <small>
+                  {item.permissions.join(", ") || "read_only"}
+                  {restoresDraft ? " / 승인 시 입력창 복원" : ""}
+                </small>
+              </div>
+              <div className="conversation-approval-actions">
+                <button onClick={() => onApprove(item.sourceItemId)} type="button">
+                  <CheckCircle2 size={13} />
+                  승인
+                </button>
+                <button onClick={() => onReject(item.sourceItemId)} type="button">
+                  <X size={13} />
+                  거절
+                </button>
+              </div>
+            </article>
+          );
+        })}
       </div>
     </section>
   );
