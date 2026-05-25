@@ -18,6 +18,10 @@ export default defineConfig({
       "@ai-orchestrator/protocol": path.resolve(repoRoot, "packages/protocol/src/index.ts"),
       "@ai-orchestrator/providers": path.resolve(repoRoot, "packages/providers/src/index.ts"),
       "@ai-orchestrator/agents": path.resolve(repoRoot, "packages/agents/src/index.ts"),
+      // Shadcn-standard `@/` path for v0-generated primitives. Mirrors
+      // the tsconfig.json `paths` entry so editor go-to-definition,
+      // type resolution, and Vite bundling all agree.
+      "@": path.resolve(__dirname, "src"),
     },
   },
 });
