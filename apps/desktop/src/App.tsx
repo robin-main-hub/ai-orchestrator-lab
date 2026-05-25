@@ -151,11 +151,6 @@ import {
   terminalSlots,
 } from "./seeds/conversation";
 import { initialMemoryRecords } from "./seeds/memory";
-import {
-  initialAssistantDrafts,
-  initialWorkItemHandoffs,
-  initialWorkItems,
-} from "./seeds/workItems";
 import { ApprovalDrawer } from "./components/ApprovalDrawer";
 import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
 import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
@@ -182,7 +177,8 @@ import { useAgentConfigFilesController } from "./hooks/useAgentConfigFilesContro
 import { useApprovalQueueController } from "./hooks/useApprovalQueueController";
 import { useDgxEventSyncController } from "./hooks/useDgxEventSyncController";
 import { createAuthBinding, useProviderRegistryController } from "./hooks/useProviderRegistryController";
-import { createInsightFindings, createMetaOnboardingSignals, statusForWorkLane } from "./lib/workbenchDerived";
+import { useWorkItemsController } from "./hooks/useWorkItemsController";
+import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbenchDerived";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 
 export function App() {
@@ -250,9 +246,17 @@ export function App() {
   const [contextPackTier, setContextPackTier] = useState<ContextPackTier>("standard");
   const [reviewMode, setReviewMode] = useState<ReviewMode>("quick");
   const [branchExperiments, setBranchExperiments] = useState<BranchExperiment[]>(initialBranchExperiments);
-  const [workItems, setWorkItems] = useState<WorkItem[]>(initialWorkItems);
-  const [assistantDrafts, setAssistantDrafts] = useState<AssistantDraft[]>(initialAssistantDrafts);
-  const [workItemHandoffs, setWorkItemHandoffs] = useState<WorkItemHandoff[]>(initialWorkItemHandoffs);
+  const {
+    assistantDrafts,
+    handleArchiveWorkItem,
+    handleRouteWorkItem,
+    prependAssistantDraft,
+    prependWorkItem,
+    prependWorkItemHandoff,
+    updateWorkItem,
+    workItemHandoffs,
+    workItems,
+  } = useWorkItemsController({ appendEvent });
   const [debateSession, setDebateSession] = useState<Stage3DebateSession>(() =>
     createStage3DebateSession({
       messages: initialConversationMessages,
@@ -447,45 +451,6 @@ export function App() {
     setEventLog((events) => appendEventToLog(events, event));
     queueEventForSync(event, { skipRemoteSync: options?.skipRemoteSync });
     return event;
-  }
-
-  function handleRouteWorkItem(workItemId: string, lane: WorkItem["lane"]) {
-    const updatedAt = new Date().toISOString();
-    setWorkItems((items) =>
-      items.map((item) =>
-        item.id === workItemId
-          ? {
-              ...item,
-              lane,
-              status: statusForWorkLane(lane),
-              updatedAt,
-            }
-          : item,
-      ),
-    );
-    appendEvent("work_item.routed", {
-      workItemId,
-      lane,
-      status: statusForWorkLane(lane),
-    });
-  }
-
-  function handleArchiveWorkItem(workItemId: string) {
-    const updatedAt = new Date().toISOString();
-    setWorkItems((items) =>
-      items.map((item) =>
-        item.id === workItemId
-          ? {
-              ...item,
-              status: "archived",
-              updatedAt,
-            }
-          : item,
-      ),
-    );
-    appendEvent("work_item.archived", {
-      workItemId,
-    });
   }
 
   async function handleRefreshSessionIndex() {
@@ -856,7 +821,7 @@ export function App() {
       priority: attachmentMetadata.length > 0 ? "high" : "normal",
       createdAt,
     };
-    setWorkItems((items) => [workItem, ...items].slice(0, 12));
+    prependWorkItem(workItem);
     appendEvent(isDgxRoutedProvider(selectedProvider) ? "provider.completion.dgx.requested" : "provider.completion.mocked", {
       agentId: selectedAgent.id,
       providerProfileId: selectedProvider.id,
@@ -965,19 +930,12 @@ export function App() {
       missingInfo: [],
       createdAt: assistantMessage.createdAt,
     };
-    setAssistantDrafts((drafts) => [assistantDraft, ...drafts].slice(0, 12));
-    setWorkItems((items) =>
-      items.map((item) =>
-        item.id === workItem.id
-          ? {
-              ...item,
-              lane: completionMetadata.realProviderCall ? "check" : "ask",
-              status: completionMetadata.realProviderCall ? "drafted" : "waiting_input",
-              updatedAt: assistantMessage.createdAt,
-            }
-          : item,
-      ),
-    );
+    prependAssistantDraft(assistantDraft);
+    updateWorkItem(workItem.id, {
+      lane: completionMetadata.realProviderCall ? "check" : "ask",
+      status: completionMetadata.realProviderCall ? "drafted" : "waiting_input",
+      updatedAt: assistantMessage.createdAt,
+    });
     appendEvent("conversation.message.created", {
       messageId: assistantMessage.id,
       role: "assistant",
@@ -1070,7 +1028,7 @@ export function App() {
       priority: mode === "debate" ? "high" : "normal",
       createdAt,
     };
-    setWorkItems((items) => [workItem, ...items].slice(0, 12));
+    prependWorkItem(workItem);
     const handoff: WorkItemHandoff = {
       id: `handoff_packet_${crypto.randomUUID()}`,
       workItemId: workItem.id,
@@ -1082,7 +1040,7 @@ export function App() {
       approvalState: "required",
       createdAt,
     };
-    setWorkItemHandoffs((handoffs) => [handoff, ...handoffs].slice(0, 12));
+    prependWorkItemHandoff(handoff);
     appendEvent("coding_packet.created", {
       packet: nextPacket,
       goal: nextPacket.goal,
@@ -1243,7 +1201,7 @@ export function App() {
     }
     setDraftMessage(prompt);
     setMode("conversation");
-    setWorkItems((items) => [workItem, ...items].slice(0, 12));
+    prependWorkItem(workItem);
     appendEvent("debate.utterance.selected", {
       debateId: debateSession.id,
       utteranceId: utterance.id,
