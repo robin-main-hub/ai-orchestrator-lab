@@ -2881,6 +2881,7 @@ export function App() {
                 onImportTelegram={handleImportTelegramIngress}
                 onRefreshApprovals={handleRefreshApprovalQueue}
                 onResolveServerApproval={handleResolveServerApproval}
+                pendingTmuxApprovalKeys={Object.keys(pendingTmuxDispatchByApprovalKey)}
                 permissionSnapshot={permissionSnapshot}
                 providerReadiness={providerReadiness}
                 secretVaultSnapshot={secretVaultSnapshot}
