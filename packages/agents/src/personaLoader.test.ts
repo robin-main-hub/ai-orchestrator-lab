@@ -67,19 +67,22 @@ describe("personaNameForProfile", () => {
 });
 
 describe("loadPersona", () => {
-  it('mode="off" returns empty fragments and never touches the source', async () => {
-    let touched = false;
+  it('mode="off" returns empty fragments and reads only SAFETY.md (universal injection)', async () => {
+    const reads: string[] = [];
     const watchful = createInMemoryPersonaSource({});
     const wrapped = {
       async readMarkdown(p: string) {
-        touched = true;
+        reads.push(p);
         return watchful.readMarkdown(p);
       },
     };
     const loaded = await loadPersona("architect", "off", wrapped);
     expect(loaded.mode).toBe("off");
     expect(loaded.fragments).toHaveLength(0);
-    expect(touched).toBe(false);
+    // SAFETY.md is universal — fetched even when persona body is off.
+    // No persona-specific reads (SOUL.md / AGENTS.md) happen.
+    expect(reads).toEqual(["agents/SAFETY.md"]);
+    expect(loaded.safetyContent).toBeNull();
   });
 
   it('mode="soul_only" loads only SOUL.md', async () => {
@@ -207,5 +210,129 @@ describe("createInMemoryPersonaSource", () => {
     expect(await src.readMarkdown("__proto__")).toBeNull();
     expect(await src.readMarkdown("constructor")).toBeNull();
     expect(await src.readMarkdown("toString")).toBeNull();
+  });
+});
+
+describe("loadPersona — SAFETY.md universal injection", () => {
+  const SAFETY_BODY = "# SAFETY\n\nDGX-01 금기. secret 금기. permission gate 의무.\n";
+
+  it("populates safetyContent when agents/SAFETY.md exists", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/SAFETY.md": SAFETY_BODY,
+      "agents/architect/SOUL.md": "# soul",
+    });
+    const loaded = await loadPersona("architect", "soul_only", src);
+    expect(loaded.safetyContent).toBe(SAFETY_BODY);
+  });
+
+  it("safetyContent is null when agents/SAFETY.md is absent (loader does not throw)", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/architect/SOUL.md": "# soul",
+    });
+    const loaded = await loadPersona("architect", "soul_only", src);
+    expect(loaded.safetyContent).toBeNull();
+    // and persona fragments still load fine
+    expect(loaded.fragments).toHaveLength(1);
+  });
+
+  it("SAFETY.md is loaded even when mode=off (caller can still inject safety alone)", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/SAFETY.md": SAFETY_BODY,
+    });
+    const loaded = await loadPersona("architect", "off", src);
+    expect(loaded.fragments).toEqual([]);
+    expect(loaded.safetyContent).toBe(SAFETY_BODY);
+  });
+});
+
+describe("buildPersonaPromptFragment — SAFETY injection", () => {
+  const SAFETY_BODY = "DGX-01 금기.\nsecret 금기.\npermission gate 의무.";
+
+  it("auto-injects SAFETY as a top-level section before the persona body (default)", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/SAFETY.md": SAFETY_BODY,
+      "agents/architect/SOUL.md": "나는 설계자다.",
+    });
+    const loaded = await loadPersona("architect", "soul_only", src);
+    const out = buildPersonaPromptFragment(loaded);
+
+    // Safety section appears
+    expect(out).toContain("# System Safety Boundaries");
+    expect(out).toContain("DGX-01 금기");
+    // Persona section appears
+    expect(out).toContain("# Persona: architect");
+    expect(out).toContain("나는 설계자다");
+    // Safety comes BEFORE persona (precedence: rules ⊃ character)
+    expect(out.indexOf("# System Safety Boundaries")).toBeLessThan(
+      out.indexOf("# Persona: architect"),
+    );
+  });
+
+  it("respects omitSafety: true (debug / inspector use case)", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/SAFETY.md": SAFETY_BODY,
+      "agents/architect/SOUL.md": "나는 설계자다.",
+    });
+    const loaded = await loadPersona("architect", "soul_only", src);
+    const out = buildPersonaPromptFragment(loaded, { omitSafety: true });
+
+    expect(out).not.toContain("# System Safety Boundaries");
+    expect(out).not.toContain("DGX-01 금기");
+    expect(out).toContain("# Persona: architect");
+    expect(out).toContain("나는 설계자다");
+  });
+
+  it("when SAFETY.md is absent, output is identical to pre-SAFETY behavior (no empty section)", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/architect/SOUL.md": "나는 설계자다.",
+    });
+    const loaded = await loadPersona("architect", "soul_only", src);
+    const out = buildPersonaPromptFragment(loaded);
+
+    expect(out).not.toContain("# System Safety Boundaries");
+    expect(out).toContain("# Persona: architect");
+    expect(out).toContain("나는 설계자다");
+  });
+
+  it("mode=off + SAFETY present → output is SAFETY only (no persona section)", async () => {
+    const src = createInMemoryPersonaSource({ "agents/SAFETY.md": SAFETY_BODY });
+    const loaded = await loadPersona("architect", "off", src);
+    const out = buildPersonaPromptFragment(loaded);
+
+    expect(out).toContain("# System Safety Boundaries");
+    expect(out).toContain("DGX-01 금기");
+    expect(out).not.toContain("# Persona: architect");
+  });
+
+  it("mode=off + SAFETY absent → empty string (caller decides fallback)", async () => {
+    const src = createInMemoryPersonaSource({});
+    const loaded = await loadPersona("architect", "off", src);
+    expect(buildPersonaPromptFragment(loaded)).toBe("");
+  });
+
+  it("headerLine still comes before everything (system tag stays at the top)", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/SAFETY.md": SAFETY_BODY,
+      "agents/architect/SOUL.md": "나는 설계자다.",
+    });
+    const loaded = await loadPersona("architect", "soul_only", src);
+    const out = buildPersonaPromptFragment(loaded, {
+      headerLine: "[system] persona injection start",
+    });
+    expect(out.startsWith("[system] persona injection start")).toBe(true);
+    expect(out.indexOf("[system] persona injection start")).toBeLessThan(
+      out.indexOf("# System Safety Boundaries"),
+    );
+  });
+
+  it("safety content is trimmed (no trailing-newline bloat)", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/SAFETY.md": `${SAFETY_BODY}\n\n\n\n`,
+      "agents/architect/SOUL.md": "x",
+    });
+    const loaded = await loadPersona("architect", "soul_only", src);
+    const out = buildPersonaPromptFragment(loaded);
+    // No 3+ consecutive newlines between safety and persona
+    expect(out).not.toMatch(/\n{3,}# Persona/);
   });
 });
