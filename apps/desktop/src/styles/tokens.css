@@ -22,48 +22,72 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* AI Orchestrator Lab — Deep Teal Theme (Apple + Linear + Arc aesthetic) */
+/* AI Orchestrator Lab — Deep Teal Theme (Apple + Linear + Arc aesthetic)
+ *
+ * Stage 1b token unification (PR #139):
+ *   v0 hex values below are aligned to the LEGACY palette currently
+ *   shipping in production styles.css. This preserves the visual that
+ *   users already see while making tokens.css the canonical source.
+ *   Shadcn primitives in src/ui/ that reference these v0 tokens via
+ *   Tailwind (`bg-primary`, `text-destructive`, ...) will now render
+ *   with the legacy look — no surprises when Stage 2 components swap
+ *   raw classes for primitives.
+ *
+ *   Original v0 hex (pre-unification) is kept in trailing comments so
+ *   we can recover the "designer-intended" palette later if we choose.
+ */
 :root {
   /* Base palette — Deep teal with green undertones */
-  --background: #04161a;
-  --foreground: #e8f4f8;
+  --background: #002d35;          /* was #04161a — match legacy --bg */
+  --foreground: #d7eef2;          /* was #e8f4f8 — match legacy --text */
 
   /* Surface layers */
-  --card: #0a2428;
-  --card-foreground: #e8f4f8;
-  --popover: #0d3640;
-  --popover-foreground: #e8f4f8;
+  --card: #00343d;                /* was #0a2428 — match legacy --panel */
+  --card-foreground: #d7eef2;
+  --popover: #004250;             /* was #0d3640 — match legacy --panel-strong */
+  --popover-foreground: #d7eef2;
 
-  /* Primary — Muted cyan (NOT neon, intentionally desaturated) */
-  --primary: #5fd3e2;
-  --primary-foreground: #04161a;
-  --primary-muted: #3a9ba8;
+  /* Primary — cyan accent (legacy --cyan retained) */
+  --primary: #29d7e6;             /* was #5fd3e2 — match legacy --cyan */
+  --primary-foreground: #002d35;
+  --primary-muted: #18b8b0;       /* was #3a9ba8 — match legacy --teal */
 
   /* Secondary */
-  --secondary: #0d3640;
-  --secondary-foreground: #e8f4f8;
+  --secondary: #004250;           /* match --popover */
+  --secondary-foreground: #d7eef2;
 
-  /* Muted text */
+  /*
+   * Muted — INTENTIONALLY UNCHANGED from v0 spec.
+   *   v0:     --muted = surface tint (#1a4a52), --muted-foreground = subtle text (#8ba4ab)
+   *   legacy: --muted = subtle text (#8ebbc3)   ← bridged separately, see legacy block below
+   * The two systems use the same var name for opposite roles. Renaming
+   * either side would cascade through too many call sites at once, so
+   * Stage 1b keeps them disjoint:
+   *   - shadcn primitives use Tailwind `bg-muted` / `text-muted-foreground`
+   *     which resolve here.
+   *   - legacy code continues to read `var(--muted)` from styles.css.
+   */
   --muted: #1a4a52;
-  --muted-foreground: #8ba4ab;
+  --muted-foreground: #8ebbc3;    /* was #8ba4ab — match legacy --muted */
 
   /* Accent */
-  --accent: #0d3640;
-  --accent-foreground: #5fd3e2;
+  --accent: #004250;              /* match --popover */
+  --accent-foreground: #29d7e6;   /* match --primary */
 
-  /* Semantic colors */
-  --destructive: #f87171;
+  /* Semantic colors — aligned to legacy --rose / --green / --amber */
+  --destructive: #ff7d90;         /* was #f87171 — match legacy --rose */
   --destructive-foreground: #fef2f2;
-  --success: #34d399;
-  --success-foreground: #04161a;
-  --warning: #fbbf24;
-  --warning-foreground: #04161a;
+  --success: #54e0a0;             /* was #34d399 — match legacy --green */
+  --success-foreground: #002d35;
+  --warning: #d8c65d;             /* was #fbbf24 — match legacy --amber */
+  --warning-foreground: #002d35;
 
   /* Borders and inputs */
-  --border: #1a4a52;
-  --border-focus: #5fd3e2;
-  --input: #0a2428;
-  --ring: #5fd3e2;
+  --border: #0a5a68;              /* was #1a4a52 — match legacy --line */
+  --border-subtle: #064852;       /* NEW — match legacy --line-soft */
+  --border-focus: #29d7e6;        /* match --primary */
+  --input: #00343d;               /* match --card */
+  --ring: #29d7e6;                /* match --primary */
 
   /* Chart colors */
   --chart-1: #5fd3e2;
@@ -89,12 +113,40 @@
   --text-secondary: #8ba4ab;
   --text-muted: #4a6670;
 
-  /* Status colors */
-  --status-online: #34d399;
-  --status-offline: #f87171;
-  --status-pending: #fbbf24;
-  --status-idle: #8ba4ab;
-  --status-active: #5fd3e2;
+  /* Status colors — aligned to legacy semantic colors */
+  --status-online: var(--success);
+  --status-offline: var(--destructive);
+  --status-pending: var(--warning);
+  --status-idle: var(--muted-foreground);
+  --status-active: var(--primary);
+
+  /*
+   * ── Legacy bridge ──────────────────────────────────────────────
+   * Legacy variable names mapped to v0 tokens. Lets the ~300 BEM
+   * Stage 2 CSS rules (var(--cyan) / var(--rose) / var(--text) / ...)
+   * keep working unchanged while tokens.css owns the actual hex.
+   *
+   * Removed from styles.css `:root` to avoid double-definition; the
+   * cascade now resolves through these aliases.
+   *
+   * `--muted` is the one exception — both files keep their own
+   * definition because the same name carries opposite meaning across
+   * systems. See note above.
+   */
+  --bg: var(--background);
+  --panel: var(--card);
+  --panel-strong: var(--popover);
+  --line: var(--border);
+  --line-soft: var(--border-subtle);
+  --text: var(--foreground);
+  --subtle: #5f8c96;             /* legacy-only, no v0 equivalent */
+  --amber: var(--warning);
+  --teal: var(--primary-muted);
+  --rose: var(--destructive);
+  --violet: var(--role-architect);
+  --green: var(--success);
+  --blue: #2aa7e8;               /* legacy-only, used by agent pulse */
+  --cyan: var(--primary);
 
   /* Agent role colors */
   --role-orchestrator: #5fd3e2;
