@@ -4429,6 +4429,330 @@ button {
   grid-template-columns: minmax(0, 1fr) auto auto auto;
 }
 
+/* ─── MementoPanel v2 (Stage 2-2) — collapsible drawer layout ─────────
+ * design-decisions §10. Always-visible summary on top, detail folded
+ * into drawers (Recall Trace / Relations / Reflect / Records) below.
+ */
+.memento-panel-v2 {
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  gap: 10px;
+}
+
+.memento-v2__count {
+  margin-left: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.memento-v2__policy {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 11px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.memento-v2__policy svg {
+  flex-shrink: 0;
+  color: var(--cyan);
+}
+
+.memento-v2__policy--auto svg {
+  color: var(--cyan);
+}
+
+.memento-v2__policy--manual svg {
+  color: var(--muted);
+}
+
+.memento-v2__policy strong {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.memento-v2__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.memento-v2__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  transition: background 120ms ease;
+}
+
+.memento-v2__stat strong {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.memento-v2__stat span {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.memento-v2__stat--cyan strong {
+  color: var(--cyan);
+}
+
+.memento-v2__stat--amber strong {
+  color: var(--amber);
+}
+
+.memento-v2__context {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.memento-v2__context--good {
+  border-color: rgba(95, 211, 226, 0.2);
+}
+
+.memento-v2__context--needs_review {
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+.memento-v2__context--watch {
+  border-color: rgba(248, 113, 113, 0.25);
+}
+
+.memento-v2__context-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.memento-v2__context-summary {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.memento-v2__context-meta {
+  margin: 0;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.memento-v2__drawers {
+  display: grid;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.memento-v2__drawer {
+  display: grid;
+  gap: 4px;
+}
+
+.memento-v2__drawer-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.memento-v2__drawer-trigger:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.memento-v2__drawer-chevron {
+  transition: transform 120ms ease;
+  flex-shrink: 0;
+}
+
+.memento-v2__drawer-chevron--closed {
+  transform: rotate(-90deg);
+}
+
+.memento-v2__drawer-label {
+  flex: 1;
+  text-align: left;
+}
+
+.memento-v2__drawer-count {
+  opacity: 0.7;
+  font-weight: 500;
+}
+
+.memento-v2__drawer-content {
+  display: grid;
+  gap: 4px;
+  padding-left: 18px;
+}
+
+.memento-v2__empty {
+  margin: 0;
+  padding: 6px 4px;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.6;
+  font-style: italic;
+}
+
+/* Recall trace entry */
+.memento-v2__trace {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 2px solid transparent;
+}
+
+.memento-v2__trace--used {
+  border-left-color: var(--cyan);
+}
+
+.memento-v2__trace--blocked {
+  border-left-color: var(--muted);
+  opacity: 0.7;
+}
+
+.memento-v2__trace-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.memento-v2__trace-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.memento-v2__trace-score {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--cyan);
+  flex-shrink: 0;
+}
+
+.memento-v2__trace-meta {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.memento-v2__trace-reason {
+  margin: 0;
+  font-size: 10px;
+  color: var(--subtle);
+  font-style: italic;
+}
+
+/* Relations / issues / records share a compact row pattern */
+.memento-v2__relation,
+.memento-v2__issue {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.memento-v2__relation strong,
+.memento-v2__issue strong {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.memento-v2__relation span,
+.memento-v2__issue span {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.memento-v2__issue--warn {
+  border-left: 2px solid var(--amber);
+}
+
+.memento-v2__issue--bad,
+.memento-v2__issue--critical {
+  border-left: 2px solid var(--red);
+}
+
+.memento-v2__record {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.memento-v2__record-body {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.memento-v2__record-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memento-v2__record-meta {
+  font-size: 10px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memento-v2__record-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
 .side-panel.ingress-panel {
   grid-template-rows: auto auto minmax(86px, 1fr) auto auto;
   padding: 10px;
