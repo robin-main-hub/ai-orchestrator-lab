@@ -7,6 +7,7 @@ import {
   MessageSquare,
   Send,
   Server,
+  ShieldCheck,
   Terminal,
 } from "lucide-react";
 import {
@@ -196,6 +197,7 @@ import {
   initialWorkItems,
 } from "./seeds/workItems";
 import { initialAgentConfigFiles, initialAgentProfilePacks } from "./seeds/configFiles";
+import { ApprovalDrawer } from "./components/ApprovalDrawer";
 import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
 import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
 import { AgentStatePanel } from "./components/AgentStatePanel";
@@ -230,6 +232,7 @@ export function App() {
   );
   const [eventOutbox, setEventOutbox] = useState<EventEnvelope[]>([]);
   const [activeNavItem, setActiveNavItem] = useState<NavItemId>("sessions");
+  const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
   const [providerRegistrationOpen, setProviderRegistrationOpen] = useState(false);
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(createInitialProviderProfiles);
   const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(seededModelCatalog);
@@ -1692,8 +1695,10 @@ export function App() {
     });
   }
 
-  function handleResolveNextPermission(state: Extract<ApprovalState, "approved" | "rejected">) {
-    const pendingItem = nextRequiredPermission(permissionSnapshot);
+  function handleResolvePermissionItem(sourceItemId: string, state: Extract<ApprovalState, "approved" | "rejected">) {
+    const pendingItem =
+      permissionSnapshot.queue.find((item) => item.sourceItemId === sourceItemId && item.state === "required") ??
+      nextRequiredPermission(permissionSnapshot);
     if (!pendingItem) {
       return;
     }
@@ -1949,6 +1954,14 @@ export function App() {
     } finally {
       setApprovalServerBusyId(undefined);
     }
+  }
+
+  function handleResolveNextPermission(state: Extract<ApprovalState, "approved" | "rejected">) {
+    const pendingItem = nextRequiredPermission(permissionSnapshot);
+    if (!pendingItem) {
+      return;
+    }
+    handleResolvePermissionItem(pendingItem.sourceItemId, state);
   }
 
   function handleRememberCurrentContext() {
@@ -3081,6 +3094,16 @@ export function App() {
               </button>
             </div>
             <div className="toolbar-actions">
+              <button
+                className={`ghost-button approval-toolbar-button ${
+                  permissionSnapshot.summary.pending > 0 ? "needs-attention" : ""
+                }`}
+                onClick={() => setApprovalDrawerOpen((open) => !open)}
+                type="button"
+              >
+                <ShieldCheck size={16} />
+                승인 {permissionSnapshot.summary.pending}
+              </button>
               <button className="ghost-button" onClick={handleRememberCurrentContext} type="button">
                 <Database size={16} />
                 Memory
@@ -3235,6 +3258,13 @@ export function App() {
           visual={agentVisualsById[settingsAgent.id] ?? {}}
         />
       ) : null}
+      <ApprovalDrawer
+        onApprove={(sourceItemId) => handleResolvePermissionItem(sourceItemId, "approved")}
+        onClose={() => setApprovalDrawerOpen(false)}
+        onReject={(sourceItemId) => handleResolvePermissionItem(sourceItemId, "rejected")}
+        open={approvalDrawerOpen}
+        snapshot={permissionSnapshot}
+      />
     </div>
   );
 }
