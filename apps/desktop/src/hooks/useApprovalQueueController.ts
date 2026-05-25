@@ -1,0 +1,220 @@
+import { useState } from "react";
+import type { ApprovalRequest, ApprovalState } from "@ai-orchestrator/protocol";
+import {
+  requestTmuxDispatch,
+  type DesktopTmuxDispatchRequest,
+} from "../runtime/stage33TmuxServer";
+import {
+  fetchDgxApprovalQueue,
+  grantDgxApproval,
+  rejectDgxApproval,
+  type DesktopApprovalListResponse,
+} from "../runtime/stage34ApprovalServer";
+import type { TmuxRedispatchOutcome } from "../components/OperationsRailPanel";
+
+export type ApprovalQueueController = {
+  approvalServerSnapshot?: DesktopApprovalListResponse;
+  approvalServerStatus: "idle" | "loading" | "error" | "ready";
+  approvalServerError: string;
+  approvalServerBusyId?: string;
+  pendingTmuxApprovalKeys: string[];
+  tmuxRedispatchOutcomes: TmuxRedispatchOutcome[];
+  handleRefreshApprovalQueue: () => Promise<void>;
+  handleTmuxApprovalQueued: (input: {
+    approval: ApprovalRequest;
+    request: DesktopTmuxDispatchRequest;
+  }) => Promise<void>;
+  handleResolveServerApproval: (
+    approval: ApprovalRequest,
+    state: Extract<ApprovalState, "approved" | "rejected">,
+  ) => Promise<void>;
+};
+
+export type UseApprovalQueueControllerParams = {
+  appendEvent: (type: string, payload: unknown) => void;
+};
+
+export function useApprovalQueueController({ appendEvent }: UseApprovalQueueControllerParams): ApprovalQueueController {
+  const [approvalServerSnapshot, setApprovalServerSnapshot] = useState<DesktopApprovalListResponse>();
+  const [approvalServerStatus, setApprovalServerStatus] = useState<"idle" | "loading" | "error" | "ready">("idle");
+  const [approvalServerError, setApprovalServerError] = useState("");
+  const [approvalServerBusyId, setApprovalServerBusyId] = useState<string>();
+  const [pendingTmuxDispatchByApprovalKey, setPendingTmuxDispatchByApprovalKey] = useState<
+    Record<string, DesktopTmuxDispatchRequest>
+  >({});
+  const [tmuxRedispatchOutcomes, setTmuxRedispatchOutcomes] = useState<TmuxRedispatchOutcome[]>([]);
+
+  async function handleRefreshApprovalQueue() {
+    setApprovalServerStatus("loading");
+    setApprovalServerError("");
+    try {
+      const snapshot = await fetchDgxApprovalQueue();
+      setApprovalServerSnapshot(snapshot);
+      setApprovalServerStatus("ready");
+      appendEvent("approval.queue.refreshed", {
+        authorityNodeId: "dgx-02",
+        approvalCount: snapshot.approvals.length,
+        pendingCount: snapshot.queue.length,
+        redaction: "applied",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setApprovalServerStatus("error");
+      setApprovalServerError(message);
+      appendEvent("approval.queue.refresh_failed", {
+        authorityNodeId: "dgx-02",
+        message,
+        redaction: "applied",
+      });
+    }
+  }
+
+  async function handleTmuxApprovalQueued({
+    approval,
+    request,
+  }: {
+    approval: ApprovalRequest;
+    request: DesktopTmuxDispatchRequest;
+  }) {
+    setPendingTmuxDispatchByApprovalKey((current) => ({
+      ...current,
+      [approval.id]: request,
+      ...(approval.sourceItemId ? { [approval.sourceItemId]: request } : {}),
+    }));
+    appendEvent("tmux.dispatch.approval_queued", {
+      approvalId: approval.id,
+      sourceItemId: approval.sourceItemId,
+      role: request.role,
+      paneId: request.paneId,
+      authorityNodeId: "dgx-02",
+      redaction: "applied",
+    });
+    await handleRefreshApprovalQueue();
+  }
+
+  async function handleResolveServerApproval(
+    approval: ApprovalRequest,
+    state: Extract<ApprovalState, "approved" | "rejected">,
+  ) {
+    const decidedAt = new Date().toISOString();
+    setApprovalServerBusyId(approval.id);
+    setApprovalServerError("");
+    try {
+      const request = {
+        approvalId: approval.id,
+        actor: "user" as const,
+        reason: `desktop operator ${state}`,
+        decidedAt,
+      };
+      const result =
+        state === "approved"
+          ? await grantDgxApproval({ request })
+          : await rejectDgxApproval({ request });
+
+      if ("error" in result) {
+        throw new Error(result.error);
+      }
+
+      appendEvent(`approval.server.${state}`, {
+        approvalId: approval.id,
+        sourceItemId: approval.sourceItemId,
+        action: approval.action,
+        status: result.status,
+        authorityNodeId: "dgx-02",
+        redaction: "applied",
+      });
+      const pendingTmuxRequest =
+        pendingTmuxDispatchByApprovalKey[approval.id] ??
+        (approval.sourceItemId ? pendingTmuxDispatchByApprovalKey[approval.sourceItemId] : undefined);
+      if (state === "approved" && pendingTmuxRequest) {
+        try {
+          const approvedDispatch = await requestTmuxDispatch({
+            request: {
+              ...pendingTmuxRequest,
+              id: `${pendingTmuxRequest.id}_approved_${Date.now()}`,
+              approvalState: "approved",
+              dispatchMode: "execute_if_approved",
+              createdAt: decidedAt,
+            },
+          });
+          appendEvent("tmux.dispatch.approval_applied", {
+            approvalId: approval.id,
+            sourceItemId: approval.sourceItemId,
+            originalRequestId: pendingTmuxRequest.id,
+            approvedRequestId: approvedDispatch.intent.id,
+            role: pendingTmuxRequest.role,
+            dispatchStatus: approvedDispatch.dispatch.status,
+            dispatchAttempted: approvedDispatch.dispatch.attempted,
+            dispatchReason: approvedDispatch.dispatch.reason,
+            authorityNodeId: "dgx-02",
+            redaction: "applied",
+          });
+          const outcome: TmuxRedispatchOutcome = {
+            approvalId: approval.id,
+            createdAt: new Date().toISOString(),
+            reason: approvedDispatch.dispatch.reason,
+            role: pendingTmuxRequest.role,
+            sourceItemId: approval.sourceItemId,
+            status: approvedDispatch.dispatch.status,
+          };
+          setTmuxRedispatchOutcomes((current) => [outcome, ...current].slice(0, 5));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          setApprovalServerError(`승인은 완료됐지만 tmux 재전송에 실패: ${message}`);
+          appendEvent("tmux.dispatch.approval_apply_failed", {
+            approvalId: approval.id,
+            sourceItemId: approval.sourceItemId,
+            originalRequestId: pendingTmuxRequest.id,
+            message,
+            authorityNodeId: "dgx-02",
+            redaction: "applied",
+          });
+          const outcome: TmuxRedispatchOutcome = {
+            approvalId: approval.id,
+            createdAt: new Date().toISOString(),
+            reason: message,
+            role: pendingTmuxRequest.role,
+            sourceItemId: approval.sourceItemId,
+            status: "failed",
+          };
+          setTmuxRedispatchOutcomes((current) => [outcome, ...current].slice(0, 5));
+        }
+      }
+      if (pendingTmuxRequest || state === "rejected") {
+        setPendingTmuxDispatchByApprovalKey((current) => {
+          const next = { ...current };
+          delete next[approval.id];
+          if (approval.sourceItemId) {
+            delete next[approval.sourceItemId];
+          }
+          return next;
+        });
+      }
+      await handleRefreshApprovalQueue();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setApprovalServerStatus("error");
+      setApprovalServerError(message);
+      appendEvent(`approval.server.${state}_failed`, {
+        approvalId: approval.id,
+        message,
+        authorityNodeId: "dgx-02",
+        redaction: "applied",
+      });
+    } finally {
+      setApprovalServerBusyId(undefined);
+    }
+  }
+
+  return {
+    approvalServerSnapshot,
+    approvalServerStatus,
+    approvalServerError,
+    approvalServerBusyId,
+    pendingTmuxApprovalKeys: Object.keys(pendingTmuxDispatchByApprovalKey),
+    tmuxRedispatchOutcomes,
+    handleRefreshApprovalQueue,
+    handleTmuxApprovalQueued,
+    handleResolveServerApproval,
+  };
+}
