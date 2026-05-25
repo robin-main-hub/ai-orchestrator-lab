@@ -2,8 +2,6 @@ import { Power, RefreshCw, Server } from "lucide-react";
 import type { DeviceRebootRequest, DeviceRebootWatchdog, RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import type { Stage32DgxRouteDiagnosticSnapshot } from "../runtime/stage32DgxRouteDiagnostics";
 import { statusTone } from "../lib/uiLabels";
-import type { WindowAuditItem } from "../types";
-import { WindowChecklist } from "./WindowChecklist";
 
 export function RuntimeRailPanel({
   dgxRouteDiagnostics,
@@ -23,26 +21,6 @@ export function RuntimeRailPanel({
   const macbookOutbox = macbookClient?.outboxCount ?? 0;
   const dgx02 = snapshot.runtimeNodes.find((node) => node.id === "dgx-02");
   const activeWatchdog = rebootWatchdogs[0];
-  const auditItems: WindowAuditItem[] = [
-    {
-      id: "dgx01-locked",
-      label: "DGX-01 보호",
-      status: "ready",
-      detail: "DGX-01은 locked로만 표시하고 작업 대상으로 잡지 않습니다.",
-    },
-    {
-      id: "dgx02-authority",
-      label: "DGX-02 원본",
-      status: dgx02?.isPrimary ? "ready" : "blocked",
-      detail: "세션/이벤트/공유 데이터의 authoritative server입니다.",
-    },
-    {
-      id: "local-fallback",
-      label: "로컬 폴백",
-      status: snapshot.localModelStatus === "online" ? "ready" : "partial",
-      detail: "DGX-02가 내려가면 로컬 모델, 로컬 로그, outbox만 살아납니다.",
-    },
-  ];
 
   return (
     <section className="mini-panel rail-panel">
@@ -118,7 +96,6 @@ export function RuntimeRailPanel({
           ))}
         </div>
       ) : null}
-      <WindowChecklist items={auditItems} title="시스템 창 점검" />
     </section>
   );
 }
