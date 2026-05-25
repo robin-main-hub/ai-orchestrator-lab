@@ -2293,6 +2293,14 @@ async function dispatchServerTmuxCommandIfAllowed(
     };
   }
 
+  if (process.env.ORCHESTRATOR_TMUX_DRY_RUN === "1") {
+    return {
+      attempted: false,
+      status: "recorded",
+      reason: "ORCHESTRATOR_TMUX_DRY_RUN accepted approved tmux dispatch without send-keys",
+    };
+  }
+
   if (process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS !== "1") {
     return {
       attempted: false,
