@@ -28,6 +28,7 @@ import type {
   ProviderTrustLevel,
   RemoteExecutionRequest,
   RemoteExecutionResponse,
+  RedactionPhase,
   RuntimeSnapshot,
   SecretAvailability,
   SourceTrust,
@@ -145,6 +146,13 @@ export type ServerApprovalListResponse = {
     expired: number;
   };
   createdAt: string;
+};
+
+export type ServerRedactionReport = {
+  phase: RedactionPhase;
+  redacted: boolean;
+  replacementCount: number;
+  patternIds: string[];
 };
 
 const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
@@ -1391,15 +1399,16 @@ export async function createDgxProviderCompletionResponse(
   request: ProviderCompletionRequest,
   options: DgxProviderCompletionOptions = {},
 ): Promise<ProviderCompletionResponse> {
+  const redactedRequest = redactForServerPhase(request, "pre_send").value as ProviderCompletionRequest;
   const vllmBaseUrl = options.vllmBaseUrl ?? process.env.DGX02_VLLM_BASE_URL ?? DEFAULT_DGX02_VLLM_BASE_URL;
   const fetchImpl = options.fetchImpl ?? fetch;
 
-  if (request.providerProfileId !== "provider_dgx02_vllm") {
-    return createServerProviderProxyCompletionResponse(request, options);
+  if (redactedRequest.providerProfileId !== "provider_dgx02_vllm") {
+    return redactProviderCompletionResponseForReceive(await createServerProviderProxyCompletionResponse(redactedRequest, options));
   }
 
-  return createOpenAICompatibleServerCompletion({
-    request,
+  return redactProviderCompletionResponseForReceive(await createOpenAICompatibleServerCompletion({
+    request: redactedRequest,
     profileId: "provider_dgx02_vllm",
     kind: "openai",
     baseUrl: vllmBaseUrl,
@@ -1411,7 +1420,7 @@ export async function createDgxProviderCompletionResponse(
         enable_thinking: false,
       },
     },
-  });
+  }));
 }
 
 export async function createServerProviderProxyCompletionResponse(
@@ -2640,17 +2649,106 @@ const SECRET_LIKE_PATTERNS: ReadonlyArray<RegExp> = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
 ];
 
+const SERVER_REDACTION_RULES: ReadonlyArray<{
+  id: string;
+  pattern: RegExp;
+  replacement: string;
+}> = [
+  ...SECRET_LIKE_PATTERNS.map((pattern, index) => ({
+    id: `secret_like_${index + 1}`,
+    pattern,
+    replacement: "<redacted>",
+  })),
+  {
+    id: "pii_email",
+    pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
+    replacement: "<redacted:email>",
+  },
+  {
+    id: "pii_phone",
+    pattern: /\b(?:\+82[-\s]?)?0?1[016789][-\s]?\d{3,4}[-\s]?\d{4}\b/,
+    replacement: "<redacted:phone>",
+  },
+];
+
+const SENSITIVE_KEY_PATTERN =
+  /^(api[-_]?key|auth[-_]?header|authorization|bearer|cookie|password|secret|access[-_]?token|refresh[-_]?token|session[-_]?token|private[-_]?key)$/i;
+
+export function redactForServerPhase<T>(value: T, phase: RedactionPhase): { value: T; report: ServerRedactionReport } {
+  const report: ServerRedactionReport = {
+    phase,
+    redacted: false,
+    replacementCount: 0,
+    patternIds: [],
+  };
+  const redactedValue = redactUnknownForServer(value, report) as T;
+  return {
+    value: redactedValue,
+    report,
+  };
+}
+
+function redactProviderCompletionResponseForReceive(response: ProviderCompletionResponse): ProviderCompletionResponse {
+  return redactForServerPhase(response, "post_receive").value as ProviderCompletionResponse;
+}
+
+function redactUnknownForServer(value: unknown, report: ServerRedactionReport, keyHint?: string): unknown {
+  if (typeof value === "string") {
+    return redactStringForServer(value, report);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactUnknownForServer(entry, report));
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, entry]) => {
+      if (SENSITIVE_KEY_PATTERN.test(key) || (keyHint && SENSITIVE_KEY_PATTERN.test(keyHint))) {
+        report.redacted = true;
+        report.replacementCount += 1;
+        if (!report.patternIds.includes("sensitive_key")) {
+          report.patternIds.push("sensitive_key");
+        }
+        return [key, "<redacted:secret_ref_only>"];
+      }
+
+      return [key, redactUnknownForServer(entry, report, key)];
+    }),
+  );
+}
+
+function redactStringForServer(value: string, report: ServerRedactionReport): string {
+  let redacted = value;
+  for (const rule of SERVER_REDACTION_RULES) {
+    const pattern = new RegExp(rule.pattern.source, rule.pattern.flags.includes("g") ? rule.pattern.flags : `${rule.pattern.flags}g`);
+    redacted = redacted.replace(pattern, () => {
+      report.redacted = true;
+      report.replacementCount += 1;
+      if (!report.patternIds.includes(rule.id)) {
+        report.patternIds.push(rule.id);
+      }
+      return rule.replacement;
+    });
+  }
+  return redacted;
+}
+
 function containsSecretLikeText(value: unknown): boolean {
   const text = fingerprintEvent(value);
   return SECRET_LIKE_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 function redactSecretsForLog(text: string): string {
-  let masked = text;
-  for (const pattern of SECRET_LIKE_PATTERNS) {
-    masked = masked.replace(new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`), "<redacted>");
-  }
-  return masked;
+  return redactStringForServer(text, {
+    phase: "post_receive",
+    redacted: false,
+    replacementCount: 0,
+    patternIds: [],
+  });
 }
 
 function fingerprintEvent(value: unknown): string {
