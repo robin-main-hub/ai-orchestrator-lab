@@ -4,6 +4,7 @@ import type {
   PermissionLevel,
   TerminalCommandIntent,
   TerminalHostKind,
+  TerminalTimelineBlock,
   TmuxPaneRole,
 } from "@ai-orchestrator/protocol";
 import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
@@ -35,9 +36,10 @@ export type DesktopTmuxDispatchResponse = {
   approval?: ApprovalRequest;
   dispatch: {
     attempted: boolean;
-    status: "recorded" | "pending_approval" | "blocked" | "sent" | "failed";
+    status: "recorded" | "pending_approval" | "blocked" | "sent" | "failed" | "dry_run";
     reason: string;
   };
+  timelineBlocks?: TerminalTimelineBlock[];
 };
 
 export type DesktopTmuxPreflightResponse = {
@@ -48,6 +50,7 @@ export type DesktopTmuxPreflightResponse = {
     reason: string;
   };
   approval?: ApprovalRequest;
+  timelineBlocks?: TerminalTimelineBlock[];
   audit: {
     redactionApplied: boolean;
     wouldRecordEvents: string[];
@@ -88,6 +91,7 @@ export type DesktopTmuxCaptureResponse = {
     redactionApplied: boolean;
     capturedAt: string;
   };
+  timelineBlocks?: TerminalTimelineBlock[];
 };
 
 type TmuxServerRequestInput<TRequest> = {
