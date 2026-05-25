@@ -13,6 +13,8 @@ import {
   createServerProviderRegistrySnapshot,
   createServerProviderModelDiscoveryResponse,
   createRemoteRunResponse,
+  evaluateServerProviderCompletionPermission,
+  evaluateServerRemoteRunPermission,
   createRuntimeSnapshot,
   createServerEventStorageState,
   listEventStorageSessions,
@@ -81,6 +83,101 @@ describe("server health placeholder", () => {
 
     expect(response.status).toBe("queued");
     expect(response.fallbackMode).toBe("none");
+  });
+
+  it("requires approval before DGX-02 uses limited or untrusted provider credentials", () => {
+    const permission = evaluateServerProviderCompletionPermission({
+      id: "provider_completion_request_permission",
+      sessionId: "session_1",
+      providerProfileId: "provider_apifun_claude",
+      modelId: "claude-opus-4-6",
+      messages: [{ role: "user", content: "hello" }],
+      source: "desktop",
+      routePreference: "server_proxy",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+
+    expect(permission.action).toBe("provider_completion");
+    expect(permission.decision).toBe("approval_required");
+    expect(permission.approvalState).toBe("required");
+    expect(permission.requestedLevels).toEqual(["network_access", "secret_access"]);
+  });
+
+  it("allows approved provider completion requests through the server gate", () => {
+    const permission = evaluateServerProviderCompletionPermission({
+      id: "provider_completion_request_permission_approved",
+      sessionId: "session_1",
+      providerProfileId: "provider_apifun_claude",
+      modelId: "claude-opus-4-6",
+      messages: [{ role: "user", content: "hello" }],
+      source: "desktop",
+      routePreference: "server_proxy",
+      approvalState: "approved",
+      permissionDecision: "allow",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+
+    expect(permission.decision).toBe("allow");
+    expect(permission.approvalState).toBe("approved");
+  });
+
+  it("does not treat client-supplied allow decisions as approval by themselves", () => {
+    const permission = evaluateServerProviderCompletionPermission({
+      id: "provider_completion_request_permission_client_allow",
+      sessionId: "session_1",
+      providerProfileId: "provider_apifun_claude",
+      modelId: "claude-opus-4-6",
+      messages: [{ role: "user", content: "hello" }],
+      source: "desktop",
+      routePreference: "server_proxy",
+      permissionDecision: "allow",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+
+    expect(permission.decision).toBe("approval_required");
+    expect(permission.approvalState).toBe("required");
+  });
+
+  it("allows trusted DGX-02 providers without a second approval", () => {
+    const permission = evaluateServerProviderCompletionPermission({
+      id: "provider_completion_request_permission_trusted",
+      sessionId: "session_1",
+      providerProfileId: "provider_codex_oauth",
+      modelId: "codex-session",
+      messages: [{ role: "user", content: "hello" }],
+      source: "desktop",
+      routePreference: "server_proxy",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+
+    expect(permission.decision).toBe("allow");
+    expect(permission.approvalState).toBe("not_required");
+    expect(permission.requestedLevels).toEqual(["network_access"]);
+  });
+
+  it("maps remote run approvals through the shared server gate", () => {
+    const required = evaluateServerRemoteRunPermission({
+      id: "remote_request_permission_required",
+      runId: "run_1",
+      kind: "workspace_run",
+      targetNodeId: "dgx-02",
+      commandPreview: "pnpm test",
+      approvalState: "required",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+    const approved = evaluateServerRemoteRunPermission({
+      id: "remote_request_permission_approved",
+      runId: "run_2",
+      kind: "workspace_run",
+      targetNodeId: "dgx-02",
+      commandPreview: "pnpm test",
+      approvalState: "approved",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+
+    expect(required.decision).toBe("approval_required");
+    expect(required.requestedLevels).toEqual(["run_safe_commands", "remote_workspace"]);
+    expect(approved.decision).toBe("allow");
   });
 
   it("reports heartbeat state from runtime", () => {
@@ -906,6 +1003,70 @@ describe("public health storage redaction", () => {
 });
 
 describe("HTTP request limits", () => {
+  it("returns 403 for provider completions that need approval before proxying", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/provider-completions`, {
+        body: JSON.stringify({
+          id: "provider_completion_http_permission",
+          sessionId: "session_1",
+          providerProfileId: "provider_apifun_claude",
+          modelId: "claude-opus-4-6",
+          messages: [{ role: "user", content: "hello" }],
+          source: "desktop",
+          routePreference: "server_proxy",
+          createdAt: "2026-05-24T00:00:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toMatchObject({
+        error: "permission_required",
+        permission: {
+          action: "provider_completion",
+          approvalState: "required",
+          decision: "approval_required",
+        },
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
+
   it("returns 413 for oversized authorized JSON bodies without dropping the socket", async () => {
     const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
     const previousNodeEnv = process.env.NODE_ENV;

@@ -594,6 +594,8 @@ export const providerCompletionRequestSchema = z.object({
   messages: z.array(providerCompletionMessageSchema).min(1).max(200),
   source: eventSourceSchema,
   routePreference: providerCompletionRouteSchema,
+  approvalState: z.enum(["not_required", "required", "approved", "rejected", "expired"]).optional(),
+  permissionDecision: z.enum(["allow", "approval_required", "deny"]).optional(),
   createdAt: z.string().min(1).max(64),
 });
 export type ProviderCompletionRequest = z.infer<typeof providerCompletionRequestSchema>;

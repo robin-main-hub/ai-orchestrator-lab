@@ -3,6 +3,7 @@ import { mkdir, readFile, appendFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
+  ApprovalState,
   DgxHeartbeat,
   EventEnvelope,
   EventStorageSessionIndexResponse,
@@ -10,6 +11,9 @@ import type {
   EventSyncPushRequest,
   EventSyncPushResponse,
   ModelDiscoverySnapshot,
+  PermissionAction,
+  PermissionDecision,
+  PermissionLevel,
   ProviderCompletionMessage,
   ProviderCompletionRequest,
   ProviderCompletionResponse,
@@ -104,6 +108,14 @@ type ServerProviderProxyConfig = {
   oauthAuthFileEnvName?: string;
   defaultOAuthAuthFile?: string;
   oauthAccountLabel?: string;
+};
+
+export type ServerPermissionGateResult = {
+  action: PermissionAction;
+  approvalState: ApprovalState;
+  decision: PermissionDecision;
+  requestedLevels: PermissionLevel[];
+  reason: string;
 };
 
 const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
@@ -762,6 +774,112 @@ function createServerProviderTrustLevel(providerProfileId: string): ProviderTrus
   return "trusted";
 }
 
+function resolveServerProviderTrustLevel(providerProfileId: string): ProviderTrustLevel | "unknown" {
+  if (providerProfileId === "provider_dgx02_vllm") {
+    return "trusted";
+  }
+
+  const config = serverProviderProxyConfigs.find((candidate) => candidate.providerProfileId === providerProfileId);
+  if (!config) {
+    return "unknown";
+  }
+
+  return createServerProviderTrustLevel(providerProfileId);
+}
+
+export function evaluateServerProviderCompletionPermission(
+  request: ProviderCompletionRequest,
+): ServerPermissionGateResult {
+  const config = serverProviderProxyConfigs.find((candidate) => candidate.providerProfileId === request.providerProfileId);
+  const trustLevel = resolveServerProviderTrustLevel(request.providerProfileId);
+  const requestedLevels: PermissionLevel[] = ["network_access"];
+
+  if (request.providerProfileId !== "provider_dgx02_vllm" && !config?.noAuth) {
+    requestedLevels.push("secret_access");
+  }
+
+  if (request.permissionDecision === "deny" || request.approvalState === "rejected" || request.approvalState === "expired") {
+    return {
+      action: "provider_completion",
+      approvalState: request.approvalState ?? "rejected",
+      decision: "deny",
+      requestedLevels,
+      reason: "provider completion was denied or its approval expired",
+    };
+  }
+
+  if (trustLevel === "unknown") {
+    return {
+      action: "provider_completion",
+      approvalState: "rejected",
+      decision: "deny",
+      requestedLevels,
+      reason: "provider is not registered in the DGX-02 proxy allowlist",
+    };
+  }
+
+  if (request.approvalState === "approved") {
+    return {
+      action: "provider_completion",
+      approvalState: "approved",
+      decision: "allow",
+      requestedLevels,
+      reason: "provider completion was explicitly approved",
+    };
+  }
+
+  if (trustLevel === "trusted") {
+    return {
+      action: "provider_completion",
+      approvalState: "not_required",
+      decision: "allow",
+      requestedLevels,
+      reason: "trusted DGX-02 provider can run without an extra approval",
+    };
+  }
+
+  return {
+    action: "provider_completion",
+    approvalState: "required",
+    decision: "approval_required",
+    requestedLevels,
+    reason: `${trustLevel} provider completion requires explicit approval before DGX-02 uses its credential`,
+  };
+}
+
+export function evaluateServerRemoteRunPermission(request: RemoteExecutionRequest): ServerPermissionGateResult {
+  const requestedLevels: PermissionLevel[] =
+    request.kind === "model_inference" ? ["network_access", "remote_workspace"] : ["run_safe_commands", "remote_workspace"];
+
+  if (request.approvalState === "approved") {
+    return {
+      action: "remote_workspace",
+      approvalState: "approved",
+      decision: "allow",
+      requestedLevels,
+      reason: "remote run was explicitly approved",
+    };
+  }
+
+  if (request.approvalState === "rejected" || request.approvalState === "expired") {
+    return {
+      action: "remote_workspace",
+      approvalState: request.approvalState,
+      decision: "deny",
+      requestedLevels,
+      reason: "remote run approval was rejected or expired",
+    };
+  }
+
+  return {
+    action: "remote_workspace",
+    approvalState: "required",
+    decision: "approval_required",
+    requestedLevels,
+    reason: "remote execution requires approval before DGX-02 queues it",
+  };
+}
+
 function createServerProviderTags(providerProfileId: string) {
   if (providerProfileId.includes("deepseek")) {
     return ["dgx-secret-ref", "server-proxy", "deepseek"];
@@ -1379,14 +1497,15 @@ export function createRemoteRunResponse(
   request: RemoteExecutionRequest,
   runtime = createRuntimeSnapshot(),
 ): RemoteExecutionResponse {
-  if (request.approvalState !== "approved") {
+  const permission = evaluateServerRemoteRunPermission(request);
+  if (permission.decision !== "allow") {
     return {
       id: `remote_response_${crypto.randomUUID()}`,
       requestId: request.id,
       status: "blocked",
       targetNodeId: request.targetNodeId,
       fallbackMode: "local_cli",
-      message: "approval required before DGX remote execution",
+      message: permission.reason,
       createdAt: new Date().toISOString(),
     };
   }
@@ -1748,6 +1867,14 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         respondJson(400, {
           error: "invalid_provider_completion_payload",
           message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+      const permission = evaluateServerProviderCompletionPermission(payload);
+      if (permission.decision !== "allow") {
+        respondJson(403, {
+          error: permission.decision === "deny" ? "permission_denied" : "permission_required",
+          permission,
         });
         return;
       }
