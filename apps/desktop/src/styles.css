@@ -3424,6 +3424,92 @@ button {
   background: #003b44;
 }
 
+/* ── Stage 2-6 Debate provenance — DebateUtterance v2 fields ── */
+
+.debate-card--decision {
+  border-left: 3px solid var(--cyan);
+  background: linear-gradient(
+    90deg,
+    rgba(95, 211, 226, 0.06),
+    transparent 24%
+  );
+}
+
+.debate-card__decision-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  padding: 1px 6px;
+  border: 1px solid rgba(95, 211, 226, 0.55);
+  border-radius: 4px;
+  background: rgba(95, 211, 226, 0.16);
+  color: var(--cyan);
+  font-size: 9px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  letter-spacing: 0.05em;
+}
+
+.debate-card__parent-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 47, 56, 0.55);
+  color: var(--subtle);
+  font-size: 10px;
+}
+
+.debate-card__parent-ref em {
+  color: var(--text);
+  font-style: normal;
+  font-weight: 500;
+}
+
+.debate-card__provenance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px dashed var(--line-soft);
+}
+
+.debate-card__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: rgba(0, 47, 56, 0.45);
+  color: var(--muted);
+  font-size: 9.5px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  cursor: default;
+}
+
+.debate-card__pill--ok {
+  border-color: rgba(120, 220, 160, 0.42);
+  color: #a8ffdf;
+}
+
+.debate-card__pill--bad {
+  border-color: rgba(255, 95, 109, 0.42);
+  color: var(--rose);
+}
+
+.debate-card__pill--cyan {
+  border-color: rgba(95, 211, 226, 0.5);
+  color: var(--cyan);
+}
+
+.debate-card__pill--neutral {
+  color: var(--muted);
+}
+
 .debate-tags {
   display: flex;
   flex-wrap: wrap;
