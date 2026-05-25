@@ -375,7 +375,7 @@ cd apps/desktop && node ../../node_modules/vitest/vitest.mjs run --passWithNoTes
 1. ❌ **AutoResearch 루프 (diagnose/propose/guard) 구현 금지.** raw log 적재까지만. v2.
 2. ❌ **새 npm 의존성 추가 금지.** BM25 는 50줄로 직접 구현 가능. `lunr` / `elasticlunr` / `sentence-transformers` / 임베딩 라이브러리 등 일체 금지.
 3. ❌ **`MemoryRecord` 의 기존 required 필드 변경 금지.** 새 필드는 전부 optional. `id / title / content / sourceChannel / trustLevel / pinned / createdAt / layer` 같은 기존 필드의 type / required 상태 절대 바꾸지 말 것 — backup projection / replay / 다른 controller 가 깨짐.
-4. ❌ **UI 작업 금지.** `apps/desktop/src/components/MementoPanel.tsx` 및 `.memento-v2__*` CSS 절대 건드리지 말 것 (Claude 의 작업 영역, 충돌 발생). `MementoInspectorPanel.tsx` (legacy) 도 마찬가지로 보존.
+4. ❌ **UI 작업 금지.** `apps/desktop/src/components/EvolveMementoPanel.tsx` (구 `MementoPanel.tsx`, "EvolveMemento" 로 unified rename 됨) 및 `.memento-v2__*` CSS 절대 건드리지 말 것 (Claude 의 작업 영역, 충돌 발생). `MementoInspectorPanel.tsx` (legacy) 도 마찬가지로 보존.
 5. ❌ **semantic embedding view 활성화 금지.** stub function (`return []`) 으로 둘 것. embedding provider 결정이 별도 일.
 6. ❌ **Context 를 Question 위에 두는 prompt 작성 금지.** 논문 Appendix F 전부 일관되게 `Question:` 먼저, `Context:` 아래. 어떤 prompt template 짤 때든 이 순서.
 7. ❌ **기존 테스트 비활성화 / skip / 삭제 금지.** 새 필드 때문에 깨지는 테스트는 fixture 에 default 값 추가해서 살릴 것.
