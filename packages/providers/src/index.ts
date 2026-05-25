@@ -36,6 +36,17 @@ export {
   splitSystemAndMessages,
   type AnthropicAdapterOptions,
 } from "./anthropicAdapter.js";
+export {
+  assertContract,
+  CONTRACT_EMPTY_CONTENT,
+  CONTRACT_HAPPY_PATH,
+  CONTRACT_NETWORK_FAILURE,
+  CONTRACT_PROVIDER_ERROR,
+  CONTRACT_RATE_LIMITED,
+  CONTRACT_UNAUTHORIZED,
+  STANDARD_CONTRACT_CASES,
+  type ContractExpectation,
+} from "./contractTestFixtures.js";
 
 /**
  * @deprecated The legacy adapter shape. New adapters should implement
