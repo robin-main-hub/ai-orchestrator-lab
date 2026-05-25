@@ -78,3 +78,19 @@ ORCHESTRATOR_TMUX_DRY_RUN=
 ```
 
 and must remain behind Event Storage, Permission, Redaction, and Approval gates.
+
+## Automated Smoke
+
+With a dry-run server already running, execute:
+
+```bash
+corepack pnpm tmux:smoke:dry-run
+```
+
+The script verifies:
+
+- `/health` exposes `tmux-dispatch-gate`;
+- `/tmux/dispatch` with `approvalState=required` queues an approval;
+- `/approvals/grant` approves that dispatch;
+- `/tmux/dispatch` with `approvalState=approved` returns `recorded`;
+- `dispatch.attempted=false`, proving no real `tmux send-keys` ran.
