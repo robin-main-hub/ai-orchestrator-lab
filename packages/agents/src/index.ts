@@ -352,6 +352,46 @@ export const defaultAgentProfiles: AgentProfile[] = [
     permissionLevel: "read_only",
   },
   {
+    id: "agent_builder",
+    name: "Builder",
+    kind: "virtual",
+    role: "builder",
+    // Builder is a creative-energy persona (Yui Hirasawa) — small SOUL
+    // summary is enough; concrete artifact construction happens through
+    // Coding Packet → Executor handoff, not through the Builder prompt
+    // weight itself.
+    soulMode: "summary",
+    configSource: "internal",
+    enabled: true,
+    permissionLevel: "read_only",
+  },
+  {
+    id: "agent_external",
+    name: "External",
+    kind: "real",
+    role: "external",
+    // Misato — external channel operator. Read-only default; promotions
+    // happen through explicit per-request permission decisions.
+    soulMode: "retrieved",
+    configSource: "markdown",
+    enabled: false,
+    permissionLevel: "read_only",
+  },
+  {
+    id: "agent_auditor",
+    name: "Auditor",
+    kind: "virtual",
+    role: "auditor",
+    // Sora — independent compliance sentinel. Read-only by design.
+    // configSource stays "internal" by default per the virtual-personas
+    // invariant; flip to "markdown" + loadPersona when promoting Sora
+    // into an active audit round.
+    soulMode: "retrieved",
+    configSource: "internal",
+    enabled: false,
+    permissionLevel: "read_only",
+  },
+  {
     id: "agent_executor",
     name: "Executor",
     kind: "real",
