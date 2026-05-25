@@ -12,6 +12,7 @@ import {
   createLiveHealthResponse,
   createProviderCompletionApprovalRequest,
   createServerIngressSnapshot,
+  createServerTmuxDispatchSnapshot,
   createServerProviderRegistrySnapshot,
   createServerProviderModelDiscoveryResponse,
   createRemoteRunResponse,
@@ -367,6 +368,56 @@ describe("server health placeholder", () => {
       state: "required",
       sourceTrust: "untrusted",
     });
+  });
+
+  it("records tmux dispatch intents behind approval without leaking raw secrets", () => {
+    const snapshot = createServerTmuxDispatchSnapshot(
+      {
+        id: "tmux_dispatch_test",
+        sessionId: "session_tmux_test",
+        terminalSessionId: "terminal_session_ai_swarm",
+        role: "architect",
+        host: "dgx_02",
+        paneId: "%4",
+        requestedBy: "user",
+        commandPreview: "pnpm typecheck",
+        approvalState: "required",
+        dispatchMode: "execute_if_approved",
+        tmuxSessionName: "ai-swarm",
+        createdAt: "2026-05-24T00:00:00.000Z",
+      },
+      "2026-05-24T00:00:00.000Z",
+    );
+
+    expect(snapshot.intent.dispatchState).toBe("pending_approval");
+    expect(snapshot.permission.decision).toBe("approval_required");
+    expect(snapshot.approval).toMatchObject({
+      action: "terminal_run",
+      state: "required",
+      requestedLevels: expect.arrayContaining(["run_safe_commands", "remote_workspace"]),
+    });
+    expect(snapshot.events.map((event) => event.type)).toEqual([
+      "terminal.command.intent.created",
+      "approval.requested",
+    ]);
+
+    const denied = createServerTmuxDispatchSnapshot({
+      id: "tmux_dispatch_secret_test",
+      sessionId: "session_tmux_test",
+      terminalSessionId: "terminal_session_ai_swarm",
+      role: "qa",
+      host: "dgx_02",
+      paneId: "%7",
+      requestedBy: "user",
+      commandPreview: "echo Bearer abcdefghijklmnopqrstuvwxyz123456",
+      approvalState: "approved",
+      dispatchMode: "execute_if_approved",
+      tmuxSessionName: "ai-swarm",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+    expect(denied.permission.decision).toBe("deny");
+    expect(denied.intent.dispatchState).toBe("blocked");
+    expect(JSON.stringify(denied)).not.toContain("abcdefghijklmnopqrstuvwxyz");
   });
 
   it("merges desktop system prompts before proxying to strict vLLM chat templates", async () => {
@@ -1346,6 +1397,144 @@ describe("HTTP request limits", () => {
         delete process.env.EVENT_STORAGE_DIR;
       } else {
         process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("records tmux dispatch requests through the approval gate", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const previousTmuxDispatch = process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-tmux-"));
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+    process.env.EVENT_STORAGE_DIR = tempDir;
+    delete process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/tmux/dispatch`, {
+        body: JSON.stringify({
+          id: "tmux_dispatch_http_test",
+          sessionId: "session_tmux_http",
+          terminalSessionId: "terminal_session_ai_swarm",
+          role: "frontend",
+          host: "dgx_02",
+          paneId: "%5",
+          requestedBy: "user",
+          commandPreview: "pnpm typecheck",
+          approvalState: "required",
+          dispatchMode: "execute_if_approved",
+          tmuxSessionName: "ai-swarm",
+          createdAt: "2026-05-25T00:00:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(response.status).toBe(202);
+      const body = (await response.json()) as {
+        approval?: { state: string; action: string };
+        dispatch: { status: string; attempted: boolean };
+        eventSync: { accepted: number };
+        intent: { dispatchState: string; redactedCommandPreview: string };
+        permission: { decision: string };
+      };
+      expect(body.permission.decision).toBe("approval_required");
+      expect(body.intent.dispatchState).toBe("pending_approval");
+      expect(body.approval).toMatchObject({
+        state: "required",
+        action: "terminal_run",
+      });
+      expect(body.dispatch).toMatchObject({
+        attempted: false,
+        status: "pending_approval",
+      });
+      expect(body.eventSync.accepted).toBe(2);
+
+      const approvedResponse = await fetch(`http://127.0.0.1:${address.port}/tmux/dispatch`, {
+        body: JSON.stringify({
+          id: "tmux_dispatch_http_approved",
+          sessionId: "session_tmux_http",
+          terminalSessionId: "terminal_session_ai_swarm",
+          role: "frontend",
+          host: "dgx_02",
+          paneId: "%5",
+          requestedBy: "user",
+          commandPreview: "pnpm test",
+          approvalState: "approved",
+          dispatchMode: "execute_if_approved",
+          tmuxSessionName: "ai-swarm",
+          createdAt: "2026-05-25T00:01:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      expect(approvedResponse.status).toBe(202);
+      const approvedBody = (await approvedResponse.json()) as {
+        dispatch: { status: string; reason: string };
+        dispatchEventSync?: { accepted: number };
+        permission: { decision: string };
+      };
+      expect(approvedBody.permission.decision).toBe("allow");
+      expect(approvedBody.dispatch.status).toBe("blocked");
+      expect(approvedBody.dispatch.reason).toContain("ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS");
+      expect(approvedBody.dispatchEventSync?.accepted).toBe(1);
+
+      const listResponse = await fetch(`http://127.0.0.1:${address.port}/approvals/list`, {
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+        },
+      });
+      expect(listResponse.status).toBe(200);
+      await expect(listResponse.json()).resolves.toMatchObject({
+        summary: {
+          pending: 1,
+        },
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousEventStorageDir === undefined) {
+        delete process.env.EVENT_STORAGE_DIR;
+      } else {
+        process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      if (previousTmuxDispatch === undefined) {
+        delete process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
+      } else {
+        process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS = previousTmuxDispatch;
       }
       await rm(tempDir, { force: true, recursive: true });
     }
