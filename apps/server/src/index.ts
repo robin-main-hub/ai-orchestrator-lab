@@ -2,6 +2,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { mkdir, readFile, appendFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type {
   ApprovalDecisionRequest,
   ApprovalQueueItem,
@@ -39,6 +41,10 @@ import type {
   RuntimeSnapshot,
   SecretAvailability,
   SourceTrust,
+  TerminalCommandIntent,
+  TerminalCommandDispatchState,
+  TerminalHostKind,
+  TmuxPaneRole,
 } from "@ai-orchestrator/protocol";
 import {
   approvalDecisionRequestSchema,
@@ -46,6 +52,7 @@ import {
   eventSyncPushRequestSchema,
   providerCompletionRequestSchema,
   remoteExecutionRequestSchema,
+  terminalCommandIntentSchema,
 } from "@ai-orchestrator/protocol";
 import {
   CodexCliOAuthAdapter,
@@ -62,6 +69,7 @@ export type ServerCapability =
   | "vllm-health"
   | "runtime-status"
   | "remote-run-request"
+  | "tmux-dispatch-gate"
   | "approval-queue"
   | "event-storage-sync"
   | "remote-event-stream-placeholder"
@@ -109,6 +117,7 @@ export type DgxVllmProbeOptions = {
 
 const DEFAULT_DGX02_VLLM_BASE_URL = "http://dgx-02:8001/v1";
 const DEFAULT_DGX_MODEL_ID = "qwen36-domain-lora-v5-prisma";
+const execFileAsync = promisify(execFile);
 
 type ServerProviderProxyConfig = {
   providerProfileId: string;
@@ -193,6 +202,47 @@ export type ServerRedactionReport = {
   redacted: boolean;
   replacementCount: number;
   patternIds: string[];
+};
+
+export type ServerTmuxDispatchMode = "record_only" | "execute_if_approved";
+
+export type ServerTmuxDispatchRequest = {
+  id: string;
+  sessionId: string;
+  terminalSessionId: string;
+  role: TmuxPaneRole;
+  host: TerminalHostKind;
+  paneId: string;
+  requestedBy: PermissionActor;
+  commandPreview: string;
+  approvalState: ApprovalState;
+  dispatchMode: ServerTmuxDispatchMode;
+  tmuxSessionName: string;
+  createdAt: string;
+};
+
+export type ServerTmuxDispatchSnapshot = {
+  intent: TerminalCommandIntent;
+  permission: ServerPermissionGateResult;
+  approval?: ApprovalRequest;
+  events: EventEnvelope[];
+};
+
+export type ServerTmuxDispatchResult = {
+  attempted: boolean;
+  status: TerminalCommandDispatchState;
+  reason: string;
+  stdoutPreview?: string;
+  stderrPreview?: string;
+};
+
+export type ServerTmuxDispatchResponse = {
+  intent: TerminalCommandIntent;
+  permission: ServerPermissionGateResult;
+  approval?: ApprovalRequest;
+  dispatch: ServerTmuxDispatchResult;
+  eventSync: EventSyncPushResponse;
+  dispatchEventSync?: EventSyncPushResponse;
 };
 
 const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
@@ -453,6 +503,7 @@ export function createHealthResponse(now = new Date().toISOString(), probe?: Dgx
       "vllm-health",
       "runtime-status",
       "remote-run-request",
+      "tmux-dispatch-gate",
       "approval-queue",
       "event-storage-sync",
       "remote-event-stream-placeholder",
@@ -1008,6 +1059,209 @@ export function createRemoteRunApprovalRequest(
   };
 }
 
+const TMUX_PANE_ROLES: TmuxPaneRole[] = [
+  "discussion",
+  "orchestrator",
+  "status",
+  "code",
+  "architect",
+  "frontend",
+  "backend",
+  "qa",
+  "research",
+  "memory",
+];
+
+const TERMINAL_HOST_KINDS: TerminalHostKind[] = ["local_mac", "home_pc", "dgx_02", "dgx_01_locked"];
+
+export function parseServerTmuxDispatchRequest(value: unknown, now = new Date().toISOString()): ServerTmuxDispatchRequest {
+  if (!value || typeof value !== "object") {
+    throw new Error("tmux dispatch payload must be an object");
+  }
+
+  const candidate = value as Partial<ServerTmuxDispatchRequest>;
+  const commandPreview = typeof candidate.commandPreview === "string" ? candidate.commandPreview.trim() : "";
+  if (!commandPreview) {
+    throw new Error("commandPreview is required");
+  }
+  if (commandPreview.length > 8_000) {
+    throw new Error("commandPreview must be 8000 characters or fewer");
+  }
+
+  const role = parseTmuxPaneRole(candidate.role);
+  const sessionId = typeof candidate.sessionId === "string" && candidate.sessionId.trim() ? candidate.sessionId.trim() : "session_desktop_001";
+  const terminalSessionId =
+    typeof candidate.terminalSessionId === "string" && candidate.terminalSessionId.trim()
+      ? candidate.terminalSessionId.trim()
+      : "terminal_session_ai_swarm";
+  const paneId = typeof candidate.paneId === "string" && candidate.paneId.trim() ? candidate.paneId.trim() : `role:${role}`;
+  const requestedBy = parsePermissionActor(candidate.requestedBy);
+  const approvalState = parseApprovalState(candidate.approvalState);
+  const dispatchMode =
+    candidate.dispatchMode === "execute_if_approved" || candidate.dispatchMode === "record_only"
+      ? candidate.dispatchMode
+      : "record_only";
+  const host = parseTerminalHostKind(candidate.host);
+  const tmuxSessionName =
+    typeof candidate.tmuxSessionName === "string" && candidate.tmuxSessionName.trim()
+      ? candidate.tmuxSessionName.trim()
+      : "ai-swarm";
+  const id =
+    typeof candidate.id === "string" && candidate.id.trim()
+      ? candidate.id.trim()
+      : `tmux_dispatch_${stableServerId(`${sessionId}:${terminalSessionId}:${role}:${commandPreview}`)}`;
+  const createdAt = typeof candidate.createdAt === "string" && candidate.createdAt.trim() ? candidate.createdAt.trim() : now;
+
+  return {
+    id,
+    sessionId,
+    terminalSessionId,
+    role,
+    host,
+    paneId,
+    requestedBy,
+    commandPreview,
+    approvalState,
+    dispatchMode,
+    tmuxSessionName,
+    createdAt,
+  };
+}
+
+export function evaluateServerTmuxDispatchPermission(request: ServerTmuxDispatchRequest): ServerPermissionGateResult {
+  const requestedLevels = detectTmuxDispatchPermissions(request);
+  const rawSecretPatternFound = containsSecretLikeText(request.commandPreview);
+
+  if (rawSecretPatternFound) {
+    return {
+      action: "terminal_run",
+      approvalState: "rejected",
+      decision: "deny",
+      requestedLevels,
+      reason: "tmux command text appears to contain a raw secret and will not be dispatched",
+    };
+  }
+
+  if (request.host === "dgx_01_locked") {
+    return {
+      action: "terminal_run",
+      approvalState: "rejected",
+      decision: "deny",
+      requestedLevels,
+      reason: "DGX-01 is locked and cannot receive tmux dispatches from this orchestrator",
+    };
+  }
+
+  if (request.approvalState === "approved") {
+    return {
+      action: "terminal_run",
+      approvalState: "approved",
+      decision: "allow",
+      requestedLevels,
+      reason: "tmux dispatch was explicitly approved",
+    };
+  }
+
+  if (request.approvalState === "rejected" || request.approvalState === "expired") {
+    return {
+      action: "terminal_run",
+      approvalState: request.approvalState,
+      decision: "deny",
+      requestedLevels,
+      reason: "tmux dispatch approval was rejected or expired",
+    };
+  }
+
+  return {
+    action: "terminal_run",
+    approvalState: "required",
+    decision: "approval_required",
+    requestedLevels,
+    reason: "tmux dispatch requires explicit approval before send-keys can run",
+  };
+}
+
+export function createServerTmuxDispatchSnapshot(
+  request: ServerTmuxDispatchRequest,
+  now = new Date().toISOString(),
+): ServerTmuxDispatchSnapshot {
+  const permission = evaluateServerTmuxDispatchPermission(request);
+  const redactedCommandPreview = redactForServerPhase(request.commandPreview, "pre_store").value;
+  const dispatchState = createTmuxIntentDispatchState(request, permission);
+  const intent = terminalCommandIntentSchema.parse({
+    id: request.id,
+    sessionId: request.sessionId,
+    terminalSessionId: request.terminalSessionId,
+    paneId: request.paneId,
+    requestedBy: request.requestedBy,
+    commandPreview: redactedCommandPreview,
+    redactedCommandPreview,
+    requestedPermissions: permission.requestedLevels,
+    approvalState: permission.approvalState,
+    dispatchState,
+    blockedReason: permission.decision === "deny" ? permission.reason : undefined,
+    createdAt: request.createdAt,
+  }) as TerminalCommandIntent;
+  const approval =
+    permission.decision === "approval_required" ? createTmuxDispatchApprovalRequest(request, permission, now) : undefined;
+  const events: EventEnvelope[] = [
+    createTmuxCommandIntentEvent(intent, request.role, request.host, request.tmuxSessionName),
+  ];
+
+  if (permission.decision === "deny") {
+    events.push(createTmuxCommandBlockedEvent(intent, permission.reason, request.role, request.host, now));
+  }
+
+  if (approval) {
+    events.push(createApprovalRequestedEvent(approval));
+  }
+
+  return {
+    intent,
+    permission,
+    approval,
+    events,
+  };
+}
+
+export async function recordServerTmuxDispatchToPersistentServerStorage(
+  request: ServerTmuxDispatchRequest,
+  storage: JsonlServerEventStorage,
+  now = new Date().toISOString(),
+): Promise<ServerTmuxDispatchResponse> {
+  const snapshot = createServerTmuxDispatchSnapshot(request, now);
+  const eventSync = await pushEventsToPersistentServerStorage(createTmuxDispatchEventSyncRequest(request, snapshot.events, now), storage, now);
+  const dispatch = await dispatchServerTmuxCommandIfAllowed(request, snapshot.intent, snapshot.permission);
+  let dispatchEventSync: EventSyncPushResponse | undefined;
+
+  if (
+    dispatch.status === "sent" ||
+    dispatch.status === "failed" ||
+    (dispatch.status === "blocked" && snapshot.permission.decision === "allow" && request.dispatchMode === "execute_if_approved")
+  ) {
+    const dispatchEvent =
+      dispatch.status === "sent"
+        ? createTmuxCommandSentEvent(snapshot.intent, dispatch, request.role, request.host, now)
+        : dispatch.status === "failed"
+          ? createTmuxCommandFailedEvent(snapshot.intent, dispatch, request.role, request.host, now)
+          : createTmuxCommandBlockedEvent(snapshot.intent, dispatch.reason, request.role, request.host, now);
+    dispatchEventSync = await pushEventsToPersistentServerStorage(
+      createTmuxDispatchEventSyncRequest(request, [dispatchEvent], now),
+      storage,
+      now,
+    );
+  }
+
+  return {
+    intent: snapshot.intent,
+    permission: snapshot.permission,
+    approval: snapshot.approval,
+    dispatch,
+    eventSync,
+    dispatchEventSync,
+  };
+}
+
 export function listApprovalsFromServerStorage(
   state = defaultEventStorageState,
   now = new Date().toISOString(),
@@ -1541,6 +1795,14 @@ function createIngressResultReason(blocked: boolean, requiresApproval: boolean, 
   return "high confidence external input accepted";
 }
 
+function stableServerId(value: string) {
+  let hash = 0;
+  for (const char of value) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  return hash.toString(36);
+}
+
 function stableIngressId(value: string) {
   let hash = 0;
   for (const char of value) {
@@ -1631,6 +1893,303 @@ function asApprovalDecisionPayload(value: unknown): ServerApprovalDecisionEventP
   }
 
   return undefined;
+}
+
+function parseTmuxPaneRole(value: unknown): TmuxPaneRole {
+  if (typeof value === "string" && TMUX_PANE_ROLES.includes(value as TmuxPaneRole)) {
+    return value as TmuxPaneRole;
+  }
+
+  return "orchestrator";
+}
+
+function parseTerminalHostKind(value: unknown): TerminalHostKind {
+  if (typeof value === "string" && TERMINAL_HOST_KINDS.includes(value as TerminalHostKind)) {
+    return value as TerminalHostKind;
+  }
+
+  return "dgx_02";
+}
+
+function parsePermissionActor(value: unknown): PermissionActor {
+  if (value === "user" || value === "agent" || value === "external_channel" || value === "mobile" || value === "server") {
+    return value;
+  }
+
+  return "user";
+}
+
+function parseApprovalState(value: unknown): ApprovalState {
+  if (value === "not_required" || value === "required" || value === "approved" || value === "rejected" || value === "expired") {
+    return value;
+  }
+
+  return "required";
+}
+
+function detectTmuxDispatchPermissions(request: ServerTmuxDispatchRequest): PermissionLevel[] {
+  const permissions = new Set<PermissionLevel>(["run_safe_commands", "remote_workspace"]);
+  const command = request.commandPreview.toLowerCase();
+
+  if (request.host === "local_mac" || request.host === "home_pc") {
+    permissions.delete("remote_workspace");
+  }
+
+  if (/(rm\s+-rf|shutdown|reboot|format|diskpart|mkfs|dd\s+if=|sudo\s+)/i.test(request.commandPreview)) {
+    permissions.add("run_dangerous_commands");
+  }
+
+  if (/(apply_patch|write|delete|remove|move|mv\s|rm\s|git\s+push|git\s+merge|git\s+rebase|pnpm\s+install|npm\s+install)/i.test(
+    request.commandPreview,
+  )) {
+    permissions.add("write_files");
+  }
+
+  if (/(curl|wget|http:\/\/|https:\/\/|ssh\s|scp\s|rsync\s|git\s+fetch|git\s+pull)/i.test(request.commandPreview)) {
+    permissions.add("network_access");
+  }
+
+  if (/(api[_ -]?key|token|secret|bearer|password|private key|\.env|auth\.json)/i.test(command)) {
+    permissions.add("secret_access");
+  }
+
+  return [...permissions];
+}
+
+function createTmuxIntentDispatchState(
+  _request: ServerTmuxDispatchRequest,
+  permission: ServerPermissionGateResult,
+): TerminalCommandDispatchState {
+  if (permission.decision === "deny") return "blocked";
+  if (permission.decision === "approval_required") return "pending_approval";
+  return "recorded";
+}
+
+function createTmuxDispatchApprovalRequest(
+  request: ServerTmuxDispatchRequest,
+  permission: ServerPermissionGateResult,
+  now: string,
+): ApprovalRequest {
+  const channel = eventSourceFromPermissionActor(request.requestedBy);
+  return {
+    id: createApprovalId(request.id),
+    sessionId: request.sessionId,
+    sourceItemId: request.id,
+    subjectId: `${request.host}:${request.tmuxSessionName}:${request.role}`,
+    actor: request.requestedBy,
+    channel,
+    sourceTrust: sourceTrustFromEventSource(channel),
+    action: permission.action,
+    requestedLevels: permission.requestedLevels,
+    decision: permission.decision,
+    state: permission.approvalState,
+    reason: permission.reason,
+    ttlSeconds: DEFAULT_APPROVAL_TTL_SECONDS,
+    createdAt: now,
+    expiresAt: addSecondsIso(now, DEFAULT_APPROVAL_TTL_SECONDS),
+  };
+}
+
+function eventSourceFromPermissionActor(actor: PermissionActor): EventSource {
+  if (actor === "mobile") return "mobile";
+  if (actor === "external_channel") return "api";
+  if (actor === "agent") return "agent";
+  if (actor === "server") return "server";
+  return "desktop";
+}
+
+function createTmuxCommandIntentEvent(
+  intent: TerminalCommandIntent,
+  role: TmuxPaneRole,
+  host: TerminalHostKind,
+  tmuxSessionName: string,
+): EventEnvelope {
+  return {
+    id: `event_tmux_intent_${intent.id}`,
+    sessionId: intent.sessionId,
+    type: "terminal.command.intent.created",
+    payload: {
+      intent,
+      role,
+      host,
+      tmuxSessionName,
+      rawCommandQuarantined: true,
+    },
+    createdAt: intent.createdAt,
+    source: "server",
+    sourceTrust: "trusted",
+    redacted: true,
+    correlationId: intent.id,
+  };
+}
+
+function createTmuxCommandBlockedEvent(
+  intent: TerminalCommandIntent,
+  reason: string,
+  role: TmuxPaneRole,
+  host: TerminalHostKind,
+  createdAt: string,
+): EventEnvelope {
+  return {
+    id: `event_tmux_blocked_${intent.id}_${stableServerId(reason)}`,
+    sessionId: intent.sessionId,
+    type: "terminal.command.blocked",
+    payload: {
+      intentId: intent.id,
+      terminalSessionId: intent.terminalSessionId,
+      paneId: intent.paneId,
+      role,
+      host,
+      reason,
+      redactedCommandPreview: intent.redactedCommandPreview,
+    },
+    createdAt,
+    source: "server",
+    sourceTrust: "trusted",
+    redacted: true,
+    correlationId: intent.id,
+  };
+}
+
+function createTmuxCommandSentEvent(
+  intent: TerminalCommandIntent,
+  dispatch: ServerTmuxDispatchResult,
+  role: TmuxPaneRole,
+  host: TerminalHostKind,
+  createdAt: string,
+): EventEnvelope {
+  return {
+    id: `event_tmux_sent_${intent.id}_${stableServerId(createdAt)}`,
+    sessionId: intent.sessionId,
+    type: "terminal.command.sent",
+    payload: {
+      intentId: intent.id,
+      terminalSessionId: intent.terminalSessionId,
+      paneId: intent.paneId,
+      role,
+      host,
+      stdoutPreview: dispatch.stdoutPreview,
+      stderrPreview: dispatch.stderrPreview,
+    },
+    createdAt,
+    source: "server",
+    sourceTrust: "trusted",
+    redacted: true,
+    correlationId: intent.id,
+  };
+}
+
+function createTmuxCommandFailedEvent(
+  intent: TerminalCommandIntent,
+  dispatch: ServerTmuxDispatchResult,
+  role: TmuxPaneRole,
+  host: TerminalHostKind,
+  createdAt: string,
+): EventEnvelope {
+  return {
+    id: `event_tmux_failed_${intent.id}_${stableServerId(dispatch.reason)}`,
+    sessionId: intent.sessionId,
+    type: "terminal.command.failed",
+    payload: {
+      intentId: intent.id,
+      terminalSessionId: intent.terminalSessionId,
+      paneId: intent.paneId,
+      role,
+      host,
+      reason: dispatch.reason,
+      stdoutPreview: dispatch.stdoutPreview,
+      stderrPreview: dispatch.stderrPreview,
+    },
+    createdAt,
+    source: "server",
+    sourceTrust: "trusted",
+    redacted: true,
+    correlationId: intent.id,
+  };
+}
+
+function createTmuxDispatchEventSyncRequest(
+  request: ServerTmuxDispatchRequest,
+  events: EventEnvelope[],
+  now: string,
+): EventSyncPushRequest {
+  return {
+    id: `event_sync_tmux_${request.id}_${stableServerId(now)}`,
+    clientId: "server_tmux_dispatch_gate",
+    sessionId: request.sessionId,
+    events,
+    idempotencyKey: `server_tmux_dispatch_gate:${request.id}:${events.map((event) => event.id).join(",")}`,
+    createdAt: now,
+  };
+}
+
+async function dispatchServerTmuxCommandIfAllowed(
+  request: ServerTmuxDispatchRequest,
+  _intent: TerminalCommandIntent,
+  permission: ServerPermissionGateResult,
+): Promise<ServerTmuxDispatchResult> {
+  if (permission.decision === "approval_required") {
+    return {
+      attempted: false,
+      status: "pending_approval",
+      reason: "tmux dispatch recorded and queued for approval",
+    };
+  }
+
+  if (permission.decision === "deny") {
+    return {
+      attempted: false,
+      status: "blocked",
+      reason: permission.reason,
+    };
+  }
+
+  if (request.dispatchMode !== "execute_if_approved") {
+    return {
+      attempted: false,
+      status: "recorded",
+      reason: "tmux dispatch intent recorded without executing send-keys",
+    };
+  }
+
+  if (process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS !== "1") {
+    return {
+      attempted: false,
+      status: "blocked",
+      reason: "ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS is not enabled on this server",
+    };
+  }
+
+  const scriptPath = process.env.TMUX_SWARM_SEND_SCRIPT ?? join(process.cwd(), "scripts", "swarm-send.sh");
+  const timeoutMs = Number(process.env.ORCHESTRATOR_TMUX_SEND_TIMEOUT_MS ?? 15_000);
+
+  try {
+    const result = await execFileAsync(scriptPath, [request.role, request.commandPreview], {
+      env: {
+        ...process.env,
+        AI_SWARM_SESSION: request.tmuxSessionName,
+      },
+      maxBuffer: 64_000,
+      timeout: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 15_000,
+      windowsHide: true,
+    });
+    return {
+      attempted: true,
+      status: "sent",
+      reason: "tmux send-keys dispatched through swarm-send.sh",
+      stdoutPreview: redactForServerPhase(result.stdout.slice(0, 2_000), "post_receive").value,
+      stderrPreview: redactForServerPhase(result.stderr.slice(0, 2_000), "post_receive").value,
+    };
+  } catch (error) {
+    const execError = error as { stdout?: string; stderr?: string; message?: string };
+    return {
+      attempted: true,
+      status: "failed",
+      reason: redactForServerPhase(execError.message ?? "tmux dispatch failed", "post_receive").value,
+      stdoutPreview: redactForServerPhase((execError.stdout ?? "").slice(0, 2_000), "post_receive").value,
+      stderrPreview: redactForServerPhase((execError.stderr ?? "").slice(0, 2_000), "post_receive").value,
+    };
+  }
 }
 
 function addSecondsIso(value: string, seconds: number) {
@@ -2724,6 +3283,36 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       } catch (error) {
         respondJson(500, {
           error: "ingress_event_storage_write_failed",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return;
+    }
+
+    if (pathname === "/tmux/dispatch" && request.method === "POST") {
+      let payload: ServerTmuxDispatchRequest;
+      try {
+        payload = parseServerTmuxDispatchRequest(await readJsonBody(request));
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) {
+          respondJson(413, { error: "payload_too_large", limit: error.limit });
+          return;
+        }
+        respondJson(400, {
+          error: "invalid_tmux_dispatch_payload",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+
+      try {
+        const result = await recordServerTmuxDispatchToPersistentServerStorage(payload, eventStorage);
+        const status =
+          result.permission.decision === "deny" ? 403 : result.permission.decision === "approval_required" ? 202 : 202;
+        respondJson(status, result);
+      } catch (error) {
+        respondJson(500, {
+          error: "tmux_dispatch_record_failed",
           message: error instanceof Error ? error.message : String(error),
         });
       }
