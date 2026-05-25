@@ -1,38 +1,59 @@
-import { Archive, KeyRound, ShieldCheck, Smartphone } from "lucide-react";
-import type { PermissionMatrixSnapshot, ProviderRuntimeReadiness, SecretVaultSnapshot } from "@ai-orchestrator/protocol";
+import { Archive, Check, KeyRound, RefreshCw, ShieldCheck, Smartphone, X } from "lucide-react";
+import type {
+  ApprovalRequest,
+  ApprovalState,
+  PermissionMatrixSnapshot,
+  ProviderRuntimeReadiness,
+  SecretVaultSnapshot,
+} from "@ai-orchestrator/protocol";
+import type { DesktopApprovalListResponse } from "../runtime/stage34ApprovalServer";
 import type { Stage7BackupSnapshot } from "../runtime/stage7Backup";
 import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
 import type { WindowAuditItem } from "../types";
 import { WindowChecklist } from "./WindowChecklist";
 
 export function OperationsRailPanel({
+  approvalBusyId,
+  approvalError,
+  approvalServerStatus,
+  approvalServerSnapshot,
   backupSnapshot,
   ingressSnapshot,
   onCheckProviderVault,
   onExportBackup,
   onImportTelegram,
+  onRefreshApprovals,
+  onResolveServerApproval,
   permissionSnapshot,
   providerReadiness,
   secretVaultSnapshot,
 }: {
+  approvalBusyId?: string;
+  approvalError?: string;
+  approvalServerStatus: "idle" | "loading" | "error" | "ready";
+  approvalServerSnapshot?: DesktopApprovalListResponse;
   backupSnapshot: Stage7BackupSnapshot;
   ingressSnapshot: Stage8IngressSnapshot;
   onCheckProviderVault: () => void;
   onExportBackup: () => void;
   onImportTelegram: () => void;
+  onRefreshApprovals: () => void;
+  onResolveServerApproval: (approval: ApprovalRequest, state: Extract<ApprovalState, "approved" | "rejected">) => void;
   permissionSnapshot: PermissionMatrixSnapshot;
   providerReadiness: ProviderRuntimeReadiness;
   secretVaultSnapshot: SecretVaultSnapshot;
 }) {
+  const serverPending = approvalServerSnapshot?.queue.length ?? 0;
+  const visibleApprovals = approvalServerSnapshot?.approvals.filter((approval) => approval.state === "required").slice(0, 4) ?? [];
   const auditItems: WindowAuditItem[] = [
     {
       id: "permission",
       label: "승인 대기열",
-      status: permissionSnapshot.summary.pending > 0 ? "partial" : "ready",
+      status: permissionSnapshot.summary.pending + serverPending > 0 ? "partial" : "ready",
       detail:
-        permissionSnapshot.summary.pending > 0
-          ? `${permissionSnapshot.summary.pending}개 작업이 승인 전 대기 중입니다.`
-          : "위험 실행은 모두 권한 정책을 통과했거나 대기열이 비어 있습니다.",
+        permissionSnapshot.summary.pending + serverPending > 0
+          ? `${permissionSnapshot.summary.pending} local / ${serverPending} DGX 승인 대기 중입니다.`
+          : "위험 실행은 권한 정책을 통과했고 승인 대기열은 비어 있습니다.",
     },
     {
       id: "ingress",
@@ -44,7 +65,7 @@ export function OperationsRailPanel({
       id: "secret",
       label: "비밀값",
       status: secretVaultSnapshot.summary.missing > 0 ? "partial" : "ready",
-      detail: "키 원문은 UI와 로그에 남기지 않고 vault ref 상태만 표시합니다.",
+      detail: "원문 키는 UI와 로그에 남기지 않고 vault ref 상태만 표시합니다.",
     },
     {
       id: "gemini",
@@ -69,12 +90,15 @@ export function OperationsRailPanel({
           <button className="rail-icon-button" onClick={onCheckProviderVault} title="Check Provider Vault" type="button">
             <KeyRound size={13} />
           </button>
+          <button className="rail-icon-button" onClick={onRefreshApprovals} title="Refresh DGX approvals" type="button">
+            <RefreshCw size={13} />
+          </button>
         </div>
       </header>
       <div className="rail-stat-list">
         <div>
           <span>permission</span>
-          <strong>{permissionSnapshot.summary.pending} pending</strong>
+          <strong>{permissionSnapshot.summary.pending} local / {serverPending} DGX</strong>
         </div>
         <div>
           <span>ingress</span>
@@ -93,7 +117,47 @@ export function OperationsRailPanel({
           <strong>{secretVaultSnapshot.summary.available}/{secretVaultSnapshot.entries.length} available</strong>
         </div>
       </div>
-      <WindowChecklist items={auditItems} title="Ops 창 점검" />
+      <div className="server-approval-queue">
+        <header>
+          <span>DGX 승인 큐</span>
+          <strong>{approvalServerStatus === "loading" ? "loading" : `${serverPending} pending`}</strong>
+        </header>
+        {approvalError ? <p className="server-approval-error">{approvalError}</p> : null}
+        {visibleApprovals.length === 0 ? (
+          <p className="server-approval-empty">
+            {approvalServerSnapshot ? "서버 승인 대기열이 비어 있습니다." : "새로고침하면 DGX-02의 실제 승인 큐를 불러옵니다."}
+          </p>
+        ) : (
+          visibleApprovals.map((approval) => (
+            <article key={approval.id}>
+              <div>
+                <strong>{approval.action}</strong>
+                <span>{approval.reason}</span>
+                <small>{approval.requestedLevels.join(", ") || "policy review"}</small>
+              </div>
+              <div className="server-approval-actions">
+                <button
+                  disabled={approvalBusyId === approval.id}
+                  onClick={() => onResolveServerApproval(approval, "approved")}
+                  title="Approve"
+                  type="button"
+                >
+                  <Check size={12} />
+                </button>
+                <button
+                  disabled={approvalBusyId === approval.id}
+                  onClick={() => onResolveServerApproval(approval, "rejected")}
+                  title="Reject"
+                  type="button"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+      <WindowChecklist items={auditItems} title="Ops 점검" />
     </section>
   );
 }
