@@ -210,3 +210,31 @@ Manus 6주 로드맵을 우리 Stage 2~3 영역별 마이그레이션과 정렬:
 - Manus archive: [`docs/manus/competitive-ux-research-output.md`](manus/competitive-ux-research-output.md)
 - v0 raw output (reference only): [`docs/v0/v0-output/`](v0/v0-output/)
 - v0 적용 결과 (Stage 0/1a): [`apps/desktop/src/styles/tokens.css`](../apps/desktop/src/styles/tokens.css), [`apps/desktop/src/ui/`](../apps/desktop/src/ui/)
+
+## 13. Debate provenance schema
+
+Decision: adopt optional provenance fields on `DebateUtterance` before building the final debate UI.
+
+Added protocol fields:
+
+- `parentUtteranceId?: string` — reply/critique linkage.
+- `acceptedBy?: string[]` — later utterance ids that accepted this utterance.
+- `rejectedBy?: string[]` — later utterance ids that rejected this utterance.
+- `decisionId?: string` — final decision or decision-record link.
+- `evidenceRefIds?: string[]` — evidence references used by the utterance.
+- `codingImpactRefs?: string[]` — CodingPacket or implementation refs affected by the utterance.
+
+These fields are optional so existing debate seeds and UI components keep working. The goal is to let future UI show provenance footers, accepted/rejected trails, and decision handoff links without changing the storage shape later.
+
+## 14. Tmux block model
+
+Decision: model tmux panes as timelines of typed blocks, not as raw terminal text only.
+
+Added protocol schemas:
+
+- `terminalTimelineBlockKindSchema`
+- `terminalTimelineBlockStatusSchema`
+- `terminalTimelineBlockSchema`
+- `terminalPaneTimelineSchema`
+
+The block model can represent command intent, approval, dry-run, dispatch, capture, handoff, and notes. It stays execution-neutral: real `tmux send-keys` is still gated by the existing approval and dry-run flow. The UI can render Warp-like terminal blocks later by reading `TerminalPaneTimeline`, while Event Storage remains the source of truth.

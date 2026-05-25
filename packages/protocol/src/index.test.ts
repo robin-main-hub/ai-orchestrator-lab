@@ -11,6 +11,7 @@ import {
   approvalRequestSchema,
   assistantDraftSchema,
   codingPacketSchema,
+  debateRoundSchema,
   evidenceRefSchema,
   eventEnvelopeSchema,
   eventStorageSessionIndexResponseSchema,
@@ -25,6 +26,7 @@ import {
   terminalCommandIntentSchema,
   terminalCommandEventTypeSchema,
   terminalPaneSchema,
+  terminalPaneTimelineSchema,
   tmuxSessionRefSchema,
   workItemHandoffSchema,
   workItemSchema,
@@ -66,6 +68,44 @@ describe("protocol schemas", () => {
     };
 
     expect(codingPacketSchema.parse(packet).goal).toBe("오케스트레이터 골격 생성");
+  });
+
+  it("tracks debate provenance without forcing UI-specific layout", () => {
+    const round = debateRoundSchema.parse({
+      id: "round_critique",
+      debateId: "debate_1",
+      kind: "cross_critique",
+      title: "상호 비판",
+      status: "completed",
+      utterances: [
+        {
+          id: "utterance_architect_1",
+          agentId: "agent_architect",
+          roundId: "round_initial",
+          content: "Event Storage를 먼저 고정하자.",
+          tags: ["evidence", "coding_impact"],
+          acceptedBy: ["utterance_orchestrator_2"],
+          decisionId: "decision_event_storage_first",
+          evidenceRefIds: ["evidence_docs_13"],
+          createdAt: "2026-05-26T00:00:00.000Z",
+        },
+        {
+          id: "utterance_reviewer_1",
+          agentId: "agent_reviewer",
+          roundId: "round_critique",
+          parentUtteranceId: "utterance_architect_1",
+          content: "동의하지만 outbox race를 먼저 막아야 한다.",
+          tags: ["objection", "risk"],
+          rejectedBy: ["utterance_orchestrator_2"],
+          codingImpactRefs: ["coding_packet.verificationPlan"],
+          createdAt: "2026-05-26T00:01:00.000Z",
+        },
+      ],
+    });
+
+    expect(round.utterances[0]?.acceptedBy).toEqual(["utterance_orchestrator_2"]);
+    expect(round.utterances[1]?.parentUtteranceId).toBe("utterance_architect_1");
+    expect(round.utterances[1]?.codingImpactRefs).toEqual(["coding_packet.verificationPlan"]);
   });
 
   it("keeps provider credentials behind a secret reference", () => {
@@ -980,6 +1020,62 @@ describe("protocol schemas", () => {
       const type = terminalCommandEventTypeSchema.parse(event.type);
       expect(() => parseTerminalCommandEventPayload(type, event.payload)).not.toThrow();
     }
+  });
+
+  it("models tmux pane timelines as blocks before real execution", () => {
+    const timeline = terminalPaneTimelineSchema.parse({
+      id: "timeline_frontend_pane",
+      sessionId: "session_tmux",
+      terminalSessionId: "terminal_session_ai_swarm",
+      paneId: "%5",
+      role: "frontend",
+      host: "dgx_02",
+      lastBlockId: "block_dry_run",
+      updatedAt: "2026-05-26T00:03:00.000Z",
+      blocks: [
+        {
+          id: "block_intent",
+          sessionId: "session_tmux",
+          terminalSessionId: "terminal_session_ai_swarm",
+          paneId: "%5",
+          role: "frontend",
+          host: "dgx_02",
+          kind: "command_intent",
+          status: "pending_approval",
+          title: "Frontend pane command intent",
+          summary: "pnpm typecheck dispatch is waiting for approval.",
+          commandIntentId: "tmux_dispatch_1",
+          approvalId: "approval_tmux_dispatch_1",
+          relatedEventIds: ["event_tmux_intent_tmux_dispatch_1", "event_approval_tmux_dispatch_1"],
+          redactionApplied: true,
+          createdAt: "2026-05-26T00:00:00.000Z",
+        },
+        {
+          id: "block_dry_run",
+          sessionId: "session_tmux",
+          terminalSessionId: "terminal_session_ai_swarm",
+          paneId: "%5",
+          role: "frontend",
+          host: "dgx_02",
+          kind: "dry_run",
+          status: "dry_run",
+          title: "Dry-run accepted",
+          summary: "Approval replay produced an audit event without send-keys.",
+          parentBlockId: "block_intent",
+          commandIntentId: "tmux_dispatch_1",
+          relatedEventIds: ["event_tmux_dry_run_tmux_dispatch_1"],
+          outputPreview: "ORCHESTRATOR_TMUX_DRY_RUN accepted approved tmux dispatch",
+          redactionApplied: true,
+          startedAt: "2026-05-26T00:02:00.000Z",
+          completedAt: "2026-05-26T00:02:00.000Z",
+          createdAt: "2026-05-26T00:02:00.000Z",
+        },
+      ],
+    });
+
+    expect(timeline.blocks.map((block) => block.kind)).toEqual(["command_intent", "dry_run"]);
+    expect(timeline.blocks[1]?.parentBlockId).toBe("block_intent");
+    expect(timeline.blocks[1]?.status).toBe("dry_run");
   });
 
   it("models provider credential parsing and model discovery without raw keys", () => {
