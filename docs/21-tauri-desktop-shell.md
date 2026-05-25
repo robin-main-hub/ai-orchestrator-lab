@@ -16,7 +16,7 @@ Electron is not the default path unless Tauri blocks a critical native capabilit
 
 ## Why
 
-The app needs to run mainly on a MacBook, but also from the Windows home PC and phone. The MacBook is the canonical work machine and owns the canonical Event Store and MemoryRecord records. DGX-02 is the always-on continuity mirror, compute node, projection server, and SimpleMem index host. Clients should keep a local cache/outbox or thin projection, then sync or import through the MacBook authority.
+The app needs to run mainly on a MacBook, but also from the Windows home PC and phone. DGX-02 is the main authoritative server for Event Store, MemoryRecord, WorkItem, approvals, drafts, and continuity storage. MacBook is the primary work client. Clients should keep a local cache/outbox or thin projection, then sync back to DGX-02.
 
 Tauri fits this shape because it gives the UI a small native shell while still allowing platform-specific integrations:
 
@@ -29,12 +29,12 @@ Tauri fits this shape because it gives the UI a small native shell while still a
 
 ## Data Authority
 
-MacBook remains the source of truth for shared Event Storage, MemoryRecord, WorkItem, approvals, and drafts.
+DGX-02 remains the source of truth for shared Event Storage, MemoryRecord, WorkItem, approvals, and drafts.
 
 Client behavior:
 
-- MacBook: canonical SQLite store plus local model fallback.
-- DGX-02: continuity mirror, projection server, compute server, SimpleMem index host.
+- DGX-02: authoritative Event Store/MemoryRecord server, projection server, compute server, SimpleMem index host.
+- MacBook: primary work client with local SQLite cache/outbox and local model fallback.
 - Home PC: local cache/outbox exists, but normal operation assumes DGX-02 projection is online.
 - Mobile: read, approve, stop, retry, and pending remote input only.
 

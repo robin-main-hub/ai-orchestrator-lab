@@ -95,13 +95,15 @@ Event Store가 append-only이면 `forget`은 단순 삭제가 아니다.
 - 관련 Obsidian/Notion export는 다음 동기화에서 소급 수정한다.
 - secret은 secret storage에서 실제 삭제한다.
 
-## MacBook, DGX, SimpleMem의 관계
+## DGX, MacBook, SimpleMem의 관계
 
-MacBook은 원본 작업기이며 canonical Event Store, MemoryRecord, WorkItem, approval, draft의 주인이다.
+DGX-02는 원본 저장소이며 Event Store, MemoryRecord, WorkItem, approval, draft의 authority다.
 
-DGX-02는 항상 켜진 continuity mirror, 연산 서버, projection server, SimpleMem 검색 인덱스 host로 둔다. DGX-02가 기억 검색을 제공하더라도 SimpleMem은 canonical memory database가 아니라 MacBook의 Event Store와 MemoryRecord에서 파생된 고성능 검색 인덱스다.
+MacBook은 주 작업 클라이언트다. 온라인일 때는 DGX-02 authority에 기록하고, 오프라인일 때는 로컬 cache/outbox에 임시 저장한 뒤 온라인 복귀 시 DGX-02로 동기화한다.
 
-폰이나 DGX remote input에서 생긴 기억 후보는 처음에는 `pending_remote_input` 또는 archival write request로 남긴다. MacBook이 다시 연결되면 Memory Curator/Orchestrator가 import, promotion, rejection을 결정한다.
+SimpleMem은 DGX-02에 두는 고성능 검색 인덱스다. 하지만 SimpleMem이 원본 기억 DB가 되면 안 된다. 원본 기억은 DGX-02 Event Store와 MemoryRecord이고, SimpleMem은 그 원본에서 파생된 semantic/lexical/symbolic retrieval index다.
+
+폰이나 remote input에서 생긴 기억 후보는 처음에는 pending client input 또는 archival write request로 남긴다. DGX-02 authority가 수신한 뒤 Memory Curator/Orchestrator가 promotion, rejection을 결정한다.
 
 장기 기억 쓰기는 에이전트가 직접 `insert`하지 않는다. 에이전트는 `memory.archival_write.requested`를 만들고, 승격된 MemoryRecord만 DGX-02 SimpleMem에 색인한다.
 
