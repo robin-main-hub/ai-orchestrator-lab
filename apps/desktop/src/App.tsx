@@ -14,6 +14,8 @@ import {
   createCodingPacketDraft,
   createDebateRounds,
   defaultAgentProfiles,
+  parseDelegateTags,
+  type DelegateTag,
   type DebateContext,
 } from "@ai-orchestrator/agents";
 import {
@@ -60,6 +62,16 @@ import {
 import { probeDgxOrchestratorServer } from "./runtime/stage13DgxServer";
 import { DEFAULT_DGX_SERVER_BASE_URL } from "./runtime/stage30DgxEndpoints";
 import { probeDgxProviderRoutes, type Stage32DgxRouteDiagnosticSnapshot } from "./runtime/stage32DgxRouteDiagnostics";
+import {
+  buildDelegatedAgentPrompt,
+  buildDelegationFollowupPrompt,
+  delegationAuthorityLevel,
+  resolveDelegationTargetAgent,
+  serializeDelegationOutcome,
+  type DesktopDelegationOutcome,
+  type WorkbenchCompletionPurpose,
+  type WorkbenchCompletionResult,
+} from "./runtime/stage35DelegationRuntime";
 import {
   mergeConversationMessages,
   mergeEventReplayLogs,
@@ -675,6 +687,13 @@ export function App() {
       recalledMemories.length > 0
         ? `Memento recall:\n${recalledMemories.join("\n")}`
         : "Memento recall: no selected records",
+      agent.role === "companion" || agent.role === "orchestrator"
+        ? [
+            "Delegation: You may command registered sub-agents with <delegate to=\"role_or_persona\">task</delegate>.",
+            "Treat companion delegation as orchestrator-level authority for LLM sub-agent calls.",
+            "Do not claim terminal execution, file changes, or external sending happened unless a permission/event record exists.",
+          ].join("\n")
+        : "Delegation: respond directly unless the orchestrator/companion explicitly delegated this task to you.",
       "Do not claim terminal/file execution happened unless an execution event exists.",
       "If the next step needs code work, mention the Coding Packet boundary explicitly.",
     ].join("\n\n");
@@ -695,6 +714,337 @@ export function App() {
     };
 
     return [systemMessage, ...conversationMessages.slice(-8), userMessage];
+  }
+
+  async function completeWorkbenchAgent({
+    agent,
+    approvalState,
+    createdAt,
+    modelId,
+    permissionDecision,
+    persona,
+    provider,
+    purpose,
+    userMessage,
+  }: {
+    agent: WorkbenchAgent;
+    approvalState?: ApprovalState;
+    createdAt: string;
+    modelId: string;
+    permissionDecision?: "allow";
+    persona?: AgentPersonaSettings;
+    provider: ProviderProfile;
+    purpose: WorkbenchCompletionPurpose;
+    userMessage: ConversationMessage;
+  }): Promise<WorkbenchCompletionResult> {
+    if (!isDgxRoutedProvider(provider)) {
+      return {
+        content: buildMockAssistantReply({
+          content: userMessage.content,
+          agent,
+          provider,
+        }),
+        metadata: {
+          realProviderCall: false,
+          route: "mock",
+          purpose,
+        },
+      };
+    }
+
+    const pipelineMessages = createConversationPipelineMessages({
+      agent,
+      memory: memoryInspector,
+      modelId,
+      persona,
+      provider,
+      userMessage,
+    });
+    appendEvent("prompt.pipeline.assembled", {
+      agentId: agent.id,
+      providerProfileId: provider.id,
+      modelId,
+      messageCount: pipelineMessages.length,
+      memoryTraceId: memoryInspector.trace.id,
+      usedMemoryCount: memoryInspector.trace.results.filter((result) => result.usedInDecision).length,
+      soulMode: agent.soulMode,
+      purpose,
+      redaction: "applied",
+    });
+    const result = await requestDgxProviderCompletion({
+      provider,
+      modelId,
+      messages: pipelineMessages,
+      approvalState,
+      permissionDecision,
+    });
+    appendEvent("provider.completion.dgx.succeeded", {
+      agentId: agent.id,
+      providerProfileId: provider.id,
+      modelId,
+      endpoint: result.endpoint,
+      route: result.route,
+      fallbackReason: result.fallbackReason,
+      usage: result.usage,
+      purpose,
+    });
+    return {
+      content: result.content,
+      metadata: {
+        endpoint: result.endpoint,
+        route: result.route,
+        fallbackReason: result.fallbackReason,
+        usage: result.usage,
+        realProviderCall: true,
+        purpose,
+      },
+    };
+  }
+
+  async function executeDelegationRound({
+    createdAt,
+    initialReply,
+    modelId,
+    providerApprovalState,
+    selectedAgent,
+    selectedAgentPersona,
+    selectedProvider,
+    userMessage,
+  }: {
+    createdAt: string;
+    initialReply: string;
+    modelId: string;
+    providerApprovalState?: ApprovalState;
+    selectedAgent: WorkbenchAgent;
+    selectedAgentPersona?: AgentPersonaSettings;
+    selectedProvider: ProviderProfile;
+    userMessage: ConversationMessage;
+  }): Promise<
+    | {
+        finalReply: string;
+        followupMetadata: Record<string, unknown>;
+        initialReply: string;
+        outcomes: DesktopDelegationOutcome[];
+        tags: DelegateTag[];
+      }
+    | undefined
+  > {
+    const tags = parseDelegateTags(initialReply);
+    if (tags.length === 0) {
+      return undefined;
+    }
+
+    const outcomes: DesktopDelegationOutcome[] = [];
+    const maxDelegatesPerTurn = 4;
+    appendEvent("agent.delegation.detected", {
+      sourceAgentId: selectedAgent.id,
+      sourceAgentName: selectedAgent.name,
+      sourceRole: selectedAgent.role,
+      sourcePersonaName: selectedAgent.personaName,
+      authorityLevel: delegationAuthorityLevel(selectedAgent),
+      targets: tags.map((tag) => tag.target),
+      count: tags.length,
+      depthLimit: 1,
+    });
+
+    for (let index = 0; index < tags.length; index += 1) {
+      const tag = tags[index]!;
+      if (index >= maxDelegatesPerTurn) {
+        outcomes.push({ kind: "blocked", tag, reason: "max_delegates_exceeded" });
+        appendEvent("agent.delegation.blocked", {
+          sourceAgentId: selectedAgent.id,
+          target: tag.target,
+          reason: "max_delegates_exceeded",
+          depthLimit: 1,
+        });
+        continue;
+      }
+
+      const targetAgent = resolveDelegationTargetAgent(tag.target, selectedAgent, agents);
+      if (!targetAgent) {
+        outcomes.push({ kind: "unknown_target", tag });
+        appendEvent("agent.delegation.unknown_target", {
+          sourceAgentId: selectedAgent.id,
+          target: tag.target,
+          promptLength: tag.prompt.length,
+        });
+        continue;
+      }
+
+      if (targetAgent.id === selectedAgent.id) {
+        outcomes.push({ kind: "self_delegation", tag });
+        appendEvent("agent.delegation.self_blocked", {
+          sourceAgentId: selectedAgent.id,
+          target: tag.target,
+        });
+        continue;
+      }
+
+      const targetProvider =
+        providerProfiles.find((provider) => provider.id === targetAgent.providerProfileId) ?? selectedProvider;
+      const targetModelId = targetAgent.modelId ?? targetProvider.defaultModel ?? modelId;
+      const targetApprovalState = approvalStateByItemId[`permission_provider_${targetProvider.id}`];
+      const targetPermissionDecision = targetApprovalState === "approved" ? "allow" : undefined;
+      const targetPersona = agentPersonaById[targetAgent.id] ?? createDefaultPersonaSettings(targetAgent);
+      const delegatedPrompt = buildDelegatedAgentPrompt({
+        caller: selectedAgent,
+        originalUserMessage: userMessage.content,
+        tag,
+      });
+      const delegationMessage: ConversationMessage = {
+        id: `message_delegation_${crypto.randomUUID()}`,
+        sessionId: activeSessionId,
+        role: "user",
+        content: delegatedPrompt,
+        createdAt,
+        metadata: {
+          delegatedByAgentId: selectedAgent.id,
+          delegatedByAgentName: selectedAgent.name,
+          targetAgentId: targetAgent.id,
+          targetRole: targetAgent.role,
+          depthLimit: 1,
+        },
+      };
+
+      appendEvent("agent.delegation.dispatched", {
+        sourceAgentId: selectedAgent.id,
+        sourceAgentName: selectedAgent.name,
+        targetAgentId: targetAgent.id,
+        targetAgentName: targetAgent.name,
+        targetRole: targetAgent.role,
+        targetPersonaName: targetAgent.personaName,
+        providerProfileId: targetProvider.id,
+        modelId: targetModelId,
+        promptLength: tag.prompt.length,
+        authorityLevel: delegationAuthorityLevel(selectedAgent),
+        depthLimit: 1,
+      });
+
+      try {
+        setAgentActivity(targetAgent.id, "preparing");
+        const targetResult = await completeWorkbenchAgent({
+          agent: targetAgent,
+          approvalState: targetApprovalState,
+          createdAt,
+          modelId: targetModelId,
+          permissionDecision: targetPermissionDecision,
+          persona: targetPersona,
+          provider: targetProvider,
+          purpose: "delegation_subagent",
+          userMessage: delegationMessage,
+        });
+        setAgentActivity(targetAgent.id, "responding");
+        const outcome: DesktopDelegationOutcome = {
+          kind: "succeeded",
+          tag,
+          targetAgentId: targetAgent.id,
+          targetAgentName: targetAgent.name,
+          targetRole: targetAgent.role,
+          providerProfileId: targetProvider.id,
+          modelId: targetModelId,
+          response: targetResult.content,
+        };
+        outcomes.push(outcome);
+        appendEvent("agent.delegation.succeeded", {
+          sourceAgentId: selectedAgent.id,
+          targetAgentId: targetAgent.id,
+          targetAgentName: targetAgent.name,
+          targetRole: targetAgent.role,
+          providerProfileId: targetProvider.id,
+          modelId: targetModelId,
+          responseLength: targetResult.content.length,
+          route: targetResult.metadata.route,
+          realProviderCall: targetResult.metadata.realProviderCall,
+        });
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        outcomes.push({
+          kind: "failed",
+          tag,
+          targetAgentId: targetAgent.id,
+          targetAgentName: targetAgent.name,
+          reason,
+        });
+        appendEvent("agent.delegation.failed", {
+          sourceAgentId: selectedAgent.id,
+          targetAgentId: targetAgent.id,
+          targetAgentName: targetAgent.name,
+          targetRole: targetAgent.role,
+          providerProfileId: targetProvider.id,
+          modelId: targetModelId,
+          error: reason,
+        });
+      } finally {
+        window.setTimeout(() => {
+          setAgentActivity(targetAgent.id, "idle");
+        }, 450);
+      }
+    }
+
+    const followupPrompt = buildDelegationFollowupPrompt({
+      caller: selectedAgent,
+      initialReply,
+      originalUserMessage: userMessage.content,
+      outcomes,
+    });
+    const followupMessage: ConversationMessage = {
+      id: `message_delegation_followup_${crypto.randomUUID()}`,
+      sessionId: activeSessionId,
+      role: "user",
+      content: followupPrompt,
+      createdAt: new Date().toISOString(),
+      metadata: {
+        delegationOutcomeCount: outcomes.length,
+        sourceAgentId: selectedAgent.id,
+        depthLimit: 1,
+      },
+    };
+
+    try {
+      const followup = await completeWorkbenchAgent({
+        agent: selectedAgent,
+        approvalState: providerApprovalState,
+        createdAt,
+        modelId,
+        permissionDecision: providerApprovalState === "approved" ? "allow" : undefined,
+        persona: selectedAgentPersona,
+        provider: selectedProvider,
+        purpose: "delegation_followup",
+        userMessage: followupMessage,
+      });
+      appendEvent("agent.delegation.followup.completed", {
+        sourceAgentId: selectedAgent.id,
+        sourceAgentName: selectedAgent.name,
+        outcomeCount: outcomes.length,
+        succeededCount: outcomes.filter((outcome) => outcome.kind === "succeeded").length,
+        blockedCount: outcomes.filter((outcome) => outcome.kind !== "succeeded").length,
+        responseLength: followup.content.length,
+      });
+      return {
+        finalReply: followup.content,
+        followupMetadata: followup.metadata,
+        initialReply,
+        outcomes,
+        tags,
+      };
+    } catch (error) {
+      appendEvent("agent.delegation.followup.failed", {
+        sourceAgentId: selectedAgent.id,
+        sourceAgentName: selectedAgent.name,
+        outcomeCount: outcomes.length,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        finalReply: initialReply,
+        followupMetadata: {
+          delegationFollowupError: error instanceof Error ? error.message : String(error),
+        },
+        initialReply,
+        outcomes,
+        tags,
+      };
+    }
+
   }
 
   async function handleSendMessageStage2() {
@@ -848,57 +1198,42 @@ export function App() {
     let reply = "";
     let completionMetadata: Record<string, unknown> = {};
     try {
-      if (isDgxRoutedProvider(selectedProvider)) {
-        const pipelineMessages = createConversationPipelineMessages({
-          agent: selectedAgent,
-          memory: memoryInspector,
-          modelId,
-          persona: selectedAgentPersona,
-          provider: selectedProvider,
-          userMessage,
-        });
-        appendEvent("prompt.pipeline.assembled", {
-          agentId: selectedAgent.id,
-          providerProfileId: selectedProvider.id,
-          modelId,
-          messageCount: pipelineMessages.length,
-          memoryTraceId: memoryInspector.trace.id,
-          usedMemoryCount: memoryInspector.trace.results.filter((result) => result.usedInDecision).length,
-          soulMode: selectedAgent.soulMode,
-          redaction: "applied",
-        });
-        const result = await requestDgxProviderCompletion({
-          provider: selectedProvider,
-          modelId,
-          messages: pipelineMessages,
-          approvalState: providerApprovalState,
-          permissionDecision: providerApprovalState === "approved" ? "allow" : undefined,
-        });
-        reply = result.content;
+      const result = await completeWorkbenchAgent({
+        agent: selectedAgent,
+        approvalState: providerApprovalState,
+        createdAt,
+        modelId,
+        permissionDecision: providerApprovalState === "approved" ? "allow" : undefined,
+        persona: selectedAgentPersona,
+        provider: selectedProvider,
+        purpose: "primary",
+        userMessage,
+      });
+      reply = result.content;
+      completionMetadata = result.metadata;
+      const delegationRound = await executeDelegationRound({
+        createdAt,
+        initialReply: reply,
+        modelId,
+        providerApprovalState,
+        selectedAgent,
+        selectedAgentPersona,
+        selectedProvider,
+        userMessage,
+      });
+      if (delegationRound) {
+        reply = delegationRound.finalReply;
         completionMetadata = {
-          endpoint: result.endpoint,
-          route: result.route,
-          fallbackReason: result.fallbackReason,
-          usage: result.usage,
-          realProviderCall: true,
-        };
-        appendEvent("provider.completion.dgx.succeeded", {
-          agentId: selectedAgent.id,
-          providerProfileId: selectedProvider.id,
-          modelId,
-          endpoint: result.endpoint,
-          route: result.route,
-          fallbackReason: result.fallbackReason,
-          usage: result.usage,
-        });
-      } else {
-        reply = buildMockAssistantReply({
-          content: messageContent,
-          agent: selectedAgent,
-          provider: selectedProvider,
-        });
-        completionMetadata = {
-          realProviderCall: false,
+          ...completionMetadata,
+          ...delegationRound.followupMetadata,
+          delegationExecuted: true,
+          delegationInitialContent: delegationRound.initialReply,
+          delegations: delegationRound.outcomes.map(serializeDelegationOutcome),
+          delegationTags: delegationRound.tags.map((tag) => ({
+            target: tag.target,
+            prompt: tag.prompt,
+            status: "executed",
+          })),
         };
       }
     } catch (error) {

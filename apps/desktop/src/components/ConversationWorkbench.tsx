@@ -1,4 +1,5 @@
 import { Archive, CheckCircle2, FileText, GitBranch, ImageIcon, Link2, Paperclip, Play, Send, ShieldAlert, Smartphone, X } from "lucide-react";
+import { parseDelegateTags } from "@ai-orchestrator/agents";
 import type { ApprovalQueueItem, BranchExperiment, ContextPackTier, ConversationAttachment, ConversationMessage, ModelDescriptor, PermissionMatrixSnapshot, ProviderProfile } from "@ai-orchestrator/protocol";
 import { attachmentAcceptForModel, attachmentCapabilityLabel, createDefaultPersonaSettings, formatAttachmentSize, getMessageAttachments, modelSupportsAnyAttachment, agentRoleLabel } from "../lib/helpers";
 import { branchStatusLabel, contextPackTierLabel, creativityLevelLabel, messageLabel, soulModeLabel } from "../lib/uiLabels";
@@ -90,6 +91,7 @@ export function ConversationWorkbench({
   const attachmentLimitReached = draftAttachments.length >= maxDraftAttachments;
   const adoptedBranchCount = branchExperiments.filter((branch) => branch.status === "adopted").length;
   const latestBranch = branchExperiments[0];
+  const delegationItems = createDelegationPreviewItems(messages, agents);
   const auditItems: WindowAuditItem[] = [
     {
       id: "chat",
@@ -177,6 +179,7 @@ export function ConversationWorkbench({
           pendingProviderRetry={pendingProviderRetry}
           queue={permissionSnapshot.queue}
         />
+        <DelegationInlinePanel items={delegationItems} />
         {messages.map((message) => {
           const attachments = getMessageAttachments(message);
           return (
@@ -304,6 +307,144 @@ export function ConversationWorkbench({
       </div>
     </section>
   );
+}
+
+type DelegationPreviewItem = {
+  id: string;
+  target: string;
+  prompt: string;
+  sourceAgent: string;
+  status: "detected" | "succeeded" | "blocked" | "failed" | "unknown_target" | "self_delegation";
+  targetLabel?: string;
+};
+
+function createDelegationPreviewItems(messages: ConversationMessage[], agents: WorkbenchAgent[]): DelegationPreviewItem[] {
+  return messages
+    .flatMap((message) => {
+      if (message.role !== "assistant") {
+        return [];
+      }
+      const sourceAgent = String(message.metadata?.agentName ?? "assistant");
+      const metadataDelegations = normalizeDelegationMetadata(message.metadata);
+      const candidates =
+        metadataDelegations.length > 0
+          ? metadataDelegations
+          : parseDelegateTags(message.content).map((tag) => ({
+              prompt: tag.prompt,
+              status: "detected" as const,
+              target: tag.target,
+            }));
+
+      return candidates.map((item, index) => {
+        const target = item.target;
+        const normalizedTarget = normalizeDelegationKey(target);
+        const matchedAgent = agents.find((agent) =>
+          [agent.role, agent.id, agent.name, agent.personaName]
+            .filter((value): value is string => Boolean(value))
+            .some((value) => normalizeDelegationKey(value) === normalizedTarget),
+        );
+        return {
+          id: `${message.id}_delegate_${index}`,
+          prompt: item.prompt,
+          sourceAgent,
+          status: item.status,
+          target,
+          targetLabel: matchedAgent ? `${matchedAgent.name} / ${agentRoleLabel(matchedAgent.role)}` : undefined,
+        };
+      });
+    })
+    .slice(-4)
+    .reverse();
+}
+
+function normalizeDelegationKey(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+function normalizeDelegationMetadata(metadata: ConversationMessage["metadata"]) {
+  const rawDelegations = metadata?.delegationTags ?? metadata?.delegations;
+  if (!Array.isArray(rawDelegations)) {
+    return [];
+  }
+
+  return rawDelegations.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+    const record = item as Record<string, unknown>;
+    const target = typeof record.target === "string" ? record.target : undefined;
+    const prompt = typeof record.prompt === "string" ? record.prompt : undefined;
+    if (!target || !prompt) {
+      return [];
+    }
+    return [
+      {
+        prompt,
+        status: normalizeDelegationStatus(record.status ?? record.kind),
+        target,
+      },
+    ];
+  });
+}
+
+function normalizeDelegationStatus(value: unknown): DelegationPreviewItem["status"] {
+  return value === "succeeded" ||
+    value === "blocked" ||
+    value === "failed" ||
+    value === "unknown_target" ||
+    value === "self_delegation"
+    ? value
+    : "detected";
+}
+
+function DelegationInlinePanel({ items }: { items: DelegationPreviewItem[] }) {
+  return (
+    <section className={`conversation-delegation-panel ${items.length === 0 ? "idle" : ""}`} aria-label="Delegation monitor">
+      <header>
+        <span>
+          <GitBranch size={14} />
+          Delegation
+        </span>
+        <em>{items.length === 0 ? "depth 1 ready" : `${items.length} tracked`}</em>
+      </header>
+      {items.length === 0 ? (
+        <p>채아린이 inline delegate 태그를 쓰면 여기에서 target, 상태, task를 바로 추적합니다.</p>
+      ) : (
+        <div className="conversation-delegation-list">
+          {items.map((item) => (
+            <article className={`delegation-status-${item.status}`} key={item.id}>
+              <div>
+                <strong>{item.targetLabel ?? item.target}</strong>
+                <small>
+                  {item.sourceAgent} → {item.target}
+                </small>
+              </div>
+              <p>{item.prompt}</p>
+              <em>{delegationStatusLabel(item.status)}</em>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function delegationStatusLabel(status: DelegationPreviewItem["status"]) {
+  switch (status) {
+    case "succeeded":
+      return "done";
+    case "blocked":
+      return "blocked";
+    case "failed":
+      return "failed";
+    case "unknown_target":
+      return "unknown";
+    case "self_delegation":
+      return "loop guard";
+    case "detected":
+    default:
+      return "detected";
+  }
 }
 
 function ApprovalQueueInlinePanel({
