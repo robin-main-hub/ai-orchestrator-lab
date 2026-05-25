@@ -77,7 +77,6 @@ import type {
   AssistantDraft,
   ApprovalState,
   BackupProjection,
-  BranchExperiment,
   CodingPacket,
   ConversationMessage,
   ContextPackTier,
@@ -136,7 +135,6 @@ import {
   codingPacket,
   debateRounds,
   initialAgentRun,
-  initialBranchExperiments,
   initialConversationMessages,
   initialEventLog,
   navItems,
@@ -166,6 +164,7 @@ import { TerminalDock } from "./components/TerminalDock";
 import { TmuxSwarmBoard } from "./components/TmuxSwarmBoard";
 import { useAgentConfigFilesController } from "./hooks/useAgentConfigFilesController";
 import { useApprovalQueueController } from "./hooks/useApprovalQueueController";
+import { useBranchExperimentsController } from "./hooks/useBranchExperimentsController";
 import { useDgxEventSyncController } from "./hooks/useDgxEventSyncController";
 import { useMemoryController } from "./hooks/useMemoryController";
 import { createAuthBinding, useProviderRegistryController } from "./hooks/useProviderRegistryController";
@@ -236,7 +235,6 @@ export function App() {
   const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
   const [contextPackTier, setContextPackTier] = useState<ContextPackTier>("standard");
   const [reviewMode, setReviewMode] = useState<ReviewMode>("quick");
-  const [branchExperiments, setBranchExperiments] = useState<BranchExperiment[]>(initialBranchExperiments);
   const {
     assistantDrafts,
     handleArchiveWorkItem,
@@ -274,6 +272,18 @@ export function App() {
     [agentSettingsAgentId, agents],
   );
   const selectedAgentPersona = selectedAgent ? agentPersonaById[selectedAgent.id] : undefined;
+  const {
+    adoptedBranchSummaries,
+    branchExperiments,
+    handleAdoptBranchExperiment,
+    handleCreateBranchExperiment,
+  } = useBranchExperimentsController({
+    activeSessionId,
+    appendConversationMessage: (message) => setConversationMessages((messages) => [...messages, message]),
+    appendEvent,
+    contextPackTier,
+    selectedAgentName: selectedAgent?.name,
+  });
   const {
     agentConfigFiles,
     agentProfilePacks,
@@ -961,10 +971,6 @@ export function App() {
       agent: selectedAgent,
       provider: selectedProvider,
     });
-    const adoptedBranchSummaries = branchExperiments
-      .filter((branch) => branch.status === "adopted")
-      .map((branch) => `Adopted branch ${branch.title}: ${branch.summary}`)
-      .slice(0, 3);
     const debateDecisions = debateSession.rounds
       .flatMap((round) => round.utterances)
       .filter((utterance) => utterance.tags.some((tag) => tag === "agreement" || tag === "coding_impact"))
@@ -1072,65 +1078,6 @@ export function App() {
       reviewerPolicy: mode === "deep" ? "cross_vendor_roundtable" : "single_reviewer_fast_path",
       rubric: ["plan_coverage", "code_quality", "test_coverage", "convention"],
       invariantChecks: true,
-    });
-  }
-
-  function handleCreateBranchExperiment() {
-    const createdAt = new Date().toISOString();
-    const nextBranch: BranchExperiment = {
-      id: `branch_${crypto.randomUUID()}`,
-      sourceSessionId: activeSessionId,
-      title: `shadow: ${selectedAgent?.name ?? "Agent"} ${branchExperiments.length + 1}`,
-      agentName: selectedAgent?.name ?? "Agent",
-      status: "ready",
-      summary: `${selectedAgent?.name ?? "Agent"}가 ${contextPackTier} ContextPack으로 현재 요구사항을 별도 shadow conversation에서 검토한다.`,
-      createdAt,
-    };
-
-    setBranchExperiments((branches) => [nextBranch, ...branches].slice(0, 8));
-    appendEvent("conversation.branch.created", {
-      branch: nextBranch,
-      contextPackTier,
-      adoptPolicy: "summary_only",
-    });
-  }
-
-  function handleAdoptBranchExperiment() {
-    const branch = branchExperiments.find((candidate) => candidate.status !== "adopted");
-    if (!branch) {
-      return;
-    }
-
-    const createdAt = new Date().toISOString();
-    const adoptionMessage: ConversationMessage = {
-      id: `message_branch_adopted_${crypto.randomUUID()}`,
-      sessionId: activeSessionId,
-      role: "assistant",
-      content: `Branch 채택: ${branch.title} - ${branch.summary}`,
-      createdAt,
-      metadata: {
-        branchId: branch.id,
-        branchAdopted: true,
-        contextPolicy: "summary_only",
-      },
-    };
-
-    setBranchExperiments((branches) =>
-      branches.map((candidate) => (candidate.id === branch.id ? { ...candidate, status: "adopted" } : candidate)),
-    );
-    setConversationMessages((messages) => [...messages, adoptionMessage]);
-    appendEvent("conversation.branch.adopted", {
-      branchId: branch.id,
-      title: branch.title,
-      summary: branch.summary,
-      contextPolicy: "summary_only",
-    });
-    appendEvent("conversation.message.created", {
-      messageId: adoptionMessage.id,
-      role: adoptionMessage.role,
-      content: adoptionMessage.content,
-      metadata: adoptionMessage.metadata,
-      redaction: "applied",
     });
   }
 
