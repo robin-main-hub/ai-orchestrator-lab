@@ -164,7 +164,7 @@ import { CommandPalette, type CommandEntry } from "./components/CommandPalette";
 import { ConfigLibraryPanel } from "./components/ConfigLibraryPanel";
 import { ConversationWorkbench } from "./components/ConversationWorkbench";
 import { IngressGuardPanel } from "./components/IngressGuardPanel";
-import { MementoPanel } from "./components/MementoPanel";
+import { EvolveMementoPanel } from "./components/EvolveMementoPanel";
 import { OperationsRailPanel } from "./components/OperationsRailPanel";
 import { ProjectRailPanel } from "./components/ProjectRailPanel";
 import { ProviderProfilesManagerPanel } from "./components/ProviderProfilesManagerPanel";
@@ -688,8 +688,8 @@ export function App() {
         ? `SOUL.md: ${persona.soulSummary}\nAGENTS.md: ${persona.agentsInstruction}\nCreativity: ${persona.creativityLevel}`
         : "SOUL.md: default role profile",
       recalledMemories.length > 0
-        ? `Memento recall:\n${recalledMemories.join("\n")}`
-        : "Memento recall: no selected records",
+        ? `EvolveMemento recall:\n${recalledMemories.join("\n")}`
+        : "EvolveMemento recall: no selected records",
       agent.role === "companion" || agent.role === "orchestrator"
         ? [
             "Delegation: You may command registered sub-agents with <delegate to=\"role_or_persona\">task</delegate>.",
@@ -2295,7 +2295,7 @@ export function App() {
       id: "memory.remember",
       verb: "Memory",
       label: "현재 맥락 기억",
-      hint: "Memento 에 새 항목 추가",
+      hint: "EvolveMemento 에 새 항목 추가",
       shortcut: "⌘⇧M",
       run: handleRememberCurrentContext,
     },
@@ -2503,7 +2503,7 @@ export function App() {
             </div>
             <div className="memory-sync-note">
               <strong>Memory Sync</strong>
-              <span>Memento/장기기억과 로컬 캐시 동기화 상태</span>
+              <span>EvolveMemento / 장기기억과 로컬 캐시 동기화 상태</span>
               <em className={statusTone(runtimeSnapshotState.memorySyncStatus)}>{runtimeSnapshotState.memorySyncStatus}</em>
             </div>
             <div className="sync-authority-note">
@@ -2697,7 +2697,7 @@ export function App() {
               profiles={providerProfiles}
               selectedAgentId={selectedAgent?.id}
             />
-            <MementoPanel
+            <EvolveMementoPanel
               inspector={memoryInspector}
               onActivate={handleActivateMemory}
               onForget={handleForgetMemory}
