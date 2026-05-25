@@ -30,6 +30,12 @@ export {
   type AdapterFetchLike,
   type OpenAICompatibleAdapterOptions,
 } from "./openAiCompatibleAdapter.js";
+export {
+  AnthropicAdapter,
+  extractAnthropicText,
+  splitSystemAndMessages,
+  type AnthropicAdapterOptions,
+} from "./anthropicAdapter.js";
 
 /**
  * @deprecated The legacy adapter shape. New adapters should implement

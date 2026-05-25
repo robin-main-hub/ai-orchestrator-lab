@@ -13,3 +13,9 @@ export {
   type AdapterFetchLike,
   type OpenAICompatibleAdapterOptions,
 } from "../openAiCompatibleAdapter.js";
+export {
+  AnthropicAdapter,
+  extractAnthropicText,
+  splitSystemAndMessages,
+  type AnthropicAdapterOptions,
+} from "../anthropicAdapter.js";
