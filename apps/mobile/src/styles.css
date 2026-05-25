@@ -534,6 +534,15 @@ textarea {
   padding: 24px;
 }
 
+.screen__error {
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 92, 122, 0.32);
+  border-radius: 14px;
+  background: rgba(255, 92, 122, 0.1);
+  color: #ff9cad;
+  font-size: 14px;
+}
+
 .section {
   background: var(--bg-elevated);
   border-radius: 16px;
@@ -649,6 +658,37 @@ textarea {
 .chip--unknown {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-muted);
+}
+
+/* ===== Approvals ===== */
+
+.approval-summary {
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.approval-card {
+  gap: 14px;
+}
+
+.approval-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.approval-card__meta,
+.approval-card__time {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.approval-card__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 /* ===== SOULs screen ===== */

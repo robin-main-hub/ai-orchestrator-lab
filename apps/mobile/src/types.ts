@@ -28,6 +28,7 @@ export type MobileMoreScreen =
   | "packets"
   | "debates"
   | "handoffs"
+  | "approvals"
   | "settings-general"
   | "settings-connection";
 

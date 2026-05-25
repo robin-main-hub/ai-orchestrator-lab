@@ -44,6 +44,14 @@ export class MobileApiError extends Error {
  * message that the chat screen can render directly.
  */
 export async function postJson<T>(path: string, payload: unknown): Promise<T> {
+  return requestJson<T>("POST", path, payload);
+}
+
+export async function getJson<T>(path: string): Promise<T> {
+  return requestJson<T>("GET", path);
+}
+
+async function requestJson<T>(method: "GET" | "POST", path: string, payload?: unknown): Promise<T> {
   const settings = loadConnectionSettings();
   if (!settings.apiToken) {
     throw new MobileApiError(
@@ -60,12 +68,12 @@ export async function postJson<T>(path: string, payload: unknown): Promise<T> {
     let response: Response;
     try {
       response = await fetch(endpoint, {
-        method: "POST",
+        method,
         headers: {
           "content-type": "application/json",
           authorization: `Bearer ${settings.apiToken}`,
         },
-        body: JSON.stringify(payload),
+        body: method === "POST" ? JSON.stringify(payload) : undefined,
       });
     } catch (err) {
       lastTransportError = err;
