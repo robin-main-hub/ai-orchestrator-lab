@@ -723,34 +723,75 @@ export type ExternalApprovalItem = {
   createdAt: string;
 };
 
-export type PermissionAction =
-  | "conversation_reply"
-  | "memory_write"
-  | "backup_export"
-  | "terminal_run"
-  | "file_write"
-  | "remote_workspace"
-  | "provider_completion"
-  | "device_reboot"
-  | "secret_view"
-  | "mobile_approval"
-  | "email_send"
-  | "customer_reply"
-  | "external_message_send"
-  | "document_share"
-  | "calendar_create"
-  | "quote_send"
-  | "invoice_create"
-  | "payment_action"
-  | "contract_review"
-  | "deploy"
-  | "git_push"
-  | "unknown_external_effect";
+export const permissionActionSchema = z.enum([
+  "conversation_reply",
+  "memory_write",
+  "backup_export",
+  "terminal_run",
+  "file_write",
+  "remote_workspace",
+  "provider_completion",
+  "device_reboot",
+  "secret_view",
+  "mobile_approval",
+  "email_send",
+  "customer_reply",
+  "external_message_send",
+  "document_share",
+  "calendar_create",
+  "quote_send",
+  "invoice_create",
+  "payment_action",
+  "contract_review",
+  "deploy",
+  "git_push",
+  "unknown_external_effect",
+]);
+export type PermissionAction = z.infer<typeof permissionActionSchema>;
 
 export const permissionActorSchema = z.enum(["user", "agent", "external_channel", "mobile", "server"]);
 export type PermissionActor = z.infer<typeof permissionActorSchema>;
 
-export type PermissionDecision = "allow" | "approval_required" | "deny";
+export const permissionDecisionSchema = z.enum(["allow", "approval_required", "deny"]);
+export type PermissionDecision = z.infer<typeof permissionDecisionSchema>;
+
+export const redactionPhaseSchema = z.enum(["pre_send", "post_receive", "pre_store", "pre_backup", "pre_share"]);
+export type RedactionPhase = z.infer<typeof redactionPhaseSchema>;
+
+export const redactionRuleScopeSchema = z.enum(["input", "output", "event", "backup", "share"]);
+export type RedactionRuleScope = z.infer<typeof redactionRuleScopeSchema>;
+
+export const redactionRuleSchema = z.object({
+  id: z.string(),
+  phase: redactionPhaseSchema,
+  name: z.string(),
+  scope: redactionRuleScopeSchema,
+  enabled: z.boolean(),
+  pattern: z.string(),
+  replacement: z.string(),
+  reason: z.string(),
+});
+export type RedactionRule = z.infer<typeof redactionRuleSchema>;
+
+export const approvalRequestSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  sourceItemId: z.string().optional(),
+  subjectId: z.string(),
+  actor: permissionActorSchema,
+  channel: eventSourceSchema,
+  sourceTrust: sourceTrustSchema,
+  action: permissionActionSchema,
+  requestedLevels: z.array(permissionLevelSchema),
+  decision: permissionDecisionSchema,
+  state: approvalStateSchema,
+  reason: z.string(),
+  costEstimateTokens: z.number().int().nonnegative().optional(),
+  ttlSeconds: z.number().int().positive().optional(),
+  createdAt: z.string(),
+  expiresAt: z.string().optional(),
+});
+export type ApprovalRequest = z.infer<typeof approvalRequestSchema>;
 
 export type PermissionMatrixItem = {
   id: string;

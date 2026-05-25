@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   agentProfileSchema,
   agentSessionSchema,
+  approvalRequestSchema,
   assistantDraftSchema,
   codingPacketSchema,
   evidenceRefSchema,
@@ -11,6 +12,7 @@ import {
   eventSyncPushResponseSchema,
   executionSlotSchema,
   providerProfileSchema,
+  redactionRuleSchema,
   terminalCommandIntentSchema,
   terminalPaneSchema,
   tmuxSessionRefSchema,
@@ -803,5 +805,39 @@ describe("protocol schemas", () => {
     expect(vault.entries[0]?.storage).toBe("session_memory");
     expect(readiness.canUseAutomaticMemory).toBe(false);
     expect(readiness.status).toBe("needs_approval");
+  });
+
+  it("validates approval requests and redaction rules for the permission engine", () => {
+    const approval = approvalRequestSchema.parse({
+      id: "approval_provider_1",
+      sessionId: "session_desktop_001",
+      sourceItemId: "permission_provider_reseller",
+      subjectId: "provider_apifun_claude_a",
+      actor: "agent",
+      channel: "agent",
+      sourceTrust: "limited",
+      action: "provider_completion",
+      requestedLevels: ["network_access", "secret_access"],
+      decision: "approval_required",
+      state: "required",
+      reason: "reseller provider requires approval before prompt send",
+      costEstimateTokens: 12_000,
+      ttlSeconds: 900,
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+    const rule = redactionRuleSchema.parse({
+      id: "redact_secret_like_token",
+      phase: "pre_store",
+      name: "Secret-like token redaction",
+      scope: "event",
+      enabled: true,
+      pattern: "(sk-|claude-|grok-|deepseek-|pat-)[A-Za-z0-9_-]{20,}",
+      replacement: "[REDACTED_SECRET]",
+      reason: "event store must not persist raw credentials",
+    });
+
+    expect(approval.decision).toBe("approval_required");
+    expect(approval.requestedLevels).toContain("secret_access");
+    expect(rule.phase).toBe("pre_store");
   });
 });
