@@ -2126,6 +2126,124 @@ button {
   background: #141311;
 }
 
+/* ── AutonomySlider — design-decisions §8 5-level ─────────────── */
+
+.autonomy-slider {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(0, 47, 56, 0.45);
+}
+
+.autonomy-slider--disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.autonomy-slider__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.autonomy-slider__label {
+  color: var(--subtle);
+  font-size: 10px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.autonomy-slider__value {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--cyan);
+  font-size: 12px;
+}
+
+.autonomy-slider__track {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.autonomy-slider__step {
+  display: grid;
+  gap: 2px;
+  padding: 6px 4px 5px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: rgba(0, 47, 56, 0.4);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  text-align: center;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.autonomy-slider__step:hover:not(:disabled) {
+  border-color: rgba(95, 211, 226, 0.5);
+}
+
+.autonomy-slider__step--passed {
+  background: rgba(95, 211, 226, 0.08);
+}
+
+.autonomy-slider__step--active {
+  border-color: var(--cyan);
+  background: rgba(95, 211, 226, 0.22);
+  color: var(--cyan);
+}
+
+.autonomy-slider__step:disabled {
+  cursor: not-allowed;
+}
+
+.autonomy-slider__step-num {
+  font-size: 13px;
+  font-weight: 650;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+}
+
+.autonomy-slider__step-label {
+  font-size: 9px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+}
+
+.autonomy-slider__description {
+  margin: 0;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.autonomy-slider__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 9.5px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  color: var(--subtle);
+}
+
+.autonomy-slider__meta em {
+  margin-left: 4px;
+  color: var(--muted);
+  font-style: normal;
+}
+
+.autonomy-slider__hint {
+  margin: 0;
+  padding-top: 4px;
+  border-top: 1px dashed var(--line-soft);
+  color: var(--subtle);
+  font-size: 10px;
+}
+
 .agent-settings-note strong {
   color: var(--amber);
   font-size: 11px;

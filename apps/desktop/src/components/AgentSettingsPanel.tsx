@@ -4,6 +4,7 @@ import { agentRoleLabel } from "../lib/helpers";
 import { agentRoleOptions } from "../lib/appConstants";
 import type { AgentVisualSettings, WindowAuditItem, WorkbenchAgent } from "../types";
 import { AgentAvatar } from "./AgentAvatar";
+import { AutonomySlider, type AutonomyLevel } from "./AutonomySlider";
 import { WindowChecklist } from "./WindowChecklist";
 export function AgentSettingsPanel({
   agent,
@@ -133,6 +134,10 @@ export function AgentSettingsPanel({
             초기화
           </button>
         </div>
+        <AutonomySlider
+          hint="🟡 v1: UI 미리보기. permission gate 후속 PR에서 runtime 과 wiring."
+          initialLevel={initialAutonomyForRole(agent.role)}
+        />
         <div className="agent-settings-note">
           <span>tmux 준비 상태</span>
           <strong>이름 / 역할 / avatar는 Event Storage에 기록되고, 실제 tmux runner 연결 전까지 UI와 handoff 기록에서 먼저 사용한다.</strong>
@@ -141,5 +146,34 @@ export function AgentSettingsPanel({
       <WindowChecklist items={auditItems} title="에이전트 설정 점검" />
     </section>
   );
+}
+
+/**
+ * design-decisions.md §8 — 채아린(companion) Level 3, Maomao(researcher)
+ * read-only 작업 Level 4, Executor 같은 위험 role 은 Level 3 이하.
+ */
+function initialAutonomyForRole(role: WorkbenchAgent["role"]): AutonomyLevel {
+  switch (role) {
+    case "executor":
+    case "builder":
+      return 3;
+    case "researcher":
+    case "memory_curator":
+      return 4;
+    case "auditor":
+    case "verifier":
+    case "reviewer":
+      return 2;
+    case "skeptic":
+    case "domain_expert":
+      return 2;
+    case "orchestrator":
+    case "architect":
+      return 3;
+    case "companion":
+    case "external":
+    default:
+      return 3;
+  }
 }
 
