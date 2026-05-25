@@ -9,6 +9,7 @@ import type {
   WorkbenchAgent,
 } from "../types";
 import { agentVisualStorageKey, maxDraftAttachments, now } from "./appConstants";
+import { getPersonaAvatarUrl } from "./personaAvatars";
 export function slugifyProviderName(value: string, fallback: string) {
   const slug = value
     .trim()
@@ -341,7 +342,18 @@ export function getAgentInitials(name: string) {
 }
 
 export function createInitialAgentVisualSettings(agents: WorkbenchAgent[]): Record<string, AgentVisualSettings> {
-  const defaults = Object.fromEntries(agents.map((agent) => [agent.id, {} satisfies AgentVisualSettings]));
+  // Layer 1 (lowest precedence): bundled persona avatar from
+  // agents/<personaName | role>/avatar.{svg,png,jpg,jpeg,webp}, if any.
+  // Layer 2: localStorage-stored visuals (user-uploaded overrides).
+  // Stored values fully replace the bundled fallback so explicit user
+  // uploads always win, and `clear avatar` truly clears.
+  const defaults = Object.fromEntries(
+    agents.map((agent) => {
+      const bundledUrl = getPersonaAvatarUrl(agent.personaName ?? agent.role);
+      const visual: AgentVisualSettings = bundledUrl ? { avatarDataUrl: bundledUrl } : {};
+      return [agent.id, visual];
+    }),
+  );
   try {
     if (typeof window === "undefined") {
       return defaults;
