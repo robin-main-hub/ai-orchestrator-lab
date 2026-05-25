@@ -49,7 +49,7 @@ describe("server health placeholder", () => {
 
     expect(discovery.providerProfileId).toBe("provider_dgx02_vllm");
     expect(discovery.source).toBe("remote_probe");
-    expect(discovery.models[0]?.id).toBe("qwen36-gio-wiki-rag-prisma");
+    expect(discovery.models[0]?.id).toBe("qwen36-gio-lora-v5-prisma");
     expect(discovery.redactionApplied).toBe(true);
   });
 
@@ -96,7 +96,7 @@ describe("server health placeholder", () => {
         id: "provider_completion_request_1",
         sessionId: "session_1",
         providerProfileId: "provider_dgx02_vllm",
-        modelId: "qwen36-gio-wiki-rag-prisma",
+        modelId: "qwen36-gio-lora-v5-prisma",
         messages: [{ role: "user", content: "Reply OK only" }],
         source: "desktop",
         routePreference: "server_proxy",
@@ -135,7 +135,7 @@ describe("server health placeholder", () => {
         id: "provider_completion_request_system_merge",
         sessionId: "session_1",
         providerProfileId: "provider_dgx02_vllm",
-        modelId: "qwen36-gio-wiki-rag-prisma",
+        modelId: "qwen36-gio-lora-v5-prisma",
         messages: [
           { role: "system", content: "Desktop pipeline context." },
           { role: "user", content: "Reply OK only" },
@@ -594,7 +594,7 @@ describe("server health placeholder", () => {
         ok: true,
         status: 200,
         async text() {
-          return JSON.stringify({ data: [{ id: "qwen36-gio-wiki-rag-prisma" }] });
+          return JSON.stringify({ data: [{ id: "qwen36-gio-lora-v5-prisma" }] });
         },
       };
     };
@@ -612,7 +612,7 @@ describe("server health placeholder", () => {
 
     expect(probe.status).toBe("connected");
     expect(health.runtime.dgxStatus).toBe("online");
-    expect(health.runtime.runtimeNodes[0]?.models).toContain("qwen36-gio-wiki-rag-prisma");
+    expect(health.runtime.runtimeNodes[0]?.models).toContain("qwen36-gio-lora-v5-prisma");
   });
 
   it("marks the server degraded when vLLM is not reachable", async () => {

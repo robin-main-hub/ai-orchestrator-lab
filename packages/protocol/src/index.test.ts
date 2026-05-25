@@ -230,7 +230,7 @@ describe("protocol schemas", () => {
       id: "provider_completion_request_1",
       sessionId: "session_1",
       providerProfileId: "provider_dgx02_vllm",
-      modelId: "qwen36-gio-wiki-rag-prisma",
+      modelId: "qwen36-gio-lora-v5-prisma",
       messages: [{ role: "user", content: "Reply OK only" }],
       source: "desktop",
       routePreference: "server_proxy",

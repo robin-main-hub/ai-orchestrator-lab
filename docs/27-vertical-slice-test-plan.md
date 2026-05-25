@@ -93,7 +93,7 @@ export const providerCompletionRequest: ProviderCompletionRequest = {
   id: "provider_completion_vs_001",
   sessionId: SMOKE_SESSION_ID,
   providerProfileId: "provider_dgx02_vllm",
-  modelId: "qwen36-gio-wiki-rag-prisma",
+  modelId: "qwen36-gio-lora-v5-prisma",
   messages: [{ role: "user", content: "Reply OK only" }],
   source: "desktop",
   routePreference: "server_proxy",

@@ -98,7 +98,7 @@ describe("provider credential parsing and model discovery", () => {
       name: "DGX-02 vLLM",
       kind: "openai" as const,
       baseUrl: "http://dgx-02:8001/v1",
-      defaultModel: "qwen36-gio-wiki-rag-prisma",
+      defaultModel: "qwen36-gio-lora-v5-prisma",
       enabled: true,
       tags: ["dgx", "vllm", "no-auth"],
       trustLevel: "trusted" as const,
@@ -114,7 +114,7 @@ describe("provider credential parsing and model discovery", () => {
     });
 
     expect(discovery.source).toBe("remote_probe");
-    expect(discovery.models[0]?.id).toBe("qwen36-gio-wiki-rag-prisma");
+    expect(discovery.models[0]?.id).toBe("qwen36-gio-lora-v5-prisma");
     expect(discovery.models[0]?.inputModalities).toEqual(["text", "document"]);
     expect(vault.entries[0]?.storage).toBe("dgx_vault");
     expect(vault.entries[0]?.availability).toBe("available");

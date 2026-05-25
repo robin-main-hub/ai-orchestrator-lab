@@ -18,7 +18,7 @@ const provider: ProviderProfile = {
   name: "DGX-02 vLLM",
   kind: "openai",
   baseUrl: "http://dgx-02:8001/v1",
-  defaultModel: "qwen36-gio-wiki-rag-prisma",
+  defaultModel: "qwen36-gio-lora-v5-prisma",
   enabled: true,
   tags: ["dgx", "vllm", "no-auth"],
   trustLevel: "trusted",
@@ -42,16 +42,16 @@ describe("stage12 DGX provider completion", () => {
   });
 
   it("builds a vLLM request with thinking disabled", () => {
-    const body = createDgxVllmRequestBody("qwen36-gio-wiki-rag-prisma", messages);
+    const body = createDgxVllmRequestBody("qwen36-gio-lora-v5-prisma", messages);
 
-    expect(body.model).toBe("qwen36-gio-wiki-rag-prisma");
+    expect(body.model).toBe("qwen36-gio-lora-v5-prisma");
     expect(body.chat_template_kwargs.enable_thinking).toBe(false);
     expect(body.messages[0]?.role).toBe("system");
     expect(body.messages[1]?.content).toBe("Can DGX answer now?");
   });
 
   it("keeps desktop pipeline system prompts inside the leading vLLM system message", () => {
-    const body = createDgxVllmRequestBody("qwen36-gio-wiki-rag-prisma", [
+    const body = createDgxVllmRequestBody("qwen36-gio-lora-v5-prisma", [
       { ...messages[0]!, role: "system", content: "Desktop pipeline context." },
       ...messages,
     ]);
@@ -62,7 +62,7 @@ describe("stage12 DGX provider completion", () => {
   });
 
   it("builds a server proxy request without raw provider endpoints", () => {
-    const request = createProviderCompletionProxyRequest(provider, "qwen36-gio-wiki-rag-prisma", messages);
+    const request = createProviderCompletionProxyRequest(provider, "qwen36-gio-lora-v5-prisma", messages);
 
     expect(request.providerProfileId).toBe("provider_dgx02_vllm");
     expect(request.routePreference).toBe("server_proxy");
@@ -80,7 +80,7 @@ describe("stage12 DGX provider completion", () => {
           id: "provider_completion_response_1",
           requestId: "provider_completion_request_1",
           providerProfileId: "provider_dgx02_vllm",
-          modelId: "qwen36-gio-wiki-rag-prisma",
+          modelId: "qwen36-gio-lora-v5-prisma",
           route: "server_proxy",
           status: "succeeded",
           content: "DGX is ready.",
@@ -94,7 +94,7 @@ describe("stage12 DGX provider completion", () => {
 
     const result = await requestDgxVllmCompletion({
       provider,
-      modelId: "qwen36-gio-wiki-rag-prisma",
+      modelId: "qwen36-gio-lora-v5-prisma",
       messages,
       fetchImpl,
     });
@@ -124,7 +124,7 @@ describe("stage12 DGX provider completion", () => {
 
     const result = await requestDgxVllmCompletion({
       provider,
-      modelId: "qwen36-gio-wiki-rag-prisma",
+      modelId: "qwen36-gio-lora-v5-prisma",
       messages,
       fetchImpl,
     });
