@@ -73,6 +73,7 @@ textarea {
   height: 100dvh;
   position: relative;
   overflow: hidden;
+  min-width: 0;
 }
 
 /* ===== Chat screen ===== */
@@ -82,6 +83,7 @@ textarea {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   background-color: var(--bg);
   background-image: var(--chat-bg-image);
   background-size: var(--chat-bg-size);
@@ -232,6 +234,7 @@ textarea {
   display: flex;
   align-items: flex-end;
   gap: 8px;
+  min-width: 0;
 }
 
 .composer__file-button {
@@ -250,8 +253,14 @@ textarea {
   background: rgba(255, 255, 255, 0.1);
 }
 
+.composer__file-button:disabled {
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
 .composer__textarea-wrap {
   flex: 1;
+  min-width: 0;
   background: var(--bg-input);
   border-radius: 20px;
   padding: 8px 14px;
@@ -263,6 +272,7 @@ textarea {
 
 .composer__textarea {
   width: 100%;
+  min-width: 0;
   resize: none;
   border: none;
   outline: none;
@@ -417,10 +427,12 @@ textarea {
 .tabbar {
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-width: 0;
   background: var(--bg-elevated);
   border-top: 1px solid var(--border);
-  padding: 4px 4px calc(var(--safe-bottom) + 4px) 4px;
+  padding: 4px calc(var(--safe-right) + 4px) calc(var(--safe-bottom) + 4px)
+    calc(var(--safe-left) + 4px);
 }
 
 .tabbar__item {
@@ -432,7 +444,16 @@ textarea {
   padding: 6px 0;
   border-radius: 12px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 10.5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tabbar__item span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tabbar__item--active {
@@ -440,7 +461,7 @@ textarea {
 }
 
 .tabbar__icon {
-  font-size: 22px;
+  font-size: 20px;
   line-height: 1;
 }
 
