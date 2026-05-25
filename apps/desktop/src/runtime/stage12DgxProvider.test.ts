@@ -69,6 +69,16 @@ describe("stage12 DGX provider completion", () => {
     expect(JSON.stringify(request)).not.toContain("http://dgx-02:8001");
   });
 
+  it("forwards approved permission state to the DGX server proxy request", () => {
+    const request = createProviderCompletionProxyRequest(provider, "qwen36-domain-lora-v5-prisma", messages, {
+      approvalState: "approved",
+      permissionDecision: "allow",
+    });
+
+    expect(request.approvalState).toBe("approved");
+    expect(request.permissionDecision).toBe("allow");
+  });
+
   it("uses the DGX server proxy before direct provider calls", async () => {
     const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
       expect(String(url)).toBe(`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`);
