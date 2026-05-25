@@ -84,6 +84,12 @@ import {
   mergeClientEventOutboxEvents,
 } from "./runtime/stage29LocalEventStore";
 import {
+  fetchDgxApprovalQueue,
+  grantDgxApproval,
+  rejectDgxApproval,
+  type DesktopApprovalListResponse,
+} from "./runtime/stage34ApprovalServer";
+import {
   mergeConversationMessages,
   mergeEventReplayLogs,
   pullAndReplayDgxEventStorage,
@@ -99,6 +105,7 @@ import { createObsidianExportPlan } from "./runtime/stage26ObsidianExport";
 import type {
   AssistantDraft,
   ApprovalState,
+  ApprovalRequest,
   BackupProjection,
   BranchExperiment,
   CodingPacket,
@@ -255,6 +262,10 @@ export function App() {
   const [rebootApprovals, setRebootApprovals] = useState<ExternalApprovalItem[]>([]);
   const [rebootWatchdogs, setRebootWatchdogs] = useState<DeviceRebootWatchdog[]>([]);
   const [approvalStateByItemId, setApprovalStateByItemId] = useState<Record<string, ApprovalState>>({});
+  const [approvalServerSnapshot, setApprovalServerSnapshot] = useState<DesktopApprovalListResponse>();
+  const [approvalServerStatus, setApprovalServerStatus] = useState<"idle" | "loading" | "error" | "ready">("idle");
+  const [approvalServerError, setApprovalServerError] = useState("");
+  const [approvalServerBusyId, setApprovalServerBusyId] = useState<string>();
   const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
   const [contextPackTier, setContextPackTier] = useState<ContextPackTier>("standard");
   const [reviewMode, setReviewMode] = useState<ReviewMode>("quick");
@@ -1725,6 +1736,78 @@ export function App() {
     }
   }
 
+  async function handleRefreshApprovalQueue() {
+    setApprovalServerStatus("loading");
+    setApprovalServerError("");
+    try {
+      const snapshot = await fetchDgxApprovalQueue();
+      setApprovalServerSnapshot(snapshot);
+      setApprovalServerStatus("ready");
+      appendEvent("approval.queue.refreshed", {
+        authorityNodeId: "dgx-02",
+        approvalCount: snapshot.approvals.length,
+        pendingCount: snapshot.queue.length,
+        redaction: "applied",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setApprovalServerStatus("error");
+      setApprovalServerError(message);
+      appendEvent("approval.queue.refresh_failed", {
+        authorityNodeId: "dgx-02",
+        message,
+        redaction: "applied",
+      });
+    }
+  }
+
+  async function handleResolveServerApproval(
+    approval: ApprovalRequest,
+    state: Extract<ApprovalState, "approved" | "rejected">,
+  ) {
+    const decidedAt = new Date().toISOString();
+    setApprovalServerBusyId(approval.id);
+    setApprovalServerError("");
+    try {
+      const request = {
+        approvalId: approval.id,
+        actor: "user" as const,
+        reason: `desktop operator ${state}`,
+        decidedAt,
+      };
+      const result =
+        state === "approved"
+          ? await grantDgxApproval({ request })
+          : await rejectDgxApproval({ request });
+
+      if ("error" in result) {
+        throw new Error(result.error);
+      }
+
+      appendEvent(`approval.server.${state}`, {
+        approvalId: approval.id,
+        sourceItemId: approval.sourceItemId,
+        action: approval.action,
+        status: result.status,
+        authorityNodeId: "dgx-02",
+        redaction: "applied",
+      });
+      await handleRefreshApprovalQueue();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setApprovalServerStatus("error");
+      setApprovalServerError(message);
+      appendEvent(`approval.server.${state}_failed`, {
+        approvalId: approval.id,
+        message,
+        authorityNodeId: "dgx-02",
+        redaction: "applied",
+      });
+    } finally {
+      setApprovalServerBusyId(undefined);
+    }
+  }
+
   function handleRememberCurrentContext() {
     const createdAt = new Date().toISOString();
     const candidates = rememberStage6Context({
@@ -2710,11 +2793,17 @@ export function App() {
                 snapshot={runtimeSnapshotState}
               />
               <OperationsRailPanel
+                approvalBusyId={approvalServerBusyId}
+                approvalError={approvalServerError}
+                approvalServerSnapshot={approvalServerSnapshot}
+                approvalServerStatus={approvalServerStatus}
                 backupSnapshot={backupSnapshot}
                 ingressSnapshot={ingressSnapshot}
                 onCheckProviderVault={handleCheckProviderVault}
                 onExportBackup={handleExportBackupProjections}
                 onImportTelegram={handleImportTelegramIngress}
+                onRefreshApprovals={handleRefreshApprovalQueue}
+                onResolveServerApproval={handleResolveServerApproval}
                 permissionSnapshot={permissionSnapshot}
                 providerReadiness={providerReadiness}
                 secretVaultSnapshot={secretVaultSnapshot}
