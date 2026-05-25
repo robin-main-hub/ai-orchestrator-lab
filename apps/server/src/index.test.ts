@@ -10,6 +10,7 @@ import {
   createHealthResponse,
   createJsonlServerEventStorage,
   createLiveHealthResponse,
+  createProviderCompletionApprovalRequest,
   createServerProviderRegistrySnapshot,
   createServerProviderModelDiscoveryResponse,
   createRemoteRunResponse,
@@ -17,6 +18,7 @@ import {
   evaluateServerRemoteRunPermission,
   createRuntimeSnapshot,
   createServerEventStorageState,
+  listApprovalsFromServerStorage,
   listEventStorageSessions,
   loadServerEventStorageStateFromJsonl,
   pickAllowedOrigin,
@@ -153,6 +155,56 @@ describe("server health placeholder", () => {
     expect(permission.decision).toBe("allow");
     expect(permission.approvalState).toBe("not_required");
     expect(permission.requestedLevels).toEqual(["network_access"]);
+  });
+
+  it("derives the approval queue from Event Storage approval events", () => {
+    const state = createServerEventStorageState();
+    const request = {
+      id: "provider_completion_request_approval_queue",
+      sessionId: "session_1",
+      providerProfileId: "provider_apifun_claude",
+      modelId: "claude-opus-4-6",
+      messages: [{ role: "user" as const, content: "hello" }],
+      source: "desktop" as const,
+      routePreference: "server_proxy" as const,
+      createdAt: "2026-05-24T00:00:00.000Z",
+    };
+    const permission = evaluateServerProviderCompletionPermission(request);
+    const approval = createProviderCompletionApprovalRequest(request, permission, "2026-05-24T00:00:00.000Z");
+
+    pushEventsToServerStorage(
+      {
+        id: "event_sync_approval_queue",
+        clientId: "test",
+        sessionId: approval.sessionId,
+        events: [
+          {
+            id: "event_approval_requested_test",
+            sessionId: approval.sessionId,
+            type: "approval.requested",
+            payload: approval,
+            createdAt: approval.createdAt,
+            source: "server",
+            sourceTrust: "trusted",
+            redacted: true,
+          },
+        ],
+        idempotencyKey: "event_approval_requested_test",
+        createdAt: approval.createdAt,
+      },
+      state,
+      approval.createdAt,
+    );
+
+    const list = listApprovalsFromServerStorage(state, "2026-05-24T00:00:01.000Z");
+
+    expect(list.summary.pending).toBe(1);
+    expect(list.queue[0]).toMatchObject({
+      sourceItemId: request.id,
+      state: "required",
+      requestedBy: "user",
+    });
+    expect(list.queue[0]?.permissions).toEqual(["network_access", "secret_access"]);
   });
 
   it("maps remote run approvals through the shared server gate", () => {
@@ -1006,8 +1058,11 @@ describe("HTTP request limits", () => {
   it("returns 403 for provider completions that need approval before proxying", async () => {
     const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
     const previousNodeEnv = process.env.NODE_ENV;
+    const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-approvals-"));
     process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
     process.env.NODE_ENV = "production";
+    process.env.EVENT_STORAGE_DIR = tempDir;
 
     const server = startServer(0);
 
@@ -1041,11 +1096,50 @@ describe("HTTP request limits", () => {
       expect(response.status).toBe(403);
       await expect(response.json()).resolves.toMatchObject({
         error: "permission_required",
+        approval: {
+          sourceItemId: "provider_completion_http_permission",
+          state: "required",
+        },
         permission: {
           action: "provider_completion",
           approvalState: "required",
           decision: "approval_required",
         },
+      });
+
+      const listResponse = await fetch(`http://127.0.0.1:${address.port}/approvals/list`, {
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+        },
+      });
+      expect(listResponse.status).toBe(200);
+      await expect(listResponse.json()).resolves.toMatchObject({
+        summary: {
+          pending: 1,
+        },
+        queue: [
+          {
+            sourceItemId: "provider_completion_http_permission",
+            state: "required",
+          },
+        ],
+      });
+
+      const grantResponse = await fetch(`http://127.0.0.1:${address.port}/approvals/grant`, {
+        body: JSON.stringify({ sourceItemId: "provider_completion_http_permission", actor: "user" }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      expect(grantResponse.status).toBe(200);
+      await expect(grantResponse.json()).resolves.toMatchObject({
+        approval: {
+          sourceItemId: "provider_completion_http_permission",
+          state: "approved",
+        },
+        status: "approved",
       });
     } finally {
       await new Promise<void>((resolve, reject) => {
@@ -1064,6 +1158,12 @@ describe("HTTP request limits", () => {
       } else {
         process.env.NODE_ENV = previousNodeEnv;
       }
+      if (previousEventStorageDir === undefined) {
+        delete process.env.EVENT_STORAGE_DIR;
+      } else {
+        process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      await rm(tempDir, { force: true, recursive: true });
     }
   });
 
