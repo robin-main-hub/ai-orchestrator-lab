@@ -155,11 +155,11 @@ corepack pnpm dev
 
 ## Stage16
 
-- MacBook client id를 `client_macbook`으로 통일하고, Event Storage sync가 실제 MacBook outbox count를 갱신하도록 수정했다.
-- Home PC는 offline-first outbox 대상이 아니라 `online_only` / `requires_dgx` 클라이언트로 분리했다.
-- DGX-02 서버가 내려가면 MacBook은 local outbox로 큐잉하고, Home PC는 DGX 복구 대기 degraded 상태로 표시한다.
-- 데스크톱 앱에 browser localStorage 기반 Event outbox adapter를 추가했다. 이후 Tauri/Electron 단계에서 같은 인터페이스를 SQLite로 교체하면 된다.
-- 앱 새로고침 후에도 MacBook outbox에 남은 이벤트를 다시 DGX-02 `/events/sync`로 밀어넣는다.
+- Retired as a separate implementation surface.
+- The legacy browser outbox adapter has been folded into Stage29 `LocalClientEventCache`.
+- Stage29 is the single desktop-side client cache/outbox for DGX-02 Event Storage.
+- DGX-02 remains the authority. MacBook only keeps a local replay cache and unsynced event outbox.
+- Re-appending already-projected events must not resurrect them into the unsynced queue.
 
 ## Stage17
 

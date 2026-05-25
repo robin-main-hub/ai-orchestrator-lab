@@ -25,6 +25,9 @@ type StoredClientCachedEvent = {
 
 const defaultStoreKey = "ai-orchestrator:local-event-cache:client_macbook";
 
+// This is the single desktop-side cache/outbox for DGX-02 Event Storage.
+// DGX-02 remains the authority; this store only preserves client events until
+// they are projected to the authority and keeps a local replay cache.
 export function createLocalClientEventCache(
   storage?: ClientEventStorageLike,
   key = defaultStoreKey,
@@ -124,11 +127,31 @@ function parseRecords(rawValue: string | null): StoredClientCachedEvent[] {
 }
 
 function dedupeRecords(records: StoredClientCachedEvent[]): StoredClientCachedEvent[] {
-  return Array.from(new Map(records.map((record) => [record.event.id, record])).values());
+  const dedupedByEventId = new Map<string, StoredClientCachedEvent>();
+
+  for (const record of records) {
+    const existing = dedupedByEventId.get(record.event.id);
+    dedupedByEventId.set(record.event.id, existing ? mergeCachedEventRecords(record, existing) : record);
+  }
+
+  return Array.from(dedupedByEventId.values());
 }
 
 function dedupeEvents(events: EventEnvelope[]): EventEnvelope[] {
   return Array.from(new Map(events.map((event) => [event.id, event])).values());
+}
+
+function mergeCachedEventRecords(
+  currentRecord: StoredClientCachedEvent,
+  existingRecord: StoredClientCachedEvent,
+): StoredClientCachedEvent {
+  return {
+    event: currentRecord.event,
+    projectedTo: {
+      ...existingRecord.projectedTo,
+      ...currentRecord.projectedTo,
+    },
+  };
 }
 
 function isStoredClientCachedEvent(value: unknown): value is StoredClientCachedEvent {
