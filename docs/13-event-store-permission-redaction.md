@@ -2,12 +2,11 @@
 
 ## 목표
 
-AI Orchestrator Lab의 모든 대화, 토론, 실행, 백업, 모바일 승인, Telegram 브리지 이벤트는 하나의 Event Store 계열을 기준으로 기록된다. canonical 권위는 MacBook Event Store이며, DGX-02는 always-on continuity mirror와 server-side projection으로 동작한다. 집 PC와 폰은 로컬 cache/outbox 또는 thin client projection을 가진다. Obsidian, Notion, 모바일 대시보드, SimpleMem index는 모두 projection이다.
+AI Orchestrator Lab의 모든 대화, 토론, 실행, 백업, 모바일 승인, Telegram 브리지 이벤트는 하나의 Event Store 계열을 기준으로 기록된다. 중앙 권위는 DGX-02 Event Store이며, MacBook과 집 PC는 로컬 cache/outbox를 가진 client replica로 동작한다. Obsidian, Notion, 모바일 대시보드, SimpleMem index는 모두 projection이다.
 
 이 문서는 구현 초기에 반드시 고정해야 할 세 가지를 정의한다.
 
-- MacBook canonical Event Store
-- DGX-02 continuity mirror
+- DGX-02 Event Store authority
 - client local SQLite cache/outbox
 - Redaction Layer
 - Permission Matrix
@@ -22,35 +21,35 @@ AI Orchestrator Lab의 모든 대화, 토론, 실행, 백업, 모바일 승인, 
 
 ## 저장소 선택
 
-초기 저장소는 MacBook canonical Event Store와 각 클라이언트의 로컬 SQLite outbox/cache, DGX-02 continuity mirror를 기본으로 한다.
+초기 저장소는 DGX-02의 중앙 Event Store와 각 클라이언트의 로컬 SQLite outbox/cache를 기본으로 한다.
 
 | 후보 | 판단 |
 | --- | --- |
-| SQLite | 1차 선택. MacBook canonical store, DGX mirror, 클라이언트 로컬 outbox/cache 모두에 적용하기 쉽다. |
+| SQLite | 1차 선택. DGX-02 authority와 클라이언트 로컬 outbox/cache 모두에 적용하기 쉽다. |
 | JSONL | export와 debug에는 좋지만 query와 sync conflict 관리가 약하다. |
-| Postgres | DGX mirror/projection 서버에서는 장기적으로 좋지만 첫 구현에는 SQLite mirror로 충분하다. |
+| Postgres | DGX 서버에서는 장기적으로 좋지만 첫 구현에는 SQLite authority로 충분하다. |
 | CRDT | 멀티 디바이스 동시 편집에는 강하지만 초기 복잡도가 크다. 보류한다. |
 
-기본 구조는 `MacBook SQLite canonical store + DGX-02 SQLite continuity mirror + client SQLite append-only outbox + artifact files + server sync`로 시작한다. DGX-02는 추후 Postgres로 승격할 수 있게 event envelope를 저장소 독립적으로 유지한다.
+기본 구조는 `DGX-02 SQLite authority + client SQLite append-only outbox + artifact files + server sync`로 시작한다. DGX-02는 추후 Postgres로 승격할 수 있게 event envelope를 저장소 독립적으로 유지한다.
 
 ## 멀티 클라이언트 동기화 모델
 
 맥북과 집 PC는 둘 다 같은 DGX-02에 접속한다.
 
 ```text
-MacBook canonical SQLite Event Store
-  -> DGX-02 continuity mirror
+MacBook local SQLite outbox
+  -> DGX-02 Event Store authority
   -> Home PC local SQLite cache
   -> Obsidian/Notion/Mobile/SimpleMem projections
 ```
 
 원칙:
 
-- MacBook이 온라인이면 canonical write/import 판단은 MacBook이 담당한다.
+- DGX-02가 온라인이면 모든 이벤트의 최종 authority는 DGX-02다.
 - 맥북이 오프라인이면 로컬 SQLite outbox에 append한다.
-- Phone/Home PC/DGX remote input은 DGX-02에 `pending_remote_input`으로 남긴 뒤 MacBook 복귀 시 import/merge한다.
-- 온라인 복구 시 `client_id`, `device_id`, `idempotency_key`, `base_revision`, `source_event_ids`를 함께 보내 MacBook canonical store와 DGX mirror를 동기화한다.
-- 충돌은 초기에는 canonical revision + manual review + `sync.conflict.detected` 이벤트로 처리한다.
+- Phone/Home PC remote input은 DGX-02에 pending client input으로 남긴다.
+- 온라인 복구 시 `client_id`, `device_id`, `idempotency_key`, `base_revision`을 함께 보내 DGX-02에 동기화한다.
+- 충돌은 초기에는 DGX-02 revision + `dgx02_authority_wins` + 의미 충돌 `manual_review` 이벤트로 처리한다.
 - 사용자가 직접 작성한 결정, Coding Packet, memory pin/forget처럼 의미 충돌이 큰 이벤트는 자동 덮어쓰기보다 conflict UI에서 확인한다.
 - 집 PC는 같은 방식으로 DGX-02에서 pull하고, 필요한 경우 자기 local outbox를 push한다.
 

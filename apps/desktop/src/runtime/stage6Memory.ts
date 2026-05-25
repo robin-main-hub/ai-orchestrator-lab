@@ -104,17 +104,17 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       pinned: true,
     },
     {
-      id: "memory_seed_macbook_authority",
+      id: "memory_seed_dgx02_authority",
       layer: "project_memory",
       scope: "project",
       kind: "architecture",
-      title: "MacBook canonical authority",
+      title: "DGX-02 authority server",
       content:
-        "MacBook is the authoritative work machine and canonical source for Event Store and MemoryRecord. DGX-02 is the always-on continuity mirror, compute node, projection server, and SimpleMem index host.",
+        "DGX-02 is the authoritative server for Event Store, MemoryRecord, WorkItem, approvals, drafts, and continuity storage. MacBook is the primary work client with a local cache/outbox for offline work, and syncs back to DGX-02 when online.",
       sourceChannel: "desktop",
       trustLevel: "trusted",
       projectId: defaultProjectId,
-      tags: ["macbook", "dgx-02", "continuity", "simplemem"],
+      tags: ["dgx-02", "authority", "sync", "fallback"],
       activationState: "active",
       createdAt,
       lastAccessedAt: createdAt,
@@ -462,7 +462,7 @@ function createReflectionIssues(
       kind: "duplicate",
       recordIds: [left.id, right.id],
       severity: "medium",
-      recommendation: "Merge these fragments or keep the newer one as the canonical memory.",
+      recommendation: "Merge these fragments or keep the newer one as the authoritative memory.",
     });
   });
 
