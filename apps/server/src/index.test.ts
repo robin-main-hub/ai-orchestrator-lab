@@ -418,6 +418,38 @@ describe("server health placeholder", () => {
     expect(response.content).toContain("<redacted>");
   });
 
+  it("marks transient provider failures as retryable runtime hints", async () => {
+    const response = await createDgxProviderCompletionResponse(
+      {
+        id: "provider_completion_request_retry_hint",
+        sessionId: "session_1",
+        providerProfileId: "provider_dgx02_vllm",
+        modelId: "qwen36-domain-lora-v5-prisma",
+        messages: [{ role: "user", content: "Reply OK only" }],
+        source: "desktop",
+        routePreference: "server_proxy",
+        createdAt: "2026-05-24T00:00:00.000Z",
+      },
+      {
+        now: "2026-05-24T00:00:00.000Z",
+        vllmBaseUrl: "http://127.0.0.1:8001/v1",
+        fetchImpl: async () => ({
+          ok: false,
+          status: 502,
+          async text() {
+            return "Bad Gateway";
+          },
+        }),
+      },
+    );
+
+    expect(response.status).toBe("failed");
+    expect(response.runtimeHints).toMatchObject({
+      retryable: true,
+      retryReason: "transient_http_status",
+    });
+  });
+
   it("recursively redacts sensitive keys and PII for server phases", () => {
     const result = redactForServerPhase(
       {
@@ -2274,9 +2306,12 @@ describe("HTTP request limits", () => {
       await expect(listResponse.json()).resolves.toMatchObject({
         queue: [
           {
+            action: "terminal_run",
             replayEndpoint: "/tmux/dispatch",
             replayKind: "tmux_dispatch",
+            reason: "tmux dispatch requires explicit approval before send-keys can run",
             sourceItemId: "tmux_dispatch_http_test",
+            sourceTrust: "trusted",
           },
         ],
         summary: {

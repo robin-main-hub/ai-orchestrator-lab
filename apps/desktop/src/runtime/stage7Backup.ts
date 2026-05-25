@@ -49,6 +49,7 @@ export type Stage7DelegationRecord = {
   route?: string;
   reason?: string;
   responsePreview?: string;
+  promptPreview?: string;
 };
 
 export type Stage7BackupInput = {
@@ -246,6 +247,9 @@ function renderStage7ObsidianMarkdown({
     "## Recall Trace",
     ...formatRecallTrace(memoryInspector),
     "",
+    "## EvolveMemento Index",
+    ...formatEvolveMementoIndex(memoryInspector),
+    "",
     "## Memory Context",
     `- summary: ${memoryInspector.contextPacket.summary}`,
     `- active: ${memoryInspector.contextPacket.activeRecordIds.length}`,
@@ -306,6 +310,7 @@ function renderStage7NotionSummary({
         blocked: memoryInspector.blockedCount,
         fusion: formatRecallFusionProjection(memoryInspector),
       },
+      evolveMemento: createEvolveMementoProjection(memoryInspector),
       memoryContext: {
         id: memoryInspector.contextPacket.id,
         summary: memoryInspector.contextPacket.summary,
@@ -371,6 +376,7 @@ function renderStage7MobileDashboard({
         health: memoryInspector.stats.health,
         issues: memoryInspector.issues.length,
         fusion: formatRecallFusionProjection(memoryInspector).slice(0, 5),
+        evolveMemento: createEvolveMementoProjection(memoryInspector),
       },
     },
     null,
@@ -398,6 +404,7 @@ function collectDelegationRecords(events: EventEnvelope[]): Stage7DelegationReco
         route: getString(payload, "route"),
         reason: getString(payload, "reason") ?? getString(payload, "error"),
         responsePreview: truncate(getString(payload, "responsePreview") ?? getString(payload, "finalContent") ?? "", 240),
+        promptPreview: truncate(getString(payload, "prompt") ?? "", 180),
       };
     });
 }
@@ -412,7 +419,9 @@ function formatDelegationRecords(records: Stage7DelegationRecord[]) {
     const route = record.route ? ` / ${record.route}` : "";
     const authority = record.authorityLevel ? ` / ${record.authorityLevel}` : "";
     const reason = record.reason ? ` :: ${record.reason}` : "";
-    return `- ${record.createdAt} :: ${record.status} :: ${record.sourceAgentId ?? "unknown"} -> ${target}${authority}${route}${reason}`;
+    const prompt = record.promptPreview ? ` / task: ${record.promptPreview}` : "";
+    const response = record.responsePreview ? ` / result: ${record.responsePreview}` : "";
+    return `- ${record.createdAt} :: ${record.status} :: ${record.sourceAgentId ?? "unknown"} -> ${target}${authority}${route}${reason}${prompt}${response}`;
   });
 }
 
@@ -466,6 +475,58 @@ function formatRecallFusionProjection(memoryInspector: Stage6MemoryInspector) {
   }));
 }
 
+function createEvolveMementoProjection(memoryInspector: Stage6MemoryInspector) {
+  const fusion = formatRecallFusionProjection(memoryInspector);
+  const viewCounts = fusion.reduce<Record<string, number>>((acc, result) => {
+    for (const view of result.views) {
+      acc[view.view] = (acc[view.view] ?? 0) + 1;
+    }
+    return acc;
+  }, {});
+  const enrichedRecords = memoryInspector.records.filter(
+    (record) =>
+      Boolean(record.losslessRestatement) ||
+      Boolean(record.keywords?.length) ||
+      Boolean(record.entities?.length) ||
+      Boolean(record.persons?.length) ||
+      typeof record.importance === "number" ||
+      typeof record.entityReinforcement === "number",
+  );
+
+  return {
+    engine: "EvolveMemento",
+    placement: "Question first; dynamic recall context below question",
+    enrichedRecords: enrichedRecords.length,
+    fusionResults: fusion.filter((result) => result.mode !== "none").length,
+    viewCounts,
+    importanceAverage: averageNumber(enrichedRecords.map((record) => record.importance)),
+    reinforcementTotal: Number(
+      enrichedRecords.reduce((sum, record) => sum + (record.entityReinforcement ?? 0), 0).toFixed(2),
+    ),
+  };
+}
+
+function formatEvolveMementoIndex(memoryInspector: Stage6MemoryInspector) {
+  const projection = createEvolveMementoProjection(memoryInspector);
+  return [
+    `- engine: ${projection.engine}`,
+    `- placement: ${projection.placement}`,
+    `- enriched records: ${projection.enrichedRecords}`,
+    `- fusion results: ${projection.fusionResults}`,
+    `- view counts: lexical ${projection.viewCounts.lexical ?? 0}, semantic ${projection.viewCounts.semantic ?? 0}, metadata ${projection.viewCounts.metadata ?? 0}`,
+    `- average importance: ${projection.importanceAverage ?? "n/a"}`,
+    `- reinforcement total: ${projection.reinforcementTotal}`,
+  ];
+}
+
+function averageNumber(values: Array<number | undefined>) {
+  const numericValues = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (numericValues.length === 0) {
+    return undefined;
+  }
+  return Number((numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length).toFixed(3));
+}
+
 function delegationStatusFromEventType(type: string): Stage7DelegationRecord["status"] {
   switch (type) {
     case "agent.delegation.detected":
@@ -504,7 +565,7 @@ function truncate(value: string, max: number): string {
   if (value.length <= max) {
     return value;
   }
-  return `${value.slice(0, Math.max(0, max - 1))}…`;
+  return `${value.slice(0, Math.max(0, max - 3))}...`;
 }
 
 function formatMemoryRelations(memoryInspector: Stage6MemoryInspector) {

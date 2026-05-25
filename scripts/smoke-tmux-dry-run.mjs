@@ -26,6 +26,30 @@ assert(
   "server must advertise tmux-dispatch-gate",
 );
 
+const preflight = await readJson(`${baseUrl}/tmux/preflight`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify(
+    createTmuxDispatchRequest({
+      approvalState: "required",
+      commandPreview,
+      createdAt: new Date(now - 1000).toISOString(),
+      id: `preflight_${sourceItemId}`,
+    }),
+  ),
+});
+assert(preflight.permission?.decision === "approval_required", "preflight must evaluate permission before dispatch");
+assert(preflight.audit?.wouldQueueApproval === true, "preflight must disclose that approval will be queued");
+assert(
+  Array.isArray(preflight.timelineBlocks) && preflight.timelineBlocks.length >= 2,
+  "preflight must return auditable timeline blocks",
+);
+assert(
+  preflight.timelineBlocks.some((block) => block.kind === "command_intent") &&
+    preflight.timelineBlocks.some((block) => block.kind === "approval"),
+  "preflight timeline must include command_intent and approval blocks",
+);
+
 const pendingDispatch = await readJson(`${baseUrl}/tmux/dispatch`, {
   method: "POST",
   headers: { "content-type": "application/json" },
@@ -41,6 +65,10 @@ const pendingDispatch = await readJson(`${baseUrl}/tmux/dispatch`, {
 assert(pendingDispatch.permission?.decision === "approval_required", "required dispatch must require approval");
 assert(pendingDispatch.dispatch?.status === "pending_approval", "required dispatch must stay pending");
 assert(pendingDispatch.approval?.sourceItemId === sourceItemId, "approval must link back to dispatch id");
+assert(
+  pendingDispatch.timelineBlocks?.some((block) => block.kind === "approval" && block.status === "pending_approval"),
+  "pending dispatch must return an approval timeline block",
+);
 
 const pendingApprovals = await readJson(`${baseUrl}/approvals/list`);
 assert(
@@ -74,11 +102,15 @@ const approvedDispatch = await readJson(`${baseUrl}/tmux/dispatch`, {
   ),
 });
 assert(approvedDispatch.permission?.decision === "allow", "approved dispatch must pass permission gate");
-assert(approvedDispatch.dispatch?.status === "recorded", "dry-run approved dispatch must be recorded");
+assert(approvedDispatch.dispatch?.status === "dry_run", "dry-run approved dispatch must be marked as dry_run");
 assert(approvedDispatch.dispatch?.attempted === false, "dry-run must not attempt tmux send-keys");
 assert(
   String(approvedDispatch.dispatch?.reason ?? "").includes("ORCHESTRATOR_TMUX_DRY_RUN"),
   "dry-run response must prove ORCHESTRATOR_TMUX_DRY_RUN handled the dispatch",
+);
+assert(
+  approvedDispatch.timelineBlocks?.some((block) => block.kind === "dry_run" && block.status === "dry_run"),
+  "approved dry-run dispatch must return a dry_run timeline block",
 );
 
 const finalApprovals = await readJson(`${baseUrl}/approvals/list`);
@@ -101,6 +133,13 @@ console.log(
         dispatchStatus: pendingDispatch.dispatch?.status,
         permission: pendingDispatch.permission?.decision,
         sourceItemId,
+        timelineBlockCount: pendingDispatch.timelineBlocks?.length ?? 0,
+      },
+      preflight: {
+        decision: preflight.permission?.decision,
+        timelineBlockCount: preflight.timelineBlocks?.length ?? 0,
+        wouldAttemptSendKeys: preflight.audit?.wouldAttemptSendKeys,
+        wouldQueueApproval: preflight.audit?.wouldQueueApproval,
       },
       grant: {
         approvalState: grant.approval?.state,
@@ -112,6 +151,7 @@ console.log(
         permission: approvedDispatch.permission?.decision,
         reason: approvedDispatch.dispatch?.reason,
         sourceItemId: approvedItemId,
+        timelineBlockCount: approvedDispatch.timelineBlocks?.length ?? 0,
       },
       approvals: {
         pendingAfterGrant: finalApprovals.summary?.pending,

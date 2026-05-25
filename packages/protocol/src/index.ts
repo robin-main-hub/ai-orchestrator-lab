@@ -1371,8 +1371,12 @@ export type ApprovalQueueItem = {
   sourceItemId: string;
   summary: string;
   requestedBy: PermissionActor;
+  action?: PermissionAction;
+  reason?: string;
+  sourceTrust?: SourceTrust;
   permissions: PermissionLevel[];
   state: ApprovalState;
+  costEstimateTokens?: number;
   createdAt: string;
   expiresAt?: string;
   replayKind?: ApprovalReplayKind;
