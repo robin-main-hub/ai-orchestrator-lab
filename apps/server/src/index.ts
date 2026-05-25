@@ -3,6 +3,9 @@ import { mkdir, readFile, appendFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
+  ApprovalDecisionRequest,
+  ApprovalQueueItem,
+  ApprovalRequest,
   ApprovalState,
   DgxHeartbeat,
   EventEnvelope,
@@ -12,6 +15,7 @@ import type {
   EventSyncPushResponse,
   ModelDiscoverySnapshot,
   PermissionAction,
+  PermissionActor,
   PermissionDecision,
   PermissionLevel,
   ProviderCompletionMessage,
@@ -26,8 +30,11 @@ import type {
   RemoteExecutionResponse,
   RuntimeSnapshot,
   SecretAvailability,
+  SourceTrust,
 } from "@ai-orchestrator/protocol";
 import {
+  approvalDecisionRequestSchema,
+  approvalRequestSchema,
   eventSyncPushRequestSchema,
   providerCompletionRequestSchema,
   remoteExecutionRequestSchema,
@@ -47,6 +54,7 @@ export type ServerCapability =
   | "vllm-health"
   | "runtime-status"
   | "remote-run-request"
+  | "approval-queue"
   | "event-storage-sync"
   | "remote-event-stream-placeholder"
   | "memory-sync-placeholder";
@@ -116,6 +124,27 @@ export type ServerPermissionGateResult = {
   decision: PermissionDecision;
   requestedLevels: PermissionLevel[];
   reason: string;
+};
+
+export type ServerApprovalDecisionEventPayload = {
+  approvalId: string;
+  sourceItemId?: string;
+  state: Extract<ApprovalState, "approved" | "rejected">;
+  actor: PermissionActor;
+  reason?: string;
+  decidedAt: string;
+};
+
+export type ServerApprovalListResponse = {
+  approvals: ApprovalRequest[];
+  queue: ApprovalQueueItem[];
+  summary: {
+    pending: number;
+    approved: number;
+    rejected: number;
+    expired: number;
+  };
+  createdAt: string;
 };
 
 const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
@@ -376,6 +405,7 @@ export function createHealthResponse(now = new Date().toISOString(), probe?: Dgx
       "vllm-health",
       "runtime-status",
       "remote-run-request",
+      "approval-queue",
       "event-storage-sync",
       "remote-event-stream-placeholder",
       "memory-sync-placeholder",
@@ -878,6 +908,332 @@ export function evaluateServerRemoteRunPermission(request: RemoteExecutionReques
     requestedLevels,
     reason: "remote execution requires approval before DGX-02 queues it",
   };
+}
+
+const DEFAULT_APPROVAL_TTL_SECONDS = 86_400;
+
+export function createProviderCompletionApprovalRequest(
+  request: ProviderCompletionRequest,
+  permission: ServerPermissionGateResult,
+  now = new Date().toISOString(),
+): ApprovalRequest {
+  return {
+    id: createApprovalId(request.id),
+    sessionId: request.sessionId,
+    sourceItemId: request.id,
+    subjectId: `${request.providerProfileId}:${request.modelId}`,
+    actor: actorFromEventSource(request.source),
+    channel: request.source,
+    sourceTrust: sourceTrustFromEventSource(request.source),
+    action: permission.action,
+    requestedLevels: permission.requestedLevels,
+    decision: permission.decision,
+    state: permission.approvalState,
+    reason: permission.reason,
+    ttlSeconds: DEFAULT_APPROVAL_TTL_SECONDS,
+    createdAt: now,
+    expiresAt: addSecondsIso(now, DEFAULT_APPROVAL_TTL_SECONDS),
+  };
+}
+
+export function createRemoteRunApprovalRequest(
+  request: RemoteExecutionRequest,
+  permission: ServerPermissionGateResult,
+  now = new Date().toISOString(),
+): ApprovalRequest {
+  return {
+    id: createApprovalId(request.id),
+    sessionId: request.runId,
+    sourceItemId: request.id,
+    subjectId: `${request.targetNodeId}:${request.kind}`,
+    actor: "user",
+    channel: "desktop",
+    sourceTrust: "trusted",
+    action: permission.action,
+    requestedLevels: permission.requestedLevels,
+    decision: permission.decision,
+    state: permission.approvalState,
+    reason: permission.reason,
+    ttlSeconds: DEFAULT_APPROVAL_TTL_SECONDS,
+    createdAt: now,
+    expiresAt: addSecondsIso(now, DEFAULT_APPROVAL_TTL_SECONDS),
+  };
+}
+
+export function listApprovalsFromServerStorage(
+  state = defaultEventStorageState,
+  now = new Date().toISOString(),
+): ServerApprovalListResponse {
+  const requestedApprovals = new Map<string, ApprovalRequest>();
+  const decisions = new Map<string, ServerApprovalDecisionEventPayload>();
+  const events = [...state.eventsById.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+
+  for (const event of events) {
+    if (event.type === "approval.requested") {
+      const parsed = approvalRequestSchema.safeParse(event.payload);
+      if (parsed.success) {
+        requestedApprovals.set(parsed.data.id, parsed.data);
+      }
+      continue;
+    }
+
+    if (event.type === "approval.granted" || event.type === "approval.rejected") {
+      const decision = asApprovalDecisionPayload(event.payload);
+      if (decision) {
+        decisions.set(decision.approvalId, decision);
+      }
+    }
+  }
+
+  const approvals = [...requestedApprovals.values()]
+    .map((approval) => {
+      const decision = decisions.get(approval.id);
+      if (decision) {
+        return {
+          ...approval,
+          state: decision.state,
+          decision: decision.state === "approved" ? "allow" : "deny",
+        } satisfies ApprovalRequest;
+      }
+
+      if (approval.state === "required" && approval.expiresAt && approval.expiresAt < now) {
+        return {
+          ...approval,
+          state: "expired",
+          decision: "deny",
+        } satisfies ApprovalRequest;
+      }
+
+      return approval;
+    })
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
+  const queue = approvals.filter((approval) => approval.state === "required").map(createApprovalQueueItem);
+
+  return {
+    approvals,
+    queue,
+    summary: {
+      pending: queue.length,
+      approved: approvals.filter((approval) => approval.state === "approved").length,
+      rejected: approvals.filter((approval) => approval.state === "rejected").length,
+      expired: approvals.filter((approval) => approval.state === "expired").length,
+    },
+    createdAt: now,
+  };
+}
+
+export async function listApprovalsFromPersistentServerStorage(
+  storage: JsonlServerEventStorage,
+  now = new Date().toISOString(),
+): Promise<ServerApprovalListResponse> {
+  await storage.queue.catch(() => undefined);
+  const state = await storage.statePromise;
+  return listApprovalsFromServerStorage(state, now);
+}
+
+export async function recordApprovalRequestToPersistentServerStorage(
+  approval: ApprovalRequest,
+  storage: JsonlServerEventStorage,
+  now = new Date().toISOString(),
+): Promise<EventSyncPushResponse> {
+  const event = createApprovalRequestedEvent(approval);
+  return pushEventsToPersistentServerStorage(
+    {
+      id: `event_sync_approval_requested_${approval.id}`,
+      clientId: "dgx-02-server",
+      sessionId: approval.sessionId,
+      events: [event],
+      idempotencyKey: event.id,
+      createdAt: now,
+    },
+    storage,
+    now,
+  );
+}
+
+export async function decideApprovalInPersistentServerStorage(
+  request: ApprovalDecisionRequest,
+  state: Extract<ApprovalState, "approved" | "rejected">,
+  storage: JsonlServerEventStorage,
+  now = new Date().toISOString(),
+): Promise<
+  | {
+      statusCode: 200;
+      payload: {
+        approval: ApprovalRequest;
+        event: EventEnvelope<ServerApprovalDecisionEventPayload>;
+        status: Extract<ApprovalState, "approved" | "rejected">;
+      };
+    }
+  | {
+      statusCode: 404 | 409;
+      payload: { error: string; approval?: ApprovalRequest };
+    }
+> {
+  return enqueueStorageTask(storage, async () => {
+    const storageState = await storage.statePromise;
+    const current = listApprovalsFromServerStorage(storageState, now);
+    const approval = current.approvals.find(
+      (candidate) =>
+        (request.approvalId && candidate.id === request.approvalId) ||
+        (request.sourceItemId && candidate.sourceItemId === request.sourceItemId),
+    );
+
+    if (!approval) {
+      return {
+        statusCode: 404,
+        payload: { error: "approval_not_found" },
+      };
+    }
+
+    if (approval.state !== "required") {
+      return {
+        statusCode: 409,
+        payload: {
+          error: "approval_not_pending",
+          approval,
+        },
+      };
+    }
+
+    const decidedAt = request.decidedAt ?? now;
+    const event = createApprovalDecisionEvent(approval, state, request.actor ?? "user", request.reason, decidedAt);
+    const syncRequest: EventSyncPushRequest = {
+      id: `event_sync_approval_${state}_${approval.id}`,
+      clientId: "dgx-02-server",
+      sessionId: approval.sessionId,
+      events: [event],
+      idempotencyKey: event.id,
+      createdAt: now,
+    };
+    const syncResponse = pushEventsToServerStorage(syncRequest, storageState, now);
+    await appendAcceptedEventsToJsonl(syncRequest, syncResponse, storage.eventLogPath, now);
+    const updatedApproval =
+      listApprovalsFromServerStorage(storageState, now).approvals.find((candidate) => candidate.id === approval.id) ??
+      approval;
+
+    return {
+      statusCode: 200,
+      payload: {
+        approval: updatedApproval,
+        event,
+        status: state,
+      },
+    };
+  });
+}
+
+function createApprovalId(sourceItemId: string) {
+  return `approval_${sourceItemId.replace(/[^a-zA-Z0-9_-]+/g, "_")}`;
+}
+
+function actorFromEventSource(source: ProviderCompletionRequest["source"]): PermissionActor {
+  if (source === "mobile") return "mobile";
+  if (source === "agent") return "agent";
+  if (source === "api" || source === "legacy_telegram") return "external_channel";
+  if (source === "server") return "server";
+  return "user";
+}
+
+function sourceTrustFromEventSource(source: ProviderCompletionRequest["source"]): SourceTrust {
+  if (source === "legacy_telegram" || source === "api") return "untrusted";
+  if (source === "mobile") return "limited";
+  return "trusted";
+}
+
+function createApprovalQueueItem(approval: ApprovalRequest): ApprovalQueueItem {
+  return {
+    id: `queue_${approval.id}`,
+    sourceItemId: approval.sourceItemId ?? approval.id,
+    summary: approvalSummary(approval),
+    requestedBy: approval.actor,
+    permissions: approval.requestedLevels,
+    state: approval.state,
+    createdAt: approval.createdAt,
+    expiresAt: approval.expiresAt,
+  };
+}
+
+function approvalSummary(approval: ApprovalRequest) {
+  if (approval.action === "provider_completion") {
+    return `Provider completion approval: ${approval.subjectId}`;
+  }
+
+  if (approval.action === "remote_workspace") {
+    return `Remote workspace approval: ${approval.subjectId}`;
+  }
+
+  return `${approval.action} approval: ${approval.subjectId}`;
+}
+
+function createApprovalRequestedEvent(approval: ApprovalRequest): EventEnvelope<ApprovalRequest> {
+  return {
+    id: `event_approval_requested_${approval.id}`,
+    sessionId: approval.sessionId,
+    type: "approval.requested",
+    payload: approval,
+    createdAt: approval.createdAt,
+    source: "server",
+    sourceTrust: "trusted",
+    redacted: true,
+    correlationId: approval.sourceItemId,
+  };
+}
+
+function createApprovalDecisionEvent(
+  approval: ApprovalRequest,
+  state: Extract<ApprovalState, "approved" | "rejected">,
+  actor: PermissionActor,
+  reason: string | undefined,
+  decidedAt: string,
+): EventEnvelope<ServerApprovalDecisionEventPayload> {
+  return {
+    id: `event_approval_${state}_${approval.id}_${decidedAt.replace(/[^a-zA-Z0-9_-]+/g, "_")}`,
+    sessionId: approval.sessionId,
+    type: state === "approved" ? "approval.granted" : "approval.rejected",
+    payload: {
+      approvalId: approval.id,
+      sourceItemId: approval.sourceItemId,
+      state,
+      actor,
+      reason,
+      decidedAt,
+    },
+    createdAt: decidedAt,
+    source: "server",
+    sourceTrust: "trusted",
+    redacted: true,
+    correlationId: approval.sourceItemId,
+  };
+}
+
+function asApprovalDecisionPayload(value: unknown): ServerApprovalDecisionEventPayload | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const candidate = value as Partial<ServerApprovalDecisionEventPayload>;
+  if (
+    typeof candidate.approvalId === "string" &&
+    (candidate.state === "approved" || candidate.state === "rejected") &&
+    typeof candidate.actor === "string" &&
+    typeof candidate.decidedAt === "string"
+  ) {
+    return candidate as ServerApprovalDecisionEventPayload;
+  }
+
+  return undefined;
+}
+
+function addSecondsIso(value: string, seconds: number) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
+  }
+
+  date.setSeconds(date.getSeconds() + seconds);
+  return date.toISOString();
 }
 
 function createServerProviderTags(providerProfileId: string) {
@@ -1872,9 +2228,23 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       }
       const permission = evaluateServerProviderCompletionPermission(payload);
       if (permission.decision !== "allow") {
+        let approval: ApprovalRequest | undefined;
+        if (permission.decision === "approval_required") {
+          approval = createProviderCompletionApprovalRequest(payload, permission);
+          try {
+            await recordApprovalRequestToPersistentServerStorage(approval, eventStorage);
+          } catch (error) {
+            respondJson(500, {
+              error: "approval_queue_write_failed",
+              message: error instanceof Error ? error.message : String(error),
+            });
+            return;
+          }
+        }
         respondJson(403, {
           error: permission.decision === "deny" ? "permission_denied" : "permission_required",
           permission,
+          approval,
         });
         return;
       }
@@ -1898,7 +2268,52 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         });
         return;
       }
-      respondJson(202, createRemoteRunResponse(payload));
+      const remoteResponse = createRemoteRunResponse(payload);
+      const permission = evaluateServerRemoteRunPermission(payload);
+      let approval: ApprovalRequest | undefined;
+      if (permission.decision === "approval_required") {
+        approval = createRemoteRunApprovalRequest(payload, permission);
+        try {
+          await recordApprovalRequestToPersistentServerStorage(approval, eventStorage);
+        } catch (error) {
+          respondJson(500, {
+            error: "approval_queue_write_failed",
+            message: error instanceof Error ? error.message : String(error),
+          });
+          return;
+        }
+      }
+      respondJson(202, {
+        ...remoteResponse,
+        approval,
+      });
+      return;
+    }
+
+    if ((pathname === "/approvals" || pathname === "/approvals/list") && request.method === "GET") {
+      respondJson(200, await listApprovalsFromPersistentServerStorage(eventStorage));
+      return;
+    }
+
+    if ((pathname === "/approvals/grant" || pathname === "/approvals/reject") && request.method === "POST") {
+      let payload: ApprovalDecisionRequest;
+      try {
+        payload = approvalDecisionRequestSchema.parse(await readJsonBody(request)) as ApprovalDecisionRequest;
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) {
+          respondJson(413, { error: "payload_too_large", limit: error.limit });
+          return;
+        }
+        respondJson(400, {
+          error: "invalid_approval_decision_payload",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+
+      const decision = pathname === "/approvals/grant" ? "approved" : "rejected";
+      const result = await decideApprovalInPersistentServerStorage(payload, decision, eventStorage);
+      respondJson(result.statusCode, result.payload);
       return;
     }
 
