@@ -1847,6 +1847,75 @@ describe("HTTP request limits", () => {
     }
   });
 
+  it("replays approved provider completion requests from the approval record", async () => {
+    const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const previousAnthropicKey = process.env.ANTHROPIC_API_KEY;
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-provider-replay-"));
+    process.env.EVENT_STORAGE_DIR = tempDir;
+    delete process.env.ANTHROPIC_API_KEY;
+
+    const storage = createJsonlServerEventStorage();
+
+    try {
+      const request = {
+        id: "provider_completion_replay",
+        sessionId: "session_provider_replay",
+        providerProfileId: "provider_apifun_claude",
+        modelId: "claude-opus-4-6",
+        messages: [{ role: "user" as const, content: "hello" }],
+        source: "desktop" as const,
+        routePreference: "server_proxy" as const,
+        createdAt: "2026-05-25T00:00:00.000Z",
+      };
+      const permission = evaluateServerProviderCompletionPermission(request);
+      expect(permission.decision).toBe("approval_required");
+      const approval = createProviderCompletionApprovalRequest(
+        request,
+        permission,
+        "2026-05-25T00:00:00.000Z",
+      );
+
+      await recordApprovalRequestToPersistentServerStorage(approval, storage, "2026-05-25T00:00:00.000Z");
+      await decideApprovalInPersistentServerStorage(
+        { approvalId: approval.id, actor: "user", decidedAt: "2026-05-25T00:00:01.000Z" },
+        "approved",
+        storage,
+        "2026-05-25T00:00:01.000Z",
+      );
+
+      const replay = await replayApprovedRequestFromPersistentServerStorage(
+        { approvalId: approval.id, actor: "user" },
+        storage,
+        "2026-05-25T00:00:02.000Z",
+      );
+
+      expect(replay.statusCode).toBe(202);
+      expect(replay.payload).toMatchObject({
+        status: "replayed",
+        replay: {
+          kind: "provider_completion",
+        },
+        result: {
+          requestId: "provider_completion_replay",
+          providerProfileId: "provider_apifun_claude",
+          status: "failed",
+        },
+      });
+    } finally {
+      if (previousEventStorageDir === undefined) {
+        delete process.env.EVENT_STORAGE_DIR;
+      } else {
+        process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      if (previousAnthropicKey === undefined) {
+        delete process.env.ANTHROPIC_API_KEY;
+      } else {
+        process.env.ANTHROPIC_API_KEY = previousAnthropicKey;
+      }
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
   it("returns 403 for provider completions that need approval before proxying", async () => {
     const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
     const previousNodeEnv = process.env.NODE_ENV;

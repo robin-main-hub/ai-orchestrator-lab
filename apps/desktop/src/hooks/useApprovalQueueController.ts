@@ -7,6 +7,7 @@ import {
 import {
   fetchDgxApprovalQueue,
   grantDgxApproval,
+  replayDgxApproval,
   rejectDgxApproval,
   type DesktopApprovalListResponse,
 } from "../runtime/stage34ApprovalServer";
@@ -123,10 +124,47 @@ export function useApprovalQueueController({ appendEvent }: UseApprovalQueueCont
         authorityNodeId: "dgx-02",
         redaction: "applied",
       });
+      let replayedByServer = false;
+      if (state === "approved" && approval.replay) {
+        try {
+          const replay = await replayDgxApproval({ request });
+          replayedByServer = replay.status === "replayed";
+          appendEvent("approval.server.replay_requested", {
+            approvalId: approval.id,
+            sourceItemId: approval.sourceItemId,
+            replayKind: approval.replay.kind,
+            replayStatus: replay.status,
+            authorityNodeId: "dgx-02",
+            redaction: "applied",
+          });
+          if (approval.replay.kind === "tmux_dispatch" && replay.status === "replayed") {
+            const dispatch = extractTmuxDispatchReplay(replay.result);
+            const outcome: TmuxRedispatchOutcome = {
+              approvalId: approval.id,
+              createdAt: new Date().toISOString(),
+              reason: dispatch?.reason ?? "server replay completed",
+              role: extractReplayRole(approval.replay.payload) ?? "orchestrator",
+              sourceItemId: approval.sourceItemId,
+              status: dispatch?.status ?? "recorded",
+            };
+            setTmuxRedispatchOutcomes((current) => [outcome, ...current].slice(0, 5));
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          appendEvent("approval.server.replay_failed", {
+            approvalId: approval.id,
+            sourceItemId: approval.sourceItemId,
+            replayKind: approval.replay.kind,
+            message,
+            authorityNodeId: "dgx-02",
+            redaction: "applied",
+          });
+        }
+      }
       const pendingTmuxRequest =
         pendingTmuxDispatchByApprovalKey[approval.id] ??
         (approval.sourceItemId ? pendingTmuxDispatchByApprovalKey[approval.sourceItemId] : undefined);
-      if (state === "approved" && pendingTmuxRequest) {
+      if (state === "approved" && pendingTmuxRequest && !replayedByServer) {
         try {
           const approvedDispatch = await requestTmuxDispatch({
             request: {
@@ -217,4 +255,39 @@ export function useApprovalQueueController({ appendEvent }: UseApprovalQueueCont
     handleTmuxApprovalQueued,
     handleResolveServerApproval,
   };
+}
+
+function extractTmuxDispatchReplay(result: unknown): { reason?: string; status?: TmuxRedispatchOutcome["status"] } | undefined {
+  if (!result || typeof result !== "object") {
+    return undefined;
+  }
+  const dispatch = (result as { dispatch?: unknown }).dispatch;
+  if (!dispatch || typeof dispatch !== "object") {
+    return undefined;
+  }
+  const status = (dispatch as { status?: unknown }).status;
+  const reason = (dispatch as { reason?: unknown }).reason;
+  return {
+    reason: typeof reason === "string" ? reason : undefined,
+    status: isTmuxRedispatchStatus(status) ? status : undefined,
+  };
+}
+
+function extractReplayRole(payload: unknown): TmuxRedispatchOutcome["role"] | undefined {
+  if (!payload || typeof payload !== "object") {
+    return undefined;
+  }
+  const role = (payload as { role?: unknown }).role;
+  return typeof role === "string" ? role : undefined;
+}
+
+function isTmuxRedispatchStatus(value: unknown): value is TmuxRedispatchOutcome["status"] {
+  return (
+    value === "sent" ||
+    value === "failed" ||
+    value === "blocked" ||
+    value === "recorded" ||
+    value === "pending_approval" ||
+    value === "dry_run"
+  );
 }
