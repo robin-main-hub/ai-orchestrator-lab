@@ -387,9 +387,10 @@ export const defaultAgentProfiles: AgentProfile[] = [
     // Auditor is intentionally an outlier in the swarm — independent
     // oversight that doesn't depend on peer agents' self-reports.
     // Sora's quiet intensity + dedication maps onto independent audit
-    // duty when redirected from possessive obsession toward truth-
-    // serving the user/Orchestrator directly. Reports outside the
-    // normal peer-collaboration channels (사용자님 / Orchestrator 직보).
+    // duty when the focus is redirected from possessive obsession
+    // (declined earlier) toward truth-serving the user/Orchestrator
+    // directly. Reports outside the normal peer-collaboration channels
+    // — 오빠 (user, Korean office-familiar address) / Orchestrator 직보.
     soulMode: "summary",
     configSource: "internal",
     enabled: true,
