@@ -163,7 +163,7 @@ import { CodingPacketPanel } from "./components/CodingPacketPanel";
 import { ConfigLibraryPanel } from "./components/ConfigLibraryPanel";
 import { ConversationWorkbench } from "./components/ConversationWorkbench";
 import { IngressGuardPanel } from "./components/IngressGuardPanel";
-import { MementoInspectorPanel } from "./components/MementoInspectorPanel";
+import { MementoPanel } from "./components/MementoPanel";
 import { OperationsRailPanel } from "./components/OperationsRailPanel";
 import { ProjectRailPanel } from "./components/ProjectRailPanel";
 import { ProviderProfilesManagerPanel } from "./components/ProviderProfilesManagerPanel";
@@ -2608,7 +2608,7 @@ export function App() {
               profiles={providerProfiles}
               selectedAgentId={selectedAgent?.id}
             />
-            <MementoInspectorPanel
+            <MementoPanel
               inspector={memoryInspector}
               onActivate={handleActivateMemory}
               onForget={handleForgetMemory}
