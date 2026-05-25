@@ -1495,6 +1495,15 @@ button {
 
 .window-checklist-head {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.window-checklist-expand {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: center;
@@ -1509,22 +1518,39 @@ button {
   text-align: left;
 }
 
-.window-checklist-head strong,
-.window-checklist-head span {
+.window-checklist-expand strong,
+.window-checklist-expand span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.window-checklist-head strong {
+.window-checklist-expand strong {
   color: var(--text);
   font-size: 10px;
 }
 
-.window-checklist-head span {
+.window-checklist-expand span {
   color: var(--cyan);
   font-size: 10px;
+}
+
+.window-checklist-dismiss {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.window-checklist-dismiss:hover {
+  border-color: var(--line-soft);
+  color: var(--text);
 }
 
 .window-checklist-toggle {
