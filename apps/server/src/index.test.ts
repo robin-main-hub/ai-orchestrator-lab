@@ -3,6 +3,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
+  agentDelegationEventTypeSchema,
+  parseAgentDelegationEventPayload,
+} from "@ai-orchestrator/protocol";
+import type { ServerAgentDelegationExecuteRequest } from "./index";
+import {
   createEventStorageSnapshot,
   createDgxProviderCompletionResponse,
   createDgxHeartbeat,
@@ -37,6 +42,13 @@ import {
   resolveAllowedOrigins,
   startServer,
 } from "./index";
+
+function expectValidAgentDelegationEvents(events: Array<{ type: string; payload: unknown }>) {
+  for (const event of events) {
+    const type = agentDelegationEventTypeSchema.parse(event.type);
+    expect(() => parseAgentDelegationEventPayload(type, event.payload)).not.toThrow();
+  }
+}
 
 describe("server health placeholder", () => {
   it("returns DGX-02 authority with client cache runtime status", () => {
@@ -1284,7 +1296,7 @@ describe("public health storage redaction", () => {
 });
 
 describe("server agent delegation endpoint core", () => {
-  const baseDelegationRequest = {
+  const baseDelegationRequest: ServerAgentDelegationExecuteRequest = {
     id: "agent_delegation_test_1",
     sessionId: "session_1",
     caller: {
@@ -1372,6 +1384,7 @@ describe("server agent delegation endpoint core", () => {
       "agent.delegation.followup.completed",
     ]);
     expect(response.events.every((event) => event.redacted)).toBe(true);
+    expectValidAgentDelegationEvents(response.events);
   });
 
   it("records unknown delegation targets before the follow-up turn", async () => {
@@ -1405,6 +1418,7 @@ describe("server agent delegation endpoint core", () => {
       },
     ]);
     expect(response.events.map((event) => event.type)).toContain("agent.delegation.unknown_target");
+    expectValidAgentDelegationEvents(response.events);
     expect(response.finalContent).toContain("채아린 최종");
   });
 });
@@ -1486,8 +1500,188 @@ describe("HTTP request limits", () => {
         },
       });
       expect(eventsResponse.status).toBe(200);
-      const eventPayload = (await eventsResponse.json()) as { events: Array<{ type: string }> };
+      const eventPayload = (await eventsResponse.json()) as { events: Array<{ type: string; payload: unknown }> };
       expect(eventPayload.events.map((event: { type: string }) => event.type)).toContain("agent.delegation.succeeded");
+      expectValidAgentDelegationEvents(
+        eventPayload.events.filter((event) => event.type.startsWith("agent.delegation.")),
+      );
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousEventStorageDir === undefined) {
+        delete process.env.EVENT_STORAGE_DIR;
+      } else {
+        process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects mock agent delegation in production", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/agent-delegations/execute`, {
+        body: JSON.stringify({
+          id: "agent_delegation_http_mock_prod",
+          sessionId: "session_http",
+          executionMode: "mock",
+          caller: {
+            agentId: "agent_chaerin",
+            role: "companion",
+            personaName: "chaerin",
+            providerProfileId: "provider_dgx02_vllm",
+            modelId: "qwen36-gio-lora-v5-prisma",
+          },
+          userMessage: "Ask researcher for a short market scan.",
+          targets: [
+            {
+              key: "researcher",
+              agentId: "agent_maomao",
+              role: "researcher",
+              personaName: "maomao",
+              providerProfileId: "provider_dgx02_vllm",
+              modelId: "qwen36-gio-lora-v5-prisma",
+            },
+          ],
+          routePreference: "server_proxy",
+          createdAt: "2026-05-25T00:00:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toMatchObject({
+        error: "mock_delegation_disabled",
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
+
+  it("queues approval before live agent delegation can call a limited provider", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-agent-delegation-approval-"));
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+    process.env.EVENT_STORAGE_DIR = tempDir;
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/agent-delegations/execute`, {
+        body: JSON.stringify({
+          id: "agent_delegation_live_permission",
+          sessionId: "session_http_permission",
+          caller: {
+            agentId: "agent_chaerin",
+            role: "companion",
+            personaName: "chaerin",
+            providerProfileId: "provider_apifun_claude",
+            modelId: "claude-opus-4-6",
+          },
+          userMessage: "Ask researcher for a short market scan.",
+          targets: [
+            {
+              key: "researcher",
+              agentId: "agent_maomao",
+              role: "researcher",
+              personaName: "maomao",
+              providerProfileId: "provider_apifun_claude",
+              modelId: "claude-opus-4-6",
+            },
+          ],
+          routePreference: "server_proxy",
+          createdAt: "2026-05-25T00:00:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toMatchObject({
+        error: "permission_required",
+        approval: {
+          sourceItemId: expect.stringContaining("agent_delegation_live_permission_initial"),
+          state: "required",
+        },
+        permission: {
+          action: "provider_completion",
+          approvalState: "required",
+          decision: "approval_required",
+        },
+      });
+
+      const listResponse = await fetch(`http://127.0.0.1:${address.port}/approvals/list`, {
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+        },
+      });
+      expect(listResponse.status).toBe(200);
+      await expect(listResponse.json()).resolves.toMatchObject({
+        summary: {
+          pending: 1,
+        },
+      });
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
