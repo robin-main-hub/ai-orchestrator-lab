@@ -206,7 +206,7 @@ import { ConfigLibraryPanel } from "./components/ConfigLibraryPanel";
 import { ConversationWorkbench } from "./components/ConversationWorkbench";
 import { IngressGuardPanel } from "./components/IngressGuardPanel";
 import { MementoInspectorPanel } from "./components/MementoInspectorPanel";
-import { OperationsRailPanel } from "./components/OperationsRailPanel";
+import { OperationsRailPanel, type TmuxRedispatchOutcome } from "./components/OperationsRailPanel";
 import { ProjectRailPanel } from "./components/ProjectRailPanel";
 import { ProviderProfilesManagerPanel } from "./components/ProviderProfilesManagerPanel";
 import { ProviderRegistrationMenu } from "./components/ProviderRegistrationMenu";
@@ -271,6 +271,7 @@ export function App() {
   const [approvalServerError, setApprovalServerError] = useState("");
   const [approvalServerBusyId, setApprovalServerBusyId] = useState<string>();
   const [pendingTmuxDispatchByApprovalKey, setPendingTmuxDispatchByApprovalKey] = useState<Record<string, DesktopTmuxDispatchRequest>>({});
+  const [tmuxRedispatchOutcomes, setTmuxRedispatchOutcomes] = useState<TmuxRedispatchOutcome[]>([]);
   const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
   const [contextPackTier, setContextPackTier] = useState<ContextPackTier>("standard");
   const [reviewMode, setReviewMode] = useState<ReviewMode>("quick");
@@ -1846,6 +1847,15 @@ export function App() {
             authorityNodeId: "dgx-02",
             redaction: "applied",
           });
+          const outcome: TmuxRedispatchOutcome = {
+            approvalId: approval.id,
+            createdAt: new Date().toISOString(),
+            reason: approvedDispatch.dispatch.reason,
+            role: pendingTmuxRequest.role,
+            sourceItemId: approval.sourceItemId,
+            status: approvedDispatch.dispatch.status,
+          };
+          setTmuxRedispatchOutcomes((current) => [outcome, ...current].slice(0, 5));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           setApprovalServerError(`승인은 완료됐지만 tmux 재전송 실패: ${message}`);
@@ -1857,6 +1867,15 @@ export function App() {
             authorityNodeId: "dgx-02",
             redaction: "applied",
           });
+          const outcome: TmuxRedispatchOutcome = {
+            approvalId: approval.id,
+            createdAt: new Date().toISOString(),
+            reason: message,
+            role: pendingTmuxRequest.role,
+            sourceItemId: approval.sourceItemId,
+            status: "failed",
+          };
+          setTmuxRedispatchOutcomes((current) => [outcome, ...current].slice(0, 5));
         }
       }
       if (pendingTmuxRequest || state === "rejected") {
@@ -2885,6 +2904,7 @@ export function App() {
                 permissionSnapshot={permissionSnapshot}
                 providerReadiness={providerReadiness}
                 secretVaultSnapshot={secretVaultSnapshot}
+                tmuxRedispatchOutcomes={tmuxRedispatchOutcomes}
               />
             </>
           ) : null}
