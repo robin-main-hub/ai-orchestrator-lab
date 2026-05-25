@@ -2874,9 +2874,63 @@ button {
   line-height: 1.35;
 }
 
+.tmux-pane-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.tmux-pane-controls input {
+  min-width: 0;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  outline: none;
+  background: #002d35;
+  color: var(--text);
+  font: 11px/1.2 var(--mono);
+}
+
+.tmux-pane-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 62px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #00343d;
+  color: var(--cyan);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.tmux-pane-controls button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.tmux-pane-output {
+  max-height: 92px;
+  margin: 0;
+  padding: 7px;
+  overflow: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #00171c;
+  color: var(--muted);
+  font: 10px/1.4 var(--mono);
+  white-space: pre-wrap;
+}
+
 .tmux-decision-row {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   padding: 7px 9px;
 }
