@@ -3,12 +3,15 @@ import {
   CheckCircle2,
   ChevronDown,
   Database,
+  Hash,
   Link2,
   Plus,
   Sparkles,
   Trash2,
+  TrendingUp,
+  UserRound,
 } from "lucide-react";
-import type { MemoryRecord } from "@ai-orchestrator/protocol";
+import type { MemoryRecord, RecallResult } from "@ai-orchestrator/protocol";
 import { cn } from "../lib/utils";
 import type { Stage6MemoryInspector } from "../runtime/stage6Memory";
 
@@ -139,7 +142,10 @@ export function EvolveMementoPanel({
               key={result.record.id}
             >
               <div className="memento-v2__trace-head">
-                <strong className="memento-v2__trace-title">
+                <strong
+                  className="memento-v2__trace-title"
+                  title={result.record.losslessRestatement ?? result.record.content}
+                >
                   {result.record.title}
                 </strong>
                 <span className="memento-v2__trace-score">
@@ -150,6 +156,12 @@ export function EvolveMementoPanel({
                 {mementoKindLabel(result.record.kind)} · {mementoScopeLabel(result.record.scope)} ·{" "}
                 {activationStateLabel(result.activationState)}
               </span>
+              <ImportanceBar
+                importance={result.record.importance}
+                reinforcement={result.record.entityReinforcement}
+              />
+              <RecordChips record={result.record} />
+              <FusionBreakdown detail={result.fusionDetail} />
               <p className="memento-v2__trace-reason">{recallReasonLabel(result.reason)}</p>
             </article>
           ))}
@@ -200,11 +212,22 @@ export function EvolveMementoPanel({
           {visibleRecords.map((record) => (
             <article className="memento-v2__record" key={record.id}>
               <div className="memento-v2__record-body">
-                <strong className="memento-v2__record-title">{record.title}</strong>
+                <strong
+                  className="memento-v2__record-title"
+                  title={record.losslessRestatement ?? record.content}
+                >
+                  {record.title}
+                </strong>
                 <span className="memento-v2__record-meta">
                   {mementoKindLabel(record.kind)} · {mementoScopeLabel(record.scope)} ·{" "}
                   {trustLevelLabel(record.trustLevel)}
                 </span>
+                <ImportanceBar
+                  compact
+                  importance={record.importance}
+                  reinforcement={record.entityReinforcement}
+                />
+                <RecordChips record={record} />
               </div>
               <div className="memento-v2__record-actions">
                 <button
@@ -388,4 +411,138 @@ function reflectionIssueLabel(kind: Stage6MemoryInspector["issues"][number]["kin
     untrusted_active: "비신뢰 활성",
   };
   return labels[kind];
+}
+
+// ── v2: EvolveMem schema 신규 필드 시각화 helpers ──────────────────
+
+/**
+ * Importance bar — 0~1 progress. entityReinforcement (누적 score, 0~5)
+ * 가 있으면 우측에 mono badge 로 같이 표시. 둘 다 없으면 미렌더.
+ */
+function ImportanceBar({
+  importance,
+  reinforcement,
+  compact,
+}: {
+  importance?: number;
+  reinforcement?: number;
+  compact?: boolean;
+}) {
+  if (importance === undefined && !reinforcement) return null;
+  const pct = Math.max(0, Math.min(1, importance ?? 0)) * 100;
+  return (
+    <div
+      className={cn("memento-v2__importance", compact && "memento-v2__importance--compact")}
+      title={`importance ${pct.toFixed(0)}% · reinforce +${(reinforcement ?? 0).toFixed(1)}`}
+    >
+      <div className="memento-v2__importance-track">
+        <div className="memento-v2__importance-fill" style={{ width: `${pct}%` }} />
+      </div>
+      {reinforcement && reinforcement > 0 ? (
+        <span className="memento-v2__importance-badge">
+          <TrendingUp size={9} />
+          {reinforcement.toFixed(1)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Render the LLM-extracted structured chips: topic / persons / entities /
+ * keywords. Each track is independently optional; rendering skips when
+ * empty so empty cards stay clean.
+ */
+function RecordChips({ record }: { record: MemoryRecord }) {
+  const topic = record.topic;
+  const persons = record.persons ?? [];
+  const entities = record.entities ?? [];
+  const keywords = record.keywords ?? [];
+  const hasAny =
+    topic || persons.length > 0 || entities.length > 0 || keywords.length > 0;
+  if (!hasAny) return null;
+  return (
+    <div className="memento-v2__chips">
+      {topic ? (
+        <span
+          className="memento-v2__chip memento-v2__chip--topic"
+          title={`topic: ${topic}`}
+        >
+          <Hash size={9} />
+          {topic}
+        </span>
+      ) : null}
+      {persons.slice(0, 3).map((p) => (
+        <span
+          className="memento-v2__chip memento-v2__chip--person"
+          key={`p-${p}`}
+          title={`person: ${p}`}
+        >
+          <UserRound size={9} />
+          {p}
+        </span>
+      ))}
+      {persons.length > 3 ? (
+        <span className="memento-v2__chip-overflow">+{persons.length - 3}</span>
+      ) : null}
+      {entities.slice(0, 3).map((e) => (
+        <span
+          className="memento-v2__chip memento-v2__chip--entity"
+          key={`e-${e}`}
+          title={`entity: ${e}`}
+        >
+          {e}
+        </span>
+      ))}
+      {entities.length > 3 ? (
+        <span className="memento-v2__chip-overflow">+{entities.length - 3}</span>
+      ) : null}
+      {keywords.slice(0, 5).map((k) => (
+        <span
+          className="memento-v2__chip memento-v2__chip--keyword"
+          key={`k-${k}`}
+          title={`keyword: ${k}`}
+        >
+          {k}
+        </span>
+      ))}
+      {keywords.length > 5 ? (
+        <span className="memento-v2__chip-overflow">+{keywords.length - 5}</span>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Fusion breakdown — view → rank chips. EvolveMem 의 3-view RRF fusion
+ * 결과를 사용자에게 노출. semantic view stub 인 동안에도 lexical / metadata
+ * 가 어떤 rank 로 기여했는지 확인 가능. detail 없으면 미렌더.
+ */
+function FusionBreakdown({ detail }: { detail?: RecallResult["fusionDetail"] }) {
+  if (!detail || detail.views.length === 0) return null;
+  const viewShort: Record<"lexical" | "semantic" | "metadata", string> = {
+    lexical: "lex",
+    semantic: "sem",
+    metadata: "meta",
+  };
+  return (
+    <div
+      className="memento-v2__fusion"
+      title={`fusion mode: ${detail.fusionMode} (RRF k=60)`}
+    >
+      <span className="memento-v2__fusion-label">{detail.fusionMode}</span>
+      {detail.views.map((v) => (
+        <span
+          className={cn(
+            "memento-v2__fusion-view",
+            `memento-v2__fusion-view--${v.view}`,
+          )}
+          key={`${v.view}-${v.rank}`}
+          title={`${v.view} rank #${v.rank} (raw ${v.rawScore.toFixed(2)})`}
+        >
+          {viewShort[v.view]}#{v.rank}
+        </span>
+      ))}
+    </div>
+  );
 }
