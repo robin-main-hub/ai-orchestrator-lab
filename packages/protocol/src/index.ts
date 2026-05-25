@@ -818,6 +818,330 @@ export function parseAgentDelegationEventPayload(type: AgentDelegationEventType,
   return agentDelegationEventPayloadSchemaByType[type].parse(payload) as AgentDelegationEventPayload;
 }
 
+export const agentDelegationTimelineStatusSchema = z.enum([
+  "pending",
+  "in_flight",
+  "succeeded",
+  "failed",
+  "blocked",
+  "unknown_target",
+  "self_blocked",
+]);
+export type AgentDelegationTimelineStatus = z.infer<typeof agentDelegationTimelineStatusSchema>;
+
+export const agentDelegationFollowupStatusSchema = z.enum(["completed", "failed"]);
+export type AgentDelegationFollowupStatus = z.infer<typeof agentDelegationFollowupStatusSchema>;
+
+export type AgentDelegationTimelineFollowup = {
+  eventId: string;
+  status: AgentDelegationFollowupStatus;
+  createdAt: string;
+  outcomeCount: number;
+  succeededCount?: number;
+  blockedCount?: number;
+  responseLength?: number;
+  error?: string;
+};
+
+export type AgentDelegationTimelineItem = {
+  id: string;
+  sessionId: string;
+  sourceAgentId: string;
+  sourceAgentName?: string;
+  sourceRole?: AgentRole;
+  sourcePersonaName?: string;
+  authorityLevel?: AgentDelegationAuthorityLevel;
+  target: string;
+  targetAgentId?: string;
+  targetAgentName?: string;
+  targetRole?: AgentRole;
+  targetPersonaName?: string;
+  providerProfileId?: string;
+  modelId?: string;
+  status: AgentDelegationTimelineStatus;
+  promptLength?: number;
+  responseLength?: number;
+  route?: AgentDelegationCompletionRoute;
+  realProviderCall?: boolean;
+  reason?: string;
+  error?: string;
+  depthLimit?: number;
+  detectedAt?: string;
+  dispatchedAt?: string;
+  completedAt?: string;
+  eventIds: string[];
+};
+
+export type AgentDelegationTimelineProjection = {
+  items: AgentDelegationTimelineItem[];
+  followups: AgentDelegationTimelineFollowup[];
+  summary: {
+    total: number;
+    pending: number;
+    inFlight: number;
+    succeeded: number;
+    failed: number;
+    blocked: number;
+  };
+};
+
+export function projectAgentDelegationTimeline(events: EventEnvelope[]): AgentDelegationTimelineProjection {
+  const sortedEvents = [...events]
+    .filter((event) => agentDelegationEventTypeSchema.safeParse(event.type).success)
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  const items: AgentDelegationTimelineItem[] = [];
+  const followups: AgentDelegationTimelineFollowup[] = [];
+
+  for (const event of sortedEvents) {
+    const type = agentDelegationEventTypeSchema.parse(event.type);
+    const payload = parseAgentDelegationEventPayload(type, event.payload);
+
+    if (type === "agent.delegation.detected") {
+      const detected = payload as AgentDelegationDetectedPayload;
+      detected.targets.forEach((target, index) => {
+        items.push({
+          id: `${event.id}:target:${index}`,
+          sessionId: event.sessionId,
+          sourceAgentId: detected.sourceAgentId,
+          sourceAgentName: detected.sourceAgentName,
+          sourceRole: detected.sourceRole,
+          sourcePersonaName: detected.sourcePersonaName,
+          authorityLevel: detected.authorityLevel,
+          target,
+          status: "pending",
+          depthLimit: detected.depthLimit,
+          detectedAt: event.createdAt,
+          eventIds: [event.id],
+        });
+      });
+      continue;
+    }
+
+    if (type === "agent.delegation.followup.completed") {
+      const completed = payload as AgentDelegationFollowupCompletedPayload;
+      followups.push({
+        eventId: event.id,
+        status: "completed",
+        createdAt: event.createdAt,
+        outcomeCount: completed.outcomeCount,
+        succeededCount: completed.succeededCount,
+        blockedCount: completed.blockedCount,
+        responseLength: completed.responseLength,
+      });
+      continue;
+    }
+
+    if (type === "agent.delegation.followup.failed") {
+      const failed = payload as AgentDelegationFollowupFailedPayload;
+      followups.push({
+        eventId: event.id,
+        status: "failed",
+        createdAt: event.createdAt,
+        outcomeCount: failed.outcomeCount,
+        error: failed.error,
+      });
+      continue;
+    }
+
+    applyDelegationEvent(items, event, type, payload);
+  }
+
+  const summary = {
+    total: items.length,
+    pending: items.filter((item) => item.status === "pending").length,
+    inFlight: items.filter((item) => item.status === "in_flight").length,
+    succeeded: items.filter((item) => item.status === "succeeded").length,
+    failed: items.filter((item) => item.status === "failed").length,
+    blocked: items.filter((item) => ["blocked", "unknown_target", "self_blocked"].includes(item.status)).length,
+  };
+
+  return { followups, items, summary };
+}
+
+function applyDelegationEvent(
+  items: AgentDelegationTimelineItem[],
+  event: EventEnvelope,
+  type: AgentDelegationEventType,
+  payload: AgentDelegationEventPayload,
+) {
+  if (type === "agent.delegation.dispatched") {
+    const dispatched = payload as AgentDelegationDispatchedPayload;
+    const item = findPendingDelegationItem(items, event.sessionId, dispatched) ?? createDelegationTimelineItem(event, {
+      sourceAgentId: dispatched.sourceAgentId,
+      sourceAgentName: dispatched.sourceAgentName,
+      target: dispatched.targetRole,
+    });
+    Object.assign(item, {
+      authorityLevel: dispatched.authorityLevel,
+      depthLimit: dispatched.depthLimit,
+      dispatchedAt: event.createdAt,
+      modelId: dispatched.modelId,
+      promptLength: dispatched.promptLength,
+      providerProfileId: dispatched.providerProfileId,
+      sourceAgentName: dispatched.sourceAgentName,
+      target: dispatched.targetRole,
+      targetAgentId: dispatched.targetAgentId,
+      targetAgentName: dispatched.targetAgentName,
+      targetPersonaName: dispatched.targetPersonaName,
+      targetRole: dispatched.targetRole,
+      status: "in_flight" satisfies AgentDelegationTimelineStatus,
+    });
+    appendEventId(item, event.id);
+    return;
+  }
+
+  if (type === "agent.delegation.succeeded") {
+    const succeeded = payload as AgentDelegationSucceededPayload;
+    const item = findDelegationItemByTargetAgent(items, event.sessionId, succeeded.sourceAgentId, succeeded.targetAgentId) ??
+      createDelegationTimelineItem(event, {
+        sourceAgentId: succeeded.sourceAgentId,
+        target: succeeded.targetRole,
+      });
+    Object.assign(item, {
+      completedAt: event.createdAt,
+      modelId: succeeded.modelId,
+      providerProfileId: succeeded.providerProfileId,
+      realProviderCall: succeeded.realProviderCall,
+      responseLength: succeeded.responseLength,
+      route: succeeded.route,
+      targetAgentId: succeeded.targetAgentId,
+      targetAgentName: succeeded.targetAgentName,
+      targetRole: succeeded.targetRole,
+      status: "succeeded" satisfies AgentDelegationTimelineStatus,
+    });
+    appendEventId(item, event.id);
+    return;
+  }
+
+  if (type === "agent.delegation.failed") {
+    const failed = payload as AgentDelegationFailedPayload;
+    const item = findDelegationItemByTargetAgent(items, event.sessionId, failed.sourceAgentId, failed.targetAgentId) ??
+      createDelegationTimelineItem(event, {
+        sourceAgentId: failed.sourceAgentId,
+        target: failed.targetRole,
+      });
+    Object.assign(item, {
+      completedAt: event.createdAt,
+      error: failed.error,
+      modelId: failed.modelId,
+      providerProfileId: failed.providerProfileId,
+      targetAgentId: failed.targetAgentId,
+      targetAgentName: failed.targetAgentName,
+      targetRole: failed.targetRole,
+      status: "failed" satisfies AgentDelegationTimelineStatus,
+    });
+    appendEventId(item, event.id);
+    return;
+  }
+
+  if (type === "agent.delegation.blocked") {
+    const blocked = payload as AgentDelegationBlockedPayload;
+    updateStringTargetItem(items, event, blocked, "blocked", blocked.reason);
+    return;
+  }
+
+  if (type === "agent.delegation.unknown_target") {
+    const unknown = payload as AgentDelegationUnknownTargetPayload;
+    updateStringTargetItem(items, event, unknown, "unknown_target", "unknown delegation target");
+    return;
+  }
+
+  if (type === "agent.delegation.self_blocked") {
+    const selfBlocked = payload as AgentDelegationSelfBlockedPayload;
+    updateStringTargetItem(items, event, selfBlocked, "self_blocked", "self delegation blocked");
+  }
+}
+
+function updateStringTargetItem(
+  items: AgentDelegationTimelineItem[],
+  event: EventEnvelope,
+  payload: AgentDelegationBlockedPayload | AgentDelegationUnknownTargetPayload | AgentDelegationSelfBlockedPayload,
+  status: AgentDelegationTimelineStatus,
+  reason: string,
+) {
+  const item = findPendingStringTargetItem(items, event.sessionId, payload.sourceAgentId, payload.target) ??
+    createDelegationTimelineItem(event, {
+      sourceAgentId: payload.sourceAgentId,
+      target: payload.target,
+    });
+  Object.assign(item, {
+    completedAt: event.createdAt,
+    promptLength: "promptLength" in payload ? payload.promptLength : item.promptLength,
+    reason,
+    status,
+    target: payload.target,
+  });
+  appendEventId(item, event.id);
+}
+
+function createDelegationTimelineItem(
+  event: EventEnvelope,
+  input: { sourceAgentId: string; sourceAgentName?: string; target: string },
+): AgentDelegationTimelineItem {
+  return {
+    eventIds: [event.id],
+    id: `${event.id}:timeline`,
+    sessionId: event.sessionId,
+    sourceAgentId: input.sourceAgentId,
+    sourceAgentName: input.sourceAgentName,
+    status: "pending",
+    target: input.target,
+  };
+}
+
+function findPendingDelegationItem(
+  items: AgentDelegationTimelineItem[],
+  sessionId: string,
+  payload: AgentDelegationDispatchedPayload,
+) {
+  const candidateKeys = [
+    payload.targetAgentId,
+    payload.targetAgentName,
+    payload.targetRole,
+    payload.targetPersonaName,
+  ].filter((value): value is string => Boolean(value)).map(normalizeDelegationTimelineKey);
+  return items.find((item) =>
+    item.sessionId === sessionId &&
+    item.sourceAgentId === payload.sourceAgentId &&
+    item.status === "pending" &&
+    candidateKeys.includes(normalizeDelegationTimelineKey(item.target)),
+  );
+}
+
+function findDelegationItemByTargetAgent(
+  items: AgentDelegationTimelineItem[],
+  sessionId: string,
+  sourceAgentId: string,
+  targetAgentId: string,
+) {
+  return [...items].reverse().find((item) =>
+    item.sessionId === sessionId &&
+    item.sourceAgentId === sourceAgentId &&
+    item.targetAgentId === targetAgentId &&
+    (item.status === "in_flight" || item.status === "pending"),
+  );
+}
+
+function findPendingStringTargetItem(items: AgentDelegationTimelineItem[], sessionId: string, sourceAgentId: string, target: string) {
+  const normalizedTarget = normalizeDelegationTimelineKey(target);
+  return items.find((item) =>
+    item.sessionId === sessionId &&
+    item.sourceAgentId === sourceAgentId &&
+    item.status === "pending" &&
+    normalizeDelegationTimelineKey(item.target) === normalizedTarget,
+  );
+}
+
+function appendEventId(item: AgentDelegationTimelineItem, eventId: string) {
+  if (!item.eventIds.includes(eventId)) {
+    item.eventIds.push(eventId);
+  }
+}
+
+function normalizeDelegationTimelineKey(value: string) {
+  return value.trim().toLowerCase().replace(/[\s_]+/g, "-");
+}
+
 export const permissionLevelSchema = z.enum([
   "read_only",
   "write_files",
