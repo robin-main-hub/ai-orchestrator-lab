@@ -2,6 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 
 const STORAGE_PREFIX = "mobile.chatBackgroundDataUrl.soul.";
 const ACTIVE_BG_VAR = "--chat-bg-image";
+const ACTIVE_OVERLAY_VAR = "--chat-bg-overlay";
+/**
+ * Value the overlay var takes when a SOUL background is loaded. We
+ * reference the active gradient defined in styles.css so the actual
+ * shading values live in one place (CSS), not split between CSS + JS.
+ */
+const OVERLAY_VALUE_ACTIVE = "var(--chat-bg-overlay-active)";
+const OVERLAY_VALUE_INACTIVE = "transparent";
 
 /**
  * Persists a per-SOUL background image as a data URL in localStorage.
@@ -24,8 +32,14 @@ export function useSoulBackground(activeSoulId: string | undefined) {
     const root = document.documentElement;
     if (dataUrl) {
       root.style.setProperty(ACTIVE_BG_VAR, `url("${dataUrl}")`);
+      // 살짝 음영처리 — apply the shading gradient so the photo stays
+      // visible but bubbles + composer don't get gobbled by vivid
+      // colors / bright spots in the user's image.
+      root.style.setProperty(ACTIVE_OVERLAY_VAR, OVERLAY_VALUE_ACTIVE);
     } else {
       root.style.setProperty(ACTIVE_BG_VAR, "none");
+      // No image → no shading. var(--bg) already covers the chat area.
+      root.style.setProperty(ACTIVE_OVERLAY_VAR, OVERLAY_VALUE_INACTIVE);
     }
   }, [dataUrl]);
 

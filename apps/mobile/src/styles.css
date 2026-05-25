@@ -21,6 +21,17 @@
   --chat-bg-image: none;
   --chat-bg-size: cover;
   --chat-bg-position: center;
+  /* Shading overlay painted on top of the SOUL background image so that
+     bubbles + composer + header stay readable. Default `transparent`
+     (no image → no shading); the hook flips it to
+     `--chat-bg-overlay-active` whenever an image is loaded. */
+  --chat-bg-overlay: transparent;
+  --chat-bg-overlay-active: linear-gradient(
+    180deg,
+    rgba(11, 11, 16, 0.22) 0%,
+    rgba(11, 11, 16, 0.32) 40%,
+    rgba(11, 11, 16, 0.55) 100%
+  );
 }
 
 * {
@@ -89,6 +100,23 @@ textarea {
   background-size: var(--chat-bg-size);
   background-position: var(--chat-bg-position);
   background-repeat: no-repeat;
+  /* New stacking context so the overlay ::before stays scoped to this
+     subtree (won't leak above modals/drawers). */
+  position: relative;
+  isolation: isolate;
+}
+
+/* Shading overlay over the SOUL background image. Painted only when an
+   image is loaded (the hook sets --chat-bg-overlay → active gradient);
+   otherwise this is transparent and has no visual effect. Sits BEHIND
+   header / messages / composer so the image stays visible but darkened. */
+.chat::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--chat-bg-overlay);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .chat__header {
@@ -105,6 +133,9 @@ textarea {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   flex-shrink: 0;
+  /* Lift above .chat::before shading overlay. position:relative is
+     required for z-index to take effect. */
+  position: relative;
   z-index: 2;
 }
 
@@ -140,6 +171,9 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* Above .chat::before shading overlay. */
+  position: relative;
+  z-index: 1;
 }
 
 .chat__empty {
@@ -147,6 +181,10 @@ textarea {
   color: var(--text-muted);
   text-align: center;
   padding: 32px 24px;
+  /* When a background image is loaded, the empty-state caption uses
+     muted gray that can lose contrast against a vivid photo. A subtle
+     shadow keeps it legible without darkening the text itself. */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
 .bubble {
@@ -205,6 +243,10 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* Above .chat::before shading overlay. The solid bg-elevated already
+     hides the photo here, so this is just stacking insurance. */
+  position: relative;
+  z-index: 1;
 }
 
 .composer__attachments {
