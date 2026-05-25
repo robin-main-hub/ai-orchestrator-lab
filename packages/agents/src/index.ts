@@ -23,6 +23,21 @@ export type {
   PersonaSourceMode,
 } from "./personaLoader.js";
 
+export {
+  buildRoundUserPrompt,
+  inferUtteranceTag,
+  pickAgentsForRound,
+  runDebateRound,
+} from "./debateEngine.js";
+export type {
+  DebateAgentError,
+  DebateEngineAgentSlot,
+  DebateEngineOptions,
+  LlmCompletionFn,
+  RunDebateRoundParams,
+  RunDebateRoundResult,
+} from "./debateEngine.js";
+
 export type DebateContext = {
   sessionId: string;
   problem: string;
