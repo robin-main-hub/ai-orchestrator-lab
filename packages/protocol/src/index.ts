@@ -602,6 +602,17 @@ export type ProviderCompletionUsage = {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  /**
+   * Anthropic-only: tokens consumed to populate the prompt cache on this
+   * call. Optional everywhere else; adapters that do not surface cache
+   * accounting simply omit it.
+   */
+  cacheCreationInputTokens?: number;
+  /**
+   * Anthropic-only: tokens read back from the prompt cache on this call.
+   * Same optionality rules as above.
+   */
+  cacheReadInputTokens?: number;
 };
 
 export type ProviderCompletionResponse = {
