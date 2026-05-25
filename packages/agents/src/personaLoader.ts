@@ -2,10 +2,21 @@ import type { AgentProfile } from "@ai-orchestrator/protocol";
 
 /**
  * Persona loader for the markdown-backed agent profile files under
- * `agents/<persona-name>/`. Each persona has up to two files:
+ * `agents/<persona-name>/`. Each persona has up to two mandatory files
+ * plus optional extras:
  *
- *   SOUL.md    — voice, judgment style, long-term disposition
- *   AGENTS.md  — operational rules, permission boundaries, output format
+ *   SOUL.md      — voice, judgment style, long-term disposition (mandatory)
+ *   AGENTS.md    — operational rules, permission boundaries, output format (mandatory)
+ *   IDENTITY.md  — optional: deeper identity / immutable backstory that
+ *                  the persona must always carry (loaded ahead of SOUL
+ *                  so the character body sits inside identity context)
+ *   USER.md      — optional: stable facts about the human user the
+ *                  persona is addressing (오빠 호칭, 회사 컨텍스트, etc.).
+ *                  Loaded at the tail so it's fresh in context.
+ *
+ * Optional files are detected by presence — drop them in agents/<name>/
+ * and the loader picks them up automatically. Personas that don't have
+ * them work unchanged.
  *
  * The loader is filesystem-agnostic: it takes a `PersonaFileSource` so
  * unit tests can inject in-memory fixtures and the Node implementation
@@ -26,7 +37,7 @@ import type { AgentProfile } from "@ai-orchestrator/protocol";
 
 export type PersonaSourceMode = "soul_only" | "agents_only" | "soul_plus_agents" | "off";
 
-export type PersonaFragmentSource = "soul" | "agents";
+export type PersonaFragmentSource = "soul" | "agents" | "identity" | "user";
 
 export type PersonaFragment = {
   source: PersonaFragmentSource;
@@ -39,7 +50,12 @@ export type LoadedPersona = {
   /** Directory name under `agents/`, e.g. `architect`. */
   personaName: string;
   mode: PersonaSourceMode;
-  /** In load order — SOUL first when both are loaded; empty when mode === "off". */
+  /**
+   * In prompt-injection order. Layout when all fragments are present:
+   *   IDENTITY (if file exists) → SOUL → AGENTS → USER (if file exists).
+   * Empty when `mode === "off"`. Optional fragments (IDENTITY/USER) are
+   * skipped without error when the corresponding file is absent.
+   */
   fragments: PersonaFragment[];
   /**
    * Shared safety-boundary content read from the repo-root
@@ -83,7 +99,28 @@ export class PersonaFragmentMissingError extends Error {
 
 const SOUL_FILENAME = "SOUL.md";
 const AGENTS_FILENAME = "AGENTS.md";
+const IDENTITY_FILENAME = "IDENTITY.md";
+const USER_FILENAME = "USER.md";
 const SAFETY_RELATIVE_PATH = "agents/SAFETY.md";
+
+/**
+ * Optional persona files. Detected by presence — caller doesn't toggle
+ * them via mode. If the file doesn't exist under `agents/<personaName>/`,
+ * the loader silently skips it (no `PersonaFragmentMissingError`).
+ *
+ * Order here also defines slot position in the assembled prompt body:
+ * IDENTITY sits before the SOUL+AGENTS character body (innermost
+ * identity wraps the character), USER sits after it (the "who you're
+ * addressing" context follows the character setup).
+ */
+const OPTIONAL_FRAGMENTS: Array<{
+  source: PersonaFragmentSource;
+  filename: string;
+  slot: "before_character" | "after_character";
+}> = [
+  { source: "identity", filename: IDENTITY_FILENAME, slot: "before_character" },
+  { source: "user", filename: USER_FILENAME, slot: "after_character" },
+];
 
 /**
  * Translate the AgentProfile's `configSource` field into a load mode.
@@ -139,15 +176,39 @@ export async function loadPersona(
     return { personaName, mode, fragments: [], safetyContent };
   }
 
-  const fragments: PersonaFragment[] = [];
+  // Load mandatory (mode-driven) fragments first — these throw if missing.
+  const characterFragments: PersonaFragment[] = [];
   for (const need of fragmentsNeededForMode(mode)) {
     const relativePath = `agents/${personaName}/${need.filename}`;
     const content = await source.readMarkdown(relativePath);
     if (content === null) {
       throw new PersonaFragmentMissingError(personaName, relativePath);
     }
-    fragments.push({ source: need.source, relativePath, content });
+    characterFragments.push({ source: need.source, relativePath, content });
   }
+
+  // Probe optional fragments. Missing files are silently skipped — that's
+  // how a persona opts out of IDENTITY/USER without any config flag.
+  const optionalLoaded: Array<{ slot: "before_character" | "after_character"; fragment: PersonaFragment }> = [];
+  for (const opt of OPTIONAL_FRAGMENTS) {
+    const relativePath = `agents/${personaName}/${opt.filename}`;
+    const content = await source.readMarkdown(relativePath);
+    if (content === null) continue;
+    optionalLoaded.push({
+      slot: opt.slot,
+      fragment: { source: opt.source, relativePath, content },
+    });
+  }
+
+  // Assemble in semantic order: identity (before_character) → mandatory
+  // character body → user (after_character). When multiple optionals
+  // share a slot they keep the OPTIONAL_FRAGMENTS declaration order.
+  const fragments: PersonaFragment[] = [
+    ...optionalLoaded.filter((o) => o.slot === "before_character").map((o) => o.fragment),
+    ...characterFragments,
+    ...optionalLoaded.filter((o) => o.slot === "after_character").map((o) => o.fragment),
+  ];
+
   return { personaName, mode, fragments, safetyContent };
 }
 
@@ -193,7 +254,8 @@ export type PersonaPromptOptions = {
  *
  * Output layout (default, safety injected first because it has higher
  * precedence in conflict resolution — the character is a voice inside
- * these rules, not above them):
+ * these rules, not above them). Optional IDENTITY/USER fragments slot
+ * in around the mandatory character body — see OPTIONAL_FRAGMENTS:
  *
  *   <headerLine?>
  *
@@ -202,11 +264,17 @@ export type PersonaPromptOptions = {
  *
  *   # Persona: <name>
  *
+ *   ## From agents/<name>/IDENTITY.md  (if file exists)
+ *   <IDENTITY.md body, trimmed>
+ *
  *   ## From agents/<name>/SOUL.md
  *   <SOUL.md body, trimmed>
  *
  *   ## From agents/<name>/AGENTS.md
  *   <AGENTS.md body, trimmed>
+ *
+ *   ## From agents/<name>/USER.md  (if file exists)
+ *   <USER.md body, trimmed>
  */
 export function buildPersonaPromptFragment(
   loaded: LoadedPersona,

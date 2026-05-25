@@ -237,6 +237,17 @@ export const agentRoleSchema = z.enum([
   "mediator",         // synthesizes conflicting agent opinions into one draft
   "watchdog",         // long-term drift / anomaly detection over session history
   "domain_expert",    // load-time domain knowledge injection (HTV/B2B/etc.)
+  // Polymath / 만능 비서. Eligible for every debate round (no narrow
+  // specialization). Designed for character-driven profiles that act as
+  // the user's primary day-to-day assistant rather than a single-role
+  // specialist. Typically paired with a personaName override (e.g.
+  // chae_arin) and configSource: "markdown" so the full character files
+  // load. Permission level usually starts at "write_files" so the
+  // companion can self-edit its own SOUL/AGENTS/IDENTITY/USER files
+  // (the actual write still goes through the permission gate + user
+  // confirm — granting the level just means "this role is allowed to
+  // request such writes," not "writes execute silently").
+  "companion",
 ]);
 export type AgentRole = z.infer<typeof agentRoleSchema>;
 

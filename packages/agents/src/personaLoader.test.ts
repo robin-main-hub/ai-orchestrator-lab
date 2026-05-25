@@ -336,3 +336,93 @@ describe("buildPersonaPromptFragment — SAFETY injection", () => {
     expect(out).not.toMatch(/\n{3,}# Persona/);
   });
 });
+
+describe("loadPersona — optional IDENTITY.md / USER.md fragments", () => {
+  it("loads IDENTITY.md when present (slotted before character body)", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/chae_arin/SOUL.md": "soul body",
+      "agents/chae_arin/AGENTS.md": "agents body",
+      "agents/chae_arin/IDENTITY.md": "# Identity\n\nWho am I.",
+    });
+    const loaded = await loadPersona("chae_arin", "soul_plus_agents", src);
+    const sources = loaded.fragments.map((f) => f.source);
+    // IDENTITY first, then mandatory SOUL → AGENTS
+    expect(sources).toEqual(["identity", "soul", "agents"]);
+    expect(loaded.fragments[0]!.relativePath).toBe("agents/chae_arin/IDENTITY.md");
+  });
+
+  it("loads USER.md when present (slotted after character body)", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/chae_arin/SOUL.md": "soul body",
+      "agents/chae_arin/AGENTS.md": "agents body",
+      "agents/chae_arin/USER.md": "# User\n\nAbout 오빠.",
+    });
+    const loaded = await loadPersona("chae_arin", "soul_plus_agents", src);
+    const sources = loaded.fragments.map((f) => f.source);
+    expect(sources).toEqual(["soul", "agents", "user"]);
+  });
+
+  it("loads IDENTITY + USER together in the canonical 4-file shape", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/chae_arin/SOUL.md": "soul body",
+      "agents/chae_arin/AGENTS.md": "agents body",
+      "agents/chae_arin/IDENTITY.md": "identity body",
+      "agents/chae_arin/USER.md": "user body",
+    });
+    const loaded = await loadPersona("chae_arin", "soul_plus_agents", src);
+    const sources = loaded.fragments.map((f) => f.source);
+    // identity → soul → agents → user
+    expect(sources).toEqual(["identity", "soul", "agents", "user"]);
+  });
+
+  it("silently skips missing optional fragments (no PersonaFragmentMissingError)", async () => {
+    // The 17 legacy personas don't have IDENTITY/USER. Loader must NOT
+    // throw — it should just return the SOUL+AGENTS pair unchanged.
+    const src = createInMemoryPersonaSource({
+      "agents/architect/SOUL.md": "soul",
+      "agents/architect/AGENTS.md": "agents",
+    });
+    const loaded = await loadPersona("architect", "soul_plus_agents", src);
+    const sources = loaded.fragments.map((f) => f.source);
+    expect(sources).toEqual(["soul", "agents"]);
+  });
+
+  it("still throws when a MANDATORY file is missing (regression guard)", async () => {
+    // Only optional fragments are silently skipped. Missing SOUL/AGENTS
+    // must still surface as PersonaFragmentMissingError.
+    const src = createInMemoryPersonaSource({
+      "agents/architect/AGENTS.md": "agents",
+      "agents/architect/IDENTITY.md": "identity",
+    });
+    await expect(loadPersona("architect", "soul_plus_agents", src)).rejects.toBeInstanceOf(
+      PersonaFragmentMissingError,
+    );
+  });
+});
+
+describe("buildPersonaPromptFragment — 4-file companion (chae_arin shape)", () => {
+  it("renders all four fragments with their relativePath headings in order", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/SAFETY.md": "# Safety rules\n",
+      "agents/chae_arin/IDENTITY.md": "## who\nchaerin",
+      "agents/chae_arin/SOUL.md": "## voice\nplayful",
+      "agents/chae_arin/AGENTS.md": "## rules\nbe playful",
+      "agents/chae_arin/USER.md": "## user\n오빠",
+    });
+    const loaded = await loadPersona("chae_arin", "soul_plus_agents", src);
+    const out = buildPersonaPromptFragment(loaded);
+    // Each fragment heading appears
+    expect(out).toContain("## From agents/chae_arin/IDENTITY.md");
+    expect(out).toContain("## From agents/chae_arin/SOUL.md");
+    expect(out).toContain("## From agents/chae_arin/AGENTS.md");
+    expect(out).toContain("## From agents/chae_arin/USER.md");
+    // Order: IDENTITY before SOUL, SOUL before AGENTS, AGENTS before USER
+    const idxId = out.indexOf("IDENTITY.md");
+    const idxSoul = out.indexOf("SOUL.md");
+    const idxAg = out.indexOf("AGENTS.md");
+    const idxUser = out.indexOf("USER.md");
+    expect(idxId).toBeLessThan(idxSoul);
+    expect(idxSoul).toBeLessThan(idxAg);
+    expect(idxAg).toBeLessThan(idxUser);
+  });
+});
