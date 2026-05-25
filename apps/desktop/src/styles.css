@@ -5104,6 +5104,142 @@ button {
   font-style: italic;
 }
 
+/* ── EvolveMemento panel v2 — schema 신규 필드 시각화 ─────────── */
+
+.memento-v2__importance {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+}
+
+.memento-v2__importance--compact {
+  margin: 1px 0;
+}
+
+.memento-v2__importance-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.memento-v2__importance--compact .memento-v2__importance-track {
+  height: 3px;
+}
+
+.memento-v2__importance-fill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(95, 211, 226, 0.5), var(--cyan));
+  transition: width 200ms ease;
+}
+
+.memento-v2__importance-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(120, 220, 160, 0.16);
+  color: #a8ffdf;
+  font-size: 9px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+}
+
+.memento-v2__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin: 2px 0;
+}
+
+.memento-v2__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: rgba(0, 47, 56, 0.4);
+  color: var(--muted);
+  font-size: 9px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  white-space: nowrap;
+}
+
+.memento-v2__chip--topic {
+  border-color: rgba(95, 211, 226, 0.45);
+  color: var(--cyan);
+}
+
+.memento-v2__chip--person {
+  border-color: rgba(170, 179, 255, 0.45);
+  color: #aab3ff;
+}
+
+.memento-v2__chip--entity {
+  border-color: rgba(245, 191, 92, 0.36);
+  color: var(--amber);
+}
+
+.memento-v2__chip--keyword {
+  color: var(--subtle);
+}
+
+.memento-v2__chip-overflow {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 4px;
+  color: var(--subtle);
+  font-size: 9px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+}
+
+.memento-v2__fusion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.18);
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+}
+
+.memento-v2__fusion-label {
+  color: var(--subtle);
+  font-size: 8.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.memento-v2__fusion-view {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(95, 211, 226, 0.14);
+  color: var(--cyan);
+  font-size: 9px;
+}
+
+.memento-v2__fusion-view--lexical {
+  background: rgba(245, 191, 92, 0.16);
+  color: var(--amber);
+}
+
+.memento-v2__fusion-view--semantic {
+  background: rgba(170, 179, 255, 0.16);
+  color: #aab3ff;
+}
+
+.memento-v2__fusion-view--metadata {
+  background: rgba(120, 220, 160, 0.16);
+  color: #a8ffdf;
+}
+
 /* Relations / issues / records share a compact row pattern */
 .memento-v2__relation,
 .memento-v2__issue {
