@@ -40,6 +40,30 @@ export type DesktopTmuxDispatchResponse = {
   };
 };
 
+export type DesktopTmuxPreflightResponse = {
+  intent: TerminalCommandIntent;
+  permission: {
+    decision: PermissionDecision;
+    requestedLevels: PermissionLevel[];
+    reason: string;
+  };
+  approval?: ApprovalRequest;
+  audit: {
+    redactionApplied: boolean;
+    wouldRecordEvents: string[];
+    wouldQueueApproval: boolean;
+    wouldAttemptSendKeys: boolean;
+    dryRunEnabled: boolean;
+    sendKeysEnabled: boolean;
+    replayEndpoint?: string;
+    checks: Array<{
+      id: string;
+      status: "pass" | "warn" | "block";
+      message: string;
+    }>;
+  };
+};
+
 export type DesktopTmuxCaptureRequest = {
   id: string;
   sessionId: string;
@@ -81,6 +105,21 @@ export async function requestTmuxDispatch({
 }: TmuxServerRequestInput<DesktopTmuxDispatchRequest>): Promise<DesktopTmuxDispatchResponse> {
   return postTmuxServerJson<DesktopTmuxDispatchResponse>({
     path: "/tmux/dispatch",
+    request,
+    serverBaseUrl,
+    fetchImpl,
+    timeoutMs,
+  });
+}
+
+export async function requestTmuxPreflight({
+  request,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 5_000,
+}: TmuxServerRequestInput<DesktopTmuxDispatchRequest>): Promise<DesktopTmuxPreflightResponse> {
+  return postTmuxServerJson<DesktopTmuxPreflightResponse>({
+    path: "/tmux/preflight",
     request,
     serverBaseUrl,
     fetchImpl,

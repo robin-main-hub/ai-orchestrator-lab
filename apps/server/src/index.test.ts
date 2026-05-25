@@ -22,6 +22,7 @@ import {
   createServerAgentDelegationExecution,
   createServerTmuxCaptureSnapshot,
   createServerTmuxDispatchSnapshot,
+  createServerTmuxPreflightResponse,
   createServerProviderRegistrySnapshot,
   createServerProviderModelDiscoveryResponse,
   createRemoteRunResponse,
@@ -2524,6 +2525,147 @@ describe("HTTP request limits", () => {
         delete process.env.ORCHESTRATOR_TMUX_DRY_RUN;
       } else {
         process.env.ORCHESTRATOR_TMUX_DRY_RUN = previousTmuxDryRun;
+      }
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("preflights tmux dispatches without recording or executing them", async () => {
+    const previousSendKeys = process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
+    const previousDryRun = process.env.ORCHESTRATOR_TMUX_DRY_RUN;
+    delete process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
+    process.env.ORCHESTRATOR_TMUX_DRY_RUN = "1";
+
+    try {
+      const request = {
+        id: "tmux_preflight_unit",
+        sessionId: "session_tmux_preflight",
+        terminalSessionId: "terminal_session_ai_swarm",
+        role: "architect" as const,
+        host: "dgx_02" as const,
+        paneId: "%4",
+        requestedBy: "user" as const,
+        commandPreview: "pnpm test",
+        approvalState: "required" as const,
+        dispatchMode: "execute_if_approved" as const,
+        tmuxSessionName: "ai-swarm",
+        createdAt: "2026-05-25T00:00:00.000Z",
+      };
+
+      const preflight = createServerTmuxPreflightResponse(request, "2026-05-25T00:00:01.000Z");
+
+      expect(preflight.permission.decision).toBe("approval_required");
+      expect(preflight.audit).toMatchObject({
+        wouldQueueApproval: true,
+        wouldAttemptSendKeys: false,
+        dryRunEnabled: true,
+        sendKeysEnabled: false,
+        replayEndpoint: "/tmux/dispatch",
+      });
+      expect(preflight.audit.wouldRecordEvents).toEqual([
+        "terminal.command.intent.created",
+        "approval.requested",
+      ]);
+      expect(preflight.audit.checks.map((check) => check.id)).toEqual([
+        "redaction",
+        "permission",
+        "dispatch_mode",
+        "server_gate",
+      ]);
+    } finally {
+      if (previousSendKeys === undefined) {
+        delete process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
+      } else {
+        process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS = previousSendKeys;
+      }
+      if (previousDryRun === undefined) {
+        delete process.env.ORCHESTRATOR_TMUX_DRY_RUN;
+      } else {
+        process.env.ORCHESTRATOR_TMUX_DRY_RUN = previousDryRun;
+      }
+    }
+  });
+
+  it("serves tmux preflight over HTTP without writing approval events", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-tmux-preflight-"));
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+    process.env.EVENT_STORAGE_DIR = tempDir;
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/tmux/preflight`, {
+        body: JSON.stringify({
+          id: "tmux_preflight_http",
+          sessionId: "session_tmux_preflight_http",
+          role: "qa",
+          host: "dgx_02",
+          requestedBy: "user",
+          commandPreview: "pnpm typecheck",
+          approvalState: "required",
+          dispatchMode: "execute_if_approved",
+          createdAt: "2026-05-25T00:00:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        audit: {
+          wouldQueueApproval: true,
+          wouldRecordEvents: ["terminal.command.intent.created", "approval.requested"],
+        },
+        permission: {
+          decision: "approval_required",
+        },
+      });
+
+      const pull = await fetch(`http://127.0.0.1:${address.port}/events?sessionId=session_tmux_preflight_http`, {
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+        },
+      });
+      expect(pull.status).toBe(200);
+      await expect(pull.json()).resolves.toMatchObject({
+        events: [],
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousEventStorageDir === undefined) {
+        delete process.env.EVENT_STORAGE_DIR;
+      } else {
+        process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
       }
       await rm(tempDir, { force: true, recursive: true });
     }

@@ -357,6 +357,26 @@ export type ServerTmuxDispatchResponse = {
   dispatchEventSync?: EventSyncPushResponse;
 };
 
+export type ServerTmuxPreflightResponse = {
+  intent: TerminalCommandIntent;
+  permission: ServerPermissionGateResult;
+  approval?: ApprovalRequest;
+  audit: {
+    redactionApplied: boolean;
+    wouldRecordEvents: string[];
+    wouldQueueApproval: boolean;
+    wouldAttemptSendKeys: boolean;
+    dryRunEnabled: boolean;
+    sendKeysEnabled: boolean;
+    replayEndpoint?: string;
+    checks: Array<{
+      id: string;
+      status: "pass" | "warn" | "block";
+      message: string;
+    }>;
+  };
+};
+
 export type ServerTmuxCaptureRequest = {
   id: string;
   sessionId: string;
@@ -1770,6 +1790,72 @@ export function createServerTmuxDispatchSnapshot(
     permission,
     approval,
     events,
+  };
+}
+
+export function createServerTmuxPreflightResponse(
+  request: ServerTmuxDispatchRequest,
+  now = new Date().toISOString(),
+): ServerTmuxPreflightResponse {
+  const snapshot = createServerTmuxDispatchSnapshot(request, now);
+  const sendKeysEnabled = process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS === "1";
+  const dryRunEnabled = process.env.ORCHESTRATOR_TMUX_DRY_RUN === "1";
+  const wouldAttemptSendKeys =
+    snapshot.permission.decision === "allow" &&
+    request.dispatchMode === "execute_if_approved" &&
+    sendKeysEnabled &&
+    !dryRunEnabled;
+
+  return {
+    intent: snapshot.intent,
+    permission: snapshot.permission,
+    approval: snapshot.approval,
+    audit: {
+      redactionApplied: snapshot.intent.commandPreview !== snapshot.intent.redactedCommandPreview,
+      wouldRecordEvents: snapshot.events.map((event) => event.type),
+      wouldQueueApproval: Boolean(snapshot.approval),
+      wouldAttemptSendKeys,
+      dryRunEnabled,
+      sendKeysEnabled,
+      replayEndpoint: snapshot.approval?.replay?.endpoint,
+      checks: [
+        {
+          id: "redaction",
+          status: snapshot.intent.commandPreview === snapshot.intent.redactedCommandPreview ? "pass" : "warn",
+          message:
+            snapshot.intent.commandPreview === snapshot.intent.redactedCommandPreview
+              ? "command preview contains no redacted secret-like text"
+              : "command preview will be redacted before persistence",
+        },
+        {
+          id: "permission",
+          status:
+            snapshot.permission.decision === "deny"
+              ? "block"
+              : snapshot.permission.decision === "approval_required"
+                ? "warn"
+                : "pass",
+          message: snapshot.permission.reason,
+        },
+        {
+          id: "dispatch_mode",
+          status: request.dispatchMode === "execute_if_approved" ? "warn" : "pass",
+          message:
+            request.dispatchMode === "execute_if_approved"
+              ? "approved replay may attempt tmux send-keys if the server env gate allows it"
+              : "record-only mode will not attempt tmux send-keys",
+        },
+        {
+          id: "server_gate",
+          status: wouldAttemptSendKeys ? "warn" : "pass",
+          message: wouldAttemptSendKeys
+            ? "server env currently allows real tmux send-keys"
+            : dryRunEnabled
+              ? "server dry-run gate prevents real send-keys"
+              : "server send-keys gate is disabled",
+        },
+      ],
+    },
   };
 }
 
@@ -4436,6 +4522,25 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
           message: error instanceof Error ? error.message : String(error),
         });
       }
+      return;
+    }
+
+    if (pathname === "/tmux/preflight" && request.method === "POST") {
+      let payload: ServerTmuxDispatchRequest;
+      try {
+        payload = parseServerTmuxDispatchRequest(await readJsonBody(request));
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) {
+          respondJson(413, { error: "payload_too_large", limit: error.limit });
+          return;
+        }
+        respondJson(400, {
+          error: "invalid_tmux_preflight_payload",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+      respondJson(200, createServerTmuxPreflightResponse(payload));
       return;
     }
 
