@@ -152,7 +152,7 @@ import {
   navItems,
   terminalSlots,
 } from "./seeds/conversation";
-import { ApprovalDrawer } from "./components/ApprovalDrawer";
+import { ControlQueueDrawer } from "./components/ControlQueueDrawer";
 import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
 import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
 import { AgentsSidebar } from "./components/AgentsSidebar";
@@ -2484,10 +2484,11 @@ export function App() {
                   permissionSnapshot.summary.pending > 0 ? "needs-attention" : ""
                 }`}
                 onClick={() => setApprovalDrawerOpen((open) => !open)}
+                title="Control Queue (⌘⇧A)"
                 type="button"
               >
                 <ShieldCheck size={16} />
-                승인 {permissionSnapshot.summary.pending}
+                Queue {permissionSnapshot.summary.pending}
               </button>
               <button className="ghost-button" onClick={handleRememberCurrentContext} type="button">
                 <Database size={16} />
@@ -2643,7 +2644,7 @@ export function App() {
           visual={agentVisualsById[settingsAgent.id] ?? {}}
         />
       ) : null}
-      <ApprovalDrawer
+      <ControlQueueDrawer
         onApprove={(sourceItemId) => handleResolvePermissionItem(sourceItemId, "approved")}
         onClose={() => setApprovalDrawerOpen(false)}
         onReject={(sourceItemId) => handleResolvePermissionItem(sourceItemId, "rejected")}

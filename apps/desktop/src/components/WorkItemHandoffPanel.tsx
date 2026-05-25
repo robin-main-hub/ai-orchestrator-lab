@@ -69,10 +69,10 @@ export function WorkItemHandoffPanel({
   const waitingInput = laneItems.ask.length;
 
   return (
-    <section className="work-handoff-strip inbox-strip" aria-label="Assistant Inbox">
+    <section className="work-handoff-strip inbox-strip" aria-label="Control Queue strip">
       <header>
         <div>
-          <span>Assistant Inbox</span>
+          <span>Control Queue</span>
           <strong>
             {activeItems.length} tasks / {visibleDrafts.length} drafts / {pendingHandoffs} approvals
           </strong>
