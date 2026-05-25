@@ -5,6 +5,10 @@ import { pathToFileURL } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type {
+  AgentDelegationAuthorityLevel,
+  AgentDelegationEventPayload,
+  AgentDelegationEventType,
+  AgentRole,
   ApprovalDecisionRequest,
   ApprovalQueueItem,
   ApprovalRequest,
@@ -49,8 +53,10 @@ import type {
   TmuxPaneRole,
 } from "@ai-orchestrator/protocol";
 import {
+  agentRoleSchema,
   approvalRequestSchema,
   eventSyncPushRequestSchema,
+  parseAgentDelegationEventPayload,
   providerCompletionRequestSchema,
   remoteExecutionRequestSchema,
   terminalCommandIntentSchema,
@@ -205,7 +211,7 @@ export type ServerIngressReceiverResponse = {
 
 export type ServerAgentDelegationAgentRef = {
   agentId: string;
-  role: string;
+  role: AgentRole;
   providerProfileId: string;
   modelId: string;
   personaName?: string;
@@ -1219,14 +1225,13 @@ export async function createServerAgentDelegationExecution(
     type: "agent.delegation.detected",
     suffix: "detected",
     payload: {
-      executionId: request.id,
       sourceAgentId: request.caller.agentId,
+      sourceAgentName: createServerAgentDisplayName(request.caller),
       sourceRole: request.caller.role,
       authorityLevel: createServerDelegationAuthorityLevel(request.caller),
       targets: parsedTags.map((tag) => tag.target),
       count: parsedTags.length,
       depthLimit: 1,
-      executionScope: "completion_only",
     },
     createdAt: now,
   }));
@@ -1275,12 +1280,19 @@ export async function createServerAgentDelegationExecution(
       type: "agent.delegation.dispatched",
       suffix: `dispatched_${tag.target}_${index}`,
       payload: {
-        executionId: request.id,
         sourceAgentId: request.caller.agentId,
         targetAgentId: target.agentId,
-        target: tag.target,
-        promptPreview: createRedactedPreview(prompt),
-        executionScope: "completion_only",
+        sourceAgentName: createServerAgentDisplayName(request.caller),
+        sourceRole: request.caller.role,
+        sourcePersonaName: request.caller.personaName,
+        authorityLevel: createServerDelegationAuthorityLevel(request.caller),
+        depthLimit: 1,
+        targetAgentName: createServerAgentDisplayName(target),
+        targetRole: target.role,
+        targetPersonaName: target.personaName,
+        providerProfileId: target.providerProfileId,
+        modelId: target.modelId,
+        promptLength: prompt.length,
       },
       createdAt: now,
     }));
@@ -1347,13 +1359,15 @@ export async function createServerAgentDelegationExecution(
     type: "agent.delegation.followup.completed",
     suffix: "followup_completed",
     payload: {
-      executionId: request.id,
       sourceAgentId: request.caller.agentId,
+      sourceAgentName: createServerAgentDisplayName(request.caller),
+      sourceRole: request.caller.role,
+      sourcePersonaName: request.caller.personaName,
+      authorityLevel: createServerDelegationAuthorityLevel(request.caller),
       outcomeCount: delegations.length,
-      succeeded: delegations.filter((outcome) => outcome.kind === "succeeded").length,
-      blocked: delegations.filter((outcome) => outcome.kind === "blocked" || outcome.kind === "self_delegation").length,
-      failed: delegations.filter((outcome) => outcome.kind === "failed").length,
-      finalPreview: createRedactedPreview(finalContent),
+      succeededCount: delegations.filter((outcome) => outcome.kind === "succeeded").length,
+      blockedCount: delegations.filter((outcome) => outcome.kind === "blocked" || outcome.kind === "self_delegation").length,
+      responseLength: finalContent.length,
     },
     createdAt: now,
   }));
@@ -2567,12 +2581,20 @@ function parseServerAgentDelegationAgentRef(value: unknown, fieldName: string): 
   const candidate = value as Partial<ServerAgentDelegationAgentRef>;
   return {
     agentId: parseRequiredString(candidate.agentId, `${fieldName}.agentId`, 256),
-    role: parseRequiredString(candidate.role, `${fieldName}.role`, 128),
+    role: parseServerAgentRole(candidate.role, `${fieldName}.role`),
     providerProfileId: parseRequiredString(candidate.providerProfileId, `${fieldName}.providerProfileId`, 256),
     modelId: parseRequiredString(candidate.modelId, `${fieldName}.modelId`, 256),
     personaName: parseOptionalString(candidate.personaName, 128),
     systemPrompt: parseOptionalString(candidate.systemPrompt, 200_000),
   };
+}
+
+function parseServerAgentRole(value: unknown, fieldName: string): AgentRole {
+  const parsed = agentRoleSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`${fieldName} must be a known AgentRole`);
+  }
+  return parsed.data;
 }
 
 function parseServerAgentDelegationTargets(value: unknown): ServerAgentDelegationTarget[] {
@@ -2655,8 +2677,12 @@ function isSelfDelegation(caller: ServerAgentDelegationAgentRef, target: string)
   return target === caller.agentId || target === caller.role || target === caller.personaName;
 }
 
-function createServerDelegationAuthorityLevel(agent: ServerAgentDelegationAgentRef) {
+function createServerDelegationAuthorityLevel(agent: ServerAgentDelegationAgentRef): AgentDelegationAuthorityLevel {
   return agent.role === "companion" || agent.role === "orchestrator" ? "orchestrator_plus" : "agent";
+}
+
+function createServerAgentDisplayName(agent: ServerAgentDelegationAgentRef): string {
+  return agent.personaName ?? agent.agentId;
 }
 
 function buildServerSubAgentDelegationPrompt(caller: ServerAgentDelegationAgentRef, prompt: string): string {
@@ -2698,16 +2724,18 @@ function createRedactedPreview(value: string, maxLength = 360): string {
 
 function createServerAgentDelegationEvent(params: {
   request: ServerAgentDelegationExecuteRequest;
-  type: string;
+  type: AgentDelegationEventType;
   suffix: string;
-  payload: unknown;
+  payload: AgentDelegationEventPayload;
   createdAt: string;
 }): EventEnvelope {
+  const redactedPayload = redactForServerPhase(params.payload, "pre_store").value;
+  const payload = parseAgentDelegationEventPayload(params.type, redactedPayload);
   return {
     id: `event_${params.type.replaceAll(".", "_")}_${params.request.id}_${stableServerId(params.suffix)}`,
     sessionId: params.request.sessionId,
     type: params.type,
-    payload: redactForServerPhase(params.payload, "pre_store").value,
+    payload,
     createdAt: params.createdAt,
     source: "server",
     sourceTrust: "trusted",
@@ -2718,22 +2746,12 @@ function createServerAgentDelegationEvent(params: {
 
 function createServerAgentDelegationOutcomeEvent(
   request: ServerAgentDelegationExecuteRequest,
-  type: string,
+  type: AgentDelegationEventType,
   outcome: ServerAgentDelegationOutcome,
   createdAt: string,
 ): EventEnvelope {
   const suffix = `${type}:${outcome.target}:${outcome.kind}:${"reason" in outcome ? outcome.reason ?? "" : ""}`;
-  const payload = {
-    executionId: request.id,
-    sourceAgentId: request.caller.agentId,
-    outcome: {
-      ...outcome,
-      prompt: createRedactedPreview(outcome.prompt),
-      response: "response" in outcome ? createRedactedPreview(outcome.response) : undefined,
-      reason: "reason" in outcome ? createRedactedPreview(outcome.reason) : undefined,
-    },
-    executionScope: "completion_only",
-  };
+  const payload = createServerAgentDelegationOutcomePayload(request, outcome);
   return createServerAgentDelegationEvent({
     request,
     type,
@@ -2741,6 +2759,73 @@ function createServerAgentDelegationOutcomeEvent(
     payload,
     createdAt,
   });
+}
+
+function createServerAgentDelegationOutcomePayload(
+  request: ServerAgentDelegationExecuteRequest,
+  outcome: ServerAgentDelegationOutcome,
+): AgentDelegationEventPayload {
+  const base = {
+    sourceAgentId: request.caller.agentId,
+    sourceAgentName: createServerAgentDisplayName(request.caller),
+    sourceRole: request.caller.role,
+    sourcePersonaName: request.caller.personaName,
+    authorityLevel: createServerDelegationAuthorityLevel(request.caller),
+    depthLimit: 1,
+  };
+
+  if (outcome.kind === "blocked") {
+    return {
+      ...base,
+      target: outcome.target,
+      reason: createRedactedPreview(outcome.reason, 4_000),
+    };
+  }
+
+  if (outcome.kind === "unknown_target") {
+    return {
+      ...base,
+      target: outcome.target,
+      promptLength: outcome.prompt.length,
+    };
+  }
+
+  if (outcome.kind === "self_delegation") {
+    return {
+      ...base,
+      target: outcome.target,
+    };
+  }
+
+  const target = request.targets.find((candidate) => candidate.agentId === outcome.targetAgentId);
+  const targetRole = target?.role ?? "executor";
+  const targetName = target ? createServerAgentDisplayName(target) : outcome.targetAgentId ?? outcome.target;
+  const providerProfileId = target?.providerProfileId ?? request.caller.providerProfileId;
+  const modelId = target?.modelId ?? request.caller.modelId;
+
+  if (outcome.kind === "succeeded") {
+    return {
+      ...base,
+      targetAgentId: outcome.targetAgentId,
+      targetAgentName: targetName,
+      targetRole,
+      providerProfileId,
+      modelId,
+      responseLength: outcome.response.length,
+      route: request.executionMode === "mock" ? "mock" : request.routePreference ?? "server_proxy",
+      realProviderCall: request.executionMode !== "mock",
+    };
+  }
+
+  return {
+    ...base,
+    targetAgentId: outcome.targetAgentId ?? outcome.target,
+    targetAgentName: targetName,
+    targetRole,
+    providerProfileId,
+    modelId,
+    error: createRedactedPreview(outcome.reason, 20_000),
+  };
 }
 
 function detectTmuxDispatchPermissions(request: ServerTmuxDispatchRequest): PermissionLevel[] {
