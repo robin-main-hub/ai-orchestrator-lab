@@ -39,7 +39,10 @@ export type {
 } from "./debateEngine.js";
 
 export {
+  COMPLETION_ONLY_TARGET_ROLES,
   DEFAULT_BLOCKED_TARGETS,
+  delegationAuthorityLevel,
+  evaluateDelegationPolicy,
   parseDelegateTags,
   runCompanionTurn,
 } from "./delegation.js";
@@ -47,6 +50,9 @@ export type {
   CompanionTurnInput,
   CompanionTurnOptions,
   CompanionTurnResult,
+  DelegationAuthorityLevel,
+  DelegationPolicyDecision,
+  DelegationTargetEffect,
   DelegateOutcome,
   DelegateTag,
 } from "./delegation.js";
