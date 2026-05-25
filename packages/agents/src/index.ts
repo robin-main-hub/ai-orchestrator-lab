@@ -320,9 +320,27 @@ export const defaultAgentProfiles: AgentProfile[] = [
   },
   {
     id: "agent_skeptic",
-    name: "Skeptic",
+    name: "Skeptic (Asuka)",
     kind: "virtual",
     role: "skeptic",
+    soulMode: "summary",
+    configSource: "internal",
+    enabled: true,
+    permissionLevel: "read_only",
+    // personaName 미지정 → loader 가 default 로 role ("skeptic") 사용
+    // → agents/skeptic/ (Asuka) 로 lookup.
+  },
+  {
+    id: "agent_skeptic_yohane",
+    name: "Idea Bank (Yohane)",
+    kind: "virtual",
+    role: "skeptic",
+    // Same role as Asuka, different perspective:
+    // - Asuka: within-paradigm aggressive challenge ("이게 잘못됐다, 더 강하게")
+    // - Yohane: cross-paradigm 가정 inversion ("이 paradigm 이 필요한가? 본질만 남기고 뒤집자")
+    // Two-layer skeptic coverage. personaName override below routes
+    // loader to agents/yohane/ instead of the default agents/skeptic/.
+    personaName: "yohane",
     soulMode: "summary",
     configSource: "internal",
     enabled: true,

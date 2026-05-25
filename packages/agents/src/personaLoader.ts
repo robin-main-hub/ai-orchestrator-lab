@@ -93,13 +93,16 @@ export function inferModeFromConfigSource(
 }
 
 /**
- * The directory name for a profile. Currently a 1:1 mapping from `role`
- * to directory name (the 6 built-in roles each have a directory). This
- * indirection lets us add aliases or per-profile overrides later without
- * touching every call site.
+ * The directory name for a profile. Defaults to a 1:1 mapping from
+ * `role` to directory name (the 6+ built-in roles each have a
+ * directory under `agents/`). When a profile carries an explicit
+ * `personaName` field, that override wins — used when two profiles
+ * share the same role but need different character files (e.g.
+ * `agents/skeptic/` = Asuka, `agents/yohane/` = Yohane Idea Bank,
+ * both `role: "skeptic"`).
  */
 export function personaNameForProfile(profile: AgentProfile): string {
-  return profile.role;
+  return profile.personaName ?? profile.role;
 }
 
 export async function loadPersona(

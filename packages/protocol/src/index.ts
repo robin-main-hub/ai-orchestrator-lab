@@ -242,6 +242,17 @@ export const agentProfileSchema = z.object({
   authBinding: agentAuthBindingSchema.optional(),
   enabled: z.boolean(),
   permissionLevel: z.string().optional(),
+  /**
+   * Optional override for the persona directory name used by the
+   * markdown persona loader (`packages/agents`'s loadPersona). When
+   * omitted, the loader uses `role` as the directory name (1:1
+   * convention from R2). Set this when multiple profiles share the
+   * same role but need different character files — e.g. two skeptics
+   * with `role: "skeptic"`: one with `personaName: undefined` (loads
+   * `agents/skeptic/`, Asuka), another with `personaName: "yohane"`
+   * (loads `agents/yohane/`, Yohane Idea Bank).
+   */
+  personaName: z.string().optional(),
 });
 export type AgentProfile = z.infer<typeof agentProfileSchema>;
 

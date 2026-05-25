@@ -64,6 +64,33 @@ describe("personaNameForProfile", () => {
       expect(personaNameForProfile(profile)).toBe(role);
     }
   });
+
+  it("personaName override wins over role (multi-persona-per-role pattern)", () => {
+    // Two skeptics — Asuka uses default (agents/skeptic/), Yohane
+    // uses personaName: "yohane" → agents/yohane/. Tests that the
+    // override path doesn't accidentally fall back to role.
+    const asuka: AgentProfile = {
+      id: "agent_skeptic",
+      name: "Skeptic (Asuka)",
+      kind: "virtual",
+      role: "skeptic",
+      soulMode: "summary",
+      configSource: "markdown",
+      enabled: true,
+    };
+    const yohane: AgentProfile = {
+      id: "agent_skeptic_yohane",
+      name: "Idea Bank (Yohane)",
+      kind: "virtual",
+      role: "skeptic",
+      personaName: "yohane",
+      soulMode: "summary",
+      configSource: "markdown",
+      enabled: true,
+    };
+    expect(personaNameForProfile(asuka)).toBe("skeptic");
+    expect(personaNameForProfile(yohane)).toBe("yohane");
+  });
 });
 
 describe("loadPersona", () => {
