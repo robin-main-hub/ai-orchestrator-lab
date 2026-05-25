@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ApprovalRequest, ApprovalState } from "@ai-orchestrator/protocol";
 import {
   requestTmuxDispatch,
+  requestTmuxPreflight,
   type DesktopTmuxDispatchRequest,
 } from "../runtime/stage33TmuxServer";
 import {
@@ -166,14 +167,32 @@ export function useApprovalQueueController({ appendEvent }: UseApprovalQueueCont
         (approval.sourceItemId ? pendingTmuxDispatchByApprovalKey[approval.sourceItemId] : undefined);
       if (state === "approved" && pendingTmuxRequest && !replayedByServer) {
         try {
+          const approvedRequest: DesktopTmuxDispatchRequest = {
+            ...pendingTmuxRequest,
+            id: `${pendingTmuxRequest.id}_approved_${Date.now()}`,
+            approvalState: "approved",
+            dispatchMode: "execute_if_approved",
+            createdAt: decidedAt,
+          };
+          const preflight = await requestTmuxPreflight({ request: approvedRequest });
+          appendEvent("tmux.dispatch.preflight_checked", {
+            approvalId: approval.id,
+            sourceItemId: approval.sourceItemId,
+            approvedRequestId: approvedRequest.id,
+            role: approvedRequest.role,
+            permissionDecision: preflight.permission.decision,
+            wouldAttemptSendKeys: preflight.audit.wouldAttemptSendKeys,
+            dryRunEnabled: preflight.audit.dryRunEnabled,
+            sendKeysEnabled: preflight.audit.sendKeysEnabled,
+            timelineBlockCount: preflight.timelineBlocks?.length ?? 0,
+            authorityNodeId: "dgx-02",
+            redaction: "applied",
+          });
+          if (preflight.permission.decision === "deny") {
+            throw new Error(preflight.permission.reason);
+          }
           const approvedDispatch = await requestTmuxDispatch({
-            request: {
-              ...pendingTmuxRequest,
-              id: `${pendingTmuxRequest.id}_approved_${Date.now()}`,
-              approvalState: "approved",
-              dispatchMode: "execute_if_approved",
-              createdAt: decidedAt,
-            },
+            request: approvedRequest,
           });
           appendEvent("tmux.dispatch.approval_applied", {
             approvalId: approval.id,
@@ -184,6 +203,7 @@ export function useApprovalQueueController({ appendEvent }: UseApprovalQueueCont
             dispatchStatus: approvedDispatch.dispatch.status,
             dispatchAttempted: approvedDispatch.dispatch.attempted,
             dispatchReason: approvedDispatch.dispatch.reason,
+            timelineBlockCount: approvedDispatch.timelineBlocks?.length ?? 0,
             authorityNodeId: "dgx-02",
             redaction: "applied",
           });

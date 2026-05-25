@@ -665,6 +665,13 @@ export type ProviderCompletionResponse = {
   content?: string;
   endpoint?: string;
   usage?: ProviderCompletionUsage;
+  runtimeHints?: {
+    estimatedTokens?: number;
+    budgetApprovalThresholdTokens?: number;
+    budgetHardLimitTokens?: number;
+    retryable?: boolean;
+    retryReason?: string;
+  };
   error?: string;
   createdAt: string;
 };

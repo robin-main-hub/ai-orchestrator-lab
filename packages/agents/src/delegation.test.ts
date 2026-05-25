@@ -240,6 +240,9 @@ describe("runCompanionTurn — completion-only gated targets", () => {
     }
     expect(executorRequest!.messages.at(-1)!.content).toContain("completion-only");
     expect(executorRequest!.messages.at(-1)!.content).toContain("Permission");
+    expect(executorRequest!.messages.at(-1)!.content).toContain("Do not execute terminal commands");
+    expect(executorRequest!.messages.at(-1)!.content).toContain("Do not");
+    expect(executorRequest!.messages.at(-1)!.content).toContain("access secrets");
   });
 
   it("lets companion delegate to external as completion-only", async () => {
