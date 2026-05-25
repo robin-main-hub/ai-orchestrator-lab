@@ -2446,6 +2446,106 @@ button {
   font-size: 11px;
 }
 
+.conversation-delegation-panel {
+  display: grid;
+  gap: 7px;
+  justify-self: stretch;
+  max-width: 100%;
+  padding: 8px;
+  border: 1px solid #0d6f79;
+  border-radius: 8px;
+  background: #002f34;
+  box-shadow: 0 8px 18px rgb(0 0 0 / 15%);
+}
+
+.conversation-delegation-panel.idle {
+  opacity: 0.78;
+}
+
+.conversation-delegation-panel header,
+.conversation-delegation-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.conversation-delegation-panel header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.conversation-delegation-panel header em,
+.conversation-delegation-list article > em {
+  color: var(--cyan);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.conversation-delegation-panel > p {
+  margin: 0;
+  color: var(--subtle);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.conversation-delegation-list {
+  display: grid;
+  gap: 6px;
+}
+
+.conversation-delegation-list article {
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #00343d;
+}
+
+.conversation-delegation-list article > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.conversation-delegation-list strong,
+.conversation-delegation-list small,
+.conversation-delegation-list p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-delegation-list strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.conversation-delegation-list small,
+.conversation-delegation-list p {
+  color: var(--subtle);
+  font-size: 10px;
+}
+
+.conversation-delegation-list p {
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+.conversation-delegation-list .delegation-status-succeeded {
+  border-color: #1d7c63;
+}
+
+.conversation-delegation-list .delegation-status-failed,
+.conversation-delegation-list .delegation-status-blocked {
+  border-color: #8d463d;
+}
+
 .message {
   max-width: 78%;
   padding: 9px 10px;

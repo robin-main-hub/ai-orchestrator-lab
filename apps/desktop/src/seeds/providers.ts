@@ -128,7 +128,7 @@ export const seededProviderProfiles: ProviderProfile[] = [
       kind: "custom",
       baseUrl: "codex-oauth://dgx-02",
       defaultModel: "codex-session",
-      tags: ["oauth", "codex", "dgx", "session"],
+      tags: ["oauth", "codex", "dgx", "session", "server-proxy"],
       trustLevel: "trusted",
     }),
     secretRef: createDgxVaultSecretRef("secret_dgx02_codex_oauth", "DGX-02 Codex OAuth Session", "dgx-02:~/.codex/auth.json"),
@@ -199,7 +199,7 @@ function sanitizeProviderProfile(profile: ProviderProfile): ProviderProfile {
       secretRef:
         profile.secretRef ??
         createDgxVaultSecretRef("secret_dgx02_codex_oauth", "DGX-02 Codex OAuth Session", "dgx-02:~/.codex/auth.json"),
-      tags: Array.from(new Set([...profile.tags, "oauth", "codex", "dgx", "session"])),
+      tags: Array.from(new Set([...profile.tags, "oauth", "codex", "dgx", "session", "server-proxy"])),
       trustLevel: "trusted",
     };
   }
