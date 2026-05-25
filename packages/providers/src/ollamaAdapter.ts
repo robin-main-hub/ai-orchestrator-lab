@@ -7,6 +7,7 @@ import type {
 import type { AdapterRuntimeContext, LlmAdapter } from "./adapter.js";
 import { AdapterError, redactSecretsForLog, truncateForLog } from "./errors.js";
 import type { AdapterFetchLike } from "./openAiCompatibleAdapter.js";
+import { createRequestSignal } from "./signal.js";
 
 /**
  * Ollama `/api/chat` adapter.
@@ -355,23 +356,7 @@ function reportAdapterError(ctx: AdapterRuntimeContext, error: unknown) {
   }
 }
 
-function createRequestSignal(ctx: AdapterRuntimeContext): AbortSignal | undefined {
-  if (!ctx.timeoutMs) {
-    return ctx.abortSignal;
-  }
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), ctx.timeoutMs);
-  (timeout as unknown as { unref?: () => void }).unref?.();
-  if (ctx.abortSignal) {
-    if (ctx.abortSignal.aborted) {
-      controller.abort();
-    } else {
-      ctx.abortSignal.addEventListener("abort", () => controller.abort(), { once: true });
-    }
-  }
-  controller.signal.addEventListener("abort", () => clearTimeout(timeout), { once: true });
-  return controller.signal;
-}
+// createRequestSignal moved to ./signal.ts.
 
 function inferOllamaContextWindow(modelIdLower: string): number {
   if (/qwen|deepseek|gpt-oss|grok|claude/.test(modelIdLower)) return 128_000;

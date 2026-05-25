@@ -3,50 +3,17 @@ import type { ProviderCompletionRequest } from "@ai-orchestrator/protocol";
 import { createOllamaMessages, OllamaAdapter } from "./ollamaAdapter";
 import type { AdapterFetchLike } from "./openAiCompatibleAdapter";
 import { createAdapterContext } from "./adapter";
+import { baseProviderRequest, recordedFetch } from "./testHelpers";
 
+// Ollama-specific defaults on top of the shared baseProviderRequest.
 function baseRequest(overrides: Partial<ProviderCompletionRequest> = {}): ProviderCompletionRequest {
-  return {
+  return baseProviderRequest({
     id: "req_ollama_001",
-    sessionId: "session_test",
     providerProfileId: "provider_local_ollama",
     modelId: "llama3.1:8b",
-    messages: [{ role: "user", content: "Reply OK only" }],
-    source: "desktop",
-    routePreference: "direct_provider",
     createdAt: "2026-05-25T13:00:00.000Z",
     ...overrides,
-  };
-}
-
-type FetchCall = {
-  url: string;
-  method?: string;
-  headers?: Record<string, string>;
-  body?: string;
-};
-
-function recordedFetch(
-  impl: (call: FetchCall) => { ok: boolean; status: number; body: string },
-): { fetch: AdapterFetchLike; calls: FetchCall[] } {
-  const calls: FetchCall[] = [];
-  const fetchImpl: AdapterFetchLike = async (input, init) => {
-    const call: FetchCall = {
-      url: input,
-      method: init?.method,
-      headers: init?.headers,
-      body: typeof init?.body === "string" ? init.body : undefined,
-    };
-    calls.push(call);
-    const out = impl(call);
-    return {
-      ok: out.ok,
-      status: out.status,
-      async text() {
-        return out.body;
-      },
-    };
-  };
-  return { fetch: fetchImpl, calls };
+  });
 }
 
 describe("createOllamaMessages", () => {
