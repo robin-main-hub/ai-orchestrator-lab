@@ -6341,6 +6341,255 @@ button {
   color: #a8ffdf;
 }
 
+/* ── Stage 2-5 Control Queue (formerly ApprovalDrawer) ───────── */
+
+/* The Control Queue reuses .approval-drawer for positioning/animation
+   (fixed top-right, slide-in transition) and adds its own internal
+   layout via .control-queue__* classes. */
+
+.control-queue {
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  width: min(460px, calc(100vw - 32px));
+}
+
+.control-queue__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px 11px 6px;
+}
+
+.control-queue__summary p {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: rgba(0, 47, 56, 0.55);
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+}
+
+.control-queue__summary span {
+  color: var(--subtle);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.control-queue__summary strong {
+  color: var(--cyan);
+  font-size: 11px;
+}
+
+.control-queue__lanes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 11px 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.control-queue__lane {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: rgba(0, 47, 56, 0.45);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  font-size: 9.5px;
+}
+
+.control-queue__lane:hover:not(:disabled) {
+  border-color: rgba(95, 211, 226, 0.45);
+}
+
+.control-queue__lane--active {
+  border-color: var(--cyan);
+  background: rgba(95, 211, 226, 0.18);
+  color: var(--cyan);
+}
+
+.control-queue__lane--soon {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.control-queue__lane-label {
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+
+.control-queue__lane-count {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(95, 211, 226, 0.2);
+  color: var(--cyan);
+  font-size: 9px;
+}
+
+.control-queue__list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  padding: 10px 11px 12px;
+  overflow-y: auto;
+}
+
+.control-queue__empty {
+  display: grid;
+  justify-items: start;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #0d0d0c;
+  color: var(--green);
+}
+
+.control-queue__empty strong {
+  color: var(--text);
+}
+
+.control-queue__card {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--amber);
+  border-radius: 8px;
+  background: #0d0d0c;
+}
+
+.control-queue__card header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.control-queue__card header div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.control-queue__card header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--subtle);
+  font-size: 10px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+}
+
+.control-queue__card header strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.control-queue__card em {
+  color: var(--amber);
+  font-size: 9.5px;
+  font-style: normal;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  text-transform: uppercase;
+}
+
+.control-queue__card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.control-queue__card-id {
+  color: var(--subtle);
+  font-size: 9px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+}
+
+.control-queue__card-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.control-queue__card-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: rgba(0, 47, 56, 0.55);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  font-size: 9.5px;
+}
+
+.control-queue__card-action:hover:not(:disabled) {
+  border-color: rgba(95, 211, 226, 0.45);
+  color: var(--cyan);
+}
+
+.control-queue__card-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.control-queue__card-action--approve {
+  border-color: #138b73;
+  color: #a8ffdf;
+}
+
+.control-queue__card-action--approve:hover:not(:disabled) {
+  background: rgba(19, 139, 115, 0.25);
+}
+
+.control-queue__card-action--archive {
+  border-color: rgba(255, 95, 109, 0.4);
+  color: var(--rose);
+}
+
+.control-queue__card-action--archive:hover:not(:disabled) {
+  background: rgba(255, 95, 109, 0.15);
+}
+
+.control-queue__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 11px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--subtle);
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  font-size: 9.5px;
+}
+
+.control-queue__footer kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: rgba(0, 47, 56, 0.55);
+  color: var(--muted);
+  font-size: 9px;
+}
+
 .status-bar {
   border-bottom-color: #087083;
   background: #003440;
