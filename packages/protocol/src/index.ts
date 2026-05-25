@@ -345,8 +345,14 @@ export const debateUtteranceSchema = z.object({
   id: z.string(),
   agentId: z.string(),
   roundId: z.string(),
+  parentUtteranceId: z.string().optional(),
   content: z.string(),
   tags: z.array(debateTagSchema),
+  acceptedBy: z.array(z.string()).optional(),
+  rejectedBy: z.array(z.string()).optional(),
+  decisionId: z.string().optional(),
+  evidenceRefIds: z.array(z.string()).optional(),
+  codingImpactRefs: z.array(z.string()).optional(),
   createdAt: z.string(),
 });
 export type DebateUtterance = z.infer<typeof debateUtteranceSchema>;
@@ -1458,6 +1464,71 @@ export const terminalCommandDispatchStateSchema = z.enum([
   "failed",
 ]);
 export type TerminalCommandDispatchState = z.infer<typeof terminalCommandDispatchStateSchema>;
+
+export const terminalTimelineBlockKindSchema = z.enum([
+  "planning",
+  "command_intent",
+  "approval",
+  "dry_run",
+  "dispatch",
+  "capture",
+  "handoff",
+  "note",
+]);
+export type TerminalTimelineBlockKind = z.infer<typeof terminalTimelineBlockKindSchema>;
+
+export const terminalTimelineBlockStatusSchema = z.enum([
+  "planned",
+  "pending_approval",
+  "blocked",
+  "dry_run",
+  "running",
+  "completed",
+  "failed",
+  "stale",
+]);
+export type TerminalTimelineBlockStatus = z.infer<typeof terminalTimelineBlockStatusSchema>;
+
+export const terminalTimelineBlockSchema = z
+  .object({
+    id: z.string(),
+    sessionId: z.string(),
+    terminalSessionId: z.string(),
+    paneId: z.string(),
+    role: tmuxPaneRoleSchema,
+    host: terminalHostKindSchema,
+    kind: terminalTimelineBlockKindSchema,
+    status: terminalTimelineBlockStatusSchema,
+    title: z.string(),
+    summary: z.string(),
+    parentBlockId: z.string().optional(),
+    commandIntentId: z.string().optional(),
+    approvalId: z.string().optional(),
+    runId: z.string().optional(),
+    relatedEventIds: z.array(z.string()),
+    outputPreview: z.string().optional(),
+    redactionApplied: z.boolean(),
+    startedAt: z.string().optional(),
+    completedAt: z.string().optional(),
+    createdAt: z.string(),
+  })
+  .strict();
+export type TerminalTimelineBlock = z.infer<typeof terminalTimelineBlockSchema>;
+
+export const terminalPaneTimelineSchema = z
+  .object({
+    id: z.string(),
+    sessionId: z.string(),
+    terminalSessionId: z.string(),
+    paneId: z.string(),
+    role: tmuxPaneRoleSchema,
+    host: terminalHostKindSchema,
+    blocks: z.array(terminalTimelineBlockSchema),
+    lastBlockId: z.string().optional(),
+    updatedAt: z.string(),
+  })
+  .strict();
+export type TerminalPaneTimeline = z.infer<typeof terminalPaneTimelineSchema>;
 
 export const tmuxSessionRefSchema = z.object({
   id: z.string(),
