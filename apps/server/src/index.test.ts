@@ -17,6 +17,7 @@ import {
   createServerProviderRegistrySnapshot,
   createServerProviderModelDiscoveryResponse,
   createRemoteRunResponse,
+  estimateProviderCompletionBudgetTokens,
   evaluateServerProviderCompletionPermission,
   evaluateServerRemoteRunPermission,
   createRuntimeSnapshot,
@@ -159,6 +160,64 @@ describe("server health placeholder", () => {
     expect(permission.decision).toBe("allow");
     expect(permission.approvalState).toBe("not_required");
     expect(permission.requestedLevels).toEqual(["network_access"]);
+  });
+
+  it("requires budget approval for high-token trusted provider requests", () => {
+    const longPrompt = "budget ".repeat(14_000);
+    const permission = evaluateServerProviderCompletionPermission({
+      id: "provider_completion_request_budget_approval",
+      sessionId: "session_1",
+      providerProfileId: "provider_codex_oauth",
+      modelId: "codex-session",
+      messages: [{ role: "user", content: longPrompt }],
+      source: "desktop",
+      routePreference: "server_proxy",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+
+    expect(permission.costEstimateTokens).toBe(estimateProviderCompletionBudgetTokens([{ role: "user", content: longPrompt }]));
+    expect(permission.decision).toBe("approval_required");
+    expect(permission.approvalState).toBe("required");
+    expect(permission.reason).toContain("budget approval");
+  });
+
+  it("denies provider completion requests above the hard budget limit", () => {
+    const oversizedPrompt = "hard-limit ".repeat(52_000);
+    const permission = evaluateServerProviderCompletionPermission({
+      id: "provider_completion_request_budget_denied",
+      sessionId: "session_1",
+      providerProfileId: "provider_codex_oauth",
+      modelId: "codex-session",
+      messages: [{ role: "user", content: oversizedPrompt }],
+      source: "desktop",
+      routePreference: "server_proxy",
+      approvalState: "approved",
+      permissionDecision: "allow",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+
+    expect(permission.costEstimateTokens).toBeGreaterThan(128_000);
+    expect(permission.decision).toBe("deny");
+    expect(permission.approvalState).toBe("rejected");
+    expect(permission.reason).toContain("hard limit");
+  });
+
+  it("includes provider cost estimate in approval requests", () => {
+    const request = {
+      id: "provider_completion_request_budget_payload",
+      sessionId: "session_1",
+      providerProfileId: "provider_apifun_claude",
+      modelId: "claude-opus-4-6",
+      messages: [{ role: "user" as const, content: "hello" }],
+      source: "desktop" as const,
+      routePreference: "server_proxy" as const,
+      createdAt: "2026-05-24T00:00:00.000Z",
+    };
+    const permission = evaluateServerProviderCompletionPermission(request);
+    const approval = createProviderCompletionApprovalRequest(request, permission, "2026-05-24T00:00:00.000Z");
+
+    expect(approval.costEstimateTokens).toBe(permission.costEstimateTokens);
+    expect(approval.costEstimateTokens).toBeGreaterThan(0);
   });
 
   it("derives the approval queue from Event Storage approval events", () => {
