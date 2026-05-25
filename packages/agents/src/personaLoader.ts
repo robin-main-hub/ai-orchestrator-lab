@@ -117,7 +117,12 @@ export function inferModeFromConfigSource(
  * touching every call site.
  */
 export function personaNameForProfile(profile: AgentProfile): string {
-  return profile.role;
+  // `personaName` override (protocol R3.1) lets multiple profiles sharing
+  // the same role load distinct character files — e.g. two skeptics, one
+  // mapped to agents/skeptic/ (Asuka), the other to agents/yohane/
+  // (Yohane Idea Bank). Falls back to the role name for the canonical
+  // 1:1 case.
+  return profile.personaName ?? profile.role;
 }
 
 export async function loadPersona(

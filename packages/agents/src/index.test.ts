@@ -252,15 +252,13 @@ describe("assertSafeCodingPacket", () => {
 });
 
 describe("defaultAgentProfiles", () => {
-  it("ships 10 profiles: orchestrator + 5 debate personas + builder + external + auditor + executor", () => {
-    expect(defaultAgentProfiles).toHaveLength(10);
+  it("ships 17 profiles: 10 core roles + Yohane (skeptic 2호) + 6 R3.2 expansion roles", () => {
+    expect(defaultAgentProfiles).toHaveLength(17);
   });
 
   it("covers every persona that has a SOUL.md directory under agents/", () => {
-    // Mirrors the 5 SOUL files added in PR #48 (architect/reviewer/skeptic/
-    // verifier/memory_curator) plus orchestrator, plus the personas
-    // consolidated in this PR (builder/external/auditor) — all have a
-    // matching agents/<role>/ markdown directory.
+    // Each defaultAgentProfile has a matching agents/<role>/ markdown
+    // directory (or agents/<personaName>/ when overridden — e.g. Yohane).
     // Regression guard: if someone removes one of these the test fails
     // with a specific role name, not a vague "missing item".
     const roles = defaultAgentProfiles.map((p) => p.role);
@@ -274,6 +272,24 @@ describe("defaultAgentProfiles", () => {
     expect(roles).toContain("external");
     expect(roles).toContain("auditor");
     expect(roles).toContain("executor");
+    // R3.2 expansion
+    expect(roles).toContain("researcher");
+    expect(roles).toContain("negotiator");
+    expect(roles).toContain("risk_officer");
+    expect(roles).toContain("mediator");
+    expect(roles).toContain("watchdog");
+    expect(roles).toContain("domain_expert");
+  });
+
+  it("uses personaName override only when multiple profiles share a role", () => {
+    // R3.1 personaName invariant: every personaName must point at an
+    // agents/<personaName>/ directory; profiles without an override
+    // fall back to agents/<role>/. The only override on main today is
+    // Yohane (second skeptic) → agents/yohane/.
+    const skeptics = defaultAgentProfiles.filter((p) => p.role === "skeptic");
+    expect(skeptics.length).toBeGreaterThanOrEqual(2);
+    const overrides = skeptics.map((p) => p.personaName).filter(Boolean);
+    expect(overrides).toContain("yohane");
   });
 
   it("keeps the executor disabled by default (requires F2 permission gate)", () => {
