@@ -167,3 +167,37 @@ server 응답 body가 항상 JSON임을 가정 (현재 server는 `writeJson` 일
 2. **`DgxProxyDiagnostic`를 event log에 저장**: trust level별로 raw snippet 저장 정책 — `trusted` provider만 raw 저장, `untrusted`는 code+message만? 이건 `13-event-store-permission-redaction` 정책과 정렬 필요.
 3. **자동 fallback**: `DNS_FAILED`/`TLS_INVALID` 시 자동으로 LAN URL로 fallback할지 vs 사용자 액션 요구. (Claude 추천: 후자, 자동 fallback은 다른 호스트로 가는 의미라 보안 검증 필요)
 4. **진단 캐싱**: 같은 code가 1분 안에 반복되면 묶어서 표시할지 (UI 폭주 방지).
+
+---
+
+## 9. Implementation status (post-merge)
+
+이 명세는 [PR #19](https://github.com/robin-main-hub/ai-orchestrator-lab/pull/19) (Codex)로 실 구현되어 main에 머지됨. 코덱스가 `stage32DgxRouteDiagnostics` 모듈로 base URL별 분리 진단 + Systems 패널 상태 카드까지 구현.
+
+### 실 구현이 발견한 첫 사용 사례
+
+`Probe DGX` 버튼이 base URL별 응답을 따로 기록하면서, 같은 도메인이라도 진단 결과가 다음과 같이 분리됨이 드러남:
+
+- `dgx-02:4317` (LAN): `health ok/200`, `provider ok/204`
+- `orchestrator.endruin.com` (Cloudflare): `network_error`
+
+이게 §3 "Failed to fetch 분해 가이드"의 `DNS_FAILED` 시나리오와 정확히 매핑됨 (DNS에서 NXDOMAIN). docs/26의 분류표가 실제 진단으로 검증된 첫 사례.
+
+→ 해결 경로: orchestrator 서브도메인을 Cloudflare에 위임 + Cloudflare Tunnel로 노출 (별도 인프라 단계, 그 작업도 완료). 진단 표가 코드 작업이 아닌 도메인/라우팅 작업으로 좁혀줌 — 이게 docs/26 §4 "DgxProxyDiagnostic 페이로드 포맷"의 핵심 가치.
+
+### 코덱스 구현이 docs와 매칭되는 지점
+
+| Docs/26 명세 | stage32 실 구현 |
+|---|---|
+| §1 호출 경로 (L1/L2/L3 분리) | base URL별 별도 진단 — 같은 layer 내에서도 호스트별 분리 |
+| §2 에러 코드표 17개 | 구현에서는 첫 라운드로 `health`/`provider` 분리 + status code 매핑부터 시작. 17개 코드 전체는 점진 확장 |
+| §3 "Failed to fetch" 분해 가이드 | `network_error` 분류로 시작 (DNS/TLS/CORS/PNA 추가 분리는 후속) |
+| §4 `DgxProxyDiagnostic` 페이로드 | Systems 패널 상태 카드 UI로 직접 노출 + Event Storage 기록 |
+| §6 시운전 시나리오 | 6개 중 "endruin DNS 미등록" 시나리오가 첫 실증 검증 |
+
+### Open / 후속
+
+- 17개 에러 코드 풀 커버리지 — 현재는 `network_error` / HTTP status 매핑 위주. `CORS_PREFLIGHT_BLOCKED` / `PNA_BLOCKED` / `TLS_INVALID` 분리는 별도 PR.
+- `DgxProxyErrorCode` enum + `DgxProxyDiagnostic` zod schema를 `packages/protocol`에 정식 등록 — 현재는 desktop runtime 내부 타입.
+- §8 결정 사항 4개는 미해결: L1 분류 정확도 (Tauri shell 결정과 연관), event log 저장 정책 (`docs/13` redaction 정렬), 자동 fallback, 진단 캐싱.
+- AdapterError category와 `DgxProxyErrorCode` 매핑 표준화 — adapter 계층 에러와 진단 계층 에러가 같은 카테고리 용어 사용하도록 (별도 PR).
