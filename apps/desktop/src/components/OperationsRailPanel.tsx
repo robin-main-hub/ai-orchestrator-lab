@@ -12,6 +12,15 @@ import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
 import type { WindowAuditItem } from "../types";
 import { WindowChecklist } from "./WindowChecklist";
 
+export type TmuxRedispatchOutcome = {
+  approvalId: string;
+  createdAt: string;
+  reason: string;
+  role: string;
+  sourceItemId?: string;
+  status: "sent" | "failed" | "blocked" | "recorded" | "pending_approval";
+};
+
 export function OperationsRailPanel({
   approvalBusyId,
   approvalError,
@@ -28,6 +37,7 @@ export function OperationsRailPanel({
   permissionSnapshot,
   providerReadiness,
   secretVaultSnapshot,
+  tmuxRedispatchOutcomes = [],
 }: {
   approvalBusyId?: string;
   approvalError?: string;
@@ -44,6 +54,7 @@ export function OperationsRailPanel({
   permissionSnapshot: PermissionMatrixSnapshot;
   providerReadiness: ProviderRuntimeReadiness;
   secretVaultSnapshot: SecretVaultSnapshot;
+  tmuxRedispatchOutcomes?: TmuxRedispatchOutcome[];
 }) {
   const serverPending = approvalServerSnapshot?.queue.length ?? 0;
   const visibleApprovals = approvalServerSnapshot?.approvals.filter((approval) => approval.state === "required").slice(0, 4) ?? [];
@@ -180,6 +191,23 @@ export function OperationsRailPanel({
           ))
         )}
       </div>
+      {tmuxRedispatchOutcomes.length > 0 ? (
+        <div className="server-approval-outcomes">
+          <header>
+            <span>최근 tmux 재전송</span>
+            <strong>{tmuxRedispatchOutcomes.length}</strong>
+          </header>
+          {tmuxRedispatchOutcomes.slice(0, 3).map((outcome) => (
+            <article className={`server-approval-outcome-${outcome.status}`} key={`${outcome.approvalId}:${outcome.createdAt}`}>
+              <div>
+                <strong>{outcome.role}</strong>
+                <span>{outcome.reason}</span>
+              </div>
+              <small>{outcome.status}</small>
+            </article>
+          ))}
+        </div>
+      ) : null}
       <WindowChecklist items={auditItems} title="Ops 점검" />
     </section>
   );
