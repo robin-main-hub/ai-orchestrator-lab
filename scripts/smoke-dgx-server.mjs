@@ -80,6 +80,7 @@ console.log(
         route: completion.route,
         content: completion.content,
         usage: completion.usage,
+        runtimeHints: completion.runtimeHints,
         error: completion.error,
       },
       eventSync: {

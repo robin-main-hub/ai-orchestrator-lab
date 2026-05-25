@@ -163,6 +163,8 @@ describe("stage7 backup projections", () => {
     expect(obsidian?.destination).toContain("session_desktop_001.md");
     expect(obsidian?.contentPreview).toContain("[REDACTED:api_key]");
     expect(obsidianContent).not.toContain("sk-super-secret-token");
+    expect(obsidianContent).toContain("## EvolveMemento Index");
+    expect(obsidianContent).toContain("Question first; dynamic recall context below question");
     expect(obsidianContent).toContain("## Memory Context");
     expect(obsidianContent).toContain("fusion:");
     expect(obsidianContent).toContain("score");
@@ -212,6 +214,8 @@ describe("stage7 backup projections", () => {
     const mobileContent = getArtifactContent(snapshot, mobileArtifact?.id);
 
     expect(notionContent).toContain("memoryContext");
+    expect(notionContent).toContain("\"evolveMemento\"");
+    expect(notionContent).toContain("\"engine\": \"EvolveMemento\"");
     expect(notionContent).toContain("\"fusion\"");
     expect(notionContent).toContain("\"views\"");
     expect(notionContent).toContain("memoryRelations");
@@ -220,6 +224,7 @@ describe("stage7 backup projections", () => {
     expect(notionContent).toContain("\"succeeded\": 1");
     expect(notionContent).not.toContain("sk-delegation-secret-token");
     expect(mobileContent).toContain("relationLinks");
+    expect(mobileContent).toContain("\"evolveMemento\"");
     expect(mobileContent).toContain("\"fusion\"");
     expect(mobileContent).toContain("health");
     expect(mobileContent).toContain("\"delegation\"");
