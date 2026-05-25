@@ -26,6 +26,25 @@ import type { AdapterFetchLike } from "./openAiCompatibleAdapter.js";
  *     counters), not `prompt_tokens` / `completion_tokens`
  */
 
+/**
+ * Where to place `cache_control: ephemeral` breakpoints when prompt caching
+ * is enabled. Anthropic caches every block from the start of the request up
+ * to (and including) the marked block, so each breakpoint extends the
+ * cacheable prefix.
+ *
+ *   - "system": cache the system prefix only (1 breakpoint at the end of
+ *     system). Useful when the agent persona / instructions are the only
+ *     stable long prefix and turns differ.
+ *   - "system_and_last_user": also cache through the last user turn
+ *     (2 breakpoints — system + last user). Useful for repeated
+ *     long-context queries where the same documents prefix every turn.
+ *
+ * Anthropic allows up to 4 breakpoints per request; v1 of this adapter only
+ * exposes these two presets. Callers that need bespoke placement should
+ * subclass or build the body manually.
+ */
+export type AnthropicCacheStrategy = "system" | "system_and_last_user";
+
 export type AnthropicAdapterOptions = {
   profileId: string;
   /** Base URL of the Anthropic-compatible endpoint, e.g. https://api.anthropic.com or https://api.apikey.fun */
@@ -42,6 +61,27 @@ export type AnthropicAdapterOptions = {
   defaultMaxTokens?: number;
   /** Optional default temperature; if undefined the field is omitted from the body. */
   temperature?: number;
+  /**
+   * Enable Anthropic prompt caching. When `true`:
+   *   - injects `prompt-caching-2024-07-31` into the `anthropic-beta` header
+   *     (deduplicated against `betaHeaders` so it is never sent twice)
+   *   - converts the top-level `system` field from a plain string to a
+   *     content-block array carrying `cache_control: ephemeral` on the
+   *     last block (cacheable prefix = the whole system prompt)
+   *   - if `cacheStrategy === "system_and_last_user"`, also converts the
+   *     last user message's `content` to a content-block array with
+   *     `cache_control: ephemeral`, extending the cacheable prefix
+   *     through that user turn
+   *
+   * Defaults to `false` (no caching, no header injection) so behavior is
+   * backward-compatible. Resellers (APIKey.fun etc.) may not forward the
+   * beta header or may strip `cache_control`; verify reseller support
+   * before flipping this on for them. Direct `api.anthropic.com` always
+   * works. See docs/25 §6 + §13.
+   */
+  enablePromptCaching?: boolean;
+  /** Where to place cache breakpoints. Default `"system"` when caching is enabled, ignored otherwise. */
+  cacheStrategy?: AnthropicCacheStrategy;
   /** Extra body fields merged at the top level. */
   extraBody?: Record<string, unknown>;
   /** Extra headers merged onto every request. */
@@ -73,6 +113,19 @@ type AnthropicMessageResponse = {
 
 const DEFAULT_VERSION = "2023-06-01";
 const DEFAULT_MAX_TOKENS = 4096;
+const PROMPT_CACHING_BETA_FLAG = "prompt-caching-2024-07-31";
+const EPHEMERAL_CACHE_CONTROL = { type: "ephemeral" as const };
+
+type AnthropicTextBlockInput = {
+  type: "text";
+  text: string;
+  cache_control?: { type: "ephemeral" };
+};
+type AnthropicMessageInput = {
+  role: "user" | "assistant";
+  content: string | AnthropicTextBlockInput[];
+};
+type AnthropicSystemInput = string | AnthropicTextBlockInput[];
 
 export class AnthropicAdapter implements LlmAdapter {
   readonly profileId: string;
@@ -84,6 +137,8 @@ export class AnthropicAdapter implements LlmAdapter {
   private readonly betaHeaders: string[];
   private readonly defaultMaxTokens: number;
   private readonly temperature?: number;
+  private readonly enablePromptCaching: boolean;
+  private readonly cacheStrategy: AnthropicCacheStrategy;
   private readonly extraBody: Record<string, unknown>;
   private readonly headers: Record<string, string>;
   private readonly fetchImpl: AdapterFetchLike;
@@ -97,6 +152,8 @@ export class AnthropicAdapter implements LlmAdapter {
     this.betaHeaders = options.betaHeaders ?? [];
     this.defaultMaxTokens = options.defaultMaxTokens ?? DEFAULT_MAX_TOKENS;
     this.temperature = options.temperature;
+    this.enablePromptCaching = options.enablePromptCaching ?? false;
+    this.cacheStrategy = options.cacheStrategy ?? "system";
     this.extraBody = options.extraBody ?? {};
     this.headers = options.headers ?? {};
     this.fetchImpl = options.fetchImpl ?? fetch;
@@ -206,8 +263,9 @@ export class AnthropicAdapter implements LlmAdapter {
       "anthropic-version": this.anthropicVersion,
       ...this.headers,
     };
-    if (this.betaHeaders.length > 0) {
-      headers["anthropic-beta"] = this.betaHeaders.join(",");
+    const beta = resolveBetaHeader(this.betaHeaders, this.enablePromptCaching);
+    if (beta) {
+      headers["anthropic-beta"] = beta;
     }
     if (secret) {
       headers["x-api-key"] = secret;
@@ -219,13 +277,19 @@ export class AnthropicAdapter implements LlmAdapter {
     const { system, messages } = splitSystemAndMessages(request.messages);
     assertAnthropicMessageOrder(messages);
 
+    const { system: systemOut, messages: messagesOut } = applyCacheBreakpoints(
+      system,
+      messages,
+      this.enablePromptCaching ? this.cacheStrategy : null,
+    );
+
     const body: Record<string, unknown> = {
       model: request.modelId,
-      messages,
+      messages: messagesOut,
       max_tokens: this.defaultMaxTokens,
       ...this.extraBody,
     };
-    if (system) body.system = system;
+    if (systemOut !== undefined) body.system = systemOut;
     if (typeof this.temperature === "number") body.temperature = this.temperature;
     return body;
   }
@@ -305,6 +369,98 @@ export function extractAnthropicText(content: AnthropicContentBlock[]): string {
     .map((block) => block.text)
     .join("")
     .trim();
+}
+
+/**
+ * Combine the constructor `betaHeaders` list with the prompt-caching beta
+ * flag (when caching is enabled) into a single comma-joined
+ * `anthropic-beta` header value. Returns `undefined` when there is
+ * nothing to send so the caller can skip the header entirely.
+ *
+ * Deduplicates so a caller that manually added `prompt-caching-2024-07-31`
+ * to `betaHeaders` AND set `enablePromptCaching: true` does not see the
+ * flag twice (Anthropic ignores duplicates but reseller proxies have been
+ * observed to reject them).
+ */
+export function resolveBetaHeader(
+  betaHeaders: readonly string[],
+  enablePromptCaching: boolean,
+): string | undefined {
+  const seen = new Set<string>();
+  const flags: string[] = [];
+  for (const value of betaHeaders) {
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    flags.push(trimmed);
+  }
+  if (enablePromptCaching && !seen.has(PROMPT_CACHING_BETA_FLAG)) {
+    flags.push(PROMPT_CACHING_BETA_FLAG);
+  }
+  return flags.length === 0 ? undefined : flags.join(",");
+}
+
+/**
+ * Apply `cache_control: ephemeral` breakpoints to the system field and
+ * (depending on strategy) the last user message, converting them from
+ * plain-string form to Anthropic's typed content-block form.
+ *
+ * Behavior:
+ *   - `strategy === null` (caching disabled): pass through untouched
+ *     (`system` stays a string, message contents stay strings) so the
+ *     request matches v1 (no-caching) shape exactly.
+ *   - `strategy === "system"`: convert system to `[{type:"text", text, cache_control}]`.
+ *     If there is no system content, no breakpoint is placed (no error).
+ *   - `strategy === "system_and_last_user"`: also rewrite the last user
+ *     message's content to a single-block array with `cache_control`.
+ *     If `messages` has no user turn (shouldn't happen — asserted earlier
+ *     — but defensive), the user breakpoint is skipped silently.
+ *
+ * Only the LAST occurrence in each scope is marked. Anthropic caches every
+ * block from the start up through the marked block, so marking later
+ * blocks extends the prefix without needing breakpoints on earlier ones.
+ */
+export function applyCacheBreakpoints(
+  system: string | undefined,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  strategy: AnthropicCacheStrategy | null,
+): {
+  system: AnthropicSystemInput | undefined;
+  messages: AnthropicMessageInput[];
+} {
+  if (!strategy) {
+    return { system, messages };
+  }
+  const systemOut: AnthropicSystemInput | undefined =
+    system && system.length > 0
+      ? [{ type: "text", text: system, cache_control: EPHEMERAL_CACHE_CONTROL }]
+      : undefined;
+
+  if (strategy === "system") {
+    return { system: systemOut, messages };
+  }
+
+  // strategy === "system_and_last_user"
+  let lastUserIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]!.role === "user") {
+      lastUserIndex = i;
+      break;
+    }
+  }
+  if (lastUserIndex === -1) {
+    return { system: systemOut, messages };
+  }
+  const messagesOut: AnthropicMessageInput[] = messages.map((m, i) => {
+    if (i !== lastUserIndex) return m;
+    return {
+      role: m.role,
+      content: [
+        { type: "text", text: m.content, cache_control: EPHEMERAL_CACHE_CONTROL },
+      ],
+    };
+  });
+  return { system: systemOut, messages: messagesOut };
 }
 
 function normalizeAnthropicUsage(

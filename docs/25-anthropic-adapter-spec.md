@@ -200,7 +200,9 @@ Anthropic은 추가 헤더 제공:
 
 text 누적은 `content_block_delta`의 `delta.text`만 모으면 됨. tool/image 블록은 향후.
 
-## 6. Prompt caching (1차 어댑터 비대상이지만 명세)
+## 6. Prompt caching
+
+> v1 어댑터에서는 미포함이라고 적혀 있었으나, [PR #43](https://github.com/robin-main-hub/ai-orchestrator-lab/pull/43)으로 실제 옵션이 들어왔다. 구현된 동작은 §13 참조. 아래는 그 옵션이 내부적으로 만드는 wire shape.
 
 `anthropic-beta: prompt-caching-2024-07-31` 헤더를 보내고, request의 system/messages content block에 `cache_control: { type: "ephemeral" }`를 붙이면 다음 호출 시 cache_read_input_tokens로 회수.
 
@@ -212,7 +214,7 @@ text 누적은 `content_block_delta`의 `delta.text`만 모으면 됨. tool/imag
 }
 ```
 
-reseller는 보통 cache 지원 불확실 — 어댑터는 default off, 명시 옵션으로만 켠다.
+reseller는 보통 cache 지원 불확실 — 어댑터는 default off, 명시 옵션 (`enablePromptCaching: true`)으로만 켠다.
 
 ## 7. APIKey.fun Claude A/B reseller 차이
 
@@ -365,5 +367,89 @@ SMOKE_PROVIDER_PROFILE_ID=provider_apifun_claude pnpm server:smoke
 
 - streaming layer (`stream: true`) — v1 비대상, 별도 PR
 - tool use 실 처리 — 현재는 `stop_reason: tool_use` → failed 반환. 별도 PR
-- prompt caching 활성화 — `betaHeaders` 옵션 + content block에 `cache_control` 추가 패턴 별도 PR
-- contract test 적용 (`anthropicAdapter.contract.test.ts`) — `openAiCompatibleAdapter.contract.test.ts` 패턴 그대로
+- ~~prompt caching 활성화~~ — PR #43으로 구현. §13 참조.
+- ~~contract test 적용~~ — PR #33 (`anthropicAdapter.contract.test.ts` 6 cases) 머지됨.
+
+## 13. Prompt caching (post-merge — PR #43)
+
+`enablePromptCaching` 옵션이 추가되어 caller가 명시할 때만 caching이 켜진다 (default `false`, 100% backward compatible).
+
+### 13.1 구현 옵션
+
+| 옵션 | 타입 | 기본 | 설명 |
+|---|---|---|---|
+| `enablePromptCaching` | `boolean` | `false` | true일 때만 caching 활성. 끈 상태에서는 어떤 body/header 변경도 일어나지 않음. |
+| `cacheStrategy` | `"system" \| "system_and_last_user"` | `"system"` (caching 켜진 경우) | breakpoint 배치 전략. caching off면 무시. |
+
+활성화 시 어댑터의 행동:
+
+1. **헤더 자동 주입** — `anthropic-beta: prompt-caching-2024-07-31`이 자동 추가된다. 기존 `betaHeaders` 옵션에 이미 들어있으면 중복 없이 한 번만 보낸다 (reseller proxy가 중복 거부한 사례 방어).
+2. **system 변환** — string → `[{type:"text", text, cache_control:{type:"ephemeral"}}]`. system이 비어 있으면 (`undefined`) 그냥 그대로 두고 header만 보낸다 (no-op 안전).
+3. **system_and_last_user 모드** — 위 + messages 배열의 마지막 `user` 메시지 content를 같은 모양의 1-block 배열로 변환. 마지막 user 없으면 (defensive) skip. 다른 user/assistant 메시지는 string 그대로.
+
+> 두 strategy 모두 cache_control은 "마지막" 블록 하나에만 붙인다. Anthropic은 요청 시작부터 marked block까지를 cacheable prefix로 잡으므로 더 이른 위치에 breakpoint를 둘 필요가 없다.
+
+### 13.2 적용 예시 (시스템 + 마지막 user 캐싱)
+
+```ts
+const claude = new AnthropicAdapter({
+  profileId: "provider_anthropic_direct",
+  baseUrl: "https://api.anthropic.com",
+  enablePromptCaching: true,
+  cacheStrategy: "system_and_last_user",
+});
+```
+
+→ 요청 body:
+```jsonc
+{
+  "system": [
+    { "type": "text", "text": "long stable system prompt...", "cache_control": { "type": "ephemeral" } }
+  ],
+  "messages": [
+    { "role": "user", "content": "earlier user (uncached)" },
+    { "role": "assistant", "content": "earlier assistant" },
+    { "role": "user", "content": [
+      { "type": "text", "text": "second user (long doc + question)", "cache_control": { "type": "ephemeral" } }
+    ]}
+  ]
+}
+```
+
+→ 응답 usage:
+```jsonc
+{
+  "input_tokens": 12,
+  "output_tokens": 4,
+  "cache_creation_input_tokens": 800,    // 첫 호출
+  "cache_read_input_tokens": 1200          // 5분 내 재호출 시
+}
+```
+
+protocol `ProviderCompletionUsage`의 `cacheCreationInputTokens` / `cacheReadInputTokens`로 그대로 회수된다 (§3.3).
+
+### 13.3 reseller 활성화 가이드
+
+| Provider | 권장 |
+|---|---|
+| `api.anthropic.com` 직접 | `enablePromptCaching: true` 권장 (verified) |
+| APIKey.fun Claude A/B | default off 유지. cache 통과 여부 미검증 — 별도 smoke test 후 활성화 결정 |
+| 향후 reseller | 처음에는 off. 응답 usage의 `cache_creation_input_tokens > 0` + 재호출에서 `cache_read_input_tokens > 0` 확인되면 on |
+
+### 13.4 caller-level 진입 시점
+
+현재 server (`createAnthropicServerCompletion()`)는 `enablePromptCaching`을 켜지 **않는다** — debate engine / 외부 caller가 옵션화하기 전까지 default off 유지. caller가 다음 중 하나를 결정할 때 server config에 명시적으로 켠다:
+
+- agent persona가 안정화돼 system prompt가 자주 변경되지 않는다 (재호출 ROI 명확)
+- 첨부 문서 RAG 등 long-context 패턴이 1회 호출 안에서 같은 prefix를 가진다 (`system_and_last_user`)
+
+### 13.5 헬퍼 export
+
+테스트/외부 코드용으로 두 헬퍼가 모듈에서 직접 export된다:
+
+- `resolveBetaHeader(betaHeaders, enablePromptCaching)` — 어떤 anthropic-beta 헤더 값이 나가는지 단위 검증용
+- `applyCacheBreakpoints(system, messages, strategy)` — system/messages 변환 결과 검증용
+
+### 13.6 5개 결정 변경 사항
+
+§11.4 ("prompt-caching beta 1차 어댑터에 미포함") 결정은 PR #43에서 **번복**됨. 새 결정: **opt-in 옵션으로 노출하되 default false**. 이유: 옵션이 없으면 caller가 string→content block 변환을 직접 해야 하는데, 그건 어댑터 책임 영역. opt-in + 자동 변환이 caller 경험과 안전성 모두에서 우월.
