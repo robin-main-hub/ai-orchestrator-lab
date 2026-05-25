@@ -1,4 +1,11 @@
-import type { ApprovalRequest, PermissionDecision, PermissionLevel, TerminalCommandIntent, TmuxPaneRole } from "@ai-orchestrator/protocol";
+import type {
+  ApprovalRequest,
+  PermissionDecision,
+  PermissionLevel,
+  TerminalCommandIntent,
+  TerminalHostKind,
+  TmuxPaneRole,
+} from "@ai-orchestrator/protocol";
 import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
 import { createDgxOrchestratorJsonHeaders } from "./stage31DgxAuth";
 
@@ -9,6 +16,7 @@ export type DesktopTmuxDispatchRequest = {
   sessionId: string;
   terminalSessionId?: string;
   role: TmuxPaneRole;
+  host?: TerminalHostKind;
   paneId?: string;
   commandPreview: string;
   approvalState?: "not_required" | "required" | "approved" | "rejected" | "expired";
@@ -37,6 +45,7 @@ export type DesktopTmuxCaptureRequest = {
   sessionId: string;
   terminalSessionId?: string;
   role: TmuxPaneRole;
+  host?: TerminalHostKind;
   paneId?: string;
   lines?: number;
   tmuxSessionName?: string;
