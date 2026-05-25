@@ -244,9 +244,7 @@ function renderStage7ObsidianMarkdown({
     agentRun ? `- ${agentRun.id}: ${agentRun.status} / verifier ${agentRun.verifier.status}` : "- not created",
     "",
     "## Recall Trace",
-    ...memoryInspector.trace.results.map((result) =>
-      `- ${result.usedInDecision ? "used" : "blocked"} :: ${result.record.title} (${result.record.layer}, ${result.reason})`,
-    ),
+    ...formatRecallTrace(memoryInspector),
     "",
     "## Memory Context",
     `- summary: ${memoryInspector.contextPacket.summary}`,
@@ -306,6 +304,7 @@ function renderStage7NotionSummary({
         id: memoryInspector.trace.id,
         used: memoryInspector.trace.results.filter((result) => result.usedInDecision).length,
         blocked: memoryInspector.blockedCount,
+        fusion: formatRecallFusionProjection(memoryInspector),
       },
       memoryContext: {
         id: memoryInspector.contextPacket.id,
@@ -371,6 +370,7 @@ function renderStage7MobileDashboard({
         relationLinks: memoryInspector.contextPacket.relationIds.length,
         health: memoryInspector.stats.health,
         issues: memoryInspector.issues.length,
+        fusion: formatRecallFusionProjection(memoryInspector).slice(0, 5),
       },
     },
     null,
@@ -434,6 +434,36 @@ function countDelegationsByStatus(records: Stage7DelegationRecord[]) {
       followup_failed: 0,
     },
   );
+}
+
+function formatRecallTrace(memoryInspector: Stage6MemoryInspector) {
+  if (memoryInspector.trace.results.length === 0) {
+    return ["- none"];
+  }
+
+  return memoryInspector.trace.results.map((result) => {
+    const fusion = result.fusionDetail?.views.length
+      ? ` / fusion: ${result.fusionDetail.views
+          .map((view) => `${view.view}#${view.rank}:${Number(view.rawScore.toFixed(3))}`)
+          .join(", ")}`
+      : " / fusion: pinned-or-active";
+    return `- ${result.usedInDecision ? "used" : "blocked"} :: ${result.record.title} (${result.record.layer}, score ${Number(result.score.toFixed(3))}, ${result.reason}${fusion})`;
+  });
+}
+
+function formatRecallFusionProjection(memoryInspector: Stage6MemoryInspector) {
+  return memoryInspector.trace.results.map((result) => ({
+    recordId: result.record.id,
+    title: result.record.title,
+    usedInDecision: result.usedInDecision,
+    score: Number(result.score.toFixed(4)),
+    mode: result.fusionDetail?.fusionMode ?? "none",
+    views: (result.fusionDetail?.views ?? []).map((view) => ({
+      view: view.view,
+      rank: view.rank,
+      rawScore: Number(view.rawScore.toFixed(4)),
+    })),
+  }));
 }
 
 function delegationStatusFromEventType(type: string): Stage7DelegationRecord["status"] {
