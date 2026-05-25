@@ -35,6 +35,22 @@ export type Stage7BackupQueueItem = {
   reason: string;
 };
 
+export type Stage7DelegationRecord = {
+  id: string;
+  type: string;
+  createdAt: string;
+  sourceAgentId?: string;
+  sourceRole?: string;
+  target?: string;
+  targetAgentId?: string;
+  targetRole?: string;
+  status: "detected" | "dispatched" | "succeeded" | "failed" | "blocked" | "unknown_target" | "self_blocked" | "followup_completed" | "followup_failed";
+  authorityLevel?: string;
+  route?: string;
+  reason?: string;
+  responsePreview?: string;
+};
+
 export type Stage7BackupInput = {
   sessionId?: string;
   messages: ConversationMessage[];
@@ -87,6 +103,7 @@ export function createStage7BackupSnapshot({
   });
   const mobileContent = renderStage7MobileDashboard({
     packet,
+    events,
     runtime,
     memoryInspector,
     mobilePolicy,
@@ -196,6 +213,7 @@ function renderStage7ObsidianMarkdown({
   const safeMessages = redactForEventStore(messages) as ConversationMessage[];
   const safePacket = redactForEventStore(packet) as CodingPacket;
   const safeEvents = redactForEventStore(events.slice(0, 10)) as EventEnvelope[];
+  const safeDelegations = collectDelegationRecords(events);
 
   return [
     "---",
@@ -249,6 +267,9 @@ function renderStage7ObsidianMarkdown({
     "## Memory Reflection Issues",
     ...formatMemoryIssues(memoryInspector).slice(0, 8),
     "",
+    "## Delegation Timeline",
+    ...formatDelegationRecords(safeDelegations).slice(0, 12),
+    "",
     "## Conversation",
     ...safeMessages.map((message) => `- **${message.role}**: ${message.content}`),
     "",
@@ -266,6 +287,7 @@ function renderStage7NotionSummary({
   createdAt,
 }: Pick<Stage7BackupInput, "packet" | "events" | "agentRun" | "memoryInspector"> & { createdAt: string }) {
   const safePacket = redactForEventStore(packet) as CodingPacket;
+  const delegationRecords = collectDelegationRecords(events);
   return JSON.stringify(
     {
       title: safePacket.goal,
@@ -275,6 +297,11 @@ function renderStage7NotionSummary({
       constraints: safePacket.constraints.slice(0, 5),
       verification: safePacket.verificationPlan.slice(0, 5),
       eventCount: events.length,
+      delegation: {
+        total: delegationRecords.length,
+        byStatus: countDelegationsByStatus(delegationRecords),
+        recent: delegationRecords.slice(-8),
+      },
       memoryTrace: {
         id: memoryInspector.trace.id,
         used: memoryInspector.trace.results.filter((result) => result.usedInDecision).length,
@@ -308,17 +335,20 @@ function renderStage7NotionSummary({
 
 function renderStage7MobileDashboard({
   packet,
+  events,
   runtime,
   memoryInspector,
   mobilePolicy,
   createdAt,
 }: {
   packet: CodingPacket;
+  events: EventEnvelope[];
   runtime: RuntimeSnapshot;
   memoryInspector: Stage6MemoryInspector;
   mobilePolicy: MobileActionPolicy;
   createdAt: string;
 }) {
+  const delegationRecords = collectDelegationRecords(events);
   return JSON.stringify(
     {
       title: packet.goal,
@@ -329,6 +359,11 @@ function renderStage7MobileDashboard({
         authority: runtime.syncTopology.authorityLabel,
       },
       allowedActions: mobilePolicy,
+      delegation: {
+        total: delegationRecords.length,
+        pending: delegationRecords.filter((record) => record.status === "detected" || record.status === "dispatched").length,
+        recent: delegationRecords.slice(-5),
+      },
       memory: {
         records: memoryInspector.records.length,
         blocked: memoryInspector.blockedCount,
@@ -341,6 +376,105 @@ function renderStage7MobileDashboard({
     null,
     2,
   );
+}
+
+function collectDelegationRecords(events: EventEnvelope[]): Stage7DelegationRecord[] {
+  const safeEvents = redactForEventStore(events) as EventEnvelope[];
+  return safeEvents
+    .filter((event) => event.type.startsWith("agent.delegation."))
+    .map((event) => {
+      const payload = asRecord(event.payload);
+      return {
+        id: event.id,
+        type: event.type,
+        createdAt: event.createdAt,
+        sourceAgentId: getString(payload, "sourceAgentId"),
+        sourceRole: getString(payload, "sourceRole"),
+        target: getString(payload, "target"),
+        targetAgentId: getString(payload, "targetAgentId"),
+        targetRole: getString(payload, "targetRole"),
+        status: delegationStatusFromEventType(event.type),
+        authorityLevel: getString(payload, "authorityLevel"),
+        route: getString(payload, "route"),
+        reason: getString(payload, "reason") ?? getString(payload, "error"),
+        responsePreview: truncate(getString(payload, "responsePreview") ?? getString(payload, "finalContent") ?? "", 240),
+      };
+    });
+}
+
+function formatDelegationRecords(records: Stage7DelegationRecord[]) {
+  if (records.length === 0) {
+    return ["- none"];
+  }
+
+  return records.map((record) => {
+    const target = record.targetAgentId ?? record.target ?? "unknown";
+    const route = record.route ? ` / ${record.route}` : "";
+    const authority = record.authorityLevel ? ` / ${record.authorityLevel}` : "";
+    const reason = record.reason ? ` :: ${record.reason}` : "";
+    return `- ${record.createdAt} :: ${record.status} :: ${record.sourceAgentId ?? "unknown"} -> ${target}${authority}${route}${reason}`;
+  });
+}
+
+function countDelegationsByStatus(records: Stage7DelegationRecord[]) {
+  return records.reduce<Record<Stage7DelegationRecord["status"], number>>(
+    (acc, record) => {
+      acc[record.status] += 1;
+      return acc;
+    },
+    {
+      detected: 0,
+      dispatched: 0,
+      succeeded: 0,
+      failed: 0,
+      blocked: 0,
+      unknown_target: 0,
+      self_blocked: 0,
+      followup_completed: 0,
+      followup_failed: 0,
+    },
+  );
+}
+
+function delegationStatusFromEventType(type: string): Stage7DelegationRecord["status"] {
+  switch (type) {
+    case "agent.delegation.detected":
+      return "detected";
+    case "agent.delegation.dispatched":
+      return "dispatched";
+    case "agent.delegation.succeeded":
+      return "succeeded";
+    case "agent.delegation.failed":
+      return "failed";
+    case "agent.delegation.blocked":
+      return "blocked";
+    case "agent.delegation.unknown_target":
+      return "unknown_target";
+    case "agent.delegation.self_blocked":
+      return "self_blocked";
+    case "agent.delegation.followup.completed":
+      return "followup_completed";
+    case "agent.delegation.followup.failed":
+      return "followup_failed";
+    default:
+      return "failed";
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function getString(value: Record<string, unknown>, key: string) {
+  const candidate = value[key];
+  return typeof candidate === "string" && candidate.length > 0 ? candidate : undefined;
+}
+
+function truncate(value: string, max: number): string {
+  if (value.length <= max) {
+    return value;
+  }
+  return `${value.slice(0, Math.max(0, max - 1))}…`;
 }
 
 function formatMemoryRelations(memoryInspector: Stage6MemoryInspector) {

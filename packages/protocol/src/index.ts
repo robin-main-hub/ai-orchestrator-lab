@@ -345,8 +345,14 @@ export const debateUtteranceSchema = z.object({
   id: z.string(),
   agentId: z.string(),
   roundId: z.string(),
+  parentUtteranceId: z.string().optional(),
   content: z.string(),
   tags: z.array(debateTagSchema),
+  acceptedBy: z.array(z.string()).optional(),
+  rejectedBy: z.array(z.string()).optional(),
+  decisionId: z.string().optional(),
+  evidenceRefIds: z.array(z.string()).optional(),
+  codingImpactRefs: z.array(z.string()).optional(),
   createdAt: z.string(),
 });
 export type DebateUtterance = z.infer<typeof debateUtteranceSchema>;
@@ -1286,6 +1292,24 @@ export const redactionRuleSchema = z.object({
 });
 export type RedactionRule = z.infer<typeof redactionRuleSchema>;
 
+export const approvalReplayKindSchema = z.enum([
+  "provider_completion",
+  "agent_delegation",
+  "remote_run",
+  "tmux_dispatch",
+]);
+export type ApprovalReplayKind = z.infer<typeof approvalReplayKindSchema>;
+
+export const approvalReplayRequestSchema = z
+  .object({
+    kind: approvalReplayKindSchema,
+    endpoint: z.string().min(1).max(512),
+    method: z.enum(["POST"]),
+    payload: z.unknown(),
+  })
+  .strict();
+export type ApprovalReplayRequest = z.infer<typeof approvalReplayRequestSchema>;
+
 export const approvalRequestSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
@@ -1300,6 +1324,7 @@ export const approvalRequestSchema = z.object({
   state: approvalStateSchema,
   reason: z.string(),
   costEstimateTokens: z.number().int().nonnegative().optional(),
+  replay: approvalReplayRequestSchema.optional(),
   ttlSeconds: z.number().int().positive().optional(),
   createdAt: z.string(),
   expiresAt: z.string().optional(),
@@ -1343,6 +1368,8 @@ export type ApprovalQueueItem = {
   state: ApprovalState;
   createdAt: string;
   expiresAt?: string;
+  replayKind?: ApprovalReplayKind;
+  replayEndpoint?: string;
 };
 
 export type PermissionMatrixSnapshot = {
@@ -1428,8 +1455,80 @@ export type TerminalSessionStatus = z.infer<typeof terminalSessionStatusSchema>;
 export const terminalPaneStatusSchema = z.enum(["planned", "idle", "running", "blocked", "capturing", "stale", "closed"]);
 export type TerminalPaneStatus = z.infer<typeof terminalPaneStatusSchema>;
 
-export const terminalCommandDispatchStateSchema = z.enum(["recorded", "pending_approval", "blocked", "sent", "failed"]);
+export const terminalCommandDispatchStateSchema = z.enum([
+  "recorded",
+  "pending_approval",
+  "blocked",
+  "dry_run",
+  "sent",
+  "failed",
+]);
 export type TerminalCommandDispatchState = z.infer<typeof terminalCommandDispatchStateSchema>;
+
+export const terminalTimelineBlockKindSchema = z.enum([
+  "planning",
+  "command_intent",
+  "approval",
+  "dry_run",
+  "dispatch",
+  "capture",
+  "handoff",
+  "note",
+]);
+export type TerminalTimelineBlockKind = z.infer<typeof terminalTimelineBlockKindSchema>;
+
+export const terminalTimelineBlockStatusSchema = z.enum([
+  "planned",
+  "pending_approval",
+  "blocked",
+  "dry_run",
+  "running",
+  "completed",
+  "failed",
+  "stale",
+]);
+export type TerminalTimelineBlockStatus = z.infer<typeof terminalTimelineBlockStatusSchema>;
+
+export const terminalTimelineBlockSchema = z
+  .object({
+    id: z.string(),
+    sessionId: z.string(),
+    terminalSessionId: z.string(),
+    paneId: z.string(),
+    role: tmuxPaneRoleSchema,
+    host: terminalHostKindSchema,
+    kind: terminalTimelineBlockKindSchema,
+    status: terminalTimelineBlockStatusSchema,
+    title: z.string(),
+    summary: z.string(),
+    parentBlockId: z.string().optional(),
+    commandIntentId: z.string().optional(),
+    approvalId: z.string().optional(),
+    runId: z.string().optional(),
+    relatedEventIds: z.array(z.string()),
+    outputPreview: z.string().optional(),
+    redactionApplied: z.boolean(),
+    startedAt: z.string().optional(),
+    completedAt: z.string().optional(),
+    createdAt: z.string(),
+  })
+  .strict();
+export type TerminalTimelineBlock = z.infer<typeof terminalTimelineBlockSchema>;
+
+export const terminalPaneTimelineSchema = z
+  .object({
+    id: z.string(),
+    sessionId: z.string(),
+    terminalSessionId: z.string(),
+    paneId: z.string(),
+    role: tmuxPaneRoleSchema,
+    host: terminalHostKindSchema,
+    blocks: z.array(terminalTimelineBlockSchema),
+    lastBlockId: z.string().optional(),
+    updatedAt: z.string(),
+  })
+  .strict();
+export type TerminalPaneTimeline = z.infer<typeof terminalPaneTimelineSchema>;
 
 export const tmuxSessionRefSchema = z.object({
   id: z.string(),
@@ -1494,9 +1593,98 @@ export type TerminalPaneOutputCapturedEventPayload = {
   capturedAt: string;
 };
 
-export type TerminalCommandIntentEventPayload = {
-  intent: TerminalCommandIntent;
-};
+export const terminalCommandEventTypeSchema = z.enum([
+  "terminal.command.intent.created",
+  "terminal.command.blocked",
+  "terminal.command.dry_run",
+  "terminal.command.sent",
+  "terminal.command.failed",
+]);
+export type TerminalCommandEventType = z.infer<typeof terminalCommandEventTypeSchema>;
+
+export const terminalCommandIntentEventPayloadSchema = z
+  .object({
+    intent: terminalCommandIntentSchema,
+    role: tmuxPaneRoleSchema,
+    host: terminalHostKindSchema,
+    tmuxSessionName: z.string(),
+    rawCommandQuarantined: z.boolean(),
+  })
+  .strict();
+export type TerminalCommandIntentEventPayload = z.infer<typeof terminalCommandIntentEventPayloadSchema>;
+
+export const terminalCommandBlockedEventPayloadSchema = z
+  .object({
+    intentId: z.string(),
+    terminalSessionId: z.string(),
+    paneId: z.string(),
+    role: tmuxPaneRoleSchema,
+    host: terminalHostKindSchema,
+    reason: z.string(),
+    redactedCommandPreview: z.string(),
+  })
+  .strict();
+export type TerminalCommandBlockedEventPayload = z.infer<typeof terminalCommandBlockedEventPayloadSchema>;
+
+export const terminalCommandDryRunEventPayloadSchema = z
+  .object({
+    intentId: z.string(),
+    terminalSessionId: z.string(),
+    paneId: z.string(),
+    role: tmuxPaneRoleSchema,
+    host: terminalHostKindSchema,
+    reason: z.string(),
+    attempted: z.literal(false),
+    redactedCommandPreview: z.string(),
+  })
+  .strict();
+export type TerminalCommandDryRunEventPayload = z.infer<typeof terminalCommandDryRunEventPayloadSchema>;
+
+export const terminalCommandSentEventPayloadSchema = z
+  .object({
+    intentId: z.string(),
+    terminalSessionId: z.string(),
+    paneId: z.string(),
+    role: tmuxPaneRoleSchema,
+    host: terminalHostKindSchema,
+    stdoutPreview: z.string().optional(),
+    stderrPreview: z.string().optional(),
+  })
+  .strict();
+export type TerminalCommandSentEventPayload = z.infer<typeof terminalCommandSentEventPayloadSchema>;
+
+export const terminalCommandFailedEventPayloadSchema = terminalCommandSentEventPayloadSchema
+  .extend({
+    reason: z.string(),
+  })
+  .strict();
+export type TerminalCommandFailedEventPayload = z.infer<typeof terminalCommandFailedEventPayloadSchema>;
+
+export type TerminalCommandEventPayload =
+  | TerminalCommandIntentEventPayload
+  | TerminalCommandBlockedEventPayload
+  | TerminalCommandDryRunEventPayload
+  | TerminalCommandSentEventPayload
+  | TerminalCommandFailedEventPayload;
+
+export function parseTerminalCommandEventPayload(
+  type: TerminalCommandEventType,
+  payload: unknown,
+): TerminalCommandEventPayload {
+  if (type === "terminal.command.intent.created") {
+    return terminalCommandIntentEventPayloadSchema.parse(payload);
+  }
+  if (type === "terminal.command.blocked") {
+    return terminalCommandBlockedEventPayloadSchema.parse(payload);
+  }
+  if (type === "terminal.command.dry_run") {
+    return terminalCommandDryRunEventPayloadSchema.parse(payload);
+  }
+  if (type === "terminal.command.sent") {
+    return terminalCommandSentEventPayloadSchema.parse(payload);
+  }
+  return terminalCommandFailedEventPayloadSchema.parse(payload);
+}
 
 export type RunRequestedEventPayload = {
   runId: string;

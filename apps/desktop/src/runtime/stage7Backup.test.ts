@@ -45,6 +45,52 @@ const events: EventEnvelope[] = [
     sourceTrust: "trusted",
     redacted: false,
   },
+  {
+    id: "event_delegation_detected",
+    sessionId: "session_desktop_001",
+    type: "agent.delegation.detected",
+    payload: {
+      sourceAgentId: "agent_chaerin",
+      sourceRole: "companion",
+      authorityLevel: "orchestrator_plus",
+      targets: ["researcher"],
+    },
+    createdAt,
+    source: "agent",
+    sourceTrust: "trusted",
+    redacted: false,
+  },
+  {
+    id: "event_delegation_succeeded",
+    sessionId: "session_desktop_001",
+    type: "agent.delegation.succeeded",
+    payload: {
+      sourceAgentId: "agent_chaerin",
+      target: "researcher",
+      targetAgentId: "agent_researcher",
+      targetRole: "researcher",
+      route: "server_proxy",
+      responsePreview: "research done with sk-delegation-secret-token",
+    },
+    createdAt,
+    source: "agent",
+    sourceTrust: "trusted",
+    redacted: false,
+  },
+  {
+    id: "event_delegation_blocked",
+    sessionId: "session_desktop_001",
+    type: "agent.delegation.blocked",
+    payload: {
+      sourceAgentId: "agent_builder",
+      target: "executor",
+      reason: "target role executor requires orchestrator_plus authority",
+    },
+    createdAt,
+    source: "agent",
+    sourceTrust: "trusted",
+    redacted: false,
+  },
 ];
 
 const projections: BackupProjection[] = [
@@ -120,6 +166,10 @@ describe("stage7 backup projections", () => {
     expect(obsidianContent).toContain("## Memory Context");
     expect(obsidianContent).toContain("## Memory Relations");
     expect(obsidianContent).toContain("## Memory Reflection Issues");
+    expect(obsidianContent).toContain("## Delegation Timeline");
+    expect(obsidianContent).toContain("agent_chaerin -> agent_researcher");
+    expect(obsidianContent).toContain("blocked :: agent_builder -> executor");
+    expect(obsidianContent).not.toContain("sk-delegation-secret-token");
     expect(snapshot.artifacts.find((artifact) => artifact.target === "notion")?.status).toBe("queued");
     expect(snapshot.mobilePolicy.canTypeTerminal).toBe(false);
     expect(snapshot.mobilePolicy.canViewSecrets).toBe(false);
@@ -162,7 +212,12 @@ describe("stage7 backup projections", () => {
     expect(notionContent).toContain("memoryContext");
     expect(notionContent).toContain("memoryRelations");
     expect(notionContent).toContain("memoryIssues");
+    expect(notionContent).toContain("\"delegation\"");
+    expect(notionContent).toContain("\"succeeded\": 1");
+    expect(notionContent).not.toContain("sk-delegation-secret-token");
     expect(mobileContent).toContain("relationLinks");
     expect(mobileContent).toContain("health");
+    expect(mobileContent).toContain("\"delegation\"");
+    expect(mobileContent).toContain("\"total\": 3");
   });
 });
