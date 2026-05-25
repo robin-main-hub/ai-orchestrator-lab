@@ -164,6 +164,8 @@ describe("stage7 backup projections", () => {
     expect(obsidian?.contentPreview).toContain("[REDACTED:api_key]");
     expect(obsidianContent).not.toContain("sk-super-secret-token");
     expect(obsidianContent).toContain("## Memory Context");
+    expect(obsidianContent).toContain("fusion:");
+    expect(obsidianContent).toContain("score");
     expect(obsidianContent).toContain("## Memory Relations");
     expect(obsidianContent).toContain("## Memory Reflection Issues");
     expect(obsidianContent).toContain("## Delegation Timeline");
@@ -210,12 +212,15 @@ describe("stage7 backup projections", () => {
     const mobileContent = getArtifactContent(snapshot, mobileArtifact?.id);
 
     expect(notionContent).toContain("memoryContext");
+    expect(notionContent).toContain("\"fusion\"");
+    expect(notionContent).toContain("\"views\"");
     expect(notionContent).toContain("memoryRelations");
     expect(notionContent).toContain("memoryIssues");
     expect(notionContent).toContain("\"delegation\"");
     expect(notionContent).toContain("\"succeeded\": 1");
     expect(notionContent).not.toContain("sk-delegation-secret-token");
     expect(mobileContent).toContain("relationLinks");
+    expect(mobileContent).toContain("\"fusion\"");
     expect(mobileContent).toContain("health");
     expect(mobileContent).toContain("\"delegation\"");
     expect(mobileContent).toContain("\"total\": 3");
