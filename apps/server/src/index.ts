@@ -27,7 +27,6 @@ import type {
   PermissionActor,
   PermissionDecision,
   PermissionLevel,
-  ProviderCompletionMessage,
   ProviderCompletionRequest,
   ProviderCompletionResponse,
   ProviderKind,
@@ -2567,17 +2566,6 @@ async function resolveServerProviderOAuthAvailability(
 const defaultDgxSystemPrompt =
   "Answer directly in Korean when the user writes Korean. Do not reveal reasoning or a thinking process.";
 
-type AnthropicMessageResponse = {
-  content?: Array<{
-    type?: string;
-    text?: string;
-  }>;
-  usage?: {
-    input_tokens?: number;
-    output_tokens?: number;
-  };
-};
-
 export type DgxProviderCompletionOptions = {
   now?: string;
   vllmBaseUrl?: string;
@@ -2702,90 +2690,6 @@ export async function createServerProviderProxyCompletionResponse(
   });
 }
 
-// === LEGACY ANTHROPIC HELPERS — dead after this PR ===
-//
-// Pre-adapter raw-fetch path for anthropic_messages providers. Both call
-// sites (createServerProviderProxyCompletionResponse +
-// createServerProviderModelDiscoveryResponse) now route through
-// AnthropicAdapter, so the block below and the supporting helpers
-// (createAnthropicMessagesEndpoint, createAnthropicProviderHeaders,
-// createAnthropicMessagesRequestBody, extractAnthropicMessagesContent,
-// extractAnthropicMessagesUsage, AnthropicMessageResponse) are
-// unreachable. Kept in this commit to keep the diff focused; removed in
-// a follow-up cleanup PR symmetric with #30.
-async function _legacyAnthropicMessagesCompletion(
-  request: ProviderCompletionRequest,
-  config: ServerProviderProxyConfig,
-  apiKey: string | undefined,
-  fetchImpl: FetchLike,
-  createdAt: string,
-): Promise<ProviderCompletionResponse> {
-  const endpoint = createAnthropicMessagesEndpoint(config);
-  try {
-    const response = await fetchImpl(endpoint, {
-      method: "POST",
-      headers: createAnthropicProviderHeaders(apiKey),
-      body: JSON.stringify(createAnthropicMessagesRequestBody(request.modelId, request.messages)),
-    });
-    const rawText = await response.text();
-
-    if (!response.ok) {
-      return {
-        id: `provider_completion_response_${crypto.randomUUID()}`,
-        requestId: request.id,
-        providerProfileId: request.providerProfileId,
-        modelId: request.modelId,
-        route: "server_proxy",
-        status: "failed",
-        endpoint,
-        error: `DGX-02 provider proxy failed: ${response.status} ${redactSecretsForLog(rawText.slice(0, 240))}`,
-        createdAt,
-      };
-    }
-
-    const parsed = JSON.parse(rawText) as AnthropicMessageResponse;
-    const content = extractAnthropicMessagesContent(parsed);
-    if (!content) {
-      return {
-        id: `provider_completion_response_${crypto.randomUUID()}`,
-        requestId: request.id,
-        providerProfileId: request.providerProfileId,
-        modelId: request.modelId,
-        route: "server_proxy",
-        status: "failed",
-        endpoint,
-        error: "DGX-02 provider proxy returned an empty response",
-        createdAt,
-      };
-    }
-
-    return {
-      id: `provider_completion_response_${crypto.randomUUID()}`,
-      requestId: request.id,
-      providerProfileId: request.providerProfileId,
-      modelId: request.modelId,
-      route: "server_proxy",
-      status: "succeeded",
-      content,
-      endpoint,
-      usage: extractAnthropicMessagesUsage(parsed),
-      createdAt,
-    };
-  } catch (error) {
-    return {
-      id: `provider_completion_response_${crypto.randomUUID()}`,
-      requestId: request.id,
-      providerProfileId: request.providerProfileId,
-      modelId: request.modelId,
-      route: "server_proxy",
-      status: "failed",
-      endpoint,
-      error: error instanceof Error ? error.message : String(error),
-      createdAt,
-    };
-  }
-}
-
 function createOpenAICompatibleServerCompletion(params: {
   request: ProviderCompletionRequest;
   profileId: string;
@@ -2874,59 +2778,6 @@ function createAnthropicServerCompletion(params: {
       },
     },
   );
-}
-
-// Dead after this PR — only referenced by _legacyAnthropicMessagesCompletion.
-// Removed in the follow-up cleanup PR.
-function createAnthropicMessagesEndpoint(config: ServerProviderProxyConfig) {
-  const baseUrl = config.baseUrl.replace(/\/$/, "");
-  return `${baseUrl}/v1/messages`;
-}
-
-function createAnthropicProviderHeaders(apiKey?: string) {
-  const headers: Record<string, string> = {
-    "content-type": "application/json",
-    "anthropic-version": "2023-06-01",
-  };
-
-  if (apiKey) {
-    headers.authorization = `Bearer ${apiKey}`;
-  }
-
-  return headers;
-}
-
-function createAnthropicMessagesRequestBody(modelId: string, messages: ProviderCompletionMessage[]) {
-  return {
-    model: modelId,
-    system: defaultDgxSystemPrompt,
-    messages: messages.slice(-8).map((message) => ({
-      role: message.role === "assistant" ? "assistant" : "user",
-      content: message.content,
-    })),
-    max_tokens: 512,
-    temperature: 0.2,
-  };
-}
-
-function extractAnthropicMessagesContent(parsed: AnthropicMessageResponse) {
-  return parsed.content
-    ?.map((entry) => entry.text)
-    .filter((text): text is string => Boolean(text?.trim()))
-    .join("\n")
-    .trim();
-}
-
-function extractAnthropicMessagesUsage(parsed: AnthropicMessageResponse) {
-  const usage = parsed.usage;
-  return {
-    inputTokens: usage?.input_tokens,
-    outputTokens: usage?.output_tokens,
-    totalTokens:
-      typeof usage?.input_tokens === "number" && typeof usage.output_tokens === "number"
-        ? usage.input_tokens + usage.output_tokens
-        : undefined,
-  };
 }
 
 function parsePositiveInteger(value: string | undefined): number | undefined {
