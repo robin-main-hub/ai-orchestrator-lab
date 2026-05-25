@@ -54,6 +54,28 @@ body {
     var(--bg);
 }
 
+.boot-error {
+  display: grid;
+  gap: 10px;
+  max-width: 720px;
+  margin: 96px auto;
+  padding: 20px;
+  border: 1px solid var(--rose);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--rose) 12%, var(--panel));
+  color: var(--text);
+}
+
+.boot-error strong {
+  color: var(--rose);
+}
+
+.boot-error span {
+  color: var(--muted);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  word-break: break-word;
+}
+
 button,
 input,
 textarea {
