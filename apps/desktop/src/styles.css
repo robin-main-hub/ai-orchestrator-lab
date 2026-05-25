@@ -861,6 +861,76 @@ button {
   opacity: 0.5;
 }
 
+.server-approval-outcomes {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.server-approval-outcomes > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--subtle);
+  font-size: 10px;
+}
+
+.server-approval-outcomes > header strong {
+  color: var(--cyan);
+  font-size: 10px;
+}
+
+.server-approval-outcomes article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #001f25;
+}
+
+.server-approval-outcomes article div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.server-approval-outcomes article strong,
+.server-approval-outcomes article span,
+.server-approval-outcomes article small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-approval-outcomes article strong {
+  color: var(--text);
+  font-size: 10px;
+}
+
+.server-approval-outcomes article span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.server-approval-outcomes article small {
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--cyan);
+  background: rgba(0, 229, 255, 0.08);
+  font-size: 9px;
+}
+
+.server-approval-outcomes article.server-approval-outcome-failed small,
+.server-approval-outcomes article.server-approval-outcome-blocked small {
+  color: #ff8f8f;
+  background: rgba(255, 92, 92, 0.1);
+}
+
 .project-rail-panel,
 .channel-rail-panel,
 .backup-rail-panel,
