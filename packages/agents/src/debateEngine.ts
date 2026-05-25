@@ -103,6 +103,7 @@ const DEFAULT_ROUTE_PREFERENCE: ProviderCompletionRoute = "server_proxy";
 const ROUND_ROLE_PRIORITY: Record<DebateRoundKind, string[]> = {
   problem_definition: [
     "orchestrator",
+    "companion",
     "architect",
     "researcher",
     "domain_expert",
@@ -110,6 +111,7 @@ const ROUND_ROLE_PRIORITY: Record<DebateRoundKind, string[]> = {
   ],
   initial_proposals: [
     "orchestrator",
+    "companion",
     "architect",
     "builder",
     "skeptic",
@@ -118,15 +120,17 @@ const ROUND_ROLE_PRIORITY: Record<DebateRoundKind, string[]> = {
   ],
   cross_critique: [
     "orchestrator",
+    "companion",
     "skeptic",
     "reviewer",
     "auditor",
     "risk_officer",
     "watchdog",
   ],
-  orchestrator_summary: ["orchestrator", "mediator", "memory_curator"],
+  orchestrator_summary: ["orchestrator", "companion", "mediator", "memory_curator"],
   refinement: [
     "orchestrator",
+    "companion",
     "architect",
     "builder",
     "reviewer",
@@ -135,6 +139,7 @@ const ROUND_ROLE_PRIORITY: Record<DebateRoundKind, string[]> = {
   ],
   final_decision: [
     "orchestrator",
+    "companion",
     "architect",
     "reviewer",
     "auditor",
@@ -142,6 +147,7 @@ const ROUND_ROLE_PRIORITY: Record<DebateRoundKind, string[]> = {
   ],
   coding_packet: [
     "orchestrator",
+    "companion",
     "architect",
     "builder",
     "reviewer",
