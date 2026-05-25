@@ -65,13 +65,12 @@ export type AgentProfilePack = {
   configFileIds: string[];
   tags: string[];
 };
+/**
+ * Tri-state used by MetaOnboardingSignal. The legacy WindowAuditItem
+ * shared this enum but is removed (no production consumers — see
+ * design-decisions §1, WindowChecklist deletion).
+ */
 export type WindowAuditStatus = "ready" | "partial" | "blocked";
-export type WindowAuditItem = {
-  id: string;
-  label: string;
-  status: WindowAuditStatus;
-  detail: string;
-};
 export type MetaOnboardingSignal = {
   id: string;
   label: string;
