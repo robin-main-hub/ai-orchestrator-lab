@@ -52,6 +52,11 @@ export {
   OllamaAdapter,
   type OllamaAdapterOptions,
 } from "./ollamaAdapter.js";
+export {
+  createOpenRouterAdapter,
+  OPENROUTER_RECOMMENDED_FALLBACK_MODELS,
+  type OpenRouterAdapterOptions,
+} from "./openRouterAdapter.js";
 
 /**
  * @deprecated The legacy adapter shape. New adapters should implement
