@@ -36,14 +36,7 @@ import {
   createStage5DgxBridge,
   type Stage5DgxBridge,
 } from "./runtime/stage5Runtime";
-import {
-  activateMemoryRecord,
-  createStage6MemoryInspector,
-  forgetMemoryRecord,
-  pinMemoryRecord,
-  rememberStage6Context,
-  type Stage6MemoryInspector,
-} from "./runtime/stage6Memory";
+import type { Stage6MemoryInspector } from "./runtime/stage6Memory";
 import {
   applyStage7ProjectionStatuses,
   createStage7BackupSnapshot,
@@ -93,7 +86,6 @@ import type {
   EventEnvelope,
   EventSource,
   ExternalApprovalItem,
-  MemoryRecord,
   ModelDiscoverySnapshot,
   ProviderProfile,
   ReviewMode,
@@ -150,7 +142,6 @@ import {
   navItems,
   terminalSlots,
 } from "./seeds/conversation";
-import { initialMemoryRecords } from "./seeds/memory";
 import { ApprovalDrawer } from "./components/ApprovalDrawer";
 import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
 import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
@@ -176,6 +167,7 @@ import { TmuxSwarmBoard } from "./components/TmuxSwarmBoard";
 import { useAgentConfigFilesController } from "./hooks/useAgentConfigFilesController";
 import { useApprovalQueueController } from "./hooks/useApprovalQueueController";
 import { useDgxEventSyncController } from "./hooks/useDgxEventSyncController";
+import { useMemoryController } from "./hooks/useMemoryController";
 import { createAuthBinding, useProviderRegistryController } from "./hooks/useProviderRegistryController";
 import { useWorkItemsController } from "./hooks/useWorkItemsController";
 import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbenchDerived";
@@ -226,7 +218,6 @@ export function App() {
     setRuntimeSnapshotState,
     refreshSessionIndex: handleRefreshSessionIndex,
   });
-  const [memoryRecords, setMemoryRecords] = useState<MemoryRecord[]>(initialMemoryRecords);
   const [ingressSnapshot, setIngressSnapshot] = useState<Stage8IngressSnapshot>(initialIngressSnapshot);
   const [rebootApprovals, setRebootApprovals] = useState<ExternalApprovalItem[]>([]);
   const [rebootWatchdogs, setRebootWatchdogs] = useState<DeviceRebootWatchdog[]>([]);
@@ -326,18 +317,23 @@ export function App() {
     runtimeUpdatedAt: runtimeSnapshotState.updatedAt,
     selectedAgent,
   });
-  const memoryInspector = useMemo(
-    () =>
-      createStage6MemoryInspector({
-        records: memoryRecords,
-        messages: conversationMessages,
-        packet: codingPacketState,
-        events: eventLog,
-        provider: selectedProvider,
-        createdAt: runtimeSnapshotState.updatedAt,
-      }),
-    [codingPacketState, conversationMessages, eventLog, memoryRecords, runtimeSnapshotState.updatedAt, selectedProvider],
-  );
+  const {
+    handleActivateMemory,
+    handleForgetMemory,
+    handlePinMemory,
+    handleRememberCurrentContext,
+    memoryInspector,
+    memoryRecords,
+    prependMemoryRecord,
+  } = useMemoryController({
+    appendEvent,
+    events: eventLog,
+    markMemorySyncing,
+    messages: conversationMessages,
+    packet: codingPacketState,
+    provider: selectedProvider,
+    runtimeUpdatedAt: runtimeSnapshotState.updatedAt,
+  });
   const backupSnapshot = useMemo(
     () =>
       createStage7BackupSnapshot({
@@ -451,6 +447,14 @@ export function App() {
     setEventLog((events) => appendEventToLog(events, event));
     queueEventForSync(event, { skipRemoteSync: options?.skipRemoteSync });
     return event;
+  }
+
+  function markMemorySyncing(createdAt: string) {
+    setRuntimeSnapshotState((snapshot) => ({
+      ...snapshot,
+      memorySyncStatus: snapshot.dgxStatus === "online" ? "syncing" : "degraded",
+      updatedAt: createdAt,
+    }));
   }
 
   async function handleRefreshSessionIndex() {
@@ -1323,19 +1327,16 @@ export function App() {
     };
 
     setConversationMessages((messages) => [...messages, telegramMessage]);
-    setMemoryRecords((records) => [
-      {
-        id: `memory_ingress_${normalizedEvent.id}`,
-        layer: "fragment",
-        title: "Telegram ingress candidate",
-        content: normalizedEvent.normalizedText,
-        sourceChannel: "legacy_telegram",
-        trustLevel: "untrusted",
-        createdAt: receivedAt,
-        pinned: false,
-      },
-      ...records,
-    ]);
+    prependMemoryRecord({
+      id: `memory_ingress_${normalizedEvent.id}`,
+      layer: "fragment",
+      title: "Telegram ingress candidate",
+      content: normalizedEvent.normalizedText,
+      sourceChannel: "legacy_telegram",
+      trustLevel: "untrusted",
+      createdAt: receivedAt,
+      pinned: false,
+    });
     appendEvent(
       "conversation.message.created",
       {
@@ -1562,63 +1563,6 @@ export function App() {
       return;
     }
     handleResolvePermissionItem(pendingItem.sourceItemId, state);
-  }
-
-  function handleRememberCurrentContext() {
-    const createdAt = new Date().toISOString();
-    const candidates = rememberStage6Context({
-      messages: conversationMessages,
-      packet: codingPacketState,
-      provider: selectedProvider,
-      createdAt,
-    });
-
-    setMemoryRecords((records) => {
-      const existingIds = new Set(records.map((record) => record.id));
-      return [...candidates.filter((record) => !existingIds.has(record.id)), ...records];
-    });
-    setRuntimeSnapshotState((snapshot) => ({
-      ...snapshot,
-      memorySyncStatus: snapshot.dgxStatus === "online" ? "syncing" : "degraded",
-      updatedAt: createdAt,
-    }));
-    appendEvent("memory.candidate.created", {
-      recordIds: candidates.map((record) => record.id),
-      count: candidates.length,
-      sourceChannel: "desktop",
-      trustLevel: selectedProvider?.trustLevel ?? "limited",
-      providerProfileId: selectedProvider?.id,
-    });
-    appendEvent("memory.recall.trace.updated", {
-      traceId: memoryInspector.trace.id,
-      resultCount: memoryInspector.trace.results.length,
-      usedCount: memoryInspector.trace.results.filter((result) => result.usedInDecision).length,
-      blockedCount: memoryInspector.blockedCount,
-    });
-  }
-
-  function handlePinMemory(recordId: string) {
-    setMemoryRecords((records) => pinMemoryRecord(records, recordId));
-    appendEvent("memory.pin.updated", {
-      recordId,
-      pinned: true,
-    });
-  }
-
-  function handleActivateMemory(recordId: string) {
-    setMemoryRecords((records) => activateMemoryRecord(records, recordId));
-    appendEvent("memory.activation.updated", {
-      recordId,
-      activationState: "active",
-    });
-  }
-
-  function handleForgetMemory(recordId: string) {
-    setMemoryRecords((records) => forgetMemoryRecord(records, recordId));
-    appendEvent("memory.forget.requested", {
-      recordId,
-      policy: "tombstone_projection",
-    });
   }
 
   function handleCreateAgentRun() {
