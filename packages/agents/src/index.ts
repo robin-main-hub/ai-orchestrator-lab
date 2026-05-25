@@ -38,6 +38,19 @@ export type {
   RunDebateRoundResult,
 } from "./debateEngine.js";
 
+export {
+  DEFAULT_BLOCKED_TARGETS,
+  parseDelegateTags,
+  runCompanionTurn,
+} from "./delegation.js";
+export type {
+  CompanionTurnInput,
+  CompanionTurnOptions,
+  CompanionTurnResult,
+  DelegateOutcome,
+  DelegateTag,
+} from "./delegation.js";
+
 export type DebateContext = {
   sessionId: string;
   problem: string;
