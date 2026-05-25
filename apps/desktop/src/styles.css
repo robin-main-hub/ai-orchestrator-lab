@@ -4257,8 +4257,10 @@ button {
 }
 
 .agent-dot {
-  width: 8px;
-  height: 8px;
+  /* Avatar enlarged to 44–88px; a 8px status dot looked vestigial.
+     10px is still subtle but registers as a distinct indicator. */
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: var(--subtle);
   transition:
@@ -4299,30 +4301,33 @@ button {
   letter-spacing: 0.02em;
 }
 
-/* small: 24 → 36. Used inline next to compact text (tmux pane cards,
-   agent state side-list). Was visibly squashed before; 36 fits 2~3
-   characters of initials at a readable size. */
+/* small: PR #102에서 24 → 36으로 키웠지만 사용자 피드백상 여전히
+   촘촘해 보임. 한 번 더 44px로 확장 + initials 가독성을 위해
+   font-size 13→15. 옆 텍스트 metric과의 균형은 grid auto 컬럼이
+   자동 조정. */
 .agent-avatar.small {
-  width: 36px;
-  height: 36px;
-  font-size: 13px;
+  width: 44px;
+  height: 44px;
+  font-size: 15px;
   border-radius: 10px;
 }
 
-/* medium: 34 → 48. The default everywhere else. */
+/* medium: 48 → 60. The default everywhere else — TmuxPaneCard 헤더 등
+   캐릭터 식별이 한눈에 와야 하는 자리. */
 .agent-avatar.medium {
-  width: 48px;
-  height: 48px;
-  font-size: 17px;
+  width: 60px;
+  height: 60px;
+  font-size: 20px;
+  border-radius: 14px;
 }
 
-/* large: 48 → 72. Settings drawer / persona inspector — primary
+/* large: 72 → 88. Settings drawer / persona inspector — primary
    identity slot, should read as a real profile picture. */
 .agent-avatar.large {
-  width: 72px;
-  height: 72px;
-  font-size: 24px;
-  border-radius: 16px;
+  width: 88px;
+  height: 88px;
+  font-size: 28px;
+  border-radius: 20px;
 }
 
 .agent-avatar.has-image {
