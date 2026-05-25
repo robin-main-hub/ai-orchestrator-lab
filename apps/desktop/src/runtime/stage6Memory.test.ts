@@ -10,6 +10,7 @@ import {
 } from "./stage6Memory";
 
 const createdAt = "2026-05-24T00:00:00.000Z";
+process.env.MEMENTO_RECALL_LOG_DISABLED = "1";
 
 const packet: CodingPacket = {
   goal: "DGX local fallback and Event Store memory",
@@ -117,5 +118,71 @@ describe("stage6 memory inspector", () => {
     expect(activated[0]?.activationState).toBe("active");
     expect(pinned[0]?.pinned).toBe(true);
     expect(forgotten[0]?.tombstonedAt).toBe(createdAt);
+  });
+
+  it("decays EvolveMemento importance by one tick without crossing the floor", () => {
+    const records = createSeedMemoryRecords(createdAt).map((record) => ({
+      ...record,
+      importance: record.id === "memory_seed_event_storage" ? 0.1 : 0.5,
+    }));
+
+    const inspector = createStage6MemoryInspector({
+      records,
+      messages,
+      packet,
+      events,
+      provider: trustedProvider,
+      createdAt,
+    });
+
+    expect(inspector.records.find((record) => record.id === "memory_seed_event_storage")?.importance).toBe(0.1);
+    expect(inspector.records.find((record) => record.id === "memory_seed_dgx02_authority")?.importance).toBe(0.49);
+  });
+
+  it("reinforces records whose persons match the recall query", () => {
+    const records = [
+      ...createSeedMemoryRecords(createdAt),
+      {
+        id: "memory_seed_maomao_research",
+        layer: "project_memory" as const,
+        scope: "project" as const,
+        kind: "context" as const,
+        title: "Maomao research handoff",
+        content: "Maomao tracks source-backed market research handoffs.",
+        sourceChannel: "agent" as const,
+        trustLevel: "trusted" as const,
+        projectId: "project_ai_orchestrator_lab",
+        activationState: "active" as const,
+        createdAt,
+        persons: ["Maomao"],
+        entities: ["Research"],
+        keywords: ["maomao", "research", "handoff"],
+        topic: "Maomao research memory",
+        losslessRestatement: "Maomao tracks source-backed market research handoffs for AI Orchestrator Lab.",
+        importance: 0.5,
+        entityReinforcement: 0,
+        pinned: false,
+      },
+    ];
+    const maomaoMessages: ConversationMessage[] = [
+      {
+        id: "message_maomao",
+        sessionId: "session_desktop_001",
+        role: "user",
+        content: "Maomao에게 시장 조사 기억을 다시 불러와줘.",
+        createdAt,
+      },
+    ];
+
+    const inspector = createStage6MemoryInspector({
+      records,
+      messages: maomaoMessages,
+      packet: { ...packet, goal: "Maomao research recall" },
+      events,
+      provider: trustedProvider,
+      createdAt,
+    });
+
+    expect(inspector.records.find((record) => record.id === "memory_seed_maomao_research")?.entityReinforcement).toBe(0.1);
   });
 });
