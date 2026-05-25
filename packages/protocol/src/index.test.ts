@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   agentProfileSchema,
+  agentDelegationDetectedPayloadSchema,
+  agentDelegationDispatchedPayloadSchema,
+  agentDelegationEventTypeSchema,
+  agentDelegationFollowupCompletedPayloadSchema,
+  agentDelegationSucceededPayloadSchema,
   agentSessionSchema,
   approvalDecisionRequestSchema,
   approvalRequestSchema,
@@ -12,6 +17,7 @@ import {
   eventSyncPushRequestSchema,
   eventSyncPushResponseSchema,
   executionSlotSchema,
+  parseAgentDelegationEventPayload,
   providerProfileSchema,
   redactionRuleSchema,
   terminalCommandIntentSchema,
@@ -173,6 +179,68 @@ describe("protocol schemas", () => {
     expect(index.sessions[0]?.sessionId).toBe("session_desktop_001");
     expect(index.sessions[0]?.title).toBe("Desktop Workbench");
     expect(index.sessions[0]?.sources).toContain("desktop");
+  });
+
+  it("validates delegation event payloads for companion sub-agent routing", () => {
+    const detected = agentDelegationDetectedPayloadSchema.parse({
+      sourceAgentId: "agent_chae_arin",
+      sourceAgentName: "채아린",
+      sourceRole: "companion",
+      sourcePersonaName: "chae_arin",
+      authorityLevel: "orchestrator_plus",
+      targets: ["researcher", "executor"],
+      count: 2,
+      depthLimit: 1,
+    });
+    const dispatched = agentDelegationDispatchedPayloadSchema.parse({
+      sourceAgentId: "agent_chae_arin",
+      sourceAgentName: "채아린",
+      targetAgentId: "agent_maomao",
+      targetAgentName: "Maomao",
+      targetRole: "researcher",
+      targetPersonaName: "maomao",
+      providerProfileId: "provider_codex_oauth",
+      modelId: "codex-session",
+      promptLength: 88,
+      authorityLevel: "orchestrator_plus",
+      depthLimit: 1,
+    });
+    const succeeded = agentDelegationSucceededPayloadSchema.parse({
+      sourceAgentId: "agent_chae_arin",
+      targetAgentId: "agent_maomao",
+      targetAgentName: "Maomao",
+      targetRole: "researcher",
+      providerProfileId: "provider_codex_oauth",
+      modelId: "codex-session",
+      responseLength: 240,
+      route: "server_proxy",
+      realProviderCall: true,
+    });
+    const followup = agentDelegationFollowupCompletedPayloadSchema.parse({
+      sourceAgentId: "agent_chae_arin",
+      sourceAgentName: "채아린",
+      outcomeCount: 2,
+      succeededCount: 1,
+      blockedCount: 1,
+      responseLength: 420,
+    });
+
+    const envelope = eventEnvelopeSchema.parse({
+      id: "event_delegation_dispatched_1",
+      sessionId: "session_desktop_001",
+      type: agentDelegationEventTypeSchema.parse("agent.delegation.dispatched"),
+      payload: dispatched,
+      createdAt: "2026-05-25T00:00:00.000Z",
+      source: "desktop",
+      sourceTrust: "trusted",
+      redacted: true,
+    });
+    const parsedPayload = parseAgentDelegationEventPayload("agent.delegation.dispatched", envelope.payload);
+
+    expect(detected.authorityLevel).toBe("orchestrator_plus");
+    expect(succeeded.route).toBe("server_proxy");
+    expect(followup.blockedCount).toBe(1);
+    expect(parsedPayload).toEqual(dispatched);
   });
 
   it("separates client offline queues from DGX-02 authority", () => {
