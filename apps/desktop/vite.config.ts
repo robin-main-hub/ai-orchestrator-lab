@@ -1,13 +1,18 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
 
 export default defineConfig({
-  plugins: [react()],
+  // Tailwind 4 has a first-party Vite plugin that replaces the legacy
+  // postcss approach. It scans source files automatically (no content
+  // glob needed) and emits the CSS layer the new `@theme inline` syntax
+  // in tokens.css expects.
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       "@ai-orchestrator/protocol": path.resolve(repoRoot, "packages/protocol/src/index.ts"),
