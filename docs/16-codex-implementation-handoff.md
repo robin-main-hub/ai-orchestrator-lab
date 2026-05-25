@@ -180,13 +180,13 @@ Still gated:
 
 Implementation note updated on 2026-05-25:
 
-- MacBook is the authoritative work machine and canonical source for Event Store, MemoryRecord, WorkItem, approvals, and drafts.
-- DGX-02 is the always-on continuity mirror, compute node, projection server, and SimpleMem index host.
-- Home PC and Phone are clients over the DGX-02 projection; remote inputs stay provisional until MacBook import.
-- Conflict policy is MacBook canonical import or `manual_review`; do not silently let DGX-02 own conflicts.
-- Offline and remote write policy is pending outbox/input first, then MacBook import/merge.
+- DGX-02 is the authoritative shared server for Event Store, MemoryRecord, WorkItem, approvals, drafts, and continuity storage.
+- MacBook is the primary work client with a persistent local cache/outbox and can continue with local models when DGX-02 is offline.
+- Home PC and Phone are clients over the DGX-02 projection; remote inputs sync to DGX-02 rather than becoming a separate source of truth.
+- Conflict policy is `dgx02_authority_wins` for mechanical conflicts and `manual_review` for semantic conflicts.
+- Offline and remote write policy is pending outbox/input first, then DGX-02 sync.
 - Legacy Telegram ingress remains visible in the UI as Telegram, but persisted protocol values use `legacy_telegram`.
 - Unknown external effects are denied by default; customer replies, email sends, provider execution, device reboot, and terminal actions require approval.
 - `stage29LocalEventStore` remains a client-side cache/outbox layer.
-- Memento MCP remains a future adapter. DGX-02 SimpleMem is a derived continuity index, not the canonical memory source.
+- Memento MCP remains a future adapter. DGX-02 SimpleMem is a derived retrieval index over DGX-02 MemoryRecord, not a separate original memory source.
 - The Windows Obsidian default vault root is `F:/obsidian/ai-headquarter`.

@@ -4,30 +4,32 @@
 
 This document records the accepted memory direction for AI Orchestrator Lab.
 
-It supersedes older wording that treated DGX-02 as the canonical memory authority.
+It corrects older wording that briefly treated the MacBook as the memory authority.
 
 ## Core Decision
 
 ```text
-MacBook = canonical work machine
-DGX-02 = always-on continuity mirror + compute node + projection server + SimpleMem index host
-Phone = stateless thin client
+DGX-02 = main authoritative server
+MacBook = primary work client with offline cache/outbox
+Home PC = online client
+Phone = thin approval/read/input client
+SimpleMem = derived retrieval index on DGX-02
 ```
 
-DGX-02 is not a temporary emergency fallback. It is the always-on mirror that lets the user continue work from phone, home PC, or remote sessions while the MacBook is unavailable.
+DGX-02 is the main system.
 
-However, DGX-02 must not become the canonical memory database.
+It owns authoritative Event Store, MemoryRecord, WorkItem, approvals, drafts, continuity storage, and server-side projections. MacBook is where the user usually works, but it is not the final source of truth. When MacBook is offline, it writes to local cache/outbox and syncs back to DGX-02 later.
 
 ## Authority Model
 
 | Node | Role |
 | --- | --- |
-| MacBook | Owns canonical Event Store, WorkItem records, MemoryRecord records, approvals, and drafts |
-| DGX-02 | Mirrors canonical data, hosts heavy models, serves projections, runs SimpleMem search/index, buffers remote continuity inputs |
-| Home PC | Online client that normally talks to DGX-02 and can show the continuity projection |
+| DGX-02 | Authoritative shared server for Event Store, MemoryRecord, WorkItem, approvals, drafts, continuity storage, heavy model execution, projection, and SimpleMem index hosting |
+| MacBook | Primary work client; keeps local cache/outbox for offline work and local model fallback |
+| Home PC | Online client that normally talks to DGX-02 |
 | Phone | Thin client for read, approval, stop, retry, and remote input |
 
-Events created through Phone/DGX while the MacBook is unavailable are `pending_remote_input` until the MacBook imports and accepts them.
+Events created through MacBook while offline, Phone, Home PC, or external ingress are client-side pending inputs until synced to DGX-02.
 
 ## SimpleMem Placement
 
@@ -35,29 +37,36 @@ SimpleMem belongs on DGX-02.
 
 Reason:
 
-- DGX-02 is always on.
-- DGX-02 can host embedding, indexing, semantic retrieval, and heavier memory search.
-- Phone and remote clients can retrieve memory through DGX-02 even when MacBook is closed.
+- DGX-02 is always on and is the main server.
+- DGX-02 hosts heavy model, embedding, indexing, semantic retrieval, and memory search workloads.
+- Phone and remote clients can retrieve memory through DGX-02.
 - Tmux/swarm agents can use DGX-02 SimpleMem as a shared blackboard.
 
-But SimpleMem is a derived index, not the source of truth.
+But SimpleMem is not the original memory database.
+
+Original memory is:
 
 ```text
-MacBook Event Store
-  -> canonical MemoryRecord projection
-  -> DGX continuity mirror
+DGX-02 Event Store
+  -> DGX-02 MemoryRecord projection
+```
+
+SimpleMem is derived:
+
+```text
+DGX-02 Event Store / MemoryRecord
   -> DGX SimpleMem index
   -> Phone / remote / tmux agent recall
 ```
 
-Remote input flow:
+Client input flow:
 
 ```text
-Phone or DGX remote input
-  -> pending remote event
-  -> optional provisional SimpleMem index
-  -> MacBook reconnect
-  -> authoritative import or rejection
+MacBook offline / Phone / Home PC / external ingress
+  -> pending client event
+  -> DGX-02 sync
+  -> optional Memory Curator promotion
+  -> DGX SimpleMem index
 ```
 
 ## Memory Layers
@@ -90,9 +99,9 @@ memory.core.updated
 
 Long-term facts, decisions, contracts, architecture rules, customer rules, and resolved bugs.
 
-Canonical archival memory is represented by `MemoryRecord`.
+Original archival memory is represented by `MemoryRecord` on DGX-02.
 
-Agents must not directly insert canonical archival memory. They may only request a write:
+Agents must not directly insert archival memory. They may only request a write:
 
 ```text
 memory_request_archival_write(title, content, tags, sourceEventIds)
@@ -123,7 +132,7 @@ Example:
 
 1. Backend Agent completes an API contract.
 2. Backend Agent requests archival write with source event IDs.
-3. Memory Curator promotes the candidate into a canonical `MemoryRecord`.
+3. Memory Curator promotes the candidate into an authoritative `MemoryRecord` on DGX-02.
 4. DGX SimpleMem indexes that MemoryRecord.
 5. Frontend Agent searches for the API contract and receives `EvidenceRef` entries.
 
@@ -143,7 +152,7 @@ type MemoryMementoSnapshot = {
   quarantinedMemoryRecordIds: string[];
   memoryContextPacketId?: string;
   simpleMemIndexRevision?: string;
-  pendingRemoteEventIds: string[];
+  pendingClientEventIds: string[];
   sourceEventIds: string[];
   createdAt: string;
 };
@@ -156,7 +165,7 @@ This lets a tmux swarm or remote session restart without token bloat.
 - Trusted and limited active/suggested memories may be indexed.
 - Quarantined memories must not be indexed.
 - Untrusted memories must not be retrieved unless explicitly activated.
-- Phone/DGX-created remote memory candidates remain provisional until MacBook import.
+- Client-created memory candidates remain pending until DGX-02 receives and processes them.
 - Raw source documents must not be stored inside `EvidenceRef`.
 - `EvidenceRef` stores only reference, summary, content hash, revision, and observed timestamp.
 
@@ -172,8 +181,8 @@ memory.index.completed
 memory.index.skipped
 memory.index.failed
 memory.memento.snapshot.created
-memory.remote_input.pending
-memory.remote_input.imported
+memory.client_input.pending
+memory.client_input.synced
 ```
 
 ## Tmux Dispatch Safety
@@ -197,18 +206,17 @@ Actual dispatch requires:
 
 ### PR-M0: Authority Seed Correction
 
-Update stale memory seed:
+Keep the seed memory aligned with runtime topology:
 
 ```text
 memory_seed_dgx02_authority
--> memory_seed_macbook_authority
 ```
 
-The new memory states:
+The memory states:
 
 ```text
-MacBook is the authoritative work machine and canonical source for Event Store and MemoryRecord.
-DGX-02 is always-on continuity mirror, compute node, projection server, and SimpleMem index host.
+DGX-02 is the authoritative server for Event Store, MemoryRecord, WorkItem, approvals, drafts, and continuity storage.
+MacBook is the primary work client with a local cache/outbox for offline work, and syncs back to DGX-02 when online.
 ```
 
 ### PR-M1: Protocol Types
@@ -239,7 +247,7 @@ Test requirements:
 
 - quarantined memory is not indexed by default
 - untrusted memory is skipped unless activated
-- SimpleMem adapter never becomes canonical source
+- SimpleMem adapter never becomes original source
 - existing `MemoryAPI` fallback still works
 
 ### PR-M3: UI and Events
@@ -252,13 +260,15 @@ index status
 indexed count
 skipped count
 retrieval source
-pending remote input count
+pending client input count
 ```
 
 ## Current Boundaries
 
 Take now:
 
+- DGX-02 authority
+- MacBook client cache/outbox
 - Core / Archival memory split
 - Shared Blackboard
 - Memento lightweight snapshot
@@ -268,8 +278,8 @@ Take now:
 Change before implementation:
 
 - `memory_insert_archival` becomes `memory_request_archival_write`
-- SimpleMem DB becomes derived index, not canonical DB
-- Memento becomes working memory + MemoryRecord IDs + index revision + pending remote input IDs
+- SimpleMem DB becomes derived index, not original DB
+- Memento becomes working memory + MemoryRecord IDs + index revision + pending client event IDs
 - `tmux send-keys` direct execution becomes `tmux.dispatch.requested`
 
 Defer:
@@ -281,6 +291,4 @@ Defer:
 
 ## One-Line Rule
 
-SimpleMem lives on DGX-02 because DGX-02 is the always-on continuity mirror, not because DGX-02 owns the truth.
-
-The truth lives on the MacBook.
+DGX-02 is the main authority. SimpleMem lives there as a derived retrieval index over DGX-02 MemoryRecord.

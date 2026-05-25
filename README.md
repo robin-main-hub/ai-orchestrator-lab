@@ -7,9 +7,9 @@
 ## 목표
 
 - 데스크톱 앱이 전체 지휘실 역할을 한다.
-- `dgx-02`는 강한 모델, 로컬 LLM 서버, 원격 작업 실행, 모바일/원격 continuity mirror, SimpleMem 검색 인덱스를 담당한다.
+- `dgx-02`는 메인 서버이자 원본 저장소다. 강한 모델, 로컬 LLM 서버, 장기 메모리, 원격 작업 실행, 모바일/원격 continuity, SimpleMem 검색 인덱스를 담당한다.
 - 서버 접속이 불가능하면 맥북의 로컬 모델과 로컬 CLI만으로 오케스트레이션/토론을 계속한다.
-- MacBook을 원본 작업기와 canonical Event Store/MemoryRecord 주인으로 두고, DGX-02는 always-on continuity mirror와 연산/검색 서버로 둔다. 집 PC와 폰은 DGX projection을 보고 입력/승인을 남기며, MacBook 복귀 시 authoritative import/merge를 수행한다.
+- DGX-02를 메인 authority와 원본 저장소로 두고, MacBook은 주 작업 클라이언트로 둔다. MacBook은 오프라인일 때만 로컬 SQLite cache/outbox에 임시 저장하고, 온라인 복귀 시 DGX-02로 동기화한다. 집 PC와 폰은 DGX-02 projection을 보고 입력/승인을 남긴다.
 - 토론 기능을 끈 상태에서는 OpenClaw/Claude/Codex/로컬 모델과 1:1 대화하듯 작업한다.
 - 하나의 API 또는 하나의 모델에서도 여러 가상 에이전트를 만들어 병렬 토론과 역할 분담을 수행한다.
 - 여러 프로바이더 프로파일을 동시에 등록하고, 실행마다 모델/API 키/검증 모델을 바꿀 수 있다.
@@ -31,7 +31,7 @@
 - 사용 가능 모델 자동 조회
 - 강한 모델 검증 또는 동일 로컬 모델 검증
 - DGX 원격 실행 및 로컬 폴백
-- MacBook canonical Event Store, DGX-02 continuity mirror, client outbox, Redaction Layer, Permission Matrix
+- DGX-02 Event Storage authority, client cache/outbox, Redaction Layer, Permission Matrix
 - External Ingress Guard와 confidence routing
 - Memento-MCP 스타일 장기 메모리와 DGX-02 SimpleMem 검색 인덱스
 - 에이전트별 `soul.md` 정체성 파일
@@ -171,11 +171,11 @@ corepack pnpm dev
 
 ## PR0 Authority Correction
 
-- MacBook is the authoritative work machine and canonical source for Event Store, MemoryRecord, WorkItem, approvals, and drafts.
-- DGX-02 is the always-on continuity mirror, compute node, projection server, and SimpleMem index host.
-- Home PC and Phone are clients over the DGX-02 projection; inputs created while MacBook is unavailable remain pending remote inputs until MacBook imports them.
-- Conflict handling must prefer MacBook canonical import or manual review, not silent DGX ownership.
-- Local/remote writes use pending queues and replay/import when the MacBook authority returns.
+- DGX-02 is the authoritative shared server for Event Storage, MemoryRecord, WorkItem, approvals, drafts, and continuity storage.
+- MacBook is the primary work client with a persistent local cache/outbox and can continue with local models when DGX-02 is unavailable.
+- Home PC and Phone are clients over the DGX-02 projection; inputs created while MacBook is unavailable remain pending client inputs until they sync to DGX-02.
+- Conflict handling uses `dgx02_authority_wins` for mechanical conflicts and `manual_review` for semantic conflicts.
+- Local/remote writes use pending queues and replay/import to DGX-02 when the authority returns.
 - External legacy Telegram input is represented as `legacy_telegram` in persisted protocol data while UI labels may still say Telegram.
 - Unknown external effects, device reboot, provider execution, secret access, and terminal actions are denied by default unless the Permission Matrix approves them.
 - Windows Obsidian export defaults to `F:/obsidian/ai-headquarter`.
