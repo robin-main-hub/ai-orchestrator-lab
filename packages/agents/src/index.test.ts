@@ -252,8 +252,19 @@ describe("assertSafeCodingPacket", () => {
 });
 
 describe("defaultAgentProfiles", () => {
-  it("ships 10 profiles: orchestrator + 5 debate personas + builder + external + auditor + executor", () => {
-    expect(defaultAgentProfiles).toHaveLength(10);
+  it("ships 11 profiles: orchestrator + 5 debate personas + 2 skeptic perspectives (Asuka general + Yohane Idea Bank) + builder + external + auditor + executor", () => {
+    expect(defaultAgentProfiles).toHaveLength(11);
+  });
+
+  it("supports two profiles sharing the same role (skeptic) with personaName override", () => {
+    const skeptics = defaultAgentProfiles.filter((p) => p.role === "skeptic");
+    expect(skeptics).toHaveLength(2);
+    // first skeptic uses default role-based lookup (agents/skeptic/ → Asuka)
+    const general = skeptics.find((p) => p.id === "agent_skeptic");
+    expect(general?.personaName).toBeUndefined();
+    // second skeptic overrides personaName to "yohane" (agents/yohane/)
+    const yohane = skeptics.find((p) => p.id === "agent_skeptic_yohane");
+    expect(yohane?.personaName).toBe("yohane");
   });
 
   it("covers every persona that has a SOUL.md directory under agents/", () => {
