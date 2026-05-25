@@ -11,7 +11,7 @@ flowchart LR
   LocalRuntime --> LocalTmux[local tmux / CLI agent panes]
   DGX --> RemoteModels[vLLM / 원격 모델 서버]
   DGX --> DgxTmux[DGX-02 tmux / remote CLI panes]
-  DGX --> Memory[Memento-MCP 메모리]
+  DGX --> Memory[SimpleMem 검색 인덱스 / continuity mirror]
   DGX --> Workspaces[원격 워크스페이스 / 터미널 세션]
   Desktop --> Profiles[프로바이더 프로파일 저장소]
   Desktop --> EventStore[SQLite Event Store]
@@ -25,11 +25,11 @@ flowchart LR
 
 예상 기술 스택은 Tauri 또는 Electron + React + TypeScript다. 로컬 시스템 접근과 맥북 배포 안정성을 고려해 초기에는 Tauri를 우선 검토한다.
 
-DGX-02를 중앙 Event Store 권위(authority)로 둔다. 맥북, 집 PC, 모바일은 각각 로컬 SQLite 캐시와 offline outbox를 가진 client replica로 동작한다.
+MacBook을 canonical Event Store와 MemoryRecord의 권위(authority)로 둔다. DGX-02는 always-on continuity mirror, compute node, projection server, SimpleMem index host로 동작한다. 집 PC와 모바일은 DGX projection을 보는 client replica이며, MacBook을 못 쓰는 동안 생성한 입력은 pending remote input으로 남긴다.
 
-온라인 상태에서는 이벤트가 DGX-02에 append되고, 각 클라이언트는 필요한 projection과 캐시를 동기화한다. 맥북이 오프라인이면 대화, 토론, 로컬 실행 기록은 로컬 SQLite outbox에 append하고, 다시 온라인이 되면 DGX-02에 idempotency key와 revision 정보를 함께 전송해 동기화한다.
+온라인 상태에서는 MacBook canonical event가 DGX-02 mirror에 동기화되고, 각 클라이언트는 필요한 projection과 캐시를 읽는다. MacBook을 못 쓰는 동안 Phone/Home PC/DGX에서 생긴 입력은 DGX-02에 임시 보관하고, MacBook 복귀 후 idempotency key와 source event 정보를 함께 import/merge한다.
 
-Obsidian/Notion/mobile은 여전히 원본 저장소가 아니라 Event Store의 projection이다. 차이는 원본 Event Store의 권위가 단일 맥북이 아니라 DGX-02에 있다는 점이다.
+Obsidian/Notion/mobile은 여전히 원본 저장소가 아니라 Event Store의 projection이다. DGX-02 SimpleMem도 projection/index이며 canonical memory database가 아니다.
 
 ## dgx-02 서버
 
@@ -37,7 +37,7 @@ Obsidian/Notion/mobile은 여전히 원본 저장소가 아니라 Event Store의
 
 - 원격 모델 실행
 - 멀티 에이전트 라운드 관리
-- 장기 메모리 서버
+- SimpleMem 검색 인덱스와 continuity projection 서버
 - 원격 워크스페이스 실행
 - 로그 저장 및 검색
 - 비용/토큰/속도 집계
@@ -72,7 +72,7 @@ Obsidian/Notion/mobile은 여전히 원본 저장소가 아니라 Event Store의
 
 ## Event Store와 권한
 
-Event Store의 중앙 원본은 DGX-02다. 각 클라이언트의 로컬 SQLite는 offline cache/outbox 역할을 하며, API 키와 토큰은 Event Store에 평문 저장하지 않고 OS keychain 또는 DGX secret vault에 secret reference로만 연결한다.
+Event Store의 canonical 원본은 MacBook이다. DGX-02는 continuity mirror와 server-side projection을 제공하고, 각 클라이언트의 로컬 SQLite는 cache/outbox 역할을 한다. API 키와 토큰은 Event Store에 평문 저장하지 않고 OS keychain 또는 DGX secret vault에 secret reference로만 연결한다.
 
 모든 event는 저장 전에 Redaction Layer와 Permission Matrix를 통과한다. Telegram, 모바일, 외부 API에서 들어온 파일 쓰기/터미널 실행/네트워크 실행 요청은 기본적으로 `pending approval` 상태가 된다.
 
