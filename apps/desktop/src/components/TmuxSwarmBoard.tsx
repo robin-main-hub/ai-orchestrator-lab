@@ -1,15 +1,21 @@
 import { useState } from "react";
 import { LockKeyhole } from "lucide-react";
-import type { ApprovalRequest, CodingPacket, ConversationMessage, TmuxPaneRole } from "@ai-orchestrator/protocol";
+import type {
+  ApprovalRequest,
+  CodingPacket,
+  ConversationMessage,
+  TerminalTimelineBlock,
+  TmuxPaneRole,
+} from "@ai-orchestrator/protocol";
 import { messageLabel } from "../lib/uiLabels";
 import {
   requestTmuxCapture,
   requestTmuxDispatch,
   type DesktopTmuxDispatchRequest,
 } from "../runtime/stage33TmuxServer";
-import type { AgentActivityStatus, AgentVisualSettings, WindowAuditItem, WorkbenchAgent } from "../types";
+import type { AgentActivityStatus, AgentVisualSettings, WorkbenchAgent } from "../types";
 import { TmuxPaneCard } from "./TmuxPaneCard";
-import { WindowChecklist } from "./WindowChecklist";
+import { makeSyntheticBlock } from "./TmuxPaneTimeline";
 
 type TmuxPaneDefinition = {
   id: string;
@@ -52,37 +58,21 @@ export function TmuxSwarmBoard({
   const [runtimeStatusByRole, setRuntimeStatusByRole] = useState<Record<string, string>>({});
   const [paneOutputByRole, setPaneOutputByRole] = useState<Record<string, string>>({});
   const [busyByRole, setBusyByRole] = useState<Record<string, PaneBusyState | undefined>>({});
+  const [timelineBlocksByRole, setTimelineBlocksByRole] = useState<
+    Record<string, TerminalTimelineBlock[]>
+  >({});
   const [boardNotice, setBoardNotice] = useState(
     "DGX-02 tmux 게이트 준비됨. 실제 send-keys는 서버 env gate와 승인 이후에만 실행됩니다.",
   );
   const panes = createTmuxPanes(roleAgent, recommendation);
   const visiblePanes = panes.slice(0, recommendation.recommendedCount);
-  const auditItems: WindowAuditItem[] = [
-    {
-      id: "layout",
-      label: "tmux 화면",
-      status: "ready",
-      detail: "tmux 모드에서는 좌우 rail과 하단 dock을 비우고 중앙 workbench를 전체 화면으로 엽니다.",
-    },
-    {
-      id: "pane-count",
-      label: "4-10 pane",
-      status: "ready",
-      detail: `현재 작업 난이도를 ${recommendation.difficulty}로 보고 ${recommendation.recommendedCount}개 pane을 추천합니다.`,
-    },
-    {
-      id: "server-gate",
-      label: "서버 게이트",
-      status: "ready",
-      detail: "dispatch/capture 요청은 DGX-02 서버의 Permission, Approval, Redaction 게이트를 통과합니다.",
-    },
-    {
-      id: "gemini",
-      label: "Gemini 연결",
-      status: "blocked",
-      detail: "Gemini CLI는 agy -p 설정 전까지 의도적으로 연결하지 않습니다.",
-    },
-  ];
+
+  function appendBlock(roleKey: TmuxPaneRole, block: TerminalTimelineBlock) {
+    setTimelineBlocksByRole((current) => ({
+      ...current,
+      [roleKey]: [...(current[roleKey] ?? []), block],
+    }));
+  }
 
   function updateCommandDraft(role: TmuxPaneRole, value: string) {
     setCommandDraftByRole((current) => ({
@@ -113,6 +103,21 @@ export function TmuxSwarmBoard({
         ...current,
         [pane.roleKey]: result.payload?.outputPreview || result.reason,
       }));
+      appendBlock(
+        pane.roleKey,
+        makeSyntheticBlock({
+          paneId: `role:${pane.roleKey}`,
+          role: pane.roleKey,
+          host: "dgx_02",
+          sessionId: activeSessionId,
+          terminalSessionId: "terminal_session_ai_swarm",
+          kind: "capture",
+          status: result.status === "captured" ? "completed" : "stale",
+          title: `${pane.title} capture`,
+          summary: result.reason,
+          outputPreview: result.payload?.outputPreview,
+        }),
+      );
       setBoardNotice(`${pane.title}: ${result.reason}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -151,8 +156,60 @@ export function TmuxSwarmBoard({
           ? `승인 대기: ${result.approval.reason}`
           : `${result.dispatch.status}: ${result.dispatch.reason}`,
       }));
+      // Intent → optional approval gate → dispatch outcome
+      appendBlock(
+        pane.roleKey,
+        makeSyntheticBlock({
+          paneId: `role:${pane.roleKey}`,
+          role: pane.roleKey,
+          host: "dgx_02",
+          sessionId: activeSessionId,
+          terminalSessionId: "terminal_session_ai_swarm",
+          kind: "command_intent",
+          status: "planned",
+          title: commandPreview || `${pane.title} intent`,
+          summary: `의도: ${commandPreview}`,
+        }),
+      );
       if (result.approval) {
+        appendBlock(
+          pane.roleKey,
+          makeSyntheticBlock({
+            paneId: `role:${pane.roleKey}`,
+            role: pane.roleKey,
+            host: "dgx_02",
+            sessionId: activeSessionId,
+            terminalSessionId: "terminal_session_ai_swarm",
+            kind: "approval",
+            status: "pending_approval",
+            title: "approval 대기",
+            summary: result.approval.reason,
+            approvalId: result.approval.id,
+          }),
+        );
         onApprovalQueued?.({ approval: result.approval, request });
+      } else {
+        appendBlock(
+          pane.roleKey,
+          makeSyntheticBlock({
+            paneId: `role:${pane.roleKey}`,
+            role: pane.roleKey,
+            host: "dgx_02",
+            sessionId: activeSessionId,
+            terminalSessionId: "terminal_session_ai_swarm",
+            kind: "dispatch",
+            status:
+              result.dispatch.status === "recorded"
+                ? "completed"
+                : result.dispatch.status === "blocked"
+                  ? "blocked"
+                  : result.dispatch.status === "pending_approval"
+                    ? "pending_approval"
+                    : "failed",
+            title: `${pane.title} dispatch`,
+            summary: result.dispatch.reason,
+          }),
+        );
       }
       setBoardNotice(`${pane.title}: ${result.dispatch.reason}`);
     } catch (error) {
@@ -196,7 +253,6 @@ export function TmuxSwarmBoard({
           ))}
         </div>
       </section>
-      <WindowChecklist items={auditItems} title="tmux 창 점검" />
       <div className="tmux-workbench">
         <section className="tmux-operator-chat">
           <header>
@@ -235,6 +291,7 @@ export function TmuxSwarmBoard({
                   ...pane,
                   state: runtimeStatusByRole[pane.roleKey] ?? (pane.agent ? (agentActivityById[pane.agent.id] ?? pane.state) : pane.state),
                 }}
+                timelineBlocks={timelineBlocksByRole[pane.roleKey] ?? []}
                 visual={pane.agent ? agentVisualsById[pane.agent.id] : undefined}
               />
             ))}

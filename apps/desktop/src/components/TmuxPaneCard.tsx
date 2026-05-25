@@ -1,7 +1,9 @@
 import { Eye, Loader2, SendHorizontal } from "lucide-react";
+import type { TerminalTimelineBlock } from "@ai-orchestrator/protocol";
 import type { AgentVisualSettings, WorkbenchAgent } from "../types";
 import { agentRoleLabel } from "../lib/helpers";
 import { AgentAvatar } from "./AgentAvatar";
+import { TmuxPaneTimeline } from "./TmuxPaneTimeline";
 
 export function TmuxPaneCard({
   busy,
@@ -11,6 +13,7 @@ export function TmuxPaneCard({
   onCommandDraftChange,
   onDispatch,
   pane,
+  timelineBlocks,
   visual,
 }: {
   busy?: "capture" | "dispatch";
@@ -28,6 +31,8 @@ export function TmuxPaneCard({
     agent?: WorkbenchAgent;
     signal: string;
   };
+  /** Stage 2-6: optional Warp-style timeline blocks for this pane. */
+  timelineBlocks?: TerminalTimelineBlock[];
   visual?: AgentVisualSettings;
 }) {
   return (
@@ -66,6 +71,7 @@ export function TmuxPaneCard({
         </div>
       ) : null}
       {lastOutput ? <pre className="tmux-pane-output">{lastOutput}</pre> : null}
+      {timelineBlocks ? <TmuxPaneTimeline blocks={timelineBlocks} /> : null}
     </article>
   );
 }
