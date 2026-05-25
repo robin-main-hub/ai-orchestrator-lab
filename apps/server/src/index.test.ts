@@ -28,6 +28,7 @@ import {
   pushEventsToPersistentServerStorage,
   pushEventsToServerStorage,
   redactInternalPathsForPublicHealth,
+  redactForServerPhase,
   resolveAllowedOrigins,
   startServer,
 } from "./index";
@@ -276,6 +277,69 @@ describe("server health placeholder", () => {
     expect(response.route).toBe("server_proxy");
     expect(response.content).toBe("OK");
     expect(response.usage?.totalTokens).toBe(14);
+  });
+
+  it("redacts provider prompts before send and provider content after receive", async () => {
+    const response = await createDgxProviderCompletionResponse(
+      {
+        id: "provider_completion_request_redaction",
+        sessionId: "session_1",
+        providerProfileId: "provider_dgx02_vllm",
+        modelId: "qwen36-gio-lora-v5-prisma",
+        messages: [
+          {
+            role: "user",
+            content: "token sk-thisshouldnotleaveDGX02 and email choiminwoong@example.com",
+          },
+        ],
+        source: "desktop",
+        routePreference: "server_proxy",
+        createdAt: "2026-05-24T00:00:00.000Z",
+      },
+      {
+        now: "2026-05-24T00:00:00.000Z",
+        vllmBaseUrl: "http://127.0.0.1:8001/v1",
+        fetchImpl: async (_url, init) => {
+          const bodyText = String(init?.body);
+          expect(bodyText).not.toContain("sk-thisshouldnotleaveDGX02");
+          expect(bodyText).not.toContain("choiminwoong@example.com");
+          expect(bodyText).toContain("<redacted>");
+          expect(bodyText).toContain("<redacted:email>");
+          return {
+            ok: true,
+            status: 200,
+            async text() {
+              return JSON.stringify({
+                choices: [{ message: { content: "received Bearer abcdefghijklmnopqrstuvwxyz123456" } }],
+              });
+            },
+          };
+        },
+      },
+    );
+
+    expect(response.status).toBe("succeeded");
+    expect(response.content).not.toContain("abcdefghijklmnopqrstuvwxyz");
+    expect(response.content).toContain("<redacted>");
+  });
+
+  it("recursively redacts sensitive keys and PII for server phases", () => {
+    const result = redactForServerPhase(
+      {
+        authorization: "Bearer abcdefghijklmnopqrstuvwxyz123456",
+        nested: {
+          note: "contact 010-1234-5678 or robin@example.com",
+        },
+      },
+      "pre_send",
+    );
+
+    expect(result.report.redacted).toBe(true);
+    expect(result.report.patternIds).toContain("sensitive_key");
+    expect(result.report.patternIds).toContain("pii_email");
+    expect(JSON.stringify(result.value)).not.toContain("abcdefghijklmnopqrstuvwxyz");
+    expect(JSON.stringify(result.value)).not.toContain("010-1234-5678");
+    expect(JSON.stringify(result.value)).not.toContain("robin@example.com");
   });
 
   it("merges desktop system prompts before proxying to strict vLLM chat templates", async () => {
