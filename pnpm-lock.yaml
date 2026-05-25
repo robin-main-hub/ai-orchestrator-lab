@@ -146,6 +146,12 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
+  packages/memory:
+    dependencies:
+      '@ai-orchestrator/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
   packages/protocol:
     dependencies:
       zod:
