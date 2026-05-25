@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import * as path from "node:path";
 
 import type { PersonaFileSource } from "../personaLoader.js";
@@ -34,6 +34,22 @@ export function createNodeFileSource(repoRoot: string): PersonaFileSource {
         if (isFileNotFound(error)) return null;
         throw error;
       }
+    },
+    async findFirstExisting(candidatePaths: string[]): Promise<string | null> {
+      for (const candidate of candidatePaths) {
+        const absolutePath = path.join(repoRoot, candidate);
+        try {
+          await access(absolutePath);
+          return candidate;
+        } catch (error) {
+          if (isFileNotFound(error)) continue;
+          // EACCES / EISDIR / etc. — treat as "not usable" but keep
+          // walking the list; some candidates being inaccessible
+          // shouldn't kill the whole lookup.
+          continue;
+        }
+      }
+      return null;
     },
   };
 }

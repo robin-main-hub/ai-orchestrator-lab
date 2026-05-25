@@ -208,4 +208,106 @@ describe("createInMemoryPersonaSource", () => {
     expect(await src.readMarkdown("constructor")).toBeNull();
     expect(await src.readMarkdown("toString")).toBeNull();
   });
+
+  it("findFirstExisting returns the first candidate that's a key, in call-order", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/x/avatar.png": "binary blob ignored",
+      "agents/x/avatar.svg": "svg body ignored",
+    });
+    expect(
+      await src.findFirstExisting!(["agents/x/avatar.svg", "agents/x/avatar.png"]),
+    ).toBe("agents/x/avatar.svg");
+    expect(
+      await src.findFirstExisting!(["agents/x/avatar.png", "agents/x/avatar.svg"]),
+    ).toBe("agents/x/avatar.png");
+  });
+
+  it("findFirstExisting returns null when no candidate exists", async () => {
+    const src = createInMemoryPersonaSource({});
+    expect(
+      await src.findFirstExisting!(["agents/ghost/avatar.svg", "agents/ghost/avatar.png"]),
+    ).toBeNull();
+  });
+});
+
+describe("loadPersona — asset discovery (avatar, background)", () => {
+  it("populates avatarPath when agents/<name>/avatar.svg exists", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/architect/SOUL.md": "# soul",
+      "agents/architect/AGENTS.md": "# agents",
+      "agents/architect/avatar.svg": "<svg/>",
+    });
+    const loaded = await loadPersona("architect", "soul_plus_agents", src);
+    expect(loaded.avatarPath).toBe("agents/architect/avatar.svg");
+  });
+
+  it("avatarPath is null when no avatar.* file exists", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/architect/SOUL.md": "# soul",
+    });
+    const loaded = await loadPersona("architect", "soul_only", src);
+    expect(loaded.avatarPath).toBeNull();
+  });
+
+  it("tries SVG first, falls through to other extensions when SVG missing", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/x/SOUL.md": "# x",
+      // No SVG; PNG is the first extension actually present.
+      "agents/x/avatar.png": "png bytes",
+      "agents/x/avatar.webp": "webp bytes",
+    });
+    const loaded = await loadPersona("x", "soul_only", src);
+    expect(loaded.avatarPath).toBe("agents/x/avatar.png");
+  });
+
+  it("user-dropped real photo (avatar.jpg) wins when SVG placeholder is absent", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/portrait/SOUL.md": "# portrait",
+      "agents/portrait/avatar.jpg": "jpeg bytes",
+    });
+    const loaded = await loadPersona("portrait", "soul_only", src);
+    expect(loaded.avatarPath).toBe("agents/portrait/avatar.jpg");
+  });
+
+  it("chatBackgroundPath is populated when agents/<name>/background.* exists", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/cozy/SOUL.md": "# cozy",
+      "agents/cozy/background.webp": "webp bytes",
+    });
+    const loaded = await loadPersona("cozy", "soul_only", src);
+    expect(loaded.chatBackgroundPath).toBe("agents/cozy/background.webp");
+  });
+
+  it("chatBackgroundPath is null when no background.* exists (mobile falls back to user-uploaded image)", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/architect/SOUL.md": "# soul",
+    });
+    const loaded = await loadPersona("architect", "soul_only", src);
+    expect(loaded.chatBackgroundPath).toBeNull();
+  });
+
+  it("mode=off still discovers avatar + background (renderer wants the face even without markdown injection)", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/architect/avatar.svg": "<svg/>",
+      "agents/architect/background.png": "png bytes",
+      // no SOUL.md or AGENTS.md needed for off mode
+    });
+    const loaded = await loadPersona("architect", "off", src);
+    expect(loaded.fragments).toEqual([]);
+    expect(loaded.avatarPath).toBe("agents/architect/avatar.svg");
+    expect(loaded.chatBackgroundPath).toBe("agents/architect/background.png");
+  });
+
+  it("source without findFirstExisting cleanly returns null for both asset paths", async () => {
+    // A minimal source — markdown-only, no asset discovery support.
+    const minimal = {
+      async readMarkdown(p: string) {
+        return p === "agents/x/SOUL.md" ? "# x" : null;
+      },
+    };
+    const loaded = await loadPersona("x", "soul_only", minimal);
+    expect(loaded.fragments).toHaveLength(1);
+    expect(loaded.avatarPath).toBeNull();
+    expect(loaded.chatBackgroundPath).toBeNull();
+  });
 });

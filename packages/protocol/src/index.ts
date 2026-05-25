@@ -242,6 +242,31 @@ export const agentProfileSchema = z.object({
   authBinding: agentAuthBindingSchema.optional(),
   enabled: z.boolean(),
   permissionLevel: z.string().optional(),
+  /**
+   * Path (relative to repo root) of the persona's avatar image. Convention:
+   * lives next to `SOUL.md` at `agents/<role>/avatar.{svg,png,jpg,jpeg,webp}`.
+   * Used for desktop agent-swarm thumbnails, mobile chat message author
+   * avatars, and any other place a face is shown.
+   *
+   * Optional — caller falls back to a generic role icon when missing.
+   * Renderers should treat this as a hint and resolve it through their
+   * own asset pipeline (Vite `import.meta.glob`, `node:fs`, etc.) rather
+   * than fetching it raw at runtime.
+   */
+  avatarPath: z.string().optional(),
+  /**
+   * Path (relative to repo root) of an optional default chat-window
+   * background image bundled with the persona. Convention:
+   * `agents/<role>/background.{svg,png,jpg,jpeg,webp}`.
+   *
+   * Precedence on mobile/desktop:
+   *   1. user-uploaded background (SOUL-keyed local storage)
+   *   2. this `chatBackgroundPath` if set
+   *   3. solid theme color
+   *
+   * Optional.
+   */
+  chatBackgroundPath: z.string().optional(),
 });
 export type AgentProfile = z.infer<typeof agentProfileSchema>;
 

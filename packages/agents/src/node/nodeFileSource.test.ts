@@ -48,4 +48,28 @@ describe("createNodeFileSource", () => {
     // ENOENT, so the source should still propagate it instead of swallowing.
     await expect(source.readMarkdown("agents/architect")).rejects.toBeDefined();
   });
+
+  it("findFirstExisting returns the first candidate that exists on disk", async () => {
+    const source = createNodeFileSource(repoRoot);
+    await writeFile(
+      path.join(repoRoot, "agents", "architect", "avatar.svg"),
+      "<svg/>",
+      "utf8",
+    );
+    const found = await source.findFirstExisting!([
+      "agents/architect/avatar.png", // missing
+      "agents/architect/avatar.svg", // exists
+      "agents/architect/avatar.jpg", // missing
+    ]);
+    expect(found).toBe("agents/architect/avatar.svg");
+  });
+
+  it("findFirstExisting returns null when no candidate exists on disk", async () => {
+    const source = createNodeFileSource(repoRoot);
+    const found = await source.findFirstExisting!([
+      "agents/ghost/avatar.svg",
+      "agents/ghost/avatar.png",
+    ]);
+    expect(found).toBeNull();
+  });
 });
