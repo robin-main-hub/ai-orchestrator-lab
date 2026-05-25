@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   agentProfileSchema,
   agentSessionSchema,
+  approvalDecisionRequestSchema,
   approvalRequestSchema,
   assistantDraftSchema,
   codingPacketSchema,
@@ -838,6 +839,10 @@ describe("protocol schemas", () => {
 
     expect(approval.decision).toBe("approval_required");
     expect(approval.requestedLevels).toContain("secret_access");
+    expect(approvalDecisionRequestSchema.parse({ sourceItemId: "permission_provider_reseller" }).sourceItemId).toBe(
+      "permission_provider_reseller",
+    );
+    expect(() => approvalDecisionRequestSchema.parse({ reason: "missing target" })).toThrow();
     expect(rule.phase).toBe("pre_store");
   });
 });

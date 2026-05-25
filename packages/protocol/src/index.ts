@@ -795,6 +795,19 @@ export const approvalRequestSchema = z.object({
 });
 export type ApprovalRequest = z.infer<typeof approvalRequestSchema>;
 
+export const approvalDecisionRequestSchema = z
+  .object({
+    approvalId: z.string().optional(),
+    sourceItemId: z.string().optional(),
+    actor: permissionActorSchema.optional(),
+    reason: z.string().max(2_000).optional(),
+    decidedAt: z.string().optional(),
+  })
+  .refine((value) => Boolean(value.approvalId || value.sourceItemId), {
+    message: "approvalId or sourceItemId is required",
+  });
+export type ApprovalDecisionRequest = z.infer<typeof approvalDecisionRequestSchema>;
+
 export type PermissionMatrixItem = {
   id: string;
   sessionId: string;
