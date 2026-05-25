@@ -5300,6 +5300,189 @@ button {
   height: 86px;
 }
 
+/* ── Stage 2-4 Command Palette ⌘K ────────────────────────────── */
+
+.command-palette__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh 16px 16px;
+  background: rgba(0, 12, 14, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.command-palette__panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(640px, calc(100vw - 32px));
+  max-height: 64vh;
+  border: 1px solid rgba(95, 211, 226, 0.32);
+  border-radius: 12px;
+  background: #0a2428;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.command-palette__input-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--muted);
+}
+
+.command-palette__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  outline: none;
+}
+
+.command-palette__input::placeholder {
+  color: var(--subtle);
+}
+
+.command-palette__esc {
+  padding: 1px 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: rgba(0, 47, 56, 0.6);
+  color: var(--subtle);
+  font-size: 9.5px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+}
+
+.command-palette__list {
+  padding: 6px 0;
+  overflow-y: auto;
+}
+
+.command-palette__empty {
+  margin: 18px;
+  color: var(--subtle);
+  font-size: 12px;
+  text-align: center;
+}
+
+.command-palette__group {
+  display: grid;
+  gap: 2px;
+  padding: 4px 0;
+}
+
+.command-palette__group-head {
+  padding: 4px 14px 2px;
+  color: var(--subtle);
+  font-size: 9.5px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.command-palette__row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.command-palette__row--active {
+  background: rgba(95, 211, 226, 0.12);
+}
+
+.command-palette__row-verb {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(95, 211, 226, 0.16);
+  color: var(--cyan);
+  font-size: 9.5px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.command-palette__row-arrow {
+  color: var(--subtle);
+}
+
+.command-palette__row-label {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-palette__row-hint {
+  color: var(--subtle);
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-palette__row-shortcut {
+  padding: 1px 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: rgba(0, 47, 56, 0.55);
+  color: var(--muted);
+  font-size: 9.5px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  white-space: nowrap;
+}
+
+.command-palette__hint-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 14px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--subtle);
+  font-size: 10px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+}
+
+.command-palette__hint-bar kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 5px;
+  margin: 0 2px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: rgba(0, 47, 56, 0.45);
+  color: var(--muted);
+  font-size: 9.5px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+}
+
+.command-palette__hint-spacer {
+  flex: 1 1 auto;
+}
+
+.command-palette__hint-grammar {
+  color: var(--muted);
+  letter-spacing: 0.05em;
+}
+
 .approval-drawer {
   position: fixed;
   z-index: 32;

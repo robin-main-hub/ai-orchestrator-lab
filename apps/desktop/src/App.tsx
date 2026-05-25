@@ -160,6 +160,7 @@ import { BackupPanel } from "./components/BackupPanel";
 import { BackupRailMenu } from "./components/BackupRailMenu";
 import { ChannelRailPanel } from "./components/ChannelRailPanel";
 import { CodingPacketPanel } from "./components/CodingPacketPanel";
+import { CommandPalette, type CommandEntry } from "./components/CommandPalette";
 import { ConfigLibraryPanel } from "./components/ConfigLibraryPanel";
 import { ConversationWorkbench } from "./components/ConversationWorkbench";
 import { IngressGuardPanel } from "./components/IngressGuardPanel";
@@ -174,6 +175,7 @@ import { SessionIndexRailPanel } from "./components/SessionIndexRailPanel";
 import { Stage3DebateTable } from "./components/Stage3DebateTable";
 import { TerminalDock } from "./components/TerminalDock";
 import { TmuxSwarmBoard } from "./components/TmuxSwarmBoard";
+import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import { useAgentConfigFilesController } from "./hooks/useAgentConfigFilesController";
 import { useApprovalQueueController } from "./hooks/useApprovalQueueController";
 import { useBranchExperimentsController } from "./hooks/useBranchExperimentsController";
@@ -190,6 +192,7 @@ export function App() {
   const [dgxRouteDiagnostics, setDgxRouteDiagnostics] = useState<Stage32DgxRouteDiagnosticSnapshot>();
   const [activeNavItem, setActiveNavItem] = useState<NavItemId>("sessions");
   const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [agents, setAgents] = useState<WorkbenchAgent[]>(seededAgentProfiles);
   const [agentActivityById, setAgentActivityById] = useState<Record<string, AgentActivityStatus>>({});
   const [agentVisualsById, setAgentVisualsById] = useState<Record<string, AgentVisualSettings>>(() =>
@@ -2255,6 +2258,91 @@ export function App() {
     });
   }
 
+  const paletteCommands: CommandEntry[] = [
+    {
+      id: "switch.conversation",
+      verb: "Switch",
+      label: "Conversation",
+      hint: "본 대화 보드로 전환",
+      shortcut: "⌘1",
+      run: () => setMode("conversation"),
+    },
+    {
+      id: "switch.debate",
+      verb: "Switch",
+      label: "Debate",
+      hint: "토론 테이블 모드",
+      shortcut: "⌘2",
+      run: () => setMode("debate"),
+    },
+    {
+      id: "switch.tmux",
+      verb: "Switch",
+      label: "Tmux",
+      hint: "실행 pane grid",
+      shortcut: "⌘3",
+      run: () => setMode("tmux"),
+    },
+    {
+      id: "open.control-queue",
+      verb: "Open",
+      label: "Control Queue",
+      hint: "approval drawer toggle",
+      shortcut: "⌘⇧A",
+      run: () => setApprovalDrawerOpen((open) => !open),
+    },
+    {
+      id: "memory.remember",
+      verb: "Memory",
+      label: "현재 맥락 기억",
+      hint: "Memento 에 새 항목 추가",
+      shortcut: "⌘⇧M",
+      run: handleRememberCurrentContext,
+    },
+    {
+      id: "approve.next",
+      verb: "Approve",
+      label: "다음 권한 요청 승인",
+      hint: "queue 첫 항목 approve",
+      shortcut: "⌘⏎",
+      run: () => handleResolveNextPermission("approved"),
+    },
+    {
+      id: "reject.next",
+      verb: "Reject",
+      label: "다음 권한 요청 거부",
+      hint: "queue 첫 항목 reject",
+      run: () => handleResolveNextPermission("rejected"),
+    },
+    {
+      id: "help.shortcuts",
+      verb: "Help",
+      label: "단축키 도움말",
+      hint: "design-decisions §6",
+      shortcut: "?",
+      run: () => {
+        // MVP: shortcut list lives in this palette itself. ?-hotkey
+        // just reopens the palette so the user sees the catalog.
+        setCommandPaletteOpen(true);
+      },
+    },
+  ];
+
+  useGlobalShortcuts({
+    onCommandPalette: () => setCommandPaletteOpen((open) => !open),
+    onSwitchConversation: () => setMode("conversation"),
+    onSwitchDebate: () => setMode("debate"),
+    onSwitchTmux: () => setMode("tmux"),
+    onControlQueue: () => setApprovalDrawerOpen((open) => !open),
+    onMementoRemember: handleRememberCurrentContext,
+    onApprove: () => handleResolveNextPermission("approved"),
+    onEscape: () => {
+      if (commandPaletteOpen) setCommandPaletteOpen(false);
+      else if (approvalDrawerOpen) setApprovalDrawerOpen(false);
+    },
+    onHelp: () => setCommandPaletteOpen(true),
+  });
+
   return (
     <div className={`app-shell ${mode === "tmux" ? "tmux-focus-shell" : ""}`}>
       <RuntimeStatusBar
@@ -2649,6 +2737,11 @@ export function App() {
         onReject={(sourceItemId) => handleResolvePermissionItem(sourceItemId, "rejected")}
         open={approvalDrawerOpen}
         snapshot={permissionSnapshot}
+      />
+      <CommandPalette
+        commands={paletteCommands}
+        onClose={() => setCommandPaletteOpen(false)}
+        open={commandPaletteOpen}
       />
     </div>
   );
