@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Approvals } from "./Approvals";
 import type { MobileMoreScreen } from "../types";
 import {
   seedCodingPackets,
@@ -24,6 +25,7 @@ export function More({ onSignOut }: Props) {
   if (screen === "packets") return <PacketList onBack={() => setScreen("menu")} />;
   if (screen === "debates") return <DebateList onBack={() => setScreen("menu")} />;
   if (screen === "handoffs") return <HandoffList onBack={() => setScreen("menu")} />;
+  if (screen === "approvals") return <Approvals onBack={() => setScreen("menu")} />;
   if (screen === "settings-general") return <GeneralSettings onBack={() => setScreen("menu")} />;
   if (screen === "settings-connection") return <ConnectionSettings onBack={() => setScreen("menu")} />;
 
@@ -39,6 +41,7 @@ export function More({ onSignOut }: Props) {
           <NavRow label="코딩 패킷" onClick={() => setScreen("packets")} />
           <NavRow label="토론 결과" onClick={() => setScreen("debates")} />
           <NavRow label="핸드오프" onClick={() => setScreen("handoffs")} />
+          <NavRow label="승인 큐" onClick={() => setScreen("approvals")} />
         </section>
         <section className="section">
           <div className="section__title">설정</div>
