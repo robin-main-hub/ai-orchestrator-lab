@@ -16,6 +16,7 @@ import type {
   Reflection,
   SourceTrust,
 } from "@ai-orchestrator/protocol";
+import { lexicalView, metadataView, rrfFuse, semanticView } from "./memoryViews";
 
 export type Stage6MemoryInspector = {
   trace: MemoryTrace;
@@ -83,6 +84,14 @@ const kinds: MemoryKind[] = [
 ];
 const trustLevels: SourceTrust[] = ["trusted", "limited", "untrusted"];
 const blockedAutoRecallLayers: MemoryLayer[] = ["project_memory", "user_memory"];
+const evolveMementoLexicalTopK = 10;
+const evolveMementoSemanticTopK = 10;
+const evolveMementoMetadataTopK = 10;
+const evolveMementoContextBudget = 8;
+const defaultImportance = 0.5;
+const importanceDecayStep = 0.01;
+const entityReinforcementStep = 0.1;
+const entityReinforcementCap = 5;
 
 export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
   return [
@@ -101,6 +110,14 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       activationState: "active",
       createdAt,
       lastAccessedAt: createdAt,
+      losslessRestatement:
+        "AI Orchestrator Lab records session logs, debates, coding packets, run artifacts, backup projections, and memory traces through Event Storage before export.",
+      keywords: ["event", "storage", "session", "debate", "coding", "backup", "memory"],
+      entities: ["AI Orchestrator Lab", "Event Storage", "Coding Packet"],
+      persons: [],
+      topic: "Event Storage as primary recording path",
+      importance: 0.7,
+      entityReinforcement: 0,
       pinned: true,
     },
     {
@@ -118,6 +135,14 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       activationState: "active",
       createdAt,
       lastAccessedAt: createdAt,
+      losslessRestatement:
+        "DGX-02 is the authoritative server for Event Store, MemoryRecord, WorkItem, approvals, drafts, and continuity storage, while MacBook works as a client cache and outbox.",
+      keywords: ["dgx-02", "authority", "server", "sync", "macbook", "outbox", "continuity"],
+      entities: ["DGX-02", "MacBook", "Event Store", "MemoryRecord", "WorkItem"],
+      persons: [],
+      topic: "DGX-02 authority and MacBook client cache",
+      importance: 0.7,
+      entityReinforcement: 0,
       pinned: true,
     },
     {
@@ -134,6 +159,14 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       tags: ["provider", "redaction", "trust-policy"],
       activationState: "suggested",
       createdAt,
+      losslessRestatement:
+        "AI Orchestrator Lab blocks reseller and custom base URL providers from automatic project or user memory unless the memory is explicitly activated.",
+      keywords: ["provider", "reseller", "redaction", "trust", "memory", "activation"],
+      entities: ["AI Orchestrator Lab", "Provider Profile", "MemoryRecord"],
+      persons: [],
+      topic: "Untrusted provider memory guard",
+      importance: 0.5,
+      entityReinforcement: 0,
       pinned: false,
     },
     {
@@ -150,6 +183,14 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       tags: ["telegram", "approval", "ingress"],
       activationState: "quarantined",
       createdAt,
+      losslessRestatement:
+        "Telegram commands enter AI Orchestrator Lab as untrusted input and require approval before file writes, terminal runs, remote commands, secret access, or memory promotion.",
+      keywords: ["telegram", "approval", "ingress", "quarantine", "terminal", "secret"],
+      entities: ["Telegram", "AI Orchestrator Lab", "Permission Matrix"],
+      persons: [],
+      topic: "Telegram input quarantine",
+      importance: 0.5,
+      entityReinforcement: 0,
       pinned: false,
     },
     {
@@ -166,6 +207,14 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       tags: ["memento", "memory-context", "relations", "activation"],
       activationState: "suggested",
       createdAt,
+      losslessRestatement:
+        "EvolveMemento keeps remember, recall, memory_context, reflect, stats, relation creation, and activation as explicit memory operations with scope, kind, source trust, and trace metadata.",
+      keywords: ["evolvememento", "memento", "recall", "memory_context", "relations", "activation"],
+      entities: ["EvolveMemento", "MemoryAPI", "MemoryContextPacket"],
+      persons: [],
+      topic: "EvolveMemento API shape",
+      importance: 0.7,
+      entityReinforcement: 0,
       pinned: true,
     },
   ];
@@ -181,11 +230,25 @@ export function createStage6MemoryInspector({
   projectId = defaultProjectId,
   createdAt = new Date().toISOString(),
 }: Stage6MemorySnapshotInput): Stage6MemoryInspector {
-  const activeRecords = records.filter((record) => !record.tombstonedAt);
   const query = createRecallQuery(messages, packet);
+  const activeRecordsBeforeRecall = records.filter((record) => !record.tombstonedAt);
+  const extracted = extractRecallMetadata(query, activeRecordsBeforeRecall);
+  const activeRecords = reconcileEvolveMementoRecords(activeRecordsBeforeRecall, extracted);
   const policy = createRecallPolicy(provider);
   const relations = createMemoryRelations(activeRecords, createdAt);
-  const results = recallMemory(activeRecords, query, policy, relations);
+  const recall = recallMemory(activeRecords, query, policy, relations, extracted);
+  const results = recall.results;
+  appendEvolveMementoRecallLog({
+    sessionId: targetSessionId,
+    query,
+    extracted,
+    lexicalSize: recall.viewSizes.lexical,
+    semanticSize: recall.viewSizes.semantic,
+    metadataSize: recall.viewSizes.metadata,
+    results,
+    policy,
+    createdAt,
+  });
   const contextPacket = createMemoryContextPacket({
     sessionId: targetSessionId,
     query,
@@ -269,6 +332,13 @@ export function rememberStage6Context({
       tags: ["conversation", "workbench"],
       activationState: "suggested",
       createdAt,
+      losslessRestatement: `The user worked in a conversation session on ${createdAt} about ${lastUserMessage?.content ?? packet.goal}.`,
+      keywords: extractKeywords(`${lastUserMessage?.content ?? ""} ${packet.goal} conversation workbench`),
+      entities: extractInlineEntities(`${lastUserMessage?.content ?? ""} ${packet.goal}`),
+      persons: extractInlinePersons(`${lastUserMessage?.content ?? ""} ${packet.goal}`),
+      topic: "Conversation work session",
+      importance: defaultImportance,
+      entityReinforcement: 0,
       pinned: false,
     },
     {
@@ -285,6 +355,13 @@ export function rememberStage6Context({
       tags: ["coding-packet", "reflection"],
       activationState: "suggested",
       createdAt,
+      losslessRestatement: `The coding handoff on ${createdAt} recorded ${packet.decisions[0] ?? packet.goal} with verification ${packet.verificationPlan[0] ?? "pending"}.`,
+      keywords: extractKeywords(`${packet.goal} ${packet.decisions.join(" ")} ${packet.verificationPlan.join(" ")}`),
+      entities: extractInlineEntities(`${packet.goal} ${packet.decisions.join(" ")}`),
+      persons: extractInlinePersons(`${packet.goal} ${packet.decisions.join(" ")}`),
+      topic: "Coding handoff reflection",
+      importance: defaultImportance,
+      entityReinforcement: 0,
       pinned: false,
     },
   ];
@@ -343,10 +420,30 @@ function recallMemory(
   query: string,
   policy: MemoryTrace["policy"],
   relations: MemoryRelation[],
-): RecallResult[] {
-  return records
-    .map((record) => {
-      const score = scoreRecord(record, query, relations);
+  extracted: { persons: string[]; entities: string[] },
+): { results: RecallResult[]; viewSizes: { lexical: number; semantic: number; metadata: number } } {
+  const lexicalResults = lexicalView(query, records, evolveMementoLexicalTopK);
+  const semanticResults = semanticView(query, records, evolveMementoSemanticTopK);
+  const metadataResults = metadataView(query, records, evolveMementoMetadataTopK, extracted);
+  const fusedResults = rrfFuse([lexicalResults, semanticResults, metadataResults]).slice(0, evolveMementoContextBudget);
+  const fusedByRecord = new Map(fusedResults.map((result) => [result.recordId, result]));
+  const relatedRecords = new Set(fusedResults.map((result) => result.recordId));
+
+  for (const record of records) {
+    if (record.pinned || record.activationState === "active") {
+      relatedRecords.add(record.id);
+    }
+  }
+
+  const results = [...relatedRecords]
+    .map((recordId) => {
+      const record = records.find((candidate) => candidate.id === recordId);
+      if (!record) {
+        return undefined;
+      }
+      const fusion = fusedByRecord.get(record.id);
+      const fusedScore = fusion?.fusedScore ?? 0;
+      const score = scoreRecord(record, relations, fusedScore);
       const blockedByLayer = policy.blockedLayers.includes(record.layer);
       const explicitlyActivated = record.pinned || record.activationState === "active";
       const blockedByTrust = record.trustLevel === "untrusted" && !explicitlyActivated;
@@ -359,9 +456,19 @@ function recallMemory(
             ? "suggested"
             : "inactive";
 
-      return {
+      const result: RecallResult = {
         record,
         score,
+        fusionDetail: fusion
+          ? {
+              views: fusion.viewBreakdown.map((view) => ({
+                view: view.view,
+                rank: view.rank,
+                rawScore: view.rawScore,
+              })),
+              fusionMode: "rrf" as const,
+            }
+          : undefined,
         usedInDecision,
         activationState,
         reason: usedInDecision
@@ -372,7 +479,9 @@ function recallMemory(
               ? "untrusted memory is quarantined until pinned"
               : "low query overlap",
       };
+      return result;
     })
+    .filter((result): result is RecallResult => Boolean(result))
     .filter((result) => result.score > 0.05 || result.record.pinned || result.record.activationState === "active")
     .sort(
       (left, right) =>
@@ -380,7 +489,16 @@ function recallMemory(
         Number(right.record.pinned) - Number(left.record.pinned) ||
         right.score - left.score,
     )
-    .slice(0, 8);
+    .slice(0, evolveMementoContextBudget);
+
+  return {
+    results,
+    viewSizes: {
+      lexical: lexicalResults.length,
+      semantic: semanticResults.length,
+      metadata: metadataResults.length,
+    },
+  };
 }
 
 function createRecallQuery(messages: ConversationMessage[], packet: CodingPacket): string {
@@ -563,24 +681,201 @@ function createReflection(
   };
 }
 
-function scoreRecord(record: MemoryRecord, query: string, relations: MemoryRelation[]): number {
-  const terms = tokenize(query);
-  if (terms.length === 0) {
-    return record.pinned ? 0.4 : 0.1;
-  }
-
-  const haystack = tokenize(
-    `${record.title} ${record.content} ${record.layer} ${record.kind ?? ""} ${record.scope ?? ""} ${(record.tags ?? []).join(" ")}`,
-  );
-  const overlap = terms.filter((term) => haystack.includes(term)).length;
+function scoreRecord(record: MemoryRecord, relations: MemoryRelation[], fusedScore: number): number {
   const relationBoost = Math.min(
     relations.filter((relation) => relation.fromRecordId === record.id || relation.toRecordId === record.id).length * 0.04,
     0.16,
   );
   const trustBoost = record.trustLevel === "trusted" ? 0.18 : record.trustLevel === "limited" ? 0.08 : 0;
   const pinBoost = record.pinned ? 0.2 : record.activationState === "active" ? 0.14 : 0;
-  return Math.min(overlap / Math.max(terms.length, 1) + relationBoost + trustBoost + pinBoost, 0.99);
+  const importanceBoost = 0.2 * (record.importance ?? defaultImportance);
+  const reinforcementBoost = 0.1 * (record.entityReinforcement ?? 0);
+  return Math.min(fusedScore + relationBoost + trustBoost + pinBoost + importanceBoost + reinforcementBoost, 0.99);
 }
+
+function reconcileEvolveMementoRecords(
+  records: MemoryRecord[],
+  extracted: { persons: string[]; entities: string[] },
+): MemoryRecord[] {
+  const queryPersons = new Set(extracted.persons.map(normalizeMetadataValue));
+  const queryEntities = new Set(extracted.entities.map(normalizeMetadataValue));
+
+  return records.map((record) => {
+    const recordPersons = new Set((record.persons ?? []).map(normalizeMetadataValue));
+    const recordEntities = new Set((record.entities ?? []).map(normalizeMetadataValue));
+    const matchesMetadata =
+      hasIntersection(queryPersons, recordPersons) || hasIntersection(queryEntities, recordEntities);
+    const nextImportance = Math.max(0.1, (record.importance ?? defaultImportance) - importanceDecayStep);
+    const nextReinforcement = matchesMetadata
+      ? Math.min(entityReinforcementCap, (record.entityReinforcement ?? 0) + entityReinforcementStep)
+      : (record.entityReinforcement ?? 0);
+
+    return {
+      ...record,
+      importance: Number(nextImportance.toFixed(2)),
+      entityReinforcement: Number(nextReinforcement.toFixed(2)),
+    };
+  });
+}
+
+function extractRecallMetadata(query: string, records: MemoryRecord[]) {
+  const knownEntities = unique(records.flatMap((record) => record.entities ?? []));
+  const knownPersons = unique(records.flatMap((record) => record.persons ?? []));
+  const entities = unique([
+    ...knownEntities.filter((entity) => includesMetadataValue(query, entity)),
+    ...extractInlineEntities(query),
+  ]);
+  const persons = unique([
+    ...knownPersons.filter((person) => includesMetadataValue(query, person)),
+    ...extractInlinePersons(query),
+  ]);
+
+  return { persons, entities };
+}
+
+function extractInlineEntities(value: string): string[] {
+  const entities = value.match(/\b(?:DGX-02|DGX-01|MacBook|Event Store|Event Storage|MemoryRecord|WorkItem|Telegram|Coding Packet|EvolveMemento|Memento|SimpleMem|OpenClaw)\b/gi) ?? [];
+  return unique(entities.map((entity) => canonicalEntityName(entity)));
+}
+
+function extractInlinePersons(value: string): string[] {
+  const matches = value.match(/\b[A-Z][A-Za-z0-9_-]{1,}\b/g) ?? [];
+  return unique(matches.filter((match) => !commonCapitalizedWords.has(match)));
+}
+
+function extractKeywords(value: string): string[] {
+  return unique(tokenize(value).filter((term) => term.length >= 3)).slice(0, 7);
+}
+
+function appendEvolveMementoRecallLog({
+  sessionId,
+  query,
+  extracted,
+  lexicalSize,
+  semanticSize,
+  metadataSize,
+  results,
+  policy,
+  createdAt,
+}: {
+  sessionId: string;
+  query: string;
+  extracted: { persons: string[]; entities: string[] };
+  lexicalSize: number;
+  semanticSize: number;
+  metadataSize: number;
+  results: RecallResult[];
+  policy: MemoryTrace["policy"];
+  createdAt: string;
+}) {
+  if (getRuntimeEnv("MEMENTO_RECALL_LOG_DISABLED") === "1") {
+    return;
+  }
+
+  try {
+    const requireNode = getNodeRequire();
+    if (!requireNode) {
+      return;
+    }
+    const fs = requireNode("node:fs") as {
+      mkdirSync(path: string, options: { recursive: boolean }): void;
+      appendFileSync(path: string, content: string): void;
+    };
+    const path = requireNode("node:path") as {
+      join(...parts: string[]): string;
+      resolve(...parts: string[]): string;
+    };
+    const logDir = path.resolve("apps", "desktop", ".cache");
+    const logPath = path.join(logDir, "memento_recall_log.jsonl");
+    fs.mkdirSync(logDir, { recursive: true });
+    fs.appendFileSync(
+      logPath,
+      `${JSON.stringify({
+        ts: createdAt,
+        sessionId,
+        query,
+        extractedEntities: extracted.entities,
+        extractedPersons: extracted.persons,
+        viewSizes: { lexical: lexicalSize, semantic: semanticSize, metadata: metadataSize },
+        returned: results.map((result) => ({
+          recordId: result.record.id,
+          fusedScore: result.fusionDetail?.views.length ? Number((result.score ?? 0).toFixed(4)) : 0,
+          viewBreakdown: result.fusionDetail?.views ?? [],
+        })),
+        policy: { autoRecallAllowed: policy.autoRecallAllowed, reason: policy.reason },
+      })}\n`,
+    );
+  } catch (error) {
+    console.warn("EvolveMemento recall log append skipped", error);
+  }
+}
+
+function getRuntimeEnv(name: string): string | undefined {
+  const processLike = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  return processLike?.env?.[name];
+}
+
+function getNodeRequire(): ((id: string) => unknown) | undefined {
+  try {
+    return Function("return typeof require === 'function' ? require : undefined")() as ((id: string) => unknown) | undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeMetadataValue(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function includesMetadataValue(value: string, candidate: string) {
+  return normalizeMetadataValue(value).includes(normalizeMetadataValue(candidate));
+}
+
+function hasIntersection(left: Set<string>, right: Set<string>) {
+  for (const value of left) {
+    if (right.has(value)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function unique(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function canonicalEntityName(value: string) {
+  const normalized = value.toLowerCase();
+  if (normalized === "event storage") {
+    return "Event Storage";
+  }
+  if (normalized === "event store") {
+    return "Event Store";
+  }
+  if (normalized === "coding packet") {
+    return "Coding Packet";
+  }
+  if (normalized === "simplemem") {
+    return "SimpleMem";
+  }
+  if (normalized === "evolvememento") {
+    return "EvolveMemento";
+  }
+  return value;
+}
+
+const commonCapitalizedWords = new Set([
+  "Event",
+  "Storage",
+  "Store",
+  "MemoryRecord",
+  "WorkItem",
+  "Coding",
+  "Packet",
+  "Memento",
+  "EvolveMemento",
+  "SimpleMem",
+]);
 
 function relationConfidence(left: MemoryRecord, right: MemoryRecord): number {
   const leftTerms = tokenize(`${left.title} ${left.content} ${(left.tags ?? []).join(" ")}`);
