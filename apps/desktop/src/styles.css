@@ -2128,6 +2128,103 @@ button {
   outline-offset: -2px;
 }
 
+.conversation-approval-panel {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  gap: 7px;
+  justify-self: stretch;
+  max-width: 100%;
+  padding: 8px;
+  border: 1px solid #826033;
+  border-radius: 8px;
+  background: #141311;
+  box-shadow: 0 8px 18px rgb(0 0 0 / 20%);
+}
+
+.conversation-approval-panel header,
+.conversation-approval-list article,
+.conversation-approval-actions {
+  display: flex;
+  align-items: center;
+}
+
+.conversation-approval-panel header,
+.conversation-approval-list article {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.conversation-approval-panel header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.conversation-approval-panel header em {
+  color: var(--amber);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.conversation-approval-list {
+  display: grid;
+  gap: 6px;
+}
+
+.conversation-approval-list article {
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #002f38;
+}
+
+.conversation-approval-list article > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.conversation-approval-list strong,
+.conversation-approval-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-approval-list strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.conversation-approval-list small {
+  color: var(--subtle);
+  font-size: 10px;
+}
+
+.conversation-approval-actions {
+  flex-shrink: 0;
+  gap: 5px;
+}
+
+.conversation-approval-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #00343d;
+  color: var(--text);
+  font-size: 11px;
+}
+
 .message {
   max-width: 78%;
   padding: 9px 10px;
