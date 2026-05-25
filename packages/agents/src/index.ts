@@ -79,6 +79,9 @@ export function advanceDebateRound(
   if (target.status === "blocked") {
     throw new Error(`debate round is blocked, cannot advance: ${completedRoundId}`);
   }
+  if (target.status !== "running") {
+    throw new Error(`debate round is not running, cannot advance: ${completedRoundId}`);
+  }
 
   const next = rounds.map((round, index): DebateRound => {
     if (index === targetIndex) {

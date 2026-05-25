@@ -55,12 +55,17 @@ describe("debate round lifecycle", () => {
 
   it("marks finished when the last round completes", () => {
     let rounds = createDebateRounds("debate_e");
-    for (const round of rounds) {
-      const result = advanceDebateRound(rounds, round.id);
+    for (let index = 0; index < 7; index += 1) {
+      const active = getActiveDebateRound(rounds);
+      expect(active).toBeDefined();
+      const result = advanceDebateRound(rounds, active!.id);
       rounds = result.rounds;
-      if (round === rounds[rounds.length - 1]) {
+      if (index === 6) {
         expect(result.finished).toBe(true);
         expect(result.nextRunningRoundId).toBeUndefined();
+      } else {
+        expect(result.finished).toBe(false);
+        expect(result.nextRunningRoundId).toBeDefined();
       }
     }
     expect(rounds.every((round) => round.status === "completed")).toBe(true);
@@ -75,6 +80,11 @@ describe("debate round lifecycle", () => {
     const rounds = createDebateRounds("debate_g");
     const first = advanceDebateRound(rounds, rounds[0]!.id);
     expect(() => advanceDebateRound(first.rounds, rounds[0]!.id)).toThrow(/already completed/);
+  });
+
+  it("throws when advancing a pending round out of order", () => {
+    const rounds = createDebateRounds("debate_pending");
+    expect(() => advanceDebateRound(rounds, rounds[2]!.id)).toThrow(/not running/);
   });
 
   it("throws when advancing a blocked round", () => {
