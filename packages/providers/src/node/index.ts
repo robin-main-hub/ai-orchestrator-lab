@@ -19,3 +19,8 @@ export {
   splitSystemAndMessages,
   type AnthropicAdapterOptions,
 } from "../anthropicAdapter.js";
+export {
+  createOllamaMessages,
+  OllamaAdapter,
+  type OllamaAdapterOptions,
+} from "../ollamaAdapter.js";
