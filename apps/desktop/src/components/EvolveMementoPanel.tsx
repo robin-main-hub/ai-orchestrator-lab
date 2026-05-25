@@ -1,49 +1,41 @@
 import { useState } from "react";
 import {
-  CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Database,
   Hash,
-  Link2,
   Plus,
   Sparkles,
-  Trash2,
   TrendingUp,
   UserRound,
 } from "lucide-react";
 import type { MemoryRecord, RecallResult } from "@ai-orchestrator/protocol";
-import { cn } from "../lib/utils";
+import { cn } from "@/lib/utils";
+import { Button } from "@/ui/button";
 import type { Stage6MemoryInspector } from "../runtime/stage6Memory";
 
 /**
- * EvolveMemento panel — unified naming of the Memento + EvolveMem
- * (arXiv:2605.13941) merger. Replaces the legacy MementoInspectorPanel.
+ * EvolveMemento panel — strict v0 port.
  *
- * "EvolveMemento" = our Memento (long-term memory store + UI) extended
- * with EvolveMem-style multi-view retrieval and (eventually) the
- * self-evolving retrieval loop. The runtime layer (`Stage6MemoryInspector`
- * et al.) keeps the historical `Memory*` naming to avoid runtime churn;
- * this UI surface adopts the unified product name.
+ * source: docs/v0/v0-output/components/sidebar/memento-panel.tsx
  *
- * Applies docs/design-decisions.md §10 (Notion-style document canvas)
- * and §1 (no WindowChecklist in production UI).
+ * v0 structure (intentional — what user gets):
+ *   - header (chevron + title + count + add)
+ *   - auto-load indicator (Sparkles + policy line)
+ *   - 4 mini stat cells
+ *   - Memory Context card
+ *   - Recall Trace drawer (only)
  *
- * Layout strategy: **always-visible summary + collapsible drawers for
- * detail.** The legacy panel rendered every section flat (Recall Trace
- * + Relations + Reflect + Records all simultaneously), producing the
- * "dashboard of dashboards" feel design-decisions explicitly rejects.
+ * Stage 1b v2 의 신규 schema 시각화 (importance bar / chip strip /
+ * fusion breakdown) 는 Recall Trace row 안에 carry — v0 의 행 구조를
+ * 그대로 두면서 새 메타데이터를 추가 라인으로 노출.
  *
- * Default view is now:
- *   [auto-load indicator] · [4 stat chips] · [context summary card]
- *   [Recall Trace drawer — open]
- *   [Relations drawer — closed]
- *   [Reflect drawer — auto-open if issues > 0]
- *   [Records drawer — closed]
- *
- * Every action the old panel exposed (activate / pin / forget) is
- * preserved inside the Records drawer; no functional regression.
- *
- * WindowChecklist intentionally removed per design-decisions §1.
+ * Records management actions (activate / pin / forget) 는 v0 가
+ * 디자인하지 않은 영역. 호스트 (App.tsx) 는 콜백을 그대로 전달하지만
+ * 이 panel 은 v0 그대로의 read-only 뷰. Records 관리는 향후 별도
+ * 진입점 (right-click context menu, 또는 Records sub-page) 으로 옮길
+ * 예정. 그 전까지는 콜백 reference 만 유지해서 host 의 contract 가
+ * 깨지지 않음.
  */
 
 export type EvolveMementoPanelProps = {
@@ -54,288 +46,354 @@ export type EvolveMementoPanelProps = {
   onRemember: () => void;
 };
 
-/** Back-compat alias for callers that still import the old name. */
+/** Back-compat alias. */
 export type MementoPanelProps = EvolveMementoPanelProps;
 
 export function EvolveMementoPanel({
   inspector,
-  onActivate,
-  onForget,
-  onPin,
   onRemember,
 }: EvolveMementoPanelProps) {
+  const [isOpen, setIsOpen] = useState(true);
   const visibleTrace = inspector.trace.results.slice(0, 6);
-  const visibleRecords = inspector.records.slice(0, 8);
-  const visibleRelations = inspector.relations.slice(0, 4);
-  const visibleIssues = inspector.issues.slice(0, 4);
   const policy = inspector.trace.policy;
+  const ctx = inspector.contextPacket;
 
   return (
-    <section className="side-panel memory-panel memento-panel-v2" aria-label="EvolveMemento">
-      <header className="panel-title">
-        <Database size={17} />
-        <h2>EvolveMemento</h2>
-        <span className="memento-v2__count">{inspector.stats.totalRecords}</span>
+    <section
+      aria-label="EvolveMemento"
+      className="evolvememento-root rounded-lg border border-border bg-card"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <button
-          aria-label="현재 맥락 기억"
-          className="icon-button"
-          onClick={onRemember}
+          aria-expanded={isOpen}
+          className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary"
+          onClick={() => setIsOpen((o) => !o)}
           type="button"
         >
-          <Plus size={15} />
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 text-muted-foreground transition-transform",
+              !isOpen && "-rotate-90",
+            )}
+          />
+          <Database className="h-4 w-4" />
+          EvolveMemento
+          <span className="text-xs text-muted-foreground">
+            {inspector.stats.totalRecords}
+          </span>
         </button>
-      </header>
-
-      <div
-        className={cn(
-          "memento-v2__policy",
-          policy.autoRecallAllowed
-            ? "memento-v2__policy--auto"
-            : "memento-v2__policy--manual",
-        )}
-      >
-        <Sparkles size={12} />
-        <strong>{policy.autoRecallAllowed ? "자동 불러오기" : "수동 불러오기"}</strong>
-        <span>{recallReasonLabel(policy.reason)}</span>
-      </div>
-
-      <div className="memento-v2__stats">
-        <Stat label="기억" value={inspector.stats.totalRecords} />
-        <Stat label="활성" value={inspector.stats.activeRecords} tone="cyan" />
-        <Stat label="관계" value={inspector.stats.relationCount} />
-        <Stat
-          label="격리"
-          value={inspector.stats.quarantinedRecords}
-          tone={inspector.stats.quarantinedRecords > 0 ? "amber" : undefined}
-        />
-      </div>
-
-      <div className={cn("memento-v2__context", `memento-v2__context--${inspector.stats.health}`)}>
-        <span className="memento-v2__context-label">Memory Context</span>
-        <strong className="memento-v2__context-summary">
-          {inspector.contextPacket.summary}
-        </strong>
-        <p className="memento-v2__context-meta">
-          active {inspector.contextPacket.activeRecordIds.length} · blocked{" "}
-          {inspector.contextPacket.blockedRecordIds.length} · links{" "}
-          {inspector.contextPacket.relationIds.length}
-        </p>
-      </div>
-
-      <div className="memento-v2__drawers">
-        <Drawer
-          label="Recall Trace"
-          count={visibleTrace.length}
-          defaultOpen
-          empty={
-            visibleTrace.length === 0
-              ? "현재 작업에 매칭되는 recall 후보가 없습니다."
-              : undefined
-          }
+        <Button
+          aria-label="현재 맥락 기억"
+          className="h-6 w-6"
+          onClick={onRemember}
+          size="icon"
+          variant="ghost"
         >
-          {visibleTrace.map((result) => (
-            <article
+          <Plus className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      {isOpen ? (
+        <div className="space-y-4 p-3">
+          {/* Auto-load indicator */}
+          <div className="flex items-start gap-2">
+            <Sparkles
               className={cn(
-                "memento-v2__trace",
-                result.usedInDecision ? "memento-v2__trace--used" : "memento-v2__trace--blocked",
+                "mt-0.5 h-3.5 w-3.5 shrink-0",
+                policy.autoRecallAllowed ? "text-primary" : "text-muted-foreground",
               )}
-              key={result.record.id}
-            >
-              <div className="memento-v2__trace-head">
-                <strong
-                  className="memento-v2__trace-title"
-                  title={result.record.losslessRestatement ?? result.record.content}
-                >
-                  {result.record.title}
-                </strong>
-                <span className="memento-v2__trace-score">
-                  {(result.score * 100).toFixed(0)}%
-                </span>
+            />
+            <div className="min-w-0">
+              <div className="text-xs text-foreground">
+                {policy.autoRecallAllowed ? "자동 불러오기" : "수동 불러오기"}
               </div>
-              <span className="memento-v2__trace-meta">
-                {mementoKindLabel(result.record.kind)} · {mementoScopeLabel(result.record.scope)} ·{" "}
-                {activationStateLabel(result.activationState)}
-              </span>
-              <ImportanceBar
-                importance={result.record.importance}
-                reinforcement={result.record.entityReinforcement}
-              />
-              <RecordChips record={result.record} />
-              <FusionBreakdown detail={result.fusionDetail} />
-              <p className="memento-v2__trace-reason">{recallReasonLabel(result.reason)}</p>
-            </article>
-          ))}
-        </Drawer>
-
-        <Drawer
-          label="Relations"
-          count={visibleRelations.length}
-          empty={
-            visibleRelations.length === 0
-              ? "활성 기억이 늘어나면 관계 그래프가 생깁니다."
-              : undefined
-          }
-        >
-          {visibleRelations.map((relation) => (
-            <article className="memento-v2__relation" key={relation.id}>
-              <strong>{memoryRelationLabel(relation.kind)}</strong>
-              <span>
-                {(relation.confidence * 100).toFixed(0)}% ·{" "}
-                {relation.fromRecordId.replace("memory_seed_", "")}
-              </span>
-            </article>
-          ))}
-        </Drawer>
-
-        <Drawer
-          label="Reflect"
-          count={visibleIssues.length}
-          defaultOpen={visibleIssues.length > 0}
-          empty={
-            visibleIssues.length === 0
-              ? "정리가 필요한 중복 / 모순 / 오래된 기억 없음."
-              : undefined
-          }
-        >
-          {visibleIssues.map((issue) => (
-            <article
-              className={cn("memento-v2__issue", `memento-v2__issue--${issue.severity}`)}
-              key={issue.id}
-            >
-              <strong>{reflectionIssueLabel(issue.kind)}</strong>
-              <span>{issue.recommendation}</span>
-            </article>
-          ))}
-        </Drawer>
-
-        <Drawer label="Records" count={visibleRecords.length}>
-          {visibleRecords.map((record) => (
-            <article className="memento-v2__record" key={record.id}>
-              <div className="memento-v2__record-body">
-                <strong
-                  className="memento-v2__record-title"
-                  title={record.losslessRestatement ?? record.content}
-                >
-                  {record.title}
-                </strong>
-                <span className="memento-v2__record-meta">
-                  {mementoKindLabel(record.kind)} · {mementoScopeLabel(record.scope)} ·{" "}
-                  {trustLevelLabel(record.trustLevel)}
-                </span>
-                <ImportanceBar
-                  compact
-                  importance={record.importance}
-                  reinforcement={record.entityReinforcement}
-                />
-                <RecordChips record={record} />
+              <div className="text-[10px] text-muted-foreground line-clamp-2">
+                {recallReasonLabel(policy.reason)}
               </div>
-              <div className="memento-v2__record-actions">
-                <button
-                  aria-label={`${record.title} 활성화`}
-                  className={cn(
-                    "icon-button tiny",
-                    record.activationState === "active" && "active",
-                  )}
-                  disabled={record.activationState === "active"}
-                  onClick={() => onActivate(record.id)}
-                  type="button"
-                >
-                  <Link2 size={13} />
-                </button>
-                <button
-                  aria-label={`${record.title} 고정`}
-                  className={cn("icon-button tiny", record.pinned && "active")}
-                  disabled={record.pinned}
-                  onClick={() => onPin(record.id)}
-                  type="button"
-                >
-                  <CheckCircle2 size={13} />
-                </button>
-                <button
-                  aria-label={`${record.title} 삭제`}
-                  className="icon-button tiny"
-                  onClick={() => onForget(record.id)}
-                  type="button"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            </article>
-          ))}
-        </Drawer>
-      </div>
+            </div>
+          </div>
+
+          {/* 4 mini stats */}
+          <div className="grid grid-cols-4 gap-1.5">
+            <MiniStat label="기억" value={inspector.stats.totalRecords} />
+            <MiniStat label="활성" value={inspector.stats.activeRecords} tone="cyan" />
+            <MiniStat label="관계" value={inspector.stats.relationCount} />
+            <MiniStat
+              label="격리"
+              tone={inspector.stats.quarantinedRecords > 0 ? "amber" : "neutral"}
+              value={inspector.stats.quarantinedRecords}
+            />
+          </div>
+
+          {/* Memory Context */}
+          <div className="rounded-md border border-border bg-card/40 px-3 py-2">
+            <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Memory Context
+            </div>
+            <div className="mt-1 text-xs text-foreground line-clamp-2">
+              {ctx.summary}
+            </div>
+            <div className="mt-1 text-[10px] text-muted-foreground">
+              active {ctx.activeRecordIds.length} · blocked{" "}
+              {ctx.blockedRecordIds.length} · links {ctx.relationIds.length}
+            </div>
+          </div>
+
+          {/* Recall Trace — sole drawer */}
+          <RecallTraceList traces={visibleTrace} />
+        </div>
+      ) : null}
     </section>
   );
 }
 
-function Stat({
+// ── v0-style sub-components ──────────────────────────────────────────
+
+function MiniStat({
   label,
   value,
-  tone,
+  tone = "neutral",
 }: {
   label: string;
   value: number;
-  tone?: "cyan" | "amber";
+  tone?: "neutral" | "cyan" | "amber";
 }) {
   return (
-    <div className={cn("memento-v2__stat", tone && `memento-v2__stat--${tone}`)}>
-      <strong>{value}</strong>
-      <span>{label}</span>
+    <div className="flex flex-col items-center rounded-md bg-card/40 py-1.5">
+      <span
+        className={cn(
+          "text-sm font-semibold",
+          tone === "cyan" && "text-primary",
+          tone === "amber" && "text-warning",
+          tone === "neutral" && "text-foreground",
+        )}
+      >
+        {value}
+      </span>
+      <span className="text-[9px] text-muted-foreground">{label}</span>
     </div>
   );
 }
 
-function Drawer({
-  label,
-  count,
-  defaultOpen = false,
-  empty,
-  children,
-}: {
-  label: string;
-  count: number;
-  defaultOpen?: boolean;
-  empty?: string;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
+function RecallTraceList({ traces }: { traces: RecallResult[] }) {
+  const [expanded, setExpanded] = useState(true);
+
   return (
-    <div className="memento-v2__drawer">
+    <div>
       <button
-        aria-expanded={open}
-        className="memento-v2__drawer-trigger"
-        onClick={() => setOpen((o) => !o)}
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs hover:bg-card/60"
+        onClick={() => setExpanded((o) => !o)}
         type="button"
       >
-        <ChevronDown
-          className={cn(
-            "memento-v2__drawer-chevron",
-            !open && "memento-v2__drawer-chevron--closed",
-          )}
-          size={12}
-        />
-        <span className="memento-v2__drawer-label">{label}</span>
-        <span className="memento-v2__drawer-count">{count}</span>
-      </button>
-      {open && (
-        <div className="memento-v2__drawer-content">
-          {empty ? <p className="memento-v2__empty">{empty}</p> : children}
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-foreground">Recall Trace</span>
+          <span className="text-muted-foreground">{traces.length}</span>
         </div>
-      )}
+        {expanded ? (
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+        )}
+      </button>
+      {expanded ? (
+        <div className="mt-1 space-y-1">
+          {traces.length === 0 ? (
+            <p className="px-2 py-1 text-[10px] text-muted-foreground">
+              현재 작업에 매칭되는 recall 후보가 없습니다.
+            </p>
+          ) : (
+            traces.map((trace) => (
+              <RecallTraceRow key={trace.record.id} result={trace} />
+            ))
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-// ── Label helpers — unchanged from legacy, kept local to this file ──
-
-function trustLevelLabel(trustLevel: MemoryRecord["trustLevel"]) {
-  const labels: Record<MemoryRecord["trustLevel"], string> = {
-    limited: "제한됨",
-    trusted: "신뢰됨",
-    untrusted: "격리됨",
-  };
-  return labels[trustLevel];
+function RecallTraceRow({ result }: { result: RecallResult }) {
+  return (
+    <div
+      className={cn(
+        "rounded-md border bg-card/40 p-2 transition-colors",
+        result.usedInDecision
+          ? "border-primary/40"
+          : "border-border opacity-70",
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span
+              className="truncate text-xs font-medium text-foreground"
+              title={result.record.losslessRestatement ?? result.record.content}
+            >
+              {result.record.title}
+            </span>
+            {result.usedInDecision ? (
+              <span className="shrink-0 rounded bg-primary/15 px-1 py-0.5 text-[9px] text-primary">
+                사용됨
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+            {mementoKindLabel(result.record.kind)} ·{" "}
+            {mementoScopeLabel(result.record.scope)}
+          </p>
+        </div>
+        <span className="shrink-0 text-[10px] text-muted-foreground">
+          {(result.score * 100).toFixed(0)}%
+        </span>
+      </div>
+      <ImportanceBar
+        importance={result.record.importance}
+        reinforcement={result.record.entityReinforcement}
+      />
+      <RecordChips record={result.record} />
+      <FusionBreakdown detail={result.fusionDetail} />
+    </div>
+  );
 }
+
+function ImportanceBar({
+  importance,
+  reinforcement,
+}: {
+  importance?: number;
+  reinforcement?: number;
+}) {
+  if (importance === undefined && !reinforcement) return null;
+  const pct = Math.max(0, Math.min(1, importance ?? 0)) * 100;
+  return (
+    <div
+      className="mt-1.5 flex items-center gap-1.5"
+      title={`importance ${pct.toFixed(0)}% · reinforce +${(reinforcement ?? 0).toFixed(1)}`}
+    >
+      <div className="relative h-1 flex-1 overflow-hidden rounded-full bg-card/70">
+        <div
+          className="h-full bg-gradient-to-r from-primary/50 to-primary transition-all duration-200"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {reinforcement && reinforcement > 0 ? (
+        <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-success/15 px-1 py-0.5 text-[9px] font-mono text-success">
+          <TrendingUp className="h-2.5 w-2.5" />
+          {reinforcement.toFixed(1)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function RecordChips({ record }: { record: MemoryRecord }) {
+  const topic = record.topic;
+  const persons = record.persons ?? [];
+  const entities = record.entities ?? [];
+  const keywords = record.keywords ?? [];
+  const hasAny =
+    topic || persons.length > 0 || entities.length > 0 || keywords.length > 0;
+  if (!hasAny) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1">
+      {topic ? (
+        <Chip tone="primary" title={`topic: ${topic}`}>
+          <Hash className="h-2.5 w-2.5" />
+          {topic}
+        </Chip>
+      ) : null}
+      {persons.slice(0, 3).map((p) => (
+        <Chip key={`p-${p}`} title={`person: ${p}`} tone="violet">
+          <UserRound className="h-2.5 w-2.5" />
+          {p}
+        </Chip>
+      ))}
+      {persons.length > 3 ? <ChipOverflow count={persons.length - 3} /> : null}
+      {entities.slice(0, 3).map((e) => (
+        <Chip key={`e-${e}`} title={`entity: ${e}`} tone="warning">
+          {e}
+        </Chip>
+      ))}
+      {entities.length > 3 ? <ChipOverflow count={entities.length - 3} /> : null}
+      {keywords.slice(0, 5).map((k) => (
+        <Chip key={`k-${k}`} title={`keyword: ${k}`}>
+          {k}
+        </Chip>
+      ))}
+      {keywords.length > 5 ? <ChipOverflow count={keywords.length - 5} /> : null}
+    </div>
+  );
+}
+
+function Chip({
+  children,
+  tone,
+  title,
+}: {
+  children: React.ReactNode;
+  tone?: "primary" | "violet" | "warning";
+  title?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-0.5 rounded-full border bg-card/40 px-1.5 py-0 text-[9px] font-mono",
+        tone === "primary" && "border-primary/45 text-primary",
+        tone === "violet" && "border-chart-5/45 text-chart-5",
+        tone === "warning" && "border-warning/45 text-warning",
+        !tone && "border-border text-muted-foreground",
+      )}
+      title={title}
+    >
+      {children}
+    </span>
+  );
+}
+
+function ChipOverflow({ count }: { count: number }) {
+  return (
+    <span className="px-1 text-[9px] font-mono text-muted-foreground">
+      +{count}
+    </span>
+  );
+}
+
+function FusionBreakdown({ detail }: { detail?: RecallResult["fusionDetail"] }) {
+  if (!detail || detail.views.length === 0) return null;
+  const viewShort: Record<"lexical" | "semantic" | "metadata", string> = {
+    lexical: "lex",
+    semantic: "sem",
+    metadata: "meta",
+  };
+  return (
+    <div
+      className="mt-1.5 flex flex-wrap items-center gap-1 rounded bg-card/70 px-1 py-0.5 font-mono"
+      title={`fusion mode: ${detail.fusionMode} (RRF k=60)`}
+    >
+      <span className="text-[8.5px] uppercase tracking-wider text-muted-foreground">
+        {detail.fusionMode}
+      </span>
+      {detail.views.map((v) => (
+        <span
+          className={cn(
+            "rounded px-1 text-[9px]",
+            v.view === "lexical" && "bg-warning/15 text-warning",
+            v.view === "semantic" && "bg-chart-5/15 text-chart-5",
+            v.view === "metadata" && "bg-success/15 text-success",
+          )}
+          key={`${v.view}-${v.rank}`}
+          title={`${v.view} rank #${v.rank} (raw ${v.rawScore.toFixed(2)})`}
+        >
+          {viewShort[v.view]}#{v.rank}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ── Label helpers ────────────────────────────────────────────────────
 
 function recallReasonLabel(reason: string) {
   const labels: Record<string, string> = {
@@ -348,7 +406,8 @@ function recallReasonLabel(reason: string) {
     "query overlap and trust policy passed": "현재 작업과 관련 있고 신뢰 정책을 통과함",
     "untrusted provider: project/user memory requires explicit selection":
       "신뢰되지 않은 프로바이더는 프로젝트/사용자 기억을 자동으로 받지 않음",
-    "untrusted memory is quarantined until pinned": "신뢰되지 않은 기억은 고정 전까지 격리됨",
+    "untrusted memory is quarantined until pinned":
+      "신뢰되지 않은 기억은 고정 전까지 격리됨",
   };
   return labels[reason] ?? reason;
 }
@@ -374,175 +433,4 @@ function mementoKindLabel(kind?: MemoryRecord["kind"]) {
     workflow: "작업흐름",
   };
   return kind ? labels[kind] : "미분류";
-}
-
-function activationStateLabel(
-  state?: Stage6MemoryInspector["trace"]["results"][number]["activationState"],
-) {
-  const labels: Record<
-    NonNullable<Stage6MemoryInspector["trace"]["results"][number]["activationState"]>,
-    string
-  > = {
-    active: "사용됨",
-    inactive: "대기",
-    quarantined: "격리",
-    suggested: "후보",
-  };
-  return state ? labels[state] : "대기";
-}
-
-function memoryRelationLabel(kind: Stage6MemoryInspector["relations"][number]["kind"]) {
-  const labels: Record<Stage6MemoryInspector["relations"][number]["kind"], string> = {
-    contradicts: "모순",
-    depends_on: "의존",
-    related: "관련",
-    supersedes: "대체",
-    supports: "보강",
-  };
-  return labels[kind];
-}
-
-function reflectionIssueLabel(kind: Stage6MemoryInspector["issues"][number]["kind"]) {
-  const labels: Record<Stage6MemoryInspector["issues"][number]["kind"], string> = {
-    contradiction: "모순 후보",
-    duplicate: "중복 후보",
-    missing_relation: "관계 부족",
-    stale: "오래된 기억",
-    untrusted_active: "비신뢰 활성",
-  };
-  return labels[kind];
-}
-
-// ── v2: EvolveMem schema 신규 필드 시각화 helpers ──────────────────
-
-/**
- * Importance bar — 0~1 progress. entityReinforcement (누적 score, 0~5)
- * 가 있으면 우측에 mono badge 로 같이 표시. 둘 다 없으면 미렌더.
- */
-function ImportanceBar({
-  importance,
-  reinforcement,
-  compact,
-}: {
-  importance?: number;
-  reinforcement?: number;
-  compact?: boolean;
-}) {
-  if (importance === undefined && !reinforcement) return null;
-  const pct = Math.max(0, Math.min(1, importance ?? 0)) * 100;
-  return (
-    <div
-      className={cn("memento-v2__importance", compact && "memento-v2__importance--compact")}
-      title={`importance ${pct.toFixed(0)}% · reinforce +${(reinforcement ?? 0).toFixed(1)}`}
-    >
-      <div className="memento-v2__importance-track">
-        <div className="memento-v2__importance-fill" style={{ width: `${pct}%` }} />
-      </div>
-      {reinforcement && reinforcement > 0 ? (
-        <span className="memento-v2__importance-badge">
-          <TrendingUp size={9} />
-          {reinforcement.toFixed(1)}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * Render the LLM-extracted structured chips: topic / persons / entities /
- * keywords. Each track is independently optional; rendering skips when
- * empty so empty cards stay clean.
- */
-function RecordChips({ record }: { record: MemoryRecord }) {
-  const topic = record.topic;
-  const persons = record.persons ?? [];
-  const entities = record.entities ?? [];
-  const keywords = record.keywords ?? [];
-  const hasAny =
-    topic || persons.length > 0 || entities.length > 0 || keywords.length > 0;
-  if (!hasAny) return null;
-  return (
-    <div className="memento-v2__chips">
-      {topic ? (
-        <span
-          className="memento-v2__chip memento-v2__chip--topic"
-          title={`topic: ${topic}`}
-        >
-          <Hash size={9} />
-          {topic}
-        </span>
-      ) : null}
-      {persons.slice(0, 3).map((p) => (
-        <span
-          className="memento-v2__chip memento-v2__chip--person"
-          key={`p-${p}`}
-          title={`person: ${p}`}
-        >
-          <UserRound size={9} />
-          {p}
-        </span>
-      ))}
-      {persons.length > 3 ? (
-        <span className="memento-v2__chip-overflow">+{persons.length - 3}</span>
-      ) : null}
-      {entities.slice(0, 3).map((e) => (
-        <span
-          className="memento-v2__chip memento-v2__chip--entity"
-          key={`e-${e}`}
-          title={`entity: ${e}`}
-        >
-          {e}
-        </span>
-      ))}
-      {entities.length > 3 ? (
-        <span className="memento-v2__chip-overflow">+{entities.length - 3}</span>
-      ) : null}
-      {keywords.slice(0, 5).map((k) => (
-        <span
-          className="memento-v2__chip memento-v2__chip--keyword"
-          key={`k-${k}`}
-          title={`keyword: ${k}`}
-        >
-          {k}
-        </span>
-      ))}
-      {keywords.length > 5 ? (
-        <span className="memento-v2__chip-overflow">+{keywords.length - 5}</span>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * Fusion breakdown — view → rank chips. EvolveMem 의 3-view RRF fusion
- * 결과를 사용자에게 노출. semantic view stub 인 동안에도 lexical / metadata
- * 가 어떤 rank 로 기여했는지 확인 가능. detail 없으면 미렌더.
- */
-function FusionBreakdown({ detail }: { detail?: RecallResult["fusionDetail"] }) {
-  if (!detail || detail.views.length === 0) return null;
-  const viewShort: Record<"lexical" | "semantic" | "metadata", string> = {
-    lexical: "lex",
-    semantic: "sem",
-    metadata: "meta",
-  };
-  return (
-    <div
-      className="memento-v2__fusion"
-      title={`fusion mode: ${detail.fusionMode} (RRF k=60)`}
-    >
-      <span className="memento-v2__fusion-label">{detail.fusionMode}</span>
-      {detail.views.map((v) => (
-        <span
-          className={cn(
-            "memento-v2__fusion-view",
-            `memento-v2__fusion-view--${v.view}`,
-          )}
-          key={`${v.view}-${v.rank}`}
-          title={`${v.view} rank #${v.rank} (raw ${v.rawScore.toFixed(2)})`}
-        >
-          {viewShort[v.view]}#{v.rank}
-        </span>
-      ))}
-    </div>
-  );
 }
