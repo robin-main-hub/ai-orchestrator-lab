@@ -12,6 +12,7 @@ import {
   createLiveHealthResponse,
   createProviderCompletionApprovalRequest,
   createServerIngressSnapshot,
+  createServerTmuxCaptureSnapshot,
   createServerTmuxDispatchSnapshot,
   createServerProviderRegistrySnapshot,
   createServerProviderModelDiscoveryResponse,
@@ -418,6 +419,31 @@ describe("server health placeholder", () => {
     expect(denied.permission.decision).toBe("deny");
     expect(denied.intent.dispatchState).toBe("blocked");
     expect(JSON.stringify(denied)).not.toContain("abcdefghijklmnopqrstuvwxyz");
+  });
+
+  it("redacts read-only tmux pane captures before event storage", () => {
+    const snapshot = createServerTmuxCaptureSnapshot(
+      {
+        id: "tmux_capture_test",
+        sessionId: "session_tmux_test",
+        terminalSessionId: "terminal_session_ai_swarm",
+        role: "qa",
+        host: "dgx_02",
+        paneId: "%7",
+        requestedBy: "user",
+        lines: 80,
+        tmuxSessionName: "ai-swarm",
+        createdAt: "2026-05-24T00:00:00.000Z",
+      },
+      "running with Bearer abcdefghijklmnopqrstuvwxyz123456\nall good",
+      "2026-05-24T00:00:00.000Z",
+    );
+
+    expect(snapshot.payload.redactionApplied).toBe(true);
+    expect(snapshot.payload.outputPreview).not.toContain("abcdefghijklmnopqrstuvwxyz");
+    expect(snapshot.payload.outputPreview).toContain("<redacted>");
+    expect(snapshot.event.type).toBe("terminal.pane.output_captured");
+    expect(snapshot.event.redacted).toBe(true);
   });
 
   it("merges desktop system prompts before proxying to strict vLLM chat templates", async () => {
@@ -1535,6 +1561,84 @@ describe("HTTP request limits", () => {
         delete process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
       } else {
         process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS = previousTmuxDispatch;
+      }
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps tmux capture disabled until the server explicitly enables it", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const previousTmuxCapture = process.env.ORCHESTRATOR_ENABLE_TMUX_CAPTURE;
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-tmux-capture-"));
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+    process.env.EVENT_STORAGE_DIR = tempDir;
+    delete process.env.ORCHESTRATOR_ENABLE_TMUX_CAPTURE;
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/tmux/capture`, {
+        body: JSON.stringify({
+          id: "tmux_capture_http_disabled",
+          sessionId: "session_tmux_http",
+          terminalSessionId: "terminal_session_ai_swarm",
+          role: "qa",
+          host: "dgx_02",
+          paneId: "%7",
+          requestedBy: "user",
+          lines: 80,
+          tmuxSessionName: "ai-swarm",
+          createdAt: "2026-05-25T00:02:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(response.status).toBe(202);
+      await expect(response.json()).resolves.toMatchObject({
+        status: "disabled",
+        reason: expect.stringContaining("ORCHESTRATOR_ENABLE_TMUX_CAPTURE"),
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousEventStorageDir === undefined) {
+        delete process.env.EVENT_STORAGE_DIR;
+      } else {
+        process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      if (previousTmuxCapture === undefined) {
+        delete process.env.ORCHESTRATOR_ENABLE_TMUX_CAPTURE;
+      } else {
+        process.env.ORCHESTRATOR_ENABLE_TMUX_CAPTURE = previousTmuxCapture;
       }
       await rm(tempDir, { force: true, recursive: true });
     }

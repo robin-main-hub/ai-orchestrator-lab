@@ -44,6 +44,7 @@ import type {
   TerminalCommandIntent,
   TerminalCommandDispatchState,
   TerminalHostKind,
+  TerminalPaneOutputCapturedEventPayload,
   TmuxPaneRole,
 } from "@ai-orchestrator/protocol";
 import {
@@ -70,6 +71,7 @@ export type ServerCapability =
   | "runtime-status"
   | "remote-run-request"
   | "tmux-dispatch-gate"
+  | "tmux-capture-gate"
   | "approval-queue"
   | "event-storage-sync"
   | "remote-event-stream-placeholder"
@@ -243,6 +245,26 @@ export type ServerTmuxDispatchResponse = {
   dispatch: ServerTmuxDispatchResult;
   eventSync: EventSyncPushResponse;
   dispatchEventSync?: EventSyncPushResponse;
+};
+
+export type ServerTmuxCaptureRequest = {
+  id: string;
+  sessionId: string;
+  terminalSessionId: string;
+  role: TmuxPaneRole;
+  host: TerminalHostKind;
+  paneId: string;
+  requestedBy: PermissionActor;
+  lines: number;
+  tmuxSessionName: string;
+  createdAt: string;
+};
+
+export type ServerTmuxCaptureResponse = {
+  status: "disabled" | "captured" | "failed";
+  reason: string;
+  payload?: TerminalPaneOutputCapturedEventPayload;
+  eventSync?: EventSyncPushResponse;
 };
 
 const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
@@ -504,6 +526,7 @@ export function createHealthResponse(now = new Date().toISOString(), probe?: Dgx
       "runtime-status",
       "remote-run-request",
       "tmux-dispatch-gate",
+      "tmux-capture-gate",
       "approval-queue",
       "event-storage-sync",
       "remote-event-stream-placeholder",
@@ -1260,6 +1283,124 @@ export async function recordServerTmuxDispatchToPersistentServerStorage(
     eventSync,
     dispatchEventSync,
   };
+}
+
+export function parseServerTmuxCaptureRequest(value: unknown, now = new Date().toISOString()): ServerTmuxCaptureRequest {
+  if (!value || typeof value !== "object") {
+    throw new Error("tmux capture payload must be an object");
+  }
+
+  const candidate = value as Partial<ServerTmuxCaptureRequest>;
+  const role = parseTmuxPaneRole(candidate.role);
+  const sessionId = typeof candidate.sessionId === "string" && candidate.sessionId.trim() ? candidate.sessionId.trim() : "session_desktop_001";
+  const terminalSessionId =
+    typeof candidate.terminalSessionId === "string" && candidate.terminalSessionId.trim()
+      ? candidate.terminalSessionId.trim()
+      : "terminal_session_ai_swarm";
+  const paneId = typeof candidate.paneId === "string" && candidate.paneId.trim() ? candidate.paneId.trim() : `role:${role}`;
+  const requestedBy = parsePermissionActor(candidate.requestedBy);
+  const host = parseTerminalHostKind(candidate.host);
+  const tmuxSessionName =
+    typeof candidate.tmuxSessionName === "string" && candidate.tmuxSessionName.trim()
+      ? candidate.tmuxSessionName.trim()
+      : "ai-swarm";
+  const lines =
+    typeof candidate.lines === "number" && Number.isFinite(candidate.lines)
+      ? Math.max(1, Math.min(2_000, Math.trunc(candidate.lines)))
+      : 120;
+  const id =
+    typeof candidate.id === "string" && candidate.id.trim()
+      ? candidate.id.trim()
+      : `tmux_capture_${stableServerId(`${sessionId}:${terminalSessionId}:${role}:${lines}`)}`;
+  const createdAt = typeof candidate.createdAt === "string" && candidate.createdAt.trim() ? candidate.createdAt.trim() : now;
+
+  return {
+    id,
+    sessionId,
+    terminalSessionId,
+    role,
+    host,
+    paneId,
+    requestedBy,
+    lines,
+    tmuxSessionName,
+    createdAt,
+  };
+}
+
+export function createServerTmuxCaptureSnapshot(
+  request: ServerTmuxCaptureRequest,
+  rawOutput: string,
+  now = new Date().toISOString(),
+): { payload: TerminalPaneOutputCapturedEventPayload; event: EventEnvelope<TerminalPaneOutputCapturedEventPayload> } {
+  const redacted = redactForServerPhase(rawOutput, "pre_store");
+  const outputPreview = String(redacted.value).slice(0, 12_000);
+  const payload: TerminalPaneOutputCapturedEventPayload = {
+    terminalSessionId: request.terminalSessionId,
+    paneId: request.paneId,
+    role: request.role,
+    outputPreview,
+    lineCount: outputPreview ? outputPreview.split(/\r?\n/).length : 0,
+    redactionApplied: redacted.report.redacted,
+    capturedAt: now,
+  };
+
+  return {
+    payload,
+    event: {
+      id: `event_tmux_capture_${request.id}_${stableServerId(now)}`,
+      sessionId: request.sessionId,
+      type: "terminal.pane.output_captured",
+      payload,
+      createdAt: now,
+      source: "server",
+      sourceTrust: "trusted",
+      redacted: true,
+      correlationId: request.id,
+    },
+  };
+}
+
+export async function recordServerTmuxCaptureToPersistentServerStorage(
+  request: ServerTmuxCaptureRequest,
+  storage: JsonlServerEventStorage,
+  now = new Date().toISOString(),
+): Promise<ServerTmuxCaptureResponse> {
+  if (process.env.ORCHESTRATOR_ENABLE_TMUX_CAPTURE !== "1") {
+    return {
+      status: "disabled",
+      reason: "ORCHESTRATOR_ENABLE_TMUX_CAPTURE is not enabled on this server",
+    };
+  }
+
+  try {
+    const rawOutput = await captureServerTmuxPane(request);
+    const snapshot = createServerTmuxCaptureSnapshot(request, rawOutput, now);
+    const eventSync = await pushEventsToPersistentServerStorage(
+      {
+        id: `event_sync_tmux_capture_${request.id}_${stableServerId(now)}`,
+        clientId: "server_tmux_capture_gate",
+        sessionId: request.sessionId,
+        events: [snapshot.event],
+        idempotencyKey: `server_tmux_capture_gate:${request.id}:${snapshot.event.id}`,
+        createdAt: now,
+      },
+      storage,
+      now,
+    );
+
+    return {
+      status: "captured",
+      reason: "tmux pane output captured and redacted",
+      payload: snapshot.payload,
+      eventSync,
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      reason: redactForServerPhase(error instanceof Error ? error.message : String(error), "post_receive").value,
+    };
+  }
 }
 
 export function listApprovalsFromServerStorage(
@@ -2190,6 +2331,22 @@ async function dispatchServerTmuxCommandIfAllowed(
       stderrPreview: redactForServerPhase((execError.stderr ?? "").slice(0, 2_000), "post_receive").value,
     };
   }
+}
+
+async function captureServerTmuxPane(request: ServerTmuxCaptureRequest): Promise<string> {
+  const scriptPath = process.env.TMUX_SWARM_CAPTURE_SCRIPT ?? join(process.cwd(), "scripts", "swarm-capture.sh");
+  const timeoutMs = Number(process.env.ORCHESTRATOR_TMUX_CAPTURE_TIMEOUT_MS ?? 10_000);
+  const result = await execFileAsync(scriptPath, [request.role, "--lines", String(request.lines)], {
+    env: {
+      ...process.env,
+      AI_SWARM_SESSION: request.tmuxSessionName,
+    },
+    maxBuffer: 256_000,
+    timeout: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 10_000,
+    windowsHide: true,
+  });
+
+  return `${result.stdout}${result.stderr ? `\n[stderr]\n${result.stderr}` : ""}`;
 }
 
 function addSecondsIso(value: string, seconds: number) {
@@ -3313,6 +3470,34 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       } catch (error) {
         respondJson(500, {
           error: "tmux_dispatch_record_failed",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return;
+    }
+
+    if (pathname === "/tmux/capture" && request.method === "POST") {
+      let payload: ServerTmuxCaptureRequest;
+      try {
+        payload = parseServerTmuxCaptureRequest(await readJsonBody(request));
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) {
+          respondJson(413, { error: "payload_too_large", limit: error.limit });
+          return;
+        }
+        respondJson(400, {
+          error: "invalid_tmux_capture_payload",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+
+      try {
+        const result = await recordServerTmuxCaptureToPersistentServerStorage(payload, eventStorage);
+        respondJson(result.status === "failed" ? 502 : 202, result);
+      } catch (error) {
+        respondJson(500, {
+          error: "tmux_capture_failed",
           message: error instanceof Error ? error.message : String(error),
         });
       }
