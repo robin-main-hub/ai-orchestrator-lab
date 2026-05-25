@@ -12,6 +12,7 @@ import type {
   ApprovalDecisionRequest,
   ApprovalQueueItem,
   ApprovalRequest,
+  ApprovalReplayRequest,
   ApprovalState,
   DgxHeartbeat,
   EventEnvelope,
@@ -54,6 +55,7 @@ import type {
 } from "@ai-orchestrator/protocol";
 import {
   agentRoleSchema,
+  approvalDecisionRequestSchema,
   approvalRequestSchema,
   eventSyncPushRequestSchema,
   parseAgentDelegationEventPayload,
@@ -175,6 +177,20 @@ export type ServerApprovalListResponse = {
   };
   createdAt: string;
 };
+
+export type ServerApprovalReplayResponse =
+  | {
+      status: "replayed";
+      approval: ApprovalRequest;
+      replay: ApprovalReplayRequest;
+      result: ServerAgentDelegationExecuteResponse;
+      eventSync?: EventSyncPushResponse;
+    }
+  | {
+      status: "not_replayed";
+      reason: string;
+      approval?: ApprovalRequest;
+    };
 
 export type ServerIngressInput = {
   id: string;
@@ -1387,11 +1403,14 @@ export async function createServerAgentDelegationExecution(
 async function createServerAgentDelegationCompletionWithGate(
   request: ProviderCompletionRequest,
   storage: JsonlServerEventStorage,
+  replay?: ApprovalReplayRequest,
 ): Promise<ProviderCompletionResponse> {
   const permission = evaluateServerProviderCompletionPermission(request);
   if (permission.decision !== "allow") {
     const approval =
-      permission.decision === "approval_required" ? createProviderCompletionApprovalRequest(request, permission) : undefined;
+      permission.decision === "approval_required"
+        ? createProviderCompletionApprovalRequest(request, permission, new Date().toISOString(), replay)
+        : undefined;
     if (approval) {
       await recordApprovalRequestToPersistentServerStorage(approval, storage);
     }
@@ -1513,6 +1532,7 @@ export function createProviderCompletionApprovalRequest(
   request: ProviderCompletionRequest,
   permission: ServerPermissionGateResult,
   now = new Date().toISOString(),
+  replay = createProviderCompletionApprovalReplay(request),
 ): ApprovalRequest {
   return {
     id: createApprovalId(request.id),
@@ -1528,9 +1548,36 @@ export function createProviderCompletionApprovalRequest(
     state: permission.approvalState,
     reason: permission.reason,
     costEstimateTokens: permission.costEstimateTokens,
+    replay,
     ttlSeconds: DEFAULT_APPROVAL_TTL_SECONDS,
     createdAt: now,
     expiresAt: addSecondsIso(now, DEFAULT_APPROVAL_TTL_SECONDS),
+  };
+}
+
+function createProviderCompletionApprovalReplay(request: ProviderCompletionRequest): ApprovalReplayRequest {
+  return {
+    kind: "provider_completion",
+    endpoint: "/provider-completions",
+    method: "POST",
+    payload: {
+      ...request,
+      approvalState: "approved",
+      permissionDecision: "allow",
+    } satisfies ProviderCompletionRequest,
+  };
+}
+
+function createServerAgentDelegationApprovalReplay(request: ServerAgentDelegationExecuteRequest): ApprovalReplayRequest {
+  return {
+    kind: "agent_delegation",
+    endpoint: "/agent-delegations/execute",
+    method: "POST",
+    payload: {
+      ...request,
+      approvalState: "approved",
+      permissionDecision: "allow",
+    } satisfies ServerAgentDelegationExecuteRequest,
   };
 }
 
@@ -2043,6 +2090,109 @@ export async function decideApprovalInPersistentServerStorage(
   });
 }
 
+export async function replayApprovedRequestFromPersistentServerStorage(
+  request: ApprovalDecisionRequest,
+  storage: JsonlServerEventStorage,
+  now = new Date().toISOString(),
+): Promise<
+  | {
+      statusCode: 202;
+      payload: ServerApprovalReplayResponse;
+    }
+  | {
+      statusCode: 404 | 409 | 422;
+      payload: ServerApprovalReplayResponse;
+    }
+> {
+  const current = await listApprovalsFromPersistentServerStorage(storage, now);
+  const approval = current.approvals.find(
+    (candidate) =>
+      (request.approvalId && candidate.id === request.approvalId) ||
+      (request.sourceItemId && candidate.sourceItemId === request.sourceItemId),
+  );
+
+  if (!approval) {
+    return {
+      statusCode: 404,
+      payload: {
+        status: "not_replayed",
+        reason: "approval_not_found",
+      },
+    };
+  }
+
+  if (approval.state !== "approved") {
+    return {
+      statusCode: 409,
+      payload: {
+        status: "not_replayed",
+        reason: "approval_not_approved",
+        approval,
+      },
+    };
+  }
+
+  if (!approval.replay) {
+    return {
+      statusCode: 409,
+      payload: {
+        status: "not_replayed",
+        reason: "approval_has_no_replay_payload",
+        approval,
+      },
+    };
+  }
+
+  if (approval.replay.kind !== "agent_delegation") {
+    return {
+      statusCode: 422,
+      payload: {
+        status: "not_replayed",
+        reason: `unsupported_replay_kind:${approval.replay.kind}`,
+        approval,
+      },
+    };
+  }
+
+  const delegationRequest = parseServerAgentDelegationExecuteRequest({
+    ...(approval.replay.payload as Record<string, unknown>),
+    approvalState: "approved",
+    permissionDecision: "allow",
+  });
+  if (delegationRequest.executionMode === "mock" && process.env.NODE_ENV === "production") {
+    throw new Error("mock agent delegation execution is disabled in production");
+  }
+  const completion =
+    delegationRequest.executionMode === "mock"
+      ? createServerAgentDelegationMockCompletionFactory()
+      : (completionRequest: ProviderCompletionRequest) =>
+          createServerAgentDelegationCompletionWithGate(
+            completionRequest,
+            storage,
+            createServerAgentDelegationApprovalReplay(delegationRequest),
+          );
+  const result = await createServerAgentDelegationExecution(delegationRequest, {
+    completeProvider: completion,
+    now,
+  });
+  const eventSync = await pushEventsToPersistentServerStorage(
+    createServerAgentDelegationEventSyncRequest(delegationRequest, result.events, result.createdAt),
+    storage,
+    now,
+  );
+
+  return {
+    statusCode: 202,
+    payload: {
+      status: "replayed",
+      approval,
+      replay: approval.replay,
+      result,
+      eventSync,
+    },
+  };
+}
+
 function createApprovalId(sourceItemId: string) {
   return `approval_${sourceItemId.replace(/[^a-zA-Z0-9_-]+/g, "_")}`;
 }
@@ -2438,6 +2588,8 @@ function createApprovalQueueItem(approval: ApprovalRequest): ApprovalQueueItem {
     state: approval.state,
     createdAt: approval.createdAt,
     expiresAt: approval.expiresAt,
+    replayKind: approval.replay?.kind,
+    replayEndpoint: approval.replay?.endpoint,
   };
 }
 
@@ -4026,7 +4178,11 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
           payload.executionMode === "mock"
             ? createServerAgentDelegationMockCompletionFactory()
             : (completionRequest: ProviderCompletionRequest) =>
-                createServerAgentDelegationCompletionWithGate(completionRequest, eventStorage);
+                createServerAgentDelegationCompletionWithGate(
+                  completionRequest,
+                  eventStorage,
+                  createServerAgentDelegationApprovalReplay(payload),
+                );
         const result = await createServerAgentDelegationExecution(payload, {
           completeProvider: completion,
           now: payload.createdAt,
@@ -4053,6 +4209,44 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         }
         respondJson(502, {
           error: "agent_delegation_failed",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return;
+    }
+
+    if (pathname === "/approvals/replay" && request.method === "POST") {
+      let payload: ApprovalDecisionRequest;
+      try {
+        payload = approvalDecisionRequestSchema.parse(await readJsonBody(request)) as ApprovalDecisionRequest;
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) {
+          respondJson(413, { error: "payload_too_large", limit: error.limit });
+          return;
+        }
+        respondJson(400, {
+          error: "invalid_approval_replay_payload",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+
+      try {
+        const result = await replayApprovedRequestFromPersistentServerStorage(payload, eventStorage);
+        respondJson(result.statusCode, result.payload);
+      } catch (error) {
+        if (
+          error instanceof RequestBodyTooLargeError ||
+          (error instanceof Error && error.message.includes("mock agent delegation execution is disabled"))
+        ) {
+          respondJson(403, {
+            error: "approval_replay_denied",
+            message: error instanceof Error ? error.message : String(error),
+          });
+          return;
+        }
+        respondJson(502, {
+          error: "approval_replay_failed",
           message: error instanceof Error ? error.message : String(error),
         });
       }

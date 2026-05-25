@@ -23,6 +23,7 @@ import {
   createServerProviderRegistrySnapshot,
   createServerProviderModelDiscoveryResponse,
   createRemoteRunResponse,
+  decideApprovalInPersistentServerStorage,
   estimateProviderCompletionBudgetTokens,
   evaluateServerProviderCompletionPermission,
   evaluateServerRemoteRunPermission,
@@ -39,6 +40,8 @@ import {
   pushEventsToServerStorage,
   redactInternalPathsForPublicHealth,
   redactForServerPhase,
+  recordApprovalRequestToPersistentServerStorage,
+  replayApprovedRequestFromPersistentServerStorage,
   resolveAllowedOrigins,
   startServer,
 } from "./index";
@@ -1661,6 +1664,11 @@ describe("HTTP request limits", () => {
       await expect(response.json()).resolves.toMatchObject({
         error: "permission_required",
         approval: {
+          replay: {
+            endpoint: "/agent-delegations/execute",
+            kind: "agent_delegation",
+            method: "POST",
+          },
           sourceItemId: expect.stringContaining("agent_delegation_live_permission_initial"),
           state: "required",
         },
@@ -1681,6 +1689,12 @@ describe("HTTP request limits", () => {
         summary: {
           pending: 1,
         },
+        queue: [
+          {
+            replayEndpoint: "/agent-delegations/execute",
+            replayKind: "agent_delegation",
+          },
+        ],
       });
     } finally {
       await new Promise<void>((resolve, reject) => {
@@ -1703,6 +1717,112 @@ describe("HTTP request limits", () => {
         delete process.env.EVENT_STORAGE_DIR;
       } else {
         process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("replays an approved agent delegation request from the approval record", async () => {
+    const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const previousNodeEnv = process.env.NODE_ENV;
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-agent-delegation-replay-"));
+    process.env.EVENT_STORAGE_DIR = tempDir;
+    process.env.NODE_ENV = "test";
+
+    const storage = createJsonlServerEventStorage();
+
+    try {
+      const approval = {
+        id: "approval_agent_delegation_replay",
+        sessionId: "session_replay",
+        sourceItemId: "agent_delegation_replay_source",
+        subjectId: "agent_chaerin:agent_maomao",
+        actor: "user" as const,
+        channel: "desktop" as const,
+        sourceTrust: "trusted" as const,
+        action: "provider_completion" as const,
+        requestedLevels: ["network_access" as const],
+        decision: "approval_required" as const,
+        state: "required" as const,
+        reason: "test delegation replay approval",
+        replay: {
+          kind: "agent_delegation" as const,
+          endpoint: "/agent-delegations/execute",
+          method: "POST" as const,
+          payload: {
+            id: "agent_delegation_replay",
+            sessionId: "session_replay",
+            executionMode: "mock",
+            caller: {
+              agentId: "agent_chaerin",
+              role: "companion",
+              personaName: "chaerin",
+              providerProfileId: "provider_dgx02_vllm",
+              modelId: "qwen36-domain-lora-v5-prisma",
+            },
+            userMessage: "Ask researcher for a short market scan.",
+            targets: [
+              {
+                key: "researcher",
+                agentId: "agent_maomao",
+                role: "researcher",
+                personaName: "maomao",
+                providerProfileId: "provider_dgx02_vllm",
+                modelId: "qwen36-domain-lora-v5-prisma",
+              },
+            ],
+            routePreference: "server_proxy",
+            createdAt: "2026-05-25T00:00:00.000Z",
+          } satisfies ServerAgentDelegationExecuteRequest,
+        },
+        ttlSeconds: 86_400,
+        createdAt: "2026-05-25T00:00:00.000Z",
+        expiresAt: "2026-05-26T00:00:00.000Z",
+      };
+
+      await recordApprovalRequestToPersistentServerStorage(approval, storage, "2026-05-25T00:00:00.000Z");
+      await decideApprovalInPersistentServerStorage(
+        { approvalId: approval.id, actor: "user", decidedAt: "2026-05-25T00:00:01.000Z" },
+        "approved",
+        storage,
+        "2026-05-25T00:00:01.000Z",
+      );
+
+      const replay = await replayApprovedRequestFromPersistentServerStorage(
+        { approvalId: approval.id, actor: "user" },
+        storage,
+        "2026-05-25T00:00:02.000Z",
+      );
+
+      expect(replay.statusCode).toBe(202);
+      expect(replay.payload).toMatchObject({
+        status: "replayed",
+        result: {
+          id: "agent_delegation_replay",
+          shortCircuited: false,
+          delegations: [
+            {
+              kind: "succeeded",
+              target: "researcher",
+              targetAgentId: "agent_maomao",
+            },
+          ],
+        },
+      });
+      if (replay.payload.status === "replayed") {
+        expect(replay.payload.eventSync?.accepted).toBe(4);
+        expectValidAgentDelegationEvents(replay.payload.result.events);
+      }
+    } finally {
+      if (previousEventStorageDir === undefined) {
+        delete process.env.EVENT_STORAGE_DIR;
+      } else {
+        process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
       }
       await rm(tempDir, { force: true, recursive: true });
     }
