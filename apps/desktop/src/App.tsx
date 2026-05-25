@@ -104,11 +104,8 @@ import type {
 } from "@ai-orchestrator/protocol";
 import type {
   AgentActivityStatus,
-  AgentConfigFile,
-  AgentConfigFileKind,
   AgentConfigTab,
   AgentPersonaSettings,
-  AgentProfilePack,
   AgentVisualSettings,
   CenterMode,
   DraftAttachment,
@@ -159,7 +156,6 @@ import {
   initialWorkItemHandoffs,
   initialWorkItems,
 } from "./seeds/workItems";
-import { initialAgentConfigFiles, initialAgentProfilePacks } from "./seeds/configFiles";
 import { ApprovalDrawer } from "./components/ApprovalDrawer";
 import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
 import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
@@ -182,6 +178,7 @@ import { SessionIndexRailPanel } from "./components/SessionIndexRailPanel";
 import { Stage3DebateTable } from "./components/Stage3DebateTable";
 import { TerminalDock } from "./components/TerminalDock";
 import { TmuxSwarmBoard } from "./components/TmuxSwarmBoard";
+import { useAgentConfigFilesController } from "./hooks/useAgentConfigFilesController";
 import { useApprovalQueueController } from "./hooks/useApprovalQueueController";
 import { useDgxEventSyncController } from "./hooks/useDgxEventSyncController";
 import { createAuthBinding, useProviderRegistryController } from "./hooks/useProviderRegistryController";
@@ -209,9 +206,6 @@ export function App() {
   const [agentPersonaById, setAgentPersonaById] = useState<Record<string, AgentPersonaSettings>>(() =>
     Object.fromEntries(seededAgentProfiles.map((agent) => [agent.id, createDefaultPersonaSettings(agent)])),
   );
-  const [agentConfigFiles, setAgentConfigFiles] = useState<AgentConfigFile[]>(initialAgentConfigFiles);
-  const [agentProfilePacks] = useState<AgentProfilePack[]>(initialAgentProfilePacks);
-  const [selectedConfigFileId, setSelectedConfigFileId] = useState(initialAgentConfigFiles[0]?.id);
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
   const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
   const [activeSessionId, setActiveSessionId] = useState(DEFAULT_SESSION_ID);
@@ -285,6 +279,20 @@ export function App() {
     [agentSettingsAgentId, agents],
   );
   const selectedAgentPersona = selectedAgent ? agentPersonaById[selectedAgent.id] : undefined;
+  const {
+    agentConfigFiles,
+    agentProfilePacks,
+    handleCreateConfigFile,
+    handleDuplicateConfigFile,
+    handleImportConfigFile,
+    handleSaveConfigFile,
+    handleUpdateConfigFile,
+    selectedConfigFileId,
+    setSelectedConfigFileId,
+  } = useAgentConfigFilesController({
+    appendEvent,
+    selectedAgent,
+  });
   const configLibraryActive = activeNavItem === "config_files";
   const {
     activeProvider,
@@ -2061,135 +2069,6 @@ export function App() {
         [agentId]: nextStart,
       };
     });
-  }
-
-  function createConfigFileDraft(kind: AgentConfigFileKind): AgentConfigFile {
-    const createdAt = new Date().toISOString();
-    const index = agentConfigFiles.filter((file) => file.kind === kind).length + 1;
-    const kindPath: Record<AgentConfigFileKind, string> = {
-      agents: "agents/shared/AGENTS.md",
-      memory_policy: "agents/policies/MEMORY.md",
-      prompt_template: "agents/templates/prompt.md",
-      skill: "agents/skills/SKILL.md",
-      soul: "agents/new-agent/SOUL.md",
-    };
-    const kindLabel: Record<AgentConfigFileKind, string> = {
-      agents: "AGENTS.md",
-      memory_policy: "Memory Policy",
-      prompt_template: "Prompt Template",
-      skill: "SKILL.md",
-      soul: "SOUL.md",
-    };
-
-    return {
-      id: `config_${kind}_${Date.now()}`,
-      body: `${kindLabel[kind]} 초안\n\n- 목적:\n- 적용 대상:\n- 금지/주의:\n`,
-      kind,
-      label: `${kindLabel[kind]} 초안 ${index}`,
-      linkedAgentIds: selectedAgent ? [selectedAgent.id] : [],
-      path: kindPath[kind],
-      scope: kind === "soul" ? "agent" : "project",
-      tags: ["draft"],
-      updatedAt: createdAt,
-      version: 1,
-    };
-  }
-
-  function handleCreateConfigFile(kind: AgentConfigFileKind) {
-    const nextFile = createConfigFileDraft(kind);
-    setAgentConfigFiles((files) => [nextFile, ...files]);
-    setSelectedConfigFileId(nextFile.id);
-    appendEvent("agent.config_file.created", {
-      configFileId: nextFile.id,
-      kind: nextFile.kind,
-      label: nextFile.label,
-      path: nextFile.path,
-      rawSecretPersisted: false,
-    });
-  }
-
-  function handleDuplicateConfigFile(configFileId: string) {
-    const source = agentConfigFiles.find((file) => file.id === configFileId);
-    if (!source) {
-      return;
-    }
-    const nextFile: AgentConfigFile = {
-      ...source,
-      id: `config_${source.kind}_${Date.now()}`,
-      label: `${source.label} 복사본`,
-      updatedAt: new Date().toISOString(),
-      version: source.version + 1,
-    };
-    setAgentConfigFiles((files) => [nextFile, ...files]);
-    setSelectedConfigFileId(nextFile.id);
-    appendEvent("agent.config_file.duplicated", {
-      configFileId: nextFile.id,
-      sourceConfigFileId: source.id,
-      kind: nextFile.kind,
-      rawSecretPersisted: false,
-    });
-  }
-
-  function handleImportConfigFile(configFileId: string, fileName: string, body: string) {
-    const source = agentConfigFiles.find((file) => file.id === configFileId);
-    if (!source) {
-      return;
-    }
-    const directoryPrefix = source.path.includes("/")
-      ? `${source.path.split("/").slice(0, -1).join("/")}/`
-      : "";
-    const nextPath = `${directoryPrefix}${fileName}`;
-    const nextLabel = fileName.replace(/\.(md|markdown|txt)$/i, "").trim() || source.label;
-
-    setAgentConfigFiles((files) =>
-      files.map((file) =>
-        file.id === configFileId
-          ? {
-              ...file,
-              body,
-              label: nextLabel,
-              path: nextPath,
-              updatedAt: new Date().toISOString(),
-              version: file.version + 1,
-            }
-          : file,
-      ),
-    );
-    appendEvent("agent.config_file.imported", {
-      configFileId,
-      fileName,
-      kind: source.kind,
-      rawSecretPersisted: false,
-    });
-  }
-
-  function handleSaveConfigFile(configFileId: string) {
-    const source = agentConfigFiles.find((file) => file.id === configFileId);
-    if (!source) {
-      return;
-    }
-    appendEvent("agent.config_file.saved", {
-      configFileId,
-      kind: source.kind,
-      label: source.label,
-      path: source.path,
-      version: source.version,
-      rawSecretPersisted: false,
-    });
-  }
-
-  function handleUpdateConfigFile(configFileId: string, patch: Partial<AgentConfigFile>) {
-    setAgentConfigFiles((files) =>
-      files.map((file) =>
-        file.id === configFileId
-          ? {
-              ...file,
-              ...patch,
-              updatedAt: new Date().toISOString(),
-            }
-          : file,
-      ),
-    );
   }
 
   return (
