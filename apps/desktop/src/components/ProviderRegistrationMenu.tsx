@@ -1,7 +1,6 @@
 import { ChevronLeft, KeyRound, LockKeyhole, Pencil, RefreshCw, Terminal, Trash2, type LucideIcon } from "lucide-react";
 import type { ModelDiscoverySnapshot, ProviderProfile } from "@ai-orchestrator/protocol";
-import type { ModelCatalog, ProviderRegistrationMode, WindowAuditItem } from "../types";
-import { WindowChecklist } from "./WindowChecklist";
+import type { ModelCatalog, ProviderRegistrationMode } from "../types";
 export function ProviderRegistrationMenu({
   modelCatalog,
   modelDiscoveryByProviderId,
@@ -32,32 +31,6 @@ export function ProviderRegistrationMenu({
     { mode: "api_key", label: "API Key", detail: "env / JSON / base URL", icon: KeyRound },
     { mode: "cli", label: "CLI", detail: "Codex / Claude Code / OpenClaw", icon: Terminal },
     { mode: "oauth", label: "OAuth", detail: "session / account binding", icon: LockKeyhole },
-  ];
-  const auditItems: WindowAuditItem[] = [
-    {
-      id: "api",
-      label: "API Key",
-      status: "ready",
-      detail: "단순 키, env export, Claude Code JSON, custom base URL을 같은 secret ref로 받습니다.",
-    },
-    {
-      id: "cli",
-      label: "CLI Provider",
-      status: "partial",
-      detail: "Codex/Claude/OpenClaw CLI는 등록 준비됨. Gemini agy -p는 설정 전까지 잠금입니다.",
-    },
-    {
-      id: "oauth",
-      label: "OAuth",
-      status: "ready",
-      detail: "계정 세션형 provider를 이름 붙여 저장하고 agent에서 선택할 수 있습니다.",
-    },
-    {
-      id: "models",
-      label: "모델 목록",
-      status: profiles.length > 0 ? "ready" : "partial",
-      detail: "프로바이더별 discovery/cached 모델을 agent 모델 선택창으로 넘깁니다.",
-    },
   ];
 
   return (
@@ -122,7 +95,6 @@ export function ProviderRegistrationMenu({
           );
         })}
       </div>
-      <WindowChecklist items={auditItems} title="프로바이더 창 점검" />
     </section>
   );
 }

@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { ImageIcon, X } from "lucide-react";
 import { agentRoleLabel } from "../lib/helpers";
 import { agentRoleOptions } from "../lib/appConstants";
-import type { AgentVisualSettings, WindowAuditItem, WorkbenchAgent } from "../types";
+import type { AgentVisualSettings, WorkbenchAgent } from "../types";
 import { AgentAvatar } from "./AgentAvatar";
 import { AutonomySlider, type AutonomyLevel } from "./AutonomySlider";
-import { WindowChecklist } from "./WindowChecklist";
+
 export function AgentSettingsPanel({
   agent,
   onClearAvatar,
@@ -37,32 +37,6 @@ export function AgentSettingsPanel({
       onUpdateAgent(agent.id, { name: nextName });
     }
   }
-  const auditItems: WindowAuditItem[] = [
-    {
-      id: "name",
-      label: "이름",
-      status: draftName.trim() ? "ready" : "partial",
-      detail: "에이전트 표시명은 tmux pane, 대화 상대, 기록에 함께 반영됩니다.",
-    },
-    {
-      id: "role",
-      label: "역할",
-      status: "ready",
-      detail: "지휘자/설계자/검토자/실행자 같은 역할을 여기서 바꿉니다.",
-    },
-    {
-      id: "avatar",
-      label: "프로필 사진",
-      status: visual.avatarDataUrl ? "ready" : "partial",
-      detail: "업로드 이미지는 data URL로 저장해 외부 접속에서도 경로가 깨지지 않게 합니다.",
-    },
-    {
-      id: "event-record",
-      label: "설정 기록",
-      status: "ready",
-      detail: "이름, 역할, 이미지 변경은 Event Storage에 남길 준비가 되어 있습니다.",
-    },
-  ];
 
   return (
     <section className="agent-settings-modal" aria-label="Agent profile settings">
@@ -143,7 +117,6 @@ export function AgentSettingsPanel({
           <strong>이름 / 역할 / avatar는 Event Storage에 기록되고, 실제 tmux runner 연결 전까지 UI와 handoff 기록에서 먼저 사용한다.</strong>
         </div>
       </div>
-      <WindowChecklist items={auditItems} title="에이전트 설정 점검" />
     </section>
   );
 }

@@ -1,6 +1,5 @@
 import { CheckCircle2, CopyPlus, Download, FileText, Package, Plus, Save, Tags, Upload } from "lucide-react";
-import type { AgentConfigFile, AgentConfigFileKind, AgentProfilePack, WindowAuditItem } from "../types";
-import { WindowChecklist } from "./WindowChecklist";
+import type { AgentConfigFile, AgentConfigFileKind, AgentProfilePack } from "../types";
 
 const configKinds: AgentConfigFileKind[] = ["soul", "agents", "skill", "memory_policy", "prompt_template"];
 
@@ -72,32 +71,6 @@ export function ConfigLibraryPanel({
   const selectedConfigFile = configFiles.find((file) => file.id === selectedConfigFileId) ?? configFiles[0];
   const selectedKind = selectedConfigFile?.kind ?? "soul";
   const visibleFiles = configFiles.filter((file) => file.kind === selectedKind);
-  const auditItems: WindowAuditItem[] = [
-    {
-      id: "library",
-      label: "라이브러리 원본",
-      status: configFiles.length > 0 ? "ready" : "partial",
-      detail: "SOUL.md와 AGENTS.md는 여기에서 만들고 라벨링한 뒤 에이전트 설정에서 선택합니다.",
-    },
-    {
-      id: "single-active",
-      label: "종류별 단일 선택",
-      status: "ready",
-      detail: "같은 종류의 설정파일은 한 에이전트에 하나만 활성화합니다. 여러 파일 조합은 Profile Pack으로 묶습니다.",
-    },
-    {
-      id: "markdown",
-      label: "Markdown 호환",
-      status: "ready",
-      detail: "앱 내부 구조화 저장을 먼저 쓰고, OpenClaw식 AGENTS.md / SOUL.md import/export 경로를 유지합니다.",
-    },
-    {
-      id: "provider-edit",
-      label: "선택 연결",
-      status: "partial",
-      detail: "Provider/Agent 편집 화면은 이 라이브러리에 등록된 파일만 선택하게 연결합니다.",
-    },
-  ];
 
   return (
     <section
@@ -300,7 +273,6 @@ export function ConfigLibraryPanel({
         </span>
       </div>
 
-      <WindowChecklist items={auditItems} title="설정파일 창 점검" />
     </section>
   );
 }

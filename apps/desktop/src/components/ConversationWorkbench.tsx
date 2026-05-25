@@ -3,9 +3,8 @@ import { parseDelegateTags } from "@ai-orchestrator/agents";
 import type { ApprovalQueueItem, BranchExperiment, ContextPackTier, ConversationAttachment, ConversationMessage, ModelDescriptor, PermissionMatrixSnapshot, ProviderProfile } from "@ai-orchestrator/protocol";
 import { attachmentAcceptForModel, attachmentCapabilityLabel, createDefaultPersonaSettings, formatAttachmentSize, getMessageAttachments, modelSupportsAnyAttachment, agentRoleLabel } from "../lib/helpers";
 import { branchStatusLabel, contextPackTierLabel, creativityLevelLabel, messageLabel, soulModeLabel } from "../lib/uiLabels";
-import type { AgentConfigFile, AgentConfigTab, AgentPersonaSettings, DraftAttachment, PendingProviderRetry, WindowAuditItem, WorkbenchAgent } from "../types";
+import type { AgentConfigFile, AgentConfigTab, AgentPersonaSettings, DraftAttachment, PendingProviderRetry, WorkbenchAgent } from "../types";
 import { AgentConfigDrawer } from "./AgentConfigDrawer";
-import { WindowChecklist } from "./WindowChecklist";
 
 export function ConversationWorkbench({
   activeSessionId,
@@ -92,34 +91,6 @@ export function ConversationWorkbench({
   const adoptedBranchCount = branchExperiments.filter((branch) => branch.status === "adopted").length;
   const latestBranch = branchExperiments[0];
   const delegationItems = createDelegationPreviewItems(messages, agents);
-  const auditItems: WindowAuditItem[] = [
-    {
-      id: "chat",
-      label: "대화",
-      status: selectedAgent ? "ready" : "partial",
-      detail: "선택한 agent/provider/model 조합으로 같은 세션 안에서 이어서 대화합니다.",
-    },
-    {
-      id: "attachments",
-      label: "첨부",
-      status: attachmentEnabled ? "ready" : "blocked",
-      detail: attachmentEnabled
-        ? `현재 모델은 ${attachmentCapabilityLabel(selectedModel)}이고 최대 ${maxDraftAttachments}개까지 붙입니다.`
-        : "선택 모델이 멀티모달을 지원하지 않아 첨부를 막았습니다.",
-    },
-    {
-      id: "handoff",
-      label: "토론/패킷",
-      status: "ready",
-      detail: "현재 대화를 Debate Context와 Coding Packet으로 승격할 수 있습니다.",
-    },
-    {
-      id: "backup",
-      label: "백업/채널",
-      status: "ready",
-      detail: "Obsidian/Notion projection과 Telegram 이어받기 버튼이 같은 흐름에 묶여 있습니다.",
-    },
-  ];
 
   return (
     <section className="workbench-panel">
@@ -171,7 +142,6 @@ export function ConversationWorkbench({
           provider={selectedProvider}
         />
       ) : null}
-      <WindowChecklist items={auditItems} title="대화 창 점검" />
       <div className="conversation-stream" aria-label="대화 기록" tabIndex={0}>
         <ApprovalQueueInlinePanel
           onApprove={onApprovePermission}
