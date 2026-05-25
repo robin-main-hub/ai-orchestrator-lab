@@ -30,6 +30,7 @@ import {
 } from "@ai-orchestrator/protocol";
 import {
   CodexCliOAuthAdapter,
+  AnthropicAdapter,
   OpenAICompatibleAdapter,
   type CodexExecRunner,
 } from "@ai-orchestrator/providers/node";
@@ -544,52 +545,33 @@ export async function createServerProviderModelDiscoveryResponse(
     };
   }
 
-  const endpoint = `${config.baseUrl.replace(/\/$/, "")}/models`;
-  try {
-    const response = await fetchWithTimeout(
-      options.fetchImpl ?? fetch,
-      endpoint,
-      {
-        method: "GET",
-        headers: createAnthropicProviderHeaders(apiKey),
-      },
-      options.timeoutMs ?? 1_500,
-    );
-    const rawText = await response.text();
-    if (!response.ok) {
-      throw new Error(`${response.status} ${redactSecretsForLog(rawText.slice(0, 180))}`);
-    }
+  // anthropic_messages branch: Anthropic has no /v1/models endpoint, so the
+  // adapter returns the static modelIds list directly. We still flow it
+  // through AnthropicAdapter.discoverModels() to keep the shape and tag
+  // policy consistent with how completions will report models.
+  const adapter = new AnthropicAdapter({
+    profileId: config.providerProfileId,
+    baseUrl: config.baseUrl,
+    modelIds: config.defaultModelIds,
+    requiresAuth: !config.noAuth,
+    fetchImpl: options.fetchImpl ?? fetch,
+  });
+  const models = await adapter.discoverModels({
+    resolveSecret: async () => apiKey,
+    timeoutMs: options.timeoutMs ?? 1_500,
+  });
 
-    const parsed = JSON.parse(rawText) as { data?: Array<{ id?: string }> };
-    const models = (parsed.data ?? [])
-      .map((model) => model.id)
-      .filter((modelId): modelId is string => Boolean(modelId))
-      .map((modelId) => createServerProviderModelDescriptor(config, modelId));
-
-    return {
-      id: `model_discovery_${providerProfileId}_${models.length || "fallback"}`,
-      providerProfileId,
-      status: "succeeded",
-      source: "remote_probe",
-      models: models.length ? models : fallbackModels,
-      selectedModelId: (models[0] ?? fallbackModels[0])?.id,
-      redactionApplied: true,
-      warnings: models.length ? [] : ["remote /models returned no models; using static model fallback"],
-      createdAt,
-    };
-  } catch (error) {
-    return {
-      id: `model_discovery_${providerProfileId}_fallback`,
-      providerProfileId,
-      status: "succeeded",
-      source: "remote_probe",
-      models: fallbackModels,
-      selectedModelId: fallbackModels[0]?.id,
-      redactionApplied: true,
-      warnings: [`remote /models failed; using static model fallback: ${error instanceof Error ? error.message : String(error)}`],
-      createdAt,
-    };
-  }
+  return {
+    id: `model_discovery_${providerProfileId}_${models.length || "fallback"}`,
+    providerProfileId,
+    status: "succeeded",
+    source: "remote_probe",
+    models: models.length ? models : fallbackModels,
+    selectedModelId: (models[0] ?? fallbackModels[0])?.id,
+    redactionApplied: true,
+    warnings: [],
+    createdAt,
+  };
 }
 
 export async function createServerProviderRegistrySnapshot(
@@ -1022,20 +1004,49 @@ export async function createServerProviderProxyCompletionResponse(
     };
   }
 
-  if (config.apiStyle !== "anthropic_messages") {
-    return createOpenAICompatibleServerCompletion({
+  if (config.apiStyle === "anthropic_messages") {
+    return createAnthropicServerCompletion({
       request,
       profileId: config.providerProfileId,
-      kind: createServerProviderKind(config),
       baseUrl: config.baseUrl,
       modelIds: config.defaultModelIds,
-      supportsModelList: config.supportsModelList,
       requiresAuth: !config.noAuth,
       apiKey,
       fetchImpl,
     });
   }
 
+  return createOpenAICompatibleServerCompletion({
+    request,
+    profileId: config.providerProfileId,
+    kind: createServerProviderKind(config),
+    baseUrl: config.baseUrl,
+    modelIds: config.defaultModelIds,
+    supportsModelList: config.supportsModelList,
+    requiresAuth: !config.noAuth,
+    apiKey,
+    fetchImpl,
+  });
+}
+
+// === LEGACY ANTHROPIC HELPERS — dead after this PR ===
+//
+// Pre-adapter raw-fetch path for anthropic_messages providers. Both call
+// sites (createServerProviderProxyCompletionResponse +
+// createServerProviderModelDiscoveryResponse) now route through
+// AnthropicAdapter, so the block below and the supporting helpers
+// (createAnthropicMessagesEndpoint, createAnthropicProviderHeaders,
+// createAnthropicMessagesRequestBody, extractAnthropicMessagesContent,
+// extractAnthropicMessagesUsage, AnthropicMessageResponse) are
+// unreachable. Kept in this commit to keep the diff focused; removed in
+// a follow-up cleanup PR symmetric with #30.
+async function _legacyAnthropicMessagesCompletion(
+  request: ProviderCompletionRequest,
+  config: ServerProviderProxyConfig,
+  apiKey: string | undefined,
+  fetchImpl: FetchLike,
+  createdAt: string,
+): Promise<ProviderCompletionResponse> {
   const endpoint = createAnthropicMessagesEndpoint(config);
   try {
     const response = await fetchImpl(endpoint, {
@@ -1145,6 +1156,55 @@ function createOpenAICompatibleServerCompletion(params: {
   );
 }
 
+function createAnthropicServerCompletion(params: {
+  request: ProviderCompletionRequest;
+  profileId: string;
+  baseUrl: string;
+  modelIds: string[];
+  requiresAuth: boolean;
+  apiKey?: string;
+  fetchImpl: FetchLike;
+}) {
+  const adapter = new AnthropicAdapter({
+    profileId: params.profileId,
+    baseUrl: params.baseUrl,
+    modelIds: params.modelIds,
+    requiresAuth: params.requiresAuth,
+    defaultMaxTokens: 512,
+    temperature: 0.2,
+    fetchImpl: params.fetchImpl,
+  });
+
+  return adapter.complete(
+    {
+      ...params.request,
+      // Prepend the same Korean-first system prompt the legacy server path
+      // injected, so behavior at the SOUL/agent layer stays consistent
+      // across the OpenAI-compatible and Anthropic branches.
+      messages: [
+        {
+          role: "system",
+          content:
+            "Answer directly in Korean when the user writes Korean. Do not reveal reasoning or a thinking process.",
+        },
+        ...params.request.messages,
+      ],
+      routePreference: "server_proxy",
+    },
+    {
+      resolveSecret: async () => params.apiKey,
+      timeoutMs: 30_000,
+      onRawError(status, redactedSnippet) {
+        if (redactedSnippet) {
+          console.warn(`Anthropic adapter warning (${status}): ${redactedSnippet}`);
+        }
+      },
+    },
+  );
+}
+
+// Dead after this PR — only referenced by _legacyAnthropicMessagesCompletion.
+// Removed in the follow-up cleanup PR.
 function createAnthropicMessagesEndpoint(config: ServerProviderProxyConfig) {
   const baseUrl = config.baseUrl.replace(/\/$/, "");
   return `${baseUrl}/v1/messages`;

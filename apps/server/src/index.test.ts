@@ -190,7 +190,12 @@ describe("server health placeholder", () => {
           now: "2026-05-24T00:00:00.000Z",
           fetchImpl: async (url, init) => {
             expect(url).toBe("https://api.apikey.fun/v1/messages");
-            expect(init?.headers?.authorization).toBe("Bearer apifun-test-secret");
+            // Anthropic uses x-api-key, not Authorization: Bearer. The
+            // AnthropicAdapter sets this header from the secret and never
+            // echoes the value back into the body.
+            expect(init?.headers?.["x-api-key"]).toBe("apifun-test-secret");
+            expect(init?.headers?.["anthropic-version"]).toBe("2023-06-01");
+            expect(init?.headers?.authorization).toBeUndefined();
             expect(String(init?.body)).not.toContain("apifun-test-secret");
             expect(String(init?.body)).toContain("\"model\":\"claude-code-compatible\"");
             return {
@@ -198,7 +203,9 @@ describe("server health placeholder", () => {
               status: 200,
               async text() {
                 return JSON.stringify({
+                  type: "message",
                   content: [{ type: "text", text: "APIFun OK" }],
+                  stop_reason: "end_turn",
                   usage: { input_tokens: 10, output_tokens: 3 },
                 });
               },
