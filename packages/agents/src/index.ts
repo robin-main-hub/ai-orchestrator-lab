@@ -491,6 +491,28 @@ export const defaultAgentProfiles: AgentProfile[] = [
     enabled: false,
     permissionLevel: "read_only",
   },
+  // ─── Companion (전속 비서 / 만능 character) ──────────────────────────
+  {
+    id: "agent_chaerin",
+    name: "채아린",
+    // kind: "real" because she is the user's primary day-to-day
+    // assistant in conversation mode (Misato follows the same pattern
+    // for the same reason). Her configSource is "markdown" so the full
+    // character files (AGENTS.md + SOUL.md + IDENTITY.md + USER.md)
+    // load via personaLoader at prompt-assembly time — embedded summary
+    // is too thin to preserve the character voice.
+    kind: "real",
+    role: "companion",
+    personaName: "chae_arin",
+    soulMode: "full",
+    configSource: "markdown",
+    enabled: true,
+    // write_files grants the permission level — actual file writes
+    // still go through the F2 permission gate + user confirm. Channel:
+    // her own AGENTS.md says "AGENTS.md·SOUL.md 변경은 오빠에게 건의
+    // 후 반영", which the permission gate enforces at runtime.
+    permissionLevel: "write_files",
+  },
   {
     id: "agent_executor",
     name: "Executor",

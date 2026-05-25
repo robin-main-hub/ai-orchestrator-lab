@@ -252,15 +252,15 @@ describe("assertSafeCodingPacket", () => {
 });
 
 describe("defaultAgentProfiles", () => {
-  it("ships 17 profiles: 10 core roles + Yohane (skeptic 2호) + 6 R3.2 expansion roles", () => {
-    expect(defaultAgentProfiles).toHaveLength(17);
+  it("ships 18 profiles: 10 core + Yohane + 6 R3.2 + chae_arin (companion)", () => {
+    expect(defaultAgentProfiles).toHaveLength(18);
   });
 
   it("covers every persona that has a SOUL.md directory under agents/", () => {
     // Each defaultAgentProfile has a matching agents/<role>/ markdown
-    // directory (or agents/<personaName>/ when overridden — e.g. Yohane).
-    // Regression guard: if someone removes one of these the test fails
-    // with a specific role name, not a vague "missing item".
+    // directory (or agents/<personaName>/ when overridden — e.g. Yohane,
+    // chae_arin). Regression guard: if someone removes one of these the
+    // test fails with a specific role name, not a vague "missing item".
     const roles = defaultAgentProfiles.map((p) => p.role);
     expect(roles).toContain("orchestrator");
     expect(roles).toContain("architect");
@@ -279,17 +279,35 @@ describe("defaultAgentProfiles", () => {
     expect(roles).toContain("mediator");
     expect(roles).toContain("watchdog");
     expect(roles).toContain("domain_expert");
+    // R3.3 companion (만능 캐릭터)
+    expect(roles).toContain("companion");
   });
 
-  it("uses personaName override only when multiple profiles share a role", () => {
+  it("uses personaName override only when needed (Yohane + chae_arin today)", () => {
     // R3.1 personaName invariant: every personaName must point at an
     // agents/<personaName>/ directory; profiles without an override
-    // fall back to agents/<role>/. The only override on main today is
-    // Yohane (second skeptic) → agents/yohane/.
-    const skeptics = defaultAgentProfiles.filter((p) => p.role === "skeptic");
-    expect(skeptics.length).toBeGreaterThanOrEqual(2);
-    const overrides = skeptics.map((p) => p.personaName).filter(Boolean);
+    // fall back to agents/<role>/. Today two profiles use the override:
+    //   - Yohane (second skeptic) → agents/yohane/
+    //   - 채아린 (companion) → agents/chae_arin/
+    const overrides = defaultAgentProfiles
+      .map((p) => p.personaName)
+      .filter((name): name is string => Boolean(name));
     expect(overrides).toContain("yohane");
+    expect(overrides).toContain("chae_arin");
+  });
+
+  it("chae_arin (companion) is the user's primary assistant — enabled, real, markdown-loaded", () => {
+    const chaerin = defaultAgentProfiles.find((p) => p.personaName === "chae_arin");
+    expect(chaerin).toBeDefined();
+    expect(chaerin!.role).toBe("companion");
+    expect(chaerin!.kind).toBe("real");
+    expect(chaerin!.configSource).toBe("markdown");
+    expect(chaerin!.enabled).toBe(true);
+    expect(chaerin!.soulMode).toBe("full");
+    // write_files unlocks self-editing of her own SOUL/AGENTS/IDENTITY/USER
+    // files. Actual file mutations still go through the F2 permission
+    // gate + user confirm; the level just authorizes the request.
+    expect(chaerin!.permissionLevel).toBe("write_files");
   });
 
   it("keeps the executor disabled by default (requires F2 permission gate)", () => {

@@ -393,6 +393,8 @@ export function agentRoleLabel(role: WorkbenchAgent["role"]) {
     mediator: "의견 조율자",
     watchdog: "장기 모니터",
     domain_expert: "도메인 전문가",
+    // R3.3 companion (만능 캐릭터 / 전속 비서)
+    companion: "전속 비서",
   };
 
   return labels[role];
