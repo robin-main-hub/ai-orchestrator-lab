@@ -336,11 +336,16 @@ function AgentSidebarCard({
       >
         <span className="agent-avatar-status">
           <AgentAvatar agent={agent} size="small" visual={agentVisualsById[agent.id]} />
-          <span
-            aria-label={`${agent.name} ${activityStatus}`}
-            className={`agent-dot ${agent.enabled ? "enabled" : ""} ${activityStatus}`}
-            title={activityStatus}
-          />
+          {(() => {
+            const display = deriveDisplayState(agent, activityStatus);
+            return (
+              <span
+                aria-label={`${agent.name} ${display}`}
+                className={`agent-dot ${agent.enabled ? "enabled" : ""} ${activityStatus} agent-dot--${display}`}
+                title={displayStateLabel(display)}
+              />
+            );
+          })()}
         </span>
         <div className="agents-sidebar__row-body">
           <strong className="agents-sidebar__row-name">{agent.name}</strong>
@@ -436,4 +441,45 @@ function AgentSidebarCard({
       </div>
     </div>
   );
+}
+
+/**
+ * design-decisions.md §2 — 7-state agent vocabulary
+ *   active · ready · gated · waiting_approval · blocked · watch_only · standby
+ *
+ * 현재 runtime data 가 3-state (idle | preparing | responding) 만 노출하므로
+ * 여기서 derived state 5개를 매핑. `waiting_approval` 과 `blocked` 는 별도
+ * snapshot (permission queue, error log) 이 sidebar 까지 흘러올 때 추가.
+ */
+type DisplayState =
+  | "active"
+  | "ready"
+  | "gated"
+  | "waiting_approval"
+  | "blocked"
+  | "watch_only"
+  | "standby";
+
+function deriveDisplayState(
+  agent: WorkbenchAgent,
+  activityStatus: AgentActivityStatus,
+): DisplayState {
+  if (!agent.enabled) return "standby";
+  if (agent.role === "auditor" || agent.role === "watchdog") return "watch_only";
+  if (activityStatus === "responding") return "active";
+  if (activityStatus === "preparing") return "gated";
+  return "ready";
+}
+
+function displayStateLabel(state: DisplayState): string {
+  const labels: Record<DisplayState, string> = {
+    active: "활성 (LLM call 중)",
+    ready: "대기 (호출 가능)",
+    gated: "권한 셋업 중",
+    waiting_approval: "사용자 승인 대기",
+    blocked: "오류 / 의존성 실패",
+    watch_only: "관찰 전용",
+    standby: "비활성",
+  };
+  return labels[state];
 }

@@ -5221,6 +5221,42 @@ button {
   box-shadow: 0 0 0 4px rgba(42, 167, 232, 0.16);
 }
 
+/* ── §2 7-state vocabulary — additive on top of activity classes ── */
+
+.agent-dot--active {
+  background: var(--cyan);
+  animation: agent-dot-pulse 900ms ease-in-out infinite;
+}
+
+.agent-dot--ready {
+  background: var(--green, #5fe3a0);
+}
+
+.agent-dot--gated {
+  background: var(--amber);
+  box-shadow: 0 0 0 4px rgba(216, 198, 93, 0.12);
+}
+
+.agent-dot--waiting_approval {
+  background: var(--amber);
+  animation: agent-dot-pulse 1200ms ease-in-out infinite;
+}
+
+.agent-dot--blocked {
+  background: var(--rose);
+  box-shadow: 0 0 0 4px rgba(255, 95, 109, 0.16);
+}
+
+.agent-dot--watch_only {
+  background: rgba(200, 210, 215, 0.5);
+  box-shadow: 0 0 0 3px rgba(200, 210, 215, 0.1);
+}
+
+.agent-dot--standby {
+  background: transparent;
+  border: 1px solid var(--line-soft);
+}
+
 .agent-avatar {
   display: inline-grid;
   place-items: center;

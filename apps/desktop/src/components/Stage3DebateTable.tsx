@@ -103,7 +103,7 @@ export function Stage3DebateTable({
             />
           ))}
         </div>
-        <aside className="human-peek-panel">
+        <aside className="human-peek-panel agent-relay-panel" aria-label="Agent Relay">
           <section>
             <header>
               <Activity size={15} />
@@ -121,7 +121,7 @@ export function Stage3DebateTable({
           <section>
             <header>
               <GitBranch size={15} />
-              <strong>Human Peek</strong>
+              <strong>Agent Relay</strong>
             </header>
             <div className="peek-list">
               {session.humanPeek.map((entry) => (
