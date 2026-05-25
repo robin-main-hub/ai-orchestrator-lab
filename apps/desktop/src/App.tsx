@@ -141,6 +141,7 @@ import type {
   DraftAttachment,
   ModelCatalog,
   NavItemId,
+  PendingProviderRetry,
   ProviderRegistrationMode,
   Stage3DebateUtteranceView,
   WorkbenchAgent,
@@ -295,6 +296,7 @@ export function App() {
   const [obsidianMarkdownPreview, setObsidianMarkdownPreview] = useState("");
   const [draftMessage, setDraftMessage] = useState("");
   const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([]);
+  const [pendingProviderRetry, setPendingProviderRetry] = useState<PendingProviderRetry | undefined>();
   const activeProvider = useMemo(
     () => providerProfiles.find((profile) => profile.id === runtimeSnapshotState.activeProviderProfileId),
     [providerProfiles, runtimeSnapshotState.activeProviderProfileId],
@@ -939,6 +941,17 @@ export function App() {
       providerNeedsApproval;
 
     if (providerBlocked) {
+      if (providerNeedsApproval) {
+        setPendingProviderRetry({
+          permissionItemId: providerPermissionId,
+          providerProfileId: selectedProvider.id,
+          agentId: selectedAgent.id,
+          modelId,
+          content: messageContent,
+          attachments: attachmentMetadata,
+          createdAt,
+        });
+      }
       const blockedMessage: ConversationMessage = {
         id: `message_provider_blocked_${crypto.randomUUID()}`,
         sessionId: activeSessionId,
@@ -977,6 +990,7 @@ export function App() {
         reason: providerReadiness.reason,
         requestedMessageLength: messageContent.length,
         attachmentCount: attachmentMetadata.length,
+        retryStored: providerNeedsApproval,
         redaction: "applied",
       });
       appendEvent("conversation.message.created", {
@@ -1684,6 +1698,15 @@ export function App() {
       return;
     }
 
+    handleResolvePermission(pendingItem.sourceItemId, state);
+  }
+
+  function handleResolvePermission(sourceItemId: string, state: Extract<ApprovalState, "approved" | "rejected">) {
+    const pendingItem = permissionSnapshot.queue.find((item) => item.sourceItemId === sourceItemId);
+    if (!pendingItem) {
+      return;
+    }
+
     const decidedAt = new Date().toISOString();
     setApprovalStateByItemId((decisions) => ({
       ...decisions,
@@ -1739,6 +1762,30 @@ export function App() {
         responseStatus: bridge.response.status,
         fallbackMode: bridge.response.fallbackMode,
       });
+    }
+
+    if (pendingProviderRetry?.permissionItemId === pendingItem.sourceItemId) {
+      if (state === "approved") {
+        setDraftMessage(pendingProviderRetry.content);
+        setDraftAttachments(pendingProviderRetry.attachments);
+        appendEvent("provider.completion.retry.restored", {
+          permissionItemId: pendingItem.sourceItemId,
+          providerProfileId: pendingProviderRetry.providerProfileId,
+          agentId: pendingProviderRetry.agentId,
+          modelId: pendingProviderRetry.modelId,
+          contentLength: pendingProviderRetry.content.length,
+          attachmentCount: pendingProviderRetry.attachments.length,
+          redaction: "applied",
+        });
+      } else {
+        appendEvent("provider.completion.retry.discarded", {
+          permissionItemId: pendingItem.sourceItemId,
+          providerProfileId: pendingProviderRetry.providerProfileId,
+          reason: "operator rejected provider completion approval",
+          redaction: "applied",
+        });
+      }
+      setPendingProviderRetry(undefined);
     }
   }
 
@@ -3073,6 +3120,7 @@ export function App() {
               messages={conversationMessages}
               onAddDraftAttachments={handleAddDraftAttachments}
               onAdoptBranch={handleAdoptBranchExperiment}
+              onApprovePermission={(sourceItemId) => handleResolvePermission(sourceItemId, "approved")}
               onBackupProjection={handleExportBackupProjections}
               onContextPackTierChange={handleContextPackTierChange}
               onCreateBranch={handleCreateBranchExperiment}
@@ -3081,6 +3129,7 @@ export function App() {
               onDraftMessageChange={setDraftMessage}
               onImportTelegram={handleImportTelegramIngress}
               onPromoteToDebate={handlePromoteToDebate}
+              onRejectPermission={(sourceItemId) => handleResolvePermission(sourceItemId, "rejected")}
               onRemoveDraftAttachment={handleRemoveDraftAttachment}
               onSelectAgent={setSelectedAgentId}
               onSendMessage={handleSendMessageStage2}
@@ -3088,6 +3137,8 @@ export function App() {
               onOpenAgentConfig={openAgentConfigPanel}
               onUpdateAgentConfig={updateSelectedAgentConfig}
               onUpdateAgentPersona={updateSelectedAgentPersona}
+              pendingProviderRetry={pendingProviderRetry}
+              permissionSnapshot={permissionSnapshot}
               selectedAgent={selectedAgent}
               selectedAgentId={selectedAgent?.id}
               selectedModel={selectedModel}

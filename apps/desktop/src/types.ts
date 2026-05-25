@@ -10,6 +10,15 @@ export type AgentConfigTab = "profile" | "soul" | "agents_md" | "creativity" | "
 export type AgentVoicePreset = "direct" | "calm" | "architect" | "reviewer" | "executor";
 export type AgentCreativityLevel = "strict" | "focused" | "balanced" | "creative" | "experimental";
 export type DraftAttachment = ConversationAttachment;
+export type PendingProviderRetry = {
+  permissionItemId: string;
+  providerProfileId: string;
+  agentId: string;
+  modelId: string;
+  content: string;
+  attachments: DraftAttachment[];
+  createdAt: string;
+};
 export type Stage3DebateUtteranceView = DebateUtterance & {
   roundTitle: string;
   agentName: string;
