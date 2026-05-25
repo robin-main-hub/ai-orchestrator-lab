@@ -211,6 +211,39 @@ Manus 6주 로드맵을 우리 Stage 2~3 영역별 마이그레이션과 정렬:
 - v0 raw output (reference only): [`docs/v0/v0-output/`](v0/v0-output/)
 - v0 적용 결과 (Stage 0/1a): [`apps/desktop/src/styles/tokens.css`](../apps/desktop/src/styles/tokens.css), [`apps/desktop/src/ui/`](../apps/desktop/src/ui/)
 
+## 12. Memory placement contract — EvolveMemento 채택
+
+### ✅ 채택: System prompt 위 / dynamic recall 은 user message 의 Question 아래 (Context BELOW Question)
+
+EvolveMem (arXiv:2605.13941) 의 Appendix F (Prompt Catalog) 전체가 일관되게 다음 패턴을 사용한다.
+
+```text
+Question: {question}
+Context:
+{retrieved memories}
+Rules: ...
+```
+
+흔한 RAG 튜토리얼의 "context 먼저, 질문 나중" 의 정반대다. 근거는 LLM 이 question 을 working memory 에 먼저 올려두고 context 를 스캔해야 attention 가중치가 정밀하게 걸리기 때문이다. context 를 먼저 던지면 무엇을 찾을지 모른 채 처음 부분에 anchor 된다.
+
+### 우리 적용 규칙
+
+| 위치 | 무엇이 들어감 |
+|---|---|
+| System prompt (TOP) | persona + pinned + trusted layer 기억 (거의 안 바뀌는 것만) |
+| User message | 첫 줄 Question, 그 아래 동적 recall context, 그 아래 rules |
+| Assistant turn | 비워둠 (memory injection 안 함) |
+
+### Schema 정렬
+
+`MemoryRecord` 에 EvolveMem 의 6-category 분류 (episodic / semantic / preference / project state / working summary / procedural) 대응 필드는 신규 도입하지 않는다. 우리 기존 `kind` enum (architecture / context / decision / learning / pattern / preference / relationship / workflow) 으로 충분히 재매핑 가능하다.
+
+새 필드 (EvolveMemento uplift): keywords / entities / persons / topic / importance / entityReinforcement / losslessRestatement.
+
+### Self-evolving retrieval (v2 보류)
+
+EvolveMem 의 진짜 노벨티인 diagnose→propose→guard 루프는 v1 에선 도입하지 않는다. 대신 raw recall log (`apps/desktop/.cache/memento_recall_log.jsonl`) 를 적재해서 v2 의 입력으로 사용할 수 있도록 준비만 한다.
+
 ## 13. Debate provenance schema
 
 Decision: adopt optional provenance fields on `DebateUtterance` before building the final debate UI.

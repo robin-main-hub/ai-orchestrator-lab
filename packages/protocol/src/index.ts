@@ -1753,6 +1753,13 @@ export const memoryRecordSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string().optional(),
   lastAccessedAt: z.string().optional(),
+  losslessRestatement: z.string().optional(),
+  keywords: z.array(z.string()).optional(),
+  entities: z.array(z.string()).optional(),
+  persons: z.array(z.string()).optional(),
+  topic: z.string().optional(),
+  importance: z.number().min(0).max(1).optional(),
+  entityReinforcement: z.number().min(0).optional(),
   pinned: z.boolean(),
   tombstonedAt: z.string().optional(),
 });
@@ -1772,6 +1779,10 @@ export type RecallQuery = {
 export type RecallResult = {
   record: MemoryRecord;
   score: number;
+  fusionDetail?: {
+    views: Array<{ view: "lexical" | "semantic" | "metadata"; rank: number; rawScore: number }>;
+    fusionMode: "rrf" | "sum" | "weighted_sum";
+  };
   usedInDecision: boolean;
   activationState?: MemoryActivationState;
   reason: string;
