@@ -252,13 +252,15 @@ describe("assertSafeCodingPacket", () => {
 });
 
 describe("defaultAgentProfiles", () => {
-  it("ships 7 profiles: orchestrator + 5 debate personas + executor", () => {
-    expect(defaultAgentProfiles).toHaveLength(7);
+  it("ships 10 profiles: orchestrator + 5 debate personas + builder + external + auditor + executor", () => {
+    expect(defaultAgentProfiles).toHaveLength(10);
   });
 
   it("covers every persona that has a SOUL.md directory under agents/", () => {
     // Mirrors the 5 SOUL files added in PR #48 (architect/reviewer/skeptic/
-    // verifier/memory_curator) plus the pre-existing orchestrator.
+    // verifier/memory_curator) plus orchestrator, plus the personas
+    // consolidated in this PR (builder/external/auditor) — all have a
+    // matching agents/<role>/ markdown directory.
     // Regression guard: if someone removes one of these the test fails
     // with a specific role name, not a vague "missing item".
     const roles = defaultAgentProfiles.map((p) => p.role);
@@ -268,6 +270,10 @@ describe("defaultAgentProfiles", () => {
     expect(roles).toContain("skeptic");
     expect(roles).toContain("verifier");
     expect(roles).toContain("memory_curator");
+    expect(roles).toContain("builder");
+    expect(roles).toContain("external");
+    expect(roles).toContain("auditor");
+    expect(roles).toContain("executor");
   });
 
   it("keeps the executor disabled by default (requires F2 permission gate)", () => {
