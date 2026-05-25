@@ -6549,6 +6549,196 @@ button {
   letter-spacing: 0.05em;
 }
 
+/* ── Cheat-Sheet overlay (? shortcut) ─────────────────────────── */
+
+.cheat-sheet__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 82;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 12, 14, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.cheat-sheet__panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(580px, calc(100vw - 32px));
+  max-height: min(72vh, 640px);
+  border: 1px solid rgba(95, 211, 226, 0.32);
+  border-radius: 12px;
+  background: #0a2428;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.cheat-sheet__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.cheat-sheet__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.cheat-sheet__title strong {
+  font-weight: 650;
+}
+
+.cheat-sheet__subtitle {
+  color: var(--subtle);
+  font-size: 10px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cheat-sheet__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: rgba(0, 47, 56, 0.45);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.cheat-sheet__close:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.cheat-sheet__table {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  overflow-y: auto;
+  display: block;
+}
+
+.cheat-sheet__table thead {
+  position: sticky;
+  top: 0;
+  background: #0a2428;
+}
+
+.cheat-sheet__table th {
+  padding: 8px 14px 6px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--subtle);
+  font-size: 9.5px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  font-weight: 500;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.cheat-sheet__table td {
+  padding: 6px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-size: 11.5px;
+  vertical-align: middle;
+}
+
+.cheat-sheet__table tbody tr:hover {
+  background: rgba(95, 211, 226, 0.06);
+}
+
+.cheat-sheet__key-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.cheat-sheet__kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  padding: 1px 5px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: rgba(0, 47, 56, 0.6);
+  color: var(--muted);
+  font-size: 10px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+}
+
+.cheat-sheet__action {
+  color: var(--text);
+}
+
+.cheat-sheet__priority {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(95, 211, 226, 0.14);
+  color: var(--cyan);
+  font-size: 9.5px;
+  font-family: var(--font-mono, ui-monospace, "JetBrains Mono", monospace);
+  letter-spacing: 0.04em;
+}
+
+.cheat-sheet__priority--critical {
+  background: rgba(95, 211, 226, 0.2);
+  color: var(--cyan);
+}
+
+.cheat-sheet__priority--secondary {
+  background: rgba(120, 220, 160, 0.16);
+  color: #a8ffdf;
+}
+
+.cheat-sheet__priority--safety {
+  background: rgba(255, 95, 109, 0.16);
+  color: var(--rose);
+}
+
+.cheat-sheet__priority--frequent {
+  background: rgba(245, 191, 92, 0.16);
+  color: var(--amber);
+}
+
+.cheat-sheet__priority--universal {
+  background: rgba(200, 210, 215, 0.12);
+  color: var(--muted);
+}
+
+.cheat-sheet__priority--learning {
+  background: rgba(120, 130, 255, 0.16);
+  color: #aab3ff;
+}
+
+.cheat-sheet__footer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--subtle);
+  font-size: 10.5px;
+}
+
 .approval-drawer {
   position: fixed;
   z-index: 32;

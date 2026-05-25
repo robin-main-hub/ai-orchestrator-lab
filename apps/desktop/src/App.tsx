@@ -160,6 +160,7 @@ import { BackupPanel } from "./components/BackupPanel";
 import { BackupRailMenu } from "./components/BackupRailMenu";
 import { ChannelRailPanel } from "./components/ChannelRailPanel";
 import { CodingPacketPanel } from "./components/CodingPacketPanel";
+import { CheatSheetOverlay } from "./components/CheatSheetOverlay";
 import { CommandPalette, type CommandEntry } from "./components/CommandPalette";
 import { ConfigLibraryPanel } from "./components/ConfigLibraryPanel";
 import { ConversationWorkbench } from "./components/ConversationWorkbench";
@@ -193,6 +194,7 @@ export function App() {
   const [activeNavItem, setActiveNavItem] = useState<NavItemId>("sessions");
   const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [cheatSheetOpen, setCheatSheetOpen] = useState(false);
   const [agents, setAgents] = useState<WorkbenchAgent[]>(seededAgentProfiles);
   const [agentActivityById, setAgentActivityById] = useState<Record<string, AgentActivityStatus>>({});
   const [agentVisualsById, setAgentVisualsById] = useState<Record<string, AgentVisualSettings>>(() =>
@@ -2320,11 +2322,7 @@ export function App() {
       label: "단축키 도움말",
       hint: "design-decisions §6",
       shortcut: "?",
-      run: () => {
-        // MVP: shortcut list lives in this palette itself. ?-hotkey
-        // just reopens the palette so the user sees the catalog.
-        setCommandPaletteOpen(true);
-      },
+      run: () => setCheatSheetOpen(true),
     },
   ];
 
@@ -2337,10 +2335,11 @@ export function App() {
     onMementoRemember: handleRememberCurrentContext,
     onApprove: () => handleResolveNextPermission("approved"),
     onEscape: () => {
-      if (commandPaletteOpen) setCommandPaletteOpen(false);
+      if (cheatSheetOpen) setCheatSheetOpen(false);
+      else if (commandPaletteOpen) setCommandPaletteOpen(false);
       else if (approvalDrawerOpen) setApprovalDrawerOpen(false);
     },
-    onHelp: () => setCommandPaletteOpen(true),
+    onHelp: () => setCheatSheetOpen((o) => !o),
   });
 
   return (
@@ -2743,6 +2742,10 @@ export function App() {
         commands={paletteCommands}
         onClose={() => setCommandPaletteOpen(false)}
         open={commandPaletteOpen}
+      />
+      <CheatSheetOverlay
+        onClose={() => setCheatSheetOpen(false)}
+        open={cheatSheetOpen}
       />
     </div>
   );
