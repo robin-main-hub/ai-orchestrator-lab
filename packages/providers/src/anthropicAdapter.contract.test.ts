@@ -5,12 +5,7 @@ import type { AdapterFetchLike } from "./openAiCompatibleAdapter";
 import { createAdapterContext } from "./adapter";
 import {
   assertContract,
-  CONTRACT_EMPTY_CONTENT,
-  CONTRACT_HAPPY_PATH,
-  CONTRACT_NETWORK_FAILURE,
-  CONTRACT_PROVIDER_ERROR,
-  CONTRACT_RATE_LIMITED,
-  CONTRACT_UNAUTHORIZED,
+  STANDARD_CONTRACT_CASES,
 } from "./contractTestFixtures";
 
 function baseRequest(): ProviderCompletionRequest {
@@ -45,79 +40,56 @@ function jsonResponse(status: number, body: unknown) {
   };
 }
 
+// One fetch mock per case in STANDARD_CONTRACT_CASES, keyed by the
+// fixture's `name`. The wire shape is Anthropic-specific (content
+// array of text blocks, error.type discriminator, etc.) so each
+// case supplies the right body, but the assertion is universal.
+//
+// If STANDARD_CONTRACT_CASES grows a new fixture, TypeScript can't
+// catch the missing key here — the runtime guard at the bottom
+// throws a clear "missing fetch for case X" so the gap is loud.
+const fetchByCase: Record<string, AdapterFetchLike> = {
+  "happy path": async () =>
+    jsonResponse(200, {
+      type: "message",
+      content: [{ type: "text", text: "ok" }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 5, output_tokens: 1 },
+    }),
+  "401 unauthorized": async () =>
+    jsonResponse(401, {
+      type: "error",
+      error: { type: "authentication_error", message: "invalid x-api-key" },
+    }),
+  "429 rate limited": async () =>
+    jsonResponse(429, {
+      type: "error",
+      error: { type: "rate_limit_error", message: "too many" },
+    }),
+  "500 server error": async () => jsonResponse(500, "upstream timeout"),
+  "transport failure": async () => {
+    throw new TypeError("fetch failed");
+  },
+  "empty body": async () =>
+    jsonResponse(200, {
+      type: "message",
+      content: [],
+      stop_reason: "end_turn",
+    }),
+};
+
 describe("AnthropicAdapter — contract", () => {
-  it("happy path", async () => {
-    const fetch: AdapterFetchLike = async () =>
-      jsonResponse(200, {
-        type: "message",
-        content: [{ type: "text", text: "ok" }],
-        stop_reason: "end_turn",
-        usage: { input_tokens: 5, output_tokens: 1 },
-      });
-    const response = await makeAdapter(fetch).complete(
-      baseRequest(),
-      createAdapterContext({ secret: "sk-ant-test" }),
-    );
-    assertContract(response, CONTRACT_HAPPY_PATH);
-  });
-
-  it("401 unauthorized → credential_expired", async () => {
-    const fetch: AdapterFetchLike = async () =>
-      jsonResponse(401, {
-        type: "error",
-        error: { type: "authentication_error", message: "invalid x-api-key" },
-      });
-    const response = await makeAdapter(fetch).complete(
-      baseRequest(),
-      createAdapterContext({ secret: "sk-ant-bad" }),
-    );
-    assertContract(response, CONTRACT_UNAUTHORIZED);
-  });
-
-  it("429 → rate_limit", async () => {
-    const fetch: AdapterFetchLike = async () =>
-      jsonResponse(429, {
-        type: "error",
-        error: { type: "rate_limit_error", message: "too many" },
-      });
-    const response = await makeAdapter(fetch).complete(
-      baseRequest(),
-      createAdapterContext({ secret: "sk-ant" }),
-    );
-    assertContract(response, CONTRACT_RATE_LIMITED);
-  });
-
-  it("500 → provider", async () => {
-    const fetch: AdapterFetchLike = async () => jsonResponse(500, "upstream timeout");
-    const response = await makeAdapter(fetch).complete(
-      baseRequest(),
-      createAdapterContext({ secret: "sk-ant" }),
-    );
-    assertContract(response, CONTRACT_PROVIDER_ERROR);
-  });
-
-  it("transport failure → network", async () => {
-    const fetch: AdapterFetchLike = async () => {
-      throw new TypeError("fetch failed");
-    };
-    const response = await makeAdapter(fetch).complete(
-      baseRequest(),
-      createAdapterContext({ secret: "sk-ant" }),
-    );
-    assertContract(response, CONTRACT_NETWORK_FAILURE);
-  });
-
-  it("empty content → provider/empty", async () => {
-    const fetch: AdapterFetchLike = async () =>
-      jsonResponse(200, {
-        type: "message",
-        content: [],
-        stop_reason: "end_turn",
-      });
-    const response = await makeAdapter(fetch).complete(
-      baseRequest(),
-      createAdapterContext({ secret: "sk-ant" }),
-    );
-    assertContract(response, CONTRACT_EMPTY_CONTENT);
-  });
+  for (const { name, expectation } of STANDARD_CONTRACT_CASES) {
+    it(name, async () => {
+      const fetchImpl = fetchByCase[name];
+      if (!fetchImpl) {
+        throw new Error(`missing Anthropic fetch mock for contract case "${name}"`);
+      }
+      const response = await makeAdapter(fetchImpl).complete(
+        baseRequest(),
+        createAdapterContext({ secret: "sk-ant" }),
+      );
+      assertContract(response, expectation);
+    });
+  }
 });
