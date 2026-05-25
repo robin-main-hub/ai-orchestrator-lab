@@ -252,8 +252,18 @@ describe("assertSafeCodingPacket", () => {
 });
 
 describe("defaultAgentProfiles", () => {
-  it("ships 11 profiles: orchestrator + 5 debate personas + 2 skeptic perspectives (Asuka general + Yohane Idea Bank) + builder + external + auditor + executor", () => {
-    expect(defaultAgentProfiles).toHaveLength(11);
+  it("ships 17 profiles after R3.2 (11 base + 6 new-role personas: researcher/negotiator/risk_officer/mediator/watchdog/domain_expert)", () => {
+    expect(defaultAgentProfiles).toHaveLength(17);
+  });
+
+  it("covers all 6 R3.2 new roles", () => {
+    const roles = defaultAgentProfiles.map((p) => p.role);
+    expect(roles).toContain("researcher");
+    expect(roles).toContain("negotiator");
+    expect(roles).toContain("risk_officer");
+    expect(roles).toContain("mediator");
+    expect(roles).toContain("watchdog");
+    expect(roles).toContain("domain_expert");
   });
 
   it("supports two profiles sharing the same role (skeptic) with personaName override", () => {

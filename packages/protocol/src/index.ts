@@ -227,6 +227,15 @@ export const agentRoleSchema = z.enum([
   "executor",
   "external",
   "auditor",
+  // R3.2 expansion — gap analysis flagged these as needed for ERP / B2B
+  // intelligence / sales-context workflows. All additive, optional, no
+  // existing profile changes.
+  "researcher",       // active external info gathering, trust-classified output
+  "negotiator",       // sales/협상 advisor, applies user's 협상 3원칙
+  "risk_officer",     // worst-case quantification, Regret Minimization
+  "mediator",         // synthesizes conflicting agent opinions into one draft
+  "watchdog",         // long-term drift / anomaly detection over session history
+  "domain_expert",    // load-time domain knowledge injection (HTV/B2B/etc.)
 ]);
 export type AgentRole = z.infer<typeof agentRoleSchema>;
 
