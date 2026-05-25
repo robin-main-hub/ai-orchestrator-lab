@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  CheckCircle2,
+  Check,
   Clock3,
   Edit3,
   Forward,
@@ -10,31 +10,31 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import type { ApprovalQueueItem, PermissionMatrixSnapshot } from "@ai-orchestrator/protocol";
-import { cn } from "../lib/utils";
+import type {
+  ApprovalQueueItem,
+  PermissionMatrixSnapshot,
+} from "@ai-orchestrator/protocol";
+import { cn } from "@/lib/utils";
+import { Button } from "@/ui/button";
 
 /**
- * Stage 2-5 Control Queue — formerly ApprovalDrawer / "Assistant Inbox".
+ * Control Queue drawer — v0 visual language port.
  *
- * Applies docs/design-decisions.md §1 (rename: Assistant Inbox →
- * **Control Queue** with 6 lane actions: approve / ask / edit /
- * delegate / block / archive — all keyboard-accessible) and §6
- * (⌘⇧A shortcut already wired through useGlobalShortcuts).
+ * v0 의 `debate/assistant-inbox.tsx` 는 bottom strip 형태. 우리
+ * Control Queue 는 ⌘⇧A 로 호출되는 **오른쪽 슬라이드 drawer** 라서
+ * v0 mockup 의 직접 대응이 없음. 하지만:
+ *   - design-decisions §1 의 Control Queue + 6 lane vocabulary 는 우리만의 결정
+ *   - design-decisions §6 의 ⌘⇧A shortcut 도 우리만의 결정
+ *   - v0 는 bottom strip 으로만 표현했지 keyboard 호출 가능한 overlay
+ *     drawer 는 안 만듬
  *
- * Two-section layout:
- *   1. Header — title + pending count + close
- *   2. Lane chip strip — 6 lanes per §1. Approve/Reject are wired
- *      to existing permission handlers; ask/edit/delegate/block/
- *      archive are rendered as the canonical vocabulary but stay
- *      disabled until protocol handoff actions land (📌 future
- *      schema work, design-decisions §7 territory).
- *   3. Queue list — each item card carries the same 6 actions so
- *      the user can route any pending item without leaving the
- *      drawer.
+ * 이번 port 는 layout 은 우리의 right-slide drawer 를 유지하되,
+ * **visual language 를 v0 그대로** (Tailwind utility + Button primitive
+ * + bg-card / border-border / text-foreground 등) 로 통일.
  *
- * All existing callbacks (`onApprove`, `onReject`, `onClose`)
- * preserved verbatim. Visual upgrade only — zero functional
- * regression compared to legacy ApprovalDrawer.
+ * v0 mockup 의 bottom AssistantInbox 자리는 ConversationWorkbench (PR
+ * #144) 의 InboxApprovalStrip 에 이미 구현 — 두 surface 가 같은 데이터
+ * (PermissionMatrixSnapshot) 를 다른 진입점으로 노출.
  */
 
 export type ControlQueueDrawerProps = {
@@ -47,13 +47,18 @@ export type ControlQueueDrawerProps = {
 
 type LaneId = "approve" | "ask" | "edit" | "delegate" | "block" | "archive";
 
-const LANES: Array<{ id: LaneId; label: string; icon: React.ReactNode; status: "live" | "soon" }> = [
-  { id: "approve", label: "approve", icon: <CheckCircle2 size={12} />, status: "live" },
-  { id: "ask", label: "ask", icon: <HelpCircle size={12} />, status: "soon" },
-  { id: "edit", label: "edit", icon: <Edit3 size={12} />, status: "soon" },
-  { id: "delegate", label: "delegate", icon: <Forward size={12} />, status: "soon" },
-  { id: "block", label: "block", icon: <ShieldOff size={12} />, status: "soon" },
-  { id: "archive", label: "archive", icon: <XCircle size={12} />, status: "live" }, // archive = reject
+const LANES: Array<{
+  id: LaneId;
+  label: string;
+  icon: React.ReactNode;
+  status: "live" | "soon";
+}> = [
+  { id: "approve", label: "approve", icon: <Check className="h-3 w-3" />, status: "live" },
+  { id: "ask", label: "ask", icon: <HelpCircle className="h-3 w-3" />, status: "soon" },
+  { id: "edit", label: "edit", icon: <Edit3 className="h-3 w-3" />, status: "soon" },
+  { id: "delegate", label: "delegate", icon: <Forward className="h-3 w-3" />, status: "soon" },
+  { id: "block", label: "block", icon: <ShieldOff className="h-3 w-3" />, status: "soon" },
+  { id: "archive", label: "archive", icon: <XCircle className="h-3 w-3" />, status: "live" }, // = reject
 ];
 
 export function ControlQueueDrawer({
@@ -68,89 +73,85 @@ export function ControlQueueDrawer({
   const pendingItems = snapshot.queue.filter((item) => item.state === "required");
   const resolvedCount = snapshot.queue.length - pendingItems.length;
 
+  if (!open) return null;
+
   return (
     <aside
-      aria-hidden={!open}
       aria-label="Control Queue"
-      className={cn("approval-drawer control-queue", open && "open")}
+      className="fixed right-4 top-14 z-30 flex max-h-[calc(100vh-78px)] w-[min(460px,calc(100vw-32px))] flex-col rounded-lg border border-border bg-card shadow-2xl"
     >
-      <header>
-        <div>
-          <span>
-            <ShieldCheck size={16} />
-            Control Queue
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-border px-3 py-2">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium text-foreground">Control Queue</span>
+          <span className="text-xs text-muted-foreground">
+            {pendingItems.length} pending
           </span>
-          <strong>{pendingItems.length} pending · ⌘⇧A</strong>
+          <kbd className="rounded border border-border bg-card/60 px-1 py-0 text-[9px] font-mono text-muted-foreground">
+            ⌘⇧A
+          </kbd>
         </div>
-        <button aria-label="Close Control Queue" onClick={onClose} type="button">
-          <X size={16} />
-        </button>
-      </header>
-
-      <div className="control-queue__summary">
-        <p>
-          <span>allow</span>
-          <strong>{snapshot.summary.allowed}</strong>
-        </p>
-        <p>
-          <span>approved</span>
-          <strong>{snapshot.summary.approved}</strong>
-        </p>
-        <p>
-          <span>denied</span>
-          <strong>{snapshot.summary.denied}</strong>
-        </p>
+        <Button
+          aria-label="Close Control Queue"
+          className="h-6 w-6"
+          onClick={onClose}
+          size="icon"
+          variant="ghost"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
       </div>
 
-      <div className="control-queue__lanes" role="tablist" aria-label="lane filter">
-        <button
-          aria-selected={activeLane === "all"}
-          className={cn(
-            "control-queue__lane",
-            activeLane === "all" && "control-queue__lane--active",
-          )}
+      {/* Summary */}
+      <div className="grid grid-cols-3 gap-1.5 border-b border-border px-3 py-2">
+        <SummaryCell label="allow" tone="muted" value={snapshot.summary.allowed} />
+        <SummaryCell label="approved" tone="success" value={snapshot.summary.approved} />
+        <SummaryCell label="denied" tone="destructive" value={snapshot.summary.denied} />
+      </div>
+
+      {/* Lane chips */}
+      <div
+        aria-label="lane filter"
+        className="flex flex-wrap gap-1 border-b border-border px-3 py-2"
+        role="tablist"
+      >
+        <LaneChip
+          active={activeLane === "all"}
+          count={pendingItems.length}
+          label="all"
           onClick={() => setActiveLane("all")}
-          role="tab"
-          type="button"
-        >
-          <span className="control-queue__lane-label">all</span>
-          <span className="control-queue__lane-count">{pendingItems.length}</span>
-        </button>
+        />
         {LANES.map((lane) => (
-          <button
-            aria-selected={activeLane === lane.id}
-            className={cn(
-              "control-queue__lane",
-              activeLane === lane.id && "control-queue__lane--active",
-              lane.status === "soon" && "control-queue__lane--soon",
-            )}
+          <LaneChip
+            active={activeLane === lane.id}
             disabled={lane.status === "soon"}
+            icon={lane.icon}
             key={lane.id}
+            label={lane.label}
             onClick={() => setActiveLane(lane.id)}
-            role="tab"
-            title={lane.status === "soon" ? "곧 추가됨 (protocol handoff schema 대기)" : undefined}
-            type="button"
-          >
-            {lane.icon}
-            <span className="control-queue__lane-label">{lane.label}</span>
-          </button>
+            soon={lane.status === "soon"}
+          />
         ))}
       </div>
 
-      <div className="control-queue__list">
+      {/* Queue list */}
+      <div className="flex-1 space-y-2 overflow-y-auto p-3">
         {pendingItems.length === 0 ? (
-          <article className="control-queue__empty">
-            <CheckCircle2 size={18} />
-            <strong>대기 중인 항목 없음</strong>
-            <span>
+          <div className="flex flex-col items-start gap-2 rounded-md border border-border bg-card/40 p-4">
+            <Check className="h-4 w-4 text-success" />
+            <span className="text-sm font-medium text-foreground">
+              대기 중인 항목 없음
+            </span>
+            <span className="text-xs text-muted-foreground">
               {resolvedCount > 0
                 ? `${resolvedCount}개 항목은 이미 처리됐습니다.`
                 : "위험 실행은 아직 큐에 없습니다."}
             </span>
-          </article>
+          </div>
         ) : (
           pendingItems.map((item) => (
-            <ControlQueueCard
+            <QueueCard
               item={item}
               key={item.id}
               onApprove={onApprove}
@@ -160,17 +161,95 @@ export function ControlQueueDrawer({
         )}
       </div>
 
-      <footer className="control-queue__footer">
-        <span>
-          {LANES.filter((l) => l.status === "live").length} live lane · {LANES.filter((l) => l.status === "soon").length} pending schema
+      {/* Footer */}
+      <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-[10px] text-muted-foreground">
+        <span className="font-mono">
+          {LANES.filter((l) => l.status === "live").length} live ·{" "}
+          {LANES.filter((l) => l.status === "soon").length} pending schema
         </span>
-        <kbd>esc</kbd>
-      </footer>
+        <kbd className="rounded border border-border bg-card/60 px-1 py-0 font-mono">
+          esc
+        </kbd>
+      </div>
     </aside>
   );
 }
 
-function ControlQueueCard({
+// ── Sub-components ──────────────────────────────────────────────────
+
+function SummaryCell({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "muted" | "success" | "destructive";
+}) {
+  return (
+    <div className="flex flex-col items-center rounded-md border border-border bg-card/40 px-2 py-1.5">
+      <span
+        className={cn(
+          "text-sm font-semibold",
+          tone === "success" && "text-success",
+          tone === "destructive" && "text-destructive",
+          tone === "muted" && "text-foreground",
+        )}
+      >
+        {value}
+      </span>
+      <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function LaneChip({
+  active,
+  count,
+  disabled,
+  icon,
+  label,
+  onClick,
+  soon,
+}: {
+  active: boolean;
+  count?: number;
+  disabled?: boolean;
+  icon?: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  soon?: boolean;
+}) {
+  return (
+    <button
+      aria-selected={active}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-mono transition-colors",
+        active
+          ? "border-primary bg-primary/15 text-primary"
+          : "border-border bg-card/40 text-muted-foreground hover:border-primary/45",
+        disabled && "cursor-not-allowed opacity-40 hover:border-border",
+      )}
+      disabled={disabled}
+      onClick={onClick}
+      role="tab"
+      title={soon ? "곧 추가됨 (protocol handoff schema 대기)" : undefined}
+      type="button"
+    >
+      {icon}
+      <span>{label}</span>
+      {count !== undefined ? (
+        <span className="rounded-full bg-primary/20 px-1 text-[9px] text-primary">
+          {count}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+function QueueCard({
   item,
   onApprove,
   onReject,
@@ -180,75 +259,98 @@ function ControlQueueCard({
   onReject: (sourceItemId: string) => void;
 }) {
   return (
-    <article className="control-queue__card">
-      <header>
-        <div>
-          <span>
-            <Clock3 size={12} />
+    <div
+      className={cn(
+        "flex flex-col gap-1.5 rounded-md border bg-card/40 p-2",
+        item.state === "required"
+          ? "border-warning/50"
+          : "border-border",
+      )}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Clock3 className="h-3 w-3 text-muted-foreground" />
+          <span className="truncate text-[10px] font-mono text-muted-foreground">
             {item.requestedBy}
           </span>
-          <strong>{item.summary}</strong>
         </div>
-        <em>{item.state}</em>
-      </header>
-      <p>{item.permissions.join(" · ")}</p>
-      <small className="control-queue__card-id">{item.sourceItemId}</small>
-      <div className="control-queue__card-actions">
-        <button
-          className="control-queue__card-action control-queue__card-action--approve"
-          onClick={() => onApprove(item.sourceItemId)}
-          type="button"
-          title="approve"
-        >
-          <CheckCircle2 size={12} />
-          approve
-        </button>
-        <button
-          className="control-queue__card-action"
-          disabled
-          type="button"
-          title="ask — protocol handoff schema 대기"
-        >
-          <HelpCircle size={12} />
-          ask
-        </button>
-        <button
-          className="control-queue__card-action"
-          disabled
-          type="button"
-          title="edit — protocol handoff schema 대기"
-        >
-          <Edit3 size={12} />
-          edit
-        </button>
-        <button
-          className="control-queue__card-action"
-          disabled
-          type="button"
-          title="delegate — protocol handoff schema 대기"
-        >
-          <Forward size={12} />
-          delegate
-        </button>
-        <button
-          className="control-queue__card-action"
-          disabled
-          type="button"
-          title="block — protocol handoff schema 대기"
-        >
-          <ShieldOff size={12} />
-          block
-        </button>
-        <button
-          className="control-queue__card-action control-queue__card-action--archive"
-          onClick={() => onReject(item.sourceItemId)}
-          type="button"
-          title="archive (reject)"
-        >
-          <XCircle size={12} />
-          archive
-        </button>
+        <span className="rounded bg-warning/15 px-1 py-0 text-[9px] font-mono uppercase text-warning">
+          {item.state}
+        </span>
       </div>
-    </article>
+
+      {/* Summary */}
+      <p className="text-xs font-medium text-foreground line-clamp-2">
+        {item.summary}
+      </p>
+      <p className="text-[10px] text-muted-foreground">
+        {item.permissions.join(" · ")}
+      </p>
+      <p className="text-[9px] font-mono text-muted-foreground">
+        {item.sourceItemId}
+      </p>
+
+      {/* 6 lane actions inline (approve/archive live, others soon) */}
+      <div className="grid grid-cols-3 gap-1 pt-1">
+        <ActionButton
+          icon={<Check className="h-3 w-3" />}
+          label="approve"
+          onClick={() => onApprove(item.sourceItemId)}
+          tone="primary"
+        />
+        <ActionButton disabled icon={<HelpCircle className="h-3 w-3" />} label="ask" />
+        <ActionButton disabled icon={<Edit3 className="h-3 w-3" />} label="edit" />
+        <ActionButton
+          disabled
+          icon={<Forward className="h-3 w-3" />}
+          label="delegate"
+        />
+        <ActionButton disabled icon={<ShieldOff className="h-3 w-3" />} label="block" />
+        <ActionButton
+          icon={<XCircle className="h-3 w-3" />}
+          label="archive"
+          onClick={() => onReject(item.sourceItemId)}
+          tone="destructive"
+        />
+      </div>
+    </div>
+  );
+}
+
+function ActionButton({
+  icon,
+  label,
+  onClick,
+  tone,
+  disabled,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+  tone?: "primary" | "destructive";
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      className={cn(
+        "inline-flex items-center justify-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-mono transition-colors",
+        tone === "primary" && !disabled && "border-primary/50 text-primary hover:bg-primary/10",
+        tone === "destructive" &&
+          !disabled &&
+          "border-destructive/45 text-destructive hover:bg-destructive/10",
+        !tone &&
+          !disabled &&
+          "border-border bg-card/40 text-muted-foreground hover:border-primary/45",
+        disabled && "cursor-not-allowed border-border/50 text-muted-foreground/50 opacity-50",
+      )}
+      disabled={disabled}
+      onClick={onClick}
+      title={disabled ? "곧 추가됨 (protocol handoff schema 대기)" : label}
+      type="button"
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
