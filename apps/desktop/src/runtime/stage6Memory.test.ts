@@ -28,7 +28,7 @@ const messages: ConversationMessage[] = [
     id: "message_1",
     sessionId: "session_desktop_001",
     role: "user",
-    content: "DGX-02를 authority로 두고 기억 trace를 보여줘",
+    content: "MacBook을 authority로 두고 DGX-02 continuity mirror 기억 trace를 보여줘",
     createdAt,
   },
 ];
@@ -80,6 +80,8 @@ describe("stage6 memory inspector", () => {
     expect(inspector.contextPacket.activeRecordIds.length).toBeGreaterThan(0);
     expect(inspector.stats.relationCount).toBeGreaterThan(0);
     expect(inspector.pinnedCount).toBeGreaterThan(0);
+    expect(inspector.records.some((record) => record.id === "memory_seed_macbook_authority")).toBe(true);
+    expect(inspector.records.some((record) => record.id === "memory_seed_dgx02_authority")).toBe(false);
   });
 
   it("blocks project and user memory for untrusted providers", () => {
