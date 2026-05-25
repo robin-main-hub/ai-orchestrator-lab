@@ -95,6 +95,14 @@ Event Store가 append-only이면 `forget`은 단순 삭제가 아니다.
 - 관련 Obsidian/Notion export는 다음 동기화에서 소급 수정한다.
 - secret은 secret storage에서 실제 삭제한다.
 
-## DGX와 로컬의 관계
+## MacBook, DGX, SimpleMem의 관계
 
-DGX가 연결되어 있으면 중앙 Memento 서버를 사용한다. DGX가 끊기면 데스크톱은 마지막으로 동기화된 로컬 캐시를 읽기 전용으로 사용하고, 새 기억은 로컬 pending queue에 쌓는다. 서버가 복구되면 충돌 검사를 거쳐 동기화한다. 초기 충돌 해결은 복잡한 CRDT 대신 revision id와 last-write-wins, conflict event 기록으로 시작한다.
+MacBook은 원본 작업기이며 canonical Event Store, MemoryRecord, WorkItem, approval, draft의 주인이다.
+
+DGX-02는 항상 켜진 continuity mirror, 연산 서버, projection server, SimpleMem 검색 인덱스 host로 둔다. DGX-02가 기억 검색을 제공하더라도 SimpleMem은 canonical memory database가 아니라 MacBook의 Event Store와 MemoryRecord에서 파생된 고성능 검색 인덱스다.
+
+폰이나 DGX remote input에서 생긴 기억 후보는 처음에는 `pending_remote_input` 또는 archival write request로 남긴다. MacBook이 다시 연결되면 Memory Curator/Orchestrator가 import, promotion, rejection을 결정한다.
+
+장기 기억 쓰기는 에이전트가 직접 `insert`하지 않는다. 에이전트는 `memory.archival_write.requested`를 만들고, 승격된 MemoryRecord만 DGX-02 SimpleMem에 색인한다.
+
+세부 설계는 `docs/28-simplemem-continuity-memory.md`를 따른다.
