@@ -227,6 +227,16 @@ export const agentRoleSchema = z.enum([
   "executor",
   "external",
   "auditor",
+  // R3.2 expansion — gap analysis flagged these as needed for ERP /
+  // B2B intelligence / sales-context workflows. All additive: each
+  // existing profile keeps its current role; new roles unlock new
+  // defaultAgentProfile entries.
+  "researcher",       // active external info gathering, trust-classified output
+  "negotiator",       // sales/협상 advisor, applies user's 협상 3원칙
+  "risk_officer",     // worst-case quantification, Regret Minimization
+  "mediator",         // synthesizes conflicting agent opinions into one draft
+  "watchdog",         // long-term drift / anomaly detection over session history
+  "domain_expert",    // load-time domain knowledge injection (HTV/B2B/etc.)
 ]);
 export type AgentRole = z.infer<typeof agentRoleSchema>;
 
@@ -242,6 +252,17 @@ export const agentProfileSchema = z.object({
   authBinding: agentAuthBindingSchema.optional(),
   enabled: z.boolean(),
   permissionLevel: z.string().optional(),
+  /**
+   * Optional override for the persona directory name used by the
+   * markdown persona loader (`packages/agents`'s loadPersona). When
+   * omitted, the loader uses `role` as the directory name (1:1
+   * convention from R2). Set this when multiple profiles share the
+   * same role but need different character files — e.g. two skeptics
+   * with `role: "skeptic"`: one with `personaName: undefined` (loads
+   * `agents/skeptic/`, Asuka), another with `personaName: "yohane"`
+   * (loads `agents/yohane/`, Yohane Idea Bank).
+   */
+  personaName: z.string().optional(),
 });
 export type AgentProfile = z.infer<typeof agentProfileSchema>;
 

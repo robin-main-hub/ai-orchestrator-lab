@@ -391,6 +391,91 @@ export const defaultAgentProfiles: AgentProfile[] = [
     enabled: false,
     permissionLevel: "read_only",
   },
+  // ─── R3.1: second skeptic via personaName override ──────────────────
+  {
+    id: "agent_skeptic_yohane",
+    name: "Yohane",
+    kind: "virtual",
+    role: "skeptic",
+    // Same role as the canonical skeptic (Asuka). The personaName
+    // override points the persona loader at agents/yohane/ instead of
+    // agents/skeptic/, so the two skeptics speak in distinct voices
+    // (Asuka = adversarial QA; Yohane = first-principles inversion /
+    // idea bank).
+    personaName: "yohane",
+    soulMode: "summary",
+    configSource: "internal",
+    enabled: false,
+    permissionLevel: "read_only",
+  },
+  // ─── R3.2: six new roles (gap-analysis flagged) ────────────────────
+  {
+    id: "agent_researcher",
+    name: "Researcher",
+    kind: "virtual",
+    role: "researcher",
+    // Maomao — active external info gathering, trust-classified output.
+    soulMode: "retrieved",
+    configSource: "internal",
+    enabled: false,
+    permissionLevel: "read_only",
+  },
+  {
+    id: "agent_negotiator",
+    name: "Negotiator",
+    kind: "virtual",
+    role: "negotiator",
+    // Sparkle (花火) — sales / 협상 advisor. Applies user's 협상 3원칙
+    // through the 5-막 framework.
+    soulMode: "summary",
+    configSource: "internal",
+    enabled: false,
+    permissionLevel: "read_only",
+  },
+  {
+    id: "agent_risk_officer",
+    name: "Risk Officer",
+    kind: "virtual",
+    role: "risk_officer",
+    // C.C. — worst-case quantification, 5-step Quantitative Risk Algorithm.
+    soulMode: "summary",
+    configSource: "internal",
+    enabled: false,
+    permissionLevel: "read_only",
+  },
+  {
+    id: "agent_mediator",
+    name: "Mediator",
+    kind: "virtual",
+    role: "mediator",
+    // Robin — synthesizes conflicting agent opinions into one draft.
+    soulMode: "summary",
+    configSource: "internal",
+    enabled: false,
+    permissionLevel: "read_only",
+  },
+  {
+    id: "agent_watchdog",
+    name: "Watchdog",
+    kind: "virtual",
+    role: "watchdog",
+    // Frieren — long-term drift / anomaly detection over session history.
+    soulMode: "summary",
+    configSource: "internal",
+    enabled: false,
+    permissionLevel: "read_only",
+  },
+  {
+    id: "agent_domain_expert",
+    name: "Domain Expert",
+    kind: "virtual",
+    role: "domain_expert",
+    // Herta — load-time domain knowledge injection (HTV/B2B/etc.).
+    soulMode: "retrieved",
+    configSource: "internal",
+    enabled: false,
+    permissionLevel: "read_only",
+  },
   {
     id: "agent_executor",
     name: "Executor",
