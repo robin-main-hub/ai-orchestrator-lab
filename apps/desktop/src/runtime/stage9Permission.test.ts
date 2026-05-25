@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MobileActionPolicy, ProviderRuntimeReadiness, RuntimeSnapshot, TerminalSlot } from "@ai-orchestrator/protocol";
 import { createStage4AgentRun } from "./stage4Runtime";
 import { createTelegramDemoInput, createStage8IngressSnapshot } from "./stage8Ingress";
-import { createStage9PermissionSnapshot, nextRequiredPermission } from "./stage9Permission";
+import { createStage9PermissionSnapshot, evaluatePermissionGate, nextRequiredPermission } from "./stage9Permission";
 
 const createdAt = "2026-05-24T00:30:00.000Z";
 
@@ -222,5 +222,56 @@ describe("stage9 permission matrix", () => {
     expect(providerItem?.state).toBe("required");
     expect(providerItem?.requestedLevels).toEqual(["network_access", "secret_access"]);
     expect(snapshot.queue.some((item) => item.sourceItemId === providerItem?.id)).toBe(true);
+  });
+
+  it("evaluates a provider completion through the common permission gate", () => {
+    const result = evaluatePermissionGate({
+      sessionId: "session_desktop_001",
+      subjectId: "provider_apifun_claude_a",
+      actor: "agent",
+      channel: "agent",
+      sourceTrust: "limited",
+      action: "provider_completion",
+      requestedLevels: ["network_access", "secret_access"],
+      createdAt,
+    });
+
+    expect(result.requiresApproval).toBe(true);
+    expect(result.queueItem?.sourceItemId).toBe(result.item.id);
+    expect(result.item.reason).toContain("requires approval");
+  });
+
+  it("denies dangerous mobile actions in the common permission gate", () => {
+    const result = evaluatePermissionGate({
+      sessionId: "session_desktop_001",
+      subjectId: "mobile_terminal",
+      actor: "mobile",
+      channel: "mobile",
+      sourceTrust: "limited",
+      action: "terminal_run",
+      requestedLevels: ["run_dangerous_commands"],
+      createdAt,
+    });
+
+    expect(result.denied).toBe(true);
+    expect(result.queueItem).toBeUndefined();
+  });
+
+  it("routes token budget overflow to approval instead of direct execution", () => {
+    const result = evaluatePermissionGate({
+      sessionId: "session_desktop_001",
+      subjectId: "provider_codex_oauth",
+      actor: "agent",
+      channel: "agent",
+      sourceTrust: "trusted",
+      action: "provider_completion",
+      requestedLevels: ["network_access"],
+      costEstimateTokens: 120_000,
+      maxAllowedTokens: 64_000,
+      createdAt,
+    });
+
+    expect(result.requiresApproval).toBe(true);
+    expect(result.item.reason).toContain("exceeds budget");
   });
 });

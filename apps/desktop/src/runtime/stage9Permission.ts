@@ -13,6 +13,7 @@ import type {
   ProviderRuntimeReadiness,
   RuntimeSnapshot,
   TerminalSlot,
+  SourceTrust,
 } from "@ai-orchestrator/protocol";
 import type { Stage4AgentRun, Stage4RunStep } from "./stage4Runtime";
 
@@ -26,6 +27,29 @@ export type Stage9PermissionInput = {
   providerReadiness?: ProviderRuntimeReadiness;
   decisions?: Record<string, ApprovalState>;
   createdAt?: string;
+};
+
+export type PermissionGateInput = {
+  sessionId: string;
+  subjectId: string;
+  actor: PermissionActor;
+  channel: EventSource;
+  sourceTrust: SourceTrust;
+  action: PermissionAction;
+  requestedLevels: PermissionLevel[];
+  state?: ApprovalState;
+  reason?: string;
+  costEstimateTokens?: number;
+  maxAllowedTokens?: number;
+  createdAt?: string;
+};
+
+export type PermissionGateResult = {
+  item: PermissionMatrixItem;
+  queueItem?: ApprovalQueueItem;
+  allowed: boolean;
+  requiresApproval: boolean;
+  denied: boolean;
 };
 
 export function createStage9PermissionSnapshot({
@@ -65,6 +89,63 @@ export function createStage9PermissionSnapshot({
 
 export function nextRequiredPermission(snapshot: PermissionMatrixSnapshot): ApprovalQueueItem | undefined {
   return snapshot.queue.find((item) => item.state === "required");
+}
+
+export function evaluatePermissionGate({
+  sessionId,
+  subjectId,
+  actor,
+  channel,
+  sourceTrust,
+  action,
+  requestedLevels,
+  state,
+  reason,
+  costEstimateTokens,
+  maxAllowedTokens,
+  createdAt = new Date().toISOString(),
+}: PermissionGateInput): PermissionGateResult {
+  const itemState = state ?? defaultApprovalStateForGate({
+    actor,
+    sourceTrust,
+    action,
+    requestedLevels,
+    costEstimateTokens,
+    maxAllowedTokens,
+  });
+  const decision = decisionForGate(itemState, action);
+  const item: PermissionMatrixItem = {
+    id: `permission_gate_${stableId(`${sessionId}:${subjectId}:${actor}:${action}:${createdAt}`)}`,
+    sessionId,
+    subjectId,
+    actor,
+    channel,
+    sourceTrust,
+    action,
+    requestedLevels,
+    state: itemState,
+    decision,
+    reason:
+      reason ??
+      defaultGateReason({
+        actor,
+        sourceTrust,
+        action,
+        requestedLevels,
+        state: itemState,
+        costEstimateTokens,
+        maxAllowedTokens,
+      }),
+    createdAt,
+  };
+
+  return {
+    item,
+    queueItem: item.state === "required" ? createQueueItem(item) : undefined,
+    allowed: item.decision === "allow",
+    requiresApproval: item.decision === "approval_required",
+    denied: item.decision === "deny",
+  };
 }
 
 function createExternalApprovalItem(
@@ -269,6 +350,92 @@ function decisionFromState(state: ApprovalState): PermissionDecision {
   }
 
   return "approval_required";
+}
+
+function defaultApprovalStateForGate({
+  actor,
+  sourceTrust,
+  action,
+  requestedLevels,
+  costEstimateTokens,
+  maxAllowedTokens,
+}: Pick<
+  PermissionGateInput,
+  "actor" | "sourceTrust" | "action" | "requestedLevels" | "costEstimateTokens" | "maxAllowedTokens"
+>): ApprovalState {
+  if (action === "unknown_external_effect") {
+    return "rejected";
+  }
+
+  if (typeof costEstimateTokens === "number" && typeof maxAllowedTokens === "number" && costEstimateTokens > maxAllowedTokens) {
+    return "required";
+  }
+
+  if (
+    actor === "external_channel" &&
+    (sourceTrust === "untrusted" || requestedLevels.some((level) => level !== "read_only"))
+  ) {
+    return "required";
+  }
+
+  if (actor === "mobile" && (requestedLevels.includes("secret_access") || requestedLevels.includes("run_dangerous_commands"))) {
+    return "rejected";
+  }
+
+  if (
+    requestedLevels.includes("secret_access") ||
+    requestedLevels.includes("remote_workspace") ||
+    requestedLevels.includes("write_files") ||
+    requestedLevels.includes("run_safe_commands") ||
+    requestedLevels.includes("run_dangerous_commands")
+  ) {
+    return "required";
+  }
+
+  return "not_required";
+}
+
+function decisionForGate(state: ApprovalState, action: PermissionAction): PermissionDecision {
+  if (action === "unknown_external_effect") {
+    return "deny";
+  }
+
+  return decisionFromState(state);
+}
+
+function defaultGateReason({
+  actor,
+  sourceTrust,
+  action,
+  requestedLevels,
+  state,
+  costEstimateTokens,
+  maxAllowedTokens,
+}: Pick<
+  PermissionGateInput,
+  "actor" | "sourceTrust" | "action" | "requestedLevels" | "costEstimateTokens" | "maxAllowedTokens"
+> & { state: ApprovalState }) {
+  if (action === "unknown_external_effect") {
+    return "unknown external effect is denied by default";
+  }
+
+  if (typeof costEstimateTokens === "number" && typeof maxAllowedTokens === "number" && costEstimateTokens > maxAllowedTokens) {
+    return `estimated token cost ${costEstimateTokens} exceeds budget ${maxAllowedTokens}`;
+  }
+
+  if (actor === "mobile" && state === "rejected") {
+    return "mobile cannot perform secret or dangerous terminal actions";
+  }
+
+  if (actor === "external_channel" && sourceTrust === "untrusted") {
+    return "untrusted external source must pass explicit approval";
+  }
+
+  if (state === "required") {
+    return `action ${action} requires approval for ${requestedLevels.join(", ") || "policy review"}`;
+  }
+
+  return "permission gate allows this action";
 }
 
 function decisionFromActionAndState(action: PermissionAction, state: ApprovalState): PermissionDecision {
