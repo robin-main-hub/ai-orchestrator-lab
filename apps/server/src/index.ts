@@ -551,7 +551,7 @@ export async function createServerProviderModelDiscoveryResponse(
       endpoint,
       {
         method: "GET",
-        headers: createServerProviderHeaders(config, apiKey),
+        headers: createAnthropicProviderHeaders(apiKey),
       },
       options.timeoutMs ?? 1_500,
     );
@@ -910,19 +910,6 @@ async function resolveServerProviderOAuthAvailability(
   }
 }
 
-type DgxCompletionResponse = {
-  choices?: Array<{
-    message?: {
-      content?: string;
-    };
-  }>;
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-  };
-};
-
 const defaultDgxSystemPrompt =
   "Answer directly in Korean when the user writes Korean. Do not reveal reasoning or a thinking process.";
 
@@ -1035,7 +1022,6 @@ export async function createServerProviderProxyCompletionResponse(
     };
   }
 
-  const endpoint = createServerProviderEndpoint(config);
   if (config.apiStyle !== "anthropic_messages") {
     return createOpenAICompatibleServerCompletion({
       request,
@@ -1050,11 +1036,12 @@ export async function createServerProviderProxyCompletionResponse(
     });
   }
 
+  const endpoint = createAnthropicMessagesEndpoint(config);
   try {
     const response = await fetchImpl(endpoint, {
       method: "POST",
-      headers: createServerProviderHeaders(config, apiKey),
-      body: JSON.stringify(createServerProviderRequestBody(config, request.modelId, request.messages)),
+      headers: createAnthropicProviderHeaders(apiKey),
+      body: JSON.stringify(createAnthropicMessagesRequestBody(request.modelId, request.messages)),
     });
     const rawText = await response.text();
 
@@ -1072,8 +1059,8 @@ export async function createServerProviderProxyCompletionResponse(
       };
     }
 
-    const parsed = JSON.parse(rawText) as DgxCompletionResponse | AnthropicMessageResponse;
-    const content = extractServerProviderContent(config, parsed);
+    const parsed = JSON.parse(rawText) as AnthropicMessageResponse;
+    const content = extractAnthropicMessagesContent(parsed);
     if (!content) {
       return {
         id: `provider_completion_response_${crypto.randomUUID()}`,
@@ -1097,7 +1084,7 @@ export async function createServerProviderProxyCompletionResponse(
       status: "succeeded",
       content,
       endpoint,
-      usage: extractServerProviderUsage(config, parsed),
+      usage: extractAnthropicMessagesUsage(parsed),
       createdAt,
     };
   } catch (error) {
@@ -1158,19 +1145,16 @@ function createOpenAICompatibleServerCompletion(params: {
   );
 }
 
-function createServerProviderEndpoint(config: ServerProviderProxyConfig) {
+function createAnthropicMessagesEndpoint(config: ServerProviderProxyConfig) {
   const baseUrl = config.baseUrl.replace(/\/$/, "");
-  return config.apiStyle === "anthropic_messages" ? `${baseUrl}/v1/messages` : `${baseUrl}/chat/completions`;
+  return `${baseUrl}/v1/messages`;
 }
 
-function createServerProviderHeaders(config: ServerProviderProxyConfig, apiKey?: string) {
+function createAnthropicProviderHeaders(apiKey?: string) {
   const headers: Record<string, string> = {
     "content-type": "application/json",
+    "anthropic-version": "2023-06-01",
   };
-
-  if (config.apiStyle === "anthropic_messages") {
-    headers["anthropic-version"] = "2023-06-01";
-  }
 
   if (apiKey) {
     headers.authorization = `Bearer ${apiKey}`;
@@ -1179,63 +1163,36 @@ function createServerProviderHeaders(config: ServerProviderProxyConfig, apiKey?:
   return headers;
 }
 
-function createServerProviderRequestBody(
-  config: ServerProviderProxyConfig,
-  modelId: string,
-  messages: ProviderCompletionMessage[],
-) {
-  if (config.apiStyle === "anthropic_messages") {
-    return {
-      model: modelId,
-      system: "Answer directly in Korean when the user writes Korean. Do not reveal reasoning or a thinking process.",
-      messages: messages.slice(-8).map((message) => ({
-        role: message.role === "assistant" ? "assistant" : "user",
-        content: message.content,
-      })),
-      max_tokens: 512,
-      temperature: 0.2,
-    };
-  }
-
-  return createServerDgxVllmRequestBody(modelId, messages);
-}
-
-function extractServerProviderContent(
-  config: ServerProviderProxyConfig,
-  parsed: DgxCompletionResponse | AnthropicMessageResponse,
-) {
-  if (config.apiStyle === "anthropic_messages") {
-    return (parsed as AnthropicMessageResponse).content
-      ?.map((entry) => entry.text)
-      .filter((text): text is string => Boolean(text?.trim()))
-      .join("\n")
-      .trim();
-  }
-
-  return (parsed as DgxCompletionResponse).choices?.[0]?.message?.content?.trim();
-}
-
-function extractServerProviderUsage(
-  config: ServerProviderProxyConfig,
-  parsed: DgxCompletionResponse | AnthropicMessageResponse,
-) {
-  if (config.apiStyle === "anthropic_messages") {
-    const usage = (parsed as AnthropicMessageResponse).usage;
-    return {
-      inputTokens: usage?.input_tokens,
-      outputTokens: usage?.output_tokens,
-      totalTokens:
-        typeof usage?.input_tokens === "number" && typeof usage.output_tokens === "number"
-          ? usage.input_tokens + usage.output_tokens
-          : undefined,
-    };
-  }
-
-  const usage = (parsed as DgxCompletionResponse).usage;
+function createAnthropicMessagesRequestBody(modelId: string, messages: ProviderCompletionMessage[]) {
   return {
-    inputTokens: usage?.prompt_tokens,
-    outputTokens: usage?.completion_tokens,
-    totalTokens: usage?.total_tokens,
+    model: modelId,
+    system: defaultDgxSystemPrompt,
+    messages: messages.slice(-8).map((message) => ({
+      role: message.role === "assistant" ? "assistant" : "user",
+      content: message.content,
+    })),
+    max_tokens: 512,
+    temperature: 0.2,
+  };
+}
+
+function extractAnthropicMessagesContent(parsed: AnthropicMessageResponse) {
+  return parsed.content
+    ?.map((entry) => entry.text)
+    .filter((text): text is string => Boolean(text?.trim()))
+    .join("\n")
+    .trim();
+}
+
+function extractAnthropicMessagesUsage(parsed: AnthropicMessageResponse) {
+  const usage = parsed.usage;
+  return {
+    inputTokens: usage?.input_tokens,
+    outputTokens: usage?.output_tokens,
+    totalTokens:
+      typeof usage?.input_tokens === "number" && typeof usage.output_tokens === "number"
+        ? usage.input_tokens + usage.output_tokens
+        : undefined,
   };
 }
 
@@ -1338,48 +1295,6 @@ function expandHomePath(value: string) {
   }
 
   return join(process.env.HOME ?? "/home/robin", value.slice(2));
-}
-
-function createServerDgxVllmRequestBody(modelId: string, messages: ProviderCompletionMessage[]) {
-  return {
-    model: modelId,
-    messages: createServerDgxChatMessages(messages),
-    max_tokens: 512,
-    temperature: 0.2,
-    chat_template_kwargs: {
-      enable_thinking: false,
-    },
-  };
-}
-
-function createServerDgxChatMessages(messages: ProviderCompletionMessage[]) {
-  const systemParts = [defaultDgxSystemPrompt];
-  const chatMessages: Array<{ role: "assistant" | "user"; content: string }> = [];
-
-  for (const message of messages) {
-    const content = message.content.trim();
-    if (!content) {
-      continue;
-    }
-
-    if (message.role === "system") {
-      systemParts.push(content);
-      continue;
-    }
-
-    chatMessages.push({
-      role: message.role === "assistant" ? "assistant" : "user",
-      content,
-    });
-  }
-
-  return [
-    {
-      role: "system" as const,
-      content: systemParts.join("\n\n"),
-    },
-    ...chatMessages.slice(-8),
-  ];
 }
 
 export function createDgxHeartbeat(runtime = createRuntimeSnapshot(), checkedAt = new Date().toISOString()): DgxHeartbeat {
