@@ -2,19 +2,16 @@ import { describe, expect, it } from "vitest";
 import type { ProviderCompletionRequest } from "@ai-orchestrator/protocol";
 import { MockLlmAdapter } from "./mockLlmAdapter";
 import { createAdapterContext } from "./adapter";
+import { baseProviderRequest } from "./testHelpers";
 
 function baseRequest(overrides: Partial<ProviderCompletionRequest> = {}): ProviderCompletionRequest {
-  return {
+  return baseProviderRequest({
     id: "req_001",
-    sessionId: "session_test",
     providerProfileId: "provider_mock_llm",
     modelId: "mock-orchestrator",
-    messages: [{ role: "user", content: "ping" }],
-    source: "desktop",
-    routePreference: "direct_provider",
     createdAt: "2026-05-25T06:00:00.000Z",
     ...overrides,
-  };
+  });
 }
 
 describe("MockLlmAdapter", () => {
