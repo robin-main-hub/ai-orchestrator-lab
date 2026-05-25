@@ -13,6 +13,7 @@
     "server:build": "corepack pnpm --filter @ai-orchestrator/server build",
     "server:start": "corepack pnpm --filter @ai-orchestrator/server start",
     "server:smoke": "node scripts/smoke-dgx-server.mjs",
+    "tmux:smoke:dry-run": "node scripts/smoke-tmux-dry-run.mjs",
     "swarm:setup": "bash scripts/setup-agent-swarm.sh",
     "swarm:reset": "bash scripts/setup-agent-swarm.sh --reset",
     "swarm:send": "bash scripts/swarm-send.sh",
