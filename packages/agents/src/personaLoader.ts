@@ -41,6 +41,23 @@ export type LoadedPersona = {
   mode: PersonaSourceMode;
   /** In load order — SOUL first when both are loaded; empty when mode === "off". */
   fragments: PersonaFragment[];
+  /**
+   * Shared safety-boundary content read from the repo-root
+   * `agents/SAFETY.md` file when present, or `null` when the file is
+   * absent or the loader was given a `PersonaFileSource` that does not
+   * carry it.
+   *
+   * Persona files (SOUL.md / AGENTS.md) hold character/voice only — the
+   * universal safety rules (DGX-01 금기, secret 보호, permission gate
+   * 의무, untrusted provider 격리, redaction stages, ...) live in
+   * `agents/SAFETY.md` as a single source of truth, and the loader
+   * surfaces them here so `buildPersonaPromptFragment` can auto-inject
+   * them ahead of the character body.
+   *
+   * Always populated when the file exists, regardless of `mode` — even
+   * `mode === "off"` callers want the safety rules to flow through.
+   */
+  safetyContent: string | null;
 };
 
 export interface PersonaFileSource {
@@ -66,6 +83,7 @@ export class PersonaFragmentMissingError extends Error {
 
 const SOUL_FILENAME = "SOUL.md";
 const AGENTS_FILENAME = "AGENTS.md";
+const SAFETY_RELATIVE_PATH = "agents/SAFETY.md";
 
 /**
  * Translate the AgentProfile's `configSource` field into a load mode.
@@ -107,9 +125,15 @@ export async function loadPersona(
   mode: PersonaSourceMode,
   source: PersonaFileSource,
 ): Promise<LoadedPersona> {
+  // SAFETY.md is universal — loaded regardless of mode, since even an
+  // `off` persona (no character text injected) should still inherit the
+  // system safety rules when the caller assembles its prompt.
+  const safetyContent = await source.readMarkdown(SAFETY_RELATIVE_PATH);
+
   if (mode === "off") {
-    return { personaName, mode, fragments: [] };
+    return { personaName, mode, fragments: [], safetyContent };
   }
+
   const fragments: PersonaFragment[] = [];
   for (const need of fragmentsNeededForMode(mode)) {
     const relativePath = `agents/${personaName}/${need.filename}`;
@@ -119,7 +143,7 @@ export async function loadPersona(
     }
     fragments.push({ source: need.source, relativePath, content });
   }
-  return { personaName, mode, fragments };
+  return { personaName, mode, fragments, safetyContent };
 }
 
 function fragmentsNeededForMode(
@@ -143,17 +167,33 @@ export type PersonaPromptOptions = {
   headerLine?: string;
   /** Wrap each fragment's body with a `## From <relativePath>` heading. Defaults to true. */
   includeFragmentHeadings?: boolean;
+  /**
+   * Skip injecting the shared `agents/SAFETY.md` content at the top of
+   * the assembled fragment. Defaults to `false` (safety IS injected).
+   *
+   * Operational callers should leave this `false` so character personas
+   * always inherit the universal safety boundaries. Pass `true` only for
+   * debug / prompt-size analysis / persona inspector UIs that want to
+   * render the character body in isolation.
+   */
+  omitSafety?: boolean;
 };
 
 /**
  * Assemble the loaded persona into a single markdown blob suitable for
- * prompt injection. Returns empty string when `loaded.fragments` is empty
- * (which includes `mode === "off"`) — the caller decides whether to fall
- * back to embedded summary text or skip persona injection entirely.
+ * prompt injection. Returns empty string when neither the safety
+ * content nor any character fragments are present — the caller decides
+ * whether to fall back to embedded summary text or skip persona
+ * injection entirely.
  *
- * Output layout (default):
+ * Output layout (default, safety injected first because it has higher
+ * precedence in conflict resolution — the character is a voice inside
+ * these rules, not above them):
  *
  *   <headerLine?>
+ *
+ *   # System Safety Boundaries
+ *   <SAFETY.md body, trimmed>
  *
  *   # Persona: <name>
  *
@@ -167,16 +207,24 @@ export function buildPersonaPromptFragment(
   loaded: LoadedPersona,
   options: PersonaPromptOptions = {},
 ): string {
-  if (loaded.fragments.length === 0) return "";
-  const { headerLine, includeFragmentHeadings = true } = options;
+  const { headerLine, includeFragmentHeadings = true, omitSafety = false } = options;
+  const includeSafety = !omitSafety && loaded.safetyContent !== null;
+  if (!includeSafety && loaded.fragments.length === 0) return "";
+
   const parts: string[] = [];
   if (headerLine) parts.push(headerLine);
-  parts.push(`# Persona: ${loaded.personaName}`);
-  for (const fragment of loaded.fragments) {
-    if (includeFragmentHeadings) {
-      parts.push(`## From ${fragment.relativePath}`);
+  if (includeSafety) {
+    parts.push("# System Safety Boundaries");
+    parts.push(loaded.safetyContent!.trim());
+  }
+  if (loaded.fragments.length > 0) {
+    parts.push(`# Persona: ${loaded.personaName}`);
+    for (const fragment of loaded.fragments) {
+      if (includeFragmentHeadings) {
+        parts.push(`## From ${fragment.relativePath}`);
+      }
+      parts.push(fragment.content.trim());
     }
-    parts.push(fragment.content.trim());
   }
   return parts.join("\n\n");
 }
