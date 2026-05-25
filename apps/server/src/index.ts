@@ -186,7 +186,7 @@ export type ServerApprovalReplayResponse =
       status: "replayed";
       approval: ApprovalRequest;
       replay: ApprovalReplayRequest;
-      result: ServerAgentDelegationExecuteResponse | ServerTmuxDispatchResponse;
+      result: ProviderCompletionResponse | ServerAgentDelegationExecuteResponse | ServerTmuxDispatchResponse;
       eventSync?: EventSyncPushResponse;
     }
   | {
@@ -2145,6 +2145,25 @@ export async function replayApprovedRequestFromPersistentServerStorage(
         status: "not_replayed",
         reason: "approval_has_no_replay_payload",
         approval,
+      },
+    };
+  }
+
+  if (approval.replay.kind === "provider_completion") {
+    const completionRequest = providerCompletionRequestSchema.parse({
+      ...(approval.replay.payload as Record<string, unknown>),
+      approvalState: "approved",
+      permissionDecision: "allow",
+    }) as ProviderCompletionRequest;
+    const result = await createDgxProviderCompletionResponse(completionRequest);
+
+    return {
+      statusCode: 202,
+      payload: {
+        status: "replayed",
+        approval,
+        replay: approval.replay,
+        result,
       },
     };
   }
