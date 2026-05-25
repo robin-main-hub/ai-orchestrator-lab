@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@ai-orchestrator/agents": "workspace:*",
+    "@ai-orchestrator/memory": "workspace:*",
     "@ai-orchestrator/protocol": "workspace:*",
     "@ai-orchestrator/providers": "workspace:*",
     "@fontsource/inter": "^5.2.5",

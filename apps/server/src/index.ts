@@ -52,6 +52,7 @@ import type {
   TerminalCommandIntent,
   TerminalCommandDispatchState,
   TerminalHostKind,
+  TerminalTimelineBlock,
   TerminalPaneOutputCapturedEventPayload,
   TmuxPaneRole,
 } from "@ai-orchestrator/protocol";
@@ -65,6 +66,7 @@ import {
   providerCompletionRequestSchema,
   remoteExecutionRequestSchema,
   terminalCommandIntentSchema,
+  terminalTimelineBlockSchema,
 } from "@ai-orchestrator/protocol";
 import {
   CodexCliOAuthAdapter,
@@ -338,6 +340,7 @@ export type ServerTmuxDispatchSnapshot = {
   permission: ServerPermissionGateResult;
   approval?: ApprovalRequest;
   events: EventEnvelope[];
+  timelineBlocks: TerminalTimelineBlock[];
 };
 
 export type ServerTmuxDispatchResult = {
@@ -355,12 +358,14 @@ export type ServerTmuxDispatchResponse = {
   dispatch: ServerTmuxDispatchResult;
   eventSync: EventSyncPushResponse;
   dispatchEventSync?: EventSyncPushResponse;
+  timelineBlocks: TerminalTimelineBlock[];
 };
 
 export type ServerTmuxPreflightResponse = {
   intent: TerminalCommandIntent;
   permission: ServerPermissionGateResult;
   approval?: ApprovalRequest;
+  timelineBlocks: TerminalTimelineBlock[];
   audit: {
     redactionApplied: boolean;
     wouldRecordEvents: string[];
@@ -395,6 +400,7 @@ export type ServerTmuxCaptureResponse = {
   reason: string;
   payload?: TerminalPaneOutputCapturedEventPayload;
   eventSync?: EventSyncPushResponse;
+  timelineBlocks?: TerminalTimelineBlock[];
 };
 
 const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
@@ -1784,12 +1790,14 @@ export function createServerTmuxDispatchSnapshot(
   if (approval) {
     events.push(createApprovalRequestedEvent(approval));
   }
+  const timelineBlocks = createTmuxDispatchTimelineBlocks(request, intent, permission, approval, events, now);
 
   return {
     intent,
     permission,
     approval,
     events,
+    timelineBlocks,
   };
 }
 
@@ -1810,6 +1818,7 @@ export function createServerTmuxPreflightResponse(
     intent: snapshot.intent,
     permission: snapshot.permission,
     approval: snapshot.approval,
+    timelineBlocks: snapshot.timelineBlocks,
     audit: {
       redactionApplied: snapshot.intent.commandPreview !== snapshot.intent.redactedCommandPreview,
       wouldRecordEvents: snapshot.events.map((event) => event.type),
@@ -1889,6 +1898,13 @@ export async function recordServerTmuxDispatchToPersistentServerStorage(
       now,
     );
   }
+  const dispatchEventIds = dispatchEventSync?.results
+    .filter((result) => result.status === "accepted" || result.status === "duplicate")
+    .map((result) => result.eventId);
+  const timelineBlocks = [
+    ...snapshot.timelineBlocks,
+    createTmuxDispatchResultTimelineBlock(request, snapshot.intent, dispatch, dispatchEventIds ?? [], now),
+  ];
 
   return {
     intent: snapshot.intent,
@@ -1897,6 +1913,7 @@ export async function recordServerTmuxDispatchToPersistentServerStorage(
     dispatch,
     eventSync,
     dispatchEventSync,
+    timelineBlocks,
   };
 }
 
@@ -1976,6 +1993,147 @@ export function createServerTmuxCaptureSnapshot(
   };
 }
 
+function createTmuxDispatchTimelineBlocks(
+  request: ServerTmuxDispatchRequest,
+  intent: TerminalCommandIntent,
+  permission: ServerPermissionGateResult,
+  approval: ApprovalRequest | undefined,
+  events: EventEnvelope[],
+  now: string,
+): TerminalTimelineBlock[] {
+  const intentEventIds = events
+    .filter((event) => event.type === "terminal.command.intent.created")
+    .map((event) => event.id);
+  const approvalEventIds = events
+    .filter((event) => event.type === "approval.requested")
+    .map((event) => event.id);
+  const blockedEventIds = events
+    .filter((event) => event.type === "terminal.command.blocked")
+    .map((event) => event.id);
+  const blocks: TerminalTimelineBlock[] = [
+    parseTmuxTimelineBlock({
+      id: `tmux_block_intent_${intent.id}`,
+      sessionId: request.sessionId,
+      terminalSessionId: request.terminalSessionId,
+      paneId: request.paneId,
+      role: request.role,
+      host: request.host,
+      kind: "command_intent",
+      status:
+        permission.decision === "deny"
+          ? "blocked"
+          : permission.decision === "approval_required"
+            ? "pending_approval"
+            : request.dispatchMode === "execute_if_approved"
+              ? "running"
+              : "planned",
+      title: `${request.role} command intent`,
+      summary:
+        permission.decision === "approval_required"
+          ? "tmux dispatch is waiting for approval"
+          : permission.reason,
+      commandIntentId: intent.id,
+      relatedEventIds: [...intentEventIds, ...blockedEventIds],
+      redactionApplied: intent.commandPreview !== intent.redactedCommandPreview,
+      createdAt: now,
+    }),
+  ];
+
+  if (approval) {
+    blocks.push(
+      parseTmuxTimelineBlock({
+        id: `tmux_block_approval_${approval.id}`,
+        sessionId: request.sessionId,
+        terminalSessionId: request.terminalSessionId,
+        paneId: request.paneId,
+        role: request.role,
+        host: request.host,
+        kind: "approval",
+        status: "pending_approval",
+        title: "Approval required",
+        summary: approval.reason,
+        parentBlockId: blocks[0]?.id,
+        commandIntentId: intent.id,
+        approvalId: approval.id,
+        relatedEventIds: approvalEventIds,
+        redactionApplied: true,
+        createdAt: now,
+      }),
+    );
+  }
+
+  return blocks;
+}
+
+function createTmuxDispatchResultTimelineBlock(
+  request: ServerTmuxDispatchRequest,
+  intent: TerminalCommandIntent,
+  dispatch: ServerTmuxDispatchResult,
+  relatedEventIds: string[],
+  now: string,
+): TerminalTimelineBlock {
+  const isDryRun = dispatch.status === "dry_run";
+  const status =
+    dispatch.status === "sent"
+      ? "completed"
+      : dispatch.status === "failed"
+        ? "failed"
+        : dispatch.status === "blocked"
+          ? "blocked"
+          : isDryRun
+            ? "dry_run"
+            : "planned";
+
+  return parseTmuxTimelineBlock({
+    id: `tmux_block_dispatch_${intent.id}_${stableServerId(`${dispatch.status}:${now}`)}`,
+    sessionId: request.sessionId,
+    terminalSessionId: request.terminalSessionId,
+    paneId: request.paneId,
+    role: request.role,
+    host: request.host,
+    kind: isDryRun ? "dry_run" : "dispatch",
+    status,
+    title: isDryRun ? "Dry-run dispatch" : "Dispatch result",
+    summary: dispatch.reason,
+    parentBlockId: `tmux_block_intent_${intent.id}`,
+    commandIntentId: intent.id,
+    relatedEventIds,
+    outputPreview: dispatch.stderrPreview ?? dispatch.stdoutPreview,
+    redactionApplied: true,
+    completedAt: now,
+    createdAt: now,
+  });
+}
+
+function createTmuxCaptureTimelineBlock(
+  request: ServerTmuxCaptureRequest,
+  payload: TerminalPaneOutputCapturedEventPayload,
+  relatedEventIds: string[],
+  now: string,
+): TerminalTimelineBlock {
+  return parseTmuxTimelineBlock({
+    id: `tmux_block_capture_${request.id}_${stableServerId(now)}`,
+    sessionId: request.sessionId,
+    terminalSessionId: request.terminalSessionId,
+    paneId: request.paneId,
+    role: request.role,
+    host: request.host,
+    kind: "capture",
+    status: "completed",
+    title: `${request.role} pane capture`,
+    summary: `${payload.lineCount} lines captured`,
+    relatedEventIds,
+    outputPreview: payload.outputPreview,
+    redactionApplied: payload.redactionApplied,
+    completedAt: now,
+    createdAt: now,
+  });
+}
+
+function parseTmuxTimelineBlock(value: TerminalTimelineBlock): TerminalTimelineBlock {
+  return terminalTimelineBlockSchema.parse(value) as TerminalTimelineBlock;
+}
+
 export async function recordServerTmuxCaptureToPersistentServerStorage(
   request: ServerTmuxCaptureRequest,
   storage: JsonlServerEventStorage,
@@ -2009,6 +2167,7 @@ export async function recordServerTmuxCaptureToPersistentServerStorage(
       reason: "tmux pane output captured and redacted",
       payload: snapshot.payload,
       eventSync,
+      timelineBlocks: [createTmuxCaptureTimelineBlock(request, snapshot.payload, [snapshot.event.id], now)],
     };
   } catch (error) {
     return {
@@ -3619,23 +3778,62 @@ export async function createDgxProviderCompletionResponse(
   const fetchImpl = options.fetchImpl ?? fetch;
 
   if (redactedRequest.providerProfileId !== "provider_dgx02_vllm") {
-    return redactProviderCompletionResponseForReceive(await createServerProviderProxyCompletionResponse(redactedRequest, options));
+    return withProviderRuntimeHints(
+      redactProviderCompletionResponseForReceive(await createServerProviderProxyCompletionResponse(redactedRequest, options)),
+      redactedRequest,
+    );
   }
 
-  return redactProviderCompletionResponseForReceive(await createOpenAICompatibleServerCompletion({
-    request: redactedRequest,
-    profileId: "provider_dgx02_vllm",
-    kind: "openai",
-    baseUrl: vllmBaseUrl,
-    modelIds: [DEFAULT_DGX_MODEL_ID],
-    requiresAuth: false,
-    fetchImpl,
-    extraBody: {
-      chat_template_kwargs: {
-        enable_thinking: false,
+  return withProviderRuntimeHints(
+    redactProviderCompletionResponseForReceive(await createOpenAICompatibleServerCompletion({
+      request: redactedRequest,
+      profileId: "provider_dgx02_vllm",
+      kind: "openai",
+      baseUrl: vllmBaseUrl,
+      modelIds: [DEFAULT_DGX_MODEL_ID],
+      requiresAuth: false,
+      fetchImpl,
+      extraBody: {
+        chat_template_kwargs: {
+          enable_thinking: false,
+        },
       },
+    })),
+    redactedRequest,
+  );
+}
+
+function withProviderRuntimeHints(
+  response: ProviderCompletionResponse,
+  request: ProviderCompletionRequest,
+): ProviderCompletionResponse {
+  const budget = resolveProviderBudgetPolicy();
+  const estimatedTokens = estimateProviderCompletionBudgetTokens(request.messages);
+  const retryHint = classifyProviderRetryHint(response);
+  return {
+    ...response,
+    runtimeHints: {
+      estimatedTokens,
+      budgetApprovalThresholdTokens: budget.approvalThresholdTokens,
+      budgetHardLimitTokens: budget.hardLimitTokens,
+      retryable: retryHint.retryable,
+      retryReason: retryHint.reason,
     },
-  }));
+  };
+}
+
+function classifyProviderRetryHint(response: ProviderCompletionResponse): { retryable: boolean; reason?: string } {
+  if (response.status !== "failed") {
+    return { retryable: false };
+  }
+  const error = response.error?.toLowerCase() ?? "";
+  if (/\b(408|409|425|429|500|502|503|504)\b/.test(error)) {
+    return { retryable: true, reason: "transient_http_status" };
+  }
+  if (error.includes("timeout") || error.includes("econnreset") || error.includes("fetch") || error.includes("rate")) {
+    return { retryable: true, reason: "transient_transport_or_rate_limit" };
+  }
+  return { retryable: false, reason: "non_retryable_provider_error" };
 }
 
 export async function createServerProviderProxyCompletionResponse(

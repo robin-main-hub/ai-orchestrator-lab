@@ -9,6 +9,11 @@ import type {
   RecallQuery,
   Reflection,
 } from "@ai-orchestrator/protocol";
+import type {
+  MemoryAdapter,
+  MemoryAdapterContext,
+  MemoryAdapterKind,
+} from "@ai-orchestrator/memory";
 import {
   activateMemoryRecord,
   createStage6MemoryInspector,
@@ -20,10 +25,21 @@ export type LocalMementoMemoryApi = MemoryAPI & {
   snapshot(): MemoryRecord[];
 };
 
+export type AdapterBackedMementoMemoryApi = MemoryAPI & {
+  adapterKind: MemoryAdapterKind;
+  adapterProfileId: string;
+};
+
 export type LocalMementoMemoryApiOptions = {
   records: MemoryRecord[];
   provider?: ProviderProfile;
   events?: EventEnvelope[];
+  createdAt?: string;
+};
+
+export type AdapterBackedMementoMemoryApiOptions = {
+  adapter: MemoryAdapter;
+  context?: Partial<MemoryAdapterContext>;
   createdAt?: string;
 };
 
@@ -113,6 +129,62 @@ export function createLocalMementoMemoryApi({
     },
     snapshot() {
       return [...memoryRecords];
+    },
+  };
+}
+
+export function createAdapterBackedMementoMemoryApi({
+  adapter,
+  context = {},
+  createdAt = new Date().toISOString(),
+}: AdapterBackedMementoMemoryApiOptions): AdapterBackedMementoMemoryApi {
+  function createContext(): MemoryAdapterContext {
+    return {
+      permissionDecision: "allow",
+      callerTrustLevel: "trusted",
+      now: () => createdAt,
+      ...context,
+    };
+  }
+
+  return {
+    adapterKind: adapter.kind,
+    adapterProfileId: adapter.profileId,
+    recall(query) {
+      return adapter.recall(query, createContext());
+    },
+    remember(input) {
+      return adapter.remember(input, createContext());
+    },
+    reflect(sessionId) {
+      if (adapter.reflect) {
+        return adapter.reflect(sessionId, createContext());
+      }
+      return Promise.resolve({
+        sessionId,
+        summary: `${adapter.profileId} does not expose reflect(); using adapter-backed Memento fallback.`,
+        decisions: [],
+        risks: [],
+        createdAt,
+      } satisfies Reflection);
+    },
+    memoryContext(query) {
+      return adapter.memoryContext(query, createContext());
+    },
+    stats() {
+      return adapter.stats(createContext());
+    },
+    createRelations(recordIds) {
+      return adapter.createRelations(recordIds, createContext());
+    },
+    activateMemories(recordIds) {
+      return adapter.activateMemories(recordIds, createContext());
+    },
+    pin(recordId) {
+      return adapter.pin(recordId, createContext());
+    },
+    forget(recordId) {
+      return adapter.forget(recordId, createContext());
     },
   };
 }
