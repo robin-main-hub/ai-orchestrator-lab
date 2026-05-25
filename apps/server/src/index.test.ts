@@ -1566,6 +1566,99 @@ describe("HTTP request limits", () => {
     }
   });
 
+  it("dry-runs approved tmux dispatch without send-keys or model engine access", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const previousTmuxDispatch = process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
+    const previousTmuxDryRun = process.env.ORCHESTRATOR_TMUX_DRY_RUN;
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-tmux-dry-run-"));
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+    process.env.EVENT_STORAGE_DIR = tempDir;
+    process.env.ORCHESTRATOR_TMUX_DRY_RUN = "1";
+    delete process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/tmux/dispatch`, {
+        body: JSON.stringify({
+          id: "tmux_dispatch_http_dry_run",
+          sessionId: "session_tmux_http",
+          terminalSessionId: "terminal_session_ai_swarm",
+          role: "qa",
+          host: "dgx_02",
+          paneId: "%7",
+          requestedBy: "user",
+          commandPreview: "pnpm test",
+          approvalState: "approved",
+          dispatchMode: "execute_if_approved",
+          tmuxSessionName: "ai-swarm",
+          createdAt: "2026-05-25T00:03:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(response.status).toBe(202);
+      const body = (await response.json()) as {
+        dispatch: { attempted: boolean; reason: string; status: string };
+        permission: { decision: string };
+      };
+      expect(body.permission.decision).toBe("allow");
+      expect(body.dispatch).toMatchObject({
+        attempted: false,
+        status: "recorded",
+      });
+      expect(body.dispatch.reason).toContain("ORCHESTRATOR_TMUX_DRY_RUN");
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousEventStorageDir === undefined) {
+        delete process.env.EVENT_STORAGE_DIR;
+      } else {
+        process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      if (previousTmuxDispatch === undefined) {
+        delete process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
+      } else {
+        process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS = previousTmuxDispatch;
+      }
+      if (previousTmuxDryRun === undefined) {
+        delete process.env.ORCHESTRATOR_TMUX_DRY_RUN;
+      } else {
+        process.env.ORCHESTRATOR_TMUX_DRY_RUN = previousTmuxDryRun;
+      }
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
   it("keeps tmux capture disabled until the server explicitly enables it", async () => {
     const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
     const previousNodeEnv = process.env.NODE_ENV;
