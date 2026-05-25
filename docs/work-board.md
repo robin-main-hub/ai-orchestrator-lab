@@ -2,7 +2,7 @@
 
 Claude와 Codex가 같은 repo를 분업할 때 서로의 작업 상태와 합의를 한 페이지로 보기 위한 작업판.
 
-관련 문서: [`review-board.md`](review-board.md) (외부 검토자 리뷰), [`24-provider-adapters.md`](24-provider-adapters.md) (LlmAdapter), [`29-permission-engine-spec.md`](29-permission-engine-spec.md) (Permission/Redaction), [`30-security-audit-checklist.md`](30-security-audit-checklist.md) (보안 감사), [`31-streaming-layer-spec.md`](31-streaming-layer-spec.md) (streaming v1), [`32-memory-adapter-spec.md`](32-memory-adapter-spec.md) (MemoryAdapter contract).
+관련 문서: [`review-board.md`](review-board.md) (외부 검토자 리뷰), [`24-provider-adapters.md`](24-provider-adapters.md) (LlmAdapter), [`29-permission-engine-spec.md`](29-permission-engine-spec.md) (Permission/Redaction), [`30-security-audit-checklist.md`](30-security-audit-checklist.md) (보안 감사), [`31-streaming-layer-spec.md`](31-streaming-layer-spec.md) (streaming v1), [`32-memory-adapter-spec.md`](32-memory-adapter-spec.md) (MemoryAdapter contract), [`33-dgx02-deploy-runbook.md`](33-dgx02-deploy-runbook.md) (DGX-02 deploy).
 
 마지막 갱신: 2026-05-25 라운드 **3.1** (R3 위 amend — Codex F6~F9가 PR로 추가됨 + Claude `#54/#56/#58` 평행 stack. F10 (tmux dispatch gate)은 Codex에서 진행 중, PR 아직 없음).
 
