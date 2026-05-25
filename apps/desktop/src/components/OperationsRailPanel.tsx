@@ -9,8 +9,6 @@ import type {
 import type { DesktopApprovalListResponse } from "../runtime/stage34ApprovalServer";
 import type { Stage7BackupSnapshot } from "../runtime/stage7Backup";
 import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
-import type { WindowAuditItem } from "../types";
-import { WindowChecklist } from "./WindowChecklist";
 
 export type TmuxRedispatchOutcome = {
   approvalId: string;
@@ -63,35 +61,6 @@ export function OperationsRailPanel({
     pendingTmuxApprovalKeySet.has(approval.id) ||
     (approval.sourceItemId ? pendingTmuxApprovalKeySet.has(approval.sourceItemId) : false),
   ).length;
-  const auditItems: WindowAuditItem[] = [
-    {
-      id: "permission",
-      label: "승인 대기열",
-      status: permissionSnapshot.summary.pending + serverPending > 0 ? "partial" : "ready",
-      detail:
-        permissionSnapshot.summary.pending + serverPending > 0
-          ? `${permissionSnapshot.summary.pending} local / ${serverPending} DGX 승인 대기 중입니다.`
-          : "위험 실행은 권한 정책을 통과했고 승인 대기열은 비어 있습니다.",
-    },
-    {
-      id: "ingress",
-      label: "외부 입력",
-      status: ingressSnapshot.result.approvalState === "required" ? "partial" : "ready",
-      detail: "Telegram/Mobile/API 입력은 ingress guard와 승인 상태를 먼저 거칩니다.",
-    },
-    {
-      id: "secret",
-      label: "비밀값",
-      status: secretVaultSnapshot.summary.missing > 0 ? "partial" : "ready",
-      detail: "원문 키는 UI와 로그에 남기지 않고 vault ref 상태만 표시합니다.",
-    },
-    {
-      id: "gemini",
-      label: "Gemini CLI",
-      status: "blocked",
-      detail: "사용자 지시대로 agy -p 설정 전까지 연결하지 않습니다.",
-    },
-  ];
 
   return (
     <section className="mini-panel rail-panel ops-rail-panel">
@@ -208,7 +177,6 @@ export function OperationsRailPanel({
           ))}
         </div>
       ) : null}
-      <WindowChecklist items={auditItems} title="Ops 점검" />
     </section>
   );
 }
