@@ -12,6 +12,7 @@ import {
   createLiveHealthResponse,
   createProviderCompletionApprovalRequest,
   createServerIngressSnapshot,
+  createServerAgentDelegationExecution,
   createServerTmuxCaptureSnapshot,
   createServerTmuxDispatchSnapshot,
   createServerProviderRegistrySnapshot,
@@ -47,6 +48,7 @@ describe("server health placeholder", () => {
     expect(health.runtime.syncTopology.conflictPolicy).toBe("dgx02_authority_wins");
     expect(health.capabilities).toContain("remote-run-request");
     expect(health.capabilities).toContain("model-registry");
+    expect(health.capabilities).toContain("agent-delegation-endpoint");
     expect(health.capabilities).toContain("vllm-health");
     expect(health.capabilities).toContain("event-storage-sync");
     expect(health.eventStorage.mode).toBe("memory");
@@ -1281,7 +1283,237 @@ describe("public health storage redaction", () => {
   });
 });
 
+describe("server agent delegation endpoint core", () => {
+  const baseDelegationRequest = {
+    id: "agent_delegation_test_1",
+    sessionId: "session_1",
+    caller: {
+      agentId: "agent_chaerin",
+      role: "companion",
+      personaName: "chaerin",
+      providerProfileId: "provider_dgx02_vllm",
+      modelId: "qwen36-gio-lora-v5-prisma",
+      systemPrompt: "You are Chaerin.",
+    },
+    userMessage: "시장 규모를 확인하고 결론을 줘.",
+    targets: [
+      {
+        key: "researcher",
+        agentId: "agent_maomao",
+        role: "researcher",
+        personaName: "maomao",
+        providerProfileId: "provider_dgx02_vllm",
+        modelId: "qwen36-gio-lora-v5-prisma",
+        systemPrompt: "You are Maomao.",
+      },
+    ],
+    routePreference: "server_proxy" as const,
+    createdAt: "2026-05-25T00:00:00.000Z",
+  };
+
+  it("resolves a companion delegate tag and records server delegation events", async () => {
+    const seenRequests: string[] = [];
+    const response = await createServerAgentDelegationExecution(baseDelegationRequest, {
+      completeProvider: async (request) => {
+        seenRequests.push(request.id);
+        if (seenRequests.length === 1) {
+          return {
+            id: "response_initial",
+            requestId: request.id,
+            providerProfileId: request.providerProfileId,
+            modelId: request.modelId,
+            route: request.routePreference,
+            status: "succeeded",
+            content: '조사 맡길게. <delegate to="researcher">2024 HTV 시장 규모</delegate>',
+            createdAt: request.createdAt,
+          };
+        }
+        if (seenRequests.length === 2) {
+          return {
+            id: "response_researcher",
+            requestId: request.id,
+            providerProfileId: request.providerProfileId,
+            modelId: request.modelId,
+            route: request.routePreference,
+            status: "succeeded",
+            content: "마오마오: 톱5 시장과 리스크를 확인했어.",
+            createdAt: request.createdAt,
+          };
+        }
+        return {
+          id: "response_followup",
+          requestId: request.id,
+          providerProfileId: request.providerProfileId,
+          modelId: request.modelId,
+          route: request.routePreference,
+          status: "succeeded",
+          content: "채아린 최종: 마오마오 확인을 반영해 톱5를 정리했어.",
+          createdAt: request.createdAt,
+        };
+      },
+      generateId: () => `id_${seenRequests.length + 1}`,
+      now: "2026-05-25T00:00:00.000Z",
+    });
+
+    expect(seenRequests).toHaveLength(3);
+    expect(response.shortCircuited).toBe(false);
+    expect(response.finalContent).toContain("채아린 최종");
+    expect(response.delegations).toMatchObject([
+      {
+        kind: "succeeded",
+        target: "researcher",
+        targetAgentId: "agent_maomao",
+      },
+    ]);
+    expect(response.events.map((event) => event.type)).toEqual([
+      "agent.delegation.detected",
+      "agent.delegation.dispatched",
+      "agent.delegation.succeeded",
+      "agent.delegation.followup.completed",
+    ]);
+    expect(response.events.every((event) => event.redacted)).toBe(true);
+  });
+
+  it("records unknown delegation targets before the follow-up turn", async () => {
+    const response = await createServerAgentDelegationExecution(
+      {
+        ...baseDelegationRequest,
+        targets: [],
+      },
+      {
+        completeProvider: async (request) => ({
+          id: `response_${request.id}`,
+          requestId: request.id,
+          providerProfileId: request.providerProfileId,
+          modelId: request.modelId,
+          route: request.routePreference,
+          status: "succeeded",
+          content:
+            request.id.includes("initial")
+              ? '<delegate to="researcher">자료 확인</delegate>'
+              : "채아린 최종: 대상이 없어서 직접 정리했어.",
+          createdAt: request.createdAt,
+        }),
+        now: "2026-05-25T00:00:00.000Z",
+      },
+    );
+
+    expect(response.delegations).toMatchObject([
+      {
+        kind: "unknown_target",
+        target: "researcher",
+      },
+    ]);
+    expect(response.events.map((event) => event.type)).toContain("agent.delegation.unknown_target");
+    expect(response.finalContent).toContain("채아린 최종");
+  });
+});
+
 describe("HTTP request limits", () => {
+  it("executes mock agent delegation and persists delegation events", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-agent-delegations-"));
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "test";
+    process.env.EVENT_STORAGE_DIR = tempDir;
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/agent-delegations/execute`, {
+        body: JSON.stringify({
+          id: "agent_delegation_http_mock",
+          sessionId: "session_http",
+          executionMode: "mock",
+          caller: {
+            agentId: "agent_chaerin",
+            role: "companion",
+            personaName: "chaerin",
+            providerProfileId: "provider_dgx02_vllm",
+            modelId: "qwen36-gio-lora-v5-prisma",
+          },
+          userMessage: "마오마오에게 조사 맡겨줘.",
+          targets: [
+            {
+              key: "researcher",
+              agentId: "agent_maomao",
+              role: "researcher",
+              personaName: "maomao",
+              providerProfileId: "provider_dgx02_vllm",
+              modelId: "qwen36-gio-lora-v5-prisma",
+            },
+          ],
+          routePreference: "server_proxy",
+          createdAt: "2026-05-25T00:00:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(response.status).toBe(202);
+      const payload = await response.json();
+      expect(payload).toMatchObject({
+        id: "agent_delegation_http_mock",
+        shortCircuited: false,
+        delegations: [
+          {
+            kind: "succeeded",
+            target: "researcher",
+            targetAgentId: "agent_maomao",
+          },
+        ],
+        eventSync: {
+          accepted: 4,
+        },
+      });
+
+      const eventsResponse = await fetch(`http://127.0.0.1:${address.port}/events?sessionId=session_http`, {
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+        },
+      });
+      expect(eventsResponse.status).toBe(200);
+      const eventPayload = (await eventsResponse.json()) as { events: Array<{ type: string }> };
+      expect(eventPayload.events.map((event: { type: string }) => event.type)).toContain("agent.delegation.succeeded");
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousEventStorageDir === undefined) {
+        delete process.env.EVENT_STORAGE_DIR;
+      } else {
+        process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
   it("returns 403 for provider completions that need approval before proxying", async () => {
     const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
     const previousNodeEnv = process.env.NODE_ENV;

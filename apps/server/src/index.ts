@@ -27,8 +27,10 @@ import type {
   PermissionActor,
   PermissionDecision,
   PermissionLevel,
+  ProviderCompletionMessage,
   ProviderCompletionRequest,
   ProviderCompletionResponse,
+  ProviderCompletionRoute,
   ProviderKind,
   ProviderRegistryAuthMode,
   ProviderRegistryEntry,
@@ -67,6 +69,7 @@ export type ServerCapability =
   | "model-registry"
   | "provider-registry"
   | "provider-completion-proxy"
+  | "agent-delegation-endpoint"
   | "vllm-health"
   | "runtime-status"
   | "remote-run-request"
@@ -198,6 +201,87 @@ export type ServerIngressReceiverResponse = {
   snapshot: ServerIngressSnapshot;
   eventSync: EventSyncPushResponse;
   approvals: ApprovalRequest[];
+};
+
+export type ServerAgentDelegationAgentRef = {
+  agentId: string;
+  role: string;
+  providerProfileId: string;
+  modelId: string;
+  personaName?: string;
+  systemPrompt?: string;
+};
+
+export type ServerAgentDelegationTarget = ServerAgentDelegationAgentRef & {
+  key: string;
+};
+
+type ServerDelegateTag = {
+  target: string;
+  prompt: string;
+  raw: string;
+  startIndex: number;
+  endIndex: number;
+};
+
+export type ServerAgentDelegationExecutionMode = "live" | "mock";
+
+export type ServerAgentDelegationExecuteRequest = {
+  id: string;
+  sessionId: string;
+  caller: ServerAgentDelegationAgentRef;
+  userMessage: string;
+  targets: ServerAgentDelegationTarget[];
+  routePreference?: ProviderCompletionRoute;
+  maxDelegatesPerTurn?: number;
+  approvalState?: ApprovalState;
+  permissionDecision?: PermissionDecision;
+  executionMode?: ServerAgentDelegationExecutionMode;
+  createdAt?: string;
+};
+
+export type ServerAgentDelegationOutcome =
+  | {
+      kind: "succeeded";
+      target: string;
+      prompt: string;
+      targetAgentId: string;
+      response: string;
+    }
+  | {
+      kind: "blocked";
+      target: string;
+      prompt: string;
+      reason: string;
+    }
+  | {
+      kind: "unknown_target";
+      target: string;
+      prompt: string;
+    }
+  | {
+      kind: "self_delegation";
+      target: string;
+      prompt: string;
+    }
+  | {
+      kind: "failed";
+      target: string;
+      prompt: string;
+      targetAgentId?: string;
+      reason: string;
+    };
+
+export type ServerAgentDelegationExecuteResponse = {
+  id: string;
+  sessionId: string;
+  initialContent: string;
+  finalContent: string;
+  shortCircuited: boolean;
+  delegations: ServerAgentDelegationOutcome[];
+  events: EventEnvelope[];
+  eventSync?: EventSyncPushResponse;
+  createdAt: string;
 };
 
 export type ServerRedactionReport = {
@@ -523,6 +607,7 @@ export function createHealthResponse(now = new Date().toISOString(), probe?: Dgx
       "model-registry",
       "provider-registry",
       "provider-completion-proxy",
+      "agent-delegation-endpoint",
       "vllm-health",
       "runtime-status",
       "remote-run-request",
@@ -1026,6 +1111,316 @@ export function evaluateServerProviderCompletionPermission(
     requestedLevels,
     reason: `${trustLevel} provider completion requires explicit approval before DGX-02 uses its credential`,
     costEstimateTokens,
+  };
+}
+
+class ServerAgentDelegationPermissionError extends Error {
+  constructor(
+    readonly permission: ServerPermissionGateResult,
+    readonly approval?: ApprovalRequest,
+  ) {
+    super(permission.reason);
+    this.name = "ServerAgentDelegationPermissionError";
+  }
+}
+
+export function parseServerAgentDelegationExecuteRequest(
+  value: unknown,
+  now = new Date().toISOString(),
+): ServerAgentDelegationExecuteRequest {
+  if (!value || typeof value !== "object") {
+    throw new Error("agent delegation payload must be an object");
+  }
+
+  const candidate = value as Partial<ServerAgentDelegationExecuteRequest>;
+  const sessionId = parseRequiredString(candidate.sessionId, "sessionId", 256);
+  const userMessage = parseRequiredString(candidate.userMessage, "userMessage", 200_000);
+  const caller = parseServerAgentDelegationAgentRef(candidate.caller, "caller");
+  const targets = parseServerAgentDelegationTargets(candidate.targets);
+  const id =
+    typeof candidate.id === "string" && candidate.id.trim()
+      ? candidate.id.trim().slice(0, 256)
+      : `agent_delegation_${stableServerId(`${sessionId}:${caller.agentId}:${userMessage}`)}`;
+  const routePreference =
+    candidate.routePreference === "server_proxy" ||
+    candidate.routePreference === "direct_provider" ||
+    candidate.routePreference === "local_fallback"
+      ? candidate.routePreference
+      : "server_proxy";
+  const maxDelegatesPerTurn =
+    typeof candidate.maxDelegatesPerTurn === "number" && Number.isFinite(candidate.maxDelegatesPerTurn)
+      ? Math.max(0, Math.min(10, Math.trunc(candidate.maxDelegatesPerTurn)))
+      : 4;
+  const executionMode = candidate.executionMode === "mock" ? "mock" : "live";
+  const createdAt = typeof candidate.createdAt === "string" && candidate.createdAt.trim() ? candidate.createdAt.trim() : now;
+
+  return {
+    id,
+    sessionId,
+    caller,
+    userMessage,
+    targets,
+    routePreference,
+    maxDelegatesPerTurn,
+    approvalState: parseOptionalApprovalState(candidate.approvalState),
+    permissionDecision: parseOptionalPermissionDecision(candidate.permissionDecision),
+    executionMode,
+    createdAt,
+  };
+}
+
+export async function createServerAgentDelegationExecution(
+  request: ServerAgentDelegationExecuteRequest,
+  options: {
+    completeProvider?: (request: ProviderCompletionRequest) => Promise<ProviderCompletionResponse>;
+    now?: string;
+    generateId?: () => string;
+  } = {},
+): Promise<ServerAgentDelegationExecuteResponse> {
+  const createdAt = request.createdAt ?? options.now ?? new Date().toISOString();
+  const now = options.now ?? createdAt;
+  const route = request.routePreference ?? "server_proxy";
+  const generateId = options.generateId ?? (() => crypto.randomUUID());
+  const completeProvider = options.completeProvider ?? createDgxProviderCompletionResponse;
+  const targetByKey = createServerAgentDelegationTargetIndex(request.targets);
+  const events: EventEnvelope[] = [];
+
+  const initialCompletion = await completeProvider(createServerDelegationProviderRequest({
+    id: `provider_completion_${request.id}_initial_${generateId()}`,
+    sessionId: request.sessionId,
+    agent: request.caller,
+    messages: [
+      createOptionalSystemMessage(request.caller.systemPrompt),
+      { role: "user", content: request.userMessage },
+    ].filter((message): message is ProviderCompletionMessage => Boolean(message)),
+    route,
+    approvalState: request.approvalState,
+    permissionDecision: request.permissionDecision,
+    createdAt: now,
+  }));
+  const initialContent = requireSucceededProviderContent(initialCompletion, "caller initial delegation turn");
+  const parsedTags = parseServerDelegateTags(initialContent);
+
+  if (parsedTags.length === 0) {
+    return {
+      id: request.id,
+      sessionId: request.sessionId,
+      initialContent,
+      finalContent: initialContent,
+      shortCircuited: true,
+      delegations: [],
+      events,
+      createdAt,
+    };
+  }
+
+  events.push(createServerAgentDelegationEvent({
+    request,
+    type: "agent.delegation.detected",
+    suffix: "detected",
+    payload: {
+      executionId: request.id,
+      sourceAgentId: request.caller.agentId,
+      sourceRole: request.caller.role,
+      authorityLevel: createServerDelegationAuthorityLevel(request.caller),
+      targets: parsedTags.map((tag) => tag.target),
+      count: parsedTags.length,
+      depthLimit: 1,
+      executionScope: "completion_only",
+    },
+    createdAt: now,
+  }));
+
+  const delegations: ServerAgentDelegationOutcome[] = [];
+  for (let index = 0; index < parsedTags.length; index += 1) {
+    const tag = parsedTags[index]!;
+    const prompt = tag.prompt;
+    if (index >= (request.maxDelegatesPerTurn ?? 4)) {
+      const outcome: ServerAgentDelegationOutcome = {
+        kind: "blocked",
+        target: tag.target,
+        prompt,
+        reason: "max_delegates_exceeded",
+      };
+      delegations.push(outcome);
+      events.push(createServerAgentDelegationOutcomeEvent(request, "agent.delegation.blocked", outcome, now));
+      continue;
+    }
+
+    if (isSelfDelegation(request.caller, tag.target)) {
+      const outcome: ServerAgentDelegationOutcome = {
+        kind: "self_delegation",
+        target: tag.target,
+        prompt,
+      };
+      delegations.push(outcome);
+      events.push(createServerAgentDelegationOutcomeEvent(request, "agent.delegation.self_blocked", outcome, now));
+      continue;
+    }
+
+    const target = targetByKey.get(tag.target);
+    if (!target) {
+      const outcome: ServerAgentDelegationOutcome = {
+        kind: "unknown_target",
+        target: tag.target,
+        prompt,
+      };
+      delegations.push(outcome);
+      events.push(createServerAgentDelegationOutcomeEvent(request, "agent.delegation.unknown_target", outcome, now));
+      continue;
+    }
+
+    events.push(createServerAgentDelegationEvent({
+      request,
+      type: "agent.delegation.dispatched",
+      suffix: `dispatched_${tag.target}_${index}`,
+      payload: {
+        executionId: request.id,
+        sourceAgentId: request.caller.agentId,
+        targetAgentId: target.agentId,
+        target: tag.target,
+        promptPreview: createRedactedPreview(prompt),
+        executionScope: "completion_only",
+      },
+      createdAt: now,
+    }));
+
+    try {
+      const targetCompletion = await completeProvider(createServerDelegationProviderRequest({
+        id: `provider_completion_${request.id}_${tag.target}_${generateId()}`,
+        sessionId: request.sessionId,
+        agent: target,
+        messages: [
+          createOptionalSystemMessage(target.systemPrompt),
+          {
+            role: "user",
+            content: buildServerSubAgentDelegationPrompt(request.caller, prompt),
+          },
+        ].filter((message): message is ProviderCompletionMessage => Boolean(message)),
+        route,
+        approvalState: request.approvalState,
+        permissionDecision: request.permissionDecision,
+        createdAt: now,
+      }));
+      const response = requireSucceededProviderContent(targetCompletion, `delegated target ${tag.target}`);
+      const outcome: ServerAgentDelegationOutcome = {
+        kind: "succeeded",
+        target: tag.target,
+        prompt,
+        targetAgentId: target.agentId,
+        response,
+      };
+      delegations.push(outcome);
+      events.push(createServerAgentDelegationOutcomeEvent(request, "agent.delegation.succeeded", outcome, now));
+    } catch (error) {
+      const outcome: ServerAgentDelegationOutcome = {
+        kind: "failed",
+        target: tag.target,
+        prompt,
+        targetAgentId: target.agentId,
+        reason: error instanceof Error ? error.message : String(error),
+      };
+      delegations.push(outcome);
+      events.push(createServerAgentDelegationOutcomeEvent(request, "agent.delegation.failed", outcome, now));
+    }
+  }
+
+  const followUpCompletion = await completeProvider(createServerDelegationProviderRequest({
+    id: `provider_completion_${request.id}_followup_${generateId()}`,
+    sessionId: request.sessionId,
+    agent: request.caller,
+    messages: [
+      createOptionalSystemMessage(request.caller.systemPrompt),
+      { role: "user", content: request.userMessage },
+      { role: "assistant", content: initialContent },
+      { role: "user", content: buildServerDelegationFollowUpPrompt(delegations, request.userMessage) },
+    ].filter((message): message is ProviderCompletionMessage => Boolean(message)),
+    route,
+    approvalState: request.approvalState,
+    permissionDecision: request.permissionDecision,
+    createdAt: now,
+  }));
+  const finalContent = requireSucceededProviderContent(followUpCompletion, "caller delegation follow-up");
+
+  events.push(createServerAgentDelegationEvent({
+    request,
+    type: "agent.delegation.followup.completed",
+    suffix: "followup_completed",
+    payload: {
+      executionId: request.id,
+      sourceAgentId: request.caller.agentId,
+      outcomeCount: delegations.length,
+      succeeded: delegations.filter((outcome) => outcome.kind === "succeeded").length,
+      blocked: delegations.filter((outcome) => outcome.kind === "blocked" || outcome.kind === "self_delegation").length,
+      failed: delegations.filter((outcome) => outcome.kind === "failed").length,
+      finalPreview: createRedactedPreview(finalContent),
+    },
+    createdAt: now,
+  }));
+
+  return {
+    id: request.id,
+    sessionId: request.sessionId,
+    initialContent,
+    finalContent,
+    shortCircuited: false,
+    delegations,
+    events,
+    createdAt,
+  };
+}
+
+async function createServerAgentDelegationCompletionWithGate(
+  request: ProviderCompletionRequest,
+  storage: JsonlServerEventStorage,
+): Promise<ProviderCompletionResponse> {
+  const permission = evaluateServerProviderCompletionPermission(request);
+  if (permission.decision !== "allow") {
+    const approval =
+      permission.decision === "approval_required" ? createProviderCompletionApprovalRequest(request, permission) : undefined;
+    if (approval) {
+      await recordApprovalRequestToPersistentServerStorage(approval, storage);
+    }
+    throw new ServerAgentDelegationPermissionError(permission, approval);
+  }
+  return createDgxProviderCompletionResponse(request);
+}
+
+function createServerAgentDelegationMockCompletionFactory() {
+  let callCount = 0;
+  return async (request: ProviderCompletionRequest): Promise<ProviderCompletionResponse> => {
+    callCount += 1;
+    const content =
+      callCount === 1
+        ? `채아린이 하위 에이전트에게 확인할게. <delegate to="researcher">${request.messages.at(-1)?.content ?? "조사"}</delegate>`
+        : callCount === 2
+          ? "마오마오 조사 결과: 핵심 근거 3개와 리스크 1개를 확인했어."
+          : "채아린 최종 정리: 하위 에이전트 확인까지 반영해서 바로 실행 가능한 결론으로 묶었어.";
+    return {
+      id: `provider_completion_response_mock_${callCount}`,
+      requestId: request.id,
+      providerProfileId: request.providerProfileId,
+      modelId: request.modelId,
+      route: request.routePreference,
+      status: "succeeded",
+      content,
+      createdAt: request.createdAt,
+    };
+  };
+}
+
+function createServerAgentDelegationEventSyncRequest(
+  request: ServerAgentDelegationExecuteRequest,
+  events: EventEnvelope[],
+  now: string,
+): EventSyncPushRequest {
+  return {
+    id: `event_sync_agent_delegation_${request.id}_${stableServerId(now)}`,
+    clientId: "server_agent_delegation_endpoint",
+    sessionId: request.sessionId,
+    events,
+    idempotencyKey: `server_agent_delegation_endpoint:${request.id}:${events.map((event) => event.id).join(",")}`,
+    createdAt: now,
   };
 }
 
@@ -2133,6 +2528,219 @@ function parseApprovalState(value: unknown): ApprovalState {
   }
 
   return "required";
+}
+
+function parseOptionalApprovalState(value: unknown): ApprovalState | undefined {
+  if (value === undefined) return undefined;
+  if (value === "not_required" || value === "required" || value === "approved" || value === "rejected" || value === "expired") {
+    return value;
+  }
+  return undefined;
+}
+
+function parseOptionalPermissionDecision(value: unknown): PermissionDecision | undefined {
+  if (value === "allow" || value === "approval_required" || value === "deny") {
+    return value;
+  }
+  return undefined;
+}
+
+function parseRequiredString(value: unknown, fieldName: string, maxLength: number): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${fieldName} must be a non-empty string`);
+  }
+  return value.trim().slice(0, maxLength);
+}
+
+function parseOptionalString(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== "string" || !value.trim()) {
+    return undefined;
+  }
+  return value.trim().slice(0, maxLength);
+}
+
+function parseServerAgentDelegationAgentRef(value: unknown, fieldName: string): ServerAgentDelegationAgentRef {
+  if (!value || typeof value !== "object") {
+    throw new Error(`${fieldName} must be an object`);
+  }
+
+  const candidate = value as Partial<ServerAgentDelegationAgentRef>;
+  return {
+    agentId: parseRequiredString(candidate.agentId, `${fieldName}.agentId`, 256),
+    role: parseRequiredString(candidate.role, `${fieldName}.role`, 128),
+    providerProfileId: parseRequiredString(candidate.providerProfileId, `${fieldName}.providerProfileId`, 256),
+    modelId: parseRequiredString(candidate.modelId, `${fieldName}.modelId`, 256),
+    personaName: parseOptionalString(candidate.personaName, 128),
+    systemPrompt: parseOptionalString(candidate.systemPrompt, 200_000),
+  };
+}
+
+function parseServerAgentDelegationTargets(value: unknown): ServerAgentDelegationTarget[] {
+  if (!Array.isArray(value)) {
+    throw new Error("targets must be an array");
+  }
+
+  return value.slice(0, 32).map((target, index): ServerAgentDelegationTarget => {
+    const candidate = target as Partial<ServerAgentDelegationTarget>;
+    return {
+      ...parseServerAgentDelegationAgentRef(target, `targets[${index}]`),
+      key: parseRequiredString(candidate.key, `targets[${index}].key`, 128),
+    };
+  });
+}
+
+function parseServerDelegateTags(content: string): ServerDelegateTag[] {
+  const tags: ServerDelegateTag[] = [];
+  const pattern = /<delegate\s+to="([a-zA-Z_][a-zA-Z0-9_-]*)"\s*>([\s\S]*?)<\/delegate>/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(content)) !== null) {
+    tags.push({
+      target: match[1]!,
+      prompt: match[2]!.trim(),
+      raw: match[0]!,
+      startIndex: match.index,
+      endIndex: match.index + match[0]!.length,
+    });
+  }
+  return tags;
+}
+
+function createServerAgentDelegationTargetIndex(targets: ServerAgentDelegationTarget[]): Map<string, ServerAgentDelegationTarget> {
+  const index = new Map<string, ServerAgentDelegationTarget>();
+  for (const target of targets) {
+    for (const key of [target.key, target.role, target.personaName, target.agentId]) {
+      if (key) index.set(key, target);
+    }
+  }
+  return index;
+}
+
+function createOptionalSystemMessage(content: string | undefined): ProviderCompletionMessage | undefined {
+  if (!content) return undefined;
+  return { role: "system", content };
+}
+
+function createServerDelegationProviderRequest(params: {
+  id: string;
+  sessionId: string;
+  agent: ServerAgentDelegationAgentRef;
+  messages: ProviderCompletionMessage[];
+  route: ProviderCompletionRoute;
+  approvalState?: ApprovalState;
+  permissionDecision?: PermissionDecision;
+  createdAt: string;
+}): ProviderCompletionRequest {
+  return {
+    id: params.id,
+    sessionId: params.sessionId,
+    providerProfileId: params.agent.providerProfileId,
+    modelId: params.agent.modelId,
+    messages: params.messages,
+    source: "server",
+    routePreference: params.route,
+    approvalState: params.approvalState,
+    permissionDecision: params.permissionDecision,
+    createdAt: params.createdAt,
+  };
+}
+
+function requireSucceededProviderContent(response: ProviderCompletionResponse, label: string): string {
+  if (response.status !== "succeeded" || !response.content) {
+    throw new Error(`${label} failed: ${response.error ?? response.status}`);
+  }
+  return response.content;
+}
+
+function isSelfDelegation(caller: ServerAgentDelegationAgentRef, target: string): boolean {
+  return target === caller.agentId || target === caller.role || target === caller.personaName;
+}
+
+function createServerDelegationAuthorityLevel(agent: ServerAgentDelegationAgentRef) {
+  return agent.role === "companion" || agent.role === "orchestrator" ? "orchestrator_plus" : "agent";
+}
+
+function buildServerSubAgentDelegationPrompt(caller: ServerAgentDelegationAgentRef, prompt: string): string {
+  return [
+    `Delegated by ${caller.personaName ?? caller.role} (${caller.agentId}).`,
+    "This server-side delegation is completion-only. Do not execute commands, send external messages, or mutate files.",
+    "Return concise findings that the caller can incorporate into a final answer.",
+    "",
+    prompt,
+  ].join("\n");
+}
+
+function buildServerDelegationFollowUpPrompt(outcomes: ServerAgentDelegationOutcome[], userMessage: string): string {
+  const lines = outcomes.map((outcome, index) => {
+    if (outcome.kind === "succeeded") {
+      return `${index + 1}. ${outcome.target}: ${outcome.response}`;
+    }
+    if (outcome.kind === "failed") {
+      return `${index + 1}. ${outcome.target}: failed - ${outcome.reason}`;
+    }
+    if (outcome.kind === "blocked") {
+      return `${index + 1}. ${outcome.target}: blocked - ${outcome.reason}`;
+    }
+    return `${index + 1}. ${outcome.target}: ${outcome.kind}`;
+  });
+
+  return [
+    "Sub-agent delegation results are below. Produce the final answer in your own voice.",
+    `Original user request: ${userMessage}`,
+    "",
+    lines.join("\n") || "No usable delegation result.",
+  ].join("\n");
+}
+
+function createRedactedPreview(value: string, maxLength = 360): string {
+  const redacted = redactForServerPhase(value, "pre_store").value;
+  return redacted.length > maxLength ? `${redacted.slice(0, maxLength)}...` : redacted;
+}
+
+function createServerAgentDelegationEvent(params: {
+  request: ServerAgentDelegationExecuteRequest;
+  type: string;
+  suffix: string;
+  payload: unknown;
+  createdAt: string;
+}): EventEnvelope {
+  return {
+    id: `event_${params.type.replaceAll(".", "_")}_${params.request.id}_${stableServerId(params.suffix)}`,
+    sessionId: params.request.sessionId,
+    type: params.type,
+    payload: redactForServerPhase(params.payload, "pre_store").value,
+    createdAt: params.createdAt,
+    source: "server",
+    sourceTrust: "trusted",
+    redacted: true,
+    correlationId: params.request.id,
+  };
+}
+
+function createServerAgentDelegationOutcomeEvent(
+  request: ServerAgentDelegationExecuteRequest,
+  type: string,
+  outcome: ServerAgentDelegationOutcome,
+  createdAt: string,
+): EventEnvelope {
+  const suffix = `${type}:${outcome.target}:${outcome.kind}:${"reason" in outcome ? outcome.reason ?? "" : ""}`;
+  const payload = {
+    executionId: request.id,
+    sourceAgentId: request.caller.agentId,
+    outcome: {
+      ...outcome,
+      prompt: createRedactedPreview(outcome.prompt),
+      response: "response" in outcome ? createRedactedPreview(outcome.response) : undefined,
+      reason: "reason" in outcome ? createRedactedPreview(outcome.reason) : undefined,
+    },
+    executionScope: "completion_only",
+  };
+  return createServerAgentDelegationEvent({
+    request,
+    type,
+    suffix,
+    payload,
+    createdAt,
+  });
 }
 
 function detectTmuxDispatchPermissions(request: ServerTmuxDispatchRequest): PermissionLevel[] {
@@ -3301,6 +3909,68 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       }
       const completion = await createDgxProviderCompletionResponse(payload);
       respondJson(completion.status === "succeeded" ? 200 : 502, completion);
+      return;
+    }
+
+    if (pathname === "/agent-delegations/execute" && request.method === "POST") {
+      let payload: ServerAgentDelegationExecuteRequest;
+      try {
+        payload = parseServerAgentDelegationExecuteRequest(await readJsonBody(request));
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) {
+          respondJson(413, { error: "payload_too_large", limit: error.limit });
+          return;
+        }
+        respondJson(400, {
+          error: "invalid_agent_delegation_payload",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+
+      if (payload.executionMode === "mock" && process.env.NODE_ENV === "production") {
+        respondJson(403, {
+          error: "mock_delegation_disabled",
+          message: "mock agent delegation execution is disabled in production",
+        });
+        return;
+      }
+
+      try {
+        const completion =
+          payload.executionMode === "mock"
+            ? createServerAgentDelegationMockCompletionFactory()
+            : (completionRequest: ProviderCompletionRequest) =>
+                createServerAgentDelegationCompletionWithGate(completionRequest, eventStorage);
+        const result = await createServerAgentDelegationExecution(payload, {
+          completeProvider: completion,
+          now: payload.createdAt,
+        });
+        const eventSync = result.events.length
+          ? await pushEventsToPersistentServerStorage(
+              createServerAgentDelegationEventSyncRequest(payload, result.events, result.createdAt),
+              eventStorage,
+              result.createdAt,
+            )
+          : undefined;
+        respondJson(202, {
+          ...result,
+          eventSync,
+        });
+      } catch (error) {
+        if (error instanceof ServerAgentDelegationPermissionError) {
+          respondJson(403, {
+            error: error.permission.decision === "deny" ? "permission_denied" : "permission_required",
+            permission: error.permission,
+            approval: error.approval,
+          });
+          return;
+        }
+        respondJson(502, {
+          error: "agent_delegation_failed",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
       return;
     }
 
