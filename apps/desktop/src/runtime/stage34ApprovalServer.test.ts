@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   fetchDgxApprovalQueue,
   grantDgxApproval,
+  replayDgxApproval,
   rejectDgxApproval,
 } from "./stage34ApprovalServer";
 import { DGX02_LAN_ORCHESTRATOR_BASE_URL } from "./stage30DgxEndpoints";
@@ -103,6 +104,35 @@ describe("stage34 approval server runtime", () => {
       "https://orchestrator.endruin.com/approvals/reject",
     ]);
     expect("status" in response ? response.status : undefined).toBe("rejected");
+  });
+
+  it("posts approval replay requests to the DGX server", async () => {
+    const response = await replayDgxApproval({
+      request: {
+        approvalId: "approval_tmux_1",
+        actor: "user",
+      },
+      fetchImpl: async (url, init) => {
+        expect(String(url)).toBe(`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/approvals/replay`);
+        expect(init?.method).toBe("POST");
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          approvalId: "approval_tmux_1",
+          actor: "user",
+        });
+
+        return jsonResponse({
+          approval: { id: "approval_tmux_1", state: "approved" },
+          replay: { kind: "tmux_dispatch", endpoint: "/tmux/dispatch", method: "POST", payload: {} },
+          result: { dispatch: { status: "dry_run", attempted: false, reason: "dry-run" } },
+          status: "replayed",
+        });
+      },
+    });
+
+    expect(response).toMatchObject({
+      status: "replayed",
+      replay: { kind: "tmux_dispatch" },
+    });
   });
 });
 

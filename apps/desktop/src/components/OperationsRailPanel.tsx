@@ -16,7 +16,7 @@ export type TmuxRedispatchOutcome = {
   reason: string;
   role: string;
   sourceItemId?: string;
-  status: "sent" | "failed" | "blocked" | "recorded" | "pending_approval";
+  status: "sent" | "failed" | "blocked" | "recorded" | "pending_approval" | "dry_run";
 };
 
 export function OperationsRailPanel({

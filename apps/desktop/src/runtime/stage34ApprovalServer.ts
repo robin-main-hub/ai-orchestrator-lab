@@ -24,6 +24,20 @@ export type DesktopApprovalDecisionResponse =
       approval?: ApprovalRequest;
     };
 
+export type DesktopApprovalReplayResponse =
+  | {
+      status: "replayed";
+      approval: ApprovalRequest;
+      replay: ApprovalRequest["replay"];
+      result: unknown;
+      eventSync?: unknown;
+    }
+  | {
+      status: "not_replayed";
+      reason: string;
+      approval?: ApprovalRequest;
+    };
+
 export type DesktopApprovalDecisionInput = Pick<
   ApprovalDecisionRequest,
   "approvalId" | "sourceItemId" | "actor" | "reason" | "decidedAt"
@@ -79,6 +93,22 @@ export async function rejectDgxApproval({
     body: request,
     method: "POST",
     path: "/approvals/reject",
+    serverBaseUrl,
+    fetchImpl,
+    timeoutMs,
+  });
+}
+
+export async function replayDgxApproval({
+  request,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 8_000,
+}: ApprovalServerPostInput<DesktopApprovalDecisionInput>): Promise<DesktopApprovalReplayResponse> {
+  return requestApprovalServerJson<DesktopApprovalReplayResponse>({
+    body: request,
+    method: "POST",
+    path: "/approvals/replay",
     serverBaseUrl,
     fetchImpl,
     timeoutMs,
