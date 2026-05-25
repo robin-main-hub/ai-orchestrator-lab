@@ -386,6 +386,15 @@ export function agentRoleLabel(role: WorkbenchAgent["role"]) {
     reviewer: "검토자",
     skeptic: "비판자",
     verifier: "검증자",
+    // R3.2 — added when 6 new AgentRole values landed in protocol.
+    // Labels here are minimal Korean defaults; Codex (desktop owner)
+    // can refine voice when convenient.
+    researcher: "정보 수집가",
+    negotiator: "협상 자문",
+    risk_officer: "위험 분석가",
+    mediator: "의견 조율자",
+    watchdog: "장기 모니터",
+    domain_expert: "도메인 전문가",
   };
 
   return labels[role];
