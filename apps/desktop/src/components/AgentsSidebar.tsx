@@ -13,7 +13,8 @@ import type {
 import { AgentAvatar } from "./AgentAvatar";
 
 /**
- * Stage 2-1 agent sidebar — replaces the legacy AgentStatePanel.
+ * Stage 2-1 agent sidebar — replaces the legacy AgentStatePanel
+ * (removed in legacy-cleanup PR).
  *
  * Implements docs/design-decisions.md §2 "Agent Roster 구조" — a 3-tier
  * layout that groups agents by **what they're doing right now** rather
