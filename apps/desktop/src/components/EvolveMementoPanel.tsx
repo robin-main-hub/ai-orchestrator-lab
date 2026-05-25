@@ -13,10 +13,17 @@ import { cn } from "../lib/utils";
 import type { Stage6MemoryInspector } from "../runtime/stage6Memory";
 
 /**
- * Stage 2-2 Memento panel — replaces the legacy MementoInspectorPanel.
+ * EvolveMemento panel — unified naming of the Memento + EvolveMem
+ * (arXiv:2605.13941) merger. Replaces the legacy MementoInspectorPanel.
  *
- * Applies docs/design-decisions.md §10 (Memento → Notion-style document
- * canvas) and §1 (no WindowChecklist in production UI).
+ * "EvolveMemento" = our Memento (long-term memory store + UI) extended
+ * with EvolveMem-style multi-view retrieval and (eventually) the
+ * self-evolving retrieval loop. The runtime layer (`Stage6MemoryInspector`
+ * et al.) keeps the historical `Memory*` naming to avoid runtime churn;
+ * this UI surface adopts the unified product name.
+ *
+ * Applies docs/design-decisions.md §10 (Notion-style document canvas)
+ * and §1 (no WindowChecklist in production UI).
  *
  * Layout strategy: **always-visible summary + collapsible drawers for
  * detail.** The legacy panel rendered every section flat (Recall Trace
@@ -36,7 +43,7 @@ import type { Stage6MemoryInspector } from "../runtime/stage6Memory";
  * WindowChecklist intentionally removed per design-decisions §1.
  */
 
-export type MementoPanelProps = {
+export type EvolveMementoPanelProps = {
   inspector: Stage6MemoryInspector;
   onActivate: (recordId: string) => void;
   onForget: (recordId: string) => void;
@@ -44,13 +51,16 @@ export type MementoPanelProps = {
   onRemember: () => void;
 };
 
-export function MementoPanel({
+/** Back-compat alias for callers that still import the old name. */
+export type MementoPanelProps = EvolveMementoPanelProps;
+
+export function EvolveMementoPanel({
   inspector,
   onActivate,
   onForget,
   onPin,
   onRemember,
-}: MementoPanelProps) {
+}: EvolveMementoPanelProps) {
   const visibleTrace = inspector.trace.results.slice(0, 6);
   const visibleRecords = inspector.records.slice(0, 8);
   const visibleRelations = inspector.relations.slice(0, 4);
@@ -58,10 +68,10 @@ export function MementoPanel({
   const policy = inspector.trace.policy;
 
   return (
-    <section className="side-panel memory-panel memento-panel-v2" aria-label="Memento">
+    <section className="side-panel memory-panel memento-panel-v2" aria-label="EvolveMemento">
       <header className="panel-title">
         <Database size={17} />
-        <h2>Memento</h2>
+        <h2>EvolveMemento</h2>
         <span className="memento-v2__count">{inspector.stats.totalRecords}</span>
         <button
           aria-label="현재 맥락 기억"

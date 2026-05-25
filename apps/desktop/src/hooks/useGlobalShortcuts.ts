@@ -9,7 +9,7 @@ import { useEffect } from "react";
  *   ⌘K      Command Palette
  *   ⌘1/2/3  Switch mode (conversation / debate / tmux)
  *   ⌘⇧A     Control Queue (approval drawer)
- *   ⌘⇧M     Memento — remember current context
+ *   ⌘⇧M     EvolveMemento — remember current context
  *   ⌘I      Ask / Invoke Orchestrator
  *   ⌘.      Stop / interrupt
  *   ⌘Enter  Approve selected draft
