@@ -41,6 +41,28 @@ export type LoadedPersona = {
   mode: PersonaSourceMode;
   /** In load order — SOUL first when both are loaded; empty when mode === "off". */
   fragments: PersonaFragment[];
+  /**
+   * Repo-root-relative path of the persona's avatar image if one is
+   * present at `agents/<personaName>/avatar.{svg,png,jpg,jpeg,webp}`.
+   * `null` when no avatar was discovered (either none exists, or the
+   * `PersonaFileSource` does not implement `findFirstExisting`).
+   *
+   * Renderers (desktop swarm thumbnail, mobile message author, etc.)
+   * use this as the single source of truth — replacing the placeholder
+   * SVG is as simple as dropping a real `avatar.png` next to `SOUL.md`.
+   */
+  avatarPath: string | null;
+  /**
+   * Repo-root-relative path of an optional default chat-window
+   * background bundled with the persona, looked up at
+   * `agents/<personaName>/background.{svg,png,jpg,jpeg,webp}`.
+   *
+   * Mobile precedence:
+   *   1. user-uploaded background (SOUL-keyed local storage)
+   *   2. this `chatBackgroundPath` if set
+   *   3. solid theme color
+   */
+  chatBackgroundPath: string | null;
 };
 
 export interface PersonaFileSource {
@@ -52,6 +74,17 @@ export interface PersonaFileSource {
    * real filesystem problems (permission denied, etc.).
    */
   readMarkdown(relativePath: string): Promise<string | null>;
+  /**
+   * Optional: given an ordered list of candidate paths, return the first
+   * one that actually exists, or `null` if none do. Used for avatar /
+   * background image discovery (the loader does not need the bytes —
+   * only the path so the caller's asset pipeline can resolve it).
+   *
+   * Implementations that omit this method simply cause `LoadedPersona`'s
+   * `avatarPath` and `chatBackgroundPath` to be `null` — markdown
+   * loading is unaffected.
+   */
+  findFirstExisting?(candidatePaths: string[]): Promise<string | null>;
 }
 
 export class PersonaFragmentMissingError extends Error {
@@ -66,6 +99,22 @@ export class PersonaFragmentMissingError extends Error {
 
 const SOUL_FILENAME = "SOUL.md";
 const AGENTS_FILENAME = "AGENTS.md";
+
+/**
+ * Image extensions checked for `avatar.*` and `background.*`, in
+ * preference order. SVG first because it's the format used for the
+ * shipped placeholders and scales without artifacts; raster formats
+ * after so a user dropping in a real photo immediately wins.
+ */
+const PERSONA_IMAGE_EXTENSIONS = ["svg", "png", "jpg", "jpeg", "webp"] as const;
+
+function avatarCandidates(personaName: string): string[] {
+  return PERSONA_IMAGE_EXTENSIONS.map((ext) => `agents/${personaName}/avatar.${ext}`);
+}
+
+function backgroundCandidates(personaName: string): string[] {
+  return PERSONA_IMAGE_EXTENSIONS.map((ext) => `agents/${personaName}/background.${ext}`);
+}
 
 /**
  * Translate the AgentProfile's `configSource` field into a load mode.
@@ -107,9 +156,18 @@ export async function loadPersona(
   mode: PersonaSourceMode,
   source: PersonaFileSource,
 ): Promise<LoadedPersona> {
+  // Asset discovery runs even when mode === "off" — a renderer that
+  // chose not to inject the markdown body still wants to show the
+  // persona's face / background.
+  const [avatarPath, chatBackgroundPath] = await Promise.all([
+    discoverAsset(source, avatarCandidates(personaName)),
+    discoverAsset(source, backgroundCandidates(personaName)),
+  ]);
+
   if (mode === "off") {
-    return { personaName, mode, fragments: [] };
+    return { personaName, mode, fragments: [], avatarPath, chatBackgroundPath };
   }
+
   const fragments: PersonaFragment[] = [];
   for (const need of fragmentsNeededForMode(mode)) {
     const relativePath = `agents/${personaName}/${need.filename}`;
@@ -119,7 +177,15 @@ export async function loadPersona(
     }
     fragments.push({ source: need.source, relativePath, content });
   }
-  return { personaName, mode, fragments };
+  return { personaName, mode, fragments, avatarPath, chatBackgroundPath };
+}
+
+async function discoverAsset(
+  source: PersonaFileSource,
+  candidates: string[],
+): Promise<string | null> {
+  if (!source.findFirstExisting) return null;
+  return source.findFirstExisting(candidates);
 }
 
 function fragmentsNeededForMode(
@@ -185,6 +251,10 @@ export function buildPersonaPromptFragment(
  * In-memory `PersonaFileSource` for tests and for callers that want to
  * preload all persona files (e.g. the desktop renderer can bundle the
  * markdown at build time and avoid runtime fs access).
+ *
+ * The values in `files` are treated as markdown text. For asset
+ * discovery (`findFirstExisting`), only the presence of the key matters
+ * — value can be `""` for placeholder image entries.
  */
 export function createInMemoryPersonaSource(
   files: Record<string, string>,
@@ -194,6 +264,14 @@ export function createInMemoryPersonaSource(
       return Object.prototype.hasOwnProperty.call(files, relativePath)
         ? files[relativePath]!
         : null;
+    },
+    async findFirstExisting(candidatePaths: string[]) {
+      for (const candidate of candidatePaths) {
+        if (Object.prototype.hasOwnProperty.call(files, candidate)) {
+          return candidate;
+        }
+      }
+      return null;
     },
   };
 }

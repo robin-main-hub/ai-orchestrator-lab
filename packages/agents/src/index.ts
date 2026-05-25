@@ -297,6 +297,7 @@ export const defaultAgentProfiles: AgentProfile[] = [
     configSource: "internal",
     enabled: true,
     permissionLevel: "read_only",
+    avatarPath: "agents/orchestrator/avatar.svg",
   },
   {
     id: "agent_architect",
@@ -307,6 +308,7 @@ export const defaultAgentProfiles: AgentProfile[] = [
     configSource: "internal",
     enabled: true,
     permissionLevel: "read_only",
+    avatarPath: "agents/architect/avatar.svg",
   },
   {
     id: "agent_reviewer",
@@ -317,6 +319,7 @@ export const defaultAgentProfiles: AgentProfile[] = [
     configSource: "internal",
     enabled: true,
     permissionLevel: "read_only",
+    avatarPath: "agents/reviewer/avatar.svg",
   },
   {
     id: "agent_skeptic",
@@ -327,6 +330,7 @@ export const defaultAgentProfiles: AgentProfile[] = [
     configSource: "internal",
     enabled: true,
     permissionLevel: "read_only",
+    avatarPath: "agents/skeptic/avatar.svg",
   },
   {
     id: "agent_verifier",
@@ -337,6 +341,7 @@ export const defaultAgentProfiles: AgentProfile[] = [
     configSource: "internal",
     enabled: true,
     permissionLevel: "read_only",
+    avatarPath: "agents/verifier/avatar.svg",
   },
   {
     id: "agent_memory_curator",
@@ -350,6 +355,7 @@ export const defaultAgentProfiles: AgentProfile[] = [
     configSource: "internal",
     enabled: true,
     permissionLevel: "read_only",
+    avatarPath: "agents/memory_curator/avatar.svg",
   },
   {
     id: "agent_executor",
@@ -360,5 +366,7 @@ export const defaultAgentProfiles: AgentProfile[] = [
     configSource: "off",
     enabled: false,
     permissionLevel: "run_safe_commands",
+    // executor is a "real" runtime stub — no persona avatar; UI should
+    // show a generic terminal/cog icon.
   },
 ];

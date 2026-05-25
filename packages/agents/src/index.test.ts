@@ -290,4 +290,16 @@ describe("defaultAgentProfiles", () => {
       expect(profile.configSource).toBe("internal");
     }
   });
+
+  it("every virtual persona has avatarPath pointing at agents/<role>/avatar.svg", () => {
+    const virtuals = defaultAgentProfiles.filter((p) => p.kind === "virtual");
+    for (const profile of virtuals) {
+      expect(profile.avatarPath).toBe(`agents/${profile.role}/avatar.svg`);
+    }
+  });
+
+  it("the real executor stub has no avatarPath (renderer uses generic terminal icon)", () => {
+    const executor = defaultAgentProfiles.find((p) => p.role === "executor");
+    expect(executor!.avatarPath).toBeUndefined();
+  });
 });
