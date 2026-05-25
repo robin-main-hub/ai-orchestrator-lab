@@ -1286,6 +1286,24 @@ export const redactionRuleSchema = z.object({
 });
 export type RedactionRule = z.infer<typeof redactionRuleSchema>;
 
+export const approvalReplayKindSchema = z.enum([
+  "provider_completion",
+  "agent_delegation",
+  "remote_run",
+  "tmux_dispatch",
+]);
+export type ApprovalReplayKind = z.infer<typeof approvalReplayKindSchema>;
+
+export const approvalReplayRequestSchema = z
+  .object({
+    kind: approvalReplayKindSchema,
+    endpoint: z.string().min(1).max(512),
+    method: z.enum(["POST"]),
+    payload: z.unknown(),
+  })
+  .strict();
+export type ApprovalReplayRequest = z.infer<typeof approvalReplayRequestSchema>;
+
 export const approvalRequestSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
@@ -1300,6 +1318,7 @@ export const approvalRequestSchema = z.object({
   state: approvalStateSchema,
   reason: z.string(),
   costEstimateTokens: z.number().int().nonnegative().optional(),
+  replay: approvalReplayRequestSchema.optional(),
   ttlSeconds: z.number().int().positive().optional(),
   createdAt: z.string(),
   expiresAt: z.string().optional(),
@@ -1343,6 +1362,8 @@ export type ApprovalQueueItem = {
   state: ApprovalState;
   createdAt: string;
   expiresAt?: string;
+  replayKind?: ApprovalReplayKind;
+  replayEndpoint?: string;
 };
 
 export type PermissionMatrixSnapshot = {
