@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import {
   agentDelegationEventTypeSchema,
   parseAgentDelegationEventPayload,
+  parseTerminalCommandEventPayload,
+  terminalCommandEventTypeSchema,
 } from "@ai-orchestrator/protocol";
 import type { ServerAgentDelegationExecuteRequest } from "./index";
 import {
@@ -50,6 +52,13 @@ function expectValidAgentDelegationEvents(events: Array<{ type: string; payload:
   for (const event of events) {
     const type = agentDelegationEventTypeSchema.parse(event.type);
     expect(() => parseAgentDelegationEventPayload(type, event.payload)).not.toThrow();
+  }
+}
+
+function expectValidTerminalCommandEvents(events: Array<{ type: string; payload: unknown }>) {
+  for (const event of events) {
+    const type = terminalCommandEventTypeSchema.parse(event.type);
+    expect(() => parseTerminalCommandEventPayload(type, event.payload)).not.toThrow();
   }
 }
 
@@ -470,13 +479,23 @@ describe("server health placeholder", () => {
     expect(snapshot.permission.decision).toBe("approval_required");
     expect(snapshot.approval).toMatchObject({
       action: "terminal_run",
+      replay: {
+        endpoint: "/tmux/dispatch",
+        kind: "tmux_dispatch",
+        method: "POST",
+      },
       state: "required",
       requestedLevels: expect.arrayContaining(["run_safe_commands", "remote_workspace"]),
+    });
+    expect(snapshot.approval?.replay?.payload).toMatchObject({
+      approvalState: "approved",
+      id: "tmux_dispatch_test",
     });
     expect(snapshot.events.map((event) => event.type)).toEqual([
       "terminal.command.intent.created",
       "approval.requested",
     ]);
+    expectValidTerminalCommandEvents(snapshot.events.filter((event) => event.type.startsWith("terminal.command.")));
 
     const denied = createServerTmuxDispatchSnapshot({
       id: "tmux_dispatch_secret_test",
@@ -1809,7 +1828,7 @@ describe("HTTP request limits", () => {
           ],
         },
       });
-      if (replay.payload.status === "replayed") {
+      if (replay.payload.status === "replayed" && "events" in replay.payload.result) {
         expect(replay.payload.eventSync?.accepted).toBe(4);
         expectValidAgentDelegationEvents(replay.payload.result.events);
       }
@@ -2003,6 +2022,11 @@ describe("HTTP request limits", () => {
       });
       expect(listResponse.status).toBe(200);
       await expect(listResponse.json()).resolves.toMatchObject({
+        queue: [
+          {
+            sourceItemId: expect.any(String),
+          },
+        ],
         summary: {
           pending: 1,
         },
@@ -2136,6 +2160,13 @@ describe("HTTP request limits", () => {
       });
       expect(listResponse.status).toBe(200);
       await expect(listResponse.json()).resolves.toMatchObject({
+        queue: [
+          {
+            replayEndpoint: "/tmux/dispatch",
+            replayKind: "tmux_dispatch",
+            sourceItemId: "tmux_dispatch_http_test",
+          },
+        ],
         summary: {
           pending: 1,
         },
@@ -2220,14 +2251,179 @@ describe("HTTP request limits", () => {
       expect(response.status).toBe(202);
       const body = (await response.json()) as {
         dispatch: { attempted: boolean; reason: string; status: string };
+        dispatchEventSync?: { accepted: number };
         permission: { decision: string };
       };
       expect(body.permission.decision).toBe("allow");
       expect(body.dispatch).toMatchObject({
         attempted: false,
-        status: "recorded",
+        status: "dry_run",
       });
       expect(body.dispatch.reason).toContain("ORCHESTRATOR_TMUX_DRY_RUN");
+      expect(body.dispatchEventSync?.accepted).toBe(1);
+
+      const pull = await fetch(`http://127.0.0.1:${address.port}/events?sessionId=session_tmux_http`, {
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+        },
+      });
+      expect(pull.status).toBe(200);
+      const pulled = (await pull.json()) as { events: Array<{ type: string; payload: unknown }> };
+      expect(pulled.events.map((event) => event.type)).toContain("terminal.command.dry_run");
+      expectValidTerminalCommandEvents(pulled.events.filter((event) => event.type.startsWith("terminal.command.")));
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousEventStorageDir === undefined) {
+        delete process.env.EVENT_STORAGE_DIR;
+      } else {
+        process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      if (previousTmuxDispatch === undefined) {
+        delete process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
+      } else {
+        process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS = previousTmuxDispatch;
+      }
+      if (previousTmuxDryRun === undefined) {
+        delete process.env.ORCHESTRATOR_TMUX_DRY_RUN;
+      } else {
+        process.env.ORCHESTRATOR_TMUX_DRY_RUN = previousTmuxDryRun;
+      }
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("replays approved tmux dispatch requests as dry-run audit events", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const previousTmuxDispatch = process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
+    const previousTmuxDryRun = process.env.ORCHESTRATOR_TMUX_DRY_RUN;
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-tmux-replay-"));
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+    process.env.EVENT_STORAGE_DIR = tempDir;
+    process.env.ORCHESTRATOR_TMUX_DRY_RUN = "1";
+    delete process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const dispatchResponse = await fetch(`http://127.0.0.1:${address.port}/tmux/dispatch`, {
+        body: JSON.stringify({
+          id: "tmux_dispatch_http_replay",
+          sessionId: "session_tmux_replay",
+          terminalSessionId: "terminal_session_ai_swarm",
+          role: "architect",
+          host: "dgx_02",
+          paneId: "%4",
+          requestedBy: "user",
+          commandPreview: "pnpm typecheck",
+          approvalState: "required",
+          dispatchMode: "execute_if_approved",
+          tmuxSessionName: "ai-swarm",
+          createdAt: "2026-05-25T00:04:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      expect(dispatchResponse.status).toBe(202);
+      await expect(dispatchResponse.json()).resolves.toMatchObject({
+        approval: {
+          replay: {
+            endpoint: "/tmux/dispatch",
+            kind: "tmux_dispatch",
+          },
+        },
+        dispatch: {
+          status: "pending_approval",
+        },
+      });
+
+      const grantResponse = await fetch(`http://127.0.0.1:${address.port}/approvals/grant`, {
+        body: JSON.stringify({ sourceItemId: "tmux_dispatch_http_replay", actor: "user" }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      expect(grantResponse.status).toBe(200);
+
+      const replayResponse = await fetch(`http://127.0.0.1:${address.port}/approvals/replay`, {
+        body: JSON.stringify({ sourceItemId: "tmux_dispatch_http_replay", actor: "user" }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      expect(replayResponse.status).toBe(202);
+      const replay = (await replayResponse.json()) as {
+        result: {
+          dispatch: { attempted: boolean; status: string };
+          dispatchEventSync?: { accepted: number };
+          eventSync: { accepted: number };
+        };
+        replay: { kind: string };
+        status: string;
+      };
+      expect(replay).toMatchObject({
+        replay: {
+          kind: "tmux_dispatch",
+        },
+        result: {
+          dispatch: {
+            attempted: false,
+            status: "dry_run",
+          },
+        },
+        status: "replayed",
+      });
+      expect(replay.result.eventSync.accepted).toBe(0);
+      expect(replay.result.dispatchEventSync?.accepted).toBe(1);
+
+      const pull = await fetch(`http://127.0.0.1:${address.port}/events?sessionId=session_tmux_replay`, {
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+        },
+      });
+      expect(pull.status).toBe(200);
+      const pulled = (await pull.json()) as { events: Array<{ type: string; payload: unknown }> };
+      expect(pulled.events.map((event) => event.type)).toEqual(
+        expect.arrayContaining([
+          "terminal.command.intent.created",
+          "approval.requested",
+          "approval.granted",
+          "terminal.command.dry_run",
+        ]),
+      );
+      expectValidTerminalCommandEvents(pulled.events.filter((event) => event.type.startsWith("terminal.command.")));
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
