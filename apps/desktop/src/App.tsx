@@ -75,16 +75,6 @@ import { fetchDgxProviderModelDiscovery, fetchDgxProviderRegistry, probeDgxOrche
 import { DEFAULT_DGX_SERVER_BASE_URL } from "./runtime/stage30DgxEndpoints";
 import { probeDgxProviderRoutes, type Stage32DgxRouteDiagnosticSnapshot } from "./runtime/stage32DgxRouteDiagnostics";
 import {
-  createInitialEventSyncState,
-  pushEventsToDgxEventStorage,
-  reduceEventSyncState,
-  type Stage14EventSyncState,
-} from "./runtime/stage14EventSync";
-import {
-  createLocalClientEventCache,
-  mergeClientEventOutboxEvents,
-} from "./runtime/stage29LocalEventStore";
-import {
   requestTmuxDispatch,
   type DesktopTmuxDispatchRequest,
 } from "./runtime/stage33TmuxServer";
@@ -219,6 +209,7 @@ import { SessionIndexRailPanel } from "./components/SessionIndexRailPanel";
 import { Stage3DebateTable } from "./components/Stage3DebateTable";
 import { TerminalDock } from "./components/TerminalDock";
 import { TmuxSwarmBoard } from "./components/TmuxSwarmBoard";
+import { useDgxEventSyncController } from "./hooks/useDgxEventSyncController";
 import { createInsightFindings, createMetaOnboardingSignals, statusForWorkLane } from "./lib/workbenchDerived";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 
@@ -226,11 +217,6 @@ export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
   const [runtimeSnapshotState, setRuntimeSnapshotState] = useState<RuntimeSnapshot>(runtimeSnapshot);
   const [dgxRouteDiagnostics, setDgxRouteDiagnostics] = useState<Stage32DgxRouteDiagnosticSnapshot>();
-  const localClientEventCache = useMemo(
-    () => createLocalClientEventCache(typeof window === "undefined" ? undefined : window.localStorage),
-    [],
-  );
-  const [eventOutbox, setEventOutbox] = useState<EventEnvelope[]>([]);
   const [activeNavItem, setActiveNavItem] = useState<NavItemId>("sessions");
   const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
   const [providerRegistrationOpen, setProviderRegistrationOpen] = useState(false);
@@ -258,13 +244,27 @@ export function App() {
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
   const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
   const [activeSessionId, setActiveSessionId] = useState(DEFAULT_SESSION_ID);
-  const [eventSyncState, setEventSyncState] = useState<Stage14EventSyncState>(() =>
-    createInitialEventSyncState(0),
-  );
   const [sessionIndexState, setSessionIndexState] = useState<Stage20SessionIndexState>(() =>
     createInitialSessionIndexState(),
   );
-  const [syncedEventIds, setSyncedEventIds] = useState<Record<string, true>>({});
+  const {
+    eventOutbox,
+    eventSyncState,
+    syncedEventIds,
+    localClientEventCache,
+    setEventSyncState,
+    setSyncedEventIds,
+    bootstrapLocalEventStorage,
+    queueEventForSync,
+    handleSyncEventStorage,
+  } = useDgxEventSyncController({
+    activeSessionId,
+    eventLog,
+    seedEvents: initialEventLog,
+    setEventLog,
+    setRuntimeSnapshotState,
+    refreshSessionIndex: handleRefreshSessionIndex,
+  });
   const [memoryRecords, setMemoryRecords] = useState<MemoryRecord[]>(initialMemoryRecords);
   const [ingressSnapshot, setIngressSnapshot] = useState<Stage8IngressSnapshot>(initialIngressSnapshot);
   const [rebootApprovals, setRebootApprovals] = useState<ExternalApprovalItem[]>([]);
@@ -440,25 +440,6 @@ export function App() {
     void bootstrapLocalEventStorage();
   }, []);
 
-  async function bootstrapLocalEventStorage() {
-    for (const event of initialEventLog) {
-      await localClientEventCache.append(event);
-    }
-
-    const localEvents = await localClientEventCache.listBySession(activeSessionId);
-    const localUnsyncedEvents = await localClientEventCache.listUnsynced();
-    const queuedEvents = mergeClientEventOutboxEvents([], localUnsyncedEvents);
-    setEventLog((events) => mergeEventReplayLogs(events, localEvents));
-    setEventOutbox(queuedEvents);
-
-    if (queuedEvents.length > 0) {
-      void syncEventsToDgx(queuedEvents);
-    } else {
-      void syncEventsToDgx(initialEventLog);
-    }
-    void handleRefreshSessionIndex();
-  }
-
   useEffect(() => {
     try {
       if (typeof window !== "undefined") {
@@ -542,107 +523,8 @@ export function App() {
       correlationId: options?.correlationId,
     });
     setEventLog((events) => appendEventToLog(events, event));
-    void localClientEventCache.append(event);
-    if (!options?.skipRemoteSync) {
-      void syncEventsToDgx([event]);
-    }
+    queueEventForSync(event, { skipRemoteSync: options?.skipRemoteSync });
     return event;
-  }
-
-  async function syncEventsToDgx(eventsToSync: EventEnvelope[]) {
-    if (eventsToSync.length === 0) {
-      return;
-    }
-
-    for (const event of eventsToSync) {
-      await localClientEventCache.append(event);
-    }
-
-    setEventSyncState((state) => ({
-      ...state,
-      status: "syncing",
-      outboxCount: Math.max(state.outboxCount, eventsToSync.length),
-    }));
-
-    const result = await pushEventsToDgxEventStorage({
-      events: eventsToSync,
-    });
-    if (result.syncedEventIds.length > 0) {
-      await localClientEventCache.markProjected(result.syncedEventIds, "dgx-02");
-    }
-
-    const localUnsyncedEvents = await localClientEventCache.listUnsynced();
-    const nextOutbox = mergeClientEventOutboxEvents(localUnsyncedEvents, result.queuedEvents);
-    setEventOutbox(nextOutbox);
-
-    setEventSyncState((state) => {
-      const nextState = reduceEventSyncState(state, result);
-      return {
-        ...nextState,
-        status: nextOutbox.length > 0 && nextState.status === "synced" ? "queued" : nextState.status,
-        outboxCount: nextOutbox.length,
-      };
-    });
-    if (result.syncedEventIds.length > 0) {
-      setSyncedEventIds((current) => ({
-        ...current,
-        ...Object.fromEntries(result.syncedEventIds.map((eventId) => [eventId, true])),
-      }));
-    }
-    const dgxReachable = Boolean(result.response);
-    setRuntimeSnapshotState((snapshot) => ({
-      ...snapshot,
-      status: dgxReachable && nextOutbox.length === 0 ? "online" : "degraded",
-      dgxStatus: dgxReachable ? "online" : "offline",
-      memorySyncStatus: result.status === "synced" && nextOutbox.length === 0 ? "online" : "degraded",
-      runtimeNodes: snapshot.runtimeNodes.map((node) =>
-        node.id === "dgx-02"
-          ? {
-              ...node,
-              status: dgxReachable ? "online" : "offline",
-            }
-          : node,
-      ),
-      syncTopology: {
-        ...snapshot.syncTopology,
-        clients: snapshot.syncTopology.clients.map((client) =>
-          client.id === "client_macbook"
-            ? {
-                ...client,
-                status: nextOutbox.length === 0 ? "online" : "degraded",
-                outboxCount: nextOutbox.length,
-                lastSeenAt: result.response?.createdAt ?? client.lastSeenAt,
-              }
-            : client.id === "client_home_pc"
-              ? {
-                  ...client,
-                  status: dgxReachable ? "online" : "degraded",
-                  outboxCount: 0,
-                  lastSeenAt: result.response?.createdAt ?? client.lastSeenAt,
-                }
-            : client,
-        ),
-      },
-      recentError:
-        result.status === "queued"
-          ? `DGX-02 Event Storage unavailable; MacBook local outbox active, Home PC waits for DGX recovery. ${result.error ?? ""}`
-          : result.status === "failed"
-            ? `Event Storage sync needs review. ${result.error ?? ""}`
-            : undefined,
-      updatedAt: result.response?.createdAt ?? new Date().toISOString(),
-    }));
-
-    if (dgxReachable) {
-      void handleRefreshSessionIndex();
-    }
-  }
-
-  async function handleSyncEventStorage() {
-    const unsyncedEvents = eventLog.filter((event) => !syncedEventIds[event.id]);
-    const localUnsyncedEvents = await localClientEventCache.listUnsynced();
-    void syncEventsToDgx(
-      mergeClientEventOutboxEvents(eventOutbox, mergeClientEventOutboxEvents(localUnsyncedEvents, unsyncedEvents)),
-    );
   }
 
   function handleRouteWorkItem(workItemId: string, lane: WorkItem["lane"]) {
