@@ -9,10 +9,17 @@ import type {
   ApprovalState,
   DgxHeartbeat,
   EventEnvelope,
+  EventSource,
   EventStorageSessionIndexResponse,
   EventSyncPullResponse,
   EventSyncPushRequest,
   EventSyncPushResponse,
+  ExternalChannel,
+  IngressAuthorType,
+  IngressConfidence,
+  IngressEvent,
+  IngressGuardResult,
+  IngressGuardStep,
   ModelDiscoverySnapshot,
   PermissionAction,
   PermissionActor,
@@ -146,6 +153,39 @@ export type ServerApprovalListResponse = {
     expired: number;
   };
   createdAt: string;
+};
+
+export type ServerIngressInput = {
+  id: string;
+  sessionId: string;
+  channel: ExternalChannel;
+  authorType: IngressAuthorType;
+  eventType: IngressEvent["eventType"];
+  text: string;
+  receivedAt: string;
+  debounceWindowMs?: number;
+  recentTexts?: string[];
+};
+
+export type ServerIngressSnapshot = {
+  id: string;
+  sessionId: string;
+  channel: ExternalChannel;
+  result: IngressGuardResult;
+  approvals: ApprovalRequest[];
+  checklist: string[];
+  zeroTokenSafety: {
+    enabled: boolean;
+    cadence: string;
+    lastCheck: string;
+    pendingCount: number;
+  };
+};
+
+export type ServerIngressReceiverResponse = {
+  snapshot: ServerIngressSnapshot;
+  eventSync: EventSyncPushResponse;
+  approvals: ApprovalRequest[];
 };
 
 export type ServerRedactionReport = {
@@ -1148,6 +1188,365 @@ function sourceTrustFromEventSource(source: ProviderCompletionRequest["source"])
   if (source === "legacy_telegram" || source === "api") return "untrusted";
   if (source === "mobile") return "limited";
   return "trusted";
+}
+
+export function createServerIngressSnapshot(input: ServerIngressInput): ServerIngressSnapshot {
+  const normalizedText = normalizeIngressText([...(input.recentTexts ?? []), input.text].join(" "));
+  const redaction = redactForServerPhase(normalizedText, "pre_store");
+  const redactedText = String(redaction.value);
+  const requestedPermissions = detectIngressPermissions(normalizedText);
+  const confidence = classifyIngressConfidence(normalizedText, requestedPermissions);
+  const requiresApproval = requestedPermissions.length > 0 || confidence !== "high";
+  const guardSteps = createIngressGuardSteps({
+    input,
+    normalizedText,
+    redactedText,
+    requestedPermissions,
+    requiresApproval,
+  });
+  const blocked = guardSteps.some((step) => step.status === "blocked");
+  const source = eventSourceForIngressChannel(input.channel);
+  const normalizedEvent: IngressEvent | undefined = blocked
+    ? undefined
+    : {
+        id: `ingress_event_${stableIngressId(`${input.id}:${redactedText}`)}`,
+        channel: input.channel,
+        source,
+        sourceTrust: sourceTrustFromEventSource(source),
+        authorType: input.authorType,
+        rawText: "[QUARANTINED_RAW_PAYLOAD]",
+        normalizedText: redactedText,
+        eventType: input.eventType,
+        requestedPermissions,
+        confidence,
+        requiresApproval,
+        redacted: redaction.report.redacted || redactedText !== normalizedText,
+        createdAt: input.receivedAt,
+      };
+  const approvalState: ApprovalState = blocked ? "rejected" : requiresApproval ? "required" : "not_required";
+  const result: IngressGuardResult = {
+    id: `ingress_result_${stableIngressId(`${input.id}:${approvalState}`)}`,
+    inputId: input.id,
+    accepted: Boolean(normalizedEvent),
+    earlyReturn: blocked || input.eventType !== "message",
+    confidence,
+    normalizedEvent,
+    guardSteps,
+    approvalState,
+    reason: createIngressResultReason(blocked, requiresApproval, confidence),
+    createdAt: input.receivedAt,
+  };
+  const approvals = normalizedEvent && requiresApproval ? [createIngressApprovalRequest(input, normalizedEvent, result)] : [];
+
+  return {
+    id: `ingress_snapshot_${stableIngressId(`${input.id}:${input.receivedAt}`)}`,
+    sessionId: input.sessionId,
+    channel: input.channel,
+    result,
+    approvals,
+    checklist: [
+      "external source classified before session handoff",
+      "raw payload quarantined; only redacted normalized text is stored",
+      "dangerous action requests become approval queue items",
+      "memory candidates remain provisional until a curator promotes them",
+      "terminal/tmux dispatch is not executed from ingress",
+    ],
+    zeroTokenSafety: {
+      enabled: true,
+      cadence: "3h",
+      lastCheck: input.receivedAt,
+      pendingCount: approvals.length,
+    },
+  };
+}
+
+export async function recordServerIngressToPersistentServerStorage(
+  input: ServerIngressInput,
+  storage: JsonlServerEventStorage,
+  now = new Date().toISOString(),
+): Promise<ServerIngressReceiverResponse> {
+  const snapshot = createServerIngressSnapshot(input);
+  const events = createServerIngressEvents(snapshot, now);
+  const eventSync = await pushEventsToPersistentServerStorage(
+    {
+      id: `event_sync_ingress_${snapshot.id}`,
+      clientId: "dgx-02-server",
+      sessionId: snapshot.sessionId,
+      events,
+      idempotencyKey: `ingress:${snapshot.id}`,
+      createdAt: now,
+    },
+    storage,
+    now,
+  );
+
+  return {
+    snapshot,
+    eventSync,
+    approvals: snapshot.approvals,
+  };
+}
+
+function createServerIngressEvents(snapshot: ServerIngressSnapshot, now: string): EventEnvelope[] {
+  const source = snapshot.result.normalizedEvent?.source ?? eventSourceForIngressChannel(snapshot.channel);
+  const sourceTrust = snapshot.result.normalizedEvent?.sourceTrust ?? sourceTrustFromEventSource(source);
+  const events: EventEnvelope[] = [
+    {
+      id: `event_ingress_guard_${snapshot.result.id}`,
+      sessionId: snapshot.sessionId,
+      type: "ingress.guard.evaluated",
+      payload: {
+        snapshotId: snapshot.id,
+        result: snapshot.result,
+        checklist: snapshot.checklist,
+        zeroTokenSafety: snapshot.zeroTokenSafety,
+      },
+      createdAt: now,
+      source,
+      sourceTrust,
+      redacted: true,
+      correlationId: snapshot.id,
+    },
+  ];
+
+  if (snapshot.result.normalizedEvent) {
+    events.push({
+      id: `event_ingress_accepted_${snapshot.result.normalizedEvent.id}`,
+      sessionId: snapshot.sessionId,
+      type: "ingress.event.accepted",
+      payload: snapshot.result.normalizedEvent,
+      createdAt: now,
+      source,
+      sourceTrust,
+      redacted: true,
+      correlationId: snapshot.id,
+    });
+    events.push({
+      id: `event_memory_remote_pending_${snapshot.result.normalizedEvent.id}`,
+      sessionId: snapshot.sessionId,
+      type: "memory.remote_input.pending",
+      payload: {
+        ingressEventId: snapshot.result.normalizedEvent.id,
+        channel: snapshot.channel,
+        sourceTrust,
+        summary: snapshot.result.normalizedEvent.normalizedText.slice(0, 180),
+        approvalState: snapshot.result.approvalState,
+      },
+      createdAt: now,
+      source,
+      sourceTrust,
+      redacted: true,
+      correlationId: snapshot.id,
+    });
+  }
+
+  for (const approval of snapshot.approvals) {
+    events.push(createApprovalRequestedEvent(approval));
+  }
+
+  return events;
+}
+
+function parseServerIngressInput(value: unknown, now = new Date().toISOString()): ServerIngressInput {
+  if (!value || typeof value !== "object") {
+    throw new Error("ingress payload must be an object");
+  }
+  const candidate = value as Record<string, unknown>;
+  const channel = parseExternalChannel(candidate.channel);
+  const authorType = parseIngressAuthorType(candidate.authorType);
+  const eventType = parseIngressEventType(candidate.eventType);
+  const text = typeof candidate.text === "string" ? candidate.text : undefined;
+  if (!text || text.length > 50_000) {
+    throw new Error("ingress text is required and must be <= 50000 characters");
+  }
+  const receivedAt = typeof candidate.receivedAt === "string" && candidate.receivedAt ? candidate.receivedAt : now;
+  const id =
+    typeof candidate.id === "string" && candidate.id
+      ? candidate.id
+      : `ingress_input_${stableIngressId(`${channel}:${receivedAt}:${text.slice(0, 128)}`)}`;
+  const sessionId =
+    typeof candidate.sessionId === "string" && candidate.sessionId
+      ? candidate.sessionId
+      : `session_ingress_${channel}`;
+  const recentTexts = Array.isArray(candidate.recentTexts)
+    ? candidate.recentTexts.filter((entry): entry is string => typeof entry === "string").slice(0, 12)
+    : undefined;
+  const debounceWindowMs =
+    typeof candidate.debounceWindowMs === "number" && Number.isFinite(candidate.debounceWindowMs)
+      ? Math.max(0, Math.trunc(candidate.debounceWindowMs))
+      : undefined;
+
+  return {
+    id,
+    sessionId,
+    channel,
+    authorType,
+    eventType,
+    text,
+    receivedAt,
+    debounceWindowMs,
+    recentTexts,
+  };
+}
+
+function parseExternalChannel(value: unknown): ExternalChannel {
+  if (value === "legacy_telegram" || value === "mobile" || value === "api" || value === "webhook") {
+    return value;
+  }
+  return "api";
+}
+
+function parseIngressAuthorType(value: unknown): IngressAuthorType {
+  if (value === "user" || value === "bot" || value === "manager" || value === "system") {
+    return value;
+  }
+  return "user";
+}
+
+function parseIngressEventType(value: unknown): IngressEvent["eventType"] {
+  if (value === "message" || value === "system_event" || value === "bot_reply" || value === "unknown") {
+    return value;
+  }
+  return "message";
+}
+
+function createIngressGuardSteps(params: {
+  input: ServerIngressInput;
+  normalizedText: string;
+  redactedText: string;
+  requestedPermissions: PermissionLevel[];
+  requiresApproval: boolean;
+}): IngressGuardStep[] {
+  const isNoise = params.input.eventType === "system_event" || !params.normalizedText.trim();
+  const isSelfResponse = params.input.authorType === "bot" || params.input.authorType === "manager";
+  return [
+    {
+      name: "shape_unification",
+      status: "passed",
+      reason: `${params.input.channel} payload normalized into IngressEvent`,
+    },
+    {
+      name: "noise_filter",
+      status: isNoise ? "blocked" : "passed",
+      reason: isNoise ? "system/noise event skipped before model wakeup" : "message event kept",
+    },
+    {
+      name: "self_response_prevention",
+      status: isSelfResponse ? "blocked" : "passed",
+      reason: isSelfResponse ? "bot/manager author would create response loop" : "external user author accepted",
+    },
+    {
+      name: "debounce",
+      status: "passed",
+      reason: params.input.recentTexts?.length
+        ? `${params.input.recentTexts.length + 1} messages merged in ${params.input.debounceWindowMs ?? 30_000}ms window`
+        : "single message; merge window clear",
+    },
+    {
+      name: "pii_secret_block",
+      status: params.requestedPermissions.includes("secret_access") || params.requiresApproval ? "queued" : "passed",
+      reason:
+        params.redactedText !== params.normalizedText
+          ? "secret-like text redacted and approval required"
+          : params.requiresApproval
+            ? "sensitive action waits for approval"
+            : "no sensitive request detected",
+    },
+    {
+      name: "guard_logging",
+      status: "passed",
+      reason: "redacted event goes to Event Storage; raw payload stays quarantined",
+    },
+    {
+      name: "checklist_injection",
+      status: "passed",
+      reason: "external-agent checklist attached before session handoff",
+    },
+  ];
+}
+
+function createIngressApprovalRequest(
+  input: ServerIngressInput,
+  event: IngressEvent,
+  result: IngressGuardResult,
+): ApprovalRequest {
+  return {
+    id: createApprovalId(event.id),
+    sessionId: input.sessionId,
+    sourceItemId: event.id,
+    subjectId: `${event.channel}:${event.id}`,
+    actor: actorFromEventSource(event.source),
+    channel: event.source,
+    sourceTrust: event.sourceTrust,
+    action: actionFromIngressPermissions(event.requestedPermissions),
+    requestedLevels: event.requestedPermissions,
+    decision: "approval_required",
+    state: "required",
+    reason: result.reason,
+    ttlSeconds: DEFAULT_APPROVAL_TTL_SECONDS,
+    createdAt: input.receivedAt,
+    expiresAt: addSecondsIso(input.receivedAt, DEFAULT_APPROVAL_TTL_SECONDS),
+  };
+}
+
+function actionFromIngressPermissions(permissions: PermissionLevel[]): PermissionAction {
+  if (permissions.includes("run_dangerous_commands")) return "terminal_run";
+  if (permissions.includes("run_safe_commands")) return "terminal_run";
+  if (permissions.includes("write_files")) return "file_write";
+  if (permissions.includes("secret_access")) return "secret_view";
+  if (permissions.includes("remote_workspace")) return "remote_workspace";
+  return "unknown_external_effect";
+}
+
+function detectIngressPermissions(value: string): PermissionLevel[] {
+  const permissions = new Set<PermissionLevel>();
+  if (/(terminal|tmux|pnpm|npm|python|bash|powershell|cmd\.exe|execute|run|실행)/i.test(value)) {
+    permissions.add("run_safe_commands");
+  }
+  if (/(delete|remove|rm\s|move|write|patch|merge|push|파일|수정|삭제)/i.test(value)) {
+    permissions.add("write_files");
+  }
+  if (/(api[_ -]?key|token|secret|bearer|sk-|password|private key)/i.test(value)) {
+    permissions.add("secret_access");
+  }
+  if (/(reboot|shutdown|format|rm\s+-rf|재부팅|종료)/i.test(value)) {
+    permissions.add("run_dangerous_commands");
+  }
+  return [...permissions];
+}
+
+function classifyIngressConfidence(value: string, permissions: PermissionLevel[]): IngressConfidence {
+  if (permissions.length > 0 || /(refund|payment|delete|merge|push|secret|token|api key|환불|결제|삭제)/i.test(value)) {
+    return "low";
+  }
+  if (/(coding|handoff|debate|summary|review|코딩|토론|요약|검토)/i.test(value)) {
+    return "medium";
+  }
+  return "high";
+}
+
+function normalizeIngressText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function eventSourceForIngressChannel(channel: ExternalChannel): EventSource {
+  if (channel === "legacy_telegram") return "legacy_telegram";
+  if (channel === "mobile") return "mobile";
+  return "api";
+}
+
+function createIngressResultReason(blocked: boolean, requiresApproval: boolean, confidence: IngressConfidence) {
+  if (blocked) return "blocked before session handoff";
+  if (requiresApproval) return `${confidence} confidence external input queued for approval`;
+  return "high confidence external input accepted";
+}
+
+function stableIngressId(value: string) {
+  let hash = 0;
+  for (const char of value) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  return hash.toString(16);
 }
 
 function createApprovalQueueItem(approval: ApprovalRequest): ApprovalQueueItem {
@@ -2301,6 +2700,33 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
 
     if ((pathname === "/approvals" || pathname === "/approvals/list") && request.method === "GET") {
       respondJson(200, await listApprovalsFromPersistentServerStorage(eventStorage));
+      return;
+    }
+
+    if (pathname === "/ingress/events" && request.method === "POST") {
+      let payload: ServerIngressInput;
+      try {
+        payload = parseServerIngressInput(await readJsonBody(request));
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) {
+          respondJson(413, { error: "payload_too_large", limit: error.limit });
+          return;
+        }
+        respondJson(400, {
+          error: "invalid_ingress_payload",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+
+      try {
+        respondJson(202, await recordServerIngressToPersistentServerStorage(payload, eventStorage));
+      } catch (error) {
+        respondJson(500, {
+          error: "ingress_event_storage_write_failed",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
       return;
     }
 
