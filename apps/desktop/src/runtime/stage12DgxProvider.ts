@@ -1,5 +1,7 @@
 import type {
+  ApprovalState,
   ConversationMessage,
+  PermissionDecision,
   ProviderCompletionRequest,
   ProviderCompletionResponse,
   ProviderCompletionRoute,
@@ -35,6 +37,8 @@ export type Stage12DgxCompletionInput = {
   proxyBaseUrl?: string | string[];
   proxyTimeoutMs?: number;
   allowDirectFallback?: boolean;
+  approvalState?: ApprovalState;
+  permissionDecision?: PermissionDecision;
 };
 
 export type Stage12DgxCompletionResult = {
@@ -61,6 +65,8 @@ export async function requestDgxVllmCompletion({
   proxyBaseUrl,
   proxyTimeoutMs = 30_000,
   allowDirectFallback = true,
+  approvalState,
+  permissionDecision,
 }: Stage12DgxCompletionInput): Promise<Stage12DgxCompletionResult> {
   try {
     return await requestDgxProviderCompletionViaProxyFallback({
@@ -70,6 +76,8 @@ export async function requestDgxVllmCompletion({
       fetchImpl,
       proxyBaseUrl,
       proxyTimeoutMs,
+      approvalState,
+      permissionDecision,
     });
   } catch (proxyError) {
     if (!allowDirectFallback) {
@@ -104,6 +112,8 @@ export async function requestDgxProviderCompletion({
   fetchImpl = fetch,
   proxyBaseUrl,
   proxyTimeoutMs = 30_000,
+  approvalState,
+  permissionDecision,
 }: Stage12DgxCompletionInput): Promise<Stage12DgxCompletionResult> {
   if (isDgxVllmProvider(provider)) {
     return requestDgxVllmCompletion({
@@ -113,6 +123,8 @@ export async function requestDgxProviderCompletion({
       fetchImpl,
       proxyBaseUrl,
       proxyTimeoutMs,
+      approvalState,
+      permissionDecision,
     });
   }
 
@@ -123,6 +135,8 @@ export async function requestDgxProviderCompletion({
     fetchImpl,
     proxyBaseUrl,
     proxyTimeoutMs,
+    approvalState,
+    permissionDecision,
   });
 }
 
@@ -130,8 +144,9 @@ export function createProviderCompletionProxyRequest(
   provider: ProviderProfile,
   modelId: string,
   messages: ConversationMessage[],
+  permission?: Pick<ProviderCompletionRequest, "approvalState" | "permissionDecision">,
 ): ProviderCompletionRequest {
-  return {
+  const request: ProviderCompletionRequest = {
     id: `provider_completion_request_${crypto.randomUUID()}`,
     sessionId: messages.at(-1)?.sessionId ?? "session_desktop_001",
     providerProfileId: provider.id,
@@ -144,6 +159,15 @@ export function createProviderCompletionProxyRequest(
     routePreference: "server_proxy",
     createdAt: new Date().toISOString(),
   };
+
+  if (permission?.approvalState) {
+    request.approvalState = permission.approvalState;
+  }
+  if (permission?.permissionDecision) {
+    request.permissionDecision = permission.permissionDecision;
+  }
+
+  return request;
 }
 
 async function requestDgxProviderCompletionViaProxyFallback({
@@ -153,7 +177,10 @@ async function requestDgxProviderCompletionViaProxyFallback({
   fetchImpl,
   proxyBaseUrl,
   proxyTimeoutMs,
+  approvalState,
+  permissionDecision,
 }: Required<Pick<Stage12DgxCompletionInput, "provider" | "modelId" | "messages" | "fetchImpl" | "proxyTimeoutMs">> &
+  Pick<Stage12DgxCompletionInput, "approvalState" | "permissionDecision"> &
   Pick<Stage12DgxCompletionInput, "proxyBaseUrl">): Promise<Stage12DgxCompletionResult> {
   let lastError: unknown;
   const errors: string[] = [];
@@ -166,6 +193,8 @@ async function requestDgxProviderCompletionViaProxyFallback({
         fetchImpl,
         proxyBaseUrl: baseUrl,
         proxyTimeoutMs,
+        approvalState,
+        permissionDecision,
       });
     } catch (error) {
       lastError = error;
@@ -183,7 +212,10 @@ async function requestDgxVllmCompletionViaProxy({
   fetchImpl,
   proxyBaseUrl,
   proxyTimeoutMs,
-}: Required<Pick<Stage12DgxCompletionInput, "provider" | "modelId" | "messages" | "fetchImpl" | "proxyBaseUrl" | "proxyTimeoutMs">>): Promise<Stage12DgxCompletionResult> {
+  approvalState,
+  permissionDecision,
+}: Required<Pick<Stage12DgxCompletionInput, "provider" | "modelId" | "messages" | "fetchImpl" | "proxyBaseUrl" | "proxyTimeoutMs">> &
+  Pick<Stage12DgxCompletionInput, "approvalState" | "permissionDecision">): Promise<Stage12DgxCompletionResult> {
   const endpoint = `${String(proxyBaseUrl).replace(/\/$/, "")}/provider-completions`;
   const response = await fetchWithTimeout(
     fetchImpl,
@@ -191,7 +223,7 @@ async function requestDgxVllmCompletionViaProxy({
     {
       method: "POST",
       headers: createDgxOrchestratorJsonHeaders(),
-      body: JSON.stringify(createProviderCompletionProxyRequest(provider, modelId, messages)),
+      body: JSON.stringify(createProviderCompletionProxyRequest(provider, modelId, messages, { approvalState, permissionDecision })),
     },
     proxyTimeoutMs,
   );

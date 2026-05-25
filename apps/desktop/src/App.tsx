@@ -1054,6 +1054,8 @@ export function App() {
           provider: selectedProvider,
           modelId,
           messages: pipelineMessages,
+          approvalState: providerApprovalState,
+          permissionDecision: providerApprovalState === "approved" ? "allow" : undefined,
         });
         reply = result.content;
         completionMetadata = {
