@@ -6,7 +6,9 @@ import type {
   ProviderCompletionResponse,
 } from "@ai-orchestrator/protocol";
 import {
-  DEFAULT_BLOCKED_TARGETS,
+  COMPLETION_ONLY_TARGET_ROLES,
+  delegationAuthorityLevel,
+  evaluateDelegationPolicy,
   parseDelegateTags,
   runCompanionTurn,
   type CompanionTurnInput,
@@ -106,17 +108,44 @@ describe("parseDelegateTags", () => {
   });
 });
 
-describe("DEFAULT_BLOCKED_TARGETS", () => {
-  it("blocks executor / external / auditor by default", () => {
-    expect(DEFAULT_BLOCKED_TARGETS.has("executor")).toBe(true);
-    expect(DEFAULT_BLOCKED_TARGETS.has("external")).toBe(true);
-    expect(DEFAULT_BLOCKED_TARGETS.has("auditor")).toBe(true);
+describe("delegation policy", () => {
+  it("treats companion and orchestrator as orchestrator_plus authority", () => {
+    expect(delegationAuthorityLevel(makeProfile({ id: "agent_chaerin", role: "companion" }))).toBe(
+      "orchestrator_plus",
+    );
+    expect(delegationAuthorityLevel(makeProfile({ id: "agent_orchestrator", role: "orchestrator" }))).toBe(
+      "orchestrator_plus",
+    );
+    expect(delegationAuthorityLevel(makeProfile({ id: "agent_builder", role: "builder" }))).toBe("agent");
   });
 
-  it("does NOT block researcher / negotiator / etc.", () => {
-    expect(DEFAULT_BLOCKED_TARGETS.has("researcher")).toBe(false);
-    expect(DEFAULT_BLOCKED_TARGETS.has("negotiator")).toBe(false);
-    expect(DEFAULT_BLOCKED_TARGETS.has("companion")).toBe(false);
+  it("marks executor / external / auditor as completion-only side-effect gated targets", () => {
+    expect(COMPLETION_ONLY_TARGET_ROLES.has("executor")).toBe(true);
+    expect(COMPLETION_ONLY_TARGET_ROLES.has("external")).toBe(true);
+    expect(COMPLETION_ONLY_TARGET_ROLES.has("auditor")).toBe(true);
+    expect(COMPLETION_ONLY_TARGET_ROLES.has("researcher")).toBe(false);
+  });
+
+  it("allows companion to delegate to executor as completion-only", () => {
+    const decision = evaluateDelegationPolicy({
+      caller: makeProfile({ id: "agent_chaerin", role: "companion" }),
+      target: makeProfile({ id: "agent_executor", role: "executor" }),
+      targetKey: "executor",
+    });
+    expect(decision.allowed).toBe(true);
+    expect(decision.authorityLevel).toBe("orchestrator_plus");
+    expect(decision.targetEffect).toBe("completion_only");
+    expect(decision.sideEffectsRequireApproval).toBe(true);
+  });
+
+  it("blocks normal agents from delegating to side-effect roles", () => {
+    const decision = evaluateDelegationPolicy({
+      caller: makeProfile({ id: "agent_builder", role: "builder" }),
+      target: makeProfile({ id: "agent_executor", role: "executor" }),
+      targetKey: "executor",
+    });
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain("orchestrator_plus");
   });
 });
 
@@ -170,13 +199,15 @@ describe("runCompanionTurn — single happy-path delegation", () => {
   });
 });
 
-describe("runCompanionTurn — blocked targets", () => {
-  it("blocks executor by default (no adapter call)", async () => {
+describe("runCompanionTurn — completion-only gated targets", () => {
+  it("lets companion delegate to executor as completion-only", async () => {
     let executorCalled = false;
+    let executorRequest: ProviderCompletionRequest | undefined;
     const executor = makeSlot(
       makeProfile({ id: "agent_executor", role: "executor" }),
       async (req) => {
         executorCalled = true;
+        executorRequest = req;
         return {
           id: "x",
           requestId: req.id,
@@ -199,11 +230,23 @@ describe("runCompanionTurn — blocked targets", () => {
       targets: new Map([["executor", executor]]),
       userMessage: "x",
     });
-    expect(executorCalled).toBe(false);
-    expect(result.delegations[0]!.kind).toBe("blocked");
+    expect(executorCalled).toBe(true);
+    expect(result.delegations[0]!.kind).toBe("succeeded");
+    const outcome = result.delegations[0]!;
+    if (outcome.kind === "succeeded") {
+      expect(outcome.authorityLevel).toBe("orchestrator_plus");
+      expect(outcome.targetEffect).toBe("completion_only");
+      expect(outcome.sideEffectsRequireApproval).toBe(true);
+    }
+    expect(executorRequest!.messages.at(-1)!.content).toContain("completion-only");
+    expect(executorRequest!.messages.at(-1)!.content).toContain("Permission");
   });
 
-  it("blocks external by default", async () => {
+  it("lets companion delegate to external as completion-only", async () => {
+    const external = makeSlot(
+      makeProfile({ id: "agent_external", role: "external" }),
+      returningOnce("external draft only"),
+    );
     const caller = makeSlot(
       makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
       returningOnce(`<delegate to="external">send to telegram</delegate>`, `못 보냈어`),
@@ -211,13 +254,21 @@ describe("runCompanionTurn — blocked targets", () => {
     const result = await runCompanionTurn({
       caller,
       context: makeContext(),
-      targets: new Map(),
+      targets: new Map([["external", external]]),
       userMessage: "x",
     });
-    expect(result.delegations[0]!.kind).toBe("blocked");
+    expect(result.delegations[0]!.kind).toBe("succeeded");
+    const outcome = result.delegations[0]!;
+    if (outcome.kind === "succeeded") {
+      expect(outcome.sideEffectsRequireApproval).toBe(true);
+    }
   });
 
-  it("blocks auditor by default", async () => {
+  it("lets companion delegate to auditor as completion-only", async () => {
+    const auditor = makeSlot(
+      makeProfile({ id: "agent_auditor", role: "auditor" }),
+      returningOnce("audit draft only"),
+    );
     const caller = makeSlot(
       makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
       returningOnce(`<delegate to="auditor">감사 좀</delegate>`, `못 위임`),
@@ -225,13 +276,17 @@ describe("runCompanionTurn — blocked targets", () => {
     const result = await runCompanionTurn({
       caller,
       context: makeContext(),
-      targets: new Map(),
+      targets: new Map([["auditor", auditor]]),
       userMessage: "x",
     });
-    expect(result.delegations[0]!.kind).toBe("blocked");
+    expect(result.delegations[0]!.kind).toBe("succeeded");
+    const outcome = result.delegations[0]!;
+    if (outcome.kind === "succeeded") {
+      expect(outcome.sideEffectsRequireApproval).toBe(true);
+    }
   });
 
-  it("respects a custom blockedTargets override (allowing executor)", async () => {
+  it("respects a custom blockedTargets override", async () => {
     const exec = makeSlot(
       makeProfile({ id: "agent_executor", role: "executor" }),
       returningOnce("did the thing"),
@@ -245,9 +300,9 @@ describe("runCompanionTurn — blocked targets", () => {
       context: makeContext(),
       targets: new Map([["executor", exec]]),
       userMessage: "x",
-      options: { blockedTargets: new Set() }, // explicitly empty
+      options: { blockedTargets: new Set(["executor"]) },
     });
-    expect(result.delegations[0]!.kind).toBe("succeeded");
+    expect(result.delegations[0]!.kind).toBe("blocked");
   });
 });
 
