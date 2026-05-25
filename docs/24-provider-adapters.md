@@ -200,7 +200,7 @@ totalTokens가 없으면 inputTokens + outputTokens로 채운다.
 
 ## 10. 테스트 전략
 
-- **Contract test**: 모든 어댑터가 같은 `adapterContractSuite(adapter, fixtures)`를 통과한다. fixture는 mock fetch로 5가지 케이스(성공, 401, 429, 5xx, 잘못된 JSON).
+- **Contract test**: 모든 어댑터가 같은 `adapterContractSuite(adapter, fixtures)`를 통과한다. fixture는 mock fetch로 5가지 케이스(성공, 401, 429, 5xx, 잘못된 JSON). 실제 구현은 `packages/providers/src/contractTestFixtures.ts`의 `STANDARD_CONTRACT_CASES` + `assertContract`, 어댑터별 `*.contract.test.ts`가 `it.each(STANDARD_CONTRACT_CASES)`로 동일 케이스 셋을 반복한다. 공통 test helper는 `packages/providers/src/testHelpers.ts` (NOT exported in barrel — vitest fixture가 desktop 런타임으로 새는 것 금지).
 - **Unit test**: 어댑터별 응답 파싱(특히 Anthropic content array, Ollama 줄 단위, OpenRouter 추가 필드).
 - **Mock adapter 재작성**: 새 인터페이스 기준으로 MockProviderAdapter를 다시 짠다. 토큰 카운트는 `content.length`가 아니라 명시 fixture 값.
 - **Integration**: smoke 스크립트에서 vLLM 어댑터만 실제 DGX-02 endpoint 호출 (CI 환경에는 토글로 skip).
