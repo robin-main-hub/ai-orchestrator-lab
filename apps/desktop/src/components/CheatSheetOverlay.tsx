@@ -1,15 +1,15 @@
 import { Keyboard, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/ui/button";
 
 /**
- * Stage 2-4 follow-up — Help cheat-sheet overlay (`?` shortcut).
+ * Help cheat-sheet overlay (`?` shortcut) — v0 visual.
  *
- * design-decisions.md §6 의 10-priority shortcut 카탈로그를 modal 로
- * 노출. 이전에는 `?` 가 그냥 Command Palette 를 재오픈했지만 그건
- * 학습용으로 부적절 — palette 는 명령 실행 도구지 학습 도구가 아님.
- * 이 overlay 는 "키 → 액션 → 우선순위" 3-열 표로 사용자가 한 화면에
- * 전체 단축키 체계를 학습할 수 있게 함.
+ * v0 mockup 에는 cheat sheet 자체가 없음 (v0 는 CommandPalette 하나로
+ * 모든 진입 통일). 우리는 design-decisions §6 의 10-priority shortcut
+ * catalog 를 학습용으로 별도 모달로 분리.
  *
- * Presentation-only — 호스트가 `open` / `onClose` 만 관리.
+ * Visual language 만 v0 정렬 — Tailwind utility + ui/Button.
  */
 
 export type CheatSheetOverlayProps = {
@@ -52,80 +52,111 @@ export function CheatSheetOverlay({ open, onClose }: CheatSheetOverlayProps) {
     <div
       aria-label="Keyboard shortcut cheat sheet"
       aria-modal="true"
-      className="cheat-sheet__overlay"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/55 p-4 backdrop-blur-md"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
       onKeyDown={handleKeyDown}
       role="dialog"
     >
-      <div className="cheat-sheet__panel">
-        <header className="cheat-sheet__header">
-          <span className="cheat-sheet__title">
-            <Keyboard size={14} />
-            <strong>Keyboard Shortcuts</strong>
+      <div className="flex max-h-[min(72vh,640px)] w-[min(580px,calc(100vw-32px))] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+        {/* Header */}
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-border px-3 py-3">
+          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground">
+            <Keyboard className="h-4 w-4" />
+            Keyboard Shortcuts
           </span>
-          <span className="cheat-sheet__subtitle">design-decisions §6 · verb-first grammar</span>
-          <button
+          <span className="truncate text-[10px] font-mono text-muted-foreground">
+            design-decisions §6 · verb-first grammar
+          </span>
+          <Button
             aria-label="close cheat sheet"
-            className="cheat-sheet__close"
+            className="h-6 w-6"
             onClick={onClose}
-            type="button"
+            size="icon"
+            variant="ghost"
           >
-            <X size={14} />
-          </button>
-        </header>
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
 
-        <table className="cheat-sheet__table">
-          <thead>
-            <tr>
-              <th>Key</th>
-              <th>Action</th>
-              <th>Priority</th>
-            </tr>
-          </thead>
-          <tbody>
-            {SHORTCUTS.map((row) => (
-              <tr key={row.keys.join("-") + row.label}>
-                <td>
-                  <span className="cheat-sheet__key-row">
-                    {row.keys.map((k, i) => (
-                      <kbd className="cheat-sheet__kbd" key={`${row.label}-${k}-${i}`}>
-                        {k}
-                      </kbd>
-                    ))}
-                  </span>
-                </td>
-                <td className="cheat-sheet__action">{row.label}</td>
-                <td>
-                  <span className={`cheat-sheet__priority cheat-sheet__priority--${priorityClass(row.priority)}`}>
-                    {row.priority}
-                  </span>
-                </td>
+        {/* Table */}
+        <div className="flex-1 overflow-y-auto">
+          <table className="w-full border-collapse">
+            <thead className="sticky top-0 bg-card">
+              <tr>
+                <th className="border-b border-border px-3 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Key
+                </th>
+                <th className="border-b border-border px-3 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Action
+                </th>
+                <th className="border-b border-border px-3 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Priority
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {SHORTCUTS.map((row) => (
+                <tr
+                  className="border-b border-border/40 transition-colors hover:bg-primary/5"
+                  key={row.keys.join("-") + row.label}
+                >
+                  <td className="px-3 py-2">
+                    <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                      {row.keys.map((k, i) => (
+                        <kbd
+                          className="inline-flex min-w-[18px] items-center justify-center rounded border border-border bg-card/60 px-1.5 py-0 text-[10px] font-mono text-muted-foreground"
+                          key={`${row.label}-${k}-${i}`}
+                        >
+                          {k}
+                        </kbd>
+                      ))}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-foreground">{row.label}</td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={cn(
+                        "inline-block rounded px-1.5 py-0 text-[10px] font-mono",
+                        priorityClasses(row.priority),
+                      )}
+                    >
+                      {row.priority}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-        <footer className="cheat-sheet__footer">
-          <span>Command Palette 에서 같은 액션 검색 가능 — </span>
-          <kbd className="cheat-sheet__kbd">⌘</kbd>
-          <kbd className="cheat-sheet__kbd">K</kbd>
-        </footer>
+        {/* Footer */}
+        <div className="flex items-center gap-1 border-t border-border px-3 py-2 text-[10.5px] text-muted-foreground">
+          <span>Command Palette 에서 같은 액션 검색 가능 —</span>
+          <kbd className="rounded border border-border bg-card/60 px-1 py-0 font-mono">⌘</kbd>
+          <kbd className="rounded border border-border bg-card/60 px-1 py-0 font-mono">K</kbd>
+        </div>
       </div>
     </div>
   );
 }
 
-function priorityClass(p: ShortcutRow["priority"]): string {
-  // 한글 → CSS-safe 매핑
-  const map: Record<ShortcutRow["priority"], string> = {
-    핵심: "critical",
-    보조: "secondary",
-    안전: "safety",
-    빈번: "frequent",
-    보편: "universal",
-    학습: "learning",
-  };
-  return map[p];
+function priorityClasses(p: ShortcutRow["priority"]): string {
+  switch (p) {
+    case "핵심":
+      return "bg-primary/20 text-primary";
+    case "보조":
+      return "bg-success/15 text-success";
+    case "안전":
+      return "bg-destructive/15 text-destructive";
+    case "빈번":
+      return "bg-warning/15 text-warning";
+    case "보편":
+      return "bg-card/60 text-muted-foreground";
+    case "학습":
+      return "bg-chart-5/15 text-chart-5";
+    default:
+      return "bg-card/60 text-muted-foreground";
+  }
 }
