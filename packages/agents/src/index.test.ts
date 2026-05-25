@@ -252,14 +252,14 @@ describe("assertSafeCodingPacket", () => {
 });
 
 describe("defaultAgentProfiles", () => {
-  it("ships 8 profiles: orchestrator + 5 debate personas + builder + executor", () => {
-    expect(defaultAgentProfiles).toHaveLength(8);
+  it("ships 9 profiles: orchestrator + 5 debate personas + builder + external + executor", () => {
+    expect(defaultAgentProfiles).toHaveLength(9);
   });
 
   it("covers every persona that has a SOUL.md directory under agents/", () => {
     // Mirrors the 5 SOUL files added in PR #48 (architect/reviewer/skeptic/
     // verifier/memory_curator) plus the pre-existing orchestrator plus
-    // the builder (Yui Hirasawa) added here.
+    // the builder (Yui Hirasawa) plus the external operations (Misato).
     // Regression guard: if someone removes one of these the test fails
     // with a specific role name, not a vague "missing item".
     const roles = defaultAgentProfiles.map((p) => p.role);
@@ -270,6 +270,7 @@ describe("defaultAgentProfiles", () => {
     expect(roles).toContain("verifier");
     expect(roles).toContain("memory_curator");
     expect(roles).toContain("builder");
+    expect(roles).toContain("external");
   });
 
   it("keeps the executor disabled by default (requires F2 permission gate)", () => {

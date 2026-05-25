@@ -366,6 +366,20 @@ export const defaultAgentProfiles: AgentProfile[] = [
     permissionLevel: "read_only",
   },
   {
+    id: "agent_external_misato",
+    name: "External Operations (Misato)",
+    kind: "virtual",
+    role: "external",
+    // External role for crisis response + multi-agent coordination during
+    // execution + external-channel (ingress) acknowledgement. Misato's
+    // Casual ↔ Commander Mode duality maps onto idle ↔ crisis swarm
+    // states. Persona prompt only needs the small SOUL summary.
+    soulMode: "summary",
+    configSource: "internal",
+    enabled: true,
+    permissionLevel: "read_only",
+  },
+  {
     id: "agent_executor",
     name: "Executor",
     kind: "real",
