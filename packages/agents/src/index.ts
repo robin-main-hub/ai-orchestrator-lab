@@ -352,6 +352,20 @@ export const defaultAgentProfiles: AgentProfile[] = [
     permissionLevel: "read_only",
   },
   {
+    id: "agent_builder",
+    name: "Builder",
+    kind: "virtual",
+    role: "builder",
+    // Builder is a creative-energy persona (Yui Hirasawa) — small SOUL
+    // summary is enough; concrete artifact construction happens through
+    // Coding Packet → Executor handoff, not through the Builder prompt
+    // weight itself.
+    soulMode: "summary",
+    configSource: "internal",
+    enabled: true,
+    permissionLevel: "read_only",
+  },
+  {
     id: "agent_executor",
     name: "Executor",
     kind: "real",
