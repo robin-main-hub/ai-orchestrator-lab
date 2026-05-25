@@ -8,9 +8,12 @@
 
 | 파일 | 종류 | 상태 | 비고 |
 |---|---|---|---|
-| `persona-enrichment-input.md` | 입력 prompt | 발송 완료 (사용자가 Manus에 paste) | 17 캐릭터 SOUL/AGENTS 풍부화 요청. ~147KB 한국어 instruction + 33 현재 파일 paste. ~1500 코인 예상 |
-| `debate-mock-data-input.md` | 입력 prompt | 발송 대기 | 50 시나리오 × 7 round × 17 persona mock utterance 생성 요청. YAML output. ~1000 코인 예상 |
-| `competitive-ux-research-output.md` | 결과 (Manus 작성) | ✅ 받음 | Linear / Arc / Cursor / Warp / Notion AI / Raycast / Cline UX 분석 |
+| `persona-enrichment-input.md` | 입력 prompt | ✅ 발송 + 결과 통합 완료 | 17 캐릭터 SOUL/AGENTS 풍부화 요청. ~147KB 한국어 instruction + 33 현재 파일 paste |
+| `persona-enrichment-output.md` | 결과 (니뭉 작성, 1차) | ✅ 받음 | 15 캐릭터 분량. verifier/domain_expert 누락 |
+| `persona-enrichment-supplement.md` | 결과 (니뭉 작성, 2차 보충) | ✅ 받음 | 누락된 verifier (Makise) + domain_expert (Herta) 2개 |
+| `debate-mock-data-input.md` | 입력 prompt | ✅ 발송 + 결과 통합 완료 | 50 시나리오 × 7 round × 17 persona mock utterance 생성 요청. YAML output |
+| `debate-mock-data-output.yaml` | 결과 (니뭉 작성) | ✅ 받음 + ship | apps/desktop/src/seeds/debateMockData.json 으로 변환 ship (PR #116) |
+| `competitive-ux-research-output.md` | 결과 (니뭉 작성) | ✅ 받음 + 채택 결정 정리 | Linear / Arc / Cursor / Warp / Notion AI / Raycast / Cline UX 분석. docs/design-decisions.md에 채택/거부 분류 |
 | `competitive_tool_ux_research.csv` | 결과 보조 데이터 | ✅ 받음 | 위 분석의 raw 데이터 (도구별 비교) |
 
 ## 결정 추적
