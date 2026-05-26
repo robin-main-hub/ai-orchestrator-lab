@@ -866,3 +866,6 @@ function stableId(value: string) {
   }
   return hash.toString(16);
 }
+
+export { ConnectionHealthMonitor } from './connectionHealth.js';
+export type { ConnectionHealthMonitorOptions, ConnectionHealthSnapshot, ConnectionStatus, StatusChangeListener } from './connectionHealth.js';
