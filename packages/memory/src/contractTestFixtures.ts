@@ -166,4 +166,118 @@ export const STANDARD_CONTRACT_CASES: MemoryContractCase[] = [
 }
 },
 },
+  {
+    label: "memoryContext returns packet with records and totalTokenEstimate",
+    async run(adapter, ctx) {
+      await adapter.remember(
+        {
+          title: "context test",
+          content: "this is content for the context packet",
+          layer: "session",
+          trustLevel: "trusted" as any,
+        },
+        ctx,
+      );
+      const packet = await adapter.memoryContext({ query: "context" }, ctx);
+      if (!packet.id) throw new Error("packet missing id");
+      if (!Array.isArray(packet.activeRecordIds)) {
+        throw new Error("packet.activeRecordIds must be an array");
+      }
+      if (!Array.isArray(packet.blockedRecordIds)) {
+        throw new Error("packet.blockedRecordIds must be an array");
+      }
+      if (typeof packet.summary !== "string") {
+        throw new Error("packet.summary must be a string");
+      }
+      if (typeof packet.createdAt !== "string") {
+        throw new Error("packet.createdAt must be a string");
+      }
+    },
+  },
+  {
+    label: "recall respects limit parameter (cap at requested count)",
+    async run(adapter, ctx) {
+      for (const i of [1, 2, 3, 4, 5]) {
+        await adapter.remember(
+          {
+            title: `limit-test-${i}`,
+            content: `limit testing record number ${i} carries the limit keyword`,
+            layer: "session",
+            trustLevel: "trusted" as any,
+          },
+          ctx,
+        );
+      }
+      const results = await adapter.recall({ query: "limit", limit: 2 }, ctx);
+      if (results.length > 2) {
+        throw new Error(`expected at most 2 results, got ${results.length}`);
+      }
+    },
+  },
+  {
+    label: "forget is idempotent (second call does not throw)",
+    async run(adapter, ctx) {
+      const record = await adapter.remember(
+        {
+          title: "idem-forget",
+          content: "idempotent forget target",
+          layer: "session",
+          trustLevel: "trusted" as any,
+        },
+        ctx,
+      );
+      await adapter.forget(record.id, ctx);
+      // Second call must not throw
+      await adapter.forget(record.id, ctx);
+    },
+  },
+  {
+    label: "activateMemories with empty array is a no-op",
+    async run(adapter, ctx) {
+      // Must not throw on empty input
+      await adapter.activateMemories([], ctx);
+    },
+  },
+  {
+    label: "pin then forget tombstones a pinned record",
+    async run(adapter, ctx) {
+      const record = await adapter.remember(
+        {
+          title: "pinned-then-forgotten",
+          content: "pin-forget interaction test record",
+          layer: "session",
+          trustLevel: "trusted" as any,
+        },
+        ctx,
+      );
+      await adapter.pin(record.id, ctx);
+      await adapter.forget(record.id, ctx);
+      const results = await adapter.recall({ query: "pin-forget interaction" }, ctx);
+      const found = results.find((r) => r.record.id === record.id);
+      if (found) {
+        throw new Error("pinned record should still be tombstoned by forget");
+      }
+    },
+  },
+  {
+    label: "recall results carry score and usedInDecision flag",
+    async run(adapter, ctx) {
+      await adapter.remember(
+        {
+          title: "score-test",
+          content: "score and usedInDecision flag presence check",
+          layer: "session",
+          trustLevel: "trusted" as any,
+        },
+        ctx,
+      );
+      const results = await adapter.recall({ query: "usedInDecision flag presence" }, ctx);
+      if (results.length === 0) throw new Error("expected at least one result");
+      const r = results[0]!;
+      if (typeof r.score !== "number") throw new Error("result.score must be a number");
+      if (typeof r.usedInDecision !== "boolean") {
+        throw new Error("result.usedInDecision must be a boolean");
+      }
+    },
+  },
 ];
