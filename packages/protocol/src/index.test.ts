@@ -686,6 +686,9 @@ describe("protocol schemas", () => {
           sourceItemId: "permission_external_1",
           summary: "terminal_run from external_channel",
           requestedBy: "external_channel",
+          action: "terminal_run",
+          reason: "external command waits for approval",
+          sourceTrust: "untrusted",
           permissions: ["run_safe_commands"],
           state: "required",
           createdAt: "2026-05-24T00:00:00.000Z",
@@ -694,6 +697,8 @@ describe("protocol schemas", () => {
     };
 
     expect(snapshot.queue[0]?.permissions).toContain("run_safe_commands");
+    expect(snapshot.queue[0]?.action).toBe("terminal_run");
+    expect(snapshot.queue[0]?.sourceTrust).toBe("untrusted");
     expect(snapshot.items[1]?.decision).toBe("deny");
   });
 
