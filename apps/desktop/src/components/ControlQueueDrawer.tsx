@@ -16,6 +16,7 @@ import type {
 } from "@ai-orchestrator/protocol";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
+import { StatusBadge } from "@/ui/status-badge";
 
 /**
  * Control Queue drawer — v0 visual language port.
@@ -222,6 +223,14 @@ function LaneChip({
   onClick: () => void;
   soon?: boolean;
 }) {
+  const variant = label === "approve" ? "success"
+    : label === "ask" ? "primary"
+    : label === "edit" ? "warning"
+    : label === "delegate" ? "muted"
+    : label === "block" ? "danger"
+    : label === "archive" ? "muted"
+    : "default";
+
   return (
     <button
       aria-selected={active}
@@ -239,7 +248,7 @@ function LaneChip({
       type="button"
     >
       {icon}
-      <span>{label}</span>
+      <StatusBadge variant={variant} size="sm">{label}</StatusBadge>
       {count !== undefined ? (
         <span className="rounded-full bg-primary/20 px-1 text-[9px] text-primary">
           {count}
