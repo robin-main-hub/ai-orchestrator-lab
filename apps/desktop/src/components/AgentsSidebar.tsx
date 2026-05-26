@@ -385,12 +385,12 @@ function AgentCard({
       </div>
 
       {/* Bottom row: provider + model selector + status */}
-      <div className="flex items-center gap-1.5 pl-9">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-1.5 pl-9">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               aria-label={`${agent.name} provider`}
-              className="flex max-w-[110px] items-center gap-1 rounded bg-card/60 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="flex min-w-0 items-center gap-1 rounded bg-card/60 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               type="button"
             >
               <span className="truncate">{providerLabel}</span>
@@ -425,68 +425,78 @@ function AgentCard({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {hasModelOverflow ? (
-          <Button
-            aria-label={`${agent.name} model 이전`}
-            className="h-5 w-5"
-            disabled={!canShiftLeft}
-            onClick={() => onShiftModelWindow(agent.id, -1)}
-            size="icon"
-            variant="ghost"
-          >
-            <ChevronLeft className="h-2.5 w-2.5" />
-          </Button>
-        ) : null}
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              aria-label={`${agent.name} model`}
-              className="flex max-w-[120px] items-center gap-1 rounded bg-card/60 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              type="button"
+        <div className="flex min-w-0 items-center gap-0.5">
+          {hasModelOverflow ? (
+            <Button
+              aria-label={`${agent.name} model 이전`}
+              className="h-5 w-5 shrink-0"
+              disabled={!canShiftLeft}
+              onClick={() => onShiftModelWindow(agent.id, -1)}
+              size="icon"
+              variant="ghost"
             >
-              <span className="truncate">{modelLabel}</span>
-              <ChevronDown className="h-2.5 w-2.5 shrink-0" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-44">
-            {visibleModels.length === 0 ? (
-              <DropdownMenuItem disabled>model pending</DropdownMenuItem>
-            ) : null}
-            {visibleModels.map((model) => (
-              <DropdownMenuItem
-                key={model.id}
-                onSelect={() => onAssignModel(agent.id, model.id)}
-              >
-                <span className="truncate">{model.name}</span>
-                {model.id === agent.modelId ? (
-                  <span className="ml-auto text-[10px] text-primary">active</span>
-                ) : null}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <ChevronLeft className="h-2.5 w-2.5" />
+            </Button>
+          ) : null}
 
-        {hasModelOverflow ? (
-          <Button
-            aria-label={`${agent.name} model 다음`}
-            className="h-5 w-5"
-            disabled={!canShiftRight}
-            onClick={() => onShiftModelWindow(agent.id, 1)}
-            size="icon"
-            variant="ghost"
-          >
-            <ChevronRight className="h-2.5 w-2.5" />
-          </Button>
-        ) : null}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                aria-label={`${agent.name} model`}
+                className="flex min-w-0 flex-1 items-center gap-1 rounded bg-card/60 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                type="button"
+              >
+                <span className="truncate">{modelLabel}</span>
+                <ChevronDown className="h-2.5 w-2.5 shrink-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-44">
+              {visibleModels.length === 0 ? (
+                <DropdownMenuItem disabled>model pending</DropdownMenuItem>
+              ) : null}
+              {visibleModels.map((model) => (
+                <DropdownMenuItem
+                  key={model.id}
+                  onSelect={() => onAssignModel(agent.id, model.id)}
+                >
+                  <span className="truncate">{model.name}</span>
+                  {model.id === agent.modelId ? (
+                    <span className="ml-auto text-[10px] text-primary">active</span>
+                  ) : null}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {hasModelOverflow ? (
+            <Button
+              aria-label={`${agent.name} model 다음`}
+              className="h-5 w-5 shrink-0"
+              disabled={!canShiftRight}
+              onClick={() => onShiftModelWindow(agent.id, 1)}
+              size="icon"
+              variant="ghost"
+            >
+              <ChevronRight className="h-2.5 w-2.5" />
+            </Button>
+          ) : null}
+        </div>
 
         {/* in use indicator */}
         {isResponding ? (
-          <StatusBadge className="ml-auto" size="sm" variant="success">
+          <StatusBadge
+            className="justify-self-end whitespace-nowrap"
+            size="sm"
+            variant="success"
+          >
             in use
           </StatusBadge>
         ) : isPreparing ? (
-          <StatusBadge className="ml-auto" size="sm" variant="warning">
+          <StatusBadge
+            className="justify-self-end whitespace-nowrap"
+            size="sm"
+            variant="warning"
+          >
             prepare
           </StatusBadge>
         ) : null}
