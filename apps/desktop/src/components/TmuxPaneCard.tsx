@@ -4,6 +4,7 @@ import type { AgentVisualSettings, WorkbenchAgent } from "../types";
 import { agentRoleLabel } from "../lib/helpers";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
+import { StatusBadge } from "@/ui/status-badge";
 import { AgentAvatar } from "./AgentAvatar";
 import { TmuxPaneTimeline } from "./TmuxPaneTimeline";
 
@@ -67,14 +68,9 @@ export function TmuxPaneCard({
             </div>
           </div>
         </div>
-        <span
-          className={cn(
-            "inline-flex shrink-0 items-center rounded-full border px-1.5 py-0 text-[9px] font-mono",
-            stateToneClasses(pane.state),
-          )}
-        >
+        <StatusBadge variant={stateToBadgeVariant(pane.state)} size="sm">
           {pane.state}
-        </span>
+        </StatusBadge>
       </div>
 
       {/* Role description */}
@@ -168,19 +164,10 @@ export function TmuxPaneCard({
   );
 }
 
-function stateToneClasses(state: string): string {
-  if (state === "chat active" || state === "active") {
-    return "border-primary/45 text-primary bg-primary/10";
-  }
-  if (state === "ready") {
-    return "border-success/45 text-success bg-success/10";
-  }
-  if (state === "dispatch gated" || state === "pending_approval") {
-    return "border-warning/45 text-warning bg-warning/10";
-  }
-  if (state === "guarding" || state === "failed" || state === "dispatch failed") {
-    return "border-destructive/45 text-destructive bg-destructive/10";
-  }
-  // idle / watch only / default
-  return "border-border text-muted-foreground bg-card/40";
+function stateToBadgeVariant(state: string): "primary" | "success" | "warning" | "danger" | "muted" {
+  if (state === "chat active" || state === "active") return "primary";
+  if (state === "ready") return "success";
+  if (state === "dispatch gated" || state === "pending_approval") return "warning";
+  if (state === "guarding" || state === "failed" || state === "dispatch failed") return "danger";
+  return "muted";
 }
