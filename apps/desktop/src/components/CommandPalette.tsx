@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, CornerDownLeft, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/ui/status-badge";
 
 /**
  * Command Palette — strict v0 port.
@@ -179,9 +180,9 @@ export function CommandPalette({
                       onMouseEnter={() => setActiveIndex(globalIndex)}
                       type="button"
                     >
-                      <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-mono font-medium uppercase text-primary">
+                      <StatusBadge className="shrink-0 font-mono uppercase" size="sm" variant="primary">
                         {entry.verb}
-                      </span>
+                      </StatusBadge>
                       <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
                       <span className="truncate text-sm text-foreground">
                         {entry.label}

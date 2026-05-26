@@ -702,6 +702,32 @@ textarea {
   color: var(--text-muted);
 }
 
+.mobile-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mobile-status-grid div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.mobile-status-grid span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.mobile-status-grid strong {
+  align-self: flex-start;
+}
+
 /* ===== Approvals ===== */
 
 .approval-summary {
