@@ -198,3 +198,58 @@
 - F1 (RedactionRule schema) 머지 후 §3.3 어댑터 체크리스트에 항목 추가
 - F3 (server PermissionMatrixItem emit) 머지 후 §3.1에 R 항목 자동화 가능
 - F9 (Ingress guard receiver) 머지 후 §3.8 외부 endpoint 체크리스트 확장
+
+## 12. CLI 기반 Provider (grok -p, gemini -p, codex 등)
+
+이 섹션은 로컬 CLI를 subprocess로 호출하는 provider (grok, gemini, codex 등)에 적용되는 보안 체크리스트다.
+
+### 12.1 필수 체크 항목
+
+- [ ] **Subprocess 실행 방식**
+  - `spawn` 또는 `execFile` 사용, `shell: true` 절대 금지
+  - prompt는 **stdin**으로만 전달 (command argument로 넘기지 않음)
+- [ ] **Timeout / Cancellation**
+  - `AdapterRuntimeContext.timeoutMs`와 `abortSignal`을 반드시 사용
+  - timeout 또는 abort 발생 시 child process를 강제 종료 (kill) 처리
+  - 종료 후에도 zombie process가 남지 않도록 확인
+- [ ] **Command Injection 방지**
+  - prompt 내용이 command line argument로 들어가지 않음
+  - stdin 전달 시에도 shell metacharacter escape 불필요하게 만들기 (가능하면 binary에 직접 전달)
+- [ ] **Stderr Redaction**
+  - stderr 전체를 `redactSecretsForLog` 통과시킨 후에만 로깅 또는 `providerRawSnippet`에 저장
+  - 원문 stderr는 절대 Event Storage, 로그, UI에 노출 금지
+- [ ] **OAuth / Local Session Trust Boundary**
+  - CLI가 로그인 세션에 의존하는 경우, `trustLevel`은 기본 `limited`
+  - `trusted`로 올리려면 명시적 설정 필요
+  - CLI binary 경로, home directory 등이 registry에 안전하게 노출되는지 확인
+- [ ] **Missing Binary / Non-zero Exit 처리**
+  - binary가 없을 때 graceful한 `AdapterError` 발생
+  - non-zero exit 시 stderr (redacted)를 적절히 포함하되 raw leak 방지
+- [ ] **Stdout Parsing Failure**
+  - empty stdout, non-JSON, unexpected format 시 `AdapterError` category 명확히 정의
+  - parsing 실패 시에도 secret leak이 발생하지 않도록 처리
+- [ ] **Secret Leakage Test**
+  - CLI stderr/stdout에 API 키, OAuth 토큰, 개인정보가 섞여 나올 수 있는 모든 케이스에 대해 redaction 테스트 필수
+- [ ] **Provider Registry Metadata**
+  - `authMode: "cli_session"`
+  - `secretAvailability`
+  - `trustLevel`
+  - `requiresLocalBinary`, `localBinaryName` 등이 정확히 등록되는지 검증
+
+### 12.2 금지 행위
+
+- CLI를 호출할 때 prompt를 shell argument로 전달
+- stderr 원문을 로그나 Event Storage에 그대로 저장
+- CLI binary 경로를 하드코딩하거나 사용자 입력으로 받을 때 sanitization 없이 사용
+- OAuth 세션 파일(`~/.grok/auth.json`, `~/.gemini/oauth_creds.json` 등) 경로를 provider metadata에 직접 노출
+
+### 12.3 테스트 필수 항목
+
+- prompt가 command line argument로 전달되지 않는지 검증
+- stdin으로 prompt가 전달되는지
+- timeout / AbortSignal 시 child process가 제대로 종료되는지
+- stderr에 secret이 포함된 경우 redaction 되는지
+- binary missing, non-zero exit, empty stdout, parse failure 각각에 대해 올바른 `AdapterError`가 발생하는지
+- registry에 CLI provider metadata가 올바르게 등록되는지
+
+머지 차단 기준: 위 항목 중 Critical에 해당하는 항목이 하나라도 미준수 시 차단.
