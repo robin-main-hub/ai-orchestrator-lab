@@ -546,3 +546,5 @@ export const defaultAgentProfiles: AgentProfile[] = [
 
 export { buildAgentSystemPrompt, estimateTokens, soulModeToPersonaSourceMode } from './soulInjection.js';
 export type { SoulInjectionReport } from './soulInjection.js';
+export { buildDebateSummary, countTagDistribution } from './debateSummary.js';
+export type { DebateSummaryOptions, TagDistribution } from './debateSummary.js';
