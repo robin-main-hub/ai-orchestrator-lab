@@ -29,7 +29,7 @@ describe("withTrustEnforcement — trust enforcement", () => {
                  const ctx = makeContractCtx({ permissionDecision: "deny" });
                  await expect(
                          adapter.remember(
-                           { title: "t", content: "c", layer: "session", trustLevel: "trusted" },
+                           { title: "t", content: "c", layer: "episode", sourceChannel: "agent", trustLevel: "trusted" },
                                    ctx,
                                  ),
                        ).rejects.toMatchObject({ category: "permission_denied" });
@@ -48,7 +48,7 @@ describe("withTrustEnforcement — trust enforcement", () => {
                  const ctx = makeContractCtx({ permissionDecision: "allow" });
                  await expect(
                          adapter.remember(
-                           { title: "t", content: "c", layer: "session", trustLevel: "untrusted" },
+                           { title: "t", content: "c", layer: "episode", sourceChannel: "agent", trustLevel: "untrusted" },
                                    ctx,
                                  ),
                        ).rejects.toMatchObject({ category: "trust_violation" });

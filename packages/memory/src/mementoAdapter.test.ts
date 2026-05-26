@@ -17,11 +17,12 @@ function makeCtx(overrides: Partial<MemoryAdapterContext> = {}): MemoryAdapterCo
 function makeRecord(id: string, title: string, content: string, extra: Partial<MemoryRecord> = {}): MemoryRecord {
   return {
     id,
-    layer: "project",
+    layer: "project_memory",
     scope: "project",
     kind: "context",
     title,
     content,
+    sourceChannel: "agent",
     trustLevel: "trusted",
     tags: [],
     activationState: "suggested",
@@ -85,9 +86,10 @@ describe("MementoMcpAdapter — remember + policy write-through", () => {
     const adapter = new MementoMcpAdapter({ policy: "local_cache" });
     const record = await adapter.remember(
       {
-        layer: "project",
+        layer: "project_memory",
         title: "new decision",
         content: "새로운 아키텍처 결정",
+        sourceChannel: "agent",
         trustLevel: "trusted",
         tags: ["arch"],
       },
@@ -101,7 +103,7 @@ describe("MementoMcpAdapter — remember + policy write-through", () => {
   it("stores only to local for session_only policy", async () => {
     const adapter = new MementoMcpAdapter({ policy: "session_only" });
     const record = await adapter.remember(
-      { layer: "session", title: "temp note", content: "임시 메모", trustLevel: "trusted", tags: [] },
+      { layer: "episode", title: "temp note", content: "임시 메모", sourceChannel: "agent", trustLevel: "trusted", tags: [] },
       makeCtx(),
     );
     expect(adapter["localRecords"].has(record.id)).toBe(true);
@@ -151,9 +153,11 @@ describe("MementoMcpAdapter — stats", () => {
     const stats = await adapter.stats(makeCtx());
     expect(stats.totalRecords).toBe(3); // s1, s2, s3
     expect(stats.activeRecords).toBe(1); // s1 only (s2 tombstoned)
-    expect(stats.localCacheSize).toBe(2);
-    expect(stats.remoteCacheSize).toBe(1);
-    expect(stats.policy).toBe("local_cache");
+    expect(stats.health).toBeDefined();
+    const cache = adapter.cacheStats();
+    expect(cache.localCacheSize).toBe(2);
+    expect(cache.remoteCacheSize).toBe(1);
+    expect(cache.policy).toBe("local_cache");
   });
 });
 
@@ -168,9 +172,11 @@ describe("MementoMcpAdapter — reflect", () => {
     });
     const reflection = await adapter.reflect("sess-1", makeCtx());
     expect(reflection.sessionId).toBe("sess-1");
-    expect(reflection.summaryPoints.length).toBe(2);
-    expect(reflection.candidateRecordIds).toContain("r1");
-    expect(reflection.candidateRecordIds).not.toContain("r3");
-    expect(reflection.policy).toBe("local_cache");
+    expect(reflection.summary.length).toBeGreaterThan(0);
+    expect(reflection.summary).toContain("plan A");
+    expect(reflection.summary).toContain("plan B");
+    expect(reflection.summary).not.toContain("unrelated");
+    expect(Array.isArray(reflection.decisions)).toBe(true);
+    expect(Array.isArray(reflection.risks)).toBe(true);
   });
 });

@@ -43,7 +43,8 @@ export const STANDARD_CONTRACT_CASES: MemoryContractCase[] = [
 {
           title: "test record",
           content: "hello world",
-          layer: "session",
+          layer: "episode",
+          sourceChannel: "agent" as any,
           trustLevel: "trusted" as any,
 },
         ctx,
@@ -59,7 +60,8 @@ export const STANDARD_CONTRACT_CASES: MemoryContractCase[] = [
 {
           title: "fox story",
           content: "the quick brown fox",
-          layer: "session",
+          layer: "episode",
+          sourceChannel: "agent" as any,
           trustLevel: "trusted" as any,
 },
         ctx,
@@ -76,7 +78,8 @@ export const STANDARD_CONTRACT_CASES: MemoryContractCase[] = [
 {
           title: "pin me",
           content: "pin this record",
-          layer: "session",
+          layer: "episode",
+          sourceChannel: "agent" as any,
           trustLevel: "trusted" as any,
 },
         ctx,
@@ -95,7 +98,8 @@ export const STANDARD_CONTRACT_CASES: MemoryContractCase[] = [
 {
           title: "forget me",
           content: "forget this record please",
-          layer: "session",
+          layer: "episode",
+          sourceChannel: "agent" as any,
           trustLevel: "trusted" as any,
 },
         ctx,
@@ -114,7 +118,8 @@ export const STANDARD_CONTRACT_CASES: MemoryContractCase[] = [
 {
           title: "stat test",
           content: "testing stats",
-          layer: "session",
+          layer: "episode",
+          sourceChannel: "agent" as any,
           trustLevel: "trusted" as any,
 },
         ctx,
@@ -132,7 +137,8 @@ export const STANDARD_CONTRACT_CASES: MemoryContractCase[] = [
 {
           title: "activate me",
           content: "needs activation",
-          layer: "session",
+          layer: "episode",
+          sourceChannel: "agent" as any,
           trustLevel: "trusted" as any,
 },
         ctx,
@@ -150,11 +156,11 @@ export const STANDARD_CONTRACT_CASES: MemoryContractCase[] = [
     label: "createRelations returns MemoryRelation array",
     async run(adapter, ctx) {
       const a = await adapter.remember(
-{ title: "a", content: "record a", layer: "session", trustLevel: "trusted" as any },
+{ title: "a", content: "record a", layer: "episode", sourceChannel: "agent", trustLevel: "trusted" as any },
         ctx,
       );
       const b = await adapter.remember(
-{ title: "b", content: "record b", layer: "session", trustLevel: "trusted" as any },
+{ title: "b", content: "record b", layer: "episode", sourceChannel: "agent", trustLevel: "trusted" as any },
         ctx,
       );
       const relations = await adapter.createRelations([a.id, b.id], ctx);
@@ -173,7 +179,8 @@ export const STANDARD_CONTRACT_CASES: MemoryContractCase[] = [
         {
           title: "context test",
           content: "this is content for the context packet",
-          layer: "session",
+          layer: "episode",
+          sourceChannel: "agent" as any,
           trustLevel: "trusted" as any,
         },
         ctx,
@@ -202,8 +209,9 @@ export const STANDARD_CONTRACT_CASES: MemoryContractCase[] = [
           {
             title: `limit-test-${i}`,
             content: `limit testing record number ${i} carries the limit keyword`,
-            layer: "session",
-            trustLevel: "trusted" as any,
+            layer: "episode",
+            sourceChannel: "agent" as any,
+          trustLevel: "trusted" as any,
           },
           ctx,
         );
@@ -221,7 +229,8 @@ export const STANDARD_CONTRACT_CASES: MemoryContractCase[] = [
         {
           title: "idem-forget",
           content: "idempotent forget target",
-          layer: "session",
+          layer: "episode",
+          sourceChannel: "agent" as any,
           trustLevel: "trusted" as any,
         },
         ctx,
@@ -245,7 +254,8 @@ export const STANDARD_CONTRACT_CASES: MemoryContractCase[] = [
         {
           title: "pinned-then-forgotten",
           content: "pin-forget interaction test record",
-          layer: "session",
+          layer: "episode",
+          sourceChannel: "agent" as any,
           trustLevel: "trusted" as any,
         },
         ctx,
@@ -266,7 +276,8 @@ export const STANDARD_CONTRACT_CASES: MemoryContractCase[] = [
         {
           title: "score-test",
           content: "score and usedInDecision flag presence check",
-          layer: "session",
+          layer: "episode",
+          sourceChannel: "agent" as any,
           trustLevel: "trusted" as any,
         },
         ctx,
