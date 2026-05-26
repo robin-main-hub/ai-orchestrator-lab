@@ -3,6 +3,7 @@ import { Activity } from "lucide-react";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
+import { StatusBadge } from "@/ui/status-badge";
 
 /**
  * Runtime status bar — v0 visual port (TopNav 의 status 영역).
@@ -190,16 +191,19 @@ function StatusRow({ label, status }: { label: string; status: string }) {
   return (
     <div className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-card/60">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <div className="flex items-center gap-1.5">
-        <StatusDot status={status} />
-        <span
-          className={cn("text-xs font-medium", statusToneClasses(status))}
-        >
-          {status}
-        </span>
-      </div>
+      <StatusBadge variant={statusToBadgeVariant(status)} size="sm">
+        {status}
+      </StatusBadge>
     </div>
   );
+}
+
+function statusToBadgeVariant(status: string): "success" | "danger" | "warning" | "muted" {
+  const s = status.toLowerCase();
+  if (s.includes("online") || s.includes("ready") || s.includes("connected")) return "success";
+  if (s.includes("offline") || s.includes("error") || s.includes("unreachable")) return "danger";
+  if (s.includes("pending") || s.includes("preparing") || s.includes("fallback")) return "warning";
+  return "muted";
 }
 
 function statusToneFromString(status: string): "online" | "offline" | "pending" | "idle" {
