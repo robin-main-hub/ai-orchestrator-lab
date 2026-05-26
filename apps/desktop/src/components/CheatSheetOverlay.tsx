@@ -1,6 +1,6 @@
 import { Keyboard, X } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
+import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 
 /**
  * Help cheat-sheet overlay (`?` shortcut) — v0 visual.
@@ -102,7 +102,7 @@ export function CheatSheetOverlay({ open, onClose }: CheatSheetOverlayProps) {
                   className="border-b border-border/40 transition-colors hover:bg-primary/5"
                   key={row.keys.join("-") + row.label}
                 >
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-1.5">
                     <span className="inline-flex items-center gap-1 whitespace-nowrap">
                       {row.keys.map((k, i) => (
                         <kbd
@@ -114,16 +114,11 @@ export function CheatSheetOverlay({ open, onClose }: CheatSheetOverlayProps) {
                       ))}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-xs text-foreground">{row.label}</td>
-                  <td className="px-3 py-2">
-                    <span
-                      className={cn(
-                        "inline-block rounded px-1.5 py-0 text-[10px] font-mono",
-                        priorityClasses(row.priority),
-                      )}
-                    >
+                  <td className="px-3 py-1.5 text-xs text-foreground">{row.label}</td>
+                  <td className="px-3 py-1.5">
+                    <StatusBadge size="sm" variant={priorityBadgeVariant(row.priority)}>
                       {row.priority}
-                    </span>
+                    </StatusBadge>
                   </td>
                 </tr>
               ))}
@@ -142,21 +137,18 @@ export function CheatSheetOverlay({ open, onClose }: CheatSheetOverlayProps) {
   );
 }
 
-function priorityClasses(p: ShortcutRow["priority"]): string {
-  switch (p) {
+function priorityBadgeVariant(priority: ShortcutRow["priority"]): StatusBadgeVariant {
+  switch (priority) {
     case "핵심":
-      return "bg-primary/20 text-primary";
+      return "primary";
     case "보조":
-      return "bg-success/15 text-success";
+      return "success";
     case "안전":
-      return "bg-destructive/15 text-destructive";
+      return "danger";
     case "빈번":
-      return "bg-warning/15 text-warning";
+      return "warning";
     case "보편":
-      return "bg-card/60 text-muted-foreground";
     case "학습":
-      return "bg-chart-5/15 text-chart-5";
-    default:
-      return "bg-card/60 text-muted-foreground";
+      return "muted";
   }
 }
