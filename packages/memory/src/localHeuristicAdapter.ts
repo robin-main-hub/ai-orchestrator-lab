@@ -60,7 +60,7 @@ export class LocalHeuristicAdapter implements MemoryAdapter {
           .filter((r) => {
                     if (r.tombstonedAt) return false;
                     if (query.layers && !query.layers.includes(r.layer)) return false;
-                    if (query.scopes && !query.scopes.includes(r.scope)) return false;
+                    if (query.scopes && r.scope && !query.scopes.includes(r.scope)) return false;
                     if (query.kinds && !query.kinds.includes(r.kind ?? "context")) return false;
                     if (!query.includeUntrusted && r.trustLevel === "untrusted") return false;
                     return true;
@@ -83,7 +83,7 @@ export class LocalHeuristicAdapter implements MemoryAdapter {
         const record: MemoryRecord = {
                 id,
                 layer: input.layer,
-                scope: input.scope ?? input.layer,
+                scope: input.scope,
                 kind: input.kind ?? "context",
                 title: input.title,
                 content: input.content,
@@ -165,11 +165,15 @@ export class LocalHeuristicAdapter implements MemoryAdapter {
   }
 
   async createRelations(recordIds: string[], _ctx?: MemoryAdapterContext): Promise<MemoryRelation[]> {
+        const now = new Date().toISOString();
         const newRelations = recordIds.slice(1).map((toId, idx): MemoryRelation => ({
                 id: stableId(`${recordIds[0]}_${toId}`, String(idx)),
                 fromRecordId: recordIds[0] as string,
                 toRecordId: toId,
                 kind: "related",
+                confidence: 0.5,
+                reason: "auto-linked by createRelations",
+                createdAt: now,
         }));
         this._relations.push(...newRelations);
         return newRelations;

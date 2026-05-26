@@ -7,6 +7,7 @@ import type {
   RecallQuery,
   RecallResult,
   Reflection,
+  MemoryScope,
 } from "@ai-orchestrator/protocol";
 import type { MemoryAdapter, MemoryAdapterContext, MemoryAdapterKind } from "./adapter";
 import { MemoryAdapterError } from "./errors";
@@ -126,13 +127,17 @@ export class MementoMcpAdapter implements MemoryAdapter {
 
     await ctx.appendEvent?.({
       id: `memento_recall_${stableId(`${this.policy}:${query.query}`)}`,
-      sessionId: "memento_mcp",
+      sessionId: query.sessionId ?? "memento_mcp",
       type: "memory.operation",
       payload: {
         kind: "memory_operation",
         operation: "recall",
         recordIds: sorted.map((r) => r.record.id),
       },
+      createdAt: ctx.now?.() ?? this.nowFn(),
+      source: "agent",
+      sourceTrust: "trusted",
+      redacted: false,
     });
 
     return sorted;
@@ -173,6 +178,10 @@ export class MementoMcpAdapter implements MemoryAdapter {
         kind: "archival_write_requested",
         input,
       },
+      createdAt: now,
+      source: "agent",
+      sourceTrust: input.trustLevel,
+      redacted: false,
     });
 
     return record;
@@ -181,12 +190,23 @@ export class MementoMcpAdapter implements MemoryAdapter {
   async memoryContext(query: RecallQuery, ctx: MemoryAdapterContext): Promise<MemoryContextPacket> {
     const results = await this.recall(query, ctx);
     const now = ctx.now?.() ?? this.nowFn();
+    const activeIds: string[] = [];
+    const blockedIds: string[] = [];
+    for (const r of results) {
+      if (r.record.activationState === "quarantined" || r.record.trustLevel === "untrusted") {
+        blockedIds.push(r.record.id);
+      } else {
+        activeIds.push(r.record.id);
+      }
+    }
     return {
       id: `memento_ctx_${stableId(`${query.query}:${now}`)}`,
+      sessionId: query.sessionId ?? "memento_mcp",
       query: query.query,
-      records: results.map((r) => r.record),
-      totalTokenEstimate: results.reduce((sum, r) => sum + estimateTokens(r.record.content), 0),
-      truncated: false,
+      activeRecordIds: activeIds,
+      blockedRecordIds: blockedIds,
+      relationIds: [],
+      summary: results.map((r) => r.record.title).join("; "),
       createdAt: now,
     };
   }
@@ -195,17 +215,32 @@ export class MementoMcpAdapter implements MemoryAdapter {
     const local = Array.from(this.localRecords.values());
     const remote = Array.from(this.remoteRecords.values());
     const allIds = new Set([...local.map((r) => r.id), ...remote.map((r) => r.id)]);
+    const active = local.filter((r) => !r.tombstonedAt && r.activationState !== "quarantined").length;
+    const quarantined = local.filter((r) => r.activationState === "quarantined").length;
     return {
-      id: `memento_stats_${stableId(this.policy)}`,
-      profileId: this.profileId,
       totalRecords: allIds.size,
-      activeRecords: local.filter((r) => !r.tombstonedAt && r.activationState !== "quarantined").length,
+      activeRecords: active,
       pinnedRecords: this.pinnedIds.size,
-      quarantinedRecords: local.filter((r) => r.activationState === "quarantined").length,
+      quarantinedRecords: quarantined,
+      relationCount: 0,
+      duplicateCandidates: 0,
+      contradictionCandidates: 0,
+      staleCandidates: 0,
+      health: quarantined > active ? "needs_review" : quarantined > 0 ? "watch" : "good",
+    };
+  }
+
+  /**
+   * Memento-specific cache metadata. Not part of the MemoryAdapter
+   * contract — exposed for inspectors/diagnostics that need to see
+   * which records are in the local cache vs. only on the remote DGX
+   * central store.
+   */
+  cacheStats(): { localCacheSize: number; remoteCacheSize: number; policy: MementoPolicy } {
+    return {
       localCacheSize: this.localRecords.size,
       remoteCacheSize: this.policy !== "session_only" ? this.remoteRecords.size : 0,
       policy: this.policy,
-      createdAt: this.nowFn(),
     };
   }
 
@@ -246,13 +281,15 @@ export class MementoMcpAdapter implements MemoryAdapter {
   }
 
   async createRelations(recordIds: string[], _ctx: MemoryAdapterContext): Promise<MemoryRelation[]> {
+    const now = this.nowFn();
     return recordIds.slice(0, -1).map((id, idx) => ({
       id: `relation_${stableId(`${id}:${recordIds[idx + 1]}`)}`,
       fromRecordId: id,
       toRecordId: recordIds[idx + 1] ?? id,
-      relationType: "associated",
-      strength: 0.5,
-      createdAt: this.nowFn(),
+      kind: "related" as const,
+      confidence: 0.5,
+      reason: "auto-linked by createRelations",
+      createdAt: now,
     }));
   }
 
@@ -260,15 +297,20 @@ export class MementoMcpAdapter implements MemoryAdapter {
     const sessionRecords = Array.from(this.localRecords.values()).filter(
       (r) => r.sessionId === sessionId && !r.tombstonedAt,
     );
+    const summaryLines = sessionRecords.slice(0, 5).map((r) => `[${r.layer}] ${r.title}`);
+    const risks = sessionRecords
+      .filter((r) => r.trustLevel === "untrusted" || r.activationState === "quarantined")
+      .slice(0, 5)
+      .map((r) => `untrusted/quarantined: ${r.title}`);
+    const decisions = sessionRecords
+      .filter((r) => r.pinned)
+      .slice(0, 5)
+      .map((r) => r.title);
     return {
-      id: `memento_reflect_${stableId(sessionId)}`,
       sessionId,
-      summaryPoints: sessionRecords
-        .slice(0, 5)
-        .map((r) => `[${r.layer}] ${r.title}`),
-      suggestedTags: Array.from(new Set(sessionRecords.flatMap((r) => r.tags ?? []))).slice(0, 8),
-      candidateRecordIds: sessionRecords.slice(0, 10).map((r) => r.id),
-      policy: this.policy,
+      summary: summaryLines.join("; "),
+      decisions,
+      risks,
       createdAt: this.nowFn(),
     };
   }
@@ -332,9 +374,9 @@ function buildReason(trace: RecallTrace): string {
   return `served from dgx_central (cache-miss, policy: ${trace.policy})`;
 }
 
-function inferScope(layer: string): MemoryRecord["scope"] {
-  if (layer === "project") return "project";
-  if (layer === "user") return "user";
+function inferScope(layer: string): MemoryScope {
+  if (layer === "project_memory") return "project";
+  if (layer === "user_memory") return "global";
   return "session";
 }
 
