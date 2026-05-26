@@ -159,7 +159,7 @@ export function parseProviderCredentialInput(
   const tags = createProviderTags(format, trustLevel, baseUrl);
 
   return {
-    id: `provider_parse_${stableId(`${format}:${baseUrl ?? ""}:${rawSecret ? maskSecret(rawSecret) : "none"}`)}`,
+    id: `provider_parse_${stableId(`${format}:${baseUrl ?? ""}:${rawSecret ?? "none"}`)}`,
     format,
     providerKind,
     profileName: createProfileName(format, providerKind, baseUrl),
