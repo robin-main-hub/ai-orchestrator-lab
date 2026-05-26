@@ -52,7 +52,7 @@ import type {
                                                       private relations: MemoryRelation[] = [];
                                                         private _seq = 0;
 
-                                                          constructo
+                                                          constructor(profileId = "local_heuristic") {
                                                               this.profileId = profileId;
                                                                 }
 
