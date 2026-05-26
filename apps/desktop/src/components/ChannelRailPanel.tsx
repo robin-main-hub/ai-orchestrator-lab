@@ -1,5 +1,6 @@
 import { RadioTower, Smartphone } from "lucide-react";
 import type { PermissionMatrixSnapshot, RuntimeSnapshot } from "@ai-orchestrator/protocol";
+import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
 import { guardStepLabel } from "../lib/uiLabels";
 
@@ -35,7 +36,11 @@ export function ChannelRailPanel({
         {channels.map((channel) => (
           <article key={channel.label}>
             <strong>{channel.label}</strong>
-            <span>{channel.status}</span>
+            <span>
+              <StatusBadge size="sm" variant={channelStatusBadgeVariant(channel.status)}>
+                {channel.status}
+              </StatusBadge>
+            </span>
           </article>
         ))}
       </div>
@@ -48,7 +53,11 @@ export function ChannelRailPanel({
         {visibleSteps.map((step) => (
           <article className={step.status} key={step.name}>
             <strong>{guardStepLabel(step.name)}</strong>
-            <span>{step.status}</span>
+            <span>
+              <StatusBadge size="sm" variant={guardStatusBadgeVariant(step.status)}>
+                {step.status}
+              </StatusBadge>
+            </span>
             <p>{step.reason}</p>
           </article>
         ))}
@@ -65,4 +74,18 @@ export function ChannelRailPanel({
       </div>
     </section>
   );
+}
+
+function channelStatusBadgeVariant(status: string): StatusBadgeVariant {
+  if (status.includes("linked") || status.includes("ready")) return "success";
+  if (status.includes("blocked") || status.includes("rejected")) return "danger";
+  if (status.includes("pending") || status.includes("guarded")) return "warning";
+  return "muted";
+}
+
+function guardStatusBadgeVariant(status: string): StatusBadgeVariant {
+  if (status === "passed") return "success";
+  if (status === "blocked") return "danger";
+  if (status === "review") return "warning";
+  return "muted";
 }
