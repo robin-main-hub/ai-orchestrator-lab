@@ -15,6 +15,7 @@ import {
 } from "../runtime/stage33TmuxServer";
 import type { AgentActivityStatus, AgentVisualSettings, WorkbenchAgent } from "../types";
 import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/ui/status-badge";
 import { TmuxPaneCard } from "./TmuxPaneCard";
 import { makeSyntheticBlock } from "./TmuxPaneTimeline";
 
@@ -236,10 +237,10 @@ export function TmuxSwarmBoard({
           <span className="text-[10px] text-muted-foreground">
             {recommendation.recommendedCount} / {recommendation.recommendedCount === 10 ? "10" : "max 10"}
           </span>
-          <span className="inline-flex items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-[9px] font-mono text-warning">
-            <LockKeyhole className="h-2.5 w-2.5" />
-            gate
-          </span>
+           <StatusBadge variant="warning" size="sm">
+             <LockKeyhole className="h-2.5 w-2.5" />
+             gate
+           </StatusBadge>
         </div>
         <span className="text-xs text-muted-foreground">
           {visiblePanes.length} panes · 난이도 {recommendation.difficulty} · score{" "}
@@ -257,12 +258,9 @@ export function TmuxSwarmBoard({
         </div>
         <div className="ml-auto flex flex-wrap gap-1">
           {recommendation.recommendedRoles.map((role) => (
-            <span
-              className="inline-flex items-center rounded-full border border-border bg-card/40 px-2 py-0 text-[9px] font-mono text-muted-foreground"
-              key={role}
-            >
-              {role}
-            </span>
+             <StatusBadge variant="muted" size="sm" key={role}>
+               {role}
+             </StatusBadge>
           ))}
         </div>
       </div>
