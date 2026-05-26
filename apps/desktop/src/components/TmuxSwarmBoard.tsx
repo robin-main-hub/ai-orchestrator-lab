@@ -14,6 +14,7 @@ import {
   type DesktopTmuxDispatchRequest,
 } from "../runtime/stage33TmuxServer";
 import type { AgentActivityStatus, AgentVisualSettings, WorkbenchAgent } from "../types";
+import { cn } from "@/lib/utils";
 import { TmuxPaneCard } from "./TmuxPaneCard";
 import { makeSyntheticBlock } from "./TmuxPaneTimeline";
 
@@ -223,99 +224,151 @@ export function TmuxSwarmBoard({
   }
 
   return (
-    <section className="tmux-panel" aria-label="Role-Based Tmux Agent Swarm">
-      <header className="tmux-header">
-        <div>
-          <span>Runtime Workbench</span>
-          <strong>ai-swarm</strong>
-          <p>왼쪽은 지휘자 대화, 오른쪽은 agent pane별 상태와 중요 메시지를 봅니다.</p>
+    <section
+      aria-label="Role-Based Tmux Agent Swarm"
+      className="flex h-full flex-col bg-background"
+    >
+      {/* ── Top header (v0 h-10) ───────────────────────────────── */}
+      <header className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-card/30 px-4">
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] text-muted-foreground">Runtime Workbench</span>
+          <span className="text-xs font-medium text-foreground">ai-swarm</span>
+          <span className="text-[10px] text-muted-foreground">
+            {recommendation.recommendedCount} / {recommendation.recommendedCount === 10 ? "10" : "max 10"}
+          </span>
+          <span className="inline-flex items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-[9px] font-mono text-warning">
+            <LockKeyhole className="h-2.5 w-2.5" />
+            gate
+          </span>
         </div>
-        <div className="tmux-gate">
-          <LockKeyhole size={15} />
-          <span>Implementation Gate</span>
-          <strong>Event Storage / Permission / Redaction 먼저</strong>
-        </div>
+        <span className="text-xs text-muted-foreground">
+          {visiblePanes.length} panes · 난이도 {recommendation.difficulty} · score{" "}
+          {recommendation.score}
+        </span>
       </header>
-      <section className="tmux-recommendation-panel" aria-label="Orchestrator swarm recommendation">
-        <div>
-          <span>Orchestrator 추천 배치</span>
-          <strong>{recommendation.recommendedCount}명 / 최대 10명</strong>
-          <p>{recommendation.summary}</p>
+
+      {/* ── Recommendation strip ───────────────────────────────── */}
+      <div className="flex shrink-0 items-center gap-3 border-b border-border bg-card/20 px-4 py-2">
+        <div className="min-w-0">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Orchestrator 추천
+          </div>
+          <p className="truncate text-xs text-foreground">{recommendation.summary}</p>
         </div>
-        <div className="tmux-recommendation-meter">
-          <span>난이도</span>
-          <strong>{recommendation.difficulty}</strong>
-          <em>score {recommendation.score}</em>
-        </div>
-        <div className="tmux-role-chip-list">
+        <div className="ml-auto flex flex-wrap gap-1">
           {recommendation.recommendedRoles.map((role) => (
-            <span key={role}>{role}</span>
+            <span
+              className="inline-flex items-center rounded-full border border-border bg-card/40 px-2 py-0 text-[9px] font-mono text-muted-foreground"
+              key={role}
+            >
+              {role}
+            </span>
           ))}
         </div>
-      </section>
-      <div className="tmux-workbench">
-        <section className="tmux-operator-chat">
-          <header>
-            <span>Operator Chat</span>
-            <strong>{activeSessionId}</strong>
-          </header>
-          <div className="tmux-chat-stream">
+      </div>
+
+      {/* ── Main: operator chat (left) + pane grid (right) ─────── */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Operator Chat */}
+        <div className="flex w-80 shrink-0 flex-col border-r border-border bg-card/20">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <span className="text-xs font-medium text-foreground">Operator Chat</span>
+            <span className="text-[10px] font-mono text-muted-foreground">
+              {activeSessionId.slice(-12)}
+            </span>
+          </div>
+          <div className="flex-1 space-y-2 overflow-y-auto p-3">
             {recentMessages.map((message) => (
-              <article className={message.role === "user" ? "user" : "assistant"} key={message.id}>
-                <span>{message.role === "user" ? "사용자" : messageLabel(message)}</span>
-                <p>{message.content}</p>
-              </article>
+              <div
+                className="rounded-lg border border-border bg-card p-3"
+                key={message.id}
+              >
+                <div className="flex items-start gap-2">
+                  <span
+                    className={cn(
+                      "text-[10px] font-medium",
+                      message.role === "user"
+                        ? "text-primary"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {message.role === "user" ? "사용자" : messageLabel(message)}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-foreground">{message.content}</p>
+              </div>
             ))}
           </div>
-          <div className="tmux-chat-note">
-            <span>main chat stays here</span>
-            <strong>small text / monitor first</strong>
+          <div className="border-t border-border px-4 py-2 text-[10px]">
+            <div className="text-muted-foreground">tmux session: ai-swarm</div>
+            <div className="text-muted-foreground">
+              runtime backend: DGX-02 gate / 4-10 panes
+            </div>
+            <div className="text-muted-foreground">
+              send-keys: server env gate + approval required
+            </div>
           </div>
-        </section>
-        <section className="tmux-agent-board">
-          <header>
-            <span>Agent Work Status</span>
-            <strong>{recommendation.recommendedCount} panes / max 10</strong>
-          </header>
-          <div className="tmux-agent-grid">
-            {visiblePanes.map((pane) => (
-              <TmuxPaneCard
-                busy={busyByRole[pane.roleKey]}
-                commandDraft={commandDraftByRole[pane.roleKey] ?? defaultTmuxCommandForRole(pane.roleKey)}
-                key={pane.id}
-                lastOutput={paneOutputByRole[pane.roleKey]}
-                onCapture={() => void handleCapturePane(pane)}
-                onCommandDraftChange={(value) => updateCommandDraft(pane.roleKey, value)}
-                onDispatch={() => void handleDispatchPane(pane)}
-                pane={{
-                  ...pane,
-                  state: runtimeStatusByRole[pane.roleKey] ?? (pane.agent ? (agentActivityById[pane.agent.id] ?? pane.state) : pane.state),
-                }}
-                timelineBlocks={timelineBlocksByRole[pane.roleKey] ?? []}
-                visual={pane.agent ? agentVisualsById[pane.agent.id] : undefined}
-              />
-            ))}
+        </div>
+
+        {/* Agent Pane Grid */}
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border px-4 py-2">
+            <span className="text-xs font-medium text-foreground">
+              Agent Work Status
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {recommendation.recommendedCount} panes / max 10
+            </span>
           </div>
-        </section>
+          <div className="flex-1 overflow-y-auto">
+            <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {visiblePanes.map((pane) => (
+                <TmuxPaneCard
+                  busy={busyByRole[pane.roleKey]}
+                  commandDraft={
+                    commandDraftByRole[pane.roleKey] ??
+                    defaultTmuxCommandForRole(pane.roleKey)
+                  }
+                  key={pane.id}
+                  lastOutput={paneOutputByRole[pane.roleKey]}
+                  onCapture={() => void handleCapturePane(pane)}
+                  onCommandDraftChange={(value) =>
+                    updateCommandDraft(pane.roleKey, value)
+                  }
+                  onDispatch={() => void handleDispatchPane(pane)}
+                  pane={{
+                    ...pane,
+                    state:
+                      runtimeStatusByRole[pane.roleKey] ??
+                      (pane.agent
+                        ? agentActivityById[pane.agent.id] ?? pane.state
+                        : pane.state),
+                  }}
+                  timelineBlocks={timelineBlocksByRole[pane.roleKey] ?? []}
+                  visual={
+                    pane.agent ? agentVisualsById[pane.agent.id] : undefined
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
-      <div className="tmux-decision-row">
-        <div>
-          <span>Event Storage mapping</span>
-          <strong>intent / capture events ready</strong>
+
+      {/* ── Bottom status bar (v0 h-8) ─────────────────────────── */}
+      <footer className="flex h-8 shrink-0 items-center justify-between gap-4 border-t border-border bg-card/30 px-4 text-[10px]">
+        <div className="flex items-center gap-4">
+          <span className="text-muted-foreground">Event Storage</span>
+          <span className="text-foreground">intent / capture events ready</span>
         </div>
-        <div>
-          <span>Permission + Redaction</span>
-          <strong>승인 전 기록, 저장 전 제거</strong>
+        <div className="flex items-center gap-4">
+          <span className="text-muted-foreground">Permission + Redaction</span>
+          <span className="text-foreground">승인 전 기록, 저장 전 제거</span>
         </div>
-        <div>
-          <span>현재 서버 응답</span>
-          <strong>{boardNotice}</strong>
+        <div className="flex min-w-0 items-center gap-4">
+          <span className="text-muted-foreground">서버 응답</span>
+          <span className="truncate text-foreground">{boardNotice}</span>
         </div>
-      </div>
-      <footer className="tmux-footer">
-        <span>tmux session: ai-swarm</span>
-        <span>runtime backend: DGX-02 gate / 4-10 panes</span>
-        <span>send-keys: server env gate + approval required</span>
       </footer>
     </section>
   );
