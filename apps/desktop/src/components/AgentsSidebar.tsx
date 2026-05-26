@@ -1,9 +1,17 @@
 import { useState } from "react";
-import { Bot, ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
 import { modelWindowSize } from "../lib/appConstants";
 import { agentRoleLabel } from "../lib/helpers";
-import { cn } from "../lib/utils";
+import { cn } from "@/lib/utils";
+import { Button } from "@/ui/button";
 import type {
   AgentActivityStatus,
   AgentVisualSettings,
@@ -13,33 +21,31 @@ import type {
 import { AgentAvatar } from "./AgentAvatar";
 
 /**
- * Stage 2-1 agent sidebar — replaces the legacy AgentStatePanel
- * (removed in legacy-cleanup PR).
+ * Agents sidebar — strict v0 port.
  *
- * Implements docs/design-decisions.md §2 "Agent Roster 구조" — a 3-tier
- * layout that groups agents by **what they're doing right now** rather
- * than rendering them as a flat list of equally weighted cards.
+ * source: docs/v0/v0-output/components/sidebar/agents-panel.tsx +
+ *         agent-card.tsx
  *
- *   ACTIVE   — agent.activityStatus !== "idle". Cyan pulse dot.
- *              These cards show full controls (provider / model select,
- *              rename, remove) because the user is most likely about to
- *              touch them.
- *   STANDBY  — enabled && activityStatus === "idle". Quiet teal dot.
- *              Compact card; click to select, hover for inline actions.
- *   SPECIALIST DRAWER — !enabled. Collapsed by default; expand to surface
- *              advanced / rarely-used personas without polluting the
- *              everyday sidebar.
+ * v0 layout:
+ *   <rounded-lg border bg-card>
+ *     <header chevron + "Agents" + add button>
+ *     <collapse content>
+ *       Core    group: <AgentCard> ×N
+ *       Specialists group: <AgentCard> ×N
+ *       Companions  group (collapsible): <AgentCard> ×N
  *
- * Naming / state vocabulary lives in design-decisions.md §2 — the
- * 7-state enum (active / ready / gated / waiting_approval / blocked /
- * watch_only / standby) is the long-term target. Today's data source
- * (`AgentActivityStatus = "idle" | "preparing" | "responding"`) only
- * covers 3 of those, so we map conservatively and leave the richer
- * states for a later wiring pass.
+ * AgentCard (v0):
+ *   avatar + role + Primary badge (top row, hover shows Pencil/Trash)
+ *   model selector chip + "in use" indicator (bottom row)
  *
- * The legacy WindowChecklist is **intentionally omitted** here — per
- * design-decisions §1 it's a dev-only instrument and shouldn't ride
- * along with the production sidebar.
+ * 우리 데이터 모델 매핑:
+ *   v0 의 agent.category (core / specialist / companion) 가 우리에겐
+ *   없음. role 로부터 derive — see roleToCategory() below.
+ *
+ * 안 들어간 기존 기능 (Stage 2-1 의 §2 3-tier active/standby/specialist
+ * lane, 7-state vocabulary dot tone 등) 는 docs/specs/v0-port-deferred-
+ * features.md 에 기록. data plumbing 이 충분히 흘러올 때 sub-feature 로
+ * 재도입.
  */
 
 export type AgentsSidebarProps = {
@@ -59,45 +65,22 @@ export type AgentsSidebarProps = {
   selectedAgentId?: string;
 };
 
-type AgentLane = "active" | "standby" | "specialist";
+type AgentCategory = "core" | "specialist" | "companion";
 
-type LaneBucket = {
-  lane: AgentLane;
-  agents: WorkbenchAgent[];
-};
-
-/**
- * Sort agents into 3 lanes based on enabled + activityStatus.
- *
- * Bucket order within each lane preserves the input order so that user
- * reorderings (drag-and-drop, manual sort) survive the grouping.
- */
-function groupAgentsByLane(
-  agents: WorkbenchAgent[],
-  activityById: Record<string, AgentActivityStatus>,
-): LaneBucket[] {
-  const active: WorkbenchAgent[] = [];
-  const standby: WorkbenchAgent[] = [];
-  const specialist: WorkbenchAgent[] = [];
-
-  for (const agent of agents) {
-    const status = activityById[agent.id] ?? "idle";
-    if (!agent.enabled) {
-      specialist.push(agent);
-      continue;
-    }
-    if (status === "preparing" || status === "responding") {
-      active.push(agent);
-    } else {
-      standby.push(agent);
-    }
+function roleToCategory(role: WorkbenchAgent["role"]): AgentCategory {
+  switch (role) {
+    case "orchestrator":
+    case "architect":
+    case "builder":
+    case "reviewer":
+    case "executor":
+      return "core";
+    case "companion":
+    case "external":
+      return "companion";
+    default:
+      return "specialist";
   }
-
-  return [
-    { lane: "active", agents: active },
-    { lane: "standby", agents: standby },
-    { lane: "specialist", agents: specialist },
-  ];
 }
 
 export function AgentsSidebar({
@@ -116,12 +99,18 @@ export function AgentsSidebar({
   profiles,
   selectedAgentId,
 }: AgentsSidebarProps) {
-  const [specialistOpen, setSpecialistOpen] = useState(false);
-  const [{ agents: active }, { agents: standby }, { agents: specialist }] =
-    groupAgentsByLane(agents, agentActivityById) as [LaneBucket, LaneBucket, LaneBucket];
+  const [isOpen, setIsOpen] = useState(true);
 
-  // Provider occupancy is computed once per render — every card needs the
-  // same set, no need to recompute per row.
+  const core: WorkbenchAgent[] = [];
+  const specialists: WorkbenchAgent[] = [];
+  const companions: WorkbenchAgent[] = [];
+  for (const agent of agents) {
+    const cat = roleToCategory(agent.role);
+    if (cat === "core") core.push(agent);
+    else if (cat === "specialist") specialists.push(agent);
+    else companions.push(agent);
+  }
+
   const occupiedProviderIds = new Set(
     agents
       .map((a) => a.providerProfileId)
@@ -141,136 +130,146 @@ export function AgentsSidebar({
     onShiftModelWindow,
     profiles,
     selectedAgentId,
-    totalAgentCount: agents.length,
     occupiedProviderIds,
   };
 
   return (
-    <section className="side-panel compact agents-sidebar" aria-label="Agents">
-      <header className="panel-title">
-        <Bot size={17} />
-        <h2>Agents</h2>
-        <span className="agents-sidebar__count">{agents.length}</span>
+    <section
+      aria-label="Agents"
+      className="agents-sidebar-root rounded-lg border border-border bg-card"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <button
-          aria-label="agent 추가"
-          className="icon-button"
-          onClick={onAddAgent}
+          aria-expanded={isOpen}
+          className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary"
+          onClick={() => setIsOpen((o) => !o)}
           type="button"
         >
-          <Plus size={15} />
-        </button>
-      </header>
-
-      <div className="agents-sidebar__lanes">
-        {active.length > 0 && (
-          <Lane label="ACTIVE" tone="active" count={active.length}>
-            {active.map((agent) => (
-              <AgentSidebarCard
-                {...sharedCardProps}
-                agent={agent}
-                density="full"
-                key={agent.id}
-              />
-            ))}
-          </Lane>
-        )}
-
-        <Lane label="STANDBY" tone="standby" count={standby.length}>
-          {standby.length === 0 ? (
-            <p className="agents-sidebar__empty">대기 중인 agent 없음</p>
-          ) : (
-            standby.map((agent) => (
-              <AgentSidebarCard
-                {...sharedCardProps}
-                agent={agent}
-                density="full"
-                key={agent.id}
-              />
-            ))
-          )}
-        </Lane>
-
-        {specialist.length > 0 && (
-          <div className="agents-sidebar__drawer">
-            <button
-              aria-expanded={specialistOpen}
-              className="agents-sidebar__drawer-trigger"
-              onClick={() => setSpecialistOpen((o) => !o)}
-              type="button"
-            >
-              <ChevronDown
-                className={cn(
-                  "agents-sidebar__drawer-chevron",
-                  !specialistOpen && "agents-sidebar__drawer-chevron--closed",
-                )}
-                size={12}
-              />
-              <span>SPECIALISTS ({specialist.length})</span>
-            </button>
-            {specialistOpen && (
-              <div className="agents-sidebar__drawer-content">
-                {specialist.map((agent) => (
-                  <AgentSidebarCard
-                    {...sharedCardProps}
-                    agent={agent}
-                    density="compact"
-                    key={agent.id}
-                  />
-                ))}
-              </div>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 text-muted-foreground transition-transform",
+              !isOpen && "-rotate-90",
             )}
-          </div>
-        )}
+          />
+          Agents
+          <span className="text-xs text-muted-foreground">{agents.length}</span>
+        </button>
+        <Button
+          aria-label="agent 추가"
+          className="h-6 w-6"
+          onClick={onAddAgent}
+          size="icon"
+          variant="ghost"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </Button>
       </div>
+
+      {isOpen ? (
+        <div className="space-y-3 p-2">
+          <AgentGroup
+            agents={core}
+            label="Core"
+            {...sharedCardProps}
+          />
+          <AgentGroup
+            agents={specialists}
+            label="Specialists"
+            {...sharedCardProps}
+          />
+          <AgentGroupCollapsible
+            agents={companions}
+            defaultOpen={false}
+            label="Companions"
+            {...sharedCardProps}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }
 
-function Lane({
+// ── Sub-components ──────────────────────────────────────────────────
+
+type SharedCardProps = {
+  agentActivityById: Record<string, AgentActivityStatus>;
+  agentVisualsById: Record<string, AgentVisualSettings>;
+  modelCatalog: ModelCatalog;
+  modelWindowStartByAgentId: Record<string, number>;
+  onAssignModel: (agentId: string, modelId: string) => void;
+  onAssignProvider: (agentId: string, providerId: string) => void;
+  onOpenAgentSettings: (agentId: string) => void;
+  onRemoveAgent: (agentId: string) => void;
+  onSelectAgent: (agentId: string) => void;
+  onShiftModelWindow: (agentId: string, direction: -1 | 1) => void;
+  profiles: ProviderProfile[];
+  selectedAgentId?: string;
+  occupiedProviderIds: Set<string>;
+};
+
+function AgentGroup({
   label,
-  tone,
-  count,
-  children,
-}: {
-  label: string;
-  tone: "active" | "standby";
-  count: number;
-  children: React.ReactNode;
-}) {
+  agents,
+  ...shared
+}: SharedCardProps & { label: string; agents: WorkbenchAgent[] }) {
+  if (agents.length === 0) return null;
   return (
-    <div className={`agents-sidebar__lane agents-sidebar__lane--${tone}`}>
-      <div className="agents-sidebar__lane-header">
-        <span className="agents-sidebar__lane-label">{label}</span>
-        {count > 0 && (
-          <span className="agents-sidebar__lane-count" aria-hidden>
-            {count}
-          </span>
-        )}
+    <div className="space-y-1">
+      <span className="px-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      <div className="space-y-1">
+        {agents.map((agent) => (
+          <AgentCard agent={agent} key={agent.id} {...shared} />
+        ))}
       </div>
-      {children}
     </div>
   );
 }
 
-type AgentSidebarCardProps = Omit<AgentsSidebarProps, "agents" | "onAddAgent"> & {
-  agent: WorkbenchAgent;
-  /**
-   * "full" = active/standby lane (provider + model selectors visible).
-   * "compact" = specialist drawer (collapsed actions, click → settings drawer).
-   */
-  density: "full" | "compact";
-  totalAgentCount: number;
-  occupiedProviderIds: Set<string>;
-};
+function AgentGroupCollapsible({
+  label,
+  agents,
+  defaultOpen = true,
+  ...shared
+}: SharedCardProps & {
+  label: string;
+  agents: WorkbenchAgent[];
+  defaultOpen?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  if (agents.length === 0) return null;
+  return (
+    <div>
+      <button
+        aria-expanded={isOpen}
+        className="flex w-full items-center gap-1 px-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
+        onClick={() => setIsOpen((o) => !o)}
+        type="button"
+      >
+        <ChevronDown
+          className={cn("h-3 w-3 transition-transform", !isOpen && "-rotate-90")}
+        />
+        {label} ({agents.length})
+      </button>
+      {isOpen ? (
+        <div className="mt-1 space-y-1">
+          {agents.map((agent) => (
+            <AgentCard agent={agent} key={agent.id} {...shared} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
-function AgentSidebarCard({
+function AgentCard({
   agent,
   agentActivityById,
   agentVisualsById,
-  density,
   modelCatalog,
   modelWindowStartByAgentId,
-  occupiedProviderIds,
   onAssignModel,
   onAssignProvider,
   onOpenAgentSettings,
@@ -279,207 +278,160 @@ function AgentSidebarCard({
   onShiftModelWindow,
   profiles,
   selectedAgentId,
-  totalAgentCount,
-}: AgentSidebarCardProps) {
-  const activityStatus = agentActivityById[agent.id] ?? "idle";
+  occupiedProviderIds,
+}: SharedCardProps & { agent: WorkbenchAgent }) {
   const isSelected = agent.id === selectedAgentId;
-  const summary = agentRoleLabel(agent.role);
-
-  // Specialist drawer cards stay compact — avatar + name + role only.
-  // Clicking the row opens the agent settings drawer (provider / model /
-  // permissions live there) rather than crowding the sidebar.
-  if (density === "compact") {
-    return (
-      <button
-        aria-label={`${agent.name} 설정 열기`}
-        className={cn(
-          "agents-sidebar__row agents-sidebar__row--compact",
-          isSelected && "agents-sidebar__row--selected",
-        )}
-        onClick={() => {
-          onSelectAgent(agent.id);
-          onOpenAgentSettings(agent.id);
-        }}
-        type="button"
-      >
-        <AgentAvatar agent={agent} size="small" visual={agentVisualsById[agent.id]} />
-        <div className="agents-sidebar__row-body">
-          <strong className="agents-sidebar__row-name">{agent.name}</strong>
-          <span className="agents-sidebar__row-summary">{summary}</span>
-        </div>
-      </button>
-    );
-  }
-
-  // Full card — used by active / standby lanes.
+  const activity = agentActivityById[agent.id] ?? "idle";
+  const isResponding = activity === "responding";
+  const isPreparing = activity === "preparing";
+  const visual = agentVisualsById[agent.id];
   const providerModels = agent.providerProfileId
-    ? (modelCatalog[agent.providerProfileId] ?? [])
+    ? modelCatalog[agent.providerProfileId] ?? []
     : [];
   const modelWindowStart = modelWindowStartByAgentId[agent.id] ?? 0;
-  const visibleModels = providerModels.slice(modelWindowStart, modelWindowStart + modelWindowSize);
+  const visibleModels = providerModels.slice(
+    modelWindowStart,
+    modelWindowStart + modelWindowSize,
+  );
   const hasModelOverflow = providerModels.length > modelWindowSize;
-  const canShiftModelsLeft = hasModelOverflow && modelWindowStart > 0;
-  const canShiftModelsRight =
+  const canShiftLeft = hasModelOverflow && modelWindowStart > 0;
+  const canShiftRight =
     hasModelOverflow && modelWindowStart + modelWindowSize < providerModels.length;
 
   return (
     <div
       className={cn(
-        "agents-sidebar__row agents-sidebar__row--full",
-        isSelected && "agents-sidebar__row--selected",
+        "group flex flex-col gap-2 rounded-md border border-transparent p-2 transition-colors",
+        isSelected
+          ? "border-primary/40 bg-primary/5"
+          : "hover:bg-card/60",
       )}
     >
-      <button
-        className="agents-sidebar__row-select"
-        onClick={() => onSelectAgent(agent.id)}
-        type="button"
-      >
-        <span className="agent-avatar-status">
-          <AgentAvatar agent={agent} size="small" visual={agentVisualsById[agent.id]} />
-          {(() => {
-            const display = deriveDisplayState(agent, activityStatus);
-            return (
-              <span
-                aria-label={`${agent.name} ${display}`}
-                className={`agent-dot ${agent.enabled ? "enabled" : ""} ${activityStatus} agent-dot--${display}`}
-                title={displayStateLabel(display)}
-              />
-            );
-          })()}
-        </span>
-        <div className="agents-sidebar__row-body">
-          <strong className="agents-sidebar__row-name">{agent.name}</strong>
-          <span className="agents-sidebar__row-summary" title={summary}>
-            {summary}
-          </span>
-        </div>
-      </button>
+      {/* Top row: avatar + role + Primary + actions */}
+      <div className="flex items-start gap-2">
+        <button
+          aria-label={`${agent.name} 선택`}
+          className="shrink-0"
+          onClick={() => onSelectAgent(agent.id)}
+          type="button"
+        >
+          <AgentAvatar agent={agent} size="small" visual={visual} />
+        </button>
 
-      <div className="agents-sidebar__row-actions">
         <button
-          aria-label={`${agent.name} 설정`}
-          className="agent-rename-button"
-          onClick={() => onOpenAgentSettings(agent.id)}
-          title="agent 설정"
+          className="min-w-0 flex-1 text-left"
+          onClick={() => onSelectAgent(agent.id)}
           type="button"
         >
-          <Pencil size={14} />
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-sm font-medium text-foreground">
+              {agent.name}
+            </span>
+            {agent.role === "orchestrator" ? (
+              <span className="shrink-0 rounded bg-primary/15 px-1 py-0.5 text-[9px] font-medium text-primary">
+                Primary
+              </span>
+            ) : null}
+          </div>
+          <span className="text-[11px] text-muted-foreground">
+            {agentRoleLabel(agent.role)}
+          </span>
         </button>
-        <button
-          aria-label={`${agent.name} 제거`}
-          className="agent-remove-button"
-          disabled={totalAgentCount <= 1}
-          onClick={() => onRemoveAgent(agent.id)}
-          type="button"
-        >
-          <Trash2 size={14} />
-        </button>
+
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          <Button
+            aria-label={`${agent.name} 설정`}
+            className="h-6 w-6"
+            onClick={() => onOpenAgentSettings(agent.id)}
+            size="icon"
+            variant="ghost"
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+          <Button
+            aria-label={`${agent.name} 삭제`}
+            className="h-6 w-6 text-destructive/70 hover:text-destructive"
+            onClick={() => onRemoveAgent(agent.id)}
+            size="icon"
+            variant="ghost"
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
       </div>
 
-      <select
-        aria-label={`${agent.name} provider 선택`}
-        className="agent-provider-select"
-        onChange={(event) => onAssignProvider(agent.id, event.target.value)}
-        value={agent.providerProfileId ?? ""}
-      >
-        <option disabled value="">
-          provider 선택
-        </option>
-        {profiles.map((profile) => {
-          // A provider is "occupied" only by *other* agents; agent itself
-          // is allowed to stay on its current provider.
-          const isOccupied =
-            occupiedProviderIds.has(profile.id) && agent.providerProfileId !== profile.id;
-          return (
-            <option disabled={isOccupied} key={profile.id} value={profile.id}>
-              {profile.name}
-              {isOccupied ? " (in use)" : ""}
-            </option>
-          );
-        })}
-      </select>
-
-      <div
-        className={`agent-model-row ${hasModelOverflow ? "with-window-controls" : "single-window"}`}
-      >
-        {hasModelOverflow && (
-          <button
-            aria-label={`${agent.name} model 이전`}
-            className="model-shift-button"
-            disabled={!canShiftModelsLeft}
-            onClick={() => onShiftModelWindow(agent.id, -1)}
-            type="button"
-          >
-            <ChevronLeft size={14} />
-          </button>
-        )}
+      {/* Bottom row: provider + model selector + status */}
+      <div className="flex items-center gap-1.5 pl-9">
         <select
-          aria-label={`${agent.name} model 선택`}
-          className="agent-model-select"
-          disabled={providerModels.length === 0}
-          onChange={(event) => onAssignModel(agent.id, event.target.value)}
-          value={agent.modelId ?? visibleModels[0]?.id ?? ""}
+          aria-label={`${agent.name} provider`}
+          className="rounded bg-card/60 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none"
+          onChange={(event) => onAssignProvider(agent.id, event.target.value)}
+          value={agent.providerProfileId ?? ""}
         >
-          {visibleModels.length === 0 && <option value="">model pending</option>}
+          <option value="">provider…</option>
+          {profiles.map((profile) => (
+            <option
+              disabled={
+                occupiedProviderIds.has(profile.id) &&
+                profile.id !== agent.providerProfileId
+              }
+              key={profile.id}
+              value={profile.id}
+            >
+              {profile.name}
+            </option>
+          ))}
+        </select>
+
+        {hasModelOverflow ? (
+          <Button
+            aria-label={`${agent.name} model 이전`}
+            className="h-5 w-5"
+            disabled={!canShiftLeft}
+            onClick={() => onShiftModelWindow(agent.id, -1)}
+            size="icon"
+            variant="ghost"
+          >
+            <ChevronLeft className="h-2.5 w-2.5" />
+          </Button>
+        ) : null}
+
+        <select
+          aria-label={`${agent.name} model`}
+          className="max-w-[120px] truncate rounded bg-card/60 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none"
+          onChange={(event) => onAssignModel(agent.id, event.target.value)}
+          value={agent.modelId ?? ""}
+        >
+          {visibleModels.length === 0 ? (
+            <option value="">model pending</option>
+          ) : null}
           {visibleModels.map((model) => (
             <option key={model.id} value={model.id}>
               {model.name}
             </option>
           ))}
         </select>
-        {hasModelOverflow && (
-          <button
+
+        {hasModelOverflow ? (
+          <Button
             aria-label={`${agent.name} model 다음`}
-            className="model-shift-button"
-            disabled={!canShiftModelsRight}
+            className="h-5 w-5"
+            disabled={!canShiftRight}
             onClick={() => onShiftModelWindow(agent.id, 1)}
-            type="button"
+            size="icon"
+            variant="ghost"
           >
-            <ChevronRight size={14} />
-          </button>
-        )}
+            <ChevronRight className="h-2.5 w-2.5" />
+          </Button>
+        ) : null}
+
+        {/* in use indicator */}
+        {isResponding ? (
+          <span className="ml-auto text-[10px] text-success">in use</span>
+        ) : isPreparing ? (
+          <span className="ml-auto text-[10px] text-warning">prepare</span>
+        ) : null}
       </div>
     </div>
   );
-}
-
-/**
- * design-decisions.md §2 — 7-state agent vocabulary
- *   active · ready · gated · waiting_approval · blocked · watch_only · standby
- *
- * 현재 runtime data 가 3-state (idle | preparing | responding) 만 노출하므로
- * 여기서 derived state 5개를 매핑. `waiting_approval` 과 `blocked` 는 별도
- * snapshot (permission queue, error log) 이 sidebar 까지 흘러올 때 추가.
- */
-type DisplayState =
-  | "active"
-  | "ready"
-  | "gated"
-  | "waiting_approval"
-  | "blocked"
-  | "watch_only"
-  | "standby";
-
-function deriveDisplayState(
-  agent: WorkbenchAgent,
-  activityStatus: AgentActivityStatus,
-): DisplayState {
-  if (!agent.enabled) return "standby";
-  if (agent.role === "auditor" || agent.role === "watchdog") return "watch_only";
-  if (activityStatus === "responding") return "active";
-  if (activityStatus === "preparing") return "gated";
-  return "ready";
-}
-
-function displayStateLabel(state: DisplayState): string {
-  const labels: Record<DisplayState, string> = {
-    active: "활성 (LLM call 중)",
-    ready: "대기 (호출 가능)",
-    gated: "권한 셋업 중",
-    waiting_approval: "사용자 승인 대기",
-    blocked: "오류 / 의존성 실패",
-    watch_only: "관찰 전용",
-    standby: "비활성",
-  };
-  return labels[state];
 }
