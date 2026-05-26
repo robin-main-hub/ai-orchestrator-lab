@@ -277,6 +277,11 @@ export class MementoMcpAdapter implements MemoryAdapter {
       if (local) {
         this.localRecords.set(id, { ...local, activationState: "active" });
       }
+      // Also update remote so dgx_central-only records can be activated.
+      const remote = this.remoteRecords.get(id);
+      if (remote) {
+        this.remoteRecords.set(id, { ...remote, activationState: "active" });
+      }
     }
   }
 
