@@ -2,11 +2,13 @@ import { useState } from "react";
 import { Approvals } from "./Approvals";
 import type { MobileMoreScreen } from "../types";
 import {
+  seedRuntime,
   seedCodingPackets,
   seedDebates,
   seedHandoffs,
   seedMemory,
 } from "../seeds";
+import { connectionHealthLabel, pendingApprovalLabel } from "../lib/statusSummary";
 import {
   loadConnectionSettings,
   resetConnectionSettings,
@@ -35,6 +37,21 @@ export function More({ onSignOut }: Props) {
         <div className="screen__title">더보기</div>
       </header>
       <div className="screen__body">
+        <section className="section">
+          <div className="section__title">상태</div>
+          <div className="mobile-status-grid">
+            <div>
+              <span>DGX</span>
+              <strong className={`chip chip--${seedRuntime.status}`}>
+                {connectionHealthLabel(seedRuntime.status)}
+              </strong>
+            </div>
+            <div>
+              <span>승인</span>
+              <strong className="chip chip--trusted">{pendingApprovalLabel(0, false)}</strong>
+            </div>
+          </div>
+        </section>
         <section className="section">
           <div className="section__title">작업</div>
           <NavRow label="메모리 조회" onClick={() => setScreen("memory")} />

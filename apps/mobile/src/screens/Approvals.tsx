@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ApprovalQueueItem, ApprovalRequest } from "@ai-orchestrator/protocol";
 import { getJson, MobileApiError, postJson } from "../lib/api";
+import { pendingApprovalLabel } from "../lib/statusSummary";
 
 type Props = {
   onBack: () => void;
@@ -86,7 +87,7 @@ export function Approvals({ onBack }: Props) {
             <div className="settings__hint">provider 호출, remote run, 이후 tmux dispatch가 여기에 쌓입니다.</div>
           </div>
           <span className={`chip chip--${pending.length > 0 ? "limited" : "trusted"}`}>
-            {loading ? "확인 중" : `${pending.length} pending`}
+            {pendingApprovalLabel(pending.length, loading)}
           </span>
         </section>
 

@@ -1,5 +1,7 @@
 import { Bot, LayoutDashboard, Play, Send } from "lucide-react";
 import type { BranchExperiment, CodingPacket, InsightFinding, ReviewMode } from "@ai-orchestrator/protocol";
+import { approvalBadgeVariant, runtimeBadgeVariant } from "@/lib/statusBadgeMapping";
+import { StatusBadge } from "@/ui/status-badge";
 import type { Stage4AgentRun } from "../runtime/stage4Runtime";
 import type { Stage6MemoryInspector } from "../runtime/stage6Memory";
 import { branchStatusLabel, insightCategoryLabel, reviewModeLabel } from "../lib/uiLabels";
@@ -73,14 +75,26 @@ export function ProjectRailPanel({
         </div>
         <div>
           <span>run status</span>
-          <strong>{agentRun.status}</strong>
+          <strong>
+            <StatusBadge size="sm" variant={runtimeBadgeVariant(agentRun.status)}>
+              {agentRun.status}
+            </StatusBadge>
+          </strong>
         </div>
       </div>
       <div className="rail-card-list">
         {visibleSteps.map((step) => (
           <article key={step.id}>
             <strong>{step.title}</strong>
-            <span>{step.status} / {step.permissionState}</span>
+            <span>
+              <StatusBadge size="sm" variant={runtimeBadgeVariant(step.status)}>
+                {step.status}
+              </StatusBadge>{" "}
+              /{" "}
+              <StatusBadge size="sm" variant={approvalBadgeVariant(step.permissionState)}>
+                {step.permissionState}
+              </StatusBadge>
+            </span>
             <p>{step.summary}</p>
           </article>
         ))}

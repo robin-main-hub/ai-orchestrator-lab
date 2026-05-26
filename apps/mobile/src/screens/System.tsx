@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { seedProviders, seedRuntime } from "../seeds";
+import { connectionHealthLabel } from "../lib/statusSummary";
 import type { MobileProviderEntry, MobileRuntimeSnapshot, RuntimeStatus } from "../types";
 
 const STATUS_LABEL: Record<RuntimeStatus, string> = {
@@ -66,7 +67,9 @@ function RuntimeSection({
       <div className="section__title">DGX Runtime</div>
       <div className="row">
         <div className="row__label">상태</div>
-        <span className={`chip chip--${runtime.status}`}>{STATUS_LABEL[runtime.status]}</span>
+        <span className={`chip chip--${runtime.status}`}>
+          {connectionHealthLabel(runtime.status)} · {STATUS_LABEL[runtime.status]}
+        </span>
       </div>
       <div className="row">
         <div className="row__label">서버</div>

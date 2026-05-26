@@ -1,6 +1,7 @@
 import { Keyboard, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
+import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 
 /**
  * Help cheat-sheet overlay (`?` shortcut) — v0 visual.
@@ -116,14 +117,13 @@ export function CheatSheetOverlay({ open, onClose }: CheatSheetOverlayProps) {
                   </td>
                   <td className="px-3 py-2 text-xs text-foreground">{row.label}</td>
                   <td className="px-3 py-2">
-                    <span
-                      className={cn(
-                        "inline-block rounded px-1.5 py-0 text-[10px] font-mono",
-                        priorityClasses(row.priority),
-                      )}
+                    <StatusBadge
+                      className="font-mono"
+                      size="sm"
+                      variant={priorityVariant(row.priority)}
                     >
                       {row.priority}
-                    </span>
+                    </StatusBadge>
                   </td>
                 </tr>
               ))}
@@ -142,21 +142,21 @@ export function CheatSheetOverlay({ open, onClose }: CheatSheetOverlayProps) {
   );
 }
 
-function priorityClasses(p: ShortcutRow["priority"]): string {
+function priorityVariant(p: ShortcutRow["priority"]): StatusBadgeVariant {
   switch (p) {
     case "핵심":
-      return "bg-primary/20 text-primary";
+      return "primary";
     case "보조":
-      return "bg-success/15 text-success";
+      return "success";
     case "안전":
-      return "bg-destructive/15 text-destructive";
+      return "danger";
     case "빈번":
-      return "bg-warning/15 text-warning";
+      return "warning";
     case "보편":
-      return "bg-card/60 text-muted-foreground";
+      return "muted";
     case "학습":
-      return "bg-chart-5/15 text-chart-5";
+      return "companion";
     default:
-      return "bg-card/60 text-muted-foreground";
+      return "muted";
   }
 }

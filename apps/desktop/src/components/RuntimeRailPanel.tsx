@@ -1,5 +1,7 @@
 import { Power, RefreshCw, Server } from "lucide-react";
 import type { DeviceRebootRequest, DeviceRebootWatchdog, RuntimeSnapshot } from "@ai-orchestrator/protocol";
+import { runtimeBadgeVariant } from "@/lib/statusBadgeMapping";
+import { StatusBadge } from "@/ui/status-badge";
 import type { Stage32DgxRouteDiagnosticSnapshot } from "../runtime/stage32DgxRouteDiagnostics";
 import { statusTone } from "../lib/uiLabels";
 
@@ -46,7 +48,11 @@ export function RuntimeRailPanel({
               </button>
             </div>
             <strong>{node.id === "dgx-01" ? "guarded" : node.isPrimary ? "main" : node.role}</strong>
-            <em className={statusTone(node.status)}>{node.status}</em>
+            <em className={statusTone(node.status)}>
+              <StatusBadge size="sm" variant={runtimeBadgeVariant(node.status)}>
+                {node.status}
+              </StatusBadge>
+            </em>
           </article>
         ))}
       </div>
@@ -61,7 +67,11 @@ export function RuntimeRailPanel({
         </div>
         <div>
           <span>memento</span>
-          <strong className={statusTone(snapshot.memorySyncStatus)}>{snapshot.memorySyncStatus}</strong>
+          <strong className={statusTone(snapshot.memorySyncStatus)}>
+            <StatusBadge size="sm" variant={runtimeBadgeVariant(snapshot.memorySyncStatus)}>
+              {snapshot.memorySyncStatus}
+            </StatusBadge>
+          </strong>
         </div>
         <div>
           <span>mac outbox</span>
@@ -70,7 +80,9 @@ export function RuntimeRailPanel({
         <div>
           <span>home pc</span>
           <strong className={statusTone(homePcClient?.status ?? "degraded")}>
-            {homePcClient?.status === "online" ? "online-only" : "needs DGX"}
+            <StatusBadge size="sm" variant={runtimeBadgeVariant(homePcClient?.status ?? "degraded")}>
+              {homePcClient?.status === "online" ? "online-only" : "needs DGX"}
+            </StatusBadge>
           </strong>
         </div>
         <div>
@@ -88,7 +100,10 @@ export function RuntimeRailPanel({
             <article key={route.baseUrl}>
               <strong>{route.baseUrl.replace(/^https?:\/\//, "")}</strong>
               <span>
-                health {route.health.status}
+                health{" "}
+                <StatusBadge size="sm" variant={runtimeBadgeVariant(route.health.status)}>
+                  {route.health.status}
+                </StatusBadge>
                 {route.health.httpStatus ? `/${route.health.httpStatus}` : ""} · provider {route.providerPreflight.status}
                 {route.providerPreflight.httpStatus ? `/${route.providerPreflight.httpStatus}` : ""}
               </span>

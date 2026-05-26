@@ -1,5 +1,7 @@
 import { RadioTower, Smartphone } from "lucide-react";
 import type { PermissionMatrixSnapshot, RuntimeSnapshot } from "@ai-orchestrator/protocol";
+import { approvalBadgeVariant, runtimeBadgeVariant } from "@/lib/statusBadgeMapping";
+import { StatusBadge } from "@/ui/status-badge";
 import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
 import { guardStepLabel } from "../lib/uiLabels";
 
@@ -35,7 +37,11 @@ export function ChannelRailPanel({
         {channels.map((channel) => (
           <article key={channel.label}>
             <strong>{channel.label}</strong>
-            <span>{channel.status}</span>
+            <span>
+              <StatusBadge size="sm" variant={runtimeBadgeVariant(channel.status)}>
+                {channel.status}
+              </StatusBadge>
+            </span>
           </article>
         ))}
       </div>
@@ -48,7 +54,11 @@ export function ChannelRailPanel({
         {visibleSteps.map((step) => (
           <article className={step.status} key={step.name}>
             <strong>{guardStepLabel(step.name)}</strong>
-            <span>{step.status}</span>
+            <span>
+              <StatusBadge size="sm" variant={approvalBadgeVariant(step.status)}>
+                {step.status}
+              </StatusBadge>
+            </span>
             <p>{step.reason}</p>
           </article>
         ))}
