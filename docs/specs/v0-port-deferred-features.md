@@ -26,7 +26,7 @@
 | 기능 | 범주 | 이유 | 재진입 후보 |
 |---|---|---|---|
 | Agent dropdown rich layout (AvatarWithStatus + StatusBadge + 그룹별 메뉴) | 🟡 | DropdownMenu primitive 미설치. 현재 native `<select>` 로 대체. | `@radix-ui/react-dropdown-menu` 도입 후 본격 dropdown |
-| Branch experiment 컨트롤 (분기 / 채택) | 🔵 | v0 mockup 에 없음. 현재 Action Strip 에 유지. | 그대로 유지 — Action Strip 이 v0 영역 밖이라 추가로 빼지 않음 |
+| Branch experiment 컨트롤 (분기 / 채택) | 🔵 | v0 mockup 에 없음. 현재 Action Strip 에 유지. | 그대로 유지 |
 | Telegram import | 🔵 | v0 에 없음. Action Strip 에 유지. | 동상 |
 | ContextPack tier toggle (Lite/Standard/Full) | 🔵 | v0 header chips 에 자리 부족. 현재 header 우측 chip 으로 유지. | 동상 |
 | Inline DelegationPanel | 🟡 | v0 에 직접 없지만 우리만의 핵심. message thread 위에 inline panel 로 carry. | 그대로 유지 |
@@ -47,7 +47,7 @@
 | Orchestrator recommendation strip (난이도 / score / recommended roles) | 🟡 | v0 에 없음. tmux 가 본격 가동되면 가치 큼. 현재 header 아래 strip 으로 유지. | 그대로 유지 — v0 의 단순 header 와 공존 |
 | TerminalTimelineBlock per-pane Warp timeline | 🔴 | v0 mockup 에 없음. Stage 2-6 의 핵심 산출물. pane card 안에 carry. | 동상 — card 하단 collapsible section |
 
-## Agents sidebar (PR #5/8)
+## Agents sidebar (PR #147)
 
 | 기능 | 범주 | 이유 | 재진입 후보 |
 |---|---|---|---|
@@ -55,7 +55,28 @@
 | §2 7-state vocabulary dot tone (gated / waiting_approval / watch_only / blocked) | 🟡 | v0 의 단순 status dot 으로 축소. 7 state 매핑 helper 는 코드에서 빠짐. | data plumbing 완성 시 dot 색상에 다시 매핑 |
 | AgentSidebarCard 의 풍부한 controls (provider/model 양쪽 dropdown + 양쪽 chevron) | 🔴 | v0 는 단일 model dropdown 만. 우리는 provider+model 둘 다 필요. carry. | 그대로 유지 |
 | Specialist drawer 의 compact density | 🔵 | v0 의 collapsible Companions 그룹으로 대체. compact density 모드는 빠짐. | 필요 시 dense mode 토글로 |
-| 7-state displayState helper (deriveDisplayState / displayStateLabel) | 🔵 | data 가 7 state 까지 흘러올 때 부활. | 동상 |
+
+## Control Queue drawer (PR #148)
+
+| 기능 | 범주 | 이유 | 재진입 후보 |
+|---|---|---|---|
+| 우측 슬라이드 overlay drawer (⌘⇧A 호출) | 🔴 | v0 mockup 은 Debate view bottom strip 만. 우리 ⌘⇧A overlay 는 §6 의 핵심 — keyboard 호출 가능 surface. | 그대로 유지 |
+| 4 disabled lane (ask / edit / delegate / block) | 🟡 | schema 대기. visual 만 그려놓음. | protocol handoff schema 도입 후 활성 |
+
+## Command Palette (PR #149)
+
+| 기능 | 범주 | 이유 | 재진입 후보 |
+|---|---|---|---|
+| `cmdk` 패키지 미사용 | 🔵 | v0 는 cmdk 의 fuzzy filter / arrow nav 사용. 우리는 useState + substring 으로 충분. | npm dep 늘리지 않음 |
+| Cheat Sheet overlay (`?` shortcut) | 🔴 | v0 에 없음. 학습용 별도 modal. 우리만의 추가 surface. | 그대로 유지 |
+
+## Top nav / status bar (PR #150)
+
+| 기능 | 범주 | 이유 | 재진입 후보 |
+|---|---|---|---|
+| Mode switching (Conversation / Debate / Tmux) 의 top nav 통합 | 🟡 | v0 의 TopNav 중앙에 있음. 우리는 board-toolbar 에 분리 보유. App.tsx 큰 refactor 필요. | App shell layout refactor 별도 PR |
+| Logo / brand block ("AI Orchestrator Lab" + "desktop command room") | 🔵 | v0 의 좌측 brand 영역. 우리 layout 에 자리 없음 (좌측 nav rail 이 차지). | 좌측 nav rail 의 brand-block 으로 carry 중 |
+| ⌘K trigger button | 🟡 | v0 의 우측 Command button + ⌘K kbd. 우리는 toolbar 우측 ghost button 으로. | top nav refactor 와 함께 |
 
 ---
 
