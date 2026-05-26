@@ -1,40 +1,39 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
-  Activity,
-  Bot,
+  ArrowRight,
   CheckCircle2,
+  ChevronDown,
   CornerDownRight,
-  GitBranch,
+  FileText,
   GitMerge,
   Link2,
   Send,
+  Users,
   XCircle,
 } from "lucide-react";
 import type { DebateTag, DebateUtterance } from "@ai-orchestrator/protocol";
 import type { Stage3DebateSession } from "../runtime/stage3Runtime";
-import { debateRounds } from "../seeds/conversation";
 import type { Stage3DebateUtteranceView } from "../types";
-import { cn } from "../lib/utils";
+import { cn } from "@/lib/utils";
+import { Button } from "@/ui/button";
 
 /**
- * Stage 3 Debate Table — Stage 2-6 provenance UI.
+ * Stage 3 Debate Table — strict v0 port.
  *
- * Renders the new optional provenance fields from
- * `debateUtteranceSchema` (PR #125, see `packages/protocol/src/index.ts:344`):
+ * source: docs/v0/v0-output/components/debate/*
  *
- *   - parentUtteranceId  : 이 발언이 어떤 발언에 대한 응답/반박인지
- *   - acceptedBy         : 이 발언을 수용한 후속 발언 ids
- *   - rejectedBy         : 이 발언을 기각한 후속 발언 ids
- *   - decisionId         : 이 발언이 최종 결정에 연결됐다면 결정 id
- *   - evidenceRefIds     : 근거가 된 외부 reference (docs / packets / events)
- *   - codingImpactRefs   : coding packet / file change 참조
+ * v0 layout:
+ *   <flex h-full flex-col>
+ *     <DebateContextHeader>      title + 패킷반영 button + stage tabs
+ *     <flex flex-1>
+ *       <flex-1 border-r>        2-col grid of DebateRoundCard
+ *       <w-80 right side>        StatusHub + Agent Relay (collapsible)
  *
- * 모든 필드 optional 이라 데이터 없는 발언은 footer 미렌더. seed 가
- * 점진적으로 채워지면 footer 가 자연스럽게 자랑.
- *
- * 또한 docs/design-decisions.md §1 에 따라 WindowChecklist 의존 제거 —
- * production UI 는 dev-only audit 항목 표시 안 함.
+ * 모든 prop / callback 보존. design-decisions §7 의 provenance 시각화
+ * (parent/accepted/rejected/decision/evidence/coding) 는 round card
+ * footer 에 carry — v0 row 구조 안에 chip strip 으로.
  */
+
 export function Stage3DebateTable({
   onCreateCodingPacket,
   onSelectUtterance,
@@ -58,96 +57,137 @@ export function Stage3DebateTable({
     [session.rounds, session.participants],
   );
 
-  // O(1) lookup: id → utterance (for parent / acceptedBy / rejectedBy chip text)
   const utteranceById = useMemo(() => {
     const map = new Map<string, Stage3DebateUtteranceView>();
     for (const u of utterances) map.set(u.id, u);
     return map;
   }, [utterances]);
 
+  const currentRound =
+    session.rounds.find((r) => r.status === "running") ?? session.rounds[0];
+
   return (
-    <section className="debate-panel stage3">
-      <header className="debate-context">
-        <div>
-          <span>Debate Context</span>
-          <strong>{session.problem}</strong>
-          <p>{session.summary}</p>
+    <section className="flex h-full flex-col bg-background" aria-label="Debate">
+      {/* ── Header: context + stage tabs ───────────────────────── */}
+      <DebateContextHeader
+        currentRoundId={currentRound?.id}
+        onCreateCodingPacket={onCreateCodingPacket}
+        rounds={session.rounds}
+        session={session}
+      />
+
+      {/* ── Main: rounds (left, grid) + side panel (right) ─────── */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left: debate rounds grid */}
+        <div className="flex-1 overflow-y-auto border-r border-border">
+          <div className="grid grid-cols-1 gap-3 p-4 lg:grid-cols-2">
+            {utterances.map((utterance, index) => (
+              <DebateRoundCard
+                index={index + 1}
+                key={utterance.id}
+                onSelect={onSelectUtterance}
+                utterance={utterance}
+                utteranceById={utteranceById}
+              />
+            ))}
+          </div>
         </div>
-        <button className="primary-button" onClick={onCreateCodingPacket} type="button">
-          <Send size={15} />
-          패킷 반영
-        </button>
-      </header>
-      <div className="round-strip">
-        {session.rounds.map((round) => (
-          <span className={`round-chip ${round.status}`} key={round.id}>
-            {round.title}
-          </span>
-        ))}
-      </div>
-      <div className="roundtable-mode-strip">
-        <span>Roundtable</span>
-        <strong>Branch 확장 모델</strong>
-        <em>Sequential</em>
-        <em>Deliberative</em>
-        <small>토론 transcript 전체가 아니라 채택 요약만 main context로 돌아옵니다.</small>
-      </div>
-      <div className="debate-workspace">
-        <div className="debate-grid">
-          {utterances.map((utterance) => (
-            <DebateCard
-              key={utterance.id}
-              onSelect={onSelectUtterance}
-              utterance={utterance}
-              utteranceById={utteranceById}
-            />
-          ))}
+
+        {/* Right: status hub + agent relay */}
+        <div className="flex w-80 shrink-0 flex-col overflow-y-auto">
+          <div className="space-y-4 p-4">
+            <StatusHub items={session.statusHub} />
+            <AgentRelay entries={session.humanPeek} />
+          </div>
         </div>
-        <aside className="human-peek-panel agent-relay-panel" aria-label="Agent Relay">
-          <section>
-            <header>
-              <Activity size={15} />
-              <strong>Status Hub</strong>
-            </header>
-            <div className="status-hub-grid">
-              {session.statusHub.map((item) => (
-                <div className={`status-hub-cell ${item.tone}`} key={item.id}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                </div>
-              ))}
-            </div>
-          </section>
-          <section>
-            <header>
-              <GitBranch size={15} />
-              <strong>Agent Relay</strong>
-            </header>
-            <div className="peek-list">
-              {session.humanPeek.map((entry) => (
-                <article className={`peek-row ${entry.state}`} key={entry.id}>
-                  <span>{entry.kind}</span>
-                  <strong>
-                    {entry.actor} → {entry.target}
-                  </strong>
-                  <p>{entry.summary}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-        </aside>
       </div>
     </section>
   );
 }
 
-function DebateCard({
+// ── Header ───────────────────────────────────────────────────────────
+
+function DebateContextHeader({
+  currentRoundId,
+  onCreateCodingPacket,
+  rounds,
+  session,
+}: {
+  currentRoundId?: string;
+  onCreateCodingPacket: () => void;
+  rounds: Stage3DebateSession["rounds"];
+  session: Stage3DebateSession;
+}) {
+  return (
+    <div className="shrink-0 border-b border-border bg-card/30">
+      {/* Title row */}
+      <div className="flex items-start gap-4 border-b border-border/50 px-4 py-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+          <FileText className="h-4 w-4 text-primary" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Debate Context
+          </span>
+          <h2 className="mt-1 truncate text-sm font-semibold text-foreground">
+            {session.problem}
+          </h2>
+          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+            {session.summary}
+          </p>
+        </div>
+        <Button
+          className="shrink-0 gap-2"
+          onClick={onCreateCodingPacket}
+          size="sm"
+          variant="outline"
+        >
+          <FileText className="h-3.5 w-3.5" />
+          패킷 반영
+        </Button>
+      </div>
+
+      {/* Stage tabs */}
+      <div className="flex items-center gap-1 overflow-x-auto px-4 py-2">
+        {rounds.map((round) => {
+          const isActive = round.id === currentRoundId;
+          const isCompleted = round.status === "completed";
+          return (
+            <button
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                isActive
+                  ? "bg-primary/15 text-primary"
+                  : isCompleted
+                    ? "text-muted-foreground hover:bg-card/60 hover:text-foreground"
+                    : "text-muted-foreground/50 hover:bg-card/60 hover:text-muted-foreground",
+              )}
+              key={round.id}
+              type="button"
+            >
+              {round.title}
+              {isActive ? (
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Round card ───────────────────────────────────────────────────────
+
+function DebateRoundCard({
   utterance,
   utteranceById,
+  index,
   onSelect,
 }: {
   utterance: Stage3DebateUtteranceView;
   utteranceById: Map<string, Stage3DebateUtteranceView>;
+  index: number;
   onSelect?: (utterance: Stage3DebateUtteranceView) => void;
 }) {
   const parent = utterance.parentUtteranceId
@@ -158,21 +198,20 @@ function DebateCard({
   const evidenceCount = utterance.evidenceRefIds?.length ?? 0;
   const codingCount = utterance.codingImpactRefs?.length ?? 0;
   const isDecision = Boolean(utterance.decisionId);
-
   const hasProvenance =
-    parent ||
-    acceptedCount > 0 ||
-    rejectedCount > 0 ||
-    evidenceCount > 0 ||
-    codingCount > 0 ||
-    isDecision;
+    parent || acceptedCount > 0 || rejectedCount > 0 || evidenceCount > 0 || codingCount > 0 || isDecision;
+
+  const time = new Date(utterance.createdAt).toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   return (
-    <article
+    <div
       className={cn(
-        "debate-card",
-        onSelect && "selectable",
-        isDecision && "debate-card--decision",
+        "flex flex-col rounded-lg border bg-card transition-colors",
+        onSelect && "cursor-pointer hover:border-primary/40",
+        isDecision ? "border-primary/50" : "border-border",
       )}
       onClick={() => onSelect?.(utterance)}
       onKeyDown={(event) => {
@@ -183,87 +222,118 @@ function DebateCard({
       }}
       role={onSelect ? "button" : undefined}
       tabIndex={onSelect ? 0 : undefined}
-      title="이 발언자와 Conversation에서 이어서 대화"
     >
-      <header>
-        <Bot size={16} />
-        <strong>{utterance.agentName}</strong>
-        <span>{utterance.roundTitle}</span>
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/15 text-[11px] font-semibold text-primary">
+            {utterance.agentName.slice(0, 1)}
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium text-foreground">
+              {utterance.agentName}
+            </div>
+            <div className="truncate text-[10px] text-muted-foreground">
+              {utterance.roundTitle}
+            </div>
+          </div>
+        </div>
         {isDecision ? (
-          <span className="debate-card__decision-badge" title="최종 결정에 연결됨">
-            <GitMerge size={11} />
+          <span className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-mono text-primary">
+            <GitMerge className="h-2.5 w-2.5" />
             DECISION
           </span>
         ) : null}
-      </header>
+      </div>
 
       {parent ? (
-        <div className="debate-card__parent-ref">
-          <CornerDownRight size={11} />
+        <div className="flex items-center gap-1.5 border-b border-border/50 px-3 py-1.5 text-[10px] text-muted-foreground">
+          <CornerDownRight className="h-2.5 w-2.5" />
           <span>
-            <em>{parent.agentName}</em>의 {parent.roundTitle} 발언에 응답
+            <span className="font-medium text-foreground">{parent.agentName}</span>의{" "}
+            {parent.roundTitle} 발언에 응답
           </span>
         </div>
       ) : null}
 
-      <div className="debate-tags">
-        {utterance.tags.map((tag) => (
-          <em className={`debate-tag ${tag}`} key={tag}>
-            {debateTagLabel(tag)}
-          </em>
-        ))}
-      </div>
-      <p>{utterance.content}</p>
+      {/* Tags */}
+      {utterance.tags.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1 border-b border-border/50 px-3 py-1.5">
+          {utterance.tags.map((tag) => (
+            <span
+              className={cn(
+                "inline-flex items-center rounded-full border px-1.5 py-0 text-[9px] font-mono",
+                tagToneClasses(tag),
+              )}
+              key={tag}
+            >
+              {debateTagLabel(tag)}
+            </span>
+          ))}
+        </div>
+      ) : null}
 
+      {/* Content */}
+      <p className="flex-1 px-3 py-2.5 text-sm leading-relaxed text-foreground line-clamp-4">
+        {utterance.content}
+      </p>
+
+      {/* Provenance pills */}
       {hasProvenance ? (
-        <footer className="debate-card__provenance">
+        <div className="flex flex-wrap gap-1 border-t border-border/50 px-3 py-1.5">
           {acceptedCount > 0 ? (
-            <ProvenancePill
-              icon={<CheckCircle2 size={10} />}
+            <Pill
+              icon={<CheckCircle2 className="h-2.5 w-2.5" />}
               label={`수용 ${acceptedCount}`}
-              tone="ok"
+              tone="success"
               tooltip={resolveNameList(utterance.acceptedBy, utteranceById)}
             />
           ) : null}
           {rejectedCount > 0 ? (
-            <ProvenancePill
-              icon={<XCircle size={10} />}
+            <Pill
+              icon={<XCircle className="h-2.5 w-2.5" />}
               label={`기각 ${rejectedCount}`}
-              tone="bad"
+              tone="destructive"
               tooltip={resolveNameList(utterance.rejectedBy, utteranceById)}
             />
           ) : null}
           {evidenceCount > 0 ? (
-            <ProvenancePill
-              icon={<Link2 size={10} />}
+            <Pill
+              icon={<Link2 className="h-2.5 w-2.5" />}
               label={`근거 ${evidenceCount}`}
-              tone="neutral"
+              tone="muted"
               tooltip={utterance.evidenceRefIds?.join(" · ")}
             />
           ) : null}
           {codingCount > 0 ? (
-            <ProvenancePill
-              icon={<Send size={10} />}
+            <Pill
+              icon={<Send className="h-2.5 w-2.5" />}
               label={`코딩 ${codingCount}`}
-              tone="cyan"
+              tone="primary"
               tooltip={utterance.codingImpactRefs?.join(" · ")}
             />
           ) : null}
           {isDecision ? (
-            <ProvenancePill
-              icon={<GitMerge size={10} />}
+            <Pill
+              icon={<GitMerge className="h-2.5 w-2.5" />}
               label={utterance.decisionId ?? "decision"}
-              tone="cyan"
+              tone="primary"
               tooltip="이 발언이 최종 결정 노드로 채택됨"
             />
           ) : null}
-        </footer>
+        </div>
       ) : null}
-    </article>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between border-t border-border/50 px-3 py-1.5 text-[10px] text-muted-foreground">
+        <span>Round {index}</span>
+        <span>{time}</span>
+      </div>
+    </div>
   );
 }
 
-function ProvenancePill({
+function Pill({
   icon,
   label,
   tone,
@@ -271,12 +341,18 @@ function ProvenancePill({
 }: {
   icon: React.ReactNode;
   label: string;
-  tone: "ok" | "bad" | "neutral" | "cyan";
+  tone: "success" | "destructive" | "muted" | "primary";
   tooltip?: string;
 }) {
   return (
     <span
-      className={cn("debate-card__pill", `debate-card__pill--${tone}`)}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border bg-card/40 px-1.5 py-0 text-[9px] font-mono",
+        tone === "success" && "border-success/45 text-success",
+        tone === "destructive" && "border-destructive/45 text-destructive",
+        tone === "primary" && "border-primary/45 text-primary",
+        tone === "muted" && "border-border text-muted-foreground",
+      )}
       title={tooltip}
     >
       {icon}
@@ -284,6 +360,122 @@ function ProvenancePill({
     </span>
   );
 }
+
+// ── Right side panel: Status Hub ────────────────────────────────────
+
+function StatusHub({ items }: { items: Stage3DebateSession["statusHub"] }) {
+  return (
+    <div className="rounded-lg border border-border bg-card">
+      <div className="border-b border-border px-4 py-2">
+        <span className="text-xs font-medium text-foreground">Status Hub</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 p-3">
+        {items.map((item) => (
+          <div
+            className="rounded-md border border-border bg-card/40 px-3 py-2"
+            key={item.id}
+          >
+            <span className="text-[10px] text-muted-foreground">{item.label}</span>
+            <div className="mt-0.5 flex items-center gap-1.5">
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  item.tone === "ok" && "bg-success",
+                  item.tone === "warn" && "bg-warning",
+                  item.tone === "danger" && "bg-destructive",
+                )}
+              />
+              <span
+                className={cn(
+                  "text-sm font-medium",
+                  item.tone === "ok" && "text-success",
+                  item.tone === "warn" && "text-warning",
+                  item.tone === "danger" && "text-destructive",
+                )}
+              >
+                {item.value}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Right side panel: Agent Relay ───────────────────────────────────
+
+function AgentRelay({
+  entries,
+}: {
+  entries: Stage3DebateSession["humanPeek"];
+}) {
+  const [isOpen, setIsOpen] = useState(true);
+  return (
+    <div className="rounded-lg border border-border bg-card">
+      <button
+        aria-expanded={isOpen}
+        className="flex w-full items-center justify-between border-b border-border px-4 py-2 hover:bg-card/60"
+        onClick={() => setIsOpen((o) => !o)}
+        type="button"
+      >
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-primary" />
+          <span className="text-xs font-medium text-foreground">Agent Relay</span>
+        </div>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 text-muted-foreground transition-transform",
+            !isOpen && "-rotate-90",
+          )}
+        />
+      </button>
+      {isOpen ? (
+        <div className="space-y-2 p-3">
+          {entries.length === 0 ? (
+            <p className="px-2 py-1 text-[10px] text-muted-foreground">
+              비공개 에이전트 흐름 없음.
+            </p>
+          ) : (
+            entries.map((entry) => (
+              <div
+                className="rounded-md border border-border bg-card/40 p-2"
+                key={entry.id}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                      entry.kind === "send" || entry.kind === "spawn"
+                        ? "bg-primary/15 text-primary"
+                        : entry.kind === "approval"
+                          ? "bg-warning/15 text-warning"
+                          : "bg-card/60 text-muted-foreground",
+                    )}
+                  >
+                    {entry.kind}
+                  </span>
+                  <span className="text-xs font-medium text-foreground">
+                    {entry.actor}
+                  </span>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-xs font-medium text-foreground">
+                    {entry.target}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                  {entry.summary}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ── Label helpers ───────────────────────────────────────────────────
 
 function resolveNameList(
   ids: DebateUtterance["acceptedBy"] | DebateUtterance["rejectedBy"],
@@ -309,35 +501,19 @@ function debateTagLabel(tag: DebateTag) {
   return labels[tag];
 }
 
-// Legacy preview helper retained but unused (kept for backward compat with
-// debugging / story imports). Safe to delete in a future cleanup.
-export function _DebateTablePreview() {
-  const rows = [
-    { agent: "Architect", tag: "근거", text: "패키지 경계가 먼저 잡혀야 DGX와 로컬 폴백이 뒤틀리지 않는다." },
-    { agent: "Reviewer", tag: "리스크", text: "API 키 원문 저장과 터미널 실행은 첫 구현에서 명시적으로 막아야 한다." },
-    { agent: "Orchestrator", tag: "코딩 영향", text: "결론은 Coding Packet 필드로 바로 내려갈 수 있어야 한다." },
-  ];
-  return (
-    <section className="debate-panel">
-      <div className="round-strip">
-        {debateRounds.map((round) => (
-          <span className={`round-chip ${round.status}`} key={round.id}>
-            {round.title}
-          </span>
-        ))}
-      </div>
-      <div className="debate-grid">
-        {rows.map((row) => (
-          <article className="debate-card" key={`${row.agent}-${row.tag}`}>
-            <header>
-              <Bot size={17} />
-              <strong>{row.agent}</strong>
-              <span>{row.tag}</span>
-            </header>
-            <p>{row.text}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
+function tagToneClasses(tag: DebateTag): string {
+  switch (tag) {
+    case "agreement":
+      return "border-success/45 text-success";
+    case "objection":
+      return "border-destructive/45 text-destructive";
+    case "evidence":
+      return "border-primary/45 text-primary";
+    case "risk":
+      return "border-destructive/45 text-destructive";
+    case "coding_impact":
+      return "border-warning/45 text-warning";
+    default:
+      return "border-border text-muted-foreground";
+  }
 }

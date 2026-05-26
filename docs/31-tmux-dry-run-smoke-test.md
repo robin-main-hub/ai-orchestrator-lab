@@ -12,6 +12,8 @@ Test this flow without using the DGX-02 local model engine and without executing
 
 ```text
 Desktop Tmux Workbench
+-> /tmux/preflight
+-> timeline block preview
 -> /tmux/dispatch
 -> approval.requested
 -> Ops approval queue refresh
@@ -41,9 +43,10 @@ ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS=
 With dry-run enabled, an approved tmux dispatch returns:
 
 ```text
-dispatch.status = recorded
+dispatch.status = dry_run
 dispatch.attempted = false
 dispatch.reason contains ORCHESTRATOR_TMUX_DRY_RUN
+timelineBlocks includes kind=dry_run
 ```
 
 ## Desktop Environment
@@ -62,8 +65,8 @@ This avoids `http://dgx-02:4317`, `https://orchestrator.endruin.com`, vLLM, and 
 
 1. Tmux pane dispatch shows approval queued.
 2. Ops rail refreshes the DGX approval queue.
-3. The approval row displays `승인 후 tmux 재전송`.
-4. After approval, the recent redispatch list shows `recorded`.
+3. The approval row displays a tmux dispatch reason and replay endpoint.
+4. After approval, the recent redispatch list shows `dry_run`.
 5. No real `send-keys` command is executed.
 
 ## Production Rule
@@ -90,7 +93,8 @@ corepack pnpm tmux:smoke:dry-run
 The script verifies:
 
 - `/health` exposes `tmux-dispatch-gate`;
+- `/tmux/preflight` returns permission, audit checks, and timeline blocks;
 - `/tmux/dispatch` with `approvalState=required` queues an approval;
 - `/approvals/grant` approves that dispatch;
-- `/tmux/dispatch` with `approvalState=approved` returns `recorded`;
+- `/tmux/dispatch` with `approvalState=approved` returns `dry_run`;
 - `dispatch.attempted=false`, proving no real `tmux send-keys` ran.

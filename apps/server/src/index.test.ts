@@ -366,6 +366,12 @@ describe("server health placeholder", () => {
     expect(response.route).toBe("server_proxy");
     expect(response.content).toBe("OK");
     expect(response.usage?.totalTokens).toBe(14);
+    expect(response.runtimeHints).toMatchObject({
+      estimatedTokens: expect.any(Number),
+      budgetApprovalThresholdTokens: expect.any(Number),
+      budgetHardLimitTokens: expect.any(Number),
+      retryable: false,
+    });
   });
 
   it("redacts provider prompts before send and provider content after receive", async () => {
@@ -410,6 +416,38 @@ describe("server health placeholder", () => {
     expect(response.status).toBe("succeeded");
     expect(response.content).not.toContain("abcdefghijklmnopqrstuvwxyz");
     expect(response.content).toContain("<redacted>");
+  });
+
+  it("marks transient provider failures as retryable runtime hints", async () => {
+    const response = await createDgxProviderCompletionResponse(
+      {
+        id: "provider_completion_request_retry_hint",
+        sessionId: "session_1",
+        providerProfileId: "provider_dgx02_vllm",
+        modelId: "qwen36-gio-lora-v5-prisma",
+        messages: [{ role: "user", content: "Reply OK only" }],
+        source: "desktop",
+        routePreference: "server_proxy",
+        createdAt: "2026-05-24T00:00:00.000Z",
+      },
+      {
+        now: "2026-05-24T00:00:00.000Z",
+        vllmBaseUrl: "http://127.0.0.1:8001/v1",
+        fetchImpl: async () => ({
+          ok: false,
+          status: 502,
+          async text() {
+            return "Bad Gateway";
+          },
+        }),
+      },
+    );
+
+    expect(response.status).toBe("failed");
+    expect(response.runtimeHints).toMatchObject({
+      retryable: true,
+      retryReason: "transient_http_status",
+    });
   });
 
   it("recursively redacts sensitive keys and PII for server phases", () => {
@@ -496,6 +534,15 @@ describe("server health placeholder", () => {
       "terminal.command.intent.created",
       "approval.requested",
     ]);
+    expect(snapshot.timelineBlocks.map((block) => block.kind)).toEqual(["command_intent", "approval"]);
+    expect(snapshot.timelineBlocks[0]).toMatchObject({
+      commandIntentId: "tmux_dispatch_test",
+      status: "pending_approval",
+    });
+    expect(snapshot.timelineBlocks[1]).toMatchObject({
+      approvalId: snapshot.approval?.id,
+      status: "pending_approval",
+    });
     expectValidTerminalCommandEvents(snapshot.events.filter((event) => event.type.startsWith("terminal.command.")));
 
     const denied = createServerTmuxDispatchSnapshot({
@@ -515,6 +562,33 @@ describe("server health placeholder", () => {
     expect(denied.permission.decision).toBe("deny");
     expect(denied.intent.dispatchState).toBe("blocked");
     expect(JSON.stringify(denied)).not.toContain("abcdefghijklmnopqrstuvwxyz");
+  });
+
+  it("preflights tmux dispatch with auditable timeline blocks before replay", () => {
+    const preflight = createServerTmuxPreflightResponse(
+      {
+        id: "tmux_preflight_test",
+        sessionId: "session_tmux_test",
+        terminalSessionId: "terminal_session_ai_swarm",
+        role: "backend",
+        host: "dgx_02",
+        paneId: "%6",
+        requestedBy: "user",
+        commandPreview: "pnpm test",
+        approvalState: "required",
+        dispatchMode: "execute_if_approved",
+        tmuxSessionName: "ai-swarm",
+        createdAt: "2026-05-24T00:00:00.000Z",
+      },
+      "2026-05-24T00:00:00.000Z",
+    );
+
+    expect(preflight.permission.decision).toBe("approval_required");
+    expect(preflight.audit.wouldQueueApproval).toBe(true);
+    expect(preflight.audit.wouldRecordEvents).toEqual(["terminal.command.intent.created", "approval.requested"]);
+    expect(preflight.timelineBlocks).toHaveLength(2);
+    expect(preflight.timelineBlocks[0]?.kind).toBe("command_intent");
+    expect(preflight.timelineBlocks[1]?.kind).toBe("approval");
   });
 
   it("redacts read-only tmux pane captures before event storage", () => {
@@ -2232,9 +2306,12 @@ describe("HTTP request limits", () => {
       await expect(listResponse.json()).resolves.toMatchObject({
         queue: [
           {
+            action: "terminal_run",
             replayEndpoint: "/tmux/dispatch",
             replayKind: "tmux_dispatch",
+            reason: "tmux dispatch requires explicit approval before send-keys can run",
             sourceItemId: "tmux_dispatch_http_test",
+            sourceTrust: "trusted",
           },
         ],
         summary: {
