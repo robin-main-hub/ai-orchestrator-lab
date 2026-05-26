@@ -24,3 +24,12 @@ export {
   OllamaAdapter,
   type OllamaAdapterOptions,
 } from "../ollamaAdapter.js";
+export {
+  GrokCliOAuthAdapter,
+  createGrokExecPrompt,
+  runGrokExecSubprocess,
+  type GrokCliOAuthAdapterOptions,
+  type GrokExecResult,
+  type GrokExecRunner,
+  type GrokExecRunnerParams,
+} from "./grokCliOAuthAdapter.js";
