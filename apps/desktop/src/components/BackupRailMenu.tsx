@@ -1,5 +1,6 @@
 import { Archive, RefreshCw } from "lucide-react";
 import type { BackupProjection } from "@ai-orchestrator/protocol";
+import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import type { Stage7BackupSnapshot } from "../runtime/stage7Backup";
 
 export function BackupRailMenu({
@@ -40,7 +41,12 @@ export function BackupRailMenu({
         {projections.map((projection) => (
           <article key={projection.id}>
             <strong>{projection.target}</strong>
-            <span>{projection.status} / redaction {projection.redactionApplied ? "on" : "off"}</span>
+            <span>
+              <StatusBadge size="sm" variant={backupStatusBadgeVariant(projection.status)}>
+                {projection.status}
+              </StatusBadge>{" "}
+              / redaction {projection.redactionApplied ? "on" : "off"}
+            </span>
           </article>
         ))}
       </div>
@@ -48,12 +54,24 @@ export function BackupRailMenu({
         {snapshot.artifacts.map((artifact) => (
           <article className={artifact.status} key={artifact.id}>
             <strong>{artifact.title}</strong>
-            <span>{artifact.target} / {artifact.format}</span>
+            <span>
+              <StatusBadge size="sm" variant={backupStatusBadgeVariant(artifact.status)}>
+                {artifact.status}
+              </StatusBadge>{" "}
+              / {artifact.target} / {artifact.format}
+            </span>
             <p>{artifact.destination}</p>
           </article>
         ))}
       </div>
     </section>
   );
+}
+
+function backupStatusBadgeVariant(status: string): StatusBadgeVariant {
+  if (status === "ready" || status === "synced") return "success";
+  if (status === "blocked" || status === "failed") return "danger";
+  if (status === "queued" || status === "pending") return "warning";
+  return "muted";
 }
 
