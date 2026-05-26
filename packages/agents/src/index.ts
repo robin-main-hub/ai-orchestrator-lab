@@ -543,3 +543,6 @@ export const defaultAgentProfiles: AgentProfile[] = [
     permissionLevel: "run_safe_commands",
   },
 ];
+
+export { buildAgentSystemPrompt, estimateTokens, soulModeToPersonaSourceMode } from './soulInjection.js';
+export type { SoulInjectionReport } from './soulInjection.js';
