@@ -221,8 +221,9 @@ export class MementoMcpAdapter implements MemoryAdapter {
     }
   }
 
-  async forget(recordId: string, _ctx: MemoryAdapterContext): Promise<void> {
-    const tombstone = (r: MemoryRecord) => ({ ...r, tombstonedAt: this.nowFn() });
+  async forget(recordId: string, ctx: MemoryAdapterContext): Promise<void> {
+    const now = ctx.now?.() ?? this.nowFn();
+    const tombstone = (r: MemoryRecord) => ({ ...r, tombstonedAt: now });
     const local = this.localRecords.get(recordId);
     if (local) {
       this.localRecords.set(recordId, tombstone(local));
