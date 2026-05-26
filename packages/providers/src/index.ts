@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   ModelDescriptor,
   ModelDiscoverySnapshot,
@@ -100,7 +101,7 @@ export function maskSecret(value: string): string {
 
 export function createSessionSecretRef(rawSecret: string, label = "세션 임시 키"): SecretRef {
   return {
-    id: `secret_${crypto.randomUUID()}`,
+    id: `secret_${randomUUID()}`,
     label,
     scope: "session",
     redactedPreview: maskSecret(rawSecret),
