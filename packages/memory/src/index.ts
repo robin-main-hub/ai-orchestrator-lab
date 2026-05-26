@@ -17,3 +17,6 @@ export { MockMemoryAdapter } from "./mockMemoryAdapter";
 export type { MockMemoryAdapterOptions } from "./mockMemoryAdapter";
 export { withTrustEnforcement } from "./trustEnforcedAdapter";
 export type { TrustPolicy } from "./trustEnforcedAdapter";
+
+export { MementoMcpAdapter } from "./mementoAdapter";
+export type { MementoMcpAdapterOptions, MementoPolicy, RecallSource, RecallTrace } from "./mementoAdapter";
