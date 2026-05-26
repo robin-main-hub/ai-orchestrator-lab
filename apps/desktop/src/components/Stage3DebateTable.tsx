@@ -16,6 +16,7 @@ import type { Stage3DebateSession } from "../runtime/stage3Runtime";
 import type { Stage3DebateUtteranceView } from "../types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
+import { StatusBadge } from "@/ui/status-badge";
 
 /**
  * Stage 3 Debate Table — strict v0 port.
@@ -259,17 +260,23 @@ function DebateRoundCard({
       {/* Tags */}
       {utterance.tags.length > 0 ? (
         <div className="flex flex-wrap items-center gap-1 border-b border-border/50 px-3 py-1.5">
-          {utterance.tags.map((tag) => (
-            <span
-              className={cn(
-                "inline-flex items-center rounded-full border px-1.5 py-0 text-[9px] font-mono",
-                tagToneClasses(tag),
-              )}
-              key={tag}
-            >
-              {debateTagLabel(tag)}
-            </span>
-          ))}
+          {utterance.tags.map((tag) => {
+            const variant =
+              tag === "agreement"
+                ? "success"
+                : tag === "objection"
+                  ? "warning"
+                  : tag === "evidence"
+                    ? "primary"
+                    : tag === "risk"
+                      ? "danger"
+                      : "muted";
+            return (
+              <StatusBadge key={tag} variant={variant} size="sm">
+                {debateTagLabel(tag)}
+              </StatusBadge>
+            );
+          })}
         </div>
       ) : null}
 
@@ -501,19 +508,4 @@ function debateTagLabel(tag: DebateTag) {
   return labels[tag];
 }
 
-function tagToneClasses(tag: DebateTag): string {
-  switch (tag) {
-    case "agreement":
-      return "border-success/45 text-success";
-    case "objection":
-      return "border-destructive/45 text-destructive";
-    case "evidence":
-      return "border-primary/45 text-primary";
-    case "risk":
-      return "border-destructive/45 text-destructive";
-    case "coding_impact":
-      return "border-warning/45 text-warning";
-    default:
-      return "border-border text-muted-foreground";
-  }
-}
+
