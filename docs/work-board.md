@@ -1,5 +1,60 @@
 # Work Board (Claude × Codex 협업 상태)
 
+## R5 canonical update (2026-05-26 sync)
+
+origin/main @ `5524d3e1` (`#182` squash merge). R4 v0 cascade train + R5 Stage 1b 1차 wave 완료 (2026-05-26 sync, origin/main @ `5524d3e1`; 후속 `#156`~`#183`). 아래 R4-era open PR 표와 "Stage 1b 진행 중" 표현은 이 섹션이 최신 기준으로 supersede한다.
+
+### 2026-05-26 라운드 5 (Stage 1b primitive adoption - 1차 wave)
+
+- `#183` (`a81c1d1`) - Debate + AgentCard combined
+  - `Stage3DebateTable`: DebateRoundCard tag chip -> `StatusBadge` (v0 fidelity)
+  - `AgentsSidebar`: AgentCard Primary -> `StatusBadge` (primitive normalization, exact v0 fidelity 아님)
+- `#182` (`5524d3e1467f143acdd5ae01896362b0ac9a2df5`) - TmuxPaneCard
+  - `TmuxPaneCard` status chip -> `StatusBadge` (v0 fidelity)
+  - Final scope = `TmuxPaneCard.tsx` only
+  - cleanup commits `27cce79`, `58e0d38` 는 scope 정리용이며 제품 변경 아님
+
+### R5 release note
+
+`#183` Debate tag mapping = v0 fidelity 일치에 더해 의미축 2개 정정 동반:
+
+- `objection`: `destructive` -> `warning` (v0 정렬)
+- `coding_impact`: `warning` -> `muted` (v0 정렬)
+
+릴리스 노트 가치 있음 - 사용자가 chip 색상 변화 인지할 수 있음.
+
+### R5 operational incident
+
+운영 사고 (R5 라운드, 2026-05-26):
+
+- Grok 2 가 main 이 아니라 Grok 1 branch (`grok/stage1b-debate-agent-statusbadge`) 에서 분기하여 PR `#182` 가 `#183` diff 를 흡수한 채 열림
+- Claude 1기가 GitHub 상 PR diff 직접 확인으로 발견
+- Grok 2 가 main 으로 rebase + 두 비-tmux 파일 제거 force-push
+- 정리 commit `58e0d38` 후 PR `#182` 정상 머지
+- 다음 라운드부터 cascade worker 는 PR 생성 전에 다음 branch rebase precondition 을 강제:
+  1. `git fetch origin && git rebase origin/main`
+  2. PR body 첫 줄에 `branched off main @ <SHA>` 명시
+  3. PR body 의 scope claim 과 실 diff scope (`git diff main --stat`) 가 1:1 일치해야 함
+
+### R5 Stage 1b status
+
+R5 Stage 1b 1차 wave (Debate + AgentCard + TmuxPaneCard) 완료 - `#183`, `#182` 머지.
+
+잔여 cascade:
+
+- `CheatSheetOverlay`
+- `ControlQueueDrawer` lane
+- `TmuxSwarmBoard`
+- `EvolveMemento` RecallTrace
+- `CommandPalette`
+- `RuntimeStatusBar`
+- `ConversationWorkbench` frozen
+
+ConversationWorkbench: frozen -
+(1) Codex stacked train (`#166` -> `#169` -> `#173` -> `#178`) 동시 작업
+(2) monolithic `ConversationWorkbench` 를 v0 의 5-file 구조(header/view/message-bubble/message-thread/composer + approval-queue)로 분해하는 design 미합의
+두 조건 해소 후 별도 라운드 진입.
+
 Claude와 Codex가 같은 repo를 분업할 때 서로의 작업 상태와 합의를 한 페이지로 보기 위한 작업판.
 
 관련 문서: [`review-board.md`](review-board.md) (외부 검토자 리뷰), [`24-provider-adapters.md`](24-provider-adapters.md) (LlmAdapter), [`29-permission-engine-spec.md`](29-permission-engine-spec.md) (Permission/Redaction), [`30-security-audit-checklist.md`](30-security-audit-checklist.md) (보안 감사), [`31-streaming-layer-spec.md`](31-streaming-layer-spec.md) (streaming v1), [`32-memory-adapter-spec.md`](32-memory-adapter-spec.md) (MemoryAdapter contract), [`33-dgx02-deploy-runbook.md`](33-dgx02-deploy-runbook.md) (DGX-02 deploy).
