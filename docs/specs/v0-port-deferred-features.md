@@ -1,5 +1,25 @@
 # v0 port — deferred features ledger
 
+## R5 status update (Stage 1b 1차 wave)
+
+기준: origin/main @ `5524d3e1` (`#182` squash merge, full SHA `5524d3e1467f143acdd5ae01896362b0ac9a2df5`).
+
+✅ R5 1차 wave 머지 완료:
+
+- AgentCard Primary: Stage 1b primitive normalization 완료, merge commit `a81c1d1` (`#183`). `StatusBadge` adoption 이며 exact v0 fidelity 항목은 아님.
+- DebateRoundCard tag chip: v0 fidelity cascade 완료, merge commit `a81c1d1` (`#183`). Debate 관련 항목은 deferred 상태가 아니라 R5 1차 wave 완료 항목으로 본다.
+- TmuxPaneCard status chip: v0 fidelity cascade 완료, merge commit `5524d3e1467f143acdd5ae01896362b0ac9a2df5` (`#182`). Final scope = `TmuxPaneCard.tsx` only.
+
+Release-note 의미축 정정:
+
+- `objection`: `destructive` -> `warning`
+- `coding_impact`: `warning` -> `muted`
+
+Operational note:
+
+- Grok 2 branch rebase precondition 누락으로 `#182` 가 `#183` diff 를 흡수했으나, main rebase + non-tmux scope cleanup 후 정상 머지됨.
+- 다음 cascade worker 는 branch rebase precondition (`git fetch origin && git rebase origin/main`, PR body `branched off main @ <SHA>`, scope claim == `git diff main --stat`) 을 강제한다.
+
 > **목적**: v0 mockup 에 없거나 v0 의 단순 레이아웃에 들어가지 않는 우리만의 기능들을 기록. 나중에 별도 진입점 (right-click context, sub-page, drawer 등) 에서 재도입할 자리를 찾을 때 참고.
 > **갱신 규칙**: v0 port PR 에서 "이 기능은 v0 에 없어서 뺐다" 할 때마다 여기에 한 줄 추가.
 
