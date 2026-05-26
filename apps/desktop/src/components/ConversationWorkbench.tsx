@@ -45,6 +45,7 @@ import {
   messageLabel,
   soulModeLabel,
 } from "../lib/uiLabels";
+import { getConversationWorkbenchVisibility } from "../lib/conversationWorkbenchVisibility";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import type {
@@ -162,6 +163,11 @@ export function ConversationWorkbench({
   const delegationItems = createDelegationPreviewItems(messages, agents);
   const canDelegate =
     selectedAgent?.role === "companion" || selectedAgent?.role === "orchestrator";
+  const workbenchVisibility = getConversationWorkbenchVisibility({
+    delegationItemCount: delegationItems.length,
+    pendingApprovalCount: permissionSnapshot.queue.length,
+    pendingProviderRetry: Boolean(pendingProviderRetry),
+  });
 
   return (
     <section className="conversation-workbench flex h-full flex-col bg-background">
@@ -202,13 +208,17 @@ export function ConversationWorkbench({
           aria-label="대화 기록"
           tabIndex={0}
         >
-          <ApprovalQueueInline
-            onApprove={onApprovePermission}
-            onReject={onRejectPermission}
-            pendingProviderRetry={pendingProviderRetry}
-            queue={permissionSnapshot.queue}
-          />
-          <DelegationInline items={delegationItems} />
+          {workbenchVisibility.showInlineApprovalQueue ? (
+            <ApprovalQueueInline
+              onApprove={onApprovePermission}
+              onReject={onRejectPermission}
+              pendingProviderRetry={pendingProviderRetry}
+              queue={permissionSnapshot.queue}
+            />
+          ) : null}
+          {workbenchVisibility.showInlineDelegation ? (
+            <DelegationInline items={delegationItems} />
+          ) : null}
           {messages.length === 0 ? (
             <EmptyConversation />
           ) : (
@@ -223,35 +233,37 @@ export function ConversationWorkbench({
         </div>
       </div>
 
+      {/* ── Action strip ─────────────────────────────────────────── */}
+      <ActionStrip
+        adoptedBranchCount={adoptedBranchCount}
+        branchExperiments={branchExperiments}
+        canDelegate={canDelegate}
+        latestBranch={latestBranch}
+        onAdoptBranch={onAdoptBranch}
+        onBackupProjection={onBackupProjection}
+        onCreateAgentRun={onCreateAgentRun}
+        onCreateBranch={onCreateBranch}
+        onCreateCodingPacket={onCreateCodingPacket}
+        onImportTelegram={onImportTelegram}
+        onPromoteToDebate={onPromoteToDebate}
+        showOverflowBranchControls={workbenchVisibility.showOverflowBranchControls}
+      />
+
       {/* ── Composer ─────────────────────────────────────────────── */}
       <Composer
         attachmentAccept={attachmentAccept}
         attachmentEnabled={attachmentEnabled}
         attachmentLimitReached={attachmentLimitReached}
-        canDelegate={canDelegate}
         draftAttachments={draftAttachments}
         draftMessage={draftMessage}
         maxDraftAttachments={maxDraftAttachments}
         onAddDraftAttachments={onAddDraftAttachments}
-        onCreateAgentRun={onCreateAgentRun}
-        onCreateCodingPacket={onCreateCodingPacket}
         onDraftMessageChange={onDraftMessageChange}
-        onPromoteToDebate={onPromoteToDebate}
         onRemoveDraftAttachment={onRemoveDraftAttachment}
         onSendMessage={onSendMessage}
         selectedAgent={selectedAgent}
         selectedModel={selectedModel}
-      />
-
-      {/* ── Action strip ─────────────────────────────────────────── */}
-      <ActionStrip
-        adoptedBranchCount={adoptedBranchCount}
-        branchExperiments={branchExperiments}
-        latestBranch={latestBranch}
-        onAdoptBranch={onAdoptBranch}
-        onBackupProjection={onBackupProjection}
-        onCreateBranch={onCreateBranch}
-        onImportTelegram={onImportTelegram}
+        showDelegationChips={workbenchVisibility.showComposerDelegationChips}
       />
 
       {/* ── Assistant Inbox approval strip ───────────────────────── */}
@@ -622,36 +634,30 @@ function Composer({
   attachmentAccept,
   attachmentEnabled,
   attachmentLimitReached,
-  canDelegate,
   draftAttachments,
   draftMessage,
   maxDraftAttachments,
   onAddDraftAttachments,
-  onCreateAgentRun,
-  onCreateCodingPacket,
   onDraftMessageChange,
-  onPromoteToDebate,
   onRemoveDraftAttachment,
   onSendMessage,
   selectedAgent,
   selectedModel,
+  showDelegationChips,
 }: {
   attachmentAccept: string;
   attachmentEnabled: boolean;
   attachmentLimitReached: boolean;
-  canDelegate: boolean;
   draftAttachments: DraftAttachment[];
   draftMessage: string;
   maxDraftAttachments: number;
   onAddDraftAttachments: (files: FileList | null) => void;
-  onCreateAgentRun: () => void;
-  onCreateCodingPacket: () => void;
   onDraftMessageChange: (value: string) => void;
-  onPromoteToDebate: () => void;
   onRemoveDraftAttachment: (attachmentId: string) => void;
   onSendMessage: () => void;
   selectedAgent?: WorkbenchAgent;
   selectedModel?: ModelDescriptor;
+  showDelegationChips: boolean;
 }) {
   const canSend =
     Boolean(selectedAgent) &&
@@ -660,24 +666,9 @@ function Composer({
   return (
     <div className="shrink-0 border-t border-border bg-card/50">
       {/* Delegation chips (companion only) */}
-      {canDelegate ? (
+      {showDelegationChips ? (
         <div className="flex flex-wrap items-center gap-2 border-b border-border/50 px-4 py-2">
-          <DelegationChip
-            icon={<Swords className="h-3.5 w-3.5" />}
-            label="토론 전환"
-            onClick={onPromoteToDebate}
-            shortcut="⌘⇧D"
-          />
-          <DelegationChip
-            icon={<Package className="h-3.5 w-3.5" />}
-            label="패킷 생성"
-            onClick={onCreateCodingPacket}
-          />
-          <DelegationChip
-            icon={<Play className="h-3.5 w-3.5" />}
-            label="실행 슬롯"
-            onClick={onCreateAgentRun}
-          />
+          <span className="text-xs text-muted-foreground">Delegation tools ready</span>
         </div>
       ) : null}
 
@@ -784,11 +775,13 @@ function Composer({
 }
 
 function DelegationChip({
+  disabled = false,
   icon,
   label,
   onClick,
   shortcut,
 }: {
+  disabled?: boolean;
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
@@ -796,7 +789,8 @@ function DelegationChip({
 }) {
   return (
     <button
-      className="inline-flex items-center gap-1.5 rounded-md bg-card/60 px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-card hover:text-primary"
+      className="inline-flex items-center gap-1.5 rounded-md bg-card/60 px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-card hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+      disabled={disabled}
       onClick={onClick}
       type="button"
     >
@@ -814,22 +808,49 @@ function DelegationChip({
 function ActionStrip({
   adoptedBranchCount,
   branchExperiments,
+  canDelegate,
   latestBranch,
   onAdoptBranch,
   onBackupProjection,
+  onCreateAgentRun,
   onCreateBranch,
+  onCreateCodingPacket,
   onImportTelegram,
+  onPromoteToDebate,
+  showOverflowBranchControls,
 }: {
   adoptedBranchCount: number;
   branchExperiments: BranchExperiment[];
+  canDelegate: boolean;
   latestBranch?: BranchExperiment;
   onAdoptBranch: () => void;
   onBackupProjection: () => void;
+  onCreateAgentRun: () => void;
   onCreateBranch: () => void;
+  onCreateCodingPacket: () => void;
   onImportTelegram: () => void;
+  onPromoteToDebate: () => void;
+  showOverflowBranchControls: boolean;
 }) {
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border bg-card/30 px-4 py-2">
+      <DelegationChip
+        disabled={!canDelegate}
+        icon={<Swords className="h-3.5 w-3.5" />}
+        label="토론 전환"
+        onClick={onPromoteToDebate}
+        shortcut="⌘⇧D"
+      />
+      <DelegationChip
+        icon={<Package className="h-3.5 w-3.5" />}
+        label="패킷 생성"
+        onClick={onCreateCodingPacket}
+      />
+      <DelegationChip
+        icon={<Play className="h-3.5 w-3.5" />}
+        label="실행 슬롯"
+        onClick={onCreateAgentRun}
+      />
       <Button
         className="h-7 gap-1.5 text-xs"
         onClick={onBackupProjection}
@@ -848,38 +869,40 @@ function ActionStrip({
         <Smartphone className="h-3.5 w-3.5" />
         Telegram
       </Button>
-      <div className="ml-auto flex items-center gap-2 rounded-md border border-border bg-card/40 px-2 py-1 text-[10px]">
-        <Database className="h-3 w-3 text-muted-foreground" />
-        <span className="text-muted-foreground">Branch</span>
-        <span className="font-mono text-foreground">
-          {branchExperiments.length} · 채택 {adoptedBranchCount}
-        </span>
-        {latestBranch ? (
-          <span
-            className="text-muted-foreground"
-            title={latestBranch.summary}
-          >
-            · {branchStatusLabel(latestBranch.status)}
+      {showOverflowBranchControls ? (
+        <div className="ml-auto flex items-center gap-2 rounded-md border border-border bg-card/40 px-2 py-1 text-[10px]">
+          <Database className="h-3 w-3 text-muted-foreground" />
+          <span className="text-muted-foreground">Branch</span>
+          <span className="font-mono text-foreground">
+            {branchExperiments.length} · 채택 {adoptedBranchCount}
           </span>
-        ) : null}
-        <Button
-          className="h-6 px-2 text-[10px]"
-          onClick={onCreateBranch}
-          size="sm"
-          variant="ghost"
-        >
-          분기
-        </Button>
-        <Button
-          className="h-6 px-2 text-[10px]"
-          disabled={!branchExperiments.some((b) => b.status !== "adopted")}
-          onClick={onAdoptBranch}
-          size="sm"
-          variant="ghost"
-        >
-          채택
-        </Button>
-      </div>
+          {latestBranch ? (
+            <span
+              className="text-muted-foreground"
+              title={latestBranch.summary}
+            >
+              · {branchStatusLabel(latestBranch.status)}
+            </span>
+          ) : null}
+          <Button
+            className="h-6 px-2 text-[10px]"
+            onClick={onCreateBranch}
+            size="sm"
+            variant="ghost"
+          >
+            분기
+          </Button>
+          <Button
+            className="h-6 px-2 text-[10px]"
+            disabled={!branchExperiments.some((b) => b.status !== "adopted")}
+            onClick={onAdoptBranch}
+            size="sm"
+            variant="ghost"
+          >
+            채택
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
