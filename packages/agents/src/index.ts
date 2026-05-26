@@ -551,3 +551,6 @@ export type { DebateSummaryOptions, TagDistribution } from './debateSummary.js';
 
 export { extractCodingPacketFromDebate } from "./codingPacketFromDebate.js";
 export type { ExtractCodingPacketOptions } from "./codingPacketFromDebate.js";
+
+export { runDebate } from "./runDebate.js";
+export type { RunDebateParams, RunDebateResult } from "./runDebate.js";
