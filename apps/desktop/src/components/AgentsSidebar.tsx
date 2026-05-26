@@ -12,6 +12,7 @@ import { modelWindowSize } from "../lib/appConstants";
 import { agentRoleLabel } from "../lib/helpers";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
+import { StatusBadge } from "@/ui/status-badge";
 import type {
   AgentActivityStatus,
   AgentVisualSettings,
@@ -328,9 +329,9 @@ function AgentCard({
               {agent.name}
             </span>
             {agent.role === "orchestrator" ? (
-              <span className="shrink-0 rounded bg-primary/15 px-1 py-0.5 text-[9px] font-medium text-primary">
+              <StatusBadge variant="primary" size="sm">
                 Primary
-              </span>
+              </StatusBadge>
             ) : null}
           </div>
           <span className="text-[11px] text-muted-foreground">
