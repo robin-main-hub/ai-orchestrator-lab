@@ -33,3 +33,12 @@ export {
   type GrokExecRunner,
   type GrokExecRunnerParams,
 } from "./grokCliOAuthAdapter.js";
+export {
+  GeminiCliAdapter,
+  createGeminiExecPrompt,
+  runGeminiExecSubprocess,
+  type GeminiCliAdapterOptions,
+  type GeminiExecResult,
+  type GeminiExecRunner,
+  type GeminiExecRunnerParams,
+} from "./geminiCliAdapter.js";
