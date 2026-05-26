@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type {
   ModelDescriptor,
   ModelDiscoverySnapshot,
@@ -90,6 +89,24 @@ export type ProviderAdapter = {
   complete(request: ProviderCompletionRequest): Promise<ProviderCompletionResult>;
 };
 
+/**
+ * UUID-like id generator that works in both Node and browser contexts.
+ * Uses globalThis.crypto.randomUUID() when available (Node ≥19, all modern
+ * browsers, Electron renderer). Falls back to a Math.random-based UUIDv4
+ * string for Node 18 test environments without a global crypto.
+ */
+function generateSecretId(): string {
+  const g = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (g && typeof g.randomUUID === "function") {
+    return g.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export function maskSecret(value: string): string {
   const trimmed = value.trim();
   if (trimmed.length <= 8) {
@@ -101,7 +118,7 @@ export function maskSecret(value: string): string {
 
 export function createSessionSecretRef(rawSecret: string, label = "세션 임시 키"): SecretRef {
   return {
-    id: `secret_${randomUUID()}`,
+    id: `secret_${generateSecretId()}`,
     label,
     scope: "session",
     redactedPreview: maskSecret(rawSecret),

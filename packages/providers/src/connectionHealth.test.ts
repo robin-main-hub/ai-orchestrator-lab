@@ -4,7 +4,7 @@ import { ConnectionHealthMonitor } from "./connectionHealth.js";
 const NOW = "2026-05-26T00:00:00.000Z";
 
 function makeFetch(opts: { ok: boolean; status?: number; delayMs?: number }) {
-  return async (_url: string, _init?: RequestInit): Promise<Response> => {
+  return async (_url: RequestInfo | URL, _init?: RequestInit): Promise<Response> => {
     if (opts.delayMs) {
       await new Promise((r) => setTimeout(r, opts.delayMs));
     }
