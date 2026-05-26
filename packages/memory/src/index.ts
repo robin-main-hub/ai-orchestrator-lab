@@ -20,3 +20,4 @@ export type { TrustPolicy } from "./trustEnforcedAdapter";
 
 export { MementoMcpAdapter } from "./mementoAdapter";
 export type { MementoMcpAdapterOptions, MementoPolicy, RecallSource, RecallTrace } from "./mementoAdapter";
+export { LocalHeuristicAdapter } from "./localHeuristicAdapter";
