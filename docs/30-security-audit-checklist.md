@@ -201,23 +201,32 @@
 
 ## 12. CLI 기반 Provider (grok -p, gemini -p, codex 등)
 
-이 섹션은 로컬 CLI를 subprocess로 호출하는 provider (grok, gemini, codex 등)에 적용되는 보안 체크리스트다.
+이 공식 가이드는 로컬 CLI를 subprocess로 호출하는 provider (grok, gemini, codex 등)에 적용되는 보안 및 아키텍처 체크리스트다.
 
 ### 12.1 필수 체크 항목
 
-- [ ] **Subprocess 실행 방식**
-  - `spawn` 또는 `execFile` 사용, `shell: true` 절대 금지
-  - prompt는 **stdin**으로만 전달 (command argument로 넘기지 않음)
-- [ ] **Timeout / Cancellation**
-  - `AdapterRuntimeContext.timeoutMs`와 `abortSignal`을 반드시 사용
-  - timeout 또는 abort 발생 시 child process를 강제 종료 (kill) 처리
-  - 종료 후에도 zombie process가 남지 않도록 확인
-- [ ] **Command Injection 방지**
+- [ ] **Subprocess 실행 방식 및 환경변수 allowlist**
+  - `spawn` 또는 `execFile` 사용, `shell: false` 지정 필수 및 `shell: true` 절대 금지
+  - prompt는 **stdin**으로만 전달 (command line argument로 넘기지 않음)
+  - `process.env` 전체를 subprocess에 직접 상속(inheritance)하지 않아야 함
+  - 작동에 필요한 필수 환경변수만 화이트리스트(allowlist)로 명시하여 자식 프로세스 생성 시 `env` 옵션으로 전달 (OAuth token, API key, internal SSO 인증정보 등 불필요한 민감 정보의 자식 프로세스 유출 차단)
+- [ ] **Stream Backpressure 및 Deadlock 방지**
+  - 대용량 prompt를 stdin으로 넘길 때 `write()` 반환값을 감시하고 버퍼가 찰 경우 `drain` 이벤트를 대기하여 backpressure 조절
+  - stdout/stderr 데이터 수신 시, 무제한 버퍼링을 방지하기 위한 최대 캡처 제한(capture limit, e.g. 5MB) 및 truncation 전략 적용
+  - 버퍼 오버플로우나 파이프 막힘으로 인해 프로세스가 멈추는 데드락(deadlock) 방지 로직 적용
+- [ ] **Timeout / Cancellation 및 프로세스 Lifecycle Cleanup**
+  - `AdapterRuntimeContext.timeoutMs`와 `abortSignal`을 반드시 적용
+  - timeout 또는 abort 발생 시, 그리고 부모 프로세스 종료(SIGINT, SIGTERM, exit) 시 child process가 방치되거나 orphan/zombie로 남지 않도록 명시적인 프로세스 트리 cleanup/kill 로직 적용
+  - detached child process 사용 금지 또는 명시적인 라이프사이클 관리 필수
+- [ ] **Command/Credential Injection 방지**
   - prompt 내용이 command line argument로 들어가지 않음
   - stdin 전달 시에도 shell metacharacter escape 불필요하게 만들기 (가능하면 binary에 직접 전달)
-- [ ] **Stderr Redaction**
-  - stderr 전체를 `redactSecretsForLog` 통과시킨 후에만 로깅 또는 `providerRawSnippet`에 저장
-  - 원문 stderr는 절대 Event Storage, 로그, UI에 노출 금지
+- [ ] **Stderr/Stdout Redaction**
+  - stderr/stdout 전체를 `redactSecretsForLog` 통과시킨 후에만 로깅 또는 `providerRawSnippet`에 저장
+  - 원문 출력(stderr/stdout)은 절대 Event Storage, 로그 파일, UI 화면에 노출 금지
+- [ ] **Token/Log/Process-List 노출 방지**
+  - `curl -H "Authorization: Bearer ..."` 같은 argv 기반 credential 전달 금지 (shared/multi-user 호스트에서 `ps` 명령어 등으로 토큰 노출 우려)
+  - 인증 자격증명은 stdin 또는 별도 config 파일을 통해서만 전달하고, process-list에 토큰이 아규먼트로 노출되지 않는 수단(mitigation) 강구
 - [ ] **OAuth / Local Session Trust Boundary**
   - CLI가 로그인 세션에 의존하는 경우, `trustLevel`은 기본 `limited`
   - `trusted`로 올리려면 명시적 설정 필요
@@ -239,16 +248,21 @@
 ### 12.2 금지 행위
 
 - CLI를 호출할 때 prompt를 shell argument로 전달
-- stderr 원문을 로그나 Event Storage에 그대로 저장
+- `process.env` 전체를 자식 프로세스에 그대로 상속(direct inheritance)
+- curl 실행 시 헤더 토큰(`Authorization: Bearer ...`)과 같은 민감정보를 argv 인자로 직접 전달
+- 대용량 입력/출력 스트림에 대한 backpressure 및 truncation 제한 없이 버퍼링하여 데드락 위험 노출
+- stderr/stdout 원문을 필터링(redaction) 없이 로그나 Event Storage에 그대로 저장
 - CLI binary 경로를 하드코딩하거나 사용자 입력으로 받을 때 sanitization 없이 사용
 - OAuth 세션 파일(`~/.grok/auth.json`, `~/.gemini/oauth_creds.json` 등) 경로를 provider metadata에 직접 노출
 
 ### 12.3 테스트 필수 항목
 
-- prompt가 command line argument로 전달되지 않는지 검증
-- stdin으로 prompt가 전달되는지
-- timeout / AbortSignal 시 child process가 제대로 종료되는지
-- stderr에 secret이 포함된 경우 redaction 되는지
+- prompt가 command line argument로 전달되지 않고 `shell: false` 및 stdin을 통해 전달되는지 검증
+- 부모 프로세스 비정상 종료 / timeout / abort 발생 시 자식 프로세스가 완전히 kill 및 cleanup되는지 검증
+- 명시된 allowlist 이외의 부모 환경변수가 자식 프로세스에 유출(leakage)되지 않는지 환경변수 격리 테스트
+- 대용량 prompt 및 대규모 stdout 수신 시 backpressure 조절 및 데드락 없이 안정적으로 스트리밍/truncation 되는지 검증
+- stderr/stdout에 secret이 포함되어 출력되는 경우 `redactSecretsForLog`를 통해 마스킹되는지 검증
+- `ps` 등 시스템 프로세스 리스트 상에서 bearer token이 노출되는 취약점(argv 노출) 존재 여부 검토
 - binary missing, non-zero exit, empty stdout, parse failure 각각에 대해 올바른 `AdapterError`가 발생하는지
 - registry에 CLI provider metadata가 올바르게 등록되는지
 
