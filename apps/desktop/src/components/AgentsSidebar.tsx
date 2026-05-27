@@ -12,6 +12,17 @@ import { modelWindowSize } from "../lib/appConstants";
 import { agentRoleLabel } from "../lib/helpers";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
 import { StatusBadge } from "@/ui/status-badge";
 import type {
   AgentActivityStatus,
@@ -135,59 +146,64 @@ export function AgentsSidebar({
   };
 
   return (
-    <section
+    <Collapsible
       aria-label="Agents"
-      className="agents-sidebar-root rounded-lg border border-border bg-card"
+      asChild
+      onOpenChange={setIsOpen}
+      open={isOpen}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <button
-          aria-expanded={isOpen}
-          className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary"
-          onClick={() => setIsOpen((o) => !o)}
-          type="button"
-        >
-          <ChevronDown
-            className={cn(
-              "h-4 w-4 text-muted-foreground transition-transform",
-              !isOpen && "-rotate-90",
-            )}
-          />
-          Agents
-          <span className="text-xs text-muted-foreground">{agents.length}</span>
-        </button>
-        <Button
-          aria-label="agent 추가"
-          className="h-6 w-6"
-          onClick={onAddAgent}
-          size="icon"
-          variant="ghost"
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-
-      {isOpen ? (
-        <div className="space-y-3 p-2">
-          <AgentGroup
-            agents={core}
-            label="Core"
-            {...sharedCardProps}
-          />
-          <AgentGroup
-            agents={specialists}
-            label="Specialists"
-            {...sharedCardProps}
-          />
-          <AgentGroupCollapsible
-            agents={companions}
-            defaultOpen={false}
-            label="Companions"
-            {...sharedCardProps}
-          />
+      <section className="agents-sidebar-root rounded-lg border border-border bg-card">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <CollapsibleTrigger asChild>
+            <button
+              aria-expanded={isOpen}
+              className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary"
+              type="button"
+            >
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 text-muted-foreground transition-transform",
+                  !isOpen && "-rotate-90",
+                )}
+              />
+              Agents
+              <span className="text-xs text-muted-foreground">{agents.length}</span>
+            </button>
+          </CollapsibleTrigger>
+          <Button
+            aria-label="agent 추가"
+            className="h-6 w-6"
+            onClick={onAddAgent}
+            size="icon"
+            variant="ghost"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
         </div>
-      ) : null}
-    </section>
+
+        <CollapsibleContent>
+          <div className="space-y-3 p-2">
+            <AgentGroup
+              agents={core}
+              label="Core"
+              {...sharedCardProps}
+            />
+            <AgentGroup
+              agents={specialists}
+              label="Specialists"
+              {...sharedCardProps}
+            />
+            <AgentGroupCollapsible
+              agents={companions}
+              defaultOpen={false}
+              label="Companions"
+              {...sharedCardProps}
+            />
+          </div>
+        </CollapsibleContent>
+      </section>
+    </Collapsible>
   );
 }
 
@@ -242,26 +258,27 @@ function AgentGroupCollapsible({
   const [isOpen, setIsOpen] = useState(defaultOpen);
   if (agents.length === 0) return null;
   return (
-    <div>
-      <button
-        aria-expanded={isOpen}
-        className="flex w-full items-center gap-1 px-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
-        onClick={() => setIsOpen((o) => !o)}
-        type="button"
-      >
-        <ChevronDown
-          className={cn("h-3 w-3 transition-transform", !isOpen && "-rotate-90")}
-        />
-        {label} ({agents.length})
-      </button>
-      {isOpen ? (
+    <Collapsible onOpenChange={setIsOpen} open={isOpen}>
+      <CollapsibleTrigger asChild>
+        <button
+          aria-expanded={isOpen}
+          className="flex w-full items-center gap-1 px-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
+          type="button"
+        >
+          <ChevronDown
+            className={cn("h-3 w-3 transition-transform", !isOpen && "-rotate-90")}
+          />
+          {label} ({agents.length})
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
         <div className="mt-1 space-y-1">
           {agents.map((agent) => (
             <AgentCard agent={agent} key={agent.id} {...shared} />
           ))}
         </div>
-      ) : null}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -298,6 +315,12 @@ function AgentCard({
   const canShiftLeft = hasModelOverflow && modelWindowStart > 0;
   const canShiftRight =
     hasModelOverflow && modelWindowStart + modelWindowSize < providerModels.length;
+  const activeProvider = profiles.find(
+    (profile) => profile.id === agent.providerProfileId,
+  );
+  const activeModel = providerModels.find((model) => model.id === agent.modelId);
+  const providerLabel = activeProvider?.name ?? "provider...";
+  const modelLabel = activeModel?.name ?? agent.modelId ?? "model pending";
 
   return (
     <div
@@ -329,7 +352,7 @@ function AgentCard({
               {agent.name}
             </span>
             {agent.role === "orchestrator" ? (
-              <StatusBadge variant="primary" size="sm">
+              <StatusBadge className="shrink-0" size="sm" variant="primary">
                 Primary
               </StatusBadge>
             ) : null}
@@ -363,26 +386,44 @@ function AgentCard({
 
       {/* Bottom row: provider + model selector + status */}
       <div className="flex items-center gap-1.5 pl-9">
-        <select
-          aria-label={`${agent.name} provider`}
-          className="rounded bg-card/60 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none"
-          onChange={(event) => onAssignProvider(agent.id, event.target.value)}
-          value={agent.providerProfileId ?? ""}
-        >
-          <option value="">provider…</option>
-          {profiles.map((profile) => (
-            <option
-              disabled={
-                occupiedProviderIds.has(profile.id) &&
-                profile.id !== agent.providerProfileId
-              }
-              key={profile.id}
-              value={profile.id}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              aria-label={`${agent.name} provider`}
+              className="flex max-w-[110px] items-center gap-1 rounded bg-card/60 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              type="button"
             >
-              {profile.name}
-            </option>
-          ))}
-        </select>
+              <span className="truncate">{providerLabel}</span>
+              <ChevronDown className="h-2.5 w-2.5 shrink-0" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-44">
+            <DropdownMenuItem onSelect={() => onAssignProvider(agent.id, "")}>
+              provider...
+            </DropdownMenuItem>
+            {profiles.map((profile) => {
+              const isOccupied =
+                occupiedProviderIds.has(profile.id) &&
+                profile.id !== agent.providerProfileId;
+              return (
+                <DropdownMenuItem
+                  disabled={isOccupied}
+                  key={profile.id}
+                  onSelect={() => onAssignProvider(agent.id, profile.id)}
+                >
+                  <span className="truncate">{profile.name}</span>
+                  {profile.id === agent.providerProfileId ? (
+                    <span className="ml-auto text-[10px] text-primary">active</span>
+                  ) : isOccupied ? (
+                    <span className="ml-auto text-[10px] text-muted-foreground">
+                      busy
+                    </span>
+                  ) : null}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {hasModelOverflow ? (
           <Button
@@ -397,21 +438,34 @@ function AgentCard({
           </Button>
         ) : null}
 
-        <select
-          aria-label={`${agent.name} model`}
-          className="max-w-[120px] truncate rounded bg-card/60 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none"
-          onChange={(event) => onAssignModel(agent.id, event.target.value)}
-          value={agent.modelId ?? ""}
-        >
-          {visibleModels.length === 0 ? (
-            <option value="">model pending</option>
-          ) : null}
-          {visibleModels.map((model) => (
-            <option key={model.id} value={model.id}>
-              {model.name}
-            </option>
-          ))}
-        </select>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              aria-label={`${agent.name} model`}
+              className="flex max-w-[120px] items-center gap-1 rounded bg-card/60 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              type="button"
+            >
+              <span className="truncate">{modelLabel}</span>
+              <ChevronDown className="h-2.5 w-2.5 shrink-0" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-44">
+            {visibleModels.length === 0 ? (
+              <DropdownMenuItem disabled>model pending</DropdownMenuItem>
+            ) : null}
+            {visibleModels.map((model) => (
+              <DropdownMenuItem
+                key={model.id}
+                onSelect={() => onAssignModel(agent.id, model.id)}
+              >
+                <span className="truncate">{model.name}</span>
+                {model.id === agent.modelId ? (
+                  <span className="ml-auto text-[10px] text-primary">active</span>
+                ) : null}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {hasModelOverflow ? (
           <Button
@@ -428,9 +482,13 @@ function AgentCard({
 
         {/* in use indicator */}
         {isResponding ? (
-          <span className="ml-auto text-[10px] text-success">in use</span>
+          <StatusBadge className="ml-auto" size="sm" variant="success">
+            in use
+          </StatusBadge>
         ) : isPreparing ? (
-          <span className="ml-auto text-[10px] text-warning">prepare</span>
+          <StatusBadge className="ml-auto" size="sm" variant="warning">
+            prepare
+          </StatusBadge>
         ) : null}
       </div>
     </div>
