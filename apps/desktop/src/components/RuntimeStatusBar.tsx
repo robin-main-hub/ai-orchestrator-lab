@@ -4,6 +4,7 @@ import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
+import { providerDisplayLabel } from "../lib/helpers";
 
 /**
  * Runtime status bar — v0 visual port (TopNav 의 status 영역).
@@ -32,6 +33,7 @@ export function RuntimeStatusBar({
   const primaryNode = snapshot.runtimeNodes.find((node) => node.isPrimary);
   const dgxLabel = primaryNode?.label ?? snapshot.syncTopology.authorityLabel;
   const overallHealth = deriveHealth(snapshot);
+  const displayProviderName = providerDisplayLabel(providerName);
 
   return (
     <header className="flex h-10 shrink-0 items-center justify-between gap-4 border-b border-border bg-card/50 px-4">
@@ -39,7 +41,7 @@ export function RuntimeStatusBar({
       <div className="flex min-w-0 items-center gap-3 text-[11px]">
         <span className="flex items-center gap-1.5">
           <span className="text-muted-foreground">Active</span>
-          <span className="font-medium text-foreground">{providerName}</span>
+          <span className="font-medium text-foreground" title={providerName}>{displayProviderName}</span>
         </span>
         <Separator />
         <span className="flex items-center gap-1.5">
