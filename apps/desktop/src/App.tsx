@@ -125,6 +125,7 @@ import {
   modelWindowSize,
   now,
 } from "./lib/appConstants";
+import { getConversationShellVisibility } from "./lib/conversationShellVisibility";
 import {
   agentRoleLabel,
   classifyDraftAttachment,
@@ -2342,8 +2343,17 @@ export function App() {
     onHelp: () => setCheatSheetOpen((o) => !o),
   });
 
+  const shellVisibility = getConversationShellVisibility({
+    configLibraryActive,
+    mode,
+  });
+
   return (
-    <div className={`app-shell ${mode === "tmux" ? "tmux-focus-shell" : ""}`}>
+    <div
+      className={`app-shell ${mode === "tmux" ? "tmux-focus-shell" : ""} ${
+        mode === "conversation" && !configLibraryActive ? "conversation-v0-shell" : ""
+      }`}
+    >
       <RuntimeStatusBar
         onProbeDgx={handleProbeDgx}
         providerName={activeProvider?.name ?? "미선택"}
@@ -2351,7 +2361,9 @@ export function App() {
       />
       <main className="workspace-grid">
         <aside
-          className={`left-rail ${providerRegistrationOpen ? "provider-mode" : ""}`}
+          className={`left-rail ${providerRegistrationOpen ? "provider-mode" : ""} ${
+            shellVisibility.showLeftRail ? "" : "shell-surface-hidden"
+          }`}
           aria-label="오케스트레이터 네비게이션"
         >
           <div className="brand-block">
@@ -2565,7 +2577,11 @@ export function App() {
                 Tmux
               </button>
             </div>
-            <div className="toolbar-actions">
+            <div
+              className={`toolbar-actions ${
+                shellVisibility.showToolbarActions ? "" : "shell-surface-hidden"
+              }`}
+            >
               <button
                 className={`ghost-button approval-toolbar-button ${
                   permissionSnapshot.summary.pending > 0 ? "needs-attention" : ""
@@ -2658,7 +2674,7 @@ export function App() {
             />
           )}
 
-          {mode === "tmux" || configLibraryActive ? null : (
+          {shellVisibility.showWorkItemHandoffPanel ? (
             <WorkItemHandoffPanel
               drafts={assistantDrafts}
               handoffs={workItemHandoffs}
@@ -2666,16 +2682,16 @@ export function App() {
               onArchiveItem={handleArchiveWorkItem}
               onRouteItem={handleRouteWorkItem}
             />
-          )}
+          ) : null}
 
-          {mode === "tmux" || configLibraryActive ? null : (
+          {shellVisibility.showCodingPacketPanel ? (
             <CodingPacketPanel
               insightFindings={insightFindings}
               onReviewModeChange={handleReviewModeChange}
               packet={codingPacketState}
               reviewMode={reviewMode}
             />
-          )}
+          ) : null}
         </section>
 
         {mode === "tmux" ? null : (
@@ -2696,31 +2712,35 @@ export function App() {
               profiles={providerProfiles}
               selectedAgentId={selectedAgent?.id}
             />
-            <EvolveMementoPanel
-              inspector={memoryInspector}
-              onActivate={handleActivateMemory}
-              onForget={handleForgetMemory}
-              onPin={handlePinMemory}
-              onRemember={handleRememberCurrentContext}
-            />
+            {shellVisibility.showEvolveMementoPanel ? (
+              <EvolveMementoPanel
+                inspector={memoryInspector}
+                onActivate={handleActivateMemory}
+                onForget={handleForgetMemory}
+                onPin={handlePinMemory}
+                onRemember={handleRememberCurrentContext}
+              />
+            ) : null}
           </aside>
         )}
       </main>
-      <TerminalDock
-        agentRun={agentRunState}
-        dgxBridge={dgxBridgeState}
-        eventSyncState={eventSyncState}
-        events={eventLog}
-        onApproveNext={() => handleResolveNextPermission("approved")}
-        onCheckProviderVault={handleCheckProviderVault}
-        onRejectNext={() => handleResolveNextPermission("rejected")}
-        onReplayEvents={handleReplayEventStorage}
-        onSyncEvents={handleSyncEventStorage}
-        permissionSnapshot={permissionSnapshot}
-        providerReadiness={providerReadiness}
-        secretVaultSnapshot={secretVaultSnapshot}
-        slots={terminalSlots}
-      />
+      {shellVisibility.showTerminalDock ? (
+        <TerminalDock
+          agentRun={agentRunState}
+          dgxBridge={dgxBridgeState}
+          eventSyncState={eventSyncState}
+          events={eventLog}
+          onApproveNext={() => handleResolveNextPermission("approved")}
+          onCheckProviderVault={handleCheckProviderVault}
+          onRejectNext={() => handleResolveNextPermission("rejected")}
+          onReplayEvents={handleReplayEventStorage}
+          onSyncEvents={handleSyncEventStorage}
+          permissionSnapshot={permissionSnapshot}
+          providerReadiness={providerReadiness}
+          secretVaultSnapshot={secretVaultSnapshot}
+          slots={terminalSlots}
+        />
+      ) : null}
       {settingsAgent ? (
         <AgentSettingsPanel
           agent={settingsAgent}
