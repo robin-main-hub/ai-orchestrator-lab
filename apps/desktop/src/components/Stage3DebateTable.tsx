@@ -17,6 +17,7 @@ import type { Stage3DebateUtteranceView } from "../types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
+import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
 
 /**
  * Stage 3 Debate Table — strict v0 port.
@@ -227,9 +228,11 @@ function DebateRoundCard({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/15 text-[11px] font-semibold text-primary">
-            {utterance.agentName.slice(0, 1)}
-          </div>
+          <AvatarWithStatus
+            initials={utterance.agentName.slice(0, 2).toUpperCase()}
+            roleColor={roleColorFromRole(utterance.agentName.toLowerCase())}
+            size="sm"
+          />
           <div className="min-w-0">
             <div className="truncate text-sm font-medium text-foreground">
               {utterance.agentName}
@@ -240,10 +243,10 @@ function DebateRoundCard({
           </div>
         </div>
         {isDecision ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-mono text-primary">
+          <StatusBadge variant="primary" size="sm" className="font-mono gap-1 shrink-0">
             <GitMerge className="h-2.5 w-2.5" />
             DECISION
-          </span>
+          </StatusBadge>
         ) : null}
       </div>
 
@@ -351,19 +354,18 @@ function Pill({
   tone: "success" | "destructive" | "muted" | "primary";
   tooltip?: string;
 }) {
+  const variant =
+    tone === "success" ? "success"
+    : tone === "destructive" ? "danger"
+    : tone === "primary" ? "primary"
+    : "muted";
+
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full border bg-card/40 px-1.5 py-0 text-[9px] font-mono",
-        tone === "success" && "border-success/45 text-success",
-        tone === "destructive" && "border-destructive/45 text-destructive",
-        tone === "primary" && "border-primary/45 text-primary",
-        tone === "muted" && "border-border text-muted-foreground",
-      )}
-      title={tooltip}
-    >
-      {icon}
-      {label}
+    <span title={tooltip}>
+      <StatusBadge variant={variant} size="sm" className="font-mono gap-1">
+        {icon}
+        {label}
+      </StatusBadge>
     </span>
   );
 }
@@ -450,18 +452,18 @@ function AgentRelay({
                 key={entry.id}
               >
                 <div className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                  <StatusBadge
+                    variant={
                       entry.kind === "send" || entry.kind === "spawn"
-                        ? "bg-primary/15 text-primary"
+                        ? "primary"
                         : entry.kind === "approval"
-                          ? "bg-warning/15 text-warning"
-                          : "bg-card/60 text-muted-foreground",
-                    )}
+                          ? "warning"
+                          : "muted"
+                    }
+                    size="sm"
                   >
                     {entry.kind}
-                  </span>
+                  </StatusBadge>
                   <span className="text-xs font-medium text-foreground">
                     {entry.actor}
                   </span>
