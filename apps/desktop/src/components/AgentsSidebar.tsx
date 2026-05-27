@@ -81,6 +81,7 @@ type AgentCategory = "core" | "specialist" | "companion";
 
 const agentFullKoreanNameByIdentity: Record<string, string> = {
   architect: "오시노 시노부",
+  auditor: "카스가노 소라",
   builder: "히라사와 유이",
   chae_arin: "채아린",
   domain_expert: "헤르타",
@@ -93,8 +94,15 @@ const agentFullKoreanNameByIdentity: Record<string, string> = {
   researcher: "마오마오",
   reviewer: "시노미야 카구야",
   risk_officer: "C.C.",
+  skeptic: "소류 아스카 랭그레이",
+  verifier: "마키세 크리스",
   watchdog: "프리렌",
   yohane: "츠시마 요시코",
+};
+
+const agentDisplayRoleLabelByIdentity: Record<string, string> = {
+  skeptic: "UX 비판자",
+  yohane: "아이디어 뱅크",
 };
 
 function roleToCategory(role: WorkbenchAgent["role"]): AgentCategory {
@@ -116,7 +124,8 @@ function roleToCategory(role: WorkbenchAgent["role"]): AgentCategory {
 function agentSecondaryDisplayLabel(agent: WorkbenchAgent) {
   const identityKey = agent.personaName ?? agent.role;
   const displayName = agentFullKoreanNameByIdentity[identityKey] ?? agent.name;
-  return `${displayName} · ${agentRoleLabel(agent.role)}`;
+  const roleLabel = agentDisplayRoleLabelByIdentity[identityKey] ?? agentRoleLabel(agent.role);
+  return `${displayName} · ${roleLabel}`;
 }
 
 export function AgentsSidebar({
