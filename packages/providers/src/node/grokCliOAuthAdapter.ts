@@ -7,6 +7,8 @@ import type {
 } from "@ai-orchestrator/protocol";
 import type { AdapterRuntimeContext, LlmAdapter } from "../adapter.js";
 import { AdapterError, redactSecretsForLog, truncateForLog } from "../errors.js";
+import { buildCliSubprocessEnv } from "./cliSubprocessEnv.js";
+
 
 export type GrokCliOAuthAdapterOptions = {
   profileId?: string;
@@ -149,10 +151,10 @@ export async function runGrokExecSubprocess(params: GrokExecRunnerParams): Promi
   }
 
   let timedOut = false;
-  const env = {
-    ...process.env,
-    ...(params.grokHome ? { GROK_HOME: expandHomePath(params.grokHome) } : {}),
-  };
+  const env = buildCliSubprocessEnv(
+    params.grokHome ? { GROK_HOME: expandHomePath(params.grokHome) } : {}
+  );
+
 
   return await new Promise<GrokExecResult>((resolve, reject) => {
     const child = spawn(expandHomePath(params.grokBinPath), args, {
