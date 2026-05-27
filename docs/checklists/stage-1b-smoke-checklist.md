@@ -38,6 +38,17 @@
 | CommandPalette verb chip | `#191` (`0ab08d6`) | ✅ merged | Entry verb chip uses `StatusBadge`; full v0 CommandPalette port 아님; cmdk/Dialog/AvatarWithStatus 미도입 |
 | Stage3DebateTable avatar / Pill / relay badge | `#192` (`6da8d7c`) | ✅ merged | Debate avatar uses `AvatarWithStatus` first adoption surface; DECISION / Pill / AgentRelay kind badge use `StatusBadge`; status prop unused; initials 1자 -> 2자 |
 
+## R6 Conversation v0 parity wave
+
+| Surface | PR | Status | Smoke check |
+|---|---:|---|---|
+| Conversation v0 parity audit | `#166` | ✅ merged | Visual inspection checklist and deferred feature ledger added. |
+| Conversation shell pass | `#169` | ✅ merged | Left rail, TerminalDock, and side/bottom panels hide in Conversation mode; center board expands. |
+| Conversation workbench action row | `#173` | ✅ merged | ActionStrip and visibility cleanup inside the workbench. |
+| Conversation right rail pass | `#178` | ✅ merged | AgentsSidebar rail layout adapts, right rail width is 360-420px. |
+| AgentSettingsPanel DropdownMenu | `#194` | ✅ merged | Native select replaced with DropdownMenu; role change callback, slider, and avatar controls verified. |
+| v0 visual QA checklist | `#197` | merge 대기 | v0 visual QA checklist added to repository (refer to [v0-visual-qa-checklist.md](file:///Users/robin/Documents/ai-orchestrator-lab-review/docs/checklists/v0-visual-qa-checklist.md) for full items). |
+
 ## Removed stale gates
 
 - F10 gate 후 대기 문구 제거: Stage 1b 1차 wave 는 `#183` + `#182` 머지로 완료됨.
@@ -58,4 +69,4 @@
 
 - `CommandPalette` full v0 port — TODO / design judgment needed. `#191` 로 verb chip 은 완료됐지만 v0 CommandPalette 구조와 현재 repo verb-command 구조가 달라 단순 치환 금지.
 - `AvatarWithStatus` broader adoption — TODO / design judgment needed. `#192` 로 첫 적용 surface 는 생겼지만 `AgentAvatar` 는 protocol-aware component 이므로 무단 교체 금지.
-- `ConversationWorkbench` — FROZEN until `#166/#169/#173/#178` conversation stack and component split design are settled.
+- `ConversationWorkbench` structural decomposition — TODO / design judgment needed. monolithic `ConversationWorkbench` 를 v0 의 5-file 구조로 실제 분할하는 작업 미합의.

@@ -1,8 +1,9 @@
 # Work Board (Claude × Codex 협업 상태)
 
-## R5 canonical update (2026-05-27 sync)
+## R6 canonical update (2026-05-27 sync)
 
-origin/main @ `b9ee832` (`#164` merge, Stage 1b 기준 마지막 UI merge = `#192`). R4 v0 cascade train + R5 Stage 1b primitive adoption 1차/2차/3차 wave 완료 (2026-05-27 sync; 후속 `#156`~`#192`, scripts-only `#164`). 아래 R4-era open PR 표와 "Stage 1b 진행 중" 표현은 이 섹션이 최신 기준으로 supersede한다.
+origin/main @ `ecc8d0b` (`#197` merge 대기). R6 Conversation v0 parity wave (PR `#166`, `#169`, `#173`, `#178`, `#194`) 및 visual QA checklist (`#197`) 추가 완료. 아래 R5/R6 open PR 표와 완료 진행 상황은 최신 sync 기준이다.
+
 
 ### 2026-05-26 라운드 5 (Stage 1b primitive adoption - 1차 wave)
 
@@ -69,39 +70,24 @@ origin/main @ `b9ee832` (`#164` merge, Stage 1b 기준 마지막 UI merge = `#19
   4. PR body 에 `v0 fidelity` / `primitive normalization` / `design judgment` / `FROZEN` 중 해당 판정을 명시해야 함
   5. docs-only PR 과 code PR 은 역할을 분리해야 함
 
-### R5 Stage 1b status
+### R6 Conversation v0 parity wave status
 
-R5 Stage 1b 1차 wave (Debate + AgentCard + TmuxPaneCard) 완료 - `#183`, `#182` 머지.
-R5 Stage 1b 2차 wave (ControlQueueDrawer + RuntimeStatusBar + TmuxSwarmBoard + rail surfaces + CheatSheetOverlay) 완료 - `#184`~`#188` 머지.
-R5 Stage 1b 3차 wave (EvolveMemento RecordChips + CommandPalette verb chip + Debate avatar/pill/relay) 완료 - `#190`~`#192` 머지.
+R6 Conversation v0 parity wave (Audit + Shell visibility + Action row + Right rail/sidebar) 및 후속 PR 완료 - `#166`, `#169`, `#173`, `#178`, `#194` 머지 완료.
 
 완료 분류:
 
-- v0 fidelity 완료
-  - `Stage3DebateTable`: DebateRoundCard tag mapping (`#183`)
-  - `TmuxPaneCard`: pane status mapping (`#182`)
-- primitive normalization 완료
-  - `AgentsSidebar`: AgentCard Primary badge (`#183`)
-  - `ControlQueueDrawer`: lane chip (`#184`)
-  - `RuntimeStatusBar`: status rows (`#185`)
-  - `TmuxSwarmBoard`: gate/role status elements (`#186`)
-  - rail status surfaces: `BackupRailMenu`, `ChannelRailPanel`, `ProjectRailPanel` (`#187`)
-  - `CheatSheetOverlay`: shortcut priority chips (`#188`)
-  - `EvolveMementoPanel`: RecordChips / fusion chips (`#190`)
-  - `CommandPalette`: verb chip only (`#191`)
-  - `Stage3DebateTable`: DECISION / Pill / AgentRelay kind badge (`#192`)
-  - `Stage3DebateTable`: `AvatarWithStatus` first adoption surface (`#192`)
+- v0 visual parity 1차 완료
+  - `ConversationWorkbench` visual parity 및 visibility cleanup 완료 (`#166`, `#169`, `#173`, `#178`)
+  - `AgentSettingsPanel` DropdownMenu primitive 치환 완료 (`#194`)
+- structural decomposition은 design judgment / future work로 유지
+  - monolithic `ConversationWorkbench` 를 v0 의 5-file 구조(header/view/message-bubble/message-thread/composer + approval-queue)로 분해하는 작업은 미완 상태로 남겨둠.
 
 잔여 / 동결:
 
 - `CommandPalette` full v0 port - TODO / design judgment needed. `#191` 은 verb chip 만 완료했으며 v0 CommandPalette 구조와 현재 repo verb-command 구조가 달라 단순 치환 금지.
 - `AvatarWithStatus` broader adoption - TODO / design judgment needed. `#192` 에서 첫 적용은 완료했지만 `AgentAvatar` 는 protocol-aware component 이므로 무단 교체 금지.
-- `ConversationWorkbench` - FROZEN.
+- `ConversationWorkbench` structural decomposition - monolithic 대형 컴포넌트를 v0 5-file 구조로 실제 분할하는 작업 (future work).
 
-ConversationWorkbench: frozen -
-(1) Codex stacked train (`#166` -> `#169` -> `#173` -> `#178`) 동시 작업
-(2) monolithic `ConversationWorkbench` 를 v0 의 5-file 구조(header/view/message-bubble/message-thread/composer + approval-queue)로 분해하는 design 미합의
-두 조건 해소 후 별도 라운드 진입.
 
 Claude와 Codex가 같은 repo를 분업할 때 서로의 작업 상태와 합의를 한 페이지로 보기 위한 작업판.
 
@@ -386,8 +372,14 @@ R3.1 → R4 추가 정리됨:
 - ~~v0 디자인 적용~~ — ✅ **#111 (Stage 0) + #113 (Stage 1a) + #141 (token 통합) + #143~#152 (8 panel cascade) + #154 (Stage 1b adoption 시작) 로 closure 임박**
 - ~~EvolveMemento 통합~~ — ✅ **#124 (spec) + #125/#128/#135/#139 (Codex) + #129/#138/#143 (Claude) 로 v1 완성**
 
-여전히 미정:
+여전히 미정 / 남은 큰 과제:
 
+- visual QA (PR #197 및 후속 점검)
+- `ConversationWorkbench` structural decomposition (monolithic 분할)
+- `CommandPalette` full v0 port
+- `AvatarWithStatus` 잔여 surface policy (broader adoption)
+- BEM legacy panel cleanup
+- provider CLI hardening follow-up (PR #196 env allowlist 및 후속)
 - Tool use / function call — Anthropic / OpenAI 명세 차이 어댑터 통합 후
 - Multimodal (image / document) — ModelDescriptor에 flag만, 어댑터 미구현
 - Coding Packet 실행 게이트 — packet 검증은 있고 실 실행 0
@@ -396,6 +388,7 @@ R3.1 → R4 추가 정리됨:
 - **Stage 1b primitive cascade — 나머지 7 panel** (#154 패턴을 ConversationWorkbench / Stage3DebateTable / TmuxPaneCard / AgentsSidebar / ControlQueueDrawer / CommandPalette / RuntimeStatusBar 에 mechanical 채용)
 - **dropdown-menu + collapsible primitive** (npm deps 설치 + `src/ui/` wrapper 추가)
 - **deferred-feature ledger 의 🔴 항목 재진입** (각 항목별로 별도 surface 찾아 다시 등장)
+
 
 ## 8. 최근 결정 로그
 
