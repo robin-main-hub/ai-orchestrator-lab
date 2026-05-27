@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react";
-import { ImageIcon, X } from "lucide-react";
+import { ImageIcon, X, ChevronDown } from "lucide-react";
 import { agentRoleLabel } from "../lib/helpers";
 import { agentRoleOptions } from "../lib/appConstants";
 import type { AgentVisualSettings, WorkbenchAgent } from "../types";
 import { AgentAvatar } from "./AgentAvatar";
 import { AutonomySlider, type AutonomyLevel } from "./AutonomySlider";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "../ui/dropdown-menu";
 
 export function AgentSettingsPanel({
   agent,
@@ -68,20 +74,35 @@ export function AgentSettingsPanel({
         </label>
         <label>
           <span>역할</span>
-          <select
-            onChange={(event) =>
-              onUpdateAgent(agent.id, {
-                role: event.target.value as WorkbenchAgent["role"],
-              })
-            }
-            value={agent.role}
-          >
-            {agentRoleOptions.map((role) => (
-              <option key={role} value={role}>
-                {agentRoleLabel(role)}
-              </option>
-            ))}
-          </select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                aria-label="Agent role selector"
+                className="flex w-full items-center justify-between rounded border border-input bg-card px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                type="button"
+              >
+                <span>{agentRoleLabel(agent.role)}</span>
+                <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              {agentRoleOptions.map((role) => (
+                <DropdownMenuItem
+                  key={role}
+                  onSelect={() =>
+                    onUpdateAgent(agent.id, {
+                      role: role as WorkbenchAgent["role"],
+                    })
+                  }
+                >
+                  <span>{agentRoleLabel(role)}</span>
+                  {role === agent.role ? (
+                    <span className="ml-auto text-[10px] text-primary font-medium">active</span>
+                  ) : null}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </label>
         <div className="agent-avatar-editor">
           <div>
