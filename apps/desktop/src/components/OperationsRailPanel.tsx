@@ -6,6 +6,7 @@ import type {
   ProviderRuntimeReadiness,
   SecretVaultSnapshot,
 } from "@ai-orchestrator/protocol";
+import { StatusBadge } from "@/ui/status-badge";
 import type { DesktopApprovalListResponse } from "../runtime/stage34ApprovalServer";
 import type { Stage7BackupSnapshot } from "../runtime/stage7Backup";
 import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
@@ -97,7 +98,18 @@ export function OperationsRailPanel({
         </div>
         <div>
           <span>provider</span>
-          <strong>{providerReadiness.status}</strong>
+          <StatusBadge
+            size="sm"
+            variant={
+              providerReadiness.status === "ready"
+                ? "success"
+                : providerReadiness.status === "needs_approval"
+                  ? "warning"
+                  : "danger"
+            }
+          >
+            {providerReadiness.status}
+          </StatusBadge>
         </div>
         <div>
           <span>vault</span>
