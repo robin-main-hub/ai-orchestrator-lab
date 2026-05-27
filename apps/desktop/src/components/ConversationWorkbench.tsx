@@ -37,6 +37,7 @@ import {
   getMessageAttachments,
   modelSupportsAnyAttachment,
   agentRoleLabel,
+  providerDisplayLabel,
 } from "../lib/helpers";
 import {
   branchStatusLabel,
@@ -330,7 +331,7 @@ function ConversationHeader({
           <span className="text-[10px] text-muted-foreground">현재 대화 상대</span>
           <span className="truncate text-xs font-medium text-foreground">
             {selectedAgent?.name ?? "봇 선택 필요"} ·{" "}
-            {selectedProvider?.name ?? "provider pending"}
+            {selectedProvider ? providerDisplayLabel(selectedProvider.name) : "provider pending"}
           </span>
         </div>
       </div>
