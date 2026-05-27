@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
 import { modelWindowSize } from "../lib/appConstants";
+import { agentRoleLabel } from "../lib/helpers";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import {
@@ -78,6 +79,24 @@ export type AgentsSidebarProps = {
 
 type AgentCategory = "core" | "specialist" | "companion";
 
+const agentFullKoreanNameByIdentity: Record<string, string> = {
+  architect: "오시노 시노부",
+  builder: "히라사와 유이",
+  chae_arin: "채아린",
+  domain_expert: "헤르타",
+  executor: "렘",
+  external: "미사토 카츠라기",
+  mediator: "니코 로빈",
+  memory_curator: "레이 아야나미",
+  negotiator: "스파클",
+  orchestrator: "마키마",
+  researcher: "마오마오",
+  reviewer: "시노미야 카구야",
+  risk_officer: "C.C.",
+  watchdog: "프리렌",
+  yohane: "츠시마 요시코",
+};
+
 function roleToCategory(role: WorkbenchAgent["role"]): AgentCategory {
   switch (role) {
     case "orchestrator":
@@ -92,6 +111,12 @@ function roleToCategory(role: WorkbenchAgent["role"]): AgentCategory {
     default:
       return "specialist";
   }
+}
+
+function agentSecondaryDisplayLabel(agent: WorkbenchAgent) {
+  const identityKey = agent.personaName ?? agent.role;
+  const displayName = agentFullKoreanNameByIdentity[identityKey] ?? agent.name;
+  return `${displayName} · ${agentRoleLabel(agent.role)}`;
 }
 
 export function AgentsSidebar({
@@ -330,7 +355,7 @@ function AgentCard({
           : "hover:bg-card/60",
       )}
     >
-      {/* Top row: avatar + display name + Primary + actions */}
+      {/* Top row: avatar + name + identity label + actions */}
       <div className="flex items-start gap-2">
         <button
           aria-label={`${agent.name} 선택`}
@@ -357,7 +382,7 @@ function AgentCard({
             ) : null}
           </div>
           <span className="text-[11px] text-muted-foreground">
-            {agent.name}
+            {agentSecondaryDisplayLabel(agent)}
           </span>
         </button>
 
