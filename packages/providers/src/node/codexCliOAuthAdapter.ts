@@ -9,6 +9,8 @@ import type {
 } from "@ai-orchestrator/protocol";
 import type { AdapterRuntimeContext, LlmAdapter } from "../adapter.js";
 import { AdapterError, redactSecretsForLog, truncateForLog } from "../errors.js";
+import { buildCliSubprocessEnv } from "./cliSubprocessEnv.js";
+
 
 export type CodexCliOAuthAdapterOptions = {
   profileId?: string;
@@ -168,10 +170,10 @@ export async function runCodexExecSubprocess(params: CodexExecRunnerParams): Pro
   args.push("-");
 
   let timedOut = false;
-  const env = {
-    ...process.env,
-    ...(params.codexHome ? { CODEX_HOME: expandHomePath(params.codexHome) } : {}),
-  };
+  const env = buildCliSubprocessEnv(
+    params.codexHome ? { CODEX_HOME: expandHomePath(params.codexHome) } : {}
+  );
+
 
   try {
     return await new Promise<CodexExecResult>((resolve, reject) => {
