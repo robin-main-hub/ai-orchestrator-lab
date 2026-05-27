@@ -100,6 +100,11 @@ const agentFullKoreanNameByIdentity: Record<string, string> = {
   yohane: "츠시마 요시코",
 };
 
+const agentDisplayRoleLabelByIdentity: Record<string, string> = {
+  skeptic: "UX 비판자",
+  yohane: "아이디어 뱅크",
+};
+
 function roleToCategory(role: WorkbenchAgent["role"]): AgentCategory {
   switch (role) {
     case "orchestrator":
@@ -119,7 +124,8 @@ function roleToCategory(role: WorkbenchAgent["role"]): AgentCategory {
 function agentSecondaryDisplayLabel(agent: WorkbenchAgent) {
   const identityKey = agent.personaName ?? agent.role;
   const displayName = agentFullKoreanNameByIdentity[identityKey] ?? agent.name;
-  return `${displayName} · ${agentRoleLabel(agent.role)}`;
+  const roleLabel = agentDisplayRoleLabelByIdentity[identityKey] ?? agentRoleLabel(agent.role);
+  return `${displayName} · ${roleLabel}`;
 }
 
 export function AgentsSidebar({
