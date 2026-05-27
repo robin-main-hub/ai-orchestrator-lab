@@ -7,6 +7,8 @@ import type {
 } from "@ai-orchestrator/protocol";
 import type { AdapterRuntimeContext, LlmAdapter } from "../adapter.js";
 import { AdapterError, redactSecretsForLog, truncateForLog } from "../errors.js";
+import { buildCliSubprocessEnv } from "./cliSubprocessEnv.js";
+
 
 export type GeminiCliAdapterOptions = {
   profileId?: string;
@@ -149,10 +151,10 @@ export async function runGeminiExecSubprocess(params: GeminiExecRunnerParams): P
   }
 
   let timedOut = false;
-  const env = {
-    ...process.env,
-    ...(params.geminiHome ? { GEMINI_HOME: expandHomePath(params.geminiHome) } : {}),
-  };
+  const env = buildCliSubprocessEnv(
+    params.geminiHome ? { GEMINI_HOME: expandHomePath(params.geminiHome) } : {}
+  );
+
 
   return await new Promise<GeminiExecResult>((resolve, reject) => {
     const child = spawn(expandHomePath(params.geminiBinPath), args, {
