@@ -280,10 +280,10 @@ function ImportanceBar({
         />
       </div>
       {reinforcement && reinforcement > 0 ? (
-        <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-success/15 px-1 py-0.5 text-[9px] font-mono text-success">
+        <StatusBadge variant="success" size="sm" className="font-mono gap-0.5 shrink-0">
           <TrendingUp className="h-2.5 w-2.5" />
           {reinforcement.toFixed(1)}
-        </span>
+        </StatusBadge>
       ) : null}
     </div>
   );
@@ -337,18 +337,16 @@ function Chip({
   tone?: "primary" | "violet" | "warning";
   title?: string;
 }) {
+  const variant =
+    tone === "primary" ? "primary"
+    : tone === "warning" ? "warning"
+    : "muted";
+
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-0.5 rounded-full border bg-card/40 px-1.5 py-0 text-[9px] font-mono",
-        tone === "primary" && "border-primary/45 text-primary",
-        tone === "violet" && "border-chart-5/45 text-chart-5",
-        tone === "warning" && "border-warning/45 text-warning",
-        !tone && "border-border text-muted-foreground",
-      )}
-      title={title}
-    >
-      {children}
+    <span title={title}>
+      <StatusBadge variant={variant} size="sm" className="font-mono gap-0.5">
+        {children}
+      </StatusBadge>
     </span>
   );
 }
@@ -376,20 +374,22 @@ function FusionBreakdown({ detail }: { detail?: RecallResult["fusionDetail"] }) 
       <span className="text-[8.5px] uppercase tracking-wider text-muted-foreground">
         {detail.fusionMode}
       </span>
-      {detail.views.map((v) => (
-        <span
-          className={cn(
-            "rounded px-1 text-[9px]",
-            v.view === "lexical" && "bg-warning/15 text-warning",
-            v.view === "semantic" && "bg-chart-5/15 text-chart-5",
-            v.view === "metadata" && "bg-success/15 text-success",
-          )}
-          key={`${v.view}-${v.rank}`}
-          title={`${v.view} rank #${v.rank} (raw ${v.rawScore.toFixed(2)})`}
-        >
-          {viewShort[v.view]}#{v.rank}
-        </span>
-      ))}
+      {detail.views.map((v) => {
+        const variant =
+          v.view === "lexical" ? "warning"
+          : v.view === "metadata" ? "success"
+          : "muted";
+        return (
+          <span
+            key={`${v.view}-${v.rank}`}
+            title={`${v.view} rank #${v.rank} (raw ${v.rawScore.toFixed(2)})`}
+          >
+            <StatusBadge variant={variant} size="sm" className="font-mono">
+              {viewShort[v.view]}#{v.rank}
+            </StatusBadge>
+          </span>
+        );
+      })}
     </div>
   );
 }
