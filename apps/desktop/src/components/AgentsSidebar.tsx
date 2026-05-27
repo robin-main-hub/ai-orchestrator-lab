@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
 import { modelWindowSize } from "../lib/appConstants";
-import { agentRoleLabel } from "../lib/helpers";
+import { agentRoleLabel, providerDisplayLabel } from "../lib/helpers";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import {
@@ -381,7 +381,7 @@ function AgentCard({
     (profile) => profile.id === agent.providerProfileId,
   );
   const activeModel = providerModels.find((model) => model.id === agent.modelId);
-  const providerLabel = activeProvider?.name ?? "provider...";
+  const providerLabel = activeProvider ? providerDisplayLabel(activeProvider.name) : "provider...";
   const modelLabel = activeModel?.name ?? agent.modelId ?? "model pending";
   const primaryDisplayName = agentPrimaryDisplayName(agent);
   const secondaryDisplayLabel = agentSecondaryDisplayLabel(agent);
@@ -469,19 +469,18 @@ function AgentCard({
               const isOccupied =
                 occupiedProviderIds.has(profile.id) &&
                 profile.id !== agent.providerProfileId;
+              const displayLabel = providerDisplayLabel(profile.name);
               return (
                 <DropdownMenuItem
                   disabled={isOccupied}
                   key={profile.id}
                   onSelect={() => onAssignProvider(agent.id, profile.id)}
                 >
-                  <span className="truncate">{profile.name}</span>
+                  <span className="truncate">{displayLabel}</span>
                   {profile.id === agent.providerProfileId ? (
                     <span className="ml-auto text-[10px] text-primary">active</span>
                   ) : isOccupied ? (
-                    <span className="ml-auto text-[10px] text-muted-foreground">
-                      busy
-                    </span>
+                    <span className="ml-auto text-[10px] text-muted-foreground">busy</span>
                   ) : null}
                 </DropdownMenuItem>
               );
