@@ -1,5 +1,6 @@
 import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import type { ModelDiscoverySnapshot, ProviderProfile } from "@ai-orchestrator/protocol";
+import { StatusBadge } from "@/ui/status-badge";
 import type { ModelCatalog } from "../types";
 
 export function ProviderProfilesManagerPanel({
@@ -43,7 +44,20 @@ export function ProviderProfilesManagerPanel({
                   {models.length} models / {discovery?.status ?? "cached"} / {discovery?.source ?? "seed"}
                 </small>
               </div>
-              <span className={`trust ${profile.trustLevel}`}>{profile.trustLevel}</span>
+              <StatusBadge
+                size="sm"
+                variant={
+                  profile.trustLevel === "trusted"
+                    ? "success"
+                    : profile.trustLevel === "limited"
+                      ? "warning"
+                      : profile.trustLevel === "untrusted"
+                        ? "danger"
+                        : "muted"
+                }
+              >
+                {profile.trustLevel}
+              </StatusBadge>
               <div className="provider-actions">
                 <button
                   aria-label={`${profile.name} model discovery`}
