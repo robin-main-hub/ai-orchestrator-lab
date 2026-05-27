@@ -26,24 +26,40 @@ export function providerDisplayLabel(name: string): string {
   const dgxNumber = dgxMatch?.[1];
   const grokSessionNumber = grokSessionMatch?.[1];
 
-  if (normalized.includes("apikey.fun") || normalized.includes("apifun")) return "Claude (3rd)";
-  if (normalized.includes("\uB9AC\uC140\uB7EC") || normalized.includes("reseller")) return "Claude (3rd)";
+  if (normalized.includes("apikey.fun") || normalized.includes("apifun")) {
+    if (normalized.includes("claude a")) return "Claude A (APIFun)";
+    if (normalized.includes("claude b")) return "Claude B (APIFun)";
+    return "Claude (3rd)";
+  }
+  if (normalized.includes("\uB9AC\uC140\uB7EC") || normalized.includes("reseller")) {
+    if (normalized.includes("\uD638\uD658")) return "\uB9AC\uC140\uB7EC \uD638\uD658";
+    return "\uB9AC\uC140\uB7EC";
+  }
   if (
     normalized.includes("openai") &&
     (normalized.includes("\uD638\uD658") || normalized.includes("compatible") || normalized.includes("compat"))
   ) {
     return "OpenAI \uD638\uD658";
   }
-  if (normalized.includes("deepseek")) return "DeepSeek";
-  if (normalized.includes("openrouter")) return "OpenRouter";
+  if (normalized.includes("deepseek")) {
+    if (normalized.includes("dgx")) return "DeepSeek (DGX)";
+    return "DeepSeek";
+  }
+  if (normalized.includes("openrouter")) {
+    if (normalized.includes("dgx")) return "OpenRouter (DGX)";
+    return "OpenRouter";
+  }
   if (normalized.includes("codex")) return "Codex";
   if (grokSessionNumber) return `Grok #${grokSessionNumber}`;
   if (normalized.includes("grok")) return "Grok";
   if (normalized.includes("gemini")) return "Gemini";
   if (normalized.includes("anthropic") || normalized.includes("claude")) return "Claude";
+  if (normalized.includes("openclaw")) {
+    if (dgxNumber) return `DGX-${dgxNumber.padStart(2, "0")} OpenClaw`;
+    return "OpenClaw";
+  }
   if (dgxNumber) return `DGX-${dgxNumber.padStart(2, "0")}`;
   if (normalized.includes("dgx")) return "DGX";
-  if (normalized.includes("openclaw")) return "OpenClaw";
   if (normalized.includes("openai")) return "OpenAI";
 
   return name;
