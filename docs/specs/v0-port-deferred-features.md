@@ -1,8 +1,8 @@
 # v0 port — deferred features ledger
 
-## R5 status update (Stage 1b 1차/2차 wave)
+## R5 status update (Stage 1b 1차/2차/3차 wave)
 
-기준: origin/main @ `310e38d6` (`#188` merge, full SHA `310e38d6eef6cbad55a6c793ed431a8904e42dfb`).
+기준: origin/main @ `b9ee832` (`#164` merge, Stage 1b 기준 마지막 UI merge = `#192` / `6da8d7c5f0473df885f39b642bee481489bbab2a`).
 
 ✅ R5 1차 wave 머지 완료:
 
@@ -17,6 +17,12 @@
 - TmuxSwarmBoard status elements: primitive normalization 완료, merge commit `6e581fd` (`#186`). gate chip + role/status elements 중심. v0 fidelity 로 과장하지 않음.
 - Rail status surfaces: primitive normalization 완료, merge commit `84c5373` (`#187`). `BackupRailMenu`, `ChannelRailPanel`, `ProjectRailPanel` 대상.
 - CheatSheetOverlay status chips: primitive normalization 완료, merge commit `310e38d` (`#188`). `CommandPalette` 는 건드리지 않음.
+
+✅ R5 3차 wave 머지 완료:
+
+- EvolveMementoPanel RecordChips: primitive normalization 완료, merge commit `f842919` (`#190`). reinforcement / generic RecordChips / fusion view rank chip 이 `StatusBadge` 로 치환됨. `persons` / `semantic` 의 기존 violet 계열 tone 은 `muted` 로 흡수된 의도적 normalization.
+- CommandPalette verb chip: primitive normalization 완료, merge commit `0ab08d6` (`#191`). entry verb inline chip 만 `StatusBadge` 로 치환됨. full v0 CommandPalette port 는 아님; `cmdk`, Dialog 구조, `AvatarWithStatus` 는 미도입.
+- Stage3DebateTable avatar / pill / relay badge: primitive normalization 완료, merge commit `6da8d7c` (`#192`). DebateRoundCard avatar 는 `AvatarWithStatus` 첫 적용 surface 이며, DECISION / Pill / AgentRelay kind badge 는 `StatusBadge` 로 치환됨. `status` prop 미사용, initials 1자 -> 2자 변경, `roleColorFromRole(agentName)` fallback 은 follow-up note.
 
 Release-note 의미축 정정:
 
@@ -34,9 +40,8 @@ Current remaining Stage 1b candidates:
 
 | Surface | 판정 | 이유 | 다음 진입 조건 |
 |---|---|---|---|
-| `EvolveMementoPanel` RecordChips inline tag | TODO / safe mechanical | `사용됨` badge 는 `StatusBadge` 로 완료됐지만 RecordChips 내부 inline tag 가 남아 있음. | 별도 small PR 로 `StatusBadge` 치환 가능성 검토 |
-| `CommandPalette` | TODO / design judgment needed | v0 CommandPalette 는 cmdk/agent-palette 구조, 현재 repo 는 verb-command palette 구조. 단순 치환 금지. | 구조/데이터 흐름 판정 후 진행 |
-| `AvatarWithStatus` adoption | TODO / design judgment needed | primitive 는 있으나 실제 적용 surface 는 없음. 현재 `AgentAvatar` 는 protocol-aware component. | `AgentAvatar` 공존/대체 정책 합의 |
+| `CommandPalette` full v0 port | TODO / design judgment needed | `#191` 로 verb chip 은 완료됐지만 v0 CommandPalette 는 cmdk/agent-palette 구조, 현재 repo 는 verb-command palette 구조. 단순 치환 금지. | 구조/데이터 흐름 판정 후 진행 |
+| `AvatarWithStatus` broader adoption | TODO / design judgment needed | `#192` 로 첫 적용 surface 는 생겼지만 현재 `AgentAvatar` 는 protocol-aware component. | `AgentAvatar` 공존/대체 정책 합의 |
 | `ConversationWorkbench` | FROZEN | `#166/#169/#173/#178` conversation stack 과 v0 5-file 구조 분해 설계 미합의. | stacked train 정리 + component split 설계 합의 |
 
 > **목적**: v0 mockup 에 없거나 v0 의 단순 레이아웃에 들어가지 않는 우리만의 기능들을 기록. 나중에 별도 진입점 (right-click context, sub-page, drawer 등) 에서 재도입할 자리를 찾을 때 참고.
@@ -112,6 +117,8 @@ Stage 1b note: `#184` 에서 lane chip label 은 `StatusBadge` 로 primitive nor
 | Cheat Sheet overlay (`?` shortcut) | 🔴 | v0 에 없음. 학습용 별도 modal. 우리만의 추가 surface. | 그대로 유지 |
 
 Stage 1b note: `#188` 은 `CheatSheetOverlay` 만 primitive normalization 했고 `CommandPalette` 는 건드리지 않음. `CommandPalette` 는 TODO / design judgment needed 로 유지.
+
+Stage 1b note: `#191` 은 `CommandPalette` entry verb chip 만 primitive normalization 했음. full v0 CommandPalette port 는 여전히 design judgment needed 로 유지.
 
 ## Top nav / status bar (PR #150)
 
