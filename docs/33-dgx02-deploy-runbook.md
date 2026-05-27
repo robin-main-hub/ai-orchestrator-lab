@@ -73,6 +73,31 @@ Expected:
 - `/provider-registry` without bearer returns `401`.
 - `/provider-registry` with bearer returns `200`.
 
+### Automated Probes (GET-only Read-only)
+
+For a quick, read-only diagnostic check of the deployed server, use the automated probe scripts in `scripts/dgx-02/`. These scripts execute only safe HTTP GET requests to audit the node's availability.
+
+- **`probe-health.sh`**: Checks `/health` (public) and `/heartbeat` (private).
+- **`probe-models.sh`**: Checks `/models` and `/provider-models` for vLLM status.
+- **`probe-all.sh`**: A wrapper script that sequentially executes `probe-health.sh` and `probe-models.sh`.
+
+#### Usage Example
+
+To verify the local deployment:
+
+```bash
+# Execute health and model checks sequentially
+DGX_SERVER_BASE_URL=http://127.0.0.1:4317 \
+  ORCHESTRATOR_API_TOKEN=$ORCHESTRATOR_API_TOKEN \
+  DGX_PROBE_TIMEOUT_SECONDS=5 \
+  ./scripts/dgx-02/probe-all.sh
+```
+
+> [!WARNING]
+> - **Credential Safety**: Never hardcode production API tokens inside runbooks or wrapper files. Always pass them dynamically via shell environment variables or retrieve them from a secure vault.
+> - **CI Logging**: Ensure that execution logs in CI/CD pipelines mask or redact environment variables (such as `ORCHESTRATOR_API_TOKEN`) to prevent token leaks.
+> - **Network Security**: The scripts default to HTTP for internal network checks. If executing queries over public networks, configure `DGX_SERVER_BASE_URL` with `https://` for transport security.
+
 5. Run no-engine smoke checks:
 
 ```bash
