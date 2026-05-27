@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
 import { modelWindowSize } from "../lib/appConstants";
-import { agentRoleLabel } from "../lib/helpers";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import {
@@ -331,7 +330,7 @@ function AgentCard({
           : "hover:bg-card/60",
       )}
     >
-      {/* Top row: avatar + role + Primary + actions */}
+      {/* Top row: avatar + display name + Primary + actions */}
       <div className="flex items-start gap-2">
         <button
           aria-label={`${agent.name} 선택`}
@@ -358,7 +357,7 @@ function AgentCard({
             ) : null}
           </div>
           <span className="text-[11px] text-muted-foreground">
-            {agentRoleLabel(agent.role)}
+            {agent.name}
           </span>
         </button>
 
