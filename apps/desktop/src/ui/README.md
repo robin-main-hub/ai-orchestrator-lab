@@ -17,6 +17,8 @@ components migrate to use these one panel at a time (Stage 2+).
 | `label` | `react-label` | Form-control association |
 | `tooltip` | `react-tooltip` | Hover popover with 0-delay variant |
 | `popover` | `react-popover` | Click-anchored content |
+| `dropdown-menu` | `react-dropdown-menu` | Menu, checkbox/radio item, submenu, separator, shortcut slots |
+| `collapsible` | `react-collapsible` | Lightweight disclosure primitive for deferred panel sections |
 | `dialog` | `react-dialog` | Modal overlay + close affordance |
 | `sheet` | `react-dialog` (variant) | Slide-in drawer (right edge by default) |
 | `scroll-area` | `react-scroll-area` | Custom scrollbar — used by long lists |
@@ -32,8 +34,8 @@ actually needs them — keeps the bundle lean and avoids carrying
 dead-weight code:
 
 `accordion`, `alert`, `alert-dialog`, `aspect-ratio`, `breadcrumb`,
-`calendar`, `carousel`, `chart`, `checkbox`, `collapsible`, `command`,
-`context-menu`, `drawer`, `dropdown-menu`, `form`, `hover-card`,
+`calendar`, `carousel`, `chart`, `checkbox`, `command`,
+`context-menu`, `drawer`, `form`, `hover-card`,
 `input-otp`, `menubar`, `navigation-menu`, `pagination`, `progress`,
 `radio-group`, `resizable`, `select`, `sidebar` (Shadcn's prebuilt
 shell — we'll build ours), `slider`, `sonner`, `table`, `toast`,
