@@ -1,6 +1,7 @@
 import { RadioTower, Smartphone } from "lucide-react";
 import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
 import { guardStepLabel } from "../lib/uiLabels";
+import { StatusBadge } from "@/ui/status-badge";
 
 export function IngressGuardPanel({
   onImportTelegram,
@@ -31,7 +32,19 @@ export function IngressGuardPanel({
         </div>
         <div>
           <span>approval</span>
-          <strong>{snapshot.result.approvalState}</strong>
+          <StatusBadge
+            size="sm"
+            variant={
+              snapshot.result.approvalState === "not_required"
+                ? "success"
+                : snapshot.result.approvalState === "required"
+                  ? "warning"
+                  : "danger"
+            }
+            className="mt-1 w-fit"
+          >
+            {snapshot.result.approvalState}
+          </StatusBadge>
         </div>
       </div>
       <div className="guard-step-list" aria-label="Ingress guard steps">
