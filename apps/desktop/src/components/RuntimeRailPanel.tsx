@@ -1,7 +1,7 @@
 import { Power, RefreshCw, Server } from "lucide-react";
 import type { DeviceRebootRequest, DeviceRebootWatchdog, RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import type { Stage32DgxRouteDiagnosticSnapshot } from "../runtime/stage32DgxRouteDiagnostics";
-import { statusTone } from "../lib/uiLabels";
+import { StatusBadge } from "@/ui/status-badge";
 
 export function RuntimeRailPanel({
   dgxRouteDiagnostics,
@@ -46,7 +46,19 @@ export function RuntimeRailPanel({
               </button>
             </div>
             <strong>{node.id === "dgx-01" ? "guarded" : node.isPrimary ? "main" : node.role}</strong>
-            <em className={statusTone(node.status)}>{node.status}</em>
+            <StatusBadge
+              size="sm"
+              variant={
+                node.status === "online"
+                  ? "success"
+                  : node.status === "offline"
+                    ? "danger"
+                    : "warning"
+              }
+              className="mt-1 w-fit"
+            >
+              {node.status}
+            </StatusBadge>
           </article>
         ))}
       </div>
@@ -61,7 +73,18 @@ export function RuntimeRailPanel({
         </div>
         <div>
           <span>memento</span>
-          <strong className={statusTone(snapshot.memorySyncStatus)}>{snapshot.memorySyncStatus}</strong>
+          <StatusBadge
+            size="sm"
+            variant={
+              snapshot.memorySyncStatus === "online"
+                ? "success"
+                : snapshot.memorySyncStatus === "offline"
+                  ? "danger"
+                  : "warning"
+            }
+          >
+            {snapshot.memorySyncStatus}
+          </StatusBadge>
         </div>
         <div>
           <span>mac outbox</span>
@@ -69,9 +92,12 @@ export function RuntimeRailPanel({
         </div>
         <div>
           <span>home pc</span>
-          <strong className={statusTone(homePcClient?.status ?? "degraded")}>
+          <StatusBadge
+            size="sm"
+            variant={homePcClient?.status === "online" ? "success" : "danger"}
+          >
             {homePcClient?.status === "online" ? "online-only" : "needs DGX"}
-          </strong>
+          </StatusBadge>
         </div>
         <div>
           <span>heartbeat</span>
