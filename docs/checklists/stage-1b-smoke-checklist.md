@@ -1,6 +1,6 @@
 # Stage 1b Smoke Checklist
 
-기준 SHA: `310e38d6` (`#188` merge, full SHA `310e38d6eef6cbad55a6c793ed431a8904e42dfb`)
+기준 SHA: `55c8716` (`#174` docs merge, Stage 1b 기준 마지막 UI merge = `#192` / `6da8d7c5f0473df885f39b642bee481489bbab2a`)
 
 ## 사전 조건 (cascade worker MUST 확인)
 
@@ -30,12 +30,21 @@
 | Rail status surfaces | `#187` (`84c5373`) | ✅ merged | `BackupRailMenu`, `ChannelRailPanel`, `ProjectRailPanel` status surfaces use `StatusBadge`; repo 고유 rail normalization |
 | CheatSheetOverlay status chips | `#188` (`310e38d`) | ✅ merged | Shortcut priority chip uses `StatusBadge`; `CommandPalette` 미접촉 |
 
+## R5 Stage 1b 3차 wave
+
+| Surface | PR | Status | Smoke check |
+|---|---:|---|---|
+| EvolveMementoPanel RecordChips | `#190` (`f842919`) | ✅ merged | reinforcement / generic RecordChips / fusion rank chip use `StatusBadge`; `persons` / `semantic` violet tone is intentionally normalized into `muted` |
+| CommandPalette verb chip | `#191` (`0ab08d6`) | ✅ merged | Entry verb chip uses `StatusBadge`; full v0 CommandPalette port 아님; cmdk/Dialog/AvatarWithStatus 미도입 |
+| Stage3DebateTable avatar / Pill / relay badge | `#192` (`6da8d7c`) | ✅ merged | Debate avatar uses `AvatarWithStatus` first adoption surface; DECISION / Pill / AgentRelay kind badge use `StatusBadge`; status prop unused; initials 1자 -> 2자 |
+
 ## Removed stale gates
 
 - F10 gate 후 대기 문구 제거: Stage 1b 1차 wave 는 `#183` + `#182` 머지로 완료됨.
 - `#182` / `#183` 상태는 진행 중이 아니라 ✅ merged.
 - `#182` cleanup commits `27cce79`, `58e0d38` 는 scope 정리용이며 제품 변경 아님.
 - `ControlQueueDrawer`, `RuntimeStatusBar`, `TmuxSwarmBoard`, rail status surfaces, `CheatSheetOverlay` 는 잔여 후보가 아니라 ✅ merged 상태.
+- `EvolveMementoPanel` RecordChips, `CommandPalette` verb chip, `Stage3DebateTable` avatar/Pill/relay badge 는 잔여 후보가 아니라 ✅ merged 상태.
 
 ## Worker branch rebase precondition
 
@@ -47,7 +56,8 @@
 
 ## Remaining Stage 1b candidates
 
-- `EvolveMementoPanel` RecordChips inline tag — TODO / safe mechanical. `StatusBadge` 로 치환 가능성이 높은 후보.
-- `CommandPalette` — TODO / design judgment needed. v0 CommandPalette 구조와 현재 repo verb-command 구조가 달라 단순 치환 금지.
-- `AvatarWithStatus` adoption — TODO / design judgment needed. primitive 는 있으나 실제 적용 surface 는 없음. `AgentAvatar` 는 protocol-aware component 이므로 무단 교체 금지.
+- `CommandPalette` full v0 port — TODO / design judgment needed. `#191` 로 verb chip 은 완료됐지만 v0 CommandPalette 구조와 현재 repo verb-command 구조가 달라 단순 치환 금지.
+- `AvatarWithStatus` broader adoption — TODO / design judgment needed. `#192` 로 첫 적용 surface 는 생겼지만 `AgentAvatar` 는 protocol-aware component 이므로 무단 교체 금지.
 - `ConversationWorkbench` — FROZEN until `#166/#169/#173/#178` conversation stack and component split design are settled.
+- `#157` dropdown/collapsible primitive — 별도 infrastructure PR.
+- conversation stack `#166/#169/#173/#178` — 별도 순차 처리.
