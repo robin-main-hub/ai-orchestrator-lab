@@ -1,8 +1,9 @@
 # v0 port — deferred features ledger
 
-## R5 status update (Stage 1b 1차/2차/3차 wave)
+## R6 status update (Conversation v0 parity wave)
 
-기준: origin/main @ `b9ee832` (`#164` merge, Stage 1b 기준 마지막 UI merge = `#192` / `6da8d7c5f0473df885f39b642bee481489bbab2a`).
+기준: origin/main @ `ecc8d0b` (`#197` merge 대기). R6 Conversation v0 parity wave (PR `#166`, `#169`, `#173`, `#178`, `#194`) 머지 완료.
+
 
 ✅ R5 1차 wave 머지 완료:
 
@@ -42,7 +43,9 @@ Current remaining Stage 1b candidates:
 |---|---|---|---|
 | `CommandPalette` full v0 port | TODO / design judgment needed | `#191` 로 verb chip 은 완료됐지만 v0 CommandPalette 는 cmdk/agent-palette 구조, 현재 repo 는 verb-command palette 구조. 단순 치환 금지. | 구조/데이터 흐름 판정 후 진행 |
 | `AvatarWithStatus` broader adoption | TODO / design judgment needed | `#192` 로 첫 적용 surface 는 생겼지만 현재 `AgentAvatar` 는 protocol-aware component. | `AgentAvatar` 공존/대체 정책 합의 |
-| `ConversationWorkbench` | FROZEN | `#166/#169/#173/#178` conversation stack 과 v0 5-file 구조 분해 설계 미합의. | stacked train 정리 + component split 설계 합의 |
+| `ConversationWorkbench` (visual parity) | 완료 | `#166/#169/#173/#178` conversation stack 머지로 visual parity 1차 완료. | visual QA 진행 |
+| `ConversationWorkbench` structural decomposition | TODO / design judgment needed | monolithic `ConversationWorkbench` 를 v0 의 5-file 구조로 실제 분할하는 작업 미합의. | component split 설계 합의 |
+
 
 > **목적**: v0 mockup 에 없거나 v0 의 단순 레이아웃에 들어가지 않는 우리만의 기능들을 기록. 나중에 별도 진입점 (right-click context, sub-page, drawer 등) 에서 재도입할 자리를 찾을 때 참고.
 > **갱신 규칙**: v0 port PR 에서 "이 기능은 v0 에 없어서 뺐다" 할 때마다 여기에 한 줄 추가.
