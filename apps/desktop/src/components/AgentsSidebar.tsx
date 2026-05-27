@@ -105,6 +105,35 @@ const agentDisplayRoleLabelByIdentity: Record<string, string> = {
   yohane: "아이디어 뱅크",
 };
 
+function englishRoleLabel(role: WorkbenchAgent["role"]) {
+  const labels: Record<WorkbenchAgent["role"], string> = {
+    architect: "Architect",
+    auditor: "Auditor",
+    builder: "Builder",
+    companion: "Companion",
+    domain_expert: "Domain Expert",
+    executor: "Executor",
+    external: "External",
+    mediator: "Mediator",
+    memory_curator: "Memory Curator",
+    negotiator: "Negotiator",
+    orchestrator: "Orchestrator",
+    researcher: "Researcher",
+    reviewer: "Reviewer",
+    risk_officer: "Risk Officer",
+    skeptic: "Skeptic",
+    verifier: "Verifier",
+    watchdog: "Watchdog",
+  };
+
+  return labels[role];
+}
+
+function agentPrimaryDisplayName(agent: WorkbenchAgent) {
+  const identityKey = agent.personaName ?? agent.role;
+  return agentFullKoreanNameByIdentity[identityKey] ?? agent.name;
+}
+
 function roleToCategory(role: WorkbenchAgent["role"]): AgentCategory {
   switch (role) {
     case "orchestrator":
@@ -123,9 +152,9 @@ function roleToCategory(role: WorkbenchAgent["role"]): AgentCategory {
 
 function agentSecondaryDisplayLabel(agent: WorkbenchAgent) {
   const identityKey = agent.personaName ?? agent.role;
-  const displayName = agentFullKoreanNameByIdentity[identityKey] ?? agent.name;
-  const roleLabel = agentDisplayRoleLabelByIdentity[identityKey] ?? agentRoleLabel(agent.role);
-  return `${displayName} · ${roleLabel}`;
+  const roleLabel =
+    agentDisplayRoleLabelByIdentity[identityKey] ?? agentRoleLabel(agent.role);
+  return `${englishRoleLabel(agent.role)} · ${roleLabel}`;
 }
 
 export function AgentsSidebar({
@@ -354,6 +383,8 @@ function AgentCard({
   const activeModel = providerModels.find((model) => model.id === agent.modelId);
   const providerLabel = activeProvider?.name ?? "provider...";
   const modelLabel = activeModel?.name ?? agent.modelId ?? "model pending";
+  const primaryDisplayName = agentPrimaryDisplayName(agent);
+  const secondaryDisplayLabel = agentSecondaryDisplayLabel(agent);
 
   return (
     <div
@@ -382,7 +413,7 @@ function AgentCard({
         >
           <div className="flex items-center gap-1.5">
             <span className="truncate text-sm font-medium text-foreground">
-              {agent.name}
+              {primaryDisplayName}
             </span>
             {agent.role === "orchestrator" ? (
               <StatusBadge className="shrink-0" size="sm" variant="primary">
@@ -391,7 +422,7 @@ function AgentCard({
             ) : null}
           </div>
           <span className="text-[11px] text-muted-foreground">
-            {agentSecondaryDisplayLabel(agent)}
+            {secondaryDisplayLabel}
           </span>
         </button>
 
