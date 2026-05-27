@@ -125,6 +125,7 @@ import {
   modelWindowSize,
   now,
 } from "./lib/appConstants";
+import { getConversationRailLayout } from "./lib/conversationRailLayout";
 import { getConversationShellVisibility } from "./lib/conversationShellVisibility";
 import {
   agentRoleLabel,
@@ -2347,12 +2348,21 @@ export function App() {
     configLibraryActive,
     mode,
   });
+  const railLayout = getConversationRailLayout({
+    configLibraryActive,
+    mode,
+  });
 
   return (
     <div
       className={`app-shell ${mode === "tmux" ? "tmux-focus-shell" : ""} ${
         mode === "conversation" && !configLibraryActive ? "conversation-v0-shell" : ""
       }`}
+      style={{
+        "--conversation-right-rail-max": `${railLayout.rightRailMaxWidthPx}px`,
+        "--conversation-right-rail-min": `${railLayout.rightRailMinWidthPx}px`,
+        "--conversation-right-rail-width": `${railLayout.rightRailWidthPx}px`,
+      } as React.CSSProperties}
     >
       <RuntimeStatusBar
         onProbeDgx={handleProbeDgx}
