@@ -1,8 +1,9 @@
 # v0 Conversation Parity Audit
 
-Status: audit PR seed
+Status: Implemented / R6 visual parity complete
 Owner: Codex UI track
-Date: 2026-05-26
+Date: 2026-05-27
+
 
 ## Goal
 
@@ -34,30 +35,35 @@ The v0 Conversation screen is a focused command-room conversation:
 
 The v0 Conversation screenshot does not show the full desktop operations shell around the conversation. In particular, the first-viewport Conversation state does not show a left rail, terminal dock, coding packet panel, handoff panel, or memory/memento panel as always-visible surfaces.
 
-## Current Parity Gaps
+## Parity Gaps Status (R6 Update)
 
-### App Shell Surfaces
+All App Shell and ConversationWorkbench visual parity gaps identified in this audit have been **resolved** or **superseded** in the R6 parity wave:
 
-These are the largest visible mismatches because they sit outside `ConversationWorkbench` and appear by default in Conversation mode:
+### App Shell Surfaces (Resolved)
+- **Left rail**: Hidden by default in Conversation mode (`#169` merged).
+- **TerminalDock**: Hidden by default in Conversation mode (`#169` merged).
+- **WorkItemHandoffPanel**: Hidden by default in Conversation mode (`#169` merged).
+- **CodingPacketPanel**: Hidden by default in Conversation mode (`#169` merged).
+- **EvolveMementoPanel**: Hidden by default in Conversation mode (`#169` merged).
 
-| Surface | Current location | v0 parity issue | First recommendation |
-| --- | --- | --- | --- |
-| Left rail | `apps/desktop/src/App.tsx` | v0 Conversation uses the app header + right Agents sidebar, not a persistent left operations rail. | Hide or collapse by default for `mode === "conversation"` in the v0 parity pass. |
-| `TerminalDock` | `apps/desktop/src/App.tsx` | v0 Conversation screenshot has no bottom terminal dock. | Hide by default in Conversation mode; keep for tmux/runtime modes. |
-| `WorkItemHandoffPanel` | `apps/desktop/src/App.tsx` | v0 has a compact approval queue, not a separate large handoff panel below the conversation. | Move behind drawer/toggle or hide by default for Conversation. |
-| `CodingPacketPanel` | `apps/desktop/src/App.tsx` | v0 Conversation does not display the coding packet panel in the default conversation viewport. | Keep the create-packet action, but hide the panel unless explicitly opened. |
-| `EvolveMementoPanel` | `apps/desktop/src/App.tsx` | v0 right side is Agents-focused; memento panel makes the default right rail heavier than v0. | Hide by default in Conversation mode or move behind Memory/settings affordance. |
+### ConversationWorkbench Surfaces (Resolved)
+- **Inline approval queue**: Visibility cleaned up and integrated (`#173` merged).
+- **Delegation inline panel**: Visibility cleaned up and integrated (`#173` merged).
+- **Action strip extras**: Core actions preserved; layout visibility aligned with v0 (`#173` merged).
+- **Header chips**: Visible chip count and labels aligned with v0 (`#173` merged).
 
-### ConversationWorkbench Surfaces
+### AgentsSidebar / Right Rail (Resolved)
+- **AgentsSidebar rail layout**: Adapted to v0 categories; right rail width restricted to 360-420px (`#178` merged).
+- **AgentSettingsPanel select replacement**: Native select replaced with DropdownMenu (`#194` merged).
 
-`ConversationWorkbench` already mirrors the v0 hierarchy more closely than the outer app shell, but a few extra surfaces still make the default screen denser than v0:
+## Remaining / Deferred Items (Post-R6)
 
-| Surface | Current location | v0 parity issue | First recommendation |
-| --- | --- | --- | --- |
-| Inline approval queue | `ApprovalQueueInline` | v0 uses the bottom collapsible approval queue strip as the primary approval surface. | Keep only when there is an urgent pending retry, otherwise rely on `InboxApprovalStrip`. |
-| Delegation inline panel | `DelegationInline` | Useful product behavior, but not visible in the v0 baseline. | Hide when empty or move under an explicit delegation affordance. |
-| Action strip extras | `ActionStrip` | v0 screenshot emphasizes fewer bottom actions; current strip includes backup/Telegram/branch variants. | Keep core actions; defer non-v0 extras behind menu or overflow. |
-| Header chips | `ConversationHeader` | Current header includes additional SOUL/Creativity/Context concepts beyond the v0 Profile/Memory/Preview shape. | Keep data contracts, but align visible chip count/labels with v0 first. |
+These are structural/architectural items deferred for design judgment or future work:
+
+1. **ConversationWorkbench Structural Decomposition**: Splitting the monolithic `ConversationWorkbench.tsx` into v0's 5-file structure (header/view/message-bubble/message-thread/composer + approval-queue).
+2. **CommandPalette Full v0 Port**: Redesigning CommandPalette cmdk/Dialog structures vs current verb-command layout.
+3. **AvatarWithStatus Broader Adoption**: Replacing `AgentAvatar` across remaining surfaces without breaking protocol contracts.
+
 
 ## Recommended Next PR
 
