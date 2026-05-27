@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/ui/collapsible";
+
 import {
   AlertTriangle,
   CheckCircle2,
@@ -78,46 +80,51 @@ function TimelineBlockRow({ block }: { block: TerminalTimelineBlock }) {
         `tmux-block--kind-${block.kind}`,
       )}
     >
-      <button
-        aria-expanded={open}
-        className="tmux-block__head"
-        disabled={!hasDetail}
-        onClick={() => hasDetail && setOpen((o) => !o)}
-        type="button"
-      >
-        <span className="tmux-block__stamp">{formatStamp(block.createdAt)}</span>
-        <span className="tmux-block__kind-icon">{kindIcon(block.kind)}</span>
-        <span className="tmux-block__kind-label">{kindLabel(block.kind)}</span>
-        <span className="tmux-block__title">{block.title}</span>
-        <span
-          className={cn("tmux-block__status-dot", `tmux-block__status-dot--${tone}`)}
-          aria-label={`status: ${block.status}`}
-          title={statusLabel(block.status)}
-        />
-        {hasDetail ? (
-          <ChevronDown
-            className={cn(
-              "tmux-block__chevron",
-              !open && "tmux-block__chevron--closed",
-            )}
-            size={11}
-          />
-        ) : null}
-      </button>
-      {open && hasDetail ? (
-        <div className="tmux-block__detail">
-          {block.summary ? <p className="tmux-block__summary">{block.summary}</p> : null}
-          {block.outputPreview ? (
-            <pre className="tmux-block__output">{block.outputPreview}</pre>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger asChild>
+          <button
+            aria-expanded={open}
+            className="tmux-block__head"
+            disabled={!hasDetail}
+            type="button"
+          >
+            <span className="tmux-block__stamp">{formatStamp(block.createdAt)}</span>
+            <span className="tmux-block__kind-icon">{kindIcon(block.kind)}</span>
+            <span className="tmux-block__kind-label">{kindLabel(block.kind)}</span>
+            <span className="tmux-block__title">{block.title}</span>
+            <span
+              className={cn("tmux-block__status-dot", `tmux-block__status-dot--${tone}`)}
+              aria-label={`status: ${block.status}`}
+              title={statusLabel(block.status)}
+            />
+            {hasDetail ? (
+              <ChevronDown
+                className={cn(
+                  "tmux-block__chevron",
+                  !open && "tmux-block__chevron--closed",
+                )}
+                size={11}
+              />
+            ) : null}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          {hasDetail ? (
+            <div className="tmux-block__detail">
+              {block.summary ? <p className="tmux-block__summary">{block.summary}</p> : null}
+              {block.outputPreview ? (
+                <pre className="tmux-block__output">{block.outputPreview}</pre>
+              ) : null}
+              <footer className="tmux-block__meta">
+                <span>{statusLabel(block.status)}</span>
+                {block.redactionApplied ? <em>redacted</em> : null}
+                {block.approvalId ? <span>approval:{block.approvalId.slice(-6)}</span> : null}
+                {block.runId ? <span>run:{block.runId.slice(-6)}</span> : null}
+              </footer>
+            </div>
           ) : null}
-          <footer className="tmux-block__meta">
-            <span>{statusLabel(block.status)}</span>
-            {block.redactionApplied ? <em>redacted</em> : null}
-            {block.approvalId ? <span>approval:{block.approvalId.slice(-6)}</span> : null}
-            {block.runId ? <span>run:{block.runId.slice(-6)}</span> : null}
-          </footer>
-        </div>
-      ) : null}
+        </CollapsibleContent>
+      </Collapsible>
     </li>
   );
 }
