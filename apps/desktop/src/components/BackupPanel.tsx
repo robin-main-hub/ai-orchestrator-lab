@@ -1,6 +1,7 @@
 import { Archive, ShieldCheck } from "lucide-react";
 import type { BackupProjection } from "@ai-orchestrator/protocol";
 import type { Stage7BackupSnapshot } from "../runtime/stage7Backup";
+import { StatusBadge } from "@/ui/status-badge";
 
 export function BackupPanel({
   onExport,
@@ -26,7 +27,19 @@ export function BackupPanel({
         {projections.map((projection) => (
           <div className="backup-cell" key={projection.id}>
             <span>{projection.target}</span>
-            <strong>{projection.status}</strong>
+            <StatusBadge
+              size="sm"
+              variant={
+                projection.status === "synced"
+                  ? "success"
+                  : projection.status === "pending"
+                    ? "warning"
+                    : "danger"
+              }
+              className="mt-1 w-fit"
+            >
+              {projection.status}
+            </StatusBadge>
           </div>
         ))}
       </div>
@@ -51,7 +64,18 @@ export function BackupPanel({
               <strong>{artifact.title}</strong>
               <span>{artifact.destination}</span>
             </div>
-            <em>{artifact.status}</em>
+            <StatusBadge
+              size="sm"
+              variant={
+                artifact.status === "ready"
+                  ? "success"
+                  : artifact.status === "queued"
+                    ? "warning"
+                    : "danger"
+              }
+            >
+              {artifact.status}
+            </StatusBadge>
             <small>{artifact.format} / {artifact.byteLength} bytes</small>
           </article>
         ))}
