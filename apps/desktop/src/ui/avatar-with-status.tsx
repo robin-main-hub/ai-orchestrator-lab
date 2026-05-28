@@ -79,6 +79,8 @@ export function AvatarWithStatus({
   className,
   avatarDataUrl,
 }: AvatarWithStatusProps) {
+  const [imgError, setImgError] = React.useState(false);
+
   return (
     <div className={cn("relative inline-flex", className)}>
       <div
@@ -89,10 +91,11 @@ export function AvatarWithStatus({
           isPrimary && "ring-2 ring-primary/60",
         )}
       >
-        {avatarDataUrl ? (
+        {avatarDataUrl && !imgError ? (
           <img
             src={avatarDataUrl}
             alt={initials}
+            onError={() => setImgError(true)}
             className="h-full w-full rounded-lg object-cover"
           />
         ) : (
