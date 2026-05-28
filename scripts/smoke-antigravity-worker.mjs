@@ -66,57 +66,74 @@ async function testUltraFirstSelector() {
 }
 
 async function testUltraTaskBootstrap() {
-  const root = join(tempRoot, "bootstrap-root");
-  const result = await runScript(ultraTaskScript, [
-    "--root", root,
-    "--task-id", "bootstrap-ultra",
-    "--title", "Bootstrap Ultra",
-    "--body", "Use Ultra first for this isolated coding task.",
-    "--run-dry-run",
-  ]);
-  assert(result.code === 0, result.stderr);
-  const requestText = await readFile(join(root, "bootstrap-ultra", "lane-a", "request.md"), "utf8");
-  const resultText = await readFile(join(root, "bootstrap-ultra", "lane-a", "result.md"), "utf8");
-  const logText = await readFile(join(root, "bootstrap-ultra", "lane-a", "log.txt"), "utf8");
-  assert(requestText.includes("personal_antigravity_ultra"), "bootstrap request should target Ultra");
-  assert(resultText.includes("selectedBy: ultra_first"), "bootstrap dry-run should use Ultra-first selector");
-  assert(logText.includes("\"selectedBy\":\"ultra_first\""), "bootstrap dry-run should audit Ultra-first selector");
+  await verifyBootstrapTask({
+    scriptPath: ultraTaskScript,
+    folderName: "bootstrap-root",
+    taskId: "bootstrap-ultra",
+    title: "Bootstrap Ultra",
+    body: "Use Ultra first for this isolated coding task.",
+    laneDir: "lane-a",
+    expectedRequestProfile: "personal_antigravity_ultra",
+    expectedResultText: "selectedBy: ultra_first",
+    expectedSelectedBy: "ultra_first",
+  });
 }
 
 async function testPro1TaskBootstrap() {
-  const root = join(tempRoot, "pro1-bootstrap-root");
-  const result = await runScript(pro1TaskScript, [
-    "--root", root,
-    "--task-id", "bootstrap-pro1",
-    "--title", "Bootstrap Pro One",
-    "--body", "Prepare the next personal Pro coding lane.",
-    "--run-dry-run",
-  ]);
-  assert(result.code === 0, result.stderr);
-  const requestText = await readFile(join(root, "bootstrap-pro1", "lane-b", "request.md"), "utf8");
-  const resultText = await readFile(join(root, "bootstrap-pro1", "lane-b", "result.md"), "utf8");
-  const logText = await readFile(join(root, "bootstrap-pro1", "lane-b", "log.txt"), "utf8");
-  assert(requestText.includes("personal_antigravity_pro_1"), "bootstrap request should target Pro #1");
-  assert(resultText.includes("personal_antigravity_pro_1"), "bootstrap dry-run should select Pro #1");
-  assert(logText.includes("\"selectedBy\":\"lane\""), "bootstrap dry-run should audit lane selection");
+  await verifyBootstrapTask({
+    scriptPath: pro1TaskScript,
+    folderName: "pro1-bootstrap-root",
+    taskId: "bootstrap-pro1",
+    title: "Bootstrap Pro One",
+    body: "Prepare the next personal Pro coding lane.",
+    laneDir: "lane-b",
+    expectedRequestProfile: "personal_antigravity_pro_1",
+    expectedResultText: "personal_antigravity_pro_1",
+    expectedSelectedBy: "lane",
+  });
 }
 
 async function testPro2TaskBootstrap() {
-  const root = join(tempRoot, "pro2-bootstrap-root");
-  const result = await runScript(pro2TaskScript, [
+  await verifyBootstrapTask({
+    scriptPath: pro2TaskScript,
+    folderName: "pro2-bootstrap-root",
+    taskId: "bootstrap-pro2",
+    title: "Bootstrap Pro Two",
+    body: "Prepare the second personal Pro coding lane.",
+    laneDir: "lane-c",
+    expectedRequestProfile: "personal_antigravity_pro_2",
+    expectedResultText: "personal_antigravity_pro_2",
+    expectedSelectedBy: "lane",
+  });
+}
+
+async function verifyBootstrapTask({
+  scriptPath,
+  folderName,
+  taskId,
+  title,
+  body,
+  laneDir,
+  expectedRequestProfile,
+  expectedResultText,
+  expectedSelectedBy,
+}) {
+  const root = join(tempRoot, folderName);
+  const result = await runScript(scriptPath, [
     "--root", root,
-    "--task-id", "bootstrap-pro2",
-    "--title", "Bootstrap Pro Two",
-    "--body", "Prepare the second personal Pro coding lane.",
+    "--task-id", taskId,
+    "--title", title,
+    "--body", body,
     "--run-dry-run",
   ]);
   assert(result.code === 0, result.stderr);
-  const requestText = await readFile(join(root, "bootstrap-pro2", "lane-c", "request.md"), "utf8");
-  const resultText = await readFile(join(root, "bootstrap-pro2", "lane-c", "result.md"), "utf8");
-  const logText = await readFile(join(root, "bootstrap-pro2", "lane-c", "log.txt"), "utf8");
-  assert(requestText.includes("personal_antigravity_pro_2"), "bootstrap request should target Pro #2");
-  assert(resultText.includes("personal_antigravity_pro_2"), "bootstrap dry-run should select Pro #2");
-  assert(logText.includes("\"selectedBy\":\"lane\""), "bootstrap dry-run should audit lane selection");
+  const taskDir = join(root, taskId, laneDir);
+  const requestText = await readFile(join(taskDir, "request.md"), "utf8");
+  const resultText = await readFile(join(taskDir, "result.md"), "utf8");
+  const logText = await readFile(join(taskDir, "log.txt"), "utf8");
+  assert(requestText.includes(expectedRequestProfile), `bootstrap request should target ${expectedRequestProfile}`);
+  assert(resultText.includes(expectedResultText), `bootstrap dry-run should include ${expectedResultText}`);
+  assert(logText.includes(`"selectedBy":"${expectedSelectedBy}"`), "bootstrap dry-run should audit lane selection");
 }
 
 async function testNonOwnerBlocked() {
