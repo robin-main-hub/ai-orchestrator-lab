@@ -33,8 +33,9 @@ export function RuntimeStatusBar({
   providerName: string;
   snapshot: RuntimeSnapshot;
 }) {
-  const primaryNode = snapshot.runtimeNodes.find((node) => node.isPrimary);
-  const dgxLabel = primaryNode?.label ?? snapshot.syncTopology.authorityLabel;
+  const runtimeNodes = snapshot?.runtimeNodes ?? [];
+  const primaryNode = runtimeNodes.find((node) => node?.isPrimary);
+  const dgxLabel = primaryNode?.label ?? snapshot?.syncTopology?.authorityLabel ?? "DGX";
   const overallHealth = deriveHealth(snapshot);
   const displayProviderName = providerDisplayLabel(providerName);
 
@@ -64,25 +65,25 @@ export function RuntimeStatusBar({
           <Separator />
           <span className="flex items-center gap-1">
             <span>{dgxLabel}:</span>
-            <StatusDot status={snapshot.dgxStatus} />
-            <span className={cn("font-mono text-[9.5px]", statusToneClasses(snapshot.dgxStatus))}>
-              {snapshot.dgxStatus}
+            <StatusDot status={snapshot?.dgxStatus} />
+            <span className={cn("font-mono text-[9.5px]", statusToneClasses(snapshot?.dgxStatus))}>
+              {snapshot?.dgxStatus ?? "unknown"}
             </span>
           </span>
           <Separator />
           <span className="flex items-center gap-1">
             <span>Local:</span>
-            <StatusDot status={snapshot.localModelStatus} />
+            <StatusDot status={snapshot?.localModelStatus} />
             <span
               className={cn(
                 "font-mono text-[9.5px]",
-                statusToneClasses(snapshot.localModelStatus),
+                statusToneClasses(snapshot?.localModelStatus),
               )}
             >
-              {snapshot.localModelStatus}
+              {snapshot?.localModelStatus ?? "unknown"}
             </span>
           </span>
-          {snapshot.recentError ? (
+          {snapshot?.recentError ? (
             <>
               <Separator />
               <span className="truncate max-w-[120px] text-destructive">{snapshot.recentError}</span>
@@ -150,10 +151,10 @@ export function RuntimeStatusBar({
         <Separator />
 
         <HealthIndicator
-          dgxStatus={snapshot.dgxStatus}
+          dgxStatus={snapshot?.dgxStatus}
           dgxLabel={dgxLabel}
           health={overallHealth}
-          localStatus={snapshot.localModelStatus}
+          localStatus={snapshot?.localModelStatus}
           providerName={providerName}
         />
         <Button
@@ -174,7 +175,7 @@ function Separator() {
   return <span className="text-border">·</span>;
 }
 
-function StatusDot({ status }: { status: string }) {
+function StatusDot({ status }: { status?: string }) {
   const tone = statusToneFromString(status);
   return (
     <span
@@ -197,11 +198,11 @@ function HealthIndicator({
   localStatus,
   providerName,
 }: {
-  dgxStatus: string;
-  dgxLabel: string;
+  dgxStatus?: string;
+  dgxLabel?: string;
   health: "healthy" | "degraded" | "error";
-  localStatus: string;
-  providerName: string;
+  localStatus?: string;
+  providerName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const healthColor = {
@@ -250,11 +251,11 @@ function HealthIndicator({
                 </span>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Active provider · {providerName}
+                Active provider · {providerName ?? "Unknown"}
               </p>
             </div>
             <div className="space-y-1 p-2">
-              <StatusRow label={dgxLabel} status={dgxStatus} />
+              <StatusRow label={dgxLabel ?? "DGX"} status={dgxStatus} />
               <StatusRow label="Local" status={localStatus} />
             </div>
           </div>
@@ -264,18 +265,19 @@ function HealthIndicator({
   );
 }
 
-function StatusRow({ label, status }: { label: string; status: string }) {
+function StatusRow({ label, status }: { label: string; status?: string }) {
   return (
     <div className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-card/60">
       <span className="text-xs text-muted-foreground">{label}</span>
       <StatusBadge variant={statusToBadgeVariant(status)} size="sm">
-        {status}
+        {status ?? "unknown"}
       </StatusBadge>
     </div>
   );
 }
 
-function statusToBadgeVariant(status: string): "success" | "danger" | "warning" | "muted" {
+function statusToBadgeVariant(status?: string): "success" | "danger" | "warning" | "muted" {
+  if (!status) return "muted";
   const s = status.toLowerCase();
   if (s.includes("online") || s.includes("ready") || s.includes("connected")) return "success";
   if (s.includes("offline") || s.includes("error") || s.includes("unreachable")) return "danger";
@@ -283,7 +285,8 @@ function statusToBadgeVariant(status: string): "success" | "danger" | "warning" 
   return "muted";
 }
 
-function statusToneFromString(status: string): "online" | "offline" | "pending" | "idle" {
+function statusToneFromString(status?: string): "online" | "offline" | "pending" | "idle" {
+  if (!status) return "idle";
   const s = status.toLowerCase();
   if (s.includes("online") || s.includes("ready") || s.includes("connected")) return "online";
   if (s.includes("offline") || s.includes("error") || s.includes("unreachable")) return "offline";
@@ -291,7 +294,7 @@ function statusToneFromString(status: string): "online" | "offline" | "pending" 
   return "idle";
 }
 
-function statusToneClasses(status: string): string {
+function statusToneClasses(status?: string): string {
   switch (statusToneFromString(status)) {
     case "online":
       return "text-success";
@@ -305,7 +308,8 @@ function statusToneClasses(status: string): string {
   }
 }
 
-function deriveHealth(snapshot: RuntimeSnapshot): "healthy" | "degraded" | "error" {
+function deriveHealth(snapshot?: RuntimeSnapshot): "healthy" | "degraded" | "error" {
+  if (!snapshot) return "error";
   if (snapshot.recentError) return "error";
   const dgxTone = statusToneFromString(snapshot.dgxStatus);
   const localTone = statusToneFromString(snapshot.localModelStatus);
