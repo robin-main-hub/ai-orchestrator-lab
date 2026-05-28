@@ -19,6 +19,8 @@
     "antigravity:pro2-task": "node scripts/create-antigravity-pro2-task.mjs",
     "antigravity:worker": "node scripts/run-antigravity-worker.mjs",
     "antigravity:smoke": "node scripts/smoke-antigravity-worker.mjs",
+    "personal-ai:sessions": "node scripts/check-personal-ai-sessions.mjs",
+    "personal-ai:smoke": "node scripts/smoke-personal-ai-sessions.mjs",
     "swarm:setup": "bash scripts/setup-agent-swarm.sh",
     "swarm:reset": "bash scripts/setup-agent-swarm.sh --reset",
     "swarm:send": "bash scripts/swarm-send.sh",
