@@ -133,6 +133,18 @@ export const seededProviderProfiles: ProviderProfile[] = [
     }),
     secretRef: createDgxVaultSecretRef("secret_dgx02_codex_oauth", "DGX-02 Codex OAuth Session", "dgx-02:~/.codex/auth.json"),
   },
+  {
+    ...createProviderProfile({
+      id: "provider_claude_code_single_owner",
+      name: "Claude Code Single Owner",
+      kind: "custom",
+      baseUrl: "claude-code-single-owner://local",
+      defaultModel: "claude-cli-session",
+      tags: ["claude", "cli", "single-owner", "server-proxy", "session"],
+      trustLevel: "limited",
+    }),
+    secretRef: createDgxVaultSecretRef("secret_local_claude_cli", "Claude Code single-owner local session", "local:claude"),
+  },
 ];
 
 export function createInitialProviderProfiles() {
@@ -201,6 +213,21 @@ function sanitizeProviderProfile(profile: ProviderProfile): ProviderProfile {
         createDgxVaultSecretRef("secret_dgx02_codex_oauth", "DGX-02 Codex OAuth Session", "dgx-02:~/.codex/auth.json"),
       tags: Array.from(new Set([...profile.tags, "oauth", "codex", "dgx", "session", "server-proxy"])),
       trustLevel: "trusted",
+    };
+  }
+
+  if (profile.id === "provider_claude_code_single_owner") {
+    return {
+      ...profile,
+      name: "Claude Code Single Owner",
+      kind: "custom",
+      baseUrl: "claude-code-single-owner://local",
+      defaultModel: "claude-cli-session",
+      secretRef:
+        profile.secretRef ??
+        createDgxVaultSecretRef("secret_local_claude_cli", "Claude Code single-owner local session", "local:claude"),
+      tags: Array.from(new Set([...profile.tags, "claude", "cli", "single-owner", "server-proxy", "session"])),
+      trustLevel: "limited",
     };
   }
 
@@ -331,6 +358,12 @@ export const seededModelCatalog: ModelCatalog = {
     "codex-local",
     "codex-dgx",
   ].map((id) => createModel("provider_codex_oauth", id, ["oauth", "codex", "dgx", "session"])),
+  provider_claude_code_single_owner: [
+    "claude-cli-session",
+    "opus",
+    "sonnet",
+    "haiku",
+  ].map((id) => createModel("provider_claude_code_single_owner", id, ["claude", "cli", "single-owner", "server-proxy", "session"])),
 };
 
 function createProviderProfileFromRegistryEntry(entry: ProviderRegistryEntry): ProviderProfile {
