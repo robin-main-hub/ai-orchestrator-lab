@@ -20,7 +20,7 @@ export type ClaudeCliAdapterOptions = {
   runClaudeExec?: ClaudeExecRunner;
 };
 
-export type ClaudePermissionMode = "default" | "acceptEdits" | "auto" | "bypassPermissions" | "dontAsk" | "plan";
+export type ClaudePermissionMode = "default" | "plan";
 
 export type ClaudeExecRunnerParams = {
   claudeBinPath: string;
@@ -43,9 +43,9 @@ export type ClaudeExecResult = {
 
 export type ClaudeExecRunner = (params: ClaudeExecRunnerParams) => Promise<ClaudeExecResult>;
 
-const DEFAULT_PROFILE_ID = "provider_claude_cli";
+const DEFAULT_PROFILE_ID = "provider_claude_code_single_owner";
 const DEFAULT_TIMEOUT_MS = 60_000;
-const DEFAULT_PERMISSION_MODE: ClaudePermissionMode = "dontAsk";
+const DEFAULT_PERMISSION_MODE: ClaudePermissionMode = "plan";
 const DEFAULT_MODEL_IDS = [
   "claude-cli-session",
   "opus",
@@ -53,6 +53,7 @@ const DEFAULT_MODEL_IDS = [
   "haiku",
 ];
 const CAPTURE_LIMIT = 256_000;
+let activeClaudeCliTask: { requestId: string; startedAt: string } | undefined;
 
 export class ClaudeCliAdapter implements LlmAdapter {
   readonly profileId: string;
@@ -95,7 +96,22 @@ export class ClaudeCliAdapter implements LlmAdapter {
   ): Promise<ProviderCompletionResponse> {
     const createdAt = new Date().toISOString();
     const endpoint = `${this.claudeBinPath} --print`;
+    const activeTask = activeClaudeCliTask;
+    if (activeTask) {
+      return {
+        id: `provider_completion_response_${request.id}_claude_cli_blocked`,
+        requestId: request.id,
+        providerProfileId: this.profileId,
+        modelId: request.modelId,
+        route: request.routePreference,
+        status: "failed",
+        endpoint,
+        error: "[blocked] Claude Code single-owner provider already has an active CLI task",
+        createdAt,
+      };
+    }
 
+    activeClaudeCliTask = { requestId: request.id, startedAt: createdAt };
     try {
       const result = await this.runClaudeExec({
         claudeBinPath: this.claudeBinPath,
@@ -147,6 +163,10 @@ export class ClaudeCliAdapter implements LlmAdapter {
         error: `[${adapterError.category}] ${adapterError.message}`,
         createdAt,
       };
+    } finally {
+      if (activeClaudeCliTask?.requestId === request.id) {
+        activeClaudeCliTask = undefined;
+      }
     }
   }
 }
