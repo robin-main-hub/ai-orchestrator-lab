@@ -69,9 +69,11 @@ import {
   terminalTimelineBlockSchema,
 } from "@ai-orchestrator/protocol";
 import {
+  ClaudeCliAdapter,
   CodexCliOAuthAdapter,
   AnthropicAdapter,
   OpenAICompatibleAdapter,
+  type ClaudeExecRunner,
   type CodexExecRunner,
 } from "@ai-orchestrator/providers/node";
 import { handleApprovalRoute } from "./routes/approvals";
@@ -499,6 +501,15 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     oauthAuthFileEnvName: "CODEX_OAUTH_AUTH_FILE",
     defaultOAuthAuthFile: "~/.codex/auth.json",
     oauthAccountLabel: "codex-oauth",
+  },
+  {
+    providerProfileId: "provider_claude_cli",
+    baseUrl: process.env.CLAUDE_CLI_BASE_URL ?? "claude-cli://local",
+    apiKeyEnvNames: [],
+    noAuth: true,
+    apiStyle: "openai_chat",
+    defaultModelIds: ["claude-cli-session", "opus", "sonnet", "haiku"],
+    supportsModelList: false,
   },
   {
     providerProfileId: "provider_grok_oauth_dgx",
@@ -955,6 +966,10 @@ async function createServerProviderSecretAvailability(
     return "available";
   }
 
+  if (authMode === "local_cli") {
+    return "available";
+  }
+
   if (authMode === "oauth_session") {
     return resolveServerProviderOAuthAvailability(config, now);
   }
@@ -999,6 +1014,10 @@ function createServerProviderModelDescriptor(
 }
 
 function createServerProviderRegistryAuthMode(config: ServerProviderProxyConfig): ProviderRegistryAuthMode {
+  if (config.providerProfileId === "provider_claude_cli") {
+    return "local_cli";
+  }
+
   if (config.providerProfileId.includes("grok_oauth") || config.providerProfileId.includes("codex_oauth")) {
     return "oauth_session";
   }
@@ -1019,6 +1038,7 @@ function createServerProviderDisplayName(providerProfileId: string) {
     provider_openai_compat: "OpenAI Official",
     provider_openrouter_dgx: "OpenRouter DGX-02 Key",
     provider_codex_oauth: "Codex OAuth Session",
+    provider_claude_cli: "Claude CLI Session",
     provider_grok_oauth_dgx: "Grok OAuth #1",
     provider_grok_oauth_dgx_2: "Grok OAuth #2",
     provider_openclaw_dgx: "DGX-02 OpenClaw vLLM",
@@ -1036,7 +1056,11 @@ function createServerProviderKind(config: ServerProviderProxyConfig): ProviderKi
     return "openrouter";
   }
 
-  if (config.providerProfileId.includes("grok") || config.providerProfileId.includes("codex_oauth")) {
+  if (
+    config.providerProfileId.includes("grok") ||
+    config.providerProfileId.includes("codex_oauth") ||
+    config.providerProfileId === "provider_claude_cli"
+  ) {
     return "custom";
   }
 
@@ -1053,6 +1077,10 @@ function createServerProviderTrustLevel(providerProfileId: string): ProviderTrus
   }
 
   if (providerProfileId.includes("grok")) {
+    return "limited";
+  }
+
+  if (providerProfileId === "provider_claude_cli") {
     return "limited";
   }
 
@@ -3658,6 +3686,10 @@ function createServerProviderTags(providerProfileId: string) {
     return ["oauth", "codex", "server-proxy", "dgx", "session"];
   }
 
+  if (providerProfileId === "provider_claude_cli") {
+    return ["claude", "cli", "local", "server-proxy", "session"];
+  }
+
   if (providerProfileId.includes("grok")) {
     return [
       "oauth",
@@ -3687,6 +3719,10 @@ function createServerProviderSecretRefPreview(
     return `dgx-02:${getServerProviderOAuthAuthFilePath(config) ?? "oauth-session"}`;
   }
 
+  if (authMode === "local_cli") {
+    return `local:${process.env.CLAUDE_BIN_PATH ?? "claude"}`;
+  }
+
   return `dgx-02:${config.apiKeyEnvNames[0] ?? config.defaultKeyFile ?? "provider-secret"}`;
 }
 
@@ -3702,6 +3738,13 @@ function createServerProviderSecretSourceRefs(
     return [
       ...(config.oauthAccountLabel ? [`account:${config.oauthAccountLabel}`] : []),
       ...(getServerProviderOAuthAuthFilePath(config) ? [`file:${getServerProviderOAuthAuthFilePath(config)}`] : []),
+    ];
+  }
+
+  if (authMode === "local_cli") {
+    return [
+      `bin:${process.env.CLAUDE_BIN_PATH ?? "claude"}`,
+      ...(process.env.CLAUDE_CLI_CWD ? [`cwd:${process.env.CLAUDE_CLI_CWD}`] : []),
     ];
   }
 
@@ -3770,6 +3813,7 @@ export type DgxProviderCompletionOptions = {
   now?: string;
   vllmBaseUrl?: string;
   fetchImpl?: FetchLike;
+  claudeCliRunner?: ClaudeExecRunner;
   codexCliRunner?: CodexExecRunner;
 };
 
@@ -3884,6 +3928,34 @@ export async function createServerProviderProxyCompletionResponse(
         onRawError(status, redactedSnippet) {
           if (redactedSnippet) {
             console.warn(`Codex OAuth CLI adapter warning (${status}): ${redactedSnippet}`);
+          }
+        },
+      },
+    );
+  }
+
+  if (config.providerProfileId === "provider_claude_cli") {
+    const adapter = new ClaudeCliAdapter({
+      profileId: config.providerProfileId,
+      claudeBinPath: process.env.CLAUDE_BIN_PATH ?? "claude",
+      claudeHome: process.env.CLAUDE_CLI_HOME,
+      cwd: process.env.CLAUDE_CLI_CWD,
+      defaultTimeoutMs: parsePositiveInteger(process.env.CLAUDE_CLI_TIMEOUT_MS) ?? 60_000,
+      permissionMode: process.env.CLAUDE_CLI_PERMISSION_MODE === "bypassPermissions" ? "bypassPermissions" : "dontAsk",
+      modelIds: config.defaultModelIds,
+      runClaudeExec: options.claudeCliRunner,
+    });
+    return adapter.complete(
+      {
+        ...request,
+        routePreference: "server_proxy",
+      },
+      {
+        resolveSecret: async () => undefined,
+        timeoutMs: parsePositiveInteger(process.env.CLAUDE_CLI_TIMEOUT_MS) ?? 60_000,
+        onRawError(status, redactedSnippet) {
+          if (redactedSnippet) {
+            console.warn(`Claude CLI adapter warning (${status}): ${redactedSnippet}`);
           }
         },
       },
