@@ -3,11 +3,13 @@ import type {
   ProviderCompletionMessage,
   ProviderCompletionRequest,
   ProviderCompletionResponse,
+  ProviderCompletionChunkEvent,
 } from "@ai-orchestrator/protocol";
 import type { AdapterRuntimeContext, LlmAdapter } from "./adapter.js";
 import { AdapterError, redactSecretsForLog, truncateForLog } from "./errors.js";
 import type { AdapterFetchLike } from "./openAiCompatibleAdapter.js";
 import { createRequestSignal } from "./signal.js";
+import { responseToChunks, chunksToLines } from "./streamUtils.js";
 
 /**
  * Ollama `/api/chat` adapter.
@@ -204,6 +206,108 @@ export class OllamaAdapter implements LlmAdapter {
         endpoint,
         error: `[${adapterError.category}] ${adapterError.message}`,
         createdAt,
+      };
+    }
+  }
+
+  async *completeStreaming(
+    request: ProviderCompletionRequest,
+    ctx: AdapterRuntimeContext,
+  ): AsyncIterable<ProviderCompletionChunkEvent> {
+    const createdAt = new Date().toISOString();
+    const endpoint = `${this.baseUrl}/api/chat`;
+
+    try {
+      const secret = await this.resolveSecret(ctx);
+      const requestBody = {
+        ...this.createRequestBody(request),
+        stream: true,
+      };
+
+      const response = await this.fetchImpl(endpoint, {
+        method: "POST",
+        headers: this.createHeaders(secret),
+        body: JSON.stringify(requestBody),
+        signal: createRequestSignal(ctx),
+      });
+
+      if (!response.ok) {
+        const rawText = await response.text();
+        throw createHttpAdapterError(response.status, rawText, "ollama chat completion streaming failed");
+      }
+
+      const chunks = responseToChunks(response.body);
+      const lines = chunksToLines(chunks);
+      let sequence = 0;
+      let finalContent = "";
+      let lastUsage: any = undefined;
+      let stopReason: string | undefined = undefined;
+
+      for await (const line of lines) {
+        if (!line.trim()) continue;
+
+        let parsed: any;
+        try {
+          parsed = JSON.parse(line);
+        } catch (e) {
+          continue;
+        }
+
+        if (parsed.error) {
+          throw new AdapterError("provider", `ollama returned an error: ${parsed.error}`, {
+            providerRawSnippet: truncateForLog(redactSecretsForLog(line)),
+          });
+        }
+
+        const content = parsed.message?.content;
+        if (content) {
+          finalContent += content;
+          yield {
+            type: "delta",
+            requestId: request.id,
+            sequence: sequence++,
+            delta: content,
+          };
+        }
+
+        const usage = normalizeOllamaUsage(parsed);
+        if (usage) {
+          lastUsage = usage;
+          yield {
+            type: "usage",
+            requestId: request.id,
+            usage: lastUsage,
+          };
+        }
+
+        if (parsed.done) {
+          stopReason = parsed.done_reason || "stop";
+        }
+      }
+
+      yield {
+        type: "done",
+        requestId: request.id,
+        finalContent,
+        stopReason: stopReason === "stop" ? "end_turn" : stopReason === "length" ? "max_tokens" : "end_turn",
+        usage: lastUsage,
+        endpoint,
+        createdAt,
+        completedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      const adapterError = normalizeOllamaError(error);
+      reportAdapterError(ctx, adapterError);
+      yield {
+        type: "error",
+        requestId: request.id,
+        error: {
+          category: adapterError.category,
+          message: adapterError.message,
+          status: adapterError.status,
+          retryAfterSec: adapterError.retryAfterSec,
+          providerRawSnippet: adapterError.providerRawSnippet,
+        },
       };
     }
   }
