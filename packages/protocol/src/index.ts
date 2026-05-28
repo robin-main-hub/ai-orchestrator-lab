@@ -1273,6 +1273,10 @@ export type ExternalApprovalItem = {
 export const permissionActionSchema = z.enum([
   "conversation_reply",
   "memory_write",
+  "memory_call",
+  "memory_write_request",
+  "memory_promote",
+  "memory_forget",
   "backup_export",
   "terminal_run",
   "file_write",
