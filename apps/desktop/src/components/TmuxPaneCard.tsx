@@ -1,4 +1,5 @@
-import { Eye, Loader2, Send } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronRight, Clock3, Eye, Loader2, Send } from "lucide-react";
 import type { TerminalTimelineBlock } from "@ai-orchestrator/protocol";
 import type { AgentVisualSettings, WorkbenchAgent } from "../types";
 import { agentRoleLabel } from "../lib/helpers";
@@ -7,6 +8,7 @@ import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
 import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
 import { TmuxPaneTimeline } from "./TmuxPaneTimeline";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/ui/collapsible";
 
 /**
  * Tmux pane card — strict v0 port.
@@ -53,6 +55,7 @@ export function TmuxPaneCard({
   visual?: AgentVisualSettings;
 }) {
   const isIdle = pane.state === "idle";
+  const [isTimelineOpen, setIsTimelineOpen] = useState(false);
   return (
     <div className="flex flex-col rounded-lg border border-border bg-card">
       {/* Header: avatar + title + status */}
@@ -170,10 +173,32 @@ export function TmuxPaneCard({
         </pre>
       ) : null}
 
-      {/* Timeline blocks (Stage 2-6) */}
-      {timelineBlocks ? (
-        <div className="mx-2 mb-2">
-          <TmuxPaneTimeline blocks={timelineBlocks} />
+      {/* Timeline blocks (Stage 2-6) - Collapsible */}
+      {timelineBlocks && timelineBlocks.length > 0 ? (
+        <div className="border-t border-border/40 p-2">
+          <Collapsible open={isTimelineOpen} onOpenChange={setIsTimelineOpen}>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors py-1 px-1.5 rounded hover:bg-muted/10 cursor-pointer"
+              >
+                <div className="flex items-center gap-1.5">
+                  <Clock3 size={11} />
+                  <span>타임라인 로그 ({timelineBlocks.length})</span>
+                </div>
+                {isTimelineOpen ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-1.5">
+              <div className="max-h-60 overflow-y-auto pr-1">
+                <TmuxPaneTimeline blocks={timelineBlocks} />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
       ) : null}
     </div>
