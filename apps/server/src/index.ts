@@ -1,4 +1,5 @@
-﻿import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { z } from "zod";
 import { mkdir, readFile, appendFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -67,6 +68,7 @@ import {
   remoteExecutionRequestSchema,
   terminalCommandIntentSchema,
   terminalTimelineBlockSchema,
+  type ProviderCompletionChunkEvent,
 } from "@ai-orchestrator/protocol";
 import {
   ClaudeCliAdapter,
@@ -76,6 +78,17 @@ import {
   type ClaudeExecRunner,
   type CodexExecRunner,
 } from "@ai-orchestrator/providers/node";
+import {
+  MementoMcpAdapter,
+  LocalHeuristicAdapter,
+  withTrustEnforcement,
+  DgxSimpleMemMemoryAdapter,
+} from "@ai-orchestrator/memory";
+import type {
+  MemoryAdapter,
+  MemoryAdapterContext,
+  MemoryAdapterKind,
+} from "@ai-orchestrator/memory";
 import { handleApprovalRoute } from "./routes/approvals";
 import { handleTmuxRoute } from "./routes/tmux";
 
@@ -3876,7 +3889,229 @@ export type DgxProviderCompletionOptions = {
   fetchImpl?: FetchLike;
   claudeCliRunner?: ClaudeExecRunner;
   codexCliRunner?: CodexExecRunner;
+  abortSignal?: AbortSignal;
+  timeoutMs?: number;
 };
+
+// Zod schemas for memory endpoints
+import {
+  memoryLayerSchema,
+  memoryScopeSchema,
+  memoryKindSchema,
+  sourceTrustSchema,
+} from "@ai-orchestrator/protocol";
+
+export const memoryRecallQueryZodSchema = z.object({
+  sessionId: z.string().optional(),
+  projectId: z.string().optional(),
+  query: z.string(),
+  layers: z.array(memoryLayerSchema).optional(),
+  scopes: z.array(memoryScopeSchema).optional(),
+  kinds: z.array(memoryKindSchema).optional(),
+  includeUntrusted: z.boolean().optional(),
+  limit: z.number().int().positive().optional(),
+});
+
+export const memoryInputZodSchema = z.object({
+  layer: memoryLayerSchema,
+  scope: memoryScopeSchema.optional(),
+  kind: memoryKindSchema.optional(),
+  title: z.string(),
+  content: z.string(),
+  sourceChannel: z.enum(["desktop", "legacy_telegram", "mobile", "api", "agent"]),
+  trustLevel: sourceTrustSchema,
+  projectId: z.string().optional(),
+  sessionId: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export function evaluateServerMemoryPermission(
+  action: "memory_call" | "memory_write_request" | "memory_promote" | "memory_forget",
+  callerTrustLevel: ProviderTrustLevel,
+): ServerPermissionGateResult {
+  const requestedLevels: PermissionLevel[] = ["memory_access" as any];
+  
+  if (callerTrustLevel === "untrusted") {
+    return {
+      action,
+      approvalState: "rejected",
+      decision: "deny",
+      requestedLevels,
+      reason: "untrusted callers are not permitted to call memory APIs directly",
+    };
+  }
+  
+  if (action === "memory_forget" || action === "memory_promote") {
+    if (callerTrustLevel === "limited") {
+      return {
+        action,
+        approvalState: "required",
+        decision: "approval_required",
+        requestedLevels,
+        reason: `${action} operation by limited caller requires explicit approval`,
+      };
+    }
+  }
+  
+  return {
+    action,
+    approvalState: "not_required",
+    decision: "allow",
+    requestedLevels,
+    reason: "authorized memory access",
+  };
+}
+
+export async function createDgxProviderCompletionStreamResponse(
+  request: ProviderCompletionRequest,
+  options: DgxProviderCompletionOptions = {},
+): Promise<AsyncIterable<ProviderCompletionChunkEvent>> {
+  const redactedRequest = redactForServerPhase(request, "pre_send").value as ProviderCompletionRequest;
+  const vllmBaseUrl = options.vllmBaseUrl ?? process.env.DGX02_VLLM_BASE_URL ?? DEFAULT_DGX02_VLLM_BASE_URL;
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  if (redactedRequest.providerProfileId === "provider_dgx02_vllm") {
+    const adapter = new OpenAICompatibleAdapter({
+      profileId: "provider_dgx02_vllm",
+      kind: "openai",
+      baseUrl: vllmBaseUrl,
+      modelIds: [DEFAULT_DGX_MODEL_ID],
+      requiresAuth: false,
+      fetchImpl,
+      extraBody: {
+        chat_template_kwargs: {
+          enable_thinking: false,
+        },
+      },
+    });
+    if (!adapter.completeStreaming) {
+      throw new Error("vLLM adapter does not support streaming");
+    }
+    return adapter.completeStreaming(
+      { ...redactedRequest, routePreference: "server_proxy" },
+      {
+        resolveSecret: async () => undefined,
+        abortSignal: options.abortSignal,
+        timeoutMs: options.timeoutMs ?? 30_000,
+      } as any,
+    );
+  }
+
+  const config = serverProviderProxyConfigs.find((candidate) => candidate.providerProfileId === redactedRequest.providerProfileId);
+  if (!config) {
+    throw new Error("provider is not registered in the DGX-02 proxy allowlist");
+  }
+
+  const claudeSingleOwnerBlockReason = evaluateClaudeCodeSingleOwnerPolicy(redactedRequest);
+  if (claudeSingleOwnerBlockReason) {
+    throw new Error(`[blocked] ${claudeSingleOwnerBlockReason}`);
+  }
+
+  if (config.providerProfileId === "provider_codex_oauth") {
+    const adapter = new CodexCliOAuthAdapter({
+      profileId: config.providerProfileId,
+      codexBinPath: process.env.CODEX_BIN_PATH ?? "codex",
+      codexHome: process.env.CODEX_OAUTH_HOME ?? "~/.codex",
+      cwd: process.env.CODEX_OAUTH_CWD,
+      defaultTimeoutMs: parsePositiveInteger(process.env.CODEX_CLI_TIMEOUT_MS) ?? 30_000,
+      modelIds: config.defaultModelIds,
+      runCodexExec: options.codexCliRunner,
+    });
+    if (!adapter.completeStreaming) {
+      throw new Error("Codex CLI adapter does not support streaming");
+    }
+    return adapter.completeStreaming(
+      { ...redactedRequest, routePreference: "server_proxy" },
+      {
+        resolveSecret: async () => undefined,
+        abortSignal: options.abortSignal,
+        timeoutMs: options.timeoutMs ?? 30_000,
+      } as any,
+    );
+  }
+
+  if (config.providerProfileId === "provider_claude_code_single_owner") {
+    const adapter = new ClaudeCliAdapter({
+      profileId: config.providerProfileId,
+      claudeBinPath: process.env.CLAUDE_BIN_PATH ?? "claude",
+      claudeHome: process.env.CLAUDE_CLI_HOME,
+      cwd: process.env.CLAUDE_CLI_CWD,
+      defaultTimeoutMs: parsePositiveInteger(process.env.CLAUDE_CLI_TIMEOUT_MS) ?? 60_000,
+      permissionMode: process.env.CLAUDE_CLI_PERMISSION_MODE === "default" ? "default" : "plan",
+      modelIds: config.defaultModelIds,
+      runClaudeExec: options.claudeCliRunner,
+    });
+    if (!adapter.completeStreaming) {
+      throw new Error("Claude CLI adapter does not support streaming");
+    }
+    return adapter.completeStreaming(
+      { ...redactedRequest, routePreference: "server_proxy" },
+      {
+        resolveSecret: async () => undefined,
+        abortSignal: options.abortSignal,
+        timeoutMs: options.timeoutMs ?? 60_000,
+      } as any,
+    );
+  }
+
+  const apiKey = config.noAuth ? undefined : await resolveServerProviderApiKey(config);
+  if (!config.noAuth && !apiKey) {
+    throw new Error("DGX-02 provider secret was not resolved from env or key file");
+  }
+
+  if (config.apiStyle === "anthropic_messages") {
+    const adapter = new AnthropicAdapter({
+      profileId: config.providerProfileId,
+      baseUrl: config.baseUrl,
+      modelIds: config.defaultModelIds,
+      requiresAuth: !config.noAuth,
+      defaultMaxTokens: 512,
+      temperature: 0.2,
+      fetchImpl,
+    });
+    if (!adapter.completeStreaming) {
+      throw new Error("Anthropic adapter does not support streaming");
+    }
+    return adapter.completeStreaming(
+      {
+        ...redactedRequest,
+        messages: [
+          { role: "system", content: defaultDgxSystemPrompt },
+          ...redactedRequest.messages,
+        ],
+      },
+      {
+        resolveSecret: async () => apiKey,
+        abortSignal: options.abortSignal,
+        timeoutMs: options.timeoutMs ?? 30_000,
+      } as any,
+    );
+  }
+
+  const adapter = new OpenAICompatibleAdapter({
+    profileId: config.providerProfileId,
+    kind: createServerProviderKind(config),
+    baseUrl: config.baseUrl,
+    modelIds: config.defaultModelIds,
+    supportsModelList: config.supportsModelList,
+    requiresAuth: !config.noAuth,
+    defaultSystemPrompt: defaultDgxSystemPrompt,
+    maxTokens: 512,
+    temperature: 0.2,
+    fetchImpl,
+  });
+  if (!adapter.completeStreaming) {
+    throw new Error("OpenAI-compatible adapter does not support streaming");
+  }
+  return adapter.completeStreaming(
+    { ...redactedRequest, routePreference: "server_proxy" },
+    {
+      resolveSecret: async () => apiKey,
+      abortSignal: options.abortSignal,
+      timeoutMs: options.timeoutMs ?? 30_000,
+    } as any,
+  );
+}
 
 export async function createDgxProviderCompletionResponse(
   request: ProviderCompletionRequest,
@@ -4583,6 +4818,29 @@ export function listEventStorageSessions(
 
 export function startServer(port = Number(process.env.PORT ?? 4317)) {
   const eventStorage = createJsonlServerEventStorage();
+  
+  const memoryAdapterKind = (process.env.MEMORY_ADAPTER ?? "local_heuristic") as MemoryAdapterKind;
+  let rawMemoryAdapter: MemoryAdapter;
+  if (memoryAdapterKind === "memento_mcp") {
+    rawMemoryAdapter = new MementoMcpAdapter({
+      profileId: "server_memento_mcp",
+      policy: (process.env.MEMENTO_POLICY ?? "local_cache") as any,
+    });
+  } else if (memoryAdapterKind === "dgx_simplemem") {
+    rawMemoryAdapter = new DgxSimpleMemMemoryAdapter({
+      profileId: "server_dgx_simplemem",
+    });
+  } else {
+    rawMemoryAdapter = new LocalHeuristicAdapter({
+      profileId: "server_local_heuristic",
+    });
+  }
+  const memoryAdapter = withTrustEnforcement(rawMemoryAdapter, {
+    allowUntrustedRecall: process.env.MEMORY_ALLOW_UNTRUSTED_RECALL === "true",
+    allowUntrustedWrite: process.env.MEMORY_ALLOW_UNTRUSTED_WRITE === "true",
+    requireAllowDecision: true,
+  });
+
   const apiToken = resolveOrchestratorApiToken();
   const expectedAuthorization = `Bearer ${apiToken}`;
 
@@ -4689,6 +4947,326 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       }
       const completion = await createDgxProviderCompletionResponse(payload);
       respondJson(completion.status === "succeeded" ? 200 : 502, completion);
+      return;
+    }
+
+    if (pathname === "/provider-completions/stream" && request.method === "POST") {
+      let payload: ProviderCompletionRequest;
+      try {
+        payload = providerCompletionRequestSchema.parse(await readJsonBody(request)) as ProviderCompletionRequest;
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) {
+          respondJson(413, { error: "payload_too_large", limit: error.limit });
+          return;
+        }
+        respondJson(400, {
+          error: "invalid_provider_completion_payload",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+      const permission = evaluateServerProviderCompletionPermission(payload);
+      if (permission.decision !== "allow") {
+        respondJson(403, {
+          error: permission.decision === "deny" ? "permission_denied" : "permission_required",
+          permission,
+        });
+        return;
+      }
+
+      response.writeHead(200, {
+        "cache-control": "no-cache",
+        "connection": "keep-alive",
+        "content-type": "text/event-stream; charset=utf-8",
+        ...corsHeaders,
+      });
+
+      const abortController = new AbortController();
+      request.on("close", () => {
+        abortController.abort();
+      });
+
+      try {
+        const stream = await createDgxProviderCompletionStreamResponse(payload, {
+          abortSignal: abortController.signal,
+        });
+        for await (const chunk of stream) {
+          response.write(`event: chunk\ndata: ${JSON.stringify(chunk)}\n\n`);
+        }
+      } catch (error) {
+        const errChunk = {
+          type: "error" as const,
+          requestId: payload.id,
+          error: {
+            category: "unknown" as any,
+            message: error instanceof Error ? error.message : String(error),
+          }
+        };
+        response.write(`event: chunk\ndata: ${JSON.stringify(errChunk)}\n\n`);
+      } finally {
+        response.end();
+      }
+      return;
+    }
+
+    if (pathname === "/memory/recall" && request.method === "POST") {
+      let body: any;
+      try {
+        body = memoryRecallQueryZodSchema.parse(await readJsonBody(request));
+      } catch (error) {
+        respondJson(400, { error: "invalid_recall_query", message: String(error) });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_call", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        const results = await memoryAdapter.recall(body, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, results);
+      } catch (error) {
+        respondJson(500, { error: "memory_recall_failed", message: String(error) });
+      }
+      return;
+    }
+
+    if (pathname === "/memory/remember" && request.method === "POST") {
+      let body: any;
+      try {
+        body = memoryInputZodSchema.parse(await readJsonBody(request));
+      } catch (error) {
+        respondJson(400, { error: "invalid_memory_input", message: String(error) });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_write_request", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        const record = await memoryAdapter.remember(body, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, record);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("promotion_pending")) {
+          respondJson(202, { status: "pending", message: "promotion_pending" });
+        } else if (typeof error === "object" && error !== null && (error as any).category === "promotion_pending") {
+          respondJson(202, { status: "pending", message: "promotion_pending" });
+        } else {
+          respondJson(500, { error: "memory_remember_failed", message: String(error) });
+        }
+      }
+      return;
+    }
+
+    if (pathname === "/memory/context" && request.method === "POST") {
+      let body: any;
+      try {
+        body = memoryRecallQueryZodSchema.parse(await readJsonBody(request));
+      } catch (error) {
+        respondJson(400, { error: "invalid_recall_query", message: String(error) });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_call", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        const packet = await memoryAdapter.memoryContext(body, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, packet);
+      } catch (error) {
+        respondJson(500, { error: "memory_context_failed", message: String(error) });
+      }
+      return;
+    }
+
+    if (pathname === "/memory/stats" && request.method === "GET") {
+      const permission = evaluateServerMemoryPermission("memory_call", "trusted");
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        const stats = await memoryAdapter.stats({
+          permissionDecision: permission.decision,
+          callerTrustLevel: "trusted",
+        });
+        respondJson(200, stats);
+      } catch (error) {
+        respondJson(500, { error: "memory_stats_failed", message: String(error) });
+      }
+      return;
+    }
+
+    if (pathname === "/memory/pin" && request.method === "POST") {
+      let body: any;
+      try {
+        body = await readJsonBody(request);
+      } catch (error) {
+        respondJson(400, { error: "invalid_body" });
+        return;
+      }
+      const recordId = body.recordId;
+      if (typeof recordId !== "string") {
+        respondJson(400, { error: "recordId is required" });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_call", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        await memoryAdapter.pin(recordId, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, { success: true });
+      } catch (error) {
+        respondJson(500, { error: "memory_pin_failed", message: String(error) });
+      }
+      return;
+    }
+
+    if (pathname === "/memory/forget" && request.method === "POST") {
+      let body: any;
+      try {
+        body = await readJsonBody(request);
+      } catch (error) {
+        respondJson(400, { error: "invalid_body" });
+        return;
+      }
+      const recordId = body.recordId;
+      if (typeof recordId !== "string") {
+        respondJson(400, { error: "recordId is required" });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_forget", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        await memoryAdapter.forget(recordId, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, { success: true });
+      } catch (error) {
+        respondJson(500, { error: "memory_forget_failed", message: String(error) });
+      }
+      return;
+    }
+
+    if (pathname === "/memory/activate" && request.method === "POST") {
+      let body: any;
+      try {
+        body = await readJsonBody(request);
+      } catch (error) {
+        respondJson(400, { error: "invalid_body" });
+        return;
+      }
+      const recordIds = body.recordIds;
+      if (!Array.isArray(recordIds)) {
+        respondJson(400, { error: "recordIds array is required" });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_promote", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        await memoryAdapter.activateMemories(recordIds, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, { success: true });
+      } catch (error) {
+        respondJson(500, { error: "memory_activate_failed", message: String(error) });
+      }
+      return;
+    }
+
+    if (pathname === "/memory/relations" && request.method === "POST") {
+      let body: any;
+      try {
+        body = await readJsonBody(request);
+      } catch (error) {
+        respondJson(400, { error: "invalid_body" });
+        return;
+      }
+      const recordIds = body.recordIds;
+      if (!Array.isArray(recordIds)) {
+        respondJson(400, { error: "recordIds array is required" });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_call", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        const relations = await memoryAdapter.createRelations(recordIds, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, relations);
+      } catch (error) {
+        respondJson(500, { error: "memory_relations_failed", message: String(error) });
+      }
+      return;
+    }
+
+    if (pathname === "/memory/reflect" && request.method === "POST") {
+      let body: any;
+      try {
+        body = await readJsonBody(request);
+      } catch (error) {
+        respondJson(400, { error: "invalid_body" });
+        return;
+      }
+      const sessionId = body.sessionId;
+      if (typeof sessionId !== "string") {
+        respondJson(400, { error: "sessionId is required" });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_call", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        if (!memoryAdapter.reflect) {
+          respondJson(501, { error: "not_implemented", message: "reflection not supported by current adapter" });
+          return;
+        }
+        const reflection = await memoryAdapter.reflect(sessionId, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, reflection);
+      } catch (error) {
+        respondJson(500, { error: "memory_reflect_failed", message: String(error) });
+      }
       return;
     }
 
