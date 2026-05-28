@@ -3,11 +3,13 @@ import type {
   ProviderCompletionMessage,
   ProviderCompletionRequest,
   ProviderCompletionResponse,
+  ProviderCompletionChunkEvent,
 } from "@ai-orchestrator/protocol";
 import type { AdapterRuntimeContext, LlmAdapter } from "./adapter.js";
 import { AdapterError, redactSecretsForLog, truncateForLog } from "./errors.js";
 import type { AdapterFetchLike } from "./openAiCompatibleAdapter.js";
 import { createRequestSignal } from "./signal.js";
+import { responseToChunks, chunksToLines } from "./streamUtils.js";
 
 /**
  * Anthropic `/v1/messages` adapter.
@@ -189,6 +191,144 @@ export class AnthropicAdapter implements LlmAdapter {
         endpoint,
         error: `[${adapterError.category}] ${adapterError.message}`,
         createdAt,
+      };
+    }
+  }
+
+  async *completeStreaming(
+    request: ProviderCompletionRequest,
+    ctx: AdapterRuntimeContext,
+  ): AsyncIterable<ProviderCompletionChunkEvent> {
+    const createdAt = new Date().toISOString();
+    const endpoint = `${this.baseUrl}/v1/messages`;
+
+    try {
+      const secret = await this.resolveSecret(ctx);
+      const body = {
+        ...this.createRequestBody(request),
+        stream: true,
+      };
+
+      const response = await this.fetchImpl(endpoint, {
+        method: "POST",
+        headers: this.createHeaders(secret),
+        body: JSON.stringify(body),
+        signal: createRequestSignal(ctx),
+      });
+
+      if (!response.ok) {
+        const rawText = await response.text();
+        throw createHttpAdapterError(response, rawText);
+      }
+
+      const chunks = responseToChunks(response.body);
+      const lines = chunksToLines(chunks);
+      let currentEvent = "";
+      let sequence = 0;
+      let finalContent = "";
+      let lastUsage: any = undefined;
+      let stopReason: string | undefined = undefined;
+
+      for await (const line of lines) {
+        if (line.startsWith("event:")) {
+          currentEvent = line.slice(6).trim();
+          continue;
+        }
+        if (!line.startsWith("data:")) {
+          continue;
+        }
+
+        const dataStr = line.slice(5).trim();
+        let parsed: any;
+        try {
+          parsed = JSON.parse(dataStr);
+        } catch (e) {
+          continue;
+        }
+
+        if (currentEvent === "message_start") {
+          if (parsed.message?.usage) {
+            lastUsage = normalizeAnthropicUsage(parsed.message.usage);
+            yield {
+              type: "usage",
+              requestId: request.id,
+              usage: lastUsage,
+            };
+          }
+        } else if (currentEvent === "content_block_delta") {
+          const delta = parsed.delta;
+          if (delta?.type === "text_delta" && typeof delta.text === "string") {
+            finalContent += delta.text;
+            yield {
+              type: "delta",
+              requestId: request.id,
+              sequence: sequence++,
+              delta: delta.text,
+            };
+          }
+        } else if (currentEvent === "message_delta") {
+          if (parsed.delta?.stop_reason) {
+            stopReason = parsed.delta.stop_reason;
+          }
+          if (parsed.usage) {
+            const nextUsage = normalizeAnthropicUsage(parsed.usage) || {};
+            lastUsage = {
+              ...(lastUsage || {}),
+              ...nextUsage,
+            };
+            if (lastUsage.inputTokens !== undefined && lastUsage.outputTokens !== undefined) {
+              lastUsage.totalTokens = lastUsage.inputTokens + lastUsage.outputTokens;
+            }
+            yield {
+              type: "usage",
+              requestId: request.id,
+              usage: lastUsage,
+            };
+          }
+        } else if (currentEvent === "error") {
+          throw new AdapterError(
+            "provider",
+            `Anthropic returned an error: ${parsed.error?.type ?? "unknown"}`,
+            { providerRawSnippet: truncateForLog(redactSecretsForLog(dataStr)) },
+          );
+        }
+      }
+
+      if (stopReason === "tool_use") {
+        yield {
+          type: "error",
+          requestId: request.id,
+          error: {
+            category: "provider",
+            message: "tool_use_returned_but_not_supported",
+          },
+        };
+        return;
+      }
+
+      yield {
+        type: "done",
+        requestId: request.id,
+        finalContent,
+        stopReason: (stopReason as any) || "end_turn",
+        usage: lastUsage,
+        endpoint,
+        createdAt,
+        completedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      const adapterError = normalizeAnthropicError(error);
+      reportAdapterError(ctx, adapterError);
+      yield {
+        type: "error",
+        requestId: request.id,
+        error: {
+          category: adapterError.category,
+          message: adapterError.message,
+          status: adapterError.status,
+          retryAfterSec: adapterError.retryAfterSec,
+          providerRawSnippet: adapterError.providerRawSnippet,
+        },
       };
     }
   }

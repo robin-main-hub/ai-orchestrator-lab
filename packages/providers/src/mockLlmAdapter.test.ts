@@ -95,4 +95,51 @@ describe("MockLlmAdapter", () => {
     );
     expect(response.content).toBe("mock:empty");
   });
+
+  it("streams the completion chunks correctly", async () => {
+    const adapter = new MockLlmAdapter();
+    const chunks = [];
+    const stream = adapter.completeStreaming(
+      baseRequest({ messages: [{ role: "user", content: "hello stream" }] }),
+      createAdapterContext(),
+    );
+    for await (const chunk of stream) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks).toHaveLength(4);
+    expect(chunks[0]).toEqual({
+      type: "usage",
+      requestId: "req_001",
+      usage: {
+        inputTokens: 12,
+        outputTokens: 4,
+        totalTokens: 16,
+      },
+    });
+    expect(chunks[1]).toEqual({
+      type: "delta",
+      requestId: "req_001",
+      sequence: 0,
+      delta: "mock:",
+    });
+    expect(chunks[2]).toEqual({
+      type: "delta",
+      requestId: "req_001",
+      sequence: 1,
+      delta: "hello stream",
+    });
+    expect(chunks[3]).toMatchObject({
+      type: "done",
+      requestId: "req_001",
+      finalContent: "mock:hello stream",
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 12,
+        outputTokens: 4,
+        totalTokens: 16,
+      },
+      endpoint: "mock",
+    });
+  });
 });

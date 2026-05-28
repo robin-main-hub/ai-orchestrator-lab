@@ -5,7 +5,7 @@ import type {
   ProviderRegistrySnapshot,
   RuntimeSnapshot,
 } from "@ai-orchestrator/protocol";
-import { mergeDgxRuntimeSnapshot } from "./stage5Runtime";
+import { mergeDgxRuntimeSnapshot, DgxConnectionStateMachine } from "./stage5Runtime";
 import { DEFAULT_DGX_SERVER_BASE_URL, resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
 import { createDgxOrchestratorJsonHeaders } from "./stage31DgxAuth";
 
@@ -215,3 +215,42 @@ function createUnreachableRuntime(localRuntime: RuntimeSnapshot, checkedAt: stri
     updatedAt: checkedAt,
   };
 }
+
+export function updateRuntimeWithFsmState(
+  localRuntime: RuntimeSnapshot,
+  fsm: DgxConnectionStateMachine,
+  checkedAt = new Date().toISOString()
+): RuntimeSnapshot {
+  const fsmState = fsm.getState();
+  const error = fsm.getLastError();
+
+  return {
+    ...localRuntime,
+    status: fsmState === "online" || fsmState === "syncing" ? "online" : "degraded",
+    dgxStatus: fsmState === "online" || fsmState === "syncing" ? "online" : "offline",
+    memorySyncStatus: fsmState === "online" ? "online" : fsmState === "syncing" ? "syncing" : "degraded",
+    runtimeNodes: localRuntime.runtimeNodes.map((node) =>
+      node.id === "dgx-02"
+        ? {
+            ...node,
+            status: fsmState === "online" || fsmState === "syncing" ? "online" : "offline",
+          }
+        : node
+    ),
+    syncTopology: {
+      ...localRuntime.syncTopology,
+      clients: localRuntime.syncTopology.clients.map((client) =>
+        client.syncRole === "authority" || client.id === "dgx-02"
+          ? {
+              ...client,
+              status: fsmState === "online" || fsmState === "syncing" ? "online" : "offline",
+              lastSeenAt: checkedAt,
+            }
+          : client
+      ),
+    },
+    recentError: error ? `dgx-02 WebSocket error: ${error}` : localRuntime.recentError,
+    updatedAt: checkedAt,
+  };
+}
+

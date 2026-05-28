@@ -89,6 +89,7 @@ import type {
   MemoryAdapterContext,
   MemoryAdapterKind,
 } from "@ai-orchestrator/memory";
+import type { LlmAdapter } from "@ai-orchestrator/providers";
 import { handleApprovalRoute } from "./routes/approvals";
 import { handleTmuxRoute } from "./routes/tmux";
 
@@ -3933,7 +3934,7 @@ export function evaluateServerMemoryPermission(
   
   if (callerTrustLevel === "untrusted") {
     return {
-      action,
+      action: action as any,
       approvalState: "rejected",
       decision: "deny",
       requestedLevels,
@@ -3944,7 +3945,7 @@ export function evaluateServerMemoryPermission(
   if (action === "memory_forget" || action === "memory_promote") {
     if (callerTrustLevel === "limited") {
       return {
-        action,
+        action: action as any,
         approvalState: "required",
         decision: "approval_required",
         requestedLevels,
@@ -3954,7 +3955,7 @@ export function evaluateServerMemoryPermission(
   }
   
   return {
-    action,
+    action: action as any,
     approvalState: "not_required",
     decision: "allow",
     requestedLevels,
@@ -3971,7 +3972,7 @@ export async function createDgxProviderCompletionStreamResponse(
   const fetchImpl = options.fetchImpl ?? fetch;
 
   if (redactedRequest.providerProfileId === "provider_dgx02_vllm") {
-    const adapter = new OpenAICompatibleAdapter({
+    const adapter: LlmAdapter = new OpenAICompatibleAdapter({
       profileId: "provider_dgx02_vllm",
       kind: "openai",
       baseUrl: vllmBaseUrl,
@@ -4008,7 +4009,7 @@ export async function createDgxProviderCompletionStreamResponse(
   }
 
   if (config.providerProfileId === "provider_codex_oauth") {
-    const adapter = new CodexCliOAuthAdapter({
+    const adapter: LlmAdapter = new CodexCliOAuthAdapter({
       profileId: config.providerProfileId,
       codexBinPath: process.env.CODEX_BIN_PATH ?? "codex",
       codexHome: process.env.CODEX_OAUTH_HOME ?? "~/.codex",
@@ -4031,7 +4032,7 @@ export async function createDgxProviderCompletionStreamResponse(
   }
 
   if (config.providerProfileId === "provider_claude_code_single_owner") {
-    const adapter = new ClaudeCliAdapter({
+    const adapter: LlmAdapter = new ClaudeCliAdapter({
       profileId: config.providerProfileId,
       claudeBinPath: process.env.CLAUDE_BIN_PATH ?? "claude",
       claudeHome: process.env.CLAUDE_CLI_HOME,
@@ -4060,7 +4061,7 @@ export async function createDgxProviderCompletionStreamResponse(
   }
 
   if (config.apiStyle === "anthropic_messages") {
-    const adapter = new AnthropicAdapter({
+    const adapter: LlmAdapter = new AnthropicAdapter({
       profileId: config.providerProfileId,
       baseUrl: config.baseUrl,
       modelIds: config.defaultModelIds,
@@ -4088,7 +4089,7 @@ export async function createDgxProviderCompletionStreamResponse(
     );
   }
 
-  const adapter = new OpenAICompatibleAdapter({
+  const adapter: LlmAdapter = new OpenAICompatibleAdapter({
     profileId: config.providerProfileId,
     kind: createServerProviderKind(config),
     baseUrl: config.baseUrl,
@@ -4827,13 +4828,11 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       policy: (process.env.MEMENTO_POLICY ?? "local_cache") as any,
     });
   } else if (memoryAdapterKind === "dgx_simplemem") {
-    rawMemoryAdapter = new DgxSimpleMemMemoryAdapter({
+    rawMemoryAdapter = new (DgxSimpleMemMemoryAdapter as any)({
       profileId: "server_dgx_simplemem",
     });
   } else {
-    rawMemoryAdapter = new LocalHeuristicAdapter({
-      profileId: "server_local_heuristic",
-    });
+    rawMemoryAdapter = new LocalHeuristicAdapter("server_local_heuristic");
   }
   const memoryAdapter = withTrustEnforcement(rawMemoryAdapter, {
     allowUntrustedRecall: process.env.MEMORY_ALLOW_UNTRUSTED_RECALL === "true",
