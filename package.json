@@ -15,6 +15,7 @@
     "server:smoke": "node scripts/smoke-dgx-server.mjs",
     "tmux:smoke:dry-run": "node scripts/smoke-tmux-dry-run.mjs",
     "antigravity:ultra-task": "node scripts/create-antigravity-ultra-task.mjs",
+    "antigravity:pro1-task": "node scripts/create-antigravity-pro1-task.mjs",
     "antigravity:worker": "node scripts/run-antigravity-worker.mjs",
     "antigravity:smoke": "node scripts/smoke-antigravity-worker.mjs",
     "swarm:setup": "bash scripts/setup-agent-swarm.sh",
