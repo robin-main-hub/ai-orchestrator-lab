@@ -141,6 +141,17 @@ function createGuardSteps(params: {
       reason: isSelfResponse ? "bot/manager author would create response loop" : "external user author accepted",
     },
     {
+      name: "external_agent_isolation",
+      status: (params.input.channel === "legacy_telegram" || params.input.channel === "webhook") &&
+              params.requestedPermissions.some((p) => p === "secret_access" || p === "write_files" || p === "run_safe_commands")
+              ? "blocked"
+              : "passed",
+      reason: (params.input.channel === "legacy_telegram" || params.input.channel === "webhook") &&
+              params.requestedPermissions.some((p) => p === "secret_access" || p === "write_files" || p === "run_safe_commands")
+        ? "external channels are restricted from write, run, or secret access capabilities"
+        : "no prohibited external capability request detected",
+    },
+    {
       name: "debounce",
       status: "passed",
       reason: params.input.recentTexts?.length

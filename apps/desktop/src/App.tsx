@@ -168,6 +168,7 @@ import { ConfigLibraryPanel } from "./components/ConfigLibraryPanel";
 import { ConversationWorkbench } from "./components/ConversationWorkbench";
 import { IngressGuardPanel } from "./components/IngressGuardPanel";
 import { EvolveMementoPanel } from "./components/EvolveMementoPanel";
+import { HumanPeekPanel } from "./components/HumanPeekPanel";
 import { OperationsRailPanel } from "./components/OperationsRailPanel";
 import { ProjectRailPanel } from "./components/ProjectRailPanel";
 import { ProviderProfilesManagerPanel } from "./components/ProviderProfilesManagerPanel";
@@ -2730,6 +2731,9 @@ export function App() {
                 onPin={handlePinMemory}
                 onRemember={handleRememberCurrentContext}
               />
+            ) : null}
+            {shellVisibility.showEvolveMementoPanel ? (
+              <HumanPeekPanel ingressSnapshot={ingressSnapshot} />
             ) : null}
           </aside>
         )}
