@@ -17,14 +17,14 @@ Windows PowerShell:
 
 ```powershell
 cd C:\Users\Robin\Documents\Playground\ai-orchestrator-lab-codex
-corepack pnpm personal-ai:sessions -- --refresh --grok-cli-refresh-fallback --hydrate-grok-homes --probe-grok
+corepack pnpm personal-ai:sessions -- --refresh --grok-cli-refresh-fallback --hydrate-grok-homes --probe-grok --probe-mimo
 ```
 
 macOS/Linux:
 
 ```bash
 cd ~/Documents/Playground/ai-orchestrator-lab-codex
-corepack pnpm personal-ai:sessions -- --refresh --grok-cli-refresh-fallback --hydrate-grok-homes --probe-grok
+corepack pnpm personal-ai:sessions -- --refresh --grok-cli-refresh-fallback --hydrate-grok-homes --probe-grok --probe-mimo
 ```
 
 The script does not print access tokens or refresh tokens.
@@ -98,6 +98,17 @@ macOS/Linux:
 ```bash
 CLAUDE_CONFIG_DIR="$HOME/.claude-max20" claude --permission-mode plan -p "Reply OK if this Claude profile is active."
 ```
+
+## MiMo
+
+MiMo profiles are checked by reading the `opencode.json` configuration file in the workspace root.
+If an API key is formatted as `{env:VAR_NAME}`, the check verifies that the corresponding environment variable (or `.env` file entry) is defined.
+
+When `--probe-mimo` is passed, it sends a lightweight direct completion ping request to each configured `baseURL` (`mimo` and `mimo-tp`).
+
+* **active:** The ping request succeeded (HTTP 200).
+* **unauthorized:** Upstream returned HTTP 401/403 (Invalid API Key).
+* **network_error / probe_failed:** The request timed out or returned another error.
 
 ## Antigravity
 

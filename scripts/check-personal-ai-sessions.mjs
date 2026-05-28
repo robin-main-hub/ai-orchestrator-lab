@@ -60,13 +60,20 @@ async function main() {
   }
 
   const homeRoot = resolve(args.homeRoot ?? homedir());
+  const workspaceRoot = resolve(args.workspaceRoot ?? process.cwd());
+
+  // Load .env from workspace root if exists
+  await loadDotEnv(workspaceRoot);
+
   const options = {
     hydrateGrokHomes: Boolean(args.hydrateGrokHomes),
     refresh: Boolean(args.refresh),
     probeGrok: Boolean(args.probeGrok),
+    probeMimo: Boolean(args.probeMimo),
     grokCliRefreshFallback: Boolean(args.grokCliRefreshFallback),
     json: Boolean(args.json),
     homeRoot,
+    workspaceRoot,
     expiryMarginMinutes: Number(args.expiresWithinMinutes ?? DEFAULT_EXPIRY_MARGIN_MINUTES),
     refreshUrl: args.grokRefreshUrl ?? DEFAULT_REFRESH_URL,
     grokCliRefreshTimeoutMs: Number(args.grokCliRefreshTimeoutMs ?? DEFAULT_CLI_REFRESH_TIMEOUT_MS),
@@ -79,6 +86,7 @@ async function main() {
   }
 
   const claude = await Promise.all(CLAUDE_PROFILES.map((profile) => checkClaudeProfile(profile, homeRoot)));
+  const mimo = await checkMimoProfiles(options, workspaceRoot);
   const antigravity = await checkAntigravity(homeRoot);
   const report = {
     generatedAt: new Date().toISOString(),
@@ -88,6 +96,7 @@ async function main() {
     },
     grok,
     claude,
+    mimo,
     antigravity,
   };
 
@@ -321,6 +330,126 @@ async function checkAntigravity(homeRoot) {
   };
 }
 
+async function loadDotEnv(workspaceRoot) {
+  const envPath = join(workspaceRoot, ".env");
+  try {
+    const content = await readFile(envPath, "utf8");
+    for (const line of content.split(/\r?\n/)) {
+      const match = line.trim().match(/^([^#=]+)=(.*)$/);
+      if (match) {
+        const key = match[1].trim();
+        let val = match[2].trim();
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1);
+        }
+        process.env[key] = val;
+      }
+    }
+  } catch (error) {
+    if (error && error.code !== "ENOENT") {
+      console.warn(`Warning: failed to read .env file: ${error.message}`);
+    }
+  }
+}
+
+async function checkMimoProfiles(options, workspaceRoot) {
+  const configPath = join(workspaceRoot, "opencode.json");
+  const result = [];
+
+  let config;
+  try {
+    const raw = await readFile(configPath, "utf8");
+    config = JSON.parse(raw);
+  } catch (error) {
+    return [{
+      provider: "mimo",
+      id: "mimo_all",
+      label: "MiMo/OpenCode profiles",
+      registered: false,
+      state: "missing_config_file",
+      error: error.code === "ENOENT" ? "opencode.json not found" : error.message,
+      baseURL: "(none)",
+    }];
+  }
+
+  const providers = config.provider || {};
+  for (const [providerId, provider] of Object.entries(providers)) {
+    if (providerId !== "mimo" && providerId !== "mimo-tp") continue;
+
+    const { baseURL, apiKey } = provider.options || {};
+    const profile = {
+      provider: "mimo",
+      id: providerId,
+      label: provider.name || providerId,
+      registered: false,
+      state: "missing_api_key",
+      baseURL: baseURL || "(none)",
+    };
+
+    if (!baseURL || !apiKey) {
+      result.push(profile);
+      continue;
+    }
+
+    profile.registered = true;
+    let resolvedApiKey = apiKey;
+    const envMatch = apiKey.match(/^\{env:(.+)\}$/);
+    if (envMatch) {
+      const envVarName = envMatch[1];
+      const envValue = process.env[envVarName];
+      if (!envValue) {
+        profile.state = "missing_env_var";
+        profile.envVarName = envVarName;
+        result.push(profile);
+        continue;
+      }
+      resolvedApiKey = envValue;
+      profile.envVarName = envVarName;
+    }
+
+    profile.state = "registered_probe_required";
+
+    if (options.probeMimo) {
+      try {
+        const resolvedBaseURL = baseURL.replace(/\/$/, "");
+        const res = await fetch(`${resolvedBaseURL}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${resolvedApiKey}`,
+          },
+          body: JSON.stringify({
+            model: "mimo-v2.5-pro",
+            messages: [{ role: "user", content: "ping" }],
+            max_tokens: 5,
+          }),
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (res.ok) {
+          profile.state = "active";
+          profile.probe = "ok";
+        } else {
+          const text = await res.text();
+          profile.probe = `failed: HTTP ${res.status}`;
+          if (res.status === 401 || res.status === 403) {
+            profile.state = "unauthorized";
+          } else {
+            profile.state = "probe_failed";
+          }
+        }
+      } catch (error) {
+        profile.state = "network_error";
+        profile.probe = `failed: ${error.message}`;
+      }
+    }
+
+    result.push(profile);
+  }
+
+  return result;
+}
+
 function classifyExpiry(expiresAt, marginMinutes) {
   if (!expiresAt) {
     return { state: "unknown_expiry", expiresInMinutes: null };
@@ -362,6 +491,8 @@ async function readGrokAuthEntry(authFile) {
   return prop ? prop[1] : undefined;
 }
 
+// stripBom, writeJson, pathExists, resolveUnderHome functions are defined in bottom or elsewhere.
+
 function stripBom(value) {
   return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
 }
@@ -396,7 +527,14 @@ function parseArgs(argv) {
       out.help = true;
       continue;
     }
-    if (["--json", "--refresh", "--hydrate-grok-homes", "--probe-grok", "--grok-cli-refresh-fallback"].includes(arg)) {
+    if ([
+      "--json",
+      "--refresh",
+      "--hydrate-grok-homes",
+      "--probe-grok",
+      "--probe-mimo",
+      "--grok-cli-refresh-fallback"
+    ].includes(arg)) {
       out[toCamelCase(arg.slice(2))] = true;
       continue;
     }
@@ -442,6 +580,17 @@ function printReport(report) {
     console.log(`  configDir: ${entry.configDir}`);
   }
   console.log("");
+  for (const entry of report.mimo) {
+    console.log(`${entry.label}: ${entry.state}`);
+    console.log(`  baseURL: ${entry.baseURL}`);
+    if (entry.envVarName) {
+      console.log(`  apiKeySource: env.${entry.envVarName}`);
+    }
+    if (entry.probe) {
+      console.log(`  probe: ${entry.probe}`);
+    }
+  }
+  console.log("");
   console.log(`${report.antigravity.label}: ${report.antigravity.state}`);
   console.log(`  configPath: ${report.antigravity.configPath}`);
   console.log("");
@@ -458,14 +607,16 @@ Options:
   --grok-cli-refresh-fallback     If direct refresh fails, run a short 'grok -p' probe for CLI-managed refresh.
   --hydrate-grok-homes           Write ~/.grok2/auth.json and ~/.grok3/auth.json from account slots.
   --probe-grok                   Run 'grok models' for each configured Grok home.
+  --probe-mimo                   Run a quick completion ping request for each configured MiMo profile.
   --expires-within-minutes <n>    Refresh threshold. Default: ${DEFAULT_EXPIRY_MARGIN_MINUTES}.
   --home-root <path>              Test/helper override for ~.
+  --workspace-root <path>         Test/helper override for workspace root.
   --grok-bin <path>               Grok binary. Default: GROK_BIN or grok.
   --grok-cli-refresh-timeout-ms <n>
                                  Timeout for CLI refresh fallback. Default: ${DEFAULT_CLI_REFRESH_TIMEOUT_MS}.
 
 Recommended startup check:
-  corepack pnpm personal-ai:sessions -- --refresh --grok-cli-refresh-fallback --hydrate-grok-homes --probe-grok
+  corepack pnpm personal-ai:sessions -- --refresh --grok-cli-refresh-fallback --hydrate-grok-homes --probe-grok --probe-mimo
 `);
 }
 
