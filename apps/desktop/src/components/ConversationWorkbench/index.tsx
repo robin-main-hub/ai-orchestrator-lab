@@ -20,6 +20,8 @@ import type {
   DraftAttachment,
   PendingProviderRetry,
   WorkbenchAgent,
+  AgentVisualSettings,
+  AgentActivityStatus,
 } from "../../types";
 import { AgentConfigDrawer } from "../AgentConfigDrawer";
 
@@ -68,6 +70,8 @@ export function ConversationWorkbench({
   selectedAgentId,
   selectedModel,
   selectedProvider,
+  agentVisualsById,
+  agentActivityById,
 }: {
   activeSessionId: string;
   agentConfigPanel: { open: boolean; tab: AgentConfigTab };
@@ -105,6 +109,8 @@ export function ConversationWorkbench({
   selectedAgentId?: string;
   selectedModel?: ModelDescriptor;
   selectedProvider?: ProviderProfile;
+  agentVisualsById?: Record<string, AgentVisualSettings>;
+  agentActivityById?: Record<string, AgentActivityStatus>;
 }) {
   const persona = agentPersona ?? (selectedAgent ? createDefaultPersonaSettings(selectedAgent) : undefined);
   const memoryMode = selectedProvider?.trustLevel === "trusted" ? "auto" : "manual";
@@ -170,6 +176,8 @@ export function ConversationWorkbench({
         onApprovePermission={onApprovePermission}
         onRejectPermission={onRejectPermission}
         agents={agents}
+        agentVisualsById={agentVisualsById}
+        agentActivityById={agentActivityById}
       />
 
       {/* ── Action strip ─────────────────────────────────────────── */}

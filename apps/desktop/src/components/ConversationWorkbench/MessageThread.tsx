@@ -14,13 +14,14 @@ import type {
 } from "@ai-orchestrator/protocol";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
-import type { WorkbenchAgent, PendingProviderRetry } from "../../types";
+import type { WorkbenchAgent, PendingProviderRetry, AgentVisualSettings, AgentActivityStatus } from "../../types";
 import {
   formatAttachmentSize,
   getMessageAttachments,
   agentRoleLabel,
 } from "../../lib/helpers";
 import { messageLabel } from "../../lib/uiLabels";
+import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
 
 export type DelegationPreviewItem = {
   id: string;
@@ -40,6 +41,8 @@ export function MessageThread({
   onApprovePermission,
   onRejectPermission,
   agents,
+  agentVisualsById,
+  agentActivityById,
 }: {
   messages: ConversationMessage[];
   selectedAgent?: WorkbenchAgent;
@@ -52,6 +55,8 @@ export function MessageThread({
   onApprovePermission: (sourceItemId: string) => void;
   onRejectPermission: (sourceItemId: string) => void;
   agents: WorkbenchAgent[];
+  agentVisualsById?: Record<string, AgentVisualSettings>;
+  agentActivityById?: Record<string, AgentActivityStatus>;
 }) {
   const delegationItems = createDelegationPreviewItems(messages, agents);
 
@@ -81,6 +86,9 @@ export function MessageThread({
               key={message.id}
               message={message}
               selectedAgent={selectedAgent}
+              agents={agents}
+              agentVisualsById={agentVisualsById}
+              agentActivityById={agentActivityById}
             />
           ))
         )}
@@ -113,9 +121,15 @@ function EmptyConversation() {
 function MessageBubble({
   message,
   selectedAgent,
+  agents,
+  agentVisualsById,
+  agentActivityById,
 }: {
   message: ConversationMessage;
   selectedAgent?: WorkbenchAgent;
+  agents: WorkbenchAgent[];
+  agentVisualsById?: Record<string, AgentVisualSettings>;
+  agentActivityById?: Record<string, AgentActivityStatus>;
 }) {
   const attachments = getMessageAttachments(message);
   const label = messageLabel(message, selectedAgent);
@@ -145,11 +159,36 @@ function MessageBubble({
     );
   }
 
+  const senderAgent = agents.find(
+    (a) =>
+      a.name === label ||
+      a.id === message.metadata?.agentId ||
+      a.role === message.metadata?.agentRole ||
+      (message.metadata?.agentName && a.name === String(message.metadata.agentName))
+  );
+  const initials = (senderAgent?.name ?? selectedAgent?.name ?? label).slice(0, 2).toUpperCase();
+  const roleColor = senderAgent ? roleColorFromRole(senderAgent.role) : "orchestrator";
+  const activity = senderAgent && agentActivityById ? agentActivityById[senderAgent.id] : "idle";
+  const agentStatus = senderAgent
+    ? activity === "responding"
+      ? ("active" as const)
+      : activity === "preparing"
+        ? ("pending" as const)
+        : activity === "idle"
+          ? ("idle" as const)
+          : ("online" as const)
+    : undefined;
+  const visual = senderAgent && agentVisualsById ? agentVisualsById[senderAgent.id] : undefined;
+
   return (
     <div className="flex gap-3">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-xs font-semibold text-primary">
-        {(selectedAgent?.name ?? label).slice(0, 1)}
-      </div>
+      <AvatarWithStatus
+        initials={initials}
+        roleColor={roleColor}
+        status={agentStatus}
+        avatarDataUrl={visual?.avatarDataUrl}
+        size="sm"
+      />
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-foreground">{label}</span>

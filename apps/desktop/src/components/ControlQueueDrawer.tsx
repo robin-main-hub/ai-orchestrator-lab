@@ -284,9 +284,9 @@ function QueueCard({
             {item.requestedBy}
           </span>
         </div>
-        <span className="rounded bg-warning/15 px-1 py-0 text-[9px] font-mono uppercase text-warning">
+        <StatusBadge variant="warning" size="sm" className="font-mono uppercase shrink-0">
           {item.state}
-        </span>
+        </StatusBadge>
       </div>
 
       {/* Summary */}
