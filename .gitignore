@@ -22,6 +22,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .codex-*
+.codex-tasks/
 .ai-swarm/
 
 # editor / os
