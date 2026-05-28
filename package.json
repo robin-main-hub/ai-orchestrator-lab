@@ -17,7 +17,9 @@
     "swarm:setup": "bash scripts/setup-agent-swarm.sh",
     "swarm:reset": "bash scripts/setup-agent-swarm.sh --reset",
     "swarm:send": "bash scripts/swarm-send.sh",
-    "swarm:capture": "bash scripts/swarm-capture.sh"
+    "swarm:capture": "bash scripts/swarm-capture.sh",
+    "swarm:claude:start": "bash scripts/swarm-start-claude-workers.sh",
+    "swarm:claude:task": "bash scripts/swarm-claude-task.sh"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

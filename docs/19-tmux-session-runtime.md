@@ -14,6 +14,8 @@ Real automatic command dispatch remains gated by:
 - Execution Slot UI
 - explicit user approval for dangerous actions
 
+The Claude worker path uses persistent interactive Claude Code sessions inside tmux panes. It must not use `claude -p`, `--print`, or unaudited direct process execution.
+
 ## Why tmux
 
 tmux is a terminal multiplexer. It can keep sessions alive after detach and can later reattach to them from another terminal. That matches the product need for long-lived CLI agents that survive app reconnects, SSH interruption, and MacBook/Home PC handoff.
@@ -33,6 +35,20 @@ Conversation / Debate / Coding Packet
 
 tmux is the runtime surface.
 Event Storage remains the record.
+
+Interactive Claude workers fit this model as long-lived processes inside selected panes:
+
+```text
+Operator request
+  -> Permission + Redaction
+  -> TerminalCommandIntent
+  -> scripts/swarm-claude-task.sh
+  -> interactive Claude Code pane
+  -> scripts/swarm-capture.sh
+  -> redacted capture event
+```
+
+The worker process is not a separate source of truth. It is just another terminal runtime attached to an audited pane id.
 
 ## Runtime Concepts
 
@@ -111,6 +127,30 @@ It:
 
 This can be wired into Event Storage before command dispatch is enabled.
 
+## Interactive Claude Worker Helpers
+
+`scripts/swarm-start-claude-workers.sh` starts interactive Claude Code workers in existing swarm panes.
+
+It:
+
+- requires an existing `ai-swarm` tmux session and `.ai-swarm/ai-swarm.env`;
+- starts `claude` without `-p` or `--print`;
+- defaults to `--permission-mode plan`;
+- records non-secret worker pane metadata in `.ai-swarm/ai-swarm.claude-workers.env`;
+- leaves actual task dispatch to `scripts/swarm-claude-task.sh`.
+
+`scripts/swarm-claude-task.sh` sends a structured prompt packet to an already-running worker pane.
+
+It:
+
+- requires worker state from `swarm-start-claude-workers.sh`;
+- refuses obvious secrets in task text;
+- uses `tmux load-buffer` and `paste-buffer` for prompt dispatch;
+- logs only redacted dispatch metadata;
+- does not run a new Claude process.
+
+The app-facing runtime should still model these sends as `TerminalCommandIntent` records and route real dispatch through the same approval, dry-run, and redaction gates as any other tmux send.
+
 ## Control Mode Later
 
 tmux control mode should be considered after basic capture works.
@@ -145,3 +185,4 @@ If DGX-02 is unreachable:
 - Never dispatch Telegram/mobile/API commands directly into tmux.
 - Never use numeric pane indexes as stable identity when pane ids are available.
 - Never make tmux the source of truth.
+- Never use headless Claude invocation for this worker path; use persistent interactive panes only.
