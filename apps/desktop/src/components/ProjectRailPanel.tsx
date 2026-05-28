@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bot, LayoutDashboard, Play, Send } from "lucide-react";
 import type { BranchExperiment, CodingPacket, InsightFinding, ReviewMode } from "@ai-orchestrator/protocol";
 import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
@@ -34,7 +34,43 @@ export function ProjectRailPanel({
   reviewMode: ReviewMode;
   sessionId: string;
 }) {
-  const [activeTab, setActiveTab] = useState<"overview" | "run" | "insights">("overview");
+  // Persistence key: session-based tab state
+  const storageKey = `ai-orchestrator:rail-tab:${sessionId}`;
+  
+  const [activeTab, setActiveTabState] = useState<"overview" | "run" | "insights">(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved === "overview" || saved === "run" || saved === "insights") {
+        return saved;
+      }
+    } catch (e) {
+      console.warn("로컬 스토리지 로드 실패:", e);
+    }
+    return "overview";
+  });
+
+  // Sync tab state when switching sessions
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`ai-orchestrator:rail-tab:${sessionId}`);
+      if (saved === "overview" || saved === "run" || saved === "insights") {
+        setActiveTabState(saved);
+      } else {
+        setActiveTabState("overview");
+      }
+    } catch (e) {
+      setActiveTabState("overview");
+    }
+  }, [sessionId]);
+
+  const setActiveTab = (tab: "overview" | "run" | "insights") => {
+    setActiveTabState(tab);
+    try {
+      localStorage.setItem(storageKey, tab);
+    } catch (e) {
+      console.warn("로컬 스토리지 저장 실패:", e);
+    }
+  };
 
   const visibleSteps = agentRun.steps.slice(0, 4);
   const visibleFiles = packet.filesToInspect.slice(0, 3);
@@ -45,10 +81,12 @@ export function ProjectRailPanel({
 
   const isRunning = agentRun.status === "planned" || agentRun.status === "ready_for_approval";
   const insightCount = insightFindings.length;
+  // Cap the insight count badge text to 9+ per PM guidelines
+  const displayInsightCount = insightCount > 9 ? "9+" : String(insightCount);
 
   return (
-    <section className="mini-panel rail-panel project-rail-panel">
-      <header className="mb-2">
+    <section className="mini-panel rail-panel project-rail-panel flex flex-col h-full overflow-hidden">
+      <header className="mb-2 shrink-0">
         <LayoutDashboard size={16} />
         <span>Project</span>
         <div className="rail-action-row">
@@ -62,7 +100,7 @@ export function ProjectRailPanel({
       </header>
 
       {/* Mini Tabs Header */}
-      <div className="rail-tabs mb-2">
+      <div className="rail-tabs mb-2 shrink-0">
         <button
           className={activeTab === "overview" ? "active" : ""}
           onClick={() => setActiveTab("overview")}
@@ -82,11 +120,12 @@ export function ProjectRailPanel({
           onClick={() => setActiveTab("insights")}
           type="button"
         >
-          Insights {insightCount > 0 && <span className="tab-count-badge">{insightCount}</span>}
+          Insights {insightCount > 0 && <span className="tab-count-badge">{displayInsightCount}</span>}
         </button>
       </div>
 
-      <div className="rail-tab-content">
+      {/* Scrollable Tab Content Area */}
+      <div className="rail-tab-content flex-1 overflow-y-auto pr-0.5 space-y-2">
         {activeTab === "overview" && (
           <>
             <div className="rail-hero-card">
@@ -164,38 +203,38 @@ export function ProjectRailPanel({
         )}
 
         {activeTab === "insights" && (
-          <>
-            <div className="rail-insight-list">
-              {visibleInsights.length > 0 ? (
-                visibleInsights.map((finding) => (
-                  <article className={finding.status} key={finding.id}>
-                    <strong>{insightCategoryLabel(finding.category)}</strong>
-                    <span>{finding.label}</span>
-                  </article>
-                ))
-              ) : (
-                <div className="col-span-2 text-center py-4 text-xs text-muted-foreground">감지된 인사이트가 없습니다.</div>
-              )}
-            </div>
-            <div className="meta-onboarding-box">
-              <button className="rail-icon-button" onClick={onRunMetaOnboarding} title="Meta Agent Onboarding" type="button">
-                <Bot size={13} />
-              </button>
-              <div>
-                <strong>Meta Agent Onboarding</strong>
-                {visibleMetaSignals.length > 0 ? (
-                  visibleMetaSignals.map((signal) => (
-                    <span className={signal.status} key={signal.id}>
-                      {signal.label}: {signal.suggestion}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-xs text-muted-foreground">대기 중인 온보딩 신호가 없습니다.</span>
-                )}
-              </div>
-            </div>
-          </>
+          <div className="rail-insight-list">
+            {visibleInsights.length > 0 ? (
+              visibleInsights.map((finding) => (
+                <article className={finding.status} key={finding.id}>
+                  <strong>{insightCategoryLabel(finding.category)}</strong>
+                  <span>{finding.label}</span>
+                </article>
+              ))
+            ) : (
+              <div className="col-span-2 text-center py-4 text-xs text-muted-foreground">감지된 인사이트가 없습니다.</div>
+            )}
+          </div>
         )}
+      </div>
+
+      {/* Meta Agent Onboarding Box - Statically fixed at the bottom of the panel per PM guidelines */}
+      <div className="meta-onboarding-box border-t border-border/40 pt-2 mt-2 shrink-0">
+        <button className="rail-icon-button" onClick={onRunMetaOnboarding} title="Meta Agent Onboarding" type="button">
+          <Bot size={13} />
+        </button>
+        <div>
+          <strong>Meta Agent Onboarding</strong>
+          {visibleMetaSignals.length > 0 ? (
+            visibleMetaSignals.map((signal) => (
+              <span className={signal.status} key={signal.id}>
+                {signal.label}: {signal.suggestion}
+              </span>
+            ))
+          ) : (
+            <span className="text-xs text-muted-foreground">대기 중인 온보딩 신호가 없습니다.</span>
+          )}
+        </div>
       </div>
     </section>
   );
