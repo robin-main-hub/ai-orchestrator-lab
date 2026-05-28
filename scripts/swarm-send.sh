@@ -69,7 +69,7 @@ if [[ -z "$pane_id" ]]; then
   exit 2
 fi
 
-if [[ "$command_text" =~ (sk-[A-Za-z0-9_-]{12,}|Bearer[[:space:]][A-Za-z0-9._-]{12,}|BEGIN[[:space:]]+PRIVATE[[:space:]]+KEY) ]]; then
+if [[ "$command_text" =~ (sk-[A-Za-z0-9_-]{12,}|AKIA[A-Z0-9]{16}|AIzaSy[A-Za-z0-9_-]{33}|Bearer[[:space:]][A-Za-z0-9._-]{12,}|BEGIN[[:space:]]+PRIVATE[[:space:]]+KEY) ]]; then
   echo "Refusing to send command text that appears to contain a secret." >&2
   exit 3
 fi
