@@ -1,4 +1,5 @@
-import { CheckCircle2 } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import type { CodingPacket, InsightFinding, ReviewMode } from "@ai-orchestrator/protocol";
 import { insightCategoryLabel, reviewModeLabel } from "../lib/uiLabels";
 
@@ -7,12 +8,26 @@ export function CodingPacketPanel({
   onReviewModeChange,
   packet,
   reviewMode,
+  onVerify,
 }: {
   insightFindings: InsightFinding[];
   onReviewModeChange: (mode: ReviewMode) => void;
   packet: CodingPacket;
   reviewMode: ReviewMode;
+  onVerify?: () => Promise<void>;
 }) {
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  const handleVerifyClick = async () => {
+    if (!onVerify || isVerifying) return;
+    setIsVerifying(true);
+    try {
+      await onVerify();
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
   const columns = [
     ["결정", packet.decisions],
     ["제약", packet.constraints],
@@ -27,9 +42,18 @@ export function CodingPacketPanel({
           <span>Coding Packet</span>
           <h2>{packet.goal}</h2>
         </div>
-        <button className="ghost-button" type="button">
-          <CheckCircle2 size={16} />
-          구조 검증
+        <button 
+          className="ghost-button" 
+          type="button"
+          onClick={handleVerifyClick}
+          disabled={isVerifying || !onVerify}
+        >
+          {isVerifying ? (
+            <Loader2 className="animate-spin" size={16} />
+          ) : (
+            <CheckCircle2 size={16} />
+          )}
+          {isVerifying ? "검증 중..." : "구조 검증"}
         </button>
       </header>
       <section className="review-insight-panel" aria-label="Review and insight controls">

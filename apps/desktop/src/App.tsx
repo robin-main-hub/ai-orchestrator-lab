@@ -60,7 +60,8 @@ import {
   requestDgxProviderCompletion,
 } from "./runtime/stage12DgxProvider";
 import { probeDgxOrchestratorServer } from "./runtime/stage13DgxServer";
-import { DEFAULT_DGX_SERVER_BASE_URL } from "./runtime/stage30DgxEndpoints";
+import { DEFAULT_DGX_SERVER_BASE_URL, resolveDgxServerBaseUrls } from "./runtime/stage30DgxEndpoints";
+import { createDgxOrchestratorJsonHeaders } from "./runtime/stage31DgxAuth";
 import { probeDgxProviderRoutes, type Stage32DgxRouteDiagnosticSnapshot } from "./runtime/stage32DgxRouteDiagnostics";
 import {
   buildDelegatedAgentPrompt,
@@ -1506,6 +1507,68 @@ export function App() {
     });
   }
 
+  async function handleVerifyCodingPacket() {
+    const baseUrl = resolveDgxServerBaseUrls(undefined)[0] ?? DEFAULT_DGX_SERVER_BASE_URL;
+    const endpoint = `${baseUrl}/verify-packet`;
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: createDgxOrchestratorJsonHeaders(),
+        body: JSON.stringify(codingPacketState),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server verify-packet failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      setAgentRunState((prev) => ({
+        ...prev,
+        verifier: {
+          id: prev.verifier.id,
+          status: result.status,
+          checks: result.checks,
+          notes: [
+            `실제 subprocess 실행 완료: ${result.message}`,
+            `exitCode: ${result.exitCode}`,
+            `출력 결과: ${result.stdout ? result.stdout.slice(0, 300) : "출력 없음"}`,
+            ...(result.stderr ? [`에러 결과: ${result.stderr.slice(0, 300)}`] : []),
+          ],
+        },
+      }));
+
+      appendEvent("coding_packet.verified", {
+        status: result.status,
+        exitCode: result.exitCode,
+        checks: result.checks,
+        message: result.message,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      });
+
+    } catch (error: any) {
+      console.error("Failed to verify coding packet:", error);
+
+      setAgentRunState((prev) => ({
+        ...prev,
+        verifier: {
+          id: prev.verifier.id,
+          status: "blocked",
+          checks: prev.verifier.checks.map((c) => ({ ...c, status: "fail" as const })),
+          notes: [
+            `패킷 검증 네트워크 오류: ${error.message || String(error)}`,
+          ],
+        },
+      }));
+
+      appendEvent("coding_packet.verification.failed", {
+        error: error.message || String(error),
+      });
+    }
+  }
+
   function handleExportBackupProjections() {
     const snapshot = createStage7BackupSnapshot({
       sessionId: activeSessionId,
@@ -2663,6 +2726,7 @@ export function App() {
               onReviewModeChange={handleReviewModeChange}
               packet={codingPacketState}
               reviewMode={reviewMode}
+              onVerify={handleVerifyCodingPacket}
             />
           ) : null}
         </section>
