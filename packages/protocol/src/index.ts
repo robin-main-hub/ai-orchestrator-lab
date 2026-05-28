@@ -1266,6 +1266,7 @@ export type IngressGuardName =
   | "shape_unification"
   | "noise_filter"
   | "self_response_prevention"
+  | "external_agent_isolation"
   | "debounce"
   | "pii_secret_block"
   | "guard_logging"
@@ -2218,3 +2219,19 @@ export type MobileActionPolicy = {
   canViewSecrets: boolean;
   canMergeOrPush: boolean;
 };
+
+export const ssotProviderKindSchema = z.enum(["markdown", "notion", "github"]);
+export type SsotProviderKind = z.infer<typeof ssotProviderKindSchema>;
+
+export const ssotSnapshotSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  providerKind: ssotProviderKindSchema,
+  sourceUrl: z.string().optional(),
+  contentHash: z.string(),
+  revision: z.string(),
+  observedAt: z.string(),
+  itemCount: z.number().int().nonnegative(),
+});
+export type SsotSnapshot = z.infer<typeof ssotSnapshotSchema>;
+
