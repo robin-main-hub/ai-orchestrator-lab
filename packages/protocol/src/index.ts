@@ -659,22 +659,23 @@ export const providerCompletionRequestSchema = z.object({
 });
 export type ProviderCompletionRequest = z.infer<typeof providerCompletionRequestSchema>;
 
-export type ProviderCompletionUsage = {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
+export const providerCompletionUsageSchema = z.object({
+  inputTokens: z.number().int().nonnegative().optional(),
+  outputTokens: z.number().int().nonnegative().optional(),
+  totalTokens: z.number().int().nonnegative().optional(),
   /**
    * Anthropic-only: tokens consumed to populate the prompt cache on this
    * call. Optional everywhere else; adapters that do not surface cache
    * accounting simply omit it.
    */
-  cacheCreationInputTokens?: number;
+  cacheCreationInputTokens: z.number().int().nonnegative().optional(),
   /**
    * Anthropic-only: tokens read back from the prompt cache on this call.
    * Same optionality rules as above.
    */
-  cacheReadInputTokens?: number;
-};
+  cacheReadInputTokens: z.number().int().nonnegative().optional(),
+});
+export type ProviderCompletionUsage = z.infer<typeof providerCompletionUsageSchema>;
 
 export type ProviderCompletionResponse = {
   id: string;
@@ -696,6 +697,55 @@ export type ProviderCompletionResponse = {
   error?: string;
   createdAt: string;
 };
+
+export const adapterErrorCategorySchema = z.enum([
+  "network",
+  "auth",
+  "credential_expired",
+  "refresh_required",
+  "rate_limit",
+  "bad_request",
+  "provider",
+  "blocked",
+  "unknown",
+]);
+export type AdapterErrorCategory = z.infer<typeof adapterErrorCategorySchema>;
+
+export const providerCompletionChunkEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("delta"),
+    requestId: z.string(),
+    sequence: z.number().int().nonnegative(),
+    delta: z.string(),
+  }),
+  z.object({
+    type: z.literal("usage"),
+    requestId: z.string(),
+    usage: providerCompletionUsageSchema,
+  }),
+  z.object({
+    type: z.literal("done"),
+    requestId: z.string(),
+    finalContent: z.string(),
+    stopReason: z.enum(["end_turn", "max_tokens", "stop_sequence", "tool_use", "cancelled"]).optional(),
+    usage: providerCompletionUsageSchema.optional(),
+    endpoint: z.string(),
+    createdAt: z.string(),
+    completedAt: z.string(),
+  }),
+  z.object({
+    type: z.literal("error"),
+    requestId: z.string(),
+    error: z.object({
+      category: adapterErrorCategorySchema,
+      message: z.string(),
+      status: z.number().int().optional(),
+      retryAfterSec: z.number().int().optional(),
+      providerRawSnippet: z.string().optional(),
+    }),
+  }),
+]);
+export type ProviderCompletionChunkEvent = z.infer<typeof providerCompletionChunkEventSchema>;
 
 export const agentDelegationEventTypeSchema = z.enum([
   "agent.delegation.detected",
@@ -1273,10 +1323,6 @@ export type ExternalApprovalItem = {
 export const permissionActionSchema = z.enum([
   "conversation_reply",
   "memory_write",
-  "memory_call",
-  "memory_write_request",
-  "memory_promote",
-  "memory_forget",
   "backup_export",
   "terminal_run",
   "file_write",

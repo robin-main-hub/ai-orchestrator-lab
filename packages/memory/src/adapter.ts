@@ -103,3 +103,6 @@ export class MemoryApiAdapter implements MemoryAdapter {
     return this.api.reflect(sessionId);
   }
 }
+
+export { DgxSimpleMemMemoryAdapter } from "./dgxSimpleMemAdapter.js";
+

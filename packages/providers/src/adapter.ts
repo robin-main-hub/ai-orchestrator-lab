@@ -3,6 +3,7 @@ import type {
   ProviderCompletionRequest,
   ProviderCompletionResponse,
   ProviderKind,
+  ProviderCompletionChunkEvent,
 } from "@ai-orchestrator/protocol";
 
 /**
@@ -45,6 +46,10 @@ export interface LlmAdapter {
     request: ProviderCompletionRequest,
     ctx: AdapterRuntimeContext,
   ): Promise<ProviderCompletionResponse>;
+  completeStreaming?(
+    request: ProviderCompletionRequest,
+    ctx: AdapterRuntimeContext,
+  ): AsyncIterable<ProviderCompletionChunkEvent>;
 }
 
 export type CreateAdapterContextParams = {

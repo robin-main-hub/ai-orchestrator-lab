@@ -362,4 +362,65 @@ describe("OllamaAdapter — log redaction", () => {
     expect(snippet).not.toContain("eyJabc.def.ghi-very-long-jwt-value-here");
     expect(snippet).toContain("<redacted>");
   });
+
+  it("streams the completion chunks correctly", async () => {
+    const { fetch } = recordedFetch(() => ({
+      ok: true,
+      status: 200,
+      body: [
+        '{"model":"llama3.1:8b","message":{"role":"assistant","content":"He"},"done":false}\n',
+        '{"model":"llama3.1:8b","message":{"role":"assistant","content":"llo"},"done":false}\n',
+        '{"model":"llama3.1:8b","message":{"role":"assistant","content":""},"done":true,"done_reason":"stop","prompt_eval_count":10,"eval_count":2}\n'
+      ]
+    }));
+
+    const adapter = new OllamaAdapter({
+      profileId: "provider_local_ollama",
+      fetchImpl: fetch,
+    });
+
+    const stream = adapter.completeStreaming(
+      baseRequest(),
+      createAdapterContext()
+    );
+
+    const chunks = [];
+    for await (const chunk of stream) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks).toHaveLength(4);
+    expect(chunks[0]).toEqual({
+      type: "delta",
+      requestId: "req_ollama_001",
+      sequence: 0,
+      delta: "He",
+    });
+    expect(chunks[1]).toEqual({
+      type: "delta",
+      requestId: "req_ollama_001",
+      sequence: 1,
+      delta: "llo",
+    });
+    expect(chunks[2]).toEqual({
+      type: "usage",
+      requestId: "req_ollama_001",
+      usage: {
+        inputTokens: 10,
+        outputTokens: 2,
+        totalTokens: 12,
+      },
+    });
+    expect(chunks[3]).toMatchObject({
+      type: "done",
+      requestId: "req_ollama_001",
+      finalContent: "Hello",
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 10,
+        outputTokens: 2,
+        totalTokens: 12,
+      },
+    });
+  });
 });

@@ -955,3 +955,82 @@ function stableId(value: string, salt: string) {
   }
   return hash.toString(16);
 }
+
+export type Stage6MemoryReflectionWorkerInput = {
+  records: MemoryRecord[];
+  sessionId?: string;
+  projectId?: string;
+  now?: string;
+};
+
+export async function runMemoryReflectionWorker({
+  records,
+  sessionId = defaultSessionId,
+  projectId = defaultProjectId,
+  now = new Date().toISOString(),
+}: Stage6MemoryReflectionWorkerInput): Promise<{
+  resolvedRecords: MemoryRecord[];
+  fixedCount: number;
+  newIssues: MemoryReflectionIssue[];
+}> {
+  let resolvedRecords = [...records];
+  const relations = createMemoryRelations(resolvedRecords, now);
+  const issues = createReflectionIssues(resolvedRecords, relations, now);
+  let fixedCount = 0;
+
+  for (const issue of issues) {
+    if (issue.kind === "duplicate") {
+      const [id1, id2] = issue.recordIds;
+      const rec1 = resolvedRecords.find((r) => r.id === id1);
+      const rec2 = resolvedRecords.find((r) => r.id === id2);
+      if (rec1 && rec2) {
+        const t1 = Date.parse(rec1.createdAt);
+        const t2 = Date.parse(rec2.createdAt);
+        const newer = t1 >= t2 ? rec1 : rec2;
+        const older = t1 >= t2 ? rec2 : rec1;
+
+        resolvedRecords = resolvedRecords.map((r) => {
+          if (r.id === older.id) {
+            return { ...r, activationState: "inactive", tombstonedAt: now };
+          }
+          if (r.id === newer.id) {
+            return { ...r, activationState: "active", updatedAt: now };
+          }
+          return r;
+        });
+        fixedCount++;
+      }
+    } else if (issue.kind === "contradiction") {
+      const [id1, id2] = issue.recordIds;
+      const rec1 = resolvedRecords.find((r) => r.id === id1);
+      const rec2 = resolvedRecords.find((r) => r.id === id2);
+      if (rec1 && rec2) {
+        const imp1 = rec1.importance ?? 0.5;
+        const imp2 = rec2.importance ?? 0.5;
+        const winner = imp1 >= imp2 ? rec1 : rec2;
+        const loser = imp1 >= imp2 ? rec2 : rec1;
+
+        resolvedRecords = resolvedRecords.map((r) => {
+          if (r.id === loser.id) {
+            return { ...r, activationState: "quarantined", updatedAt: now };
+          }
+          if (r.id === winner.id) {
+            return { ...r, activationState: "active", updatedAt: now };
+          }
+          return r;
+        });
+        fixedCount++;
+      }
+    }
+  }
+
+  const nextRelations = createMemoryRelations(resolvedRecords.filter(r => !r.tombstonedAt), now);
+  const newIssues = createReflectionIssues(resolvedRecords.filter(r => !r.tombstonedAt), nextRelations, now);
+
+  return {
+    resolvedRecords,
+    fixedCount,
+    newIssues,
+  };
+}
+

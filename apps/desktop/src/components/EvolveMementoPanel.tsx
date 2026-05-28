@@ -8,6 +8,7 @@ import {
   Sparkles,
   TrendingUp,
   UserRound,
+  MoreVertical,
 } from "lucide-react";
 import type { MemoryRecord, RecallResult } from "@ai-orchestrator/protocol";
 import { cn } from "@/lib/utils";
@@ -53,6 +54,9 @@ export type MementoPanelProps = EvolveMementoPanelProps;
 export function EvolveMementoPanel({
   inspector,
   onRemember,
+  onActivate,
+  onForget,
+  onPin,
 }: EvolveMementoPanelProps) {
   const [isOpen, setIsOpen] = useState(true);
   const visibleTrace = inspector.trace.results.slice(0, 6);
@@ -142,7 +146,12 @@ export function EvolveMementoPanel({
           </div>
 
           {/* Recall Trace — sole drawer */}
-          <RecallTraceList traces={visibleTrace} />
+          <RecallTraceList 
+            traces={visibleTrace} 
+            onActivate={onActivate}
+            onForget={onForget}
+            onPin={onPin}
+          />
         </div>
       ) : null}
     </section>
@@ -177,7 +186,24 @@ function MiniStat({
   );
 }
 
-function RecallTraceList({ traces }: { traces: RecallResult[] }) {
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
+
+function RecallTraceList({
+  traces,
+  onActivate,
+  onForget,
+  onPin,
+}: {
+  traces: RecallResult[];
+  onActivate: (recordId: string) => void;
+  onForget: (recordId: string) => void;
+  onPin: (recordId: string) => void;
+}) {
   const [expanded, setExpanded] = useState(true);
 
   return (
@@ -206,7 +232,13 @@ function RecallTraceList({ traces }: { traces: RecallResult[] }) {
             </p>
           ) : (
             traces.map((trace) => (
-              <RecallTraceRow key={trace.record.id} result={trace} />
+              <RecallTraceRow
+                key={trace.record.id}
+                result={trace}
+                onActivate={onActivate}
+                onForget={onForget}
+                onPin={onPin}
+              />
             ))
           )}
         </div>
@@ -215,7 +247,17 @@ function RecallTraceList({ traces }: { traces: RecallResult[] }) {
   );
 }
 
-function RecallTraceRow({ result }: { result: RecallResult }) {
+function RecallTraceRow({
+  result,
+  onActivate,
+  onForget,
+  onPin,
+}: {
+  result: RecallResult;
+  onActivate: (recordId: string) => void;
+  onForget: (recordId: string) => void;
+  onPin: (recordId: string) => void;
+}) {
   return (
     <div
       className={cn(
@@ -245,9 +287,39 @@ function RecallTraceRow({ result }: { result: RecallResult }) {
             {mementoScopeLabel(result.record.scope)}
           </p>
         </div>
-        <span className="shrink-0 text-[10px] text-muted-foreground">
-          {(result.score * 100).toFixed(0)}%
-        </span>
+        
+        {/* Actions Dropdown */}
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="text-[10px] text-muted-foreground">
+            {(result.score * 100).toFixed(0)}%
+          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                aria-label="기록 관리 메뉴"
+                className="h-5 w-5 hover:bg-card"
+                size="icon"
+                variant="ghost"
+              >
+                <MoreVertical className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-36">
+              <DropdownMenuItem onSelect={() => onPin(result.record.id)}>
+                기억 고정 (Pin)
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onActivate(result.record.id)}>
+                기억 활성화
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onSelect={() => onForget(result.record.id)}
+                variant="destructive"
+              >
+                기억 삭제
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
       <ImportanceBar
         importance={result.record.importance}
