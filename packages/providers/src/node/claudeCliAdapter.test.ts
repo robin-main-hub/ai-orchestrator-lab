@@ -12,7 +12,7 @@ function baseRequest(overrides: Partial<ProviderCompletionRequest> = {}): Provid
   return {
     id: "req_claude_001",
     sessionId: "session_test",
-    providerProfileId: "provider_claude_cli",
+    providerProfileId: "provider_claude_code_single_owner",
     modelId: "claude-cli-session",
     messages: [{ role: "user", content: "Hello" }],
     source: "desktop",
@@ -30,7 +30,7 @@ describe("ClaudeCliAdapter", () => {
 
     expect(models.map((model) => model.id)).toContain("claude-cli-session");
     expect(models.map((model) => model.id)).toContain("sonnet");
-    expect(models[0]?.providerProfileId).toBe("provider_claude_cli");
+    expect(models[0]?.providerProfileId).toBe("provider_claude_code_single_owner");
     expect(JSON.stringify(models)).not.toContain("token");
   });
 
@@ -57,7 +57,7 @@ describe("ClaudeCliAdapter", () => {
     expect(response.content).toContain("Claude CLI worker");
     expect(calls[0]?.claudeHome).toBe("/home/robin/.claude");
     expect(calls[0]?.timeoutMs).toBe(12_000);
-    expect(calls[0]?.permissionMode).toBe("dontAsk");
+    expect(calls[0]?.permissionMode).toBe("plan");
     expect(calls[0]?.cliModelId).toBeUndefined();
     expect(calls[0]?.prompt).toContain("USER: Hello");
   });
@@ -73,6 +73,33 @@ describe("ClaudeCliAdapter", () => {
     await adapter.complete(baseRequest({ modelId: "sonnet" }), createAdapterContext());
 
     expect(calls[0]?.cliModelId).toBe("sonnet");
+  });
+
+  it("rejects concurrent Claude CLI tasks with a single-active-session lock", async () => {
+    let releaseFirst!: () => void;
+    let firstStarted!: () => void;
+    const firstStartedPromise = new Promise<void>((resolve) => {
+      firstStarted = resolve;
+    });
+    const releaseFirstPromise = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const runner: ClaudeExecRunner = async () => {
+      firstStarted();
+      await releaseFirstPromise;
+      return { exitCode: 0, signal: null, stdout: JSON.stringify({ result: "first done" }), stderr: "" };
+    };
+    const adapter = new ClaudeCliAdapter({ claudeBinPath: "claude", runClaudeExec: runner });
+
+    const first = adapter.complete(baseRequest({ id: "req_first" }), createAdapterContext());
+    await firstStartedPromise;
+    const second = await adapter.complete(baseRequest({ id: "req_second" }), createAdapterContext());
+    releaseFirst();
+    const firstResponse = await first;
+
+    expect(firstResponse.status).toBe("succeeded");
+    expect(second.status).toBe("failed");
+    expect(second.error).toContain("[blocked]");
   });
 
   it("maps unauthorized CLI output to credential_expired and redacts raw snippets", async () => {

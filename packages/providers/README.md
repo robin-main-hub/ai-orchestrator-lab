@@ -41,3 +41,16 @@
 - `discoverModelsForProfile`은 DGX/vLLM provider에 대해 `remote_probe` source와 `qwen36-gio-lora-v5-prisma` 모델을 반환한다.
 - `createSecretVaultSnapshot`은 DGX no-auth route를 `dgx_vault` available 상태로 다룬다.
 - 실제 completion 전송은 `apps/server`의 `/provider-completions` 프록시를 우선 사용하고, 서버가 없을 때만 desktop direct fallback으로 이어진다.
+
+## Claude Code Single Owner Provider
+
+`provider_claude_code_single_owner` is intended for a single owner's personal research/development use across trusted devices. It must not be used to route requests from other users or shared company services through a personal Claude account. Only one active Claude Code task may run at a time.
+
+Required server guards:
+
+- `ENABLE_CLAUDE_CODE_SINGLE_OWNER_PROVIDER=true` must be set before the provider can run.
+- `CLAUDE_CODE_OWNER_USER_ID` must identify the only allowed owner.
+- `requestContext.userId` must match `CLAUDE_CODE_OWNER_USER_ID`.
+- shared route types such as `shared`, `slack_bot`, `company_webapp`, `multi_user_openclaw`, `public_api`, and `scheduled_batch` are blocked.
+- trusted remote devices are allowed only when the authenticated owner is the caller.
+- the adapter rejects concurrent Claude Code CLI work with a single-active-session lock.
