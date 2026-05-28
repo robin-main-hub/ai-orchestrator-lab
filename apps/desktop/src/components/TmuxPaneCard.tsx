@@ -5,7 +5,7 @@ import { agentRoleLabel } from "../lib/helpers";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
-import { AgentAvatar } from "./AgentAvatar";
+import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
 import { TmuxPaneTimeline } from "./TmuxPaneTimeline";
 
 /**
@@ -58,7 +58,23 @@ export function TmuxPaneCard({
       {/* Header: avatar + title + status */}
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <AgentAvatar agent={pane.agent} size="small" visual={visual} />
+          <AvatarWithStatus
+            initials={pane.agent ? pane.agent.name.slice(0, 2).toUpperCase() : "??"}
+            roleColor={pane.agent ? roleColorFromRole(pane.agent.role) : "companion"}
+            status={
+              pane.state === "chat active" || pane.state === "active"
+                ? "active"
+                : pane.state === "ready"
+                  ? "online"
+                  : pane.state === "dispatch gated" || pane.state === "pending_approval"
+                    ? "pending"
+                    : pane.state === "guarding"
+                      ? "offline"
+                      : "idle"
+            }
+            avatarDataUrl={visual?.avatarDataUrl}
+            size="sm"
+          />
           <div className="min-w-0">
             <div className="truncate text-[10px] text-muted-foreground">
               {pane.id}

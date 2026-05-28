@@ -2666,6 +2666,8 @@ export function App() {
               selectedAgentId={selectedAgent?.id}
               selectedModel={selectedModel}
               selectedProvider={selectedProvider}
+              agentVisualsById={agentVisualsById}
+              agentActivityById={agentActivityById}
             />
           ) : mode === "debate" ? (
             <Stage3DebateTable

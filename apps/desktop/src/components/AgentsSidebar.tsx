@@ -30,7 +30,7 @@ import type {
   ModelCatalog,
   WorkbenchAgent,
 } from "../types";
-import { AgentAvatar } from "./AgentAvatar";
+import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
 
 /**
  * Agents sidebar — strict v0 port.
@@ -403,7 +403,21 @@ function AgentCard({
           onClick={() => onSelectAgent(agent.id)}
           type="button"
         >
-          <AgentAvatar agent={agent} size="small" visual={visual} />
+          <AvatarWithStatus
+            initials={agent.name.slice(0, 2).toUpperCase()}
+            roleColor={roleColorFromRole(agent.role)}
+            status={
+              isResponding
+                ? "active"
+                : isPreparing
+                  ? "pending"
+                  : activity === "idle"
+                    ? "idle"
+                    : "online"
+            }
+            avatarDataUrl={visual?.avatarDataUrl}
+            size="sm"
+          />
         </button>
 
         <button
