@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -70,6 +70,7 @@ async function main() {
     refresh: Boolean(args.refresh),
     probeGrok: Boolean(args.probeGrok),
     probeMimo: Boolean(args.probeMimo),
+    probeRemote: Boolean(args.probeRemote),
     grokCliRefreshFallback: Boolean(args.grokCliRefreshFallback),
     json: Boolean(args.json),
     homeRoot,
@@ -87,6 +88,7 @@ async function main() {
 
   const claude = await Promise.all(CLAUDE_PROFILES.map((profile) => checkClaudeProfile(profile, homeRoot)));
   const mimo = await checkMimoProfiles(options, workspaceRoot);
+  const remote = await checkRemoteProfiles(options);
   const antigravity = await checkAntigravity(homeRoot);
   const report = {
     generatedAt: new Date().toISOString(),
@@ -97,6 +99,7 @@ async function main() {
     grok,
     claude,
     mimo,
+    remote,
     antigravity,
   };
 
@@ -450,6 +453,146 @@ async function checkMimoProfiles(options, workspaceRoot) {
   return result;
 }
 
+const REMOTE_PROFILES = [
+  {
+    id: "remote_codex_dgx01",
+    label: "Codex (DGX-01)",
+    host: "100.81.57.88",
+    user: "robin",
+    cmd: "~/.codex/packages/standalone/releases/0.132.0-aarch64-unknown-linux-musl/codex",
+    args: ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "-"],
+    provider: "codex",
+    testInput: "Reply exactly: OK",
+    expectedOutput: "OK",
+  },
+  {
+    id: "remote_codex_dgx02",
+    label: "Codex (DGX-02)",
+    host: "100.71.215.84",
+    user: "robin",
+    cmd: "~/.codex/packages/standalone/releases/0.132.0-aarch64-unknown-linux-musl/codex",
+    args: ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "-"],
+    provider: "codex",
+    testInput: "Reply exactly: OK",
+    expectedOutput: "OK",
+  },
+  {
+    id: "remote_grok_dgx01",
+    label: "Grok (DGX-01)",
+    host: "100.81.57.88",
+    user: "robin",
+    cmd: "~/.grok/bin/grok",
+    args: ["-p", "Reply exactly: OK", "--output-format", "json"],
+    provider: "grok",
+  },
+  {
+    id: "remote_grok_dgx02",
+    label: "Grok (DGX-02)",
+    host: "100.71.215.84",
+    user: "robin",
+    cmd: "~/.grok/bin/grok",
+    args: ["-p", "Reply exactly: OK", "--output-format", "json"],
+    provider: "grok",
+  },
+];
+
+async function checkRemoteProfiles(options) {
+  const result = [];
+  for (const profile of REMOTE_PROFILES) {
+    result.push(await checkRemoteProfile(profile, options));
+  }
+  return result;
+}
+
+async function checkRemoteProfile(profile, options) {
+  const status = {
+    provider: profile.provider,
+    id: profile.id,
+    label: profile.label,
+    host: profile.host,
+    user: profile.user,
+    registered: false,
+    state: "probe_required",
+    probe: "not_run",
+  };
+
+  if (!options.probeRemote) {
+    status.state = "registered_probe_required";
+    return status;
+  }
+
+  const escapedArgs = profile.args.map(arg => {
+    if (arg.includes(" ") || arg.includes("'") || arg.includes("\"")) {
+      return `'${arg.replace(/'/g, "'\\''")}'`;
+    }
+    return arg;
+  }).join(" ");
+  const remoteCmd = `${profile.cmd} ${escapedArgs}`;
+
+  return new Promise((resolve) => {
+    const sshArgs = [
+      "-o", "ConnectTimeout=5",
+      "-o", "StrictHostKeyChecking=no",
+      `${profile.user}@${profile.host}`,
+      remoteCmd
+    ];
+
+    const child = spawn("ssh", sshArgs, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+
+    let stdout = "";
+    let stderr = "";
+
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      status.state = "network_error";
+      status.probe = "failed: timeout";
+      resolve(status);
+    }, 15000);
+
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      status.state = "ssh_client_error";
+      status.probe = `failed: ${err.message}`;
+      resolve(status);
+    });
+
+    child.on("close", (exitCode) => {
+      clearTimeout(timer);
+      status.registered = true;
+      if (exitCode === 0) {
+        status.state = "active";
+        status.probe = "ok";
+      } else {
+        status.probe = `failed: exit code ${exitCode}`;
+        const errLog = `${stderr}\n${stdout}`.trim();
+        if (errLog.includes("Permission denied") || errLog.includes("permission denied") || errLog.includes("PermissionDenied")) {
+          status.state = "permission_denied";
+        } else if (errLog.includes("Invalid API Key") || errLog.includes("401") || errLog.includes("unauthorized")) {
+          status.state = "unauthorized";
+        } else if (errLog.includes("Connection closed") || errLog.includes("Connection timed out") || errLog.includes("timeout")) {
+          status.state = "network_error";
+        } else {
+          status.state = "probe_failed";
+        }
+        status.error = errLog.split(/\r?\n/)[0] || `Exit code ${exitCode}`;
+      }
+      resolve(status);
+    });
+
+    if (profile.testInput) {
+      child.stdin.end(profile.testInput);
+    } else {
+      child.stdin.end();
+    }
+  });
+}
+
 function classifyExpiry(expiresAt, marginMinutes) {
   if (!expiresAt) {
     return { state: "unknown_expiry", expiresInMinutes: null };
@@ -491,8 +634,6 @@ async function readGrokAuthEntry(authFile) {
   return prop ? prop[1] : undefined;
 }
 
-// stripBom, writeJson, pathExists, resolveUnderHome functions are defined in bottom or elsewhere.
-
 function stripBom(value) {
   return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
 }
@@ -533,6 +674,7 @@ function parseArgs(argv) {
       "--hydrate-grok-homes",
       "--probe-grok",
       "--probe-mimo",
+      "--probe-remote",
       "--grok-cli-refresh-fallback"
     ].includes(arg)) {
       out[toCamelCase(arg.slice(2))] = true;
@@ -591,6 +733,17 @@ function printReport(report) {
     }
   }
   console.log("");
+  for (const entry of report.remote) {
+    console.log(`${entry.label}: ${entry.state}`);
+    console.log(`  host: ${entry.user}@${entry.host}`);
+    if (entry.probe) {
+      console.log(`  probe: ${entry.probe}`);
+    }
+    if (entry.error) {
+      console.log(`  error: ${entry.error}`);
+    }
+  }
+  console.log("");
   console.log(`${report.antigravity.label}: ${report.antigravity.state}`);
   console.log(`  configPath: ${report.antigravity.configPath}`);
   console.log("");
@@ -608,6 +761,7 @@ Options:
   --hydrate-grok-homes           Write ~/.grok2/auth.json and ~/.grok3/auth.json from account slots.
   --probe-grok                   Run 'grok models' for each configured Grok home.
   --probe-mimo                   Run a quick completion ping request for each configured MiMo profile.
+  --probe-remote                 Run a quick verification query via SSH for each remote Codex/Grok profile on DGX-01/02.
   --expires-within-minutes <n>    Refresh threshold. Default: ${DEFAULT_EXPIRY_MARGIN_MINUTES}.
   --home-root <path>              Test/helper override for ~.
   --workspace-root <path>         Test/helper override for workspace root.
@@ -616,7 +770,7 @@ Options:
                                  Timeout for CLI refresh fallback. Default: ${DEFAULT_CLI_REFRESH_TIMEOUT_MS}.
 
 Recommended startup check:
-  corepack pnpm personal-ai:sessions -- --refresh --grok-cli-refresh-fallback --hydrate-grok-homes --probe-grok --probe-mimo
+  corepack pnpm personal-ai:sessions -- --refresh --grok-cli-refresh-fallback --hydrate-grok-homes --probe-grok --probe-mimo --probe-remote
 `);
 }
 
@@ -627,3 +781,4 @@ function toCamelCase(value) {
 function toPosixPath(value) {
   return value.replace(/\\/g, "/");
 }
+
