@@ -2936,4 +2936,103 @@ describe("HTTP request limits", () => {
       }
     }
   });
+
+  it("runs package verification for Coding Packet and captures subprocess output", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const packet = {
+        goal: "Test execution gate",
+        context: ["context_1"],
+        decisions: ["decision_1"],
+        rejectedOptions: ["option_1"],
+        constraints: ["constraint_1"],
+        filesToInspect: [],
+        implementationPlan: ["plan_1"],
+        verificationPlan: ["plan_test_1"],
+        reviewerNotes: [],
+      };
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/verify-packet`, {
+        body: JSON.stringify({
+          ...packet,
+          command: "node -e \"process.exit(0)\""
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      if (response.status !== 200) {
+        console.log("RESPONSE ERROR BODY:", await response.json());
+      }
+      expect(response.status).toBe(200);
+      const data = (await response.json()) as any;
+      expect(data).toMatchObject({
+        status: "passed",
+        exitCode: 0,
+        checks: [
+          { label: "Compiler checks", status: "pass" },
+          { label: "Unit test coverage", status: "pass" }
+        ]
+      });
+      expect(data.stdout).toBeDefined();
+
+      const failResponse = await fetch(`http://127.0.0.1:${address.port}/verify-packet`, {
+        body: JSON.stringify({
+          ...packet,
+          command: "node -e \"process.exit(1)\""
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(failResponse.status).toBe(200);
+      const failData = (await failResponse.json()) as any;
+      expect(failData).toMatchObject({
+        status: "failed",
+        checks: [
+          { label: "Compiler checks", status: "fail" },
+          { label: "Unit test coverage", status: "warn" }
+        ]
+      });
+      expect(failData.exitCode).toBe(1);
+
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
 });
