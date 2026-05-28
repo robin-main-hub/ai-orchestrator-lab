@@ -2366,6 +2366,9 @@ export function App() {
       } as React.CSSProperties}
     >
       <RuntimeStatusBar
+        mode={mode}
+        onChangeMode={setMode}
+        onCommandPalette={() => setCommandPaletteOpen(true)}
         onProbeDgx={handleProbeDgx}
         providerName={activeProvider?.name ?? "미선택"}
         snapshot={runtimeSnapshotState}
@@ -2377,15 +2380,6 @@ export function App() {
           }`}
           aria-label="오케스트레이터 네비게이션"
         >
-          <div className="brand-block">
-            <div className="brand-mark">
-              <Brain size={22} />
-            </div>
-            <div>
-              <strong>AI Orchestrator Lab</strong>
-              <span>desktop command room</span>
-            </div>
-          </div>
 
           <nav className="nav-stack">
             {navItems.map((item) => {
@@ -2554,40 +2548,6 @@ export function App() {
           }`}
         >
           <div className="board-toolbar">
-            <div className="mode-area" role="tablist" aria-label="작업 모드">
-              <div className="mode-switch">
-                <button
-                  aria-selected={mode === "conversation"}
-                  className={mode === "conversation" ? "active" : ""}
-                  onClick={() => setMode("conversation")}
-                  role="tab"
-                  type="button"
-                >
-                  <MessageSquare size={16} />
-                  Conversation
-                </button>
-                <button
-                  aria-selected={mode === "debate"}
-                  className={mode === "debate" ? "active" : ""}
-                  onClick={() => setMode("debate")}
-                  role="tab"
-                  type="button"
-                >
-                  <GitBranch size={16} />
-                  Debate
-                </button>
-              </div>
-              <button
-                aria-selected={mode === "tmux"}
-                className={`tmux-mode-button ${mode === "tmux" ? "active" : ""}`}
-                onClick={() => setMode("tmux")}
-                role="tab"
-                type="button"
-              >
-                <Terminal size={16} />
-                Tmux
-              </button>
-            </div>
             <div
               className={`toolbar-actions ${
                 shellVisibility.showToolbarActions ? "" : "shell-surface-hidden"
