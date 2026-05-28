@@ -806,6 +806,43 @@ describe("server health placeholder", () => {
     expect(response.route).toBe("server_proxy");
   });
 
+  it("routes Claude CLI completions through the local CLI adapter without calling HTTP fetch", async () => {
+    const response = await createDgxProviderCompletionResponse(
+      {
+        id: "provider_completion_request_claude_cli",
+        sessionId: "session_1",
+        providerProfileId: "provider_claude_cli",
+        modelId: "claude-cli-session",
+        messages: [{ role: "user", content: "delegate this" }],
+        source: "desktop",
+        routePreference: "server_proxy",
+        createdAt: "2026-05-28T00:00:00.000Z",
+      },
+      {
+        now: "2026-05-28T00:00:00.000Z",
+        fetchImpl: async () => {
+          throw new Error("Claude CLI must not use HTTP fetch");
+        },
+        claudeCliRunner: async (params) => {
+          expect(params.claudeBinPath).toBe("claude");
+          expect(params.permissionMode).toBe("dontAsk");
+          expect(params.prompt).toContain("USER: delegate this");
+          expect(params.cliModelId).toBeUndefined();
+          return {
+            exitCode: 0,
+            signal: null,
+            stdout: JSON.stringify({ type: "result", result: "Claude CLI OK" }),
+            stderr: "",
+          };
+        },
+      },
+    );
+
+    expect(response.status).toBe("succeeded");
+    expect(response.content).toBe("Claude CLI OK");
+    expect(response.route).toBe("server_proxy");
+  });
+
   it("discovers DeepSeek models through the DGX-02 provider model proxy", async () => {
     const previousKey = process.env.DEEPSEEK_API_KEY;
     process.env.DEEPSEEK_API_KEY = "deepseek-test-secret";
@@ -859,6 +896,7 @@ describe("server health placeholder", () => {
       const deepseek = registry.entries.find((entry) => entry.providerProfileId === "provider_deepseek_dgx");
       const apifun = registry.entries.find((entry) => entry.providerProfileId === "provider_apifun_claude");
       const codexOauth = registry.entries.find((entry) => entry.providerProfileId === "provider_codex_oauth");
+      const claudeCli = registry.entries.find((entry) => entry.providerProfileId === "provider_claude_cli");
       const grok = registry.entries.find((entry) => entry.providerProfileId === "provider_grok_oauth_dgx");
 
       expect(registry.authorityNodeId).toBe("dgx-02");
@@ -872,6 +910,10 @@ describe("server health placeholder", () => {
       expect(codexOauth?.name).toBe("Codex OAuth Session");
       expect(codexOauth?.authMode).toBe("oauth_session");
       expect(codexOauth?.tags).toContain("codex");
+      expect(claudeCli?.name).toBe("Claude CLI Session");
+      expect(claudeCli?.authMode).toBe("local_cli");
+      expect(claudeCli?.secretAvailability).toBe("available");
+      expect(claudeCli?.tags).toEqual(expect.arrayContaining(["claude", "cli", "local"]));
       expect(grok?.authMode).toBe("oauth_session");
       expect(JSON.stringify(registry)).not.toContain("deepseek-test-secret");
     } finally {
@@ -2131,7 +2173,7 @@ describe("HTTP request limits", () => {
           authorType: "user",
           eventType: "message",
           text: "please run bash and use Bearer abcdefghijklmnopqrstuvwxyz123456",
-          receivedAt: "2026-05-25T00:00:00.000Z",
+          receivedAt: "2099-05-25T00:00:00.000Z",
         }),
         headers: {
           authorization: "Bearer test-orchestrator-token",

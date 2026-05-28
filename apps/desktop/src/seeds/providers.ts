@@ -133,6 +133,18 @@ export const seededProviderProfiles: ProviderProfile[] = [
     }),
     secretRef: createDgxVaultSecretRef("secret_dgx02_codex_oauth", "DGX-02 Codex OAuth Session", "dgx-02:~/.codex/auth.json"),
   },
+  {
+    ...createProviderProfile({
+      id: "provider_claude_cli",
+      name: "Claude CLI Session",
+      kind: "custom",
+      baseUrl: "claude-cli://local",
+      defaultModel: "claude-cli-session",
+      tags: ["claude", "cli", "local", "server-proxy", "session"],
+      trustLevel: "limited",
+    }),
+    secretRef: createDgxVaultSecretRef("secret_local_claude_cli", "Claude CLI local session", "local:claude"),
+  },
 ];
 
 export function createInitialProviderProfiles() {
@@ -201,6 +213,21 @@ function sanitizeProviderProfile(profile: ProviderProfile): ProviderProfile {
         createDgxVaultSecretRef("secret_dgx02_codex_oauth", "DGX-02 Codex OAuth Session", "dgx-02:~/.codex/auth.json"),
       tags: Array.from(new Set([...profile.tags, "oauth", "codex", "dgx", "session", "server-proxy"])),
       trustLevel: "trusted",
+    };
+  }
+
+  if (profile.id === "provider_claude_cli") {
+    return {
+      ...profile,
+      name: "Claude CLI Session",
+      kind: "custom",
+      baseUrl: "claude-cli://local",
+      defaultModel: "claude-cli-session",
+      secretRef:
+        profile.secretRef ??
+        createDgxVaultSecretRef("secret_local_claude_cli", "Claude CLI local session", "local:claude"),
+      tags: Array.from(new Set([...profile.tags, "claude", "cli", "local", "server-proxy", "session"])),
+      trustLevel: "limited",
     };
   }
 
@@ -331,6 +358,12 @@ export const seededModelCatalog: ModelCatalog = {
     "codex-local",
     "codex-dgx",
   ].map((id) => createModel("provider_codex_oauth", id, ["oauth", "codex", "dgx", "session"])),
+  provider_claude_cli: [
+    "claude-cli-session",
+    "opus",
+    "sonnet",
+    "haiku",
+  ].map((id) => createModel("provider_claude_cli", id, ["claude", "cli", "local", "server-proxy", "session"])),
 };
 
 function createProviderProfileFromRegistryEntry(entry: ProviderRegistryEntry): ProviderProfile {
