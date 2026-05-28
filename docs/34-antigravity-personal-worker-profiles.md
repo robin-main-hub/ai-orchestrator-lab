@@ -9,6 +9,7 @@ The current implementation is file-based handoff only:
 ```text
 scripts/run-antigravity-worker.mjs
 scripts/run-antigravity-worker.sh
+scripts/create-antigravity-ultra-task.mjs
 scripts/smoke-antigravity-worker.mjs
 ```
 
@@ -49,6 +50,8 @@ When heavy validation is specifically required, prefer:
 heavy_validation -> personal_antigravity_ultra
 ```
 
+Start with Ultra while it is the currently connected Antigravity account. Treat it as the first live lane, prove the handoff and checkpoint loop there, then add the Pro lanes after the loop is stable.
+
 ## Required Guards
 
 The wrapper enforces:
@@ -78,6 +81,26 @@ shared
 
 ## File Handoff
 
+Ultra-first task bootstrap:
+
+```bash
+ENABLE_PERSONAL_ANTIGRAVITY_PROFILES=true \
+OWNER_USER_ID=robin \
+node scripts/create-antigravity-ultra-task.mjs \
+  --task-id first-ultra-task \
+  --title "First Ultra coding task" \
+  --body "Implement this task in the Ultra lane." \
+  --run-dry-run
+```
+
+PowerShell equivalent:
+
+```powershell
+$env:ENABLE_PERSONAL_ANTIGRAVITY_PROFILES="true"
+$env:OWNER_USER_ID="robin"
+node scripts/create-antigravity-ultra-task.mjs --task-id first-ultra-task --title "First Ultra coding task" --body "Implement this task in the Ultra lane." --run-dry-run
+```
+
 Recommended task shape:
 
 ```text
@@ -95,7 +118,7 @@ node scripts/run-antigravity-worker.mjs \
   --task .codex-tasks/antigravity/example/lane-a/request.md \
   --user-id robin \
   --route-type personal_codex \
-  --lane lane_a \
+  --ultra-first \
   --dry-run
 ```
 
