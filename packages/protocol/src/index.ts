@@ -618,6 +618,26 @@ export type ProviderCompletionRoute = z.infer<typeof providerCompletionRouteSche
 
 export type ProviderCompletionStatus = "succeeded" | "failed" | "fallback_required";
 
+export const providerCompletionRouteTypeSchema = z.enum([
+  "personal",
+  "trusted_remote_device",
+  "shared",
+  "slack_bot",
+  "company_webapp",
+  "multi_user_openclaw",
+  "public_api",
+  "scheduled_batch",
+]);
+export type ProviderCompletionRouteType = z.infer<typeof providerCompletionRouteTypeSchema>;
+
+export const providerCompletionRequestContextSchema = z.object({
+  userId: z.string().min(1).max(256),
+  routeType: providerCompletionRouteTypeSchema.default("personal"),
+  trustedDeviceId: z.string().min(1).max(256).optional(),
+  humanInitiated: z.boolean().optional(),
+});
+export type ProviderCompletionRequestContext = z.infer<typeof providerCompletionRequestContextSchema>;
+
 export const providerCompletionMessageSchema = z.object({
   role: z.enum(["user", "assistant", "system", "tool"]),
   content: z.string().max(200_000),
@@ -632,6 +652,7 @@ export const providerCompletionRequestSchema = z.object({
   messages: z.array(providerCompletionMessageSchema).min(1).max(200),
   source: eventSourceSchema,
   routePreference: providerCompletionRouteSchema,
+  requestContext: providerCompletionRequestContextSchema.optional(),
   approvalState: z.enum(["not_required", "required", "approved", "rejected", "expired"]).optional(),
   permissionDecision: z.enum(["allow", "approval_required", "deny"]).optional(),
   createdAt: z.string().min(1).max(64),

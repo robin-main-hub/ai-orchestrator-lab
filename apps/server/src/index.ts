@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+﻿import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { mkdir, readFile, appendFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -69,9 +69,11 @@ import {
   terminalTimelineBlockSchema,
 } from "@ai-orchestrator/protocol";
 import {
+  ClaudeCliAdapter,
   CodexCliOAuthAdapter,
   AnthropicAdapter,
   OpenAICompatibleAdapter,
+  type ClaudeExecRunner,
   type CodexExecRunner,
 } from "@ai-orchestrator/providers/node";
 import { handleApprovalRoute } from "./routes/approvals";
@@ -135,6 +137,15 @@ export type DgxVllmProbeOptions = {
 
 const DEFAULT_DGX02_VLLM_BASE_URL = "http://dgx-02:8001/v1";
 const DEFAULT_DGX_MODEL_ID = "qwen36-domain-lora-v5-prisma";
+const CLAUDE_CODE_SINGLE_OWNER_PROVIDER_ID = "provider_claude_code_single_owner";
+const CLAUDE_CODE_BLOCKED_ROUTE_TYPES = new Set([
+  "shared",
+  "slack_bot",
+  "company_webapp",
+  "multi_user_openclaw",
+  "public_api",
+  "scheduled_batch",
+]);
 const execFileAsync = promisify(execFile);
 
 type ServerProviderProxyConfig = {
@@ -499,6 +510,15 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     oauthAuthFileEnvName: "CODEX_OAUTH_AUTH_FILE",
     defaultOAuthAuthFile: "~/.codex/auth.json",
     oauthAccountLabel: "codex-oauth",
+  },
+  {
+    providerProfileId: CLAUDE_CODE_SINGLE_OWNER_PROVIDER_ID,
+    baseUrl: process.env.CLAUDE_CLI_BASE_URL ?? "claude-code-single-owner://local",
+    apiKeyEnvNames: [],
+    noAuth: true,
+    apiStyle: "openai_chat",
+    defaultModelIds: ["claude-cli-session", "opus", "sonnet", "haiku"],
+    supportsModelList: false,
   },
   {
     providerProfileId: "provider_grok_oauth_dgx",
@@ -955,6 +975,10 @@ async function createServerProviderSecretAvailability(
     return "available";
   }
 
+  if (authMode === "local_cli") {
+    return "available";
+  }
+
   if (authMode === "oauth_session") {
     return resolveServerProviderOAuthAvailability(config, now);
   }
@@ -999,6 +1023,10 @@ function createServerProviderModelDescriptor(
 }
 
 function createServerProviderRegistryAuthMode(config: ServerProviderProxyConfig): ProviderRegistryAuthMode {
+  if (config.providerProfileId === "provider_claude_code_single_owner") {
+    return "local_cli";
+  }
+
   if (config.providerProfileId.includes("grok_oauth") || config.providerProfileId.includes("codex_oauth")) {
     return "oauth_session";
   }
@@ -1019,6 +1047,7 @@ function createServerProviderDisplayName(providerProfileId: string) {
     provider_openai_compat: "OpenAI Official",
     provider_openrouter_dgx: "OpenRouter DGX-02 Key",
     provider_codex_oauth: "Codex OAuth Session",
+    provider_claude_code_single_owner: "Claude Code Single Owner",
     provider_grok_oauth_dgx: "Grok OAuth #1",
     provider_grok_oauth_dgx_2: "Grok OAuth #2",
     provider_openclaw_dgx: "DGX-02 OpenClaw vLLM",
@@ -1036,7 +1065,11 @@ function createServerProviderKind(config: ServerProviderProxyConfig): ProviderKi
     return "openrouter";
   }
 
-  if (config.providerProfileId.includes("grok") || config.providerProfileId.includes("codex_oauth")) {
+  if (
+    config.providerProfileId.includes("grok") ||
+    config.providerProfileId.includes("codex_oauth") ||
+    config.providerProfileId === "provider_claude_code_single_owner"
+  ) {
     return "custom";
   }
 
@@ -1053,6 +1086,10 @@ function createServerProviderTrustLevel(providerProfileId: string): ProviderTrus
   }
 
   if (providerProfileId.includes("grok")) {
+    return "limited";
+  }
+
+  if (providerProfileId === "provider_claude_code_single_owner") {
     return "limited";
   }
 
@@ -1087,6 +1124,18 @@ export function evaluateServerProviderCompletionPermission(
 
   if (request.providerProfileId !== "provider_dgx02_vllm" && !config?.noAuth) {
     requestedLevels.push("secret_access");
+  }
+
+  const claudeSingleOwnerBlockReason = evaluateClaudeCodeSingleOwnerPolicy(request);
+  if (claudeSingleOwnerBlockReason) {
+    return {
+      action: "provider_completion",
+      approvalState: "rejected",
+      decision: "deny",
+      requestedLevels,
+      reason: claudeSingleOwnerBlockReason,
+      costEstimateTokens,
+    };
   }
 
   if (request.permissionDecision === "deny" || request.approvalState === "rejected" || request.approvalState === "expired") {
@@ -1165,6 +1214,46 @@ export function evaluateServerProviderCompletionPermission(
   };
 }
 
+function evaluateClaudeCodeSingleOwnerPolicy(request: ProviderCompletionRequest): string | undefined {
+  if (request.providerProfileId !== CLAUDE_CODE_SINGLE_OWNER_PROVIDER_ID) {
+    return undefined;
+  }
+
+  if (!isClaudeCodeSingleOwnerProviderEnabled()) {
+    return "Claude Code single-owner provider is disabled until ENABLE_CLAUDE_CODE_SINGLE_OWNER_PROVIDER=true";
+  }
+
+  const ownerUserId = resolveClaudeCodeOwnerUserId();
+  if (!ownerUserId) {
+    return "Claude Code single-owner provider requires CLAUDE_CODE_OWNER_USER_ID";
+  }
+
+  const requestContext = request.requestContext;
+  if (!requestContext?.userId) {
+    return "Claude Code single-owner provider requires requestContext.userId";
+  }
+
+  if (requestContext.userId !== ownerUserId) {
+    return "Claude Code single-owner provider only accepts requests from its configured owner";
+  }
+
+  if (CLAUDE_CODE_BLOCKED_ROUTE_TYPES.has(requestContext.routeType ?? "personal")) {
+    return `Claude Code single-owner provider blocks shared route type: ${requestContext.routeType}`;
+  }
+
+  return undefined;
+}
+
+function isClaudeCodeSingleOwnerProviderEnabled() {
+  return (
+    process.env.ENABLE_CLAUDE_CODE_SINGLE_OWNER_PROVIDER === "true" ||
+    process.env.ENABLE_PERSONAL_CLAUDE_CODE_PROVIDER === "true"
+  );
+}
+
+function resolveClaudeCodeOwnerUserId() {
+  return process.env.CLAUDE_CODE_OWNER_USER_ID ?? process.env.OWNER_USER_ID;
+}
 class ServerAgentDelegationPermissionError extends Error {
   constructor(
     readonly permission: ServerPermissionGateResult,
@@ -3658,6 +3747,10 @@ function createServerProviderTags(providerProfileId: string) {
     return ["oauth", "codex", "server-proxy", "dgx", "session"];
   }
 
+  if (providerProfileId === "provider_claude_code_single_owner") {
+    return ["claude", "cli", "single-owner", "server-proxy", "session"];
+  }
+
   if (providerProfileId.includes("grok")) {
     return [
       "oauth",
@@ -3687,6 +3780,10 @@ function createServerProviderSecretRefPreview(
     return `dgx-02:${getServerProviderOAuthAuthFilePath(config) ?? "oauth-session"}`;
   }
 
+  if (authMode === "local_cli") {
+    return `local:${process.env.CLAUDE_BIN_PATH ?? "claude"}`;
+  }
+
   return `dgx-02:${config.apiKeyEnvNames[0] ?? config.defaultKeyFile ?? "provider-secret"}`;
 }
 
@@ -3702,6 +3799,13 @@ function createServerProviderSecretSourceRefs(
     return [
       ...(config.oauthAccountLabel ? [`account:${config.oauthAccountLabel}`] : []),
       ...(getServerProviderOAuthAuthFilePath(config) ? [`file:${getServerProviderOAuthAuthFilePath(config)}`] : []),
+    ];
+  }
+
+  if (authMode === "local_cli") {
+    return [
+      `bin:${process.env.CLAUDE_BIN_PATH ?? "claude"}`,
+      ...(process.env.CLAUDE_CLI_CWD ? [`cwd:${process.env.CLAUDE_CLI_CWD}`] : []),
     ];
   }
 
@@ -3770,6 +3874,7 @@ export type DgxProviderCompletionOptions = {
   now?: string;
   vllmBaseUrl?: string;
   fetchImpl?: FetchLike;
+  claudeCliRunner?: ClaudeExecRunner;
   codexCliRunner?: CodexExecRunner;
 };
 
@@ -3861,6 +3966,20 @@ export async function createServerProviderProxyCompletionResponse(
     };
   }
 
+  const claudeSingleOwnerBlockReason = evaluateClaudeCodeSingleOwnerPolicy(request);
+  if (claudeSingleOwnerBlockReason) {
+    return {
+      id: `provider_completion_response_${crypto.randomUUID()}`,
+      requestId: request.id,
+      providerProfileId: request.providerProfileId,
+      modelId: request.modelId,
+      route: "server_proxy",
+      status: "failed",
+      error: `[blocked] ${claudeSingleOwnerBlockReason}`,
+      createdAt,
+    };
+  }
+
   if (config.providerProfileId === "provider_codex_oauth") {
     const adapter = new CodexCliOAuthAdapter({
       profileId: config.providerProfileId,
@@ -3884,6 +4003,37 @@ export async function createServerProviderProxyCompletionResponse(
         onRawError(status, redactedSnippet) {
           if (redactedSnippet) {
             console.warn(`Codex OAuth CLI adapter warning (${status}): ${redactedSnippet}`);
+          }
+        },
+      },
+    );
+  }
+
+  if (config.providerProfileId === "provider_claude_code_single_owner") {
+    console.info(
+      `Claude Code single-owner provider dispatch user=${request.requestContext?.userId ?? "missing"} route=${request.requestContext?.routeType ?? "personal"} concurrency=single-active-session`,
+    );
+    const adapter = new ClaudeCliAdapter({
+      profileId: config.providerProfileId,
+      claudeBinPath: process.env.CLAUDE_BIN_PATH ?? "claude",
+      claudeHome: process.env.CLAUDE_CLI_HOME,
+      cwd: process.env.CLAUDE_CLI_CWD,
+      defaultTimeoutMs: parsePositiveInteger(process.env.CLAUDE_CLI_TIMEOUT_MS) ?? 60_000,
+      permissionMode: process.env.CLAUDE_CLI_PERMISSION_MODE === "default" ? "default" : "plan",
+      modelIds: config.defaultModelIds,
+      runClaudeExec: options.claudeCliRunner,
+    });
+    return adapter.complete(
+      {
+        ...request,
+        routePreference: "server_proxy",
+      },
+      {
+        resolveSecret: async () => undefined,
+        timeoutMs: parsePositiveInteger(process.env.CLAUDE_CLI_TIMEOUT_MS) ?? 60_000,
+        onRawError(status, redactedSnippet) {
+          if (redactedSnippet) {
+            console.warn(`Claude CLI adapter warning (${status}): ${redactedSnippet}`);
           }
         },
       },
