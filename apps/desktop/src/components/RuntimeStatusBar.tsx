@@ -40,7 +40,7 @@ export function RuntimeStatusBar({
   const displayProviderName = providerDisplayLabel(providerName);
 
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border bg-card/50 px-4">
+    <header className="status-bar flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border bg-card/50 px-4">
       {/* Left: Brand logo + system status */}
       <div className="flex min-w-0 items-center gap-4">
         {/* Brand Block */}

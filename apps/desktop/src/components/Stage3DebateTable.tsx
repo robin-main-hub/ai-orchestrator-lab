@@ -45,19 +45,40 @@ export function Stage3DebateTable({
   onSelectUtterance?: (utterance: Stage3DebateUtteranceView) => void;
   session: Stage3DebateSession;
 }) {
-  const utterances: Stage3DebateUtteranceView[] = useMemo(
-    () =>
-      session.rounds.flatMap((round) =>
-        round.utterances.map((utterance) => ({
-          ...utterance,
-          roundTitle: round.title,
-          agentName:
-            session.participants.find((p) => p.agentId === utterance.agentId)?.name ??
-            utterance.agentId,
-        })),
-      ),
-    [session.rounds, session.participants],
-  );
+  const [prevSessionId, setPrevSessionId] = useState(session.id);
+  const [activeRoundId, setActiveRoundId] = useState<string>(() => {
+    const runningRound = session.rounds.find((r) => r.status === "running");
+    if (runningRound) return runningRound.id;
+    const completedRounds = session.rounds.filter((r) => r.status === "completed");
+    if (completedRounds.length > 0) {
+      return completedRounds[completedRounds.length - 1]?.id ?? "";
+    }
+    return session.rounds[0]?.id ?? "";
+  });
+
+  if (session.id !== prevSessionId) {
+    setPrevSessionId(session.id);
+    const runningRound = session.rounds.find((r) => r.status === "running");
+    const defaultRoundId =
+      runningRound?.id ??
+      session.rounds.filter((r) => r.status === "completed").slice(-1)[0]?.id ??
+      session.rounds[0]?.id ??
+      "";
+    setActiveRoundId(defaultRoundId);
+  }
+
+  const activeRound = session.rounds.find((r) => r.id === activeRoundId);
+
+  const utterances: Stage3DebateUtteranceView[] = useMemo(() => {
+    if (!activeRound) return [];
+    return activeRound.utterances.map((utterance) => ({
+      ...utterance,
+      roundTitle: activeRound.title,
+      agentName:
+        session.participants.find((p) => p.agentId === utterance.agentId)?.name ??
+        utterance.agentId,
+    }));
+  }, [activeRound, session.participants]);
 
   const utteranceById = useMemo(() => {
     const map = new Map<string, Stage3DebateUtteranceView>();
@@ -65,14 +86,12 @@ export function Stage3DebateTable({
     return map;
   }, [utterances]);
 
-  const currentRound =
-    session.rounds.find((r) => r.status === "running") ?? session.rounds[0];
-
   return (
     <section className="flex h-full flex-col bg-background" aria-label="Debate">
       {/* ── Header: context + stage tabs ───────────────────────── */}
       <DebateContextHeader
-        currentRoundId={currentRound?.id}
+        currentRoundId={activeRoundId}
+        onSelectRoundId={setActiveRoundId}
         onCreateCodingPacket={onCreateCodingPacket}
         rounds={session.rounds}
         session={session}
@@ -111,11 +130,13 @@ export function Stage3DebateTable({
 
 function DebateContextHeader({
   currentRoundId,
+  onSelectRoundId,
   onCreateCodingPacket,
   rounds,
   session,
 }: {
   currentRoundId?: string;
+  onSelectRoundId: (id: string) => void;
   onCreateCodingPacket: () => void;
   rounds: Stage3DebateSession["rounds"];
   session: Stage3DebateSession;
@@ -165,6 +186,7 @@ function DebateContextHeader({
                     : "text-muted-foreground/50 hover:bg-card/60 hover:text-muted-foreground",
               )}
               key={round.id}
+              onClick={() => onSelectRoundId(round.id)}
               type="button"
             >
               {round.title}
