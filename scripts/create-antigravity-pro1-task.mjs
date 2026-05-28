@@ -43,6 +43,8 @@ async function main() {
     workerScript,
     "--task",
     requestFile,
+    "--task-id",
+    taskId,
     "--user-id",
     userId,
     "--route-type",
