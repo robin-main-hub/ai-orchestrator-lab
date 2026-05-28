@@ -1,4 +1,15 @@
 export {
+  ClaudeCliAdapter,
+  createClaudeExecPrompt,
+  extractClaudeResultContent,
+  runClaudeExecSubprocess,
+  type ClaudeCliAdapterOptions,
+  type ClaudeExecResult,
+  type ClaudeExecRunner,
+  type ClaudeExecRunnerParams,
+  type ClaudePermissionMode,
+} from "./claudeCliAdapter.js";
+export {
   CodexCliOAuthAdapter,
   createCodexExecPrompt,
   runCodexExecSubprocess,
