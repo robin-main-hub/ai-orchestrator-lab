@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const script = fileURLToPath(new URL("./run-antigravity-worker.mjs", import.meta.url));
+const ultraTaskScript = fileURLToPath(new URL("./create-antigravity-ultra-task.mjs", import.meta.url));
 const baseEnv = {
   ...process.env,
   ENABLE_PERSONAL_ANTIGRAVITY_PROFILES: "true",
@@ -19,6 +20,8 @@ const baseEnv = {
 const tempRoot = await mkdtemp(join(tmpdir(), "antigravity-worker-"));
 try {
   await testOwnerDryRun();
+  await testUltraFirstSelector();
+  await testUltraTaskBootstrap();
   await testNonOwnerBlocked();
   await testSharedRouteBlocked();
   await testPrimaryAccountBlocked();
@@ -43,6 +46,37 @@ async function testOwnerDryRun() {
   assert(resultText.includes("personal_antigravity_ultra"), "dry-run result should name selected profile");
   const logText = await readFile(paths.log, "utf8");
   assert(logText.includes("\"selectedBy\":\"explicit_owner_selection\""), "dry-run should log explicit selection");
+}
+
+async function testUltraFirstSelector() {
+  const paths = await createTask("ultra-first-selector");
+  const result = await runWorker([
+    "--task", paths.request,
+    "--ultra-first",
+    "--dry-run",
+  ]);
+  assert(result.code === 0, result.stderr);
+  const resultText = await readFile(paths.result, "utf8");
+  assert(resultText.includes("personal_antigravity_ultra"), "--ultra-first should select Ultra");
+  assert(resultText.includes("selectedBy: ultra_first"), "--ultra-first selection should be visible");
+}
+
+async function testUltraTaskBootstrap() {
+  const root = join(tempRoot, "bootstrap-root");
+  const result = await runScript(ultraTaskScript, [
+    "--root", root,
+    "--task-id", "bootstrap-ultra",
+    "--title", "Bootstrap Ultra",
+    "--body", "Use Ultra first for this isolated coding task.",
+    "--run-dry-run",
+  ]);
+  assert(result.code === 0, result.stderr);
+  const requestText = await readFile(join(root, "bootstrap-ultra", "lane-a", "request.md"), "utf8");
+  const resultText = await readFile(join(root, "bootstrap-ultra", "lane-a", "result.md"), "utf8");
+  const logText = await readFile(join(root, "bootstrap-ultra", "lane-a", "log.txt"), "utf8");
+  assert(requestText.includes("personal_antigravity_ultra"), "bootstrap request should target Ultra");
+  assert(resultText.includes("selectedBy: ultra_first"), "bootstrap dry-run should use Ultra-first selector");
+  assert(logText.includes("\"selectedBy\":\"ultra_first\""), "bootstrap dry-run should audit Ultra-first selector");
 }
 
 async function testNonOwnerBlocked() {
@@ -165,8 +199,12 @@ async function createTask(name) {
 }
 
 async function runWorker(args, extraEnv = {}) {
+  return runScript(script, args, extraEnv);
+}
+
+async function runScript(scriptPath, args, extraEnv = {}) {
   try {
-    const output = await execFileAsync(process.execPath, [script, ...args], {
+    const output = await execFileAsync(process.execPath, [scriptPath, ...args], {
       env: { ...baseEnv, ...extraEnv },
       windowsHide: true,
     });
