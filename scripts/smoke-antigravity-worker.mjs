@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const script = fileURLToPath(new URL("./run-antigravity-worker.mjs", import.meta.url));
 const ultraTaskScript = fileURLToPath(new URL("./create-antigravity-ultra-task.mjs", import.meta.url));
+const pro1TaskScript = fileURLToPath(new URL("./create-antigravity-pro1-task.mjs", import.meta.url));
 const baseEnv = {
   ...process.env,
   ENABLE_PERSONAL_ANTIGRAVITY_PROFILES: "true",
@@ -22,6 +23,7 @@ try {
   await testOwnerDryRun();
   await testUltraFirstSelector();
   await testUltraTaskBootstrap();
+  await testPro1TaskBootstrap();
   await testNonOwnerBlocked();
   await testSharedRouteBlocked();
   await testPrimaryAccountBlocked();
@@ -77,6 +79,24 @@ async function testUltraTaskBootstrap() {
   assert(requestText.includes("personal_antigravity_ultra"), "bootstrap request should target Ultra");
   assert(resultText.includes("selectedBy: ultra_first"), "bootstrap dry-run should use Ultra-first selector");
   assert(logText.includes("\"selectedBy\":\"ultra_first\""), "bootstrap dry-run should audit Ultra-first selector");
+}
+
+async function testPro1TaskBootstrap() {
+  const root = join(tempRoot, "pro1-bootstrap-root");
+  const result = await runScript(pro1TaskScript, [
+    "--root", root,
+    "--task-id", "bootstrap-pro1",
+    "--title", "Bootstrap Pro One",
+    "--body", "Prepare the next personal Pro coding lane.",
+    "--run-dry-run",
+  ]);
+  assert(result.code === 0, result.stderr);
+  const requestText = await readFile(join(root, "bootstrap-pro1", "lane-b", "request.md"), "utf8");
+  const resultText = await readFile(join(root, "bootstrap-pro1", "lane-b", "result.md"), "utf8");
+  const logText = await readFile(join(root, "bootstrap-pro1", "lane-b", "log.txt"), "utf8");
+  assert(requestText.includes("personal_antigravity_pro_1"), "bootstrap request should target Pro #1");
+  assert(resultText.includes("personal_antigravity_pro_1"), "bootstrap dry-run should select Pro #1");
+  assert(logText.includes("\"selectedBy\":\"lane\""), "bootstrap dry-run should audit lane selection");
 }
 
 async function testNonOwnerBlocked() {
