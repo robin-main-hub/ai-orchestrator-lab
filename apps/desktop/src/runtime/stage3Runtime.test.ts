@@ -6,7 +6,7 @@ import type {
   ProviderProfile,
   RuntimeSnapshot,
 } from "@ai-orchestrator/protocol";
-import { createStage3DebateSession } from "./stage3Runtime";
+import { createStage3DebateSession, runStage3DebateSession } from "./stage3Runtime";
 
 const messages: ConversationMessage[] = [
   {
@@ -120,5 +120,33 @@ describe("stage3 debate runtime", () => {
     expect(session.rounds.flatMap((round) => round.utterances).some((utterance) => utterance.tags.includes("risk"))).toBe(true);
     expect(session.humanPeek).toHaveLength(3);
     expect(session.statusHub.find((item) => item.id === "providers")?.value).toBe("2 active / 1 risky");
+  });
+
+  it("runs the live debate end-to-end using runStage3DebateSession", async () => {
+    const fakeFetch = async (url: string, init?: RequestInit) => {
+      return {
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            status: "succeeded",
+            content: "가상 에이전트의 모의 토론 발언입니다. [[tag:agreement]]",
+            route: "server_proxy",
+          }),
+      } as Response;
+    };
+
+    const session = await runStage3DebateSession({
+      messages,
+      agents,
+      providers,
+      events,
+      runtime,
+      fetchImpl: fakeFetch as any,
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+
+    expect(session.rounds).toHaveLength(7);
+    expect(session.rounds[0]?.utterances.length).toBeGreaterThan(0);
+    expect(session.rounds[0]?.utterances[0]?.content).toContain("가상 에이전트의 모의 토론 발언입니다.");
   });
 });
