@@ -1,3 +1,27 @@
+// Polyfill window.crypto.randomUUID for non-secure HTTP contexts (e.g., direct IP address access)
+if (typeof window !== "undefined") {
+  if (!window.crypto) {
+    (window as any).crypto = {} as any;
+  }
+  if (!window.crypto.randomUUID) {
+    window.crypto.randomUUID = function randomUUID() {
+      if (window.crypto.getRandomValues) {
+        return (([1e7] as any) + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c: any) => {
+          const arr = new Uint8Array(1);
+          window.crypto.getRandomValues(arr);
+          const val = arr[0] !== undefined ? arr[0] : 0;
+          return (c ^ (val & (15 >> (c / 4)))).toString(16);
+        });
+      }
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === "x" ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+    };
+  }
+}
+
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
