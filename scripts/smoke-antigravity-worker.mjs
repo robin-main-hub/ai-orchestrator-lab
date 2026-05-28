@@ -1,0 +1,286 @@
+#!/usr/bin/env node
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+const script = fileURLToPath(new URL("./run-antigravity-worker.mjs", import.meta.url));
+const ultraTaskScript = fileURLToPath(new URL("./create-antigravity-ultra-task.mjs", import.meta.url));
+const pro1TaskScript = fileURLToPath(new URL("./create-antigravity-pro1-task.mjs", import.meta.url));
+const pro2TaskScript = fileURLToPath(new URL("./create-antigravity-pro2-task.mjs", import.meta.url));
+const baseEnv = {
+  ...process.env,
+  ENABLE_PERSONAL_ANTIGRAVITY_PROFILES: "true",
+  OWNER_USER_ID: "owner-robin",
+  REQUEST_USER_ID: "owner-robin",
+  ANTIGRAVITY_ROUTE_TYPE: "personal_codex",
+};
+
+const tempRoot = await mkdtemp(join(tmpdir(), "antigravity-worker-"));
+try {
+  await testOwnerDryRun();
+  await testUltraFirstSelector();
+  await testUltraTaskBootstrap();
+  await testPro1TaskBootstrap();
+  await testPro2TaskBootstrap();
+  await testNonOwnerBlocked();
+  await testSharedRouteBlocked();
+  await testPrimaryAccountBlocked();
+  await testSingleActiveLock();
+  await testLaneSelection();
+  await testFallbackLogging();
+  await testGuiRejected();
+  console.log("Antigravity worker smoke passed.");
+} finally {
+  await rm(tempRoot, { force: true, recursive: true });
+}
+
+async function testOwnerDryRun() {
+  const paths = await createTask("owner-dry-run");
+  const result = await runWorker([
+    "--task", paths.request,
+    "--profile", "personal_antigravity_ultra",
+    "--dry-run",
+  ]);
+  assert(result.code === 0, result.stderr);
+  const resultText = await readFile(paths.result, "utf8");
+  assert(resultText.includes("personal_antigravity_ultra"), "dry-run result should name selected profile");
+  const logText = await readFile(paths.log, "utf8");
+  assert(logText.includes("\"selectedBy\":\"explicit_owner_selection\""), "dry-run should log explicit selection");
+}
+
+async function testUltraFirstSelector() {
+  const paths = await createTask("ultra-first-selector");
+  const result = await runWorker([
+    "--task", paths.request,
+    "--ultra-first",
+    "--dry-run",
+  ]);
+  assert(result.code === 0, result.stderr);
+  const resultText = await readFile(paths.result, "utf8");
+  assert(resultText.includes("personal_antigravity_ultra"), "--ultra-first should select Ultra");
+  assert(resultText.includes("selectedBy: ultra_first"), "--ultra-first selection should be visible");
+}
+
+async function testUltraTaskBootstrap() {
+  await verifyBootstrapTask({
+    scriptPath: ultraTaskScript,
+    folderName: "bootstrap-root",
+    taskId: "bootstrap-ultra",
+    title: "Bootstrap Ultra",
+    body: "Use Ultra first for this isolated coding task.",
+    laneDir: "lane-a",
+    expectedRequestProfile: "personal_antigravity_ultra",
+    expectedResultText: "selectedBy: ultra_first",
+    expectedSelectedBy: "ultra_first",
+  });
+}
+
+async function testPro1TaskBootstrap() {
+  await verifyBootstrapTask({
+    scriptPath: pro1TaskScript,
+    folderName: "pro1-bootstrap-root",
+    taskId: "bootstrap-pro1",
+    title: "Bootstrap Pro One",
+    body: "Prepare the next personal Pro coding lane.",
+    laneDir: "lane-b",
+    expectedRequestProfile: "personal_antigravity_pro_1",
+    expectedResultText: "personal_antigravity_pro_1",
+    expectedSelectedBy: "lane",
+  });
+}
+
+async function testPro2TaskBootstrap() {
+  await verifyBootstrapTask({
+    scriptPath: pro2TaskScript,
+    folderName: "pro2-bootstrap-root",
+    taskId: "bootstrap-pro2",
+    title: "Bootstrap Pro Two",
+    body: "Prepare the second personal Pro coding lane.",
+    laneDir: "lane-c",
+    expectedRequestProfile: "personal_antigravity_pro_2",
+    expectedResultText: "personal_antigravity_pro_2",
+    expectedSelectedBy: "lane",
+  });
+}
+
+async function verifyBootstrapTask({
+  scriptPath,
+  folderName,
+  taskId,
+  title,
+  body,
+  laneDir,
+  expectedRequestProfile,
+  expectedResultText,
+  expectedSelectedBy,
+}) {
+  const root = join(tempRoot, folderName);
+  const result = await runScript(scriptPath, [
+    "--root", root,
+    "--task-id", taskId,
+    "--title", title,
+    "--body", body,
+    "--run-dry-run",
+  ]);
+  assert(result.code === 0, result.stderr);
+  const taskDir = join(root, taskId, laneDir);
+  const requestText = await readFile(join(taskDir, "request.md"), "utf8");
+  const resultText = await readFile(join(taskDir, "result.md"), "utf8");
+  const logText = await readFile(join(taskDir, "log.txt"), "utf8");
+  assert(requestText.includes(expectedRequestProfile), `bootstrap request should target ${expectedRequestProfile}`);
+  assert(resultText.includes(expectedResultText), `bootstrap dry-run should include ${expectedResultText}`);
+  assert(logText.includes(`"selectedBy":"${expectedSelectedBy}"`), "bootstrap dry-run should audit lane selection");
+}
+
+async function testNonOwnerBlocked() {
+  const paths = await createTask("non-owner");
+  const result = await runWorker([
+    "--task", paths.request,
+    "--profile", "personal_antigravity_pro_1",
+    "--user-id", "someone-else",
+    "--dry-run",
+  ]);
+  assert(result.code !== 0, "non-owner request should fail");
+  assert(result.stderr.includes("configured owner"), result.stderr);
+}
+
+async function testSharedRouteBlocked() {
+  const paths = await createTask("shared-route");
+  const result = await runWorker([
+    "--task", paths.request,
+    "--profile", "personal_antigravity_pro_1",
+    "--route-type", "company_webapp",
+    "--dry-run",
+  ]);
+  assert(result.code !== 0, "shared route should fail");
+  assert(result.stderr.includes("blocked shared route type"), result.stderr);
+}
+
+async function testPrimaryAccountBlocked() {
+  const paths = await createTask("primary-account");
+  const result = await runWorker([
+    "--task", paths.request,
+    "--profile", "primary_google_account",
+    "--dry-run",
+  ]);
+  assert(result.code !== 0, "primary account should fail");
+  assert(result.stderr.includes("primary_google_account is excluded"), result.stderr);
+}
+
+async function testSingleActiveLock() {
+  const paths = await createTask("single-lock");
+  const lockDir = join(paths.dir, "locks");
+  const first = execFileAsync(process.execPath, [
+    script,
+    "--task", paths.request,
+    "--profile", "personal_antigravity_pro_1",
+    "--lock-dir", lockDir,
+    "--hold-lock-ms", "700",
+    "--dry-run",
+  ], { env: baseEnv, windowsHide: true });
+  await delay(200);
+  const second = await runWorker([
+    "--task", paths.request,
+    "--profile", "personal_antigravity_pro_1",
+    "--lock-dir", lockDir,
+    "--dry-run",
+  ]);
+  assert(second.code !== 0, "second concurrent task should fail");
+  assert(second.stderr.includes("active task"), second.stderr);
+  await first;
+}
+
+async function testLaneSelection() {
+  const paths = await createTask("lane-selection");
+  const result = await runWorker([
+    "--task", paths.request,
+    "--lane", "lane_c",
+    "--dry-run",
+  ]);
+  assert(result.code === 0, result.stderr);
+  const resultText = await readFile(paths.result, "utf8");
+  assert(resultText.includes("personal_antigravity_pro_2"), "lane_c should select pro_2");
+  assert(resultText.includes("selectedBy: lane"), "lane selection should be visible");
+}
+
+async function testFallbackLogging() {
+  const paths = await createTask("fallback");
+  const lockDir = join(paths.dir, "locks");
+  const first = execFileAsync(process.execPath, [
+    script,
+    "--task", paths.request,
+    "--lane", "lane_b",
+    "--lock-dir", lockDir,
+    "--hold-lock-ms", "700",
+    "--dry-run",
+  ], { env: baseEnv, windowsHide: true });
+  await delay(200);
+  const second = await runWorker([
+    "--task", paths.request,
+    "--lane", "lane_b",
+    "--fallback-profile", "personal_antigravity_pro_2",
+    "--lock-dir", lockDir,
+    "--dry-run",
+  ], { ENABLE_PERSONAL_ANTIGRAVITY_FALLBACK: "true" });
+  assert(second.code === 0, second.stderr);
+  const logText = await readFile(paths.log, "utf8");
+  assert(logText.includes("\"selectedBy\":\"owner_enabled_fallback\""), "fallback must be logged");
+  assert(logText.includes("\"fallbackFrom\":\"personal_antigravity_pro_1\""), "fallback source must be logged");
+  await first;
+}
+
+async function testGuiRejected() {
+  const paths = await createTask("gui-rejected");
+  const result = await runWorker([
+    "--task", paths.request,
+    "--profile", "personal_antigravity_ultra",
+    "--mode", "gui",
+    "--dry-run",
+  ]);
+  assert(result.code !== 0, "GUI automation mode should fail");
+  assert(result.stderr.includes("GUI or browser automation mode is rejected"), result.stderr);
+}
+
+async function createTask(name) {
+  const dir = join(tempRoot, name);
+  const request = join(dir, "request.md");
+  const result = join(dir, "result.md");
+  const log = join(dir, "log.txt");
+  await mkdir(dir, { recursive: true });
+  await writeFile(request, `# ${name}\n\nImplement safely in an isolated coding lane.\n`, { encoding: "utf8" });
+  return { dir, request, result, log };
+}
+
+async function runWorker(args, extraEnv = {}) {
+  return runScript(script, args, extraEnv);
+}
+
+async function runScript(scriptPath, args, extraEnv = {}) {
+  try {
+    const output = await execFileAsync(process.execPath, [scriptPath, ...args], {
+      env: { ...baseEnv, ...extraEnv },
+      windowsHide: true,
+    });
+    return { code: 0, stdout: output.stdout, stderr: output.stderr };
+  } catch (error) {
+    return {
+      code: error.code ?? 1,
+      stdout: error.stdout ?? "",
+      stderr: error.stderr ?? error.message,
+    };
+  }
+}
+
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
