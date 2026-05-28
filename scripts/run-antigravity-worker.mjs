@@ -7,6 +7,7 @@ const PROVIDER = "Antigravity/Gemini";
 const ENABLE_ENV = "ENABLE_PERSONAL_ANTIGRAVITY_PROFILES";
 const OWNER_ENV = "OWNER_USER_ID";
 const FALLBACK_ENV = "ENABLE_PERSONAL_ANTIGRAVITY_FALLBACK";
+const ULTRA_FIRST_PROFILE = "personal_antigravity_ultra";
 const ALLOWED_ROUTES = new Set(["personal_codex", "personal_lab"]);
 const BLOCKED_ROUTES = new Set([
   "slack_bot",
@@ -188,12 +189,19 @@ function parseArgs(argv) {
   const out = {};
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    if (arg === "--") {
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       out.help = true;
       continue;
     }
     if (arg === "--dry-run") {
       out.dryRun = true;
+      continue;
+    }
+    if (arg === "--ultra-first") {
+      out.ultraFirst = true;
       continue;
     }
     const match = arg.match(/^--([^=]+)=(.*)$/);
@@ -211,6 +219,9 @@ function parseArgs(argv) {
 }
 
 function selectProfile(args) {
+  if (args.ultraFirst) {
+    return { profileId: ULTRA_FIRST_PROFILE, selectedBy: "ultra_first" };
+  }
   if (args.profile) {
     return { profileId: args.profile, selectedBy: "explicit_owner_selection" };
   }
@@ -351,9 +362,10 @@ function toCamelCase(value) {
 
 function printUsage() {
   console.log(`Usage:
-  node scripts/run-antigravity-worker.mjs --task .codex-tasks/antigravity/<task>/request.md --user-id OWNER --route-type personal_codex --lane lane_a --dry-run
+  node scripts/run-antigravity-worker.mjs --task .codex-tasks/antigravity/<task>/request.md --user-id OWNER --route-type personal_codex --ultra-first --dry-run
 
 Selectors:
+  --ultra-first
   --profile personal_antigravity_ultra|personal_antigravity_pro_1|personal_antigravity_pro_2
   --lane lane_a|lane_b|lane_c
   --role heavy_validation
