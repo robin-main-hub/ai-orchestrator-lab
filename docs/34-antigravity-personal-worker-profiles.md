@@ -10,6 +10,7 @@ The current implementation is file-based handoff only:
 scripts/run-antigravity-worker.mjs
 scripts/run-antigravity-worker.sh
 scripts/create-antigravity-ultra-task.mjs
+scripts/create-antigravity-pro1-task.mjs
 scripts/smoke-antigravity-worker.mjs
 ```
 
@@ -51,6 +52,8 @@ heavy_validation -> personal_antigravity_ultra
 ```
 
 Start with Ultra while it is the currently connected Antigravity account. Treat it as the first live lane, prove the handoff and checkpoint loop there, then add the Pro lanes after the loop is stable.
+
+After Ultra is verified, prepare the next account as Pro #1 on `lane_b`. It should also be a coding worker, but its assigned files or modules should not overlap with active Ultra work.
 
 ## Required Guards
 
@@ -99,6 +102,14 @@ PowerShell equivalent:
 $env:ENABLE_PERSONAL_ANTIGRAVITY_PROFILES="true"
 $env:OWNER_USER_ID="robin"
 node scripts/create-antigravity-ultra-task.mjs --task-id first-ultra-task --title "First Ultra coding task" --body "Implement this task in the Ultra lane." --run-dry-run
+```
+
+Pro #1 task bootstrap after the Ultra loop is stable:
+
+```powershell
+$env:ENABLE_PERSONAL_ANTIGRAVITY_PROFILES="true"
+$env:OWNER_USER_ID="robin"
+node scripts/create-antigravity-pro1-task.mjs --task-id first-pro1-task --title "First Pro #1 coding task" --body "Implement this task in the Pro #1 lane." --run-dry-run
 ```
 
 Recommended task shape:
