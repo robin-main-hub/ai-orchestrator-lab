@@ -349,6 +349,7 @@ export function App() {
     selectedAgent,
   });
   const {
+    adapterStatus,
     handleActivateMemory,
     handleForgetMemory,
     handlePinMemory,
@@ -2751,6 +2752,7 @@ export function App() {
             />
             {shellVisibility.showEvolveMementoPanel ? (
               <EvolveMementoPanel
+                adapterStatus={adapterStatus}
                 inspector={memoryInspector}
                 onActivate={handleActivateMemory}
                 onForget={handleForgetMemory}
