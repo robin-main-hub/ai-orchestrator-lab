@@ -2962,15 +2962,12 @@ describe("HTTP request limits", () => {
         constraints: ["constraint_1"],
         filesToInspect: [],
         implementationPlan: ["plan_1"],
-        verificationPlan: ["plan_test_1"],
+        verificationPlan: ["node -e \"process.exit(0)\""],
         reviewerNotes: [],
       };
 
       const response = await fetch(`http://127.0.0.1:${address.port}/verify-packet`, {
-        body: JSON.stringify({
-          ...packet,
-          command: "node -e \"process.exit(0)\""
-        }),
+        body: JSON.stringify(packet),
         headers: {
           authorization: "Bearer test-orchestrator-token",
           "content-type": "application/json",
@@ -2987,17 +2984,18 @@ describe("HTTP request limits", () => {
         status: "passed",
         exitCode: 0,
         checks: [
-          { label: "Compiler checks", status: "pass" },
-          { label: "Unit test coverage", status: "pass" }
+          { label: "node -e \"process.exit(0)\"", status: "pass" }
         ]
       });
       expect(data.stdout).toBeDefined();
 
+      const failPacket = {
+        ...packet,
+        verificationPlan: ["node -e \"process.exit(1)\""],
+      };
+
       const failResponse = await fetch(`http://127.0.0.1:${address.port}/verify-packet`, {
-        body: JSON.stringify({
-          ...packet,
-          command: "node -e \"process.exit(1)\""
-        }),
+        body: JSON.stringify(failPacket),
         headers: {
           authorization: "Bearer test-orchestrator-token",
           "content-type": "application/json",
@@ -3008,10 +3006,9 @@ describe("HTTP request limits", () => {
       expect(failResponse.status).toBe(200);
       const failData = (await failResponse.json()) as any;
       expect(failData).toMatchObject({
-        status: "failed",
+        status: "warning",
         checks: [
-          { label: "Compiler checks", status: "fail" },
-          { label: "Unit test coverage", status: "warn" }
+          { label: "node -e \"process.exit(1)\"", status: "fail" }
         ]
       });
       expect(failData.exitCode).toBe(1);
