@@ -16,12 +16,12 @@ export async function triggerReauth(slot: string = "grok-oauth-1") {
   if (isTauri) {
     try {
       // Tauri 1.x / 2.x API 호환성을 고려한 dynamic import 구조
-      const tauriApi = (await import("@tauri-apps/api")) as any;
+      const tauriApi = (await import(/* @vite-ignore */ "@tauri-apps/api")) as any;
       if (tauriApi.shell && typeof tauriApi.shell.open === "function") {
         await tauriApi.shell.open(authUrl);
       } else {
         // Tauri 2.x 스타일 또는 plugin-shell
-        const { open } = await import("@tauri-apps/plugin-shell" as any);
+        const { open } = await import(/* @vite-ignore */ "@tauri-apps/plugin-shell" as any);
         await open(authUrl);
       }
     } catch (err) {
