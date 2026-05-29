@@ -56,6 +56,16 @@ import type {
   TerminalTimelineBlock,
   TerminalPaneOutputCapturedEventPayload,
   TmuxPaneRole,
+  MemorySyncRequest,
+  MemoryRecord,
+  MemoryInput,
+  RecallQuery,
+  RecallResult,
+  Reflection,
+  MemoryContextPacket,
+  MemoryStats,
+  MemoryRelation,
+  MemoryAPI,
 } from "@ai-orchestrator/protocol";
 import {
   agentRoleSchema,
@@ -69,6 +79,7 @@ import {
   remoteExecutionRequestSchema,
   terminalCommandIntentSchema,
   terminalTimelineBlockSchema,
+  memorySyncRequestSchema,
   type ProviderCompletionChunkEvent,
 } from "@ai-orchestrator/protocol";
 import {
@@ -112,7 +123,7 @@ export type ServerCapability =
   | "approval-queue"
   | "event-storage-sync"
   | "remote-event-stream-placeholder"
-  | "memory-sync-placeholder";
+  | "memory-sync";
 
 export type ServerHealthResponse = {
   service: "ai-orchestrator-dgx-server";
@@ -706,7 +717,7 @@ export function createHealthResponse(now = new Date().toISOString(), probe?: Dgx
       "approval-queue",
       "event-storage-sync",
       "remote-event-stream-placeholder",
-      "memory-sync-placeholder",
+      "memory-sync",
     ],
     eventStorage: createEventStorageSnapshot(defaultEventStorageState, {
       mode: "memory",
@@ -4822,6 +4833,276 @@ export function listEventStorageSessions(
   };
 }
 
+export class PromotionPendingError extends Error {
+  readonly code = "promotion_pending";
+  readonly record: MemoryRecord;
+  constructor(record: MemoryRecord) {
+    super(`Memory record ${record.id} requires curator approval before promotion`);
+    this.name = "PromotionPendingError";
+    this.record = record;
+  }
+}
+
+export type MemoryRecordSyncResult = {
+  status: "accepted" | "promotion_pending" | "failed";
+  record?: MemoryRecord;
+  reason?: string;
+};
+
+export type MemorySyncResponse = {
+  id: string;
+  requestId: string;
+  sessionId: string;
+  serverRevision: number;
+  accepted: number;
+  promotionPending: number;
+  failed: number;
+  results: MemoryRecordSyncResult[];
+  createdAt: string;
+};
+
+export type DgxSimpleMemMemoryAdapterOptions = {
+  sessionId: string;
+  projectId?: string;
+  clientId?: string;
+  storage: JsonlServerEventStorage;
+};
+
+export type LocalDgxSimpleMemMemoryAdapter = MemoryAPI & {
+  snapshot(): Promise<MemoryRecord[]>;
+};
+
+export function createDgxSimpleMemMemoryAdapter({
+  sessionId,
+  projectId = "project_ai_orchestrator_lab",
+  clientId = "server",
+  storage,
+}: DgxSimpleMemMemoryAdapterOptions): LocalDgxSimpleMemMemoryAdapter {
+  function stableRecordId(title: string, content: string, createdAt: string): string {
+    let hash = 0;
+    for (const char of `${title}:${content}:${createdAt}`) {
+      hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+    }
+    return `mem_dgx_${hash.toString(16)}`;
+  }
+
+  function buildPushRequest(event: EventEnvelope, now: string): EventSyncPushRequest {
+    return {
+      id: `mem_sync_req_${crypto.randomUUID()}`,
+      clientId,
+      sessionId: event.sessionId,
+      events: [event],
+      idempotencyKey: `${clientId}:${event.sessionId}:${event.id}`,
+      createdAt: now,
+    };
+  }
+
+  async function getSnapshot(): Promise<MemoryRecord[]> {
+    const now = new Date().toISOString();
+    const pulled = await pullEventsFromPersistentServerStorage(sessionId, storage, now);
+    const forgottenIds = new Set(
+      pulled.events
+        .filter((e) => e.type === "memory.record.forgotten")
+        .map((e) => (e.payload as { recordId?: string }).recordId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    const records = pulled.events
+      .filter((e) => e.type === "memory.record.created")
+      .map((e) => e.payload as MemoryRecord)
+      .filter((r) => !forgottenIds.has(r.id));
+    
+    // Apply pin states if any
+    const pinnedIds = new Set(
+      pulled.events
+        .filter((e) => e.type === "memory.record.pinned")
+        .map((e) => (e.payload as { recordId?: string }).recordId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    for (const r of records) {
+      if (pinnedIds.has(r.id)) {
+        r.pinned = true;
+      }
+    }
+    return records;
+  }
+
+  return {
+    async remember(input: MemoryInput): Promise<MemoryRecord> {
+      const now = new Date().toISOString();
+      const record: MemoryRecord = {
+        id: stableRecordId(input.title, input.content, now),
+        layer: input.layer,
+        scope: input.scope ?? (input.layer === "user_memory" ? "global" : input.layer === "fragment" || input.layer === "episode" ? "session" : "project"),
+        kind: input.kind ?? "context",
+        title: input.title,
+        content: input.content,
+        sourceChannel: input.sourceChannel,
+        trustLevel: input.trustLevel,
+        projectId: input.projectId ?? projectId,
+        sessionId: input.sessionId ?? sessionId,
+        tags: input.tags ?? [],
+        activationState: input.trustLevel === "untrusted" ? "quarantined" : "suggested",
+        createdAt: now,
+        pinned: false,
+      };
+
+      const eventType = input.trustLevel === "untrusted" ? "memory.promotion.pending" : "memory.record.created";
+      const envelope: EventEnvelope = {
+        id: `evt_${crypto.randomUUID()}`,
+        sessionId: record.sessionId ?? sessionId,
+        type: eventType,
+        payload: record,
+        createdAt: now,
+        source: "server",
+        sourceTrust: input.trustLevel === "trusted" ? "trusted" : "limited",
+        redacted: false,
+      };
+
+      await pushEventsToPersistentServerStorage(buildPushRequest(envelope, now), storage, now);
+
+      if (input.trustLevel === "untrusted") {
+        throw new PromotionPendingError(record);
+      }
+      return record;
+    },
+
+    async recall(query: RecallQuery): Promise<RecallResult[]> {
+      const records = await getSnapshot();
+      return records
+        .filter((r) => !r.tombstonedAt)
+        .filter((r) => (query.layers ? query.layers.includes(r.layer) : true))
+        .filter((r) => (query.scopes ? query.scopes.includes(r.scope ?? "project") : true))
+        .filter((r) => (query.kinds ? query.kinds.includes(r.kind ?? "context") : true))
+        .filter((r) => (query.includeUntrusted ? true : r.trustLevel !== "untrusted"))
+        .slice(0, query.limit ?? 50)
+        .map((r) => ({
+          record: r,
+          score: 1.0,
+          usedInDecision: false,
+          activationState: r.activationState,
+          reason: "event_store_match",
+        }));
+    },
+
+    async reflect(sid: string): Promise<Reflection> {
+      const records = await getSnapshot();
+      return {
+        sessionId: sid,
+        summary: `${records.length} memory records stored for session`,
+        decisions: [],
+        risks: [],
+        createdAt: new Date().toISOString(),
+      };
+    },
+
+    async memoryContext(query: RecallQuery): Promise<MemoryContextPacket> {
+      const results: RecallResult[] = await this.recall(query);
+      const now = new Date().toISOString();
+      return {
+        id: `ctx_${crypto.randomUUID()}`,
+        sessionId: query.sessionId ?? sessionId,
+        query: query.query,
+        activeRecordIds: results.map((r) => r.record.id),
+        blockedRecordIds: [],
+        relationIds: [],
+        summary: `${results.length} records matched`,
+        createdAt: now,
+      };
+    },
+
+    async stats(): Promise<MemoryStats> {
+      const records = await getSnapshot();
+      const active = records.filter((r) => r.activationState === "active" || r.activationState === "suggested");
+      return {
+        totalRecords: records.length,
+        activeRecords: active.length,
+        pinnedRecords: records.filter((r) => r.pinned).length,
+        quarantinedRecords: records.filter((r) => r.activationState === "quarantined").length,
+        relationCount: 0,
+        duplicateCandidates: 0,
+        contradictionCandidates: 0,
+        staleCandidates: 0,
+        health: records.length === 0 ? "good" : active.length > 0 ? "good" : "watch",
+      };
+    },
+
+    async createRelations(_recordIds: string[]): Promise<MemoryRelation[]> {
+      return [];
+    },
+
+    async activateMemories(_recordIds: string[]): Promise<void> {
+      // activation projection not yet implemented; records start as "suggested"
+    },
+
+    async pin(recordId: string): Promise<void> {
+      const now = new Date().toISOString();
+      const envelope: EventEnvelope = {
+        id: `evt_${crypto.randomUUID()}`,
+        sessionId,
+        type: "memory.record.pinned",
+        payload: { recordId },
+        createdAt: now,
+        source: "server",
+        sourceTrust: "trusted",
+        redacted: false,
+      };
+      await pushEventsToPersistentServerStorage(buildPushRequest(envelope, now), storage, now);
+    },
+
+    async forget(recordId: string): Promise<void> {
+      const now = new Date().toISOString();
+      const envelope: EventEnvelope = {
+        id: `evt_${crypto.randomUUID()}`,
+        sessionId,
+        type: "memory.record.forgotten",
+        payload: { recordId },
+        createdAt: now,
+        source: "server",
+        sourceTrust: "trusted",
+        redacted: false,
+      };
+      await pushEventsToPersistentServerStorage(buildPushRequest(envelope, now), storage, now);
+    },
+
+    snapshot: getSnapshot,
+  };
+}
+
+export async function syncMemoryRecords(
+  request: MemorySyncRequest,
+  adapter: any,
+  storage: JsonlServerEventStorage,
+  now = new Date().toISOString(),
+): Promise<MemorySyncResponse> {
+  const state = await storage.statePromise;
+  const results: MemoryRecordSyncResult[] = [];
+
+  for (const input of request.inputs) {
+    try {
+      const record = await adapter.remember(input);
+      results.push({ status: "accepted", record });
+    } catch (error) {
+      if (error instanceof PromotionPendingError) {
+        results.push({ status: "promotion_pending", record: error.record });
+      } else {
+        results.push({ status: "failed", reason: error instanceof Error ? error.message : String(error) });
+      }
+    }
+  }
+
+  return {
+    id: `mem_sync_response_${crypto.randomUUID()}`,
+    requestId: request.id,
+    sessionId: request.sessionId,
+    serverRevision: state.revision,
+    accepted: results.filter((r) => r.status === "accepted").length,
+    promotionPending: results.filter((r) => r.status === "promotion_pending").length,
+    failed: results.filter((r) => r.status === "failed").length,
+    results,
+    createdAt: now,
+  };
+}
+
 export function startServer(port = Number(process.env.PORT ?? 4317)) {
   const eventStorage = createJsonlServerEventStorage();
   
@@ -5009,6 +5290,55 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         response.write(`event: chunk\ndata: ${JSON.stringify(errChunk)}\n\n`);
       } finally {
         response.end();
+      }
+      return;
+    }
+
+    if (pathname === "/memory/sync" && request.method === "POST") {
+      let payload: MemorySyncRequest;
+      try {
+        payload = memorySyncRequestSchema.parse(await readJsonBody(request)) as MemorySyncRequest;
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) {
+          respondJson(413, { error: "payload_too_large", limit: error.limit });
+          return;
+        }
+        respondJson(400, {
+          error: "invalid_memory_sync_payload",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+      try {
+        respondJson(202, await syncMemoryRecords(payload, memoryAdapter, eventStorage));
+      } catch (error) {
+        respondJson(500, {
+          error: "memory_sync_failed",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return;
+    }
+
+    if (pathname === "/memory" && request.method === "GET") {
+      const sessionId = requestUrl.searchParams.get("sessionId") ?? "session_dgx_server";
+      const layerParam = requestUrl.searchParams.get("layer");
+      const query: RecallQuery = {
+        sessionId,
+        query: "*",
+        layers: layerParam ? [layerParam as RecallQuery["layers"] extends (infer L)[] | undefined ? L : never] : undefined,
+        includeUntrusted: requestUrl.searchParams.get("includeUntrusted") === "true",
+      };
+      try {
+        respondJson(200, await memoryAdapter.recall(query, {
+          permissionDecision: "allow",
+          callerTrustLevel: "trusted",
+        }));
+      } catch (error) {
+        respondJson(500, {
+          error: "memory_recall_failed",
+          message: error instanceof Error ? error.message : String(error),
+        });
       }
       return;
     }
