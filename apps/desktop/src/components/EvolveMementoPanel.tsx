@@ -66,6 +66,7 @@ import {
  */
 
 export type EvolveMementoPanelProps = {
+  adapterStatus: "loading" | "ready" | "error";
   inspector: Stage6MemoryInspector;
   onActivate: (recordId: string) => void;
   onForget: (recordId: string) => void;
@@ -77,6 +78,7 @@ export type EvolveMementoPanelProps = {
 export type MementoPanelProps = EvolveMementoPanelProps;
 
 export function EvolveMementoPanel({
+  adapterStatus,
   inspector,
   onRemember,
   onActivate,
@@ -115,6 +117,18 @@ export function EvolveMementoPanel({
           <span className="text-xs text-muted-foreground">
             {inspector.stats.totalRecords}
           </span>
+          <StatusBadge
+            size="sm"
+            variant={
+              adapterStatus === "ready"
+                ? "success"
+                : adapterStatus === "error"
+                  ? "danger"
+                  : "muted"
+            }
+          >
+            {adapterStatus === "loading" ? "…" : adapterStatus === "error" ? "err" : "dgx"}
+          </StatusBadge>
         </button>
         <div className="flex items-center gap-1">
           <Button
