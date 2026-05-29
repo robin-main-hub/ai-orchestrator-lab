@@ -1929,18 +1929,29 @@ export type MemoryStats = {
   health: "good" | "watch" | "needs_review";
 };
 
-export type MemoryInput = {
-  layer: MemoryLayer;
-  scope?: MemoryScope;
-  kind?: MemoryKind;
-  title: string;
-  content: string;
-  sourceChannel: MemoryRecord["sourceChannel"];
-  trustLevel: SourceTrust;
-  projectId?: string;
-  sessionId?: string;
-  tags?: string[];
-};
+export const memoryInputSchema = z.object({
+  layer: memoryLayerSchema,
+  scope: memoryScopeSchema.optional(),
+  kind: memoryKindSchema.optional(),
+  title: z.string(),
+  content: z.string(),
+  sourceChannel: z.enum(["desktop", "legacy_telegram", "mobile", "api", "agent"]),
+  trustLevel: sourceTrustSchema,
+  projectId: z.string().optional(),
+  sessionId: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+export type MemoryInput = z.infer<typeof memoryInputSchema>;
+
+export const memorySyncRequestSchema = z.object({
+  id: z.string(),
+  clientId: z.string(),
+  sessionId: z.string(),
+  inputs: z.array(memoryInputSchema),
+  idempotencyKey: z.string(),
+  createdAt: z.string(),
+});
+export type MemorySyncRequest = z.infer<typeof memorySyncRequestSchema>;
 
 export type Reflection = {
   sessionId: string;

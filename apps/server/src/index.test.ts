@@ -47,6 +47,9 @@ import {
   replayApprovedRequestFromPersistentServerStorage,
   resolveAllowedOrigins,
   startServer,
+  createDgxSimpleMemMemoryAdapter,
+  PromotionPendingError,
+  syncMemoryRecords,
 } from "./index";
 
 function expectValidAgentDelegationEvents(events: Array<{ type: string; payload: unknown }>) {
@@ -3034,5 +3037,155 @@ describe("HTTP request limits", () => {
         process.env.NODE_ENV = previousNodeEnv;
       }
     }
+  });
+
+  describe("DgxSimpleMemMemoryAdapter", () => {
+    it("stores a trusted memory record and recalls it from event storage", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-mem-"));
+      try {
+        const storage = createJsonlServerEventStorage(tempDir);
+        const adapter = createDgxSimpleMemMemoryAdapter({ sessionId: "session_mem_test", storage });
+
+        const record = await adapter.remember({
+          layer: "fragment",
+          title: "Test preference",
+          content: "Always use TypeScript strict mode",
+          sourceChannel: "desktop",
+          trustLevel: "trusted",
+        });
+
+        expect(record.layer).toBe("fragment");
+        expect(record.trustLevel).toBe("trusted");
+        expect(record.activationState).toBe("suggested");
+        expect(record.pinned).toBe(false);
+
+        const results = await adapter.recall({ sessionId: "session_mem_test", query: "*" });
+        expect(results).toHaveLength(1);
+        expect(results[0]?.record.id).toBe(record.id);
+        expect(results[0]?.reason).toBe("event_store_match");
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("throws PromotionPendingError for untrusted input and stores promotion.pending event", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-mem-untrusted-"));
+      try {
+        const storage = createJsonlServerEventStorage(tempDir);
+        const adapter = createDgxSimpleMemMemoryAdapter({ sessionId: "session_mem_untrusted", storage });
+
+        let thrownError: unknown;
+        try {
+          await adapter.remember({
+            layer: "fragment",
+            title: "Untrusted preference",
+            content: "This came from an untrusted source",
+            sourceChannel: "api",
+            trustLevel: "untrusted",
+          });
+        } catch (error) {
+          thrownError = error;
+        }
+
+        expect(thrownError).toBeInstanceOf(PromotionPendingError);
+        expect((thrownError as PromotionPendingError).code).toBe("promotion_pending");
+        expect((thrownError as PromotionPendingError).record.trustLevel).toBe("untrusted");
+        expect((thrownError as PromotionPendingError).record.activationState).toBe("quarantined");
+
+        // Untrusted record must NOT appear in recall (not in memory.record.created events)
+        const results = await adapter.recall({ sessionId: "session_mem_untrusted", query: "*", includeUntrusted: true });
+        expect(results).toHaveLength(0);
+
+        // But the promotion.pending event must have been written
+        const pulled = await pullEventsFromPersistentServerStorage("session_mem_untrusted", storage, undefined, 0);
+        const pendingEvent = pulled.events.find((e) => e.type === "memory.promotion.pending");
+        expect(pendingEvent).toBeDefined();
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("tombstones a record via forget() so it is excluded from recall", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-mem-forget-"));
+      try {
+        const storage = createJsonlServerEventStorage(tempDir);
+        const adapter = createDgxSimpleMemMemoryAdapter({ sessionId: "session_mem_forget", storage });
+
+        const record = await adapter.remember({
+          layer: "episode",
+          title: "Temporary note",
+          content: "This should be forgotten",
+          sourceChannel: "desktop",
+          trustLevel: "trusted",
+        });
+
+        await adapter.forget(record.id);
+
+        const results = await adapter.recall({ sessionId: "session_mem_forget", query: "*" });
+        expect(results).toHaveLength(0);
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("returns correct stats after storing mixed records", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-mem-stats-"));
+      try {
+        const storage = createJsonlServerEventStorage(tempDir);
+        const adapter = createDgxSimpleMemMemoryAdapter({ sessionId: "session_mem_stats", storage });
+
+        await adapter.remember({ layer: "fragment", title: "A", content: "alpha", sourceChannel: "desktop", trustLevel: "trusted" });
+        await adapter.remember({ layer: "episode", title: "B", content: "beta", sourceChannel: "desktop", trustLevel: "trusted" });
+
+        const stats = await adapter.stats();
+        expect(stats.totalRecords).toBe(2);
+        expect(stats.health).toBe("good");
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("syncMemoryRecords", () => {
+    it("returns accepted count for trusted inputs and promotionPending for untrusted", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-sync-mem-"));
+      try {
+        const storage = createJsonlServerEventStorage(tempDir);
+        const adapter = createDgxSimpleMemMemoryAdapter({ sessionId: "session_sync", storage });
+
+        const response = await syncMemoryRecords(
+          {
+            id: "mem_sync_req_1",
+            clientId: "client_test",
+            sessionId: "session_sync",
+            inputs: [
+              { layer: "fragment", title: "Trusted", content: "ok", sourceChannel: "desktop", trustLevel: "trusted" },
+              { layer: "fragment", title: "Untrusted", content: "risky", sourceChannel: "api", trustLevel: "untrusted" },
+            ],
+            idempotencyKey: "client_test:session_sync:mem_sync_req_1",
+            createdAt: "2026-05-29T00:00:00.000Z",
+          },
+          adapter,
+          storage,
+          "2026-05-29T00:00:00.000Z",
+        );
+
+        expect(response.accepted).toBe(1);
+        expect(response.promotionPending).toBe(1);
+        expect(response.failed).toBe(0);
+        expect(response.results[0]?.status).toBe("accepted");
+        expect(response.results[1]?.status).toBe("promotion_pending");
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("memory-sync capability", () => {
+    it("reports memory-sync in capabilities and not the placeholder", () => {
+      const health = createHealthResponse();
+      expect(health.capabilities).toContain("memory-sync");
+      expect(health.capabilities).not.toContain("memory-sync-placeholder");
+    });
   });
 });
