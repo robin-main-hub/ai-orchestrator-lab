@@ -1,3 +1,21 @@
+* text=auto
+
 *.sh text eol=lf
 *.service text eol=lf
+*.js text eol=lf
 *.mjs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.asar binary
+*.zip binary
+*.tar binary
+*.gz binary
