@@ -96,6 +96,7 @@ import { createCorsHeaders } from "./http/cors";
 import { RequestBodyTooLargeError, readJsonBody } from "./http/requestBody";
 import { handleApprovalRoute } from "./routes/approvals";
 import { handleTmuxRoute } from "./routes/tmux";
+import { handleVerifyPacketRoute } from "./routes/verifyPacket";
 export { pickAllowedOrigin, resolveAllowedOrigins } from "./http/cors";
 
 export type ServerCapability =
@@ -5432,6 +5433,20 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       return;
     }
 
+    if (
+      await handleVerifyPacketRoute({
+        request,
+        pathname,
+        method: request.method,
+        readJsonBody,
+        isRequestBodyTooLargeError: (error): error is RequestBodyTooLargeError =>
+          error instanceof RequestBodyTooLargeError,
+        respondJson,
+      })
+    ) {
+      return;
+    }
+
     if (pathname === "/ingress/events" && request.method === "POST") {
       let payload: ServerIngressInput;
       try {
@@ -5535,69 +5550,6 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
 
     if (pathname === "/sessions" && request.method === "GET") {
       respondJson(200, await listPersistentEventStorageSessions(eventStorage));
-      return;
-    }
-
-    if (pathname === "/verify-packet" && request.method === "POST") {
-      let body: any;
-      try {
-        body = await readJsonBody(request);
-      } catch (error) {
-        respondJson(400, { error: "invalid_body" });
-        return;
-      }
-
-      let packet: any;
-      try {
-        packet = codingPacketSchema.parse(body);
-      } catch (error) {
-        respondJson(400, {
-          error: "invalid_coding_packet",
-          message: error instanceof Error ? error.message : String(error),
-        });
-        return;
-      }
-
-      const command = body.command || "corepack pnpm --filter @ai-orchestrator/protocol test";
-      const rootDir = process.cwd().includes("apps") ? resolve(process.cwd(), "../..") : process.cwd();
-
-      try {
-        const { exec } = await import("node:child_process");
-        const execAsync = promisify(exec);
-        const result = await execAsync(command, {
-          cwd: rootDir,
-          timeout: 30000,
-        });
-
-        respondJson(200, {
-          status: "passed",
-          checks: [
-            { label: "Compiler checks", status: "pass" },
-            { label: "Unit test coverage", status: "pass" },
-          ],
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: 0,
-          message: "테스트 및 패킷 검증에 성공했습니다.",
-        });
-      } catch (error: any) {
-        const stdout = error.stdout || "";
-        const stderr = error.stderr || "";
-        const exitCode = typeof error.code === "number" ? error.code : 1;
-        const message = error.message || "테스트 검증에 실패했습니다.";
-
-        respondJson(200, {
-          status: "failed",
-          checks: [
-            { label: "Compiler checks", status: "fail" },
-            { label: "Unit test coverage", status: "warn" },
-          ],
-          stdout: stdout,
-          stderr: stderr,
-          exitCode: exitCode,
-          message: message,
-        });
-      }
       return;
     }
 
