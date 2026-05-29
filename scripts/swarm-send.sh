@@ -8,7 +8,7 @@ ENV_FILE="${STATE_DIR}/${SESSION_NAME}.env"
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/swarm-send.sh <role> <command...>
+  scripts/swarm-send.sh <role> <shell-command...>
 
 Roles:
   discussion
@@ -26,7 +26,8 @@ Examples:
   scripts/swarm-send.sh architect "codex 'Review protocol boundaries'"
   scripts/swarm-send.sh qa "pnpm typecheck && pnpm test"
 
-The helper sends text to the stored tmux pane id, then presses Enter.
+The helper sends shell command text to the stored tmux pane id, then presses Enter.
+Use scripts/swarm-claude-task.sh for persistent interactive Claude worker prompts.
 USAGE
 }
 
@@ -68,7 +69,7 @@ if [[ -z "$pane_id" ]]; then
   exit 2
 fi
 
-if [[ "$command_text" =~ (sk-[A-Za-z0-9_-]{12,}|Bearer[[:space:]][A-Za-z0-9._-]{12,}|BEGIN[[:space:]]+PRIVATE[[:space:]]+KEY) ]]; then
+if [[ "$command_text" =~ (sk-[A-Za-z0-9_-]{12,}|AKIA[A-Z0-9]{16}|AIzaSy[A-Za-z0-9_-]{33}|Bearer[[:space:]][A-Za-z0-9._-]{12,}|BEGIN[[:space:]]+PRIVATE[[:space:]]+KEY) ]]; then
   echo "Refusing to send command text that appears to contain a secret." >&2
   exit 3
 fi
@@ -78,5 +79,6 @@ if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
   exit 1
 fi
 
-tmux send-keys -t "$pane_id" "$command_text" C-m
+tmux send-keys -t "$pane_id" -l "$command_text"
+tmux send-keys -t "$pane_id" C-m
 echo "Sent to ${role} (${pane_id}) in ${SESSION_NAME}."

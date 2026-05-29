@@ -2,6 +2,7 @@ import type {
   ModelDescriptor,
   ProviderCompletionRequest,
   ProviderCompletionResponse,
+  ProviderCompletionChunkEvent,
 } from "@ai-orchestrator/protocol";
 import type { AdapterRuntimeContext, LlmAdapter } from "./adapter";
 
@@ -82,6 +83,54 @@ export class MockLlmAdapter implements LlmAdapter {
         totalTokens: inputTokens + outputTokens,
       },
       createdAt: request.createdAt,
+    };
+  }
+
+  async *completeStreaming(
+    request: ProviderCompletionRequest,
+    _ctx: AdapterRuntimeContext,
+  ): AsyncIterable<ProviderCompletionChunkEvent> {
+    const lastUserMessage = [...request.messages].reverse().find((message) => message.role === "user");
+    const content = `mock:${lastUserMessage?.content ?? "empty"}`;
+    const inputTokens = this.fixtureUsage.inputTokens;
+    const outputTokens = this.fixtureUsage.outputTokens;
+    const totalTokens = inputTokens + outputTokens;
+
+    yield {
+      type: "usage",
+      requestId: request.id,
+      usage: {
+        inputTokens,
+        outputTokens,
+        totalTokens,
+      },
+    };
+
+    const chunks = ["mock:", lastUserMessage?.content ?? "empty"];
+    let seq = 0;
+    for (const chunk of chunks) {
+      if (!chunk) continue;
+      yield {
+        type: "delta",
+        requestId: request.id,
+        sequence: seq++,
+        delta: chunk,
+      };
+    }
+
+    yield {
+      type: "done",
+      requestId: request.id,
+      finalContent: content,
+      stopReason: "end_turn",
+      usage: {
+        inputTokens,
+        outputTokens,
+        totalTokens,
+      },
+      endpoint: "mock",
+      createdAt: request.createdAt,
+      completedAt: new Date().toISOString(),
     };
   }
 }

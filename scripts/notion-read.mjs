@@ -131,6 +131,14 @@ async function blockToMarkdown(block, apiKey, indent = '') {
     case 'child_database':
       md = `${indent}*Child Database: ${data.title} (${block.id})*\n\n`;
       break;
+    case 'table':
+      // Table wrapper block itself yields no text, children table_rows will compile the cells
+      md = '';
+      break;
+    case 'table_row':
+      const cellTexts = data.cells.map(cell => parseRichText(cell));
+      md = `${indent}| ${cellTexts.join(' | ')} |\n`;
+      break;
     default:
       md = `${indent}*[Unsupported block type: ${type}]*\n\n`;
       break;

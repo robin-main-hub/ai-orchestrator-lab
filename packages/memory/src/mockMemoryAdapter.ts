@@ -8,8 +8,8 @@ import type {
   RecallResult,
   Reflection,
 } from "@ai-orchestrator/protocol";
-import type { MemoryAdapter, MemoryAdapterContext } from "./adapter";
-import { MemoryAdapterError } from "./errors";
+import type { MemoryAdapter, MemoryAdapterContext } from "./adapter.js";
+import { MemoryAdapterError } from "./errors.js";
 
 export type MockMemoryAdapterOptions = {
   profileId?: string;

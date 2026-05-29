@@ -8,6 +8,18 @@ import type {
   Reflection,
   TerminalSlot,
 } from "@ai-orchestrator/protocol";
+import {
+  extractCodingPacketFromDebate,
+  assertSafeCodingPacket,
+  type DebateContext,
+} from "@ai-orchestrator/agents";
+import {
+  runStage3DebateSession,
+  type Stage3DebateInput,
+  type Stage3DebateSession,
+} from "./stage3Runtime";
+import type { LocalClientEventCache } from "./stage29LocalEventStore";
+
 
 export type Stage4RunStepStatus = "planned" | "ready" | "blocked" | "verified";
 
@@ -22,12 +34,15 @@ export type Stage4RunStep = {
 
 export type Stage4VerifierReport = {
   id: string;
-  status: "passed" | "warning" | "blocked";
+  status: "passed" | "warning" | "blocked" | "failed";
   checks: Array<{
     label: string;
     status: "pass" | "warn" | "fail";
   }>;
   notes: string[];
+  exitCode?: number;
+  stdout?: string;
+  stderr?: string;
 };
 
 export type Stage4RunReplay = {
@@ -229,3 +244,89 @@ function createReflection(packet: CodingPacket, recallTrace: RecallResult[], cre
     createdAt,
   };
 }
+
+export async function runStage4AgentPipeline(params: {
+  stage3Input: Stage3DebateInput & { packet?: CodingPacket };
+  eventCache: LocalClientEventCache;
+  debateId?: string;
+  fetchImpl?: typeof fetch;
+  perAgentTimeoutMs?: number;
+  createdAt?: string;
+}): Promise<{
+  debateSession: Stage3DebateSession;
+  codingPacket: CodingPacket;
+  agentRun: Stage4AgentRun;
+}> {
+  const time = params.createdAt ?? new Date().toISOString();
+  
+  // 1. Run live debate
+  const debateSession = await runStage3DebateSession({
+    ...params.stage3Input,
+    debateId: params.debateId,
+    fetchImpl: params.fetchImpl,
+    perAgentTimeoutMs: params.perAgentTimeoutMs,
+    createdAt: time,
+  });
+
+  // 2. Assemble debate context
+  const lastUserMessage = [...params.stage3Input.messages].reverse().find((m) => m.role === "user");
+  const problem = lastUserMessage?.content ?? "Conversation context를 Debate Mode로 승격";
+  const summary = debateSession.summary;
+
+  const debateContext: DebateContext = {
+    sessionId: params.stage3Input.messages[0]?.sessionId ?? "session_desktop_001",
+    problem,
+    conversationSummary: summary,
+    constraints: params.stage3Input.packet?.constraints ?? [],
+    openQuestions: params.stage3Input.packet?.reviewerNotes ?? [],
+    userPreferences: [],
+    memoryTraceIds: [],
+  };
+
+  // 3. Extract and sanitize coding packet
+  const extractedPacket = extractCodingPacketFromDebate(debateContext, debateSession.rounds);
+  const safePacket = assertSafeCodingPacket(extractedPacket);
+
+  // 4. Create agent run
+  const agentRun = createStage4AgentRun({
+    packet: safePacket,
+    primaryAgent: params.stage3Input.agents.find((a) => a.role === "orchestrator"),
+    agents: params.stage3Input.agents,
+    messages: params.stage3Input.messages,
+    events: params.stage3Input.events,
+    createdAt: time,
+  });
+
+  // 5. Emit events to Local Event Store
+  const codingPacketEvent: EventEnvelope = {
+    id: `event_coding_packet_${crypto.randomUUID()}`,
+    sessionId: debateContext.sessionId,
+    type: "coding_packet.created",
+    payload: safePacket,
+    createdAt: time,
+    source: "desktop",
+    sourceTrust: "trusted",
+    redacted: false,
+  };
+
+  const agentRunEvent: EventEnvelope = {
+    id: `event_agent_run_${crypto.randomUUID()}`,
+    sessionId: debateContext.sessionId,
+    type: "agent_run.created",
+    payload: agentRun,
+    createdAt: time,
+    source: "desktop",
+    sourceTrust: "trusted",
+    redacted: false,
+  };
+
+  await params.eventCache.append(codingPacketEvent);
+  await params.eventCache.append(agentRunEvent);
+
+  return {
+    debateSession,
+    codingPacket: safePacket,
+    agentRun,
+  };
+}
+

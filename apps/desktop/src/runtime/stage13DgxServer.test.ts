@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
-import { fetchDgxProviderModelDiscovery, fetchDgxProviderRegistry, probeDgxOrchestratorServer } from "./stage13DgxServer";
+import { fetchDgxProviderModelDiscovery, fetchDgxProviderRegistry, probeDgxOrchestratorServer, updateRuntimeWithFsmState } from "./stage13DgxServer";
+import { DgxConnectionStateMachine } from "./stage5Runtime";
 import { DGX02_LAN_ORCHESTRATOR_BASE_URL } from "./stage30DgxEndpoints";
 
 const localRuntime: RuntimeSnapshot = {
@@ -242,6 +243,16 @@ describe("stage13 DGX server probing", () => {
     expect(registry.authorityNodeId).toBe("dgx-02");
     expect(registry.rawSecretPersisted).toBe(false);
     expect(registry.entries[0]?.providerProfileId).toBe("provider_dgx02_vllm");
+  });
+
+  it("updates runtime snapshot state based on DgxConnectionStateMachine state", () => {
+    const fsm = new DgxConnectionStateMachine("ws://localhost:8080", {
+      WebSocketImpl: class {} as any,
+    });
+    const updated = updateRuntimeWithFsmState(localRuntime, fsm, "2026-05-24T00:03:00.000Z");
+    expect(updated.dgxStatus).toBe("offline");
+    expect(updated.status).toBe("degraded");
+    expect(updated.memorySyncStatus).toBe("degraded");
   });
 });
 

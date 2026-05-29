@@ -12,7 +12,7 @@ import type {
   RecallResult,
   Reflection,
 } from "@ai-orchestrator/protocol";
-import type { MemoryAdapterError } from "./errors";
+import type { MemoryAdapterError } from "./errors.js";
 
 export type MemoryAdapterKind = "local_heuristic" | "memento_mcp" | "dgx_simplemem" | "mock";
 
@@ -54,6 +54,7 @@ export interface MemoryAdapter {
   activateMemories(recordIds: string[], ctx: MemoryAdapterContext): Promise<void>;
   createRelations(recordIds: string[], ctx: MemoryAdapterContext): Promise<MemoryRelation[]>;
   reflect?(sessionId: string, ctx: MemoryAdapterContext): Promise<Reflection>;
+  injectRecord?(record: MemoryRecord): void;
 }
 
 export class MemoryApiAdapter implements MemoryAdapter {
@@ -103,3 +104,6 @@ export class MemoryApiAdapter implements MemoryAdapter {
     return this.api.reflect(sessionId);
   }
 }
+
+export { DgxSimpleMemMemoryAdapter } from "./dgxSimpleMemAdapter.js";
+

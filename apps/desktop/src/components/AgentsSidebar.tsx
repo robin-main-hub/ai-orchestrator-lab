@@ -30,7 +30,7 @@ import type {
   ModelCatalog,
   WorkbenchAgent,
 } from "../types";
-import { AgentAvatar } from "./AgentAvatar";
+import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
 
 /**
  * Agents sidebar — strict v0 port.
@@ -214,9 +214,9 @@ export function AgentsSidebar({
       onOpenChange={setIsOpen}
       open={isOpen}
     >
-      <section className="agents-sidebar-root rounded-lg border border-border bg-card">
+      <section className="agents-sidebar-root flex flex-col h-full rounded-lg border border-border bg-card overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2 shrink-0">
           <CollapsibleTrigger asChild>
             <button
               aria-expanded={isOpen}
@@ -244,7 +244,7 @@ export function AgentsSidebar({
           </Button>
         </div>
 
-        <CollapsibleContent>
+        <CollapsibleContent className="flex-1 min-h-0 overflow-y-auto">
           <div className="space-y-3 p-2">
             <AgentGroup
               agents={core}
@@ -403,7 +403,21 @@ function AgentCard({
           onClick={() => onSelectAgent(agent.id)}
           type="button"
         >
-          <AgentAvatar agent={agent} size="small" visual={visual} />
+          <AvatarWithStatus
+            initials={agent.name.slice(0, 2).toUpperCase()}
+            roleColor={roleColorFromRole(agent.role)}
+            status={
+              isResponding
+                ? "active"
+                : isPreparing
+                  ? "pending"
+                  : activity === "idle"
+                    ? "idle"
+                    : "online"
+            }
+            avatarDataUrl={visual?.avatarDataUrl}
+            size="sm"
+          />
         </button>
 
         <button

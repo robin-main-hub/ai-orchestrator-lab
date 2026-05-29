@@ -20,6 +20,7 @@ import {
   executionSlotSchema,
   parseAgentDelegationEventPayload,
   projectAgentDelegationTimeline,
+  providerCompletionRequestSchema,
   providerProfileSchema,
   redactionRuleSchema,
   parseTerminalCommandEventPayload,
@@ -68,6 +69,28 @@ describe("protocol schemas", () => {
     };
 
     expect(codingPacketSchema.parse(packet).goal).toBe("오케스트레이터 골격 생성");
+  });
+
+  it("parses provider completion request context for single-owner routes", () => {
+    const request = providerCompletionRequestSchema.parse({
+      id: "req_single_owner",
+      sessionId: "session_single_owner",
+      providerProfileId: "provider_claude_code_single_owner",
+      modelId: "claude-cli-session",
+      messages: [{ role: "user", content: "review this" }],
+      source: "desktop",
+      routePreference: "server_proxy",
+      requestContext: {
+        userId: "owner-robin",
+        routeType: "trusted_remote_device",
+        trustedDeviceId: "tailscale-laptop",
+        humanInitiated: true,
+      },
+      createdAt: "2026-05-28T00:00:00.000Z",
+    });
+
+    expect(request.requestContext?.routeType).toBe("trusted_remote_device");
+    expect(request.requestContext?.userId).toBe("owner-robin");
   });
 
   it("tracks debate provenance without forcing UI-specific layout", () => {

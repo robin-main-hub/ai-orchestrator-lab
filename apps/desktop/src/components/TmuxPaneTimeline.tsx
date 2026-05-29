@@ -108,7 +108,7 @@ function TimelineBlockRow({ block }: { block: TerminalTimelineBlock }) {
             ) : null}
           </button>
         </CollapsibleTrigger>
-        <CollapsibleContent>
+        <CollapsibleContent className="tmux-block__collapsible-content">
           {hasDetail ? (
             <div className="tmux-block__detail">
               {block.summary ? <p className="tmux-block__summary">{block.summary}</p> : null}

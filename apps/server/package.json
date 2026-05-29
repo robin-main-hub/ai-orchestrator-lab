@@ -13,7 +13,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-orchestrator/memory": "workspace:*",
     "@ai-orchestrator/protocol": "workspace:*",
-    "@ai-orchestrator/providers": "workspace:*"
+    "@ai-orchestrator/providers": "workspace:*",
+    "zod": "^3.25.76"
   }
 }

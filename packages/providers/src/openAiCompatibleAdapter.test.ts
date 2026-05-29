@@ -185,4 +185,77 @@ describe("OpenAICompatibleAdapter", () => {
     expect(onRawError).toHaveBeenCalledWith(401, expect.stringContaining("<redacted>"));
     expect(onRawError.mock.calls[0]?.[1]).not.toContain("sk-abcdef0123456789abcdef0123456789");
   });
+
+  it("streams the completion chunks correctly", async () => {
+    const fetchImpl: AdapterFetchLike = async (url, init) => {
+      expect(url).toBe("https://api.example.test/v1/chat/completions");
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body.stream).toBe(true);
+      expect(body.stream_options).toEqual({ include_usage: true });
+
+      return {
+        ok: true,
+        status: 200,
+        async text() {
+          return "";
+        },
+        body: [
+          'data: {"choices":[{"delta":{"content":"He"}}]}\n',
+          'data: {"choices":[{"delta":{"content":"llo"}}]}\n',
+          'data: {"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}\n',
+          'data: [DONE]\n'
+        ]
+      };
+    };
+
+    const adapter = new OpenAICompatibleAdapter({
+      profileId: "provider_openai_compatible",
+      baseUrl: "https://api.example.test/v1/",
+      fetchImpl,
+    });
+
+    const stream = adapter.completeStreaming(
+      baseRequest(),
+      createAdapterContext({ secret: "sk-test-secret" })
+    );
+
+    const chunks = [];
+    for await (const chunk of stream) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks).toHaveLength(4);
+    expect(chunks[0]).toEqual({
+      type: "delta",
+      requestId: "req_openai_001",
+      sequence: 0,
+      delta: "He",
+    });
+    expect(chunks[1]).toEqual({
+      type: "delta",
+      requestId: "req_openai_001",
+      sequence: 1,
+      delta: "llo",
+    });
+    expect(chunks[2]).toEqual({
+      type: "usage",
+      requestId: "req_openai_001",
+      usage: {
+        inputTokens: 10,
+        outputTokens: 2,
+        totalTokens: 12,
+      },
+    });
+    expect(chunks[3]).toMatchObject({
+      type: "done",
+      requestId: "req_openai_001",
+      finalContent: "Hello",
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 10,
+        outputTokens: 2,
+        totalTokens: 12,
+      },
+    });
+  });
 });

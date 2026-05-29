@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   Brain,
   ChevronRight,
@@ -59,8 +59,10 @@ import {
   isDgxRoutedProvider,
   requestDgxProviderCompletion,
 } from "./runtime/stage12DgxProvider";
+import { requestDgxProviderCompletionStream } from "./runtime/stage12DgxProviderStream";
 import { probeDgxOrchestratorServer } from "./runtime/stage13DgxServer";
-import { DEFAULT_DGX_SERVER_BASE_URL } from "./runtime/stage30DgxEndpoints";
+import { DEFAULT_DGX_SERVER_BASE_URL, resolveDgxServerBaseUrls } from "./runtime/stage30DgxEndpoints";
+import { createDgxOrchestratorJsonHeaders } from "./runtime/stage31DgxAuth";
 import { probeDgxProviderRoutes, type Stage32DgxRouteDiagnosticSnapshot } from "./runtime/stage32DgxRouteDiagnostics";
 import {
   buildDelegatedAgentPrompt,
@@ -168,6 +170,7 @@ import { ConfigLibraryPanel } from "./components/ConfigLibraryPanel";
 import { ConversationWorkbench } from "./components/ConversationWorkbench";
 import { IngressGuardPanel } from "./components/IngressGuardPanel";
 import { EvolveMementoPanel } from "./components/EvolveMementoPanel";
+import { HumanPeekPanel } from "./components/HumanPeekPanel";
 import { OperationsRailPanel } from "./components/OperationsRailPanel";
 import { ProjectRailPanel } from "./components/ProjectRailPanel";
 import { ProviderProfilesManagerPanel } from "./components/ProviderProfilesManagerPanel";
@@ -186,6 +189,7 @@ import { useDgxEventSyncController } from "./hooks/useDgxEventSyncController";
 import { useMemoryController } from "./hooks/useMemoryController";
 import { createAuthBinding, useProviderRegistryController } from "./hooks/useProviderRegistryController";
 import { useWorkItemsController } from "./hooks/useWorkItemsController";
+import { useStreamingStore } from "./store/useStreamingStore";
 import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbenchDerived";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 
@@ -213,6 +217,7 @@ export function App() {
     Object.fromEntries(seededAgentProfiles.map((agent) => [agent.id, createDefaultPersonaSettings(agent)])),
   );
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
+  const activeAbortControllerRef = useRef<AbortController | null>(null);
   const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
   const [activeSessionId, setActiveSessionId] = useState(DEFAULT_SESSION_ID);
   const [sessionIndexState, setSessionIndexState] = useState<Stage20SessionIndexState>(() =>
@@ -264,7 +269,8 @@ export function App() {
     updateWorkItem,
     workItemHandoffs,
     workItems,
-  } = useWorkItemsController({ appendEvent });
+    handleControlQueueAction,
+  } = useWorkItemsController({ appendEvent, sessionId: activeSessionId });
   const [debateSession, setDebateSession] = useState<Stage3DebateSession>(() =>
     createStage3DebateSession({
       messages: initialConversationMessages,
@@ -363,9 +369,14 @@ export function App() {
     provider: selectedProvider,
     runtimeUpdatedAt: runtimeSnapshotState.updatedAt,
   });
+  const lastBackupSnapshotRef = useRef<Stage7BackupSnapshot | null>(null);
   const backupSnapshot = useMemo(
-    () =>
-      createStage7BackupSnapshot({
+    () => {
+      const isStreaming = conversationMessages.some((msg) => msg.metadata?.streaming === true);
+      if (isStreaming && lastBackupSnapshotRef.current) {
+        return lastBackupSnapshotRef.current;
+      }
+      const nextSnapshot = createStage7BackupSnapshot({
         sessionId: activeSessionId,
         messages: conversationMessages,
         packet: codingPacketState,
@@ -376,7 +387,10 @@ export function App() {
         memoryInspector,
         obsidianVaultRoot: defaultObsidianVaultRoot,
         createdAt: runtimeSnapshotState.updatedAt,
-      }),
+      });
+      lastBackupSnapshotRef.current = nextSnapshot;
+      return nextSnapshot;
+    },
     [
       agentRunState,
       activeSessionId,
@@ -1054,7 +1068,14 @@ export function App() {
 
   }
 
-  async function handleSendMessageStage2() {
+  function handleCancelStream() {
+    if (activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+      activeAbortControllerRef.current = null;
+    }
+  }
+
+  async function handleSendMessageStage2(replyTo?: { id: string; role: string; content: string; senderLabel: string }) {
     const content = draftMessage.trim();
     const attachments = draftAttachments;
     if ((!content && attachments.length === 0) || !selectedAgent || !selectedProvider) {
@@ -1073,7 +1094,10 @@ export function App() {
       role: "user",
       content: messageContent,
       createdAt,
-      metadata: attachmentMetadata.length > 0 ? { attachments: attachmentMetadata } : undefined,
+      metadata: {
+        ...(attachmentMetadata.length > 0 ? { attachments: attachmentMetadata } : {}),
+        ...(replyTo ? { replyTo } : {}),
+      },
     };
     const providerPermissionId = `permission_provider_${selectedProvider.id}`;
     const providerApprovalState = approvalStateByItemId[providerPermissionId];
@@ -1202,106 +1226,341 @@ export function App() {
       routePreference: isDgxRoutedProvider(selectedProvider) ? "server_proxy" : "mock",
     });
 
-    let reply = "";
-    let completionMetadata: Record<string, unknown> = {};
-    try {
-      const result = await completeWorkbenchAgent({
+    const assistantMessageId = `message_agent_${crypto.randomUUID()}`;
+
+    if (isDgxRoutedProvider(selectedProvider)) {
+      const pipelineMessages = createConversationPipelineMessages({
         agent: selectedAgent,
-        approvalState: providerApprovalState,
-        createdAt,
+        memory: memoryInspector,
         modelId,
-        permissionDecision: providerApprovalState === "approved" ? "allow" : undefined,
         persona: selectedAgentPersona,
         provider: selectedProvider,
-        purpose: "primary",
         userMessage,
       });
-      reply = result.content;
-      completionMetadata = result.metadata;
-      const delegationRound = await executeDelegationRound({
-        createdAt,
-        initialReply: reply,
-        modelId,
-        providerApprovalState,
-        selectedAgent,
-        selectedAgentPersona,
-        selectedProvider,
-        userMessage,
-      });
-      if (delegationRound) {
-        reply = delegationRound.finalReply;
-        completionMetadata = {
-          ...completionMetadata,
-          ...delegationRound.followupMetadata,
-          delegationExecuted: true,
-          delegationInitialContent: delegationRound.initialReply,
-          delegations: delegationRound.outcomes.map(serializeDelegationOutcome),
-          delegationTags: delegationRound.tags.map((tag) => ({
-            target: tag.target,
-            prompt: tag.prompt,
-            status: "executed",
-          })),
-        };
-      }
-    } catch (error) {
-      reply = `${selectedProvider.name} 호출에 실패했어. ${error instanceof Error ? error.message : String(error)}`;
-      completionMetadata = {
-        error: error instanceof Error ? error.message : String(error),
-        realProviderCall: false,
-      };
-      appendEvent("provider.completion.dgx.failed", {
+
+      appendEvent("prompt.pipeline.assembled", {
         agentId: selectedAgent.id,
         providerProfileId: selectedProvider.id,
         modelId,
-        error: error instanceof Error ? error.message : String(error),
+        messageCount: pipelineMessages.length,
+        memoryTraceId: memoryInspector.trace.id,
+        usedMemoryCount: memoryInspector.trace.results.filter((result) => result.usedInDecision).length,
+        soulMode: selectedAgent.soulMode,
+        purpose: "primary",
+        redaction: "applied",
       });
-    }
 
-    const assistantMessage: ConversationMessage = {
-      id: `message_agent_${crypto.randomUUID()}`,
-      sessionId: activeSessionId,
-      role: "assistant",
-      content: reply,
-      createdAt: new Date().toISOString(),
-      metadata: {
+      const initialAssistantMessage: ConversationMessage = {
+        id: assistantMessageId,
+        sessionId: activeSessionId,
+        role: "assistant",
+        content: "",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          agentName: selectedAgent.name,
+          providerProfileId: selectedProvider.id,
+          authMode,
+          streaming: true,
+        },
+      };
+
+      setAgentActivity(selectedAgent.id, "responding");
+      setConversationMessages((messages) => [...messages, initialAssistantMessage]);
+
+      const abortController = new AbortController();
+      activeAbortControllerRef.current = abortController;
+
+      let accumulatedContent = "";
+
+      try {
+        await requestDgxProviderCompletionStream({
+          provider: selectedProvider,
+          modelId,
+          messages: pipelineMessages,
+          approvalState: providerApprovalState,
+          permissionDecision: providerApprovalState === "approved" ? "allow" : undefined,
+          abortSignal: abortController.signal,
+          onChunk: (event) => {
+            if (event.type === "delta") {
+              accumulatedContent += event.delta;
+              useStreamingStore.getState().setContent(assistantMessageId, accumulatedContent);
+              if ((event as any).reasoningSnippet) {
+                useStreamingStore.getState().setReasoningSnippet(selectedAgent.id, (event as any).reasoningSnippet);
+              }
+            }
+          },
+        });
+
+        let finalReply = accumulatedContent;
+        let completionMetadata: Record<string, unknown> = {
+          endpoint: "",
+          route: "server_proxy",
+          realProviderCall: true,
+          purpose: "primary",
+        };
+
+        const delegationRound = await executeDelegationRound({
+          createdAt,
+          initialReply: finalReply,
+          modelId,
+          providerApprovalState,
+          selectedAgent,
+          selectedAgentPersona,
+          selectedProvider,
+          userMessage,
+        });
+
+        if (delegationRound) {
+          finalReply = delegationRound.finalReply;
+          completionMetadata = {
+            ...completionMetadata,
+            ...delegationRound.followupMetadata,
+            delegationExecuted: true,
+            delegationInitialContent: delegationRound.initialReply,
+            delegations: delegationRound.outcomes.map(serializeDelegationOutcome),
+            delegationTags: delegationRound.tags.map((tag) => ({
+              target: tag.target,
+              prompt: tag.prompt,
+              status: "executed",
+            })),
+          };
+        }
+
+        const finalAssistantMessage: ConversationMessage = {
+          id: assistantMessageId,
+          sessionId: activeSessionId,
+          role: "assistant",
+          content: finalReply,
+          createdAt: new Date().toISOString(),
+          metadata: {
+            agentName: selectedAgent.name,
+            providerProfileId: selectedProvider.id,
+            authMode,
+            ...completionMetadata,
+          },
+        };
+
+        setConversationMessages((prevMessages) =>
+          prevMessages.map((msg) => (msg.id === assistantMessageId ? finalAssistantMessage : msg))
+        );
+
+        const assistantDraft: AssistantDraft = {
+          id: `draft_reply_${crypto.randomUUID()}`,
+          workItemId: workItem.id,
+          sessionId: activeSessionId,
+          title: `${selectedAgent.name} reply`,
+          body: finalReply.slice(0, 1200),
+          targetSurface: "conversation",
+          status: "sent",
+          confidence: "medium",
+          evidenceRefs: workItem.evidenceRefs,
+          missingInfo: [],
+          createdAt: finalAssistantMessage.createdAt,
+        };
+        prependAssistantDraft(assistantDraft);
+
+        updateWorkItem(workItem.id, {
+          lane: "check",
+          status: "drafted",
+          updatedAt: finalAssistantMessage.createdAt,
+        });
+
+        appendEvent("conversation.message.created", {
+          messageId: assistantMessageId,
+          role: "assistant",
+          content: finalReply,
+          metadata: finalAssistantMessage.metadata,
+          agentName: selectedAgent.name,
+          providerProfileId: selectedProvider.id,
+          contentLength: finalReply.length,
+          redaction: "applied",
+        });
+
+        appendEvent("provider.completion.dgx.succeeded", {
+          agentId: selectedAgent.id,
+          providerProfileId: selectedProvider.id,
+          modelId,
+          endpoint: "",
+          route: "server_proxy",
+          purpose: "primary",
+        });
+
+      } catch (error: any) {
+        const isAbort = error.name === "AbortError" || abortController.signal.aborted;
+        const errorText = isAbort ? "요청이 취소되었습니다." : (error instanceof Error ? error.message : String(error));
+        const finalReply = isAbort ? "스트리밍이 사용자에 의해 중단되었습니다." : `${selectedProvider.name} 호출에 실패했어. ${errorText}`;
+
+        const finalMetadata = {
+          error: errorText,
+          realProviderCall: false,
+          ...(isAbort ? { aborted: true } : {}),
+        };
+
+        const failedAssistantMessage: ConversationMessage = {
+          id: assistantMessageId,
+          sessionId: activeSessionId,
+          role: "assistant",
+          content: finalReply,
+          createdAt: new Date().toISOString(),
+          metadata: {
+            agentName: selectedAgent.name,
+            providerProfileId: selectedProvider.id,
+            authMode,
+            ...finalMetadata,
+          },
+        };
+
+        setConversationMessages((prevMessages) =>
+          prevMessages.map((msg) => (msg.id === assistantMessageId ? failedAssistantMessage : msg))
+        );
+
+        appendEvent("provider.completion.dgx.failed", {
+          agentId: selectedAgent.id,
+          providerProfileId: selectedProvider.id,
+          modelId,
+          error: errorText,
+        });
+
+        const assistantDraft: AssistantDraft = {
+          id: `draft_reply_${crypto.randomUUID()}`,
+          workItemId: workItem.id,
+          sessionId: activeSessionId,
+          title: `${selectedAgent.name} reply`,
+          body: finalReply.slice(0, 1200),
+          targetSurface: "conversation",
+          status: "sent",
+          confidence: "low",
+          evidenceRefs: workItem.evidenceRefs,
+          missingInfo: [],
+          createdAt: failedAssistantMessage.createdAt,
+        };
+        prependAssistantDraft(assistantDraft);
+
+        updateWorkItem(workItem.id, {
+          lane: "ask",
+          status: "waiting_input",
+          updatedAt: failedAssistantMessage.createdAt,
+        });
+
+        appendEvent("conversation.message.created", {
+          messageId: assistantMessageId,
+          role: "assistant",
+          content: finalReply,
+          metadata: failedAssistantMessage.metadata,
+          agentName: selectedAgent.name,
+          providerProfileId: selectedProvider.id,
+          contentLength: finalReply.length,
+          redaction: "applied",
+        });
+      } finally {
+        useStreamingStore.getState().clearContent(assistantMessageId);
+        useStreamingStore.getState().clearReasoning(selectedAgent.id);
+        if (activeAbortControllerRef.current === abortController) {
+          activeAbortControllerRef.current = null;
+        }
+      }
+    } else {
+      let reply = "";
+      let completionMetadata: Record<string, unknown> = {};
+      try {
+        const result = await completeWorkbenchAgent({
+          agent: selectedAgent,
+          approvalState: providerApprovalState,
+          createdAt,
+          modelId,
+          permissionDecision: providerApprovalState === "approved" ? "allow" : undefined,
+          persona: selectedAgentPersona,
+          provider: selectedProvider,
+          purpose: "primary",
+          userMessage,
+        });
+        reply = result.content;
+        completionMetadata = result.metadata;
+        const delegationRound = await executeDelegationRound({
+          createdAt,
+          initialReply: reply,
+          modelId,
+          providerApprovalState,
+          selectedAgent,
+          selectedAgentPersona,
+          selectedProvider,
+          userMessage,
+        });
+        if (delegationRound) {
+          reply = delegationRound.finalReply;
+          completionMetadata = {
+            ...completionMetadata,
+            ...delegationRound.followupMetadata,
+            delegationExecuted: true,
+            delegationInitialContent: delegationRound.initialReply,
+            delegations: delegationRound.outcomes.map(serializeDelegationOutcome),
+            delegationTags: delegationRound.tags.map((tag) => ({
+              target: tag.target,
+              prompt: tag.prompt,
+              status: "executed",
+            })),
+          };
+        }
+      } catch (error) {
+        reply = `${selectedProvider.name} 호출에 실패했어. ${error instanceof Error ? error.message : String(error)}`;
+        completionMetadata = {
+          error: error instanceof Error ? error.message : String(error),
+          realProviderCall: false,
+        };
+        appendEvent("provider.completion.dgx.failed", {
+          agentId: selectedAgent.id,
+          providerProfileId: selectedProvider.id,
+          modelId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      const assistantMessage: ConversationMessage = {
+        id: assistantMessageId,
+        sessionId: activeSessionId,
+        role: "assistant",
+        content: reply,
+        createdAt: new Date().toISOString(),
+        metadata: {
+          agentName: selectedAgent.name,
+          providerProfileId: selectedProvider.id,
+          authMode,
+          ...completionMetadata,
+        },
+      };
+
+      setAgentActivity(selectedAgent.id, "responding");
+      setConversationMessages((messages) => [...messages, assistantMessage]);
+      const assistantDraft: AssistantDraft = {
+        id: `draft_reply_${crypto.randomUUID()}`,
+        workItemId: workItem.id,
+        sessionId: activeSessionId,
+        title: `${selectedAgent.name} reply`,
+        body: reply.slice(0, 1200),
+        targetSurface: "conversation",
+        status: "sent",
+        confidence: completionMetadata.realProviderCall ? "medium" : "low",
+        evidenceRefs: workItem.evidenceRefs,
+        missingInfo: [],
+        createdAt: assistantMessage.createdAt,
+      };
+      prependAssistantDraft(assistantDraft);
+      updateWorkItem(workItem.id, {
+        lane: completionMetadata.realProviderCall ? "check" : "ask",
+        status: completionMetadata.realProviderCall ? "drafted" : "waiting_input",
+        updatedAt: assistantMessage.createdAt,
+      });
+      appendEvent("conversation.message.created", {
+        messageId: assistantMessage.id,
+        role: "assistant",
+        content: reply,
+        metadata: assistantMessage.metadata,
         agentName: selectedAgent.name,
         providerProfileId: selectedProvider.id,
-        authMode,
-        ...completionMetadata,
-      },
-    };
-
-    setAgentActivity(selectedAgent.id, "responding");
-    setConversationMessages((messages) => [...messages, assistantMessage]);
-    const assistantDraft: AssistantDraft = {
-      id: `draft_reply_${crypto.randomUUID()}`,
-      workItemId: workItem.id,
-      sessionId: activeSessionId,
-      title: `${selectedAgent.name} reply`,
-      body: reply.slice(0, 1200),
-      targetSurface: "conversation",
-      status: "sent",
-      confidence: completionMetadata.realProviderCall ? "medium" : "low",
-      evidenceRefs: workItem.evidenceRefs,
-      missingInfo: [],
-      createdAt: assistantMessage.createdAt,
-    };
-    prependAssistantDraft(assistantDraft);
-    updateWorkItem(workItem.id, {
-      lane: completionMetadata.realProviderCall ? "check" : "ask",
-      status: completionMetadata.realProviderCall ? "drafted" : "waiting_input",
-      updatedAt: assistantMessage.createdAt,
-    });
-    appendEvent("conversation.message.created", {
-      messageId: assistantMessage.id,
-      role: "assistant",
-      content: reply,
-      metadata: assistantMessage.metadata,
-      agentName: selectedAgent.name,
-      providerProfileId: selectedProvider.id,
-      contentLength: reply.length,
-      redaction: "applied",
-    });
+        contentLength: reply.length,
+        redaction: "applied",
+      });
+    }
     window.setTimeout(() => {
       setAgentActivity(selectedAgent.id, "idle");
     }, 450);
@@ -1505,6 +1764,71 @@ export function App() {
     });
   }
 
+  async function handleVerifyCodingPacket() {
+    const baseUrl = resolveDgxServerBaseUrls(undefined)[0] ?? DEFAULT_DGX_SERVER_BASE_URL;
+    const endpoint = `${baseUrl}/verify-packet`;
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: createDgxOrchestratorJsonHeaders(),
+        body: JSON.stringify(codingPacketState),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server verify-packet failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      setAgentRunState((prev) => ({
+        ...prev,
+        verifier: {
+          id: prev.verifier.id,
+          status: result.status,
+          checks: result.checks,
+          notes: [
+            `실제 subprocess 실행 완료: ${result.message}`,
+            `exitCode: ${result.exitCode}`,
+            `출력 결과: ${result.stdout ? result.stdout.slice(0, 300) : "출력 없음"}`,
+            ...(result.stderr ? [`에러 결과: ${result.stderr.slice(0, 300)}`] : []),
+          ],
+          exitCode: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
+        },
+      }));
+
+      appendEvent("coding_packet.verified", {
+        status: result.status,
+        exitCode: result.exitCode,
+        checks: result.checks,
+        message: result.message,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      });
+
+    } catch (error: any) {
+      console.error("Failed to verify coding packet:", error);
+
+      setAgentRunState((prev) => ({
+        ...prev,
+        verifier: {
+          id: prev.verifier.id,
+          status: "blocked",
+          checks: prev.verifier.checks.map((c) => ({ ...c, status: "fail" as const })),
+          notes: [
+            `패킷 검증 네트워크 오류: ${error.message || String(error)}`,
+          ],
+        },
+      }));
+
+      appendEvent("coding_packet.verification.failed", {
+        error: error.message || String(error),
+      });
+    }
+  }
+
   function handleExportBackupProjections() {
     const snapshot = createStage7BackupSnapshot({
       sessionId: activeSessionId,
@@ -1535,6 +1859,50 @@ export function App() {
           content: markdown,
         })
       : undefined;
+
+    if (obsidianExportPlan) {
+      (async () => {
+        try {
+          const baseUrl = resolveDgxServerBaseUrls(undefined)[0] ?? DEFAULT_DGX_SERVER_BASE_URL;
+          const res = await fetch(`${baseUrl}/api/export-obsidian`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              absolutePath: obsidianExportPlan.absolutePath,
+              content: markdown,
+            }),
+          });
+          const raw = await res.json();
+          if (res.ok && raw.success) {
+            setBackupProjectionsState((projections) =>
+              projections.map((p) =>
+                p.target === "obsidian" ? { ...p, status: "synced" } : p
+              )
+            );
+            appendEvent("backup.projection.synced", {
+              target: "obsidian",
+              absolutePath: obsidianExportPlan.absolutePath,
+            });
+          } else {
+            throw new Error(raw.message || "Unknown error");
+          }
+        } catch (error) {
+          console.error("Obsidian export failed:", error);
+          setBackupProjectionsState((projections) =>
+            projections.map((p) =>
+              p.target === "obsidian" ? { ...p, status: "failed" } : p
+            )
+          );
+          appendEvent("backup.projection.failed", {
+            target: "obsidian",
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      })();
+    }
+
     setBackupProjectionsState((projections) => applyStage7ProjectionStatuses(projections, snapshot));
     appendEvent("backup.projection.generated", {
       snapshotId: snapshot.id,
@@ -2365,6 +2733,9 @@ export function App() {
       } as React.CSSProperties}
     >
       <RuntimeStatusBar
+        mode={mode}
+        onChangeMode={setMode}
+        onCommandPalette={() => setCommandPaletteOpen(true)}
         onProbeDgx={handleProbeDgx}
         providerName={activeProvider?.name ?? "미선택"}
         snapshot={runtimeSnapshotState}
@@ -2376,15 +2747,6 @@ export function App() {
           }`}
           aria-label="오케스트레이터 네비게이션"
         >
-          <div className="brand-block">
-            <div className="brand-mark">
-              <Brain size={22} />
-            </div>
-            <div>
-              <strong>AI Orchestrator Lab</strong>
-              <span>desktop command room</span>
-            </div>
-          </div>
 
           <nav className="nav-stack">
             {navItems.map((item) => {
@@ -2553,40 +2915,6 @@ export function App() {
           }`}
         >
           <div className="board-toolbar">
-            <div className="mode-area" role="tablist" aria-label="작업 모드">
-              <div className="mode-switch">
-                <button
-                  aria-selected={mode === "conversation"}
-                  className={mode === "conversation" ? "active" : ""}
-                  onClick={() => setMode("conversation")}
-                  role="tab"
-                  type="button"
-                >
-                  <MessageSquare size={16} />
-                  Conversation
-                </button>
-                <button
-                  aria-selected={mode === "debate"}
-                  className={mode === "debate" ? "active" : ""}
-                  onClick={() => setMode("debate")}
-                  role="tab"
-                  type="button"
-                >
-                  <GitBranch size={16} />
-                  Debate
-                </button>
-              </div>
-              <button
-                aria-selected={mode === "tmux"}
-                className={`tmux-mode-button ${mode === "tmux" ? "active" : ""}`}
-                onClick={() => setMode("tmux")}
-                role="tab"
-                type="button"
-              >
-                <Terminal size={16} />
-                Tmux
-              </button>
-            </div>
             <div
               className={`toolbar-actions ${
                 shellVisibility.showToolbarActions ? "" : "shell-surface-hidden"
@@ -2665,6 +2993,10 @@ export function App() {
               selectedAgentId={selectedAgent?.id}
               selectedModel={selectedModel}
               selectedProvider={selectedProvider}
+              agentVisualsById={agentVisualsById}
+              agentActivityById={agentActivityById}
+              isStreaming={conversationMessages.some((msg) => msg.metadata?.streaming === true)}
+              onCancelStream={handleCancelStream}
             />
           ) : mode === "debate" ? (
             <Stage3DebateTable
@@ -2681,6 +3013,8 @@ export function App() {
               messages={conversationMessages}
               onApprovalQueued={handleTmuxApprovalQueued}
               packet={codingPacketState}
+              mode={mode}
+              onChangeMode={setMode}
             />
           )}
 
@@ -2700,6 +3034,8 @@ export function App() {
               onReviewModeChange={handleReviewModeChange}
               packet={codingPacketState}
               reviewMode={reviewMode}
+              onVerify={handleVerifyCodingPacket}
+              verifier={agentRunState.verifier}
             />
           ) : null}
         </section>
@@ -2730,6 +3066,9 @@ export function App() {
                 onPin={handlePinMemory}
                 onRemember={handleRememberCurrentContext}
               />
+            ) : null}
+            {shellVisibility.showEvolveMementoPanel ? (
+              <HumanPeekPanel ingressSnapshot={ingressSnapshot} />
             ) : null}
           </aside>
         )}
@@ -2767,6 +3106,8 @@ export function App() {
         onReject={(sourceItemId) => handleResolvePermissionItem(sourceItemId, "rejected")}
         open={approvalDrawerOpen}
         snapshot={permissionSnapshot}
+        workItems={workItems}
+        onSubmitAction={handleControlQueueAction}
       />
       <CommandPalette
         commands={paletteCommands}

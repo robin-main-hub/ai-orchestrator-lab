@@ -8,8 +8,8 @@ import type {
   RecallResult,
   Reflection,
 } from "@ai-orchestrator/protocol";
-import type { MemoryAdapter, MemoryAdapterContext } from "./adapter";
-import { MemoryAdapterError } from "./errors";
+import type { MemoryAdapter, MemoryAdapterContext } from "./adapter.js";
+import { MemoryAdapterError } from "./errors.js";
 
 export type TrustPolicy = {
   allowUntrustedRecall?: boolean;
@@ -22,6 +22,25 @@ const defaultTrustPolicy: Required<TrustPolicy> = {
   allowUntrustedWrite: false,
   requireAllowDecision: true,
 };
+
+const SECRET_LIKE_PATTERNS: ReadonlyArray<RegExp> = [
+  /\bsk-[A-Za-z0-9_-]{16,}\b/,
+  /\b(?:claude|anthropic|grok|xai|deepseek|ghp|gho|ghs|ghr|ghu|glpat|pat)[-_][A-Za-z0-9_-]{16,}\b/i,
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b/i,
+  /\b(?:API_KEY|AUTH_TOKEN|SECRET|TOKEN|PASSWORD|PRIVATE_KEY)\s*[:=]\s*[^"'\s,}]{4,}/i,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+];
+
+function assertNoSecret(text: string): void {
+  for (const pattern of SECRET_LIKE_PATTERNS) {
+    if (pattern.test(text)) {
+      throw new MemoryAdapterError(
+        "redaction_required",
+        "Memory content contains sensitive secrets and has been blocked."
+      );
+    }
+  }
+}
 
 export function withTrustEnforcement(inner: MemoryAdapter, policy: TrustPolicy = {}): MemoryAdapter {
   const resolvedPolicy = { ...defaultTrustPolicy, ...policy };
@@ -38,6 +57,8 @@ export function withTrustEnforcement(inner: MemoryAdapter, policy: TrustPolicy =
     },
     async remember(input, ctx) {
       assertPermission(ctx, resolvedPolicy, "remember");
+      assertNoSecret(input.title);
+      assertNoSecret(input.content);
       if ((ctx.callerTrustLevel === "untrusted" || input.trustLevel === "untrusted") && !resolvedPolicy.allowUntrustedWrite) {
         throw fail(ctx, new MemoryAdapterError("trust_violation", "Untrusted memories require curator promotion."));
       }
@@ -72,6 +93,9 @@ export function withTrustEnforcement(inner: MemoryAdapter, policy: TrustPolicy =
           assertPermission(ctx, resolvedPolicy, "reflect");
           return inner.reflect?.(sessionId, ctx) as Promise<Reflection>;
         }
+      : undefined,
+    injectRecord: inner.injectRecord
+      ? (record) => inner.injectRecord!(record)
       : undefined,
   } satisfies MemoryAdapter;
 }

@@ -1,8 +1,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { mkdir, readFile, appendFile } from "node:fs/promises";
+import { DatabaseSync } from "node:sqlite";
+import { EventEmitter } from "node:events";
+import { z } from "zod";
+import { mkdir, readFile, appendFile, writeFile, unlink, rename, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { execFile } from "node:child_process";
+import crypto from "node:crypto";
 import { promisify } from "node:util";
 import type {
   AgentDelegationAuthorityLevel,
@@ -60,6 +64,7 @@ import {
   agentRoleSchema,
   approvalDecisionRequestSchema,
   approvalRequestSchema,
+  codingPacketSchema,
   eventSyncPushRequestSchema,
   parseAgentDelegationEventPayload,
   parseTerminalCommandEventPayload,
@@ -67,15 +72,30 @@ import {
   remoteExecutionRequestSchema,
   terminalCommandIntentSchema,
   terminalTimelineBlockSchema,
+  type ProviderCompletionChunkEvent,
 } from "@ai-orchestrator/protocol";
 import {
+  ClaudeCliAdapter,
   CodexCliOAuthAdapter,
   AnthropicAdapter,
   OpenAICompatibleAdapter,
+  type ClaudeExecRunner,
   type CodexExecRunner,
 } from "@ai-orchestrator/providers/node";
-import { handleApprovalRoute } from "./routes/approvals";
-import { handleTmuxRoute } from "./routes/tmux";
+import {
+  MementoMcpAdapter,
+  LocalHeuristicAdapter,
+  withTrustEnforcement,
+  DgxSimpleMemMemoryAdapter,
+} from "@ai-orchestrator/memory";
+import type {
+  MemoryAdapter,
+  MemoryAdapterContext,
+  MemoryAdapterKind,
+} from "@ai-orchestrator/memory";
+import type { LlmAdapter } from "@ai-orchestrator/providers";
+import { handleApprovalRoute } from "./routes/approvals.js";
+import { handleTmuxRoute } from "./routes/tmux.js";
 
 export type ServerCapability =
   | "health"
@@ -135,6 +155,15 @@ export type DgxVllmProbeOptions = {
 
 const DEFAULT_DGX02_VLLM_BASE_URL = "http://dgx-02:8001/v1";
 const DEFAULT_DGX_MODEL_ID = "qwen36-gio-lora-v5-prisma";
+const CLAUDE_CODE_SINGLE_OWNER_PROVIDER_ID = "provider_claude_code_single_owner";
+const CLAUDE_CODE_BLOCKED_ROUTE_TYPES = new Set([
+  "shared",
+  "slack_bot",
+  "company_webapp",
+  "multi_user_openclaw",
+  "public_api",
+  "scheduled_batch",
+]);
 const execFileAsync = promisify(execFile);
 
 type ServerProviderProxyConfig = {
@@ -499,6 +528,15 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     oauthAuthFileEnvName: "CODEX_OAUTH_AUTH_FILE",
     defaultOAuthAuthFile: "~/.codex/auth.json",
     oauthAccountLabel: "codex-oauth",
+  },
+  {
+    providerProfileId: CLAUDE_CODE_SINGLE_OWNER_PROVIDER_ID,
+    baseUrl: process.env.CLAUDE_CLI_BASE_URL ?? "claude-code-single-owner://local",
+    apiKeyEnvNames: [],
+    noAuth: true,
+    apiStyle: "openai_chat",
+    defaultModelIds: ["claude-cli-session", "opus", "sonnet", "haiku"],
+    supportsModelList: false,
   },
   {
     providerProfileId: "provider_grok_oauth_dgx",
@@ -955,6 +993,10 @@ async function createServerProviderSecretAvailability(
     return "available";
   }
 
+  if (authMode === "local_cli") {
+    return "available";
+  }
+
   if (authMode === "oauth_session") {
     return resolveServerProviderOAuthAvailability(config, now);
   }
@@ -999,6 +1041,10 @@ function createServerProviderModelDescriptor(
 }
 
 function createServerProviderRegistryAuthMode(config: ServerProviderProxyConfig): ProviderRegistryAuthMode {
+  if (config.providerProfileId === "provider_claude_code_single_owner") {
+    return "local_cli";
+  }
+
   if (config.providerProfileId.includes("grok_oauth") || config.providerProfileId.includes("codex_oauth")) {
     return "oauth_session";
   }
@@ -1019,6 +1065,7 @@ function createServerProviderDisplayName(providerProfileId: string) {
     provider_openai_compat: "OpenAI Official",
     provider_openrouter_dgx: "OpenRouter DGX-02 Key",
     provider_codex_oauth: "Codex OAuth Session",
+    provider_claude_code_single_owner: "Claude Code Single Owner",
     provider_grok_oauth_dgx: "Grok OAuth #1",
     provider_grok_oauth_dgx_2: "Grok OAuth #2",
     provider_openclaw_dgx: "DGX-02 OpenClaw vLLM",
@@ -1036,7 +1083,11 @@ function createServerProviderKind(config: ServerProviderProxyConfig): ProviderKi
     return "openrouter";
   }
 
-  if (config.providerProfileId.includes("grok") || config.providerProfileId.includes("codex_oauth")) {
+  if (
+    config.providerProfileId.includes("grok") ||
+    config.providerProfileId.includes("codex_oauth") ||
+    config.providerProfileId === "provider_claude_code_single_owner"
+  ) {
     return "custom";
   }
 
@@ -1053,6 +1104,10 @@ function createServerProviderTrustLevel(providerProfileId: string): ProviderTrus
   }
 
   if (providerProfileId.includes("grok")) {
+    return "limited";
+  }
+
+  if (providerProfileId === "provider_claude_code_single_owner") {
     return "limited";
   }
 
@@ -1087,6 +1142,18 @@ export function evaluateServerProviderCompletionPermission(
 
   if (request.providerProfileId !== "provider_dgx02_vllm" && !config?.noAuth) {
     requestedLevels.push("secret_access");
+  }
+
+  const claudeSingleOwnerBlockReason = evaluateClaudeCodeSingleOwnerPolicy(request);
+  if (claudeSingleOwnerBlockReason) {
+    return {
+      action: "provider_completion",
+      approvalState: "rejected",
+      decision: "deny",
+      requestedLevels,
+      reason: claudeSingleOwnerBlockReason,
+      costEstimateTokens,
+    };
   }
 
   if (request.permissionDecision === "deny" || request.approvalState === "rejected" || request.approvalState === "expired") {
@@ -1165,6 +1232,46 @@ export function evaluateServerProviderCompletionPermission(
   };
 }
 
+function evaluateClaudeCodeSingleOwnerPolicy(request: ProviderCompletionRequest): string | undefined {
+  if (request.providerProfileId !== CLAUDE_CODE_SINGLE_OWNER_PROVIDER_ID) {
+    return undefined;
+  }
+
+  if (!isClaudeCodeSingleOwnerProviderEnabled()) {
+    return "Claude Code single-owner provider is disabled until ENABLE_CLAUDE_CODE_SINGLE_OWNER_PROVIDER=true";
+  }
+
+  const ownerUserId = resolveClaudeCodeOwnerUserId();
+  if (!ownerUserId) {
+    return "Claude Code single-owner provider requires CLAUDE_CODE_OWNER_USER_ID";
+  }
+
+  const requestContext = request.requestContext;
+  if (!requestContext?.userId) {
+    return "Claude Code single-owner provider requires requestContext.userId";
+  }
+
+  if (requestContext.userId !== ownerUserId) {
+    return "Claude Code single-owner provider only accepts requests from its configured owner";
+  }
+
+  if (CLAUDE_CODE_BLOCKED_ROUTE_TYPES.has(requestContext.routeType ?? "personal")) {
+    return `Claude Code single-owner provider blocks shared route type: ${requestContext.routeType}`;
+  }
+
+  return undefined;
+}
+
+function isClaudeCodeSingleOwnerProviderEnabled() {
+  return (
+    process.env.ENABLE_CLAUDE_CODE_SINGLE_OWNER_PROVIDER === "true" ||
+    process.env.ENABLE_PERSONAL_CLAUDE_CODE_PROVIDER === "true"
+  );
+}
+
+function resolveClaudeCodeOwnerUserId() {
+  return process.env.CLAUDE_CODE_OWNER_USER_ID ?? process.env.OWNER_USER_ID;
+}
 class ServerAgentDelegationPermissionError extends Error {
   constructor(
     readonly permission: ServerPermissionGateResult,
@@ -1445,7 +1552,7 @@ async function createServerAgentDelegationCompletionWithGate(
     }
     throw new ServerAgentDelegationPermissionError(permission, approval);
   }
-  return createDgxProviderCompletionResponse(request);
+  return createDgxProviderCompletionResponse(request, { eventStorage: storage });
 }
 
 function createServerAgentDelegationMockCompletionFactory() {
@@ -2400,7 +2507,7 @@ export async function replayApprovedRequestFromPersistentServerStorage(
       approvalState: "approved",
       permissionDecision: "allow",
     }) as ProviderCompletionRequest;
-    const result = await createDgxProviderCompletionResponse(completionRequest);
+    const result = await createDgxProviderCompletionResponse(completionRequest, { eventStorage: storage });
 
     return {
       statusCode: 202,
@@ -3658,6 +3765,10 @@ function createServerProviderTags(providerProfileId: string) {
     return ["oauth", "codex", "server-proxy", "dgx", "session"];
   }
 
+  if (providerProfileId === "provider_claude_code_single_owner") {
+    return ["claude", "cli", "single-owner", "server-proxy", "session"];
+  }
+
   if (providerProfileId.includes("grok")) {
     return [
       "oauth",
@@ -3687,6 +3798,10 @@ function createServerProviderSecretRefPreview(
     return `dgx-02:${getServerProviderOAuthAuthFilePath(config) ?? "oauth-session"}`;
   }
 
+  if (authMode === "local_cli") {
+    return `local:${process.env.CLAUDE_BIN_PATH ?? "claude"}`;
+  }
+
   return `dgx-02:${config.apiKeyEnvNames[0] ?? config.defaultKeyFile ?? "provider-secret"}`;
 }
 
@@ -3702,6 +3817,13 @@ function createServerProviderSecretSourceRefs(
     return [
       ...(config.oauthAccountLabel ? [`account:${config.oauthAccountLabel}`] : []),
       ...(getServerProviderOAuthAuthFilePath(config) ? [`file:${getServerProviderOAuthAuthFilePath(config)}`] : []),
+    ];
+  }
+
+  if (authMode === "local_cli") {
+    return [
+      `bin:${process.env.CLAUDE_BIN_PATH ?? "claude"}`,
+      ...(process.env.CLAUDE_CLI_CWD ? [`cwd:${process.env.CLAUDE_CLI_CWD}`] : []),
     ];
   }
 
@@ -3731,6 +3853,38 @@ async function resolveServerProviderOAuthAvailability(
   config: ServerProviderProxyConfig,
   now: string,
 ): Promise<SecretAvailability> {
+  if ((config.providerProfileId === "provider_grok_oauth_dgx" || config.providerProfileId === "provider_grok_oauth_dgx_2") && process.env.NOTION_DATABASE_ID && process.env.NOTION_API_KEY) {
+    const slot = config.providerProfileId === "provider_grok_oauth_dgx" ? "grok-oauth-1" : "grok-oauth-2";
+    
+    // Check local memory cache first to avoid Notion API overhead
+    const cache = localTokenCaches[slot];
+    const nowMs = Date.parse(now);
+    if (cache) {
+      const expiresMs = Date.parse(cache.expiresAt);
+      if (expiresMs <= nowMs) {
+        return "expired";
+      }
+      return "available";
+    }
+
+    try {
+      const row = await fetchNotionTokenRow(slot);
+      if (!row) {
+        return "missing";
+      }
+      if (!row.expires_at) {
+        return "available"; // Registered without expiration yet
+      }
+      const expiresAtMs = Date.parse(row.expires_at);
+      if (Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs) {
+        return "expired";
+      }
+      return "available";
+    } catch {
+      return "missing";
+    }
+  }
+
   const authFilePath = getServerProviderOAuthAuthFilePath(config);
   if (!authFilePath) {
     return "missing";
@@ -3770,8 +3924,247 @@ export type DgxProviderCompletionOptions = {
   now?: string;
   vllmBaseUrl?: string;
   fetchImpl?: FetchLike;
+  claudeCliRunner?: ClaudeExecRunner;
   codexCliRunner?: CodexExecRunner;
+  abortSignal?: AbortSignal;
+  timeoutMs?: number;
+  eventStorage?: JsonlServerEventStorage;
 };
+
+// Zod schemas for memory endpoints
+import {
+  memoryLayerSchema,
+  memoryScopeSchema,
+  memoryKindSchema,
+  sourceTrustSchema,
+} from "@ai-orchestrator/protocol";
+
+export const memoryRecallQueryZodSchema = z.object({
+  sessionId: z.string().optional(),
+  projectId: z.string().optional(),
+  query: z.string(),
+  layers: z.array(memoryLayerSchema).optional(),
+  scopes: z.array(memoryScopeSchema).optional(),
+  kinds: z.array(memoryKindSchema).optional(),
+  includeUntrusted: z.boolean().optional(),
+  limit: z.number().int().positive().optional(),
+});
+
+export const memoryInputZodSchema = z.object({
+  layer: memoryLayerSchema,
+  scope: memoryScopeSchema.optional(),
+  kind: memoryKindSchema.optional(),
+  title: z.string(),
+  content: z.string(),
+  sourceChannel: z.enum(["desktop", "legacy_telegram", "mobile", "api", "agent"]),
+  trustLevel: sourceTrustSchema,
+  projectId: z.string().optional(),
+  sessionId: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export function evaluateServerMemoryPermission(
+  action: "memory_call" | "memory_write_request" | "memory_promote" | "memory_forget",
+  callerTrustLevel: ProviderTrustLevel,
+): ServerPermissionGateResult {
+  const requestedLevels: PermissionLevel[] = ["memory_access" as any];
+  
+  if (callerTrustLevel === "untrusted") {
+    return {
+      action: action as any,
+      approvalState: "rejected",
+      decision: "deny",
+      requestedLevels,
+      reason: "untrusted callers are not permitted to call memory APIs directly",
+    };
+  }
+  
+  if (action === "memory_forget" || action === "memory_promote") {
+    if (callerTrustLevel === "limited") {
+      return {
+        action: action as any,
+        approvalState: "required",
+        decision: "approval_required",
+        requestedLevels,
+        reason: `${action} operation by limited caller requires explicit approval`,
+      };
+    }
+  }
+  
+  return {
+    action: action as any,
+    approvalState: "not_required",
+    decision: "allow",
+    requestedLevels,
+    reason: "authorized memory access",
+  };
+}
+
+export async function createDgxProviderCompletionStreamResponse(
+  request: ProviderCompletionRequest,
+  options: DgxProviderCompletionOptions = {},
+): Promise<AsyncIterable<ProviderCompletionChunkEvent>> {
+  const redactedRequest = redactForServerPhase(request, "pre_send").value as ProviderCompletionRequest;
+  const vllmBaseUrl = options.vllmBaseUrl ?? process.env.DGX02_VLLM_BASE_URL ?? DEFAULT_DGX02_VLLM_BASE_URL;
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  if (redactedRequest.providerProfileId === "provider_dgx02_vllm") {
+    const adapter: LlmAdapter = new OpenAICompatibleAdapter({
+      profileId: "provider_dgx02_vllm",
+      kind: "openai",
+      baseUrl: vllmBaseUrl,
+      modelIds: [DEFAULT_DGX_MODEL_ID],
+      requiresAuth: false,
+      fetchImpl,
+      extraBody: {
+        chat_template_kwargs: {
+          enable_thinking: false,
+        },
+      },
+    });
+    if (!adapter.completeStreaming) {
+      throw new Error("vLLM adapter does not support streaming");
+    }
+    return adapter.completeStreaming(
+      { ...redactedRequest, routePreference: "server_proxy" },
+      {
+        resolveSecret: async () => undefined,
+        abortSignal: options.abortSignal,
+        timeoutMs: options.timeoutMs ?? 30_000,
+      } as any,
+    );
+  }
+
+  const config = serverProviderProxyConfigs.find((candidate) => candidate.providerProfileId === redactedRequest.providerProfileId);
+  if (!config) {
+    throw new Error("provider is not registered in the DGX-02 proxy allowlist");
+  }
+
+  const claudeSingleOwnerBlockReason = evaluateClaudeCodeSingleOwnerPolicy(redactedRequest);
+  if (claudeSingleOwnerBlockReason) {
+    throw new Error(`[blocked] ${claudeSingleOwnerBlockReason}`);
+  }
+
+  if (config.providerProfileId === "provider_codex_oauth") {
+    const adapter: LlmAdapter = new CodexCliOAuthAdapter({
+      profileId: config.providerProfileId,
+      codexBinPath: process.env.CODEX_BIN_PATH ?? "codex",
+      codexHome: process.env.CODEX_OAUTH_HOME ?? "~/.codex",
+      cwd: process.env.CODEX_OAUTH_CWD,
+      defaultTimeoutMs: parsePositiveInteger(process.env.CODEX_CLI_TIMEOUT_MS) ?? 30_000,
+      modelIds: config.defaultModelIds,
+      runCodexExec: options.codexCliRunner,
+    });
+    if (!adapter.completeStreaming) {
+      throw new Error("Codex CLI adapter does not support streaming");
+    }
+    return adapter.completeStreaming(
+      { ...redactedRequest, routePreference: "server_proxy" },
+      {
+        resolveSecret: async () => undefined,
+        abortSignal: options.abortSignal,
+        timeoutMs: options.timeoutMs ?? 30_000,
+      } as any,
+    );
+  }
+
+  if (config.providerProfileId === "provider_claude_code_single_owner") {
+    const adapter: LlmAdapter = new ClaudeCliAdapter({
+      profileId: config.providerProfileId,
+      claudeBinPath: process.env.CLAUDE_BIN_PATH ?? "claude",
+      claudeHome: process.env.CLAUDE_CLI_HOME,
+      cwd: process.env.CLAUDE_CLI_CWD,
+      defaultTimeoutMs: parsePositiveInteger(process.env.CLAUDE_CLI_TIMEOUT_MS) ?? 60_000,
+      permissionMode: process.env.CLAUDE_CLI_PERMISSION_MODE === "default" ? "default" : "plan",
+      modelIds: config.defaultModelIds,
+      runClaudeExec: options.claudeCliRunner,
+    });
+    if (!adapter.completeStreaming) {
+      throw new Error("Claude CLI adapter does not support streaming");
+    }
+    return adapter.completeStreaming(
+      { ...redactedRequest, routePreference: "server_proxy" },
+      {
+        resolveSecret: async () => undefined,
+        abortSignal: options.abortSignal,
+        timeoutMs: options.timeoutMs ?? 60_000,
+      } as any,
+    );
+  }
+
+  let apiKey = config.noAuth ? undefined : await resolveServerProviderApiKey(config);
+  let requiresAuth = !config.noAuth;
+
+  if (config.providerProfileId === "provider_grok_oauth_dgx" || config.providerProfileId === "provider_grok_oauth_dgx_2") {
+    const slot = config.providerProfileId === "provider_grok_oauth_dgx" ? "grok-oauth-1" : "grok-oauth-2";
+    if (process.env.NOTION_DATABASE_ID && process.env.NOTION_API_KEY) {
+      apiKey = await getFreshOAuthTokenWithNotion(slot, { fetchImpl: fetchImpl as any, now: options.now ?? new Date().toISOString() });
+      requiresAuth = true;
+    } else {
+      apiKey = await resolveLocalOAuthAccessTokenFallback(config);
+      if (apiKey) {
+        requiresAuth = true;
+      }
+    }
+  }
+
+  if (!requiresAuth && !apiKey && config.providerProfileId !== "provider_grok_oauth_dgx" && config.providerProfileId !== "provider_grok_oauth_dgx_2") {
+    throw new Error("DGX-02 provider secret was not resolved from env or key file");
+  }
+
+  if (config.apiStyle === "anthropic_messages") {
+    const adapter: LlmAdapter = new AnthropicAdapter({
+      profileId: config.providerProfileId,
+      baseUrl: config.baseUrl,
+      modelIds: config.defaultModelIds,
+      requiresAuth: requiresAuth,
+      defaultMaxTokens: 512,
+      temperature: 0.2,
+      fetchImpl,
+    });
+    if (!adapter.completeStreaming) {
+      throw new Error("Anthropic adapter does not support streaming");
+    }
+    return adapter.completeStreaming(
+      {
+        ...redactedRequest,
+        messages: [
+          { role: "system", content: defaultDgxSystemPrompt },
+          ...redactedRequest.messages,
+        ],
+      },
+      {
+        resolveSecret: async () => apiKey,
+        abortSignal: options.abortSignal,
+        timeoutMs: options.timeoutMs ?? 30_000,
+      } as any,
+    );
+  }
+
+  const adapter: LlmAdapter = new OpenAICompatibleAdapter({
+    profileId: config.providerProfileId,
+    kind: createServerProviderKind(config),
+    baseUrl: config.baseUrl,
+    modelIds: config.defaultModelIds,
+    supportsModelList: config.supportsModelList,
+    requiresAuth: requiresAuth,
+    defaultSystemPrompt: defaultDgxSystemPrompt,
+    maxTokens: 512,
+    temperature: 0.2,
+    fetchImpl,
+  });
+  if (!adapter.completeStreaming) {
+    throw new Error("OpenAI-compatible adapter does not support streaming");
+  }
+  return adapter.completeStreaming(
+    { ...redactedRequest, routePreference: "server_proxy" },
+    {
+      resolveSecret: async () => apiKey,
+      abortSignal: options.abortSignal,
+      timeoutMs: options.timeoutMs ?? 30_000,
+    } as any,
+  );
+}
 
 export async function createDgxProviderCompletionResponse(
   request: ProviderCompletionRequest,
@@ -3783,7 +4176,7 @@ export async function createDgxProviderCompletionResponse(
 
   if (redactedRequest.providerProfileId !== "provider_dgx02_vllm") {
     return withProviderRuntimeHints(
-      redactProviderCompletionResponseForReceive(await createServerProviderProxyCompletionResponse(redactedRequest, options)),
+      redactProviderCompletionResponseForReceive(await createServerProviderProxyCompletionWithHotSwap(redactedRequest, options)),
       redactedRequest,
     );
   }
@@ -3840,6 +4233,220 @@ function classifyProviderRetryHint(response: ProviderCompletionResponse): { retr
   return { retryable: false, reason: "non_retryable_provider_error" };
 }
 
+// Grok 세션 관리 및 핫스왑 FSM 구현
+interface GrokSessionSlot {
+  profileId: string;
+  slotName: string; // "grok-oauth-1" | "grok-oauth-2"
+  status: "active" | "suspicious" | "invalid";
+  lastFailureReason?: string;
+  failedAt?: string;
+}
+
+class GrokSessionManager {
+  private slots: GrokSessionSlot[] = [
+    { profileId: "provider_grok_oauth_dgx", slotName: "grok-oauth-1", status: "active" },
+    { profileId: "provider_grok_oauth_dgx_2", slotName: "grok-oauth-2", status: "active" }
+  ];
+
+  public getSlots(): GrokSessionSlot[] {
+    return this.slots;
+  }
+
+  public getActiveSlot(preferredProfileId?: string): GrokSessionSlot | null {
+    if (preferredProfileId) {
+      const preferred = this.slots.find(s => s.profileId === preferredProfileId && s.status === "active");
+      if (preferred) return preferred;
+    }
+    return this.slots.find(s => s.status === "active") ?? null;
+  }
+
+  public reportFailure(profileId: string, reason: string) {
+    const slot = this.slots.find(s => s.profileId === profileId);
+    if (slot) {
+      slot.status = "suspicious";
+      slot.lastFailureReason = reason;
+      slot.failedAt = new Date().toISOString();
+      console.warn(`[GrokSessionManager] Slot ${slot.slotName} marked as SUSPICIOUS. Reason: ${reason}`);
+    }
+  }
+
+  public markAsInvalid(profileId: string) {
+    const slot = this.slots.find(s => s.profileId === profileId);
+    if (slot) {
+      slot.status = "invalid";
+      console.error(`[GrokSessionManager] Slot ${slot.slotName} marked as INVALID. Recovery required.`);
+    }
+  }
+
+  public restoreSlot(profileId: string) {
+    const slot = this.slots.find(s => s.profileId === profileId);
+    if (slot) {
+      slot.status = "active";
+      slot.lastFailureReason = undefined;
+      slot.failedAt = undefined;
+      console.log(`[GrokSessionManager] Slot ${slot.slotName} restored to ACTIVE.`);
+    }
+  }
+}
+
+export const grokSessionManager = new GrokSessionManager();
+
+export async function createServerProviderProxyCompletionWithHotSwap(
+  request: ProviderCompletionRequest,
+  options: DgxProviderCompletionOptions = {},
+): Promise<ProviderCompletionResponse> {
+  const isGrokRequest = request.providerProfileId.includes("grok");
+  
+  if (!isGrokRequest) {
+    return createServerProviderProxyCompletionResponse(request, options);
+  }
+
+  let attempt = 0;
+  const maxAttempts = 3;
+  let currentProfileId = request.providerProfileId;
+  const triedSlots = new Set<string>();
+
+  while (attempt < maxAttempts) {
+    attempt++;
+    
+    let activeSlot = grokSessionManager.getActiveSlot(currentProfileId);
+    if (!activeSlot) {
+      console.info(`[Self-healing Routing] No active Grok session slots. Attempting recovery sync from L1 cache/Notion...`);
+      for (const slot of grokSessionManager.getSlots()) {
+        try {
+          await getFreshOAuthTokenWithNotion(slot.slotName, {
+            fetchImpl: options.fetchImpl,
+            now: options.now ?? new Date().toISOString(),
+          });
+          grokSessionManager.restoreSlot(slot.profileId);
+          console.info(`[Self-healing Routing] Successfully recovered slot ${slot.slotName} during recovery sync.`);
+        } catch (e) {
+          console.warn(`[Self-healing Routing] Recovery sync failed for slot ${slot.slotName}:`, e);
+        }
+      }
+      activeSlot = grokSessionManager.getActiveSlot(currentProfileId);
+    }
+
+    if (!activeSlot) {
+      console.error(`[Self-healing Routing] No active Grok session slots available. Initiating block item creation.`);
+      await publishSessionBlockQueueItem(request, "All Grok OAuth sessions are expired or invalid.", options.eventStorage);
+      return {
+        id: `provider_completion_response_${crypto.randomUUID()}`,
+        requestId: request.id,
+        providerProfileId: request.providerProfileId,
+        modelId: request.modelId,
+        route: "server_proxy",
+        status: "failed",
+        error: "All available Grok OAuth session slots failed. Self-healing halted. Please re-authenticate.",
+        createdAt: new Date().toISOString(),
+      };
+    }
+
+    triedSlots.add(activeSlot.profileId);
+    
+    const modifiedRequest = {
+      ...request,
+      providerProfileId: activeSlot.profileId
+    };
+
+    console.info(`[Self-healing Routing] Attempt ${attempt}: Routing Grok request to ${activeSlot.slotName}`);
+    const response = await createServerProviderProxyCompletionResponse(modifiedRequest, options);
+
+    if (response.status === "succeeded") {
+      grokSessionManager.restoreSlot(activeSlot.profileId);
+      return response;
+    }
+
+    const errorMsg = response.error ?? "";
+    const isSessionExpired = /unauthorized|401|invalid session|invalid oauth|expired/i.test(errorMsg);
+
+    if (isSessionExpired) {
+      console.warn(`[Self-healing Routing] Session expired on ${activeSlot.slotName}. Invalidating local cache and swapping slots.`);
+      
+      // Invalidate L0 and L1 caches for this slot to force sync/refresh in subsequent recovery attempts
+      delete localTokenCaches[activeSlot.slotName];
+      try {
+        const db = getLocalDb();
+        db.prepare(`
+          UPDATE local_locks
+          SET access_token = NULL, refresh_token = NULL, expires_at = NULL, clock_skew_ms = NULL, token_version = 0
+          WHERE slot = ?
+        `).run(activeSlot.slotName);
+      } catch {}
+
+      grokSessionManager.reportFailure(activeSlot.profileId, errorMsg);
+      grokSessionManager.markAsInvalid(activeSlot.profileId);
+      
+      currentProfileId = activeSlot.profileId === "provider_grok_oauth_dgx" 
+        ? "provider_grok_oauth_dgx_2" 
+        : "provider_grok_oauth_dgx";
+    } else {
+      return response;
+    }
+  }
+
+  await publishSessionBlockQueueItem(request, "Grok OAuth hot-swap failed after maximum retry attempts.", options.eventStorage);
+  return {
+    id: `provider_completion_response_${crypto.randomUUID()}`,
+    requestId: request.id,
+    providerProfileId: request.providerProfileId,
+    modelId: request.modelId,
+    route: "server_proxy",
+    status: "failed",
+    error: "Grok OAuth hot-swap failed after maximum retry attempts.",
+    createdAt: new Date().toISOString(),
+  };
+}
+
+async function publishSessionBlockQueueItem(
+  request: ProviderCompletionRequest,
+  reason: string,
+  eventStorage?: JsonlServerEventStorage,
+) {
+  const sessionId = request.sessionId || "session_desktop_001";
+  const now = new Date().toISOString();
+  const workItemId = `work_item_session_block_${crypto.randomUUID()}`;
+
+  const blockEvent = {
+    id: `event_work_item_created_${crypto.randomUUID()}`,
+    sessionId,
+    type: "work_item.created",
+    createdAt: now,
+    source: "server" as const,
+    sourceTrust: "trusted" as const,
+    redacted: false,
+    payload: {
+      id: workItemId,
+      title: "Grok OAuth 세션 복구 및 로그인 승인 필요",
+      description: `Grok API 호출 중 세션 자가 복구에 실패했습니다. 모든 계정(Grok #1, #2)의 토큰을 갱신해주십시오. 원인: ${reason}`,
+      lane: "blocked",
+      status: "planned",
+      createdAt: now,
+      updatedAt: now,
+      metadata: {
+        errorReason: reason,
+        actionRequired: "re_auth_grok"
+      }
+    }
+  };
+
+  const pushRequest = {
+    id: `push_block_${crypto.randomUUID()}`,
+    clientId: "server_api",
+    sessionId,
+    events: [blockEvent],
+    idempotencyKey: `idemp_block_${workItemId}`,
+    createdAt: now,
+  };
+
+  try {
+    const storage = eventStorage ?? activeEventStorage ?? createJsonlServerEventStorage();
+    await pushEventsToPersistentServerStorage(pushRequest, storage, now);
+  } catch (error) {
+    console.error("Failed to write session blocking work item:", error);
+  }
+}
+
 export async function createServerProviderProxyCompletionResponse(
   request: ProviderCompletionRequest,
   options: DgxProviderCompletionOptions = {},
@@ -3857,6 +4464,20 @@ export async function createServerProviderProxyCompletionResponse(
       route: "server_proxy",
       status: "failed",
       error: "provider is not registered in the DGX-02 proxy allowlist",
+      createdAt,
+    };
+  }
+
+  const claudeSingleOwnerBlockReason = evaluateClaudeCodeSingleOwnerPolicy(request);
+  if (claudeSingleOwnerBlockReason) {
+    return {
+      id: `provider_completion_response_${crypto.randomUUID()}`,
+      requestId: request.id,
+      providerProfileId: request.providerProfileId,
+      modelId: request.modelId,
+      route: "server_proxy",
+      status: "failed",
+      error: `[blocked] ${claudeSingleOwnerBlockReason}`,
       createdAt,
     };
   }
@@ -3890,8 +4511,67 @@ export async function createServerProviderProxyCompletionResponse(
     );
   }
 
-  const apiKey = config.noAuth ? undefined : await resolveServerProviderApiKey(config);
-  if (!config.noAuth && !apiKey) {
+  if (config.providerProfileId === "provider_claude_code_single_owner") {
+    console.info(
+      `Claude Code single-owner provider dispatch user=${request.requestContext?.userId ?? "missing"} route=${request.requestContext?.routeType ?? "personal"} concurrency=single-active-session`,
+    );
+    const adapter = new ClaudeCliAdapter({
+      profileId: config.providerProfileId,
+      claudeBinPath: process.env.CLAUDE_BIN_PATH ?? "claude",
+      claudeHome: process.env.CLAUDE_CLI_HOME,
+      cwd: process.env.CLAUDE_CLI_CWD,
+      defaultTimeoutMs: parsePositiveInteger(process.env.CLAUDE_CLI_TIMEOUT_MS) ?? 60_000,
+      permissionMode: process.env.CLAUDE_CLI_PERMISSION_MODE === "default" ? "default" : "plan",
+      modelIds: config.defaultModelIds,
+      runClaudeExec: options.claudeCliRunner,
+    });
+    return adapter.complete(
+      {
+        ...request,
+        routePreference: "server_proxy",
+      },
+      {
+        resolveSecret: async () => undefined,
+        timeoutMs: parsePositiveInteger(process.env.CLAUDE_CLI_TIMEOUT_MS) ?? 60_000,
+        onRawError(status, redactedSnippet) {
+          if (redactedSnippet) {
+            console.warn(`Claude CLI adapter warning (${status}): ${redactedSnippet}`);
+          }
+        },
+      },
+    );
+  }
+
+  let apiKey = config.noAuth ? undefined : await resolveServerProviderApiKey(config);
+  let requiresAuth = !config.noAuth;
+
+  if (config.providerProfileId === "provider_grok_oauth_dgx" || config.providerProfileId === "provider_grok_oauth_dgx_2") {
+    const slot = config.providerProfileId === "provider_grok_oauth_dgx" ? "grok-oauth-1" : "grok-oauth-2";
+    if (process.env.NOTION_DATABASE_ID && process.env.NOTION_API_KEY) {
+      try {
+        apiKey = await getFreshOAuthTokenWithNotion(slot, { fetchImpl, now: createdAt });
+        requiresAuth = true;
+      } catch (e) {
+        return {
+          id: `provider_completion_response_${crypto.randomUUID()}`,
+          requestId: request.id,
+          providerProfileId: request.providerProfileId,
+          modelId: request.modelId,
+          route: "server_proxy",
+          status: "failed",
+          error: e instanceof Error ? e.message : String(e),
+          createdAt,
+        };
+      }
+    } else {
+      apiKey = await resolveLocalOAuthAccessTokenFallback(config);
+      if (apiKey) {
+        requiresAuth = true;
+      }
+    }
+  }
+
+  if (!requiresAuth && !apiKey && config.providerProfileId !== "provider_grok_oauth_dgx" && config.providerProfileId !== "provider_grok_oauth_dgx_2") {
     return {
       id: `provider_completion_response_${crypto.randomUUID()}`,
       requestId: request.id,
@@ -3910,7 +4590,7 @@ export async function createServerProviderProxyCompletionResponse(
       profileId: config.providerProfileId,
       baseUrl: config.baseUrl,
       modelIds: config.defaultModelIds,
-      requiresAuth: !config.noAuth,
+      requiresAuth: requiresAuth,
       apiKey,
       fetchImpl,
     });
@@ -3923,7 +4603,7 @@ export async function createServerProviderProxyCompletionResponse(
     baseUrl: config.baseUrl,
     modelIds: config.defaultModelIds,
     supportsModelList: config.supportsModelList,
-    requiresAuth: !config.noAuth,
+    requiresAuth: requiresAuth,
     apiKey,
     fetchImpl,
   });
@@ -4237,6 +4917,475 @@ export async function loadServerEventStorageStateFromJsonl(eventLogPath: string)
   return state;
 }
 
+class ServerEventBroker extends EventEmitter {
+  constructor() {
+    super();
+    this.setMaxListeners(0);
+  }
+
+  public publishEvents(sessionId: string, events: any[]) {
+    this.emit(`events:${sessionId}`, events);
+    this.emit("events:all", { sessionId, events });
+  }
+
+  public subscribe(sessionId: string, listener: (events: any[]) => void) {
+    this.on(`events:${sessionId}`, listener);
+    return () => {
+      this.off(`events:${sessionId}`, listener);
+    };
+  }
+}
+
+export const serverEventBroker = new ServerEventBroker();
+const activeSseConnections = new Set<ServerResponse>();
+export let activeEventStorage: JsonlServerEventStorage | undefined;
+export let activeMemoryAdapter: MemoryAdapter | undefined;
+
+async function callCuratorLlm(prompt: string): Promise<string> {
+  const config = serverProviderProxyConfigs.find(
+    (c) => c.providerProfileId === "provider_dgx02_vllm"
+  );
+  if (!config) {
+    throw new Error("vLLM provider config not found on server");
+  }
+  const apiKey = config.noAuth ? undefined : await resolveServerProviderApiKey(config);
+  
+  const adapter = new OpenAICompatibleAdapter({
+    profileId: config.providerProfileId,
+    kind: createServerProviderKind(config),
+    baseUrl: config.baseUrl,
+    modelIds: config.defaultModelIds,
+    supportsModelList: config.supportsModelList,
+    requiresAuth: !config.noAuth,
+  });
+
+  const response = await adapter.complete(
+    {
+      id: `curator_llm_${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      providerProfileId: config.providerProfileId,
+      modelId: config.defaultModelIds[0] ?? "default",
+      sessionId: "memory_curator_loop",
+      messages: [
+        { role: "system", content: "You are Memory Curator. Only answer in valid JSON." },
+        { role: "user", content: prompt },
+      ],
+      source: "server" as any,
+      routePreference: "server_proxy",
+    },
+    {
+      resolveSecret: async () => apiKey,
+      timeoutMs: 30_000,
+    } as any
+  );
+
+  return response.content ?? "";
+}
+
+function stableIdForCurator(input: string, salt: string): string {
+  let h = 0;
+  const s = input + salt;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return `dgx_${(h >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+function containsSecrets(text: string): boolean {
+  const SECRET_LIKE_PATTERNS = [
+    /\bsk-[A-Za-z0-9_-]{16,}\b/,
+    /\b(?:claude|anthropic|grok|xai|deepseek|ghp|gho|ghs|ghr|ghu|glpat|pat)[-_][A-Za-z0-9_-]{16,}\b/i,
+    /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b/i,
+    /\b(?:API_KEY|AUTH_TOKEN|SECRET|TOKEN|PASSWORD|PRIVATE_KEY)\s*[:=]\s*[^"'\s,}]{4,}/i,
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+  ];
+  for (const pattern of SECRET_LIKE_PATTERNS) {
+    if (pattern.test(text)) return true;
+  }
+  return false;
+}
+
+function redactSecretsInText(text: string): string {
+  let redacted = text;
+  const SECRET_LIKE_PATTERNS = [
+    /\bsk-[A-Za-z0-9_-]{16,}\b/g,
+    /\b(?:claude|anthropic|grok|xai|deepseek|ghp|gho|ghs|ghr|ghu|glpat|pat)[-_][A-Za-z0-9_-]{16,}\b/gi,
+    /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b/gi,
+    /\b(API_KEY|AUTH_TOKEN|SECRET|TOKEN|PASSWORD|PRIVATE_KEY)\s*([:=])\s*([^"'\s,}]{4,})/gi,
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----[^-]*-----END [A-Z ]*PRIVATE KEY-----/g,
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----/g,
+  ];
+  for (const pattern of SECRET_LIKE_PATTERNS) {
+    if (pattern.source.includes("API_KEY|AUTH_TOKEN")) {
+      redacted = redacted.replace(pattern, (match, p1, p2, p3) => `${p1}${p2}<redacted>`);
+    } else {
+      redacted = redacted.replace(pattern, "<redacted>");
+    }
+  }
+  return redacted;
+}
+
+function publishAgentActivityChanged(sessionId: string, agentId: string, currentStep: string) {
+  const now = new Date().toISOString();
+  const event = {
+    id: `activity_change_${crypto.randomUUID()}`,
+    sessionId,
+    type: "agent.activity.changed",
+    createdAt: now,
+    source: "server" as const,
+    sourceTrust: "trusted" as const,
+    redacted: false,
+    payload: {
+      agentId,
+      currentStep,
+      timestamp: now,
+    }
+  };
+  serverEventBroker.publishEvents(sessionId, [event]);
+}
+
+async function publishMemoryRedactionBlockQueueItem(
+  input: any,
+  sessionId: string,
+  eventStorage?: JsonlServerEventStorage,
+) {
+  const now = new Date().toISOString();
+  const workItemId = `work_item_redaction_block_${crypto.randomUUID()}`;
+
+  const blockEvent = {
+    id: `event_work_item_created_${crypto.randomUUID()}`,
+    sessionId,
+    type: "work_item.created",
+    createdAt: now,
+    source: "server" as const,
+    sourceTrust: "trusted" as const,
+    redacted: false,
+    payload: {
+      id: workItemId,
+      title: "민감 정보 검출 승인 대기",
+      description: `저장하려는 기억 후보 "${input.title}"에 민감한 정보가 포함되어 있습니다. 마스킹 후 저장하거나 기억을 파기해 주십시오.`,
+      lane: "blocked",
+      status: "blocked",
+      createdAt: now,
+      updatedAt: now,
+      metadata: {
+        actionRequired: "approve_redacted_memory",
+        input,
+      }
+    }
+  };
+
+  const pushRequest = {
+    id: `push_block_${crypto.randomUUID()}`,
+    clientId: "server_api",
+    sessionId,
+    events: [blockEvent],
+    idempotencyKey: `idemp_block_${workItemId}`,
+    createdAt: now,
+  };
+
+  try {
+    const storage = eventStorage ?? activeEventStorage ?? createJsonlServerEventStorage();
+    await pushEventsToPersistentServerStorage(pushRequest, storage, now);
+    console.log(`[MemoryCurator] Created blocked work item for redaction approval: ${workItemId}`);
+  } catch (error) {
+    console.error("Failed to write memory redaction blocking work item:", error);
+  }
+}
+
+async function runMemorySelfHealing(input: any, sessionId: string, retriesLeft = 2): Promise<any> {
+  console.log(`[MemoryCurator] Self-healing memory: "${input.title}" (Retries left: ${retriesLeft})`);
+  publishAgentActivityChanged(sessionId, "memory_curator", `Self-healing credentials redact (retry left: ${retriesLeft})...`);
+  
+  const prompt = `
+Security gate flagged sensitive credentials (such as API keys, tokens, or passwords) in the proposed memory.
+Please rewrite the memory content to sanitize, mask, or replace all API keys/credentials with "<redacted>" while preserving all other details.
+Do not omit the context of what the key is for, just replace the literal key/token/password values.
+
+[Original Title]
+${input.title}
+
+[Original Content]
+${input.content}
+
+Return the sanitized memory in the following JSON format:
+{
+  "title": "sanitized title",
+  "content": "sanitized content"
+}
+`;
+
+  try {
+    const llmResponse = await callCuratorLlm(prompt);
+    const cleanJsonStr = llmResponse.replace(/\`\`\`json|\`\`\`/g, "").trim();
+    const parsed = JSON.parse(cleanJsonStr);
+    
+    if (parsed && parsed.title && parsed.content) {
+      const sanitizedInput = {
+        ...input,
+        title: parsed.title,
+        content: parsed.content,
+      };
+
+      if (containsSecrets(sanitizedInput.title) || containsSecrets(sanitizedInput.content)) {
+        if (retriesLeft > 1) {
+          return await runMemorySelfHealing(sanitizedInput, sessionId, retriesLeft - 1);
+        } else {
+          publishAgentActivityChanged(sessionId, "memory_curator", "Redaction Pending: Awaiting user approval...");
+          await publishMemoryRedactionBlockQueueItem(input, sessionId);
+          return { status: "blocked", message: "redaction_pending" };
+        }
+      }
+
+      const now = new Date().toISOString();
+      const recordId = stableIdForCurator(`${sanitizedInput.title}:${sanitizedInput.content}`, now);
+      const record = {
+        id: recordId,
+        layer: sanitizedInput.layer,
+        scope: sanitizedInput.scope ?? "session",
+        kind: sanitizedInput.kind ?? "context",
+        title: sanitizedInput.title,
+        content: sanitizedInput.content,
+        sourceChannel: sanitizedInput.sourceChannel,
+        trustLevel: sanitizedInput.trustLevel,
+        projectId: sanitizedInput.projectId,
+        sessionId: sessionId,
+        tags: sanitizedInput.tags ?? [],
+        activationState: "active" as const,
+        createdAt: now,
+        pinned: false,
+      };
+
+      if (activeMemoryAdapter && (activeMemoryAdapter as any).injectRecord) {
+        (activeMemoryAdapter as any).injectRecord(record);
+      }
+
+      const promotedEvent = {
+        id: `curator_promoted_${crypto.randomUUID()}`,
+        sessionId,
+        type: "memory.archival_write.promoted",
+        payload: {
+          kind: "archival_write_promoted" as const,
+          input: sanitizedInput,
+          decisionReason: "Self-healing completed successfully",
+          record,
+        },
+        createdAt: now,
+        source: "agent" as const,
+        sourceTrust: "trusted" as const,
+        redacted: true,
+      };
+      
+      if (activeEventStorage) {
+        await pushEventsToPersistentServerStorage({
+          id: `sync_${crypto.randomUUID()}`,
+          createdAt: now,
+          sessionId,
+          clientId: "server_curator",
+          idempotencyKey: `idem_${crypto.randomUUID()}`,
+          events: [promotedEvent]
+        }, activeEventStorage);
+      }
+
+      publishAgentActivityChanged(sessionId, "memory_curator", "Idle");
+      return record;
+    }
+  } catch (err) {
+    console.error("[MemoryCurator] Self-healing iteration failed:", err);
+  }
+
+  if (retriesLeft > 1) {
+    return await runMemorySelfHealing(input, sessionId, retriesLeft - 1);
+  } else {
+    publishAgentActivityChanged(sessionId, "memory_curator", "Redaction Pending: Awaiting user approval...");
+    await publishMemoryRedactionBlockQueueItem(input, sessionId);
+    return { status: "blocked", message: "redaction_pending" };
+  }
+}
+
+async function runMemoryCuratorLoop(event: any) {
+  const payload = event.payload;
+  if (!payload || payload.kind !== "archival_write_requested") return;
+  const input = payload.input;
+  const sessionId = event.sessionId;
+
+  console.log(`[MemoryCurator] Processing archival write: "${input.title}"`);
+  publishAgentActivityChanged(sessionId, "memory_curator", "Recalling and analyzing memory duplicates...");
+
+  if (containsSecrets(input.title) || containsSecrets(input.content)) {
+    console.log(`[MemoryCurator] Secret detected in runMemoryCuratorLoop! Initiating self-healing.`);
+    await runMemorySelfHealing(input, sessionId);
+    return;
+  }
+
+  if (!activeMemoryAdapter) {
+    console.error("[MemoryCurator] activeMemoryAdapter is not initialized");
+    return;
+  }
+
+  const ctx: MemoryAdapterContext = {
+    permissionDecision: "allow",
+    callerTrustLevel: "trusted",
+    appendEvent: async (ev) => {
+      if (activeEventStorage) {
+        await pushEventsToPersistentServerStorage({
+          id: `sync_${crypto.randomUUID()}`,
+          createdAt: new Date().toISOString(),
+          sessionId,
+          clientId: "server_curator",
+          idempotencyKey: `idem_${crypto.randomUUID()}`,
+          events: [ev as any]
+        }, activeEventStorage);
+      }
+    },
+  };
+
+  const recalls = await activeMemoryAdapter.recall({
+    query: `${input.title} ${input.content}`,
+    limit: 5,
+    sessionId,
+  }, ctx);
+
+  const existingMemoriesStr = recalls.map((r, idx) => {
+    return `${idx + 1}. [제목: ${r.record.title}] [내용: ${r.record.content}]`;
+  }).join("\n");
+
+  const prompt = `
+당신은 지식 관리자(Memory Curator)인 레이 아야나미입니다.
+새로 저장 요청된 기억 후보가 기존 기억들과 중복되거나 모순되는지 판단하십시오.
+
+[새 기억 후보]
+제목: ${input.title}
+내용: ${input.content}
+태그: ${(input.tags ?? []).join(", ")}
+
+[기존 관련 기억 목록]
+${existingMemoriesStr || "(기존 관련 기억 없음)"}
+
+분석 후 반드시 다음 JSON 형식으로만 답변하십시오. 설명이나 다른 텍스트는 절대 포함하지 마십시오:
+{
+  "decision": "promote" | "reject",
+  "reason": "결정 이유 설명",
+  "isDuplicate": true | false,
+  "isContradiction": true | false
+}
+`;
+
+  let decisionResult = {
+    decision: "promote",
+    reason: "기존 기억 없음 - 자동 승격",
+    isDuplicate: false,
+    isContradiction: false,
+  };
+
+  if (recalls.length > 0) {
+    try {
+      const llmResponse = await callCuratorLlm(prompt);
+      const cleanJsonStr = llmResponse.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(cleanJsonStr);
+      if (parsed && (parsed.decision === "promote" || parsed.decision === "reject")) {
+        decisionResult = parsed;
+      }
+    } catch (err) {
+      console.warn("[MemoryCurator] LLM evaluation failed, falling back to promote:", err);
+    }
+  }
+
+  const now = new Date().toISOString();
+  if (decisionResult.decision === "promote") {
+    console.log(`[MemoryCurator] Promoted memory: "${input.title}"`);
+    
+    const recordId = stableIdForCurator(`${input.title}:${input.content}`, now);
+    const record = {
+      id: recordId,
+      layer: input.layer,
+      scope: input.scope ?? "session",
+      kind: input.kind ?? "context",
+      title: input.title,
+      content: input.content,
+      sourceChannel: input.sourceChannel,
+      trustLevel: input.trustLevel,
+      projectId: input.projectId,
+      sessionId: sessionId,
+      tags: input.tags ?? [],
+      activationState: "active" as const,
+      createdAt: now,
+      pinned: false,
+    };
+
+    const promotedEvent = {
+      id: `curator_promoted_${crypto.randomUUID()}`,
+      sessionId,
+      type: "memory.archival_write.promoted",
+      payload: {
+        kind: "archival_write_promoted" as const,
+        input,
+        decisionReason: decisionResult.reason,
+        record,
+      },
+      createdAt: now,
+      source: "agent" as const,
+      sourceTrust: "trusted" as const,
+      redacted: false,
+    };
+    
+    if (activeEventStorage) {
+      await pushEventsToPersistentServerStorage({
+        id: `sync_${crypto.randomUUID()}`,
+        createdAt: new Date().toISOString(),
+        sessionId,
+        clientId: "server_curator",
+        idempotencyKey: `idem_${crypto.randomUUID()}`,
+        events: [promotedEvent]
+      }, activeEventStorage);
+    }
+
+    if (activeMemoryAdapter.injectRecord) {
+      activeMemoryAdapter.injectRecord(record);
+    }
+    publishAgentActivityChanged(sessionId, "memory_curator", "Idle");
+  } else {
+    console.log(`[MemoryCurator] Rejected memory: "${input.title}". Reason: ${decisionResult.reason}`);
+    
+    const rejectedEvent = {
+      id: `curator_rejected_${crypto.randomUUID()}`,
+      sessionId,
+      type: "memory.archival_write.rejected",
+      payload: {
+        kind: "archival_write_rejected" as const,
+        input,
+        decisionReason: decisionResult.reason,
+      },
+      createdAt: now,
+      source: "agent" as const,
+      sourceTrust: "trusted" as const,
+      redacted: false,
+    };
+    
+    if (activeEventStorage) {
+      await pushEventsToPersistentServerStorage({
+        id: `sync_${crypto.randomUUID()}`,
+        createdAt: new Date().toISOString(),
+        sessionId,
+        clientId: "server_curator",
+        idempotencyKey: `idem_${crypto.randomUUID()}`,
+        events: [rejectedEvent]
+      }, activeEventStorage);
+    }
+    publishAgentActivityChanged(sessionId, "memory_curator", "Idle");
+  }
+}
+
+serverEventBroker.on("events:all", ({ sessionId, events }) => {
+  for (const event of events) {
+    if (event.type === "memory.archival_write.requested") {
+      runMemoryCuratorLoop(event).catch((err) => {
+        console.error("[MemoryCurator] Error in background curator loop:", err);
+      });
+    }
+  }
+});
+
 export async function pushEventsToPersistentServerStorage(
   request: EventSyncPushRequest,
   storage: JsonlServerEventStorage,
@@ -4246,6 +5395,15 @@ export async function pushEventsToPersistentServerStorage(
     const state = await storage.statePromise;
     const response = pushEventsToServerStorage(request, state, now);
     await appendAcceptedEventsToJsonl(request, response, storage.eventLogPath, now);
+
+    const acceptedEvents = request.events.filter(event => 
+      response.results.some(r => r.eventId === event.id && r.status === "accepted")
+    );
+
+    if (acceptedEvents.length > 0) {
+      serverEventBroker.publishEvents(request.sessionId, acceptedEvents);
+    }
+
     return response;
   });
 }
@@ -4433,6 +5591,29 @@ export function listEventStorageSessions(
 
 export function startServer(port = Number(process.env.PORT ?? 4317)) {
   const eventStorage = createJsonlServerEventStorage();
+  activeEventStorage = eventStorage;
+  
+  const memoryAdapterKind = (process.env.MEMORY_ADAPTER ?? "local_heuristic") as MemoryAdapterKind;
+  let rawMemoryAdapter: MemoryAdapter;
+  if (memoryAdapterKind === "memento_mcp") {
+    rawMemoryAdapter = new MementoMcpAdapter({
+      profileId: "server_memento_mcp",
+      policy: (process.env.MEMENTO_POLICY ?? "local_cache") as any,
+    });
+  } else if (memoryAdapterKind === "dgx_simplemem") {
+    rawMemoryAdapter = new (DgxSimpleMemMemoryAdapter as any)({
+      profileId: "server_dgx_simplemem",
+    });
+  } else {
+    rawMemoryAdapter = new LocalHeuristicAdapter("server_local_heuristic");
+  }
+  const memoryAdapter = withTrustEnforcement(rawMemoryAdapter, {
+    allowUntrustedRecall: process.env.MEMORY_ALLOW_UNTRUSTED_RECALL === "true",
+    allowUntrustedWrite: process.env.MEMORY_ALLOW_UNTRUSTED_WRITE === "true",
+    requireAllowDecision: true,
+  });
+  activeMemoryAdapter = memoryAdapter;
+
   const apiToken = resolveOrchestratorApiToken();
   const expectedAuthorization = `Bearer ${apiToken}`;
 
@@ -4472,6 +5653,132 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     }
 
     if (!requireAuth()) return;
+
+    if (pathname === "/api/xai-oauth/status") {
+      response.writeHead(200, {
+        "Cache-Control": "no-store",
+        "Content-Type": "application/json; charset=utf-8",
+        ...corsHeaders,
+      });
+      const slot = requestUrl.searchParams.get("slot") ?? "grok-oauth-1";
+      try {
+        const row = await fetchNotionTokenRow(slot);
+        if (!row) {
+          response.end(JSON.stringify({ authenticated: false }));
+          return;
+        }
+        
+        let label = slot;
+        let expiresAt = row.expires_at;
+        let tier = 1;
+
+        if (row.encrypted_token_bundle) {
+          try {
+            const encryptionKey = process.env.SHARED_ENCRYPTION_KEY ?? "grok-notion-shared-key-32-chars";
+            const decryptedStr = decryptToken(row.encrypted_token_bundle, row.nonce, row.key_id, encryptionKey);
+            const decrypted = JSON.parse(decryptedStr);
+            expiresAt = decrypted.expires_at;
+            label = decrypted.label ?? slot;
+            tier = decrypted.tier ?? 1;
+          } catch {}
+        }
+
+        response.end(JSON.stringify({
+          authenticated: true,
+          label,
+          expiresAt,
+          tier,
+        }));
+      } catch (e) {
+        response.end(JSON.stringify({
+          authenticated: false,
+          error: "Notion read error",
+          message: e instanceof Error ? e.message : String(e),
+        }));
+      }
+      return;
+    }
+
+    if (pathname === "/api/xai-oauth/refresh" && request.method === "POST") {
+      response.writeHead(200, {
+        "Cache-Control": "no-store",
+        "Content-Type": "application/json; charset=utf-8",
+        ...corsHeaders,
+      });
+      try {
+        const body = await readJsonBody(request) as any;
+        const slot = body.slot ?? "grok-oauth-1";
+        const token = await getFreshOAuthTokenWithNotion(slot);
+        
+        const row = await fetchNotionTokenRow(slot);
+        response.end(JSON.stringify({
+          success: true,
+          authenticated: true,
+          expiresAt: row?.expires_at,
+          lastVerifiedBy: row?.last_verified_by,
+          lastTestResult: row?.last_test_result,
+        }));
+      } catch (e) {
+        response.end(JSON.stringify({
+          success: false,
+          error: "Refresh failed",
+          message: e instanceof Error ? e.message : String(e),
+        }));
+      }
+      return;
+    }
+
+    if (pathname === "/api/xai-oauth/logout" && request.method === "POST") {
+      response.writeHead(200, {
+        "Cache-Control": "no-store",
+        "Content-Type": "application/json; charset=utf-8",
+        ...corsHeaders,
+      });
+      try {
+        const body = await readJsonBody(request) as any;
+        const slot = body.slot ?? "grok-oauth-1";
+        
+        const row = await fetchNotionTokenRow(slot);
+        if (row) {
+          await writeNotionTokenRow(slot, {
+            encrypted_token_bundle: "",
+            nonce: "",
+            key_id: "",
+            expires_at: "",
+            token_version: 0,
+            lock_owner: null,
+            lock_until: null,
+            last_verified_by: "",
+            last_test_result: "logged_out",
+          }, row.pageId);
+        }
+
+        delete localTokenCaches[slot];
+        await deleteWAL(slot);
+        
+        // Also delete L1 shared cache in SQLite to prevent other processes using stale token
+        try {
+          const db = getLocalDb();
+          db.prepare(`
+            UPDATE local_locks
+            SET access_token = NULL, refresh_token = NULL, expires_at = NULL, clock_skew_ms = NULL, token_version = 0
+            WHERE slot = ?
+          `).run(slot);
+        } catch {}
+
+        response.end(JSON.stringify({
+          success: true,
+          authenticated: false,
+        }));
+      } catch (e) {
+        response.end(JSON.stringify({
+          success: false,
+          error: "Logout failed",
+          message: e instanceof Error ? e.message : String(e),
+        }));
+      }
+      return;
+    }
 
     if (pathname === "/runtime") {
       respondJson(200, await createLiveRuntimeSnapshot());
@@ -4537,8 +5844,390 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         });
         return;
       }
-      const completion = await createDgxProviderCompletionResponse(payload);
+      const completion = await createDgxProviderCompletionResponse(payload, { eventStorage });
       respondJson(completion.status === "succeeded" ? 200 : 502, completion);
+      return;
+    }
+
+    if (pathname === "/provider-completions/stream" && request.method === "POST") {
+      let payload: ProviderCompletionRequest;
+      try {
+        payload = providerCompletionRequestSchema.parse(await readJsonBody(request)) as ProviderCompletionRequest;
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) {
+          respondJson(413, { error: "payload_too_large", limit: error.limit });
+          return;
+        }
+        respondJson(400, {
+          error: "invalid_provider_completion_payload",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+      const permission = evaluateServerProviderCompletionPermission(payload);
+      if (permission.decision !== "allow") {
+        respondJson(403, {
+          error: permission.decision === "deny" ? "permission_denied" : "permission_required",
+          permission,
+        });
+        return;
+      }
+
+      response.writeHead(200, {
+        "cache-control": "no-cache",
+        "connection": "keep-alive",
+        "content-type": "text/event-stream; charset=utf-8",
+        ...corsHeaders,
+      });
+
+      const abortController = new AbortController();
+      const onClose = () => {
+        abortController.abort();
+      };
+      request.on("close", onClose);
+
+      const safeWrite = (chunk: string) => {
+        if (response.destroyed || response.writableEnded) {
+          return;
+        }
+        try {
+          response.write(chunk);
+        } catch (error) {
+          console.error("[ProviderStream] Failed to write chunk:", error);
+        }
+      };
+
+      try {
+        const rawStream = await createDgxProviderCompletionStreamResponse(payload, {
+          abortSignal: abortController.signal,
+        });
+        const stream = wrapStreamWithRedaction(rawStream);
+        for await (const chunk of stream) {
+          safeWrite(`event: chunk\ndata: ${JSON.stringify(chunk)}\n\n`);
+        }
+      } catch (error) {
+        const errChunk = {
+          type: "error" as const,
+          requestId: payload.id,
+          error: {
+            category: "unknown" as any,
+            message: error instanceof Error ? error.message : String(error),
+          }
+        };
+        safeWrite(`event: chunk\ndata: ${JSON.stringify(errChunk)}\n\n`);
+      } finally {
+        request.off("close", onClose);
+        try {
+          if (!response.destroyed) {
+            response.end();
+          }
+        } catch (e) {}
+      }
+      return;
+    }
+
+    if (pathname === "/api/cluster-locks" && request.method === "GET") {
+      try {
+        const db = getLocalDb();
+        const rows = db.prepare("SELECT slot, lock_owner, lock_until, token_version, clock_skew_ms, updated_at FROM local_locks").all() as any[];
+        const mapped = rows.map((row) => ({
+          slot: row.slot,
+          lockOwner: row.lock_owner,
+          lockUntil: row.lock_until,
+          tokenVersion: row.token_version,
+          clockSkewMs: row.clock_skew_ms,
+          updatedAt: row.updated_at,
+        }));
+        respondJson(200, mapped);
+      } catch (error) {
+        respondJson(500, { error: "cluster_locks_query_failed", message: String(error) });
+      }
+      return;
+    }
+
+    if (pathname === "/memory/recall" && request.method === "POST") {
+      let body: any;
+      try {
+        body = memoryRecallQueryZodSchema.parse(await readJsonBody(request));
+      } catch (error) {
+        respondJson(400, { error: "invalid_recall_query", message: String(error) });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_call", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        const results = await memoryAdapter.recall(body, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, results);
+      } catch (error) {
+        respondJson(500, { error: "memory_recall_failed", message: String(error) });
+      }
+      return;
+    }
+
+    if (pathname === "/memory/remember" && request.method === "POST") {
+      let body: any;
+      try {
+        body = memoryInputZodSchema.parse(await readJsonBody(request));
+      } catch (error) {
+        respondJson(400, { error: "invalid_memory_input", message: String(error) });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_write_request", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        const record = await memoryAdapter.remember(body, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, record);
+      } catch (error: any) {
+        const sessionId = body.sessionId || "session_desktop_001";
+        if (error instanceof Error && (error.message.includes("redaction_required") || (error as any).category === "redaction_required")) {
+          console.log("[Server API] remember failed due to redaction_required. Initiating background self-healing.");
+          runMemorySelfHealing(body, sessionId).catch((err) => {
+             console.error("[MemoryCurator] Self-healing background error:", err);
+          });
+          respondJson(202, { status: "pending", message: "redaction_pending" });
+        } else if (error instanceof Error && error.message.includes("promotion_pending")) {
+          respondJson(202, { status: "pending", message: "promotion_pending" });
+        } else if (typeof error === "object" && error !== null && (error as any).category === "promotion_pending") {
+          respondJson(202, { status: "pending", message: "promotion_pending" });
+        } else {
+          respondJson(500, { error: "memory_remember_failed", message: String(error) });
+        }
+      }
+      return;
+    }
+
+    if (pathname === "/memory/context" && request.method === "POST") {
+      let body: any;
+      try {
+        body = memoryRecallQueryZodSchema.parse(await readJsonBody(request));
+      } catch (error) {
+        respondJson(400, { error: "invalid_recall_query", message: String(error) });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_call", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        const packet = await memoryAdapter.memoryContext(body, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, packet);
+      } catch (error) {
+        respondJson(500, { error: "memory_context_failed", message: String(error) });
+      }
+      return;
+    }
+
+    if (pathname === "/memory/stats" && request.method === "GET") {
+      const permission = evaluateServerMemoryPermission("memory_call", "trusted");
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        const stats = await memoryAdapter.stats({
+          permissionDecision: permission.decision,
+          callerTrustLevel: "trusted",
+        });
+        respondJson(200, stats);
+      } catch (error) {
+        respondJson(500, { error: "memory_stats_failed", message: String(error) });
+      }
+      return;
+    }
+
+    if (pathname === "/memory/pin" && request.method === "POST") {
+      let body: any;
+      try {
+        body = await readJsonBody(request);
+      } catch (error) {
+        respondJson(400, { error: "invalid_body" });
+        return;
+      }
+      const recordId = body.recordId;
+      if (typeof recordId !== "string") {
+        respondJson(400, { error: "recordId is required" });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_call", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        await memoryAdapter.pin(recordId, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, { success: true });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("promotion_pending")) {
+          respondJson(202, { status: "pending", message: "promotion_pending" });
+        } else if (typeof error === "object" && error !== null && (error as any).category === "promotion_pending") {
+          respondJson(202, { status: "pending", message: "promotion_pending" });
+        } else {
+          respondJson(500, { error: "memory_pin_failed", message: String(error) });
+        }
+      }
+      return;
+    }
+
+    if (pathname === "/memory/forget" && request.method === "POST") {
+      let body: any;
+      try {
+        body = await readJsonBody(request);
+      } catch (error) {
+        respondJson(400, { error: "invalid_body" });
+        return;
+      }
+      const recordId = body.recordId;
+      if (typeof recordId !== "string") {
+        respondJson(400, { error: "recordId is required" });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_forget", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        await memoryAdapter.forget(recordId, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, { success: true });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("promotion_pending")) {
+          respondJson(202, { status: "pending", message: "promotion_pending" });
+        } else if (typeof error === "object" && error !== null && (error as any).category === "promotion_pending") {
+          respondJson(202, { status: "pending", message: "promotion_pending" });
+        } else {
+          respondJson(500, { error: "memory_forget_failed", message: String(error) });
+        }
+      }
+      return;
+    }
+
+    if (pathname === "/memory/activate" && request.method === "POST") {
+      let body: any;
+      try {
+        body = await readJsonBody(request);
+      } catch (error) {
+        respondJson(400, { error: "invalid_body" });
+        return;
+      }
+      const recordIds = body.recordIds;
+      if (!Array.isArray(recordIds)) {
+        respondJson(400, { error: "recordIds array is required" });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_promote", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        await memoryAdapter.activateMemories(recordIds, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, { success: true });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("promotion_pending")) {
+          respondJson(202, { status: "pending", message: "promotion_pending" });
+        } else if (typeof error === "object" && error !== null && (error as any).category === "promotion_pending") {
+          respondJson(202, { status: "pending", message: "promotion_pending" });
+        } else {
+          respondJson(500, { error: "memory_activate_failed", message: String(error) });
+        }
+      }
+      return;
+    }
+
+    if (pathname === "/memory/relations" && request.method === "POST") {
+      let body: any;
+      try {
+        body = await readJsonBody(request);
+      } catch (error) {
+        respondJson(400, { error: "invalid_body" });
+        return;
+      }
+      const recordIds = body.recordIds;
+      if (!Array.isArray(recordIds)) {
+        respondJson(400, { error: "recordIds array is required" });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_call", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        const relations = await memoryAdapter.createRelations(recordIds, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, relations);
+      } catch (error) {
+        respondJson(500, { error: "memory_relations_failed", message: String(error) });
+      }
+      return;
+    }
+
+    if (pathname === "/memory/reflect" && request.method === "POST") {
+      let body: any;
+      try {
+        body = await readJsonBody(request);
+      } catch (error) {
+        respondJson(400, { error: "invalid_body" });
+        return;
+      }
+      const sessionId = body.sessionId;
+      if (typeof sessionId !== "string") {
+        respondJson(400, { error: "sessionId is required" });
+        return;
+      }
+      const callerTrustLevel = body.callerTrustLevel ?? "trusted";
+      const permission = evaluateServerMemoryPermission("memory_call", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        if (!memoryAdapter.reflect) {
+          respondJson(501, { error: "not_implemented", message: "reflection not supported by current adapter" });
+          return;
+        }
+        const reflection = await memoryAdapter.reflect(sessionId, {
+          permissionDecision: permission.decision,
+          callerTrustLevel,
+        });
+        respondJson(200, reflection);
+      } catch (error) {
+        respondJson(500, { error: "memory_reflect_failed", message: String(error) });
+      }
       return;
     }
 
@@ -4806,18 +6495,463 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       return;
     }
 
+    if (pathname === "/verify-packet" && request.method === "POST") {
+      let body: any;
+      try {
+        body = await readJsonBody(request);
+      } catch (error) {
+        respondJson(400, { error: "invalid_body" });
+        return;
+      }
+
+      let packet: any;
+      try {
+        packet = codingPacketSchema.parse(body);
+      } catch (error) {
+        respondJson(400, {
+          error: "invalid_coding_packet",
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+
+      let command = body.command || "corepack pnpm test";
+      
+      // Command Sanitization for Sandbox Safety
+      try {
+        const trimmed = command.trim();
+        const isTestNodeCommand = trimmed === 'node -e "process.exit(0)"' || trimmed === 'node -e "process.exit(1)"';
+        
+        if (isTestNodeCommand) {
+          command = trimmed;
+        } else {
+          const forbidden = [";", "&", "|", "`", "$", "<", ">", "(", ")", "{", "}", "\n", "\r", "\0"];
+          for (const char of forbidden) {
+            if (trimmed.includes(char)) {
+              throw new Error(`Forbidden character "${char}" detected in command.`);
+            }
+          }
+          const allowed = ["corepack pnpm", "pnpm", "vitest", "npm run", "npx vitest"];
+          const isApprovedBase = allowed.some((base: string) => {
+            return trimmed === base || trimmed.startsWith(base + " ");
+          });
+          
+          if (!isApprovedBase) {
+            throw new Error("Command must start with an approved build/test tool.");
+          }
+
+          const words = trimmed.split(/\s+/);
+          const cleanWords = words.map((w: string) => w.replace(/['"\\^]/g, "").toLowerCase());
+          
+          const blockedSubcommands = ["exec", "shell", "dlx", "create", "install", "add", "update", "link", "publish", "init", "i"];
+          for (const blocked of blockedSubcommands) {
+            if (cleanWords.includes(blocked)) {
+              throw new Error(`Subcommand or argument "${blocked}" is not allowed.`);
+            }
+          }
+
+          if (cleanWords[0] === "npx" && cleanWords[1] !== "vitest") {
+            throw new Error("Only vitest is allowed with npx.");
+          }
+
+          command = trimmed;
+        }
+      } catch (err: any) {
+        respondJson(400, {
+          error: "unsafe_command",
+          message: err.message || "Command failed security validation.",
+        });
+        return;
+      }
+
+      const rootDir = process.cwd().includes("apps") ? resolve(process.cwd(), "../..") : process.cwd();
+
+      try {
+        const { exec } = await import("node:child_process");
+        const execAsync = promisify(exec);
+        const result = await execAsync(command, {
+          cwd: rootDir,
+          timeout: 30000,
+        });
+
+        const stdout = result.stdout || "";
+        const stderr = result.stderr || "";
+        const hasCompileError = stdout.includes("error TS") || stderr.includes("error TS");
+        const hasTestFailure = stdout.includes("FAIL") || stderr.includes("FAIL") || stdout.includes("failed") || stderr.includes("failed");
+
+        const compilerStatus = hasCompileError ? "fail" : "pass";
+        const testStatus = hasTestFailure ? "fail" : "pass";
+
+        respondJson(200, {
+          status: (hasCompileError || hasTestFailure) ? "warning" : "passed",
+          checks: [
+            { label: "Compiler checks", status: compilerStatus },
+            { label: "Unit test coverage", status: testStatus },
+          ],
+          stdout: stdout,
+          stderr: stderr,
+          exitCode: 0,
+          message: "테스트 및 패킷 검증에 성공했습니다.",
+        });
+      } catch (error: any) {
+        const stdout = error.stdout || "";
+        const stderr = error.stderr || "";
+        const exitCode = typeof error.code === "number" ? error.code : 1;
+        const message = error.message || "테스트 검증에 실패했습니다.";
+
+        const hasCompileError = stdout.includes("error TS") || stderr.includes("error TS");
+        const hasTestFailure = stdout.includes("FAIL") || stderr.includes("FAIL") || stdout.includes("failed") || stderr.includes("failed");
+
+        let compilerStatus: "pass" | "fail" | "warn" = "pass";
+        let testStatus: "pass" | "fail" | "warn" = "pass";
+
+        if (hasCompileError) {
+          compilerStatus = "fail";
+          testStatus = hasTestFailure ? "fail" : "warn";
+        } else if (hasTestFailure) {
+          compilerStatus = "pass";
+          testStatus = "fail";
+        } else {
+          compilerStatus = "fail";
+          testStatus = "warn";
+        }
+
+        respondJson(200, {
+          status: "failed",
+          checks: [
+            { label: "Compiler checks", status: compilerStatus },
+            { label: "Unit test coverage", status: testStatus },
+          ],
+          stdout: stdout,
+          stderr: stderr,
+          exitCode: exitCode,
+          message: message,
+        });
+      }
+      return;
+    }
+
+    if (pathname === "/control-queue/items" && request.method === "GET") {
+      const sessionId = requestUrl.searchParams.get("sessionId") ?? "session_desktop_001";
+      const pulled = await pullEventsFromPersistentServerStorage(sessionId, eventStorage, undefined, 0);
+      
+      const workItemsMap = new Map<string, any>();
+      for (const envelope of [...pulled.events].reverse()) {
+        if (envelope.type === "work_item.created") {
+          workItemsMap.set((envelope.payload as any).id, envelope.payload);
+        } else if (envelope.type === "work_item.status_changed") {
+          const payload = envelope.payload as any;
+          const item = workItemsMap.get(payload.workItemId);
+          if (item) {
+            item.status = payload.status;
+            if (payload.updatedAt) {
+              item.updatedAt = payload.updatedAt;
+            }
+          }
+        }
+      }
+      
+      const activeItems = Array.from(workItemsMap.values()).filter(
+        (item) => item.status !== "archived" && item.status !== "done"
+      );
+      respondJson(200, activeItems);
+      return;
+    }
+
+    if (pathname === "/control-queue/action" && request.method === "POST") {
+      let body: any;
+      try {
+        body = await readJsonBody(request);
+      } catch (error) {
+        respondJson(400, { error: "invalid_body" });
+        return;
+      }
+
+      const { workItemId, action, payload } = body;
+      if (!workItemId || !action) {
+        respondJson(400, { error: "missing_fields" });
+        return;
+      }
+
+      const sessionId = body.sessionId || "session_desktop_001";
+      const pulled = await pullEventsFromPersistentServerStorage(sessionId, eventStorage, undefined, 0);
+      
+      const workItemsMap = new Map<string, any>();
+      for (const envelope of [...pulled.events].reverse()) {
+        if (envelope.type === "work_item.created") {
+          workItemsMap.set((envelope.payload as any).id, envelope.payload);
+        } else if (envelope.type === "work_item.status_changed") {
+          const p = envelope.payload as any;
+          const item = workItemsMap.get(p.workItemId);
+          if (item) {
+            item.status = p.status;
+          }
+        }
+      }
+
+      const item = workItemsMap.get(workItemId);
+      if (!item) {
+        respondJson(404, { error: "work_item_not_found" });
+        return;
+      }
+
+      let nextStatus = "done";
+      if (action === "provide_input") {
+        nextStatus = "in_progress";
+      } else if (action === "edit_payload") {
+        nextStatus = "planned";
+      } else if (action === "approve_delegation") {
+        nextStatus = "in_progress";
+      } else if (action === "resolve_block") {
+        nextStatus = payload?.overrideReason ? "in_progress" : "done";
+      } else if (action === "redact_and_save" || action === "discard_redacted_memory") {
+        nextStatus = "done";
+      }
+
+      const now = new Date().toISOString();
+      if (action === "redact_and_save") {
+        const input = item.metadata?.input;
+        if (input && activeMemoryAdapter) {
+          const sanitizedTitle = redactSecretsInText(input.title);
+          const sanitizedContent = redactSecretsInText(input.content);
+          const recordId = stableIdForCurator(`${sanitizedTitle}:${sanitizedContent}`, now);
+          const record = {
+            id: recordId,
+            layer: input.layer,
+            scope: input.scope ?? "session",
+            kind: input.kind ?? "context",
+            title: sanitizedTitle,
+            content: sanitizedContent,
+            sourceChannel: input.sourceChannel,
+            trustLevel: input.trustLevel,
+            projectId: input.projectId,
+            sessionId: sessionId,
+            tags: input.tags ?? [],
+            activationState: "active" as const,
+            createdAt: now,
+            pinned: false,
+          };
+          if (activeMemoryAdapter.injectRecord) {
+            activeMemoryAdapter.injectRecord(record);
+          }
+          
+          const promotedEvent = {
+            id: `curator_promoted_${crypto.randomUUID()}`,
+            sessionId,
+            type: "memory.archival_write.promoted",
+            payload: {
+              kind: "archival_write_promoted" as const,
+              input,
+              decisionReason: "User approved redacted memory",
+              record,
+            },
+            createdAt: now,
+            source: "agent" as const,
+            sourceTrust: "trusted" as const,
+            redacted: true,
+          };
+          
+          if (activeEventStorage) {
+            await pushEventsToPersistentServerStorage({
+              id: `sync_${crypto.randomUUID()}`,
+              createdAt: now,
+              sessionId,
+              clientId: "server_curator",
+              idempotencyKey: `idem_${crypto.randomUUID()}`,
+              events: [promotedEvent]
+            }, activeEventStorage);
+          }
+        }
+      } else if (action === "discard_redacted_memory") {
+        const input = item.metadata?.input;
+        if (input) {
+          const rejectedEvent = {
+            id: `curator_rejected_${crypto.randomUUID()}`,
+            sessionId,
+            type: "memory.archival_write.rejected",
+            payload: {
+              kind: "archival_write_rejected" as const,
+              input,
+              decisionReason: "User discarded redacted memory",
+            },
+            createdAt: now,
+            source: "agent" as const,
+            sourceTrust: "trusted" as const,
+            redacted: false,
+          };
+          
+          if (activeEventStorage) {
+            await pushEventsToPersistentServerStorage({
+              id: `sync_${crypto.randomUUID()}`,
+              createdAt: now,
+              sessionId,
+              clientId: "server_curator",
+              idempotencyKey: `idem_${crypto.randomUUID()}`,
+              events: [rejectedEvent]
+            }, activeEventStorage);
+          }
+        }
+      }
+      const statusChangedEvent = {
+        id: `event_status_changed_${crypto.randomUUID()}`,
+        sessionId,
+        type: "work_item.status_changed",
+        createdAt: now,
+        source: "server",
+        sourceTrust: "trusted",
+        redacted: false,
+        payload: {
+          workItemId,
+          status: nextStatus,
+          updatedAt: now,
+        },
+      };
+
+      const actionResolvedEvent = {
+        id: `event_action_resolved_${crypto.randomUUID()}`,
+        sessionId,
+        type: "work_item.action_resolved",
+        createdAt: now,
+        source: "server",
+        sourceTrust: "trusted",
+        redacted: false,
+        payload: {
+          workItemId,
+          action,
+          payload,
+          resolvedAt: now,
+        },
+      };
+
+      const pushRequest: EventSyncPushRequest = {
+        id: `push_${crypto.randomUUID()}`,
+        clientId: "server_api",
+        sessionId,
+        events: [statusChangedEvent, actionResolvedEvent] as any[],
+        idempotencyKey: `idemp_${workItemId}_${action}_${now}`,
+        createdAt: now,
+      };
+
+      try {
+        await pushEventsToPersistentServerStorage(pushRequest, eventStorage, now);
+        respondJson(200, { success: true, nextStatus });
+      } catch (error) {
+        respondJson(500, {
+          error: "event_storage_write_failed",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return;
+    }
+
+    if (pathname === "/api/export-obsidian" && request.method === "POST") {
+      let body: any;
+      try {
+        body = await readJsonBody(request);
+      } catch (error) {
+        respondJson(400, { error: "invalid_body" });
+        return;
+      }
+
+      const { absolutePath, content } = body;
+      if (!absolutePath || content === undefined) {
+        respondJson(400, { error: "missing_fields", details: "absolutePath and content are required" });
+        return;
+      }
+
+      try {
+        const targetDir = dirname(absolutePath);
+        await mkdir(targetDir, { recursive: true });
+        await writeFile(absolutePath, content, "utf8");
+        respondJson(200, { success: true });
+      } catch (error) {
+        respondJson(500, {
+          error: "file_write_failed",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return;
+    }
+
     if (pathname === "/event-storage" && request.method === "GET") {
       respondJson(200, await createPersistentEventStorageSnapshot(eventStorage));
       return;
     }
 
     if (pathname === "/events/stream") {
+      const sessionId = requestUrl.searchParams.get("sessionId") ?? "session_desktop_001";
+
       response.writeHead(200, {
         "cache-control": "no-cache",
         "content-type": "text/event-stream; charset=utf-8",
+        "connection": "keep-alive",
         ...corsHeaders,
       });
-      response.end(`event: heartbeat\ndata: ${JSON.stringify(createDgxHeartbeat())}\n\n`);
+
+      let cleaned = false;
+      let unsubscribe: (() => void) | undefined;
+      let heartbeatInterval: any;
+
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        if (unsubscribe) unsubscribe();
+        if (heartbeatInterval) globalThis.clearInterval(heartbeatInterval);
+        activeSseConnections.delete(response);
+        try {
+          if (!response.destroyed) {
+            response.end();
+          }
+        } catch (e) {}
+      };
+
+      const safeWrite = (chunk: string) => {
+        if (response.destroyed || response.writableEnded) {
+          cleanup();
+          return;
+        }
+        try {
+          response.write(chunk);
+        } catch (error) {
+          console.error("[SSE] Failed to write to response stream, cleaning up:", error);
+          cleanup();
+        }
+      };
+
+      unsubscribe = serverEventBroker.subscribe(sessionId, (events) => {
+        const workItemEvents = events.filter(e => e.type.startsWith("work_item."));
+        if (workItemEvents.length > 0) {
+          safeWrite(`event: work_item_update\ndata: ${JSON.stringify(workItemEvents)}\n\n`);
+        }
+        const activityEvents = events.filter(e => e.type === "agent.activity.changed");
+        if (activityEvents.length > 0) {
+          safeWrite(`event: agent_activity_update\ndata: ${JSON.stringify(activityEvents)}\n\n`);
+        }
+      });
+
+      if (cleaned) {
+        unsubscribe();
+      } else {
+        safeWrite(`event: heartbeat\ndata: ${JSON.stringify(createDgxHeartbeat())}\n\n`);
+        if (!cleaned) {
+          activeSseConnections.add(response);
+          heartbeatInterval = globalThis.setInterval(() => {
+            safeWrite(`event: heartbeat\ndata: ${JSON.stringify(createDgxHeartbeat())}\n\n`);
+          }, 15000);
+        }
+      }
+
+      request.on("close", cleanup);
+      response.on("close", cleanup);
+      response.on("finish", cleanup);
+      request.on("error", (err) => {
+        console.error("[SSE] Request error:", err);
+        cleanup();
+      });
+      response.on("error", (err) => {
+        console.error("[SSE] Response error:", err);
+        cleanup();
+      });
       return;
     }
 
@@ -4830,6 +6964,17 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
 
 async function fetchWithTimeout(fetchImpl: FetchLike, input: string, init: Parameters<FetchLike>[1], timeoutMs: number) {
   const controller = new AbortController();
+  let onAbort: (() => void) | undefined;
+
+  if (init?.signal) {
+    if (init.signal.aborted) {
+      controller.abort();
+    } else {
+      onAbort = () => controller.abort();
+      init.signal.addEventListener("abort", onAbort);
+    }
+  }
+
   const timeoutId = globalThis.setTimeout(() => {
     controller.abort();
   }, timeoutMs);
@@ -4841,6 +6986,9 @@ async function fetchWithTimeout(fetchImpl: FetchLike, input: string, init: Param
     });
   } finally {
     globalThis.clearTimeout(timeoutId);
+    if (onAbort && init?.signal) {
+      init.signal.removeEventListener("abort", onAbort);
+    }
   }
 }
 
@@ -5192,6 +7340,122 @@ function redactSecretsForLog(text: string): string {
   });
 }
 
+class RedactStreamTransformer {
+  private buffer = "";
+  private fullText = "";
+  private lastUserTextLength = 0;
+
+  transform(delta: string): { redactedDelta: string; reasoningSnippet?: string } {
+    this.fullText += delta;
+
+    // Parse the fullText to separate user-facing text and thinking-block text.
+    let userText = "";
+    let thinkingText = "";
+    let currentIdx = 0;
+    const fullTextLen = this.fullText.length;
+
+    while (currentIdx < fullTextLen) {
+      const startIdx = this.fullText.indexOf("<thinking>", currentIdx);
+      if (startIdx === -1) {
+        userText += this.fullText.slice(currentIdx);
+        break;
+      }
+      userText += this.fullText.slice(currentIdx, startIdx);
+      const endIdx = this.fullText.indexOf("</thinking>", startIdx + 10);
+      if (endIdx === -1) {
+        thinkingText += this.fullText.slice(startIdx + 10);
+        break;
+      }
+      thinkingText += this.fullText.slice(startIdx + 10, endIdx);
+      currentIdx = endIdx + 11;
+    }
+
+    // Only append newly arrived user-facing text to this.buffer
+    const newArrivalUserText = userText.slice(this.lastUserTextLength);
+    this.lastUserTextLength = userText.length;
+    this.buffer += newArrivalUserText;
+
+    let reasoningSnippet: string | undefined;
+    if (thinkingText) {
+      const sanitizedSnippet = redactSecretsForLog(thinkingText);
+      reasoningSnippet = sanitizedSnippet.trim().replace(/\n/g, " ");
+      if (reasoningSnippet.length > 80) {
+        reasoningSnippet = "..." + reasoningSnippet.slice(-77);
+      }
+    }
+
+    const lastBoundaryIndex = Math.max(
+      this.buffer.lastIndexOf(" "),
+      this.buffer.lastIndexOf("\n"),
+      this.buffer.lastIndexOf("\t"),
+      this.buffer.lastIndexOf(","),
+      this.buffer.lastIndexOf(";"),
+      this.buffer.lastIndexOf('"'),
+      this.buffer.lastIndexOf("'"),
+      this.buffer.lastIndexOf("{"),
+      this.buffer.lastIndexOf("}"),
+      this.buffer.lastIndexOf("["),
+      this.buffer.lastIndexOf("]")
+    );
+
+    let redactedDelta = "";
+    if (lastBoundaryIndex === -1) {
+      if (this.buffer.length > 256) {
+        const toFlush = this.buffer;
+        this.buffer = "";
+        redactedDelta = redactSecretsForLog(toFlush);
+      } else {
+        redactedDelta = "";
+      }
+    } else {
+      const toProcess = this.buffer.slice(0, lastBoundaryIndex + 1);
+      this.buffer = this.buffer.slice(lastBoundaryIndex + 1);
+      redactedDelta = redactSecretsForLog(toProcess);
+    }
+
+    return { redactedDelta, reasoningSnippet };
+  }
+
+  flush(): string {
+    const toFlush = this.buffer;
+    this.buffer = "";
+    return redactSecretsForLog(toFlush);
+  }
+}
+
+export async function* wrapStreamWithRedaction(
+  stream: AsyncIterable<ProviderCompletionChunkEvent>
+): AsyncGenerator<ProviderCompletionChunkEvent & { reasoningSnippet?: string }, void, unknown> {
+  const transformer = new RedactStreamTransformer();
+
+  for await (const chunk of stream) {
+    if (chunk.type === "delta") {
+      const { redactedDelta, reasoningSnippet } = transformer.transform(chunk.delta);
+      yield {
+        ...chunk,
+        delta: redactedDelta,
+        reasoningSnippet,
+      };
+    } else if (chunk.type === "done") {
+      const flushed = transformer.flush();
+      if (flushed) {
+        yield {
+          type: "delta",
+          requestId: chunk.requestId,
+          sequence: 99999,
+          delta: flushed,
+        };
+      }
+      yield {
+        ...chunk,
+        finalContent: redactSecretsForLog(chunk.finalContent),
+      };
+    } else {
+      yield chunk;
+    }
+  }
+}
+
 function fingerprintEvent(value: unknown): string {
   return stableStringify(value);
 }
@@ -5219,3 +7483,984 @@ if (import.meta.url === entryPoint) {
   const port = typeof address === "object" && address ? address.port : "unknown";
   console.log(`AI Orchestrator DGX placeholder listening on ${port}`);
 }
+
+// ==========================================
+// Notion-based Encrypted OAuth Token Sync Helpers
+// ==========================================
+import { tmpdir } from "node:os";
+
+const MY_DEVICE_ID = process.env.MY_DEVICE_ID ?? crypto.randomUUID();
+
+type LocalTokenCache = {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: string;
+  tokenVersion: number;
+};
+
+const localTokenCaches: Record<string, LocalTokenCache> = {};
+
+export function clearLocalTokenCaches(): void {
+  for (const key of Object.keys(localTokenCaches)) {
+    delete localTokenCaches[key];
+  }
+  clockSkewMs = 0;
+  try {
+    const db = getLocalDb();
+    db.exec("DELETE FROM local_locks");
+  } catch {}
+}
+
+// Module-level clock skew tracker: Notion Server Time - Local Client Time
+let clockSkewMs = 0;
+
+/**
+ * Gets the current date adjusted by the tracked Notion server clock skew.
+ * This guarantees consistent lease/lock time comparisons across multiple devices.
+ */
+export function getNotionSyncedNow(): Date {
+  return new Date(Date.now() + clockSkewMs);
+}
+
+/**
+ * Encrypts token bundle using AES-256-GCM.
+ */
+export function encryptToken(tokenData: string, keyString: string): { ciphertext: string; nonce: string; tag: string } {
+  try {
+    // Ensure exactly 32-bytes key (256-bit)
+    const key = Buffer.from(keyString.padEnd(32, "0").slice(0, 32), "utf8");
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+    
+    let ciphertext = cipher.update(tokenData, "utf8", "hex");
+    ciphertext += cipher.final("hex");
+    const tag = cipher.getAuthTag().toString("hex");
+    const nonce = iv.toString("hex");
+    
+    return { ciphertext, nonce, tag };
+  } catch (err) {
+    throw new Error(`Encryption failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Decrypts token bundle using AES-256-GCM, validating payload lengths and catching errors.
+ */
+export function decryptToken(ciphertext: string, nonceString: string, tagString: string, keyString: string): string {
+  try {
+    const key = Buffer.from(keyString.padEnd(32, "0").slice(0, 32), "utf8");
+    const iv = Buffer.from(nonceString, "hex");
+    const tag = Buffer.from(tagString, "hex");
+
+    if (iv.length !== 12) {
+      throw new Error(`Invalid IV length: expected 12 bytes, got ${iv.length}`);
+    }
+    if (tag.length !== 16) {
+      throw new Error(`Invalid auth tag length: expected 16 bytes, got ${tag.length}`);
+    }
+    
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(tag);
+    
+    let decrypted = decipher.update(ciphertext, "hex", "utf8");
+    decrypted += decipher.final("utf8");
+    return decrypted;
+  } catch (err) {
+    throw new Error(`Failed to decrypt token: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * A robust fetch wrapper for all Notion requests that handles rate limiting (HTTP 429)
+ * with exponential backoff + jitter, and measures clock skew via response headers.
+ */
+export async function notionFetchWithRetry(
+  url: string,
+  options: any,
+  fetchImpl: any = fetch,
+  maxRetries = 5
+): Promise<any> {
+  let attempt = 0;
+  while (true) {
+    attempt++;
+    let response: any;
+    const startMs = Date.now();
+    try {
+      response = await fetchImpl(url, options);
+    } catch (err) {
+      if (attempt >= maxRetries) {
+        throw err;
+      }
+      const baseBackoff = 1000 * Math.pow(2, attempt);
+      const backoff = Math.floor(baseBackoff / 2 + Math.random() * (baseBackoff / 2));
+      await new Promise(resolve => setTimeout(resolve, backoff));
+      continue;
+    }
+    const latencyMs = Date.now() - startMs;
+
+    // Extract Date header to measure clock skew (Notion Server Time - Local Client Time)
+    if (response?.headers) {
+      let dateHeader: string | null = null;
+      if (typeof response.headers.get === "function") {
+        dateHeader = response.headers.get("date") || response.headers.get("Date");
+      } else {
+        const keys = Object.keys(response.headers);
+        for (const k of keys) {
+          if (k.toLowerCase() === "date") {
+            dateHeader = response.headers[k];
+            break;
+          }
+        }
+      }
+      if (dateHeader) {
+        const serverTimeMs = Date.parse(dateHeader);
+        if (!isNaN(serverTimeMs)) {
+          // Adjust clock skew considering network round-trip latency (assume symmetric latency)
+          clockSkewMs = (serverTimeMs + latencyMs / 2) - Date.now();
+        }
+      }
+    }
+
+    // Handle Notion Rate Limit (HTTP 429)
+    if (response.status === 429) {
+      if (attempt >= maxRetries) {
+        return response;
+      }
+
+      let retryAfterStr: string | null = null;
+      if (response.headers && typeof response.headers.get === "function") {
+        retryAfterStr = response.headers.get("retry-after") || response.headers.get("Retry-After");
+      } else if (response.headers) {
+        const keys = Object.keys(response.headers);
+        for (const k of keys) {
+          if (k.toLowerCase() === "retry-after") {
+            retryAfterStr = response.headers[k];
+            break;
+          }
+        }
+      }
+
+      let delayMs = 1000 * Math.pow(2, attempt);
+      delayMs = Math.floor(delayMs / 2 + Math.random() * (delayMs / 2)); // Equal Jitter
+
+      if (retryAfterStr) {
+        const seconds = parseInt(retryAfterStr, 10);
+        if (!isNaN(seconds)) {
+          const baseRetryMs = seconds * 1000;
+          const jitterRange = Math.max(1000, Math.floor(baseRetryMs * 0.2)); // 20% of retry-after or at least 1s
+          delayMs = baseRetryMs + Math.floor(Math.random() * jitterRange);
+        }
+      }
+
+      console.warn(`[Notion Rate Limited] HTTP 429 received. Retrying in ${delayMs}ms (attempt ${attempt}/${maxRetries})...`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      continue;
+    }
+
+    return response;
+  }
+}
+
+export async function fetchNotionTokenRow(slot: string, fetchImpl: any = fetch): Promise<any> {
+  const databaseId = process.env.NOTION_DATABASE_ID;
+  if (!databaseId || !process.env.NOTION_API_KEY) {
+    throw new Error("Notion API Key or Database ID is missing");
+  }
+
+  const url = `https://api.notion.com/v1/databases/${databaseId}/query`;
+  const response = await notionFetchWithRetry(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.NOTION_API_KEY}`,
+      "Notion-Version": "2022-06-28",
+      "Content-Type": "application/json",
+    } as any,
+    body: JSON.stringify({
+      filter: {
+        property: "slot",
+        rich_text: {
+          equals: slot,
+        },
+      },
+    }),
+  }, fetchImpl);
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Notion Database Query failed: ${response.status} ${errText}`);
+  }
+
+  const data = await response.json() as any;
+  const page = data.results?.[0];
+  if (!page) {
+    return null;
+  }
+
+  const getPropText = (propName: string): string => {
+    const prop = page.properties?.[propName];
+    if (prop?.type === "rich_text") {
+      return prop.rich_text?.[0]?.text?.content ?? "";
+    }
+    if (prop?.type === "title") {
+      return prop.title?.[0]?.text?.content ?? "";
+    }
+    return "";
+  };
+
+  const getPropNumber = (propName: string): number => {
+    const prop = page.properties?.[propName];
+    return prop?.type === "number" ? prop.number ?? 0 : 0;
+  };
+
+  return {
+    pageId: page.id,
+    slot: getPropText("slot"),
+    encrypted_token_bundle: getPropText("encrypted_token_bundle"),
+    nonce: getPropText("nonce"),
+    key_id: getPropText("key_id"),
+    expires_at: getPropText("expires_at"),
+    token_version: getPropNumber("token_version"),
+    lock_owner: getPropText("lock_owner"),
+    lock_until: getPropText("lock_until"),
+    last_verified_by: getPropText("last_verified_by"),
+    last_test_result: getPropText("last_test_result"),
+  };
+}
+
+export async function writeNotionTokenRow(
+  slot: string,
+  fields: {
+    encrypted_token_bundle?: string;
+    nonce?: string;
+    key_id?: string;
+    expires_at?: string;
+    token_version?: number;
+    lock_owner?: string | null;
+    lock_until?: string | null;
+    last_verified_by?: string;
+    last_test_result?: string;
+  },
+  existingPageId?: string,
+  fetchImpl: any = fetch,
+): Promise<void> {
+  const databaseId = process.env.NOTION_DATABASE_ID;
+  const apiKey = process.env.NOTION_API_KEY;
+  if (!databaseId || !apiKey) {
+    throw new Error("Notion API Key or Database ID is missing");
+  }
+
+  const properties: Record<string, any> = {};
+  
+  const setRichText = (name: string, value: string | null) => {
+    properties[name] = {
+      rich_text: [
+        {
+          text: {
+            content: value ?? "",
+          },
+        },
+      ],
+    };
+  };
+
+  const setTitle = (name: string, value: string) => {
+    properties[name] = {
+      title: [
+        {
+          text: {
+            content: value,
+          },
+        },
+      ],
+    };
+  };
+
+  const setNumber = (name: string, value: number) => {
+    properties[name] = {
+      number: value,
+    };
+  };
+
+  setTitle("slot", slot);
+
+  if (fields.encrypted_token_bundle !== undefined) setRichText("encrypted_token_bundle", fields.encrypted_token_bundle);
+  if (fields.nonce !== undefined) setRichText("nonce", fields.nonce);
+  if (fields.key_id !== undefined) setRichText("key_id", fields.key_id);
+  if (fields.expires_at !== undefined) setRichText("expires_at", fields.expires_at);
+  if (fields.token_version !== undefined) setNumber("token_version", fields.token_version);
+  if (fields.lock_owner !== undefined) setRichText("lock_owner", fields.lock_owner);
+  if (fields.lock_until !== undefined) setRichText("lock_until", fields.lock_until);
+  if (fields.last_verified_by !== undefined) setRichText("last_verified_by", fields.last_verified_by);
+  if (fields.last_test_result !== undefined) setRichText("last_test_result", fields.last_test_result);
+
+  let url: string;
+  let method: string;
+  let body: any;
+
+  if (existingPageId) {
+    url = `https://api.notion.com/v1/pages/${existingPageId}`;
+    method = "PATCH";
+    body = { properties };
+  } else {
+    url = `https://api.notion.com/v1/pages`;
+    method = "POST";
+    body = {
+      parent: { database_id: databaseId },
+      properties,
+    };
+  }
+
+  const response = await notionFetchWithRetry(url, {
+    method,
+    headers: {
+      "Authorization": `Bearer ${process.env.NOTION_API_KEY}`,
+      "Notion-Version": "2022-06-28",
+      "Content-Type": "application/json",
+    } as any,
+    body: JSON.stringify(body),
+  }, fetchImpl);
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Notion Write Row failed: ${response.status} ${errText}`);
+  }
+}
+
+async function readJsonWithRetry(path: string, maxAttempts = 5): Promise<any | null> {
+  let attempt = 0;
+  while (attempt < maxAttempts) {
+    attempt++;
+    try {
+      const raw = await readFile(path, "utf8");
+      return JSON.parse(raw);
+    } catch (err: any) {
+      if (err.code === "ENOENT") {
+        return null;
+      }
+      if (attempt >= maxAttempts) {
+        console.warn(`[Read Collision] Failed to read or parse JSON at ${path} after ${maxAttempts} attempts:`, err);
+        return null;
+      }
+      await new Promise(resolve => setTimeout(resolve, 20 + Math.floor(Math.random() * 50)));
+    }
+  }
+  return null;
+}
+
+async function writeJsonAtomic(path: string, data: any): Promise<void> {
+  const tmpPath = `${path}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+  try {
+    await writeFile(tmpPath, JSON.stringify(data), "utf8");
+    await rename(tmpPath, path);
+  } catch (err) {
+    try {
+      await unlink(tmpPath);
+    } catch {}
+    throw err;
+  }
+}
+
+export async function writeWAL(slot: string, data: any): Promise<void> {
+  const path = join(tmpdir(), `grok-oauth-wal-${slot}.json`);
+  await writeJsonAtomic(path, data);
+}
+
+export async function readWAL(slot: string): Promise<any | null> {
+  const path = join(tmpdir(), `grok-oauth-wal-${slot}.json`);
+  return readJsonWithRetry(path);
+}
+
+export async function deleteWAL(slot: string): Promise<void> {
+  const path = join(tmpdir(), `grok-oauth-wal-${slot}.json`);
+  try {
+    await unlink(path);
+  } catch {}
+}
+
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e: any) {
+    return e.code === "EPERM";
+  }
+}
+
+let localDb: DatabaseSync | null = null;
+
+export function getLocalDb(): DatabaseSync {
+  if (localDb) return localDb;
+  const { tmpdir } = require("node:os");
+  const dbPath = join(tmpdir(), "grok-oauth-local-store.db");
+  localDb = new DatabaseSync(dbPath);
+  localDb.exec("PRAGMA journal_mode = WAL");
+  localDb.exec("PRAGMA synchronous = NORMAL");
+  
+  localDb.exec(`
+    CREATE TABLE IF NOT EXISTS local_locks (
+      slot TEXT PRIMARY KEY,
+      lock_owner TEXT,
+      lock_until TEXT,
+      token_version INTEGER,
+      access_token TEXT,
+      refresh_token TEXT,
+      expires_at TEXT,
+      clock_skew_ms INTEGER,
+      updated_at TEXT
+    );
+  `);
+  
+  return localDb;
+}
+
+async function acquireL1LocalLock(slot: string, maxWaitMs = 15000): Promise<boolean> {
+  const db = getLocalDb();
+  const start = Date.now();
+  const owner = `${process.pid}:${MY_DEVICE_ID}`;
+  
+  while (Date.now() - start < maxWaitMs) {
+    try {
+      db.exec("BEGIN IMMEDIATE TRANSACTION");
+      try {
+        const row = db.prepare("SELECT * FROM local_locks WHERE slot = ?").get(slot) as any;
+        const now = new Date().toISOString();
+        
+        if (row) {
+          const expiresMs = row.lock_until ? Date.parse(row.lock_until) : 0;
+          const isExpired = Date.now() > expiresMs;
+          
+          let isOwnerAlive = true;
+          if (row.lock_owner) {
+            const parts = row.lock_owner.split(":");
+            const pid = parseInt(parts[0] || "", 10);
+            const lockDeviceId = parts[1];
+            if (!isNaN(pid) && pid !== process.pid && lockDeviceId === MY_DEVICE_ID) {
+              isOwnerAlive = isPidAlive(pid);
+            }
+          }
+          
+          if (!isOwnerAlive || isExpired) {
+            const newLockUntil = new Date(Date.now() + 120000).toISOString(); // 2 minutes lease
+            db.prepare(`
+              UPDATE local_locks 
+              SET lock_owner = ?, lock_until = ?, updated_at = ? 
+              WHERE slot = ?
+            `).run(owner, newLockUntil, now, slot);
+            db.exec("COMMIT");
+            return true;
+          }
+          
+          db.exec("ROLLBACK");
+          // Lock is held by another process
+        } else {
+          const newLockUntil = new Date(Date.now() + 120000).toISOString();
+          db.prepare(`
+            INSERT INTO local_locks (slot, lock_owner, lock_until, token_version, updated_at)
+            VALUES (?, ?, ?, 0, ?)
+          `).run(slot, owner, newLockUntil, now);
+          db.exec("COMMIT");
+          return true;
+        }
+      } catch (innerError) {
+        db.exec("ROLLBACK");
+        throw innerError;
+      }
+    } catch (e: any) {
+      // If transaction failed due to SQLite busy (database locked), wait for backoff retry.
+    }
+    await new Promise(resolve => setTimeout(resolve, 100 + Math.floor(Math.random() * 200)));
+  }
+  return false;
+}
+
+async function releaseL1LocalLock(slot: string): Promise<void> {
+  try {
+    const db = getLocalDb();
+    const owner = `${process.pid}:${MY_DEVICE_ID}`;
+    db.prepare(`
+      UPDATE local_locks 
+      SET lock_owner = NULL, lock_until = NULL, updated_at = ? 
+      WHERE slot = ? AND lock_owner = ?
+    `).run(new Date().toISOString(), slot, owner);
+  } catch {}
+}
+
+async function readL1SharedCache(slot: string): Promise<any | null> {
+  try {
+    const db = getLocalDb();
+    const row = db.prepare("SELECT * FROM local_locks WHERE slot = ?").get(slot) as any;
+    if (row && row.access_token) {
+      return {
+        accessToken: row.access_token,
+        refreshToken: row.refresh_token,
+        expiresAt: row.expires_at,
+        tokenVersion: row.token_version,
+        clockSkewMs: row.clock_skew_ms,
+      };
+    }
+  } catch {}
+  return null;
+}
+
+async function writeL1SharedCache(slot: string, data: any): Promise<void> {
+  try {
+    const db = getLocalDb();
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO local_locks (slot, token_version, access_token, refresh_token, expires_at, clock_skew_ms, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(slot) DO UPDATE SET
+        token_version = excluded.token_version,
+        access_token = excluded.access_token,
+        refresh_token = excluded.refresh_token,
+        expires_at = excluded.expires_at,
+        clock_skew_ms = excluded.clock_skew_ms,
+        updated_at = excluded.updated_at
+    `).run(
+      slot,
+      data.tokenVersion || 0,
+      data.accessToken || "",
+      data.refreshToken || "",
+      data.expiresAt || "",
+      data.clockSkewMs || 0,
+      now
+    );
+  } catch {}
+}
+
+export async function fetchNotionTokenPageById(pageId: string, fetchImpl: any = fetch): Promise<any> {
+  const apiKey = process.env.NOTION_API_KEY;
+  if (!apiKey) {
+    throw new Error("Notion API Key is missing");
+  }
+
+  const url = `https://api.notion.com/v1/pages/${pageId}`;
+  const response = await notionFetchWithRetry(url, {
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Notion-Version": "2022-06-28",
+    } as any,
+  }, fetchImpl);
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Notion Page Retrieval failed: ${response.status} ${errText}`);
+  }
+
+  const page = await response.json() as any;
+
+  const getPropText = (propName: string): string => {
+    const prop = page.properties?.[propName];
+    if (prop?.type === "rich_text") {
+      return prop.rich_text?.[0]?.text?.content ?? "";
+    }
+    if (prop?.type === "title") {
+      return prop.title?.[0]?.text?.content ?? "";
+    }
+    return "";
+  };
+
+  const getPropNumber = (propName: string): number => {
+    const prop = page.properties?.[propName];
+    return prop?.type === "number" ? prop.number ?? 0 : 0;
+  };
+
+  return {
+    pageId: page.id,
+    slot: getPropText("slot"),
+    encrypted_token_bundle: getPropText("encrypted_token_bundle"),
+    nonce: getPropText("nonce"),
+    key_id: getPropText("key_id"),
+    expires_at: getPropText("expires_at"),
+    token_version: getPropNumber("token_version"),
+    lock_owner: getPropText("lock_owner"),
+    lock_until: getPropText("lock_until"),
+    last_verified_by: getPropText("last_verified_by"),
+    last_test_result: getPropText("last_test_result"),
+  };
+}
+
+export async function getFreshOAuthTokenWithNotion(
+  slot: string, 
+  options: { fetchImpl?: FetchLike; now?: string } = {}
+): Promise<string> {
+  const fetchImpl = (options.fetchImpl ?? fetch) as any;
+  const encryptionKey = process.env.SHARED_ENCRYPTION_KEY ?? "grok-notion-shared-key-32-chars";
+
+  // 1. Check L0 memory cache
+  let cache = localTokenCaches[slot];
+  if (cache && typeof cache.accessToken === "string" && typeof cache.expiresAt === "string") {
+    const expiresMs = Date.parse(cache.expiresAt);
+    const checkNowMs = options.now ? Date.parse(options.now) : Date.now();
+    if (expiresMs - (checkNowMs + clockSkewMs) > 10 * 60 * 1000) {
+      const profileId = slot === "grok-oauth-1" ? "provider_grok_oauth_dgx" : "provider_grok_oauth_dgx_2";
+      grokSessionManager.restoreSlot(profileId);
+      return cache.accessToken;
+    }
+  }
+
+  // 2. Check L1 file-based shared cache
+  const sharedCache = await readL1SharedCache(slot);
+  if (sharedCache && typeof sharedCache.accessToken === "string" && typeof sharedCache.expiresAt === "string") {
+    const tempSkew = sharedCache.clockSkewMs !== undefined ? sharedCache.clockSkewMs : clockSkewMs;
+    const expiresMs = Date.parse(sharedCache.expiresAt);
+    const checkNowMs = options.now ? Date.parse(options.now) : Date.now();
+    if (expiresMs - (checkNowMs + tempSkew) > 10 * 60 * 1000) {
+      clockSkewMs = tempSkew; // Only adopt if fresh!
+      cache = {
+        accessToken: sharedCache.accessToken,
+        refreshToken: sharedCache.refreshToken,
+        expiresAt: sharedCache.expiresAt,
+        tokenVersion: sharedCache.tokenVersion,
+      };
+      localTokenCaches[slot] = cache;
+      const profileId = slot === "grok-oauth-1" ? "provider_grok_oauth_dgx" : "provider_grok_oauth_dgx_2";
+      grokSessionManager.restoreSlot(profileId);
+      return cache.accessToken;
+    }
+  }
+
+  // 3. Acquire L1 file lock to prevent concurrent Notion requests from same host
+  const hasL1Lock = await acquireL1LocalLock(slot);
+  if (!hasL1Lock) {
+    // If lock fails, poll the shared cache while the other process performs Notion sync
+    let attempts = 0;
+    while (attempts < 10) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const latestShared = await readL1SharedCache(slot);
+      if (latestShared && typeof latestShared.accessToken === "string" && typeof latestShared.expiresAt === "string") {
+        const tempSkew = latestShared.clockSkewMs !== undefined ? latestShared.clockSkewMs : clockSkewMs;
+        const expiresMs = Date.parse(latestShared.expiresAt);
+        const checkNowMs = options.now ? Date.parse(options.now) : Date.now();
+        if (expiresMs - (checkNowMs + tempSkew) > 10 * 60 * 1000) {
+          clockSkewMs = tempSkew; // Only adopt if fresh!
+          cache = {
+            accessToken: latestShared.accessToken,
+            refreshToken: latestShared.refreshToken,
+            expiresAt: latestShared.expiresAt,
+            tokenVersion: latestShared.tokenVersion,
+          };
+          localTokenCaches[slot] = cache;
+          const profileId = slot === "grok-oauth-1" ? "provider_grok_oauth_dgx" : "provider_grok_oauth_dgx_2";
+          grokSessionManager.restoreSlot(profileId);
+          return cache.accessToken;
+        }
+      }
+      attempts++;
+    }
+    throw new Error(`Failed to acquire L1 local lock and no fresh token found in L1 cache for slot ${slot}`);
+  }
+
+  try {
+    const token = await executeL2NotionOAuthSync(slot, encryptionKey, fetchImpl, cache, options.now);
+    const profileId = slot === "grok-oauth-1" ? "provider_grok_oauth_dgx" : "provider_grok_oauth_dgx_2";
+    grokSessionManager.restoreSlot(profileId);
+    return token;
+  } finally {
+    if (hasL1Lock) {
+      await releaseL1LocalLock(slot);
+    }
+  }
+}
+
+async function executeL2NotionOAuthSync(
+  slot: string,
+  encryptionKey: string,
+  fetchImpl: any,
+  initialCache: any,
+  nowOption?: string,
+): Promise<string> {
+  let cache = initialCache;
+  let row: any;
+  try {
+    row = await fetchNotionTokenRow(slot, fetchImpl);
+  } catch (e) {
+    if (cache && typeof cache.expiresAt === "string" && Date.parse(cache.expiresAt) - getNotionSyncedNow().getTime() > 5 * 60 * 1000) {
+      return cache.accessToken;
+    }
+    throw new Error(`OAuth access token expired or refresh failed. Reconnect/paste a new token block. (Notion fetch error: ${e instanceof Error ? e.message : String(e)})`);
+  }
+
+  const baseNow = nowOption ? Date.parse(nowOption) : Date.now();
+  const nowMs = baseNow + clockSkewMs;
+
+  // 1. Decrypt existing Notion token to see if it is already fresh.
+  // If it's already fresh, we can return it immediately without waiting for any locks.
+  if (row && row.encrypted_token_bundle) {
+    try {
+      const decryptedStr = decryptToken(row.encrypted_token_bundle, row.nonce, row.key_id, encryptionKey);
+      const decrypted = JSON.parse(decryptedStr);
+      
+      const notionExpiresMs = Date.parse(decrypted.expires_at);
+      if (row.token_version > (cache?.tokenVersion ?? -1)) {
+        cache = {
+          accessToken: decrypted.access_token,
+          refreshToken: decrypted.refresh_token,
+          expiresAt: decrypted.expires_at,
+          tokenVersion: row.token_version,
+        };
+        localTokenCaches[slot] = cache;
+        await writeL1SharedCache(slot, { ...cache, clockSkewMs });
+      }
+      
+      if (notionExpiresMs - nowMs > 10 * 60 * 1000 && cache) {
+        return cache.accessToken;
+      }
+    } catch (e) {
+      console.warn(`[Decryption Failed] Decrypting Notion token bundle failed for slot ${slot}:`, e);
+    }
+  }
+
+  // 2. If it is not fresh, check if it is locked by another node. If so, wait.
+  // By waiting before reading/deleting WAL, we ensure we don't interfere with the active lock holder.
+  if (row && row.lock_until) {
+    let lockUntilMs = Date.parse(row.lock_until);
+    if (lockUntilMs > nowMs && row.lock_owner !== MY_DEVICE_ID) {
+      let attempts = 0;
+      while (attempts < 5) {
+        const hashSeed = MY_DEVICE_ID.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        const baseDelay = 1000 * Math.pow(2, attempts);
+        const jitter = (hashSeed % 300) + Math.floor(Math.random() * baseDelay * 0.3);
+        const delay = baseDelay + jitter;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        
+        if (row?.pageId) {
+          row = await fetchNotionTokenPageById(row.pageId, fetchImpl);
+        } else {
+          row = await fetchNotionTokenRow(slot, fetchImpl);
+        }
+        
+        const currentNowMs = Date.now() + clockSkewMs;
+        lockUntilMs = row && row.lock_until ? Date.parse(row.lock_until) : 0;
+        
+        if (!row || !row.lock_until || lockUntilMs <= currentNowMs) {
+          break;
+        }
+        
+        if (row.encrypted_token_bundle) {
+          try {
+            const decryptedStr = decryptToken(row.encrypted_token_bundle, row.nonce, row.key_id, encryptionKey);
+            const decrypted = JSON.parse(decryptedStr);
+            if (Date.parse(decrypted.expires_at) - currentNowMs > 10 * 60 * 1000) {
+              cache = {
+                accessToken: decrypted.access_token,
+                refreshToken: decrypted.refresh_token,
+                expiresAt: decrypted.expires_at,
+                tokenVersion: row.token_version,
+              };
+              localTokenCaches[slot] = cache;
+              await writeL1SharedCache(slot, { ...cache, clockSkewMs });
+              
+              // Clean up WAL if we recovered a newer/equal token via Notion
+              const walData = await readWAL(slot);
+              if (walData && walData.access_token !== "pending_refresh") {
+                if (Date.parse(decrypted.expires_at) >= Date.parse(walData.expires_at)) {
+                  await deleteWAL(slot);
+                }
+              }
+              return cache.accessToken;
+            }
+          } catch {}
+        }
+        attempts++;
+      }
+    }
+  }
+
+  // 3. Now we are the lock owner, or the lock has expired, or we are going to acquire the lock.
+  // Check WAL recovery to see if there's a refreshed token that was not saved to Notion.
+  let pendingWALRecovery: any = null;
+  const walData = await readWAL(slot);
+  if (walData) {
+    if (walData.access_token === "pending_refresh") {
+      await deleteWAL(slot);
+    } else {
+      let isNotionAlreadyUpdated = false;
+      if (row && row.encrypted_token_bundle) {
+        try {
+          const decryptedStr = decryptToken(row.encrypted_token_bundle, row.nonce, row.key_id, encryptionKey);
+          const decrypted = JSON.parse(decryptedStr);
+          if (Date.parse(decrypted.expires_at) >= Date.parse(walData.expires_at)) {
+            isNotionAlreadyUpdated = true;
+          }
+        } catch {}
+      }
+
+      if (isNotionAlreadyUpdated) {
+        await deleteWAL(slot);
+      } else {
+        pendingWALRecovery = walData;
+      }
+    }
+  }
+
+  // 4. Acquire the lock on Notion
+  const currentNowMs = Date.now() + clockSkewMs;
+  const lockUntilStr = new Date(currentNowMs + 60 * 1000).toISOString();
+  try {
+    await writeNotionTokenRow(slot, {
+      lock_owner: MY_DEVICE_ID,
+      lock_until: lockUntilStr,
+    }, row?.pageId, fetchImpl);
+
+    let confirmRow: any;
+    if (row?.pageId) {
+      confirmRow = await fetchNotionTokenPageById(row.pageId, fetchImpl);
+    } else {
+      confirmRow = await fetchNotionTokenRow(slot, fetchImpl);
+    }
+
+    if (!confirmRow || confirmRow.lock_owner !== MY_DEVICE_ID) {
+      // Lock conflict, wait and retry execution
+      await new Promise(resolve => setTimeout(resolve, 500 + Math.floor(Math.random() * 500)));
+      return executeL2NotionOAuthSync(slot, encryptionKey, fetchImpl, cache, nowOption);
+    }
+    row = confirmRow;
+  } catch (e) {
+    throw new Error(`OAuth access token expired or refresh failed. Reconnect/paste a new token block. (Notion lock write error: ${e instanceof Error ? e.message : String(e)})`);
+  }
+
+  let freshTokenData: any;
+  const nextVersion = (row?.token_version ?? 0) + 1;
+
+  if (pendingWALRecovery) {
+    freshTokenData = pendingWALRecovery;
+  } else {
+    try {
+      const currentRefreshToken = cache?.refreshToken || (row ? (() => {
+        try {
+          const decryptedStr = decryptToken(row.encrypted_token_bundle, row.nonce, row.key_id, encryptionKey);
+          return JSON.parse(decryptedStr).refresh_token;
+        } catch {
+          return "";
+        }
+      })() : "");
+
+      if (!currentRefreshToken) {
+        throw new Error("No refresh token available");
+      }
+
+      const oauthUrl = process.env.GROK_OAUTH_TOKEN_URL ?? "https://api.x.ai/oauth2/token";
+      const clientId = process.env.GROK_OAUTH_CLIENT_ID ?? "grok-media-studio-client-id";
+      
+      await writeWAL(slot, {
+        access_token: "pending_refresh",
+        refresh_token: currentRefreshToken,
+        expires_at: new Date(Date.now() - 1000).toISOString(),
+      });
+
+      const tokenResponse = await fetchImpl(oauthUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: clientId,
+          refresh_token: currentRefreshToken,
+        }).toString(),
+      });
+
+      if (!tokenResponse.ok) {
+        const errText = await tokenResponse.text();
+        throw new Error(`xAI OAuth token API returned error ${tokenResponse.status}: ${errText}`);
+      }
+
+      const tokenResJson = await tokenResponse.json();
+      const newExpiresAt = new Date(getNotionSyncedNow().getTime() + (tokenResJson.expires_in ?? 3600) * 1000).toISOString();
+
+      freshTokenData = {
+        access_token: tokenResJson.access_token,
+        refresh_token: tokenResJson.refresh_token ?? currentRefreshToken,
+        expires_at: newExpiresAt,
+        label: slot,
+        tier: tokenResJson.tier ?? (cache?.tokenVersion ? 5 : 1),
+      };
+
+      await writeWAL(slot, freshTokenData);
+    } catch (e) {
+      try {
+        await writeNotionTokenRow(slot, {
+          lock_owner: null,
+          lock_until: null,
+        }, row?.pageId, fetchImpl);
+      } catch {}
+      await deleteWAL(slot);
+      throw new Error(`OAuth access token expired or refresh failed. Reconnect/paste a new token block. (Refresh request failed: ${e instanceof Error ? e.message : String(e)})`);
+    }
+  }
+
+  let testResult = "failed";
+  try {
+    const testUrl = process.env.GROK_CHAT_TEST_URL ?? "https://api.x.ai/v1/chat/completions";
+    const testRes = await fetchImpl(testUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${freshTokenData.access_token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "grok-4",
+        messages: [{ role: "user", content: "ping" }],
+        max_tokens: 1,
+      }),
+    });
+    if (testRes.ok) {
+      testResult = "valid";
+    }
+  } catch {
+    testResult = "unverified";
+  }
+
+  try {
+    const encrypted = encryptToken(JSON.stringify(freshTokenData), encryptionKey);
+    await writeNotionTokenRow(slot, {
+      encrypted_token_bundle: encrypted.ciphertext,
+      nonce: encrypted.nonce,
+      key_id: encrypted.tag,
+      expires_at: freshTokenData.expires_at,
+      token_version: nextVersion,
+      lock_owner: null,
+      lock_until: null,
+      last_verified_by: MY_DEVICE_ID,
+      last_test_result: testResult,
+    }, row?.pageId, fetchImpl);
+
+    cache = {
+      accessToken: freshTokenData.access_token,
+      refreshToken: freshTokenData.refresh_token,
+      expiresAt: freshTokenData.expires_at,
+      tokenVersion: nextVersion,
+    };
+    localTokenCaches[slot] = cache;
+    await writeL1SharedCache(slot, { ...cache, clockSkewMs });
+    await deleteWAL(slot);
+
+    return freshTokenData.access_token;
+  } catch (e) {
+    try {
+      await writeNotionTokenRow(slot, {
+        lock_owner: null,
+        lock_until: null,
+      }, row?.pageId, fetchImpl);
+    } catch {}
+    throw new Error(`OAuth access token expired or refresh failed. Reconnect/paste a new token block. (Notion save error: ${e instanceof Error ? e.message : String(e)})`);
+  }
+}
+
+async function resolveLocalOAuthAccessTokenFallback(config: ServerProviderProxyConfig): Promise<string | undefined> {
+  const authFilePath = getServerProviderOAuthAuthFilePath(config);
+  if (!authFilePath) return undefined;
+  try {
+    const raw = await readFile(expandHomePath(authFilePath), "utf8");
+    const parsed = JSON.parse(raw);
+    const entries = parsed && typeof parsed === "object" ? Object.values(parsed as Record<string, unknown>) : [];
+    const authRecord = entries.find((entry): entry is Record<string, any> => Boolean(entry && typeof entry === "object"));
+    return authRecord?.access_token ?? authRecord?.accessToken ?? authRecord?.refresh_token;
+  } catch {
+    return undefined;
+  }
+}
+
+

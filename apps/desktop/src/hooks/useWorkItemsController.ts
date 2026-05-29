@@ -1,52 +1,90 @@
-import { useState } from "react";
+import { useCallback } from "react";
 import type {
   AssistantDraft,
   EventEnvelope,
   WorkItem,
   WorkItemHandoff,
 } from "@ai-orchestrator/protocol";
-import {
-  initialAssistantDrafts,
-  initialWorkItemHandoffs,
-  initialWorkItems,
-} from "../seeds/workItems";
+import { useWorkItemsStore } from "../store/useWorkItemsStore";
+import { useWorkItemsSSE } from "./useWorkItemsSSE";
 import { statusForWorkLane } from "../lib/workbenchDerived";
+import { fetchControlQueueItems, submitControlQueueAction } from "../runtime/controlQueueApi";
 
 type AppendWorkbenchEvent = <T>(type: string, payload: T) => EventEnvelope<T>;
 
 type WorkItemsControllerInput = {
   appendEvent: AppendWorkbenchEvent;
+  sessionId?: string;
 };
 
-export function useWorkItemsController({ appendEvent }: WorkItemsControllerInput) {
-  const [workItems, setWorkItems] = useState<WorkItem[]>(initialWorkItems);
-  const [assistantDrafts, setAssistantDrafts] = useState<AssistantDraft[]>(initialAssistantDrafts);
-  const [workItemHandoffs, setWorkItemHandoffs] = useState<WorkItemHandoff[]>(initialWorkItemHandoffs);
+export function useWorkItemsController({ appendEvent, sessionId = "session_desktop_001" }: WorkItemsControllerInput) {
+  // Zustand 전역 상태 바인딩
+  const {
+    workItems,
+    assistantDrafts,
+    workItemHandoffs,
+    isLoading,
+    error,
+    setWorkItems,
+    updateWorkItem,
+    prependWorkItem,
+    prependAssistantDraft,
+    prependWorkItemHandoff,
+    setIsLoading,
+    setError,
+  } = useWorkItemsStore();
 
-  function prependWorkItem(workItem: WorkItem) {
-    setWorkItems((items) => [workItem, ...items].slice(0, 12));
-  }
+  // SSE 채널 실시간 구독 마운트
+  useWorkItemsSSE(sessionId);
 
-  function prependAssistantDraft(assistantDraft: AssistantDraft) {
-    setAssistantDrafts((drafts) => [assistantDraft, ...drafts].slice(0, 12));
-  }
+  const fetchWorkItems = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const items = await fetchControlQueueItems({ sessionId });
+      setWorkItems(items);
+    } catch (err) {
+      console.error("Failed to fetch control queue items:", err);
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sessionId, setWorkItems, setIsLoading, setError]);
 
-  function prependWorkItemHandoff(handoff: WorkItemHandoff) {
-    setWorkItemHandoffs((handoffs) => [handoff, ...handoffs].slice(0, 12));
-  }
-
-  function updateWorkItem(workItemId: string, patch: Partial<WorkItem>) {
-    setWorkItems((items) =>
-      items.map((item) =>
-        item.id === workItemId
-          ? {
-              ...item,
-              ...patch,
-            }
-          : item,
-      ),
-    );
-  }
+  const handleControlQueueAction = useCallback(async (workItemId: string, action: string, payload?: any) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await submitControlQueueAction({
+        workItemId,
+        action,
+        payload,
+        sessionId,
+      });
+      if (result.success) {
+        appendEvent("work_item.action_submitted", {
+          workItemId,
+          action,
+          payload,
+          nextStatus: result.nextStatus,
+        });
+      } else {
+        throw new Error("Action failed on server");
+      }
+    } catch (err) {
+      console.error("Failed to submit control queue action:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      appendEvent("work_item.action_failed", {
+        workItemId,
+        action,
+        error: msg,
+      });
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sessionId, setIsLoading, setError, appendEvent]);
 
   function handleRouteWorkItem(workItemId: string, lane: WorkItem["lane"]) {
     const updatedAt = new Date().toISOString();
@@ -84,5 +122,9 @@ export function useWorkItemsController({ appendEvent }: WorkItemsControllerInput
     updateWorkItem,
     workItemHandoffs,
     workItems,
+    fetchWorkItems,
+    handleControlQueueAction,
+    isLoading,
+    error,
   };
 }

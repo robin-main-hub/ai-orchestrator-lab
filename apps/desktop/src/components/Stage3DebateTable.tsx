@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   CheckCircle2,
@@ -18,6 +18,10 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
 import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
+import { DebateDetailDrawer } from "./DebateDetailDrawer";
+import { RoundSummaryMap } from "./RoundSummaryMap";
+import { DecisionTimelineWidget } from "./DecisionTimelineWidget";
+import { useDebateStore } from "../store/useDebateStore";
 
 /**
  * Stage 3 Debate Table — strict v0 port.
@@ -45,19 +49,51 @@ export function Stage3DebateTable({
   onSelectUtterance?: (utterance: Stage3DebateUtteranceView) => void;
   session: Stage3DebateSession;
 }) {
-  const utterances: Stage3DebateUtteranceView[] = useMemo(
-    () =>
-      session.rounds.flatMap((round) =>
-        round.utterances.map((utterance) => ({
-          ...utterance,
-          roundTitle: round.title,
-          agentName:
-            session.participants.find((p) => p.agentId === utterance.agentId)?.name ??
-            utterance.agentId,
-        })),
-      ),
-    [session.rounds, session.participants],
-  );
+  const setSession = useDebateStore((state) => state.setSession);
+
+  // Sync session with the Zustand store whenever it changes
+  useEffect(() => {
+    setSession(session);
+  }, [session, setSession]);
+
+  const [prevSessionId, setPrevSessionId] = useState(session.id);
+  const [activeRoundId, setActiveRoundId] = useState<string>(() => {
+    const runningRound = session.rounds.find((r) => r.status === "running");
+    if (runningRound) return runningRound.id;
+    const completedRounds = session.rounds.filter((r) => r.status === "completed");
+    if (completedRounds.length > 0) {
+      return completedRounds[completedRounds.length - 1]?.id ?? "";
+    }
+    return session.rounds[0]?.id ?? "";
+  });
+  const [activeUtterance, setActiveUtterance] = useState<Stage3DebateUtteranceView | null>(null);
+  const [viewMode, setViewMode] = useState<"rounds" | "map">("rounds");
+
+  if (session.id !== prevSessionId) {
+    setPrevSessionId(session.id);
+    const runningRound = session.rounds.find((r) => r.status === "running");
+    const defaultRoundId =
+      runningRound?.id ??
+      session.rounds.filter((r) => r.status === "completed").slice(-1)[0]?.id ??
+      session.rounds[0]?.id ??
+      "";
+    setActiveRoundId(defaultRoundId);
+    setActiveUtterance(null);
+    setViewMode("rounds");
+  }
+
+  const activeRound = session.rounds.find((r) => r.id === activeRoundId);
+
+  const utterances: Stage3DebateUtteranceView[] = useMemo(() => {
+    if (!activeRound) return [];
+    return activeRound.utterances.map((utterance) => ({
+      ...utterance,
+      roundTitle: activeRound.title,
+      agentName:
+        session.participants.find((p) => p.agentId === utterance.agentId)?.name ??
+        utterance.agentId,
+    }));
+  }, [activeRound, session.participants]);
 
   const utteranceById = useMemo(() => {
     const map = new Map<string, Stage3DebateUtteranceView>();
@@ -65,44 +101,109 @@ export function Stage3DebateTable({
     return map;
   }, [utterances]);
 
-  const currentRound =
-    session.rounds.find((r) => r.status === "running") ?? session.rounds[0];
-
   return (
     <section className="flex h-full flex-col bg-background" aria-label="Debate">
       {/* ── Header: context + stage tabs ───────────────────────── */}
       <DebateContextHeader
-        currentRoundId={currentRound?.id}
+        currentRoundId={activeRoundId}
+        onSelectRoundId={setActiveRoundId}
         onCreateCodingPacket={onCreateCodingPacket}
         rounds={session.rounds}
         session={session}
       />
 
-      {/* ── Main: rounds (left, grid) + side panel (right) ─────── */}
+      {/* ── Main: rounds (left, grid/dashboard) + side panel (right) ─────── */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: debate rounds grid */}
-        <div className="flex-1 overflow-y-auto border-r border-border">
-          <div className="grid grid-cols-1 gap-3 p-4 lg:grid-cols-2">
-            {utterances.map((utterance, index) => (
-              <DebateRoundCard
-                index={index + 1}
-                key={utterance.id}
-                onSelect={onSelectUtterance}
-                utterance={utterance}
-                utteranceById={utteranceById}
+        {/* Left: View Switcher container */}
+        <div className="flex flex-1 flex-col border-r border-border overflow-hidden">
+          {/* View Switcher toggle group */}
+          <div className="flex items-center justify-between border-b border-border/60 bg-card/20 px-4 py-2 shrink-0">
+            <span className="text-xs font-semibold text-muted-foreground">토론 보기 모드</span>
+            <div className="flex rounded-md bg-muted/40 p-0.5 border border-border/50">
+              <button
+                type="button"
+                onClick={() => setViewMode("rounds")}
+                className={cn(
+                  "px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer",
+                  viewMode === "rounds"
+                    ? "bg-background text-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Round Cards
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("map")}
+                className={cn(
+                  "px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer",
+                  viewMode === "map"
+                    ? "bg-background text-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Summary Map
+              </button>
+            </div>
+          </div>
+
+          {/* Active View Content */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {viewMode === "rounds" ? (
+              <div className="grid grid-cols-1 gap-3 p-4 lg:grid-cols-2">
+                {utterances.map((utterance, index) => (
+                  <div 
+                    key={utterance.id} 
+                    id={`utterance-card-${utterance.id}`}
+                    className="transition-all duration-300 rounded-md"
+                  >
+                    <DebateRoundCard
+                      index={index + 1}
+                      onSelect={setActiveUtterance}
+                      utterance={utterance}
+                      utteranceById={utteranceById}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <RoundSummaryMap
+                sessionId={session.id}
+                onSelectRound={(roundId) => {
+                  setActiveRoundId(roundId);
+                  setViewMode("rounds");
+                }}
+                currentRoundId={activeRoundId}
               />
-            ))}
+            )}
           </div>
         </div>
-
-        {/* Right: status hub + agent relay */}
-        <div className="flex w-80 shrink-0 flex-col overflow-y-auto">
+ 
+        {/* Right: status hub + timeline widget + agent relay */}
+        <div className="flex w-80 shrink-0 flex-col overflow-y-auto bg-card/5">
           <div className="space-y-4 p-4">
             <StatusHub items={session.statusHub} />
+            <DecisionTimelineWidget
+              utterances={utterances}
+              onSelectUtterance={setActiveUtterance}
+              onSwitchToRoundsView={() => setViewMode("rounds")}
+            />
             <AgentRelay entries={session.humanPeek} />
           </div>
         </div>
       </div>
+
+      {/* Debate Detail Drawer */}
+      <DebateDetailDrawer
+        utterance={activeUtterance}
+        allUtterances={utterances}
+        onSelectUtterance={setActiveUtterance}
+        onHandoffConversation={(u) => {
+          onSelectUtterance?.(u);
+          setActiveUtterance(null);
+        }}
+        onClose={() => setActiveUtterance(null)}
+      />
     </section>
   );
 }
@@ -111,11 +212,13 @@ export function Stage3DebateTable({
 
 function DebateContextHeader({
   currentRoundId,
+  onSelectRoundId,
   onCreateCodingPacket,
   rounds,
   session,
 }: {
   currentRoundId?: string;
+  onSelectRoundId: (id: string) => void;
   onCreateCodingPacket: () => void;
   rounds: Stage3DebateSession["rounds"];
   session: Stage3DebateSession;
@@ -165,6 +268,7 @@ function DebateContextHeader({
                     : "text-muted-foreground/50 hover:bg-card/60 hover:text-muted-foreground",
               )}
               key={round.id}
+              onClick={() => onSelectRoundId(round.id)}
               type="button"
             >
               {round.title}

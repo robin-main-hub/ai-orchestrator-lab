@@ -1,29 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect } from "react";
+import { Command } from "cmdk";
+import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowRight, CornerDownLeft, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/ui/status-badge";
-
-/**
- * Command Palette — strict v0 port.
- * source: docs/v0/v0-output/components/shared/command-palette.tsx
- *
- * v0 layout (Dialog overlay):
- *   <Dialog>
- *     <DialogContent border bg-card>
- *       <search row: Search icon + input + ESC kbd>
- *       <list grouped by heading (Quick Actions / Core / Specialists / ...)>
- *       <footer: agents count + ↑↓ / ↵ hints>
- *
- * 우리 데이터 모델은 v0 의 agent-switching 중심과 다름 — 우리는
- * verb-grouped command entries (Switch / Open / Memory / Approve /
- * Help). 그래서:
- *   - v0 의 visual / layout / spacing 그대로
- *   - 우리 commands 가 verb 별로 grouped (v0 의 Quick Actions/Core/
- *     Specialists 와 동일한 group pattern)
- *
- * Stage 2-4 의 host contract (commands[], open, onClose) 0 변경.
- * cmdk package 도입 안 함 — 내장 useState + filter 로 충분.
- */
 
 export type CommandEntry = {
   /** Stable id. */
@@ -53,137 +33,95 @@ export function CommandPalette({
   commands,
   placeholder = "Search commands... (예: switch debate, approve next, open memento)",
 }: CommandPaletteProps) {
-  const [query, setQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-
+  
+  // Close palette on ESC key (already handled by Dialog content usually, but safety check)
   useEffect(() => {
-    if (open) {
-      setQuery("");
-      setActiveIndex(0);
-      const id = requestAnimationFrame(() => inputRef.current?.focus());
-      return () => cancelAnimationFrame(id);
-    }
-    return undefined;
-  }, [open]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return commands;
-    return commands.filter((entry) => {
-      const haystack = `${entry.verb} ${entry.label} ${entry.hint ?? ""}`.toLowerCase();
-      return q.split(/\s+/).every((token) => haystack.includes(token));
-    });
-  }, [commands, query]);
-
-  useEffect(() => {
-    if (activeIndex >= filtered.length) {
-      setActiveIndex(filtered.length === 0 ? 0 : filtered.length - 1);
-    }
-  }, [activeIndex, filtered.length]);
-
-  const groups = useMemo(() => {
-    const map = new Map<string, CommandEntry[]>();
-    for (const entry of filtered) {
-      const list = map.get(entry.verb) ?? [];
-      list.push(entry);
-      map.set(entry.verb, list);
-    }
-    return Array.from(map.entries());
-  }, [filtered]);
-
-  if (!open) return null;
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActiveIndex((i) => Math.min(i + 1, filtered.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveIndex((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      const entry = filtered[activeIndex];
-      if (entry) {
-        entry.run();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && open) {
         onClose();
       }
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      onClose();
-    }
-  };
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onClose]);
+
+  // Group commands by verb for visual layout
+  const grouped = commands.reduce((acc, entry) => {
+    const list = acc.get(entry.verb) ?? [];
+    list.push(entry);
+    acc.set(entry.verb, list);
+    return acc;
+  }, new Map<string, CommandEntry[]>());
+
+  const groups = Array.from(grouped.entries());
 
   return (
-    <div
-      aria-label="Command Palette"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-start justify-center bg-background/55 p-4 pt-[12vh] backdrop-blur-md"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      role="dialog"
-    >
-      <div
-        className="flex max-h-[64vh] w-[min(640px,calc(100vw-32px))] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
-        onKeyDown={handleKeyDown}
-      >
-        {/* Search input row */}
-        <div className="flex items-center gap-2 border-b border-border px-3 py-3">
-          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <input
-            aria-label="Command search"
-            className="flex-1 bg-transparent font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setActiveIndex(0);
+    <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay 
+          className="fixed inset-0 z-50 bg-background/55 backdrop-blur-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" 
+        />
+        <Dialog.Content 
+          className="fixed left-1/2 top-[12vh] z-50 w-[min(640px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-card shadow-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
+          aria-label="Command Palette modal"
+        >
+          <Command 
+            className="flex flex-col overflow-hidden" 
+            label="Global Command Palette"
+            onKeyDown={(e) => {
+              // Escape is handled by Dialog.Content wrapper, but if any propagation happens:
+              if (e.key === "Escape") {
+                onClose();
+              }
             }}
-            placeholder={placeholder}
-            ref={inputRef}
-            type="text"
-            value={query}
-          />
-          <kbd className="rounded border border-border bg-card/60 px-1.5 py-0.5 text-[10px] font-mono font-medium text-muted-foreground">
-            ESC
-          </kbd>
-        </div>
+          >
+            {/* Input row */}
+            <div className="flex items-center gap-2 border-b border-border px-3 py-3">
+              <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <Command.Input 
+                autoFocus
+                placeholder={placeholder}
+                className="flex-1 bg-transparent font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+              />
+              <kbd className="rounded border border-border bg-card/60 px-1.5 py-0.5 text-[10px] font-mono font-medium text-muted-foreground">
+                ESC
+              </kbd>
+            </div>
 
-        {/* List */}
-        <div className="flex-1 overflow-y-auto p-2">
-          {filtered.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              매칭되는 명령이 없습니다.
-            </p>
-          ) : (
-            groups.map(([verb, entries]) => (
-              <div className="mb-2" key={verb}>
-                <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                  {verb}
-                </div>
-                {entries.map((entry) => {
-                  const globalIndex = filtered.indexOf(entry);
-                  const isActive = globalIndex === activeIndex;
-                  return (
-                    <button
-                      aria-selected={isActive}
-                      className={cn(
-                        "flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors",
-                        isActive
-                          ? "bg-primary/10 text-foreground"
-                          : "text-foreground hover:bg-card/60",
-                      )}
+            {/* List area */}
+            <Command.List className="max-h-[45vh] overflow-y-auto p-2">
+              <Command.Empty className="py-6 text-center text-sm text-muted-foreground">
+                매칭되는 명령이 없습니다.
+              </Command.Empty>
+              
+              {groups.map(([verb, entries]) => (
+                <Command.Group 
+                  key={verb}
+                  heading={
+                    <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      {verb}
+                    </div>
+                  }
+                >
+                  {entries.map((entry) => (
+                    <Command.Item
                       key={entry.id}
-                      onClick={() => {
+                      onSelect={() => {
                         entry.run();
                         onClose();
                       }}
-                      onMouseEnter={() => setActiveIndex(globalIndex)}
-                      type="button"
+                      // We can match using custom value if needed, cmdk filters by inner text by default
+                      value={`${entry.verb} ${entry.label} ${entry.hint ?? ""}`}
+                      className="flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors text-foreground hover:bg-card/60 data-[selected=true]:bg-primary/10 data-[selected=true]:text-foreground [&_svg]:text-muted-foreground data-[selected=true]:[&_svg]:text-foreground"
                     >
-                      <StatusBadge variant="primary" size="sm" className="font-mono uppercase shrink-0">
+                      <StatusBadge 
+                        variant="primary" 
+                        size="sm" 
+                        className="font-mono uppercase shrink-0"
+                      >
                         {entry.verb}
                       </StatusBadge>
-                      <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground transition-transform" />
                       <span className="truncate text-sm text-foreground">
                         {entry.label}
                       </span>
@@ -197,33 +135,33 @@ export function CommandPalette({
                           {entry.shortcut}
                         </kbd>
                       ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            ))
-          )}
-        </div>
+                    </Command.Item>
+                  ))}
+                </Command.Group>
+              ))}
+            </Command.List>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-border px-3 py-2">
-          <span className="text-[10px] text-muted-foreground">
-            {commands.length} commands · verb · object · target
-          </span>
-          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <kbd className="rounded border border-border bg-card/60 px-1 py-0.5 font-mono">↑↓</kbd>
-              navigate
-            </span>
-            <span className="flex items-center gap-1">
-              <kbd className="rounded border border-border bg-card/60 px-1 py-0.5 font-mono">
-                <CornerDownLeft className="h-2.5 w-2.5" />
-              </kbd>
-              select
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
+            {/* Footer */}
+            <div className="flex items-center justify-between border-t border-border px-3 py-2 bg-card/35">
+              <span className="text-[10px] text-muted-foreground">
+                {commands.length} commands · verb · object · target
+              </span>
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <kbd className="rounded border border-border bg-card/60 px-1 py-0.5 font-mono">↑↓</kbd>
+                  navigate
+                </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="rounded border border-border bg-card/60 px-1 py-0.5 font-mono">
+                    <CornerDownLeft className="h-2.5 w-2.5" />
+                  </kbd>
+                  select
+                </span>
+              </div>
+            </div>
+          </Command>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

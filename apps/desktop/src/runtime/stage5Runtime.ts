@@ -197,3 +197,178 @@ function normalizeCacheClient(client: ClientDevice): ClientDevice {
           : "continue_locally",
   };
 }
+
+export type DgxConnectionState = "online" | "degraded" | "offline" | "syncing";
+
+export interface DgxConnectionStateListener {
+  onStateChange?(state: DgxConnectionState, previousState: DgxConnectionState): void;
+  onRestore?(): Promise<void> | void;
+}
+
+export type DgxConnectionStateMachineOptions = {
+  heartbeatIntervalMs?: number;
+  reconnectIntervalMs?: number;
+  listeners?: DgxConnectionStateListener;
+  WebSocketImpl?: typeof WebSocket;
+};
+
+export class DgxConnectionStateMachine {
+  private currentState: DgxConnectionState = "offline";
+  private ws: WebSocket | null = null;
+  private heartbeatTimer: any = null;
+  private reconnectTimer: any = null;
+  private lastHeartbeatTime: number = 0;
+  private currentLatencyMs: number = 0;
+  private lastError: string | null = null;
+
+  constructor(
+    private readonly wsUrl: string,
+    private readonly options: DgxConnectionStateMachineOptions = {}
+  ) {
+    this.currentState = "offline";
+  }
+
+  getState(): DgxConnectionState {
+    return this.currentState;
+  }
+
+  getLatencyMs(): number {
+    return this.currentLatencyMs;
+  }
+
+  getLastError(): string | null {
+    return this.lastError;
+  }
+
+  private transitionTo(nextState: DgxConnectionState) {
+    if (this.currentState === nextState) return;
+    const prevState = this.currentState;
+    this.currentState = nextState;
+
+    this.options.listeners?.onStateChange?.(nextState, prevState);
+
+    if (prevState === "offline" && nextState === "syncing") {
+      this.handleRestore();
+    }
+  }
+
+  private async handleRestore() {
+    try {
+      if (this.options.listeners?.onRestore) {
+        await this.options.listeners.onRestore();
+      }
+      this.transitionTo("online");
+    } catch (err) {
+      this.lastError = err instanceof Error ? err.message : String(err);
+      this.transitionTo("degraded");
+    }
+  }
+
+  connect() {
+    this.disconnect();
+
+    const WSClass = this.options.WebSocketImpl ?? globalThis.WebSocket;
+    if (!WSClass) {
+      this.lastError = "WebSocket implementation not found";
+      this.transitionTo("offline");
+      return;
+    }
+
+    try {
+      this.ws = new WSClass(this.wsUrl);
+    } catch (err) {
+      this.lastError = err instanceof Error ? err.message : String(err);
+      this.scheduleReconnect();
+      return;
+    }
+
+    this.ws.onopen = () => {
+      this.lastError = null;
+      this.lastHeartbeatTime = Date.now();
+      
+      if (this.currentState === "offline") {
+        this.transitionTo("syncing");
+      } else {
+        this.transitionTo("online");
+      }
+      this.startHeartbeat();
+    };
+
+    this.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "pong" || data.type === "heartbeat") {
+          this.lastHeartbeatTime = Date.now();
+          if (data.timestamp) {
+            this.currentLatencyMs = Date.now() - data.timestamp;
+          }
+          if (this.currentState === "degraded") {
+            this.transitionTo("online");
+          }
+        }
+      } catch (err) {
+        // ignore
+      }
+    };
+
+    this.ws.onerror = () => {
+      this.lastError = "WebSocket error event";
+      this.transitionTo("degraded");
+    };
+
+    this.ws.onclose = () => {
+      this.transitionTo("offline");
+      this.scheduleReconnect();
+    };
+  }
+
+  disconnect() {
+    this.stopHeartbeat();
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch (e) {}
+      this.ws = null;
+    }
+  }
+
+  private startHeartbeat() {
+    this.stopHeartbeat();
+    const interval = this.options.heartbeatIntervalMs ?? 10000;
+    this.heartbeatTimer = setInterval(() => {
+      if (this.ws && this.ws.readyState === 1) { // OPEN
+        try {
+          this.ws.send(JSON.stringify({ type: "ping", timestamp: Date.now() }));
+        } catch (e) {
+          this.transitionTo("degraded");
+        }
+      }
+
+      const elapsed = Date.now() - this.lastHeartbeatTime;
+      if (elapsed > interval * 2.5) {
+        this.transitionTo("degraded");
+      }
+    }, interval);
+  }
+
+  private stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  private scheduleReconnect() {
+    if (this.reconnectTimer) return;
+    const interval = this.options.reconnectIntervalMs ?? 5000;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, interval);
+  }
+}
+
