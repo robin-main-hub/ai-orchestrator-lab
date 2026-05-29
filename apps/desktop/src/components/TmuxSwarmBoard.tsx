@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LockKeyhole } from "lucide-react";
+import { LockKeyhole, MessageSquare, GitBranch, Terminal, Lock } from "lucide-react";
 import type {
   ApprovalRequest,
   CodingPacket,
@@ -13,7 +13,8 @@ import {
   requestTmuxDispatch,
   type DesktopTmuxDispatchRequest,
 } from "../runtime/stage33TmuxServer";
-import type { AgentActivityStatus, AgentVisualSettings, WorkbenchAgent } from "../types";
+import { ClusterLocksDashboard } from "./ClusterLocksDashboard";
+import type { AgentActivityStatus, AgentVisualSettings, WorkbenchAgent, CenterMode } from "../types";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/ui/status-badge";
 import { TmuxPaneCard } from "./TmuxPaneCard";
@@ -44,6 +45,8 @@ export function TmuxSwarmBoard({
   messages,
   onApprovalQueued,
   packet,
+  mode,
+  onChangeMode,
 }: {
   activeSessionId: string;
   agentActivityById: Record<string, AgentActivityStatus>;
@@ -52,6 +55,8 @@ export function TmuxSwarmBoard({
   messages: ConversationMessage[];
   onApprovalQueued?: (input: TmuxApprovalQueuedInput) => void;
   packet: CodingPacket;
+  mode: CenterMode;
+  onChangeMode: (mode: CenterMode) => void;
 }) {
   const recentMessages = messages.slice(-6);
   const roleAgent = (role: WorkbenchAgent["role"]) => agents.find((agent) => agent.role === role);
@@ -66,6 +71,7 @@ export function TmuxSwarmBoard({
   const [boardNotice, setBoardNotice] = useState(
     "DGX-02 tmux 게이트 준비됨. 실제 send-keys는 서버 env gate와 승인 이후에만 실행됩니다.",
   );
+  const [showLocksDashboard, setShowLocksDashboard] = useState(false);
   const panes = createTmuxPanes(roleAgent, recommendation);
   const visiblePanes = panes.slice(0, recommendation.recommendedCount);
 
@@ -241,7 +247,58 @@ export function TmuxSwarmBoard({
              <LockKeyhole className="h-2.5 w-2.5" />
              gate
            </StatusBadge>
+          <button
+            onClick={() => setShowLocksDashboard(true)}
+            className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-mono font-semibold rounded bg-muted/40 hover:bg-muted/80 border border-border/15 transition-all text-muted-foreground hover:text-foreground cursor-pointer"
+          >
+            <Lock className="h-2.5 w-2.5 text-primary" />
+            분산 락 모니터
+          </button>
         </div>
+
+        {/* Center: Mode Switching tabs (renders even in tmux fullscreen header) */}
+        <div className="flex items-center gap-0.5 bg-muted/20 p-0.5 rounded-md border border-border/30 h-8 select-none">
+          <button
+            className={cn(
+              "inline-flex items-center justify-center h-7 gap-1.5 px-3 text-[11px] font-medium transition-all rounded-sm border border-transparent cursor-pointer",
+              mode === "conversation"
+                ? "text-foreground bg-background shadow-sm"
+                : "text-muted-foreground hover:text-foreground bg-transparent"
+            )}
+            onClick={() => onChangeMode("conversation")}
+            type="button"
+          >
+            <MessageSquare className="h-3 w-3" />
+            Conversation
+          </button>
+          <button
+            className={cn(
+              "inline-flex items-center justify-center h-7 gap-1.5 px-3 text-[11px] font-medium transition-all rounded-sm border border-transparent cursor-pointer",
+              mode === "debate"
+                ? "text-foreground bg-background shadow-sm"
+                : "text-muted-foreground hover:text-foreground bg-transparent"
+            )}
+            onClick={() => onChangeMode("debate")}
+            type="button"
+          >
+            <GitBranch className="h-3 w-3" />
+            Debate
+          </button>
+          <button
+            className={cn(
+              "inline-flex items-center justify-center h-7 gap-1.5 px-3 text-[11px] font-medium transition-all rounded-sm border border-transparent cursor-pointer",
+              mode === "tmux"
+                ? "text-foreground bg-background shadow-sm"
+                : "text-muted-foreground hover:text-foreground bg-transparent"
+            )}
+            onClick={() => onChangeMode("tmux")}
+            type="button"
+          >
+            <Terminal className="h-3 w-3" />
+            Tmux
+          </button>
+        </div>
+
         <span className="text-xs text-muted-foreground">
           {visiblePanes.length} panes · 난이도 {recommendation.difficulty} · score{" "}
           {recommendation.score}
@@ -368,6 +425,7 @@ export function TmuxSwarmBoard({
           <span className="truncate text-foreground">{boardNotice}</span>
         </div>
       </footer>
+      <ClusterLocksDashboard open={showLocksDashboard} onClose={() => setShowLocksDashboard(false)} />
     </section>
   );
 }

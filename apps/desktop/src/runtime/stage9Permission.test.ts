@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MobileActionPolicy, ProviderRuntimeReadiness, RuntimeSnapshot, TerminalSlot } from "@ai-orchestrator/protocol";
+import type { MobileActionPolicy, ProviderRuntimeReadiness, RuntimeSnapshot, TerminalSlot, PermissionLevel } from "@ai-orchestrator/protocol";
 import { createStage4AgentRun } from "./stage4Runtime";
 import { createTelegramDemoInput, createStage8IngressSnapshot } from "./stage8Ingress";
 import { createStage9PermissionSnapshot, evaluatePermissionGate, nextRequiredPermission } from "./stage9Permission";
@@ -79,10 +79,20 @@ const agentRun = createStage4AgentRun({
 
 describe("stage9 permission matrix", () => {
   it("merges external approvals, terminal slots, run steps, and mobile policy", () => {
-    const ingress = createStage8IngressSnapshot(createTelegramDemoInput(createdAt));
+    const externalApprovals = [
+      {
+        id: "external_approval_demo",
+        ingressEventId: "ingress_event_demo",
+        channel: "legacy_telegram" as const,
+        summary: "do telegram thing",
+        permissions: ["run_safe_commands", "secret_access"] as PermissionLevel[],
+        state: "required" as const,
+        createdAt,
+      },
+    ];
     const snapshot = createStage9PermissionSnapshot({
       sessionId: "session_desktop_001",
-      externalApprovals: ingress.approvals,
+      externalApprovals,
       terminalSlots,
       agentRun,
       runtime,
@@ -99,10 +109,20 @@ describe("stage9 permission matrix", () => {
   });
 
   it("applies operator approval decisions without removing denied mobile boundaries", () => {
-    const ingress = createStage8IngressSnapshot(createTelegramDemoInput(createdAt));
+    const externalApprovals = [
+      {
+        id: "external_approval_demo",
+        ingressEventId: "ingress_event_demo",
+        channel: "legacy_telegram" as const,
+        summary: "do telegram thing",
+        permissions: ["run_safe_commands", "secret_access"] as PermissionLevel[],
+        state: "required" as const,
+        createdAt,
+      },
+    ];
     const pendingSnapshot = createStage9PermissionSnapshot({
       sessionId: "session_desktop_001",
-      externalApprovals: ingress.approvals,
+      externalApprovals,
       terminalSlots,
       agentRun,
       runtime,
@@ -113,7 +133,7 @@ describe("stage9 permission matrix", () => {
 
     const approvedSnapshot = createStage9PermissionSnapshot({
       sessionId: "session_desktop_001",
-      externalApprovals: ingress.approvals,
+      externalApprovals,
       terminalSlots,
       agentRun,
       runtime,

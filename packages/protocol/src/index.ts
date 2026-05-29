@@ -618,6 +618,26 @@ export type ProviderCompletionRoute = z.infer<typeof providerCompletionRouteSche
 
 export type ProviderCompletionStatus = "succeeded" | "failed" | "fallback_required";
 
+export const providerCompletionRouteTypeSchema = z.enum([
+  "personal",
+  "trusted_remote_device",
+  "shared",
+  "slack_bot",
+  "company_webapp",
+  "multi_user_openclaw",
+  "public_api",
+  "scheduled_batch",
+]);
+export type ProviderCompletionRouteType = z.infer<typeof providerCompletionRouteTypeSchema>;
+
+export const providerCompletionRequestContextSchema = z.object({
+  userId: z.string().min(1).max(256),
+  routeType: providerCompletionRouteTypeSchema.default("personal"),
+  trustedDeviceId: z.string().min(1).max(256).optional(),
+  humanInitiated: z.boolean().optional(),
+});
+export type ProviderCompletionRequestContext = z.infer<typeof providerCompletionRequestContextSchema>;
+
 export const providerCompletionMessageSchema = z.object({
   role: z.enum(["user", "assistant", "system", "tool"]),
   content: z.string().max(200_000),
@@ -632,28 +652,30 @@ export const providerCompletionRequestSchema = z.object({
   messages: z.array(providerCompletionMessageSchema).min(1).max(200),
   source: eventSourceSchema,
   routePreference: providerCompletionRouteSchema,
+  requestContext: providerCompletionRequestContextSchema.optional(),
   approvalState: z.enum(["not_required", "required", "approved", "rejected", "expired"]).optional(),
   permissionDecision: z.enum(["allow", "approval_required", "deny"]).optional(),
   createdAt: z.string().min(1).max(64),
 });
 export type ProviderCompletionRequest = z.infer<typeof providerCompletionRequestSchema>;
 
-export type ProviderCompletionUsage = {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
+export const providerCompletionUsageSchema = z.object({
+  inputTokens: z.number().int().nonnegative().optional(),
+  outputTokens: z.number().int().nonnegative().optional(),
+  totalTokens: z.number().int().nonnegative().optional(),
   /**
    * Anthropic-only: tokens consumed to populate the prompt cache on this
    * call. Optional everywhere else; adapters that do not surface cache
    * accounting simply omit it.
    */
-  cacheCreationInputTokens?: number;
+  cacheCreationInputTokens: z.number().int().nonnegative().optional(),
   /**
    * Anthropic-only: tokens read back from the prompt cache on this call.
    * Same optionality rules as above.
    */
-  cacheReadInputTokens?: number;
-};
+  cacheReadInputTokens: z.number().int().nonnegative().optional(),
+});
+export type ProviderCompletionUsage = z.infer<typeof providerCompletionUsageSchema>;
 
 export type ProviderCompletionResponse = {
   id: string;
@@ -675,6 +697,55 @@ export type ProviderCompletionResponse = {
   error?: string;
   createdAt: string;
 };
+
+export const adapterErrorCategorySchema = z.enum([
+  "network",
+  "auth",
+  "credential_expired",
+  "refresh_required",
+  "rate_limit",
+  "bad_request",
+  "provider",
+  "blocked",
+  "unknown",
+]);
+export type AdapterErrorCategory = z.infer<typeof adapterErrorCategorySchema>;
+
+export const providerCompletionChunkEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("delta"),
+    requestId: z.string(),
+    sequence: z.number().int().nonnegative(),
+    delta: z.string(),
+  }),
+  z.object({
+    type: z.literal("usage"),
+    requestId: z.string(),
+    usage: providerCompletionUsageSchema,
+  }),
+  z.object({
+    type: z.literal("done"),
+    requestId: z.string(),
+    finalContent: z.string(),
+    stopReason: z.enum(["end_turn", "max_tokens", "stop_sequence", "tool_use", "cancelled"]).optional(),
+    usage: providerCompletionUsageSchema.optional(),
+    endpoint: z.string(),
+    createdAt: z.string(),
+    completedAt: z.string(),
+  }),
+  z.object({
+    type: z.literal("error"),
+    requestId: z.string(),
+    error: z.object({
+      category: adapterErrorCategorySchema,
+      message: z.string(),
+      status: z.number().int().optional(),
+      retryAfterSec: z.number().int().optional(),
+      providerRawSnippet: z.string().optional(),
+    }),
+  }),
+]);
+export type ProviderCompletionChunkEvent = z.infer<typeof providerCompletionChunkEventSchema>;
 
 export const agentDelegationEventTypeSchema = z.enum([
   "agent.delegation.detected",
@@ -1195,6 +1266,7 @@ export type IngressGuardName =
   | "shape_unification"
   | "noise_filter"
   | "self_response_prevention"
+  | "external_agent_isolation"
   | "debounce"
   | "pii_secret_block"
   | "guard_logging"
@@ -2147,3 +2219,19 @@ export type MobileActionPolicy = {
   canViewSecrets: boolean;
   canMergeOrPush: boolean;
 };
+
+export const ssotProviderKindSchema = z.enum(["markdown", "notion", "github"]);
+export type SsotProviderKind = z.infer<typeof ssotProviderKindSchema>;
+
+export const ssotSnapshotSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  providerKind: ssotProviderKindSchema,
+  sourceUrl: z.string().optional(),
+  contentHash: z.string(),
+  revision: z.string(),
+  observedAt: z.string(),
+  itemCount: z.number().int().nonnegative(),
+});
+export type SsotSnapshot = z.infer<typeof ssotSnapshotSchema>;
+

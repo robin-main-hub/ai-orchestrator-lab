@@ -4,10 +4,12 @@ import type {
   ProviderCompletionRequest,
   ProviderCompletionResponse,
   ProviderKind,
+  ProviderCompletionChunkEvent,
 } from "@ai-orchestrator/protocol";
 import type { AdapterRuntimeContext, LlmAdapter } from "./adapter.js";
 import { AdapterError, redactSecretsForLog, truncateForLog } from "./errors.js";
 import { createRequestSignal } from "./signal.js";
+import { responseToChunks, chunksToLines } from "./streamUtils.js";
 
 export type AdapterFetchLike = (
   input: string,
@@ -21,6 +23,7 @@ export type AdapterFetchLike = (
   ok: boolean;
   status: number;
   text(): Promise<string>;
+  body?: any;
 }>;
 
 export type OpenAICompatibleAdapterOptions = {
@@ -179,6 +182,108 @@ export class OpenAICompatibleAdapter implements LlmAdapter {
         endpoint,
         error: `[${adapterError.category}] ${adapterError.message}`,
         createdAt,
+      };
+    }
+  }
+
+  async *completeStreaming(
+    request: ProviderCompletionRequest,
+    ctx: AdapterRuntimeContext,
+  ): AsyncIterable<ProviderCompletionChunkEvent> {
+    const createdAt = new Date().toISOString();
+    const endpoint = `${this.baseUrl}/chat/completions`;
+
+    try {
+      const secret = await this.resolveSecret(ctx);
+      const requestBody = {
+        ...this.createRequestBody(request.modelId, request.messages),
+        stream: true,
+        stream_options: { include_usage: true },
+      };
+
+      const response = await this.fetchImpl(endpoint, {
+        method: "POST",
+        headers: this.createHeaders(secret),
+        body: JSON.stringify(requestBody),
+        signal: createRequestSignal(ctx),
+      });
+
+      if (!response.ok) {
+        const rawText = await response.text();
+        throw createHttpAdapterError(response.status, rawText, "chat completion streaming failed");
+      }
+
+      const chunks = responseToChunks(response.body);
+      const lines = chunksToLines(chunks);
+      let sequence = 0;
+      let finalContent = "";
+      let lastUsage: any = undefined;
+
+      for await (const line of lines) {
+        if (!line.startsWith("data:")) continue;
+        const dataStr = line.slice(5).trim();
+        if (dataStr === "[DONE]") {
+          break;
+        }
+
+        let parsed: any;
+        try {
+          parsed = JSON.parse(dataStr);
+        } catch (e) {
+          continue;
+        }
+
+        const choice = parsed.choices?.[0];
+        const delta = choice?.delta;
+        const content = delta?.content;
+
+        if (content) {
+          finalContent += content;
+          yield {
+            type: "delta",
+            requestId: request.id,
+            sequence: sequence++,
+            delta: content,
+          };
+        }
+
+        if (parsed.usage) {
+          lastUsage = {
+            inputTokens: parsed.usage.prompt_tokens,
+            outputTokens: parsed.usage.completion_tokens,
+            totalTokens: parsed.usage.total_tokens,
+          };
+          yield {
+            type: "usage",
+            requestId: request.id,
+            usage: lastUsage,
+          };
+        }
+      }
+
+      yield {
+        type: "done",
+        requestId: request.id,
+        finalContent,
+        stopReason: "end_turn",
+        usage: lastUsage,
+        endpoint,
+        createdAt,
+        completedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      const adapterError = normalizeOpenAICompatibleError(error);
+      reportAdapterError(ctx, adapterError);
+      yield {
+        type: "error",
+        requestId: request.id,
+        error: {
+          category: adapterError.category,
+          message: adapterError.message,
+          status: adapterError.status,
+          retryAfterSec: adapterError.retryAfterSec,
+          providerRawSnippet: adapterError.providerRawSnippet,
+        },
       };
     }
   }

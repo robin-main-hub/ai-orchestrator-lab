@@ -53,4 +53,25 @@ describe("withTrustEnforcement — trust enforcement", () => {
                                  ),
                        ).rejects.toMatchObject({ category: "trust_violation" });
            });
+
+           it("blocks remember when title or content contains secrets", async () => {
+                 const adapter = withTrustEnforcement(new MockMemoryAdapter());
+                 const ctx = makeContractCtx({ permissionDecision: "allow", callerTrustLevel: "trusted" });
+                 
+                 // Secret in content
+                 await expect(
+                         adapter.remember(
+                           { title: "safe title", content: "my key is sk-1234567890abcdef1234567890abcdef", layer: "episode", sourceChannel: "agent", trustLevel: "trusted" },
+                           ctx
+                         )
+                 ).rejects.toMatchObject({ category: "redaction_required" });
+
+                 // Secret in title
+                 await expect(
+                         adapter.remember(
+                           { title: "Bearer eyJhbGciOiJIUzI1NiIsInR5c.payload.signature", content: "safe content", layer: "episode", sourceChannel: "agent", trustLevel: "trusted" },
+                           ctx
+                         )
+                 ).rejects.toMatchObject({ category: "redaction_required" });
+           });
 });

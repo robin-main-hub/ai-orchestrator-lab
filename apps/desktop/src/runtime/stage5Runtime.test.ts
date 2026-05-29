@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import type { Stage4AgentRun } from "./stage4Runtime";
-import { createStage5DgxBridge, mergeDgxRuntimeSnapshot } from "./stage5Runtime";
+import { createStage5DgxBridge, mergeDgxRuntimeSnapshot, DgxConnectionStateMachine } from "./stage5Runtime";
 
 const runtime: RuntimeSnapshot = {
   status: "degraded",
@@ -135,3 +135,109 @@ describe("stage5 dgx bridge", () => {
     expect(merged.runtimeNodes[0]?.role).toBe("main_server");
   });
 });
+
+describe("DgxConnectionStateMachine", () => {
+  class MockWebSocket {
+    static instances: MockWebSocket[] = [];
+    url: string;
+    readyState: number = 0; // CONNECTING
+    onopen: (() => void) | null = null;
+    onmessage: ((event: any) => void) | null = null;
+    onerror: ((event: any) => void) | null = null;
+    onclose: (() => void) | null = null;
+    sentMessages: string[] = [];
+    closed = false;
+
+    constructor(url: string) {
+      this.url = url;
+      MockWebSocket.instances.push(this);
+    }
+
+    send(msg: string) {
+      this.sentMessages.push(msg);
+    }
+
+    close() {
+      this.closed = true;
+      if (this.onclose) this.onclose();
+    }
+
+    triggerOpen() {
+      this.readyState = 1; // OPEN
+      if (this.onopen) this.onopen();
+    }
+
+    triggerMessage(data: any) {
+      if (this.onmessage) {
+        this.onmessage({ data: JSON.stringify(data) });
+      }
+    }
+
+    triggerError() {
+      if (this.onerror) this.onerror({});
+    }
+  }
+
+  it("transitions state correctly during open and restore", async () => {
+    MockWebSocket.instances = [];
+    let restoreCalled = false;
+    let stateChanges: string[] = [];
+
+    let resolveRestore: (() => void) | null = null;
+    const restorePromise = new Promise<void>((resolve) => {
+      resolveRestore = resolve;
+    });
+
+    const fsm = new DgxConnectionStateMachine("ws://localhost:8080", {
+      WebSocketImpl: MockWebSocket as any,
+      listeners: {
+        onStateChange(state, prev) {
+          stateChanges.push(`${prev}->${state}`);
+          if (state === "online") {
+            resolveRestore?.();
+          }
+        },
+        onRestore() {
+          restoreCalled = true;
+        }
+      }
+    });
+
+    expect(fsm.getState()).toBe("offline");
+
+    fsm.connect();
+    expect(MockWebSocket.instances.length).toBe(1);
+    const mockWs = MockWebSocket.instances[0]!;
+
+    mockWs.triggerOpen();
+
+    await restorePromise;
+
+    expect(stateChanges).toContain("offline->syncing");
+    expect(stateChanges).toContain("syncing->online");
+    expect(restoreCalled).toBe(true);
+    expect(fsm.getState()).toBe("online");
+
+    fsm.disconnect();
+  });
+
+  it("handles degraded states when ping pong is missing or error happens", () => {
+    MockWebSocket.instances = [];
+    const fsm = new DgxConnectionStateMachine("ws://localhost:8080", {
+      WebSocketImpl: MockWebSocket as any,
+      heartbeatIntervalMs: 100
+    });
+
+    fsm.connect();
+    const mockWs = MockWebSocket.instances[0]!;
+    mockWs.triggerOpen();
+
+    expect(fsm.getState()).toBe("online");
+
+    mockWs.triggerError();
+    expect(fsm.getState()).toBe("degraded");
+
+    fsm.disconnect();
+  });
+});
+

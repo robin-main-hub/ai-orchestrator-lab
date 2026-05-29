@@ -48,6 +48,7 @@ export function guardStepLabel(step: Stage8IngressSnapshot["result"]["guardSteps
     shape_unification: "Shape",
     noise_filter: "Noise",
     self_response_prevention: "Self-loop",
+    external_agent_isolation: "Isolation",
     debounce: "Debounce",
     pii_secret_block: "PII/Secret",
     guard_logging: "Logging",

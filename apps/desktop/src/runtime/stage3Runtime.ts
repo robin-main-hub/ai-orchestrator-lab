@@ -8,7 +8,18 @@ import type {
   EventEnvelope,
   ProviderProfile,
   RuntimeSnapshot,
+  ProviderCompletionResponse,
+  CodingPacket,
 } from "@ai-orchestrator/protocol";
+import {
+  runDebate,
+  buildAgentSystemPrompt,
+  type DebateContext,
+  type DebateEngineAgentSlot,
+  type LlmCompletionFn,
+} from "@ai-orchestrator/agents";
+import { requestDgxProviderCompletion } from "./stage12DgxProvider";
+
 
 export type HumanPeekEntry = {
   id: string;
@@ -297,4 +308,115 @@ function trimForCard(value: string, limit = 120): string {
   }
 
   return `${value.slice(0, limit - 1)}...`;
+}
+
+export function createDgxLlmCompletionFn(
+  provider: ProviderProfile,
+  fetchImpl: typeof fetch = fetch,
+): LlmCompletionFn {
+  return async (request, ctx) => {
+    const messages: ConversationMessage[] = request.messages.map((m, idx) => ({
+      id: `msg_debate_${idx}_${crypto.randomUUID()}`,
+      sessionId: request.sessionId,
+      role: m.role === "system" ? "system" : m.role === "assistant" ? "assistant" : "user",
+      content: m.content,
+      createdAt: new Date().toISOString(),
+    }));
+
+    const result = await requestDgxProviderCompletion({
+      provider,
+      modelId: request.modelId,
+      messages,
+      fetchImpl,
+      proxyTimeoutMs: ctx.timeoutMs,
+    });
+
+    return {
+      id: `res_debate_${crypto.randomUUID()}`,
+      requestId: request.id,
+      providerProfileId: provider.id,
+      modelId: request.modelId,
+      status: "succeeded",
+      content: result.content,
+      endpoint: result.endpoint,
+      route: result.route,
+      usage: result.usage,
+      createdAt: new Date().toISOString(),
+    };
+  };
+}
+
+export async function runStage3DebateSession(
+  input: Stage3DebateInput & {
+    packet?: CodingPacket;
+    debateId?: string;
+    fetchImpl?: typeof fetch;
+    perAgentTimeoutMs?: number;
+  },
+): Promise<Stage3DebateSession> {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const baseSession = createStage3DebateSession(input);
+  if (input.debateId) {
+    baseSession.id = input.debateId;
+  }
+
+  // Extract debate context from input
+  const lastUserMessage = [...input.messages].reverse().find((m) => m.role === "user");
+  const problem = lastUserMessage?.content ?? "Conversation context를 Debate Mode로 승격";
+  const summary = summarizeConversation(input.messages);
+
+  const debateContext: DebateContext = {
+    sessionId: input.messages[0]?.sessionId ?? "session_desktop_001",
+    problem,
+    conversationSummary: summary,
+    constraints: input.packet?.constraints ?? [],
+    openQuestions: input.packet?.reviewerNotes ?? [],
+    userPreferences: [],
+    memoryTraceIds: [],
+  };
+
+  // Build Slots for agents
+  const slots: DebateEngineAgentSlot[] = input.agents
+    .filter((agent) => agent.enabled)
+    .map((agent) => {
+      const provider = input.providers.find((p) => p.id === agent.providerProfileId);
+      if (!provider) {
+        throw new Error(`Provider not found for agent ${agent.id}`);
+      }
+
+      return {
+        agent,
+        complete: createDgxLlmCompletionFn(provider, fetchImpl),
+        systemPrompt: `당신은 ${agent.name} (${agent.role}) 에이전트입니다. 역할과 목적에 맞게 토론에 참여해 주세요.`,
+        modelId: agent.modelId ?? provider.defaultModel ?? "gpt-5.5-pro",
+        resolveSecret: async () => provider.secretRef?.id,
+      };
+    });
+
+  // Execute debate rounds via agents engine
+  const initialRounds: DebateRound[] = baseSession.rounds.map((round, idx) => ({
+    ...round,
+    status: idx === 0 ? ("running" as const) : ("pending" as const),
+    utterances: [],
+  }));
+
+  const debateResult = await runDebate({
+    debateId: baseSession.id,
+    initialRounds,
+    context: debateContext,
+    slots,
+    engineOptions: {
+      perAgentTimeoutMs: input.perAgentTimeoutMs ?? 30000,
+    },
+  });
+
+  // Re-assemble human peek and status hub with actual utterances count
+  const updatedParticipants = baseSession.participants;
+  const updatedHumanPeek = createHumanPeek(updatedParticipants, debateResult.rounds, input.events, baseSession.promotedAt);
+
+  return {
+    ...baseSession,
+    rounds: debateResult.rounds,
+    humanPeek: updatedHumanPeek,
+  };
 }

@@ -467,4 +467,90 @@ describe("AnthropicAdapter — AdapterError instance check", () => {
   it("AdapterError is the actual instance for assertions that need the class", () => {
     expect(new AdapterError("auth", "x")).toBeInstanceOf(AdapterError);
   });
+
+  it("streams the completion chunks correctly", async () => {
+    const { fetch } = recordedFetch(() => ({
+      ok: true,
+      status: 200,
+      body: [
+        'event: message_start\n',
+        'data: {"type":"message_start","message":{"id":"msg_123","usage":{"input_tokens":12,"output_tokens":0}}}\n\n',
+        'event: content_block_start\n',
+        'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
+        'event: content_block_delta\n',
+        'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hel"}}\n\n',
+        'event: content_block_delta\n',
+        'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"lo"}}\n\n',
+        'event: content_block_stop\n',
+        'data: {"type":"content_block_stop","index":0}\n\n',
+        'event: message_delta\n',
+        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}\n\n',
+        'event: message_stop\n',
+        'data: {"type":"message_stop"}\n\n'
+      ]
+    }));
+
+    const adapter = new AnthropicAdapter({
+      profileId: "provider_apifun_claude",
+      baseUrl: "https://api.apikey.fun",
+      fetchImpl: fetch,
+    });
+
+    const stream = adapter.completeStreaming(
+      baseRequest(),
+      createAdapterContext({ secret: "sk-ant-secret" })
+    );
+
+    const chunks = [];
+    for await (const chunk of stream) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks).toHaveLength(5);
+    expect(chunks[0]).toEqual({
+      type: "usage",
+      requestId: "req_anthropic_001",
+      usage: {
+        inputTokens: 12,
+        outputTokens: 0,
+        totalTokens: 12,
+      },
+    });
+    expect(chunks[1]).toEqual({
+      type: "delta",
+      requestId: "req_anthropic_001",
+      sequence: 0,
+      delta: "Hel",
+    });
+    expect(chunks[2]).toEqual({
+      type: "delta",
+      requestId: "req_anthropic_001",
+      sequence: 1,
+      delta: "lo",
+    });
+    expect(chunks[3]).toEqual({
+      type: "usage",
+      requestId: "req_anthropic_001",
+      usage: {
+        inputTokens: 12,
+        outputTokens: 2,
+        totalTokens: 14,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 0,
+      },
+    });
+    expect(chunks[4]).toMatchObject({
+      type: "done",
+      requestId: "req_anthropic_001",
+      finalContent: "Hello",
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 12,
+        outputTokens: 2,
+        totalTokens: 14,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 0,
+      },
+    });
+  });
 });

@@ -38,6 +38,7 @@ export type AvatarWithStatusProps = {
   isPrimary?: boolean;
   size?: "sm" | "md" | "lg";
   className?: string;
+  avatarDataUrl?: string;
 };
 
 const roleColorMap: Record<RoleColor, string> = {
@@ -76,18 +77,30 @@ export function AvatarWithStatus({
   isPrimary = false,
   size = "md",
   className,
+  avatarDataUrl,
 }: AvatarWithStatusProps) {
+  const [imgError, setImgError] = React.useState(false);
+
   return (
     <div className={cn("relative inline-flex", className)}>
       <div
         className={cn(
-          "flex items-center justify-center rounded-lg font-mono font-medium",
+          "flex items-center justify-center rounded-lg font-mono font-medium overflow-hidden",
           roleColorMap[roleColor],
           sizeMap[size],
           isPrimary && "ring-2 ring-primary/60",
         )}
       >
-        {initials}
+        {avatarDataUrl && !imgError ? (
+          <img
+            src={avatarDataUrl}
+            alt={initials}
+            onError={() => setImgError(true)}
+            className="h-full w-full rounded-lg object-cover"
+          />
+        ) : (
+          initials
+        )}
       </div>
       {status ? (
         <span
@@ -128,10 +141,10 @@ export function roleColorFromRole(role: string): RoleColor {
     case "risk_officer":
     case "mediator":
     case "negotiator":
+    case "ux_critic":
       return "expert";
     case "companion":
     case "external":
-    case "ux_critic":
     default:
       return "companion";
   }

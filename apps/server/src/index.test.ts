@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -47,6 +47,21 @@ import {
   replayApprovedRequestFromPersistentServerStorage,
   resolveAllowedOrigins,
   startServer,
+  encryptToken,
+  decryptToken,
+  getFreshOAuthTokenWithNotion,
+  clearLocalTokenCaches,
+  writeWAL,
+  readWAL,
+  deleteWAL,
+  fetchNotionTokenRow,
+  writeNotionTokenRow,
+  getNotionSyncedNow,
+  grokSessionManager,
+  createServerProviderProxyCompletionWithHotSwap,
+  serverEventBroker,
+  wrapStreamWithRedaction,
+  getLocalDb,
 } from "./index";
 
 function expectValidAgentDelegationEvents(events: Array<{ type: string; payload: unknown }>) {
@@ -806,6 +821,61 @@ describe("server health placeholder", () => {
     expect(response.route).toBe("server_proxy");
   });
 
+  it("routes Claude CLI completions through the local CLI adapter without calling HTTP fetch", async () => {
+    const previousEnable = process.env.ENABLE_CLAUDE_CODE_SINGLE_OWNER_PROVIDER;
+    const previousOwner = process.env.CLAUDE_CODE_OWNER_USER_ID;
+    process.env.ENABLE_CLAUDE_CODE_SINGLE_OWNER_PROVIDER = "true";
+    process.env.CLAUDE_CODE_OWNER_USER_ID = "owner-robin";
+
+    let response: Awaited<ReturnType<typeof createDgxProviderCompletionResponse>>;
+    try {
+      response = await createDgxProviderCompletionResponse(
+        {
+          id: "provider_completion_request_claude_cli",
+          sessionId: "session_1",
+          providerProfileId: "provider_claude_code_single_owner",
+          modelId: "claude-cli-session",
+          messages: [{ role: "user", content: "delegate this" }],
+          source: "desktop",
+          routePreference: "server_proxy",
+          requestContext: {
+            userId: "owner-robin",
+            routeType: "personal",
+            humanInitiated: true,
+          },
+          createdAt: "2026-05-28T00:00:00.000Z",
+        },
+        {
+          now: "2026-05-28T00:00:00.000Z",
+          fetchImpl: async () => {
+            throw new Error("Claude CLI must not use HTTP fetch");
+          },
+          claudeCliRunner: async (params) => {
+            expect(params.claudeBinPath).toBe("claude");
+            expect(params.permissionMode).toBe("plan");
+            expect(params.prompt).toContain("USER: delegate this");
+            expect(params.cliModelId).toBeUndefined();
+            return {
+              exitCode: 0,
+              signal: null,
+              stdout: JSON.stringify({ type: "result", result: "Claude CLI OK" }),
+              stderr: "",
+            };
+          },
+        },
+      );
+    } finally {
+      if (previousEnable === undefined) delete process.env.ENABLE_CLAUDE_CODE_SINGLE_OWNER_PROVIDER;
+      else process.env.ENABLE_CLAUDE_CODE_SINGLE_OWNER_PROVIDER = previousEnable;
+      if (previousOwner === undefined) delete process.env.CLAUDE_CODE_OWNER_USER_ID;
+      else process.env.CLAUDE_CODE_OWNER_USER_ID = previousOwner;
+    }
+
+    expect(response.status).toBe("succeeded");
+    expect(response.content).toBe("Claude CLI OK");
+    expect(response.route).toBe("server_proxy");
+  });
+
   it("discovers DeepSeek models through the DGX-02 provider model proxy", async () => {
     const previousKey = process.env.DEEPSEEK_API_KEY;
     process.env.DEEPSEEK_API_KEY = "deepseek-test-secret";
@@ -859,6 +929,7 @@ describe("server health placeholder", () => {
       const deepseek = registry.entries.find((entry) => entry.providerProfileId === "provider_deepseek_dgx");
       const apifun = registry.entries.find((entry) => entry.providerProfileId === "provider_apifun_claude");
       const codexOauth = registry.entries.find((entry) => entry.providerProfileId === "provider_codex_oauth");
+      const claudeCli = registry.entries.find((entry) => entry.providerProfileId === "provider_claude_code_single_owner");
       const grok = registry.entries.find((entry) => entry.providerProfileId === "provider_grok_oauth_dgx");
 
       expect(registry.authorityNodeId).toBe("dgx-02");
@@ -872,6 +943,10 @@ describe("server health placeholder", () => {
       expect(codexOauth?.name).toBe("Codex OAuth Session");
       expect(codexOauth?.authMode).toBe("oauth_session");
       expect(codexOauth?.tags).toContain("codex");
+      expect(claudeCli?.name).toBe("Claude Code Single Owner");
+      expect(claudeCli?.authMode).toBe("local_cli");
+      expect(claudeCli?.secretAvailability).toBe("available");
+      expect(claudeCli?.tags).toEqual(expect.arrayContaining(["claude", "cli", "single-owner"]));
       expect(grok?.authMode).toBe("oauth_session");
       expect(JSON.stringify(registry)).not.toContain("deepseek-test-secret");
     } finally {
@@ -2131,7 +2206,7 @@ describe("HTTP request limits", () => {
           authorType: "user",
           eventType: "message",
           text: "please run bash and use Bearer abcdefghijklmnopqrstuvwxyz123456",
-          receivedAt: "2026-05-25T00:00:00.000Z",
+          receivedAt: new Date().toISOString(),
         }),
         headers: {
           authorization: "Bearer test-orchestrator-token",
@@ -2873,6 +2948,1230 @@ describe("HTTP request limits", () => {
         delete process.env.NODE_ENV;
       } else {
         process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
+
+  it("runs package verification for Coding Packet and captures subprocess output", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const packet = {
+        goal: "Test execution gate",
+        context: ["context_1"],
+        decisions: ["decision_1"],
+        rejectedOptions: ["option_1"],
+        constraints: ["constraint_1"],
+        filesToInspect: [],
+        implementationPlan: ["plan_1"],
+        verificationPlan: ["plan_test_1"],
+        reviewerNotes: [],
+      };
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/verify-packet`, {
+        body: JSON.stringify({
+          ...packet,
+          command: "node -e \"process.exit(0)\""
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      if (response.status !== 200) {
+        console.log("RESPONSE ERROR BODY:", await response.json());
+      }
+      expect(response.status).toBe(200);
+      const data = (await response.json()) as any;
+      expect(data).toMatchObject({
+        status: "passed",
+        exitCode: 0,
+        checks: [
+          { label: "Compiler checks", status: "pass" },
+          { label: "Unit test coverage", status: "pass" }
+        ]
+      });
+      expect(data.stdout).toBeDefined();
+
+      const failResponse = await fetch(`http://127.0.0.1:${address.port}/verify-packet`, {
+        body: JSON.stringify({
+          ...packet,
+          command: "node -e \"process.exit(1)\""
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(failResponse.status).toBe(200);
+      const failData = (await failResponse.json()) as any;
+      expect(failData).toMatchObject({
+        status: "failed",
+        checks: [
+          { label: "Compiler checks", status: "fail" },
+          { label: "Unit test coverage", status: "warn" }
+        ]
+      });
+      expect(failData.exitCode).toBe(1);
+
+      // Security sanitization test cases
+      const unsafeCommands = [
+        "pnpm-shell",
+        "pnpm install",
+        "pnpm i",
+        "pnpm --filter package exec calc",
+        "pnpm test; calc",
+        "pnpm test && calc",
+        "npx something vitest",
+        "npm run install",
+      ];
+
+      for (const cmd of unsafeCommands) {
+        const unsafeResponse = await fetch(`http://127.0.0.1:${address.port}/verify-packet`, {
+          body: JSON.stringify({
+            ...packet,
+            command: cmd,
+          }),
+          headers: {
+            authorization: "Bearer test-orchestrator-token",
+            "content-type": "application/json",
+          },
+          method: "POST",
+        });
+
+        expect(unsafeResponse.status).toBe(400);
+        const unsafeData = (await unsafeResponse.json()) as any;
+        expect(unsafeData.error).toBe("unsafe_command");
+      }
+
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
+});
+
+describe("Notion OAuth Token Sync & Lock Integration", () => {
+  let originalEnv: Record<string, string | undefined>;
+
+  // MockNotionServer helper to represent a stateful mocked Notion API instance.
+  class MockNotionServer {
+    public dbRow: any;
+    public calls: { url: string; init?: any }[] = [];
+    public clockSkewOffsetMs = 0;
+    public rateLimitAttempts = 0;
+    public maxRateLimitAttempts = 0;
+    private testKey: string;
+
+    constructor(slot: string, initialBundle: any, testKey: string) {
+      this.testKey = testKey;
+      const enc = encryptToken(JSON.stringify(initialBundle), testKey);
+
+      this.dbRow = {
+        id: "page-123",
+        properties: {
+          slot: { type: "title", title: [{ text: { content: slot } }] },
+          encrypted_token_bundle: { type: "rich_text", rich_text: [{ text: { content: enc.ciphertext } }] },
+          nonce: { type: "rich_text", rich_text: [{ text: { content: enc.nonce } }] },
+          key_id: { type: "rich_text", rich_text: [{ text: { content: enc.tag } }] },
+          expires_at: { type: "rich_text", rich_text: [{ text: { content: initialBundle.expires_at } }] },
+          token_version: { type: "number", number: 1 },
+          lock_owner: { type: "rich_text", rich_text: [] },
+          lock_until: { type: "rich_text", rich_text: [] },
+          last_verified_by: { type: "rich_text", rich_text: [] },
+          last_test_result: { type: "rich_text", rich_text: [] },
+        }
+      };
+    }
+
+    public getFetch() {
+      return async (url: string, init?: any) => {
+        this.calls.push({ url, init });
+
+        if (this.rateLimitAttempts < this.maxRateLimitAttempts) {
+          this.rateLimitAttempts++;
+          return {
+            ok: false,
+            status: 429,
+            headers: {
+              get: (k: string) => k.toLowerCase() === "retry-after" ? "1" : null
+            },
+            text: async () => "Rate Limited",
+            json: async () => ({}),
+          };
+        }
+
+        const serverDate = new Date(Date.now() + this.clockSkewOffsetMs).toUTCString();
+        const responseHeaders = {
+          get: (k: string) => k.toLowerCase() === "date" ? serverDate : null
+        };
+
+        if (url.includes("/databases/") && url.includes("/query")) {
+          return {
+            ok: true,
+            status: 200,
+            headers: responseHeaders,
+            text: async () => JSON.stringify({ results: [this.dbRow] }),
+            json: async () => ({ results: [this.dbRow] }),
+          };
+        }
+
+        if (url.includes("/pages/page-123") || url.includes("/pages")) {
+          if (init && init.body) {
+            const body = JSON.parse(init.body);
+            const props = body.properties;
+
+            if (props.lock_owner !== undefined) {
+              const val = props.lock_owner.rich_text?.[0]?.text?.content ?? "";
+              this.dbRow.properties.lock_owner = { type: "rich_text", rich_text: val ? [{ text: { content: val } }] : [] };
+            }
+            if (props.lock_until !== undefined) {
+              const val = props.lock_until.rich_text?.[0]?.text?.content ?? "";
+              this.dbRow.properties.lock_until = { type: "rich_text", rich_text: val ? [{ text: { content: val } }] : [] };
+            }
+            if (props.encrypted_token_bundle !== undefined) {
+              this.dbRow.properties.encrypted_token_bundle = { type: "rich_text", rich_text: [{ text: { content: props.encrypted_token_bundle.rich_text[0].text.content } }] };
+              this.dbRow.properties.nonce = { type: "rich_text", rich_text: [{ text: { content: props.nonce.rich_text[0].text.content } }] };
+              this.dbRow.properties.key_id = { type: "rich_text", rich_text: [{ text: { content: props.key_id.rich_text[0].text.content } }] };
+              this.dbRow.properties.expires_at = { type: "rich_text", rich_text: [{ text: { content: props.expires_at.rich_text[0].text.content } }] };
+              this.dbRow.properties.token_version = { type: "number", number: props.token_version.number };
+            }
+            if (props.last_test_result !== undefined) {
+              const val = props.last_test_result.rich_text?.[0]?.text?.content ?? "";
+              this.dbRow.properties.last_test_result = { type: "rich_text", rich_text: val ? [{ text: { content: val } }] : [] };
+            }
+          }
+          return {
+            ok: true,
+            status: 200,
+            headers: responseHeaders,
+            text: async () => JSON.stringify(this.dbRow),
+            json: async () => this.dbRow,
+          };
+        }
+
+        if (url.includes("/oauth2/token")) {
+          const resPayload = {
+            access_token: "new-access-token",
+            refresh_token: "new-refresh-token",
+            expires_in: 3600,
+            tier: 5,
+          };
+          return {
+            ok: true,
+            status: 200,
+            headers: responseHeaders,
+            text: async () => JSON.stringify(resPayload),
+            json: async () => resPayload,
+          };
+        }
+
+        if (url.includes("/chat/completions")) {
+          const resPayload = { choices: [{ message: { content: "pong" } }] };
+          return {
+            ok: true,
+            status: 200,
+            headers: responseHeaders,
+            text: async () => JSON.stringify(resPayload),
+            json: async () => resPayload,
+          };
+        }
+
+        return {
+          ok: false,
+          status: 404,
+          headers: responseHeaders,
+          text: async () => "Not Found",
+          json: async () => ({}),
+        };
+      };
+    }
+  }
+
+  const cleanL1Files = async () => {
+    const slot = "grok-oauth-test";
+    const cachePath = join(tmpdir(), `grok-oauth-local-cache-${slot}.json`);
+    const lockPath = join(tmpdir(), `grok-oauth-local-lock-${slot}.lock`);
+    await rm(cachePath, { force: true });
+    await rm(lockPath, { force: true });
+  };
+
+  beforeEach(async () => {
+    originalEnv = { ...process.env };
+    process.env.NOTION_DATABASE_ID = "test-db-id";
+    process.env.NOTION_API_KEY = "test-api-key";
+    process.env.SHARED_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef"; // 32 chars hex key
+    process.env.MY_DEVICE_ID = "device-test-1";
+    clearLocalTokenCaches();
+    await cleanL1Files();
+  });
+
+  afterEach(async () => {
+    process.env = originalEnv;
+    // Clean up test WAL files
+    await deleteWAL("grok-oauth-test");
+    clearLocalTokenCaches();
+    await cleanL1Files();
+  });
+
+  it("Notion Happy Path: locks, refreshes from xAI, writes back, and releases lock", async () => {
+    const testKey = "0123456789abcdef0123456789abcdef";
+    const oldBundle = {
+      access_token: "old-access",
+      refresh_token: "old-refresh",
+      expires_at: new Date(Date.now() - 5000).toISOString(),
+    };
+
+    const server = new MockNotionServer("grok-oauth-test", oldBundle, testKey);
+    const mockFetch = server.getFetch();
+
+    const token = await getFreshOAuthTokenWithNotion("grok-oauth-test", { fetchImpl: mockFetch });
+    expect(token).toBe("new-access-token");
+    expect(server.dbRow.properties.token_version.number).toBe(2);
+    expect(server.dbRow.properties.last_test_result.rich_text[0].text.content).toBe("valid");
+  }, 15000);
+
+  it("Lock wait: backs off when lock is active, then uses token updated by peer", async () => {
+    const testKey = "0123456789abcdef0123456789abcdef";
+    const oldBundle = {
+      access_token: "old-access",
+      refresh_token: "old-refresh",
+      expires_at: new Date(Date.now() - 5000).toISOString(),
+    };
+
+    const server = new MockNotionServer("grok-oauth-test", oldBundle, testKey);
+    // Simulate peer holding the lock
+    server.dbRow.properties.lock_owner = { type: "rich_text", rich_text: [{ text: { content: "device-peer" } }] };
+    server.dbRow.properties.lock_until = { type: "rich_text", rich_text: [{ text: { content: new Date(Date.now() + 1000).toISOString() } }] };
+
+    let queryCount = 0;
+    const originalFetch = server.getFetch();
+    const mockFetch = async (url: string, init?: any) => {
+      const isReadRequest = (url.includes("/databases/") && url.includes("/query")) ||
+                            (url.includes("/pages/page-123") && (!init || init.method === "GET" || !init.method));
+      if (isReadRequest) {
+        queryCount++;
+        if (queryCount >= 2) {
+          // Simulate peer finished refresh and wrote new token, releasing lock
+          const peerBundle = {
+            access_token: "peer-refreshed-access",
+            refresh_token: "peer-refreshed-refresh",
+            expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+          };
+          const enc = encryptToken(JSON.stringify(peerBundle), testKey);
+          server.dbRow.properties.encrypted_token_bundle = { type: "rich_text", rich_text: [{ text: { content: enc.ciphertext } }] };
+          server.dbRow.properties.nonce = { type: "rich_text", rich_text: [{ text: { content: enc.nonce } }] };
+          server.dbRow.properties.key_id = { type: "rich_text", rich_text: [{ text: { content: enc.tag } }] };
+          server.dbRow.properties.expires_at = { type: "rich_text", rich_text: [{ text: { content: peerBundle.expires_at } }] };
+          server.dbRow.properties.token_version = { type: "number", number: 2 };
+          server.dbRow.properties.lock_owner = { type: "rich_text", rich_text: [] };
+          server.dbRow.properties.lock_until = { type: "rich_text", rich_text: [] };
+        }
+      }
+      return originalFetch(url, init);
+    };
+
+    const token = await getFreshOAuthTokenWithNotion("grok-oauth-test", { fetchImpl: mockFetch });
+    expect(token).toBe("peer-refreshed-access");
+    expect(queryCount).toBeGreaterThanOrEqual(2);
+  }, 15000);
+
+  it("WAL Recovery: recovers local pending WAL, writes it to Notion under lock", async () => {
+    const testKey = "0123456789abcdef0123456789abcdef";
+
+    // 1. Setup local WAL
+    const walData = {
+      access_token: "wal-recovered-access",
+      refresh_token: "wal-recovered-refresh",
+      expires_at: new Date(Date.now() + 1800 * 1000).toISOString(),
+      label: "grok-oauth-test",
+      tier: 5,
+    };
+    await writeWAL("grok-oauth-test", walData);
+
+    // Notion has stale data
+    const staleBundle = {
+      access_token: "stale-access",
+      refresh_token: "stale-refresh",
+      expires_at: new Date(Date.now() - 10000).toISOString(),
+    };
+
+    const server = new MockNotionServer("grok-oauth-test", staleBundle, testKey);
+    const mockFetch = server.getFetch();
+
+    const token = await getFreshOAuthTokenWithNotion("grok-oauth-test", { fetchImpl: mockFetch });
+    expect(token).toBe("wal-recovered-access");
+    expect(server.dbRow.properties.token_version.number).toBe(2);
+
+    const checkWAL = await readWAL("grok-oauth-test");
+    expect(checkWAL).toBeNull();
+  }, 15000);
+
+  it("Notion Retry & Clock Skew: handles 429 with retry-after header and updates clockSkewMs", async () => {
+    const testKey = "0123456789abcdef0123456789abcdef";
+    const validBundle = {
+      access_token: "test-access",
+      refresh_token: "test-refresh",
+      expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+    };
+
+    const server = new MockNotionServer("grok-oauth-test", validBundle, testKey);
+    server.maxRateLimitAttempts = 1;
+    server.clockSkewOffsetMs = 60000; // Server is 60 seconds fast
+    const mockFetch = server.getFetch();
+
+    const token = await getFreshOAuthTokenWithNotion("grok-oauth-test", { fetchImpl: mockFetch });
+    expect(token).toBe("test-access");
+    expect(server.rateLimitAttempts).toBe(1);
+
+    const syncedNow = getNotionSyncedNow();
+    const timeDiff = syncedNow.getTime() - Date.now();
+    expect(timeDiff).toBeGreaterThan(50_000);
+    expect(timeDiff).toBeLessThan(70_000);
+  }, 15000);
+});
+
+describe("SSE events/stream and GrokSessionManager Hot-Swap", () => {
+  const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+
+  beforeEach(() => {
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    // Reset grok slots to active
+    for (const slot of grokSessionManager.getSlots()) {
+      grokSessionManager.restoreSlot(slot.profileId);
+    }
+    clearLocalTokenCaches();
+  });
+
+  afterEach(() => {
+    if (previousToken === undefined) {
+      delete process.env.ORCHESTRATOR_API_TOKEN;
+    } else {
+      process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+    }
+    clearLocalTokenCaches();
+  });
+
+  it("SSE events/stream: keeps connection open, sends heartbeat, triggers properly, and cleans up on close", async () => {
+    const server = startServer(0);
+    const sessionId = `sse-test-session-${crypto.randomUUID()}`;
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      // Start a fetch request to /events/stream
+      const abortController = new AbortController();
+      const sseUrl = `http://127.0.0.1:${address.port}/events/stream?sessionId=${sessionId}`;
+      
+      const responsePromise = fetch(sseUrl, {
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+        },
+        signal: abortController.signal,
+      });
+
+      // Wait briefly for connection setup
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // Verify that a listener was added to serverEventBroker
+      expect(serverEventBroker.listenerCount(`events:${sessionId}`)).toBe(1);
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain("text/event-stream");
+
+      const reader = response.body?.getReader();
+      expect(reader).toBeDefined();
+
+      // Read first chunk (should be heartbeat)
+      const firstRead = await reader!.read();
+      const firstText = new TextDecoder().decode(firstRead.value);
+      expect(firstText).toContain("event: heartbeat");
+
+      // Publish an event
+      const testEvent = {
+        id: `evt_test_${crypto.randomUUID()}`,
+        sessionId,
+        type: "work_item.created",
+        payload: { id: "item_1" },
+        createdAt: new Date().toISOString(),
+      };
+      serverEventBroker.publishEvents(sessionId, [testEvent]);
+
+      // Read second chunk
+      const secondRead = await reader!.read();
+      const secondText = new TextDecoder().decode(secondRead.value);
+      expect(secondText).toContain("event: work_item_update");
+      expect(secondText).toContain(testEvent.id);
+
+      // Now close the client connection
+      abortController.abort();
+      reader?.releaseLock();
+
+      // Wait for server to process request close event
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // Verify that the listener was cleaned up to prevent leaks
+      expect(serverEventBroker.listenerCount(`events:${sessionId}`)).toBe(0);
+
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+    }
+  });
+
+  it("GrokSessionManager Hot-Swap: recovers session failure gracefully via slot swapping", async () => {
+    let attemptCount = 0;
+    
+    // We will set up mock environment for Notion Sync
+    process.env.NOTION_DATABASE_ID = "test-db-id";
+    process.env.NOTION_API_KEY = "test-api-key";
+    process.env.SHARED_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef";
+    process.env.MY_DEVICE_ID = "device-test-1";
+
+    const mockRequest = {
+      id: "req_grok_test",
+      sessionId: "session_grok_test",
+      providerProfileId: "provider_grok_oauth_dgx",
+      modelId: "grok-4",
+      messages: [{ role: "user" as const, content: "hello" }],
+      source: "desktop" as const,
+      routePreference: "server_proxy" as const,
+      createdAt: new Date().toISOString(),
+    };
+
+    const statefulSlots: Record<string, {
+      lock_owner?: string | null;
+      lock_until?: string | null;
+      accessToken: string;
+      refreshToken: string;
+      expiresAt: string;
+      tokenVersion: number;
+    }> = {
+      "grok-oauth-1": {
+        accessToken: "token-grok-oauth-1-old",
+        refreshToken: "refresh-grok-oauth-1-old",
+        expiresAt: new Date(Date.now() - 10000).toISOString(),
+        tokenVersion: 1,
+      },
+      "grok-oauth-2": {
+        accessToken: "token-grok-oauth-2-old",
+        refreshToken: "refresh-grok-oauth-2-old",
+        expiresAt: new Date(Date.now() - 10000).toISOString(),
+        tokenVersion: 1,
+      },
+    };
+
+    // Stateful mock fetch implementation
+    const mockFetch = async (url: string, init?: any) => {
+      attemptCount++;
+
+      // Notion page query or db query
+      if (url.includes("/databases/") && url.includes("/query")) {
+        const body = init?.body ? JSON.parse(init.body) : {};
+        const slotName = body.filter?.rich_text?.equals || (url.includes("grok-oauth-2") ? "grok-oauth-2" : "grok-oauth-1");
+        const slotData = (statefulSlots[slotName] || statefulSlots["grok-oauth-1"])!;
+        const enc = encryptToken(
+          JSON.stringify({
+            access_token: slotData.accessToken,
+            refresh_token: slotData.refreshToken,
+            expires_at: slotData.expiresAt,
+          }),
+          "0123456789abcdef0123456789abcdef"
+        );
+        const row = {
+          id: `page-${slotName}`,
+          properties: {
+            slot: { type: "title", title: [{ text: { content: slotName } }] },
+            encrypted_token_bundle: { type: "rich_text", rich_text: [{ text: { content: enc.ciphertext } }] },
+            nonce: { type: "rich_text", rich_text: [{ text: { content: enc.nonce } }] },
+            key_id: { type: "rich_text", rich_text: [{ text: { content: enc.tag } }] },
+            expires_at: { type: "rich_text", rich_text: [{ text: { content: slotData.expiresAt } }] },
+            token_version: { type: "number", number: slotData.tokenVersion },
+            lock_owner: { type: "rich_text", rich_text: slotData.lock_owner ? [{ text: { content: slotData.lock_owner } }] : [] },
+            lock_until: { type: "rich_text", rich_text: slotData.lock_until ? [{ text: { content: slotData.lock_until } }] : [] },
+            last_verified_by: { type: "rich_text", rich_text: [] },
+            last_test_result: { type: "rich_text", rich_text: [] },
+          }
+        };
+        return new Response(JSON.stringify({ results: [row] }), { status: 200 });
+      }
+ 
+      if (url.includes("/pages/page-grok-oauth-1") || url.includes("/pages/page-grok-oauth-2")) {
+        const slotName = url.includes("page-grok-oauth-2") ? "grok-oauth-2" : "grok-oauth-1";
+        const slotData = statefulSlots[slotName]!;
+        if (init && init.method === "PATCH" && init.body) {
+          const body = JSON.parse(init.body);
+          const props = body.properties;
+          if (props.lock_owner !== undefined) {
+            slotData.lock_owner = props.lock_owner.rich_text?.[0]?.text?.content ?? null;
+          }
+          if (props.lock_until !== undefined) {
+            slotData.lock_until = props.lock_until.rich_text?.[0]?.text?.content ?? null;
+          }
+          if (props.encrypted_token_bundle !== undefined && props.encrypted_token_bundle.rich_text?.[0]) {
+            const encBundle = props.encrypted_token_bundle.rich_text[0].text.content;
+            const nonce = props.nonce.rich_text[0].text.content;
+            const tag = props.key_id.rich_text[0].text.content;
+            const decStr = decryptToken(encBundle, nonce, tag, "0123456789abcdef0123456789abcdef");
+            const dec = JSON.parse(decStr);
+            slotData.accessToken = dec.access_token;
+            slotData.refreshToken = dec.refresh_token;
+            slotData.expiresAt = dec.expires_at;
+            slotData.tokenVersion = props.token_version.number;
+          }
+        }
+        const enc = encryptToken(
+          JSON.stringify({
+            access_token: slotData.accessToken,
+            refresh_token: slotData.refreshToken,
+            expires_at: slotData.expiresAt,
+          }),
+          "0123456789abcdef0123456789abcdef"
+        );
+        const row = {
+          id: `page-${slotName}`,
+          properties: {
+            slot: { type: "title", title: [{ text: { content: slotName } }] },
+            encrypted_token_bundle: { type: "rich_text", rich_text: [{ text: { content: enc.ciphertext } }] },
+            nonce: { type: "rich_text", rich_text: [{ text: { content: enc.nonce } }] },
+            key_id: { type: "rich_text", rich_text: [{ text: { content: enc.tag } }] },
+            expires_at: { type: "rich_text", rich_text: [{ text: { content: slotData.expiresAt } }] },
+            token_version: { type: "number", number: slotData.tokenVersion },
+            lock_owner: { type: "rich_text", rich_text: slotData.lock_owner ? [{ text: { content: slotData.lock_owner } }] : [] },
+            lock_until: { type: "rich_text", rich_text: slotData.lock_until ? [{ text: { content: slotData.lock_until } }] : [] },
+            last_verified_by: { type: "rich_text", rich_text: [] },
+            last_test_result: { type: "rich_text", rich_text: [] },
+          }
+        };
+        return new Response(JSON.stringify(row), { status: 200 });
+      }
+
+      if (url.includes("/oauth2/token")) {
+        const bodyStr = init?.body || "";
+        const slotName = bodyStr.includes("grok-oauth-2") ? "grok-oauth-2" : "grok-oauth-1";
+        return new Response(JSON.stringify({
+          access_token: `token-${slotName}-new`,
+          refresh_token: `refresh-${slotName}-new`,
+          expires_in: 3600,
+        }), { status: 200 });
+      }
+
+      // xAI completions
+      if (url.includes("api.x.ai/v1/chat/completions") || url.includes("/chat/completions")) {
+        const auth = init?.headers?.Authorization || init?.headers?.authorization || "";
+        if (auth.includes("token-grok-oauth-1-new")) {
+          // Simulate 401 Unauthorized for the first slot to trigger hot-swap
+          return new Response("Unauthorized session expired", { status: 401 });
+        }
+        return new Response(JSON.stringify({
+          choices: [{ message: { content: "Success from slot 2" } }],
+        }), { status: 200 });
+      }
+
+      return new Response("Not Found", { status: 404 });
+    };
+
+    const response = await createServerProviderProxyCompletionWithHotSwap(mockRequest, {
+      fetchImpl: mockFetch as any,
+    });
+
+    expect(response.status).toBe("succeeded");
+    expect(response.content).toBe("Success from slot 2");
+
+    // Verify slot status in grokSessionManager
+    const slots = grokSessionManager.getSlots();
+    const slot1 = slots.find(s => s.slotName === "grok-oauth-1");
+    const slot2 = slots.find(s => s.slotName === "grok-oauth-2");
+
+    expect(slot1?.status).toBe("invalid");
+    expect(slot2?.status).toBe("active");
+  });
+
+  it("GrokSessionManager Absolute Failure: auto-generates block lane item when all slots fail", async () => {
+    // We will set up mock environment for Notion Sync
+    process.env.NOTION_DATABASE_ID = "test-db-id";
+    process.env.NOTION_API_KEY = "test-api-key";
+    process.env.SHARED_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef";
+    process.env.MY_DEVICE_ID = "device-test-1";
+
+    // Both slots return 401, causing absolute failure
+    const mockRequest = {
+      id: "req_grok_absolute_fail",
+      sessionId: "session_grok_block_test",
+      providerProfileId: "provider_grok_oauth_dgx",
+      modelId: "grok-4",
+      messages: [{ role: "user" as const, content: "hello" }],
+      source: "desktop" as const,
+      routePreference: "server_proxy" as const,
+      createdAt: new Date().toISOString(),
+    };
+
+    const statefulSlots: Record<string, {
+      lock_owner?: string | null;
+      lock_until?: string | null;
+      accessToken: string;
+      refreshToken: string;
+      expiresAt: string;
+      tokenVersion: number;
+    }> = {
+      "grok-oauth-1": {
+        accessToken: "token-grok-oauth-1-old",
+        refreshToken: "refresh-grok-oauth-1-old",
+        expiresAt: new Date(Date.now() - 10000).toISOString(),
+        tokenVersion: 1,
+      },
+      "grok-oauth-2": {
+        accessToken: "token-grok-oauth-2-old",
+        refreshToken: "refresh-grok-oauth-2-old",
+        expiresAt: new Date(Date.now() - 10000).toISOString(),
+        tokenVersion: 1,
+      },
+    };
+
+    const mockFetch = async (url: string, init?: any) => {
+      // Notion page query or db query
+      if (url.includes("/databases/") && url.includes("/query")) {
+        const body = init?.body ? JSON.parse(init.body) : {};
+        const slotName = body.filter?.rich_text?.equals || (url.includes("grok-oauth-2") ? "grok-oauth-2" : "grok-oauth-1");
+        const slotData = (statefulSlots[slotName] || statefulSlots["grok-oauth-1"])!;
+        const enc = encryptToken(
+          JSON.stringify({
+            access_token: slotData.accessToken,
+            refresh_token: slotData.refreshToken,
+            expires_at: slotData.expiresAt,
+          }),
+          "0123456789abcdef0123456789abcdef"
+        );
+        const row = {
+          id: `page-${slotName}`,
+          properties: {
+            slot: { type: "title", title: [{ text: { content: slotName } }] },
+            encrypted_token_bundle: { type: "rich_text", rich_text: [{ text: { content: enc.ciphertext } }] },
+            nonce: { type: "rich_text", rich_text: [{ text: { content: enc.nonce } }] },
+            key_id: { type: "rich_text", rich_text: [{ text: { content: enc.tag } }] },
+            expires_at: { type: "rich_text", rich_text: [{ text: { content: slotData.expiresAt } }] },
+            token_version: { type: "number", number: slotData.tokenVersion },
+            lock_owner: { type: "rich_text", rich_text: slotData.lock_owner ? [{ text: { content: slotData.lock_owner } }] : [] },
+            lock_until: { type: "rich_text", rich_text: slotData.lock_until ? [{ text: { content: slotData.lock_until } }] : [] },
+            last_verified_by: { type: "rich_text", rich_text: [] },
+            last_test_result: { type: "rich_text", rich_text: [] },
+          }
+        };
+        return new Response(JSON.stringify({ results: [row] }), { status: 200 });
+      }
+
+      if (url.includes("/pages/page-grok-oauth-1") || url.includes("/pages/page-grok-oauth-2")) {
+        const slotName = url.includes("page-grok-oauth-2") ? "grok-oauth-2" : "grok-oauth-1";
+        const slotData = statefulSlots[slotName]!;
+        if (init && init.method === "PATCH" && init.body) {
+          const body = JSON.parse(init.body);
+          const props = body.properties;
+          if (props.lock_owner !== undefined) {
+            slotData.lock_owner = props.lock_owner.rich_text?.[0]?.text?.content ?? null;
+          }
+          if (props.lock_until !== undefined) {
+            slotData.lock_until = props.lock_until.rich_text?.[0]?.text?.content ?? null;
+          }
+          if (props.encrypted_token_bundle !== undefined && props.encrypted_token_bundle.rich_text?.[0]) {
+            const encBundle = props.encrypted_token_bundle.rich_text[0].text.content;
+            const nonce = props.nonce.rich_text[0].text.content;
+            const tag = props.key_id.rich_text[0].text.content;
+            const decStr = decryptToken(encBundle, nonce, tag, "0123456789abcdef0123456789abcdef");
+            const dec = JSON.parse(decStr);
+            slotData.accessToken = dec.access_token;
+            slotData.refreshToken = dec.refresh_token;
+            slotData.expiresAt = dec.expires_at;
+            slotData.tokenVersion = props.token_version.number;
+          }
+        }
+        const enc = encryptToken(
+          JSON.stringify({
+            access_token: slotData.accessToken,
+            refresh_token: slotData.refreshToken,
+            expires_at: slotData.expiresAt,
+          }),
+          "0123456789abcdef0123456789abcdef"
+        );
+        const row = {
+          id: `page-${slotName}`,
+          properties: {
+            slot: { type: "title", title: [{ text: { content: slotName } }] },
+            encrypted_token_bundle: { type: "rich_text", rich_text: [{ text: { content: enc.ciphertext } }] },
+            nonce: { type: "rich_text", rich_text: [{ text: { content: enc.nonce } }] },
+            key_id: { type: "rich_text", rich_text: [{ text: { content: enc.tag } }] },
+            expires_at: { type: "rich_text", rich_text: [{ text: { content: slotData.expiresAt } }] },
+            token_version: { type: "number", number: slotData.tokenVersion },
+            lock_owner: { type: "rich_text", rich_text: slotData.lock_owner ? [{ text: { content: slotData.lock_owner } }] : [] },
+            lock_until: { type: "rich_text", rich_text: slotData.lock_until ? [{ text: { content: slotData.lock_until } }] : [] },
+            last_verified_by: { type: "rich_text", rich_text: [] },
+            last_test_result: { type: "rich_text", rich_text: [] },
+          }
+        };
+        return new Response(JSON.stringify(row), { status: 200 });
+      }
+
+      if (url.includes("/oauth2/token")) {
+        return new Response("Invalid grant", { status: 400 });
+      }
+
+      // completions call fails on all tokens
+      if (url.includes("/chat/completions")) {
+        return new Response("Unauthorized session expired", { status: 401 });
+      }
+
+      return new Response("Not Found", { status: 404 });
+    };
+
+    const tempStorage = createJsonlServerEventStorage();
+
+    const response = await createServerProviderProxyCompletionWithHotSwap(mockRequest, {
+      fetchImpl: mockFetch as any,
+      eventStorage: tempStorage,
+    });
+
+    expect(response.status).toBe("failed");
+    expect(response.error).toContain("All available Grok OAuth session slots failed");
+
+    // Retrieve state and check for blocked work item
+    const state = await tempStorage.statePromise;
+    const sessionEvents = state.eventsBySession.get("session_grok_block_test") || [];
+    const events = sessionEvents.map(id => state.eventsById.get(id)).filter(Boolean);
+
+    const blockEvent = events.find(e => e?.type === "work_item.created");
+    expect(blockEvent).toBeDefined();
+    expect((blockEvent?.payload as any)?.lane).toBe("blocked");
+    expect((blockEvent?.payload as any)?.metadata?.actionRequired).toBe("re_auth_grok");
+  }, 15000);
+
+  it("GrokSessionManager Loop Exhaustion: auto-generates block lane item when retry attempts are exhausted", async () => {
+    process.env.NOTION_DATABASE_ID = "test-db-id";
+    process.env.NOTION_API_KEY = "test-api-key";
+    process.env.SHARED_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef";
+    process.env.MY_DEVICE_ID = "device-test-1";
+
+    const mockRequest = {
+      id: "req_grok_exhaust_fail",
+      sessionId: "session_grok_exhaust_test",
+      providerProfileId: "provider_grok_oauth_dgx",
+      modelId: "grok-4",
+      messages: [{ role: "user" as const, content: "hello" }],
+      source: "desktop" as const,
+      routePreference: "server_proxy" as const,
+      createdAt: new Date().toISOString(),
+    };
+
+    const statefulSlots: Record<string, {
+      lock_owner?: string | null;
+      lock_until?: string | null;
+      accessToken: string;
+      refreshToken: string;
+      expiresAt: string;
+      tokenVersion: number;
+    }> = {
+      "grok-oauth-1": {
+        accessToken: "token-grok-oauth-1-old",
+        refreshToken: "refresh-grok-oauth-1-old",
+        expiresAt: new Date(Date.now() - 10000).toISOString(),
+        tokenVersion: 1,
+      },
+      "grok-oauth-2": {
+        accessToken: "token-grok-oauth-2-old",
+        refreshToken: "refresh-grok-oauth-2-old",
+        expiresAt: new Date(Date.now() - 10000).toISOString(),
+        tokenVersion: 1,
+      },
+    };
+
+    const mockFetch = async (url: string, init?: any) => {
+      if (url.includes("/databases/") && url.includes("/query")) {
+        const body = init?.body ? JSON.parse(init.body) : {};
+        const slotName = body.filter?.rich_text?.equals || (url.includes("grok-oauth-2") ? "grok-oauth-2" : "grok-oauth-1");
+        const slotData = statefulSlots[slotName]!;
+        const enc = encryptToken(
+          JSON.stringify({
+            access_token: slotData.accessToken,
+            refresh_token: slotData.refreshToken,
+            expires_at: slotData.expiresAt,
+          }),
+          "0123456789abcdef0123456789abcdef"
+        );
+        const row = {
+          id: `page-${slotName}`,
+          properties: {
+            slot: { type: "title", title: [{ text: { content: slotName } }] },
+            encrypted_token_bundle: { type: "rich_text", rich_text: [{ text: { content: enc.ciphertext } }] },
+            nonce: { type: "rich_text", rich_text: [{ text: { content: enc.nonce } }] },
+            key_id: { type: "rich_text", rich_text: [{ text: { content: enc.tag } }] },
+            expires_at: { type: "rich_text", rich_text: [{ text: { content: slotData.expiresAt } }] },
+            token_version: { type: "number", number: slotData.tokenVersion },
+            lock_owner: { type: "rich_text", rich_text: slotData.lock_owner ? [{ text: { content: slotData.lock_owner } }] : [] },
+            lock_until: { type: "rich_text", rich_text: slotData.lock_until ? [{ text: { content: slotData.lock_until } }] : [] },
+            last_verified_by: { type: "rich_text", rich_text: [] },
+            last_test_result: { type: "rich_text", rich_text: [] },
+          }
+        };
+        return new Response(JSON.stringify({ results: [row] }), { status: 200 });
+      }
+
+      if (url.includes("/pages/page-grok-oauth-1") || url.includes("/pages/page-grok-oauth-2")) {
+        const slotName = url.includes("page-grok-oauth-2") ? "grok-oauth-2" : "grok-oauth-1";
+        const slotData = statefulSlots[slotName]!;
+        if (init && init.method === "PATCH" && init.body) {
+          const body = JSON.parse(init.body);
+          const props = body.properties;
+          if (props.lock_owner !== undefined) {
+            slotData.lock_owner = props.lock_owner.rich_text?.[0]?.text?.content ?? null;
+          }
+          if (props.lock_until !== undefined) {
+            slotData.lock_until = props.lock_until.rich_text?.[0]?.text?.content ?? null;
+          }
+          if (props.encrypted_token_bundle !== undefined && props.encrypted_token_bundle.rich_text?.[0]) {
+            const encBundle = props.encrypted_token_bundle.rich_text[0].text.content;
+            const nonce = props.nonce.rich_text[0].text.content;
+            const tag = props.key_id.rich_text[0].text.content;
+            const decStr = decryptToken(encBundle, nonce, tag, "0123456789abcdef0123456789abcdef");
+            const dec = JSON.parse(decStr);
+            slotData.accessToken = dec.access_token;
+            slotData.refreshToken = dec.refresh_token;
+            slotData.expiresAt = dec.expires_at;
+            slotData.tokenVersion = props.token_version.number;
+          }
+        }
+        const enc = encryptToken(
+          JSON.stringify({
+            access_token: slotData.accessToken,
+            refresh_token: slotData.refreshToken,
+            expires_at: slotData.expiresAt,
+          }),
+          "0123456789abcdef0123456789abcdef"
+        );
+        const row = {
+          id: `page-${slotName}`,
+          properties: {
+            slot: { type: "title", title: [{ text: { content: slotName } }] },
+            encrypted_token_bundle: { type: "rich_text", rich_text: [{ text: { content: enc.ciphertext } }] },
+            nonce: { type: "rich_text", rich_text: [{ text: { content: enc.nonce } }] },
+            key_id: { type: "rich_text", rich_text: [{ text: { content: enc.tag } }] },
+            expires_at: { type: "rich_text", rich_text: [{ text: { content: slotData.expiresAt } }] },
+            token_version: { type: "number", number: slotData.tokenVersion },
+            lock_owner: { type: "rich_text", rich_text: slotData.lock_owner ? [{ text: { content: slotData.lock_owner } }] : [] },
+            lock_until: { type: "rich_text", rich_text: slotData.lock_until ? [{ text: { content: slotData.lock_until } }] : [] },
+            last_verified_by: { type: "rich_text", rich_text: [] },
+            last_test_result: { type: "rich_text", rich_text: [] },
+          }
+        };
+        return new Response(JSON.stringify(row), { status: 200 });
+      }
+
+      if (url.includes("/oauth2/token")) {
+        const slotName = url.includes("grok-oauth-2") ? "grok-oauth-2" : "grok-oauth-1";
+        return new Response(JSON.stringify({
+          access_token: `token-refreshed-${slotName}`,
+          refresh_token: `refresh-new-${slotName}`,
+          expires_in: 3600,
+        }), { status: 200 });
+      }
+
+      if (url.includes("/chat/completions")) {
+        return new Response("Unauthorized session expired", { status: 401 });
+      }
+
+      return new Response("Not Found", { status: 404 });
+    };
+
+    const tempStorage = createJsonlServerEventStorage();
+
+    const response = await createServerProviderProxyCompletionWithHotSwap(mockRequest, {
+      fetchImpl: mockFetch as any,
+      eventStorage: tempStorage,
+    });
+
+    expect(response.status).toBe("failed");
+    expect(response.error).toContain("Grok OAuth hot-swap failed after maximum retry attempts");
+
+    // Retrieve state and check for blocked work item
+    const state = await tempStorage.statePromise;
+    const sessionEvents = state.eventsBySession.get("session_grok_exhaust_test") || [];
+    const events = sessionEvents.map(id => state.eventsById.get(id)).filter(Boolean);
+
+    const blockEvent = events.find(e => e?.type === "work_item.created");
+    expect(blockEvent).toBeDefined();
+    expect((blockEvent?.payload as any)?.lane).toBe("blocked");
+    expect((blockEvent?.payload as any)?.metadata?.errorReason).toContain("Grok OAuth hot-swap failed after maximum retry attempts");
+  }, 15000);
+});
+
+describe("Control Queue API", () => {
+  const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+  const previousNodeEnv = process.env.NODE_ENV;
+
+  beforeEach(() => {
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+  });
+
+  afterEach(() => {
+    if (previousToken === undefined) {
+      delete process.env.ORCHESTRATOR_API_TOKEN;
+    } else {
+      process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+    }
+    if (previousNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  it("lists active work items and processes control queue actions", async () => {
+    const server = startServer(0);
+    const sessionId = `test-session-cq-${crypto.randomUUID()}`;
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      // 1. GET /control-queue/items - Initially empty
+      const initRes = await fetch(`http://127.0.0.1:${address.port}/control-queue/items?sessionId=${sessionId}`, {
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+        },
+      });
+      expect(initRes.status).toBe(200);
+      const initItems = await initRes.json() as any[];
+      expect(initItems.length).toBe(0);
+
+      // 2. Push work_item.created event via event sync
+      const workItemId = `work_item_test_${crypto.randomUUID()}`;
+      const now = new Date().toISOString();
+      const workItemCreatedEvent = {
+        id: `evt_created_${crypto.randomUUID()}`,
+        sessionId: sessionId,
+        type: "work_item.created",
+        createdAt: now,
+        source: "server",
+        sourceTrust: "trusted",
+        redacted: false,
+        payload: {
+          id: workItemId,
+          sessionId: sessionId,
+          title: "Test Input Request",
+          kind: "approval",
+          lane: "ask",
+          status: "waiting_input",
+          summary: "Need input context",
+          sourceRefs: [],
+          evidenceRefs: [],
+          missingInfo: [],
+          createdAt: now,
+        },
+      };
+
+      const syncRes = await fetch(`http://127.0.0.1:${address.port}/events/sync`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          id: "sync_001",
+          clientId: "test_client",
+          sessionId: sessionId,
+          events: [workItemCreatedEvent],
+          idempotencyKey: "idemp_test_sync_cq_1",
+          createdAt: now,
+        }),
+      });
+      const syncResult = await syncRes.json() as any;
+      expect(syncRes.status).toBe(202);
+      expect(syncResult.results[0]).toMatchObject({
+        status: "accepted",
+      });
+
+      // 3. GET /control-queue/items - Should contain 1 active item
+      const listRes = await fetch(`http://127.0.0.1:${address.port}/control-queue/items?sessionId=${sessionId}`, {
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+        },
+      });
+      expect(listRes.status).toBe(200);
+      const activeItems = await listRes.json() as any[];
+      expect(activeItems.length).toBe(1);
+      expect(activeItems[0].id).toBe(workItemId);
+      expect(activeItems[0].status).toBe("waiting_input");
+
+      // 4. POST /control-queue/action - resolve work item
+      const actionRes = await fetch(`http://127.0.0.1:${address.port}/control-queue/action`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId: sessionId,
+          workItemId: workItemId,
+          action: "provide_input",
+          payload: {
+            inputValue: "Resolved user input here",
+          },
+        }),
+      });
+      expect(actionRes.status).toBe(200);
+      const actionResult = await actionRes.json() as any;
+      expect(actionResult.success).toBe(true);
+      expect(actionResult.nextStatus).toBe("in_progress");
+
+      // 5. GET /control-queue/items - Should be empty again (since status became in_progress)
+      const afterActionRes = await fetch(`http://127.0.0.1:${address.port}/control-queue/items?sessionId=${sessionId}`, {
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+        },
+      });
+      expect(afterActionRes.status).toBe(200);
+      const activeItemsAfter = await afterActionRes.json() as any[];
+      expect(activeItemsAfter.length).toBe(1);
+      expect(activeItemsAfter[0].status).toBe("in_progress");
+
+      // 6. Test with invalid workItemId - should return 404
+      const invalidActionRes = await fetch(`http://127.0.0.1:${address.port}/control-queue/action`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId: sessionId,
+          workItemId: "non_existent_item",
+          action: "provide_input",
+          payload: {},
+        }),
+      });
+      expect(invalidActionRes.status).toBe(404);
+
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+    }
+  });
+});
+
+describe("Swarm advanced security, locks, and reasoning features", () => {
+  it("extracts thinking tokens and redacts secrets in RedactStreamTransformer", async () => {
+    const inputChunks: any[] = [
+      { type: "delta" as const, delta: "Normal text. ", requestId: "req-1", sequence: 1 },
+      { type: "delta" as const, delta: "<thinking>Checking api-key sk-abc123XYZ987654321...", requestId: "req-1", sequence: 2 },
+      { type: "delta" as const, delta: " and processing...", requestId: "req-1", sequence: 3 },
+      { type: "delta" as const, delta: "</thinking>Done.", requestId: "req-1", sequence: 4 }
+    ];
+
+    async function* makeStream() {
+      for (const chunk of inputChunks) {
+        yield chunk;
+      }
+    }
+
+    const stream = wrapStreamWithRedaction(makeStream());
+    const results: any[] = [];
+    for await (const chunk of stream) {
+      results.push(chunk);
+    }
+
+    expect(results.length).toBe(4);
+    expect(results[0]).toMatchObject({ delta: "Normal text. " });
+    expect(results[1].reasoningSnippet).toBe("Checking api-key <redacted>...");
+    expect(results[2].reasoningSnippet).toBe("Checking api-key <redacted>... and processing...");
+    expect(results[3].reasoningSnippet).toBe("Checking api-key <redacted>... and processing...");
+    expect(results[1].delta).toBe("");
+  });
+
+  it("exposes /api/cluster-locks with mapped L1 SQLite locks", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+
+    try {
+      const db = getLocalDb();
+      const nowStr = new Date().toISOString();
+      db.prepare(`
+        INSERT OR REPLACE INTO local_locks (slot, lock_owner, lock_until, token_version, clock_skew_ms, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run("test-lock-slot", "12345:device-test", nowStr, 42, 250, nowStr);
+
+      const server = startServer(0);
+      try {
+        await new Promise<void>((resolve) => server.once("listening", resolve));
+        const address = server.address() as any;
+
+        const res = await fetch(`http://127.0.0.1:${address.port}/api/cluster-locks`, {
+          headers: {
+            authorization: "Bearer test-orchestrator-token",
+          },
+        });
+        expect(res.status).toBe(200);
+        const data = await res.json() as any[];
+        const testLock = data.find((l) => l.slot === "test-lock-slot");
+        expect(testLock).toBeDefined();
+        expect(testLock.lockOwner).toBe("12345:device-test");
+        expect(testLock.tokenVersion).toBe(42);
+        expect(testLock.clockSkewMs).toBe(250);
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    } finally {
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
       }
     }
   });

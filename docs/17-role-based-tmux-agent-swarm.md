@@ -29,6 +29,8 @@ The first implemented tmux layer is deliberately conservative:
 - `scripts/setup-agent-swarm.sh --panes 4..10` controls the swarm size. The default is 10 panes.
 - `scripts/swarm-send.sh` dispatches to stored pane ids by role.
 - `scripts/swarm-capture.sh` captures pane output read-only and redacts obvious secrets.
+- `scripts/swarm-start-claude-workers.sh` can start persistent interactive Claude Code workers inside selected panes.
+- `scripts/swarm-claude-task.sh` sends structured task prompts to those interactive Claude worker panes.
 - Gemini CLI remains disconnected until CLI setup is done.
 - The helper refuses obvious secret-bearing command text.
 - The desktop UI still treats tmux as a permissioned execution backend, not an untracked side channel.
@@ -382,6 +384,43 @@ scripts/swarm-send.sh memory "codex 'Summarize this run into handoff notes'"
 ```
 
 The helper is role-based and uses stored pane ids instead of fragile pane indexes. It also refuses command text that appears to contain API keys, bearer tokens, or private key material.
+
+`scripts/swarm-send.sh` is for explicit shell command dispatch. Claude worker prompts should use the separate Claude helper below so prompt text is pasted into an already-running interactive session instead of being interpreted as a shell command.
+
+## Interactive Claude Workers
+
+The repository also includes:
+
+```text
+scripts/swarm-start-claude-workers.sh
+scripts/swarm-claude-task.sh
+```
+
+This workflow is for persistent interactive Claude Code panes. It does not use `claude -p`, `--print`, or the headless Agent SDK path.
+
+Example first-run shape:
+
+```bash
+scripts/setup-agent-swarm.sh --reset
+scripts/swarm-start-claude-workers.sh --roles code,architect,qa --permission-mode plan
+scripts/swarm-claude-task.sh architect "Review the protocol boundaries for this patch and return concise risks."
+scripts/swarm-capture.sh architect
+```
+
+`scripts/swarm-start-claude-workers.sh` starts `claude` in selected panes with a stable worker name and records non-secret pane metadata in `.ai-swarm`. It defaults to `--permission-mode plan` so workers inspect and plan before edits.
+
+`scripts/swarm-claude-task.sh` uses `tmux load-buffer` and `paste-buffer` for task prompts. It wraps task text in a structured packet, refuses obvious secrets, and writes only redacted dispatch metadata to `.ai-swarm`.
+
+Operational rules:
+
+- start only the worker roles needed for the current task;
+- keep discussion, orchestrator, and status panes as control panes unless explicitly changed;
+- confirm Claude login/readiness in tmux before sending prompts;
+- use `swarm-capture.sh` for read-only inspection;
+- record meaningful results back into the Event Store path when wired through the app;
+- keep file writes, installs, network access, expensive tests, and git operations behind operator approval.
+
+Windows note: native Windows does not include tmux. This workflow needs WSL, MSYS2, Git Bash with tmux, or a remote Unix host where `tmux`, `claude`, and repository paths are all available in the same environment.
 
 ## Orchestration Rules
 

@@ -7,6 +7,7 @@ import {
   forgetMemoryRecord,
   pinMemoryRecord,
   rememberStage6Context,
+  runMemoryReflectionWorker,
 } from "./stage6Memory";
 
 const createdAt = "2026-05-24T00:00:00.000Z";
@@ -184,5 +185,50 @@ describe("stage6 memory inspector", () => {
     });
 
     expect(inspector.records.find((record) => record.id === "memory_seed_maomao_research")?.entityReinforcement).toBe(0.1);
+  });
+
+  it("resolves duplicate and contradiction memory issues using runMemoryReflectionWorker", async () => {
+    const duplicateRecords = [
+      {
+        id: "memory_seed_event_storage_1",
+        layer: "project_memory" as const,
+        scope: "project" as const,
+        kind: "architecture" as const,
+        title: "Event Storage first",
+        content: "Duplicate text 1",
+        sourceChannel: "desktop" as const,
+        trustLevel: "trusted" as const,
+        projectId: "project_ai_orchestrator_lab",
+        activationState: "active" as const,
+        createdAt: "2026-05-24T00:00:00.000Z",
+        pinned: false,
+      },
+      {
+        id: "memory_seed_event_storage_2",
+        layer: "project_memory" as const,
+        scope: "project" as const,
+        kind: "architecture" as const,
+        title: "Event Storage first",
+        content: "Duplicate text 2 (newer)",
+        sourceChannel: "desktop" as const,
+        trustLevel: "trusted" as const,
+        projectId: "project_ai_orchestrator_lab",
+        activationState: "active" as const,
+        createdAt: "2026-05-24T00:01:00.000Z",
+        pinned: false,
+      },
+    ];
+
+    const result = await runMemoryReflectionWorker({
+      records: duplicateRecords,
+      now: "2026-05-24T00:02:00.000Z",
+    });
+
+    expect(result.fixedCount).toBe(1);
+    const older = result.resolvedRecords.find(r => r.id === "memory_seed_event_storage_1");
+    const newer = result.resolvedRecords.find(r => r.id === "memory_seed_event_storage_2");
+    expect(older?.activationState).toBe("inactive");
+    expect(older?.tombstonedAt).toBe("2026-05-24T00:02:00.000Z");
+    expect(newer?.activationState).toBe("active");
   });
 });

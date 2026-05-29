@@ -9,8 +9,8 @@ import type {
   Reflection,
   MemoryScope,
 } from "@ai-orchestrator/protocol";
-import type { MemoryAdapter, MemoryAdapterContext, MemoryAdapterKind } from "./adapter";
-import { MemoryAdapterError } from "./errors";
+import type { MemoryAdapter, MemoryAdapterContext, MemoryAdapterKind } from "./adapter.js";
+import { MemoryAdapterError } from "./errors.js";
 
 // ──────────────────────────────────────────────
 // Public types

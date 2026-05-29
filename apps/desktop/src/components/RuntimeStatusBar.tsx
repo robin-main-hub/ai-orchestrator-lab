@@ -1,84 +1,160 @@
 import { useState } from "react";
-import { Activity } from "lucide-react";
+import { Activity, Brain, GitBranch, MessageSquare, Search, Terminal } from "lucide-react";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
 import { providerDisplayLabel } from "../lib/helpers";
+import type { CenterMode } from "../types";
 
 /**
- * Runtime status bar — v0 visual port (TopNav 의 status 영역).
+ * Runtime status bar — v0 visual port (TopNav).
  *
  * source: docs/v0/v0-output/components/layout/top-nav.tsx +
  *         status-indicator.tsx
  *
- * v0 의 TopNav 는 [logo] [mode tabs] [⌘K + status dot] 3-zone.
- * 우리 layout 은 mode tabs 가 별도 board-toolbar 에 있어서 이 컴포넌트
- * 는 v0 의 **status 영역** 만 담당 (좌측 시스템 health + 우측 Probe).
- *
- * v0 의 popover-on-click 형태로 system health detail 노출. 우리 protocol
- * 의 RuntimeSnapshot 그대로 사용. 모드 switching consolidation 은
- * docs/specs/v0-port-deferred-features.md 에 기록.
+ * v0 의 TopNav 는 [logo] [mode tabs] [⌘K + status dot] 3-zone 구조입니다.
+ * 이 구조에 맞추어 헤더 좌측에 브랜드 로고, 중앙에 모드 전환 탭,
+ * 우측에 ⌘K 명령 팔레트 실행 단추 및 상태 모니터를 통합 탑재하였습니다.
  */
 
 export function RuntimeStatusBar({
+  mode,
+  onChangeMode,
+  onCommandPalette,
   onProbeDgx,
   providerName,
   snapshot,
 }: {
+  mode: CenterMode;
+  onChangeMode: (mode: CenterMode) => void;
+  onCommandPalette: () => void;
   onProbeDgx: () => void;
   providerName: string;
   snapshot: RuntimeSnapshot;
 }) {
-  const primaryNode = snapshot.runtimeNodes.find((node) => node.isPrimary);
-  const dgxLabel = primaryNode?.label ?? snapshot.syncTopology.authorityLabel;
+  const runtimeNodes = snapshot?.runtimeNodes ?? [];
+  const primaryNode = runtimeNodes.find((node) => node?.isPrimary);
+  const dgxLabel = primaryNode?.label ?? snapshot?.syncTopology?.authorityLabel ?? "DGX";
   const overallHealth = deriveHealth(snapshot);
   const displayProviderName = providerDisplayLabel(providerName);
 
   return (
-    <header className="flex h-10 shrink-0 items-center justify-between gap-4 border-b border-border bg-card/50 px-4">
-      {/* Left: meta strip */}
-      <div className="flex min-w-0 items-center gap-3 text-[11px]">
-        <span className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">Active</span>
-          <span className="font-medium text-foreground" title={providerName}>{displayProviderName}</span>
-        </span>
+    <header className="status-bar flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border bg-card/50 px-4">
+      {/* Left: Brand logo + system status */}
+      <div className="flex min-w-0 items-center gap-4">
+        {/* Brand Block */}
+        <div className="flex items-center gap-2 select-none">
+          <div className="flex h-7 w-7 items-center justify-center rounded bg-primary/10 text-primary">
+            <Brain className="h-4.5 w-4.5" />
+          </div>
+          <div className="flex flex-col leading-tight">
+            <span className="text-[11px] font-bold text-foreground tracking-tight">AI Orchestrator Lab</span>
+            <span className="text-[8.5px] text-muted-foreground">desktop command room</span>
+          </div>
+        </div>
+
         <Separator />
-        <span className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">{dgxLabel}</span>
-          <StatusDot status={snapshot.dgxStatus} />
-          <span className={cn("font-mono text-[10px]", statusToneClasses(snapshot.dgxStatus))}>
-            {snapshot.dgxStatus}
+
+        {/* Compact Meta Status Strip */}
+        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <span>Active:</span>
+            <span className="font-semibold text-foreground" title={providerName}>{displayProviderName}</span>
           </span>
-        </span>
-        <Separator />
-        <span className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">Local</span>
-          <StatusDot status={snapshot.localModelStatus} />
-          <span
-            className={cn(
-              "font-mono text-[10px]",
-              statusToneClasses(snapshot.localModelStatus),
-            )}
-          >
-            {snapshot.localModelStatus}
+          <Separator />
+          <span className="flex items-center gap-1">
+            <span>{dgxLabel}:</span>
+            <StatusDot status={snapshot?.dgxStatus} />
+            <span className={cn("font-mono text-[9.5px]", statusToneClasses(snapshot?.dgxStatus))}>
+              {snapshot?.dgxStatus ?? "unknown"}
+            </span>
           </span>
-        </span>
-        {snapshot.recentError ? (
-          <>
-            <Separator />
-            <span className="truncate text-destructive">{snapshot.recentError}</span>
-          </>
-        ) : null}
+          <Separator />
+          <span className="flex items-center gap-1">
+            <span>Local:</span>
+            <StatusDot status={snapshot?.localModelStatus} />
+            <span
+              className={cn(
+                "font-mono text-[9.5px]",
+                statusToneClasses(snapshot?.localModelStatus),
+              )}
+            >
+              {snapshot?.localModelStatus ?? "unknown"}
+            </span>
+          </span>
+          {snapshot?.recentError ? (
+            <>
+              <Separator />
+              <span className="truncate max-w-[120px] text-destructive">{snapshot.recentError}</span>
+            </>
+          ) : null}
+        </div>
       </div>
 
-      {/* Right: health indicator + probe action */}
+      {/* Center: Mode Switching tabs */}
+      <div className="flex items-center gap-0.5 bg-muted/20 p-0.5 rounded-md border border-border/30 h-8 select-none">
+        <Button
+          variant={mode === "conversation" ? "secondary" : "ghost"}
+          size="sm"
+          className={cn(
+            "h-7 gap-1.5 px-3 text-[11px] font-medium transition-all",
+            mode === "conversation" ? "text-foreground bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+          )}
+          onClick={() => onChangeMode("conversation")}
+        >
+          <MessageSquare className="h-3 w-3" />
+          Conversation
+        </Button>
+        <Button
+          variant={mode === "debate" ? "secondary" : "ghost"}
+          size="sm"
+          className={cn(
+            "h-7 gap-1.5 px-3 text-[11px] font-medium transition-all",
+            mode === "debate" ? "text-foreground bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+          )}
+          onClick={() => onChangeMode("debate")}
+        >
+          <GitBranch className="h-3 w-3" />
+          Debate
+        </Button>
+        <Button
+          variant={mode === "tmux" ? "secondary" : "ghost"}
+          size="sm"
+          className={cn(
+            "h-7 gap-1.5 px-3 text-[11px] font-medium transition-all",
+            mode === "tmux" ? "text-foreground bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+          )}
+          onClick={() => onChangeMode("tmux")}
+        >
+          <Terminal className="h-3 w-3" />
+          Tmux
+        </Button>
+      </div>
+
+      {/* Right: health indicator + command trigger + probe action */}
       <div className="flex shrink-0 items-center gap-2">
+        {/* Command Palette Trigger Button */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-2 px-2.5 text-[11px] border-border/60 bg-muted/10 text-muted-foreground hover:text-foreground transition-all"
+          onClick={onCommandPalette}
+        >
+          <Search className="h-3 w-3" />
+          <span>Command...</span>
+          <kbd className="pointer-events-none select-none rounded bg-muted/60 px-1 font-mono text-[9px] font-medium border border-border/40">
+            ⌘K
+          </kbd>
+        </Button>
+
+        <Separator />
+
         <HealthIndicator
-          dgxStatus={snapshot.dgxStatus}
+          dgxStatus={snapshot?.dgxStatus}
           dgxLabel={dgxLabel}
           health={overallHealth}
-          localStatus={snapshot.localModelStatus}
+          localStatus={snapshot?.localModelStatus}
           providerName={providerName}
         />
         <Button
@@ -99,7 +175,7 @@ function Separator() {
   return <span className="text-border">·</span>;
 }
 
-function StatusDot({ status }: { status: string }) {
+function StatusDot({ status }: { status?: string }) {
   const tone = statusToneFromString(status);
   return (
     <span
@@ -122,11 +198,11 @@ function HealthIndicator({
   localStatus,
   providerName,
 }: {
-  dgxStatus: string;
-  dgxLabel: string;
+  dgxStatus?: string;
+  dgxLabel?: string;
   health: "healthy" | "degraded" | "error";
-  localStatus: string;
-  providerName: string;
+  localStatus?: string;
+  providerName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const healthColor = {
@@ -175,11 +251,11 @@ function HealthIndicator({
                 </span>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Active provider · {providerName}
+                Active provider · {providerName ?? "Unknown"}
               </p>
             </div>
             <div className="space-y-1 p-2">
-              <StatusRow label={dgxLabel} status={dgxStatus} />
+              <StatusRow label={dgxLabel ?? "DGX"} status={dgxStatus} />
               <StatusRow label="Local" status={localStatus} />
             </div>
           </div>
@@ -189,18 +265,19 @@ function HealthIndicator({
   );
 }
 
-function StatusRow({ label, status }: { label: string; status: string }) {
+function StatusRow({ label, status }: { label: string; status?: string }) {
   return (
     <div className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-card/60">
       <span className="text-xs text-muted-foreground">{label}</span>
       <StatusBadge variant={statusToBadgeVariant(status)} size="sm">
-        {status}
+        {status ?? "unknown"}
       </StatusBadge>
     </div>
   );
 }
 
-function statusToBadgeVariant(status: string): "success" | "danger" | "warning" | "muted" {
+function statusToBadgeVariant(status?: string): "success" | "danger" | "warning" | "muted" {
+  if (!status) return "muted";
   const s = status.toLowerCase();
   if (s.includes("online") || s.includes("ready") || s.includes("connected")) return "success";
   if (s.includes("offline") || s.includes("error") || s.includes("unreachable")) return "danger";
@@ -208,7 +285,8 @@ function statusToBadgeVariant(status: string): "success" | "danger" | "warning" 
   return "muted";
 }
 
-function statusToneFromString(status: string): "online" | "offline" | "pending" | "idle" {
+function statusToneFromString(status?: string): "online" | "offline" | "pending" | "idle" {
+  if (!status) return "idle";
   const s = status.toLowerCase();
   if (s.includes("online") || s.includes("ready") || s.includes("connected")) return "online";
   if (s.includes("offline") || s.includes("error") || s.includes("unreachable")) return "offline";
@@ -216,7 +294,7 @@ function statusToneFromString(status: string): "online" | "offline" | "pending" 
   return "idle";
 }
 
-function statusToneClasses(status: string): string {
+function statusToneClasses(status?: string): string {
   switch (statusToneFromString(status)) {
     case "online":
       return "text-success";
@@ -230,7 +308,8 @@ function statusToneClasses(status: string): string {
   }
 }
 
-function deriveHealth(snapshot: RuntimeSnapshot): "healthy" | "degraded" | "error" {
+function deriveHealth(snapshot?: RuntimeSnapshot): "healthy" | "degraded" | "error" {
+  if (!snapshot) return "error";
   if (snapshot.recentError) return "error";
   const dgxTone = statusToneFromString(snapshot.dgxStatus);
   const localTone = statusToneFromString(snapshot.localModelStatus);

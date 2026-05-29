@@ -25,4 +25,27 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+  build: {
+    minify: "esbuild",
+    cssMinify: true,
+    sourcemap: false,
+    rollupOptions: {
+      external: ["@tauri-apps/api", "@tauri-apps/plugin-shell"],
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules")) {
+            if (id.includes("@radix-ui")) {
+              return "vendor-radix";
+            }
+            if (id.includes("lucide")) {
+              return "vendor-icons";
+            }
+            if (id.includes("prismjs")) {
+              return "vendor-syntax";
+            }
+          }
+        },
+      },
+    },
+  },
 });

@@ -59,7 +59,7 @@ export type FetchCall = {
 export type RecordedFetchResponse = {
   ok: boolean;
   status: number;
-  body: string;
+  body: any;
   headers?: Record<string, string>;
 };
 
@@ -91,8 +91,9 @@ export function recordedFetch(impl: (call: FetchCall) => RecordedFetchResponse):
       ok: out.ok,
       status: out.status,
       async text() {
-        return out.body;
+        return typeof out.body === "string" ? out.body : JSON.stringify(out.body);
       },
+      body: out.body,
     };
   };
   return { fetch: fetchImpl, calls };
