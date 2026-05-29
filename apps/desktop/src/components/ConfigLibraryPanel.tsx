@@ -1,4 +1,5 @@
 import { CheckCircle2, CopyPlus, Download, FileText, Package, Plus, Save, Tags, Upload } from "lucide-react";
+import { platformDownload } from "../lib/platform";
 import type { AgentConfigFile, AgentConfigFileKind, AgentProfilePack } from "../types";
 
 const configKinds: AgentConfigFileKind[] = ["soul", "agents", "skill", "memory_policy", "prompt_template"];
@@ -34,15 +35,11 @@ function parseTagInput(value: string) {
 
 function downloadConfigFile(file: AgentConfigFile) {
   const fileName = file.path.split(/[\\/]/).filter(Boolean).pop() ?? `${file.label}.md`;
-  const blob = new Blob([file.body], { type: "text/markdown;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  platformDownload.downloadTextFile({
+    fileName,
+    body: file.body,
+    mimeType: "text/markdown;charset=utf-8",
+  });
 }
 
 export function ConfigLibraryPanel({
