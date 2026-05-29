@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer } from "node:http";
 import { z } from "zod";
 import { mkdir, readFile, appendFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -91,8 +91,12 @@ import type {
   MemoryAdapterKind,
 } from "@ai-orchestrator/memory";
 import type { LlmAdapter } from "@ai-orchestrator/providers";
+import { sseSessionRegistry } from "./events/sseSession";
+import { createCorsHeaders } from "./http/cors";
+import { RequestBodyTooLargeError, readJsonBody } from "./http/requestBody";
 import { handleApprovalRoute } from "./routes/approvals";
 import { handleTmuxRoute } from "./routes/tmux";
+export { pickAllowedOrigin, resolveAllowedOrigins } from "./http/cors";
 
 export type ServerCapability =
   | "health"
@@ -5603,12 +5607,13 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     }
 
     if (pathname === "/events/stream") {
-      response.writeHead(200, {
-        "cache-control": "no-cache",
-        "content-type": "text/event-stream; charset=utf-8",
-        ...corsHeaders,
+      const session = sseSessionRegistry.createSession({
+        request,
+        response,
+        headers: corsHeaders,
+        heartbeatPayload: () => createDgxHeartbeat(),
       });
-      response.end(`event: heartbeat\ndata: ${JSON.stringify(createDgxHeartbeat())}\n\n`);
+      session.start();
       return;
     }
 
@@ -5635,88 +5640,6 @@ async function fetchWithTimeout(fetchImpl: FetchLike, input: string, init: Param
   }
 }
 
-const MAX_JSON_BODY_BYTES = 1_048_576;
-
-class RequestBodyTooLargeError extends Error {
-  constructor(public limit: number) {
-    super(`request body exceeds ${limit} byte limit`);
-    this.name = "RequestBodyTooLargeError";
-  }
-}
-
-async function readJsonBody(request: IncomingMessage) {
-  const contentLength = Number(request.headers["content-length"] ?? 0);
-  if (Number.isFinite(contentLength) && contentLength > MAX_JSON_BODY_BYTES) {
-    request.resume();
-    throw new RequestBodyTooLargeError(MAX_JSON_BODY_BYTES);
-  }
-
-  return new Promise<unknown>((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let total = 0;
-    let settled = false;
-
-    const settle = (callback: () => void) => {
-      if (settled) return;
-      settled = true;
-      request.off("data", onData);
-      request.off("end", onEnd);
-      callback();
-    };
-
-    const onData = (chunk: Buffer | string) => {
-      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      total += buf.length;
-      if (total > MAX_JSON_BODY_BYTES) {
-        chunks.length = 0;
-        settle(() => {
-          request.resume();
-          reject(new RequestBodyTooLargeError(MAX_JSON_BODY_BYTES));
-        });
-        return;
-      }
-      chunks.push(buf);
-    };
-
-    const onEnd = () => {
-      settle(() => {
-        try {
-          const rawBody = Buffer.concat(chunks).toString("utf8");
-          resolve(rawBody ? JSON.parse(rawBody) : {});
-        } catch (error) {
-          reject(error);
-        }
-      });
-    };
-
-    request.on("data", onData);
-    request.once("end", onEnd);
-    request.once("error", (error) => {
-      settle(() => reject(error));
-    });
-  });
-}
-
-const DEFAULT_ALLOWED_ORIGINS: ReadonlyArray<string> = [
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-  "http://localhost:5174",
-  "http://127.0.0.1:5174",
-  "https://orchestrator.endruin.com",
-];
-
-export function resolveAllowedOrigins(): Set<string> {
-  const extras = (process.env.ORCHESTRATOR_ALLOWED_ORIGINS ?? "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-  return new Set<string>([...DEFAULT_ALLOWED_ORIGINS, ...extras]);
-}
-
-const ALLOWED_ORIGINS = resolveAllowedOrigins();
-const FALLBACK_ALLOWED_ORIGIN = "http://localhost:5173";
-const ALLOWED_METHODS = "GET, HEAD, OPTIONS, POST";
-
 function resolveOrchestratorApiToken(): string {
   const fromEnv = process.env.ORCHESTRATOR_API_TOKEN?.trim();
   if (fromEnv) return fromEnv;
@@ -5735,10 +5658,6 @@ function resolveOrchestratorApiToken(): string {
   return devToken;
 }
 
-export function pickAllowedOrigin(originHeader: string | undefined, allowed: Set<string> = ALLOWED_ORIGINS): string {
-  return originHeader && allowed.has(originHeader) ? originHeader : FALLBACK_ALLOWED_ORIGIN;
-}
-
 export function redactInternalPathsForPublicHealth(
   snapshot: ServerEventStorageSnapshot,
 ): ServerEventStorageSnapshot {
@@ -5747,26 +5666,6 @@ export function redactInternalPathsForPublicHealth(
     storageDir: "",
     eventLogPath: "",
   };
-}
-
-function createCorsHeaders(originHeader?: string) {
-  return {
-    "access-control-allow-headers": "content-type,authorization",
-    "access-control-allow-methods": ALLOWED_METHODS,
-    "access-control-allow-origin": pickAllowedOrigin(originHeader),
-    "access-control-allow-credentials": "true",
-    "access-control-allow-private-network": "true",
-    "access-control-max-age": "600",
-    "vary": "Origin, Access-Control-Request-Method, Access-Control-Request-Headers, Access-Control-Request-Private-Network",
-  };
-}
-
-function writeJson(response: ServerResponse, statusCode: number, payload: unknown) {
-  response.writeHead(statusCode, {
-    "content-type": "application/json; charset=utf-8",
-    ...createCorsHeaders(),
-  });
-  response.end(JSON.stringify(payload));
 }
 
 async function appendAcceptedEventsToJsonl(
