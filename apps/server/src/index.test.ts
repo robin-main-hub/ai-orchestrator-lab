@@ -8,6 +8,8 @@ import {
   parseTerminalCommandEventPayload,
   terminalCommandEventTypeSchema,
 } from "@ai-orchestrator/protocol";
+import type { MemoryInput, MemoryRecord } from "@ai-orchestrator/protocol";
+import { MemoryAdapterError, type MemoryAdapter, type MemoryAdapterContext } from "@ai-orchestrator/memory";
 import type { ServerAgentDelegationExecuteRequest } from "./index";
 import {
   createEventStorageSnapshot,
@@ -47,6 +49,7 @@ import {
   replayApprovedRequestFromPersistentServerStorage,
   resolveAllowedOrigins,
   startServer,
+  syncMemoryRecords,
 } from "./index";
 
 function expectValidAgentDelegationEvents(events: Array<{ type: string; payload: unknown }>) {
@@ -1449,6 +1452,171 @@ describe("public health storage redaction", () => {
     expect(redacted.loadedAt).toBe("2026-05-25T00:00:00.000Z");
     // original must not be mutated
     expect(original.storageDir).toBe("/home/robin/secret-vault");
+  });
+});
+
+describe("memory sync endpoint", () => {
+  const syncInput: MemoryInput = {
+    layer: "episode",
+    scope: "session",
+    kind: "context",
+    title: "Session decision",
+    content: "Keep memory sync scoped to protocol and server only.",
+    sourceChannel: "desktop",
+    trustLevel: "trusted",
+    sessionId: "session_memory_sync",
+    tags: ["memory-sync"],
+  };
+
+  function createRecord(input: MemoryInput, id = "mem_sync_record_1"): MemoryRecord {
+    return {
+      id,
+      layer: input.layer,
+      scope: input.scope,
+      kind: input.kind,
+      title: input.title,
+      content: input.content,
+      sourceChannel: input.sourceChannel,
+      trustLevel: input.trustLevel,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      tags: input.tags,
+      activationState: "suggested",
+      createdAt: "2026-06-03T00:00:00.000Z",
+      pinned: false,
+    };
+  }
+
+  function createMemoryAdapter(remember: MemoryAdapter["remember"]): MemoryAdapter {
+    return {
+      profileId: "test_memory_adapter",
+      kind: "mock",
+      remember,
+      recall: async () => [],
+      memoryContext: async () => ({
+        id: "memory_context_test",
+        sessionId: "session_memory_sync",
+        query: "",
+        activeRecordIds: [],
+        blockedRecordIds: [],
+        relationIds: [],
+        summary: "",
+        createdAt: "2026-06-03T00:00:00.000Z",
+      }),
+      stats: async () => ({
+        totalRecords: 0,
+        activeRecords: 0,
+        pinnedRecords: 0,
+        quarantinedRecords: 0,
+        relationCount: 0,
+        duplicateCandidates: 0,
+        contradictionCandidates: 0,
+        staleCandidates: 0,
+        health: "good",
+      }),
+      pin: async () => undefined,
+      forget: async () => undefined,
+      activateMemories: async () => undefined,
+      createRelations: async () => [],
+    };
+  }
+
+  it("syncs records through the memory adapter and reports mixed item statuses", async () => {
+    const calls: Array<{ input: MemoryInput; ctx: MemoryAdapterContext }> = [];
+    const adapter = createMemoryAdapter(async (input, ctx) => {
+      calls.push({ input, ctx });
+      if (input.title === "Promotion pending") {
+        throw new MemoryAdapterError("promotion_pending", "Queued for curator promotion.", {
+          recordId: "pending_record_1",
+        });
+      }
+      if (input.title === "Backend failure") {
+        throw new Error("backend unavailable");
+      }
+      return createRecord(input, `accepted_${calls.length}`);
+    });
+
+    const response = await syncMemoryRecords(
+      {
+        id: "memory_sync_request_1",
+        clientId: "client_desktop",
+        sessionId: "session_memory_sync",
+        inputs: [
+          syncInput,
+          { ...syncInput, title: "Promotion pending", trustLevel: "limited" },
+          { ...syncInput, title: "Backend failure" },
+        ],
+        idempotencyKey: "client_desktop:session_memory_sync:memory_sync_request_1",
+        createdAt: "2026-06-03T00:00:00.000Z",
+      },
+      adapter,
+      {
+        serverRevision: 17,
+        now: "2026-06-03T00:00:01.000Z",
+      },
+    );
+
+    expect(calls).toHaveLength(3);
+    expect(calls[0]?.ctx.permissionDecision).toBe("allow");
+    expect(calls[0]?.ctx.callerTrustLevel).toBe("trusted");
+    expect(response.serverRevision).toBe(17);
+    expect(response.accepted).toBe(1);
+    expect(response.promotionPending).toBe(1);
+    expect(response.failed).toBe(1);
+    expect(response.results.map((result) => result.status)).toEqual([
+      "accepted",
+      "promotion_pending",
+      "failed",
+    ]);
+    expect(response.results[1]?.record?.id).toBe("pending_record_1");
+    expect(response.results[2]?.reason).toBe("backend unavailable");
+  });
+
+  it("accepts trusted memory sync HTTP requests", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (typeof address !== "object" || address === null) throw new Error("server did not bind");
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/memory/sync`, {
+        method: "POST",
+        headers: {
+          "authorization": "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          id: "memory_sync_request_http_1",
+          clientId: "client_desktop",
+          sessionId: "session_memory_sync_http",
+          inputs: [{ ...syncInput, sessionId: "session_memory_sync_http" }],
+          idempotencyKey: "client_desktop:session_memory_sync_http:memory_sync_request_http_1",
+          createdAt: "2026-06-03T00:00:00.000Z",
+        }),
+      });
+      const body = await response.json() as {
+        accepted: number;
+        failed: number;
+        results: Array<{ status: string }>;
+      };
+
+      expect(response.status).toBe(202);
+      expect(body.accepted).toBe(1);
+      expect(body.failed).toBe(0);
+      expect(body.results[0]?.status).toBe("accepted");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+    }
   });
 });
 
