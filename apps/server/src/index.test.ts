@@ -3181,6 +3181,26 @@ describe("HTTP request limits", () => {
       });
       expect(failData.exitCode).toBe(1);
 
+      const invalidPacket = {
+        ...packet,
+        verificationPlan: ["node -e \"console.log('injected'); process.exit(0)\""],
+      };
+
+      const invalidResponse = await fetch(`http://127.0.0.1:${address.port}/verify-packet`, {
+        body: JSON.stringify(invalidPacket),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(invalidResponse.status).toBe(400);
+      const invalidData = (await invalidResponse.json()) as any;
+      expect(invalidData).toMatchObject({
+        error: "command_not_allowed",
+      });
+
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
