@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Brain,
   ChevronRight,
@@ -217,6 +217,10 @@ export function App() {
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
   const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
   const [activeSessionId, setActiveSessionId] = useState(DEFAULT_SESSION_ID);
+  const activeSessionIdRef = useRef(activeSessionId);
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
   const [sessionIndexState, setSessionIndexState] = useState<Stage20SessionIndexState>(() =>
     createInitialSessionIndexState(),
   );
@@ -467,15 +471,18 @@ export function App() {
       skipRemoteSync?: boolean;
     },
   ) {
+    const targetSessionId = options?.sessionId ?? activeSessionIdRef.current;
     const event = createStage2Event({
-      sessionId: options?.sessionId ?? activeSessionId,
+      sessionId: targetSessionId,
       type,
       payload,
       source: options?.source,
       sourceTrust: options?.sourceTrust,
       correlationId: options?.correlationId,
     });
-    setEventLog((events) => appendEventToLog(events, event));
+    if (targetSessionId === activeSessionIdRef.current) {
+      setEventLog((events) => appendEventToLog(events, event));
+    }
     queueEventForSync(event, { skipRemoteSync: options?.skipRemoteSync });
     return event;
   }
@@ -504,6 +511,7 @@ export function App() {
     const createdAt = new Date().toISOString();
     const title = window.prompt("새 세션 이름", "새 작업 세션")?.trim() || "새 작업 세션";
     const nextSessionId = `session_${createdAt.replace(/[-:.TZ]/g, "").slice(0, 14)}_${crypto.randomUUID().slice(0, 8)}`;
+    activeSessionIdRef.current = nextSessionId;
     setActiveSessionId(nextSessionId);
     setConversationMessages([]);
     setEventLog([]);
@@ -1063,6 +1071,7 @@ export function App() {
       return;
     }
 
+    const targetSessionId = activeSessionIdRef.current;
     const createdAt = new Date().toISOString();
     const authLabel = selectedAgent.authBinding?.label ?? "credential pending";
     const authMode = selectedAgent.authBinding?.mode ?? "provider_profile";
@@ -1071,7 +1080,7 @@ export function App() {
     const attachmentMetadata = attachments.map((attachment) => ({ ...attachment }));
     const userMessage: ConversationMessage = {
       id: `message_user_${crypto.randomUUID()}`,
-      sessionId: activeSessionId,
+      sessionId: targetSessionId,
       role: "user",
       content: messageContent,
       createdAt,
@@ -1099,7 +1108,7 @@ export function App() {
       }
       const blockedMessage: ConversationMessage = {
         id: `message_provider_blocked_${crypto.randomUUID()}`,
-        sessionId: activeSessionId,
+        sessionId: targetSessionId,
         role: "assistant",
         content: providerNeedsApproval
           ? `${selectedProvider.name}는 승인 후 사용할 수 있어. 하단 Permission 대기열에서 provider_completion을 승인하면 바로 이어서 보낼 수 있어.`
@@ -1112,7 +1121,9 @@ export function App() {
         },
       };
 
-      setConversationMessages((messages) => [...messages, userMessage, blockedMessage]);
+      if (activeSessionIdRef.current === targetSessionId) {
+        setConversationMessages((messages) => [...messages, userMessage, blockedMessage]);
+      }
       setDraftMessage("");
       setDraftAttachments([]);
       appendEvent("conversation.message.created", {
@@ -1125,7 +1136,7 @@ export function App() {
         attachments: attachmentMetadata,
         attachmentStorage: "metadata_only",
         redaction: "applied",
-      });
+      }, { sessionId: targetSessionId });
       appendEvent("provider.completion.blocked", {
         agentId: selectedAgent.id,
         providerProfileId: selectedProvider.id,
@@ -1137,7 +1148,7 @@ export function App() {
         attachmentCount: attachmentMetadata.length,
         retryStored: providerNeedsApproval,
         redaction: "applied",
-      });
+      }, { sessionId: targetSessionId });
       appendEvent("conversation.message.created", {
         messageId: blockedMessage.id,
         role: "assistant",
@@ -1145,7 +1156,7 @@ export function App() {
         metadata: blockedMessage.metadata,
         providerProfileId: selectedProvider.id,
         redaction: "applied",
-      });
+      }, { sessionId: targetSessionId });
       return;
     }
 
@@ -1163,10 +1174,10 @@ export function App() {
       attachments: attachmentMetadata,
       attachmentStorage: "metadata_only",
       redaction: "applied",
-    });
+    }, { sessionId: targetSessionId });
     const workItem: WorkItem = {
       id: `work_item_message_${crypto.randomUUID()}`,
-      sessionId: activeSessionId,
+      sessionId: targetSessionId,
       title: messageContent.slice(0, 64) || "Attachment request",
       kind: "conversation",
       lane: "check",
@@ -1202,7 +1213,7 @@ export function App() {
       authMode,
       authLabel,
       routePreference: isDgxRoutedProvider(selectedProvider) ? "server_proxy" : "mock",
-    });
+    }, { sessionId: targetSessionId });
 
     let reply = "";
     let completionMetadata: Record<string, unknown> = {};
@@ -1256,12 +1267,12 @@ export function App() {
         providerProfileId: selectedProvider.id,
         modelId,
         error: error instanceof Error ? error.message : String(error),
-      });
+      }, { sessionId: targetSessionId });
     }
 
     const assistantMessage: ConversationMessage = {
       id: `message_agent_${crypto.randomUUID()}`,
-      sessionId: activeSessionId,
+      sessionId: targetSessionId,
       role: "assistant",
       content: reply,
       createdAt: new Date().toISOString(),
@@ -1273,12 +1284,10 @@ export function App() {
       },
     };
 
-    setAgentActivity(selectedAgent.id, "responding");
-    setConversationMessages((messages) => [...messages, assistantMessage]);
     const assistantDraft: AssistantDraft = {
       id: `draft_reply_${crypto.randomUUID()}`,
       workItemId: workItem.id,
-      sessionId: activeSessionId,
+      sessionId: targetSessionId,
       title: `${selectedAgent.name} reply`,
       body: reply.slice(0, 1200),
       targetSurface: "conversation",
@@ -1288,12 +1297,21 @@ export function App() {
       missingInfo: [],
       createdAt: assistantMessage.createdAt,
     };
-    prependAssistantDraft(assistantDraft);
-    updateWorkItem(workItem.id, {
-      lane: completionMetadata.realProviderCall ? "check" : "ask",
-      status: completionMetadata.realProviderCall ? "drafted" : "waiting_input",
-      updatedAt: assistantMessage.createdAt,
-    });
+    if (activeSessionIdRef.current === targetSessionId) {
+      setAgentActivity(selectedAgent.id, "responding");
+      setConversationMessages((messages) => [...messages, assistantMessage]);
+      prependAssistantDraft(assistantDraft);
+      updateWorkItem(workItem.id, {
+        lane: completionMetadata.realProviderCall ? "check" : "ask",
+        status: completionMetadata.realProviderCall ? "drafted" : "waiting_input",
+        updatedAt: assistantMessage.createdAt,
+      });
+      window.setTimeout(() => {
+        setAgentActivity(selectedAgent.id, "idle");
+      }, 450);
+    } else {
+      setAgentActivity(selectedAgent.id, "idle");
+    }
     appendEvent("conversation.message.created", {
       messageId: assistantMessage.id,
       role: "assistant",
@@ -1303,10 +1321,7 @@ export function App() {
       providerProfileId: selectedProvider.id,
       contentLength: reply.length,
       redaction: "applied",
-    });
-    window.setTimeout(() => {
-      setAgentActivity(selectedAgent.id, "idle");
-    }, 450);
+    }, { sessionId: targetSessionId });
   }
 
   function handleCreateCodingPacket() {
