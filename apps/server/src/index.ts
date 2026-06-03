@@ -5081,9 +5081,31 @@ export async function syncMemoryRecords(
     try {
       const record = await adapter.remember(input);
       results.push({ status: "accepted", record });
-    } catch (error) {
-      if (error instanceof PromotionPendingError) {
-        results.push({ status: "promotion_pending", record: error.record });
+    } catch (error: any) {
+      if (
+        error instanceof PromotionPendingError ||
+        (error && typeof error === "object" && error.category === "promotion_pending")
+      ) {
+        let record = error.record;
+        if (!record && input) {
+          record = {
+            id: error.meta?.recordId || `mem_dgx_pending_${crypto.randomUUID().slice(0, 8)}`,
+            layer: input.layer,
+            scope: input.scope ?? "project",
+            kind: input.kind ?? "context",
+            title: input.title,
+            content: input.content,
+            sourceChannel: input.sourceChannel,
+            trustLevel: input.trustLevel,
+            projectId: input.projectId,
+            sessionId: input.sessionId,
+            tags: input.tags ?? [],
+            activationState: "quarantined",
+            createdAt: now,
+            pinned: false,
+          };
+        }
+        results.push({ status: "promotion_pending", record });
       } else {
         results.push({ status: "failed", reason: error instanceof Error ? error.message : String(error) });
       }
