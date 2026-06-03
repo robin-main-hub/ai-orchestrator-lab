@@ -28,6 +28,9 @@ import type {
   IngressEvent,
   IngressGuardResult,
   IngressGuardStep,
+  MemoryInput,
+  MemoryRecord,
+  MemorySyncRequest,
   ModelDiscoverySnapshot,
   PermissionAction,
   PermissionActor,
@@ -80,6 +83,7 @@ import {
   type CodexExecRunner,
 } from "@ai-orchestrator/providers/node";
 import {
+  isMemoryAdapterError,
   MementoMcpAdapter,
   LocalHeuristicAdapter,
   withTrustEnforcement,
@@ -3904,6 +3908,7 @@ import {
   memoryLayerSchema,
   memoryScopeSchema,
   memoryKindSchema,
+  memorySyncRequestSchema,
   sourceTrustSchema,
 } from "@ai-orchestrator/protocol";
 
@@ -3965,6 +3970,116 @@ export function evaluateServerMemoryPermission(
     decision: "allow",
     requestedLevels,
     reason: "authorized memory access",
+  };
+}
+
+export type MemoryRecordSyncStatus = "accepted" | "promotion_pending" | "failed";
+
+export type MemoryRecordSyncResult = {
+  inputIndex: number;
+  status: MemoryRecordSyncStatus;
+  record?: MemoryRecord;
+  serverRevision?: number;
+  reason?: string;
+};
+
+export type MemorySyncResponse = {
+  requestId: string;
+  sessionId: string;
+  serverRevision: number;
+  accepted: number;
+  promotionPending: number;
+  failed: number;
+  results: MemoryRecordSyncResult[];
+  createdAt: string;
+};
+
+export async function syncMemoryRecords(
+  request: MemorySyncRequest,
+  adapter: MemoryAdapter,
+  options: { serverRevision?: number; now?: string } = {},
+): Promise<MemorySyncResponse> {
+  const createdAt = options.now ?? new Date().toISOString();
+  const serverRevision = options.serverRevision ?? 0;
+  const results: MemoryRecordSyncResult[] = [];
+
+  for (const [inputIndex, input] of request.inputs.entries()) {
+    try {
+      const record = await adapter.remember(input, {
+        permissionDecision: "allow",
+        callerTrustLevel: "trusted",
+        now: () => createdAt,
+      });
+      results.push({
+        inputIndex,
+        status: "accepted",
+        record,
+        serverRevision,
+      });
+    } catch (error) {
+      if (isPromotionPendingMemoryError(error)) {
+        results.push({
+          inputIndex,
+          status: "promotion_pending",
+          record: createPendingMemoryRecord(input, error, createdAt),
+          serverRevision,
+          reason: error instanceof Error ? error.message : "promotion_pending",
+        });
+        continue;
+      }
+
+      results.push({
+        inputIndex,
+        status: "failed",
+        serverRevision,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return {
+    requestId: request.id,
+    sessionId: request.sessionId,
+    serverRevision,
+    accepted: results.filter((result) => result.status === "accepted").length,
+    promotionPending: results.filter((result) => result.status === "promotion_pending").length,
+    failed: results.filter((result) => result.status === "failed").length,
+    results,
+    createdAt,
+  };
+}
+
+function isPromotionPendingMemoryError(error: unknown): error is Error & { meta?: { recordId?: string } } {
+  if (isMemoryAdapterError(error)) {
+    return error.category === "promotion_pending";
+  }
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      (error as { category?: unknown }).category === "promotion_pending",
+  );
+}
+
+function createPendingMemoryRecord(
+  input: MemoryInput,
+  error: { meta?: { recordId?: string } },
+  createdAt: string,
+): MemoryRecord {
+  return {
+    id: error.meta?.recordId ?? `pending_${stableServerId(`${input.title}:${input.content}:${createdAt}`)}`,
+    layer: input.layer,
+    scope: input.scope,
+    kind: input.kind ?? "context",
+    title: input.title,
+    content: input.content,
+    sourceChannel: input.sourceChannel,
+    trustLevel: input.trustLevel,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    tags: input.tags ?? [],
+    activationState: "suggested",
+    createdAt,
+    pinned: false,
   };
 }
 
@@ -5009,6 +5124,32 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         response.write(`event: chunk\ndata: ${JSON.stringify(errChunk)}\n\n`);
       } finally {
         response.end();
+      }
+      return;
+    }
+
+    if (pathname === "/memory/sync" && request.method === "POST") {
+      let body: MemorySyncRequest;
+      try {
+        body = memorySyncRequestSchema.parse(await readJsonBody(request)) as MemorySyncRequest;
+      } catch (error) {
+        respondJson(400, { error: "invalid_memory_sync_request", message: String(error) });
+        return;
+      }
+      const callerTrustLevel = "trusted";
+      const permission = evaluateServerMemoryPermission("memory_write_request", callerTrustLevel);
+      if (permission.decision !== "allow") {
+        respondJson(403, { error: "permission_denied", permission });
+        return;
+      }
+      try {
+        const storageState = await eventStorage.statePromise;
+        const syncResponse = await syncMemoryRecords(body, memoryAdapter, {
+          serverRevision: storageState.revision,
+        });
+        respondJson(syncResponse.failed > 0 ? 207 : 202, syncResponse);
+      } catch (error) {
+        respondJson(500, { error: "memory_sync_failed", message: String(error) });
       }
       return;
     }
