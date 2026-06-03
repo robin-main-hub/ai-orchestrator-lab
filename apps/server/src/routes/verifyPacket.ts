@@ -40,15 +40,26 @@ export async function handleVerifyPacketRoute({
       return true;
     }
 
+    const ALLOWED_COMMANDS = new Set([
+      "corepack pnpm --filter @ai-orchestrator/protocol test",
+      "pnpm --filter @ai-orchestrator/protocol test",
+      "node -e \"process.exit(0)\"",
+      "node -e \"process.exit(1)\"",
+    ]);
+
     try {
-      // Parse commands from verificationPlan. We filter out natural language instructions
-      // and only keep lines that look like shell commands (e.g. starting with pnpm, npm, bash, node).
-      // Or we can just execute the plan if it's explicitly formatted as a command.
-      // For safety, we only allow specific prefixes or we just run them and timeout.
-      const commands = payload.verificationPlan.filter(
-        (cmd) => cmd.startsWith("pnpm ") || cmd.startsWith("npm ") || cmd.startsWith("corepack ") || cmd.startsWith("node ")
-      );
-      
+      // Validate that all requested commands are strictly whitelisted
+      for (const cmd of payload.verificationPlan) {
+        if (!ALLOWED_COMMANDS.has(cmd)) {
+          respondJson(400, {
+            error: "command_not_allowed",
+            message: `Command "${cmd}" is not in the whitelist of allowed commands.`,
+          });
+          return true;
+        }
+      }
+
+      const commands = payload.verificationPlan;
       const results = [];
       let passed = true;
 
@@ -75,7 +86,7 @@ export async function handleVerifyPacketRoute({
           label: "No executable commands found in verificationPlan",
           status: "fail",
           stdout: "",
-          stderr: "Verification plan must contain commands starting with pnpm, npm, corepack, or node."
+          stderr: "Verification plan must contain allowed commands."
         });
       }
 
