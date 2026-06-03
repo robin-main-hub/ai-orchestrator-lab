@@ -1848,6 +1848,30 @@ export const memoryRecordSchema = z.object({
 });
 export type MemoryRecord = z.infer<typeof memoryRecordSchema>;
 
+export const memoryInputSchema = z.object({
+  layer: memoryLayerSchema,
+  scope: memoryScopeSchema.optional(),
+  kind: memoryKindSchema.optional(),
+  title: z.string(),
+  content: z.string(),
+  sourceChannel: memoryRecordSchema.shape.sourceChannel,
+  trustLevel: sourceTrustSchema,
+  projectId: z.string().optional(),
+  sessionId: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+export type MemoryInput = z.infer<typeof memoryInputSchema>;
+
+export const memorySyncRequestSchema = z.object({
+  id: z.string(),
+  clientId: z.string(),
+  sessionId: z.string(),
+  inputs: z.array(memoryInputSchema),
+  idempotencyKey: z.string(),
+  createdAt: z.string(),
+});
+export type MemorySyncRequest = z.infer<typeof memorySyncRequestSchema>;
+
 export type RecallQuery = {
   sessionId?: string;
   projectId?: string;
@@ -1927,19 +1951,6 @@ export type MemoryStats = {
   contradictionCandidates: number;
   staleCandidates: number;
   health: "good" | "watch" | "needs_review";
-};
-
-export type MemoryInput = {
-  layer: MemoryLayer;
-  scope?: MemoryScope;
-  kind?: MemoryKind;
-  title: string;
-  content: string;
-  sourceChannel: MemoryRecord["sourceChannel"];
-  trustLevel: SourceTrust;
-  projectId?: string;
-  sessionId?: string;
-  tags?: string[];
 };
 
 export type Reflection = {
@@ -2234,4 +2245,3 @@ export const ssotSnapshotSchema = z.object({
   itemCount: z.number().int().nonnegative(),
 });
 export type SsotSnapshot = z.infer<typeof ssotSnapshotSchema>;
-
