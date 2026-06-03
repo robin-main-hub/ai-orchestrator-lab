@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
+import type { IncomingMessage } from "node:http";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -51,6 +52,7 @@ import {
   startServer,
   syncMemoryRecords,
 } from "./index";
+import { handleVerifyPacketRoute, type VerifyPacketRouteDependencies } from "./routes/verifyPacket";
 
 function expectValidAgentDelegationEvents(events: Array<{ type: string; payload: unknown }>) {
   for (const event of events) {
@@ -3105,114 +3107,157 @@ describe("HTTP request limits", () => {
     }
   });
 
-  it("runs package verification for Coding Packet and captures subprocess output", async () => {
-    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
-    const previousNodeEnv = process.env.NODE_ENV;
-    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
-    process.env.NODE_ENV = "production";
+  function createVerifyPacketDependencies(
+    body: unknown,
+    overrides: Partial<VerifyPacketRouteDependencies> = {},
+  ) {
+    const responses: Array<{ statusCode: number; payload: unknown }> = [];
+    const dependencies: VerifyPacketRouteDependencies = {
+      request: {} as IncomingMessage,
+      pathname: "/verify-packet",
+      method: "POST",
+      readJsonBody: async () => body,
+      isRequestBodyTooLargeError: (error): error is { limit: number } =>
+        Boolean(error && typeof error === "object" && "limit" in error),
+      respondJson: (statusCode, payload) => {
+        responses.push({ statusCode, payload });
+      },
+      ...overrides,
+    };
 
-    const server = startServer(0);
+    return { dependencies, responses };
+  }
+
+  const verifyPacketFixture = {
+    goal: "Test execution gate",
+    context: ["context_1"],
+    decisions: ["decision_1"],
+    rejectedOptions: ["option_1"],
+    constraints: ["constraint_1"],
+    filesToInspect: [],
+    implementationPlan: ["plan_1"],
+    verificationPlan: ["pnpm --filter @ai-orchestrator/protocol test"],
+    reviewerNotes: [],
+  };
+
+  it("runs allowlisted verification commands through an injected execFile runner", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "test";
+    const calls: Array<{ file: string; args: string[] }> = [];
+    const { dependencies, responses } = createVerifyPacketDependencies(verifyPacketFixture, {
+      execFileAsync: async (file, args) => {
+        calls.push({ file, args });
+        return { stdout: "Test Output", stderr: "" };
+      },
+    });
 
     try {
-      await new Promise<void>((resolve) => {
-        server.once("listening", resolve);
-      });
-      const address = server.address();
-      if (!address || typeof address !== "object") {
-        throw new Error("test server did not bind to a TCP port");
-      }
+      await handleVerifyPacketRoute(dependencies);
 
-      const packet = {
-        goal: "Test execution gate",
-        context: ["context_1"],
-        decisions: ["decision_1"],
-        rejectedOptions: ["option_1"],
-        constraints: ["constraint_1"],
-        filesToInspect: [],
-        implementationPlan: ["plan_1"],
-        verificationPlan: ["node -e \"process.exit(0)\""],
-        reviewerNotes: [],
-      };
-
-      const response = await fetch(`http://127.0.0.1:${address.port}/verify-packet`, {
-        body: JSON.stringify(packet),
-        headers: {
-          authorization: "Bearer test-orchestrator-token",
-          "content-type": "application/json",
-        },
-        method: "POST",
-      });
-
-      if (response.status !== 200) {
-        console.log("RESPONSE ERROR BODY:", await response.json());
-      }
-      expect(response.status).toBe(200);
-      const data = (await response.json()) as any;
+      expect(calls).toEqual([
+        { file: "pnpm", args: ["--filter", "@ai-orchestrator/protocol", "test"] },
+      ]);
+      expect(responses[0]?.statusCode).toBe(200);
+      const data = responses[0]?.payload as any;
       expect(data).toMatchObject({
         status: "passed",
         exitCode: 0,
         checks: [
-          { label: "node -e \"process.exit(0)\"", status: "pass" }
-        ]
+          { label: "pnpm --filter @ai-orchestrator/protocol test", status: "pass" },
+        ],
       });
-      expect(data.stdout).toBeDefined();
-
-      const failPacket = {
-        ...packet,
-        verificationPlan: ["node -e \"process.exit(1)\""],
-      };
-
-      const failResponse = await fetch(`http://127.0.0.1:${address.port}/verify-packet`, {
-        body: JSON.stringify(failPacket),
-        headers: {
-          authorization: "Bearer test-orchestrator-token",
-          "content-type": "application/json",
-        },
-        method: "POST",
-      });
-
-      expect(failResponse.status).toBe(200);
-      const failData = (await failResponse.json()) as any;
-      expect(failData).toMatchObject({
-        status: "warning",
-        checks: [
-          { label: "node -e \"process.exit(1)\"", status: "fail" }
-        ]
-      });
-      expect(failData.exitCode).toBe(1);
-
-      const invalidPacket = {
-        ...packet,
-        verificationPlan: ["node -e \"console.log('injected'); process.exit(0)\""],
-      };
-
-      const invalidResponse = await fetch(`http://127.0.0.1:${address.port}/verify-packet`, {
-        body: JSON.stringify(invalidPacket),
-        headers: {
-          authorization: "Bearer test-orchestrator-token",
-          "content-type": "application/json",
-        },
-        method: "POST",
-      });
-
-      expect(invalidResponse.status).toBe(400);
-      const invalidData = (await invalidResponse.json()) as any;
-      expect(invalidData).toMatchObject({
-        error: "command_not_allowed",
-      });
-
+      expect(data.stdout).toContain("Test Output");
     } finally {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) reject(error);
-          else resolve();
-        });
-      });
-      if (previousToken === undefined) {
-        delete process.env.ORCHESTRATOR_API_TOKEN;
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
       } else {
-        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+        process.env.NODE_ENV = previousNodeEnv;
       }
+    }
+  });
+
+  it("rejects shell metacharacters and node eval commands without invoking the runner", async () => {
+    let calls = 0;
+    const rejectedCommands = [
+      "pnpm --filter @ai-orchestrator/protocol test && whoami",
+      "pnpm --filter @ai-orchestrator/protocol test --additional-flag",
+      "node -e \"process.exit(0)\"",
+    ];
+
+    for (const command of rejectedCommands) {
+      const { dependencies, responses } = createVerifyPacketDependencies({
+        ...verifyPacketFixture,
+        verificationPlan: [command],
+      }, {
+        execFileAsync: async () => {
+          calls += 1;
+          return { stdout: "", stderr: "" };
+        },
+      });
+
+      await handleVerifyPacketRoute(dependencies);
+
+      expect(responses[0]).toMatchObject({
+        statusCode: 400,
+        payload: { error: "command_not_allowed" },
+      });
+    }
+
+    expect(calls).toBe(0);
+  });
+
+  it("blocks production verification unless explicitly enabled", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousAllow = process.env.ORCHESTRATOR_ALLOW_VERIFY_PACKET_IN_PRODUCTION;
+    process.env.NODE_ENV = "production";
+    delete process.env.ORCHESTRATOR_ALLOW_VERIFY_PACKET_IN_PRODUCTION;
+
+    try {
+      const { dependencies, responses } = createVerifyPacketDependencies(verifyPacketFixture, {
+        execFileAsync: async () => ({ stdout: "should not run", stderr: "" }),
+      });
+      await handleVerifyPacketRoute(dependencies);
+
+      expect(responses[0]).toMatchObject({
+        statusCode: 403,
+        payload: { error: "production_execution_blocked" },
+      });
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousAllow === undefined) {
+        delete process.env.ORCHESTRATOR_ALLOW_VERIFY_PACKET_IN_PRODUCTION;
+      } else {
+        process.env.ORCHESTRATOR_ALLOW_VERIFY_PACKET_IN_PRODUCTION = previousAllow;
+      }
+    }
+  });
+
+  it("sanitizes and truncates subprocess output before returning it", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "test";
+    const rawSecret = "sk-12345678901234567890123456789012";
+    const longOutput = `${process.cwd()} ${rawSecret} ${"x".repeat(30_000)}`;
+    const { dependencies, responses } = createVerifyPacketDependencies(verifyPacketFixture, {
+      execFileAsync: async () => ({ stdout: longOutput, stderr: `Bearer ${rawSecret}` }),
+    });
+
+    try {
+      await handleVerifyPacketRoute(dependencies);
+
+      const data = responses[0]?.payload as any;
+      expect(responses[0]?.statusCode).toBe(200);
+      expect(data.stdout).toContain("<root>");
+      expect(data.stdout).toContain("<redacted>");
+      expect(data.stdout).not.toContain(process.cwd());
+      expect(data.stdout).not.toContain(rawSecret);
+      expect(data.stdout).toContain("[... Output truncated due to size limits ...]");
+      expect(data.stderr).toContain("<redacted>");
+      expect(data.stderr).not.toContain(rawSecret);
+    } finally {
       if (previousNodeEnv === undefined) {
         delete process.env.NODE_ENV;
       } else {
