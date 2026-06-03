@@ -63,16 +63,23 @@ export function useMemoryController({
   );
 
   useEffect(() => {
+    let active = true;
     setAdapterStatus("loading");
     memoryApi
       .recall({ query: packet.goal ?? "", limit: 50 })
       .then((results) => {
+        if (!active) return;
         setMemoryRecords(results.map((r) => r.record));
         setAdapterStatus("ready");
       })
-      .catch(() => setAdapterStatus("error"));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [memoryApi]);
+      .catch(() => {
+        if (!active) return;
+        setAdapterStatus("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, [memoryApi, packet.goal]);
 
   useEffect(() => {
     const ids = memoryRecords.map((r) => r.id);
