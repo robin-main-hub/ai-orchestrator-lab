@@ -36,7 +36,14 @@ function resolveConfiguredDgxServerBaseUrls() {
   const fallback = env.VITE_DGX_SERVER_FALLBACK_BASE_URLS?.split(",").map((candidate) => candidate.trim()).filter(Boolean) ?? [];
 
   if (primary || lan || fallback.length > 0) {
-    return [primary, lan, ...fallback].filter((candidate): candidate is string => Boolean(candidate));
+    const list = [lan, primary, ...fallback].filter((candidate): candidate is string => Boolean(candidate));
+    if (!list.includes(DGX02_LAN_ORCHESTRATOR_BASE_URL)) {
+      list.push(DGX02_LAN_ORCHESTRATOR_BASE_URL);
+    }
+    if (!list.includes(ENDRUIN_ORCHESTRATOR_BASE_URL)) {
+      list.push(ENDRUIN_ORCHESTRATOR_BASE_URL);
+    }
+    return list;
   }
 
   return [...DEFAULT_DGX_SERVER_FALLBACK_BASE_URLS];
