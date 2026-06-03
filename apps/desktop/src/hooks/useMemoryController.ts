@@ -1,19 +1,24 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   CodingPacket,
   ConversationMessage,
   EventEnvelope,
   MemoryRecord,
+  MemoryRelation,
   ProviderProfile,
+  Reflection,
 } from "@ai-orchestrator/protocol";
+import { DgxSimpleMemMemoryAdapter } from "@ai-orchestrator/memory";
 import {
   activateMemoryRecord,
   createStage6MemoryInspector,
   forgetMemoryRecord,
   pinMemoryRecord,
   rememberStage6Context,
+  type Stage6MemoryInspector,
 } from "../runtime/stage6Memory";
 import { initialMemoryRecords } from "../seeds/memory";
+import { createAdapterBackedMementoMemoryApi } from "../runtime/stage27MemoryApi";
 
 type AppendWorkbenchEvent = <T>(type: string, payload: T) => EventEnvelope<T>;
 
@@ -27,6 +32,8 @@ type MemoryControllerInput = {
   runtimeUpdatedAt: string;
 };
 
+const defaultSessionId = "session_desktop_001";
+
 export function useMemoryController({
   appendEvent,
   events,
@@ -36,9 +43,58 @@ export function useMemoryController({
   provider,
   runtimeUpdatedAt,
 }: MemoryControllerInput) {
-  const [memoryRecords, setMemoryRecords] = useState<MemoryRecord[]>(initialMemoryRecords);
+  const [memoryRecords, setMemoryRecords] = useState<MemoryRecord[]>([]);
+  const [adapterStatus, setAdapterStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [adapterRelations, setAdapterRelations] = useState<MemoryRelation[] | null>(null);
+  const [adapterReflection, setAdapterReflection] = useState<Reflection | null>(null);
 
-  const memoryInspector = useMemo(
+  const memoryAdapter = useMemo(
+    () =>
+      new DgxSimpleMemMemoryAdapter({
+        profileId: "desktop_dgx_simplemem",
+        seedRecords: initialMemoryRecords,
+      }),
+    [],
+  );
+
+  const memoryApi = useMemo(
+    () => createAdapterBackedMementoMemoryApi({ adapter: memoryAdapter }),
+    [memoryAdapter],
+  );
+
+  useEffect(() => {
+    let active = true;
+    setAdapterStatus("loading");
+    memoryApi
+      .recall({ query: packet.goal ?? "", limit: 50 })
+      .then((results) => {
+        if (!active) return;
+        setMemoryRecords(results.map((result) => result.record));
+        setAdapterStatus("ready");
+      })
+      .catch(() => {
+        if (!active) return;
+        setAdapterStatus("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, [memoryApi, packet.goal]);
+
+  useEffect(() => {
+    const recordIds = memoryRecords.map((record) => record.id);
+    if (recordIds.length === 0) {
+      setAdapterRelations(null);
+      return;
+    }
+    memoryApi.createRelations(recordIds).then(setAdapterRelations).catch(() => {});
+  }, [memoryApi, memoryRecords]);
+
+  useEffect(() => {
+    memoryApi.reflect(defaultSessionId).then(setAdapterReflection).catch(() => {});
+  }, [memoryApi, memoryRecords]);
+
+  const baseInspector = useMemo(
     () =>
       createStage6MemoryInspector({
         records: memoryRecords,
@@ -49,6 +105,15 @@ export function useMemoryController({
         createdAt: runtimeUpdatedAt,
       }),
     [events, memoryRecords, messages, packet, provider, runtimeUpdatedAt],
+  );
+
+  const memoryInspector: Stage6MemoryInspector = useMemo(
+    () => ({
+      ...baseInspector,
+      ...(adapterRelations != null ? { relations: adapterRelations } : {}),
+      ...(adapterReflection != null ? { reflection: adapterReflection } : {}),
+    }),
+    [adapterRelations, adapterReflection, baseInspector],
   );
 
   function prependMemoryRecord(memoryRecord: MemoryRecord) {
@@ -109,6 +174,7 @@ export function useMemoryController({
   }
 
   return {
+    adapterStatus,
     handleActivateMemory,
     handleForgetMemory,
     handlePinMemory,
