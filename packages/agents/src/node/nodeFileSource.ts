@@ -25,9 +25,14 @@ import type { PersonaFileSource } from "../personaLoader.js";
  * SOUL.md`) are joined under this root.
  */
 export function createNodeFileSource(repoRoot: string): PersonaFileSource {
+  const resolvedRepoRoot = path.resolve(repoRoot);
   return {
     async readMarkdown(relativePath: string): Promise<string | null> {
-      const absolutePath = path.join(repoRoot, relativePath);
+      const absolutePath = path.resolve(resolvedRepoRoot, relativePath);
+      const relative = path.relative(resolvedRepoRoot, absolutePath);
+      if (relative.startsWith("..") || path.isAbsolute(relative)) {
+        throw new Error(`Directory traversal attempt blocked: ${relativePath}`);
+      }
       try {
         return await readFile(absolutePath, "utf8");
       } catch (error) {

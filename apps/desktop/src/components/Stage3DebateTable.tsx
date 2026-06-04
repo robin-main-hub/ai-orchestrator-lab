@@ -18,6 +18,18 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
 import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
+import { defaultAgentProfiles } from "@ai-orchestrator/agents";
+
+function resolveFallbackAgent(agentId: string) {
+  const profile = defaultAgentProfiles.find((p) => p.id === agentId);
+  if (profile) {
+    return { name: profile.name, role: profile.role };
+  }
+  const parts = agentId.replace(/^agent_/, "").split("_");
+  const role = parts[0] || "builder";
+  const name = parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+  return { name, role: role as any };
+}
 
 /**
  * Stage 3 Debate Table — strict v0 port.
@@ -40,10 +52,12 @@ export function Stage3DebateTable({
   onCreateCodingPacket,
   onSelectUtterance,
   session,
+  agentVisualsById = {},
 }: {
   onCreateCodingPacket: () => void;
   onSelectUtterance?: (utterance: Stage3DebateUtteranceView) => void;
   session: Stage3DebateSession;
+  agentVisualsById?: Record<string, { avatarDataUrl?: string }>;
 }) {
   const [prevSessionId, setPrevSessionId] = useState(session.id);
   const [activeRoundId, setActiveRoundId] = useState<string>(() => {
@@ -76,7 +90,10 @@ export function Stage3DebateTable({
       roundTitle: activeRound.title,
       agentName:
         session.participants.find((p) => p.agentId === utterance.agentId)?.name ??
-        utterance.agentId,
+        resolveFallbackAgent(utterance.agentId).name,
+      agentRole:
+        session.participants.find((p) => p.agentId === utterance.agentId)?.role ??
+        resolveFallbackAgent(utterance.agentId).role,
     }));
   }, [activeRound, session.participants]);
 
@@ -114,6 +131,7 @@ export function Stage3DebateTable({
                 onSelect={onSelectUtterance}
                 utterance={utterance}
                 utteranceById={utteranceById}
+                agentVisualsById={agentVisualsById}
               />
             ))}
           </div>
@@ -213,11 +231,13 @@ function DebateRoundCard({
   utteranceById,
   index,
   onSelect,
+  agentVisualsById,
 }: {
   utterance: Stage3DebateUtteranceView;
   utteranceById: Map<string, Stage3DebateUtteranceView>;
   index: number;
   onSelect?: (utterance: Stage3DebateUtteranceView) => void;
+  agentVisualsById: Record<string, { avatarDataUrl?: string }>;
 }) {
   const parent = utterance.parentUtteranceId
     ? utteranceById.get(utterance.parentUtteranceId)
@@ -257,7 +277,8 @@ function DebateRoundCard({
         <div className="flex min-w-0 items-center gap-2">
           <AvatarWithStatus
             initials={utterance.agentName.slice(0, 2).toUpperCase()}
-            roleColor={roleColorFromRole(utterance.agentName.toLowerCase())}
+            roleColor={roleColorFromRole(utterance.agentRole)}
+            avatarDataUrl={agentVisualsById[utterance.agentId]?.avatarDataUrl}
             size="sm"
           />
           <div className="min-w-0">
@@ -536,4 +557,3 @@ function debateTagLabel(tag: DebateTag) {
   };
   return labels[tag];
 }
-

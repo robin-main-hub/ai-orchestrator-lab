@@ -60,6 +60,9 @@ export type DebateEngineOptions = {
   now?: () => Date;
   /** ID source override (testing). */
   generateId?: () => string;
+  activePersonaOverrides?: Record<string, string>;
+  rolePersonaPriorities?: Record<string, string[]>;
+  allowMultiPersonaRoles?: string[];
 };
 
 export type DebateAgentError = {
@@ -188,6 +191,57 @@ const ROUND_INSTRUCTION: Record<DebateRoundKind, string> = {
     "이 라운드의 목표는 코딩 전달 패킷의 초안을 만드는 것이다. 목표/맥락/결정/거부된 옵션/제약/검토할 파일/구현 계획/검증 계획/리뷰어 노트를 짧게 적어라. 절대 경로나 상위 디렉터리 이동(`..`)은 사용하지 말 것.",
 };
 
+function compareAgents(
+  a: AgentProfile,
+  b: AgentProfile,
+  role: string,
+  activePersonaOverrides?: Record<string, string>,
+  rolePersonaPriorities?: Record<string, string[]>,
+): number {
+  // 1. User-Explicit Override
+  if (activePersonaOverrides && activePersonaOverrides[role]) {
+    const overrideId = activePersonaOverrides[role];
+    if (a.id === overrideId && b.id !== overrideId) return -1;
+    if (b.id === overrideId && a.id !== overrideId) return 1;
+  }
+
+  // 2. rolePersonaPriorities
+  if (rolePersonaPriorities && rolePersonaPriorities[role]) {
+    const priorityList = rolePersonaPriorities[role];
+    const indexA = priorityList.indexOf(a.id);
+    const indexB = priorityList.indexOf(b.id);
+    if (indexA !== -1 && indexB !== -1) {
+      return indexA - indexB;
+    }
+    if (indexA !== -1) return -1;
+    if (indexB !== -1) return 1;
+  }
+
+  // 3. isDefault
+  const defaultA = a.isDefault === true;
+  const defaultB = b.isDefault === true;
+  if (defaultA && !defaultB) return -1;
+  if (defaultB && !defaultA) return 1;
+
+  // 4. isCanonical
+  const canonicalA = a.isCanonical === true || !a.personaName;
+  const canonicalB = b.isCanonical === true || !b.personaName;
+  if (canonicalA && !canonicalB) return -1;
+  if (canonicalB && !canonicalA) return 1;
+
+  // 5. priority
+  const prioA = a.priority ?? 0;
+  const prioB = b.priority ?? 0;
+  if (prioA !== prioB) {
+    return prioB - prioA; // Descending (higher priority first)
+  }
+
+  // 6. Tie-breaker (Alphabetical by id)
+  if (a.id < b.id) return -1;
+  if (a.id > b.id) return 1;
+  return 0;
+}
+
 /**
  * Pick which agents are invited to this round. Filters by recommended
  * role list and caps at `max` slots, preserving the priority order from
@@ -197,11 +251,15 @@ export function pickAgentsForRound(
   kind: DebateRoundKind,
   slots: DebateEngineAgentSlot[],
   max: number,
+  options?: {
+    activePersonaOverrides?: Record<string, string>;
+    rolePersonaPriorities?: Record<string, string[]>;
+    allowMultiPersonaRoles?: string[];
+  },
 ): DebateEngineAgentSlot[] {
   const cap = Math.max(1, Math.min(HARD_MAX_UTTERANCES_PER_ROUND, max));
   const priority = ROUND_ROLE_PRIORITY[kind];
-  // Keyed by string so future AgentRole additions (R3.2) work without
-  // a code change here — see ROUND_ROLE_PRIORITY note.
+  
   const eligibleByRole = new Map<string, DebateEngineAgentSlot[]>();
   for (const slot of slots) {
     if (!slot.agent.enabled) continue;
@@ -209,16 +267,55 @@ export function pickAgentsForRound(
     bucket.push(slot);
     eligibleByRole.set(slot.agent.role, bucket);
   }
+
+  // Sort candidates within each role bucket based on deterministic hierarchy
+  for (const [role, bucket] of eligibleByRole.entries()) {
+    bucket.sort((a, b) => compareAgents(
+      a.agent,
+      b.agent,
+      role,
+      options?.activePersonaOverrides,
+      options?.rolePersonaPriorities
+    ));
+  }
+
   const selected: DebateEngineAgentSlot[] = [];
+  const selectedIds = new Set<string>();
+
+  // Pass 1: Select the top sorted candidate for each role in priority order
   for (const role of priority) {
     const bucket = eligibleByRole.get(role);
-    if (!bucket) continue;
-    for (const slot of bucket) {
-      if (selected.length >= cap) break;
-      selected.push(slot);
+    if (bucket && bucket.length > 0) {
+      const topSlot = bucket[0]!;
+      if (!selectedIds.has(topSlot.agent.id) && selected.length < cap) {
+        selected.push(topSlot);
+        selectedIds.add(topSlot.agent.id);
+      }
     }
-    if (selected.length >= cap) break;
   }
+
+  // Pass 2: Select subsequent personas for allowed roles in round-robin
+  // order, so one role cannot consume all remaining seats before another
+  // allowed multi-persona role gets its second persona.
+  if (selected.length < cap && options?.allowMultiPersonaRoles) {
+    const multiRoles = new Set(options.allowMultiPersonaRoles);
+    const allowedBuckets = priority
+      .filter((role) => multiRoles.has(role))
+      .map((role) => eligibleByRole.get(role) ?? [])
+      .filter((bucket) => bucket.length > 1);
+    const maxBucketLength = Math.max(0, ...allowedBuckets.map((bucket) => bucket.length));
+
+    for (let index = 1; index < maxBucketLength && selected.length < cap; index += 1) {
+      for (const bucket of allowedBuckets) {
+        if (selected.length >= cap) break;
+        const slot = bucket[index];
+        if (!slot || selectedIds.has(slot.agent.id)) continue;
+        selected.push(slot);
+        selectedIds.add(slot.agent.id);
+      }
+    }
+  }
+
   return selected;
 }
 
@@ -316,7 +413,11 @@ export async function runDebateRound(
   const now = opts.now ?? DEFAULT_NOW;
   const generateId = opts.generateId ?? DEFAULT_GENERATE_ID;
 
-  const invited = pickAgentsForRound(params.round.kind, params.slots, max);
+  const invited = pickAgentsForRound(params.round.kind, params.slots, max, {
+    activePersonaOverrides: opts.activePersonaOverrides,
+    rolePersonaPriorities: opts.rolePersonaPriorities,
+    allowMultiPersonaRoles: opts.allowMultiPersonaRoles,
+  });
   const utterances: DebateUtterance[] = [];
   const agentErrors: DebateAgentError[] = [];
 

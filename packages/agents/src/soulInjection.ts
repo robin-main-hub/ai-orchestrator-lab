@@ -24,6 +24,7 @@ import {
   buildPersonaPromptFragment,
   loadPersona,
   personaNameForProfile,
+  PersonaFragmentMissingError,
 } from "./personaLoader.js";
 import type {
   LoadedPersona,
@@ -91,17 +92,62 @@ export async function buildAgentSystemPrompt(
   source: PersonaFileSource,
   options?: PersonaPromptOptions,
 ): Promise<SoulInjectionReport> {
-  const personaName = personaNameForProfile(profile);
-  const sourceMode = soulModeToPersonaSourceMode(profile.soulMode);
-  const loaded: LoadedPersona = await loadPersona(personaName, sourceMode, source);
+  let loaded: LoadedPersona;
+  let personaName = personaNameForProfile(profile);
+  let mode = profile.soulMode;
+
+  try {
+    const sourceMode = soulModeToPersonaSourceMode(mode);
+    loaded = await loadPersona(personaName, sourceMode, source);
+  } catch (err) {
+    if (err instanceof PersonaFragmentMissingError) {
+      try {
+        personaName = canonicalPersonaNameForRole(profile.role);
+        mode = getCanonicalSoulMode(profile.role);
+        const sourceMode = soulModeToPersonaSourceMode(mode);
+        loaded = await loadPersona(personaName, sourceMode, source);
+      } catch (fallbackErr) {
+        if (!(fallbackErr instanceof PersonaFragmentMissingError)) {
+          throw fallbackErr;
+        }
+        mode = "off";
+        loaded = await loadPersona(personaName, "off", source);
+      }
+    } else {
+      throw err;
+    }
+  }
+
   const promptText = buildPersonaPromptFragment(loaded, options);
 
   return {
     personaName,
-    mode: profile.soulMode,
+    mode,
     fragmentsInjected: loaded.fragments.map((f) => f.relativePath),
     safetyInjected: loaded.safetyContent !== null && !(options?.omitSafety ?? false),
     estimatedTokens: estimateTokens(promptText),
     promptText,
   };
+}
+
+function canonicalPersonaNameForRole(role: string): string {
+  if (role === "companion") return "chae_arin";
+  return role;
+}
+
+function getCanonicalSoulMode(role: string): SoulInjectionMode {
+  switch (role) {
+    case "companion":
+      return "full";
+    case "reviewer":
+    case "external":
+    case "auditor":
+    case "researcher":
+    case "domain_expert":
+      return "retrieved";
+    case "executor":
+      return "off";
+    default:
+      return "summary";
+  }
 }

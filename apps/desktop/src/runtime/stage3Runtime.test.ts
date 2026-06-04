@@ -122,6 +122,54 @@ describe("stage3 debate runtime", () => {
     expect(session.statusHub.find((item) => item.id === "providers")?.value).toBe("2 active / 1 risky");
   });
 
+  it("uses roles, not English names, to create mock debate utterances", () => {
+    const localizedAgents: AgentProfile[] = [
+      { ...agents[0]!, id: "agent_makima", name: "마키마", role: "orchestrator" },
+      { ...agents[1]!, id: "agent_shinobu", name: "오시노 시노부", role: "architect" },
+      { ...agents[2]!, id: "agent_kaguya", name: "시노미야 카구야", role: "reviewer" },
+      {
+        id: "agent_rem",
+        name: "렘",
+        kind: "virtual",
+        role: "executor",
+        providerProfileId: "provider_mock",
+        modelId: "mock-executor",
+        soulMode: "off",
+        configSource: "internal",
+        enabled: true,
+      },
+      {
+        id: "agent_yohane",
+        name: "츠시마 요시코",
+        kind: "virtual",
+        role: "skeptic",
+        providerProfileId: "provider_mock",
+        modelId: "mock-skeptic",
+        soulMode: "summary",
+        configSource: "markdown",
+        enabled: true,
+      },
+    ];
+
+    const session = createStage3DebateSession({
+      messages,
+      agents: localizedAgents,
+      providers,
+      events,
+      runtime,
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+
+    const allUtteranceAgentIds = session.rounds.flatMap((round) => round.utterances.map((utterance) => utterance.agentId));
+
+    expect(session.participants).toHaveLength(5);
+    expect(session.participants.find((participant) => participant.role === "reviewer")?.agentId).toBe("agent_kaguya");
+    expect(allUtteranceAgentIds).toContain("agent_makima");
+    expect(allUtteranceAgentIds).toContain("agent_shinobu");
+    expect(allUtteranceAgentIds).toContain("agent_kaguya");
+    expect(allUtteranceAgentIds).toContain("agent_rem");
+  });
+
   it("runs the live debate end-to-end using runStage3DebateSession", async () => {
     const fakeFetch = async (url: string, init?: RequestInit) => {
       return {
