@@ -87,7 +87,12 @@ export function Stage3DebateTable({
   }, [utterances]);
 
   return (
-    <section className="flex h-full flex-col bg-background" aria-label="Debate">
+    <section
+      aria-label="Debate"
+      className="flex h-full flex-col bg-background"
+      data-focus-id="debate-table-container"
+      tabIndex={-1}
+    >
       {/* ── Header: context + stage tabs ───────────────────────── */}
       <DebateContextHeader
         currentRoundId={activeRoundId}
@@ -531,5 +536,4 @@ function debateTagLabel(tag: DebateTag) {
   };
   return labels[tag];
 }
-
 

@@ -189,11 +189,14 @@ import { useMemoryController } from "./hooks/useMemoryController";
 import { createAuthBinding, useProviderRegistryController } from "./hooks/useProviderRegistryController";
 import { useWorkItemsController } from "./hooks/useWorkItemsController";
 import { applyAgentProviderAssignment } from "./lib/agentProviderAssignment";
+import { getRestoreFocusSelector, type FocusHistory } from "./lib/focusRestoration";
 import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbenchDerived";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 
 export function App() {
   const [mode, setMode] = useState<CenterMode>("conversation");
+  const modeRef = useRef<CenterMode>(mode);
+  const lastFocusedIdByModeRef = useRef<FocusHistory>({});
   const [runtimeSnapshotState, setRuntimeSnapshotState] = useState<RuntimeSnapshot>(runtimeSnapshot);
   const [dgxRouteDiagnostics, setDgxRouteDiagnostics] = useState<Stage32DgxRouteDiagnosticSnapshot>();
   const [activeNavItem, setActiveNavItem] = useState<NavItemId>("sessions");
@@ -222,6 +225,40 @@ export function App() {
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+  useEffect(() => {
+    function handleFocusIn(event: FocusEvent) {
+      const target = event.target instanceof Element
+        ? event.target.closest<HTMLElement>("[data-focus-id]")
+        : undefined;
+      const focusId = target?.dataset.focusId;
+      if (focusId) {
+        lastFocusedIdByModeRef.current[modeRef.current] = focusId;
+      }
+    }
+
+    document.addEventListener("focusin", handleFocusIn);
+    return () => document.removeEventListener("focusin", handleFocusIn);
+  }, []);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const activeElement = document.activeElement;
+      const shouldRestoreFocus =
+        !activeElement ||
+        activeElement === document.body ||
+        activeElement === document.documentElement ||
+        !document.contains(activeElement);
+
+      if (!shouldRestoreFocus) return;
+
+      const selector = getRestoreFocusSelector(mode, lastFocusedIdByModeRef.current);
+      document.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [mode]);
   const [sessionIndexState, setSessionIndexState] = useState<Stage20SessionIndexState>(() =>
     createInitialSessionIndexState(),
   );
