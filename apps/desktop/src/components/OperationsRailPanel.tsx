@@ -184,7 +184,20 @@ export function OperationsRailPanel({
                 <strong>{outcome.role}</strong>
                 <span>{outcome.reason}</span>
               </div>
-              <small>{outcome.status}</small>
+              <StatusBadge
+                size="sm"
+                variant={
+                  outcome.status === "sent" || outcome.status === "recorded"
+                    ? "success"
+                    : outcome.status === "failed" || outcome.status === "blocked"
+                      ? "danger"
+                      : outcome.status === "dry_run"
+                        ? "default"
+                        : "warning"
+                }
+              >
+                {outcome.status}
+              </StatusBadge>
             </article>
           ))}
         </div>
