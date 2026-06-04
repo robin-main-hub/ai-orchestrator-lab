@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
 import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
+import { defaultAgentProfiles } from "@ai-orchestrator/agents";
 
 /**
  * Stage 3 Debate Table — strict v0 port.
@@ -40,10 +41,12 @@ export function Stage3DebateTable({
   onCreateCodingPacket,
   onSelectUtterance,
   session,
+  agentVisualsById = {},
 }: {
   onCreateCodingPacket: () => void;
   onSelectUtterance?: (utterance: Stage3DebateUtteranceView) => void;
   session: Stage3DebateSession;
+  agentVisualsById?: Record<string, { avatarDataUrl?: string }>;
 }) {
   const [prevSessionId, setPrevSessionId] = useState(session.id);
   const [activeRoundId, setActiveRoundId] = useState<string>(() => {
@@ -114,6 +117,7 @@ export function Stage3DebateTable({
                 onSelect={onSelectUtterance}
                 utterance={utterance}
                 utteranceById={utteranceById}
+                agentVisualsById={agentVisualsById}
               />
             ))}
           </div>
@@ -208,16 +212,52 @@ function DebateContextHeader({
 
 // ── Round card ───────────────────────────────────────────────────────
 
+function resolveRole(agentId: string): string {
+  const defaultProfile = defaultAgentProfiles.find((p) => p.id === agentId);
+  if (defaultProfile) return defaultProfile.role;
+
+  const lowerId = agentId.toLowerCase();
+  const knownRoles = [
+    "orchestrator",
+    "architect",
+    "builder",
+    "executor",
+    "reviewer",
+    "verifier",
+    "auditor",
+    "researcher",
+    "memory_curator",
+    "domain_expert",
+    "watchdog",
+    "skeptic",
+    "risk_officer",
+    "mediator",
+    "negotiator",
+    "ux_critic",
+    "companion",
+    "external",
+  ];
+  for (const role of knownRoles) {
+    if (lowerId.includes(role)) {
+      return role;
+    }
+  }
+
+  return "builder";
+}
+
 function DebateRoundCard({
   utterance,
   utteranceById,
   index,
   onSelect,
+  agentVisualsById,
 }: {
   utterance: Stage3DebateUtteranceView;
   utteranceById: Map<string, Stage3DebateUtteranceView>;
   index: number;
   onSelect?: (utterance: Stage3DebateUtteranceView) => void;
+  agentVisualsById: Record<string, { avatarDataUrl?: string }>;
 }) {
   const parent = utterance.parentUtteranceId
     ? utteranceById.get(utterance.parentUtteranceId)
@@ -257,7 +297,8 @@ function DebateRoundCard({
         <div className="flex min-w-0 items-center gap-2">
           <AvatarWithStatus
             initials={utterance.agentName.slice(0, 2).toUpperCase()}
-            roleColor={roleColorFromRole(utterance.agentName.toLowerCase())}
+            roleColor={roleColorFromRole(resolveRole(utterance.agentId))}
+            avatarDataUrl={agentVisualsById[utterance.agentId]?.avatarDataUrl}
             size="sm"
           />
           <div className="min-w-0">

@@ -88,7 +88,6 @@ export function createStage3DebateSession({
   const summary = summarizeConversation(messages);
   const participants = agents
     .filter((agent) => agent.enabled)
-    .slice(0, 4)
     .map((agent) => {
       const provider = providers.find((profile) => profile.id === agent.providerProfileId);
       return {
