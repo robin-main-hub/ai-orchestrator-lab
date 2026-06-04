@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Check,
   Clock3,
@@ -62,6 +62,15 @@ const LANES: Array<{
   { id: "archive", label: "archive", icon: <XCircle className="h-3 w-3" />, status: "live" }, // = reject
 ];
 
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
+
 export function ControlQueueDrawer({
   onApprove,
   onClose,
@@ -70,16 +79,89 @@ export function ControlQueueDrawer({
   snapshot,
 }: ControlQueueDrawerProps) {
   const [activeLane, setActiveLane] = useState<LaneId | "all">("all");
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
 
   const pendingItems = snapshot.queue.filter((item) => item.state === "required");
   const resolvedCount = snapshot.queue.length - pendingItems.length;
+
+  useEffect(() => {
+    if (!open) return;
+
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    function getFocusableElements() {
+      const drawer = drawerRef.current;
+      if (!drawer) return [];
+
+      return Array.from(drawer.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+        .filter((element) => element.offsetParent !== null || element === document.activeElement);
+    }
+
+    function focusFirstElement() {
+      const first = closeButtonRef.current ?? getFocusableElements()[0] ?? drawerRef.current;
+      first?.focus();
+    }
+
+    const frame = window.requestAnimationFrame(focusFirstElement);
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const focusable = getFocusableElements();
+      if (focusable.length === 0) {
+        event.preventDefault();
+        drawerRef.current?.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    function handleFocusIn(event: FocusEvent) {
+      const drawer = drawerRef.current;
+      if (!drawer || !(event.target instanceof Node) || drawer.contains(event.target)) return;
+      focusFirstElement();
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("focusin", handleFocusIn);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("focusin", handleFocusIn);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
+  }, [onClose, open]);
 
   if (!open) return null;
 
   return (
     <aside
       aria-label="Control Queue"
+      aria-modal="true"
       className="fixed right-4 top-14 z-30 flex max-h-[calc(100vh-78px)] w-[min(460px,calc(100vw-32px))] flex-col rounded-lg border border-border bg-card shadow-2xl"
+      ref={drawerRef}
+      role="dialog"
+      tabIndex={-1}
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
@@ -97,6 +179,7 @@ export function ControlQueueDrawer({
           aria-label="Close Control Queue"
           className="h-6 w-6"
           onClick={onClose}
+          ref={closeButtonRef}
           size="icon"
           variant="ghost"
         >

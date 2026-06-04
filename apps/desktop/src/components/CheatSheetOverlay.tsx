@@ -1,3 +1,4 @@
+import * as Dialog from "@radix-ui/react-dialog";
 import { Keyboard, X } from "lucide-react";
 import { Button } from "@/ui/button";
 import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
@@ -41,43 +42,33 @@ const SHORTCUTS: ShortcutRow[] = [
 export function CheatSheetOverlay({ open, onClose }: CheatSheetOverlayProps) {
   if (!open) return null;
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      onClose();
-    }
-  }
-
   return (
-    <div
-      aria-label="Keyboard shortcut cheat sheet"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/55 p-4 backdrop-blur-md"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      onKeyDown={handleKeyDown}
-      role="dialog"
-    >
-      <div className="flex max-h-[min(72vh,640px)] w-[min(580px,calc(100vw-32px))] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+    <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-background/55 backdrop-blur-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[min(72vh,640px)] w-[min(580px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
         {/* Header */}
         <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-border px-3 py-3">
-          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground">
+          <Dialog.Title className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground">
             <Keyboard className="h-4 w-4" />
             Keyboard Shortcuts
-          </span>
+          </Dialog.Title>
+          <Dialog.Description className="sr-only">
+            Keyboard shortcut cheat sheet for global app commands.
+          </Dialog.Description>
           <span className="truncate text-[10px] font-mono text-muted-foreground">
             design-decisions §6 · verb-first grammar
           </span>
-          <Button
-            aria-label="close cheat sheet"
-            className="h-6 w-6"
-            onClick={onClose}
-            size="icon"
-            variant="ghost"
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
+          <Dialog.Close asChild>
+            <Button
+              aria-label="close cheat sheet"
+              className="h-6 w-6"
+              size="icon"
+              variant="ghost"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </Dialog.Close>
         </div>
 
         {/* Table */}
@@ -132,8 +123,9 @@ export function CheatSheetOverlay({ open, onClose }: CheatSheetOverlayProps) {
           <kbd className="rounded border border-border bg-card/60 px-1 py-0 font-mono">⌘</kbd>
           <kbd className="rounded border border-border bg-card/60 px-1 py-0 font-mono">K</kbd>
         </div>
-      </div>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
