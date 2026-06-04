@@ -2,34 +2,34 @@
 
 ## Status
 
-This document records the accepted memory direction for AI Orchestrator Lab.
+This document records the accepted continuity memory direction for AI Orchestrator Lab.
 
-It corrects older wording that briefly treated the MacBook as the memory authority.
+It separates active work authority from continuity mirroring: MacBook owns operator decisions and offline outbox state, while DGX-02 mirrors continuity and hosts derived retrieval indexes.
 
 ## Core Decision
 
 ```text
-DGX-02 = main authoritative server
-MacBook = primary work client with offline cache/outbox
+MacBook = operator authority for active work and offline cache/outbox
+DGX-02 = continuity mirror, sync server, heavy model host, and derived retrieval index host
 Home PC = online client
 Phone = thin approval/read/input client
-SimpleMem = derived retrieval index on DGX-02
+SimpleMem = derived retrieval index over mirrored continuity records
 ```
 
-DGX-02 is the main system.
+MacBook is the active operator authority.
 
-It owns authoritative Event Store, MemoryRecord, WorkItem, approvals, drafts, continuity storage, and server-side projections. MacBook is where the user usually works, but it is not the final source of truth. When MacBook is offline, it writes to local cache/outbox and syncs back to DGX-02 later.
+It owns live work decisions, local Event Store/MemoryRecord/WorkItem/approval/draft state, and the offline outbox while the user is working. DGX-02 mirrors that continuity when online, keeps durable shared projections, and hosts heavy model execution plus derived retrieval indexes.
 
 ## Authority Model
 
 | Node | Role |
 | --- | --- |
-| DGX-02 | Authoritative shared server for Event Store, MemoryRecord, WorkItem, approvals, drafts, continuity storage, heavy model execution, projection, and SimpleMem index hosting |
-| MacBook | Primary work client; keeps local cache/outbox for offline work and local model fallback |
+| MacBook | Operator authority for active work state, local decisions, offline cache/outbox, and local model fallback |
+| DGX-02 | Continuity mirror and sync server for Event Store, MemoryRecord, WorkItem, approvals, drafts, heavy model execution, projection, and SimpleMem index hosting |
 | Home PC | Online client that normally talks to DGX-02 |
 | Phone | Thin client for read, approval, stop, retry, and remote input |
 
-Events created through MacBook while offline, Phone, Home PC, or external ingress are client-side pending inputs until synced to DGX-02.
+Events created through MacBook are active operator state. Phone, Home PC, and external ingress events are client-side pending inputs until accepted into MacBook work state and mirrored to DGX-02.
 
 ## SimpleMem Placement
 
@@ -209,14 +209,14 @@ Actual dispatch requires:
 Keep the seed memory aligned with runtime topology:
 
 ```text
-memory_seed_dgx02_authority
+memory_seed_macbook_authority
 ```
 
 The memory states:
 
 ```text
-DGX-02 is the authoritative server for Event Store, MemoryRecord, WorkItem, approvals, drafts, and continuity storage.
-MacBook is the primary work client with a local cache/outbox for offline work, and syncs back to DGX-02 when online.
+MacBook is the operator authority for active work state, local decisions, and offline continuity outbox.
+DGX-02 is the continuity mirror and sync server for mirrored Event Store, MemoryRecord, WorkItem, approvals, drafts, and derived retrieval indexes.
 ```
 
 ### PR-M1: Protocol Types
@@ -267,8 +267,8 @@ pending client input count
 
 Take now:
 
-- DGX-02 authority
-- MacBook client cache/outbox
+- MacBook active work authority
+- DGX-02 continuity mirror and sync server
 - Core / Archival memory split
 - Shared Blackboard
 - Memento lightweight snapshot
@@ -291,4 +291,4 @@ Defer:
 
 ## One-Line Rule
 
-DGX-02 is the main authority. SimpleMem lives there as a derived retrieval index over DGX-02 MemoryRecord.
+MacBook owns active work authority; DGX-02 mirrors continuity and hosts derived SimpleMem retrieval indexes.
