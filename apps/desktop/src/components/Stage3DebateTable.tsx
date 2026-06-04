@@ -18,7 +18,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
 import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
-import { defaultAgentProfiles } from "@ai-orchestrator/agents";
 
 /**
  * Stage 3 Debate Table — strict v0 port.
@@ -80,6 +79,9 @@ export function Stage3DebateTable({
       agentName:
         session.participants.find((p) => p.agentId === utterance.agentId)?.name ??
         utterance.agentId,
+      agentRole:
+        session.participants.find((p) => p.agentId === utterance.agentId)?.role ??
+        "builder",
     }));
   }, [activeRound, session.participants]);
 
@@ -212,40 +214,6 @@ function DebateContextHeader({
 
 // ── Round card ───────────────────────────────────────────────────────
 
-function resolveRole(agentId: string): string {
-  const defaultProfile = defaultAgentProfiles.find((p) => p.id === agentId);
-  if (defaultProfile) return defaultProfile.role;
-
-  const lowerId = agentId.toLowerCase();
-  const knownRoles = [
-    "orchestrator",
-    "architect",
-    "builder",
-    "executor",
-    "reviewer",
-    "verifier",
-    "auditor",
-    "researcher",
-    "memory_curator",
-    "domain_expert",
-    "watchdog",
-    "skeptic",
-    "risk_officer",
-    "mediator",
-    "negotiator",
-    "ux_critic",
-    "companion",
-    "external",
-  ];
-  for (const role of knownRoles) {
-    if (lowerId.includes(role)) {
-      return role;
-    }
-  }
-
-  return "builder";
-}
-
 function DebateRoundCard({
   utterance,
   utteranceById,
@@ -297,7 +265,7 @@ function DebateRoundCard({
         <div className="flex min-w-0 items-center gap-2">
           <AvatarWithStatus
             initials={utterance.agentName.slice(0, 2).toUpperCase()}
-            roleColor={roleColorFromRole(resolveRole(utterance.agentId))}
+            roleColor={roleColorFromRole(utterance.agentRole)}
             avatarDataUrl={agentVisualsById[utterance.agentId]?.avatarDataUrl}
             size="sm"
           />
@@ -577,4 +545,3 @@ function debateTagLabel(tag: DebateTag) {
   };
   return labels[tag];
 }
-

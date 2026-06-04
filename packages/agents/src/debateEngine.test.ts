@@ -211,6 +211,27 @@ describe("pickAgentsForRound", () => {
     });
     expect(pickedWithArchitectMulti.map(s => s.agent.id)).toEqual(["agent_architect_1", "agent_skeptic_1", "agent_architect_2"]);
   });
+
+  it("round-robins multi-persona expansion across allowed roles", () => {
+    const slots = [
+      makeSlot(makeProfile({ id: "agent_architect_1", role: "architect", isCanonical: true }), "x"),
+      makeSlot(makeProfile({ id: "agent_architect_2", role: "architect", personaName: "arch2", priority: 30 }), "x"),
+      makeSlot(makeProfile({ id: "agent_architect_3", role: "architect", personaName: "arch3", priority: 20 }), "x"),
+      makeSlot(makeProfile({ id: "agent_skeptic_1", role: "skeptic", isCanonical: true }), "x"),
+      makeSlot(makeProfile({ id: "agent_skeptic_2", role: "skeptic", personaName: "skeptic2", priority: 30 }), "x"),
+    ];
+
+    const picked = pickAgentsForRound("initial_proposals", slots, 4, {
+      allowMultiPersonaRoles: ["architect", "skeptic"],
+    });
+
+    expect(picked.map((slot) => slot.agent.id)).toEqual([
+      "agent_architect_1",
+      "agent_skeptic_1",
+      "agent_architect_2",
+      "agent_skeptic_2",
+    ]);
+  });
 });
 
 describe("inferUtteranceTag", () => {
