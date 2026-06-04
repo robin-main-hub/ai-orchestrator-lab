@@ -2742,6 +2742,7 @@ export function App() {
               onCreateCodingPacket={handleCreateCodingPacket}
               onSelectUtterance={handleSelectDebateUtterance}
               session={debateSession}
+              agentVisualsById={agentVisualsById}
             />
           ) : (
             <TmuxSwarmBoard

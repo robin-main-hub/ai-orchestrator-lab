@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   AgentProfile,
   CodingPacket,
   DebateRound,
@@ -88,6 +88,17 @@ export function createDebateRounds(debateId: string): DebateRound[] {
   }));
 }
 
+function generateUUID(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export function createMockUtterance(params: {
   agent: AgentProfile;
   roundId: string;
@@ -95,7 +106,7 @@ export function createMockUtterance(params: {
   tag: DebateUtterance["tags"][number];
 }): DebateUtterance {
   return {
-    id: `utterance_${crypto.randomUUID()}`,
+    id: `utterance_${generateUUID()}`,
     agentId: params.agent.id,
     roundId: params.roundId,
     content: params.content,

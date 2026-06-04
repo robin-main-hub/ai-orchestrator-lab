@@ -274,6 +274,9 @@ export const agentProfileSchema = z.object({
    * (loads `agents/yohane/`, Yohane Idea Bank).
    */
   personaName: z.string().optional(),
+  isCanonical: z.boolean().optional(),
+  isDefault: z.boolean().optional(),
+  priority: z.number().optional(),
 });
 export type AgentProfile = z.infer<typeof agentProfileSchema>;
 
@@ -318,6 +321,9 @@ export const conversationSessionSchema = z.object({
   linkedDebates: z.array(z.string()),
   memoryTraceIds: z.array(z.string()),
   backupStatus: backupStatusSchema,
+  activePersonaOverrides: z.record(z.string()).optional(),
+  rolePersonaPriorities: z.record(z.array(z.string())).optional(),
+  allowMultiPersonaRoles: z.array(agentRoleSchema).optional(),
 });
 export type ConversationSession = z.infer<typeof conversationSessionSchema>;
 

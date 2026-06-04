@@ -150,6 +150,88 @@ describe("pickAgentsForRound", () => {
     const picked = pickAgentsForRound("coding_packet", slots, 4);
     expect(picked).toEqual([]);
   });
+
+  it("respects the sorting hierarchy (override, default, canonical, priority, tie-breaker)", () => {
+    // 1. Tie-breaker alphabetical sorting:
+    const slotsAlphabetical = [
+      makeSlot(makeProfile({ id: "agent_skeptic_yohane", role: "skeptic", personaName: "yohane" }), "x"),
+      makeSlot(makeProfile({ id: "agent_skeptic_asuka", role: "skeptic", personaName: "asuka" }), "x"),
+    ];
+    const picked1 = pickAgentsForRound("initial_proposals", slotsAlphabetical, 1);
+    expect(picked1[0]!.agent.id).toBe("agent_skeptic_asuka");
+
+    // 2. Priority:
+    const slotsPriority = [
+      makeSlot(makeProfile({ id: "agent_skeptic_yohane", role: "skeptic", personaName: "yohane", priority: 10 }), "x"),
+      makeSlot(makeProfile({ id: "agent_skeptic_asuka", role: "skeptic", personaName: "asuka", priority: 5 }), "x"),
+    ];
+    const picked2 = pickAgentsForRound("initial_proposals", slotsPriority, 1);
+    expect(picked2[0]!.agent.id).toBe("agent_skeptic_yohane");
+
+    // 3. isCanonical:
+    const slotsCanonical = [
+      makeSlot(makeProfile({ id: "agent_skeptic_yohane", role: "skeptic", personaName: "yohane", priority: 20 }), "x"),
+      makeSlot(makeProfile({ id: "agent_skeptic_asuka", role: "skeptic", isCanonical: true, priority: 5 }), "x"),
+    ];
+    const picked3 = pickAgentsForRound("initial_proposals", slotsCanonical, 1);
+    expect(picked3[0]!.agent.id).toBe("agent_skeptic_asuka");
+
+    // 4. isDefault:
+    const slotsDefault = [
+      makeSlot(makeProfile({ id: "agent_skeptic_yohane", role: "skeptic", personaName: "yohane", isDefault: true, priority: 5 }), "x"),
+      makeSlot(makeProfile({ id: "agent_skeptic_asuka", role: "skeptic", isCanonical: true, priority: 20 }), "x"),
+    ];
+    const picked4 = pickAgentsForRound("initial_proposals", slotsDefault, 1);
+    expect(picked4[0]!.agent.id).toBe("agent_skeptic_yohane");
+
+    // 5. User-Explicit Override:
+    const slotsOverride = [
+      makeSlot(makeProfile({ id: "agent_skeptic_yohane", role: "skeptic", personaName: "yohane", isDefault: true }), "x"),
+      makeSlot(makeProfile({ id: "agent_skeptic_asuka", role: "skeptic", personaName: "asuka" }), "x"),
+    ];
+    const picked5 = pickAgentsForRound("initial_proposals", slotsOverride, 1, {
+      activePersonaOverrides: { skeptic: "agent_skeptic_asuka" },
+    });
+    expect(picked5[0]!.agent.id).toBe("agent_skeptic_asuka");
+  });
+
+  it("applies 2-Pass selection (diversity first, then multi-persona expansion)", () => {
+    const slots = [
+      makeSlot(makeProfile({ id: "agent_architect_1", role: "architect", isCanonical: true }), "x"),
+      makeSlot(makeProfile({ id: "agent_architect_2", role: "architect", personaName: "arch2" }), "x"),
+      makeSlot(makeProfile({ id: "agent_skeptic_1", role: "skeptic", isCanonical: true }), "x"),
+      makeSlot(makeProfile({ id: "agent_skeptic_2", role: "skeptic", personaName: "skeptic2" }), "x"),
+    ];
+
+    const pickedNoMulti = pickAgentsForRound("initial_proposals", slots, 3);
+    expect(pickedNoMulti.map(s => s.agent.id)).toEqual(["agent_architect_1", "agent_skeptic_1"]);
+
+    const pickedWithArchitectMulti = pickAgentsForRound("initial_proposals", slots, 3, {
+      allowMultiPersonaRoles: ["architect"],
+    });
+    expect(pickedWithArchitectMulti.map(s => s.agent.id)).toEqual(["agent_architect_1", "agent_skeptic_1", "agent_architect_2"]);
+  });
+
+  it("round-robins multi-persona expansion across allowed roles", () => {
+    const slots = [
+      makeSlot(makeProfile({ id: "agent_architect_1", role: "architect", isCanonical: true }), "x"),
+      makeSlot(makeProfile({ id: "agent_architect_2", role: "architect", personaName: "arch2", priority: 30 }), "x"),
+      makeSlot(makeProfile({ id: "agent_architect_3", role: "architect", personaName: "arch3", priority: 20 }), "x"),
+      makeSlot(makeProfile({ id: "agent_skeptic_1", role: "skeptic", isCanonical: true }), "x"),
+      makeSlot(makeProfile({ id: "agent_skeptic_2", role: "skeptic", personaName: "skeptic2", priority: 30 }), "x"),
+    ];
+
+    const picked = pickAgentsForRound("initial_proposals", slots, 4, {
+      allowMultiPersonaRoles: ["architect", "skeptic"],
+    });
+
+    expect(picked.map((slot) => slot.agent.id)).toEqual([
+      "agent_architect_1",
+      "agent_skeptic_1",
+      "agent_architect_2",
+      "agent_skeptic_2",
+    ]);
+  });
 });
 
 describe("inferUtteranceTag", () => {

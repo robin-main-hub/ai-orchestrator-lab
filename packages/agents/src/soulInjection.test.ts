@@ -108,4 +108,73 @@ describe("buildAgentSystemPrompt", () => {
     expect(report.personaName).toBe("yohane");
     expect(report.promptText).toContain("Yohane soul");
   });
+
+  it("falls back to canonical profile if custom persona files are missing", async () => {
+    const source = createInMemoryPersonaSource({
+      "agents/architect/SOUL.md": "# Canonical Architect Soul",
+      "agents/SAFETY.md": SAFETY,
+    });
+    const report = await buildAgentSystemPrompt(
+      makeProfile({ soulMode: "summary", personaName: "yohane", role: "architect" }),
+      source,
+    );
+    expect(report.personaName).toBe("architect");
+    expect(report.mode).toBe("summary");
+    expect(report.promptText).toContain("Canonical Architect Soul");
+    expect(report.fragmentsInjected).toEqual(["agents/architect/SOUL.md"]);
+  });
+
+  it("falls back to off mode if canonical profile files are also missing", async () => {
+    const source = createInMemoryPersonaSource({
+      "agents/SAFETY.md": SAFETY,
+    });
+    const report = await buildAgentSystemPrompt(
+      makeProfile({ soulMode: "summary", personaName: "yohane", role: "architect" }),
+      source,
+    );
+    expect(report.personaName).toBe("architect");
+    expect(report.mode).toBe("off");
+    expect(report.fragmentsInjected).toHaveLength(0);
+    expect(report.promptText).toContain("비밀을 노출");
+  });
+
+  it("does not hide non-missing canonical persona read failures", async () => {
+    const source = {
+      async readMarkdown(relativePath: string) {
+        if (relativePath === "agents/SAFETY.md") return SAFETY;
+        if (relativePath === "agents/yohane/SOUL.md") return null;
+        if (relativePath === "agents/architect/SOUL.md") {
+          throw new Error("permission denied");
+        }
+        return null;
+      },
+    };
+
+    await expect(
+      buildAgentSystemPrompt(
+        makeProfile({ soulMode: "summary", personaName: "yohane", role: "architect" }),
+        source,
+      ),
+    ).rejects.toThrow("permission denied");
+  });
+
+  it("falls back to the canonical companion persona directory", async () => {
+    const source = createInMemoryPersonaSource({
+      "agents/chae_arin/SOUL.md": "# Chae Arin Soul",
+      "agents/chae_arin/AGENTS.md": "# Chae Arin Rules",
+      "agents/SAFETY.md": SAFETY,
+    });
+
+    const report = await buildAgentSystemPrompt(
+      makeProfile({ soulMode: "summary", personaName: "missing_companion", role: "companion" }),
+      source,
+    );
+
+    expect(report.personaName).toBe("chae_arin");
+    expect(report.mode).toBe("full");
+    expect(report.fragmentsInjected).toEqual([
+      "agents/chae_arin/SOUL.md",
+      "agents/chae_arin/AGENTS.md",
+    ]);
+  });
 });
