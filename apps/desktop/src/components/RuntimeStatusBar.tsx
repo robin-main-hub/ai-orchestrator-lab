@@ -193,10 +193,10 @@ function StatusDot({ status }: { status?: string }) {
       aria-hidden
       className={cn(
         "h-1.5 w-1.5 rounded-full",
-        tone === "online" && "bg-success",
-        tone === "offline" && "bg-destructive",
-        tone === "pending" && "bg-warning animate-pulse",
-        tone === "idle" && "bg-muted-foreground/50",
+        tone === "online" && "bg-status-online",
+        tone === "offline" && "bg-status-offline",
+        tone === "pending" && "bg-status-pending animate-pulse",
+        tone === "idle" && "bg-status-idle",
       )}
     />
   );
@@ -279,16 +279,9 @@ function StatusRow({ label, status }: { label: string; status?: string }) {
   );
 }
 
-function statusToBadgeVariant(status?: string): "success" | "danger" | "warning" | "muted" {
-  if (!status) return "muted";
-  const s = status.toLowerCase();
-  if (s.includes("online") || s.includes("ready") || s.includes("connected")) return "success";
-  if (s.includes("offline") || s.includes("error") || s.includes("unreachable")) return "danger";
-  if (s.includes("pending") || s.includes("preparing") || s.includes("fallback")) return "warning";
-  return "muted";
-}
+type StatusTone = "online" | "offline" | "pending" | "idle";
 
-function statusToneFromString(status?: string): "online" | "offline" | "pending" | "idle" {
+function statusToneFromString(status?: string): StatusTone {
   if (!status) return "idle";
   const s = status.toLowerCase();
   if (s.includes("online") || s.includes("ready") || s.includes("connected")) return "online";
@@ -297,15 +290,31 @@ function statusToneFromString(status?: string): "online" | "offline" | "pending"
   return "idle";
 }
 
-function statusToneClasses(status?: string): string {
-  switch (statusToneFromString(status)) {
+function statusToBadgeVariant(status?: string): "success" | "danger" | "warning" | "muted" {
+  const tone = statusToneFromString(status);
+  switch (tone) {
     case "online":
-      return "text-success";
+      return "success";
     case "offline":
-      return "text-destructive";
+      return "danger";
     case "pending":
-      return "text-warning";
+      return "warning";
     case "idle":
+    default:
+      return "muted";
+  }
+}
+
+function statusToneClasses(status?: string): string {
+  const variant = statusToBadgeVariant(status);
+  switch (variant) {
+    case "success":
+      return "text-success";
+    case "danger":
+      return "text-destructive";
+    case "warning":
+      return "text-warning";
+    case "muted":
     default:
       return "text-muted-foreground";
   }
