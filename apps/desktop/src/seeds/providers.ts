@@ -87,6 +87,19 @@ export const seededProviderProfiles: ProviderProfile[] = [
   },
   {
     ...createProviderProfile({
+      id: "provider_apifun_claude_b",
+      name: "APIKey.fun Claude B",
+      kind: "anthropic",
+      baseUrl: "https://api.apikey.fun",
+      defaultModel: "claude-opus-4-6",
+      tags: ["dgx-secret-ref", "server-proxy", "apikey.fun", "reseller"],
+      trustLevel: "untrusted",
+    }),
+    secretRef: createDgxVaultSecretRef("secret_dgx02_apikeyfun_claude_b", "DGX-02 APIKey.fun Claude B", "dgx-02:ANTHROPIC_API_KEY_ALT"),
+    modelDiscoveryEndpoint: "https://api.apikey.fun/v1/models",
+  },
+  {
+    ...createProviderProfile({
       id: "provider_grok_oauth_dgx",
       name: "Grok OAuth #1",
       kind: "custom",
@@ -331,6 +344,12 @@ export const seededModelCatalog: ModelCatalog = {
     "claude-sonnet-reseller",
     "claude-haiku-reseller",
   ].map((id) => createModel("provider_apifun_claude", id, ["apikey.fun", "reseller", "server-proxy"])),
+  provider_apifun_claude_b: [
+    "claude-opus-4-6",
+    "claude-code-compatible",
+    "claude-sonnet-reseller",
+    "claude-haiku-reseller",
+  ].map((id) => createModel("provider_apifun_claude_b", id, ["apikey.fun", "reseller", "server-proxy"])),
   provider_grok_oauth_dgx: [
     "grok-oauth-session",
     "grok-4",
