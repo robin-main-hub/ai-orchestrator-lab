@@ -134,6 +134,7 @@ async function requestApprovalServerJson<TResponse>({
 
   for (const baseUrl of resolveDgxServerBaseUrls(serverBaseUrl)) {
     const endpoint = `${baseUrl}${path}`;
+    const requestBody = body === undefined ? undefined : JSON.stringify(body);
     const controller = new AbortController();
     const timeoutId = globalThis.setTimeout(() => {
       controller.abort();
@@ -141,8 +142,8 @@ async function requestApprovalServerJson<TResponse>({
 
     try {
       const response = await fetchImpl(endpoint, {
-        body: body === undefined ? undefined : JSON.stringify(body),
-        headers: await createDgxOrchestratorJsonHeaders(method, path, endpoint),
+        body: requestBody,
+        headers: await createDgxOrchestratorJsonHeaders(method, path, endpoint, { body: requestBody ?? "" }),
         method,
         signal: controller.signal,
       });

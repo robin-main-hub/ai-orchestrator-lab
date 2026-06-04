@@ -217,13 +217,14 @@ async function requestDgxVllmCompletionViaProxy({
 }: Required<Pick<Stage12DgxCompletionInput, "provider" | "modelId" | "messages" | "fetchImpl" | "proxyBaseUrl" | "proxyTimeoutMs">> &
   Pick<Stage12DgxCompletionInput, "approvalState" | "permissionDecision">): Promise<Stage12DgxCompletionResult> {
   const endpoint = `${String(proxyBaseUrl).replace(/\/$/, "")}/provider-completions`;
+  const body = JSON.stringify(createProviderCompletionProxyRequest(provider, modelId, messages, { approvalState, permissionDecision }));
   const response = await fetchWithTimeout(
     fetchImpl,
     endpoint,
     {
       method: "POST",
-      headers: await createDgxOrchestratorJsonHeaders("POST", "/provider-completions", endpoint),
-      body: JSON.stringify(createProviderCompletionProxyRequest(provider, modelId, messages, { approvalState, permissionDecision })),
+      headers: await createDgxOrchestratorJsonHeaders("POST", "/provider-completions", endpoint, { body }),
+      body,
     },
     proxyTimeoutMs,
   );
