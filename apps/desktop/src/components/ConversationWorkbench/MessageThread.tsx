@@ -22,6 +22,7 @@ import {
 } from "../../lib/helpers";
 import { messageLabel } from "../../lib/uiLabels";
 import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
+import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 
 export type DelegationPreviewItem = {
   id: string;
@@ -325,14 +326,13 @@ function DelegationInline({ items }: { items: DelegationPreviewItem[] }) {
               <span className="truncate text-xs font-medium text-foreground">
                 {item.targetLabel ?? item.target}
               </span>
-              <span
-                className={cn(
-                  "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-mono",
-                  delegationToneClasses(item.status),
-                )}
+              <StatusBadge
+                variant={delegationVariantFromStatus(item.status)}
+                size="sm"
+                className="shrink-0 font-mono text-[9px]"
               >
                 {delegationStatusLabel(item.status)}
-              </span>
+              </StatusBadge>
             </div>
             <p className="truncate text-[10px] text-muted-foreground">
               {item.sourceAgent} → {item.target}
@@ -441,18 +441,18 @@ function delegationStatusLabel(status: DelegationPreviewItem["status"]) {
   }
 }
 
-function delegationToneClasses(status: DelegationPreviewItem["status"]): string {
+function delegationVariantFromStatus(status: DelegationPreviewItem["status"]): StatusBadgeVariant {
   switch (status) {
     case "succeeded":
-      return "bg-success/15 text-success";
+      return "success";
     case "blocked":
     case "failed":
-      return "bg-destructive/15 text-destructive";
+      return "danger";
     case "unknown_target":
     case "self_delegation":
-      return "bg-warning/15 text-warning";
+      return "warning";
     case "detected":
     default:
-      return "bg-card/60 text-muted-foreground";
+      return "muted";
   }
 }
