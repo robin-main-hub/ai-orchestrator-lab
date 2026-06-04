@@ -72,7 +72,7 @@ async function fetchWithTimeout(fetchImpl: typeof fetch, input: string, timeoutM
   try {
     return await fetchImpl(input, {
       method: "GET",
-      headers: createDgxOrchestratorAuthHeaders(),
+      headers: await createDgxOrchestratorAuthHeaders("GET", "/sessions", input),
       signal: controller.signal,
     });
   } finally {

@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import * as crypto from "node:crypto";
 import type {
   AgentDelegationAuthorityLevel,
   AgentDelegationEventPayload,
@@ -97,7 +98,7 @@ import type {
 import type { LlmAdapter } from "@ai-orchestrator/providers";
 import { sseSessionRegistry } from "./events/sseSession";
 import { createCorsHeaders } from "./http/cors";
-import { RequestBodyTooLargeError, readJsonBody } from "./http/requestBody";
+import { RequestBodyTooLargeError, readJsonBody, readRawBody } from "./http/requestBody";
 import { handleApprovalRoute } from "./routes/approvals";
 import { handleTmuxRoute } from "./routes/tmux";
 import { handleVerifyPacketRoute } from "./routes/verifyPacket";
@@ -4961,6 +4962,66 @@ export function listEventStorageSessions(
   };
 }
 
+type NonceRegistryOptions = {
+  maxNonces?: number;
+  cleanupIntervalMs?: number | false;
+  now?: () => number;
+};
+
+export class NonceRegistry {
+  private nonces = new Map<string, number>();
+  private readonly maxNonces: number;
+  private readonly now: () => number;
+  private readonly cleanupInterval?: ReturnType<typeof setInterval>;
+
+  constructor(options: NonceRegistryOptions = {}) {
+    this.maxNonces = options.maxNonces ?? 100_000;
+    this.now = options.now ?? Date.now;
+    const cleanupIntervalMs = options.cleanupIntervalMs ?? 60_000;
+    if (cleanupIntervalMs !== false) {
+      this.cleanupInterval = setInterval(() => {
+        this.cleanupExpired();
+      }, cleanupIntervalMs);
+      this.cleanupInterval.unref?.();
+    }
+  }
+
+  has(nonce: string): boolean {
+    const expiry = this.nonces.get(nonce);
+    if (!expiry) return false;
+    if (this.now() > expiry) {
+      this.nonces.delete(nonce);
+      return false;
+    }
+    return true;
+  }
+
+  add(nonce: string, ttlMs: number) {
+    if (!this.nonces.has(nonce) && this.nonces.size >= this.maxNonces) {
+      this.cleanupExpired();
+      if (this.nonces.size >= this.maxNonces) {
+        throw new Error("nonce_registry_capacity_exceeded");
+      }
+    }
+    this.nonces.set(nonce, this.now() + ttlMs);
+  }
+
+  dispose() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
+  }
+
+  private cleanupExpired() {
+    const now = this.now();
+    for (const [nonce, expiry] of this.nonces.entries()) {
+      if (now > expiry) {
+        this.nonces.delete(nonce);
+      }
+    }
+  }
+}
+
 export function startServer(port = Number(process.env.PORT ?? 4317)) {
   const eventStorage = createJsonlServerEventStorage();
   
@@ -4984,6 +5045,8 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     requireAllowDecision: true,
   });
 
+  const nonceRegistry = new NonceRegistry();
+
   const apiToken = resolveOrchestratorApiToken();
   const expectedAuthorization = `Bearer ${apiToken}`;
 
@@ -5001,8 +5064,91 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       response.end(JSON.stringify(payload));
     };
 
-    const requireAuth = (): boolean => {
+    const requireAuth = async (): Promise<boolean> => {
       if (request.headers.authorization === expectedAuthorization) return true;
+
+      const signatureHeader = request.headers["x-dgx-signature"];
+      const timestampHeader = request.headers["x-dgx-timestamp"];
+      const nonceHeader = request.headers["x-dgx-nonce"];
+      const bodyHashHeader = request.headers["x-dgx-body-sha256"];
+
+      if (signatureHeader && timestampHeader && nonceHeader && bodyHashHeader) {
+        const userSig = typeof signatureHeader === "string" ? signatureHeader : "";
+        const nonce = typeof nonceHeader === "string" ? nonceHeader : "";
+        const bodyHash = typeof bodyHashHeader === "string" ? bodyHashHeader : "";
+        const hexSha256Pattern = /^[0-9a-fA-F]{64}$/;
+
+        if (!hexSha256Pattern.test(userSig) || !hexSha256Pattern.test(bodyHash) || !nonce) {
+          respondJson(401, { error: "unauthorized" });
+          return false;
+        }
+
+        const timestamp = Number(timestampHeader);
+        const driftWindowMs = Number(process.env.DGX_ORCHESTRATOR_DRIFT_WINDOW_MS) || 300_000;
+        const now = Date.now();
+
+        if (isNaN(timestamp) || Math.abs(now - timestamp) > driftWindowMs) {
+          respondJson(401, { error: "clock_drift_exceeded" });
+          return false;
+        }
+
+        const signedPath = `${pathname}${requestUrl.search}`;
+        const message = [request.method?.toUpperCase() || "", signedPath, bodyHash.toLowerCase(), String(timestampHeader), nonce].join("\n");
+        const expectedHmac = crypto.createHmac("sha256", apiToken).update(message).digest("hex");
+
+        const expectedBuffer = Buffer.from(expectedHmac, "hex");
+        const userBuffer = Buffer.from(userSig, "hex");
+
+        const signaturesMatch = crypto.timingSafeEqual(expectedBuffer, userBuffer);
+
+        if (!signaturesMatch) {
+          respondJson(401, { error: "unauthorized" });
+          return false;
+        }
+
+        if (nonceRegistry.has(nonce)) {
+          respondJson(401, { error: "replay_detected" });
+          return false;
+        }
+
+        let rawBody: string;
+        try {
+          rawBody = await readRawBody(request);
+        } catch (error) {
+          if (error instanceof RequestBodyTooLargeError) {
+            respondJson(413, { error: "payload_too_large", limit: error.limit });
+            return false;
+          }
+          respondJson(400, {
+            error: "invalid_json_body",
+            message: error instanceof Error ? error.message : String(error),
+          });
+          return false;
+        }
+
+        const actualBodyHash = crypto.createHash("sha256").update(rawBody).digest("hex");
+        const expectedBodyHashBuffer = Buffer.from(actualBodyHash, "hex");
+        const userBodyHashBuffer = Buffer.from(bodyHash, "hex");
+
+        if (!crypto.timingSafeEqual(expectedBodyHashBuffer, userBodyHashBuffer)) {
+          respondJson(401, { error: "unauthorized" });
+          return false;
+        }
+
+        if (nonceRegistry.has(nonce)) {
+          respondJson(401, { error: "replay_detected" });
+          return false;
+        }
+
+        try {
+          nonceRegistry.add(nonce, driftWindowMs * 2);
+        } catch (error) {
+          respondJson(503, { error: error instanceof Error ? error.message : "nonce_registry_capacity_exceeded" });
+          return false;
+        }
+        return true;
+      }
+
       respondJson(401, { error: "unauthorized" });
       return false;
     };
@@ -5022,7 +5168,7 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       return;
     }
 
-    if (!requireAuth()) return;
+    if (!(await requireAuth())) return;
 
     if (pathname === "/runtime") {
       respondJson(200, await createLiveRuntimeSnapshot());
@@ -5734,6 +5880,10 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     }
 
     respondJson(404, { error: "not_found" });
+  });
+
+  server.on("close", () => {
+    nonceRegistry.dispose();
   });
 
   server.listen(port, "0.0.0.0");
