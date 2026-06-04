@@ -65,6 +65,10 @@ export function CommandPalette({
           className="fixed left-1/2 top-[12vh] z-50 w-[min(640px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-card shadow-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
           aria-label="Command Palette modal"
         >
+          <Dialog.Title className="sr-only">Command Palette</Dialog.Title>
+          <Dialog.Description className="sr-only">
+            Search and run workspace commands by verb, object, or target.
+          </Dialog.Description>
           <Command 
             className="flex flex-col overflow-hidden" 
             label="Global Command Palette"
