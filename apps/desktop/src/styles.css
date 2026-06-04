@@ -97,7 +97,7 @@ button {
 
 .app-shell.tmux-focus-shell {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: 42px minmax(0, 1fr);
 }
 
 .app-shell.conversation-v0-shell {
@@ -233,7 +233,7 @@ button {
 
 .center-board.tmux-center-board {
   grid-column: 1 / -1;
-  grid-row: 1 / -1;
+  grid-row: 2;
   grid-template-rows: auto minmax(0, 1fr);
   padding: 8px;
 }
@@ -263,9 +263,13 @@ button {
   display: none !important;
 }
 
+.tmux-focus-shell .status-bar {
+  grid-column: 1;
+  grid-row: 1;
+}
+
 .tmux-focus-shell .left-rail,
 .tmux-focus-shell .right-rail,
-.tmux-focus-shell .status-bar,
 .tmux-focus-shell .terminal-dock,
 .tmux-focus-shell .toolbar-actions {
   display: none;
