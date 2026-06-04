@@ -46,6 +46,7 @@ export type Stage3DebateSession = {
   participants: Array<{
     agentId: string;
     name: string;
+    role: AgentProfile["role"];
     providerName: string;
     modelId: string;
   }>;
@@ -93,6 +94,7 @@ export function createStage3DebateSession({
       return {
         agentId: agent.id,
         name: agent.name,
+        role: agent.role,
         providerName: provider?.name ?? "provider pending",
         modelId: agent.modelId ?? provider?.defaultModel ?? "model pending",
       };
@@ -134,10 +136,10 @@ function createRoundUtterances(
   participants: Stage3DebateSession["participants"],
   createdAt: string,
 ): DebateUtterance[] {
-  const orchestrator = participants.find((participant) => participant.name === "Orchestrator") ?? participants[0];
-  const architect = participants.find((participant) => participant.name === "Architect") ?? participants[1] ?? orchestrator;
-  const reviewer = participants.find((participant) => participant.name === "Reviewer") ?? participants[2] ?? orchestrator;
-  const executor = participants.find((participant) => participant.name === "Executor") ?? participants[3] ?? architect;
+  const orchestrator = participants.find((participant) => participant.role === "orchestrator") ?? participants[0];
+  const architect = participants.find((participant) => participant.role === "architect") ?? participants[1] ?? orchestrator;
+  const reviewer = participants.find((participant) => participant.role === "reviewer") ?? participants[2] ?? orchestrator;
+  const executor = participants.find((participant) => participant.role === "executor") ?? participants[3] ?? architect;
 
   if (!orchestrator || !architect || !reviewer || !executor) {
     return [];
@@ -221,9 +223,9 @@ function createHumanPeek(
   events: EventEnvelope[],
   createdAt: string,
 ): HumanPeekEntry[] {
-  const orchestrator = participants.find((participant) => participant.name === "Orchestrator") ?? participants[0];
-  const architect = participants.find((participant) => participant.name === "Architect") ?? participants[1];
-  const reviewer = participants.find((participant) => participant.name === "Reviewer") ?? participants[2];
+  const orchestrator = participants.find((participant) => participant.role === "orchestrator") ?? participants[0];
+  const architect = participants.find((participant) => participant.role === "architect") ?? participants[1];
+  const reviewer = participants.find((participant) => participant.role === "reviewer") ?? participants[2];
 
   return [
     {

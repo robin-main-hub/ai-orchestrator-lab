@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   agentProfileSchema,
+  conversationSessionSchema,
   agentDelegationDetectedPayloadSchema,
   agentDelegationDispatchedPayloadSchema,
   agentDelegationEventTypeSchema,
@@ -171,6 +172,44 @@ describe("protocol schemas", () => {
         configSource: "internal+markdown",
       }),
     ).toThrow();
+  });
+
+  it("persists multi-persona selection metadata on agent profiles and sessions", () => {
+    const agent = agentProfileSchema.parse({
+      id: "agent_skeptic_yohane",
+      name: "츠시마 요시코",
+      kind: "virtual",
+      role: "skeptic",
+      soulMode: "summary",
+      configSource: "markdown",
+      enabled: true,
+      personaName: "yohane",
+      isCanonical: false,
+      isDefault: true,
+      priority: 75,
+    });
+
+    expect(agent.isDefault).toBe(true);
+    expect(agent.priority).toBe(75);
+
+    const session = conversationSessionSchema.parse({
+      id: "session_1",
+      mode: "conversation",
+      channel: "desktop",
+      primaryAgentId: "agent_orchestrator",
+      messages: [],
+      linkedRuns: [],
+      linkedDebates: [],
+      memoryTraceIds: [],
+      backupStatus: "pending",
+      activePersonaOverrides: { skeptic: "agent_skeptic_yohane" },
+      rolePersonaPriorities: { skeptic: ["agent_skeptic_yohane", "agent_skeptic_asuka"] },
+      allowMultiPersonaRoles: ["skeptic"],
+    });
+
+    expect(session.activePersonaOverrides?.skeptic).toBe("agent_skeptic_yohane");
+    expect(session.rolePersonaPriorities?.skeptic).toEqual(["agent_skeptic_yohane", "agent_skeptic_asuka"]);
+    expect(session.allowMultiPersonaRoles).toEqual(["skeptic"]);
   });
 
   it("requires a source trust level for persisted events", () => {

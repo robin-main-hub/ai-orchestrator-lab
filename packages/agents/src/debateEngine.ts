@@ -294,21 +294,24 @@ export function pickAgentsForRound(
     }
   }
 
-  // Pass 2: Select subsequent personas for roles in allowMultiPersonaRoles
+  // Pass 2: Select subsequent personas for allowed roles in round-robin
+  // order, so one role cannot consume all remaining seats before another
+  // allowed multi-persona role gets its second persona.
   if (selected.length < cap && options?.allowMultiPersonaRoles) {
     const multiRoles = new Set(options.allowMultiPersonaRoles);
-    for (const role of priority) {
-      if (!multiRoles.has(role)) continue;
-      const bucket = eligibleByRole.get(role);
-      if (!bucket) continue;
-      for (let i = 1; i < bucket.length; i++) {
-        const slot = bucket[i]!;
-        if (!selectedIds.has(slot.agent.id)) {
-          if (selected.length < cap) {
-            selected.push(slot);
-            selectedIds.add(slot.agent.id);
-          }
-        }
+    const allowedBuckets = priority
+      .filter((role) => multiRoles.has(role))
+      .map((role) => eligibleByRole.get(role) ?? [])
+      .filter((bucket) => bucket.length > 1);
+    const maxBucketLength = Math.max(0, ...allowedBuckets.map((bucket) => bucket.length));
+
+    for (let index = 1; index < maxBucketLength && selected.length < cap; index += 1) {
+      for (const bucket of allowedBuckets) {
+        if (selected.length >= cap) break;
+        const slot = bucket[index];
+        if (!slot || selectedIds.has(slot.agent.id)) continue;
+        selected.push(slot);
+        selectedIds.add(slot.agent.id);
       }
     }
   }

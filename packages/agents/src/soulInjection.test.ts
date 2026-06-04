@@ -137,4 +137,44 @@ describe("buildAgentSystemPrompt", () => {
     expect(report.fragmentsInjected).toHaveLength(0);
     expect(report.promptText).toContain("비밀을 노출");
   });
+
+  it("does not hide non-missing canonical persona read failures", async () => {
+    const source = {
+      async readMarkdown(relativePath: string) {
+        if (relativePath === "agents/SAFETY.md") return SAFETY;
+        if (relativePath === "agents/yohane/SOUL.md") return null;
+        if (relativePath === "agents/architect/SOUL.md") {
+          throw new Error("permission denied");
+        }
+        return null;
+      },
+    };
+
+    await expect(
+      buildAgentSystemPrompt(
+        makeProfile({ soulMode: "summary", personaName: "yohane", role: "architect" }),
+        source,
+      ),
+    ).rejects.toThrow("permission denied");
+  });
+
+  it("falls back to the canonical companion persona directory", async () => {
+    const source = createInMemoryPersonaSource({
+      "agents/chae_arin/SOUL.md": "# Chae Arin Soul",
+      "agents/chae_arin/AGENTS.md": "# Chae Arin Rules",
+      "agents/SAFETY.md": SAFETY,
+    });
+
+    const report = await buildAgentSystemPrompt(
+      makeProfile({ soulMode: "summary", personaName: "missing_companion", role: "companion" }),
+      source,
+    );
+
+    expect(report.personaName).toBe("chae_arin");
+    expect(report.mode).toBe("full");
+    expect(report.fragmentsInjected).toEqual([
+      "agents/chae_arin/SOUL.md",
+      "agents/chae_arin/AGENTS.md",
+    ]);
+  });
 });
