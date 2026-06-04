@@ -51,6 +51,7 @@ import {
   resolveAllowedOrigins,
   startServer,
   syncMemoryRecords,
+  getFilteredSubprocessEnv,
 } from "./index";
 import { handleVerifyPacketRoute, type VerifyPacketRouteDependencies } from "./routes/verifyPacket";
 
@@ -3310,5 +3311,43 @@ describe("HTTP request limits", () => {
         process.env.NODE_ENV = previousNodeEnv;
       }
     }
+  });
+
+  describe("getFilteredSubprocessEnv", () => {
+    it("filters process.env and customEnv to only contain allowlisted environment variables", () => {
+      const previousEnv = { ...process.env };
+
+      // Setup temporary clean env
+      for (const key of Object.keys(process.env)) {
+        delete process.env[key];
+      }
+
+      process.env.PATH = "/usr/bin";
+      process.env.HOME = "/home/test";
+      process.env.ORCHESTRATOR_API_TOKEN = "sensitive-api-token";
+      process.env.SECRET_KEY = "another-sensitive-key";
+
+      try {
+        const filtered = getFilteredSubprocessEnv({
+          AI_SWARM_SESSION: "session_123",
+          INVALID_CUSTOM_ENV: "should_be_filtered_out",
+        });
+
+        expect(filtered.PATH).toBe("/usr/bin");
+        expect(filtered.HOME).toBe("/home/test");
+        expect(filtered.AI_SWARM_SESSION).toBe("session_123");
+
+        // These should be filtered out
+        expect(filtered.ORCHESTRATOR_API_TOKEN).toBeUndefined();
+        expect(filtered.SECRET_KEY).toBeUndefined();
+        expect(filtered.INVALID_CUSTOM_ENV).toBeUndefined();
+      } finally {
+        // Restore process.env
+        for (const key of Object.keys(process.env)) {
+          delete process.env[key];
+        }
+        Object.assign(process.env, previousEnv);
+      }
+    });
   });
 });
