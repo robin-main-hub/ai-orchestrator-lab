@@ -96,6 +96,7 @@ export function RuntimeStatusBar({
       <div className="flex items-center gap-0.5 bg-muted/20 p-0.5 rounded-md border border-border/30 h-8 select-none">
         <Button
           aria-label="Conversation mode"
+          data-focus-id="mode-tab-conversation"
           variant={mode === "conversation" ? "secondary" : "ghost"}
           size="sm"
           className={cn(
@@ -110,6 +111,7 @@ export function RuntimeStatusBar({
         </Button>
         <Button
           aria-label="Debate mode"
+          data-focus-id="mode-tab-debate"
           variant={mode === "debate" ? "secondary" : "ghost"}
           size="sm"
           className={cn(
@@ -124,6 +126,7 @@ export function RuntimeStatusBar({
         </Button>
         <Button
           aria-label="Tmux mode"
+          data-focus-id="mode-tab-tmux"
           variant={mode === "tmux" ? "secondary" : "ghost"}
           size="sm"
           className={cn(
