@@ -172,6 +172,31 @@ const CLAUDE_CODE_BLOCKED_ROUTE_TYPES = new Set([
 ]);
 const execFileAsync = promisify(execFile);
 
+export function getFilteredSubprocessEnv(customEnv?: Record<string, string>): NodeJS.ProcessEnv {
+  const ALLOWLIST = [
+    "PATH", "HOME", "USER", "LOGNAME",
+    "AI_SWARM_SESSION", "AI_SWARM_STATE_DIR", "AI_SWARM_CAPTURE_LINES",
+    "LANG", "LC_ALL", "LC_CTYPE",
+    "TMPDIR", "TEMP", "TMP"
+  ];
+
+  const filteredEnv: NodeJS.ProcessEnv = {};
+  for (const key of ALLOWLIST) {
+    if (process.env[key] !== undefined) {
+      filteredEnv[key] = process.env[key];
+    }
+  }
+  if (customEnv) {
+    for (const [key, value] of Object.entries(customEnv)) {
+      if (ALLOWLIST.includes(key)) {
+        filteredEnv[key] = value;
+      }
+    }
+  }
+  return filteredEnv;
+}
+
+
 type ServerProviderProxyConfig = {
   providerProfileId: string;
   baseUrl: string;
@@ -3693,10 +3718,9 @@ async function dispatchServerTmuxCommandIfAllowed(
 
   try {
     const result = await execFileAsync(scriptPath, [request.role, request.commandPreview], {
-      env: {
-        ...process.env,
+      env: getFilteredSubprocessEnv({
         AI_SWARM_SESSION: request.tmuxSessionName,
-      },
+      }),
       maxBuffer: 64_000,
       timeout: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 15_000,
       windowsHide: true,
@@ -3724,10 +3748,9 @@ async function captureServerTmuxPane(request: ServerTmuxCaptureRequest): Promise
   const scriptPath = process.env.TMUX_SWARM_CAPTURE_SCRIPT ?? join(process.cwd(), "scripts", "swarm-capture.sh");
   const timeoutMs = Number(process.env.ORCHESTRATOR_TMUX_CAPTURE_TIMEOUT_MS ?? 10_000);
   const result = await execFileAsync(scriptPath, [request.role, "--lines", String(request.lines)], {
-    env: {
-      ...process.env,
+    env: getFilteredSubprocessEnv({
       AI_SWARM_SESSION: request.tmuxSessionName,
-    },
+    }),
     maxBuffer: 256_000,
     timeout: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 10_000,
     windowsHide: true,
