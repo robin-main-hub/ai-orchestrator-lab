@@ -14,6 +14,7 @@ import type { MemoryInput, MemoryRecord } from "@ai-orchestrator/protocol";
 import { MemoryAdapterError, type MemoryAdapter, type MemoryAdapterContext } from "@ai-orchestrator/memory";
 import type { ServerAgentDelegationExecuteRequest } from "./index";
 import {
+  NonceRegistry,
   createEventStorageSnapshot,
   createDgxProviderCompletionResponse,
   createDgxHeartbeat,
@@ -1798,6 +1799,64 @@ describe("DGX orchestrator request authentication", () => {
 
       expect(response.status).toBe(401);
     });
+  });
+
+  it("rejects replayed HMAC nonces before reading oversized bodies", async () => {
+    await withRuntimeServer(async (baseUrl, token) => {
+      const timestamp = Date.now().toString();
+      const nonce = "runtime-replay-before-body";
+      const firstResponse = await fetch(`${baseUrl}/runtime`, {
+        headers: createDgxRequestSignatureHeaders({
+          method: "GET",
+          path: "/runtime",
+          token,
+          timestamp,
+          nonce,
+        }),
+      });
+      expect(firstResponse.status).toBe(200);
+
+      const replayResponse = await fetch(`${baseUrl}/memory/sync`, {
+        method: "POST",
+        headers: {
+          ...createDgxRequestSignatureHeaders({
+            method: "POST",
+            path: "/memory/sync",
+            token,
+            timestamp,
+            nonce,
+          }),
+          "content-type": "application/json",
+          "content-length": String(1_048_577),
+        },
+      });
+      const replayBody = await replayResponse.json() as { error?: string };
+
+      expect(replayResponse.status).toBe(401);
+      expect(replayBody.error).toBe("replay_detected");
+    });
+  });
+
+  it("does not evict unexpired nonces when the replay registry is full", () => {
+    let now = 1_700_000_000_000;
+    const registry = new NonceRegistry({
+      maxNonces: 2,
+      now: () => now,
+      cleanupIntervalMs: false,
+    });
+
+    registry.add("nonce-1", 60_000);
+    registry.add("nonce-2", 60_000);
+
+    expect(() => registry.add("nonce-3", 60_000)).toThrow("nonce_registry_capacity_exceeded");
+    expect(registry.has("nonce-1")).toBe(true);
+
+    now += 60_001;
+    registry.add("nonce-3", 60_000);
+
+    expect(registry.has("nonce-1")).toBe(false);
+    expect(registry.has("nonce-3")).toBe(true);
+    registry.dispose();
   });
 
   it("continues to accept bearer auth for runtime requests", async () => {

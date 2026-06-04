@@ -31,6 +31,7 @@ export async function readRawBody(request: IncomingMessage): Promise<string> {
       settled = true;
       request.off("data", onData);
       request.off("end", onEnd);
+      request.off("error", onError);
       callback();
     };
 
@@ -54,11 +55,13 @@ export async function readRawBody(request: IncomingMessage): Promise<string> {
       });
     };
 
+    const onError = (error: Error) => {
+      settle(() => reject(error));
+    };
+
     request.on("data", onData);
     request.once("end", onEnd);
-    request.once("error", (error) => {
-      settle(() => reject(error));
-    });
+    request.once("error", onError);
   });
 
   rawBodyByRequest.set(request, bodyPromise);

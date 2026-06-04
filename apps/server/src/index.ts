@@ -4962,6 +4962,66 @@ export function listEventStorageSessions(
   };
 }
 
+type NonceRegistryOptions = {
+  maxNonces?: number;
+  cleanupIntervalMs?: number | false;
+  now?: () => number;
+};
+
+export class NonceRegistry {
+  private nonces = new Map<string, number>();
+  private readonly maxNonces: number;
+  private readonly now: () => number;
+  private readonly cleanupInterval?: ReturnType<typeof setInterval>;
+
+  constructor(options: NonceRegistryOptions = {}) {
+    this.maxNonces = options.maxNonces ?? 100_000;
+    this.now = options.now ?? Date.now;
+    const cleanupIntervalMs = options.cleanupIntervalMs ?? 60_000;
+    if (cleanupIntervalMs !== false) {
+      this.cleanupInterval = setInterval(() => {
+        this.cleanupExpired();
+      }, cleanupIntervalMs);
+      this.cleanupInterval.unref?.();
+    }
+  }
+
+  has(nonce: string): boolean {
+    const expiry = this.nonces.get(nonce);
+    if (!expiry) return false;
+    if (this.now() > expiry) {
+      this.nonces.delete(nonce);
+      return false;
+    }
+    return true;
+  }
+
+  add(nonce: string, ttlMs: number) {
+    if (!this.nonces.has(nonce) && this.nonces.size >= this.maxNonces) {
+      this.cleanupExpired();
+      if (this.nonces.size >= this.maxNonces) {
+        throw new Error("nonce_registry_capacity_exceeded");
+      }
+    }
+    this.nonces.set(nonce, this.now() + ttlMs);
+  }
+
+  dispose() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
+  }
+
+  private cleanupExpired() {
+    const now = this.now();
+    for (const [nonce, expiry] of this.nonces.entries()) {
+      if (now > expiry) {
+        this.nonces.delete(nonce);
+      }
+    }
+  }
+}
+
 export function startServer(port = Number(process.env.PORT ?? 4317)) {
   const eventStorage = createJsonlServerEventStorage();
   
@@ -4984,31 +5044,6 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     allowUntrustedWrite: process.env.MEMORY_ALLOW_UNTRUSTED_WRITE === "true",
     requireAllowDecision: true,
   });
-
-  class NonceRegistry {
-    private nonces = new Map<string, number>();
-    private readonly maxNonces = 5_000;
-
-    has(nonce: string): boolean {
-      const expiry = this.nonces.get(nonce);
-      if (!expiry) return false;
-      if (Date.now() > expiry) {
-        this.nonces.delete(nonce);
-        return false;
-      }
-      return true;
-    }
-
-    add(nonce: string, ttlMs: number) {
-      if (this.nonces.size >= this.maxNonces) {
-        const oldestNonce = this.nonces.keys().next().value;
-        if (oldestNonce !== undefined) {
-          this.nonces.delete(oldestNonce);
-        }
-      }
-      this.nonces.set(nonce, Date.now() + ttlMs);
-    }
-  }
 
   const nonceRegistry = new NonceRegistry();
 
@@ -5057,6 +5092,25 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
           return false;
         }
 
+        const signedPath = `${pathname}${requestUrl.search}`;
+        const message = [request.method?.toUpperCase() || "", signedPath, bodyHash.toLowerCase(), String(timestampHeader), nonce].join("\n");
+        const expectedHmac = crypto.createHmac("sha256", apiToken).update(message).digest("hex");
+
+        const expectedBuffer = Buffer.from(expectedHmac, "hex");
+        const userBuffer = Buffer.from(userSig, "hex");
+
+        const signaturesMatch = crypto.timingSafeEqual(expectedBuffer, userBuffer);
+
+        if (!signaturesMatch) {
+          respondJson(401, { error: "unauthorized" });
+          return false;
+        }
+
+        if (nonceRegistry.has(nonce)) {
+          respondJson(401, { error: "replay_detected" });
+          return false;
+        }
+
         let rawBody: string;
         try {
           rawBody = await readRawBody(request);
@@ -5081,26 +5135,17 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
           return false;
         }
 
-        const signedPath = `${pathname}${requestUrl.search}`;
-        const message = [request.method?.toUpperCase() || "", signedPath, bodyHash.toLowerCase(), String(timestampHeader), nonce].join("\n");
-        const expectedHmac = crypto.createHmac("sha256", apiToken).update(message).digest("hex");
-
-        const expectedBuffer = Buffer.from(expectedHmac, "hex");
-        const userBuffer = Buffer.from(userSig, "hex");
-
-        const signaturesMatch = crypto.timingSafeEqual(expectedBuffer, userBuffer);
-
-        if (!signaturesMatch) {
-          respondJson(401, { error: "unauthorized" });
-          return false;
-        }
-
         if (nonceRegistry.has(nonce)) {
           respondJson(401, { error: "replay_detected" });
           return false;
         }
 
-        nonceRegistry.add(nonce, driftWindowMs * 2);
+        try {
+          nonceRegistry.add(nonce, driftWindowMs * 2);
+        } catch (error) {
+          respondJson(503, { error: error instanceof Error ? error.message : "nonce_registry_capacity_exceeded" });
+          return false;
+        }
         return true;
       }
 
@@ -5835,6 +5880,10 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     }
 
     respondJson(404, { error: "not_found" });
+  });
+
+  server.on("close", () => {
+    nonceRegistry.dispose();
   });
 
   server.listen(port, "0.0.0.0");

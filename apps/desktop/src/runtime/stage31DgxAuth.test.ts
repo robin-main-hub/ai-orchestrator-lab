@@ -1,6 +1,7 @@
 import { createHash, createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  __test,
   createDgxOrchestratorAuthHeaders,
   createDgxOrchestratorJsonHeaders,
   generateBrowserHmacSha256,
@@ -95,6 +96,21 @@ describe("DGX orchestrator desktop auth headers", () => {
         value: originalCrypto,
       });
     }
+  });
+
+  it("writes SHA-256 fallback message lengths as 64-bit big-endian integers", () => {
+    const padded = new Uint8Array(64);
+    const view = new DataView(padded.buffer);
+
+    __test.writeSha256MessageLength(view, padded.length, 536_870_912);
+
+    expect(view.getUint32(padded.length - 8, false)).toBe(1);
+    expect(view.getUint32(padded.length - 4, false)).toBe(0);
+
+    __test.writeSha256MessageLength(view, padded.length, 536_870_911);
+
+    expect(view.getUint32(padded.length - 8, false)).toBe(0);
+    expect(view.getUint32(padded.length - 4, false)).toBe(0xfffffff8);
   });
 
   it("keeps bearer authorization for HTTPS targets", async () => {
