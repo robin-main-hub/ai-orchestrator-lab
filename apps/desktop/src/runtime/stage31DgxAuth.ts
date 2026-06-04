@@ -151,14 +151,13 @@ function sha256(message: Uint8Array) {
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
   ];
-  const bitLength = message.length * 8;
   const paddedLength = Math.ceil((message.length + 9) / 64) * 64;
   const padded = new Uint8Array(paddedLength);
   padded.set(message);
   padded[message.length] = 0x80;
 
   const view = new DataView(padded.buffer);
-  view.setUint32(paddedLength - 4, bitLength, false);
+  writeSha256MessageLength(view, paddedLength, message.length);
 
   const words = new Uint32Array(64);
   for (let offset = 0; offset < paddedLength; offset += 64) {
@@ -225,8 +224,20 @@ function concatBytes(left: Uint8Array, right: Uint8Array) {
   return output;
 }
 
+function writeSha256MessageLength(view: DataView, paddedLength: number, byteLength: number) {
+  const bitLength = byteLength * 8;
+  const highBits = Math.floor(bitLength / 0x1_0000_0000);
+  const lowBits = bitLength % 0x1_0000_0000;
+  view.setUint32(paddedLength - 8, highBits, false);
+  view.setUint32(paddedLength - 4, lowBits, false);
+}
+
 function bytesToHex(bytes: Uint8Array) {
   return Array.from(bytes)
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
 }
+
+export const __test = {
+  writeSha256MessageLength,
+};
