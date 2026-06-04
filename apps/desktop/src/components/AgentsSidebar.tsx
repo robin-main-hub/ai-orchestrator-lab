@@ -102,7 +102,7 @@ const agentFullKoreanNameByIdentity: Record<string, string> = {
 
 const agentDisplayRoleLabelByIdentity: Record<string, string> = {
   skeptic: "UX 비판자",
-  yohane: "아이디어 뱅크",
+  yohane: "4차원 아이디어 뱅크",
 };
 
 function englishRoleLabel(role: WorkbenchAgent["role"]) {
