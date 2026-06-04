@@ -2,6 +2,34 @@ import { RadioTower, Smartphone } from "lucide-react";
 import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
 import { guardStepLabel } from "../lib/uiLabels";
 import { StatusBadge } from "@/ui/status-badge";
+import type { StatusBadgeVariant } from "@/ui/status-badge";
+
+function approvalStateBadgeVariant(state: string): StatusBadgeVariant {
+  switch (state) {
+    case "approved":
+    case "not_required":
+      return "success";
+    case "required":
+      return "warning";
+    case "rejected":
+      return "danger";
+    default:
+      return "muted";
+  }
+}
+
+function guardStepBadgeVariant(status: string): StatusBadgeVariant {
+  switch (status) {
+    case "passed":
+      return "success";
+    case "blocked":
+      return "danger";
+    case "skipped":
+      return "muted";
+    default:
+      return "warning";
+  }
+}
 
 export function IngressGuardPanel({
   onImportTelegram,
@@ -34,13 +62,7 @@ export function IngressGuardPanel({
           <span>approval</span>
           <StatusBadge
             size="sm"
-            variant={
-              snapshot.result.approvalState === "not_required"
-                ? "success"
-                : snapshot.result.approvalState === "required"
-                  ? "warning"
-                  : "danger"
-            }
+            variant={approvalStateBadgeVariant(snapshot.result.approvalState)}
             className="mt-1 w-fit"
           >
             {snapshot.result.approvalState}
@@ -53,17 +75,11 @@ export function IngressGuardPanel({
             <strong>{guardStepLabel(step.name)}</strong>
             <StatusBadge
               size="sm"
-              variant={
-                step.status === "passed"
-                  ? "success"
-                  : step.status === "blocked"
-                    ? "danger"
-                    : "warning"
-              }
+              variant={guardStepBadgeVariant(step.status)}
             >
               {step.status}
             </StatusBadge>
-            <span>{step.reason}</span>
+            <span className="guard-step-reason">{step.reason}</span>
           </article>
         ))}
       </div>
@@ -76,13 +92,7 @@ export function IngressGuardPanel({
             <article key={approval.id}>
               <StatusBadge
                 size="sm"
-                variant={
-                  approval.state === "approved"
-                    ? "success"
-                    : approval.state === "rejected"
-                      ? "danger"
-                      : "warning"
-                }
+                variant={approvalStateBadgeVariant(approval.state)}
               >
                 {approval.state}
               </StatusBadge>
@@ -100,4 +110,3 @@ export function IngressGuardPanel({
     </section>
   );
 }
-
