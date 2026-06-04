@@ -163,6 +163,7 @@ async function postTmuxServerJson<TResponse>({
 
   for (const baseUrl of resolveDgxServerBaseUrls(serverBaseUrl)) {
     const endpoint = `${baseUrl}${path}`;
+    const body = JSON.stringify(request);
     const controller = new AbortController();
     const timeoutId = globalThis.setTimeout(() => {
       controller.abort();
@@ -170,8 +171,8 @@ async function postTmuxServerJson<TResponse>({
 
     try {
       const response = await fetchImpl(endpoint, {
-        body: JSON.stringify(request),
-        headers: await createDgxOrchestratorJsonHeaders("POST", path, endpoint),
+        body,
+        headers: await createDgxOrchestratorJsonHeaders("POST", path, endpoint, { body }),
         method: "POST",
         signal: controller.signal,
       });

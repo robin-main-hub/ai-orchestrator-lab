@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -74,22 +74,28 @@ function createDgxRequestSignatureHeaders({
   method,
   path,
   token,
+  body = "",
   timestamp = Date.now().toString(),
   nonce = "test-nonce",
 }: {
   method: string;
   path: string;
   token: string;
+  body?: string;
   timestamp?: string;
   nonce?: string;
 }) {
+  const bodyHash = createHash("sha256")
+    .update(body)
+    .digest("hex");
   const signature = createHmac("sha256", token)
-    .update([method.toUpperCase(), path, timestamp, nonce].join("\n"))
+    .update([method.toUpperCase(), path, bodyHash, timestamp, nonce].join("\n"))
     .digest("hex");
 
   return {
     "x-dgx-timestamp": timestamp,
     "x-dgx-nonce": nonce,
+    "x-dgx-body-sha256": bodyHash,
     "x-dgx-signature": signature,
   };
 }
@@ -1718,6 +1724,76 @@ describe("DGX orchestrator request authentication", () => {
           timestamp: Date.now().toString(),
           nonce: "runtime-tampered",
         }),
+      });
+
+      expect(response.status).toBe(401);
+    });
+  });
+
+  it("rejects HMAC requests when the signed query string is changed", async () => {
+    await withRuntimeServer(async (baseUrl, token) => {
+      const response = await fetch(`${baseUrl}/provider-models?providerProfileId=provider_dgx02_vllm`, {
+        headers: createDgxRequestSignatureHeaders({
+          method: "GET",
+          path: "/provider-models?providerProfileId=provider_deepseek_dgx",
+          token,
+          timestamp: Date.now().toString(),
+          nonce: "runtime-query-tampered",
+        }),
+      });
+
+      expect(response.status).toBe(401);
+    });
+  });
+
+  it("rejects HMAC requests when the signed body is changed", async () => {
+    await withRuntimeServer(async (baseUrl, token) => {
+      const signedBody = JSON.stringify({
+        id: "memory_sync_signed_body_1",
+        clientId: "client_desktop",
+        sessionId: "session_memory_sync_http",
+        inputs: [],
+        idempotencyKey: "client_desktop:session_memory_sync_http:memory_sync_signed_body_1",
+        createdAt: "2026-06-03T00:00:00.000Z",
+      });
+      const tamperedBody = JSON.stringify({
+        id: "memory_sync_signed_body_1",
+        clientId: "client_desktop",
+        sessionId: "session_memory_sync_http",
+        inputs: [{ layer: "episode", scope: "session", kind: "context", title: "tampered", content: "tampered", sourceChannel: "desktop", trustLevel: "trusted" }],
+        idempotencyKey: "client_desktop:session_memory_sync_http:memory_sync_signed_body_1",
+        createdAt: "2026-06-03T00:00:00.000Z",
+      });
+
+      const response = await fetch(`${baseUrl}/memory/sync`, {
+        method: "POST",
+        headers: {
+          ...createDgxRequestSignatureHeaders({
+            method: "POST",
+            path: "/memory/sync",
+            token,
+            body: signedBody,
+            timestamp: Date.now().toString(),
+            nonce: "runtime-body-tampered",
+          }),
+          "content-type": "application/json",
+        },
+        body: tamperedBody,
+      });
+
+      expect(response.status).toBe(401);
+    });
+  });
+
+  it("rejects malformed hex signatures without throwing", async () => {
+    await withRuntimeServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/runtime`, {
+        headers: {
+          "x-dgx-timestamp": Date.now().toString(),
+          "x-dgx-nonce": "runtime-bad-hex",
+          "x-dgx-body-sha256": "0".repeat(64),
+          "x-dgx-signature": "z".repeat(64),
+        },
       });
 
       expect(response.status).toBe(401);
@@ -3490,9 +3566,10 @@ describe("HTTP request limits", () => {
         const port = address.port;
         const path = "/runtime";
         const method = "GET";
+        const bodyHash = createHash("sha256").update("").digest("hex");
 
         const signRequest = (timestamp: string, nonce: string, token: string) => {
-          const message = [method, path, timestamp, nonce].join("\n");
+          const message = [method, path, bodyHash, timestamp, nonce].join("\n");
           return createHmac("sha256", token).update(message).digest("hex");
         };
 
@@ -3506,6 +3583,7 @@ describe("HTTP request limits", () => {
             "x-dgx-signature": validSignature,
             "x-dgx-timestamp": validTimestamp,
             "x-dgx-nonce": validNonce,
+            "x-dgx-body-sha256": bodyHash,
           },
           method,
         });
@@ -3521,6 +3599,7 @@ describe("HTTP request limits", () => {
             "x-dgx-signature": oldSignature,
             "x-dgx-timestamp": oldTimestamp,
             "x-dgx-nonce": oldNonce,
+            "x-dgx-body-sha256": bodyHash,
           },
           method,
         });
@@ -3534,6 +3613,7 @@ describe("HTTP request limits", () => {
             "x-dgx-signature": validSignature,
             "x-dgx-timestamp": validTimestamp,
             "x-dgx-nonce": validNonce,
+            "x-dgx-body-sha256": bodyHash,
           },
           method,
         });
@@ -3548,6 +3628,7 @@ describe("HTTP request limits", () => {
             "x-dgx-signature": badSignature,
             "x-dgx-timestamp": validTimestamp,
             "x-dgx-nonce": "different-nonce-mismatch-header",
+            "x-dgx-body-sha256": bodyHash,
           },
           method,
         });

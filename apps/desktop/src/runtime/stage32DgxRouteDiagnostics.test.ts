@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { probeDgxProviderRoutes } from "./stage32DgxRouteDiagnostics";
+import { createDgxOrchestratorJsonHeaders } from "./stage31DgxAuth";
 
 vi.mock("./stage31DgxAuth", () => ({
   createDgxOrchestratorJsonHeaders: vi.fn(async () => ({
@@ -78,5 +79,21 @@ describe("stage32 DGX route diagnostics", () => {
     expect(snapshot.summary.timeout).toBe(2);
     expect(snapshot.routes[0]?.health.status).toBe("timeout");
     expect(snapshot.routes[0]?.providerPreflight.status).toBe("timeout");
+  });
+
+  it("reports auth crypto failures separately from network errors", async () => {
+    vi.mocked(createDgxOrchestratorJsonHeaders).mockRejectedValueOnce(
+      Object.assign(new Error("secure nonce generation is unavailable"), {
+        name: "DgxAuthCryptoError",
+      }),
+    );
+
+    const snapshot = await probeDgxProviderRoutes({
+      fetchImpl: async () => new Response("ok"),
+      serverBaseUrl: "http://dgx-02:4317",
+    });
+
+    expect(snapshot.summary.cryptoError).toBe(1);
+    expect(snapshot.routes[0]?.health.status).toBe("crypto_error");
   });
 });

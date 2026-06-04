@@ -1,7 +1,7 @@
 import { createDgxOrchestratorJsonHeaders } from "./stage31DgxAuth";
 import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
 
-export type Stage32DgxRouteCheckStatus = "ok" | "http_error" | "network_error" | "timeout";
+export type Stage32DgxRouteCheckStatus = "ok" | "http_error" | "network_error" | "timeout" | "crypto_error";
 
 export type Stage32DgxRouteProbe = {
   endpoint: string;
@@ -27,6 +27,7 @@ export type Stage32DgxRouteDiagnosticSnapshot = {
     httpError: number;
     networkError: number;
     timeout: number;
+    cryptoError: number;
   };
 };
 
@@ -75,6 +76,7 @@ function summarizeRouteDiagnostics(routes: Stage32DgxRouteDiagnostic[]) {
     httpError: probes.filter((probe) => probe.status === "http_error").length,
     networkError: probes.filter((probe) => probe.status === "network_error").length,
     timeout: probes.filter((probe) => probe.status === "timeout").length,
+    cryptoError: probes.filter((probe) => probe.status === "crypto_error").length,
   };
 }
 
@@ -105,7 +107,7 @@ async function probeRoute(fetchImpl: typeof fetch, endpoint: string, method: "GE
     return {
       endpoint,
       method,
-      status: isAbortError(error) ? "timeout" : "network_error",
+      status: isAbortError(error) ? "timeout" : isDgxAuthCryptoError(error) ? "crypto_error" : "network_error",
       latencyMs: Date.now() - startedAt,
       error: formatRouteError(error),
     } satisfies Stage32DgxRouteProbe;
@@ -126,6 +128,10 @@ function isAbortError(error: unknown) {
   return error instanceof DOMException
     ? error.name === "AbortError"
     : error instanceof Error && error.name === "AbortError";
+}
+
+function isDgxAuthCryptoError(error: unknown) {
+  return error instanceof Error && error.name === "DgxAuthCryptoError";
 }
 
 function formatRouteError(error: unknown) {
