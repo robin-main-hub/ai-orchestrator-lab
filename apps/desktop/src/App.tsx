@@ -188,6 +188,7 @@ import { useDgxEventSyncController } from "./hooks/useDgxEventSyncController";
 import { useMemoryController } from "./hooks/useMemoryController";
 import { createAuthBinding, useProviderRegistryController } from "./hooks/useProviderRegistryController";
 import { useWorkItemsController } from "./hooks/useWorkItemsController";
+import { applyAgentProviderAssignment } from "./lib/agentProviderAssignment";
 import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbenchDerived";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 
@@ -2296,23 +2297,15 @@ export function App() {
   }
 
   function handleAssignProvider(agentId: string, providerId: string) {
-    const provider = providerProfiles.find((profile) => profile.id === providerId);
-    const isOccupied = agents.some((agent) => agent.id !== agentId && agent.providerProfileId === providerId);
-    if (!provider || isOccupied) {
-      return;
-    }
-
     setAgents((currentAgents) =>
-      currentAgents.map((agent) =>
-        agent.id === agentId
-          ? {
-              ...agent,
-              providerProfileId: provider.id,
-              modelId: modelCatalog[provider.id]?.[0]?.id ?? provider.defaultModel,
-              authBinding: createAuthBinding(provider),
-            }
-          : agent,
-      ),
+      applyAgentProviderAssignment({
+        agentId,
+        agents: currentAgents,
+        createAuthBinding,
+        modelCatalog,
+        providerId,
+        providerProfiles,
+      }),
     );
     setModelWindowStartByAgentId((windowStart) => ({
       ...windowStart,
