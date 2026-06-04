@@ -399,7 +399,7 @@ function AgentCard({
       <div className="flex items-start gap-2">
         <button
           aria-label={`${agent.name} 선택`}
-          className="shrink-0"
+          className="flex min-w-0 flex-1 items-start gap-2 text-left"
           onClick={() => onSelectAgent(agent.id)}
           type="button"
         >
@@ -417,27 +417,23 @@ function AgentCard({
             }
             avatarDataUrl={visual?.avatarDataUrl}
             size="sm"
+            className="shrink-0"
           />
-        </button>
-
-        <button
-          className="min-w-0 flex-1 text-left"
-          onClick={() => onSelectAgent(agent.id)}
-          type="button"
-        >
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-medium text-foreground">
-              {primaryDisplayName}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-sm font-medium text-foreground">
+                {primaryDisplayName}
+              </span>
+              {agent.role === "orchestrator" ? (
+                <StatusBadge className="shrink-0" size="sm" variant="primary">
+                  Primary
+                </StatusBadge>
+              ) : null}
+            </div>
+            <span className="text-[11px] text-muted-foreground block text-left">
+              {secondaryDisplayLabel}
             </span>
-            {agent.role === "orchestrator" ? (
-              <StatusBadge className="shrink-0" size="sm" variant="primary">
-                Primary
-              </StatusBadge>
-            ) : null}
           </div>
-          <span className="text-[11px] text-muted-foreground">
-            {secondaryDisplayLabel}
-          </span>
         </button>
 
         <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
