@@ -106,6 +106,7 @@ export function CommandPalette({
                       {verb}
                     </div>
                   }
+                  className="mb-2 last:mb-0"
                 >
                   {entries.map((entry) => (
                     <Command.Item
@@ -116,7 +117,7 @@ export function CommandPalette({
                       }}
                       // We can match using custom value if needed, cmdk filters by inner text by default
                       value={`${entry.verb} ${entry.label} ${entry.hint ?? ""}`}
-                      className="flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors text-foreground hover:bg-card/60 data-[selected=true]:bg-primary/10 data-[selected=true]:text-foreground [&_svg]:text-muted-foreground data-[selected=true]:[&_svg]:text-foreground"
+                      className="flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors text-foreground hover:bg-card/60 data-[selected=true]:bg-primary/10 data-[selected=true]:text-foreground aria-selected:bg-primary/10 aria-selected:text-foreground [&_svg]:text-muted-foreground data-[selected=true]:[&_svg]:text-foreground aria-selected:[&_svg]:text-foreground"
                     >
                       <StatusBadge 
                         variant="primary" 
