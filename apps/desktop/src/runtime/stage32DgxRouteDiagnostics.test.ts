@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { probeDgxProviderRoutes } from "./stage32DgxRouteDiagnostics";
 
+vi.mock("./stage31DgxAuth", () => ({
+  createDgxOrchestratorJsonHeaders: vi.fn(async () => ({
+    "content-type": "application/json",
+    "x-dgx-signature": "0".repeat(64),
+    "x-dgx-timestamp": "1700000000000",
+    "x-dgx-nonce": "route-diagnostics-test",
+  })),
+}));
+
 describe("stage32 DGX route diagnostics", () => {
   it("checks health and provider preflight per DGX route", async () => {
     const calls: string[] = [];

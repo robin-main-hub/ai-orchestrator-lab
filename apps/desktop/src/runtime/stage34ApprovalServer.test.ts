@@ -7,13 +7,20 @@ import {
 } from "./stage34ApprovalServer";
 import { DGX02_LAN_ORCHESTRATOR_BASE_URL } from "./stage30DgxEndpoints";
 
+function expectHttpHmacHeaders(headers: Record<string, string>) {
+  expect(headers.authorization).toBeUndefined();
+  expect(headers["x-dgx-signature"]).toMatch(/^[a-f0-9]{64}$/);
+  expect(headers["x-dgx-timestamp"]).toMatch(/^\d+$/);
+  expect(headers["x-dgx-nonce"]).toBeTruthy();
+}
+
 describe("stage34 approval server runtime", () => {
-  it("fetches the DGX approval queue with bearer headers", async () => {
+  it("fetches the DGX approval queue with HMAC headers", async () => {
     const response = await fetchDgxApprovalQueue({
       fetchImpl: async (url, init) => {
         expect(String(url)).toBe(`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/approvals/list`);
         expect(init?.method).toBe("GET");
-        expect((init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
+        expectHttpHmacHeaders(init?.headers as Record<string, string>);
 
         return jsonResponse({
           approvals: [

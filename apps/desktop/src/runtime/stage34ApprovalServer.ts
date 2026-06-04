@@ -142,7 +142,7 @@ async function requestApprovalServerJson<TResponse>({
     try {
       const response = await fetchImpl(endpoint, {
         body: body === undefined ? undefined : JSON.stringify(body),
-        headers: createDgxOrchestratorJsonHeaders(),
+        headers: await createDgxOrchestratorJsonHeaders(method, path, endpoint),
         method,
         signal: controller.signal,
       });

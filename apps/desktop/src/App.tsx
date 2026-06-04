@@ -1568,7 +1568,7 @@ export function App() {
     try {
       const response = await fetch(endpoint, {
         method: "POST",
-        headers: createDgxOrchestratorJsonHeaders(),
+        headers: await createDgxOrchestratorJsonHeaders("POST", "/verify-packet", endpoint),
         body: JSON.stringify(codingPacketState),
       });
 
