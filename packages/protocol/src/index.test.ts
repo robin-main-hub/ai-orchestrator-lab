@@ -30,8 +30,11 @@ import {
   terminalPaneSchema,
   terminalPaneTimelineSchema,
   tmuxSessionRefSchema,
+  workLaneSchema,
   workItemHandoffSchema,
+  workItemKindSchema,
   workItemSchema,
+  workSurfaceSchema,
   workSourceSchema,
   type BackupProjectionArtifact,
   type CodingPacket,
@@ -840,10 +843,11 @@ describe("protocol schemas", () => {
       id: "work_item_1",
       sessionId: "session_1",
       title: "Review provider credential flow",
-      kind: "review",
-      lane: "review",
+      kind: "internal_coord",
+      lane: "check",
       status: "triaged",
       summary: "Check provider profile handling before live calls.",
+      surface: "conversation",
       sourceRefs: [
         {
           source: "desktop_manual",
@@ -864,7 +868,11 @@ describe("protocol schemas", () => {
     });
 
     expect(item.priority).toBe("normal");
+    expect(item.surface).toBe("conversation");
     expect(item.evidenceRefs[0]?.summary).toContain("Provider keys");
+    expect(() => workLaneSchema.parse("review")).toThrow();
+    expect(() => workItemKindSchema.parse("coding_packet")).toThrow();
+    expect(workSurfaceSchema.parse("coding_packet")).toBe("coding_packet");
     expect(() =>
       evidenceRefSchema.parse({
         id: "bad_evidence",

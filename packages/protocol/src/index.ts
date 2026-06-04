@@ -3,15 +3,7 @@ import { z } from "zod";
 export const runtimeStatusSchema = z.enum(["online", "degraded", "offline", "syncing"]);
 export type RuntimeStatus = z.infer<typeof runtimeStatusSchema>;
 
-export const workModeSchema = z.enum([
-  "conversation",
-  "debate",
-  "coding",
-  "review",
-  "research",
-  "planning",
-  "verification",
-]);
+export const workModeSchema = z.enum(["conversation", "debate", "tmux"]);
 export type WorkMode = z.infer<typeof workModeSchema>;
 
 export const providerKindSchema = z.enum([
@@ -454,20 +446,10 @@ export const workLaneSchema = z.enum([
   "ask",
   "approve",
   "blocked",
-  "inbox",
-  "conversation",
-  "debate",
-  "coding",
-  "review",
-  "execution",
-  "memory",
-  "backup",
 ]);
 export type WorkLane = z.infer<typeof workLaneSchema>;
 
-// Temporary PR1 taxonomy until routine and automation semantics are designed.
 export const workItemKindSchema = z.enum([
-  // TEMP PR1 taxonomy. Keep business kinds grouped here until workflow/routine semantics stabilize.
   "customer_inquiry",
   "quote_request",
   "price_nego",
@@ -479,16 +461,6 @@ export const workItemKindSchema = z.enum([
   "internal_coord",
   "report",
   "general",
-  "conversation",
-  "decision",
-  "coding_packet",
-  "execution",
-  "review",
-  "research",
-  "memory",
-  "backup",
-  "external_request",
-  "approval",
 ]);
 export type WorkItemKind = z.infer<typeof workItemKindSchema>;
 
@@ -545,7 +517,7 @@ export const missingInfoSlotSchema = z.object({
 });
 export type MissingInfoSlot = z.infer<typeof missingInfoSlotSchema>;
 
-export const handoffTargetSurfaceSchema = z.enum([
+export const workSurfaceSchema = z.enum([
   "conversation",
   "debate",
   "coding_packet",
@@ -555,6 +527,9 @@ export const handoffTargetSurfaceSchema = z.enum([
   "notion",
   "mobile",
 ]);
+export type WorkSurface = z.infer<typeof workSurfaceSchema>;
+
+export const handoffTargetSurfaceSchema = workSurfaceSchema;
 export type HandoffTargetSurface = z.infer<typeof handoffTargetSurfaceSchema>;
 
 export const workItemSchema = z.object({
@@ -563,6 +538,7 @@ export const workItemSchema = z.object({
   title: z.string(),
   kind: workItemKindSchema,
   lane: workLaneSchema,
+  surface: workSurfaceSchema.optional(),
   status: workItemStatusSchema,
   summary: z.string(),
   sourceRefs: z.array(workSourceRefSchema),
