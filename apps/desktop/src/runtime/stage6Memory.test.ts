@@ -30,7 +30,7 @@ const messages: ConversationMessage[] = [
     id: "message_1",
     sessionId: "session_desktop_001",
     role: "user",
-    content: "DGX-02를 authority로 두고 MacBook local outbox 기억 trace를 보여줘",
+    content: "MacBook operator authority와 DGX-02 continuity mirror 기억 trace를 보여줘",
     createdAt,
   },
 ];
@@ -82,8 +82,8 @@ describe("stage6 memory inspector", () => {
     expect(inspector.contextPacket.activeRecordIds.length).toBeGreaterThan(0);
     expect(inspector.stats.relationCount).toBeGreaterThan(0);
     expect(inspector.pinnedCount).toBeGreaterThan(0);
-    expect(inspector.records.some((record) => record.id === "memory_seed_dgx02_authority")).toBe(true);
-    expect(inspector.records.some((record) => record.id === "memory_seed_macbook_authority")).toBe(false);
+    expect(inspector.records.some((record) => record.id === "memory_seed_macbook_authority")).toBe(true);
+    expect(inspector.records.some((record) => record.id === "memory_seed_dgx02_authority")).toBe(false);
   });
 
   it("blocks project and user memory for untrusted providers", () => {
@@ -137,7 +137,7 @@ describe("stage6 memory inspector", () => {
     });
 
     expect(inspector.records.find((record) => record.id === "memory_seed_event_storage")?.importance).toBe(0.1);
-    expect(inspector.records.find((record) => record.id === "memory_seed_dgx02_authority")?.importance).toBe(0.49);
+    expect(inspector.records.find((record) => record.id === "memory_seed_macbook_authority")?.importance).toBe(0.49);
   });
 
   it("reinforces records whose persons match the recall query", () => {

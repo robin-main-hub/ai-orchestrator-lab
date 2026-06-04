@@ -121,26 +121,26 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       pinned: true,
     },
     {
-      id: "memory_seed_dgx02_authority",
+      id: "memory_seed_macbook_authority",
       layer: "project_memory",
       scope: "project",
       kind: "architecture",
-      title: "DGX-02 authority server",
+      title: "MacBook operator authority",
       content:
-        "DGX-02 is the authoritative server for Event Store, MemoryRecord, WorkItem, approvals, drafts, and continuity storage. MacBook is the primary work client with a local cache/outbox for offline work, and syncs back to DGX-02 when online.",
+        "MacBook is the operator authority for active work state, local decisions, and offline continuity outbox. DGX-02 is the continuity mirror and sync server: it receives MacBook outbox events when online, stores mirrored Event Store, MemoryRecord, WorkItem, approvals, and drafts continuity, and hosts derived retrieval indexes.",
       sourceChannel: "desktop",
       trustLevel: "trusted",
       projectId: defaultProjectId,
-      tags: ["dgx-02", "authority", "sync", "fallback"],
+      tags: ["macbook", "operator-authority", "dgx-02", "continuity-mirror", "sync"],
       activationState: "active",
       createdAt,
       lastAccessedAt: createdAt,
       losslessRestatement:
-        "DGX-02 is the authoritative server for Event Store, MemoryRecord, WorkItem, approvals, drafts, and continuity storage, while MacBook works as a client cache and outbox.",
-      keywords: ["dgx-02", "authority", "server", "sync", "macbook", "outbox", "continuity"],
+        "MacBook is the operator authority for active work state and offline continuity outbox; DGX-02 acts as continuity mirror, sync server, and retrieval index host.",
+      keywords: ["macbook", "operator", "authority", "dgx-02", "mirror", "sync", "outbox", "continuity"],
       entities: ["DGX-02", "MacBook", "Event Store", "MemoryRecord", "WorkItem"],
       persons: [],
-      topic: "DGX-02 authority and MacBook client cache",
+      topic: "MacBook authority and DGX continuity mirror",
       importance: 0.7,
       entityReinforcement: 0,
       pinned: true,
@@ -1033,4 +1033,3 @@ export async function runMemoryReflectionWorker({
     newIssues,
   };
 }
-
