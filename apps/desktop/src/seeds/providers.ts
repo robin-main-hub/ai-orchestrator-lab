@@ -91,7 +91,7 @@ export const seededProviderProfiles: ProviderProfile[] = [
       name: "APIKey.fun Claude B",
       kind: "anthropic",
       baseUrl: "https://api.apikey.fun",
-      defaultModel: "claude-opus-4-6",
+      defaultModel: "claude-opus-4-7",
       tags: ["dgx-secret-ref", "server-proxy", "apikey.fun", "reseller"],
       trustLevel: "untrusted",
     }),
@@ -347,6 +347,7 @@ export const seededModelCatalog: ModelCatalog = {
   ].map((id) => createModel("provider_apifun_claude", id, ["apikey.fun", "reseller", "server-proxy"])),
   provider_apifun_claude_b: [
     "claude-opus-4-8",
+    "claude-opus-4-7",
     "claude-opus-4-6",
     "claude-code-compatible",
     "claude-sonnet-reseller",
