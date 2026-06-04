@@ -4,6 +4,13 @@ import { fetchDgxProviderModelDiscovery, fetchDgxProviderRegistry, probeDgxOrche
 import { DgxConnectionStateMachine } from "./stage5Runtime";
 import { DGX02_LAN_ORCHESTRATOR_BASE_URL } from "./stage30DgxEndpoints";
 
+function expectHttpHmacHeaders(headers: Record<string, string>) {
+  expect(headers.authorization).toBeUndefined();
+  expect(headers["x-dgx-signature"]).toMatch(/^[a-f0-9]{64}$/);
+  expect(headers["x-dgx-timestamp"]).toMatch(/^\d+$/);
+  expect(headers["x-dgx-nonce"]).toBeTruthy();
+}
+
 const localRuntime: RuntimeSnapshot = {
   status: "degraded",
   dgxStatus: "offline",
@@ -71,7 +78,7 @@ describe("stage13 DGX server probing", () => {
   it("merges live DGX server health, heartbeat, and model discovery", async () => {
     const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
       const path = String(url);
-      expect((init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
+      expectHttpHmacHeaders(init?.headers as Record<string, string>);
       if (path.endsWith("/health")) {
         return jsonResponse({
           service: "ai-orchestrator-dgx-server",
@@ -173,7 +180,7 @@ describe("stage13 DGX server probing", () => {
       },
       fetchImpl: async (url, init) => {
         expect(String(url)).toBe(`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-models?providerProfileId=provider_deepseek_dgx`);
-        expect((init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
+        expectHttpHmacHeaders(init?.headers as Record<string, string>);
         return jsonResponse({
           id: "model_discovery_deepseek",
           providerProfileId: "provider_deepseek_dgx",
@@ -205,7 +212,7 @@ describe("stage13 DGX server probing", () => {
     const registry = await fetchDgxProviderRegistry({
       fetchImpl: async (url, init) => {
         expect(String(url)).toBe(`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-registry`);
-        expect((init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
+        expectHttpHmacHeaders(init?.headers as Record<string, string>);
         return jsonResponse({
           id: "provider_registry_dgx02_1",
           authorityNodeId: "dgx-02",

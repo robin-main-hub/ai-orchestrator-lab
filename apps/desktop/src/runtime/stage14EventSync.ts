@@ -85,6 +85,7 @@ export async function pushEventsToDgxEventStorage({
 
   for (const baseUrl of resolveDgxServerBaseUrls(serverBaseUrl)) {
     const endpoint = `${baseUrl}/events/sync`;
+    const body = JSON.stringify(request);
 
     try {
       const response = await fetchWithTimeout(
@@ -92,8 +93,8 @@ export async function pushEventsToDgxEventStorage({
         endpoint,
         {
           method: "POST",
-          headers: createDgxOrchestratorJsonHeaders(),
-          body: JSON.stringify(request),
+          headers: await createDgxOrchestratorJsonHeaders("POST", "/events/sync", endpoint, { body }),
+          body,
         },
         timeoutMs,
       );

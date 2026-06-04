@@ -164,8 +164,9 @@ async function fetchJson<T>(fetchImpl: typeof fetch, url: string, timeoutMs: num
   }, timeoutMs);
 
   try {
+    const parsedPath = new URL(url, "http://localhost").pathname;
     const response = await fetchImpl(url, {
-      headers: createDgxOrchestratorJsonHeaders(),
+      headers: await createDgxOrchestratorJsonHeaders("GET", parsedPath, url),
       signal: controller.signal,
     });
     const rawText = await response.text();

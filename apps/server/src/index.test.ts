@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
+import { createHash, createHmac } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -13,6 +14,7 @@ import type { MemoryInput, MemoryRecord } from "@ai-orchestrator/protocol";
 import { MemoryAdapterError, type MemoryAdapter, type MemoryAdapterContext } from "@ai-orchestrator/memory";
 import type { ServerAgentDelegationExecuteRequest } from "./index";
 import {
+  NonceRegistry,
   createEventStorageSnapshot,
   createDgxProviderCompletionResponse,
   createDgxHeartbeat,
@@ -67,6 +69,36 @@ function expectValidTerminalCommandEvents(events: Array<{ type: string; payload:
     const type = terminalCommandEventTypeSchema.parse(event.type);
     expect(() => parseTerminalCommandEventPayload(type, event.payload)).not.toThrow();
   }
+}
+
+function createDgxRequestSignatureHeaders({
+  method,
+  path,
+  token,
+  body = "",
+  timestamp = Date.now().toString(),
+  nonce = "test-nonce",
+}: {
+  method: string;
+  path: string;
+  token: string;
+  body?: string;
+  timestamp?: string;
+  nonce?: string;
+}) {
+  const bodyHash = createHash("sha256")
+    .update(body)
+    .digest("hex");
+  const signature = createHmac("sha256", token)
+    .update([method.toUpperCase(), path, bodyHash, timestamp, nonce].join("\n"))
+    .digest("hex");
+
+  return {
+    "x-dgx-timestamp": timestamp,
+    "x-dgx-nonce": nonce,
+    "x-dgx-body-sha256": bodyHash,
+    "x-dgx-signature": signature,
+  };
 }
 
 describe("server health placeholder", () => {
@@ -1620,6 +1652,223 @@ describe("memory sync endpoint", () => {
         process.env.ORCHESTRATOR_API_TOKEN = previousToken;
       }
     }
+  });
+});
+
+describe("DGX orchestrator request authentication", () => {
+  async function withRuntimeServer<T>(callback: (baseUrl: string, token: string) => Promise<T>): Promise<T> {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const token = "test-orchestrator-token";
+    process.env.ORCHESTRATOR_API_TOKEN = token;
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (typeof address !== "object" || address === null) throw new Error("server did not bind");
+
+      return await callback(`http://127.0.0.1:${address.port}`, token);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+    }
+  }
+
+  it("accepts valid HMAC headers for runtime requests", async () => {
+    await withRuntimeServer(async (baseUrl, token) => {
+      const response = await fetch(`${baseUrl}/runtime`, {
+        headers: createDgxRequestSignatureHeaders({
+          method: "GET",
+          path: "/runtime",
+          token,
+          timestamp: Date.now().toString(),
+          nonce: "runtime-valid",
+        }),
+      });
+
+      expect(response.status).toBe(200);
+    });
+  });
+
+  it("rejects HMAC headers outside the timestamp drift window", async () => {
+    await withRuntimeServer(async (baseUrl, token) => {
+      const staleTimestamp = (Date.now() - 6 * 60_000).toString();
+      const response = await fetch(`${baseUrl}/runtime`, {
+        headers: createDgxRequestSignatureHeaders({
+          method: "GET",
+          path: "/runtime",
+          token,
+          timestamp: staleTimestamp,
+          nonce: "runtime-stale",
+        }),
+      });
+      const body = await response.json() as { error: string };
+
+      expect(response.status).toBe(401);
+      expect(body.error).toBe("clock_drift_exceeded");
+    });
+  });
+
+  it("rejects tampered HMAC signatures", async () => {
+    await withRuntimeServer(async (baseUrl, token) => {
+      const response = await fetch(`${baseUrl}/runtime`, {
+        headers: createDgxRequestSignatureHeaders({
+          method: "GET",
+          path: "/heartbeat",
+          token,
+          timestamp: Date.now().toString(),
+          nonce: "runtime-tampered",
+        }),
+      });
+
+      expect(response.status).toBe(401);
+    });
+  });
+
+  it("rejects HMAC requests when the signed query string is changed", async () => {
+    await withRuntimeServer(async (baseUrl, token) => {
+      const response = await fetch(`${baseUrl}/provider-models?providerProfileId=provider_dgx02_vllm`, {
+        headers: createDgxRequestSignatureHeaders({
+          method: "GET",
+          path: "/provider-models?providerProfileId=provider_deepseek_dgx",
+          token,
+          timestamp: Date.now().toString(),
+          nonce: "runtime-query-tampered",
+        }),
+      });
+
+      expect(response.status).toBe(401);
+    });
+  });
+
+  it("rejects HMAC requests when the signed body is changed", async () => {
+    await withRuntimeServer(async (baseUrl, token) => {
+      const signedBody = JSON.stringify({
+        id: "memory_sync_signed_body_1",
+        clientId: "client_desktop",
+        sessionId: "session_memory_sync_http",
+        inputs: [],
+        idempotencyKey: "client_desktop:session_memory_sync_http:memory_sync_signed_body_1",
+        createdAt: "2026-06-03T00:00:00.000Z",
+      });
+      const tamperedBody = JSON.stringify({
+        id: "memory_sync_signed_body_1",
+        clientId: "client_desktop",
+        sessionId: "session_memory_sync_http",
+        inputs: [{ layer: "episode", scope: "session", kind: "context", title: "tampered", content: "tampered", sourceChannel: "desktop", trustLevel: "trusted" }],
+        idempotencyKey: "client_desktop:session_memory_sync_http:memory_sync_signed_body_1",
+        createdAt: "2026-06-03T00:00:00.000Z",
+      });
+
+      const response = await fetch(`${baseUrl}/memory/sync`, {
+        method: "POST",
+        headers: {
+          ...createDgxRequestSignatureHeaders({
+            method: "POST",
+            path: "/memory/sync",
+            token,
+            body: signedBody,
+            timestamp: Date.now().toString(),
+            nonce: "runtime-body-tampered",
+          }),
+          "content-type": "application/json",
+        },
+        body: tamperedBody,
+      });
+
+      expect(response.status).toBe(401);
+    });
+  });
+
+  it("rejects malformed hex signatures without throwing", async () => {
+    await withRuntimeServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/runtime`, {
+        headers: {
+          "x-dgx-timestamp": Date.now().toString(),
+          "x-dgx-nonce": "runtime-bad-hex",
+          "x-dgx-body-sha256": "0".repeat(64),
+          "x-dgx-signature": "z".repeat(64),
+        },
+      });
+
+      expect(response.status).toBe(401);
+    });
+  });
+
+  it("rejects replayed HMAC nonces before reading oversized bodies", async () => {
+    await withRuntimeServer(async (baseUrl, token) => {
+      const timestamp = Date.now().toString();
+      const nonce = "runtime-replay-before-body";
+      const firstResponse = await fetch(`${baseUrl}/runtime`, {
+        headers: createDgxRequestSignatureHeaders({
+          method: "GET",
+          path: "/runtime",
+          token,
+          timestamp,
+          nonce,
+        }),
+      });
+      expect(firstResponse.status).toBe(200);
+
+      const replayResponse = await fetch(`${baseUrl}/memory/sync`, {
+        method: "POST",
+        headers: {
+          ...createDgxRequestSignatureHeaders({
+            method: "POST",
+            path: "/memory/sync",
+            token,
+            timestamp,
+            nonce,
+          }),
+          "content-type": "application/json",
+          "content-length": String(1_048_577),
+        },
+      });
+      const replayBody = await replayResponse.json() as { error?: string };
+
+      expect(replayResponse.status).toBe(401);
+      expect(replayBody.error).toBe("replay_detected");
+    });
+  });
+
+  it("does not evict unexpired nonces when the replay registry is full", () => {
+    let now = 1_700_000_000_000;
+    const registry = new NonceRegistry({
+      maxNonces: 2,
+      now: () => now,
+      cleanupIntervalMs: false,
+    });
+
+    registry.add("nonce-1", 60_000);
+    registry.add("nonce-2", 60_000);
+
+    expect(() => registry.add("nonce-3", 60_000)).toThrow("nonce_registry_capacity_exceeded");
+    expect(registry.has("nonce-1")).toBe(true);
+
+    now += 60_001;
+    registry.add("nonce-3", 60_000);
+
+    expect(registry.has("nonce-1")).toBe(false);
+    expect(registry.has("nonce-3")).toBe(true);
+    registry.dispose();
+  });
+
+  it("continues to accept bearer auth for runtime requests", async () => {
+    await withRuntimeServer(async (baseUrl, token) => {
+      const response = await fetch(`${baseUrl}/runtime`, {
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.status).toBe(200);
+    });
   });
 });
 
@@ -3347,6 +3596,135 @@ describe("HTTP request limits", () => {
           delete process.env[key];
         }
         Object.assign(process.env, previousEnv);
+      }
+    });
+  });
+
+  describe("HMAC-SHA256 Request Signing Authentication", () => {
+    it("authorizes request with valid signature headers and rejects drift/replay/invalid signatures", async () => {
+      const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+      const previousNodeEnv = process.env.NODE_ENV;
+      const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+      const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-hmac-auth-"));
+      const apiToken = "test-hmac-orchestrator-token";
+      process.env.ORCHESTRATOR_API_TOKEN = apiToken;
+      process.env.NODE_ENV = "production";
+      process.env.EVENT_STORAGE_DIR = tempDir;
+
+      const server = startServer(0);
+
+      try {
+        await new Promise<void>((resolve) => {
+          server.once("listening", resolve);
+        });
+        const address = server.address();
+        if (!address || typeof address !== "object") {
+          throw new Error("test server did not bind to a TCP port");
+        }
+
+        const port = address.port;
+        const path = "/runtime";
+        const method = "GET";
+        const bodyHash = createHash("sha256").update("").digest("hex");
+
+        const signRequest = (timestamp: string, nonce: string, token: string) => {
+          const message = [method, path, bodyHash, timestamp, nonce].join("\n");
+          return createHmac("sha256", token).update(message).digest("hex");
+        };
+
+        // 1. Test Valid HMAC Signature
+        const validTimestamp = Date.now().toString();
+        const validNonce = "valid-nonce-123";
+        const validSignature = signRequest(validTimestamp, validNonce, apiToken);
+
+        const resValid = await fetch(`http://127.0.0.1:${port}${path}`, {
+          headers: {
+            "x-dgx-signature": validSignature,
+            "x-dgx-timestamp": validTimestamp,
+            "x-dgx-nonce": validNonce,
+            "x-dgx-body-sha256": bodyHash,
+          },
+          method,
+        });
+        expect(resValid.status).toBe(200);
+
+        // 2. Test Clock Drift Rejected (> 5 minutes)
+        const oldTimestamp = (Date.now() - 360_000).toString();
+        const oldNonce = "old-nonce-456";
+        const oldSignature = signRequest(oldTimestamp, oldNonce, apiToken);
+
+        const resDrift = await fetch(`http://127.0.0.1:${port}${path}`, {
+          headers: {
+            "x-dgx-signature": oldSignature,
+            "x-dgx-timestamp": oldTimestamp,
+            "x-dgx-nonce": oldNonce,
+            "x-dgx-body-sha256": bodyHash,
+          },
+          method,
+        });
+        expect(resDrift.status).toBe(401);
+        const driftBody = await resDrift.json() as { error?: string };
+        expect(driftBody.error).toBe("clock_drift_exceeded");
+
+        // 3. Test Replay Attack Rejected
+        const replayRes = await fetch(`http://127.0.0.1:${port}${path}`, {
+          headers: {
+            "x-dgx-signature": validSignature,
+            "x-dgx-timestamp": validTimestamp,
+            "x-dgx-nonce": validNonce,
+            "x-dgx-body-sha256": bodyHash,
+          },
+          method,
+        });
+        expect(replayRes.status).toBe(401);
+        const replayBody = await replayRes.json() as { error?: string };
+        expect(replayBody.error).toBe("replay_detected");
+
+        // 4. Test Invalid Signature Rejected
+        const badSignature = signRequest(validTimestamp, "different-nonce", apiToken);
+        const resBadSig = await fetch(`http://127.0.0.1:${port}${path}`, {
+          headers: {
+            "x-dgx-signature": badSignature,
+            "x-dgx-timestamp": validTimestamp,
+            "x-dgx-nonce": "different-nonce-mismatch-header",
+            "x-dgx-body-sha256": bodyHash,
+          },
+          method,
+        });
+        expect(resBadSig.status).toBe(401);
+
+        // 5. Test Legacy Bearer Token Still Works
+        const resLegacy = await fetch(`http://127.0.0.1:${port}${path}`, {
+          headers: {
+            authorization: `Bearer ${apiToken}`,
+          },
+          method,
+        });
+        expect(resLegacy.status).toBe(200);
+
+      } finally {
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => {
+            if (error) reject(error);
+            else resolve();
+          });
+        });
+        if (previousToken === undefined) {
+          delete process.env.ORCHESTRATOR_API_TOKEN;
+        } else {
+          process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+        }
+        if (previousNodeEnv === undefined) {
+          delete process.env.NODE_ENV;
+        } else {
+          process.env.NODE_ENV = previousNodeEnv;
+        }
+        if (previousEventStorageDir === undefined) {
+          delete process.env.EVENT_STORAGE_DIR;
+        } else {
+          process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+        }
+        await rm(tempDir, { force: true, recursive: true });
       }
     });
   });
