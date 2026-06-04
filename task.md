@@ -1,0 +1,25 @@
+# Task List: Phase 1: Security Hardening & Gate Optimization
+
+- [x] Create a branch `feature/security-hardening-dispatch-gate` from `origin/main` (SHA: `f008b6b`)
+- [x] Fix tmux dispatch approval bypass:
+  - [x] Modify `evaluateServerTmuxDispatchPermission` and `/tmux/dispatch` logic in `apps/server/src/index.ts` to require verifying `approvalState: 'approved'` against the internal Event Store
+  - [x] Refactor `evaluateServerTmuxDispatchPermission` to accept `storageState?: ServerEventStorageState`
+  - [x] Update `/tmux/dispatch` and `/tmux/preflight` route handlers in `index.ts` to fetch and pass `storageState`
+  - [x] Update `recordServerTmuxDispatchToPersistentServerStorage` and `createServerTmuxPreflightResponse` to pass `storageState` compatibility layers
+- [x] Mitigate timing leaks in `requireAuth`:
+  - [x] Compare `expectedHmac.length !== userSig.length`
+  - [x] If they differ, SHA-256 hash both strings first and run `timingSafeEqual` on the 32-byte digests
+  - [x] Else run `timingSafeEqual` directly
+- [x] Optimize `NonceRegistry`:
+  - [x] Modify `cleanupExpired` to stop scanning once a non-expired nonce is found (utilizing JavaScript Map's insertion-order FIFO nature)
+  - [x] Register `server.on('close')` to invoke `nonceRegistry.dispose()` to properly clear intervals
+- [x] Add unit tests in `apps/server/src/index.test.ts`:
+  - [x] Verify tmux dispatch bypass attempt is rejected with 403
+  - [x] Verify HMAC timing-safe hash comparison correctly handles different lengths without crashes
+  - [x] Verify `NonceRegistry` rejects replay and evicts nonces safely
+  - [x] Update existing tests to support new validation check (e.g. by setting up approval events)
+- [x] Verify via:
+  - [x] `pnpm --filter @ai-orchestrator/server typecheck`
+  - [x] `pnpm --filter @ai-orchestrator/server test`
+  - [x] `pnpm -r build`
+- [x] Commit and push the branch
