@@ -270,18 +270,14 @@ function SummaryCell({
   value: number;
   tone: "muted" | "success" | "destructive";
 }) {
+  const variant =
+    tone === "success" ? "success" : tone === "destructive" ? "danger" : "muted";
+
   return (
-    <div className="flex flex-col items-center rounded-md border border-border bg-card/40 px-2 py-1.5">
-      <span
-        className={cn(
-          "text-sm font-semibold",
-          tone === "success" && "text-success",
-          tone === "destructive" && "text-destructive",
-          tone === "muted" && "text-foreground",
-        )}
-      >
+    <div className="flex flex-col items-center gap-1 rounded-md border border-border bg-card/40 px-2 py-1.5">
+      <StatusBadge variant={variant} size="md" className="font-semibold px-2.5">
         {value}
-      </span>
+      </StatusBadge>
       <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
@@ -386,21 +382,21 @@ function QueueCard({
       {/* 6 lane actions inline (approve/archive live, others soon) */}
       <div className="grid grid-cols-3 gap-1 pt-1">
         <ActionButton
-          icon={<Check className="h-3 w-3" />}
+          icon={<Check className="h-3 w-3 size-3" />}
           label="approve"
           onClick={() => onApprove(item.sourceItemId)}
           tone="primary"
         />
-        <ActionButton disabled icon={<HelpCircle className="h-3 w-3" />} label="ask" />
-        <ActionButton disabled icon={<Edit3 className="h-3 w-3" />} label="edit" />
+        <ActionButton disabled icon={<HelpCircle className="h-3 w-3 size-3" />} label="ask" />
+        <ActionButton disabled icon={<Edit3 className="h-3 w-3 size-3" />} label="edit" />
         <ActionButton
           disabled
-          icon={<Forward className="h-3 w-3" />}
+          icon={<Forward className="h-3 w-3 size-3" />}
           label="delegate"
         />
-        <ActionButton disabled icon={<ShieldOff className="h-3 w-3" />} label="block" />
+        <ActionButton disabled icon={<ShieldOff className="h-3 w-3 size-3" />} label="block" />
         <ActionButton
-          icon={<XCircle className="h-3 w-3" />}
+          icon={<XCircle className="h-3 w-3 size-3" />}
           label="archive"
           onClick={() => onReject(item.sourceItemId)}
           tone="destructive"
@@ -423,18 +419,15 @@ function ActionButton({
   tone?: "primary" | "destructive";
   disabled?: boolean;
 }) {
+  const buttonVariant =
+    tone === "primary" ? "default" : tone === "destructive" ? "destructive" : "outline";
+
   return (
-    <button
+    <Button
+      variant={buttonVariant}
       className={cn(
-        "inline-flex items-center justify-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-mono transition-colors",
-        tone === "primary" && !disabled && "border-primary/50 text-primary hover:bg-primary/10",
-        tone === "destructive" &&
-          !disabled &&
-          "border-destructive/45 text-destructive hover:bg-destructive/10",
-        !tone &&
-          !disabled &&
-          "border-border bg-card/40 text-muted-foreground hover:border-primary/45",
-        disabled && "cursor-not-allowed border-border/50 text-muted-foreground/50 opacity-50",
+        "h-7 gap-1 px-1.5 text-[10px] font-mono",
+        disabled && "cursor-not-allowed opacity-50"
       )}
       disabled={disabled}
       onClick={onClick}
@@ -443,6 +436,6 @@ function ActionButton({
     >
       {icon}
       {label}
-    </button>
+    </Button>
   );
 }
