@@ -78,7 +78,7 @@ export const seededProviderProfiles: ProviderProfile[] = [
       name: "APIKey.fun Claude A",
       kind: "anthropic",
       baseUrl: "https://api.apikey.fun",
-      defaultModel: "claude-opus-4-6",
+      defaultModel: "claude-opus-4-8",
       tags: ["dgx-secret-ref", "server-proxy", "apikey.fun", "reseller"],
       trustLevel: "untrusted",
     }),
