@@ -44,8 +44,8 @@ export function getConversationShellVisibility({
     return {
       showCodingPacketPanel: false,
       showEvolveMementoPanel: false,
-      showLeftRail: true,
-      showTerminalDock: true,
+      showLeftRail: false,
+      showTerminalDock: false,
       showToolbarActions: false,
       showWorkItemHandoffPanel: false,
     };

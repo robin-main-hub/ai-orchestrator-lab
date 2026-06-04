@@ -2483,12 +2483,11 @@ export function App() {
         snapshot={runtimeSnapshotState}
       />
       <main className="workspace-grid">
-        <aside
-          className={`left-rail ${providerRegistrationOpen ? "provider-mode" : ""} ${
-            shellVisibility.showLeftRail ? "" : "shell-surface-hidden"
-          }`}
-          aria-label="오케스트레이터 네비게이션"
-        >
+        {shellVisibility.showLeftRail ? (
+          <aside
+            className={`left-rail ${providerRegistrationOpen ? "provider-mode" : ""}`}
+            aria-label="오케스트레이터 네비게이션"
+          >
 
           <nav className="nav-stack">
             {navItems.map((item) => {
@@ -2649,7 +2648,8 @@ export function App() {
                 ))}
             </div>
           </section>
-        </aside>
+          </aside>
+        ) : null}
 
         <section
           className={`center-board ${mode === "tmux" ? "tmux-center-board" : ""} ${
@@ -2657,31 +2657,29 @@ export function App() {
           }`}
         >
           <div className="board-toolbar">
-            <div
-              className={`toolbar-actions ${
-                shellVisibility.showToolbarActions ? "" : "shell-surface-hidden"
-              }`}
-            >
-              <button
-                className={`ghost-button approval-toolbar-button ${
-                  permissionSnapshot.summary.pending > 0 ? "needs-attention" : ""
-                }`}
-                onClick={() => setApprovalDrawerOpen((open) => !open)}
-                title="Control Queue (⌘⇧A)"
-                type="button"
-              >
-                <ShieldCheck size={16} />
-                Queue {permissionSnapshot.summary.pending}
-              </button>
-              <button className="ghost-button" onClick={handleRememberCurrentContext} type="button">
-                <Database size={16} />
-                Memory
-              </button>
-              <button className="primary-button" onClick={handleCreateCodingPacket} type="button">
-                <Send size={16} />
-                Coding Packet
-              </button>
-            </div>
+            {shellVisibility.showToolbarActions ? (
+              <div className="toolbar-actions">
+                <button
+                  className={`ghost-button approval-toolbar-button ${
+                    permissionSnapshot.summary.pending > 0 ? "needs-attention" : ""
+                  }`}
+                  onClick={() => setApprovalDrawerOpen((open) => !open)}
+                  title="Control Queue (⌘⇧A)"
+                  type="button"
+                >
+                  <ShieldCheck size={16} />
+                  Queue {permissionSnapshot.summary.pending}
+                </button>
+                <button className="ghost-button" onClick={handleRememberCurrentContext} type="button">
+                  <Database size={16} />
+                  Memory
+                </button>
+                <button className="primary-button" onClick={handleCreateCodingPacket} type="button">
+                  <Send size={16} />
+                  Coding Packet
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {configLibraryActive ? (
