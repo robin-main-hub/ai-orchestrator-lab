@@ -1842,7 +1842,19 @@ export function parseServerTmuxDispatchRequest(value: unknown, now = new Date().
   };
 }
 
-export function evaluateServerTmuxDispatchPermission(request: ServerTmuxDispatchRequest): ServerPermissionGateResult {
+export function evaluateServerTmuxDispatchPermission(
+  request: ServerTmuxDispatchRequest,
+  storageStateOrNow?: ServerEventStorageState | string,
+  now = new Date().toISOString(),
+): ServerPermissionGateResult {
+  let storageState: ServerEventStorageState | undefined;
+  let actualNow = now;
+  if (typeof storageStateOrNow === "string") {
+    actualNow = storageStateOrNow;
+  } else if (storageStateOrNow && typeof storageStateOrNow === "object") {
+    storageState = storageStateOrNow;
+  }
+
   const requestedLevels = detectTmuxDispatchPermissions(request);
   const rawSecretPatternFound = containsSecretLikeText(request.commandPreview);
 
@@ -1867,13 +1879,34 @@ export function evaluateServerTmuxDispatchPermission(request: ServerTmuxDispatch
   }
 
   if (request.approvalState === "approved") {
-    return {
-      action: "terminal_run",
-      approvalState: "approved",
-      decision: "allow",
-      requestedLevels,
-      reason: "tmux dispatch was explicitly approved",
-    };
+    let isApproved = false;
+    if (storageState) {
+      const approvalsList = listApprovalsFromServerStorage(storageState, actualNow);
+      const matchedApproval = approvalsList.approvals.find(
+        (a) => a.id === createApprovalId(request.id) || a.sourceItemId === request.id
+      );
+      if (matchedApproval && matchedApproval.state === "approved") {
+        isApproved = true;
+      }
+    }
+
+    if (isApproved) {
+      return {
+        action: "terminal_run",
+        approvalState: "approved",
+        decision: "allow",
+        requestedLevels,
+        reason: "tmux dispatch was explicitly approved",
+      };
+    } else {
+      return {
+        action: "terminal_run",
+        approvalState: "rejected",
+        decision: "deny",
+        requestedLevels,
+        reason: "tmux dispatch approval bypass attempt detected: approval state 'approved' not found in event store",
+      };
+    }
   }
 
   if (request.approvalState === "rejected" || request.approvalState === "expired") {
@@ -1897,9 +1930,17 @@ export function evaluateServerTmuxDispatchPermission(request: ServerTmuxDispatch
 
 export function createServerTmuxDispatchSnapshot(
   request: ServerTmuxDispatchRequest,
+  storageStateOrNow?: ServerEventStorageState | string,
   now = new Date().toISOString(),
 ): ServerTmuxDispatchSnapshot {
-  const permission = evaluateServerTmuxDispatchPermission(request);
+  let storageState: ServerEventStorageState | undefined;
+  let actualNow = now;
+  if (typeof storageStateOrNow === "string") {
+    actualNow = storageStateOrNow;
+  } else if (storageStateOrNow && typeof storageStateOrNow === "object") {
+    storageState = storageStateOrNow;
+  }
+  const permission = evaluateServerTmuxDispatchPermission(request, storageState, actualNow);
   const redactedCommandPreview = redactForServerPhase(request.commandPreview, "pre_store").value;
   const dispatchState = createTmuxIntentDispatchState(request, permission);
   const intent = terminalCommandIntentSchema.parse({
@@ -1917,19 +1958,19 @@ export function createServerTmuxDispatchSnapshot(
     createdAt: request.createdAt,
   }) as TerminalCommandIntent;
   const approval =
-    permission.decision === "approval_required" ? createTmuxDispatchApprovalRequest(request, permission, now) : undefined;
+    permission.decision === "approval_required" ? createTmuxDispatchApprovalRequest(request, permission, actualNow) : undefined;
   const events: EventEnvelope[] = [
     createTmuxCommandIntentEvent(intent, request.role, request.host, request.tmuxSessionName),
   ];
 
   if (permission.decision === "deny") {
-    events.push(createTmuxCommandBlockedEvent(intent, permission.reason, request.role, request.host, now));
+    events.push(createTmuxCommandBlockedEvent(intent, permission.reason, request.role, request.host, actualNow));
   }
 
   if (approval) {
     events.push(createApprovalRequestedEvent(approval));
   }
-  const timelineBlocks = createTmuxDispatchTimelineBlocks(request, intent, permission, approval, events, now);
+  const timelineBlocks = createTmuxDispatchTimelineBlocks(request, intent, permission, approval, events, actualNow);
 
   return {
     intent,
@@ -1942,9 +1983,10 @@ export function createServerTmuxDispatchSnapshot(
 
 export function createServerTmuxPreflightResponse(
   request: ServerTmuxDispatchRequest,
+  storageStateOrNow?: ServerEventStorageState | string,
   now = new Date().toISOString(),
 ): ServerTmuxPreflightResponse {
-  const snapshot = createServerTmuxDispatchSnapshot(request, now);
+  const snapshot = createServerTmuxDispatchSnapshot(request, storageStateOrNow, now);
   const sendKeysEnabled = process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS === "1";
   const dryRunEnabled = process.env.ORCHESTRATOR_TMUX_DRY_RUN === "1";
   const wouldAttemptSendKeys =
@@ -2012,7 +2054,8 @@ export async function recordServerTmuxDispatchToPersistentServerStorage(
   storage: JsonlServerEventStorage,
   now = new Date().toISOString(),
 ): Promise<ServerTmuxDispatchResponse> {
-  const snapshot = createServerTmuxDispatchSnapshot(request, now);
+  const storageState = await storage.statePromise;
+  const snapshot = createServerTmuxDispatchSnapshot(request, storageState, now);
   const eventSync = await pushEventsToPersistentServerStorage(createTmuxDispatchEventSyncRequest(request, snapshot.events, now), storage, now);
   const dispatch = await dispatchServerTmuxCommandIfAllowed(request, snapshot.intent, snapshot.permission);
   let dispatchEventSync: EventSyncPushResponse | undefined;
@@ -5017,6 +5060,8 @@ export class NonceRegistry {
     for (const [nonce, expiry] of this.nonces.entries()) {
       if (now > expiry) {
         this.nonces.delete(nonce);
+      } else {
+        break; // FIFO eviction/cleanup optimization: stop at first non-expired nonce
       }
     }
   }
@@ -5096,10 +5141,18 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         const message = [request.method?.toUpperCase() || "", signedPath, bodyHash.toLowerCase(), String(timestampHeader), nonce].join("\n");
         const expectedHmac = crypto.createHmac("sha256", apiToken).update(message).digest("hex");
 
-        const expectedBuffer = Buffer.from(expectedHmac, "hex");
-        const userBuffer = Buffer.from(userSig, "hex");
+        let expectedBuffer: Buffer;
+        let userBuffer: Buffer;
 
-        const signaturesMatch = crypto.timingSafeEqual(expectedBuffer, userBuffer);
+        if (expectedHmac.length !== userSig.length) {
+          expectedBuffer = crypto.createHash("sha256").update(expectedHmac).digest();
+          userBuffer = crypto.createHash("sha256").update(userSig).digest();
+        } else {
+          expectedBuffer = Buffer.from(expectedHmac, "hex");
+          userBuffer = Buffer.from(userSig, "hex");
+        }
+
+        const signaturesMatch = crypto.timingSafeEqual(expectedBuffer, userBuffer) && expectedHmac.length === userSig.length;
 
         if (!signaturesMatch) {
           respondJson(401, { error: "unauthorized" });
@@ -5799,7 +5852,8 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         });
         return;
       }
-      respondJson(200, createServerTmuxPreflightResponse(payload));
+      const storageState = await eventStorage.statePromise;
+      respondJson(200, createServerTmuxPreflightResponse(payload, storageState));
       return;
     }
 
