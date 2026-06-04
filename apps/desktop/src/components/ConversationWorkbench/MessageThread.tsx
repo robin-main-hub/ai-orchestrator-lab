@@ -161,9 +161,8 @@ function MessageBubble({
 
   const senderAgent = agents.find(
     (a) =>
-      a.name === label ||
       a.id === message.metadata?.agentId ||
-      a.role === message.metadata?.agentRole ||
+      a.name === label ||
       (message.metadata?.agentName && a.name === String(message.metadata.agentName))
   );
   const initials = (senderAgent?.name ?? selectedAgent?.name ?? label).slice(0, 2).toUpperCase();
