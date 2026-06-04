@@ -9,14 +9,19 @@ export class RequestBodyTooLargeError extends Error {
   }
 }
 
-export async function readJsonBody(request: IncomingMessage): Promise<unknown> {
+const rawBodyByRequest = new WeakMap<IncomingMessage, Promise<string>>();
+
+export async function readRawBody(request: IncomingMessage): Promise<string> {
+  const existing = rawBodyByRequest.get(request);
+  if (existing) return existing;
+
   const contentLength = Number(request.headers["content-length"] ?? 0);
   if (Number.isFinite(contentLength) && contentLength > MAX_JSON_BODY_BYTES) {
     request.resume();
     throw new RequestBodyTooLargeError(MAX_JSON_BODY_BYTES);
   }
 
-  return new Promise<unknown>((resolve, reject) => {
+  const bodyPromise = new Promise<string>((resolve, reject) => {
     const chunks: Buffer[] = [];
     let total = 0;
     let settled = false;
@@ -45,12 +50,7 @@ export async function readJsonBody(request: IncomingMessage): Promise<unknown> {
 
     const onEnd = () => {
       settle(() => {
-        try {
-          const rawBody = Buffer.concat(chunks).toString("utf8");
-          resolve(rawBody ? JSON.parse(rawBody) : {});
-        } catch (error) {
-          reject(error);
-        }
+        resolve(Buffer.concat(chunks).toString("utf8"));
       });
     };
 
@@ -60,4 +60,12 @@ export async function readJsonBody(request: IncomingMessage): Promise<unknown> {
       settle(() => reject(error));
     });
   });
+
+  rawBodyByRequest.set(request, bodyPromise);
+  return bodyPromise;
+}
+
+export async function readJsonBody(request: IncomingMessage): Promise<unknown> {
+  const rawBody = await readRawBody(request);
+  return rawBody ? JSON.parse(rawBody) : {};
 }
