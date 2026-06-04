@@ -25,7 +25,7 @@ export const seededAgentProfiles: WorkbenchAgent[] = defaultAgentProfiles.map((a
     },
     {
       providerProfileId: "provider_apifun_claude",
-      modelId: "claude-opus-4-6",
+      modelId: "claude-opus-4-8",
       authBinding: {
         mode: "provider_profile",
         label: "APIKey.fun Claude A",
@@ -44,8 +44,13 @@ export const seededAgentProfiles: WorkbenchAgent[] = defaultAgentProfiles.map((a
     },
   ];
 
+  // R4: Bind agent_executor (Codex) explicitly to provider_apifun_claude (APIKey.fun Claude A) with claude-opus-4-8
+  const binding = agent.role === "executor" || agent.id === "agent_executor"
+    ? bindings[2]
+    : bindings[index % bindings.length];
+
   return {
     ...agent,
-    ...bindings[index % bindings.length],
+    ...binding,
   };
 });
