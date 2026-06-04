@@ -1566,10 +1566,11 @@ export function App() {
     const endpoint = `${baseUrl}/verify-packet`;
 
     try {
+      const body = JSON.stringify(codingPacketState);
       const response = await fetch(endpoint, {
         method: "POST",
-        headers: createDgxOrchestratorJsonHeaders(),
-        body: JSON.stringify(codingPacketState),
+        headers: await createDgxOrchestratorJsonHeaders("POST", "/verify-packet", endpoint, { body }),
+        body,
       });
 
       if (!response.ok) {
