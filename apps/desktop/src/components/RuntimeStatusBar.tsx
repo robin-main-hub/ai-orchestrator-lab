@@ -95,6 +95,7 @@ export function RuntimeStatusBar({
       {/* Center: Mode Switching tabs */}
       <div className="flex items-center gap-0.5 bg-muted/20 p-0.5 rounded-md border border-border/30 h-8 select-none">
         <Button
+          aria-label="Conversation mode"
           variant={mode === "conversation" ? "secondary" : "ghost"}
           size="sm"
           className={cn(
@@ -102,11 +103,13 @@ export function RuntimeStatusBar({
             mode === "conversation" ? "text-foreground bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
           )}
           onClick={() => onChangeMode("conversation")}
+          title="Conversation"
         >
           <MessageSquare className="h-3 w-3" />
           <span className="status-bar-mode-label">Conversation</span>
         </Button>
         <Button
+          aria-label="Debate mode"
           variant={mode === "debate" ? "secondary" : "ghost"}
           size="sm"
           className={cn(
@@ -114,11 +117,13 @@ export function RuntimeStatusBar({
             mode === "debate" ? "text-foreground bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
           )}
           onClick={() => onChangeMode("debate")}
+          title="Debate"
         >
           <GitBranch className="h-3 w-3" />
           <span className="status-bar-mode-label">Debate</span>
         </Button>
         <Button
+          aria-label="Tmux mode"
           variant={mode === "tmux" ? "secondary" : "ghost"}
           size="sm"
           className={cn(
@@ -126,6 +131,7 @@ export function RuntimeStatusBar({
             mode === "tmux" ? "text-foreground bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
           )}
           onClick={() => onChangeMode("tmux")}
+          title="Tmux"
         >
           <Terminal className="h-3 w-3" />
           <span className="status-bar-mode-label">Tmux</span>
@@ -136,10 +142,12 @@ export function RuntimeStatusBar({
       <div className="flex shrink-0 items-center gap-2">
         {/* Command Palette Trigger Button */}
         <Button
+          aria-label="Open command palette"
           variant="outline"
           size="sm"
           className="h-7 gap-2 px-2.5 text-[11px] border-border/60 bg-muted/10 text-muted-foreground hover:text-foreground transition-all"
           onClick={onCommandPalette}
+          title="Command palette"
         >
           <Search className="h-3 w-3" />
           <span className="status-bar-command-label">Command...</span>
