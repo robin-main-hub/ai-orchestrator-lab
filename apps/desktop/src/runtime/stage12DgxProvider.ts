@@ -222,7 +222,7 @@ async function requestDgxVllmCompletionViaProxy({
     endpoint,
     {
       method: "POST",
-      headers: createDgxOrchestratorJsonHeaders(),
+      headers: await createDgxOrchestratorJsonHeaders("POST", "/provider-completions", endpoint),
       body: JSON.stringify(createProviderCompletionProxyRequest(provider, modelId, messages, { approvalState, permissionDecision })),
     },
     proxyTimeoutMs,

@@ -92,7 +92,7 @@ export async function pushEventsToDgxEventStorage({
         endpoint,
         {
           method: "POST",
-          headers: createDgxOrchestratorJsonHeaders(),
+          headers: await createDgxOrchestratorJsonHeaders("POST", "/events/sync", endpoint),
           body: JSON.stringify(request),
         },
         timeoutMs,

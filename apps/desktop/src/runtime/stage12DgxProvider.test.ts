@@ -13,6 +13,13 @@ import {
 } from "./stage30DgxEndpoints";
 import type { ConversationMessage, ProviderProfile } from "@ai-orchestrator/protocol";
 
+function expectHttpHmacHeaders(headers: Record<string, string>) {
+  expect(headers.authorization).toBeUndefined();
+  expect(headers["x-dgx-signature"]).toMatch(/^[a-f0-9]{64}$/);
+  expect(headers["x-dgx-timestamp"]).toMatch(/^\d+$/);
+  expect(headers["x-dgx-nonce"]).toBeTruthy();
+}
+
 const provider: ProviderProfile = {
   id: "provider_dgx02_vllm",
   name: "DGX-02 vLLM",
@@ -82,7 +89,7 @@ describe("stage12 DGX provider completion", () => {
   it("uses the DGX server proxy before direct provider calls", async () => {
     const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
       expect(String(url)).toBe(`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`);
-      expect((init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
+      expectHttpHmacHeaders(init?.headers as Record<string, string>);
       expect(String(init?.body)).not.toContain("sk-");
       expect(String(init?.body)).not.toContain("http://dgx-02:8001");
       return new Response(

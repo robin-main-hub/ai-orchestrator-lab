@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { requestTmuxCapture, requestTmuxDispatch, requestTmuxPreflight } from "./stage33TmuxServer";
 
+function expectHttpHmacHeaders(headers: Record<string, string>) {
+  expect(headers.authorization).toBeUndefined();
+  expect(headers["x-dgx-signature"]).toMatch(/^[a-f0-9]{64}$/);
+  expect(headers["x-dgx-timestamp"]).toMatch(/^\d+$/);
+  expect(headers["x-dgx-nonce"]).toBeTruthy();
+}
+
 describe("stage33 tmux server runtime", () => {
   it("posts tmux dispatch intents through the DGX server with auth headers", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
@@ -59,7 +66,7 @@ describe("stage33 tmux server runtime", () => {
     });
 
     expect(calls[0]?.url).toBe("http://dgx-02:4317/tmux/dispatch");
-    expect((calls[0]?.init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
+    expectHttpHmacHeaders(calls[0]?.init?.headers as Record<string, string>);
     expect(result.permission.decision).toBe("approval_required");
     expect(result.dispatch.status).toBe("pending_approval");
   });
@@ -75,7 +82,7 @@ describe("stage33 tmux server runtime", () => {
       },
       fetchImpl: async (url: RequestInfo | URL, init?: RequestInit) => {
         expect(String(url)).toBe("http://dgx-02:4317/tmux/capture");
-        expect((init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
+        expectHttpHmacHeaders(init?.headers as Record<string, string>);
         return jsonResponse({
           status: "disabled",
           reason: "ORCHESTRATOR_ENABLE_TMUX_CAPTURE is not enabled on this server",
@@ -99,7 +106,7 @@ describe("stage33 tmux server runtime", () => {
       },
       fetchImpl: async (url: RequestInfo | URL, init?: RequestInit) => {
         expect(String(url)).toBe("http://dgx-02:4317/tmux/preflight");
-        expect((init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
+        expectHttpHmacHeaders(init?.headers as Record<string, string>);
         return jsonResponse({
           intent: {
             id: "tmux_preflight_desktop_test",

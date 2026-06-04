@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { fetchDgxSessionIndex } from "./stage20SessionIndex";
 
+function expectHttpHmacHeaders(headers: Record<string, string>) {
+  expect(headers.authorization).toBeUndefined();
+  expect(headers["x-dgx-signature"]).toMatch(/^[a-f0-9]{64}$/);
+  expect(headers["x-dgx-timestamp"]).toMatch(/^\d+$/);
+  expect(headers["x-dgx-nonce"]).toBeTruthy();
+}
+
 describe("stage20 session index", () => {
   it("loads DGX-02 Event Storage sessions", async () => {
     const result = await fetchDgxSessionIndex({
@@ -8,7 +15,7 @@ describe("stage20 session index", () => {
       fetchImpl: async (url, init) => {
         expect(url).toBe("http://dgx-02:4317/sessions");
         expect(init?.method).toBe("GET");
-        expect((init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
+        expectHttpHmacHeaders(init?.headers as Record<string, string>);
         return {
           ok: true,
           status: 200,
