@@ -68,6 +68,14 @@ export type VerifyPacketRouteDependencies = {
   execFileAsync?: ExecFileAsync;
 };
 
+function isPacketVerificationAllowed(): boolean {
+  const rawEnv = process.env.NODE_ENV;
+  const nodeEnv = (rawEnv || "production").toLowerCase().trim();
+  const safeEnvironments = ["development", "dev", "test", "local"];
+  const blockedEnvironments = ["production", "prod", "staging"];
+  return safeEnvironments.includes(nodeEnv) && !blockedEnvironments.includes(nodeEnv);
+}
+
 export async function handleVerifyPacketRoute({
   request,
   pathname,
@@ -78,7 +86,7 @@ export async function handleVerifyPacketRoute({
   execFileAsync = defaultExecFileAsync,
 }: VerifyPacketRouteDependencies): Promise<boolean> {
   if (pathname === "/verify-packet" && method === "POST") {
-    if (process.env.NODE_ENV === "production" && process.env.ORCHESTRATOR_ALLOW_VERIFY_PACKET_IN_PRODUCTION !== "true") {
+    if (!isPacketVerificationAllowed()) {
       respondJson(403, {
         error: "production_execution_blocked",
         message: "Coding packet verification command execution is disabled in production.",
