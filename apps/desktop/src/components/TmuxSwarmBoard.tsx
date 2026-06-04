@@ -228,6 +228,8 @@ export function TmuxSwarmBoard({
     <section
       aria-label="Role-Based Tmux Agent Swarm"
       className="flex h-full flex-col bg-background"
+      data-focus-id="tmux-swarm-board-container"
+      tabIndex={-1}
     >
       {/* ── Top header (v0 h-10) ───────────────────────────────── */}
       <header className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-card/30 px-4">
