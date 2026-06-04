@@ -86,8 +86,9 @@ async function probeRoute(fetchImpl: typeof fetch, endpoint: string, method: "GE
   }, timeoutMs);
 
   try {
+    const parsedPath = new URL(endpoint, "http://localhost").pathname;
     const response = await fetchImpl(endpoint, {
-      headers: createDgxOrchestratorJsonHeaders(),
+      headers: await createDgxOrchestratorJsonHeaders(method, parsedPath, endpoint),
       method,
       signal: controller.signal,
     });

@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
+import { createHmac } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -67,6 +68,30 @@ function expectValidTerminalCommandEvents(events: Array<{ type: string; payload:
     const type = terminalCommandEventTypeSchema.parse(event.type);
     expect(() => parseTerminalCommandEventPayload(type, event.payload)).not.toThrow();
   }
+}
+
+function createDgxRequestSignatureHeaders({
+  method,
+  path,
+  token,
+  timestamp = Date.now().toString(),
+  nonce = "test-nonce",
+}: {
+  method: string;
+  path: string;
+  token: string;
+  timestamp?: string;
+  nonce?: string;
+}) {
+  const signature = createHmac("sha256", token)
+    .update([method.toUpperCase(), path, timestamp, nonce].join("\n"))
+    .digest("hex");
+
+  return {
+    "x-dgx-timestamp": timestamp,
+    "x-dgx-nonce": nonce,
+    "x-dgx-signature": signature,
+  };
 }
 
 describe("server health placeholder", () => {
@@ -1620,6 +1645,95 @@ describe("memory sync endpoint", () => {
         process.env.ORCHESTRATOR_API_TOKEN = previousToken;
       }
     }
+  });
+});
+
+describe("DGX orchestrator request authentication", () => {
+  async function withRuntimeServer<T>(callback: (baseUrl: string, token: string) => Promise<T>): Promise<T> {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const token = "test-orchestrator-token";
+    process.env.ORCHESTRATOR_API_TOKEN = token;
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (typeof address !== "object" || address === null) throw new Error("server did not bind");
+
+      return await callback(`http://127.0.0.1:${address.port}`, token);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+    }
+  }
+
+  it("accepts valid HMAC headers for runtime requests", async () => {
+    await withRuntimeServer(async (baseUrl, token) => {
+      const response = await fetch(`${baseUrl}/runtime`, {
+        headers: createDgxRequestSignatureHeaders({
+          method: "GET",
+          path: "/runtime",
+          token,
+          timestamp: Date.now().toString(),
+          nonce: "runtime-valid",
+        }),
+      });
+
+      expect(response.status).toBe(200);
+    });
+  });
+
+  it("rejects HMAC headers outside the timestamp drift window", async () => {
+    await withRuntimeServer(async (baseUrl, token) => {
+      const staleTimestamp = (Date.now() - 6 * 60_000).toString();
+      const response = await fetch(`${baseUrl}/runtime`, {
+        headers: createDgxRequestSignatureHeaders({
+          method: "GET",
+          path: "/runtime",
+          token,
+          timestamp: staleTimestamp,
+          nonce: "runtime-stale",
+        }),
+      });
+      const body = await response.json() as { error: string };
+
+      expect(response.status).toBe(401);
+      expect(body.error).toBe("clock_drift_exceeded");
+    });
+  });
+
+  it("rejects tampered HMAC signatures", async () => {
+    await withRuntimeServer(async (baseUrl, token) => {
+      const response = await fetch(`${baseUrl}/runtime`, {
+        headers: createDgxRequestSignatureHeaders({
+          method: "GET",
+          path: "/heartbeat",
+          token,
+          timestamp: Date.now().toString(),
+          nonce: "runtime-tampered",
+        }),
+      });
+
+      expect(response.status).toBe(401);
+    });
+  });
+
+  it("continues to accept bearer auth for runtime requests", async () => {
+    await withRuntimeServer(async (baseUrl, token) => {
+      const response = await fetch(`${baseUrl}/runtime`, {
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.status).toBe(200);
+    });
   });
 });
 
@@ -3347,6 +3461,130 @@ describe("HTTP request limits", () => {
           delete process.env[key];
         }
         Object.assign(process.env, previousEnv);
+      }
+    });
+  });
+
+  describe("HMAC-SHA256 Request Signing Authentication", () => {
+    it("authorizes request with valid signature headers and rejects drift/replay/invalid signatures", async () => {
+      const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+      const previousNodeEnv = process.env.NODE_ENV;
+      const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+      const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-hmac-auth-"));
+      const apiToken = "test-hmac-orchestrator-token";
+      process.env.ORCHESTRATOR_API_TOKEN = apiToken;
+      process.env.NODE_ENV = "production";
+      process.env.EVENT_STORAGE_DIR = tempDir;
+
+      const server = startServer(0);
+
+      try {
+        await new Promise<void>((resolve) => {
+          server.once("listening", resolve);
+        });
+        const address = server.address();
+        if (!address || typeof address !== "object") {
+          throw new Error("test server did not bind to a TCP port");
+        }
+
+        const port = address.port;
+        const path = "/runtime";
+        const method = "GET";
+
+        const signRequest = (timestamp: string, nonce: string, token: string) => {
+          const message = [method, path, timestamp, nonce].join("\n");
+          return createHmac("sha256", token).update(message).digest("hex");
+        };
+
+        // 1. Test Valid HMAC Signature
+        const validTimestamp = Date.now().toString();
+        const validNonce = "valid-nonce-123";
+        const validSignature = signRequest(validTimestamp, validNonce, apiToken);
+
+        const resValid = await fetch(`http://127.0.0.1:${port}${path}`, {
+          headers: {
+            "x-dgx-signature": validSignature,
+            "x-dgx-timestamp": validTimestamp,
+            "x-dgx-nonce": validNonce,
+          },
+          method,
+        });
+        expect(resValid.status).toBe(200);
+
+        // 2. Test Clock Drift Rejected (> 5 minutes)
+        const oldTimestamp = (Date.now() - 360_000).toString();
+        const oldNonce = "old-nonce-456";
+        const oldSignature = signRequest(oldTimestamp, oldNonce, apiToken);
+
+        const resDrift = await fetch(`http://127.0.0.1:${port}${path}`, {
+          headers: {
+            "x-dgx-signature": oldSignature,
+            "x-dgx-timestamp": oldTimestamp,
+            "x-dgx-nonce": oldNonce,
+          },
+          method,
+        });
+        expect(resDrift.status).toBe(401);
+        const driftBody = await resDrift.json() as { error?: string };
+        expect(driftBody.error).toBe("clock_drift_exceeded");
+
+        // 3. Test Replay Attack Rejected
+        const replayRes = await fetch(`http://127.0.0.1:${port}${path}`, {
+          headers: {
+            "x-dgx-signature": validSignature,
+            "x-dgx-timestamp": validTimestamp,
+            "x-dgx-nonce": validNonce,
+          },
+          method,
+        });
+        expect(replayRes.status).toBe(401);
+        const replayBody = await replayRes.json() as { error?: string };
+        expect(replayBody.error).toBe("replay_detected");
+
+        // 4. Test Invalid Signature Rejected
+        const badSignature = signRequest(validTimestamp, "different-nonce", apiToken);
+        const resBadSig = await fetch(`http://127.0.0.1:${port}${path}`, {
+          headers: {
+            "x-dgx-signature": badSignature,
+            "x-dgx-timestamp": validTimestamp,
+            "x-dgx-nonce": "different-nonce-mismatch-header",
+          },
+          method,
+        });
+        expect(resBadSig.status).toBe(401);
+
+        // 5. Test Legacy Bearer Token Still Works
+        const resLegacy = await fetch(`http://127.0.0.1:${port}${path}`, {
+          headers: {
+            authorization: `Bearer ${apiToken}`,
+          },
+          method,
+        });
+        expect(resLegacy.status).toBe(200);
+
+      } finally {
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => {
+            if (error) reject(error);
+            else resolve();
+          });
+        });
+        if (previousToken === undefined) {
+          delete process.env.ORCHESTRATOR_API_TOKEN;
+        } else {
+          process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+        }
+        if (previousNodeEnv === undefined) {
+          delete process.env.NODE_ENV;
+        } else {
+          process.env.NODE_ENV = previousNodeEnv;
+        }
+        if (previousEventStorageDir === undefined) {
+          delete process.env.EVENT_STORAGE_DIR;
+        } else {
+          process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+        }
+        await rm(tempDir, { force: true, recursive: true });
       }
     });
   });

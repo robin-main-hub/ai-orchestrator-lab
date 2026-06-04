@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import * as crypto from "node:crypto";
 import type {
   AgentDelegationAuthorityLevel,
   AgentDelegationEventPayload,
@@ -4984,6 +4985,35 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     requireAllowDecision: true,
   });
 
+  class NonceRegistry {
+    private nonces = new Map<string, number>();
+
+    has(nonce: string): boolean {
+      const expiry = this.nonces.get(nonce);
+      if (!expiry) return false;
+      if (Date.now() > expiry) {
+        this.nonces.delete(nonce);
+        return false;
+      }
+      return true;
+    }
+
+    add(nonce: string, ttlMs: number) {
+      this.nonces.set(nonce, Date.now() + ttlMs);
+
+      if (this.nonces.size > 1000) {
+        const now = Date.now();
+        for (const [n, exp] of this.nonces.entries()) {
+          if (now > exp) {
+            this.nonces.delete(n);
+          }
+        }
+      }
+    }
+  }
+
+  const nonceRegistry = new NonceRegistry();
+
   const apiToken = resolveOrchestratorApiToken();
   const expectedAuthorization = `Bearer ${apiToken}`;
 
@@ -5003,6 +5033,46 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
 
     const requireAuth = (): boolean => {
       if (request.headers.authorization === expectedAuthorization) return true;
+
+      const signatureHeader = request.headers["x-dgx-signature"];
+      const timestampHeader = request.headers["x-dgx-timestamp"];
+      const nonceHeader = request.headers["x-dgx-nonce"];
+
+      if (signatureHeader && timestampHeader && nonceHeader) {
+        const timestamp = Number(timestampHeader);
+        const driftWindowMs = Number(process.env.DGX_ORCHESTRATOR_DRIFT_WINDOW_MS) || 300_000;
+        const now = Date.now();
+
+        if (isNaN(timestamp) || Math.abs(now - timestamp) > driftWindowMs) {
+          respondJson(401, { error: "clock_drift_exceeded" });
+          return false;
+        }
+
+        const userSig = typeof signatureHeader === "string" ? signatureHeader : "";
+        const nonce = typeof nonceHeader === "string" ? nonceHeader : "";
+
+        const message = [request.method?.toUpperCase() || "", pathname, String(timestampHeader), nonce].join("\n");
+        const expectedHmac = crypto.createHmac("sha256", apiToken).update(message).digest("hex");
+
+        const expectedBuffer = Buffer.from(expectedHmac, "hex");
+        const userBuffer = Buffer.from(userSig.length === 64 ? userSig : "0".repeat(64), "hex");
+
+        const signaturesMatch = crypto.timingSafeEqual(expectedBuffer, userBuffer) && userSig.length === 64;
+
+        if (!signaturesMatch) {
+          respondJson(401, { error: "unauthorized" });
+          return false;
+        }
+
+        if (nonceRegistry.has(nonce)) {
+          respondJson(401, { error: "replay_detected" });
+          return false;
+        }
+
+        nonceRegistry.add(nonce, driftWindowMs * 2);
+        return true;
+      }
+
       respondJson(401, { error: "unauthorized" });
       return false;
     };

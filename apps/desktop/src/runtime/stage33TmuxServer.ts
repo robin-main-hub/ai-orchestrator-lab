@@ -171,7 +171,7 @@ async function postTmuxServerJson<TResponse>({
     try {
       const response = await fetchImpl(endpoint, {
         body: JSON.stringify(request),
-        headers: createDgxOrchestratorJsonHeaders(),
+        headers: await createDgxOrchestratorJsonHeaders("POST", path, endpoint),
         method: "POST",
         signal: controller.signal,
       });

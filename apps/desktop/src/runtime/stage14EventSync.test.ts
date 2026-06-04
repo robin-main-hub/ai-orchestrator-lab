@@ -7,6 +7,13 @@ import {
   reduceEventSyncState,
 } from "./stage14EventSync";
 
+function expectHttpHmacHeaders(headers: Record<string, string>) {
+  expect(headers.authorization).toBeUndefined();
+  expect(headers["x-dgx-signature"]).toMatch(/^[a-f0-9]{64}$/);
+  expect(headers["x-dgx-timestamp"]).toMatch(/^\d+$/);
+  expect(headers["x-dgx-nonce"]).toBeTruthy();
+}
+
 const event: EventEnvelope = {
   id: "event_sync_1",
   sessionId: "session_1",
@@ -39,7 +46,7 @@ describe("stage14 Event Storage sync", () => {
       fetchImpl: async (url, init) => {
         expect(url).toBe("http://dgx-02:4317/events/sync");
         expect(init?.method).toBe("POST");
-        expect((init?.headers as Record<string, string>).authorization).toMatch(/^Bearer \S+/);
+        expectHttpHmacHeaders(init?.headers as Record<string, string>);
         expect(String(init?.body)).not.toContain("sk-secret");
         return {
           ok: true,

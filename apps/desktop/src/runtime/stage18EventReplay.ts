@@ -1,5 +1,6 @@
 import type { ConversationMessage, EventEnvelope, EventSyncPullResponse } from "@ai-orchestrator/protocol";
 import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
+import { createDgxOrchestratorAuthHeaders } from "./stage31DgxAuth";
 
 export type Stage18EventReplayStatus = "restored" | "empty" | "failed";
 
@@ -167,6 +168,7 @@ async function fetchWithTimeout(fetchImpl: typeof fetch, input: string, timeoutM
   try {
     return await fetchImpl(input, {
       method: "GET",
+      headers: await createDgxOrchestratorAuthHeaders("GET", "/events", input),
       signal: controller.signal,
     });
   } finally {
