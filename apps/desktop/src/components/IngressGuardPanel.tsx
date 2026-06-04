@@ -51,7 +51,18 @@ export function IngressGuardPanel({
         {visibleSteps.map((step) => (
           <article className={step.status} key={step.name}>
             <strong>{guardStepLabel(step.name)}</strong>
-            <em>{step.status}</em>
+            <StatusBadge
+              size="sm"
+              variant={
+                step.status === "passed"
+                  ? "success"
+                  : step.status === "blocked"
+                    ? "danger"
+                    : "warning"
+              }
+            >
+              {step.status}
+            </StatusBadge>
             <span>{step.reason}</span>
           </article>
         ))}
@@ -63,7 +74,18 @@ export function IngressGuardPanel({
         ) : (
           snapshot.approvals.map((approval) => (
             <article key={approval.id}>
-              <strong>{approval.state}</strong>
+              <StatusBadge
+                size="sm"
+                variant={
+                  approval.state === "approved"
+                    ? "success"
+                    : approval.state === "rejected"
+                      ? "danger"
+                      : "warning"
+                }
+              >
+                {approval.state}
+              </StatusBadge>
               <em>{approval.permissions.join(", ")}</em>
             </article>
           ))
