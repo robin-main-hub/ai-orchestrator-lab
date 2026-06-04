@@ -54,10 +54,10 @@ export function RuntimeStatusBar({
           </div>
         </div>
 
-        <Separator />
+        <span className="status-bar-meta-separator"><Separator /></span>
 
         {/* Compact Meta Status Strip */}
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+        <div className="status-bar-meta-strip flex items-center gap-3 text-[10px] text-muted-foreground">
           <span className="flex items-center gap-1">
             <span>Active:</span>
             <span className="font-semibold text-foreground" title={providerName}>{displayProviderName}</span>
@@ -104,7 +104,7 @@ export function RuntimeStatusBar({
           onClick={() => onChangeMode("conversation")}
         >
           <MessageSquare className="h-3 w-3" />
-          Conversation
+          <span className="status-bar-mode-label">Conversation</span>
         </Button>
         <Button
           variant={mode === "debate" ? "secondary" : "ghost"}
@@ -116,7 +116,7 @@ export function RuntimeStatusBar({
           onClick={() => onChangeMode("debate")}
         >
           <GitBranch className="h-3 w-3" />
-          Debate
+          <span className="status-bar-mode-label">Debate</span>
         </Button>
         <Button
           variant={mode === "tmux" ? "secondary" : "ghost"}
@@ -128,7 +128,7 @@ export function RuntimeStatusBar({
           onClick={() => onChangeMode("tmux")}
         >
           <Terminal className="h-3 w-3" />
-          Tmux
+          <span className="status-bar-mode-label">Tmux</span>
         </Button>
       </div>
 
@@ -142,8 +142,8 @@ export function RuntimeStatusBar({
           onClick={onCommandPalette}
         >
           <Search className="h-3 w-3" />
-          <span>Command...</span>
-          <kbd className="pointer-events-none select-none rounded bg-muted/60 px-1 font-mono text-[9px] font-medium border border-border/40">
+          <span className="status-bar-command-label">Command...</span>
+          <kbd className="status-bar-command-kbd pointer-events-none select-none rounded bg-muted/60 px-1 font-mono text-[9px] font-medium border border-border/40">
             ⌘K
           </kbd>
         </Button>
@@ -158,7 +158,7 @@ export function RuntimeStatusBar({
           providerName={providerName}
         />
         <Button
-          className="h-7 gap-1.5 text-xs"
+          className="status-bar-probe-btn h-7 gap-1.5 text-xs"
           onClick={onProbeDgx}
           size="sm"
           variant="ghost"
