@@ -443,6 +443,20 @@ export type ServerTmuxPreflightResponse = {
   };
 };
 
+const tmuxDispatchApprovalReplayFields: Array<keyof ServerTmuxDispatchRequest> = [
+  "id",
+  "sessionId",
+  "terminalSessionId",
+  "role",
+  "host",
+  "paneId",
+  "requestedBy",
+  "commandPreview",
+  "dispatchMode",
+  "tmuxSessionName",
+  "createdAt",
+];
+
 export type ServerTmuxCaptureRequest = {
   id: string;
   sessionId: string;
@@ -1842,6 +1856,26 @@ export function parseServerTmuxDispatchRequest(value: unknown, now = new Date().
   };
 }
 
+function tmuxDispatchApprovalReplayMatchesRequest(
+  approval: ApprovalRequest,
+  request: ServerTmuxDispatchRequest,
+): boolean {
+  const replay = approval.replay;
+  if (!replay || replay.kind !== "tmux_dispatch" || replay.endpoint !== "/tmux/dispatch" || replay.method !== "POST") {
+    return false;
+  }
+  if (!replay.payload || typeof replay.payload !== "object" || Array.isArray(replay.payload)) {
+    return false;
+  }
+
+  const payload = replay.payload as Partial<Record<keyof ServerTmuxDispatchRequest, unknown>>;
+  if (payload.approvalState !== "approved") {
+    return false;
+  }
+
+  return tmuxDispatchApprovalReplayFields.every((field) => payload[field] === request[field]);
+}
+
 export function evaluateServerTmuxDispatchPermission(
   request: ServerTmuxDispatchRequest,
   storageStateOrNow?: ServerEventStorageState | string,
@@ -1880,13 +1914,18 @@ export function evaluateServerTmuxDispatchPermission(
 
   if (request.approvalState === "approved") {
     let isApproved = false;
+    let replayPayloadMismatch = false;
     if (storageState) {
       const approvalsList = listApprovalsFromServerStorage(storageState, actualNow);
       const matchedApproval = approvalsList.approvals.find(
         (a) => a.id === createApprovalId(request.id) || a.sourceItemId === request.id
       );
       if (matchedApproval && matchedApproval.state === "approved") {
-        isApproved = true;
+        if (tmuxDispatchApprovalReplayMatchesRequest(matchedApproval, request)) {
+          isApproved = true;
+        } else {
+          replayPayloadMismatch = true;
+        }
       }
     }
 
@@ -1904,7 +1943,9 @@ export function evaluateServerTmuxDispatchPermission(
         approvalState: "rejected",
         decision: "deny",
         requestedLevels,
-        reason: "tmux dispatch approval bypass attempt detected: approval state 'approved' not found in event store",
+        reason: replayPayloadMismatch
+          ? "tmux dispatch approval bypass attempt detected: approval replay payload mismatch"
+          : "tmux dispatch approval bypass attempt detected: approval state 'approved' not found in event store",
       };
     }
   }
@@ -4948,6 +4989,14 @@ export function pushEventsToServerStorage(
   };
 }
 
+function isServerOwnedApprovalEventType(eventType: string): boolean {
+  return eventType === "approval.requested" || eventType === "approval.granted" || eventType === "approval.rejected";
+}
+
+function containsServerOwnedApprovalEvents(request: EventSyncPushRequest): boolean {
+  return request.events.some((event) => isServerOwnedApprovalEventType(event.type));
+}
+
 export function pullEventsFromServerStorage(
   sessionId: string,
   state = defaultEventStorageState,
@@ -5060,8 +5109,6 @@ export class NonceRegistry {
     for (const [nonce, expiry] of this.nonces.entries()) {
       if (now > expiry) {
         this.nonces.delete(nonce);
-      } else {
-        break; // FIFO eviction/cleanup optimization: stop at first non-expired nonce
       }
     }
   }
@@ -5123,7 +5170,7 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         const bodyHash = typeof bodyHashHeader === "string" ? bodyHashHeader : "";
         const hexSha256Pattern = /^[0-9a-fA-F]{64}$/;
 
-        if (!hexSha256Pattern.test(userSig) || !hexSha256Pattern.test(bodyHash) || !nonce) {
+        if (!hexSha256Pattern.test(bodyHash) || !nonce) {
           respondJson(401, { error: "unauthorized" });
           return false;
         }
@@ -5141,18 +5188,9 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         const message = [request.method?.toUpperCase() || "", signedPath, bodyHash.toLowerCase(), String(timestampHeader), nonce].join("\n");
         const expectedHmac = crypto.createHmac("sha256", apiToken).update(message).digest("hex");
 
-        let expectedBuffer: Buffer;
-        let userBuffer: Buffer;
-
-        if (expectedHmac.length !== userSig.length) {
-          expectedBuffer = crypto.createHash("sha256").update(expectedHmac).digest();
-          userBuffer = crypto.createHash("sha256").update(userSig).digest();
-        } else {
-          expectedBuffer = Buffer.from(expectedHmac, "hex");
-          userBuffer = Buffer.from(userSig, "hex");
-        }
-
-        const signaturesMatch = crypto.timingSafeEqual(expectedBuffer, userBuffer) && expectedHmac.length === userSig.length;
+        const expectedBuffer = crypto.createHash("sha256").update(expectedHmac).digest();
+        const userBuffer = crypto.createHash("sha256").update(userSig).digest();
+        const signaturesMatch = crypto.timingSafeEqual(expectedBuffer, userBuffer) && hexSha256Pattern.test(userSig);
 
         if (!signaturesMatch) {
           respondJson(401, { error: "unauthorized" });
@@ -5160,6 +5198,7 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         }
 
         if (nonceRegistry.has(nonce)) {
+          response.setHeader("connection", "close");
           respondJson(401, { error: "replay_detected" });
           return false;
         }
@@ -5189,6 +5228,7 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         }
 
         if (nonceRegistry.has(nonce)) {
+          response.setHeader("connection", "close");
           respondJson(401, { error: "replay_detected" });
           return false;
         }
@@ -5890,6 +5930,14 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         respondJson(400, {
           error: "invalid_event_sync_payload",
           message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+
+      if (containsServerOwnedApprovalEvents(payload)) {
+        respondJson(403, {
+          error: "server_owned_event_type",
+          message: "Approval events must be created through server approval routes.",
         });
         return;
       }
