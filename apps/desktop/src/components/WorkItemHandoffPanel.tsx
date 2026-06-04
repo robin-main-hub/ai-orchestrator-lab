@@ -7,14 +7,6 @@ function workLaneLabel(lane: WorkItem["lane"]) {
     ask: "질문",
     approve: "승인",
     blocked: "차단",
-    inbox: "수신",
-    conversation: "대화",
-    debate: "토론",
-    coding: "코딩",
-    review: "리뷰",
-    execution: "실행",
-    memory: "기억",
-    backup: "백업",
   };
 
   return labels[lane] ?? lane;
@@ -29,7 +21,7 @@ function getInboxLane(item: WorkItem): "auto" | "check" | "ask" | "approve" | "b
     return "ask";
   }
 
-  if (item.status === "waiting_approval" || item.kind === "approval" || item.lane === "approve") {
+  if (item.status === "waiting_approval" || item.lane === "approve") {
     return "approve";
   }
 
