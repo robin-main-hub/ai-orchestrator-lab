@@ -1859,6 +1859,52 @@ describe("DGX orchestrator request authentication", () => {
     registry.dispose();
   });
 
+  it("NonceRegistry rejects replay and evicts nonces safely with FIFO optimization", () => {
+    let now = 1_700_000_000_000;
+    const registry = new NonceRegistry({
+      maxNonces: 3,
+      now: () => now,
+      cleanupIntervalMs: false,
+    });
+
+    registry.add("nonce-1", 10_000);
+    registry.add("nonce-2", 30_000);
+    registry.add("nonce-3", 40_000);
+
+    expect(registry.has("nonce-1")).toBe(true);
+
+    // Advance time so only nonce-1 is expired
+    now += 15_000;
+    // Map is:
+    // nonce-1: expired
+    // nonce-2: active
+    // nonce-3: active
+    // Adding a new nonce triggers cleanup, which will delete nonce-1 and stop at nonce-2.
+    registry.add("nonce-4", 10_000);
+
+    expect(registry.has("nonce-1")).toBe(false);
+    expect(registry.has("nonce-2")).toBe(true);
+    expect(registry.has("nonce-3")).toBe(true);
+    expect(registry.has("nonce-4")).toBe(true);
+
+    registry.dispose();
+  });
+
+  it("HMAC timing-safe hash comparison correctly handles different lengths without crashes", async () => {
+    await withRuntimeServer(async (baseUrl) => {
+      // Send a signature of incorrect length to test requireAuth comparison gracefully returns 401 instead of crashing.
+      const response = await fetch(`${baseUrl}/runtime`, {
+        headers: {
+          "x-dgx-timestamp": Date.now().toString(),
+          "x-dgx-nonce": "runtime-diff-len",
+          "x-dgx-body-sha256": "0".repeat(64),
+          "x-dgx-signature": "abcdef", // 6 chars (diff length)
+        },
+      });
+      expect(response.status).toBe(401);
+    });
+  });
+
   it("continues to accept bearer auth for runtime requests", async () => {
     await withRuntimeServer(async (baseUrl, token) => {
       const response = await fetch(`${baseUrl}/runtime`, {
@@ -2745,6 +2791,39 @@ describe("HTTP request limits", () => {
       });
       expect(body.eventSync.accepted).toBe(2);
 
+      const preRequestResponse = await fetch(`http://127.0.0.1:${address.port}/tmux/dispatch`, {
+        body: JSON.stringify({
+          id: "tmux_dispatch_http_approved",
+          sessionId: "session_tmux_http",
+          terminalSessionId: "terminal_session_ai_swarm",
+          role: "frontend",
+          host: "dgx_02",
+          paneId: "%5",
+          requestedBy: "user",
+          commandPreview: "pnpm test",
+          approvalState: "required",
+          dispatchMode: "execute_if_approved",
+          tmuxSessionName: "ai-swarm",
+          createdAt: "2026-05-25T00:00:30.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      expect(preRequestResponse.status).toBe(202);
+
+      const grantResponse = await fetch(`http://127.0.0.1:${address.port}/approvals/grant`, {
+        body: JSON.stringify({ sourceItemId: "tmux_dispatch_http_approved", actor: "user" }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      expect(grantResponse.status).toBe(200);
+
       const approvedResponse = await fetch(`http://127.0.0.1:${address.port}/tmux/dispatch`, {
         body: JSON.stringify({
           id: "tmux_dispatch_http_approved",
@@ -2853,6 +2932,39 @@ describe("HTTP request limits", () => {
         throw new Error("test server did not bind to a TCP port");
       }
 
+      const preRequestResponse = await fetch(`http://127.0.0.1:${address.port}/tmux/dispatch`, {
+        body: JSON.stringify({
+          id: "tmux_dispatch_http_dry_run",
+          sessionId: "session_tmux_http",
+          terminalSessionId: "terminal_session_ai_swarm",
+          role: "qa",
+          host: "dgx_02",
+          paneId: "%7",
+          requestedBy: "user",
+          commandPreview: "pnpm test",
+          approvalState: "required",
+          dispatchMode: "execute_if_approved",
+          tmuxSessionName: "ai-swarm",
+          createdAt: "2026-05-25T00:02:30.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      expect(preRequestResponse.status).toBe(202);
+
+      const grantResponse = await fetch(`http://127.0.0.1:${address.port}/approvals/grant`, {
+        body: JSON.stringify({ sourceItemId: "tmux_dispatch_http_dry_run", actor: "user" }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      expect(grantResponse.status).toBe(200);
+
       const response = await fetch(`http://127.0.0.1:${address.port}/tmux/dispatch`, {
         body: JSON.stringify({
           id: "tmux_dispatch_http_dry_run",
@@ -2929,6 +3041,79 @@ describe("HTTP request limits", () => {
         delete process.env.ORCHESTRATOR_TMUX_DRY_RUN;
       } else {
         process.env.ORCHESTRATOR_TMUX_DRY_RUN = previousTmuxDryRun;
+      }
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects tmux dispatch bypass attempts when not found in the Event Store", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-tmux-bypass-"));
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+    process.env.EVENT_STORAGE_DIR = tempDir;
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      // Try to dispatch directly as approved without prior approval in the event store
+      const response = await fetch(`http://127.0.0.1:${address.port}/tmux/dispatch`, {
+        body: JSON.stringify({
+          id: "tmux_dispatch_bypass_attempt",
+          sessionId: "session_tmux_bypass",
+          terminalSessionId: "terminal_session_ai_swarm",
+          role: "qa",
+          host: "dgx_02",
+          paneId: "%7",
+          requestedBy: "user",
+          commandPreview: "pnpm test",
+          approvalState: "approved", // Client-provided approved state
+          dispatchMode: "execute_if_approved",
+          tmuxSessionName: "ai-swarm",
+          createdAt: "2026-05-25T00:03:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(response.status).toBe(403);
+      const body = await response.json() as { error?: string, permission?: { decision: string, reason: string } };
+      expect(body.permission?.decision).toBe("deny");
+      expect(body.permission?.reason).toContain("bypass attempt detected");
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousEventStorageDir === undefined) {
+        delete process.env.EVENT_STORAGE_DIR;
+      } else {
+        process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
       }
       await rm(tempDir, { force: true, recursive: true });
     }
@@ -3202,6 +3387,75 @@ describe("HTTP request limits", () => {
       await expect(pull.json()).resolves.toMatchObject({
         events: [],
       });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousEventStorageDir === undefined) {
+        delete process.env.EVENT_STORAGE_DIR;
+      } else {
+        process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects tmux preflight bypass attempts when not found in the Event Store", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-tmux-preflight-bypass-"));
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+    process.env.EVENT_STORAGE_DIR = tempDir;
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/tmux/preflight`, {
+        body: JSON.stringify({
+          id: "tmux_preflight_bypass_attempt",
+          sessionId: "session_tmux_preflight_bypass",
+          role: "qa",
+          host: "dgx_02",
+          requestedBy: "user",
+          commandPreview: "pnpm test",
+          approvalState: "approved",
+          dispatchMode: "execute_if_approved",
+          createdAt: "2026-05-25T00:00:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(response.status).toBe(200);
+      const body = await response.json() as { permission: { decision: string; reason: string } };
+      expect(body.permission.decision).toBe("deny");
+      expect(body.permission.reason).toContain("bypass attempt detected");
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
