@@ -58,6 +58,14 @@ const statusColorMap: Record<AvatarStatus, string> = {
   active: "bg-status-active",
 };
 
+const statusLabelMap: Record<AvatarStatus, string> = {
+  online: "온라인",
+  offline: "오프라인",
+  pending: "대기 중",
+  idle: "유휴",
+  active: "활성",
+};
+
 const sizeMap: Record<NonNullable<AvatarWithStatusProps["size"]>, string> = {
   sm: "h-7 w-7 text-[10px]",
   md: "h-9 w-9 text-xs",
@@ -110,7 +118,10 @@ export function AvatarWithStatus({
             statusSizeMap[size],
             status === "active" && "status-pulse",
           )}
-        />
+          title={statusLabelMap[status]}
+        >
+          <span className="sr-only">상태: {statusLabelMap[status]}</span>
+        </span>
       ) : null}
     </div>
   );
