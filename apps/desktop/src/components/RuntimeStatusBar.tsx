@@ -1,9 +1,9 @@
-import { useState } from "react";
 import { Activity, Brain, GitBranch, MessageSquare, Search, Terminal } from "lucide-react";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { providerDisplayLabel } from "../lib/helpers";
 import type { CenterMode } from "../types";
 
@@ -212,7 +212,6 @@ function HealthIndicator({
   localStatus?: string;
   providerName?: string;
 }) {
-  const [open, setOpen] = useState(false);
   const healthColor = {
     healthy: "bg-success",
     degraded: "bg-warning",
@@ -225,51 +224,44 @@ function HealthIndicator({
   }[health];
 
   return (
-    <div className="relative">
-      <button
-        aria-expanded={open}
-        aria-label={`System status: ${healthLabel}`}
-        className="relative flex h-6 w-6 items-center justify-center rounded-full transition-colors hover:bg-card/60"
-        onClick={() => setOpen((o) => !o)}
-        type="button"
-      >
-        <span
-          className={cn(
-            "h-2 w-2 rounded-full",
-            healthColor,
-            health !== "healthy" && "animate-pulse",
-          )}
-        />
-      </button>
-
-      {open ? (
-        <>
-          {/* backdrop to close on click outside */}
-          <div
-            aria-hidden
-            className="fixed inset-0 z-20"
-            onClick={() => setOpen(false)}
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          aria-label={`System status: ${healthLabel}`}
+          className="relative flex h-6 w-6 items-center justify-center rounded-full transition-colors hover:bg-card/60"
+          type="button"
+        >
+          <span
+            className={cn(
+              "h-2 w-2 rounded-full",
+              healthColor,
+              health !== "healthy" && "animate-pulse",
+            )}
           />
-          <div className="absolute right-0 top-8 z-30 w-72 overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
-            <div className="border-b border-border px-4 py-3">
-              <div className="flex items-center gap-2">
-                <span className={cn("h-2 w-2 rounded-full", healthColor)} />
-                <span className="text-sm font-medium text-foreground">
-                  {healthLabel}
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Active provider · {providerName ?? "Unknown"}
-              </p>
-            </div>
-            <div className="space-y-1 p-2">
-              <StatusRow label={dgxLabel ?? "DGX"} status={dgxStatus} />
-              <StatusRow label="Local" status={localStatus} />
-            </div>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        className="w-72 overflow-hidden rounded-lg border border-border bg-card p-0 shadow-2xl"
+      >
+        <div className="border-b border-border px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className={cn("h-2 w-2 rounded-full", healthColor)} />
+            <span className="text-sm font-medium text-foreground">
+              {healthLabel}
+            </span>
           </div>
-        </>
-      ) : null}
-    </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Active provider · {providerName ?? "Unknown"}
+          </p>
+        </div>
+        <div className="space-y-1 p-2">
+          <StatusRow label={dgxLabel ?? "DGX"} status={dgxStatus} />
+          <StatusRow label="Local" status={localStatus} />
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
