@@ -22,6 +22,7 @@ export type PendingProviderRetry = {
 export type Stage3DebateUtteranceView = DebateUtterance & {
   roundTitle: string;
   agentName: string;
+  agentRole: AgentProfile["role"];
 };
 export type AgentPersonaSettings = {
   voicePreset: AgentVoicePreset;

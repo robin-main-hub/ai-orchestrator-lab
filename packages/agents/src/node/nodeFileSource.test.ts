@@ -48,4 +48,11 @@ describe("createNodeFileSource", () => {
     // ENOENT, so the source should still propagate it instead of swallowing.
     await expect(source.readMarkdown("agents/architect")).rejects.toBeDefined();
   });
+
+  it("rejects path traversal attempts resolving outside repoRoot", async () => {
+    const source = createNodeFileSource(repoRoot);
+    await expect(source.readMarkdown("../etc/passwd")).rejects.toThrow(
+      "Directory traversal attempt blocked"
+    );
+  });
 });

@@ -323,6 +323,7 @@ export const conversationSessionSchema = z.object({
   backupStatus: backupStatusSchema,
   activePersonaOverrides: z.record(z.string()).optional(),
   rolePersonaPriorities: z.record(z.array(z.string())).optional(),
+  allowMultiPersonaRoles: z.array(agentRoleSchema).optional(),
 });
 export type ConversationSession = z.infer<typeof conversationSessionSchema>;
 

@@ -102,11 +102,14 @@ export async function buildAgentSystemPrompt(
   } catch (err) {
     if (err instanceof PersonaFragmentMissingError) {
       try {
-        personaName = profile.role;
+        personaName = canonicalPersonaNameForRole(profile.role);
         mode = getCanonicalSoulMode(profile.role);
         const sourceMode = soulModeToPersonaSourceMode(mode);
         loaded = await loadPersona(personaName, sourceMode, source);
       } catch (fallbackErr) {
+        if (!(fallbackErr instanceof PersonaFragmentMissingError)) {
+          throw fallbackErr;
+        }
         mode = "off";
         loaded = await loadPersona(personaName, "off", source);
       }
@@ -125,6 +128,11 @@ export async function buildAgentSystemPrompt(
     estimatedTokens: estimateTokens(promptText),
     promptText,
   };
+}
+
+function canonicalPersonaNameForRole(role: string): string {
+  if (role === "companion") return "chae_arin";
+  return role;
 }
 
 function getCanonicalSoulMode(role: string): SoulInjectionMode {
