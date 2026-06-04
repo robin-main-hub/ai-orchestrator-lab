@@ -377,22 +377,35 @@ export async function runStage3DebateSession(
   };
 
   // Build Slots for agents
-  const slots: DebateEngineAgentSlot[] = input.agents
-    .filter((agent) => agent.enabled)
-    .map((agent) => {
-      const provider = input.providers.find((p) => p.id === agent.providerProfileId);
-      if (!provider) {
-        throw new Error(`Provider not found for agent ${agent.id}`);
-      }
+  const fileSource = getDesktopFileSource();
+  const slots: DebateEngineAgentSlot[] = await Promise.all(
+    input.agents
+      .filter((agent) => agent.enabled)
+      .map(async (agent) => {
+        const provider = input.providers.find((p) => p.id === agent.providerProfileId);
+        if (!provider) {
+          throw new Error(`Provider not found for agent ${agent.id}`);
+        }
 
-      return {
-        agent,
-        complete: createDgxLlmCompletionFn(provider, fetchImpl),
-        systemPrompt: `당신은 ${agent.name} (${agent.role}) 에이전트입니다. 역할과 목적에 맞게 토론에 참여해 주세요.`,
-        modelId: agent.modelId ?? provider.defaultModel ?? "gpt-5.5-pro",
-        resolveSecret: async () => provider.secretRef?.id,
-      };
-    });
+        let systemPrompt = `당신은 ${agent.name} (${agent.role}) 에이전트입니다. 역할과 목적에 맞게 토론에 참여해 주세요.`;
+        try {
+          const promptReport = await buildAgentSystemPrompt(agent, fileSource);
+          if (promptReport.promptText) {
+            systemPrompt = promptReport.promptText;
+          }
+        } catch (e) {
+          console.warn(`Failed to build system prompt for agent ${agent.id}`, e);
+        }
+
+        return {
+          agent,
+          complete: createDgxLlmCompletionFn(provider, fetchImpl),
+          systemPrompt,
+          modelId: agent.modelId ?? provider.defaultModel ?? "gpt-5.5-pro",
+          resolveSecret: async () => provider.secretRef?.id,
+        };
+      })
+  );
 
   // Execute debate rounds via agents engine
   const initialRounds: DebateRound[] = baseSession.rounds.map((round, idx) => ({
@@ -401,6 +414,13 @@ export async function runStage3DebateSession(
     utterances: [],
   }));
 
+  const enabledRoles = input.agents.filter((a) => a.enabled).map((a) => a.role);
+  const roleCounts = enabledRoles.reduce((acc, role) => {
+    acc[role] = (acc[role] ?? 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const allowMultiPersonaRoles = Object.keys(roleCounts).filter((role) => roleCounts[role]! > 1);
+
   const debateResult = await runDebate({
     debateId: baseSession.id,
     initialRounds,
@@ -408,6 +428,7 @@ export async function runStage3DebateSession(
     slots,
     engineOptions: {
       perAgentTimeoutMs: input.perAgentTimeoutMs ?? 30000,
+      allowMultiPersonaRoles: allowMultiPersonaRoles.length > 0 ? allowMultiPersonaRoles : ["skeptic"],
     },
   });
 
@@ -419,5 +440,43 @@ export async function runStage3DebateSession(
     ...baseSession,
     rounds: debateResult.rounds,
     humanPeek: updatedHumanPeek,
+  };
+}
+
+function getDesktopFileSource() {
+  const requireNode = (() => {
+    try {
+      return Function("return typeof require === 'function' ? require : undefined")();
+    } catch {
+      return undefined;
+    }
+  })();
+
+  if (requireNode) {
+    try {
+      const fs = requireNode("node:fs");
+      const path = requireNode("node:path");
+      const repoRoot = process.cwd();
+
+      return {
+        async readMarkdown(relativePath: string): Promise<string | null> {
+          const absolutePath = path.resolve(repoRoot, relativePath);
+          try {
+            return fs.readFileSync(absolutePath, "utf8");
+          } catch (error: any) {
+            if (error?.code === "ENOENT") return null;
+            throw error;
+          }
+        },
+      };
+    } catch (e) {
+      console.warn("Failed to initialize Node-based file source", e);
+    }
+  }
+
+  return {
+    async readMarkdown(relativePath: string): Promise<string | null> {
+      return null;
+    },
   };
 }

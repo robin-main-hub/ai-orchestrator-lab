@@ -287,7 +287,7 @@ export function pickAgentsForRound(
     const bucket = eligibleByRole.get(role);
     if (bucket && bucket.length > 0) {
       const topSlot = bucket[0]!;
-      if (selected.length < cap) {
+      if (!selectedIds.has(topSlot.agent.id) && selected.length < cap) {
         selected.push(topSlot);
         selectedIds.add(topSlot.agent.id);
       }
