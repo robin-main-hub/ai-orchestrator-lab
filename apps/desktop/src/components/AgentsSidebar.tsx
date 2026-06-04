@@ -400,6 +400,7 @@ function AgentCard({
         <button
           aria-label={`${agent.name} 선택`}
           className="flex min-w-0 flex-1 items-start gap-2 text-left"
+          data-focus-id={`agent-card-${agent.id}`}
           onClick={() => onSelectAgent(agent.id)}
           type="button"
         >
