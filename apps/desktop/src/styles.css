@@ -945,7 +945,7 @@ button {
 }
 
 .server-approval-outcomes article strong,
-.server-approval-outcomes article span,
+.server-approval-outcomes article .server-approval-outcome-reason,
 .server-approval-outcomes article small {
   min-width: 0;
   overflow: hidden;
@@ -958,7 +958,7 @@ button {
   font-size: 10px;
 }
 
-.server-approval-outcomes article span {
+.server-approval-outcomes article .server-approval-outcome-reason {
   color: var(--muted);
   font-size: 9px;
 }
@@ -4464,7 +4464,7 @@ button {
   overflow-wrap: anywhere;
 }
 
-.provider-row div span,
+.provider-row > div > span,
 .provider-row code {
   display: none;
 }
@@ -5470,7 +5470,7 @@ button {
 }
 
 .guard-step-list strong,
-.guard-step-list span {
+.guard-step-list .guard-step-reason {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5488,7 +5488,7 @@ button {
   font-style: normal;
 }
 
-.guard-step-list span {
+.guard-step-list .guard-step-reason {
   grid-column: 1 / -1;
   color: var(--subtle);
   font-size: 9px;

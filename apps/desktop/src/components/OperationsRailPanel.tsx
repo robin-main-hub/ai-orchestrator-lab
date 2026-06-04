@@ -182,9 +182,22 @@ export function OperationsRailPanel({
             <article className={`server-approval-outcome-${outcome.status}`} key={`${outcome.approvalId}:${outcome.createdAt}`}>
               <div>
                 <strong>{outcome.role}</strong>
-                <span>{outcome.reason}</span>
+                <span className="server-approval-outcome-reason">{outcome.reason}</span>
               </div>
-              <small>{outcome.status}</small>
+              <StatusBadge
+                size="sm"
+                variant={
+                  outcome.status === "sent" || outcome.status === "recorded"
+                    ? "success"
+                    : outcome.status === "failed" || outcome.status === "blocked"
+                      ? "danger"
+                      : outcome.status === "dry_run"
+                        ? "warning"
+                        : "warning"
+                }
+              >
+                {outcome.status}
+              </StatusBadge>
             </article>
           ))}
         </div>

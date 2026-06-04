@@ -40,8 +40,25 @@ export function ProviderProfilesManagerPanel({
             <article className={`provider-row ${isInUse ? "in-use" : ""}`} key={profile.id}>
               <div>
                 <strong>{profile.name}</strong>
-                <small className="provider-model-summary">
-                  {models.length} models / {discovery?.status ?? "cached"} / {discovery?.source ?? "seed"}
+                <small className="provider-model-summary flex items-center gap-1 mt-1">
+                  <span>{models.length} models</span>
+                  <span>/</span>
+                  <StatusBadge
+                    size="sm"
+                    variant={
+                      discovery?.status === "succeeded"
+                        ? "success"
+                        : discovery?.status === "loading"
+                          ? "warning"
+                          : discovery?.status === "failed" || discovery?.status === "blocked"
+                            ? "danger"
+                            : "muted"
+                    }
+                  >
+                    {discovery?.status ?? "cached"}
+                  </StatusBadge>
+                  <span>/</span>
+                  <span>{discovery?.source ?? "seed"}</span>
                 </small>
               </div>
               <StatusBadge
