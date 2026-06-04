@@ -34,7 +34,7 @@ describe("getConversationShellVisibility", () => {
     });
   });
 
-  it("keeps tmux focused on the swarm board and terminal semantics", () => {
+  it("keeps tmux focused on the swarm board without supporting shell surfaces", () => {
     expect(
       getConversationShellVisibility({
         configLibraryActive: false,
@@ -43,8 +43,8 @@ describe("getConversationShellVisibility", () => {
     ).toMatchObject({
       showCodingPacketPanel: false,
       showEvolveMementoPanel: false,
-      showLeftRail: true,
-      showTerminalDock: true,
+      showLeftRail: false,
+      showTerminalDock: false,
       showToolbarActions: false,
       showWorkItemHandoffPanel: false,
     });
