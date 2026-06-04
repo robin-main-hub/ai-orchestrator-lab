@@ -16,7 +16,6 @@ export function statusForWorkLane(lane: WorkItem["lane"]): WorkItem["status"] {
     ask: "waiting_input",
     approve: "waiting_approval",
     blocked: "blocked",
-    inbox: "inbox",
   };
 
   return statuses[lane] ?? "triaged";
