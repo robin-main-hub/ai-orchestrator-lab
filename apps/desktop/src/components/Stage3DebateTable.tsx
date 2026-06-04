@@ -18,6 +18,18 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
 import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
+import { defaultAgentProfiles } from "@ai-orchestrator/agents";
+
+function resolveFallbackAgent(agentId: string) {
+  const profile = defaultAgentProfiles.find((p) => p.id === agentId);
+  if (profile) {
+    return { name: profile.name, role: profile.role };
+  }
+  const parts = agentId.replace(/^agent_/, "").split("_");
+  const role = parts[0] || "builder";
+  const name = parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+  return { name, role: role as any };
+}
 
 /**
  * Stage 3 Debate Table — strict v0 port.
@@ -78,10 +90,10 @@ export function Stage3DebateTable({
       roundTitle: activeRound.title,
       agentName:
         session.participants.find((p) => p.agentId === utterance.agentId)?.name ??
-        utterance.agentId,
+        resolveFallbackAgent(utterance.agentId).name,
       agentRole:
         session.participants.find((p) => p.agentId === utterance.agentId)?.role ??
-        "builder",
+        resolveFallbackAgent(utterance.agentId).role,
     }));
   }, [activeRound, session.participants]);
 
