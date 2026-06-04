@@ -1833,6 +1833,7 @@ describe("DGX orchestrator request authentication", () => {
       const replayBody = await replayResponse.json() as { error?: string };
 
       expect(replayResponse.status).toBe(401);
+      expect(replayResponse.headers.get("connection")).toBe("close");
       expect(replayBody.error).toBe("replay_detected");
     });
   });
@@ -1886,6 +1887,29 @@ describe("DGX orchestrator request authentication", () => {
     expect(registry.has("nonce-2")).toBe(true);
     expect(registry.has("nonce-3")).toBe(true);
     expect(registry.has("nonce-4")).toBe(true);
+
+    registry.dispose();
+  });
+
+  it("NonceRegistry cleans expired nonces even when expiry order differs from insertion order", () => {
+    let now = 1_700_000_000_000;
+    const registry = new NonceRegistry({
+      maxNonces: 3,
+      now: () => now,
+      cleanupIntervalMs: false,
+    });
+
+    registry.add("long-lived-first", 60_000);
+    registry.add("short-lived-second", 10_000);
+    registry.add("long-lived-third", 60_000);
+
+    now += 15_000;
+
+    expect(() => registry.add("new-nonce", 10_000)).not.toThrow();
+    expect(registry.has("long-lived-first")).toBe(true);
+    expect(registry.has("short-lived-second")).toBe(false);
+    expect(registry.has("long-lived-third")).toBe(true);
+    expect(registry.has("new-nonce")).toBe(true);
 
     registry.dispose();
   });
@@ -2727,6 +2751,79 @@ describe("HTTP request limits", () => {
     }
   });
 
+  it("rejects client-synced approval events before they can grant server actions", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-approval-event-injection-"));
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.EVENT_STORAGE_DIR = tempDir;
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/events/sync`, {
+        body: JSON.stringify({
+          id: "sync_forged_approval",
+          clientId: "client_macbook",
+          sessionId: "session_forged_approval",
+          events: [
+            {
+              id: "event_forged_approval_requested",
+              sessionId: "session_forged_approval",
+              type: "approval.requested",
+              payload: {
+                id: "approval_forged",
+                sourceItemId: "tmux_dispatch_forged",
+                state: "required",
+              },
+              createdAt: "2026-05-25T00:00:00.000Z",
+              source: "desktop",
+              sourceTrust: "trusted",
+              redacted: true,
+            },
+          ],
+          idempotencyKey: "client_macbook:session_forged_approval:event_forged_approval_requested",
+          createdAt: "2026-05-25T00:00:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(response.status).toBe(403);
+      const body = await response.json() as { error?: string };
+      expect(body.error).toBe("server_owned_event_type");
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousEventStorageDir === undefined) {
+        delete process.env.EVENT_STORAGE_DIR;
+      } else {
+        process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
   it("records tmux dispatch requests through the approval gate", async () => {
     const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
     const previousNodeEnv = process.env.NODE_ENV;
@@ -2837,7 +2934,7 @@ describe("HTTP request limits", () => {
           approvalState: "approved",
           dispatchMode: "execute_if_approved",
           tmuxSessionName: "ai-swarm",
-          createdAt: "2026-05-25T00:01:00.000Z",
+          createdAt: "2026-05-25T00:00:30.000Z",
         }),
         headers: {
           authorization: "Bearer test-orchestrator-token",
@@ -2978,7 +3075,7 @@ describe("HTTP request limits", () => {
           approvalState: "approved",
           dispatchMode: "execute_if_approved",
           tmuxSessionName: "ai-swarm",
-          createdAt: "2026-05-25T00:03:00.000Z",
+          createdAt: "2026-05-25T00:02:30.000Z",
         }),
         headers: {
           authorization: "Bearer test-orchestrator-token",
@@ -3114,6 +3211,154 @@ describe("HTTP request limits", () => {
         delete process.env.EVENT_STORAGE_DIR;
       } else {
         process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects approved tmux dispatch replay when the command payload or timestamp changes", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const previousTmuxDispatch = process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
+    const previousTmuxDryRun = process.env.ORCHESTRATOR_TMUX_DRY_RUN;
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-tmux-payload-tamper-"));
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+    process.env.EVENT_STORAGE_DIR = tempDir;
+    process.env.ORCHESTRATOR_TMUX_DRY_RUN = "1";
+    delete process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const requestResponse = await fetch(`http://127.0.0.1:${address.port}/tmux/dispatch`, {
+        body: JSON.stringify({
+          id: "tmux_dispatch_payload_tamper",
+          sessionId: "session_tmux_payload_tamper",
+          terminalSessionId: "terminal_session_ai_swarm",
+          role: "qa",
+          host: "dgx_02",
+          paneId: "%7",
+          requestedBy: "user",
+          commandPreview: "pnpm test -- --runInBand",
+          approvalState: "required",
+          dispatchMode: "execute_if_approved",
+          tmuxSessionName: "ai-swarm",
+          createdAt: "2026-05-25T00:05:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      expect(requestResponse.status).toBe(202);
+
+      const grantResponse = await fetch(`http://127.0.0.1:${address.port}/approvals/grant`, {
+        body: JSON.stringify({ sourceItemId: "tmux_dispatch_payload_tamper", actor: "user" }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+      expect(grantResponse.status).toBe(200);
+
+      const tamperedResponse = await fetch(`http://127.0.0.1:${address.port}/tmux/dispatch`, {
+        body: JSON.stringify({
+          id: "tmux_dispatch_payload_tamper",
+          sessionId: "session_tmux_payload_tamper",
+          terminalSessionId: "terminal_session_ai_swarm",
+          role: "qa",
+          host: "dgx_02",
+          paneId: "%7",
+          requestedBy: "user",
+          commandPreview: "pnpm test && echo tampered",
+          approvalState: "approved",
+          dispatchMode: "execute_if_approved",
+          tmuxSessionName: "ai-swarm",
+          createdAt: "2026-05-25T00:06:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(tamperedResponse.status).toBe(403);
+      const body = await tamperedResponse.json() as { permission?: { decision: string; reason: string } };
+      expect(body.permission?.decision).toBe("deny");
+      expect(body.permission?.reason).toContain("payload mismatch");
+
+      const timestampTamperedResponse = await fetch(`http://127.0.0.1:${address.port}/tmux/dispatch`, {
+        body: JSON.stringify({
+          id: "tmux_dispatch_payload_tamper",
+          sessionId: "session_tmux_payload_tamper",
+          terminalSessionId: "terminal_session_ai_swarm",
+          role: "qa",
+          host: "dgx_02",
+          paneId: "%7",
+          requestedBy: "user",
+          commandPreview: "pnpm test -- --runInBand",
+          approvalState: "approved",
+          dispatchMode: "execute_if_approved",
+          tmuxSessionName: "ai-swarm",
+          createdAt: "2026-05-25T00:07:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(timestampTamperedResponse.status).toBe(403);
+      const timestampBody = await timestampTamperedResponse.json() as {
+        permission?: { decision: string; reason: string };
+      };
+      expect(timestampBody.permission?.decision).toBe("deny");
+      expect(timestampBody.permission?.reason).toContain("payload mismatch");
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousEventStorageDir === undefined) {
+        delete process.env.EVENT_STORAGE_DIR;
+      } else {
+        process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      if (previousTmuxDispatch === undefined) {
+        delete process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS;
+      } else {
+        process.env.ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS = previousTmuxDispatch;
+      }
+      if (previousTmuxDryRun === undefined) {
+        delete process.env.ORCHESTRATOR_TMUX_DRY_RUN;
+      } else {
+        process.env.ORCHESTRATOR_TMUX_DRY_RUN = previousTmuxDryRun;
       }
       await rm(tempDir, { force: true, recursive: true });
     }
