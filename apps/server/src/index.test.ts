@@ -3206,18 +3206,64 @@ describe("HTTP request limits", () => {
     expect(calls).toBe(0);
   });
 
-  it("blocks production verification unless explicitly enabled", async () => {
+  it("blocks packet verification in unauthorized environments (prod, staging, undefined)", async () => {
     const previousNodeEnv = process.env.NODE_ENV;
     const previousAllow = process.env.ORCHESTRATOR_ALLOW_VERIFY_PACKET_IN_PRODUCTION;
-    process.env.NODE_ENV = "production";
-    delete process.env.ORCHESTRATOR_ALLOW_VERIFY_PACKET_IN_PRODUCTION;
+
+    const testEnvironments = [
+      { env: "production", expectedBlocked: true },
+      { env: "prod", expectedBlocked: true },
+      { env: "staging", expectedBlocked: true },
+      { env: undefined, expectedBlocked: true },
+      { env: "", expectedBlocked: true },
+      { env: "development", expectedBlocked: false },
+      { env: "dev", expectedBlocked: false },
+      { env: "test", expectedBlocked: false },
+      { env: "local", expectedBlocked: false },
+    ];
 
     try {
-      const { dependencies, responses } = createVerifyPacketDependencies(verifyPacketFixture, {
-        execFileAsync: async () => ({ stdout: "should not run", stderr: "" }),
-      });
-      await handleVerifyPacketRoute(dependencies);
+      for (const { env, expectedBlocked } of testEnvironments) {
+        if (env === undefined) {
+          delete process.env.NODE_ENV;
+        } else {
+          process.env.NODE_ENV = env;
+        }
 
+        let runnerCalled = false;
+        const { dependencies, responses } = createVerifyPacketDependencies(verifyPacketFixture, {
+          execFileAsync: async () => {
+            runnerCalled = true;
+            return { stdout: "success", stderr: "" };
+          },
+        });
+
+        await handleVerifyPacketRoute(dependencies);
+
+        if (expectedBlocked) {
+          expect(runnerCalled).toBe(false);
+          expect(responses[0]).toMatchObject({
+            statusCode: 403,
+            payload: { error: "production_execution_blocked" },
+          });
+        } else {
+          expect(responses[0]?.statusCode).toBe(200);
+        }
+      }
+
+      // ORCHESTRATOR_ALLOW_VERIFY_PACKET_IN_PRODUCTION=true should not bypass in production
+      process.env.NODE_ENV = "production";
+      process.env.ORCHESTRATOR_ALLOW_VERIFY_PACKET_IN_PRODUCTION = "true";
+      let runnerCalledWithBypass = false;
+      const { dependencies, responses } = createVerifyPacketDependencies(verifyPacketFixture, {
+        execFileAsync: async () => {
+          runnerCalledWithBypass = true;
+          return { stdout: "success", stderr: "" };
+        },
+      });
+
+      await handleVerifyPacketRoute(dependencies);
+      expect(runnerCalledWithBypass).toBe(false);
       expect(responses[0]).toMatchObject({
         statusCode: 403,
         payload: { error: "production_execution_blocked" },
