@@ -94,9 +94,10 @@ function TimelineBlockRow({ block }: { block: TerminalTimelineBlock }) {
             <span className="tmux-block__title">{block.title}</span>
             <span
               className={cn("tmux-block__status-dot", `tmux-block__status-dot--${tone}`)}
-              aria-label={`status: ${block.status}`}
               title={statusLabel(block.status)}
-            />
+            >
+              <span className="sr-only">상태: {statusLabel(block.status)}</span>
+            </span>
             {hasDetail ? (
               <ChevronDown
                 className={cn(
