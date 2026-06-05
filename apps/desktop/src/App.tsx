@@ -158,8 +158,9 @@ import {
 import { ControlQueueDrawer } from "./components/ControlQueueDrawer";
 import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
 import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
+import { OperatorCockpit } from "./components/operator-cockpit/OperatorCockpit";
+import { mockSnapshot } from "./components/operator-cockpit/fixtures/mockSnapshot";
 import { AgentsSidebar } from "./components/AgentsSidebar";
-import { BackupPanel } from "./components/BackupPanel";
 import { BackupRailMenu } from "./components/BackupRailMenu";
 import { ChannelRailPanel } from "./components/ChannelRailPanel";
 import { CodingPacketPanel } from "./components/CodingPacketPanel";
@@ -167,6 +168,7 @@ import { CheatSheetOverlay } from "./components/CheatSheetOverlay";
 import { CommandPalette, type CommandEntry } from "./components/CommandPalette";
 import { ConfigLibraryPanel } from "./components/ConfigLibraryPanel";
 import { ConversationWorkbench } from "./components/ConversationWorkbench";
+import { DebateAnnexPage } from "./components/debate-chamber/DebateAnnexPage";
 import { IngressGuardPanel } from "./components/IngressGuardPanel";
 import { EvolveMementoPanel } from "./components/EvolveMementoPanel";
 import { HumanPeekPanel } from "./components/HumanPeekPanel";
@@ -2402,6 +2404,21 @@ export function App() {
       run: () => setMode("tmux"),
     },
     {
+      id: "switch.cockpit",
+      verb: "Switch",
+      label: "Operator Cockpit",
+      hint: "Mock dashboard view",
+      shortcut: "⌘4",
+      run: () => setMode("cockpit"),
+    },
+    {
+      id: "switch.annex",
+      verb: "Switch",
+      label: "Debate Annex",
+      hint: "토론 보조 정보 전용 페이지",
+      run: () => setMode("annex"),
+    },
+    {
       id: "open.control-queue",
       verb: "Open",
       label: "Control Queue",
@@ -2447,6 +2464,7 @@ export function App() {
     onSwitchConversation: () => setMode("conversation"),
     onSwitchDebate: () => setMode("debate"),
     onSwitchTmux: () => setMode("tmux"),
+    onSwitchCockpit: () => setMode("cockpit"),
     onControlQueue: () => setApprovalDrawerOpen((open) => !open),
     onMementoRemember: handleRememberCurrentContext,
     onApprove: () => handleResolveNextPermission("approved"),
@@ -2467,9 +2485,17 @@ export function App() {
     mode,
   });
 
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+
   return (
     <div
       className={`app-shell ${mode === "tmux" ? "tmux-focus-shell" : ""} ${
+        mode === "cockpit" ? "cockpit-focus-shell" : ""
+      } ${
+        mode === "annex" ? "annex-focus-shell" : ""
+      } ${
+        mode === "debate" ? "debate-focus-shell" : ""
+      } ${
         mode === "conversation" && !configLibraryActive ? "conversation-v0-shell" : ""
       }`}
       style={{
@@ -2482,14 +2508,16 @@ export function App() {
         mode={mode}
         onChangeMode={setMode}
         onCommandPalette={() => setCommandPaletteOpen(true)}
+        onOpenOpsDetail={() => setMode("cockpit")}
         onProbeDgx={handleProbeDgx}
+        onToggleDrawer={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
         providerName={activeProvider?.name ?? "미선택"}
         snapshot={runtimeSnapshotState}
       />
       <main className="workspace-grid">
         {shellVisibility.showLeftRail ? (
           <aside
-            className={`left-rail ${providerRegistrationOpen ? "provider-mode" : ""}`}
+            className={`left-rail ${providerRegistrationOpen ? "provider-mode" : ""} ${isMobileDrawerOpen ? "drawer-open" : ""}`}
             aria-label="오케스트레이터 네비게이션"
           >
 
@@ -2656,12 +2684,12 @@ export function App() {
         ) : null}
 
         <section
-          className={`center-board ${mode === "tmux" ? "tmux-center-board" : ""} ${
+          className={`center-board ${mode === "tmux" ? "tmux-center-board" : ""} ${mode === "cockpit" ? "cockpit-center-board" : ""} ${mode === "annex" ? "annex-center-board" : ""} ${mode === "debate" ? "debate-center-board" : ""} ${
             configLibraryActive ? "config-center-board" : ""
           }`}
         >
-          <div className="board-toolbar">
-            {shellVisibility.showToolbarActions ? (
+          {shellVisibility.showToolbarActions ? (
+            <div className="board-toolbar">
               <div className="toolbar-actions">
                 <button
                   className={`ghost-button approval-toolbar-button ${
@@ -2683,8 +2711,8 @@ export function App() {
                   Coding Packet
                 </button>
               </div>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
 
           {configLibraryActive ? (
             <ConfigLibraryPanel
@@ -2743,11 +2771,12 @@ export function App() {
           ) : mode === "debate" ? (
             <Stage3DebateTable
               onCreateCodingPacket={handleCreateCodingPacket}
+              onOpenAnnex={() => setMode("annex")}
               onSelectUtterance={handleSelectDebateUtterance}
               session={debateSession}
               agentVisualsById={agentVisualsById}
             />
-          ) : (
+          ) : mode === "tmux" ? (
             <TmuxSwarmBoard
               activeSessionId={activeSessionId}
               agentActivityById={agentActivityById}
@@ -2757,7 +2786,20 @@ export function App() {
               onApprovalQueued={handleTmuxApprovalQueued}
               packet={codingPacketState}
             />
-          )}
+          ) : mode === "cockpit" ? (
+            <OperatorCockpit
+              onPreviewEvidence={() => setApprovalDrawerOpen(true)}
+              snapshot={mockSnapshot}
+            />
+          ) : mode === "annex" ? (
+            <DebateAnnexPage
+              codingPacketGoal={codingPacketState.goal}
+              onBack={() => setMode("debate")}
+              pendingApprovals={permissionSnapshot.summary.pending}
+              runtime={runtimeSnapshotState}
+              session={debateSession}
+            />
+          ) : null}
 
           {shellVisibility.showWorkItemHandoffPanel ? (
             <WorkItemHandoffPanel
@@ -2780,7 +2822,7 @@ export function App() {
           ) : null}
         </section>
 
-        {mode === "tmux" ? null : (
+        {mode === "conversation" || mode === "debate" || mode === "tmux" || mode === "cockpit" || mode === "annex" ? null : (
           <aside className="right-rail" aria-label="모델과 에이전트 상태">
             <AgentsSidebar
               agents={agents}
