@@ -61,6 +61,8 @@ export function DebateAnnexPage({
   codingPacketGoal,
   className,
   onBack,
+  onViewApproval,
+  onViewMemory,
   pendingApprovals,
   runtime,
   session,
@@ -68,6 +70,8 @@ export function DebateAnnexPage({
   codingPacketGoal?: string;
   className?: string;
   onBack?: () => void;
+  onViewApproval?: () => void;
+  onViewMemory?: () => void;
   pendingApprovals: number;
   runtime: RuntimeSnapshot;
   session: Stage3DebateSession;
@@ -154,8 +158,8 @@ export function DebateAnnexPage({
           {activeTab === "status" ? <StatusHubPanel items={data.statusHub} /> : null}
           {activeTab === "evidence" ? <EvidencePanel refs={data.evidenceRefs} /> : null}
           {activeTab === "agents" ? <AgentRelayPanel relay={data.agentRelay} /> : null}
-          {activeTab === "memory" ? <MemoryPanel recall={data.memoryRecall} /> : null}
-          {activeTab === "queue" ? <QueuePanel items={data.queueItems} /> : null}
+          {activeTab === "memory" ? <MemoryPanel recall={data.memoryRecall} onViewMemory={onViewMemory} /> : null}
+          {activeTab === "queue" ? <QueuePanel items={data.queueItems} onViewApproval={onViewApproval} /> : null}
           {activeTab === "logs" ? <LogsPanel entries={data.logs} /> : null}
         </div>
       </div>
@@ -384,15 +388,33 @@ function AgentRelayPanel({
 
 function MemoryPanel({
   recall,
+  onViewMemory,
 }: {
   recall: { confidence: number; key: string; value: string }[];
+  onViewMemory?: () => void;
 }) {
   if (!recall.length) return <EmptyState icon={Database} message="No memory recalls" />;
 
   return (
     <div className="space-y-3">
       {recall.map((item) => (
-        <div className="rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-4" key={item.key}>
+        <div
+          className={cn(
+            "rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-4 transition-colors text-left w-full block",
+            onViewMemory &&
+              "cursor-pointer hover:border-cyan-500/30 hover:bg-zinc-900/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+          )}
+          key={item.key}
+          onClick={onViewMemory}
+          onKeyDown={(e) => {
+            if (onViewMemory && (e.key === "Enter" || e.key === " ")) {
+              e.preventDefault();
+              onViewMemory();
+            }
+          }}
+          role={onViewMemory ? "button" : undefined}
+          tabIndex={onViewMemory ? 0 : undefined}
+        >
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium text-cyan-400">{item.key}</p>
             <span className="text-xs text-zinc-500">{item.confidence}%</span>
@@ -404,7 +426,13 @@ function MemoryPanel({
   );
 }
 
-function QueuePanel({ items }: { items: QueueItem[] }) {
+function QueuePanel({
+  items,
+  onViewApproval,
+}: {
+  items: QueueItem[];
+  onViewApproval?: () => void;
+}) {
   if (!items.length) return <EmptyState icon={Clock} message="Queue is empty" />;
 
   const statusIcon = {
@@ -422,8 +450,25 @@ function QueuePanel({ items }: { items: QueueItem[] }) {
     <div className="space-y-2">
       {items.map((item) => {
         const Icon = statusIcon[item.status];
+        const isClickable = item.type === "approval" && onViewApproval;
         return (
-          <div className="flex items-center gap-3 rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-3" key={item.id}>
+          <div
+            className={cn(
+              "flex items-center gap-3 rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-3 transition-colors text-left w-full",
+              isClickable &&
+                "cursor-pointer hover:border-amber-500/30 hover:bg-zinc-900/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+            )}
+            key={item.id}
+            onClick={isClickable ? onViewApproval : undefined}
+            onKeyDown={(e) => {
+              if (isClickable && (e.key === "Enter" || e.key === " ")) {
+                e.preventDefault();
+                onViewApproval();
+              }
+            }}
+            role={isClickable ? "button" : undefined}
+            tabIndex={isClickable ? 0 : undefined}
+          >
             <Icon className={cn("h-4 w-4", statusColor[item.status])} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm text-zinc-100">{item.title}</p>
