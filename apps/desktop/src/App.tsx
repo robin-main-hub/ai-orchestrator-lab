@@ -3398,6 +3398,9 @@ export function App() {
               draftAttachments={draftAttachments}
               draftMessage={draftMessage}
               maxDraftAttachments={maxDraftAttachments}
+              memoryAdapterStatus={adapterStatus}
+              memoryRecordCount={memoryRecords.length}
+              memoryScope={selectedAgentMemoryScope}
               messages={conversationMessages}
               onAddDraftAttachments={handleAddDraftAttachments}
               onAdoptBranch={handleAdoptBranchExperiment}
