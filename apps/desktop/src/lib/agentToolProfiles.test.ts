@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getAgentToolBadgeLabels, getAgentToolProfile } from "./agentToolProfiles";
+import { getAgentToolBadgeLabels, getAgentToolProfile, getAgentToolProfileSummary } from "./agentToolProfiles";
 
 describe("getAgentToolProfile", () => {
   it("returns concise orchestrator tool badges", () => {
@@ -29,5 +29,12 @@ describe("getAgentToolProfile", () => {
       "기억 순위",
       "기억 정리 요청",
     ]);
+  });
+
+  it("creates a compact sidebar summary for visible agent cards", () => {
+    expect(getAgentToolProfileSummary("executor")).toEqual({
+      label: "실행 도구",
+      visibleBadges: ["Tmux 전달", "승인 확인", "실행 기록"],
+    });
   });
 });
