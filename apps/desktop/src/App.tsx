@@ -73,6 +73,7 @@ import {
   type WorkbenchCompletionPurpose,
   type WorkbenchCompletionResult,
 } from "./runtime/stage35DelegationRuntime";
+import { createConversationPipelineMessages } from "./runtime/conversationPipeline";
 import {
   mergeConversationMessages,
   mergeEventReplayLogs,
@@ -134,7 +135,6 @@ import {
 } from "./lib/appConstants";
 import { getConversationRailLayout } from "./lib/conversationRailLayout";
 import { getConversationShellVisibility } from "./lib/conversationShellVisibility";
-import { createAgentChannelRuntimeSummary, createAgentRuntimeConfigSection } from "./lib/agentRuntimeConfig";
 import {
   createAgentChannelMemoryScope,
   createInitialAgentConversationChannels,
@@ -858,75 +858,6 @@ export function App() {
     setDraftAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
   }
 
-  function createConversationPipelineMessages({
-    agent,
-    configFiles,
-    memory,
-    memoryScope,
-    modelId,
-    persona,
-    provider,
-    userMessage,
-  }: {
-    agent: WorkbenchAgent;
-    configFiles: AgentConfigFile[];
-    memory: Stage6MemoryInspector;
-    memoryScope: AgentChannelMemoryScope;
-    modelId: string;
-    persona?: AgentPersonaSettings;
-    provider: ProviderProfile;
-    userMessage: ConversationMessage;
-  }) {
-    const recalledMemories = memory.trace.results
-      .filter((result) => result.usedInDecision)
-      .slice(0, 5)
-      .map((result, index) => `${index + 1}. ${result.record.title}: ${result.record.content} (score ${result.score.toFixed(2)})`);
-    const runtimeConfig = createAgentRuntimeConfigSection(agent, configFiles);
-    const systemContent = [
-      "AI Orchestrator Lab conversation pipeline.",
-      "Reply in Korean unless the user explicitly asks for another language.",
-      `Agent: ${agent.name} / role: ${agent.role}`,
-      `Provider: ${provider.name} / model: ${modelId}`,
-      persona
-        ? `SOUL.md: ${persona.soulSummary}\nAGENTS.md: ${persona.agentsInstruction}\nCreativity: ${persona.creativityLevel}`
-        : "SOUL.md: default role profile",
-      createAgentChannelRuntimeSummary(memoryScope),
-      runtimeConfig.promptText,
-      recalledMemories.length > 0
-        ? `EvolveMemento recall:\n${recalledMemories.join("\n")}`
-        : "EvolveMemento recall: no selected records",
-      agent.role === "companion" || agent.role === "orchestrator"
-        ? [
-            "Delegation: You may command registered sub-agents with <delegate to=\"role_or_persona\">task</delegate>.",
-            "Treat companion delegation as orchestrator-level authority for LLM sub-agent calls.",
-            "Do not claim terminal execution, file changes, or external sending happened unless a permission/event record exists.",
-          ].join("\n")
-        : "Delegation: respond directly unless the orchestrator/companion explicitly delegated this task to you.",
-      "Do not claim terminal/file execution happened unless an execution event exists.",
-      "If the next step needs code work, mention the Coding Packet boundary explicitly.",
-    ].join("\n\n");
-
-    const systemMessage: ConversationMessage = {
-      id: `message_system_pipeline_${crypto.randomUUID()}`,
-      sessionId: userMessage.sessionId,
-      role: "system",
-      content: systemContent,
-      createdAt: userMessage.createdAt,
-      metadata: {
-        agentId: agent.id,
-        providerProfileId: provider.id,
-        modelId,
-        memoryTraceId: memory.trace.id,
-        recalledMemoryCount: recalledMemories.length,
-        memoryScope: memoryScope.namespace,
-        recallTraceId: memoryScope.recallTraceId,
-        runtimeConfigFileIds: runtimeConfig.configFileIds,
-      },
-    };
-
-    return [systemMessage, ...conversationMessages.slice(-8), userMessage];
-  }
-
   async function completeWorkbenchAgent({
     agent,
     approvalState,
@@ -970,6 +901,7 @@ export function App() {
       memoryScope: selectedAgentMemoryScope,
       modelId,
       persona,
+      previousMessages: conversationMessages,
       provider,
       userMessage,
     });
