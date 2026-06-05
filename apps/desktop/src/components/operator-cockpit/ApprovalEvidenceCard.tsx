@@ -5,7 +5,13 @@ import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
 import { badgeColorForPayload } from "./presentation";
 
-export function ApprovalEvidenceCard({ approvals }: { approvals: OperatorCockpitApprovalEvidence[] }) {
+export function ApprovalEvidenceCard({ 
+  approvals, 
+  onPreview 
+}: { 
+  approvals: OperatorCockpitApprovalEvidence[];
+  onPreview?: () => void;
+}) {
   return (
     <GlassPanel variant={approvals.length > 0 ? "warning" : "default"}>
       <GlassPanelHeader action={<Badge color={approvals.length > 0 ? "yellow" : "green"}>{approvals.length} pending</Badge>}>
@@ -34,7 +40,14 @@ export function ApprovalEvidenceCard({ approvals }: { approvals: OperatorCockpit
                   </div>
                   <p className="mt-1 text-sm leading-relaxed text-zinc-400">{approval.blockReason}</p>
                 </div>
-                <Eye className="h-4 w-4 shrink-0 text-zinc-600" />
+                <button
+                  aria-label="View approval details"
+                  className="rounded p-1.5 text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+                  onClick={onPreview}
+                  type="button"
+                >
+                  <Eye className="h-4 w-4 shrink-0" />
+                </button>
               </div>
 
               {approval.commandPreview && (
@@ -88,6 +101,13 @@ export function ApprovalEvidenceCard({ approvals }: { approvals: OperatorCockpit
                     Payload requires operator attention
                   </div>
                 )}
+
+                {approval.tamperWarning ? (
+                  <div className="mt-2 flex items-center gap-2 rounded bg-rose-500/10 px-2 py-1.5 text-[11px] font-semibold text-rose-400">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    TAMPER WARNING: {approval.securityRisk || "Payload signature verification failed"}
+                  </div>
+                ) : null}
               </div>
             </article>
           ))}
