@@ -16,6 +16,15 @@ import type { AgentActivityStatus, AgentVisualSettings, WorkbenchAgent } from ".
 import { StatusBadge } from "@/ui/status-badge";
 import { TmuxPaneCard } from "./TmuxPaneCard";
 import { makeSyntheticBlock } from "./TmuxPaneTimeline";
+import {
+  compactTmuxPreview,
+  formatTmuxDifficultyLabel,
+  formatTmuxPaneCountLabel,
+  sanitizeTmuxWorkbenchText,
+  tmuxPaneRoleLabel,
+  tmuxWorkbenchCopy,
+  type TmuxWorkbenchDifficulty,
+} from "../lib/tmuxWorkbenchPresentation";
 
 type TmuxPaneDefinition = {
   id: string;
@@ -70,9 +79,7 @@ export function TmuxSwarmBoard({
   const roleAgent = (role: WorkbenchAgent["role"]) => agents.find((agent) => agent.role === role);
   const recommendation = createTmuxSwarmRecommendation(packet, messages);
   const [busyByRole, setBusyByRole] = useState<Record<string, PaneBusyState | undefined>>({});
-  const [boardNotice, setBoardNotice] = useState(
-    "DGX-02 tmux 게이트 준비됨. 실제 send-keys는 서버 env gate와 승인 이후에만 실행됩니다.",
-  );
+  const [boardNotice, setBoardNotice] = useState<string>(tmuxWorkbenchCopy.gatedNotice);
   const panes = createTmuxPanes(roleAgent, recommendation);
   const visiblePanes = panes.slice(0, recommendation.recommendedCount);
 
@@ -110,7 +117,7 @@ export function TmuxSwarmBoard({
       onStatusChange((current) => ({ ...current, [pane.roleKey]: result.status }));
       onOutputChange((current) => ({
         ...current,
-        [pane.roleKey]: result.payload?.outputPreview || result.reason,
+        [pane.roleKey]: compactTmuxPreview(result.payload?.outputPreview || result.reason),
       }));
       appendBlock(
         pane.roleKey,
@@ -127,9 +134,9 @@ export function TmuxSwarmBoard({
           outputPreview: result.payload?.outputPreview,
         }),
       );
-      setBoardNotice(`${pane.title}: ${result.reason}`);
+      setBoardNotice(sanitizeTmuxWorkbenchText(`${pane.title}: ${result.reason}`));
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = sanitizeTmuxWorkbenchText(error instanceof Error ? error.message : String(error));
       onStatusChange((current) => ({ ...current, [pane.roleKey]: "capture failed" }));
       onOutputChange((current) => ({ ...current, [pane.roleKey]: message }));
       setBoardNotice(`${pane.title}: capture 실패 - ${message}`);
@@ -162,8 +169,8 @@ export function TmuxSwarmBoard({
       onOutputChange((current) => ({
         ...current,
         [pane.roleKey]: result.approval
-          ? `승인 대기: ${result.approval.reason}`
-          : `${result.dispatch.status}: ${result.dispatch.reason}`,
+          ? sanitizeTmuxWorkbenchText(`승인 대기: ${result.approval.reason}`)
+          : sanitizeTmuxWorkbenchText(`${result.dispatch.status}: ${result.dispatch.reason}`),
       }));
       // Intent → optional approval gate → dispatch outcome
       appendBlock(
@@ -220,9 +227,9 @@ export function TmuxSwarmBoard({
           }),
         );
       }
-      setBoardNotice(`${pane.title}: ${result.dispatch.reason}`);
+      setBoardNotice(sanitizeTmuxWorkbenchText(`${pane.title}: ${result.dispatch.reason}`));
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = sanitizeTmuxWorkbenchText(error instanceof Error ? error.message : String(error));
       onStatusChange((current) => ({ ...current, [pane.roleKey]: "dispatch failed" }));
       onOutputChange((current) => ({ ...current, [pane.roleKey]: message }));
       setBoardNotice(`${pane.title}: dispatch 실패 - ${message}`);
@@ -233,7 +240,7 @@ export function TmuxSwarmBoard({
 
   return (
     <section
-      aria-label="Tmux Workbench"
+      aria-label={tmuxWorkbenchCopy.kicker}
       className="flex h-full flex-col overflow-hidden bg-zinc-950 text-zinc-100 focus:outline-none"
       data-focus-id="tmux-swarm-board-container"
       tabIndex={-1}
@@ -243,7 +250,7 @@ export function TmuxSwarmBoard({
           <Terminal className="h-4 w-4 text-amber-400" />
           <div>
             <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-              Tmux Workbench
+              {tmuxWorkbenchCopy.kicker}
             </span>
             <h1 className="text-sm font-medium text-zinc-100">ai-swarm</h1>
           </div>
@@ -251,23 +258,23 @@ export function TmuxSwarmBoard({
         <div className="flex items-center gap-4 text-xs text-zinc-500">
           <span className="hidden items-center gap-1.5 sm:flex">
             <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
-            {visiblePanes.length} panes
+            {formatTmuxPaneCountLabel(visiblePanes.length)}
           </span>
-          <span>{recommendation.difficulty}</span>
+          <span>{formatTmuxDifficultyLabel(recommendation.difficulty)}</span>
         </div>
       </header>
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 border-b border-zinc-800/60 bg-zinc-900/30 px-4 py-2 md:px-6">
         <div className="min-w-0 flex-1">
           <div className="text-[10px] uppercase tracking-wider text-zinc-600">
-            Orchestrator 추천
+            {tmuxWorkbenchCopy.recommendationLabel}
           </div>
           <p className="truncate text-xs text-zinc-200">{recommendation.summary}</p>
         </div>
         <div className="flex flex-wrap gap-1 sm:ml-auto">
           {recommendation.recommendedRoles.map((role) => (
             <StatusBadge variant="muted" size="sm" key={role}>
-              {role}
+              {tmuxPaneRoleLabel(role)}
             </StatusBadge>
           ))}
         </div>
@@ -301,10 +308,10 @@ export function TmuxSwarmBoard({
         <div className="mx-auto flex max-w-4xl items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2">
           <Terminal className="h-4 w-4 shrink-0 text-zinc-500" />
           <p className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-300">
-            {boardNotice}
+            {sanitizeTmuxWorkbenchText(boardNotice)}
           </p>
           <span className="hidden text-[10px] text-zinc-500 sm:inline">
-            session {activeSessionId.slice(-12)}
+            세션 {activeSessionId.slice(-12)}
           </span>
         </div>
       </footer>
@@ -312,7 +319,7 @@ export function TmuxSwarmBoard({
   );
 }
 
-type TmuxSwarmDifficulty = "light" | "standard" | "complex" | "critical";
+type TmuxSwarmDifficulty = TmuxWorkbenchDifficulty;
 
 function createTmuxPanes(
   roleAgent: (role: WorkbenchAgent["role"]) => WorkbenchAgent | undefined,
@@ -322,7 +329,7 @@ function createTmuxPanes(
     {
       id: "pane-0",
       roleKey: "discussion",
-      title: "Discussion & Planning",
+      title: "논의와 계획",
       role: "요구사항 / 제품 / 아키텍처 논의",
       state: "chat active",
       agent: roleAgent("orchestrator"),
@@ -331,7 +338,7 @@ function createTmuxPanes(
     {
       id: "pane-1",
       roleKey: "orchestrator",
-      title: "Orchestrator Control",
+      title: "오케스트레이터 지휘",
       role: "작업 분해 / 역할 배정 / 지휘",
       state: "dispatch gated",
       agent: roleAgent("orchestrator"),
@@ -340,7 +347,7 @@ function createTmuxPanes(
     {
       id: "pane-2",
       roleKey: "status",
-      title: "Status & Monitor",
+      title: "상태 감시",
       role: "진행 로그 / 테스트 / stuck run 감시",
       state: "watch only",
       signal: "Event Storage에 기록 가능한 run intent와 capture 상태를 봅니다.",
@@ -348,7 +355,7 @@ function createTmuxPanes(
     {
       id: "pane-3",
       roleKey: "code",
-      title: "Agent - Code Expert",
+      title: "코드 작업자",
       role: "핵심 로직 / 리팩터링 / 복잡 구현",
       state: "idle",
       agent: roleAgent("builder"),
@@ -357,7 +364,7 @@ function createTmuxPanes(
     {
       id: "pane-4",
       roleKey: "architect",
-      title: "Agent - Architect",
+      title: "설계 작업자",
       role: "protocol / Event Storage / 타입 경계",
       state: "ready",
       agent: roleAgent("architect"),
@@ -366,7 +373,7 @@ function createTmuxPanes(
     {
       id: "pane-5",
       roleKey: "frontend",
-      title: "Agent - Frontend Dev",
+      title: "프론트 작업자",
       role: "desktop UI / Workbench / Execution Slot",
       state: "active",
       signal: "현재 tmux workbench와 approval UX wiring을 담당합니다.",
@@ -374,7 +381,7 @@ function createTmuxPanes(
     {
       id: "pane-6",
       roleKey: "backend",
-      title: "Agent - Backend Dev",
+      title: "백엔드 작업자",
       role: "server / sync / DGX 연결 지점",
       state: "idle",
       signal: "DGX-02가 main server입니다. DGX-01은 locked 상태로 둡니다.",
@@ -382,7 +389,7 @@ function createTmuxPanes(
     {
       id: "pane-7",
       roleKey: "qa",
-      title: "Agent - QA & Security",
+      title: "검증과 보안",
       role: "테스트 / 권한 / redaction / 회귀검사",
       state: "guarding",
       agent: roleAgent("reviewer") ?? roleAgent("verifier"),
@@ -391,7 +398,7 @@ function createTmuxPanes(
     {
       id: "pane-8",
       roleKey: "research",
-      title: "Agent - Research Scout",
+      title: "조사 작업자",
       role: "외부 문서 / repo / 레퍼런스 조사",
       state: recommendation.recommendedRoles.includes("research") ? "recommended" : "standby",
       agent: roleAgent("skeptic"),
@@ -400,7 +407,7 @@ function createTmuxPanes(
     {
       id: "pane-9",
       roleKey: "memory",
-      title: "Agent - Memory Curator",
+      title: "기억 관리자",
       role: "Memento recall / 결정 기록 / handoff 정리",
       state: recommendation.recommendedRoles.includes("memory") ? "recommended" : "standby",
       agent: roleAgent("memory_curator"),

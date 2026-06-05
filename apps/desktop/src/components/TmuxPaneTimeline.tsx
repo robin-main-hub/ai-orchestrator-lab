@@ -22,6 +22,7 @@ import type {
 } from "@ai-orchestrator/protocol";
 import { cn } from "../lib/utils";
 import { createTerminalBlockPublicWorkTrace } from "../lib/publicWorkTrace";
+import { compactTmuxPreview, sanitizeTmuxWorkbenchText } from "../lib/tmuxWorkbenchPresentation";
 import { PublicWorkTracePanel } from "./PublicWorkTracePanel";
 
 /**
@@ -51,7 +52,7 @@ export function TmuxPaneTimeline({ blocks, limit = 5 }: TmuxPaneTimelineProps) {
     <div className="tmux-pane-timeline" aria-label="pane timeline">
       <header className="tmux-pane-timeline__head">
         <Clock3 size={11} />
-        <span>timeline</span>
+        <span>타임라인</span>
         <em>{blocks.length}</em>
       </header>
       {visible.length === 0 ? (
@@ -115,15 +116,15 @@ function TimelineBlockRow({ block }: { block: TerminalTimelineBlock }) {
         <CollapsibleContent>
           {hasDetail ? (
             <div className="tmux-block__detail">
-              {block.summary ? <p className="tmux-block__summary">{block.summary}</p> : null}
+              {block.summary ? <p className="tmux-block__summary">{sanitizeTmuxWorkbenchText(block.summary)}</p> : null}
               {block.outputPreview ? (
-                <pre className="tmux-block__output">{block.outputPreview}</pre>
+                <pre className="tmux-block__output">{compactTmuxPreview(block.outputPreview)}</pre>
               ) : null}
               <PublicWorkTracePanel className="sm:grid-cols-1" trace={publicWorkTrace} />
               <footer className="tmux-block__meta">
                 <span>{statusLabel(block.status)}</span>
-                {block.redactionApplied ? <em>redacted</em> : null}
-                {block.approvalId ? <span>approval:{block.approvalId.slice(-6)}</span> : null}
+                {block.redactionApplied ? <em>마스킹됨</em> : null}
+                {block.approvalId ? <span>승인:{block.approvalId.slice(-6)}</span> : null}
                 {block.runId ? <span>run:{block.runId.slice(-6)}</span> : null}
               </footer>
             </div>
