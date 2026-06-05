@@ -11,7 +11,13 @@ import { RecoveryContinuityCard } from "./RecoveryContinuityCard";
 import { WorkerFleetCard } from "./WorkerFleetCard";
 import { badgeColorForMirror, formatClock } from "./presentation";
 
-export function OperatorCockpit({ snapshot }: { snapshot: OperatorCockpitSnapshot }) {
+export function OperatorCockpit({ 
+  snapshot,
+  onPreviewEvidence,
+}: { 
+  snapshot: OperatorCockpitSnapshot;
+  onPreviewEvidence?: () => void;
+}) {
   const blockedCount = snapshot.fleet.filter((worker) => worker.status === "blocked" || worker.status === "error").length;
   const approvalCount = snapshot.approvals.length;
   const riskyApprovalCount = snapshot.approvals.filter((approval) => approval.payloadBindingStatus !== "bound").length;
@@ -91,7 +97,7 @@ export function OperatorCockpit({ snapshot }: { snapshot: OperatorCockpitSnapsho
           </div>
 
           <div className="min-w-0 space-y-4 lg:col-span-5">
-            <ApprovalEvidenceCard approvals={snapshot.approvals} />
+            <ApprovalEvidenceCard approvals={snapshot.approvals} onPreview={onPreviewEvidence} />
             <HandoffCard handoffs={snapshot.handoffs} />
             <DispatchHistoryCard history={snapshot.dispatchHistory} />
           </div>
