@@ -65,8 +65,8 @@ export function useMemoryController({
   );
 
   const memoryApi = useMemo(
-    () => createAdapterBackedMementoMemoryApi({ adapter: memoryAdapter }),
-    [memoryAdapter],
+    () => createAdapterBackedMementoMemoryApi({ adapter: memoryAdapter, operationScope: memoryScope }),
+    [memoryAdapter, memoryScope],
   );
 
   useEffect(() => {
