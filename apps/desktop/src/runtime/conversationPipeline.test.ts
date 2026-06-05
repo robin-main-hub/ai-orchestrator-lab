@@ -125,6 +125,9 @@ describe("conversation pipeline runtime helper", () => {
         memoryTraceId: "trace_memory_001",
         recalledMemoryCount: 1,
         memoryScope: memoryScope.namespace,
+        memoryScopeAgentId: "agent_orchestrator",
+        memoryScopeProviderProfileId: "provider_mimo_token_openai",
+        memoryScopeSessionId: "session_main",
         recallTraceId: memoryScope.recallTraceId,
         runtimeConfigFileIds: ["config_skill_role_tool_profiles_v1"],
       },
@@ -134,6 +137,7 @@ describe("conversation pipeline runtime helper", () => {
     expect(pipeline[0]?.content).toContain("Agent: 마키마 / role: orchestrator");
     expect(pipeline[0]?.content).toContain("Provider: MiMo Token Plan / model: mimo-v2.5-pro");
     expect(pipeline[0]?.content).toContain("총괄 지휘자");
+    expect(pipeline[0]?.content).toContain(`namespace=${memoryScope.namespace}`);
     expect(pipeline[0]?.content).toContain(memoryScope.recallTraceId);
     expect(pipeline[0]?.content).toContain("역할별 도구 호출 프로필");
     expect(pipeline[0]?.content).toContain("[REDACTED:env_secret]");

@@ -70,14 +70,15 @@ describe("agent runtime config injection", () => {
   });
 
   it("summarizes the active agent memory channel for the runtime prompt", () => {
-    expect(
-      createAgentChannelRuntimeSummary({
-        agentId: "agent_orchestrator",
-        sessionId: "session_main",
-        providerProfileId: "provider_mimo_token_openai",
-        namespace: "agent:agent_orchestrator/session:session_main/provider:provider_mimo_token_openai",
-        recallTraceId: "recall_agent_orchestrator_session_main_provider_mimo_token_openai",
-      }),
-    ).toContain("권한 상승이나 다른 에이전트 채널 접근 허가가 아니다");
+    const summary = createAgentChannelRuntimeSummary({
+      agentId: "agent_orchestrator",
+      sessionId: "session_main",
+      providerProfileId: "provider_mimo_token_openai",
+      namespace: "agent:agent_orchestrator/session:session_main/provider:provider_mimo_token_openai",
+      recallTraceId: "recall_agent_orchestrator_session_main_provider_mimo_token_openai",
+    });
+
+    expect(summary).toContain("권한 상승이나 다른 에이전트 채널 접근 허가가 아니다");
+    expect(summary).toContain("namespace=agent:agent_orchestrator/session:session_main/provider:provider_mimo_token_openai");
   });
 });
