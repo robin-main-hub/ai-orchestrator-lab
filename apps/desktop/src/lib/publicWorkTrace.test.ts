@@ -21,7 +21,11 @@ describe("publicWorkTrace", () => {
         modelId: "mimo-v2.5-pro",
         realProviderCall: true,
         route: "mimo-openai",
+        usage: {
+          totalTokens: 128,
+        },
         memoryScope: "agent_orchestrator/session_main/provider_mimo_token_openai",
+        memoryTraceId: "trace_memory_001",
         recallTraceId: "recall_agent_orchestrator_session_main_provider_mimo_token_openai",
         recalledMemoryCount: 4,
         runtimeConfigFileIds: ["config_memory_policy", "config_tool_profile"],
@@ -49,10 +53,28 @@ describe("publicWorkTrace", () => {
         value: "mimo-openai · mimo-v2.5-pro",
       }),
     );
+    expect(trace.groups[0]?.items).toContainEqual(
+      expect.objectContaining({
+        label: "토큰 사용",
+        value: "128 total tokens",
+      }),
+    );
     expect(trace.groups[1]?.items).toContainEqual(
       expect.objectContaining({
         label: "위임 제안",
         value: "verifier · succeeded",
+      }),
+    );
+    expect(trace.groups[1]?.items).toContainEqual(
+      expect.objectContaining({
+        label: "런타임 규칙",
+        value: "2개 config 적용",
+      }),
+    );
+    expect(trace.groups[2]?.items).toContainEqual(
+      expect.objectContaining({
+        label: "기억 추적",
+        value: "trace_memory_001",
       }),
     );
     expect(trace.groups[2]?.items).toContainEqual(
