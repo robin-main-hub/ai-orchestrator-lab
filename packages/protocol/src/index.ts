@@ -2238,6 +2238,8 @@ export const operatorCockpitWorkerFleetSchema = z.object({
   role: agentRoleSchema,
   status: operatorCockpitWorkerStatusSchema,
   statusRingColor: z.enum(["green", "yellow", "red", "gray"]),
+  lane: workLaneSchema.optional(),
+  surface: workSurfaceSchema.optional(),
   worktree: z.string().optional(),
   branch: z.string().optional(),
   blockedReason: z.string().optional(),
@@ -2250,6 +2252,8 @@ export const operatorCockpitApprovalEvidenceSchema = z.object({
   evidenceRefs: z.array(evidenceRefSchema),
   commandPreview: z.string().optional(),
   payloadBindingStatus: z.enum(["bound", "unbound", "expired"]),
+  tamperWarning: z.boolean().optional(),
+  securityRisk: z.string().optional(),
 });
 export type OperatorCockpitApprovalEvidence = z.infer<typeof operatorCockpitApprovalEvidenceSchema>;
 
@@ -2257,6 +2261,7 @@ export const operatorCockpitHandoffSchema = z.object({
   ownerAgentId: z.string(),
   nextAction: z.string(),
   missingInfoSlots: z.array(missingInfoSlotSchema),
+  evidenceRefs: z.array(evidenceRefSchema).optional(),
 });
 export type OperatorCockpitHandoff = z.infer<typeof operatorCockpitHandoffSchema>;
 
@@ -2290,6 +2295,8 @@ export const operatorCockpitDispatchHistorySchema = z.object({
   approvalState: z.enum(["not_required", "required", "approved", "rejected", "expired"]),
   replayPayloadDigest: z.string(),
   tamperWarning: z.boolean(),
+  tamperReason: z.string().optional(),
+  evidenceRefs: z.array(evidenceRefSchema).optional(),
   createdAt: z.string(),
 });
 export type OperatorCockpitDispatchHistory = z.infer<typeof operatorCockpitDispatchHistorySchema>;
