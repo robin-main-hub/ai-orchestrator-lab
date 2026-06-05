@@ -844,6 +844,40 @@ describe("server health placeholder", () => {
     }
   });
 
+  it("fails closed for unregistered provider proxy requests without echoing secret-like input", async () => {
+    const response = await createDgxProviderCompletionResponse(
+      {
+        id: "provider_completion_request_unregistered",
+        sessionId: "session_1",
+        providerProfileId: "provider_unknown_sk-test-secret",
+        modelId: "unapproved-model",
+        messages: [
+          {
+            role: "user",
+            content: "Try this token sk-test-secret-from-message",
+          },
+        ],
+        source: "desktop",
+        routePreference: "server_proxy",
+        createdAt: "2026-06-05T00:00:00.000Z",
+      },
+      {
+        now: "2026-06-05T00:00:00.000Z",
+        fetchImpl: async () => {
+          throw new Error("unregistered provider must not fetch");
+        },
+      },
+    );
+
+    expect(response.status).toBe("failed");
+    expect(response.route).toBe("server_proxy");
+    expect(response.error).toContain("provider is not registered");
+    expect(response.error).not.toContain("sk-test-secret");
+    expect(response.content).toBeUndefined();
+    expect(response.runtimeHints?.retryable).toBe(false);
+    expect(JSON.stringify(response)).not.toContain("sk-test-secret-from-message");
+  });
+
   it("routes Codex OAuth completions through the CLI adapter without calling HTTP fetch", async () => {
     const response = await createDgxProviderCompletionResponse(
       {
