@@ -46,11 +46,10 @@ export function createAgentConversationFlowCards({
 }: AgentConversationFlowInput): AgentConversationFlowCard[] {
   const toolProfile = getAgentToolProfile(agent.role);
   const providerId = providerProfileId ?? memoryScope?.providerProfileId ?? "provider_unassigned";
-  const recallTraceId = memoryScope?.recallTraceId ?? `recall_${agent.id}_manual`;
-  const namespace = memoryScope?.namespace ?? `agent:${agent.id}/manual`;
-  const recallQuery = memoryScope
-    ? createAgentChannelRecallQuery(memoryScope, `${agent.name} ${agent.role} conversation`)
-    : `agent:${agent.id}\nprovider:${providerId}`;
+  const scopeLabel = memoryScope
+    ? `에이전트 ${memoryScope.agentId} / 세션 ${memoryScope.sessionId}`
+    : `에이전트 ${agent.id} / 수동 세션`;
+  const recallQuery = memoryScope ? createAgentChannelRecallQuery(memoryScope, `${agent.name} ${agent.role} conversation`) : undefined;
 
   return [
     {
@@ -69,9 +68,10 @@ export function createAgentConversationFlowCards({
       label: "EvolveMemento",
       value: createMemoryValue(adapterStatus, memoryRecordCount),
       details: [
-        `namespace=${namespace}`,
-        `Recall Trace=${recallTraceId}`,
-        `recall query=${recallQuery.replace(/\s+/g, " ").slice(0, 96)}`,
+        scopeLabel,
+        `${memoryRecordCount}개 recall 후보`,
+        recallQuery ? "대화 맥락 기반 recall 준비" : "수동 recall 대기",
+        "기억 원문은 채팅 화면에 직접 노출하지 않음",
         "trusted provider가 아니면 장기 기억 자동 주입은 수동 확인",
       ],
       tone: createMemoryTone(adapterStatus),
