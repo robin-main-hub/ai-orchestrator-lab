@@ -227,4 +227,52 @@ describe("conversation pipeline runtime helper", () => {
       expect(pipeline[0]?.metadata?.roleToolProfileTools).toEqual(expect.arrayContaining([expect.any(String)]));
     }
   });
+
+  it("redacts persona and recalled memory text before injecting the system prompt", () => {
+    const userMessage = message("message_user_latest", "user", "요약해줘");
+    const unsafeMemory = {
+      trace: {
+        id: "trace_memory_unsafe",
+        results: [
+          {
+            usedInDecision: true,
+            score: 0.95,
+            record: {
+              title: "secret https://token-plan-sgp.xiaomimimo.com/v1",
+              content: "Bearer sk-1234567890abcdef /Users/robin/private raw prompt: hidden",
+            },
+          },
+        ],
+      },
+    } as Stage6MemoryInspector;
+
+    const pipeline = createConversationPipelineMessages({
+      agent,
+      configFiles: [],
+      memory: unsafeMemory,
+      memoryScope,
+      modelId: "mimo-v2.5-pro",
+      persona: {
+        ...persona,
+        agentsInstruction: "COOKIE=session-secret",
+        soulSummary: "PASSWORD=hunter2",
+      },
+      previousMessages: [],
+      provider,
+      systemMessageId: "message_system_pipeline_redaction_test",
+      userMessage,
+    });
+    const content = pipeline[0]?.content ?? "";
+
+    expect(content).not.toContain("https://token-plan-sgp.xiaomimimo.com/v1");
+    expect(content).not.toContain("sk-1234567890abcdef");
+    expect(content).not.toContain("/Users/robin/private");
+    expect(content).not.toContain("hidden");
+    expect(content).not.toContain("COOKIE=session-secret");
+    expect(content).not.toContain("PASSWORD=hunter2");
+    expect(content).toContain("[REDACTED:url]");
+    expect(content).toContain("Bearer [REDACTED:bearer_token]");
+    expect(content).toContain("[REDACTED:path]");
+    expect(content).toContain("[REDACTED:internal]");
+  });
 });

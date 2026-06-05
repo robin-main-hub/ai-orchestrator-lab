@@ -97,6 +97,21 @@ describe("agent runtime config injection", () => {
     expect(section.configFileIds).toEqual(["config_[REDACTED:token_plan]"]);
   });
 
+  it("redacts runtime config labels and raw internal text before prompt injection", () => {
+    const section = createAgentRuntimeConfigSection(agent, [
+      {
+        ...configFiles[0]!,
+        label: "외부 문서 https://token-plan-sgp.xiaomimimo.com/v1",
+        body: "raw prompt: never expose this",
+      },
+    ]);
+
+    expect(section.promptText).not.toContain("https://token-plan-sgp.xiaomimimo.com/v1");
+    expect(section.promptText).not.toContain("never expose this");
+    expect(section.promptText).toContain("[REDACTED:url]");
+    expect(section.promptText).toContain("[REDACTED:internal]");
+  });
+
   it("audits role tool runtime contracts for every seeded agent", () => {
     const audit = createAgentRoleToolRuntimeAudit(seededAgentProfiles);
 

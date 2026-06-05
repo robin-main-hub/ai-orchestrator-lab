@@ -127,7 +127,7 @@ function EmptyConversation({ summary }: { summary: AgentChatContinuitySummary })
         <kbd className="mt-2 inline-flex rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-zinc-300">
           ⌘K
         </kbd>
-        로 봇 전환.
+        로 역할 전환.
       </p>
     </div>
   );
@@ -329,10 +329,10 @@ function DelegationInline({ items }: { items: DelegationPreviewItem[] }) {
       <div className="mb-2 flex items-center justify-between text-xs">
         <span className="flex items-center gap-1.5 font-medium text-violet-300">
           <GitBranch className="h-3.5 w-3.5" />
-          Delegation
+          위임 추적
         </span>
         <span className="rounded-full border border-violet-400/20 bg-black/20 px-2 py-0.5 text-[10px] text-violet-200">
-          {items.length} tracked
+          {items.length}건 추적
         </span>
       </div>
       <div className="space-y-1.5">
