@@ -14,10 +14,10 @@ const laneLabels: Record<ControlQueueLaneId, string> = {
 const actionFeedbackLabels: Record<ControlQueueLaneId, string> = {
   approve: "승인 처리",
   archive: "거부 처리",
-  ask: "질문이 대화 초안으로 준비됩니다",
+  ask: "대화 입력창에 질문 초안 생성",
   block: "항목이 차단됩니다",
-  delegate: "실행 위임안이 준비됩니다",
-  edit: "수정 초안이 생성됩니다",
+  delegate: "작업 항목에 실행 위임 초안 생성",
+  edit: "작업 항목에 수정 초안 생성",
 };
 
 const stateLabels: Record<string, string> = {

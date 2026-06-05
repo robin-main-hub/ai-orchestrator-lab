@@ -177,6 +177,16 @@ export function getAgentToolBadgeLabels(role: AgentRole): string[] {
   return getAgentToolProfile(role).tools.map((tool) => toolBadgeLabels[tool] ?? tool);
 }
 
+export function getRoleToolDefinitionGaps(): string[] {
+  const tools = new Set(
+    Object.values(roleToolProfiles)
+      .flatMap((profile) => profile.tools),
+  );
+  return [...tools]
+    .filter((tool) => !toolBadgeLabels[tool] || !toolBoundaries[tool])
+    .sort();
+}
+
 export function getAgentToolProfileSummary(role: AgentRole) {
   const profile = getAgentToolProfile(role);
   return {
@@ -187,7 +197,7 @@ export function getAgentToolProfileSummary(role: AgentRole) {
 }
 
 export function createAgentToolRuntimeSummary(tools: string[]): AgentToolRuntimeSummary {
-  const boundaries = tools.map((tool) => toolBoundaries[tool] ?? "read");
+  const boundaries = tools.map((tool) => toolBoundaries[tool] ?? "approval");
   const approvalRequiredCount = boundaries.filter((boundary) => boundary === "approval").length;
   const writeCapableCount = boundaries.filter((boundary) => boundary === "write").length;
   const readOnlyCount = boundaries.filter((boundary) => boundary === "read").length;

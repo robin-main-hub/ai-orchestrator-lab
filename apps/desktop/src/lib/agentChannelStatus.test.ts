@@ -62,7 +62,7 @@ describe("createAgentChannelStatus", () => {
         value: "recall 추적 준비됨",
       },
       {
-        label: "Provider",
+        label: "공급자",
         tone: "ready",
         value: "provider_mimo_token_openai · mimo-v2.5-pro",
       },

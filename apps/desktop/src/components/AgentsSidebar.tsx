@@ -382,8 +382,8 @@ function AgentCard({
     (profile) => profile.id === agent.providerProfileId,
   );
   const activeModel = providerModels.find((model) => model.id === agent.modelId);
-  const providerLabel = activeProvider ? providerDisplayLabel(activeProvider.name) : "provider...";
-  const modelLabel = activeModel?.name ?? agent.modelId ?? "model pending";
+  const providerLabel = activeProvider ? providerDisplayLabel(activeProvider.name) : "Provider 미지정";
+  const modelLabel = activeModel?.name ?? agent.modelId ?? "모델 연결 대기";
   const primaryDisplayName = agentPrimaryDisplayName(agent);
   const secondaryDisplayLabel = agentSecondaryDisplayLabel(agent);
   const toolProfileSummary = getAgentToolProfileSummary(agent.role);
@@ -485,8 +485,8 @@ function AgentCard({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-44">
-            <DropdownMenuItem onSelect={() => onAssignProvider(agent.id, "")}>
-              provider...
+                <DropdownMenuItem onSelect={() => onAssignProvider(agent.id, "")}>
+                  Provider 미지정
             </DropdownMenuItem>
             {profiles.map((profile) => {
               const isOccupied =
@@ -501,9 +501,9 @@ function AgentCard({
                 >
                   <span className="truncate">{displayLabel}</span>
                   {profile.id === agent.providerProfileId ? (
-                    <span className="ml-auto text-[10px] text-primary">active</span>
+                    <span className="ml-auto text-[10px] text-primary">사용 중</span>
                   ) : isOccupied ? (
-                    <span className="ml-auto text-[10px] text-muted-foreground">busy</span>
+                    <span className="ml-auto text-[10px] text-muted-foreground">점유됨</span>
                   ) : null}
                 </DropdownMenuItem>
               );
@@ -538,7 +538,7 @@ function AgentCard({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-44">
               {visibleModels.length === 0 ? (
-                <DropdownMenuItem disabled>model pending</DropdownMenuItem>
+                <DropdownMenuItem disabled>모델 목록 대기 중</DropdownMenuItem>
               ) : null}
               {visibleModels.map((model) => (
                 <DropdownMenuItem
@@ -547,7 +547,7 @@ function AgentCard({
                 >
                   <span className="truncate">{model.name}</span>
                   {model.id === agent.modelId ? (
-                    <span className="ml-auto text-[10px] text-primary">active</span>
+                    <span className="ml-auto text-[10px] text-primary">사용 중</span>
                   ) : null}
                 </DropdownMenuItem>
               ))}

@@ -97,6 +97,9 @@ export const initialConversationMessages: ConversationMessage[] = [
     role: "user",
     content: "문서에 맞춰 첫 구현 골격을 만들자. 토론으로 확대할 수 있게 경계도 살려줘.",
     createdAt: now,
+    metadata: {
+      agentId: "agent_orchestrator",
+    },
   },
   {
     id: "message_seed_orchestrator",
@@ -105,6 +108,7 @@ export const initialConversationMessages: ConversationMessage[] = [
     content: "protocol, provider stub, agent runtime stub, desktop board를 먼저 연결하고 실제 모델 호출은 막아둔다.",
     createdAt: now,
     metadata: {
+      agentId: "agent_orchestrator",
       agentName: "Orchestrator",
       providerProfileId: "provider_mock_local",
     },
