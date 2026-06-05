@@ -100,6 +100,31 @@ export const seededProviderProfiles: ProviderProfile[] = [
   },
   {
     ...createProviderProfile({
+      id: "provider_mimo_token_openai",
+      name: "MiMo Token Plan OpenAI",
+      kind: "openai",
+      baseUrl: "https://token-plan-sgp.xiaomimimo.com/v1",
+      defaultModel: "mimo-v2.5-pro",
+      tags: ["dgx-secret-ref", "server-proxy", "mimo", "token-plan", "openai-compatible"],
+      trustLevel: "limited",
+    }),
+    secretRef: createDgxVaultSecretRef("secret_dgx02_mimo_token_plan", "DGX-02 MiMo Token Plan API key", "dgx-02:MIMO_API_KEY"),
+    modelDiscoveryEndpoint: "https://token-plan-sgp.xiaomimimo.com/v1/models",
+  },
+  {
+    ...createProviderProfile({
+      id: "provider_mimo_token_anthropic",
+      name: "MiMo Token Plan Anthropic",
+      kind: "anthropic",
+      baseUrl: "https://token-plan-sgp.xiaomimimo.com/anthropic",
+      defaultModel: "mimo-v2.5-pro",
+      tags: ["dgx-secret-ref", "server-proxy", "mimo", "token-plan", "anthropic-compatible"],
+      trustLevel: "limited",
+    }),
+    secretRef: createDgxVaultSecretRef("secret_dgx02_mimo_token_plan", "DGX-02 MiMo Token Plan API key", "dgx-02:MIMO_API_KEY"),
+  },
+  {
+    ...createProviderProfile({
       id: "provider_grok_oauth_dgx",
       name: "Grok OAuth #1",
       kind: "custom",
@@ -271,6 +296,7 @@ function inferModelInputModalities(modelId: string): ModelDescriptor["inputModal
     id.includes("qwen") ||
     id.includes("deepseek") ||
     id.includes("kimi") ||
+    id.includes("mimo") ||
     id.includes("codex") ||
     id.includes("reviewer")
   ) {
@@ -354,6 +380,15 @@ export const seededModelCatalog: ModelCatalog = {
     "claude-sonnet-reseller",
     "claude-haiku-reseller",
   ].map((id) => createModel("provider_apifun_claude_b", id, ["apikey.fun", "reseller", "server-proxy"])),
+  provider_mimo_token_openai: [
+    "mimo-v2.5-pro",
+    "mimo-v2.5",
+    "mimo-v2.5-asr",
+  ].map((id) => createModel("provider_mimo_token_openai", id, ["mimo", "token-plan", "openai-compatible", "server-proxy"])),
+  provider_mimo_token_anthropic: [
+    "mimo-v2.5-pro",
+    "mimo-v2.5",
+  ].map((id) => createModel("provider_mimo_token_anthropic", id, ["mimo", "token-plan", "anthropic-compatible", "server-proxy"])),
   provider_grok_oauth_dgx: [
     "grok-oauth-session",
     "grok-4",
