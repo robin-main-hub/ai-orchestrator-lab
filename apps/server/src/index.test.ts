@@ -878,6 +878,59 @@ describe("server health placeholder", () => {
     expect(JSON.stringify(response)).not.toContain("sk-test-secret-from-message");
   });
 
+  it("fails closed for registered providers when the requested model is outside the proxy allowlist", async () => {
+    const permission = evaluateServerProviderCompletionPermission({
+      id: "provider_completion_request_bad_model",
+      sessionId: "session_1",
+      providerProfileId: "provider_apifun_claude",
+      modelId: "claude-opus-99-unregistered",
+      messages: [
+        {
+          role: "user",
+          content: "Try the unregistered model sk-test-secret-from-message",
+        },
+      ],
+      source: "desktop",
+      routePreference: "server_proxy",
+      approvalState: "approved",
+      createdAt: "2026-06-05T00:00:00.000Z",
+    });
+
+    expect(permission.decision).toBe("deny");
+    expect(permission.approvalState).toBe("rejected");
+    expect(permission.reason).toContain("provider model is not registered");
+
+    const response = await createDgxProviderCompletionResponse(
+      {
+        id: "provider_completion_request_bad_model",
+        sessionId: "session_1",
+        providerProfileId: "provider_apifun_claude",
+        modelId: "claude-opus-99-unregistered",
+        messages: [
+          {
+            role: "user",
+            content: "Try the unregistered model sk-test-secret-from-message",
+          },
+        ],
+        source: "desktop",
+        routePreference: "server_proxy",
+        approvalState: "approved",
+        createdAt: "2026-06-05T00:00:00.000Z",
+      },
+      {
+        now: "2026-06-05T00:00:00.000Z",
+        fetchImpl: async () => {
+          throw new Error("unregistered provider model must not fetch");
+        },
+      },
+    );
+
+    expect(response.status).toBe("failed");
+    expect(response.error).toContain("provider model is not registered");
+    expect(response.runtimeHints?.retryable).toBe(false);
+    expect(JSON.stringify(response)).not.toContain("sk-test-secret-from-message");
+  });
+
   it("routes Codex OAuth completions through the CLI adapter without calling HTTP fetch", async () => {
     const response = await createDgxProviderCompletionResponse(
       {
