@@ -227,16 +227,17 @@ export function TmuxSwarmBoard({
   return (
     <section
       aria-label="Role-Based Tmux Agent Swarm"
-      className="flex h-full flex-col bg-background"
+      className="relative flex h-full min-w-[980px] flex-col overflow-hidden bg-zinc-950 text-zinc-100"
       data-focus-id="tmux-swarm-board-container"
       tabIndex={-1}
     >
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(34,211,238,0.14),transparent_34%),radial-gradient(circle_at_90%_18%,rgba(245,158,11,0.10),transparent_30%)]" />
       {/* ── Top header (v0 h-10) ───────────────────────────────── */}
-      <header className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-card/30 px-4">
+      <header className="relative z-10 flex h-11 shrink-0 items-center justify-between border-b border-white/10 bg-zinc-950/80 px-4 backdrop-blur-xl">
         <div className="flex items-center gap-3">
-          <span className="text-[10px] text-muted-foreground">Runtime Workbench</span>
-          <span className="text-xs font-medium text-foreground">ai-swarm</span>
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-[10px] uppercase tracking-[0.22em] text-cyan-300">Runtime Workbench</span>
+          <span className="text-xs font-semibold text-zinc-100">ai-swarm</span>
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-[10px] text-zinc-500">
             {recommendation.recommendedCount} / {recommendation.recommendedCount === 10 ? "10" : "max 10"}
           </span>
            <StatusBadge variant="warning" size="sm">
@@ -244,19 +245,19 @@ export function TmuxSwarmBoard({
              gate
            </StatusBadge>
         </div>
-        <span className="text-xs text-muted-foreground">
+        <span className="font-mono text-xs text-zinc-500">
           {visiblePanes.length} panes · 난이도 {recommendation.difficulty} · score{" "}
           {recommendation.score}
         </span>
       </header>
 
       {/* ── Recommendation strip ───────────────────────────────── */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-border bg-card/20 px-4 py-2">
+      <div className="relative z-10 flex shrink-0 items-center gap-3 border-b border-white/10 bg-white/[0.03] px-4 py-2 backdrop-blur-xl">
         <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-600">
             Orchestrator 추천
           </div>
-          <p className="truncate text-xs text-foreground">{recommendation.summary}</p>
+          <p className="truncate text-xs text-zinc-200">{recommendation.summary}</p>
         </div>
         <div className="ml-auto flex flex-wrap gap-1">
           {recommendation.recommendedRoles.map((role) => (
@@ -268,19 +269,24 @@ export function TmuxSwarmBoard({
       </div>
 
       {/* ── Main: operator chat (left) + pane grid (right) ─────── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="relative z-10 flex flex-1 overflow-hidden">
         {/* Operator Chat */}
-        <div className="flex w-80 shrink-0 flex-col border-r border-border bg-card/20">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <span className="text-xs font-medium text-foreground">Operator Chat</span>
-            <span className="text-[10px] font-mono text-muted-foreground">
+        <div className="flex w-80 shrink-0 flex-col border-r border-white/10 bg-zinc-900/35 backdrop-blur-xl">
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+            <span className="text-xs font-semibold text-zinc-100">Operator Chat</span>
+            <span className="text-[10px] font-mono text-zinc-600">
               {activeSessionId.slice(-12)}
             </span>
           </div>
           <div className="flex-1 space-y-2 overflow-y-auto p-3">
             {recentMessages.map((message) => (
               <div
-                className="rounded-lg border border-border bg-card p-3"
+                className={cn(
+                  "rounded-2xl border p-3 shadow-lg shadow-black/20",
+                  message.role === "user"
+                    ? "border-amber-400/20 bg-amber-500/10"
+                    : "border-white/10 bg-black/20",
+                )}
                 key={message.id}
               >
                 <div className="flex items-start gap-2">
@@ -288,23 +294,23 @@ export function TmuxSwarmBoard({
                     className={cn(
                       "text-[10px] font-medium",
                       message.role === "user"
-                        ? "text-primary"
-                        : "text-muted-foreground",
+                        ? "text-amber-300"
+                        : "text-cyan-300",
                     )}
                   >
                     {message.role === "user" ? "사용자" : messageLabel(message)}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-foreground">{message.content}</p>
+                <p className="mt-1 line-clamp-5 text-xs leading-relaxed text-zinc-300">{message.content}</p>
               </div>
             ))}
           </div>
-          <div className="border-t border-border px-4 py-2 text-[10px]">
-            <div className="text-muted-foreground">tmux session: ai-swarm</div>
-            <div className="text-muted-foreground">
+          <div className="border-t border-white/10 px-4 py-2 font-mono text-[10px]">
+            <div className="text-zinc-500">tmux session: ai-swarm</div>
+            <div className="text-zinc-500">
               runtime backend: DGX-02 gate / 4-10 panes
             </div>
-            <div className="text-muted-foreground">
+            <div className="text-zinc-500">
               send-keys: server env gate + approval required
             </div>
           </div>
@@ -312,11 +318,11 @@ export function TmuxSwarmBoard({
 
         {/* Agent Pane Grid */}
         <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex items-center justify-between border-b border-border px-4 py-2">
-            <span className="text-xs font-medium text-foreground">
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-2">
+            <span className="text-xs font-semibold text-zinc-100">
               Agent Work Status
             </span>
-            <span className="text-[10px] text-muted-foreground">
+            <span className="font-mono text-[10px] text-zinc-600">
               {recommendation.recommendedCount} panes / max 10
             </span>
           </div>
@@ -356,18 +362,18 @@ export function TmuxSwarmBoard({
       </div>
 
       {/* ── Bottom status bar (v0 h-8) ─────────────────────────── */}
-      <footer className="flex h-8 shrink-0 items-center justify-between gap-4 border-t border-border bg-card/30 px-4 text-[10px]">
+      <footer className="relative z-10 flex h-9 shrink-0 items-center justify-between gap-4 border-t border-white/10 bg-zinc-950/80 px-4 font-mono text-[10px] backdrop-blur-xl">
         <div className="flex items-center gap-4">
-          <span className="text-muted-foreground">Event Storage</span>
-          <span className="text-foreground">intent / capture events ready</span>
+          <span className="text-zinc-600">Event Storage</span>
+          <span className="text-cyan-300">intent / capture events ready</span>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-muted-foreground">Permission + Redaction</span>
-          <span className="text-foreground">승인 전 기록, 저장 전 제거</span>
+          <span className="text-zinc-600">Permission + Redaction</span>
+          <span className="text-amber-300">승인 전 기록, 저장 전 제거</span>
         </div>
         <div className="flex min-w-0 items-center gap-4">
-          <span className="text-muted-foreground">서버 응답</span>
-          <span className="truncate text-foreground">{boardNotice}</span>
+          <span className="text-zinc-600">서버 응답</span>
+          <span className="truncate text-zinc-300">{boardNotice}</span>
         </div>
       </footer>
     </section>
