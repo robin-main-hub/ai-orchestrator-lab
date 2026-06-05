@@ -46,6 +46,7 @@ export function CodingPacketPanel({
           className="ghost-button" 
           type="button"
           onClick={handleVerifyClick}
+          title={onVerify ? "Coding Packet 구조 검증" : "검증 러너 미연결"}
           disabled={isVerifying || !onVerify}
         >
           {isVerifying ? (
@@ -98,4 +99,3 @@ export function CodingPacketPanel({
     </section>
   );
 }
-

@@ -25,15 +25,15 @@ type ShortcutRow = {
 };
 
 const SHORTCUTS: ShortcutRow[] = [
-  { keys: ["⌘", "K"], label: "Global Command Palette", priority: "핵심" },
-  { keys: ["⌘", "I"], label: "Ask / Invoke Orchestrator (현재 context로 AI 호출)", priority: "핵심" },
+  { keys: ["⌘", "K"], label: "전역 명령 팔레트", priority: "핵심" },
+  { keys: ["⌘", "I"], label: "오케스트레이터 호출", priority: "핵심" },
   { keys: ["⌘", "1"], label: "Conversation 모드 전환", priority: "핵심" },
   { keys: ["⌘", "2"], label: "Debate 모드 전환", priority: "핵심" },
   { keys: ["⌘", "3"], label: "Tmux 모드 전환", priority: "핵심" },
   { keys: ["⌘", "⇧", "A"], label: "Control Queue 열기 / 닫기", priority: "핵심" },
   { keys: ["⌘", "⇧", "M"], label: "EvolveMemento — 현재 맥락 기억", priority: "보조" },
-  { keys: ["⌘", "⇧", "D"], label: "Debate 생성 또는 pane split-down", priority: "보조" },
-  { keys: ["⌘", "."], label: "Stop / interrupt active agent", priority: "안전" },
+  { keys: ["⌘", "⇧", "D"], label: "토론 생성 또는 패널 분할", priority: "보조" },
+  { keys: ["⌘", "."], label: "활성 에이전트 중단", priority: "안전" },
   { keys: ["⌘", "⏎"], label: "Selected draft 승인 / 전송", priority: "빈번" },
   { keys: ["Esc"], label: "Overlay 닫기 / focus reset", priority: "보편" },
   { keys: ["?"], label: "이 단축키 도움말", priority: "학습" },
@@ -51,17 +51,17 @@ export function CheatSheetOverlay({ open, onClose }: CheatSheetOverlayProps) {
         <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-border px-3 py-3">
           <Dialog.Title className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground">
             <Keyboard className="h-4 w-4" />
-            Keyboard Shortcuts
+            키보드 단축키
           </Dialog.Title>
           <Dialog.Description className="sr-only">
-            Keyboard shortcut cheat sheet for global app commands.
+            전역 앱 명령에 대한 키보드 단축키 안내입니다.
           </Dialog.Description>
           <span className="truncate text-[10px] font-mono text-muted-foreground">
-            design-decisions §6 · verb-first grammar
+            운영 단축키 · 명령 우선 흐름
           </span>
           <Dialog.Close asChild>
             <Button
-              aria-label="close cheat sheet"
+              aria-label="단축키 도움말 닫기"
               className="h-6 w-6"
               size="icon"
               variant="ghost"
@@ -77,13 +77,13 @@ export function CheatSheetOverlay({ open, onClose }: CheatSheetOverlayProps) {
             <thead className="sticky top-0 bg-card">
               <tr>
                 <th className="border-b border-border px-3 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Key
+                  키
                 </th>
                 <th className="border-b border-border px-3 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Action
+                  동작
                 </th>
                 <th className="border-b border-border px-3 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Priority
+                  우선순위
                 </th>
               </tr>
             </thead>
@@ -119,7 +119,7 @@ export function CheatSheetOverlay({ open, onClose }: CheatSheetOverlayProps) {
 
         {/* Footer */}
         <div className="flex items-center gap-1 border-t border-border px-3 py-2 text-[10.5px] text-muted-foreground">
-          <span>Command Palette 에서 같은 액션 검색 가능 —</span>
+          <span>명령 팔레트에서 같은 동작을 검색할 수 있습니다 —</span>
           <kbd className="rounded border border-border bg-card/60 px-1 py-0 font-mono">⌘</kbd>
           <kbd className="rounded border border-border bg-card/60 px-1 py-0 font-mono">K</kbd>
         </div>

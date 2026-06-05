@@ -4,6 +4,7 @@ import {
   getAgentToolBadgeLabels,
   getAgentToolProfile,
   getAgentToolProfileSummary,
+  getRoleToolDefinitionGaps,
 } from "./agentToolProfiles";
 
 describe("getAgentToolProfile", () => {
@@ -60,5 +61,18 @@ describe("agent tool profile runtime boundaries", () => {
     expect(summary.label).toBe("지휘 도구");
     expect(summary.visibleBadges).toEqual(["작업 대기열", "승인 확인", "Tmux 계획"]);
     expect(summary.runtime.boundaryLabel).toBe("승인 필요 1개");
+  });
+
+  it("requires every role tool to have an explicit label and boundary", () => {
+    expect(getRoleToolDefinitionGaps()).toEqual([]);
+  });
+
+  it("treats unknown tools as approval-gated instead of silently read-only", () => {
+    expect(createAgentToolRuntimeSummary(["unknown.future.tool"])).toEqual({
+      approvalRequiredCount: 1,
+      boundaryLabel: "승인 필요 1개",
+      readOnlyCount: 0,
+      writeCapableCount: 0,
+    });
   });
 });

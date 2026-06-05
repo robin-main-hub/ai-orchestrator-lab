@@ -31,7 +31,7 @@ export function createProviderSmokeReadiness(profile: ProviderProfile): Provider
   if (tags.includes("mimo") && tags.includes("openai-compatible")) {
     return {
       commandLabel: "pnpm provider:smoke:ai -- --run-mimo",
-      modeLabel: "샘플 대화 가능",
+      modeLabel: "연결 검증 가능",
       routeLabel: "MiMo OpenAI",
       tone: "success",
     };
@@ -39,7 +39,7 @@ export function createProviderSmokeReadiness(profile: ProviderProfile): Provider
   if (tags.includes("mimo") && tags.includes("anthropic-compatible")) {
     return {
       commandLabel: "pnpm provider:smoke:ai",
-      modeLabel: "호환성 점검",
+      modeLabel: "호환성 검증",
       routeLabel: "MiMo Anthropic",
       tone: "warning",
     };
@@ -100,7 +100,7 @@ export function createProviderRoundtripHarness(profile: ProviderProfile): Provid
   if (tags.includes("mimo") && tags.includes("openai-compatible")) {
     return {
       commandLabel: "pnpm provider:smoke:ai -- --run-mimo",
-      modeLabel: "샘플 대화 준비",
+      modeLabel: "연결 검증 준비",
       routeLabel: "MiMo OpenAI",
       networkPolicyLabel: "명시 실행 시 네트워크 호출",
       secretPolicyLabel: profile.secretRef ? "SecretRef 필요" : "SecretRef 없음",
@@ -111,7 +111,7 @@ export function createProviderRoundtripHarness(profile: ProviderProfile): Provid
   if (tags.includes("mimo") && tags.includes("anthropic-compatible")) {
     return {
       commandLabel: "pnpm provider:smoke:ai -- --run-all",
-      modeLabel: "호환성 확인 준비",
+      modeLabel: "호환성 검증 준비",
       routeLabel: "MiMo Anthropic",
       networkPolicyLabel: "호환성 probe 우선",
       secretPolicyLabel: profile.secretRef ? "SecretRef 필요" : "SecretRef 없음",
