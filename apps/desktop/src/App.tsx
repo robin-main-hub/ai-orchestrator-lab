@@ -516,6 +516,7 @@ export function App() {
     appendEvent,
     events: eventLog,
     markMemorySyncing,
+    memoryScope: selectedAgentMemoryScope,
     messages: conversationMessages,
     packet: codingPacketState,
     provider: selectedProvider,
