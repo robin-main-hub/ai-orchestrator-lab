@@ -158,6 +158,7 @@ import {
 import { ControlQueueDrawer } from "./components/ControlQueueDrawer";
 import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
 import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
+import { OperatorCockpit } from "./components/operator-cockpit/OperatorCockpit";
 import { AgentsSidebar } from "./components/AgentsSidebar";
 import { BackupPanel } from "./components/BackupPanel";
 import { BackupRailMenu } from "./components/BackupRailMenu";
@@ -2402,6 +2403,14 @@ export function App() {
       run: () => setMode("tmux"),
     },
     {
+      id: "switch.cockpit",
+      verb: "Switch",
+      label: "Operator Cockpit",
+      hint: "Mock dashboard view",
+      shortcut: "⌘4",
+      run: () => setMode("cockpit"),
+    },
+    {
       id: "open.control-queue",
       verb: "Open",
       label: "Control Queue",
@@ -2747,7 +2756,7 @@ export function App() {
               session={debateSession}
               agentVisualsById={agentVisualsById}
             />
-          ) : (
+          ) : mode === "tmux" ? (
             <TmuxSwarmBoard
               activeSessionId={activeSessionId}
               agentActivityById={agentActivityById}
@@ -2757,7 +2766,9 @@ export function App() {
               onApprovalQueued={handleTmuxApprovalQueued}
               packet={codingPacketState}
             />
-          )}
+          ) : mode === "cockpit" ? (
+            <OperatorCockpit />
+          ) : null}
 
           {shellVisibility.showWorkItemHandoffPanel ? (
             <WorkItemHandoffPanel
