@@ -41,6 +41,15 @@ describe("publicWorkTrace", () => {
 
     const trace = createConversationMessagePublicWorkTrace(message);
 
+    expect(trace.receipt).toEqual({
+      label: "에이전트 실행 영수증",
+      status: "checkpointed",
+      items: [
+        { label: "범위", value: "생성/도구/핸드오프/메모리" },
+        { label: "기준점", value: "session_main · recall_agent_orchestrator_session_main_provider_mimo_token_openai" },
+        { label: "마스킹", value: "적용됨" },
+      ],
+    });
     expect(trace.groups.map((group) => group.title)).toEqual([
       "작업 단계",
       "명령·도구 제안",
@@ -151,6 +160,15 @@ describe("publicWorkTrace", () => {
 
     const trace = createTerminalBlockPublicWorkTrace(block);
 
+    expect(trace.receipt).toEqual({
+      label: "Tmux 실행 영수증",
+      status: "checkpointed",
+      items: [
+        { label: "범위", value: "디스패치" },
+        { label: "기준점", value: "terminal_session_ai_swarm · role:qa" },
+        { label: "마스킹", value: "적용됨" },
+      ],
+    });
     expect(trace.groups[0]?.items).toContainEqual(
       expect.objectContaining({ label: "tmux 단계", value: "dispatch · completed" }),
     );
