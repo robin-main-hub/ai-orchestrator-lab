@@ -77,7 +77,7 @@ export function Stage3DebateTable({
   return (
     <section
       aria-label="Debate Chamber"
-      className="flex h-full flex-col bg-zinc-950 text-zinc-100 focus:outline-none"
+      className="flex h-full flex-col bg-transparent text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
       data-focus-id="debate-table-container"
       tabIndex={-1}
     >
@@ -111,7 +111,7 @@ export function Stage3DebateTable({
                 </Button>
               ) : null}
               <Button
-                className="bg-violet-600 text-xs text-white hover:bg-violet-700"
+                className="bg-violet-600 text-xs text-zinc-100 hover:bg-violet-700"
                 onClick={onCreateCodingPacket}
                 size="sm"
               >
@@ -246,9 +246,9 @@ function UtteranceCard({
   const borderColor = roleBorderColors[utterance.agentRole] ?? "border-l-zinc-600";
 
   return (
-    <article
+    <div
       className={cn(
-        "rounded-lg border border-zinc-800/60 border-l-2 bg-zinc-900/40 p-4 transition-all hover:border-zinc-700",
+        "rounded-lg border border-zinc-800/60 border-l-2 bg-zinc-900/40 p-4 transition-all hover:border-zinc-700 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 block w-full",
         borderColor,
         isDecisionNode && "ring-1 ring-violet-500/30",
         onSelect && "cursor-pointer",
@@ -308,7 +308,7 @@ function UtteranceCard({
           </footer>
         </div>
       </div>
-    </article>
+    </div>
   );
 }
 

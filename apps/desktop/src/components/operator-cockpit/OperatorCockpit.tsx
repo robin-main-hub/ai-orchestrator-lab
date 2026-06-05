@@ -1,6 +1,6 @@
 import React from "react";
 import { Activity, BrainCircuit, Monitor, RefreshCw, Server, ShieldAlert } from "lucide-react";
-import { mockSnapshot } from "./fixtures/mockSnapshot";
+import type { OperatorCockpitSnapshot } from "@ai-orchestrator/protocol";
 import { ApprovalEvidenceCard } from "./ApprovalEvidenceCard";
 import { Badge } from "./Badge";
 import { DispatchHistoryCard } from "./DispatchHistoryCard";
@@ -11,8 +11,7 @@ import { RecoveryContinuityCard } from "./RecoveryContinuityCard";
 import { WorkerFleetCard } from "./WorkerFleetCard";
 import { badgeColorForMirror, formatClock } from "./presentation";
 
-export function OperatorCockpit() {
-  const snapshot = mockSnapshot;
+export function OperatorCockpit({ snapshot }: { snapshot: OperatorCockpitSnapshot }) {
   const blockedCount = snapshot.fleet.filter((worker) => worker.status === "blocked" || worker.status === "error").length;
   const approvalCount = snapshot.approvals.length;
   const riskyApprovalCount = snapshot.approvals.filter((approval) => approval.payloadBindingStatus !== "bound").length;
@@ -26,7 +25,7 @@ export function OperatorCockpit() {
   return (
     <div
       aria-label="Operator Cockpit read-only command view"
-      className="relative flex h-full min-h-0 flex-col overflow-hidden bg-zinc-950 text-zinc-100"
+      className="relative flex h-full min-h-0 flex-col overflow-hidden bg-transparent text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
       data-focus-id="cockpit-container"
       tabIndex={-1}
     >
@@ -36,10 +35,10 @@ export function OperatorCockpit() {
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.018] [background-image:linear-gradient(to_right,#fff_1px,transparent_1px),linear-gradient(to_bottom,#fff_1px,transparent_1px)] [background-size:32px_32px]"
+        className="pointer-events-none absolute inset-0 opacity-[0.03] [background-image:linear-gradient(to_right,rgba(255,255,255,0.8)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.8)_1px,transparent_1px)] [background-size:32px_32px]"
       />
 
-      <header className="sticky top-0 z-10 border-b border-zinc-800/60 bg-zinc-950/80 px-4 py-3 backdrop-blur-xl">
+      <header className="sticky top-0 z-10 border-b border-zinc-800/60 bg-zinc-900/40 px-4 py-3 backdrop-blur-xl">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-cyan-500/15 text-cyan-300 shadow-[0_0_24px_rgba(6,182,212,0.18)]">

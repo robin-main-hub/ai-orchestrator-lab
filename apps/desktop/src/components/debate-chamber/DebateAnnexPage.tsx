@@ -1,4 +1,4 @@
-import { useMemo, useState, type ElementType } from "react";
+import { useEffect, useMemo, useState, type ElementType } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -73,16 +73,18 @@ export function DebateAnnexPage({
   session: Stage3DebateSession;
 }) {
   const [activeTab, setActiveTab] = useState<AnnexTab>("status");
+  const now = useNow();
+
   const data = useMemo(
     () => ({
       agentRelay: session.humanPeek.map((entry) => ({
         actor: entry.actor,
         action: entry.kind,
         target: entry.target,
-        timestamp: formatRelativeTime(entry.createdAt),
+        timestamp: formatRelativeTime(entry.createdAt, now),
       })),
       evidenceRefs: buildEvidenceRefs(session),
-      logs: buildLogs(session, runtime),
+      logs: buildLogs(session, runtime, now),
       memoryRecall: session.contextPreview.map((value, index) => ({
         confidence: Math.max(62, 94 - index * 7),
         key: `context-${index + 1}`,
@@ -91,17 +93,18 @@ export function DebateAnnexPage({
       queueItems: buildQueueItems({ codingPacketGoal, pendingApprovals, session }),
       statusHub: buildStatusItems(session, runtime),
     }),
-    [codingPacketGoal, pendingApprovals, runtime, session],
+    [codingPacketGoal, pendingApprovals, runtime, session, now],
   );
 
   return (
     <section
-      className={cn("flex h-full flex-col bg-zinc-950 text-zinc-100 focus:outline-none", className)}
+      className={cn("flex h-full flex-col bg-transparent text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50", className)}
       data-focus-id="debate-annex-container"
       tabIndex={-1}
     >
       <header className="shrink-0 border-b border-zinc-800/60 bg-zinc-900/30 px-4 py-4 md:px-6">
-        <div className="flex items-center gap-4">
+        <div className="mx-auto max-w-4xl">
+          <div className="flex items-center gap-4">
           {onBack ? (
             <Button className="h-8 w-8" onClick={onBack} size="icon" variant="ghost">
               <ArrowLeft className="h-4 w-4" />
@@ -142,6 +145,7 @@ export function DebateAnnexPage({
               </button>
             );
           })}
+          </div>
         </div>
       </header>
 
@@ -253,25 +257,25 @@ function buildQueueItems({
   return items;
 }
 
-function buildLogs(session: Stage3DebateSession, runtime: RuntimeSnapshot): LogEntry[] {
+function buildLogs(session: Stage3DebateSession, runtime: RuntimeSnapshot, now: number): LogEntry[] {
   return [
     {
       id: "promoted",
       level: "info",
       message: `Debate promoted from conversation at ${new Date(session.promotedAt).toLocaleString("ko-KR")}`,
-      timestamp: formatRelativeTime(session.promotedAt),
+      timestamp: formatRelativeTime(session.promotedAt, now),
     },
     {
       id: "runtime",
       level: runtime.recentError ? "error" : "info",
       message: runtime.recentError ?? `Runtime updated at ${new Date(runtime.updatedAt).toLocaleString("ko-KR")}`,
-      timestamp: formatRelativeTime(runtime.updatedAt),
+      timestamp: formatRelativeTime(runtime.updatedAt, now),
     },
     ...session.humanPeek.map((entry) => ({
       id: entry.id,
       level: entry.state === "blocked" ? "warn" as const : "info" as const,
       message: `${entry.actor} ${entry.kind} ${entry.target}: ${entry.summary}`,
-      timestamp: formatRelativeTime(entry.createdAt),
+      timestamp: formatRelativeTime(entry.createdAt, now),
     })),
   ];
 }
@@ -474,12 +478,21 @@ function EmptyState({ icon: Icon, message }: { icon: ElementType; message: strin
   );
 }
 
-function formatRelativeTime(value: string) {
+function formatRelativeTime(value: string, now: number) {
   const timestamp = new Date(value).getTime();
   if (Number.isNaN(timestamp)) return value;
-  const delta = Date.now() - timestamp;
+  const delta = now - timestamp;
   if (delta < 60_000) return "just now";
   if (delta < 3_600_000) return `${Math.max(1, Math.floor(delta / 60_000))}m ago`;
   if (delta < 86_400_000) return `${Math.floor(delta / 3_600_000)}h ago`;
   return `${Math.floor(delta / 86_400_000)}d ago`;
+}
+
+function useNow(updateIntervalMs = 60000) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), updateIntervalMs);
+    return () => clearInterval(interval);
+  }, [updateIntervalMs]);
+  return now;
 }
