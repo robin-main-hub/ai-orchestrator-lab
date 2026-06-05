@@ -29,6 +29,8 @@ describe("publicWorkTrace", () => {
         recallTraceId: "recall_agent_orchestrator_session_main_provider_mimo_token_openai",
         recalledMemoryCount: 4,
         runtimeConfigFileIds: ["config_memory_policy", "config_tool_profile"],
+        roleToolProfileLabel: "지휘 도구",
+        roleToolProfileTools: ["work.queue", "approval", "tmux.plan"],
         delegationTags: [
           {
             prompt: "검증자에게 테스트 범위를 확인시켜라",
@@ -53,8 +55,8 @@ describe("publicWorkTrace", () => {
     });
     expect(trace.groups.map((group) => group.title)).toEqual([
       "작업 단계",
-      "명령·도구 제안",
-      "검증·근거",
+      "도구 후보",
+      "검증",
     ]);
     expect(trace.groups[0]?.items).toContainEqual(
       expect.objectContaining({
@@ -79,6 +81,18 @@ describe("publicWorkTrace", () => {
       expect.objectContaining({
         label: "런타임 규칙",
         value: "2개 config 적용",
+      }),
+    );
+    expect(trace.groups[1]?.items).toContainEqual(
+      expect.objectContaining({
+        label: "도구 프로필",
+        value: "지휘 도구 · 3개 후보",
+      }),
+    );
+    expect(trace.groups[1]?.items).toContainEqual(
+      expect.objectContaining({
+        label: "호출 후보",
+        value: "work.queue, approval, tmux.plan",
       }),
     );
     expect(trace.groups[2]?.items).toContainEqual(
@@ -131,6 +145,11 @@ describe("publicWorkTrace", () => {
           "endpoint=https://token-plan-sgp.xiaomimimo.com/v1",
         ].join("\n"),
         providerProfileId: "provider_mimo_token_openai",
+        roleToolProfileLabel: "도구",
+        roleToolProfileTools: [
+          "tool input: rm -rf /Users/robin/Documents",
+          "https://token-plan-sgp.xiaomimimo.com/v1",
+        ],
       },
     };
 
@@ -168,8 +187,8 @@ describe("publicWorkTrace", () => {
     });
     expect(trace.groups.map((group) => group.title)).toEqual([
       "작업 단계",
-      "명령·도구 제안",
-      "검증·근거",
+      "도구 후보",
+      "검증",
     ]);
     expect(trace.groups[0]?.items[0]).toMatchObject({ label: "응답 단계", value: "공개 답변 생성" });
     expect(trace.groups[1]?.items[0]).toMatchObject({ label: "도구 호출", value: "필요 시 목적·입력·권한을 먼저 표시" });
