@@ -727,7 +727,9 @@ function createDiscoveredModels(profile: ProviderProfile): ModelDescriptor[] {
         ]
       : profile.tags.includes("apifun") || profile.tags.includes("apikey.fun")
         ? [
-            profile.defaultModel ?? "claude-opus-4-6",
+            profile.defaultModel ?? "claude-opus-4-8",
+            "claude-opus-4-8",
+            "claude-opus-4-7",
             "claude-opus-4-6",
             "claude-code-compatible",
             "claude-sonnet-reseller",

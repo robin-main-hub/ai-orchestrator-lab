@@ -15,7 +15,7 @@ function baseRequest(overrides: Partial<ProviderCompletionRequest> = {}): Provid
   return baseProviderRequest({
     id: "req_anthropic_001",
     providerProfileId: "provider_apifun_claude",
-    modelId: "claude-opus-4-6",
+    modelId: "claude-opus-4-8",
     ...overrides,
   });
 }
@@ -155,7 +155,7 @@ describe("AnthropicAdapter — request shape", () => {
     });
     await adapter.complete(baseRequest(), createAdapterContext({ secret: "k" }));
     expect(body!.max_tokens).toBe(8192);
-    expect(body!.model).toBe("claude-opus-4-6");
+    expect(body!.model).toBe("claude-opus-4-8");
   });
 
   it("includes anthropic-beta header when configured", async () => {
@@ -450,11 +450,11 @@ describe("AnthropicAdapter — discoverModels", () => {
     const adapter = new AnthropicAdapter({
       profileId: "provider_apifun_claude",
       baseUrl: "https://api.apikey.fun",
-      modelIds: ["claude-opus-4-6", "claude-sonnet-reseller", "claude-haiku-reseller"],
+      modelIds: ["claude-opus-4-8", "claude-sonnet-reseller", "claude-haiku-reseller"],
     });
     const models = await adapter.discoverModels(createAdapterContext({ secret: "k" }));
     expect(models).toHaveLength(3);
-    expect(models[0]!.id).toBe("claude-opus-4-6");
+    expect(models[0]!.id).toBe("claude-opus-4-8");
     expect(models[0]!.providerProfileId).toBe("provider_apifun_claude");
     expect(models[0]!.tags).toContain("anthropic");
     // Opus supports tools; haiku doesn't (in our heuristic).

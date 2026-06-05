@@ -202,11 +202,16 @@ import { createAuthBinding, useProviderRegistryController } from "./hooks/usePro
 import { useWorkItemsController } from "./hooks/useWorkItemsController";
 import { applyAgentProviderAssignment } from "./lib/agentProviderAssignment";
 import { getRestoreFocusSelector, type FocusHistory } from "./lib/focusRestoration";
+import { readJsonState, writeJsonState } from "./lib/persistentJsonState";
 import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbenchDerived";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 
+const CENTER_MODE_STORAGE_KEY = "ai-orchestrator.center-mode.v1";
+
 export function App() {
-  const [mode, setMode] = useState<CenterMode>("conversation");
+  const [mode, setMode] = useState<CenterMode>(() =>
+    readJsonState(CENTER_MODE_STORAGE_KEY, "cockpit", parseStoredCenterMode),
+  );
   const modeRef = useRef<CenterMode>(mode);
   const lastFocusedIdByModeRef = useRef<FocusHistory>({});
   const [runtimeSnapshotState, setRuntimeSnapshotState] = useState<RuntimeSnapshot>(runtimeSnapshot);
@@ -240,6 +245,7 @@ export function App() {
   }, [activeSessionId]);
   useEffect(() => {
     modeRef.current = mode;
+    writeJsonState(CENTER_MODE_STORAGE_KEY, mode);
   }, [mode]);
   useEffect(() => {
     function handleFocusIn(event: FocusEvent) {
@@ -361,6 +367,7 @@ export function App() {
     handleTmuxApprovalQueued,
     handleResolveServerApproval,
   } = useApprovalQueueController({ appendEvent, onTmuxOutcome: handleTmuxOutcome });
+
   const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
   const [contextPackTier, setContextPackTier] = useState<ContextPackTier>("standard");
   const [reviewMode, setReviewMode] = useState<ReviewMode>("quick");
@@ -3397,4 +3404,14 @@ export function App() {
       />
     </div>
   );
+}
+
+function parseStoredCenterMode(value: unknown): CenterMode {
+  return value === "conversation" ||
+    value === "debate" ||
+    value === "tmux" ||
+    value === "cockpit" ||
+    value === "annex"
+    ? value
+    : "cockpit";
 }
