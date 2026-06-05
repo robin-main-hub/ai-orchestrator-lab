@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   appendAgentChannelMessages,
   createAgentChannelMemoryScope,
+  createAgentChannelRecallQuery,
   createInitialAgentConversationChannels,
   getAgentChannelMessages,
 } from "./agentConversationChannels";
@@ -66,5 +67,18 @@ describe("agentConversationChannels", () => {
       namespace: "agent:agent_reviewer/session:session_a/provider:provider_mimo_token_openai",
       recallTraceId: "recall_agent_reviewer_session_a_provider_mimo_token_openai",
     });
+  });
+
+  it("builds recall queries that keep agent, session and provider scope visible to memory adapters", () => {
+    const scope = createAgentChannelMemoryScope("agent_reviewer", "session_a", "provider_mimo_token_openai");
+
+    expect(createAgentChannelRecallQuery(scope, "코딩 패킷 검토")).toBe(
+      [
+        "코딩 패킷 검토",
+        "agent:agent_reviewer",
+        "session:session_a",
+        "provider:provider_mimo_token_openai",
+      ].join("\n"),
+    );
   });
 });
