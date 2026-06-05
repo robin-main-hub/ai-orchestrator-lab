@@ -26,4 +26,19 @@ describe("seeded EvolveMemento config files", () => {
     expect(skill?.body).toContain("agentId");
     expectLinkedToEveryDefaultAgent("config_skill_evolvememento_continuity_v1");
   });
+
+  it("links the role tool profile skill to every default agent without embedding secrets", () => {
+    const skill = initialAgentConfigFiles.find((item) => item.id === "config_skill_role_tool_profiles_v1");
+
+    expect(skill?.kind).toBe("skill");
+    expect(skill?.body).toContain("Orchestrator");
+    expect(skill?.body).toContain("Reviewer");
+    expect(skill?.body).toContain("Executor");
+    expect(skill?.body).toContain("memory.recall");
+    expect(skill?.body).toContain("tool.call");
+    expect(skill?.body).toContain("기본 차단");
+    expect(skill?.body).toContain("trusted provider");
+    expect(skill?.body).not.toContain("MIMO_API_KEY=");
+    expectLinkedToEveryDefaultAgent("config_skill_role_tool_profiles_v1");
+  });
 });
