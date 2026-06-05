@@ -58,6 +58,20 @@ describe("stage32 DGX route diagnostics", () => {
     expect(snapshot.routes[1]?.health.bodyPreview).toBe("bad gateway");
   });
 
+  it("redacts secret-like response previews before storing diagnostics", async () => {
+    const snapshot = await probeDgxProviderRoutes({
+      fetchImpl: async () =>
+        new Response("proxy leaked sk-route-secret-token from /Users/robin/.config/provider", { status: 502 }),
+      serverBaseUrl: "https://orchestrator.endruin.com",
+    });
+
+    const preview = snapshot.routes[0]?.health.bodyPreview ?? "";
+    expect(preview).toContain("[redacted-secret]");
+    expect(preview).toContain("[redacted-path]");
+    expect(preview).not.toContain("sk-route-secret-token");
+    expect(preview).not.toContain("/Users/robin");
+  });
+
   it("marks aborted route probes as timeout", async () => {
     vi.useFakeTimers();
     const fetchImpl = async (_url: RequestInfo | URL, init?: RequestInit) =>
