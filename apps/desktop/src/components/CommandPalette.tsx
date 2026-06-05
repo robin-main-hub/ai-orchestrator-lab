@@ -31,7 +31,7 @@ export function CommandPalette({
   open,
   onClose,
   commands,
-  placeholder = "Search commands... (예: switch debate, approve next, open memento)",
+  placeholder = "명령 검색... (예: 토론 전환, 다음 승인, 기억 열기)",
 }: CommandPaletteProps) {
   
   // Close palette on ESC key (already handled by Dialog content usually, but safety check)
@@ -63,15 +63,15 @@ export function CommandPalette({
         />
         <Dialog.Content 
           className="fixed left-1/2 top-[12vh] z-50 w-[min(512px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-card shadow-2xl p-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
-          aria-label="Command Palette modal"
+          aria-label="명령 팔레트 모달"
         >
-          <Dialog.Title className="sr-only">Command Palette</Dialog.Title>
+          <Dialog.Title className="sr-only">명령 팔레트</Dialog.Title>
           <Dialog.Description className="sr-only">
-            Search and run workspace commands by verb, object, or target.
+            작업공간 명령을 검색하고 실행합니다.
           </Dialog.Description>
           <Command 
             className="flex flex-col overflow-hidden" 
-            label="Global Command Palette"
+            label="전역 명령 팔레트"
             onKeyDown={(e) => {
               // Escape is handled by Dialog.Content wrapper, but if any propagation happens:
               if (e.key === "Escape") {

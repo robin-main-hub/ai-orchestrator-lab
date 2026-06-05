@@ -100,7 +100,7 @@ describe("providerRoutingConsole", () => {
       defaultModelLabel: "mimo-v2.5-pro",
       discoveryLabel: "모델 발견 완료",
       displayName: "MiMo",
-      readinessLabel: "샘플 대화 준비",
+      readinessLabel: "연결 검증 준비",
       secretPolicyLabel: "서버 SecretRef 사용",
     });
     expect(items[1]).toMatchObject({

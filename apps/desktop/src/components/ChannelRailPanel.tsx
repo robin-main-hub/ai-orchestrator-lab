@@ -17,17 +17,17 @@ export function ChannelRailPanel({
 }) {
   const visibleSteps = ingressSnapshot.result.guardSteps.slice(0, 7);
   const channels = [
-    { label: "Telegram", status: ingressSnapshot.channel === "legacy_telegram" ? "linked" : "ready" },
-    { label: "OpenClaw Bridge", status: "pending adapter" },
-    { label: "Mobile", status: runtime.dgxStatus === "online" ? "approval ready" : "read-only pending" },
-    { label: "API", status: "guarded ingress" },
+    { label: "Telegram", status: ingressSnapshot.channel === "legacy_telegram" ? "연결됨" : "준비됨" },
+    { label: "OpenClaw Bridge", status: "어댑터 설정 필요" },
+    { label: "Mobile", status: runtime.dgxStatus === "online" ? "승인 준비됨" : "읽기 전용 대기" },
+    { label: "API", status: "인입 보호 중" },
   ];
 
   return (
     <section className="mini-panel rail-panel channel-rail-panel">
       <header>
         <RadioTower size={16} />
-        <span>Channels</span>
+        <span>채널</span>
         <button className="rail-icon-button" onClick={onImportTelegram} title="Telegram에서 이어받기" type="button">
           <Smartphone size={13} />
         </button>
@@ -45,7 +45,7 @@ export function ChannelRailPanel({
         ))}
       </div>
       <div className="rail-hero-card">
-        <span>ingress confidence</span>
+        <span>인입 신뢰도</span>
         <strong>{ingressSnapshot.result.confidence} / {ingressSnapshot.result.approvalState}</strong>
         <p>{ingressSnapshot.result.reason}</p>
       </div>
@@ -64,11 +64,11 @@ export function ChannelRailPanel({
       </div>
       <div className="rail-stat-list">
         <div>
-          <span>permission queue</span>
+          <span>승인 대기열</span>
           <strong>{permissionSnapshot.summary.pending}</strong>
         </div>
         <div>
-          <span>0-token safety</span>
+          <span>0-토큰 안전장치</span>
           <strong>{ingressSnapshot.zeroTokenSafety.enabled ? ingressSnapshot.zeroTokenSafety.cadence : "off"}</strong>
         </div>
       </div>
@@ -77,9 +77,9 @@ export function ChannelRailPanel({
 }
 
 function channelStatusBadgeVariant(status: string): StatusBadgeVariant {
-  if (status.includes("linked") || status.includes("ready")) return "success";
-  if (status.includes("blocked") || status.includes("rejected")) return "danger";
-  if (status.includes("pending") || status.includes("guarded")) return "warning";
+  if (status.includes("연결") || status.includes("준비")) return "success";
+  if (status.includes("차단") || status.includes("거부")) return "danger";
+  if (status.includes("대기") || status.includes("보호") || status.includes("설정")) return "warning";
   return "muted";
 }
 

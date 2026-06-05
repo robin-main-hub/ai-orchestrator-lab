@@ -88,11 +88,11 @@ export function AgentConfigDrawer({
             </label>
             <label>
               <span>Provider</span>
-              <input readOnly value={provider?.name ?? "provider pending"} />
+              <input readOnly value={provider?.name ?? "Provider 미지정"} />
             </label>
             <label>
-              <span>Model</span>
-              <input readOnly value={agent.modelId ?? provider?.defaultModel ?? "model pending"} />
+              <span>모델</span>
+              <input readOnly value={agent.modelId ?? provider?.defaultModel ?? "모델 연결 대기"} />
             </label>
           </div>
         ) : null}
