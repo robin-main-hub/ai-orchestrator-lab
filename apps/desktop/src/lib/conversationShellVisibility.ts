@@ -29,7 +29,7 @@ export function getConversationShellVisibility({
     };
   }
 
-  if (mode === "conversation") {
+  if (mode === "conversation" || mode === "debate") {
     return {
       showCodingPacketPanel: false,
       showEvolveMementoPanel: false,
@@ -40,7 +40,7 @@ export function getConversationShellVisibility({
     };
   }
 
-  if (mode === "tmux") {
+  if (mode === "tmux" || mode === "cockpit" || mode === "annex") {
     return {
       showCodingPacketPanel: false,
       showEvolveMementoPanel: false,

@@ -48,16 +48,16 @@ export function Composer({
     (draftMessage.trim().length > 0 || draftAttachments.length > 0);
 
   return (
-    <div className="shrink-0 border-t border-border bg-card/50">
+    <div className="shrink-0 border-t border-white/10 bg-zinc-950/90 shadow-[0_-20px_50px_rgba(0,0,0,0.28)] backdrop-blur-xl">
       {/* Delegation chips (companion only) */}
       {showDelegationChips ? (
-        <div className="flex flex-wrap items-center gap-2 border-b border-border/50 px-4 py-2">
-          <span className="text-xs text-muted-foreground">Delegation tools ready</span>
+        <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-2">
+          <span className="text-xs text-cyan-300">Delegation tools ready</span>
         </div>
       ) : null}
 
       <form
-        className="flex items-end gap-2 p-3"
+        className="mx-auto flex max-w-4xl items-end gap-2 p-3"
         onSubmit={(event) => {
           event.preventDefault();
           if (canSend) onSendMessage();
@@ -80,7 +80,7 @@ export function Composer({
           <label
             aria-disabled={!attachmentEnabled || attachmentLimitReached}
             className={cn(
-              "inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-card/60 hover:text-foreground",
+              "inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-zinc-400 transition-colors hover:border-cyan-400/30 hover:bg-cyan-500/10 hover:text-cyan-200",
               (!attachmentEnabled || attachmentLimitReached) &&
                 "cursor-not-allowed opacity-40 hover:bg-transparent",
             )}
@@ -89,7 +89,7 @@ export function Composer({
           >
             <Paperclip className="h-4 w-4" />
           </label>
-          <span className="text-[9px] text-muted-foreground">
+          <span className="text-center text-[9px] text-zinc-500">
             {draftAttachments.length}/{maxDraftAttachments}
           </span>
         </div>
@@ -98,7 +98,7 @@ export function Composer({
         <div className="relative flex-1">
           <textarea
             aria-label="메시지 입력"
-            className="min-h-[44px] w-full resize-none rounded-md border border-border bg-card/40 px-3 py-2.5 pr-12 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none"
+            className="min-h-[48px] w-full resize-none rounded-2xl border border-white/10 bg-zinc-900/70 px-4 py-3 pr-14 text-sm text-zinc-100 shadow-inner shadow-black/20 outline-none placeholder:text-zinc-600 transition-colors focus-visible:border-cyan-400/50 focus-visible:bg-zinc-900"
             data-focus-id="composer-textarea"
             onChange={(event) => onDraftMessageChange(event.target.value)}
             onKeyDown={(event) => {
@@ -120,7 +120,7 @@ export function Composer({
             <div className="absolute bottom-2 left-2 right-12 flex flex-wrap gap-1">
               {draftAttachments.map((attachment) => (
                 <span
-                  className="inline-flex items-center gap-1 rounded bg-card/80 px-1.5 py-0.5 text-[10px]"
+                  className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-black/50 px-1.5 py-0.5 text-[10px]"
                   key={attachment.id}
                 >
                   {attachment.kind === "image" ? (
@@ -128,7 +128,7 @@ export function Composer({
                   ) : (
                     <FileText className="h-2.5 w-2.5" />
                   )}
-                  <span className="max-w-[80px] truncate text-foreground">
+                  <span className="max-w-[80px] truncate text-zinc-200">
                     {attachment.name}
                   </span>
                   <button
@@ -147,7 +147,7 @@ export function Composer({
 
         {/* Send */}
         <Button
-          className="h-9 gap-2"
+          className="h-10 gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 text-white shadow-lg shadow-cyan-950/30 hover:from-cyan-400 hover:to-violet-400"
           disabled={!canSend}
           type="submit"
         >
