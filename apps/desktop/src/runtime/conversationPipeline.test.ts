@@ -212,6 +212,17 @@ describe("conversation pipeline runtime helper", () => {
 
       expect(pipeline[0]?.content).toContain("# 역할 기반 도구 사용 계약");
       expect(pipeline[0]?.content).toContain("- 허용 도구:");
+      expect(pipeline[0]?.metadata).toMatchObject({
+        agentId: agentUnderTest.id,
+        providerProfileId: provider.id,
+        modelId: "mimo-v2.5-pro",
+        memoryScope: scope.namespace,
+        memoryScopeAgentId: agentUnderTest.id,
+        memoryScopeProviderProfileId: provider.id,
+        memoryScopeSessionId: "session_main",
+        recallTraceId: scope.recallTraceId,
+        runtimeConfigFileIds: [],
+      });
       expect(pipeline[0]?.metadata?.roleToolProfileLabel).toEqual(expect.any(String));
       expect(pipeline[0]?.metadata?.roleToolProfileTools).toEqual(expect.arrayContaining([expect.any(String)]));
     }
