@@ -19,6 +19,7 @@ import {
   controlQueueActionFeedback,
   controlQueueLaneLabel,
   controlQueuePermissionLabel,
+  sanitizeControlQueueText,
   controlQueueStateLabel,
   type ControlQueueLaneId,
 } from "@/lib/controlQueuePresentation";
@@ -391,7 +392,7 @@ function QueueCard({
         <div className="flex min-w-0 items-center gap-1.5">
           <Clock3 className="h-3 w-3 text-muted-foreground" />
           <span className="truncate text-[10px] font-mono text-muted-foreground">
-            {item.requestedBy}
+            {sanitizeControlQueueText(item.requestedBy)}
           </span>
         </div>
         <StatusBadge variant="warning" size="sm" className="font-mono uppercase shrink-0">
@@ -401,13 +402,13 @@ function QueueCard({
 
       {/* Summary */}
       <p className="text-xs font-medium text-foreground line-clamp-2">
-        {item.summary}
+        {sanitizeControlQueueText(item.summary)}
       </p>
       <p className="text-[10px] text-muted-foreground">
         {item.permissions.map(controlQueuePermissionLabel).join(" · ")}
       </p>
       <p className="text-[9px] font-mono text-muted-foreground">
-        {item.sourceItemId}
+        {sanitizeControlQueueText(item.sourceItemId)}
       </p>
 
       {/* 6 lane actions inline. 모든 lane은 WorkItem/Draft/Handoff 흐름으로 연결된다. */}

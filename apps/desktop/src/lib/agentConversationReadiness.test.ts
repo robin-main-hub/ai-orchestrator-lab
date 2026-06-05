@@ -50,4 +50,20 @@ describe("createAgentConversationReadiness", () => {
       tone: "attention",
     });
   });
+
+  it("separates missing tool profiles from missing agent channels", () => {
+    expect(
+      createAgentConversationReadiness({
+        adapterStatus: "ready",
+        agentId: "agent_researcher",
+        memoryRecordCount: 2,
+        messageCount: 3,
+        toolCount: 0,
+      }),
+    ).toMatchObject({
+      label: "도구 프로필 확인 필요",
+      memoryQualityLabel: "장기 기억 축적 중",
+      tone: "warming",
+    });
+  });
 });

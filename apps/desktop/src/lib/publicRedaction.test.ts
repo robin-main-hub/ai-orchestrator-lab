@@ -31,6 +31,9 @@ describe("publicRedaction", () => {
 
   it("공개 렌더에 위험한 원문이 남아 있으면 보고한다", () => {
     expect(inspectPublicText("tool input: hidden").isSafe).toBe(false);
+    expect(inspectPublicText("API_KEY=secret-value").isSafe).toBe(false);
+    expect(inspectPublicText("COOKIE=session-value").isSafe).toBe(false);
+    expect(inspectPublicText("PASSWORD=hunter2").isSafe).toBe(false);
     expect(inspectPublicText("요약 단계만 표시").isSafe).toBe(true);
   });
 });
