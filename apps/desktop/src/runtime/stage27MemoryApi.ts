@@ -40,6 +40,7 @@ export type LocalMementoMemoryApiOptions = {
 export type AdapterBackedMementoMemoryApiOptions = {
   adapter: MemoryAdapter;
   context?: Partial<MemoryAdapterContext>;
+  operationScope?: MemoryAdapterContext["operationScope"];
   createdAt?: string;
 };
 
@@ -136,12 +137,14 @@ export function createLocalMementoMemoryApi({
 export function createAdapterBackedMementoMemoryApi({
   adapter,
   context = {},
+  operationScope,
   createdAt = new Date().toISOString(),
 }: AdapterBackedMementoMemoryApiOptions): AdapterBackedMementoMemoryApi {
   function createContext(): MemoryAdapterContext {
     return {
       permissionDecision: "allow",
       callerTrustLevel: "trusted",
+      operationScope,
       now: () => createdAt,
       ...context,
     };
