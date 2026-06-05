@@ -55,6 +55,8 @@ const memory = {
         record: {
           title: "이전 대화",
           content: "사용자는 한국어 보고를 선호한다.",
+          sessionId: "session_main",
+          tags: ["agent:agent_orchestrator", "provider:provider_mimo_token_openai"],
         },
       },
       {
@@ -63,11 +65,13 @@ const memory = {
         record: {
           title: "미사용 기억",
           content: "이 문장은 들어가면 안 된다.",
+          sessionId: "session_main",
+          tags: ["agent:agent_orchestrator", "provider:provider_mimo_token_openai"],
         },
       },
     ],
   },
-} as Stage6MemoryInspector;
+} as unknown as Stage6MemoryInspector;
 
 const configFiles: AgentConfigFile[] = [
   {
@@ -188,6 +192,53 @@ describe("conversation pipeline runtime helper", () => {
     expect(pipeline[0]?.content).toContain("SOUL.md: default role profile");
     expect(pipeline[0]?.content).toContain("도구 묶음: 검증 도구");
     expect(pipeline[0]?.content).toContain("허용 도구: test.run, build.check, evidence.check");
+  });
+
+  it("does not inject another agent channel's scoped memories", () => {
+    const userMessage = message("message_user_latest", "user", "내 기억만 써줘");
+    const mixedMemory = {
+      trace: {
+        id: "trace_memory_mixed_scope",
+        results: [
+          {
+            usedInDecision: true,
+            score: 0.96,
+            record: {
+              title: "다른 에이전트 기억",
+              content: "리뷰어에게만 속한 선호.",
+              sessionId: "session_main",
+              tags: ["agent:agent_reviewer", "provider:provider_mimo_token_openai"],
+            },
+          },
+          {
+            usedInDecision: true,
+            score: 0.91,
+            record: {
+              title: "현재 에이전트 기억",
+              content: "마키마 채널에 속한 결정.",
+              sessionId: "session_main",
+              tags: ["agent:agent_orchestrator", "provider:provider_mimo_token_openai"],
+            },
+          },
+        ],
+      },
+    } as unknown as Stage6MemoryInspector;
+
+    const pipeline = createConversationPipelineMessages({
+      agent,
+      configFiles: [],
+      memory: mixedMemory,
+      memoryScope,
+      modelId: "mimo-v2.5-pro",
+      previousMessages: [],
+      provider,
+      systemMessageId: "message_system_pipeline_scope_test",
+      userMessage,
+    });
+
+    expect(pipeline[0]?.content).toContain("현재 에이전트 기억");
+    expect(pipeline[0]?.content).not.toContain("다른 에이전트 기억");
+    expect(pipeline[0]?.metadata?.recalledMemoryCount).toBe(1);
   });
 
   it("injects role tool contracts for every seeded agent", () => {

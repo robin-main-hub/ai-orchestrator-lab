@@ -39,7 +39,7 @@ export function createConversationPipelineMessages({
   userMessage,
 }: CreateConversationPipelineMessagesInput): ConversationMessage[] {
   const recalledMemories = memory.trace.results
-    .filter((result) => result.usedInDecision)
+    .filter((result) => result.usedInDecision && memoryResultMatchesScope(result, memoryScope))
     .slice(0, 5)
     .map(
       (result, index) =>
@@ -105,4 +105,26 @@ function sanitizePipelineText(value: string): string {
     .replaceAll("Bearer [redacted]", "Bearer [REDACTED:bearer_token]")
     .replaceAll("[redacted:path]", "[REDACTED:path]")
     .replaceAll("[redacted]", "[REDACTED:secret]");
+}
+
+function memoryResultMatchesScope(
+  result: Stage6MemoryInspector["trace"]["results"][number],
+  memoryScope: AgentChannelMemoryScope,
+): boolean {
+  const tags = result.record.tags ?? [];
+  const agentId = readScopedTag(tags, "agent");
+  const providerProfileId = readScopedTag(tags, "provider");
+  const sessionId = result.record.sessionId;
+
+  return (
+    (!agentId || agentId === memoryScope.agentId) &&
+    (!sessionId || sessionId === memoryScope.sessionId) &&
+    (!providerProfileId || providerProfileId === memoryScope.providerProfileId)
+  );
+}
+
+function readScopedTag(tags: string[], prefix: "agent" | "provider"): string | undefined {
+  const marker = `${prefix}:`;
+  const tag = tags.find((candidate) => candidate.startsWith(marker));
+  return tag ? tag.slice(marker.length) : undefined;
 }

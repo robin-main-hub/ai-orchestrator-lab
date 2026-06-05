@@ -163,7 +163,7 @@ export function TmuxPaneCard({
               )}
               disabled={isIdle}
               onChange={(event) => onCommandDraftChange?.(event.target.value)}
-              placeholder={isIdle ? "" : "승인 후 실행할 명령"}
+              placeholder={isIdle ? "에이전트 배정 후 명령 가능" : "승인 후 실행할 명령"}
               value={commandDraft ?? ""}
             />
             <Button

@@ -129,7 +129,7 @@ export function ProjectRailPanel({
         {activeTab === "overview" && (
           <>
             <div className="rail-hero-card">
-              <span>active session</span>
+              <span>활성 세션</span>
               <strong>{sessionId}</strong>
               <p>{packet.goal}</p>
             </div>

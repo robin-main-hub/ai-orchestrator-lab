@@ -1031,7 +1031,7 @@ function recallReasonLabel(reason: string) {
   const labels: Record<string, string> = {
     "blocked by provider trust policy": "프로바이더 신뢰 정책으로 보류됨",
     "low query overlap": "현재 작업과 관련도가 낮음",
-    "provider pending: limited recall preview":
+    "provider unassigned: limited recall preview":
       "프로바이더가 정해지기 전이라 제한된 기억만 미리 봄",
     "provider trust allows automatic recall trace":
       "신뢰된 프로바이더라 관련 기억을 자동으로 불러옴",

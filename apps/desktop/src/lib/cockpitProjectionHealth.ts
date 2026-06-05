@@ -34,7 +34,7 @@ export function createCockpitLocalHealthIndicators({
     healthIndicators.push("기억 동기화 저하");
   }
   if (eventSyncStatus === "failed") {
-    healthIndicators.push(`이벤트 발신함 동기화 실패: ${sanitizeCockpitProjectionText(eventSyncLastError || "unknown error")}`);
+    healthIndicators.push(`이벤트 발신함 동기화 실패: ${sanitizeCockpitProjectionText(eventSyncLastError || "오류 원문 없음")}`);
   }
   if (healthIndicators.length === 0) {
     healthIndicators.push("로컬 경고 없음 · 서버 스냅샷은 별도 확인");
@@ -72,10 +72,10 @@ export function createCockpitServerSnapshotIndicator({
   if (status === "loaded") {
     return providerIndicator
       ? `서버 스냅샷 동기화됨: ${sanitizeCockpitProjectionText(providerIndicator)}`
-      : `서버 스냅샷 동기화됨: ${timestamp ?? "timestamp unavailable"}`;
+      : `서버 스냅샷 동기화됨: ${timestamp ?? "동기화 시각 없음"}`;
   }
   if (status === "failed") {
-    return `서버 스냅샷 실패 · 로컬 투영 유지: ${sanitizeCockpitProjectionText(error ?? "unknown error")}`;
+    return `서버 스냅샷 실패 · 로컬 투영 유지: ${sanitizeCockpitProjectionText(error ?? "오류 원문 없음")}`;
   }
   return "서버 스냅샷 미연결 · 로컬 투영 표시 중";
 }

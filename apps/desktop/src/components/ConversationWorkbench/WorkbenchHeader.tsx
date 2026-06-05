@@ -62,8 +62,8 @@ export function WorkbenchHeader({
           {agents.map((agent) => (
             <option key={agent.id} value={agent.id}>
               {agent.name} · {agent.id === selectedAgentId
-                ? selectedModel?.id ?? agent.modelId ?? "model pending"
-                : agent.modelId ?? "model pending"}
+                ? selectedModel?.id ?? agent.modelId ?? "모델 연결 대기"
+                : agent.modelId ?? "모델 연결 대기"}
             </option>
           ))}
         </select>
@@ -71,7 +71,7 @@ export function WorkbenchHeader({
           <span className="text-[10px] text-muted-foreground">현재 대화 상대</span>
           <span className="truncate text-xs font-medium text-foreground">
             {selectedAgent?.name ?? "봇 선택 필요"} ·{" "}
-            {selectedProvider ? providerDisplayLabel(selectedProvider.name) : "provider pending"}
+            {selectedProvider ? providerDisplayLabel(selectedProvider.name) : "Provider 미지정"}
           </span>
         </div>
         {selectedAgent && toolProfile ? (
@@ -81,7 +81,7 @@ export function WorkbenchHeader({
 
       {/* Center: session id */}
       <div className="hidden flex-col items-center md:flex">
-        <span className="text-[10px] text-muted-foreground">session</span>
+        <span className="text-[10px] text-muted-foreground">세션</span>
         <span className="text-xs font-medium text-foreground">
           {sessionId.slice(-12)}
         </span>
@@ -90,7 +90,7 @@ export function WorkbenchHeader({
       {/* Right: Profile / Memory / Context / Preview chips */}
       <div className="flex items-center gap-2">
         <HeaderChip
-          label="Profile"
+          label="프로필"
           onClick={() => onOpenAgentConfig("profile")}
           value={selectedAgent ? agentRoleLabel(selectedAgent.role) : "대기"}
         />
@@ -105,18 +105,18 @@ export function WorkbenchHeader({
           value={persona ? creativityLevelLabel(persona.creativityLevel) : "균형"}
         />
         <HeaderChip
-          label="Memory"
+          label="기억"
           onClick={() => onOpenAgentConfig("injection")}
           value={memoryMode}
         />
         <HeaderChip
-          label="Context"
+          label="맥락"
           onClick={cycleContextPackTier}
-          title="ContextPack: Lite → Standard → Full"
+          title="맥락 묶음: Lite → Standard → Full"
           value={contextPackTierLabel(contextPackTier)}
         />
         <Button
-          aria-label="agent settings"
+          aria-label="에이전트 설정"
           className="h-8 w-8"
           onClick={() => onOpenAgentConfig("edit")}
           size="icon"

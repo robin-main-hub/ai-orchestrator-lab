@@ -730,7 +730,7 @@ export function createRuntimeSnapshot(now = new Date().toISOString(), probe?: Dg
     activeProviderProfileId: undefined,
     recentError: vllmReachable
       ? "remote execution waits for approval tokens"
-      : `DGX-02 server reachable but vLLM probe failed: ${probe?.error ?? "unknown error"}`,
+      : `DGX-02 server reachable but vLLM probe failed: ${probe?.error ?? "오류 원문 없음"}`,
     updatedAt: now,
   };
 }
@@ -779,7 +779,7 @@ export function createDgxModelDiscovery(now = new Date().toISOString(), probe?: 
     redactionApplied: true,
     warnings: vllmReachable
       ? ["DGX-02 vLLM registry; completion still requires runtime approval"]
-      : [`DGX-02 vLLM probe failed: ${probe?.error ?? "unknown error"}`],
+      : [`DGX-02 vLLM probe failed: ${probe?.error ?? "오류 원문 없음"}`],
     createdAt: now,
     models: modelIds.map((modelId) => createDgxModelDescriptor(modelId)),
   };
@@ -6440,5 +6440,5 @@ if (import.meta.url === entryPoint) {
   const server = startServer();
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : "unknown";
-  console.log(`AI Orchestrator DGX placeholder listening on ${port}`);
+  console.log(`AI Orchestrator runtime server listening on ${port}`);
 }
