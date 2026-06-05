@@ -6,6 +6,7 @@ import type {
   WorkbenchAgent,
 } from "../types";
 import type { AgentChannelMemoryScope } from "../lib/agentConversationChannels";
+import { createAgentChannelMemoryScope } from "../lib/agentConversationChannels";
 import type { Stage6MemoryInspector } from "./stage6Memory";
 import { seededAgentProfiles } from "../seeds/agents";
 import { createConversationPipelineMessages } from "./conversationPipeline";
@@ -140,6 +141,13 @@ describe("conversation pipeline runtime helper", () => {
     expect(pipeline[0]?.content).toContain(`namespace=${memoryScope.namespace}`);
     expect(pipeline[0]?.content).toContain(memoryScope.recallTraceId);
     expect(pipeline[0]?.content).toContain("역할별 도구 호출 프로필");
+    expect(pipeline[0]?.content).toContain("# 역할 기반 도구 사용 계약");
+    expect(pipeline[0]?.content).toContain("도구 묶음: 지휘 도구");
+    expect(pipeline[0]?.content).toContain("허용 도구: work.queue, approval, tmux.plan");
+    expect(pipeline[0]?.metadata).toMatchObject({
+      roleToolProfileLabel: "지휘 도구",
+      roleToolProfileTools: ["work.queue", "approval", "tmux.plan"],
+    });
     expect(pipeline[0]?.content).toContain("[REDACTED:env_secret]");
     expect(pipeline[0]?.content).toContain("EvolveMemento recall:");
     expect(pipeline[0]?.content).toContain("이전 대화: 사용자는 한국어 보고를 선호한다.");
@@ -178,5 +186,34 @@ describe("conversation pipeline runtime helper", () => {
       "Delegation: respond directly unless the orchestrator/companion explicitly delegated this task to you.",
     );
     expect(pipeline[0]?.content).toContain("SOUL.md: default role profile");
+    expect(pipeline[0]?.content).toContain("도구 묶음: 검증 도구");
+    expect(pipeline[0]?.content).toContain("허용 도구: test.run, build.check, evidence.check");
+  });
+
+  it("injects role tool contracts for every seeded agent", () => {
+    for (const seededAgent of seededAgentProfiles) {
+      const agentUnderTest = {
+        ...seededAgent,
+        soulMode: "summary",
+      } satisfies WorkbenchAgent;
+      const scope = createAgentChannelMemoryScope(agentUnderTest.id, "session_main", provider.id);
+
+      const pipeline = createConversationPipelineMessages({
+        agent: agentUnderTest,
+        configFiles: [],
+        memory,
+        memoryScope: scope,
+        modelId: "mimo-v2.5-pro",
+        previousMessages: [],
+        provider,
+        systemMessageId: `message_system_pipeline_${agentUnderTest.id}`,
+        userMessage: message(`message_user_${agentUnderTest.id}`, "user", "상태 알려줘"),
+      });
+
+      expect(pipeline[0]?.content).toContain("# 역할 기반 도구 사용 계약");
+      expect(pipeline[0]?.content).toContain("- 허용 도구:");
+      expect(pipeline[0]?.metadata?.roleToolProfileLabel).toEqual(expect.any(String));
+      expect(pipeline[0]?.metadata?.roleToolProfileTools).toEqual(expect.arrayContaining([expect.any(String)]));
+    }
   });
 });
