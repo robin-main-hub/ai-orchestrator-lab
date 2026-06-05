@@ -411,7 +411,7 @@ function createRecallPolicy(provider?: ProviderProfile): MemoryTrace["policy"] {
     providerTrustLevel: provider?.trustLevel ?? "limited",
     autoRecallAllowed: true,
     blockedLayers: [],
-    reason: provider ? "provider trust allows automatic recall trace" : "provider pending: limited recall preview",
+    reason: provider ? "provider trust allows automatic recall trace" : "provider unassigned: limited recall preview",
   };
 }
 

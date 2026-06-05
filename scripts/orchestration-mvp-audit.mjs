@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 
 const checks = [
   {
@@ -38,6 +39,37 @@ const checks = [
     command: "node",
     args: ["scripts/provider-ai-smoke.mjs", "--run-all"],
   },
+  {
+    name: "operator surface maturity scan",
+    type: "static-source-scan",
+  },
+];
+
+const sourceScanTargets = [
+  "apps/desktop/src/components/AgentsSidebar.tsx",
+  "apps/desktop/src/components/AgentConfigDrawer.tsx",
+  "apps/desktop/src/components/ConversationWorkbench/WorkbenchHeader.tsx",
+  "apps/desktop/src/components/CheatSheetOverlay.tsx",
+  "apps/desktop/src/components/TerminalDock.tsx",
+  "apps/desktop/src/components/ChannelRailPanel.tsx",
+  "apps/desktop/src/components/SessionIndexRailPanel.tsx",
+  "apps/desktop/src/lib/providerSmokeReadiness.ts",
+  "apps/desktop/src/lib/controlQueuePresentation.ts",
+  "apps/desktop/src/lib/cockpitProjectionHealth.ts",
+  "apps/desktop/src/lib/agentChannelStatus.ts",
+  "apps/desktop/src/runtime/stage2Runtime.ts",
+  "apps/desktop/src/runtime/stage3Runtime.ts",
+  "apps/server/src/index.ts",
+];
+
+const forbiddenSourcePatterns = [
+  { id: "raw-model-pending", pattern: /model pending/i },
+  { id: "raw-provider-pending", pattern: /provider pending/i },
+  { id: "raw-command-palette", pattern: /Global Command Palette|Search commands|Keyboard Shortcuts/i },
+  { id: "raw-execution-disabled", pattern: /execution disabled/i },
+  { id: "raw-placeholder-listening", pattern: /placeholder listening/i },
+  { id: "raw-sample-conversation", pattern: /샘플 대화|호환성 점검|호환성 확인 준비/ },
+  { id: "raw-unknown-fallback", pattern: /timestamp unavailable|unknown error/i },
 ];
 
 const forbiddenOutputPatterns = [
@@ -57,7 +89,7 @@ const forbiddenOutputPatterns = [
 const results = [];
 
 for (const check of checks) {
-  const result = await runCheck(check);
+  const result = check.type === "static-source-scan" ? await runStaticSourceScan(check) : await runCheck(check);
   results.push(result);
   if (result.exitCode !== 0) {
     printResults(results);
@@ -101,6 +133,25 @@ function runCheck(check) {
       });
     });
   });
+}
+
+async function runStaticSourceScan(check) {
+  const matches = [];
+  for (const target of sourceScanTargets) {
+    const source = await readFile(target, "utf8");
+    for (const forbidden of forbiddenSourcePatterns) {
+      if (forbidden.pattern.test(source)) {
+        matches.push(`${target}:${forbidden.id}`);
+      }
+    }
+  }
+  return {
+    exitCode: matches.length > 0 ? 1 : 0,
+    forbiddenMatches: matches,
+    name: check.name,
+    stderrPreview: "",
+    stdoutPreview: matches.length > 0 ? matches.join(" ") : "운영 표면 금지 문구 없음",
+  };
 }
 
 function preview(value) {

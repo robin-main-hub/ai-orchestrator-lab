@@ -21,10 +21,10 @@ function provider(patch: Partial<ProviderProfile>): ProviderProfile {
 }
 
 describe("provider smoke readiness", () => {
-  it("marks MiMo OpenAI route as a runnable sample conversation", () => {
+  it("marks MiMo OpenAI route as a runnable connection verification", () => {
     expect(createProviderSmokeReadiness(provider({}))).toEqual({
       commandLabel: "pnpm provider:smoke:ai -- --run-mimo",
-      modeLabel: "샘플 대화 가능",
+      modeLabel: "연결 검증 가능",
       routeLabel: "MiMo OpenAI",
       tone: "success",
     });
@@ -41,7 +41,7 @@ describe("provider smoke readiness", () => {
       ),
     ).toEqual({
       commandLabel: "pnpm provider:smoke:ai",
-      modeLabel: "호환성 점검",
+      modeLabel: "호환성 검증",
       routeLabel: "MiMo Anthropic",
       tone: "warning",
     });
@@ -97,7 +97,7 @@ describe("provider smoke readiness", () => {
 
     expect(harness).toEqual({
       commandLabel: "pnpm provider:smoke:ai -- --run-mimo",
-      modeLabel: "샘플 대화 준비",
+      modeLabel: "연결 검증 준비",
       routeLabel: "MiMo OpenAI",
       networkPolicyLabel: "명시 실행 시 네트워크 호출",
       secretPolicyLabel: "SecretRef 필요",

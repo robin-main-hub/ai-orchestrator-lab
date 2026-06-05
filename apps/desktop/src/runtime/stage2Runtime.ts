@@ -125,7 +125,7 @@ export function buildMockAssistantReply(params: {
   agent: AgentProfile;
   provider: ProviderProfile;
 }): string {
-  const modelId = params.agent.modelId ?? params.provider.defaultModel ?? "model pending";
+  const modelId = params.agent.modelId ?? params.provider.defaultModel ?? "모델 연결 대기";
 
   return [
     `${params.agent.name}이 ${params.provider.name} / ${modelId} 바인딩으로 응답했어.`,
@@ -138,11 +138,11 @@ export function createCodingPacketFromConversation({ messages, agent, provider }
   const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
   const recentContext = messages.slice(-8).map((message) => `${message.role}: ${message.content}`);
   const agentLine = agent
-    ? `${agent.name} / ${agent.role} / ${agent.modelId ?? "model pending"}`
-    : "agent pending";
+    ? `${agent.name} / ${agent.role} / ${agent.modelId ?? "모델 연결 대기"}`
+    : "에이전트 대기";
   const providerLine = provider
-    ? `${provider.name} / ${provider.kind} / ${provider.defaultModel ?? "model pending"}`
-    : "provider pending";
+    ? `${provider.name} / ${provider.kind} / ${provider.defaultModel ?? "모델 연결 대기"}`
+    : "Provider 미지정";
 
   return {
     goal: lastUserMessage?.content ?? "Conversation Workbench에서 코딩 목표 정리",

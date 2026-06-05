@@ -24,6 +24,9 @@ const seedMessages: ConversationMessage[] = [
     role: "user",
     content: "첫 질문",
     createdAt: "2026-06-05T00:00:00.000Z",
+    metadata: {
+      agentId: "agent_orchestrator",
+    },
   },
   {
     id: "message_assistant",
@@ -38,12 +41,30 @@ const seedMessages: ConversationMessage[] = [
 ];
 
 describe("agentConversationChannels", () => {
-  it("creates an isolated channel for every agent and assigns seed messages to the default agent", () => {
+  it("creates an isolated channel for every agent and only assigns explicitly scoped seed messages", () => {
     const channels = createInitialAgentConversationChannels(agents, seedMessages);
 
     expect(getAgentChannelMessages(channels, "agent_orchestrator")).toHaveLength(2);
     expect(getAgentChannelMessages(channels, "agent_reviewer")).toEqual([]);
     expect(getAgentChannelMessages(channels, "agent_executor")).toEqual([]);
+  });
+
+  it("does not route agentName-only assistant messages into the first agent channel", () => {
+    const channels = createInitialAgentConversationChannels(agents, [
+      {
+        id: "message_agent_name_only",
+        sessionId: "session_a",
+        role: "assistant",
+        content: "이름만 있는 과거 메시지",
+        createdAt: "2026-06-05T00:00:03.000Z",
+        metadata: {
+          agentName: "마키마",
+        },
+      },
+    ]);
+
+    expect(getAgentChannelMessages(channels, "agent_orchestrator")).toEqual([]);
+    expect(getAgentChannelMessages(channels, "agent_reviewer")).toEqual([]);
   });
 
   it("appends messages only to the selected agent channel", () => {

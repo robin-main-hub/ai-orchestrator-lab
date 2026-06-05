@@ -22,14 +22,14 @@ export function SessionIndexRailPanel({
     <section className="mini-panel rail-panel session-index-panel">
       <header>
         <Database size={16} />
-        <span>Sessions</span>
-        <button className="rail-icon-button" onClick={onCreateSession} title="Create a new session" type="button">
+        <span>세션</span>
+        <button className="rail-icon-button" onClick={onCreateSession} title="새 세션 만들기" type="button">
           <Plus size={13} />
         </button>
-        <button className="rail-icon-button" onClick={onRenameActiveSession} title="Rename active session" type="button">
+        <button className="rail-icon-button" onClick={onRenameActiveSession} title="현재 세션 이름 변경" type="button">
           <Pencil size={13} />
         </button>
-        <button className="rail-icon-button" onClick={onRefresh} title="Refresh sessions from DGX-02" type="button">
+        <button className="rail-icon-button" onClick={onRefresh} title="DGX-02 세션 다시 조회" type="button">
           <RefreshCw size={13} />
         </button>
       </header>
@@ -39,7 +39,7 @@ export function SessionIndexRailPanel({
       </div>
       <div className="session-index-list">
         {visibleSessions.length === 0 ? (
-          <p>DGX-02 session index pending</p>
+          <p>DGX-02 세션 색인 대기 중 · 새로고침으로 다시 조회</p>
         ) : (
           visibleSessions.map((session) => (
             <button
@@ -49,7 +49,7 @@ export function SessionIndexRailPanel({
               type="button"
             >
               <strong>{session.title ?? session.sessionId}</strong>
-              <span>{session.sessionId} / {session.eventCount} events / {session.lastEventType ?? "event"}</span>
+              <span>{session.sessionId} / 이벤트 {session.eventCount}개 / {session.lastEventType ?? "이벤트"}</span>
             </button>
           ))
         )}

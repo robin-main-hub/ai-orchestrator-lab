@@ -36,8 +36,8 @@ export function ProviderProfilesManagerPanel({
     <section className="side-panel">
       <header className="panel-title">
         <KeyRound size={17} />
-        <h2>Provider Routing Console</h2>
-        <button aria-label="provider 추가" className="icon-button" onClick={onAddProvider} type="button">
+        <h2>공급자 라우팅 콘솔</h2>
+        <button aria-label="공급자 추가" className="icon-button" onClick={onAddProvider} type="button">
           <Plus size={15} />
         </button>
       </header>

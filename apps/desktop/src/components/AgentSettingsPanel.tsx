@@ -97,7 +97,7 @@ export function AgentSettingsPanel({
                 >
                   <span>{agentRoleLabel(role)}</span>
                   {role === agent.role ? (
-                    <span className="ml-auto text-[10px] text-primary font-medium">active</span>
+                    <span className="ml-auto text-[10px] text-primary font-medium">사용 중</span>
                   ) : null}
                 </DropdownMenuItem>
               ))}
@@ -170,4 +170,3 @@ function initialAutonomyForRole(role: WorkbenchAgent["role"]): AutonomyLevel {
       return 3;
   }
 }
-

@@ -27,11 +27,10 @@ export function createInitialAgentConversationChannels(
   agents: AgentChannelSeed[],
   seedMessages: ConversationMessage[],
 ): AgentConversationChannels {
-  const defaultAgentId = agents[0]?.id ?? "agent_unassigned";
   return Object.fromEntries(
     agents.map((agent) => [
       agent.id,
-      seedMessages.filter((message) => (message.metadata?.agentId ?? defaultAgentId) === agent.id),
+      seedMessages.filter((message) => message.metadata?.agentId === agent.id),
     ]),
   );
 }
