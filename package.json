@@ -18,6 +18,7 @@
     "provider:smoke:ai:all": "node scripts/provider-ai-smoke.mjs --run-all",
     "provider:smoke:ai:manifest": "node scripts/smoke-provider-ai-manifest.mjs",
     "provider:smoke:deepseek": "node scripts/smoke-deepseek-provider.mjs",
+    "orchestration:mvp:audit": "node scripts/orchestration-mvp-audit.mjs",
     "tmux:smoke:dry-run": "node scripts/smoke-tmux-dry-run.mjs",
     "antigravity:ultra-task": "node scripts/create-antigravity-ultra-task.mjs",
     "antigravity:pro1-task": "node scripts/create-antigravity-pro1-task.mjs",

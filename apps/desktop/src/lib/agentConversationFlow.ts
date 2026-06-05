@@ -3,7 +3,7 @@ import {
   createAgentChannelRecallQuery,
   type AgentChannelMemoryScope,
 } from "./agentConversationChannels";
-import { getAgentToolProfile } from "./agentToolProfiles";
+import { createAgentToolRuntimeSummary, getAgentToolProfile } from "./agentToolProfiles";
 
 export type AgentConversationFlowTone = "ready" | "manual" | "error";
 
@@ -82,6 +82,7 @@ export function createAgentConversationFlowCards({
       value: `${toolProfile.tools.length}개 도구 프로필`,
       details: [
         "memory.recall",
+        createToolBoundaryDetail(toolProfile.tools),
         ...toolProfile.tools.slice(0, 4),
         "tool.call 전 목적·입력·권한을 먼저 요약",
       ],
@@ -98,4 +99,11 @@ export function createAgentConversationFlowCards({
       tone: "manual",
     },
   ];
+}
+
+function createToolBoundaryDetail(tools: string[]) {
+  const runtime = createAgentToolRuntimeSummary(tools);
+  return runtime.approvalRequiredCount > 0
+    ? `승인 경계 ${runtime.approvalRequiredCount}개`
+    : runtime.boundaryLabel;
 }
