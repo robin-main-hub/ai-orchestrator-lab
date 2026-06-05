@@ -15,6 +15,13 @@ import type {
   PermissionMatrixSnapshot,
 } from "@ai-orchestrator/protocol";
 import { cn } from "@/lib/utils";
+import {
+  controlQueueActionFeedback,
+  controlQueueLaneLabel,
+  controlQueuePermissionLabel,
+  controlQueueStateLabel,
+  type ControlQueueLaneId,
+} from "@/lib/controlQueuePresentation";
 import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
 
@@ -50,7 +57,7 @@ export type ControlQueueDrawerProps = {
   snapshot: PermissionMatrixSnapshot;
 };
 
-type LaneId = "approve" | "ask" | "edit" | "delegate" | "block" | "archive";
+type LaneId = ControlQueueLaneId;
 
 const LANES: Array<{
   id: LaneId;
@@ -58,12 +65,12 @@ const LANES: Array<{
   icon: React.ReactNode;
   status: "live" | "soon";
 }> = [
-  { id: "approve", label: "approve", icon: <Check className="h-3 w-3" />, status: "live" },
-  { id: "ask", label: "ask", icon: <HelpCircle className="h-3 w-3" />, status: "live" },
-  { id: "edit", label: "edit", icon: <Edit3 className="h-3 w-3" />, status: "live" },
-  { id: "delegate", label: "delegate", icon: <Forward className="h-3 w-3" />, status: "live" },
-  { id: "block", label: "block", icon: <ShieldOff className="h-3 w-3" />, status: "live" },
-  { id: "archive", label: "archive", icon: <XCircle className="h-3 w-3" />, status: "live" }, // = reject
+  { id: "approve", label: controlQueueLaneLabel("approve"), icon: <Check className="h-3 w-3" />, status: "live" },
+  { id: "ask", label: controlQueueLaneLabel("ask"), icon: <HelpCircle className="h-3 w-3" />, status: "live" },
+  { id: "edit", label: controlQueueLaneLabel("edit"), icon: <Edit3 className="h-3 w-3" />, status: "live" },
+  { id: "delegate", label: controlQueueLaneLabel("delegate"), icon: <Forward className="h-3 w-3" />, status: "live" },
+  { id: "block", label: controlQueueLaneLabel("block"), icon: <ShieldOff className="h-3 w-3" />, status: "live" },
+  { id: "archive", label: controlQueueLaneLabel("archive"), icon: <XCircle className="h-3 w-3" />, status: "live" },
 ];
 
 const FOCUSABLE_SELECTOR = [
@@ -164,7 +171,7 @@ export function ControlQueueDrawer({
 
   return (
     <aside
-      aria-label="Control Queue"
+      aria-label="승인 대기열"
       aria-modal="true"
       className="fixed right-4 top-14 z-30 flex max-h-[calc(100vh-78px)] w-[min(460px,calc(100vw-32px))] flex-col rounded-lg border border-border bg-card shadow-2xl"
       ref={drawerRef}
@@ -175,16 +182,16 @@ export function ControlQueueDrawer({
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium text-foreground">Control Queue</span>
+          <span className="text-sm font-medium text-foreground">승인 대기열</span>
           <span className="text-xs text-muted-foreground">
-            {pendingItems.length} pending
+            {pendingItems.length}건 대기
           </span>
           <kbd className="rounded border border-border bg-card/60 px-1 py-0 text-[9px] font-mono text-muted-foreground">
             ⌘⇧A
           </kbd>
         </div>
         <Button
-          aria-label="Close Control Queue"
+          aria-label="승인 대기열 닫기"
           className="h-6 w-6"
           onClick={onClose}
           ref={closeButtonRef}
@@ -197,21 +204,21 @@ export function ControlQueueDrawer({
 
       {/* Summary */}
       <div className="grid grid-cols-3 gap-1.5 border-b border-border px-3 py-2">
-        <SummaryCell label="allow" tone="muted" value={snapshot.summary.allowed} />
-        <SummaryCell label="approved" tone="success" value={snapshot.summary.approved} />
-        <SummaryCell label="denied" tone="destructive" value={snapshot.summary.denied} />
+        <SummaryCell label="허용" tone="muted" value={snapshot.summary.allowed} />
+        <SummaryCell label="승인됨" tone="success" value={snapshot.summary.approved} />
+        <SummaryCell label="거부됨" tone="destructive" value={snapshot.summary.denied} />
       </div>
 
       {/* Lane chips */}
       <div
-        aria-label="lane filter"
+        aria-label="처리 방식 필터"
         className="flex flex-wrap gap-1 border-b border-border px-3 py-2"
         role="tablist"
       >
         <LaneChip
           active={activeLane === "all"}
           count={pendingItems.length}
-          label="all"
+          label="전체"
           onClick={() => setActiveLane("all")}
         />
         {LANES.map((lane) => (
@@ -261,7 +268,7 @@ export function ControlQueueDrawer({
       {/* Footer */}
       <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-[10px] text-muted-foreground">
         <span className="font-mono">
-          {LANES.filter((l) => l.status === "live").length} live · WorkItem 연결됨
+          {LANES.filter((l) => l.status === "live").length}개 동작 · 작업 항목 연결됨
         </span>
         <kbd className="rounded border border-border bg-card/60 px-1 py-0 font-mono">
           esc
@@ -314,12 +321,12 @@ function LaneChip({
   onClick: () => void;
   soon?: boolean;
 }) {
-  const variant = label === "approve" ? "success"
-    : label === "ask" ? "primary"
-    : label === "edit" ? "warning"
-    : label === "delegate" ? "muted"
-    : label === "block" ? "danger"
-    : label === "archive" ? "muted"
+  const variant = label === controlQueueLaneLabel("approve") ? "success"
+    : label === controlQueueLaneLabel("ask") ? "primary"
+    : label === controlQueueLaneLabel("edit") ? "warning"
+    : label === controlQueueLaneLabel("delegate") ? "muted"
+    : label === controlQueueLaneLabel("block") ? "danger"
+    : label === controlQueueLaneLabel("archive") ? "muted"
     : "default";
 
   return (
@@ -388,7 +395,7 @@ function QueueCard({
           </span>
         </div>
         <StatusBadge variant="warning" size="sm" className="font-mono uppercase shrink-0">
-          {item.state}
+          {controlQueueStateLabel(item.state)}
         </StatusBadge>
       </div>
 
@@ -397,7 +404,7 @@ function QueueCard({
         {item.summary}
       </p>
       <p className="text-[10px] text-muted-foreground">
-        {item.permissions.join(" · ")}
+        {item.permissions.map(controlQueuePermissionLabel).join(" · ")}
       </p>
       <p className="text-[9px] font-mono text-muted-foreground">
         {item.sourceItemId}
@@ -408,7 +415,7 @@ function QueueCard({
         {showAction("approve") ? (
           <ActionButton
             icon={<Check className="h-3 w-3 size-3" />}
-            label="approve"
+            label={controlQueueLaneLabel("approve")}
             onClick={() => onApprove(item.sourceItemId)}
             tone="primary"
           />
@@ -416,28 +423,28 @@ function QueueCard({
         {showAction("ask") ? (
           <ActionButton
             icon={<HelpCircle className="h-3 w-3 size-3" />}
-            label="ask"
+            label={controlQueueLaneLabel("ask")}
             onClick={() => onAsk(item)}
           />
         ) : null}
         {showAction("edit") ? (
           <ActionButton
             icon={<Edit3 className="h-3 w-3 size-3" />}
-            label="edit"
+            label={controlQueueLaneLabel("edit")}
             onClick={() => onEdit(item)}
           />
         ) : null}
         {showAction("delegate") ? (
           <ActionButton
             icon={<Forward className="h-3 w-3 size-3" />}
-            label="delegate"
+            label={controlQueueLaneLabel("delegate")}
             onClick={() => onDelegate(item)}
           />
         ) : null}
         {showAction("block") ? (
           <ActionButton
             icon={<ShieldOff className="h-3 w-3 size-3" />}
-            label="block"
+            label={controlQueueLaneLabel("block")}
             onClick={() => onBlock(item)}
             tone="destructive"
           />
@@ -445,7 +452,7 @@ function QueueCard({
         {showAction("archive") ? (
           <ActionButton
             icon={<XCircle className="h-3 w-3 size-3" />}
-            label="archive"
+            label={controlQueueLaneLabel("archive")}
             onClick={() => onReject(item.sourceItemId)}
             tone="destructive"
           />
@@ -480,11 +487,15 @@ function ActionButton({
       )}
       disabled={disabled}
       onClick={onClick}
-      title={disabled ? "비활성화됨" : label}
+      title={disabled ? "비활성화됨" : controlQueueActionFeedback(labelToLaneId(label))}
       type="button"
     >
       {icon}
       {label}
     </Button>
   );
+}
+
+function labelToLaneId(label: string): ControlQueueLaneId {
+  return LANES.find((lane) => lane.label === label)?.id ?? "ask";
 }

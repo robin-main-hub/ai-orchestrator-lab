@@ -20,6 +20,14 @@ const baseApproval: ApprovalQueueItem = {
   createdAt: "2026-06-05T08:00:00.000Z",
 };
 
+const unsafeApproval: ApprovalQueueItem = {
+  ...baseApproval,
+  sourceItemId: "terminal_run_unsafe",
+  summary:
+    "tool input {\"command\":\"deploy\"} Bearer abc123 https://internal.example.test /Users/robin/project sk-live-secret",
+  reason: "API_KEY=value tp-slmvllbti6z4gmjnj5srk2r9nqdbhj5hteonqwswxks2o6ge",
+};
+
 describe("controlQueueWorkItems", () => {
   it("ask 버튼은 누락 정보가 있는 질문 lane WorkItem을 만든다", () => {
     const item = createControlQueueAskItem(baseApproval, {
@@ -84,5 +92,33 @@ describe("controlQueueWorkItems", () => {
     expect(item.priority).toBe("high");
     expect(item.title).toContain("차단됨");
     expect(item.evidenceRefs[0]?.reference).toBe("permission://terminal_run_1");
+  });
+
+  it("WorkItem과 draft에 원문 tool input, token, URL, local path를 저장하지 않는다", () => {
+    const askItem = createControlQueueAskItem(unsafeApproval, {
+      createdAt: "2026-06-05T08:05:00.000Z",
+      sessionId: "session_main",
+    });
+    const { draft, workItem } = createControlQueueEditDraft(unsafeApproval, {
+      createdAt: "2026-06-05T08:06:00.000Z",
+      sessionId: "session_main",
+    });
+
+    const combined = [
+      askItem.title,
+      askItem.summary,
+      askItem.evidenceRefs[0]?.summary,
+      workItem.title,
+      workItem.summary,
+      draft.body,
+    ].join("\n");
+
+    expect(combined).toContain("도구 입력 [redacted]");
+    expect(combined).not.toContain("Bearer abc123");
+    expect(combined).not.toContain("https://internal.example.test");
+    expect(combined).not.toContain("/Users/robin");
+    expect(combined).not.toContain("sk-live-secret");
+    expect(combined).not.toContain("tp-slmvllbti");
+    expect(combined).not.toContain("API_KEY=value");
   });
 });
