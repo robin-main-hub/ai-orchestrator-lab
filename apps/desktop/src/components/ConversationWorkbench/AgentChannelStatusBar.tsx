@@ -14,6 +14,7 @@ import type { WorkbenchAgent } from "../../types";
 export function AgentChannelStatusBar({
   adapterStatus,
   controlQueueContinuity,
+  memoryGovernanceLabel,
   memoryRecordCount,
   memoryScope,
   messageCount,
@@ -23,6 +24,7 @@ export function AgentChannelStatusBar({
 }: {
   adapterStatus: AgentChannelAdapterStatus;
   controlQueueContinuity?: ControlQueueContinuitySummary;
+  memoryGovernanceLabel?: string;
   memoryRecordCount: number;
   memoryScope?: AgentChannelMemoryScope;
   messageCount: number;
@@ -59,6 +61,11 @@ export function AgentChannelStatusBar({
           <Brain className="h-3.5 w-3.5" />
           <span>{status.memoryLabel}</span>
         </StatusPill>
+        {memoryGovernanceLabel ? (
+          <StatusPill tone={status.tone}>
+            <span>{memoryGovernanceLabel}</span>
+          </StatusPill>
+        ) : null}
         {controlQueueContinuity?.hasItems ? (
           <StatusPill tone={controlQueueContinuity.tone}>
             <ListChecks className="h-3.5 w-3.5" />
