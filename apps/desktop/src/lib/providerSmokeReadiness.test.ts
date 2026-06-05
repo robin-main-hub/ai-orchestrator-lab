@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
-import { createProviderSmokeReadiness } from "./providerSmokeReadiness";
+import {
+  createProviderRoundtripResultSummary,
+  createProviderRoundtripHarness,
+  createProviderSmokeReadiness,
+} from "./providerSmokeReadiness";
 
 function provider(patch: Partial<ProviderProfile>): ProviderProfile {
   return {
@@ -50,6 +54,13 @@ describe("provider smoke readiness", () => {
           id: "provider_deepseek_dgx",
           name: "DeepSeek DGX-02 Key",
           tags: ["dgx-secret-ref", "server-proxy", "deepseek"],
+          secretRef: {
+            id: "secret_dgx02_deepseek",
+            label: "DGX-02 DeepSeek API key",
+            scope: "profile",
+            redactedPreview: "dgx-02:DEEPSEEK_API_KEY",
+            transient: false,
+          },
         }),
       ),
     ).toEqual({
@@ -69,5 +80,84 @@ describe("provider smoke readiness", () => {
         }),
       ),
     ).toBeUndefined();
+  });
+
+  it("creates a safe roundtrip harness for MiMo without exposing endpoint or secret values", () => {
+    const harness = createProviderRoundtripHarness(
+      provider({
+        secretRef: {
+          id: "secret_dgx02_mimo_token_plan",
+          label: "DGX-02 MiMo Token Plan API key",
+          scope: "profile",
+          redactedPreview: "dgx-02:MIMO_API_KEY",
+          transient: false,
+        },
+      }),
+    );
+
+    expect(harness).toEqual({
+      commandLabel: "pnpm provider:smoke:ai -- --run-mimo",
+      modeLabel: "샘플 대화 준비",
+      routeLabel: "MiMo OpenAI",
+      networkPolicyLabel: "명시 실행 시 네트워크 호출",
+      secretPolicyLabel: "SecretRef 필요",
+      logPolicyLabel: "응답 미리보기만 기록",
+      tone: "success",
+    });
+    expect(JSON.stringify(harness)).not.toContain("https://token-plan-sgp.xiaomimimo.com/v1");
+    expect(JSON.stringify(harness)).not.toContain("MIMO_API_KEY=");
+  });
+
+  it("keeps DeepSeek live calls opt-in and dry-run first", () => {
+    expect(
+      createProviderRoundtripHarness(
+        provider({
+          id: "provider_deepseek_dgx",
+          name: "DeepSeek DGX-02 Key",
+          tags: ["dgx-secret-ref", "server-proxy", "deepseek"],
+          secretRef: {
+            id: "secret_dgx02_deepseek",
+            label: "DGX-02 DeepSeek API key",
+            scope: "profile",
+            redactedPreview: "dgx-02:DEEPSEEK_API_KEY",
+            transient: false,
+          },
+        }),
+      ),
+    ).toEqual({
+      commandLabel: "pnpm provider:smoke:deepseek -- --dry-run",
+      modeLabel: "라이브 호출 준비",
+      routeLabel: "DeepSeek",
+      networkPolicyLabel: "기본 dry-run · live는 명시 opt-in",
+      secretPolicyLabel: "SecretRef 필요",
+      logPolicyLabel: "응답 미리보기만 기록",
+      tone: "warning",
+    });
+  });
+
+  it("summarizes provider roundtrip results without raw response bodies", () => {
+    expect(
+      createProviderRoundtripResultSummary({
+        status: "ok",
+        latencyMs: 812,
+        providerLabel: "MiMo OpenAI",
+      }),
+    ).toEqual({
+      label: "연결 확인됨",
+      detail: "MiMo OpenAI · 812ms",
+      tone: "success",
+    });
+
+    expect(
+      createProviderRoundtripResultSummary({
+        status: "auth_required",
+        providerLabel: "DeepSeek",
+        rawMessage: "Authorization: Bearer sk-secret1234567890",
+      }),
+    ).toEqual({
+      label: "권한 필요",
+      detail: "DeepSeek · 비밀값 확인 필요",
+      tone: "warning",
+    });
   });
 });

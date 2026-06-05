@@ -3,7 +3,10 @@ import type { ModelDiscoverySnapshot, ProviderProfile } from "@ai-orchestrator/p
 import { StatusBadge } from "@/ui/status-badge";
 import { createProviderOperationalBadges } from "../lib/providerOperationalBadges";
 import type { ModelCatalog } from "../types";
-import { createProviderSmokeReadiness } from "../lib/providerSmokeReadiness";
+import {
+  createProviderRoundtripHarness,
+  createProviderSmokeReadiness,
+} from "../lib/providerSmokeReadiness";
 
 export function ProviderProfilesManagerPanel({
   modelCatalog,
@@ -40,6 +43,7 @@ export function ProviderProfilesManagerPanel({
           const models = modelCatalog[profile.id] ?? [];
           const operationalBadges = createProviderOperationalBadges(profile, profiles);
           const smokeReadiness = createProviderSmokeReadiness(profile);
+          const roundtripHarness = createProviderRoundtripHarness(profile);
           return (
             <article className={`provider-row ${isInUse ? "in-use" : ""}`} key={profile.id}>
               <div>
@@ -97,6 +101,21 @@ export function ProviderProfilesManagerPanel({
                     <span className="max-w-[260px] truncate font-mono text-zinc-400">
                       {smokeReadiness.commandLabel}
                     </span>
+                  </small>
+                ) : null}
+                {roundtripHarness ? (
+                  <small className="mt-2 flex flex-wrap items-center gap-1 text-[10px] text-zinc-500">
+                    <StatusBadge
+                      size="sm"
+                      variant={roundtripHarness.tone === "success" ? "success" : "warning"}
+                    >
+                      왕복 테스트
+                    </StatusBadge>
+                    <span>{roundtripHarness.networkPolicyLabel}</span>
+                    <span>/</span>
+                    <span>{roundtripHarness.secretPolicyLabel}</span>
+                    <span>/</span>
+                    <span>{roundtripHarness.logPolicyLabel}</span>
                   </small>
                 ) : null}
               </div>
