@@ -31,6 +31,20 @@ export type PublicWorkTrace = {
 };
 
 const EMPTY_TRACE: PublicWorkTrace = { groups: [] };
+const FORBIDDEN_PUBLIC_TRACE_PATTERNS = [
+  /https?:\/\/[^\s"')]+/i,
+  /Bearer\s+[A-Za-z0-9._~+/=-]+/i,
+  /sk-[A-Za-z0-9_-]{8,}/i,
+  /tp-[A-Za-z0-9_-]{8,}/i,
+  /\/Users\/[^\s"')]+/i,
+  /(?:chain[- ]of[- ]thought|raw prompt|tool input|command args?)\s*:/i,
+];
+
+export type PublicTraceSafetyReport = {
+  blockedReasons: string[];
+  isSafe: boolean;
+  label: string;
+};
 
 export function createConversationMessagePublicWorkTrace(message: ConversationMessage): PublicWorkTrace {
   if (message.role === "user") return EMPTY_TRACE;
@@ -276,6 +290,25 @@ export function createTerminalBlockPublicWorkTrace(block: TerminalTimelineBlock)
       { label: "마스킹", value: block.redactionApplied ? "적용됨" : "확인 필요" },
     ],
   });
+}
+
+export function createPublicTraceSafetyReport(trace: PublicWorkTrace): PublicTraceSafetyReport {
+  const serialized = JSON.stringify(trace);
+  const blockedReasons = FORBIDDEN_PUBLIC_TRACE_PATTERNS.flatMap((pattern) =>
+    pattern.test(serialized) ? [`금지 패턴 감지: ${pattern.source}`] : [],
+  );
+  const hasReceiptMasking = trace.receipt?.items.some(
+    (item) => item.label === "마스킹" && item.value.includes("적용"),
+  );
+  if (trace.groups.length > 0 && !hasReceiptMasking) {
+    blockedReasons.push("마스킹 영수증 없음");
+  }
+
+  return {
+    blockedReasons,
+    isSafe: blockedReasons.length === 0,
+    label: blockedReasons.length === 0 ? "마스킹 점검 통과" : "마스킹 확인 필요",
+  };
 }
 
 function toTrace(
