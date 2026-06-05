@@ -16,8 +16,18 @@ export type PublicWorkTraceGroup = {
   items: PublicWorkTraceItem[];
 };
 
+export type PublicWorkTraceReceipt = {
+  label: "에이전트 실행 영수증" | "토론 실행 영수증" | "Tmux 실행 영수증";
+  status: "checkpointed" | "live" | "fallback" | "blocked";
+  items: Array<{
+    label: "범위" | "기준점" | "마스킹";
+    value: string;
+  }>;
+};
+
 export type PublicWorkTrace = {
   groups: PublicWorkTraceGroup[];
+  receipt?: PublicWorkTraceReceipt;
 };
 
 const EMPTY_TRACE: PublicWorkTrace = { groups: [] };
@@ -114,7 +124,7 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
     });
   }
 
-  return toTrace(steps, commands, evidence);
+  return toTrace(steps, commands, evidence, createConversationReceipt(message, metadata));
 }
 
 export function createDebateUtterancePublicWorkTrace(utterance: Stage3DebateUtteranceView): PublicWorkTrace {
@@ -154,7 +164,15 @@ export function createDebateUtterancePublicWorkTrace(utterance: Stage3DebateUtte
     });
   }
 
-  return toTrace(steps, commands, evidence);
+  return toTrace(steps, commands, evidence, {
+    label: "토론 실행 영수증",
+    status: utterance.tags.includes("risk") ? "live" : "checkpointed",
+    items: [
+      { label: "범위", value: sanitize(`토론/${utterance.roundId}`) },
+      { label: "기준점", value: sanitize(`${utterance.agentId} · ${utterance.roundTitle}`) },
+      { label: "마스킹", value: "적용됨" },
+    ],
+  });
 }
 
 export function createTerminalBlockPublicWorkTrace(block: TerminalTimelineBlock): PublicWorkTrace {
@@ -192,19 +210,90 @@ export function createTerminalBlockPublicWorkTrace(block: TerminalTimelineBlock)
       value: sanitize(block.outputPreview),
     });
   }
-  return toTrace(steps, commands, evidence);
+  return toTrace(steps, commands, evidence, {
+    label: "Tmux 실행 영수증",
+    status: block.status === "failed" || block.status === "blocked" ? "blocked" : "checkpointed",
+    items: [
+      { label: "범위", value: sanitize(tmuxKindDisplayLabel(block.kind)) },
+      { label: "기준점", value: sanitize(`${block.terminalSessionId} · ${block.paneId}`) },
+      { label: "마스킹", value: block.redactionApplied ? "적용됨" : "확인 필요" },
+    ],
+  });
 }
 
 function toTrace(
   steps: PublicWorkTraceItem[],
   commands: PublicWorkTraceItem[],
   evidence: PublicWorkTraceItem[],
+  receipt?: PublicWorkTraceReceipt,
 ): PublicWorkTrace {
   const groups: PublicWorkTraceGroup[] = [];
   if (steps.length > 0) groups.push({ id: "steps", items: steps, title: "작업 단계" });
   if (commands.length > 0) groups.push({ id: "commands", items: commands, title: "명령·도구 제안" });
   if (evidence.length > 0) groups.push({ id: "evidence", items: evidence, title: "검증·근거" });
-  return { groups };
+  return { groups, receipt };
+}
+
+function createConversationReceipt(
+  message: ConversationMessage,
+  metadata: Record<string, unknown>,
+): PublicWorkTraceReceipt | undefined {
+  const hasTraceableWork =
+    readBoolean(metadata.realProviderCall) !== undefined ||
+    readString(metadata.route) ||
+    readString(metadata.providerProfileId) ||
+    readString(metadata.memoryScope) ||
+    readString(metadata.recallTraceId);
+  if (!hasTraceableWork) return undefined;
+
+  const spans = [
+    readBoolean(metadata.realProviderCall) !== undefined ? "generation" : undefined,
+    readStringArray(metadata.runtimeConfigFileIds).length > 0 ? "tool" : undefined,
+    readDelegations(metadata).length > 0 ? "handoff" : undefined,
+    readString(metadata.recallTraceId) || readString(metadata.memoryTraceId) ? "memory" : undefined,
+  ].filter((value): value is string => Boolean(value));
+  const checkpoint = [
+    message.sessionId,
+    readString(metadata.recallTraceId) ?? readString(metadata.memoryTraceId) ?? readString(metadata.providerProfileId),
+  ].filter(Boolean).join(" · ");
+
+  return {
+    label: "에이전트 실행 영수증",
+    status: readBoolean(metadata.realProviderCall) === false ? "fallback" : "checkpointed",
+    items: [
+      { label: "범위", value: sanitize(spans.length > 0 ? spans.map(spanDisplayLabel).join("/") : "메시지") },
+      { label: "기준점", value: sanitize(checkpoint || message.id) },
+      { label: "마스킹", value: "적용됨" },
+    ],
+  };
+}
+
+function spanDisplayLabel(span: string) {
+  switch (span) {
+    case "generation":
+      return "생성";
+    case "tool":
+      return "도구";
+    case "handoff":
+      return "핸드오프";
+    case "memory":
+      return "메모리";
+    default:
+      return span;
+  }
+}
+
+function tmuxKindDisplayLabel(kind: TerminalTimelineBlock["kind"]) {
+  switch (kind) {
+    case "command_intent":
+      return "명령 의도";
+    case "dispatch":
+      return "디스패치";
+    case "dry_run":
+      return "드라이런";
+    default:
+      return kind;
+  }
 }
 
 function readDelegations(metadata: Record<string, unknown>) {
