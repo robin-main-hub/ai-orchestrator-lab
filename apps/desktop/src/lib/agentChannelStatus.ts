@@ -74,7 +74,7 @@ export function createAgentChannelDetailChips({
     chips.push({
       label: "기억 추적",
       tone: "ready",
-      value: compactChannelValue(memoryScope.recallTraceId),
+      value: memoryScope.recallTraceId ? "recall 추적 준비됨" : "recall 추적 대기",
     });
   }
   if (providerProfileId || modelId) {

@@ -59,7 +59,7 @@ describe("createAgentChannelStatus", () => {
       {
         label: "기억 추적",
         tone: "ready",
-        value: expect.stringMatching(/^recall_agent_memory_curator_.*….*token_openai$/),
+        value: "recall 추적 준비됨",
       },
       {
         label: "Provider",

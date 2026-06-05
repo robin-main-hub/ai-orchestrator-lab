@@ -19,8 +19,10 @@ describe("createAgentConversationFlowCards", () => {
       expect(cards.map((card) => card.id)).toEqual(["channel", "memory", "tools", "trace"]);
       expect(cards[0]?.value).toContain(agent.id);
       expect(cards[0]?.details.join(" ")).toContain(agent.role);
-      expect(cards[1]?.details.join(" ")).toContain(memoryScope.recallTraceId);
-      expect(cards[1]?.details.join(" ")).toContain("recall query");
+      expect(cards[1]?.details.join(" ")).toContain(`에이전트 ${memoryScope.agentId} / 세션 ${memoryScope.sessionId}`);
+      expect(cards[1]?.details.join(" ")).toContain("대화 맥락 기반 recall 준비");
+      expect(cards[1]?.details.join(" ")).toContain("기억 원문은 채팅 화면에 직접 노출하지 않음");
+      expect(cards[1]?.details.join(" ")).not.toContain(memoryScope.recallTraceId);
       expect(cards[2]?.details.join(" ")).toContain("memory.recall");
       expect(cards[3]?.details.join(" ")).toContain("숨은 사고");
     }
