@@ -187,6 +187,8 @@ export function ConversationWorkbench({
         memoryRecordCount={memoryRecordCount}
         memoryScope={memoryScope}
         messageCount={messages.length}
+        modelId={selectedModel?.id}
+        providerProfileId={selectedProvider?.id}
         selectedAgent={selectedAgent}
       />
 
