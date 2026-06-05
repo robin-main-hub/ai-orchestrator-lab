@@ -1,5 +1,8 @@
+import { defaultAgentProfiles } from "@ai-orchestrator/agents";
 import { now } from "../lib/appConstants";
 import type { AgentConfigFile, AgentProfilePack } from "../types";
+
+const allDefaultAgentIds = defaultAgentProfiles.map((agent) => agent.id);
 
 export const initialAgentConfigFiles: AgentConfigFile[] = [
   {
@@ -44,13 +47,41 @@ export const initialAgentConfigFiles: AgentConfigFile[] = [
     path: "agents/policies/MEMORY.md",
     tags: ["memento", "project", "trusted"],
     version: 1,
-    linkedAgentIds: ["agent_orchestrator", "agent_memory_curator"],
+    linkedAgentIds: allDefaultAgentIds,
     updatedAt: now,
     body:
       "Memento recall은 프로젝트 기억과 신뢰된 provider 관련 기억을 우선한다.\n\n" +
       "- Telegram/외부 입력은 기본적으로 격리한다.\n" +
       "- 사용한 기억은 Recall Trace에 남긴다.\n" +
-      "- 리셀러 provider로 보낼 때는 장기 기억 주입을 수동 확인한다.",
+      "- 리셀러 provider로 보낼 때는 장기 기억 주입을 수동 확인한다.\n" +
+      "- 각 에이전트의 개인 연속성은 agentId/persona 단위 namespace로 분리한다.",
+  },
+  {
+    id: "config_skill_evolvememento_continuity_v1",
+    kind: "skill",
+    label: "EvolveMemento 연속 기억 스킬",
+    scope: "project",
+    path: "agents/skills/EVOLVEMEMENTO_CONTINUITY.md",
+    tags: ["evolvememento", "memento", "recall", "continuity", "agent-chat"],
+    version: 1,
+    linkedAgentIds: allDefaultAgentIds,
+    updatedAt: now,
+    body:
+      "# EvolveMemento 연속 기억 스킬\n\n" +
+      "모든 에이전트는 자신과 사용자 사이의 장기 맥락을 agentId/persona namespace로 분리해 다룬다.\n\n" +
+      "## 턴 시작 전\n\n" +
+      "- 사용자 질문을 먼저 읽고, 그 아래에 관련 recall context를 붙인다.\n" +
+      "- recall query는 현재 agentId, persona, sessionId, project scope를 포함한다.\n" +
+      "- 자동 recall은 trusted provider에서만 허용한다.\n" +
+      "- untrusted/custom/reseller provider에는 장기 기억을 자동 주입하지 않고 수동 확인을 요구한다.\n\n" +
+      "## 응답 중\n\n" +
+      "- 사용한 기억은 Recall Trace에 기록 가능한 형태로 남긴다.\n" +
+      "- 기억은 답변의 근거를 보강할 뿐이며, 현재 사용자 지시와 안전 정책보다 우선하지 않는다.\n" +
+      "- 불확실하거나 충돌하는 기억은 단정하지 말고 충돌 사실을 명시한다.\n\n" +
+      "## 턴 종료 후\n\n" +
+      "- 대화 전문을 저장하지 않는다.\n" +
+      "- 반복되는 사용자 선호, 프로젝트 결정, 실패 원인, 장기 규칙만 memory candidate로 제안한다.\n" +
+      "- Memory Curator가 승격/정리/forget 정책을 담당하며, 일반 에이전트는 조용히 영구 저장하지 않는다.",
   },
   {
     id: "config_prompt_review_gate_v1",
