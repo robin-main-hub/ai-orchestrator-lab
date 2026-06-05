@@ -113,6 +113,7 @@ import type {
 } from "@ai-orchestrator/protocol";
 import type {
   AgentActivityStatus,
+  AgentConfigFile,
   AgentConfigTab,
   AgentPersonaSettings,
   AgentVisualSettings,
@@ -133,11 +134,13 @@ import {
 } from "./lib/appConstants";
 import { getConversationRailLayout } from "./lib/conversationRailLayout";
 import { getConversationShellVisibility } from "./lib/conversationShellVisibility";
+import { createAgentChannelRuntimeSummary, createAgentRuntimeConfigSection } from "./lib/agentRuntimeConfig";
 import {
   createAgentChannelMemoryScope,
   createInitialAgentConversationChannels,
   getAgentChannelMessages,
   updateAgentChannelMessages,
+  type AgentChannelMemoryScope,
   type AgentConversationChannels,
 } from "./lib/agentConversationChannels";
 import {
@@ -857,14 +860,18 @@ export function App() {
 
   function createConversationPipelineMessages({
     agent,
+    configFiles,
     memory,
+    memoryScope,
     modelId,
     persona,
     provider,
     userMessage,
   }: {
     agent: WorkbenchAgent;
+    configFiles: AgentConfigFile[];
     memory: Stage6MemoryInspector;
+    memoryScope: AgentChannelMemoryScope;
     modelId: string;
     persona?: AgentPersonaSettings;
     provider: ProviderProfile;
@@ -874,6 +881,7 @@ export function App() {
       .filter((result) => result.usedInDecision)
       .slice(0, 5)
       .map((result, index) => `${index + 1}. ${result.record.title}: ${result.record.content} (score ${result.score.toFixed(2)})`);
+    const runtimeConfig = createAgentRuntimeConfigSection(agent, configFiles);
     const systemContent = [
       "AI Orchestrator Lab conversation pipeline.",
       "Reply in Korean unless the user explicitly asks for another language.",
@@ -882,6 +890,8 @@ export function App() {
       persona
         ? `SOUL.md: ${persona.soulSummary}\nAGENTS.md: ${persona.agentsInstruction}\nCreativity: ${persona.creativityLevel}`
         : "SOUL.md: default role profile",
+      createAgentChannelRuntimeSummary(memoryScope),
+      runtimeConfig.promptText,
       recalledMemories.length > 0
         ? `EvolveMemento recall:\n${recalledMemories.join("\n")}`
         : "EvolveMemento recall: no selected records",
@@ -908,6 +918,9 @@ export function App() {
         modelId,
         memoryTraceId: memory.trace.id,
         recalledMemoryCount: recalledMemories.length,
+        memoryScope: memoryScope.namespace,
+        recallTraceId: memoryScope.recallTraceId,
+        runtimeConfigFileIds: runtimeConfig.configFileIds,
       },
     };
 
@@ -952,7 +965,9 @@ export function App() {
 
     const pipelineMessages = createConversationPipelineMessages({
       agent,
+      configFiles: agentConfigFiles,
       memory: memoryInspector,
+      memoryScope: selectedAgentMemoryScope,
       modelId,
       persona,
       provider,
@@ -964,6 +979,7 @@ export function App() {
       modelId,
       messageCount: pipelineMessages.length,
       memoryTraceId: memoryInspector.trace.id,
+      runtimeConfigFileIds: pipelineMessages[0]?.metadata?.runtimeConfigFileIds,
       usedMemoryCount: memoryInspector.trace.results.filter((result) => result.usedInDecision).length,
       soulMode: agent.soulMode,
       purpose,
