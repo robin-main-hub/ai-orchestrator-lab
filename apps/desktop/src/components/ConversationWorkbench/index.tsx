@@ -40,6 +40,7 @@ import { AgentConversationFlowPanel } from "./AgentConversationFlowPanel";
 
 export function ConversationWorkbench({
   activeSessionId,
+  agentToolRuntimeLabel,
   agentConfigPanel,
   configFiles,
   agentPersona,
@@ -86,6 +87,7 @@ export function ConversationWorkbench({
   agentActivityById,
 }: {
   activeSessionId: string;
+  agentToolRuntimeLabel?: string;
   agentConfigPanel: { open: boolean; tab: AgentConfigTab };
   configFiles: AgentConfigFile[];
   agentPersona?: AgentPersonaSettings;
@@ -195,6 +197,7 @@ export function ConversationWorkbench({
 
       <AgentChannelStatusBar
         adapterStatus={memoryAdapterStatus}
+        agentToolRuntimeLabel={agentToolRuntimeLabel}
         controlQueueContinuity={controlQueueContinuity}
         memoryGovernanceLabel={memoryGovernanceLabel}
         memoryRecordCount={memoryRecordCount}
