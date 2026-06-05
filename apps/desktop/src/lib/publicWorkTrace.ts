@@ -124,7 +124,39 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
     });
   }
 
-  return toTrace(steps, commands, evidence, createConversationReceipt(message, metadata));
+  if (steps.length === 0) {
+    steps.push({
+      id: "assistant-response",
+      label: "응답 단계",
+      tone: "info",
+      value: "공개 답변 생성",
+    });
+  }
+
+  if (commands.length === 0) {
+    commands.push({
+      id: "tool-boundary",
+      label: "도구 호출",
+      tone: "neutral",
+      value: "필요 시 목적·입력·권한을 먼저 표시",
+    });
+  }
+
+  if (evidence.length === 0) {
+    evidence.push({
+      id: "public-boundary",
+      label: "검증 경계",
+      tone: "neutral",
+      value: "숨은 사고 과정 비공개 · 요약만 표시",
+    });
+  }
+
+  return toTrace(
+    steps,
+    commands,
+    evidence,
+    createConversationReceipt(message, metadata) ?? createFallbackConversationReceipt(message),
+  );
 }
 
 export function createDebateUtterancePublicWorkTrace(utterance: Stage3DebateUtteranceView): PublicWorkTrace {
@@ -263,6 +295,19 @@ function createConversationReceipt(
     items: [
       { label: "범위", value: sanitize(spans.length > 0 ? spans.map(spanDisplayLabel).join("/") : "메시지") },
       { label: "기준점", value: sanitize(checkpoint || message.id) },
+      { label: "마스킹", value: "적용됨" },
+      { label: "공개 범위", value: "요약 단계만" },
+    ],
+  };
+}
+
+function createFallbackConversationReceipt(message: ConversationMessage): PublicWorkTraceReceipt {
+  return {
+    label: "에이전트 실행 영수증",
+    status: "checkpointed",
+    items: [
+      { label: "범위", value: "메시지" },
+      { label: "기준점", value: sanitize(message.id) },
       { label: "마스킹", value: "적용됨" },
       { label: "공개 범위", value: "요약 단계만" },
     ],
