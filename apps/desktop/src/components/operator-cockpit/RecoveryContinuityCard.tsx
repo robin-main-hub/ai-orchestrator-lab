@@ -3,6 +3,7 @@ import { Activity, ArchiveRestore, CloudUpload, HeartPulse } from "lucide-react"
 import type { OperatorCockpitRecovery } from "@ai-orchestrator/protocol";
 import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
+import { operatorCockpitActionLabels } from "./actionLabels";
 import { badgeColorForOutbox } from "./presentation";
 
 export function RecoveryContinuityCard({
@@ -20,8 +21,10 @@ export function RecoveryContinuityCard({
             <Badge color="green">{recovery.healthIndicators.length} checks</Badge>
             {onOpen ? (
               <button
+                aria-label={operatorCockpitActionLabels.openRecoveryContinuity}
                 className="rounded-md border border-zinc-700/70 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 transition hover:border-emerald-400/60 hover:text-emerald-200"
                 onClick={onOpen}
+                title={operatorCockpitActionLabels.openRecoveryContinuity}
                 type="button"
               >
                 열기
