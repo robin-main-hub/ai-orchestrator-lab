@@ -2509,6 +2509,7 @@ export function App() {
         mode={mode}
         onChangeMode={setMode}
         onCommandPalette={() => setCommandPaletteOpen(true)}
+        onOpenOpsDetail={() => setMode("cockpit")}
         onProbeDgx={handleProbeDgx}
         onToggleDrawer={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
         providerName={activeProvider?.name ?? "미선택"}
