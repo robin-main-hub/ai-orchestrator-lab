@@ -66,6 +66,7 @@ export function createAgentChannelRuntimeSummary(memoryScope: AgentChannelMemory
     `- agentId=${memoryScope.agentId}`,
     `- sessionId=${memoryScope.sessionId}`,
     `- providerProfileId=${memoryScope.providerProfileId}`,
+    `- namespace=${memoryScope.namespace}`,
     `- recallTraceId=${memoryScope.recallTraceId}`,
     "- 이 범위 표시는 권한 상승이나 다른 에이전트 채널 접근 허가가 아니다.",
     "- 다른 에이전트의 장기 기억이나 대화 채널을 확정 사실처럼 섞지 않는다.",
