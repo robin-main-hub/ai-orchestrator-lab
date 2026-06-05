@@ -102,30 +102,30 @@ export function TerminalDock({
         <span className="terminal-dock-v2__title">
           <Terminal size={15} />
           <strong>Terminal / Run Log</strong>
-          <em>execution disabled</em>
+          <em>승인 기반 실행</em>
         </span>
         <div className="terminal-dock-v2__chips">
           <StatusChip
             icon={<LockKeyhole size={11} />}
-            label="perm"
-            value={`${permissionSnapshot.summary.pending} pending`}
+            label="승인"
+            value={`${permissionSnapshot.summary.pending}건 대기`}
             tone={permTone}
           />
           <StatusChip
             icon={<Server size={11} />}
-            label="dgx"
+            label="DGX"
             value={dgxBridge.heartbeat.status}
             tone={dgxTone}
           />
           <StatusChip
             icon={<Radio size={11} />}
-            label="sync"
-            value={`rev ${eventSyncState.serverRevision ?? "-"} · ob ${eventSyncState.outboxCount}`}
+            label="동기화"
+            value={`rev ${eventSyncState.serverRevision ?? "-"} · 보류 ${eventSyncState.outboxCount}`}
             tone={syncTone}
           />
           <StatusChip
             icon={<KeyRound size={11} />}
-            label="vault"
+            label="금고"
             value={`${secretVaultSnapshot.summary.available}/${secretVaultSnapshot.entries.length}`}
             tone={vaultTone}
           />
@@ -147,14 +147,14 @@ export function TerminalDock({
                   onClick={onApproveNext}
                   type="button"
                 >
-                  approve
+                  승인
                 </button>
                 <button
                   className="terminal-dock-v2__action"
                   onClick={onRejectNext}
                   type="button"
                 >
-                  reject
+                  거부
                 </button>
               </>
             }
@@ -165,7 +165,7 @@ export function TerminalDock({
             tone="ok"
             stamp="perm-queue"
             title="대기 중인 승인 요청 없음"
-            meta={`allow ${permissionSnapshot.summary.allowed} · approved ${permissionSnapshot.summary.approved} · deny ${permissionSnapshot.summary.denied}`}
+            meta={`허용 ${permissionSnapshot.summary.allowed} · 승인됨 ${permissionSnapshot.summary.approved} · 거부 ${permissionSnapshot.summary.denied}`}
           />
         )}
 
@@ -174,15 +174,15 @@ export function TerminalDock({
           tone="ok"
           stamp={`run-${agentRun.status}`}
           title={agentRun.soulSummary}
-          meta={`${agentRun.recallTrace.length} recall · ${agentRun.recallTrace.filter((t) => t.usedInDecision).length} used · verifier ${agentRun.verifier.status} · replay ${agentRun.replay.eventIds.length}`}
+          meta={`기억 ${agentRun.recallTrace.length}개 · 사용 ${agentRun.recallTrace.filter((t) => t.usedInDecision).length}개 · 검증 ${agentRun.verifier.status} · 재생 ${agentRun.replay.eventIds.length}개`}
         />
 
         <Block
           type="dgx"
           tone={dgxTone}
           stamp={dgxBridge.authorityNodeId}
-          title={`remote ${dgxBridge.response.status} · sync ${dgxBridge.syncMode}`}
-          meta={`fallback ${dgxBridge.localFallbackEnabled ? dgxBridge.response.fallbackMode : "none"}`}
+          title={`원격 ${dgxBridge.response.status} · 동기화 ${dgxBridge.syncMode}`}
+          meta={`대체 경로 ${dgxBridge.localFallbackEnabled ? dgxBridge.response.fallbackMode : "없음"}`}
         />
 
         <Block
@@ -190,14 +190,14 @@ export function TerminalDock({
           tone={vaultTone}
           stamp={`vault ${providerReadiness.modelCount}m`}
           title={providerReadiness.reason}
-          meta={`secret ${providerReadiness.secretAvailability} · memory ${providerReadiness.canUseAutomaticMemory ? "auto" : "manual"} · raw persisted: no`}
+          meta={`비밀값 ${providerReadiness.secretAvailability} · 기억 ${providerReadiness.canUseAutomaticMemory ? "자동" : "수동"} · 원문 저장 없음`}
           actions={
             <button
               className="terminal-dock-v2__action"
               onClick={onCheckProviderVault}
               type="button"
             >
-              check
+              확인
             </button>
           }
         />
@@ -216,8 +216,8 @@ export function TerminalDock({
                     : "neutral"
             }
             stamp={slot.label}
-            title={slot.lastCommandPreview || "no command yet"}
-            meta={`status ${slot.status} · approval ${slot.permissionState}`}
+            title={slot.lastCommandPreview || "아직 명령 없음"}
+            meta={`상태 ${slot.status} · 승인 ${slot.permissionState}`}
           />
         ))}
 

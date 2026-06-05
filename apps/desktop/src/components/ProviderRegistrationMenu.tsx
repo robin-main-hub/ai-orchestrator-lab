@@ -33,14 +33,14 @@ export function ProviderRegistrationMenu({
   }> = [
     { mode: "api_key", label: "API Key", detail: "env / JSON / base URL", icon: KeyRound },
     { mode: "cli", label: "CLI", detail: "Codex / Claude Code / OpenClaw", icon: Terminal },
-    { mode: "oauth", label: "OAuth", detail: "session / account binding", icon: LockKeyhole },
+    { mode: "oauth", label: "OAuth", detail: "세션 / 계정 바인딩", icon: LockKeyhole },
   ];
 
   return (
-    <section className="provider-registration-menu" aria-label="provider registration menu">
+    <section className="provider-registration-menu" aria-label="공급자 등록 메뉴">
       <header>
-        <span>Provider 등록</span>
-        <button aria-label="provider 등록 메뉴 닫기" className="rail-icon-button" onClick={onClose} type="button">
+        <span>공급자 등록</span>
+        <button aria-label="공급자 등록 메뉴 닫기" className="rail-icon-button" onClick={onClose} type="button">
           <ChevronLeft size={14} />
         </button>
       </header>

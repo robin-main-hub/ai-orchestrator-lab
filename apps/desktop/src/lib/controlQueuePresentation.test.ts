@@ -34,9 +34,9 @@ describe("controlQueuePresentation", () => {
   });
 
   it("returns action feedback labels for each live queue action", () => {
-    expect(controlQueueActionFeedback("ask")).toBe("질문이 대화 초안으로 준비됩니다");
-    expect(controlQueueActionFeedback("edit")).toBe("수정 초안이 생성됩니다");
-    expect(controlQueueActionFeedback("delegate")).toBe("실행 위임안이 준비됩니다");
+    expect(controlQueueActionFeedback("ask")).toBe("대화 입력창에 질문 초안 생성");
+    expect(controlQueueActionFeedback("edit")).toBe("작업 항목에 수정 초안 생성");
+    expect(controlQueueActionFeedback("delegate")).toBe("작업 항목에 실행 위임 초안 생성");
     expect(controlQueueActionFeedback("block")).toBe("항목이 차단됩니다");
   });
 });

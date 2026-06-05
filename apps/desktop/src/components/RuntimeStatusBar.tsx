@@ -234,14 +234,14 @@ function HealthIndicator({
             <h4 className="text-sm font-medium text-zinc-100">{title}</h4>
           </div>
           <p className="mt-1 text-xs text-zinc-500">
-            Runtime status overview · {providerName || "provider pending"}
+            런타임 상태 요약 · {providerName || "Provider 미지정"}
           </p>
         </div>
         <div className="space-y-1 p-2">
           <StatusRow label={dgxLabel} status={snapshot.dgxStatus} />
-          <StatusRow label="Local" status={snapshot.localModelStatus} />
-          <StatusRow label="Memory" status={snapshot.memorySyncStatus} />
-          <StatusRow label="Authority" status={snapshot.syncTopology.authorityLabel} />
+          <StatusRow label="로컬" status={snapshot.localModelStatus} />
+          <StatusRow label="기억" status={snapshot.memorySyncStatus} />
+          <StatusRow label="권위 노드" status={snapshot.syncTopology.authorityLabel} />
           {snapshot.recentError ? (
             <div className="mt-2 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
               <p className="line-clamp-3 text-xs text-rose-300">{snapshot.recentError}</p>
