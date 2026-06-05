@@ -247,14 +247,14 @@ export function TmuxSwarmBoard({
         </div>
       </header>
 
-      <div className="flex shrink-0 items-center gap-3 border-b border-zinc-800/60 bg-zinc-900/30 px-4 py-2 md:px-6">
-        <div className="min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 border-b border-zinc-800/60 bg-zinc-900/30 px-4 py-2 md:px-6">
+        <div className="min-w-0 flex-1">
           <div className="text-[10px] uppercase tracking-wider text-zinc-600">
             Orchestrator 추천
           </div>
           <p className="truncate text-xs text-zinc-200">{recommendation.summary}</p>
         </div>
-        <div className="ml-auto flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1 sm:ml-auto">
           {recommendation.recommendedRoles.map((role) => (
             <StatusBadge variant="muted" size="sm" key={role}>
               {role}
