@@ -40,6 +40,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
+import type { MemoryGovernanceSummary } from "../lib/memoryGovernance";
 
 /**
  * EvolveMemento panel — strict v0 port.
@@ -67,6 +68,7 @@ import {
 
 export type EvolveMementoPanelProps = {
   adapterStatus: "loading" | "ready" | "error";
+  governanceSummary?: MemoryGovernanceSummary;
   inspector: Stage6MemoryInspector;
   onActivate: (recordId: string) => void;
   onForget: (recordId: string) => void;
@@ -79,6 +81,7 @@ export type MementoPanelProps = EvolveMementoPanelProps;
 
 export function EvolveMementoPanel({
   adapterStatus,
+  governanceSummary,
   inspector,
   onRemember,
   onActivate,
@@ -157,6 +160,10 @@ export function EvolveMementoPanel({
 
       {isOpen ? (
         <div className="space-y-4 p-3">
+          {governanceSummary ? (
+            <MemoryGovernanceStrip summary={governanceSummary} />
+          ) : null}
+
           {/* Auto-load indicator */}
           <div className="flex items-start gap-2">
             <Sparkles
@@ -252,6 +259,44 @@ export function EvolveMementoPanel({
 }
 
 // ── v0-style sub-components ──────────────────────────────────────────
+
+function MemoryGovernanceStrip({ summary }: { summary: MemoryGovernanceSummary }) {
+  const variant =
+    summary.status === "ready"
+      ? "success"
+      : summary.status === "error"
+        ? "danger"
+        : "warning";
+
+  return (
+    <div className="rounded-md border border-border bg-card/40 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-xs font-medium text-foreground">{summary.installLabel}</div>
+          <div className="mt-0.5 truncate text-[10px] text-muted-foreground">{summary.currentScopeLabel}</div>
+        </div>
+        <StatusBadge size="sm" variant={variant}>
+          {summary.healthLabel}
+        </StatusBadge>
+      </div>
+      <div className="mt-2 grid grid-cols-4 gap-1.5 text-center">
+        <GovernanceMiniStat label="활성" value={summary.activeCount} />
+        <GovernanceMiniStat label="고정" value={summary.pinnedCount} />
+        <GovernanceMiniStat label="격리" value={summary.quarantinedCount} />
+        <GovernanceMiniStat label="삭제" value={summary.tombstonedCount} />
+      </div>
+    </div>
+  );
+}
+
+function GovernanceMiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded bg-card/70 px-1 py-1">
+      <div className="text-xs font-semibold text-foreground">{value}</div>
+      <div className="text-[9px] text-muted-foreground">{label}</div>
+    </div>
+  );
+}
 
 function MiniStat({
   label,
