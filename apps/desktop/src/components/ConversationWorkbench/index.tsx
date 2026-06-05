@@ -7,6 +7,7 @@ import type {
   PermissionMatrixSnapshot,
   ProviderProfile,
 } from "@ai-orchestrator/protocol";
+import type { AgentChannelMemoryScope } from "../../lib/agentConversationChannels";
 import {
   attachmentAcceptForModel,
   createDefaultPersonaSettings,
@@ -31,6 +32,7 @@ import { Composer } from "./Composer";
 import { WorkbenchHeader } from "./WorkbenchHeader";
 import { ActionStrip } from "./ActionStrip";
 import { InboxApprovalStrip } from "./ApprovalQueue";
+import { AgentChannelStatusBar } from "./AgentChannelStatusBar";
 
 export function ConversationWorkbench({
   activeSessionId,
@@ -43,6 +45,9 @@ export function ConversationWorkbench({
   draftAttachments,
   draftMessage,
   maxDraftAttachments,
+  memoryAdapterStatus,
+  memoryRecordCount,
+  memoryScope,
   messages,
   onAddDraftAttachments,
   onAdoptBranch,
@@ -84,6 +89,9 @@ export function ConversationWorkbench({
   draftAttachments: DraftAttachment[];
   draftMessage: string;
   maxDraftAttachments: number;
+  memoryAdapterStatus: "loading" | "ready" | "error";
+  memoryRecordCount: number;
+  memoryScope?: AgentChannelMemoryScope;
   messages: ConversationMessage[];
   onAddDraftAttachments: (files: FileList | null) => void;
   onAdoptBranch: () => void;
@@ -168,6 +176,14 @@ export function ConversationWorkbench({
         selectedModel={selectedModel}
         selectedProvider={selectedProvider}
         sessionId={activeSessionId}
+      />
+
+      <AgentChannelStatusBar
+        adapterStatus={memoryAdapterStatus}
+        memoryRecordCount={memoryRecordCount}
+        memoryScope={memoryScope}
+        messageCount={messages.length}
+        selectedAgent={selectedAgent}
       />
 
       <MessageThread
