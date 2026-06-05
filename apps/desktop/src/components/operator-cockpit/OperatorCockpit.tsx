@@ -9,7 +9,7 @@ import { MemoryRecallCard } from "./MemoryRecallCard";
 import { ProviderRoutingCard } from "./ProviderRoutingCard";
 import { RecoveryContinuityCard } from "./RecoveryContinuityCard";
 import { WorkerFleetCard } from "./WorkerFleetCard";
-import { badgeColorForMirror, formatClock } from "./presentation";
+import { badgeColorForMirror, formatClock, mirrorHealthLabel } from "./presentation";
 
 export function OperatorCockpit({
   snapshot,
@@ -36,7 +36,7 @@ export function OperatorCockpit({
 
   return (
     <div
-      aria-label="Operator Cockpit read-only command view"
+      aria-label="운영자 관제판 읽기 전용 지휘 화면"
       className="relative flex h-full min-h-0 flex-col overflow-hidden bg-transparent text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
       data-focus-id="cockpit-container"
       tabIndex={-1}
@@ -58,18 +58,18 @@ export function OperatorCockpit({
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-sm font-semibold tracking-tight text-zinc-100">Operator Cockpit</h1>
+                <h1 className="truncate text-sm font-semibold tracking-tight text-zinc-100">운영자 관제판</h1>
                 <Badge color="outline" size="xs">
-                  Read-only Command View
+                  읽기 전용 지휘 화면
                 </Badge>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
                 <span className="inline-flex items-center gap-1">
                   <RefreshCw className="h-3 w-3" />
-                  Last sync: {formatClock(snapshot.timestamp)}
+                  마지막 동기화: {formatClock(snapshot.timestamp)}
                 </span>
                 <span className="text-zinc-700">/</span>
-                <span>snapshot {snapshot.id}</span>
+                <span>스냅샷 {snapshot.id}</span>
               </div>
             </div>
           </div>
@@ -77,21 +77,21 @@ export function OperatorCockpit({
           <div className="flex flex-wrap items-center gap-2">
             <Badge color={blockedCount > 0 ? "red" : "green"} pulse={blockedCount > 0}>
               <ShieldAlert className="h-3 w-3" />
-              {blockedCount} blocked
+              {blockedCount}건 차단
             </Badge>
             <Badge color={approvalCount > 0 ? "yellow" : "green"}>
               <Activity className="h-3 w-3" />
-              {approvalCount} approvals
+              {approvalCount}건 승인
             </Badge>
             <Badge color={snapshot.memory.macBookAuthorityEnabled ? "green" : "gray"}>
               <Monitor className="h-3 w-3" />
-              MacBook authority
+              MacBook 권위
             </Badge>
             <Badge color={badgeColorForMirror(snapshot.memory.dgxMirrorHealth)}>
               <Server className="h-3 w-3" />
-              DGX {snapshot.memory.dgxMirrorHealth}
+              DGX {mirrorHealthLabel(snapshot.memory.dgxMirrorHealth)}
             </Badge>
-            <Badge color={totalSignals > 0 ? "yellow" : "blue"}>{totalSignals} signals</Badge>
+            <Badge color={totalSignals > 0 ? "yellow" : "blue"}>{totalSignals}건 신호</Badge>
           </div>
         </div>
       </header>

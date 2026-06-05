@@ -4,7 +4,7 @@ import type { OperatorCockpitRecovery } from "@ai-orchestrator/protocol";
 import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
 import { operatorCockpitActionLabels } from "./actionLabels";
-import { badgeColorForOutbox } from "./presentation";
+import { badgeColorForOutbox, outboxSyncLabel } from "./presentation";
 
 export function RecoveryContinuityCard({
   recovery,
@@ -18,7 +18,7 @@ export function RecoveryContinuityCard({
       <GlassPanelHeader
         action={
           <div className="flex items-center gap-2">
-            <Badge color="green">{recovery.healthIndicators.length} checks</Badge>
+            <Badge color="green">{recovery.healthIndicators.length}건 점검</Badge>
             {onOpen ? (
               <button
                 aria-label={operatorCockpitActionLabels.openRecoveryContinuity}
@@ -35,7 +35,7 @@ export function RecoveryContinuityCard({
       >
         <div className="flex items-center gap-2">
           <HeartPulse className="h-4 w-4 text-emerald-400" />
-          <h3 className="text-sm font-semibold text-zinc-100">Recovery & Continuity</h3>
+          <h3 className="text-sm font-semibold text-zinc-100">복구와 연속성</h3>
         </div>
       </GlassPanelHeader>
 
@@ -44,23 +44,23 @@ export function RecoveryContinuityCard({
           <div className="rounded-lg border border-zinc-800/50 bg-black/20 p-3">
             <span className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
               <ArchiveRestore className="h-3 w-3" />
-              Offline Resume
+              오프라인 재개
             </span>
             <Badge color={recovery.offlineResumeSupported ? "green" : "gray"}>
-              {recovery.offlineResumeSupported ? "Supported" : "Unsupported"}
+              {recovery.offlineResumeSupported ? "지원됨" : "미지원"}
             </Badge>
           </div>
           <div className="rounded-lg border border-zinc-800/50 bg-black/20 p-3">
             <span className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
               <CloudUpload className="h-3 w-3" />
-              Outbox Sync
+              발신함 동기화
             </span>
-            <Badge color={badgeColorForOutbox(recovery.outboxSyncStatus)}>{recovery.outboxSyncStatus}</Badge>
+            <Badge color={badgeColorForOutbox(recovery.outboxSyncStatus)}>{outboxSyncLabel(recovery.outboxSyncStatus)}</Badge>
           </div>
         </div>
 
         <div>
-          <span className="mb-2 block text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Health Indicators</span>
+          <span className="mb-2 block text-[10px] font-semibold uppercase tracking-wider text-zinc-600">상태 신호</span>
           <div className="flex flex-wrap gap-2">
             {recovery.healthIndicators.map((indicator) => (
               <Badge
