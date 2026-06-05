@@ -6,6 +6,7 @@ import type {
 } from "@ai-orchestrator/protocol";
 import { Button } from "@/ui/button";
 import type { WorkbenchAgent, AgentConfigTab, AgentPersonaSettings } from "../../types";
+import { getAgentToolBadgeLabels, getAgentToolProfile } from "../../lib/agentToolProfiles";
 import { agentRoleLabel, providerDisplayLabel } from "../../lib/helpers";
 import {
   creativityLevelLabel,
@@ -40,6 +41,7 @@ export function WorkbenchHeader({
   selectedProvider?: ProviderProfile;
   sessionId: string;
 }) {
+  const toolProfile = selectedAgent ? getAgentToolProfile(selectedAgent.role) : undefined;
   const cycleContextPackTier = () => {
     const order: ContextPackTier[] = ["lite", "standard", "full"];
     const currentIndex = order.indexOf(contextPackTier);
@@ -72,6 +74,9 @@ export function WorkbenchHeader({
             {selectedProvider ? providerDisplayLabel(selectedProvider.name) : "provider pending"}
           </span>
         </div>
+        {selectedAgent && toolProfile ? (
+          <ToolBadgeStrip profile={toolProfile} role={selectedAgent.role} />
+        ) : null}
       </div>
 
       {/* Center: session id */}
@@ -121,6 +126,35 @@ export function WorkbenchHeader({
         </Button>
       </div>
     </header>
+  );
+}
+
+function ToolBadgeStrip({
+  profile,
+  role,
+}: {
+  profile: ReturnType<typeof getAgentToolProfile>;
+  role: WorkbenchAgent["role"];
+}) {
+  const badgeLabels = getAgentToolBadgeLabels(role);
+  return (
+    <div
+      aria-label={`${profile.label} 읽기 전용 참고 기능`}
+      className="hidden max-w-[320px] items-center gap-1.5 overflow-hidden lg:flex"
+      title={`읽기 전용 참고: ${profile.label} · ${badgeLabels.join(", ")}`}
+    >
+      <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
+        잘하는 기능
+      </span>
+      {badgeLabels.slice(0, 3).map((tool) => (
+        <span
+          className="max-w-[92px] truncate rounded-full border border-border/80 bg-card/50 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+          key={tool}
+        >
+          {tool}
+        </span>
+      ))}
+    </div>
   );
 }
 
