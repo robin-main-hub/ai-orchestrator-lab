@@ -1,42 +1,73 @@
-import React from 'react';
-import type { OperatorCockpitProviderRouting } from '@ai-orchestrator/protocol';
-import { Badge } from './Badge';
+import React from "react";
+import { Gauge, RadioTower, Route, ShieldCheck, Zap } from "lucide-react";
+import type { OperatorCockpitProviderRouting } from "@ai-orchestrator/protocol";
+import { Badge } from "./Badge";
+import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
+import {
+  badgeColorForCost,
+  badgeColorForFallback,
+  badgeColorForSpeed,
+  badgeColorForTrust,
+} from "./presentation";
 
 export function ProviderRoutingCard({ routing }: { routing: OperatorCockpitProviderRouting }) {
   return (
-    <div className="bg-purple-500/10 backdrop-blur-xl border border-purple-500/30 rounded-2xl p-6 shadow-xl hover:shadow-[0_0_25px_rgba(168,85,247,0.15)] transition-all relative overflow-hidden group">
-      {/* Ethereal tracking line and bounce animation */}
-      <div className="absolute top-0 left-6 w-px h-full bg-gradient-to-b from-purple-500/50 to-transparent"></div>
-      <div className="absolute top-0 left-[23px] w-1 h-4 bg-purple-400 shadow-[0_0_8px_var(--color-purple-400)] animate-bounce rounded-full"></div>
+    <GlassPanel variant="default" className="relative">
+      <div aria-hidden className="absolute left-4 top-11 h-[calc(100%-3.25rem)] w-px bg-gradient-to-b from-violet-500/50 to-transparent" />
+      <GlassPanelHeader action={<Badge color={badgeColorForFallback(routing.fallbackStatus)}>{routing.fallbackStatus}</Badge>}>
+        <div className="flex items-center gap-2">
+          <RadioTower className="h-4 w-4 text-violet-400" />
+          <h3 className="text-sm font-semibold text-zinc-100">Provider Routing</h3>
+        </div>
+      </GlassPanelHeader>
 
-      <div className="pl-6 relative">
-        <h3 className="text-lg font-semibold mb-6 text-purple-400 drop-shadow-[0_0_8px_var(--color-purple-400)] flex items-center gap-2">
-          <span>📡</span> Provider Provenance
-        </h3>
-
-        <div className="mb-6 bg-black/40 border border-purple-500/20 rounded-xl p-4">
-          <span className="font-semibold text-zinc-500 tracking-wider text-[10px] uppercase block mb-2">Selected Route</span>
-          <span className="font-mono text-sm text-purple-300 tracking-wide">{routing.selectedModelId}</span>
+      <div className="space-y-4 p-3 pl-8">
+        <div className="rounded-lg border border-violet-500/20 bg-violet-500/10 p-3">
+          <span className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+            <Route className="h-3 w-3" />
+            Selected Route
+          </span>
+          <span className="break-all font-mono text-sm text-violet-200">{routing.selectedModelId}</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="bg-black/20 p-3 rounded-lg border border-white/5">
-            <span className="font-semibold text-zinc-500 tracking-wider text-[10px] uppercase block mb-2">Fallback Status</span>
-            <Badge color={routing.fallbackStatus === 'active' ? 'yellow' : routing.fallbackStatus === 'available' ? 'green' : 'gray'}>
-              {routing.fallbackStatus}
-            </Badge>
-          </div>
-          <div className="bg-black/20 p-3 rounded-lg border border-white/5">
-            <span className="font-semibold text-zinc-500 tracking-wider text-[10px] uppercase block mb-2">Source Trust</span>
-            <Badge color="purple">{routing.trustBadge}</Badge>
-          </div>
-        </div>
-
-        <div className="flex gap-2">
-          <Badge color="blue">Cost: {routing.costBadge}</Badge>
-          <Badge color="blue">Speed: {routing.speedBadge}</Badge>
+        <div className="grid grid-cols-3 gap-2">
+          <MetricBadge icon={<Gauge className="h-3 w-3" />} label="Cost" color={badgeColorForCost(routing.costBadge)}>
+            {routing.costBadge}
+          </MetricBadge>
+          <MetricBadge icon={<Zap className="h-3 w-3" />} label="Speed" color={badgeColorForSpeed(routing.speedBadge)}>
+            {routing.speedBadge}
+          </MetricBadge>
+          <MetricBadge
+            icon={<ShieldCheck className="h-3 w-3" />}
+            label="Trust"
+            color={badgeColorForTrust(routing.trustBadge)}
+          >
+            {routing.trustBadge}
+          </MetricBadge>
         </div>
       </div>
+    </GlassPanel>
+  );
+}
+
+function MetricBadge({
+  children,
+  color,
+  icon,
+  label,
+}: {
+  children: React.ReactNode;
+  color: Parameters<typeof Badge>[0]["color"];
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <div className="rounded-lg border border-zinc-800/50 bg-black/20 p-2">
+      <span className="mb-1 flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider text-zinc-600">
+        {icon}
+        {label}
+      </span>
+      <Badge color={color} size="xs">{children}</Badge>
     </div>
   );
 }

@@ -1,45 +1,62 @@
-import React from 'react';
-import type { OperatorCockpitHandoff } from '@ai-orchestrator/protocol';
+import React from "react";
+import { AlertCircle, ArrowRight, Handshake, UserRoundCheck } from "lucide-react";
+import type { OperatorCockpitHandoff } from "@ai-orchestrator/protocol";
+import { Badge } from "./Badge";
+import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
 
 export function HandoffCard({ handoffs }: { handoffs: OperatorCockpitHandoff[] }) {
   return (
-    <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl hover:border-white/20 transition-all">
-      <div className="flex items-center gap-3 mb-6">
-        <span className="drop-shadow-[0_0_8px_var(--color-cyan-400)] text-xl">🤝</span>
-        <h3 className="text-lg font-semibold text-zinc-100">Handoffs</h3>
-      </div>
+    <GlassPanel>
+      <GlassPanelHeader action={<Badge color={handoffs.length > 0 ? "blue" : "gray"}>{handoffs.length} active</Badge>}>
+        <div className="flex items-center gap-2">
+          <Handshake className="h-4 w-4 text-cyan-400" />
+          <h3 className="text-sm font-semibold text-zinc-100">Handoffs</h3>
+        </div>
+      </GlassPanelHeader>
       {handoffs.length === 0 ? (
-        <p className="text-sm text-zinc-500 font-mono">No active handoffs.</p>
+        <div className="p-4 text-sm text-zinc-500">No active handoffs.</div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3 p-3">
           {handoffs.map((handoff, idx) => (
-            <div key={idx} className="p-4 border border-white/5 bg-black/40 rounded-xl group hover:bg-black/60 transition-colors">
-              <div className="flex items-center gap-3 mb-4 border-b border-white/5 pb-3">
-                <span className="font-semibold text-zinc-500 tracking-wider text-[10px] uppercase">Owner</span>
-                <span className="text-sm font-semibold text-cyan-400">{handoff.ownerAgentId}</span>
+            <article key={`${handoff.ownerAgentId}-${idx}`} className="rounded-lg border border-zinc-800/50 bg-zinc-900/30 p-3">
+              <div className="mb-3 flex items-center gap-2 border-b border-zinc-800/50 pb-3">
+                <span className="flex h-7 w-7 items-center justify-center rounded-md bg-cyan-500/10 text-cyan-300">
+                  <UserRoundCheck className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Owner</span>
+                  <span className="block truncate text-sm font-semibold text-cyan-300">{handoff.ownerAgentId}</span>
+                </div>
               </div>
+
               <div className="mb-4">
-                <span className="font-semibold text-zinc-500 tracking-wider text-[10px] uppercase block mb-2">Next Action</span>
-                <span className="text-sm text-zinc-300 font-mono leading-relaxed">{handoff.nextAction}</span>
+                <span className="mb-2 block text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Next Action</span>
+                <div className="flex items-start gap-2 rounded-md bg-black/25 p-2 text-sm text-zinc-300">
+                  <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-400" />
+                  <span>{handoff.nextAction}</span>
+                </div>
               </div>
+
               {handoff.missingInfoSlots.length > 0 && (
-                <div className="bg-amber-500/5 p-3 rounded-lg border border-amber-500/10">
-                  <span className="font-semibold text-amber-500/70 tracking-wider text-[10px] uppercase block mb-2 flex items-center gap-2">
-                    <span className="animate-pulse">⚠️</span> Missing Info
+                <div className="rounded-lg border border-amber-500/15 bg-amber-500/5 p-3">
+                  <span className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+                    <AlertCircle className="h-3.5 w-3.5" /> Missing Info
                   </span>
-                  <ul className="space-y-1">
+                  <ul className="space-y-1.5">
                     {handoff.missingInfoSlots.map((slot, i) => (
-                      <li key={i} className="text-xs font-mono text-amber-400 flex items-center gap-2">
-                        <span className="opacity-50">›</span> {slot.label} {slot.required && <span className="opacity-50">(Required)</span>}
+                      <li key={`${slot.id}-${i}`} className="flex items-center gap-2 text-xs text-amber-300">
+                        <span className="h-1 w-1 rounded-full bg-amber-400" />
+                        <span>{slot.label}</span>
+                        {slot.required ? <Badge color="yellow" size="xs">required</Badge> : null}
                       </li>
                     ))}
                   </ul>
                 </div>
               )}
-            </div>
+            </article>
           ))}
         </div>
       )}
-    </div>
+    </GlassPanel>
   );
 }
