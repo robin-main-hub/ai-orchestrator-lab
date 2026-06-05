@@ -2301,6 +2301,22 @@ export function App() {
     setAgentConfigPanel({ open: true, tab });
   }
 
+  function openProviderRoutingFromCockpit() {
+    setMode("conversation");
+    setActiveNavItem("providers");
+    setProviderRegistrationOpen(true);
+  }
+
+  function openMemoryFromCockpit() {
+    setReturnModeAfterConfigClose("cockpit");
+    setMode("conversation");
+    setAgentConfigPanel({ open: true, tab: "injection" });
+  }
+
+  function openRecoveryFromCockpit() {
+    setMode("annex");
+  }
+
   function updateSelectedAgentConfig(patch: Partial<Pick<WorkbenchAgent, "configSource" | "soulMode">>) {
     if (!selectedAgent) {
       return;
@@ -3032,14 +3048,15 @@ export function App() {
     configLibraryActive,
     mode,
   });
+  const leftRailVisible = shellVisibility.showLeftRail || providerRegistrationOpen;
 
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
   useEffect(() => {
-    if (!shellVisibility.showLeftRail && isMobileDrawerOpen) {
+    if (!leftRailVisible && isMobileDrawerOpen) {
       setIsMobileDrawerOpen(false);
     }
-  }, [isMobileDrawerOpen, shellVisibility.showLeftRail]);
+  }, [isMobileDrawerOpen, leftRailVisible]);
 
   return (
     <div
@@ -3059,7 +3076,7 @@ export function App() {
       } as React.CSSProperties}
     >
       <RuntimeStatusBar
-        drawerAvailable={shellVisibility.showLeftRail}
+        drawerAvailable={leftRailVisible}
         mode={mode}
         onChangeMode={setMode}
         onCommandPalette={() => setCommandPaletteOpen(true)}
@@ -3070,13 +3087,13 @@ export function App() {
         snapshot={runtimeSnapshotState}
       />
       <main className="workspace-grid">
-        {isMobileDrawerOpen && shellVisibility.showLeftRail ? (
+        {isMobileDrawerOpen && leftRailVisible ? (
           <div
             className="mobile-drawer-backdrop"
             onClick={() => setIsMobileDrawerOpen(false)}
           />
         ) : null}
-        {shellVisibility.showLeftRail ? (
+        {leftRailVisible ? (
           <aside
             className={`left-rail ${providerRegistrationOpen ? "provider-mode" : ""} ${isMobileDrawerOpen ? "drawer-open" : ""}`}
             aria-label="오케스트레이터 네비게이션"
@@ -3360,6 +3377,9 @@ export function App() {
             />
           ) : mode === "cockpit" ? (
             <OperatorCockpit
+              onOpenMemory={openMemoryFromCockpit}
+              onOpenProviderRouting={openProviderRoutingFromCockpit}
+              onOpenRecovery={openRecoveryFromCockpit}
               onPreviewEvidence={() => setApprovalDrawerOpen(true)}
               snapshot={cockpitSnapshot}
             />
