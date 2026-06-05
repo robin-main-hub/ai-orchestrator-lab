@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,6 +32,20 @@ function loadEnv() {
       }
     }
   }
+}
+
+export function redactSensitiveText(value) {
+  return String(value)
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '[REDACTED:api_key]')
+    .replace(/\btp-[A-Za-z0-9_-]{8,}\b/g, '[REDACTED:token_plan_key]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/gi, 'Bearer [REDACTED:bearer_token]')
+    .replace(/\b[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|COOKIE)[A-Z0-9_]*\s*=\s*["']?[^\s"']+["']?/g, '[REDACTED:env_secret]');
+}
+
+export function truncateForConsole(value, maxChars = 2000) {
+  const text = redactSensitiveText(value);
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars)}\n...[truncated ${text.length - maxChars} chars]`;
 }
 
 async function main() {
@@ -109,14 +123,22 @@ async function main() {
     const rawText = await response.text();
     if (!response.ok) {
       console.error(`API Error (Status ${response.status}):`);
-      console.error(rawText);
+      console.error(truncateForConsole(rawText));
       process.exit(1);
     }
 
-    const data = JSON.parse(rawText);
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (err) {
+      console.error('Invalid JSON response from API:');
+      console.error(truncateForConsole(rawText));
+      process.exit(1);
+    }
     const reply = data.choices?.[0]?.message?.content;
     if (!reply) {
-      console.error('Empty response choices from API:', data);
+      console.error('Empty response choices from API.');
+      console.error(truncateForConsole(JSON.stringify(data)));
       process.exit(1);
     }
 
@@ -129,7 +151,9 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
