@@ -1,6 +1,7 @@
 import type { AgentConfigFile, WorkbenchAgent } from "../types";
 import type { AgentChannelMemoryScope } from "./agentConversationChannels";
 import { getAgentToolProfile } from "./agentToolProfiles";
+import { sanitizePublicText } from "./publicRedaction";
 
 export type AgentRuntimeConfigSection = {
   configFileIds: string[];
@@ -24,11 +25,11 @@ export type AgentRoleToolRuntimeAudit = {
 const maxConfigBodyChars = 2_400;
 const secretPatterns: Array<[RegExp, string]> = [
   [/https?:\/\/[^\s"'`<>)]+/gi, "[REDACTED:url]"],
-  [/sk-[A-Za-z0-9_-]{8,}/g, "[REDACTED:api_key]"],
-  [/tp-[A-Za-z0-9_-]{8,}/g, "[REDACTED:token_plan]"],
+  [/sk-[A-Za-z0-9_-]{8,}/gi, "[REDACTED:api_key]"],
+  [/tp-[A-Za-z0-9_-]{8,}/gi, "[REDACTED:token_plan]"],
   [/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/gi, "Bearer [REDACTED:bearer_token]"],
-  [/\b[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|COOKIE)[A-Z0-9_]*\s*=\s*["']?[^\s"']+["']?/g, "[REDACTED:env_secret]"],
-  [/\/Users\/[^\s"'`<>)]+/g, "[REDACTED:path]"],
+  [/\b[A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|COOKIE)[A-Za-z0-9_]*\s*=\s*["']?[^\s"']+["']?/gi, "[REDACTED:env_secret]"],
+  [/\/Users\/[^\s"'`<>)]+/gi, "[REDACTED:path]"],
 ];
 
 export function selectAgentRuntimeConfigFiles(
@@ -53,9 +54,9 @@ export function createAgentRuntimeConfigSection(
   const sections = linkedConfigFiles.map((file) => {
     const body = redactPromptConfigText(file.body).slice(0, maxConfigBodyChars);
     return [
-      `## ${file.label}`,
+      `## ${redactPromptConfigText(file.label)}`,
       `- id: ${redactPromptConfigText(file.id)}`,
-      `- kind: ${file.kind}`,
+      `- kind: ${redactPromptConfigText(file.kind)}`,
       `- path: ${redactPromptConfigText(file.path)}`,
       "",
       body,
@@ -135,5 +136,11 @@ export function createAgentRoleToolRuntimeAudit(agents: WorkbenchAgent[]): Agent
 }
 
 function redactPromptConfigText(value: string): string {
-  return secretPatterns.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), value);
+  const patternSanitized = secretPatterns.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), value);
+  return sanitizePublicText(patternSanitized)
+    .replaceAll("[redacted:url]", "[REDACTED:url]")
+    .replaceAll("Bearer [redacted]", "Bearer [REDACTED:bearer_token]")
+    .replaceAll("[redacted:path]", "[REDACTED:path]")
+    .replaceAll("[redacted:internal]", "[REDACTED:internal]")
+    .replaceAll("[redacted]", "[REDACTED:secret]");
 }

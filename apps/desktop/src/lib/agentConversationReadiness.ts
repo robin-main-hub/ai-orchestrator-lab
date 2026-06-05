@@ -1,3 +1,5 @@
+import { createAgentMemoryQuality } from "./agentMemoryQuality";
+
 export type AgentConversationReadinessTone = "ready" | "warming" | "attention";
 
 export type AgentConversationReadinessInput = {
@@ -23,7 +25,11 @@ export function createAgentConversationReadiness({
   toolCount,
 }: AgentConversationReadinessInput): AgentConversationReadiness {
   const checks: string[] = [];
-  const memoryQualityLabel = createMemoryQualityLabel({ adapterStatus, memoryRecordCount, messageCount });
+  const memoryQualityLabel = createAgentMemoryQuality({
+    adapterStatus,
+    memoryRecordCount,
+    messageCount,
+  }).shortLabel;
   if (agentId?.trim()) {
     checks.push("전용 채널");
   }
@@ -46,12 +52,21 @@ export function createAgentConversationReadiness({
     };
   }
 
-  if (!agentId?.trim() || toolCount === 0) {
+  if (!agentId?.trim()) {
     return {
       checks,
       label: "에이전트 준비 확인 필요",
       memoryQualityLabel,
       tone: "attention",
+    };
+  }
+
+  if (toolCount === 0) {
+    return {
+      checks,
+      label: "도구 프로필 확인 필요",
+      memoryQualityLabel,
+      tone: "warming",
     };
   }
 
@@ -79,20 +94,4 @@ export function createAgentConversationReadiness({
     memoryQualityLabel,
     tone: "ready",
   };
-}
-
-function createMemoryQualityLabel({
-  adapterStatus,
-  memoryRecordCount,
-  messageCount,
-}: {
-  adapterStatus: AgentConversationReadinessInput["adapterStatus"];
-  memoryRecordCount: number;
-  messageCount: number;
-}) {
-  if (adapterStatus === "error") return "장기 기억 점검 필요";
-  if (adapterStatus === "loading") return "장기 기억 로딩";
-  if (memoryRecordCount >= 3 && messageCount >= 2) return "장기 기억 품질 양호";
-  if (memoryRecordCount > 0 || messageCount > 0) return "장기 기억 축적 중";
-  return "장기 기억 시작 전";
 }

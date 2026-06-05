@@ -4,6 +4,7 @@ const PUBLIC_TEXT_FORBIDDEN_PATTERNS = [
   /sk-[A-Za-z0-9_-]{8,}/i,
   /tp-[A-Za-z0-9_-]{8,}/i,
   /\/Users\/[^\s"'`<>)]+/i,
+  /\b[A-Za-z0-9_]*(?:TOKEN|SECRET|API_KEY|PASSWORD|COOKIE|KEY)[A-Za-z0-9_]*\s*=\s*["']?[^\s"']+["']?/i,
   /(?:chain[- ]of[- ]thought|raw prompt|tool input|command args?)\b/i,
 ];
 
