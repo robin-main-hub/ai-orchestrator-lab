@@ -20,7 +20,7 @@ export type PublicWorkTraceReceipt = {
   label: "에이전트 실행 영수증" | "토론 실행 영수증" | "Tmux 실행 영수증";
   status: "checkpointed" | "live" | "fallback" | "blocked";
   items: Array<{
-    label: "범위" | "기준점" | "마스킹";
+    label: "범위" | "기준점" | "마스킹" | "공개 범위";
     value: string;
   }>;
 };
@@ -264,6 +264,7 @@ function createConversationReceipt(
       { label: "범위", value: sanitize(spans.length > 0 ? spans.map(spanDisplayLabel).join("/") : "메시지") },
       { label: "기준점", value: sanitize(checkpoint || message.id) },
       { label: "마스킹", value: "적용됨" },
+      { label: "공개 범위", value: "요약 단계만" },
     ],
   };
 }
@@ -347,8 +348,11 @@ function roleDisplayLabel(role: string) {
 
 function sanitize(value: string) {
   return value
+    .replace(/(?:chain[- ]of[- ]thought|raw prompt|tool input)\s*:[^\n\r]*/gi, "[redacted:internal]")
+    .replace(/https?:\/\/[^\s"')]+/gi, "[redacted:url]")
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, "[redacted]")
-    .replace(/\btp-[A-Za-z0-9_-]{8,}\b/g, "[redacted]")
-    .replace(/\b[A-Za-z0-9_]*(?:TOKEN|SECRET|API_KEY|PASSWORD)[A-Za-z0-9_]*=[^\s]+/gi, "[redacted]");
+    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "[redacted]")
+    .replace(/tp-[A-Za-z0-9_-]{8,}/g, "[redacted]")
+    .replace(/\b[A-Za-z0-9_]*(?:TOKEN|SECRET|API_KEY|PASSWORD)[A-Za-z0-9_]*=[^\s]+/gi, "[redacted]")
+    .replace(/\/Users\/[^\s"')]+/g, "[redacted:path]");
 }

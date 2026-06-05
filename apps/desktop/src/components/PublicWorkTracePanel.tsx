@@ -19,6 +19,13 @@ export function PublicWorkTracePanel({
         className,
       )}
     >
+      <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[10px] text-zinc-500">
+        <span className="font-semibold text-zinc-300">공개 작업 로그</span>
+        <span className="rounded-full border border-violet-400/20 bg-violet-400/10 px-1.5 py-0.5 text-violet-200">
+          내부 추론 비공개
+        </span>
+        <span>요약 단계와 검증 근거만 표시</span>
+      </div>
       {trace.receipt ? (
         <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5 text-[10px] text-zinc-300">
           <span className="font-semibold uppercase tracking-[0.18em] text-violet-200">{trace.receipt.label}</span>
