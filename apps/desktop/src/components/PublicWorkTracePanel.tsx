@@ -1,6 +1,10 @@
 import { CheckCircle2, CircleDashed, FileSearch, TerminalSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { PublicWorkTrace, PublicWorkTraceTone } from "../lib/publicWorkTrace";
+import {
+  createPublicTraceSafetyReport,
+  type PublicWorkTrace,
+  type PublicWorkTraceTone,
+} from "../lib/publicWorkTrace";
 
 export function PublicWorkTracePanel({
   className,
@@ -10,6 +14,7 @@ export function PublicWorkTracePanel({
   trace: PublicWorkTrace;
 }) {
   if (trace.groups.length === 0) return null;
+  const safetyReport = createPublicTraceSafetyReport(trace);
 
   return (
     <div
@@ -23,6 +28,17 @@ export function PublicWorkTracePanel({
         <span className="font-semibold text-zinc-300">공개 작업 로그</span>
         <span className="rounded-full border border-violet-400/20 bg-violet-400/10 px-1.5 py-0.5 text-violet-200">
           내부 추론 비공개
+        </span>
+        <span
+          className={cn(
+            "rounded-full border px-1.5 py-0.5",
+            safetyReport.isSafe
+              ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-200"
+              : "border-rose-400/25 bg-rose-500/10 text-rose-200",
+          )}
+          title={safetyReport.blockedReasons.join(", ") || safetyReport.label}
+        >
+          {safetyReport.label}
         </span>
         <span>요약 단계와 검증 근거만 표시</span>
       </div>
