@@ -42,6 +42,16 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
     });
   }
 
+  const totalTokens = readUsageTotalTokens(metadata.usage);
+  if (totalTokens !== undefined) {
+    steps.push({
+      id: "token-usage",
+      label: "토큰 사용",
+      tone: "neutral",
+      value: sanitize(`${totalTokens} total tokens`),
+    });
+  }
+
   const error = readString(metadata.error) ?? readString(metadata.fallbackReason);
   if (error) {
     steps.push({
@@ -78,6 +88,16 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
       label: "기억 범위",
       tone: "neutral",
       value: sanitize(memoryScope),
+    });
+  }
+
+  const memoryTraceId = readString(metadata.memoryTraceId);
+  if (memoryTraceId) {
+    evidence.push({
+      id: "memory-trace",
+      label: "기억 추적",
+      tone: "neutral",
+      value: sanitize(memoryTraceId),
     });
   }
 
@@ -217,6 +237,12 @@ function readBoolean(value: unknown) {
 
 function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function readUsageTotalTokens(value: unknown) {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  return readNumber(record.totalTokens) ?? readNumber(record.total_tokens);
 }
 
 function readStringArray(value: unknown) {
