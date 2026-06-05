@@ -51,6 +51,7 @@ export function ConversationWorkbench({
   draftMessage,
   maxDraftAttachments,
   memoryAdapterStatus,
+  memoryGovernanceLabel,
   memoryRecordCount,
   memoryScope,
   messages,
@@ -96,6 +97,7 @@ export function ConversationWorkbench({
   draftMessage: string;
   maxDraftAttachments: number;
   memoryAdapterStatus: "loading" | "ready" | "error";
+  memoryGovernanceLabel?: string;
   memoryRecordCount: number;
   memoryScope?: AgentChannelMemoryScope;
   messages: ConversationMessage[];
@@ -194,6 +196,7 @@ export function ConversationWorkbench({
       <AgentChannelStatusBar
         adapterStatus={memoryAdapterStatus}
         controlQueueContinuity={controlQueueContinuity}
+        memoryGovernanceLabel={memoryGovernanceLabel}
         memoryRecordCount={memoryRecordCount}
         memoryScope={memoryScope}
         messageCount={messages.length}
