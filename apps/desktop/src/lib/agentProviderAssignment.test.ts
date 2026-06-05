@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
 import type { WorkbenchAgent } from "../types";
+import { createProviderCompletionProxyRequest } from "../runtime/stage12DgxProvider";
 import { applyAgentProviderAssignment } from "./agentProviderAssignment";
 
 const baseAgent: WorkbenchAgent = {
@@ -99,6 +100,47 @@ describe("applyAgentProviderAssignment", () => {
         providerProfileId: provider.id,
       },
     });
+  });
+
+  it("preserves the assigned provider and model in the server proxy completion request", () => {
+    const nextAgents = applyAgentProviderAssignment({
+      agents: [baseAgent],
+      agentId: baseAgent.id,
+      providerId: provider.id,
+      providerProfiles: [provider],
+      modelCatalog: {
+        [provider.id]: [
+          {
+            id: "gpt-4.1-mini",
+            name: "gpt-4.1-mini",
+            providerProfileId: provider.id,
+            supportsStreaming: true,
+            supportsTools: false,
+            tags: [],
+          },
+        ],
+      },
+      createAuthBinding,
+    });
+    const assignedAgent = nextAgents[0];
+    expect(assignedAgent?.providerProfileId).toBe(provider.id);
+    expect(assignedAgent?.modelId).toBe("gpt-4.1-mini");
+
+    const request = createProviderCompletionProxyRequest(provider, assignedAgent?.modelId ?? provider.defaultModel ?? "model pending", [
+      {
+        id: "message_1",
+        sessionId: "session_provider_assignment",
+        role: "user",
+        content: "Run with the assigned model.",
+        createdAt: "2026-06-05T00:00:00.000Z",
+      },
+    ]);
+
+    expect(request.providerProfileId).toBe(provider.id);
+    expect(request.modelId).toBe("gpt-4.1-mini");
+    expect(request.sessionId).toBe("session_provider_assignment");
+    expect(JSON.stringify(request)).not.toContain("API secretRef");
+    expect(JSON.stringify(request)).not.toContain("oauth_pending");
   });
 
   it("keeps current agents when the provider is already occupied by another agent", () => {
