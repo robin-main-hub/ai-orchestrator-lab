@@ -57,11 +57,11 @@ export function TmuxPaneCard({
   const isIdle = pane.state === "idle";
   const [isTimelineOpen, setIsTimelineOpen] = useState(false);
   return (
-    <div className="flex min-h-[260px] flex-col rounded-2xl border border-white/10 bg-zinc-900/60 shadow-xl shadow-black/25 backdrop-blur-xl transition-colors hover:border-cyan-300/25">
+    <div className="flex min-h-[260px] flex-col rounded-lg border border-zinc-800/60 bg-zinc-900/40 shadow-xl shadow-black/25 backdrop-blur-xl transition-colors hover:border-zinc-700/60">
       {/* Header: avatar + title + status */}
       <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/10 p-1 shadow-[0_0_22px_rgba(34,211,238,0.12)]">
+          <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-1">
             <AvatarWithStatus
               initials={pane.agent ? pane.agent.name.slice(0, 2).toUpperCase() : "??"}
               roleColor={pane.agent ? roleColorFromRole(pane.agent.role) : "companion"}
@@ -126,7 +126,7 @@ export function TmuxPaneCard({
             <input
               aria-label={`${pane.title} command preview`}
               className={cn(
-                "h-8 min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2 font-mono text-[10px] text-zinc-200 placeholder:text-zinc-700 focus-visible:border-cyan-400/50 focus-visible:outline-none",
+                "h-8 min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2 font-mono text-[10px] text-zinc-200 placeholder:text-zinc-700 focus-visible:border-amber-400/50 focus-visible:outline-none",
                 isIdle && "cursor-not-allowed opacity-50",
               )}
               disabled={isIdle}
@@ -136,7 +136,7 @@ export function TmuxPaneCard({
             />
             <Button
               aria-label={`${pane.title} capture`}
-              className="h-8 gap-1 rounded-lg px-2 text-[10px] text-cyan-300 hover:bg-cyan-500/10"
+              className="h-8 gap-1 rounded-lg px-2 text-[10px] text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-100"
               disabled={Boolean(busy) || isIdle}
               onClick={onCapture}
               size="sm"

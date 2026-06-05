@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { AgentProfile, ConversationAttachment, DebateUtterance, ModelDescriptor } from "@ai-orchestrator/protocol";
 
-export type CenterMode = "conversation" | "debate" | "tmux" | "cockpit";
+export type CenterMode = "conversation" | "debate" | "tmux" | "cockpit" | "annex";
 export type AgentActivityStatus = "idle" | "preparing" | "responding";
 export type WorkbenchAgent = AgentProfile;
 export type ModelCatalog = Record<string, ModelDescriptor[]>;

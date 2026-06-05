@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LockKeyhole } from "lucide-react";
+import { Terminal } from "lucide-react";
 import type {
   ApprovalRequest,
   CodingPacket,
@@ -7,14 +7,12 @@ import type {
   TerminalTimelineBlock,
   TmuxPaneRole,
 } from "@ai-orchestrator/protocol";
-import { messageLabel } from "../lib/uiLabels";
 import {
   requestTmuxCapture,
   requestTmuxDispatch,
   type DesktopTmuxDispatchRequest,
 } from "../runtime/stage33TmuxServer";
 import type { AgentActivityStatus, AgentVisualSettings, WorkbenchAgent } from "../types";
-import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/ui/status-badge";
 import { TmuxPaneCard } from "./TmuxPaneCard";
 import { makeSyntheticBlock } from "./TmuxPaneTimeline";
@@ -53,7 +51,6 @@ export function TmuxSwarmBoard({
   onApprovalQueued?: (input: TmuxApprovalQueuedInput) => void;
   packet: CodingPacket;
 }) {
-  const recentMessages = messages.slice(-6);
   const roleAgent = (role: WorkbenchAgent["role"]) => agents.find((agent) => agent.role === role);
   const recommendation = createTmuxSwarmRecommendation(packet, messages);
   const [commandDraftByRole, setCommandDraftByRole] = useState<Record<string, string>>({});
@@ -226,33 +223,31 @@ export function TmuxSwarmBoard({
 
   return (
     <section
-      aria-label="Role-Based Tmux Agent Swarm"
-      className="relative flex h-full min-w-[980px] flex-col overflow-hidden bg-zinc-950 text-zinc-100"
+      aria-label="Tmux Workbench"
+      className="flex h-full flex-col overflow-hidden bg-zinc-950 text-zinc-100 focus:outline-none"
       data-focus-id="tmux-swarm-board-container"
       tabIndex={-1}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(34,211,238,0.14),transparent_34%),radial-gradient(circle_at_90%_18%,rgba(245,158,11,0.10),transparent_30%)]" />
-      {/* ── Top header (v0 h-10) ───────────────────────────────── */}
-      <header className="relative z-10 flex h-11 shrink-0 items-center justify-between border-b border-white/10 bg-zinc-950/80 px-4 backdrop-blur-xl">
+      <header className="flex shrink-0 items-center justify-between border-b border-zinc-800/60 bg-zinc-900/30 px-4 py-3 md:px-6">
         <div className="flex items-center gap-3">
-          <span className="text-[10px] uppercase tracking-[0.22em] text-cyan-300">Runtime Workbench</span>
-          <span className="text-xs font-semibold text-zinc-100">ai-swarm</span>
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-[10px] text-zinc-500">
-            {recommendation.recommendedCount} / {recommendation.recommendedCount === 10 ? "10" : "max 10"}
-          </span>
-           <StatusBadge variant="warning" size="sm">
-             <LockKeyhole className="h-2.5 w-2.5" />
-             gate
-           </StatusBadge>
+          <Terminal className="h-4 w-4 text-amber-400" />
+          <div>
+            <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+              Tmux Workbench
+            </span>
+            <h1 className="text-sm font-medium text-zinc-100">ai-swarm</h1>
+          </div>
         </div>
-        <span className="font-mono text-xs text-zinc-500">
-          {visiblePanes.length} panes · 난이도 {recommendation.difficulty} · score{" "}
-          {recommendation.score}
-        </span>
+        <div className="flex items-center gap-4 text-xs text-zinc-500">
+          <span className="hidden items-center gap-1.5 sm:flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+            {visiblePanes.length} panes
+          </span>
+          <span>{recommendation.difficulty}</span>
+        </div>
       </header>
 
-      {/* ── Recommendation strip ───────────────────────────────── */}
-      <div className="relative z-10 flex shrink-0 items-center gap-3 border-b border-white/10 bg-white/[0.03] px-4 py-2 backdrop-blur-xl">
+      <div className="flex shrink-0 items-center gap-3 border-b border-zinc-800/60 bg-zinc-900/30 px-4 py-2 md:px-6">
         <div className="min-w-0">
           <div className="text-[10px] uppercase tracking-wider text-zinc-600">
             Orchestrator 추천
@@ -261,119 +256,46 @@ export function TmuxSwarmBoard({
         </div>
         <div className="ml-auto flex flex-wrap gap-1">
           {recommendation.recommendedRoles.map((role) => (
-             <StatusBadge variant="muted" size="sm" key={role}>
-               {role}
-             </StatusBadge>
+            <StatusBadge variant="muted" size="sm" key={role}>
+              {role}
+            </StatusBadge>
           ))}
         </div>
       </div>
 
-      {/* ── Main: operator chat (left) + pane grid (right) ─────── */}
-      <div className="relative z-10 flex flex-1 overflow-hidden">
-        {/* Operator Chat */}
-        <div className="flex w-80 shrink-0 flex-col border-r border-white/10 bg-zinc-900/35 backdrop-blur-xl">
-          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-            <span className="text-xs font-semibold text-zinc-100">Operator Chat</span>
-            <span className="text-[10px] font-mono text-zinc-600">
-              {activeSessionId.slice(-12)}
-            </span>
-          </div>
-          <div className="flex-1 space-y-2 overflow-y-auto p-3">
-            {recentMessages.map((message) => (
-              <div
-                className={cn(
-                  "rounded-2xl border p-3 shadow-lg shadow-black/20",
-                  message.role === "user"
-                    ? "border-amber-400/20 bg-amber-500/10"
-                    : "border-white/10 bg-black/20",
-                )}
-                key={message.id}
-              >
-                <div className="flex items-start gap-2">
-                  <span
-                    className={cn(
-                      "text-[10px] font-medium",
-                      message.role === "user"
-                        ? "text-amber-300"
-                        : "text-cyan-300",
-                    )}
-                  >
-                    {message.role === "user" ? "사용자" : messageLabel(message)}
-                  </span>
-                </div>
-                <p className="mt-1 line-clamp-5 text-xs leading-relaxed text-zinc-300">{message.content}</p>
-              </div>
-            ))}
-          </div>
-          <div className="border-t border-white/10 px-4 py-2 font-mono text-[10px]">
-            <div className="text-zinc-500">tmux session: ai-swarm</div>
-            <div className="text-zinc-500">
-              runtime backend: DGX-02 gate / 4-10 panes
-            </div>
-            <div className="text-zinc-500">
-              send-keys: server env gate + approval required
-            </div>
-          </div>
-        </div>
-
-        {/* Agent Pane Grid */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex items-center justify-between border-b border-white/10 px-4 py-2">
-            <span className="text-xs font-semibold text-zinc-100">
-              Agent Work Status
-            </span>
-            <span className="font-mono text-[10px] text-zinc-600">
-              {recommendation.recommendedCount} panes / max 10
-            </span>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {visiblePanes.map((pane) => (
-                <TmuxPaneCard
-                  busy={busyByRole[pane.roleKey]}
-                  commandDraft={
-                    commandDraftByRole[pane.roleKey] ??
-                    defaultTmuxCommandForRole(pane.roleKey)
-                  }
-                  key={pane.id}
-                  lastOutput={paneOutputByRole[pane.roleKey]}
-                  onCapture={() => void handleCapturePane(pane)}
-                  onCommandDraftChange={(value) =>
-                    updateCommandDraft(pane.roleKey, value)
-                  }
-                  onDispatch={() => void handleDispatchPane(pane)}
-                  pane={{
-                    ...pane,
-                    state:
-                      runtimeStatusByRole[pane.roleKey] ??
-                      (pane.agent
-                        ? agentActivityById[pane.agent.id] ?? pane.state
-                        : pane.state),
-                  }}
-                  timelineBlocks={timelineBlocksByRole[pane.roleKey] ?? []}
-                  visual={
-                    pane.agent ? agentVisualsById[pane.agent.id] : undefined
-                  }
-                />
-              ))}
-            </div>
-          </div>
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {visiblePanes.map((pane) => (
+            <TmuxPaneCard
+              busy={busyByRole[pane.roleKey]}
+              commandDraft={commandDraftByRole[pane.roleKey] ?? defaultTmuxCommandForRole(pane.roleKey)}
+              key={pane.id}
+              lastOutput={paneOutputByRole[pane.roleKey]}
+              onCapture={() => void handleCapturePane(pane)}
+              onCommandDraftChange={(value) => updateCommandDraft(pane.roleKey, value)}
+              onDispatch={() => void handleDispatchPane(pane)}
+              pane={{
+                ...pane,
+                state:
+                  runtimeStatusByRole[pane.roleKey] ??
+                  (pane.agent ? agentActivityById[pane.agent.id] ?? pane.state : pane.state),
+              }}
+              timelineBlocks={timelineBlocksByRole[pane.roleKey] ?? []}
+              visual={pane.agent ? agentVisualsById[pane.agent.id] : undefined}
+            />
+          ))}
         </div>
       </div>
 
-      {/* ── Bottom status bar (v0 h-8) ─────────────────────────── */}
-      <footer className="relative z-10 flex h-9 shrink-0 items-center justify-between gap-4 border-t border-white/10 bg-zinc-950/80 px-4 font-mono text-[10px] backdrop-blur-xl">
-        <div className="flex items-center gap-4">
-          <span className="text-zinc-600">Event Storage</span>
-          <span className="text-cyan-300">intent / capture events ready</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="text-zinc-600">Permission + Redaction</span>
-          <span className="text-amber-300">승인 전 기록, 저장 전 제거</span>
-        </div>
-        <div className="flex min-w-0 items-center gap-4">
-          <span className="text-zinc-600">서버 응답</span>
-          <span className="truncate text-zinc-300">{boardNotice}</span>
+      <footer className="shrink-0 border-t border-zinc-800/60 bg-zinc-900/30 p-4">
+        <div className="mx-auto flex max-w-4xl items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2">
+          <Terminal className="h-4 w-4 shrink-0 text-zinc-500" />
+          <p className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-300">
+            {boardNotice}
+          </p>
+          <span className="hidden text-[10px] text-zinc-500 sm:inline">
+            session {activeSessionId.slice(-12)}
+          </span>
         </div>
       </footer>
     </section>
