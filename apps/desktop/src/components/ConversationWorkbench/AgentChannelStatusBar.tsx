@@ -6,6 +6,10 @@ import {
   createAgentChannelStatus,
   type AgentChannelAdapterStatus,
 } from "../../lib/agentChannelStatus";
+import {
+  createAgentConversationReadiness,
+  type AgentConversationReadinessTone,
+} from "../../lib/agentConversationReadiness";
 import type { ControlQueueContinuitySummary } from "../../lib/controlQueueContinuity";
 import { getAgentToolBadgeLabels } from "../../lib/agentToolProfiles";
 import { agentRoleLabel } from "../../lib/helpers";
@@ -47,6 +51,13 @@ export function AgentChannelStatusBar({
     providerProfileId,
     toolLabels: selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role) : [],
   });
+  const readiness = createAgentConversationReadiness({
+    adapterStatus,
+    agentId: selectedAgent?.id,
+    memoryRecordCount,
+    messageCount,
+    toolCount: selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role).length : 0,
+  });
 
   return (
     <div className="border-b border-white/10 bg-zinc-950/80 px-4 py-2">
@@ -73,6 +84,15 @@ export function AgentChannelStatusBar({
             <span>{agentToolRuntimeLabel}</span>
           </StatusPill>
         ) : null}
+        <ReadinessPill tone={readiness.tone}>
+          <span className="font-semibold text-zinc-300">운영 준비</span>
+          <span>{readiness.label}</span>
+          {readiness.checks.length > 0 ? (
+            <span className="hidden max-w-[260px] truncate text-zinc-400 xl:inline">
+              {readiness.checks.join(" · ")}
+            </span>
+          ) : null}
+        </ReadinessPill>
         {controlQueueContinuity?.hasItems ? (
           <StatusPill tone={controlQueueContinuity.tone}>
             <ListChecks className="h-3.5 w-3.5" />
@@ -94,6 +114,27 @@ export function AgentChannelStatusBar({
         ))}
       </div>
     </div>
+  );
+}
+
+function ReadinessPill({
+  children,
+  tone,
+}: {
+  children: ReactNode;
+  tone: AgentConversationReadinessTone;
+}) {
+  const toneClass =
+    tone === "attention"
+      ? "border-rose-400/25 bg-rose-500/10 text-rose-200"
+      : tone === "warming"
+        ? "border-amber-300/25 bg-amber-400/10 text-amber-100"
+        : "border-violet-300/20 bg-violet-400/10 text-violet-100";
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${toneClass}`}>
+      {children}
+    </span>
   );
 }
 

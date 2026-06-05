@@ -3,6 +3,7 @@ import type { ConversationMessage, TerminalTimelineBlock } from "@ai-orchestrato
 import {
   createConversationMessagePublicWorkTrace,
   createDebateUtterancePublicWorkTrace,
+  createPublicTraceSafetyReport,
   createTerminalBlockPublicWorkTrace,
 } from "./publicWorkTrace";
 import type { Stage3DebateUtteranceView } from "../types";
@@ -128,6 +129,10 @@ describe("publicWorkTrace", () => {
     expect(serialized).not.toContain("sk-1234567890abcdef");
     expect(serialized).not.toContain("tp-slmvllbti6z4gmjnj5srk2r9nqdbhj5hteonqwswxks2o6ge");
     expect(serialized).toContain("[redacted]");
+    expect(createPublicTraceSafetyReport(trace)).toMatchObject({
+      isSafe: true,
+      label: "마스킹 점검 통과",
+    });
   });
 
   it("공개 작업 로그는 내부 추론과 원문 도구 입력을 요약 경계로 마스킹한다", () => {
@@ -162,6 +167,34 @@ describe("publicWorkTrace", () => {
     expect(serialized).not.toContain("https://token-plan-sgp.xiaomimimo.com/v1");
     expect(serialized).toContain("[redacted:internal]");
     expect(trace.receipt?.items).toContainEqual({ label: "공개 범위", value: "요약 단계만" });
+    expect(createPublicTraceSafetyReport(trace).isSafe).toBe(true);
+  });
+
+  it("렌더 직전 공개 trace 안전점검은 마스킹되지 않은 금지 표면을 차단한다", () => {
+    const report = createPublicTraceSafetyReport({
+      groups: [
+        {
+          id: "evidence",
+          title: "검증",
+          items: [
+            {
+              id: "raw",
+              label: "원문",
+              tone: "danger",
+              value: "raw prompt: hidden",
+            },
+          ],
+        },
+      ],
+      receipt: {
+        label: "에이전트 실행 영수증",
+        status: "checkpointed",
+        items: [{ label: "마스킹", value: "확인 필요" }],
+      },
+    });
+
+    expect(report.isSafe).toBe(false);
+    expect(report.label).toBe("마스킹 확인 필요");
   });
 
   it("메타데이터가 없는 assistant 메시지도 공개 가능한 응답 단계와 도구 경계를 보여준다", () => {

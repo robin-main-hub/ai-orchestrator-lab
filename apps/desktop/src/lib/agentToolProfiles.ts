@@ -5,6 +5,15 @@ export type AgentToolProfile = {
   tools: string[];
 };
 
+export type AgentToolBoundary = "approval" | "read" | "write";
+
+export type AgentToolRuntimeSummary = {
+  approvalRequiredCount: number;
+  boundaryLabel: string;
+  readOnlyCount: number;
+  writeCapableCount: number;
+};
+
 const assistantToolProfile: AgentToolProfile = {
   label: "보조 도구",
   tools: ["memory.recall", "question.ask", "handoff"],
@@ -119,6 +128,47 @@ const toolBadgeLabels: Record<string, string> = {
   "worstcase": "최악 상황",
 };
 
+const toolBoundaries: Record<string, AgentToolBoundary> = {
+  "alert.queue": "read",
+  "answer.draft": "write",
+  "approval": "approval",
+  "assumption.check": "read",
+  "blast.radius": "read",
+  "build.check": "read",
+  "citation": "read",
+  "code.edit": "approval",
+  "conflict.merge": "write",
+  "countercase": "read",
+  "daily.plan": "write",
+  "decision.draft": "write",
+  "diagram": "write",
+  "diff.review": "read",
+  "domain.recall": "read",
+  "drift.scan": "read",
+  "evidence.check": "read",
+  "forget.request": "approval",
+  "handoff": "write",
+  "memory.rank": "read",
+  "memory.recall": "read",
+  "offer.draft": "write",
+  "plan.spec": "write",
+  "policy.guard": "read",
+  "question.ask": "write",
+  "request.change": "approval",
+  "risk.map": "read",
+  "rollback.plan": "approval",
+  "run.log": "read",
+  "scope.audit": "read",
+  "source.rank": "read",
+  "stakeholder.map": "read",
+  "test.run": "approval",
+  "tmux.dispatch": "approval",
+  "tmux.plan": "write",
+  "web.research": "read",
+  "work.queue": "read",
+  "worstcase": "read",
+};
+
 export function getAgentToolProfile(role: AgentRole): AgentToolProfile {
   return roleToolProfiles[role] ?? assistantToolProfile;
 }
@@ -131,6 +181,27 @@ export function getAgentToolProfileSummary(role: AgentRole) {
   const profile = getAgentToolProfile(role);
   return {
     label: profile.label,
+    runtime: createAgentToolRuntimeSummary(profile.tools),
     visibleBadges: getAgentToolBadgeLabels(role).slice(0, 3),
+  };
+}
+
+export function createAgentToolRuntimeSummary(tools: string[]): AgentToolRuntimeSummary {
+  const boundaries = tools.map((tool) => toolBoundaries[tool] ?? "read");
+  const approvalRequiredCount = boundaries.filter((boundary) => boundary === "approval").length;
+  const writeCapableCount = boundaries.filter((boundary) => boundary === "write").length;
+  const readOnlyCount = boundaries.filter((boundary) => boundary === "read").length;
+  const boundaryLabel =
+    approvalRequiredCount > 0
+      ? `승인 필요 ${approvalRequiredCount}개`
+      : writeCapableCount > 0
+        ? `초안 작성 ${writeCapableCount}개`
+        : "읽기 중심";
+
+  return {
+    approvalRequiredCount,
+    boundaryLabel,
+    readOnlyCount,
+    writeCapableCount,
   };
 }
