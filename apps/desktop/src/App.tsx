@@ -88,6 +88,7 @@ import {
 import { createObsidianExportPlan } from "./runtime/stage26ObsidianExport";
 import type {
   AssistantDraft,
+  ApprovalQueueItem,
   ApprovalState,
   BackupProjection,
   CodingPacket,
@@ -132,6 +133,11 @@ import {
 } from "./lib/appConstants";
 import { getConversationRailLayout } from "./lib/conversationRailLayout";
 import { getConversationShellVisibility } from "./lib/conversationShellVisibility";
+import {
+  createControlQueueAskItem,
+  createControlQueueDelegateHandoff,
+  createControlQueueEditDraft,
+} from "./lib/controlQueueWorkItems";
 import {
   agentRoleLabel,
   classifyDraftAttachment,
@@ -2054,6 +2060,72 @@ export function App() {
     handleResolvePermissionItem(pendingItem.sourceItemId, state);
   }
 
+  function handleControlQueueAsk(item: ApprovalQueueItem) {
+    const createdAt = new Date().toISOString();
+    const workItem = createControlQueueAskItem(item, {
+      createdAt,
+      sessionId: activeSessionId,
+    });
+
+    prependWorkItem(workItem);
+    setDraftMessage([
+      `이 승인 항목에 대해 추가 확인이 필요합니다: ${item.summary}`,
+      item.reason ? `사유: ${item.reason}` : undefined,
+      `권한: ${item.permissions.join(", ")}`,
+      "승인/거부 판단에 필요한 정보를 알려주세요.",
+    ].filter(Boolean).join("\n"));
+    setMode("conversation");
+    setApprovalDrawerOpen(false);
+    appendEvent("control_queue.ask.created", {
+      workItemId: workItem.id,
+      sourceItemId: item.sourceItemId,
+      queueItemId: item.id,
+      redaction: "applied",
+    });
+  }
+
+  function handleControlQueueEdit(item: ApprovalQueueItem) {
+    const createdAt = new Date().toISOString();
+    const { draft, workItem } = createControlQueueEditDraft(item, {
+      createdAt,
+      sessionId: activeSessionId,
+    });
+
+    prependWorkItem(workItem);
+    prependAssistantDraft(draft);
+    setDraftMessage(draft.body);
+    setMode("conversation");
+    setApprovalDrawerOpen(false);
+    appendEvent("control_queue.edit_draft.created", {
+      draftId: draft.id,
+      workItemId: workItem.id,
+      sourceItemId: item.sourceItemId,
+      queueItemId: item.id,
+      redaction: "applied",
+    });
+  }
+
+  function handleControlQueueDelegate(item: ApprovalQueueItem) {
+    const createdAt = new Date().toISOString();
+    const { handoff, workItem } = createControlQueueDelegateHandoff(item, {
+      createdAt,
+      sessionId: activeSessionId,
+    });
+
+    prependWorkItem(workItem);
+    prependWorkItemHandoff(handoff);
+    setMode("cockpit");
+    setApprovalDrawerOpen(false);
+    appendEvent("control_queue.delegate.created", {
+      handoffId: handoff.id,
+      workItemId: workItem.id,
+      sourceItemId: item.sourceItemId,
+      queueItemId: item.id,
+      targetSurface: handoff.targetSurface,
+      redaction: "applied",
+    });
+  }
+
   function handleCreateAgentRun() {
     const run = createStage4AgentRun({
       packet: codingPacketState,
@@ -3305,8 +3377,11 @@ export function App() {
         />
       ) : null}
       <ControlQueueDrawer
+        onAsk={handleControlQueueAsk}
         onApprove={(sourceItemId) => handleResolvePermissionItem(sourceItemId, "approved")}
         onClose={() => setApprovalDrawerOpen(false)}
+        onDelegate={handleControlQueueDelegate}
+        onEdit={handleControlQueueEdit}
         onReject={(sourceItemId) => handleResolvePermissionItem(sourceItemId, "rejected")}
         open={approvalDrawerOpen}
         snapshot={permissionSnapshot}
