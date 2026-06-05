@@ -84,6 +84,44 @@ export const initialAgentConfigFiles: AgentConfigFile[] = [
       "- Memory Curator가 승격/정리/forget 정책을 담당하며, 일반 에이전트는 조용히 영구 저장하지 않는다.",
   },
   {
+    id: "config_skill_role_tool_profiles_v1",
+    kind: "skill",
+    label: "역할별 도구 호출 프로필",
+    scope: "project",
+    path: "agents/skills/ROLE_TOOL_PROFILES.md",
+    tags: ["tools", "skills", "role-routing", "permission-gate", "agent-chat"],
+    version: 1,
+    linkedAgentIds: allDefaultAgentIds,
+    updatedAt: now,
+    body:
+      "# 역할별 도구 호출 프로필\n\n" +
+      "모든 에이전트는 같은 대화 채널과 EvolveMemento 기억을 공유하지 않고, 자신의 agentId 범위에서만 도구 호출 계획을 세운다.\n\n" +
+      "## 공통 규칙\n\n" +
+      "- 이 skill은 도구나 기억을 자동 확장하지 않는다. 기본 차단 상태에서 필요한 호출만 명시적으로 요청한다.\n" +
+      "- tool.call 전에는 목적, 입력, 예상 출력, 권한 필요 여부를 한 줄로 요약한다.\n" +
+      "- memory.recall은 trusted provider에서만 기본 허용하며, 현재 agentId, sessionId, providerProfileId scope를 포함한다.\n" +
+      "- limited/untrusted provider는 장기 기억 자동 주입과 외부 tool.call을 수동 확인으로 격상한다.\n" +
+      "- secret 원문은 절대 답변/로그/문서에 쓰지 않고 SecretRef 또는 provider profile만 언급한다.\n" +
+      "- 파일 수정, tmux dispatch, 외부 전송, 승인 필요한 provider 호출은 Permission Matrix를 먼저 통과한다.\n" +
+      "- 실패한 도구 호출은 숨기지 않고 원인, 재시도 조건, fallback을 보고한다.\n\n" +
+      "## 역할별 기본 도구\n\n" +
+      "- Orchestrator: work.queue.route, approval.request, tmux.dispatch.plan, memory.recall, cockpit.snapshot.review\n" +
+      "- Architect: code.map, dependency.trace, design.review, memory.recall, spec.split\n" +
+      "- Reviewer: diff.review, test.gap.find, security.check, approval.request, memory.recall\n" +
+      "- Executor: coding.packet.execute, tmux.dispatch.request, build.verify, test.run, memory.recall\n" +
+      "- Builder: file.patch.plan, component.compose, test.run, memory.recall\n" +
+      "- Skeptic: risk.enumerate, assumption.challenge, counterexample.search, memory.recall\n" +
+      "- Verifier: test.run, build.verify, evidence.collect, regression.trace, memory.recall\n" +
+      "- Auditor: permission.audit, secret.redaction.check, event.log.review, memory.recall\n" +
+      "- Memory Curator: memory.recall, memory.candidate.rank, memory.pin, memory.forget.request, contradiction.scan\n" +
+      "- Researcher/Domain Expert: web.research.plan, source.compare, terminology.extract, memory.recall\n" +
+      "- Companion/Mediator/Negotiator: conversation.summarize, handoff.prepare, question.ask, memory.recall\n\n" +
+      "## 출력 규칙\n\n" +
+      "- 실제 도구 호출이 없으면 호출했다고 말하지 않는다.\n" +
+      "- 도구 결과는 사용자에게 필요한 결론부터 보고하고, 원문 로그는 Cockpit/Annex로 넘긴다.\n" +
+      "- 다음 에이전트에게 넘길 때는 WorkItem 또는 Handoff 형태로 남긴다.",
+  },
+  {
     id: "config_prompt_review_gate_v1",
     kind: "prompt_template",
     label: "검토 게이트 프롬프트",
