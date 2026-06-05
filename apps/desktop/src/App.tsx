@@ -149,6 +149,7 @@ import {
   createControlQueueDelegateHandoff,
   createControlQueueEditDraft,
 } from "./lib/controlQueueWorkItems";
+import { createControlQueueContinuitySummary } from "./lib/controlQueueContinuity";
 import {
   agentRoleLabel,
   classifyDraftAttachment,
@@ -159,6 +160,10 @@ import {
   modelSupportsAttachmentKind,
 } from "./lib/helpers";
 import { statusTone } from "./lib/uiLabels";
+import {
+  createCockpitLocalHealthIndicators,
+  createCockpitServerSnapshotIndicator,
+} from "./lib/cockpitProjectionHealth";
 import { seededProviderProfiles } from "./seeds/providers";
 import {
   initialDgxBridge,
@@ -416,6 +421,15 @@ export function App() {
     workItemHandoffs,
     workItems,
   } = useWorkItemsController({ appendEvent });
+  const controlQueueContinuity = useMemo(
+    () =>
+      createControlQueueContinuitySummary({
+        assistantDrafts,
+        handoffs: workItemHandoffs,
+        workItems,
+      }),
+    [assistantDrafts, workItemHandoffs, workItems],
+  );
   const [debateSession, setDebateSession] = useState<Stage3DebateSession>(() =>
     createStage3DebateSession({
       messages: initialConversationMessages,
@@ -2812,20 +2826,12 @@ export function App() {
       outboxSyncStatus = "failed";
     }
 
-    // Determine health indicators
-    const healthIndicators: string[] = [];
-    if (runtimeSnapshotState.dgxStatus === "offline") {
-      healthIndicators.push("DGX-02 mirror node is offline");
-    }
-    if (runtimeSnapshotState.memorySyncStatus === "degraded") {
-      healthIndicators.push("Memory sync degraded");
-    }
-    if (eventSyncState.status === "failed") {
-      healthIndicators.push(`Event outbox sync failure: ${eventSyncState.lastError || "unknown error"}`);
-    }
-    if (healthIndicators.length === 0) {
-      healthIndicators.push("All systems operational");
-    }
+    const healthIndicators = createCockpitLocalHealthIndicators({
+      dgxStatus: runtimeSnapshotState.dgxStatus,
+      eventSyncLastError: eventSyncState.lastError,
+      eventSyncStatus: eventSyncState.status,
+      memorySyncStatus: runtimeSnapshotState.memorySyncStatus,
+    });
 
     // Compact deterministic digest for replay payload display.
     function createDeterministicDigest(input: string): string {
@@ -2958,7 +2964,7 @@ export function App() {
         contradictionWarnings,
       },
       routing: {
-        selectedModelId: selectedModel?.id || "unknown",
+        selectedModelId: selectedModel?.id || "모델 미선택",
         fallbackStatus,
         costBadge,
         speedBadge,
@@ -3041,20 +3047,21 @@ export function App() {
   ]);
 
   const cockpitSnapshot: OperatorCockpitSnapshot = useMemo(() => {
-    let serverIndicator = "Server cockpit snapshot: local fallback active";
-
-    if (remoteCockpitSnapshotState.status === "loading") {
-      serverIndicator = "Server cockpit snapshot: syncing";
-    } else if (remoteCockpitSnapshotState.status === "loaded" && remoteCockpitSnapshotState.snapshot) {
+    let providerIndicator: string | undefined;
+    let timestamp: string | undefined;
+    if (remoteCockpitSnapshotState.status === "loaded" && remoteCockpitSnapshotState.snapshot) {
       const providerReady = remoteCockpitSnapshotState.snapshot.recovery.healthIndicators.find((indicator) =>
         indicator.startsWith("Provider registry:"),
       );
-      serverIndicator = providerReady
-        ? `Server cockpit snapshot synced: ${providerReady}`
-        : `Server cockpit snapshot synced at ${remoteCockpitSnapshotState.snapshot.timestamp}`;
-    } else if (remoteCockpitSnapshotState.status === "failed" && remoteCockpitSnapshotState.error) {
-      serverIndicator = `Server cockpit snapshot fallback: ${remoteCockpitSnapshotState.error.slice(0, 120)}`;
+      providerIndicator = providerReady;
+      timestamp = remoteCockpitSnapshotState.snapshot.timestamp;
     }
+    const serverIndicator = createCockpitServerSnapshotIndicator({
+      error: remoteCockpitSnapshotState.status === "failed" ? remoteCockpitSnapshotState.error : undefined,
+      providerIndicator,
+      status: remoteCockpitSnapshotState.status,
+      timestamp,
+    });
 
     return {
       ...derivedCockpitSnapshot,
@@ -3343,6 +3350,7 @@ export function App() {
               agents={agents}
               branchExperiments={branchExperiments}
               contextPackTier={contextPackTier}
+              controlQueueContinuity={controlQueueContinuity}
               draftAttachments={draftAttachments}
               draftMessage={draftMessage}
               maxDraftAttachments={maxDraftAttachments}
