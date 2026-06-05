@@ -1,3 +1,5 @@
+import type { AgentChannelMemoryScope } from "./agentConversationChannels";
+
 export type AgentChannelAdapterStatus = "loading" | "ready" | "error";
 
 export type AgentChannelStatusInput = {
@@ -12,6 +14,19 @@ export type AgentChannelStatus = {
   continuityLabel: string;
   memoryLabel: string;
   tone: AgentChannelAdapterStatus;
+};
+
+export type AgentChannelDetailChip = {
+  label: string;
+  tone: AgentChannelAdapterStatus;
+  value: string;
+};
+
+export type AgentChannelDetailChipInput = {
+  memoryScope?: AgentChannelMemoryScope;
+  modelId?: string;
+  providerProfileId?: string;
+  toolLabels?: string[];
 };
 
 export function createAgentChannelStatus({
@@ -38,4 +53,40 @@ function createMemoryLabel(adapterStatus: AgentChannelAdapterStatus, memoryRecor
     return "기억 연결 확인 필요";
   }
   return memoryRecordCount > 0 ? `기억 ${memoryRecordCount}개 적용` : "기억 대기";
+}
+
+export function createAgentChannelDetailChips({
+  memoryScope,
+  modelId,
+  providerProfileId,
+  toolLabels = [],
+}: AgentChannelDetailChipInput): AgentChannelDetailChip[] {
+  const chips: AgentChannelDetailChip[] = [];
+  if (memoryScope) {
+    chips.push({
+      label: "기억 범위",
+      tone: "ready",
+      value: `${memoryScope.agentId} · ${memoryScope.sessionId}`,
+    });
+    chips.push({
+      label: "Recall Trace",
+      tone: "ready",
+      value: memoryScope.recallTraceId,
+    });
+  }
+  if (providerProfileId || modelId) {
+    chips.push({
+      label: "Provider",
+      tone: "ready",
+      value: [providerProfileId, modelId].filter(Boolean).join(" · "),
+    });
+  }
+  if (toolLabels.length > 0) {
+    chips.push({
+      label: "도구 프로필",
+      tone: "ready",
+      value: toolLabels.slice(0, 3).join(" · "),
+    });
+  }
+  return chips;
 }

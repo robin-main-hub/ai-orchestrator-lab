@@ -2,10 +2,12 @@ import type { ReactNode } from "react";
 import { Brain, ListChecks, MessageSquareText, RadioTower } from "lucide-react";
 import type { AgentChannelMemoryScope } from "../../lib/agentConversationChannels";
 import {
+  createAgentChannelDetailChips,
   createAgentChannelStatus,
   type AgentChannelAdapterStatus,
 } from "../../lib/agentChannelStatus";
 import type { ControlQueueContinuitySummary } from "../../lib/controlQueueContinuity";
+import { getAgentToolBadgeLabels } from "../../lib/agentToolProfiles";
 import type { WorkbenchAgent } from "../../types";
 
 export function AgentChannelStatusBar({
@@ -14,6 +16,8 @@ export function AgentChannelStatusBar({
   memoryRecordCount,
   memoryScope,
   messageCount,
+  modelId,
+  providerProfileId,
   selectedAgent,
 }: {
   adapterStatus: AgentChannelAdapterStatus;
@@ -21,6 +25,8 @@ export function AgentChannelStatusBar({
   memoryRecordCount: number;
   memoryScope?: AgentChannelMemoryScope;
   messageCount: number;
+  modelId?: string;
+  providerProfileId?: string;
   selectedAgent?: WorkbenchAgent;
 }) {
   const status = createAgentChannelStatus({
@@ -28,6 +34,12 @@ export function AgentChannelStatusBar({
     adapterStatus,
     memoryRecordCount,
     messageCount,
+  });
+  const detailChips = createAgentChannelDetailChips({
+    memoryScope,
+    modelId,
+    providerProfileId,
+    toolLabels: selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role) : [],
   });
 
   return (
@@ -56,11 +68,14 @@ export function AgentChannelStatusBar({
             ) : null}
           </StatusPill>
         ) : null}
-        {memoryScope ? (
-          <span className="hidden rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] text-zinc-500 lg:inline-flex">
-            범위: 에이전트·세션·모델별 기억
-          </span>
-        ) : null}
+        {detailChips.map((chip) => (
+          <StatusPill key={`${chip.label}:${chip.value}`} tone={chip.tone}>
+            <span className="font-semibold text-zinc-300">{chip.label}</span>
+            <span className="hidden max-w-[260px] truncate text-zinc-500 lg:inline">
+              {chip.value}
+            </span>
+          </StatusPill>
+        ))}
       </div>
     </div>
   );
