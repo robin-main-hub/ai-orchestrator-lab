@@ -1,4 +1,5 @@
 import type { AgentProfile } from "@ai-orchestrator/protocol";
+import { sanitizePublicText } from "./publicRedaction";
 
 export type DebateStance = "agree" | "disagree" | "risk" | "evidence" | "decision" | "neutral";
 export type DebateRoundStatus = "blocked" | "complete" | "completed" | "pending" | "running";
@@ -95,12 +96,5 @@ export function roundStatusLabel(status: DebateRoundStatus) {
 }
 
 export function sanitizeDebateAnnexText(value: string) {
-  return value
-    .replace(/(?:chain[- ]of[- ]thought|raw prompt|tool input|command args?)\s*:[^\n\r]*/gi, "[redacted:internal]")
-    .replace(/https?:\/\/[^\s"')]+/gi, "[redacted:url]")
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "[redacted]")
-    .replace(/tp-[A-Za-z0-9_-]{8,}/g, "[redacted]")
-    .replace(/\b[A-Za-z0-9_]*(?:TOKEN|SECRET|API_KEY|PASSWORD)[A-Za-z0-9_]*=[^\s]+/gi, "[redacted]")
-    .replace(/\/Users\/[^\s"')]+/g, "[redacted:path]");
+  return sanitizePublicText(value);
 }

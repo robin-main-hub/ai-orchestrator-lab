@@ -1,5 +1,6 @@
 import type { ConversationMessage, TerminalTimelineBlock } from "@ai-orchestrator/protocol";
 import type { Stage3DebateUtteranceView } from "../types";
+import { compactPublicText, inspectPublicText, sanitizePublicText } from "./publicRedaction";
 
 export type PublicWorkTraceTone = "neutral" | "info" | "success" | "warning" | "danger";
 
@@ -23,6 +24,15 @@ export type PublicWorkTraceReceipt = {
     label: "범위" | "기준점" | "마스킹" | "공개 범위";
     value: string;
   }>;
+};
+
+export type PublicWorkReceiptSummary = {
+  compactLabel: string;
+  detailItems: Array<{
+    label: PublicWorkTraceReceipt["items"][number]["label"];
+    value: string;
+  }>;
+  statusLabel: string;
 };
 
 export type PublicWorkTrace = {
@@ -294,9 +304,10 @@ export function createTerminalBlockPublicWorkTrace(block: TerminalTimelineBlock)
 
 export function createPublicTraceSafetyReport(trace: PublicWorkTrace): PublicTraceSafetyReport {
   const serialized = JSON.stringify(trace);
-  const blockedReasons = FORBIDDEN_PUBLIC_TRACE_PATTERNS.flatMap((pattern) =>
+  const patternReasons = FORBIDDEN_PUBLIC_TRACE_PATTERNS.flatMap((pattern) =>
     pattern.test(serialized) ? [`금지 패턴 감지: ${pattern.source}`] : [],
   );
+  const blockedReasons = [...patternReasons, ...inspectPublicText(serialized).blockedReasons];
   const hasReceiptMasking = trace.receipt?.items.some(
     (item) => item.label === "마스킹" && item.value.includes("적용"),
   );
@@ -308,6 +319,21 @@ export function createPublicTraceSafetyReport(trace: PublicWorkTrace): PublicTra
     blockedReasons,
     isSafe: blockedReasons.length === 0,
     label: blockedReasons.length === 0 ? "마스킹 점검 통과" : "마스킹 확인 필요",
+  };
+}
+
+export function createPublicWorkReceiptSummary(trace: PublicWorkTrace): PublicWorkReceiptSummary | undefined {
+  if (!trace.receipt) return undefined;
+  const safeItems = trace.receipt.items.map((item) => ({
+    label: item.label,
+    value: compactPublicText(item.value, 56),
+  }));
+  const scope = safeItems.find((item) => item.label === "범위")?.value;
+  const checkpoint = safeItems.find((item) => item.label === "기준점")?.value;
+  return {
+    compactLabel: [trace.receipt.label, scope, checkpoint].filter(Boolean).join(" · "),
+    detailItems: safeItems,
+    statusLabel: receiptStatusLabel(trace.receipt.status),
   };
 }
 
@@ -452,12 +478,20 @@ function roleDisplayLabel(role: string) {
 }
 
 function sanitize(value: string) {
-  return value
-    .replace(/(?:chain[- ]of[- ]thought|raw prompt|tool input)\s*:[^\n\r]*/gi, "[redacted:internal]")
-    .replace(/https?:\/\/[^\s"')]+/gi, "[redacted:url]")
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "[redacted]")
-    .replace(/tp-[A-Za-z0-9_-]{8,}/g, "[redacted]")
-    .replace(/\b[A-Za-z0-9_]*(?:TOKEN|SECRET|API_KEY|PASSWORD)[A-Za-z0-9_]*=[^\s]+/gi, "[redacted]")
-    .replace(/\/Users\/[^\s"')]+/g, "[redacted:path]");
+  return sanitizePublicText(value);
+}
+
+function receiptStatusLabel(status: PublicWorkTraceReceipt["status"]) {
+  switch (status) {
+    case "checkpointed":
+      return "저장됨";
+    case "live":
+      return "진행 중";
+    case "fallback":
+      return "폴백";
+    case "blocked":
+      return "차단";
+    default:
+      return status;
+  }
 }

@@ -13,6 +13,8 @@ describe("agent chat continuity summary", () => {
       }),
     ).toEqual({
       detail: "기억 7개 적용 · 4개 메시지 · 도구: 작업 대기열, 승인 확인, Tmux 계획",
+      memoryQualityLabel: "장기 기억 품질 양호",
+      memoryQualityTone: "ready",
       placeholder: "마키마에게 이어서 말 걸기",
       title: "마키마와 이어서 대화",
     });
@@ -29,6 +31,8 @@ describe("agent chat continuity summary", () => {
       }),
     ).toEqual({
       detail: "기억 조회 중 · 첫 메시지를 보내면 전용 채널에 저장됩니다 · 도구: 테스트 확인",
+      memoryQualityLabel: "장기 기억 불러오는 중",
+      memoryQualityTone: "warming",
       placeholder: "마키세 크리스에게 말 걸기",
       title: "마키세 크리스와 새 대화",
     });
@@ -48,5 +52,19 @@ describe("agent chat continuity summary", () => {
     expect(serialized).not.toContain("sk-secret1234567890");
     expect(serialized).not.toContain("tp-secret1234567890");
     expect(serialized).toContain("[redacted]");
+  });
+
+  it("기억 어댑터 오류는 장기 기억 품질 점검으로 표시한다", () => {
+    expect(
+      createAgentChatContinuitySummary({
+        adapterStatus: "error",
+        agentName: "검증자",
+        memoryRecordCount: 0,
+        messageCount: 2,
+      }),
+    ).toMatchObject({
+      memoryQualityLabel: "장기 기억 점검 필요",
+      memoryQualityTone: "attention",
+    });
   });
 });

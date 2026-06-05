@@ -1,6 +1,7 @@
 import type { ModelDiscoverySnapshot, ProviderProfile, SourceTrust } from "@ai-orchestrator/protocol";
 import type { ModelCatalog } from "../types";
 import { providerDisplayLabel } from "./helpers";
+import { sanitizePublicText } from "./publicRedaction";
 import { createProviderRoundtripHarness, createProviderSmokeReadiness } from "./providerSmokeReadiness";
 
 export type ProviderRoutingConsoleTone = "success" | "warning" | "danger" | "muted";
@@ -69,13 +70,11 @@ export function createProviderRoutingConsoleItems({
 }
 
 export function sanitizeProviderConsoleText(value: string): string {
-  return value
-    .replace(/https?:\/\/[^\s"'`<>)]+/gi, "redacted_url")
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/gi, "Bearer redacted_token")
-    .replace(/sk-[A-Za-z0-9_-]{8,}/gi, "redacted_key")
-    .replace(/tp-[A-Za-z0-9_-]{8,}/gi, "redacted_token")
-    .replace(/\b([A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD|KEY))\b/g, "redacted_secret_name")
-    .replace(/\/Users\/[^\s"'`<>)]+/g, "redacted_path");
+  return sanitizePublicText(value)
+    .replaceAll("[redacted:url]", "redacted_url")
+    .replaceAll("Bearer [redacted]", "Bearer redacted_token")
+    .replaceAll("[redacted:path]", "redacted_path")
+    .replaceAll("[redacted]", "redacted_token");
 }
 
 function discoveryLabelFor(status: ModelDiscoverySnapshot["status"] | undefined): string {
