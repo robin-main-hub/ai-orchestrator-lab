@@ -8,6 +8,7 @@ import type {
   ProviderProfile,
 } from "@ai-orchestrator/protocol";
 import type { AgentChannelMemoryScope } from "../../lib/agentConversationChannels";
+import type { ControlQueueContinuitySummary } from "../../lib/controlQueueContinuity";
 import {
   attachmentAcceptForModel,
   createDefaultPersonaSettings,
@@ -42,6 +43,7 @@ export function ConversationWorkbench({
   agents,
   branchExperiments,
   contextPackTier,
+  controlQueueContinuity,
   draftAttachments,
   draftMessage,
   maxDraftAttachments,
@@ -86,6 +88,7 @@ export function ConversationWorkbench({
   agents: WorkbenchAgent[];
   branchExperiments: BranchExperiment[];
   contextPackTier: ContextPackTier;
+  controlQueueContinuity?: ControlQueueContinuitySummary;
   draftAttachments: DraftAttachment[];
   draftMessage: string;
   maxDraftAttachments: number;
@@ -180,6 +183,7 @@ export function ConversationWorkbench({
 
       <AgentChannelStatusBar
         adapterStatus={memoryAdapterStatus}
+        controlQueueContinuity={controlQueueContinuity}
         memoryRecordCount={memoryRecordCount}
         memoryScope={memoryScope}
         messageCount={messages.length}
