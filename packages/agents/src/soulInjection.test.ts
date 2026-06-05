@@ -109,6 +109,33 @@ describe("buildAgentSystemPrompt", () => {
     expect(report.promptText).toContain("Yohane soul");
   });
 
+  it("builds the markdown persona configuration used by agent settings into the system prompt", async () => {
+    const source = createInMemoryPersonaSource({
+      "agents/yohane/SOUL.md": "# Yohane soul\n4차원 아이디어 뱅크 관점.",
+      "agents/yohane/AGENTS.md": "# Yohane rules\n새 아이디어와 반례를 함께 낸다.",
+      "agents/SAFETY.md": SAFETY,
+    });
+
+    const report = await buildAgentSystemPrompt(
+      makeProfile({
+        configSource: "markdown",
+        personaName: "yohane",
+        soulMode: "full",
+      }),
+      source,
+    );
+
+    expect(report.personaName).toBe("yohane");
+    expect(report.mode).toBe("full");
+    expect(report.fragmentsInjected).toEqual([
+      "agents/yohane/SOUL.md",
+      "agents/yohane/AGENTS.md",
+    ]);
+    expect(report.promptText).toContain("비밀을 노출하지 말 것");
+    expect(report.promptText).toContain("4차원 아이디어 뱅크 관점");
+    expect(report.promptText).toContain("새 아이디어와 반례를 함께 낸다");
+  });
+
   it("falls back to canonical profile if custom persona files are missing", async () => {
     const source = createInMemoryPersonaSource({
       "agents/architect/SOUL.md": "# Canonical Architect Soul",
