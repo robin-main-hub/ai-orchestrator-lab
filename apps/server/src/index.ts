@@ -120,8 +120,8 @@ export type ServerCapability =
   | "approval-queue"
   | "cockpit-readonly-snapshot"
   | "event-storage-sync"
-  | "remote-event-stream-placeholder"
-  | "memory-sync-placeholder";
+  | "event-stream"
+  | "memory-sync";
 
 export type ServerHealthResponse = {
   service: "ai-orchestrator-dgx-server";
@@ -754,8 +754,8 @@ export function createHealthResponse(now = new Date().toISOString(), probe?: Dgx
       "approval-queue",
       "cockpit-readonly-snapshot",
       "event-storage-sync",
-      "remote-event-stream-placeholder",
-      "memory-sync-placeholder",
+      "event-stream",
+      "memory-sync",
     ],
     eventStorage: createEventStorageSnapshot(defaultEventStorageState, {
       mode: "memory",
