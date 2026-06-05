@@ -1,3 +1,5 @@
+import { compactPublicText, sanitizePublicText } from "./publicRedaction";
+
 export type CockpitLocalHealthInput = {
   dgxStatus: string;
   eventSyncLastError?: string;
@@ -41,15 +43,7 @@ export function createCockpitLocalHealthIndicators({
 }
 
 export function sanitizeCockpitProjectionText(value: string) {
-  return value
-    .replace(/\braw prompt\s*:/gi, "원문 프롬프트:")
-    .replace(/\btool input\b[\s\S]*/gi, "도구 입력 [redacted]")
-    .replace(/https?:\/\/[^\s)]+/gi, "[url]")
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [token]")
-    .replace(/\b(?:sk|tp)-[A-Za-z0-9_-]{6,}\b/g, "[secret]")
-    .replace(/\b[A-Z][A-Z0-9_]*(?:API|TOKEN|SECRET|KEY)[A-Z0-9_]*=[^\s]+/g, "[env-secret]")
-    .replace(/\/Users\/[^\s),;]+/g, "[local-path]")
-    .slice(0, 240);
+  return compactPublicText(sanitizePublicText(value), 240);
 }
 
 export function resolveCockpitPayloadBindingStatus({

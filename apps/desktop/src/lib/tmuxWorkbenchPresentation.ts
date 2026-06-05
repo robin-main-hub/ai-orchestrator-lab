@@ -1,4 +1,5 @@
 import type { TmuxPaneRole } from "@ai-orchestrator/protocol";
+import { compactPublicText, sanitizePublicText } from "./publicRedaction";
 
 export type TmuxWorkbenchDifficulty = "light" | "standard" | "complex" | "critical";
 
@@ -59,18 +60,9 @@ export function tmuxPaneStateLabel(state: string) {
 }
 
 export function sanitizeTmuxWorkbenchText(value: string) {
-  return value
-    .replace(/(?:chain[- ]of[- ]thought|raw prompt|tool input|command args?)\s*:[^\n\r]*/gi, "[redacted:internal]")
-    .replace(/https?:\/\/[^\s"')]+/gi, "[redacted:url]")
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "[redacted]")
-    .replace(/tp-[A-Za-z0-9_-]{8,}/g, "[redacted]")
-    .replace(/\b[A-Za-z0-9_]*(?:TOKEN|SECRET|API_KEY|PASSWORD)[A-Za-z0-9_]*=[^\s]+/gi, "[redacted]")
-    .replace(/\/Users\/[^\s"')]+/g, "[redacted:path]");
+  return sanitizePublicText(value);
 }
 
 export function compactTmuxPreview(value: string, maxLength = 240) {
-  const sanitized = sanitizeTmuxWorkbenchText(value).replace(/\s+/g, " ").trim();
-  if (sanitized.length <= maxLength) return sanitized;
-  return `${sanitized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+  return compactPublicText(value, maxLength);
 }

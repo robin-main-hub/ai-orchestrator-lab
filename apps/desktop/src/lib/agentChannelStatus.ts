@@ -1,4 +1,5 @@
 import type { AgentChannelMemoryScope } from "./agentConversationChannels";
+import { compactPublicText, sanitizePublicText } from "./publicRedaction";
 
 export type AgentChannelAdapterStatus = "loading" | "ready" | "error";
 
@@ -95,16 +96,9 @@ export function createAgentChannelDetailChips({
 }
 
 function sanitizeChannelValue(value: string): string {
-  return value
-    .replace(/https?:\/\/[^\s"')]+/gi, "[redacted:url]")
-    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "[redacted]")
-    .replace(/tp-[A-Za-z0-9_-]{8,}/g, "[redacted]")
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/gi, "Bearer [redacted]")
-    .replace(/\b[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|COOKIE)[A-Z0-9_]*\s*=\s*["']?[^\s"']+["']?/g, "[redacted]");
+  return sanitizePublicText(value);
 }
 
 function compactChannelValue(value: string): string {
-  const sanitized = sanitizeChannelValue(value);
-  if (sanitized.length <= 48) return sanitized;
-  return `${sanitized.slice(0, 28)}…${sanitized.slice(-18)}`;
+  return compactPublicText(value, 48);
 }
