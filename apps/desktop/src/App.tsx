@@ -413,6 +413,8 @@ export function App() {
   const {
     assistantDrafts,
     handleArchiveWorkItem,
+    handleApproveWorkItemHandoff,
+    handleMarkAssistantDraftSent,
     handleRouteWorkItem,
     prependAssistantDraft,
     prependWorkItem,
@@ -3444,7 +3446,9 @@ export function App() {
               handoffs={workItemHandoffs}
               items={workItems}
               onArchiveItem={handleArchiveWorkItem}
+              onApproveHandoff={handleApproveWorkItemHandoff}
               onRouteItem={handleRouteWorkItem}
+              onSendDraft={handleMarkAssistantDraftSent}
             />
           ) : null}
 
