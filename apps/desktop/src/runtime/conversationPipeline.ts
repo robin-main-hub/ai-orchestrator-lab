@@ -7,6 +7,7 @@ import type {
 import type { AgentChannelMemoryScope } from "../lib/agentConversationChannels";
 import {
   createAgentChannelRuntimeSummary,
+  createAgentRoleToolRuntimeSummary,
   createAgentRuntimeConfigSection,
 } from "../lib/agentRuntimeConfig";
 import type { Stage6MemoryInspector } from "./stage6Memory";
@@ -41,6 +42,7 @@ export function createConversationPipelineMessages({
     .slice(0, 5)
     .map((result, index) => `${index + 1}. ${result.record.title}: ${result.record.content} (score ${result.score.toFixed(2)})`);
   const runtimeConfig = createAgentRuntimeConfigSection(agent, configFiles);
+  const roleToolConfig = createAgentRoleToolRuntimeSummary(agent);
   const systemContent = [
     "AI Orchestrator Lab conversation pipeline.",
     "Reply in Korean unless the user explicitly asks for another language.",
@@ -50,6 +52,7 @@ export function createConversationPipelineMessages({
       ? `SOUL.md: ${persona.soulSummary}\nAGENTS.md: ${persona.agentsInstruction}\nCreativity: ${persona.creativityLevel}`
       : "SOUL.md: default role profile",
     createAgentChannelRuntimeSummary(memoryScope),
+    roleToolConfig.promptText,
     runtimeConfig.promptText,
     recalledMemories.length > 0
       ? `EvolveMemento recall:\n${recalledMemories.join("\n")}`
@@ -83,6 +86,8 @@ export function createConversationPipelineMessages({
       memoryScopeSessionId: memoryScope.sessionId,
       recallTraceId: memoryScope.recallTraceId,
       runtimeConfigFileIds: runtimeConfig.configFileIds,
+      roleToolProfileLabel: roleToolConfig.label,
+      roleToolProfileTools: roleToolConfig.tools,
     },
   };
 

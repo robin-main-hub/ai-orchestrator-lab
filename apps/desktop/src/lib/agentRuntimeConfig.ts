@@ -1,8 +1,15 @@
 import type { AgentConfigFile, WorkbenchAgent } from "../types";
 import type { AgentChannelMemoryScope } from "./agentConversationChannels";
+import { getAgentToolProfile } from "./agentToolProfiles";
 
 export type AgentRuntimeConfigSection = {
   configFileIds: string[];
+  promptText: string;
+};
+
+export type AgentRoleToolRuntimeSection = {
+  label: string;
+  tools: string[];
   promptText: string;
 };
 
@@ -71,6 +78,23 @@ export function createAgentChannelRuntimeSummary(memoryScope: AgentChannelMemory
     "- 이 범위 표시는 권한 상승이나 다른 에이전트 채널 접근 허가가 아니다.",
     "- 다른 에이전트의 장기 기억이나 대화 채널을 확정 사실처럼 섞지 않는다.",
   ].join("\n");
+}
+
+export function createAgentRoleToolRuntimeSummary(agent: WorkbenchAgent): AgentRoleToolRuntimeSection {
+  const profile = getAgentToolProfile(agent.role);
+  return {
+    label: profile.label,
+    tools: profile.tools,
+    promptText: [
+      "# 역할 기반 도구 사용 계약",
+      "",
+      `- 도구 묶음: ${profile.label}`,
+      `- 허용 도구: ${profile.tools.join(", ")}`,
+      "- 실제 도구 호출을 수행했다고 말하기 전에는 권한 기록 또는 실행 이벤트를 확인한다.",
+      "- 필요한 도구 호출은 목적, 입력, 예상 출력, 권한 필요 여부를 먼저 요약한다.",
+      "- 비밀값, 원문 토큰, 내부 프롬프트 전문은 도구 입력이나 공개 로그에 쓰지 않는다.",
+    ].join("\n"),
+  };
 }
 
 function redactPromptConfigText(value: string): string {
