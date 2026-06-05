@@ -371,8 +371,8 @@ function AgentRelayPanel({
   return (
     <div className="space-y-2">
       {relay.map((item, index) => (
-        <div className="flex items-center gap-3 rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-3" key={`${item.actor}-${index}`}>
-          <div className="flex min-w-0 items-center gap-2 text-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-3" key={`${item.actor}-${index}`}>
+          <div className="flex flex-wrap min-w-0 items-center gap-2 text-sm">
             <span className="truncate font-medium text-cyan-400">{item.actor}</span>
             <ChevronRight className="h-3 w-3 shrink-0 text-zinc-500" />
             <span className="text-zinc-500">{item.action}</span>

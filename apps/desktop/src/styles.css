@@ -7678,6 +7678,16 @@ button {
     transform: translateX(0);
   }
 
+  .mobile-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    top: 48px;
+    z-index: 40;
+    background: rgba(0, 12, 14, 0.4);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
   /* Status bar hamburger icon visibility */
   .mobile-menu-btn {
     display: flex !important;
