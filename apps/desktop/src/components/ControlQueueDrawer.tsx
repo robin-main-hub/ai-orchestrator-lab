@@ -39,8 +39,11 @@ import { StatusBadge } from "@/ui/status-badge";
  */
 
 export type ControlQueueDrawerProps = {
+  onAsk: (item: ApprovalQueueItem) => void;
   onApprove: (sourceItemId: string) => void;
   onClose: () => void;
+  onDelegate: (item: ApprovalQueueItem) => void;
+  onEdit: (item: ApprovalQueueItem) => void;
   onReject: (sourceItemId: string) => void;
   open: boolean;
   snapshot: PermissionMatrixSnapshot;
@@ -55,9 +58,9 @@ const LANES: Array<{
   status: "live" | "soon";
 }> = [
   { id: "approve", label: "approve", icon: <Check className="h-3 w-3" />, status: "live" },
-  { id: "ask", label: "ask", icon: <HelpCircle className="h-3 w-3" />, status: "soon" },
-  { id: "edit", label: "edit", icon: <Edit3 className="h-3 w-3" />, status: "soon" },
-  { id: "delegate", label: "delegate", icon: <Forward className="h-3 w-3" />, status: "soon" },
+  { id: "ask", label: "ask", icon: <HelpCircle className="h-3 w-3" />, status: "live" },
+  { id: "edit", label: "edit", icon: <Edit3 className="h-3 w-3" />, status: "live" },
+  { id: "delegate", label: "delegate", icon: <Forward className="h-3 w-3" />, status: "live" },
   { id: "block", label: "block", icon: <ShieldOff className="h-3 w-3" />, status: "live" },
   { id: "archive", label: "archive", icon: <XCircle className="h-3 w-3" />, status: "live" }, // = reject
 ];
@@ -72,8 +75,11 @@ const FOCUSABLE_SELECTOR = [
 ].join(",");
 
 export function ControlQueueDrawer({
+  onAsk,
   onApprove,
   onClose,
+  onDelegate,
+  onEdit,
   onReject,
   open,
   snapshot,
@@ -236,9 +242,13 @@ export function ControlQueueDrawer({
         ) : (
           pendingItems.map((item) => (
             <QueueCard
+              activeLane={activeLane}
               item={item}
               key={item.id}
+              onAsk={onAsk}
               onApprove={onApprove}
+              onDelegate={onDelegate}
+              onEdit={onEdit}
               onReject={onReject}
             />
           ))
@@ -248,8 +258,7 @@ export function ControlQueueDrawer({
       {/* Footer */}
       <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-[10px] text-muted-foreground">
         <span className="font-mono">
-          {LANES.filter((l) => l.status === "live").length} live ·{" "}
-          {LANES.filter((l) => l.status === "soon").length} pending schema
+          {LANES.filter((l) => l.status === "live").length} live · WorkItem 연결됨
         </span>
         <kbd className="rounded border border-border bg-card/60 px-1 py-0 font-mono">
           esc
@@ -323,7 +332,7 @@ function LaneChip({
       disabled={disabled}
       onClick={onClick}
       role="tab"
-      title={soon ? "곧 추가됨 (protocol handoff schema 대기)" : undefined}
+      title={soon ? "비활성화됨" : undefined}
       type="button"
     >
       {icon}
@@ -338,14 +347,24 @@ function LaneChip({
 }
 
 function QueueCard({
+  activeLane,
   item,
+  onAsk,
   onApprove,
+  onDelegate,
+  onEdit,
   onReject,
 }: {
+  activeLane: LaneId | "all";
   item: ApprovalQueueItem;
+  onAsk: (item: ApprovalQueueItem) => void;
   onApprove: (sourceItemId: string) => void;
+  onDelegate: (item: ApprovalQueueItem) => void;
+  onEdit: (item: ApprovalQueueItem) => void;
   onReject: (sourceItemId: string) => void;
 }) {
+  const showAction = (lane: LaneId) => activeLane === "all" || activeLane === lane;
+
   return (
     <div
       className={cn(
@@ -379,33 +398,53 @@ function QueueCard({
         {item.sourceItemId}
       </p>
 
-      {/* 6 lane actions inline (approve/block/archive live, ask/edit/delegate wait for schema) */}
-      <div className="grid grid-cols-3 gap-1 pt-1">
-        <ActionButton
-          icon={<Check className="h-3 w-3 size-3" />}
-          label="approve"
-          onClick={() => onApprove(item.sourceItemId)}
-          tone="primary"
-        />
-        <ActionButton disabled icon={<HelpCircle className="h-3 w-3 size-3" />} label="ask" />
-        <ActionButton disabled icon={<Edit3 className="h-3 w-3 size-3" />} label="edit" />
-        <ActionButton
-          disabled
-          icon={<Forward className="h-3 w-3 size-3" />}
-          label="delegate"
-        />
-        <ActionButton
-          icon={<ShieldOff className="h-3 w-3 size-3" />}
-          label="block"
-          onClick={() => onReject(item.sourceItemId)}
-          tone="destructive"
-        />
-        <ActionButton
-          icon={<XCircle className="h-3 w-3 size-3" />}
-          label="archive"
-          onClick={() => onReject(item.sourceItemId)}
-          tone="destructive"
-        />
+      {/* 6 lane actions inline. 모든 lane은 WorkItem/Draft/Handoff 흐름으로 연결된다. */}
+      <div className={cn("grid gap-1 pt-1", activeLane === "all" ? "grid-cols-3" : "grid-cols-1")}>
+        {showAction("approve") ? (
+          <ActionButton
+            icon={<Check className="h-3 w-3 size-3" />}
+            label="approve"
+            onClick={() => onApprove(item.sourceItemId)}
+            tone="primary"
+          />
+        ) : null}
+        {showAction("ask") ? (
+          <ActionButton
+            icon={<HelpCircle className="h-3 w-3 size-3" />}
+            label="ask"
+            onClick={() => onAsk(item)}
+          />
+        ) : null}
+        {showAction("edit") ? (
+          <ActionButton
+            icon={<Edit3 className="h-3 w-3 size-3" />}
+            label="edit"
+            onClick={() => onEdit(item)}
+          />
+        ) : null}
+        {showAction("delegate") ? (
+          <ActionButton
+            icon={<Forward className="h-3 w-3 size-3" />}
+            label="delegate"
+            onClick={() => onDelegate(item)}
+          />
+        ) : null}
+        {showAction("block") ? (
+          <ActionButton
+            icon={<ShieldOff className="h-3 w-3 size-3" />}
+            label="block"
+            onClick={() => onReject(item.sourceItemId)}
+            tone="destructive"
+          />
+        ) : null}
+        {showAction("archive") ? (
+          <ActionButton
+            icon={<XCircle className="h-3 w-3 size-3" />}
+            label="archive"
+            onClick={() => onReject(item.sourceItemId)}
+            tone="destructive"
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -436,7 +475,7 @@ function ActionButton({
       )}
       disabled={disabled}
       onClick={onClick}
-      title={disabled ? "곧 추가됨 (protocol handoff schema 대기)" : label}
+      title={disabled ? "비활성화됨" : label}
       type="button"
     >
       {icon}
