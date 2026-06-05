@@ -530,7 +530,7 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     apiKeyFileEnvName: "APIFUN_API_KEY_FILE",
     defaultKeyFile: "~/.openclaw/secrets/apifun.key",
     apiStyle: "anthropic_messages",
-    defaultModelIds: ["claude-opus-4-6", "claude-code-compatible", "claude-sonnet-reseller", "claude-haiku-reseller"],
+    defaultModelIds: ["claude-opus-4-8", "claude-opus-4-6", "claude-code-compatible", "claude-sonnet-reseller", "claude-haiku-reseller"],
     supportsModelList: false,
   },
   {
@@ -540,7 +540,7 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     envFilePaths: ["~/openclaws/2/env"],
     apiKeyFileEnvName: "APIFUN_CLAUDE_B_API_KEY_FILE",
     apiStyle: "anthropic_messages",
-    defaultModelIds: ["claude-opus-4-6", "claude-code-compatible", "claude-sonnet-reseller", "claude-haiku-reseller"],
+    defaultModelIds: ["claude-opus-4-8", "claude-opus-4-6", "claude-code-compatible", "claude-sonnet-reseller", "claude-haiku-reseller"],
     supportsModelList: false,
   },
   {

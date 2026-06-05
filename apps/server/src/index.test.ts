@@ -1031,13 +1031,13 @@ describe("server health placeholder", () => {
 
       expect(deepseek?.secretAvailability).toBe("available");
       expect(claudeA?.name).toBe("APIKey.fun Claude A");
-      expect(claudeA?.selectedModelId).toBe("claude-opus-4-6");
-      expect(claudeA?.defaultModelIds).toContain("claude-opus-4-6");
+      expect(claudeA?.selectedModelId).toBe("claude-opus-4-8");
+      expect(claudeA?.defaultModelIds).toContain("claude-opus-4-8");
       expect(claudeA?.secretAvailability).toBe("available");
       expect(claudeA?.secretRefPreview).toBe("dgx-02:ANTHROPIC_API_KEY");
       expect(claudeB?.name).toBe("APIKey.fun Claude B");
-      expect(claudeB?.selectedModelId).toBe("claude-opus-4-6");
-      expect(claudeB?.defaultModelIds).toContain("claude-opus-4-6");
+      expect(claudeB?.selectedModelId).toBe("claude-opus-4-8");
+      expect(claudeB?.defaultModelIds).toContain("claude-opus-4-8");
       expect(claudeB?.secretAvailability).toBe("available");
       expect(claudeB?.secretRefPreview).toBe("dgx-02:ANTHROPIC_API_KEY_ALT");
       expect(JSON.stringify(registry)).not.toContain("deepseek-env-file-secret");
