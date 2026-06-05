@@ -18,8 +18,10 @@ import { defaultAgentProfiles } from "@ai-orchestrator/agents";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { deriveDebateDecisionReadiness, type DebateDecisionReadiness } from "../lib/debateDecisionReadiness";
+import { createDebateUtterancePublicWorkTrace } from "../lib/publicWorkTrace";
 import type { Stage3DebateSession } from "../runtime/stage3Runtime";
 import type { Stage3DebateUtteranceView } from "../types";
+import { PublicWorkTracePanel } from "./PublicWorkTracePanel";
 
 type Stance = "agree" | "disagree" | "risk" | "evidence" | "decision" | "neutral";
 
@@ -331,6 +333,7 @@ function UtteranceCard({
   const evidenceCount = utterance.evidenceRefIds?.length ?? 0;
   const codingCount = utterance.codingImpactRefs?.length ?? 0;
   const hasProvenance = acceptedCount > 0 || rejectedCount > 0 || evidenceCount > 0 || codingCount > 0;
+  const publicWorkTrace = createDebateUtterancePublicWorkTrace(utterance);
 
   return (
     <article
@@ -411,6 +414,8 @@ function UtteranceCard({
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">
             {utterance.content}
           </p>
+
+          <PublicWorkTracePanel className="sm:grid-cols-3" trace={publicWorkTrace} />
 
           {hasProvenance ? (
             <footer className="flex flex-wrap items-center gap-2 border-t border-zinc-800/50 pt-2">

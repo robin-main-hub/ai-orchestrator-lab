@@ -25,6 +25,8 @@ import {
 import { messageLabel } from "../../lib/uiLabels";
 import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
 import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
+import { PublicWorkTracePanel } from "../PublicWorkTracePanel";
+import { createConversationMessagePublicWorkTrace } from "../../lib/publicWorkTrace";
 
 export type DelegationPreviewItem = {
   id: string;
@@ -139,6 +141,7 @@ function MessageBubble({
 }) {
   const attachments = getMessageAttachments(message);
   const label = messageLabel(message, selectedAgent);
+  const publicWorkTrace = createConversationMessagePublicWorkTrace(message);
   const time = new Date(message.createdAt ?? Date.now()).toLocaleTimeString(
     "ko-KR",
     { hour: "2-digit", minute: "2-digit" },
@@ -209,6 +212,7 @@ function MessageBubble({
           {attachments.length > 0 ? (
             <MessageAttachments attachments={attachments} />
           ) : null}
+          <PublicWorkTracePanel trace={publicWorkTrace} />
         </div>
       </div>
     </div>

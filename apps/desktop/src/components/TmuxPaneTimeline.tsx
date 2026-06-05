@@ -21,6 +21,8 @@ import type {
   TerminalTimelineBlockStatus,
 } from "@ai-orchestrator/protocol";
 import { cn } from "../lib/utils";
+import { createTerminalBlockPublicWorkTrace } from "../lib/publicWorkTrace";
+import { PublicWorkTracePanel } from "./PublicWorkTracePanel";
 
 /**
  * Stage 2-6 Tmux block model UI — Warp-style timeline inside each pane.
@@ -71,6 +73,7 @@ function TimelineBlockRow({ block }: { block: TerminalTimelineBlock }) {
   const [open, setOpen] = useState(false);
   const tone = statusTone(block.status);
   const hasDetail = Boolean(block.summary || block.outputPreview);
+  const publicWorkTrace = createTerminalBlockPublicWorkTrace(block);
 
   return (
     <li
@@ -116,6 +119,7 @@ function TimelineBlockRow({ block }: { block: TerminalTimelineBlock }) {
               {block.outputPreview ? (
                 <pre className="tmux-block__output">{block.outputPreview}</pre>
               ) : null}
+              <PublicWorkTracePanel className="sm:grid-cols-1" trace={publicWorkTrace} />
               <footer className="tmux-block__meta">
                 <span>{statusLabel(block.status)}</span>
                 {block.redactionApplied ? <em>redacted</em> : null}
