@@ -17,6 +17,7 @@ import type { AgentProfile, DebateTag, DebateUtterance } from "@ai-orchestrator/
 import { defaultAgentProfiles } from "@ai-orchestrator/agents";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
+import { deriveDebateDecisionReadiness, type DebateDecisionReadiness } from "../lib/debateDecisionReadiness";
 import type { Stage3DebateSession } from "../runtime/stage3Runtime";
 import type { Stage3DebateUtteranceView } from "../types";
 
@@ -75,6 +76,7 @@ export function Stage3DebateTable({
     [currentRound, session],
   );
   const consensus = useMemo(() => deriveConsensus(session), [session]);
+  const readiness = useMemo(() => deriveDebateDecisionReadiness(session), [session]);
 
   return (
     <section
@@ -121,12 +123,15 @@ export function Stage3DebateTable({
                 className="bg-violet-600 text-xs text-zinc-100 hover:bg-violet-700"
                 onClick={onCreateCodingPacket}
                 size="sm"
+                title={readiness.nextActionLabel}
               >
                 <FileCode className="mr-1.5 h-3.5 w-3.5" />
                 패킷 반영
               </Button>
             </div>
           </div>
+
+          <DebateReadinessBanner readiness={readiness} />
 
           <div className="mt-4 flex items-center gap-1 overflow-x-auto pb-1">
             {session.rounds.map((round, index) => {
@@ -198,11 +203,64 @@ export function Stage3DebateTable({
             <SummaryChip icon={ArrowRight} label="결정" value={consensus.decisions} color="text-violet-400" />
           </div>
           <div className="text-xs text-zinc-500">
-            {session.participants.length} agents · {currentRound?.status ?? "pending"}
+            {session.participants.length} agents · {currentRound?.status ?? "pending"} · {readiness.headline}
           </div>
         </div>
       </footer>
     </section>
+  );
+}
+
+function DebateReadinessBanner({ readiness }: { readiness: DebateDecisionReadiness }) {
+  const tone = {
+    blocked: {
+      border: "border-rose-500/30",
+      dot: "bg-rose-400",
+      text: "text-rose-300",
+    },
+    needs_review: {
+      border: "border-amber-500/30",
+      dot: "bg-amber-400",
+      text: "text-amber-300",
+    },
+    ready: {
+      border: "border-violet-500/30",
+      dot: "bg-violet-400",
+      text: "text-violet-300",
+    },
+  }[readiness.state];
+
+  return (
+    <div className={cn("mt-4 rounded-xl border bg-zinc-950/35 p-3", tone.border)}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={cn("h-2 w-2 rounded-full", tone.dot)} />
+            <strong className={cn("text-sm", tone.text)}>{readiness.headline}</strong>
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-zinc-500">{readiness.nextActionLabel}</p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-wider text-zinc-500">
+          <span>decision {readiness.decisionCount}</span>
+          <span>coding {readiness.codingImpactCount}</span>
+          <span>evidence {readiness.evidenceCount}</span>
+          <span>risk {readiness.riskCount}</span>
+          <span>objection {readiness.objectionCount}</span>
+        </div>
+      </div>
+      {readiness.blockers.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {readiness.blockers.slice(0, 3).map((blocker) => (
+            <span
+              className="rounded-full border border-zinc-800/80 bg-black/25 px-2 py-0.5 text-[10px] text-zinc-400"
+              key={blocker}
+            >
+              {blocker}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
