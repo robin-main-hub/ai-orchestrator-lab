@@ -129,7 +129,7 @@ export function createAgentRoleToolRuntimeAudit(agents: WorkbenchAgent[]): Agent
     emptyToolAgentIds,
     summary:
       uncoveredIds.size === 0
-        ? `전원 도구 계약 설치 완료 · ${coveredCount}/${agents.length}`
+        ? `전원 도구 계약 확인 완료 · ${coveredCount}/${agents.length}`
         : `도구 계약 확인 필요 · ${coveredCount}/${agents.length}`,
   };
 }
