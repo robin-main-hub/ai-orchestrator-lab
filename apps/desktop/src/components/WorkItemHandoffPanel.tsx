@@ -6,16 +6,21 @@ export function WorkItemHandoffPanel({
   handoffs,
   items,
   onArchiveItem,
+  onApproveHandoff,
   onRouteItem,
+  onSendDraft,
 }: {
   drafts: AssistantDraft[];
   handoffs: WorkItemHandoff[];
   items: WorkItem[];
   onArchiveItem: (workItemId: string) => void;
+  onApproveHandoff: (handoffId: string) => void;
   onRouteItem: (workItemId: string, lane: WorkItem["lane"]) => void;
+  onSendDraft: (draftId: string) => void;
 }) {
   const board = deriveWorkQueueBoard({ drafts, handoffs, items });
   const visibleDrafts = board.pendingDrafts;
+  const visibleHandoffs = handoffs.filter((handoff) => handoff.approvalState === "required").slice(0, 3);
 
   return (
     <section className="work-handoff-strip inbox-strip work-os-board" aria-label="Control Queue Work OS board">
@@ -88,6 +93,23 @@ export function WorkItemHandoffPanel({
             <span>{draft.targetSurface} / {draft.confidence}</span>
             <strong>{draft.title}</strong>
             <p>{draft.body}</p>
+            <div className="inbox-card-actions">
+              <button onClick={() => onSendDraft(draft.id)} type="button">
+                보냄 처리
+              </button>
+            </div>
+          </article>
+        ))}
+        {visibleHandoffs.map((handoff) => (
+          <article className="work-handoff-card approve" key={handoff.id}>
+            <span>{handoff.targetSurface} / approval</span>
+            <strong>위임 승인 대기</strong>
+            <p>{handoff.summary}</p>
+            <div className="inbox-card-actions">
+              <button onClick={() => onApproveHandoff(handoff.id)} type="button">
+                승인 처리
+              </button>
+            </div>
           </article>
         ))}
       </div>

@@ -91,4 +91,21 @@ describe("control queue continuity summary", () => {
       tone: "ready",
     });
   });
+
+  it("does not count archived conversation items as active follow-up", () => {
+    const summary = createControlQueueContinuitySummary({
+      assistantDrafts: [],
+      handoffs: [],
+      workItems: [
+        workItem({ id: "archived_ask", lane: "ask", status: "archived" }),
+        workItem({ id: "archived_check", lane: "check", status: "archived" }),
+      ],
+    });
+
+    expect(summary).toEqual({
+      hasItems: false,
+      label: "큐 이어받기 없음",
+      tone: "ready",
+    });
+  });
 });

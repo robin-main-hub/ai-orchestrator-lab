@@ -16,6 +16,7 @@ import {
   initialWorkItems,
 } from "../seeds/workItems";
 import { readJsonState, writeJsonState } from "../lib/persistentJsonState";
+import { approveWorkItemHandoffState, markAssistantDraftSentState } from "../lib/workItemResolution";
 import { statusForWorkLane } from "../lib/workbenchDerived";
 
 type AppendWorkbenchEvent = <T>(type: string, payload: T) => EventEnvelope<T>;
@@ -117,9 +118,51 @@ export function useWorkItemsController({ appendEvent }: WorkItemsControllerInput
     });
   }
 
+  function handleMarkAssistantDraftSent(draftId: string) {
+    const updatedAt = new Date().toISOString();
+    const result = markAssistantDraftSentState({
+      draftId,
+      drafts: assistantDrafts,
+      items: workItems,
+      updatedAt,
+    });
+
+    if (!result.updated) {
+      return;
+    }
+
+    setAssistantDrafts(result.drafts);
+    setWorkItems(result.items);
+    appendEvent("assistant_draft.sent", {
+      draftId,
+    });
+  }
+
+  function handleApproveWorkItemHandoff(handoffId: string) {
+    const updatedAt = new Date().toISOString();
+    const result = approveWorkItemHandoffState({
+      handoffId,
+      handoffs: workItemHandoffs,
+      items: workItems,
+      updatedAt,
+    });
+
+    if (!result.updated) {
+      return;
+    }
+
+    setWorkItemHandoffs(result.handoffs);
+    setWorkItems(result.items);
+    appendEvent("work_item_handoff.approved", {
+      handoffId,
+    });
+  }
+
   return {
     assistantDrafts,
     handleArchiveWorkItem,
+    handleApproveWorkItemHandoff,
+    handleMarkAssistantDraftSent,
     handleRouteWorkItem,
     prependAssistantDraft,
     prependWorkItem,
