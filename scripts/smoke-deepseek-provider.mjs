@@ -18,7 +18,7 @@ if (dryRun) {
   printJson({
     status: "dry_run",
     provider: "deepseek",
-    endpoint,
+    endpoint: redact(endpoint),
     model,
     timeoutMs,
     hasApiKey: Boolean(apiKey),
@@ -32,7 +32,7 @@ if (!liveRun) {
   printJson({
     status: "skipped",
     provider: "deepseek",
-    endpoint,
+    endpoint: redact(endpoint),
     model,
     reason: "live flag required",
     usage: "Run with --live or PROVIDER_SMOKE_LIVE=1 to perform the network call.",
@@ -82,7 +82,7 @@ try {
   printJson({
     status: "ok",
     provider: "deepseek",
-    endpoint,
+    endpoint: redact(endpoint),
     model,
     contentPreview: redact(content).trim().slice(0, 120),
     usage: payload.usage ?? null,
@@ -165,6 +165,7 @@ function printJson(value) {
 
 function redact(value) {
   return String(value)
+    .replace(/https?:\/\/[^\s"'`<>)]+/gi, "[redacted-url]")
     .replace(/\b(?:sk|deepseek|claude|anthropic|grok|xai|ghp|gho|ghs|ghr|ghu|glpat|pat)[-_][A-Za-z0-9_-]{12,}\b/gi, "[redacted-token]")
     .replace(/\b(Bearer|Authorization)\s+["']?[^"'\s]+["']?/gi, "$1 [redacted]")
     .replace(/\b(DEEPSEEK_API_KEY|PROVIDER_SMOKE_DEEPSEEK_API_KEY|API_KEY|TOKEN|SECRET)\s*[:=]\s*["']?[^"'\s]+["']?/gi, "$1=[redacted]")

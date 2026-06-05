@@ -35,21 +35,26 @@ export function createProviderSmokePlan() {
   };
 }
 
-export function createProviderSmokeExecutionTargets({ liveDeepSeek = false } = {}) {
+export function createProviderSmokeExecutionTargets({ liveDeepSeek = false, liveMimo = false } = {}) {
   return [
     {
       id: "mimo-openai",
-      label: "MiMo OpenAI-compatible sample conversation",
-      command: [
-        process.execPath,
-        "scripts/mimo-chat.mjs",
-        "--provider",
-        "mimo",
-        "--model",
-        "mimo-v2.5-pro",
-        "한국어로 한 문장만 답해. MiMo provider smoke 정상 여부를 확인한다.",
-      ],
-      networkCall: true,
+      label: liveMimo
+        ? "MiMo OpenAI-compatible live sample conversation"
+        : "MiMo OpenAI-compatible sample conversation opt-in",
+      command: liveMimo
+        ? [
+            process.execPath,
+            "scripts/mimo-chat.mjs",
+            "--provider",
+            "mimo",
+            "--model",
+            "mimo-v2.5-pro",
+            "한국어로 한 문장만 답해. MiMo provider smoke 정상 여부를 확인한다.",
+          ]
+        : undefined,
+      networkCall: liveMimo,
+      optInFlag: "--live-mimo",
     },
     {
       id: "deepseek",
@@ -84,17 +89,47 @@ function runMimoSmoke() {
       "한국어로 한 문장만 답해. MiMo provider smoke 정상 여부를 확인한다.",
     ],
     {
-      stdio: "inherit",
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
     },
   );
 
+  const report = {
+    generatedAt: new Date().toISOString(),
+    result: {
+      id: "mimo-openai",
+      label: "MiMo OpenAI-compatible sample conversation",
+      networkCall: true,
+      status: result.status === 0 ? "ok" : "failed",
+      exitCode: result.status ?? 1,
+      stdoutPreview: redactProviderSmokeReport(result.stdout ?? "").slice(0, 1200),
+      stderrPreview: redactProviderSmokeReport(result.stderr ?? "").slice(0, 1200),
+    },
+  };
+  console.log(redactProviderSmokeReport(report));
   process.exit(result.status ?? 1);
 }
 
 function runAllProviderSmokes() {
   const liveDeepSeek = process.env.PROVIDER_SMOKE_LIVE === "1" || process.argv.includes("--live-deepseek");
-  const targets = createProviderSmokeExecutionTargets({ liveDeepSeek });
+  const liveMimo =
+    process.env.PROVIDER_SMOKE_LIVE === "1" ||
+    process.env.PROVIDER_SMOKE_LIVE_MIMO === "1" ||
+    process.argv.includes("--live-mimo");
+  const targets = createProviderSmokeExecutionTargets({ liveDeepSeek, liveMimo });
   const results = targets.map((target) => {
+    if (!target.command) {
+      return {
+        id: target.id,
+        label: target.label,
+        networkCall: false,
+        status: "skipped",
+        exitCode: 0,
+        stdoutPreview: "",
+        stderrPreview: "",
+        reason: `${target.optInFlag} 필요`,
+      };
+    }
     const [command, ...args] = target.command;
     const result = spawnSync(command, args, {
       encoding: "utf8",
@@ -111,7 +146,7 @@ function runAllProviderSmokes() {
     };
   });
   console.log(redactProviderSmokeReport({ generatedAt: new Date().toISOString(), results }));
-  process.exit(results.every((result) => result.status === "ok") ? 0 : 1);
+  process.exit(results.every((result) => result.status === "ok" || result.status === "skipped") ? 0 : 1);
 }
 
 function printHelp() {
@@ -121,7 +156,7 @@ function printHelp() {
       "",
       "--list      Print the redacted provider smoke manifest without network calls.",
       "--run-mimo  Run the MiMo OpenAI-compatible sample conversation. This performs a network call.",
-      "--run-all   Run MiMo sample plus DeepSeek dry-run. Add --live-deepseek or PROVIDER_SMOKE_LIVE=1 for DeepSeek live.",
+      "--run-all   Run opt-in manifest checks. Add --live-mimo for MiMo live or --live-deepseek for DeepSeek live.",
     ].join("\n"),
   );
 }
