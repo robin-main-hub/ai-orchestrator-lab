@@ -134,6 +134,13 @@ import {
 import { getConversationRailLayout } from "./lib/conversationRailLayout";
 import { getConversationShellVisibility } from "./lib/conversationShellVisibility";
 import {
+  createAgentChannelMemoryScope,
+  createInitialAgentConversationChannels,
+  getAgentChannelMessages,
+  updateAgentChannelMessages,
+  type AgentConversationChannels,
+} from "./lib/agentConversationChannels";
+import {
   createControlQueueAskItem,
   createControlQueueBlockItem,
   createControlQueueDelegateHandoff,
@@ -247,7 +254,9 @@ export function App() {
   const [agentPersonaById, setAgentPersonaById] = useState<Record<string, AgentPersonaSettings>>(() =>
     Object.fromEntries(seededAgentProfiles.map((agent) => [agent.id, createDefaultPersonaSettings(agent)])),
   );
-  const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>(initialConversationMessages);
+  const [conversationMessagesByAgentId, setConversationMessagesByAgentId] = useState<AgentConversationChannels>(() =>
+    createInitialAgentConversationChannels(seededAgentProfiles, initialConversationMessages),
+  );
   const [eventLog, setEventLog] = useState<EventEnvelope[]>(initialEventLog);
   const [activeSessionId, setActiveSessionId] = useState(DEFAULT_SESSION_ID);
   const activeSessionIdRef = useRef(activeSessionId);
@@ -258,6 +267,17 @@ export function App() {
     modeRef.current = mode;
     writeJsonState(CENTER_MODE_STORAGE_KEY, mode);
   }, [mode]);
+  const conversationMessages = useMemo(
+    () => getAgentChannelMessages(conversationMessagesByAgentId, selectedAgentId),
+    [conversationMessagesByAgentId, selectedAgentId],
+  );
+  const setConversationMessages = useCallback(
+    (updater: ConversationMessage[] | ((messages: ConversationMessage[]) => ConversationMessage[])) => {
+      const targetAgentId = selectedAgentId || agents[0]?.id || "agent_unassigned";
+      setConversationMessagesByAgentId((channels) => updateAgentChannelMessages(channels, targetAgentId, updater));
+    },
+    [agents, selectedAgentId],
+  );
   useEffect(() => {
     function handleFocusIn(event: FocusEvent) {
       const target = event.target instanceof Element
@@ -474,6 +494,15 @@ export function App() {
     runtimeUpdatedAt: runtimeSnapshotState.updatedAt,
     selectedAgent,
   });
+  const selectedAgentMemoryScope = useMemo(
+    () =>
+      createAgentChannelMemoryScope(
+        selectedAgentId || "agent_unassigned",
+        activeSessionId,
+        selectedProvider?.id ?? selectedAgent?.providerProfileId ?? "provider_unassigned",
+      ),
+    [activeSessionId, selectedAgent?.providerProfileId, selectedAgentId, selectedProvider?.id],
+  );
   const {
     adapterStatus,
     handleActivateMemory,
@@ -654,7 +683,7 @@ export function App() {
     const nextSessionId = `session_${createdAt.replace(/[-:.TZ]/g, "").slice(0, 14)}_${crypto.randomUUID().slice(0, 8)}`;
     activeSessionIdRef.current = nextSessionId;
     setActiveSessionId(nextSessionId);
-    setConversationMessages([]);
+    setConversationMessagesByAgentId(createInitialAgentConversationChannels(agents, []));
     setEventLog([]);
     setDraftMessage("");
     setDraftAttachments([]);
@@ -705,7 +734,13 @@ export function App() {
         const switchingSessions = sessionId !== activeSessionId;
         setEventLog((events) => mergeEventReplayLogs(switchingSessions ? [] : events, localEvents));
         setActiveSessionId(sessionId);
-        setConversationMessages((messages) => (switchingSessions ? localMessages : mergeConversationMessages(messages, localMessages)));
+        setConversationMessagesByAgentId((channels) =>
+          switchingSessions
+            ? createInitialAgentConversationChannels(agents, localMessages)
+            : updateAgentChannelMessages(channels, selectedAgentId, (messages) =>
+                mergeConversationMessages(messages, localMessages),
+              ),
+        );
         setEventSyncState((state) => ({
           ...state,
           status: "queued",
@@ -745,8 +780,12 @@ export function App() {
     const switchingSessions = sessionId !== activeSessionId;
     setEventLog((events) => mergeEventReplayLogs(switchingSessions ? [] : events, mergedCachedEvents));
     setActiveSessionId(sessionId);
-    setConversationMessages((messages) =>
-      switchingSessions ? cachedMessages : mergeConversationMessages(messages, cachedMessages),
+    setConversationMessagesByAgentId((channels) =>
+      switchingSessions
+        ? createInitialAgentConversationChannels(agents, cachedMessages)
+        : updateAgentChannelMessages(channels, selectedAgentId, (messages) =>
+            mergeConversationMessages(messages, cachedMessages),
+          ),
     );
     const packetReplay = extractLatestCodingPacketFromEvents(result.events);
     if (packetReplay.status === "restored" && packetReplay.packet) {
@@ -1219,13 +1258,19 @@ export function App() {
     const modelId = selectedModel?.id ?? selectedAgent.modelId ?? selectedProvider.defaultModel ?? "model pending";
     const messageContent = content || `첨부 ${attachments.length}개`;
     const attachmentMetadata = attachments.map((attachment) => ({ ...attachment }));
+    const userMessageMetadata = {
+      agentId: selectedAgent.id,
+      memoryScope: selectedAgentMemoryScope.namespace,
+      recallTraceId: selectedAgentMemoryScope.recallTraceId,
+      ...(attachmentMetadata.length > 0 ? { attachments: attachmentMetadata } : {}),
+    };
     const userMessage: ConversationMessage = {
       id: `message_user_${crypto.randomUUID()}`,
       sessionId: targetSessionId,
       role: "user",
       content: messageContent,
       createdAt,
-      metadata: attachmentMetadata.length > 0 ? { attachments: attachmentMetadata } : undefined,
+      metadata: userMessageMetadata,
     };
     const providerPermissionId = `permission_provider_${selectedProvider.id}`;
     const providerApprovalState = approvalStateByItemId[providerPermissionId];
@@ -1256,9 +1301,12 @@ export function App() {
           : `${selectedProvider.name}는 아직 실행 준비가 안 됐어: ${providerReadiness.reason}`,
         createdAt,
         metadata: {
+          agentId: selectedAgent.id,
           providerProfileId: selectedProvider.id,
           readinessStatus: providerReadiness.status,
           permissionItemId: providerPermissionId,
+          memoryScope: selectedAgentMemoryScope.namespace,
+          recallTraceId: selectedAgentMemoryScope.recallTraceId,
         },
       };
 
@@ -1419,9 +1467,12 @@ export function App() {
       content: reply,
       createdAt: new Date().toISOString(),
       metadata: {
+        agentId: selectedAgent.id,
         agentName: selectedAgent.name,
         providerProfileId: selectedProvider.id,
         authMode,
+        memoryScope: selectedAgentMemoryScope.namespace,
+        recallTraceId: selectedAgentMemoryScope.recallTraceId,
         ...completionMetadata,
       },
     };
@@ -1832,6 +1883,7 @@ export function App() {
       content: normalizedEvent.normalizedText,
       createdAt: receivedAt,
       metadata: {
+        agentId: selectedAgentId,
         channel: normalizedEvent.channel,
         ingressEventId: normalizedEvent.id,
         approvalState: snapshot.result.approvalState,
@@ -2390,6 +2442,10 @@ export function App() {
     };
 
     setAgents((currentAgents) => [...currentAgents, nextAgent]);
+    setConversationMessagesByAgentId((channels) => ({
+      ...channels,
+      [nextAgent.id]: channels[nextAgent.id] ?? [],
+    }));
     setAgentPersonaById((currentSettings) => ({
       ...currentSettings,
       [nextAgent.id]: createDefaultPersonaSettings(nextAgent),
@@ -2423,6 +2479,10 @@ export function App() {
       setAgentVisualsById((currentSettings) => {
         const { [agentId]: _removedVisual, ...remainingSettings } = currentSettings;
         return remainingSettings;
+      });
+      setConversationMessagesByAgentId((currentChannels) => {
+        const { [agentId]: _removedMessages, ...remainingChannels } = currentChannels;
+        return remainingChannels;
       });
       if (agentSettingsAgentId === agentId) {
         setAgentSettingsAgentId(undefined);
