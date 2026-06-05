@@ -4171,18 +4171,18 @@ button {
 
 .inbox-strip {
   grid-template-columns: minmax(0, 170px) minmax(0, 1fr);
-  min-height: 92px;
-  max-height: 120px;
+  min-height: 132px;
+  max-height: 180px;
 }
 
 .inbox-strip .work-handoff-grid {
-  grid-template-columns: repeat(7, minmax(118px, 1fr));
+  grid-template-columns: repeat(8, minmax(150px, 1fr));
   overflow-x: auto;
   overflow-y: hidden;
 }
 
 .work-handoff-card.inbox-lane {
-  min-height: 74px;
+  min-height: 122px;
 }
 
 .work-handoff-card.inbox-lane.ask,
@@ -4192,6 +4192,62 @@ button {
 
 .work-handoff-card.inbox-lane.blocked {
   border-color: rgba(255, 111, 117, 0.55);
+}
+
+.work-os-board {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(124, 58, 237, 0.18), transparent 34%),
+    linear-gradient(135deg, rgba(10, 10, 12, 0.94), rgba(18, 18, 23, 0.88));
+}
+
+.work-lane-kicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.work-lane-kicker b {
+  border-radius: 999px;
+  padding: 1px 5px;
+  background: rgba(255, 204, 102, 0.14);
+  color: var(--amber);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.work-lane-kicker b.stale {
+  background: rgba(255, 111, 117, 0.13);
+  color: var(--danger);
+}
+
+.work-item-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin: 2px 0 0;
+}
+
+.work-item-meta div {
+  min-width: 0;
+  border-radius: 5px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.work-item-meta dt {
+  color: var(--subtle);
+  font-size: 7px;
+  text-transform: uppercase;
+}
+
+.work-item-meta dd {
+  margin: 1px 0 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .inbox-card-actions {
