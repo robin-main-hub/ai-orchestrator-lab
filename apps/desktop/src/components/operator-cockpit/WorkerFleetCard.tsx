@@ -6,22 +6,9 @@ import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
 import { useAgentExpression } from "./useAgentExpression";
 import { badgeColorForStatus } from "./presentation";
+import { resolveOperatorWorkerDisplay } from "./workerDisplay";
 
 const coreRoles = new Set(["orchestrator", "architect", "reviewer", "builder", "executor"]);
-const workerDisplayNames: Record<string, string> = {
-  asuka: "소류 아스카 랭그레이",
-  herta: "헤르타",
-  kagura: "시노미야 카구야",
-  makima: "마키마",
-  mao: "마오마오",
-  rem: "렘",
-  shinobu: "오시노 시노부",
-  yoshiko: "츠시마 요시코",
-};
-
-function formatRole(role: string) {
-  return role.replace(/_/g, " ");
-}
 
 export function WorkerFleetCard({ fleet }: { fleet: OperatorCockpitWorkerFleet[] }) {
   const coreFleet = fleet.filter((worker) => coreRoles.has(worker.role));
@@ -72,7 +59,7 @@ function WorkerGroup({ label, workers }: { label: string; workers: OperatorCockp
 }
 
 function WorkerRow({ worker }: { worker: OperatorCockpitWorkerFleet }) {
-  const displayName = workerDisplayNames[worker.workerId] ?? worker.workerId;
+  const workerDisplay = resolveOperatorWorkerDisplay(worker);
   const expression = useAgentExpression({
     isActive: worker.status === "working",
     taskStatus: worker.status === "error" || worker.status === "blocked" ? "error" : worker.status === "working" ? "running" : undefined,
@@ -83,16 +70,16 @@ function WorkerRow({ worker }: { worker: OperatorCockpitWorkerFleet }) {
       <div className="flex items-start gap-3">
         <AgentPortrait
           active={worker.status === "working"}
-          agentId={worker.workerId}
-          displayName={displayName}
+          agentId={workerDisplay.portraitAgentId}
+          displayName={workerDisplay.displayName}
           expression={expression}
           role={worker.role}
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-sm font-semibold text-zinc-100 group-hover:text-cyan-300">{displayName}</span>
+            <span className="truncate text-sm font-semibold text-zinc-100 group-hover:text-cyan-300">{workerDisplay.displayName}</span>
             <Badge color="blue" size="xs">
-              {formatRole(worker.role)}
+              {workerDisplay.roleLabel}
             </Badge>
             <Badge color={badgeColorForStatus(worker.status)} size="xs">
               {worker.status.replace("_", " ")}
