@@ -238,6 +238,14 @@ button {
   padding: 8px;
 }
 
+.center-board.cockpit-center-board {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  grid-template-rows: minmax(0, 1fr);
+  padding: 0;
+  background: transparent;
+}
+
 .center-board.config-center-board {
   grid-template-rows: auto minmax(0, 1fr);
 }
