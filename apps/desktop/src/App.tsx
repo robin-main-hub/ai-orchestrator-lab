@@ -99,6 +99,8 @@ import type {
   EventSource,
   ExternalApprovalItem,
   ModelDiscoverySnapshot,
+  OperatorCockpitSnapshot,
+  OperatorCockpitWorkerStatus,
   ProviderProfile,
   ReviewMode,
   RuntimeSnapshot,
@@ -159,7 +161,6 @@ import { ControlQueueDrawer } from "./components/ControlQueueDrawer";
 import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
 import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
 import { OperatorCockpit } from "./components/operator-cockpit/OperatorCockpit";
-import { mockSnapshot } from "./components/operator-cockpit/fixtures/mockSnapshot";
 import { AgentsSidebar } from "./components/AgentsSidebar";
 import { BackupRailMenu } from "./components/BackupRailMenu";
 import { ChannelRailPanel } from "./components/ChannelRailPanel";
@@ -2476,6 +2477,78 @@ export function App() {
     onHelp: () => setCheatSheetOpen((o) => !o),
   });
 
+  const derivedCockpitSnapshot: OperatorCockpitSnapshot = useMemo(() => {
+    return {
+      id: activeSessionId || "global-cockpit",
+      timestamp: new Date().toISOString(),
+      fleet: agents.map((agent) => {
+        const activity = agentActivityById[agent.id] ?? "idle";
+        let status: OperatorCockpitWorkerStatus = "idle";
+        let statusRingColor: "green" | "yellow" | "red" | "gray" = "gray";
+        if (activity === "idle") {
+          status = "idle";
+          statusRingColor = "gray";
+        } else if (activity === "preparing" || activity === "responding") {
+          status = "working";
+          statusRingColor = "green";
+        } else {
+          status = "idle";
+          statusRingColor = "gray";
+        }
+
+        return {
+          workerId: agent.id,
+          role: agent.role,
+          status,
+          statusRingColor,
+        };
+      }),
+      approvals: permissionSnapshot.queue
+        .filter((q) => q.state === "required")
+        .map((q) => ({
+          blockReason: q.summary,
+          evidenceRefs: [],
+          payloadBindingStatus: "unbound",
+          tamperWarning: false,
+        })),
+      handoffs: [],
+      memory: {
+        contextReasons: ["Session active"],
+        macBookAuthorityEnabled: runtimeSnapshotState.syncTopology.authorityLabel === "MacBook Pro",
+        dgxMirrorHealth: runtimeSnapshotState.recentError ? "degraded" : "healthy",
+        contradictionWarnings: [],
+      },
+      routing: {
+        selectedModelId: selectedModel?.id || "unknown",
+        fallbackStatus: "available",
+        costBadge: "medium",
+        speedBadge: "average",
+        trustBadge: "trusted",
+      },
+      recovery: {
+        offlineResumeSupported: true,
+        outboxSyncStatus: "synced",
+        healthIndicators: ["All systems operational"],
+      },
+      dispatchHistory: tmuxRedispatchOutcomes.map((o) => ({
+        dispatchId: o.approvalId,
+        requesterAgentId: "system",
+        approvalState: o.status === "sent" || o.status === "recorded" ? "approved" : "rejected",
+        replayPayloadDigest: "unknown",
+        tamperWarning: false,
+        createdAt: new Date().toISOString(),
+      })),
+    };
+  }, [
+    activeSessionId,
+    agents,
+    agentActivityById,
+    permissionSnapshot.queue,
+    runtimeSnapshotState,
+    selectedModel,
+    tmuxRedispatchOutcomes,
+  ]);
+
   const shellVisibility = getConversationShellVisibility({
     configLibraryActive,
     mode,
@@ -2789,7 +2862,7 @@ export function App() {
           ) : mode === "cockpit" ? (
             <OperatorCockpit
               onPreviewEvidence={() => setApprovalDrawerOpen(true)}
-              snapshot={mockSnapshot}
+              snapshot={derivedCockpitSnapshot}
             />
           ) : mode === "annex" ? (
             <DebateAnnexPage
