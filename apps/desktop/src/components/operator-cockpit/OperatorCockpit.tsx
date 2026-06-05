@@ -14,9 +14,15 @@ import { badgeColorForMirror, formatClock } from "./presentation";
 export function OperatorCockpit({
   snapshot,
   onPreviewEvidence,
+  onOpenMemory,
+  onOpenProviderRouting,
+  onOpenRecovery,
 }: {
   snapshot: OperatorCockpitSnapshot;
   onPreviewEvidence?: () => void;
+  onOpenMemory?: () => void;
+  onOpenProviderRouting?: () => void;
+  onOpenRecovery?: () => void;
 }) {
   const blockedCount = snapshot.fleet.filter((worker) => worker.status === "blocked" || worker.status === "error").length;
   const approvalCount = snapshot.approvals.length;
@@ -103,9 +109,9 @@ export function OperatorCockpit({
           </div>
 
           <div className="min-w-0 space-y-4 md:col-span-2 lg:col-span-3">
-            <ProviderRoutingCard routing={snapshot.routing} />
-            <MemoryRecallCard memory={snapshot.memory} />
-            <RecoveryContinuityCard recovery={snapshot.recovery} />
+            <ProviderRoutingCard onOpen={onOpenProviderRouting} routing={snapshot.routing} />
+            <MemoryRecallCard memory={snapshot.memory} onOpen={onOpenMemory} />
+            <RecoveryContinuityCard onOpen={onOpenRecovery} recovery={snapshot.recovery} />
           </div>
         </div>
       </div>

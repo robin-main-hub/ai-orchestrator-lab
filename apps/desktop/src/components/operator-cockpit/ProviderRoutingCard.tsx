@@ -10,11 +10,32 @@ import {
   badgeColorForTrust,
 } from "./presentation";
 
-export function ProviderRoutingCard({ routing }: { routing: OperatorCockpitProviderRouting }) {
+export function ProviderRoutingCard({
+  routing,
+  onOpen,
+}: {
+  routing: OperatorCockpitProviderRouting;
+  onOpen?: () => void;
+}) {
   return (
     <GlassPanel variant="default" className="relative">
       <div aria-hidden className="absolute left-4 top-11 h-[calc(100%-3.25rem)] w-px bg-gradient-to-b from-violet-500/50 to-transparent" />
-      <GlassPanelHeader action={<Badge color={badgeColorForFallback(routing.fallbackStatus)}>{routing.fallbackStatus}</Badge>}>
+      <GlassPanelHeader
+        action={
+          <div className="flex items-center gap-2">
+            <Badge color={badgeColorForFallback(routing.fallbackStatus)}>{routing.fallbackStatus}</Badge>
+            {onOpen ? (
+              <button
+                className="rounded-md border border-zinc-700/70 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 transition hover:border-violet-400/60 hover:text-violet-200"
+                onClick={onOpen}
+                type="button"
+              >
+                열기
+              </button>
+            ) : null}
+          </div>
+        }
+      >
         <div className="flex items-center gap-2">
           <RadioTower className="h-4 w-4 text-violet-400" />
           <h3 className="text-sm font-semibold text-zinc-100">Provider Routing</h3>
