@@ -14,6 +14,8 @@ import {
   createDefaultPersonaSettings,
   modelSupportsAnyAttachment,
 } from "../../lib/helpers";
+import { createAgentChatContinuitySummary } from "../../lib/agentChatContinuity";
+import { getAgentToolBadgeLabels } from "../../lib/agentToolProfiles";
 import { getConversationWorkbenchVisibility } from "../../lib/conversationWorkbenchVisibility";
 import type {
   AgentConfigFile,
@@ -136,6 +138,13 @@ export function ConversationWorkbench({
   const latestBranch = branchExperiments[0];
   const canDelegate =
     selectedAgent?.role === "companion" || selectedAgent?.role === "orchestrator";
+  const agentChatContinuity = createAgentChatContinuitySummary({
+    adapterStatus: memoryAdapterStatus,
+    agentName: selectedAgent?.name,
+    memoryRecordCount,
+    messageCount: messages.length,
+    toolLabels: selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role) : [],
+  });
   
   // To create preview list and visibility check, we pass state/counters
   // delegation calculation is done in MessageThread locally, so visibility helper can also use it
@@ -203,6 +212,7 @@ export function ConversationWorkbench({
       />
 
       <MessageThread
+        agentChatContinuity={agentChatContinuity}
         messages={messages}
         selectedAgent={selectedAgent}
         workbenchVisibility={workbenchVisibility}
@@ -236,6 +246,7 @@ export function ConversationWorkbench({
         attachmentLimitReached={attachmentLimitReached}
         draftAttachments={draftAttachments}
         draftMessage={draftMessage}
+        continuityPlaceholder={agentChatContinuity.placeholder}
         maxDraftAttachments={maxDraftAttachments}
         onAddDraftAttachments={onAddDraftAttachments}
         onDraftMessageChange={onDraftMessageChange}
