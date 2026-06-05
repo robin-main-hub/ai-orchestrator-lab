@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getAgentToolBadgeLabels, getAgentToolProfile, getAgentToolProfileSummary } from "./agentToolProfiles";
+import {
+  createAgentToolRuntimeSummary,
+  getAgentToolBadgeLabels,
+  getAgentToolProfile,
+  getAgentToolProfileSummary,
+} from "./agentToolProfiles";
 
 describe("getAgentToolProfile", () => {
   it("returns concise orchestrator tool badges", () => {
@@ -32,9 +37,28 @@ describe("getAgentToolProfile", () => {
   });
 
   it("creates a compact sidebar summary for visible agent cards", () => {
-    expect(getAgentToolProfileSummary("executor")).toEqual({
+    expect(getAgentToolProfileSummary("executor")).toMatchObject({
       label: "실행 도구",
       visibleBadges: ["Tmux 전달", "승인 확인", "실행 기록"],
     });
+  });
+});
+
+describe("agent tool profile runtime boundaries", () => {
+  it("summarizes approval-gated tools before they can be rendered as callable actions", () => {
+    expect(createAgentToolRuntimeSummary(["memory.recall", "tmux.dispatch", "test.run"])).toEqual({
+      approvalRequiredCount: 2,
+      boundaryLabel: "승인 필요 2개",
+      readOnlyCount: 1,
+      writeCapableCount: 0,
+    });
+  });
+
+  it("keeps role tool summaries compact for the status bar", () => {
+    const summary = getAgentToolProfileSummary("orchestrator");
+
+    expect(summary.label).toBe("지휘 도구");
+    expect(summary.visibleBadges).toEqual(["작업 대기열", "승인 확인", "Tmux 계획"]);
+    expect(summary.runtime.boundaryLabel).toBe("승인 필요 1개");
   });
 });

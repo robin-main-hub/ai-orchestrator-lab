@@ -32,6 +32,21 @@ export const annexTabPresentation: Record<AnnexTabKey, { label: string }> = {
   status: { label: "상태" },
 };
 
+export function formatAnnexTabLabel(label: string, count: number): string {
+  const safeLabel = sanitizeDebateAnnexText(label.trim() || "보조자료");
+  if (!Number.isFinite(count) || count <= 0) return safeLabel;
+  return `${safeLabel} ${Math.min(Math.floor(count), 99)}`;
+}
+
+export function createAnnexTabCountSummary(counts: Record<AnnexTabKey, number>): string {
+  const order: AnnexTabKey[] = ["status", "evidence", "agents", "memory", "queue", "logs"];
+  const active = order
+    .map((key) => [key, counts[key]] as const)
+    .filter(([, count]) => count > 0)
+    .map(([key, count]) => formatAnnexTabLabel(annexTabPresentation[key].label, count));
+  return active.length > 0 ? `보조자료 ${active.join(" · ")}` : "보조자료 없음";
+}
+
 const stanceTones: Record<DebateStance, Tone> = {
   agree: { bg: "bg-violet-500/10", color: "text-violet-300" },
   decision: { bg: "bg-violet-500/10", color: "text-violet-400" },
