@@ -142,6 +142,8 @@ function sanitizeMemoryScopePart(value: string): string {
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/gi, "Bearer redacted_token")
     .replace(/sk-[A-Za-z0-9_-]{8,}/gi, "redacted_key")
     .replace(/tp-[A-Za-z0-9_-]{8,}/gi, "redacted_token")
+    .replace(/\b([A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD|KEY))\s*=\s*[^\s"'`<>)]+/gi, "$1=redacted")
+    .replace(/\/Users\/[^\s"'`<>)]+/g, "redacted_path")
     .trim()
     .replace(/\s+/g, "_");
 }

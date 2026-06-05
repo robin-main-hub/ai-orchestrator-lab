@@ -137,6 +137,7 @@ import { getConversationRailLayout } from "./lib/conversationRailLayout";
 import { getConversationShellVisibility } from "./lib/conversationShellVisibility";
 import {
   createAgentChannelMemoryScope,
+  createAgentChannelMemoryInstallAudit,
   createInitialAgentConversationChannels,
   getAgentChannelMessages,
   updateAgentChannelMessages,
@@ -151,6 +152,7 @@ import {
 } from "./lib/controlQueueWorkItems";
 import { createControlQueueContinuitySummary } from "./lib/controlQueueContinuity";
 import { controlQueuePermissionLabel, sanitizeControlQueueText } from "./lib/controlQueuePresentation";
+import { createMemoryGovernanceSummary } from "./lib/memoryGovernance";
 import {
   agentRoleLabel,
   classifyDraftAttachment,
@@ -545,6 +547,26 @@ export function App() {
     provider: selectedProvider,
     runtimeUpdatedAt: runtimeSnapshotState.updatedAt,
   });
+  const memoryInstallAudit = useMemo(
+    () =>
+      createAgentChannelMemoryInstallAudit(
+        agents,
+        activeSessionId,
+        selectedProvider?.id ?? selectedAgent?.providerProfileId ?? "provider_unassigned",
+      ),
+    [activeSessionId, agents, selectedAgent?.providerProfileId, selectedProvider?.id],
+  );
+  const memoryGovernanceSummary = useMemo(
+    () =>
+      createMemoryGovernanceSummary({
+        adapterStatus,
+        installAudit: memoryInstallAudit,
+        records: memoryRecords,
+        scope: selectedAgentMemoryScope,
+        stats: memoryInspector.stats,
+      }),
+    [adapterStatus, memoryInstallAudit, memoryInspector.stats, memoryRecords, selectedAgentMemoryScope],
+  );
   const backupSnapshot = useMemo(
     () =>
       createStage7BackupSnapshot({
@@ -3333,6 +3355,7 @@ export function App() {
               draftMessage={draftMessage}
               maxDraftAttachments={maxDraftAttachments}
               memoryAdapterStatus={adapterStatus}
+              memoryGovernanceLabel={memoryGovernanceSummary.installLabel}
               memoryRecordCount={memoryRecords.length}
               memoryScope={selectedAgentMemoryScope}
               messages={conversationMessages}
@@ -3460,6 +3483,7 @@ export function App() {
             {shellVisibility.showEvolveMementoPanel ? (
               <EvolveMementoPanel
                 adapterStatus={adapterStatus}
+                governanceSummary={memoryGovernanceSummary}
                 inspector={memoryInspector}
                 onActivate={handleActivateMemory}
                 onForget={handleForgetMemory}
