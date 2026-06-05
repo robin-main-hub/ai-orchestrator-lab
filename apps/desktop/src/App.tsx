@@ -2477,6 +2477,8 @@ export function App() {
     mode,
   });
 
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+
   return (
     <div
       className={`app-shell ${mode === "tmux" ? "tmux-focus-shell" : ""} ${
@@ -2495,13 +2497,14 @@ export function App() {
         onChangeMode={setMode}
         onCommandPalette={() => setCommandPaletteOpen(true)}
         onProbeDgx={handleProbeDgx}
+        onToggleDrawer={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
         providerName={activeProvider?.name ?? "미선택"}
         snapshot={runtimeSnapshotState}
       />
       <main className="workspace-grid">
         {shellVisibility.showLeftRail ? (
           <aside
-            className={`left-rail ${providerRegistrationOpen ? "provider-mode" : ""}`}
+            className={`left-rail ${providerRegistrationOpen ? "provider-mode" : ""} ${isMobileDrawerOpen ? "drawer-open" : ""}`}
             aria-label="오케스트레이터 네비게이션"
           >
 
