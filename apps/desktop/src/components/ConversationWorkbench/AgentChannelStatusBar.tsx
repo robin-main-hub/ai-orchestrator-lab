@@ -8,6 +8,7 @@ import {
 } from "../../lib/agentChannelStatus";
 import type { ControlQueueContinuitySummary } from "../../lib/controlQueueContinuity";
 import { getAgentToolBadgeLabels } from "../../lib/agentToolProfiles";
+import { agentRoleLabel } from "../../lib/helpers";
 import type { WorkbenchAgent } from "../../types";
 
 export function AgentChannelStatusBar({
@@ -31,6 +32,7 @@ export function AgentChannelStatusBar({
 }) {
   const status = createAgentChannelStatus({
     agentName: selectedAgent?.name,
+    roleLabel: selectedAgent ? agentRoleLabel(selectedAgent.role) : undefined,
     adapterStatus,
     memoryRecordCount,
     messageCount,
