@@ -1,10 +1,12 @@
 import type {
   DgxHeartbeat,
   ModelDiscoverySnapshot,
+  OperatorCockpitSnapshot,
   ProviderProfile,
   ProviderRegistrySnapshot,
   RuntimeSnapshot,
 } from "@ai-orchestrator/protocol";
+import { operatorCockpitSnapshotSchema } from "@ai-orchestrator/protocol";
 import { mergeDgxRuntimeSnapshot, DgxConnectionStateMachine } from "./stage5Runtime";
 import { DEFAULT_DGX_SERVER_BASE_URL, resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
 import { createDgxOrchestratorJsonHeaders } from "./stage31DgxAuth";
@@ -58,6 +60,12 @@ export type Stage13ProviderModelDiscoveryInput = {
 };
 
 export type Stage13ProviderRegistryInput = {
+  serverBaseUrl?: string | string[];
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+};
+
+export type Stage13OperatorCockpitSnapshotInput = {
   serverBaseUrl?: string | string[];
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
@@ -157,6 +165,25 @@ export async function fetchDgxProviderRegistry({
   throw lastError instanceof Error ? lastError : new Error("DGX-02 provider registry unavailable");
 }
 
+export async function fetchDgxOperatorCockpitSnapshot({
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 1_500,
+}: Stage13OperatorCockpitSnapshotInput = {}): Promise<OperatorCockpitSnapshot> {
+  let lastError: unknown;
+
+  for (const baseUrl of resolveDgxServerBaseUrls(serverBaseUrl)) {
+    const endpoint = `${baseUrl}/cockpit/snapshot`;
+    try {
+      return operatorCockpitSnapshotSchema.parse(await fetchJson<unknown>(fetchImpl, endpoint, timeoutMs));
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("DGX-02 cockpit snapshot unavailable");
+}
+
 async function fetchJson<T>(fetchImpl: typeof fetch, url: string, timeoutMs: number): Promise<T> {
   const controller = new AbortController();
   const timeoutId = globalThis.setTimeout(() => {
@@ -171,13 +198,20 @@ async function fetchJson<T>(fetchImpl: typeof fetch, url: string, timeoutMs: num
     });
     const rawText = await response.text();
     if (!response.ok) {
-      throw new Error(`${url} failed: ${response.status} ${rawText.slice(0, 180)}`);
+      throw new Error(`${url} failed: ${response.status} ${redactDgxResponsePreview(rawText).slice(0, 180)}`);
     }
 
     return JSON.parse(rawText) as T;
   } finally {
     globalThis.clearTimeout(timeoutId);
   }
+}
+
+function redactDgxResponsePreview(value: string) {
+  return value
+    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "[redacted-secret]")
+    .replace(/\b(?:api[_-]?key|token|secret|authorization|bearer)\b[^\s"',;]*/gi, "[redacted-secret]")
+    .replace(/(?:\/Users|\/home)\/[^\s"',;]+/g, "[redacted-path]");
 }
 
 function createUnreachableRuntime(localRuntime: RuntimeSnapshot, checkedAt: string, error: string): RuntimeSnapshot {
@@ -254,4 +288,3 @@ export function updateRuntimeWithFsmState(
     updatedAt: checkedAt,
   };
 }
-

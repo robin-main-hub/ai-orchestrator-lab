@@ -33,6 +33,7 @@ import type {
   MemoryRecord,
   MemorySyncRequest,
   ModelDiscoverySnapshot,
+  OperatorCockpitSnapshot,
   PermissionAction,
   PermissionActor,
   PermissionDecision,
@@ -74,6 +75,7 @@ import {
   terminalCommandIntentSchema,
   terminalTimelineBlockSchema,
   type ProviderCompletionChunkEvent,
+  operatorCockpitSnapshotSchema,
 } from "@ai-orchestrator/protocol";
 import {
   ClaudeCliAdapter,
@@ -116,6 +118,7 @@ export type ServerCapability =
   | "tmux-dispatch-gate"
   | "tmux-capture-gate"
   | "approval-queue"
+  | "cockpit-readonly-snapshot"
   | "event-storage-sync"
   | "remote-event-stream-placeholder"
   | "memory-sync-placeholder";
@@ -749,6 +752,7 @@ export function createHealthResponse(now = new Date().toISOString(), probe?: Dgx
       "tmux-dispatch-gate",
       "tmux-capture-gate",
       "approval-queue",
+      "cockpit-readonly-snapshot",
       "event-storage-sync",
       "remote-event-stream-placeholder",
       "memory-sync-placeholder",
@@ -999,6 +1003,137 @@ export async function createServerProviderRegistrySnapshot(
     rawSecretPersisted: false,
     createdAt,
   };
+}
+
+export async function createServerOperatorCockpitSnapshot(
+  options: DgxProviderCompletionOptions & { eventStorage?: ServerEventStorageSnapshot } = {},
+): Promise<OperatorCockpitSnapshot> {
+  const timestamp = options.now ?? new Date().toISOString();
+  const [runtime, providerRegistry] = await Promise.all([
+    createLiveRuntimeSnapshot({
+      now: timestamp,
+      vllmBaseUrl: options.vllmBaseUrl,
+      fetchImpl: options.fetchImpl,
+      timeoutMs: options.timeoutMs,
+    }),
+    createServerProviderRegistrySnapshot({
+      now: timestamp,
+      fetchImpl: options.fetchImpl,
+      timeoutMs: options.timeoutMs,
+    }),
+  ]);
+  const selectedProvider =
+    providerRegistry.entries.find((entry) => entry.secretAvailability === "available" && entry.selectedModelId) ??
+    providerRegistry.entries.find((entry) => entry.selectedModelId) ??
+    providerRegistry.entries[0];
+  const missingSecrets = providerRegistry.entries.filter((entry) => entry.secretAvailability === "missing");
+  const expiredSecrets = providerRegistry.entries.filter((entry) => entry.secretAvailability === "expired");
+  const revokedSecrets = providerRegistry.entries.filter((entry) => entry.secretAvailability === "revoked");
+  const unavailableProviders = [...missingSecrets, ...expiredSecrets, ...revokedSecrets];
+  const outboxCount = runtime.syncTopology.clients.reduce((sum, client) => sum + client.outboxCount, 0);
+  const dgxMirrorHealth =
+    runtime.dgxStatus === "online"
+      ? runtime.memorySyncStatus === "degraded"
+        ? "degraded"
+        : "healthy"
+      : "disconnected";
+  const outboxSyncStatus =
+    runtime.memorySyncStatus === "offline"
+      ? "failed"
+      : runtime.memorySyncStatus === "syncing" || outboxCount > 0
+        ? "pending"
+        : "synced";
+  const vllmWorkerStatus = runtime.dgxStatus === "online" ? "idle" : "error";
+  const providerWorkerStatus = providerRegistry.summary.ready > 0 ? "idle" : "blocked";
+  const eventStorageStatus = options.eventStorage
+    ? options.eventStorage.revision > 0 || options.eventStorage.sessionCount > 0
+      ? "idle"
+      : "waiting_approval"
+    : "waiting_approval";
+  const selectedModelId = selectedProvider?.selectedModelId ?? selectedProvider?.defaultModelIds[0] ?? "unavailable";
+  const healthIndicators = [
+    `Provider registry: ${providerRegistry.summary.ready}/${providerRegistry.summary.total} ready`,
+    options.eventStorage
+      ? `Event storage: ${options.eventStorage.mode}, ${options.eventStorage.eventCount} events, revision ${options.eventStorage.revision}`
+      : "Event storage: unavailable in this snapshot",
+    runtime.dgxStatus === "online" ? "DGX runtime reachable" : "DGX runtime unreachable; desktop fallback remains authoritative",
+  ];
+
+  if (runtime.recentError) {
+    healthIndicators.push(`Runtime warning: ${redactSecretsForLog(runtime.recentError).slice(0, 180)}`);
+  }
+
+  const snapshot: OperatorCockpitSnapshot = {
+    id: `server-cockpit-${timestamp.replace(/[-:.TZ]/g, "")}`,
+    timestamp,
+    fleet: [
+      {
+        workerId: "server-provider-registry",
+        role: "orchestrator",
+        status: providerWorkerStatus,
+        statusRingColor: providerRegistry.summary.ready > 0 ? "green" : "red",
+        blockedReason: providerRegistry.summary.ready > 0 ? undefined : "No server-backed providers are ready",
+        securityTier: "tmux",
+      },
+      {
+        workerId: "server-event-storage",
+        role: "memory_curator",
+        status: eventStorageStatus,
+        statusRingColor: eventStorageStatus === "idle" ? "green" : "yellow",
+        securityTier: "container",
+      },
+      {
+        workerId: "server-dgx-runtime",
+        role: "executor",
+        status: vllmWorkerStatus,
+        statusRingColor: vllmWorkerStatus === "idle" ? "green" : "red",
+        blockedReason: vllmWorkerStatus === "error" ? "DGX runtime probe is unreachable" : undefined,
+        securityTier: "tmux",
+      },
+    ],
+    approvals: unavailableProviders.map((entry) => ({
+      blockReason: `${entry.name} credential is ${entry.secretAvailability}`,
+      evidenceRefs: [
+        {
+          id: `provider:${entry.providerProfileId}`,
+          kind: "routine_reference",
+          reference: entry.providerProfileId,
+          summary: `${entry.authMode} provider registry readiness`,
+          observedAt: entry.updatedAt,
+        },
+      ],
+      commandPreview: entry.modelDiscoveryEndpoint ? `GET ${entry.modelDiscoveryEndpoint}` : undefined,
+      payloadBindingStatus: "unbound",
+      tamperWarning: false,
+      securityRisk: "Provider is unavailable until the server-side secret/session is restored.",
+    })),
+    handoffs: [],
+    memory: {
+      contextReasons: [
+        "Server provider registry readiness",
+        "DGX runtime reachability",
+        "Persistent event storage revision",
+      ],
+      macBookAuthorityEnabled: runtime.syncTopology.authorityLabel === "MacBook Pro",
+      dgxMirrorHealth,
+      contradictionWarnings: runtime.recentError ? [redactSecretsForLog(runtime.recentError).slice(0, 180)] : [],
+    },
+    routing: {
+      selectedModelId,
+      fallbackStatus: providerRegistry.summary.ready > 1 ? "available" : "none",
+      costBadge: selectedModelId.toLowerCase().includes("opus") ? "high" : "medium",
+      speedBadge: selectedModelId.toLowerCase().includes("mini") ? "fast" : "average",
+      trustBadge: selectedProvider?.trustLevel ?? "limited",
+    },
+    recovery: {
+      offlineResumeSupported: runtime.syncTopology.offlineWritePolicy === "append_local_outbox_when_offline",
+      outboxSyncStatus,
+      healthIndicators,
+    },
+    dispatchHistory: [],
+  };
+
+  return operatorCockpitSnapshotSchema.parse(snapshot) as OperatorCockpitSnapshot;
 }
 
 async function createServerProviderRegistryEntry(
@@ -5287,6 +5422,12 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
 
     if (pathname === "/provider-registry") {
       respondJson(200, await createServerProviderRegistrySnapshot());
+      return;
+    }
+
+    if (pathname === "/cockpit/snapshot" && request.method === "GET") {
+      const storageSnapshot = redactInternalPathsForPublicHealth(await createPersistentEventStorageSnapshot(eventStorage));
+      respondJson(200, await createServerOperatorCockpitSnapshot({ eventStorage: storageSnapshot }));
       return;
     }
 

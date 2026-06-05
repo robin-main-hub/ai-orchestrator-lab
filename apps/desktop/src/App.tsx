@@ -59,7 +59,7 @@ import {
   isDgxRoutedProvider,
   requestDgxProviderCompletion,
 } from "./runtime/stage12DgxProvider";
-import { probeDgxOrchestratorServer } from "./runtime/stage13DgxServer";
+import { fetchDgxOperatorCockpitSnapshot, probeDgxOrchestratorServer } from "./runtime/stage13DgxServer";
 import { DEFAULT_DGX_SERVER_BASE_URL, resolveDgxServerBaseUrls } from "./runtime/stage30DgxEndpoints";
 import { createDgxOrchestratorJsonHeaders } from "./runtime/stage31DgxAuth";
 import { probeDgxProviderRoutes, type Stage32DgxRouteDiagnosticSnapshot } from "./runtime/stage32DgxRouteDiagnostics";
@@ -208,6 +208,13 @@ import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 
 const CENTER_MODE_STORAGE_KEY = "ai-orchestrator.center-mode.v1";
 
+type RemoteCockpitSnapshotState = {
+  status: "idle" | "loading" | "loaded" | "failed";
+  snapshot?: OperatorCockpitSnapshot;
+  error?: string;
+  loadedAt?: string;
+};
+
 export function App() {
   const [mode, setMode] = useState<CenterMode>(() =>
     readJsonState(CENTER_MODE_STORAGE_KEY, "cockpit", parseStoredCenterMode),
@@ -216,6 +223,9 @@ export function App() {
   const lastFocusedIdByModeRef = useRef<FocusHistory>({});
   const [runtimeSnapshotState, setRuntimeSnapshotState] = useState<RuntimeSnapshot>(runtimeSnapshot);
   const [dgxRouteDiagnostics, setDgxRouteDiagnostics] = useState<Stage32DgxRouteDiagnosticSnapshot>();
+  const [remoteCockpitSnapshotState, setRemoteCockpitSnapshotState] = useState<RemoteCockpitSnapshotState>({
+    status: "idle",
+  });
   const [activeNavItem, setActiveNavItem] = useState<NavItemId>("sessions");
   const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -2639,6 +2649,46 @@ export function App() {
     onHelp: () => setCheatSheetOpen((o) => !o),
   });
 
+  useEffect(() => {
+    if (mode !== "cockpit") return;
+
+    if (runtimeSnapshotState.dgxStatus === "offline") {
+      setRemoteCockpitSnapshotState({
+        status: "failed",
+        error: "DGX-02 offline; local cockpit snapshot is active",
+      });
+      return;
+    }
+
+    let active = true;
+    setRemoteCockpitSnapshotState((current) => ({
+      ...current,
+      status: current.snapshot ? "loaded" : "loading",
+      error: undefined,
+    }));
+
+    fetchDgxOperatorCockpitSnapshot({ timeoutMs: 1_500 })
+      .then((snapshot) => {
+        if (!active) return;
+        setRemoteCockpitSnapshotState({
+          status: "loaded",
+          snapshot,
+          loadedAt: new Date().toISOString(),
+        });
+      })
+      .catch((error) => {
+        if (!active) return;
+        setRemoteCockpitSnapshotState({
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [mode, runtimeSnapshotState.dgxStatus, runtimeSnapshotState.updatedAt]);
+
   const derivedCockpitSnapshot: OperatorCockpitSnapshot = useMemo(() => {
     // Determine memory health
     let dgxMirrorHealth: "healthy" | "degraded" | "disconnected" = "healthy";
@@ -2945,6 +2995,34 @@ export function App() {
     eventSyncState.lastError,
     tmuxRedispatchOutcomes,
   ]);
+
+  const cockpitSnapshot: OperatorCockpitSnapshot = useMemo(() => {
+    let serverIndicator = "Server cockpit snapshot: local fallback active";
+
+    if (remoteCockpitSnapshotState.status === "loading") {
+      serverIndicator = "Server cockpit snapshot: syncing";
+    } else if (remoteCockpitSnapshotState.status === "loaded" && remoteCockpitSnapshotState.snapshot) {
+      const providerReady = remoteCockpitSnapshotState.snapshot.recovery.healthIndicators.find((indicator) =>
+        indicator.startsWith("Provider registry:"),
+      );
+      serverIndicator = providerReady
+        ? `Server cockpit snapshot synced: ${providerReady}`
+        : `Server cockpit snapshot synced at ${remoteCockpitSnapshotState.snapshot.timestamp}`;
+    } else if (remoteCockpitSnapshotState.status === "failed" && remoteCockpitSnapshotState.error) {
+      serverIndicator = `Server cockpit snapshot fallback: ${remoteCockpitSnapshotState.error.slice(0, 120)}`;
+    }
+
+    return {
+      ...derivedCockpitSnapshot,
+      recovery: {
+        ...derivedCockpitSnapshot.recovery,
+        healthIndicators: [
+          ...derivedCockpitSnapshot.recovery.healthIndicators,
+          serverIndicator,
+        ],
+      },
+    };
+  }, [derivedCockpitSnapshot, remoteCockpitSnapshotState]);
 
   const shellVisibility = getConversationShellVisibility({
     configLibraryActive,
@@ -3283,7 +3361,7 @@ export function App() {
           ) : mode === "cockpit" ? (
             <OperatorCockpit
               onPreviewEvidence={() => setApprovalDrawerOpen(true)}
-              snapshot={derivedCockpitSnapshot}
+              snapshot={cockpitSnapshot}
             />
           ) : mode === "annex" ? (
             <DebateAnnexPage
