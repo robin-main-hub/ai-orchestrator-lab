@@ -1,5 +1,10 @@
 import { useState } from "react";
-import type { ApprovalRequest, ApprovalState } from "@ai-orchestrator/protocol";
+import {
+  tmuxPaneRoleSchema,
+  type ApprovalRequest,
+  type ApprovalState,
+  type TmuxPaneRole,
+} from "@ai-orchestrator/protocol";
 import {
   requestTmuxDispatch,
   requestTmuxPreflight,
@@ -13,6 +18,17 @@ import {
   type DesktopApprovalListResponse,
 } from "../runtime/stage34ApprovalServer";
 import type { TmuxRedispatchOutcome } from "../components/OperationsRailPanel";
+
+export type TmuxOutcome = {
+  role: TmuxPaneRole;
+  action: "approved" | "rejected" | "replayed";
+  status: TmuxRedispatchOutcome["status"];
+  reason: string;
+  approvalId?: string;
+  sourceItemId?: string;
+  commandPreview?: string;
+  outputPreview?: string;
+};
 
 export type ApprovalQueueController = {
   approvalServerSnapshot?: DesktopApprovalListResponse;
@@ -34,9 +50,10 @@ export type ApprovalQueueController = {
 
 export type UseApprovalQueueControllerParams = {
   appendEvent: (type: string, payload: unknown) => void;
+  onTmuxOutcome?: (outcome: TmuxOutcome) => void;
 };
 
-export function useApprovalQueueController({ appendEvent }: UseApprovalQueueControllerParams): ApprovalQueueController {
+export function useApprovalQueueController({ appendEvent, onTmuxOutcome }: UseApprovalQueueControllerParams): ApprovalQueueController {
   const [approvalServerSnapshot, setApprovalServerSnapshot] = useState<DesktopApprovalListResponse>();
   const [approvalServerStatus, setApprovalServerStatus] = useState<"idle" | "loading" | "error" | "ready">("idle");
   const [approvalServerError, setApprovalServerError] = useState("");
@@ -143,12 +160,22 @@ export function useApprovalQueueController({ appendEvent }: UseApprovalQueueCont
             const outcome: TmuxRedispatchOutcome = {
               approvalId: approval.id,
               createdAt: new Date().toISOString(),
-              reason: dispatch?.reason ?? "server replay completed",
+              reason: dispatch?.reason ?? "서버 재실행 완료",
               role: extractReplayRole(approval.replay.payload) ?? "orchestrator",
               sourceItemId: approval.sourceItemId,
               status: dispatch?.status ?? "recorded",
             };
             setTmuxRedispatchOutcomes((current) => [outcome, ...current].slice(0, 5));
+            onTmuxOutcome?.({
+              role: outcome.role,
+              action: "replayed",
+              status: outcome.status,
+              reason: outcome.reason,
+              approvalId: approval.id,
+              sourceItemId: approval.sourceItemId,
+              commandPreview: extractReplayCommandPreview(approval.replay.payload),
+              outputPreview: dispatch?.reason,
+            });
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -216,6 +243,16 @@ export function useApprovalQueueController({ appendEvent }: UseApprovalQueueCont
             status: approvedDispatch.dispatch.status,
           };
           setTmuxRedispatchOutcomes((current) => [outcome, ...current].slice(0, 5));
+          onTmuxOutcome?.({
+            role: pendingTmuxRequest.role,
+            action: "approved",
+            status: approvedDispatch.dispatch.status,
+            reason: approvedDispatch.dispatch.reason,
+            approvalId: approval.id,
+            sourceItemId: approval.sourceItemId,
+            commandPreview: pendingTmuxRequest.commandPreview,
+            outputPreview: approvedDispatch.dispatch.reason,
+          });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           setApprovalServerError(`승인은 완료됐지만 tmux 재전송에 실패: ${message}`);
@@ -236,7 +273,35 @@ export function useApprovalQueueController({ appendEvent }: UseApprovalQueueCont
             status: "failed",
           };
           setTmuxRedispatchOutcomes((current) => [outcome, ...current].slice(0, 5));
+          onTmuxOutcome?.({
+            role: pendingTmuxRequest.role,
+            action: "approved",
+            status: "failed",
+            reason: message,
+            approvalId: approval.id,
+            sourceItemId: approval.sourceItemId,
+            commandPreview: pendingTmuxRequest.commandPreview,
+          });
         }
+      } else if (state === "rejected" && pendingTmuxRequest) {
+        const outcome: TmuxRedispatchOutcome = {
+          approvalId: approval.id,
+          createdAt: new Date().toISOString(),
+          reason: `운영자가 거부함: ${approval.reason}`,
+          role: pendingTmuxRequest.role,
+          sourceItemId: approval.sourceItemId,
+          status: "blocked",
+        };
+        setTmuxRedispatchOutcomes((current) => [outcome, ...current].slice(0, 5));
+        onTmuxOutcome?.({
+          role: pendingTmuxRequest.role,
+          action: "rejected",
+          status: "blocked",
+          reason: `운영자가 거부함: ${approval.reason}`,
+          approvalId: approval.id,
+          sourceItemId: approval.sourceItemId,
+          commandPreview: pendingTmuxRequest.commandPreview,
+        });
       }
       if (pendingTmuxRequest || state === "rejected") {
         setPendingTmuxDispatchByApprovalKey((current) => {
@@ -293,12 +358,21 @@ function extractTmuxDispatchReplay(result: unknown): { reason?: string; status?:
   };
 }
 
-function extractReplayRole(payload: unknown): TmuxRedispatchOutcome["role"] | undefined {
+function extractReplayRole(payload: unknown): TmuxPaneRole | undefined {
   if (!payload || typeof payload !== "object") {
     return undefined;
   }
   const role = (payload as { role?: unknown }).role;
-  return typeof role === "string" ? role : undefined;
+  const parsed = tmuxPaneRoleSchema.safeParse(role);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function extractReplayCommandPreview(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object") {
+    return undefined;
+  }
+  const commandPreview = (payload as { commandPreview?: unknown }).commandPreview;
+  return typeof commandPreview === "string" ? commandPreview : undefined;
 }
 
 function isTmuxRedispatchStatus(value: unknown): value is TmuxRedispatchOutcome["status"] {

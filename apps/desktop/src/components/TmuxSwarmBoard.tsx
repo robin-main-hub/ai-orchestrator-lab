@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { Terminal } from "lucide-react";
 import type {
   ApprovalRequest,
@@ -42,6 +42,14 @@ export function TmuxSwarmBoard({
   messages,
   onApprovalQueued,
   packet,
+  commandDrafts,
+  onCommandDraftChange,
+  statuses,
+  onStatusChange,
+  outputs,
+  onOutputChange,
+  timelineBlocks,
+  onTimelineBlocksChange,
 }: {
   activeSessionId: string;
   agentActivityById: Record<string, AgentActivityStatus>;
@@ -50,16 +58,18 @@ export function TmuxSwarmBoard({
   messages: ConversationMessage[];
   onApprovalQueued?: (input: TmuxApprovalQueuedInput) => void;
   packet: CodingPacket;
+  commandDrafts: Record<string, string>;
+  onCommandDraftChange: Dispatch<SetStateAction<Record<string, string>>>;
+  statuses: Record<string, string>;
+  onStatusChange: Dispatch<SetStateAction<Record<string, string>>>;
+  outputs: Record<string, string>;
+  onOutputChange: Dispatch<SetStateAction<Record<string, string>>>;
+  timelineBlocks: Record<string, TerminalTimelineBlock[]>;
+  onTimelineBlocksChange: Dispatch<SetStateAction<Record<string, TerminalTimelineBlock[]>>>;
 }) {
   const roleAgent = (role: WorkbenchAgent["role"]) => agents.find((agent) => agent.role === role);
   const recommendation = createTmuxSwarmRecommendation(packet, messages);
-  const [commandDraftByRole, setCommandDraftByRole] = useState<Record<string, string>>({});
-  const [runtimeStatusByRole, setRuntimeStatusByRole] = useState<Record<string, string>>({});
-  const [paneOutputByRole, setPaneOutputByRole] = useState<Record<string, string>>({});
   const [busyByRole, setBusyByRole] = useState<Record<string, PaneBusyState | undefined>>({});
-  const [timelineBlocksByRole, setTimelineBlocksByRole] = useState<
-    Record<string, TerminalTimelineBlock[]>
-  >({});
   const [boardNotice, setBoardNotice] = useState(
     "DGX-02 tmux 게이트 준비됨. 실제 send-keys는 서버 env gate와 승인 이후에만 실행됩니다.",
   );
@@ -67,14 +77,14 @@ export function TmuxSwarmBoard({
   const visiblePanes = panes.slice(0, recommendation.recommendedCount);
 
   function appendBlock(roleKey: TmuxPaneRole, block: TerminalTimelineBlock) {
-    setTimelineBlocksByRole((current) => ({
+    onTimelineBlocksChange((current) => ({
       ...current,
       [roleKey]: [...(current[roleKey] ?? []), block],
     }));
   }
 
   function updateCommandDraft(role: TmuxPaneRole, value: string) {
-    setCommandDraftByRole((current) => ({
+    onCommandDraftChange((current) => ({
       ...current,
       [role]: value,
     }));
@@ -82,7 +92,7 @@ export function TmuxSwarmBoard({
 
   async function handleCapturePane(pane: TmuxPaneDefinition) {
     setBusyByRole((current) => ({ ...current, [pane.roleKey]: "capture" }));
-    setRuntimeStatusByRole((current) => ({ ...current, [pane.roleKey]: "capturing" }));
+    onStatusChange((current) => ({ ...current, [pane.roleKey]: "capturing" }));
     try {
       const result = await requestTmuxCapture({
         request: {
@@ -97,8 +107,8 @@ export function TmuxSwarmBoard({
           createdAt: new Date().toISOString(),
         },
       });
-      setRuntimeStatusByRole((current) => ({ ...current, [pane.roleKey]: result.status }));
-      setPaneOutputByRole((current) => ({
+      onStatusChange((current) => ({ ...current, [pane.roleKey]: result.status }));
+      onOutputChange((current) => ({
         ...current,
         [pane.roleKey]: result.payload?.outputPreview || result.reason,
       }));
@@ -120,8 +130,8 @@ export function TmuxSwarmBoard({
       setBoardNotice(`${pane.title}: ${result.reason}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setRuntimeStatusByRole((current) => ({ ...current, [pane.roleKey]: "capture failed" }));
-      setPaneOutputByRole((current) => ({ ...current, [pane.roleKey]: message }));
+      onStatusChange((current) => ({ ...current, [pane.roleKey]: "capture failed" }));
+      onOutputChange((current) => ({ ...current, [pane.roleKey]: message }));
       setBoardNotice(`${pane.title}: capture 실패 - ${message}`);
     } finally {
       setBusyByRole((current) => ({ ...current, [pane.roleKey]: undefined }));
@@ -129,7 +139,7 @@ export function TmuxSwarmBoard({
   }
 
   async function handleDispatchPane(pane: TmuxPaneDefinition) {
-    const commandPreview = (commandDraftByRole[pane.roleKey] || defaultTmuxCommandForRole(pane.roleKey)).trim();
+    const commandPreview = (commandDrafts[pane.roleKey] || defaultTmuxCommandForRole(pane.roleKey)).trim();
     const request: DesktopTmuxDispatchRequest = {
       id: `tmux_dispatch_${pane.roleKey}_${Date.now()}`,
       sessionId: activeSessionId,
@@ -145,11 +155,11 @@ export function TmuxSwarmBoard({
     };
 
     setBusyByRole((current) => ({ ...current, [pane.roleKey]: "dispatch" }));
-    setRuntimeStatusByRole((current) => ({ ...current, [pane.roleKey]: "dispatching" }));
+    onStatusChange((current) => ({ ...current, [pane.roleKey]: "dispatching" }));
     try {
       const result = await requestTmuxDispatch({ request });
-      setRuntimeStatusByRole((current) => ({ ...current, [pane.roleKey]: result.dispatch.status }));
-      setPaneOutputByRole((current) => ({
+      onStatusChange((current) => ({ ...current, [pane.roleKey]: result.dispatch.status }));
+      onOutputChange((current) => ({
         ...current,
         [pane.roleKey]: result.approval
           ? `승인 대기: ${result.approval.reason}`
@@ -213,8 +223,8 @@ export function TmuxSwarmBoard({
       setBoardNotice(`${pane.title}: ${result.dispatch.reason}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setRuntimeStatusByRole((current) => ({ ...current, [pane.roleKey]: "dispatch failed" }));
-      setPaneOutputByRole((current) => ({ ...current, [pane.roleKey]: message }));
+      onStatusChange((current) => ({ ...current, [pane.roleKey]: "dispatch failed" }));
+      onOutputChange((current) => ({ ...current, [pane.roleKey]: message }));
       setBoardNotice(`${pane.title}: dispatch 실패 - ${message}`);
     } finally {
       setBusyByRole((current) => ({ ...current, [pane.roleKey]: undefined }));
@@ -268,19 +278,19 @@ export function TmuxSwarmBoard({
           {visiblePanes.map((pane) => (
             <TmuxPaneCard
               busy={busyByRole[pane.roleKey]}
-              commandDraft={commandDraftByRole[pane.roleKey] ?? defaultTmuxCommandForRole(pane.roleKey)}
+              commandDraft={commandDrafts[pane.roleKey] ?? defaultTmuxCommandForRole(pane.roleKey)}
               key={pane.id}
-              lastOutput={paneOutputByRole[pane.roleKey]}
+              lastOutput={outputs[pane.roleKey]}
               onCapture={() => void handleCapturePane(pane)}
               onCommandDraftChange={(value) => updateCommandDraft(pane.roleKey, value)}
               onDispatch={() => void handleDispatchPane(pane)}
               pane={{
                 ...pane,
                 state:
-                  runtimeStatusByRole[pane.roleKey] ??
+                  statuses[pane.roleKey] ??
                   (pane.agent ? agentActivityById[pane.agent.id] ?? pane.state : pane.state),
               }}
-              timelineBlocks={timelineBlocksByRole[pane.roleKey] ?? []}
+              timelineBlocks={timelineBlocks[pane.roleKey] ?? []}
               visual={pane.agent ? agentVisualsById[pane.agent.id] : undefined}
             />
           ))}
