@@ -2456,6 +2456,7 @@ export function App() {
     onSwitchConversation: () => setMode("conversation"),
     onSwitchDebate: () => setMode("debate"),
     onSwitchTmux: () => setMode("tmux"),
+    onSwitchCockpit: () => setMode("cockpit"),
     onControlQueue: () => setApprovalDrawerOpen((open) => !open),
     onMementoRemember: handleRememberCurrentContext,
     onApprove: () => handleResolveNextPermission("approved"),
@@ -2479,6 +2480,8 @@ export function App() {
   return (
     <div
       className={`app-shell ${mode === "tmux" ? "tmux-focus-shell" : ""} ${
+        mode === "cockpit" ? "cockpit-focus-shell" : ""
+      } ${
         mode === "conversation" && !configLibraryActive ? "conversation-v0-shell" : ""
       }`}
       style={{
@@ -2791,7 +2794,7 @@ export function App() {
           ) : null}
         </section>
 
-        {mode === "tmux" ? null : (
+        {mode === "tmux" || mode === "cockpit" ? null : (
           <aside className="right-rail" aria-label="모델과 에이전트 상태">
             <AgentsSidebar
               agents={agents}
