@@ -25,6 +25,8 @@ export function AgentConfigDrawer({
   onUpdatePersona,
   persona,
   provider,
+  onReturn,
+  returnLabel,
 }: {
   activeTab: AgentConfigTab;
   agent: WorkbenchAgent;
@@ -35,6 +37,8 @@ export function AgentConfigDrawer({
   onUpdatePersona: (patch: Partial<AgentPersonaSettings>) => void;
   persona: AgentPersonaSettings;
   provider?: ProviderProfile;
+  onReturn?: () => void;
+  returnLabel?: string;
 }) {
   const soulFiles = configFiles.filter((file) => file.kind === "soul");
   const agentsFiles = configFiles.filter((file) => file.kind === "agents");
@@ -46,6 +50,20 @@ export function AgentConfigDrawer({
           <span>{agentConfigPanelTitle(activeTab)}</span>
           <strong>{agent.name}</strong>
         </div>
+        {onReturn && returnLabel ? (
+          <button
+            className="agent-config-reset-button"
+            onClick={onReturn}
+            type="button"
+            style={{
+              background: "rgba(6, 182, 212, 0.15)",
+              color: "var(--cyan)",
+              borderColor: "rgba(6, 182, 212, 0.3)",
+            }}
+          >
+            {returnLabel}
+          </button>
+        ) : null}
         <button
           className="agent-config-reset-button"
           onClick={() => onUpdatePersona(createDefaultPersonaSettings(agent))}
