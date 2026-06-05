@@ -1359,6 +1359,17 @@ export function evaluateServerProviderCompletionPermission(
     };
   }
 
+  if (config && !config.defaultModelIds.includes(request.modelId)) {
+    return {
+      action: "provider_completion",
+      approvalState: "rejected",
+      decision: "deny",
+      requestedLevels,
+      reason: "provider model is not registered in the DGX-02 proxy allowlist",
+      costEstimateTokens,
+    };
+  }
+
   if (costEstimateTokens > budgetPolicy.hardLimitTokens) {
     return {
       action: "provider_completion",
@@ -4562,6 +4573,19 @@ export async function createServerProviderProxyCompletionResponse(
       route: "server_proxy",
       status: "failed",
       error: "provider is not registered in the DGX-02 proxy allowlist",
+      createdAt,
+    };
+  }
+
+  if (!config.defaultModelIds.includes(request.modelId)) {
+    return {
+      id: `provider_completion_response_${crypto.randomUUID()}`,
+      requestId: request.id,
+      providerProfileId: request.providerProfileId,
+      modelId: request.modelId,
+      route: "server_proxy",
+      status: "failed",
+      error: "provider model is not registered in the DGX-02 proxy allowlist",
       createdAt,
     };
   }
