@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ApprovalQueueItem } from "@ai-orchestrator/protocol";
 import {
   createControlQueueAskItem,
+  createControlQueueBlockItem,
   createControlQueueDelegateHandoff,
   createControlQueueEditDraft,
 } from "./controlQueueWorkItems";
@@ -69,5 +70,19 @@ describe("controlQueueWorkItems", () => {
     expect(handoff.targetSurface).toBe("execution_slot");
     expect(handoff.approvalState).toBe("required");
     expect(handoff.missingInfo).toHaveLength(0);
+  });
+
+  it("block 버튼은 실행 슬롯에 차단 lane WorkItem을 남긴다", () => {
+    const item = createControlQueueBlockItem(baseApproval, {
+      createdAt: "2026-06-05T08:04:00.000Z",
+      sessionId: "session_main",
+    });
+
+    expect(item.lane).toBe("blocked");
+    expect(item.status).toBe("blocked");
+    expect(item.surface).toBe("execution_slot");
+    expect(item.priority).toBe("high");
+    expect(item.title).toContain("차단됨");
+    expect(item.evidenceRefs[0]?.reference).toBe("permission://terminal_run_1");
   });
 });

@@ -41,6 +41,7 @@ import { StatusBadge } from "@/ui/status-badge";
 export type ControlQueueDrawerProps = {
   onAsk: (item: ApprovalQueueItem) => void;
   onApprove: (sourceItemId: string) => void;
+  onBlock: (item: ApprovalQueueItem) => void;
   onClose: () => void;
   onDelegate: (item: ApprovalQueueItem) => void;
   onEdit: (item: ApprovalQueueItem) => void;
@@ -77,6 +78,7 @@ const FOCUSABLE_SELECTOR = [
 export function ControlQueueDrawer({
   onAsk,
   onApprove,
+  onBlock,
   onClose,
   onDelegate,
   onEdit,
@@ -247,6 +249,7 @@ export function ControlQueueDrawer({
               key={item.id}
               onAsk={onAsk}
               onApprove={onApprove}
+              onBlock={onBlock}
               onDelegate={onDelegate}
               onEdit={onEdit}
               onReject={onReject}
@@ -351,6 +354,7 @@ function QueueCard({
   item,
   onAsk,
   onApprove,
+  onBlock,
   onDelegate,
   onEdit,
   onReject,
@@ -359,6 +363,7 @@ function QueueCard({
   item: ApprovalQueueItem;
   onAsk: (item: ApprovalQueueItem) => void;
   onApprove: (sourceItemId: string) => void;
+  onBlock: (item: ApprovalQueueItem) => void;
   onDelegate: (item: ApprovalQueueItem) => void;
   onEdit: (item: ApprovalQueueItem) => void;
   onReject: (sourceItemId: string) => void;
@@ -433,7 +438,7 @@ function QueueCard({
           <ActionButton
             icon={<ShieldOff className="h-3 w-3 size-3" />}
             label="block"
-            onClick={() => onReject(item.sourceItemId)}
+            onClick={() => onBlock(item)}
             tone="destructive"
           />
         ) : null}
