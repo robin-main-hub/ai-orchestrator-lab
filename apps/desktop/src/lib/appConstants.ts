@@ -5,7 +5,7 @@ export const maxDraftAttachments = 5;
 export const agentVisualStorageKey = "ai-orchestrator-lab.agent-visuals.v1";
 export const providerProfilesStorageKey = "ai-orchestrator-lab.provider-profiles.v1";
 export const providerProfilesSeedVersionKey = "ai-orchestrator-lab.provider-profiles.seed-version";
-export const providerProfilesSeedVersion = "2026-06-04-claude-opus-4-8-default";
+export const providerProfilesSeedVersion = "2026-06-04-apifun-claude-4-6-default";
 export const defaultObsidianVaultRoot = "F:/obsidian/ai-headquarter";
 
 export const agentRoleOptions: WorkbenchAgent["role"][] = [
