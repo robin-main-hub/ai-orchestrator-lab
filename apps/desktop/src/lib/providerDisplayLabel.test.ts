@@ -19,6 +19,8 @@ describe("providerDisplayLabel", () => {
     ["Anthropic \uD638\uD658 \uD504\uB85C\uD30C\uC77C", "Claude"],
     ["DeepSeek DGX-02 Key", "DeepSeek (DGX)"],
     ["OpenRouter DGX-02 Key", "OpenRouter (DGX)"],
+    ["MiMo Token Plan OpenAI", "MiMo"],
+    ["MiMo Token Plan Anthropic", "MiMo"],
     ["Gemini", "Gemini"],
     ["unknown input", "unknown input"],
   ])("%s -> %s", (source, expected) => {
