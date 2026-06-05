@@ -26,11 +26,8 @@ import type {
 import { AgentConfigDrawer } from "../AgentConfigDrawer";
 
 // Sub-components
-import { WorkbenchHeader } from "./WorkbenchHeader";
 import { MessageThread } from "./MessageThread";
-import { ActionStrip } from "./ActionStrip";
 import { Composer } from "./Composer";
-import { InboxApprovalStrip } from "./ApprovalQueue";
 
 export function ConversationWorkbench({
   activeSessionId,
@@ -135,23 +132,7 @@ export function ConversationWorkbench({
   });
 
   return (
-    <section className="conversation-workbench flex h-full flex-col bg-background">
-      {/* ── Header ───────────────────────────────────────────────── */}
-      <WorkbenchHeader
-        agents={agents}
-        contextPackTier={contextPackTier}
-        memoryMode={memoryMode}
-        onContextPackTierChange={onContextPackTierChange}
-        onOpenAgentConfig={onOpenAgentConfig}
-        onSelectAgent={onSelectAgent}
-        persona={persona}
-        selectedAgent={selectedAgent}
-        selectedAgentId={selectedAgentId}
-        selectedModel={selectedModel}
-        selectedProvider={selectedProvider}
-        sessionId={activeSessionId}
-      />
-
+    <section className="conversation-workbench flex h-full flex-col bg-zinc-950">
       {agentConfigPanel.open && selectedAgent && persona ? (
         <AgentConfigDrawer
           activeTab={agentConfigPanel.tab}
@@ -166,7 +147,6 @@ export function ConversationWorkbench({
         />
       ) : null}
 
-      {/* ── Message thread + inline panels ───────────────────────── */}
       <MessageThread
         messages={messages}
         selectedAgent={selectedAgent}
@@ -180,23 +160,6 @@ export function ConversationWorkbench({
         agentActivityById={agentActivityById}
       />
 
-      {/* ── Action strip ─────────────────────────────────────────── */}
-      <ActionStrip
-        adoptedBranchCount={adoptedBranchCount}
-        branchExperiments={branchExperiments}
-        canDelegate={canDelegate}
-        latestBranch={latestBranch}
-        onAdoptBranch={onAdoptBranch}
-        onBackupProjection={onBackupProjection}
-        onCreateAgentRun={onCreateAgentRun}
-        onCreateBranch={onCreateBranch}
-        onCreateCodingPacket={onCreateCodingPacket}
-        onImportTelegram={onImportTelegram}
-        onPromoteToDebate={onPromoteToDebate}
-        showOverflowBranchControls={workbenchVisibility.showOverflowBranchControls}
-      />
-
-      {/* ── Composer ─────────────────────────────────────────────── */}
       <Composer
         attachmentAccept={attachmentAccept}
         attachmentEnabled={attachmentEnabled}
@@ -212,9 +175,6 @@ export function ConversationWorkbench({
         selectedModel={selectedModel}
         showDelegationChips={workbenchVisibility.showComposerDelegationChips}
       />
-
-      {/* ── Assistant Inbox approval strip ───────────────────────── */}
-      <InboxApprovalStrip queue={permissionSnapshot.queue} />
     </section>
   );
 }

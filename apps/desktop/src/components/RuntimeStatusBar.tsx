@@ -1,22 +1,33 @@
-import { Activity, Brain, GitBranch, LayoutDashboard, MessageSquare, Search, Terminal, Menu } from "lucide-react";
+import {
+  Activity,
+  Brain,
+  LayoutDashboard,
+  MessageSquare,
+  Search,
+  Settings,
+  Scale,
+  Terminal,
+  Menu,
+} from "lucide-react";
+import type { ElementType } from "react";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
-import { StatusBadge } from "@/ui/status-badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
-import { providerDisplayLabel } from "../lib/helpers";
+import { StatusBadge } from "@/ui/status-badge";
 import type { CenterMode } from "../types";
 
-/**
- * Runtime status bar — v0 visual port (TopNav).
- *
- * source: docs/v0/v0-output/components/layout/top-nav.tsx +
- *         status-indicator.tsx
- *
- * v0 의 TopNav 는 [logo] [mode tabs] [⌘K + status dot] 3-zone 구조입니다.
- * 이 구조에 맞추어 헤더 좌측에 브랜드 로고, 중앙에 모드 전환 탭,
- * 우측에 ⌘K 명령 팔레트 실행 단추 및 상태 모니터를 통합 탑재하였습니다.
- */
+const modeConfig: Array<{
+  id: Exclude<CenterMode, "annex">;
+  label: string;
+  icon: ElementType;
+  shortLabel?: string;
+}> = [
+  { id: "conversation", label: "Conversation", icon: MessageSquare, shortLabel: "Chat" },
+  { id: "debate", label: "Debate", icon: Scale },
+  { id: "tmux", label: "Tmux", icon: Terminal },
+  { id: "cockpit", label: "Cockpit", icon: LayoutDashboard },
+];
 
 export function RuntimeStatusBar({
   mode,
@@ -35,261 +46,176 @@ export function RuntimeStatusBar({
   providerName: string;
   snapshot: RuntimeSnapshot;
 }) {
-  const runtimeNodes = snapshot?.runtimeNodes ?? [];
-  const primaryNode = runtimeNodes.find((node) => node?.isPrimary);
-  const dgxLabel = primaryNode?.label ?? snapshot?.syncTopology?.authorityLabel ?? "DGX";
-  const overallHealth = deriveHealth(snapshot);
-  const displayProviderName = providerDisplayLabel(providerName);
+  const health = deriveHealth(snapshot);
+  const healthLabel = {
+    healthy: "All systems operational",
+    degraded: "Some systems degraded",
+    critical: "System critical",
+    unknown: "System status unknown",
+  }[health];
+  const activeMode = mode === "annex" ? "debate" : mode;
 
   return (
-    <header className="status-bar flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border bg-card/50 px-4">
-      {/* Left: Brand logo + system status */}
-      <div className="flex min-w-0 items-center gap-4">
-        {/* Mobile Hamburger */}
+    <header className="status-bar flex h-12 shrink-0 items-center justify-between gap-4 border-b border-zinc-800/60 bg-zinc-950/90 px-4 backdrop-blur-xl">
+      <div className="flex min-w-0 items-center gap-3">
         <Button
-          variant="ghost"
-          size="icon"
-          className="mobile-menu-btn h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+          aria-label="Toggle Navigation"
+          className="mobile-menu-btn h-8 w-8 shrink-0 text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-100"
           onClick={onToggleDrawer}
+          size="icon"
           title="Toggle Navigation"
+          variant="ghost"
         >
           <Menu className="h-5 w-5" />
         </Button>
-
-        {/* Brand Block */}
-        <div className="flex items-center gap-2 select-none">
-          <div className="flex h-7 w-7 items-center justify-center rounded bg-primary/10 text-primary shrink-0">
-            <Brain className="h-4.5 w-4.5" />
+        <div className="flex select-none items-center gap-2">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-violet-600/20 text-violet-300">
+            <Brain className="h-4 w-4" />
           </div>
-          <div className="flex flex-col leading-tight hidden sm:flex">
-            <span className="text-[11px] font-bold text-foreground tracking-tight whitespace-nowrap">AI Orchestrator Lab</span>
-            <span className="text-[8.5px] text-muted-foreground whitespace-nowrap">desktop command room</span>
+          <div className="hidden flex-col leading-tight sm:flex">
+            <span className="whitespace-nowrap text-[11px] font-bold tracking-tight text-zinc-100">
+              AI Orchestrator
+            </span>
+            <span className="whitespace-nowrap text-[8.5px] text-zinc-500">
+              Lab
+            </span>
           </div>
         </div>
+      </div>
 
-        <span className="status-bar-meta-separator"><Separator /></span>
-
-        {/* Compact Meta Status Strip */}
-        <div className="status-bar-meta-strip flex items-center gap-3 text-[10px] text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <span>Active:</span>
-            <span className="font-semibold text-foreground" title={providerName}>{displayProviderName}</span>
-          </span>
-          <Separator />
-          <span className="flex items-center gap-1">
-            <span>{dgxLabel}:</span>
-            <StatusDot status={snapshot?.dgxStatus} />
-            <span className={cn("font-mono text-[9.5px]", statusToneClasses(snapshot?.dgxStatus))}>
-              {snapshot?.dgxStatus ?? "unknown"}
-            </span>
-          </span>
-          <Separator />
-          <span className="flex items-center gap-1">
-            <span>Local:</span>
-            <StatusDot status={snapshot?.localModelStatus} />
-            <span
+      <nav className="hidden items-center gap-1 rounded-lg border border-zinc-800/70 bg-zinc-900/70 p-1 md:flex">
+        {modeConfig.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeMode === item.id;
+          return (
+            <button
+              aria-label={`${item.label} mode`}
               className={cn(
-                "font-mono text-[9.5px]",
-                statusToneClasses(snapshot?.localModelStatus),
+                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+                isActive
+                  ? "bg-zinc-800 text-zinc-100 shadow-sm"
+                  : "text-zinc-500 hover:bg-zinc-800/50 hover:text-zinc-100",
               )}
+              data-focus-id={`mode-tab-${item.id}`}
+              key={item.id}
+              onClick={() => onChangeMode(item.id)}
+              title={item.label}
+              type="button"
             >
-              {snapshot?.localModelStatus ?? "unknown"}
-            </span>
-          </span>
-          {snapshot?.recentError ? (
-            <>
-              <Separator />
-              <span className="truncate max-w-[120px] text-destructive">{snapshot.recentError}</span>
-            </>
-          ) : null}
-        </div>
-      </div>
+              <Icon className="h-3.5 w-3.5" />
+              <span className="hidden lg:inline">{item.label}</span>
+              <span className="lg:hidden">{item.shortLabel ?? item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
 
-      {/* Center: Mode Switching tabs */}
-      <div className="flex items-center gap-0.5 bg-muted/20 p-0.5 rounded-md border border-border/30 h-8 select-none">
-        <Button
-          aria-label="Conversation mode"
-          data-focus-id="mode-tab-conversation"
-          variant={mode === "conversation" ? "secondary" : "ghost"}
-          size="sm"
-          className={cn(
-            "h-7 gap-1.5 px-3 text-[11px] font-medium transition-all",
-            mode === "conversation" ? "text-foreground bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-          )}
-          onClick={() => onChangeMode("conversation")}
-          title="Conversation"
-        >
-          <MessageSquare className="h-3 w-3" />
-          <span className="status-bar-mode-label">Conversation</span>
-        </Button>
-        <Button
-          aria-label="Debate mode"
-          data-focus-id="mode-tab-debate"
-          variant={mode === "debate" ? "secondary" : "ghost"}
-          size="sm"
-          className={cn(
-            "h-7 gap-1.5 px-3 text-[11px] font-medium transition-all",
-            mode === "debate" ? "text-foreground bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-          )}
-          onClick={() => onChangeMode("debate")}
-          title="Debate"
-        >
-          <GitBranch className="h-3 w-3" />
-          <span className="status-bar-mode-label">Debate</span>
-        </Button>
-        <Button
-          aria-label="Tmux mode"
-          data-focus-id="mode-tab-tmux"
-          variant={mode === "tmux" ? "secondary" : "ghost"}
-          size="sm"
-          className={cn(
-            "h-7 gap-1.5 px-3 text-[11px] font-medium transition-all",
-            mode === "tmux" ? "text-foreground bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-          )}
-          onClick={() => onChangeMode("tmux")}
-          title="Tmux"
-        >
-          <Terminal className="h-3 w-3" />
-          <span className="status-bar-mode-label">Tmux</span>
-        </Button>
-        <Button
-          aria-label="Operator Cockpit mode"
-          data-focus-id="mode-tab-cockpit"
-          variant={mode === "cockpit" ? "secondary" : "ghost"}
-          size="sm"
-          className={cn(
-            "h-7 gap-1.5 px-3 text-[11px] font-medium transition-all",
-            mode === "cockpit" ? "text-foreground bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-          )}
-          onClick={() => onChangeMode("cockpit")}
-          title="Operator Cockpit"
-        >
-          <LayoutDashboard className="h-3 w-3" />
-          <span className="status-bar-mode-label">Cockpit</span>
-        </Button>
-      </div>
-
-      {/* Right: health indicator + command trigger + probe action */}
       <div className="flex shrink-0 items-center gap-2">
-        {/* Command Palette Trigger Button */}
         <Button
           aria-label="Open command palette"
-          variant="outline"
-          size="sm"
-          className="h-7 gap-2 px-2.5 text-[11px] border-border/60 bg-muted/10 text-muted-foreground hover:text-foreground transition-all"
+          className="h-8 gap-2 border-zinc-800/80 bg-zinc-900/50 px-2.5 text-xs text-zinc-500 hover:bg-zinc-800/80 hover:text-zinc-100"
           onClick={onCommandPalette}
+          size="sm"
           title="Command palette"
+          variant="outline"
         >
-          <Search className="h-3 w-3" />
-          <span className="status-bar-command-label">Command...</span>
-          <kbd className="status-bar-command-kbd pointer-events-none select-none rounded bg-muted/60 px-1 font-mono text-[9px] font-medium border border-border/40">
+          <Search className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Command</span>
+          <kbd className="hidden rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[10px] font-medium text-zinc-400 sm:inline">
             ⌘K
           </kbd>
         </Button>
-
-        <Separator />
-
         <HealthIndicator
-          dgxStatus={snapshot?.dgxStatus}
-          dgxLabel={dgxLabel}
-          health={overallHealth}
-          localStatus={snapshot?.localModelStatus}
+          health={health}
+          onProbeDgx={onProbeDgx}
           providerName={providerName}
+          snapshot={snapshot}
+          title={healthLabel}
         />
-        <Button
-          className="status-bar-probe-btn h-7 gap-1.5 text-xs"
-          onClick={onProbeDgx}
-          size="sm"
-          variant="ghost"
-        >
-          <Activity className="h-3 w-3" />
-          Probe DGX
-        </Button>
       </div>
     </header>
   );
 }
 
-function Separator() {
-  return <span className="text-border">·</span>;
-}
-
-function StatusDot({ status }: { status?: string }) {
-  const tone = statusToneFromString(status);
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "h-1.5 w-1.5 rounded-full",
-        tone === "online" && "bg-status-online",
-        tone === "offline" && "bg-status-offline",
-        tone === "pending" && "bg-status-pending animate-pulse",
-        tone === "idle" && "bg-status-idle",
-      )}
-    />
-  );
-}
-
 function HealthIndicator({
-  dgxStatus,
-  dgxLabel,
   health,
-  localStatus,
+  onProbeDgx,
   providerName,
+  snapshot,
+  title,
 }: {
-  dgxStatus?: string;
-  dgxLabel?: string;
-  health: "healthy" | "degraded" | "error";
-  localStatus?: string;
-  providerName?: string;
+  health: "healthy" | "degraded" | "critical" | "unknown";
+  onProbeDgx: () => void;
+  providerName: string;
+  snapshot: RuntimeSnapshot;
+  title: string;
 }) {
-  const healthColor = {
-    healthy: "bg-success",
-    degraded: "bg-warning",
-    error: "bg-destructive",
+  const dotClass = {
+    critical: "bg-rose-500",
+    degraded: "bg-amber-500",
+    healthy: "bg-emerald-500",
+    unknown: "bg-zinc-500",
   }[health];
-  const healthLabel = {
-    healthy: "All systems operational",
-    degraded: "Some systems degraded",
-    error: "System error",
-  }[health];
+  const primaryNode = snapshot.runtimeNodes.find((node) => node.isPrimary);
+  const dgxLabel = primaryNode?.label ?? snapshot.syncTopology.authorityLabel ?? "DGX";
 
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button
-          aria-label={`System status: ${healthLabel}`}
-          className="relative flex h-6 w-6 items-center justify-center rounded-full transition-colors hover:bg-card/60"
-          type="button"
+        <Button
+          aria-label={`System health: ${title}`}
+          className="h-8 gap-2 px-2 text-xs text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-100"
+          size="sm"
+          variant="ghost"
         >
-          <span
-            className={cn(
-              "h-2 w-2 rounded-full",
-              healthColor,
-              health !== "healthy" && "animate-pulse",
-            )}
-          />
-        </button>
+          <span className={cn("h-2 w-2 rounded-full", dotClass, health !== "healthy" && "animate-pulse")} />
+          <Activity className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Health</span>
+        </Button>
       </PopoverTrigger>
       <PopoverContent
         align="end"
+        className="w-80 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/95 p-0 shadow-2xl backdrop-blur-xl"
         sideOffset={8}
-        className="w-72 overflow-hidden rounded-lg border border-border bg-card p-0 shadow-2xl"
       >
-        <div className="border-b border-border px-4 py-3">
+        <div className="border-b border-zinc-800 px-4 py-3">
           <div className="flex items-center gap-2">
-            <span className={cn("h-2 w-2 rounded-full", healthColor)} />
-            <span className="text-sm font-medium text-foreground">
-              {healthLabel}
-            </span>
+            <span className={cn("h-2 w-2 rounded-full", dotClass)} />
+            <h4 className="text-sm font-medium text-zinc-100">{title}</h4>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Active provider · {providerName ?? "Unknown"}
+          <p className="mt-1 text-xs text-zinc-500">
+            Runtime status overview · {providerName || "provider pending"}
           </p>
         </div>
         <div className="space-y-1 p-2">
-          <StatusRow label={dgxLabel ?? "DGX"} status={dgxStatus} />
-          <StatusRow label="Local" status={localStatus} />
+          <StatusRow label={dgxLabel} status={snapshot.dgxStatus} />
+          <StatusRow label="Local" status={snapshot.localModelStatus} />
+          <StatusRow label="Memory" status={snapshot.memorySyncStatus} />
+          <StatusRow label="Authority" status={snapshot.syncTopology.authorityLabel} />
+          {snapshot.recentError ? (
+            <div className="mt-2 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
+              <p className="line-clamp-3 text-xs text-rose-300">{snapshot.recentError}</p>
+            </div>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2 border-t border-zinc-800 p-2">
+          <Button
+            className="h-8 flex-1 justify-start text-xs text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-100"
+            onClick={onProbeDgx}
+            size="sm"
+            variant="ghost"
+          >
+            <Activity className="mr-2 h-3.5 w-3.5" />
+            Probe DGX
+          </Button>
+          <Button
+            className="h-8 flex-1 justify-start text-xs text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-100"
+            size="sm"
+            variant="ghost"
+          >
+            <Settings className="mr-2 h-3.5 w-3.5" />
+            Ops Detail
+          </Button>
         </div>
       </PopoverContent>
     </Popover>
@@ -298,8 +224,8 @@ function HealthIndicator({
 
 function StatusRow({ label, status }: { label: string; status?: string }) {
   return (
-    <div className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-card/60">
-      <span className="text-xs text-muted-foreground">{label}</span>
+    <div className="flex items-center justify-between rounded-md px-3 py-1.5 hover:bg-zinc-800/50">
+      <span className="text-xs text-zinc-500">{label}</span>
       <StatusBadge variant={statusToBadgeVariant(status)} size="sm">
         {status ?? "unknown"}
       </StatusBadge>
@@ -333,27 +259,13 @@ function statusToBadgeVariant(status?: string): "success" | "danger" | "warning"
   }
 }
 
-function statusToneClasses(status?: string): string {
-  const variant = statusToBadgeVariant(status);
-  switch (variant) {
-    case "success":
-      return "text-success";
-    case "danger":
-      return "text-destructive";
-    case "warning":
-      return "text-warning";
-    case "muted":
-    default:
-      return "text-muted-foreground";
-  }
-}
-
-function deriveHealth(snapshot?: RuntimeSnapshot): "healthy" | "degraded" | "error" {
-  if (!snapshot) return "error";
-  if (snapshot.recentError) return "error";
+function deriveHealth(snapshot?: RuntimeSnapshot): "healthy" | "degraded" | "critical" | "unknown" {
+  if (!snapshot) return "unknown";
+  if (snapshot.recentError) return "critical";
   const dgxTone = statusToneFromString(snapshot.dgxStatus);
   const localTone = statusToneFromString(snapshot.localModelStatus);
-  if (dgxTone === "offline" || localTone === "offline") return "error";
+  if (dgxTone === "offline") return "degraded";
+  if (localTone === "offline") return "critical";
   if (dgxTone === "pending" || localTone === "pending") return "degraded";
   return "healthy";
 }

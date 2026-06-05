@@ -18,19 +18,19 @@ describe("getConversationShellVisibility", () => {
     });
   });
 
-  it("keeps supporting shell surfaces available outside the focused conversation screen", () => {
+  it("keeps debate focused on the v0 Debate Chamber surface", () => {
     expect(
       getConversationShellVisibility({
         configLibraryActive: false,
         mode: "debate",
       }),
-    ).toMatchObject({
-      showCodingPacketPanel: true,
-      showEvolveMementoPanel: true,
-      showLeftRail: true,
-      showTerminalDock: true,
-      showToolbarActions: true,
-      showWorkItemHandoffPanel: true,
+    ).toEqual({
+      showCodingPacketPanel: false,
+      showEvolveMementoPanel: false,
+      showLeftRail: false,
+      showTerminalDock: false,
+      showToolbarActions: false,
+      showWorkItemHandoffPanel: false,
     });
   });
 
