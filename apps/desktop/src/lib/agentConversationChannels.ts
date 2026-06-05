@@ -140,8 +140,8 @@ function sanitizeMemoryScopePart(value: string): string {
   return value
     .replace(/https?:\/\/[^\s"'`<>)]+/gi, "redacted_url")
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/gi, "Bearer redacted_token")
-    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/gi, "redacted_key")
-    .replace(/\btp-[A-Za-z0-9_-]{8,}\b/gi, "redacted_token")
+    .replace(/sk-[A-Za-z0-9_-]{8,}/gi, "redacted_key")
+    .replace(/tp-[A-Za-z0-9_-]{8,}/gi, "redacted_token")
     .trim()
     .replace(/\s+/g, "_");
 }
