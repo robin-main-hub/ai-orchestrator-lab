@@ -13,11 +13,13 @@ import type { DraftAttachment, WorkbenchAgent } from "../../types";
 import {
   attachmentCapabilityLabel,
 } from "../../lib/helpers";
+import { getAgentToolBadgeLabels } from "../../lib/agentToolProfiles";
 
 export function Composer({
   attachmentAccept,
   attachmentEnabled,
   attachmentLimitReached,
+  continuityPlaceholder,
   draftAttachments,
   draftMessage,
   maxDraftAttachments,
@@ -32,6 +34,7 @@ export function Composer({
   attachmentAccept: string;
   attachmentEnabled: boolean;
   attachmentLimitReached: boolean;
+  continuityPlaceholder?: string;
   draftAttachments: DraftAttachment[];
   draftMessage: string;
   maxDraftAttachments: number;
@@ -46,13 +49,16 @@ export function Composer({
   const canSend =
     Boolean(selectedAgent) &&
     (draftMessage.trim().length > 0 || draftAttachments.length > 0);
+  const toolLabels = selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role).slice(0, 3) : [];
 
   return (
     <div className="shrink-0 border-t border-white/10 bg-zinc-950/90 shadow-[0_-20px_50px_rgba(0,0,0,0.28)] backdrop-blur-xl">
       {/* Delegation chips (companion only) */}
       {showDelegationChips ? (
         <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-2">
-          <span className="text-xs text-cyan-300">Delegation tools ready</span>
+          <span className="text-xs text-cyan-300">
+            도구 준비됨{toolLabels.length > 0 ? ` · ${toolLabels.join(", ")}` : ""}
+          </span>
         </div>
       ) : null}
 
@@ -112,7 +118,7 @@ export function Composer({
               event.preventDefault();
               if (canSend) onSendMessage();
             }}
-            placeholder={`${selectedAgent?.name ?? "봇"}에게 말 걸기`}
+            placeholder={continuityPlaceholder ?? `${selectedAgent?.name ?? "봇"}에게 말 걸기`}
             rows={1}
             value={draftMessage}
           />

@@ -17,6 +17,7 @@ import type {
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import type { WorkbenchAgent, PendingProviderRetry, AgentVisualSettings, AgentActivityStatus } from "../../types";
+import type { AgentChatContinuitySummary } from "../../lib/agentChatContinuity";
 import {
   formatAttachmentSize,
   getMessageAttachments,
@@ -38,6 +39,7 @@ export type DelegationPreviewItem = {
 };
 
 export function MessageThread({
+  agentChatContinuity,
   messages,
   selectedAgent,
   workbenchVisibility,
@@ -49,6 +51,7 @@ export function MessageThread({
   agentVisualsById,
   agentActivityById,
 }: {
+  agentChatContinuity: AgentChatContinuitySummary;
   messages: ConversationMessage[];
   selectedAgent?: WorkbenchAgent;
   workbenchVisibility: {
@@ -86,7 +89,7 @@ export function MessageThread({
             <DelegationInline items={delegationItems} />
           ) : null}
           {messages.length === 0 ? (
-            <EmptyConversation />
+            <EmptyConversation summary={agentChatContinuity} />
           ) : (
             messages.map((message) => (
               <MessageBubble
@@ -105,17 +108,17 @@ export function MessageThread({
   );
 }
 
-function EmptyConversation() {
+function EmptyConversation({ summary }: { summary: AgentChatContinuitySummary }) {
   return (
     <div className="flex min-h-[360px] flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/[0.03] px-6 py-16 text-center shadow-2xl shadow-black/30 backdrop-blur-xl">
       <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-400/25 bg-cyan-400/10 shadow-[0_0_32px_rgba(34,211,238,0.18)]">
         <Sparkles className="h-6 w-6 text-cyan-300" />
       </div>
       <h3 className="mt-5 text-base font-semibold text-zinc-100">
-        대화를 시작하세요
+        {summary.title}
       </h3>
       <p className="mt-2 max-w-sm text-xs leading-relaxed text-zinc-500">
-        아래 입력창에 메시지를 입력하면 대화가 시작됩니다.
+        {summary.detail}
         <br />
         <kbd className="mt-2 inline-flex rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-zinc-300">
           ⌘K
