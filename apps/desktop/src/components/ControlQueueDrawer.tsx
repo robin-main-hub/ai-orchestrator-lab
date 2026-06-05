@@ -58,7 +58,7 @@ const LANES: Array<{
   { id: "ask", label: "ask", icon: <HelpCircle className="h-3 w-3" />, status: "soon" },
   { id: "edit", label: "edit", icon: <Edit3 className="h-3 w-3" />, status: "soon" },
   { id: "delegate", label: "delegate", icon: <Forward className="h-3 w-3" />, status: "soon" },
-  { id: "block", label: "block", icon: <ShieldOff className="h-3 w-3" />, status: "soon" },
+  { id: "block", label: "block", icon: <ShieldOff className="h-3 w-3" />, status: "live" },
   { id: "archive", label: "archive", icon: <XCircle className="h-3 w-3" />, status: "live" }, // = reject
 ];
 
@@ -379,7 +379,7 @@ function QueueCard({
         {item.sourceItemId}
       </p>
 
-      {/* 6 lane actions inline (approve/archive live, others soon) */}
+      {/* 6 lane actions inline (approve/block/archive live, ask/edit/delegate wait for schema) */}
       <div className="grid grid-cols-3 gap-1 pt-1">
         <ActionButton
           icon={<Check className="h-3 w-3 size-3" />}
@@ -394,7 +394,12 @@ function QueueCard({
           icon={<Forward className="h-3 w-3 size-3" />}
           label="delegate"
         />
-        <ActionButton disabled icon={<ShieldOff className="h-3 w-3 size-3" />} label="block" />
+        <ActionButton
+          icon={<ShieldOff className="h-3 w-3 size-3" />}
+          label="block"
+          onClick={() => onReject(item.sourceItemId)}
+          tone="destructive"
+        />
         <ActionButton
           icon={<XCircle className="h-3 w-3 size-3" />}
           label="archive"

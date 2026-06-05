@@ -28,6 +28,9 @@ import { AgentConfigDrawer } from "../AgentConfigDrawer";
 // Sub-components
 import { MessageThread } from "./MessageThread";
 import { Composer } from "./Composer";
+import { WorkbenchHeader } from "./WorkbenchHeader";
+import { ActionStrip } from "./ActionStrip";
+import { InboxApprovalStrip } from "./ApprovalQueue";
 
 export function ConversationWorkbench({
   activeSessionId,
@@ -57,7 +60,6 @@ export function ConversationWorkbench({
   onSelectAgent,
   onSendMessage,
   onCloseAgentConfig,
-  onCloseAgentConfig: _unusedClose, // preserve interface signatures if needed
   onReturn,
   returnLabel,
   onOpenAgentConfig,
@@ -153,6 +155,21 @@ export function ConversationWorkbench({
         />
       ) : null}
 
+      <WorkbenchHeader
+        agents={agents}
+        contextPackTier={contextPackTier}
+        memoryMode={memoryMode}
+        onContextPackTierChange={onContextPackTierChange}
+        onOpenAgentConfig={onOpenAgentConfig}
+        onSelectAgent={onSelectAgent}
+        persona={persona}
+        selectedAgent={selectedAgent}
+        selectedAgentId={selectedAgentId}
+        selectedModel={selectedModel}
+        selectedProvider={selectedProvider}
+        sessionId={activeSessionId}
+      />
+
       <MessageThread
         messages={messages}
         selectedAgent={selectedAgent}
@@ -164,6 +181,21 @@ export function ConversationWorkbench({
         agents={agents}
         agentVisualsById={agentVisualsById}
         agentActivityById={agentActivityById}
+      />
+
+      <ActionStrip
+        adoptedBranchCount={adoptedBranchCount}
+        branchExperiments={branchExperiments}
+        canDelegate={canDelegate}
+        latestBranch={latestBranch}
+        onAdoptBranch={onAdoptBranch}
+        onBackupProjection={onBackupProjection}
+        onCreateAgentRun={onCreateAgentRun}
+        onCreateBranch={onCreateBranch}
+        onCreateCodingPacket={onCreateCodingPacket}
+        onImportTelegram={onImportTelegram}
+        onPromoteToDebate={onPromoteToDebate}
+        showOverflowBranchControls={workbenchVisibility.showOverflowBranchControls}
       />
 
       <Composer
@@ -181,6 +213,8 @@ export function ConversationWorkbench({
         selectedModel={selectedModel}
         showDelegationChips={workbenchVisibility.showComposerDelegationChips}
       />
+
+      <InboxApprovalStrip queue={permissionSnapshot.queue} />
     </section>
   );
 }
