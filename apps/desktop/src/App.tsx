@@ -896,6 +896,7 @@ export function App() {
     userMessage: ConversationMessage;
   }): Promise<WorkbenchCompletionResult> {
     if (!isDgxRoutedProvider(provider)) {
+      const recalledMemoryCount = memoryInspector.trace.results.filter((result) => result.usedInDecision).length;
       return {
         content: buildMockAssistantReply({
           content: userMessage.content,
@@ -903,8 +904,15 @@ export function App() {
           provider,
         }),
         metadata: {
+          modelId,
+          providerProfileId: provider.id,
           realProviderCall: false,
           route: "mock",
+          memoryTraceId: memoryInspector.trace.id,
+          recalledMemoryCount,
+          runtimeConfigFileIds: agentConfigFiles
+            .filter((configFile) => configFile.linkedAgentIds.includes(agent.id))
+            .map((configFile) => configFile.id),
           purpose,
         },
       };
@@ -940,6 +948,7 @@ export function App() {
       approvalState,
       permissionDecision,
     });
+    const pipelineMetadata = pipelineMessages[0]?.metadata ?? {};
     appendEvent("provider.completion.dgx.succeeded", {
       agentId: agent.id,
       providerProfileId: provider.id,
@@ -954,9 +963,14 @@ export function App() {
       content: result.content,
       metadata: {
         endpoint: result.endpoint,
+        modelId,
+        providerProfileId: provider.id,
         route: result.route,
         fallbackReason: result.fallbackReason,
         usage: result.usage,
+        memoryTraceId: pipelineMetadata.memoryTraceId,
+        recalledMemoryCount: pipelineMetadata.recalledMemoryCount,
+        runtimeConfigFileIds: pipelineMetadata.runtimeConfigFileIds,
         realProviderCall: true,
         purpose,
       },
