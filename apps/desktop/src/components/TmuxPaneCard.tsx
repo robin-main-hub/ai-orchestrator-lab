@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Clock3, Eye, Loader2, Send } from "lucide-re
 import type { TerminalTimelineBlock } from "@ai-orchestrator/protocol";
 import type { AgentVisualSettings, WorkbenchAgent } from "../types";
 import { agentRoleLabel } from "../lib/helpers";
+import { deriveTmuxPaneLifecycleSummary, type TmuxPaneLifecycleTone } from "../lib/tmuxPaneLifecycle";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
@@ -56,6 +57,11 @@ export function TmuxPaneCard({
 }) {
   const isIdle = pane.state === "idle";
   const [isTimelineOpen, setIsTimelineOpen] = useState(false);
+  const lifecycle = deriveTmuxPaneLifecycleSummary({
+    lastOutput,
+    paneState: pane.state,
+    timelineBlocks: timelineBlocks ?? [],
+  });
   return (
     <div className="flex min-h-[260px] flex-col rounded-lg border border-zinc-800/60 bg-zinc-900/40 shadow-xl shadow-black/25 backdrop-blur-xl transition-colors hover:border-zinc-700/60">
       {/* Header: avatar + title + status */}
@@ -118,6 +124,23 @@ export function TmuxPaneCard({
       <p className="line-clamp-2 px-3 py-2 text-[10px] text-zinc-500">
         {pane.signal}
       </p>
+
+      <div className="mx-3 mb-2 rounded-lg border border-white/[0.07] bg-black/20 p-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+            <span className={cn("h-1.5 w-1.5 rounded-full", lifecycleToneDot(lifecycle.tone))} />
+            {lifecycle.lastBlockLabel}
+          </span>
+          <span className={cn("shrink-0 text-[10px]", lifecycleToneText(lifecycle.tone))}>
+            {lifecycle.pendingApprovalCount > 0
+              ? `${lifecycle.pendingApprovalCount} approval`
+              : lifecycle.failedCount > 0
+                ? `${lifecycle.failedCount} blocked`
+                : lifecycle.tone}
+          </span>
+        </div>
+        <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-zinc-500">{lifecycle.detail}</p>
+      </div>
 
       {/* Command controls */}
       {onCapture || onDispatch ? (
@@ -213,4 +236,24 @@ function stateToBadgeVariant(state: string): "primary" | "success" | "warning" |
   if (state === "dispatch gated" || state === "pending_approval") return "warning";
   if (state === "guarding" || state === "failed" || state === "dispatch failed") return "danger";
   return "muted";
+}
+
+function lifecycleToneDot(tone: TmuxPaneLifecycleTone) {
+  const colors: Record<TmuxPaneLifecycleTone, string> = {
+    danger: "bg-rose-400",
+    idle: "bg-zinc-600",
+    ok: "bg-emerald-400",
+    warn: "bg-amber-400",
+  };
+  return colors[tone];
+}
+
+function lifecycleToneText(tone: TmuxPaneLifecycleTone) {
+  const colors: Record<TmuxPaneLifecycleTone, string> = {
+    danger: "text-rose-300",
+    idle: "text-zinc-500",
+    ok: "text-emerald-300",
+    warn: "text-amber-300",
+  };
+  return colors[tone];
 }
