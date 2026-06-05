@@ -167,6 +167,7 @@ import {
   resolveCockpitPayloadBindingStatus,
   sanitizeCockpitProjectionText,
 } from "./lib/cockpitProjectionHealth";
+import { createPermissionApprovalLedger } from "./lib/permissionApprovalLedger";
 import { seededProviderProfiles } from "./seeds/providers";
 import {
   initialDgxBridge,
@@ -2034,6 +2035,7 @@ export function App() {
       requestedBy: pendingItem.requestedBy,
     });
     appendEvent("permission.queue.updated", {
+      decidedBy: "desktop_operator",
       snapshotId: permissionSnapshot.id,
       sourceItemId: pendingItem.sourceItemId,
       state,
@@ -2852,16 +2854,6 @@ export function App() {
       memorySyncStatus: runtimeSnapshotState.memorySyncStatus,
     });
 
-    // Compact deterministic digest for replay payload display.
-    function createDeterministicDigest(input: string): string {
-      let hash = 0;
-      for (let i = 0; i < input.length; i++) {
-        hash = (hash * 31 + input.charCodeAt(i)) >>> 0;
-      }
-      const hex = hash.toString(16).padStart(8, "0");
-      return `${hex}${hex.split("").reverse().join("")}e58a2d3cf88ab41b7cd910f5`.padEnd(64, "0");
-    }
-
     return {
       id: activeSessionId || "global-cockpit",
       timestamp: new Date().toISOString(),
@@ -3002,51 +2994,10 @@ export function App() {
         outboxSyncStatus,
         healthIndicators,
       },
-      dispatchHistory: tmuxRedispatchOutcomes.map((o) => {
-        const requesterAgent = agents.find((a) => a.role === o.role || a.id === o.role);
-        const sourceMatrixItem = o.sourceItemId
-          ? permissionSnapshot.items.find((item) => item.id === o.sourceItemId)
-          : undefined;
-        const dispatchTamperWarning = sourceMatrixItem?.sourceTrust === "untrusted" || o.status === "blocked";
-
-        const stateMap: Record<string, "approved" | "rejected" | "required" | "not_required"> = {
-          sent: "approved",
-          recorded: "approved",
-          failed: "rejected",
-          blocked: "rejected",
-          pending_approval: "required",
-          dry_run: "not_required",
-        };
-        const approvalState = stateMap[o.status] || "approved";
-
-        const evidenceRefs = o.sourceItemId
-          ? [
-              {
-                id: o.sourceItemId,
-                kind: "routine_reference" as const,
-                reference: o.sourceItemId,
-                summary: `승인 출처: ${sanitizeCockpitProjectionText(o.sourceItemId)}`,
-              },
-            ]
-          : [];
-
-        return {
-          dispatchId: o.approvalId,
-          requesterAgentId: requesterAgent?.id || "system",
-          approvalState,
-          replayPayloadDigest: o.sourceItemId
-            ? createDeterministicDigest(`${o.approvalId}:${o.sourceItemId}`)
-            : "unavailable",
-          tamperWarning: dispatchTamperWarning,
-          tamperReason:
-            sourceMatrixItem?.sourceTrust === "untrusted"
-              ? `비신뢰 전송 출처: ${sanitizeCockpitProjectionText(sourceMatrixItem.channel)}`
-              : o.status === "blocked"
-                ? sanitizeCockpitProjectionText(o.reason || "차단됨")
-                : undefined,
-          evidenceRefs,
-          createdAt: o.createdAt || new Date().toISOString(),
-        };
+      dispatchHistory: createPermissionApprovalLedger({
+        decisionEvents: eventLog,
+        permissionSnapshot,
+        tmuxRedispatchOutcomes,
       }),
     };
   }, [
@@ -3069,6 +3020,7 @@ export function App() {
     selectedProvider,
     eventSyncState.status,
     eventSyncState.lastError,
+    eventLog,
     tmuxRedispatchOutcomes,
   ]);
 
