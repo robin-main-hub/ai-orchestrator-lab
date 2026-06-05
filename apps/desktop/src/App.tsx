@@ -2665,7 +2665,7 @@ export function App() {
         ) : null}
 
         <section
-          className={`center-board ${mode === "tmux" ? "tmux-center-board" : ""} ${
+          className={`center-board ${mode === "tmux" ? "tmux-center-board" : ""} ${mode === "cockpit" ? "cockpit-center-board" : ""} ${
             configLibraryActive ? "config-center-board" : ""
           }`}
         >
