@@ -5,10 +5,10 @@ import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
 import { badgeColorForPayload } from "./presentation";
 
-export function ApprovalEvidenceCard({ 
-  approvals, 
-  onPreview 
-}: { 
+export function ApprovalEvidenceCard({
+  approvals,
+  onPreview,
+}: {
   approvals: OperatorCockpitApprovalEvidence[];
   onPreview?: () => void;
 }) {
@@ -40,14 +40,18 @@ export function ApprovalEvidenceCard({
                   </div>
                   <p className="mt-1 text-sm leading-relaxed text-zinc-400">{approval.blockReason}</p>
                 </div>
-                <button
-                  aria-label="View approval details"
-                  className="rounded p-1.5 text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
-                  onClick={onPreview}
-                  type="button"
-                >
-                  <Eye className="h-4 w-4 shrink-0" />
-                </button>
+                {onPreview ? (
+                  <button
+                    aria-label="View approval details"
+                    className="rounded p-1.5 text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+                    onClick={onPreview}
+                    type="button"
+                  >
+                    <Eye className="h-4 w-4 shrink-0" />
+                  </button>
+                ) : (
+                  <Eye aria-hidden className="h-4 w-4 shrink-0 text-zinc-600" />
+                )}
               </div>
 
               {approval.commandPreview && (

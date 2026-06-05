@@ -427,7 +427,7 @@ function ActionButton({
       variant={buttonVariant}
       className={cn(
         "h-7 gap-1 px-1.5 text-[10px] font-mono transition-all",
-        disabled && "cursor-not-allowed opacity-30 border-dashed bg-transparent hover:bg-transparent"
+        disabled && "cursor-not-allowed border-dashed bg-transparent opacity-30 hover:bg-transparent",
       )}
       disabled={disabled}
       onClick={onClick}

@@ -161,7 +161,6 @@ import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
 import { OperatorCockpit } from "./components/operator-cockpit/OperatorCockpit";
 import { mockSnapshot } from "./components/operator-cockpit/fixtures/mockSnapshot";
 import { AgentsSidebar } from "./components/AgentsSidebar";
-
 import { BackupRailMenu } from "./components/BackupRailMenu";
 import { ChannelRailPanel } from "./components/ChannelRailPanel";
 import { CodingPacketPanel } from "./components/CodingPacketPanel";
@@ -2788,7 +2787,10 @@ export function App() {
               packet={codingPacketState}
             />
           ) : mode === "cockpit" ? (
-            <OperatorCockpit snapshot={mockSnapshot} />
+            <OperatorCockpit
+              onPreviewEvidence={() => setApprovalDrawerOpen(true)}
+              snapshot={mockSnapshot}
+            />
           ) : mode === "annex" ? (
             <DebateAnnexPage
               codingPacketGoal={codingPacketState.goal}
