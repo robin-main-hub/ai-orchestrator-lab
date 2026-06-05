@@ -135,6 +135,7 @@ import { getConversationRailLayout } from "./lib/conversationRailLayout";
 import { getConversationShellVisibility } from "./lib/conversationShellVisibility";
 import {
   createControlQueueAskItem,
+  createControlQueueBlockItem,
   createControlQueueDelegateHandoff,
   createControlQueueEditDraft,
 } from "./lib/controlQueueWorkItems";
@@ -2143,6 +2144,24 @@ export function App() {
     });
   }
 
+  function handleControlQueueBlock(item: ApprovalQueueItem) {
+    const createdAt = new Date().toISOString();
+    const workItem = createControlQueueBlockItem(item, {
+      createdAt,
+      sessionId: activeSessionId,
+    });
+
+    prependWorkItem(workItem);
+    handleResolvePermissionItem(item.sourceItemId, "rejected");
+    setApprovalDrawerOpen(false);
+    appendEvent("control_queue.block.created", {
+      workItemId: workItem.id,
+      sourceItemId: item.sourceItemId,
+      queueItemId: item.id,
+      redaction: "applied",
+    });
+  }
+
   function handleCreateAgentRun() {
     const run = createStage4AgentRun({
       packet: codingPacketState,
@@ -3484,6 +3503,7 @@ export function App() {
       <ControlQueueDrawer
         onAsk={handleControlQueueAsk}
         onApprove={(sourceItemId) => handleResolvePermissionItem(sourceItemId, "approved")}
+        onBlock={handleControlQueueBlock}
         onClose={() => setApprovalDrawerOpen(false)}
         onDelegate={handleControlQueueDelegate}
         onEdit={handleControlQueueEdit}
