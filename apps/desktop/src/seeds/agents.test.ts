@@ -1,19 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { seededAgentProfiles } from "./agents";
-import { seededProviderProfiles } from "./providers";
+import { seededModelCatalog, seededProviderProfiles } from "./providers";
 
-describe("seeded APIFun Claude bindings", () => {
-  it("uses Claude Opus 4.8 for automatic APIFun Claude A/B bindings", () => {
-    const executor = seededAgentProfiles.find((agent) => agent.role === "executor" || agent.id === "agent_executor");
-    const researcher = seededAgentProfiles.find((agent) => agent.role === "researcher");
-    const claudeA = seededProviderProfiles.find((provider) => provider.id === "provider_apifun_claude");
-    const claudeB = seededProviderProfiles.find((provider) => provider.id === "provider_apifun_claude_b");
+describe("seeded MiMo Token Plan bindings", () => {
+  it("registers both OpenAI and Anthropic compatible MiMo token-plan providers without raw secrets", () => {
+    const mimoOpenAi = seededProviderProfiles.find((provider) => provider.id === "provider_mimo_token_openai");
+    const mimoAnthropic = seededProviderProfiles.find((provider) => provider.id === "provider_mimo_token_anthropic");
 
-    expect(claudeA?.defaultModel).toBe("claude-opus-4-8");
-    expect(claudeB?.defaultModel).toBe("claude-opus-4-8");
-    expect(executor?.providerProfileId).toBe("provider_apifun_claude");
-    expect(executor?.modelId).toBe("claude-opus-4-8");
-    expect(researcher?.providerProfileId).toBe("provider_apifun_claude_b");
-    expect(researcher?.modelId).toBe("claude-opus-4-8");
+    expect(mimoOpenAi?.baseUrl).toBe("https://token-plan-sgp.xiaomimimo.com/v1");
+    expect(mimoOpenAi?.defaultModel).toBe("mimo-v2.5-pro");
+    expect(mimoOpenAi?.secretRef?.redactedPreview).toBe("dgx-02:MIMO_API_KEY");
+    expect(mimoOpenAi?.secretRef?.redactedPreview).not.toContain("tp-");
+    expect(mimoAnthropic?.baseUrl).toBe("https://token-plan-sgp.xiaomimimo.com/anthropic");
+    expect(mimoAnthropic?.defaultModel).toBe("mimo-v2.5-pro");
+    expect(seededModelCatalog.provider_mimo_token_openai?.map((model) => model.id)).toContain("mimo-v2.5-pro");
+    expect(seededModelCatalog.provider_mimo_token_anthropic?.map((model) => model.id)).toContain("mimo-v2.5-pro");
+  });
+
+  it("binds every seeded agent to the MiMo OpenAI-compatible token-plan provider", () => {
+    expect(seededAgentProfiles.length).toBeGreaterThan(0);
+    for (const agent of seededAgentProfiles) {
+      expect(agent.providerProfileId).toBe("provider_mimo_token_openai");
+      expect(agent.modelId).toBe("mimo-v2.5-pro");
+      expect(agent.authBinding?.secretRefId).toBe("dgx-02:MIMO_API_KEY");
+    }
   });
 });
