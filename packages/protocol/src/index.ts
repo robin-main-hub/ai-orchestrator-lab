@@ -2279,6 +2279,13 @@ export const operatorCockpitProviderRoutingSchema = z.object({
   costBadge: z.enum(["low", "medium", "high"]),
   speedBadge: z.enum(["fast", "average", "slow"]),
   trustBadge: sourceTrustSchema,
+  assignedAgentCount: z.number().int().nonnegative().optional(),
+  discoveryLabel: z.string().optional(),
+  modelCount: z.number().int().nonnegative().optional(),
+  providerLabel: z.string().optional(),
+  readinessLabel: z.string().optional(),
+  routeLabel: z.string().optional(),
+  secretPolicyLabel: z.string().optional(),
 });
 export type OperatorCockpitProviderRouting = z.infer<typeof operatorCockpitProviderRoutingSchema>;
 
