@@ -10,6 +10,7 @@ import {
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
 import { modelWindowSize } from "../lib/appConstants";
 import { agentRoleLabel, providerDisplayLabel } from "../lib/helpers";
+import { getAgentToolProfileSummary } from "../lib/agentToolProfiles";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import {
@@ -385,6 +386,7 @@ function AgentCard({
   const modelLabel = activeModel?.name ?? agent.modelId ?? "model pending";
   const primaryDisplayName = agentPrimaryDisplayName(agent);
   const secondaryDisplayLabel = agentSecondaryDisplayLabel(agent);
+  const toolProfileSummary = getAgentToolProfileSummary(agent.role);
 
   return (
     <div
@@ -433,6 +435,16 @@ function AgentCard({
             </div>
             <span className="text-[11px] text-muted-foreground block text-left">
               {secondaryDisplayLabel}
+            </span>
+            <span className="mt-1 flex flex-wrap gap-1">
+              {toolProfileSummary.visibleBadges.map((label) => (
+                <span
+                  className="rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[9px] text-muted-foreground"
+                  key={label}
+                >
+                  {label}
+                </span>
+              ))}
             </span>
           </div>
         </button>
