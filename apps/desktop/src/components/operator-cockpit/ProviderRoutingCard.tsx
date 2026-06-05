@@ -3,6 +3,7 @@ import { Gauge, RadioTower, Route, ShieldCheck, Zap } from "lucide-react";
 import type { OperatorCockpitProviderRouting } from "@ai-orchestrator/protocol";
 import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
+import { operatorCockpitActionLabels } from "./actionLabels";
 import {
   badgeColorForCost,
   badgeColorForFallback,
@@ -26,8 +27,10 @@ export function ProviderRoutingCard({
             <Badge color={badgeColorForFallback(routing.fallbackStatus)}>{routing.fallbackStatus}</Badge>
             {onOpen ? (
               <button
+                aria-label={operatorCockpitActionLabels.openProviderRouting}
                 className="rounded-md border border-zinc-700/70 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 transition hover:border-violet-400/60 hover:text-violet-200"
                 onClick={onOpen}
+                title={operatorCockpitActionLabels.openProviderRouting}
                 type="button"
               >
                 열기

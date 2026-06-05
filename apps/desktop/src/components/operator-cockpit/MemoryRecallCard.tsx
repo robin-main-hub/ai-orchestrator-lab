@@ -3,6 +3,7 @@ import { AlertTriangle, Brain, Database, Monitor } from "lucide-react";
 import type { OperatorCockpitMemoryRecall } from "@ai-orchestrator/protocol";
 import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
+import { operatorCockpitActionLabels } from "./actionLabels";
 import { badgeColorForMirror } from "./presentation";
 
 export function MemoryRecallCard({
@@ -20,8 +21,10 @@ export function MemoryRecallCard({
             <Badge color="purple">{memory.contextReasons.length} recalls</Badge>
             {onOpen ? (
               <button
+                aria-label={operatorCockpitActionLabels.openMemoryRecall}
                 className="rounded-md border border-zinc-700/70 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 transition hover:border-violet-400/60 hover:text-violet-200"
                 onClick={onOpen}
+                title={operatorCockpitActionLabels.openMemoryRecall}
                 type="button"
               >
                 열기
