@@ -34,6 +34,7 @@ import { WorkbenchHeader } from "./WorkbenchHeader";
 import { ActionStrip } from "./ActionStrip";
 import { InboxApprovalStrip } from "./ApprovalQueue";
 import { AgentChannelStatusBar } from "./AgentChannelStatusBar";
+import { AgentConversationFlowPanel } from "./AgentConversationFlowPanel";
 
 export function ConversationWorkbench({
   activeSessionId,
@@ -190,6 +191,15 @@ export function ConversationWorkbench({
         modelId={selectedModel?.id}
         providerProfileId={selectedProvider?.id}
         selectedAgent={selectedAgent}
+      />
+
+      <AgentConversationFlowPanel
+        adapterStatus={memoryAdapterStatus}
+        memoryRecordCount={memoryRecordCount}
+        memoryScope={memoryScope}
+        selectedAgent={selectedAgent}
+        selectedModel={selectedModel}
+        selectedProvider={selectedProvider}
       />
 
       <MessageThread
