@@ -26,6 +26,7 @@ export function providerDisplayLabel(name: string): string {
   const dgxNumber = dgxMatch?.[1];
   const grokSessionNumber = grokSessionMatch?.[1];
 
+  if (normalized.includes("mimo")) return "MiMo";
   if (normalized.includes("apikey.fun") || normalized.includes("apifun")) {
     if (normalized.includes("claude a")) return "Claude A (APIFun)";
     if (normalized.includes("claude b")) return "Claude B (APIFun)";
@@ -457,4 +458,3 @@ export function agentRoleLabel(role: WorkbenchAgent["role"]) {
 
   return labels[role];
 }
-
