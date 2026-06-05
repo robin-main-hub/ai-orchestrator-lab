@@ -150,6 +150,7 @@ import {
   createControlQueueEditDraft,
 } from "./lib/controlQueueWorkItems";
 import { createControlQueueContinuitySummary } from "./lib/controlQueueContinuity";
+import { controlQueuePermissionLabel, sanitizeControlQueueText } from "./lib/controlQueuePresentation";
 import {
   agentRoleLabel,
   classifyDraftAttachment,
@@ -2120,9 +2121,9 @@ export function App() {
 
     prependWorkItem(workItem);
     setDraftMessage([
-      `이 승인 항목에 대해 추가 확인이 필요합니다: ${item.summary}`,
-      item.reason ? `사유: ${item.reason}` : undefined,
-      `권한: ${item.permissions.join(", ")}`,
+      `이 승인 항목에 대해 추가 확인이 필요합니다: ${sanitizeControlQueueText(item.summary)}`,
+      item.reason ? `사유: ${sanitizeControlQueueText(item.reason)}` : undefined,
+      `권한: ${item.permissions.map(controlQueuePermissionLabel).join(", ")}`,
       "승인/거부 판단에 필요한 정보를 알려주세요.",
     ].filter(Boolean).join("\n"));
     setMode("conversation");
