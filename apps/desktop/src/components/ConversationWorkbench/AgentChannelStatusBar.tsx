@@ -58,6 +58,13 @@ export function AgentChannelStatusBar({
     messageCount,
     toolCount: selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role).length : 0,
   });
+  const readinessDetail = [
+    `운영 준비: ${readiness.label}`,
+    readiness.memoryQualityLabel,
+    readiness.checks.length > 0 ? readiness.checks.join(" · ") : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div className="border-b border-white/10 bg-zinc-950/80 px-4 py-2">
@@ -84,7 +91,7 @@ export function AgentChannelStatusBar({
             <span>{agentToolRuntimeLabel}</span>
           </StatusPill>
         ) : null}
-        <ReadinessPill tone={readiness.tone}>
+        <ReadinessPill aria-label={readinessDetail} title={readinessDetail} tone={readiness.tone}>
           <span className="font-semibold text-zinc-300">운영 준비</span>
           <span>{readiness.label}</span>
           <span className="hidden text-zinc-400 md:inline">{readiness.memoryQualityLabel}</span>
@@ -119,11 +126,15 @@ export function AgentChannelStatusBar({
 }
 
 function ReadinessPill({
+  "aria-label": ariaLabel,
   children,
   tone,
+  title,
 }: {
+  "aria-label"?: string;
   children: ReactNode;
   tone: AgentConversationReadinessTone;
+  title?: string;
 }) {
   const toneClass =
     tone === "attention"
@@ -133,7 +144,11 @@ function ReadinessPill({
         : "border-violet-300/20 bg-violet-400/10 text-violet-100";
 
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${toneClass}`}>
+    <span
+      aria-label={ariaLabel}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${toneClass}`}
+      title={title}
+    >
       {children}
     </span>
   );

@@ -10,6 +10,7 @@ import {
   createAgentRoleToolRuntimeSummary,
   createAgentRuntimeConfigSection,
 } from "../lib/agentRuntimeConfig";
+import { sanitizePublicText } from "../lib/publicRedaction";
 import type { Stage6MemoryInspector } from "./stage6Memory";
 
 export type CreateConversationPipelineMessagesInput = {
@@ -40,7 +41,10 @@ export function createConversationPipelineMessages({
   const recalledMemories = memory.trace.results
     .filter((result) => result.usedInDecision)
     .slice(0, 5)
-    .map((result, index) => `${index + 1}. ${result.record.title}: ${result.record.content} (score ${result.score.toFixed(2)})`);
+    .map(
+      (result, index) =>
+        `${index + 1}. ${sanitizePipelineText(result.record.title)}: ${sanitizePipelineText(result.record.content)} (score ${result.score.toFixed(2)})`,
+    );
   const runtimeConfig = createAgentRuntimeConfigSection(agent, configFiles);
   const roleToolConfig = createAgentRoleToolRuntimeSummary(agent);
   const systemContent = [
@@ -49,7 +53,7 @@ export function createConversationPipelineMessages({
     `Agent: ${agent.name} / role: ${agent.role}`,
     `Provider: ${provider.name} / model: ${modelId}`,
     persona
-      ? `SOUL.md: ${persona.soulSummary}\nAGENTS.md: ${persona.agentsInstruction}\nCreativity: ${persona.creativityLevel}`
+      ? `SOUL.md: ${sanitizePipelineText(persona.soulSummary)}\nAGENTS.md: ${sanitizePipelineText(persona.agentsInstruction)}\nCreativity: ${persona.creativityLevel}`
       : "SOUL.md: default role profile",
     createAgentChannelRuntimeSummary(memoryScope),
     roleToolConfig.promptText,
@@ -92,4 +96,13 @@ export function createConversationPipelineMessages({
   };
 
   return [systemMessage, ...previousMessages.slice(-8), userMessage];
+}
+
+function sanitizePipelineText(value: string): string {
+  return sanitizePublicText(value)
+    .replaceAll("[redacted:internal]", "[REDACTED:internal]")
+    .replaceAll("[redacted:url]", "[REDACTED:url]")
+    .replaceAll("Bearer [redacted]", "Bearer [REDACTED:bearer_token]")
+    .replaceAll("[redacted:path]", "[REDACTED:path]")
+    .replaceAll("[redacted]", "[REDACTED:secret]");
 }

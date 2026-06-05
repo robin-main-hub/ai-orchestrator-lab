@@ -1,3 +1,5 @@
+import { compactPublicText } from "./publicRedaction";
+
 export type ControlQueueLaneId = "approve" | "ask" | "edit" | "delegate" | "block" | "archive";
 
 const laneLabels: Record<ControlQueueLaneId, string> = {
@@ -50,13 +52,12 @@ export function controlQueuePermissionLabel(permission: string) {
 }
 
 export function sanitizeControlQueueText(value: string) {
-  return value
-    .replace(/\braw prompt\s*:/gi, "원문 프롬프트:")
-    .replace(/\btool input\b[\s\S]*/gi, "도구 입력 [redacted]")
-    .replace(/https?:\/\/[^\s)]+/gi, "[url]")
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [token]")
-    .replace(/\b(?:sk|tp)-[A-Za-z0-9_-]{6,}\b/g, "[secret]")
-    .replace(/\b[A-Z][A-Z0-9_]*(?:API|TOKEN|SECRET|KEY)[A-Z0-9_]*=[^\s]+/g, "[env-secret]")
-    .replace(/\/Users\/[^\s),;]+/g, "[local-path]")
-    .slice(0, 240);
+  const prepared = value.replace(/\braw prompt\s*:/gi, "원문 프롬프트:");
+  return compactPublicText(prepared, 240)
+    .replaceAll("[redacted:internal]", "도구 입력 [queue-redacted]")
+    .replaceAll("[redacted:url]", "[url]")
+    .replaceAll("Bearer [redacted]", "Bearer [token]")
+    .replaceAll("[redacted:path]", "[local-path]")
+    .replaceAll("[redacted]", "[secret]")
+    .replaceAll("[queue-redacted]", "[redacted]");
 }
