@@ -58,6 +58,8 @@ export function ConversationWorkbench({
   onSendMessage,
   onCloseAgentConfig,
   onCloseAgentConfig: _unusedClose, // preserve interface signatures if needed
+  onReturn,
+  returnLabel,
   onOpenAgentConfig,
   onUpdateAgentConfig,
   onUpdateAgentPersona,
@@ -97,6 +99,8 @@ export function ConversationWorkbench({
   onSelectAgent: (agentId: string) => void;
   onSendMessage: () => void;
   onCloseAgentConfig: () => void;
+  onReturn?: () => void;
+  returnLabel?: string;
   onOpenAgentConfig: (tab: AgentConfigTab) => void;
   onUpdateAgentConfig: (patch: Partial<Pick<WorkbenchAgent, "configSource" | "soulMode">>) => void;
   onUpdateAgentPersona: (patch: Partial<AgentPersonaSettings>) => void;
@@ -144,6 +148,8 @@ export function ConversationWorkbench({
           onUpdatePersona={onUpdateAgentPersona}
           persona={persona}
           provider={selectedProvider}
+          onReturn={onReturn}
+          returnLabel={returnLabel}
         />
       ) : null}
 

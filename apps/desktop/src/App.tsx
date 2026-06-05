@@ -219,6 +219,7 @@ export function App() {
     open: false,
     tab: "profile",
   });
+  const [returnModeAfterConfigClose, setReturnModeAfterConfigClose] = useState<CenterMode | null>(null);
   const [agentPersonaById, setAgentPersonaById] = useState<Record<string, AgentPersonaSettings>>(() =>
     Object.fromEntries(seededAgentProfiles.map((agent) => [agent.id, createDefaultPersonaSettings(agent)])),
   );
@@ -263,6 +264,11 @@ export function App() {
 
     return () => window.cancelAnimationFrame(frame);
   }, [mode]);
+  useEffect(() => {
+    if (mode !== "conversation" || !agentConfigPanel.open) {
+      setReturnModeAfterConfigClose(null);
+    }
+  }, [mode, agentConfigPanel.open]);
   const [sessionIndexState, setSessionIndexState] = useState<Stage20SessionIndexState>(() =>
     createInitialSessionIndexState(),
   );
@@ -2277,6 +2283,14 @@ export function App() {
     });
   }
 
+  function handleCloseAgentConfig() {
+    setAgentConfigPanel((panel) => ({ ...panel, open: false }));
+    if (returnModeAfterConfigClose) {
+      setMode(returnModeAfterConfigClose);
+      setReturnModeAfterConfigClose(null);
+    }
+  }
+
   function handleOpenAgentSettings(agentId: string) {
     setSelectedAgentId(agentId);
     setAgentSettingsAgentId(agentId);
@@ -3064,7 +3078,9 @@ export function App() {
               onRemoveDraftAttachment={handleRemoveDraftAttachment}
               onSelectAgent={setSelectedAgentId}
               onSendMessage={handleSendMessageStage2}
-              onCloseAgentConfig={() => setAgentConfigPanel((panel) => ({ ...panel, open: false }))}
+              onCloseAgentConfig={handleCloseAgentConfig}
+              onReturn={handleCloseAgentConfig}
+              returnLabel={returnModeAfterConfigClose === "annex" ? "← Annex로" : undefined}
               onOpenAgentConfig={openAgentConfigPanel}
               onUpdateAgentConfig={updateSelectedAgentConfig}
               onUpdateAgentPersona={updateSelectedAgentPersona}
@@ -3106,6 +3122,7 @@ export function App() {
               onBack={() => setMode("debate")}
               onViewApproval={() => setApprovalDrawerOpen(true)}
               onViewMemory={() => {
+                setReturnModeAfterConfigClose("annex");
                 setMode("conversation");
                 setAgentConfigPanel({ open: true, tab: "injection" });
               }}
