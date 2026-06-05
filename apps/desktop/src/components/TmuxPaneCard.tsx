@@ -57,32 +57,34 @@ export function TmuxPaneCard({
   const isIdle = pane.state === "idle";
   const [isTimelineOpen, setIsTimelineOpen] = useState(false);
   return (
-    <div className="flex flex-col rounded-lg border border-border bg-card">
+    <div className="flex min-h-[260px] flex-col rounded-lg border border-zinc-800/60 bg-zinc-900/40 shadow-xl shadow-black/25 backdrop-blur-xl transition-colors hover:border-zinc-700/60">
       {/* Header: avatar + title + status */}
-      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <AvatarWithStatus
-            initials={pane.agent ? pane.agent.name.slice(0, 2).toUpperCase() : "??"}
-            roleColor={pane.agent ? roleColorFromRole(pane.agent.role) : "companion"}
-            status={
-              pane.state === "chat active" || pane.state === "active"
-                ? "active"
-                : pane.state === "ready"
-                  ? "online"
-                  : pane.state === "dispatch gated" || pane.state === "pending_approval"
-                    ? "pending"
-                    : pane.state === "guarding"
-                      ? "offline"
-                      : "idle"
-            }
-            avatarDataUrl={visual?.avatarDataUrl}
-            size="sm"
-          />
+          <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-1">
+            <AvatarWithStatus
+              initials={pane.agent ? pane.agent.name.slice(0, 2).toUpperCase() : "??"}
+              roleColor={pane.agent ? roleColorFromRole(pane.agent.role) : "companion"}
+              status={
+                pane.state === "chat active" || pane.state === "active"
+                  ? "active"
+                  : pane.state === "ready"
+                    ? "online"
+                    : pane.state === "dispatch gated" || pane.state === "pending_approval"
+                      ? "pending"
+                      : pane.state === "guarding"
+                        ? "offline"
+                        : "idle"
+              }
+              avatarDataUrl={visual?.avatarDataUrl}
+              size="sm"
+            />
+          </div>
           <div className="min-w-0">
-            <div className="truncate text-[10px] text-muted-foreground">
+            <div className="truncate font-mono text-[10px] text-zinc-600">
               {pane.id}
             </div>
-            <div className="truncate text-sm font-medium text-foreground">
+            <div className="truncate text-sm font-semibold text-zinc-100">
               {pane.title}
             </div>
           </div>
@@ -93,38 +95,38 @@ export function TmuxPaneCard({
       </div>
 
       {/* Role description */}
-      <div className="border-b border-border/50 px-3 py-2">
-        <p className="text-[10px] text-muted-foreground line-clamp-2">{pane.role}</p>
+      <div className="border-b border-white/[0.07] px-3 py-2">
+        <p className="line-clamp-2 text-[10px] text-zinc-500">{pane.role}</p>
       </div>
 
       {/* Agent assignment */}
-      <div className="flex items-center justify-between gap-2 border-b border-border/50 px-3 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-white/[0.07] px-3 py-2">
         <div className="min-w-0">
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-[10px] text-zinc-600">
             {pane.agent ? agentRoleLabel(pane.agent.role) : "future slot"}
           </span>
-          <div className="truncate text-[11px] font-medium text-foreground">
+          <div className="truncate text-[11px] font-semibold text-zinc-200">
             {pane.agent?.name ?? "담당 agent 미정"}
           </div>
         </div>
-        <span className="text-[10px] font-mono text-muted-foreground">
+        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-[10px] text-zinc-500">
           {pane.agent?.modelId ?? "model pending"}
         </span>
       </div>
 
       {/* Signal text */}
-      <p className="px-3 py-2 text-[10px] text-muted-foreground line-clamp-2">
+      <p className="line-clamp-2 px-3 py-2 text-[10px] text-zinc-500">
         {pane.signal}
       </p>
 
       {/* Command controls */}
       {onCapture || onDispatch ? (
-        <div className="border-t border-border p-2">
+        <div className="mt-auto border-t border-white/10 p-2">
           <div className="flex items-center gap-1">
             <input
               aria-label={`${pane.title} command preview`}
               className={cn(
-                "h-7 flex-1 min-w-0 rounded-md border border-border bg-card/40 px-2 font-mono text-[10px] text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none",
+                "h-8 min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2 font-mono text-[10px] text-zinc-200 placeholder:text-zinc-700 focus-visible:border-amber-400/50 focus-visible:outline-none",
                 isIdle && "cursor-not-allowed opacity-50",
               )}
               disabled={isIdle}
@@ -134,7 +136,7 @@ export function TmuxPaneCard({
             />
             <Button
               aria-label={`${pane.title} capture`}
-              className="h-7 gap-1 px-2 text-[10px]"
+              className="h-8 gap-1 rounded-lg px-2 text-[10px] text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-100"
               disabled={Boolean(busy) || isIdle}
               onClick={onCapture}
               size="sm"
@@ -149,7 +151,7 @@ export function TmuxPaneCard({
             </Button>
             <Button
               aria-label={`${pane.title} dispatch`}
-              className="h-7 gap-1 px-2 text-[10px] text-primary"
+              className="h-8 gap-1 rounded-lg px-2 text-[10px] text-amber-300 hover:bg-amber-500/10"
               disabled={Boolean(busy) || isIdle}
               onClick={onDispatch}
               size="sm"
@@ -168,28 +170,28 @@ export function TmuxPaneCard({
 
       {/* Output preview */}
       {lastOutput ? (
-        <pre className="mx-2 mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded border border-border bg-background/60 p-2 font-mono text-[10px] text-muted-foreground">
+        <pre className="mx-2 mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/40 p-2 font-mono text-[10px] text-zinc-500">
           {lastOutput}
         </pre>
       ) : null}
 
       {/* Timeline blocks (Stage 2-6) - Collapsible */}
       {timelineBlocks && timelineBlocks.length > 0 ? (
-        <div className="border-t border-border/40 p-2">
+        <div className="border-t border-white/[0.07] p-2">
           <Collapsible open={isTimelineOpen} onOpenChange={setIsTimelineOpen}>
             <CollapsibleTrigger asChild>
               <button
                 type="button"
-                className="flex w-full items-center justify-between text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors py-1 px-1.5 rounded hover:bg-muted/10 cursor-pointer"
+                className="flex w-full cursor-pointer items-center justify-between rounded px-1.5 py-1 text-[10px] font-medium text-zinc-500 transition-colors hover:bg-white/[0.04] hover:text-zinc-200"
               >
                 <div className="flex items-center gap-1.5">
                   <Clock3 size={11} />
                   <span>타임라인 로그 ({timelineBlocks.length})</span>
                 </div>
                 {isTimelineOpen ? (
-                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  <ChevronRight className="h-3.5 w-3.5 text-zinc-500" />
                 )}
               </button>
             </CollapsibleTrigger>

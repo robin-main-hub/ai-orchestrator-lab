@@ -7,7 +7,7 @@ import { useEffect } from "react";
  * docs/design-decisions.md §6:
  *
  *   ⌘K      Command Palette
- *   ⌘1/2/3  Switch mode (conversation / debate / tmux)
+ *   ⌘1/2/3/4 Switch mode (conversation / debate / tmux / cockpit)
  *   ⌘⇧A     Control Queue (approval drawer)
  *   ⌘⇧M     EvolveMemento — remember current context
  *   ⌘I      Ask / Invoke Orchestrator
@@ -31,6 +31,7 @@ export type GlobalShortcutHandlers = {
   onSwitchConversation?: () => void;
   onSwitchDebate?: () => void;
   onSwitchTmux?: () => void;
+  onSwitchCockpit?: () => void;
   onControlQueue?: () => void;
   onMementoRemember?: () => void;
   onInvokeOrchestrator?: () => void;
@@ -77,6 +78,11 @@ export function useGlobalShortcuts(handlers: GlobalShortcutHandlers) {
         if (key === "3" && !shift) {
           e.preventDefault();
           handlers.onSwitchTmux?.();
+          return;
+        }
+        if (key === "4" && !shift) {
+          e.preventDefault();
+          handlers.onSwitchCockpit?.();
           return;
         }
         if (key === "a" && shift) {

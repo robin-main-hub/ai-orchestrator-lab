@@ -1,24 +1,222 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ElementType } from "react";
 import {
+  AlertTriangle,
   ArrowRight,
   CheckCircle2,
-  ChevronDown,
   CornerDownRight,
-  FileText,
+  ExternalLink,
+  FileCode,
   GitMerge,
-  Link2,
-  Send,
-  Users,
+  Lightbulb,
+  Scale,
   XCircle,
 } from "lucide-react";
-import type { DebateTag, DebateUtterance } from "@ai-orchestrator/protocol";
-import type { Stage3DebateSession } from "../runtime/stage3Runtime";
-import type { Stage3DebateUtteranceView } from "../types";
+import type { AgentProfile, DebateTag, DebateUtterance } from "@ai-orchestrator/protocol";
+import { defaultAgentProfiles } from "@ai-orchestrator/agents";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
-import { StatusBadge } from "@/ui/status-badge";
-import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
-import { defaultAgentProfiles } from "@ai-orchestrator/agents";
+import type { Stage3DebateSession } from "../runtime/stage3Runtime";
+import type { Stage3DebateUtteranceView } from "../types";
+
+type Stance = "agree" | "disagree" | "risk" | "evidence" | "decision" | "neutral";
+
+const stanceConfig: Record<Stance, { icon: ElementType; color: string; bg: string; label: string }> = {
+  agree: { bg: "bg-emerald-500/10", color: "text-emerald-400", icon: CheckCircle2, label: "합의" },
+  decision: { bg: "bg-violet-500/10", color: "text-violet-400", icon: ArrowRight, label: "결정" },
+  disagree: { bg: "bg-rose-500/10", color: "text-rose-400", icon: XCircle, label: "반대" },
+  evidence: { bg: "bg-cyan-500/10", color: "text-cyan-400", icon: Lightbulb, label: "근거" },
+  neutral: { bg: "bg-zinc-500/10", color: "text-zinc-400", icon: Scale, label: "중립" },
+  risk: { bg: "bg-amber-500/10", color: "text-amber-400", icon: AlertTriangle, label: "리스크" },
+};
+
+const roleBorderColors: Partial<Record<AgentProfile["role"], string>> = {
+  architect: "border-l-violet-500",
+  builder: "border-l-blue-500",
+  executor: "border-l-amber-500",
+  memory_curator: "border-l-purple-500",
+  orchestrator: "border-l-cyan-500",
+  reviewer: "border-l-rose-500",
+  skeptic: "border-l-emerald-500",
+  verifier: "border-l-lime-500",
+};
+
+export function Stage3DebateTable({
+  onCreateCodingPacket,
+  onOpenAnnex,
+  onSelectUtterance,
+  session,
+}: {
+  onCreateCodingPacket: () => void;
+  onOpenAnnex?: () => void;
+  onSelectUtterance?: (utterance: Stage3DebateUtteranceView) => void;
+  session: Stage3DebateSession;
+  agentVisualsById?: Record<string, { avatarDataUrl?: string }>;
+}) {
+  const [activeRoundIndex, setActiveRoundIndex] = useState(() => resolveDefaultRoundIndex(session));
+
+  useEffect(() => {
+    setActiveRoundIndex(resolveDefaultRoundIndex(session));
+  }, [session.id]);
+
+  const currentRound = session.rounds[activeRoundIndex] ?? session.rounds[0];
+  const utteranceById = useMemo(() => {
+    const map = new Map<string, Stage3DebateUtteranceView>();
+    for (const round of session.rounds) {
+      for (const utterance of round.utterances) {
+        map.set(utterance.id, createUtteranceView(utterance, round.title, session));
+      }
+    }
+    return map;
+  }, [session]);
+  const utterances = useMemo(
+    () => currentRound?.utterances.map((utterance) => createUtteranceView(utterance, currentRound.title, session)) ?? [],
+    [currentRound, session],
+  );
+  const consensus = useMemo(() => deriveConsensus(session), [session]);
+
+  return (
+    <section
+      aria-label="Debate Chamber"
+      className="flex h-full flex-col bg-transparent text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+      data-focus-id="debate-table-container"
+      tabIndex={-1}
+    >
+      <header className="shrink-0 border-b border-zinc-800/60 bg-zinc-900/30 px-4 py-4 md:px-6">
+        <div className="mx-auto max-w-4xl">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <Scale className="h-4 w-4 shrink-0 text-violet-400" />
+                <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                  Debate Chamber
+                </span>
+              </div>
+              <h1 className="mt-1 text-balance text-lg font-semibold text-zinc-100">
+                {session.problem}
+              </h1>
+              <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-zinc-500">
+                {session.summary}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {onOpenAnnex ? (
+                <Button
+                  className="border-zinc-700 text-xs"
+                  onClick={onOpenAnnex}
+                  size="sm"
+                  variant="outline"
+                >
+                  <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                  Annex
+                </Button>
+              ) : null}
+              <Button
+                className="bg-violet-600 text-xs text-zinc-100 hover:bg-violet-700"
+                onClick={onCreateCodingPacket}
+                size="sm"
+              >
+                <FileCode className="mr-1.5 h-3.5 w-3.5" />
+                패킷 반영
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center gap-1 overflow-x-auto pb-1">
+            {session.rounds.map((round, index) => {
+              const dotColor = roundDotColor(index, round.status);
+              return (
+                <button
+                  className={cn(
+                    "flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+                    activeRoundIndex === index
+                      ? "bg-zinc-800 text-zinc-100"
+                      : "text-zinc-500 hover:bg-zinc-800/50 hover:text-zinc-100",
+                  )}
+                  key={round.id}
+                  onClick={() => setActiveRoundIndex(index)}
+                  type="button"
+                >
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full",
+                      dotColor,
+                      round.status === "running" && "animate-pulse",
+                    )}
+                  />
+                  {round.title}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-y-auto px-4 py-6 md:px-6">
+        <div className="mx-auto max-w-4xl space-y-4">
+          {utterances.map((utterance) => (
+            <UtteranceCard
+              key={utterance.id}
+              onSelect={onSelectUtterance}
+              utterance={utterance}
+              utteranceById={utteranceById}
+            />
+          ))}
+          {utterances.length === 0 ? (
+            <div className="py-12 text-center">
+              <Scale className="mx-auto h-8 w-8 text-zinc-700" />
+              <p className="mt-2 text-sm text-zinc-500">이 라운드에 발언이 없습니다</p>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <footer className="shrink-0 border-t border-zinc-800/60 bg-zinc-900/30 px-4 py-3 md:px-6">
+        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-4">
+            <SummaryChip icon={CheckCircle2} label="합의" value={consensus.agreed} color="text-emerald-400" />
+            <SummaryChip icon={XCircle} label="반대" value={consensus.disagreed} color="text-rose-400" />
+            <SummaryChip icon={AlertTriangle} label="리스크" value={consensus.risks} color="text-amber-400" />
+            <SummaryChip icon={ArrowRight} label="결정" value={consensus.decisions} color="text-violet-400" />
+          </div>
+          <div className="text-xs text-zinc-500">
+            {session.participants.length} agents · {currentRound?.status ?? "pending"}
+          </div>
+        </div>
+      </footer>
+    </section>
+  );
+}
+
+function resolveDefaultRoundIndex(session: Stage3DebateSession) {
+  const runningIndex = session.rounds.findIndex((round) => round.status === "running");
+  if (runningIndex >= 0) return runningIndex;
+  const lastCompletedIndex = session.rounds.map((round) => round.status).lastIndexOf("completed");
+  if (lastCompletedIndex >= 0) return lastCompletedIndex;
+  return 0;
+}
+
+function roundDotColor(index: number, status: Stage3DebateSession["rounds"][number]["status"]) {
+  if (status === "blocked") return "bg-rose-500";
+  if (status === "running") return "bg-amber-500";
+  if (status === "pending") return "bg-zinc-600";
+  const completedAccentColors = ["bg-cyan-500", "bg-violet-500", "bg-rose-500", "bg-amber-500", "bg-emerald-500"];
+  return completedAccentColors[index % completedAccentColors.length];
+}
+
+function createUtteranceView(
+  utterance: DebateUtterance,
+  roundTitle: string,
+  session: Stage3DebateSession,
+): Stage3DebateUtteranceView {
+  const participant = session.participants.find((p) => p.agentId === utterance.agentId);
+  const fallback = resolveFallbackAgent(utterance.agentId);
+  return {
+    ...utterance,
+    agentName: participant?.name ?? fallback.name,
+    agentRole: participant?.role ?? fallback.role,
+    roundTitle,
+  };
+}
 
 function resolveFallbackAgent(agentId: string) {
   const profile = defaultAgentProfiles.find((p) => p.id === agentId);
@@ -26,534 +224,168 @@ function resolveFallbackAgent(agentId: string) {
     return { name: profile.name, role: profile.role };
   }
   const parts = agentId.replace(/^agent_/, "").split("_");
-  const role = parts[0] || "builder";
+  const role = (parts[0] || "builder") as AgentProfile["role"];
   const name = parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
-  return { name, role: role as any };
+  return { name, role };
 }
 
-/**
- * Stage 3 Debate Table — strict v0 port.
- *
- * source: docs/v0/v0-output/components/debate/*
- *
- * v0 layout:
- *   <flex h-full flex-col>
- *     <DebateContextHeader>      title + 패킷반영 button + stage tabs
- *     <flex flex-1>
- *       <flex-1 border-r>        2-col grid of DebateRoundCard
- *       <w-80 right side>        StatusHub + Agent Relay (collapsible)
- *
- * 모든 prop / callback 보존. design-decisions §7 의 provenance 시각화
- * (parent/accepted/rejected/decision/evidence/coding) 는 round card
- * footer 에 carry — v0 row 구조 안에 chip strip 으로.
- */
-
-export function Stage3DebateTable({
-  onCreateCodingPacket,
-  onSelectUtterance,
-  session,
-  agentVisualsById = {},
-}: {
-  onCreateCodingPacket: () => void;
-  onSelectUtterance?: (utterance: Stage3DebateUtteranceView) => void;
-  session: Stage3DebateSession;
-  agentVisualsById?: Record<string, { avatarDataUrl?: string }>;
-}) {
-  const [prevSessionId, setPrevSessionId] = useState(session.id);
-  const [activeRoundId, setActiveRoundId] = useState<string>(() => {
-    const runningRound = session.rounds.find((r) => r.status === "running");
-    if (runningRound) return runningRound.id;
-    const completedRounds = session.rounds.filter((r) => r.status === "completed");
-    if (completedRounds.length > 0) {
-      return completedRounds[completedRounds.length - 1]?.id ?? "";
-    }
-    return session.rounds[0]?.id ?? "";
-  });
-
-  if (session.id !== prevSessionId) {
-    setPrevSessionId(session.id);
-    const runningRound = session.rounds.find((r) => r.status === "running");
-    const defaultRoundId =
-      runningRound?.id ??
-      session.rounds.filter((r) => r.status === "completed").slice(-1)[0]?.id ??
-      session.rounds[0]?.id ??
-      "";
-    setActiveRoundId(defaultRoundId);
-  }
-
-  const activeRound = session.rounds.find((r) => r.id === activeRoundId);
-
-  const utterances: Stage3DebateUtteranceView[] = useMemo(() => {
-    if (!activeRound) return [];
-    return activeRound.utterances.map((utterance) => ({
-      ...utterance,
-      roundTitle: activeRound.title,
-      agentName:
-        session.participants.find((p) => p.agentId === utterance.agentId)?.name ??
-        resolveFallbackAgent(utterance.agentId).name,
-      agentRole:
-        session.participants.find((p) => p.agentId === utterance.agentId)?.role ??
-        resolveFallbackAgent(utterance.agentId).role,
-    }));
-  }, [activeRound, session.participants]);
-
-  const utteranceById = useMemo(() => {
-    const map = new Map<string, Stage3DebateUtteranceView>();
-    for (const u of utterances) map.set(u.id, u);
-    return map;
-  }, [utterances]);
-
-  return (
-    <section
-      aria-label="Debate"
-      className="flex h-full flex-col bg-background"
-      data-focus-id="debate-table-container"
-      tabIndex={-1}
-    >
-      {/* ── Header: context + stage tabs ───────────────────────── */}
-      <DebateContextHeader
-        currentRoundId={activeRoundId}
-        onSelectRoundId={setActiveRoundId}
-        onCreateCodingPacket={onCreateCodingPacket}
-        rounds={session.rounds}
-        session={session}
-      />
-
-      {/* ── Main: rounds (left, grid) + side panel (right) ─────── */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left: debate rounds grid */}
-        <div className="flex-1 overflow-y-auto border-r border-border">
-          <div className="grid grid-cols-1 gap-3 p-4 lg:grid-cols-2">
-            {utterances.map((utterance, index) => (
-              <DebateRoundCard
-                index={index + 1}
-                key={utterance.id}
-                onSelect={onSelectUtterance}
-                utterance={utterance}
-                utteranceById={utteranceById}
-                agentVisualsById={agentVisualsById}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Right: status hub + agent relay */}
-        <div className="flex w-80 shrink-0 flex-col overflow-y-auto">
-          <div className="space-y-4 p-4">
-            <StatusHub items={session.statusHub} />
-            <AgentRelay entries={session.humanPeek} />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ── Header ───────────────────────────────────────────────────────────
-
-function DebateContextHeader({
-  currentRoundId,
-  onSelectRoundId,
-  onCreateCodingPacket,
-  rounds,
-  session,
-}: {
-  currentRoundId?: string;
-  onSelectRoundId: (id: string) => void;
-  onCreateCodingPacket: () => void;
-  rounds: Stage3DebateSession["rounds"];
-  session: Stage3DebateSession;
-}) {
-  return (
-    <div className="shrink-0 border-b border-border bg-card/30">
-      {/* Title row */}
-      <div className="flex items-start gap-4 border-b border-border/50 px-4 py-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-          <FileText className="h-4 w-4 text-primary" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Debate Context
-          </span>
-          <h2 className="mt-1 truncate text-sm font-semibold text-foreground">
-            {session.problem}
-          </h2>
-          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-            {session.summary}
-          </p>
-        </div>
-        <Button
-          className="shrink-0 gap-2"
-          onClick={onCreateCodingPacket}
-          size="sm"
-          variant="outline"
-        >
-          <FileText className="h-3.5 w-3.5" />
-          패킷 반영
-        </Button>
-      </div>
-
-      {/* Stage tabs */}
-      <div className="flex items-center gap-1 overflow-x-auto px-4 py-2">
-        {rounds.map((round) => {
-          const isActive = round.id === currentRoundId;
-          const isCompleted = round.status === "completed";
-          return (
-            <button
-              className={cn(
-                "flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                isActive
-                  ? "bg-primary/15 text-primary"
-                  : isCompleted
-                    ? "text-muted-foreground hover:bg-card/60 hover:text-foreground"
-                    : "text-muted-foreground/50 hover:bg-card/60 hover:text-muted-foreground",
-              )}
-              key={round.id}
-              onClick={() => onSelectRoundId(round.id)}
-              type="button"
-            >
-              {round.title}
-              {isActive ? (
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── Round card ───────────────────────────────────────────────────────
-
-function DebateRoundCard({
+function UtteranceCard({
+  onSelect,
   utterance,
   utteranceById,
-  index,
-  onSelect,
-  agentVisualsById,
 }: {
+  onSelect?: (utterance: Stage3DebateUtteranceView) => void;
   utterance: Stage3DebateUtteranceView;
   utteranceById: Map<string, Stage3DebateUtteranceView>;
-  index: number;
-  onSelect?: (utterance: Stage3DebateUtteranceView) => void;
-  agentVisualsById: Record<string, { avatarDataUrl?: string }>;
 }) {
-  const parent = utterance.parentUtteranceId
-    ? utteranceById.get(utterance.parentUtteranceId)
-    : undefined;
-  const acceptedCount = utterance.acceptedBy?.length ?? 0;
-  const rejectedCount = utterance.rejectedBy?.length ?? 0;
-  const evidenceCount = utterance.evidenceRefIds?.length ?? 0;
-  const codingCount = utterance.codingImpactRefs?.length ?? 0;
-  const isDecision = Boolean(utterance.decisionId);
-  const hasProvenance =
-    parent || acceptedCount > 0 || rejectedCount > 0 || evidenceCount > 0 || codingCount > 0 || isDecision;
-
-  const time = new Date(utterance.createdAt).toLocaleTimeString("ko-KR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const stance = resolveStance(utterance);
+  const config = stanceConfig[stance];
+  const Icon = config.icon;
+  const isDecisionNode = Boolean(utterance.decisionId);
+  const parent = utterance.parentUtteranceId ? utteranceById.get(utterance.parentUtteranceId) : undefined;
+  const borderColor = roleBorderColors[utterance.agentRole] ?? "border-l-zinc-600";
 
   return (
     <div
       className={cn(
-        "flex flex-col rounded-lg border bg-card transition-colors",
-        onSelect && "cursor-pointer hover:border-primary/40",
-        isDecision ? "border-primary/50" : "border-border",
+        "rounded-lg border border-zinc-800/60 border-l-2 bg-zinc-900/40 p-4 transition-all hover:border-zinc-700 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 block w-full",
+        borderColor,
+        isDecisionNode && "ring-1 ring-violet-500/30",
+        onSelect && "cursor-pointer",
       )}
       onClick={() => onSelect?.(utterance)}
       onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (onSelect && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
-          onSelect?.(utterance);
+          onSelect(utterance);
         }
       }}
       role={onSelect ? "button" : undefined}
       tabIndex={onSelect ? 0 : undefined}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <AvatarWithStatus
-            initials={utterance.agentName.slice(0, 2).toUpperCase()}
-            roleColor={roleColorFromRole(utterance.agentRole)}
-            avatarDataUrl={agentVisualsById[utterance.agentId]?.avatarDataUrl}
-            size="sm"
-          />
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium text-foreground">
-              {utterance.agentName}
+      <div className="flex items-start gap-3">
+        <div className={cn("mt-0.5 rounded-md p-1.5", config.bg)}>
+          <Icon className={cn("h-4 w-4", config.color)} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <header className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-zinc-100">{utterance.agentName}</span>
+            <span className="text-xs text-zinc-500">{roleLabel(utterance.agentRole)}</span>
+            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", config.bg, config.color)}>
+              {config.label}
+            </span>
+            {isDecisionNode ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-400">
+                <GitMerge className="h-2.5 w-2.5" />
+                결정
+              </span>
+            ) : null}
+          </header>
+          {parent ? (
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-zinc-500">
+              <CornerDownRight className="h-3 w-3" />
+              <span>
+                <span className="text-zinc-300">{parent.agentName}</span>의 {parent.roundTitle} 발언에 응답
+              </span>
             </div>
-            <div className="truncate text-[10px] text-muted-foreground">
-              {utterance.roundTitle}
-            </div>
-          </div>
+          ) : null}
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">
+            {utterance.content}
+          </p>
+          <footer className="mt-3 flex flex-wrap items-center gap-2">
+            {utterance.tags.map((tag) => (
+              <TagPill key={tag} tag={tag} />
+            ))}
+            {(utterance.evidenceRefIds?.length ?? 0) > 0 ? (
+              <span className="text-xs text-cyan-400">Evidence {utterance.evidenceRefIds?.length}</span>
+            ) : null}
+            {(utterance.codingImpactRefs?.length ?? 0) > 0 ? (
+              <span className="text-xs text-violet-400">Coding {utterance.codingImpactRefs?.length}</span>
+            ) : null}
+            <span className="ml-auto text-[10px] text-zinc-600">
+              {new Date(utterance.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          </footer>
         </div>
-        {isDecision ? (
-          <StatusBadge variant="primary" size="sm" className="font-mono gap-1 shrink-0">
-            <GitMerge className="h-2.5 w-2.5" />
-            DECISION
-          </StatusBadge>
-        ) : null}
-      </div>
-
-      {parent ? (
-        <div className="flex items-center gap-1.5 border-b border-border/50 px-3 py-1.5 text-[10px] text-muted-foreground">
-          <CornerDownRight className="h-2.5 w-2.5" />
-          <span>
-            <span className="font-medium text-foreground">{parent.agentName}</span>의{" "}
-            {parent.roundTitle} 발언에 응답
-          </span>
-        </div>
-      ) : null}
-
-      {/* Tags */}
-      {utterance.tags.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1 border-b border-border/50 px-3 py-1.5">
-          {utterance.tags.map((tag) => {
-            const variant =
-              tag === "agreement"
-                ? "success"
-                : tag === "objection"
-                  ? "warning"
-                  : tag === "evidence"
-                    ? "primary"
-                    : tag === "risk"
-                      ? "danger"
-                      : "muted";
-            return (
-              <StatusBadge key={tag} variant={variant} size="sm">
-                {debateTagLabel(tag)}
-              </StatusBadge>
-            );
-          })}
-        </div>
-      ) : null}
-
-      {/* Content */}
-      <p className="flex-1 px-3 py-2.5 text-sm leading-relaxed text-foreground line-clamp-4">
-        {utterance.content}
-      </p>
-
-      {/* Provenance pills */}
-      {hasProvenance ? (
-        <div className="flex flex-wrap gap-1 border-t border-border/50 px-3 py-1.5">
-          {acceptedCount > 0 ? (
-            <Pill
-              icon={<CheckCircle2 className="h-2.5 w-2.5" />}
-              label={`수용 ${acceptedCount}`}
-              tone="success"
-              tooltip={resolveNameList(utterance.acceptedBy, utteranceById)}
-            />
-          ) : null}
-          {rejectedCount > 0 ? (
-            <Pill
-              icon={<XCircle className="h-2.5 w-2.5" />}
-              label={`기각 ${rejectedCount}`}
-              tone="destructive"
-              tooltip={resolveNameList(utterance.rejectedBy, utteranceById)}
-            />
-          ) : null}
-          {evidenceCount > 0 ? (
-            <Pill
-              icon={<Link2 className="h-2.5 w-2.5" />}
-              label={`근거 ${evidenceCount}`}
-              tone="muted"
-              tooltip={utterance.evidenceRefIds?.join(" · ")}
-            />
-          ) : null}
-          {codingCount > 0 ? (
-            <Pill
-              icon={<Send className="h-2.5 w-2.5" />}
-              label={`코딩 ${codingCount}`}
-              tone="primary"
-              tooltip={utterance.codingImpactRefs?.join(" · ")}
-            />
-          ) : null}
-          {isDecision ? (
-            <Pill
-              icon={<GitMerge className="h-2.5 w-2.5" />}
-              label={utterance.decisionId ?? "decision"}
-              tone="primary"
-              tooltip="이 발언이 최종 결정 노드로 채택됨"
-            />
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* Footer */}
-      <div className="flex items-center justify-between border-t border-border/50 px-3 py-1.5 text-[10px] text-muted-foreground">
-        <span>Round {index}</span>
-        <span>{time}</span>
       </div>
     </div>
   );
 }
 
-function Pill({
-  icon,
-  label,
-  tone,
-  tooltip,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  tone: "success" | "destructive" | "muted" | "primary";
-  tooltip?: string;
-}) {
-  const variant =
-    tone === "success" ? "success"
-    : tone === "destructive" ? "danger"
-    : tone === "primary" ? "primary"
-    : "muted";
+function resolveStance(utterance: Stage3DebateUtteranceView): Stance {
+  if (utterance.decisionId) return "decision";
+  if (utterance.tags.includes("risk")) return "risk";
+  if (utterance.tags.includes("objection")) return "disagree";
+  if (utterance.tags.includes("agreement")) return "agree";
+  if (utterance.tags.includes("evidence") || utterance.tags.includes("coding_impact")) return "evidence";
+  return "neutral";
+}
 
+function TagPill({ tag }: { tag: DebateTag }) {
+  const styles: Record<DebateTag, string> = {
+    agreement: "bg-emerald-500/10 text-emerald-400",
+    coding_impact: "bg-violet-500/10 text-violet-400",
+    evidence: "bg-cyan-500/10 text-cyan-400",
+    objection: "bg-rose-500/10 text-rose-400",
+    risk: "bg-amber-500/10 text-amber-400",
+  };
   return (
-    <span title={tooltip}>
-      <StatusBadge variant={variant} size="sm" className="font-mono gap-1">
-        {icon}
-        {label}
-      </StatusBadge>
+    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", styles[tag])}>
+      {debateTagLabel(tag)}
     </span>
   );
 }
 
-// ── Right side panel: Status Hub ────────────────────────────────────
-
-function StatusHub({ items }: { items: Stage3DebateSession["statusHub"] }) {
-  return (
-    <div className="rounded-lg border border-border bg-card">
-      <div className="border-b border-border px-4 py-2">
-        <span className="text-xs font-medium text-foreground">Status Hub</span>
-      </div>
-      <div className="grid grid-cols-2 gap-2 p-3">
-        {items.map((item) => (
-          <div
-            className="rounded-md border border-border bg-card/40 px-3 py-2"
-            key={item.id}
-          >
-            <span className="text-[10px] text-muted-foreground">{item.label}</span>
-            <div className="mt-0.5 flex items-center gap-1.5">
-              <span
-                className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  item.tone === "ok" && "bg-success",
-                  item.tone === "warn" && "bg-warning",
-                  item.tone === "danger" && "bg-destructive",
-                )}
-              />
-              <span
-                className={cn(
-                  "text-sm font-medium",
-                  item.tone === "ok" && "text-success",
-                  item.tone === "warn" && "text-warning",
-                  item.tone === "danger" && "text-destructive",
-                )}
-              >
-                {item.value}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Right side panel: Agent Relay ───────────────────────────────────
-
-function AgentRelay({
-  entries,
+function SummaryChip({
+  color,
+  icon: Icon,
+  label,
+  value,
 }: {
-  entries: Stage3DebateSession["humanPeek"];
+  color: string;
+  icon: ElementType;
+  label: string;
+  value: number;
 }) {
-  const [isOpen, setIsOpen] = useState(true);
   return (
-    <div className="rounded-lg border border-border bg-card">
-      <button
-        aria-expanded={isOpen}
-        className="flex w-full items-center justify-between border-b border-border px-4 py-2 hover:bg-card/60"
-        onClick={() => setIsOpen((o) => !o)}
-        type="button"
-      >
-        <div className="flex items-center gap-2">
-          <Users className="h-4 w-4 text-primary" />
-          <span className="text-xs font-medium text-foreground">Agent Relay</span>
-        </div>
-        <ChevronDown
-          className={cn(
-            "h-4 w-4 text-muted-foreground transition-transform",
-            !isOpen && "-rotate-90",
-          )}
-        />
-      </button>
-      {isOpen ? (
-        <div className="space-y-2 p-3">
-          {entries.length === 0 ? (
-            <p className="px-2 py-1 text-[10px] text-muted-foreground">
-              비공개 에이전트 흐름 없음.
-            </p>
-          ) : (
-            entries.map((entry) => (
-              <div
-                className="rounded-md border border-border bg-card/40 p-2"
-                key={entry.id}
-              >
-                <div className="flex items-center gap-2">
-                  <StatusBadge
-                    variant={
-                      entry.kind === "send" || entry.kind === "spawn"
-                        ? "primary"
-                        : entry.kind === "approval"
-                          ? "warning"
-                          : "muted"
-                    }
-                    size="sm"
-                  >
-                    {entry.kind}
-                  </StatusBadge>
-                  <span className="text-xs font-medium text-foreground">
-                    {entry.actor}
-                  </span>
-                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                  <span className="text-xs font-medium text-foreground">
-                    {entry.target}
-                  </span>
-                </div>
-                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                  {entry.summary}
-                </p>
-              </div>
-            ))
-          )}
-        </div>
-      ) : null}
+    <div className="flex items-center gap-1.5 text-xs">
+      <Icon className={cn("h-3.5 w-3.5", color)} />
+      <span className="text-zinc-500">{label}</span>
+      <span className={cn("font-medium", color)}>{value}</span>
     </div>
   );
 }
 
-// ── Label helpers ───────────────────────────────────────────────────
+function deriveConsensus(session: Stage3DebateSession) {
+  let agreed = 0;
+  let disagreed = 0;
+  let risks = 0;
+  let decisions = 0;
+  for (const round of session.rounds) {
+    for (const utterance of round.utterances) {
+      if (utterance.tags.includes("agreement")) agreed += 1;
+      if (utterance.tags.includes("objection")) disagreed += 1;
+      if (utterance.tags.includes("risk")) risks += 1;
+      if (utterance.decisionId || utterance.tags.includes("coding_impact")) decisions += 1;
+    }
+  }
+  return { agreed, decisions, disagreed, risks };
+}
 
-function resolveNameList(
-  ids: DebateUtterance["acceptedBy"] | DebateUtterance["rejectedBy"],
-  utteranceById: Map<string, Stage3DebateUtteranceView>,
-): string | undefined {
-  if (!ids || ids.length === 0) return undefined;
-  return ids
-    .map((id) => {
-      const u = utteranceById.get(id);
-      return u ? `${u.agentName} (${u.roundTitle})` : id;
-    })
-    .join(" · ");
+function roleLabel(role: AgentProfile["role"]) {
+  return role
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function debateTagLabel(tag: DebateTag) {
   const labels: Record<DebateTag, string> = {
     agreement: "합의",
-    objection: "반대",
-    evidence: "근거",
-    risk: "리스크",
     coding_impact: "코딩 영향",
+    evidence: "근거",
+    objection: "반대",
+    risk: "리스크",
   };
   return labels[tag];
 }

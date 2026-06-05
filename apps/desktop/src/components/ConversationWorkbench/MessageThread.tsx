@@ -5,6 +5,8 @@ import {
   ShieldAlert,
   Check,
   GitBranch,
+  Sparkles,
+  UserRound,
 } from "lucide-react";
 import { parseDelegateTags } from "@ai-orchestrator/agents";
 import type {
@@ -62,37 +64,40 @@ export function MessageThread({
   const delegationItems = createDelegationPreviewItems(messages, agents);
 
   return (
-    <div className="relative flex-1 overflow-hidden">
+    <div className="relative flex-1 overflow-hidden bg-zinc-950">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.12),transparent_32%),radial-gradient(circle_at_84%_18%,rgba(139,92,246,0.12),transparent_32%)]" />
       <div
-        className="flex h-full flex-col gap-3 overflow-y-auto p-4"
+        className="relative flex h-full flex-col gap-3 overflow-y-auto px-4 py-5"
         aria-label="대화 기록"
         tabIndex={0}
       >
-        {workbenchVisibility.showInlineApprovalQueue ? (
-          <ApprovalQueueInline
-            onApprove={onApprovePermission}
-            onReject={onRejectPermission}
-            pendingProviderRetry={pendingProviderRetry}
-            queue={permissionSnapshotQueue}
-          />
-        ) : null}
-        {workbenchVisibility.showInlineDelegation ? (
-          <DelegationInline items={delegationItems} />
-        ) : null}
-        {messages.length === 0 ? (
-          <EmptyConversation />
-        ) : (
-          messages.map((message) => (
-            <MessageBubble
-              key={message.id}
-              message={message}
-              selectedAgent={selectedAgent}
-              agents={agents}
-              agentVisualsById={agentVisualsById}
-              agentActivityById={agentActivityById}
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+          {workbenchVisibility.showInlineApprovalQueue ? (
+            <ApprovalQueueInline
+              onApprove={onApprovePermission}
+              onReject={onRejectPermission}
+              pendingProviderRetry={pendingProviderRetry}
+              queue={permissionSnapshotQueue}
             />
-          ))
-        )}
+          ) : null}
+          {workbenchVisibility.showInlineDelegation ? (
+            <DelegationInline items={delegationItems} />
+          ) : null}
+          {messages.length === 0 ? (
+            <EmptyConversation />
+          ) : (
+            messages.map((message) => (
+              <MessageBubble
+                key={message.id}
+                message={message}
+                selectedAgent={selectedAgent}
+                agents={agents}
+                agentVisualsById={agentVisualsById}
+                agentActivityById={agentActivityById}
+              />
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
@@ -100,17 +105,17 @@ export function MessageThread({
 
 function EmptyConversation() {
   return (
-    <div className="flex h-full flex-col items-center justify-center py-20">
-      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-        <span className="font-mono text-lg font-bold text-primary">AI</span>
+    <div className="flex min-h-[360px] flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/[0.03] px-6 py-16 text-center shadow-2xl shadow-black/30 backdrop-blur-xl">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-400/25 bg-cyan-400/10 shadow-[0_0_32px_rgba(34,211,238,0.18)]">
+        <Sparkles className="h-6 w-6 text-cyan-300" />
       </div>
-      <h3 className="mt-4 text-sm font-medium text-foreground">
+      <h3 className="mt-5 text-base font-semibold text-zinc-100">
         대화를 시작하세요
       </h3>
-      <p className="mt-1 text-center text-xs text-muted-foreground">
+      <p className="mt-2 max-w-sm text-xs leading-relaxed text-zinc-500">
         아래 입력창에 메시지를 입력하면 대화가 시작됩니다.
         <br />
-        <kbd className="rounded border border-border bg-card/60 px-1 py-0.5 text-[10px]">
+        <kbd className="mt-2 inline-flex rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-zinc-300">
           ⌘K
         </kbd>
         로 봇 전환.
@@ -141,20 +146,23 @@ function MessageBubble({
 
   if (message.role === "user") {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[80%] space-y-1">
-          <div className="flex items-center justify-end gap-2">
-            <span className="text-[10px] text-muted-foreground">{time}</span>
-            <span className="text-sm font-medium text-foreground">사용자</span>
+      <div className="flex justify-end gap-2 py-1.5">
+        <div className="max-w-[82%] space-y-1">
+          <div className="flex items-center justify-end gap-2 px-1">
+            <span className="text-[10px] text-zinc-600">{time}</span>
+            <span className="text-xs font-medium text-zinc-300">사용자</span>
           </div>
-          <div className="rounded-lg rounded-tr-none bg-primary/15 p-3">
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+          <div className="rounded-2xl rounded-tr-md border border-cyan-300/20 bg-gradient-to-br from-cyan-500 to-violet-500 p-3 shadow-lg shadow-cyan-950/30">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-white">
               {message.content}
             </p>
             {attachments.length > 0 ? (
               <MessageAttachments attachments={attachments} />
             ) : null}
           </div>
+        </div>
+        <div className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cyan-200/30 bg-cyan-500/20 text-cyan-100 shadow-[0_0_20px_rgba(34,211,238,0.22)]">
+          <UserRound className="h-4 w-4" />
         </div>
       </div>
     );
@@ -181,7 +189,7 @@ function MessageBubble({
   const visual = senderAgent && agentVisualsById ? agentVisualsById[senderAgent.id] : undefined;
 
   return (
-    <div className="flex gap-3">
+    <div className="flex gap-3 py-1.5">
       <AvatarWithStatus
         initials={initials}
         roleColor={roleColor}
@@ -190,12 +198,12 @@ function MessageBubble({
         size="sm"
       />
       <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-foreground">{label}</span>
-          <span className="text-[10px] text-muted-foreground">{time}</span>
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-xs font-semibold text-zinc-200">{label}</span>
+          <span className="text-[10px] text-zinc-600">{time}</span>
         </div>
-        <div className="rounded-lg rounded-tl-none border border-border bg-card p-3">
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+        <div className="rounded-2xl rounded-tl-md border border-white/10 bg-zinc-900/70 p-3 shadow-lg shadow-black/20 backdrop-blur-xl">
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
             {message.content}
           </p>
           {attachments.length > 0 ? (
@@ -216,16 +224,16 @@ function MessageAttachments({
     <div className="mt-2 flex flex-wrap gap-1.5">
       {attachments.map((attachment) => (
         <span
-          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card/40 px-2 py-1 text-[10px]"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-[10px] text-zinc-200 backdrop-blur"
           key={attachment.id}
         >
           {attachment.kind === "image" ? (
-            <ImageIcon className="h-3 w-3 text-primary" />
+            <ImageIcon className="h-3 w-3 text-cyan-300" />
           ) : (
-            <FileText className="h-3 w-3 text-primary" />
+            <FileText className="h-3 w-3 text-cyan-300" />
           )}
-          <span className="font-medium text-foreground">{attachment.name}</span>
-          <span className="text-muted-foreground">
+          <span className="font-medium text-zinc-100">{attachment.name}</span>
+          <span className="text-zinc-500">
             {formatAttachmentSize(attachment.size)}
           </span>
         </span>
@@ -248,13 +256,13 @@ function ApprovalQueueInline({
   const visible = queue.slice(0, 3);
   if (visible.length === 0) return null;
   return (
-    <div className="rounded-lg border border-warning/40 bg-warning/5 p-3">
+    <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 p-3 shadow-lg shadow-amber-950/20 backdrop-blur-xl">
       <div className="mb-2 flex items-center justify-between text-xs">
-        <span className="flex items-center gap-1.5 font-medium text-warning">
+        <span className="flex items-center gap-1.5 font-medium text-amber-300">
           <ShieldAlert className="h-3.5 w-3.5" />
           승인 대기
         </span>
-        <span className="text-[10px] text-muted-foreground">
+        <span className="rounded-full border border-amber-400/20 bg-black/20 px-2 py-0.5 text-[10px] text-amber-200">
           {queue.length} pending
         </span>
       </div>
@@ -264,14 +272,14 @@ function ApprovalQueueInline({
             pendingProviderRetry?.permissionItemId === item.sourceItemId;
           return (
             <div
-              className="flex items-center justify-between gap-3 rounded-md border border-border bg-card/40 px-3 py-2"
+              className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2"
               key={item.id}
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium text-foreground">
+                <p className="truncate text-xs font-medium text-zinc-100">
                   {item.summary}
                 </p>
-                <p className="truncate text-[10px] text-muted-foreground">
+                <p className="truncate text-[10px] text-zinc-500">
                   {item.permissions.join(", ") || "read_only"}
                   {restoresDraft ? " · 승인 시 입력창 복원" : ""}
                 </p>
@@ -306,24 +314,24 @@ function ApprovalQueueInline({
 function DelegationInline({ items }: { items: DelegationPreviewItem[] }) {
   if (items.length === 0) return null;
   return (
-    <div className="rounded-lg border border-chart-5/40 bg-chart-5/5 p-3">
+    <div className="rounded-2xl border border-violet-400/25 bg-violet-500/10 p-3 shadow-lg shadow-violet-950/20 backdrop-blur-xl">
       <div className="mb-2 flex items-center justify-between text-xs">
-        <span className="flex items-center gap-1.5 font-medium text-chart-5">
+        <span className="flex items-center gap-1.5 font-medium text-violet-300">
           <GitBranch className="h-3.5 w-3.5" />
           Delegation
         </span>
-        <span className="text-[10px] text-muted-foreground">
+        <span className="rounded-full border border-violet-400/20 bg-black/20 px-2 py-0.5 text-[10px] text-violet-200">
           {items.length} tracked
         </span>
       </div>
       <div className="space-y-1.5">
         {items.map((item) => (
           <div
-            className="rounded-md border border-border bg-card/40 px-3 py-1.5"
+            className="rounded-xl border border-white/10 bg-black/20 px-3 py-2"
             key={item.id}
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-xs font-medium text-foreground">
+              <span className="truncate text-xs font-medium text-zinc-100">
                 {item.targetLabel ?? item.target}
               </span>
               <StatusBadge
@@ -334,10 +342,10 @@ function DelegationInline({ items }: { items: DelegationPreviewItem[] }) {
                 {delegationStatusLabel(item.status)}
               </StatusBadge>
             </div>
-            <p className="truncate text-[10px] text-muted-foreground">
+            <p className="truncate text-[10px] text-zinc-500">
               {item.sourceAgent} → {item.target}
             </p>
-            <p className="mt-1 line-clamp-2 text-[11px] text-foreground">
+            <p className="mt-1 line-clamp-2 text-[11px] text-zinc-300">
               {item.prompt}
             </p>
           </div>
