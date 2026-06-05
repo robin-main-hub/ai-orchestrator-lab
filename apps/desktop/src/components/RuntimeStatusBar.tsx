@@ -1,4 +1,4 @@
-import { Activity, Brain, GitBranch, LayoutDashboard, MessageSquare, Search, Terminal } from "lucide-react";
+import { Activity, Brain, GitBranch, LayoutDashboard, MessageSquare, Search, Terminal, Menu } from "lucide-react";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
@@ -23,6 +23,7 @@ export function RuntimeStatusBar({
   onChangeMode,
   onCommandPalette,
   onProbeDgx,
+  onToggleDrawer,
   providerName,
   snapshot,
 }: {
@@ -30,6 +31,7 @@ export function RuntimeStatusBar({
   onChangeMode: (mode: CenterMode) => void;
   onCommandPalette: () => void;
   onProbeDgx: () => void;
+  onToggleDrawer: () => void;
   providerName: string;
   snapshot: RuntimeSnapshot;
 }) {
@@ -43,14 +45,25 @@ export function RuntimeStatusBar({
     <header className="status-bar flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border bg-card/50 px-4">
       {/* Left: Brand logo + system status */}
       <div className="flex min-w-0 items-center gap-4">
+        {/* Mobile Hamburger */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="mobile-menu-btn h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+          onClick={onToggleDrawer}
+          title="Toggle Navigation"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+
         {/* Brand Block */}
         <div className="flex items-center gap-2 select-none">
-          <div className="flex h-7 w-7 items-center justify-center rounded bg-primary/10 text-primary">
+          <div className="flex h-7 w-7 items-center justify-center rounded bg-primary/10 text-primary shrink-0">
             <Brain className="h-4.5 w-4.5" />
           </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-[11px] font-bold text-foreground tracking-tight">AI Orchestrator Lab</span>
-            <span className="text-[8.5px] text-muted-foreground">desktop command room</span>
+          <div className="flex flex-col leading-tight hidden sm:flex">
+            <span className="text-[11px] font-bold text-foreground tracking-tight whitespace-nowrap">AI Orchestrator Lab</span>
+            <span className="text-[8.5px] text-muted-foreground whitespace-nowrap">desktop command room</span>
           </div>
         </div>
 
