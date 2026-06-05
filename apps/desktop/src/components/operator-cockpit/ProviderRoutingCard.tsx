@@ -55,7 +55,15 @@ export function ProviderRoutingCard({
             <Route className="h-3 w-3" />
             선택 경로
           </span>
+          {routing.providerLabel ? (
+            <div className="mb-1 text-xs font-semibold text-zinc-100">{routing.providerLabel}</div>
+          ) : null}
           <span className="break-all font-mono text-sm text-violet-200">{routing.selectedModelId}</span>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {routing.routeLabel ? <Badge color="purple" size="xs">{routing.routeLabel}</Badge> : null}
+            {routing.readinessLabel ? <Badge color="blue" size="xs">{routing.readinessLabel}</Badge> : null}
+            {routing.secretPolicyLabel ? <Badge color="outline" size="xs">{routing.secretPolicyLabel}</Badge> : null}
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-2">
@@ -71,6 +79,14 @@ export function ProviderRoutingCard({
             color={badgeColorForTrust(routing.trustBadge)}
           >
             {trustBadgeLabel(routing.trustBadge)}
+          </MetricBadge>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <MetricBadge icon={<RadioTower className="h-3 w-3" />} label="에이전트" color="outline">
+            {routing.assignedAgentCount ?? 0}명 사용
+          </MetricBadge>
+          <MetricBadge icon={<Route className="h-3 w-3" />} label="모델 카탈로그" color="outline">
+            {routing.modelCount ?? 0}개 · {routing.discoveryLabel ?? "시드 모델 사용"}
           </MetricBadge>
         </div>
       </div>
