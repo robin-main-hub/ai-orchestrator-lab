@@ -2812,6 +2812,12 @@ export function App() {
 
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
+  useEffect(() => {
+    if (!shellVisibility.showLeftRail && isMobileDrawerOpen) {
+      setIsMobileDrawerOpen(false);
+    }
+  }, [isMobileDrawerOpen, shellVisibility.showLeftRail]);
+
   return (
     <div
       className={`app-shell ${mode === "tmux" ? "tmux-focus-shell" : ""} ${
@@ -2830,6 +2836,7 @@ export function App() {
       } as React.CSSProperties}
     >
       <RuntimeStatusBar
+        drawerAvailable={shellVisibility.showLeftRail}
         mode={mode}
         onChangeMode={setMode}
         onCommandPalette={() => setCommandPaletteOpen(true)}
@@ -2840,7 +2847,7 @@ export function App() {
         snapshot={runtimeSnapshotState}
       />
       <main className="workspace-grid">
-        {isMobileDrawerOpen ? (
+        {isMobileDrawerOpen && shellVisibility.showLeftRail ? (
           <div
             className="mobile-drawer-backdrop"
             onClick={() => setIsMobileDrawerOpen(false)}

@@ -30,6 +30,7 @@ const modeConfig: Array<{
 ];
 
 export function RuntimeStatusBar({
+  drawerAvailable,
   mode,
   onChangeMode,
   onCommandPalette,
@@ -39,6 +40,7 @@ export function RuntimeStatusBar({
   providerName,
   snapshot,
 }: {
+  drawerAvailable: boolean;
   mode: CenterMode;
   onChangeMode: (mode: CenterMode) => void;
   onCommandPalette: () => void;
@@ -60,16 +62,59 @@ export function RuntimeStatusBar({
   return (
     <header className="status-bar flex h-12 shrink-0 items-center justify-between gap-4 border-b border-zinc-800/60 bg-zinc-950/90 px-4 backdrop-blur-xl">
       <div className="flex min-w-0 items-center gap-3">
-        <Button
-          aria-label="Toggle Navigation"
-          className="mobile-menu-btn h-8 w-8 shrink-0 text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-100"
-          onClick={onToggleDrawer}
-          size="icon"
-          title="Toggle Navigation"
-          variant="ghost"
-        >
-          <Menu className="h-5 w-5" />
-        </Button>
+        {drawerAvailable ? (
+          <Button
+            aria-label="Toggle Navigation"
+            className="mobile-menu-btn h-8 w-8 shrink-0 text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-100"
+            onClick={onToggleDrawer}
+            size="icon"
+            title="Toggle Navigation"
+            variant="ghost"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+        ) : (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                aria-label="Open mobile mode menu"
+                className="mobile-menu-btn h-8 w-8 shrink-0 text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-100"
+                size="icon"
+                title="Open mobile mode menu"
+                variant="ghost"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              className="w-52 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/95 p-1 shadow-2xl backdrop-blur-xl"
+              sideOffset={8}
+            >
+              {modeConfig.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeMode === item.id;
+                return (
+                  <button
+                    aria-current={isActive ? "page" : undefined}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors",
+                      isActive
+                        ? "bg-zinc-800 text-zinc-100"
+                        : "text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100",
+                    )}
+                    key={item.id}
+                    onClick={() => onChangeMode(item.id)}
+                    type="button"
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </PopoverContent>
+          </Popover>
+        )}
         <div className="flex select-none items-center gap-2">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-violet-600/20 text-violet-300">
             <Brain className="h-4 w-4" />
