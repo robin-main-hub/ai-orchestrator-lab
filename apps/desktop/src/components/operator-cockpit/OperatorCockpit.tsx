@@ -11,10 +11,10 @@ import { RecoveryContinuityCard } from "./RecoveryContinuityCard";
 import { WorkerFleetCard } from "./WorkerFleetCard";
 import { badgeColorForMirror, formatClock } from "./presentation";
 
-export function OperatorCockpit({ 
+export function OperatorCockpit({
   snapshot,
   onPreviewEvidence,
-}: { 
+}: {
   snapshot: OperatorCockpitSnapshot;
   onPreviewEvidence?: () => void;
 }) {
