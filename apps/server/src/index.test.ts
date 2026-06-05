@@ -116,6 +116,10 @@ describe("server health placeholder", () => {
     expect(health.capabilities).toContain("agent-delegation-endpoint");
     expect(health.capabilities).toContain("vllm-health");
     expect(health.capabilities).toContain("event-storage-sync");
+    expect(health.capabilities).toContain("event-stream");
+    expect(health.capabilities).toContain("memory-sync");
+    expect(health.capabilities).not.toContain("remote-event-stream-placeholder");
+    expect(health.capabilities).not.toContain("memory-sync-placeholder");
     expect(health.eventStorage.mode).toBe("memory");
     expect(health.eventStorage.revision).toBe(0);
   });
