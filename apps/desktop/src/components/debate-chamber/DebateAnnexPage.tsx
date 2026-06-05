@@ -13,7 +13,13 @@ import {
   XCircle,
 } from "lucide-react";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
-import { annexCopy, annexTabPresentation, sanitizeDebateAnnexText } from "@/lib/debateChamberPresentation";
+import {
+  annexCopy,
+  annexTabPresentation,
+  createAnnexTabCountSummary,
+  formatAnnexTabLabel,
+  sanitizeDebateAnnexText,
+} from "@/lib/debateChamberPresentation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { deriveDebateDecisionReadiness } from "../../lib/debateDecisionReadiness";
@@ -101,6 +107,18 @@ export function DebateAnnexPage({
     }),
     [codingPacketGoal, pendingApprovals, runtime, session, now],
   );
+  const tabCounts = useMemo(
+    () => ({
+      agents: data.agentRelay.length,
+      evidence: data.evidenceRefs.length,
+      logs: data.logs.length,
+      memory: data.memoryRecall.length,
+      queue: data.queueItems.length,
+      status: data.statusHub.length,
+    }),
+    [data],
+  );
+  const tabSummary = createAnnexTabCountSummary(tabCounts);
 
   return (
     <section
@@ -126,6 +144,7 @@ export function DebateAnnexPage({
             <h1 className="mt-1 truncate text-sm font-medium text-zinc-100">
               {session.problem}
             </h1>
+            <p className="mt-1 truncate text-xs text-zinc-500">{tabSummary}</p>
           </div>
         </div>
 
@@ -147,7 +166,7 @@ export function DebateAnnexPage({
                 type="button"
               >
                 <Icon className="h-3.5 w-3.5" />
-                {config.label}
+                {formatAnnexTabLabel(config.label, tabCounts[key])}
               </button>
             );
           })}
