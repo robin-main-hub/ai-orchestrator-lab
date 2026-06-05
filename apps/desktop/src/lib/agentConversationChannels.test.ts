@@ -2,11 +2,14 @@ import type { ConversationMessage } from "@ai-orchestrator/protocol";
 import { describe, expect, it } from "vitest";
 import {
   appendAgentChannelMessages,
+  createAgentChannelMemoryInstallAudit,
+  createAgentChannelMemoryInstallSummary,
   createAgentChannelMemoryScope,
   createAgentChannelRecallQuery,
   createInitialAgentConversationChannels,
   getAgentChannelMessages,
 } from "./agentConversationChannels";
+import { seededAgentProfiles } from "../seeds/agents";
 
 const agents = [
   { id: "agent_orchestrator" },
@@ -79,6 +82,53 @@ describe("agentConversationChannels", () => {
         "session:session_a",
         "provider:provider_mimo_token_openai",
       ].join("\n"),
+    );
+  });
+
+  it("audits memory scope installation for every seeded agent", () => {
+    const audit = createAgentChannelMemoryInstallAudit(
+      seededAgentProfiles,
+      "session_main",
+      "provider_mimo_token_openai",
+    );
+
+    expect(audit.totalAgents).toBe(seededAgentProfiles.length);
+    expect(audit.installedCount).toBe(seededAgentProfiles.length);
+    expect(audit.missingAgentIds).toEqual([]);
+    expect(audit.duplicateNamespaceAgentIds).toEqual([]);
+    expect(audit.duplicateRecallTraceAgentIds).toEqual([]);
+    expect(audit.scopes.map((scope) => scope.agentId).sort()).toEqual(
+      seededAgentProfiles.map((agent) => agent.id).sort(),
+    );
+  });
+
+  it("redacts secret-like provider values from memory namespaces and recall traces", () => {
+    const audit = createAgentChannelMemoryInstallAudit(
+      [{ id: "agent_executor" }],
+      "session_main",
+      "provider https://token-plan-sgp.xiaomimimo.com/v1 Bearer bearer-secret-value sk-secret-value tp-secret-value",
+    );
+    const serializedAudit = JSON.stringify(audit);
+
+    expect(serializedAudit).not.toContain("https://token-plan-sgp.xiaomimimo.com/v1");
+    expect(serializedAudit).not.toContain("sk-secret-value");
+    expect(serializedAudit).not.toContain("tp-secret-value");
+    expect(audit.scopes[0]?.providerProfileId).toBe(
+      "provider_redacted_url_Bearer_redacted_token_redacted_key_redacted_token",
+    );
+    expect(audit.scopes[0]?.namespace).not.toContain(" ");
+    expect(audit.scopes[0]?.recallTraceId).not.toContain(" ");
+  });
+
+  it("summarizes memory installation in safe Korean operator language", () => {
+    const audit = createAgentChannelMemoryInstallAudit(
+      seededAgentProfiles,
+      "session_main",
+      "provider_mimo_token_openai",
+    );
+
+    expect(createAgentChannelMemoryInstallSummary(audit)).toBe(
+      `전원 기억 설치 완료 · ${seededAgentProfiles.length}/${seededAgentProfiles.length}`,
     );
   });
 });

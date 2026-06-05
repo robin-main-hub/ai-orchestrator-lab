@@ -57,7 +57,7 @@ describe("createAgentChannelStatus", () => {
         value: "agent_memory_curator · session_main",
       },
       {
-        label: "Recall Trace",
+        label: "기억 추적",
         tone: "ready",
         value: expect.stringMatching(/^recall_agent_memory_curator_.*….*token_openai$/),
       },
@@ -84,11 +84,12 @@ describe("createAgentChannelStatus", () => {
         sessionId: "session_main",
       },
       modelId: "claude-opus-4-8",
-      providerProfileId: "provider_apifun_claude https://token-plan-sgp.xiaomimimo.com/v1 Bearer sk-secret1234567890",
+      providerProfileId: "provider_apifun_claude https://token-plan-sgp.xiaomimimo.com/v1 Bearer sk-secret1234567890 tp-secret1234567890",
       toolLabels: ["Tmux 전달", "승인 확인"],
     });
 
     expect(JSON.stringify(chips)).not.toContain("sk-secret1234567890");
+    expect(JSON.stringify(chips)).not.toContain("tp-secret1234567890");
     expect(JSON.stringify(chips)).not.toContain("https://token-plan-sgp.xiaomimimo.com/v1");
     expect(JSON.stringify(chips)).toContain("[redacted]");
   });

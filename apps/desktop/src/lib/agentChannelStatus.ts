@@ -72,7 +72,7 @@ export function createAgentChannelDetailChips({
       value: sanitizeChannelValue(`${memoryScope.agentId} · ${memoryScope.sessionId}`),
     });
     chips.push({
-      label: "Recall Trace",
+      label: "기억 추적",
       tone: "ready",
       value: compactChannelValue(memoryScope.recallTraceId),
     });
@@ -98,6 +98,7 @@ function sanitizeChannelValue(value: string): string {
   return value
     .replace(/https?:\/\/[^\s"')]+/gi, "[redacted:url]")
     .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, "[redacted]")
+    .replace(/\btp-[A-Za-z0-9_-]{8,}\b/g, "[redacted]")
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/gi, "Bearer [redacted]")
     .replace(/\b[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|COOKIE)[A-Z0-9_]*\s*=\s*["']?[^\s"']+["']?/g, "[redacted]");
 }
