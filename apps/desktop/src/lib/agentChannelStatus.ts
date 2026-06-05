@@ -4,6 +4,7 @@ export type AgentChannelAdapterStatus = "loading" | "ready" | "error";
 
 export type AgentChannelStatusInput = {
   agentName?: string;
+  roleLabel?: string;
   adapterStatus: AgentChannelAdapterStatus;
   memoryRecordCount: number;
   messageCount: number;
@@ -31,14 +32,16 @@ export type AgentChannelDetailChipInput = {
 
 export function createAgentChannelStatus({
   agentName,
+  roleLabel,
   adapterStatus,
   memoryRecordCount,
   messageCount,
 }: AgentChannelStatusInput): AgentChannelStatus {
   const displayName = agentName?.trim() || "선택 에이전트";
+  const identityTitle = roleLabel?.trim() ? `${displayName} · ${sanitizeChannelValue(roleLabel)}` : `${displayName} 전용 채널`;
 
   return {
-    title: `${displayName} 전용 채널`,
+    title: identityTitle,
     continuityLabel: messageCount > 0 ? `이전 대화 이어받음 · ${messageCount}개 메시지` : "새 대화 시작",
     memoryLabel: createMemoryLabel(adapterStatus, memoryRecordCount),
     tone: adapterStatus,
@@ -66,27 +69,41 @@ export function createAgentChannelDetailChips({
     chips.push({
       label: "기억 범위",
       tone: "ready",
-      value: `${memoryScope.agentId} · ${memoryScope.sessionId}`,
+      value: sanitizeChannelValue(`${memoryScope.agentId} · ${memoryScope.sessionId}`),
     });
     chips.push({
       label: "Recall Trace",
       tone: "ready",
-      value: memoryScope.recallTraceId,
+      value: compactChannelValue(memoryScope.recallTraceId),
     });
   }
   if (providerProfileId || modelId) {
     chips.push({
       label: "Provider",
       tone: "ready",
-      value: [providerProfileId, modelId].filter(Boolean).join(" · "),
+      value: sanitizeChannelValue([providerProfileId, modelId].filter(Boolean).join(" · ")),
     });
   }
   if (toolLabels.length > 0) {
     chips.push({
       label: "도구 프로필",
       tone: "ready",
-      value: toolLabels.slice(0, 3).join(" · "),
+      value: sanitizeChannelValue(toolLabels.slice(0, 3).join(" · ")),
     });
   }
   return chips;
+}
+
+function sanitizeChannelValue(value: string): string {
+  return value
+    .replace(/https?:\/\/[^\s"')]+/gi, "[redacted:url]")
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, "[redacted]")
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/gi, "Bearer [redacted]")
+    .replace(/\b[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|COOKIE)[A-Z0-9_]*\s*=\s*["']?[^\s"']+["']?/g, "[redacted]");
+}
+
+function compactChannelValue(value: string): string {
+  const sanitized = sanitizeChannelValue(value);
+  if (sanitized.length <= 48) return sanitized;
+  return `${sanitized.slice(0, 28)}…${sanitized.slice(-18)}`;
 }
