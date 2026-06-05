@@ -2,6 +2,7 @@ import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import type { ModelDiscoverySnapshot, ProviderProfile } from "@ai-orchestrator/protocol";
 import { StatusBadge } from "@/ui/status-badge";
 import { createProviderOperationalBadges } from "../lib/providerOperationalBadges";
+import type { ProviderRoutingConsoleItem, ProviderRoutingConsoleTone } from "../lib/providerRoutingConsole";
 import type { ModelCatalog } from "../types";
 import {
   createProviderRoundtripHarness,
@@ -16,6 +17,7 @@ export function ProviderProfilesManagerPanel({
   onRenameProvider,
   onRemoveProvider,
   profiles,
+  routingConsoleItems,
   usedProviderIds,
 }: {
   modelCatalog: ModelCatalog;
@@ -25,13 +27,16 @@ export function ProviderProfilesManagerPanel({
   onRenameProvider: (providerId: string) => void;
   onRemoveProvider: (providerId: string) => void;
   profiles: ProviderProfile[];
+  routingConsoleItems: ProviderRoutingConsoleItem[];
   usedProviderIds: Set<string>;
 }) {
+  const routingItemById = new Map(routingConsoleItems.map((item) => [item.providerId, item]));
+
   return (
     <section className="side-panel">
       <header className="panel-title">
         <KeyRound size={17} />
-        <h2>Provider Profiles</h2>
+        <h2>Provider Routing Console</h2>
         <button aria-label="provider 추가" className="icon-button" onClick={onAddProvider} type="button">
           <Plus size={15} />
         </button>
@@ -44,10 +49,27 @@ export function ProviderProfilesManagerPanel({
           const operationalBadges = createProviderOperationalBadges(profile, profiles);
           const smokeReadiness = createProviderSmokeReadiness(profile);
           const roundtripHarness = createProviderRoundtripHarness(profile);
+          const routingItem = routingItemById.get(profile.id);
           return (
             <article className={`provider-row ${isInUse ? "in-use" : ""}`} key={profile.id}>
               <div>
-                <strong>{profile.name}</strong>
+                <strong>{routingItem?.displayName ?? profile.name}</strong>
+                {routingItem ? (
+                  <small className="provider-model-summary mt-1 flex flex-wrap items-center gap-1">
+                    <StatusBadge size="sm" variant={variantForRoutingTone(routingItem.enabledTone)}>
+                      {routingItem.enabledLabel}
+                    </StatusBadge>
+                    <StatusBadge size="sm" variant={variantForRoutingTone(routingItem.readinessTone)}>
+                      {routingItem.readinessLabel}
+                    </StatusBadge>
+                    <StatusBadge size="sm" variant={variantForRoutingTone(routingItem.trustTone)}>
+                      {routingItem.trustLabel}
+                    </StatusBadge>
+                    <span>{routingItem.assignedAgentCount} agents</span>
+                    <span>/</span>
+                    <span>{routingItem.defaultModelLabel}</span>
+                  </small>
+                ) : null}
                 <small className="provider-model-summary flex items-center gap-1 mt-1">
                   <span>{models.length} models</span>
                   <span>/</span>
@@ -118,6 +140,16 @@ export function ProviderProfilesManagerPanel({
                     <span>{roundtripHarness.logPolicyLabel}</span>
                   </small>
                 ) : null}
+                {routingItem ? (
+                  <small className="mt-2 flex flex-wrap items-center gap-1 text-[10px] text-zinc-500">
+                    <StatusBadge size="sm" variant={variantForRoutingTone(routingItem.discoveryTone)}>
+                      {routingItem.discoveryLabel}
+                    </StatusBadge>
+                    <span>{routingItem.routeLabel}</span>
+                    <span>/</span>
+                    <span>{routingItem.secretPolicyLabel}</span>
+                  </small>
+                ) : null}
               </div>
               <StatusBadge
                 size="sm"
@@ -169,4 +201,11 @@ export function ProviderProfilesManagerPanel({
       </div>
     </section>
   );
+}
+
+function variantForRoutingTone(tone: ProviderRoutingConsoleTone) {
+  if (tone === "success") return "success";
+  if (tone === "warning") return "warning";
+  if (tone === "danger") return "danger";
+  return "muted";
 }

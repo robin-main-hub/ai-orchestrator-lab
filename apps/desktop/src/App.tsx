@@ -153,6 +153,7 @@ import {
 import { createControlQueueContinuitySummary } from "./lib/controlQueueContinuity";
 import { controlQueuePermissionLabel, sanitizeControlQueueText } from "./lib/controlQueuePresentation";
 import { createMemoryGovernanceSummary } from "./lib/memoryGovernance";
+import { createProviderRoutingConsoleItems } from "./lib/providerRoutingConsole";
 import {
   agentRoleLabel,
   classifyDraftAttachment,
@@ -519,6 +520,16 @@ export function App() {
     runtimeUpdatedAt: runtimeSnapshotState.updatedAt,
     selectedAgent,
   });
+  const providerRoutingConsoleItems = useMemo(
+    () =>
+      createProviderRoutingConsoleItems({
+        agents,
+        discoveryByProviderId: modelDiscoveryByProviderId,
+        modelCatalog,
+        profiles: providerProfiles,
+      }),
+    [agents, modelCatalog, modelDiscoveryByProviderId, providerProfiles],
+  );
   const selectedAgentMemoryScope = useMemo(
     () =>
       createAgentChannelMemoryScope(
@@ -2875,6 +2886,9 @@ export function App() {
       eventSyncStatus: eventSyncState.status,
       memorySyncStatus: runtimeSnapshotState.memorySyncStatus,
     });
+    const selectedProviderConsoleItem = providerRoutingConsoleItems.find(
+      (item) => item.providerId === selectedProvider?.id,
+    );
 
     return {
       id: activeSessionId || "global-cockpit",
@@ -3009,6 +3023,13 @@ export function App() {
         costBadge,
         speedBadge,
         trustBadge: selectedProvider?.trustLevel || "limited",
+        assignedAgentCount: selectedProviderConsoleItem?.assignedAgentCount,
+        discoveryLabel: selectedProviderConsoleItem?.discoveryLabel,
+        modelCount: selectedProviderConsoleItem?.modelCount,
+        providerLabel: selectedProviderConsoleItem?.displayName,
+        readinessLabel: selectedProviderConsoleItem?.readinessLabel,
+        routeLabel: selectedProviderConsoleItem?.routeLabel,
+        secretPolicyLabel: selectedProviderConsoleItem?.secretPolicyLabel,
       },
       recovery: {
         offlineResumeSupported:
@@ -3039,6 +3060,7 @@ export function App() {
     memoryInspector,
     selectedModel,
     providerProfiles,
+    providerRoutingConsoleItems,
     selectedProvider,
     eventSyncState.status,
     eventSyncState.lastError,
@@ -3170,6 +3192,7 @@ export function App() {
               onRenameProvider={handleRenameProvider}
               onRegister={handleRegisterProvider}
               profiles={providerProfiles}
+              routingConsoleItems={providerRoutingConsoleItems}
               usedProviderIds={usedProviderIds}
             />
           ) : null}
