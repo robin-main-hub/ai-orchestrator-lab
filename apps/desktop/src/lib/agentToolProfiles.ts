@@ -126,3 +126,11 @@ export function getAgentToolProfile(role: AgentRole): AgentToolProfile {
 export function getAgentToolBadgeLabels(role: AgentRole): string[] {
   return getAgentToolProfile(role).tools.map((tool) => toolBadgeLabels[tool] ?? tool);
 }
+
+export function getAgentToolProfileSummary(role: AgentRole) {
+  const profile = getAgentToolProfile(role);
+  return {
+    label: profile.label,
+    visibleBadges: getAgentToolBadgeLabels(role).slice(0, 3),
+  };
+}
