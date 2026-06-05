@@ -101,7 +101,7 @@ async function probeRoute(fetchImpl: typeof fetch, endpoint: string, method: "GE
       status: response.ok ? "ok" : "http_error",
       latencyMs: Date.now() - startedAt,
       httpStatus: response.status,
-      bodyPreview: rawText.slice(0, 180),
+      bodyPreview: redactDgxDiagnosticPreview(rawText).slice(0, 180),
     } satisfies Stage32DgxRouteProbe;
   } catch (error) {
     return {
@@ -109,7 +109,7 @@ async function probeRoute(fetchImpl: typeof fetch, endpoint: string, method: "GE
       method,
       status: isAbortError(error) ? "timeout" : isDgxAuthCryptoError(error) ? "crypto_error" : "network_error",
       latencyMs: Date.now() - startedAt,
-      error: formatRouteError(error),
+      error: redactDgxDiagnosticPreview(formatRouteError(error)),
     } satisfies Stage32DgxRouteProbe;
   } finally {
     globalThis.clearTimeout(timeoutId);
@@ -140,4 +140,11 @@ function formatRouteError(error: unknown) {
   }
 
   return String(error);
+}
+
+function redactDgxDiagnosticPreview(value: string) {
+  return value
+    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "[redacted-secret]")
+    .replace(/\b(?:api[_-]?key|token|secret|authorization|bearer)\b[^\s"',;]*/gi, "[redacted-secret]")
+    .replace(/(?:\/Users|\/home)\/[^\s"',;]+/g, "[redacted-path]");
 }

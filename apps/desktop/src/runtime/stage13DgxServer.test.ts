@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
-import { fetchDgxProviderModelDiscovery, fetchDgxProviderRegistry, probeDgxOrchestratorServer, updateRuntimeWithFsmState } from "./stage13DgxServer";
+import {
+  fetchDgxOperatorCockpitSnapshot,
+  fetchDgxProviderModelDiscovery,
+  fetchDgxProviderRegistry,
+  probeDgxOrchestratorServer,
+  updateRuntimeWithFsmState,
+} from "./stage13DgxServer";
 import { DgxConnectionStateMachine } from "./stage5Runtime";
 import { DGX02_LAN_ORCHESTRATOR_BASE_URL } from "./stage30DgxEndpoints";
 
@@ -250,6 +256,69 @@ describe("stage13 DGX server probing", () => {
     expect(registry.authorityNodeId).toBe("dgx-02");
     expect(registry.rawSecretPersisted).toBe(false);
     expect(registry.entries[0]?.providerProfileId).toBe("provider_dgx02_vllm");
+  });
+
+  it("fetches a read-only Operator Cockpit snapshot through the DGX server", async () => {
+    const snapshot = await fetchDgxOperatorCockpitSnapshot({
+      fetchImpl: async (url, init) => {
+        expect(String(url)).toBe(`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/cockpit/snapshot`);
+        expectHttpHmacHeaders(init?.headers as Record<string, string>);
+        return jsonResponse({
+          id: "server-cockpit-20260524000100000",
+          timestamp: "2026-05-24T00:01:00.000Z",
+          fleet: [
+            {
+              workerId: "server-provider-registry",
+              role: "orchestrator",
+              status: "idle",
+              statusRingColor: "green",
+            },
+          ],
+          approvals: [],
+          handoffs: [],
+          memory: {
+            contextReasons: ["Server provider registry readiness"],
+            macBookAuthorityEnabled: true,
+            dgxMirrorHealth: "healthy",
+            contradictionWarnings: [],
+          },
+          routing: {
+            selectedModelId: "claude-opus-4-8",
+            fallbackStatus: "available",
+            costBadge: "high",
+            speedBadge: "average",
+            trustBadge: "limited",
+          },
+          recovery: {
+            offlineResumeSupported: true,
+            outboxSyncStatus: "synced",
+            healthIndicators: ["Server cockpit snapshot synced"],
+          },
+          dispatchHistory: [],
+        });
+      },
+    });
+
+    expect(snapshot.id).toBe("server-cockpit-20260524000100000");
+    expect(snapshot.routing.selectedModelId).toBe("claude-opus-4-8");
+  });
+
+  it("redacts secret-like response previews from DGX server fetch errors", async () => {
+    await expect(
+      fetchDgxOperatorCockpitSnapshot({
+        serverBaseUrl: "http://dgx-02:4317",
+        fetchImpl: async () =>
+          new Response("upstream failed with sk-stage13-secret-token at /Users/robin/.config/key", { status: 500 }),
+      }),
+    ).rejects.toThrow("[redacted-secret]");
+
+    await expect(
+      fetchDgxOperatorCockpitSnapshot({
+        serverBaseUrl: "http://dgx-02:4317",
+        fetchImpl: async () =>
+          new Response("upstream failed with sk-stage13-secret-token at /Users/robin/.config/key", { status: 500 }),
+      }),
+    ).rejects.not.toThrow(/sk-stage13-secret-token|\/Users\/robin/);
   });
 
   it("updates runtime snapshot state based on DgxConnectionStateMachine state", () => {
