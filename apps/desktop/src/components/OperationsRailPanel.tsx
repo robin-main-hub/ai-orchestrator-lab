@@ -5,6 +5,7 @@ import type {
   PermissionMatrixSnapshot,
   ProviderRuntimeReadiness,
   SecretVaultSnapshot,
+  TmuxPaneRole,
 } from "@ai-orchestrator/protocol";
 import { StatusBadge } from "@/ui/status-badge";
 import type { DesktopApprovalListResponse } from "../runtime/stage34ApprovalServer";
@@ -15,7 +16,7 @@ export type TmuxRedispatchOutcome = {
   approvalId: string;
   createdAt: string;
   reason: string;
-  role: string;
+  role: TmuxPaneRole;
   sourceItemId?: string;
   status: "sent" | "failed" | "blocked" | "recorded" | "pending_approval" | "dry_run";
 };
