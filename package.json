@@ -15,6 +15,7 @@
     "server:start": "corepack pnpm --filter @ai-orchestrator/server start",
     "server:smoke": "node scripts/smoke-dgx-server.mjs",
     "provider:smoke:ai": "node scripts/provider-ai-smoke.mjs --list",
+    "provider:smoke:ai:all": "node scripts/provider-ai-smoke.mjs --run-all",
     "provider:smoke:ai:manifest": "node scripts/smoke-provider-ai-manifest.mjs",
     "provider:smoke:deepseek": "node scripts/smoke-deepseek-provider.mjs",
     "tmux:smoke:dry-run": "node scripts/smoke-tmux-dry-run.mjs",
