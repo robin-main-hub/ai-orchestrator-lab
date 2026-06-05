@@ -5,10 +5,31 @@ import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
 import { badgeColorForMirror } from "./presentation";
 
-export function MemoryRecallCard({ memory }: { memory: OperatorCockpitMemoryRecall }) {
+export function MemoryRecallCard({
+  memory,
+  onOpen,
+}: {
+  memory: OperatorCockpitMemoryRecall;
+  onOpen?: () => void;
+}) {
   return (
     <GlassPanel variant={memory.contradictionWarnings.length > 0 ? "danger" : "default"}>
-      <GlassPanelHeader action={<Badge color="purple">{memory.contextReasons.length} recalls</Badge>}>
+      <GlassPanelHeader
+        action={
+          <div className="flex items-center gap-2">
+            <Badge color="purple">{memory.contextReasons.length} recalls</Badge>
+            {onOpen ? (
+              <button
+                className="rounded-md border border-zinc-700/70 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 transition hover:border-violet-400/60 hover:text-violet-200"
+                onClick={onOpen}
+                type="button"
+              >
+                열기
+              </button>
+            ) : null}
+          </div>
+        }
+      >
         <div className="flex items-center gap-2">
           <Brain className="h-4 w-4 text-violet-400" />
           <h3 className="text-sm font-semibold text-zinc-100">Memory Recall</h3>

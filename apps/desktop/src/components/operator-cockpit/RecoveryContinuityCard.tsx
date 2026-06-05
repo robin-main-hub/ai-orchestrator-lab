@@ -5,10 +5,31 @@ import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
 import { badgeColorForOutbox } from "./presentation";
 
-export function RecoveryContinuityCard({ recovery }: { recovery: OperatorCockpitRecovery }) {
+export function RecoveryContinuityCard({
+  recovery,
+  onOpen,
+}: {
+  recovery: OperatorCockpitRecovery;
+  onOpen?: () => void;
+}) {
   return (
     <GlassPanel>
-      <GlassPanelHeader action={<Badge color="green">{recovery.healthIndicators.length} checks</Badge>}>
+      <GlassPanelHeader
+        action={
+          <div className="flex items-center gap-2">
+            <Badge color="green">{recovery.healthIndicators.length} checks</Badge>
+            {onOpen ? (
+              <button
+                className="rounded-md border border-zinc-700/70 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 transition hover:border-emerald-400/60 hover:text-emerald-200"
+                onClick={onOpen}
+                type="button"
+              >
+                열기
+              </button>
+            ) : null}
+          </div>
+        }
+      >
         <div className="flex items-center gap-2">
           <HeartPulse className="h-4 w-4 text-emerald-400" />
           <h3 className="text-sm font-semibold text-zinc-100">Recovery & Continuity</h3>
