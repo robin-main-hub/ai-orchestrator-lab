@@ -36,10 +36,13 @@ function loadEnv() {
 
 export function redactSensitiveText(value) {
   return String(value)
+    .replace(/https?:\/\/[^\s"'`<>)]+/gi, '[REDACTED:url]')
     .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '[REDACTED:api_key]')
     .replace(/\btp-[A-Za-z0-9_-]{8,}\b/g, '[REDACTED:token_plan_key]')
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/gi, 'Bearer [REDACTED:bearer_token]')
-    .replace(/\b[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|COOKIE)[A-Z0-9_]*\s*=\s*["']?[^\s"']+["']?/g, '[REDACTED:env_secret]');
+    .replace(/\b[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|COOKIE)[A-Z0-9_]*\s*=\s*["']?[^\s"']+["']?/g, '[REDACTED:env_secret]')
+    .replace(/\/Users\/[^\s"'`<>)]+/g, '[REDACTED:path]')
+    .replace(/\/home\/[^\s"'`<>)]+/g, '[REDACTED:path]');
 }
 
 export function truncateForConsole(value, maxChars = 2000) {
@@ -102,7 +105,7 @@ async function main() {
   const resolvedBaseURL = baseURL.replace(/\/$/, '');
   const endpoint = `${resolvedBaseURL}/chat/completions`;
 
-  console.log(`[MiMo CLI Direct] Querying ${modelName} via ${providerName} (${resolvedBaseURL})...`);
+  console.log(`[MiMo CLI Direct] Querying ${modelName} via ${providerName} (endpoint redacted)...`);
 
   try {
     const response = await fetch(endpoint, {
@@ -143,7 +146,7 @@ async function main() {
     }
 
     console.log('\n--- Response from MiMo ---');
-    console.log(reply);
+    console.log(truncateForConsole(reply, 1200));
     console.log('--------------------------');
   } catch (err) {
     console.error('Network or processing error:', err.message);
