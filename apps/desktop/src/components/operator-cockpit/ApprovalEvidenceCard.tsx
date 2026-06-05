@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, ClipboardList, Eye, FileText, Hash, Shield
 import type { OperatorCockpitApprovalEvidence } from "@ai-orchestrator/protocol";
 import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
+import { operatorCockpitActionLabels } from "./actionLabels";
 import { badgeColorForPayload } from "./presentation";
 
 export function ApprovalEvidenceCard({
@@ -42,9 +43,10 @@ export function ApprovalEvidenceCard({
                 </div>
                 {onPreview ? (
                   <button
-                    aria-label="View approval details"
+                    aria-label={operatorCockpitActionLabels.previewApprovalEvidence}
                     className="rounded p-1.5 text-zinc-600 transition-colors hover:bg-zinc-800 hover:text-zinc-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
                     onClick={onPreview}
+                    title={operatorCockpitActionLabels.previewApprovalEvidence}
                     type="button"
                   >
                     <Eye className="h-4 w-4 shrink-0" />
