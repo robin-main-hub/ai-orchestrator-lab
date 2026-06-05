@@ -145,6 +145,37 @@ describe("publicWorkTrace", () => {
     expect(trace.receipt?.items).toContainEqual({ label: "공개 범위", value: "요약 단계만" });
   });
 
+  it("메타데이터가 없는 assistant 메시지도 공개 가능한 응답 단계와 도구 경계를 보여준다", () => {
+    const message: ConversationMessage = {
+      id: "msg_assistant_plain",
+      sessionId: "session_main",
+      role: "assistant",
+      content: "기본 답변입니다.",
+      createdAt: "2026-06-05T08:00:00.000Z",
+    };
+
+    const trace = createConversationMessagePublicWorkTrace(message);
+
+    expect(trace.receipt).toEqual({
+      label: "에이전트 실행 영수증",
+      status: "checkpointed",
+      items: [
+        { label: "범위", value: "메시지" },
+        { label: "기준점", value: "msg_assistant_plain" },
+        { label: "마스킹", value: "적용됨" },
+        { label: "공개 범위", value: "요약 단계만" },
+      ],
+    });
+    expect(trace.groups.map((group) => group.title)).toEqual([
+      "작업 단계",
+      "명령·도구 제안",
+      "검증·근거",
+    ]);
+    expect(trace.groups[0]?.items[0]).toMatchObject({ label: "응답 단계", value: "공개 답변 생성" });
+    expect(trace.groups[1]?.items[0]).toMatchObject({ label: "도구 호출", value: "필요 시 목적·입력·권한을 먼저 표시" });
+    expect(trace.groups[2]?.items[0]).toMatchObject({ label: "검증 경계", value: "숨은 사고 과정 비공개 · 요약만 표시" });
+  });
+
   it("토론 발언의 태그와 근거를 같은 공개 로그 모델로 변환한다", () => {
     const utterance: Stage3DebateUtteranceView = {
       id: "utt_1",
