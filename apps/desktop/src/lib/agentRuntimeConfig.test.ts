@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { AgentConfigFile, WorkbenchAgent } from "../types";
 import {
+  createAgentRoleToolRuntimeAudit,
+  createAgentRoleToolRuntimeSummary,
   createAgentChannelRuntimeSummary,
   createAgentRuntimeConfigSection,
   selectAgentRuntimeConfigFiles,
 } from "./agentRuntimeConfig";
+import { seededAgentProfiles } from "../seeds/agents";
 
 const agent = {
   id: "agent_orchestrator",
@@ -61,12 +64,60 @@ describe("agent runtime config injection", () => {
     const section = createAgentRuntimeConfigSection(agent, [
       {
         ...configFiles[0]!,
+        path: "/Users/robin/Documents/ai-orchestrator-lab-review/.env",
         body: "절대 들어가면 안 되는 키 sk-1234567890abcdef",
       },
     ]);
 
     expect(section.promptText).toContain("[REDACTED:api_key]");
     expect(section.promptText).not.toContain("sk-1234567890abcdef");
+    expect(section.promptText).not.toContain("/Users/robin/Documents");
+  });
+
+  it("redacts URL, bearer token, and MiMo token-plan strings from runtime config text", () => {
+    const section = createAgentRuntimeConfigSection(agent, [
+      {
+        ...configFiles[0]!,
+        id: "config_tp-secret1234567890",
+        body: [
+          "endpoint=https://token-plan-sgp.xiaomimimo.com/v1",
+          "Authorization: Bearer bearer-secret-value",
+          "mimo=tp-secret1234567890",
+        ].join("\n"),
+      },
+    ]);
+    const serialized = section.promptText;
+
+    expect(serialized).not.toContain("https://token-plan-sgp.xiaomimimo.com/v1");
+    expect(serialized).not.toContain("bearer-secret-value");
+    expect(serialized).not.toContain("tp-secret1234567890");
+    expect(serialized).toContain("[REDACTED:url]");
+    expect(serialized).toContain("Bearer [REDACTED:bearer_token]");
+    expect(serialized).toContain("[REDACTED:token_plan]");
+    expect(section.configFileIds).toEqual(["config_[REDACTED:token_plan]"]);
+  });
+
+  it("audits role tool runtime contracts for every seeded agent", () => {
+    const audit = createAgentRoleToolRuntimeAudit(seededAgentProfiles);
+
+    expect(audit.totalAgents).toBe(seededAgentProfiles.length);
+    expect(audit.coveredCount).toBe(seededAgentProfiles.length);
+    expect(audit.missingAgentIds).toEqual([]);
+    expect(audit.emptyToolAgentIds).toEqual([]);
+    expect(audit.summary).toBe(`전원 도구 계약 설치 완료 · ${seededAgentProfiles.length}/${seededAgentProfiles.length}`);
+  });
+
+  it("keeps role tool runtime summaries permission-first and secret-free", () => {
+    for (const seededAgent of seededAgentProfiles) {
+      const section = createAgentRoleToolRuntimeSummary(seededAgent);
+
+      expect(section.promptText).toContain("권한 기록 또는 실행 이벤트");
+      expect(section.promptText).toContain("목적, 입력, 예상 출력, 권한 필요 여부");
+      expect(section.promptText).toContain("비밀값, 원문 토큰, 내부 프롬프트 전문");
+      expect(section.tools.length).toBeGreaterThan(0);
+      expect(section.promptText).not.toMatch(/https?:\/\//);
+      expect(section.promptText).not.toMatch(/\b(?:sk|tp)-[A-Za-z0-9_-]{8,}\b/);
+    }
   });
 
   it("summarizes the active agent memory channel for the runtime prompt", () => {

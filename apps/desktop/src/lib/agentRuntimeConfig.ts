@@ -13,11 +13,22 @@ export type AgentRoleToolRuntimeSection = {
   promptText: string;
 };
 
+export type AgentRoleToolRuntimeAudit = {
+  totalAgents: number;
+  coveredCount: number;
+  missingAgentIds: string[];
+  emptyToolAgentIds: string[];
+  summary: string;
+};
+
 const maxConfigBodyChars = 2_400;
 const secretPatterns: Array<[RegExp, string]> = [
-  [/\bsk-[A-Za-z0-9_-]{8,}\b/g, "[REDACTED:api_key]"],
+  [/https?:\/\/[^\s"'`<>)]+/gi, "[REDACTED:url]"],
+  [/sk-[A-Za-z0-9_-]{8,}/g, "[REDACTED:api_key]"],
+  [/tp-[A-Za-z0-9_-]{8,}/g, "[REDACTED:token_plan]"],
   [/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/gi, "Bearer [REDACTED:bearer_token]"],
   [/\b[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|COOKIE)[A-Z0-9_]*\s*=\s*["']?[^\s"']+["']?/g, "[REDACTED:env_secret]"],
+  [/\/Users\/[^\s"'`<>)]+/g, "[REDACTED:path]"],
 ];
 
 export function selectAgentRuntimeConfigFiles(
@@ -43,16 +54,16 @@ export function createAgentRuntimeConfigSection(
     const body = redactPromptConfigText(file.body).slice(0, maxConfigBodyChars);
     return [
       `## ${file.label}`,
-      `- id: ${file.id}`,
+      `- id: ${redactPromptConfigText(file.id)}`,
       `- kind: ${file.kind}`,
-      `- path: ${file.path}`,
+      `- path: ${redactPromptConfigText(file.path)}`,
       "",
       body,
     ].join("\n");
   });
 
   return {
-    configFileIds: linkedConfigFiles.map((file) => file.id),
+    configFileIds: linkedConfigFiles.map((file) => redactPromptConfigText(file.id)),
     promptText: [
       "# 에이전트 설치 스킬/도구 프로필",
       "",
@@ -94,6 +105,32 @@ export function createAgentRoleToolRuntimeSummary(agent: WorkbenchAgent): AgentR
       "- 필요한 도구 호출은 목적, 입력, 예상 출력, 권한 필요 여부를 먼저 요약한다.",
       "- 비밀값, 원문 토큰, 내부 프롬프트 전문은 도구 입력이나 공개 로그에 쓰지 않는다.",
     ].join("\n"),
+  };
+}
+
+export function createAgentRoleToolRuntimeAudit(agents: WorkbenchAgent[]): AgentRoleToolRuntimeAudit {
+  const sections = agents.map((agent) => ({
+    agentId: agent.id,
+    section: createAgentRoleToolRuntimeSummary(agent),
+  }));
+  const missingAgentIds = sections
+    .filter(({ section }) => section.label.trim().length === 0)
+    .map(({ agentId }) => agentId);
+  const emptyToolAgentIds = sections
+    .filter(({ section }) => section.tools.length === 0)
+    .map(({ agentId }) => agentId);
+  const uncoveredIds = new Set([...missingAgentIds, ...emptyToolAgentIds]);
+  const coveredCount = agents.length - uncoveredIds.size;
+
+  return {
+    totalAgents: agents.length,
+    coveredCount,
+    missingAgentIds,
+    emptyToolAgentIds,
+    summary:
+      uncoveredIds.size === 0
+        ? `전원 도구 계약 설치 완료 · ${coveredCount}/${agents.length}`
+        : `도구 계약 확인 필요 · ${coveredCount}/${agents.length}`,
   };
 }
 
