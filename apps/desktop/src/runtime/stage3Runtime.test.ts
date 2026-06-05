@@ -197,4 +197,69 @@ describe("stage3 debate runtime", () => {
     expect(session.rounds[0]?.utterances.length).toBeGreaterThan(0);
     expect(session.rounds[0]?.utterances[0]?.content).toContain("가상 에이전트의 모의 토론 발언입니다.");
   });
+
+  it("preserves each agent provider and model binding in live debate proxy requests", async () => {
+    const boundAgents: AgentProfile[] = [
+      {
+        ...agents[0]!,
+        providerProfileId: "provider_orchestrator",
+        modelId: "model-orchestrator-bound",
+      },
+      {
+        ...agents[1]!,
+        providerProfileId: "provider_architect",
+        modelId: "model-architect-bound",
+      },
+      {
+        ...agents[2]!,
+        providerProfileId: "provider_reviewer",
+        modelId: "model-reviewer-bound",
+      },
+    ];
+    const boundProviders: ProviderProfile[] = boundAgents.map((agent) => ({
+      id: agent.providerProfileId!,
+      name: `${agent.name} Provider`,
+      kind: "custom",
+      defaultModel: "fallback-model-must-not-win",
+      enabled: true,
+      tags: ["server-proxy"],
+      trustLevel: "trusted",
+    }));
+    const seenBindings = new Set<string>();
+    const fakeFetch = async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as {
+        providerProfileId: string;
+        modelId: string;
+      };
+      seenBindings.add(`${body.providerProfileId}:${body.modelId}`);
+      expect(body.modelId).not.toBe("fallback-model-must-not-win");
+      return {
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            status: "succeeded",
+            content: "바인딩된 에이전트 발언입니다. [[tag:agreement]]",
+            route: "server_proxy",
+          }),
+      } as Response;
+    };
+
+    await runStage3DebateSession({
+      messages,
+      agents: boundAgents,
+      providers: boundProviders,
+      events,
+      runtime,
+      fetchImpl: fakeFetch as any,
+      createdAt: "2026-06-05T00:00:00.000Z",
+    });
+
+    expect(seenBindings).toEqual(
+      new Set([
+        "provider_orchestrator:model-orchestrator-bound",
+        "provider_architect:model-architect-bound",
+        "provider_reviewer:model-reviewer-bound",
+      ]),
+    );
+  });
 });
