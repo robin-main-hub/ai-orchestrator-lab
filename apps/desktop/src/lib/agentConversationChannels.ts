@@ -14,6 +14,15 @@ export type AgentChannelMemoryScope = {
   recallTraceId: string;
 };
 
+export type AgentChannelMemoryInstallAudit = {
+  totalAgents: number;
+  installedCount: number;
+  missingAgentIds: string[];
+  duplicateNamespaceAgentIds: string[];
+  duplicateRecallTraceAgentIds: string[];
+  scopes: AgentChannelMemoryScope[];
+};
+
 export function createInitialAgentConversationChannels(
   agents: AgentChannelSeed[],
   seedMessages: ConversationMessage[],
@@ -63,12 +72,16 @@ export function createAgentChannelMemoryScope(
   sessionId: string,
   providerProfileId: string,
 ): AgentChannelMemoryScope {
+  const safeAgentId = sanitizeMemoryScopePart(agentId);
+  const safeSessionId = sanitizeMemoryScopePart(sessionId);
+  const safeProviderProfileId = sanitizeMemoryScopePart(providerProfileId);
+
   return {
-    agentId,
-    providerProfileId,
-    sessionId,
-    namespace: `agent:${agentId}/session:${sessionId}/provider:${providerProfileId}`,
-    recallTraceId: `recall_${agentId}_${sessionId}_${providerProfileId}`,
+    agentId: safeAgentId,
+    providerProfileId: safeProviderProfileId,
+    sessionId: safeSessionId,
+    namespace: `agent:${safeAgentId}/session:${safeSessionId}/provider:${safeProviderProfileId}`,
+    recallTraceId: `recall_${safeAgentId}_${safeSessionId}_${safeProviderProfileId}`,
   };
 }
 
@@ -79,4 +92,65 @@ export function createAgentChannelRecallQuery(scope: AgentChannelMemoryScope, go
     `session:${scope.sessionId}`,
     `provider:${scope.providerProfileId}`,
   ].join("\n");
+}
+
+export function createAgentChannelMemoryInstallAudit(
+  agents: AgentChannelSeed[],
+  sessionId: string,
+  providerProfileId: string,
+): AgentChannelMemoryInstallAudit {
+  const scopes = agents
+    .filter((agent) => agent.id.trim().length > 0)
+    .map((agent) => createAgentChannelMemoryScope(agent.id, sessionId, providerProfileId));
+  const namespaceCounts = countBy(scopes, (scope) => scope.namespace);
+  const recallTraceCounts = countBy(scopes, (scope) => scope.recallTraceId);
+  const duplicateNamespaceAgentIds = scopes
+    .filter((scope) => (namespaceCounts.get(scope.namespace) ?? 0) > 1)
+    .map((scope) => scope.agentId);
+  const duplicateRecallTraceAgentIds = scopes
+    .filter((scope) => (recallTraceCounts.get(scope.recallTraceId) ?? 0) > 1)
+    .map((scope) => scope.agentId);
+  const missingAgentIds = agents
+    .filter((agent) => agent.id.trim().length === 0)
+    .map((agent) => agent.id);
+
+  return {
+    totalAgents: agents.length,
+    installedCount: scopes.length - new Set([...duplicateNamespaceAgentIds, ...duplicateRecallTraceAgentIds]).size,
+    missingAgentIds,
+    duplicateNamespaceAgentIds,
+    duplicateRecallTraceAgentIds,
+    scopes,
+  };
+}
+
+export function createAgentChannelMemoryInstallSummary(audit: AgentChannelMemoryInstallAudit): string {
+  if (
+    audit.missingAgentIds.length === 0 &&
+    audit.duplicateNamespaceAgentIds.length === 0 &&
+    audit.duplicateRecallTraceAgentIds.length === 0 &&
+    audit.installedCount === audit.totalAgents
+  ) {
+    return `전원 기억 설치 완료 · ${audit.installedCount}/${audit.totalAgents}`;
+  }
+  return `기억 설치 확인 필요 · ${audit.installedCount}/${audit.totalAgents}`;
+}
+
+function sanitizeMemoryScopePart(value: string): string {
+  return value
+    .replace(/https?:\/\/[^\s"'`<>)]+/gi, "redacted_url")
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/gi, "Bearer redacted_token")
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/gi, "redacted_key")
+    .replace(/\btp-[A-Za-z0-9_-]{8,}\b/gi, "redacted_token")
+    .trim()
+    .replace(/\s+/g, "_");
+}
+
+function countBy<T>(items: T[], getKey: (item: T) => string): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const key = getKey(item);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
 }
