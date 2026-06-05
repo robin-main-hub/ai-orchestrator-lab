@@ -106,6 +106,41 @@ describe("stage27 adapter-backed memento memory api", () => {
     expect(context.activeRecordIds).toContain(remembered.id);
   });
 
+  it("passes operation scope through every adapter-backed memory context", async () => {
+    const contexts: unknown[] = [];
+    const adapter = new MockMemoryAdapter({
+      profileId: "evolvememento_mock",
+      records: createSeedMemoryRecords(createdAt),
+      createdAt,
+    });
+    const originalRecall = adapter.recall.bind(adapter);
+    adapter.recall = async (query, ctx) => {
+      contexts.push(ctx?.operationScope);
+      return originalRecall(query, ctx);
+    };
+    const api = createAdapterBackedMementoMemoryApi({
+      adapter,
+      operationScope: {
+        agentId: "agent_orchestrator",
+        sessionId: "session_main",
+        providerProfileId: "provider_mimo_token_openai",
+        namespace: "agent:agent_orchestrator/session:session_main/provider:provider_mimo_token_openai",
+        recallTraceId: "recall_agent_orchestrator_session_main_provider_mimo_token_openai",
+      },
+      createdAt,
+    });
+
+    await api.recall({ query: "Event Storage", limit: 2 });
+
+    expect(contexts[0]).toEqual({
+      agentId: "agent_orchestrator",
+      sessionId: "session_main",
+      providerProfileId: "provider_mimo_token_openai",
+      namespace: "agent:agent_orchestrator/session:session_main/provider:provider_mimo_token_openai",
+      recallTraceId: "recall_agent_orchestrator_session_main_provider_mimo_token_openai",
+    });
+  });
+
   it("preserves permission and trust gates from the shared memory adapter", async () => {
     const api = createAdapterBackedMementoMemoryApi({
       adapter: withTrustEnforcement(new MockMemoryAdapter({ records: createSeedMemoryRecords(createdAt), createdAt })),
