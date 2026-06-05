@@ -152,7 +152,7 @@ export function Composer({
           type="submit"
         >
           <Send className="h-4 w-4" />
-          보내기
+          <span className="hidden sm:inline">보내기</span>
         </Button>
       </form>
     </div>

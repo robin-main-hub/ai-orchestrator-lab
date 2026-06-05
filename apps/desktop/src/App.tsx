@@ -247,23 +247,7 @@ export function App() {
     document.addEventListener("focusin", handleFocusIn);
     return () => document.removeEventListener("focusin", handleFocusIn);
   }, []);
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const activeElement = document.activeElement;
-      const shouldRestoreFocus =
-        !activeElement ||
-        activeElement === document.body ||
-        activeElement === document.documentElement ||
-        !document.contains(activeElement);
 
-      if (!shouldRestoreFocus) return;
-
-      const selector = getRestoreFocusSelector(mode, lastFocusedIdByModeRef.current);
-      document.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true });
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [mode]);
   useEffect(() => {
     if (mode !== "conversation" || !agentConfigPanel.open) {
       setReturnModeAfterConfigClose(null);
@@ -488,6 +472,24 @@ export function App() {
       }),
     [agents, modelCatalog, providerProfiles, runtimeSnapshotState],
   );
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const activeElement = document.activeElement;
+      const shouldRestoreFocus =
+        !activeElement ||
+        activeElement === document.body ||
+        activeElement === document.documentElement ||
+        !document.contains(activeElement);
+
+      if (!shouldRestoreFocus) return;
+
+      const selector = getRestoreFocusSelector(mode, lastFocusedIdByModeRef.current);
+      document.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [mode, agentConfigPanel.open, settingsAgent]);
 
   useEffect(() => {
     void bootstrapLocalEventStorage();
@@ -2838,6 +2840,12 @@ export function App() {
         snapshot={runtimeSnapshotState}
       />
       <main className="workspace-grid">
+        {isMobileDrawerOpen ? (
+          <div
+            className="mobile-drawer-backdrop"
+            onClick={() => setIsMobileDrawerOpen(false)}
+          />
+        ) : null}
         {shellVisibility.showLeftRail ? (
           <aside
             className={`left-rail ${providerRegistrationOpen ? "provider-mode" : ""} ${isMobileDrawerOpen ? "drawer-open" : ""}`}
@@ -2855,6 +2863,7 @@ export function App() {
                   onClick={() => {
                     setActiveNavItem(item.id);
                     setProviderRegistrationOpen(item.id === "providers");
+                    setIsMobileDrawerOpen(false);
                   }}
                   title={`${item.label} 메뉴`}
                   type="button"
