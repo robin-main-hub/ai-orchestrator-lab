@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Brain,
   ChevronRight,
@@ -106,6 +106,7 @@ import type {
   ReviewMode,
   RuntimeSnapshot,
   SourceTrust,
+  TerminalTimelineBlock,
   WorkItem,
   WorkItemHandoff,
 } from "@ai-orchestrator/protocol";
@@ -184,9 +185,10 @@ import { SessionIndexRailPanel } from "./components/SessionIndexRailPanel";
 import { Stage3DebateTable } from "./components/Stage3DebateTable";
 import { TerminalDock } from "./components/TerminalDock";
 import { TmuxSwarmBoard } from "./components/TmuxSwarmBoard";
+import { makeSyntheticBlock } from "./components/TmuxPaneTimeline";
 import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import { useAgentConfigFilesController } from "./hooks/useAgentConfigFilesController";
-import { useApprovalQueueController } from "./hooks/useApprovalQueueController";
+import { useApprovalQueueController, type TmuxOutcome } from "./hooks/useApprovalQueueController";
 import { useBranchExperimentsController } from "./hooks/useBranchExperimentsController";
 import { useDgxEventSyncController } from "./hooks/useDgxEventSyncController";
 import { useMemoryController } from "./hooks/useMemoryController";
@@ -278,6 +280,70 @@ export function App() {
   const [rebootApprovals, setRebootApprovals] = useState<ExternalApprovalItem[]>([]);
   const [rebootWatchdogs, setRebootWatchdogs] = useState<DeviceRebootWatchdog[]>([]);
   const [approvalStateByItemId, setApprovalStateByItemId] = useState<Record<string, ApprovalState>>({});
+  const [tmuxCommandDrafts, setTmuxCommandDrafts] = useState<Record<string, string>>({});
+  const [tmuxStatuses, setTmuxStatuses] = useState<Record<string, string>>({});
+  const [tmuxOutputs, setTmuxOutputs] = useState<Record<string, string>>({});
+  const [tmuxTimelineBlocks, setTmuxTimelineBlocks] = useState<Record<string, TerminalTimelineBlock[]>>({});
+
+  const handleTmuxOutcome = useCallback((outcome: TmuxOutcome) => {
+    const role = outcome.role;
+    const action = outcome.action;
+    const status = outcome.status;
+    const reason = outcome.reason;
+
+    // 승인 결과를 tmux pane 상태에 반영한다.
+    let mappedStatus = "idle";
+    if (action === "approved" || action === "replayed") {
+      mappedStatus = status === "recorded" || status === "sent" ? "active" : "failed";
+    } else if (action === "rejected") {
+      mappedStatus = "blocked";
+    }
+    setTmuxStatuses((current) => ({
+      ...current,
+      [role]: mappedStatus,
+    }));
+
+    // 마지막 결과 문구를 pane 출력 요약으로 보존한다.
+    setTmuxOutputs((current) => ({
+      ...current,
+      [role]: reason,
+    }));
+
+    // 기존 승인 대기 블록을 완료/차단 상태로 바꾸고 결과 블록을 추가한다.
+    setTmuxTimelineBlocks((current) => {
+      const existing = current[role] ?? [];
+
+      const updated = existing.map((block) => {
+        if (block.kind === "approval" && block.approvalId === outcome.approvalId) {
+          return {
+            ...block,
+            status: action === "approved" || action === "replayed" ? "completed" as const : "blocked" as const,
+            summary: `${block.summary} (결과: ${action})`,
+          };
+        }
+        return block;
+      });
+
+      const dispatchBlock = makeSyntheticBlock({
+        paneId: `role:${role}`,
+        role,
+        host: "dgx_02",
+        sessionId: activeSessionId,
+        terminalSessionId: "terminal_session_ai_swarm",
+        kind: "dispatch",
+        status: status === "recorded" || status === "sent" ? "completed" : status === "blocked" ? "blocked" : "failed",
+        title: outcome.commandPreview || `${role} dispatch`,
+        summary: reason,
+        approvalId: outcome.approvalId,
+      });
+
+      return {
+        ...current,
+        [role]: [...updated, dispatchBlock],
+      };
+    });
+  }, [activeSessionId]);
+
   const {
     approvalServerSnapshot,
     approvalServerStatus,
@@ -288,7 +354,7 @@ export function App() {
     handleRefreshApprovalQueue,
     handleTmuxApprovalQueued,
     handleResolveServerApproval,
-  } = useApprovalQueueController({ appendEvent });
+  } = useApprovalQueueController({ appendEvent, onTmuxOutcome: handleTmuxOutcome });
   const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
   const [contextPackTier, setContextPackTier] = useState<ContextPackTier>("standard");
   const [reviewMode, setReviewMode] = useState<ReviewMode>("quick");
@@ -3126,6 +3192,14 @@ export function App() {
               messages={conversationMessages}
               onApprovalQueued={handleTmuxApprovalQueued}
               packet={codingPacketState}
+              commandDrafts={tmuxCommandDrafts}
+              onCommandDraftChange={setTmuxCommandDrafts}
+              statuses={tmuxStatuses}
+              onStatusChange={setTmuxStatuses}
+              outputs={tmuxOutputs}
+              onOutputChange={setTmuxOutputs}
+              timelineBlocks={tmuxTimelineBlocks}
+              onTimelineBlocksChange={setTmuxTimelineBlocks}
             />
           ) : mode === "cockpit" ? (
             <OperatorCockpit
