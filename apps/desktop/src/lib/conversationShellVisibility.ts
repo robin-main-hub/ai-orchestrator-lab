@@ -40,7 +40,7 @@ export function getConversationShellVisibility({
     };
   }
 
-  if (mode === "tmux") {
+  if (mode === "tmux" || mode === "cockpit") {
     return {
       showCodingPacketPanel: false,
       showEvolveMementoPanel: false,

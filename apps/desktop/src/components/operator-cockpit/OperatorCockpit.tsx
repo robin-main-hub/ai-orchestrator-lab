@@ -23,17 +23,17 @@ export function OperatorCockpit() {
   const [activeTab, setActiveTab] = useState('Tmux Workers');
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="h-full min-h-0 bg-zinc-950 text-zinc-100 flex flex-col" data-focus-id="cockpit-container">
       {/* Top Navigation */}
-      <div className="bg-white border-b px-6 flex items-center h-14 space-x-6">
+      <div className="bg-white/5 backdrop-blur-md border-b border-white/10 px-6 flex items-center h-14 space-x-6">
         {TABS.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`h-full px-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`h-full px-2 text-sm font-medium border-b-2 transition-all duration-300 ${
               activeTab === tab
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-cyan-400 text-cyan-400 drop-shadow-[0_0_8px_var(--color-cyan-400)]'
+                : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:border-white/20'
             }`}
           >
             {tab}
@@ -44,8 +44,8 @@ export function OperatorCockpit() {
       {/* Main Content Dashboard */}
       <div className="flex-1 p-6 overflow-y-auto">
         <div className="mb-6 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-800">Operator Cockpit (Mock)</h1>
-          <span className="text-sm text-gray-500">Last updated: {new Date(snapshot.timestamp).toLocaleTimeString()}</span>
+          <h1 className="text-2xl font-bold text-zinc-100 drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]">Operator Cockpit</h1>
+          <span className="text-sm font-mono text-zinc-500 tracking-widest">LAST SYNC: {new Date(snapshot.timestamp).toLocaleTimeString()}</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

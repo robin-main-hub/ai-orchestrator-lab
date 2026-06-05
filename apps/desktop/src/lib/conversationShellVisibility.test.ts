@@ -34,20 +34,28 @@ describe("getConversationShellVisibility", () => {
     });
   });
 
-  it("keeps tmux focused on the swarm board without supporting shell surfaces", () => {
-    expect(
-      getConversationShellVisibility({
-        configLibraryActive: false,
-        mode: "tmux",
-      }),
-    ).toMatchObject({
+  it("should hide all panels in tmux or cockpit mode regardless of other states", () => {
+    const tmuxResult = getConversationShellVisibility({
+      configLibraryActive: false,
+      mode: "tmux",
+    });
+
+    const cockpitResult = getConversationShellVisibility({
+      configLibraryActive: false,
+      mode: "cockpit",
+    });
+
+    const expected = {
       showCodingPacketPanel: false,
       showEvolveMementoPanel: false,
       showLeftRail: false,
       showTerminalDock: false,
       showToolbarActions: false,
       showWorkItemHandoffPanel: false,
-    });
+    };
+
+    expect(tmuxResult).toEqual(expected);
+    expect(cockpitResult).toEqual(expected);
   });
 
   it("keeps config library focused on the library surface", () => {
