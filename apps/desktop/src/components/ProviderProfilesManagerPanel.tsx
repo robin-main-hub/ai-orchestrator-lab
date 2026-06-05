@@ -3,6 +3,7 @@ import type { ModelDiscoverySnapshot, ProviderProfile } from "@ai-orchestrator/p
 import { StatusBadge } from "@/ui/status-badge";
 import { createProviderOperationalBadges } from "../lib/providerOperationalBadges";
 import type { ModelCatalog } from "../types";
+import { createProviderSmokeReadiness } from "../lib/providerSmokeReadiness";
 
 export function ProviderProfilesManagerPanel({
   modelCatalog,
@@ -38,6 +39,7 @@ export function ProviderProfilesManagerPanel({
           const discovery = modelDiscoveryByProviderId[profile.id];
           const models = modelCatalog[profile.id] ?? [];
           const operationalBadges = createProviderOperationalBadges(profile, profiles);
+          const smokeReadiness = createProviderSmokeReadiness(profile);
           return (
             <article className={`provider-row ${isInUse ? "in-use" : ""}`} key={profile.id}>
               <div>
@@ -81,6 +83,20 @@ export function ProviderProfilesManagerPanel({
                         {badge.label}
                       </StatusBadge>
                     ))}
+                  </small>
+                ) : null}
+                {smokeReadiness ? (
+                  <small className="mt-2 flex flex-wrap items-center gap-1 text-[10px] text-zinc-500">
+                    <StatusBadge
+                      size="sm"
+                      variant={smokeReadiness.tone === "success" ? "success" : "warning"}
+                    >
+                      {smokeReadiness.routeLabel}
+                    </StatusBadge>
+                    <span>{smokeReadiness.modeLabel}</span>
+                    <span className="max-w-[260px] truncate font-mono text-zinc-400">
+                      {smokeReadiness.commandLabel}
+                    </span>
                   </small>
                 ) : null}
               </div>
