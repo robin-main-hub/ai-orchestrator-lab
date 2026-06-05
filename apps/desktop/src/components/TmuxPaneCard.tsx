@@ -1,9 +1,16 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Clock3, Eye, Loader2, Send } from "lucide-react";
 import type { TerminalTimelineBlock } from "@ai-orchestrator/protocol";
+import type { TmuxPaneRole } from "@ai-orchestrator/protocol";
 import type { AgentVisualSettings, WorkbenchAgent } from "../types";
 import { agentRoleLabel } from "../lib/helpers";
 import { deriveTmuxPaneLifecycleSummary, type TmuxPaneLifecycleTone } from "../lib/tmuxPaneLifecycle";
+import {
+  compactTmuxPreview,
+  sanitizeTmuxWorkbenchText,
+  tmuxPaneRoleLabel,
+  tmuxPaneStateLabel,
+} from "../lib/tmuxWorkbenchPresentation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
@@ -44,7 +51,7 @@ export function TmuxPaneCard({
   onDispatch?: () => void;
   pane: {
     id: string;
-    roleKey: string;
+    roleKey: TmuxPaneRole;
     title: string;
     role: string;
     state: string;
@@ -96,7 +103,7 @@ export function TmuxPaneCard({
           </div>
         </div>
         <StatusBadge variant={stateToBadgeVariant(pane.state)} size="sm">
-          {pane.state}
+          {tmuxPaneStateLabel(pane.state)}
         </StatusBadge>
       </div>
 
@@ -109,14 +116,14 @@ export function TmuxPaneCard({
       <div className="flex items-center justify-between gap-2 border-b border-white/[0.07] px-3 py-2">
         <div className="min-w-0">
           <span className="text-[10px] text-zinc-600">
-            {pane.agent ? agentRoleLabel(pane.agent.role) : "future slot"}
+            {pane.agent ? agentRoleLabel(pane.agent.role) : `${tmuxPaneRoleLabel(pane.roleKey)} 대기`}
           </span>
           <div className="truncate text-[11px] font-semibold text-zinc-200">
             {pane.agent?.name ?? "담당 agent 미정"}
           </div>
         </div>
         <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-[10px] text-zinc-500">
-          {pane.agent?.modelId ?? "model pending"}
+          {pane.agent?.modelId ?? "모델 대기"}
         </span>
       </div>
 
@@ -129,17 +136,19 @@ export function TmuxPaneCard({
         <div className="flex items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
             <span className={cn("h-1.5 w-1.5 rounded-full", lifecycleToneDot(lifecycle.tone))} />
-            {lifecycle.lastBlockLabel}
+            {tmuxPaneStateLabel(lifecycle.lastBlockLabel)}
           </span>
           <span className={cn("shrink-0 text-[10px]", lifecycleToneText(lifecycle.tone))}>
             {lifecycle.pendingApprovalCount > 0
-              ? `${lifecycle.pendingApprovalCount} approval`
+              ? `승인 ${lifecycle.pendingApprovalCount}건`
               : lifecycle.failedCount > 0
-                ? `${lifecycle.failedCount} blocked`
-                : lifecycle.tone}
+                ? `차단 ${lifecycle.failedCount}건`
+                : lifecycleToneLabel(lifecycle.tone)}
           </span>
         </div>
-        <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-zinc-500">{lifecycle.detail}</p>
+        <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-zinc-500">
+          {sanitizeTmuxWorkbenchText(lifecycle.detail)}
+        </p>
       </div>
 
       {/* Command controls */}
@@ -147,18 +156,18 @@ export function TmuxPaneCard({
         <div className="mt-auto border-t border-white/10 p-2">
           <div className="flex items-center gap-1">
             <input
-              aria-label={`${pane.title} command preview`}
+              aria-label={`${pane.title} 명령 미리보기`}
               className={cn(
                 "h-8 min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2 font-mono text-[10px] text-zinc-200 placeholder:text-zinc-700 focus-visible:border-amber-400/50 focus-visible:outline-none",
                 isIdle && "cursor-not-allowed opacity-50",
               )}
               disabled={isIdle}
               onChange={(event) => onCommandDraftChange?.(event.target.value)}
-              placeholder={isIdle ? "" : "codex 'command...'"}
+              placeholder={isIdle ? "" : "승인 후 실행할 명령"}
               value={commandDraft ?? ""}
             />
             <Button
-              aria-label={`${pane.title} capture`}
+              aria-label={`${pane.title} 읽기`}
               className="h-8 gap-1 rounded-lg px-2 text-[10px] text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-100"
               disabled={Boolean(busy) || isIdle}
               onClick={onCapture}
@@ -173,7 +182,7 @@ export function TmuxPaneCard({
               읽기
             </Button>
             <Button
-              aria-label={`${pane.title} dispatch`}
+              aria-label={`${pane.title} 보내기`}
               className="h-8 gap-1 rounded-lg px-2 text-[10px] text-amber-300 hover:bg-amber-500/10"
               disabled={Boolean(busy) || isIdle}
               onClick={onDispatch}
@@ -194,7 +203,7 @@ export function TmuxPaneCard({
       {/* Output preview */}
       {lastOutput ? (
         <pre className="mx-2 mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/40 p-2 font-mono text-[10px] text-zinc-500">
-          {lastOutput}
+          {compactTmuxPreview(lastOutput)}
         </pre>
       ) : null}
 
@@ -236,6 +245,16 @@ function stateToBadgeVariant(state: string): "primary" | "success" | "warning" |
   if (state === "dispatch gated" || state === "pending_approval") return "warning";
   if (state === "guarding" || state === "failed" || state === "dispatch failed") return "danger";
   return "muted";
+}
+
+function lifecycleToneLabel(tone: TmuxPaneLifecycleTone) {
+  const labels: Record<TmuxPaneLifecycleTone, string> = {
+    danger: "문제",
+    idle: "대기",
+    ok: "정상",
+    warn: "주의",
+  };
+  return labels[tone];
 }
 
 function lifecycleToneDot(tone: TmuxPaneLifecycleTone) {
