@@ -168,6 +168,7 @@ import { CheatSheetOverlay } from "./components/CheatSheetOverlay";
 import { CommandPalette, type CommandEntry } from "./components/CommandPalette";
 import { ConfigLibraryPanel } from "./components/ConfigLibraryPanel";
 import { ConversationWorkbench } from "./components/ConversationWorkbench";
+import { DebateAnnexPage } from "./components/debate-chamber/DebateAnnexPage";
 import { IngressGuardPanel } from "./components/IngressGuardPanel";
 import { EvolveMementoPanel } from "./components/EvolveMementoPanel";
 import { HumanPeekPanel } from "./components/HumanPeekPanel";
@@ -2411,6 +2412,13 @@ export function App() {
       run: () => setMode("cockpit"),
     },
     {
+      id: "switch.annex",
+      verb: "Switch",
+      label: "Debate Annex",
+      hint: "토론 보조 정보 전용 페이지",
+      run: () => setMode("annex"),
+    },
+    {
       id: "open.control-queue",
       verb: "Open",
       label: "Control Queue",
@@ -2483,6 +2491,10 @@ export function App() {
     <div
       className={`app-shell ${mode === "tmux" ? "tmux-focus-shell" : ""} ${
         mode === "cockpit" ? "cockpit-focus-shell" : ""
+      } ${
+        mode === "annex" ? "annex-focus-shell" : ""
+      } ${
+        mode === "debate" ? "debate-focus-shell" : ""
       } ${
         mode === "conversation" && !configLibraryActive ? "conversation-v0-shell" : ""
       }`}
@@ -2671,12 +2683,12 @@ export function App() {
         ) : null}
 
         <section
-          className={`center-board ${mode === "tmux" ? "tmux-center-board" : ""} ${mode === "cockpit" ? "cockpit-center-board" : ""} ${
+          className={`center-board ${mode === "tmux" ? "tmux-center-board" : ""} ${mode === "cockpit" ? "cockpit-center-board" : ""} ${mode === "annex" ? "annex-center-board" : ""} ${mode === "debate" ? "debate-center-board" : ""} ${
             configLibraryActive ? "config-center-board" : ""
           }`}
         >
-          <div className="board-toolbar">
-            {shellVisibility.showToolbarActions ? (
+          {shellVisibility.showToolbarActions ? (
+            <div className="board-toolbar">
               <div className="toolbar-actions">
                 <button
                   className={`ghost-button approval-toolbar-button ${
@@ -2698,8 +2710,8 @@ export function App() {
                   Coding Packet
                 </button>
               </div>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
 
           {configLibraryActive ? (
             <ConfigLibraryPanel
@@ -2758,6 +2770,7 @@ export function App() {
           ) : mode === "debate" ? (
             <Stage3DebateTable
               onCreateCodingPacket={handleCreateCodingPacket}
+              onOpenAnnex={() => setMode("annex")}
               onSelectUtterance={handleSelectDebateUtterance}
               session={debateSession}
               agentVisualsById={agentVisualsById}
@@ -2774,6 +2787,14 @@ export function App() {
             />
           ) : mode === "cockpit" ? (
             <OperatorCockpit />
+          ) : mode === "annex" ? (
+            <DebateAnnexPage
+              codingPacketGoal={codingPacketState.goal}
+              onBack={() => setMode("debate")}
+              pendingApprovals={permissionSnapshot.summary.pending}
+              runtime={runtimeSnapshotState}
+              session={debateSession}
+            />
           ) : null}
 
           {shellVisibility.showWorkItemHandoffPanel ? (
@@ -2797,7 +2818,7 @@ export function App() {
           ) : null}
         </section>
 
-        {mode === "tmux" || mode === "cockpit" ? null : (
+        {mode === "conversation" || mode === "debate" || mode === "tmux" || mode === "cockpit" || mode === "annex" ? null : (
           <aside className="right-rail" aria-label="모델과 에이전트 상태">
             <AgentsSidebar
               agents={agents}
