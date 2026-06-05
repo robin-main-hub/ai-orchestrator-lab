@@ -33,6 +33,7 @@ export function RuntimeStatusBar({
   mode,
   onChangeMode,
   onCommandPalette,
+  onOpenOpsDetail,
   onProbeDgx,
   onToggleDrawer,
   providerName,
@@ -41,6 +42,7 @@ export function RuntimeStatusBar({
   mode: CenterMode;
   onChangeMode: (mode: CenterMode) => void;
   onCommandPalette: () => void;
+  onOpenOpsDetail: () => void;
   onProbeDgx: () => void;
   onToggleDrawer: () => void;
   providerName: string;
@@ -127,6 +129,7 @@ export function RuntimeStatusBar({
         </Button>
         <HealthIndicator
           health={health}
+          onOpenOpsDetail={onOpenOpsDetail}
           onProbeDgx={onProbeDgx}
           providerName={providerName}
           snapshot={snapshot}
@@ -139,12 +142,14 @@ export function RuntimeStatusBar({
 
 function HealthIndicator({
   health,
+  onOpenOpsDetail,
   onProbeDgx,
   providerName,
   snapshot,
   title,
 }: {
   health: "healthy" | "degraded" | "critical" | "unknown";
+  onOpenOpsDetail: () => void;
   onProbeDgx: () => void;
   providerName: string;
   snapshot: RuntimeSnapshot;
@@ -210,6 +215,7 @@ function HealthIndicator({
           </Button>
           <Button
             className="h-8 flex-1 justify-start text-xs text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-100"
+            onClick={onOpenOpsDetail}
             size="sm"
             variant="ghost"
           >
