@@ -1,6 +1,7 @@
 import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import type { ModelDiscoverySnapshot, ProviderProfile } from "@ai-orchestrator/protocol";
 import { StatusBadge } from "@/ui/status-badge";
+import { createProviderOperationalBadges } from "../lib/providerOperationalBadges";
 import type { ModelCatalog } from "../types";
 
 export function ProviderProfilesManagerPanel({
@@ -36,6 +37,7 @@ export function ProviderProfilesManagerPanel({
           const isInUse = usedProviderIds.has(profile.id);
           const discovery = modelDiscoveryByProviderId[profile.id];
           const models = modelCatalog[profile.id] ?? [];
+          const operationalBadges = createProviderOperationalBadges(profile, profiles);
           return (
             <article className={`provider-row ${isInUse ? "in-use" : ""}`} key={profile.id}>
               <div>
@@ -60,6 +62,27 @@ export function ProviderProfilesManagerPanel({
                   <span>/</span>
                   <span>{discovery?.source ?? "seed"}</span>
                 </small>
+                {operationalBadges.length > 0 ? (
+                  <small className="mt-2 flex flex-wrap items-center gap-1">
+                    {operationalBadges.map((badge) => (
+                      <StatusBadge
+                        key={badge.label}
+                        size="sm"
+                        variant={
+                          badge.tone === "success"
+                            ? "success"
+                            : badge.tone === "warning"
+                              ? "warning"
+                              : badge.tone === "primary"
+                                ? "primary"
+                                : "muted"
+                        }
+                      >
+                        {badge.label}
+                      </StatusBadge>
+                    ))}
+                  </small>
+                ) : null}
               </div>
               <StatusBadge
                 size="sm"
