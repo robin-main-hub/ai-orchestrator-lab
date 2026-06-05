@@ -6,12 +6,13 @@ describe("createAgentChannelStatus", () => {
     expect(
       createAgentChannelStatus({
         agentName: "마키마",
+        roleLabel: "Orchestrator · 지휘자",
         adapterStatus: "ready",
         memoryRecordCount: 7,
         messageCount: 4,
       }),
     ).toEqual({
-      title: "마키마 전용 채널",
+      title: "마키마 · Orchestrator · 지휘자",
       continuityLabel: "이전 대화 이어받음 · 4개 메시지",
       memoryLabel: "기억 7개 적용",
       tone: "ready",
@@ -22,12 +23,13 @@ describe("createAgentChannelStatus", () => {
     expect(
       createAgentChannelStatus({
         agentName: "마키세 크리스",
+        roleLabel: "Verifier · 검증자",
         adapterStatus: "loading",
         memoryRecordCount: 0,
         messageCount: 0,
       }),
     ).toEqual({
-      title: "마키세 크리스 전용 채널",
+      title: "마키세 크리스 · Verifier · 검증자",
       continuityLabel: "새 대화 시작",
       memoryLabel: "기억 조회 중",
       tone: "loading",
@@ -57,7 +59,7 @@ describe("createAgentChannelStatus", () => {
       {
         label: "Recall Trace",
         tone: "ready",
-        value: "recall_agent_memory_curator_session_main_provider_mimo_token_openai",
+        value: expect.stringMatching(/^recall_agent_memory_curator_.*….*token_openai$/),
       },
       {
         label: "Provider",
@@ -70,5 +72,24 @@ describe("createAgentChannelStatus", () => {
         value: "기억 조회 · 기억 순위 · 기억 정리 요청",
       },
     ]);
+  });
+
+  it("redacts secret-like values before rendering channel chips", () => {
+    const chips = createAgentChannelDetailChips({
+      memoryScope: {
+        agentId: "agent_executor",
+        namespace: "agent:agent_executor/session:session_main/provider:provider_apifun_claude",
+        providerProfileId: "provider_apifun_claude",
+        recallTraceId: "recall_agent_executor_session_main_provider_apifun_claude",
+        sessionId: "session_main",
+      },
+      modelId: "claude-opus-4-8",
+      providerProfileId: "provider_apifun_claude https://token-plan-sgp.xiaomimimo.com/v1 Bearer sk-secret1234567890",
+      toolLabels: ["Tmux 전달", "승인 확인"],
+    });
+
+    expect(JSON.stringify(chips)).not.toContain("sk-secret1234567890");
+    expect(JSON.stringify(chips)).not.toContain("https://token-plan-sgp.xiaomimimo.com/v1");
+    expect(JSON.stringify(chips)).toContain("[redacted]");
   });
 });
