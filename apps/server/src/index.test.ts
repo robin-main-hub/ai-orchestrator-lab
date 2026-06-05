@@ -8,6 +8,7 @@ import {
   agentDelegationEventTypeSchema,
   parseAgentDelegationEventPayload,
   parseTerminalCommandEventPayload,
+  operatorCockpitSnapshotSchema,
   terminalCommandEventTypeSchema,
 } from "@ai-orchestrator/protocol";
 import type { MemoryInput, MemoryRecord } from "@ai-orchestrator/protocol";
@@ -24,6 +25,7 @@ import {
   createLiveHealthResponse,
   createProviderCompletionApprovalRequest,
   createServerIngressSnapshot,
+  createServerOperatorCockpitSnapshot,
   createServerAgentDelegationExecution,
   createServerTmuxCaptureSnapshot,
   createServerTmuxDispatchSnapshot,
@@ -173,6 +175,38 @@ describe("server health placeholder", () => {
     expect(permission.decision).toBe("approval_required");
     expect(permission.approvalState).toBe("required");
     expect(permission.requestedLevels).toEqual(["network_access", "secret_access"]);
+  });
+
+  it("creates a read-only Operator Cockpit snapshot without leaking raw secrets", async () => {
+    const snapshot = await createServerOperatorCockpitSnapshot({
+      now: "2026-05-24T00:01:00.000Z",
+      eventStorage: {
+        mode: "jsonl",
+        storageDir: "[redacted]",
+        eventLogPath: "[redacted]",
+        revision: 7,
+        eventCount: 13,
+        sessionCount: 3,
+        loadedAt: "2026-05-24T00:00:00.000Z",
+      },
+      fetchImpl: async () =>
+        ({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ data: [{ id: "qwen36-domain-lora-v5-prisma" }] }),
+        }) as any,
+    });
+
+    expect(() => operatorCockpitSnapshotSchema.parse(snapshot)).not.toThrow();
+    expect(snapshot.id).toContain("server-cockpit");
+    expect(snapshot.fleet.map((worker) => worker.workerId)).toEqual([
+      "server-provider-registry",
+      "server-event-storage",
+      "server-dgx-runtime",
+    ]);
+    expect(snapshot.memory.contextReasons).toContain("Server provider registry readiness");
+    expect(snapshot.recovery.healthIndicators.join("\n")).toContain("Event storage: jsonl, 13 events, revision 7");
+    expect(JSON.stringify(snapshot)).not.toMatch(/sk-|ANTHROPIC_API_KEY|OPENAI_API_KEY|BEGIN PRIVATE KEY/);
   });
 
   it("allows approved provider completion requests through the server gate", () => {
