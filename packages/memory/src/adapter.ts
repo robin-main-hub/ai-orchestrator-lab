@@ -16,10 +16,19 @@ import type { MemoryAdapterError } from "./errors";
 
 export type MemoryAdapterKind = "local_heuristic" | "memento_mcp" | "dgx_simplemem" | "mock";
 
+export type MemoryOperationScope = {
+  agentId: string;
+  sessionId: string;
+  providerProfileId: string;
+  namespace: string;
+  recallTraceId: string;
+};
+
 export type MemoryEventPayload =
   | {
       kind: "archival_write_requested";
       input: MemoryInput;
+      operationScope?: MemoryOperationScope;
     }
   | {
       kind: "memory_adapter_error";
@@ -30,6 +39,7 @@ export type MemoryEventPayload =
       kind: "memory_operation";
       operation: string;
       recordIds?: string[];
+      operationScope?: MemoryOperationScope;
     };
 
 export type MemoryAdapterContext = {
@@ -39,6 +49,7 @@ export type MemoryAdapterContext = {
   abortSignal?: AbortSignal;
   timeoutMs?: number;
   onAdapterError?: (error: MemoryAdapterError) => void;
+  operationScope?: MemoryOperationScope;
   now?: () => string;
 };
 
@@ -105,4 +116,3 @@ export class MemoryApiAdapter implements MemoryAdapter {
 }
 
 export { DgxSimpleMemMemoryAdapter } from "./dgxSimpleMemAdapter.js";
-

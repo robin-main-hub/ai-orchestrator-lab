@@ -37,6 +37,27 @@ describe("DgxSimpleMemMemoryAdapter — contract & behavior", () => {
     expect(events[0]?.payload.recordIds).toContain("dgx_seed_001");
   });
 
+  it("appends operation scope metadata when provided by the caller", async () => {
+    const events: EventEnvelope<any>[] = [];
+    const adapter = new DgxSimpleMemMemoryAdapter({ seedRecords: [seed] });
+    const ctx = makeContractCtx({
+      operationScope: {
+        agentId: "agent_orchestrator",
+        sessionId: "session_main",
+        providerProfileId: "provider_mimo_token_openai",
+        namespace: "agent:agent_orchestrator/session:session_main/provider:provider_mimo_token_openai",
+        recallTraceId: "recall_agent_orchestrator_session_main_provider_mimo_token_openai",
+      },
+      appendEvent: async (ev) => {
+        events.push(ev);
+      },
+    });
+
+    await adapter.recall({ query: "apple" }, ctx);
+
+    expect(events[0]?.payload.operationScope).toEqual(ctx.operationScope);
+  });
+
   it("remember() throws promotion_pending and appends memory.archival_write.requested event", async () => {
     const events: EventEnvelope<any>[] = [];
     const adapter = new DgxSimpleMemMemoryAdapter();
