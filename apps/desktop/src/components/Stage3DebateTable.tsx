@@ -3,9 +3,11 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  Code2,
   CornerDownRight,
   ExternalLink,
   FileCode,
+  FileText,
   GitMerge,
   Lightbulb,
   Scale,
@@ -21,7 +23,7 @@ import type { Stage3DebateUtteranceView } from "../types";
 type Stance = "agree" | "disagree" | "risk" | "evidence" | "decision" | "neutral";
 
 const stanceConfig: Record<Stance, { icon: ElementType; color: string; bg: string; label: string }> = {
-  agree: { bg: "bg-emerald-500/10", color: "text-emerald-400", icon: CheckCircle2, label: "합의" },
+  agree: { bg: "bg-cyan-500/10", color: "text-cyan-300", icon: CheckCircle2, label: "합의" },
   decision: { bg: "bg-violet-500/10", color: "text-violet-400", icon: ArrowRight, label: "결정" },
   disagree: { bg: "bg-rose-500/10", color: "text-rose-400", icon: XCircle, label: "반대" },
   evidence: { bg: "bg-cyan-500/10", color: "text-cyan-400", icon: Lightbulb, label: "근거" },
@@ -29,15 +31,15 @@ const stanceConfig: Record<Stance, { icon: ElementType; color: string; bg: strin
   risk: { bg: "bg-amber-500/10", color: "text-amber-400", icon: AlertTriangle, label: "리스크" },
 };
 
-const roleBorderColors: Partial<Record<AgentProfile["role"], string>> = {
-  architect: "border-l-violet-500",
-  builder: "border-l-blue-500",
-  executor: "border-l-amber-500",
-  memory_curator: "border-l-purple-500",
-  orchestrator: "border-l-cyan-500",
-  reviewer: "border-l-rose-500",
-  skeptic: "border-l-emerald-500",
-  verifier: "border-l-lime-500",
+const roleToneConfig: Partial<Record<AgentProfile["role"], { bg: string; border: string; text: string }>> = {
+  architect: { bg: "bg-violet-500/10", border: "border-violet-500/30", text: "text-violet-300" },
+  builder: { bg: "bg-blue-500/10", border: "border-blue-500/30", text: "text-blue-300" },
+  executor: { bg: "bg-amber-500/10", border: "border-amber-500/30", text: "text-amber-300" },
+  memory_curator: { bg: "bg-purple-500/10", border: "border-purple-500/30", text: "text-purple-300" },
+  orchestrator: { bg: "bg-cyan-500/10", border: "border-cyan-500/30", text: "text-cyan-300" },
+  reviewer: { bg: "bg-rose-500/10", border: "border-rose-500/30", text: "text-rose-300" },
+  skeptic: { bg: "bg-violet-500/10", border: "border-violet-500/30", text: "text-violet-300" },
+  verifier: { bg: "bg-cyan-500/10", border: "border-cyan-500/30", text: "text-cyan-300" },
 };
 
 export function Stage3DebateTable({
@@ -84,19 +86,24 @@ export function Stage3DebateTable({
       <header className="shrink-0 border-b border-zinc-800/60 bg-zinc-900/30 px-4 py-4 md:px-6">
         <div className="mx-auto max-w-4xl">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <Scale className="h-4 w-4 shrink-0 text-violet-400" />
-                <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-                  Debate Chamber
-                </span>
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-cyan-500/20 bg-cyan-500/10">
+                <FileText className="h-5 w-5 text-cyan-300" />
               </div>
-              <h1 className="mt-1 text-balance text-lg font-semibold text-zinc-100">
-                {session.problem}
-              </h1>
-              <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-zinc-500">
-                {session.summary}
-              </p>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <Scale className="h-4 w-4 shrink-0 text-violet-400" />
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                    Debate Chamber
+                  </span>
+                </div>
+                <h1 className="mt-1 text-balance text-lg font-semibold text-zinc-100">
+                  {session.problem}
+                </h1>
+                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-zinc-500">
+                  {session.summary}
+                </p>
+              </div>
             </div>
             <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
               {onOpenAnnex ? (
@@ -129,7 +136,7 @@ export function Stage3DebateTable({
                   className={cn(
                     "flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
                     activeRoundIndex === index
-                      ? "bg-zinc-800 text-zinc-100"
+                      ? "bg-zinc-800 text-zinc-100 ring-1 ring-zinc-700"
                       : "text-zinc-500 hover:bg-zinc-800/50 hover:text-zinc-100",
                   )}
                   key={round.id}
@@ -152,15 +159,27 @@ export function Stage3DebateTable({
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 py-6 md:px-6">
-        <div className="mx-auto max-w-4xl space-y-4">
-          {utterances.map((utterance) => (
-            <UtteranceCard
-              key={utterance.id}
-              onSelect={onSelectUtterance}
-              utterance={utterance}
-              utteranceById={utteranceById}
-            />
-          ))}
+        <div className="mx-auto max-w-4xl">
+          {utterances.length > 0 ? (
+            <ol aria-label="토론 타임라인" className="relative space-y-3">
+              <div className="absolute bottom-0 left-[22px] top-0 w-px bg-gradient-to-b from-zinc-800 via-zinc-700 to-zinc-800" />
+              {utterances.map((utterance, index) => (
+                <li
+                  aria-label={`${stanceConfig[resolveStance(utterance)].label}: ${utterance.agentName}`}
+                  className="relative pl-8"
+                  key={utterance.id}
+                >
+                  <div className="absolute left-[18px] top-6 h-2 w-2 rounded-full bg-zinc-600 ring-4 ring-zinc-950" />
+                  <UtteranceCard
+                    index={index}
+                    onSelect={onSelectUtterance}
+                    utterance={utterance}
+                    utteranceById={utteranceById}
+                  />
+                </li>
+              ))}
+            </ol>
+          ) : null}
           {utterances.length === 0 ? (
             <div className="py-12 text-center">
               <Scale className="mx-auto h-8 w-8 text-zinc-700" />
@@ -170,10 +189,10 @@ export function Stage3DebateTable({
         </div>
       </div>
 
-      <footer className="shrink-0 border-t border-zinc-800/60 bg-zinc-900/30 px-4 py-3 md:px-6">
+      <footer className="shrink-0 border-t border-zinc-900/70 bg-zinc-950/30 px-4 py-2 md:px-6">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-4">
-            <SummaryChip icon={CheckCircle2} label="합의" value={consensus.agreed} color="text-emerald-400" />
+          <div className="flex items-center gap-3">
+            <SummaryChip icon={CheckCircle2} label="합의" value={consensus.agreed} color="text-cyan-300" />
             <SummaryChip icon={XCircle} label="반대" value={consensus.disagreed} color="text-rose-400" />
             <SummaryChip icon={AlertTriangle} label="리스크" value={consensus.risks} color="text-amber-400" />
             <SummaryChip icon={ArrowRight} label="결정" value={consensus.decisions} color="text-violet-400" />
@@ -197,9 +216,9 @@ function resolveDefaultRoundIndex(session: Stage3DebateSession) {
 
 function roundDotColor(index: number, status: Stage3DebateSession["rounds"][number]["status"]) {
   if (status === "blocked") return "bg-rose-500";
-  if (status === "running") return "bg-amber-500";
+  if (status === "running") return "bg-violet-500";
   if (status === "pending") return "bg-zinc-600";
-  const completedAccentColors = ["bg-cyan-500", "bg-violet-500", "bg-rose-500", "bg-amber-500", "bg-emerald-500"];
+  const completedAccentColors = ["bg-zinc-500", "bg-cyan-500", "bg-violet-500", "bg-rose-500", "bg-amber-500"];
   return completedAccentColors[index % completedAccentColors.length];
 }
 
@@ -230,29 +249,34 @@ function resolveFallbackAgent(agentId: string) {
 }
 
 function UtteranceCard({
+  index,
   onSelect,
   utterance,
   utteranceById,
 }: {
+  index: number;
   onSelect?: (utterance: Stage3DebateUtteranceView) => void;
   utterance: Stage3DebateUtteranceView;
   utteranceById: Map<string, Stage3DebateUtteranceView>;
 }) {
   const stance = resolveStance(utterance);
   const config = stanceConfig[stance];
-  const Icon = config.icon;
   const isDecisionNode = Boolean(utterance.decisionId);
   const parent = utterance.parentUtteranceId ? utteranceById.get(utterance.parentUtteranceId) : undefined;
-  const borderColor = roleBorderColors[utterance.agentRole] ?? "border-l-zinc-600";
+  const roleTone = roleToneConfig[utterance.agentRole] ?? {
+    bg: "bg-zinc-500/10",
+    border: "border-zinc-600/30",
+    text: "text-zinc-300",
+  };
+  const acceptedCount = utterance.acceptedBy?.length ?? 0;
+  const rejectedCount = utterance.rejectedBy?.length ?? 0;
+  const evidenceCount = utterance.evidenceRefIds?.length ?? 0;
+  const codingCount = utterance.codingImpactRefs?.length ?? 0;
+  const hasProvenance = acceptedCount > 0 || rejectedCount > 0 || evidenceCount > 0 || codingCount > 0;
 
   return (
-    <div
-      className={cn(
-        "rounded-lg border border-zinc-800/60 border-l-2 bg-zinc-900/40 p-4 transition-all hover:border-zinc-700 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 block w-full",
-        borderColor,
-        isDecisionNode && "ring-1 ring-violet-500/30",
-        onSelect && "cursor-pointer",
-      )}
+    <article
+      className={cn("group relative text-left focus:outline-none", onSelect && "cursor-pointer")}
       onClick={() => onSelect?.(utterance)}
       onKeyDown={(event) => {
         if (onSelect && (event.key === "Enter" || event.key === " ")) {
@@ -263,52 +287,93 @@ function UtteranceCard({
       role={onSelect ? "button" : undefined}
       tabIndex={onSelect ? 0 : undefined}
     >
-      <div className="flex items-start gap-3">
-        <div className={cn("mt-0.5 rounded-md p-1.5", config.bg)}>
-          <Icon className={cn("h-4 w-4", config.color)} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <header className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-zinc-100">{utterance.agentName}</span>
-            <span className="text-xs text-zinc-500">{roleLabel(utterance.agentRole)}</span>
-            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", config.bg, config.color)}>
-              {config.label}
-            </span>
-            {isDecisionNode ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-400">
-                <GitMerge className="h-2.5 w-2.5" />
-                결정
+      {isDecisionNode ? (
+        <div className="absolute -inset-px rounded-xl bg-gradient-to-r from-violet-500/20 via-cyan-500/20 to-violet-500/20 blur-sm" />
+      ) : null}
+
+      <div
+        className={cn(
+          "relative flex gap-3 rounded-xl border border-zinc-800/50 bg-zinc-900/50 p-4 transition-all",
+          "hover:border-zinc-700/50 hover:bg-zinc-900/70",
+          "focus-within:ring-2 focus-within:ring-cyan-500/40",
+          isDecisionNode && "bg-zinc-900/60 ring-1 ring-violet-500/30",
+        )}
+      >
+        <div className={cn("w-1 shrink-0 rounded-full border", roleTone.bg, roleTone.border)} />
+        <div className="min-w-0 flex-1 space-y-3">
+          <header className="flex items-start justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <div
+                className={cn(
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold",
+                  roleTone.bg,
+                  roleTone.text,
+                )}
+              >
+                {utterance.agentName.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <div className={cn("truncate text-sm font-medium", roleTone.text)}>
+                  {utterance.agentName}
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-zinc-500">
+                  {roleLabel(utterance.agentRole)}
+                </div>
+              </div>
+              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", config.bg, config.color)}>
+                {config.label}
               </span>
-            ) : null}
+              {isDecisionNode ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-300">
+                  <GitMerge className="h-3 w-3" />
+                  결정
+                </span>
+              ) : null}
+            </div>
+            <span className="shrink-0 font-mono text-[10px] tabular-nums text-zinc-500">
+              {new Date(utterance.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+            </span>
           </header>
+
           {parent ? (
-            <div className="mt-2 flex items-center gap-1.5 text-xs text-zinc-500">
+            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
               <CornerDownRight className="h-3 w-3" />
               <span>
-                <span className="text-zinc-300">{parent.agentName}</span>의 {parent.roundTitle} 발언에 응답
+                <span className="text-zinc-400">{parent.agentName}</span>의 {parent.roundTitle} 발언에 응답
               </span>
             </div>
           ) : null}
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">
-            {utterance.content}
-          </p>
-          <footer className="mt-3 flex flex-wrap items-center gap-2">
+
+          <div className="flex flex-wrap gap-1.5">
             {utterance.tags.map((tag) => (
               <TagPill key={tag} tag={tag} />
             ))}
-            {(utterance.evidenceRefIds?.length ?? 0) > 0 ? (
-              <span className="text-xs text-cyan-400">Evidence {utterance.evidenceRefIds?.length}</span>
-            ) : null}
-            {(utterance.codingImpactRefs?.length ?? 0) > 0 ? (
-              <span className="text-xs text-violet-400">Coding {utterance.codingImpactRefs?.length}</span>
-            ) : null}
-            <span className="ml-auto text-[10px] text-zinc-600">
-              {new Date(utterance.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
-            </span>
-          </footer>
+          </div>
+
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">
+            {utterance.content}
+          </p>
+
+          {hasProvenance ? (
+            <footer className="flex flex-wrap items-center gap-2 border-t border-zinc-800/50 pt-2">
+              {acceptedCount > 0 ? (
+                <ProvenancePill icon={CheckCircle2} label={`수용 ${acceptedCount}`} tone="text-cyan-300" />
+              ) : null}
+              {rejectedCount > 0 ? (
+                <ProvenancePill icon={XCircle} label={`기각 ${rejectedCount}`} tone="text-rose-400" />
+              ) : null}
+              {evidenceCount > 0 ? (
+                <ProvenancePill icon={FileText} label={`근거 ${evidenceCount}`} tone="text-cyan-400" />
+              ) : null}
+              {codingCount > 0 ? (
+                <ProvenancePill icon={Code2} label={`코딩 ${codingCount}`} tone="text-violet-400" />
+              ) : null}
+              <span className="ml-auto text-[10px] text-zinc-600">#{index + 1}</span>
+            </footer>
+          ) : null}
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -323,7 +388,7 @@ function resolveStance(utterance: Stage3DebateUtteranceView): Stance {
 
 function TagPill({ tag }: { tag: DebateTag }) {
   const styles: Record<DebateTag, string> = {
-    agreement: "bg-emerald-500/10 text-emerald-400",
+    agreement: "bg-cyan-500/10 text-cyan-300",
     coding_impact: "bg-violet-500/10 text-violet-400",
     evidence: "bg-cyan-500/10 text-cyan-400",
     objection: "bg-rose-500/10 text-rose-400",
@@ -353,6 +418,23 @@ function SummaryChip({
       <span className="text-zinc-500">{label}</span>
       <span className={cn("font-medium", color)}>{value}</span>
     </div>
+  );
+}
+
+function ProvenancePill({
+  icon: Icon,
+  label,
+  tone,
+}: {
+  icon: ElementType;
+  label: string;
+  tone: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md border border-zinc-800/80 bg-zinc-950/40 px-2 py-0.5 text-[10px] text-zinc-500">
+      <Icon className={cn("h-3 w-3", tone)} />
+      {label}
+    </span>
   );
 }
 

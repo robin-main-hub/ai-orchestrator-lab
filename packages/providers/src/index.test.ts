@@ -148,7 +148,7 @@ describe("provider credential parsing and model discovery", () => {
           id: "provider_apifun_claude",
           name: "APIKey.fun Claude A",
           kind: "anthropic",
-          defaultModel: "claude-opus-4-6",
+          defaultModel: "claude-opus-4-8",
           tags: ["server-proxy", "apikey.fun", "reseller", "dgx-secret-ref"],
           trustLevel: "untrusted",
         }),

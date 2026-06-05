@@ -19,7 +19,7 @@ import type { AdapterFetchLike } from "./openAiCompatibleAdapter";
  * with provider-specific defaults (e.g. anthropic prefers a Claude
  * model id) just override the relevant fields:
  *
- *   baseProviderRequest({ providerProfileId: "provider_apifun_claude", modelId: "claude-opus-4-6" })
+ *   baseProviderRequest({ providerProfileId: "provider_apifun_claude", modelId: "claude-opus-4-8" })
  */
 export function baseProviderRequest(
   overrides: Partial<ProviderCompletionRequest> = {},
