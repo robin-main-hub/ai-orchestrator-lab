@@ -6,10 +6,10 @@ describe("operatorCockpitActionLabels", () => {
     const labels = Object.values(operatorCockpitActionLabels);
 
     expect(labels).toEqual([
-      "Memory Recall 열기",
-      "Provider Routing 열기",
-      "Recovery & Continuity 열기",
-      "Approval Evidence 미리보기",
+      "기억 근거 열기",
+      "모델 경로 열기",
+      "복구 상태 열기",
+      "승인 근거 미리보기",
     ]);
     expect(new Set(labels).size).toBe(labels.length);
   });
