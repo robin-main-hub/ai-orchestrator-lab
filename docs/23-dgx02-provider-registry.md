@@ -16,8 +16,8 @@ DGX-02의 OpenClaw Slot 2 환경 파일을 원천으로 삼아, 데스크톱 앱
 
 | 구분 | Provider ID | 표시 이름 | 기본 모델 | API key env | Base URL |
 | --- | --- | --- | --- | --- | --- |
-| Claude A | `provider_apifun_claude` | `APIKey.fun Claude A` | `claude-opus-4-6` | `ANTHROPIC_API_KEY` | `https://api.apikey.fun` |
-| Claude B | `provider_apifun_claude_b` | `APIKey.fun Claude B` | `claude-opus-4-6` | `ANTHROPIC_API_KEY_ALT` | `https://api.apikey.fun` |
+| Claude A | `provider_apifun_claude` | `APIKey.fun Claude A` | `claude-opus-4-8` | `ANTHROPIC_API_KEY` | `https://api.apikey.fun` |
+| Claude B | `provider_apifun_claude_b` | `APIKey.fun Claude B` | `claude-opus-4-8` | `ANTHROPIC_API_KEY_ALT` | `https://api.apikey.fun` |
 
 별칭 env:
 
