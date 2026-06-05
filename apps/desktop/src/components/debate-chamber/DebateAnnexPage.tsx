@@ -13,8 +13,10 @@ import {
   XCircle,
 } from "lucide-react";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
+import { annexCopy, annexTabPresentation, sanitizeDebateAnnexText } from "@/lib/debateChamberPresentation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
+import { deriveDebateDecisionReadiness } from "../../lib/debateDecisionReadiness";
 import type { Stage3DebateSession } from "../../runtime/stage3Runtime";
 
 type AnnexTab = "status" | "evidence" | "agents" | "memory" | "queue" | "logs";
@@ -49,12 +51,12 @@ type LogEntry = {
 };
 
 const tabConfig: Record<AnnexTab, { icon: ElementType; label: string }> = {
-  agents: { icon: Users, label: "Agent Relay" },
-  evidence: { icon: FileText, label: "Evidence" },
-  logs: { icon: Server, label: "Logs" },
-  memory: { icon: Database, label: "Memory" },
-  queue: { icon: Clock, label: "Queue" },
-  status: { icon: Activity, label: "Status Hub" },
+  agents: { icon: Users, label: annexTabPresentation.agents.label },
+  evidence: { icon: FileText, label: annexTabPresentation.evidence.label },
+  logs: { icon: Server, label: annexTabPresentation.logs.label },
+  memory: { icon: Database, label: annexTabPresentation.memory.label },
+  queue: { icon: Clock, label: annexTabPresentation.queue.label },
+  status: { icon: Activity, label: annexTabPresentation.status.label },
 };
 
 export function DebateAnnexPage({
@@ -92,7 +94,7 @@ export function DebateAnnexPage({
       memoryRecall: session.contextPreview.map((value, index) => ({
         confidence: Math.max(62, 94 - index * 7),
         key: `context-${index + 1}`,
-        value,
+        value: sanitizeDebateAnnexText(value),
       })),
       queueItems: buildQueueItems({ codingPacketGoal, pendingApprovals, session }),
       statusHub: buildStatusItems(session, runtime),
@@ -102,7 +104,7 @@ export function DebateAnnexPage({
 
   return (
     <section
-      className={cn("flex h-full flex-col bg-transparent text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50", className)}
+      className={cn("flex h-full flex-col bg-transparent text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50", className)}
       data-focus-id="debate-annex-container"
       tabIndex={-1}
     >
@@ -116,9 +118,9 @@ export function DebateAnnexPage({
           ) : null}
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <FileText className="h-4 w-4 text-cyan-400" />
+              <FileText className="h-4 w-4 text-violet-400" />
               <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-                Debate Annex
+                {annexCopy.kicker}
               </span>
             </div>
             <h1 className="mt-1 truncate text-sm font-medium text-zinc-100">
@@ -168,24 +170,31 @@ export function DebateAnnexPage({
 }
 
 function buildStatusItems(session: Stage3DebateSession, runtime: RuntimeSnapshot): StatusItem[] {
+  const readiness = deriveDebateDecisionReadiness(session);
   return [
     ...session.statusHub.map((item) => ({
       id: item.id,
-      label: item.label,
+      label: sanitizeDebateAnnexText(item.label),
       status: item.tone === "danger" ? "critical" as const : item.tone === "warn" ? "degraded" as const : "healthy" as const,
-      value: item.value,
+      value: sanitizeDebateAnnexText(String(item.value)),
     })),
     {
+      id: "decision-readiness",
+      label: "결정 준비",
+      status: readiness.state === "blocked" ? "critical" : readiness.state === "needs_review" ? "degraded" : "healthy",
+      value: sanitizeDebateAnnexText(readiness.headline),
+    },
+    {
       id: "authority",
-      label: "Authority",
+      label: "기준 권한",
       status: "healthy",
-      value: runtime.syncTopology.authorityLabel,
+      value: sanitizeDebateAnnexText(runtime.syncTopology.authorityLabel),
     },
     {
       id: "memory-sync",
-      label: "Memory Sync",
+      label: "기억 동기화",
       status: runtime.memorySyncStatus === "online" ? "healthy" : "degraded",
-      value: runtime.memorySyncStatus,
+      value: runtime.memorySyncStatus === "online" ? "정상" : "점검 필요",
     },
   ];
 }
@@ -198,24 +207,24 @@ function buildEvidenceRefs(session: Stage3DebateSession): EvidenceRef[] {
         refs.set(id, {
           id,
           relevance: utterance.tags.includes("risk") ? "high" : "medium",
-          source: round.title,
-          title: id,
+          source: sanitizeDebateAnnexText(round.title),
+          title: sanitizeDebateAnnexText(id),
         });
       }
       for (const id of utterance.codingImpactRefs ?? []) {
         refs.set(id, {
           id,
           relevance: "high",
-          source: `${round.title} · coding impact`,
-          title: id,
+          source: `${sanitizeDebateAnnexText(round.title)} · 코딩 영향`,
+          title: sanitizeDebateAnnexText(id),
         });
       }
       if (utterance.decisionId) {
         refs.set(utterance.decisionId, {
           id: utterance.decisionId,
           relevance: "high",
-          source: `${round.title} · decision`,
-          title: utterance.decisionId,
+          source: `${sanitizeDebateAnnexText(round.title)} · 결정`,
+          title: sanitizeDebateAnnexText(utterance.decisionId),
         });
       }
     }
@@ -237,8 +246,8 @@ function buildQueueItems({
     items.push({
       id: "permission-queue",
       status: "pending",
-      timestamp: "now",
-      title: `${pendingApprovals} approval item(s) waiting`,
+      timestamp: "지금",
+      title: `승인 대기 ${pendingApprovals}건`,
       type: "approval",
     });
   }
@@ -246,16 +255,16 @@ function buildQueueItems({
     items.push({
       id: "coding-packet",
       status: "ready",
-      timestamp: "ready",
-      title: codingPacketGoal,
+      timestamp: "준비됨",
+      title: sanitizeDebateAnnexText(codingPacketGoal),
       type: "draft",
     });
   }
   items.push({
     id: "debate-rounds",
     status: "waiting",
-    timestamp: `${session.rounds.length} rounds`,
-    title: "Round outputs available for inspection",
+    timestamp: `${session.rounds.length}개 라운드`,
+    title: "토론 산출물 검토 가능",
     type: "task",
   });
   return items;
@@ -266,21 +275,31 @@ function buildLogs(session: Stage3DebateSession, runtime: RuntimeSnapshot, now: 
     {
       id: "promoted",
       level: "info",
-      message: `Debate promoted from conversation at ${new Date(session.promotedAt).toLocaleString("ko-KR")}`,
+      message: `대화에서 토론으로 승격됨 · ${new Date(session.promotedAt).toLocaleString("ko-KR")}`,
       timestamp: formatRelativeTime(session.promotedAt, now),
     },
     {
       id: "runtime",
       level: runtime.recentError ? "error" : "info",
-      message: runtime.recentError ?? `Runtime updated at ${new Date(runtime.updatedAt).toLocaleString("ko-KR")}`,
+      message: sanitizeDebateAnnexText(
+        runtime.recentError ?? `런타임 갱신 · ${new Date(runtime.updatedAt).toLocaleString("ko-KR")}`,
+      ),
       timestamp: formatRelativeTime(runtime.updatedAt, now),
     },
     ...session.humanPeek.map((entry) => ({
       id: entry.id,
       level: entry.state === "blocked" ? "warn" as const : "info" as const,
-      message: `${entry.actor} ${entry.kind} ${entry.target}: ${entry.summary}`,
+      message: sanitizeDebateAnnexText(`${entry.actor} ${entry.kind} ${entry.target}: ${entry.summary}`),
       timestamp: formatRelativeTime(entry.createdAt, now),
     })),
+    ...session.rounds.flatMap((round) =>
+      round.utterances.slice(0, 8).map((utterance) => ({
+        id: `utterance-${utterance.id}`,
+        level: utterance.tags.includes("risk") || utterance.tags.includes("objection") ? "warn" as const : "info" as const,
+        message: sanitizeDebateAnnexText(`공개 작업 로그 · ${round.title} · ${utterance.agentId}`),
+        timestamp: formatRelativeTime(utterance.createdAt, now),
+      })),
+    ),
   ];
 }
 
@@ -315,12 +334,12 @@ function buildAnnexShape() {
 }
 
 function StatusHubPanel({ items }: { items: StatusItem[] }) {
-  if (!items.length) return <EmptyState icon={Activity} message="No status data available" />;
+  if (!items.length) return <EmptyState icon={Activity} message="상태 자료가 없습니다" />;
 
   const statusColor = {
     critical: "text-rose-400",
     degraded: "text-amber-400",
-    healthy: "text-emerald-400",
+    healthy: "text-violet-300",
   };
 
   return (
@@ -338,10 +357,10 @@ function StatusHubPanel({ items }: { items: StatusItem[] }) {
 }
 
 function EvidencePanel({ refs }: { refs: EvidenceRef[] }) {
-  if (!refs.length) return <EmptyState icon={FileText} message="No evidence references" />;
+  if (!refs.length) return <EmptyState icon={FileText} message="근거가 없습니다" />;
 
   const relevanceColor = {
-    high: "border-l-emerald-500",
+    high: "border-l-violet-500",
     low: "border-l-zinc-600",
     medium: "border-l-amber-500",
   };
@@ -366,14 +385,14 @@ function AgentRelayPanel({
 }: {
   relay: { actor: string; action: string; target: string; timestamp: string }[];
 }) {
-  if (!relay.length) return <EmptyState icon={Users} message="No agent relay activity" />;
+  if (!relay.length) return <EmptyState icon={Users} message="에이전트 흐름이 없습니다" />;
 
   return (
     <div className="space-y-2">
       {relay.map((item, index) => (
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-3" key={`${item.actor}-${index}`}>
           <div className="flex flex-wrap min-w-0 items-center gap-2 text-sm">
-            <span className="truncate font-medium text-cyan-400">{item.actor}</span>
+            <span className="truncate font-medium text-violet-300">{item.actor}</span>
             <ChevronRight className="h-3 w-3 shrink-0 text-zinc-500" />
             <span className="text-zinc-500">{item.action}</span>
             <ChevronRight className="h-3 w-3 shrink-0 text-zinc-500" />
@@ -393,7 +412,7 @@ function MemoryPanel({
   recall: { confidence: number; key: string; value: string }[];
   onViewMemory?: () => void;
 }) {
-  if (!recall.length) return <EmptyState icon={Database} message="No memory recalls" />;
+  if (!recall.length) return <EmptyState icon={Database} message="기억 호출 내역이 없습니다" />;
 
   return (
     <div className="space-y-3">
@@ -402,7 +421,7 @@ function MemoryPanel({
           className={cn(
             "rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-4 transition-colors text-left w-full block",
             onViewMemory &&
-              "cursor-pointer hover:border-cyan-500/30 hover:bg-zinc-900/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+              "cursor-pointer hover:border-violet-500/30 hover:bg-zinc-900/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50"
           )}
           key={item.key}
           onClick={onViewMemory}
@@ -416,7 +435,7 @@ function MemoryPanel({
           tabIndex={onViewMemory ? 0 : undefined}
         >
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-cyan-400">{item.key}</p>
+            <p className="text-xs font-medium text-violet-300">{item.key}</p>
             <span className="text-xs text-zinc-500">{item.confidence}%</span>
           </div>
           <p className="mt-2 line-clamp-3 text-sm text-zinc-300">{item.value}</p>
@@ -433,7 +452,7 @@ function QueuePanel({
   items: QueueItem[];
   onViewApproval?: () => void;
 }) {
-  if (!items.length) return <EmptyState icon={Clock} message="Queue is empty" />;
+  if (!items.length) return <EmptyState icon={Clock} message="대기열이 비어 있습니다" />;
 
   const statusIcon = {
     pending: AlertTriangle,
@@ -442,7 +461,7 @@ function QueuePanel({
   };
   const statusColor = {
     pending: "text-amber-400",
-    ready: "text-emerald-400",
+    ready: "text-violet-300",
     waiting: "text-zinc-400",
   };
 
@@ -456,7 +475,7 @@ function QueuePanel({
             className={cn(
               "flex items-center gap-3 rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-3 transition-colors text-left w-full",
               isClickable &&
-                "cursor-pointer hover:border-amber-500/30 hover:bg-zinc-900/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+                "cursor-pointer hover:border-amber-500/30 hover:bg-zinc-900/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50"
             )}
             key={item.id}
             onClick={isClickable ? onViewApproval : undefined}
@@ -472,7 +491,7 @@ function QueuePanel({
             <Icon className={cn("h-4 w-4", statusColor[item.status])} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm text-zinc-100">{item.title}</p>
-              <p className="text-xs text-zinc-500">{item.type}</p>
+              <p className="text-xs text-zinc-500">{queueTypeLabel(item.type)}</p>
             </div>
             <span className="text-[10px] text-zinc-500">{item.timestamp}</span>
           </div>
@@ -482,12 +501,18 @@ function QueuePanel({
   );
 }
 
+function queueTypeLabel(type: QueueItem["type"]) {
+  if (type === "approval") return "승인";
+  if (type === "draft") return "초안";
+  return "작업";
+}
+
 function LogsPanel({ entries }: { entries: LogEntry[] }) {
-  if (!entries.length) return <EmptyState icon={Server} message="No logs available" />;
+  if (!entries.length) return <EmptyState icon={Server} message="기록이 없습니다" />;
 
   const levelColor = {
     error: "text-rose-400",
-    info: "text-cyan-400",
+    info: "text-violet-300",
     warn: "text-amber-400",
   };
   const levelIcon = {
@@ -527,10 +552,10 @@ function formatRelativeTime(value: string, now: number) {
   const timestamp = new Date(value).getTime();
   if (Number.isNaN(timestamp)) return value;
   const delta = now - timestamp;
-  if (delta < 60_000) return "just now";
-  if (delta < 3_600_000) return `${Math.max(1, Math.floor(delta / 60_000))}m ago`;
-  if (delta < 86_400_000) return `${Math.floor(delta / 3_600_000)}h ago`;
-  return `${Math.floor(delta / 86_400_000)}d ago`;
+  if (delta < 60_000) return "방금";
+  if (delta < 3_600_000) return `${Math.max(1, Math.floor(delta / 60_000))}분 전`;
+  if (delta < 86_400_000) return `${Math.floor(delta / 3_600_000)}시간 전`;
+  return `${Math.floor(delta / 86_400_000)}일 전`;
 }
 
 function useNow(updateIntervalMs = 60000) {
