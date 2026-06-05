@@ -48,6 +48,7 @@ describe("publicWorkTrace", () => {
         { label: "범위", value: "생성/도구/핸드오프/메모리" },
         { label: "기준점", value: "session_main · recall_agent_orchestrator_session_main_provider_mimo_token_openai" },
         { label: "마스킹", value: "적용됨" },
+        { label: "공개 범위", value: "요약 단계만" },
       ],
     });
     expect(trace.groups.map((group) => group.title)).toEqual([
@@ -113,6 +114,35 @@ describe("publicWorkTrace", () => {
     expect(serialized).not.toContain("sk-1234567890abcdef");
     expect(serialized).not.toContain("tp-slmvllbti6z4gmjnj5srk2r9nqdbhj5hteonqwswxks2o6ge");
     expect(serialized).toContain("[redacted]");
+  });
+
+  it("공개 작업 로그는 내부 추론과 원문 도구 입력을 요약 경계로 마스킹한다", () => {
+    const message: ConversationMessage = {
+      id: "msg_assistant_cot",
+      sessionId: "session_main",
+      role: "assistant",
+      content: "응답",
+      createdAt: "2026-06-05T08:00:00.000Z",
+      metadata: {
+        error: [
+          "chain-of-thought: hidden reasoning",
+          "raw prompt: original system message",
+          "tool input: rm -rf /Users/robin/Documents",
+          "endpoint=https://token-plan-sgp.xiaomimimo.com/v1",
+        ].join("\n"),
+        providerProfileId: "provider_mimo_token_openai",
+      },
+    };
+
+    const trace = createConversationMessagePublicWorkTrace(message);
+    const serialized = JSON.stringify(trace);
+
+    expect(serialized).not.toContain("hidden reasoning");
+    expect(serialized).not.toContain("original system message");
+    expect(serialized).not.toContain("rm -rf");
+    expect(serialized).not.toContain("https://token-plan-sgp.xiaomimimo.com/v1");
+    expect(serialized).toContain("[redacted:internal]");
+    expect(trace.receipt?.items).toContainEqual({ label: "공개 범위", value: "요약 단계만" });
   });
 
   it("토론 발언의 태그와 근거를 같은 공개 로그 모델로 변환한다", () => {
