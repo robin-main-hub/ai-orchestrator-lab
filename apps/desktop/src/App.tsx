@@ -152,7 +152,10 @@ import {
 } from "./lib/controlQueueWorkItems";
 import { createControlQueueContinuitySummary } from "./lib/controlQueueContinuity";
 import { controlQueuePermissionLabel, sanitizeControlQueueText } from "./lib/controlQueuePresentation";
-import { createAgentRoleToolRuntimeAudit } from "./lib/agentRuntimeConfig";
+import {
+  createAgentRoleToolRuntimeAudit,
+  createAgentRoleToolRuntimeSummary,
+} from "./lib/agentRuntimeConfig";
 import { createMemoryGovernanceSummary } from "./lib/memoryGovernance";
 import { createProviderRoutingConsoleItems } from "./lib/providerRoutingConsole";
 import {
@@ -937,6 +940,7 @@ export function App() {
     purpose: WorkbenchCompletionPurpose;
     userMessage: ConversationMessage;
   }): Promise<WorkbenchCompletionResult> {
+    const roleToolConfig = createAgentRoleToolRuntimeSummary(agent);
     if (!isDgxRoutedProvider(provider)) {
       const recalledMemoryCount = memoryInspector.trace.results.filter((result) => result.usedInDecision).length;
       return {
@@ -955,6 +959,8 @@ export function App() {
           runtimeConfigFileIds: agentConfigFiles
             .filter((configFile) => configFile.linkedAgentIds.includes(agent.id))
             .map((configFile) => configFile.id),
+          roleToolProfileLabel: roleToolConfig.label,
+          roleToolProfileTools: roleToolConfig.tools,
           purpose,
         },
       };
@@ -1013,6 +1019,8 @@ export function App() {
         memoryTraceId: pipelineMetadata.memoryTraceId,
         recalledMemoryCount: pipelineMetadata.recalledMemoryCount,
         runtimeConfigFileIds: pipelineMetadata.runtimeConfigFileIds,
+        roleToolProfileLabel: pipelineMetadata.roleToolProfileLabel,
+        roleToolProfileTools: pipelineMetadata.roleToolProfileTools,
         realProviderCall: true,
         purpose,
       },

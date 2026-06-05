@@ -12,7 +12,7 @@ export type PublicWorkTraceItem = {
 
 export type PublicWorkTraceGroup = {
   id: "steps" | "commands" | "evidence";
-  title: "작업 단계" | "명령·도구 제안" | "검증·근거";
+  title: "작업 단계" | "도구 후보" | "검증";
   items: PublicWorkTraceItem[];
 };
 
@@ -79,6 +79,31 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
       label: "런타임 규칙",
       tone: "info",
       value: sanitize(`${runtimeConfigFileIds.length}개 config 적용`),
+    });
+  }
+
+  const roleToolProfileLabel = readString(metadata.roleToolProfileLabel);
+  const roleToolProfileTools = readStringArray(metadata.roleToolProfileTools);
+  if (roleToolProfileLabel || roleToolProfileTools.length > 0) {
+    commands.push({
+      id: "role-tool-profile",
+      label: "도구 프로필",
+      tone: "info",
+      value: sanitize(
+        [
+          roleToolProfileLabel,
+          roleToolProfileTools.length > 0 ? `${roleToolProfileTools.length}개 후보` : undefined,
+        ].filter(Boolean).join(" · "),
+      ),
+    });
+  }
+
+  if (roleToolProfileTools.length > 0) {
+    commands.push({
+      id: "tool-call-intent",
+      label: "호출 후보",
+      tone: "neutral",
+      value: sanitize(roleToolProfileTools.slice(0, 3).join(", ")),
     });
   }
 
@@ -261,8 +286,8 @@ function toTrace(
 ): PublicWorkTrace {
   const groups: PublicWorkTraceGroup[] = [];
   if (steps.length > 0) groups.push({ id: "steps", items: steps, title: "작업 단계" });
-  if (commands.length > 0) groups.push({ id: "commands", items: commands, title: "명령·도구 제안" });
-  if (evidence.length > 0) groups.push({ id: "evidence", items: evidence, title: "검증·근거" });
+  if (commands.length > 0) groups.push({ id: "commands", items: commands, title: "도구 후보" });
+  if (evidence.length > 0) groups.push({ id: "evidence", items: evidence, title: "검증" });
   return { groups, receipt };
 }
 
@@ -280,7 +305,9 @@ function createConversationReceipt(
 
   const spans = [
     readBoolean(metadata.realProviderCall) !== undefined ? "generation" : undefined,
-    readStringArray(metadata.runtimeConfigFileIds).length > 0 ? "tool" : undefined,
+    readStringArray(metadata.runtimeConfigFileIds).length > 0 || readStringArray(metadata.roleToolProfileTools).length > 0
+      ? "tool"
+      : undefined,
     readDelegations(metadata).length > 0 ? "handoff" : undefined,
     readString(metadata.recallTraceId) || readString(metadata.memoryTraceId) ? "memory" : undefined,
   ].filter((value): value is string => Boolean(value));
