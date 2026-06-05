@@ -340,6 +340,7 @@ export const seededModelCatalog: ModelCatalog = {
   ].map((id) => createModel("provider_openrouter_dgx", id, ["openrouter", "server-proxy"])),
   provider_apifun_claude: [
     "claude-opus-4-8",
+    "claude-opus-4-7",
     "claude-opus-4-6",
     "claude-code-compatible",
     "claude-sonnet-reseller",
