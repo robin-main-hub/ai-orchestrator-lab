@@ -1,4 +1,4 @@
-import { Activity, Brain, GitBranch, MessageSquare, Search, Terminal } from "lucide-react";
+import { Activity, Brain, GitBranch, LayoutDashboard, MessageSquare, Search, Terminal } from "lucide-react";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
@@ -138,6 +138,21 @@ export function RuntimeStatusBar({
         >
           <Terminal className="h-3 w-3" />
           <span className="status-bar-mode-label">Tmux</span>
+        </Button>
+        <Button
+          aria-label="Operator Cockpit mode"
+          data-focus-id="mode-tab-cockpit"
+          variant={mode === "cockpit" ? "secondary" : "ghost"}
+          size="sm"
+          className={cn(
+            "h-7 gap-1.5 px-3 text-[11px] font-medium transition-all",
+            mode === "cockpit" ? "text-foreground bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+          )}
+          onClick={() => onChangeMode("cockpit")}
+          title="Operator Cockpit"
+        >
+          <LayoutDashboard className="h-3 w-3" />
+          <span className="status-bar-mode-label">Cockpit</span>
         </Button>
       </div>
 

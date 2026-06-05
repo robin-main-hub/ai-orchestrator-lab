@@ -1,55 +1,68 @@
-import React from 'react';
-import type { OperatorCockpitMemoryRecall } from '@ai-orchestrator/protocol';
-import { Badge } from './Badge';
+import React from "react";
+import { AlertTriangle, Brain, Database, Monitor } from "lucide-react";
+import type { OperatorCockpitMemoryRecall } from "@ai-orchestrator/protocol";
+import { Badge } from "./Badge";
+import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
+import { badgeColorForMirror } from "./presentation";
 
 export function MemoryRecallCard({ memory }: { memory: OperatorCockpitMemoryRecall }) {
   return (
-    <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl hover:border-white/20 transition-all">
-      <div className="flex items-center gap-3 mb-6">
-        <span className="drop-shadow-[0_0_8px_var(--color-purple-400)] text-xl">🧠</span>
-        <h3 className="text-lg font-semibold text-zinc-100">Memory Recall</h3>
-      </div>
-
-      <div className="mb-6">
-        <span className="font-semibold text-zinc-500 tracking-wider text-[10px] uppercase block mb-3">Context Reasons</span>
-        <ul className="space-y-2">
-          {memory.contextReasons.map((reason, idx) => (
-            <li key={idx} className="text-sm text-zinc-300 font-mono flex items-center gap-2">
-              <span className="text-purple-500/50">›</span> {reason}
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="flex gap-6 mb-6">
-        <div className="bg-black/20 p-3 rounded-lg border border-white/5 flex-1">
-          <span className="font-semibold text-zinc-500 tracking-wider text-[10px] uppercase block mb-2">MacBook Authority</span>
-          <Badge color={memory.macBookAuthorityEnabled ? 'green' : 'gray'}>
-            {memory.macBookAuthorityEnabled ? 'Enabled' : 'Disabled'}
-          </Badge>
+    <GlassPanel variant={memory.contradictionWarnings.length > 0 ? "danger" : "default"}>
+      <GlassPanelHeader action={<Badge color="purple">{memory.contextReasons.length} recalls</Badge>}>
+        <div className="flex items-center gap-2">
+          <Brain className="h-4 w-4 text-violet-400" />
+          <h3 className="text-sm font-semibold text-zinc-100">Memory Recall</h3>
         </div>
-        <div className="bg-black/20 p-3 rounded-lg border border-white/5 flex-1">
-          <span className="font-semibold text-zinc-500 tracking-wider text-[10px] uppercase block mb-2">DGX Mirror Health</span>
-          <Badge color={memory.dgxMirrorHealth === 'healthy' ? 'green' : memory.dgxMirrorHealth === 'degraded' ? 'yellow' : 'red'}>
-            {memory.dgxMirrorHealth}
-          </Badge>
-        </div>
-      </div>
+      </GlassPanelHeader>
 
-      {memory.contradictionWarnings.length > 0 && (
-        <div className="bg-rose-500/10 p-4 rounded-xl border border-rose-500/20">
-          <span className="text-sm font-semibold text-rose-400 flex items-center gap-2 mb-3">
-            <span className="animate-pulse">⚠️</span> Contradiction Warnings
-          </span>
-          <ul className="space-y-1">
-            {memory.contradictionWarnings.map((warning, idx) => (
-              <li key={idx} className="text-sm text-rose-300 flex items-start gap-2">
-                <span className="mt-1 opacity-70">-</span> <span>{warning}</span>
+      <div className="space-y-4 p-3">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-lg border border-zinc-800/50 bg-black/20 p-3">
+            <span className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+              <Monitor className="h-3 w-3" />
+              MacBook
+            </span>
+            <Badge color={memory.macBookAuthorityEnabled ? "green" : "gray"}>
+              {memory.macBookAuthorityEnabled ? "Authority" : "Offline"}
+            </Badge>
+          </div>
+          <div className="rounded-lg border border-zinc-800/50 bg-black/20 p-3">
+            <span className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+              <Database className="h-3 w-3" />
+              DGX Mirror
+            </span>
+            <Badge color={badgeColorForMirror(memory.dgxMirrorHealth)}>{memory.dgxMirrorHealth}</Badge>
+          </div>
+        </div>
+
+        <div>
+          <span className="mb-2 block text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Context Reasons</span>
+          <ul className="space-y-2">
+            {memory.contextReasons.map((reason, idx) => (
+              <li key={`${reason}-${idx}`} className="flex items-start gap-2 rounded-md bg-zinc-900/30 px-3 py-2 text-sm text-zinc-300">
+                <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-violet-400" />
+                <span>{reason}</span>
               </li>
             ))}
           </ul>
         </div>
-      )}
-    </div>
+
+        {memory.contradictionWarnings.length > 0 ? (
+          <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-3">
+            <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-rose-300">
+              <AlertTriangle className="h-4 w-4" /> Contradiction Warnings
+            </span>
+          <ul className="space-y-1">
+            {memory.contradictionWarnings.map((warning, idx) => (
+              <li key={`${warning}-${idx}`} className="flex items-start gap-2 text-sm text-rose-200">
+                <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-rose-300" />
+                <span>{warning}</span>
+              </li>
+            ))}
+          </ul>
+          </div>
+        ) : null}
+      </div>
+    </GlassPanel>
   );
 }
