@@ -1,5 +1,6 @@
 import { ChevronLeft, KeyRound, LockKeyhole, Pencil, RefreshCw, Terminal, Trash2, type LucideIcon } from "lucide-react";
 import type { ModelDiscoverySnapshot, ProviderProfile } from "@ai-orchestrator/protocol";
+import type { ProviderRoutingConsoleItem } from "../lib/providerRoutingConsole";
 import type { ModelCatalog, ProviderRegistrationMode } from "../types";
 export function ProviderRegistrationMenu({
   modelCatalog,
@@ -10,6 +11,7 @@ export function ProviderRegistrationMenu({
   onRenameProvider,
   onRegister,
   profiles,
+  routingConsoleItems,
   usedProviderIds,
 }: {
   modelCatalog: ModelCatalog;
@@ -20,6 +22,7 @@ export function ProviderRegistrationMenu({
   onRenameProvider: (providerId: string) => void;
   onRegister: (mode: ProviderRegistrationMode) => void;
   profiles: ProviderProfile[];
+  routingConsoleItems: ProviderRoutingConsoleItem[];
   usedProviderIds: Set<string>;
 }) {
   const options: Array<{
@@ -55,12 +58,20 @@ export function ProviderRegistrationMenu({
           const isInUse = usedProviderIds.has(profile.id);
           const modelCount = modelCatalog[profile.id]?.length ?? 0;
           const discovery = modelDiscoveryByProviderId[profile.id];
+          const routingItem = routingConsoleItems.find((item) => item.providerId === profile.id);
           return (
             <article className={isInUse ? "in-use" : ""} key={profile.id}>
               <div>
-                <strong>{profile.name}</strong>
+                <strong>{routingItem?.displayName ?? profile.name}</strong>
                 <span>
-                  {profile.trustLevel} / {modelCount} models / {discovery?.status ?? "cached"}
+                  {routingItem
+                    ? `${routingItem.trustLabel} / ${routingItem.modelCount} models / ${routingItem.discoveryLabel}`
+                    : `${profile.trustLevel} / ${modelCount} models / ${discovery?.status ?? "cached"}`}
+                </span>
+                <span>
+                  {routingItem
+                    ? `${routingItem.assignedAgentCount} agents / ${routingItem.readinessLabel} / ${routingItem.secretPolicyLabel}`
+                    : "라우팅 요약 대기"}
                 </span>
               </div>
               <button
