@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CodingPacket,
   ConversationMessage,
@@ -23,6 +23,10 @@ import {
   createAgentChannelRecallQuery,
   type AgentChannelMemoryScope,
 } from "../lib/agentConversationChannels";
+import {
+  canCommitMemoryScopeResult,
+  createMemoryControllerScopeKey,
+} from "../lib/memoryControllerScope";
 
 type AppendWorkbenchEvent = <T>(type: string, payload: T) => EventEnvelope<T>;
 
@@ -51,6 +55,8 @@ export function useMemoryController({
   const [adapterStatus, setAdapterStatus] = useState<"loading" | "ready" | "error">("loading");
   const [adapterRelations, setAdapterRelations] = useState<MemoryRelation[] | null>(null);
   const [adapterReflection, setAdapterReflection] = useState<Reflection | null>(null);
+  const memoryScopeKey = createMemoryControllerScopeKey(memoryScope);
+  const memoryScopeKeyRef = useRef(memoryScopeKey);
   const memoryAdapterProfileId = memoryScope
     ? `desktop_dgx_simplemem_${memoryScope.recallTraceId}`
     : "desktop_dgx_simplemem";
@@ -70,7 +76,16 @@ export function useMemoryController({
   );
 
   useEffect(() => {
+    memoryScopeKeyRef.current = memoryScopeKey;
+    setMemoryRecords([]);
+    setAdapterRelations(null);
+    setAdapterReflection(null);
+    setAdapterStatus("loading");
+  }, [memoryScopeKey]);
+
+  useEffect(() => {
     let active = true;
+    const expectedScopeKey = memoryScopeKey;
     setAdapterStatus("loading");
     const recallQuery = memoryScope
       ? createAgentChannelRecallQuery(memoryScope, packet.goal ?? "")
@@ -78,31 +93,55 @@ export function useMemoryController({
     memoryApi
       .recall({ query: recallQuery, sessionId: memoryScope?.sessionId, limit: 50 })
       .then((results) => {
-        if (!active) return;
+        if (!active || !canCommitMemoryScopeResult({ currentScopeKey: memoryScopeKeyRef.current, expectedScopeKey })) return;
         setMemoryRecords(results.map((result) => result.record));
         setAdapterStatus("ready");
       })
       .catch(() => {
-        if (!active) return;
+        if (!active || !canCommitMemoryScopeResult({ currentScopeKey: memoryScopeKeyRef.current, expectedScopeKey })) return;
         setAdapterStatus("error");
       });
     return () => {
       active = false;
     };
-  }, [memoryApi, memoryScope, packet.goal]);
+  }, [memoryApi, memoryScope, memoryScopeKey, packet.goal]);
 
   useEffect(() => {
+    let active = true;
+    const expectedScopeKey = memoryScopeKey;
     const recordIds = memoryRecords.map((record) => record.id);
     if (recordIds.length === 0) {
       setAdapterRelations(null);
-      return;
+      return () => {
+        active = false;
+      };
     }
-    memoryApi.createRelations(recordIds).then(setAdapterRelations).catch(() => {});
-  }, [memoryApi, memoryRecords]);
+    memoryApi
+      .createRelations(recordIds)
+      .then((relations) => {
+        if (!active || !canCommitMemoryScopeResult({ currentScopeKey: memoryScopeKeyRef.current, expectedScopeKey })) return;
+        setAdapterRelations(relations);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [memoryApi, memoryRecords, memoryScopeKey]);
 
   useEffect(() => {
-    memoryApi.reflect(memoryScope?.namespace ?? "session_desktop_001").then(setAdapterReflection).catch(() => {});
-  }, [memoryApi, memoryRecords, memoryScope?.namespace]);
+    let active = true;
+    const expectedScopeKey = memoryScopeKey;
+    memoryApi
+      .reflect(expectedScopeKey)
+      .then((reflection) => {
+        if (!active || !canCommitMemoryScopeResult({ currentScopeKey: memoryScopeKeyRef.current, expectedScopeKey })) return;
+        setAdapterReflection(reflection);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [memoryApi, memoryRecords, memoryScopeKey]);
 
   const baseInspector = useMemo(
     () =>
