@@ -132,3 +132,17 @@ export function createControlQueueDelegateHandoff(
 
   return { handoff, workItem };
 }
+
+export function createControlQueueBlockItem(
+  item: ApprovalQueueItem,
+  input: ControlQueueProjectionInput,
+): WorkItem {
+  return createBaseWorkItem(item, input, {
+    lane: "blocked",
+    status: "blocked",
+    surface: "execution_slot",
+    title: `차단됨: ${item.summary.slice(0, 56)}`,
+    summary: item.reason ?? item.summary,
+    priority: "high",
+  });
+}
