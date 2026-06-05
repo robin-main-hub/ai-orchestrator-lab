@@ -71,3 +71,12 @@ export function createAgentChannelMemoryScope(
     recallTraceId: `recall_${agentId}_${sessionId}_${providerProfileId}`,
   };
 }
+
+export function createAgentChannelRecallQuery(scope: AgentChannelMemoryScope, goal: string): string {
+  return [
+    goal.trim() || "agent channel memory recall",
+    `agent:${scope.agentId}`,
+    `session:${scope.sessionId}`,
+    `provider:${scope.providerProfileId}`,
+  ].join("\n");
+}
