@@ -5,6 +5,7 @@ import type {
   WorkItem,
   WorkItemHandoff,
 } from "@ai-orchestrator/protocol";
+import { controlQueuePermissionLabel, sanitizeControlQueueText } from "./controlQueuePresentation";
 
 type ControlQueueProjectionInput = {
   createdAt: string;
@@ -12,12 +13,13 @@ type ControlQueueProjectionInput = {
 };
 
 function createPermissionEvidence(item: ApprovalQueueItem, createdAt: string): EvidenceRef {
+  const summary = sanitizeControlQueueText(item.reason ?? item.summary);
   return {
     id: `evidence_permission_${item.sourceItemId}`,
     kind: "event",
     reference: `permission://${item.sourceItemId}`,
-    title: item.action ? `권한 요청: ${item.action}` : "권한 요청",
-    summary: item.reason ?? item.summary,
+    title: item.action ? `권한 요청: ${sanitizeControlQueueText(item.action)}` : "권한 요청",
+    summary,
     observedAt: createdAt,
   };
 }
@@ -31,18 +33,18 @@ function createBaseWorkItem(
   return {
     id: `work_item_permission_${patch.lane}_${crypto.randomUUID()}`,
     sessionId: input.sessionId,
-    title: patch.title,
+    title: sanitizeControlQueueText(patch.title),
     kind: "internal_coord",
     lane: patch.lane,
     surface: patch.surface,
     status: patch.status,
-    summary: patch.summary,
+    summary: sanitizeControlQueueText(patch.summary),
     sourceRefs: [
       {
         source: "desktop_manual",
         externalId: item.sourceItemId,
         observedAt: input.createdAt,
-        title: "Control Queue",
+        title: "승인 대기열",
       },
     ],
     evidenceRefs: [createPermissionEvidence(item, input.createdAt)],
@@ -60,8 +62,8 @@ export function createControlQueueAskItem(
     lane: "ask",
     status: "waiting_input",
     surface: "conversation",
-    title: `질문 필요: ${item.summary.slice(0, 56)}`,
-    summary: item.reason ?? item.summary,
+    title: `질문 필요: ${sanitizeControlQueueText(item.summary).slice(0, 56)}`,
+    summary: sanitizeControlQueueText(item.reason ?? item.summary),
     missingInfo: [
       {
         id: `missing_permission_${item.sourceItemId}`,
@@ -82,18 +84,18 @@ export function createControlQueueEditDraft(
     lane: "check",
     status: "drafted",
     surface: "conversation",
-    title: `수정 초안: ${item.summary.slice(0, 56)}`,
-    summary: item.reason ?? item.summary,
+    title: `수정 초안: ${sanitizeControlQueueText(item.summary).slice(0, 56)}`,
+    summary: sanitizeControlQueueText(item.reason ?? item.summary),
   });
   const draft: AssistantDraft = {
     id: `draft_permission_${crypto.randomUUID()}`,
     workItemId: workItem.id,
     sessionId: input.sessionId,
-    title: `Control Queue 수정 초안`,
+    title: `승인 대기열 수정 초안`,
     body: [
-      item.summary,
-      item.reason ? `사유: ${item.reason}` : undefined,
-      `권한: ${item.permissions.join(", ")}`,
+      sanitizeControlQueueText(item.summary),
+      item.reason ? `사유: ${sanitizeControlQueueText(item.reason)}` : undefined,
+      `권한: ${item.permissions.map(controlQueuePermissionLabel).join(", ")}`,
       "운영자가 승인 전에 문구와 실행 조건을 다시 다듬을 수 있도록 생성된 초안입니다.",
     ].filter(Boolean).join("\n"),
     targetSurface: "conversation",
@@ -115,14 +117,14 @@ export function createControlQueueDelegateHandoff(
     lane: "approve",
     status: "waiting_approval",
     surface: "execution_slot",
-    title: `실행 위임: ${item.summary.slice(0, 56)}`,
-    summary: item.reason ?? item.summary,
+    title: `실행 위임: ${sanitizeControlQueueText(item.summary).slice(0, 56)}`,
+    summary: sanitizeControlQueueText(item.reason ?? item.summary),
   });
   const handoff: WorkItemHandoff = {
     id: `handoff_permission_${crypto.randomUUID()}`,
     workItemId: workItem.id,
     targetSurface: "execution_slot",
-    summary: `Control Queue 항목을 실행 슬롯으로 위임: ${item.summary}`,
+    summary: `승인 대기열 항목을 실행 슬롯으로 위임: ${sanitizeControlQueueText(item.summary)}`,
     payloadRef: `permission://${item.sourceItemId}`,
     evidenceRefs: workItem.evidenceRefs,
     missingInfo: [],
@@ -141,8 +143,8 @@ export function createControlQueueBlockItem(
     lane: "blocked",
     status: "blocked",
     surface: "execution_slot",
-    title: `차단됨: ${item.summary.slice(0, 56)}`,
-    summary: item.reason ?? item.summary,
+    title: `차단됨: ${sanitizeControlQueueText(item.summary).slice(0, 56)}`,
+    summary: sanitizeControlQueueText(item.reason ?? item.summary),
     priority: "high",
   });
 }
