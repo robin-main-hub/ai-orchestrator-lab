@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { redactSensitiveText, truncateForConsole } from "./mimo-chat.mjs";
 
 const sensitive = [
+  "https://token-plan-sgp.xiaomimimo.com/v1/chat/completions",
+  "/Users/robin/Documents/ai-orchestrator-lab-review/.env",
   "sk-1234567890abcdef",
   "tp-abcdefghijklmnopqrstuvwxyz",
   "Bearer abc.def.ghi",
@@ -10,12 +12,16 @@ const sensitive = [
 ].join("\n");
 
 const redacted = redactSensitiveText(sensitive);
+assert(!redacted.includes("https://token-plan-sgp.xiaomimimo.com"), "provider URLs must be redacted");
+assert(!redacted.includes("/Users/robin/Documents"), "local paths must be redacted");
 assert(!redacted.includes("sk-1234567890abcdef"), "OpenAI/Anthropic-style key must be redacted");
 assert(!redacted.includes("tp-abcdefghijklmnopqrstuvwxyz"), "MiMo token-plan key must be redacted");
 assert(!redacted.includes("Bearer abc.def.ghi"), "Bearer token must be redacted");
 assert(!redacted.includes("do-not-print"), "env secret assignment must be redacted");
 assert(redacted.includes("[REDACTED:api_key]"), "api key redaction marker should be present");
 assert(redacted.includes("[REDACTED:token_plan_key]"), "token plan redaction marker should be present");
+assert(redacted.includes("[REDACTED:url]"), "URL redaction marker should be present");
+assert(redacted.includes("[REDACTED:path]"), "path redaction marker should be present");
 
 const truncated = truncateForConsole(`${sensitive}\n${"x".repeat(100)}`, 24);
 assert(truncated.includes("[truncated"), "long output must include truncation marker");
