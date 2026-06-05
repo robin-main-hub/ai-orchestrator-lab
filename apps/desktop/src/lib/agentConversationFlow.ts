@@ -93,7 +93,7 @@ export function createAgentConversationFlowCards({
       value: "단계·도구·검증 표시",
       details: [
         "숨은 사고 과정은 노출하지 않음",
-        "작업 단계, 명령·도구 제안, 검증·근거만 채팅에 표시",
+        "작업 단계, 도구 후보, 검증 요약만 채팅에 표시",
       ],
       tone: "manual",
     },
