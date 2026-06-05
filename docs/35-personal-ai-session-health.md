@@ -77,27 +77,37 @@ Do not paste device codes, access tokens, refresh tokens, or OAuth URLs into sha
 
 ## Claude
 
-Claude profiles are checked as registered when their config directories exist:
+Claude profiles are checked without printing OAuth credentials.
+
+The local Mac profile is the Claude Team Context:
 
 ```text
-~/.claude-max20
-~/.claude-premium
+~/.claude
+~/.claude.json
 ```
 
-Claude CLI manages its own session refresh. Before assigning work after reboot, run a short profile probe.
+The remote DGX profile is the Claude Max Context and is checked through SSH by verifying the presence of:
+
+```text
+/home/robin/.claude/.credentials.json
+```
+
+Claude CLI manages its own session refresh. Before assigning work after reboot, run a short profile probe for the local Team context.
 
 Windows PowerShell:
 
 ```powershell
-$env:CLAUDE_CONFIG_DIR="$env:USERPROFILE\.claude-max20"
+$env:CLAUDE_CONFIG_DIR="$env:USERPROFILE\.claude"
 claude --permission-mode plan -p "Reply OK if this Claude profile is active."
 ```
 
 macOS/Linux:
 
 ```bash
-CLAUDE_CONFIG_DIR="$HOME/.claude-max20" claude --permission-mode plan -p "Reply OK if this Claude profile is active."
+CLAUDE_CONFIG_DIR="$HOME/.claude" claude --permission-mode plan -p "Reply OK if this Claude profile is active."
 ```
+
+The remote Max context is checked by `--probe-remote`; do not copy OAuth tokens or cookies into chat logs.
 
 ## MiMo
 

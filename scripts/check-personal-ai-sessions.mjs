@@ -36,14 +36,9 @@ const GROK_PROFILES = [
 
 const CLAUDE_PROFILES = [
   {
-    id: "personal_claude_max20",
-    label: "Claude Max20",
-    configDir: ".claude-max20",
-  },
-  {
-    id: "personal_claude_premium",
-    label: "Claude Premium",
-    configDir: ".claude-premium",
+    id: "personal_claude_team_local",
+    label: "Claude Team Context",
+    configDir: ".claude",
   },
 ];
 
@@ -455,6 +450,15 @@ async function checkMimoProfiles(options, workspaceRoot) {
 
 const REMOTE_PROFILES = [
   {
+    id: "remote_claude_max_dgx",
+    label: "Claude Max Context (DGX)",
+    host: "100.81.57.88",
+    user: "robin",
+    cmd: "test",
+    args: ["-f", "~/.claude/.credentials.json"],
+    provider: "claude",
+  },
+  {
     id: "remote_codex_dgx01",
     label: "Codex (DGX-01)",
     host: "100.81.57.88",
@@ -781,4 +785,3 @@ function toCamelCase(value) {
 function toPosixPath(value) {
   return value.replace(/\\/g, "/");
 }
-
