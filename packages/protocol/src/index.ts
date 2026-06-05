@@ -2227,3 +2227,82 @@ export const ssotSnapshotSchema = z.object({
   itemCount: z.number().int().nonnegative(),
 });
 export type SsotSnapshot = z.infer<typeof ssotSnapshotSchema>;
+
+// --- Operator Cockpit Read-Only Snapshot (PR 2) ---
+
+export const operatorCockpitWorkerStatusSchema = z.enum(["idle", "working", "blocked", "waiting_approval", "error"]);
+export type OperatorCockpitWorkerStatus = z.infer<typeof operatorCockpitWorkerStatusSchema>;
+
+export const operatorCockpitWorkerFleetSchema = z.object({
+  workerId: z.string(),
+  role: agentRoleSchema,
+  status: operatorCockpitWorkerStatusSchema,
+  statusRingColor: z.enum(["green", "yellow", "red", "gray"]),
+  worktree: z.string().optional(),
+  branch: z.string().optional(),
+  blockedReason: z.string().optional(),
+  securityTier: z.enum(["tmux", "container", "gvisor", "firecracker"]).optional(),
+});
+export type OperatorCockpitWorkerFleet = z.infer<typeof operatorCockpitWorkerFleetSchema>;
+
+export const operatorCockpitApprovalEvidenceSchema = z.object({
+  blockReason: z.string(),
+  evidenceRefs: z.array(evidenceRefSchema),
+  commandPreview: z.string().optional(),
+  payloadBindingStatus: z.enum(["bound", "unbound", "expired"]),
+});
+export type OperatorCockpitApprovalEvidence = z.infer<typeof operatorCockpitApprovalEvidenceSchema>;
+
+export const operatorCockpitHandoffSchema = z.object({
+  ownerAgentId: z.string(),
+  nextAction: z.string(),
+  missingInfoSlots: z.array(missingInfoSlotSchema),
+});
+export type OperatorCockpitHandoff = z.infer<typeof operatorCockpitHandoffSchema>;
+
+export const operatorCockpitMemoryRecallSchema = z.object({
+  contextReasons: z.array(z.string()),
+  macBookAuthorityEnabled: z.boolean(),
+  dgxMirrorHealth: z.enum(["healthy", "degraded", "disconnected"]),
+  contradictionWarnings: z.array(z.string()),
+});
+export type OperatorCockpitMemoryRecall = z.infer<typeof operatorCockpitMemoryRecallSchema>;
+
+export const operatorCockpitProviderRoutingSchema = z.object({
+  selectedModelId: z.string(),
+  fallbackStatus: z.enum(["active", "available", "none"]),
+  costBadge: z.enum(["low", "medium", "high"]),
+  speedBadge: z.enum(["fast", "average", "slow"]),
+  trustBadge: sourceTrustSchema,
+});
+export type OperatorCockpitProviderRouting = z.infer<typeof operatorCockpitProviderRoutingSchema>;
+
+export const operatorCockpitRecoverySchema = z.object({
+  offlineResumeSupported: z.boolean(),
+  outboxSyncStatus: z.enum(["synced", "pending", "failed"]),
+  healthIndicators: z.array(z.string()),
+});
+export type OperatorCockpitRecovery = z.infer<typeof operatorCockpitRecoverySchema>;
+
+export const operatorCockpitDispatchHistorySchema = z.object({
+  dispatchId: z.string(),
+  requesterAgentId: z.string(),
+  approvalState: z.enum(["not_required", "required", "approved", "rejected", "expired"]),
+  replayPayloadDigest: z.string(),
+  tamperWarning: z.boolean(),
+  createdAt: z.string(),
+});
+export type OperatorCockpitDispatchHistory = z.infer<typeof operatorCockpitDispatchHistorySchema>;
+
+export const operatorCockpitSnapshotSchema = z.object({
+  id: z.string(),
+  timestamp: z.string(),
+  fleet: z.array(operatorCockpitWorkerFleetSchema),
+  approvals: z.array(operatorCockpitApprovalEvidenceSchema),
+  handoffs: z.array(operatorCockpitHandoffSchema),
+  memory: operatorCockpitMemoryRecallSchema,
+  routing: operatorCockpitProviderRoutingSchema,
+  recovery: operatorCockpitRecoverySchema,
+  dispatchHistory: z.array(operatorCockpitDispatchHistorySchema),
+});
+export type OperatorCockpitSnapshot = z.infer<typeof operatorCockpitSnapshotSchema>;
