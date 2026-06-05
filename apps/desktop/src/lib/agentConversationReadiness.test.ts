@@ -14,6 +14,7 @@ describe("createAgentConversationReadiness", () => {
     ).toEqual({
       checks: ["전용 채널", "도구 3개", "기억 6개", "대화 4개"],
       label: "연속 대화 준비됨",
+      memoryQualityLabel: "장기 기억 품질 양호",
       tone: "ready",
     });
   });
@@ -29,6 +30,7 @@ describe("createAgentConversationReadiness", () => {
       }),
     ).toMatchObject({
       label: "첫 대화 준비됨",
+      memoryQualityLabel: "장기 기억 시작 전",
       tone: "warming",
     });
   });
@@ -44,6 +46,7 @@ describe("createAgentConversationReadiness", () => {
       }),
     ).toMatchObject({
       label: "기억 연결 확인 필요",
+      memoryQualityLabel: "장기 기억 점검 필요",
       tone: "attention",
     });
   });

@@ -1,6 +1,7 @@
 import { CheckCircle2, CircleDashed, FileSearch, TerminalSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
+  createPublicWorkReceiptSummary,
   createPublicTraceSafetyReport,
   type PublicWorkTrace,
   type PublicWorkTraceTone,
@@ -15,6 +16,7 @@ export function PublicWorkTracePanel({
 }) {
   if (trace.groups.length === 0) return null;
   const safetyReport = createPublicTraceSafetyReport(trace);
+  const receiptSummary = createPublicWorkReceiptSummary(trace);
 
   return (
     <div
@@ -42,17 +44,30 @@ export function PublicWorkTracePanel({
         </span>
         <span>요약 단계와 검증 근거만 표시</span>
       </div>
-      {trace.receipt ? (
+      {trace.receipt && receiptSummary ? (
         <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5 text-[10px] text-zinc-300">
-          <span className="font-semibold uppercase tracking-[0.18em] text-violet-200">{trace.receipt.label}</span>
-          <span className={cn("rounded-full border px-1.5 py-0.5", receiptStatusClassName(trace.receipt.status))}>
-            {receiptStatusLabel(trace.receipt.status)}
+          <span
+            className="max-w-full truncate font-semibold uppercase tracking-[0.18em] text-violet-200"
+            title={receiptSummary.compactLabel}
+          >
+            {trace.receipt.label}
           </span>
-          {trace.receipt.items.map((item) => (
+          <span className={cn("rounded-full border px-1.5 py-0.5", receiptStatusClassName(trace.receipt.status))}>
+            {receiptSummary.statusLabel}
+          </span>
+          {receiptSummary.detailItems.slice(0, 3).map((item) => (
             <span className="max-w-full truncate rounded-full bg-black/20 px-1.5 py-0.5" key={`${item.label}:${item.value}`}>
               {item.label}: {item.value}
             </span>
           ))}
+          {receiptSummary.detailItems.length > 3 ? (
+            <span
+              className="rounded-full bg-black/20 px-1.5 py-0.5 text-zinc-500"
+              title={receiptSummary.detailItems.map((item) => `${item.label}: ${item.value}`).join(" · ")}
+            >
+              +{receiptSummary.detailItems.length - 3}
+            </span>
+          ) : null}
         </div>
       ) : null}
       <div className="grid gap-2 sm:grid-cols-3">
@@ -102,21 +117,6 @@ function toneClassName(tone: PublicWorkTraceTone) {
     case "neutral":
     default:
       return "border-zinc-700/70 bg-zinc-900/60 text-zinc-300";
-  }
-}
-
-function receiptStatusLabel(status: NonNullable<PublicWorkTrace["receipt"]>["status"]) {
-  switch (status) {
-    case "checkpointed":
-      return "저장됨";
-    case "live":
-      return "진행 중";
-    case "fallback":
-      return "폴백";
-    case "blocked":
-      return "차단";
-    default:
-      return status;
   }
 }
 

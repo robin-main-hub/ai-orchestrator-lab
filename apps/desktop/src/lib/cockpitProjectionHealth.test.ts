@@ -59,11 +59,11 @@ describe("cockpit projection health labels", () => {
         "raw prompt: deploy with Bearer abc123 from /Users/robin/Documents/app and https://internal.example.test using sk-live-secret tp-slmvllbti6z4gmjnj5srk2r9nqdbhj5hteonqwswxks2o6ge",
       ),
     ).toBe(
-      "원문 프롬프트: deploy with Bearer [token] from [local-path] and [url] using [secret] [secret]",
+      "[redacted:internal]",
     );
 
     expect(sanitizeCockpitProjectionText("tool input {\"command\":\"rm -rf /\"}")).toBe(
-      "도구 입력 [redacted]",
+      "[redacted:internal]",
     );
   });
 

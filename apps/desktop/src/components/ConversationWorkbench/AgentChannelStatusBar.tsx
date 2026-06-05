@@ -87,6 +87,7 @@ export function AgentChannelStatusBar({
         <ReadinessPill tone={readiness.tone}>
           <span className="font-semibold text-zinc-300">운영 준비</span>
           <span>{readiness.label}</span>
+          <span className="hidden text-zinc-400 md:inline">{readiness.memoryQualityLabel}</span>
           {readiness.checks.length > 0 ? (
             <span className="hidden max-w-[260px] truncate text-zinc-400 xl:inline">
               {readiness.checks.join(" · ")}

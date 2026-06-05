@@ -3,6 +3,7 @@ import type { ConversationMessage, TerminalTimelineBlock } from "@ai-orchestrato
 import {
   createConversationMessagePublicWorkTrace,
   createDebateUtterancePublicWorkTrace,
+  createPublicWorkReceiptSummary,
   createPublicTraceSafetyReport,
   createTerminalBlockPublicWorkTrace,
 } from "./publicWorkTrace";
@@ -168,6 +169,29 @@ describe("publicWorkTrace", () => {
     expect(serialized).toContain("[redacted:internal]");
     expect(trace.receipt?.items).toContainEqual({ label: "공개 범위", value: "요약 단계만" });
     expect(createPublicTraceSafetyReport(trace).isSafe).toBe(true);
+  });
+
+  it("공개 영수증 표시를 공통 형식으로 압축한다", () => {
+    const trace = createConversationMessagePublicWorkTrace({
+      id: "msg_assistant_long",
+      sessionId: "session_main",
+      role: "assistant",
+      content: "응답",
+      createdAt: "2026-06-05T08:00:00.000Z",
+      metadata: {
+        providerProfileId: "provider_mimo_token_openai",
+        recallTraceId: "recall_agent_orchestrator_session_main_provider_mimo_token_openai_extra_long_tail",
+        realProviderCall: true,
+      },
+    });
+
+    const summary = createPublicWorkReceiptSummary(trace);
+
+    expect(summary).toMatchObject({
+      statusLabel: "저장됨",
+    });
+    expect(summary?.compactLabel).toContain("에이전트 실행 영수증");
+    expect(summary?.detailItems.find((item) => item.label === "기준점")?.value.length).toBeLessThanOrEqual(57);
   });
 
   it("렌더 직전 공개 trace 안전점검은 마스킹되지 않은 금지 표면을 차단한다", () => {
