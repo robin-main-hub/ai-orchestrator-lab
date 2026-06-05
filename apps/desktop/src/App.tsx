@@ -3105,7 +3105,10 @@ export function App() {
               codingPacketGoal={codingPacketState.goal}
               onBack={() => setMode("debate")}
               onViewApproval={() => setApprovalDrawerOpen(true)}
-              onViewMemory={() => setAgentConfigPanel({ open: true, tab: "injection" })}
+              onViewMemory={() => {
+                setMode("conversation");
+                setAgentConfigPanel({ open: true, tab: "injection" });
+              }}
               pendingApprovals={permissionSnapshot.summary.pending}
               runtime={runtimeSnapshotState}
               session={debateSession}
