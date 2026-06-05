@@ -152,6 +152,7 @@ import {
 } from "./lib/controlQueueWorkItems";
 import { createControlQueueContinuitySummary } from "./lib/controlQueueContinuity";
 import { controlQueuePermissionLabel, sanitizeControlQueueText } from "./lib/controlQueuePresentation";
+import { createAgentRoleToolRuntimeAudit } from "./lib/agentRuntimeConfig";
 import { createMemoryGovernanceSummary } from "./lib/memoryGovernance";
 import { createProviderRoutingConsoleItems } from "./lib/providerRoutingConsole";
 import {
@@ -529,6 +530,10 @@ export function App() {
         profiles: providerProfiles,
       }),
     [agents, modelCatalog, modelDiscoveryByProviderId, providerProfiles],
+  );
+  const agentRoleToolRuntimeAudit = useMemo(
+    () => createAgentRoleToolRuntimeAudit(agents),
+    [agents],
   );
   const selectedAgentMemoryScope = useMemo(
     () =>
@@ -3377,6 +3382,7 @@ export function App() {
               draftAttachments={draftAttachments}
               draftMessage={draftMessage}
               maxDraftAttachments={maxDraftAttachments}
+              agentToolRuntimeLabel={agentRoleToolRuntimeAudit.summary}
               memoryAdapterStatus={adapterStatus}
               memoryGovernanceLabel={memoryGovernanceSummary.installLabel}
               memoryRecordCount={memoryRecords.length}

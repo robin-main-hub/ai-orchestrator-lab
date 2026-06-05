@@ -104,7 +104,7 @@ describe("agent runtime config injection", () => {
     expect(audit.coveredCount).toBe(seededAgentProfiles.length);
     expect(audit.missingAgentIds).toEqual([]);
     expect(audit.emptyToolAgentIds).toEqual([]);
-    expect(audit.summary).toBe(`전원 도구 계약 설치 완료 · ${seededAgentProfiles.length}/${seededAgentProfiles.length}`);
+    expect(audit.summary).toBe(`전원 도구 계약 확인 완료 · ${seededAgentProfiles.length}/${seededAgentProfiles.length}`);
   });
 
   it("keeps role tool runtime summaries permission-first and secret-free", () => {
