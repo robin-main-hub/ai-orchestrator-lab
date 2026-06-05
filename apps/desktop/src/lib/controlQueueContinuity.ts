@@ -19,9 +19,11 @@ export function createControlQueueContinuitySummary({
   handoffs,
   workItems,
 }: ControlQueueContinuityInput): ControlQueueContinuitySummary {
-  const activeAskItems = workItems.filter((item) => item.surface === "conversation" && item.lane === "ask" && item.status !== "done");
+  const activeAskItems = workItems.filter(
+    (item) => item.surface === "conversation" && item.lane === "ask" && isOpenWorkItemStatus(item.status),
+  );
   const activeCheckItems = workItems.filter(
-    (item) => item.surface === "conversation" && item.lane === "check" && item.status !== "done",
+    (item) => item.surface === "conversation" && item.lane === "check" && isOpenWorkItemStatus(item.status),
   );
   const activeDrafts = assistantDrafts.filter((draft) => draft.targetSurface === "conversation" && draft.status === "draft");
   const activeHandoffs = handoffs.filter((handoff) => handoff.approvalState === "required");
@@ -50,4 +52,8 @@ export function createControlQueueContinuitySummary({
     latestTitle: latestWorkItem?.title ?? activeDrafts[0]?.title ?? activeHandoffs[0]?.summary,
     tone: "loading",
   };
+}
+
+function isOpenWorkItemStatus(status: WorkItem["status"]): boolean {
+  return status !== "done" && status !== "archived";
 }
