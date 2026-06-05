@@ -5,7 +5,7 @@ import { AgentPortrait } from "./AgentPortrait";
 import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
 import { useAgentExpression } from "./useAgentExpression";
-import { badgeColorForStatus } from "./presentation";
+import { badgeColorForStatus, workerStatusLabel } from "./presentation";
 import { resolveOperatorWorkerDisplay } from "./workerDisplay";
 
 const coreRoles = new Set(["orchestrator", "architect", "reviewer", "builder", "executor"]);
@@ -21,22 +21,22 @@ export function WorkerFleetCard({ fleet }: { fleet: OperatorCockpitWorkerFleet[]
           <div className="flex items-center gap-2">
             {fleet.some((worker) => worker.status === "blocked" || worker.status === "error") ? (
               <Badge color="red" pulse>
-                {fleet.filter((worker) => worker.status === "blocked" || worker.status === "error").length} blocked
+                {fleet.filter((worker) => worker.status === "blocked" || worker.status === "error").length}명 차단
               </Badge>
             ) : null}
-            <Badge color="outline">{fleet.length} agents</Badge>
+            <Badge color="outline">{fleet.length}명</Badge>
           </div>
         }
       >
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.55)]" />
-          <h3 className="text-sm font-semibold text-zinc-100">Worker Fleet</h3>
+          <h3 className="text-sm font-semibold text-zinc-100">워커 함대</h3>
         </div>
       </GlassPanelHeader>
 
       <div className="space-y-4 p-3">
-        {coreFleet.length > 0 ? <WorkerGroup label="Core" workers={coreFleet} /> : null}
-        {specialistFleet.length > 0 ? <WorkerGroup label="Specialists" workers={specialistFleet} /> : null}
+        {coreFleet.length > 0 ? <WorkerGroup label="핵심" workers={coreFleet} /> : null}
+        {specialistFleet.length > 0 ? <WorkerGroup label="전문가" workers={specialistFleet} /> : null}
       </div>
     </GlassPanel>
   );
@@ -82,7 +82,7 @@ function WorkerRow({ worker }: { worker: OperatorCockpitWorkerFleet }) {
               {workerDisplay.roleLabel}
             </Badge>
             <Badge color={badgeColorForStatus(worker.status)} size="xs">
-              {worker.status.replace("_", " ")}
+              {workerStatusLabel(worker.status)}
             </Badge>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-zinc-500">
@@ -100,7 +100,7 @@ function WorkerRow({ worker }: { worker: OperatorCockpitWorkerFleet }) {
             ) : null}
             <span className="inline-flex items-center gap-1">
               <Clock3 className="h-3 w-3 text-zinc-600" />
-              live
+              실시간
             </span>
           </div>
         </div>

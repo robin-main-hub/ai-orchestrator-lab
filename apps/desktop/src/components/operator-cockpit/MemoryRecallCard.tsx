@@ -4,7 +4,7 @@ import type { OperatorCockpitMemoryRecall } from "@ai-orchestrator/protocol";
 import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
 import { operatorCockpitActionLabels } from "./actionLabels";
-import { badgeColorForMirror } from "./presentation";
+import { badgeColorForMirror, mirrorHealthLabel } from "./presentation";
 
 export function MemoryRecallCard({
   memory,
@@ -18,7 +18,7 @@ export function MemoryRecallCard({
       <GlassPanelHeader
         action={
           <div className="flex items-center gap-2">
-            <Badge color="purple">{memory.contextReasons.length} recalls</Badge>
+            <Badge color="purple">{memory.contextReasons.length}건 기억</Badge>
             {onOpen ? (
               <button
                 aria-label={operatorCockpitActionLabels.openMemoryRecall}
@@ -35,7 +35,7 @@ export function MemoryRecallCard({
       >
         <div className="flex items-center gap-2">
           <Brain className="h-4 w-4 text-violet-400" />
-          <h3 className="text-sm font-semibold text-zinc-100">Memory Recall</h3>
+          <h3 className="text-sm font-semibold text-zinc-100">기억 근거</h3>
         </div>
       </GlassPanelHeader>
 
@@ -44,23 +44,23 @@ export function MemoryRecallCard({
           <div className="rounded-lg border border-zinc-800/50 bg-black/20 p-3">
             <span className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
               <Monitor className="h-3 w-3" />
-              MacBook
+              MacBook 권위
             </span>
             <Badge color={memory.macBookAuthorityEnabled ? "green" : "gray"}>
-              {memory.macBookAuthorityEnabled ? "Authority" : "Offline"}
+              {memory.macBookAuthorityEnabled ? "활성" : "비활성"}
             </Badge>
           </div>
           <div className="rounded-lg border border-zinc-800/50 bg-black/20 p-3">
             <span className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
               <Database className="h-3 w-3" />
-              DGX Mirror
+              DGX 미러
             </span>
-            <Badge color={badgeColorForMirror(memory.dgxMirrorHealth)}>{memory.dgxMirrorHealth}</Badge>
+            <Badge color={badgeColorForMirror(memory.dgxMirrorHealth)}>{mirrorHealthLabel(memory.dgxMirrorHealth)}</Badge>
           </div>
         </div>
 
         <div>
-          <span className="mb-2 block text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Context Reasons</span>
+          <span className="mb-2 block text-[10px] font-semibold uppercase tracking-wider text-zinc-600">맥락 근거</span>
           <ul className="space-y-2">
             {memory.contextReasons.map((reason, idx) => (
               <li key={`${reason}-${idx}`} className="flex items-start gap-2 rounded-md bg-zinc-900/30 px-3 py-2 text-sm text-zinc-300">
@@ -74,7 +74,7 @@ export function MemoryRecallCard({
         {memory.contradictionWarnings.length > 0 ? (
           <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-3">
             <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-rose-300">
-              <AlertTriangle className="h-4 w-4" /> Contradiction Warnings
+              <AlertTriangle className="h-4 w-4" /> 충돌 경고
             </span>
           <ul className="space-y-1">
             {memory.contradictionWarnings.map((warning, idx) => (

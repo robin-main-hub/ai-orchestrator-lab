@@ -163,6 +163,8 @@ import { statusTone } from "./lib/uiLabels";
 import {
   createCockpitLocalHealthIndicators,
   createCockpitServerSnapshotIndicator,
+  resolveCockpitPayloadBindingStatus,
+  sanitizeCockpitProjectionText,
 } from "./lib/cockpitProjectionHealth";
 import { seededProviderProfiles } from "./seeds/providers";
 import {
@@ -2779,20 +2781,20 @@ export function App() {
     // Determine memory context reasons
     const contextReasons = memoryInspector.trace.results
       .filter((res) => res.usedInDecision)
-      .map((res) => res.record.title)
+      .map((res) => sanitizeCockpitProjectionText(res.record.title))
       .slice(0, 3);
 
     // Determine contradiction warnings
     const contradictionWarnings: string[] = [];
     if (runtimeSnapshotState.memorySyncStatus === "degraded") {
-      contradictionWarnings.push("Memory sync degraded: local changes not mirrored to DGX-02");
+      contradictionWarnings.push("기억 동기화 저하: 로컬 변경이 DGX-02에 아직 반영되지 않았습니다");
     }
     const untrustedRecalls = memoryInspector.trace.results.filter(
       (res) => res.usedInDecision && res.record.trustLevel === "untrusted"
     );
     const firstUntrusted = untrustedRecalls[0];
     if (firstUntrusted) {
-      contradictionWarnings.push(`Untrusted memory source recalled: "${firstUntrusted.record.title}"`);
+      contradictionWarnings.push(`비신뢰 기억 근거 호출됨: "${sanitizeCockpitProjectionText(firstUntrusted.record.title)}"`);
     }
 
     // Determine cost/speed badges
@@ -2891,8 +2893,11 @@ export function App() {
 
           let evidenceRefs: EvidenceRef[] = [];
           let commandPreview: string | undefined = undefined;
-          let payloadBindingStatus: "bound" | "unbound" | "expired" =
-            q.expiresAt && new Date(q.expiresAt).getTime() < Date.now() ? "expired" : "unbound";
+          let payloadBindingStatus: "bound" | "unbound" | "expired" = resolveCockpitPayloadBindingStatus({
+            expiresAt: q.expiresAt,
+            hasReplayMetadata: Boolean(q.replayKind && q.replayEndpoint),
+            sourceTrust: matrixItem?.sourceTrust,
+          });
           let tamperWarning = false;
           let securityRisk: string | undefined = undefined;
 
@@ -2900,12 +2905,7 @@ export function App() {
             // Determine tamper warning and security risk based on sourceTrust
             if (matrixItem.sourceTrust === "untrusted") {
               tamperWarning = true;
-              securityRisk = `Untrusted source trust level detected from channel: ${matrixItem.channel}`;
-            }
-
-            // Only call payloads bound when replay metadata and a trusted source are both present.
-            if (q.replayKind && q.replayEndpoint && matrixItem.sourceTrust === "trusted") {
-              payloadBindingStatus = "bound";
+              securityRisk = `비신뢰 출처 감지: ${sanitizeCockpitProjectionText(matrixItem.channel)}`;
             }
 
             // Extract EvidenceRefs and CommandPreview based on category
@@ -2917,7 +2917,7 @@ export function App() {
                   id: extApp.ingressEventId,
                   kind: "event",
                   reference: extApp.ingressEventId,
-                  summary: `Inbound event: ${extApp.ingressEventId}`,
+                  summary: `인입 이벤트: ${sanitizeCockpitProjectionText(extApp.ingressEventId)}`,
                   observedAt: extApp.createdAt,
                 });
               }
@@ -2925,12 +2925,14 @@ export function App() {
               const slotId = matrixItem.id.replace("permission_terminal_", "");
               const slot = terminalSlots.find((s) => s.id === slotId);
               if (slot) {
-                commandPreview = slot.lastCommandPreview;
+                commandPreview = slot.lastCommandPreview
+                  ? sanitizeCockpitProjectionText(slot.lastCommandPreview)
+                  : undefined;
                 evidenceRefs.push({
                   id: slot.id,
                   kind: "routine_reference",
                   reference: slot.id,
-                  summary: `Terminal slot: ${slot.label}`,
+                  summary: `터미널 슬롯: ${sanitizeCockpitProjectionText(slot.label)}`,
                 });
               }
             } else if (matrixItem.id.startsWith("permission_run_")) {
@@ -2941,7 +2943,7 @@ export function App() {
                   id: step.id,
                   kind: "artifact",
                   reference: step.id,
-                  summary: `Run step: ${step.title}`,
+                  summary: `실행 단계: ${sanitizeCockpitProjectionText(step.title)}`,
                 });
               }
             } else if (matrixItem.id.startsWith("permission_provider_")) {
@@ -2950,13 +2952,13 @@ export function App() {
                 id: provId,
                 kind: "routine_reference",
                 reference: provId,
-                summary: `Provider Profile: ${provId}`,
+                summary: `프로바이더 프로필: ${sanitizeCockpitProjectionText(provId)}`,
               });
             }
           }
 
           return {
-            blockReason: q.summary,
+            blockReason: sanitizeCockpitProjectionText(q.summary),
             evidenceRefs,
             commandPreview,
             payloadBindingStatus,
@@ -2968,9 +2970,16 @@ export function App() {
         const item = workItems.find((w) => w.id === handoff.workItemId);
         return {
           ownerAgentId: item?.ownerAgentId || "agent_unassigned",
-          nextAction: handoff.summary,
-          missingInfoSlots: handoff.missingInfo,
-          evidenceRefs: handoff.evidenceRefs,
+          nextAction: sanitizeCockpitProjectionText(handoff.summary),
+          missingInfoSlots: handoff.missingInfo.map((slot) => ({
+            ...slot,
+            label: sanitizeCockpitProjectionText(slot.label),
+          })),
+          evidenceRefs: handoff.evidenceRefs?.map((ref) => ({
+            ...ref,
+            reference: sanitizeCockpitProjectionText(ref.reference),
+            summary: sanitizeCockpitProjectionText(ref.summary || ref.reference || ref.id),
+          })),
         };
       }),
       memory: {
@@ -3015,7 +3024,7 @@ export function App() {
                 id: o.sourceItemId,
                 kind: "routine_reference" as const,
                 reference: o.sourceItemId,
-                summary: `Approval Source: ${o.sourceItemId}`,
+                summary: `승인 출처: ${sanitizeCockpitProjectionText(o.sourceItemId)}`,
               },
             ]
           : [];
@@ -3030,9 +3039,9 @@ export function App() {
           tamperWarning: dispatchTamperWarning,
           tamperReason:
             sourceMatrixItem?.sourceTrust === "untrusted"
-              ? `Untrusted dispatch source: ${sourceMatrixItem.channel}`
+              ? `비신뢰 전송 출처: ${sanitizeCockpitProjectionText(sourceMatrixItem.channel)}`
               : o.status === "blocked"
-                ? o.reason
+                ? sanitizeCockpitProjectionText(o.reason || "차단됨")
                 : undefined,
           evidenceRefs,
           createdAt: o.createdAt || new Date().toISOString(),

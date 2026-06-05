@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createCockpitLocalHealthIndicators,
   createCockpitServerSnapshotIndicator,
+  resolveCockpitPayloadBindingStatus,
+  sanitizeCockpitProjectionText,
 } from "./cockpitProjectionHealth";
 
 describe("cockpit projection health labels", () => {
@@ -25,9 +27,9 @@ describe("cockpit projection health labels", () => {
         memorySyncStatus: "degraded",
       }),
     ).toEqual([
-      "DGX-02 mirror node is offline",
-      "Memory sync degraded",
-      "Event outbox sync failure: timeout while syncing",
+      "DGX-02 미러 노드 오프라인",
+      "기억 동기화 저하",
+      "이벤트 발신함 동기화 실패: timeout while syncing",
     ]);
   });
 
@@ -49,5 +51,43 @@ describe("cockpit projection health labels", () => {
         timestamp: "2026-06-05T00:00:00.000Z",
       }),
     ).toBe("서버 스냅샷 동기화됨: Provider registry: ready");
+  });
+
+  it("redacts prompt/tool/secret/path fragments before cockpit projection text reaches the UI", () => {
+    expect(
+      sanitizeCockpitProjectionText(
+        "raw prompt: deploy with Bearer abc123 from /Users/robin/Documents/app and https://internal.example.test using sk-live-secret tp-slmvllbti6z4gmjnj5srk2r9nqdbhj5hteonqwswxks2o6ge",
+      ),
+    ).toBe(
+      "원문 프롬프트: deploy with Bearer [token] from [local-path] and [url] using [secret] [secret]",
+    );
+
+    expect(sanitizeCockpitProjectionText("tool input {\"command\":\"rm -rf /\"}")).toBe(
+      "도구 입력 [redacted]",
+    );
+  });
+
+  it("only marks approval payloads as bound when replay metadata is trusted and not expired", () => {
+    expect(
+      resolveCockpitPayloadBindingStatus({
+        expiresAt: new Date(Date.now() - 1_000).toISOString(),
+        hasReplayMetadata: true,
+        sourceTrust: "trusted",
+      }),
+    ).toBe("expired");
+
+    expect(
+      resolveCockpitPayloadBindingStatus({
+        hasReplayMetadata: true,
+        sourceTrust: "untrusted",
+      }),
+    ).toBe("unbound");
+
+    expect(
+      resolveCockpitPayloadBindingStatus({
+        hasReplayMetadata: true,
+        sourceTrust: "trusted",
+      }),
+    ).toBe("bound");
   });
 });

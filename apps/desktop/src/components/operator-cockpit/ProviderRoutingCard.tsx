@@ -9,6 +9,10 @@ import {
   badgeColorForFallback,
   badgeColorForSpeed,
   badgeColorForTrust,
+  costBadgeLabel,
+  fallbackStatusLabel,
+  speedBadgeLabel,
+  trustBadgeLabel,
 } from "./presentation";
 
 export function ProviderRoutingCard({
@@ -24,7 +28,7 @@ export function ProviderRoutingCard({
       <GlassPanelHeader
         action={
           <div className="flex items-center gap-2">
-            <Badge color={badgeColorForFallback(routing.fallbackStatus)}>{routing.fallbackStatus}</Badge>
+            <Badge color={badgeColorForFallback(routing.fallbackStatus)}>{fallbackStatusLabel(routing.fallbackStatus)}</Badge>
             {onOpen ? (
               <button
                 aria-label={operatorCockpitActionLabels.openProviderRouting}
@@ -41,7 +45,7 @@ export function ProviderRoutingCard({
       >
         <div className="flex items-center gap-2">
           <RadioTower className="h-4 w-4 text-violet-400" />
-          <h3 className="text-sm font-semibold text-zinc-100">Provider Routing</h3>
+          <h3 className="text-sm font-semibold text-zinc-100">모델 경로</h3>
         </div>
       </GlassPanelHeader>
 
@@ -49,24 +53,24 @@ export function ProviderRoutingCard({
         <div className="rounded-lg border border-violet-500/20 bg-violet-500/10 p-3">
           <span className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
             <Route className="h-3 w-3" />
-            Selected Route
+            선택 경로
           </span>
           <span className="break-all font-mono text-sm text-violet-200">{routing.selectedModelId}</span>
         </div>
 
         <div className="grid grid-cols-3 gap-2">
-          <MetricBadge icon={<Gauge className="h-3 w-3" />} label="Cost" color={badgeColorForCost(routing.costBadge)}>
-            {routing.costBadge}
+          <MetricBadge icon={<Gauge className="h-3 w-3" />} label="비용" color={badgeColorForCost(routing.costBadge)}>
+            {costBadgeLabel(routing.costBadge)}
           </MetricBadge>
-          <MetricBadge icon={<Zap className="h-3 w-3" />} label="Speed" color={badgeColorForSpeed(routing.speedBadge)}>
-            {routing.speedBadge}
+          <MetricBadge icon={<Zap className="h-3 w-3" />} label="속도" color={badgeColorForSpeed(routing.speedBadge)}>
+            {speedBadgeLabel(routing.speedBadge)}
           </MetricBadge>
           <MetricBadge
             icon={<ShieldCheck className="h-3 w-3" />}
-            label="Trust"
+            label="신뢰"
             color={badgeColorForTrust(routing.trustBadge)}
           >
-            {routing.trustBadge}
+            {trustBadgeLabel(routing.trustBadge)}
           </MetricBadge>
         </div>
       </div>
