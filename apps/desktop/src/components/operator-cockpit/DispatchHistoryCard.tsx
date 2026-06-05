@@ -3,20 +3,20 @@ import { AlertTriangle, CheckCircle2, Clock3, Fingerprint, History, XCircle } fr
 import type { OperatorCockpitDispatchHistory } from "@ai-orchestrator/protocol";
 import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
-import { badgeColorForApproval, compactId, relativeMinutes } from "./presentation";
+import { approvalStateLabel, badgeColorForApproval, compactId, relativeMinutes } from "./presentation";
 
 export function DispatchHistoryCard({ history }: { history: OperatorCockpitDispatchHistory[] }) {
   return (
     <GlassPanel>
-      <GlassPanelHeader action={<Badge color="outline">{history.length} events</Badge>}>
+      <GlassPanelHeader action={<Badge color="outline">{history.length}건</Badge>}>
         <div className="flex items-center gap-2">
           <History className="h-4 w-4 text-cyan-400" />
-          <h3 className="text-sm font-semibold text-zinc-100">Dispatch History</h3>
+          <h3 className="text-sm font-semibold text-zinc-100">전송 이력</h3>
         </div>
       </GlassPanelHeader>
 
       {history.length === 0 ? (
-        <div className="p-4 text-sm text-zinc-500">No dispatch history.</div>
+        <div className="p-4 text-sm text-zinc-500">전송 이력이 없습니다.</div>
       ) : (
         <div className="space-y-2 p-3">
           {history.map((dispatch) => (
@@ -30,7 +30,7 @@ export function DispatchHistoryCard({ history }: { history: OperatorCockpitDispa
                     <ApprovalIcon state={dispatch.approvalState} />
                     <span className="truncate text-sm font-medium text-zinc-200">{dispatch.requesterAgentId}</span>
                     <Badge color={badgeColorForApproval(dispatch.approvalState)} size="xs">
-                      {dispatch.approvalState.replace("_", " ")}
+                      {approvalStateLabel(dispatch.approvalState)}
                     </Badge>
                   </div>
                   <span className="mt-1 flex items-center gap-1 text-[10px] text-zinc-600">
@@ -51,7 +51,7 @@ export function DispatchHistoryCard({ history }: { history: OperatorCockpitDispa
               {dispatch.tamperWarning && (
                 <div className="mt-3 flex items-center gap-2 rounded-md border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-300">
                   <AlertTriangle className="h-3.5 w-3.5" />
-                  Tamper warning detected
+                  변조 경고 감지
                 </div>
               )}
             </article>
