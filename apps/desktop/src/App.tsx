@@ -3104,6 +3104,8 @@ export function App() {
             <DebateAnnexPage
               codingPacketGoal={codingPacketState.goal}
               onBack={() => setMode("debate")}
+              onViewApproval={() => setApprovalDrawerOpen(true)}
+              onViewMemory={() => setAgentConfigPanel({ open: true, tab: "injection" })}
               pendingApprovals={permissionSnapshot.summary.pending}
               runtime={runtimeSnapshotState}
               session={debateSession}
