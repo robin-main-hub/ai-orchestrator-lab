@@ -159,6 +159,7 @@ import { ControlQueueDrawer } from "./components/ControlQueueDrawer";
 import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
 import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
 import { OperatorCockpit } from "./components/operator-cockpit/OperatorCockpit";
+import { mockSnapshot } from "./components/operator-cockpit/fixtures/mockSnapshot";
 import { AgentsSidebar } from "./components/AgentsSidebar";
 import { BackupPanel } from "./components/BackupPanel";
 import { BackupRailMenu } from "./components/BackupRailMenu";
@@ -2786,7 +2787,7 @@ export function App() {
               packet={codingPacketState}
             />
           ) : mode === "cockpit" ? (
-            <OperatorCockpit />
+            <OperatorCockpit snapshot={mockSnapshot} />
           ) : mode === "annex" ? (
             <DebateAnnexPage
               codingPacketGoal={codingPacketState.goal}
