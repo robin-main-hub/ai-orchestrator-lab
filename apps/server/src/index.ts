@@ -98,13 +98,13 @@ import type {
   MemoryAdapterKind,
 } from "@ai-orchestrator/memory";
 import type { LlmAdapter } from "@ai-orchestrator/providers";
-import { sseSessionRegistry } from "./events/sseSession";
-import { createCorsHeaders } from "./http/cors";
-import { RequestBodyTooLargeError, readJsonBody, readRawBody } from "./http/requestBody";
-import { handleApprovalRoute } from "./routes/approvals";
-import { handleTmuxRoute } from "./routes/tmux";
-import { handleVerifyPacketRoute } from "./routes/verifyPacket";
-export { pickAllowedOrigin, resolveAllowedOrigins } from "./http/cors";
+import { sseSessionRegistry } from "./events/sseSession.js";
+import { createCorsHeaders } from "./http/cors.js";
+import { RequestBodyTooLargeError, readJsonBody, readRawBody } from "./http/requestBody.js";
+import { handleApprovalRoute } from "./routes/approvals.js";
+import { handleTmuxRoute } from "./routes/tmux.js";
+import { handleVerifyPacketRoute } from "./routes/verifyPacket.js";
+export { pickAllowedOrigin, resolveAllowedOrigins } from "./http/cors.js";
 
 export type ServerCapability =
   | "health"
@@ -556,6 +556,24 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     apiStyle: "openai_chat",
     defaultModelIds: ["gpt-5.5-pro", "gpt-5.5-coder", "gpt-5.5-mini", "gpt-5.5-reasoning"],
     supportsModelList: true,
+  },
+  {
+    providerProfileId: "provider_mimo_token_openai",
+    baseUrl: process.env.MIMO_OPENAI_BASE_URL ?? "https://token-plan-sgp.xiaomimimo.com/v1",
+    apiKeyEnvNames: ["MIMO_API_KEY", "XIAOMI_MIMO_API_KEY"],
+    apiKeyFileEnvName: "MIMO_API_KEY_FILE",
+    apiStyle: "openai_chat",
+    defaultModelIds: ["mimo-v2.5-pro", "mimo-v2.5", "mimo-v2.5-asr"],
+    supportsModelList: true,
+  },
+  {
+    providerProfileId: "provider_mimo_token_anthropic",
+    baseUrl: process.env.MIMO_ANTHROPIC_BASE_URL ?? "https://token-plan-sgp.xiaomimimo.com/anthropic",
+    apiKeyEnvNames: ["MIMO_API_KEY", "XIAOMI_MIMO_API_KEY"],
+    apiKeyFileEnvName: "MIMO_API_KEY_FILE",
+    apiStyle: "anthropic_messages",
+    defaultModelIds: ["mimo-v2.5-pro", "mimo-v2.5"],
+    supportsModelList: false,
   },
   {
     providerProfileId: "provider_codex_oauth",
@@ -1253,6 +1271,8 @@ function createServerProviderDisplayName(providerProfileId: string) {
     provider_claude_code_single_owner: "Claude Code Single Owner",
     provider_grok_oauth_dgx: "Grok OAuth #1",
     provider_grok_oauth_dgx_2: "Grok OAuth #2",
+    provider_mimo_token_openai: "MiMo Token Plan OpenAI",
+    provider_mimo_token_anthropic: "MiMo Token Plan Anthropic",
     provider_openclaw_dgx: "DGX-02 OpenClaw vLLM",
   };
 
@@ -1280,11 +1300,15 @@ function createServerProviderKind(config: ServerProviderProxyConfig): ProviderKi
 }
 
 function createServerProviderTrustLevel(providerProfileId: string): ProviderTrustLevel {
+  if (providerProfileId.includes("mimo_token")) {
+    return "trusted";
+  }
+
   if (providerProfileId.includes("apifun")) {
     return "untrusted";
   }
 
-  if (providerProfileId.includes("openrouter") || providerProfileId.includes("apikeyfun")) {
+  if (providerProfileId.includes("openrouter") || providerProfileId.includes("apikeyfun") || providerProfileId.includes("mimo")) {
     return "limited";
   }
 
@@ -4025,6 +4049,16 @@ function createServerProviderTags(providerProfileId: string) {
     return ["dgx-secret-ref", "server-proxy", "openai", "openai-compatible"];
   }
 
+  if (providerProfileId.includes("mimo_token")) {
+    return [
+      "dgx-secret-ref",
+      "server-proxy",
+      "mimo",
+      "token-plan",
+      providerProfileId.includes("anthropic") ? "anthropic-compatible" : "openai-compatible",
+    ];
+  }
+
   if (providerProfileId.includes("codex_oauth")) {
     return ["oauth", "codex", "server-proxy", "dgx", "session"];
   }
@@ -4704,6 +4738,15 @@ export async function createServerProviderProxyCompletionResponse(
     requiresAuth: !config.noAuth,
     apiKey,
     fetchImpl,
+    extraBody: config.providerProfileId.includes("mimo_token")
+      ? {
+          max_completion_tokens: 512,
+          thinking: {
+            type: "disabled",
+          },
+          top_p: 0.95,
+        }
+      : undefined,
   });
 }
 

@@ -3,6 +3,7 @@ import {
   tmuxPaneRoleSchema,
   type ApprovalRequest,
   type ApprovalState,
+  type ProviderCompletionResponse,
   type TmuxPaneRole,
 } from "@ai-orchestrator/protocol";
 import {
@@ -50,10 +51,18 @@ export type ApprovalQueueController = {
 
 export type UseApprovalQueueControllerParams = {
   appendEvent: (type: string, payload: unknown) => void;
+  onProviderCompletionReplayed?: (outcome: {
+    approval: ApprovalRequest;
+    result: ProviderCompletionResponse;
+  }) => void;
   onTmuxOutcome?: (outcome: TmuxOutcome) => void;
 };
 
-export function useApprovalQueueController({ appendEvent, onTmuxOutcome }: UseApprovalQueueControllerParams): ApprovalQueueController {
+export function useApprovalQueueController({
+  appendEvent,
+  onProviderCompletionReplayed,
+  onTmuxOutcome,
+}: UseApprovalQueueControllerParams): ApprovalQueueController {
   const [approvalServerSnapshot, setApprovalServerSnapshot] = useState<DesktopApprovalListResponse>();
   const [approvalServerStatus, setApprovalServerStatus] = useState<"idle" | "loading" | "error" | "ready">("idle");
   const [approvalServerError, setApprovalServerError] = useState("");
@@ -155,6 +164,15 @@ export function useApprovalQueueController({ appendEvent, onTmuxOutcome }: UseAp
             authorityNodeId: "dgx-02",
             redaction: "applied",
           });
+          if (approval.replay.kind === "provider_completion" && replay.status === "replayed") {
+            const completion = extractProviderCompletionReplay(replay.result);
+            if (completion) {
+              onProviderCompletionReplayed?.({
+                approval,
+                result: completion,
+              });
+            }
+          }
           if (approval.replay.kind === "tmux_dispatch" && replay.status === "replayed") {
             const dispatch = extractTmuxDispatchReplay(replay.result);
             const outcome: TmuxRedispatchOutcome = {
@@ -340,6 +358,20 @@ export function useApprovalQueueController({ appendEvent, onTmuxOutcome }: UseAp
     handleTmuxApprovalQueued,
     handleResolveServerApproval,
   };
+}
+
+function extractProviderCompletionReplay(result: unknown): ProviderCompletionResponse | undefined {
+  if (!result || typeof result !== "object") {
+    return undefined;
+  }
+  const candidate = result as Partial<ProviderCompletionResponse>;
+  if (candidate.status !== "succeeded" || typeof candidate.content !== "string" || !candidate.content.trim()) {
+    return undefined;
+  }
+  if (typeof candidate.providerProfileId !== "string" || typeof candidate.modelId !== "string") {
+    return undefined;
+  }
+  return candidate as ProviderCompletionResponse;
 }
 
 function extractTmuxDispatchReplay(result: unknown): { reason?: string; status?: TmuxRedispatchOutcome["status"] } | undefined {
