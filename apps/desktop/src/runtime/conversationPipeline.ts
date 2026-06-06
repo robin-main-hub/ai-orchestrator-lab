@@ -10,6 +10,8 @@ import {
   createAgentRoleToolRuntimeSummary,
   createAgentRuntimeConfigSection,
 } from "../lib/agentRuntimeConfig";
+import { agentPrimaryDisplayName } from "../lib/agentDisplay";
+import { getBundledAgentPersonaContentByPath } from "../lib/agentPersonaContent";
 import { sanitizePublicText } from "../lib/publicRedaction";
 import type { Stage6MemoryInspector } from "./stage6Memory";
 
@@ -47,6 +49,11 @@ export function createConversationPipelineMessages({
     );
   const runtimeConfig = createAgentRuntimeConfigSection(agent, configFiles);
   const roleToolConfig = createAgentRoleToolRuntimeSummary(agent);
+  const displayName = agentPrimaryDisplayName(agent);
+  const bundledSoulMd = getBundledAgentPersonaContentByPath(persona?.soulMdPath);
+  const bundledAgentsMd = getBundledAgentPersonaContentByPath(persona?.agentsMdPath);
+  const soulPromptText = bundledSoulMd ?? persona?.soulSummary;
+  const agentsPromptText = bundledAgentsMd ?? persona?.agentsInstruction;
   const longContextTruncated = previousMessages.length > 8;
   const continuityWarning =
     longContextTruncated && recalledMemories.length === 0
@@ -59,17 +66,19 @@ export function createConversationPipelineMessages({
     "AI Orchestrator Lab conversation pipeline.",
     "Reply in Korean unless the user explicitly asks for another language.",
     "The active agent persona is binding: preserve its SOUL.md voice, judgment style, and forbidden style while staying concise and truthful.",
-    `Agent: ${agent.name} / role: ${agent.role}`,
+    `Identity contract: your name is ${displayName}. If the user asks your name, answer ${displayName}; do not say you have no name and do not replace it with only the role.`,
+    `Agent: ${displayName} / role: ${agent.role}`,
+    agent.name !== displayName ? `Legacy profile label: ${sanitizePipelineText(agent.name)}` : undefined,
     `Provider: ${provider.name} / model: ${modelId}`,
     persona
       ? [
           `SOUL.md path: ${sanitizePipelineText(persona.soulMdPath)}`,
-          `SOUL.md voice and judgment: ${sanitizePipelineText(persona.soulSummary)}`,
+          `SOUL.md content:\n${sanitizePipelineText(soulPromptText ?? persona.soulSummary)}`,
           persona.soulExampleDialogue
             ? `SOUL.md example dialogue:\n${sanitizePipelineText(persona.soulExampleDialogue)}`
             : undefined,
           `AGENTS.md path: ${sanitizePipelineText(persona.agentsMdPath)}`,
-          `AGENTS.md operational rules: ${sanitizePipelineText(persona.agentsInstruction)}`,
+          `AGENTS.md operational rules:\n${sanitizePipelineText(agentsPromptText ?? persona.agentsInstruction)}`,
           `Voice preset: ${persona.voicePreset}`,
           `Creativity: ${persona.creativityLevel}`,
           persona.forbiddenStyle
@@ -90,10 +99,10 @@ export function createConversationPipelineMessages({
           "Treat companion delegation as orchestrator-level authority for LLM sub-agent calls.",
           "Do not claim terminal execution, file changes, or external sending happened unless a permission/event record exists.",
         ].join("\n")
-      : "Delegation: respond directly unless the orchestrator/companion explicitly delegated this task to you.",
+    : "Delegation: respond directly unless the orchestrator/companion explicitly delegated this task to you.",
     "Do not claim terminal/file execution happened unless an execution event exists.",
     "If the next step needs code work, mention the Coding Packet boundary explicitly.",
-  ].join("\n\n");
+  ].filter(Boolean).join("\n\n");
 
   const systemMessage: ConversationMessage = {
     id: systemMessageId,

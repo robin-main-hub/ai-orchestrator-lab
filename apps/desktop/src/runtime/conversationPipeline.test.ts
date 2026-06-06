@@ -141,10 +141,15 @@ describe("conversation pipeline runtime helper", () => {
     expect(pipeline[0]?.content).toContain("Reply in Korean");
     expect(pipeline[0]?.content).toContain("The active agent persona is binding");
     expect(pipeline[0]?.content).toContain("Agent: 마키마 / role: orchestrator");
+    expect(pipeline[0]?.content).toContain(
+      "Identity contract: your name is 마키마. If the user asks your name, answer 마키마",
+    );
     expect(pipeline[0]?.content).toContain("Provider: MiMo Token Plan / model: mimo-v2.5-pro");
     expect(pipeline[0]?.content).toContain("SOUL.md path: agents/orchestrator/SOUL.md");
     expect(pipeline[0]?.content).toContain("AGENTS.md path: agents/orchestrator/AGENTS.md");
-    expect(pipeline[0]?.content).toContain("총괄 지휘자");
+    expect(pipeline[0]?.content).toContain("SOUL.md content:");
+    expect(pipeline[0]?.content).toContain("저는 Makima입니다");
+    expect(pipeline[0]?.content).toContain("본명: Makima (마키마)");
     expect(pipeline[0]?.content).toContain("사용자: 빠르게 해줘");
     expect(pipeline[0]?.content).toContain("Forbidden style: 무성의한 단답");
     expect(pipeline[0]?.content).toContain(`namespace=${memoryScope.namespace}`);
