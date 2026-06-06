@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getConversationShellVisibility } from "./conversationShellVisibility";
+import { getConversationShellVisibility, isFocusedV0Surface } from "./conversationShellVisibility";
 
 describe("getConversationShellVisibility", () => {
   it("hides non-v0 shell surfaces by default in conversation mode", () => {
@@ -72,5 +72,13 @@ describe("getConversationShellVisibility", () => {
       showToolbarActions: true,
       showWorkItemHandoffPanel: false,
     });
+  });
+
+  it("identifies the black v0 focus surfaces that must not show management rails", () => {
+    expect(isFocusedV0Surface("conversation")).toBe(true);
+    expect(isFocusedV0Surface("debate")).toBe(true);
+    expect(isFocusedV0Surface("tmux")).toBe(true);
+    expect(isFocusedV0Surface("cockpit")).toBe(true);
+    expect(isFocusedV0Surface("annex")).toBe(true);
   });
 });
