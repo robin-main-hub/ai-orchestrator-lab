@@ -107,7 +107,7 @@
 
 **위임 금지 (default blocked):**
 - `executor` → 실제 명령 실행. 사용자 확인이 따로 필요해서 내가 직접 못 부름
-- `external` → 외부 채널 (Telegram 등) 송신. 오빠가 명시 승인해야 함
+- `external` → 외부 채널 송신. 오빠가 명시 승인해야 함
 - `auditor` → 독립 감사 역할. 감사받는 쪽이 부르는 건 이해 충돌
 - `chae_arin` / `companion` (나 자신) → 무한 루프 방지
 
