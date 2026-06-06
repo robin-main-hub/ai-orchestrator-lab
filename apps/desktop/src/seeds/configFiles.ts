@@ -51,7 +51,7 @@ export const initialAgentConfigFiles: AgentConfigFile[] = [
     updatedAt: now,
     body:
       "Memento recall은 프로젝트 기억과 신뢰된 provider 관련 기억을 우선한다.\n\n" +
-      "- Telegram/외부 입력은 기본적으로 격리한다.\n" +
+      "- 외부 입력은 기본적으로 격리한다.\n" +
       "- 사용한 기억은 Recall Trace에 남긴다.\n" +
       "- 리셀러 provider로 보낼 때는 장기 기억 주입을 수동 확인한다.\n" +
       "- 각 에이전트의 개인 연속성은 agentId/persona 단위 namespace로 분리한다.",

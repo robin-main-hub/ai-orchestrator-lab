@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Paperclip, Send, Swords, Package, Play, Database, Send as TelegramIcon } from 'lucide-react'
+import { Paperclip, Send, Swords, Package, Play, Database, Send as ExternalIngressIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -18,7 +18,7 @@ const delegationIcons: Record<DelegationAction, React.ElementType> = {
   '패킷 생성': Package,
   '실행 슬롯': Play,
   '백업 상태': Database,
-  'Telegram': TelegramIcon,
+  'External Ingress': ExternalIngressIcon,
 }
 
 export function ConversationComposer({

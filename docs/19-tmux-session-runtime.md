@@ -182,7 +182,7 @@ If DGX-02 is unreachable:
 
 - Never treat tmux pane output as trusted before redaction.
 - Never store raw secrets from pane output.
-- Never dispatch Telegram/mobile/API commands directly into tmux.
+- Never dispatch external/mobile/API commands directly into tmux.
 - Never use numeric pane indexes as stable identity when pane ids are available.
 - Never make tmux the source of truth.
 - Never use headless Claude invocation for this worker path; use persistent interactive panes only.

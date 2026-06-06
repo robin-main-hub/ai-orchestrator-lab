@@ -23,7 +23,7 @@
 - Memento Memory
 - Agent Soul
 - Obsidian/Notion Backup
-- Telegram/Mobile
+- 외부 인입/Mobile
 
 하지만 구현은 넓게 동시에 벌리지 않는다. 먼저 하나의 사용 가능한 수직 슬라이스를 만든 뒤, 기능 폭을 넓힌다.
 

@@ -58,7 +58,7 @@ Mark each as pass, risk, or fail.
 | Keeps DGX-02 as continuity mirror/index host |  |  |
 | Treats SimpleMem/MCP as derived index/projection |  |  |
 | Preserves tmux approval/redaction/replay/dry-run gates |  |  |
-| Avoids direct Telegram/mobile/API to tmux dispatch |  |  |
+| Avoids direct external/mobile/API to tmux dispatch |  |  |
 | Preserves Permission Matrix deny-by-default behavior |  |  |
 | Shows evidence/source trust for operator decisions |  |  |
 | Keeps untrusted memory/provider inputs quarantined until activated |  |  |

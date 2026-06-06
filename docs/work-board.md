@@ -282,7 +282,7 @@ main
 | ~~M1 memory adapter workspace~~ | ✅ **#139 머지로 닫힘** (Codex). M2~M6 은 Codex 후속 |
 | streaming P1 | docs/31 결정 회신 + Codex F10 머지 후 protocol 정착 |
 | ERP 도메인 entries (`payment_action` 등) | F1~F10 다 머지 + 보안 감사 통과 |
-| Multi-channel ingress (telegram, mobile webhook) | F9 머지 (#55) |
+| Multi-channel ingress (external, mobile webhook) | F9 머지 (#55) |
 | tmux dispatch | F10 머지 |
 | 모바일 승인 큐 UI 추가 기능 | F5 머지 (#47) |
 | **Stage 1b primitive cascade 완료** | #152 + #154 머지 → 나머지 7 panel 에 동일 채용 (별도 follow-up PR) |
@@ -295,7 +295,7 @@ main
 
 1. 정책 매트릭스 위치 — hardcoded TS vs JSON vs DB row
 2. approval TTL 기본값
-3. 2FA 메커니즘 — 모바일 push + 코드 vs telegram bot inline button
+3. 2FA 메커니즘 — 모바일 push + 코드 vs external bot inline button
 4. PermissionMatrixItem 영속화 — Event Storage vs 별도 audit log
 5. untrusted source memory recall — 차단 vs summary only
 6. Redaction 위반 처리 — 자동 치환 vs 거부 (scope 별)
@@ -344,7 +344,7 @@ main
 | Redaction pipeline 5 stage 중 3,4,5 미구현 | Medium → **PR 완성, 머지 대기** | F7 (#49) 머지 시 |
 | Ingress receiver 0 구현 | Medium → **PR 완성, 머지 대기** | F9 (#55) 머지 시 |
 | Audit log 영속화 | High → **부분 진행 (PR 완성)** | F4 (#46) 머지 + 후속 F8 schema 확장 |
-| 2FA (device_reboot, secret_view, payment) | High | F4~F5 (#46/#47) 머지 + 결정 3 (telegram bot vs mobile push) |
+| 2FA (device_reboot, secret_view, payment) | High | F4~F5 (#46/#47) 머지 + 결정 3 (external bot vs mobile push) |
 | Backup/Export redaction (pre_backup) | High → **부분 진행** | F7 (#49)는 prompt_inject + pre_persist 만; pre_backup은 별도 |
 | Server rate limit 부재 | Low (지금) → High (외부 사용자 증가 시) | 별도 PR |
 | Provider OAuth refresh layer | Medium | F4 또는 별도 |
@@ -419,7 +419,7 @@ R3.1 → R4 추가 정리됨:
 | 2026-05-25 **R3.1** | **F6/F7/F8/F9를 `#46` (F4) 위 sibling stack으로 평행 배치** | F6 데스크톱 UI, F7 server redaction, F8 budget guard, F9 ingress receiver가 서로 다른 layer라 sibling으로 두면 리뷰가 깨끗하고 머지 순서 부담 작음. F10만 #55 위 stacked (ingress + tmux가 같은 외부-입력 축) |
 | 2026-05-25 **R3.1** | **F7 redaction은 prompt_inject + pre_persist 만 v1, pre_backup은 별도 PR** | 5-stage 중 2개부터 실 동작 검증 후 stage 3~5 확장 — 한꺼번에 5단계 다 짜면 false positive 디버깅 비용 큼. usage 숫자(`totalTokens` 등) false positive는 R3.1에서 패턴 좁혀 해결됨 |
 | 2026-05-25 **R3.1** | **F8 provider budget guard는 입력 토큰 추정 + 임계값 2단** (승인 대기 / 거부) | trusted provider라도 large prompt는 비용 폭주 위험 — 사전 추정으로 막음. `costEstimateTokens`를 approval payload에 실어 UI가 나중에 USD 환산 표시 가능 |
-| 2026-05-25 **R3.1** | **F9 ingress는 외부 raw 격리 + redacted normalized event만 Event Store 진입** | telegram/mobile webhook이 직접 실행에 도달 안 함 — server에서 guard 결과와 approval request만 기록. 외부 입력 → 자동 실행 경로 0 |
+| 2026-05-25 **R3.1** | **F9 ingress는 외부 raw 격리 + redacted normalized event만 Event Store 진입** | external/mobile webhook이 직접 실행에 도달 안 함 — server에서 guard 결과와 approval request만 기록. 외부 입력 → 자동 실행 경로 0 |
 | 2026-05-25 **R3.1** | **OpenRouter는 factory wrap of OpenAI-compat** (별도 풀-스크래치 어댑터 X) | wire shape 동일이라 `headers` / `extraBody` / `kind` 옵션으로 OpenRouter 특화(`HTTP-Referer`, `X-Title`, `transforms`, `route`)만 주입. OpenAI 어댑터 미래 개선이 자동 적용됨 |
 | 2026-05-25 **R3.1** | **페르소나 visual identity 는 `agents/<name>/avatar.svg` convention** (SOUL.md 와 sibling) | 데스크톱 swarm 썸네일 + 모바일 메시지 아바타 + 모바일 채팅 배경 폴백 셋이 같은 출처 본다 — placeholder SVG 옆에 `avatar.png` drop-in 으로 자동 교체. 사람이 일하는 느낌 / 몰입감 |
 | 2026-05-25 **R3.1** | **`PersonaFileSource` 인터페이스로 fs-agnostic** (`node:fs` 는 `src/node/` 에만) | desktop renderer Vite bundle / 모바일 PWA / 테스트 in-memory 셋 다 같은 loader 쓸 수 있게 — `node:fs` 브라우저 번들 누출 방지 |

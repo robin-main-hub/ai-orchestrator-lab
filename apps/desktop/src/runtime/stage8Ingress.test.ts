@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createStage8IngressSnapshot, createTelegramDemoInput } from "./stage8Ingress";
+import { createExternalIngressDemoInput, createStage8IngressSnapshot } from "./stage8Ingress";
 
 describe("stage8 ingress guard", () => {
-  it("redacts API secrets and queues dangerous requests for approval when coming from non-telegram channels", () => {
-    const demoInput = createTelegramDemoInput("2026-05-24T00:00:00.000Z");
+  it("redacts API secrets and queues dangerous requests for approval when coming from limited API channels", () => {
+    const demoInput = createExternalIngressDemoInput("2026-05-24T00:00:00.000Z");
     // API 채널로 설정하여 위험 권한 차단 가드를 통과시키고, redaction 및 queued 검증
     const apiInput = { ...demoInput, channel: "api" as const };
     const snapshot = createStage8IngressSnapshot(apiInput);
@@ -19,8 +19,8 @@ describe("stage8 ingress guard", () => {
     expect(snapshot.zeroTokenSafety.pendingCount).toBe(1);
   });
 
-  it("blocks dangerous write/exec/secret requests from Telegram channel by external_agent_isolation", () => {
-    const demoInput = createTelegramDemoInput("2026-05-24T00:00:00.000Z");
+  it("blocks dangerous write/exec/secret requests from webhook channel by external_agent_isolation", () => {
+    const demoInput = createExternalIngressDemoInput("2026-05-24T00:00:00.000Z");
     const snapshot = createStage8IngressSnapshot(demoInput);
 
     expect(snapshot.result.accepted).toBe(false);
@@ -30,8 +30,8 @@ describe("stage8 ingress guard", () => {
 
   it("blocks bot self responses before session handoff", () => {
     const snapshot = createStage8IngressSnapshot({
-      id: "telegram_bot_loop",
-      channel: "legacy_telegram",
+      id: "external_bot_loop",
+      channel: "external_legacy",
       authorType: "bot",
       eventType: "bot_reply",
       text: "I already answered",

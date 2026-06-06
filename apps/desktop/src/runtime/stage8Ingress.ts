@@ -37,18 +37,18 @@ export type Stage8IngressSnapshot = {
   };
 };
 
-export function createTelegramDemoInput(receivedAt = new Date().toISOString()): Stage8RawIngressInput {
+export function createExternalIngressDemoInput(receivedAt = new Date().toISOString()): Stage8RawIngressInput {
   return {
-    id: `telegram_input_${stableId(receivedAt)}`,
-    channel: "legacy_telegram",
+    id: `external_ingress_input_${stableId(receivedAt)}`,
+    channel: "external_legacy",
     authorType: "user",
     eventType: "message",
-    text: "OpenClaw에서 이어받기: 현재 대화를 코딩 패킷으로 정리하고 터미널에서 pnpm test 실행 준비해줘. OPENAI_API_KEY=sk-stage8-demo-secret",
+    text: "외부 인입에서 이어받기: 현재 대화를 코딩 패킷으로 정리하고 터미널에서 pnpm test 실행 준비해줘. OPENAI_API_KEY=sk-stage8-demo-secret",
     receivedAt,
   };
 }
 
-export function createStage8IngressSnapshot(input = createTelegramDemoInput()): Stage8IngressSnapshot {
+export function createStage8IngressSnapshot(input = createExternalIngressDemoInput()): Stage8IngressSnapshot {
   const normalizedText = normalizeText([...(input.recentTexts ?? []), input.text].join(" "));
   const redactedText = redactForEventStore(normalizedText) as string;
   const requestedPermissions = detectPermissions(normalizedText);
@@ -142,11 +142,11 @@ function createGuardSteps(params: {
     },
     {
       name: "external_agent_isolation",
-      status: (params.input.channel === "legacy_telegram" || params.input.channel === "webhook") &&
+      status: (params.input.channel === "external_legacy" || params.input.channel === "webhook") &&
               params.requestedPermissions.some((p) => p === "secret_access" || p === "write_files" || p === "run_safe_commands")
               ? "blocked"
               : "passed",
-      reason: (params.input.channel === "legacy_telegram" || params.input.channel === "webhook") &&
+      reason: (params.input.channel === "external_legacy" || params.input.channel === "webhook") &&
               params.requestedPermissions.some((p) => p === "secret_access" || p === "write_files" || p === "run_safe_commands")
         ? "external channels are restricted from write, run, or secret access capabilities"
         : "no prohibited external capability request detected",
@@ -229,12 +229,12 @@ function classifyConfidence(value: string, permissions: PermissionLevel[]): Ingr
 }
 
 function sourceTrustForChannel(channel: ExternalChannel): SourceTrust {
-  return channel === "legacy_telegram" || channel === "webhook" ? "untrusted" : "limited";
+  return channel === "external_legacy" || channel === "webhook" ? "untrusted" : "limited";
 }
 
 function eventSourceForChannel(channel: ExternalChannel) {
-  if (channel === "legacy_telegram") {
-    return "legacy_telegram";
+  if (channel === "external_legacy") {
+    return "external_legacy";
   }
 
   if (channel === "mobile") {

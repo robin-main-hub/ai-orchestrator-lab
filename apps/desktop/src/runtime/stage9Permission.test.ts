@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MobileActionPolicy, ProviderRuntimeReadiness, RuntimeSnapshot, TerminalSlot, PermissionLevel } from "@ai-orchestrator/protocol";
 import { createStage4AgentRun } from "./stage4Runtime";
-import { createTelegramDemoInput, createStage8IngressSnapshot } from "./stage8Ingress";
+import { createExternalIngressDemoInput, createStage8IngressSnapshot } from "./stage8Ingress";
 import { createStage9PermissionSnapshot, evaluatePermissionGate, nextRequiredPermission } from "./stage9Permission";
 
 const createdAt = "2026-05-24T00:30:00.000Z";
@@ -54,7 +54,7 @@ const agentRun = createStage4AgentRun({
     goal: "Build permission matrix",
     context: ["event store first"],
     decisions: ["gate execution"],
-    rejectedOptions: ["run commands from Telegram directly"],
+    rejectedOptions: ["run commands from external ingress directly"],
     constraints: ["no real terminal execution"],
     filesToInspect: ["apps/desktop/src/runtime/stage9Permission.ts"],
     implementationPlan: ["create permission snapshot"],
@@ -83,8 +83,8 @@ describe("stage9 permission matrix", () => {
       {
         id: "external_approval_demo",
         ingressEventId: "ingress_event_demo",
-        channel: "legacy_telegram" as const,
-        summary: "do telegram thing",
+        channel: "webhook" as const,
+        summary: "do external ingress thing",
         permissions: ["run_safe_commands", "secret_access"] as PermissionLevel[],
         state: "required" as const,
         createdAt,
@@ -113,8 +113,8 @@ describe("stage9 permission matrix", () => {
       {
         id: "external_approval_demo",
         ingressEventId: "ingress_event_demo",
-        channel: "legacy_telegram" as const,
-        summary: "do telegram thing",
+        channel: "webhook" as const,
+        summary: "do external ingress thing",
         permissions: ["run_safe_commands", "secret_access"] as PermissionLevel[],
         state: "required" as const,
         createdAt,
@@ -154,7 +154,7 @@ describe("stage9 permission matrix", () => {
         {
           id: "approval_customer_reply",
           ingressEventId: "ingress_customer_reply",
-          channel: "legacy_telegram",
+          channel: "webhook",
           summary: "send customer reply about refund policy",
           permissions: [],
           state: "required",

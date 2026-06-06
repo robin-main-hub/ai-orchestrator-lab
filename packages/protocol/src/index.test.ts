@@ -222,7 +222,7 @@ describe("protocol schemas", () => {
       type: "conversation.message.created",
       payload: { text: "토론으로 돌려봐" },
       createdAt: new Date("2026-05-24T00:00:00.000Z").toISOString(),
-      source: "legacy_telegram",
+      source: "external_legacy",
       sourceTrust: "untrusted",
     });
 
@@ -663,7 +663,7 @@ describe("protocol schemas", () => {
   it("models guarded external ingress before session handoff", () => {
     const result: IngressGuardResult = {
       id: "ingress_result_1",
-      inputId: "telegram_input_1",
+      inputId: "external_ingress_input_1",
       accepted: true,
       earlyReturn: false,
       confidence: "low",
@@ -684,8 +684,8 @@ describe("protocol schemas", () => {
       ],
       normalizedEvent: {
         id: "ingress_event_1",
-        channel: "legacy_telegram",
-        source: "legacy_telegram",
+        channel: "external_legacy",
+        source: "external_legacy",
         sourceTrust: "untrusted",
         authorType: "user",
         rawText: "run pnpm test",
@@ -721,7 +721,7 @@ describe("protocol schemas", () => {
           sessionId: "session_1",
           subjectId: "ingress_event_1",
           actor: "external_channel",
-          channel: "legacy_telegram",
+          channel: "external_legacy",
           sourceTrust: "untrusted",
           action: "terminal_run",
           requestedLevels: ["run_safe_commands"],
@@ -818,14 +818,14 @@ describe("protocol schemas", () => {
 
   it("uses narrow work source references for manual and legacy ingress", () => {
     const source: WorkSourceRef = {
-      source: "legacy_telegram",
-      externalId: "telegram_input_1",
+      source: "external_legacy",
+      externalId: "external_ingress_input_1",
       observedAt: "2026-05-24T00:00:00.000Z",
       contentHash: "sha256:demo",
     };
 
-    expect(workSourceSchema.parse(source.source)).toBe("legacy_telegram");
-    expect(() => workSourceSchema.parse("telegram")).toThrow();
+    expect(workSourceSchema.parse(source.source)).toBe("external_legacy");
+    expect(() => workSourceSchema.parse("external")).toThrow();
   });
 
   it("models work items without storing raw SSOT evidence bodies", () => {
@@ -924,7 +924,7 @@ describe("protocol schemas", () => {
     expect(askItem.lane).toBe("ask");
     expect(askItem.status).toBe("waiting_input");
     expect(askItem.kind).toBe("lead_time");
-    expect(workSourceSchema.options).toEqual(["desktop_manual", "mobile_manual", "legacy_telegram"]);
+    expect(workSourceSchema.options).toEqual(["desktop_manual", "mobile_manual", "external_legacy"]);
   });
 
   it("models assistant drafts and handoffs to target surfaces", () => {
