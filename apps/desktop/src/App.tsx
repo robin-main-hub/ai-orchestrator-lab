@@ -56,6 +56,7 @@ import {
   nextRequiredPermission,
 } from "./runtime/stage9Permission";
 import {
+  ProviderCompletionPermissionRequiredError,
   isDgxRoutedProvider,
   requestDgxProviderCompletion,
 } from "./runtime/stage12DgxProvider";
@@ -104,6 +105,7 @@ import type {
   ModelDiscoverySnapshot,
   OperatorCockpitSnapshot,
   OperatorCockpitWorkerStatus,
+  ProviderCompletionResponse,
   ProviderProfile,
   ReviewMode,
   RuntimeSnapshot,
@@ -365,6 +367,7 @@ export function App() {
   const [tmuxStatuses, setTmuxStatuses] = useState<Record<string, string>>({});
   const [tmuxOutputs, setTmuxOutputs] = useState<Record<string, string>>({});
   const [tmuxTimelineBlocks, setTmuxTimelineBlocks] = useState<Record<string, TerminalTimelineBlock[]>>({});
+  const [pendingProviderRetry, setPendingProviderRetry] = useState<PendingProviderRetry | undefined>();
 
   const handleTmuxOutcome = useCallback((outcome: TmuxOutcome) => {
     const role = outcome.role;
@@ -425,6 +428,69 @@ export function App() {
     });
   }, [activeSessionId]);
 
+  const handleProviderCompletionReplayed = useCallback(({
+    approval,
+    result,
+  }: {
+    approval: { id: string; sourceItemId?: string };
+    result: ProviderCompletionResponse;
+  }) => {
+    const pending = pendingProviderRetry;
+    if (!pending) {
+      return;
+    }
+    if (pending.permissionItemId !== approval.sourceItemId && pending.permissionItemId !== approval.id) {
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    const targetAgent = agents.find((agent) => agent.id === pending.agentId);
+    const replayedContent = result.content?.trim();
+    if (!replayedContent) {
+      return;
+    }
+    const assistantMessage: ConversationMessage = {
+      id: `message_agent_replay_${crypto.randomUUID()}`,
+      sessionId: activeSessionId,
+      role: "assistant",
+      content: replayedContent,
+      createdAt,
+      metadata: {
+        agentId: pending.agentId,
+        agentName: targetAgent?.name,
+        providerProfileId: result.providerProfileId,
+        modelId: result.modelId,
+        endpoint: result.endpoint,
+        route: result.route,
+        usage: result.usage,
+        realProviderCall: true,
+        replayedApprovalId: approval.id,
+        replayedSourceItemId: approval.sourceItemId,
+      },
+    };
+
+    setConversationMessages((messages) => [...messages, assistantMessage]);
+    setPendingProviderRetry(undefined);
+    setDraftMessage("");
+    setDraftAttachments([]);
+    if (targetAgent) {
+      setAgentActivity(targetAgent.id, "responding");
+      window.setTimeout(() => {
+        setAgentActivity(targetAgent.id, "idle");
+      }, 450);
+    }
+    appendEvent("provider.completion.replay.delivered", {
+      approvalId: approval.id,
+      sourceItemId: approval.sourceItemId,
+      agentId: pending.agentId,
+      providerProfileId: result.providerProfileId,
+      modelId: result.modelId,
+      contentLength: replayedContent.length,
+      route: result.route,
+      redaction: "applied",
+    }, { sessionId: activeSessionId });
+  }, [activeSessionId, agents, appendEvent, pendingProviderRetry]);
+
   const {
     approvalServerSnapshot,
     approvalServerStatus,
@@ -435,7 +501,11 @@ export function App() {
     handleRefreshApprovalQueue,
     handleTmuxApprovalQueued,
     handleResolveServerApproval,
-  } = useApprovalQueueController({ appendEvent, onTmuxOutcome: handleTmuxOutcome });
+  } = useApprovalQueueController({
+    appendEvent,
+    onProviderCompletionReplayed: handleProviderCompletionReplayed,
+    onTmuxOutcome: handleTmuxOutcome,
+  });
 
   const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
   const [contextPackTier, setContextPackTier] = useState<ContextPackTier>("standard");
@@ -478,7 +548,6 @@ export function App() {
   const [obsidianMarkdownPreview, setObsidianMarkdownPreview] = useState("");
   const [draftMessage, setDraftMessage] = useState("");
   const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([]);
-  const [pendingProviderRetry, setPendingProviderRetry] = useState<PendingProviderRetry | undefined>();
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.id === selectedAgentId) ?? agents[0],
     [agents, selectedAgentId],
@@ -1495,17 +1564,48 @@ export function App() {
         };
       }
     } catch (error) {
-      reply = `${selectedProvider.name} 호출에 실패했어. ${error instanceof Error ? error.message : String(error)}`;
-      completionMetadata = {
-        error: error instanceof Error ? error.message : String(error),
-        realProviderCall: false,
-      };
-      appendEvent("provider.completion.dgx.failed", {
-        agentId: selectedAgent.id,
-        providerProfileId: selectedProvider.id,
-        modelId,
-        error: error instanceof Error ? error.message : String(error),
-      }, { sessionId: targetSessionId });
+      if (error instanceof ProviderCompletionPermissionRequiredError) {
+        const permissionItemId = error.sourceItemId ?? error.approvalId ?? providerPermissionId;
+        setPendingProviderRetry({
+          permissionItemId,
+          providerProfileId: selectedProvider.id,
+          agentId: selectedAgent.id,
+          modelId,
+          content: messageContent,
+          attachments: attachmentMetadata,
+          createdAt,
+        });
+        await handleRefreshApprovalQueue();
+        reply = `${selectedProvider.name} 사용 승인이 필요해. Health/Ops 승인 대기열에서 provider_completion을 승인하면 같은 요청을 서버가 재실행하고 답변을 이어 붙일게.`;
+        completionMetadata = {
+          approvalId: error.approvalId,
+          permissionItemId,
+          providerProfileId: selectedProvider.id,
+          realProviderCall: false,
+          requiresServerApproval: true,
+        };
+        appendEvent("provider.completion.approval_required", {
+          agentId: selectedAgent.id,
+          providerProfileId: selectedProvider.id,
+          modelId,
+          approvalId: error.approvalId,
+          permissionItemId,
+          retryStored: true,
+          redaction: "applied",
+        }, { sessionId: targetSessionId });
+      } else {
+        reply = `${selectedProvider.name} 호출에 실패했어. ${error instanceof Error ? error.message : String(error)}`;
+        completionMetadata = {
+          error: error instanceof Error ? error.message : String(error),
+          realProviderCall: false,
+        };
+        appendEvent("provider.completion.dgx.failed", {
+          agentId: selectedAgent.id,
+          providerProfileId: selectedProvider.id,
+          modelId,
+          error: error instanceof Error ? error.message : String(error),
+        }, { sessionId: targetSessionId });
+      }
     }
 
     const assistantMessage: ConversationMessage = {

@@ -4,6 +4,7 @@ import {
   createProviderCompletionProxyRequest,
   isDgxRoutedProvider,
   isDgxVllmProvider,
+  ProviderCompletionPermissionRequiredError,
   requestDgxProviderCompletion,
   requestDgxVllmCompletion,
 } from "./stage12DgxProvider";
@@ -197,5 +198,49 @@ describe("stage12 DGX provider completion", () => {
     ).rejects.toThrow("DGX-02 server proxy failed");
 
     expect(calls).toEqual([`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`]);
+  });
+
+  it("stops fallback routing when the server requests explicit provider approval", async () => {
+    const limitedProvider: ProviderProfile = {
+      id: "provider_mimo_token_openai",
+      name: "MiMo Token Plan OpenAI",
+      kind: "openai",
+      baseUrl: "https://token-plan-sgp.xiaomimimo.com/v1",
+      defaultModel: "mimo-v2.5-pro",
+      enabled: true,
+      tags: ["server-proxy", "mimo", "token-plan"],
+      trustLevel: "limited",
+    };
+    const calls: string[] = [];
+    const fetchImpl = async (url: RequestInfo | URL) => {
+      calls.push(String(url));
+      return new Response(
+        JSON.stringify({
+          error: "permission_required",
+          approval: {
+            id: "approval_provider_completion_1",
+            sourceItemId: "permission_provider_provider_mimo_token_openai",
+          },
+          permission: {
+            approvalState: "required",
+            decision: "approval_required",
+            reason: "limited provider completion requires explicit approval",
+          },
+        }),
+        { status: 403 },
+      );
+    };
+
+    await expect(
+      requestDgxProviderCompletion({
+        provider: limitedProvider,
+        modelId: "mimo-v2.5-pro",
+        messages,
+        fetchImpl,
+        proxyBaseUrl: ["http://127.0.0.1:4317", "http://dgx-02:4317"],
+      }),
+    ).rejects.toBeInstanceOf(ProviderCompletionPermissionRequiredError);
+
+    expect(calls).toEqual(["http://127.0.0.1:4317/provider-completions"]);
   });
 });

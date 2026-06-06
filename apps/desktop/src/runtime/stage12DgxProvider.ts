@@ -26,6 +26,19 @@ type DgxCompletionResponse = {
   };
 };
 
+type ProviderCompletionPermissionRequiredPayload = {
+  approval?: {
+    id?: string;
+    sourceItemId?: string;
+  };
+  error?: string;
+  permission?: {
+    approvalState?: string;
+    decision?: string;
+    reason?: string;
+  };
+};
+
 const defaultDgxSystemPrompt =
   "Answer directly in Korean when the user writes Korean. Do not reveal reasoning or a thinking process.";
 
@@ -48,6 +61,18 @@ export type Stage12DgxCompletionResult = {
   usage?: ProviderCompletionUsage;
   fallbackReason?: string;
 };
+
+export class ProviderCompletionPermissionRequiredError extends Error {
+  approvalId?: string;
+  sourceItemId?: string;
+
+  constructor(message: string, payload: ProviderCompletionPermissionRequiredPayload = {}) {
+    super(message);
+    this.name = "ProviderCompletionPermissionRequiredError";
+    this.approvalId = payload.approval?.id;
+    this.sourceItemId = payload.approval?.sourceItemId;
+  }
+}
 
 export function isDgxVllmProvider(provider?: ProviderProfile) {
   return Boolean(provider?.tags.includes("dgx") && provider.tags.includes("vllm"));
@@ -197,6 +222,9 @@ async function requestDgxProviderCompletionViaProxyFallback({
         permissionDecision,
       });
     } catch (error) {
+      if (error instanceof ProviderCompletionPermissionRequiredError) {
+        throw error;
+      }
       lastError = error;
       errors.push(`${baseUrl}: ${formatCompletionError(error)}`);
     }
@@ -231,6 +259,10 @@ async function requestDgxVllmCompletionViaProxy({
 
   const rawText = await response.text();
   if (!response.ok) {
+    const permissionError = parseProviderCompletionPermissionRequired(rawText);
+    if (permissionError) {
+      throw permissionError;
+    }
     throw new Error(`DGX-02 server proxy failed: ${response.status} ${rawText.slice(0, 240)}`);
   }
 
@@ -311,6 +343,22 @@ function formatCompletionError(error: unknown) {
   }
 
   return String(error);
+}
+
+function parseProviderCompletionPermissionRequired(rawText: string) {
+  try {
+    const parsed = JSON.parse(rawText) as ProviderCompletionPermissionRequiredPayload;
+    if (parsed.error !== "permission_required" && parsed.permission?.decision !== "approval_required") {
+      return undefined;
+    }
+
+    return new ProviderCompletionPermissionRequiredError(
+      parsed.permission?.reason ?? "provider completion requires explicit approval",
+      parsed,
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 export function createDgxVllmRequestBody(modelId: string, messages: ConversationMessage[]) {
