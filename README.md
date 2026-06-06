@@ -24,7 +24,7 @@
 - Conversation Workbench: 토론 Off 상태의 1:1 대화형 작업 모드
 - 멀티 에이전트 토론 라운드테이블
 - 코딩 작업 전달 모드
-- Telegram/OpenClaw 대화 세션 연동
+- 외부 인입/OpenClaw 대화 세션 연동
 - 실시간 터미널/CLI 에이전트 슬롯
 - 프로바이더 프로파일 다중 등록
 - API 키/환경변수 붙여넣기 파서
@@ -176,7 +176,7 @@ corepack pnpm dev
 - Home PC and Phone are clients over the DGX-02 projection; inputs created while MacBook is unavailable remain pending client inputs until they sync to DGX-02.
 - Conflict handling uses `dgx02_authority_wins` for mechanical conflicts and `manual_review` for semantic conflicts.
 - Local/remote writes use pending queues and replay/import to DGX-02 when the authority returns.
-- External legacy Telegram input is represented as `legacy_telegram` in persisted protocol data while UI labels may still say Telegram.
+- External ingress input is represented as `external_legacy` in persisted protocol data while UI labels use generic external-ingress wording.
 - Unknown external effects, device reboot, provider execution, secret access, and terminal actions are denied by default unless the Permission Matrix approves them.
 - Windows Obsidian export defaults to `F:/obsidian/ai-headquarter`.
 - Tauri is the accepted shell direction for Windows/macOS packaging; see `docs/21-tauri-desktop-shell.md`.
@@ -205,7 +205,7 @@ corepack pnpm dev
 
 ## Stage21
 
-- Desktop의 메시지 생성, Telegram ingress, permission snapshot, Event Storage replay를 `activeSessionId` 기준으로 전환했다.
+- Desktop의 메시지 생성, 외부 인입, permission snapshot, Event Storage replay를 `activeSessionId` 기준으로 전환했다.
 - Sessions 패널에서 특정 sessionId를 누르면 해당 세션의 이벤트와 메시지를 DGX-02에서 pull하고, 선택된 세션을 active 상태로 표시한다.
 - 새 메시지와 새 이벤트는 현재 active session에 기록되므로 MacBook/Home PC 간 세션 이동의 기본 경계가 생겼다.
 
@@ -313,7 +313,7 @@ corepack pnpm dev
 
 - 좌측 네비게이션을 `세션`, `프로젝트`, `프로바이더`, `채널`, `백업` 각각의 독립 화면으로 분리했다.
 - 프로젝트 메뉴는 현재 session, Coding Packet, agent run step, memory recall, event count를 보여준다.
-- 채널 메뉴는 Telegram/OpenClaw/Mobile/API 진입점, 7중 ingress guard, approval queue, 0-token safety를 보여준다.
+- 채널 메뉴는 외부 인입/OpenClaw/Mobile/API 진입점, 7중 ingress guard, approval queue, 0-token safety를 보여준다.
 - 백업 메뉴는 Obsidian/Notion/Mobile projection과 redaction 상태, artifact destination을 보여준다.
 - `scripts/setup-agent-swarm.sh`와 `scripts/swarm-send.sh`를 추가해 `ai-swarm` tmux 세션 생성과 역할별 pane 명령 전송을 지원한다.
 - tmux helper는 pane id를 `.ai-swarm/ai-swarm.env`에 저장하고, obvious secret이 포함된 명령은 전송을 거부한다.
