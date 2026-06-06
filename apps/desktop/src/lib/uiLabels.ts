@@ -1,6 +1,7 @@
 import type { BranchExperiment, ContextPackTier, ConversationMessage, InsightCategory, ReviewMode, RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import type { AgentConfigTab, AgentCreativityLevel, AgentVoicePreset, WorkbenchAgent } from "../types";
 import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
+import { agentPrimaryDisplayName } from "./agentDisplay";
 
 export function reviewModeLabel(mode: ReviewMode) {
   const labels: Record<ReviewMode, string> = {
@@ -139,15 +140,32 @@ export function contextPackTierLabel(tier: ContextPackTier) {
   return labels[tier];
 }
 
-export function messageLabel(message: ConversationMessage, selectedAgent?: WorkbenchAgent) {
+export function messageLabel(
+  message: ConversationMessage,
+  selectedAgent?: WorkbenchAgent,
+  agents: WorkbenchAgent[] = [],
+) {
   if (message.role === "user") {
     return "사용자";
   }
 
+  const metadataAgentId = typeof message.metadata?.agentId === "string" ? message.metadata.agentId : undefined;
   const agentName = message.metadata?.agentName;
+  const matchedAgent = agents.find((agent) =>
+    agent.id === metadataAgentId ||
+    (typeof agentName === "string" && agent.name === agentName)
+  );
+  if (matchedAgent) {
+    return agentPrimaryDisplayName(matchedAgent);
+  }
+
+  if (selectedAgent) {
+    return agentPrimaryDisplayName(selectedAgent);
+  }
+
   if (typeof agentName === "string") {
     return agentName;
   }
 
-  return selectedAgent?.name ?? "Assistant";
+  return "에이전트";
 }

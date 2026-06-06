@@ -6,7 +6,10 @@ import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
 import { useAgentExpression } from "./useAgentExpression";
 import { badgeColorForStatus, workerStatusLabel } from "./presentation";
-import { resolveOperatorWorkerDisplay } from "./workerDisplay";
+import {
+  resolveOperatorWorkerDisplay,
+  resolveOperatorWorkerSkillDisplay,
+} from "./workerDisplay";
 
 const coreRoles = new Set(["orchestrator", "architect", "reviewer", "builder", "executor"]);
 
@@ -60,6 +63,7 @@ function WorkerGroup({ label, workers }: { label: string; workers: OperatorCockp
 
 function WorkerRow({ worker }: { worker: OperatorCockpitWorkerFleet }) {
   const workerDisplay = resolveOperatorWorkerDisplay(worker);
+  const skillDisplay = resolveOperatorWorkerSkillDisplay(worker.role);
   const expression = useAgentExpression({
     isActive: worker.status === "working",
     taskStatus: worker.status === "error" || worker.status === "blocked" ? "error" : worker.status === "working" ? "running" : undefined,
@@ -102,6 +106,25 @@ function WorkerRow({ worker }: { worker: OperatorCockpitWorkerFleet }) {
               <Clock3 className="h-3 w-3 text-zinc-600" />
               실시간
             </span>
+          </div>
+          <div className="mt-2 rounded-md border border-zinc-800/70 bg-black/20 px-2.5 py-2">
+            <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
+              <span className="font-semibold text-zinc-300">스킬</span>
+              <span>{skillDisplay.label}</span>
+              <span className="rounded-full border border-zinc-700/80 px-1.5 py-0.5 text-[9px] text-zinc-400">
+                {skillDisplay.boundaryLabel}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {skillDisplay.tools.map((tool) => (
+                <span
+                  className="rounded-full border border-cyan-400/15 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-medium text-cyan-100"
+                  key={tool}
+                >
+                  {tool}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
         {worker.securityTier ? (
