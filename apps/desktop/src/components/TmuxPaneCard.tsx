@@ -14,9 +14,12 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
-import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
 import { TmuxPaneTimeline } from "./TmuxPaneTimeline";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/ui/collapsible";
+import {
+  AgentActivity,
+  tmuxPaneStateToAgentActivity,
+} from "./shared/agentActivity";
 
 /**
  * Tmux pane card — strict v0 port.
@@ -75,22 +78,13 @@ export function TmuxPaneCard({
       <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <div className="rounded-md border border-amber-500/20 bg-amber-500/10 p-1">
-            <AvatarWithStatus
+            <AgentActivity
+              agent={pane.agent}
               initials={pane.agent ? pane.agent.name.slice(0, 2).toUpperCase() : "??"}
-              roleColor={pane.agent ? roleColorFromRole(pane.agent.role) : "companion"}
-              status={
-                pane.state === "chat active" || pane.state === "active"
-                  ? "active"
-                  : pane.state === "ready"
-                    ? "online"
-                    : pane.state === "dispatch gated" || pane.state === "pending_approval"
-                      ? "pending"
-                      : pane.state === "guarding"
-                        ? "offline"
-                        : "idle"
-              }
-              avatarDataUrl={visual?.avatarDataUrl}
               size="sm"
+              showLabel={false}
+              status={tmuxPaneStateToAgentActivity(pane.state)}
+              visual={visual}
             />
           </div>
           <div className="min-w-0">

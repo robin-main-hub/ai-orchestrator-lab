@@ -25,13 +25,13 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { StatusBadge } from "@/ui/status-badge";
+import { AgentActivity, AgentStatePill } from "./shared/agentActivity";
 import type {
   AgentActivityStatus,
   AgentVisualSettings,
   ModelCatalog,
   WorkbenchAgent,
 } from "../types";
-import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
 
 /**
  * Agents sidebar — strict v0 port.
@@ -406,21 +406,14 @@ function AgentCard({
           onClick={() => onSelectAgent(agent.id)}
           type="button"
         >
-          <AvatarWithStatus
+          <AgentActivity
+            agent={agent}
             initials={agent.name.slice(0, 2).toUpperCase()}
-            roleColor={roleColorFromRole(agent.role)}
-            status={
-              isResponding
-                ? "active"
-                : isPreparing
-                  ? "pending"
-                  : activity === "idle"
-                    ? "idle"
-                    : "online"
-            }
-            avatarDataUrl={visual?.avatarDataUrl}
             size="sm"
+            showLabel={false}
+            status={activity}
             className="shrink-0"
+            visual={visual}
           />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
@@ -569,22 +562,8 @@ function AgentCard({
         </div>
 
         {/* in use indicator */}
-        {isResponding ? (
-          <StatusBadge
-            className="justify-self-end whitespace-nowrap"
-            size="sm"
-            variant="success"
-          >
-            in use
-          </StatusBadge>
-        ) : isPreparing ? (
-          <StatusBadge
-            className="justify-self-end whitespace-nowrap"
-            size="sm"
-            variant="warning"
-          >
-            prepare
-          </StatusBadge>
+        {isResponding || isPreparing ? (
+          <AgentStatePill className="justify-self-end whitespace-nowrap" status={activity} />
         ) : null}
       </div>
     </div>
