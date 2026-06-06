@@ -67,6 +67,8 @@ export function MessageThread({
   agentActivityById?: Record<string, AgentActivityStatus>;
 }) {
   const delegationItems = createDelegationPreviewItems(messages, agents);
+  const selectedAgentActivity = selectedAgent && agentActivityById ? agentActivityById[selectedAgent.id] : undefined;
+  const showPendingBubble = shouldShowAssistantPendingBubble(messages, selectedAgentActivity);
 
   return (
     <div className="relative flex-1 overflow-hidden bg-zinc-950">
@@ -102,6 +104,65 @@ export function MessageThread({
               />
             ))
           )}
+          {showPendingBubble && selectedAgent ? (
+            <AssistantPendingBubble
+              activity={selectedAgentActivity}
+              agent={selectedAgent}
+              agentVisualsById={agentVisualsById}
+            />
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function shouldShowAssistantPendingBubble(
+  messages: ConversationMessage[],
+  activity?: AgentActivityStatus,
+) {
+  if (activity !== "preparing" && activity !== "responding") return false;
+  const lastMessage = messages.at(-1);
+  return lastMessage?.role === "user";
+}
+
+export function assistantPendingLabel(activity?: AgentActivityStatus) {
+  return activity === "responding" ? "답변을 정리하고 있어요" : "생각을 정리하고 있어요";
+}
+
+function AssistantPendingBubble({
+  activity,
+  agent,
+  agentVisualsById,
+}: {
+  activity?: AgentActivityStatus;
+  agent: WorkbenchAgent;
+  agentVisualsById?: Record<string, AgentVisualSettings>;
+}) {
+  const visual = agentVisualsById?.[agent.id];
+  const status = activity === "responding" ? ("active" as const) : ("pending" as const);
+
+  return (
+    <div className="flex gap-3 py-1.5" aria-live="polite" aria-label={`${agent.name} 응답 준비 중`}>
+      <AvatarWithStatus
+        initials={agent.name.slice(0, 2).toUpperCase()}
+        roleColor={roleColorFromRole(agent.role)}
+        status={status}
+        avatarDataUrl={visual?.avatarDataUrl}
+        size="sm"
+      />
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-xs font-semibold text-zinc-200">{agent.name}</span>
+          <span className="text-[10px] text-zinc-600">응답 준비 중</span>
+        </div>
+        <div className="inline-flex max-w-[82%] items-center gap-3 rounded-2xl rounded-tl-md border border-violet-300/15 bg-zinc-900/80 px-3 py-2.5 shadow-lg shadow-black/20 backdrop-blur-xl">
+          <span className="text-sm text-zinc-300">{assistantPendingLabel(activity)}</span>
+          <span className="flex items-center gap-1" aria-hidden="true">
+            <span className="message-thinking-dot" />
+            <span className="message-thinking-dot [animation-delay:160ms]" />
+            <span className="message-thinking-dot [animation-delay:320ms]" />
+          </span>
         </div>
       </div>
     </div>
