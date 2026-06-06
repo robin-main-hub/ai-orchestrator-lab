@@ -9,7 +9,12 @@ import {
 } from "lucide-react";
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
 import { modelWindowSize } from "../lib/appConstants";
-import { agentRoleLabel, providerDisplayLabel } from "../lib/helpers";
+import { providerDisplayLabel } from "../lib/helpers";
+import {
+  agentPrimaryDisplayName,
+  agentSecondaryDisplayLabel,
+  englishRoleLabelByRole,
+} from "../lib/agentDisplay";
 import { getAgentToolProfileSummary } from "../lib/agentToolProfiles";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
@@ -80,59 +85,8 @@ export type AgentsSidebarProps = {
 
 type AgentCategory = "core" | "specialist" | "companion";
 
-const agentFullKoreanNameByIdentity: Record<string, string> = {
-  architect: "오시노 시노부",
-  auditor: "카스가노 소라",
-  builder: "히라사와 유이",
-  chae_arin: "채아린",
-  domain_expert: "헤르타",
-  executor: "렘",
-  external: "미사토 카츠라기",
-  mediator: "니코 로빈",
-  memory_curator: "레이 아야나미",
-  negotiator: "스파클",
-  orchestrator: "마키마",
-  researcher: "마오마오",
-  reviewer: "시노미야 카구야",
-  risk_officer: "C.C.",
-  skeptic: "소류 아스카 랭그레이",
-  verifier: "마키세 크리스",
-  watchdog: "프리렌",
-  yohane: "츠시마 요시코",
-};
-
-const agentDisplayRoleLabelByIdentity: Record<string, string> = {
-  skeptic: "UX 비판자",
-  yohane: "4차원 아이디어 뱅크",
-};
-
 function englishRoleLabel(role: WorkbenchAgent["role"]) {
-  const labels: Record<WorkbenchAgent["role"], string> = {
-    architect: "Architect",
-    auditor: "Auditor",
-    builder: "Builder",
-    companion: "Companion",
-    domain_expert: "Domain Expert",
-    executor: "Executor",
-    external: "External",
-    mediator: "Mediator",
-    memory_curator: "Memory Curator",
-    negotiator: "Negotiator",
-    orchestrator: "Orchestrator",
-    researcher: "Researcher",
-    reviewer: "Reviewer",
-    risk_officer: "Risk Officer",
-    skeptic: "Skeptic",
-    verifier: "Verifier",
-    watchdog: "Watchdog",
-  };
-
-  return labels[role];
-}
-
-function agentPrimaryDisplayName(agent: WorkbenchAgent) {
-  const identityKey = agent.personaName ?? agent.role;
-  return agentFullKoreanNameByIdentity[identityKey] ?? agent.name;
+  return englishRoleLabelByRole[role];
 }
 
 function roleToCategory(role: WorkbenchAgent["role"]): AgentCategory {
@@ -149,13 +103,6 @@ function roleToCategory(role: WorkbenchAgent["role"]): AgentCategory {
     default:
       return "specialist";
   }
-}
-
-function agentSecondaryDisplayLabel(agent: WorkbenchAgent) {
-  const identityKey = agent.personaName ?? agent.role;
-  const roleLabel =
-    agentDisplayRoleLabelByIdentity[identityKey] ?? agentRoleLabel(agent.role);
-  return `${englishRoleLabel(agent.role)} · ${roleLabel}`;
 }
 
 export function AgentsSidebar({

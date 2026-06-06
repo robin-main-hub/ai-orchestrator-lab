@@ -56,6 +56,7 @@ import {
   nextRequiredPermission,
 } from "./runtime/stage9Permission";
 import {
+  ProviderCompletionPermissionRequiredError,
   isDgxRoutedProvider,
   requestDgxProviderCompletion,
 } from "./runtime/stage12DgxProvider";
@@ -104,6 +105,7 @@ import type {
   ModelDiscoverySnapshot,
   OperatorCockpitSnapshot,
   OperatorCockpitWorkerStatus,
+  ProviderCompletionResponse,
   ProviderProfile,
   ReviewMode,
   RuntimeSnapshot,
@@ -138,6 +140,16 @@ import {
 import { getConversationRailLayout } from "./lib/conversationRailLayout";
 import { getConversationShellVisibility, isFocusedV0Surface } from "./lib/conversationShellVisibility";
 import {
+  createConversationMessagePublicWorkTrace,
+  createTerminalBlockPublicWorkTrace,
+} from "./lib/publicWorkTrace";
+import { createWorkTraceSearchIndex } from "./lib/workTraceSearch";
+import { deriveDebateDecisionReadiness } from "./lib/debateDecisionReadiness";
+import { deriveTmuxRecoveryPlan } from "./lib/tmuxRecoveryPlan";
+import { createSettingsDiagnostics } from "./lib/settingsDiagnostics";
+import { createProductionSmokePlan } from "./lib/productionSmokePlan";
+import { createOrchestrationMaturityReport } from "./lib/orchestrationMaturity";
+import {
   createAgentChannelMemoryScope,
   createAgentChannelMemoryInstallAudit,
   createInitialAgentConversationChannels,
@@ -153,6 +165,10 @@ import {
   createControlQueueDelegateHandoff,
   createControlQueueEditDraft,
 } from "./lib/controlQueueWorkItems";
+import {
+  createDebateCodingPacketProjection,
+  createDebateCodingPacketWorkItems,
+} from "./lib/debateCodingPacketWorkItems";
 import { createControlQueueContinuitySummary } from "./lib/controlQueueContinuity";
 import { controlQueuePermissionLabel, sanitizeControlQueueText } from "./lib/controlQueuePresentation";
 import {
@@ -366,6 +382,7 @@ export function App() {
   const [tmuxStatuses, setTmuxStatuses] = useState<Record<string, string>>({});
   const [tmuxOutputs, setTmuxOutputs] = useState<Record<string, string>>({});
   const [tmuxTimelineBlocks, setTmuxTimelineBlocks] = useState<Record<string, TerminalTimelineBlock[]>>({});
+  const [pendingProviderRetry, setPendingProviderRetry] = useState<PendingProviderRetry | undefined>();
 
   const handleTmuxOutcome = useCallback((outcome: TmuxOutcome) => {
     const role = outcome.role;
@@ -426,6 +443,69 @@ export function App() {
     });
   }, [activeSessionId]);
 
+  const handleProviderCompletionReplayed = useCallback(({
+    approval,
+    result,
+  }: {
+    approval: { id: string; sourceItemId?: string };
+    result: ProviderCompletionResponse;
+  }) => {
+    const pending = pendingProviderRetry;
+    if (!pending) {
+      return;
+    }
+    if (pending.permissionItemId !== approval.sourceItemId && pending.permissionItemId !== approval.id) {
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    const targetAgent = agents.find((agent) => agent.id === pending.agentId);
+    const replayedContent = result.content?.trim();
+    if (!replayedContent) {
+      return;
+    }
+    const assistantMessage: ConversationMessage = {
+      id: `message_agent_replay_${crypto.randomUUID()}`,
+      sessionId: activeSessionId,
+      role: "assistant",
+      content: replayedContent,
+      createdAt,
+      metadata: {
+        agentId: pending.agentId,
+        agentName: targetAgent?.name,
+        providerProfileId: result.providerProfileId,
+        modelId: result.modelId,
+        endpoint: result.endpoint,
+        route: result.route,
+        usage: result.usage,
+        realProviderCall: true,
+        replayedApprovalId: approval.id,
+        replayedSourceItemId: approval.sourceItemId,
+      },
+    };
+
+    setConversationMessages((messages) => [...messages, assistantMessage]);
+    setPendingProviderRetry(undefined);
+    setDraftMessage("");
+    setDraftAttachments([]);
+    if (targetAgent) {
+      setAgentActivity(targetAgent.id, "responding");
+      window.setTimeout(() => {
+        setAgentActivity(targetAgent.id, "idle");
+      }, 450);
+    }
+    appendEvent("provider.completion.replay.delivered", {
+      approvalId: approval.id,
+      sourceItemId: approval.sourceItemId,
+      agentId: pending.agentId,
+      providerProfileId: result.providerProfileId,
+      modelId: result.modelId,
+      contentLength: replayedContent.length,
+      route: result.route,
+      redaction: "applied",
+    }, { sessionId: activeSessionId });
+  }, [activeSessionId, agents, appendEvent, pendingProviderRetry]);
+
   const {
     approvalServerSnapshot,
     approvalServerStatus,
@@ -436,7 +516,11 @@ export function App() {
     handleRefreshApprovalQueue,
     handleTmuxApprovalQueued,
     handleResolveServerApproval,
-  } = useApprovalQueueController({ appendEvent, onTmuxOutcome: handleTmuxOutcome });
+  } = useApprovalQueueController({
+    appendEvent,
+    onProviderCompletionReplayed: handleProviderCompletionReplayed,
+    onTmuxOutcome: handleTmuxOutcome,
+  });
 
   const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
   const [contextPackTier, setContextPackTier] = useState<ContextPackTier>("standard");
@@ -479,7 +563,6 @@ export function App() {
   const [obsidianMarkdownPreview, setObsidianMarkdownPreview] = useState("");
   const [draftMessage, setDraftMessage] = useState("");
   const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([]);
-  const [pendingProviderRetry, setPendingProviderRetry] = useState<PendingProviderRetry | undefined>();
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.id === selectedAgentId) ?? agents[0],
     [agents, selectedAgentId],
@@ -1492,17 +1575,48 @@ export function App() {
         };
       }
     } catch (error) {
-      reply = `${selectedProvider.name} 호출에 실패했어. ${error instanceof Error ? error.message : String(error)}`;
-      completionMetadata = {
-        error: error instanceof Error ? error.message : String(error),
-        realProviderCall: false,
-      };
-      appendEvent("provider.completion.dgx.failed", {
-        agentId: selectedAgent.id,
-        providerProfileId: selectedProvider.id,
-        modelId,
-        error: error instanceof Error ? error.message : String(error),
-      }, { sessionId: targetSessionId });
+      if (error instanceof ProviderCompletionPermissionRequiredError) {
+        const permissionItemId = error.sourceItemId ?? error.approvalId ?? providerPermissionId;
+        setPendingProviderRetry({
+          permissionItemId,
+          providerProfileId: selectedProvider.id,
+          agentId: selectedAgent.id,
+          modelId,
+          content: messageContent,
+          attachments: attachmentMetadata,
+          createdAt,
+        });
+        await handleRefreshApprovalQueue();
+        reply = `${selectedProvider.name} 사용 승인이 필요해. Health/Ops 승인 대기열에서 provider_completion을 승인하면 같은 요청을 서버가 재실행하고 답변을 이어 붙일게.`;
+        completionMetadata = {
+          approvalId: error.approvalId,
+          permissionItemId,
+          providerProfileId: selectedProvider.id,
+          realProviderCall: false,
+          requiresServerApproval: true,
+        };
+        appendEvent("provider.completion.approval_required", {
+          agentId: selectedAgent.id,
+          providerProfileId: selectedProvider.id,
+          modelId,
+          approvalId: error.approvalId,
+          permissionItemId,
+          retryStored: true,
+          redaction: "applied",
+        }, { sessionId: targetSessionId });
+      } else {
+        reply = `${selectedProvider.name} 호출에 실패했어. ${error instanceof Error ? error.message : String(error)}`;
+        completionMetadata = {
+          error: error instanceof Error ? error.message : String(error),
+          realProviderCall: false,
+        };
+        appendEvent("provider.completion.dgx.failed", {
+          agentId: selectedAgent.id,
+          providerProfileId: selectedProvider.id,
+          modelId,
+          error: error instanceof Error ? error.message : String(error),
+        }, { sessionId: targetSessionId });
+      }
     }
 
     const assistantMessage: ConversationMessage = {
@@ -1563,91 +1677,99 @@ export function App() {
   }
 
   function handleCreateCodingPacket() {
-    const basePacket = createCodingPacketFromConversation({
-      messages: conversationMessages,
-      agent: selectedAgent,
-      provider: selectedProvider,
-    });
-    const debateDecisions = debateSession.rounds
-      .flatMap((round) => round.utterances)
-      .filter((utterance) => utterance.tags.some((tag) => tag === "agreement" || tag === "coding_impact"))
-      .map((utterance) => utterance.content)
-      .slice(0, 5);
-    const packet =
-      mode === "debate"
-        ? {
-            ...basePacket,
-            context: [
-              `ContextPack tier: ${contextPackTier}`,
-              ...adoptedBranchSummaries,
-              ...basePacket.context,
-              `Stage3 Debate: ${debateSession.summary}`,
-              ...debateSession.contextPreview,
-            ],
-            decisions: [...debateDecisions, ...basePacket.decisions],
-            reviewerNotes: [
-              ...basePacket.reviewerNotes,
-              `Debate ${debateSession.id}에서 ${debateSession.rounds.length}개 라운드를 반영함`,
-            ],
-          }
-        : basePacket;
+    const createdAt = new Date().toISOString();
 
-    const nextPacket =
-      mode === "debate"
-        ? packet
-        : {
+    const {
+      packet: nextPacket,
+      readinessState,
+      handoff,
+      workItem,
+    } = mode === "debate"
+      ? (() => {
+          const projection = createDebateCodingPacketProjection({
+            contextPackTier,
+            session: debateSession,
+            sessionId: activeSessionId,
+            userPreferences: adoptedBranchSummaries,
+          });
+          const items = createDebateCodingPacketWorkItems({
+            createdAt,
+            ownerAgentId: selectedAgent?.id,
+            projection,
+            sessionId: activeSessionId,
+          });
+          return {
+            handoff: items.handoff,
+            packet: projection.packet,
+            readinessState: projection.readiness.state,
+            workItem: items.workItem,
+          };
+        })()
+      : (() => {
+          const packet = createCodingPacketFromConversation({
+            messages: conversationMessages,
+            agent: selectedAgent,
+            provider: selectedProvider,
+          });
+          const nextConversationPacket = {
             ...packet,
             context: [`ContextPack tier: ${contextPackTier}`, ...adoptedBranchSummaries, ...packet.context],
           };
+          const conversationWorkItem: WorkItem = {
+            id: `work_item_packet_${crypto.randomUUID()}`,
+            sessionId: activeSessionId,
+            title: nextConversationPacket.goal.slice(0, 72),
+            kind: "spec_doc",
+            lane: "approve",
+            surface: "coding_packet",
+            status: "waiting_approval",
+            summary: `${nextConversationPacket.decisions.length} decisions / ${nextConversationPacket.implementationPlan.length} implementation steps`,
+            sourceRefs: [{ source: "desktop_manual", observedAt: createdAt, title: "Coding Packet" }],
+            evidenceRefs: [
+              {
+                id: `evidence_packet_${crypto.randomUUID()}`,
+                kind: "artifact",
+                reference: `coding_packet://${activeSessionId}`,
+                summary: "Structured CodingPacket created from conversation.",
+                observedAt: createdAt,
+              },
+            ],
+            missingInfo: nextConversationPacket.filesToInspect.length === 0
+              ? [
+                  {
+                    id: `missing_files_${crypto.randomUUID()}`,
+                    label: "Files to inspect",
+                    reason: "Coding handoff is safer with explicit file targets.",
+                    required: false,
+                    status: "missing",
+                  },
+                ]
+              : [],
+            ownerAgentId: selectedAgent?.id,
+            priority: "normal",
+            createdAt,
+          };
+          const conversationHandoff: WorkItemHandoff = {
+            id: `handoff_packet_${crypto.randomUUID()}`,
+            workItemId: conversationWorkItem.id,
+            targetSurface: "execution_slot",
+            summary: "Coding Packet is ready to route into execution slots after approval.",
+            payloadRef: `coding_packet://${activeSessionId}`,
+            evidenceRefs: conversationWorkItem.evidenceRefs,
+            missingInfo: conversationWorkItem.missingInfo,
+            approvalState: "required",
+            createdAt,
+          };
+          return {
+            handoff: conversationHandoff,
+            packet: nextConversationPacket,
+            readinessState: "conversation",
+            workItem: conversationWorkItem,
+          };
+        })();
 
     setCodingPacketState(nextPacket);
-    const createdAt = new Date().toISOString();
-    const workItem: WorkItem = {
-      id: `work_item_packet_${crypto.randomUUID()}`,
-      sessionId: activeSessionId,
-      title: nextPacket.goal.slice(0, 72),
-      kind: "spec_doc",
-      lane: "approve",
-      surface: "coding_packet",
-      status: "waiting_approval",
-      summary: `${nextPacket.decisions.length} decisions / ${nextPacket.implementationPlan.length} implementation steps`,
-      sourceRefs: [{ source: "desktop_manual", observedAt: createdAt, title: "Coding Packet" }],
-      evidenceRefs: [
-        {
-          id: `evidence_packet_${crypto.randomUUID()}`,
-          kind: "artifact",
-          reference: `coding_packet://${activeSessionId}`,
-          summary: "Structured CodingPacket created from conversation/debate.",
-          observedAt: createdAt,
-        },
-      ],
-      missingInfo: nextPacket.filesToInspect.length === 0
-        ? [
-            {
-              id: `missing_files_${crypto.randomUUID()}`,
-              label: "Files to inspect",
-              reason: "Coding handoff is safer with explicit file targets.",
-              required: false,
-              status: "missing",
-            },
-          ]
-        : [],
-      ownerAgentId: selectedAgent?.id,
-      priority: mode === "debate" ? "high" : "normal",
-      createdAt,
-    };
     prependWorkItem(workItem);
-    const handoff: WorkItemHandoff = {
-      id: `handoff_packet_${crypto.randomUUID()}`,
-      workItemId: workItem.id,
-      targetSurface: "execution_slot",
-      summary: "Coding Packet is ready to route into execution slots after approval.",
-      payloadRef: `coding_packet://${activeSessionId}`,
-      evidenceRefs: workItem.evidenceRefs,
-      missingInfo: workItem.missingInfo,
-      approvalState: "required",
-      createdAt,
-    };
     prependWorkItemHandoff(handoff);
     appendEvent("coding_packet.created", {
       packet: nextPacket,
@@ -1657,6 +1779,8 @@ export function App() {
       contextCount: nextPacket.context.length,
       decisionCount: nextPacket.decisions.length,
       filesToInspect: nextPacket.filesToInspect,
+      sourceMode: mode === "debate" ? "debate" : "conversation",
+      debateReadiness: readinessState,
     });
   }
 
@@ -3188,6 +3312,150 @@ export function App() {
     };
   }, [derivedCockpitSnapshot, remoteCockpitSnapshotState]);
 
+  const cockpitReadiness = useMemo(() => {
+    const debateReadiness = deriveDebateDecisionReadiness(debateSession);
+    const tmuxBlocks = Object.values(tmuxTimelineBlocks).flat();
+    const latestTmuxBlock = tmuxBlocks.at(-1);
+    const firstPaneStatus = Object.values(tmuxStatuses)[0] ?? "ready";
+    const tmuxRecoveryPlan = deriveTmuxRecoveryPlan({
+      lastCaptureAt: latestTmuxBlock?.createdAt,
+      now: runtimeSnapshotState.updatedAt,
+      paneState: firstPaneStatus,
+      timelineBlocks: tmuxBlocks,
+    });
+    const conversationTraceSources = conversationMessages
+      .filter((message) => message.role === "assistant")
+      .slice(-12)
+      .map((message) => ({
+        id: message.id,
+        kind: "conversation" as const,
+        title: "에이전트 대화 공개 영수증",
+        trace: createConversationMessagePublicWorkTrace(message),
+      }));
+    const tmuxTraceSources = tmuxBlocks.slice(-12).map((block) => ({
+      id: block.id,
+      kind: "tmux" as const,
+      title: block.title,
+      trace: createTerminalBlockPublicWorkTrace(block),
+    }));
+    const workTraceIndex = createWorkTraceSearchIndex([...conversationTraceSources, ...tmuxTraceSources]);
+    const activeProviderCount = providerProfiles.filter((provider) => provider.enabled).length;
+    const providerSmokeReadyCount = providerRoutingConsoleItems.filter((item) =>
+      item.readinessTone === "success" || item.readinessTone === "warning"
+    ).length;
+    const runtimeStatus =
+      runtimeSnapshotState.dgxStatus === "online" || runtimeSnapshotState.localModelStatus === "online"
+        ? "online"
+        : eventSyncState.status === "failed"
+          ? "offline"
+          : "degraded";
+    const acceptedAttachmentTypeCount =
+      1 + (["image", "document"] as const).filter((kind) => modelSupportsAttachmentKind(selectedModel, kind)).length;
+    const onboardingPassedCount = metaOnboardingSignals.filter((signal) => signal.status === "ready").length;
+    const onboardingBlockedCount = metaOnboardingSignals.filter((signal) => signal.status === "blocked").length;
+    const codingImpactCount = debateSession.rounds.reduce(
+      (count, round) => count + round.utterances.filter((utterance) => utterance.tags.includes("coding_impact")).length,
+      0,
+    );
+    const decisionCount = debateSession.rounds.reduce(
+      (count, round) => count + round.utterances.filter((utterance) => Boolean(utterance.decisionId)).length,
+      0,
+    );
+    const workItemProjectionCount = workItems.length + assistantDrafts.length + workItemHandoffs.length;
+    const diagnostics = createSettingsDiagnostics({
+      agentCount: agents.length,
+      enabledProviderCount: activeProviderCount,
+      memoryAdapterStatus: adapterStatus,
+      providerSmokeReadyCount,
+      runtimeStatus,
+      workerCount: agents.length,
+    });
+    const smokePlan = createProductionSmokePlan({
+      includeLiveProvider: providerReadiness.status === "ready" && activeProviderCount > 0,
+      includeVisual: true,
+    });
+    const maturity = createOrchestrationMaturityReport({
+      attachments: {
+        acceptedTypeCount: acceptedAttachmentTypeCount,
+        hasProcessingPipeline: true,
+        pendingCount: draftAttachments.length,
+      },
+      controlQueue: {
+        connectedLaneCount: 6,
+        pendingApprovalCount: permissionSnapshot.summary.pending,
+        workItemProjectionCount,
+      },
+      debate: {
+        codingImpactCount,
+        decisionCount,
+        hasCodingPacketProjection: Boolean(codingPacketState.goal && workItemProjectionCount > 0),
+        readinessState: debateReadiness.state,
+      },
+      e2e: {
+        desktopTestCount: 328,
+        hasProviderSmokeHarness: providerSmokeReadyCount > 0,
+        hasVisualSmokeChecklist: true,
+      },
+      memory: {
+        agentInstallCount: memoryInstallAudit.totalAgents,
+        curatorCandidateCount: memoryRecords.filter(
+          (record) => record.activationState === "quarantined" || record.trustLevel === "untrusted",
+        ).length,
+        installedAgentCount: memoryInstallAudit.installedCount,
+        promotedCount: memoryRecords.filter((record) => record.activationState === "active" || record.pinned).length,
+      },
+      onboarding: {
+        blockingCheckCount: onboardingBlockedCount,
+        passedCheckCount: onboardingPassedCount,
+        totalCheckCount: metaOnboardingSignals.length,
+      },
+      provider: {
+        assignedAgentCount: agents.filter((agent) => Boolean(agent.providerProfileId)).length,
+        fallbackReadyCount: Math.max(0, activeProviderCount - 1),
+        profileCount: providerProfiles.length,
+        smokeReadyCount: providerSmokeReadyCount,
+      },
+      receipts: {
+        receiptCount: workTraceIndex.length,
+        searchableCount: workTraceIndex.filter((item) => item.searchable).length,
+        unsafeReceiptCount: workTraceIndex.filter((item) => !item.searchable).length,
+      },
+      tmux: {
+        hasRecoveryPlan: tmuxRecoveryPlan.state !== "manual_intervention",
+        paneCount: terminalSlots.length,
+        timelineBlockCount: tmuxBlocks.length,
+      },
+    });
+
+    return {
+      diagnostics,
+      maturity,
+      smokePlan,
+    };
+  }, [
+    adapterStatus,
+    agents,
+    assistantDrafts,
+    codingPacketState.goal,
+    conversationMessages,
+    debateSession,
+    draftAttachments.length,
+    eventSyncState.status,
+    memoryInstallAudit,
+    memoryRecords,
+    metaOnboardingSignals,
+    permissionSnapshot.summary.pending,
+    providerProfiles,
+    providerReadiness.status,
+    providerRoutingConsoleItems,
+    runtimeSnapshotState,
+    selectedModel,
+    tmuxStatuses,
+    tmuxTimelineBlocks,
+    workItemHandoffs,
+    workItems,
+  ]);
+
   const shellVisibility = getConversationShellVisibility({
     configLibraryActive,
     mode,
@@ -3539,6 +3807,7 @@ export function App() {
               onOpenProviderRouting={openProviderRoutingFromCockpit}
               onOpenRecovery={openRecoveryFromCockpit}
               onPreviewEvidence={() => setApprovalDrawerOpen(true)}
+              readiness={cockpitReadiness}
               snapshot={cockpitSnapshot}
             />
           ) : mode === "annex" ? (

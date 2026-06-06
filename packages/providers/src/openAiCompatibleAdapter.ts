@@ -39,6 +39,7 @@ export type OpenAICompatibleAdapterOptions = {
   extraBody?: Record<string, unknown>;
   headers?: Record<string, string>;
   fetchImpl?: AdapterFetchLike;
+  maxContextMessages?: number;
 };
 
 type OpenAIChatCompletionResponse = {
@@ -79,6 +80,7 @@ export class OpenAICompatibleAdapter implements LlmAdapter {
   private readonly extraBody: Record<string, unknown>;
   private readonly headers: Record<string, string>;
   private readonly fetchImpl: AdapterFetchLike;
+  private readonly maxContextMessages: number;
 
   constructor(options: OpenAICompatibleAdapterOptions) {
     this.profileId = options.profileId;
@@ -93,6 +95,7 @@ export class OpenAICompatibleAdapter implements LlmAdapter {
     this.extraBody = options.extraBody ?? {};
     this.headers = options.headers ?? {};
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.maxContextMessages = options.maxContextMessages ?? 30;
   }
 
   async discoverModels(ctx: AdapterRuntimeContext): Promise<ModelDescriptor[]> {
@@ -310,7 +313,7 @@ export class OpenAICompatibleAdapter implements LlmAdapter {
   private createRequestBody(modelId: string, messages: ProviderCompletionMessage[]) {
     return {
       model: modelId,
-      messages: createOpenAIChatMessages(messages, this.defaultSystemPrompt),
+      messages: createOpenAIChatMessages(messages, this.defaultSystemPrompt, this.maxContextMessages),
       max_tokens: this.maxTokens,
       temperature: this.temperature,
       ...this.extraBody,
@@ -338,7 +341,9 @@ export class OpenAICompatibleAdapter implements LlmAdapter {
 export function createOpenAIChatMessages(
   messages: ProviderCompletionMessage[],
   defaultSystemPrompt = DEFAULT_SYSTEM_PROMPT,
+  maxContextMessages = 30,
 ) {
+  const contextLimit = Math.max(0, Math.trunc(maxContextMessages));
   const systemParts = [defaultSystemPrompt];
   const chatMessages: Array<{ role: "assistant" | "user" | "tool"; content: string }> = [];
 
@@ -360,7 +365,7 @@ export function createOpenAIChatMessages(
       role: "system" as const,
       content: systemParts.join("\n\n"),
     },
-    ...chatMessages.slice(-8),
+    ...(contextLimit > 0 ? chatMessages.slice(-contextLimit) : []),
   ];
 }
 
