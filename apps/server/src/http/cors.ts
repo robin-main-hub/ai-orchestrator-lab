@@ -3,10 +3,20 @@ const DEFAULT_ALLOWED_ORIGINS: ReadonlyArray<string> = [
   "http://127.0.0.1:5173",
   "http://localhost:5174",
   "http://127.0.0.1:5174",
+  "http://localhost:5175",
+  "http://127.0.0.1:5175",
   "https://orchestrator.endruin.com",
 ];
 
 const ALLOWED_METHODS = "GET, HEAD, OPTIONS, POST";
+const ALLOWED_HEADERS = [
+  "content-type",
+  "authorization",
+  "x-dgx-signature",
+  "x-dgx-timestamp",
+  "x-dgx-nonce",
+  "x-dgx-body-sha256",
+].join(",");
 
 export function resolveAllowedOrigins(): Set<string> {
   const extras = (process.env.ORCHESTRATOR_ALLOWED_ORIGINS ?? "")
@@ -27,7 +37,7 @@ export function pickAllowedOrigin(originHeader: string | undefined, allowed: Set
 export function createCorsHeaders(originHeader?: string, allowed: Set<string> = resolveAllowedOrigins()) {
   const allowedOrigin = pickAllowedOrigin(originHeader, allowed);
   return {
-    "access-control-allow-headers": "content-type,authorization",
+    "access-control-allow-headers": ALLOWED_HEADERS,
     "access-control-allow-methods": ALLOWED_METHODS,
     ...(allowedOrigin
       ? {
