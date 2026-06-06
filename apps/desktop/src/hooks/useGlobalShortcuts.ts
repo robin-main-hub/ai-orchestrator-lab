@@ -33,6 +33,7 @@ export type GlobalShortcutHandlers = {
   onSwitchTmux?: () => void;
   onSwitchCockpit?: () => void;
   onControlQueue?: () => void;
+  onCreateDebate?: () => void;
   onMementoRemember?: () => void;
   onInvokeOrchestrator?: () => void;
   onStop?: () => void;
@@ -88,6 +89,11 @@ export function useGlobalShortcuts(handlers: GlobalShortcutHandlers) {
         if (key === "a" && shift) {
           e.preventDefault();
           handlers.onControlQueue?.();
+          return;
+        }
+        if (key === "d" && shift) {
+          e.preventDefault();
+          handlers.onCreateDebate?.();
           return;
         }
         if (key === "m" && shift) {
