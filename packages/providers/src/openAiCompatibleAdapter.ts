@@ -343,6 +343,7 @@ export function createOpenAIChatMessages(
   defaultSystemPrompt = DEFAULT_SYSTEM_PROMPT,
   maxContextMessages = 30,
 ) {
+  const contextLimit = Math.max(0, Math.trunc(maxContextMessages));
   const systemParts = [defaultSystemPrompt];
   const chatMessages: Array<{ role: "assistant" | "user" | "tool"; content: string }> = [];
 
@@ -364,7 +365,7 @@ export function createOpenAIChatMessages(
       role: "system" as const,
       content: systemParts.join("\n\n"),
     },
-    ...chatMessages.slice(-maxContextMessages),
+    ...(contextLimit > 0 ? chatMessages.slice(-contextLimit) : []),
   ];
 }
 
