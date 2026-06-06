@@ -154,6 +154,10 @@ import {
   createControlQueueDelegateHandoff,
   createControlQueueEditDraft,
 } from "./lib/controlQueueWorkItems";
+import {
+  createDebateCodingPacketProjection,
+  createDebateCodingPacketWorkItems,
+} from "./lib/debateCodingPacketWorkItems";
 import { createControlQueueContinuitySummary } from "./lib/controlQueueContinuity";
 import { controlQueuePermissionLabel, sanitizeControlQueueText } from "./lib/controlQueuePresentation";
 import {
@@ -1666,91 +1670,99 @@ export function App() {
   }
 
   function handleCreateCodingPacket() {
-    const basePacket = createCodingPacketFromConversation({
-      messages: conversationMessages,
-      agent: selectedAgent,
-      provider: selectedProvider,
-    });
-    const debateDecisions = debateSession.rounds
-      .flatMap((round) => round.utterances)
-      .filter((utterance) => utterance.tags.some((tag) => tag === "agreement" || tag === "coding_impact"))
-      .map((utterance) => utterance.content)
-      .slice(0, 5);
-    const packet =
-      mode === "debate"
-        ? {
-            ...basePacket,
-            context: [
-              `ContextPack tier: ${contextPackTier}`,
-              ...adoptedBranchSummaries,
-              ...basePacket.context,
-              `Stage3 Debate: ${debateSession.summary}`,
-              ...debateSession.contextPreview,
-            ],
-            decisions: [...debateDecisions, ...basePacket.decisions],
-            reviewerNotes: [
-              ...basePacket.reviewerNotes,
-              `Debate ${debateSession.id}에서 ${debateSession.rounds.length}개 라운드를 반영함`,
-            ],
-          }
-        : basePacket;
+    const createdAt = new Date().toISOString();
 
-    const nextPacket =
-      mode === "debate"
-        ? packet
-        : {
+    const {
+      packet: nextPacket,
+      readinessState,
+      handoff,
+      workItem,
+    } = mode === "debate"
+      ? (() => {
+          const projection = createDebateCodingPacketProjection({
+            contextPackTier,
+            session: debateSession,
+            sessionId: activeSessionId,
+            userPreferences: adoptedBranchSummaries,
+          });
+          const items = createDebateCodingPacketWorkItems({
+            createdAt,
+            ownerAgentId: selectedAgent?.id,
+            projection,
+            sessionId: activeSessionId,
+          });
+          return {
+            handoff: items.handoff,
+            packet: projection.packet,
+            readinessState: projection.readiness.state,
+            workItem: items.workItem,
+          };
+        })()
+      : (() => {
+          const packet = createCodingPacketFromConversation({
+            messages: conversationMessages,
+            agent: selectedAgent,
+            provider: selectedProvider,
+          });
+          const nextConversationPacket = {
             ...packet,
             context: [`ContextPack tier: ${contextPackTier}`, ...adoptedBranchSummaries, ...packet.context],
           };
+          const conversationWorkItem: WorkItem = {
+            id: `work_item_packet_${crypto.randomUUID()}`,
+            sessionId: activeSessionId,
+            title: nextConversationPacket.goal.slice(0, 72),
+            kind: "spec_doc",
+            lane: "approve",
+            surface: "coding_packet",
+            status: "waiting_approval",
+            summary: `${nextConversationPacket.decisions.length} decisions / ${nextConversationPacket.implementationPlan.length} implementation steps`,
+            sourceRefs: [{ source: "desktop_manual", observedAt: createdAt, title: "Coding Packet" }],
+            evidenceRefs: [
+              {
+                id: `evidence_packet_${crypto.randomUUID()}`,
+                kind: "artifact",
+                reference: `coding_packet://${activeSessionId}`,
+                summary: "Structured CodingPacket created from conversation.",
+                observedAt: createdAt,
+              },
+            ],
+            missingInfo: nextConversationPacket.filesToInspect.length === 0
+              ? [
+                  {
+                    id: `missing_files_${crypto.randomUUID()}`,
+                    label: "Files to inspect",
+                    reason: "Coding handoff is safer with explicit file targets.",
+                    required: false,
+                    status: "missing",
+                  },
+                ]
+              : [],
+            ownerAgentId: selectedAgent?.id,
+            priority: "normal",
+            createdAt,
+          };
+          const conversationHandoff: WorkItemHandoff = {
+            id: `handoff_packet_${crypto.randomUUID()}`,
+            workItemId: conversationWorkItem.id,
+            targetSurface: "execution_slot",
+            summary: "Coding Packet is ready to route into execution slots after approval.",
+            payloadRef: `coding_packet://${activeSessionId}`,
+            evidenceRefs: conversationWorkItem.evidenceRefs,
+            missingInfo: conversationWorkItem.missingInfo,
+            approvalState: "required",
+            createdAt,
+          };
+          return {
+            handoff: conversationHandoff,
+            packet: nextConversationPacket,
+            readinessState: "conversation",
+            workItem: conversationWorkItem,
+          };
+        })();
 
     setCodingPacketState(nextPacket);
-    const createdAt = new Date().toISOString();
-    const workItem: WorkItem = {
-      id: `work_item_packet_${crypto.randomUUID()}`,
-      sessionId: activeSessionId,
-      title: nextPacket.goal.slice(0, 72),
-      kind: "spec_doc",
-      lane: "approve",
-      surface: "coding_packet",
-      status: "waiting_approval",
-      summary: `${nextPacket.decisions.length} decisions / ${nextPacket.implementationPlan.length} implementation steps`,
-      sourceRefs: [{ source: "desktop_manual", observedAt: createdAt, title: "Coding Packet" }],
-      evidenceRefs: [
-        {
-          id: `evidence_packet_${crypto.randomUUID()}`,
-          kind: "artifact",
-          reference: `coding_packet://${activeSessionId}`,
-          summary: "Structured CodingPacket created from conversation/debate.",
-          observedAt: createdAt,
-        },
-      ],
-      missingInfo: nextPacket.filesToInspect.length === 0
-        ? [
-            {
-              id: `missing_files_${crypto.randomUUID()}`,
-              label: "Files to inspect",
-              reason: "Coding handoff is safer with explicit file targets.",
-              required: false,
-              status: "missing",
-            },
-          ]
-        : [],
-      ownerAgentId: selectedAgent?.id,
-      priority: mode === "debate" ? "high" : "normal",
-      createdAt,
-    };
     prependWorkItem(workItem);
-    const handoff: WorkItemHandoff = {
-      id: `handoff_packet_${crypto.randomUUID()}`,
-      workItemId: workItem.id,
-      targetSurface: "execution_slot",
-      summary: "Coding Packet is ready to route into execution slots after approval.",
-      payloadRef: `coding_packet://${activeSessionId}`,
-      evidenceRefs: workItem.evidenceRefs,
-      missingInfo: workItem.missingInfo,
-      approvalState: "required",
-      createdAt,
-    };
     prependWorkItemHandoff(handoff);
     appendEvent("coding_packet.created", {
       packet: nextPacket,
@@ -1760,6 +1772,8 @@ export function App() {
       contextCount: nextPacket.context.length,
       decisionCount: nextPacket.decisions.length,
       filesToInspect: nextPacket.filesToInspect,
+      sourceMode: mode === "debate" ? "debate" : "conversation",
+      debateReadiness: readinessState,
     });
   }
 
