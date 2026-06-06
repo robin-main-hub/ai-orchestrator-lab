@@ -32,10 +32,10 @@
 - 파일 쓰기 (워크스페이스 / 외부 / 사용자 홈)
 - terminal / shell 명령 실행
 - 원격 workspace 명령 (DGX-02 ssh, SimpleMem write, tmux send-keys 등)
-- network 호출 (외부 provider, telegram, webhook 등)
+- network 호출 (외부 provider, 외부 채널, webhook 등)
 - secret 접근
 - destructive operation (forget, delete, override, force push 등)
-- Telegram / mobile / API / 외부 채널에서 들어온 위험 명령
+- 외부 채널 / mobile / API에서 들어온 위험 명령
 
 승인 게이트 = docs/29 Permission engine spec의 8단계 흐름 (intent → policy match → redaction → approval → execution → audit → projection → notification). 우회 금지.
 
@@ -44,7 +44,7 @@
 - **untrusted provider** (외부 reseller, custom base URL 등) 에게는 장기 memory, 민감한 terminal log, 사용자 비밀을 자동으로 흘리지 않는다.
 - **limited provider** 에게는 현재 작업에 필요한 컨텍스트만 전달한다.
 - **trusted provider** 만 자동 memory recall이 허용된다.
-- 외부 입력 (telegram, mobile webhook 등) 의 source trust는 기본적으로 낮게 본다 — `untrusted` 시작, 사용자 명시 승인 시에만 승격.
+- 외부 입력 (외부 채널, mobile webhook 등) 의 source trust는 기본적으로 낮게 본다 — `untrusted` 시작, 사용자 명시 승인 시에만 승격.
 
 ## 5. 메모리 / 기록
 
