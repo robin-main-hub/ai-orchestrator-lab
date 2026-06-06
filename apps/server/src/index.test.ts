@@ -809,6 +809,66 @@ describe("server health placeholder", () => {
     }
   });
 
+  it("routes MiMo Token Plan with thinking disabled for OpenAI-compatible chat", async () => {
+    const previousKey = process.env.MIMO_API_KEY;
+    process.env.MIMO_API_KEY = "mimo-test-secret";
+
+    try {
+      const response = await createDgxProviderCompletionResponse(
+        {
+          id: "provider_completion_request_mimo",
+          sessionId: "session_1",
+          providerProfileId: "provider_mimo_token_openai",
+          modelId: "mimo-v2.5-pro",
+          messages: [{ role: "user", content: "짧게 응답" }],
+          source: "desktop",
+          routePreference: "server_proxy",
+          createdAt: "2026-05-24T00:00:00.000Z",
+        },
+        {
+          now: "2026-05-24T00:00:00.000Z",
+          fetchImpl: async (url, init) => {
+            expect(url).toBe("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions");
+            expect(init?.headers?.authorization).toBe("Bearer mimo-test-secret");
+            expect(String(init?.body)).not.toContain("mimo-test-secret");
+            const body = JSON.parse(String(init?.body)) as {
+              max_completion_tokens?: number;
+              messages: Array<{ role: string; content: string }>;
+              model: string;
+              thinking?: { type?: string };
+              top_p?: number;
+            };
+            expect(body.model).toBe("mimo-v2.5-pro");
+            expect(body.max_completion_tokens).toBe(512);
+            expect(body.thinking?.type).toBe("disabled");
+            expect(body.top_p).toBe(0.95);
+            expect(body.messages[0]?.role).toBe("system");
+            return {
+              ok: true,
+              status: 200,
+              async text() {
+                return JSON.stringify({
+                  choices: [{ message: { content: "MiMo OK" } }],
+                  usage: { prompt_tokens: 9, completion_tokens: 3, total_tokens: 12 },
+                });
+              },
+            };
+          },
+        },
+      );
+
+      expect(response.status).toBe("succeeded");
+      expect(response.content).toBe("MiMo OK");
+      expect(response.usage?.totalTokens).toBe(12);
+    } finally {
+      if (previousKey === undefined) {
+        delete process.env.MIMO_API_KEY;
+      } else {
+        process.env.MIMO_API_KEY = previousKey;
+      }
+    }
+  });
+
   it("routes DeepSeek through the OpenAI-compatible adapter without leaking the token into the request body", async () => {
     const previousKey = process.env.DEEPSEEK_API_KEY;
     process.env.DEEPSEEK_API_KEY = "deepseek-test-secret";
@@ -1113,7 +1173,9 @@ describe("server health placeholder", () => {
     const previousAnthropicKeyAlt = process.env.ANTHROPIC_API_KEY_ALT;
     const previousApifunKey = process.env.APIFUN_API_KEY;
     const previousApifunKeyFile = process.env.APIFUN_API_KEY_FILE;
+    const previousMimoKey = process.env.MIMO_API_KEY;
     process.env.DEEPSEEK_API_KEY = "deepseek-test-secret";
+    process.env.MIMO_API_KEY = "mimo-test-secret";
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_API_KEY_ALT;
     delete process.env.APIFUN_API_KEY;
@@ -1129,6 +1191,8 @@ describe("server health placeholder", () => {
       const codexOauth = registry.entries.find((entry) => entry.providerProfileId === "provider_codex_oauth");
       const claudeCli = registry.entries.find((entry) => entry.providerProfileId === "provider_claude_code_single_owner");
       const grok = registry.entries.find((entry) => entry.providerProfileId === "provider_grok_oauth_dgx");
+      const mimoOpenAi = registry.entries.find((entry) => entry.providerProfileId === "provider_mimo_token_openai");
+      const mimoAnthropic = registry.entries.find((entry) => entry.providerProfileId === "provider_mimo_token_anthropic");
 
       expect(registry.authorityNodeId).toBe("dgx-02");
       expect(registry.rawSecretPersisted).toBe(false);
@@ -1146,7 +1210,16 @@ describe("server health placeholder", () => {
       expect(claudeCli?.secretAvailability).toBe("available");
       expect(claudeCli?.tags).toEqual(expect.arrayContaining(["claude", "cli", "single-owner"]));
       expect(grok?.authMode).toBe("oauth_session");
+      expect(mimoOpenAi?.name).toBe("MiMo Token Plan OpenAI");
+      expect(mimoOpenAi?.secretAvailability).toBe("available");
+      expect(mimoOpenAi?.defaultModelIds).toContain("mimo-v2.5-pro");
+      expect(mimoOpenAi?.trustLevel).toBe("trusted");
+      expect(mimoOpenAi?.tags).toEqual(expect.arrayContaining(["mimo", "token-plan"]));
+      expect(mimoAnthropic?.name).toBe("MiMo Token Plan Anthropic");
+      expect(mimoAnthropic?.defaultModelIds).toContain("mimo-v2.5-pro");
+      expect(mimoAnthropic?.trustLevel).toBe("trusted");
       expect(JSON.stringify(registry)).not.toContain("deepseek-test-secret");
+      expect(JSON.stringify(registry)).not.toContain("mimo-test-secret");
     } finally {
       if (previousDeepSeekKey === undefined) {
         delete process.env.DEEPSEEK_API_KEY;
@@ -1172,6 +1245,11 @@ describe("server health placeholder", () => {
         delete process.env.APIFUN_API_KEY_FILE;
       } else {
         process.env.APIFUN_API_KEY_FILE = previousApifunKeyFile;
+      }
+      if (previousMimoKey === undefined) {
+        delete process.env.MIMO_API_KEY;
+      } else {
+        process.env.MIMO_API_KEY = previousMimoKey;
       }
     }
   });
@@ -1620,13 +1698,15 @@ describe("CORS allowed origins", () => {
     }
   });
 
-  it("includes both 5173 and 5174 vite dev ports by default", () => {
+  it("includes common vite dev ports by default", () => {
     delete process.env.ORCHESTRATOR_ALLOWED_ORIGINS;
     const allowed = resolveAllowedOrigins();
     expect(allowed.has("http://localhost:5173")).toBe(true);
     expect(allowed.has("http://127.0.0.1:5173")).toBe(true);
     expect(allowed.has("http://localhost:5174")).toBe(true);
     expect(allowed.has("http://127.0.0.1:5174")).toBe(true);
+    expect(allowed.has("http://localhost:5175")).toBe(true);
+    expect(allowed.has("http://127.0.0.1:5175")).toBe(true);
     expect(allowed.has("https://orchestrator.endruin.com")).toBe(true);
   });
 
@@ -1644,6 +1724,41 @@ describe("CORS allowed origins", () => {
     expect(pickAllowedOrigin("http://localhost:5174", allowed)).toBe("http://localhost:5174");
     expect(pickAllowedOrigin("http://evil.example.com", allowed)).toBeUndefined();
     expect(pickAllowedOrigin(undefined, allowed)).toBe("http://localhost:5173");
+  });
+
+  it("allows browser HMAC auth headers for signed orchestrator requests", async () => {
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/provider-completions`, {
+        headers: {
+          "access-control-request-headers": "content-type,x-dgx-signature,x-dgx-timestamp,x-dgx-nonce,x-dgx-body-sha256",
+          "access-control-request-method": "POST",
+          origin: "http://127.0.0.1:5173",
+        },
+        method: "OPTIONS",
+      });
+
+      expect(response.status).toBe(204);
+      expect(response.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:5173");
+      expect(response.headers.get("access-control-allow-headers")).toContain("x-dgx-signature");
+      expect(response.headers.get("access-control-allow-headers")).toContain("x-dgx-body-sha256");
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+    }
   });
 });
 

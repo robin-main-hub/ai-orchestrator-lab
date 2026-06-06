@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolveOperatorWorkerDisplay } from "./workerDisplay";
+import {
+  resolveOperatorWorkerDisplay,
+  resolveOperatorWorkerSkillDisplay,
+} from "./workerDisplay";
 
 describe("resolveOperatorWorkerDisplay", () => {
   it("maps seeded agent worker ids to Korean persona display names", () => {
@@ -35,6 +38,20 @@ describe("resolveOperatorWorkerDisplay", () => {
       displayName: "히라사와 유이",
       portraitAgentId: "builder",
       roleLabel: "Builder · 구현자",
+    });
+  });
+
+  it("exposes role skill chips for cockpit worker rows", () => {
+    expect(resolveOperatorWorkerSkillDisplay("orchestrator")).toEqual({
+      boundaryLabel: "승인 필요 1개",
+      label: "지휘 도구",
+      tools: ["작업 대기열", "승인 확인", "Tmux 계획"],
+    });
+
+    expect(resolveOperatorWorkerSkillDisplay("verifier")).toEqual({
+      boundaryLabel: "승인 필요 1개",
+      label: "검증 도구",
+      tools: ["테스트 확인", "빌드 확인", "근거 확인"],
     });
   });
 });

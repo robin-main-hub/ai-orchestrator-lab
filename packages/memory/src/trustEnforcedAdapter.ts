@@ -9,7 +9,7 @@ import type {
   Reflection,
 } from "@ai-orchestrator/protocol";
 import type { MemoryAdapter, MemoryAdapterContext } from "./adapter";
-import { MemoryAdapterError } from "./errors";
+import { MemoryAdapterError } from "./errors.js";
 
 export type TrustPolicy = {
   allowUntrustedRecall?: boolean;

@@ -9,6 +9,7 @@ import type {
   WorkbenchAgent,
 } from "../types";
 import { agentVisualStorageKey, maxDraftAttachments, now } from "./appConstants";
+import { getBundledAgentPersonaContent } from "./agentPersonaContent";
 import { getPersonaAvatarUrl } from "./personaAvatars";
 export function slugifyProviderName(value: string, fallback: string) {
   const slug = value
@@ -362,14 +363,15 @@ export function defaultForbiddenStyleForAgent(agent: WorkbenchAgent) {
 
 export function createDefaultPersonaSettings(agent: WorkbenchAgent): AgentPersonaSettings {
   const slug = agentProfileSlug(agent);
+  const bundledPersona = getBundledAgentPersonaContent(slug);
   return {
     voicePreset: defaultVoicePresetForRole(agent.role),
     creativityLevel: defaultCreativityForRole(agent.role),
     agentsMdPath: `agents/${slug}/AGENTS.md`,
     soulMdPath: `agents/${slug}/SOUL.md`,
-    soulSummary: defaultSoulSummaryForAgent(agent),
+    soulSummary: bundledPersona?.soulMd ?? defaultSoulSummaryForAgent(agent),
     soulExampleDialogue: defaultSoulExampleDialogueForAgent(agent),
-    agentsInstruction: defaultAgentsInstructionForAgent(agent),
+    agentsInstruction: bundledPersona?.agentsMd ?? defaultAgentsInstructionForAgent(agent),
     forbiddenStyle: defaultForbiddenStyleForAgent(agent),
   };
 }

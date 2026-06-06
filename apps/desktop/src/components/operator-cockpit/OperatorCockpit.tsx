@@ -1,11 +1,27 @@
-import React from "react";
-import { Activity, BrainCircuit, Monitor, RefreshCw, Server, ShieldAlert } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import {
+  Activity,
+  BrainCircuit,
+  CheckSquare,
+  ChevronDown,
+  Database,
+  Monitor,
+  RefreshCw,
+  Route,
+  Server,
+  ShieldAlert,
+  Users,
+} from "lucide-react";
 import type { OperatorCockpitSnapshot } from "@ai-orchestrator/protocol";
+import type { OrchestrationMaturityReport } from "../../lib/orchestrationMaturity";
+import type { ProductionSmokePlan } from "../../lib/productionSmokePlan";
+import type { SettingsDiagnostics } from "../../lib/settingsDiagnostics";
 import { ApprovalEvidenceCard } from "./ApprovalEvidenceCard";
 import { Badge } from "./Badge";
 import { DispatchHistoryCard } from "./DispatchHistoryCard";
 import { HandoffCard } from "./HandoffCard";
 import { MemoryRecallCard } from "./MemoryRecallCard";
+import { MaturityReadinessCard } from "./MaturityReadinessCard";
 import { ProviderRoutingCard } from "./ProviderRoutingCard";
 import { RecoveryContinuityCard } from "./RecoveryContinuityCard";
 import { WorkerFleetCard } from "./WorkerFleetCard";
@@ -17,16 +33,25 @@ export function OperatorCockpit({
   onOpenMemory,
   onOpenProviderRouting,
   onOpenRecovery,
+  readiness,
 }: {
   snapshot: OperatorCockpitSnapshot;
   onPreviewEvidence?: () => void;
   onOpenMemory?: () => void;
   onOpenProviderRouting?: () => void;
   onOpenRecovery?: () => void;
+  readiness?: {
+    diagnostics: SettingsDiagnostics;
+    maturity: OrchestrationMaturityReport;
+    smokePlan: ProductionSmokePlan;
+  };
 }) {
+  const [showDetails, setShowDetails] = useState(false);
   const blockedCount = snapshot.fleet.filter((worker) => worker.status === "blocked" || worker.status === "error").length;
   const approvalCount = snapshot.approvals.length;
   const riskyApprovalCount = snapshot.approvals.filter((approval) => approval.payloadBindingStatus !== "bound").length;
+  const workingCount = snapshot.fleet.filter((worker) => worker.status === "working").length;
+  const criticalApprovalCount = snapshot.approvals.filter((approval) => approval.securityRisk === "high").length;
   const totalSignals =
     blockedCount +
     riskyApprovalCount +
@@ -97,24 +122,129 @@ export function OperatorCockpit({
       </header>
 
       <div className="relative z-[1] flex-1 overflow-y-auto p-4">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
-          <div className="min-w-0 lg:col-span-4">
-            <WorkerFleetCard fleet={snapshot.fleet} />
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+            <GlanceTile
+              icon={<Users className="h-4 w-4" />}
+              label="워커 함대"
+              value={`${workingCount} / ${snapshot.fleet.length}`}
+              hint="작업 중"
+              tone={blockedCount > 0 ? "warning" : "normal"}
+            />
+            <GlanceTile
+              icon={<CheckSquare className="h-4 w-4" />}
+              label="승인 대기"
+              value={`${approvalCount}`}
+              hint={criticalApprovalCount > 0 ? `${criticalApprovalCount} high risk` : "건"}
+              tone={approvalCount > 0 ? "warning" : "normal"}
+            />
+            <GlanceTile
+              icon={<Route className="h-4 w-4" />}
+              label="현재 대화 모델"
+              value={snapshot.routing.selectedModelId}
+              hint={snapshot.routing.providerLabel ?? "provider 대기"}
+              tone={snapshot.routing.fallbackStatus === "active" ? "warning" : "normal"}
+            />
+            <GlanceTile
+              icon={<Database className="h-4 w-4" />}
+              label="기억 / 복구"
+              value={snapshot.memory.dgxMirrorHealth === "healthy" ? "동기화됨" : "점검 필요"}
+              hint={`미러 ${mirrorHealthLabel(snapshot.memory.dgxMirrorHealth)}`}
+              tone={snapshot.memory.dgxMirrorHealth === "healthy" ? "success" : "warning"}
+            />
+            <GlanceTile
+              icon={<ShieldAlert className="h-4 w-4" />}
+              label="위험 / 차단"
+              value={`${blockedCount}`}
+              hint={blockedCount > 0 ? "차단된 워커" : "이상 없음"}
+              tone={blockedCount > 0 ? "danger" : "success"}
+            />
           </div>
 
-          <div className="min-w-0 space-y-4 lg:col-span-5">
-            <ApprovalEvidenceCard approvals={snapshot.approvals} onPreview={onPreviewEvidence} />
-            <HandoffCard handoffs={snapshot.handoffs} />
-            <DispatchHistoryCard history={snapshot.dispatchHistory} />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+            <div className="min-w-0 lg:col-span-7">
+              <WorkerFleetCard fleet={snapshot.fleet} />
+            </div>
+            <div className="min-w-0 lg:col-span-5">
+              <ApprovalEvidenceCard approvals={snapshot.approvals} onPreview={onPreviewEvidence} />
+            </div>
           </div>
 
-          <div className="min-w-0 space-y-4 md:col-span-2 lg:col-span-3">
-            <ProviderRoutingCard onOpen={onOpenProviderRouting} routing={snapshot.routing} />
-            <MemoryRecallCard memory={snapshot.memory} onOpen={onOpenMemory} />
-            <RecoveryContinuityCard onOpen={onOpenRecovery} recovery={snapshot.recovery} />
+          <div className="overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-900/30">
+            <button
+              className="flex w-full items-center justify-between px-4 py-3 text-left"
+              onClick={() => setShowDetails((current) => !current)}
+              type="button"
+            >
+              <span className="flex items-center gap-2 text-sm font-medium text-zinc-200">
+                작전 세부 정보
+                <span className="text-xs font-normal text-zinc-500">
+                  핸드오프 · 기억 · 라우팅 · 복구 · 디스패치
+                </span>
+              </span>
+              <ChevronDown className={`h-4 w-4 text-zinc-500 transition-transform ${showDetails ? "rotate-180" : ""}`} />
+            </button>
+            {showDetails ? (
+              <div className="border-t border-zinc-800/60 p-4">
+                <div className="grid gap-4 lg:grid-cols-12">
+                  {readiness ? (
+                    <div className="lg:col-span-12">
+                      <MaturityReadinessCard
+                        diagnostics={readiness.diagnostics}
+                        maturity={readiness.maturity}
+                        smokePlan={readiness.smokePlan}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="space-y-4 lg:col-span-5">
+                    <HandoffCard handoffs={snapshot.handoffs} />
+                    <MemoryRecallCard memory={snapshot.memory} onOpen={onOpenMemory} />
+                  </div>
+                  <div className="space-y-4 lg:col-span-4">
+                    <DispatchHistoryCard history={snapshot.dispatchHistory} />
+                  </div>
+                  <div className="space-y-4 lg:col-span-3">
+                    <ProviderRoutingCard onOpen={onOpenProviderRouting} routing={snapshot.routing} />
+                    <RecoveryContinuityCard onOpen={onOpenRecovery} recovery={snapshot.recovery} />
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function GlanceTile({
+  icon,
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  hint: string;
+  tone: "danger" | "normal" | "success" | "warning";
+}) {
+  const toneClass = {
+    danger: "border-rose-500/30 bg-rose-500/[0.06] text-rose-300",
+    normal: "border-zinc-800/60 bg-zinc-900/40 text-zinc-200",
+    success: "border-emerald-500/25 bg-emerald-500/[0.06] text-emerald-300",
+    warning: "border-amber-500/25 bg-amber-500/[0.06] text-amber-300",
+  }[tone];
+
+  return (
+    <div className={`rounded-xl border p-3 backdrop-blur-xl ${toneClass}`}>
+      <div className="flex items-center justify-between text-zinc-500">
+        <span className="text-[10px] font-medium uppercase tracking-wider">{label}</span>
+        {icon}
+      </div>
+      <div className="mt-2 truncate text-lg font-semibold text-zinc-100">{value}</div>
+      <p className="mt-0.5 truncate text-[11px] text-zinc-500">{hint}</p>
     </div>
   );
 }

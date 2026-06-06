@@ -1,5 +1,5 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
-import { Terminal } from "lucide-react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { Check, Eye, Layers, Send, Terminal, X } from "lucide-react";
 import type {
   ApprovalRequest,
   CodingPacket,
@@ -14,8 +14,9 @@ import {
 } from "../runtime/stage33TmuxServer";
 import type { AgentActivityStatus, AgentVisualSettings, WorkbenchAgent } from "../types";
 import { StatusBadge } from "@/ui/status-badge";
-import { TmuxPaneCard } from "./TmuxPaneCard";
-import { makeSyntheticBlock } from "./TmuxPaneTimeline";
+import { Button } from "@/ui/button";
+import { AgentPortrait, AgentStatePill, type AgentState } from "./shared/AgentActivity";
+import { makeSyntheticBlock, TmuxPaneTimeline } from "./TmuxPaneTimeline";
 import {
   compactTmuxPreview,
   formatTmuxDifficultyLabel,
@@ -82,6 +83,14 @@ export function TmuxSwarmBoard({
   const [boardNotice, setBoardNotice] = useState<string>(tmuxWorkbenchCopy.gatedNotice);
   const panes = createTmuxPanes(roleAgent, recommendation);
   const visiblePanes = panes.slice(0, recommendation.recommendedCount);
+  const [selectedRole, setSelectedRole] = useState<TmuxPaneRole>(visiblePanes[0]?.roleKey ?? "discussion");
+  const selectedPane = useMemo(
+    () => visiblePanes.find((pane) => pane.roleKey === selectedRole) ?? visiblePanes[0],
+    [selectedRole, visiblePanes],
+  );
+  const activeCount = visiblePanes.filter((pane) => resolvePaneAgentState(pane, statuses, agentActivityById) === "working" || resolvePaneAgentState(pane, statuses, agentActivityById) === "responding").length;
+  const pendingCount = visiblePanes.filter((pane) => resolvePaneAgentState(pane, statuses, agentActivityById) === "waiting_approval").length;
+  const errorCount = visiblePanes.filter((pane) => resolvePaneAgentState(pane, statuses, agentActivityById) === "error").length;
 
   function appendBlock(roleKey: TmuxPaneRole, block: TerminalTimelineBlock) {
     onTimelineBlocksChange((current) => ({
@@ -245,26 +254,25 @@ export function TmuxSwarmBoard({
       data-focus-id="tmux-swarm-board-container"
       tabIndex={-1}
     >
-      <header className="flex shrink-0 items-center justify-between border-b border-zinc-800/60 bg-zinc-900/30 px-4 py-3 md:px-6">
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800/60 bg-zinc-950 px-4 md:px-5">
         <div className="flex items-center gap-3">
-          <Terminal className="h-4 w-4 text-amber-400" />
+          <Layers className="h-4 w-4 text-amber-400" />
           <div>
             <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-              {tmuxWorkbenchCopy.kicker}
+              워커 함대
             </span>
             <h1 className="text-sm font-medium text-zinc-100">ai-swarm</h1>
           </div>
         </div>
-        <div className="flex items-center gap-4 text-xs text-zinc-500">
-          <span className="hidden items-center gap-1.5 sm:flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
-            {formatTmuxPaneCountLabel(visiblePanes.length)}
-          </span>
-          <span>{formatTmuxDifficultyLabel(recommendation.difficulty)}</span>
+        <div className="flex items-center gap-3 text-xs text-zinc-500">
+          <FleetStat dotClass="bg-emerald-500" label="작업" value={activeCount} />
+          {pendingCount > 0 ? <FleetStat dotClass="bg-amber-500 os-breathe" label="승인 대기" value={pendingCount} /> : null}
+          {errorCount > 0 ? <FleetStat dotClass="bg-rose-500" label="오류" value={errorCount} /> : null}
+          <span className="hidden sm:inline">{formatTmuxPaneCountLabel(visiblePanes.length)}</span>
         </div>
       </header>
 
-      <div className="flex flex-col sm:flex-row sm:items-center gap-2 border-b border-zinc-800/60 bg-zinc-900/30 px-4 py-2 md:px-6">
+      <div className="flex flex-col gap-2 border-b border-zinc-800/60 bg-zinc-900/30 px-4 py-2 sm:flex-row sm:items-center md:px-5">
         <div className="min-w-0 flex-1">
           <div className="text-[10px] uppercase tracking-wider text-zinc-600">
             {tmuxWorkbenchCopy.recommendationLabel}
@@ -280,27 +288,43 @@ export function TmuxSwarmBoard({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <aside className="w-[380px] shrink-0 overflow-y-auto border-r border-zinc-800/60 p-3 max-lg:w-[320px] max-md:hidden">
           {visiblePanes.map((pane) => (
-            <TmuxPaneCard
-              busy={busyByRole[pane.roleKey]}
-              commandDraft={commandDrafts[pane.roleKey] ?? defaultTmuxCommandForRole(pane.roleKey)}
+            <TmuxFleetRow
               key={pane.id}
-              lastOutput={outputs[pane.roleKey]}
-              onCapture={() => void handleCapturePane(pane)}
-              onCommandDraftChange={(value) => updateCommandDraft(pane.roleKey, value)}
-              onDispatch={() => void handleDispatchPane(pane)}
               pane={{
                 ...pane,
                 state:
                   statuses[pane.roleKey] ??
                   (pane.agent ? agentActivityById[pane.agent.id] ?? pane.state : pane.state),
               }}
-              timelineBlocks={timelineBlocks[pane.roleKey] ?? []}
-              visual={pane.agent ? agentVisualsById[pane.agent.id] : undefined}
+              isSelected={selectedPane?.roleKey === pane.roleKey}
+              onSelect={() => setSelectedRole(pane.roleKey)}
             />
           ))}
+        </aside>
+
+        <div className="min-w-0 flex-1 overflow-hidden">
+          {selectedPane ? (
+            <TmuxPaneDetail
+              busy={busyByRole[selectedPane.roleKey]}
+              commandDraft={commandDrafts[selectedPane.roleKey] ?? defaultTmuxCommandForRole(selectedPane.roleKey)}
+              lastOutput={outputs[selectedPane.roleKey]}
+              onCapture={() => void handleCapturePane(selectedPane)}
+              onCommandDraftChange={(value) => updateCommandDraft(selectedPane.roleKey, value)}
+              onDispatch={() => void handleDispatchPane(selectedPane)}
+              pane={{
+                ...selectedPane,
+                state:
+                  statuses[selectedPane.roleKey] ??
+                  (selectedPane.agent ? agentActivityById[selectedPane.agent.id] ?? selectedPane.state : selectedPane.state),
+              }}
+              timelineBlocks={timelineBlocks[selectedPane.roleKey] ?? []}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-zinc-500">왼쪽에서 pane을 선택하세요</div>
+          )}
         </div>
       </div>
 
@@ -316,6 +340,163 @@ export function TmuxSwarmBoard({
         </div>
       </footer>
     </section>
+  );
+}
+
+function FleetStat({ dotClass, label, value }: { dotClass: string; label: string; value: number }) {
+  return (
+    <span className="flex items-center gap-1.5 text-zinc-500">
+      <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
+      {value} {label}
+    </span>
+  );
+}
+
+function TmuxFleetRow({
+  pane,
+  isSelected,
+  onSelect,
+}: {
+  pane: TmuxPaneDefinition;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  const state = mapTmuxPaneStateToAgentState(pane.state);
+  const initials = pane.agent ? getInitials(pane.agent.name) : getInitials(pane.title);
+
+  return (
+    <button
+      className={`mb-1.5 flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+        isSelected
+          ? "border-amber-500/40 bg-amber-500/[0.06]"
+          : "border-transparent hover:border-zinc-800 hover:bg-zinc-900/50"
+      }`}
+      onClick={onSelect}
+      type="button"
+    >
+      <AgentPortrait initials={initials} state={state} size="sm" tintClassName="bg-zinc-800 text-zinc-300" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium text-zinc-100">{pane.title}</span>
+          <span className="shrink-0 font-mono text-[10px] text-zinc-600">·{pane.id.replace("pane-", "")}</span>
+        </div>
+        <p className="truncate text-xs text-zinc-500">
+          {pane.agent?.name ?? tmuxPaneRoleLabel(pane.roleKey)} · {pane.role}
+        </p>
+      </div>
+      <AgentStatePill state={state} />
+    </button>
+  );
+}
+
+function TmuxPaneDetail({
+  busy,
+  commandDraft,
+  lastOutput,
+  onCapture,
+  onCommandDraftChange,
+  onDispatch,
+  pane,
+  timelineBlocks,
+}: {
+  busy?: PaneBusyState;
+  commandDraft: string;
+  lastOutput?: string;
+  onCapture: () => void;
+  onCommandDraftChange: (value: string) => void;
+  onDispatch: () => void;
+  pane: TmuxPaneDefinition;
+  timelineBlocks: TerminalTimelineBlock[];
+}) {
+  const state = mapTmuxPaneStateToAgentState(pane.state);
+  const commandDisabled = pane.state === "idle";
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex shrink-0 items-center gap-3 border-b border-zinc-800/60 px-5 py-3.5">
+        <AgentPortrait initials={pane.agent ? getInitials(pane.agent.name) : getInitials(pane.title)} state={state} size="md" tintClassName="bg-zinc-800 text-zinc-200" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="truncate text-sm font-medium text-zinc-100">{pane.title}</h2>
+            <span className="font-mono text-[10px] text-zinc-600">{pane.id}</span>
+          </div>
+          <p className="truncate text-xs text-zinc-500">{pane.agent?.name ?? "담당 agent 미정"} · {pane.role}</p>
+        </div>
+        <AgentStatePill state={state} />
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-5">
+        <div className="mb-4 rounded-xl border border-zinc-800/60 bg-zinc-900/35 p-4">
+          <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-600">운영 신호</div>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-300">{pane.signal}</p>
+        </div>
+
+        {pane.state.includes("approval") || pane.state.includes("pending") ? (
+          <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] p-4">
+            <div className="flex items-center gap-2 text-xs font-medium text-amber-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 os-breathe" />
+              승인 게이트 대기
+            </div>
+            <pre className="mt-2 overflow-x-auto rounded-lg bg-zinc-950/80 px-3 py-2 font-mono text-xs text-zinc-100">
+              {commandDraft}
+            </pre>
+            <div className="mt-3 flex items-center gap-2">
+              <Button className="h-8 gap-1.5 bg-emerald-600 px-3 text-xs hover:bg-emerald-700" disabled={Boolean(busy)} onClick={onDispatch} size="sm">
+                <Check className="h-3.5 w-3.5" />
+                승인 요청
+              </Button>
+              <Button className="h-8 gap-1.5 border-rose-500/30 px-3 text-xs text-rose-300 hover:bg-rose-500/10" disabled size="sm" variant="outline">
+                <X className="h-3.5 w-3.5" />
+                거부는 큐에서
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex items-center gap-2 px-0.5 pb-2 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+          <Eye className="h-3 w-3" />
+          최근 출력
+        </div>
+        <div className="rounded-xl border border-zinc-800/60 bg-zinc-950/60 p-4">
+          {lastOutput ? (
+            <p className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-300">{compactTmuxPreview(lastOutput)}</p>
+          ) : (
+            <p className="font-mono text-xs text-zinc-500">아직 실행 기록이 없습니다.</p>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <TmuxPaneTimeline blocks={timelineBlocks} />
+        </div>
+      </div>
+
+      <div className="shrink-0 border-t border-zinc-800/60 p-4">
+        <div className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-2 focus-within:border-amber-500/40">
+          <Terminal className="h-4 w-4 shrink-0 text-zinc-500" />
+          <input
+            aria-label={`${pane.title} 명령 미리보기`}
+            className="flex-1 bg-transparent font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+            disabled={commandDisabled}
+            onChange={(event) => onCommandDraftChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !commandDisabled) onDispatch();
+            }}
+            placeholder={`${pane.id}에 명령 보내기...`}
+            type="text"
+            value={commandDraft}
+          />
+          <Button className="h-7 gap-1.5 px-2.5 text-xs" disabled={Boolean(busy)} onClick={onCapture} size="sm" variant="ghost">
+            <Eye className="h-3.5 w-3.5" />
+            읽기
+          </Button>
+          <Button className="h-7 gap-1.5 bg-amber-600 px-2.5 text-xs hover:bg-amber-700" disabled={Boolean(busy) || commandDisabled || !commandDraft.trim()} onClick={onDispatch} size="sm">
+            <Send className="h-3.5 w-3.5" />
+            전송
+          </Button>
+        </div>
+        <p className="mt-1.5 px-1 text-[10px] text-zinc-500">승인 게이트 준비됨 · 실제 전송은 승인 이후에만 실행됩니다.</p>
+      </div>
+    </div>
   );
 }
 
@@ -496,4 +677,28 @@ function defaultTmuxCommandForRole(role: TmuxPaneRole) {
     memory: "codex 'Extract durable decisions from the current session for Memento.'",
   };
   return prompts[role];
+}
+
+function resolvePaneAgentState(
+  pane: TmuxPaneDefinition,
+  statuses: Record<string, string>,
+  agentActivityById: Record<string, AgentActivityStatus>,
+): AgentState {
+  return mapTmuxPaneStateToAgentState(
+    statuses[pane.roleKey] ?? (pane.agent ? agentActivityById[pane.agent.id] ?? pane.state : pane.state),
+  );
+}
+
+function mapTmuxPaneStateToAgentState(state: string): AgentState {
+  const normalized = state.toLowerCase();
+  if (normalized.includes("fail") || normalized.includes("error") || normalized.includes("blocked")) return "error";
+  if (normalized.includes("approval") || normalized.includes("gated") || normalized.includes("pending")) return "waiting_approval";
+  if (normalized.includes("dispatch") || normalized.includes("captur") || normalized.includes("running")) return "responding";
+  if (normalized.includes("active") || normalized.includes("guard") || normalized.includes("recommended")) return "working";
+  if (normalized.includes("ready") || normalized.includes("recorded") || normalized.includes("sent")) return "success";
+  return "idle";
+}
+
+function getInitials(name: string): string {
+  return name.replace(/[^A-Za-z가-힣]/g, "").slice(0, 2).toUpperCase() || "AG";
 }

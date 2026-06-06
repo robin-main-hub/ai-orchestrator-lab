@@ -1,4 +1,8 @@
 import type { AgentRole, OperatorCockpitWorkerFleet } from "@ai-orchestrator/protocol";
+import {
+  getAgentToolBadgeLabels,
+  getAgentToolProfileSummary,
+} from "../../lib/agentToolProfiles";
 
 const personaKeyByWorkerId: Record<string, string> = {
   agent_architect: "architect",
@@ -105,5 +109,14 @@ export function resolveOperatorWorkerDisplay(worker: Pick<OperatorCockpitWorkerF
     displayName: personaNameByKey[personaKey] ?? worker.workerId,
     portraitAgentId: personaKey,
     roleLabel: `${englishRoleLabelByRole[worker.role]} · ${koreanRoleLabel}`,
+  };
+}
+
+export function resolveOperatorWorkerSkillDisplay(role: AgentRole) {
+  const summary = getAgentToolProfileSummary(role);
+  return {
+    boundaryLabel: summary.runtime.boundaryLabel,
+    label: summary.label,
+    tools: getAgentToolBadgeLabels(role),
   };
 }
