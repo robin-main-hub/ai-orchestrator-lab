@@ -13,11 +13,15 @@ import {
   Users,
 } from "lucide-react";
 import type { OperatorCockpitSnapshot } from "@ai-orchestrator/protocol";
+import type { OrchestrationMaturityReport } from "../../lib/orchestrationMaturity";
+import type { ProductionSmokePlan } from "../../lib/productionSmokePlan";
+import type { SettingsDiagnostics } from "../../lib/settingsDiagnostics";
 import { ApprovalEvidenceCard } from "./ApprovalEvidenceCard";
 import { Badge } from "./Badge";
 import { DispatchHistoryCard } from "./DispatchHistoryCard";
 import { HandoffCard } from "./HandoffCard";
 import { MemoryRecallCard } from "./MemoryRecallCard";
+import { MaturityReadinessCard } from "./MaturityReadinessCard";
 import { ProviderRoutingCard } from "./ProviderRoutingCard";
 import { RecoveryContinuityCard } from "./RecoveryContinuityCard";
 import { WorkerFleetCard } from "./WorkerFleetCard";
@@ -29,12 +33,18 @@ export function OperatorCockpit({
   onOpenMemory,
   onOpenProviderRouting,
   onOpenRecovery,
+  readiness,
 }: {
   snapshot: OperatorCockpitSnapshot;
   onPreviewEvidence?: () => void;
   onOpenMemory?: () => void;
   onOpenProviderRouting?: () => void;
   onOpenRecovery?: () => void;
+  readiness?: {
+    diagnostics: SettingsDiagnostics;
+    maturity: OrchestrationMaturityReport;
+    smokePlan: ProductionSmokePlan;
+  };
 }) {
   const [showDetails, setShowDetails] = useState(false);
   const blockedCount = snapshot.fleet.filter((worker) => worker.status === "blocked" || worker.status === "error").length;
@@ -177,6 +187,15 @@ export function OperatorCockpit({
             {showDetails ? (
               <div className="border-t border-zinc-800/60 p-4">
                 <div className="grid gap-4 lg:grid-cols-12">
+                  {readiness ? (
+                    <div className="lg:col-span-12">
+                      <MaturityReadinessCard
+                        diagnostics={readiness.diagnostics}
+                        maturity={readiness.maturity}
+                        smokePlan={readiness.smokePlan}
+                      />
+                    </div>
+                  ) : null}
                   <div className="space-y-4 lg:col-span-5">
                     <HandoffCard handoffs={snapshot.handoffs} />
                     <MemoryRecallCard memory={snapshot.memory} onOpen={onOpenMemory} />
