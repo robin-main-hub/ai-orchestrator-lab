@@ -127,11 +127,13 @@ import type {
   WorkbenchAgent,
 } from "./types";
 import {
+  agentProfilesStorageKey,
   agentVisualStorageKey,
   defaultObsidianVaultRoot,
   maxDraftAttachments,
   modelWindowSize,
   now,
+  selectedAgentIdStorageKey,
 } from "./lib/appConstants";
 import { getConversationRailLayout } from "./lib/conversationRailLayout";
 import { getConversationShellVisibility } from "./lib/conversationShellVisibility";
@@ -228,6 +230,7 @@ import { useMemoryController } from "./hooks/useMemoryController";
 import { createAuthBinding, useProviderRegistryController } from "./hooks/useProviderRegistryController";
 import { useWorkItemsController } from "./hooks/useWorkItemsController";
 import { applyAgentProviderAssignment } from "./lib/agentProviderAssignment";
+import { parseStoredAgentProfiles, parseStoredSelectedAgentId } from "./lib/agentProfilePersistence";
 import { getRestoreFocusSelector, type FocusHistory } from "./lib/focusRestoration";
 import { readJsonState, writeJsonState } from "./lib/persistentJsonState";
 import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbenchDerived";
@@ -253,17 +256,24 @@ export function App() {
   const [remoteCockpitSnapshotState, setRemoteCockpitSnapshotState] = useState<RemoteCockpitSnapshotState>({
     status: "idle",
   });
+  const [adminRailOpen, setAdminRailOpen] = useState(false);
   const [activeNavItem, setActiveNavItem] = useState<NavItemId>("sessions");
   const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [cheatSheetOpen, setCheatSheetOpen] = useState(false);
-  const [agents, setAgents] = useState<WorkbenchAgent[]>(seededAgentProfiles);
+  const [agents, setAgents] = useState<WorkbenchAgent[]>(() =>
+    readJsonState(agentProfilesStorageKey, seededAgentProfiles, (value) =>
+      parseStoredAgentProfiles(value, seededAgentProfiles),
+    ),
+  );
   const [agentActivityById, setAgentActivityById] = useState<Record<string, AgentActivityStatus>>({});
   const [agentVisualsById, setAgentVisualsById] = useState<Record<string, AgentVisualSettings>>(() =>
     createInitialAgentVisualSettings(seededAgentProfiles),
   );
   const [modelWindowStartByAgentId, setModelWindowStartByAgentId] = useState<Record<string, number>>({});
-  const [selectedAgentId, setSelectedAgentId] = useState(seededAgentProfiles[0]?.id ?? "");
+  const [selectedAgentId, setSelectedAgentId] = useState(() =>
+    readJsonState(selectedAgentIdStorageKey, agents[0]?.id ?? "", (value) => parseStoredSelectedAgentId(value, agents)),
+  );
   const [agentSettingsAgentId, setAgentSettingsAgentId] = useState<string | undefined>();
   const [agentConfigPanel, setAgentConfigPanel] = useState<{ open: boolean; tab: AgentConfigTab }>({
     open: false,
@@ -286,6 +296,15 @@ export function App() {
     modeRef.current = mode;
     writeJsonState(CENTER_MODE_STORAGE_KEY, mode);
   }, [mode]);
+  useEffect(() => {
+    writeJsonState(agentProfilesStorageKey, agents);
+    if (!agents.some((agent) => agent.id === selectedAgentId)) {
+      setSelectedAgentId(agents[0]?.id ?? "");
+    }
+  }, [agents, selectedAgentId]);
+  useEffect(() => {
+    writeJsonState(selectedAgentIdStorageKey, selectedAgentId);
+  }, [selectedAgentId]);
   const conversationMessages = useMemo(
     () => getAgentChannelMessages(conversationMessagesByAgentId, selectedAgentId),
     [conversationMessagesByAgentId, selectedAgentId],
@@ -2402,10 +2421,26 @@ export function App() {
     setAgentConfigPanel({ open: true, tab });
   }
 
+  function openManagementRail(item: NavItemId = "sessions") {
+    setAdminRailOpen(true);
+    setActiveNavItem(item);
+    setProviderRegistrationOpen(item === "providers");
+  }
+
+  function toggleManagementRail() {
+    setAdminRailOpen((open) => {
+      const nextOpen = !open;
+      if (!nextOpen) {
+        setProviderRegistrationOpen(false);
+      } else {
+        setProviderRegistrationOpen(activeNavItem === "providers");
+      }
+      return nextOpen;
+    });
+  }
+
   function openProviderRoutingFromCockpit() {
-    setMode("conversation");
-    setActiveNavItem("providers");
-    setProviderRegistrationOpen(true);
+    openManagementRail("providers");
   }
 
   function openMemoryFromCockpit() {
@@ -2717,6 +2752,27 @@ export function App() {
       run: () => setMode("annex"),
     },
     {
+      id: "open.management",
+      verb: "Open",
+      label: "관리 패널",
+      hint: "세션, 프로바이더, 설정파일, 채널, 백업 rail",
+      run: () => openManagementRail("sessions"),
+    },
+    {
+      id: "open.providers",
+      verb: "Open",
+      label: "프로바이더 관리",
+      hint: "Provider 등록, 모델 discovery, 라우팅 점검",
+      run: () => openManagementRail("providers"),
+    },
+    {
+      id: "open.backup",
+      verb: "Open",
+      label: "백업과 복구",
+      hint: "백업 projection과 내보내기",
+      run: () => openManagementRail("backup"),
+    },
+    {
       id: "open.control-queue",
       verb: "Open",
       label: "Control Queue",
@@ -2731,6 +2787,35 @@ export function App() {
       hint: "EvolveMemento 에 새 항목 추가",
       shortcut: "⌘⇧M",
       run: handleRememberCurrentContext,
+    },
+    {
+      id: "debate.promote",
+      verb: "Debate",
+      label: "현재 대화를 토론으로 승격",
+      hint: "대화 메시지를 Debate Chamber로 보냅니다",
+      shortcut: "⌘⇧D",
+      run: handlePromoteToDebate,
+    },
+    {
+      id: "orchestrator.invoke",
+      verb: "Focus",
+      label: "오케스트레이터 입력으로 이동",
+      hint: "Conversation composer를 즉시 사용할 수 있게 전환",
+      shortcut: "⌘I",
+      run: () => {
+        setMode("conversation");
+        queueMicrotask(() => {
+          document.querySelector<HTMLElement>("[data-focus-id='composer-textarea']")?.focus();
+        });
+      },
+    },
+    {
+      id: "agent.stop",
+      verb: "Stop",
+      label: "활성 에이전트 중단",
+      hint: "응답/준비 상태를 idle로 되돌립니다",
+      shortcut: "⌘.",
+      run: () => setAgentActivityById({}),
     },
     {
       id: "approve.next",
@@ -2764,7 +2849,15 @@ export function App() {
     onSwitchTmux: () => setMode("tmux"),
     onSwitchCockpit: () => setMode("cockpit"),
     onControlQueue: () => setApprovalDrawerOpen((open) => !open),
+    onCreateDebate: handlePromoteToDebate,
     onMementoRemember: handleRememberCurrentContext,
+    onInvokeOrchestrator: () => {
+      setMode("conversation");
+      queueMicrotask(() => {
+        document.querySelector<HTMLElement>("[data-focus-id='composer-textarea']")?.focus();
+      });
+    },
+    onStop: () => setAgentActivityById({}),
     onApprove: () => handleResolveNextPermission("approved"),
     onEscape: () => {
       if (cheatSheetOpen) setCheatSheetOpen(false);
@@ -3118,7 +3211,7 @@ export function App() {
     configLibraryActive,
     mode,
   });
-  const leftRailVisible = shellVisibility.showLeftRail || providerRegistrationOpen;
+  const leftRailVisible = shellVisibility.showLeftRail || providerRegistrationOpen || adminRailOpen;
 
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
@@ -3150,6 +3243,7 @@ export function App() {
         mode={mode}
         onChangeMode={setMode}
         onCommandPalette={() => setCommandPaletteOpen(true)}
+        onOpenManagement={toggleManagementRail}
         onOpenOpsDetail={() => setMode("cockpit")}
         onProbeDgx={handleProbeDgx}
         onToggleDrawer={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
@@ -3178,6 +3272,7 @@ export function App() {
                   className={`nav-item ${isActive ? "active" : ""}`}
                   key={item.id}
                   onClick={() => {
+                    setAdminRailOpen(true);
                     setActiveNavItem(item.id);
                     setProviderRegistrationOpen(item.id === "providers");
                     setIsMobileDrawerOpen(false);
@@ -3499,7 +3594,7 @@ export function App() {
           ) : null}
         </section>
 
-        {mode === "conversation" || mode === "debate" || mode === "tmux" || mode === "cockpit" || mode === "annex" ? null : (
+        {!adminRailOpen && (mode === "conversation" || mode === "debate" || mode === "tmux" || mode === "cockpit" || mode === "annex") ? null : (
           <aside className="right-rail" aria-label="모델과 에이전트 상태">
             <AgentsSidebar
               agents={agents}
