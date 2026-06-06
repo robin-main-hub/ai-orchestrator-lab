@@ -45,7 +45,7 @@ export function ProviderRoutingCard({
       >
         <div className="flex items-center gap-2">
           <RadioTower className="h-4 w-4 text-violet-400" />
-          <h3 className="text-sm font-semibold text-zinc-100">모델 경로</h3>
+          <h3 className="text-sm font-semibold text-zinc-100">현재 대화 경로</h3>
         </div>
       </GlassPanelHeader>
 
@@ -53,7 +53,7 @@ export function ProviderRoutingCard({
         <div className="rounded-lg border border-violet-500/20 bg-violet-500/10 p-3">
           <span className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
             <Route className="h-3 w-3" />
-            선택 경로
+            선택 에이전트 경로
           </span>
           {routing.providerLabel ? (
             <div className="mb-1 text-xs font-semibold text-zinc-100">{routing.providerLabel}</div>
