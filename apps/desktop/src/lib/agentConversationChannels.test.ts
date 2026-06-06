@@ -7,6 +7,7 @@ import {
   createAgentChannelMemoryScope,
   createAgentChannelRecallQuery,
   createInitialAgentConversationChannels,
+  distributeReplayedMessagesIntoChannels,
   getAgentChannelMessages,
 } from "./agentConversationChannels";
 import { seededAgentProfiles } from "../seeds/agents";
@@ -65,6 +66,71 @@ describe("agentConversationChannels", () => {
 
     expect(getAgentChannelMessages(channels, "agent_orchestrator")).toEqual([]);
     expect(getAgentChannelMessages(channels, "agent_reviewer")).toEqual([]);
+  });
+
+  it("routes replayed messages back to each agent's own channel instead of one selected channel", () => {
+    // Existing in-memory state: each agent already holds its own message.
+    const channels = createInitialAgentConversationChannels(agents, [
+      {
+        id: "message_existing_orchestrator",
+        sessionId: "session_a",
+        role: "assistant",
+        content: "기존 오케스트레이터 메시지",
+        createdAt: "2026-06-05T00:00:00.000Z",
+        metadata: { agentId: "agent_orchestrator" },
+      },
+      {
+        id: "message_existing_reviewer",
+        sessionId: "session_a",
+        role: "assistant",
+        content: "기존 리뷰어 메시지",
+        createdAt: "2026-06-05T00:00:00.500Z",
+        metadata: { agentId: "agent_reviewer" },
+      },
+    ]);
+
+    // A replay/pull of the SAME session returns messages from multiple agents.
+    const replayed: ConversationMessage[] = [
+      {
+        id: "message_replay_orchestrator",
+        sessionId: "session_a",
+        role: "user",
+        content: "오케스트레이터에게 한 질문",
+        createdAt: "2026-06-05T00:00:01.000Z",
+        metadata: { agentId: "agent_orchestrator" },
+      },
+      {
+        id: "message_replay_reviewer",
+        sessionId: "session_a",
+        role: "user",
+        content: "리뷰어에게 한 질문",
+        createdAt: "2026-06-05T00:00:02.000Z",
+        metadata: { agentId: "agent_reviewer" },
+      },
+    ];
+
+    const mergeById = (existing: ConversationMessage[], incoming: ConversationMessage[]) => {
+      const byId = new Map(existing.map((message) => [message.id, message]));
+      for (const message of incoming) byId.set(message.id, message);
+      return [...byId.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+    };
+
+    const next = distributeReplayedMessagesIntoChannels(channels, agents, replayed, mergeById);
+
+    const orchestrator = getAgentChannelMessages(next, "agent_orchestrator");
+    const reviewer = getAgentChannelMessages(next, "agent_reviewer");
+
+    // Each agent keeps its existing message plus only its own replayed message.
+    expect(orchestrator.map((message) => message.id)).toEqual([
+      "message_existing_orchestrator",
+      "message_replay_orchestrator",
+    ]);
+    expect(reviewer.map((message) => message.id)).toEqual([
+      "message_existing_reviewer",
+      "message_replay_reviewer",
+    ]);
+    // Crucially, the reviewer's message must NOT leak into the orchestrator channel.
+    expect(orchestrator.some((message) => message.id === "message_replay_reviewer")).toBe(false);
   });
 
   it("appends messages only to the selected agent channel", () => {
