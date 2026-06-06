@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import type { WorkbenchAgent, PendingProviderRetry, AgentVisualSettings, AgentActivityStatus } from "../../types";
 import type { AgentChatContinuitySummary } from "../../lib/agentChatContinuity";
+import { resolveAgentThinkingIndicator } from "../../lib/agentThinkingIndicator";
 import {
   formatAttachmentSize,
   getMessageAttachments,
@@ -67,6 +68,7 @@ export function MessageThread({
   agentActivityById?: Record<string, AgentActivityStatus>;
 }) {
   const delegationItems = createDelegationPreviewItems(messages, agents);
+  const thinkingIndicator = resolveAgentThinkingIndicator(selectedAgent?.id, agentActivityById);
 
   return (
     <div className="relative flex-1 overflow-hidden bg-zinc-950">
@@ -102,6 +104,49 @@ export function MessageThread({
               />
             ))
           )}
+          {thinkingIndicator && selectedAgent ? (
+            <AgentThinkingRow
+              agent={selectedAgent}
+              visual={agentVisualsById?.[selectedAgent.id]}
+              label={thinkingIndicator.label}
+            />
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AgentThinkingRow({
+  agent,
+  visual,
+  label,
+}: {
+  agent: WorkbenchAgent;
+  visual?: AgentVisualSettings;
+  label: string;
+}) {
+  const initials = agent.name.slice(0, 2).toUpperCase();
+  return (
+    <div className="flex gap-3 py-1.5" aria-live="polite" data-testid="agent-thinking-row">
+      <AvatarWithStatus
+        initials={initials}
+        roleColor={roleColorFromRole(agent.role)}
+        status="pending"
+        avatarDataUrl={visual?.avatarDataUrl}
+        size="sm"
+      />
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-xs font-semibold text-zinc-200">{agent.name}</span>
+        </div>
+        <div className="inline-flex items-center gap-2 rounded-2xl rounded-tl-md border border-white/10 bg-zinc-900/70 p-3 shadow-lg shadow-black/20 backdrop-blur-xl">
+          <span className="flex gap-1" aria-hidden="true">
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-300 [animation-delay:-0.3s]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-300 [animation-delay:-0.15s]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-300" />
+          </span>
+          <span className="text-xs text-zinc-400">{label}…</span>
         </div>
       </div>
     </div>
