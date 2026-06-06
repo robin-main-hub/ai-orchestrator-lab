@@ -14,6 +14,16 @@ export interface ConversationShellVisibility {
   showWorkItemHandoffPanel: boolean;
 }
 
+export function isFocusedV0Surface(mode: CenterMode): boolean {
+  return (
+    mode === "conversation" ||
+    mode === "debate" ||
+    mode === "tmux" ||
+    mode === "cockpit" ||
+    mode === "annex"
+  );
+}
+
 export function getConversationShellVisibility({
   configLibraryActive,
   mode,
@@ -29,18 +39,7 @@ export function getConversationShellVisibility({
     };
   }
 
-  if (mode === "conversation" || mode === "debate") {
-    return {
-      showCodingPacketPanel: false,
-      showEvolveMementoPanel: false,
-      showLeftRail: false,
-      showTerminalDock: false,
-      showToolbarActions: false,
-      showWorkItemHandoffPanel: false,
-    };
-  }
-
-  if (mode === "tmux" || mode === "cockpit" || mode === "annex") {
+  if (isFocusedV0Surface(mode)) {
     return {
       showCodingPacketPanel: false,
       showEvolveMementoPanel: false,

@@ -34,7 +34,6 @@ export function RuntimeStatusBar({
   mode,
   onChangeMode,
   onCommandPalette,
-  onOpenManagement,
   onOpenOpsDetail,
   onProbeDgx,
   onToggleDrawer,
@@ -45,7 +44,6 @@ export function RuntimeStatusBar({
   mode: CenterMode;
   onChangeMode: (mode: CenterMode) => void;
   onCommandPalette: () => void;
-  onOpenManagement: () => void;
   onOpenOpsDetail: () => void;
   onProbeDgx: () => void;
   onToggleDrawer: () => void;
@@ -161,17 +159,6 @@ export function RuntimeStatusBar({
 
       <div className="flex shrink-0 items-center gap-2">
         <Button
-          aria-label="관리 패널 열기"
-          className="h-8 gap-2 border-zinc-800/80 bg-zinc-900/50 px-2.5 text-xs text-zinc-500 hover:bg-zinc-800/80 hover:text-zinc-100"
-          onClick={onOpenManagement}
-          size="sm"
-          title="관리 패널 열기"
-          variant="outline"
-        >
-          <Settings className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">관리</span>
-        </Button>
-        <Button
           aria-label="Open command palette"
           className="h-8 gap-2 border-zinc-800/80 bg-zinc-900/50 px-2.5 text-xs text-zinc-500 hover:bg-zinc-800/80 hover:text-zinc-100"
           onClick={onCommandPalette}
@@ -278,7 +265,7 @@ function HealthIndicator({
             variant="ghost"
           >
             <Settings className="mr-2 h-3.5 w-3.5" />
-            Ops Detail
+            운영 상세
           </Button>
         </div>
       </PopoverContent>
