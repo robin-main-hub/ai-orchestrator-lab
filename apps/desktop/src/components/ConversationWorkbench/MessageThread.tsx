@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import type { WorkbenchAgent, PendingProviderRetry, AgentVisualSettings, AgentActivityStatus } from "../../types";
 import type { AgentChatContinuitySummary } from "../../lib/agentChatContinuity";
+import { resolveAgentThinkingIndicator } from "../../lib/agentThinkingIndicator";
 import {
   formatAttachmentSize,
   getMessageAttachments,
@@ -68,8 +69,8 @@ export function MessageThread({
   agentActivityById?: Record<string, AgentActivityStatus>;
 }) {
   const delegationItems = createDelegationPreviewItems(messages, agents);
-  const selectedAgentActivity = selectedAgent && agentActivityById ? agentActivityById[selectedAgent.id] : undefined;
-  const showPendingBubble = shouldShowAssistantPendingBubble(messages, selectedAgentActivity);
+  const thinkingIndicator = resolveAgentThinkingIndicator(selectedAgent?.id, agentActivityById);
+  const showPendingBubble = shouldShowAssistantPendingBubble(messages, thinkingIndicator?.status);
 
   return (
     <div className="relative flex-1 overflow-hidden bg-zinc-950">
@@ -105,11 +106,12 @@ export function MessageThread({
               />
             ))
           )}
-          {showPendingBubble && selectedAgent ? (
+          {showPendingBubble && selectedAgent && thinkingIndicator ? (
             <AssistantPendingBubble
-              activity={selectedAgentActivity}
+              activity={thinkingIndicator.status}
               agent={selectedAgent}
               agentVisualsById={agentVisualsById}
+              label={thinkingIndicator.label}
             />
           ) : null}
         </div>
@@ -135,10 +137,12 @@ function AssistantPendingBubble({
   activity,
   agent,
   agentVisualsById,
+  label,
 }: {
   activity?: AgentActivityStatus;
   agent: WorkbenchAgent;
   agentVisualsById?: Record<string, AgentVisualSettings>;
+  label: string;
 }) {
   const visual = agentVisualsById?.[agent.id];
   const status = activity === "responding" ? ("active" as const) : ("pending" as const);
@@ -156,7 +160,7 @@ function AssistantPendingBubble({
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2 px-1">
           <span className="text-xs font-semibold text-zinc-200">{displayName}</span>
-          <span className="text-[10px] text-zinc-600">응답 준비 중</span>
+          <span className="text-[10px] text-zinc-600">{label}</span>
         </div>
         <div className="inline-flex max-w-[82%] items-center gap-3 rounded-2xl rounded-tl-md border border-violet-300/15 bg-zinc-900/80 px-3 py-2.5 shadow-lg shadow-black/20 backdrop-blur-xl">
           <span className="text-sm text-zinc-300">{assistantPendingLabel(activity)}</span>
