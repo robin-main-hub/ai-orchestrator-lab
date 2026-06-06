@@ -2,8 +2,8 @@ import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import { now } from "../lib/appConstants";
 import { createStage5DgxBridge } from "../runtime/stage5Runtime";
 import {
+  createExternalIngressDemoInput,
   createStage8IngressSnapshot,
-  createTelegramDemoInput,
 } from "../runtime/stage8Ingress";
 import { initialAgentRun } from "./conversation";
 
@@ -97,5 +97,5 @@ export const initialDgxBridge = createStage5DgxBridge({
 });
 
 export const initialIngressSnapshot = createStage8IngressSnapshot(
-  createTelegramDemoInput(new Date("2026-05-24T00:23:00.000+09:00").toISOString()),
+  createExternalIngressDemoInput(new Date("2026-05-24T00:23:00.000+09:00").toISOString()),
 );

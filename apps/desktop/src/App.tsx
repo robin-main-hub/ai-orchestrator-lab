@@ -47,8 +47,8 @@ import {
   type Stage7BackupSnapshot,
 } from "./runtime/stage7Backup";
 import {
+  createExternalIngressDemoInput,
   createStage8IngressSnapshot,
-  createTelegramDemoInput,
   type Stage8IngressSnapshot,
 } from "./runtime/stage8Ingress";
 import {
@@ -1882,9 +1882,9 @@ export function App() {
     });
   }
 
-  function handleImportTelegramIngress() {
+  function handleImportExternalIngress() {
     const receivedAt = new Date().toISOString();
-    const snapshot = createStage8IngressSnapshot(createTelegramDemoInput(receivedAt));
+    const snapshot = createStage8IngressSnapshot(createExternalIngressDemoInput(receivedAt));
     const normalizedEvent = snapshot.result.normalizedEvent;
 
     setIngressSnapshot(snapshot);
@@ -1902,7 +1902,7 @@ export function App() {
         })),
       },
       {
-        source: "legacy_telegram",
+        source: "api",
         sourceTrust: "untrusted",
         correlationId: snapshot.id,
       },
@@ -1916,7 +1916,7 @@ export function App() {
           reason: snapshot.result.reason,
         },
         {
-          source: "legacy_telegram",
+          source: "api",
           sourceTrust: "untrusted",
           correlationId: snapshot.id,
         },
@@ -1924,8 +1924,8 @@ export function App() {
       return;
     }
 
-    const telegramMessage: ConversationMessage = {
-      id: `message_telegram_${crypto.randomUUID()}`,
+    const externalIngressMessage: ConversationMessage = {
+      id: `message_external_ingress_${crypto.randomUUID()}`,
       sessionId: activeSessionId,
       role: "user",
       content: normalizedEvent.normalizedText,
@@ -1939,13 +1939,13 @@ export function App() {
       },
     };
 
-    setConversationMessages((messages) => [...messages, telegramMessage]);
+    setConversationMessages((messages) => [...messages, externalIngressMessage]);
     prependMemoryRecord({
       id: `memory_ingress_${normalizedEvent.id}`,
       layer: "fragment",
-      title: "Telegram ingress candidate",
+      title: "외부 인입 후보",
       content: normalizedEvent.normalizedText,
-      sourceChannel: "legacy_telegram",
+      sourceChannel: normalizedEvent.channel === "webhook" ? "api" : normalizedEvent.channel,
       trustLevel: "untrusted",
       createdAt: receivedAt,
       pinned: false,
@@ -1953,17 +1953,17 @@ export function App() {
     appendEvent(
       "conversation.message.created",
       {
-        messageId: telegramMessage.id,
+        messageId: externalIngressMessage.id,
         role: "user",
         content: normalizedEvent.normalizedText,
-        metadata: telegramMessage.metadata,
+        metadata: externalIngressMessage.metadata,
         channel: normalizedEvent.channel,
         ingressEventId: normalizedEvent.id,
         sourceTrust: normalizedEvent.sourceTrust,
         redaction: normalizedEvent.redacted ? "applied" : "none",
       },
       {
-        source: "legacy_telegram",
+        source: "api",
         sourceTrust: "untrusted",
         correlationId: snapshot.id,
       },
@@ -1972,12 +1972,12 @@ export function App() {
       "memory.candidate.created",
       {
         recordId: `memory_ingress_${normalizedEvent.id}`,
-        sourceChannel: "legacy_telegram",
+        sourceChannel: normalizedEvent.channel,
         trustLevel: "untrusted",
         autoRecall: false,
       },
       {
-        source: "legacy_telegram",
+        source: "api",
         sourceTrust: "untrusted",
         correlationId: snapshot.id,
       },
@@ -1992,7 +1992,7 @@ export function App() {
           channel: snapshot.channel,
         },
         {
-          source: "legacy_telegram",
+          source: "api",
           sourceTrust: "untrusted",
           correlationId: snapshot.id,
         },
@@ -3331,7 +3331,7 @@ export function App() {
                 ingressSnapshot={ingressSnapshot}
                 onCheckProviderVault={handleCheckProviderVault}
                 onExportBackup={handleExportBackupProjections}
-                onImportTelegram={handleImportTelegramIngress}
+                onImportExternalIngress={handleImportExternalIngress}
                 onRefreshApprovals={handleRefreshApprovalQueue}
                 onResolveServerApproval={handleResolveServerApproval}
                 pendingTmuxApprovalKeys={pendingTmuxApprovalKeys}
@@ -3363,7 +3363,7 @@ export function App() {
           {activeNavItem === "channels" ? (
             <ChannelRailPanel
               ingressSnapshot={ingressSnapshot}
-              onImportTelegram={handleImportTelegramIngress}
+              onImportExternalIngress={handleImportExternalIngress}
               permissionSnapshot={permissionSnapshot}
               runtime={runtimeSnapshotState}
             />
@@ -3500,7 +3500,7 @@ export function App() {
               onCreateAgentRun={handleCreateAgentRun}
               onCreateCodingPacket={handleCreateCodingPacket}
               onDraftMessageChange={setDraftMessage}
-              onImportTelegram={handleImportTelegramIngress}
+              onImportExternalIngress={handleImportExternalIngress}
               onPromoteToDebate={handlePromoteToDebate}
               onRejectPermission={(sourceItemId) => handleResolvePermission(sourceItemId, "rejected")}
               onRemoveDraftAttachment={handleRemoveDraftAttachment}

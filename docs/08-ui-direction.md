@@ -55,7 +55,7 @@ Conversation Workbench에는 다음 액션이 있어야 한다.
 - 실행 슬롯으로 보내기
 - 메모리에 저장
 - Obsidian/Notion 백업 상태 보기
-- Telegram에서 이어받기
+- 외부 인입에서 이어받기
 
 ### Debate Table
 

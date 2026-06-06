@@ -304,7 +304,7 @@ export type ConversationMessage = z.infer<typeof conversationMessageSchema>;
 export const conversationSessionSchema = z.object({
   id: z.string(),
   mode: z.literal("conversation"),
-  channel: z.enum(["desktop", "legacy_telegram", "mobile", "api"]),
+  channel: z.enum(["desktop", "external_legacy", "mobile", "api"]),
   primaryAgentId: z.string(),
   providerProfileId: z.string().optional(),
   modelId: z.string().optional(),
@@ -423,10 +423,10 @@ export type InsightFinding = z.infer<typeof insightFindingSchema>;
 export const sourceTrustSchema = z.enum(["trusted", "limited", "untrusted"]);
 export type SourceTrust = z.infer<typeof sourceTrustSchema>;
 
-export const eventSourceSchema = z.enum(["desktop", "server", "legacy_telegram", "mobile", "agent", "api"]);
+export const eventSourceSchema = z.enum(["desktop", "server", "external_legacy", "mobile", "agent", "api"]);
 export type EventSource = z.infer<typeof eventSourceSchema>;
 
-export const workSourceSchema = z.enum(["desktop_manual", "mobile_manual", "legacy_telegram"]);
+export const workSourceSchema = z.enum(["desktop_manual", "mobile_manual", "external_legacy"]);
 export type WorkSource = z.infer<typeof workSourceSchema>;
 
 export const workSourceRefSchema = z.object({
@@ -1240,7 +1240,7 @@ export const permissionRequestSchema = z.object({
 });
 export type PermissionRequest = z.infer<typeof permissionRequestSchema>;
 
-export type ExternalChannel = "legacy_telegram" | "mobile" | "api" | "webhook";
+export type ExternalChannel = "external_legacy" | "mobile" | "api" | "webhook";
 
 export type IngressAuthorType = "user" | "bot" | "manager" | "system";
 
@@ -1809,7 +1809,7 @@ export const memoryRecordSchema = z.object({
   kind: memoryKindSchema.optional(),
   title: z.string(),
   content: z.string(),
-  sourceChannel: z.enum(["desktop", "legacy_telegram", "mobile", "api", "agent"]),
+  sourceChannel: z.enum(["desktop", "external_legacy", "mobile", "api", "agent"]),
   trustLevel: sourceTrustSchema,
   projectId: z.string().optional(),
   sessionId: z.string().optional(),

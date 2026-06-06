@@ -65,7 +65,7 @@ export function ConversationWorkbench({
   onCreateAgentRun,
   onCreateCodingPacket,
   onDraftMessageChange,
-  onImportTelegram,
+  onImportExternalIngress,
   onPromoteToDebate,
   onRejectPermission,
   onRemoveDraftAttachment,
@@ -112,7 +112,7 @@ export function ConversationWorkbench({
   onCreateAgentRun: () => void;
   onCreateCodingPacket: () => void;
   onDraftMessageChange: (value: string) => void;
-  onImportTelegram: () => void;
+  onImportExternalIngress: () => void;
   onPromoteToDebate: () => void;
   onRejectPermission: (sourceItemId: string) => void;
   onRemoveDraftAttachment: (attachmentId: string) => void;
@@ -241,7 +241,7 @@ export function ConversationWorkbench({
         onCreateAgentRun={onCreateAgentRun}
         onCreateBranch={onCreateBranch}
         onCreateCodingPacket={onCreateCodingPacket}
-        onImportTelegram={onImportTelegram}
+        onImportExternalIngress={onImportExternalIngress}
         onPromoteToDebate={onPromoteToDebate}
         showOverflowBranchControls={workbenchVisibility.showOverflowBranchControls}
       />

@@ -150,7 +150,7 @@ function IngressSection() {
     <section className="section">
       <div className="section__title">Ingress Guard</div>
       <div className="row">
-        <div className="row__label">Telegram receiver</div>
+        <div className="row__label">External Ingress receiver</div>
         <span className="chip chip--offline">미연결</span>
       </div>
       <div className="row">

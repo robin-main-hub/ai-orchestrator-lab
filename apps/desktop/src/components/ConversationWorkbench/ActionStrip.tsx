@@ -22,7 +22,7 @@ export function ActionStrip({
   onCreateAgentRun,
   onCreateBranch,
   onCreateCodingPacket,
-  onImportTelegram,
+  onImportExternalIngress,
   onPromoteToDebate,
   showOverflowBranchControls,
 }: {
@@ -35,7 +35,7 @@ export function ActionStrip({
   onCreateAgentRun: () => void;
   onCreateBranch: () => void;
   onCreateCodingPacket: () => void;
-  onImportTelegram: () => void;
+  onImportExternalIngress: () => void;
   onPromoteToDebate: () => void;
   showOverflowBranchControls: boolean;
 }) {
@@ -69,12 +69,12 @@ export function ActionStrip({
       </Button>
       <Button
         className="h-7 gap-1.5 text-xs"
-        onClick={onImportTelegram}
+        onClick={onImportExternalIngress}
         size="sm"
         variant="ghost"
       >
         <Smartphone className="h-3.5 w-3.5" />
-        Telegram
+        외부 인입
       </Button>
       {showOverflowBranchControls ? (
         <div className="ml-auto flex items-center gap-2 rounded-md border border-border bg-card/40 px-2 py-1 text-[10px]">

@@ -28,13 +28,13 @@ export type MemoryAPI = {
 
 ## 메모리 신뢰도
 
-모든 memory record에는 출처와 신뢰도를 붙인다. Telegram, 외부 API, 리셀러 provider에서 나온 내용은 기본적으로 `untrusted` 또는 `limited`로 저장한다.
+모든 memory record에는 출처와 신뢰도를 붙인다. External Ingress, 외부 API, 리셀러 provider에서 나온 내용은 기본적으로 `untrusted` 또는 `limited`로 저장한다.
 
 ```ts
 export type MemoryRecord = {
   id: string;
   content: string;
-  sourceChannel: "desktop" | "legacy_telegram" | "mobile" | "api" | "server" | "system";
+  sourceChannel: "desktop" | "external_legacy" | "mobile" | "api" | "server" | "system";
   trustLevel: "trusted" | "limited" | "untrusted";
   projectId?: string;
   createdAt: string;
@@ -48,7 +48,7 @@ Recall 기본 정책:
 - `limited`: 사용자가 허용한 프로젝트/세션에서만 recall
 - `untrusted`: 자동 recall 금지. Memory Curator 또는 사용자 승인 후 승격 가능
 
-이 정책은 Telegram context poisoning과 리셀러 프록시로 인한 장기 메모리 유출을 줄이기 위한 기본 방어선이다.
+이 정책은 External Ingress context poisoning과 리셀러 프록시로 인한 장기 메모리 유출을 줄이기 위한 기본 방어선이다.
 
 ## Recall Trace
 
