@@ -374,15 +374,15 @@ export class AnthropicAdapter implements LlmAdapter {
   private createModelDescriptor(id: string): ModelDescriptor {
     const lower = id.toLowerCase();
     const isHaiku = lower.includes("haiku");
-    const isOpus = lower.includes("opus");
     return {
       id,
       name: id,
       providerProfileId: this.profileId,
-      contextWindow: isOpus ? 200_000 : isHaiku ? 200_000 : 200_000,
+      // All current Claude models (Opus/Sonnet/Haiku, 3.x and 4.x) share a 200K context window.
+      contextWindow: 200_000,
       supportsStreaming: true,
       supportsTools: !isHaiku,
-      inputModalities: lower.includes("haiku") ? ["text"] : ["text", "image", "document"],
+      inputModalities: isHaiku ? ["text"] : ["text", "image", "document"],
       tags: ["anthropic", "messages"],
     };
   }
