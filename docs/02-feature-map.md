@@ -35,10 +35,10 @@
 | 기능 | 설명 |
 | --- | --- |
 | 데스크톱 대화 | 오케스트레이터 창 안에서 AI와 직접 대화 |
-| Telegram 브리지 | Telegram/OpenClaw 대화를 오케스트레이터 세션으로 기록하고 이어받기 |
+| 외부 인입 브리지 | 외부 인입/OpenClaw 대화를 오케스트레이터 세션으로 기록하고 이어받기 |
 | 모바일 대시보드 | 폰에서 세션 읽기, 승인, 중단, 재시도 수행 |
 | 채널 승격 | 대화 세션을 토론/코딩/리뷰 세션으로 전환 |
-| Ingress Guard | 외부 webhook/API/Telegram 입력을 정규화, 필터링, 권한 분류 후 Event Store로 전달 |
+| Ingress Guard | 외부 webhook/API/External Ingress 입력을 정규화, 필터링, 권한 분류 후 Event Store로 전달 |
 | Confidence Routing | HIGH/MEDIUM/LOW 신뢰도에 따라 자동 응답, 빠른 승인, 검토 대기로 분기 |
 
 ## Event Store와 권한
@@ -49,7 +49,7 @@
 | Redaction Layer | event emit 직전에 API key, token, `.env` secret 제거 |
 | Secret Reference | API 키 원문 대신 OS keychain/DGX vault 참조만 저장 |
 | Permission Matrix | 채널과 액션별 allowed/pending/denied 정책 |
-| Approval Queue | Telegram/mobile/위험 실행 요청을 승인 대기 상태로 관리 |
+| Approval Queue | external/mobile/위험 실행 요청을 승인 대기 상태로 관리 |
 | Sync Conflict | Offline 이후 soul, memory, session, artifact 충돌 감지 |
 | Guard Log | 외부 입력 guard 적용 결과와 차단 이유 기록 |
 

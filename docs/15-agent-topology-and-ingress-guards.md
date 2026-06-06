@@ -19,7 +19,7 @@
 | --- | --- | --- | --- |
 | 상위 관리자 | Orchestrator | 작업 분배, 검토, 승인 요청, 사용자 보고 | 세션 생성, 하위 에이전트 지시, 승인 요청 생성 |
 | 실무 실행자 | Worker / Builder | 대화형 작업, 코딩 패킷 생성, 도구 실행 준비 | 제한된 파일/터미널 작업, 실행 전 승인 필요 |
-| 외부 채널 담당 | External Agent | Telegram/API/CS 등 외부 입력 처리 | 읽기 중심, write/exec/browser 기본 차단 |
+| 외부 채널 담당 | External Agent | external API/CS 등 외부 입력 처리 | 읽기 중심, write/exec/browser 기본 차단 |
 | 감사/개선 담당 | Auditor | 실행 로그 분석, 병목 탐지, 자동화 후보 제안 | read-only analytics |
 
 이 구조는 제품의 기본 흐름을 바꾸지 않는다. v0에서는 `Orchestrator + Worker`만 필수이고, `External Agent`와 `Auditor`는 외부 채널/운영 자동화가 붙을 때 활성화한다.
@@ -117,7 +117,7 @@ Human Peek는 기본 작업 화면을 어지럽히지 않도록 on-demand 패널
 
 ## Ingress Guard
 
-외부 입력은 절대 에이전트에 직접 연결하지 않는다. Telegram, mobile, API, webhook, 향후 ChannelTalk/Slack 같은 외부 채널은 Ingress Guard를 먼저 통과한다.
+외부 입력은 절대 에이전트에 직접 연결하지 않는다. external, mobile, API, webhook, 향후 ChannelTalk/Slack 같은 외부 채널은 Ingress Guard를 먼저 통과한다.
 
 ```text
 External Channel
@@ -216,16 +216,16 @@ v0에서 바로 구현할 것:
 
 ## Stage8 구현 경계
 
-현재 구현은 실제 Telegram Bot API나 OpenClaw 세션 연결 전에, 외부 입력이 앱 내부 세션으로 들어오는 보안 경계를 먼저 고정한다.
+현재 구현은 실제 외부 인입 API나 OpenClaw 세션 연결 전에, 외부 입력이 앱 내부 세션으로 들어오는 보안 경계를 먼저 고정한다.
 
 - `IngressEvent`는 channel, source trust, author type, normalized/redacted text, requested permissions, confidence를 가진다.
 - `IngressGuardResult`는 7단계 guard의 pass/queued/blocked 상태와 approval state를 기록한다.
-- Telegram/OpenClaw demo input은 Event Store에 들어가기 전에 secret/env 값을 redaction하고 `sourceTrust: untrusted`로 표시한다.
+- 외부 인입/OpenClaw demo input은 Event Store에 들어가기 전에 secret/env 값을 redaction하고 `sourceTrust: untrusted`로 표시한다.
 - 외부 입력의 원문 payload는 일반 Event Store에 그대로 남기지 않고 `rawText: [QUARANTINED_RAW_PAYLOAD]`로 격리한다.
 - 짧은 시간 안에 연달아 들어온 외부 snippet은 `recentTexts`와 함께 debounce window에서 하나의 normalized text로 병합한다.
 - terminal/write/secret 요청은 `ExternalApprovalItem`으로 approval queue에 들어간다.
 - self-response/bot reply는 세션 handoff 전에 차단한다.
-- Conversation Workbench의 `Telegram` 버튼은 guarded external message를 현재 세션에 추가하고, untrusted memory candidate로 격리한다.
+- Conversation Workbench의 `External Ingress` 버튼은 guarded external message를 현재 세션에 추가하고, untrusted memory candidate로 격리한다.
 - Ingress Guard 패널은 confidence, approval, guard steps, approval queue, 0-token safety pending count를 보여준다.
 
 v0 이후:

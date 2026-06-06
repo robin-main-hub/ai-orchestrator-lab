@@ -18,7 +18,7 @@
 
 - Orchestrator: 상위 관리자. 작업 분배, 승인 요청, 사용자 보고
 - Worker: 실무 실행자. 대화, 코딩 패킷, 제한된 실행 준비
-- External Agent: Telegram/API/webhook 담당. read-only 중심, 위험 도구 차단
+- External Agent: external API/webhook 담당. read-only 중심, 위험 도구 차단
 - Auditor: 로그와 병목을 분석하는 read-only 개선 제안자
 
 v0에서는 Orchestrator와 Worker만 필수다. External Agent와 Auditor는 외부 채널과 운영 자동화가 붙을 때 활성화한다.

@@ -30,7 +30,7 @@ export function OperationsRailPanel({
   ingressSnapshot,
   onCheckProviderVault,
   onExportBackup,
-  onImportTelegram,
+  onImportExternalIngress,
   onRefreshApprovals,
   onResolveServerApproval,
   pendingTmuxApprovalKeys = [],
@@ -47,7 +47,7 @@ export function OperationsRailPanel({
   ingressSnapshot: Stage8IngressSnapshot;
   onCheckProviderVault: () => void;
   onExportBackup: () => void;
-  onImportTelegram: () => void;
+  onImportExternalIngress: () => void;
   onRefreshApprovals: () => void;
   onResolveServerApproval: (approval: ApprovalRequest, state: Extract<ApprovalState, "approved" | "rejected">) => void;
   pendingTmuxApprovalKeys?: string[];
@@ -70,7 +70,7 @@ export function OperationsRailPanel({
         <ShieldCheck size={16} />
         <span>Ops</span>
         <div className="rail-action-row">
-          <button className="rail-icon-button" onClick={onImportTelegram} title="Import Telegram" type="button">
+          <button className="rail-icon-button" onClick={onImportExternalIngress} title="Import External Ingress" type="button">
             <Smartphone size={13} />
           </button>
           <button className="rail-icon-button" onClick={onExportBackup} title="Export Backup" type="button">

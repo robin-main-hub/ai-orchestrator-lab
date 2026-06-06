@@ -17,7 +17,7 @@ export interface V0ConversationActionItem {
     | "create-coding-packet"
     | "create-agent-run"
     | "backup-status"
-    | "telegram";
+    | "external-ingress";
 }
 
 export function getConversationWorkbenchVisibility({
@@ -38,6 +38,6 @@ export function getV0ConversationActionItems(): V0ConversationActionItem[] {
     { id: "create-coding-packet" },
     { id: "create-agent-run" },
     { id: "backup-status" },
-    { id: "telegram" },
+    { id: "external-ingress" },
   ];
 }

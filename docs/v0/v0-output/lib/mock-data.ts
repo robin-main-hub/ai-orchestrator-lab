@@ -313,7 +313,7 @@ export const delegationChips: DelegationChip[] = [
   { action: '패킷 생성', enabled: true, shortcut: '⇧P' },
   { action: '실행 슬롯', enabled: true, shortcut: '⇧E' },
   { action: '백업 상태', enabled: true, shortcut: '⇧B' },
-  { action: 'Telegram', enabled: false, shortcut: '⇧T' },
+  { action: 'External Ingress', enabled: false, shortcut: '⇧T' },
 ]
 
 // Debate Context Mock
