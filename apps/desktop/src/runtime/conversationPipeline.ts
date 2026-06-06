@@ -58,10 +58,24 @@ export function createConversationPipelineMessages({
   const systemContent = [
     "AI Orchestrator Lab conversation pipeline.",
     "Reply in Korean unless the user explicitly asks for another language.",
+    "The active agent persona is binding: preserve its SOUL.md voice, judgment style, and forbidden style while staying concise and truthful.",
     `Agent: ${agent.name} / role: ${agent.role}`,
     `Provider: ${provider.name} / model: ${modelId}`,
     persona
-      ? `SOUL.md: ${sanitizePipelineText(persona.soulSummary)}\nAGENTS.md: ${sanitizePipelineText(persona.agentsInstruction)}\nCreativity: ${persona.creativityLevel}`
+      ? [
+          `SOUL.md path: ${sanitizePipelineText(persona.soulMdPath)}`,
+          `SOUL.md voice and judgment: ${sanitizePipelineText(persona.soulSummary)}`,
+          persona.soulExampleDialogue
+            ? `SOUL.md example dialogue:\n${sanitizePipelineText(persona.soulExampleDialogue)}`
+            : undefined,
+          `AGENTS.md path: ${sanitizePipelineText(persona.agentsMdPath)}`,
+          `AGENTS.md operational rules: ${sanitizePipelineText(persona.agentsInstruction)}`,
+          `Voice preset: ${persona.voicePreset}`,
+          `Creativity: ${persona.creativityLevel}`,
+          persona.forbiddenStyle
+            ? `Forbidden style: ${sanitizePipelineText(persona.forbiddenStyle)}`
+            : undefined,
+        ].filter(Boolean).join("\n")
       : "SOUL.md: default role profile",
     createAgentChannelRuntimeSummary(memoryScope),
     roleToolConfig.promptText,

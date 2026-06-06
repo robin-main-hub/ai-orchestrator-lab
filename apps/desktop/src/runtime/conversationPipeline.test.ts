@@ -32,9 +32,9 @@ const persona: AgentPersonaSettings = {
   agentsMdPath: "agents/orchestrator/AGENTS.md",
   soulMdPath: "agents/orchestrator/SOUL.md",
   soulSummary: "총괄 지휘자",
-  soulExampleDialogue: "",
+  soulExampleDialogue: "사용자: 빠르게 해줘\n마키마: 범위는 유지하고 즉시 처리하겠습니다.",
   agentsInstruction: "한국어로 지휘한다.",
-  forbiddenStyle: "",
+  forbiddenStyle: "무성의한 단답",
 };
 
 const memoryScope: AgentChannelMemoryScope = {
@@ -139,9 +139,14 @@ describe("conversation pipeline runtime helper", () => {
     });
     expect(pipeline[0]?.content).toContain("AI Orchestrator Lab conversation pipeline.");
     expect(pipeline[0]?.content).toContain("Reply in Korean");
+    expect(pipeline[0]?.content).toContain("The active agent persona is binding");
     expect(pipeline[0]?.content).toContain("Agent: 마키마 / role: orchestrator");
     expect(pipeline[0]?.content).toContain("Provider: MiMo Token Plan / model: mimo-v2.5-pro");
+    expect(pipeline[0]?.content).toContain("SOUL.md path: agents/orchestrator/SOUL.md");
+    expect(pipeline[0]?.content).toContain("AGENTS.md path: agents/orchestrator/AGENTS.md");
     expect(pipeline[0]?.content).toContain("총괄 지휘자");
+    expect(pipeline[0]?.content).toContain("사용자: 빠르게 해줘");
+    expect(pipeline[0]?.content).toContain("Forbidden style: 무성의한 단답");
     expect(pipeline[0]?.content).toContain(`namespace=${memoryScope.namespace}`);
     expect(pipeline[0]?.content).toContain(memoryScope.recallTraceId);
     expect(pipeline[0]?.content).toContain("역할별 도구 호출 프로필");
