@@ -4738,7 +4738,7 @@ export async function createServerProviderProxyCompletionResponse(
     requiresAuth: !config.noAuth,
     apiKey,
     fetchImpl,
-    extraBody: config.providerProfileId.includes("mimo_token")
+    extraBody: config.providerProfileId === "provider_mimo_token_openai"
       ? {
           max_completion_tokens: 512,
           thinking: {
