@@ -140,6 +140,16 @@ import {
 import { getConversationRailLayout } from "./lib/conversationRailLayout";
 import { getConversationShellVisibility, isFocusedV0Surface } from "./lib/conversationShellVisibility";
 import {
+  createConversationMessagePublicWorkTrace,
+  createTerminalBlockPublicWorkTrace,
+} from "./lib/publicWorkTrace";
+import { createWorkTraceSearchIndex } from "./lib/workTraceSearch";
+import { deriveDebateDecisionReadiness } from "./lib/debateDecisionReadiness";
+import { deriveTmuxRecoveryPlan } from "./lib/tmuxRecoveryPlan";
+import { createSettingsDiagnostics } from "./lib/settingsDiagnostics";
+import { createProductionSmokePlan } from "./lib/productionSmokePlan";
+import { createOrchestrationMaturityReport } from "./lib/orchestrationMaturity";
+import {
   createAgentChannelMemoryScope,
   createAgentChannelMemoryInstallAudit,
   createInitialAgentConversationChannels,
@@ -3305,6 +3315,150 @@ export function App() {
     };
   }, [derivedCockpitSnapshot, remoteCockpitSnapshotState]);
 
+  const cockpitReadiness = useMemo(() => {
+    const debateReadiness = deriveDebateDecisionReadiness(debateSession);
+    const tmuxBlocks = Object.values(tmuxTimelineBlocks).flat();
+    const latestTmuxBlock = tmuxBlocks.at(-1);
+    const firstPaneStatus = Object.values(tmuxStatuses)[0] ?? "ready";
+    const tmuxRecoveryPlan = deriveTmuxRecoveryPlan({
+      lastCaptureAt: latestTmuxBlock?.createdAt,
+      now: runtimeSnapshotState.updatedAt,
+      paneState: firstPaneStatus,
+      timelineBlocks: tmuxBlocks,
+    });
+    const conversationTraceSources = conversationMessages
+      .filter((message) => message.role === "assistant")
+      .slice(-12)
+      .map((message) => ({
+        id: message.id,
+        kind: "conversation" as const,
+        title: "에이전트 대화 공개 영수증",
+        trace: createConversationMessagePublicWorkTrace(message),
+      }));
+    const tmuxTraceSources = tmuxBlocks.slice(-12).map((block) => ({
+      id: block.id,
+      kind: "tmux" as const,
+      title: block.title,
+      trace: createTerminalBlockPublicWorkTrace(block),
+    }));
+    const workTraceIndex = createWorkTraceSearchIndex([...conversationTraceSources, ...tmuxTraceSources]);
+    const activeProviderCount = providerProfiles.filter((provider) => provider.enabled).length;
+    const providerSmokeReadyCount = providerRoutingConsoleItems.filter((item) =>
+      item.readinessTone === "success" || item.readinessTone === "warning"
+    ).length;
+    const runtimeStatus =
+      runtimeSnapshotState.dgxStatus === "online" || runtimeSnapshotState.localModelStatus === "online"
+        ? "online"
+        : eventSyncState.status === "failed"
+          ? "offline"
+          : "degraded";
+    const acceptedAttachmentTypeCount =
+      1 + (["image", "document"] as const).filter((kind) => modelSupportsAttachmentKind(selectedModel, kind)).length;
+    const onboardingPassedCount = metaOnboardingSignals.filter((signal) => signal.status === "ready").length;
+    const onboardingBlockedCount = metaOnboardingSignals.filter((signal) => signal.status === "blocked").length;
+    const codingImpactCount = debateSession.rounds.reduce(
+      (count, round) => count + round.utterances.filter((utterance) => utterance.tags.includes("coding_impact")).length,
+      0,
+    );
+    const decisionCount = debateSession.rounds.reduce(
+      (count, round) => count + round.utterances.filter((utterance) => Boolean(utterance.decisionId)).length,
+      0,
+    );
+    const workItemProjectionCount = workItems.length + assistantDrafts.length + workItemHandoffs.length;
+    const diagnostics = createSettingsDiagnostics({
+      agentCount: agents.length,
+      enabledProviderCount: activeProviderCount,
+      memoryAdapterStatus: adapterStatus,
+      providerSmokeReadyCount,
+      runtimeStatus,
+      workerCount: agents.length,
+    });
+    const smokePlan = createProductionSmokePlan({
+      includeLiveProvider: providerReadiness.status === "ready" && activeProviderCount > 0,
+      includeVisual: true,
+    });
+    const maturity = createOrchestrationMaturityReport({
+      attachments: {
+        acceptedTypeCount: acceptedAttachmentTypeCount,
+        hasProcessingPipeline: true,
+        pendingCount: draftAttachments.length,
+      },
+      controlQueue: {
+        connectedLaneCount: 6,
+        pendingApprovalCount: permissionSnapshot.summary.pending,
+        workItemProjectionCount,
+      },
+      debate: {
+        codingImpactCount,
+        decisionCount,
+        hasCodingPacketProjection: Boolean(codingPacketState.goal && workItemProjectionCount > 0),
+        readinessState: debateReadiness.state,
+      },
+      e2e: {
+        desktopTestCount: 328,
+        hasProviderSmokeHarness: providerSmokeReadyCount > 0,
+        hasVisualSmokeChecklist: true,
+      },
+      memory: {
+        agentInstallCount: memoryInstallAudit.totalAgents,
+        curatorCandidateCount: memoryRecords.filter(
+          (record) => record.activationState === "quarantined" || record.trustLevel === "untrusted",
+        ).length,
+        installedAgentCount: memoryInstallAudit.installedCount,
+        promotedCount: memoryRecords.filter((record) => record.activationState === "active" || record.pinned).length,
+      },
+      onboarding: {
+        blockingCheckCount: onboardingBlockedCount,
+        passedCheckCount: onboardingPassedCount,
+        totalCheckCount: metaOnboardingSignals.length,
+      },
+      provider: {
+        assignedAgentCount: agents.filter((agent) => Boolean(agent.providerProfileId)).length,
+        fallbackReadyCount: Math.max(0, activeProviderCount - 1),
+        profileCount: providerProfiles.length,
+        smokeReadyCount: providerSmokeReadyCount,
+      },
+      receipts: {
+        receiptCount: workTraceIndex.length,
+        searchableCount: workTraceIndex.filter((item) => item.searchable).length,
+        unsafeReceiptCount: workTraceIndex.filter((item) => !item.searchable).length,
+      },
+      tmux: {
+        hasRecoveryPlan: tmuxRecoveryPlan.state !== "manual_intervention",
+        paneCount: terminalSlots.length,
+        timelineBlockCount: tmuxBlocks.length,
+      },
+    });
+
+    return {
+      diagnostics,
+      maturity,
+      smokePlan,
+    };
+  }, [
+    adapterStatus,
+    agents,
+    assistantDrafts,
+    codingPacketState.goal,
+    conversationMessages,
+    debateSession,
+    draftAttachments.length,
+    eventSyncState.status,
+    memoryInstallAudit,
+    memoryRecords,
+    metaOnboardingSignals,
+    permissionSnapshot.summary.pending,
+    providerProfiles,
+    providerReadiness.status,
+    providerRoutingConsoleItems,
+    runtimeSnapshotState,
+    selectedModel,
+    tmuxStatuses,
+    tmuxTimelineBlocks,
+    workItemHandoffs,
+    workItems,
+  ]);
+
   const shellVisibility = getConversationShellVisibility({
     configLibraryActive,
     mode,
@@ -3656,6 +3810,7 @@ export function App() {
               onOpenProviderRouting={openProviderRoutingFromCockpit}
               onOpenRecovery={openRecoveryFromCockpit}
               onPreviewEvidence={() => setApprovalDrawerOpen(true)}
+              readiness={cockpitReadiness}
               snapshot={cockpitSnapshot}
             />
           ) : mode === "annex" ? (
