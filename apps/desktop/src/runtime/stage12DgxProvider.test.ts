@@ -9,7 +9,6 @@ import {
 } from "./stage12DgxProvider";
 import {
   DGX02_LAN_ORCHESTRATOR_BASE_URL,
-  ENDRUIN_ORCHESTRATOR_BASE_URL,
 } from "./stage30DgxEndpoints";
 import type { ConversationMessage, ProviderProfile } from "@ai-orchestrator/protocol";
 
@@ -137,10 +136,7 @@ describe("stage12 DGX provider completion", () => {
       }),
     ).rejects.toThrow("DGX-02 server proxy failed");
 
-    expect(calls).toEqual([
-      `${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`,
-      `${ENDRUIN_ORCHESTRATOR_BASE_URL}/provider-completions`,
-    ]);
+    expect(calls).toEqual([`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`]);
   });
 
   it("falls back to the direct DGX provider only when explicitly allowed", async () => {
@@ -169,11 +165,7 @@ describe("stage12 DGX provider completion", () => {
       allowDirectFallback: true,
     });
 
-    expect(calls).toEqual([
-      `${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`,
-      `${ENDRUIN_ORCHESTRATOR_BASE_URL}/provider-completions`,
-      "http://dgx-02:8001/v1/chat/completions",
-    ]);
+    expect(calls).toEqual([`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`, "http://dgx-02:8001/v1/chat/completions"]);
     expect(result.route).toBe("direct_provider");
     expect(result.fallbackReason).toContain("DGX-02 server proxy failed");
   });
@@ -204,9 +196,6 @@ describe("stage12 DGX provider completion", () => {
       }),
     ).rejects.toThrow("DGX-02 server proxy failed");
 
-    expect(calls).toEqual([
-      `${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`,
-      `${ENDRUIN_ORCHESTRATOR_BASE_URL}/provider-completions`,
-    ]);
+    expect(calls).toEqual([`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`]);
   });
 });
