@@ -99,7 +99,7 @@ export function MaturityReadinessCard({
         <div className="border-t border-zinc-800/60 px-4 py-3">
           <p className="mb-2 text-xs font-medium text-zinc-300">다음 조치</p>
           <div className="flex flex-wrap gap-2">
-            {[...maturity.nextActions, ...diagnostics.nextActions].slice(0, 6).map((action) => (
+            {Array.from(new Set([...maturity.nextActions, ...diagnostics.nextActions])).slice(0, 6).map((action) => (
               <span
                 className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-200"
                 key={action}
