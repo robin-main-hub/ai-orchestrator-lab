@@ -47,6 +47,14 @@ export function createConversationPipelineMessages({
     );
   const runtimeConfig = createAgentRuntimeConfigSection(agent, configFiles);
   const roleToolConfig = createAgentRoleToolRuntimeSummary(agent);
+  const longContextTruncated = previousMessages.length > 8;
+  const continuityWarning =
+    longContextTruncated && recalledMemories.length === 0
+      ? [
+          "Long conversation continuity: older turns were compacted out of the live prompt and no EvolveMemento recall matched this agent scope.",
+          "If the answer depends on earlier context, ask a short clarification instead of inventing missing details.",
+        ].join("\n")
+      : undefined;
   const systemContent = [
     "AI Orchestrator Lab conversation pipeline.",
     "Reply in Korean unless the user explicitly asks for another language.",
@@ -61,6 +69,7 @@ export function createConversationPipelineMessages({
     recalledMemories.length > 0
       ? `EvolveMemento recall:\n${recalledMemories.join("\n")}`
       : "EvolveMemento recall: no selected records",
+    continuityWarning,
     agent.role === "companion" || agent.role === "orchestrator"
       ? [
           "Delegation: You may command registered sub-agents with <delegate to=\"role_or_persona\">task</delegate>.",
@@ -84,6 +93,7 @@ export function createConversationPipelineMessages({
       modelId,
       memoryTraceId: memory.trace.id,
       recalledMemoryCount: recalledMemories.length,
+      longContextTruncated,
       memoryScope: memoryScope.namespace,
       memoryScopeAgentId: memoryScope.agentId,
       memoryScopeProviderProfileId: memoryScope.providerProfileId,
@@ -115,6 +125,11 @@ function memoryResultMatchesScope(
   const agentId = readScopedTag(tags, "agent");
   const providerProfileId = readScopedTag(tags, "provider");
   const sessionId = result.record.sessionId;
+  const isPublicMemory = tags.includes("scope:global") || tags.includes("scope:project");
+
+  if (!agentId && !sessionId && !providerProfileId) {
+    return isPublicMemory;
+  }
 
   return (
     (!agentId || agentId === memoryScope.agentId) &&
