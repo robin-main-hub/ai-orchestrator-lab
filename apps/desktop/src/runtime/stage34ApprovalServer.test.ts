@@ -88,6 +88,7 @@ describe("stage34 approval server runtime", () => {
   it("falls back to the public endpoint when the LAN approval queue is unavailable", async () => {
     const calls: string[] = [];
     const response = await rejectDgxApproval({
+      serverBaseUrl: [DGX02_LAN_ORCHESTRATOR_BASE_URL, "https://orchestrator.endruin.com"],
       request: {
         sourceItemId: "tmux_dispatch_1",
         actor: "user",
