@@ -13,10 +13,14 @@ import type { ControlQueueContinuitySummary } from "../../lib/controlQueueContin
 import {
   attachmentAcceptForModel,
   createDefaultPersonaSettings,
-  agentRoleLabel,
   modelSupportsAnyAttachment,
   providerDisplayLabel,
 } from "../../lib/helpers";
+import {
+  agentInitialsForDisplay,
+  agentPrimaryDisplayName,
+  agentSecondaryDisplayLabel,
+} from "../../lib/agentDisplay";
 import { createAgentChatContinuitySummary } from "../../lib/agentChatContinuity";
 import { getAgentToolBadgeLabels } from "../../lib/agentToolProfiles";
 import { getConversationWorkbenchVisibility } from "../../lib/conversationWorkbenchVisibility";
@@ -162,7 +166,9 @@ export function ConversationWorkbench({
   });
   const selectedAgentActivity = selectedAgent ? agentActivityById?.[selectedAgent.id] ?? "idle" : "idle";
   const selectedAgentState = mapConversationAgentState(selectedAgentActivity);
-  const selectedAgentInitials = getConversationAgentInitials(selectedAgent?.name);
+  const selectedAgentInitials = selectedAgent ? agentInitialsForDisplay(selectedAgent) : "AI";
+  const selectedAgentDisplayName = selectedAgent ? agentPrimaryDisplayName(selectedAgent) : "에이전트 선택";
+  const selectedAgentSubtitle = selectedAgent ? agentSecondaryDisplayLabel(selectedAgent) : "대기";
   const toolLabels = selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role).slice(0, 3) : [];
 
   return (
@@ -195,18 +201,18 @@ export function ConversationWorkbench({
               />
               <div className="flex min-w-0 flex-col leading-tight">
                 <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-zinc-100">
-                  <span className="truncate">{selectedAgent?.name ?? "에이전트 선택"}</span>
+                  <span className="truncate">{selectedAgentDisplayName}</span>
                   <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-500 transition-transform group-data-[state=open]:rotate-180" />
                 </span>
                 <span className="truncate text-[11px] text-zinc-500">
-                  {selectedAgent ? agentRoleLabel(selectedAgent.role) : "대기"} · {selectedModel?.id ?? selectedAgent?.modelId ?? "모델 연결 대기"}
+                  {selectedAgentSubtitle} · {selectedModel?.id ?? selectedAgent?.modelId ?? "모델 연결 대기"}
                 </span>
               </div>
             </button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-80 border-zinc-800 bg-zinc-900/95 p-0 text-zinc-100 backdrop-blur-xl">
             <div className="border-b border-zinc-800 px-4 py-3">
-              <p className="text-sm font-medium">{selectedAgent?.name ?? "에이전트 선택"}</p>
+              <p className="text-sm font-medium">{selectedAgentDisplayName}</p>
               <p className="text-xs text-zinc-500">
                 세션 {activeSessionId.slice(-12)} · {messages.length}개 메시지
               </p>
@@ -222,7 +228,7 @@ export function ConversationWorkbench({
                 >
                   {agents.map((agent) => (
                     <option key={agent.id} value={agent.id}>
-                      {agent.name} · {agent.modelId ?? "모델 연결 대기"}
+                      {agentPrimaryDisplayName(agent)} · {agent.modelId ?? "모델 연결 대기"}
                     </option>
                   ))}
                 </select>
@@ -356,8 +362,4 @@ function mapConversationAgentState(status: AgentActivityStatus): AgentState {
   if (status === "preparing") return "thinking";
   if (status === "responding") return "responding";
   return "idle";
-}
-
-function getConversationAgentInitials(name?: string) {
-  return name?.replace(/[^A-Za-z가-힣]/g, "").slice(0, 2).toUpperCase() || "AI";
 }
