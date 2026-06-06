@@ -28,6 +28,7 @@ import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
 import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import { PublicWorkTracePanel } from "../PublicWorkTracePanel";
 import { createConversationMessagePublicWorkTrace } from "../../lib/publicWorkTrace";
+import { agentInitialsForDisplay, agentPrimaryDisplayName } from "../../lib/agentDisplay";
 
 export type DelegationPreviewItem = {
   id: string;
@@ -141,11 +142,12 @@ function AssistantPendingBubble({
 }) {
   const visual = agentVisualsById?.[agent.id];
   const status = activity === "responding" ? ("active" as const) : ("pending" as const);
+  const displayName = agentPrimaryDisplayName(agent);
 
   return (
-    <div className="flex gap-3 py-1.5" aria-live="polite" aria-label={`${agent.name} 응답 준비 중`}>
+    <div className="flex gap-3 py-1.5" aria-live="polite" aria-label={`${displayName} 응답 준비 중`}>
       <AvatarWithStatus
-        initials={agent.name.slice(0, 2).toUpperCase()}
+        initials={agentInitialsForDisplay(agent)}
         roleColor={roleColorFromRole(agent.role)}
         status={status}
         avatarDataUrl={visual?.avatarDataUrl}
@@ -153,7 +155,7 @@ function AssistantPendingBubble({
       />
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2 px-1">
-          <span className="text-xs font-semibold text-zinc-200">{agent.name}</span>
+          <span className="text-xs font-semibold text-zinc-200">{displayName}</span>
           <span className="text-[10px] text-zinc-600">응답 준비 중</span>
         </div>
         <div className="inline-flex max-w-[82%] items-center gap-3 rounded-2xl rounded-tl-md border border-violet-300/15 bg-zinc-900/80 px-3 py-2.5 shadow-lg shadow-black/20 backdrop-blur-xl">
@@ -208,7 +210,7 @@ function MessageBubble({
   agentActivityById?: Record<string, AgentActivityStatus>;
 }) {
   const attachments = getMessageAttachments(message);
-  const label = messageLabel(message, selectedAgent);
+  const label = messageLabel(message, selectedAgent, agents);
   const publicWorkTrace = createConversationMessagePublicWorkTrace(message);
   const time = new Date(message.createdAt ?? Date.now()).toLocaleTimeString(
     "ko-KR",
@@ -245,7 +247,7 @@ function MessageBubble({
       a.name === label ||
       (message.metadata?.agentName && a.name === String(message.metadata.agentName))
   );
-  const initials = (senderAgent?.name ?? selectedAgent?.name ?? label).slice(0, 2).toUpperCase();
+  const initials = senderAgent ? agentInitialsForDisplay(senderAgent) : label.slice(0, 2).toUpperCase();
   const roleColor = senderAgent ? roleColorFromRole(senderAgent.role) : "orchestrator";
   const activity = senderAgent && agentActivityById ? agentActivityById[senderAgent.id] : "idle";
   const agentStatus = senderAgent
@@ -461,7 +463,7 @@ function createDelegationPreviewItems(
           status: item.status,
           target,
           targetLabel: matchedAgent
-            ? `${matchedAgent.name} / ${agentRoleLabel(matchedAgent.role)}`
+            ? `${agentPrimaryDisplayName(matchedAgent)} / ${agentRoleLabel(matchedAgent.role)}`
             : undefined,
         };
       });
