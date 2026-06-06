@@ -6,7 +6,6 @@ const DEFAULT_ALLOWED_ORIGINS: ReadonlyArray<string> = [
   "https://orchestrator.endruin.com",
 ];
 
-const FALLBACK_ALLOWED_ORIGIN = "http://localhost:5173";
 const ALLOWED_METHODS = "GET, HEAD, OPTIONS, POST";
 
 export function resolveAllowedOrigins(): Set<string> {
@@ -17,17 +16,26 @@ export function resolveAllowedOrigins(): Set<string> {
   return new Set<string>([...DEFAULT_ALLOWED_ORIGINS, ...extras]);
 }
 
-export function pickAllowedOrigin(originHeader: string | undefined, allowed: Set<string> = resolveAllowedOrigins()): string {
-  return originHeader && allowed.has(originHeader) ? originHeader : FALLBACK_ALLOWED_ORIGIN;
+export function pickAllowedOrigin(originHeader: string | undefined, allowed: Set<string> = resolveAllowedOrigins()): string | undefined {
+  if (!originHeader) {
+    return allowed.values().next().value;
+  }
+
+  return allowed.has(originHeader) ? originHeader : undefined;
 }
 
 export function createCorsHeaders(originHeader?: string, allowed: Set<string> = resolveAllowedOrigins()) {
+  const allowedOrigin = pickAllowedOrigin(originHeader, allowed);
   return {
     "access-control-allow-headers": "content-type,authorization",
     "access-control-allow-methods": ALLOWED_METHODS,
-    "access-control-allow-origin": pickAllowedOrigin(originHeader, allowed),
-    "access-control-allow-credentials": "true",
-    "access-control-allow-private-network": "true",
+    ...(allowedOrigin
+      ? {
+          "access-control-allow-origin": allowedOrigin,
+          "access-control-allow-credentials": "true",
+          "access-control-allow-private-network": "true",
+        }
+      : {}),
     "access-control-max-age": "600",
     "vary": "Origin, Access-Control-Request-Method, Access-Control-Request-Headers, Access-Control-Request-Private-Network",
   };

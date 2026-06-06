@@ -59,7 +59,10 @@ const sourceScanTargets = [
   "apps/desktop/src/lib/agentChannelStatus.ts",
   "apps/desktop/src/runtime/stage2Runtime.ts",
   "apps/desktop/src/runtime/stage3Runtime.ts",
+  "apps/desktop/src/runtime/stage30DgxEndpoints.ts",
+  "apps/server/src/http/cors.ts",
   "apps/server/src/index.ts",
+  "packages/protocol/src/index.ts",
 ];
 
 const forbiddenSourcePatterns = [
@@ -70,6 +73,9 @@ const forbiddenSourcePatterns = [
   { id: "raw-placeholder-listening", pattern: /placeholder listening/i },
   { id: "raw-sample-conversation", pattern: /샘플 대화|호환성 점검|호환성 확인 준비/ },
   { id: "raw-unknown-fallback", pattern: /timestamp unavailable|unknown error/i },
+  { id: "cors-fallback-allowed-origin", pattern: /FALLBACK_ALLOWED_ORIGIN/ },
+  { id: "mock-delegation-production-only", pattern: /mock agent delegation execution is disabled in production/i },
+  { id: "dgx-public-fallback-default-list", pattern: /DEFAULT_DGX_SERVER_FALLBACK_BASE_URLS\s*=\s*\[[^\]]*ENDRUIN_ORCHESTRATOR_BASE_URL/ },
 ];
 
 const forbiddenOutputPatterns = [

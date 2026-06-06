@@ -113,6 +113,7 @@ export type ServerCapability =
   | "provider-completion-proxy"
   | "agent-delegation-endpoint"
   | "vllm-health"
+  | "vllm-health-degraded"
   | "runtime-status"
   | "remote-run-request"
   | "tmux-dispatch-gate"
@@ -125,7 +126,7 @@ export type ServerCapability =
 
 export type ServerHealthResponse = {
   service: "ai-orchestrator-dgx-server";
-  status: "ok";
+  status: "ok" | "degraded";
   runtime: RuntimeSnapshot;
   capabilities: ServerCapability[];
   eventStorage: ServerEventStorageSnapshot;
@@ -736,19 +737,22 @@ export function createRuntimeSnapshot(now = new Date().toISOString(), probe?: Dg
 }
 
 export function createHealthResponse(now = new Date().toISOString(), probe?: DgxVllmProbe): ServerHealthResponse {
+  const vllmReachable = probe?.status !== "unreachable";
+  const dgxCapabilities: ServerCapability[] = vllmReachable
+    ? ["provider-completion-proxy", "vllm-health", "remote-run-request"]
+    : ["vllm-health-degraded"];
+
   return {
     service: "ai-orchestrator-dgx-server",
-    status: "ok",
+    status: vllmReachable ? "ok" : "degraded",
     runtime: createRuntimeSnapshot(now, probe),
     capabilities: [
       "health",
       "model-registry",
       "provider-registry",
-      "provider-completion-proxy",
       "agent-delegation-endpoint",
-      "vllm-health",
       "runtime-status",
-      "remote-run-request",
+      ...dgxCapabilities,
       "tmux-dispatch-gate",
       "tmux-capture-gate",
       "approval-queue",
@@ -875,7 +879,7 @@ export async function createServerProviderModelDiscoveryResponse(
       id: `model_discovery_${providerProfileId}_static`,
       providerProfileId,
       status: "succeeded",
-      source: "remote_probe",
+      source: "static_fallback",
       models: fallbackModels,
       selectedModelId: fallbackModels[0]?.id,
       redactionApplied: true,
@@ -890,7 +894,7 @@ export async function createServerProviderModelDiscoveryResponse(
       id: `model_discovery_${providerProfileId}_secret_missing`,
       providerProfileId,
       status: "failed",
-      source: "remote_probe",
+      source: "static_fallback",
       models: fallbackModels,
       selectedModelId: fallbackModels[0]?.id,
       redactionApplied: true,
@@ -924,8 +928,8 @@ export async function createServerProviderModelDiscoveryResponse(
     return {
       id: `model_discovery_${providerProfileId}_${models.length || "fallback"}`,
       providerProfileId,
-      status: "succeeded",
-      source: "remote_probe",
+      status: fellBackToStatic ? "failed" : "succeeded",
+      source: fellBackToStatic ? "static_fallback" : "remote_probe",
       models: models.length ? models : fallbackModels,
       selectedModelId: (models[0] ?? fallbackModels[0])?.id,
       redactionApplied: true,
@@ -954,7 +958,7 @@ export async function createServerProviderModelDiscoveryResponse(
     id: `model_discovery_${providerProfileId}_${models.length || "fallback"}`,
     providerProfileId,
     status: "succeeded",
-    source: "remote_probe",
+    source: "static_fallback",
     models: models.length ? models : fallbackModels,
     selectedModelId: (models[0] ?? fallbackModels[0])?.id,
     redactionApplied: true,
@@ -2817,8 +2821,8 @@ export async function replayApprovedRequestFromPersistentServerStorage(
     approvalState: "approved",
     permissionDecision: "allow",
   });
-  if (delegationRequest.executionMode === "mock" && process.env.NODE_ENV === "production") {
-    throw new Error("mock agent delegation execution is disabled in production");
+  if (delegationRequest.executionMode === "mock" && !isMockAgentDelegationEnabled()) {
+    throw new Error("mock agent delegation execution requires ENABLE_MOCK_AGENT_DELEGATION=true");
   }
   const completion =
     delegationRequest.executionMode === "mock"
@@ -4912,9 +4916,14 @@ export function createDgxHeartbeat(runtime = createRuntimeSnapshot(), checkedAt 
   };
 }
 
+function isMockAgentDelegationEnabled() {
+  return process.env.ENABLE_MOCK_AGENT_DELEGATION === "true";
+}
+
 export function createRemoteRunResponse(
   request: RemoteExecutionRequest,
   runtime = createRuntimeSnapshot(),
+  options: { workerAck?: boolean } = {},
 ): RemoteExecutionResponse {
   const permission = evaluateServerRemoteRunPermission(request);
   if (permission.decision !== "allow") {
@@ -4937,6 +4946,18 @@ export function createRemoteRunResponse(
       targetNodeId: request.targetNodeId,
       fallbackMode: request.kind === "model_inference" ? "local_model" : "local_cli",
       message: "dgx-02 is not reachable; use local fallback",
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  if (!options.workerAck) {
+    return {
+      id: `remote_response_${crypto.randomUUID()}`,
+      requestId: request.id,
+      status: "blocked",
+      targetNodeId: request.targetNodeId,
+      fallbackMode: request.kind === "model_inference" ? "local_model" : "local_cli",
+      message: "remote worker queue acknowledgement is unavailable; use the tmux dispatch gate or local fallback",
       createdAt: new Date().toISOString(),
     };
   }
@@ -5859,10 +5880,10 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         return;
       }
 
-      if (payload.executionMode === "mock" && process.env.NODE_ENV === "production") {
+      if (payload.executionMode === "mock" && !isMockAgentDelegationEnabled()) {
         respondJson(403, {
           error: "mock_delegation_disabled",
-          message: "mock agent delegation execution is disabled in production",
+          message: "mock agent delegation execution requires ENABLE_MOCK_AGENT_DELEGATION=true",
         });
         return;
       }
