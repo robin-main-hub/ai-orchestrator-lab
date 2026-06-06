@@ -35,6 +35,36 @@ describe("createOpenAIChatMessages", () => {
     expect(messages[1]).toEqual({ role: "user", content: "one" });
     expect(messages[2]).toEqual({ role: "assistant", content: "two" });
   });
+
+  it("respects custom maxContextMessages parameter", () => {
+    const messages = createOpenAIChatMessages(
+      [
+        { role: "user", content: "one" },
+        { role: "assistant", content: "two" },
+        { role: "user", content: "three" },
+      ],
+      "Default prompt.",
+      2,
+    );
+    // Should keep only the last 2 chat messages
+    expect(messages).toHaveLength(3); // 1 system + 2 chat
+    expect(messages[0]?.role).toBe("system");
+    expect(messages[1]).toEqual({ role: "assistant", content: "two" });
+    expect(messages[2]).toEqual({ role: "user", content: "three" });
+  });
+
+  it("keeps only the system prompt when maxContextMessages is not positive", () => {
+    const messages = createOpenAIChatMessages(
+      [
+        { role: "user", content: "one" },
+        { role: "assistant", content: "two" },
+      ],
+      "Default prompt.",
+      0,
+    );
+
+    expect(messages).toEqual([{ role: "system", content: "Default prompt." }]);
+  });
 });
 
 describe("OpenAICompatibleAdapter", () => {
