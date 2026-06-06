@@ -24,10 +24,10 @@ import {
   agentRoleLabel,
 } from "../../lib/helpers";
 import { messageLabel } from "../../lib/uiLabels";
-import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
 import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import { PublicWorkTracePanel } from "../PublicWorkTracePanel";
 import { createConversationMessagePublicWorkTrace } from "../../lib/publicWorkTrace";
+import { AgentActivity } from "../shared/agentActivity";
 
 export type DelegationPreviewItem = {
   id: string;
@@ -184,28 +184,18 @@ function MessageBubble({
       a.name === label ||
       (message.metadata?.agentName && a.name === String(message.metadata.agentName))
   );
-  const initials = (senderAgent?.name ?? selectedAgent?.name ?? label).slice(0, 2).toUpperCase();
-  const roleColor = senderAgent ? roleColorFromRole(senderAgent.role) : "orchestrator";
   const activity = senderAgent && agentActivityById ? agentActivityById[senderAgent.id] : "idle";
-  const agentStatus = senderAgent
-    ? activity === "responding"
-      ? ("active" as const)
-      : activity === "preparing"
-        ? ("pending" as const)
-        : activity === "idle"
-          ? ("idle" as const)
-          : ("online" as const)
-    : undefined;
   const visual = senderAgent && agentVisualsById ? agentVisualsById[senderAgent.id] : undefined;
 
   return (
     <div className="flex gap-3 py-1.5">
-      <AvatarWithStatus
-        initials={initials}
-        roleColor={roleColor}
-        status={agentStatus}
-        avatarDataUrl={visual?.avatarDataUrl}
+      <AgentActivity
+        agent={senderAgent ?? selectedAgent}
+        initials={(senderAgent?.name ?? selectedAgent?.name ?? label).slice(0, 2).toUpperCase()}
+        status={activity}
+        visual={visual}
         size="sm"
+        showLabel={false}
       />
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2 px-1">
