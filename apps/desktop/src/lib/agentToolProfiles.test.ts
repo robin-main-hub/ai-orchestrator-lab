@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { seededAgentProfiles } from "../seeds/agents";
 import {
   createAgentToolRuntimeSummary,
   getAgentToolBadgeLabels,
@@ -65,6 +66,22 @@ describe("agent tool profile runtime boundaries", () => {
 
   it("requires every role tool to have an explicit label and boundary", () => {
     expect(getRoleToolDefinitionGaps()).toEqual([]);
+  });
+
+  it("covers every seeded agent role with visible tools and runtime boundaries", () => {
+    expect(seededAgentProfiles.length).toBeGreaterThanOrEqual(17);
+
+    for (const agent of seededAgentProfiles) {
+      const profile = getAgentToolProfile(agent.role);
+      const badges = getAgentToolBadgeLabels(agent.role);
+      const summary = getAgentToolProfileSummary(agent.role);
+
+      expect(profile.label, agent.id).toBeTruthy();
+      expect(profile.tools.length, agent.id).toBeGreaterThan(0);
+      expect(badges.length, agent.id).toBe(profile.tools.length);
+      expect(summary.visibleBadges.length, agent.id).toBeGreaterThan(0);
+      expect(summary.runtime.boundaryLabel, agent.id).toBeTruthy();
+    }
   });
 
   it("treats unknown tools as approval-gated instead of silently read-only", () => {
