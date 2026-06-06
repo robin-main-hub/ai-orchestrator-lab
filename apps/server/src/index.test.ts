@@ -148,7 +148,7 @@ describe("server health placeholder", () => {
     expect(response.fallbackMode).toBe("local_cli");
   });
 
-  it("queues approved runs when DGX is online", () => {
+  it("blocks approved runs until a remote worker queue acknowledges the request", () => {
     const response = createRemoteRunResponse({
       id: "remote_request_2",
       runId: "run_2",
@@ -158,6 +158,26 @@ describe("server health placeholder", () => {
       approvalState: "approved",
       createdAt: "2026-05-24T00:00:00.000Z",
     });
+
+    expect(response.status).toBe("blocked");
+    expect(response.fallbackMode).toBe("local_cli");
+    expect(response.message).toContain("worker queue acknowledgement");
+  });
+
+  it("queues approved runs only with explicit remote worker acknowledgement", () => {
+    const response = createRemoteRunResponse(
+      {
+        id: "remote_request_2_ack",
+        runId: "run_2_ack",
+        kind: "workspace_run",
+        targetNodeId: "dgx-02",
+        commandPreview: "pnpm test",
+        approvalState: "approved",
+        createdAt: "2026-05-24T00:00:00.000Z",
+      },
+      createRuntimeSnapshot(),
+      { workerAck: true },
+    );
 
     expect(response.status).toBe("queued");
     expect(response.fallbackMode).toBe("none");
@@ -1057,6 +1077,36 @@ describe("server health placeholder", () => {
     }
   });
 
+  it("marks provider model static fallback as failed when remote discovery fails", async () => {
+    const previousKey = process.env.DEEPSEEK_API_KEY;
+    process.env.DEEPSEEK_API_KEY = "deepseek-test-secret";
+
+    try {
+      const discovery = await createServerProviderModelDiscoveryResponse("provider_deepseek_dgx", {
+        now: "2026-05-24T00:00:00.000Z",
+        fetchImpl: async () => ({
+          ok: false,
+          status: 503,
+          async text() {
+            return "temporarily unavailable";
+          },
+        }),
+      });
+
+      expect(discovery.status).toBe("failed");
+      expect(discovery.source).toBe("static_fallback");
+      expect(discovery.models.map((model) => model.id)).toContain("deepseek-v4-flash");
+      expect(discovery.warnings.join(" ")).toContain("static model fallback");
+      expect(JSON.stringify(discovery)).not.toContain("deepseek-test-secret");
+    } finally {
+      if (previousKey === undefined) {
+        delete process.env.DEEPSEEK_API_KEY;
+      } else {
+        process.env.DEEPSEEK_API_KEY = previousKey;
+      }
+    }
+  });
+
   it("publishes a DGX-02 provider registry without raw secrets", async () => {
     const previousDeepSeekKey = process.env.DEEPSEEK_API_KEY;
     const previousAnthropicKey = process.env.ANTHROPIC_API_KEY;
@@ -1303,6 +1353,7 @@ describe("server health placeholder", () => {
     });
 
     expect(discovery.status).toBe("succeeded");
+    expect(discovery.source).toBe("static_fallback");
     expect(discovery.models.map((model) => model.id)).toContain("claude-code-compatible");
     expect(discovery.warnings.join(" ")).toContain("static model allowlist");
   });
@@ -1345,7 +1396,11 @@ describe("server health placeholder", () => {
     });
 
     expect(health.runtime.dgxStatus).toBe("degraded");
+    expect(health.status).toBe("degraded");
     expect(health.runtime.runtimeNodes[0]?.status).toBe("degraded");
+    expect(health.capabilities).toContain("vllm-health-degraded");
+    expect(health.capabilities).not.toContain("provider-completion-proxy");
+    expect(health.capabilities).not.toContain("remote-run-request");
     expect(health.runtime.recentError).toContain("vLLM probe failed");
   });
 
@@ -1584,10 +1639,10 @@ describe("CORS allowed origins", () => {
     expect(allowed.has("http://localhost:5174")).toBe(true);
   });
 
-  it("pickAllowedOrigin echoes a matching origin and falls back otherwise", () => {
+  it("pickAllowedOrigin echoes a matching origin and rejects disallowed origins", () => {
     const allowed = new Set<string>(["http://localhost:5173", "http://localhost:5174"]);
     expect(pickAllowedOrigin("http://localhost:5174", allowed)).toBe("http://localhost:5174");
-    expect(pickAllowedOrigin("http://evil.example.com", allowed)).toBe("http://localhost:5173");
+    expect(pickAllowedOrigin("http://evil.example.com", allowed)).toBeUndefined();
     expect(pickAllowedOrigin(undefined, allowed)).toBe("http://localhost:5173");
   });
 });
@@ -2199,14 +2254,97 @@ describe("server agent delegation endpoint core", () => {
 });
 
 describe("HTTP request limits", () => {
+  it("rejects mock agent delegation unless explicit test opt-in is enabled", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousEnableMockDelegation = process.env.ENABLE_MOCK_AGENT_DELEGATION;
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "test";
+    delete process.env.ENABLE_MOCK_AGENT_DELEGATION;
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/agent-delegations/execute`, {
+        body: JSON.stringify({
+          id: "agent_delegation_http_mock_without_opt_in",
+          sessionId: "session_http",
+          executionMode: "mock",
+          caller: {
+            agentId: "agent_chaerin",
+            role: "companion",
+            personaName: "chaerin",
+            providerProfileId: "provider_dgx02_vllm",
+            modelId: "qwen36-domain-lora-v5-prisma",
+          },
+          userMessage: "마오마오에게 조사 맡겨줘.",
+          targets: [
+            {
+              key: "researcher",
+              agentId: "agent_maomao",
+              role: "researcher",
+              personaName: "maomao",
+              providerProfileId: "provider_dgx02_vllm",
+              modelId: "qwen36-domain-lora-v5-prisma",
+            },
+          ],
+          routePreference: "server_proxy",
+          createdAt: "2026-05-25T00:00:00.000Z",
+        }),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toMatchObject({
+        error: "mock_delegation_disabled",
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousEnableMockDelegation === undefined) {
+        delete process.env.ENABLE_MOCK_AGENT_DELEGATION;
+      } else {
+        process.env.ENABLE_MOCK_AGENT_DELEGATION = previousEnableMockDelegation;
+      }
+    }
+  });
+
   it("executes mock agent delegation and persists delegation events", async () => {
     const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
     const previousNodeEnv = process.env.NODE_ENV;
     const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const previousEnableMockDelegation = process.env.ENABLE_MOCK_AGENT_DELEGATION;
     const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-agent-delegations-"));
     process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
     process.env.NODE_ENV = "test";
     process.env.EVENT_STORAGE_DIR = tempDir;
+    process.env.ENABLE_MOCK_AGENT_DELEGATION = "true";
 
     const server = startServer(0);
 
@@ -2301,6 +2439,11 @@ describe("HTTP request limits", () => {
         delete process.env.EVENT_STORAGE_DIR;
       } else {
         process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      if (previousEnableMockDelegation === undefined) {
+        delete process.env.ENABLE_MOCK_AGENT_DELEGATION;
+      } else {
+        process.env.ENABLE_MOCK_AGENT_DELEGATION = previousEnableMockDelegation;
       }
       await rm(tempDir, { force: true, recursive: true });
     }
@@ -2497,9 +2640,11 @@ describe("HTTP request limits", () => {
   it("replays an approved agent delegation request from the approval record", async () => {
     const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
     const previousNodeEnv = process.env.NODE_ENV;
+    const previousEnableMockDelegation = process.env.ENABLE_MOCK_AGENT_DELEGATION;
     const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-agent-delegation-replay-"));
     process.env.EVENT_STORAGE_DIR = tempDir;
     process.env.NODE_ENV = "test";
+    process.env.ENABLE_MOCK_AGENT_DELEGATION = "true";
 
     const storage = createJsonlServerEventStorage();
 
@@ -2595,6 +2740,11 @@ describe("HTTP request limits", () => {
         delete process.env.NODE_ENV;
       } else {
         process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousEnableMockDelegation === undefined) {
+        delete process.env.ENABLE_MOCK_AGENT_DELEGATION;
+      } else {
+        process.env.ENABLE_MOCK_AGENT_DELEGATION = previousEnableMockDelegation;
       }
       await rm(tempDir, { force: true, recursive: true });
     }

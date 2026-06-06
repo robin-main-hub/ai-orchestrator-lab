@@ -3,6 +3,8 @@ import type { WorkbenchAgent } from "../types";
 export const modelWindowSize = 8;
 export const maxDraftAttachments = 5;
 export const agentVisualStorageKey = "ai-orchestrator-lab.agent-visuals.v1";
+export const agentProfilesStorageKey = "ai-orchestrator-lab.agent-profiles.v1";
+export const selectedAgentIdStorageKey = "ai-orchestrator-lab.selected-agent-id.v1";
 export const providerProfilesStorageKey = "ai-orchestrator-lab.provider-profiles.v1";
 export const providerProfilesSeedVersionKey = "ai-orchestrator-lab.provider-profiles.seed-version";
 export const providerProfilesSeedVersion = "2026-06-05-mimo-token-plan-all-agents";
