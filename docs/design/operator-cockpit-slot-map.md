@@ -57,7 +57,7 @@ These slots may be represented in UI before they are live.
 | Runtime slot | Safe first landing | Unsafe early landing |
 | --- | --- | --- |
 | tmux pane capture | Read-only capture preview with redaction note | Direct `send-keys` outside approval gates |
-| tmux dispatch | Dry-run replay preview | Mobile/API/Telegram direct dispatch |
+| tmux dispatch | Dry-run replay preview | Mobile/API/External Ingress direct dispatch |
 | SimpleMem/MCP | Derived recall trace or mock adapter | Treating MCP as source of truth |
 | Provider fallback | Read-only provenance and badge | Silent fallback with no operator visibility |
 | Recovery sync | Outbox/mirror health card | Automatic conflict overwrite |

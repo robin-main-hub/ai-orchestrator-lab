@@ -252,7 +252,7 @@ describe("runCompanionTurn — completion-only gated targets", () => {
     );
     const caller = makeSlot(
       makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
-      returningOnce(`<delegate to="external">send to telegram</delegate>`, `못 보냈어`),
+      returningOnce(`<delegate to="external">send to external channel</delegate>`, `못 보냈어`),
     );
     const result = await runCompanionTurn({
       caller,

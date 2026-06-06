@@ -78,7 +78,7 @@ export type MobileMemoryItem = {
   title: string;
   excerpt: string;
   trustLevel: "trusted" | "limited" | "untrusted";
-  sourceChannel: "desktop" | "mobile" | "telegram" | "api" | "agent" | "system";
+  sourceChannel: "desktop" | "mobile" | "external" | "api" | "agent" | "system";
   createdAt: string;
 };
 

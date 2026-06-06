@@ -38,7 +38,7 @@ describe("getV0ConversationActionItems", () => {
       "create-coding-packet",
       "create-agent-run",
       "backup-status",
-      "telegram",
+      "external-ingress",
     ]);
   });
 });

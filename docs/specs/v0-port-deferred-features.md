@@ -74,7 +74,7 @@ Current remaining Stage 1b candidates:
 |---|---|---|---|
 | Agent dropdown rich layout (AvatarWithStatus + StatusBadge + 그룹별 메뉴) | 🟡 | DropdownMenu primitive 미설치. 현재 native `<select>` 로 대체. | `@radix-ui/react-dropdown-menu` 도입 후 본격 dropdown |
 | Branch experiment 컨트롤 (분기 / 채택) | 🔵 | v0 mockup 에 없음. 현재 Action Strip 에 유지. | 그대로 유지 |
-| Telegram import | 🔵 | v0 에 없음. Action Strip 에 유지. | 동상 |
+| External ingress import | 🔵 | v0 에 없음. Action Strip 에 유지. | 동상 |
 | ContextPack tier toggle (Lite/Standard/Full) | 🔵 | v0 header chips 에 자리 부족. 현재 header 우측 chip 으로 유지. | 동상 |
 | Inline DelegationPanel | 🟡 | v0 에 직접 없지만 우리만의 핵심. message thread 위에 inline panel 로 carry. | 그대로 유지 |
 | Inline ApprovalQueuePanel | 🟡 | v0 의 별도 ApprovalQueue 컴포넌트와 의미는 같지만 위치 다름. v0 는 하단 collapsible. 우리는 message thread 위에 + 하단에 둘 다. | 하단 strip 으로 점진 통합 |

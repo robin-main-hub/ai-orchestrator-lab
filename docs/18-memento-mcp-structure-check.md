@@ -24,7 +24,7 @@ The memory record needs more than text:
 - layer: fragment, episode, reflection, project memory, user memory.
 - scope: global, project, session.
 - kind: preference, architecture, pattern, decision, context, workflow, relationship, learning.
-- source and trust: desktop, legacy_telegram, mobile, api, agent plus trusted, limited, untrusted.
+- source and trust: desktop, external_legacy, mobile, api, agent plus trusted, limited, untrusted.
 - activation state: inactive, suggested, active, quarantined.
 - relation graph and reflection issues.
 
@@ -111,5 +111,5 @@ Rules:
 
 - Event Storage remains the source of truth for memory events.
 - Memento MCP or vector DB is an index/projection, not the only copy.
-- Untrusted provider and Telegram memories stay quarantined until explicitly activated.
+- Untrusted provider and External Ingress memories stay quarantined until explicitly activated.
 - Reflection issues must be visible before automatic recall uses risky memories.

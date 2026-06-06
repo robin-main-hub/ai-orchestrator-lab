@@ -74,7 +74,7 @@ Obsidian/Notion/mobile은 여전히 원본 저장소가 아니라 Event Store의
 
 Event Store의 중앙 원본은 DGX-02다. 각 클라이언트의 로컬 SQLite는 offline cache/outbox 역할을 하며, API 키와 토큰은 Event Store에 평문 저장하지 않고 OS keychain 또는 DGX secret vault에 secret reference로만 연결한다.
 
-모든 event는 저장 전에 Redaction Layer와 Permission Matrix를 통과한다. Telegram, 모바일, 외부 API에서 들어온 파일 쓰기/터미널 실행/네트워크 실행 요청은 기본적으로 `pending approval` 상태가 된다.
+모든 event는 저장 전에 Redaction Layer와 Permission Matrix를 통과한다. External Ingress, 모바일, 외부 API에서 들어온 파일 쓰기/터미널 실행/네트워크 실행 요청은 기본적으로 `pending approval` 상태가 된다.
 
 자세한 설계는 `docs/13-event-store-permission-redaction.md`에 둔다.
 

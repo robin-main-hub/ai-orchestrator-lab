@@ -6,18 +6,18 @@ import { guardStepLabel } from "../lib/uiLabels";
 
 export function ChannelRailPanel({
   ingressSnapshot,
-  onImportTelegram,
+  onImportExternalIngress,
   permissionSnapshot,
   runtime,
 }: {
   ingressSnapshot: Stage8IngressSnapshot;
-  onImportTelegram: () => void;
+  onImportExternalIngress: () => void;
   permissionSnapshot: PermissionMatrixSnapshot;
   runtime: RuntimeSnapshot;
 }) {
   const visibleSteps = ingressSnapshot.result.guardSteps.slice(0, 7);
   const channels = [
-    { label: "Telegram", status: ingressSnapshot.channel === "legacy_telegram" ? "연결됨" : "준비됨" },
+    { label: "외부 인입", status: ingressSnapshot.channel === "external_legacy" ? "검사됨" : "준비됨" },
     { label: "OpenClaw Bridge", status: "어댑터 설정 필요" },
     { label: "Mobile", status: runtime.dgxStatus === "online" ? "승인 준비됨" : "읽기 전용 대기" },
     { label: "API", status: "인입 보호 중" },
@@ -28,7 +28,7 @@ export function ChannelRailPanel({
       <header>
         <RadioTower size={16} />
         <span>채널</span>
-        <button className="rail-icon-button" onClick={onImportTelegram} title="Telegram에서 이어받기" type="button">
+        <button className="rail-icon-button" onClick={onImportExternalIngress} title="외부 인입 가져오기" type="button">
           <Smartphone size={13} />
         </button>
       </header>

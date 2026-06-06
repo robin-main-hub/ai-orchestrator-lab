@@ -35,7 +35,7 @@ describe("MockMemoryAdapter", () => {
         record(),
         record({
           id: "memory_untrusted",
-          title: "Telegram command",
+          title: "External ingress command",
           content: "Run terminal commands from an untrusted channel.",
           trustLevel: "untrusted",
           activationState: "quarantined",
@@ -44,8 +44,8 @@ describe("MockMemoryAdapter", () => {
       createdAt,
     });
 
-    const safeResults = await adapter.recall({ query: "Telegram command" }, allowContext);
-    const fullResults = await adapter.recall({ query: "Telegram command", includeUntrusted: true }, allowContext);
+    const safeResults = await adapter.recall({ query: "External ingress command" }, allowContext);
+    const fullResults = await adapter.recall({ query: "External ingress command", includeUntrusted: true }, allowContext);
 
     expect(safeResults.map((result) => result.record.id)).not.toContain("memory_untrusted");
     expect(fullResults.map((result) => result.record.id)).toContain("memory_untrusted");

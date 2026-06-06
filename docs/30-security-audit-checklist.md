@@ -159,7 +159,7 @@
 | Backup/Export redaction (pre_backup stage) | High | F7 |
 | External send (email/customer_reply) redaction | High | F7 |
 | Mobile push 2FA flow | High | F5 |
-| Telegram bot ingress receiver | Medium | F9 |
+| External Ingress bot ingress receiver | Medium | F9 |
 | Provider OAuth refresh layer (`refresh_required` 카테고리만 정의) | Medium | F4 또는 별도 |
 | ERP-도메인 actions (`payment_action` 등) 정책 미정 | High (ERP 진입 시) | ERP 진입 직전 |
 

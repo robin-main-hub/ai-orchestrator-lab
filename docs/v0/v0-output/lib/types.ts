@@ -166,7 +166,7 @@ export type DelegationAction =
   | '패킷 생성'
   | '실행 슬롯'
   | '백업 상태'
-  | 'Telegram'
+  | 'External Ingress'
 
 export interface DelegationChip {
   action: DelegationAction

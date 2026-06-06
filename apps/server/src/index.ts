@@ -2862,13 +2862,13 @@ function createApprovalId(sourceItemId: string) {
 function actorFromEventSource(source: ProviderCompletionRequest["source"]): PermissionActor {
   if (source === "mobile") return "mobile";
   if (source === "agent") return "agent";
-  if (source === "api" || source === "legacy_telegram") return "external_channel";
+  if (source === "api" || source === "external_legacy") return "external_channel";
   if (source === "server") return "server";
   return "user";
 }
 
 function sourceTrustFromEventSource(source: ProviderCompletionRequest["source"]): SourceTrust {
-  if (source === "legacy_telegram" || source === "api") return "untrusted";
+  if (source === "external_legacy" || source === "api") return "untrusted";
   if (source === "mobile") return "limited";
   return "trusted";
 }
@@ -3073,7 +3073,7 @@ function parseServerIngressInput(value: unknown, now = new Date().toISOString())
 }
 
 function parseExternalChannel(value: unknown): ExternalChannel {
-  if (value === "legacy_telegram" || value === "mobile" || value === "api" || value === "webhook") {
+  if (value === "external_legacy" || value === "mobile" || value === "api" || value === "webhook") {
     return value;
   }
   return "api";
@@ -3213,7 +3213,7 @@ function normalizeIngressText(value: string) {
 }
 
 function eventSourceForIngressChannel(channel: ExternalChannel): EventSource {
-  if (channel === "legacy_telegram") return "legacy_telegram";
+  if (channel === "external_legacy") return "external_legacy";
   if (channel === "mobile") return "mobile";
   return "api";
 }
@@ -4188,7 +4188,7 @@ export const memoryInputZodSchema = z.object({
   kind: memoryKindSchema.optional(),
   title: z.string(),
   content: z.string(),
-  sourceChannel: z.enum(["desktop", "legacy_telegram", "mobile", "api", "agent"]),
+  sourceChannel: z.enum(["desktop", "external_legacy", "mobile", "api", "agent"]),
   trustLevel: sourceTrustSchema,
   projectId: z.string().optional(),
   sessionId: z.string().optional(),

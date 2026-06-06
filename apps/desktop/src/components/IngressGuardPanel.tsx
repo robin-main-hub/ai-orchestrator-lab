@@ -32,10 +32,10 @@ function guardStepBadgeVariant(status: string): StatusBadgeVariant {
 }
 
 export function IngressGuardPanel({
-  onImportTelegram,
+  onImportExternalIngress,
   snapshot,
 }: {
-  onImportTelegram: () => void;
+  onImportExternalIngress: () => void;
   snapshot: Stage8IngressSnapshot;
 }) {
   const visibleSteps = snapshot.result.guardSteps.slice(0, 7);
@@ -45,7 +45,7 @@ export function IngressGuardPanel({
       <header className="panel-title">
         <RadioTower size={17} />
         <h2>Ingress Guard</h2>
-        <button aria-label="Telegram 가져오기" className="icon-button" onClick={onImportTelegram} type="button">
+        <button aria-label="외부 인입 가져오기" className="icon-button" onClick={onImportExternalIngress} type="button">
           <Smartphone size={15} />
         </button>
       </header>

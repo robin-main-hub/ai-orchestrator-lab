@@ -293,9 +293,9 @@ The following actions require explicit approval unless the project policy says o
 - secret access;
 - destructive operations;
 - remote workspace commands;
-- commands from Telegram, mobile, API, or other external channels.
+- commands from external, mobile, API, or other external channels.
 
-Telegram, mobile, and external API commands must never directly execute inside tmux panes.
+external, mobile, and external API commands must never directly execute inside tmux panes.
 
 They must pass through Ingress Guard, Redaction, Permission classification, and approval.
 

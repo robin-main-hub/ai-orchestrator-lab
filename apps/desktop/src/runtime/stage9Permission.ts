@@ -165,7 +165,7 @@ function createExternalApprovalItem(
     subjectId: approval.ingressEventId,
     actor: "external_channel",
     channel: eventSourceForExternalChannel(approval.channel),
-    sourceTrust: approval.channel === "legacy_telegram" || approval.channel === "webhook" ? "untrusted" : "limited",
+    sourceTrust: approval.channel === "external_legacy" || approval.channel === "webhook" ? "untrusted" : "limited",
     action,
     requestedLevels: approval.permissions,
     state,
@@ -447,8 +447,8 @@ function decisionFromActionAndState(action: PermissionAction, state: ApprovalSta
 }
 
 function eventSourceForExternalChannel(channel: ExternalApprovalItem["channel"]): EventSource {
-  if (channel === "legacy_telegram") {
-    return "legacy_telegram";
+  if (channel === "external_legacy") {
+    return "external_legacy";
   }
 
   if (channel === "mobile") {
@@ -478,7 +478,7 @@ function actionFromExternalApproval(approval: ExternalApprovalItem): PermissionA
     return "customer_reply";
   }
 
-  if (/(slack|telegram|message|dm|카톡|텔레그램|메시지)/i.test(summary)) {
+  if (/(slack|external|message|dm|카톡|외부 인입|메시지)/i.test(summary)) {
     return "external_message_send";
   }
 

@@ -133,7 +133,7 @@ These are not negotiable.
   databases.
 - Live tmux dispatch remains behind approval, redaction, replay binding,
   dry-run safety, and server gates.
-- Telegram, mobile, or API input must not dispatch directly into tmux.
+- external, mobile, or API input must not dispatch directly into tmux.
 - Protected actions must pass through Permission Matrix policy and redaction.
 - Unknown external effects deny by default until explicitly modeled.
 - Untrusted sources, providers, and memories must not receive automatic recall,

@@ -64,7 +64,7 @@ The following stay blocked until explicit implementation gates are passed:
 - real `tmux send-keys`;
 - destructive file operations;
 - device reboot execution;
-- direct Telegram/mobile terminal commands;
+- direct external/mobile terminal commands;
 - raw secret export.
 
 ## Obsidian Default

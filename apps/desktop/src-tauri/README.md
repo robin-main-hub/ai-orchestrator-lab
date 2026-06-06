@@ -18,5 +18,4 @@ Blocked until later:
 - destructive file moves/deletes;
 - device reboot execution;
 - raw secret export;
-- Telegram/mobile direct terminal typing.
-
+- external/mobile direct terminal typing.

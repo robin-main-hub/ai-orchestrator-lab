@@ -567,9 +567,9 @@ describe("server health placeholder", () => {
 
   it("normalizes external ingress into redacted events and approval requests", () => {
     const snapshot = createServerIngressSnapshot({
-      id: "telegram_input_server_test",
+      id: "external_ingress_input_server_test",
       sessionId: "session_ingress_test",
-      channel: "legacy_telegram",
+      channel: "external_legacy",
       authorType: "user",
       eventType: "message",
       text: "run pnpm test with OPENAI_API_KEY=sk-server-ingress-secret123456",
@@ -2953,9 +2953,9 @@ describe("HTTP request limits", () => {
 
       const response = await fetch(`http://127.0.0.1:${address.port}/ingress/events`, {
         body: JSON.stringify({
-          id: "telegram_input_http_test",
+          id: "external_ingress_input_http_test",
           sessionId: "session_ingress_http",
-          channel: "legacy_telegram",
+          channel: "external_legacy",
           authorType: "user",
           eventType: "message",
           text: "please run bash and use Bearer abcdefghijklmnopqrstuvwxyz123456",
