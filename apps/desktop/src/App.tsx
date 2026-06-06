@@ -136,7 +136,7 @@ import {
   selectedAgentIdStorageKey,
 } from "./lib/appConstants";
 import { getConversationRailLayout } from "./lib/conversationRailLayout";
-import { getConversationShellVisibility } from "./lib/conversationShellVisibility";
+import { getConversationShellVisibility, isFocusedV0Surface } from "./lib/conversationShellVisibility";
 import {
   createAgentChannelMemoryScope,
   createAgentChannelMemoryInstallAudit,
@@ -2427,18 +2427,6 @@ export function App() {
     setProviderRegistrationOpen(item === "providers");
   }
 
-  function toggleManagementRail() {
-    setAdminRailOpen((open) => {
-      const nextOpen = !open;
-      if (!nextOpen) {
-        setProviderRegistrationOpen(false);
-      } else {
-        setProviderRegistrationOpen(activeNavItem === "providers");
-      }
-      return nextOpen;
-    });
-  }
-
   function openProviderRoutingFromCockpit() {
     openManagementRail("providers");
   }
@@ -3211,7 +3199,9 @@ export function App() {
     configLibraryActive,
     mode,
   });
+  const focusedV0Surface = !configLibraryActive && isFocusedV0Surface(mode);
   const leftRailVisible = shellVisibility.showLeftRail || providerRegistrationOpen || adminRailOpen;
+  const rightRailVisible = !focusedV0Surface;
 
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
@@ -3243,7 +3233,6 @@ export function App() {
         mode={mode}
         onChangeMode={setMode}
         onCommandPalette={() => setCommandPaletteOpen(true)}
-        onOpenManagement={toggleManagementRail}
         onOpenOpsDetail={() => setMode("cockpit")}
         onProbeDgx={handleProbeDgx}
         onToggleDrawer={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
@@ -3594,7 +3583,7 @@ export function App() {
           ) : null}
         </section>
 
-        {!adminRailOpen && (mode === "conversation" || mode === "debate" || mode === "tmux" || mode === "cockpit" || mode === "annex") ? null : (
+        {rightRailVisible ? (
           <aside className="right-rail" aria-label="모델과 에이전트 상태">
             <AgentsSidebar
               agents={agents}
@@ -3627,7 +3616,7 @@ export function App() {
               <HumanPeekPanel ingressSnapshot={ingressSnapshot} />
             ) : null}
           </aside>
-        )}
+        ) : null}
       </main>
       {shellVisibility.showTerminalDock ? (
         <TerminalDock
