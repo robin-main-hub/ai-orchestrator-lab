@@ -241,6 +241,78 @@ describe("conversation pipeline runtime helper", () => {
     expect(pipeline[0]?.metadata?.recalledMemoryCount).toBe(1);
   });
 
+  it("does not inject untagged memory into every agent channel", () => {
+    const userMessage = message("message_user_latest", "user", "내 기억만 써줘");
+    const untaggedMemory = {
+      trace: {
+        id: "trace_memory_untagged",
+        results: [
+          {
+            usedInDecision: true,
+            score: 0.99,
+            record: {
+              title: "소유자 없는 기억",
+              content: "아무 agent에게나 들어가면 안 된다.",
+            },
+          },
+          {
+            usedInDecision: true,
+            score: 0.93,
+            record: {
+              title: "프로젝트 공용 기억",
+              content: "명시적으로 공용 처리된 기억은 허용한다.",
+              tags: ["scope:project"],
+            },
+          },
+        ],
+      },
+    } as unknown as Stage6MemoryInspector;
+
+    const pipeline = createConversationPipelineMessages({
+      agent,
+      configFiles: [],
+      memory: untaggedMemory,
+      memoryScope,
+      modelId: "mimo-v2.5-pro",
+      previousMessages: [],
+      provider,
+      systemMessageId: "message_system_pipeline_untagged_scope_test",
+      userMessage,
+    });
+
+    expect(pipeline[0]?.content).not.toContain("소유자 없는 기억");
+    expect(pipeline[0]?.content).toContain("프로젝트 공용 기억");
+    expect(pipeline[0]?.metadata?.recalledMemoryCount).toBe(1);
+  });
+
+  it("warns the agent when older turns were truncated and no scoped recall matched", () => {
+    const userMessage = message("message_user_latest", "user", "아까 말한 결정 이어서 해");
+    const emptyMemory = {
+      trace: {
+        id: "trace_memory_empty",
+        results: [],
+      },
+    } as unknown as Stage6MemoryInspector;
+
+    const pipeline = createConversationPipelineMessages({
+      agent,
+      configFiles: [],
+      memory: emptyMemory,
+      memoryScope,
+      modelId: "mimo-v2.5-pro",
+      previousMessages: Array.from({ length: 12 }, (_, index) =>
+        message(`message_old_${index}`, index % 2 === 0 ? "user" : "assistant", `오래된 메시지 ${index}`),
+      ),
+      provider,
+      systemMessageId: "message_system_pipeline_truncation_warning_test",
+      userMessage,
+    });
+
+    expect(pipeline[0]?.content).toContain("Long conversation continuity");
+    expect(pipeline[0]?.content).toContain("ask a short clarification");
+    expect(pipeline[0]?.metadata?.longContextTruncated).toBe(true);
+  });
+
   it("injects role tool contracts for every seeded agent", () => {
     for (const seededAgent of seededAgentProfiles) {
       const agentUnderTest = {
@@ -291,6 +363,7 @@ describe("conversation pipeline runtime helper", () => {
             record: {
               title: "secret https://token-plan-sgp.xiaomimimo.com/v1",
               content: "Bearer sk-1234567890abcdef /Users/robin/private raw prompt: hidden",
+              tags: ["scope:project"],
             },
           },
         ],
