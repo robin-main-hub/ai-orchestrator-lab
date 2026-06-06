@@ -42,6 +42,33 @@ export function getAgentChannelMessages(
   return channels[agentId] ?? [];
 }
 
+/**
+ * Merges replayed/cached messages back into existing per-agent channels while
+ * preserving agent isolation: each message is routed into its own agent's
+ * channel by `metadata.agentId`, not dumped into a single (currently selected)
+ * channel. `mergeMessages` is injected (the replay layer owns dedupe/sort) to
+ * keep this module free of runtime dependencies.
+ *
+ * Messages whose `agentId` matches no known agent are dropped, matching the
+ * behavior of `createInitialAgentConversationChannels`.
+ */
+export function distributeReplayedMessagesIntoChannels(
+  channels: AgentConversationChannels,
+  agents: AgentChannelSeed[],
+  replayedMessages: ConversationMessage[],
+  mergeMessages: (
+    existing: ConversationMessage[],
+    incoming: ConversationMessage[],
+  ) => ConversationMessage[],
+): AgentConversationChannels {
+  const next: AgentConversationChannels = { ...channels };
+  for (const agent of agents) {
+    const incoming = replayedMessages.filter((message) => message.metadata?.agentId === agent.id);
+    next[agent.id] = mergeMessages(getAgentChannelMessages(channels, agent.id), incoming);
+  }
+  return next;
+}
+
 export function appendAgentChannelMessages(
   channels: AgentConversationChannels,
   agentId: string,

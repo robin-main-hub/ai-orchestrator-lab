@@ -153,6 +153,7 @@ import {
   createAgentChannelMemoryScope,
   createAgentChannelMemoryInstallAudit,
   createInitialAgentConversationChannels,
+  distributeReplayedMessagesIntoChannels,
   getAgentChannelMessages,
   updateAgentChannelMessages,
   type AgentChannelMemoryScope,
@@ -904,9 +905,7 @@ export function App() {
         setConversationMessagesByAgentId((channels) =>
           switchingSessions
             ? createInitialAgentConversationChannels(agents, localMessages)
-            : updateAgentChannelMessages(channels, selectedAgentId, (messages) =>
-                mergeConversationMessages(messages, localMessages),
-              ),
+            : distributeReplayedMessagesIntoChannels(channels, agents, localMessages, mergeConversationMessages),
         );
         setEventSyncState((state) => ({
           ...state,
@@ -950,9 +949,7 @@ export function App() {
     setConversationMessagesByAgentId((channels) =>
       switchingSessions
         ? createInitialAgentConversationChannels(agents, cachedMessages)
-        : updateAgentChannelMessages(channels, selectedAgentId, (messages) =>
-            mergeConversationMessages(messages, cachedMessages),
-          ),
+        : distributeReplayedMessagesIntoChannels(channels, agents, cachedMessages, mergeConversationMessages),
     );
     const packetReplay = extractLatestCodingPacketFromEvents(result.events);
     if (packetReplay.status === "restored" && packetReplay.packet) {
