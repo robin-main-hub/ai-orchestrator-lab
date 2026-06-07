@@ -5280,17 +5280,20 @@ export function listEventStorageSessions(
 type NonceRegistryOptions = {
   maxNonces?: number;
   cleanupIntervalMs?: number | false;
+  maxCapacityScan?: number;
   now?: () => number;
 };
 
 export class NonceRegistry {
   private nonces = new Map<string, number>();
+  private readonly maxCapacityScan: number;
   private readonly maxNonces: number;
   private readonly now: () => number;
   private readonly cleanupInterval?: ReturnType<typeof setInterval>;
 
   constructor(options: NonceRegistryOptions = {}) {
     this.maxNonces = options.maxNonces ?? 100_000;
+    this.maxCapacityScan = Math.max(1, Math.trunc(options.maxCapacityScan ?? 64));
     this.now = options.now ?? Date.now;
     const cleanupIntervalMs = options.cleanupIntervalMs ?? 60_000;
     if (cleanupIntervalMs !== false) {
@@ -5313,8 +5316,21 @@ export class NonceRegistry {
 
   add(nonce: string, ttlMs: number) {
     if (!this.nonces.has(nonce) && this.nonces.size >= this.maxNonces) {
-      this.cleanupExpired();
-      if (this.nonces.size >= this.maxNonces) {
+      const now = this.now();
+      let evicted = false;
+      let scanned = 0;
+      for (const [key, expiry] of this.nonces.entries()) {
+        scanned += 1;
+        if (now > expiry) {
+          this.nonces.delete(key);
+          evicted = true;
+          break;
+        }
+        if (scanned >= this.maxCapacityScan) {
+          break;
+        }
+      }
+      if (!evicted && this.nonces.size >= this.maxNonces) {
         throw new Error("nonce_registry_capacity_exceeded");
       }
     }
