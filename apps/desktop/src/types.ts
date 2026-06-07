@@ -3,7 +3,15 @@ import type { AgentProfile, ConversationAttachment, DebateUtterance, ModelDescri
 import type { AttachmentProcessingPlan } from "./lib/attachmentProcessing";
 
 export type CenterMode = "conversation" | "debate" | "tmux" | "cockpit" | "annex";
-export type AgentActivityStatus = "idle" | "preparing" | "responding";
+export type AgentActivityStatus =
+  | "idle"
+  | "preparing"
+  | "tooling"
+  | "capturing"
+  | "dispatching"
+  | "waiting_approval"
+  | "responding"
+  | "error";
 export type WorkbenchAgent = AgentProfile;
 export type ModelCatalog = Record<string, ModelDescriptor[]>;
 export type ProviderRegistrationMode = "api_key" | "cli" | "oauth";

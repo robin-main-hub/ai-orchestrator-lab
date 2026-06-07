@@ -33,8 +33,8 @@ describe("MessageThread pending assistant state", () => {
   });
 
   it("uses Korean status copy for the visible waiting state", () => {
-    expect(assistantPendingLabel("preparing")).toBe("생각을 정리하고 있어요");
-    expect(assistantPendingLabel("responding")).toBe("답변을 정리하고 있어요");
+    expect(assistantPendingLabel("preparing")).toBe("요청을 정리하고 있어요");
+    expect(assistantPendingLabel("responding")).toBe("답변을 다듬고 있어요");
   });
 
   it("keeps provider failure status visible on assistant messages without leaking raw URLs", () => {
