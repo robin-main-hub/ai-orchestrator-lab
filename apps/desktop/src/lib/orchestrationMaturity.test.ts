@@ -7,7 +7,7 @@ import {
 describe("orchestrationMaturity", () => {
   it("2번부터 10번까지 실사용 성숙도 축을 빠짐없이 고정한다", () => {
     const report = createOrchestrationMaturityReport({
-      attachments: { acceptedTypeCount: 4, hasProcessingPipeline: true, pendingCount: 1 },
+      attachments: { acceptedTypeCount: 4, hasProcessingPipeline: true, pendingCount: 0 },
       controlQueue: { connectedLaneCount: 6, pendingApprovalCount: 2, workItemProjectionCount: 4 },
       debate: { codingImpactCount: 2, decisionCount: 1, hasCodingPacketProjection: true, readinessState: "ready" },
       e2e: { desktopTestCount: 306, hasProviderSmokeHarness: true, hasVisualSmokeChecklist: true },
@@ -60,5 +60,22 @@ describe("orchestrationMaturity", () => {
     expect(visibleCopy).not.toContain("desktop test");
     expect(visibleCopy).not.toContain("visual");
     expect(visibleCopy).not.toContain("blocked");
+  });
+
+  it("작성 중인 첨부가 있으면 다음 행동에 처리 계획 확인을 올린다", () => {
+    const report = createOrchestrationMaturityReport({
+      attachments: { acceptedTypeCount: 4, hasProcessingPipeline: true, pendingCount: 2 },
+      controlQueue: { connectedLaneCount: 6, pendingApprovalCount: 0, workItemProjectionCount: 4 },
+      debate: { codingImpactCount: 2, decisionCount: 1, hasCodingPacketProjection: true, readinessState: "ready" },
+      e2e: { desktopTestCount: 306, hasProviderSmokeHarness: true, hasVisualSmokeChecklist: true },
+      memory: { agentInstallCount: 18, curatorCandidateCount: 3, installedAgentCount: 18, promotedCount: 1 },
+      onboarding: { blockingCheckCount: 0, passedCheckCount: 8, totalCheckCount: 8 },
+      provider: { assignedAgentCount: 18, fallbackReadyCount: 2, profileCount: 6, smokeReadyCount: 3 },
+      receipts: { receiptCount: 12, searchableCount: 12, unsafeReceiptCount: 0 },
+      tmux: { hasRecoveryPlan: true, paneCount: 8, timelineBlockCount: 12 },
+    });
+
+    expect(report.overallStatus).toBe("needs_work");
+    expect(report.nextActions).toEqual(["첨부 2개 처리 계획을 확인하고 대화에 전송"]);
   });
 });

@@ -23,6 +23,16 @@ export type MemoryCuratorLedgerEntry = {
   updatedAt: string;
 };
 
+export type MemoryCuratorRecordOverlayInput = {
+  agentId: string;
+  candidateStatus?: MemoryCuratorCandidate["status"];
+  record: MemoryRecord;
+  recordPatch: Partial<MemoryRecord>;
+  scopeKey: string;
+  storage?: JsonStorageLike;
+  updatedAt: string;
+};
+
 export const memoryCuratorLedgerStorageKey = "ai-orchestrator.memory-curator-ledger.v1";
 
 export type ConversationTurnMemoryCandidateInput = {
@@ -147,14 +157,72 @@ export function updateMemoryCuratorLedgerRecord({
   return next;
 }
 
+export function upsertMemoryCuratorRecordOverlay({
+  agentId,
+  candidateStatus,
+  record,
+  recordPatch,
+  scopeKey,
+  storage,
+  updatedAt,
+}: MemoryCuratorRecordOverlayInput): MemoryCuratorLedgerEntry[] {
+  const current = readMemoryCuratorLedger(storage);
+  const patchedRecord: MemoryRecord = {
+    ...record,
+    ...recordPatch,
+  };
+  const targetActivationState: MemoryCuratorCandidate["targetActivationState"] =
+    patchedRecord.activationState === "quarantined" ? "quarantined" : "active";
+  let updatedExisting = false;
+  const patched: MemoryCuratorLedgerEntry[] = current.map((entry) => {
+    if (entry.scopeKey !== scopeKey || entry.candidate.record.id !== record.id) return entry;
+    updatedExisting = true;
+    return {
+      ...entry,
+      candidate: {
+        ...entry.candidate,
+        ...(candidateStatus ? { status: candidateStatus } : {}),
+        record: patchedRecord,
+        targetActivationState,
+      },
+      updatedAt,
+    };
+  });
+
+  const next: MemoryCuratorLedgerEntry[] = updatedExisting
+    ? patched
+    : [
+      {
+        candidate: {
+          ...createMemoryCuratorCandidate({
+            agentId,
+            createdAt: record.createdAt,
+            reason: "기억 관리자 수동 결정 overlay",
+            record: patchedRecord,
+          }),
+          ...(candidateStatus ? { status: candidateStatus } : {}),
+          targetActivationState,
+        },
+        scopeKey,
+        updatedAt,
+      },
+      ...patched,
+    ];
+
+  const trimmed = next.slice(0, 200);
+  writeJsonState(memoryCuratorLedgerStorageKey, trimmed, storage);
+  return trimmed;
+}
+
 export function getMemoryCuratorRecordsForScope(
   scopeKey: string,
   storage?: JsonStorageLike,
 ): MemoryRecord[] {
   return readMemoryCuratorLedger(storage)
     .filter((entry) => entry.scopeKey === scopeKey)
+    .filter((entry) => entry.candidate.status !== "rejected")
     .map((entry) => entry.candidate.record)
-    .filter((record) => !record.tombstonedAt);
+    .filter((record) => !record.tombstonedAt && record.activationState !== "quarantined");
 }
 
 export function mergeMemoryRecordsWithCuratorLedger(
