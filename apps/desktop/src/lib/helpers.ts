@@ -71,10 +71,12 @@ export function createAgentModelRouteLabel({
   modelId,
   modelName,
   providerName,
+  source,
 }: {
   modelId?: string;
   modelName?: string;
   providerName?: string;
+  source?: "agent" | "provider_default" | "catalog";
 }) {
   const providerLabel = providerName ? providerDisplayLabel(providerName) : "Provider 미지정";
   const trimmedModelId = modelId?.trim();
@@ -83,8 +85,16 @@ export function createAgentModelRouteLabel({
     trimmedModelName && trimmedModelId && trimmedModelName !== trimmedModelId
       ? `${trimmedModelName} (${trimmedModelId})`
       : trimmedModelName || trimmedModelId || "모델 연결 대기";
+  const sourceLabel =
+    source === "agent"
+      ? "에이전트 고정"
+      : source === "provider_default"
+        ? "Provider 기본"
+        : source === "catalog"
+          ? "카탈로그 후보"
+          : undefined;
 
-  return `${providerLabel} / ${modelLabel}`;
+  return `${sourceLabel ? `${sourceLabel} · ` : ""}${providerLabel} / ${modelLabel}`;
 }
 
 export function classifyDraftAttachment(file: File): ConversationAttachment["kind"] {
