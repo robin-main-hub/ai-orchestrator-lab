@@ -24,5 +24,9 @@ describe("AgentLiveWorkStatus", () => {
     expect(html).toContain("Provider 호출");
     expect(html).toContain("마스킹 점검");
     expect(html).toContain("영수증 저장");
+    expect(html).not.toContain("cyan");
+    expect(html).not.toContain("emerald");
+    expect(html).toContain("violet");
+    expect(html).toContain("amber");
   });
 });
