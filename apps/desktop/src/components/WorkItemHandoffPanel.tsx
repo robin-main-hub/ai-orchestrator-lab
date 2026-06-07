@@ -23,20 +23,20 @@ export function WorkItemHandoffPanel({
   const visibleHandoffs = handoffs.filter((handoff) => handoff.approvalState === "required").slice(0, 3);
 
   return (
-    <section className="work-handoff-strip inbox-strip work-os-board" aria-label="Control Queue Work OS board">
+    <section className="work-handoff-strip inbox-strip work-os-board" aria-label="작업 대기열 Work OS 보드">
       <header>
         <div>
-          <span>Control Queue</span>
+          <span>작업 대기열</span>
           <strong>
-            {board.activeCount} tasks / {visibleDrafts.length} drafts / {board.pendingHandoffCount} approvals
+            작업 {board.activeCount}건 / 초안 {visibleDrafts.length}건 / 승인 {board.pendingHandoffCount}건
           </strong>
         </div>
         <em>
           {board.waitingInputCount > 0
-            ? `${board.waitingInputCount} questions pending`
+            ? `질문 ${board.waitingInputCount}건 대기`
             : board.staleCount > 0
-              ? `${board.staleCount} stale items`
-              : "WorkItem first"}
+              ? `오래된 작업 ${board.staleCount}건`
+              : "작업 항목 우선"}
         </em>
       </header>
       <div className="work-handoff-grid">
@@ -47,24 +47,24 @@ export function WorkItemHandoffPanel({
             <article className={`work-handoff-card inbox-lane ${lane.id}`} key={lane.id}>
               <span className="work-lane-kicker">
                 {lane.label} / {lane.count}
-                {lane.urgentCount > 0 ? <b>{lane.urgentCount} high</b> : null}
-                {lane.staleCount > 0 ? <b className="stale">{lane.staleCount} stale</b> : null}
+                {lane.urgentCount > 0 ? <b>{lane.urgentCount} 높음</b> : null}
+                {lane.staleCount > 0 ? <b className="stale">{lane.staleCount} 오래됨</b> : null}
               </span>
-              <strong>{firstItem?.title ?? "No waiting item"}</strong>
-              <p>{firstItem?.summary ?? "New WorkItems will be classified here."}</p>
+              <strong>{firstItem?.title ?? "대기 중인 작업 없음"}</strong>
+              <p>{firstItem?.summary ?? "새 작업 항목은 여기에서 자동 분류됩니다."}</p>
               {firstItem ? (
                 <dl className="work-item-meta">
                   <div>
-                    <dt>age</dt>
+                    <dt>경과</dt>
                     <dd>{firstItem.ageLabel}</dd>
                   </div>
                   <div>
-                    <dt>priority</dt>
-                    <dd>{firstItem.priority}</dd>
+                    <dt>우선순위</dt>
+                    <dd>{workPriorityLabel(firstItem.priority)}</dd>
                   </div>
                   <div>
-                    <dt>surface</dt>
-                    <dd>{firstItem.surface ?? "none"}</dd>
+                    <dt>화면</dt>
+                    <dd>{workSurfaceLabel(firstItem.surface)}</dd>
                   </div>
                 </dl>
               ) : null}
@@ -72,16 +72,16 @@ export function WorkItemHandoffPanel({
                 <div className="inbox-card-actions">
                   {lane.id !== "check" ? (
                     <button onClick={() => onRouteItem(firstItem.id, "check")} type="button">
-                      Check
+                      검토로
                     </button>
                   ) : null}
                   {lane.id !== "approve" ? (
                     <button onClick={() => onRouteItem(firstItem.id, "approve")} type="button">
-                      Approve
+                      승인으로
                     </button>
                   ) : null}
                   <button onClick={() => onArchiveItem(firstItem.id)} type="button">
-                    Archive
+                    보관
                   </button>
                 </div>
               ) : null}
@@ -90,7 +90,7 @@ export function WorkItemHandoffPanel({
         })}
         {visibleDrafts.map((draft) => (
           <article className="work-handoff-card draft" key={draft.id}>
-            <span>{draft.targetSurface} / {draft.confidence}</span>
+            <span>{workSurfaceLabel(draft.targetSurface)} / {confidenceLabel(draft.confidence)}</span>
             <strong>{draft.title}</strong>
             <p>{draft.body}</p>
             <div className="inbox-card-actions">
@@ -102,7 +102,7 @@ export function WorkItemHandoffPanel({
         ))}
         {visibleHandoffs.map((handoff) => (
           <article className="work-handoff-card approve" key={handoff.id}>
-            <span>{handoff.targetSurface} / approval</span>
+            <span>{workSurfaceLabel(handoff.targetSurface)} / 승인</span>
             <strong>위임 승인 대기</strong>
             <p>{handoff.summary}</p>
             <div className="inbox-card-actions">
@@ -115,4 +115,37 @@ export function WorkItemHandoffPanel({
       </div>
     </section>
   );
+}
+
+function workPriorityLabel(priority: WorkItem["priority"]): string {
+  const labels: Record<WorkItem["priority"], string> = {
+    high: "높음",
+    low: "낮음",
+    normal: "보통",
+    urgent: "긴급",
+  };
+  return labels[priority];
+}
+
+function workSurfaceLabel(surface: WorkItem["surface"] | AssistantDraft["targetSurface"] | undefined): string {
+  const labels: Record<NonNullable<WorkItem["surface"]>, string> = {
+    coding_packet: "코딩 패킷",
+    conversation: "대화",
+    debate: "토론",
+    execution_slot: "실행 슬롯",
+    mobile: "모바일",
+    notion: "노션",
+    obsidian: "옵시디언",
+    tmux: "tmux",
+  };
+  return surface ? labels[surface] : "없음";
+}
+
+function confidenceLabel(confidence: AssistantDraft["confidence"]): string {
+  const labels: Record<AssistantDraft["confidence"], string> = {
+    high: "높음",
+    low: "낮음",
+    medium: "중간",
+  };
+  return labels[confidence];
 }
