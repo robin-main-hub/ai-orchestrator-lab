@@ -15,11 +15,11 @@ describe("resolveAgentThinkingIndicator", () => {
   it("surfaces a preparing indicator while the reply is being prepared", () => {
     expect(resolveAgentThinkingIndicator("agent_a", { agent_a: "preparing" })).toEqual({
       status: "preparing",
-      label: "응답 준비 중",
+      label: "요청을 해석하는 중",
       steps: [
-        { label: "생각", state: "active" },
-        { label: "도구 호출", state: "pending" },
-        { label: "명령 생성", state: "pending" },
+        { label: "요청 해석", state: "active" },
+        { label: "Provider 호출 준비", state: "pending" },
+        { label: "도구·명령 후보 정리", state: "pending" },
       ],
     });
   });
@@ -27,11 +27,11 @@ describe("resolveAgentThinkingIndicator", () => {
   it("surfaces a responding indicator while the reply is being written", () => {
     expect(resolveAgentThinkingIndicator("agent_a", { agent_a: "responding" })).toEqual({
       status: "responding",
-      label: "응답 작성 중",
+      label: "답변을 작성하는 중",
       steps: [
-        { label: "도구 호출", state: "done" },
-        { label: "검증", state: "active" },
-        { label: "작업 영수증", state: "pending" },
+        { label: "Provider 응답 수신", state: "done" },
+        { label: "마스킹·검증 점검", state: "active" },
+        { label: "작업 영수증 저장", state: "pending" },
       ],
     });
   });
