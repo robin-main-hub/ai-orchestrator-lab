@@ -166,7 +166,7 @@ function createWorkerRecentDisplay(worker: OperatorCockpitWorkerFleet) {
   const location = worker.branch
     ? `브랜치 ${worker.branch}`
     : worker.worktree
-      ? `작업공간 ${lastPathSegment(worker.worktree)}`
+      ? formatOperatorWorktreeLabel(worker.worktree)
       : "실시간 관찰";
 
   return {
@@ -184,6 +184,12 @@ function humanizeIdentifier(value: string) {
     if (/[A-Z]/.test(word.slice(1))) return word;
     return `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`;
   });
+}
+
+export function formatOperatorWorktreeLabel(value?: string) {
+  const trimmed = value?.trim();
+  if (!trimmed) return "작업공간 대기";
+  return `작업공간 ${lastPathSegment(trimmed)}`;
 }
 
 function lastPathSegment(value: string) {

@@ -45,6 +45,8 @@ describe("WorkerFleetCard", () => {
     expect(html).toContain("MacBook 기준 기억");
     expect(html).toContain("MiMo V2.5 Pro");
     expect(html).toContain("최근 상태");
+    expect(html).toContain("작업공간 operator-detail");
+    expect(html).not.toContain("/repo/worktrees");
     expect(html).not.toContain("mimo-v2.5-pro");
     expect(html).not.toContain("provider_mimo_token_openai");
   });

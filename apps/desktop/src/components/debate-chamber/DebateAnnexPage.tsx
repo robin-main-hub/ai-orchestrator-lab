@@ -315,11 +315,19 @@ function buildLogs(session: Stage3DebateSession, runtime: RuntimeSnapshot, now: 
       round.utterances.slice(0, 8).map((utterance) => ({
         id: `utterance-${utterance.id}`,
         level: utterance.tags.includes("risk") || utterance.tags.includes("objection") ? "warn" as const : "info" as const,
-        message: sanitizeDebateAnnexText(`공개 작업 로그 · ${round.title} · ${utterance.agentId}`),
+        message: sanitizeDebateAnnexText(
+          `공개 작업 로그 · ${round.title} · ${resolveDebateAnnexAgentLabel(session, utterance.agentId)}`,
+        ),
         timestamp: formatRelativeTime(utterance.createdAt, now),
       })),
     ),
   ];
+}
+
+export function resolveDebateAnnexAgentLabel(session: Stage3DebateSession, agentId: string) {
+  const participant = session.participants.find((candidate) => candidate.agentId === agentId);
+  if (participant?.name) return sanitizeDebateAnnexText(participant.name);
+  return sanitizeDebateAnnexText(agentId.replace(/^agent_/, "").replace(/[_-]+/g, " "));
 }
 
 function getTabHasData(tab: AnnexTab, data: ReturnType<typeof buildAnnexShape>): boolean {

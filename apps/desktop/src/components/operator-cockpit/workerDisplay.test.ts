@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatOperatorWorktreeLabel,
   resolveOperatorWorkerDisplay,
   resolveOperatorWorkerSkillDisplay,
 } from "./workerDisplay";
@@ -53,5 +54,12 @@ describe("resolveOperatorWorkerDisplay", () => {
       label: "검증 도구",
       tools: ["테스트 확인", "빌드 확인", "근거 확인"],
     });
+  });
+
+  it("worker worktree 전체 경로를 메인 카드용 짧은 작업공간 라벨로 줄인다", () => {
+    expect(formatOperatorWorktreeLabel("/Users/robin/.config/superpowers/worktrees/project/feature-big-rock")).toBe(
+      "작업공간 feature-big-rock",
+    );
+    expect(formatOperatorWorktreeLabel("")).toBe("작업공간 대기");
   });
 });
