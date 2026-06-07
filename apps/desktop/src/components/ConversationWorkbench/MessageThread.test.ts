@@ -84,6 +84,7 @@ describe("MessageThread pending assistant state", () => {
       metadata: {
         personaSoulApplied: true,
         personaAgentsMdApplied: true,
+        identityGuardApplied: true,
         recalledMemoryCount: 3,
         runtimeConfigFileIds: ["config_soul", "config_tools"],
         roleToolProfileTools: ["work.queue", "approval"],
@@ -93,6 +94,7 @@ describe("MessageThread pending assistant state", () => {
     expect(badges.map((badge) => badge.label)).toEqual([
       "SOUL",
       "AGENTS",
+      "이름 보정",
       "기억 3개",
       "인격 파일 2개",
       "도구 2개",
