@@ -64,7 +64,8 @@ export type PublicTraceSafetyReport = {
 
 export function createConversationMessagePublicWorkTrace(message: ConversationMessage): PublicWorkTrace {
   const metadata = message.metadata ?? {};
-  const attachmentProcessingPlans = readAttachmentProcessingPlans(metadata.attachmentProcessingPlans);
+  const rawAttachmentProcessingPlans = readAttachmentProcessingPlans(metadata.attachmentProcessingPlans);
+  const attachmentProcessingPlans = message.role === "user" ? rawAttachmentProcessingPlans : [];
   if (message.role === "user" && attachmentProcessingPlans.length === 0) return EMPTY_TRACE;
 
   const steps: PublicWorkTraceItem[] = [];
@@ -254,7 +255,7 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
     steps,
     commands,
     evidence,
-    createConversationReceipt(message, metadata) ?? createFallbackConversationReceipt(message),
+    createConversationReceipt(message, metadata, attachmentProcessingPlans) ?? createFallbackConversationReceipt(message),
   );
 }
 
@@ -424,6 +425,7 @@ function toTrace(
 function createConversationReceipt(
   message: ConversationMessage,
   metadata: Record<string, unknown>,
+  attachmentProcessingPlans: AttachmentProcessingPlan[],
 ): PublicWorkTraceReceipt | undefined {
   const hasTraceableWork =
     readBoolean(metadata.realProviderCall) !== undefined ||
@@ -431,11 +433,11 @@ function createConversationReceipt(
     readString(metadata.providerProfileId) ||
     readString(metadata.memoryScope) ||
     readString(metadata.recallTraceId) ||
-    readAttachmentProcessingPlans(metadata.attachmentProcessingPlans).length > 0;
+    attachmentProcessingPlans.length > 0;
   if (!hasTraceableWork) return undefined;
 
   const spans = [
-    readAttachmentProcessingPlans(metadata.attachmentProcessingPlans).length > 0 ? "attachment" : undefined,
+    attachmentProcessingPlans.length > 0 ? "attachment" : undefined,
     message.role === "user" ? "message" : undefined,
     readBoolean(metadata.realProviderCall) !== undefined ? "generation" : undefined,
     readStringArray(metadata.runtimeConfigFileIds).length > 0 || readStringArray(metadata.roleToolProfileTools).length > 0

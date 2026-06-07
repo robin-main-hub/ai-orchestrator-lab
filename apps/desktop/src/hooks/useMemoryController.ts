@@ -34,6 +34,7 @@ import {
   createMemoryCuratorPersistencePlan,
   mergeMemoryRecordsWithCuratorLedger,
   updateMemoryCuratorLedgerRecord,
+  upsertMemoryCuratorRecordOverlay,
   writeMemoryCuratorCandidate,
   type MemoryCuratorPersistencePlan,
 } from "../lib/memoryCuratorRuntime";
@@ -474,18 +475,22 @@ export function useMemoryController({
 
   function handlePinMemory(recordId: string) {
     const updatedAt = new Date().toISOString();
-    updateMemoryCuratorLedgerRecord({
-      candidateStatus: "approved",
-      recordId,
-      recordPatch: {
-        activationState: "active",
-        lastAccessedAt: updatedAt,
-        pinned: true,
+    const record = memoryRecords.find((candidate) => candidate.id === recordId);
+    if (record) {
+      upsertMemoryCuratorRecordOverlay({
+        agentId: memoryScope?.agentId ?? "agent_unassigned",
+        candidateStatus: "approved",
+        record,
+        recordPatch: {
+          activationState: "active",
+          lastAccessedAt: updatedAt,
+          pinned: true,
+          updatedAt,
+        },
+        scopeKey: memoryScopeKeyRef.current,
         updatedAt,
-      },
-      scopeKey: memoryScopeKeyRef.current,
-      updatedAt,
-    });
+      });
+    }
     setMemoryRecords((records) => pinMemoryRecord(records, recordId, updatedAt));
     appendEvent("memory.pin.updated", {
       recordId,
@@ -498,17 +503,21 @@ export function useMemoryController({
 
   function handleActivateMemory(recordId: string) {
     const updatedAt = new Date().toISOString();
-    updateMemoryCuratorLedgerRecord({
-      candidateStatus: "approved",
-      recordId,
-      recordPatch: {
-        activationState: "active",
-        lastAccessedAt: updatedAt,
+    const record = memoryRecords.find((candidate) => candidate.id === recordId);
+    if (record) {
+      upsertMemoryCuratorRecordOverlay({
+        agentId: memoryScope?.agentId ?? "agent_unassigned",
+        candidateStatus: "approved",
+        record,
+        recordPatch: {
+          activationState: "active",
+          lastAccessedAt: updatedAt,
+          updatedAt,
+        },
+        scopeKey: memoryScopeKeyRef.current,
         updatedAt,
-      },
-      scopeKey: memoryScopeKeyRef.current,
-      updatedAt,
-    });
+      });
+    }
     setMemoryRecords((records) => activateMemoryRecord(records, recordId, updatedAt));
     appendEvent("memory.activation.updated", {
       recordId,
@@ -521,16 +530,20 @@ export function useMemoryController({
 
   function handleForgetMemory(recordId: string) {
     const tombstonedAt = new Date().toISOString();
-    updateMemoryCuratorLedgerRecord({
-      candidateStatus: "rejected",
-      recordId,
-      recordPatch: {
-        activationState: "inactive",
-        tombstonedAt,
-      },
-      scopeKey: memoryScopeKeyRef.current,
-      updatedAt: tombstonedAt,
-    });
+    const record = memoryRecords.find((candidate) => candidate.id === recordId);
+    if (record) {
+      upsertMemoryCuratorRecordOverlay({
+        agentId: memoryScope?.agentId ?? "agent_unassigned",
+        candidateStatus: "rejected",
+        record,
+        recordPatch: {
+          activationState: "inactive",
+          tombstonedAt,
+        },
+        scopeKey: memoryScopeKeyRef.current,
+        updatedAt: tombstonedAt,
+      });
+    }
     setMemoryRecords((records) => forgetMemoryRecord(records, recordId, tombstonedAt));
     appendEvent("memory.forget.requested", {
       recordId,
