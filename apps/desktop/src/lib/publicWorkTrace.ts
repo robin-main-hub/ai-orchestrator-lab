@@ -98,7 +98,7 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
       id: "provider-call",
       label: PUBLIC_WORK_PHASES.toolCall.label,
       tone: realProviderCall === false ? "warning" : "success",
-      value: sanitize([route, model].filter(Boolean).join(" · ") || (realProviderCall ? "실제 호출 완료" : "fallback 또는 차단")),
+      value: sanitize([route, model].filter(Boolean).join(" · ") || (realProviderCall ? "실제 호출 완료" : "대체 경로 또는 차단")),
     });
   }
 
@@ -108,7 +108,7 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
       id: "token-usage",
       label: "토큰 사용",
       tone: "neutral",
-      value: sanitize(`${totalTokens} total tokens`),
+      value: sanitize(`총 토큰 ${totalTokens}개`),
     });
   }
 
@@ -128,7 +128,7 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
       id: "runtime-config",
       label: "런타임 규칙",
       tone: "info",
-      value: sanitize(`${runtimeConfigFileIds.length}개 config 적용`),
+      value: sanitize(`설정 ${runtimeConfigFileIds.length}개 적용`),
     });
   }
 
@@ -182,7 +182,7 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
       id: `delegation-${index}`,
       label: "위임 제안",
       tone: delegation.status === "failed" || delegation.status === "blocked" ? "warning" : "info",
-      value: sanitize(`${delegation.target} · ${delegation.status}`),
+      value: sanitize(`${delegation.target} · ${delegationStatusLabel(delegation.status)}`),
     });
   }
 
@@ -214,7 +214,7 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
       label: "기억 조회",
       tone: "success",
       value: sanitize(
-        `${recalledMemoryCount ?? 0}개 recall${recallTraceId ? ` · ${recallTraceId}` : ""}`,
+        `기억 ${recalledMemoryCount ?? 0}개 조회${recallTraceId ? ` · ${recallTraceId}` : ""}`,
       ),
     });
   }
@@ -269,7 +269,7 @@ export function createDebateUtterancePublicWorkTrace(utterance: Stage3DebateUtte
           id: "coding-impact",
           label: "코딩 영향",
           tone: "warning",
-          value: sanitize(`${utterance.codingImpactRefs.length}개 coding ref`),
+          value: sanitize(`코딩 참조 ${utterance.codingImpactRefs.length}개`),
         },
       ]
     : [];
@@ -287,7 +287,7 @@ export function createDebateUtterancePublicWorkTrace(utterance: Stage3DebateUtte
       id: "debate-evidence",
       label: "근거",
       tone: "success",
-      value: sanitize(`${utterance.evidenceRefIds.length}개 evidence ref`),
+      value: sanitize(`근거 참조 ${utterance.evidenceRefIds.length}개`),
     });
   }
 
@@ -308,7 +308,7 @@ export function createTerminalBlockPublicWorkTrace(block: TerminalTimelineBlock)
       id: "tmux-step",
       label: "tmux 단계",
       tone: block.status === "failed" || block.status === "blocked" ? "danger" : "info",
-      value: sanitize(`${block.kind} · ${block.status}`),
+      value: sanitize(`${tmuxKindDisplayLabel(block.kind)} · ${tmuxStatusDisplayLabel(block.status)}`),
     },
   ];
   const commands: PublicWorkTraceItem[] = [];
@@ -501,6 +501,23 @@ function tmuxKindDisplayLabel(kind: TerminalTimelineBlock["kind"]) {
   }
 }
 
+function tmuxStatusDisplayLabel(status: TerminalTimelineBlock["status"]) {
+  switch (status) {
+    case "blocked":
+      return "차단";
+    case "completed":
+      return "완료";
+    case "failed":
+      return "실패";
+    case "pending_approval":
+      return "승인 대기";
+    case "running":
+      return "실행 중";
+    default:
+      return status;
+  }
+}
+
 function readDelegations(metadata: Record<string, unknown>) {
   const raw = metadata.delegationTags ?? metadata.delegations;
   if (!Array.isArray(raw)) return [];
@@ -519,6 +536,17 @@ function readDelegations(metadata: Record<string, unknown>) {
       ] as const,
     ];
   });
+}
+
+function delegationStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    blocked: "차단",
+    detected: "감지됨",
+    failed: "실패",
+    pending: "대기",
+    succeeded: "성공",
+  };
+  return labels[status] ?? status;
 }
 
 function readString(value: unknown) {
@@ -594,7 +622,7 @@ function receiptStatusLabel(status: PublicWorkTraceReceipt["status"]) {
     case "live":
       return "진행 중";
     case "fallback":
-      return "폴백";
+      return "대체 경로";
     case "blocked":
       return "차단";
     default:

@@ -37,6 +37,12 @@ describe("MaturityReadinessCard", () => {
     expect(html).toContain("설정 진단");
     expect(html).toContain("운영 스모크");
     expect(html).toContain("토론 결정에서 코딩 패킷 생성");
+    expect(html).not.toContain("Control Queue");
+    expect(html).not.toContain("WorkItem");
+    expect(html).not.toContain("Provider");
+    expect(html).not.toContain("fallback");
+    expect(html).not.toContain("smoke");
+    expect(html).not.toContain("desktop test");
   });
 
   it("막힌 항목은 다음 액션을 직접 보여준다", () => {
@@ -66,7 +72,10 @@ describe("MaturityReadinessCard", () => {
     );
 
     expect(html).toContain("차단");
-    expect(html).toContain("활성 Provider를 1개 이상 설정");
-    expect(html).toContain("Control Queue 6개 lane을 모두 WorkItem");
+    expect(html).toContain("활성 공급자를 1개 이상 설정");
+    expect(html).toContain("작업 대기열 6개 흐름을 모두 작업 항목");
+    expect(html).not.toContain("활성 Provider");
+    expect(html).not.toContain("Control Queue");
+    expect(html).not.toContain("WorkItem");
   });
 });

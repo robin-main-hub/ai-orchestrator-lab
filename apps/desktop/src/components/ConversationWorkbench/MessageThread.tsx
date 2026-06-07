@@ -142,6 +142,11 @@ export type AssistantMessageStatusSummary = {
   variant: StatusBadgeVariant;
 };
 
+export type AssistantRuntimeEvidenceBadge = {
+  label: string;
+  variant: StatusBadgeVariant;
+};
+
 export function resolveAssistantMessageStatusSummary(
   message: ConversationMessage,
 ): AssistantMessageStatusSummary | undefined {
@@ -163,12 +168,29 @@ export function resolveAssistantMessageStatusSummary(
   }
   if (metadata.realProviderCall === true) {
     return {
-      detail: "실제 Provider 응답이 기록되었습니다.",
-      label: "실제 호출",
+      detail: "공급자 응답이 기록되고 공개 작업 로그로 요약되었습니다.",
+      label: "응답 기록",
       variant: "success",
     };
   }
   return undefined;
+}
+
+export function createAssistantRuntimeEvidenceBadges(message: ConversationMessage): AssistantRuntimeEvidenceBadge[] {
+  if (message.role !== "assistant") return [];
+  const metadata = message.metadata ?? {};
+  const badges: AssistantRuntimeEvidenceBadge[] = [];
+  if (metadata.personaSoulApplied === true) badges.push({ label: "SOUL", variant: "success" });
+  if (metadata.personaAgentsMdApplied === true) badges.push({ label: "AGENTS", variant: "success" });
+  const recalledMemoryCount = readFiniteNumber(metadata.recalledMemoryCount);
+  if (recalledMemoryCount !== undefined) {
+    badges.push({ label: `기억 ${recalledMemoryCount}개`, variant: recalledMemoryCount > 0 ? "success" : "muted" });
+  }
+  const runtimeConfigCount = readStringArray(metadata.runtimeConfigFileIds).length;
+  if (runtimeConfigCount > 0) badges.push({ label: `설정 ${runtimeConfigCount}개`, variant: "primary" });
+  const toolCount = readStringArray(metadata.roleToolProfileTools).length;
+  if (toolCount > 0) badges.push({ label: `도구 ${toolCount}개`, variant: "primary" });
+  return badges;
 }
 
 function AssistantPendingBubble({
@@ -282,6 +304,7 @@ function MessageBubble({
   const label = messageLabel(message, selectedAgent, agents);
   const publicWorkTrace = createConversationMessagePublicWorkTrace(message);
   const assistantStatusSummary = resolveAssistantMessageStatusSummary(message);
+  const runtimeEvidenceBadges = createAssistantRuntimeEvidenceBadges(message);
   const time = new Date(message.createdAt ?? Date.now()).toLocaleTimeString(
     "ko-KR",
     { hour: "2-digit", minute: "2-digit" },
@@ -358,6 +381,15 @@ function MessageBubble({
               <span className="text-[10px] leading-relaxed text-zinc-400">
                 {assistantStatusSummary.detail}
               </span>
+            </div>
+          ) : null}
+          {runtimeEvidenceBadges.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1.5" aria-label="응답 근거 배지">
+              {runtimeEvidenceBadges.map((badge) => (
+                <StatusBadge key={badge.label} size="sm" variant={badge.variant}>
+                  {badge.label}
+                </StatusBadge>
+              ))}
             </div>
           ) : null}
           <PublicWorkTracePanel trace={publicWorkTrace} />
@@ -602,6 +634,14 @@ function normalizeDelegationStatus(value: unknown): DelegationPreviewItem["statu
     value === "self_delegation"
     ? value
     : "detected";
+}
+
+function readFiniteNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function readStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
 }
 
 export function delegationStatusLabel(status: DelegationPreviewItem["status"]) {

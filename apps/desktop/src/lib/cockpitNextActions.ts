@@ -3,6 +3,7 @@ import type { ControlQueueContinuitySummary } from "./controlQueueContinuity";
 import type { OrchestrationMaturityReport } from "./orchestrationMaturity";
 import type { SettingsDiagnostics } from "./settingsDiagnostics";
 import type { WorkTraceSearchItem } from "./workTraceSearch";
+import { resolveOperatorWorkerDisplay } from "./operatorWorkerDisplay";
 
 export type CockpitNextActionItem = {
   ctaLabel: string;
@@ -47,7 +48,7 @@ export function deriveCockpitNextActions({
       .map((worker) => ({
         ctaLabel: "워커 확인",
         id: `worker_${worker.workerId}`,
-        label: `${worker.workerId}: ${worker.blockedReason ?? "차단 원인 확인"}`,
+        label: `${resolveOperatorWorkerDisplay(worker).displayName}: ${worker.blockedReason ?? "차단 원인 확인"}`,
         priority: "high" as const,
         source: "worker" as const,
         targetSurface: "fleet" as const,
@@ -103,7 +104,7 @@ export function deriveCockpitNextActions({
       .map((worker) => ({
         ctaLabel: "워커 확인",
         id: `worker_active_${worker.workerId}`,
-        label: `작업 중: ${worker.workerId} 결과 확인`,
+        label: `작업 중: ${resolveOperatorWorkerDisplay(worker).displayName} 결과 확인`,
         priority: "normal" as const,
         source: "worker" as const,
         targetSurface: "fleet" as const,
