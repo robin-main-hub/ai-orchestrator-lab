@@ -177,6 +177,7 @@ import { applyAgentIdentityResponseGuard } from "./lib/agentIdentityResponseGuar
 import { createMemoryGovernanceSummary } from "./lib/memoryGovernance";
 import { createConversationTurnMemoryCandidate } from "./lib/memoryCuratorRuntime";
 import { createProviderRoutingConsoleItems } from "./lib/providerRoutingConsole";
+import { createProviderFailureConversationReply } from "./lib/providerFallbackPlan";
 import {
   agentRoleLabel,
   createDefaultPersonaSettings,
@@ -1653,16 +1654,21 @@ export function App() {
           redaction: "applied",
         }, { sessionId: targetSessionId });
       } else {
-        reply = `${selectedProvider.name} 호출에 실패했어. ${error instanceof Error ? error.message : String(error)}`;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        reply = createProviderFailureConversationReply({
+          errorMessage,
+          provider: selectedProvider,
+          providers: providerProfiles,
+        });
         completionMetadata = {
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage,
           realProviderCall: false,
         };
         appendEvent("provider.completion.dgx.failed", {
           agentId: selectedAgent.id,
           providerProfileId: selectedProvider.id,
           modelId,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage,
         }, { sessionId: targetSessionId });
       }
     }

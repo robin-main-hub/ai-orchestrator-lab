@@ -1,4 +1,5 @@
 import type { ProviderProfile, SourceTrust } from "@ai-orchestrator/protocol";
+import { sanitizePublicText } from "./publicRedaction";
 
 export type ProviderErrorCategory = "auth" | "network" | "provider" | "rate_limit" | "timeout";
 
@@ -10,6 +11,61 @@ export type ProviderFallbackPlan = {
   status: "none" | "available" | "blocked";
   trustDowngrade: boolean;
 };
+
+export function inferProviderErrorCategory(message: string): ProviderErrorCategory {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("unauthorized") || normalized.includes("forbidden") || /\b(401|403)\b/.test(normalized)) {
+    return "auth";
+  }
+  if (normalized.includes("rate limit") || normalized.includes("too many requests") || /\b429\b/.test(normalized)) {
+    return "rate_limit";
+  }
+  if (normalized.includes("timeout") || normalized.includes("timed out") || normalized.includes("aborted")) {
+    return "timeout";
+  }
+  if (
+    normalized.includes("failed to fetch") ||
+    normalized.includes("network") ||
+    normalized.includes("econnrefused") ||
+    normalized.includes("enotfound")
+  ) {
+    return "network";
+  }
+  return "provider";
+}
+
+export function providerErrorCategoryLabel(category: ProviderErrorCategory) {
+  if (category === "auth") return "권한";
+  if (category === "network") return "네트워크";
+  if (category === "rate_limit") return "사용량 제한";
+  if (category === "timeout") return "응답 지연";
+  return "공급자";
+}
+
+export function createProviderFailureConversationReply({
+  errorMessage,
+  provider,
+  providers,
+}: {
+  errorMessage: string;
+  provider: ProviderProfile;
+  providers: ProviderProfile[];
+}) {
+  const category = inferProviderErrorCategory(errorMessage);
+  const plan = deriveProviderFallbackPlan({
+    lastErrorCategory: category,
+    providers,
+    selectedProviderId: provider.id,
+  });
+  const safeError = sanitizePublicText(errorMessage);
+  const categoryLabel = providerErrorCategoryLabel(category);
+  const nextAction =
+    plan.status === "available" && plan.candidateProviderId
+      ? `${plan.label}: ${providers.find((candidate) => candidate.id === plan.candidateProviderId)?.name ?? plan.candidateProviderId} 경로를 확인해줘.`
+      : `${plan.label}: ${plan.reason}`;
+
+  return `${provider.name} 호출이 막혔어. 원인은 ${categoryLabel} 계열로 보여.\n\n다음 조치: ${nextAction}\n\n공개 오류 요약: ${safeError}`;
+}
 
 export function deriveProviderFallbackPlan({
   lastErrorCategory,
