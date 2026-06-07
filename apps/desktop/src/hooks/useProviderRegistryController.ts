@@ -5,6 +5,7 @@ import {
   createProviderRuntimeReadiness,
   createSecretVaultSnapshot,
   discoverModelsForProfile,
+  maskSecret,
 } from "@ai-orchestrator/providers";
 import type {
   EventEnvelope,
@@ -74,6 +75,7 @@ export function useProviderRegistryController({
 }: ProviderRegistryControllerInput) {
   const [providerRegistrationOpen, setProviderRegistrationOpen] = useState(false);
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(createInitialProviderProfiles);
+  const [sessionSecretsByProviderId, setSessionSecretsByProviderId] = useState<Record<string, string>>({});
   const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(seededModelCatalog);
   const [modelDiscoveryByProviderId, setModelDiscoveryByProviderId] = useState<Record<string, ModelDiscoverySnapshot>>(
     {},
@@ -110,6 +112,11 @@ export function useProviderRegistryController({
       providerModels[0]
     );
   }, [modelCatalog, selectedAgent, selectedProvider]);
+
+  const sessionSecretProviderIds = useMemo(
+    () => new Set(Object.keys(sessionSecretsByProviderId)),
+    [sessionSecretsByProviderId],
+  );
 
   const secretVaultSnapshot = useMemo(
     () => createSecretVaultSnapshot(providerProfiles, runtimeUpdatedAt),
@@ -254,6 +261,53 @@ export function useProviderRegistryController({
   const handleAddProvider = useCallback(() => {
     handleRegisterProvider("api_key");
   }, [handleRegisterProvider]);
+
+  const handleBindProviderSessionSecret = useCallback(
+    (providerId: string) => {
+      const provider = providerProfiles.find((profile) => profile.id === providerId);
+      if (!provider) {
+        return;
+      }
+
+      const rawSecret = window.prompt(
+        `${provider.name} 세션 API 키 붙여넣기`,
+        "",
+      );
+      if (rawSecret === null) {
+        return;
+      }
+
+      const trimmedSecret = rawSecret.trim();
+      if (!trimmedSecret) {
+        setSessionSecretsByProviderId((current) => {
+          const { [providerId]: _removed, ...rest } = current;
+          return rest;
+        });
+        appendEvent("provider.session_secret.cleared", {
+          providerProfileId: provider.id,
+          rawSecretPersisted: false,
+        });
+        return;
+      }
+
+      setSessionSecretsByProviderId((current) => ({
+        ...current,
+        [providerId]: trimmedSecret,
+      }));
+      appendEvent("provider.session_secret.bound", {
+        providerProfileId: provider.id,
+        secretRefId: provider.secretRef?.id,
+        redactedPreview: maskSecret(trimmedSecret),
+        rawSecretPersisted: false,
+      });
+    },
+    [appendEvent, providerProfiles],
+  );
+
+  const resolveProviderSessionSecret = useCallback(
+    (provider: ProviderProfile) => sessionSecretsByProviderId[provider.id],
+    [sessionSecretsByProviderId],
+  );
 
   const handleDiscoverProviderModels = useCallback(
     async (providerId: string) => {
@@ -480,6 +534,7 @@ export function useProviderRegistryController({
   return {
     activeProvider,
     handleAddProvider,
+    handleBindProviderSessionSecret,
     handleCheckProviderVault,
     handleDiscoverProviderModels,
     handleRegisterProvider,
@@ -493,9 +548,11 @@ export function useProviderRegistryController({
     providerReadiness,
     providerRegistrationOpen,
     refreshDgxProviderRegistry,
+    resolveProviderSessionSecret,
     secretVaultSnapshot,
     selectedModel,
     selectedProvider,
+    sessionSecretProviderIds,
     setProviderRegistrationOpen,
     usedProviderIds,
   };

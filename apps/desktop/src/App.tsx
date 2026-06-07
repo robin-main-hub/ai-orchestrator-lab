@@ -184,6 +184,7 @@ import { createMemoryGovernanceSummary } from "./lib/memoryGovernance";
 import { createConversationTurnMemoryCandidate } from "./lib/memoryCuratorRuntime";
 import { createProviderRoutingConsoleItems } from "./lib/providerRoutingConsole";
 import { createProviderFailureConversationReply } from "./lib/providerFallbackPlan";
+import { agentPrimaryDisplayName } from "./lib/agentDisplay";
 import {
   agentRoleLabel,
   createDefaultPersonaSettings,
@@ -670,10 +671,11 @@ export function App() {
   });
   const configLibraryActive = activeNavItem === "config_files";
   const {
-    activeProvider,
-    handleAddProvider,
-    handleCheckProviderVault,
-    handleDiscoverProviderModels,
+	    activeProvider,
+	    handleAddProvider,
+	    handleBindProviderSessionSecret,
+	    handleCheckProviderVault,
+	    handleDiscoverProviderModels,
     handleRegisterProvider,
     handleRemoveProvider,
     handleRenameProvider,
@@ -683,12 +685,14 @@ export function App() {
     modelDiscoveryByProviderId,
     providerProfiles,
     providerReadiness,
-    providerRegistrationOpen,
-    refreshDgxProviderRegistry,
-    secretVaultSnapshot,
-    selectedModel,
-    selectedProvider,
-    setProviderRegistrationOpen,
+	    providerRegistrationOpen,
+	    refreshDgxProviderRegistry,
+	    resolveProviderSessionSecret,
+	    secretVaultSnapshot,
+	    selectedModel,
+	    selectedProvider,
+	    sessionSecretProviderIds,
+	    setProviderRegistrationOpen,
     usedProviderIds,
   } = useProviderRegistryController({
     activeProviderProfileId: runtimeSnapshotState.activeProviderProfileId,
@@ -1245,13 +1249,14 @@ export function App() {
       purpose,
       redaction: "applied",
     });
-    const result = await requestDgxProviderCompletion({
-      provider,
-      modelId,
-      messages: pipelineMessages,
-      approvalState,
-      permissionDecision,
-    });
+	    const result = await requestDgxProviderCompletion({
+	      provider,
+	      modelId,
+	      messages: pipelineMessages,
+	      approvalState,
+	      permissionDecision,
+	      localSecretResolver: resolveProviderSessionSecret,
+	    });
     appendEvent("provider.completion.dgx.succeeded", {
       agentId: agent.id,
       providerProfileId: provider.id,
@@ -1841,6 +1846,7 @@ export function App() {
       } else {
         const errorMessage = error instanceof Error ? error.message : String(error);
         reply = createProviderFailureConversationReply({
+          agentDisplayName: agentPrimaryDisplayName(selectedAgent),
           errorMessage,
           provider: selectedProvider,
           providers: providerProfiles,
@@ -3847,18 +3853,20 @@ export function App() {
             <ProviderRegistrationMenu
               modelCatalog={modelCatalog}
               modelDiscoveryByProviderId={modelDiscoveryByProviderId}
-              onClose={() => {
-                setProviderRegistrationOpen(false);
-                setActiveNavItem("sessions");
-              }}
-              onDiscoverModels={handleDiscoverProviderModels}
+	              onClose={() => {
+	                setProviderRegistrationOpen(false);
+	                setActiveNavItem("sessions");
+	              }}
+	              onBindSessionSecret={handleBindProviderSessionSecret}
+	              onDiscoverModels={handleDiscoverProviderModels}
               onRemoveProvider={handleRemoveProvider}
               onRenameProvider={handleRenameProvider}
               onRegister={handleRegisterProvider}
-              profiles={providerProfiles}
-              routingConsoleItems={providerRoutingConsoleItems}
-              usedProviderIds={usedProviderIds}
-            />
+	              profiles={providerProfiles}
+	              routingConsoleItems={providerRoutingConsoleItems}
+	              sessionSecretProviderIds={sessionSecretProviderIds}
+	              usedProviderIds={usedProviderIds}
+	            />
           ) : null}
 
           {activeNavItem === "sessions" ? (

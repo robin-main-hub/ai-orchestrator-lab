@@ -8,6 +8,11 @@ import type {
   ProviderCompletionUsage,
   ProviderProfile,
 } from "@ai-orchestrator/protocol";
+import {
+  AnthropicAdapter,
+  OpenAICompatibleAdapter,
+  createAdapterContext,
+} from "@ai-orchestrator/providers";
 import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
 import { createDgxOrchestratorJsonHeaders } from "./stage31DgxAuth";
 
@@ -52,6 +57,7 @@ export type Stage12DgxCompletionInput = {
   allowDirectFallback?: boolean;
   approvalState?: ApprovalState;
   permissionDecision?: PermissionDecision;
+  localSecretResolver?: (provider: ProviderProfile) => Promise<string | undefined> | string | undefined;
 };
 
 export type Stage12DgxCompletionResult = {
@@ -139,6 +145,7 @@ export async function requestDgxProviderCompletion({
   proxyTimeoutMs = 30_000,
   approvalState,
   permissionDecision,
+  localSecretResolver,
 }: Stage12DgxCompletionInput): Promise<Stage12DgxCompletionResult> {
   if (isDgxVllmProvider(provider)) {
     return requestDgxVllmCompletion({
@@ -150,19 +157,42 @@ export async function requestDgxProviderCompletion({
       proxyTimeoutMs,
       approvalState,
       permissionDecision,
+      localSecretResolver,
     });
   }
 
-  return requestDgxProviderCompletionViaProxyFallback({
-    provider,
-    modelId,
-    messages,
-    fetchImpl,
-    proxyBaseUrl,
-    proxyTimeoutMs,
-    approvalState,
-    permissionDecision,
-  });
+  try {
+    return await requestDgxProviderCompletionViaProxyFallback({
+      provider,
+      modelId,
+      messages,
+      fetchImpl,
+      proxyBaseUrl,
+      proxyTimeoutMs,
+      approvalState,
+      permissionDecision,
+    });
+  } catch (proxyError) {
+    if (proxyError instanceof ProviderCompletionPermissionRequiredError) {
+      throw proxyError;
+    }
+
+    const direct = await requestServerProxyProviderCompletionDirect({
+      provider,
+      modelId,
+      messages,
+      fetchImpl,
+      localSecretResolver,
+    });
+    if (!direct) {
+      throw proxyError;
+    }
+
+    return {
+      ...direct,
+      fallbackReason: formatCompletionError(proxyError),
+    };
+  }
 }
 
 export function createProviderCompletionProxyRequest(
@@ -332,6 +362,100 @@ async function requestDgxVllmCompletionDirect({
       totalTokens: parsed.usage?.total_tokens,
     },
   };
+}
+
+async function requestServerProxyProviderCompletionDirect({
+  provider,
+  modelId,
+  messages,
+  fetchImpl,
+  localSecretResolver,
+}: Required<Pick<Stage12DgxCompletionInput, "provider" | "modelId" | "messages" | "fetchImpl">> &
+  Pick<Stage12DgxCompletionInput, "localSecretResolver">): Promise<Stage12DgxCompletionResult | undefined> {
+  if (!provider.baseUrl || !localSecretResolver) {
+    return undefined;
+  }
+
+  const localSecret = await localSecretResolver(provider);
+  if (!localSecret?.trim()) {
+    return undefined;
+  }
+
+  const request = createDirectProviderCompletionRequest(provider, modelId, messages);
+  const adapter = createDirectProviderAdapter(provider, fetchImpl);
+  if (!adapter) {
+    return undefined;
+  }
+
+  const response = await adapter.complete(
+    request,
+    createAdapterContext({
+      secret: localSecret,
+      timeoutMs: 30_000,
+    }),
+  );
+
+  if (response.status !== "succeeded" || !response.content?.trim()) {
+    throw new Error(response.error ?? "direct provider fallback returned no completion");
+  }
+
+  return {
+    content: response.content.trim(),
+    endpoint: response.endpoint ?? provider.baseUrl,
+    route: "direct_provider",
+    usage: response.usage,
+  };
+}
+
+function createDirectProviderCompletionRequest(
+  provider: ProviderProfile,
+  modelId: string,
+  messages: ConversationMessage[],
+): ProviderCompletionRequest {
+  return {
+    id: `provider_completion_direct_${crypto.randomUUID()}`,
+    sessionId: messages.at(-1)?.sessionId ?? "session_desktop_001",
+    providerProfileId: provider.id,
+    modelId,
+    messages: compactProviderProxyMessages(messages).map((message) => ({
+      role: message.role,
+      content: message.content,
+    })),
+    source: "desktop",
+    routePreference: "direct_provider",
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function createDirectProviderAdapter(provider: ProviderProfile, fetchImpl: typeof fetch) {
+  const modelIds = provider.defaultModel ? [provider.defaultModel] : [];
+  if (provider.kind === "anthropic" || provider.tags.includes("anthropic-compatible")) {
+    return new AnthropicAdapter({
+      profileId: provider.id,
+      baseUrl: provider.baseUrl ?? "",
+      modelIds,
+      fetchImpl,
+      temperature: 0.2,
+    });
+  }
+
+  if (
+    provider.kind === "openai" ||
+    provider.kind === "openrouter" ||
+    provider.tags.includes("openai-compatible")
+  ) {
+    return new OpenAICompatibleAdapter({
+      profileId: provider.id,
+      kind: provider.kind === "openrouter" ? "openrouter" : "openai",
+      baseUrl: provider.baseUrl ?? "",
+      modelIds,
+      fetchImpl,
+      maxTokens: 512,
+      temperature: 0.2,
+    });
+  }
+
+  return undefined;
 }
 
 async function fetchWithTimeout(fetchImpl: typeof fetch, input: string, init: RequestInit, timeoutMs: number) {

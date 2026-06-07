@@ -228,6 +228,59 @@ describe("stage12 DGX provider completion", () => {
     expect(calls).toEqual([`${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`]);
   });
 
+  it("can direct-fallback server-proxy OpenAI-compatible providers only with an explicit session secret", async () => {
+    const mimoProvider: ProviderProfile = {
+      id: "provider_mimo_token_openai",
+      name: "MiMo Token Plan OpenAI",
+      kind: "openai",
+      baseUrl: "https://token-plan-sgp.xiaomimimo.com/v1",
+      defaultModel: "mimo-v2.5-pro",
+      enabled: true,
+      tags: ["server-proxy", "mimo", "token-plan", "openai-compatible"],
+      trustLevel: "limited",
+    };
+    const calls: string[] = [];
+    const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(String(url));
+      if (String(url).includes("/provider-completions")) {
+        expect(String(init?.body)).not.toContain("tp-session-secret");
+        return new Response(JSON.stringify({ error: "proxy offline" }), { status: 502 });
+      }
+
+      expect(String(url)).toBe("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions");
+      expect((init?.headers as Record<string, string>).authorization).toBe("Bearer tp-session-secret");
+      expect(String(init?.body)).toContain("mimo-v2.5-pro");
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "마키마 세션 폴백 응답." } }],
+          usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 },
+        }),
+        { status: 200 },
+      );
+    };
+
+    const result = await requestDgxProviderCompletion({
+      provider: mimoProvider,
+      modelId: "mimo-v2.5-pro",
+      messages,
+      fetchImpl,
+      localSecretResolver: async (providerProfile) =>
+        providerProfile.id === "provider_mimo_token_openai" ? "tp-session-secret" : undefined,
+    });
+
+    expect(calls).toEqual([
+      `${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`,
+      "https://token-plan-sgp.xiaomimimo.com/v1/chat/completions",
+    ]);
+    expect(result).toMatchObject({
+      content: "마키마 세션 폴백 응답.",
+      endpoint: "https://token-plan-sgp.xiaomimimo.com/v1/chat/completions",
+      route: "direct_provider",
+      fallbackReason: expect.stringContaining("DGX-02 server proxy failed"),
+      usage: { inputTokens: 11, outputTokens: 7, totalTokens: 18 },
+    });
+  });
+
   it("stops fallback routing when the server requests explicit provider approval", async () => {
     const limitedProvider: ProviderProfile = {
       id: "provider_mimo_token_openai",
