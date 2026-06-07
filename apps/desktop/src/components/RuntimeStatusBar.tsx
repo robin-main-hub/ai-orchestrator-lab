@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { StatusBadge } from "@/ui/status-badge";
+import { runtimeStatusLabel } from "../lib/railStatusLabels";
 import type { CenterMode } from "../types";
 
 const modeConfig: Array<{
@@ -23,10 +24,10 @@ const modeConfig: Array<{
   icon: ElementType;
   shortLabel?: string;
 }> = [
-  { id: "conversation", label: "Conversation", icon: MessageSquare, shortLabel: "Chat" },
-  { id: "debate", label: "Debate", icon: Scale },
+  { id: "conversation", label: "대화", icon: MessageSquare, shortLabel: "대화" },
+  { id: "debate", label: "토론", icon: Scale },
   { id: "tmux", label: "Tmux", icon: Terminal },
-  { id: "cockpit", label: "Cockpit", icon: LayoutDashboard },
+  { id: "cockpit", label: "운영 관제판", icon: LayoutDashboard, shortLabel: "관제판" },
 ];
 
 export function RuntimeStatusBar({
@@ -52,10 +53,10 @@ export function RuntimeStatusBar({
 }) {
   const health = deriveHealth(snapshot);
   const healthLabel = {
-    healthy: "All systems operational",
-    degraded: "Some systems degraded",
-    critical: "System critical",
-    unknown: "System status unknown",
+    healthy: "모든 시스템 정상",
+    degraded: "일부 시스템 저하",
+    critical: "시스템 위험",
+    unknown: "시스템 상태 알 수 없음",
   }[health];
   const activeMode = mode === "annex" ? "debate" : mode;
 
@@ -64,11 +65,11 @@ export function RuntimeStatusBar({
       <div className="flex min-w-0 items-center gap-3">
         {drawerAvailable ? (
           <Button
-            aria-label="Toggle Navigation"
+            aria-label="내비게이션 열기/닫기"
             className="mobile-menu-btn h-8 w-8 shrink-0 text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-100"
             onClick={onToggleDrawer}
             size="icon"
-            title="Toggle Navigation"
+            title="내비게이션 열기/닫기"
             variant="ghost"
           >
             <Menu className="h-5 w-5" />
@@ -77,10 +78,10 @@ export function RuntimeStatusBar({
           <Popover>
             <PopoverTrigger asChild>
               <Button
-                aria-label="Open mobile mode menu"
+                aria-label="모바일 모드 메뉴 열기"
                 className="mobile-menu-btn h-8 w-8 shrink-0 text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-100"
                 size="icon"
-                title="Open mobile mode menu"
+                title="모바일 모드 메뉴 열기"
                 variant="ghost"
               >
                 <Menu className="h-5 w-5" />
@@ -136,7 +137,7 @@ export function RuntimeStatusBar({
           const isActive = activeMode === item.id;
           return (
             <button
-              aria-label={`${item.label} mode`}
+              aria-label={`${item.label} 모드`}
               className={cn(
                 "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
                 isActive
@@ -159,15 +160,15 @@ export function RuntimeStatusBar({
 
       <div className="flex shrink-0 items-center gap-2">
         <Button
-          aria-label="Open command palette"
+          aria-label="명령 팔레트 열기"
           className="h-8 gap-2 border-zinc-800/80 bg-zinc-900/50 px-2.5 text-xs text-zinc-500 hover:bg-zinc-800/80 hover:text-zinc-100"
           onClick={onCommandPalette}
           size="sm"
-          title="Command palette"
+          title="명령 팔레트"
           variant="outline"
         >
           <Search className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Command</span>
+          <span className="hidden sm:inline">명령</span>
           <kbd className="hidden rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[10px] font-medium text-zinc-400 sm:inline">
             ⌘K
           </kbd>
@@ -213,14 +214,14 @@ function HealthIndicator({
     <Popover>
       <PopoverTrigger asChild>
         <Button
-          aria-label={`System health: ${title}`}
+          aria-label={`시스템 상태: ${title}`}
           className="h-8 gap-2 px-2 text-xs text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-100"
           size="sm"
           variant="ghost"
         >
           <span className={cn("h-2 w-2 rounded-full", dotClass, health !== "healthy" && "animate-pulse")} />
           <Activity className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Health</span>
+          <span className="hidden sm:inline">상태</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -256,7 +257,7 @@ function HealthIndicator({
             variant="ghost"
           >
             <Activity className="mr-2 h-3.5 w-3.5" />
-            Probe DGX
+            DGX 점검
           </Button>
           <Button
             className="h-8 flex-1 justify-start text-xs text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-100"
@@ -278,7 +279,7 @@ function StatusRow({ label, status }: { label: string; status?: string }) {
     <div className="flex items-center justify-between rounded-md px-3 py-1.5 hover:bg-zinc-800/50">
       <span className="text-xs text-zinc-500">{label}</span>
       <StatusBadge variant={statusToBadgeVariant(status)} size="sm">
-        {status ?? "unknown"}
+        {status ? runtimeStatusLabel(status) : "알 수 없음"}
       </StatusBadge>
     </div>
   );
