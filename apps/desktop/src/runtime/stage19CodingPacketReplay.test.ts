@@ -73,4 +73,20 @@ describe("stage19 CodingPacket replay", () => {
     expect(result.eventId).toBe("event_packet_invalid");
     expect(result.error).toBeTruthy();
   });
+
+  it("falls back to an older valid packet when the newest packet payload is invalid", () => {
+    const validOlder = createPacketEvent("event_packet_valid_old", "2026-05-24T00:00:00.000Z", {
+      ...packet,
+      goal: "older valid packet",
+    });
+    const invalidNewer = createPacketEvent("event_packet_invalid_new", "2026-05-24T00:01:00.000Z", {
+      goal: packet.goal,
+    });
+
+    const result = extractLatestCodingPacketFromEvents([validOlder, invalidNewer]);
+
+    expect(result.status).toBe("restored");
+    expect(result.eventId).toBe("event_packet_valid_old");
+    expect(result.packet?.goal).toBe("older valid packet");
+  });
 });
