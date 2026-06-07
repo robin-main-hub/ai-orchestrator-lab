@@ -26,6 +26,7 @@ import { createAgentChatContinuitySummary } from "../../lib/agentChatContinuity"
 import { createAgentChannelHeaderMemoryLabel } from "../../lib/agentChannelStatus";
 import { createAgentConversationPromptSuggestions } from "../../lib/agentConversationPrompts";
 import { getAgentToolBadgeLabels, getAgentToolProfileSummary } from "../../lib/agentToolProfiles";
+import { selectAgentRuntimeConfigFiles } from "../../lib/agentRuntimeConfig";
 import { resolveAgentThinkingIndicator } from "../../lib/agentThinkingIndicator";
 import { getConversationWorkbenchVisibility } from "../../lib/conversationWorkbenchVisibility";
 import type {
@@ -211,6 +212,7 @@ export function ConversationWorkbench({
   });
   const toolLabels = selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role).slice(0, 3) : [];
   const toolProfileSummary = selectedAgent ? getAgentToolProfileSummary(selectedAgent.role) : undefined;
+  const selectedAgentRuntimeConfigFiles = selectedAgent ? selectAgentRuntimeConfigFiles(selectedAgent, configFiles) : [];
   const headerMemoryLabel = createAgentChannelHeaderMemoryLabel(memoryScope);
   const personaSoulApplied = Boolean(persona?.soulMdPath || persona?.soulSummary);
   const personaAgentsMdApplied = Boolean(persona?.agentsMdPath || persona?.agentsInstruction);
@@ -388,7 +390,11 @@ export function ConversationWorkbench({
                 personaSoulApplied={personaSoulApplied}
                 toolLabels={toolLabels}
               />
-              <AgentSkillProfilePanel displayName={selectedAgentDisplayName} role={selectedAgent.role} />
+              <AgentSkillProfilePanel
+                displayName={selectedAgentDisplayName}
+                role={selectedAgent.role}
+                runtimeConfigFiles={selectedAgentRuntimeConfigFiles}
+              />
             </div>
           </div>
           {selectedAgentThinkingIndicator ? (
