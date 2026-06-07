@@ -179,10 +179,19 @@ export function ConversationWorkbench({
   const selectedAgentInitials = selectedAgent ? agentInitialsForDisplay(selectedAgent) : "AI";
   const selectedAgentDisplayName = selectedAgent ? agentPrimaryDisplayName(selectedAgent) : "에이전트 선택";
   const selectedAgentSubtitle = selectedAgent ? agentSecondaryDisplayLabel(selectedAgent) : "대기";
+  const selectedAgentModelRouteSource =
+    selectedAgent?.modelId && selectedModel?.id === selectedAgent.modelId
+      ? "agent"
+      : selectedProvider?.defaultModel && selectedModel?.id === selectedProvider.defaultModel
+        ? "provider_default"
+        : selectedModel
+          ? "catalog"
+          : undefined;
   const selectedAgentModelRouteLabel = createAgentModelRouteLabel({
     modelId: selectedModel?.id ?? selectedAgent?.modelId,
     modelName: selectedModel?.name,
     providerName: selectedProvider?.name,
+    source: selectedAgentModelRouteSource,
   });
   const toolLabels = selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role).slice(0, 3) : [];
   const toolProfileSummary = selectedAgent ? getAgentToolProfileSummary(selectedAgent.role) : undefined;

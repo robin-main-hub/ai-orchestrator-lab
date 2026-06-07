@@ -17,8 +17,19 @@ describe("createAgentModelRouteLabel", () => {
         modelId: "claude-opus-4-8",
         modelName: "Claude Opus 4.8",
         providerName: "APIKey.fun Claude A",
+        source: "agent",
       }),
-    ).toBe("Claude A (APIFun) / Claude Opus 4.8 (claude-opus-4-8)");
+    ).toBe("에이전트 고정 · Claude A (APIFun) / Claude Opus 4.8 (claude-opus-4-8)");
+  });
+
+  it("marks provider default model routes when no agent override is selected", () => {
+    expect(
+      createAgentModelRouteLabel({
+        modelId: "mimo-v2.5-pro",
+        providerName: "MiMo Token Plan OpenAI",
+        source: "provider_default",
+      }),
+    ).toBe("Provider 기본 · MiMo / mimo-v2.5-pro");
   });
 
   it("falls back clearly when provider or model is missing", () => {
