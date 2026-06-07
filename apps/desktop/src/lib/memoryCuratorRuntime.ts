@@ -3,6 +3,11 @@ import {
   createMemoryCuratorCandidate,
   type MemoryCuratorCandidate,
 } from "./memoryCuratorApproval";
+import {
+  readJsonState,
+  writeJsonState,
+  type JsonStorageLike,
+} from "./persistentJsonState";
 
 export type MemoryCuratorPersistencePlan = {
   activateRecordIds: string[];
@@ -10,6 +15,14 @@ export type MemoryCuratorPersistencePlan = {
   forgetRecordIds: string[];
   quarantineRecordIds: string[];
 };
+
+export type MemoryCuratorLedgerEntry = {
+  candidate: MemoryCuratorCandidate;
+  scopeKey: string;
+  updatedAt: string;
+};
+
+export const memoryCuratorLedgerStorageKey = "ai-orchestrator.memory-curator-ledger.v1";
 
 export type ConversationTurnMemoryCandidateInput = {
   agentId: string;
@@ -64,6 +77,56 @@ export function createMemoryCuratorPersistencePlan(
     forgetRecordIds,
     quarantineRecordIds,
   };
+}
+
+export function readMemoryCuratorLedger(storage?: JsonStorageLike): MemoryCuratorLedgerEntry[] {
+  return readJsonState(
+    memoryCuratorLedgerStorageKey,
+    [],
+    parseMemoryCuratorLedger,
+    storage,
+  );
+}
+
+export function writeMemoryCuratorCandidate({
+  candidate,
+  scopeKey,
+  storage,
+  updatedAt,
+}: {
+  candidate: MemoryCuratorCandidate;
+  scopeKey: string;
+  storage?: JsonStorageLike;
+  updatedAt: string;
+}): MemoryCuratorLedgerEntry[] {
+  const current = readMemoryCuratorLedger(storage);
+  const nextEntry: MemoryCuratorLedgerEntry = { candidate, scopeKey, updatedAt };
+  const next = [
+    nextEntry,
+    ...current.filter((entry) => entry.candidate.id !== candidate.id),
+  ].slice(0, 200);
+  writeJsonState(memoryCuratorLedgerStorageKey, next, storage);
+  return next;
+}
+
+export function getMemoryCuratorRecordsForScope(
+  scopeKey: string,
+  storage?: JsonStorageLike,
+): MemoryRecord[] {
+  return readMemoryCuratorLedger(storage)
+    .filter((entry) => entry.scopeKey === scopeKey)
+    .map((entry) => entry.candidate.record);
+}
+
+export function mergeMemoryRecordsWithCuratorLedger(
+  records: MemoryRecord[],
+  scopeKey: string,
+  storage?: JsonStorageLike,
+): MemoryRecord[] {
+  const recordIds = new Set(records.map((record) => record.id));
+  const ledgerRecords = getMemoryCuratorRecordsForScope(scopeKey, storage)
+    .filter((record) => !recordIds.has(record.id));
+  return [...ledgerRecords, ...records];
 }
 
 export function createConversationTurnMemoryCandidate({
@@ -139,4 +202,26 @@ function stableId(value: string): string {
     hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
   }
   return hash.toString(16).padStart(8, "0");
+}
+
+function parseMemoryCuratorLedger(value: unknown): MemoryCuratorLedgerEntry[] {
+  if (!Array.isArray(value)) {
+    throw new Error("invalid memory curator ledger");
+  }
+  return value
+    .map((entry) => parseMemoryCuratorLedgerEntry(entry))
+    .filter((entry): entry is MemoryCuratorLedgerEntry => Boolean(entry));
+}
+
+function parseMemoryCuratorLedgerEntry(value: unknown): MemoryCuratorLedgerEntry | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = (value as { candidate?: unknown }).candidate;
+  const scopeKey = (value as { scopeKey?: unknown }).scopeKey;
+  const updatedAt = (value as { updatedAt?: unknown }).updatedAt;
+  if (!candidate || typeof candidate !== "object") return undefined;
+  const record = (candidate as { record?: unknown }).record;
+  const candidateId = (candidate as { id?: unknown }).id;
+  if (!record || typeof record !== "object" || typeof candidateId !== "string") return undefined;
+  if (typeof scopeKey !== "string" || typeof updatedAt !== "string") return undefined;
+  return value as MemoryCuratorLedgerEntry;
 }

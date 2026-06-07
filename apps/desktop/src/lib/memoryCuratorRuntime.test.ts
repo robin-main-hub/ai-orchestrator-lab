@@ -3,10 +3,30 @@ import type { MemoryRecord } from "@ai-orchestrator/protocol";
 import {
   createConversationTurnMemoryCandidate,
   createMemoryCuratorPersistencePlan,
+  getMemoryCuratorRecordsForScope,
+  readMemoryCuratorLedger,
+  writeMemoryCuratorCandidate,
 } from "./memoryCuratorRuntime";
+import type { JsonStorageLike } from "./persistentJsonState";
 
 const createdAt = "2026-06-06T00:00:00.000Z";
 const updatedAt = "2026-06-06T00:01:00.000Z";
+
+class MemoryStorage implements JsonStorageLike {
+  private readonly values = new Map<string, string>();
+
+  getItem(key: string) {
+    return this.values.get(key) ?? null;
+  }
+
+  removeItem(key: string) {
+    this.values.delete(key);
+  }
+
+  setItem(key: string, value: string) {
+    this.values.set(key, value);
+  }
+}
 
 function createRecord(overrides: Partial<MemoryRecord> & Pick<MemoryRecord, "id" | "title">): MemoryRecord {
   const { id, title, ...rest } = overrides;
@@ -116,5 +136,76 @@ describe("memory curator runtime persistence planning", () => {
     expect(plan.quarantineRecordIds).toEqual(["memory_loser"]);
     expect(plan.forgetRecordIds).toEqual([]);
     expect(plan.changedRecordIds).toEqual(["memory_winner", "memory_loser"]);
+  });
+
+  it("scope별 curator 후보 ledger를 저장하고 다른 에이전트 방으로 새지 않게 복원한다", () => {
+    const storage = new MemoryStorage();
+    const makimaCandidate = createConversationTurnMemoryCandidate({
+      agentId: "agent_orchestrator",
+      agentName: "마키마",
+      assistantMessage: {
+        id: "message_agent_1",
+        content: "좋아. 다음 턴부터 이 지시를 기준으로 이어갈게.",
+        createdAt: updatedAt,
+        role: "assistant",
+        sessionId: "session_main",
+      },
+      createdAt: updatedAt,
+      memoryScopeNamespace: "agent:agent_orchestrator/session:session_main/provider:provider_mimo",
+      providerProfileId: "provider_mimo",
+      recallTraceId: "recall_agent_orchestrator_session_main_provider_mimo",
+      userMessage: {
+        id: "message_user_1",
+        content: "마키마는 다음 큰 바위 순서를 계속 기억해.",
+        createdAt,
+        role: "user",
+        sessionId: "session_main",
+      },
+    });
+    const shinobuCandidate = createConversationTurnMemoryCandidate({
+      agentId: "agent_architect",
+      agentName: "오시노 시노부",
+      assistantMessage: {
+        id: "message_agent_2",
+        content: "설계 맥락으로 따로 보관하겠다.",
+        createdAt: updatedAt,
+        role: "assistant",
+        sessionId: "session_main",
+      },
+      createdAt: updatedAt,
+      memoryScopeNamespace: "agent:agent_architect/session:session_main/provider:provider_mimo",
+      providerProfileId: "provider_mimo",
+      recallTraceId: "recall_agent_architect_session_main_provider_mimo",
+      userMessage: {
+        id: "message_user_2",
+        content: "시노부는 설계 결정을 기억해.",
+        createdAt,
+        role: "user",
+        sessionId: "session_main",
+      },
+    });
+
+    writeMemoryCuratorCandidate({
+      candidate: makimaCandidate,
+      scopeKey: "agent_orchestrator::session_main::provider_mimo",
+      storage,
+      updatedAt,
+    });
+    writeMemoryCuratorCandidate({
+      candidate: shinobuCandidate,
+      scopeKey: "agent_architect::session_main::provider_mimo",
+      storage,
+      updatedAt,
+    });
+
+    expect(readMemoryCuratorLedger(storage)).toHaveLength(2);
+    expect(
+      getMemoryCuratorRecordsForScope("agent_orchestrator::session_main::provider_mimo", storage)
+        .map((record) => record.title),
+    ).toEqual(["마키마 대화 기억 후보"]);
+    expect(
+      getMemoryCuratorRecordsForScope("agent_architect::session_main::provider_mimo", storage)
+        .map((record) => record.title),
+    ).toEqual(["오시노 시노부 대화 기억 후보"]);
   });
 });
