@@ -23,6 +23,21 @@ export type AgentChannelMemoryInstallAudit = {
   scopes: AgentChannelMemoryScope[];
 };
 
+export type AgentCompletionContextInput = {
+  agent: {
+    id: string;
+    providerProfileId?: string;
+  };
+  channels: AgentConversationChannels;
+  fallbackProviderProfileId: string;
+  sessionId: string;
+};
+
+export type AgentCompletionContext = {
+  memoryScope: AgentChannelMemoryScope;
+  previousMessages: ConversationMessage[];
+};
+
 export function createInitialAgentConversationChannels(
   agents: AgentChannelSeed[],
   seedMessages: ConversationMessage[],
@@ -118,6 +133,19 @@ export function createAgentChannelRecallQuery(scope: AgentChannelMemoryScope, go
     `session:${scope.sessionId}`,
     `provider:${scope.providerProfileId}`,
   ].join("\n");
+}
+
+export function resolveAgentCompletionContext({
+  agent,
+  channels,
+  fallbackProviderProfileId,
+  sessionId,
+}: AgentCompletionContextInput): AgentCompletionContext {
+  const providerProfileId = agent.providerProfileId ?? fallbackProviderProfileId;
+  return {
+    memoryScope: createAgentChannelMemoryScope(agent.id || "agent_unassigned", sessionId, providerProfileId),
+    previousMessages: getAgentChannelMessages(channels, agent.id),
+  };
 }
 
 export function createAgentChannelMemoryInstallAudit(

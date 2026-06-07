@@ -9,6 +9,7 @@ import {
   createInitialAgentConversationChannels,
   distributeReplayedMessagesIntoChannels,
   getAgentChannelMessages,
+  resolveAgentCompletionContext,
 } from "./agentConversationChannels";
 import { seededAgentProfiles } from "../seeds/agents";
 
@@ -170,6 +171,42 @@ describe("agentConversationChannels", () => {
         "provider:provider_mimo_token_openai",
       ].join("\n"),
     );
+  });
+
+  it("resolves completion context from the invoked target agent instead of the selected agent", () => {
+    const channels = createInitialAgentConversationChannels(agents, [
+      {
+        id: "message_orchestrator",
+        sessionId: "session_a",
+        role: "user",
+        content: "마키마에게만 보낸 말",
+        createdAt: "2026-06-05T00:00:00.000Z",
+        metadata: { agentId: "agent_orchestrator" },
+      },
+      {
+        id: "message_reviewer",
+        sessionId: "session_a",
+        role: "user",
+        content: "카구야에게만 보낸 말",
+        createdAt: "2026-06-05T00:00:01.000Z",
+        metadata: { agentId: "agent_reviewer" },
+      },
+    ]);
+
+    const context = resolveAgentCompletionContext({
+      agent: {
+        id: "agent_reviewer",
+        providerProfileId: "provider_claude_b",
+      },
+      channels,
+      fallbackProviderProfileId: "provider_selected_makima",
+      sessionId: "session_a",
+    });
+
+    expect(context.memoryScope).toEqual(
+      createAgentChannelMemoryScope("agent_reviewer", "session_a", "provider_claude_b"),
+    );
+    expect(context.previousMessages.map((message) => message.id)).toEqual(["message_reviewer"]);
   });
 
   it("audits memory scope installation for every seeded agent", () => {
