@@ -351,6 +351,8 @@ export function useMemoryController({
       messages,
       packet,
       provider,
+      agentId: memoryScope?.agentId,
+      sessionId: memoryScope?.sessionId,
       createdAt,
     });
 

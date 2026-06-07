@@ -65,6 +65,7 @@ export type Stage6RememberInput = {
   provider?: ProviderProfile;
   sessionId?: string;
   projectId?: string;
+  agentId?: string;
   createdAt?: string;
 };
 
@@ -306,6 +307,7 @@ export function createStage6MemoryInspector({
 }
 
 export function rememberStage6Context({
+  agentId,
   messages,
   packet,
   provider,
@@ -316,6 +318,11 @@ export function rememberStage6Context({
   const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
   const trustLevel = provider?.trustLevel ?? "limited";
   const seed = stableId(`${packet.goal}:${lastUserMessage?.content ?? ""}`, createdAt);
+  const scopeTags = createRememberScopeTags({
+    agentId,
+    providerProfileId: provider?.id,
+    sessionId,
+  });
 
   return [
     {
@@ -329,7 +336,7 @@ export function rememberStage6Context({
       trustLevel,
       projectId,
       sessionId,
-      tags: ["conversation", "workbench"],
+      tags: ["conversation", "workbench", ...scopeTags],
       activationState: "suggested",
       createdAt,
       losslessRestatement: `The user worked in a conversation session on ${createdAt} about ${lastUserMessage?.content ?? packet.goal}.`,
@@ -352,7 +359,7 @@ export function rememberStage6Context({
       trustLevel: trustLevel === "untrusted" ? "limited" : trustLevel,
       projectId,
       sessionId,
-      tags: ["coding-packet", "reflection"],
+      tags: ["coding-packet", "reflection", ...scopeTags],
       activationState: "suggested",
       createdAt,
       losslessRestatement: `The coding handoff on ${createdAt} recorded ${packet.decisions[0] ?? packet.goal} with verification ${packet.verificationPlan[0] ?? "pending"}.`,
@@ -365,6 +372,22 @@ export function rememberStage6Context({
       pinned: false,
     },
   ];
+}
+
+function createRememberScopeTags({
+  agentId,
+  providerProfileId,
+  sessionId,
+}: {
+  agentId?: string;
+  providerProfileId?: string;
+  sessionId?: string;
+}) {
+  return [
+    agentId ? `agent:${sanitizeMemoryTagPart(agentId)}` : undefined,
+    providerProfileId ? `provider:${sanitizeMemoryTagPart(providerProfileId)}` : undefined,
+    sessionId ? `session:${sanitizeMemoryTagPart(sessionId)}` : undefined,
+  ].filter((tag): tag is string => Boolean(tag));
 }
 
 export function pinMemoryRecord(records: MemoryRecord[], recordId: string, updatedAt = new Date().toISOString()): MemoryRecord[] {
@@ -946,6 +969,15 @@ function normalizeTitle(value: string) {
 
 function tokenize(value: string): string[] {
   return Array.from(new Set(value.toLowerCase().match(/[\p{L}\p{N}_-]{2,}/gu) ?? []));
+}
+
+function sanitizeMemoryTagPart(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
 }
 
 function stableId(value: string, salt: string) {
