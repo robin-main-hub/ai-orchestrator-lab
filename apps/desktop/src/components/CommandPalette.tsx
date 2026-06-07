@@ -62,6 +62,15 @@ export function CommandPalette({
           className="fixed inset-0 z-50 bg-background/55 backdrop-blur-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" 
         />
         <Dialog.Content 
+          onCloseAutoFocus={(e) => {
+            e.preventDefault();
+            const mainContainer = document.getElementById("main-container");
+            if (mainContainer) {
+              mainContainer.focus();
+            } else {
+              document.body.focus();
+            }
+          }}
           className="fixed left-1/2 top-[12vh] z-50 w-[min(512px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-card shadow-2xl p-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
           aria-label="명령 팔레트 모달"
         >
