@@ -19,7 +19,7 @@ describe("createAgentModelRouteLabel", () => {
         providerName: "APIKey.fun Claude A",
         source: "agent",
       }),
-    ).toBe("에이전트 고정 · Claude A (APIFun) / Claude Opus 4.8");
+    ).toBe("현재 에이전트 고정 · Claude A (APIFun) / Claude Opus 4.8");
   });
 
   it("marks provider default model routes when no agent override is selected", () => {
