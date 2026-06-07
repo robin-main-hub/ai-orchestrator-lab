@@ -660,6 +660,7 @@ export function App() {
     handlePinMemory,
     handleQueueMemoryCuratorCandidate,
     handleRememberCurrentContext,
+    createScopedMemoryInspector,
     memoryInspector,
     memoryRecords,
     prependMemoryRecord,
@@ -1071,8 +1072,13 @@ export function App() {
       fallbackProviderProfileId: provider.id ?? agent.providerProfileId ?? "provider_unassigned",
       sessionId: activeSessionId,
     });
+    const targetMemoryInspector = await createScopedMemoryInspector(
+      completionContext.memoryScope,
+      completionContext.previousMessages,
+      provider,
+    );
     if (!isDgxRoutedProvider(provider)) {
-      const recalledMemoryCount = memoryInspector.trace.results.filter((result) => result.usedInDecision).length;
+      const recalledMemoryCount = targetMemoryInspector.trace.results.filter((result) => result.usedInDecision).length;
       const guardedReply = applyAgentIdentityResponseGuard({
         agent,
         content: buildMockAssistantReply({
@@ -1089,7 +1095,7 @@ export function App() {
           providerProfileId: provider.id,
           realProviderCall: false,
           route: "mock",
-          memoryTraceId: memoryInspector.trace.id,
+          memoryTraceId: targetMemoryInspector.trace.id,
           recalledMemoryCount,
           runtimeConfigFileIds: agentConfigFiles
             .filter((configFile) => configFile.linkedAgentIds.includes(agent.id))
@@ -1105,7 +1111,7 @@ export function App() {
     const pipelineMessages = createConversationPipelineMessages({
       agent,
       configFiles: agentConfigFiles,
-      memory: memoryInspector,
+      memory: targetMemoryInspector,
       memoryScope: completionContext.memoryScope,
       modelId,
       persona,
@@ -1118,9 +1124,9 @@ export function App() {
       providerProfileId: provider.id,
       modelId,
       messageCount: pipelineMessages.length,
-      memoryTraceId: memoryInspector.trace.id,
+      memoryTraceId: targetMemoryInspector.trace.id,
       runtimeConfigFileIds: pipelineMessages[0]?.metadata?.runtimeConfigFileIds,
-      usedMemoryCount: memoryInspector.trace.results.filter((result) => result.usedInDecision).length,
+      usedMemoryCount: targetMemoryInspector.trace.results.filter((result) => result.usedInDecision).length,
       soulMode: agent.soulMode,
       purpose,
       redaction: "applied",
