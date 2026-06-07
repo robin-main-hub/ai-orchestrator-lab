@@ -173,7 +173,7 @@ export function ControlQueueDrawer({
 
   return (
     <aside
-      aria-label="Control Queue 작업 큐"
+      aria-label="작업 큐"
       aria-modal="true"
       className="fixed right-4 top-14 z-30 flex max-h-[calc(100vh-78px)] w-[min(460px,calc(100vw-32px))] flex-col rounded-lg border border-border bg-card shadow-2xl"
       ref={drawerRef}
@@ -184,7 +184,7 @@ export function ControlQueueDrawer({
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium text-foreground">Control Queue</span>
+          <span className="text-sm font-medium text-foreground">작업 큐</span>
           <span className="text-xs text-muted-foreground">
             {pendingItems.length}건 처리 대기
           </span>
@@ -193,7 +193,7 @@ export function ControlQueueDrawer({
           </kbd>
         </div>
         <Button
-          aria-label="Control Queue 닫기"
+          aria-label="작업 큐 닫기"
           className="h-6 w-6"
           onClick={onClose}
           ref={closeButtonRef}
@@ -202,6 +202,24 @@ export function ControlQueueDrawer({
         >
           <X className="h-3.5 w-3.5" />
         </Button>
+      </div>
+
+      <div className="border-b border-border bg-[linear-gradient(135deg,rgba(245,158,11,0.10),rgba(24,24,27,0.45))] px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/20 bg-amber-400/10 px-2.5 py-1 text-[10px] font-semibold text-amber-100">
+            <Clock3 className="h-3 w-3" />
+            처리 지휘판
+          </span>
+          <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-muted-foreground">
+            승인 대기 {pendingItems.length}건
+          </span>
+          <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-muted-foreground">
+            처리 완료 {resolvedCount}건
+          </span>
+        </div>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+          질문·수정·위임으로 흐름 정리 후, 위험 실행만 운영자 승인으로 통과시킵니다.
+        </p>
       </div>
 
       {/* Summary */}
