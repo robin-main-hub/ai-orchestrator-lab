@@ -67,6 +67,22 @@ describe("stage29 local client event cache", () => {
     expect(await secondStore.listUnsynced()).toHaveLength(0);
   });
 
+  it("falls back to in-memory cache when browser storage quota is exhausted", async () => {
+    const storage = {
+      getItem: () => null,
+      setItem: () => {
+        throw new DOMException("quota", "QuotaExceededError");
+      },
+    };
+    const store = createLocalClientEventCache(storage);
+
+    await expect(store.append(eventA)).resolves.toBeUndefined();
+    await expect(store.append(eventB)).resolves.toBeUndefined();
+
+    expect((await store.listBySession("session_desktop_001")).map((event) => event.id)).toEqual(["event_a", "event_b"]);
+    expect((await store.listUnsynced()).map((event) => event.id)).toEqual(["event_a", "event_b"]);
+  });
+
   it("does not resurrect a projected event when the local cache re-appends it", async () => {
     const store = createLocalClientEventCache();
 
