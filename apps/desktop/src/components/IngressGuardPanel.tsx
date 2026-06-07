@@ -1,6 +1,7 @@
 import { RadioTower, Smartphone } from "lucide-react";
 import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
 import { guardStepLabel } from "../lib/uiLabels";
+import { ingressApprovalStateLabel, ingressConfidenceLabel } from "../lib/railStatusLabels";
 import { StatusBadge } from "@/ui/status-badge";
 import type { StatusBadgeVariant } from "@/ui/status-badge";
 
@@ -44,32 +45,32 @@ export function IngressGuardPanel({
     <section className="side-panel ingress-panel">
       <header className="panel-title">
         <RadioTower size={17} />
-        <h2>Ingress Guard</h2>
+        <h2>인입 보호</h2>
         <button aria-label="외부 인입 가져오기" className="icon-button" onClick={onImportExternalIngress} type="button">
           <Smartphone size={15} />
         </button>
       </header>
       <div className="ingress-summary">
         <div>
-          <span>channel</span>
+          <span>채널</span>
           <strong>{snapshot.channel}</strong>
         </div>
         <div>
-          <span>confidence</span>
-          <strong>{snapshot.result.confidence}</strong>
+          <span>신뢰도</span>
+          <strong>{ingressConfidenceLabel(snapshot.result.confidence)}</strong>
         </div>
         <div>
-          <span>approval</span>
+          <span>승인</span>
           <StatusBadge
             size="sm"
             variant={approvalStateBadgeVariant(snapshot.result.approvalState)}
             className="mt-1 w-fit"
           >
-            {snapshot.result.approvalState}
+            {ingressApprovalStateLabel(snapshot.result.approvalState)}
           </StatusBadge>
         </div>
       </div>
-      <div className="guard-step-list" aria-label="Ingress guard steps">
+      <div className="guard-step-list" aria-label="인입 보호 단계">
         {visibleSteps.map((step) => (
           <article className={step.status} key={step.name}>
             <strong>{guardStepLabel(step.name)}</strong>
@@ -77,16 +78,16 @@ export function IngressGuardPanel({
               size="sm"
               variant={guardStepBadgeVariant(step.status)}
             >
-              {step.status}
+              {guardStepStatusLabel(step.status)}
             </StatusBadge>
             <span className="guard-step-reason">{step.reason}</span>
           </article>
         ))}
       </div>
       <div className="approval-queue-list">
-        <span>Approval Queue</span>
+        <span>승인 대기열</span>
         {snapshot.approvals.length === 0 ? (
-          <strong>empty</strong>
+          <strong>비어 있음</strong>
         ) : (
           snapshot.approvals.map((approval) => (
             <article key={approval.id}>
@@ -94,7 +95,7 @@ export function IngressGuardPanel({
                 size="sm"
                 variant={approvalStateBadgeVariant(approval.state)}
               >
-                {approval.state}
+                {ingressApprovalStateLabel(approval.state)}
               </StatusBadge>
               <em>{approval.permissions.join(", ")}</em>
             </article>
@@ -102,11 +103,19 @@ export function IngressGuardPanel({
         )}
       </div>
       <div className="zero-token-note">
-        <span>0-token safety</span>
-        <strong>
-          {snapshot.zeroTokenSafety.cadence} / pending {snapshot.zeroTokenSafety.pendingCount}
-        </strong>
+        <span>0토큰 안전장치</span>
+        <strong>{snapshot.zeroTokenSafety.cadence} / 대기 {snapshot.zeroTokenSafety.pendingCount}</strong>
       </div>
     </section>
   );
+}
+
+function guardStepStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    blocked: "차단",
+    passed: "통과",
+    queued: "대기",
+    skipped: "건너뜀",
+  };
+  return labels[status] ?? status;
 }
