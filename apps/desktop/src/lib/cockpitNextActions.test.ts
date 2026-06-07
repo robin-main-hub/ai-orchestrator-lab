@@ -120,4 +120,30 @@ describe("deriveCockpitNextActions", () => {
       },
     ]);
   });
+
+  it("surfaces control queue follow-up before generic maturity actions", () => {
+    const actions = deriveCockpitNextActions({
+      controlQueue: {
+        hasItems: true,
+        label: "큐 이어받기: 질문 1 · 초안 1 · 위임 1",
+        latestTitle: "수정 초안: 실행 조건",
+        tone: "loading",
+      },
+      diagnostics: { nextActions: [] } as unknown as SettingsDiagnostics,
+      maturity: {
+        nextActions: ["Control Queue lane 결과를 확인"],
+        overallStatus: "needs_work",
+      } as unknown as OrchestrationMaturityReport,
+      snapshot: { ...snapshot, approvals: [], fleet: [], handoffs: [] } as unknown as OperatorCockpitSnapshot,
+    });
+
+    expect(actions.map((action) => action.label)).toEqual([
+      "큐 이어받기: 질문 1 · 초안 1 · 위임 1 — 수정 초안: 실행 조건",
+      "Control Queue lane 결과를 확인",
+    ]);
+    expect(actions[0]).toMatchObject({
+      priority: "warning",
+      source: "control_queue",
+    });
+  });
 });

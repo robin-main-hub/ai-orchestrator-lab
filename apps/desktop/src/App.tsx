@@ -3490,6 +3490,7 @@ export function App() {
       diagnostics,
       maturity,
       nextActions: deriveCockpitNextActions({
+        controlQueue: controlQueueContinuity,
         diagnostics,
         maturity,
         snapshot: cockpitSnapshot,
@@ -3505,6 +3506,7 @@ export function App() {
     codingPacketState.goal,
     cockpitSnapshot,
     conversationMessages,
+    controlQueueContinuity,
     debateSession,
     draftAttachments.length,
     eventSyncState.status,
