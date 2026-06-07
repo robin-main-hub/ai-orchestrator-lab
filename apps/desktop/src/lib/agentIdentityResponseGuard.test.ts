@@ -25,6 +25,19 @@ describe("applyAgentIdentityResponseGuard", () => {
     expect(guarded.content).not.toContain("이름은 없다");
   });
 
+  it("corrects indirect Korean name-denial variants from provider replies", () => {
+    const guarded = applyAgentIdentityResponseGuard({
+      agent,
+      content: "나는 별도의 이름을 가지고 있지 않아. 역할명으로 불러줘.",
+      userContent: "너 누구야",
+    });
+
+    expect(guarded.guardApplied).toBe(true);
+    expect(guarded.content).toContain("마키마");
+    expect(guarded.content).not.toContain("별도의 이름");
+    expect(guarded.content).not.toContain("역할명으로");
+  });
+
   it("does not rewrite ordinary answers", () => {
     const guarded = applyAgentIdentityResponseGuard({
       agent,
