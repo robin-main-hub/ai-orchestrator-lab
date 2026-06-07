@@ -9,7 +9,7 @@ describe("PublicWorkTracePanel", () => {
       groups: [
         {
           id: "commands",
-          title: "도구 후보",
+          title: "도구 호출",
           items: [
             { id: "tool-1", label: "도구 1", tone: "info", value: "work.queue" },
             { id: "tool-2", label: "도구 2", tone: "info", value: "approval" },

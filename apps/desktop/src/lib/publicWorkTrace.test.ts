@@ -116,12 +116,12 @@ describe("publicWorkTrace", () => {
     });
     expect(trace.groups.map((group) => group.title)).toEqual([
       "작업 단계",
-      "도구 후보",
+      "도구 호출",
       "검증",
     ]);
     expect(trace.groups[0]?.items).toContainEqual(
       expect.objectContaining({
-        label: "Provider 호출",
+        label: "도구 호출",
         tone: "success",
         value: "mimo-openai · mimo-v2.5-pro",
       }),
@@ -158,7 +158,7 @@ describe("publicWorkTrace", () => {
     );
     expect(trace.groups[1]?.items).toContainEqual(
       expect.objectContaining({
-        label: "호출 후보",
+        label: "명령 생성",
         value: "work.queue, approval, tmux.plan",
       }),
     );
@@ -309,7 +309,7 @@ describe("publicWorkTrace", () => {
     });
     expect(trace.groups.map((group) => group.title)).toEqual([
       "작업 단계",
-      "도구 후보",
+      "도구 호출",
       "검증",
     ]);
     expect(trace.groups[0]?.items[0]).toMatchObject({ label: "응답 단계", value: "공개 답변 생성" });
