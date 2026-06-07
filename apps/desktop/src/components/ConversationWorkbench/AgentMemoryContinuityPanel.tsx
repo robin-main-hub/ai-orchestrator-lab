@@ -30,7 +30,7 @@ export function AgentMemoryContinuityPanel({
     toolLabels,
   });
   const memoryLabel = memoryRecordCount > 0 ? `기억 ${memoryRecordCount}개` : summary.memoryQualityLabel;
-  const scopeLabel = memoryScope ? "이 대화방 기억만 사용" : "전용 기억 준비 중";
+  const scopeLabel = memoryScope ? `${memoryScope.roomLabel ?? "이 대화방"} 기억 사용` : "전용 기억 준비 중";
   const traceLabel = memoryScope?.recallTraceId ? "조회 흔적 남길 준비됨" : "조회 흔적 대기";
   const conversationLabel = messageCount > 0 ? `${messageCount}개 대화 단서` : "첫 말부터 따로 기록";
   const toolCueLabel =
