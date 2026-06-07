@@ -19,6 +19,7 @@ import {
   eventSyncPushRequestSchema,
   eventSyncPushResponseSchema,
   executionSlotSchema,
+  operatorCockpitHandoffSchema,
   parseAgentDelegationEventPayload,
   projectAgentDelegationTimeline,
   providerCompletionRequestSchema,
@@ -882,6 +883,26 @@ describe("protocol schemas", () => {
         rawBody: "full SSOT body must not be stored here",
       }),
     ).toThrow();
+  });
+
+  it("keeps operator cockpit handoff routing metadata for executable CTAs", () => {
+    const parsed = operatorCockpitHandoffSchema.parse({
+      id: "handoff_packet_1",
+      ownerAgentId: "agent_executor",
+      nextAction: "코딩 패킷 실행 슬롯 인계",
+      targetSurface: "execution_slot",
+      payloadRef: "coding_packet://session_desktop_001",
+      approvalState: "required",
+      missingInfoSlots: [],
+      evidenceRefs: [],
+    });
+
+    expect(parsed).toMatchObject({
+      id: "handoff_packet_1",
+      targetSurface: "execution_slot",
+      payloadRef: "coding_packet://session_desktop_001",
+      approvalState: "required",
+    });
   });
 
   it("supports PR1 assistant inbox routing without broad source sprawl", () => {
