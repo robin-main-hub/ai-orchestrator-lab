@@ -5,6 +5,7 @@ import {
   createMemoryCuratorPersistencePlan,
   getMemoryCuratorRecordsForScope,
   readMemoryCuratorLedger,
+  resolveMemoryCuratorCandidateScopeKey,
   updateMemoryCuratorLedgerRecord,
   upsertMemoryCuratorRecordOverlay,
   writeMemoryCuratorCandidate,
@@ -256,6 +257,35 @@ describe("memory curator runtime persistence planning", () => {
       getMemoryCuratorRecordsForScope("agent_architect::session_main::provider_mimo", storage)
         .map((record) => record.title),
     ).toEqual(["오시노 시노부 대화 기억 후보"]);
+  });
+
+  it("후보 record의 scope 태그가 있으면 현재 선택 방이 아니라 후보 방 scopeKey를 우선한다", () => {
+    const candidate = createConversationTurnMemoryCandidate({
+      agentId: "agent_architect",
+      agentName: "오시노 시노부",
+      assistantMessage: {
+        id: "message_agent_architect",
+        content: "설계 결정을 별도 기억으로 남기겠다.",
+        createdAt: updatedAt,
+        role: "assistant",
+        sessionId: "session_main",
+      },
+      createdAt: updatedAt,
+      memoryScopeNamespace: "agent:agent_architect/session:session_main/provider:provider_claude_b",
+      providerProfileId: "provider_claude_b",
+      recallTraceId: "recall_agent_architect_session_main_provider_claude_b",
+      userMessage: {
+        id: "message_user_architect",
+        content: "이 설계 결정은 시노부 방에서 기억해.",
+        createdAt,
+        role: "user",
+        sessionId: "session_main",
+      },
+    });
+
+    expect(resolveMemoryCuratorCandidateScopeKey(candidate, "agent:agent_orchestrator/session:session_main/provider:provider_mimo")).toBe(
+      "agent:agent_architect/session:session_main/provider:provider_claude_b",
+    );
   });
 
   it("승인된 curator 후보는 ledger에서도 active/pinned 상태로 복원된다", () => {
