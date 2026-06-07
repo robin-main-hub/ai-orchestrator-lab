@@ -21,7 +21,10 @@ const nameQuestionPatterns = [
 
 const nameDenialPatterns = [
   /이름[은이]?\s*(없|없다|없어)/,
+  /이름[을를]\s*(가지고|갖고)?\s*있지\s*(않|않다|않아)/,
+  /별도(?:의)?\s*이름/,
   /역할로\s*부르/,
+  /역할명으로\s*부르/,
   /no name/i,
   /do not have (?:a )?name/i,
 ];
