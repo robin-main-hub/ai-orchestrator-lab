@@ -604,21 +604,21 @@ function normalizeDelegationStatus(value: unknown): DelegationPreviewItem["statu
     : "detected";
 }
 
-function delegationStatusLabel(status: DelegationPreviewItem["status"]) {
+export function delegationStatusLabel(status: DelegationPreviewItem["status"]) {
   switch (status) {
     case "succeeded":
-      return "done";
+      return "완료";
     case "blocked":
-      return "blocked";
+      return "차단";
     case "failed":
-      return "failed";
+      return "실패";
     case "unknown_target":
-      return "unknown";
+      return "대상 없음";
     case "self_delegation":
-      return "loop guard";
+      return "자기위임 차단";
     case "detected":
     default:
-      return "detected";
+      return "감지됨";
   }
 }
 
