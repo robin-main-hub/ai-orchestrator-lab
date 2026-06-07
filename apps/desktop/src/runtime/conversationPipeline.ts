@@ -10,7 +10,7 @@ import {
   createAgentRoleToolRuntimeSummary,
   createAgentRuntimeConfigSection,
 } from "../lib/agentRuntimeConfig";
-import { agentPrimaryDisplayName } from "../lib/agentDisplay";
+import { agentIdentityKey, agentPrimaryDisplayName } from "../lib/agentDisplay";
 import { getBundledAgentPersonaContentByPath } from "../lib/agentPersonaContent";
 import { sanitizePublicText } from "../lib/publicRedaction";
 import type { Stage6MemoryInspector } from "./stage6Memory";
@@ -54,6 +54,8 @@ export function createConversationPipelineMessages({
   const bundledAgentsMd = getBundledAgentPersonaContentByPath(persona?.agentsMdPath);
   const soulPromptText = bundledSoulMd ?? persona?.soulSummary;
   const agentsPromptText = bundledAgentsMd ?? persona?.agentsInstruction;
+  const personaSoulApplied = Boolean(persona && soulPromptText?.trim());
+  const personaAgentsMdApplied = Boolean(persona && agentsPromptText?.trim());
   const longContextTruncated = previousMessages.length > 8;
   const continuityWarning =
     longContextTruncated && recalledMemories.length === 0
@@ -123,6 +125,12 @@ export function createConversationPipelineMessages({
       memoryScopeSessionId: memoryScope.sessionId,
       recallTraceId: memoryScope.recallTraceId,
       runtimeConfigFileIds: runtimeConfig.configFileIds,
+      personaDisplayName: displayName,
+      personaIdentityKey: agentIdentityKey(agent),
+      personaSoulApplied,
+      personaAgentsMdApplied,
+      personaSoulMdPath: persona?.soulMdPath,
+      personaAgentsMdPath: persona?.agentsMdPath,
       roleToolProfileLabel: roleToolConfig.label,
       roleToolProfileTools: roleToolConfig.tools,
     },
