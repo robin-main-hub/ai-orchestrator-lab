@@ -2,19 +2,36 @@
 
 export type BundledAgentPersonaContent = {
   agentsMd?: string;
+  identityMd?: string;
   soulMd?: string;
+  userMd?: string;
 };
 
-const personaMarkdownModules = import.meta.glob(
-  "../../../../agents/*/{AGENTS,SOUL}.md",
-  { eager: true, query: "?raw", import: "default" },
-) as Record<string, string>;
+const personaMarkdownModules = {
+  ...import.meta.glob("../../../../agents/*/{AGENTS,IDENTITY,SOUL,USER}.md", {
+    eager: true,
+    query: "?raw",
+    import: "default",
+  }),
+  ...import.meta.glob("../../../../agents/SAFETY.md", {
+    eager: true,
+    query: "?raw",
+    import: "default",
+  }),
+} as Record<string, string>;
+
+let bundledSafetyMd: string | undefined;
 
 const personaContentByDirectory: Record<string, BundledAgentPersonaContent> = (() => {
   const out: Record<string, BundledAgentPersonaContent> = {};
 
   for (const [path, body] of Object.entries(personaMarkdownModules)) {
-    const match = path.match(/agents\/([^/]+)\/(AGENTS|SOUL)\.md$/);
+    if (/agents\/SAFETY\.md$/.test(path)) {
+      bundledSafetyMd = body;
+      continue;
+    }
+
+    const match = path.match(/agents\/([^/]+)\/(AGENTS|IDENTITY|SOUL|USER)\.md$/);
     if (!match) continue;
 
     const directoryName = match[1]!;
@@ -23,8 +40,12 @@ const personaContentByDirectory: Record<string, BundledAgentPersonaContent> = ((
 
     if (fileName === "AGENTS") {
       out[directoryName].agentsMd = body;
-    } else {
+    } else if (fileName === "IDENTITY") {
+      out[directoryName].identityMd = body;
+    } else if (fileName === "SOUL") {
       out[directoryName].soulMd = body;
+    } else {
+      out[directoryName].userMd = body;
     }
   }
 
@@ -48,4 +69,8 @@ export function getBundledAgentPersonaContentByPath(path: string | undefined): s
 
 export function listBundledAgentPersonaContent(): Readonly<Record<string, BundledAgentPersonaContent>> {
   return personaContentByDirectory;
+}
+
+export function getBundledAgentSafetyContent() {
+  return bundledSafetyMd;
 }
