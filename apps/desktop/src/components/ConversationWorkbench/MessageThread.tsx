@@ -329,24 +329,45 @@ function MessageAttachments({
 }) {
   return (
     <div className="mt-2 flex flex-wrap gap-1.5">
-      {attachments.map((attachment) => (
-        <span
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-[10px] text-zinc-200 backdrop-blur"
-          key={attachment.id}
-        >
-          {attachment.kind === "image" ? (
-            <ImageIcon className="h-3 w-3 text-cyan-300" />
-          ) : (
-            <FileText className="h-3 w-3 text-cyan-300" />
-          )}
-          <span className="font-medium text-zinc-100">{attachment.name}</span>
-          <span className="text-zinc-500">
-            {formatAttachmentSize(attachment.size)}
+      {attachments.map((attachment) => {
+        const processingMode = readAttachmentProcessingMode(attachment);
+        return (
+          <span
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-[10px] text-zinc-200 backdrop-blur"
+            key={attachment.id}
+          >
+            {attachment.kind === "image" ? (
+              <ImageIcon className="h-3 w-3 text-cyan-300" />
+            ) : (
+              <FileText className="h-3 w-3 text-cyan-300" />
+            )}
+            <span className="font-medium text-zinc-100">{attachment.name}</span>
+            <span className="text-zinc-500">
+              {formatAttachmentSize(attachment.size)}
+            </span>
+            {processingMode ? (
+              <span className="rounded-full border border-cyan-300/20 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] text-cyan-100">
+                {attachmentProcessingLabel(processingMode)}
+              </span>
+            ) : null}
           </span>
-        </span>
-      ))}
+        );
+      })}
     </div>
   );
+}
+
+function readAttachmentProcessingMode(attachment: ConversationAttachment) {
+  const value = (attachment as ConversationAttachment & { processingMode?: unknown }).processingMode;
+  return value === "vision_candidate" || value === "document_candidate" || value === "metadata_only"
+    ? value
+    : undefined;
+}
+
+function attachmentProcessingLabel(processingMode: "vision_candidate" | "document_candidate" | "metadata_only") {
+  if (processingMode === "vision_candidate") return "vision 후보";
+  if (processingMode === "document_candidate") return "문서 후보";
+  return "metadata";
 }
 
 function ApprovalQueueInline({
