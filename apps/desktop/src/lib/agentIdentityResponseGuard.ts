@@ -40,11 +40,12 @@ export function applyAgentIdentityResponseGuard({
 }: AgentIdentityResponseGuardInput): AgentIdentityResponseGuardResult {
   const askedName = nameQuestionPatterns.some((pattern) => pattern.test(userContent));
   const deniedName = nameDenialPatterns.some((pattern) => pattern.test(content));
-  if (!askedName || !deniedName) {
+  const displayName = agentPrimaryDisplayName(agent);
+  const answeredWithPrimaryName = content.includes(displayName);
+  if (!askedName || (!deniedName && answeredWithPrimaryName)) {
     return { content, guardApplied: false };
   }
 
-  const displayName = agentPrimaryDisplayName(agent);
   const roleLabel = agentSecondaryDisplayLabel(agent);
   return {
     content: `나는 ${displayName}야. 이 대화방에서는 ${roleLabel} 역할로 계속 이어서 도와줄게.`,
