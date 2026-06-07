@@ -63,12 +63,10 @@ export function CommandPalette({
         />
         <Dialog.Content 
           onCloseAutoFocus={(e) => {
-            e.preventDefault();
             const mainContainer = document.getElementById("main-container");
             if (mainContainer) {
+              e.preventDefault();
               mainContainer.focus();
-            } else {
-              document.body.focus();
             }
           }}
           className="fixed left-1/2 top-[12vh] z-50 w-[min(512px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-card shadow-2xl p-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
