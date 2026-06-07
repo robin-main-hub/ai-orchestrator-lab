@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import {
   createPublicWorkReceiptSummary,
   createPublicTraceSafetyReport,
+  maskPublicWorkTraceForRender,
   type PublicWorkTrace,
   type PublicWorkTraceTone,
 } from "../lib/publicWorkTrace";
@@ -15,8 +16,9 @@ export function PublicWorkTracePanel({
   trace: PublicWorkTrace;
 }) {
   if (trace.groups.length === 0) return null;
-  const safetyReport = createPublicTraceSafetyReport(trace);
-  const receiptSummary = createPublicWorkReceiptSummary(trace);
+  const renderTrace = maskPublicWorkTraceForRender(trace);
+  const safetyReport = createPublicTraceSafetyReport(renderTrace);
+  const receiptSummary = createPublicWorkReceiptSummary(renderTrace);
 
   return (
     <div
@@ -44,15 +46,15 @@ export function PublicWorkTracePanel({
         </span>
         <span>요약 단계와 검증 근거만 표시</span>
       </div>
-      {trace.receipt && receiptSummary ? (
+      {renderTrace.receipt && receiptSummary ? (
         <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5 text-[10px] text-zinc-300">
           <span
             className="max-w-full truncate font-semibold uppercase tracking-[0.18em] text-violet-200"
             title={receiptSummary.compactLabel}
           >
-            {trace.receipt.label}
+            {renderTrace.receipt.label}
           </span>
-          <span className={cn("rounded-full border px-1.5 py-0.5", receiptStatusClassName(trace.receipt.status))}>
+          <span className={cn("rounded-full border px-1.5 py-0.5", receiptStatusClassName(renderTrace.receipt.status))}>
             {receiptSummary.statusLabel}
           </span>
           {receiptSummary.detailItems.slice(0, 3).map((item) => (
@@ -71,7 +73,7 @@ export function PublicWorkTracePanel({
         </div>
       ) : null}
       <div className="grid gap-2 sm:grid-cols-3">
-        {trace.groups.map((group) => {
+        {renderTrace.groups.map((group) => {
           const Icon = group.id === "steps" ? CircleDashed : group.id === "commands" ? TerminalSquare : FileSearch;
           return (
             <section className="min-w-0 space-y-1.5" key={group.id}>

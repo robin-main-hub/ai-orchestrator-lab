@@ -409,6 +409,30 @@ export function createPublicWorkReceiptSummary(trace: PublicWorkTrace): PublicWo
   };
 }
 
+export function maskPublicWorkTraceForRender(trace: PublicWorkTrace): PublicWorkTrace {
+  return {
+    groups: trace.groups.map((group) => ({
+      ...group,
+      items: group.items.map((item) => ({
+        ...item,
+        label: sanitizePublicText(item.label),
+        value: sanitizePublicText(item.value),
+      })),
+    })),
+    ...(trace.receipt
+      ? {
+          receipt: {
+            ...trace.receipt,
+            items: trace.receipt.items.map((item) => ({
+              ...item,
+              value: sanitizePublicText(item.value),
+            })),
+          },
+        }
+      : {}),
+  };
+}
+
 function toTrace(
   steps: PublicWorkTraceItem[],
   commands: PublicWorkTraceItem[],
