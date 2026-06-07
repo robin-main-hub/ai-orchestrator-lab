@@ -54,15 +54,15 @@ export function createDebateCodingPacketProjection({
   const packet = assertSafeCodingPacket({
     ...extractedPacket,
     context: [
-      `ContextPack tier: ${sanitize(contextPackTier)}`,
-      `Debate session: ${sanitize(session.id)}`,
+      `컨텍스트 팩 등급: ${sanitize(contextPackTier)}`,
+      `토론 세션: ${sanitize(session.id)}`,
       ...session.contextPreview.map(sanitize),
       ...extractedPacket.context,
     ],
     reviewerNotes: [
       ...extractedPacket.reviewerNotes,
-      readiness.state === "ready" ? "Debate readiness: ready" : `Debate readiness: ${readiness.state}`,
-      ...readiness.blockers.map((blocker) => `Blocker: ${sanitize(blocker)}`),
+      `토론 준비 상태: ${readinessStateLabel(readiness.state)}`,
+      ...readiness.blockers.map((blocker) => `차단 사유: ${sanitize(blocker)}`),
     ],
   });
 
@@ -100,7 +100,7 @@ export function createDebateCodingPacketWorkItems({
     lane: "approve",
     surface: "coding_packet",
     status: projection.readiness.state === "blocked" ? "blocked" : "waiting_approval",
-    summary: `${projection.packet.decisions.length} decisions / ${projection.packet.implementationPlan.length} implementation steps`,
+    summary: `결정 ${projection.packet.decisions.length}개 / 구현 단계 ${projection.packet.implementationPlan.length}개`,
     sourceRefs: [
       {
         source: "desktop_manual",
@@ -172,4 +172,10 @@ function stableId(value: string): string {
 
 function sanitize(value: string): string {
   return sanitizePublicText(value);
+}
+
+function readinessStateLabel(state: DebateDecisionReadiness["state"]): string {
+  if (state === "ready") return "준비됨";
+  if (state === "blocked") return "차단됨";
+  return "보완 필요";
 }
