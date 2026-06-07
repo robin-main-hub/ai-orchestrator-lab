@@ -71,4 +71,50 @@ describe("workTraceSearch", () => {
     });
     expect(searchWorkTraceIndex(index, "secret")).toEqual([]);
   });
+
+  it("검색용 title과 searchText도 렌더 직전 마스킹 기준을 따른다", () => {
+    const index = createWorkTraceSearchIndex([
+      {
+        id: "tmux_unsafe",
+        kind: "tmux",
+        title: "실행 실패 https://token-plan-sgp.xiaomimimo.com/v1",
+        trace: {
+          groups: [
+            {
+              id: "commands",
+              title: "도구 호출",
+              items: [
+                {
+                  id: "raw-url",
+                  label: "오류",
+                  tone: "danger",
+                  value: "POST https://token-plan-sgp.xiaomimimo.com/v1 Bearer tp-secret1234567890",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ]);
+
+    expect(index[0]?.title).not.toContain("token-plan-sgp");
+    expect(index[0]?.searchText).not.toContain("token-plan-sgp");
+    expect(index[0]?.searchText).not.toContain("tp-secret");
+    expect(index[0]?.searchable).toBe(false);
+  });
+
+  it("title만 위험해도 검색 제외로 판정하고 title은 마스킹한다", () => {
+    const index = createWorkTraceSearchIndex([
+      {
+        id: "title_only",
+        kind: "conversation",
+        title: "provider error Bearer sk-titleonly1234567890",
+        trace,
+      },
+    ]);
+
+    expect(index[0]?.searchable).toBe(false);
+    expect(index[0]?.title).not.toContain("sk-titleonly");
+    expect(index[0]?.searchText).not.toContain("sk-titleonly");
+  });
 });

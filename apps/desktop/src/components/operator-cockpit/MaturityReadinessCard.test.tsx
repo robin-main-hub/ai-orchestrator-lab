@@ -37,6 +37,7 @@ describe("MaturityReadinessCard", () => {
     expect(html).toContain("설정 진단");
     expect(html).toContain("운영 스모크");
     expect(html).toContain("토론 결정에서 코딩 패킷 생성");
+    expect(html).toContain("종단/시각/공급자 점검");
     expect(html).not.toContain("Control Queue");
     expect(html).not.toContain("WorkItem");
     expect(html).not.toContain("Provider");

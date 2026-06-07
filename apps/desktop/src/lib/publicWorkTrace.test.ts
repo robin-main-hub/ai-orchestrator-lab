@@ -231,6 +231,34 @@ describe("publicWorkTrace", () => {
     expect(serialized).not.toContain("provider_mock_local");
   });
 
+  it("승인 대기와 실패 대화 영수증은 저장됨이 아니라 live/blocked 상태로 남긴다", () => {
+    const pendingTrace = createConversationMessagePublicWorkTrace({
+      id: "message_pending_approval",
+      role: "assistant",
+      content: "승인이 필요합니다.",
+      createdAt: "2026-06-06T00:00:00.000Z",
+      sessionId: "session_main",
+      metadata: {
+        providerProfileId: "provider_mimo_token_openai",
+        requiresServerApproval: true,
+      },
+    });
+    const failedTrace = createConversationMessagePublicWorkTrace({
+      id: "message_failed",
+      role: "assistant",
+      content: "호출 실패",
+      createdAt: "2026-06-06T00:00:00.000Z",
+      sessionId: "session_main",
+      metadata: {
+        error: "Failed to fetch",
+        providerProfileId: "provider_mimo_token_openai",
+      },
+    });
+
+    expect(pendingTrace.receipt?.status).toBe("live");
+    expect(failedTrace.receipt?.status).toBe("blocked");
+  });
+
   it("공개 로그에 비밀값처럼 보이는 문자열을 그대로 노출하지 않는다", () => {
     const message: ConversationMessage = {
       id: "msg_assistant_secret",

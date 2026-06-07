@@ -148,6 +148,44 @@ describe("WorkReceiptLedgerCard", () => {
     expect(html).toContain("터미널 1");
   });
 
+  it("실패나 주의 영수증은 첫 표면에 핵심 경고 근거를 함께 보여준다", () => {
+    const html = renderToStaticMarkup(
+      <WorkReceiptLedgerCard
+        items={[
+          {
+            ...receiptItem,
+            id: "failed_provider",
+            kind: "conversation",
+            receiptStatus: "blocked",
+            title: "모델 호출 실패 영수증",
+            trace: {
+              receipt: {
+                label: "에이전트 실행 영수증",
+                status: "blocked",
+                items: [
+                  { label: "범위", value: "생성" },
+                  { label: "기준점", value: "message_failed" },
+                  { label: "마스킹", value: "적용됨" },
+                ],
+              },
+              groups: [
+                {
+                  id: "steps",
+                  title: "작업 단계",
+                  items: [{ id: "runtime-warning", label: "실행 경고", tone: "danger", value: "Failed to fetch" }],
+                },
+              ],
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("핵심 경고");
+    expect(html).toContain("실행 경고");
+    expect(html).toContain("Failed to fetch");
+  });
+
   it("입력 순서가 섞여도 실제 createdAt 기준 최신 영수증을 먼저 보여준다", () => {
     const html = renderToStaticMarkup(
       <WorkReceiptLedgerCard

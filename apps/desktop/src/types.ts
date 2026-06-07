@@ -9,6 +9,7 @@ export type AgentActivityStatus =
   | "tooling"
   | "capturing"
   | "dispatching"
+  | "testing"
   | "waiting_approval"
   | "responding"
   | "error";
