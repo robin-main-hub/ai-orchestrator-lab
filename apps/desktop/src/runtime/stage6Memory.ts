@@ -101,9 +101,9 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       layer: "project_memory",
       scope: "project",
       kind: "architecture",
-      title: "Event Storage first",
+      title: "이벤트 저장소 우선",
       content:
-        "Session logs, debates, coding packets, run artifacts, backup projections, and memory traces must be recorded through Event Storage before export.",
+        "세션 로그, 토론, 코딩 패킷, 실행 산출물, 백업 투영, 기억 추적은 내보내기 전에 반드시 Event Storage에 먼저 기록합니다.",
       sourceChannel: "desktop",
       trustLevel: "trusted",
       projectId: defaultProjectId,
@@ -112,11 +112,11 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       createdAt,
       lastAccessedAt: createdAt,
       losslessRestatement:
-        "AI Orchestrator Lab records session logs, debates, coding packets, run artifacts, backup projections, and memory traces through Event Storage before export.",
+        "AI Orchestrator Lab은 세션 로그, 토론, 코딩 패킷, 실행 산출물, 백업 투영, 기억 추적을 내보내기 전에 Event Storage에 먼저 기록합니다.",
       keywords: ["event", "storage", "session", "debate", "coding", "backup", "memory"],
       entities: ["AI Orchestrator Lab", "Event Storage", "Coding Packet"],
       persons: [],
-      topic: "Event Storage as primary recording path",
+      topic: "Event Storage 우선 기록 경로",
       importance: 0.7,
       entityReinforcement: 0,
       pinned: true,
@@ -126,9 +126,9 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       layer: "project_memory",
       scope: "project",
       kind: "architecture",
-      title: "MacBook operator authority",
+      title: "MacBook 작업 권한 원본",
       content:
-        "MacBook is the operator authority for active work state, local decisions, and offline continuity outbox. DGX-02 is the continuity mirror and sync server: it receives MacBook outbox events when online, stores mirrored Event Store, MemoryRecord, WorkItem, approvals, and drafts continuity, and hosts derived retrieval indexes.",
+        "MacBook은 현재 작업 상태, 로컬 결정, 오프라인 연속성 outbox의 권한 원본입니다. DGX-02는 연속성 미러와 동기화 서버로 동작하며 온라인 상태에서 MacBook outbox 이벤트를 받아 Event Store, MemoryRecord, WorkItem, 승인, 초안 연속성을 미러링하고 파생 조회 인덱스를 호스팅합니다.",
       sourceChannel: "desktop",
       trustLevel: "trusted",
       projectId: defaultProjectId,
@@ -137,11 +137,11 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       createdAt,
       lastAccessedAt: createdAt,
       losslessRestatement:
-        "MacBook is the operator authority for active work state and offline continuity outbox; DGX-02 acts as continuity mirror, sync server, and retrieval index host.",
+        "MacBook은 현재 작업 상태와 오프라인 연속성 outbox의 권한 원본이며, DGX-02는 연속성 미러, 동기화 서버, 조회 인덱스 호스트로 동작합니다.",
       keywords: ["macbook", "operator", "authority", "dgx-02", "mirror", "sync", "outbox", "continuity"],
       entities: ["DGX-02", "MacBook", "Event Store", "MemoryRecord", "WorkItem"],
       persons: [],
-      topic: "MacBook authority and DGX continuity mirror",
+      topic: "MacBook 권한 원본과 DGX 연속성 미러",
       importance: 0.7,
       entityReinforcement: 0,
       pinned: true,
@@ -151,9 +151,9 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       layer: "reflection",
       scope: "project",
       kind: "decision",
-      title: "Untrusted provider guard",
+      title: "미신뢰 공급자 기억 보호",
       content:
-        "Reseller or custom base URL providers must not receive automatic project or user memory. Only explicitly activated memories may be sent.",
+        "리셀러 또는 사용자 지정 base URL 공급자에는 프로젝트/사용자 기억을 자동 전달하지 않습니다. 명시적으로 활성화한 기억만 보낼 수 있습니다.",
       sourceChannel: "agent",
       trustLevel: "trusted",
       projectId: defaultProjectId,
@@ -161,11 +161,11 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       activationState: "suggested",
       createdAt,
       losslessRestatement:
-        "AI Orchestrator Lab blocks reseller and custom base URL providers from automatic project or user memory unless the memory is explicitly activated.",
+        "AI Orchestrator Lab은 명시적으로 활성화하지 않은 프로젝트/사용자 기억이 리셀러 또는 사용자 지정 base URL 공급자에게 자동 전달되지 않도록 차단합니다.",
       keywords: ["provider", "reseller", "redaction", "trust", "memory", "activation"],
       entities: ["AI Orchestrator Lab", "Provider Profile", "MemoryRecord"],
       persons: [],
-      topic: "Untrusted provider memory guard",
+      topic: "미신뢰 공급자 기억 보호",
       importance: 0.5,
       entityReinforcement: 0,
       pinned: false,
@@ -175,9 +175,9 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       layer: "fragment",
       scope: "session",
       kind: "workflow",
-      title: "External ingress quarantine",
+      title: "외부 인입 격리",
       content:
-        "Commands from external ingress channels are untrusted by default. File writes, terminal runs, remote commands, and secret access require approval before execution or memory promotion.",
+        "외부 인입 채널에서 들어온 명령은 기본적으로 미신뢰 입력으로 취급합니다. 파일 쓰기, 터미널 실행, 원격 명령, 비밀값 접근은 실행 또는 기억 승격 전에 승인이 필요합니다.",
       sourceChannel: "external_legacy",
       trustLevel: "untrusted",
       sessionId: defaultSessionId,
@@ -185,11 +185,11 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       activationState: "quarantined",
       createdAt,
       losslessRestatement:
-        "External ingress commands enter AI Orchestrator Lab as untrusted input and require approval before file writes, terminal runs, remote commands, secret access, or memory promotion.",
+        "외부 인입 명령은 AI Orchestrator Lab에 미신뢰 입력으로 들어오며, 파일 쓰기, 터미널 실행, 원격 명령, 비밀값 접근, 기억 승격 전에 승인을 요구합니다.",
       keywords: ["external-ingress", "approval", "ingress", "quarantine", "terminal", "secret"],
       entities: ["External Ingress", "AI Orchestrator Lab", "Permission Matrix"],
       persons: [],
-      topic: "External ingress quarantine",
+      topic: "외부 인입 격리",
       importance: 0.5,
       entityReinforcement: 0,
       pinned: false,
@@ -199,9 +199,9 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       layer: "project_memory",
       scope: "project",
       kind: "pattern",
-      title: "Memento MCP shape",
+      title: "Memento MCP 구조",
       content:
-        "Memento needs remember, recall, memory_context, reflect, stats, relation creation, and activation. Records should carry scope, kind, source trust, and trace metadata.",
+        "Memento는 remember, recall, memory_context, reflect, stats, relation creation, activation 흐름을 명시적으로 다룹니다. 각 기록에는 scope, kind, source trust, trace metadata가 함께 있어야 합니다.",
       sourceChannel: "desktop",
       trustLevel: "trusted",
       projectId: defaultProjectId,
@@ -209,11 +209,11 @@ export function createSeedMemoryRecords(createdAt: string): MemoryRecord[] {
       activationState: "suggested",
       createdAt,
       losslessRestatement:
-        "EvolveMemento keeps remember, recall, memory_context, reflect, stats, relation creation, and activation as explicit memory operations with scope, kind, source trust, and trace metadata.",
+        "EvolveMemento는 remember, recall, memory_context, reflect, stats, relation creation, activation을 명시적인 기억 작업으로 유지하고, 각 작업에 scope, kind, source trust, trace metadata를 붙입니다.",
       keywords: ["evolvememento", "memento", "recall", "memory_context", "relations", "activation"],
       entities: ["EvolveMemento", "MemoryAPI", "MemoryContextPacket"],
       persons: [],
-      topic: "EvolveMemento API shape",
+      topic: "EvolveMemento API 구조",
       importance: 0.7,
       entityReinforcement: 0,
       pinned: true,
@@ -330,7 +330,7 @@ export function rememberStage6Context({
       layer: "episode",
       scope: "session",
       kind: "workflow",
-      title: "Conversation work session",
+      title: "대화 작업 세션",
       content: lastUserMessage?.content ?? packet.goal,
       sourceChannel: "desktop",
       trustLevel,
@@ -339,11 +339,11 @@ export function rememberStage6Context({
       tags: ["conversation", "workbench", ...scopeTags],
       activationState: "suggested",
       createdAt,
-      losslessRestatement: `The user worked in a conversation session on ${createdAt} about ${lastUserMessage?.content ?? packet.goal}.`,
+      losslessRestatement: `사용자는 ${createdAt} 대화 세션에서 ${lastUserMessage?.content ?? packet.goal} 주제로 작업했습니다.`,
       keywords: extractKeywords(`${lastUserMessage?.content ?? ""} ${packet.goal} conversation workbench`),
       entities: extractInlineEntities(`${lastUserMessage?.content ?? ""} ${packet.goal}`),
       persons: extractInlinePersons(`${lastUserMessage?.content ?? ""} ${packet.goal}`),
-      topic: "Conversation work session",
+      topic: "대화 작업 세션",
       importance: defaultImportance,
       entityReinforcement: 0,
       pinned: false,
@@ -353,8 +353,8 @@ export function rememberStage6Context({
       layer: "reflection",
       scope: "project",
       kind: "decision",
-      title: "Coding handoff reflection",
-      content: `${packet.decisions[0] ?? packet.goal} / verification: ${packet.verificationPlan[0] ?? "pending"}`,
+      title: "코딩 인계 회고",
+      content: `${packet.decisions[0] ?? packet.goal} / 검증: ${packet.verificationPlan[0] ?? "대기"}`,
       sourceChannel: "agent",
       trustLevel: trustLevel === "untrusted" ? "limited" : trustLevel,
       projectId,
@@ -362,11 +362,11 @@ export function rememberStage6Context({
       tags: ["coding-packet", "reflection", ...scopeTags],
       activationState: "suggested",
       createdAt,
-      losslessRestatement: `The coding handoff on ${createdAt} recorded ${packet.decisions[0] ?? packet.goal} with verification ${packet.verificationPlan[0] ?? "pending"}.`,
+      losslessRestatement: `${createdAt} 코딩 인계는 ${packet.decisions[0] ?? packet.goal} 결정을 기록했고 검증 항목은 ${packet.verificationPlan[0] ?? "대기"}입니다.`,
       keywords: extractKeywords(`${packet.goal} ${packet.decisions.join(" ")} ${packet.verificationPlan.join(" ")}`),
       entities: extractInlineEntities(`${packet.goal} ${packet.decisions.join(" ")}`),
       persons: extractInlinePersons(`${packet.goal} ${packet.decisions.join(" ")}`),
-      topic: "Coding handoff reflection",
+      topic: "코딩 인계 회고",
       importance: defaultImportance,
       entityReinforcement: 0,
       pinned: false,
@@ -425,7 +425,7 @@ function createRecallPolicy(provider?: ProviderProfile): MemoryTrace["policy"] {
       providerTrustLevel: "untrusted",
       autoRecallAllowed: false,
       blockedLayers: blockedAutoRecallLayers,
-      reason: "untrusted provider: project/user memory requires explicit selection",
+      reason: "미신뢰 공급자는 프로젝트/사용자 기억을 명시 선택했을 때만 조회합니다.",
     };
   }
 
@@ -434,7 +434,7 @@ function createRecallPolicy(provider?: ProviderProfile): MemoryTrace["policy"] {
     providerTrustLevel: provider?.trustLevel ?? "limited",
     autoRecallAllowed: true,
     blockedLayers: [],
-    reason: provider ? "provider trust allows automatic recall trace" : "provider unassigned: limited recall preview",
+    reason: provider ? "공급자 신뢰 정책상 자동 기억 조회가 허용됩니다." : "공급자가 지정되지 않아 제한된 기억 미리보기만 사용합니다.",
   };
 }
 
@@ -495,12 +495,12 @@ function recallMemory(
         usedInDecision,
         activationState,
         reason: usedInDecision
-          ? "query overlap and trust policy passed"
+          ? "질의와 겹치며 신뢰 정책을 통과했습니다."
           : blockedByLayer
-            ? "blocked by provider trust policy"
+            ? "공급자 신뢰 정책으로 차단되었습니다."
             : blockedByTrust
-              ? "untrusted memory is quarantined until pinned"
-              : "low query overlap",
+              ? "미신뢰 기억은 고정되기 전까지 격리됩니다."
+              : "질의와의 관련도가 낮습니다.",
       };
       return result;
     })
