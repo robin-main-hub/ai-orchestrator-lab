@@ -102,6 +102,53 @@ describe("memory curator runtime persistence planning", () => {
     );
   });
 
+  it("첨부 처리 계획을 대화 기억 후보 본문과 키워드에 남긴다", () => {
+    const candidate = createConversationTurnMemoryCandidate({
+      agentId: "agent_orchestrator",
+      agentName: "마키마",
+      assistantMessage: {
+        id: "message_agent_attachment",
+        content: "화면 구조를 기준으로 다음 수정을 이어가겠다.",
+        createdAt: updatedAt,
+        role: "assistant",
+        sessionId: "session_main",
+      },
+      attachmentProcessingPlans: [
+        {
+          kind: "image",
+          name: "cockpit.png",
+          processingMode: "vision_candidate",
+          size: 120_000,
+          status: "accepted",
+          storage: "metadata_only",
+        },
+        {
+          kind: "document",
+          name: "large-secret.pdf",
+          processingMode: "metadata_only",
+          reason: "파일 크기 제한 초과",
+          size: 20_000_000,
+          status: "rejected",
+          storage: "metadata_only",
+        },
+      ],
+      createdAt: updatedAt,
+      providerProfileId: "provider_mimo",
+      userMessage: {
+        id: "message_user_attachment",
+        content: "이 화면 기준으로 정리해.",
+        createdAt,
+        role: "user",
+        sessionId: "session_main",
+      },
+    });
+
+    expect(candidate.record.content).toContain("첨부: cockpit.png(image/vision_candidate/accepted)");
+    expect(candidate.record.content).toContain("large-secret.pdf(document/metadata_only/rejected)");
+    expect(candidate.record.keywords).toEqual(expect.arrayContaining(["cockpit", "image", "vision_candidate"]));
+    expect(candidate.record.tags).toEqual(expect.arrayContaining(["attachment", "attachment:image"]));
+  });
+
   it("turns duplicate reflection fixes into activate and forget persistence requests", () => {
     const older = createRecord({ id: "memory_old", title: "Old duplicate", createdAt });
     const newer = createRecord({ id: "memory_new", title: "New duplicate", createdAt: updatedAt });
