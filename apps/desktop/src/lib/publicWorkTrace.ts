@@ -4,6 +4,7 @@ import {
   summarizeAttachmentProcessingPlans,
   type AttachmentProcessingPlan,
 } from "./attachmentProcessing";
+import { PUBLIC_WORK_PHASES } from "./publicWorkPhases";
 import { compactPublicText, inspectPublicText, sanitizePublicText } from "./publicRedaction";
 
 export type PublicWorkTraceTone = "neutral" | "info" | "success" | "warning" | "danger";
@@ -17,7 +18,7 @@ export type PublicWorkTraceItem = {
 
 export type PublicWorkTraceGroup = {
   id: "steps" | "commands" | "evidence";
-  title: "작업 단계" | "도구 후보" | "검증";
+  title: "작업 단계" | "도구 호출" | "검증";
   items: PublicWorkTraceItem[];
 };
 
@@ -94,7 +95,7 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
   if (route || model || realProviderCall !== undefined) {
     steps.push({
       id: "provider-call",
-      label: "Provider 호출",
+      label: PUBLIC_WORK_PHASES.toolCall.label,
       tone: realProviderCall === false ? "warning" : "success",
       value: sanitize([route, model].filter(Boolean).join(" · ") || (realProviderCall ? "실제 호출 완료" : "fallback 또는 차단")),
     });
@@ -169,7 +170,7 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
   if (roleToolProfileTools.length > 0) {
     commands.push({
       id: "tool-call-intent",
-      label: "호출 후보",
+      label: PUBLIC_WORK_PHASES.commandGeneration.label,
       tone: "neutral",
       value: sanitize(roleToolProfileTools.slice(0, 3).join(", ")),
     });
@@ -229,7 +230,7 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
   if (commands.length === 0) {
     commands.push({
       id: "tool-boundary",
-      label: "도구 호출",
+      label: PUBLIC_WORK_PHASES.toolCall.label,
       tone: "neutral",
       value: "필요 시 목적·입력·권한을 먼저 표시",
     });
@@ -410,7 +411,7 @@ function toTrace(
 ): PublicWorkTrace {
   const groups: PublicWorkTraceGroup[] = [];
   if (steps.length > 0) groups.push({ id: "steps", items: steps, title: "작업 단계" });
-  if (commands.length > 0) groups.push({ id: "commands", items: commands, title: "도구 후보" });
+  if (commands.length > 0) groups.push({ id: "commands", items: commands, title: "도구 호출" });
   if (evidence.length > 0) groups.push({ id: "evidence", items: evidence, title: "검증" });
   return { groups, receipt };
 }
