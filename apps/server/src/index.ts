@@ -5313,8 +5313,16 @@ export class NonceRegistry {
 
   add(nonce: string, ttlMs: number) {
     if (!this.nonces.has(nonce) && this.nonces.size >= this.maxNonces) {
-      this.cleanupExpired();
-      if (this.nonces.size >= this.maxNonces) {
+      const now = this.now();
+      let evicted = false;
+      for (const [key, expiry] of this.nonces.entries()) {
+        if (now > expiry) {
+          this.nonces.delete(key);
+          evicted = true;
+          break; // 공간 1개를 확보했으므로 루프를 즉시 멈추고 DoS를 예방함
+        }
+      }
+      if (!evicted && this.nonces.size >= this.maxNonces) {
         throw new Error("nonce_registry_capacity_exceeded");
       }
     }
