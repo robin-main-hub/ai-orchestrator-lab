@@ -175,6 +175,10 @@ import {
 import { createControlQueueContinuitySummary } from "./lib/controlQueueContinuity";
 import { controlQueuePermissionLabel, sanitizeControlQueueText } from "./lib/controlQueuePresentation";
 import {
+  createUnifiedControlQueueSnapshot,
+  parseUnifiedControlQueueSourceItemId,
+} from "./lib/controlQueueUnifiedApprovals";
+import {
   createAgentRoleToolRuntimeAudit,
   createAgentRoleToolRuntimeSummary,
 } from "./lib/agentRuntimeConfig";
@@ -819,6 +823,14 @@ export function App() {
       rebootApprovals,
       runtimeSnapshotState,
     ],
+  );
+  const unifiedControlQueueSnapshot = useMemo(
+    () =>
+      createUnifiedControlQueueSnapshot({
+        approvalServerSnapshot,
+        permissionSnapshot,
+      }),
+    [approvalServerSnapshot, permissionSnapshot],
   );
   const insightFindings = useMemo(
     () =>
@@ -2497,6 +2509,31 @@ export function App() {
     handleResolvePermission(pendingItem.sourceItemId, state);
   }
 
+  function handleResolveUnifiedControlQueueItem(
+    sourceItemId: string,
+    state: Extract<ApprovalState, "approved" | "rejected">,
+  ) {
+    const source = parseUnifiedControlQueueSourceItemId(sourceItemId);
+    if (source.kind === "local") {
+      handleResolvePermissionItem(source.sourceItemId, state);
+      return;
+    }
+
+    const approval = approvalServerSnapshot?.approvals.find((item) => item.id === source.approvalId);
+    if (!approval) {
+      appendEvent("approval.server.resolve_missing", {
+        approvalId: source.approvalId,
+        sourceItemId,
+        state,
+        authorityNodeId: "dgx-02",
+        redaction: "applied",
+      });
+      return;
+    }
+
+    void handleResolveServerApproval(approval, state);
+  }
+
   function handleResolvePermission(sourceItemId: string, state: Extract<ApprovalState, "approved" | "rejected">) {
     const pendingItem = permissionSnapshot.queue.find((item) => item.sourceItemId === sourceItemId);
     if (!pendingItem) {
@@ -3434,7 +3471,7 @@ export function App() {
           statusRingColor,
         };
       }),
-      approvals: permissionSnapshot.queue
+      approvals: unifiedControlQueueSnapshot.queue
         .filter((q) => q.state === "required")
         .map((q) => {
           const matrixItem = permissionSnapshot.items.find((item) => item.id === q.sourceItemId);
@@ -3444,7 +3481,7 @@ export function App() {
           let payloadBindingStatus: "bound" | "unbound" | "expired" = resolveCockpitPayloadBindingStatus({
             expiresAt: q.expiresAt,
             hasReplayMetadata: Boolean(q.replayKind && q.replayEndpoint),
-            sourceTrust: matrixItem?.sourceTrust,
+            sourceTrust: matrixItem?.sourceTrust ?? q.sourceTrust,
           });
           let tamperWarning = false;
           let securityRisk: string | undefined = undefined;
@@ -3572,7 +3609,7 @@ export function App() {
     activeSessionId,
     agents,
     agentActivityById,
-    permissionSnapshot.queue,
+    unifiedControlQueueSnapshot.queue,
     permissionSnapshot.items,
     rebootApprovals,
     ingressSnapshot.approvals,
@@ -3635,6 +3672,7 @@ export function App() {
     });
     const workTraceIndex = createWorkTraceSearchIndex(
       createCockpitWorkTraceSources({
+        approvalItems: unifiedControlQueueSnapshot.queue,
         conversationMessages,
         debateSession,
         tmuxBlocks,
@@ -4237,14 +4275,14 @@ export function App() {
       ) : null}
       <ControlQueueDrawer
         onAsk={handleControlQueueAsk}
-        onApprove={(sourceItemId) => handleResolvePermissionItem(sourceItemId, "approved")}
+        onApprove={(sourceItemId) => handleResolveUnifiedControlQueueItem(sourceItemId, "approved")}
         onBlock={handleControlQueueBlock}
         onClose={() => setApprovalDrawerOpen(false)}
         onDelegate={handleControlQueueDelegate}
         onEdit={handleControlQueueEdit}
-        onReject={(sourceItemId) => handleResolvePermissionItem(sourceItemId, "rejected")}
+        onReject={(sourceItemId) => handleResolveUnifiedControlQueueItem(sourceItemId, "rejected")}
         open={approvalDrawerOpen}
-        snapshot={permissionSnapshot}
+        snapshot={unifiedControlQueueSnapshot}
       />
       <CommandPalette
         commands={paletteCommands}

@@ -5,6 +5,7 @@ import {
 } from "./publicWorkTrace";
 
 export type WorkTraceSearchSource = {
+  createdAt?: string;
   id: string;
   kind: "conversation" | "debate" | "tmux" | "approval" | "memory";
   title: string;
