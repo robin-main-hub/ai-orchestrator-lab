@@ -140,7 +140,8 @@ import {
 import { getConversationRailLayout } from "./lib/conversationRailLayout";
 import { getConversationShellVisibility, isFocusedV0Surface } from "./lib/conversationShellVisibility";
 import { createCockpitWorkTraceSources } from "./lib/cockpitWorkTraceSources";
-import { createWorkTraceSearchIndex } from "./lib/workTraceSearch";
+import { createWorkTraceSearchIndex, type WorkTraceSearchItem } from "./lib/workTraceSearch";
+import { resolveWorkTraceNavigationTarget } from "./lib/workTraceNavigation";
 import { deriveDebateDecisionReadiness } from "./lib/debateDecisionReadiness";
 import { deriveTmuxRecoveryPlan } from "./lib/tmuxRecoveryPlan";
 import { createSettingsDiagnostics } from "./lib/settingsDiagnostics";
@@ -2897,6 +2898,20 @@ export function App() {
     setMode("annex");
   }
 
+  function openWorkTraceSourceFromCockpit(item: WorkTraceSearchItem) {
+    const target = resolveWorkTraceNavigationTarget(item);
+    setMode(target.mode);
+    setApprovalDrawerOpen(target.approvalDrawerOpen);
+    if (target.returnModeAfterConfigClose) {
+      setReturnModeAfterConfigClose(target.returnModeAfterConfigClose);
+    }
+    if (target.agentConfigTab) {
+      setAgentConfigPanel({ open: true, tab: target.agentConfigTab });
+    } else {
+      setAgentConfigPanel((panel) => (panel.open ? { ...panel, open: false } : panel));
+    }
+  }
+
   function updateSelectedAgentConfig(patch: Partial<Pick<WorkbenchAgent, "configSource" | "soulMode">>) {
     if (!selectedAgent) {
       return;
@@ -4168,6 +4183,7 @@ export function App() {
               onOpenRecovery={openRecoveryFromCockpit}
               onOpenControlQueue={() => setApprovalDrawerOpen(true)}
               onPreviewEvidence={() => setApprovalDrawerOpen(true)}
+              onOpenWorkTrace={openWorkTraceSourceFromCockpit}
               onApproveHandoff={handleApproveWorkItemHandoffAndRoute}
               readiness={cockpitReadiness}
               snapshot={cockpitSnapshot}
