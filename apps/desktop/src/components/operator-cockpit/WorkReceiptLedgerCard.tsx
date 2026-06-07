@@ -8,6 +8,8 @@ import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
 export function WorkReceiptLedgerCard({ items }: { items: WorkTraceSearchItem[] }) {
   const recentItems = items.slice(0, 8);
   const unsafeCount = items.filter((item) => !item.searchable).length;
+  const searchableCount = items.length - unsafeCount;
+  const sourceSummary = createReceiptSourceSummary(items);
 
   return (
     <GlassPanel>
@@ -28,6 +30,16 @@ export function WorkReceiptLedgerCard({ items }: { items: WorkTraceSearchItem[] 
           </div>
         </div>
       </GlassPanelHeader>
+
+      <div className="grid gap-2 border-b border-zinc-800/60 px-4 py-3 text-[11px] sm:grid-cols-3">
+        <ReceiptSummaryPill label="총" value={`${items.length}건`} />
+        <ReceiptSummaryPill label="검색" tone="safe" value={`${searchableCount}건`} />
+        <ReceiptSummaryPill label="점검" tone={unsafeCount > 0 ? "warn" : "safe"} value={`${unsafeCount}건`} />
+        <div className="min-w-0 rounded-md border border-zinc-800/70 bg-black/15 px-3 py-2 text-zinc-500 sm:col-span-3">
+          <span className="font-medium text-zinc-300">출처</span>{" "}
+          {sourceSummary.length > 0 ? sourceSummary.join(" · ") : "아직 없음"}
+        </div>
+      </div>
 
       <div className="divide-y divide-zinc-800/60">
         {recentItems.length > 0 ? (
@@ -122,6 +134,38 @@ export function WorkReceiptLedgerCard({ items }: { items: WorkTraceSearchItem[] 
       </div>
     </GlassPanel>
   );
+}
+
+function ReceiptSummaryPill({
+  label,
+  tone = "neutral",
+  value,
+}: {
+  label: string;
+  tone?: "neutral" | "safe" | "warn";
+  value: string;
+}) {
+  const toneClass =
+    tone === "safe"
+      ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+      : tone === "warn"
+        ? "border-amber-500/20 bg-amber-500/10 text-amber-200"
+        : "border-zinc-800/70 bg-black/15 text-zinc-300";
+  return (
+    <div aria-label={`${label} ${value}`} className={`rounded-md border px-3 py-2 ${toneClass}`}>
+      <span className="text-zinc-500">{label}</span> <strong className="font-semibold">{value}</strong>
+    </div>
+  );
+}
+
+function createReceiptSourceSummary(items: WorkTraceSearchItem[]) {
+  const order: WorkTraceSearchItem["kind"][] = ["conversation", "debate", "tmux", "approval", "memory"];
+  return order
+    .map((kind) => {
+      const count = items.filter((item) => item.kind === kind).length;
+      return count > 0 ? `${kindLabel(kind)} ${count}` : null;
+    })
+    .filter((item): item is string => Boolean(item));
 }
 
 function kindLabel(kind: WorkTraceSearchItem["kind"]) {
