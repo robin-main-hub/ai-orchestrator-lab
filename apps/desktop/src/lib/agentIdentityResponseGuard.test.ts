@@ -50,6 +50,18 @@ describe("applyAgentIdentityResponseGuard", () => {
     expect(guarded.content).not.toContain("이름은 따로 없어");
   });
 
+  it("corrects legacy role-name answers when the user asks the selected agent's name", () => {
+    const guarded = applyAgentIdentityResponseGuard({
+      agent,
+      content: "저는 Orchestrator입니다. 필요한 작업을 지휘합니다.",
+      userContent: "네 이름은 뭐야?",
+    });
+
+    expect(guarded.guardApplied).toBe(true);
+    expect(guarded.content).toContain("마키마");
+    expect(guarded.content).not.toContain("Orchestrator입니다");
+  });
+
   it("does not rewrite ordinary answers", () => {
     const guarded = applyAgentIdentityResponseGuard({
       agent,
