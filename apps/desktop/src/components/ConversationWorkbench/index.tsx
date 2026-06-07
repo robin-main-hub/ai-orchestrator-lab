@@ -41,6 +41,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { AgentPortrait, type AgentState } from "../shared/AgentActivity";
 import { AgentConfigDrawer } from "../AgentConfigDrawer";
 import { AgentLiveWorkStatus } from "./AgentLiveWorkStatus";
+import { AgentMemoryContinuityPanel } from "./AgentMemoryContinuityPanel";
 import { AgentSkillProfilePanel } from "./AgentSkillProfilePanel";
 
 // Sub-components
@@ -341,7 +342,16 @@ export function ConversationWorkbench({
             personaSoulApplied={personaSoulApplied}
           />
           <div className="shrink-0 border-b border-zinc-900/80 bg-zinc-950/90 px-4 py-2">
-            <div className="mx-auto max-w-5xl">
+            <div className="mx-auto grid max-w-5xl gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <AgentMemoryContinuityPanel
+                adapterStatus={memoryAdapterStatus}
+                agentName={selectedAgentDisplayName}
+                memoryRecordCount={memoryRecordCount}
+                memoryScope={memoryScope}
+                messageCount={messages.length}
+                personaAgentsMdApplied={personaAgentsMdApplied}
+                personaSoulApplied={personaSoulApplied}
+              />
               <AgentSkillProfilePanel role={selectedAgent.role} />
             </div>
           </div>
