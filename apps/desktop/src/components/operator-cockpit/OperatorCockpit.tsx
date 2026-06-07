@@ -17,6 +17,7 @@ import type { OrchestrationMaturityReport } from "../../lib/orchestrationMaturit
 import type { ProductionSmokePlan } from "../../lib/productionSmokePlan";
 import type { SettingsDiagnostics } from "../../lib/settingsDiagnostics";
 import type { CockpitNextActionItem } from "../../lib/cockpitNextActions";
+import type { WorkTraceSearchItem } from "../../lib/workTraceSearch";
 import { ApprovalEvidenceCard } from "./ApprovalEvidenceCard";
 import { Badge } from "./Badge";
 import { DispatchHistoryCard } from "./DispatchHistoryCard";
@@ -26,6 +27,7 @@ import { MaturityReadinessCard } from "./MaturityReadinessCard";
 import { ProviderRoutingCard } from "./ProviderRoutingCard";
 import { RecoveryContinuityCard } from "./RecoveryContinuityCard";
 import { WorkerFleetCard } from "./WorkerFleetCard";
+import { WorkReceiptLedgerCard } from "./WorkReceiptLedgerCard";
 import { badgeColorForMirror, formatClock, mirrorHealthLabel } from "./presentation";
 
 export function OperatorCockpit({
@@ -46,6 +48,7 @@ export function OperatorCockpit({
     maturity: OrchestrationMaturityReport;
     nextActions?: CockpitNextActionItem[];
     smokePlan: ProductionSmokePlan;
+    workTraceItems?: WorkTraceSearchItem[];
   };
 }) {
   const [showDetails, setShowDetails] = useState(false);
@@ -200,6 +203,11 @@ export function OperatorCockpit({
                         maturity={readiness.maturity}
                         smokePlan={readiness.smokePlan}
                       />
+                    </div>
+                  ) : null}
+                  {readiness?.workTraceItems ? (
+                    <div className="lg:col-span-12">
+                      <WorkReceiptLedgerCard items={readiness.workTraceItems} />
                     </div>
                   ) : null}
                   <div className="space-y-4 lg:col-span-5">
