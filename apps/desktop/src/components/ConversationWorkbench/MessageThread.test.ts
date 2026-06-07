@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ConversationMessage } from "@ai-orchestrator/protocol";
 import {
   assistantPendingLabel,
+  delegationStatusLabel,
   resolveAssistantMessageStatusSummary,
   shouldShowAssistantPendingBubble,
 } from "./MessageThread";
@@ -63,5 +64,14 @@ describe("MessageThread pending assistant state", () => {
       label: "승인 필요",
       variant: "warning",
     });
+  });
+
+  it("uses Korean copy for delegation status badges", () => {
+    expect(delegationStatusLabel("succeeded")).toBe("완료");
+    expect(delegationStatusLabel("blocked")).toBe("차단");
+    expect(delegationStatusLabel("failed")).toBe("실패");
+    expect(delegationStatusLabel("unknown_target")).toBe("대상 없음");
+    expect(delegationStatusLabel("self_delegation")).toBe("자기위임 차단");
+    expect(delegationStatusLabel("detected")).toBe("감지됨");
   });
 });
