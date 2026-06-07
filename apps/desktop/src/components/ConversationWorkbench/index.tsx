@@ -8,7 +8,7 @@ import type {
   ProviderProfile,
   ProviderRuntimeReadiness,
 } from "@ai-orchestrator/protocol";
-import { Archive, ChevronDown, Cpu, Database, FileText, Package, Play, Smartphone, Sparkles, Swords, Wrench } from "lucide-react";
+import { Activity, Archive, ChevronDown, Cpu, Database, FileText, Package, Play, Smartphone, Sparkles, Swords, Wrench } from "lucide-react";
 import type { AgentChannelMemoryScope } from "../../lib/agentConversationChannels";
 import type { ControlQueueContinuitySummary } from "../../lib/controlQueueContinuity";
 import {
@@ -181,6 +181,7 @@ export function ConversationWorkbench({
   const selectedAgentInitials = selectedAgent ? agentInitialsForDisplay(selectedAgent) : "AI";
   const selectedAgentDisplayName = selectedAgent ? agentPrimaryDisplayName(selectedAgent) : "에이전트 선택";
   const selectedAgentSubtitle = selectedAgent ? agentSecondaryDisplayLabel(selectedAgent) : "대기";
+  const selectedAgentWorkStatusLabel = createAgentWorkStatusLabel(selectedAgentActivity, selectedAgentDisplayName);
   const selectedAgentModelRouteSource =
     selectedAgent?.modelId && selectedModel?.id === selectedAgent.modelId
       ? "agent"
@@ -273,6 +274,7 @@ export function ConversationWorkbench({
                 label="대화 모델"
                 value={selectedAgentModelRouteLabel}
               />
+              <ConversationMetaRow icon={Activity} label="현재 상태" value={selectedAgentWorkStatusLabel} />
               <ConversationMetaRow icon={Database} label="기억" value={`${memoryRecordCount}건 · ${memoryGovernanceLabel ?? memoryMode}`} />
               <ConversationMetaRow
                 icon={Sparkles}
@@ -360,6 +362,7 @@ export function ConversationWorkbench({
             toolLabels={toolLabels}
             personaAgentsMdApplied={personaAgentsMdApplied}
             personaSoulApplied={personaSoulApplied}
+            workStatusLabel={selectedAgentWorkStatusLabel}
           />
           <AgentConversationFlowPanel
             adapterStatus={memoryAdapterStatus}
@@ -381,7 +384,7 @@ export function ConversationWorkbench({
                 personaSoulApplied={personaSoulApplied}
                 toolLabels={toolLabels}
               />
-              <AgentSkillProfilePanel role={selectedAgent.role} />
+              <AgentSkillProfilePanel displayName={selectedAgentDisplayName} role={selectedAgent.role} />
             </div>
           </div>
           {selectedAgentThinkingIndicator ? (
@@ -440,6 +443,7 @@ function AgentCapabilityStrip({
   toolLabels,
   personaAgentsMdApplied,
   personaSoulApplied,
+  workStatusLabel,
 }: {
   continuityDetail: string;
   displayName: string;
@@ -450,12 +454,16 @@ function AgentCapabilityStrip({
   toolLabels: string[];
   personaAgentsMdApplied: boolean;
   personaSoulApplied: boolean;
+  workStatusLabel: string;
 }) {
   return (
     <div className="shrink-0 border-b border-zinc-900/80 bg-zinc-950/95 px-4 py-2">
       <div className="mx-auto flex max-w-5xl items-center gap-2 overflow-x-auto">
         <span className="shrink-0 rounded-full border border-violet-300/20 bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-100">
           {displayName} 전용 방
+        </span>
+        <span className="shrink-0 rounded-full border border-amber-300/20 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-100">
+          지금 · {workStatusLabel}
         </span>
         <span
           className="shrink-0 rounded-full border border-fuchsia-300/20 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] text-fuchsia-100"
@@ -501,13 +509,28 @@ function ConversationMetaRow({
         <Icon className="h-3.5 w-3.5" />
         {label}
       </span>
-      <span className="min-w-0 truncate text-right font-mono text-xs text-zinc-100">{value}</span>
+      <span className="min-w-0 truncate text-right text-xs font-medium text-zinc-100">{value}</span>
     </div>
   );
 }
 
 function mapConversationAgentState(status: AgentActivityStatus): AgentState {
   if (status === "preparing") return "thinking";
-  if (status === "responding") return "responding";
+  if (status === "responding" || status === "tooling" || status === "capturing" || status === "dispatching") {
+    return "responding";
+  }
+  if (status === "waiting_approval") return "waiting_approval";
+  if (status === "error") return "error";
   return "idle";
+}
+
+function createAgentWorkStatusLabel(status: AgentActivityStatus, displayName: string): string {
+  if (status === "preparing") return `${displayName}가 요청을 정리하는 중`;
+  if (status === "tooling") return `${displayName}가 도구 후보를 고르는 중`;
+  if (status === "capturing") return `${displayName}가 작업창을 읽는 중`;
+  if (status === "dispatching") return `${displayName}가 명령을 전달하는 중`;
+  if (status === "waiting_approval") return `${displayName}가 승인을 기다리는 중`;
+  if (status === "responding") return `${displayName}가 답변을 다듬는 중`;
+  if (status === "error") return `${displayName}가 막힌 원인을 정리하는 중`;
+  return `${displayName}가 다음 말을 기다리는 중`;
 }

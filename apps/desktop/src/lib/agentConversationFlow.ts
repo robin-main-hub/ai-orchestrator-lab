@@ -6,6 +6,7 @@ import {
 import { createAgentToolRuntimeSummary, getAgentToolBadgeLabels, getAgentToolProfile } from "./agentToolProfiles";
 import { agentRoleLabel, formatModelDisplayName, providerDisplayLabel } from "./helpers";
 import { resolveOperatorWorkerDisplay } from "./operatorWorkerDisplay";
+import { compactPublicText, sanitizePublicText } from "./publicRedaction";
 
 export type AgentConversationFlowTone = "ready" | "manual" | "error";
 
@@ -23,13 +24,15 @@ export type AgentConversationFlowInput = {
   memoryRecordCount: number;
   memoryScope?: AgentChannelMemoryScope;
   modelId?: string;
+  modelName?: string;
   providerProfileId?: string;
+  providerName?: string;
 };
 
 function createMemoryValue(adapterStatus: AgentConversationFlowInput["adapterStatus"], memoryRecordCount: number) {
-  if (adapterStatus === "error") return "수동 확인 필요";
-  if (adapterStatus === "loading") return "기억 준비 중";
-  return `${memoryRecordCount}개 기억 후보`;
+  if (adapterStatus === "error") return "기억은 함께 확인 필요";
+  if (adapterStatus === "loading") return "기억 단서 고르는 중";
+  return `${memoryRecordCount}개 기억 단서 준비`;
 }
 
 function createMemoryTone(adapterStatus: AgentConversationFlowInput["adapterStatus"]): AgentConversationFlowTone {
@@ -44,67 +47,74 @@ export function createAgentConversationFlowCards({
   memoryRecordCount,
   memoryScope,
   modelId,
+  modelName,
   providerProfileId,
+  providerName,
 }: AgentConversationFlowInput): AgentConversationFlowCard[] {
   const toolProfile = getAgentToolProfile(agent.role);
   const agentDisplay = resolveOperatorWorkerDisplay({ role: agent.role, workerId: agent.id });
-  const providerLabel = createProviderConnectionLabel(providerProfileId ?? memoryScope?.providerProfileId);
-  const scopeLabel = memoryScope ? "이 대화방 전용 기억 범위" : "수동 기억 범위";
+  const providerConnection = createProviderConnectionDetail(providerName, providerProfileId ?? memoryScope?.providerProfileId);
+  const modelLabel = formatModelDisplayName(modelName ?? modelId);
+  const scopeLabel = memoryScope ? "이 대화방 기억만 참고" : "수동 기억 확인 대기";
   const recallQuery = memoryScope ? createAgentChannelRecallQuery(memoryScope, `${agent.name} ${agent.role} conversation`) : undefined;
 
   return [
     {
       id: "channel",
-      label: "개인 채널",
-      value: `${agentDisplay.displayName} 전용 대화방`,
+      label: "동료 채널",
+      value: `${agentDisplay.displayName}와 1:1로 이어짐`,
       details: [
         `맡은 자리: ${agentDisplay.roleLabel || agentRoleLabel(agent.role)}`,
-        `모델 연결: ${providerLabel}`,
-        `모델: ${formatModelDisplayName(modelId)}`,
+        providerConnection,
+        `${modelLabel}로 대화`,
       ],
       tone: "ready",
     },
     {
       id: "memory",
-      label: "EvolveMemento",
+      label: "기억 연결",
       value: createMemoryValue(adapterStatus, memoryRecordCount),
       details: [
         scopeLabel,
-        `${memoryRecordCount}개 기억 조회 후보`,
+        `${memoryRecordCount}개 기억 후보를 고름`,
         recallQuery ? "대화 맥락 기반 기억 조회 준비" : "수동 기억 조회 대기",
-        "기억 원문은 채팅 화면에 직접 노출하지 않음",
-        "신뢰된 연결이 아니면 장기 기억 자동 주입은 수동 확인",
+        "필요한 단서만 답변에 반영",
+        "장기 기억 자동 주입은 신뢰 상태에 맞춰 조심스럽게 처리",
       ],
       tone: createMemoryTone(adapterStatus),
     },
     {
       id: "tools",
       label: toolProfile.label,
-      value: `${toolProfile.tools.length}개 도구 프로필`,
+      value: `${toolProfile.tools.length}개 협업 도구 준비`,
       details: [
         getAgentToolBadgeLabels(agent.role)[0] ?? "도구 준비",
         createToolBoundaryDetail(toolProfile.tools),
         ...getAgentToolBadgeLabels(agent.role).slice(0, 4),
-        "도구 호출 전 목적·입력·권한을 먼저 요약",
+        "호출 전 목적·입력·권한을 먼저 맞춤",
       ],
       tone: "ready",
     },
     {
       id: "trace",
-      label: "공개 작업 로그",
-      value: "단계·도구·검증 표시",
+      label: "작업 공유",
+      value: "진행 상황만 또렷하게 공유",
       details: [
         "숨은 사고 과정은 노출하지 않음",
-        "작업 단계, 도구 후보, 검증 요약만 채팅에 표시",
+        "작업 단계, 도구 후보, 검증 요약만 대화에 표시",
       ],
       tone: "manual",
     },
   ];
 }
 
-function createProviderConnectionLabel(providerProfileId?: string) {
+function createProviderConnectionDetail(providerName?: string, providerProfileId?: string) {
+  const safeProviderName = providerName?.trim();
+  if (safeProviderName) {
+    return `${compactPublicText(providerDisplayLabel(sanitizePublicText(safeProviderName)), 32)} 연결`;
+  }
   if (!providerProfileId) return "모델 연결 대기";
-  return providerDisplayLabel(providerProfileId.replace(/^provider[_-]?/i, "").replace(/_/g, " "));
+  return "공급자 연결됨";
 }
 
 function createToolBoundaryDetail(tools: string[]) {

@@ -64,6 +64,41 @@ const workTraceItem: WorkTraceSearchItem = {
 };
 
 describe("OperatorCockpit", () => {
+  it("최근 작업 영수증을 세부 정보 밖 첫 화면 요약으로 렌더링한다", () => {
+    const diagnostics = createSettingsDiagnostics({
+      agentCount: 1,
+      enabledProviderCount: 1,
+      memoryAdapterStatus: "ready",
+      providerSmokeReadyCount: 1,
+      runtimeStatus: "online",
+      workerCount: 1,
+    });
+    const maturity = createOrchestrationMaturityReport({
+      attachments: { acceptedTypeCount: 2, hasProcessingPipeline: true, pendingCount: 0 },
+      controlQueue: { connectedLaneCount: 6, pendingApprovalCount: 0, workItemProjectionCount: 1 },
+      debate: { codingImpactCount: 1, decisionCount: 1, hasCodingPacketProjection: true, readinessState: "ready" },
+      e2e: { desktopTestCount: 357, hasProviderSmokeHarness: true, hasVisualSmokeChecklist: true },
+      memory: { agentInstallCount: 1, curatorCandidateCount: 1, installedAgentCount: 1, promotedCount: 1 },
+      onboarding: { blockingCheckCount: 0, passedCheckCount: 1, totalCheckCount: 1 },
+      provider: { assignedAgentCount: 1, fallbackReadyCount: 1, profileCount: 1, smokeReadyCount: 1 },
+      receipts: { receiptCount: 1, searchableCount: 1, unsafeReceiptCount: 0 },
+      tmux: { hasRecoveryPlan: true, paneCount: 1, timelineBlockCount: 1 },
+    });
+    const smokePlan = createProductionSmokePlan({ includeLiveProvider: false, includeVisual: true });
+
+    const html = renderToStaticMarkup(
+      <OperatorCockpit
+        readiness={{ diagnostics, maturity, smokePlan, workTraceItems: [workTraceItem] }}
+        snapshot={snapshot}
+      />,
+    );
+
+    expect(html).toContain("최근 완료 기록");
+    expect(html).toContain("마키마 대화 기억 후보");
+    expect(html).toContain("GitHub #251");
+    expect(html).not.toContain("작업 영수증");
+  });
+
   it("세부 정보가 열려도 작업 영수증 장부를 한 번만 렌더링한다", () => {
     const diagnostics = createSettingsDiagnostics({
       agentCount: 1,

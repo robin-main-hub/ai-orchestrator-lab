@@ -5,6 +5,8 @@ import {
   CheckSquare,
   ChevronDown,
   Database,
+  ExternalLink,
+  FileText,
   Monitor,
   RefreshCw,
   Route,
@@ -29,6 +31,7 @@ import { RecoveryContinuityCard } from "./RecoveryContinuityCard";
 import { WorkerFleetCard } from "./WorkerFleetCard";
 import { WorkReceiptLedgerCard } from "./WorkReceiptLedgerCard";
 import { badgeColorForMirror, formatClock, mirrorHealthLabel } from "./presentation";
+import { formatOperatorModelLabel, formatOperatorProviderLabel } from "./workerDisplay";
 
 export function OperatorCockpit({
   defaultDetailsOpen = false,
@@ -159,8 +162,8 @@ export function OperatorCockpit({
             <GlanceTile
               icon={<Route className="h-4 w-4" />}
               label="현재 대화 모델"
-              value={snapshot.routing.selectedModelId}
-              hint={snapshot.routing.providerLabel ?? "공급자 대기"}
+              value={formatOperatorModelLabel(snapshot.routing.selectedModelId)}
+              hint={formatOperatorProviderLabel(snapshot.routing.providerLabel)}
               tone={snapshot.routing.fallbackStatus === "active" ? "warning" : "normal"}
             />
             <GlanceTile
@@ -183,9 +186,18 @@ export function OperatorCockpit({
             <NextActionStrip actions={readiness.nextActions} onActivate={handleNextAction} />
           ) : null}
 
+          {readiness?.workTraceItems?.length ? (
+            <RecentReceiptStrip items={readiness.workTraceItems} />
+          ) : null}
+
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
             <div className="min-w-0 lg:col-span-7">
-            <WorkerFleetCard fleet={snapshot.fleet} onOpenAgentConversation={onOpenAgentConversation} />
+              <WorkerFleetCard
+                fleet={snapshot.fleet}
+                memory={snapshot.memory}
+                onOpenAgentConversation={onOpenAgentConversation}
+                routing={snapshot.routing}
+              />
             </div>
             <div className="min-w-0 lg:col-span-5">
               <ApprovalEvidenceCard approvals={snapshot.approvals} onPreview={onPreviewEvidence} />
@@ -242,6 +254,79 @@ export function OperatorCockpit({
       </div>
     </div>
   );
+}
+
+function RecentReceiptStrip({ items }: { items: WorkTraceSearchItem[] }) {
+  const recentItems = items.slice(0, 3);
+  const unsafeCount = items.filter((item) => !item.searchable).length;
+  if (recentItems.length === 0) return null;
+
+  return (
+    <section
+      aria-label="최근 완료 기록"
+      className={`rounded-lg border px-3 py-3 backdrop-blur-xl ${
+        unsafeCount > 0
+          ? "border-amber-500/25 bg-amber-950/15"
+          : "border-cyan-500/20 bg-zinc-900/40"
+      }`}
+    >
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-cyan-400/15 bg-cyan-400/10 text-cyan-200">
+            <FileText className="h-3.5 w-3.5" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate text-xs font-semibold text-zinc-100">최근 완료 기록</h2>
+            <p className="truncate text-[11px] text-zinc-500">
+              공개 요약 {items.filter((item) => item.searchable).length}/{items.length}건
+              {unsafeCount > 0 ? ` · 점검 ${unsafeCount}건` : " · 마스킹 통과"}
+            </p>
+          </div>
+        </div>
+        <a
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 text-[11px] font-semibold text-cyan-100 transition-colors hover:border-cyan-300/40 hover:bg-cyan-400/15"
+          href="https://github.com/robin-main-hub/ai-orchestrator-lab/issues/251"
+          rel="noreferrer"
+          target="_blank"
+        >
+          GitHub #251
+          <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
+      <div className="grid gap-2 lg:grid-cols-3">
+        {recentItems.map((item) => (
+          <div
+            className="min-w-0 rounded-md border border-white/10 bg-black/20 px-2.5 py-2"
+            key={`${item.kind}:${item.id}`}
+          >
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="rounded-full border border-white/10 bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-semibold text-zinc-400">
+                {receiptKindLabel(item.kind)}
+              </span>
+              <span
+                className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${
+                  item.searchable
+                    ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+                    : "border-amber-400/25 bg-amber-400/10 text-amber-200"
+                }`}
+              >
+                {item.safetyLabel}
+              </span>
+            </div>
+            <p className="truncate text-xs font-medium text-zinc-200">{item.title}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function receiptKindLabel(kind: WorkTraceSearchItem["kind"]) {
+  if (kind === "conversation") return "대화";
+  if (kind === "debate") return "토론";
+  if (kind === "tmux") return "터미널";
+  if (kind === "approval") return "승인";
+  return "기억";
 }
 
 function NextActionStrip({

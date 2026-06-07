@@ -114,6 +114,7 @@ export function MessageThread({
               agent={selectedAgent}
               agentVisualsById={agentVisualsById}
               label={thinkingIndicator.label}
+              narration={thinkingIndicator.narration}
               steps={thinkingIndicator.steps}
             />
           ) : null}
@@ -127,13 +128,19 @@ export function shouldShowAssistantPendingBubble(
   messages: ConversationMessage[],
   activity?: AgentActivityStatus,
 ) {
-  if (activity !== "preparing" && activity !== "responding") return false;
+  if (!activity || activity === "idle") return false;
   const lastMessage = messages.at(-1);
   return lastMessage?.role === "user";
 }
 
 export function assistantPendingLabel(activity?: AgentActivityStatus) {
-  return activity === "responding" ? "답변을 정리하고 있어요" : "생각을 정리하고 있어요";
+  if (activity === "responding") return "답변을 다듬고 있어요";
+  if (activity === "tooling") return "도구를 고르는 중이에요";
+  if (activity === "capturing") return "작업창을 읽는 중이에요";
+  if (activity === "dispatching") return "명령을 전달하는 중이에요";
+  if (activity === "waiting_approval") return "승인을 기다리고 있어요";
+  if (activity === "error") return "막힌 원인을 정리하고 있어요";
+  return "요청을 정리하고 있어요";
 }
 
 export type AssistantMessageStatusSummary = {
@@ -198,16 +205,23 @@ function AssistantPendingBubble({
   agent,
   agentVisualsById,
   label,
+  narration,
   steps,
 }: {
   activity?: AgentActivityStatus;
   agent: WorkbenchAgent;
   agentVisualsById?: Record<string, AgentVisualSettings>;
   label: string;
+  narration: string;
   steps: AgentThinkingStep[];
 }) {
   const visual = agentVisualsById?.[agent.id];
-  const status = activity === "responding" ? ("active" as const) : ("pending" as const);
+  const status =
+    activity === "responding" || activity === "tooling" || activity === "capturing" || activity === "dispatching"
+      ? ("active" as const)
+      : activity === "error"
+        ? ("offline" as const)
+        : ("pending" as const);
   const displayName = agentPrimaryDisplayName(agent);
 
   return (
@@ -225,7 +239,7 @@ function AssistantPendingBubble({
           <span className="text-[10px] text-zinc-600">{label}</span>
         </div>
         <div className="inline-flex max-w-[82%] items-center gap-3 rounded-2xl rounded-tl-md border border-violet-300/15 bg-zinc-900/80 px-3 py-2.5 shadow-lg shadow-black/20 backdrop-blur-xl">
-          <span className="text-sm text-zinc-300">{assistantPendingLabel(activity)}</span>
+          <span className="text-sm text-zinc-300">{compactPublicText(narration || assistantPendingLabel(activity), 88)}</span>
           <span className="flex items-center gap-1" aria-hidden="true">
             <span className="message-thinking-dot" />
             <span className="message-thinking-dot [animation-delay:160ms]" />
@@ -345,11 +359,13 @@ function MessageBubble({
   const roleColor = senderAgent ? roleColorFromRole(senderAgent.role) : "orchestrator";
   const activity = senderAgent && agentActivityById ? agentActivityById[senderAgent.id] : "idle";
   const agentStatus = senderAgent
-    ? activity === "responding"
+    ? activity === "responding" || activity === "tooling" || activity === "capturing" || activity === "dispatching"
       ? ("active" as const)
-      : activity === "preparing"
+      : activity === "preparing" || activity === "waiting_approval"
         ? ("pending" as const)
-        : activity === "idle"
+        : activity === "error"
+          ? ("offline" as const)
+      : activity === "idle"
           ? ("idle" as const)
           : ("online" as const)
     : undefined;

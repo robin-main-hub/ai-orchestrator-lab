@@ -33,6 +33,6 @@ describe("createAgentModelRouteLabel", () => {
   });
 
   it("falls back clearly when provider or model is missing", () => {
-    expect(createAgentModelRouteLabel({})).toBe("공급자 미지정 / 모델 연결 대기");
+    expect(createAgentModelRouteLabel({})).toBe("공급자 대기 / 모델 연결 대기");
   });
 });
