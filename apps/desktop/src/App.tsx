@@ -3493,6 +3493,7 @@ export function App() {
         diagnostics,
         maturity,
         snapshot: cockpitSnapshot,
+        workTraceItems: workTraceIndex,
       }),
       smokePlan,
       workTraceItems: workTraceIndex,

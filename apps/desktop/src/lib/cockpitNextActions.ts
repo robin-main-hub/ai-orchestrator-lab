@@ -1,26 +1,40 @@
 import type { OperatorCockpitSnapshot } from "@ai-orchestrator/protocol";
 import type { OrchestrationMaturityReport } from "./orchestrationMaturity";
 import type { SettingsDiagnostics } from "./settingsDiagnostics";
+import type { WorkTraceSearchItem } from "./workTraceSearch";
 
 export type CockpitNextActionItem = {
   id: string;
   label: string;
   priority: "high" | "normal" | "warning";
-  source: "approval" | "diagnostics" | "handoff" | "maturity" | "smoke" | "worker";
+  source: "approval" | "diagnostics" | "handoff" | "maturity" | "receipt" | "smoke" | "worker";
 };
 
 export function deriveCockpitNextActions({
   diagnostics,
   maturity,
   snapshot,
+  workTraceItems = [],
   limit = 3,
 }: {
   diagnostics: SettingsDiagnostics;
   maturity: OrchestrationMaturityReport;
   snapshot: OperatorCockpitSnapshot;
+  workTraceItems?: WorkTraceSearchItem[];
   limit?: number;
 }): CockpitNextActionItem[] {
+  const unsafeReceiptCount = workTraceItems.filter((item) => !item.searchable).length;
   const candidates: CockpitNextActionItem[] = [
+    ...(unsafeReceiptCount > 0
+      ? [
+          {
+            id: "receipt_unsafe",
+            label: `공개 영수증 마스킹 점검: ${unsafeReceiptCount}건`,
+            priority: "high" as const,
+            source: "receipt" as const,
+          },
+        ]
+      : []),
     ...snapshot.fleet
       .filter((worker) => worker.status === "blocked" || worker.status === "error")
       .map((worker) => ({
@@ -55,6 +69,14 @@ export function deriveCockpitNextActions({
       priority: maturity.overallStatus === "blocked" ? ("high" as const) : ("normal" as const),
       source: "maturity" as const,
     })),
+    ...snapshot.fleet
+      .filter((worker) => worker.status === "working")
+      .map((worker) => ({
+        id: `worker_active_${worker.workerId}`,
+        label: `작업 중: ${worker.workerId} 결과 확인`,
+        priority: "normal" as const,
+        source: "worker" as const,
+      })),
   ];
 
   return dedupeByLabel(candidates)
