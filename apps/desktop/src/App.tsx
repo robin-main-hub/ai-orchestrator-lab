@@ -184,6 +184,10 @@ import { createMemoryGovernanceSummary } from "./lib/memoryGovernance";
 import { createConversationTurnMemoryCandidate } from "./lib/memoryCuratorRuntime";
 import { createProviderRoutingConsoleItems } from "./lib/providerRoutingConsole";
 import { createProviderFailureConversationReply } from "./lib/providerFallbackPlan";
+import {
+  createProviderReplayConversationMessage,
+  createProviderReplayMemoryCandidate,
+} from "./lib/providerReplayDelivery";
 import { agentPrimaryDisplayName } from "./lib/agentDisplay";
 import {
   agentRoleLabel,
@@ -466,92 +470,6 @@ export function App() {
     });
   }, [activeSessionId]);
 
-  const handleProviderCompletionReplayed = useCallback(({
-    approval,
-    result,
-  }: {
-    approval: { id: string; sourceItemId?: string };
-    result: ProviderCompletionResponse;
-  }) => {
-    const pending = pendingProviderRetry;
-    if (!pending) {
-      return;
-    }
-    if (pending.permissionItemId !== approval.sourceItemId && pending.permissionItemId !== approval.id) {
-      return;
-    }
-
-    const createdAt = new Date().toISOString();
-    const targetAgent = agents.find((agent) => agent.id === pending.agentId);
-    const replayedContent = result.content?.trim();
-    if (!replayedContent) {
-      return;
-    }
-    const assistantMessage: ConversationMessage = {
-      id: `message_agent_replay_${crypto.randomUUID()}`,
-      sessionId: pending.sessionId,
-      role: "assistant",
-      content: replayedContent,
-      createdAt,
-      metadata: {
-        agentId: pending.agentId,
-        agentName: targetAgent?.name,
-        providerProfileId: result.providerProfileId,
-        modelId: result.modelId,
-        endpoint: result.endpoint,
-        route: result.route,
-        usage: result.usage,
-        realProviderCall: true,
-        replayedApprovalId: approval.id,
-        replayedSourceItemId: approval.sourceItemId,
-        attachmentCount: pending.attachments.length,
-        ...(pending.attachmentProcessingPlans.length > 0
-          ? { attachmentProcessingPlans: pending.attachmentProcessingPlans }
-          : {}),
-      },
-    };
-
-    setConversationMessagesByAgentId((channels) =>
-      updateAgentChannelMessages(channels, pending.agentId, (messages) => [...messages, assistantMessage]),
-    );
-    setPendingProviderRetry(undefined);
-    setDraftMessage("");
-    setDraftAttachments([]);
-    setDraftRejectedAttachmentPlans([]);
-    if (targetAgent) {
-      setAgentActivity(targetAgent.id, "responding");
-      window.setTimeout(() => {
-        setAgentActivity(targetAgent.id, "idle");
-      }, 450);
-    }
-    appendEvent("provider.completion.replay.delivered", {
-      approvalId: approval.id,
-      sourceItemId: approval.sourceItemId,
-      agentId: pending.agentId,
-      providerProfileId: result.providerProfileId,
-      modelId: result.modelId,
-      contentLength: replayedContent.length,
-      route: result.route,
-      redaction: "applied",
-    }, { sessionId: pending.sessionId });
-  }, [agents, appendEvent, pendingProviderRetry]);
-
-  const {
-    approvalServerSnapshot,
-    approvalServerStatus,
-    approvalServerError,
-    approvalServerBusyId,
-    pendingTmuxApprovalKeys,
-    tmuxRedispatchOutcomes,
-    handleRefreshApprovalQueue,
-    handleTmuxApprovalQueued,
-    handleResolveServerApproval,
-  } = useApprovalQueueController({
-    appendEvent,
-    onProviderCompletionReplayed: handleProviderCompletionReplayed,
-    onTmuxOutcome: handleTmuxOutcome,
-  });
-
   const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
   const [contextPackTier, setContextPackTier] = useState<ContextPackTier>("standard");
   const [reviewMode, setReviewMode] = useState<ReviewMode>("quick");
@@ -744,6 +662,94 @@ export function App() {
     packet: codingPacketState,
     provider: selectedProvider,
     runtimeUpdatedAt: runtimeSnapshotState.updatedAt,
+  });
+  const handleProviderCompletionReplayed = useCallback(({
+    approval,
+    result,
+  }: {
+    approval: { id: string; sourceItemId?: string };
+    result: ProviderCompletionResponse;
+  }) => {
+    const pending = pendingProviderRetry;
+    if (!pending) {
+      return;
+    }
+    if (pending.permissionItemId !== approval.sourceItemId && pending.permissionItemId !== approval.id) {
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    const targetAgent = agents.find((agent) => agent.id === pending.agentId);
+    const replayedContent = result.content?.trim();
+    if (!replayedContent) {
+      return;
+    }
+    const assistantMessage = createProviderReplayConversationMessage({
+      approval,
+      createdAt,
+      id: `message_agent_replay_${crypto.randomUUID()}`,
+      pending,
+      result,
+      targetAgent,
+    });
+
+    setConversationMessagesByAgentId((channels) =>
+      updateAgentChannelMessages(channels, pending.agentId, (messages) => [...messages, assistantMessage]),
+    );
+    if (targetAgent) {
+      const memoryScope = createAgentChannelMemoryScope(
+        pending.agentId,
+        pending.sessionId,
+        pending.providerProfileId,
+      );
+      handleQueueMemoryCuratorCandidate(
+        createProviderReplayMemoryCandidate({
+          assistantMessage,
+          createdAt,
+          memoryScope,
+          pending,
+          targetAgent,
+          trustLevel: providerProfiles.find((provider) => provider.id === pending.providerProfileId)?.trustLevel ?? "limited",
+        }),
+      );
+    }
+    setPendingProviderRetry(undefined);
+    setDraftMessage("");
+    setDraftAttachments([]);
+    setDraftRejectedAttachmentPlans([]);
+    if (targetAgent) {
+      setAgentActivity(targetAgent.id, "responding");
+      window.setTimeout(() => {
+        setAgentActivity(targetAgent.id, "idle");
+      }, 450);
+    }
+    appendEvent("provider.completion.replay.delivered", {
+      approvalId: approval.id,
+      sourceItemId: approval.sourceItemId,
+      agentId: pending.agentId,
+      providerProfileId: result.providerProfileId,
+      modelId: result.modelId,
+      contentLength: replayedContent.length,
+      identityGuardApplied: assistantMessage.metadata?.identityGuardApplied,
+      memoryCandidateQueued: Boolean(targetAgent),
+      route: result.route,
+      redaction: "applied",
+    }, { sessionId: pending.sessionId });
+  }, [agents, appendEvent, handleQueueMemoryCuratorCandidate, pendingProviderRetry, providerProfiles]);
+  const {
+    approvalServerSnapshot,
+    approvalServerStatus,
+    approvalServerError,
+    approvalServerBusyId,
+    pendingTmuxApprovalKeys,
+    tmuxRedispatchOutcomes,
+    handleRefreshApprovalQueue,
+    handleTmuxApprovalQueued,
+    handleResolveServerApproval,
+  } = useApprovalQueueController({
+    appendEvent,
+    onProviderCompletionReplayed: handleProviderCompletionReplayed,
+    onTmuxOutcome: handleTmuxOutcome,
   });
   const memoryInstallAudit = useMemo(
     () =>
@@ -1901,7 +1907,7 @@ export function App() {
     if (shouldCreateMemoryCandidate) {
       const memoryCandidate = createConversationTurnMemoryCandidate({
         agentId: selectedAgent.id,
-        agentName: selectedAgent.name,
+        agentName: agentPrimaryDisplayName(selectedAgent),
         assistantMessage,
         attachmentProcessingPlans,
         createdAt: assistantMessage.createdAt,
