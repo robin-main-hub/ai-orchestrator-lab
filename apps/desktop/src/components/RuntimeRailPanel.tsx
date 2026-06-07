@@ -2,6 +2,7 @@ import { Power, RefreshCw, Server } from "lucide-react";
 import type { DeviceRebootRequest, DeviceRebootWatchdog, RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import type { Stage32DgxRouteDiagnosticSnapshot } from "../runtime/stage32DgxRouteDiagnostics";
 import { StatusBadge } from "@/ui/status-badge";
+import { runtimeNodeRoleLabel, runtimeStatusLabel } from "../lib/railStatusLabels";
 
 export function RuntimeRailPanel({
   dgxRouteDiagnostics,
@@ -26,8 +27,8 @@ export function RuntimeRailPanel({
     <section className="mini-panel rail-panel">
       <header>
         <Server size={16} />
-        <span>Systems</span>
-        <button className="rail-icon-button" onClick={onProbeDgx} title="Probe DGX-02" type="button">
+        <span>시스템</span>
+        <button className="rail-icon-button" onClick={onProbeDgx} title="DGX-02 점검" type="button">
           <RefreshCw size={13} />
         </button>
       </header>
@@ -39,13 +40,13 @@ export function RuntimeRailPanel({
               <button
                 className="rail-icon-button"
                 onClick={() => onRequestReboot(node.id as DeviceRebootRequest["targetNodeId"])}
-                title={`${node.label} reboot approval`}
+                title={`${node.label} 재시작 승인`}
                 type="button"
               >
                 <Power size={12} />
               </button>
             </div>
-            <strong>{node.id === "dgx-01" ? "guarded" : node.isPrimary ? "main" : node.role}</strong>
+            <strong>{runtimeNodeRoleLabel(node.id === "dgx-01" ? "guarded" : node.isPrimary ? "main" : node.role)}</strong>
             <StatusBadge
               size="sm"
               variant={
@@ -57,22 +58,22 @@ export function RuntimeRailPanel({
               }
               className="mt-1 w-fit"
             >
-              {node.status}
+              {runtimeStatusLabel(node.status)}
             </StatusBadge>
           </article>
         ))}
       </div>
       <div className="rail-stat-list">
         <div>
-          <span>authority</span>
+          <span>권한</span>
           <strong>{snapshot.syncTopology.authorityLabel}</strong>
         </div>
         <div>
-          <span>local models</span>
+          <span>로컬 모델</span>
           <strong>{snapshot.localModels.length}</strong>
         </div>
         <div>
-          <span>memento</span>
+          <span>기억</span>
           <StatusBadge
             size="sm"
             variant={
@@ -83,29 +84,29 @@ export function RuntimeRailPanel({
                   : "warning"
             }
           >
-            {snapshot.memorySyncStatus}
+            {runtimeStatusLabel(snapshot.memorySyncStatus)}
           </StatusBadge>
         </div>
         <div>
-          <span>mac outbox</span>
+          <span>Mac 발신함</span>
           <strong>{macbookOutbox}</strong>
         </div>
         <div>
-          <span>home pc</span>
+          <span>홈 PC</span>
           <StatusBadge
             size="sm"
             variant={homePcClient?.status === "online" ? "success" : "danger"}
           >
-            {homePcClient?.status === "online" ? "online-only" : "needs DGX"}
+            {homePcClient?.status === "online" ? "온라인 전용" : "DGX 필요"}
           </StatusBadge>
         </div>
         <div>
-          <span>heartbeat</span>
-          <strong>{snapshot.recentError ?? "connected"}</strong>
+          <span>하트비트</span>
+          <strong>{snapshot.recentError ?? "연결됨"}</strong>
         </div>
         <div>
-          <span>watchdog</span>
-          <strong>{activeWatchdog ? `${activeWatchdog.targetNodeId} ${activeWatchdog.status}` : "ready"}</strong>
+          <span>감시</span>
+          <strong>{activeWatchdog ? `${activeWatchdog.targetNodeId} ${runtimeStatusLabel(activeWatchdog.status)}` : "준비됨"}</strong>
         </div>
       </div>
       {dgxRouteDiagnostics ? (
@@ -114,8 +115,8 @@ export function RuntimeRailPanel({
             <article key={route.baseUrl}>
               <strong>{route.baseUrl.replace(/^https?:\/\//, "")}</strong>
               <span>
-                health {route.health.status}
-                {route.health.httpStatus ? `/${route.health.httpStatus}` : ""} · provider {route.providerPreflight.status}
+                상태 {runtimeStatusLabel(route.health.status)}
+                {route.health.httpStatus ? `/${route.health.httpStatus}` : ""} · 프로바이더 {runtimeStatusLabel(route.providerPreflight.status)}
                 {route.providerPreflight.httpStatus ? `/${route.providerPreflight.httpStatus}` : ""}
               </span>
             </article>
