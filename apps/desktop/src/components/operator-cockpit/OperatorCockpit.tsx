@@ -65,6 +65,15 @@ export function OperatorCockpit({
     snapshot.handoffs.reduce((count, handoff) => count + handoff.missingInfoSlots.length, 0) +
     snapshot.memory.contradictionWarnings.length +
     snapshot.dispatchHistory.filter((dispatch) => dispatch.tamperWarning).length;
+  const handleNextAction = (action: CockpitNextActionItem) => {
+    if (action.targetSurface === "approvals" && onPreviewEvidence) {
+      onPreviewEvidence();
+      return;
+    }
+    if (action.targetSurface !== "fleet") {
+      setShowDetails(true);
+    }
+  };
 
   return (
     <div
@@ -169,7 +178,7 @@ export function OperatorCockpit({
           </div>
 
           {readiness?.nextActions?.length ? (
-            <NextActionStrip actions={readiness.nextActions} />
+            <NextActionStrip actions={readiness.nextActions} onActivate={handleNextAction} />
           ) : null}
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
@@ -233,7 +242,13 @@ export function OperatorCockpit({
   );
 }
 
-function NextActionStrip({ actions }: { actions: CockpitNextActionItem[] }) {
+function NextActionStrip({
+  actions,
+  onActivate,
+}: {
+  actions: CockpitNextActionItem[];
+  onActivate: (action: CockpitNextActionItem) => void;
+}) {
   return (
     <div className="rounded-xl border border-zinc-800/70 bg-zinc-900/35 px-3 py-2 backdrop-blur-xl">
       <div className="flex flex-wrap items-center gap-2">
@@ -241,8 +256,8 @@ function NextActionStrip({ actions }: { actions: CockpitNextActionItem[] }) {
           다음 행동
         </span>
         {actions.map((action) => (
-          <span
-            className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] ${
+          <button
+            className={`inline-flex min-w-0 max-w-full items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] transition-colors hover:border-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 ${
               action.priority === "high"
                 ? "border-rose-400/25 bg-rose-500/10 text-rose-100"
                 : action.priority === "warning"
@@ -250,10 +265,15 @@ function NextActionStrip({ actions }: { actions: CockpitNextActionItem[] }) {
                   : "border-cyan-400/20 bg-cyan-500/10 text-cyan-100"
             }`}
             key={action.id}
+            onClick={() => onActivate(action)}
+            type="button"
           >
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
             <span className="truncate">{action.label}</span>
-          </span>
+            <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white/80">
+              {action.ctaLabel}
+            </span>
+          </button>
         ))}
       </div>
     </div>

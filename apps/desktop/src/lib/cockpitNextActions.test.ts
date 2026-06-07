@@ -86,9 +86,11 @@ describe("deriveCockpitNextActions", () => {
     });
 
     expect(actions[0]).toMatchObject({
+      ctaLabel: "영수증 점검",
       label: "공개 영수증 마스킹 점검: 1건",
       priority: "high",
       source: "receipt",
+      targetSurface: "receipts",
     });
   });
 
@@ -113,10 +115,12 @@ describe("deriveCockpitNextActions", () => {
 
     expect(actions).toEqual([
       {
+        ctaLabel: "워커 확인",
         id: "worker_active_agent_builder",
         label: "작업 중: agent_builder 결과 확인",
         priority: "normal",
         source: "worker",
+        targetSurface: "fleet",
       },
     ]);
   });
@@ -142,8 +146,10 @@ describe("deriveCockpitNextActions", () => {
       "Control Queue lane 결과를 확인",
     ]);
     expect(actions[0]).toMatchObject({
+      ctaLabel: "큐 이어받기",
       priority: "warning",
       source: "control_queue",
+      targetSurface: "control_queue",
     });
   });
 });
