@@ -60,7 +60,7 @@ export function createProviderReplayConversationMessage({
     createdAt,
     metadata: {
       agentId: pending.agentId,
-      agentName: targetAgent?.name,
+      agentName: targetAgent ? agentPrimaryDisplayName(targetAgent) : undefined,
       providerProfileId: result.providerProfileId,
       modelId: result.modelId,
       endpoint: result.endpoint,

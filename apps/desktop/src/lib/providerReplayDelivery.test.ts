@@ -54,6 +54,7 @@ describe("createProviderReplayConversationMessage", () => {
     expect(message.content).toContain("마키마");
     expect(message.content).not.toContain("이름은 없다");
     expect(message.metadata?.identityGuardApplied).toBe(true);
+    expect(message.metadata?.agentName).toBe("마키마");
     expect(message.metadata?.replayedApprovalId).toBe("approval_provider_1");
   });
 
