@@ -320,7 +320,7 @@ export function TmuxSwarmBoard({
             <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
               워커 함대
             </span>
-            <h1 className="text-sm font-medium text-zinc-100">ai-swarm</h1>
+            <h1 className="text-sm font-medium text-zinc-100">스웜 작업대</h1>
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs text-zinc-500">
@@ -385,7 +385,7 @@ export function TmuxSwarmBoard({
               timelineBlocks={timelineBlocks[selectedPane.roleKey] ?? []}
             />
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-zinc-500">왼쪽에서 pane을 선택하세요</div>
+            <div className="flex h-full items-center justify-center text-sm text-zinc-500">왼쪽에서 작업창을 선택하세요</div>
           )}
         </div>
       </div>
@@ -551,7 +551,7 @@ function TmuxPaneDetail({
             <h2 className="truncate text-sm font-medium text-zinc-100">{pane.title}</h2>
             <span className="text-[10px] text-zinc-600">{surfaceLabel}</span>
           </div>
-          <p className="truncate text-xs text-zinc-500">{pane.agent?.name ?? "담당 agent 미정"} · {pane.role}</p>
+          <p className="truncate text-xs text-zinc-500">{pane.agent?.name ?? "담당 에이전트 미정"} · {pane.role}</p>
         </div>
         <AgentStatePill state={state} />
       </div>
