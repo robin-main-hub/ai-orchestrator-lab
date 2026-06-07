@@ -279,12 +279,12 @@ function SelectedWorkerDetail({
         />
         <DetailTile
           icon={<Brain className="h-3.5 w-3.5" />}
-          label="기억"
+          label="관제 기억"
           value={detail.memory.primary}
         />
         <DetailTile
           icon={<Route className="h-3.5 w-3.5" />}
-          label="현재 모델"
+          label="현재 대화 모델"
           value={detail.model.routeLabel}
         />
         <DetailTile

@@ -42,6 +42,8 @@ describe("WorkerFleetCard", () => {
     expect(html).toContain("마키마");
     expect(html).toContain("작업 우선순위");
     expect(html).toContain("지휘 도구");
+    expect(html).toContain("관제 기억");
+    expect(html).toContain("현재 대화 모델");
     expect(html).toContain("MacBook 기준 기억");
     expect(html).toContain("MiMo V2.5 Pro");
     expect(html).toContain("최근 상태");
