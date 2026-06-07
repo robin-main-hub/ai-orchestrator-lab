@@ -146,6 +146,8 @@ import { deriveTmuxRecoveryPlan } from "./lib/tmuxRecoveryPlan";
 import { createSettingsDiagnostics } from "./lib/settingsDiagnostics";
 import { createProductionSmokePlan } from "./lib/productionSmokePlan";
 import { createOrchestrationMaturityReport } from "./lib/orchestrationMaturity";
+import { createExperienceRoadmap } from "./lib/orchestrationExperienceRoadmap";
+import { createOrchestrationOsDebateSession } from "./lib/orchestrationOsDebate";
 import { deriveCockpitNextActions } from "./lib/cockpitNextActions";
 import { resolveExternalIngressTargetAgentId } from "./lib/externalIngressRouting";
 import {
@@ -2151,6 +2153,30 @@ export function App() {
     });
   }
 
+  function handleRunOsDebate() {
+    const roadmap = createExperienceRoadmap({
+      diagnostics: cockpitReadiness.diagnostics,
+      maturity: cockpitReadiness.maturity,
+      snapshot: cockpitSnapshot,
+      workTraceItems: cockpitReadiness.workTraceItems,
+    });
+    const session = createOrchestrationOsDebateSession({
+      agents,
+      providers: providerProfiles,
+      roadmap,
+      trigger: "20개 큰 바위 다음 실행 순서 결정",
+    });
+
+    setDebateSession(session);
+    setMode("debate");
+    appendEvent("debate.os.generated", {
+      debateId: session.id,
+      participantCount: session.participants.length,
+      roundCount: session.rounds.length,
+      source: "command_palette",
+    });
+  }
+
   function handleSelectDebateUtterance(utterance: Stage3DebateUtteranceView) {
     const agent = agents.find((candidate) => candidate.id === utterance.agentId);
     const createdAt = new Date().toISOString();
@@ -3360,6 +3386,13 @@ export function App() {
       hint: "대화 메시지를 Debate Chamber로 보냅니다",
       shortcut: "⌘⇧D",
       run: handlePromoteToDebate,
+    },
+    {
+      id: "debate.os",
+      verb: "토론",
+      label: "OS 5턴 토론 실행",
+      hint: "20개 큰 바위 기준으로 Debate Chamber에 실제 토론 세션을 생성",
+      run: handleRunOsDebate,
     },
     {
       id: "orchestrator.invoke",
