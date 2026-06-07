@@ -192,6 +192,78 @@ describe("OperatorCockpit", () => {
     expect(html).not.toContain("terminal_run");
   });
 
+  it("작전 지휘판에서 작업 흐름과 성과 장부를 한눈에 보여준다", () => {
+    const diagnostics = createSettingsDiagnostics({
+      agentCount: 1,
+      enabledProviderCount: 1,
+      memoryAdapterStatus: "ready",
+      providerSmokeReadyCount: 1,
+      runtimeStatus: "online",
+      workerCount: 1,
+    });
+    const maturity = createOrchestrationMaturityReport({
+      attachments: { acceptedTypeCount: 2, hasProcessingPipeline: true, pendingCount: 0 },
+      controlQueue: { connectedLaneCount: 6, pendingApprovalCount: 1, workItemProjectionCount: 1 },
+      debate: { codingImpactCount: 1, decisionCount: 1, hasCodingPacketProjection: true, readinessState: "ready" },
+      e2e: { desktopTestCount: 357, hasProviderSmokeHarness: true, hasVisualSmokeChecklist: true },
+      memory: { agentInstallCount: 1, curatorCandidateCount: 1, installedAgentCount: 1, promotedCount: 1 },
+      onboarding: { blockingCheckCount: 0, passedCheckCount: 1, totalCheckCount: 1 },
+      provider: { assignedAgentCount: 1, fallbackReadyCount: 1, profileCount: 1, smokeReadyCount: 1 },
+      receipts: { receiptCount: 1, searchableCount: 1, unsafeReceiptCount: 0 },
+      tmux: { hasRecoveryPlan: true, paneCount: 1, timelineBlockCount: 1 },
+    });
+    const smokePlan = createProductionSmokePlan({ includeLiveProvider: false, includeVisual: true });
+
+    const html = renderToStaticMarkup(
+      <OperatorCockpit
+        readiness={{
+          diagnostics,
+          maturity,
+          nextActions: [
+            {
+              ctaLabel: "승인 대기열 보기",
+              id: "approval_terminal_run",
+              label: "승인 필요: 터미널 실행 권한",
+              priority: "high",
+              source: "approval",
+              targetSurface: "approvals",
+            },
+          ],
+          smokePlan,
+          workTraceItems: [workTraceItem],
+        }}
+        snapshot={{
+          ...snapshot,
+          approvals: [
+            {
+              blockReason: "테스트 실행 승인",
+              commandPreview: "pnpm test",
+              evidenceRefs: [],
+              payloadBindingStatus: "bound",
+              securityRisk: "medium",
+            },
+          ],
+          dispatchHistory: [
+            {
+              approvalState: "approved",
+              createdAt: "2026-06-06T00:03:00.000Z",
+              dispatchId: "approval_1",
+              replayPayloadDigest: "sha256:test",
+              requesterAgentId: "agent_executor",
+              tamperWarning: false,
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(html).toContain("작전 지휘판");
+    expect(html).toContain("작업 흐름");
+    expect(html).toContain("승인 1건 대기");
+    expect(html).toContain("워커 1명 작업 중");
+    expect(html).toContain("성과 장부 1건");
+  });
+
   it("기본 세부 정보가 열린 상태에서는 다음 행동 목적지 안내를 표시하지 않는다", () => {
     const diagnostics = createSettingsDiagnostics({
       agentCount: 1,

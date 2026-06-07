@@ -5,6 +5,7 @@ import {
   CheckSquare,
   ChevronDown,
   Database,
+  FileText,
   Handshake,
   Monitor,
   RefreshCw,
@@ -224,6 +225,15 @@ export function OperatorCockpit({
             />
           </div>
 
+          <MissionCommandDeck
+            approvalCount={approvalCount}
+            blockedCount={blockedCount}
+            memoryHealthLabel={mirrorHealthLabel(snapshot.memory.dgxMirrorHealth)}
+            nextActionLabel={readiness?.nextActions?.[0]?.label}
+            receiptCount={readiness?.workTraceItems?.length ?? 0}
+            workingCount={workingCount}
+          />
+
           {readiness?.nextActions?.length ? (
             <NextActionStrip actions={readiness.nextActions} onActivate={handleNextAction} />
           ) : null}
@@ -317,6 +327,98 @@ export function OperatorCockpit({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MissionCommandDeck({
+  approvalCount,
+  blockedCount,
+  memoryHealthLabel,
+  nextActionLabel,
+  receiptCount,
+  workingCount,
+}: {
+  approvalCount: number;
+  blockedCount: number;
+  memoryHealthLabel: string;
+  nextActionLabel?: string;
+  receiptCount: number;
+  workingCount: number;
+}) {
+  return (
+    <section
+      aria-label="작전 지휘판"
+      className="overflow-hidden rounded-xl border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(6,182,212,0.10),rgba(24,24,27,0.48)_42%,rgba(139,92,246,0.10))] shadow-[0_0_40px_rgba(6,182,212,0.10)] backdrop-blur-xl"
+    >
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.9fr)]">
+        <div className="border-b border-white/10 p-4 lg:border-b-0 lg:border-r">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-300/25 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold text-cyan-100">
+              <Monitor className="h-3 w-3" />
+              작전 지휘판
+            </span>
+            <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-zinc-400">
+              작업 흐름
+            </span>
+          </div>
+          <h2 className="mt-3 text-balance text-lg font-semibold tracking-tight text-zinc-50">
+            {nextActionLabel ?? "지금은 관제판을 기준으로 다음 작업을 고르면 됩니다."}
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">
+            승인, 워커 움직임, 기억 상태, 성과 장부를 한 줄 흐름으로 묶어 보여줍니다.
+            메인 화면은 행동 판단에 필요한 신호만 남기고, 세부 로그는 작전 세부 정보로 보냅니다.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 p-3">
+          <MissionMetric icon={<Activity className="h-3.5 w-3.5" />} label="승인" value={`승인 ${approvalCount}건 대기`} tone={approvalCount > 0 ? "amber" : "emerald"} />
+          <MissionMetric icon={<Users className="h-3.5 w-3.5" />} label="워커" value={`워커 ${workingCount}명 작업 중`} tone={workingCount > 0 ? "cyan" : "zinc"} />
+          <MissionMetric icon={<Database className="h-3.5 w-3.5" />} label="기억" value={`기억 ${memoryHealthLabel}`} tone={memoryHealthLabel === "정상" ? "emerald" : "amber"} />
+          <MissionMetric icon={<FileText className="h-3.5 w-3.5" />} label="성과" value={`성과 장부 ${receiptCount}건`} tone={receiptCount > 0 ? "violet" : "zinc"} />
+          <MissionMetric
+            className="col-span-2"
+            icon={<ShieldAlert className="h-3.5 w-3.5" />}
+            label="차단"
+            value={blockedCount > 0 ? `차단 ${blockedCount}건 확인 필요` : "차단 없음"}
+            tone={blockedCount > 0 ? "rose" : "emerald"}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MissionMetric({
+  className,
+  icon,
+  label,
+  tone,
+  value,
+}: {
+  className?: string;
+  icon: ReactNode;
+  label: string;
+  tone: "amber" | "cyan" | "emerald" | "rose" | "violet" | "zinc";
+  value: string;
+}) {
+  const toneClass = {
+    amber: "border-amber-400/20 bg-amber-400/10 text-amber-100",
+    cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-100",
+    emerald: "border-emerald-400/20 bg-emerald-400/10 text-emerald-100",
+    rose: "border-rose-400/20 bg-rose-400/10 text-rose-100",
+    violet: "border-violet-400/20 bg-violet-400/10 text-violet-100",
+    zinc: "border-zinc-700/70 bg-zinc-950/35 text-zinc-300",
+  }[tone];
+
+  return (
+    <div className={`min-w-0 rounded-lg border px-3 py-2 ${toneClass} ${className ?? ""}`}>
+      <p className="flex items-center gap-1.5 text-[10px] font-semibold text-current/70">
+        {icon}
+        {label}
+      </p>
+      <p className="mt-1 truncate text-[12px] font-semibold text-zinc-50" title={value}>
+        {value}
+      </p>
     </div>
   );
 }
