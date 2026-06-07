@@ -31,6 +31,7 @@ import { WorkReceiptLedgerCard } from "./WorkReceiptLedgerCard";
 import { badgeColorForMirror, formatClock, mirrorHealthLabel } from "./presentation";
 
 export function OperatorCockpit({
+  defaultDetailsOpen = false,
   snapshot,
   onPreviewEvidence,
   onOpenMemory,
@@ -38,6 +39,7 @@ export function OperatorCockpit({
   onOpenRecovery,
   readiness,
 }: {
+  defaultDetailsOpen?: boolean;
   snapshot: OperatorCockpitSnapshot;
   onPreviewEvidence?: () => void;
   onOpenMemory?: () => void;
@@ -51,7 +53,7 @@ export function OperatorCockpit({
     workTraceItems?: WorkTraceSearchItem[];
   };
 }) {
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(defaultDetailsOpen);
   const blockedCount = snapshot.fleet.filter((worker) => worker.status === "blocked" || worker.status === "error").length;
   const approvalCount = snapshot.approvals.length;
   const riskyApprovalCount = snapshot.approvals.filter((approval) => approval.payloadBindingStatus !== "bound").length;
