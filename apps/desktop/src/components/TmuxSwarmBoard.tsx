@@ -101,9 +101,13 @@ export function TmuxSwarmBoard({
   const errorCount = visiblePanes.filter((pane) => resolvePaneAgentState(pane, statuses, agentActivityById) === "error").length;
 
   function appendBlock(roleKey: TmuxPaneRole, block: TerminalTimelineBlock) {
+    appendBlocks(roleKey, [block]);
+  }
+
+  function appendBlocks(roleKey: TmuxPaneRole, blocks: TerminalTimelineBlock[]) {
     onTimelineBlocksChange((current) => ({
       ...current,
-      [roleKey]: [...(current[roleKey] ?? []), block],
+      [roleKey]: [...(current[roleKey] ?? []), ...blocks],
     }));
   }
 
@@ -136,9 +140,10 @@ export function TmuxSwarmBoard({
         ...current,
         [pane.roleKey]: compactTmuxPreview(result.payload?.outputPreview || result.reason),
       }));
-      appendBlock(
+      appendBlocks(
         pane.roleKey,
-        makeSyntheticBlock({
+        resolveTmuxTimelineBlocks(result.timelineBlocks, [
+          makeSyntheticBlock({
           paneId: `role:${pane.roleKey}`,
           role: pane.roleKey,
           host: "dgx_02",
@@ -149,7 +154,9 @@ export function TmuxSwarmBoard({
           title: `${pane.title} capture`,
           summary: result.reason,
           outputPreview: result.payload?.outputPreview,
+          redactionApplied: result.payload?.redactionApplied ?? false,
         }),
+        ]),
       );
       setBoardNotice(sanitizeTmuxWorkbenchText(`${pane.title}: ${result.reason}`));
     } catch (error) {
@@ -189,9 +196,7 @@ export function TmuxSwarmBoard({
           ? sanitizeTmuxWorkbenchText(`승인 대기: ${result.approval.reason}`)
           : sanitizeTmuxWorkbenchText(`${result.dispatch.status}: ${result.dispatch.reason}`),
       }));
-      // Intent → optional approval gate → dispatch outcome
-      appendBlock(
-        pane.roleKey,
+      const fallbackTimelineBlocks: TerminalTimelineBlock[] = [
         makeSyntheticBlock({
           paneId: `role:${pane.roleKey}`,
           role: pane.roleKey,
@@ -203,10 +208,9 @@ export function TmuxSwarmBoard({
           title: commandPreview || `${pane.title} intent`,
           summary: `의도: ${commandPreview}`,
         }),
-      );
+      ];
       if (result.approval) {
-        appendBlock(
-          pane.roleKey,
+        fallbackTimelineBlocks.push(
           makeSyntheticBlock({
             paneId: `role:${pane.roleKey}`,
             role: pane.roleKey,
@@ -222,8 +226,7 @@ export function TmuxSwarmBoard({
         );
         onApprovalQueued?.({ approval: result.approval, request });
       } else {
-        appendBlock(
-          pane.roleKey,
+        fallbackTimelineBlocks.push(
           makeSyntheticBlock({
             paneId: `role:${pane.roleKey}`,
             role: pane.roleKey,
@@ -244,6 +247,7 @@ export function TmuxSwarmBoard({
           }),
         );
       }
+      appendBlocks(pane.roleKey, resolveTmuxTimelineBlocks(result.timelineBlocks, fallbackTimelineBlocks));
       setBoardNotice(sanitizeTmuxWorkbenchText(`${pane.title}: ${result.dispatch.reason}`));
     } catch (error) {
       const message = sanitizeTmuxWorkbenchText(error instanceof Error ? error.message : String(error));
@@ -352,6 +356,13 @@ export function TmuxSwarmBoard({
       </footer>
     </section>
   );
+}
+
+export function resolveTmuxTimelineBlocks(
+  serverBlocks: TerminalTimelineBlock[] | undefined,
+  fallbackBlocks: TerminalTimelineBlock[],
+): TerminalTimelineBlock[] {
+  return serverBlocks && serverBlocks.length > 0 ? serverBlocks : fallbackBlocks;
 }
 
 function FleetStat({ dotClass, label, value }: { dotClass: string; label: string; value: number }) {

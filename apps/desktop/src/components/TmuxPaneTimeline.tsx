@@ -225,6 +225,7 @@ export function makeSyntheticBlock(input: {
   outputPreview?: string;
   approvalId?: string;
   runId?: string;
+  redactionApplied?: boolean;
 }): TerminalTimelineBlock {
   return {
     id: `block_${input.kind}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -239,7 +240,7 @@ export function makeSyntheticBlock(input: {
     summary: input.summary ?? "",
     relatedEventIds: [],
     outputPreview: input.outputPreview,
-    redactionApplied: false,
+    redactionApplied: input.redactionApplied ?? false,
     approvalId: input.approvalId,
     runId: input.runId,
     createdAt: new Date().toISOString(),
