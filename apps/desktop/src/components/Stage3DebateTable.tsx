@@ -25,8 +25,10 @@ import {
   type DebateStance,
 } from "../lib/debateChamberPresentation";
 import { deriveDebateDecisionReadiness } from "../lib/debateDecisionReadiness";
+import { createDebateUtterancePublicWorkTrace } from "../lib/publicWorkTrace";
 import type { Stage3DebateSession } from "../runtime/stage3Runtime";
 import type { Stage3DebateUtteranceView } from "../types";
+import { PublicWorkTracePanel } from "./PublicWorkTracePanel";
 
 type Stance = DebateStance;
 
@@ -273,6 +275,7 @@ function UtteranceCard({
   const evidenceCount = utterance.evidenceRefIds?.length ?? 0;
   const codingCount = utterance.codingImpactRefs?.length ?? 0;
   const hasProvenance = acceptedCount > 0 || rejectedCount > 0 || evidenceCount > 0 || codingCount > 0;
+  const publicWorkTrace = createDebateUtterancePublicWorkTrace(utterance);
 
   return (
     <article
@@ -371,6 +374,8 @@ function UtteranceCard({
               <span className="ml-auto text-[10px] text-zinc-600">#{index + 1}</span>
             </footer>
           ) : null}
+
+          <PublicWorkTracePanel trace={publicWorkTrace} />
         </div>
       </div>
     </article>
