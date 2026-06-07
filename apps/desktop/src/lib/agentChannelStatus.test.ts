@@ -47,10 +47,17 @@ describe("createAgentChannelStatus", () => {
           sessionId: "session_main",
         },
         modelId: "mimo-v2.5-pro",
+        personaAgentsMdApplied: true,
+        personaSoulApplied: true,
         providerProfileId: "provider_mimo_token_openai",
         toolLabels: ["기억 조회", "기억 순위", "기억 정리 요청"],
       }),
     ).toEqual([
+      {
+        label: "인격 설정",
+        tone: "ready",
+        value: "SOUL 적용 · AGENTS 적용",
+      },
       {
         label: "기억 범위",
         tone: "ready",
