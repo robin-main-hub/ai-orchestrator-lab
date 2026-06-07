@@ -31,7 +31,7 @@ export function AgentMemoryContinuityPanel({
   });
   const memoryLabel = memoryRecordCount > 0 ? `기억 ${memoryRecordCount}개` : summary.memoryQualityLabel;
   const scopeLabel = memoryScope ? `전용 범위 · ${shortSessionLabel(memoryScope.sessionId)}` : "전용 범위 준비 중";
-  const traceLabel = memoryScope?.recallTraceId ? "recall 추적 준비됨" : "recall 추적 대기";
+  const traceLabel = memoryScope?.recallTraceId ? "기억 조회 추적 준비됨" : "기억 조회 추적 대기";
 
   return (
     <section className="rounded-lg border border-violet-300/10 bg-violet-400/[0.035] p-3">
