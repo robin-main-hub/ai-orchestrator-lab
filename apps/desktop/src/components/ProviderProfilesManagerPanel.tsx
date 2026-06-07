@@ -65,13 +65,13 @@ export function ProviderProfilesManagerPanel({
                     <StatusBadge size="sm" variant={variantForRoutingTone(routingItem.trustTone)}>
                       {routingItem.trustLabel}
                     </StatusBadge>
-                    <span>{routingItem.assignedAgentCount} agents</span>
+                    <span>{formatAgentCount(routingItem.assignedAgentCount)}</span>
                     <span>/</span>
                     <span>{routingItem.defaultModelLabel}</span>
                   </small>
                 ) : null}
                 <small className="provider-model-summary flex items-center gap-1 mt-1">
-                  <span>{models.length} models</span>
+                  <span>{formatModelCount(models.length)}</span>
                   <span>/</span>
                   <StatusBadge
                     size="sm"
@@ -85,10 +85,10 @@ export function ProviderProfilesManagerPanel({
                             : "muted"
                     }
                   >
-                    {discovery?.status ?? "cached"}
+                    {discoveryStatusLabel(discovery?.status)}
                   </StatusBadge>
                   <span>/</span>
-                  <span>{discovery?.source ?? "seed"}</span>
+                  <span>{discoverySourceLabel(discovery?.source)}</span>
                 </small>
                 {operationalBadges.length > 0 ? (
                   <small className="mt-2 flex flex-wrap items-center gap-1">
@@ -163,14 +163,14 @@ export function ProviderProfilesManagerPanel({
                         : "muted"
                 }
               >
-                {profile.trustLevel}
+                {trustLevelLabel(profile.trustLevel)}
               </StatusBadge>
               <div className="provider-actions">
                 <button
-                  aria-label={`${profile.name} model discovery`}
+                  aria-label={`${profile.name} 모델 다시 확인`}
                   className="provider-discovery-button"
                   onClick={() => onDiscoverModels(profile.id)}
-                  title="model discovery"
+                  title="모델 다시 확인"
                   type="button"
                 >
                   <RefreshCw size={13} />
@@ -179,7 +179,7 @@ export function ProviderProfilesManagerPanel({
                   aria-label={`${profile.name} 이름 변경`}
                   className="provider-rename-button"
                   onClick={() => onRenameProvider(profile.id)}
-                  title="provider 이름 변경"
+                  title="공급자 이름 변경"
                   type="button"
                 >
                   <Pencil size={13} />
@@ -189,7 +189,7 @@ export function ProviderProfilesManagerPanel({
                   className="provider-remove-button"
                   disabled={isInUse || profiles.length <= 1}
                   onClick={() => onRemoveProvider(profile.id)}
-                  title={isInUse ? "agent가 사용 중이라 삭제할 수 없음" : "provider 삭제"}
+                  title={isInUse ? "에이전트가 사용 중이라 삭제할 수 없음" : "공급자 삭제"}
                   type="button"
                 >
                   <Trash2 size={13} />
@@ -208,4 +208,35 @@ function variantForRoutingTone(tone: ProviderRoutingConsoleTone) {
   if (tone === "warning") return "warning";
   if (tone === "danger") return "danger";
   return "muted";
+}
+
+function formatAgentCount(count: number): string {
+  return `에이전트 ${count}명`;
+}
+
+function formatModelCount(count: number): string {
+  return `모델 ${count}개`;
+}
+
+function discoveryStatusLabel(status: ModelDiscoverySnapshot["status"] | undefined): string {
+  if (status === "succeeded") return "모델 발견 완료";
+  if (status === "loading") return "모델 확인 중";
+  if (status === "failed") return "모델 확인 실패";
+  if (status === "blocked") return "모델 확인 차단";
+  return "캐시됨";
+}
+
+function discoverySourceLabel(source: ModelDiscoverySnapshot["source"] | undefined): string {
+  if (source === "local") return "로컬";
+  if (source === "mock") return "모의";
+  if (source === "remote_probe") return "원격 확인";
+  if (source === "remote_stub") return "원격 스텁";
+  if (source === "static_fallback") return "시드";
+  return "시드";
+}
+
+function trustLevelLabel(trustLevel: ProviderProfile["trustLevel"]): string {
+  if (trustLevel === "trusted") return "신뢰";
+  if (trustLevel === "limited") return "제한 신뢰";
+  return "비신뢰";
 }
