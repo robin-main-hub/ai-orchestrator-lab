@@ -100,7 +100,7 @@ describe("provider smoke readiness", () => {
       modeLabel: "연결 검증 준비",
       routeLabel: "MiMo OpenAI",
       networkPolicyLabel: "명시 실행 시 네트워크 호출",
-      secretPolicyLabel: "SecretRef 필요",
+      secretPolicyLabel: "서버 비밀값 참조 필요",
       logPolicyLabel: "응답 미리보기만 기록",
       tone: "success",
     });
@@ -128,11 +128,62 @@ describe("provider smoke readiness", () => {
       commandLabel: "pnpm provider:smoke:deepseek -- --dry-run",
       modeLabel: "라이브 호출 준비",
       routeLabel: "DeepSeek",
-      networkPolicyLabel: "기본 dry-run · live는 명시 opt-in",
-      secretPolicyLabel: "SecretRef 필요",
+      networkPolicyLabel: "기본 모의 실행 · 실제 호출은 명시 실행",
+      secretPolicyLabel: "서버 비밀값 참조 필요",
       logPolicyLabel: "응답 미리보기만 기록",
       tone: "warning",
     });
+  });
+
+  it("roundtrip harness labels avoid raw SecretRef, dry-run, live, probe jargon", () => {
+    const harnesses = [
+      createProviderRoundtripHarness(
+        provider({
+          secretRef: {
+            id: "secret_dgx02_mimo_token_plan",
+            label: "DGX-02 MiMo Token Plan API key",
+            scope: "profile",
+            redactedPreview: "dgx-02:MIMO_API_KEY",
+            transient: false,
+          },
+        }),
+      ),
+      createProviderRoundtripHarness(
+        provider({
+          id: "provider_mimo_token_anthropic",
+          kind: "anthropic",
+          tags: ["dgx-secret-ref", "server-proxy", "mimo", "token-plan", "anthropic-compatible"],
+        }),
+      ),
+      createProviderRoundtripHarness(
+        provider({
+          id: "provider_deepseek_dgx",
+          name: "DeepSeek DGX-02 Key",
+          tags: ["dgx-secret-ref", "server-proxy", "deepseek"],
+          secretRef: {
+            id: "secret_dgx02_deepseek",
+            label: "DGX-02 DeepSeek API key",
+            scope: "profile",
+            redactedPreview: "dgx-02:DEEPSEEK_API_KEY",
+            transient: false,
+          },
+        }),
+      ),
+    ].filter(Boolean);
+
+    const visiblePolicyCopy = harnesses
+      .flatMap((harness) => [
+        harness?.modeLabel,
+        harness?.networkPolicyLabel,
+        harness?.secretPolicyLabel,
+        harness?.logPolicyLabel,
+      ])
+      .join("\n");
+
+    expect(visiblePolicyCopy).not.toContain("SecretRef");
+    expect(visiblePolicyCopy).not.toContain("dry-run");
+    expect(visiblePolicyCopy).not.toContain("live");
+    expect(visiblePolicyCopy).not.toContain("probe");
   });
 
   it("summarizes provider roundtrip results without raw response bodies", () => {

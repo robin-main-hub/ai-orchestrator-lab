@@ -103,7 +103,7 @@ export function createProviderRoundtripHarness(profile: ProviderProfile): Provid
       modeLabel: "연결 검증 준비",
       routeLabel: "MiMo OpenAI",
       networkPolicyLabel: "명시 실행 시 네트워크 호출",
-      secretPolicyLabel: profile.secretRef ? "SecretRef 필요" : "SecretRef 없음",
+      secretPolicyLabel: profile.secretRef ? "서버 비밀값 참조 필요" : "서버 비밀값 참조 없음",
       logPolicyLabel: "응답 미리보기만 기록",
       tone: "success",
     };
@@ -113,8 +113,8 @@ export function createProviderRoundtripHarness(profile: ProviderProfile): Provid
       commandLabel: "pnpm provider:smoke:ai -- --run-all",
       modeLabel: "호환성 검증 준비",
       routeLabel: "MiMo Anthropic",
-      networkPolicyLabel: "호환성 probe 우선",
-      secretPolicyLabel: profile.secretRef ? "SecretRef 필요" : "SecretRef 없음",
+      networkPolicyLabel: "호환성 점검 우선",
+      secretPolicyLabel: profile.secretRef ? "서버 비밀값 참조 필요" : "서버 비밀값 참조 없음",
       logPolicyLabel: "응답 미리보기만 기록",
       tone: "warning",
     };
@@ -124,8 +124,8 @@ export function createProviderRoundtripHarness(profile: ProviderProfile): Provid
       commandLabel: "pnpm provider:smoke:deepseek -- --dry-run",
       modeLabel: "라이브 호출 준비",
       routeLabel: "DeepSeek",
-      networkPolicyLabel: "기본 dry-run · live는 명시 opt-in",
-      secretPolicyLabel: profile.secretRef ? "SecretRef 필요" : "SecretRef 없음",
+      networkPolicyLabel: "기본 모의 실행 · 실제 호출은 명시 실행",
+      secretPolicyLabel: profile.secretRef ? "서버 비밀값 참조 필요" : "서버 비밀값 참조 없음",
       logPolicyLabel: "응답 미리보기만 기록",
       tone: "warning",
     };

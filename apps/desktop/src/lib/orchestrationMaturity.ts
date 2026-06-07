@@ -21,33 +21,33 @@ export type BigRockCompletionTarget = {
 export const BIG_ROCK_COMPLETION_TARGETS: BigRockCompletionTarget[] = [
   {
     id: "02_control_queue",
-    label: "Control Queue 실사용 연결",
-    readyAction: "Control Queue 6개 lane 연결 완료",
-    requiredAction: "Control Queue 6개 lane을 모두 WorkItem/Handoff/Approval 결과로 연결",
+    label: "작업 대기열 실사용 연결",
+    readyAction: "작업 대기열 6개 흐름 연결 완료",
+    requiredAction: "작업 대기열 6개 흐름을 모두 작업 항목/핸드오프/승인 결과로 연결",
   },
   {
     id: "03_debate_to_packet",
-    label: "Debate 결정 패킷화",
-    readyAction: "Debate 결정에서 Coding Packet 후보 생성 가능",
-    requiredAction: "Debate 결정 노드에서 Coding Packet 후보와 WorkItem을 생성",
+    label: "토론 결정 패킷화",
+    readyAction: "토론 결정에서 코딩 패킷 후보 생성 가능",
+    requiredAction: "토론 결정 노드에서 코딩 패킷 후보와 작업 항목을 생성",
   },
   {
     id: "04_tmux_runtime",
-    label: "Tmux 실행/복구 runtime",
-    readyAction: "Tmux pane 실행·캡처·복구 요약 가능",
-    requiredAction: "Tmux pane timeline과 복구 계획을 연결",
+    label: "Tmux 실행/복구 런타임",
+    readyAction: "Tmux 창 실행·캡처·복구 요약 가능",
+    requiredAction: "Tmux 창 타임라인과 복구 계획을 연결",
   },
   {
     id: "05_provider_console",
-    label: "Provider 운영 콘솔",
-    readyAction: "Provider 라우팅·장애·fallback·smoke 상태 표시 가능",
-    requiredAction: "Provider smoke/fallback/할당 현황을 운영 콘솔에 연결",
+    label: "공급자 운영 콘솔",
+    readyAction: "공급자 라우팅·장애·대체 경로·상태 점검 표시 가능",
+    requiredAction: "공급자 상태 점검/대체 경로/할당 현황을 운영 콘솔에 연결",
   },
   {
     id: "06_memory_curator",
-    label: "Memory Curator 승격 루프",
-    readyAction: "모든 에이전트 기억 설치와 curator 후보 승격 가능",
-    requiredAction: "모든 에이전트 기억 설치와 curator 후보 승격 흐름을 연결",
+    label: "기억 큐레이터 승격 루프",
+    readyAction: "모든 에이전트 기억 설치와 큐레이터 후보 승격 가능",
+    requiredAction: "모든 에이전트 기억 설치와 큐레이터 후보 승격 흐름을 연결",
   },
   {
     id: "07_receipts_search",
@@ -59,19 +59,19 @@ export const BIG_ROCK_COMPLETION_TARGETS: BigRockCompletionTarget[] = [
     id: "08_attachments",
     label: "첨부파일 처리",
     readyAction: "문서·이미지·텍스트 첨부 처리 경계 준비",
-    requiredAction: "첨부파일 분류와 처리 pipeline을 연결",
+    requiredAction: "첨부파일 분류와 처리 흐름을 연결",
   },
   {
     id: "09_onboarding",
     label: "첫 실행 온보딩/진단",
     readyAction: "첫 실행 필수 진단 통과",
-    requiredAction: "첫 실행 provider/memory/runtime 진단을 통과",
+    requiredAction: "첫 실행 공급자/기억/런타임 진단을 통과",
   },
   {
     id: "10_e2e_smoke",
-    label: "E2E/시각/provider smoke",
-    readyAction: "핵심 smoke plan 준비",
-    requiredAction: "E2E/시각/provider smoke 검증 축을 준비",
+    label: "종단/시각/공급자 점검",
+    readyAction: "핵심 점검 계획 준비",
+    requiredAction: "종단/시각/공급자 점검 축을 준비",
   },
 ];
 
@@ -226,13 +226,13 @@ function statusFor(id: BigRockId, input: OrchestrationMaturityInput): BigRockMat
 function detailFor(id: BigRockId, input: OrchestrationMaturityInput): string {
   switch (id) {
     case "02_control_queue":
-      return `${input.controlQueue.connectedLaneCount}/6 lane · WorkItem ${input.controlQueue.workItemProjectionCount}개 · 승인 ${input.controlQueue.pendingApprovalCount}건`;
+      return `${input.controlQueue.connectedLaneCount}/6 흐름 · 작업 항목 ${input.controlQueue.workItemProjectionCount}개 · 승인 ${input.controlQueue.pendingApprovalCount}건`;
     case "03_debate_to_packet":
-      return `결정 ${input.debate.decisionCount}개 · 코딩 영향 ${input.debate.codingImpactCount}개 · 상태 ${input.debate.readinessState}`;
+      return `결정 ${input.debate.decisionCount}개 · 코딩 영향 ${input.debate.codingImpactCount}개 · 상태 ${debateReadinessStateLabel(input.debate.readinessState)}`;
     case "04_tmux_runtime":
-      return `pane ${input.tmux.paneCount}개 · timeline ${input.tmux.timelineBlockCount}개 · 복구 ${input.tmux.hasRecoveryPlan ? "있음" : "없음"}`;
+      return `창 ${input.tmux.paneCount}개 · 타임라인 ${input.tmux.timelineBlockCount}개 · 복구 ${input.tmux.hasRecoveryPlan ? "있음" : "없음"}`;
     case "05_provider_console":
-      return `provider ${input.provider.profileCount}개 · smoke ${input.provider.smokeReadyCount}개 · fallback ${input.provider.fallbackReadyCount}개`;
+      return `공급자 ${input.provider.profileCount}개 · 점검 ${input.provider.smokeReadyCount}개 · 대체 경로 ${input.provider.fallbackReadyCount}개`;
     case "06_memory_curator":
       return `설치 ${input.memory.installedAgentCount}/${input.memory.agentInstallCount} · 후보 ${input.memory.curatorCandidateCount}개 · 승격 ${input.memory.promotedCount}개`;
     case "07_receipts_search":
@@ -242,10 +242,19 @@ function detailFor(id: BigRockId, input: OrchestrationMaturityInput): string {
     case "09_onboarding":
       return `진단 ${input.onboarding.passedCheckCount}/${input.onboarding.totalCheckCount} · 차단 ${input.onboarding.blockingCheckCount}개`;
     case "10_e2e_smoke":
-      return `desktop test ${input.e2e.desktopTestCount}개 · provider smoke ${input.e2e.hasProviderSmokeHarness ? "있음" : "없음"} · visual ${input.e2e.hasVisualSmokeChecklist ? "있음" : "없음"}`;
+      return `데스크톱 테스트 ${input.e2e.desktopTestCount}개 · 공급자 점검 ${input.e2e.hasProviderSmokeHarness ? "있음" : "없음"} · 시각 점검 ${input.e2e.hasVisualSmokeChecklist ? "있음" : "없음"}`;
     default:
       return "";
   }
+}
+
+function debateReadinessStateLabel(state: OrchestrationMaturityInput["debate"]["readinessState"]): string {
+  const labels: Record<OrchestrationMaturityInput["debate"]["readinessState"], string> = {
+    blocked: "차단",
+    needs_review: "검토 필요",
+    ready: "준비됨",
+  };
+  return labels[state];
 }
 
 function nextActionFor(

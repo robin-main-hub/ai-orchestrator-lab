@@ -31,8 +31,8 @@ export function createSettingsDiagnostics({
 }): SettingsDiagnostics {
   const items: SettingsDiagnosticItem[] = [
     enabledProviderCount > 0
-      ? { id: "providers", label: `활성 Provider ${enabledProviderCount}개`, status: "pass" }
-      : { id: "providers", label: "활성 Provider 없음", nextAction: "활성 Provider를 1개 이상 설정", status: "block" },
+      ? { id: "providers", label: `활성 공급자 ${enabledProviderCount}개`, status: "pass" }
+      : { id: "providers", label: "활성 공급자 없음", nextAction: "활성 공급자를 1개 이상 설정", status: "block" },
     providerSmokeReadyCount > 0
       ? { id: "provider_smoke", label: `프로바이더 호출 점검 ${providerSmokeReadyCount}개 준비`, status: "pass" }
       : { id: "provider_smoke", label: "프로바이더 호출 점검 준비 부족", nextAction: "프로바이더 호출 점검 하네스 확인", status: "warn" },
