@@ -80,6 +80,29 @@ export function ingressApprovalStateLabel(state: ApprovalState | string): string
   return labels[state] ?? state;
 }
 
+export function ingressChannelLabel(channel: string): string {
+  const labels: Record<string, string> = {
+    api: "API",
+    external_legacy: "외부 레거시",
+    mobile: "모바일",
+    webhook: "웹훅",
+  };
+  return labels[channel] ?? channel;
+}
+
+export function ingressPermissionLabel(permission: string): string {
+  const labels: Record<string, string> = {
+    network_access: "네트워크 접근",
+    read_only: "읽기 전용",
+    remote_workspace: "원격 작업공간",
+    run_dangerous_commands: "위험 명령 실행",
+    run_safe_commands: "안전 명령 실행",
+    secret_access: "비밀값 접근",
+    write_files: "파일 수정",
+  };
+  return labels[permission] ?? permission;
+}
+
 export function approvalServerStatusLabel(status: "idle" | "loading" | "error" | "ready"): string {
   const labels: Record<typeof status, string> = {
     error: "오류",

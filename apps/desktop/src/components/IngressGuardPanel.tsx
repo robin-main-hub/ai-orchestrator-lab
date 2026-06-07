@@ -1,7 +1,13 @@
 import { RadioTower, Smartphone } from "lucide-react";
 import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
 import { guardStepLabel } from "../lib/uiLabels";
-import { ingressApprovalStateLabel, ingressConfidenceLabel } from "../lib/railStatusLabels";
+import { ingressReasonLabel } from "../lib/ingressReasonLabels";
+import {
+  ingressApprovalStateLabel,
+  ingressChannelLabel,
+  ingressConfidenceLabel,
+  ingressPermissionLabel,
+} from "../lib/railStatusLabels";
 import { StatusBadge } from "@/ui/status-badge";
 import type { StatusBadgeVariant } from "@/ui/status-badge";
 
@@ -53,7 +59,7 @@ export function IngressGuardPanel({
       <div className="ingress-summary">
         <div>
           <span>채널</span>
-          <strong>{snapshot.channel}</strong>
+          <strong>{ingressChannelLabel(snapshot.channel)}</strong>
         </div>
         <div>
           <span>신뢰도</span>
@@ -80,7 +86,7 @@ export function IngressGuardPanel({
             >
               {guardStepStatusLabel(step.status)}
             </StatusBadge>
-            <span className="guard-step-reason">{step.reason}</span>
+            <span className="guard-step-reason">{ingressReasonLabel(step.reason)}</span>
           </article>
         ))}
       </div>
@@ -97,7 +103,7 @@ export function IngressGuardPanel({
               >
                 {ingressApprovalStateLabel(approval.state)}
               </StatusBadge>
-              <em>{approval.permissions.join(", ")}</em>
+              <em>{approval.permissions.map(ingressPermissionLabel).join(", ")}</em>
             </article>
           ))
         )}

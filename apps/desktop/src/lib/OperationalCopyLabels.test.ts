@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CodingPacket, EventEnvelope, PermissionMatrixSnapshot, ConversationMessage } from "@ai-orchestrator/protocol";
 import { createStage6MemoryInspector } from "../runtime/stage6Memory";
-import { createInsightFindings } from "./workbenchDerived";
+import { createInsightFindings, createMetaOnboardingSignals } from "./workbenchDerived";
 import { createProductionSmokePlan } from "./productionSmokePlan";
 import { createSettingsDiagnostics } from "./settingsDiagnostics";
 
@@ -93,5 +93,27 @@ describe("operational copy labels", () => {
     expect(labels).not.toContain("checks");
     expect(labels).not.toContain("pending");
     expect(labels).not.toContain("protocol boundary");
+  });
+
+  it("uses Korean count labels in meta onboarding signals", () => {
+    const signals = createMetaOnboardingSignals({
+      agents: [],
+      models: {
+        provider_a: [
+          { id: "model_a", label: "A", providerId: "provider_a" },
+          { id: "model_b", label: "B", providerId: "provider_a" },
+        ],
+      } as never,
+      providers: [{ id: "provider_a" }, { id: "provider_b" }] as never,
+      runtime: {
+        dgxStatus: "offline",
+        localModelStatus: "online",
+      } as never,
+    });
+    const labels = signals.map((signal) => signal.suggestion).join("\n");
+
+    expect(labels).toContain("공급자 2개 / 모델 2개");
+    expect(labels).not.toContain("providers");
+    expect(labels).not.toContain("models");
   });
 });
