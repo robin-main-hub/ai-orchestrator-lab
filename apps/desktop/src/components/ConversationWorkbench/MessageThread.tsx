@@ -190,6 +190,7 @@ export function createAssistantRuntimeEvidenceBadges(message: ConversationMessag
   const badges: AssistantRuntimeEvidenceBadge[] = [];
   if (metadata.personaSoulApplied === true) badges.push({ label: "SOUL", variant: "success" });
   if (metadata.personaAgentsMdApplied === true) badges.push({ label: "AGENTS", variant: "success" });
+  if (metadata.identityGuardApplied === true) badges.push({ label: "이름 보정", variant: "primary" });
   const recalledMemoryCount = readFiniteNumber(metadata.recalledMemoryCount);
   if (recalledMemoryCount !== undefined) {
     badges.push({ label: `기억 ${recalledMemoryCount}개`, variant: recalledMemoryCount > 0 ? "success" : "muted" });

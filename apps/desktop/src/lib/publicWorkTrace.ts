@@ -157,6 +157,15 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
     });
   }
 
+  if (readBoolean(metadata.identityGuardApplied) === true) {
+    commands.push({
+      id: "identity-response-guard",
+      label: "이름 보정",
+      tone: "info",
+      value: sanitize(`${personaDisplayName ?? "선택 에이전트"} 정체성으로 응답 보정`),
+    });
+  }
+
   const roleToolProfileLabel = readString(metadata.roleToolProfileLabel);
   const roleToolProfileTools = readStringArray(metadata.roleToolProfileTools);
   if (roleToolProfileLabel || roleToolProfileTools.length > 0) {

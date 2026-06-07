@@ -86,6 +86,7 @@ describe("publicWorkTrace", () => {
         recalledMemoryCount: 4,
         runtimeConfigFileIds: ["config_memory_policy", "config_tool_profile"],
         personaDisplayName: "마키마",
+        identityGuardApplied: true,
         personaSoulApplied: true,
         personaAgentsMdApplied: true,
         personaSoulMdPath: "agents/orchestrator/SOUL.md",
@@ -148,6 +149,12 @@ describe("publicWorkTrace", () => {
       expect.objectContaining({
         label: "인격 설정",
         value: "마키마 · SOUL.md 적용 · AGENTS.md 적용",
+      }),
+    );
+    expect(trace.groups[1]?.items).toContainEqual(
+      expect.objectContaining({
+        label: "이름 보정",
+        value: "마키마 정체성으로 응답 보정",
       }),
     );
     expect(trace.groups[1]?.items).toContainEqual(
