@@ -33,6 +33,9 @@ export function formatTmuxPaneCountLabel(count: number) {
 export function formatTmuxPaneSurfaceLabel(paneId: string) {
   const match = /^pane-(\d+)$/.exec(paneId);
   if (!match) {
+    if (/^(role|agent|session|terminal)[\s:_-]/i.test(paneId) || /[\s:_-](role|agent|session|terminal)$/i.test(paneId)) {
+      return "작업창 기타";
+    }
     const safePaneLabel = compactPublicText(
       sanitizePublicText(paneId).replace(/[:_]+/g, " ").replace(/\s+/g, " ").trim(),
       24,
