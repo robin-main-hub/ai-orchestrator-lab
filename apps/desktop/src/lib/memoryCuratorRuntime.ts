@@ -3,6 +3,7 @@ import {
   createMemoryCuratorCandidate,
   type MemoryCuratorCandidate,
 } from "./memoryCuratorApproval";
+import type { AttachmentProcessingPlan } from "./attachmentProcessing";
 import {
   readJsonState,
   writeJsonState,
@@ -28,6 +29,7 @@ export type ConversationTurnMemoryCandidateInput = {
   agentId: string;
   agentName: string;
   assistantMessage: Pick<ConversationMessage, "content" | "createdAt" | "id" | "role" | "sessionId">;
+  attachmentProcessingPlans?: AttachmentProcessingPlan[];
   createdAt: string;
   memoryScopeNamespace?: string;
   projectId?: string;
@@ -133,6 +135,7 @@ export function createConversationTurnMemoryCandidate({
   agentId,
   agentName,
   assistantMessage,
+  attachmentProcessingPlans = [],
   createdAt,
   memoryScopeNamespace,
   projectId = defaultProjectId,
@@ -141,15 +144,26 @@ export function createConversationTurnMemoryCandidate({
   trustLevel = "limited",
   userMessage,
 }: ConversationTurnMemoryCandidateInput): MemoryCuratorCandidate {
+  const attachmentSummary = summarizeAttachmentPlansForMemory(attachmentProcessingPlans);
+  const userText = `사용자: ${userMessage.content}`;
+  const assistantText = `${agentName}: ${assistantMessage.content}`;
+  const attachmentText = attachmentSummary ? `첨부: ${attachmentSummary}` : undefined;
+  const memoryContent = [userText, assistantText, attachmentText].filter(Boolean).join("\n");
+  const keywordSource = [
+    userMessage.content,
+    assistantMessage.content,
+    agentName,
+    attachmentProcessingPlans.map((plan) => `${plan.name} ${plan.kind} ${plan.processingMode} ${plan.status}`).join(" "),
+  ].join(" ");
   const record: MemoryRecord = {
     id: `memory_conversation_turn_${stableId(`${agentId}:${userMessage.id}:${assistantMessage.id}`)}`,
     activationState: "suggested",
-    content: compactMemoryText(`사용자: ${userMessage.content}\n${agentName}: ${assistantMessage.content}`),
+    content: compactMemoryText(memoryContent),
     createdAt,
     entityReinforcement: 0,
     importance: 0.55,
     kind: "workflow",
-    keywords: uniqueWords(`${userMessage.content} ${assistantMessage.content} ${agentName}`).slice(0, 12),
+    keywords: uniqueWords(keywordSource).slice(0, 12),
     layer: "episode",
     losslessRestatement: compactMemoryText(
       `${createdAt} ${agentName} 대화에서 사용자는 ${userMessage.content} 라고 말했고 에이전트는 ${assistantMessage.content} 라고 답했다.`,
@@ -162,6 +176,8 @@ export function createConversationTurnMemoryCandidate({
     tags: [
       "conversation",
       "curator-candidate",
+      attachmentProcessingPlans.length > 0 ? "attachment" : undefined,
+      ...uniqueAttachmentKinds(attachmentProcessingPlans).map((kind) => `attachment:${kind}`),
       `agent:${agentId}`,
       providerProfileId ? `provider:${providerProfileId}` : undefined,
       recallTraceId ? `recall:${recallTraceId}` : undefined,
@@ -178,6 +194,21 @@ export function createConversationTurnMemoryCandidate({
     reason: "에이전트별 대화 연속성 유지",
     record,
   });
+}
+
+function summarizeAttachmentPlansForMemory(plans: AttachmentProcessingPlan[]): string | undefined {
+  if (plans.length === 0) return undefined;
+  return plans
+    .slice(0, 6)
+    .map((plan) => {
+      const suffix = plan.reason ? ` · ${plan.reason}` : "";
+      return `${plan.name}(${plan.kind}/${plan.processingMode}/${plan.status})${suffix}`;
+    })
+    .join("; ");
+}
+
+function uniqueAttachmentKinds(plans: AttachmentProcessingPlan[]): string[] {
+  return Array.from(new Set(plans.map((plan) => plan.kind)));
 }
 
 function compactMemoryText(value: string): string {
