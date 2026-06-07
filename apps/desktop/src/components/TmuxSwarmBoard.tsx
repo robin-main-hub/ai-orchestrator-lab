@@ -1,4 +1,4 @@
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { Check, Eye, Layers, Send, Terminal, X } from "lucide-react";
 import type {
   ApprovalRequest,
@@ -84,6 +84,14 @@ export function TmuxSwarmBoard({
   const panes = createTmuxPanes(roleAgent, recommendation);
   const visiblePanes = panes.slice(0, recommendation.recommendedCount);
   const [selectedRole, setSelectedRole] = useState<TmuxPaneRole>(visiblePanes[0]?.roleKey ?? "discussion");
+
+  // visiblePanes 축소 시, selectedRole이 범위를 초과하는 경우 첫 번째 Pane으로 동기화 복구
+  useEffect(() => {
+    const firstPane = visiblePanes[0];
+    if (firstPane && !visiblePanes.some((pane) => pane.roleKey === selectedRole)) {
+      setSelectedRole(firstPane.roleKey);
+    }
+  }, [visiblePanes, selectedRole]);
   const selectedPane = useMemo(
     () => visiblePanes.find((pane) => pane.roleKey === selectedRole) ?? visiblePanes[0],
     [selectedRole, visiblePanes],
@@ -445,9 +453,16 @@ function TmuxPaneDetail({
                 <Check className="h-3.5 w-3.5" />
                 승인 요청
               </Button>
-              <Button className="h-8 gap-1.5 border-rose-500/30 px-3 text-xs text-rose-300 hover:bg-rose-500/10" disabled size="sm" variant="outline">
+              <Button
+                className="h-8 gap-1.5 border-rose-500/30 px-3 text-xs text-rose-300 hover:bg-rose-500/10"
+                onClick={() => {
+                  alert("Tmux 명령어 실행 거부는 우측 상단의 승인 대기열(Control Queue) 패널에서 처리해 주세요.");
+                }}
+                size="sm"
+                variant="outline"
+              >
                 <X className="h-3.5 w-3.5" />
-                거부는 큐에서
+                거부
               </Button>
             </div>
           </div>
