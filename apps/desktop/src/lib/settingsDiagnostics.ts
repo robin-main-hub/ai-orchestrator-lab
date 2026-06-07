@@ -34,25 +34,25 @@ export function createSettingsDiagnostics({
       ? { id: "providers", label: `활성 Provider ${enabledProviderCount}개`, status: "pass" }
       : { id: "providers", label: "활성 Provider 없음", nextAction: "활성 Provider를 1개 이상 설정", status: "block" },
     providerSmokeReadyCount > 0
-      ? { id: "provider_smoke", label: `Provider smoke ${providerSmokeReadyCount}개 준비`, status: "pass" }
-      : { id: "provider_smoke", label: "Provider smoke 준비 부족", nextAction: "Provider smoke harness 확인", status: "warn" },
+      ? { id: "provider_smoke", label: `프로바이더 호출 점검 ${providerSmokeReadyCount}개 준비`, status: "pass" }
+      : { id: "provider_smoke", label: "프로바이더 호출 점검 준비 부족", nextAction: "프로바이더 호출 점검 하네스 확인", status: "warn" },
     memoryAdapterStatus === "ready"
-      ? { id: "memory", label: "Memory adapter 정상", status: "pass" }
+      ? { id: "memory", label: "기억 어댑터 정상", status: "pass" }
       : {
           id: "memory",
-          label: memoryAdapterStatus === "loading" ? "Memory adapter 로딩 중" : "Memory adapter 오류",
-          nextAction: "Memory adapter 상태 복구",
+          label: memoryAdapterStatus === "loading" ? "기억 어댑터 로딩 중" : "기억 어댑터 오류",
+          nextAction: "기억 어댑터 상태 복구",
           status: memoryAdapterStatus === "loading" ? "warn" : "block",
         },
     workerCount >= Math.max(1, agentCount)
       ? { id: "workers", label: `워커 ${workerCount}/${agentCount} 준비`, status: "pass" }
       : { id: "workers", label: `워커 ${workerCount}/${agentCount} 부족`, nextAction: "에이전트 워커 준비 상태 확인", status: "block" },
     runtimeStatus === "online"
-      ? { id: "runtime", label: "Runtime online", status: "pass" }
+      ? { id: "runtime", label: "런타임 온라인", status: "pass" }
       : {
           id: "runtime",
-          label: `Runtime ${runtimeStatus}`,
-          nextAction: "Runtime 서버 연결 확인",
+          label: `런타임 ${runtimeStatusLabel(runtimeStatus)}`,
+          nextAction: "런타임 서버 연결 확인",
           status: runtimeStatus === "degraded" ? "warn" : "block",
         },
   ];
@@ -65,4 +65,13 @@ export function createSettingsDiagnostics({
     nextActions: items.flatMap((item) => (item.nextAction ? [item.nextAction] : [])),
     status: blockingCount > 0 ? "blocked" : warningCount > 0 ? "needs_attention" : "ready",
   };
+}
+
+function runtimeStatusLabel(status: "online" | "degraded" | "offline"): string {
+  const labels: Record<"online" | "degraded" | "offline", string> = {
+    degraded: "저하",
+    offline: "오프라인",
+    online: "온라인",
+  };
+  return labels[status];
 }

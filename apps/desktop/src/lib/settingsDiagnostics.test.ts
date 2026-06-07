@@ -30,6 +30,6 @@ describe("settingsDiagnostics", () => {
     expect(diagnostics.status).toBe("blocked");
     expect(diagnostics.blockingCount).toBeGreaterThan(0);
     expect(diagnostics.nextActions).toContain("활성 Provider를 1개 이상 설정");
-    expect(diagnostics.nextActions).toContain("Memory adapter 상태 복구");
+    expect(diagnostics.nextActions).toContain("기억 어댑터 상태 복구");
   });
 });
