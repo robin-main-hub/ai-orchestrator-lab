@@ -5,8 +5,8 @@ import { agentPrimaryDisplayName } from "./agentDisplay";
 
 export function reviewModeLabel(mode: ReviewMode) {
   const labels: Record<ReviewMode, string> = {
-    deep: "Deep",
-    quick: "Quick",
+    deep: "정밀",
+    quick: "빠른 검토",
   };
 
   return labels[mode];
@@ -14,12 +14,12 @@ export function reviewModeLabel(mode: ReviewMode) {
 
 export function insightCategoryLabel(category: InsightCategory) {
   const labels: Record<InsightCategory, string> = {
-    architecture: "Architecture",
-    performance: "Performance",
-    security: "Security",
-    stability: "Stability",
-    tech_debt: "Tech Debt",
-    testing: "Testing",
+    architecture: "아키텍처",
+    performance: "성능",
+    security: "보안",
+    stability: "안정성",
+    tech_debt: "기술 부채",
+    testing: "테스트",
   };
 
   return labels[category];
@@ -46,14 +46,14 @@ export function statusTone(status: RuntimeSnapshot["status"]) {
 
 export function guardStepLabel(step: Stage8IngressSnapshot["result"]["guardSteps"][number]["name"]) {
   const labels: Record<Stage8IngressSnapshot["result"]["guardSteps"][number]["name"], string> = {
-    shape_unification: "Shape",
-    noise_filter: "Noise",
-    self_response_prevention: "Self-loop",
-    external_agent_isolation: "Isolation",
-    debounce: "Debounce",
-    pii_secret_block: "PII/Secret",
-    guard_logging: "Logging",
-    checklist_injection: "Checklist",
+    shape_unification: "형식",
+    noise_filter: "노이즈",
+    self_response_prevention: "자기 응답 차단",
+    external_agent_isolation: "격리",
+    debounce: "중복 억제",
+    pii_secret_block: "개인정보/비밀",
+    guard_logging: "기록",
+    checklist_injection: "체크리스트",
   };
 
   return labels[step];
@@ -61,10 +61,10 @@ export function guardStepLabel(step: Stage8IngressSnapshot["result"]["guardSteps
 
 export function soulModeLabel(mode: WorkbenchAgent["soulMode"]) {
   const labels: Record<WorkbenchAgent["soulMode"], string> = {
-    full: "full",
-    summary: "summary",
-    retrieved: "retrieved",
-    off: "off",
+    full: "전체",
+    summary: "요약",
+    retrieved: "검색된 기억",
+    off: "꺼짐",
   };
 
   return labels[mode];
@@ -132,9 +132,9 @@ export function agentConfigPanelTitle(tab: AgentConfigTab) {
 
 export function contextPackTierLabel(tier: ContextPackTier) {
   const labels: Record<ContextPackTier, string> = {
-    full: "Full",
-    lite: "Lite",
-    standard: "Standard",
+    full: "전체",
+    lite: "간략",
+    standard: "표준",
   };
 
   return labels[tier];
