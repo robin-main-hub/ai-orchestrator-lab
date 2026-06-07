@@ -555,7 +555,7 @@ function createMemoryContextPacket({
     activeRecordIds,
     blockedRecordIds,
     relationIds,
-    summary: `${activeRecordIds.length} active memories, ${blockedRecordIds.length} held back, ${relationIds.length} related links.`,
+    summary: `활성 기억 ${activeRecordIds.length}개, 보류 기억 ${blockedRecordIds.length}개, 관련 연결 ${relationIds.length}개.`,
     createdAt,
   };
 }
