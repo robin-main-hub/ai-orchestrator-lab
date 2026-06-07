@@ -76,6 +76,34 @@ describe("stage12 DGX provider completion", () => {
     expect(JSON.stringify(request)).not.toContain("http://dgx-02:8001");
   });
 
+  it("preserves the leading desktop system prompt when proxy requests are compacted", () => {
+    const longMessages: ConversationMessage[] = [
+      {
+        id: "message_system",
+        sessionId: "session_1",
+        role: "system",
+        content: "SOUL.md: 마키마. AGENTS.md: 지휘자. 기억 여권: recall_agent_orchestrator_session_1.",
+        createdAt: "2026-05-24T00:00:00.000Z",
+      },
+      ...Array.from({ length: 10 }, (_, index): ConversationMessage => ({
+        id: `message_${index + 1}`,
+        sessionId: "session_1",
+        role: index % 2 === 0 ? "user" : "assistant",
+        content: `turn ${index + 1}`,
+        createdAt: `2026-05-24T00:00:${String(index + 1).padStart(2, "0")}.000Z`,
+      })),
+    ];
+
+    const request = createProviderCompletionProxyRequest(provider, "qwen36-gio-lora-v5-prisma", longMessages);
+
+    expect(request.messages).toHaveLength(8);
+    expect(request.messages[0]).toEqual({
+      role: "system",
+      content: "SOUL.md: 마키마. AGENTS.md: 지휘자. 기억 여권: recall_agent_orchestrator_session_1.",
+    });
+    expect(request.messages.at(-1)).toEqual({ role: "assistant", content: "turn 10" });
+  });
+
   it("forwards approved permission state to the DGX server proxy request", () => {
     const request = createProviderCompletionProxyRequest(provider, "qwen36-gio-lora-v5-prisma", messages, {
       approvalState: "approved",
