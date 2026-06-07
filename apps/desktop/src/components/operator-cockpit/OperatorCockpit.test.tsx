@@ -146,4 +146,16 @@ describe("OperatorCockpit", () => {
     expect(html).toContain("승인 필요: terminal_run from agent");
     expect(html).toContain("승인 대기열 보기");
   });
+
+  it("워커 행에서 해당 에이전트 대화방을 여는 CTA를 렌더링한다", () => {
+    const html = renderToStaticMarkup(
+      <OperatorCockpit
+        onOpenAgentConversation={() => {}}
+        snapshot={snapshot}
+      />,
+    );
+
+    expect(html).toContain("대화 열기");
+    expect(html).toContain("마키마 대화 열기");
+  });
 });

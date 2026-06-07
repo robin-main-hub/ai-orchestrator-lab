@@ -1,5 +1,5 @@
 import React from "react";
-import { AlertCircle, Clock3, FolderGit2, GitBranch, ShieldCheck } from "lucide-react";
+import { AlertCircle, Clock3, FolderGit2, GitBranch, MessageSquare, ShieldCheck } from "lucide-react";
 import type { OperatorCockpitWorkerFleet } from "@ai-orchestrator/protocol";
 import { AgentPortrait } from "./AgentPortrait";
 import { Badge } from "./Badge";
@@ -13,7 +13,13 @@ import {
 
 const coreRoles = new Set(["orchestrator", "architect", "reviewer", "builder", "executor"]);
 
-export function WorkerFleetCard({ fleet }: { fleet: OperatorCockpitWorkerFleet[] }) {
+export function WorkerFleetCard({
+  fleet,
+  onOpenAgentConversation,
+}: {
+  fleet: OperatorCockpitWorkerFleet[];
+  onOpenAgentConversation?: (agentId: string) => void;
+}) {
   const coreFleet = fleet.filter((worker) => coreRoles.has(worker.role));
   const specialistFleet = fleet.filter((worker) => !coreRoles.has(worker.role));
 
@@ -38,14 +44,26 @@ export function WorkerFleetCard({ fleet }: { fleet: OperatorCockpitWorkerFleet[]
       </GlassPanelHeader>
 
       <div className="space-y-4 p-3">
-        {coreFleet.length > 0 ? <WorkerGroup label="핵심" workers={coreFleet} /> : null}
-        {specialistFleet.length > 0 ? <WorkerGroup label="전문가" workers={specialistFleet} /> : null}
+        {coreFleet.length > 0 ? (
+          <WorkerGroup label="핵심" onOpenAgentConversation={onOpenAgentConversation} workers={coreFleet} />
+        ) : null}
+        {specialistFleet.length > 0 ? (
+          <WorkerGroup label="전문가" onOpenAgentConversation={onOpenAgentConversation} workers={specialistFleet} />
+        ) : null}
       </div>
     </GlassPanel>
   );
 }
 
-function WorkerGroup({ label, workers }: { label: string; workers: OperatorCockpitWorkerFleet[] }) {
+function WorkerGroup({
+  label,
+  workers,
+  onOpenAgentConversation,
+}: {
+  label: string;
+  workers: OperatorCockpitWorkerFleet[];
+  onOpenAgentConversation?: (agentId: string) => void;
+}) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
@@ -54,14 +72,20 @@ function WorkerGroup({ label, workers }: { label: string; workers: OperatorCockp
       </div>
       <div className="space-y-2">
         {workers.map((worker) => (
-          <WorkerRow key={worker.workerId} worker={worker} />
+          <WorkerRow key={worker.workerId} onOpenAgentConversation={onOpenAgentConversation} worker={worker} />
         ))}
       </div>
     </div>
   );
 }
 
-function WorkerRow({ worker }: { worker: OperatorCockpitWorkerFleet }) {
+function WorkerRow({
+  worker,
+  onOpenAgentConversation,
+}: {
+  worker: OperatorCockpitWorkerFleet;
+  onOpenAgentConversation?: (agentId: string) => void;
+}) {
   const workerDisplay = resolveOperatorWorkerDisplay(worker);
   const skillDisplay = resolveOperatorWorkerSkillDisplay(worker.role);
   const expression = useAgentExpression({
@@ -126,6 +150,17 @@ function WorkerRow({ worker }: { worker: OperatorCockpitWorkerFleet }) {
               ))}
             </div>
           </div>
+          {onOpenAgentConversation ? (
+            <button
+              aria-label={`${workerDisplay.displayName} 대화 열기`}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold text-cyan-100 transition-colors hover:border-cyan-300/45 hover:bg-cyan-400/15"
+              onClick={() => onOpenAgentConversation(worker.workerId)}
+              type="button"
+            >
+              <MessageSquare className="h-3 w-3" />
+              대화 열기
+            </button>
+          ) : null}
         </div>
         {worker.securityTier ? (
           <Badge color="green" size="xs">
