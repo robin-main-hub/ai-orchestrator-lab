@@ -12,9 +12,9 @@ import type { AgentChannelMemoryScope } from "../../lib/agentConversationChannel
 import type { ControlQueueContinuitySummary } from "../../lib/controlQueueContinuity";
 import {
   attachmentAcceptForModel,
+  createAgentModelRouteLabel,
   createDefaultPersonaSettings,
   modelSupportsAnyAttachment,
-  providerDisplayLabel,
 } from "../../lib/helpers";
 import {
   agentInitialsForDisplay,
@@ -174,6 +174,11 @@ export function ConversationWorkbench({
   const selectedAgentInitials = selectedAgent ? agentInitialsForDisplay(selectedAgent) : "AI";
   const selectedAgentDisplayName = selectedAgent ? agentPrimaryDisplayName(selectedAgent) : "에이전트 선택";
   const selectedAgentSubtitle = selectedAgent ? agentSecondaryDisplayLabel(selectedAgent) : "대기";
+  const selectedAgentModelRouteLabel = createAgentModelRouteLabel({
+    modelId: selectedModel?.id ?? selectedAgent?.modelId,
+    modelName: selectedModel?.name,
+    providerName: selectedProvider?.name,
+  });
   const toolLabels = selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role).slice(0, 3) : [];
   const toolProfileSummary = selectedAgent ? getAgentToolProfileSummary(selectedAgent.role) : undefined;
   const headerMemoryLabel = createAgentChannelHeaderMemoryLabel(memoryScope);
@@ -214,7 +219,7 @@ export function ConversationWorkbench({
                   <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-500 transition-transform group-data-[state=open]:rotate-180" />
                 </span>
                 <span className="truncate text-[11px] text-zinc-500">
-                  {selectedAgentSubtitle} · {selectedModel?.id ?? selectedAgent?.modelId ?? "모델 연결 대기"}
+                  {selectedAgentSubtitle} · 현재 모델: {selectedAgentModelRouteLabel}
                 </span>
               </div>
             </button>
@@ -244,8 +249,8 @@ export function ConversationWorkbench({
               </label>
               <ConversationMetaRow
                 icon={Cpu}
-                label="모델"
-                value={`${selectedProvider ? providerDisplayLabel(selectedProvider.name) : "Provider 미지정"} · ${selectedModel?.id ?? selectedAgent?.modelId ?? "대기"}`}
+                label="현재 모델"
+                value={selectedAgentModelRouteLabel}
               />
               <ConversationMetaRow icon={Database} label="기억" value={`${memoryRecordCount}건 · ${memoryGovernanceLabel ?? memoryMode}`} />
               <ConversationMetaRow
@@ -328,7 +333,7 @@ export function ConversationWorkbench({
             continuityDetail={agentChatContinuity.detail}
             displayName={selectedAgentDisplayName}
             memoryQualityLabel={agentChatContinuity.memoryQualityLabel}
-            modelLabel={selectedModel?.id ?? selectedAgent.modelId ?? "모델 연결 대기"}
+            modelLabel={`현재 모델 · ${selectedAgentModelRouteLabel}`}
             toolBoundaryLabel={toolProfileSummary.runtime.boundaryLabel}
             toolGroupLabel={toolProfileSummary.label}
             toolLabels={toolLabels}
