@@ -91,6 +91,7 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
   }
 
   const route = readString(metadata.route) ?? readString(metadata.providerRoute) ?? readString(metadata.providerProfileId);
+  const routeLabel = route ? publicProviderRouteLabel(route) : undefined;
   const model = readString(metadata.modelId);
   const modelLabel = model ? formatModelDisplayName(model) : undefined;
   const realProviderCall = readBoolean(metadata.realProviderCall);
@@ -100,7 +101,7 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
       label: PUBLIC_WORK_PHASES.toolCall.label,
       tone: realProviderCall === false ? "warning" : "success",
       value: sanitize(
-        [route, modelLabel].filter(Boolean).join(" · ") || (realProviderCall ? "실제 호출 완료" : "대체 경로 또는 차단"),
+        [routeLabel, modelLabel].filter(Boolean).join(" · ") || (realProviderCall ? "실제 호출 완료" : "대체 경로 또는 차단"),
       ),
     });
   }
@@ -443,8 +444,11 @@ function createConversationReceipt(
     readDelegations(metadata).length > 0 ? "handoff" : undefined,
     readString(metadata.recallTraceId) || readString(metadata.memoryTraceId) ? "memory" : undefined,
   ].filter((value): value is string => Boolean(value));
+  const providerCheckpoint = readString(metadata.providerProfileId);
   const checkpointMarker =
-    readString(metadata.recallTraceId) ?? readString(metadata.memoryTraceId) ?? readString(metadata.providerProfileId);
+    readString(metadata.recallTraceId) ??
+    readString(metadata.memoryTraceId) ??
+    (providerCheckpoint ? publicProviderRouteLabel(providerCheckpoint) : undefined);
   const checkpoint = checkpointMarker ? [message.sessionId, checkpointMarker].join(" · ") : message.id;
 
   return {
@@ -616,6 +620,23 @@ function roleDisplayLabel(role: Stage3DebateUtteranceView["agentRole"]) {
 
 function sanitize(value: string) {
   return sanitizePublicText(value);
+}
+
+function publicProviderRouteLabel(value: string) {
+  const normalized = value.toLowerCase();
+  if (normalized.includes("provider_mock") || normalized.includes("mock-local")) {
+    return "로컬 목업 경로";
+  }
+  if (normalized.includes("mimo")) {
+    return "MiMo";
+  }
+  if (normalized.includes("apifun") || normalized.includes("apikeyfun")) {
+    return "APIKey.fun";
+  }
+  if (normalized.includes("openai")) {
+    return "OpenAI";
+  }
+  return value;
 }
 
 function receiptStatusLabel(status: PublicWorkTraceReceipt["status"]) {
