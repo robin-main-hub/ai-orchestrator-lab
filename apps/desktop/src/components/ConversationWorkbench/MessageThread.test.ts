@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ConversationMessage } from "@ai-orchestrator/protocol";
+import type { ConversationAttachment, ConversationMessage } from "@ai-orchestrator/protocol";
+import type { AttachmentProcessingPlan } from "../../lib/attachmentProcessing";
 import {
   attachmentProcessingLabel,
   assistantPendingLabel,
@@ -136,16 +137,17 @@ describe("MessageThread pending assistant state", () => {
   });
 
   it("첨부 표시는 메시지 메타데이터의 공식 처리 계획을 첨부 객체의 낡은 모드보다 우선한다", () => {
+    const staleAttachment: ConversationAttachment & { processingMode: AttachmentProcessingPlan["processingMode"] } = {
+      id: "attachment_1",
+      kind: "image",
+      mimeType: "image/png",
+      name: "cockpit.png",
+      processingMode: "metadata_only",
+      size: 2048,
+      storage: "metadata_only",
+    };
     const mode = resolveAttachmentProcessingModeForDisplay(
-      {
-        id: "attachment_1",
-        kind: "image",
-        mimeType: "image/png",
-        name: "cockpit.png",
-        processingMode: "metadata_only",
-        size: 2048,
-        storage: "metadata_only",
-      },
+      staleAttachment,
       [
         {
           kind: "image",
