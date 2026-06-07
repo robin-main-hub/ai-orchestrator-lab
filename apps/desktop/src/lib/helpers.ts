@@ -121,12 +121,22 @@ export function getModelInputModalities(model?: ModelDescriptor): NonNullable<Mo
 }
 
 export function modelSupportsAttachmentKind(model: ModelDescriptor | undefined, kind: ConversationAttachment["kind"]) {
-  return getModelInputModalities(model).includes(kind);
+  if (!model) {
+    return false;
+  }
+  const modalities = getModelInputModalities(model);
+  if (kind === "document") {
+    return modalities.includes("document") || modalities.includes("text");
+  }
+  return modalities.includes(kind);
 }
 
 export function modelSupportsAnyAttachment(model?: ModelDescriptor) {
+  if (!model) {
+    return false;
+  }
   const modalities = getModelInputModalities(model);
-  return modalities.includes("image") || modalities.includes("document");
+  return modalities.includes("image") || modalities.includes("document") || modalities.includes("text");
 }
 
 export function attachmentAcceptForModel(model?: ModelDescriptor) {
@@ -149,7 +159,7 @@ export function attachmentCapabilityLabel(model?: ModelDescriptor) {
   const modalities = getModelInputModalities(model);
   const labels = [
     modalities.includes("image") ? "이미지" : undefined,
-    modalities.includes("document") ? "문서" : undefined,
+    modalities.includes("document") || modalities.includes("text") ? "문서" : undefined,
   ].filter(Boolean);
 
   return labels.length > 0 ? `${labels.join(" / ")} 입력 가능` : "텍스트 전용";

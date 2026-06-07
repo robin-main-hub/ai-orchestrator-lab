@@ -59,4 +59,25 @@ describe("attachmentProcessing", () => {
       processingMode: "document_candidate",
     });
   });
+
+  it("혼합 파일 선택 결과를 순서대로 보존하며 부분 거부 사유를 남긴다", () => {
+    const plans = createAttachmentProcessingPlan({
+      currentAttachmentCount: 0,
+      files: [
+        { name: "notes.md", size: 1_000, type: "text/markdown" },
+        { name: "screen.png", size: 1_000, type: "image/png" },
+        { name: "large.pdf", size: 11 * 1024 * 1024, type: "application/pdf" },
+      ],
+      maxAttachmentCount: 5,
+      modelModalities: ["text"],
+    });
+
+    expect(plans.map((plan) => `${plan.name}:${plan.status}`)).toEqual([
+      "notes.md:accepted",
+      "screen.png:rejected",
+      "large.pdf:rejected",
+    ]);
+    expect(plans[1]).toMatchObject({ reason: "선택 모델이 이 첨부 종류를 지원하지 않음" });
+    expect(plans[2]).toMatchObject({ reason: "파일 크기 제한 초과" });
+  });
 });
