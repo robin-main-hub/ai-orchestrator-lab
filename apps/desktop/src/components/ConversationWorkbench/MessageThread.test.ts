@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { ConversationAttachment, ConversationMessage } from "@ai-orchestrator/protocol";
 import type { AttachmentProcessingPlan } from "../../lib/attachmentProcessing";
+import type { WorkbenchAgent } from "../../types";
 import {
   attachmentProcessingLabel,
   assistantPendingLabel,
   approvalPermissionListLabel,
   createAssistantRuntimeEvidenceBadges,
   delegationStatusLabel,
+  resolveMessageSenderAgent,
   resolveAssistantMessageStatusSummary,
   resolveAttachmentProcessingModeForDisplay,
   shouldShowAssistantPendingBubble,
@@ -20,6 +22,17 @@ function message(role: ConversationMessage["role"]): ConversationMessage {
     createdAt: "2026-06-06T00:00:00.000Z",
     sessionId: "session_test",
   };
+}
+
+function agent(overrides: Partial<WorkbenchAgent>): WorkbenchAgent {
+  return {
+    id: "agent_orchestrator",
+    modelId: "mimo-v2.5-pro",
+    name: "Orchestrator",
+    providerName: "MiMo",
+    role: "orchestrator",
+    ...overrides,
+  } as WorkbenchAgent;
 }
 
 describe("MessageThread pending assistant state", () => {
@@ -44,6 +57,21 @@ describe("MessageThread pending assistant state", () => {
     expect(assistantPendingLabel("dispatching")).toBe("명령을 전달하는 중이에요");
     expect(assistantPendingLabel("waiting_approval")).toBe("승인을 기다리고 있어요");
     expect(assistantPendingLabel("error")).toBe("막힌 원인을 정리하고 있어요");
+  });
+
+  it("캐릭터 이름으로 저장된 레거시 assistant 라벨도 실제 에이전트로 다시 연결한다", () => {
+    const agents = [
+      agent({
+        id: "agent_orchestrator",
+        name: "Orchestrator",
+        personaName: "마키마",
+        role: "orchestrator",
+      }),
+    ];
+
+    expect(resolveMessageSenderAgent({ agents, label: "마키마", message: message("assistant") })?.id).toBe(
+      "agent_orchestrator",
+    );
   });
 
   it("keeps provider failure status visible on assistant messages without leaking raw URLs", () => {
