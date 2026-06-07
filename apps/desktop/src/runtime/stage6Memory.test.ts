@@ -67,6 +67,18 @@ const untrustedProvider: ProviderProfile = {
 };
 
 describe("stage6 memory inspector", () => {
+  it("ships Korean default memory seeds for operator-facing recall context", () => {
+    const seeds = createSeedMemoryRecords(createdAt);
+    const combined = seeds.map((record) => `${record.title} ${record.content} ${record.losslessRestatement ?? ""} ${record.topic ?? ""}`).join(" ");
+
+    expect(seeds.find((record) => record.id === "memory_seed_event_storage")?.title).toBe("이벤트 저장소 우선");
+    expect(seeds.find((record) => record.id === "memory_seed_macbook_authority")?.title).toBe("MacBook 작업 권한 원본");
+    expect(seeds.find((record) => record.id === "memory_seed_external_ingress_quarantine")?.title).toBe("외부 인입 격리");
+    expect(combined).not.toContain("MacBook is the operator authority");
+    expect(combined).not.toContain("External ingress commands");
+    expect(combined).not.toContain("Event Storage first");
+  });
+
   it("shows trusted recall as usable decision context", () => {
     const inspector = createStage6MemoryInspector({
       records: createSeedMemoryRecords(createdAt),
@@ -97,10 +109,12 @@ describe("stage6 memory inspector", () => {
     });
 
     expect(inspector.trace.policy.autoRecallAllowed).toBe(false);
+    expect(inspector.trace.policy.reason).toBe("미신뢰 공급자는 프로젝트/사용자 기억을 명시 선택했을 때만 조회합니다.");
     expect(inspector.trace.policy.blockedLayers).toContain("project_memory");
     const projectResults = inspector.trace.results.filter((result) => result.record.layer === "project_memory");
 
     expect(projectResults.every((result) => !result.usedInDecision)).toBe(true);
+    expect(projectResults.map((result) => result.reason).join(" ")).not.toContain("blocked by provider trust policy");
     expect(inspector.contextPacket.blockedRecordIds.length).toBeGreaterThan(0);
   });
 
@@ -124,6 +138,12 @@ describe("stage6 memory inspector", () => {
         "session:session_desktop_001",
       ]),
     );
+    expect(candidates[0]?.title).toBe("대화 작업 세션");
+    expect(candidates[0]?.losslessRestatement).toContain("사용자는");
+    expect(candidates[0]?.losslessRestatement).not.toContain("The user worked");
+    expect(candidates[1]?.title).toBe("코딩 인계 회고");
+    expect(candidates[1]?.content).toContain("검증:");
+    expect(candidates[1]?.content).not.toContain("verification:");
     expect(activated[0]?.activationState).toBe("active");
     expect(pinned[0]?.pinned).toBe(true);
     expect(forgotten[0]?.tombstonedAt).toBe(createdAt);
@@ -202,7 +222,7 @@ describe("stage6 memory inspector", () => {
         layer: "project_memory" as const,
         scope: "project" as const,
         kind: "architecture" as const,
-        title: "Event Storage first",
+        title: "이벤트 저장소 우선",
         content: "Duplicate text 1",
         sourceChannel: "desktop" as const,
         trustLevel: "trusted" as const,
@@ -216,7 +236,7 @@ describe("stage6 memory inspector", () => {
         layer: "project_memory" as const,
         scope: "project" as const,
         kind: "architecture" as const,
-        title: "Event Storage first",
+        title: "이벤트 저장소 우선",
         content: "Duplicate text 2 (newer)",
         sourceChannel: "desktop" as const,
         trustLevel: "trusted" as const,
