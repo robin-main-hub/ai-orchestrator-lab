@@ -105,7 +105,7 @@ export const initialConversationMessages: ConversationMessage[] = [
     id: "message_seed_orchestrator",
     sessionId: DEFAULT_SESSION_ID,
     role: "assistant",
-    content: "protocol, provider stub, agent runtime stub, desktop board를 먼저 연결하고 실제 모델 호출은 막아둔다.",
+    content: "프로토콜 계약, 모델 연결 경계, 에이전트 런타임, 데스크톱 관제판을 먼저 안전하게 연결하고 실제 모델 호출은 승인 흐름 뒤에 붙인다.",
     createdAt: now,
     metadata: {
       agentId: "agent_orchestrator",
