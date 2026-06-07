@@ -123,7 +123,7 @@ describe("publicWorkTrace", () => {
       expect.objectContaining({
         label: "도구 호출",
         tone: "success",
-        value: "mimo-openai · MiMo V2.5 Pro",
+        value: "MiMo · MiMo V2.5 Pro",
       }),
     );
     expect(trace.groups[0]?.items).toContainEqual(
@@ -174,6 +174,26 @@ describe("publicWorkTrace", () => {
         value: "기억 4개 조회 · recall_agent_orchestrator_session_main_provider_mimo_token_openai",
       }),
     );
+  });
+
+  it("공개 로그는 원시 공급자 ID 대신 사용자가 읽을 수 있는 경로명을 표시한다", () => {
+    const trace = createConversationMessagePublicWorkTrace({
+      id: "message_route",
+      role: "assistant",
+      content: "응답",
+      createdAt: "2026-06-06T00:00:00.000Z",
+      sessionId: "session_main",
+      metadata: {
+        providerProfileId: "provider_mock_local",
+        modelId: "mock-orchestrator",
+        realProviderCall: false,
+      },
+    });
+
+    const serialized = JSON.stringify(trace);
+    expect(serialized).toContain("로컬 목업 경로");
+    expect(serialized).toContain("Mock Orchestrator");
+    expect(serialized).not.toContain("provider_mock_local");
   });
 
   it("공개 로그에 비밀값처럼 보이는 문자열을 그대로 노출하지 않는다", () => {
