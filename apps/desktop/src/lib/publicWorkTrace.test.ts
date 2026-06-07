@@ -31,6 +31,11 @@ describe("publicWorkTrace", () => {
         recallTraceId: "recall_agent_orchestrator_session_main_provider_mimo_token_openai",
         recalledMemoryCount: 4,
         runtimeConfigFileIds: ["config_memory_policy", "config_tool_profile"],
+        personaDisplayName: "마키마",
+        personaSoulApplied: true,
+        personaAgentsMdApplied: true,
+        personaSoulMdPath: "agents/orchestrator/SOUL.md",
+        personaAgentsMdPath: "agents/orchestrator/AGENTS.md",
         roleToolProfileLabel: "지휘 도구",
         roleToolProfileTools: ["work.queue", "approval", "tmux.plan"],
         delegationTags: [
@@ -83,6 +88,12 @@ describe("publicWorkTrace", () => {
       expect.objectContaining({
         label: "런타임 규칙",
         value: "2개 config 적용",
+      }),
+    );
+    expect(trace.groups[1]?.items).toContainEqual(
+      expect.objectContaining({
+        label: "인격 설정",
+        value: "마키마 · SOUL.md 적용 · AGENTS.md 적용",
       }),
     );
     expect(trace.groups[1]?.items).toContainEqual(
