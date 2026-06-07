@@ -3,7 +3,7 @@ import {
   createAgentChannelRecallQuery,
   type AgentChannelMemoryScope,
 } from "./agentConversationChannels";
-import { createAgentToolRuntimeSummary, getAgentToolProfile } from "./agentToolProfiles";
+import { createAgentToolRuntimeSummary, getAgentToolBadgeLabels, getAgentToolProfile } from "./agentToolProfiles";
 
 export type AgentConversationFlowTone = "ready" | "manual" | "error";
 
@@ -45,7 +45,7 @@ export function createAgentConversationFlowCards({
   providerProfileId,
 }: AgentConversationFlowInput): AgentConversationFlowCard[] {
   const toolProfile = getAgentToolProfile(agent.role);
-  const providerId = providerProfileId ?? memoryScope?.providerProfileId ?? "provider_unassigned";
+  const providerId = providerProfileId ?? memoryScope?.providerProfileId ?? "공급자 미지정";
   const scopeLabel = memoryScope
     ? `에이전트 ${memoryScope.agentId} / 세션 ${memoryScope.sessionId}`
     : `에이전트 ${agent.id} / 수동 세션`;
@@ -57,9 +57,9 @@ export function createAgentConversationFlowCards({
       label: "개인 채널",
       value: `${agent.name} · ${agent.id}`,
       details: [
-        `role=${agent.role}`,
-        `provider=${providerId}`,
-        `model=${modelId ?? "model_unassigned"}`,
+        `역할: ${agent.role}`,
+        `공급자: ${providerId}`,
+        `모델: ${modelId ?? "모델 미지정"}`,
       ],
       tone: "ready",
     },
@@ -69,10 +69,10 @@ export function createAgentConversationFlowCards({
       value: createMemoryValue(adapterStatus, memoryRecordCount),
       details: [
         scopeLabel,
-        `${memoryRecordCount}개 recall 후보`,
-        recallQuery ? "대화 맥락 기반 recall 준비" : "수동 recall 대기",
+        `${memoryRecordCount}개 기억 조회 후보`,
+        recallQuery ? "대화 맥락 기반 기억 조회 준비" : "수동 기억 조회 대기",
         "기억 원문은 채팅 화면에 직접 노출하지 않음",
-        "trusted provider가 아니면 장기 기억 자동 주입은 수동 확인",
+        "신뢰 공급자가 아니면 장기 기억 자동 주입은 수동 확인",
       ],
       tone: createMemoryTone(adapterStatus),
     },
@@ -81,10 +81,10 @@ export function createAgentConversationFlowCards({
       label: toolProfile.label,
       value: `${toolProfile.tools.length}개 도구 프로필`,
       details: [
-        "memory.recall",
+        getAgentToolBadgeLabels(agent.role)[0] ?? "도구 준비",
         createToolBoundaryDetail(toolProfile.tools),
-        ...toolProfile.tools.slice(0, 4),
-        "tool.call 전 목적·입력·권한을 먼저 요약",
+        ...getAgentToolBadgeLabels(agent.role).slice(0, 4),
+        "도구 호출 전 목적·입력·권한을 먼저 요약",
       ],
       tone: "ready",
     },
