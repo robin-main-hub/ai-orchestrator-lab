@@ -44,7 +44,7 @@ const session: Stage3DebateSession = {
 };
 
 describe("Stage3DebateTable", () => {
-  it("발언 카드 안에 공개 작업 로그를 렌더링한다", () => {
+  it("발언 카드의 공개 작업 로그를 접힌 검토 근거로 격리한다", () => {
     const html = renderToStaticMarkup(
       <Stage3DebateTable
         onCreateCodingPacket={() => undefined}
@@ -52,10 +52,43 @@ describe("Stage3DebateTable", () => {
       />,
     );
 
+    expect(html).toContain("<details");
+    expect(html).toContain("검토 근거 보기");
     expect(html).toContain("공개 작업 로그");
     expect(html).toContain("토론 실행 영수증");
     expect(html).toContain("코딩 영향");
     expect(html).toContain("검토자");
     expect(html).not.toContain("Reviewer");
+  });
+
+  it("보조 근거가 없는 일반 발언에는 검토 근거 접힘을 노출하지 않는다", () => {
+    const html = renderToStaticMarkup(
+      <Stage3DebateTable
+        onCreateCodingPacket={() => undefined}
+        session={{
+          ...session,
+          rounds: [
+            {
+              ...session.rounds[0]!,
+              utterances: [
+                {
+                  id: "utterance_plain",
+                  agentId: "agent_reviewer",
+                  content: "이 발언은 본문만으로 충분하다.",
+                  createdAt: "2026-06-06T00:02:00.000Z",
+                  roundId: "round_final",
+                  tags: [],
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(html).not.toContain("검토 근거 보기");
+    expect(html).not.toContain("<details");
+    expect(html).not.toContain("aria-label=\"공개 작업 로그\"");
+    expect(html).not.toContain("토론 실행 영수증");
   });
 });
