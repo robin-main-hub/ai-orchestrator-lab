@@ -43,10 +43,12 @@ export function providerErrorCategoryLabel(category: ProviderErrorCategory) {
 }
 
 export function createProviderFailureConversationReply({
+  agentDisplayName,
   errorMessage,
   provider,
   providers,
 }: {
+  agentDisplayName?: string;
   errorMessage: string;
   provider: ProviderProfile;
   providers: ProviderProfile[];
@@ -59,12 +61,17 @@ export function createProviderFailureConversationReply({
   });
   const safeError = sanitizePublicText(errorMessage);
   const categoryLabel = providerErrorCategoryLabel(category);
+  const actorLabel = agentDisplayName?.trim() ? `${sanitizePublicText(agentDisplayName.trim())}가` : "선택 에이전트가";
+  const sessionSecretHint =
+    category === "network" && provider.tags.includes("server-proxy") && provider.baseUrl
+      ? "\n\n세션 키 연결: 공급자 콘솔에서 이 Provider에 세션 키를 붙이면 DGX 없이도 같은 에이전트 방에서 이어서 대화할 수 있어."
+      : "";
   const nextAction =
     plan.status === "available" && plan.candidateProviderId
       ? `${plan.label}: ${providers.find((candidate) => candidate.id === plan.candidateProviderId)?.name ?? plan.candidateProviderId} 경로를 확인해줘.`
       : `${plan.label}: ${plan.reason}`;
 
-  return `${provider.name} 호출이 막혔어. 원인은 ${categoryLabel} 계열로 보여.\n\n다음 조치: ${nextAction}\n\n공개 오류 요약: ${safeError}`;
+  return `${actorLabel} ${provider.name} 호출에서 막혔어. 원인은 ${categoryLabel} 계열로 보여.\n\n다음 조치: ${nextAction}${sessionSecretHint}\n\n공개 오류 요약: ${safeError}`;
 }
 
 export function deriveProviderFallbackPlan({

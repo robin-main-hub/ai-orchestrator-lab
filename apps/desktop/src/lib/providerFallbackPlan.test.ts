@@ -71,6 +71,7 @@ describe("providerFallbackPlan", () => {
 
   it("대화 실패 답변에서 원본 URL을 마스킹하고 다음 조치를 제안한다", () => {
     const reply = createProviderFailureConversationReply({
+      agentDisplayName: "마키마",
       errorMessage: "http://dgx-02:4317: Failed to fetch",
       provider: provider({ id: "provider_primary", name: "MiMo Token Plan OpenAI" }),
       providers: [
@@ -79,7 +80,8 @@ describe("providerFallbackPlan", () => {
       ],
     });
 
-    expect(reply).toContain("MiMo Token Plan OpenAI 호출이 막혔어");
+    expect(reply).toContain("마키마가");
+    expect(reply).toContain("MiMo Token Plan OpenAI 호출에서 막혔어");
     expect(reply).toContain("네트워크");
     expect(reply).toContain("대체 공급자 준비");
     expect(reply).toContain("Mock 안전 경로");
@@ -87,5 +89,23 @@ describe("providerFallbackPlan", () => {
     expect(reply).not.toContain("Provider");
     expect(reply).not.toContain("fallback");
     expect(reply).toContain("[redacted:url]");
+  });
+
+  it("서버 프록시 네트워크 장애에는 세션 키 직접 폴백 연결을 안내한다", () => {
+    const reply = createProviderFailureConversationReply({
+      agentDisplayName: "마키마",
+      errorMessage: "http://dgx-02:4317: Failed to fetch",
+      provider: provider({
+        baseUrl: "https://token-plan-sgp.xiaomimimo.com/v1",
+        id: "provider_mimo_token_openai",
+        name: "MiMo Token Plan OpenAI",
+        tags: ["server-proxy", "mimo", "openai-compatible"],
+      }),
+      providers: [provider({ id: "provider_mimo_token_openai", name: "MiMo Token Plan OpenAI" })],
+    });
+
+    expect(reply).toContain("세션 키 연결");
+    expect(reply).toContain("DGX 없이도 같은 에이전트 방에서 이어서 대화");
+    expect(reply).not.toContain("http://dgx-02:4317");
   });
 });
