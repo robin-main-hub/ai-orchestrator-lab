@@ -79,6 +79,18 @@ export type EvolveMementoPanelProps = {
 /** Back-compat alias. */
 export type MementoPanelProps = EvolveMementoPanelProps;
 
+export const MEMORY_PANEL_LABELS = {
+  active: "활성",
+  blocked: "차단",
+  contextTitle: "기억 맥락",
+  importance: "중요도",
+  kindFilter: "종류",
+  links: "연결",
+  managerTitle: "EvolveMemento 기억 관리자",
+  pinned: "고정됨",
+  scopeFilter: "범위",
+} as const;
+
 export function EvolveMementoPanel({
   adapterStatus,
   governanceSummary,
@@ -220,17 +232,17 @@ export function EvolveMementoPanel({
             />
           </div>
 
-          {/* Memory Context */}
+          {/* 기억 맥락 */}
           <div className="rounded-md border border-border bg-card/40 px-3 py-2">
             <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Memory Context
+              {MEMORY_PANEL_LABELS.contextTitle}
             </div>
             <div className="mt-1 text-xs text-foreground line-clamp-2">
               {ctx.summary}
             </div>
             <div className="mt-1 text-[10px] text-muted-foreground">
-              active {ctx.activeRecordIds.length} · blocked{" "}
-              {ctx.blockedRecordIds.length} · links {ctx.relationIds.length}
+              {MEMORY_PANEL_LABELS.active} {ctx.activeRecordIds.length} · {MEMORY_PANEL_LABELS.blocked}{" "}
+              {ctx.blockedRecordIds.length} · {MEMORY_PANEL_LABELS.links} {ctx.relationIds.length}
             </div>
           </div>
 
@@ -668,7 +680,7 @@ function EvolveMementoManagerDialog({
         <DialogHeader className="border-b border-border pb-3 shrink-0">
           <DialogTitle className="flex items-center gap-2 text-lg font-bold">
             <Database className="h-5 w-5 text-primary" />
-            EvolveMemento Memory Manager
+            {MEMORY_PANEL_LABELS.managerTitle}
           </DialogTitle>
         </DialogHeader>
 
@@ -728,20 +740,20 @@ function EvolveMementoManagerDialog({
                 />
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground">Scope:</span>
+                <span className="text-[10px] text-muted-foreground">{MEMORY_PANEL_LABELS.scopeFilter}:</span>
                 <select
                   value={filterScope}
                   onChange={(e) => setFilterScope(e.target.value)}
                   className="bg-background border border-border/80 rounded-md px-2 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary"
                 >
                   <option value="all">전체</option>
-                  <option value="global">전역 (Global)</option>
-                  <option value="project">프로젝트 (Project)</option>
-                  <option value="session">세션 (Session)</option>
+                  <option value="global">전역</option>
+                  <option value="project">프로젝트</option>
+                  <option value="session">세션</option>
                 </select>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground">Kind:</span>
+                <span className="text-[10px] text-muted-foreground">{MEMORY_PANEL_LABELS.kindFilter}:</span>
                 <select
                   value={filterKind}
                   onChange={(e) => setFilterKind(e.target.value)}
@@ -795,12 +807,12 @@ function EvolveMementoManagerDialog({
                           {record.pinned ? (
                             <StatusBadge variant="primary" size="sm" className="gap-0.5">
                               <Pin className="h-2.5 w-2.5 fill-current" />
-                              Pinned
+                              {MEMORY_PANEL_LABELS.pinned}
                             </StatusBadge>
                           ) : null}
                           {record.activationState === "active" ? (
                             <StatusBadge variant="success" size="sm">
-                              Active
+                              {MEMORY_PANEL_LABELS.active}
                             </StatusBadge>
                           ) : null}
                         </div>
@@ -818,7 +830,7 @@ function EvolveMementoManagerDialog({
                       {/* Operations */}
                       <div className="flex flex-col items-end gap-2 shrink-0">
                         <span className="text-[10px] font-mono text-muted-foreground">
-                          Imp: {((record.importance ?? 0.5) * 100).toFixed(0)}%
+                          {MEMORY_PANEL_LABELS.importance}: {((record.importance ?? 0.5) * 100).toFixed(0)}%
                         </span>
                         <div className="flex items-center gap-1">
                           {!record.pinned && (
