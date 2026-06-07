@@ -39,6 +39,7 @@ import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { AgentPortrait, type AgentState } from "../shared/AgentActivity";
 import { AgentConfigDrawer } from "../AgentConfigDrawer";
+import { AgentSkillProfilePanel } from "./AgentSkillProfilePanel";
 
 // Sub-components
 import { MessageThread } from "./MessageThread";
@@ -238,15 +239,19 @@ export function ConversationWorkbench({
                   ))}
                 </select>
               </label>
-          <ConversationMetaRow icon={Cpu} label="모델" value={`${selectedProvider ? providerDisplayLabel(selectedProvider.name) : "Provider 미지정"} · ${selectedModel?.id ?? selectedAgent?.modelId ?? "대기"}`} />
-          <ConversationMetaRow icon={Database} label="기억" value={`${memoryRecordCount}건 · ${memoryGovernanceLabel ?? memoryMode}`} />
-          <ConversationMetaRow
-            icon={Sparkles}
-            label="인격"
-            value={`${personaSoulApplied ? "SOUL 적용" : "SOUL 대기"} · ${personaAgentsMdApplied ? "AGENTS 적용" : "AGENTS 대기"}`}
-          />
-          <ConversationMetaRow icon={Wrench} label="도구" value={toolLabels.length > 0 ? toolLabels.join(", ") : "연결 대기"} />
-          <ConversationMetaRow icon={Sparkles} label="연속성" value={agentChatContinuity.memoryQualityLabel} />
+              <ConversationMetaRow
+                icon={Cpu}
+                label="모델"
+                value={`${selectedProvider ? providerDisplayLabel(selectedProvider.name) : "Provider 미지정"} · ${selectedModel?.id ?? selectedAgent?.modelId ?? "대기"}`}
+              />
+              <ConversationMetaRow icon={Database} label="기억" value={`${memoryRecordCount}건 · ${memoryGovernanceLabel ?? memoryMode}`} />
+              <ConversationMetaRow
+                icon={Sparkles}
+                label="인격"
+                value={`${personaSoulApplied ? "SOUL 적용" : "SOUL 대기"} · ${personaAgentsMdApplied ? "AGENTS 적용" : "AGENTS 대기"}`}
+              />
+              <ConversationMetaRow icon={Wrench} label="도구" value={toolLabels.length > 0 ? toolLabels.join(", ") : "연결 대기"} />
+              <ConversationMetaRow icon={Sparkles} label="연속성" value={agentChatContinuity.memoryQualityLabel} />
             </div>
             <div className="grid grid-cols-2 gap-2 border-t border-zinc-800 p-2">
               <Button className="h-8 text-xs" onClick={() => onOpenAgentConfig("profile")} size="sm" variant="ghost">
@@ -315,17 +320,24 @@ export function ConversationWorkbench({
       </header>
 
       {selectedAgent && toolProfileSummary ? (
-        <AgentCapabilityStrip
-          continuityDetail={agentChatContinuity.detail}
-          displayName={selectedAgentDisplayName}
-          memoryQualityLabel={agentChatContinuity.memoryQualityLabel}
-          modelLabel={selectedModel?.id ?? selectedAgent.modelId ?? "모델 연결 대기"}
-          toolBoundaryLabel={toolProfileSummary.runtime.boundaryLabel}
-          toolGroupLabel={toolProfileSummary.label}
-          toolLabels={toolLabels}
-          personaAgentsMdApplied={personaAgentsMdApplied}
-          personaSoulApplied={personaSoulApplied}
-        />
+        <>
+          <AgentCapabilityStrip
+            continuityDetail={agentChatContinuity.detail}
+            displayName={selectedAgentDisplayName}
+            memoryQualityLabel={agentChatContinuity.memoryQualityLabel}
+            modelLabel={selectedModel?.id ?? selectedAgent.modelId ?? "모델 연결 대기"}
+            toolBoundaryLabel={toolProfileSummary.runtime.boundaryLabel}
+            toolGroupLabel={toolProfileSummary.label}
+            toolLabels={toolLabels}
+            personaAgentsMdApplied={personaAgentsMdApplied}
+            personaSoulApplied={personaSoulApplied}
+          />
+          <div className="shrink-0 border-b border-zinc-900/80 bg-zinc-950/90 px-4 py-2">
+            <div className="mx-auto max-w-5xl">
+              <AgentSkillProfilePanel role={selectedAgent.role} />
+            </div>
+          </div>
+        </>
       ) : null}
 
       <MessageThread
