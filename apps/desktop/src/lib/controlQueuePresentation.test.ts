@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { ApprovalQueueItem } from "@ai-orchestrator/protocol";
 import {
   controlQueueActionFeedback,
   controlQueueLaneLabel,
+  controlQueueMetaItems,
   controlQueuePermissionLabel,
   controlQueueStateLabel,
   sanitizeControlQueueText,
@@ -38,5 +40,31 @@ describe("controlQueuePresentation", () => {
     expect(controlQueueActionFeedback("edit")).toBe("작업 항목에 수정 초안 생성");
     expect(controlQueueActionFeedback("delegate")).toBe("작업 항목에 실행 위임 초안 생성");
     expect(controlQueueActionFeedback("block")).toBe("항목이 차단됩니다");
+  });
+
+  it("creates compact execution context chips for queue cards", () => {
+    const item: ApprovalQueueItem = {
+      id: "queue_terminal",
+      sourceItemId: "permission_terminal",
+      summary: "터미널 실행 승인",
+      requestedBy: "agent",
+      action: "terminal_run",
+      reason: "tmux remote command needs approval before using Bearer abc123",
+      sourceTrust: "trusted",
+      permissions: ["run_safe_commands"],
+      state: "required",
+      costEstimateTokens: 120_000,
+      replayKind: "tmux_dispatch",
+      replayEndpoint: "/tmux/dispatch",
+      createdAt: "2026-06-06T00:00:00.000Z",
+    };
+
+    expect(controlQueueMetaItems(item)).toEqual([
+      { label: "실행", value: "터미널 실행", variant: "primary" },
+      { label: "신뢰", value: "신뢰됨", variant: "success" },
+      { label: "재실행", value: "tmux 재전송", variant: "primary" },
+      { label: "예상", value: "120k tok", variant: "muted" },
+      { label: "사유", value: "tmux remote command needs approval before using Bearer [token]", variant: "muted" },
+    ]);
   });
 });
