@@ -327,7 +327,7 @@ function buildLogs(session: Stage3DebateSession, runtime: RuntimeSnapshot, now: 
 export function resolveDebateAnnexAgentLabel(session: Stage3DebateSession, agentId: string) {
   const participant = session.participants.find((candidate) => candidate.agentId === agentId);
   if (participant?.name) return sanitizeDebateAnnexText(participant.name);
-  return sanitizeDebateAnnexText(agentId.replace(/^agent_/, "").replace(/[_-]+/g, " "));
+  return "알 수 없는 워커";
 }
 
 function getTabHasData(tab: AnnexTab, data: ReturnType<typeof buildAnnexShape>): boolean {
