@@ -30,6 +30,18 @@ export function formatTmuxPaneCountLabel(count: number) {
   return `패널 ${count}개`;
 }
 
+export function formatTmuxPaneSurfaceLabel(paneId: string) {
+  const match = /^pane-(\d+)$/.exec(paneId);
+  if (!match) {
+    const safePaneLabel = compactPublicText(
+      sanitizePublicText(paneId).replace(/[:_]+/g, " ").replace(/\s+/g, " ").trim(),
+      24,
+    );
+    return safePaneLabel ? `작업창 ${safePaneLabel}` : "작업창";
+  }
+  return `작업창 ${Number(match[1]) + 1}`;
+}
+
 export function formatTmuxDifficultyLabel(difficulty: TmuxWorkbenchDifficulty) {
   if (difficulty === "critical") return "고위험";
   if (difficulty === "complex") return "복합";

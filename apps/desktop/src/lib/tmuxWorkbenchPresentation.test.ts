@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   compactTmuxPreview,
+  formatTmuxPaneSurfaceLabel,
   formatTmuxDifficultyLabel,
   formatTmuxPaneCountLabel,
   sanitizeTmuxWorkbenchText,
@@ -22,6 +23,13 @@ describe("tmuxWorkbenchPresentation", () => {
     expect(tmuxPaneRoleLabel("orchestrator")).toBe("지휘");
     expect(tmuxPaneRoleLabel("frontend")).toBe("프론트");
     expect(tmuxPaneRoleLabel("memory")).toBe("기억");
+  });
+
+  it("내부 pane id를 사용자 표면용 작업창 라벨로 변환한다", () => {
+    expect(formatTmuxPaneSurfaceLabel("pane-0")).toBe("작업창 1");
+    expect(formatTmuxPaneSurfaceLabel("pane-7")).toBe("작업창 8");
+    expect(formatTmuxPaneSurfaceLabel("%4")).toBe("작업창 %4");
+    expect(formatTmuxPaneSurfaceLabel("role:status")).toBe("작업창 role status");
   });
 
   it("pane 상태 라벨을 사용자 표면에서 한국어로 바꾼다", () => {
