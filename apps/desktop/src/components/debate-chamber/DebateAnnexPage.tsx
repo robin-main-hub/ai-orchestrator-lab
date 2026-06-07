@@ -96,9 +96,9 @@ export function DebateAnnexPage({
   const data = useMemo(
     () => ({
       agentRelay: session.humanPeek.map((entry) => ({
-        actor: entry.actor,
-        action: entry.kind,
-        target: entry.target,
+        actor: formatAnnexActorLabel(entry.actor),
+        action: formatAnnexActionLabel(entry.kind),
+        target: formatAnnexActorLabel(entry.target),
         timestamp: formatRelativeTime(entry.createdAt, now),
       })),
       evidenceRefs: buildEvidenceRefs(session),
@@ -225,8 +225,8 @@ function buildStatusItems(session: Stage3DebateSession, runtime: RuntimeSnapshot
     {
       id: "memory-sync",
       label: "기억 동기화",
-      status: runtime.memorySyncStatus === "online" ? "healthy" : "degraded",
-      value: runtime.memorySyncStatus === "online" ? "정상" : "점검 필요",
+      status: runtime.memorySyncStatus === "online" || runtime.memorySyncStatus === "syncing" ? "healthy" : "degraded",
+      value: formatRuntimeStatusLabel(runtime.memorySyncStatus),
     },
   ];
 }
@@ -321,7 +321,9 @@ function buildLogs(session: Stage3DebateSession, runtime: RuntimeSnapshot, now: 
     ...session.humanPeek.map((entry) => ({
       id: entry.id,
       level: entry.state === "blocked" ? "warn" as const : "info" as const,
-      message: sanitizeDebateAnnexText(`${entry.actor} ${entry.kind} ${entry.target}: ${entry.summary}`),
+      message: sanitizeDebateAnnexText(
+        `${formatAnnexActorLabel(entry.actor)} ${formatAnnexActionLabel(entry.kind)} ${formatAnnexActorLabel(entry.target)}: ${entry.summary}`,
+      ),
       timestamp: formatRelativeTime(entry.createdAt, now),
     })),
     ...session.rounds.flatMap((round) =>
@@ -341,6 +343,44 @@ export function resolveDebateAnnexAgentLabel(session: Stage3DebateSession, agent
   const participant = session.participants.find((candidate) => candidate.agentId === agentId);
   if (participant?.name) return sanitizeDebateAnnexText(participant.name);
   return "알 수 없는 워커";
+}
+
+function formatAnnexActorLabel(value: string) {
+  const normalized = value.trim().toLowerCase();
+  const labels: Record<string, string> = {
+    architect: "설계자",
+    builder: "구현자",
+    executor: "실행자",
+    orchestrator: "지휘자",
+    reviewer: "검토자",
+  };
+  return labels[normalized] ?? sanitizeDebateAnnexText(value);
+}
+
+function formatAnnexActionLabel(value: string) {
+  const normalized = value.trim().toLowerCase();
+  const labels: Record<string, string> = {
+    approve: "승인",
+    ask: "질문",
+    block: "차단",
+    capture: "수집",
+    dispatch: "전송",
+    edit: "수정",
+    handoff: "인계",
+    reject: "거절",
+    review: "검토",
+  };
+  return labels[normalized] ?? sanitizeDebateAnnexText(value);
+}
+
+function formatRuntimeStatusLabel(status: RuntimeSnapshot["memorySyncStatus"]) {
+  const labels: Record<RuntimeSnapshot["memorySyncStatus"], string> = {
+    degraded: "저하됨",
+    offline: "오프라인",
+    online: "정상",
+    syncing: "동기화 중",
+  };
+  return labels[status] ?? sanitizeDebateAnnexText(status);
 }
 
 function getTabHasData(tab: AnnexTab, data: ReturnType<typeof buildAnnexShape>): boolean {

@@ -23,6 +23,7 @@ import {
   formatTmuxPaneCountLabel,
   formatTmuxPaneSurfaceLabel,
   sanitizeTmuxWorkbenchText,
+  tmuxPaneStateLabel,
   tmuxPaneRoleLabel,
   tmuxWorkbenchCopy,
   type TmuxWorkbenchDifficulty,
@@ -168,7 +169,7 @@ export function TmuxSwarmBoard({
           terminalSessionId: "terminal_session_ai_swarm",
           kind: "capture",
           status: result.status === "captured" ? "completed" : "stale",
-          title: `${pane.title} capture`,
+          title: `${pane.title} 수집`,
           summary: result.reason,
           outputPreview: result.payload?.outputPreview,
           redactionApplied: result.payload?.redactionApplied ?? false,
@@ -231,7 +232,7 @@ export function TmuxSwarmBoard({
         ...current,
         [pane.roleKey]: result.approval
           ? sanitizeTmuxWorkbenchText(`승인 대기: ${result.approval.reason}`)
-          : sanitizeTmuxWorkbenchText(`${result.dispatch.status}: ${result.dispatch.reason}`),
+          : sanitizeTmuxWorkbenchText(`${tmuxPaneStateLabel(result.dispatch.status)}: ${result.dispatch.reason}`),
       }));
       const fallbackTimelineBlocks: TerminalTimelineBlock[] = [
         makeSyntheticBlock({
@@ -242,7 +243,7 @@ export function TmuxSwarmBoard({
           terminalSessionId: "terminal_session_ai_swarm",
           kind: "command_intent",
           status: "planned",
-          title: commandPreview || `${pane.title} intent`,
+          title: commandPreview || `${pane.title} 실행 의도`,
           summary: `의도: ${commandPreview}`,
         }),
       ];
@@ -279,7 +280,7 @@ export function TmuxSwarmBoard({
                   : result.dispatch.status === "pending_approval"
                     ? "pending_approval"
                     : "failed",
-            title: `${pane.title} dispatch`,
+            title: `${pane.title} 전송`,
             summary: result.dispatch.reason,
           }),
         );
@@ -300,7 +301,7 @@ export function TmuxSwarmBoard({
           paneTitle: pane.title,
         }),
       );
-      setBoardNotice(`${pane.title}: dispatch 실패 - ${message}`);
+      setBoardNotice(`${pane.title}: 전송 실패 - ${message}`);
     } finally {
       setBusyByRole((current) => ({ ...current, [pane.roleKey]: undefined }));
     }
@@ -665,9 +666,9 @@ function createTmuxPanes(
       id: "pane-2",
       roleKey: "status",
       title: "상태 감시",
-      role: "진행 로그 / 테스트 / stuck run 감시",
+      role: "진행 로그 / 테스트 / 멈춘 실행 감시",
       state: "watch only",
-      signal: "Event Storage에 기록 가능한 run intent와 capture 상태를 봅니다.",
+      signal: "작업 기록 장부에 남길 실행 의도와 수집 상태를 봅니다.",
     },
     {
       id: "pane-3",
@@ -676,24 +677,24 @@ function createTmuxPanes(
       role: "핵심 로직 / 리팩터링 / 복잡 구현",
       state: "idle",
       agent: roleAgent("builder"),
-      signal: "Coding Packet이 생기면 core logic 작업 후보가 됩니다.",
+      signal: "코딩 패킷이 생기면 핵심 로직 작업 후보가 됩니다.",
     },
     {
       id: "pane-4",
       roleKey: "architect",
       title: "설계 작업자",
-      role: "protocol / Event Storage / 타입 경계",
+      role: "프로토콜 / 작업 기록 / 타입 경계",
       state: "ready",
       agent: roleAgent("architect"),
-      signal: "ExecutionSlot / AgentSession / run event 타입 경계를 담당합니다.",
+      signal: "실행 슬롯, 에이전트 세션, 실행 이벤트 타입 경계를 담당합니다.",
     },
     {
       id: "pane-5",
       roleKey: "frontend",
       title: "프론트 작업자",
-      role: "desktop UI / Workbench / Execution Slot",
+      role: "데스크톱 UI / 작업대 / 실행 슬롯",
       state: "active",
-      signal: "현재 tmux workbench와 approval UX wiring을 담당합니다.",
+      signal: "터미널 작업대와 승인 동선을 담당합니다.",
     },
     {
       id: "pane-6",
@@ -701,16 +702,16 @@ function createTmuxPanes(
       title: "백엔드 작업자",
       role: "server / sync / DGX 연결 지점",
       state: "idle",
-      signal: "DGX-02가 main server입니다. DGX-01은 locked 상태로 둡니다.",
+      signal: "DGX-02를 기본 서버로 보고, DGX-01은 잠금 상태로 둡니다.",
     },
     {
       id: "pane-7",
       roleKey: "qa",
       title: "검증과 보안",
-      role: "테스트 / 권한 / redaction / 회귀검사",
+      role: "테스트 / 권한 / 마스킹 / 회귀검사",
       state: "guarding",
       agent: roleAgent("reviewer") ?? roleAgent("verifier"),
-      signal: "Secret, command, approval, event 기록 회귀를 우선 확인합니다.",
+      signal: "비밀값, 명령, 승인, 이벤트 기록 회귀를 우선 확인합니다.",
     },
     {
       id: "pane-8",
@@ -725,10 +726,10 @@ function createTmuxPanes(
       id: "pane-9",
       roleKey: "memory",
       title: "기억 관리자",
-      role: "Memento recall / 결정 기록 / handoff 정리",
+      role: "기억 호출 / 결정 기록 / 인계 정리",
       state: recommendation.recommendedRoles.includes("memory") ? "recommended" : "standby",
       agent: roleAgent("memory_curator"),
-      signal: "장기 프로젝트, 백업, handoff가 걸리면 기억 정리를 전담합니다.",
+      signal: "장기 프로젝트, 백업, 인계가 걸리면 기억 정리를 전담합니다.",
     },
   ];
 }

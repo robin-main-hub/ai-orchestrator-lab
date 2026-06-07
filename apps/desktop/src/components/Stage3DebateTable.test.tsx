@@ -91,6 +91,44 @@ describe("Stage3DebateTable", () => {
     expect(html).toContain("차단됨");
   });
 
+  it("참여자 이름이 역할명으로 들어와도 캐릭터 표시명을 우선한다", () => {
+    const html = renderToStaticMarkup(
+      <Stage3DebateTable
+        onCreateCodingPacket={() => undefined}
+        session={{
+          ...session,
+          participants: [
+            {
+              agentId: "agent_orchestrator",
+              modelId: "mimo-v2.5-pro",
+              name: "Orchestrator",
+              providerName: "MiMo",
+              role: "orchestrator",
+            },
+          ],
+          rounds: [
+            {
+              ...session.rounds[0]!,
+              utterances: [
+                {
+                  id: "utterance_orchestrator",
+                  agentId: "agent_orchestrator",
+                  content: "결정만 남기고 잡음은 Annex로 보낸다.",
+                  createdAt: "2026-06-06T00:02:00.000Z",
+                  roundId: "round_final",
+                  tags: [],
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(html).toContain("마키마");
+    expect(html).not.toContain("Orchestrator");
+  });
+
   it("보조 근거가 없는 일반 발언에는 검토 근거 접힘을 노출하지 않는다", () => {
     const html = renderToStaticMarkup(
       <Stage3DebateTable

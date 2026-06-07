@@ -18,6 +18,7 @@ import { defaultAgentProfiles } from "@ai-orchestrator/agents";
 import { cn } from "@/lib/utils";
 import { agentRoleLabel } from "../lib/helpers";
 import { Button } from "@/ui/button";
+import { agentKoreanNameByIdentity, agentPrimaryDisplayName } from "../lib/agentDisplay";
 import {
   debateChamberCopy,
   debateRoleTone,
@@ -250,7 +251,7 @@ function createUtteranceView(
   const fallback = resolveFallbackAgent(utterance.agentId);
   return {
     ...utterance,
-    agentName: participant?.name ?? fallback.name,
+    agentName: participant ? resolveDebateParticipantDisplayName(participant) : fallback.name,
     agentRole: participant?.role ?? fallback.role,
     roundTitle,
   };
@@ -259,12 +260,30 @@ function createUtteranceView(
 function resolveFallbackAgent(agentId: string) {
   const profile = defaultAgentProfiles.find((p) => p.id === agentId);
   if (profile) {
-    return { name: profile.name, role: profile.role };
+    return { name: agentPrimaryDisplayName(profile), role: profile.role };
   }
   const parts = agentId.replace(/^agent_/, "").split("_");
   const role = (parts[0] || "builder") as AgentProfile["role"];
-  const name = parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+  const name = agentKoreanNameByIdentity[role] ?? parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
   return { name, role };
+}
+
+function resolveDebateParticipantDisplayName(
+  participant: Stage3DebateSession["participants"][number],
+) {
+  const rawName = participant.name.trim();
+  const roleName = participant.role.toLowerCase();
+  if (rawName.toLowerCase() === roleName || rawName.toLowerCase() === toTitleCase(roleName).toLowerCase()) {
+    return agentKoreanNameByIdentity[participant.role] ?? rawName;
+  }
+  return agentKoreanNameByIdentity[participant.agentId.replace(/^agent_/, "")] ?? rawName;
+}
+
+function toTitleCase(value: string) {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function UtteranceCard({
