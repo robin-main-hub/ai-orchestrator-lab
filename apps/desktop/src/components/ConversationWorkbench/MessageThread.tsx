@@ -139,6 +139,7 @@ export function assistantPendingLabel(activity?: AgentActivityStatus) {
   if (activity === "tooling") return "도구를 고르는 중이에요";
   if (activity === "capturing") return "작업창을 읽는 중이에요";
   if (activity === "dispatching") return "명령을 전달하는 중이에요";
+  if (activity === "testing") return "검증을 돌리는 중이에요";
   if (activity === "waiting_approval") return "승인을 기다리고 있어요";
   if (activity === "error") return "막힌 원인을 정리하고 있어요";
   return "요청을 정리하고 있어요";
@@ -242,7 +243,11 @@ function AssistantPendingBubble({
 }) {
   const visual = agentVisualsById?.[agent.id];
   const status =
-    activity === "responding" || activity === "tooling" || activity === "capturing" || activity === "dispatching"
+    activity === "responding" ||
+      activity === "tooling" ||
+      activity === "capturing" ||
+      activity === "dispatching" ||
+      activity === "testing"
       ? ("active" as const)
       : activity === "error"
         ? ("offline" as const)
@@ -380,7 +385,11 @@ function MessageBubble({
   const roleColor = senderAgent ? roleColorFromRole(senderAgent.role) : "orchestrator";
   const activity = senderAgent && agentActivityById ? agentActivityById[senderAgent.id] : "idle";
   const agentStatus = senderAgent
-    ? activity === "responding" || activity === "tooling" || activity === "capturing" || activity === "dispatching"
+    ? activity === "responding" ||
+      activity === "tooling" ||
+      activity === "capturing" ||
+      activity === "dispatching" ||
+      activity === "testing"
       ? ("active" as const)
       : activity === "preparing" || activity === "waiting_approval"
         ? ("pending" as const)

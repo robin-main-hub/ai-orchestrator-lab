@@ -101,6 +101,7 @@ export function WorkReceiptLedgerCard({
           recentItems.map((item) => {
             const renderTrace = maskPublicWorkTraceForRender(item.trace);
             const safeTitle = sanitizePublicText(item.title);
+            const attentionItem = findReceiptAttentionItem(renderTrace);
             const receiptSummary = createPublicWorkReceiptSummary(renderTrace);
             const detailItems =
               receiptSummary?.detailItems ??
@@ -131,6 +132,11 @@ export function WorkReceiptLedgerCard({
                       {receiptSummary?.detailItems.find((detail) => detail.label === "마스킹")?.value ??
                         item.safetyLabel}
                     </p>
+                    {attentionItem ? (
+                      <p className="mt-1 truncate text-[11px] text-amber-200">
+                        핵심 경고 · {attentionItem.label}: {attentionItem.value}
+                      </p>
+                    ) : null}
                   </div>
                   <span
                     className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] ${
@@ -199,6 +205,12 @@ export function WorkReceiptLedgerCard({
       </div>
     </GlassPanel>
   );
+}
+
+function findReceiptAttentionItem(trace: WorkTraceSearchItem["trace"]) {
+  return trace.groups
+    .flatMap((group) => group.items)
+    .find((item) => item.tone === "danger" || item.tone === "warning");
 }
 
 function timestampOf(value?: string) {

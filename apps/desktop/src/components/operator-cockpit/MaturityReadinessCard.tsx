@@ -47,7 +47,7 @@ export function MaturityReadinessCard({
             </Badge>
           </div>
           <div className="space-y-2">
-            {maturity.items.slice(0, 5).map((item) => (
+            {maturity.items.map((item) => (
               <ReadinessRow
                 key={item.id}
                 label={item.label}
@@ -83,7 +83,7 @@ export function MaturityReadinessCard({
             <Badge color="blue">{smokePlan.items.length}축</Badge>
           </div>
           <div className="space-y-2">
-            {smokePlan.items.slice(0, 5).map((item) => (
+            {smokePlan.items.map((item) => (
               <ReadinessRow
                 key={item.id}
                 label={item.label}

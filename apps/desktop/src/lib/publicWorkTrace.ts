@@ -485,10 +485,11 @@ function createConversationReceipt(
     readString(metadata.memoryTraceId) ??
     (providerCheckpoint ? publicProviderRouteLabel(providerCheckpoint) : undefined);
   const checkpoint = checkpointMarker ? [message.sessionId, checkpointMarker].join(" · ") : message.id;
+  const receiptStatus = resolveConversationReceiptStatus(metadata);
 
   return {
     label: "에이전트 실행 영수증",
-    status: readBoolean(metadata.realProviderCall) === false ? "fallback" : "checkpointed",
+    status: receiptStatus,
     items: [
       { label: "범위", value: sanitize(spans.length > 0 ? spans.map(spanDisplayLabel).join("/") : "메시지") },
       { label: "기준점", value: sanitize(checkpoint || message.id) },
@@ -496,6 +497,19 @@ function createConversationReceipt(
       { label: "공개 범위", value: "요약 단계만" },
     ],
   };
+}
+
+function resolveConversationReceiptStatus(
+  metadata: Record<string, unknown>,
+): PublicWorkTraceReceipt["status"] {
+  if (readString(metadata.error)) return "blocked";
+  if (readBoolean(metadata.requiresServerApproval) === true) return "live";
+  const delegations = readDelegations(metadata);
+  if (delegations.some(([, delegation]) => delegation.status === "blocked" || delegation.status === "failed")) {
+    return "blocked";
+  }
+  if (readBoolean(metadata.realProviderCall) === false) return "fallback";
+  return "checkpointed";
 }
 
 function createFallbackConversationReceipt(message: ConversationMessage): PublicWorkTraceReceipt {

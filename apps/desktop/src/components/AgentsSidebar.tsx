@@ -517,7 +517,7 @@ function AgentCard({
 
 function avatarStatusForAgentActivity(activity: AgentActivityStatus) {
   if (activity === "preparing" || activity === "waiting_approval") return "pending";
-  if (activity === "responding" || activity === "tooling" || activity === "capturing" || activity === "dispatching") {
+  if (activity === "responding" || activity === "tooling" || activity === "capturing" || activity === "dispatching" || activity === "testing") {
     return "active";
   }
   if (activity === "error") return "offline";
@@ -530,6 +530,7 @@ function activityBadgeForAgent(activity: AgentActivityStatus): { label: string; 
   if (activity === "tooling") return { label: "도구 중", variant: "warning" };
   if (activity === "capturing") return { label: "읽는 중", variant: "warning" };
   if (activity === "dispatching") return { label: "전송 중", variant: "success" };
+  if (activity === "testing") return { label: "검증 중", variant: "warning" };
   if (activity === "waiting_approval") return { label: "승인 대기", variant: "warning" };
   if (activity === "error") return { label: "오류", variant: "danger" };
   return null;

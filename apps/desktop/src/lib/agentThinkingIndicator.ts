@@ -91,6 +91,18 @@ export function resolveAgentThinkingIndicator(
       ],
     };
   }
+  if (activity === "testing") {
+    return {
+      status: "testing",
+      label: "검증을 돌리는 중",
+      narration: "수정 결과를 믿을 수 있게 테스트와 빌드 신호를 확인하고 있습니다.",
+      steps: [
+        { label: "변경점 고정", state: "done" },
+        { label: "테스트 실행", state: "active" },
+        { label: "결과 영수증 정리", state: "pending" },
+      ],
+    };
+  }
   if (activity === "waiting_approval") {
     return {
       status: "waiting_approval",
