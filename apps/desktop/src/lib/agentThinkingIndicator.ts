@@ -1,5 +1,4 @@
 import type { AgentActivityStatus } from "../types";
-import { PUBLIC_WORK_PHASES } from "./publicWorkPhases";
 
 export type AgentThinkingIndicator = {
   status: Extract<AgentActivityStatus, "preparing" | "responding">;
@@ -35,22 +34,22 @@ export function resolveAgentThinkingIndicator(
   if (activity === "preparing") {
     return {
       status: "preparing",
-      label: "응답 준비 중",
+      label: "요청을 해석하는 중",
       steps: [
-        { label: PUBLIC_WORK_PHASES.thinking.label, state: "active" },
-        { label: PUBLIC_WORK_PHASES.toolCall.label, state: "pending" },
-        { label: PUBLIC_WORK_PHASES.commandGeneration.label, state: "pending" },
+        { label: "요청 해석", state: "active" },
+        { label: "Provider 호출 준비", state: "pending" },
+        { label: "도구·명령 후보 정리", state: "pending" },
       ],
     };
   }
   if (activity === "responding") {
     return {
       status: "responding",
-      label: "응답 작성 중",
+      label: "답변을 작성하는 중",
       steps: [
-        { label: PUBLIC_WORK_PHASES.toolCall.label, state: "done" },
-        { label: PUBLIC_WORK_PHASES.verification.label, state: "active" },
-        { label: PUBLIC_WORK_PHASES.receipt.label, state: "pending" },
+        { label: "Provider 응답 수신", state: "done" },
+        { label: "마스킹·검증 점검", state: "active" },
+        { label: "작업 영수증 저장", state: "pending" },
       ],
     };
   }
