@@ -580,7 +580,10 @@ function createMemoryRelations(records: MemoryRecord[], createdAt: string): Memo
         toRecordId: right.id,
         kind,
         confidence: Number(confidence.toFixed(2)),
-        reason: kind === "contradicts" ? "overlapping topic with opposite action language" : "shared tags, terms, scope, or kind",
+        reason:
+          kind === "contradicts"
+            ? "같은 주제에서 서로 반대되는 실행 표현이 겹칩니다."
+            : "태그, 용어, 범위 또는 기억 종류가 서로 겹칩니다.",
         createdAt,
       });
     }
@@ -603,7 +606,7 @@ function createReflectionIssues(
       kind: "duplicate",
       recordIds: [left.id, right.id],
       severity: "medium",
-      recommendation: "Merge these fragments or keep the newer one as the authoritative memory.",
+      recommendation: "중복 조각을 병합하거나 더 최신 항목을 기준 기억으로 유지하세요.",
     });
   });
 
@@ -616,7 +619,7 @@ function createReflectionIssues(
         kind: "contradiction",
         recordIds: [relation.fromRecordId, relation.toRecordId],
         severity: "high",
-        recommendation: "Review which memory should win before automatic recall uses both.",
+        recommendation: "자동 기억 조회가 두 항목을 함께 쓰기 전에 어떤 기억을 우선할지 검토하세요.",
       });
     });
 
@@ -628,7 +631,7 @@ function createReflectionIssues(
         kind: "untrusted_active",
         recordIds: [record.id],
         severity: "high",
-        recommendation: "Demote, redact, or re-verify this memory before sending it to strong or remote models.",
+        recommendation: "강한 모델이나 원격 모델에 보내기 전에 이 기억을 낮추거나 마스킹하거나 다시 검증하세요.",
       });
     });
 
@@ -641,7 +644,7 @@ function createReflectionIssues(
         kind: "stale",
         recordIds: [record.id],
         severity: "low",
-        recommendation: "Refresh this old memory or let the curator archive it.",
+        recommendation: "오래된 기억을 새로 확인하거나 큐레이터가 보관하도록 두세요.",
       });
     });
 
@@ -651,7 +654,7 @@ function createReflectionIssues(
       kind: "missing_relation",
       recordIds: records.filter((record) => record.pinned).map((record) => record.id),
       severity: "low",
-      recommendation: "Pinned memories should be linked so the context packet can restore the project map.",
+      recommendation: "고정된 기억끼리 연결해 컨텍스트 패킷이 프로젝트 지도를 복구할 수 있게 하세요.",
     });
   }
 
