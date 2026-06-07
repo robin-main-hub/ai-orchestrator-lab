@@ -16,6 +16,7 @@ import type { OperatorCockpitSnapshot } from "@ai-orchestrator/protocol";
 import type { OrchestrationMaturityReport } from "../../lib/orchestrationMaturity";
 import type { ProductionSmokePlan } from "../../lib/productionSmokePlan";
 import type { SettingsDiagnostics } from "../../lib/settingsDiagnostics";
+import type { CockpitNextActionItem } from "../../lib/cockpitNextActions";
 import { ApprovalEvidenceCard } from "./ApprovalEvidenceCard";
 import { Badge } from "./Badge";
 import { DispatchHistoryCard } from "./DispatchHistoryCard";
@@ -43,6 +44,7 @@ export function OperatorCockpit({
   readiness?: {
     diagnostics: SettingsDiagnostics;
     maturity: OrchestrationMaturityReport;
+    nextActions?: CockpitNextActionItem[];
     smokePlan: ProductionSmokePlan;
   };
 }) {
@@ -161,6 +163,10 @@ export function OperatorCockpit({
             />
           </div>
 
+          {readiness?.nextActions?.length ? (
+            <NextActionStrip actions={readiness.nextActions} />
+          ) : null}
+
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
             <div className="min-w-0 lg:col-span-7">
               <WorkerFleetCard fleet={snapshot.fleet} />
@@ -212,6 +218,33 @@ export function OperatorCockpit({
             ) : null}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function NextActionStrip({ actions }: { actions: CockpitNextActionItem[] }) {
+  return (
+    <div className="rounded-xl border border-zinc-800/70 bg-zinc-900/35 px-3 py-2 backdrop-blur-xl">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+          다음 행동
+        </span>
+        {actions.map((action) => (
+          <span
+            className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] ${
+              action.priority === "high"
+                ? "border-rose-400/25 bg-rose-500/10 text-rose-100"
+                : action.priority === "warning"
+                  ? "border-amber-400/25 bg-amber-500/10 text-amber-100"
+                  : "border-cyan-400/20 bg-cyan-500/10 text-cyan-100"
+            }`}
+            key={action.id}
+          >
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
+            <span className="truncate">{action.label}</span>
+          </span>
+        ))}
       </div>
     </div>
   );
