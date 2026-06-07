@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { TerminalTimelineBlock } from "@ai-orchestrator/protocol";
-import { resolveTmuxTimelineBlocks } from "./TmuxSwarmBoard";
+import {
+  createTmuxOperationFailedBlock,
+  createTmuxOperationStartedBlock,
+  resolveTmuxTimelineBlocks,
+} from "./TmuxSwarmBoard";
 import { makeSyntheticBlock } from "./TmuxPaneTimeline";
 
 const fallbackBlock = {
@@ -53,6 +57,55 @@ describe("makeSyntheticBlock", () => {
       title: "status capture",
     });
 
+    expect(block.redactionApplied).toBe(true);
+  });
+});
+
+describe("tmux live operation timeline blocks", () => {
+  it("creates a running capture block as soon as pane capture starts", () => {
+    const block = createTmuxOperationStartedBlock({
+      activeSessionId: "session_1",
+      commandPreview: "",
+      operation: "capture",
+      paneRole: "status",
+      paneTitle: "상태",
+    });
+
+    expect(block.kind).toBe("capture");
+    expect(block.status).toBe("running");
+    expect(block.title).toBe("상태 읽는 중");
+    expect(block.summary).toBe("상태 패널의 최신 출력을 읽고 있습니다.");
+  });
+
+  it("creates a running dispatch block as soon as pane dispatch starts", () => {
+    const block = createTmuxOperationStartedBlock({
+      activeSessionId: "session_1",
+      commandPreview: "pnpm test",
+      operation: "dispatch",
+      paneRole: "qa",
+      paneTitle: "검증",
+    });
+
+    expect(block.kind).toBe("dispatch");
+    expect(block.status).toBe("running");
+    expect(block.title).toBe("검증 전송 중");
+    expect(block.summary).toContain("pnpm test");
+    expect(block.redactionApplied).toBe(true);
+  });
+
+  it("creates a failed block when capture or dispatch throws before the server returns blocks", () => {
+    const block = createTmuxOperationFailedBlock({
+      activeSessionId: "session_1",
+      message: "http://dgx-02:4317 failed",
+      operation: "dispatch",
+      paneRole: "backend",
+      paneTitle: "백엔드",
+    });
+
+    expect(block.kind).toBe("dispatch");
+    expect(block.status).toBe("failed");
+    expect(block.title).toBe("백엔드 전송 실패");
+    expect(block.summary).toBe("[redacted:url] failed");
     expect(block.redactionApplied).toBe(true);
   });
 });

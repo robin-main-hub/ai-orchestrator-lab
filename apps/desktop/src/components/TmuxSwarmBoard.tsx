@@ -38,6 +38,7 @@ type TmuxPaneDefinition = {
 };
 
 type PaneBusyState = "capture" | "dispatch";
+type TmuxOperationKind = "capture" | "dispatch";
 
 export type TmuxApprovalQueuedInput = {
   approval: ApprovalRequest;
@@ -126,6 +127,16 @@ export function TmuxSwarmBoard({
   async function handleCapturePane(pane: TmuxPaneDefinition) {
     setBusyByRole((current) => ({ ...current, [pane.roleKey]: "capture" }));
     onStatusChange((current) => ({ ...current, [pane.roleKey]: "capturing" }));
+    appendBlock(
+      pane.roleKey,
+      createTmuxOperationStartedBlock({
+        activeSessionId,
+        commandPreview: "",
+        operation: "capture",
+        paneRole: pane.roleKey,
+        paneTitle: pane.title,
+      }),
+    );
     try {
       const result = await requestTmuxCapture({
         request: {
@@ -168,6 +179,16 @@ export function TmuxSwarmBoard({
       const message = sanitizeTmuxWorkbenchText(error instanceof Error ? error.message : String(error));
       onStatusChange((current) => ({ ...current, [pane.roleKey]: "capture failed" }));
       onOutputChange((current) => ({ ...current, [pane.roleKey]: message }));
+      appendBlock(
+        pane.roleKey,
+        createTmuxOperationFailedBlock({
+          activeSessionId,
+          message,
+          operation: "capture",
+          paneRole: pane.roleKey,
+          paneTitle: pane.title,
+        }),
+      );
       setBoardNotice(`${pane.title}: capture 실패 - ${message}`);
     } finally {
       setBusyByRole((current) => ({ ...current, [pane.roleKey]: undefined }));
@@ -192,6 +213,16 @@ export function TmuxSwarmBoard({
 
     setBusyByRole((current) => ({ ...current, [pane.roleKey]: "dispatch" }));
     onStatusChange((current) => ({ ...current, [pane.roleKey]: "dispatching" }));
+    appendBlock(
+      pane.roleKey,
+      createTmuxOperationStartedBlock({
+        activeSessionId,
+        commandPreview,
+        operation: "dispatch",
+        paneRole: pane.roleKey,
+        paneTitle: pane.title,
+      }),
+    );
     try {
       const result = await requestTmuxDispatch({ request });
       onStatusChange((current) => ({ ...current, [pane.roleKey]: result.dispatch.status }));
@@ -258,6 +289,16 @@ export function TmuxSwarmBoard({
       const message = sanitizeTmuxWorkbenchText(error instanceof Error ? error.message : String(error));
       onStatusChange((current) => ({ ...current, [pane.roleKey]: "dispatch failed" }));
       onOutputChange((current) => ({ ...current, [pane.roleKey]: message }));
+      appendBlock(
+        pane.roleKey,
+        createTmuxOperationFailedBlock({
+          activeSessionId,
+          message,
+          operation: "dispatch",
+          paneRole: pane.roleKey,
+          paneTitle: pane.title,
+        }),
+      );
       setBoardNotice(`${pane.title}: dispatch 실패 - ${message}`);
     } finally {
       setBusyByRole((current) => ({ ...current, [pane.roleKey]: undefined }));
@@ -368,6 +409,64 @@ export function resolveTmuxTimelineBlocks(
   fallbackBlocks: TerminalTimelineBlock[],
 ): TerminalTimelineBlock[] {
   return serverBlocks && serverBlocks.length > 0 ? serverBlocks : fallbackBlocks;
+}
+
+export function createTmuxOperationStartedBlock({
+  activeSessionId,
+  commandPreview,
+  operation,
+  paneRole,
+  paneTitle,
+}: {
+  activeSessionId: string;
+  commandPreview: string;
+  operation: TmuxOperationKind;
+  paneRole: TmuxPaneRole;
+  paneTitle: string;
+}): TerminalTimelineBlock {
+  const isDispatch = operation === "dispatch";
+  return makeSyntheticBlock({
+    paneId: `role:${paneRole}`,
+    role: paneRole,
+    host: "dgx_02",
+    sessionId: activeSessionId,
+    terminalSessionId: "terminal_session_ai_swarm",
+    kind: operation,
+    status: "running",
+    title: `${paneTitle} ${isDispatch ? "전송 중" : "읽는 중"}`,
+    summary: isDispatch
+      ? `명령 전송을 준비하고 있습니다. 미리보기: ${sanitizeTmuxWorkbenchText(commandPreview || "명령 없음")}`
+      : `${paneTitle} 패널의 최신 출력을 읽고 있습니다.`,
+    redactionApplied: true,
+  });
+}
+
+export function createTmuxOperationFailedBlock({
+  activeSessionId,
+  message,
+  operation,
+  paneRole,
+  paneTitle,
+}: {
+  activeSessionId: string;
+  message: string;
+  operation: TmuxOperationKind;
+  paneRole: TmuxPaneRole;
+  paneTitle: string;
+}): TerminalTimelineBlock {
+  const isDispatch = operation === "dispatch";
+  return makeSyntheticBlock({
+    paneId: `role:${paneRole}`,
+    role: paneRole,
+    host: "dgx_02",
+    sessionId: activeSessionId,
+    terminalSessionId: "terminal_session_ai_swarm",
+    kind: operation,
+    status: "failed",
+    title: `${paneTitle} ${isDispatch ? "전송 실패" : "읽기 실패"}`,
+    summary: sanitizeTmuxWorkbenchText(message),
+    redactionApplied: true,
+  });
 }
 
 function FleetStat({ dotClass, label, value }: { dotClass: string; label: string; value: number }) {
