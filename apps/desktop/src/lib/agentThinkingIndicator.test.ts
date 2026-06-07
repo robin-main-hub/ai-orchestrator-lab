@@ -17,9 +17,9 @@ describe("resolveAgentThinkingIndicator", () => {
       status: "preparing",
       label: "응답 준비 중",
       steps: [
-        { label: "기억 조회", state: "active" },
-        { label: "도구 후보", state: "pending" },
-        { label: "응답 초안", state: "pending" },
+        { label: "생각", state: "active" },
+        { label: "도구 호출", state: "pending" },
+        { label: "명령 생성", state: "pending" },
       ],
     });
   });
@@ -29,9 +29,9 @@ describe("resolveAgentThinkingIndicator", () => {
       status: "responding",
       label: "응답 작성 중",
       steps: [
-        { label: "Provider 호출", state: "done" },
-        { label: "마스킹 점검", state: "active" },
-        { label: "영수증 저장", state: "pending" },
+        { label: "도구 호출", state: "done" },
+        { label: "검증", state: "active" },
+        { label: "작업 영수증", state: "pending" },
       ],
     });
   });
