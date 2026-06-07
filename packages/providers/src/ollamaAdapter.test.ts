@@ -38,6 +38,16 @@ describe("createOllamaMessages", () => {
     ]);
     expect(out).toEqual([{ role: "user", content: "actual" }]);
   });
+
+  it("ignores malformed non-string content before mapping Ollama chat messages", () => {
+    const out = createOllamaMessages([
+      { role: "system", content: { text: "object system" } },
+      { role: "user", content: { text: "object user" } },
+      { role: "assistant", content: "valid assistant" },
+    ] as unknown as Parameters<typeof createOllamaMessages>[0]);
+
+    expect(out).toEqual([{ role: "assistant", content: "valid assistant" }]);
+  });
 });
 
 describe("OllamaAdapter — request shape", () => {

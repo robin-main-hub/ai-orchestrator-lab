@@ -348,6 +348,7 @@ export function createOpenAIChatMessages(
   const chatMessages: Array<{ role: "assistant" | "user" | "tool"; content: string }> = [];
 
   for (const message of messages) {
+    if (typeof message.content !== "string") continue;
     const content = message.content.trim();
     if (!content) continue;
     if (message.role === "system") {
