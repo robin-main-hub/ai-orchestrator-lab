@@ -1,10 +1,16 @@
 import React from "react";
-import { AlertCircle, ArrowRight, Handshake, UserRoundCheck } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckSquare, Handshake, UserRoundCheck } from "lucide-react";
 import type { OperatorCockpitHandoff } from "@ai-orchestrator/protocol";
 import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
 
-export function HandoffCard({ handoffs }: { handoffs: OperatorCockpitHandoff[] }) {
+export function HandoffCard({
+  handoffs,
+  onApproveHandoff,
+}: {
+  handoffs: OperatorCockpitHandoff[];
+  onApproveHandoff?: (handoffId: string) => void;
+}) {
   return (
     <GlassPanel>
       <GlassPanelHeader action={<Badge color={handoffs.length > 0 ? "blue" : "gray"}>{handoffs.length}건 활성</Badge>}>
@@ -53,6 +59,16 @@ export function HandoffCard({ handoffs }: { handoffs: OperatorCockpitHandoff[] }
                   </ul>
                 </div>
               )}
+              {handoff.id && handoff.approvalState === "required" && onApproveHandoff ? (
+                <button
+                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md border border-cyan-300/25 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-100 transition-colors hover:border-cyan-200/45 hover:bg-cyan-400/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50"
+                  onClick={() => onApproveHandoff(handoff.id as string)}
+                  type="button"
+                >
+                  <CheckSquare className="h-3.5 w-3.5" />
+                  {handoff.targetSurface === "execution_slot" ? "실행 슬롯 인계 승인" : "인계 승인"}
+                </button>
+              ) : null}
             </article>
           ))}
         </div>

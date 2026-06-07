@@ -168,6 +168,10 @@ import {
   createDebateCodingPacketProjection,
   createDebateCodingPacketWorkItems,
 } from "./lib/debateCodingPacketWorkItems";
+import {
+  createCodingPacketExecutionSlotBlock,
+  isCodingPacketExecutionHandoff,
+} from "./lib/codingPacketExecutionLoop";
 import { createControlQueueContinuitySummary } from "./lib/controlQueueContinuity";
 import { controlQueuePermissionLabel, sanitizeControlQueueText } from "./lib/controlQueuePresentation";
 import {
@@ -335,6 +339,13 @@ export function App() {
     () => getAgentChannelMessages(conversationMessagesByAgentId, selectedAgentId),
     [conversationMessagesByAgentId, selectedAgentId],
   );
+  const conversationMessageCountByAgentId = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(conversationMessagesByAgentId).map(([agentId, messages]) => [agentId, messages.length]),
+      ),
+    [conversationMessagesByAgentId],
+  );
   const setConversationMessages = useCallback(
     (updater: ConversationMessage[] | ((messages: ConversationMessage[]) => ConversationMessage[])) => {
       const targetAgentId = selectedAgentId || agents[0]?.id || "agent_unassigned";
@@ -475,7 +486,7 @@ export function App() {
     }
     const assistantMessage: ConversationMessage = {
       id: `message_agent_replay_${crypto.randomUUID()}`,
-      sessionId: activeSessionId,
+      sessionId: pending.sessionId,
       role: "assistant",
       content: replayedContent,
       createdAt,
@@ -497,7 +508,9 @@ export function App() {
       },
     };
 
-    setConversationMessages((messages) => [...messages, assistantMessage]);
+    setConversationMessagesByAgentId((channels) =>
+      updateAgentChannelMessages(channels, pending.agentId, (messages) => [...messages, assistantMessage]),
+    );
     setPendingProviderRetry(undefined);
     setDraftMessage("");
     setDraftAttachments([]);
@@ -517,8 +530,8 @@ export function App() {
       contentLength: replayedContent.length,
       route: result.route,
       redaction: "applied",
-    }, { sessionId: activeSessionId });
-  }, [activeSessionId, agents, appendEvent, pendingProviderRetry]);
+    }, { sessionId: pending.sessionId });
+  }, [agents, appendEvent, pendingProviderRetry]);
 
   const {
     approvalServerSnapshot,
@@ -561,6 +574,46 @@ export function App() {
       }),
     [assistantDrafts, workItemHandoffs, workItems],
   );
+
+  function handleApproveWorkItemHandoffAndRoute(handoffId: string) {
+    const targetHandoff = workItemHandoffs.find((handoff) => handoff.id === handoffId);
+    const targetWorkItem = targetHandoff
+      ? workItems.find((item) => item.id === targetHandoff.workItemId)
+      : undefined;
+    const createdAt = new Date().toISOString();
+
+    handleApproveWorkItemHandoff(handoffId);
+
+    if (!targetHandoff || !isCodingPacketExecutionHandoff(targetHandoff)) {
+      return;
+    }
+
+    const block = createCodingPacketExecutionSlotBlock({
+      createdAt,
+      handoff: { ...targetHandoff, approvalState: "approved" },
+      packet: codingPacketState,
+      sessionId: activeSessionId,
+      workItem: targetWorkItem,
+    });
+
+    setTmuxTimelineBlocks((blocks) => ({
+      ...blocks,
+      code: [...(blocks.code ?? []), block],
+    }));
+    setTmuxStatuses((statuses) => ({
+      ...statuses,
+      code: "idle",
+    }));
+    setMode("tmux");
+    appendEvent("coding_packet.execution_slot.ready", {
+      handoffId: targetHandoff.id,
+      payloadRef: targetHandoff.payloadRef,
+      timelineBlockId: block.id,
+      targetSurface: targetHandoff.targetSurface,
+      redaction: "applied",
+    });
+  }
+
   const [debateSession, setDebateSession] = useState<Stage3DebateSession>(() =>
     createStage3DebateSession({
       messages: initialConversationMessages,
@@ -1499,6 +1552,7 @@ export function App() {
       if (providerNeedsApproval) {
         setPendingProviderRetry({
           permissionItemId: providerPermissionId,
+          sessionId: targetSessionId,
           providerProfileId: selectedProvider.id,
           agentId: selectedAgent.id,
           modelId,
@@ -1676,6 +1730,7 @@ export function App() {
         const permissionItemId = error.sourceItemId ?? error.approvalId ?? providerPermissionId;
         setPendingProviderRetry({
           permissionItemId,
+          sessionId: targetSessionId,
           providerProfileId: selectedProvider.id,
           agentId: selectedAgent.id,
           modelId,
@@ -1903,6 +1958,22 @@ export function App() {
     setCodingPacketState(nextPacket);
     prependWorkItem(workItem);
     prependWorkItemHandoff(handoff);
+    const executionSlotBlock = createCodingPacketExecutionSlotBlock({
+      createdAt,
+      handoff,
+      packet: nextPacket,
+      routeState: "pending_approval",
+      sessionId: activeSessionId,
+      workItem,
+    });
+    setTmuxTimelineBlocks((current) => ({
+      ...current,
+      code: [...(current.code ?? []), executionSlotBlock],
+    }));
+    setTmuxStatuses((current) => ({
+      ...current,
+      code: "blocked",
+    }));
     appendEvent("coding_packet.created", {
       packet: nextPacket,
       goal: nextPacket.goal,
@@ -1913,6 +1984,7 @@ export function App() {
       filesToInspect: nextPacket.filesToInspect,
       sourceMode: mode === "debate" ? "debate" : "conversation",
       debateReadiness: readinessState,
+      executionSlotTimelineBlockId: executionSlotBlock.id,
     });
   }
 
@@ -3352,22 +3424,28 @@ export function App() {
             securityRisk,
           };
         }),
-      handoffs: workItemHandoffs.map((handoff) => {
-        const item = workItems.find((w) => w.id === handoff.workItemId);
-        return {
-          ownerAgentId: item?.ownerAgentId || "agent_unassigned",
-          nextAction: sanitizeCockpitProjectionText(handoff.summary),
-          missingInfoSlots: handoff.missingInfo.map((slot) => ({
-            ...slot,
-            label: sanitizeCockpitProjectionText(slot.label),
-          })),
-          evidenceRefs: handoff.evidenceRefs?.map((ref) => ({
-            ...ref,
-            reference: sanitizeCockpitProjectionText(ref.reference),
-            summary: sanitizeCockpitProjectionText(ref.summary || ref.reference || ref.id),
-          })),
-        };
-      }),
+      handoffs: workItemHandoffs
+        .filter((handoff) => handoff.approvalState === "required")
+        .map((handoff) => {
+          const item = workItems.find((w) => w.id === handoff.workItemId);
+          return {
+            id: handoff.id,
+            ownerAgentId: item?.ownerAgentId || "agent_unassigned",
+            nextAction: sanitizeCockpitProjectionText(handoff.summary),
+            targetSurface: handoff.targetSurface,
+            payloadRef: handoff.payloadRef ? sanitizeCockpitProjectionText(handoff.payloadRef) : undefined,
+            approvalState: handoff.approvalState,
+            missingInfoSlots: handoff.missingInfo.map((slot) => ({
+              ...slot,
+              label: sanitizeCockpitProjectionText(slot.label),
+            })),
+            evidenceRefs: handoff.evidenceRefs?.map((ref) => ({
+              ...ref,
+              reference: sanitizeCockpitProjectionText(ref.reference),
+              summary: sanitizeCockpitProjectionText(ref.summary || ref.reference || ref.id),
+            })),
+          };
+        }),
       memory: {
         contextReasons,
         macBookAuthorityEnabled: runtimeSnapshotState.syncTopology.authorityLabel === "MacBook Pro",
@@ -3890,6 +3968,7 @@ export function App() {
               memoryGovernanceLabel={memoryGovernanceSummary.installLabel}
               memoryRecordCount={memoryRecords.length}
               memoryScope={selectedAgentMemoryScope}
+              messageCountByAgentId={conversationMessageCountByAgentId}
               messages={conversationMessages}
               onAddDraftAttachments={handleAddDraftAttachments}
               onAdoptBranch={handleAdoptBranchExperiment}
@@ -3959,6 +4038,7 @@ export function App() {
               onOpenRecovery={openRecoveryFromCockpit}
               onOpenControlQueue={() => setApprovalDrawerOpen(true)}
               onPreviewEvidence={() => setApprovalDrawerOpen(true)}
+              onApproveHandoff={handleApproveWorkItemHandoffAndRoute}
               readiness={cockpitReadiness}
               snapshot={cockpitSnapshot}
             />
@@ -3984,7 +4064,7 @@ export function App() {
               handoffs={workItemHandoffs}
               items={workItems}
               onArchiveItem={handleArchiveWorkItem}
-              onApproveHandoff={handleApproveWorkItemHandoff}
+              onApproveHandoff={handleApproveWorkItemHandoffAndRoute}
               onRouteItem={handleRouteWorkItem}
               onSendDraft={handleMarkAssistantDraftSent}
             />
