@@ -11,7 +11,7 @@ describe("AgentLiveWorkStatus", () => {
           label: "응답 작성 중",
           status: "responding",
           steps: [
-            { label: "Provider 호출", state: "done" },
+            { label: "공급자 호출", state: "done" },
             { label: "마스킹 점검", state: "active" },
             { label: "영수증 저장", state: "pending" },
           ],
@@ -21,7 +21,7 @@ describe("AgentLiveWorkStatus", () => {
 
     expect(html).toContain("마키마 작업 중");
     expect(html).toContain("응답 작성 중");
-    expect(html).toContain("Provider 호출");
+    expect(html).toContain("공급자 호출");
     expect(html).toContain("마스킹 점검");
     expect(html).toContain("영수증 저장");
     expect(html).not.toContain("cyan");
