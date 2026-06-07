@@ -153,6 +153,7 @@ import {
   createInitialAgentConversationChannels,
   distributeReplayedMessagesIntoChannels,
   getAgentChannelMessages,
+  resolveAgentCompletionContext,
   updateAgentChannelMessages,
   type AgentChannelMemoryScope,
   type AgentConversationChannels,
@@ -1064,6 +1065,12 @@ export function App() {
     userMessage: ConversationMessage;
   }): Promise<WorkbenchCompletionResult> {
     const roleToolConfig = createAgentRoleToolRuntimeSummary(agent);
+    const completionContext = resolveAgentCompletionContext({
+      agent,
+      channels: conversationMessagesByAgentId,
+      fallbackProviderProfileId: provider.id ?? agent.providerProfileId ?? "provider_unassigned",
+      sessionId: activeSessionId,
+    });
     if (!isDgxRoutedProvider(provider)) {
       const recalledMemoryCount = memoryInspector.trace.results.filter((result) => result.usedInDecision).length;
       const guardedReply = applyAgentIdentityResponseGuard({
@@ -1099,10 +1106,10 @@ export function App() {
       agent,
       configFiles: agentConfigFiles,
       memory: memoryInspector,
-      memoryScope: selectedAgentMemoryScope,
+      memoryScope: completionContext.memoryScope,
       modelId,
       persona,
-      previousMessages: conversationMessages,
+      previousMessages: completionContext.previousMessages,
       provider,
       userMessage,
     });
