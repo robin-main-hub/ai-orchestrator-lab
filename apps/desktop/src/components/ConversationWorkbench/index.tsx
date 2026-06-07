@@ -24,6 +24,7 @@ import {
 import { createAgentChatContinuitySummary } from "../../lib/agentChatContinuity";
 import { createAgentChannelHeaderMemoryLabel } from "../../lib/agentChannelStatus";
 import { getAgentToolBadgeLabels, getAgentToolProfileSummary } from "../../lib/agentToolProfiles";
+import { resolveAgentThinkingIndicator } from "../../lib/agentThinkingIndicator";
 import { getConversationWorkbenchVisibility } from "../../lib/conversationWorkbenchVisibility";
 import type {
   AgentConfigFile,
@@ -39,6 +40,7 @@ import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { AgentPortrait, type AgentState } from "../shared/AgentActivity";
 import { AgentConfigDrawer } from "../AgentConfigDrawer";
+import { AgentLiveWorkStatus } from "./AgentLiveWorkStatus";
 import { AgentSkillProfilePanel } from "./AgentSkillProfilePanel";
 
 // Sub-components
@@ -168,6 +170,7 @@ export function ConversationWorkbench({
   });
   const selectedAgentActivity = selectedAgent ? agentActivityById?.[selectedAgent.id] ?? "idle" : "idle";
   const selectedAgentState = mapConversationAgentState(selectedAgentActivity);
+  const selectedAgentThinkingIndicator = resolveAgentThinkingIndicator(selectedAgent?.id, agentActivityById);
   const selectedAgentInitials = selectedAgent ? agentInitialsForDisplay(selectedAgent) : "AI";
   const selectedAgentDisplayName = selectedAgent ? agentPrimaryDisplayName(selectedAgent) : "에이전트 선택";
   const selectedAgentSubtitle = selectedAgent ? agentSecondaryDisplayLabel(selectedAgent) : "대기";
@@ -337,6 +340,9 @@ export function ConversationWorkbench({
               <AgentSkillProfilePanel role={selectedAgent.role} />
             </div>
           </div>
+          {selectedAgentThinkingIndicator ? (
+            <AgentLiveWorkStatus displayName={selectedAgentDisplayName} indicator={selectedAgentThinkingIndicator} />
+          ) : null}
         </>
       ) : null}
 
