@@ -174,6 +174,7 @@ import {
 } from "./lib/codingPacketExecutionLoop";
 import { createControlQueueContinuitySummary } from "./lib/controlQueueContinuity";
 import { controlQueuePermissionLabel, sanitizeControlQueueText } from "./lib/controlQueuePresentation";
+import { shouldRefreshControlQueueOnOpen } from "./lib/controlQueueAutoRefresh";
 import {
   createUnifiedControlQueueSnapshot,
   parseUnifiedControlQueueSourceItemId,
@@ -755,6 +756,22 @@ export function App() {
     onProviderCompletionReplayed: handleProviderCompletionReplayed,
     onTmuxOutcome: handleTmuxOutcome,
   });
+  const previousApprovalDrawerOpenRef = useRef(approvalDrawerOpen);
+
+  useEffect(() => {
+    const previousOpen = previousApprovalDrawerOpenRef.current;
+    previousApprovalDrawerOpenRef.current = approvalDrawerOpen;
+    if (
+      shouldRefreshControlQueueOnOpen({
+        isOpen: approvalDrawerOpen,
+        previousOpen,
+        status: approvalServerStatus,
+      })
+    ) {
+      void handleRefreshApprovalQueue();
+    }
+  }, [approvalDrawerOpen, approvalServerStatus, handleRefreshApprovalQueue]);
+
   const memoryInstallAudit = useMemo(
     () =>
       createAgentChannelMemoryInstallAudit(
