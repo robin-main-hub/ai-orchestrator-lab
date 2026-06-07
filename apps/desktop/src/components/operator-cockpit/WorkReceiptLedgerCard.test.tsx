@@ -115,4 +115,35 @@ describe("WorkReceiptLedgerCard", () => {
     expect(html).not.toContain("/Users/robin/Documents");
     expect(html).toContain("[redacted");
   });
+
+  it("장부 상단에서 전체 수량, 검색 가능 수량, 출처별 수량을 압축 요약한다", () => {
+    const html = renderToStaticMarkup(
+      <WorkReceiptLedgerCard
+        items={[
+          receiptItem,
+          {
+            ...receiptItem,
+            id: "conversation_1",
+            kind: "conversation",
+            title: "대화 공개 영수증",
+          },
+          {
+            ...receiptItem,
+            id: "terminal_1",
+            kind: "tmux",
+            searchable: false,
+            safetyLabel: "검색 제외 필요",
+            title: "터미널 공개 영수증",
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("총 3건");
+    expect(html).toContain("검색 2건");
+    expect(html).toContain("점검 1건");
+    expect(html).toContain("대화 1");
+    expect(html).toContain("토론 1");
+    expect(html).toContain("터미널 1");
+  });
 });
