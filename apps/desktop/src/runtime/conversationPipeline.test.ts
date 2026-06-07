@@ -152,6 +152,9 @@ describe("conversation pipeline runtime helper", () => {
     expect(pipeline[0]?.content).toContain(
       "Identity contract: your name is 마키마. If the user asks your name, answer 마키마",
     );
+    expect(pipeline[0]?.content).toContain(
+      'Name QA contract: when the user asks "네 이름은 뭐야", "이름", "누구야", or similar identity questions, answer first as "마키마"',
+    );
     expect(pipeline[0]?.content).toContain("Provider: MiMo Token Plan / model: mimo-v2.5-pro");
     expect(pipeline[0]?.content).toContain("# System Safety Boundaries");
     expect(pipeline[0]?.content).toContain("# Persona: orchestrator");

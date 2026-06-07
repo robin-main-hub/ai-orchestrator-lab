@@ -51,7 +51,7 @@ describe("deriveCockpitNextActions", () => {
 
     expect(actions.map((action) => action.label)).toEqual([
       "렘: 권한 확인 필요",
-      "승인 필요: terminal_run from agent",
+      "승인 필요: 터미널 실행 권한",
       "공급자 상태 점검을 다시 실행",
     ]);
   });
@@ -92,6 +92,22 @@ describe("deriveCockpitNextActions", () => {
       source: "receipt",
       targetSurface: "receipts",
     });
+  });
+
+  it("does not expose raw approval block reason strings in visible next actions", () => {
+    const actions = deriveCockpitNextActions({
+      diagnostics: { nextActions: [] } as unknown as SettingsDiagnostics,
+      maturity: { nextActions: [], overallStatus: "ready" } as unknown as OrchestrationMaturityReport,
+      snapshot: {
+        ...snapshot,
+        fleet: [],
+        handoffs: [],
+      } as unknown as OperatorCockpitSnapshot,
+    });
+
+    expect(actions[0]?.label).toBe("승인 필요: 터미널 실행 권한");
+    expect(actions[0]?.label).not.toContain("terminal_run");
+    expect(actions[0]?.label).not.toContain("from agent");
   });
 
   it("when nothing is blocked, points the operator at active worker output", () => {

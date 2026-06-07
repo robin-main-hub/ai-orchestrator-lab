@@ -1,4 +1,5 @@
 import type { AgentChannelMemoryScope } from "./agentConversationChannels";
+import { formatModelDisplayName } from "./helpers";
 import { compactPublicText, sanitizePublicText } from "./publicRedaction";
 
 export type AgentChannelAdapterStatus = "loading" | "ready" | "error";
@@ -96,7 +97,9 @@ export function createAgentChannelDetailChips({
     chips.push({
       label: "공급자",
       tone: "ready",
-      value: sanitizeChannelValue([providerDisplayName(providerProfileId), modelId].filter(Boolean).join(" · ")),
+      value: sanitizeChannelValue(
+        [providerDisplayName(providerProfileId), formatModelDisplayName(modelId)].filter(Boolean).join(" · "),
+      ),
     });
   }
   if (toolLabels.length > 0) {

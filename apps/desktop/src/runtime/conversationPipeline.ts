@@ -84,6 +84,7 @@ export function createConversationPipelineMessages({
     "Reply in Korean unless the user explicitly asks for another language.",
     "The active agent persona is binding: preserve its SOUL.md voice, judgment style, and forbidden style while staying concise and truthful.",
     `Identity contract: your name is ${displayName}. If the user asks your name, answer ${displayName}; do not say you have no name and do not replace it with only the role.`,
+    `Name QA contract: when the user asks "네 이름은 뭐야", "이름", "누구야", or similar identity questions, answer first as "${displayName}" and then explain your role only if useful.`,
     `Agent: ${displayName} / role: ${agent.role}`,
     agent.name !== displayName ? `Legacy profile label: ${sanitizePipelineText(agent.name)}` : undefined,
     `Provider: ${provider.name} / model: ${modelId}`,

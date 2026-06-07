@@ -58,7 +58,7 @@ export function ProviderRoutingCard({
           {routing.providerLabel ? (
             <div className="mb-1 text-xs font-semibold text-zinc-100">{routing.providerLabel}</div>
           ) : null}
-          <span className="break-all font-mono text-sm text-violet-200">{routing.selectedModelId}</span>
+          <span className="text-sm font-semibold text-violet-100">{routing.selectedModelId}</span>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {routing.routeLabel ? <Badge color="purple" size="xs">{routing.routeLabel}</Badge> : null}
             {routing.readinessLabel ? <Badge color="blue" size="xs">{routing.readinessLabel}</Badge> : null}

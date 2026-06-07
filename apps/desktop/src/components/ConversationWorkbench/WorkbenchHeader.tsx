@@ -6,8 +6,9 @@ import type {
 } from "@ai-orchestrator/protocol";
 import { Button } from "@/ui/button";
 import type { WorkbenchAgent, AgentConfigTab, AgentPersonaSettings } from "../../types";
+import { agentPrimaryDisplayName } from "../../lib/agentDisplay";
 import { getAgentToolBadgeLabels, getAgentToolProfile } from "../../lib/agentToolProfiles";
-import { agentRoleLabel, providerDisplayLabel } from "../../lib/helpers";
+import { agentRoleLabel, formatModelDisplayName, providerDisplayLabel } from "../../lib/helpers";
 import {
   creativityLevelLabel,
   soulModeLabel,
@@ -61,17 +62,17 @@ export function WorkbenchHeader({
         >
           {agents.map((agent) => (
             <option key={agent.id} value={agent.id}>
-              {agent.name} · {agent.id === selectedAgentId
-                ? selectedModel?.id ?? agent.modelId ?? "모델 연결 대기"
-                : agent.modelId ?? "모델 연결 대기"}
+              {agentPrimaryDisplayName(agent)} · {agent.id === selectedAgentId
+                ? formatModelDisplayName(selectedModel?.name ?? selectedModel?.id ?? agent.modelId)
+                : formatModelDisplayName(agent.modelId)}
             </option>
           ))}
         </select>
         <div className="flex min-w-0 flex-col">
           <span className="text-[10px] text-muted-foreground">현재 대화 상대</span>
           <span className="truncate text-xs font-medium text-foreground">
-            {selectedAgent?.name ?? "봇 선택 필요"} ·{" "}
-            {selectedProvider ? providerDisplayLabel(selectedProvider.name) : "공급자 미지정"}
+            {selectedAgent ? agentPrimaryDisplayName(selectedAgent) : "봇 선택 필요"} ·{" "}
+            {selectedProvider ? providerDisplayLabel(selectedProvider.name) : "모델 연결 대기"}
           </span>
         </div>
         {selectedAgent && toolProfile ? (

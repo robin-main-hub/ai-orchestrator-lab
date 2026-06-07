@@ -81,10 +81,7 @@ export function createAgentModelRouteLabel({
   const providerLabel = providerName ? providerDisplayLabel(providerName) : "공급자 미지정";
   const trimmedModelId = modelId?.trim();
   const trimmedModelName = modelName?.trim();
-  const modelLabel =
-    trimmedModelName && trimmedModelId && trimmedModelName !== trimmedModelId
-      ? `${trimmedModelName} (${trimmedModelId})`
-      : trimmedModelName || trimmedModelId || "모델 연결 대기";
+  const modelLabel = formatModelDisplayName(trimmedModelName || trimmedModelId);
   const sourceLabel =
     source === "agent"
       ? "에이전트 고정"
@@ -95,6 +92,26 @@ export function createAgentModelRouteLabel({
           : undefined;
 
   return `${sourceLabel ? `${sourceLabel} · ` : ""}${providerLabel} / ${modelLabel}`;
+}
+
+export function formatModelDisplayName(value?: string) {
+  const model = value?.trim();
+  if (!model) return "모델 연결 대기";
+  const known: Record<string, string> = {
+    "claude-opus-4-6": "Claude Opus 4.6",
+    "claude-opus-4-7": "Claude Opus 4.7",
+    "claude-opus-4-8": "Claude Opus 4.8",
+    "mimo-v2.5": "MiMo V2.5",
+    "mimo-v2.5-asr": "MiMo V2.5 ASR",
+    "mimo-v2.5-pro": "MiMo V2.5 Pro",
+  };
+  if (known[model]) return known[model];
+  if (/^gpt-\d/.test(model)) return model.toUpperCase();
+  return model
+    .replace(/^claude-/i, "Claude ")
+    .replace(/^mimo-/i, "MiMo ")
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export function classifyDraftAttachment(file: File): ConversationAttachment["kind"] {

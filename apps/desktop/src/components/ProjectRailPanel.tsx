@@ -4,7 +4,7 @@ import type { BranchExperiment, CodingPacket, InsightFinding, ReviewMode } from 
 import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import type { Stage4AgentRun } from "../runtime/stage4Runtime";
 import type { Stage6MemoryInspector } from "../runtime/stage6Memory";
-import { branchStatusLabel, insightCategoryLabel, reviewModeLabel } from "../lib/uiLabels";
+import { branchAgentNameLabel, branchStatusLabel, insightCategoryLabel, reviewModeLabel } from "../lib/uiLabels";
 import type { MetaOnboardingSignal } from "../types";
 
 export function ProjectRailPanel({
@@ -195,7 +195,9 @@ export function ProjectRailPanel({
               {visibleBranches.map((branch) => (
                 <article key={branch.id}>
                   <strong>{branch.title}</strong>
-                  <span>{branchStatusLabel(branch.status)} / {branch.agentName}</span>
+                  <span>
+                    {branchStatusLabel(branch.status)} / {branchAgentNameLabel(branch.agentName)}
+                  </span>
                 </article>
               ))}
             </div>

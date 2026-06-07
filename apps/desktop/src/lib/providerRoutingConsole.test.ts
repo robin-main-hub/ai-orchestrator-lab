@@ -97,7 +97,7 @@ describe("providerRoutingConsole", () => {
 
     expect(items[0]).toMatchObject({
       assignedAgentCount: 2,
-      defaultModelLabel: "mimo-v2.5-pro",
+      defaultModelLabel: "MiMo V2.5 Pro",
       discoveryLabel: "모델 발견 완료",
       displayName: "MiMo",
       readinessLabel: "연결 검증 준비",
