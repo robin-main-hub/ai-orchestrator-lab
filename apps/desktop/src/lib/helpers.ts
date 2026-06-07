@@ -67,6 +67,26 @@ export function providerDisplayLabel(name: string): string {
   return name;
 }
 
+export function createAgentModelRouteLabel({
+  modelId,
+  modelName,
+  providerName,
+}: {
+  modelId?: string;
+  modelName?: string;
+  providerName?: string;
+}) {
+  const providerLabel = providerName ? providerDisplayLabel(providerName) : "Provider 미지정";
+  const trimmedModelId = modelId?.trim();
+  const trimmedModelName = modelName?.trim();
+  const modelLabel =
+    trimmedModelName && trimmedModelId && trimmedModelName !== trimmedModelId
+      ? `${trimmedModelName} (${trimmedModelId})`
+      : trimmedModelName || trimmedModelId || "모델 연결 대기";
+
+  return `${providerLabel} / ${modelLabel}`;
+}
+
 export function classifyDraftAttachment(file: File): ConversationAttachment["kind"] {
   return file.type.startsWith("image/") ? "image" : "document";
 }
