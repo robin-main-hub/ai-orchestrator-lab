@@ -44,6 +44,11 @@ export type TmuxApprovalQueuedInput = {
   request: DesktopTmuxDispatchRequest;
 };
 
+export const tmuxBoardCopyLabels = {
+  fallbackApprovalTitle: "승인 대기",
+  rejectFromQueueNotice: "Tmux 명령어 실행 거부는 우측 상단의 승인 대기열 패널에서 처리해 주세요.",
+} as const;
+
 export function TmuxSwarmBoard({
   activeSessionId,
   agentActivityById,
@@ -219,7 +224,7 @@ export function TmuxSwarmBoard({
             terminalSessionId: "terminal_session_ai_swarm",
             kind: "approval",
             status: "pending_approval",
-            title: "approval 대기",
+            title: tmuxBoardCopyLabels.fallbackApprovalTitle,
             summary: result.approval.reason,
             approvalId: result.approval.id,
           }),
@@ -327,7 +332,7 @@ export function TmuxSwarmBoard({
               onCommandDraftChange={(value) => updateCommandDraft(selectedPane.roleKey, value)}
               onDispatch={() => void handleDispatchPane(selectedPane)}
               onReject={() => {
-                setBoardNotice("Tmux 명령어 실행 거부는 우측 상단의 승인 대기열(Control Queue) 패널에서 처리해 주세요.");
+                setBoardNotice(tmuxBoardCopyLabels.rejectFromQueueNotice);
               }}
               pane={{
                 ...selectedPane,
@@ -692,18 +697,18 @@ function createTmuxSwarmRecommendation(packet: CodingPacket, messages: Conversat
   };
 }
 
-function defaultTmuxCommandForRole(role: TmuxPaneRole) {
+export function defaultTmuxCommandForRole(role: TmuxPaneRole) {
   const prompts: Record<TmuxPaneRole, string> = {
-    discussion: "echo 'Discuss requirement first. No direct execution.'",
-    orchestrator: "codex 'Break down the current request into role-based tasks. Do not execute commands.'",
+    discussion: "echo '요구사항을 먼저 논의한다. 직접 실행하지 않는다.'",
+    orchestrator: "codex '현재 요청을 역할별 작업으로 나눠라. 명령은 실행하지 마라.'",
     status: "git status --short",
-    code: "codex 'Inspect the current Coding Packet and propose implementation steps.'",
-    architect: "codex 'Review protocol and event boundaries for the current task.'",
-    frontend: "codex 'Review the desktop tmux workbench UI and propose the next UI patch.'",
-    backend: "codex 'Review the server tmux gate and identify missing safety checks.'",
+    code: "codex '현재 코딩 패킷을 검토하고 구현 단계를 제안하라.'",
+    architect: "codex '현재 작업의 프로토콜과 이벤트 경계를 검토하라.'",
+    frontend: "codex '데스크톱 tmux 워크벤치 UI를 검토하고 다음 UI 패치를 제안하라.'",
+    backend: "codex '서버 tmux 게이트를 검토하고 빠진 안전장치를 찾아라.'",
     qa: "corepack pnpm typecheck && corepack pnpm test",
-    research: "codex 'Collect references needed for the current implementation decision.'",
-    memory: "codex 'Extract durable decisions from the current session for Memento.'",
+    research: "codex '현재 구현 결정에 필요한 레퍼런스를 수집하라.'",
+    memory: "codex '현재 세션에서 Memento에 남길 지속 결정을 추출하라.'",
   };
   return prompts[role];
 }
