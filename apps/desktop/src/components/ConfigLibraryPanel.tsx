@@ -1,4 +1,5 @@
 import { CheckCircle2, CopyPlus, Download, FileText, Package, Plus, Save, Tags, Upload } from "lucide-react";
+import { agentRoleLabel } from "../lib/helpers";
 import { platformDownload } from "../lib/platform";
 import type { AgentConfigFile, AgentConfigFileKind, AgentProfilePack } from "../types";
 
@@ -6,8 +7,8 @@ const configKinds: AgentConfigFileKind[] = ["soul", "agents", "skill", "memory_p
 
 const kindLabels: Record<AgentConfigFileKind, string> = {
   agents: "AGENTS.md",
-  memory_policy: "Memory Policy",
-  prompt_template: "Prompt Template",
+  memory_policy: "기억 정책",
+  prompt_template: "프롬프트 템플릿",
   skill: "SKILL.md",
   soul: "SOUL.md",
 };
@@ -72,7 +73,7 @@ export function ConfigLibraryPanel({
   return (
     <section
       className={`mini-panel config-library-panel ${variant === "rail" ? "rail-panel" : "config-library-workbench"}`}
-      aria-label="agent config file library"
+      aria-label="에이전트 설정파일 라이브러리"
     >
       <header>
         <FileText size={16} />
@@ -245,13 +246,13 @@ export function ConfigLibraryPanel({
       <div className="config-profile-pack-list">
         <div className="config-section-title">
           <Package size={14} />
-          <strong>Profile Packs</strong>
+          <strong>프로필 팩</strong>
         </div>
         {profilePacks.map((pack) => (
           <article key={pack.id}>
             <div>
               <strong>{pack.label}</strong>
-              <span>{pack.agentRole} / {pack.configFileIds.length} files</span>
+              <span>{agentRoleLabel(pack.agentRole)} / 설정파일 {pack.configFileIds.length}개</span>
               <p>{pack.description}</p>
             </div>
             <em>{pack.tags.join(" · ")}</em>
