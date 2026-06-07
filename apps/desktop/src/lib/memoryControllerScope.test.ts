@@ -11,6 +11,8 @@ describe("memory controller scope guards", () => {
         agentId: "agent_reviewer",
         sessionId: "session_main",
         providerProfileId: "provider_mimo_token_openai",
+        roomId: "room_session_main_agent_reviewer",
+        roomLabel: "에이전트 전용 방",
         namespace: "agent:agent_reviewer/session:session_main/provider:provider_mimo_token_openai",
         recallTraceId: "recall_agent_reviewer_session_main_provider_mimo_token_openai",
       }),

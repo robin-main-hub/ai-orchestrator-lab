@@ -3957,6 +3957,7 @@ export function App() {
               onOpenMemory={openMemoryFromCockpit}
               onOpenProviderRouting={openProviderRoutingFromCockpit}
               onOpenRecovery={openRecoveryFromCockpit}
+              onOpenControlQueue={() => setApprovalDrawerOpen(true)}
               onPreviewEvidence={() => setApprovalDrawerOpen(true)}
               readiness={cockpitReadiness}
               snapshot={cockpitSnapshot}

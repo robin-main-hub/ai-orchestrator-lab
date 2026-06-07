@@ -154,6 +154,8 @@ describe("agentConversationChannels", () => {
     expect(createAgentChannelMemoryScope("agent_reviewer", "session_a", "provider_mimo_token_openai")).toEqual({
       agentId: "agent_reviewer",
       providerProfileId: "provider_mimo_token_openai",
+      roomId: "room_session_a_agent_reviewer",
+      roomLabel: "에이전트 전용 방",
       sessionId: "session_a",
       namespace: "agent:agent_reviewer/session:session_a/provider:provider_mimo_token_openai",
       recallTraceId: "recall_agent_reviewer_session_a_provider_mimo_token_openai",

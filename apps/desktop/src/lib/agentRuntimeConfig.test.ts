@@ -140,6 +140,8 @@ describe("agent runtime config injection", () => {
       agentId: "agent_orchestrator",
       sessionId: "session_main",
       providerProfileId: "provider_mimo_token_openai",
+      roomId: "room_session_main_agent_orchestrator",
+      roomLabel: "에이전트 전용 방",
       namespace: "agent:agent_orchestrator/session:session_main/provider:provider_mimo_token_openai",
       recallTraceId: "recall_agent_orchestrator_session_main_provider_mimo_token_openai",
     });
