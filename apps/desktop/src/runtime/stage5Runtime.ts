@@ -84,7 +84,10 @@ function createLocalHeartbeat(runtime: RuntimeSnapshot, checkedAt: string): DgxH
     status: runtime.dgxStatus === "online" ? "connected" : "unreachable",
     latencyMs: runtime.dgxStatus === "online" ? 18 : undefined,
     checkedAt,
-    message: runtime.dgxStatus === "online" ? "dgx authority reachable" : "dgx unreachable; desktop uses local fallback",
+    message:
+      runtime.dgxStatus === "online"
+        ? "DGX 권위 노드에 연결되었습니다."
+        : "DGX에 닿지 않아 데스크톱 로컬 대체 경로를 사용합니다.",
   };
 }
 
@@ -100,7 +103,7 @@ function createLocalRemoteResponse(
       status: "blocked",
       targetNodeId: request.targetNodeId,
       fallbackMode: "local_cli",
-      message: "approval required before DGX remote workspace execution",
+      message: "DGX 원격 워크스페이스 실행 전 운영자 승인이 필요합니다.",
       createdAt,
     };
   }
@@ -112,7 +115,7 @@ function createLocalRemoteResponse(
       status: "fallback_required",
       targetNodeId: request.targetNodeId,
       fallbackMode: "local_cli",
-      message: "DGX is offline; keep the run in local outbox",
+      message: "DGX가 오프라인이라 실행 요청을 로컬 발신함에 보관합니다.",
       createdAt,
     };
   }
@@ -123,15 +126,25 @@ function createLocalRemoteResponse(
     status: "queued",
     targetNodeId: request.targetNodeId,
     fallbackMode: "none",
-    message: "DGX remote run queued",
+    message: "DGX 원격 실행 대기열에 등록했습니다.",
     createdAt,
   };
 }
 
 function createCommandPreview(run: Stage4AgentRun): string {
-  const verifier = run.verifier.status;
+  const verifier = stage5StatusLabel(run.verifier.status);
   const required = run.steps.filter((step) => step.permissionState === "required").length;
-  return `run ${run.id} with verifier=${verifier}; approvals=${required}`;
+  return `${run.id} 실행 · 검증 ${verifier} · 승인 ${required}건`;
+}
+
+function stage5StatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    failed: "실패",
+    passed: "통과",
+    pending: "대기",
+    running: "실행 중",
+  };
+  return labels[status] ?? status;
 }
 
 function mergeClients(localRuntime: RuntimeSnapshot, serverRuntime: RuntimeSnapshot) {
@@ -269,7 +282,7 @@ export class DgxConnectionStateMachine {
 
     const WSClass = this.options.WebSocketImpl ?? globalThis.WebSocket;
     if (!WSClass) {
-      this.lastError = "WebSocket implementation not found";
+      this.lastError = "WebSocket 구현을 찾지 못했습니다.";
       this.transitionTo("offline");
       return;
     }
@@ -312,7 +325,7 @@ export class DgxConnectionStateMachine {
     };
 
     this.ws.onerror = () => {
-      this.lastError = "WebSocket error event";
+      this.lastError = "WebSocket 오류 이벤트를 받았습니다.";
       this.transitionTo("degraded");
     };
 
@@ -371,4 +384,3 @@ export class DgxConnectionStateMachine {
     }, interval);
   }
 }
-
