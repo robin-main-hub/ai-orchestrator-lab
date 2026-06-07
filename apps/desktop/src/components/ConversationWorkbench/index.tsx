@@ -43,6 +43,7 @@ import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { AgentPortrait, type AgentState } from "../shared/AgentActivity";
 import { AgentConfigDrawer } from "../AgentConfigDrawer";
+import { AgentConversationMissionBrief } from "./AgentConversationMissionBrief";
 import { AgentConversationFlowPanel } from "./AgentConversationFlowPanel";
 import { AgentLiveWorkStatus } from "./AgentLiveWorkStatus";
 import { AgentMemoryContinuityPanel } from "./AgentMemoryContinuityPanel";
@@ -358,6 +359,16 @@ export function ConversationWorkbench({
 
       {selectedAgent && toolProfileSummary ? (
         <>
+          <AgentConversationMissionBrief
+            continuityDetail={agentChatContinuity.detail}
+            memoryQualityLabel={agentChatContinuity.memoryQualityLabel}
+            modelLabel={`대화 모델 · ${selectedAgentModelRouteLabel}`}
+            nextPrompt={promptSuggestions[0]}
+            personaAppliedLabel={personaSoulApplied && personaAgentsMdApplied ? "SOUL/AGENTS 적용" : "인격 설정 확인"}
+            selectedAgentName={selectedAgentDisplayName}
+            toolLabels={toolLabels}
+            workStatusLabel={selectedAgentWorkStatusLabel}
+          />
           <AgentCapabilityStrip
             continuityDetail={agentChatContinuity.detail}
             displayName={selectedAgentDisplayName}
