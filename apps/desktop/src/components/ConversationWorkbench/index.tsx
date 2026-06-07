@@ -15,6 +15,7 @@ import {
   attachmentAcceptForModel,
   createAgentModelRouteLabel,
   createDefaultPersonaSettings,
+  formatModelDisplayName,
   modelSupportsAnyAttachment,
 } from "../../lib/helpers";
 import {
@@ -238,7 +239,7 @@ export function ConversationWorkbench({
                   <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-500 transition-transform group-data-[state=open]:rotate-180" />
                 </span>
                 <span className="truncate text-[11px] text-zinc-500">
-                  {selectedAgentSubtitle} · 현재 모델: {selectedAgentModelRouteLabel}
+                  {selectedAgentSubtitle} · 대화 모델: {selectedAgentModelRouteLabel}
                 </span>
               </div>
             </button>
@@ -261,14 +262,15 @@ export function ConversationWorkbench({
                 >
                   {agents.map((agent) => (
                     <option key={agent.id} value={agent.id}>
-                      {agentPrimaryDisplayName(agent)} · {agent.modelId ?? "모델 연결 대기"}
+                      {agentPrimaryDisplayName(agent)} ·{" "}
+                      {agent.modelId ? formatModelDisplayName(agent.modelId) : "모델 연결 대기"}
                     </option>
                   ))}
                 </select>
               </label>
               <ConversationMetaRow
                 icon={Cpu}
-                label="현재 모델"
+                label="대화 모델"
                 value={selectedAgentModelRouteLabel}
               />
               <ConversationMetaRow icon={Database} label="기억" value={`${memoryRecordCount}건 · ${memoryGovernanceLabel ?? memoryMode}`} />
@@ -352,7 +354,7 @@ export function ConversationWorkbench({
             continuityDetail={agentChatContinuity.detail}
             displayName={selectedAgentDisplayName}
             memoryQualityLabel={agentChatContinuity.memoryQualityLabel}
-            modelLabel={`현재 모델 · ${selectedAgentModelRouteLabel}`}
+            modelLabel={`대화 모델 · ${selectedAgentModelRouteLabel}`}
             toolBoundaryLabel={toolProfileSummary.runtime.boundaryLabel}
             toolGroupLabel={toolProfileSummary.label}
             toolLabels={toolLabels}

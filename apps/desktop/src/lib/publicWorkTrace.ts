@@ -4,7 +4,7 @@ import {
   summarizeAttachmentProcessingPlans,
   type AttachmentProcessingPlan,
 } from "./attachmentProcessing";
-import { agentRoleLabel } from "./helpers";
+import { agentRoleLabel, formatModelDisplayName } from "./helpers";
 import { PUBLIC_WORK_PHASES } from "./publicWorkPhases";
 import { compactPublicText, inspectPublicText, sanitizePublicText } from "./publicRedaction";
 
@@ -24,7 +24,7 @@ export type PublicWorkTraceGroup = {
 };
 
 export type PublicWorkTraceReceipt = {
-  label: "에이전트 실행 영수증" | "토론 실행 영수증" | "Tmux 실행 영수증";
+  label: "에이전트 실행 영수증" | "토론 실행 영수증" | "터미널 실행 영수증";
   status: "checkpointed" | "live" | "fallback" | "blocked";
   items: Array<{
     label: "범위" | "기준점" | "마스킹" | "공개 범위";
@@ -92,13 +92,16 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
 
   const route = readString(metadata.route) ?? readString(metadata.providerRoute) ?? readString(metadata.providerProfileId);
   const model = readString(metadata.modelId);
+  const modelLabel = model ? formatModelDisplayName(model) : undefined;
   const realProviderCall = readBoolean(metadata.realProviderCall);
   if (route || model || realProviderCall !== undefined) {
     steps.push({
       id: "provider-call",
       label: PUBLIC_WORK_PHASES.toolCall.label,
       tone: realProviderCall === false ? "warning" : "success",
-      value: sanitize([route, model].filter(Boolean).join(" · ") || (realProviderCall ? "실제 호출 완료" : "대체 경로 또는 차단")),
+      value: sanitize(
+        [route, modelLabel].filter(Boolean).join(" · ") || (realProviderCall ? "실제 호출 완료" : "대체 경로 또는 차단"),
+      ),
     });
   }
 
@@ -306,7 +309,7 @@ export function createTerminalBlockPublicWorkTrace(block: TerminalTimelineBlock)
   const steps: PublicWorkTraceItem[] = [
     {
       id: "tmux-step",
-      label: "tmux 단계",
+      label: "터미널 단계",
       tone: block.status === "failed" || block.status === "blocked" ? "danger" : "info",
       value: sanitize(`${tmuxKindDisplayLabel(block.kind)} · ${tmuxStatusDisplayLabel(block.status)}`),
     },
@@ -338,7 +341,7 @@ export function createTerminalBlockPublicWorkTrace(block: TerminalTimelineBlock)
     });
   }
   return toTrace(steps, commands, evidence, {
-    label: "Tmux 실행 영수증",
+    label: "터미널 실행 영수증",
     status: block.status === "failed" || block.status === "blocked" ? "blocked" : "checkpointed",
     items: [
       { label: "범위", value: sanitize(tmuxKindDisplayLabel(block.kind)) },

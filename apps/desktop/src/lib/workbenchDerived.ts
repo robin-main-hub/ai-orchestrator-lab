@@ -61,14 +61,14 @@ export function createInsightFindings({
       category: "performance",
       status: memoryInspector.trace.results.length > 5 ? "watch" : "ok",
       label: `기억 조회 ${memoryInspector.trace.results.length}건`,
-      summary: "중복 recall이 많아지면 ContextPack tier를 낮춘다.",
+      summary: "중복 기억 조회가 많아지면 맥락 묶음 크기를 낮춘다.",
     },
     {
       id: "insight_security",
       category: "security",
       status: permissionSnapshot.summary.pending > 0 || providerReadiness.status === "blocked" ? "watch" : "ok",
       label: `승인 대기 ${permissionSnapshot.summary.pending}건`,
-      summary: "승인 대기, secret, provider trust를 배포 전에 확인한다.",
+      summary: "승인 대기, 비밀값, 모델 연결 신뢰도를 배포 전에 확인한다.",
     },
     {
       id: "insight_tech_debt",

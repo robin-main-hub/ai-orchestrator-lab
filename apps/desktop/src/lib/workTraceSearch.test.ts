@@ -11,7 +11,7 @@ const trace: PublicWorkTrace = {
       id: "steps",
       title: "작업 단계",
       items: [
-        { id: "provider", label: "Provider 호출", value: "MiMo OpenAI · mimo-v2.5-pro", tone: "success" },
+        { id: "provider", label: "모델 호출", value: "MiMo OpenAI · MiMo V2.5 Pro", tone: "success" },
       ],
     },
     {

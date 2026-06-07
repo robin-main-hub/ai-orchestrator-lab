@@ -71,7 +71,7 @@ describe("createAgentChannelStatus", () => {
       {
         label: "공급자",
         tone: "ready",
-        value: "MiMo · mimo-v2.5-pro",
+        value: "MiMo · MiMo V2.5 Pro",
       },
       {
         label: "도구 프로필",
@@ -119,6 +119,6 @@ describe("createAgentChannelStatus", () => {
     expect(rendered).not.toContain("agent:");
     expect(rendered).not.toContain("provider_mimo_token_openai");
     expect(chips.every((chip) => chip.value.length <= 42)).toBe(true);
-    expect(chips.find((chip) => chip.label === "공급자")?.value).toContain("mimo-v2.5-pro");
+    expect(chips.find((chip) => chip.label === "공급자")?.value).toContain("MiMo V2.5 Pro");
   });
 });

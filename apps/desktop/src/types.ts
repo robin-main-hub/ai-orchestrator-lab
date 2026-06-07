@@ -22,6 +22,7 @@ export type PendingProviderRetry = {
   modelId: string;
   content: string;
   attachments: DraftAttachment[];
+  attachmentProcessingPlans: AttachmentProcessingPlan[];
   createdAt: string;
 };
 export type Stage3DebateUtteranceView = DebateUtterance & {

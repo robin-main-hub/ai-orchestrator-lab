@@ -53,7 +53,7 @@ describe("publicWorkTrace", () => {
     expect(trace.groups[0]?.items).toContainEqual(
       expect.objectContaining({
         label: "첨부 준비",
-        value: "첨부 1개 준비 · 이미지 vision 후보 1 · 거부 1",
+        value: "첨부 1개 준비 · 이미지 확인 후보 1 · 거부 1",
       }),
     );
     expect(trace.groups[2]?.items).toContainEqual(
@@ -123,7 +123,7 @@ describe("publicWorkTrace", () => {
       expect.objectContaining({
         label: "도구 호출",
         tone: "success",
-        value: "mimo-openai · mimo-v2.5-pro",
+        value: "mimo-openai · MiMo V2.5 Pro",
       }),
     );
     expect(trace.groups[0]?.items).toContainEqual(
@@ -345,7 +345,7 @@ describe("publicWorkTrace", () => {
     );
   });
 
-  it("tmux 타임라인 block을 명령/검증 로그로 변환한다", () => {
+  it("터미널 타임라인 block을 명령/검증 로그로 변환한다", () => {
     const block: TerminalTimelineBlock = {
       id: "block_1",
       sessionId: "session_main",
@@ -366,7 +366,7 @@ describe("publicWorkTrace", () => {
     const trace = createTerminalBlockPublicWorkTrace(block);
 
     expect(trace.receipt).toEqual({
-      label: "Tmux 실행 영수증",
+      label: "터미널 실행 영수증",
       status: "checkpointed",
       items: [
         { label: "범위", value: "디스패치" },
@@ -375,7 +375,7 @@ describe("publicWorkTrace", () => {
       ],
     });
     expect(trace.groups[0]?.items).toContainEqual(
-      expect.objectContaining({ label: "tmux 단계", value: "디스패치 · 완료" }),
+      expect.objectContaining({ label: "터미널 단계", value: "디스패치 · 완료" }),
     );
     expect(trace.groups[2]?.items).toContainEqual(
       expect.objectContaining({ label: "출력", value: "153 passed" }),
@@ -416,6 +416,7 @@ describe("publicWorkTrace", () => {
     ].join("\n");
 
     expect(visibleValues).not.toContain("fallback");
+    expect(visibleValues).not.toContain("tmux");
     expect(visibleValues).not.toContain("total tokens");
     expect(visibleValues).not.toContain("coding ref");
     expect(visibleValues).not.toContain("evidence ref");

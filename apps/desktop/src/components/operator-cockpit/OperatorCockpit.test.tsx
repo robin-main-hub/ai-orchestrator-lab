@@ -97,7 +97,7 @@ describe("OperatorCockpit", () => {
     expect(html.match(/작업 영수증/g)?.length).toBe(1);
   });
 
-  it("다음 행동을 읽기 전용 배지가 아니라 명확한 CTA 버튼으로 렌더링한다", () => {
+  it("다음 행동을 첫 화면의 지금 할 일 CTA와 접힌 후보로 렌더링한다", () => {
     const diagnostics = createSettingsDiagnostics({
       agentCount: 1,
       enabledProviderCount: 1,
@@ -128,10 +128,18 @@ describe("OperatorCockpit", () => {
             {
               ctaLabel: "승인 대기열 보기",
               id: "approval_terminal_run",
-              label: "승인 필요: terminal_run from agent",
+              label: "승인 필요: 터미널 실행 권한",
               priority: "high",
               source: "approval",
               targetSurface: "approvals",
+            },
+            {
+              ctaLabel: "진단 보기",
+              id: "diagnostics_0",
+              label: "공급자 상태 점검을 다시 실행",
+              priority: "warning",
+              source: "diagnostics",
+              targetSurface: "diagnostics",
             },
           ],
           smokePlan,
@@ -142,9 +150,11 @@ describe("OperatorCockpit", () => {
     );
 
     expect(html).toContain("<button");
-    expect(html).toContain("다음 행동");
-    expect(html).toContain("승인 필요: terminal_run from agent");
+    expect(html).toContain("지금 할 일");
+    expect(html).toContain("승인 필요: 터미널 실행 권한");
     expect(html).toContain("승인 대기열 보기");
+    expect(html).toContain("다른 후보 1건");
+    expect(html).not.toContain("terminal_run");
   });
 
   it("워커 행에서 해당 에이전트 대화방을 여는 CTA를 렌더링한다", () => {
