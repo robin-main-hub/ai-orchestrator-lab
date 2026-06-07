@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ConversationMessage, TerminalTimelineBlock } from "@ai-orchestrator/protocol";
+import type { ApprovalQueueItem, ConversationMessage, TerminalTimelineBlock } from "@ai-orchestrator/protocol";
 import type { Stage3DebateSession } from "../runtime/stage3Runtime";
 import { createCockpitWorkTraceSources } from "./cockpitWorkTraceSources";
 
@@ -92,19 +92,38 @@ const tmuxBlock: TerminalTimelineBlock = {
   createdAt: "2026-06-05T08:02:00.000Z",
 };
 
+const approvalItem: ApprovalQueueItem = {
+  id: "queue_permission_provider",
+  sourceItemId: "permission_provider_mimo",
+  summary: "provider_completion from agent",
+  requestedBy: "agent",
+  action: "provider_completion",
+  reason: "provider completion requires approval",
+  sourceTrust: "limited",
+  permissions: ["network_access"],
+  state: "required",
+  createdAt: "2026-06-05T08:03:00.000Z",
+};
+
 describe("createCockpitWorkTraceSources", () => {
-  it("대화, 토론, tmux 공개 영수증을 하나의 Cockpit 색인 소스로 만든다", () => {
+  it("대화, 토론, tmux, 승인 공개 영수증을 최신순 Cockpit 색인 소스로 만든다", () => {
     const sources = createCockpitWorkTraceSources({
+      approvalItems: [approvalItem],
       conversationMessages: [userMessage, assistantMessage],
       debateSession,
       tmuxBlocks: [tmuxBlock],
     });
 
-    expect(sources.map((source) => source.kind)).toEqual(["conversation", "conversation", "debate", "tmux"]);
+    expect(sources.map((source) => source.kind)).toEqual(["approval", "tmux", "debate", "conversation", "conversation"]);
     expect(sources[0]).toMatchObject({
+      id: "queue_permission_provider",
+      title: "승인 공개 영수증 · provider completion",
+    });
+    expect(sources[0]?.trace.receipt?.label).toBe("에이전트 실행 영수증");
+    expect(sources).toContainEqual(expect.objectContaining({
       id: "msg_user_1",
       title: "사용자 첨부 공개 영수증",
-    });
+    }));
     expect(sources.find((source) => source.kind === "debate")).toMatchObject({
       id: "utterance_1",
       title: "토론 공개 영수증 · 최종 결정",

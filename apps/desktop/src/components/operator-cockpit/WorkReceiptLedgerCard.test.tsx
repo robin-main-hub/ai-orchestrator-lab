@@ -4,6 +4,7 @@ import type { WorkTraceSearchItem } from "../../lib/workTraceSearch";
 import { WorkReceiptLedgerCard } from "./WorkReceiptLedgerCard";
 
 const receiptItem: WorkTraceSearchItem = {
+  createdAt: "2026-06-05T08:00:00.000Z",
   id: "utterance_1",
   kind: "debate",
   title: "토론 공개 영수증 · 최종 결정",
@@ -145,5 +146,48 @@ describe("WorkReceiptLedgerCard", () => {
     expect(html).toContain("대화 1");
     expect(html).toContain("토론 1");
     expect(html).toContain("터미널 1");
+  });
+
+  it("입력 순서가 섞여도 실제 createdAt 기준 최신 영수증을 먼저 보여준다", () => {
+    const html = renderToStaticMarkup(
+      <WorkReceiptLedgerCard
+        items={[
+          { ...receiptItem, createdAt: "2026-06-05T08:00:00.000Z", id: "old", title: "오래된 영수증" },
+          { ...receiptItem, createdAt: "2026-06-05T08:10:00.000Z", id: "new", title: "가장 최신 영수증" },
+        ]}
+      />,
+    );
+
+    expect(html.indexOf("가장 최신 영수증")).toBeLessThan(html.indexOf("오래된 영수증"));
+  });
+
+  it("검색어와 종류 필터로 장부를 즉시 좁히고 원본 보기 동선을 노출한다", () => {
+    const html = renderToStaticMarkup(
+      <WorkReceiptLedgerCard
+        initialKind="approval"
+        initialQuery="provider"
+        items={[
+          {
+            ...receiptItem,
+            id: "approval_1",
+            kind: "approval",
+            searchText: "provider approval 승인",
+            title: "provider 승인 영수증",
+          },
+          {
+            ...receiptItem,
+            id: "debate_1",
+            kind: "debate",
+            searchText: "provider debate 토론",
+            title: "provider 토론 영수증",
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("작업 영수증 검색");
+    expect(html).toContain("provider 승인 영수증");
+    expect(html).toContain("원본 보기");
+    expect(html).not.toContain("provider 토론 영수증");
   });
 });
