@@ -3857,6 +3857,7 @@ export function App() {
               onUpdateAgentPersona={updateSelectedAgentPersona}
               pendingProviderRetry={pendingProviderRetry}
               permissionSnapshot={permissionSnapshot}
+              providerReadiness={providerReadiness}
               selectedAgent={selectedAgent}
               selectedAgentId={selectedAgent?.id}
               selectedModel={selectedModel}
