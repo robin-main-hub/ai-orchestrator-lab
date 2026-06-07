@@ -38,6 +38,22 @@ describe("resolveAgentThinkingIndicator", () => {
     });
   });
 
+  it("surfaces tool, tmux, approval, and error states with visible work narration", () => {
+    expect(resolveAgentThinkingIndicator("agent_a", { agent_a: "tooling" })?.label).toBe("도구 후보를 고르는 중");
+    expect(resolveAgentThinkingIndicator("agent_a", { agent_a: "capturing" })?.steps[1]).toEqual({
+      label: "출력 읽기",
+      state: "active",
+    });
+    expect(resolveAgentThinkingIndicator("agent_a", { agent_a: "dispatching" })?.narration).toContain("명령");
+    expect(resolveAgentThinkingIndicator("agent_a", { agent_a: "waiting_approval" })?.label).toBe(
+      "운영자 승인을 기다리는 중",
+    );
+    expect(resolveAgentThinkingIndicator("agent_a", { agent_a: "error" })?.steps[0]).toEqual({
+      label: "실패 감지",
+      state: "done",
+    });
+  });
+
   it("only reflects the selected agent, not other busy agents", () => {
     expect(
       resolveAgentThinkingIndicator("agent_a", { agent_a: "idle", agent_b: "responding" }),
