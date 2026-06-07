@@ -71,7 +71,7 @@ export function WorkbenchHeader({
           <span className="text-[10px] text-muted-foreground">현재 대화 상대</span>
           <span className="truncate text-xs font-medium text-foreground">
             {selectedAgent?.name ?? "봇 선택 필요"} ·{" "}
-            {selectedProvider ? providerDisplayLabel(selectedProvider.name) : "Provider 미지정"}
+            {selectedProvider ? providerDisplayLabel(selectedProvider.name) : "공급자 미지정"}
           </span>
         </div>
         {selectedAgent && toolProfile ? (

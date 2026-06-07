@@ -158,4 +158,11 @@ describe("OperatorCockpit", () => {
     expect(html).toContain("대화 열기");
     expect(html).toContain("마키마 대화 열기");
   });
+
+  it("모델 경로 힌트에서 provider fallback 문구를 한국어로 렌더링한다", () => {
+    const html = renderToStaticMarkup(<OperatorCockpit snapshot={snapshot} />);
+
+    expect(html).toContain("공급자 대기");
+    expect(html).not.toContain("provider 대기");
+  });
 });

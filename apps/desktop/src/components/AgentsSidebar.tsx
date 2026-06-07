@@ -329,7 +329,7 @@ function AgentCard({
     (profile) => profile.id === agent.providerProfileId,
   );
   const activeModel = providerModels.find((model) => model.id === agent.modelId);
-  const providerLabel = activeProvider ? providerDisplayLabel(activeProvider.name) : "Provider 미지정";
+  const providerLabel = activeProvider ? providerDisplayLabel(activeProvider.name) : "공급자 미지정";
   const modelLabel = activeModel?.name ?? agent.modelId ?? "모델 연결 대기";
   const primaryDisplayName = agentPrimaryDisplayName(agent);
   const secondaryDisplayLabel = agentSecondaryDisplayLabel(agent);
@@ -423,7 +423,7 @@ function AgentCard({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
-              aria-label={`${agent.name} provider`}
+              aria-label={`${agent.name} 공급자`}
               className="flex min-w-0 items-center gap-1 rounded bg-card/60 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               type="button"
             >
@@ -432,8 +432,8 @@ function AgentCard({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-44">
-                <DropdownMenuItem onSelect={() => onAssignProvider(agent.id, "")}>
-                  Provider 미지정
+            <DropdownMenuItem onSelect={() => onAssignProvider(agent.id, "")}>
+              공급자 미지정
             </DropdownMenuItem>
             {profiles.map((profile) => {
               const isOccupied =
@@ -461,7 +461,7 @@ function AgentCard({
         <div className="flex min-w-0 items-center gap-0.5">
           {hasModelOverflow ? (
             <Button
-              aria-label={`${agent.name} model 이전`}
+              aria-label={`${agent.name} 모델 이전`}
               className="h-5 w-5 shrink-0"
               disabled={!canShiftLeft}
               onClick={() => onShiftModelWindow(agent.id, -1)}
@@ -475,7 +475,7 @@ function AgentCard({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                aria-label={`${agent.name} model`}
+                aria-label={`${agent.name} 모델`}
                 className="flex min-w-0 flex-1 items-center gap-1 rounded bg-card/60 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 type="button"
               >
@@ -503,7 +503,7 @@ function AgentCard({
 
           {hasModelOverflow ? (
             <Button
-              aria-label={`${agent.name} model 다음`}
+              aria-label={`${agent.name} 모델 다음`}
               className="h-5 w-5 shrink-0"
               disabled={!canShiftRight}
               onClick={() => onShiftModelWindow(agent.id, 1)}
