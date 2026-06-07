@@ -37,4 +37,39 @@ describe("PublicWorkTracePanel", () => {
     expect(html).toContain("도구 4: memory.recall");
     expect(html).toContain("도구 5: receipt.search");
   });
+
+  it("렌더 직전 원시 비밀값과 내부 입력 표면을 다시 마스킹한다", () => {
+    const trace: PublicWorkTrace = {
+      groups: [
+        {
+          id: "evidence",
+          title: "검증",
+          items: [
+            {
+              id: "raw-secret",
+              label: "원문",
+              tone: "danger",
+              value: "Bearer sk-1234567890abcdef raw prompt: hidden /Users/robin/Documents",
+            },
+          ],
+        },
+      ],
+      receipt: {
+        label: "에이전트 실행 영수증",
+        status: "checkpointed",
+        items: [
+          { label: "범위", value: "https://token-plan-sgp.xiaomimimo.com/v1" },
+          { label: "마스킹", value: "적용됨" },
+        ],
+      },
+    };
+
+    const html = renderToStaticMarkup(<PublicWorkTracePanel trace={trace} />);
+
+    expect(html).not.toContain("sk-1234567890abcdef");
+    expect(html).not.toContain("raw prompt");
+    expect(html).not.toContain("/Users/robin/Documents");
+    expect(html).not.toContain("https://token-plan-sgp.xiaomimimo.com/v1");
+    expect(html).toContain("[redacted");
+  });
 });

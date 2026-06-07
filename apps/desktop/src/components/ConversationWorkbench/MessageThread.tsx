@@ -32,6 +32,7 @@ import { createConversationMessagePublicWorkTrace } from "../../lib/publicWorkTr
 import { agentInitialsForDisplay, agentPrimaryDisplayName } from "../../lib/agentDisplay";
 import type { AgentThinkingStep } from "../../lib/agentThinkingIndicator";
 import { compactPublicText } from "../../lib/publicRedaction";
+import type { AttachmentProcessingPlan } from "../../lib/attachmentProcessing";
 
 export type DelegationPreviewItem = {
   id: string;
@@ -315,6 +316,7 @@ function MessageBubble({
   agentActivityById?: Record<string, AgentActivityStatus>;
 }) {
   const attachments = getMessageAttachments(message);
+  const attachmentProcessingPlans = readMessageAttachmentProcessingPlans(message);
   const label = messageLabel(message, selectedAgent, agents);
   const publicWorkTrace = createConversationMessagePublicWorkTrace(message);
   const assistantStatusSummary = resolveAssistantMessageStatusSummary(message);
@@ -337,7 +339,7 @@ function MessageBubble({
               {message.content}
             </p>
             {attachments.length > 0 ? (
-              <MessageAttachments attachments={attachments} />
+              <MessageAttachments attachments={attachments} processingPlans={attachmentProcessingPlans} />
             ) : null}
             <PublicWorkTracePanel trace={publicWorkTrace} />
           </div>
@@ -390,7 +392,7 @@ function MessageBubble({
             {message.content}
           </p>
           {attachments.length > 0 ? (
-            <MessageAttachments attachments={attachments} />
+            <MessageAttachments attachments={attachments} processingPlans={attachmentProcessingPlans} />
           ) : null}
           {assistantStatusSummary ? (
             <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-2.5 py-2">
@@ -418,13 +420,15 @@ function MessageBubble({
 
 function MessageAttachments({
   attachments,
+  processingPlans,
 }: {
   attachments: ConversationAttachment[];
+  processingPlans: AttachmentProcessingPlan[];
 }) {
   return (
     <div className="mt-2 flex flex-wrap gap-1.5">
       {attachments.map((attachment) => {
-        const processingMode = readAttachmentProcessingMode(attachment);
+        const processingMode = resolveAttachmentProcessingModeForDisplay(attachment, processingPlans);
         return (
           <span
             className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-[10px] text-zinc-200 backdrop-blur"
@@ -451,11 +455,63 @@ function MessageAttachments({
   );
 }
 
+export function resolveAttachmentProcessingModeForDisplay(
+  attachment: ConversationAttachment,
+  processingPlans: AttachmentProcessingPlan[] = [],
+) {
+  const plannedMode = processingPlans.find((plan) =>
+    plan.status === "accepted" &&
+    plan.kind === attachment.kind &&
+    plan.name === attachment.name &&
+    plan.size === attachment.size
+  )?.processingMode;
+  if (plannedMode) return plannedMode;
+  return readAttachmentProcessingMode(attachment);
+}
+
 function readAttachmentProcessingMode(attachment: ConversationAttachment) {
   const value = (attachment as ConversationAttachment & { processingMode?: unknown }).processingMode;
   return value === "vision_candidate" || value === "document_candidate" || value === "metadata_only"
     ? value
     : undefined;
+}
+
+function readMessageAttachmentProcessingPlans(message: ConversationMessage): AttachmentProcessingPlan[] {
+  const value = message.metadata?.attachmentProcessingPlans;
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((candidate): AttachmentProcessingPlan[] => {
+    if (!candidate || typeof candidate !== "object") return [];
+    const record = candidate as Partial<AttachmentProcessingPlan>;
+    const kind = record.kind;
+    const name = record.name;
+    const processingMode = record.processingMode;
+    const size = record.size;
+    const status = record.status;
+    const storage = record.storage;
+    if (
+      (kind !== "image" && kind !== "document" && kind !== "other") ||
+      typeof name !== "string" ||
+      (processingMode !== "vision_candidate" &&
+        processingMode !== "document_candidate" &&
+        processingMode !== "metadata_only") ||
+      typeof size !== "number" ||
+      (status !== "accepted" && status !== "rejected") ||
+      (storage !== "metadata_only" && storage !== "local_cache" && storage !== "dgx_object_storage")
+    ) {
+      return [];
+    }
+    return [
+      {
+        kind,
+        name,
+        processingMode,
+        ...(typeof record.reason === "string" ? { reason: record.reason } : {}),
+        size,
+        status,
+        storage,
+      },
+    ];
+  });
 }
 
 export function attachmentProcessingLabel(processingMode: "vision_candidate" | "document_candidate" | "metadata_only") {

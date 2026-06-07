@@ -93,4 +93,26 @@ describe("WorkReceiptLedgerCard", () => {
     expect(html).not.toContain("fallback");
     expect(html).not.toContain("공개 trace");
   });
+
+  it("장부 제목도 렌더 직전에 비밀값과 내부 입력 표면을 마스킹한다", () => {
+    const html = renderToStaticMarkup(
+      <WorkReceiptLedgerCard
+        items={[
+          {
+            ...receiptItem,
+            id: "secret_title",
+            kind: "conversation",
+            safetyLabel: "마스킹 확인 필요",
+            searchable: false,
+            title: "raw prompt: hidden Bearer sk-1234567890abcdef /Users/robin/Documents",
+          },
+        ]}
+      />,
+    );
+
+    expect(html).not.toContain("raw prompt");
+    expect(html).not.toContain("sk-1234567890abcdef");
+    expect(html).not.toContain("/Users/robin/Documents");
+    expect(html).toContain("[redacted");
+  });
 });
