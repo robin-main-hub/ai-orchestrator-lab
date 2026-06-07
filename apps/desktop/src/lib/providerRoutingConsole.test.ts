@@ -101,7 +101,7 @@ describe("providerRoutingConsole", () => {
       discoveryLabel: "모델 발견 완료",
       displayName: "MiMo",
       readinessLabel: "연결 검증 준비",
-      secretPolicyLabel: "서버 SecretRef 사용",
+      secretPolicyLabel: "서버 비밀값 참조 필요",
     });
     expect(items[1]).toMatchObject({
       assignedAgentCount: 1,

@@ -5,11 +5,11 @@ import type { SettingsDiagnostics } from "./settingsDiagnostics";
 import { deriveCockpitNextActions } from "./cockpitNextActions";
 
 const diagnostics = {
-  nextActions: ["Provider smoke를 다시 실행"],
+  nextActions: ["공급자 상태 점검을 다시 실행"],
 } as SettingsDiagnostics;
 
 const maturity = {
-  nextActions: ["Control Queue lane 결과를 확인"],
+  nextActions: ["작업 대기열 흐름 결과를 확인"],
   overallStatus: "needs_work",
 } as OrchestrationMaturityReport;
 
@@ -50,9 +50,9 @@ describe("deriveCockpitNextActions", () => {
     });
 
     expect(actions.map((action) => action.label)).toEqual([
-      "agent_executor: 권한 확인 필요",
+      "렘: 권한 확인 필요",
       "승인 필요: terminal_run from agent",
-      "Provider smoke를 다시 실행",
+      "공급자 상태 점검을 다시 실행",
     ]);
   });
 
@@ -117,7 +117,7 @@ describe("deriveCockpitNextActions", () => {
       {
         ctaLabel: "워커 확인",
         id: "worker_active_agent_builder",
-        label: "작업 중: agent_builder 결과 확인",
+        label: "작업 중: 히라사와 유이 결과 확인",
         priority: "normal",
         source: "worker",
         targetSurface: "fleet",
@@ -135,7 +135,7 @@ describe("deriveCockpitNextActions", () => {
       },
       diagnostics: { nextActions: [] } as unknown as SettingsDiagnostics,
       maturity: {
-        nextActions: ["Control Queue lane 결과를 확인"],
+        nextActions: ["작업 대기열 흐름 결과를 확인"],
         overallStatus: "needs_work",
       } as unknown as OrchestrationMaturityReport,
       snapshot: { ...snapshot, approvals: [], fleet: [], handoffs: [] } as unknown as OperatorCockpitSnapshot,
@@ -143,7 +143,7 @@ describe("deriveCockpitNextActions", () => {
 
     expect(actions.map((action) => action.label)).toEqual([
       "큐 이어받기: 질문 1 · 초안 1 · 위임 1 — 수정 초안: 실행 조건",
-      "Control Queue lane 결과를 확인",
+      "작업 대기열 흐름 결과를 확인",
     ]);
     expect(actions[0]).toMatchObject({
       ctaLabel: "큐 이어받기",

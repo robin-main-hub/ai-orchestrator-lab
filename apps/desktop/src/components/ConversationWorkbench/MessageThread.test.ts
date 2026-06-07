@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ConversationMessage } from "@ai-orchestrator/protocol";
 import {
   assistantPendingLabel,
+  createAssistantRuntimeEvidenceBadges,
   delegationStatusLabel,
   resolveAssistantMessageStatusSummary,
   shouldShowAssistantPendingBubble,
@@ -63,6 +64,44 @@ describe("MessageThread pending assistant state", () => {
       detail: "승인 후 같은 요청을 이어 붙일 수 있습니다.",
       label: "승인 필요",
       variant: "warning",
+    });
+  });
+
+  it("surfaces persona, memory, runtime config, and tool evidence on assistant messages", () => {
+    const badges = createAssistantRuntimeEvidenceBadges({
+      ...message("assistant"),
+      metadata: {
+        personaSoulApplied: true,
+        personaAgentsMdApplied: true,
+        recalledMemoryCount: 3,
+        runtimeConfigFileIds: ["config_soul", "config_tools"],
+        roleToolProfileTools: ["work.queue", "approval"],
+      },
+    });
+
+    expect(badges.map((badge) => badge.label)).toEqual([
+      "SOUL",
+      "AGENTS",
+      "기억 3개",
+      "설정 2개",
+      "도구 2개",
+    ]);
+  });
+
+  it("uses conservative Korean copy for completed provider responses", () => {
+    const summary = resolveAssistantMessageStatusSummary({
+      ...message("assistant"),
+      metadata: {
+        realProviderCall: true,
+        providerProfileId: "provider_apifun_claude",
+        modelId: "claude-opus-4-8",
+      },
+    });
+
+    expect(summary).toEqual({
+      detail: "공급자 응답이 기록되고 공개 작업 로그로 요약되었습니다.",
+      label: "응답 기록",
+      variant: "success",
     });
   });
 

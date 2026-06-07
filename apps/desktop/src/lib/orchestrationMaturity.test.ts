@@ -40,8 +40,25 @@ describe("orchestrationMaturity", () => {
 
     expect(report.overallStatus).toBe("blocked");
     expect(report.readyCount).toBe(0);
-    expect(report.nextActions).toContain("Control Queue 6개 lane을 모두 WorkItem/Handoff/Approval 결과로 연결");
-    expect(report.nextActions).toContain("Debate 결정 노드에서 Coding Packet 후보와 WorkItem을 생성");
+    const visibleCopy = report.items
+      .flatMap((item) => [item.label, item.detail, item.nextAction])
+      .concat(report.nextActions)
+      .filter(Boolean)
+      .join("\n");
+
+    expect(report.nextActions).toContain("작업 대기열 6개 흐름을 모두 작업 항목/핸드오프/승인 결과로 연결");
+    expect(report.nextActions).toContain("토론 결정 노드에서 코딩 패킷 후보와 작업 항목을 생성");
     expect(report.nextActions).toContain("공개 영수증 마스킹 실패 1건 해결");
+    expect(visibleCopy).not.toContain("Control Queue");
+    expect(visibleCopy).not.toContain("WorkItem");
+    expect(visibleCopy).not.toContain("Coding Packet");
+    expect(visibleCopy).not.toContain("Provider");
+    expect(visibleCopy).not.toContain("fallback");
+    expect(visibleCopy).not.toContain("smoke");
+    expect(visibleCopy).not.toContain("pane");
+    expect(visibleCopy).not.toContain("timeline");
+    expect(visibleCopy).not.toContain("desktop test");
+    expect(visibleCopy).not.toContain("visual");
+    expect(visibleCopy).not.toContain("blocked");
   });
 });
