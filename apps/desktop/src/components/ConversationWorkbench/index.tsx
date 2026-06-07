@@ -6,6 +6,7 @@ import type {
   ModelDescriptor,
   PermissionMatrixSnapshot,
   ProviderProfile,
+  ProviderRuntimeReadiness,
 } from "@ai-orchestrator/protocol";
 import { Archive, ChevronDown, Cpu, Database, FileText, Package, Play, Smartphone, Sparkles, Swords, Wrench } from "lucide-react";
 import type { AgentChannelMemoryScope } from "../../lib/agentConversationChannels";
@@ -43,6 +44,7 @@ import { AgentConfigDrawer } from "../AgentConfigDrawer";
 import { AgentLiveWorkStatus } from "./AgentLiveWorkStatus";
 import { AgentMemoryContinuityPanel } from "./AgentMemoryContinuityPanel";
 import { AgentSkillProfilePanel } from "./AgentSkillProfilePanel";
+import { ProviderReadinessPreflight } from "./ProviderReadinessPreflight";
 
 // Sub-components
 import { MessageThread } from "./MessageThread";
@@ -89,6 +91,7 @@ export function ConversationWorkbench({
   onUpdateAgentPersona,
   pendingProviderRetry,
   permissionSnapshot,
+  providerReadiness,
   selectedAgent,
   selectedAgentId,
   selectedModel,
@@ -136,6 +139,7 @@ export function ConversationWorkbench({
   onUpdateAgentPersona: (patch: Partial<AgentPersonaSettings>) => void;
   pendingProviderRetry?: PendingProviderRetry;
   permissionSnapshot: PermissionMatrixSnapshot;
+  providerReadiness: ProviderRuntimeReadiness;
   selectedAgent?: WorkbenchAgent;
   selectedAgentId?: string;
   selectedModel?: ModelDescriptor;
@@ -185,6 +189,10 @@ export function ConversationWorkbench({
   const headerMemoryLabel = createAgentChannelHeaderMemoryLabel(memoryScope);
   const personaSoulApplied = Boolean(persona?.soulMdPath || persona?.soulSummary);
   const personaAgentsMdApplied = Boolean(persona?.agentsMdPath || persona?.agentsInstruction);
+  const pendingRetryAgent = pendingProviderRetry?.agentId
+    ? agents.find((agent) => agent.id === pendingProviderRetry.agentId) ?? selectedAgent
+    : undefined;
+  const pendingRetryAgentName = pendingRetryAgent ? agentPrimaryDisplayName(pendingRetryAgent) : undefined;
 
   return (
     <section className="conversation-workbench flex h-full flex-col bg-zinc-950">
@@ -359,6 +367,12 @@ export function ConversationWorkbench({
           {selectedAgentThinkingIndicator ? (
             <AgentLiveWorkStatus displayName={selectedAgentDisplayName} indicator={selectedAgentThinkingIndicator} />
           ) : null}
+          <ProviderReadinessPreflight
+            pendingRetryAgentName={pendingRetryAgentName}
+            providerName={selectedProvider?.name}
+            readiness={providerReadiness}
+            selectedModelName={selectedModel?.name ?? selectedModel?.id ?? selectedAgent?.modelId}
+          />
         </>
       ) : null}
 
