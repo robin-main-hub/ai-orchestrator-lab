@@ -159,4 +159,39 @@ describe("Stage3DebateTable", () => {
     expect(html).not.toContain("aria-label=\"공개 작업 로그\"");
     expect(html).not.toContain("토론 실행 영수증");
   });
+
+  it("토론 메인 상단에 결정 중심 레일을 표시한다", () => {
+    const html = renderToStaticMarkup(
+      <Stage3DebateTable
+        onCreateCodingPacket={() => undefined}
+        session={{
+          ...session,
+          rounds: [
+            {
+              ...session.rounds[0]!,
+              utterances: [
+                {
+                  id: "utterance_decision",
+                  agentId: "agent_reviewer",
+                  content: "지금은 단일 PR로 묶고 Annex 로그는 분리한다.",
+                  createdAt: "2026-06-06T00:02:00.000Z",
+                  decisionId: "decision_1",
+                  evidenceRefIds: ["evidence_1"],
+                  roundId: "round_final",
+                  tags: ["risk", "coding_impact"],
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(html).toContain("결정 레일");
+    expect(html).toContain("다음 행동");
+    expect(html).toContain("결정 1건");
+    expect(html).toContain("리스크 1건");
+    expect(html).toContain("근거 1건");
+    expect(html).toContain("패킷 만들기");
+  });
 });
