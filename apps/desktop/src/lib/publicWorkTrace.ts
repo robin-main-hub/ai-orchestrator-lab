@@ -303,11 +303,26 @@ export function createTerminalBlockPublicWorkTrace(block: TerminalTimelineBlock)
 }
 
 export function createPublicTraceSafetyReport(trace: PublicWorkTrace): PublicTraceSafetyReport {
-  const serialized = JSON.stringify(trace);
+  const textsToInspect: string[] = [];
+
+  for (const group of trace.groups) {
+    for (const item of group.items) {
+      textsToInspect.push(item.label, item.value);
+    }
+  }
+
+  if (trace.receipt) {
+    textsToInspect.push(trace.receipt.label);
+    for (const item of trace.receipt.items) {
+      textsToInspect.push(item.label, item.value);
+    }
+  }
+
+  const combinedText = textsToInspect.join(" | ");
   const patternReasons = FORBIDDEN_PUBLIC_TRACE_PATTERNS.flatMap((pattern) =>
-    pattern.test(serialized) ? [`금지 패턴 감지: ${pattern.source}`] : [],
+    pattern.test(combinedText) ? [`금지 패턴 감지: ${pattern.source}`] : [],
   );
-  const blockedReasons = [...patternReasons, ...inspectPublicText(serialized).blockedReasons];
+  const blockedReasons = [...patternReasons, ...inspectPublicText(combinedText).blockedReasons];
   const hasReceiptMasking = trace.receipt?.items.some(
     (item) => item.label === "마스킹" && item.value.includes("적용"),
   );

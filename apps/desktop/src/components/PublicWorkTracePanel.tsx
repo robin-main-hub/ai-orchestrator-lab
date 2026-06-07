@@ -95,6 +95,14 @@ export function PublicWorkTracePanel({
                     </span>
                   </li>
                 ))}
+                {group.items.length > 3 ? (
+                  <li
+                    className="rounded-lg border border-zinc-700/70 bg-zinc-900/50 px-2 py-1.5 text-[10px] text-zinc-400"
+                    title={group.items.slice(3).map((item) => `${item.label}: ${item.value}`).join(" · ")}
+                  >
+                    +{group.items.length - 3}개 더 있음
+                  </li>
+                ) : null}
               </ul>
             </section>
           );
