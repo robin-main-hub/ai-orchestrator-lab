@@ -6,17 +6,17 @@ import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/ui/status-badge";
 
 export type CommandEntry = {
-  /** Stable id. */
+  /** 안정적인 명령 id. */
   id: string;
-  /** Short verb chip (Switch / Open / Memory / Approve / Help). */
+  /** 짧은 동작 배지. */
   verb: string;
-  /** Primary label (object + target). */
+  /** 주 라벨. */
   label: string;
-  /** Optional one-line hint. */
+  /** 선택형 한 줄 설명. */
   hint?: string;
-  /** Optional keyboard shortcut hint, e.g. "⌘1". */
+  /** 선택형 키보드 단축키. */
   shortcut?: string;
-  /** Invoked when the user picks this entry. */
+  /** 사용자가 항목을 선택했을 때 실행. */
   run: () => void;
 };
 
@@ -34,7 +34,7 @@ export function CommandPalette({
   placeholder = "명령 검색... (예: 토론 전환, 다음 승인, 기억 열기)",
 }: CommandPaletteProps) {
   
-  // Close palette on ESC key (already handled by Dialog content usually, but safety check)
+  // Dialog가 대부분 처리하지만, 안전하게 ESC 닫기를 한 번 더 보장한다.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && open) {
@@ -45,7 +45,7 @@ export function CommandPalette({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open, onClose]);
 
-  // Group commands by verb for visual layout
+  // 동작별로 묶어 스캔하기 쉽게 보여준다.
   const grouped = commands.reduce((acc, entry) => {
     const list = acc.get(entry.verb) ?? [];
     list.push(entry);
@@ -86,7 +86,7 @@ export function CommandPalette({
               }
             }}
           >
-            {/* Input row */}
+            {/* 입력 행 */}
             <div className="flex h-12 items-center gap-2.5 border-b border-border px-4">
               <Search className="h-5 w-5 shrink-0 text-muted-foreground/75" />
               <Command.Input 
@@ -99,7 +99,7 @@ export function CommandPalette({
               </kbd>
             </div>
 
-            {/* List area */}
+            {/* 목록 영역 */}
             <Command.List className="max-h-80 overflow-y-auto p-2 scroll-py-1">
               <Command.Empty className="py-6 text-center text-sm text-muted-foreground/80">
                 매칭되는 명령이 없습니다.
@@ -122,7 +122,6 @@ export function CommandPalette({
                         entry.run();
                         onClose();
                       }}
-                      // We can match using custom value if needed, cmdk filters by inner text by default
                       value={`${entry.verb} ${entry.label} ${entry.hint ?? ""}`}
                       className="flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-left text-sm transition-colors text-foreground hover:bg-accent/40 data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground aria-selected:bg-accent aria-selected:text-accent-foreground [&_svg]:text-muted-foreground data-[selected=true]:[&_svg]:text-accent-foreground aria-selected:[&_svg]:text-accent-foreground data-[selected=true]:[&_.command-label]:text-accent-foreground aria-selected:[&_.command-label]:text-accent-foreground data-[selected=true]:[&_.command-hint]:text-accent-foreground/70 aria-selected:[&_.command-hint]:text-accent-foreground/70 data-[selected=true]:[&_kbd]:border-accent-foreground/30 data-[selected=true]:[&_kbd]:bg-accent/20 data-[selected=true]:[&_kbd]:text-accent-foreground aria-selected:[&_kbd]:text-accent-foreground"
                     >
@@ -153,21 +152,21 @@ export function CommandPalette({
               ))}
             </Command.List>
 
-            {/* Footer */}
+            {/* 하단 도움말 */}
             <div className="flex items-center justify-between border-t border-border px-3 py-2 bg-card/35">
               <span className="text-[10px] text-muted-foreground">
-                {commands.length} commands · verb · object · target
+                {commands.length}개 명령 · 동작 · 대상 · 위치
               </span>
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <kbd className="rounded border border-border bg-card/60 px-1 py-0.5 font-mono">↑↓</kbd>
-                  navigate
+                  이동
                 </span>
                 <span className="flex items-center gap-1">
                   <kbd className="rounded border border-border bg-card/60 px-1 py-0.5 font-mono">
                     <CornerDownLeft className="h-2.5 w-2.5" />
                   </kbd>
-                  select
+                  선택
                 </span>
               </div>
             </div>
