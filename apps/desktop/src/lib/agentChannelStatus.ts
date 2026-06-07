@@ -1,5 +1,5 @@
 import type { AgentChannelMemoryScope } from "./agentConversationChannels";
-import { sanitizePublicText } from "./publicRedaction";
+import { compactPublicText, sanitizePublicText } from "./publicRedaction";
 
 export type AgentChannelAdapterStatus = "loading" | "ready" | "error";
 
@@ -70,7 +70,7 @@ export function createAgentChannelDetailChips({
     chips.push({
       label: "기억 범위",
       tone: "ready",
-      value: sanitizeChannelValue(`${memoryScope.agentId} · ${memoryScope.sessionId}`),
+      value: sanitizeChannelValue(`전용 기억 · ${shortSessionLabel(memoryScope.sessionId)}`),
     });
     chips.push({
       label: "기억 추적",
@@ -82,7 +82,7 @@ export function createAgentChannelDetailChips({
     chips.push({
       label: "공급자",
       tone: "ready",
-      value: sanitizeChannelValue([providerProfileId, modelId].filter(Boolean).join(" · ")),
+      value: sanitizeChannelValue([providerDisplayName(providerProfileId), modelId].filter(Boolean).join(" · ")),
     });
   }
   if (toolLabels.length > 0) {
@@ -95,6 +95,30 @@ export function createAgentChannelDetailChips({
   return chips;
 }
 
+export function createAgentChannelHeaderMemoryLabel(memoryScope?: AgentChannelMemoryScope): string | undefined {
+  if (!memoryScope) return undefined;
+  return sanitizeChannelValue(`기억 ${shortSessionLabel(memoryScope.sessionId)}`);
+}
+
 function sanitizeChannelValue(value: string): string {
-  return sanitizePublicText(value);
+  return compactPublicText(sanitizePublicText(value), 42);
+}
+
+function shortSessionLabel(sessionId?: string): string {
+  if (!sessionId) return "세션";
+  return sessionId
+    .replace(/^session_/, "")
+    .replace(/^desktop_/, "desk-")
+    .replace(/_/g, "-");
+}
+
+function providerDisplayName(providerProfileId?: string): string | undefined {
+  if (!providerProfileId) return undefined;
+  const value = providerProfileId.split(/\s+/)[0]?.toLowerCase() ?? "";
+  if (value.includes("mimo")) return "MiMo";
+  if (value.includes("apifun") || value.includes("apikeyfun")) return "APIKey.fun";
+  if (value.includes("openai")) return "OpenAI";
+  if (value.includes("ollama")) return "Ollama";
+  if (value.includes("vllm")) return "vLLM";
+  return "공급자 연결됨";
 }

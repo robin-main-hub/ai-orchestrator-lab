@@ -54,7 +54,7 @@ describe("createAgentChannelStatus", () => {
       {
         label: "기억 범위",
         tone: "ready",
-        value: "agent_memory_curator · session_main",
+        value: "전용 기억 · main",
       },
       {
         label: "기억 추적",
@@ -64,7 +64,7 @@ describe("createAgentChannelStatus", () => {
       {
         label: "공급자",
         tone: "ready",
-        value: "provider_mimo_token_openai · mimo-v2.5-pro",
+        value: "MiMo · mimo-v2.5-pro",
       },
       {
         label: "도구 프로필",
@@ -91,6 +91,27 @@ describe("createAgentChannelStatus", () => {
     expect(JSON.stringify(chips)).not.toContain("sk-secret1234567890");
     expect(JSON.stringify(chips)).not.toContain("tp-secret1234567890");
     expect(JSON.stringify(chips)).not.toContain("https://token-plan-sgp.xiaomimimo.com/v1");
-    expect(JSON.stringify(chips)).toContain("[redacted]");
+    expect(JSON.stringify(chips)).toContain("APIKey.fun");
+  });
+
+  it("keeps conversation header chips short and hides raw internal scope ids", () => {
+    const chips = createAgentChannelDetailChips({
+      memoryScope: {
+        agentId: "agent_memory_curator",
+        namespace: "agent:agent_memory_curator:session:session_main:provider:provider_mimo_token_openai",
+        providerProfileId: "provider_mimo_token_openai",
+        recallTraceId: "recall_agent_memory_curator_session_session_main_provider_provider_mimo_token_openai",
+        sessionId: "session_main",
+      },
+      modelId: "mimo-v2.5-pro",
+      providerProfileId: "provider_mimo_token_openai",
+      toolLabels: ["기억 조회", "기억 순위", "기억 정리 요청", "장기 맥락 요약"],
+    });
+    const rendered = JSON.stringify(chips);
+
+    expect(rendered).not.toContain("agent:");
+    expect(rendered).not.toContain("provider_mimo_token_openai");
+    expect(chips.every((chip) => chip.value.length <= 42)).toBe(true);
+    expect(chips.find((chip) => chip.label === "공급자")?.value).toContain("mimo-v2.5-pro");
   });
 });
