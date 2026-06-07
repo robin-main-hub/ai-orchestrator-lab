@@ -1,7 +1,14 @@
 import { X } from "lucide-react";
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
 import { createDefaultPersonaSettings, agentRoleLabel } from "../lib/helpers";
-import { agentConfigPanelTitle, configSourceLabel, creativityLevelLabel, creativityTemperature, voicePresetLabel } from "../lib/uiLabels";
+import {
+  agentConfigPanelTitle,
+  configSourceLabel,
+  creativityLevelLabel,
+  creativityTemperature,
+  soulModeLabel,
+  voicePresetLabel,
+} from "../lib/uiLabels";
 import type {
   AgentConfigFile,
   AgentConfigTab,
@@ -44,7 +51,7 @@ export function AgentConfigDrawer({
   const agentsFiles = configFiles.filter((file) => file.kind === "agents");
 
   return (
-    <aside className="agent-config-drawer" aria-label="Agent profile settings">
+    <aside className="agent-config-drawer" aria-label="에이전트 프로필 설정">
       <header>
         <div>
           <span>{agentConfigPanelTitle(activeTab)}</span>
@@ -87,8 +94,8 @@ export function AgentConfigDrawer({
               <input readOnly value={agentRoleLabel(agent.role)} />
             </label>
             <label>
-              <span>Provider</span>
-              <input readOnly value={provider?.name ?? "Provider 미지정"} />
+              <span>프로바이더</span>
+              <input readOnly value={provider?.name ?? "프로바이더 미지정"} />
             </label>
             <label>
               <span>모델</span>
@@ -153,16 +160,16 @@ export function AgentConfigDrawer({
               </select>
             </label>
             <label>
-              <span>Soul Mode</span>
+              <span>소울 모드</span>
               <select
                 value={agent.soulMode}
                 onChange={(event) => onUpdateAgentConfig({ soulMode: event.target.value as WorkbenchAgent["soulMode"] })}
                 disabled={agent.configSource === "off"}
               >
-                <option value="full">full</option>
-                <option value="summary">summary</option>
-                <option value="retrieved">retrieved</option>
-                <option value="off">off</option>
+                <option value="full">{soulModeLabel("full")}</option>
+                <option value="summary">{soulModeLabel("summary")}</option>
+                <option value="retrieved">{soulModeLabel("retrieved")}</option>
+                <option value="off">{soulModeLabel("off")}</option>
               </select>
             </label>
             <p className="agent-config-note">
@@ -243,29 +250,29 @@ export function AgentConfigDrawer({
         {activeTab === "injection" ? (
           <div className="agent-config-grid">
             <label>
-              <span>Config Source</span>
+              <span>설정 소스</span>
               <select
                 value={agent.configSource}
                 onChange={(event) =>
                   onUpdateAgentConfig({ configSource: event.target.value as WorkbenchAgent["configSource"] })
                 }
               >
-                <option value="internal">internal</option>
-                <option value="markdown">markdown</option>
-                <option value="off">off</option>
+                <option value="internal">{configSourceLabel("internal")}</option>
+                <option value="markdown">{configSourceLabel("markdown")}</option>
+                <option value="off">{configSourceLabel("off")}</option>
               </select>
             </label>
             <label>
-              <span>Soul Mode</span>
+              <span>소울 모드</span>
               <select
                 value={agent.soulMode}
                 onChange={(event) => onUpdateAgentConfig({ soulMode: event.target.value as WorkbenchAgent["soulMode"] })}
                 disabled={agent.configSource === "off"}
               >
-                <option value="full">full</option>
-                <option value="summary">summary</option>
-                <option value="retrieved">retrieved</option>
-                <option value="off">off</option>
+                <option value="full">{soulModeLabel("full")}</option>
+                <option value="summary">{soulModeLabel("summary")}</option>
+                <option value="retrieved">{soulModeLabel("retrieved")}</option>
+                <option value="off">{soulModeLabel("off")}</option>
               </select>
             </label>
             <p className="agent-config-note">
@@ -275,25 +282,25 @@ export function AgentConfigDrawer({
         ) : null}
         {activeTab === "preview" ? (
           <pre className="agent-config-preview">
-{`source: ${agent.configSource}
-soulMode: ${agent.soulMode}
-fallbackSoul: ${voicePresetLabel(persona.voicePreset)}
-creativity: ${creativityLevelLabel(persona.creativityLevel)} / temperature ${creativityTemperature(persona.creativityLevel).toFixed(1)}
-AGENTS.md: ${agent.configSource === "markdown" ? persona.agentsMdPath : "not injected"}
-SOUL.md: ${agent.configSource === "markdown" ? persona.soulMdPath : "not injected"}
+            {`소스: ${configSourceLabel(agent.configSource)}
+소울 모드: ${soulModeLabel(agent.soulMode)}
+대체 소울: ${voicePresetLabel(persona.voicePreset)}
+창의성: ${creativityLevelLabel(persona.creativityLevel)} / 온도 ${creativityTemperature(persona.creativityLevel).toFixed(1)}
+AGENTS.md: ${agent.configSource === "markdown" ? persona.agentsMdPath : "주입 안 됨"}
+SOUL.md: ${agent.configSource === "markdown" ? persona.soulMdPath : "주입 안 됨"}
 
-${agent.configSource === "internal" ? persona.soulSummary : "markdown source selected; file content will be loaded by path"}
-example:
+${agent.configSource === "internal" ? persona.soulSummary : "마크다운 소스 선택됨 · 파일 내용은 경로 기준으로 불러옵니다"}
+예시:
 ${persona.soulExampleDialogue}
 
 ${persona.agentsInstruction}
-avoid: ${persona.forbiddenStyle}`}
+피할 표현: ${persona.forbiddenStyle}`}
           </pre>
         ) : null}
         {activeTab === "edit" ? (
           <div className="agent-config-stack">
             <label>
-              <span>Config Source</span>
+              <span>설정 소스</span>
               <select
                 value={agent.configSource}
                 onChange={(event) =>
