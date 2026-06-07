@@ -281,6 +281,61 @@ describe("stage12 DGX provider completion", () => {
     });
   });
 
+  it("can direct-fallback server-proxy Anthropic-compatible providers with an explicit session secret", async () => {
+    const claudeProvider: ProviderProfile = {
+      id: "provider_apifun_claude_b",
+      name: "APIKey.fun Claude B",
+      kind: "anthropic",
+      baseUrl: "https://token-plan-sgp.xiaomimimo.com/anthropic",
+      defaultModel: "claude-opus-4-8",
+      enabled: true,
+      tags: ["server-proxy", "apikeyfun", "anthropic-compatible"],
+      trustLevel: "limited",
+    };
+    const calls: string[] = [];
+    const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(String(url));
+      if (String(url).includes("/provider-completions")) {
+        expect(String(init?.body)).not.toContain("sk-ant-session-secret");
+        return new Response(JSON.stringify({ error: "proxy offline" }), { status: 502 });
+      }
+
+      expect(String(url)).toBe("https://token-plan-sgp.xiaomimimo.com/anthropic/v1/messages");
+      expect((init?.headers as Record<string, string>)["x-api-key"]).toBe("sk-ant-session-secret");
+      expect(String(init?.body)).toContain("claude-opus-4-8");
+      return new Response(
+        JSON.stringify({
+          type: "message",
+          content: [{ type: "text", text: "마키마 Claude 세션 폴백 응답." }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 13, output_tokens: 9 },
+        }),
+        { status: 200 },
+      );
+    };
+
+    const result = await requestDgxProviderCompletion({
+      provider: claudeProvider,
+      modelId: "claude-opus-4-8",
+      messages,
+      fetchImpl,
+      localSecretResolver: async (providerProfile) =>
+        providerProfile.id === "provider_apifun_claude_b" ? "sk-ant-session-secret" : undefined,
+    });
+
+    expect(calls).toEqual([
+      `${DGX02_LAN_ORCHESTRATOR_BASE_URL}/provider-completions`,
+      "https://token-plan-sgp.xiaomimimo.com/anthropic/v1/messages",
+    ]);
+    expect(result).toMatchObject({
+      content: "마키마 Claude 세션 폴백 응답.",
+      endpoint: "https://token-plan-sgp.xiaomimimo.com/anthropic/v1/messages",
+      route: "direct_provider",
+      fallbackReason: expect.stringContaining("DGX-02 server proxy failed"),
+      usage: { inputTokens: 13, outputTokens: 9, totalTokens: 22 },
+    });
+  });
+
   it("stops fallback routing when the server requests explicit provider approval", async () => {
     const limitedProvider: ProviderProfile = {
       id: "provider_mimo_token_openai",
