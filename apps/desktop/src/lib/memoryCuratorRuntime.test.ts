@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { MemoryRecord } from "@ai-orchestrator/protocol";
-import { createMemoryCuratorPersistencePlan } from "./memoryCuratorRuntime";
+import {
+  createConversationTurnMemoryCandidate,
+  createMemoryCuratorPersistencePlan,
+} from "./memoryCuratorRuntime";
 
 const createdAt = "2026-06-06T00:00:00.000Z";
 const updatedAt = "2026-06-06T00:01:00.000Z";
@@ -25,6 +28,60 @@ function createRecord(overrides: Partial<MemoryRecord> & Pick<MemoryRecord, "id"
 }
 
 describe("memory curator runtime persistence planning", () => {
+  it("대화 한 턴을 에이전트별 장기 기억 후보로 만든다", () => {
+    const candidate = createConversationTurnMemoryCandidate({
+      agentId: "agent_orchestrator",
+      agentName: "마키마",
+      assistantMessage: {
+        id: "message_agent_1",
+        content: "기억해둘게. 다음에는 이 기준으로 바로 이어갈게.",
+        createdAt: updatedAt,
+        role: "assistant",
+        sessionId: "session_main",
+      },
+      createdAt: updatedAt,
+      memoryScopeNamespace: "agent:agent_orchestrator/session:session_main/provider:provider_mimo",
+      providerProfileId: "provider_mimo",
+      recallTraceId: "recall_agent_orchestrator_session_main_provider_mimo",
+      trustLevel: "limited",
+      userMessage: {
+        id: "message_user_1",
+        content: "마키마는 오케스트레이터 이름이고 앞으로 이 이름으로 대화해.",
+        createdAt,
+        role: "user",
+        sessionId: "session_main",
+      },
+    });
+
+    expect(candidate).toMatchObject({
+      agentId: "agent_orchestrator",
+      reason: "에이전트별 대화 연속성 유지",
+      status: "pending",
+      targetActivationState: "active",
+      record: {
+        activationState: "suggested",
+        kind: "workflow",
+        layer: "episode",
+        scope: "session",
+        sessionId: "session_main",
+        sourceChannel: "agent",
+        title: "마키마 대화 기억 후보",
+        trustLevel: "limited",
+      },
+    });
+    expect(candidate.record.content).toContain("사용자: 마키마는 오케스트레이터 이름");
+    expect(candidate.record.content).toContain("마키마: 기억해둘게");
+    expect(candidate.record.tags).toEqual(
+      expect.arrayContaining([
+        "conversation",
+        "curator-candidate",
+        "agent:agent_orchestrator",
+        "provider:provider_mimo",
+        "recall:recall_agent_orchestrator_session_main_provider_mimo",
+      ]),
+    );
+  });
+
   it("turns duplicate reflection fixes into activate and forget persistence requests", () => {
     const older = createRecord({ id: "memory_old", title: "Old duplicate", createdAt });
     const newer = createRecord({ id: "memory_new", title: "New duplicate", createdAt: updatedAt });
