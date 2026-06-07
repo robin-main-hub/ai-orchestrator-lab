@@ -42,4 +42,21 @@ describe("attachmentProcessing", () => {
     expect(plans[1]).toMatchObject({ reason: "첨부 개수 제한 초과" });
     expect(plans[2]).toMatchObject({ reason: "파일 크기 제한 초과" });
   });
+
+  it("모델이 text 모달리티만 지원해도 document 종류의 첨부를 허용한다", () => {
+    const plans = createAttachmentProcessingPlan({
+      currentAttachmentCount: 0,
+      files: [
+        { name: "code.ts", size: 10_000, type: "text/typescript" },
+      ],
+      maxAttachmentCount: 5,
+      modelModalities: ["text"],
+    });
+
+    expect(plans.map((plan) => plan.status)).toEqual(["accepted"]);
+    expect(plans[0]).toMatchObject({
+      kind: "document",
+      processingMode: "document_candidate",
+    });
+  });
 });
