@@ -139,6 +139,8 @@ describe("conversation pipeline runtime helper", () => {
         personaIdentityKey: "orchestrator",
         personaSoulApplied: true,
         personaAgentsMdApplied: true,
+        personaSafetyApplied: true,
+        personaFragmentsInjected: ["agents/orchestrator/SOUL.md", "agents/orchestrator/AGENTS.md"],
         personaSoulMdPath: "agents/orchestrator/SOUL.md",
         personaAgentsMdPath: "agents/orchestrator/AGENTS.md",
       },
@@ -151,6 +153,10 @@ describe("conversation pipeline runtime helper", () => {
       "Identity contract: your name is 마키마. If the user asks your name, answer 마키마",
     );
     expect(pipeline[0]?.content).toContain("Provider: MiMo Token Plan / model: mimo-v2.5-pro");
+    expect(pipeline[0]?.content).toContain("# System Safety Boundaries");
+    expect(pipeline[0]?.content).toContain("# Persona: orchestrator");
+    expect(pipeline[0]?.content).toContain("## From agents/orchestrator/SOUL.md");
+    expect(pipeline[0]?.content).toContain("## From agents/orchestrator/AGENTS.md");
     expect(pipeline[0]?.content).toContain("SOUL.md path: agents/orchestrator/SOUL.md");
     expect(pipeline[0]?.content).toContain("AGENTS.md path: agents/orchestrator/AGENTS.md");
     expect(pipeline[0]?.content).toContain("SOUL.md content:");
