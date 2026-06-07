@@ -1711,6 +1711,7 @@ export function App() {
         agentId: selectedAgent.id,
         agentName: selectedAgent.name,
         assistantMessage,
+        attachmentProcessingPlans,
         createdAt: assistantMessage.createdAt,
         memoryScopeNamespace: selectedAgentMemoryScope.namespace,
         providerProfileId: selectedProvider.id,
