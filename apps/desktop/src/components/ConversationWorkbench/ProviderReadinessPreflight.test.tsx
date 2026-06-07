@@ -51,7 +51,7 @@ describe("ProviderReadinessPreflight", () => {
     expect(html).toContain("보내기 전 확인 필요");
     expect(html).toContain("MiMo");
     expect(html).toContain("mimo-v2.5-pro");
-    expect(html).toContain("secretRef 연결이 필요함");
+    expect(html).toContain("비밀값 참조 연결이 필요함");
     expect(html).toContain("설정 또는 승인 상태를 먼저 확인");
   });
 
@@ -73,7 +73,10 @@ describe("ProviderReadinessPreflight", () => {
     expect(html).toContain("승인 대기");
     expect(html).toContain("마키마");
     expect(html).toContain("승인되면 이어서 전송");
-    expect(html).toContain("network_access");
-    expect(html).toContain("secret_access");
+    expect(html).toContain("네트워크 접근");
+    expect(html).toContain("비밀값 접근");
+    expect(html).not.toContain("network_access");
+    expect(html).not.toContain("secret_access");
+    expect(html).not.toContain("Provider 실행 전 점검");
   });
 });

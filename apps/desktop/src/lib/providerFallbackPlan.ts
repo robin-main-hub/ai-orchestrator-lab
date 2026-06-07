@@ -78,8 +78,8 @@ export function deriveProviderFallbackPlan({
 }): ProviderFallbackPlan {
   if (!lastErrorCategory) {
     return {
-      label: "현재 Provider 유지",
-      reason: "최근 Provider 장애가 없습니다.",
+      label: "현재 공급자 유지",
+      reason: "최근 공급자 장애가 없습니다.",
       retryable: false,
       status: "none",
       trustDowngrade: false,
@@ -89,7 +89,7 @@ export function deriveProviderFallbackPlan({
   if (lastErrorCategory === "auth") {
     return {
       label: "권한 점검 필요",
-      reason: "인증 오류는 자동 fallback보다 SecretRef 점검이 우선입니다.",
+      reason: "인증 오류는 자동 대체 경로보다 비밀값 참조 점검이 우선입니다.",
       retryable: false,
       status: "blocked",
       trustDowngrade: false,
@@ -103,8 +103,8 @@ export function deriveProviderFallbackPlan({
 
   if (!candidate) {
     return {
-      label: "대체 Provider 없음",
-      reason: "활성 fallback 후보가 없습니다.",
+      label: "대체 공급자 없음",
+      reason: "활성 대체 후보가 없습니다.",
       retryable: false,
       status: "blocked",
       trustDowngrade: false,
@@ -113,8 +113,8 @@ export function deriveProviderFallbackPlan({
 
   return {
     candidateProviderId: candidate.id,
-    label: "대체 Provider 준비",
-    reason: `${lastErrorCategory} 장애 시 ${candidate.name} 경로로 재시도 가능`,
+    label: "대체 공급자 준비",
+    reason: `${providerErrorCategoryLabel(lastErrorCategory)} 장애 시 ${candidate.name} 경로로 재시도 가능`,
     retryable: true,
     status: "available",
     trustDowngrade: selected ? trustRank(candidate.trustLevel) < trustRank(selected.trustLevel) : false,
