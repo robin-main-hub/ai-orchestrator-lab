@@ -129,46 +129,46 @@ export function buildDelegationFollowupPrompt({
   outcomes: DesktopDelegationOutcome[];
 }) {
   const lines: string[] = [
-    `${caller.name} delegated parts of the work to sub-agents. Now produce the final user-facing answer in your own voice.`,
-    "Do not emit any new <delegate> tags in this follow-up. One delegation cycle only.",
-    "If a sub-agent failed or was unavailable, be transparent and continue with the available evidence.",
+    `${caller.name}가 작업 일부를 하위 에이전트에게 위임했습니다. 이제 당신의 목소리로 최종 사용자 응답을 작성하세요.`,
+    "새 <delegate> 태그를 추가로 출력하지 마세요. 위임은 한 번의 순환으로만 처리합니다.",
+    "하위 에이전트가 실패했거나 사용할 수 없었다면 투명하게 밝히고, 남아 있는 근거로 계속 진행하세요.",
     "",
-    "Original user request:",
+    "원래 사용자 요청:",
     originalUserMessage,
     "",
-    "Your initial raw response:",
+    "초기 원문 응답:",
     stripDelegateTags(initialReply),
     "",
-    "Sub-agent results:",
+    "하위 에이전트 결과:",
   ];
 
   for (const outcome of outcomes) {
     lines.push("");
     lines.push(`## ${outcome.tag.target}`);
-    lines.push(`Task: ${outcome.tag.prompt}`);
+    lines.push(`작업: ${outcome.tag.prompt}`);
     switch (outcome.kind) {
       case "succeeded":
-        lines.push(`Status: succeeded (${outcome.targetAgentName} / ${outcome.targetRole})`);
+        lines.push(`상태: 완료 (${outcome.targetAgentName} / ${outcome.targetRole})`);
         lines.push(truncateDelegationText(outcome.response, 2200));
         break;
       case "blocked":
-        lines.push(`Status: blocked (${outcome.reason})`);
+        lines.push(`상태: 차단 (${outcome.reason})`);
         break;
       case "unknown_target":
-        lines.push("Status: unknown target");
+        lines.push("상태: 알 수 없는 대상");
         break;
       case "self_delegation":
-        lines.push("Status: self delegation blocked");
+        lines.push("상태: 자기 자신에게 위임 차단");
         break;
       case "failed":
-        lines.push(`Status: failed (${outcome.reason})`);
+        lines.push(`상태: 실패 (${outcome.reason})`);
         break;
     }
   }
 
   lines.push("");
-  lines.push("Final answer instructions:");
-  lines.push("Synthesize the results clearly, keep the user's decision/action next, and mention approval gates for any real execution.");
+  lines.push("최종 응답 지침:");
+  lines.push("결과를 명확히 종합하고, 사용자의 다음 결정/행동을 앞에 두며, 실제 실행이 필요한 경우 승인 관문을 언급하세요.");
   return lines.join("\n");
 }
 

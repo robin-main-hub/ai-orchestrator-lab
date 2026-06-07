@@ -77,8 +77,58 @@ describe("stage35DelegationRuntime", () => {
       ],
     });
 
-    expect(prompt).toContain("Do not emit any new <delegate> tags");
-    expect(prompt).toContain("Sub-agent results");
+    expect(prompt).toContain("새 <delegate> 태그를 추가로 출력하지 마세요.");
+    expect(prompt).toContain("하위 에이전트 결과:");
+    expect(prompt).not.toContain("Sub-agent results");
     expect(prompt).toContain("결과");
+  });
+
+  it("uses Korean status lines in delegation follow-up prompts", () => {
+    const prompt = buildDelegationFollowupPrompt({
+      caller: chaeArin,
+      initialReply: '<delegate to="researcher">확인</delegate>',
+      originalUserMessage: "시장 확인해줘",
+      outcomes: [
+        {
+          kind: "succeeded",
+          tag: makeTag("researcher"),
+          targetAgentId: "agent_researcher",
+          targetAgentName: "Researcher",
+          targetRole: "researcher",
+          providerProfileId: "provider_apifun_claude",
+          modelId: "claude-opus-4-6",
+          response: "결과",
+        },
+        {
+          kind: "blocked",
+          tag: makeTag("executor"),
+          reason: "승인 필요",
+        },
+        {
+          kind: "unknown_target",
+          tag: makeTag("ghost"),
+        },
+        {
+          kind: "self_delegation",
+          tag: makeTag("chae_arin"),
+        },
+        {
+          kind: "failed",
+          tag: makeTag("auditor"),
+          targetAgentId: "agent_auditor",
+          targetAgentName: "Auditor",
+          reason: "호출 실패",
+        },
+      ],
+    });
+
+    expect(prompt).toContain("상태: 완료");
+    expect(prompt).toContain("상태: 차단");
+    expect(prompt).toContain("상태: 알 수 없는 대상");
+    expect(prompt).toContain("상태: 자기 자신에게 위임 차단");
+    expect(prompt).toContain("상태: 실패");
+    expect(prompt).not.toContain("Status:");
+    expect(prompt).not.toContain("Original user request");
+    expect(prompt).not.toContain("Final answer instructions");
   });
 });
