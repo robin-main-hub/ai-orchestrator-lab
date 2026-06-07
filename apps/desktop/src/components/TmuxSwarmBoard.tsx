@@ -224,7 +224,7 @@ export function TmuxSwarmBoard({
             terminalSessionId: "terminal_session_ai_swarm",
             kind: "dispatch",
             status:
-              result.dispatch.status === "recorded"
+              result.dispatch.status === "recorded" || result.dispatch.status === "sent" || result.dispatch.status === "dry_run"
                 ? "completed"
                 : result.dispatch.status === "blocked"
                   ? "blocked"
