@@ -84,7 +84,7 @@ export function createAgentModelRouteLabel({
   const modelLabel = formatModelDisplayName(trimmedModelName || trimmedModelId);
   const sourceLabel =
     source === "agent"
-      ? "에이전트 고정"
+      ? "현재 에이전트 고정"
       : source === "provider_default"
         ? "공급자 기본"
         : source === "catalog"
