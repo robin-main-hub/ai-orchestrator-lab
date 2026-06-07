@@ -13,21 +13,25 @@ export function ProviderProfilesManagerPanel({
   modelCatalog,
   modelDiscoveryByProviderId,
   onAddProvider,
+  onBindSessionSecret,
   onDiscoverModels,
   onRenameProvider,
   onRemoveProvider,
   profiles,
   routingConsoleItems,
+  sessionSecretProviderIds = new Set(),
   usedProviderIds,
 }: {
   modelCatalog: ModelCatalog;
   modelDiscoveryByProviderId: Record<string, ModelDiscoverySnapshot>;
   onAddProvider: () => void;
+  onBindSessionSecret: (providerId: string) => void;
   onDiscoverModels: (providerId: string) => void;
   onRenameProvider: (providerId: string) => void;
   onRemoveProvider: (providerId: string) => void;
   profiles: ProviderProfile[];
   routingConsoleItems: ProviderRoutingConsoleItem[];
+  sessionSecretProviderIds?: Set<string>;
   usedProviderIds: Set<string>;
 }) {
   const routingItemById = new Map(routingConsoleItems.map((item) => [item.providerId, item]));
@@ -150,6 +154,14 @@ export function ProviderProfilesManagerPanel({
                     <span>{routingItem.secretPolicyLabel}</span>
                   </small>
                 ) : null}
+                {sessionSecretProviderIds.has(profile.id) ? (
+                  <small className="mt-2 flex flex-wrap items-center gap-1 text-[10px] text-zinc-500">
+                    <StatusBadge size="sm" variant="success">
+                      세션 키 준비
+                    </StatusBadge>
+                    <span>DGX 장애 시 직접 폴백 가능</span>
+                  </small>
+                ) : null}
               </div>
               <StatusBadge
                 size="sm"
@@ -174,6 +186,15 @@ export function ProviderProfilesManagerPanel({
                   type="button"
                 >
                   <RefreshCw size={13} />
+                </button>
+                <button
+                  aria-label={`${profile.name} 세션 키 연결`}
+                  className="provider-discovery-button"
+                  onClick={() => onBindSessionSecret(profile.id)}
+                  title="세션 키 연결"
+                  type="button"
+                >
+                  <KeyRound size={13} />
                 </button>
                 <button
                   aria-label={`${profile.name} 이름 변경`}

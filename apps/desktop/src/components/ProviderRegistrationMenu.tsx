@@ -6,23 +6,27 @@ export function ProviderRegistrationMenu({
   modelCatalog,
   modelDiscoveryByProviderId,
   onClose,
+  onBindSessionSecret,
   onDiscoverModels,
   onRemoveProvider,
   onRenameProvider,
   onRegister,
   profiles,
   routingConsoleItems,
+  sessionSecretProviderIds = new Set(),
   usedProviderIds,
 }: {
   modelCatalog: ModelCatalog;
   modelDiscoveryByProviderId: Record<string, ModelDiscoverySnapshot>;
   onClose: () => void;
+  onBindSessionSecret: (providerId: string) => void;
   onDiscoverModels: (providerId: string) => void;
   onRemoveProvider: (providerId: string) => void;
   onRenameProvider: (providerId: string) => void;
   onRegister: (mode: ProviderRegistrationMode) => void;
   profiles: ProviderProfile[];
   routingConsoleItems: ProviderRoutingConsoleItem[];
+  sessionSecretProviderIds?: Set<string>;
   usedProviderIds: Set<string>;
 }) {
   const options: Array<{
@@ -73,6 +77,7 @@ export function ProviderRegistrationMenu({
                     ? `에이전트 ${routingItem.assignedAgentCount}명 / ${routingItem.readinessLabel} / ${routingItem.secretPolicyLabel}`
                     : "라우팅 요약 대기"}
                 </span>
+                {sessionSecretProviderIds.has(profile.id) ? <span>세션 키 준비 / 직접 폴백 가능</span> : null}
               </div>
               <button
                 aria-label={`${profile.name} 모델 확인`}
@@ -82,6 +87,15 @@ export function ProviderRegistrationMenu({
                 type="button"
               >
                 <RefreshCw size={13} />
+              </button>
+              <button
+                aria-label={`${profile.name} 세션 키 연결`}
+                className="rail-icon-button"
+                onClick={() => onBindSessionSecret(profile.id)}
+                title="세션 키 연결"
+                type="button"
+              >
+                <KeyRound size={13} />
               </button>
               <button
                 aria-label={`${profile.name} 이름 변경`}
