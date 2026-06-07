@@ -23,14 +23,19 @@ describe("AgentMemoryContinuityPanel", () => {
       />,
     );
 
-    expect(html).toContain("기억 여권");
+    expect(html).toContain("함께 기억하는 것");
     expect(html).toContain("마키마");
     expect(html).toContain("기억 7개");
     expect(html).toContain("12개 메시지");
+    expect(html).toContain("12개 대화 단서");
     expect(html).toContain("SOUL 적용");
     expect(html).toContain("AGENTS 적용");
-    expect(html).toContain("기억 조회 추적 준비됨");
+    expect(html).toContain("이 대화방 기억만 사용");
+    expect(html).toContain("조회 흔적 남길 준비됨");
     expect(html).toContain("도구: 작업 대기열, 승인 확인");
+    expect(html).toContain("작업 대기열, 승인 확인 참고");
     expect(html).not.toContain("도구 준비 대기");
+    expect(html).not.toContain("session_desktop_001");
+    expect(html).not.toContain("provider_mimo_token_openai");
   });
 });

@@ -36,7 +36,9 @@ export function AgentConversationFlowPanel({
     memoryRecordCount,
     memoryScope,
     modelId: selectedModel?.id,
+    modelName: selectedModel?.name,
     providerProfileId: selectedProvider?.id,
+    providerName: selectedProvider?.name,
   });
 
   return (
@@ -46,13 +48,13 @@ export function AgentConversationFlowPanel({
           <section
             aria-label={`${card.label}: ${card.value}`}
             className={cn(
-              "min-w-0 rounded-2xl border px-3 py-2 shadow-lg shadow-black/20",
+              "min-w-0 rounded-lg border px-3 py-2 shadow-lg shadow-black/20",
               toneClassNames[card.tone],
             )}
             key={card.id}
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">
+              <span className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
                 {card.label}
               </span>
               <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />

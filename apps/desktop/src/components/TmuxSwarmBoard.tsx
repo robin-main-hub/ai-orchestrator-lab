@@ -21,6 +21,7 @@ import {
   compactTmuxPreview,
   formatTmuxDifficultyLabel,
   formatTmuxPaneCountLabel,
+  formatTmuxPaneSurfaceLabel,
   sanitizeTmuxWorkbenchText,
   tmuxPaneRoleLabel,
   tmuxWorkbenchCopy,
@@ -489,6 +490,7 @@ function TmuxFleetRow({
 }) {
   const state = mapTmuxPaneStateToAgentState(pane.state);
   const initials = pane.agent ? getInitials(pane.agent.name) : getInitials(pane.title);
+  const surfaceLabel = formatTmuxPaneSurfaceLabel(pane.id);
 
   return (
     <button
@@ -504,7 +506,7 @@ function TmuxFleetRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-medium text-zinc-100">{pane.title}</span>
-          <span className="shrink-0 font-mono text-[10px] text-zinc-600">·{pane.id.replace("pane-", "")}</span>
+          <span className="shrink-0 text-[10px] text-zinc-600">· {surfaceLabel}</span>
         </div>
         <p className="truncate text-xs text-zinc-500">
           {pane.agent?.name ?? tmuxPaneRoleLabel(pane.roleKey)} · {pane.role}
@@ -538,6 +540,7 @@ function TmuxPaneDetail({
 }) {
   const state = mapTmuxPaneStateToAgentState(pane.state);
   const commandDisabled = pane.state === "idle";
+  const surfaceLabel = formatTmuxPaneSurfaceLabel(pane.id);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -546,7 +549,7 @@ function TmuxPaneDetail({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h2 className="truncate text-sm font-medium text-zinc-100">{pane.title}</h2>
-            <span className="font-mono text-[10px] text-zinc-600">{pane.id}</span>
+            <span className="text-[10px] text-zinc-600">{surfaceLabel}</span>
           </div>
           <p className="truncate text-xs text-zinc-500">{pane.agent?.name ?? "담당 agent 미정"} · {pane.role}</p>
         </div>
@@ -614,7 +617,7 @@ function TmuxPaneDetail({
             onKeyDown={(event) => {
               if (event.key === "Enter" && !commandDisabled) onDispatch();
             }}
-            placeholder={`${pane.id}에 명령 보내기...`}
+            placeholder={`${surfaceLabel}에 명령 보내기...`}
             type="text"
             value={commandDraft}
           />

@@ -14,6 +14,7 @@ import {
   speedBadgeLabel,
   trustBadgeLabel,
 } from "./presentation";
+import { formatOperatorModelLabel, formatOperatorProviderLabel } from "./workerDisplay";
 
 export function ProviderRoutingCard({
   routing,
@@ -22,6 +23,9 @@ export function ProviderRoutingCard({
   routing: OperatorCockpitProviderRouting;
   onOpen?: () => void;
 }) {
+  const providerLabel = routing.providerLabel ? formatOperatorProviderLabel(routing.providerLabel) : undefined;
+  const selectedModelLabel = formatOperatorModelLabel(routing.selectedModelId);
+
   return (
     <GlassPanel variant="default" className="relative">
       <div aria-hidden className="absolute left-4 top-11 h-[calc(100%-3.25rem)] w-px bg-gradient-to-b from-violet-500/50 to-transparent" />
@@ -55,10 +59,10 @@ export function ProviderRoutingCard({
             <Route className="h-3 w-3" />
             선택 에이전트 경로
           </span>
-          {routing.providerLabel ? (
-            <div className="mb-1 text-xs font-semibold text-zinc-100">{routing.providerLabel}</div>
+          {providerLabel ? (
+            <div className="mb-1 text-xs font-semibold text-zinc-100">{providerLabel}</div>
           ) : null}
-          <span className="text-sm font-semibold text-violet-100">{routing.selectedModelId}</span>
+          <span className="text-sm font-semibold text-violet-100">{selectedModelLabel}</span>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {routing.routeLabel ? <Badge color="purple" size="xs">{routing.routeLabel}</Badge> : null}
             {routing.readinessLabel ? <Badge color="blue" size="xs">{routing.readinessLabel}</Badge> : null}
