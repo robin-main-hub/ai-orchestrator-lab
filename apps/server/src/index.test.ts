@@ -2212,6 +2212,30 @@ describe("DGX orchestrator request authentication", () => {
     registry.dispose();
   });
 
+  it("NonceRegistry bounds capacity cleanup scans and fails closed under saturation", () => {
+    let now = 1_700_000_000_000;
+    const registry = new NonceRegistry({
+      maxCapacityScan: 2,
+      maxNonces: 4,
+      now: () => now,
+      cleanupIntervalMs: false,
+    });
+
+    registry.add("active-1", 60_000);
+    registry.add("active-2", 60_000);
+    registry.add("expired-after-scan-window", 5_000);
+    registry.add("active-4", 60_000);
+
+    now += 10_000;
+
+    expect(() => registry.add("new-nonce", 10_000)).toThrow("nonce_registry_capacity_exceeded");
+    expect(registry.has("active-1")).toBe(true);
+    expect(registry.has("active-2")).toBe(true);
+    expect(registry.has("expired-after-scan-window")).toBe(false);
+
+    registry.dispose();
+  });
+
   it("HMAC timing-safe hash comparison correctly handles different lengths without crashes", async () => {
     await withRuntimeServer(async (baseUrl) => {
       // Send a signature of incorrect length to test requireAuth comparison gracefully returns 401 instead of crashing.

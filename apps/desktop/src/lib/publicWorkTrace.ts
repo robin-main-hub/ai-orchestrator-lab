@@ -323,11 +323,17 @@ export function createPublicTraceSafetyReport(trace: PublicWorkTrace): PublicTra
     pattern.test(combinedText) ? [`금지 패턴 감지: ${pattern.source}`] : [],
   );
   const blockedReasons = [...patternReasons, ...inspectPublicText(combinedText).blockedReasons];
-  const hasReceiptMasking = trace.receipt?.items.some(
-    (item) => item.label === "마스킹" && item.value.includes("적용"),
-  );
-  if (trace.groups.length > 0 && !hasReceiptMasking) {
-    blockedReasons.push("마스킹 영수증 없음");
+  if (trace.groups.length > 0) {
+    if (!trace.receipt) {
+      blockedReasons.push("마스킹 영수증 없음");
+    } else {
+      const hasReceiptMasking = trace.receipt.items.some(
+        (item) => item.label === "마스킹" && item.value.includes("적용"),
+      );
+      if (!hasReceiptMasking) {
+        blockedReasons.push("마스킹 미적용");
+      }
+    }
   }
 
   return {
