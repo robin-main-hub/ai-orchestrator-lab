@@ -1,5 +1,6 @@
 import { ChevronDown, ExternalLink, FileText, Search, ShieldCheck, ShieldX } from "lucide-react";
-import { createPublicWorkReceiptSummary } from "../../lib/publicWorkTrace";
+import { createPublicWorkReceiptSummary, maskPublicWorkTraceForRender } from "../../lib/publicWorkTrace";
+import { sanitizePublicText } from "../../lib/publicRedaction";
 import type { WorkTraceSearchItem } from "../../lib/workTraceSearch";
 import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
@@ -31,16 +32,18 @@ export function WorkReceiptLedgerCard({ items }: { items: WorkTraceSearchItem[] 
       <div className="divide-y divide-zinc-800/60">
         {recentItems.length > 0 ? (
           recentItems.map((item) => {
-            const receiptSummary = createPublicWorkReceiptSummary(item.trace);
+            const renderTrace = maskPublicWorkTraceForRender(item.trace);
+            const safeTitle = sanitizePublicText(item.title);
+            const receiptSummary = createPublicWorkReceiptSummary(renderTrace);
             const detailItems =
               receiptSummary?.detailItems ??
-              item.trace.receipt?.items.map((detail) => ({
+              renderTrace.receipt?.items.map((detail) => ({
                 label: detail.label,
                 value: detail.value,
               })) ??
               [];
             const statusLabel =
-              receiptSummary?.statusLabel ?? receiptStatusLabel(item.trace.receipt?.status ?? item.receiptStatus);
+              receiptSummary?.statusLabel ?? receiptStatusLabel(renderTrace.receipt?.status ?? item.receiptStatus);
             return (
               <article className="px-4 py-3" key={`${item.kind}:${item.id}`}>
                 <div className="flex min-w-0 items-start justify-between gap-3">
@@ -55,7 +58,7 @@ export function WorkReceiptLedgerCard({ items }: { items: WorkTraceSearchItem[] 
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-1 truncate text-xs font-medium text-zinc-200">{item.title}</p>
+                    <p className="mt-1 truncate text-xs font-medium text-zinc-200">{safeTitle}</p>
                     <p className="mt-1 truncate text-[11px] text-zinc-500">
                       공개 요약 ·{" "}
                       {receiptSummary?.detailItems.find((detail) => detail.label === "마스킹")?.value ??
@@ -82,7 +85,7 @@ export function WorkReceiptLedgerCard({ items }: { items: WorkTraceSearchItem[] 
                     </summary>
                     <div className="mt-2 grid gap-1.5 rounded-md border border-zinc-800/70 bg-black/15 p-2 sm:grid-cols-2">
                       <div className="text-[11px] font-medium text-zinc-300 sm:col-span-2">
-                        {receiptSummary?.compactLabel ?? item.trace.receipt?.label ?? item.title}
+                        {receiptSummary?.compactLabel ?? renderTrace.receipt?.label ?? safeTitle}
                       </div>
                       {detailItems.map((detail) => (
                         <div className="min-w-0" key={`${detail.label}:${detail.value}`}>
