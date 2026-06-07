@@ -1570,10 +1570,14 @@ export function App() {
       rejectedPlans: allRejectedPlans,
     });
     if (!content && attachments.length === 0) {
+      const blockedReason =
+        attachmentRecheck.rejectedPlans[0]?.reason ??
+        allRejectedPlans[0]?.reason ??
+        "선택 모델이 첨부를 처리할 수 없음";
       setDraftRejectedAttachmentPlans(allRejectedPlans.slice(-maxDraftAttachments));
       appendEvent("conversation.attachment.blocked", {
         selectedModelId: selectedModel?.id ?? modelId,
-        reason: allRejectedPlans[0]?.reason ?? "선택 모델이 첨부를 처리할 수 없음",
+        reason: blockedReason,
         attemptedCount: draftAttachments.length,
         processingPlans: attachmentRecheck.processingPlans,
         attachmentStorage: "metadata_only",
