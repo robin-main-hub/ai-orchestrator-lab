@@ -17,10 +17,10 @@ export function InboxApprovalStrip({ queue }: { queue: ApprovalQueueItem[] }) {
       >
         <div className="flex items-center gap-3">
           <span className="text-xs font-medium text-foreground">
-            Assistant Inbox
+            어시스턴트 수신함
           </span>
           <span className="text-[10px] text-muted-foreground">
-            {queue.length} tasks / {pending} pending
+            작업 {queue.length}건 / 대기 {pending}건
           </span>
         </div>
         {isOpen ? (

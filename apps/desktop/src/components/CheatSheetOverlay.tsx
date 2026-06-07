@@ -24,18 +24,18 @@ type ShortcutRow = {
   priority: "핵심" | "보조" | "안전" | "빈번" | "보편" | "학습";
 };
 
-const SHORTCUTS: ShortcutRow[] = [
+export const SHORTCUTS: ShortcutRow[] = [
   { keys: ["⌘", "K"], label: "전역 명령 팔레트", priority: "핵심" },
   { keys: ["⌘", "I"], label: "오케스트레이터 호출", priority: "핵심" },
-  { keys: ["⌘", "1"], label: "Conversation 모드 전환", priority: "핵심" },
-  { keys: ["⌘", "2"], label: "Debate 모드 전환", priority: "핵심" },
-  { keys: ["⌘", "3"], label: "Tmux 모드 전환", priority: "핵심" },
-  { keys: ["⌘", "⇧", "A"], label: "Control Queue 열기 / 닫기", priority: "핵심" },
+  { keys: ["⌘", "1"], label: "대화 모드 전환", priority: "핵심" },
+  { keys: ["⌘", "2"], label: "토론 모드 전환", priority: "핵심" },
+  { keys: ["⌘", "3"], label: "tmux 모드 전환", priority: "핵심" },
+  { keys: ["⌘", "⇧", "A"], label: "작업 대기열 열기 / 닫기", priority: "핵심" },
   { keys: ["⌘", "⇧", "M"], label: "EvolveMemento — 현재 맥락 기억", priority: "보조" },
   { keys: ["⌘", "⇧", "D"], label: "토론 생성 또는 패널 분할", priority: "보조" },
   { keys: ["⌘", "."], label: "활성 에이전트 중단", priority: "안전" },
   { keys: ["⌘", "⏎"], label: "Selected draft 승인 / 전송", priority: "빈번" },
-  { keys: ["Esc"], label: "Overlay 닫기 / focus reset", priority: "보편" },
+  { keys: ["Esc"], label: "오버레이 닫기 / 포커스 복원", priority: "보편" },
   { keys: ["?"], label: "이 단축키 도움말", priority: "학습" },
 ];
 
