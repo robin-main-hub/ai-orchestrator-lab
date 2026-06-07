@@ -11,6 +11,7 @@ export function AgentMemoryContinuityPanel({
   messageCount,
   personaAgentsMdApplied,
   personaSoulApplied,
+  toolLabels = [],
 }: {
   adapterStatus: AgentChannelAdapterStatus;
   agentName?: string;
@@ -19,12 +20,14 @@ export function AgentMemoryContinuityPanel({
   messageCount: number;
   personaAgentsMdApplied: boolean;
   personaSoulApplied: boolean;
+  toolLabels?: string[];
 }) {
   const summary = createAgentChatContinuitySummary({
     adapterStatus,
     agentName,
     memoryRecordCount,
     messageCount,
+    toolLabels,
   });
   const memoryLabel = memoryRecordCount > 0 ? `기억 ${memoryRecordCount}개` : summary.memoryQualityLabel;
   const scopeLabel = memoryScope ? `전용 범위 · ${shortSessionLabel(memoryScope.sessionId)}` : "전용 범위 준비 중";
