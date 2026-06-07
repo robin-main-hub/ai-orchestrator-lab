@@ -66,4 +66,58 @@ describe("deriveCockpitNextActions", () => {
 
     expect(actions.map((action) => action.label)).toEqual(["같은 작업", "카구야에게 리뷰 인계"]);
   });
+
+  it("surfaces unsafe public receipts as an immediate cockpit action", () => {
+    const actions = deriveCockpitNextActions({
+      diagnostics: { nextActions: [] } as unknown as SettingsDiagnostics,
+      maturity: { nextActions: [], overallStatus: "needs_work" } as unknown as OrchestrationMaturityReport,
+      snapshot: { ...snapshot, approvals: [], fleet: [], handoffs: [] } as unknown as OperatorCockpitSnapshot,
+      workTraceItems: [
+        {
+          id: "trace_unsafe",
+          kind: "conversation",
+          safetyLabel: "마스킹 확인 필요",
+          searchText: "",
+          searchable: false,
+          title: "원문 도구 입력 노출",
+          trace: { groups: [] },
+        },
+      ],
+    });
+
+    expect(actions[0]).toMatchObject({
+      label: "공개 영수증 마스킹 점검: 1건",
+      priority: "high",
+      source: "receipt",
+    });
+  });
+
+  it("when nothing is blocked, points the operator at active worker output", () => {
+    const actions = deriveCockpitNextActions({
+      diagnostics: { nextActions: [] } as unknown as SettingsDiagnostics,
+      maturity: { nextActions: [], overallStatus: "ready" } as unknown as OrchestrationMaturityReport,
+      snapshot: {
+        ...snapshot,
+        approvals: [],
+        fleet: [
+          {
+            role: "builder",
+            status: "working",
+            statusRingColor: "green",
+            workerId: "agent_builder",
+          },
+        ],
+        handoffs: [],
+      } as unknown as OperatorCockpitSnapshot,
+    });
+
+    expect(actions).toEqual([
+      {
+        id: "worker_active_agent_builder",
+        label: "작업 중: agent_builder 결과 확인",
+        priority: "normal",
+        source: "worker",
+      },
+    ]);
+  });
 });
