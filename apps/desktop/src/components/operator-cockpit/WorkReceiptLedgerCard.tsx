@@ -1,18 +1,38 @@
+import { useMemo, useState } from "react";
 import { ChevronDown, ExternalLink, FileText, Search, ShieldCheck, ShieldX } from "lucide-react";
 import { createPublicWorkReceiptSummary, maskPublicWorkTraceForRender } from "../../lib/publicWorkTrace";
 import { sanitizePublicText } from "../../lib/publicRedaction";
-import type { WorkTraceSearchItem } from "../../lib/workTraceSearch";
+import { searchWorkTraceIndex, type WorkTraceSearchItem } from "../../lib/workTraceSearch";
 import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
 
-export function WorkReceiptLedgerCard({ items }: { items: WorkTraceSearchItem[] }) {
-  const recentItems = items.slice(0, 8);
+type WorkReceiptKindFilter = WorkTraceSearchItem["kind"] | "all";
+
+export function WorkReceiptLedgerCard({
+  initialKind = "all",
+  initialQuery = "",
+  items,
+  onOpenTrace,
+}: {
+  initialKind?: WorkReceiptKindFilter;
+  initialQuery?: string;
+  items: WorkTraceSearchItem[];
+  onOpenTrace?: (item: WorkTraceSearchItem) => void;
+}) {
+  const [query, setQuery] = useState(initialQuery);
+  const [kindFilter, setKindFilter] = useState<WorkReceiptKindFilter>(initialKind);
+  const sortedItems = [...items].sort((left, right) => timestampOf(right.createdAt) - timestampOf(left.createdAt));
+  const visibleItems = useMemo(() => {
+    const queriedItems = query.trim() ? searchWorkTraceIndex(sortedItems, query) : sortedItems;
+    return queriedItems.filter((item) => kindFilter === "all" || item.kind === kindFilter);
+  }, [kindFilter, query, sortedItems]);
+  const recentItems = visibleItems.slice(0, 8);
   const unsafeCount = items.filter((item) => !item.searchable).length;
   const searchableCount = items.length - unsafeCount;
   const sourceSummary = createReceiptSourceSummary(items);
 
   return (
-    <GlassPanel>
+    <GlassPanel ariaLabel="작업 영수증 장부">
       <GlassPanelHeader
         action={
           <Badge color={unsafeCount > 0 ? "yellow" : "green"}>
@@ -38,6 +58,41 @@ export function WorkReceiptLedgerCard({ items }: { items: WorkTraceSearchItem[] 
         <div className="min-w-0 rounded-md border border-zinc-800/70 bg-black/15 px-3 py-2 text-zinc-500 sm:col-span-3">
           <span className="font-medium text-zinc-300">출처</span>{" "}
           {sourceSummary.length > 0 ? sourceSummary.join(" · ") : "아직 없음"}
+        </div>
+      </div>
+
+      <div className="space-y-2 border-b border-zinc-800/60 px-4 py-3">
+        <label className="flex items-center gap-2 rounded-lg border border-zinc-800/70 bg-black/20 px-3 py-2 text-xs text-zinc-400">
+          <Search className="h-3.5 w-3.5 text-cyan-300" />
+          <span className="sr-only">작업 영수증 검색</span>
+          <input
+            aria-label="작업 영수증 검색"
+            className="min-w-0 flex-1 bg-transparent text-xs text-zinc-200 outline-none placeholder:text-zinc-600"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="작업 영수증 검색"
+            type="search"
+            value={query}
+          />
+        </label>
+        <div aria-label="작업 영수증 종류 필터" className="flex flex-wrap gap-1.5">
+          {(["all", "conversation", "debate", "tmux", "approval", "memory"] as const).map((kind) => (
+            <button
+              aria-pressed={kindFilter === kind}
+              className={`rounded-full border px-2 py-1 text-[10px] font-medium transition-colors ${
+                kindFilter === kind
+                  ? "border-cyan-400/40 bg-cyan-500/10 text-cyan-200"
+                  : "border-zinc-800/70 bg-black/10 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300"
+              }`}
+              key={kind}
+              onClick={() => setKindFilter(kind)}
+              type="button"
+            >
+              {kind === "all" ? "전체" : kindLabel(kind)}
+            </button>
+          ))}
+          <span className="ml-auto self-center text-[10px] text-zinc-600">
+            표시 {visibleItems.length}건
+          </span>
         </div>
       </div>
 
@@ -89,6 +144,16 @@ export function WorkReceiptLedgerCard({ items }: { items: WorkTraceSearchItem[] 
                     {item.safetyLabel}
                   </span>
                 </div>
+                <button
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[10px] font-medium text-cyan-200 transition-colors hover:border-cyan-400/40 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={!onOpenTrace}
+                  onClick={() => onOpenTrace?.(item)}
+                  title={onOpenTrace ? "원본 화면으로 이동" : "원본 이동 핸들러 대기"}
+                  type="button"
+                >
+                  원본 보기
+                  <ExternalLink className="h-3 w-3" />
+                </button>
                 {detailItems.length > 0 ? (
                   <details className="group mt-2">
                     <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11px] font-medium text-zinc-400 transition-colors hover:text-zinc-200">
@@ -134,6 +199,11 @@ export function WorkReceiptLedgerCard({ items }: { items: WorkTraceSearchItem[] 
       </div>
     </GlassPanel>
   );
+}
+
+function timestampOf(value?: string) {
+  const time = value ? Date.parse(value) : 0;
+  return Number.isFinite(time) ? time : 0;
 }
 
 function ReceiptSummaryPill({

@@ -129,7 +129,7 @@ describe("OperatorCockpit", () => {
       />,
     );
 
-    expect(html.match(/작업 영수증/g)?.length).toBe(1);
+    expect(html.match(/aria-label="작업 영수증 장부"/g)?.length).toBe(1);
   });
 
   it("다음 행동을 첫 화면의 지금 할 일 CTA와 접힌 후보로 렌더링한다", () => {

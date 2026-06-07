@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultAgentProfiles, type DelegateTag } from "@ai-orchestrator/agents";
 import {
+  buildDelegatedAgentPrompt,
   buildDelegationFollowupPrompt,
   delegationAuthorityLevel,
   resolveDelegationTargetAgent,
@@ -11,6 +12,7 @@ import type { WorkbenchAgent } from "../types";
 
 const agents = defaultAgentProfiles as WorkbenchAgent[];
 const chaeArin = agents.find((agent) => agent.personaName === "chae_arin")!;
+const orchestrator = agents.find((agent) => agent.role === "orchestrator")!;
 
 function makeTag(target: string): DelegateTag {
   return {
@@ -36,6 +38,29 @@ describe("stage35DelegationRuntime", () => {
   it("does not resolve self-delegation back to the caller", () => {
     expect(resolveDelegationTargetAgent("companion", chaeArin, agents)?.id).not.toBe(chaeArin.id);
     expect(resolveDelegationTargetAgent("chae_arin", chaeArin, agents)).toBeUndefined();
+  });
+
+  it("위임 프롬프트에도 내부 역할명이 아니라 캐릭터 이름을 쓴다", () => {
+    const prompt = buildDelegatedAgentPrompt({
+      caller: orchestrator,
+      originalUserMessage: "검토자에게 회귀 위험을 보게 해줘",
+      tag: makeTag("reviewer"),
+    });
+
+    expect(prompt).toContain("[Delegated by 마키마 / orchestrator]");
+    expect(prompt).not.toContain("[Delegated by Orchestrator");
+  });
+
+  it("위임 후 종합 프롬프트도 호출자 캐릭터 이름으로 시작한다", () => {
+    const prompt = buildDelegationFollowupPrompt({
+      caller: chaeArin,
+      initialReply: '<delegate to="researcher">확인</delegate>',
+      originalUserMessage: "시장 확인해줘",
+      outcomes: [],
+    });
+
+    expect(prompt).toContain("채아린이 작업 일부를 하위 에이전트에게 위임했습니다.");
+    expect(prompt).not.toContain("Chae");
   });
 
   it("serializes successful delegation outcomes for conversation metadata", () => {
