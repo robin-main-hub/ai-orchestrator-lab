@@ -10,6 +10,7 @@ import {
   createAgentConversationReadiness,
   type AgentConversationReadinessTone,
 } from "../../lib/agentConversationReadiness";
+import { agentPrimaryDisplayName } from "../../lib/agentDisplay";
 import type { ControlQueueContinuitySummary } from "../../lib/controlQueueContinuity";
 import { getAgentToolBadgeLabels } from "../../lib/agentToolProfiles";
 import { agentRoleLabel } from "../../lib/helpers";
@@ -39,7 +40,7 @@ export function AgentChannelStatusBar({
   selectedAgent?: WorkbenchAgent;
 }) {
   const status = createAgentChannelStatus({
-    agentName: selectedAgent?.name,
+    agentName: selectedAgent ? agentPrimaryDisplayName(selectedAgent) : undefined,
     roleLabel: selectedAgent ? agentRoleLabel(selectedAgent.role) : undefined,
     adapterStatus,
     memoryRecordCount,
