@@ -98,13 +98,13 @@ export function createMetaOnboardingSignals({
       id: "meta_roles",
       label: "역할 구성",
       status: roles.has("verifier") && roles.has("memory_curator") ? "ready" : "partial",
-      suggestion: roles.has("verifier") ? "검증 역할 있음" : "Verifier 추가 추천",
+      suggestion: roles.has("verifier") ? "검증 역할 있음" : "검증 역할 추가 추천",
     },
     {
       id: "meta_engines",
       label: "엔진 감지",
       status: providers.length >= 3 && modelCount > 4 ? "ready" : "partial",
-      suggestion: `${providers.length} providers / ${modelCount} models`,
+      suggestion: `공급자 ${providers.length}개 / 모델 ${modelCount}개`,
     },
     {
       id: "meta_runtime",
