@@ -379,6 +379,7 @@ export function createOllamaMessages(input: ProviderCompletionMessage[]): Array<
   const out: Array<{ role: "system" | "user" | "assistant"; content: string }> = [];
   for (const message of input) {
     const content = message.content;
+    if (typeof content !== "string") continue;
     if (!content || !content.trim()) continue;
     if (message.role === "system" || message.role === "user" || message.role === "assistant") {
       out.push({ role: message.role, content });

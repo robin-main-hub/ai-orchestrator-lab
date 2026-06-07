@@ -402,6 +402,7 @@ export function splitSystemAndMessages(input: ProviderCompletionMessage[]): {
   const others: Array<{ role: "user" | "assistant"; content: string }> = [];
   for (const message of input) {
     const content = message.content;
+    if (typeof content !== "string") continue;
     if (!content || !content.trim()) continue;
     if (message.role === "system") {
       systems.push(content);
