@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MockMemoryAdapter, withTrustEnforcement } from "@ai-orchestrator/memory";
+import { MockMemoryAdapter, withTrustEnforcement, type MemoryAdapter, type MemoryAdapterContext } from "@ai-orchestrator/memory";
 import { createSeedMemoryRecords } from "./stage6Memory";
 import { createAdapterBackedMementoMemoryApi, createLocalMementoMemoryApi } from "./stage27MemoryApi";
 
@@ -139,6 +139,78 @@ describe("stage27 adapter-backed memento memory api", () => {
       namespace: "agent:agent_orchestrator/session:session_main/provider:provider_mimo_token_openai",
       recallTraceId: "recall_agent_orchestrator_session_main_provider_mimo_token_openai",
     });
+  });
+
+  it("passes appendEvent through mutating adapter-backed memory contexts", async () => {
+    const appendedEvents: unknown[] = [];
+    const adapter: MemoryAdapter = new MockMemoryAdapter({
+      profileId: "evolvememento_mock",
+      records: createSeedMemoryRecords(createdAt),
+      createdAt,
+    });
+    const originalPin = adapter.pin.bind(adapter);
+    adapter.pin = async (recordId: string, ctx: MemoryAdapterContext) => {
+      await ctx?.appendEvent?.({
+        id: "event_memory_pin",
+        sessionId: "session_main",
+        type: "memory.pin.updated",
+        createdAt,
+        source: "agent",
+        sourceTrust: "trusted",
+        redacted: false,
+        payload: {
+          kind: "memory_operation",
+          operation: "pin",
+          recordIds: [recordId],
+          operationScope: ctx.operationScope,
+        },
+      });
+      return originalPin(recordId, ctx);
+    };
+    const api = createAdapterBackedMementoMemoryApi({
+      adapter,
+      context: {
+        appendEvent: async (event) => {
+          appendedEvents.push(event);
+        },
+      },
+      operationScope: {
+        agentId: "agent_orchestrator",
+        sessionId: "session_main",
+        providerProfileId: "provider_mimo_token_openai",
+        namespace: "agent:agent_orchestrator/session:session_main/provider:provider_mimo_token_openai",
+        recallTraceId: "recall_agent_orchestrator_session_main_provider_mimo_token_openai",
+      },
+      createdAt,
+    });
+    const [record] = createSeedMemoryRecords(createdAt);
+    if (!record) throw new Error("expected seed memory record");
+
+    await api.pin(record.id);
+
+    expect(appendedEvents).toEqual([
+      {
+        id: "event_memory_pin",
+        sessionId: "session_main",
+        type: "memory.pin.updated",
+        createdAt,
+        source: "agent",
+        sourceTrust: "trusted",
+        redacted: false,
+        payload: {
+          kind: "memory_operation",
+          operation: "pin",
+          recordIds: [record.id],
+          operationScope: {
+            agentId: "agent_orchestrator",
+            sessionId: "session_main",
+            providerProfileId: "provider_mimo_token_openai",
+            namespace: "agent:agent_orchestrator/session:session_main/provider:provider_mimo_token_openai",
+            recallTraceId: "recall_agent_orchestrator_session_main_provider_mimo_token_openai",
+          },
+        },
+      },
+    ]);
   });
 
   it("preserves permission and trust gates from the shared memory adapter", async () => {
