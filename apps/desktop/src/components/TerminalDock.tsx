@@ -97,11 +97,11 @@ export function TerminalDock({
   const vaultTone = providerReadiness.status === "ready" ? "ok" : "warn";
 
   return (
-    <footer className="terminal-dock terminal-dock-v2" aria-label="Terminal · Run Log">
+    <footer className="terminal-dock terminal-dock-v2" aria-label="터미널 · 실행 로그">
       <div className="terminal-dock-v2__header">
         <span className="terminal-dock-v2__title">
           <Terminal size={15} />
-          <strong>Terminal / Run Log</strong>
+          <strong>터미널 / 실행 로그</strong>
           <em>승인 기반 실행</em>
         </span>
         <div className="terminal-dock-v2__chips">
@@ -114,7 +114,7 @@ export function TerminalDock({
           <StatusChip
             icon={<Server size={11} />}
             label="DGX"
-            value={dgxBridge.heartbeat.status}
+            value={connectionStatusLabel(dgxBridge.heartbeat.status)}
             tone={dgxTone}
           />
           <StatusChip
@@ -174,14 +174,14 @@ export function TerminalDock({
           tone="ok"
           stamp={`run-${agentRun.status}`}
           title={agentRun.soulSummary}
-          meta={`기억 ${agentRun.recallTrace.length}개 · 사용 ${agentRun.recallTrace.filter((t) => t.usedInDecision).length}개 · 검증 ${agentRun.verifier.status} · 재생 ${agentRun.replay.eventIds.length}개`}
+          meta={`기억 ${agentRun.recallTrace.length}개 · 사용 ${agentRun.recallTrace.filter((t) => t.usedInDecision).length}개 · 검증 ${terminalStatusLabel(agentRun.verifier.status)} · 재생 ${agentRun.replay.eventIds.length}개`}
         />
 
         <Block
           type="dgx"
           tone={dgxTone}
           stamp={dgxBridge.authorityNodeId}
-          title={`원격 ${dgxBridge.response.status} · 동기화 ${dgxBridge.syncMode}`}
+          title={`원격 ${terminalStatusLabel(dgxBridge.response.status)} · 동기화 ${dgxBridge.syncMode}`}
           meta={`대체 경로 ${dgxBridge.localFallbackEnabled ? dgxBridge.response.fallbackMode : "없음"}`}
         />
 
@@ -190,7 +190,7 @@ export function TerminalDock({
           tone={vaultTone}
           stamp={`vault ${providerReadiness.modelCount}m`}
           title={providerReadiness.reason}
-          meta={`비밀값 ${providerReadiness.secretAvailability} · 기억 ${providerReadiness.canUseAutomaticMemory ? "자동" : "수동"} · 원문 저장 없음`}
+          meta={`비밀값 ${terminalStatusLabel(providerReadiness.secretAvailability)} · 기억 ${providerReadiness.canUseAutomaticMemory ? "자동" : "수동"} · 원문 저장 없음`}
           actions={
             <button
               className="terminal-dock-v2__action"
@@ -217,7 +217,7 @@ export function TerminalDock({
             }
             stamp={slot.label}
             title={slot.lastCommandPreview || "아직 명령 없음"}
-            meta={`상태 ${slot.status} · 승인 ${slot.permissionState}`}
+            meta={`상태 ${terminalStatusLabel(slot.status)} · 승인 ${terminalStatusLabel(slot.permissionState)}`}
           />
         ))}
 
@@ -254,12 +254,12 @@ function StatusChip({
 }
 
 const TYPE_LABEL: Record<string, string> = {
-  permission: "permission",
-  runtime: "runtime",
-  dgx: "dgx-bridge",
-  vault: "vault",
-  slot: "slot",
-  event: "event",
+  permission: "승인",
+  runtime: "런타임",
+  dgx: "DGX 연결",
+  vault: "금고",
+  slot: "슬롯",
+  event: "이벤트",
 };
 
 function Block({
@@ -345,9 +345,9 @@ function EventLogBlock({
       <header className="terminal-dock-v2__block-head">
         <span className="terminal-dock-v2__block-stamp">
           <Activity size={11} />
-          event-log
+          이벤트 로그
         </span>
-        <span className="terminal-dock-v2__block-type">{eventSyncState.status}</span>
+        <span className="terminal-dock-v2__block-type">{terminalStatusLabel(eventSyncState.status)}</span>
         <span
           className={cn(
             "terminal-dock-v2__block-dot",
@@ -357,7 +357,7 @@ function EventLogBlock({
         />
       </header>
       <p className="terminal-dock-v2__block-title">
-        DGX-02 rev {eventSyncState.serverRevision ?? "-"} · outbox {eventSyncState.outboxCount}
+        DGX-02 리비전 {eventSyncState.serverRevision ?? "-"} · 보낼 항목 {eventSyncState.outboxCount}
       </p>
       <button
         aria-expanded={open}
@@ -372,7 +372,7 @@ function EventLogBlock({
           )}
           size={11}
         />
-        recent ({formattedEvents.length})
+        최근 기록 ({formattedEvents.length})
       </button>
       {open && formattedEvents.length > 0 ? (
         <ul className="terminal-dock-v2__event-list">
@@ -386,13 +386,49 @@ function EventLogBlock({
       ) : null}
       <div className="terminal-dock-v2__block-actions">
         <button className="terminal-dock-v2__action" onClick={onSyncEvents} type="button">
-          sync
+          동기화
         </button>
         <button className="terminal-dock-v2__action" onClick={onReplayEvents} type="button">
           <ShieldCheck size={11} />
-          pull
+          가져오기
         </button>
       </div>
     </article>
   );
+}
+
+function connectionStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    connected: "연결됨",
+    degraded: "저하",
+    disconnected: "끊김",
+    failed: "실패",
+    ready: "준비됨",
+    unreachable: "도달 불가",
+  };
+  return labels[status] ?? terminalStatusLabel(status);
+}
+
+function terminalStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    approved: "승인됨",
+    available: "사용 가능",
+    blocked: "차단",
+    completed: "완료",
+    denied: "거부됨",
+    expired: "만료됨",
+    failed: "실패",
+    passed: "통과",
+    pending: "대기",
+    pending_approval: "승인 대기",
+    ready: "준비됨",
+    ready_for_approval: "승인 대기",
+    rejected: "거부됨",
+    required: "승인 필요",
+    running: "실행 중",
+    sent: "전송됨",
+    synced: "동기화됨",
+    syncing: "동기화 중",
+  };
+  return labels[status] ?? status;
 }

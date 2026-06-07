@@ -39,14 +39,14 @@ export function CodingPacketPanel({
     <section className="coding-packet">
       <header>
         <div>
-          <span>Coding Packet</span>
+          <span>코딩 패킷</span>
           <h2>{packet.goal}</h2>
         </div>
         <button 
           className="ghost-button" 
           type="button"
           onClick={handleVerifyClick}
-          title={onVerify ? "Coding Packet 구조 검증" : "검증 러너 미연결"}
+          title={onVerify ? "코딩 패킷 구조 검증" : "검증 러너 미연결"}
           disabled={isVerifying || !onVerify}
         >
           {isVerifying ? (
@@ -57,9 +57,9 @@ export function CodingPacketPanel({
           {isVerifying ? "검증 중..." : "구조 검증"}
         </button>
       </header>
-      <section className="review-insight-panel" aria-label="Review and insight controls">
+      <section className="review-insight-panel" aria-label="리뷰와 인사이트 제어">
         <div className="review-mode-toggle">
-          <span>Review</span>
+          <span>리뷰</span>
           {(["quick", "deep"] as ReviewMode[]).map((mode) => (
             <button
               className={reviewMode === mode ? "active" : ""}

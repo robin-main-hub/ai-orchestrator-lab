@@ -88,12 +88,12 @@ export function ProjectRailPanel({
     <section className="mini-panel rail-panel project-rail-panel flex flex-col h-full overflow-hidden">
       <header className="mb-2 shrink-0">
         <LayoutDashboard size={16} />
-        <span>Project</span>
+        <span>프로젝트</span>
         <div className="rail-action-row">
-          <button className="rail-icon-button" onClick={onCreateCodingPacket} title="Coding Packet 생성" type="button">
+          <button className="rail-icon-button" onClick={onCreateCodingPacket} title="코딩 패킷 생성" type="button">
             <Send size={13} />
           </button>
-          <button className="rail-icon-button" onClick={onCreateAgentRun} title="Agent Run 준비" type="button">
+          <button className="rail-icon-button" onClick={onCreateAgentRun} title="에이전트 실행 준비" type="button">
             <Play size={13} />
           </button>
         </div>
@@ -106,21 +106,21 @@ export function ProjectRailPanel({
           onClick={() => setActiveTab("overview")}
           type="button"
         >
-          Overview
+          개요
         </button>
         <button
           className={activeTab === "run" ? "active" : ""}
           onClick={() => setActiveTab("run")}
           type="button"
         >
-          Run {isRunning && <span className="tab-status-dot warning" />}
+          실행 {isRunning && <span className="tab-status-dot warning" />}
         </button>
         <button
           className={activeTab === "insights" ? "active" : ""}
           onClick={() => setActiveTab("insights")}
           type="button"
         >
-          Insights {insightCount > 0 && <span className="tab-count-badge">{displayInsightCount}</span>}
+          인사이트 {insightCount > 0 && <span className="tab-count-badge">{displayInsightCount}</span>}
         </button>
       </div>
 
@@ -135,33 +135,33 @@ export function ProjectRailPanel({
             </div>
             <div className="rail-stat-list">
               <div>
-                <span>events</span>
+                <span>이벤트</span>
                 <strong>{eventCount}</strong>
               </div>
               <div>
-                <span>decisions</span>
+                <span>결정</span>
                 <strong>{packet.decisions.length}</strong>
               </div>
               <div>
-                <span>memory recall</span>
+                <span>기억 조회</span>
                 <strong>{memoryInspector.trace.results.length}</strong>
               </div>
               <div>
-                <span>run status</span>
+                <span>실행 상태</span>
                 <strong>
                   <StatusBadge size="sm" variant={railRuntimeBadgeVariant(agentRun.status)}>
-                    {agentRun.status}
+                    {railRuntimeStatusLabel(agentRun.status)}
                   </StatusBadge>
                 </strong>
               </div>
             </div>
             <div className="rail-split-list">
               <section>
-                <strong>inspect</strong>
+                <strong>검토 파일</strong>
                 {visibleFiles.length > 0 ? visibleFiles.map((file) => <span key={file}>{file}</span>) : <span>대상 없음</span>}
               </section>
               <section>
-                <strong>verify</strong>
+                <strong>검증</strong>
                 {visibleChecks.length > 0 ? visibleChecks.map((check) => <span key={check}>{check}</span>) : <span>대상 없음</span>}
               </section>
             </div>
@@ -177,11 +177,11 @@ export function ProjectRailPanel({
                     <strong>{step.title}</strong>
                     <span>
                       <StatusBadge size="sm" variant={railRuntimeBadgeVariant(step.status)}>
-                        {step.status}
+                        {railRuntimeStatusLabel(step.status)}
                       </StatusBadge>{" "}
                       /{" "}
                       <StatusBadge size="sm" variant={railApprovalBadgeVariant(step.permissionState)}>
-                        {step.permissionState}
+                        {railApprovalStateLabel(step.permissionState)}
                       </StatusBadge>
                     </span>
                     <p>{step.summary}</p>
@@ -218,13 +218,13 @@ export function ProjectRailPanel({
         )}
       </div>
 
-      {/* Meta Agent Onboarding Box - Statically fixed at the bottom of the panel per PM guidelines */}
+      {/* 메타 에이전트 온보딩 박스: PM 지침에 따라 패널 하단에 고정 */}
       <div className="meta-onboarding-box border-t border-border/40 pt-2 mt-2 shrink-0">
-        <button className="rail-icon-button" onClick={onRunMetaOnboarding} title="Meta Agent Onboarding" type="button">
+        <button className="rail-icon-button" onClick={onRunMetaOnboarding} title="메타 에이전트 온보딩" type="button">
           <Bot size={13} />
         </button>
         <div>
-          <strong>Meta Agent Onboarding</strong>
+          <strong>메타 에이전트 온보딩</strong>
           {visibleMetaSignals.length > 0 ? (
             visibleMetaSignals.map((signal) => (
               <span className={signal.status} key={signal.id}>
@@ -252,4 +252,27 @@ function railApprovalBadgeVariant(status: string): StatusBadgeVariant {
   if (status === "required") return "warning";
   if (status === "rejected" || status === "expired") return "danger";
   return "muted";
+}
+
+function railRuntimeStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    blocked: "차단",
+    completed: "완료",
+    failed: "실패",
+    planned: "계획됨",
+    ready: "준비됨",
+    ready_for_approval: "승인 대기",
+    running: "실행 중",
+  };
+  return labels[status] ?? status;
+}
+
+function railApprovalStateLabel(status: string): string {
+  const labels: Record<string, string> = {
+    approved: "승인됨",
+    expired: "만료됨",
+    rejected: "거부됨",
+    required: "승인 필요",
+  };
+  return labels[status] ?? status;
 }
