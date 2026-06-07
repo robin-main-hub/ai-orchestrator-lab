@@ -29,7 +29,7 @@ describe("tmuxWorkbenchPresentation", () => {
     expect(formatTmuxPaneSurfaceLabel("pane-0")).toBe("작업창 1");
     expect(formatTmuxPaneSurfaceLabel("pane-7")).toBe("작업창 8");
     expect(formatTmuxPaneSurfaceLabel("%4")).toBe("작업창 %4");
-    expect(formatTmuxPaneSurfaceLabel("role:status")).toBe("작업창 role status");
+    expect(formatTmuxPaneSurfaceLabel("role:status")).toBe("작업창 기타");
   });
 
   it("pane 상태 라벨을 사용자 표면에서 한국어로 바꾼다", () => {
