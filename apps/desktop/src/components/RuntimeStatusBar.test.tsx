@@ -57,4 +57,23 @@ describe("RuntimeStatusBar", () => {
     expect(html).not.toContain("Command");
     expect(html).not.toContain("Health");
   });
+
+  it("uses Korean provider fallback copy in the health popover", () => {
+    const html = renderToStaticMarkup(
+      <RuntimeStatusBar
+        drawerAvailable
+        mode="conversation"
+        onChangeMode={vi.fn()}
+        onCommandPalette={vi.fn()}
+        onOpenOpsDetail={vi.fn()}
+        onProbeDgx={vi.fn()}
+        onToggleDrawer={vi.fn()}
+        providerName=""
+        snapshot={snapshot}
+      />,
+    );
+
+    expect(html).toContain("공급자 미지정");
+    expect(html).not.toContain("Provider 미지정");
+  });
 });

@@ -29,10 +29,10 @@ describe("createAgentModelRouteLabel", () => {
         providerName: "MiMo Token Plan OpenAI",
         source: "provider_default",
       }),
-    ).toBe("Provider 기본 · MiMo / mimo-v2.5-pro");
+    ).toBe("공급자 기본 · MiMo / mimo-v2.5-pro");
   });
 
   it("falls back clearly when provider or model is missing", () => {
-    expect(createAgentModelRouteLabel({})).toBe("Provider 미지정 / 모델 연결 대기");
+    expect(createAgentModelRouteLabel({})).toBe("공급자 미지정 / 모델 연결 대기");
   });
 });

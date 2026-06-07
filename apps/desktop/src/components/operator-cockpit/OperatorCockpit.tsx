@@ -160,7 +160,7 @@ export function OperatorCockpit({
               icon={<Route className="h-4 w-4" />}
               label="현재 대화 모델"
               value={snapshot.routing.selectedModelId}
-              hint={snapshot.routing.providerLabel ?? "provider 대기"}
+              hint={snapshot.routing.providerLabel ?? "공급자 대기"}
               tone={snapshot.routing.fallbackStatus === "active" ? "warning" : "normal"}
             />
             <GlanceTile
