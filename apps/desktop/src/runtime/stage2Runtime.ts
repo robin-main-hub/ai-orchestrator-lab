@@ -9,6 +9,7 @@ import type {
   ProviderProfile,
   SourceTrust,
 } from "@ai-orchestrator/protocol";
+import type { AttachmentProcessingPlan } from "../lib/attachmentProcessing";
 
 export const DEFAULT_SESSION_ID = "session_desktop_001";
 
@@ -137,6 +138,8 @@ export function buildMockAssistantReply(params: {
 export function createCodingPacketFromConversation({ messages, agent, provider }: CodingPacketInput): CodingPacket {
   const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
   const recentContext = messages.slice(-8).map((message) => `${message.role}: ${message.content}`);
+  const attachmentContext = messages.flatMap(formatAcceptedAttachmentContext).slice(-8);
+  const attachmentReviewerNotes = messages.flatMap(formatRejectedAttachmentReviewerNotes).slice(-8);
   const agentLine = agent
     ? `${agent.name} / ${agent.role} / ${agent.modelId ?? "모델 연결 대기"}`
     : "에이전트 대기";
@@ -150,6 +153,7 @@ export function createCodingPacketFromConversation({ messages, agent, provider }
       "Conversation Workbench에서 생성된 Stage2 Coding Packet.",
       `selected agent: ${agentLine}`,
       `selected provider: ${providerLine}`,
+      ...attachmentContext,
       ...recentContext,
     ],
     decisions: [
@@ -186,8 +190,50 @@ export function createCodingPacketFromConversation({ messages, agent, provider }
     reviewerNotes: [
       "Stage2는 실제 비밀키 저장소나 모델 호출을 만들지 않는다.",
       "Event Storage authority는 DGX-02로 유지하고 MacBook은 persistent local outbox, Home PC는 online-only client로 둔다.",
+      ...attachmentReviewerNotes,
     ],
   };
+}
+
+function formatAcceptedAttachmentContext(message: ConversationMessage): string[] {
+  return readAttachmentProcessingPlans(message).flatMap((plan) => {
+    if (plan.status !== "accepted") return [];
+    return [
+      `attachment accepted: ${plan.name} (${plan.kind}, ${plan.processingMode}, ${plan.storage})`,
+    ];
+  });
+}
+
+function formatRejectedAttachmentReviewerNotes(message: ConversationMessage): string[] {
+  return readAttachmentProcessingPlans(message).flatMap((plan) => {
+    if (plan.status !== "rejected") return [];
+    return [
+      `attachment rejected: ${plan.name} (${plan.kind}, ${plan.reason ?? "사유 없음"})`,
+    ];
+  });
+}
+
+function readAttachmentProcessingPlans(message: ConversationMessage): AttachmentProcessingPlan[] {
+  const rawPlans = (message as { metadata?: { attachmentProcessingPlans?: unknown } }).metadata?.attachmentProcessingPlans;
+  if (!Array.isArray(rawPlans)) return [];
+  return rawPlans.filter(isAttachmentProcessingPlan);
+}
+
+function isAttachmentProcessingPlan(value: unknown): value is AttachmentProcessingPlan {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<AttachmentProcessingPlan>;
+  return (
+    (candidate.kind === "document" || candidate.kind === "image") &&
+    typeof candidate.name === "string" &&
+    (candidate.processingMode === "vision_candidate" ||
+      candidate.processingMode === "document_candidate" ||
+      candidate.processingMode === "metadata_only") &&
+    typeof candidate.size === "number" &&
+    (candidate.status === "accepted" || candidate.status === "rejected") &&
+    (candidate.storage === "metadata_only" ||
+      candidate.storage === "local_cache" ||
+      candidate.storage === "dgx_object_storage")
+  );
 }
 
 export function renderObsidianMarkdown({
