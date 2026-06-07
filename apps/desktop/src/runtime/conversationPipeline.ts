@@ -70,6 +70,7 @@ export function createConversationPipelineMessages({
     persona,
     soulPromptText,
   });
+  const attachmentContext = createAttachmentContext(userMessage);
   const longContextTruncated = previousMessages.length > 8;
   const continuityWarning =
     longContextTruncated && recalledMemories.length === 0
@@ -109,6 +110,7 @@ export function createConversationPipelineMessages({
     recalledMemories.length > 0
       ? `EvolveMemento recall:\n${recalledMemories.join("\n")}`
       : "EvolveMemento recall: no selected records",
+    attachmentContext,
     continuityWarning,
     agent.role === "companion" || agent.role === "orchestrator"
       ? [
@@ -154,6 +156,52 @@ export function createConversationPipelineMessages({
   };
 
   return [systemMessage, ...previousMessages.slice(-8), userMessage];
+}
+
+function createAttachmentContext(userMessage: ConversationMessage): string | undefined {
+  const metadata = userMessage.metadata as
+    | {
+        attachments?: Array<Record<string, unknown>>;
+        attachmentProcessingPlans?: Array<Record<string, unknown>>;
+      }
+    | undefined;
+  const attachments = Array.isArray(metadata?.attachments) ? metadata.attachments : [];
+  const plans = Array.isArray(metadata?.attachmentProcessingPlans) ? metadata.attachmentProcessingPlans : [];
+
+  if (attachments.length === 0 && plans.length === 0) {
+    return undefined;
+  }
+
+  const planLines = plans.slice(0, 8).map((plan, index) => {
+    const name = sanitizePipelineText(readMetadataString(plan.name, `attachment_${index + 1}`));
+    const kind = sanitizePipelineText(readMetadataString(plan.kind, "unknown"));
+    const mode = sanitizePipelineText(readMetadataString(plan.processingMode, "metadata_only"));
+    const storage = sanitizePipelineText(readMetadataString(plan.storage, "metadata_only"));
+    const status = sanitizePipelineText(readMetadataString(plan.status, "unknown"));
+    const reason = readMetadataString(plan.reason, "");
+    const reasonText = reason ? ` · 사유=${sanitizePipelineText(reason)}` : "";
+    return `${index + 1}. ${name} · kind=${kind} · mode=${mode} · storage=${storage} · status=${status}${reasonText}`;
+  });
+
+  const attachmentLines =
+    planLines.length > 0
+      ? planLines
+      : attachments.slice(0, 8).map((attachment, index) => {
+          const name = sanitizePipelineText(readMetadataString(attachment.name, `attachment_${index + 1}`));
+          const kind = sanitizePipelineText(readMetadataString(attachment.kind, "unknown"));
+          const storage = sanitizePipelineText(readMetadataString(attachment.storage, "metadata_only"));
+          return `${index + 1}. ${name} · kind=${kind} · storage=${storage}`;
+        });
+
+  return [
+    "첨부 컨텍스트:",
+    "파일 바이트는 아직 모델에 직접 전달되지 않음. 첨부 내용을 보았다고 주장하지 말고, 필요한 경우 추가 추출/권한을 요청한다.",
+    ...attachmentLines,
+  ].join("\n");
+}
+
+function readMetadataString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim() ? value : fallback;
 }
 
 function createConversationPersonaFragment({

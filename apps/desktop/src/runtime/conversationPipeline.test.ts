@@ -335,6 +335,53 @@ describe("conversation pipeline runtime helper", () => {
     expect(pipeline[0]?.metadata?.longContextTruncated).toBe(true);
   });
 
+  it("surfaces attachment processing context to the model without exposing local paths", () => {
+    const userMessage = {
+      ...message("message_user_attachment", "user", "이 첨부 기준으로 검토해줘"),
+      metadata: {
+        attachments: [
+          {
+            id: "attachment_1",
+            kind: "image",
+            name: "/Users/robin/private/current-shell.png",
+            size: 12345,
+            storage: "metadata_only",
+          },
+        ],
+        attachmentProcessingPlans: [
+          {
+            kind: "image",
+            name: "/Users/robin/private/current-shell.png",
+            processingMode: "vision_candidate",
+            size: 12345,
+            status: "accepted",
+            storage: "metadata_only",
+          },
+        ],
+      },
+    } satisfies ConversationMessage;
+
+    const pipeline = createConversationPipelineMessages({
+      agent,
+      configFiles: [],
+      memory,
+      memoryScope,
+      modelId: "mimo-v2.5-pro",
+      previousMessages: [],
+      provider,
+      systemMessageId: "message_system_pipeline_attachment_context_test",
+      userMessage,
+    });
+    const content = pipeline[0]?.content ?? "";
+
+    expect(content).toContain("첨부 컨텍스트");
+    expect(content).toContain("vision_candidate");
+    expect(content).toContain("metadata_only");
+    expect(content).toContain("파일 바이트는 아직 모델에 직접 전달되지 않음");
+    expect(content).not.toContain("/Users/robin/private/current-shell.png");
+    expect(content).toContain("[REDACTED:path]");
+  });
+
   it("injects role tool contracts for every seeded agent", () => {
     for (const seededAgent of seededAgentProfiles) {
       const agentUnderTest = {
