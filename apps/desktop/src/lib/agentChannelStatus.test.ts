@@ -66,7 +66,7 @@ describe("createAgentChannelStatus", () => {
       {
         label: "기억 추적",
         tone: "ready",
-        value: "recall 추적 준비됨",
+        value: "기억 조회 추적 준비됨",
       },
       {
         label: "공급자",
