@@ -176,7 +176,7 @@ export function createProviderCompletionProxyRequest(
     sessionId: messages.at(-1)?.sessionId ?? "session_desktop_001",
     providerProfileId: provider.id,
     modelId,
-    messages: messages.slice(-8).map((message) => ({
+    messages: compactProviderProxyMessages(messages).map((message) => ({
       role: message.role,
       content: message.content,
     })),
@@ -193,6 +193,19 @@ export function createProviderCompletionProxyRequest(
   }
 
   return request;
+}
+
+function compactProviderProxyMessages(messages: ConversationMessage[]) {
+  const normalizedMessages = messages.filter((message) => message.content.trim());
+  const leadingSystemMessages = normalizedMessages.filter((message) => message.role === "system");
+  const nonSystemMessages = normalizedMessages.filter((message) => message.role !== "system");
+  const systemBudget = Math.min(leadingSystemMessages.length, 2);
+  const latestBudget = Math.max(8 - systemBudget, 1);
+
+  return [
+    ...leadingSystemMessages.slice(0, systemBudget),
+    ...nonSystemMessages.slice(-latestBudget),
+  ];
 }
 
 async function requestDgxProviderCompletionViaProxyFallback({
