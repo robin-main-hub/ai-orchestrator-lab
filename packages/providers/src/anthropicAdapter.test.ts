@@ -53,6 +53,19 @@ describe("splitSystemAndMessages", () => {
       { role: "assistant", content: "a1" },
     ]);
   });
+
+  it("ignores malformed non-string content before Anthropic message validation", () => {
+    const malformedMessages = [
+      { role: "system", content: { text: "object system" } },
+      { role: "user", content: { text: "object user" } },
+      { role: "user", content: "valid user" },
+    ] as unknown as Parameters<typeof splitSystemAndMessages>[0];
+
+    const { system, messages } = splitSystemAndMessages(malformedMessages);
+
+    expect(system).toBeUndefined();
+    expect(messages).toEqual([{ role: "user", content: "valid user" }]);
+  });
 });
 
 describe("extractAnthropicText", () => {
