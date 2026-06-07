@@ -322,6 +322,9 @@ export function TmuxSwarmBoard({
               onCapture={() => void handleCapturePane(selectedPane)}
               onCommandDraftChange={(value) => updateCommandDraft(selectedPane.roleKey, value)}
               onDispatch={() => void handleDispatchPane(selectedPane)}
+              onReject={() => {
+                setBoardNotice("Tmux 명령어 실행 거부는 우측 상단의 승인 대기열(Control Queue) 패널에서 처리해 주세요.");
+              }}
               pane={{
                 ...selectedPane,
                 state:
@@ -404,6 +407,7 @@ function TmuxPaneDetail({
   onCapture,
   onCommandDraftChange,
   onDispatch,
+  onReject,
   pane,
   timelineBlocks,
 }: {
@@ -413,6 +417,7 @@ function TmuxPaneDetail({
   onCapture: () => void;
   onCommandDraftChange: (value: string) => void;
   onDispatch: () => void;
+  onReject: () => void;
   pane: TmuxPaneDefinition;
   timelineBlocks: TerminalTimelineBlock[];
 }) {
@@ -455,9 +460,7 @@ function TmuxPaneDetail({
               </Button>
               <Button
                 className="h-8 gap-1.5 border-rose-500/30 px-3 text-xs text-rose-300 hover:bg-rose-500/10"
-                onClick={() => {
-                  alert("Tmux 명령어 실행 거부는 우측 상단의 승인 대기열(Control Queue) 패널에서 처리해 주세요.");
-                }}
+                onClick={onReject}
                 size="sm"
                 variant="outline"
               >
