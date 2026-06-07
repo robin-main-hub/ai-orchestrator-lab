@@ -1,4 +1,5 @@
 import type { OperatorCockpitSnapshot } from "@ai-orchestrator/protocol";
+import type { ControlQueueContinuitySummary } from "./controlQueueContinuity";
 import type { OrchestrationMaturityReport } from "./orchestrationMaturity";
 import type { SettingsDiagnostics } from "./settingsDiagnostics";
 import type { WorkTraceSearchItem } from "./workTraceSearch";
@@ -7,16 +8,18 @@ export type CockpitNextActionItem = {
   id: string;
   label: string;
   priority: "high" | "normal" | "warning";
-  source: "approval" | "diagnostics" | "handoff" | "maturity" | "receipt" | "smoke" | "worker";
+  source: "approval" | "control_queue" | "diagnostics" | "handoff" | "maturity" | "receipt" | "smoke" | "worker";
 };
 
 export function deriveCockpitNextActions({
+  controlQueue,
   diagnostics,
   maturity,
   snapshot,
   workTraceItems = [],
   limit = 3,
 }: {
+  controlQueue?: ControlQueueContinuitySummary;
   diagnostics: SettingsDiagnostics;
   maturity: OrchestrationMaturityReport;
   snapshot: OperatorCockpitSnapshot;
@@ -57,6 +60,16 @@ export function deriveCockpitNextActions({
         priority: handoff.missingInfoSlots.length > 0 ? ("warning" as const) : ("normal" as const),
         source: "handoff" as const,
       })),
+    ...(controlQueue?.hasItems
+      ? [
+          {
+            id: "control_queue_followup",
+            label: controlQueue.latestTitle ? `${controlQueue.label} — ${controlQueue.latestTitle}` : controlQueue.label,
+            priority: "warning" as const,
+            source: "control_queue" as const,
+          },
+        ]
+      : []),
     ...diagnostics.nextActions.map((action, index) => ({
       id: `diagnostics_${index}`,
       label: action,
