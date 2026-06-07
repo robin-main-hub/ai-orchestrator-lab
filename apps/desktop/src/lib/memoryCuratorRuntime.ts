@@ -121,6 +121,15 @@ export function writeMemoryCuratorCandidate({
   return next;
 }
 
+export function resolveMemoryCuratorCandidateScopeKey(
+  candidate: MemoryCuratorCandidate,
+  fallbackScopeKey: string,
+): string {
+  const scopeTag = candidate.record.tags?.find((tag) => tag.startsWith("scope:"));
+  const scopeKey = scopeTag?.slice("scope:".length).trim();
+  return scopeKey || fallbackScopeKey;
+}
+
 export function updateMemoryCuratorLedgerRecord({
   candidateStatus,
   recordId,

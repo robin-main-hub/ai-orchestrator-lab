@@ -22,6 +22,7 @@ import {
 import { initialMemoryRecords } from "../seeds/memory";
 import { createAdapterBackedMementoMemoryApi } from "../runtime/stage27MemoryApi";
 import {
+  createAgentChannelMemoryScope,
   createAgentChannelRecallQuery,
   type AgentChannelMemoryScope,
 } from "../lib/agentConversationChannels";
@@ -33,6 +34,7 @@ import { resolveScopedMemoryInspector } from "../lib/scopedMemoryInspector";
 import {
   createMemoryCuratorPersistencePlan,
   mergeMemoryRecordsWithCuratorLedger,
+  resolveMemoryCuratorCandidateScopeKey,
   updateMemoryCuratorLedgerRecord,
   upsertMemoryCuratorRecordOverlay,
   writeMemoryCuratorCandidate,
@@ -263,30 +265,34 @@ export function useMemoryController({
 
   function handleQueueMemoryCuratorCandidate(candidate: MemoryCuratorCandidate) {
     const updatedAt = new Date().toISOString();
+    const candidateScopeKey = resolveMemoryCuratorCandidateScopeKey(candidate, memoryScopeKeyRef.current);
+    const candidateScope = createMemoryScopeFromCuratorCandidate(candidate);
     writeMemoryCuratorCandidate({
       candidate,
-      scopeKey: memoryScopeKeyRef.current,
+      scopeKey: candidateScopeKey,
       updatedAt,
     });
-    setMemoryRecords((records) => {
-      if (records.some((record) => record.id === candidate.record.id)) {
-        return records;
-      }
-      return [candidate.record, ...records];
-    });
+    if (candidateScopeKey === memoryScopeKeyRef.current) {
+      setMemoryRecords((records) => {
+        if (records.some((record) => record.id === candidate.record.id)) {
+          return records;
+        }
+        return [candidate.record, ...records];
+      });
+    }
     markMemorySyncing(updatedAt);
     appendEvent("memory.curator.candidate.created", {
       agentId: candidate.agentId,
       candidateId: candidate.id,
       evidenceRefs: candidate.evidenceRefs,
-      memoryScope: memoryScope?.namespace,
+      memoryScope: candidateScope?.namespace ?? memoryScope?.namespace,
       reason: candidate.reason,
-      recallTraceId: memoryScope?.recallTraceId,
+      recallTraceId: candidateScope?.recallTraceId ?? memoryScope?.recallTraceId,
       recordId: candidate.record.id,
       targetActivationState: candidate.targetActivationState,
       trustLevel: candidate.record.trustLevel,
     });
-    requestRemember(candidate.record);
+    requestRemember(candidate.record, candidateScope);
   }
 
   function handleMemoryMutationError(operation: string, recordIds: string[], error: unknown) {
@@ -309,7 +315,7 @@ export function useMemoryController({
     });
   }
 
-  function requestRemember(record: MemoryRecord) {
+  function requestRemember(record: MemoryRecord, targetScope = memoryScope) {
     const input: MemoryInput = {
       layer: record.layer,
       scope: record.scope,
@@ -322,7 +328,11 @@ export function useMemoryController({
       sessionId: record.sessionId,
       tags: record.tags,
     };
-    void memoryApi.remember(input).catch((error: unknown) => {
+    const targetMemoryApi =
+      targetScope && createMemoryControllerScopeKey(targetScope) !== memoryScopeKeyRef.current
+        ? createScopedMemoryApi(targetScope)
+        : memoryApi;
+    void targetMemoryApi.remember(input).catch((error: unknown) => {
       handleMemoryMutationError("remember", [record.id], error);
     });
   }
@@ -473,6 +483,36 @@ export function useMemoryController({
     });
   }
 
+  function createScopedMemoryApi(scope: AgentChannelMemoryScope) {
+    const scopedAdapter = new DgxSimpleMemMemoryAdapter({
+      profileId: `desktop_dgx_simplemem_${scope.recallTraceId}`,
+      seedRecords: initialMemoryRecords,
+    });
+    return createAdapterBackedMementoMemoryApi({
+      adapter: scopedAdapter,
+      operationScope: scope,
+      context: {
+        appendEvent: async (event) => {
+          appendEventRef.current(event.type, {
+            ...event.payload,
+            adapterEventId: event.id,
+            adapterEventCreatedAt: event.createdAt,
+            memoryScope: scope.namespace,
+            recallTraceId: scope.recallTraceId,
+          });
+        },
+        onAdapterError: (error) => {
+          appendEventRef.current("memory.adapter.error", {
+            category: error.category,
+            message: error.message,
+            memoryScope: scope.namespace,
+            recallTraceId: scope.recallTraceId,
+          });
+        },
+      },
+    });
+  }
+
   function handlePinMemory(recordId: string) {
     const updatedAt = new Date().toISOString();
     const record = memoryRecords.find((candidate) => candidate.id === recordId);
@@ -566,4 +606,23 @@ export function useMemoryController({
     memoryRecords,
     prependMemoryRecord,
   };
+}
+
+function createMemoryScopeFromCuratorCandidate(
+  candidate: MemoryCuratorCandidate,
+): AgentChannelMemoryScope | undefined {
+  const sessionId = candidate.record.sessionId;
+  const providerProfileId = readCandidateTag(candidate, "provider:");
+  if (!sessionId || !providerProfileId) return undefined;
+  const baseScope = createAgentChannelMemoryScope(candidate.agentId, sessionId, providerProfileId);
+  return {
+    ...baseScope,
+    namespace: readCandidateTag(candidate, "scope:") ?? baseScope.namespace,
+    recallTraceId: readCandidateTag(candidate, "recall:") ?? baseScope.recallTraceId,
+  };
+}
+
+function readCandidateTag(candidate: MemoryCuratorCandidate, prefix: string): string | undefined {
+  const value = candidate.record.tags?.find((tag) => tag.startsWith(prefix))?.slice(prefix.length).trim();
+  return value || undefined;
 }
