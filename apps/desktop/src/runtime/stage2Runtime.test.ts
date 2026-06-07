@@ -62,6 +62,48 @@ describe("stage2 runtime helpers", () => {
     expect(packet.decisions.join(" ")).toContain("Event Store");
   });
 
+  it("carries attachment processing summaries into coding packet context", () => {
+    const packet = createCodingPacketFromConversation({
+      agent,
+      provider,
+      messages: [
+        {
+          id: "message_attachment",
+          sessionId: "session_desktop_001",
+          role: "user",
+          content: "이 화면 기준으로 수정해줘",
+          createdAt: "2026-05-24T00:01:00.000Z",
+          metadata: {
+            attachmentProcessingPlans: [
+              {
+                kind: "image",
+                name: "screen.png",
+                processingMode: "vision_candidate",
+                size: 120_000,
+                status: "accepted",
+                storage: "metadata_only",
+              },
+              {
+                kind: "document",
+                name: "secret.pdf",
+                processingMode: "metadata_only",
+                reason: "파일 크기 제한 초과",
+                size: 20_000_000,
+                status: "rejected",
+                storage: "metadata_only",
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    expect(packet.context.join("\n")).toContain("screen.png");
+    expect(packet.context.join("\n")).toContain("vision_candidate");
+    expect(packet.reviewerNotes.join("\n")).toContain("secret.pdf");
+    expect(packet.reviewerNotes.join("\n")).toContain("파일 크기 제한 초과");
+  });
+
   it("renders Obsidian markdown as an event-store projection", () => {
     const packet = createCodingPacketFromConversation({ messages, agent, provider });
     const event = createStage2Event({

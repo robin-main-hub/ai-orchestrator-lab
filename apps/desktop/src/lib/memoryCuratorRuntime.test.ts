@@ -6,6 +6,7 @@ import {
   getMemoryCuratorRecordsForScope,
   readMemoryCuratorLedger,
   updateMemoryCuratorLedgerRecord,
+  upsertMemoryCuratorRecordOverlay,
   writeMemoryCuratorCandidate,
 } from "./memoryCuratorRuntime";
 import type { JsonStorageLike } from "./persistentJsonState";
@@ -354,5 +355,97 @@ describe("memory curator runtime persistence planning", () => {
 
     expect(readMemoryCuratorLedger(storage)[0]?.candidate.status).toBe("rejected");
     expect(getMemoryCuratorRecordsForScope("agent_orchestrator::session_main::provider_mimo", storage)).toEqual([]);
+  });
+
+  it("quarantine 방식으로 거절된 curator 후보도 복원 목록에서 빠진다", () => {
+    const storage = new MemoryStorage();
+    const candidate = createConversationTurnMemoryCandidate({
+      agentId: "agent_orchestrator",
+      agentName: "마키마",
+      assistantMessage: {
+        id: "message_agent_quarantined",
+        content: "이 기억은 충돌 가능성이 있어 보류한다.",
+        createdAt: updatedAt,
+        role: "assistant",
+        sessionId: "session_main",
+      },
+      createdAt: updatedAt,
+      providerProfileId: "provider_mimo",
+      userMessage: {
+        id: "message_user_quarantined",
+        content: "이 설정은 틀렸을 수도 있어.",
+        createdAt,
+        role: "user",
+        sessionId: "session_main",
+      },
+    });
+
+    writeMemoryCuratorCandidate({
+      candidate,
+      scopeKey: "agent_orchestrator::session_main::provider_mimo",
+      storage,
+      updatedAt,
+    });
+    updateMemoryCuratorLedgerRecord({
+      candidateStatus: "rejected",
+      recordId: candidate.record.id,
+      recordPatch: {
+        activationState: "quarantined",
+        updatedAt,
+      },
+      scopeKey: "agent_orchestrator::session_main::provider_mimo",
+      storage,
+      updatedAt,
+    });
+
+    expect(readMemoryCuratorLedger(storage)[0]?.candidate.record.activationState).toBe("quarantined");
+    expect(getMemoryCuratorRecordsForScope("agent_orchestrator::session_main::provider_mimo", storage)).toEqual([]);
+  });
+
+  it("원장 밖 어댑터 레코드의 pin/forget 결정도 로컬 overlay로 영속화한다", () => {
+    const storage = new MemoryStorage();
+    const scopeKey = "agent_orchestrator::session_main::provider_mimo";
+    const adapterRecord = createRecord({
+      id: "memory_seed_external",
+      title: "Adapter seed memory",
+      activationState: "inactive",
+    });
+
+    upsertMemoryCuratorRecordOverlay({
+      agentId: "agent_orchestrator",
+      candidateStatus: "approved",
+      record: adapterRecord,
+      recordPatch: {
+        activationState: "active",
+        pinned: true,
+        updatedAt,
+      },
+      scopeKey,
+      storage,
+      updatedAt,
+    });
+
+    expect(getMemoryCuratorRecordsForScope(scopeKey, storage)[0]).toMatchObject({
+      id: "memory_seed_external",
+      activationState: "active",
+      pinned: true,
+      updatedAt,
+    });
+
+    upsertMemoryCuratorRecordOverlay({
+      agentId: "agent_orchestrator",
+      candidateStatus: "rejected",
+      record: adapterRecord,
+      recordPatch: {
+        activationState: "inactive",
+        tombstonedAt: updatedAt,
+      },
+      scopeKey,
+      storage,
+      updatedAt,
+    });
+
+    expect(readMemoryCuratorLedger(storage)[0]?.candidate.status).toBe("rejected");
+    expect(getMemoryCuratorRecordsForScope(scopeKey, storage)).toEqual([]);
   });
 });

@@ -197,6 +197,8 @@ import {
 import {
   createAttachmentProcessingPlan,
   createAttachmentProcessingPlansForMessage,
+  createNextDraftRejectedAttachmentPlans,
+  reprocessMessageAttachmentsForModel,
   type AttachmentProcessingPlan,
 } from "./lib/attachmentProcessing";
 import { statusTone } from "./lib/uiLabels";
@@ -863,10 +865,34 @@ export function App() {
   }, [agentVisualsById]);
 
   useEffect(() => {
-    setDraftAttachments((current) =>
-      current.filter((attachment) => modelSupportsAttachmentKind(selectedModel, attachment.kind)),
+    if (!selectedModel || draftAttachments.length === 0) {
+      return;
+    }
+    const result = reprocessMessageAttachmentsForModel({
+      attachments: draftAttachments,
+      maxAttachmentCount: maxDraftAttachments,
+      modelModalities: getModelInputModalities(selectedModel),
+    });
+    setDraftAttachments(result.attachments);
+    setDraftRejectedAttachmentPlans((current) =>
+      createNextDraftRejectedAttachmentPlans({
+        acceptedAttachmentCount: result.attachments.length,
+        currentRejectedPlans: current,
+        incomingRejectedPlans: result.rejectedPlans,
+        maxRejectedPlanCount: maxDraftAttachments,
+      }),
     );
-    setDraftRejectedAttachmentPlans([]);
+    if (result.rejectedPlans.length > 0) {
+      appendEvent("conversation.attachment.reprocessed", {
+        selectedModelId: selectedModel.id,
+        acceptedCount: result.attachments.length,
+        rejectedCount: result.rejectedPlans.length,
+        processingPlans: result.processingPlans,
+        attachmentStorage: "metadata_only",
+        reason: "selected model changed",
+        redaction: "metadata_only",
+      });
+    }
   }, [selectedModel?.id, selectedModel?.providerProfileId]);
 
   function appendEvent<T>(
@@ -1078,11 +1104,8 @@ export function App() {
     });
     const rejectedPlans = processingPlans.filter((plan) => plan.status === "rejected");
 
-    if (rejectedPlans.length > 0) {
-      setDraftRejectedAttachmentPlans((current) => [...current, ...rejectedPlans].slice(-maxDraftAttachments));
-    }
-
     if (nextAttachments.length === 0) {
+      setDraftRejectedAttachmentPlans([]);
       appendEvent("conversation.attachment.blocked", {
         selectedModelId: selectedModel.id,
         reason: rejectedPlans[0]?.reason ?? "file kind is not supported by selected model",
@@ -1094,6 +1117,14 @@ export function App() {
     }
 
     setDraftAttachments((current) => [...current, ...nextAttachments].slice(0, maxDraftAttachments));
+    setDraftRejectedAttachmentPlans((current) =>
+      createNextDraftRejectedAttachmentPlans({
+        acceptedAttachmentCount: nextAttachments.length,
+        currentRejectedPlans: current,
+        incomingRejectedPlans: rejectedPlans,
+        maxRejectedPlanCount: maxDraftAttachments,
+      }),
+    );
     appendEvent("conversation.attachment.queued", {
       selectedModelId: selectedModel.id,
       attachmentCount: nextAttachments.length,
@@ -1509,8 +1540,7 @@ export function App() {
 
   async function handleSendMessageStage2() {
     const content = draftMessage.trim();
-    const attachments = draftAttachments;
-    if ((!content && attachments.length === 0) || !selectedAgent || !selectedProvider) {
+    if ((!content && draftAttachments.length === 0) || !selectedAgent || !selectedProvider) {
       return;
     }
 
@@ -1519,12 +1549,47 @@ export function App() {
     const authLabel = selectedAgent.authBinding?.label ?? "인증 정보 대기";
     const authMode = selectedAgent.authBinding?.mode ?? "provider_profile";
     const modelId = selectedModel?.id ?? selectedAgent.modelId ?? selectedProvider.defaultModel ?? "모델 대기";
+    const attachmentRecheck = selectedModel
+      ? reprocessMessageAttachmentsForModel({
+        attachments: draftAttachments,
+        maxAttachmentCount: maxDraftAttachments,
+        modelModalities: getModelInputModalities(selectedModel),
+      })
+      : { attachments: draftAttachments, rejectedPlans: [], processingPlans: [] };
+    const attachments = attachmentRecheck.attachments;
+    const allRejectedPlans = createNextDraftRejectedAttachmentPlans({
+      acceptedAttachmentCount: attachments.length,
+      currentRejectedPlans: draftRejectedAttachmentPlans,
+      incomingRejectedPlans: attachmentRecheck.rejectedPlans,
+      maxRejectedPlanCount: maxDraftAttachments,
+    });
     const messageContent = content || `첨부 ${attachments.length}개`;
     const attachmentMetadata = attachments.map((attachment) => ({ ...attachment }));
     const attachmentProcessingPlans = createAttachmentProcessingPlansForMessage({
       attachments: attachmentMetadata,
-      rejectedPlans: draftRejectedAttachmentPlans,
+      rejectedPlans: allRejectedPlans,
     });
+    if (!content && attachments.length === 0) {
+      setDraftRejectedAttachmentPlans(allRejectedPlans.slice(-maxDraftAttachments));
+      appendEvent("conversation.attachment.blocked", {
+        selectedModelId: selectedModel?.id ?? modelId,
+        reason: allRejectedPlans[0]?.reason ?? "선택 모델이 첨부를 처리할 수 없음",
+        attemptedCount: draftAttachments.length,
+        processingPlans: attachmentRecheck.processingPlans,
+        attachmentStorage: "metadata_only",
+      }, { sessionId: targetSessionId });
+      return;
+    }
+    if (attachmentRecheck.rejectedPlans.length > 0) {
+      appendEvent("conversation.attachment.reprocessed", {
+        selectedModelId: selectedModel?.id ?? modelId,
+        acceptedCount: attachments.length,
+        rejectedCount: attachmentRecheck.rejectedPlans.length,
+        processingPlans: attachmentRecheck.processingPlans,
+        attachmentStorage: "metadata_only",
+        redaction: "metadata_only",
+      }, { sessionId: targetSessionId });
+    }
     const userMessageMetadata = {
       agentId: selectedAgent.id,
       memoryScope: selectedAgentMemoryScope.namespace,

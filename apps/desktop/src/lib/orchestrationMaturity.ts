@@ -205,7 +205,9 @@ function statusFor(id: BigRockId, input: OrchestrationMaturityInput): BigRockMat
         ? "ready"
         : "needs_work";
     case "08_attachments":
-      return input.attachments.acceptedTypeCount >= 3 && input.attachments.hasProcessingPipeline
+      return input.attachments.acceptedTypeCount >= 3 &&
+        input.attachments.hasProcessingPipeline &&
+        input.attachments.pendingCount === 0
         ? "ready"
         : "needs_work";
     case "09_onboarding":
@@ -264,6 +266,9 @@ function nextActionFor(
 ): string {
   if (id === "07_receipts_search" && input.receipts.unsafeReceiptCount > 0) {
     return `공개 영수증 마스킹 실패 ${input.receipts.unsafeReceiptCount}건 해결`;
+  }
+  if (id === "08_attachments" && input.attachments.pendingCount > 0) {
+    return `첨부 ${input.attachments.pendingCount}개 처리 계획을 확인하고 대화에 전송`;
   }
   return fallbackAction;
 }

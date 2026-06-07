@@ -176,6 +176,34 @@ describe("publicWorkTrace", () => {
     );
   });
 
+  it("assistant 메시지에 복사된 첨부 계획은 사용자 첨부 준비 영수증으로 중복 계산하지 않는다", () => {
+    const trace = createConversationMessagePublicWorkTrace({
+      id: "msg_assistant_attachment_echo",
+      sessionId: "session_main",
+      role: "assistant",
+      content: "첨부를 보고 답했습니다.",
+      createdAt: "2026-06-05T08:00:00.000Z",
+      metadata: {
+        attachmentProcessingPlans: [
+          {
+            kind: "image",
+            name: "screen.png",
+            processingMode: "vision_candidate",
+            size: 120_000,
+            status: "accepted",
+            storage: "metadata_only",
+          },
+        ],
+        modelId: "mimo-v2.5-pro",
+        providerProfileId: "provider_mimo_token_openai",
+        realProviderCall: true,
+      },
+    });
+
+    expect(JSON.stringify(trace.groups)).not.toContain("첨부 준비");
+    expect(trace.receipt?.items).toContainEqual({ label: "범위", value: "생성" });
+  });
+
   it("공개 로그는 원시 공급자 ID 대신 사용자가 읽을 수 있는 경로명을 표시한다", () => {
     const trace = createConversationMessagePublicWorkTrace({
       id: "message_route",
