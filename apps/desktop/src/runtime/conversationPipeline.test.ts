@@ -135,6 +135,12 @@ describe("conversation pipeline runtime helper", () => {
         memoryScopeSessionId: "session_main",
         recallTraceId: memoryScope.recallTraceId,
         runtimeConfigFileIds: ["config_skill_role_tool_profiles_v1"],
+        personaDisplayName: "마키마",
+        personaIdentityKey: "orchestrator",
+        personaSoulApplied: true,
+        personaAgentsMdApplied: true,
+        personaSoulMdPath: "agents/orchestrator/SOUL.md",
+        personaAgentsMdPath: "agents/orchestrator/AGENTS.md",
       },
     });
     expect(pipeline[0]?.content).toContain("AI Orchestrator Lab conversation pipeline.");
