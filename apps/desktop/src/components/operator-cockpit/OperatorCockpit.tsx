@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import type { OperatorCockpitHandoff, OperatorCockpitSnapshot } from "@ai-orchestrator/protocol";
 import type { OrchestrationMaturityReport } from "../../lib/orchestrationMaturity";
+import { createExperienceRoadmap } from "../../lib/orchestrationExperienceRoadmap";
 import type { ProductionSmokePlan } from "../../lib/productionSmokePlan";
 import type { SettingsDiagnostics } from "../../lib/settingsDiagnostics";
 import {
@@ -27,6 +28,7 @@ import type { WorkTraceSearchItem } from "../../lib/workTraceSearch";
 import { ApprovalEvidenceCard } from "./ApprovalEvidenceCard";
 import { Badge } from "./Badge";
 import { DispatchHistoryCard } from "./DispatchHistoryCard";
+import { ExperienceRoadmapCard } from "./ExperienceRoadmapCard";
 import { HandoffCard } from "./HandoffCard";
 import { MemoryRecallCard } from "./MemoryRecallCard";
 import { MaturityReadinessCard } from "./MaturityReadinessCard";
@@ -86,6 +88,14 @@ export function OperatorCockpit({
     snapshot.handoffs.reduce((count, handoff) => count + handoff.missingInfoSlots.length, 0) +
     snapshot.memory.contradictionWarnings.length +
     snapshot.dispatchHistory.filter((dispatch) => dispatch.tamperWarning).length;
+  const experienceRoadmap = readiness
+    ? createExperienceRoadmap({
+        diagnostics: readiness.diagnostics,
+        maturity: readiness.maturity,
+        snapshot,
+        workTraceItems: readiness.workTraceItems,
+      })
+    : [];
   const handleNextAction = (action: CockpitNextActionItem) => {
     if (action.targetSurface === "approvals" && onPreviewEvidence) {
       onPreviewEvidence();
@@ -289,6 +299,11 @@ export function OperatorCockpit({
                         maturity={readiness.maturity}
                         smokePlan={readiness.smokePlan}
                       />
+                    </div>
+                  ) : null}
+                  {experienceRoadmap.length > 0 ? (
+                    <div className="lg:col-span-12">
+                      <ExperienceRoadmapCard items={experienceRoadmap} />
                     </div>
                   ) : null}
                   {readiness?.workTraceItems ? (

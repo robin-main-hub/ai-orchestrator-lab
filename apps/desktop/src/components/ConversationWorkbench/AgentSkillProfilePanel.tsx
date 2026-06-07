@@ -24,7 +24,11 @@ export function AgentSkillProfilePanel({
   const hiddenRuntimeFileCount = Math.max(runtimeConfigFiles.length - visibleRuntimeFiles.length, 0);
 
   return (
-    <section className="rounded-lg border border-cyan-400/10 bg-cyan-400/[0.04] p-3">
+    <section
+      className="rounded-lg border border-cyan-400/10 bg-cyan-400/[0.04] p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40"
+      data-focus-id="agent-skill-profile-panel"
+      tabIndex={-1}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-cyan-200/80">

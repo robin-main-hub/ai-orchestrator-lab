@@ -3299,6 +3299,53 @@ export function App() {
       run: () => setApprovalDrawerOpen((open) => !open),
     },
     {
+      id: "open.big-rocks",
+      verb: "점검",
+      label: "20개 큰 바위 로드맵",
+      hint: "Cockpit 세부 정보에서 성숙한 OS 기준 확인",
+      run: () => setMode("cockpit"),
+    },
+    {
+      id: "open.receipts",
+      verb: "점검",
+      label: "작업 영수증 장부",
+      hint: "마스킹, 테스트, 실패 후 수정 기록 확인",
+      run: () => setMode("cockpit"),
+    },
+    {
+      id: "agent.skills",
+      verb: "에이전트",
+      label: "선택 에이전트 스킬 보기",
+      hint: "SOUL/AGENTS/EvolveMemento 적용 지침 확인",
+      run: () => {
+        setMode("conversation");
+        queueMicrotask(() => {
+          document.querySelector<HTMLElement>("[data-focus-id='agent-skill-profile-panel']")?.focus();
+        });
+      },
+    },
+    {
+      id: "workflow.single-loop",
+      verb: "작업",
+      label: "요청→수정→검증→PR 루프",
+      hint: "대화로 돌아가 다음 실행 패킷을 준비",
+      run: () => {
+        setMode("conversation");
+        setDraftMessage((current) =>
+          current.trim()
+            ? current
+            : "지금 목표를 요청→수정→검증→PR→기록 루프로 쪼개서 다음 실행 계획을 제안해줘.",
+        );
+      },
+    },
+    {
+      id: "visual.qa",
+      verb: "검수",
+      label: "v0 검은 테마 시각 QA",
+      hint: "Cockpit 기준으로 화면 노이즈와 색상 상태 점검",
+      run: () => setMode("cockpit"),
+    },
+    {
       id: "memory.remember",
       verb: "기억",
       label: "현재 맥락 기억",
