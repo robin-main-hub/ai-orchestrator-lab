@@ -27,7 +27,8 @@ describe("createAgentConversationFlowCards", () => {
       expect(cards[0]?.details.join(" ")).not.toContain("provider=");
       expect(cards[0]?.details.join(" ")).not.toContain("model=");
       expect(cards[0]?.details.join(" ")).not.toContain("provider_mimo_token_openai");
-      expect(cards[1]?.details.join(" ")).toContain("이 대화방 기억만 참고");
+      expect(cards[0]?.details.join(" ")).toContain("에이전트 전용 방");
+      expect(cards[1]?.details.join(" ")).toContain("에이전트 전용 방 기억만 참고");
       expect(cards[1]?.details.join(" ")).not.toContain(memoryScope.agentId);
       expect(cards[1]?.details.join(" ")).not.toContain(memoryScope.providerProfileId);
       expect(cards[1]?.details.join(" ")).toContain("대화 맥락 기반 기억 조회 준비");

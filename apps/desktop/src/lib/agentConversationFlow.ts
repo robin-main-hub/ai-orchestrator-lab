@@ -55,7 +55,8 @@ export function createAgentConversationFlowCards({
   const agentDisplay = resolveOperatorWorkerDisplay({ role: agent.role, workerId: agent.id });
   const providerConnection = createProviderConnectionDetail(providerName, providerProfileId ?? memoryScope?.providerProfileId);
   const modelLabel = formatModelDisplayName(modelName ?? modelId);
-  const scopeLabel = memoryScope ? "이 대화방 기억만 참고" : "수동 기억 확인 대기";
+  const roomLabel = memoryScope?.roomLabel ?? "이 대화방";
+  const scopeLabel = memoryScope ? `${roomLabel} 기억만 참고` : "수동 기억 확인 대기";
   const recallQuery = memoryScope ? createAgentChannelRecallQuery(memoryScope, `${agent.name} ${agent.role} conversation`) : undefined;
 
   return [
@@ -65,6 +66,7 @@ export function createAgentConversationFlowCards({
       value: `${agentDisplay.displayName}와 1:1로 이어짐`,
       details: [
         `맡은 자리: ${agentDisplay.roleLabel || agentRoleLabel(agent.role)}`,
+        memoryScope?.roomLabel ?? "전용 방 준비 중",
         providerConnection,
         `${modelLabel}로 대화`,
       ],
