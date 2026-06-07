@@ -63,7 +63,12 @@ describe("debateCodingPacketWorkItems", () => {
     expect(projection.packet.decisions.join(" ")).toContain("Debate 메인은 토론과 합의만 남긴다");
     expect(projection.packet.implementationPlan.join(" ")).toContain("Debate 메인은 토론과 합의만 남긴다");
     expect(projection.packet.context.join(" ")).toContain("운영 로그와 증거는 Annex와 Cockpit으로 분리");
-    expect(projection.packet.context[0]).toContain("ContextPack tier: full");
+    expect(projection.packet.context[0]).toBe("컨텍스트 팩 등급: full");
+    expect(projection.packet.context[1]).toBe("토론 세션: debate_session_001");
+    expect(projection.packet.context.join(" ")).not.toContain("ContextPack tier");
+    expect(projection.packet.context.join(" ")).not.toContain("Debate session");
+    expect(projection.packet.reviewerNotes.join(" ")).toContain("토론 준비 상태: 준비됨");
+    expect(projection.packet.reviewerNotes.join(" ")).not.toContain("Debate readiness");
   });
 
   it("CodingPacket WorkItem과 실행 슬롯 Handoff를 함께 만든다", () => {
@@ -84,6 +89,8 @@ describe("debateCodingPacketWorkItems", () => {
     expect(result.workItem.status).toBe("waiting_approval");
     expect(result.workItem.kind).toBe("spec_doc");
     expect(result.workItem.priority).toBe("high");
+    expect(result.workItem.summary).toBe("결정 1개 / 구현 단계 1개");
+    expect(result.workItem.summary).not.toContain("decisions");
     expect(result.workItem.evidenceRefs[0]).toEqual(
       expect.objectContaining({
         kind: "artifact",
