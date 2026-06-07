@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import type { AgentProfile, ConversationAttachment, DebateUtterance, ModelDescriptor } from "@ai-orchestrator/protocol";
+import type { AttachmentProcessingPlan } from "./lib/attachmentProcessing";
 
 export type CenterMode = "conversation" | "debate" | "tmux" | "cockpit" | "annex";
 export type AgentActivityStatus = "idle" | "preparing" | "responding";
@@ -9,7 +10,11 @@ export type ProviderRegistrationMode = "api_key" | "cli" | "oauth";
 export type AgentConfigTab = "profile" | "soul" | "agents_md" | "creativity" | "injection" | "preview" | "edit";
 export type AgentVoicePreset = "direct" | "calm" | "architect" | "reviewer" | "executor";
 export type AgentCreativityLevel = "strict" | "focused" | "balanced" | "creative" | "experimental";
-export type DraftAttachment = ConversationAttachment;
+export type DraftAttachment = ConversationAttachment & {
+  processingMode?: AttachmentProcessingPlan["processingMode"];
+  processingStatus?: AttachmentProcessingPlan["status"];
+  processingReason?: string;
+};
 export type PendingProviderRetry = {
   permissionItemId: string;
   providerProfileId: string;

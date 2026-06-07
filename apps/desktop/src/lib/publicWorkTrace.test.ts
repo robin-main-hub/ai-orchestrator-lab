@@ -10,6 +10,60 @@ import {
 import type { Stage3DebateUtteranceView } from "../types";
 
 describe("publicWorkTrace", () => {
+  it("사용자 첨부 메시지도 처리 계획과 마스킹 영수증을 공개 로그로 요약한다", () => {
+    const trace = createConversationMessagePublicWorkTrace({
+      id: "msg_user_attachment",
+      sessionId: "session_main",
+      role: "user",
+      content: "이 화면 봐줘",
+      createdAt: "2026-06-05T08:00:00.000Z",
+      metadata: {
+        attachmentProcessingPlans: [
+          {
+            kind: "image",
+            name: "screen.png",
+            processingMode: "vision_candidate",
+            size: 120_000,
+            status: "accepted",
+            storage: "metadata_only",
+          },
+          {
+            kind: "document",
+            name: "secret.pdf",
+            processingMode: "metadata_only",
+            reason: "파일 크기 제한 초과",
+            size: 20_000_000,
+            status: "rejected",
+            storage: "metadata_only",
+          },
+        ],
+      },
+    });
+
+    expect(trace.receipt).toEqual({
+      label: "에이전트 실행 영수증",
+      status: "checkpointed",
+      items: [
+        { label: "범위", value: "첨부/메시지" },
+        { label: "기준점", value: "msg_user_attachment" },
+        { label: "마스킹", value: "적용됨" },
+        { label: "공개 범위", value: "요약 단계만" },
+      ],
+    });
+    expect(trace.groups[0]?.items).toContainEqual(
+      expect.objectContaining({
+        label: "첨부 준비",
+        value: "첨부 1개 준비 · 이미지 vision 후보 1 · 거부 1",
+      }),
+    );
+    expect(trace.groups[2]?.items).toContainEqual(
+      expect.objectContaining({
+        label: "첨부 거부",
+        value: "secret.pdf · 파일 크기 제한 초과",
+      }),
+    );
+  });
+
   it("assistant 메시지 메타데이터를 공개 작업 로그로 요약한다", () => {
     const message: ConversationMessage = {
       id: "msg_assistant_1",

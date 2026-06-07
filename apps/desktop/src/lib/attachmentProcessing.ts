@@ -16,6 +16,12 @@ export type AttachmentProcessingPlan = {
   storage: ConversationAttachment["storage"];
 };
 
+export type AttachmentProcessingSummary = {
+  acceptedCount: number;
+  label: string;
+  rejectedCount: number;
+};
+
 export function createAttachmentProcessingPlan({
   currentAttachmentCount,
   files,
@@ -57,6 +63,27 @@ export function createAttachmentProcessingPlan({
       storage: "metadata_only",
     };
   });
+}
+
+export function summarizeAttachmentProcessingPlans(plans: AttachmentProcessingPlan[]): AttachmentProcessingSummary {
+  const accepted = plans.filter((plan) => plan.status === "accepted");
+  const rejectedCount = plans.length - accepted.length;
+  const visionCount = accepted.filter((plan) => plan.processingMode === "vision_candidate").length;
+  const documentCount = accepted.filter((plan) => plan.processingMode === "document_candidate").length;
+  const metadataCount = accepted.filter((plan) => plan.processingMode === "metadata_only").length;
+  const parts = [
+    `첨부 ${accepted.length}개 준비`,
+    visionCount > 0 ? `이미지 vision 후보 ${visionCount}` : undefined,
+    documentCount > 0 ? `문서 후보 ${documentCount}` : undefined,
+    metadataCount > 0 ? `metadata 후보 ${metadataCount}` : undefined,
+    rejectedCount > 0 ? `거부 ${rejectedCount}` : undefined,
+  ].filter(Boolean);
+
+  return {
+    acceptedCount: accepted.length,
+    label: parts.join(" · "),
+    rejectedCount,
+  };
 }
 
 function classifyAttachmentKind(file: AttachmentProcessingFile): ConversationAttachment["kind"] {
