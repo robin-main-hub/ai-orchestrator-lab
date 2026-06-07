@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import {
   controlQueueActionFeedback,
   controlQueueLaneLabel,
+  controlQueueMetaItems,
   controlQueuePermissionLabel,
   sanitizeControlQueueText,
   controlQueueStateLabel,
@@ -377,6 +378,9 @@ function QueueCard({
   onReject: (sourceItemId: string) => void;
 }) {
   const showAction = (lane: LaneId) => activeLane === "all" || activeLane === lane;
+  const metaItems = controlQueueMetaItems(item);
+  const reasonMeta = metaItems.find((meta) => meta.label === "사유");
+  const compactMeta = metaItems.filter((meta) => meta.label !== "사유");
 
   return (
     <div
@@ -404,6 +408,25 @@ function QueueCard({
       <p className="text-xs font-medium text-foreground line-clamp-2">
         {sanitizeControlQueueText(item.summary)}
       </p>
+      <div className="flex flex-wrap gap-1">
+        {compactMeta.map((meta) => (
+          <StatusBadge
+            className="gap-1 font-mono"
+            key={meta.label}
+            size="sm"
+            variant={meta.variant}
+          >
+            <span className="text-muted-foreground/80">{meta.label}</span>
+            {meta.value}
+          </StatusBadge>
+        ))}
+      </div>
+      {reasonMeta ? (
+        <p className="line-clamp-1 text-[10px] text-muted-foreground" title={reasonMeta.value}>
+          <span className="text-muted-foreground/70">사유 </span>
+          {reasonMeta.value}
+        </p>
+      ) : null}
       <p className="text-[10px] text-muted-foreground">
         {item.permissions.map(controlQueuePermissionLabel).join(" · ")}
       </p>
