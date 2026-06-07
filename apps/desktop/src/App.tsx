@@ -1430,9 +1430,9 @@ export function App() {
 
     const targetSessionId = activeSessionIdRef.current;
     const createdAt = new Date().toISOString();
-    const authLabel = selectedAgent.authBinding?.label ?? "credential pending";
+    const authLabel = selectedAgent.authBinding?.label ?? "인증 정보 대기";
     const authMode = selectedAgent.authBinding?.mode ?? "provider_profile";
-    const modelId = selectedModel?.id ?? selectedAgent.modelId ?? selectedProvider.defaultModel ?? "model pending";
+    const modelId = selectedModel?.id ?? selectedAgent.modelId ?? selectedProvider.defaultModel ?? "모델 대기";
     const messageContent = content || `첨부 ${attachments.length}개`;
     const attachmentMetadata = attachments.map((attachment) => ({ ...attachment }));
     const attachmentProcessingPlans = attachmentMetadata.map((attachment) => ({
