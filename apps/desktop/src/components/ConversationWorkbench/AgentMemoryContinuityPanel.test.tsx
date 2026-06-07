@@ -19,6 +19,7 @@ describe("AgentMemoryContinuityPanel", () => {
         messageCount={12}
         personaAgentsMdApplied={true}
         personaSoulApplied={true}
+        toolLabels={["작업 대기열", "승인 확인"]}
       />,
     );
 
@@ -29,5 +30,7 @@ describe("AgentMemoryContinuityPanel", () => {
     expect(html).toContain("SOUL 적용");
     expect(html).toContain("AGENTS 적용");
     expect(html).toContain("recall 추적 준비됨");
+    expect(html).toContain("도구: 작업 대기열, 승인 확인");
+    expect(html).not.toContain("도구 준비 대기");
   });
 });

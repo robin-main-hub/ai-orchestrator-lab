@@ -351,6 +351,7 @@ export function ConversationWorkbench({
                 messageCount={messages.length}
                 personaAgentsMdApplied={personaAgentsMdApplied}
                 personaSoulApplied={personaSoulApplied}
+                toolLabels={toolLabels}
               />
               <AgentSkillProfilePanel role={selectedAgent.role} />
             </div>
