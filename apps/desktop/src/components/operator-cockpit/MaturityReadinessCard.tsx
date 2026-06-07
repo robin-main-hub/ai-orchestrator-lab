@@ -79,7 +79,7 @@ export function MaturityReadinessCard({
 
         <section className="rounded-lg border border-zinc-800/60 bg-zinc-950/35 p-3">
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-300">Production smoke</span>
+            <span className="text-xs font-medium text-zinc-300">운영 스모크</span>
             <Badge color="blue">{smokePlan.items.length}축</Badge>
           </div>
           <div className="space-y-2">
