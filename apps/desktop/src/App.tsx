@@ -3451,6 +3451,7 @@ export function App() {
         snapshot: cockpitSnapshot,
       }),
       smokePlan,
+      workTraceItems: workTraceIndex,
     };
   }, [
     adapterStatus,
