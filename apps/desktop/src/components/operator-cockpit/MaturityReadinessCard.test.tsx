@@ -35,8 +35,8 @@ describe("MaturityReadinessCard", () => {
     expect(html).toContain("실사용 성숙도");
     expect(html).toContain("9 / 9");
     expect(html).toContain("설정 진단");
-    expect(html).toContain("Production smoke");
-    expect(html).toContain("Debate 결정에서 Coding Packet 생성");
+    expect(html).toContain("운영 스모크");
+    expect(html).toContain("토론 결정에서 코딩 패킷 생성");
   });
 
   it("막힌 항목은 다음 액션을 직접 보여준다", () => {
