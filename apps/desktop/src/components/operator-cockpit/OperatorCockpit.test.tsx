@@ -211,6 +211,24 @@ describe("OperatorCockpit", () => {
     expect(html).not.toContain("provider 대기");
   });
 
+  it("서버 스냅샷이 붙지 않았을 때도 첫 화면에서 로컬 투영 상태를 명확히 보여준다", () => {
+    const html = renderToStaticMarkup(
+      <OperatorCockpit
+        snapshot={{
+          ...snapshot,
+          recovery: {
+            ...snapshot.recovery,
+            healthIndicators: ["서버 스냅샷 미연결 · 로컬 투영 표시 중"],
+          },
+        }}
+      />,
+    );
+
+    expect(html).toContain("서버 투영");
+    expect(html).toContain("로컬 투영");
+    expect(html).toContain("서버 스냅샷 미연결");
+  });
+
   it("필요한 실행 슬롯 인계는 Cockpit에서 바로 승인할 수 있게 CTA를 렌더링한다", () => {
     const html = renderToStaticMarkup(
       <OperatorCockpit
