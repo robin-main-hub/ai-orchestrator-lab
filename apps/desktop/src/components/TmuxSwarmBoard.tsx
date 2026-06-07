@@ -104,6 +104,18 @@ export function TmuxSwarmBoard({
     () => visiblePanes.find((pane) => pane.roleKey === selectedRole) ?? visiblePanes[0],
     [selectedRole, visiblePanes],
   );
+  const commandCenter = selectedPane
+    ? deriveTmuxCommandCenterForTest({
+        commandDraft: commandDrafts[selectedPane.roleKey] ?? defaultTmuxCommandForRole(selectedPane.roleKey),
+        lastOutput: outputs[selectedPane.roleKey],
+        paneRoleLabel: tmuxPaneRoleLabel(selectedPane.roleKey),
+        paneStateLabel: tmuxPaneStateLabel(
+          statuses[selectedPane.roleKey] ??
+            (selectedPane.agent ? agentActivityById[selectedPane.agent.id] ?? selectedPane.state : selectedPane.state),
+        ),
+        paneTitle: selectedPane.title,
+      })
+    : undefined;
   const activeCount = visiblePanes.filter((pane) => resolvePaneAgentState(pane, statuses, agentActivityById) === "working" || resolvePaneAgentState(pane, statuses, agentActivityById) === "responding").length;
   const pendingCount = visiblePanes.filter((pane) => resolvePaneAgentState(pane, statuses, agentActivityById) === "waiting_approval").length;
   const errorCount = visiblePanes.filter((pane) => resolvePaneAgentState(pane, statuses, agentActivityById) === "error").length;
@@ -348,6 +360,8 @@ export function TmuxSwarmBoard({
         </div>
       </div>
 
+      {commandCenter ? <TmuxCommandCenter summary={commandCenter} /> : null}
+
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <aside className="w-[380px] shrink-0 overflow-y-auto border-r border-zinc-800/60 p-3 max-lg:w-[320px] max-md:hidden">
           {visiblePanes.map((pane) => (
@@ -411,6 +425,60 @@ export function resolveTmuxTimelineBlocks(
   fallbackBlocks: TerminalTimelineBlock[],
 ): TerminalTimelineBlock[] {
   return serverBlocks && serverBlocks.length > 0 ? serverBlocks : fallbackBlocks;
+}
+
+export function deriveTmuxCommandCenterForTest({
+  commandDraft,
+  lastOutput,
+  paneRoleLabel,
+  paneStateLabel,
+  paneTitle,
+}: {
+  commandDraft: string | undefined;
+  lastOutput: string | undefined;
+  paneRoleLabel: string;
+  paneStateLabel: string;
+  paneTitle: string;
+}) {
+  return {
+    commandLabel: sanitizeTmuxWorkbenchText(commandDraft?.trim() || "명령 초안 대기"),
+    outputLabel: sanitizeTmuxWorkbenchText(lastOutput?.trim() || "아직 결과 없음"),
+    roleLabel: paneRoleLabel,
+    statusLabel: paneStateLabel,
+    title: paneTitle,
+  };
+}
+
+function TmuxCommandCenter({
+  summary,
+}: {
+  summary: ReturnType<typeof deriveTmuxCommandCenterForTest>;
+}) {
+  return (
+    <section className="shrink-0 border-b border-amber-400/10 bg-[linear-gradient(135deg,rgba(245,158,11,0.10),rgba(24,24,27,0.50)_48%,rgba(6,182,212,0.08))] px-4 py-3 md:px-5">
+      <div className="grid gap-2 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.25fr)_minmax(0,1fr)]">
+        <div className="min-w-0 rounded-lg border border-amber-300/15 bg-black/20 px-3 py-2">
+          <p className="text-[10px] font-semibold text-amber-100">선택 작업창</p>
+          <p className="mt-1 truncate text-sm font-semibold text-zinc-50" title={summary.title}>
+            {summary.title}
+          </p>
+          <p className="mt-0.5 truncate text-[11px] text-zinc-500">{summary.roleLabel} · {summary.statusLabel}</p>
+        </div>
+        <div className="min-w-0 rounded-lg border border-cyan-300/15 bg-cyan-400/10 px-3 py-2">
+          <p className="text-[10px] font-semibold text-cyan-100">다음 명령</p>
+          <p className="mt-1 truncate font-mono text-xs text-cyan-50" title={summary.commandLabel}>
+            {summary.commandLabel}
+          </p>
+        </div>
+        <div className="min-w-0 rounded-lg border border-white/10 bg-zinc-950/45 px-3 py-2">
+          <p className="text-[10px] font-semibold text-zinc-400">최근 결과</p>
+          <p className="mt-1 truncate text-xs text-zinc-200" title={summary.outputLabel}>
+            {summary.outputLabel}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export function createTmuxOperationStartedBlock({
