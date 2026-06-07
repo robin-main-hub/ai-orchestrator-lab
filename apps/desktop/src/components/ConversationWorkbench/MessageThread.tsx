@@ -202,6 +202,29 @@ export function createAssistantRuntimeEvidenceBadges(message: ConversationMessag
   return badges;
 }
 
+export function resolveMessageSenderAgent({
+  agents,
+  label,
+  message,
+}: {
+  agents: WorkbenchAgent[];
+  label: string;
+  message: ConversationMessage;
+}) {
+  const metadataAgentName = typeof message.metadata?.agentName === "string" ? message.metadata.agentName : undefined;
+  return agents.find(
+    (agent) =>
+      agent.id === message.metadata?.agentId ||
+      agent.name === label ||
+      agentPrimaryDisplayName(agent) === label ||
+      agent.personaName === label ||
+      (metadataAgentName &&
+        (agent.name === metadataAgentName ||
+          agentPrimaryDisplayName(agent) === metadataAgentName ||
+          agent.personaName === metadataAgentName)),
+  );
+}
+
 function AssistantPendingBubble({
   activity,
   agent,
@@ -352,12 +375,7 @@ function MessageBubble({
     );
   }
 
-  const senderAgent = agents.find(
-    (a) =>
-      a.id === message.metadata?.agentId ||
-      a.name === label ||
-      (message.metadata?.agentName && a.name === String(message.metadata.agentName))
-  );
+  const senderAgent = resolveMessageSenderAgent({ agents, label, message });
   const initials = senderAgent ? agentInitialsForDisplay(senderAgent) : label.slice(0, 2).toUpperCase();
   const roleColor = senderAgent ? roleColorFromRole(senderAgent.role) : "orchestrator";
   const activity = senderAgent && agentActivityById ? agentActivityById[senderAgent.id] : "idle";
