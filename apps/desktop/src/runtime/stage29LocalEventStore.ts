@@ -33,9 +33,10 @@ export function createLocalClientEventCache(
   key = defaultStoreKey,
 ): LocalClientEventCache {
   let memoryRecords: StoredClientCachedEvent[] = [];
+  let storageDisabled = false;
 
   const load = () => {
-    if (!storage) {
+    if (!storage || storageDisabled) {
       return memoryRecords;
     }
 
@@ -49,7 +50,12 @@ export function createLocalClientEventCache(
       return;
     }
 
-    storage.setItem(key, JSON.stringify(deduped));
+    try {
+      storage.setItem(key, JSON.stringify(deduped));
+    } catch {
+      storageDisabled = true;
+      memoryRecords = deduped;
+    }
   };
 
   return {
