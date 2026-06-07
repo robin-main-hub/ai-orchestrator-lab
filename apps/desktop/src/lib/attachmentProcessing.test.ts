@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createAttachmentProcessingPlan,
+  createAttachmentProcessingPlansForMessage,
   summarizeAttachmentProcessingPlans,
 } from "./attachmentProcessing";
 
@@ -99,8 +100,41 @@ describe("attachmentProcessing", () => {
 
     expect(summarizeAttachmentProcessingPlans(plans)).toEqual({
       acceptedCount: 2,
-      label: "첨부 2개 준비 · 이미지 vision 후보 1 · 문서 후보 1 · 거부 1",
+      label: "첨부 2개 준비 · 이미지 확인 후보 1 · 문서 후보 1 · 거부 1",
       rejectedCount: 1,
     });
+  });
+
+  it("메시지 전송용 처리 계획에는 accepted 첨부와 이전에 거부된 계획을 함께 보존한다", () => {
+    const plans = createAttachmentProcessingPlansForMessage({
+      attachments: [
+        {
+          id: "attachment_screen",
+          kind: "image",
+          mimeType: "image/png",
+          name: "screen.png",
+          processingMode: "vision_candidate",
+          processingStatus: "accepted",
+          size: 1_000,
+          storage: "metadata_only",
+        },
+      ],
+      rejectedPlans: [
+        {
+          kind: "document",
+          name: "secret.pdf",
+          processingMode: "metadata_only",
+          reason: "파일 크기 제한 초과",
+          size: 20_000_000,
+          status: "rejected",
+          storage: "metadata_only",
+        },
+      ],
+    });
+
+    expect(plans.map((plan) => `${plan.name}:${plan.status}:${plan.reason ?? "ok"}`)).toEqual([
+      "screen.png:accepted:ok",
+      "secret.pdf:rejected:파일 크기 제한 초과",
+    ]);
   });
 });

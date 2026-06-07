@@ -1,7 +1,7 @@
 import type { BranchExperiment, ContextPackTier, ConversationMessage, InsightCategory, ReviewMode, RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import type { AgentConfigTab, AgentCreativityLevel, AgentVoicePreset, WorkbenchAgent } from "../types";
 import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
-import { agentPrimaryDisplayName } from "./agentDisplay";
+import { agentKoreanNameByIdentity, agentPrimaryDisplayName } from "./agentDisplay";
 
 export function reviewModeLabel(mode: ReviewMode) {
   const labels: Record<ReviewMode, string> = {
@@ -34,6 +34,16 @@ export function branchStatusLabel(status: BranchExperiment["status"]) {
 
   return labels[status];
 }
+
+export function branchAgentNameLabel(agentName?: string) {
+  if (!agentName) {
+    return "에이전트";
+  }
+
+  const normalized = normalizeMetadataAgentName(agentName);
+  return agentKoreanNameByIdentity[normalized] ?? agentName;
+}
+
 export function statusTone(status: RuntimeSnapshot["status"]) {
   if (status === "online") {
     return "ok";
@@ -164,8 +174,12 @@ export function messageLabel(
   }
 
   if (typeof agentName === "string") {
-    return agentName;
+    return agentKoreanNameByIdentity[normalizeMetadataAgentName(agentName)] ?? agentName;
   }
 
   return "에이전트";
+}
+
+function normalizeMetadataAgentName(value: string) {
+  return value.trim().toLowerCase().replace(/^agent[_-]/, "").replace(/\s+/g, "_");
 }

@@ -183,12 +183,17 @@ import {
   agentRoleLabel,
   createDefaultPersonaSettings,
   createDraftAttachment,
+  formatModelDisplayName,
   getModelInputModalities,
   createInitialAgentVisualSettings,
   modelSupportsAnyAttachment,
   modelSupportsAttachmentKind,
 } from "./lib/helpers";
-import { createAttachmentProcessingPlan } from "./lib/attachmentProcessing";
+import {
+  createAttachmentProcessingPlan,
+  createAttachmentProcessingPlansForMessage,
+  type AttachmentProcessingPlan,
+} from "./lib/attachmentProcessing";
 import { statusTone } from "./lib/uiLabels";
 import {
   createCockpitLocalHealthIndicators,
@@ -484,6 +489,10 @@ export function App() {
         realProviderCall: true,
         replayedApprovalId: approval.id,
         replayedSourceItemId: approval.sourceItemId,
+        attachmentCount: pending.attachments.length,
+        ...(pending.attachmentProcessingPlans.length > 0
+          ? { attachmentProcessingPlans: pending.attachmentProcessingPlans }
+          : {}),
       },
     };
 
@@ -491,6 +500,7 @@ export function App() {
     setPendingProviderRetry(undefined);
     setDraftMessage("");
     setDraftAttachments([]);
+    setDraftRejectedAttachmentPlans([]);
     if (targetAgent) {
       setAgentActivity(targetAgent.id, "responding");
       window.setTimeout(() => {
@@ -566,6 +576,7 @@ export function App() {
   const [obsidianMarkdownPreview, setObsidianMarkdownPreview] = useState("");
   const [draftMessage, setDraftMessage] = useState("");
   const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([]);
+  const [draftRejectedAttachmentPlans, setDraftRejectedAttachmentPlans] = useState<AttachmentProcessingPlan[]>([]);
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.id === selectedAgentId) ?? agents[0],
     [agents, selectedAgentId],
@@ -801,6 +812,7 @@ export function App() {
     setDraftAttachments((current) =>
       current.filter((attachment) => modelSupportsAttachmentKind(selectedModel, attachment.kind)),
     );
+    setDraftRejectedAttachmentPlans([]);
   }, [selectedModel?.id, selectedModel?.providerProfileId]);
 
   function appendEvent<T>(
@@ -860,6 +872,7 @@ export function App() {
     setEventLog([]);
     setDraftMessage("");
     setDraftAttachments([]);
+    setDraftRejectedAttachmentPlans([]);
 
     appendEvent(
       "session.created",
@@ -1010,6 +1023,10 @@ export function App() {
       ];
     });
     const rejectedPlans = processingPlans.filter((plan) => plan.status === "rejected");
+
+    if (rejectedPlans.length > 0) {
+      setDraftRejectedAttachmentPlans((current) => [...current, ...rejectedPlans].slice(-maxDraftAttachments));
+    }
 
     if (nextAttachments.length === 0) {
       appendEvent("conversation.attachment.blocked", {
@@ -1442,15 +1459,10 @@ export function App() {
     const modelId = selectedModel?.id ?? selectedAgent.modelId ?? selectedProvider.defaultModel ?? "모델 대기";
     const messageContent = content || `첨부 ${attachments.length}개`;
     const attachmentMetadata = attachments.map((attachment) => ({ ...attachment }));
-    const attachmentProcessingPlans = attachmentMetadata.map((attachment) => ({
-      kind: attachment.kind,
-      name: attachment.name,
-      processingMode: attachment.processingMode ?? "metadata_only",
-      reason: attachment.processingReason,
-      size: attachment.size,
-      status: attachment.processingStatus ?? "accepted",
-      storage: attachment.storage,
-    }));
+    const attachmentProcessingPlans = createAttachmentProcessingPlansForMessage({
+      attachments: attachmentMetadata,
+      rejectedPlans: draftRejectedAttachmentPlans,
+    });
     const userMessageMetadata = {
       agentId: selectedAgent.id,
       memoryScope: selectedAgentMemoryScope.namespace,
@@ -1483,6 +1495,7 @@ export function App() {
           modelId,
           content: messageContent,
           attachments: attachmentMetadata,
+          attachmentProcessingPlans,
           createdAt,
         });
       }
@@ -1501,6 +1514,8 @@ export function App() {
           permissionItemId: providerPermissionId,
           memoryScope: selectedAgentMemoryScope.namespace,
           recallTraceId: selectedAgentMemoryScope.recallTraceId,
+          attachmentCount: attachmentMetadata.length,
+          ...(attachmentProcessingPlans.length > 0 ? { attachmentProcessingPlans } : {}),
         },
       };
 
@@ -1509,6 +1524,7 @@ export function App() {
       }
       setDraftMessage("");
       setDraftAttachments([]);
+      setDraftRejectedAttachmentPlans([]);
       appendEvent("conversation.message.created", {
         messageId: userMessage.id,
         role: "user",
@@ -1549,6 +1565,7 @@ export function App() {
     setConversationMessages((messages) => [...messages, userMessage]);
     setDraftMessage("");
     setDraftAttachments([]);
+    setDraftRejectedAttachmentPlans([]);
     appendEvent("conversation.message.created", {
       messageId: userMessage.id,
       role: "user",
@@ -1653,6 +1670,7 @@ export function App() {
           modelId,
           content: messageContent,
           attachments: attachmentMetadata,
+          attachmentProcessingPlans,
           createdAt,
         });
         await handleRefreshApprovalQueue();
@@ -1663,6 +1681,8 @@ export function App() {
           providerProfileId: selectedProvider.id,
           realProviderCall: false,
           requiresServerApproval: true,
+          attachmentCount: attachmentMetadata.length,
+          ...(attachmentProcessingPlans.length > 0 ? { attachmentProcessingPlans } : {}),
         };
         appendEvent("provider.completion.approval_required", {
           agentId: selectedAgent.id,
@@ -2363,6 +2383,9 @@ export function App() {
       if (state === "approved") {
         setDraftMessage(pendingProviderRetry.content);
         setDraftAttachments(pendingProviderRetry.attachments);
+        setDraftRejectedAttachmentPlans(
+          pendingProviderRetry.attachmentProcessingPlans.filter((plan) => plan.status === "rejected"),
+        );
         appendEvent("provider.completion.retry.restored", {
           permissionItemId: pendingItem.sourceItemId,
           providerProfileId: pendingProviderRetry.providerProfileId,
@@ -2370,6 +2393,7 @@ export function App() {
           modelId: pendingProviderRetry.modelId,
           contentLength: pendingProviderRetry.content.length,
           attachmentCount: pendingProviderRetry.attachments.length,
+          attachmentProcessingPlans: pendingProviderRetry.attachmentProcessingPlans,
           redaction: "applied",
         });
       } else {
@@ -3325,7 +3349,7 @@ export function App() {
         contradictionWarnings,
       },
       routing: {
-        selectedModelId: selectedModel?.id || "모델 미선택",
+        selectedModelId: formatModelDisplayName(selectedModel?.name || selectedModel?.id),
         fallbackStatus,
         costBadge,
         speedBadge,

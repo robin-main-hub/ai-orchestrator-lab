@@ -64,7 +64,13 @@ describe("controlQueuePresentation", () => {
       { label: "신뢰", value: "신뢰됨", variant: "success" },
       { label: "재실행", value: "tmux 재전송", variant: "primary" },
       { label: "예상", value: "120k tok", variant: "muted" },
-      { label: "사유", value: "tmux remote command needs approval before using Bearer [token]", variant: "muted" },
+      { label: "사유", value: "터미널 원격 명령은 토큰 사용 전 승인이 필요합니다", variant: "muted" },
     ]);
+  });
+
+  it("localizes common execution reasons after masking sensitive values", () => {
+    expect(sanitizeControlQueueText("sent to /Users/robin/private with API_KEY=value")).toBe(
+      "로컬 경로 전송 · 비밀값 마스킹됨",
+    );
   });
 });

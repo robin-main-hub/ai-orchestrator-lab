@@ -111,13 +111,50 @@ export function writeMemoryCuratorCandidate({
   return next;
 }
 
+export function updateMemoryCuratorLedgerRecord({
+  candidateStatus,
+  recordId,
+  recordPatch,
+  scopeKey,
+  storage,
+  updatedAt,
+}: {
+  candidateStatus?: MemoryCuratorCandidate["status"];
+  recordId: string;
+  recordPatch: Partial<MemoryRecord>;
+  scopeKey?: string;
+  storage?: JsonStorageLike;
+  updatedAt: string;
+}): MemoryCuratorLedgerEntry[] {
+  const current = readMemoryCuratorLedger(storage);
+  const next = current.map((entry) => {
+    if (entry.candidate.record.id !== recordId) return entry;
+    if (scopeKey && entry.scopeKey !== scopeKey) return entry;
+    return {
+      ...entry,
+      candidate: {
+        ...entry.candidate,
+        ...(candidateStatus ? { status: candidateStatus } : {}),
+        record: {
+          ...entry.candidate.record,
+          ...recordPatch,
+        },
+      },
+      updatedAt,
+    };
+  });
+  writeJsonState(memoryCuratorLedgerStorageKey, next, storage);
+  return next;
+}
+
 export function getMemoryCuratorRecordsForScope(
   scopeKey: string,
   storage?: JsonStorageLike,
 ): MemoryRecord[] {
   return readMemoryCuratorLedger(storage)
     .filter((entry) => entry.scopeKey === scopeKey)
-    .map((entry) => entry.candidate.record);
+    .map((entry) => entry.candidate.record)
+    .filter((record) => !record.tombstonedAt);
 }
 
 export function mergeMemoryRecordsWithCuratorLedger(

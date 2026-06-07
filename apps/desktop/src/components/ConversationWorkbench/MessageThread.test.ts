@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ConversationMessage } from "@ai-orchestrator/protocol";
 import {
+  attachmentProcessingLabel,
   assistantPendingLabel,
+  approvalPermissionListLabel,
   createAssistantRuntimeEvidenceBadges,
   delegationStatusLabel,
   resolveAssistantMessageStatusSummary,
@@ -83,7 +85,7 @@ describe("MessageThread pending assistant state", () => {
       "SOUL",
       "AGENTS",
       "기억 3개",
-      "설정 2개",
+      "인격 파일 2개",
       "도구 2개",
     ]);
   });
@@ -99,7 +101,7 @@ describe("MessageThread pending assistant state", () => {
     });
 
     expect(summary).toEqual({
-      detail: "공급자 응답이 기록되고 공개 작업 로그로 요약되었습니다.",
+      detail: "모델 응답이 기록되고 공개 작업 로그로 요약되었습니다.",
       label: "응답 기록",
       variant: "success",
     });
@@ -112,5 +114,16 @@ describe("MessageThread pending assistant state", () => {
     expect(delegationStatusLabel("unknown_target")).toBe("대상 없음");
     expect(delegationStatusLabel("self_delegation")).toBe("자기위임 차단");
     expect(delegationStatusLabel("detected")).toBe("감지됨");
+  });
+
+  it("renders approval permissions as Korean user-facing labels", () => {
+    expect(approvalPermissionListLabel([])).toBe("보기 전용");
+    expect(approvalPermissionListLabel(["read_only", "provider_completion", "terminal_run"])).toBe(
+      "보기 전용, 모델 호출, 터미널 실행",
+    );
+  });
+
+  it("renders attachment metadata mode as a natural Korean label", () => {
+    expect(attachmentProcessingLabel("metadata_only")).toBe("파일 정보만");
   });
 });

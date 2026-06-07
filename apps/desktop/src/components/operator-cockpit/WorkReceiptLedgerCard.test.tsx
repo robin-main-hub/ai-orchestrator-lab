@@ -57,4 +57,40 @@ describe("WorkReceiptLedgerCard", () => {
     expect(html).toContain("GitHub #251");
     expect(html).toContain("https://github.com/robin-main-hub/ai-orchestrator-lab/issues/251");
   });
+
+  it("터미널 영수증의 내부 상태값을 첫 표면에 영어로 노출하지 않는다", () => {
+    const html = renderToStaticMarkup(
+      <WorkReceiptLedgerCard
+        items={[
+          {
+            ...receiptItem,
+            id: "terminal_1",
+            kind: "tmux",
+            receiptStatus: "fallback",
+            title: "터미널 보정 기록",
+            trace: {
+              ...receiptItem.trace,
+              receipt: {
+                label: "터미널 실행 영수증",
+                status: "fallback",
+                items: [
+                  { label: "범위", value: "디스패치" },
+                  { label: "기준점", value: "터미널 세션 · 작업창" },
+                  { label: "마스킹", value: "적용됨" },
+                ],
+              },
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("터미널");
+    expect(html).toContain("대체 경로");
+    expect(html).toContain("공개 요약");
+    expect(html).toContain("상세 보기");
+    expect(html).not.toContain("tmux");
+    expect(html).not.toContain("fallback");
+    expect(html).not.toContain("공개 trace");
+  });
 });

@@ -1,6 +1,6 @@
 import type { ModelDiscoverySnapshot, ProviderProfile, SourceTrust } from "@ai-orchestrator/protocol";
 import type { ModelCatalog } from "../types";
-import { providerDisplayLabel } from "./helpers";
+import { formatModelDisplayName, providerDisplayLabel } from "./helpers";
 import { sanitizePublicText } from "./publicRedaction";
 import { createProviderRoundtripHarness, createProviderSmokeReadiness } from "./providerSmokeReadiness";
 
@@ -46,7 +46,7 @@ export function createProviderRoutingConsoleItems({
     const readiness = createProviderSmokeReadiness(profile);
     const harness = createProviderRoundtripHarness(profile);
     const assignedAgentCount = agents.filter((agent) => agent.providerProfileId === profile.id).length;
-    const defaultModelLabel = sanitizeProviderConsoleText(profile.defaultModel || "모델 미지정");
+    const defaultModelLabel = sanitizeProviderConsoleText(formatModelDisplayName(profile.defaultModel));
     const modelCount = modelCatalog[profile.id]?.length ?? 0;
 
     return {

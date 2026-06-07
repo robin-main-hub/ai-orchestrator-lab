@@ -5,6 +5,7 @@ import {
   createMemoryCuratorPersistencePlan,
   getMemoryCuratorRecordsForScope,
   readMemoryCuratorLedger,
+  updateMemoryCuratorLedgerRecord,
   writeMemoryCuratorCandidate,
 } from "./memoryCuratorRuntime";
 import type { JsonStorageLike } from "./persistentJsonState";
@@ -254,5 +255,104 @@ describe("memory curator runtime persistence planning", () => {
       getMemoryCuratorRecordsForScope("agent_architect::session_main::provider_mimo", storage)
         .map((record) => record.title),
     ).toEqual(["오시노 시노부 대화 기억 후보"]);
+  });
+
+  it("승인된 curator 후보는 ledger에서도 active/pinned 상태로 복원된다", () => {
+    const storage = new MemoryStorage();
+    const candidate = createConversationTurnMemoryCandidate({
+      agentId: "agent_orchestrator",
+      agentName: "마키마",
+      assistantMessage: {
+        id: "message_agent_approved",
+        content: "이 순서를 다음 작업에서 이어가겠다.",
+        createdAt: updatedAt,
+        role: "assistant",
+        sessionId: "session_main",
+      },
+      createdAt: updatedAt,
+      memoryScopeNamespace: "agent:agent_orchestrator/session:session_main/provider:provider_mimo",
+      providerProfileId: "provider_mimo",
+      userMessage: {
+        id: "message_user_approved",
+        content: "이 큰 바위 순서를 계속 기억해.",
+        createdAt,
+        role: "user",
+        sessionId: "session_main",
+      },
+    });
+
+    writeMemoryCuratorCandidate({
+      candidate,
+      scopeKey: "agent_orchestrator::session_main::provider_mimo",
+      storage,
+      updatedAt,
+    });
+    updateMemoryCuratorLedgerRecord({
+      candidateStatus: "approved",
+      recordId: candidate.record.id,
+      recordPatch: {
+        activationState: "active",
+        lastAccessedAt: updatedAt,
+        pinned: true,
+        updatedAt,
+      },
+      scopeKey: "agent_orchestrator::session_main::provider_mimo",
+      storage,
+      updatedAt,
+    });
+
+    expect(readMemoryCuratorLedger(storage)[0]?.candidate.status).toBe("approved");
+    expect(
+      getMemoryCuratorRecordsForScope("agent_orchestrator::session_main::provider_mimo", storage)[0],
+    ).toMatchObject({
+      activationState: "active",
+      pinned: true,
+      updatedAt,
+    });
+  });
+
+  it("거절 또는 forget 처리된 curator 후보는 재시작 복원 목록에서 빠진다", () => {
+    const storage = new MemoryStorage();
+    const candidate = createConversationTurnMemoryCandidate({
+      agentId: "agent_orchestrator",
+      agentName: "마키마",
+      assistantMessage: {
+        id: "message_agent_rejected",
+        content: "이 내용은 오래 보관하지 않겠다.",
+        createdAt: updatedAt,
+        role: "assistant",
+        sessionId: "session_main",
+      },
+      createdAt: updatedAt,
+      providerProfileId: "provider_mimo",
+      userMessage: {
+        id: "message_user_rejected",
+        content: "이건 임시로만 봐.",
+        createdAt,
+        role: "user",
+        sessionId: "session_main",
+      },
+    });
+
+    writeMemoryCuratorCandidate({
+      candidate,
+      scopeKey: "agent_orchestrator::session_main::provider_mimo",
+      storage,
+      updatedAt,
+    });
+    updateMemoryCuratorLedgerRecord({
+      candidateStatus: "rejected",
+      recordId: candidate.record.id,
+      recordPatch: {
+        activationState: "inactive",
+        tombstonedAt: updatedAt,
+      },
+      scopeKey: "agent_orchestrator::session_main::provider_mimo",
+      storage,
+      updatedAt,
+    });
+
+    expect(readMemoryCuratorLedger(storage)[0]?.candidate.status).toBe("rejected");
+    expect(getMemoryCuratorRecordsForScope("agent_orchestrator::session_main::provider_mimo", storage)).toEqual([]);
   });
 });
