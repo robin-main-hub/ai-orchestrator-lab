@@ -1417,6 +1417,9 @@ export type PermissionMatrixItem = {
   state: ApprovalState;
   decision: PermissionDecision;
   reason: string;
+  costEstimateTokens?: number;
+  replayKind?: ApprovalReplayKind;
+  replayEndpoint?: string;
   createdAt: string;
 };
 

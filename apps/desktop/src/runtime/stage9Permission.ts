@@ -14,6 +14,7 @@ import type {
   RuntimeSnapshot,
   TerminalSlot,
   SourceTrust,
+  ApprovalReplayKind,
 } from "@ai-orchestrator/protocol";
 import type { Stage4AgentRun, Stage4RunStep } from "./stage4Runtime";
 
@@ -41,6 +42,8 @@ export type PermissionGateInput = {
   reason?: string;
   costEstimateTokens?: number;
   maxAllowedTokens?: number;
+  replayKind?: ApprovalReplayKind;
+  replayEndpoint?: string;
   createdAt?: string;
 };
 
@@ -103,6 +106,8 @@ export function evaluatePermissionGate({
   reason,
   costEstimateTokens,
   maxAllowedTokens,
+  replayKind,
+  replayEndpoint,
   createdAt = new Date().toISOString(),
 }: PermissionGateInput): PermissionGateResult {
   const itemState = state ?? defaultApprovalStateForGate({
@@ -136,6 +141,9 @@ export function evaluatePermissionGate({
         costEstimateTokens,
         maxAllowedTokens,
       }),
+    costEstimateTokens,
+    replayKind,
+    replayEndpoint,
     createdAt,
   };
 
@@ -334,9 +342,15 @@ function createQueueItem(item: PermissionMatrixItem): ApprovalQueueItem {
     sourceItemId: item.id,
     summary: `${item.action} from ${item.actor}`,
     requestedBy: item.actor,
+    action: item.action,
+    reason: item.reason,
+    sourceTrust: item.sourceTrust,
     permissions: item.requestedLevels,
     state: item.state,
+    costEstimateTokens: item.costEstimateTokens,
     createdAt: item.createdAt,
+    replayKind: item.replayKind,
+    replayEndpoint: item.replayEndpoint,
   };
 }
 
