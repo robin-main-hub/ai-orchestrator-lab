@@ -37,6 +37,7 @@ export function OperatorCockpit({
   onOpenMemory,
   onOpenProviderRouting,
   onOpenRecovery,
+  onOpenAgentConversation,
   readiness,
 }: {
   defaultDetailsOpen?: boolean;
@@ -45,6 +46,7 @@ export function OperatorCockpit({
   onOpenMemory?: () => void;
   onOpenProviderRouting?: () => void;
   onOpenRecovery?: () => void;
+  onOpenAgentConversation?: (agentId: string) => void;
   readiness?: {
     diagnostics: SettingsDiagnostics;
     maturity: OrchestrationMaturityReport;
@@ -183,7 +185,7 @@ export function OperatorCockpit({
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
             <div className="min-w-0 lg:col-span-7">
-              <WorkerFleetCard fleet={snapshot.fleet} />
+            <WorkerFleetCard fleet={snapshot.fleet} onOpenAgentConversation={onOpenAgentConversation} />
             </div>
             <div className="min-w-0 lg:col-span-5">
               <ApprovalEvidenceCard approvals={snapshot.approvals} onPreview={onPreviewEvidence} />
