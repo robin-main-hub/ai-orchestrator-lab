@@ -110,12 +110,20 @@ describe("stage6 memory inspector", () => {
       packet,
       provider: trustedProvider,
       createdAt,
+      agentId: "agent_reviewer",
     });
     const activated = activateMemoryRecord(candidates, candidates[0]!.id, createdAt);
     const pinned = pinMemoryRecord(candidates, candidates[0]!.id);
     const forgotten = forgetMemoryRecord(pinned, candidates[0]!.id, createdAt);
 
     expect(candidates).toHaveLength(2);
+    expect(candidates[0]?.tags).toEqual(
+      expect.arrayContaining([
+        "agent:agent_reviewer",
+        `provider:${trustedProvider.id}`,
+        "session:session_desktop_001",
+      ]),
+    );
     expect(activated[0]?.activationState).toBe("active");
     expect(pinned[0]?.pinned).toBe(true);
     expect(forgotten[0]?.tombstonedAt).toBe(createdAt);
