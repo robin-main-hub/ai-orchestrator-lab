@@ -5,8 +5,7 @@ import {
   CheckSquare,
   ChevronDown,
   Database,
-  ExternalLink,
-  FileText,
+  Handshake,
   Monitor,
   RefreshCw,
   Route,
@@ -14,7 +13,7 @@ import {
   ShieldAlert,
   Users,
 } from "lucide-react";
-import type { OperatorCockpitSnapshot } from "@ai-orchestrator/protocol";
+import type { OperatorCockpitHandoff, OperatorCockpitSnapshot } from "@ai-orchestrator/protocol";
 import type { OrchestrationMaturityReport } from "../../lib/orchestrationMaturity";
 import type { ProductionSmokePlan } from "../../lib/productionSmokePlan";
 import type { SettingsDiagnostics } from "../../lib/settingsDiagnostics";
@@ -42,6 +41,7 @@ export function OperatorCockpit({
   onOpenRecovery,
   onOpenControlQueue,
   onOpenAgentConversation,
+  onApproveHandoff,
   readiness,
 }: {
   defaultDetailsOpen?: boolean;
@@ -52,6 +52,7 @@ export function OperatorCockpit({
   onOpenRecovery?: () => void;
   onOpenControlQueue?: () => void;
   onOpenAgentConversation?: (agentId: string) => void;
+  onApproveHandoff?: (handoffId: string) => void;
   readiness?: {
     diagnostics: SettingsDiagnostics;
     maturity: OrchestrationMaturityReport;
@@ -66,6 +67,10 @@ export function OperatorCockpit({
   const riskyApprovalCount = snapshot.approvals.filter((approval) => approval.payloadBindingStatus !== "bound").length;
   const workingCount = snapshot.fleet.filter((worker) => worker.status === "working").length;
   const criticalApprovalCount = snapshot.approvals.filter((approval) => approval.securityRisk === "high").length;
+  const actionableHandoffs = snapshot.handoffs.filter((handoff) =>
+    handoff.id && handoff.approvalState === "required" && handoff.targetSurface === "execution_slot"
+  );
+  const primaryActionableHandoff = actionableHandoffs[0];
   const totalSignals =
     blockedCount +
     riskyApprovalCount +
@@ -131,8 +136,6 @@ export function OperatorCockpit({
                   <RefreshCw className="h-3 w-3" />
                   마지막 동기화: {formatClock(snapshot.timestamp)}
                 </span>
-                <span className="text-zinc-700">/</span>
-                <span>스냅샷 {snapshot.id}</span>
               </div>
             </div>
           </div>
@@ -203,8 +206,8 @@ export function OperatorCockpit({
             <NextActionStrip actions={readiness.nextActions} onActivate={handleNextAction} />
           ) : null}
 
-          {readiness?.workTraceItems?.length ? (
-            <RecentReceiptStrip items={readiness.workTraceItems} />
+          {primaryActionableHandoff && onApproveHandoff ? (
+            <PendingHandoffStrip handoff={primaryActionableHandoff} onApprove={onApproveHandoff} />
           ) : null}
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
@@ -253,7 +256,7 @@ export function OperatorCockpit({
                     </div>
                   ) : null}
                   <div className="space-y-4 lg:col-span-5">
-                    <HandoffCard handoffs={snapshot.handoffs} />
+                    <HandoffCard handoffs={snapshot.handoffs} onApproveHandoff={onApproveHandoff} />
                     <MemoryRecallCard memory={snapshot.memory} onOpen={onOpenMemory} />
                   </div>
                   <div className="space-y-4 lg:col-span-4">
@@ -273,77 +276,44 @@ export function OperatorCockpit({
   );
 }
 
-function RecentReceiptStrip({ items }: { items: WorkTraceSearchItem[] }) {
-  const recentItems = items.slice(0, 3);
-  const unsafeCount = items.filter((item) => !item.searchable).length;
-  if (recentItems.length === 0) return null;
+function PendingHandoffStrip({
+  handoff,
+  onApprove,
+}: {
+  handoff: OperatorCockpitHandoff;
+  onApprove: (handoffId: string) => void;
+}) {
+  if (!handoff.id) return null;
 
   return (
     <section
-      aria-label="최근 완료 기록"
-      className={`rounded-lg border px-3 py-3 backdrop-blur-xl ${
-        unsafeCount > 0
-          ? "border-amber-500/25 bg-amber-950/15"
-          : "border-cyan-500/20 bg-zinc-900/40"
-      }`}
+      aria-label="실행 슬롯 인계 승인"
+      className="rounded-lg border border-cyan-400/25 bg-cyan-400/[0.06] px-3 py-3 shadow-[0_0_28px_rgba(6,182,212,0.08)] backdrop-blur-xl"
     >
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-cyan-400/15 bg-cyan-400/10 text-cyan-200">
-            <FileText className="h-3.5 w-3.5" />
-          </span>
-          <div className="min-w-0">
-            <h2 className="truncate text-xs font-semibold text-zinc-100">최근 완료 기록</h2>
-            <p className="truncate text-[11px] text-zinc-500">
-              공개 요약 {items.filter((item) => item.searchable).length}/{items.length}건
-              {unsafeCount > 0 ? ` · 점검 ${unsafeCount}건` : " · 마스킹 통과"}
-            </p>
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <div className="min-w-0">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-cyan-200/80">
+              <Handshake className="h-3 w-3" />
+              실행 슬롯 대기
+            </span>
+            <Badge color="blue" size="xs">
+              {handoff.payloadRef?.startsWith("coding_packet://") ? "코딩 패킷" : "인계"}
+            </Badge>
           </div>
+          <p className="truncate text-sm font-medium text-zinc-100">{handoff.nextAction}</p>
         </div>
-        <a
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 text-[11px] font-semibold text-cyan-100 transition-colors hover:border-cyan-300/40 hover:bg-cyan-400/15"
-          href="https://github.com/robin-main-hub/ai-orchestrator-lab/issues/251"
-          rel="noreferrer"
-          target="_blank"
+        <button
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-100 transition-colors hover:border-cyan-200/45 hover:bg-cyan-400/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50"
+          onClick={() => onApprove(handoff.id as string)}
+          type="button"
         >
-          GitHub #251
-          <ExternalLink className="h-3 w-3" />
-        </a>
-      </div>
-      <div className="grid gap-2 lg:grid-cols-3">
-        {recentItems.map((item) => (
-          <div
-            className="min-w-0 rounded-md border border-white/10 bg-black/20 px-2.5 py-2"
-            key={`${item.kind}:${item.id}`}
-          >
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <span className="rounded-full border border-white/10 bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-semibold text-zinc-400">
-                {receiptKindLabel(item.kind)}
-              </span>
-              <span
-                className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${
-                  item.searchable
-                    ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
-                    : "border-amber-400/25 bg-amber-400/10 text-amber-200"
-                }`}
-              >
-                {item.safetyLabel}
-              </span>
-            </div>
-            <p className="truncate text-xs font-medium text-zinc-200">{item.title}</p>
-          </div>
-        ))}
+          <CheckSquare className="h-3.5 w-3.5" />
+          실행 슬롯 인계 승인
+        </button>
       </div>
     </section>
   );
-}
-
-function receiptKindLabel(kind: WorkTraceSearchItem["kind"]) {
-  if (kind === "conversation") return "대화";
-  if (kind === "debate") return "토론";
-  if (kind === "tmux") return "터미널";
-  if (kind === "approval") return "승인";
-  return "기억";
 }
 
 function NextActionStrip({
