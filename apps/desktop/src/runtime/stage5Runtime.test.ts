@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import type { Stage4AgentRun } from "./stage4Runtime";
 import { createStage5DgxBridge, mergeDgxRuntimeSnapshot, DgxConnectionStateMachine } from "./stage5Runtime";
@@ -77,7 +77,10 @@ describe("stage5 dgx bridge", () => {
     });
 
     expect(bridge.heartbeat.status).toBe("unreachable");
+    expect(bridge.heartbeat.message).toBe("DGX에 닿지 않아 데스크톱 로컬 대체 경로를 사용합니다.");
     expect(bridge.response.status).toBe("blocked");
+    expect(bridge.response.message).toBe("DGX 원격 워크스페이스 실행 전 운영자 승인이 필요합니다.");
+    expect(bridge.request.commandPreview).toBe("run_1 실행 · 검증 통과 · 승인 1건");
     expect(bridge.localFallbackEnabled).toBe(true);
   });
 
@@ -96,6 +99,7 @@ describe("stage5 dgx bridge", () => {
     });
 
     expect(bridge.response.status).toBe("queued");
+    expect(bridge.response.message).toBe("DGX 원격 실행 대기열에 등록했습니다.");
     expect(bridge.localFallbackEnabled).toBe(false);
   });
 
@@ -137,6 +141,10 @@ describe("stage5 dgx bridge", () => {
 });
 
 describe("DgxConnectionStateMachine", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   class MockWebSocket {
     static instances: MockWebSocket[] = [];
     url: string;
@@ -236,8 +244,18 @@ describe("DgxConnectionStateMachine", () => {
 
     mockWs.triggerError();
     expect(fsm.getState()).toBe("degraded");
+    expect(fsm.getLastError()).toBe("WebSocket 오류 이벤트를 받았습니다.");
 
     fsm.disconnect();
   });
-});
 
+  it("reports a Korean error when no WebSocket implementation is available", () => {
+    vi.stubGlobal("WebSocket", undefined);
+    const fsm = new DgxConnectionStateMachine("ws://localhost:8080");
+
+    fsm.connect();
+
+    expect(fsm.getState()).toBe("offline");
+    expect(fsm.getLastError()).toBe("WebSocket 구현을 찾지 못했습니다.");
+  });
+});
