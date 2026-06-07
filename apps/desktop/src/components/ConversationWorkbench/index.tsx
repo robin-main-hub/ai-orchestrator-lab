@@ -22,6 +22,7 @@ import {
   agentSecondaryDisplayLabel,
 } from "../../lib/agentDisplay";
 import { createAgentChatContinuitySummary } from "../../lib/agentChatContinuity";
+import { createAgentChannelHeaderMemoryLabel } from "../../lib/agentChannelStatus";
 import { getAgentToolBadgeLabels, getAgentToolProfileSummary } from "../../lib/agentToolProfiles";
 import { getConversationWorkbenchVisibility } from "../../lib/conversationWorkbenchVisibility";
 import type {
@@ -171,6 +172,7 @@ export function ConversationWorkbench({
   const selectedAgentSubtitle = selectedAgent ? agentSecondaryDisplayLabel(selectedAgent) : "대기";
   const toolLabels = selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role).slice(0, 3) : [];
   const toolProfileSummary = selectedAgent ? getAgentToolProfileSummary(selectedAgent.role) : undefined;
+  const headerMemoryLabel = createAgentChannelHeaderMemoryLabel(memoryScope);
 
   return (
     <section className="conversation-workbench flex h-full flex-col bg-zinc-950">
@@ -255,7 +257,7 @@ export function ConversationWorkbench({
           <span>이전 대화 이어받음</span>
           {controlQueueContinuity?.hasItems ? <span>· {controlQueueContinuity.label}</span> : null}
           {agentToolRuntimeLabel ? <span>· {agentToolRuntimeLabel}</span> : null}
-          {memoryScope ? <span>· {memoryScope.namespace}</span> : null}
+          {headerMemoryLabel ? <span>· {headerMemoryLabel}</span> : null}
         </div>
 
         <div className="flex shrink-0 items-center gap-1">

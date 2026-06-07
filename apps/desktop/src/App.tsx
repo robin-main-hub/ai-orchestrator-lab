@@ -139,10 +139,7 @@ import {
 } from "./lib/appConstants";
 import { getConversationRailLayout } from "./lib/conversationRailLayout";
 import { getConversationShellVisibility, isFocusedV0Surface } from "./lib/conversationShellVisibility";
-import {
-  createConversationMessagePublicWorkTrace,
-  createTerminalBlockPublicWorkTrace,
-} from "./lib/publicWorkTrace";
+import { createCockpitWorkTraceSources } from "./lib/cockpitWorkTraceSources";
 import { createWorkTraceSearchIndex } from "./lib/workTraceSearch";
 import { deriveDebateDecisionReadiness } from "./lib/debateDecisionReadiness";
 import { deriveTmuxRecoveryPlan } from "./lib/tmuxRecoveryPlan";
@@ -3350,22 +3347,13 @@ export function App() {
       paneState: firstPaneStatus,
       timelineBlocks: tmuxBlocks,
     });
-    const conversationTraceSources = conversationMessages
-      .filter((message) => message.role === "assistant")
-      .slice(-12)
-      .map((message) => ({
-        id: message.id,
-        kind: "conversation" as const,
-        title: "에이전트 대화 공개 영수증",
-        trace: createConversationMessagePublicWorkTrace(message),
-      }));
-    const tmuxTraceSources = tmuxBlocks.slice(-12).map((block) => ({
-      id: block.id,
-      kind: "tmux" as const,
-      title: block.title,
-      trace: createTerminalBlockPublicWorkTrace(block),
-    }));
-    const workTraceIndex = createWorkTraceSearchIndex([...conversationTraceSources, ...tmuxTraceSources]);
+    const workTraceIndex = createWorkTraceSearchIndex(
+      createCockpitWorkTraceSources({
+        conversationMessages,
+        debateSession,
+        tmuxBlocks,
+      }),
+    );
     const activeProviderCount = providerProfiles.filter((provider) => provider.enabled).length;
     const providerSmokeReadyCount = providerRoutingConsoleItems.filter((item) =>
       item.readinessTone === "success" || item.readinessTone === "warning"
@@ -3463,6 +3451,7 @@ export function App() {
         snapshot: cockpitSnapshot,
       }),
       smokePlan,
+      workTraceItems: workTraceIndex,
     };
   }, [
     adapterStatus,
