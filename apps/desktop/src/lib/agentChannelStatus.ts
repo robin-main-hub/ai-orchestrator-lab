@@ -85,7 +85,7 @@ export function createAgentChannelDetailChips({
     chips.push({
       label: "기억 범위",
       tone: "ready",
-      value: sanitizeChannelValue(`전용 기억 · ${shortSessionLabel(memoryScope.sessionId)}`),
+      value: sanitizeChannelValue(`${memoryScope.roomLabel ?? "전용 기억"} · ${shortSessionLabel(memoryScope.sessionId)}`),
     });
     chips.push({
       label: "기억 추적",
@@ -114,7 +114,7 @@ export function createAgentChannelDetailChips({
 
 export function createAgentChannelHeaderMemoryLabel(memoryScope?: AgentChannelMemoryScope): string | undefined {
   if (!memoryScope) return undefined;
-  return sanitizeChannelValue(`기억 ${shortSessionLabel(memoryScope.sessionId)}`);
+  return sanitizeChannelValue(`${memoryScope.roomLabel ?? "전용 기억"} 기억`);
 }
 
 function sanitizeChannelValue(value: string): string {

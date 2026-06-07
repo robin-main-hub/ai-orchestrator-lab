@@ -14,6 +14,8 @@ describe("AgentMemoryContinuityPanel", () => {
           namespace: "agent:agent_orchestrator/session:session_desktop_001/provider:provider_mimo_token_openai",
           providerProfileId: "provider_mimo_token_openai",
           recallTraceId: "memory_trace_abc123",
+          roomId: "room_session_desktop_001_agent_orchestrator",
+          roomLabel: "에이전트 전용 방",
           sessionId: "session_desktop_001",
         }}
         messageCount={12}
@@ -30,7 +32,7 @@ describe("AgentMemoryContinuityPanel", () => {
     expect(html).toContain("12개 대화 단서");
     expect(html).toContain("SOUL 적용");
     expect(html).toContain("AGENTS 적용");
-    expect(html).toContain("이 대화방 기억만 사용");
+    expect(html).toContain("에이전트 전용 방 기억 사용");
     expect(html).toContain("조회 흔적 남길 준비됨");
     expect(html).toContain("도구: 작업 대기열, 승인 확인");
     expect(html).toContain("작업 대기열, 승인 확인 참고");
