@@ -31,6 +31,7 @@ import { PublicWorkTracePanel } from "../PublicWorkTracePanel";
 import { createConversationMessagePublicWorkTrace } from "../../lib/publicWorkTrace";
 import { agentInitialsForDisplay, agentPrimaryDisplayName } from "../../lib/agentDisplay";
 import type { AgentThinkingStep } from "../../lib/agentThinkingIndicator";
+import { compactPublicText } from "../../lib/publicRedaction";
 
 export type DelegationPreviewItem = {
   id: string;
@@ -133,6 +134,41 @@ export function shouldShowAssistantPendingBubble(
 
 export function assistantPendingLabel(activity?: AgentActivityStatus) {
   return activity === "responding" ? "답변을 정리하고 있어요" : "생각을 정리하고 있어요";
+}
+
+export type AssistantMessageStatusSummary = {
+  detail: string;
+  label: string;
+  variant: StatusBadgeVariant;
+};
+
+export function resolveAssistantMessageStatusSummary(
+  message: ConversationMessage,
+): AssistantMessageStatusSummary | undefined {
+  if (message.role !== "assistant") return undefined;
+  const metadata = message.metadata ?? {};
+  if (metadata.requiresServerApproval === true) {
+    return {
+      detail: "승인 후 같은 요청을 이어 붙일 수 있습니다.",
+      label: "승인 필요",
+      variant: "warning",
+    };
+  }
+  if (typeof metadata.error === "string" && metadata.error.trim()) {
+    return {
+      detail: compactPublicText(metadata.error, 96),
+      label: "호출 실패",
+      variant: "danger",
+    };
+  }
+  if (metadata.realProviderCall === true) {
+    return {
+      detail: "실제 Provider 응답이 기록되었습니다.",
+      label: "실제 호출",
+      variant: "success",
+    };
+  }
+  return undefined;
 }
 
 function AssistantPendingBubble({
@@ -245,6 +281,7 @@ function MessageBubble({
   const attachments = getMessageAttachments(message);
   const label = messageLabel(message, selectedAgent, agents);
   const publicWorkTrace = createConversationMessagePublicWorkTrace(message);
+  const assistantStatusSummary = resolveAssistantMessageStatusSummary(message);
   const time = new Date(message.createdAt ?? Date.now()).toLocaleTimeString(
     "ko-KR",
     { hour: "2-digit", minute: "2-digit" },
@@ -314,6 +351,14 @@ function MessageBubble({
           </p>
           {attachments.length > 0 ? (
             <MessageAttachments attachments={attachments} />
+          ) : null}
+          {assistantStatusSummary ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-2.5 py-2">
+              <StatusBadge variant={assistantStatusSummary.variant}>{assistantStatusSummary.label}</StatusBadge>
+              <span className="text-[10px] leading-relaxed text-zinc-400">
+                {assistantStatusSummary.detail}
+              </span>
+            </div>
           ) : null}
           <PublicWorkTracePanel trace={publicWorkTrace} />
         </div>
