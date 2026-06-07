@@ -179,13 +179,14 @@ import { createMemoryGovernanceSummary } from "./lib/memoryGovernance";
 import { createProviderRoutingConsoleItems } from "./lib/providerRoutingConsole";
 import {
   agentRoleLabel,
-  classifyDraftAttachment,
   createDefaultPersonaSettings,
   createDraftAttachment,
+  getModelInputModalities,
   createInitialAgentVisualSettings,
   modelSupportsAnyAttachment,
   modelSupportsAttachmentKind,
 } from "./lib/helpers";
+import { createAttachmentProcessingPlan } from "./lib/attachmentProcessing";
 import { statusTone } from "./lib/uiLabels";
 import {
   createCockpitLocalHealthIndicators,
@@ -986,17 +987,23 @@ export function App() {
     }
 
     const incomingFiles = Array.from(fileList);
-    const supportedFiles = incomingFiles.filter((file) =>
-      modelSupportsAttachmentKind(selectedModel, classifyDraftAttachment(file)),
-    );
-    const remainingSlots = Math.max(0, maxDraftAttachments - draftAttachments.length);
-    const nextAttachments = supportedFiles.slice(0, remainingSlots).map(createDraftAttachment);
+    const processingPlans = createAttachmentProcessingPlan({
+      currentAttachmentCount: draftAttachments.length,
+      files: incomingFiles,
+      maxAttachmentCount: maxDraftAttachments,
+      modelModalities: getModelInputModalities(selectedModel),
+    });
+    const nextAttachments = incomingFiles
+      .filter((_, index) => processingPlans[index]?.status === "accepted")
+      .map(createDraftAttachment);
+    const rejectedPlans = processingPlans.filter((plan) => plan.status === "rejected");
 
     if (nextAttachments.length === 0) {
       appendEvent("conversation.attachment.blocked", {
         selectedModelId: selectedModel.id,
-        reason: remainingSlots === 0 ? "attachment limit reached" : "file kind is not supported by selected model",
+        reason: rejectedPlans[0]?.reason ?? "file kind is not supported by selected model",
         attemptedCount: incomingFiles.length,
+        processingPlans,
         attachmentStorage: "metadata_only",
       });
       return;
@@ -1009,7 +1016,13 @@ export function App() {
       maxAttachmentCount: maxDraftAttachments,
       attachments: nextAttachments,
       attachmentStorage: "metadata_only",
-      blockedCount: incomingFiles.length - nextAttachments.length,
+      blockedCount: rejectedPlans.length,
+      blockedReasons: rejectedPlans.map((plan) => ({
+        name: plan.name,
+        kind: plan.kind,
+        reason: plan.reason,
+      })),
+      processingPlans,
       redaction: "metadata_only",
     });
   }
