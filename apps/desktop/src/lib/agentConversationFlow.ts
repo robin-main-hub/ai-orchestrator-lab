@@ -4,6 +4,8 @@ import {
   type AgentChannelMemoryScope,
 } from "./agentConversationChannels";
 import { createAgentToolRuntimeSummary, getAgentToolBadgeLabels, getAgentToolProfile } from "./agentToolProfiles";
+import { agentRoleLabel, formatModelDisplayName, providerDisplayLabel } from "./helpers";
+import { resolveOperatorWorkerDisplay } from "./operatorWorkerDisplay";
 
 export type AgentConversationFlowTone = "ready" | "manual" | "error";
 
@@ -45,21 +47,20 @@ export function createAgentConversationFlowCards({
   providerProfileId,
 }: AgentConversationFlowInput): AgentConversationFlowCard[] {
   const toolProfile = getAgentToolProfile(agent.role);
-  const providerId = providerProfileId ?? memoryScope?.providerProfileId ?? "공급자 미지정";
-  const scopeLabel = memoryScope
-    ? `에이전트 ${memoryScope.agentId} / 세션 ${memoryScope.sessionId}`
-    : `에이전트 ${agent.id} / 수동 세션`;
+  const agentDisplay = resolveOperatorWorkerDisplay({ role: agent.role, workerId: agent.id });
+  const providerLabel = createProviderConnectionLabel(providerProfileId ?? memoryScope?.providerProfileId);
+  const scopeLabel = memoryScope ? "이 대화방 전용 기억 범위" : "수동 기억 범위";
   const recallQuery = memoryScope ? createAgentChannelRecallQuery(memoryScope, `${agent.name} ${agent.role} conversation`) : undefined;
 
   return [
     {
       id: "channel",
       label: "개인 채널",
-      value: `${agent.name} · ${agent.id}`,
+      value: `${agentDisplay.displayName} 전용 대화방`,
       details: [
-        `역할: ${agent.role}`,
-        `공급자: ${providerId}`,
-        `모델: ${modelId ?? "모델 미지정"}`,
+        `맡은 자리: ${agentDisplay.roleLabel || agentRoleLabel(agent.role)}`,
+        `모델 연결: ${providerLabel}`,
+        `모델: ${formatModelDisplayName(modelId)}`,
       ],
       tone: "ready",
     },
@@ -72,7 +73,7 @@ export function createAgentConversationFlowCards({
         `${memoryRecordCount}개 기억 조회 후보`,
         recallQuery ? "대화 맥락 기반 기억 조회 준비" : "수동 기억 조회 대기",
         "기억 원문은 채팅 화면에 직접 노출하지 않음",
-        "신뢰 공급자가 아니면 장기 기억 자동 주입은 수동 확인",
+        "신뢰된 연결이 아니면 장기 기억 자동 주입은 수동 확인",
       ],
       tone: createMemoryTone(adapterStatus),
     },
@@ -99,6 +100,11 @@ export function createAgentConversationFlowCards({
       tone: "manual",
     },
   ];
+}
+
+function createProviderConnectionLabel(providerProfileId?: string) {
+  if (!providerProfileId) return "모델 연결 대기";
+  return providerDisplayLabel(providerProfileId.replace(/^provider[_-]?/i, "").replace(/_/g, " "));
 }
 
 function createToolBoundaryDetail(tools: string[]) {

@@ -33,6 +33,7 @@ import { resolveScopedMemoryInspector } from "../lib/scopedMemoryInspector";
 import {
   createMemoryCuratorPersistencePlan,
   mergeMemoryRecordsWithCuratorLedger,
+  updateMemoryCuratorLedgerRecord,
   writeMemoryCuratorCandidate,
   type MemoryCuratorPersistencePlan,
 } from "../lib/memoryCuratorRuntime";
@@ -326,17 +327,53 @@ export function useMemoryController({
   }
 
   function persistMemoryCuratorPlan(plan: MemoryCuratorPersistencePlan) {
+    const updatedAt = new Date().toISOString();
     if (plan.activateRecordIds.length > 0) {
+      for (const recordId of plan.activateRecordIds) {
+        updateMemoryCuratorLedgerRecord({
+          candidateStatus: "approved",
+          recordId,
+          recordPatch: {
+            activationState: "active",
+            lastAccessedAt: updatedAt,
+            updatedAt,
+          },
+          scopeKey: memoryScopeKeyRef.current,
+          updatedAt,
+        });
+      }
       void memoryApi.activateMemories(plan.activateRecordIds).catch((error: unknown) => {
         handleMemoryMutationError("activate", plan.activateRecordIds, error);
       });
     }
     for (const recordId of plan.forgetRecordIds) {
+      updateMemoryCuratorLedgerRecord({
+        candidateStatus: "rejected",
+        recordId,
+        recordPatch: {
+          activationState: "inactive",
+          tombstonedAt: updatedAt,
+        },
+        scopeKey: memoryScopeKeyRef.current,
+        updatedAt,
+      });
       void memoryApi.forget(recordId).catch((error: unknown) => {
         handleMemoryMutationError("forget", [recordId], error);
       });
     }
     if (plan.quarantineRecordIds.length > 0) {
+      for (const recordId of plan.quarantineRecordIds) {
+        updateMemoryCuratorLedgerRecord({
+          candidateStatus: "rejected",
+          recordId,
+          recordPatch: {
+            activationState: "quarantined",
+            updatedAt,
+          },
+          scopeKey: memoryScopeKeyRef.current,
+          updatedAt,
+        });
+      }
       appendEvent("memory.quarantine.requested", {
         recordIds: plan.quarantineRecordIds,
         policy: "reflection_worker",
@@ -436,7 +473,20 @@ export function useMemoryController({
   }
 
   function handlePinMemory(recordId: string) {
-    setMemoryRecords((records) => pinMemoryRecord(records, recordId));
+    const updatedAt = new Date().toISOString();
+    updateMemoryCuratorLedgerRecord({
+      candidateStatus: "approved",
+      recordId,
+      recordPatch: {
+        activationState: "active",
+        lastAccessedAt: updatedAt,
+        pinned: true,
+        updatedAt,
+      },
+      scopeKey: memoryScopeKeyRef.current,
+      updatedAt,
+    });
+    setMemoryRecords((records) => pinMemoryRecord(records, recordId, updatedAt));
     appendEvent("memory.pin.updated", {
       recordId,
       pinned: true,
@@ -447,7 +497,19 @@ export function useMemoryController({
   }
 
   function handleActivateMemory(recordId: string) {
-    setMemoryRecords((records) => activateMemoryRecord(records, recordId));
+    const updatedAt = new Date().toISOString();
+    updateMemoryCuratorLedgerRecord({
+      candidateStatus: "approved",
+      recordId,
+      recordPatch: {
+        activationState: "active",
+        lastAccessedAt: updatedAt,
+        updatedAt,
+      },
+      scopeKey: memoryScopeKeyRef.current,
+      updatedAt,
+    });
+    setMemoryRecords((records) => activateMemoryRecord(records, recordId, updatedAt));
     appendEvent("memory.activation.updated", {
       recordId,
       activationState: "active",
@@ -458,7 +520,18 @@ export function useMemoryController({
   }
 
   function handleForgetMemory(recordId: string) {
-    setMemoryRecords((records) => forgetMemoryRecord(records, recordId));
+    const tombstonedAt = new Date().toISOString();
+    updateMemoryCuratorLedgerRecord({
+      candidateStatus: "rejected",
+      recordId,
+      recordPatch: {
+        activationState: "inactive",
+        tombstonedAt,
+      },
+      scopeKey: memoryScopeKeyRef.current,
+      updatedAt: tombstonedAt,
+    });
+    setMemoryRecords((records) => forgetMemoryRecord(records, recordId, tombstonedAt));
     appendEvent("memory.forget.requested", {
       recordId,
       policy: "tombstone_projection",

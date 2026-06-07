@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
 import { modelWindowSize } from "../lib/appConstants";
-import { providerDisplayLabel } from "../lib/helpers";
+import { formatModelDisplayName, providerDisplayLabel } from "../lib/helpers";
 import {
   agentPrimaryDisplayName,
   agentSecondaryDisplayLabel,
@@ -325,7 +325,7 @@ function AgentCard({
   );
   const activeModel = providerModels.find((model) => model.id === agent.modelId);
   const providerLabel = activeProvider ? providerDisplayLabel(activeProvider.name) : "공급자 미지정";
-  const modelLabel = activeModel?.name ?? agent.modelId ?? "모델 연결 대기";
+  const modelLabel = formatModelDisplayName(activeModel?.name ?? agent.modelId);
   const primaryDisplayName = agentPrimaryDisplayName(agent);
   const secondaryDisplayLabel = agentSecondaryDisplayLabel(agent);
   const toolProfileSummary = getAgentToolProfileSummary(agent.role);

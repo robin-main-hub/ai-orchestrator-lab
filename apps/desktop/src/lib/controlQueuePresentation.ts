@@ -66,7 +66,7 @@ const actionLabels: Partial<Record<PermissionAction, string>> = {
   provider_completion: "모델 호출",
   quote_send: "견적 발송",
   remote_workspace: "원격 작업공간",
-  secret_view: "시크릿 조회",
+  secret_view: "비밀값 조회",
   terminal_run: "터미널 실행",
   unknown_external_effect: "알 수 없는 외부 효과",
 };
@@ -169,6 +169,11 @@ export function sanitizeControlQueueText(value: string) {
     .replaceAll("[redacted:url]", "[url]")
     .replaceAll("Bearer [redacted]", "Bearer [token]")
     .replaceAll("[redacted:path]", "[local-path]")
-    .replaceAll("[redacted]", "[secret]")
+    .replaceAll("[redacted]", "[비밀값]")
+    .replace(/sent to \[local-path\] with \[비밀값\]/gi, "로컬 경로 전송 · 비밀값 마스킹됨")
+    .replace(
+      /tmux remote command needs approval before using Bearer \[token\]/gi,
+      "터미널 원격 명령은 토큰 사용 전 승인이 필요합니다",
+    )
     .replaceAll("[queue-redacted]", "[redacted]");
 }

@@ -44,15 +44,17 @@ describe("ProviderReadinessPreflight", () => {
           reason: "secretRef 연결이 필요함",
           secretAvailability: "missing",
         })}
-        selectedModelName="mimo-v2.5-pro"
+        selectedModelName="MiMo V2.5 Pro"
       />,
     );
 
     expect(html).toContain("보내기 전 확인 필요");
     expect(html).toContain("MiMo");
-    expect(html).toContain("mimo-v2.5-pro");
+    expect(html).toContain("MiMo V2.5 Pro");
     expect(html).toContain("비밀값 참조 연결이 필요함");
     expect(html).toContain("설정 또는 승인 상태를 먼저 확인");
+    expect(html).toContain("모델 연결");
+    expect(html).not.toContain("공급자");
   });
 
   it("승인 후 재시도 대기 상태를 명확히 표시한다", () => {
@@ -66,7 +68,7 @@ describe("ProviderReadinessPreflight", () => {
           reason: "원격 secret 접근 승인 필요",
           warnings: ["network_access", "secret_access"],
         })}
-        selectedModelName="claude-opus-4-8"
+        selectedModelName="Claude Opus 4.8"
       />,
     );
 
@@ -78,5 +80,6 @@ describe("ProviderReadinessPreflight", () => {
     expect(html).not.toContain("network_access");
     expect(html).not.toContain("secret_access");
     expect(html).not.toContain("Provider 실행 전 점검");
+    expect(html).not.toContain("공급자");
   });
 });
