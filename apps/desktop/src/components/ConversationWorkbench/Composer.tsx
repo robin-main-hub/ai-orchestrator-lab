@@ -27,6 +27,7 @@ export function Composer({
   onDraftMessageChange,
   onRemoveDraftAttachment,
   onSendMessage,
+  promptSuggestions,
   selectedAgent,
   selectedModel,
   showDelegationChips,
@@ -42,6 +43,7 @@ export function Composer({
   onDraftMessageChange: (value: string) => void;
   onRemoveDraftAttachment: (attachmentId: string) => void;
   onSendMessage: () => void;
+  promptSuggestions?: string[];
   selectedAgent?: WorkbenchAgent;
   selectedModel?: ModelDescriptor;
   showDelegationChips: boolean;
@@ -59,6 +61,25 @@ export function Composer({
           <span className="text-xs text-cyan-300">
             도구 준비됨{toolLabels.length > 0 ? ` · ${toolLabels.join(", ")}` : ""}
           </span>
+        </div>
+      ) : null}
+
+      {!draftMessage.trim() && promptSuggestions?.length ? (
+        <div className="border-b border-white/10 px-4 py-2">
+          <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-2">
+            <span className="text-[11px] font-medium text-zinc-500">바로 물어보기</span>
+            {promptSuggestions.map((suggestion) => (
+              <button
+                className="max-w-full truncate rounded-full border border-cyan-300/15 bg-cyan-400/[0.06] px-2.5 py-1 text-left text-[11px] text-cyan-100 transition hover:border-cyan-300/35 hover:bg-cyan-400/10"
+                key={suggestion}
+                onClick={() => onDraftMessageChange(suggestion)}
+                title={suggestion}
+                type="button"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
 

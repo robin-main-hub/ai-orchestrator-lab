@@ -3,6 +3,7 @@ import {
   createAgentChannelRecallQuery,
   type AgentChannelMemoryScope,
 } from "./agentConversationChannels";
+import { agentPrimaryDisplayName } from "./agentDisplay";
 import { createAgentToolRuntimeSummary, getAgentToolBadgeLabels, getAgentToolProfile } from "./agentToolProfiles";
 import { agentRoleLabel, formatModelDisplayName, providerDisplayLabel } from "./helpers";
 import { resolveOperatorWorkerDisplay } from "./operatorWorkerDisplay";
@@ -19,7 +20,7 @@ export type AgentConversationFlowCard = {
 };
 
 export type AgentConversationFlowInput = {
-  agent: Pick<AgentProfile, "id" | "name" | "role">;
+  agent: Pick<AgentProfile, "id" | "name" | "personaName" | "role">;
   adapterStatus: "loading" | "ready" | "error";
   memoryRecordCount: number;
   memoryScope?: AgentChannelMemoryScope;
@@ -53,17 +54,18 @@ export function createAgentConversationFlowCards({
 }: AgentConversationFlowInput): AgentConversationFlowCard[] {
   const toolProfile = getAgentToolProfile(agent.role);
   const agentDisplay = resolveOperatorWorkerDisplay({ role: agent.role, workerId: agent.id });
+  const displayName = agentPrimaryDisplayName(agent);
   const providerConnection = createProviderConnectionDetail(providerName, providerProfileId ?? memoryScope?.providerProfileId);
   const modelLabel = formatModelDisplayName(modelName ?? modelId);
   const roomLabel = memoryScope?.roomLabel ?? "이 대화방";
   const scopeLabel = memoryScope ? `${roomLabel} 기억만 참고` : "수동 기억 확인 대기";
-  const recallQuery = memoryScope ? createAgentChannelRecallQuery(memoryScope, `${agent.name} ${agent.role} conversation`) : undefined;
+  const recallQuery = memoryScope ? createAgentChannelRecallQuery(memoryScope, `${displayName} ${agent.role} conversation`) : undefined;
 
   return [
     {
       id: "channel",
       label: "동료 채널",
-      value: `${agentDisplay.displayName}와 1:1로 이어짐`,
+      value: `${displayName}와 1:1로 이어짐`,
       details: [
         `맡은 자리: ${agentDisplay.roleLabel || agentRoleLabel(agent.role)}`,
         memoryScope?.roomLabel ?? "전용 방 준비 중",

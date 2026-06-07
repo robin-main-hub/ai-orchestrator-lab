@@ -10,6 +10,7 @@ import {
   distributeReplayedMessagesIntoChannels,
   getAgentChannelMessages,
   resolveAgentCompletionContext,
+  updateAgentChannelMessages,
 } from "./agentConversationChannels";
 import { seededAgentProfiles } from "../seeds/agents";
 
@@ -148,6 +149,30 @@ describe("agentConversationChannels", () => {
 
     expect(getAgentChannelMessages(nextChannels, "agent_orchestrator")).toHaveLength(2);
     expect(getAgentChannelMessages(nextChannels, "agent_reviewer")).toEqual([nextMessage]);
+  });
+
+  it("appends provider replay results to the original pending agent channel", () => {
+    const channels = createInitialAgentConversationChannels(agents, []);
+    const replayMessage: ConversationMessage = {
+      id: "message_agent_replay_1",
+      sessionId: "session_original",
+      role: "assistant",
+      content: "승인 후 재실행된 답변",
+      createdAt: "2026-06-05T00:00:04.000Z",
+      metadata: {
+        agentId: "agent_reviewer",
+        replayedApprovalId: "approval_provider_1",
+      },
+    };
+
+    const nextChannels = updateAgentChannelMessages(channels, "agent_reviewer", (messages) => [
+      ...messages,
+      replayMessage,
+    ]);
+
+    expect(getAgentChannelMessages(nextChannels, "agent_orchestrator")).toEqual([]);
+    expect(getAgentChannelMessages(nextChannels, "agent_reviewer")).toEqual([replayMessage]);
+    expect(getAgentChannelMessages(nextChannels, "agent_reviewer")[0]?.sessionId).toBe("session_original");
   });
 
   it("creates stable memory scopes per agent and session", () => {
