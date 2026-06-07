@@ -1,5 +1,9 @@
 import type { ConversationMessage, TerminalTimelineBlock } from "@ai-orchestrator/protocol";
 import type { Stage3DebateUtteranceView } from "../types";
+import {
+  summarizeAttachmentProcessingPlans,
+  type AttachmentProcessingPlan,
+} from "./attachmentProcessing";
 import { compactPublicText, inspectPublicText, sanitizePublicText } from "./publicRedaction";
 
 export type PublicWorkTraceTone = "neutral" | "info" | "success" | "warning" | "danger";
@@ -57,12 +61,32 @@ export type PublicTraceSafetyReport = {
 };
 
 export function createConversationMessagePublicWorkTrace(message: ConversationMessage): PublicWorkTrace {
-  if (message.role === "user") return EMPTY_TRACE;
-
   const metadata = message.metadata ?? {};
+  const attachmentProcessingPlans = readAttachmentProcessingPlans(metadata.attachmentProcessingPlans);
+  if (message.role === "user" && attachmentProcessingPlans.length === 0) return EMPTY_TRACE;
+
   const steps: PublicWorkTraceItem[] = [];
   const commands: PublicWorkTraceItem[] = [];
   const evidence: PublicWorkTraceItem[] = [];
+
+  if (attachmentProcessingPlans.length > 0) {
+    const attachmentSummary = summarizeAttachmentProcessingPlans(attachmentProcessingPlans);
+    steps.push({
+      id: "attachment-processing",
+      label: "첨부 준비",
+      tone: attachmentSummary.rejectedCount > 0 ? "warning" : "success",
+      value: sanitize(attachmentSummary.label),
+    });
+    for (const [index, plan] of attachmentProcessingPlans.entries()) {
+      if (plan.status !== "rejected") continue;
+      evidence.push({
+        id: `attachment-rejected-${index}`,
+        label: "첨부 거부",
+        tone: "warning",
+        value: sanitize(`${plan.name} · ${plan.reason ?? "지원하지 않는 첨부"}`),
+      });
+    }
+  }
 
   const route = readString(metadata.route) ?? readString(metadata.providerRoute) ?? readString(metadata.providerProfileId);
   const model = readString(metadata.modelId);
@@ -400,10 +424,13 @@ function createConversationReceipt(
     readString(metadata.route) ||
     readString(metadata.providerProfileId) ||
     readString(metadata.memoryScope) ||
-    readString(metadata.recallTraceId);
+    readString(metadata.recallTraceId) ||
+    readAttachmentProcessingPlans(metadata.attachmentProcessingPlans).length > 0;
   if (!hasTraceableWork) return undefined;
 
   const spans = [
+    readAttachmentProcessingPlans(metadata.attachmentProcessingPlans).length > 0 ? "attachment" : undefined,
+    message.role === "user" ? "message" : undefined,
     readBoolean(metadata.realProviderCall) !== undefined ? "generation" : undefined,
     readStringArray(metadata.runtimeConfigFileIds).length > 0 || readStringArray(metadata.roleToolProfileTools).length > 0
       ? "tool"
@@ -411,10 +438,9 @@ function createConversationReceipt(
     readDelegations(metadata).length > 0 ? "handoff" : undefined,
     readString(metadata.recallTraceId) || readString(metadata.memoryTraceId) ? "memory" : undefined,
   ].filter((value): value is string => Boolean(value));
-  const checkpoint = [
-    message.sessionId,
-    readString(metadata.recallTraceId) ?? readString(metadata.memoryTraceId) ?? readString(metadata.providerProfileId),
-  ].filter(Boolean).join(" · ");
+  const checkpointMarker =
+    readString(metadata.recallTraceId) ?? readString(metadata.memoryTraceId) ?? readString(metadata.providerProfileId);
+  const checkpoint = checkpointMarker ? [message.sessionId, checkpointMarker].join(" · ") : message.id;
 
   return {
     label: "에이전트 실행 영수증",
@@ -443,6 +469,8 @@ function createFallbackConversationReceipt(message: ConversationMessage): Public
 
 function spanDisplayLabel(span: string) {
   switch (span) {
+    case "message":
+      return "메시지";
     case "generation":
       return "생성";
     case "tool":
@@ -451,6 +479,8 @@ function spanDisplayLabel(span: string) {
       return "핸드오프";
     case "memory":
       return "메모리";
+    case "attachment":
+      return "첨부";
     default:
       return span;
   }
@@ -509,6 +539,42 @@ function readUsageTotalTokens(value: unknown) {
 
 function readStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
+function readAttachmentProcessingPlans(value: unknown): AttachmentProcessingPlan[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry): AttachmentProcessingPlan[] => {
+    if (!entry || typeof entry !== "object") return [];
+    const record = entry as Record<string, unknown>;
+    const kind = record.kind === "image" || record.kind === "document" ? record.kind : undefined;
+    const name = readString(record.name);
+    const processingMode =
+      record.processingMode === "vision_candidate" ||
+      record.processingMode === "document_candidate" ||
+      record.processingMode === "metadata_only"
+        ? record.processingMode
+        : undefined;
+    const size = readNumber(record.size);
+    const status = record.status === "accepted" || record.status === "rejected" ? record.status : undefined;
+    const storage =
+      record.storage === "metadata_only" ||
+      record.storage === "local_cache" ||
+      record.storage === "dgx_object_storage"
+        ? record.storage
+        : undefined;
+    if (!kind || !name || !processingMode || size === undefined || !status || !storage) return [];
+    return [
+      {
+        kind,
+        name,
+        processingMode,
+        reason: readString(record.reason),
+        size,
+        status,
+        storage,
+      },
+    ];
+  });
 }
 
 function roleDisplayLabel(role: string) {
