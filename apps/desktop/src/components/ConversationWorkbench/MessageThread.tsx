@@ -436,7 +436,7 @@ function ApprovalQueueInline({
           승인 대기
         </span>
         <span className="rounded-full border border-amber-400/20 bg-black/20 px-2 py-0.5 text-[10px] text-amber-200">
-          {queue.length} pending
+          {queue.length}건 대기
         </span>
       </div>
       <div className="space-y-2">
