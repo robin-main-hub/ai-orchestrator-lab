@@ -25,6 +25,7 @@ export type DraftAttachment = ConversationAttachment & {
 };
 export type PendingProviderRetry = {
   permissionItemId: string;
+  sessionId: string;
   providerProfileId: string;
   agentId: string;
   modelId: string;

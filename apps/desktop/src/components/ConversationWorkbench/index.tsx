@@ -15,7 +15,6 @@ import {
   attachmentAcceptForModel,
   createAgentModelRouteLabel,
   createDefaultPersonaSettings,
-  formatModelDisplayName,
   modelSupportsAnyAttachment,
 } from "../../lib/helpers";
 import {
@@ -25,6 +24,7 @@ import {
 } from "../../lib/agentDisplay";
 import { createAgentChatContinuitySummary } from "../../lib/agentChatContinuity";
 import { createAgentChannelHeaderMemoryLabel } from "../../lib/agentChannelStatus";
+import { createAgentConversationPromptSuggestions } from "../../lib/agentConversationPrompts";
 import { getAgentToolBadgeLabels, getAgentToolProfileSummary } from "../../lib/agentToolProfiles";
 import { resolveAgentThinkingIndicator } from "../../lib/agentThinkingIndicator";
 import { getConversationWorkbenchVisibility } from "../../lib/conversationWorkbenchVisibility";
@@ -45,6 +45,7 @@ import { AgentConfigDrawer } from "../AgentConfigDrawer";
 import { AgentConversationFlowPanel } from "./AgentConversationFlowPanel";
 import { AgentLiveWorkStatus } from "./AgentLiveWorkStatus";
 import { AgentMemoryContinuityPanel } from "./AgentMemoryContinuityPanel";
+import { AgentRosterSkillPicker } from "./AgentRosterSkillPicker";
 import { AgentSkillProfilePanel } from "./AgentSkillProfilePanel";
 import { ProviderReadinessPreflight } from "./ProviderReadinessPreflight";
 
@@ -69,6 +70,7 @@ export function ConversationWorkbench({
   memoryGovernanceLabel,
   memoryRecordCount,
   memoryScope,
+  messageCountByAgentId,
   messages,
   onAddDraftAttachments,
   onAdoptBranch,
@@ -117,6 +119,7 @@ export function ConversationWorkbench({
   memoryGovernanceLabel?: string;
   memoryRecordCount: number;
   memoryScope?: AgentChannelMemoryScope;
+  messageCountByAgentId?: Record<string, number>;
   messages: ConversationMessage[];
   onAddDraftAttachments: (files: FileList | null) => void;
   onAdoptBranch: () => void;
@@ -156,9 +159,10 @@ export function ConversationWorkbench({
   const attachmentLimitReached = draftAttachments.length >= maxDraftAttachments;
   const canDelegate =
     selectedAgent?.role === "companion" || selectedAgent?.role === "orchestrator";
+  const selectedAgentDisplayName = selectedAgent ? agentPrimaryDisplayName(selectedAgent) : "에이전트 선택";
   const agentChatContinuity = createAgentChatContinuitySummary({
     adapterStatus: memoryAdapterStatus,
-    agentName: selectedAgent?.name,
+    agentName: selectedAgentDisplayName,
     memoryRecordCount,
     messageCount: messages.length,
     toolLabels: selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role) : [],
@@ -179,9 +183,18 @@ export function ConversationWorkbench({
   const selectedAgentState = mapConversationAgentState(selectedAgentActivity);
   const selectedAgentThinkingIndicator = resolveAgentThinkingIndicator(selectedAgent?.id, agentActivityById);
   const selectedAgentInitials = selectedAgent ? agentInitialsForDisplay(selectedAgent) : "AI";
-  const selectedAgentDisplayName = selectedAgent ? agentPrimaryDisplayName(selectedAgent) : "에이전트 선택";
   const selectedAgentSubtitle = selectedAgent ? agentSecondaryDisplayLabel(selectedAgent) : "대기";
   const selectedAgentWorkStatusLabel = createAgentWorkStatusLabel(selectedAgentActivity, selectedAgentDisplayName);
+  const promptSuggestions = selectedAgent
+    ? createAgentConversationPromptSuggestions({
+        activity: selectedAgentActivity,
+        displayName: selectedAgentDisplayName,
+        memoryRecordCount,
+        messageCount: messages.length,
+        pendingApprovalCount: permissionSnapshot.queue.length,
+        role: selectedAgent.role,
+      })
+    : [];
   const selectedAgentModelRouteSource =
     selectedAgent?.modelId && selectedModel?.id === selectedAgent.modelId
       ? "agent"
@@ -249,26 +262,17 @@ export function ConversationWorkbench({
             <div className="border-b border-zinc-800 px-4 py-3">
               <p className="text-sm font-medium">{selectedAgentDisplayName}</p>
               <p className="text-xs text-zinc-500">
-                세션 {activeSessionId.slice(-12)} · {messages.length}개 메시지
+                전용 대화방 · {messages.length}개 메시지
               </p>
             </div>
             <div className="space-y-1 p-2">
-              <label className="block rounded-md px-3 py-2 hover:bg-zinc-800/40">
-                <span className="mb-1 block text-[10px] uppercase tracking-wider text-zinc-500">대화 상대</span>
-                <select
-                  aria-label="현재 대화 봇 선택"
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-violet-500"
-                  onChange={(event) => onSelectAgent(event.target.value)}
-                  value={selectedAgentId ?? ""}
-                >
-                  {agents.map((agent) => (
-                    <option key={agent.id} value={agent.id}>
-                      {agentPrimaryDisplayName(agent)} ·{" "}
-                      {agent.modelId ? formatModelDisplayName(agent.modelId) : "모델 연결 대기"}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <AgentRosterSkillPicker
+                agentActivityById={agentActivityById}
+                agents={agents}
+                messageCountByAgentId={messageCountByAgentId}
+                onSelectAgent={onSelectAgent}
+                selectedAgentId={selectedAgentId}
+              />
               <ConversationMetaRow
                 icon={Cpu}
                 label="대화 모델"
@@ -425,6 +429,7 @@ export function ConversationWorkbench({
         onDraftMessageChange={onDraftMessageChange}
         onRemoveDraftAttachment={onRemoveDraftAttachment}
         onSendMessage={onSendMessage}
+        promptSuggestions={promptSuggestions}
         selectedAgent={selectedAgent}
         selectedModel={selectedModel}
         showDelegationChips={workbenchVisibility.showComposerDelegationChips}

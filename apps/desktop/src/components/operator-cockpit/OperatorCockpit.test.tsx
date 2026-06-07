@@ -64,7 +64,7 @@ const workTraceItem: WorkTraceSearchItem = {
 };
 
 describe("OperatorCockpit", () => {
-  it("최근 작업 영수증을 세부 정보 밖 첫 화면 요약으로 렌더링한다", () => {
+  it("최근 작업 영수증은 첫 화면이 아니라 세부 정보 장부로만 보낸다", () => {
     const diagnostics = createSettingsDiagnostics({
       agentCount: 1,
       enabledProviderCount: 1,
@@ -93,9 +93,9 @@ describe("OperatorCockpit", () => {
       />,
     );
 
-    expect(html).toContain("최근 완료 기록");
-    expect(html).toContain("마키마 대화 기억 후보");
-    expect(html).toContain("GitHub #251");
+    expect(html).toContain("대화 기억 후보");
+    expect(html).not.toContain("최근 완료 기록");
+    expect(html).not.toContain("GitHub #251");
     expect(html).not.toContain("작업 영수증");
   });
 
@@ -209,5 +209,31 @@ describe("OperatorCockpit", () => {
 
     expect(html).toContain("공급자 대기");
     expect(html).not.toContain("provider 대기");
+  });
+
+  it("필요한 실행 슬롯 인계는 Cockpit에서 바로 승인할 수 있게 CTA를 렌더링한다", () => {
+    const html = renderToStaticMarkup(
+      <OperatorCockpit
+        onApproveHandoff={() => {}}
+        snapshot={{
+          ...snapshot,
+          handoffs: [
+            {
+              approvalState: "required",
+              evidenceRefs: [],
+              id: "handoff_packet_1",
+              missingInfoSlots: [],
+              nextAction: "코딩 패킷을 실행 슬롯으로 넘길 준비가 됐습니다.",
+              ownerAgentId: "agent_executor",
+              payloadRef: "coding_packet://session_desktop_001",
+              targetSurface: "execution_slot",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(html).toContain("실행 슬롯 인계 승인");
+    expect(html).toContain("코딩 패킷");
   });
 });

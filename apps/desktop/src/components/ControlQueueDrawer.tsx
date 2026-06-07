@@ -173,7 +173,7 @@ export function ControlQueueDrawer({
 
   return (
     <aside
-      aria-label="승인 대기열"
+      aria-label="Control Queue 작업 큐"
       aria-modal="true"
       className="fixed right-4 top-14 z-30 flex max-h-[calc(100vh-78px)] w-[min(460px,calc(100vw-32px))] flex-col rounded-lg border border-border bg-card shadow-2xl"
       ref={drawerRef}
@@ -184,16 +184,16 @@ export function ControlQueueDrawer({
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium text-foreground">승인 대기열</span>
+          <span className="text-sm font-medium text-foreground">Control Queue</span>
           <span className="text-xs text-muted-foreground">
-            {pendingItems.length}건 대기
+            {pendingItems.length}건 처리 대기
           </span>
           <kbd className="rounded border border-border bg-card/60 px-1 py-0 text-[9px] font-mono text-muted-foreground">
             ⌘⇧A
           </kbd>
         </div>
         <Button
-          aria-label="승인 대기열 닫기"
+          aria-label="Control Queue 닫기"
           className="h-6 w-6"
           onClick={onClose}
           ref={closeButtonRef}
