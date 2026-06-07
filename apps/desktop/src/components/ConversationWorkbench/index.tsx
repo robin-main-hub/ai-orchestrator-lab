@@ -22,7 +22,7 @@ import {
   agentSecondaryDisplayLabel,
 } from "../../lib/agentDisplay";
 import { createAgentChatContinuitySummary } from "../../lib/agentChatContinuity";
-import { getAgentToolBadgeLabels } from "../../lib/agentToolProfiles";
+import { getAgentToolBadgeLabels, getAgentToolProfileSummary } from "../../lib/agentToolProfiles";
 import { getConversationWorkbenchVisibility } from "../../lib/conversationWorkbenchVisibility";
 import type {
   AgentConfigFile,
@@ -170,6 +170,7 @@ export function ConversationWorkbench({
   const selectedAgentDisplayName = selectedAgent ? agentPrimaryDisplayName(selectedAgent) : "에이전트 선택";
   const selectedAgentSubtitle = selectedAgent ? agentSecondaryDisplayLabel(selectedAgent) : "대기";
   const toolLabels = selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role).slice(0, 3) : [];
+  const toolProfileSummary = selectedAgent ? getAgentToolProfileSummary(selectedAgent.role) : undefined;
 
   return (
     <section className="conversation-workbench flex h-full flex-col bg-zinc-950">
@@ -304,6 +305,18 @@ export function ConversationWorkbench({
         </div>
       </header>
 
+      {selectedAgent && toolProfileSummary ? (
+        <AgentCapabilityStrip
+          continuityDetail={agentChatContinuity.detail}
+          displayName={selectedAgentDisplayName}
+          memoryQualityLabel={agentChatContinuity.memoryQualityLabel}
+          modelLabel={selectedModel?.id ?? selectedAgent.modelId ?? "모델 연결 대기"}
+          toolBoundaryLabel={toolProfileSummary.runtime.boundaryLabel}
+          toolGroupLabel={toolProfileSummary.label}
+          toolLabels={toolLabels}
+        />
+      ) : null}
+
       <MessageThread
         agentChatContinuity={agentChatContinuity}
         messages={messages}
@@ -335,6 +348,52 @@ export function ConversationWorkbench({
         showDelegationChips={workbenchVisibility.showComposerDelegationChips}
       />
     </section>
+  );
+}
+
+function AgentCapabilityStrip({
+  continuityDetail,
+  displayName,
+  memoryQualityLabel,
+  modelLabel,
+  toolBoundaryLabel,
+  toolGroupLabel,
+  toolLabels,
+}: {
+  continuityDetail: string;
+  displayName: string;
+  memoryQualityLabel: string;
+  modelLabel: string;
+  toolBoundaryLabel: string;
+  toolGroupLabel: string;
+  toolLabels: string[];
+}) {
+  return (
+    <div className="shrink-0 border-b border-zinc-900/80 bg-zinc-950/95 px-4 py-2">
+      <div className="mx-auto flex max-w-5xl items-center gap-2 overflow-x-auto">
+        <span className="shrink-0 rounded-full border border-violet-300/20 bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-100">
+          {displayName} 전용 방
+        </span>
+        <span className="shrink-0 rounded-full border border-cyan-300/20 bg-cyan-500/10 px-2.5 py-1 text-[11px] text-cyan-100">
+          {toolGroupLabel} · {toolBoundaryLabel}
+        </span>
+        {toolLabels.map((label) => (
+          <span
+            className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-zinc-300"
+            key={label}
+          >
+            {label}
+          </span>
+        ))}
+        <span className="shrink-0 rounded-full border border-emerald-300/15 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-100">
+          {memoryQualityLabel}
+        </span>
+        <span className="min-w-40 shrink-0 truncate rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-zinc-400">
+          {modelLabel}
+        </span>
+        <span className="min-w-60 truncate text-[11px] text-zinc-600">{continuityDetail}</span>
+      </div>
+    </div>
   );
 }
 
