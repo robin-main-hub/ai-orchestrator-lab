@@ -27,6 +27,8 @@ export type AgentChannelDetailChip = {
 export type AgentChannelDetailChipInput = {
   memoryScope?: AgentChannelMemoryScope;
   modelId?: string;
+  personaAgentsMdApplied?: boolean;
+  personaSoulApplied?: boolean;
   providerProfileId?: string;
   toolLabels?: string[];
 };
@@ -62,10 +64,22 @@ function createMemoryLabel(adapterStatus: AgentChannelAdapterStatus, memoryRecor
 export function createAgentChannelDetailChips({
   memoryScope,
   modelId,
+  personaAgentsMdApplied,
+  personaSoulApplied,
   providerProfileId,
   toolLabels = [],
 }: AgentChannelDetailChipInput): AgentChannelDetailChip[] {
   const chips: AgentChannelDetailChip[] = [];
+  if (personaSoulApplied !== undefined || personaAgentsMdApplied !== undefined) {
+    chips.push({
+      label: "인격 설정",
+      tone: personaSoulApplied && personaAgentsMdApplied ? "ready" : "loading",
+      value: [
+        personaSoulApplied ? "SOUL 적용" : personaSoulApplied === false ? "SOUL 대기" : undefined,
+        personaAgentsMdApplied ? "AGENTS 적용" : personaAgentsMdApplied === false ? "AGENTS 대기" : undefined,
+      ].filter(Boolean).join(" · ") || "설정 확인 중",
+    });
+  }
   if (memoryScope) {
     chips.push({
       label: "기억 범위",

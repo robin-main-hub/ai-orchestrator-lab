@@ -173,6 +173,8 @@ export function ConversationWorkbench({
   const toolLabels = selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role).slice(0, 3) : [];
   const toolProfileSummary = selectedAgent ? getAgentToolProfileSummary(selectedAgent.role) : undefined;
   const headerMemoryLabel = createAgentChannelHeaderMemoryLabel(memoryScope);
+  const personaSoulApplied = Boolean(persona?.soulMdPath || persona?.soulSummary);
+  const personaAgentsMdApplied = Boolean(persona?.agentsMdPath || persona?.agentsInstruction);
 
   return (
     <section className="conversation-workbench flex h-full flex-col bg-zinc-950">
@@ -236,10 +238,15 @@ export function ConversationWorkbench({
                   ))}
                 </select>
               </label>
-              <ConversationMetaRow icon={Cpu} label="모델" value={`${selectedProvider ? providerDisplayLabel(selectedProvider.name) : "Provider 미지정"} · ${selectedModel?.id ?? selectedAgent?.modelId ?? "대기"}`} />
-              <ConversationMetaRow icon={Database} label="기억" value={`${memoryRecordCount}건 · ${memoryGovernanceLabel ?? memoryMode}`} />
-              <ConversationMetaRow icon={Wrench} label="도구" value={toolLabels.length > 0 ? toolLabels.join(", ") : "연결 대기"} />
-              <ConversationMetaRow icon={Sparkles} label="연속성" value={agentChatContinuity.memoryQualityLabel} />
+          <ConversationMetaRow icon={Cpu} label="모델" value={`${selectedProvider ? providerDisplayLabel(selectedProvider.name) : "Provider 미지정"} · ${selectedModel?.id ?? selectedAgent?.modelId ?? "대기"}`} />
+          <ConversationMetaRow icon={Database} label="기억" value={`${memoryRecordCount}건 · ${memoryGovernanceLabel ?? memoryMode}`} />
+          <ConversationMetaRow
+            icon={Sparkles}
+            label="인격"
+            value={`${personaSoulApplied ? "SOUL 적용" : "SOUL 대기"} · ${personaAgentsMdApplied ? "AGENTS 적용" : "AGENTS 대기"}`}
+          />
+          <ConversationMetaRow icon={Wrench} label="도구" value={toolLabels.length > 0 ? toolLabels.join(", ") : "연결 대기"} />
+          <ConversationMetaRow icon={Sparkles} label="연속성" value={agentChatContinuity.memoryQualityLabel} />
             </div>
             <div className="grid grid-cols-2 gap-2 border-t border-zinc-800 p-2">
               <Button className="h-8 text-xs" onClick={() => onOpenAgentConfig("profile")} size="sm" variant="ghost">
@@ -316,6 +323,8 @@ export function ConversationWorkbench({
           toolBoundaryLabel={toolProfileSummary.runtime.boundaryLabel}
           toolGroupLabel={toolProfileSummary.label}
           toolLabels={toolLabels}
+          personaAgentsMdApplied={personaAgentsMdApplied}
+          personaSoulApplied={personaSoulApplied}
         />
       ) : null}
 
@@ -361,6 +370,8 @@ function AgentCapabilityStrip({
   toolBoundaryLabel,
   toolGroupLabel,
   toolLabels,
+  personaAgentsMdApplied,
+  personaSoulApplied,
 }: {
   continuityDetail: string;
   displayName: string;
@@ -369,12 +380,20 @@ function AgentCapabilityStrip({
   toolBoundaryLabel: string;
   toolGroupLabel: string;
   toolLabels: string[];
+  personaAgentsMdApplied: boolean;
+  personaSoulApplied: boolean;
 }) {
   return (
     <div className="shrink-0 border-b border-zinc-900/80 bg-zinc-950/95 px-4 py-2">
       <div className="mx-auto flex max-w-5xl items-center gap-2 overflow-x-auto">
         <span className="shrink-0 rounded-full border border-violet-300/20 bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-100">
           {displayName} 전용 방
+        </span>
+        <span
+          className="shrink-0 rounded-full border border-fuchsia-300/20 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] text-fuchsia-100"
+          title={`${personaSoulApplied ? "SOUL.md 적용됨" : "SOUL.md 대기"} · ${personaAgentsMdApplied ? "AGENTS.md 적용됨" : "AGENTS.md 대기"}`}
+        >
+          {personaSoulApplied && personaAgentsMdApplied ? "SOUL/AGENTS 적용" : "인격 설정 확인"}
         </span>
         <span className="shrink-0 rounded-full border border-cyan-300/20 bg-cyan-500/10 px-2.5 py-1 text-[11px] text-cyan-100">
           {toolGroupLabel} · {toolBoundaryLabel}
