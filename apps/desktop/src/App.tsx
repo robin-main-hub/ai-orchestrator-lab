@@ -140,7 +140,7 @@ import {
 import { getConversationRailLayout } from "./lib/conversationRailLayout";
 import { getConversationShellVisibility, isFocusedV0Surface } from "./lib/conversationShellVisibility";
 import { createCockpitWorkTraceSources } from "./lib/cockpitWorkTraceSources";
-import { createWorkTraceSearchIndex } from "./lib/workTraceSearch";
+import { createWorkTraceSearchIndex, type WorkTraceSearchItem } from "./lib/workTraceSearch";
 import { deriveDebateDecisionReadiness } from "./lib/debateDecisionReadiness";
 import { deriveTmuxRecoveryPlan } from "./lib/tmuxRecoveryPlan";
 import { createSettingsDiagnostics } from "./lib/settingsDiagnostics";
@@ -1965,7 +1965,7 @@ export function App() {
     }, { sessionId: targetSessionId });
   }
 
-  function handleCreateCodingPacket() {
+  function handleCreateCodingPacket(sourceMode: CenterMode = mode) {
     const createdAt = new Date().toISOString();
 
     const {
@@ -1973,7 +1973,7 @@ export function App() {
       readinessState,
       handoff,
       workItem,
-    } = mode === "debate"
+    } = sourceMode === "debate" || sourceMode === "annex"
       ? (() => {
           const projection = createDebateCodingPacketProjection({
             contextPackTier,
@@ -2084,7 +2084,7 @@ export function App() {
       contextCount: nextPacket.context.length,
       decisionCount: nextPacket.decisions.length,
       filesToInspect: nextPacket.filesToInspect,
-      sourceMode: mode === "debate" ? "debate" : "conversation",
+      sourceMode: sourceMode === "debate" || sourceMode === "annex" ? "debate" : "conversation",
       debateReadiness: readinessState,
       executionSlotTimelineBlockId: executionSlotBlock.id,
     });
@@ -3155,6 +3155,53 @@ export function App() {
     });
   }
 
+  function handleOpenWorkTrace(item: WorkTraceSearchItem) {
+    if (item.kind === "conversation") {
+      const matchedMessage = Object.values(conversationMessagesByAgentId)
+        .flat()
+        .find((message) => message.id === item.id);
+      const agentId = matchedMessage?.metadata?.agentId;
+      if (typeof agentId === "string" && agents.some((agent) => agent.id === agentId)) {
+        setSelectedAgentId(agentId);
+      }
+      setMode("conversation");
+      return;
+    }
+
+    if (item.kind === "debate") {
+      setMode("debate");
+      return;
+    }
+
+    if (item.kind === "tmux") {
+      setMode("tmux");
+      return;
+    }
+
+    if (item.kind === "approval") {
+      setApprovalDrawerOpen(true);
+      return;
+    }
+
+    setMode("conversation");
+    setAgentConfigPanel({ open: true, tab: "injection" });
+  }
+
+  function handleAskAgentFromAnnex(ref: { id: string; source: string; title: string }) {
+    const targetAgentId = debateSession.participants[0]?.agentId;
+    if (targetAgentId && agents.some((agent) => agent.id === targetAgentId)) {
+      setSelectedAgentId(targetAgentId);
+    }
+    setDraftMessage(`Annex 근거 "${ref.title}"를 기준으로 다음 구현 판단과 필요한 조치를 이어서 설명해줘.`);
+    setMode("conversation");
+    appendEvent("debate.annex.evidence_routed_to_conversation", {
+      evidenceId: ref.id,
+      evidenceSource: ref.source,
+      targetAgentId,
+      redaction: "applied",
+    });
+  }
+
   const paletteCommands: CommandEntry[] = [
     {
       id: "switch.conversation",
@@ -3662,6 +3709,7 @@ export function App() {
   const cockpitReadiness = useMemo(() => {
     const debateReadiness = deriveDebateDecisionReadiness(debateSession);
     const tmuxBlocks = Object.values(tmuxTimelineBlocks).flat();
+    const allConversationMessages = Object.values(conversationMessagesByAgentId).flat();
     const latestTmuxBlock = tmuxBlocks.at(-1);
     const firstPaneStatus = Object.values(tmuxStatuses)[0] ?? "ready";
     const tmuxRecoveryPlan = deriveTmuxRecoveryPlan({
@@ -3673,7 +3721,7 @@ export function App() {
     const workTraceIndex = createWorkTraceSearchIndex(
       createCockpitWorkTraceSources({
         approvalItems: unifiedControlQueueSnapshot.queue,
-        conversationMessages,
+        conversationMessages: allConversationMessages,
         debateSession,
         tmuxBlocks,
       }),
@@ -3721,7 +3769,7 @@ export function App() {
       },
       controlQueue: {
         connectedLaneCount: 6,
-        pendingApprovalCount: permissionSnapshot.summary.pending,
+        pendingApprovalCount: unifiedControlQueueSnapshot.summary.pending,
         workItemProjectionCount,
       },
       debate: {
@@ -3788,7 +3836,7 @@ export function App() {
     assistantDrafts,
     codingPacketState.goal,
     cockpitSnapshot,
-    conversationMessages,
+    conversationMessagesByAgentId,
     controlQueueContinuity,
     debateSession,
     draftAttachments.length,
@@ -3796,7 +3844,6 @@ export function App() {
     memoryInstallAudit,
     memoryRecords,
     metaOnboardingSignals,
-    permissionSnapshot.summary.pending,
     providerProfiles,
     providerReadiness.status,
     providerRoutingConsoleItems,
@@ -3804,6 +3851,8 @@ export function App() {
     selectedModel,
     tmuxStatuses,
     tmuxTimelineBlocks,
+    unifiedControlQueueSnapshot.queue,
+    unifiedControlQueueSnapshot.summary.pending,
     workItemHandoffs,
     workItems,
   ]);
@@ -4059,7 +4108,7 @@ export function App() {
                   <Database size={16} />
                   Memory
                 </button>
-                <button className="primary-button" onClick={handleCreateCodingPacket} type="button">
+                <button className="primary-button" onClick={() => handleCreateCodingPacket()} type="button">
                   <Send size={16} />
                   Coding Packet
                 </button>
@@ -4167,6 +4216,7 @@ export function App() {
               onOpenProviderRouting={openProviderRoutingFromCockpit}
               onOpenRecovery={openRecoveryFromCockpit}
               onOpenControlQueue={() => setApprovalDrawerOpen(true)}
+              onOpenWorkTrace={handleOpenWorkTrace}
               onPreviewEvidence={() => setApprovalDrawerOpen(true)}
               onApproveHandoff={handleApproveWorkItemHandoffAndRoute}
               readiness={cockpitReadiness}
@@ -4175,14 +4225,16 @@ export function App() {
           ) : mode === "annex" ? (
             <DebateAnnexPage
               codingPacketGoal={codingPacketState.goal}
+              onAskAgent={handleAskAgentFromAnnex}
               onBack={() => setMode("debate")}
+              onCreateCodingPacket={() => handleCreateCodingPacket("annex")}
               onViewApproval={() => setApprovalDrawerOpen(true)}
               onViewMemory={() => {
                 setReturnModeAfterConfigClose("annex");
                 setMode("conversation");
                 setAgentConfigPanel({ open: true, tab: "injection" });
               }}
-              pendingApprovals={permissionSnapshot.summary.pending}
+              pendingApprovals={unifiedControlQueueSnapshot.summary.pending}
               runtime={runtimeSnapshotState}
               session={debateSession}
             />

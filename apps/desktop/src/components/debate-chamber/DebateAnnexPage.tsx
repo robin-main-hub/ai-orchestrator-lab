@@ -68,7 +68,10 @@ const tabConfig: Record<AnnexTab, { icon: ElementType; label: string }> = {
 export function DebateAnnexPage({
   codingPacketGoal,
   className,
+  initialTab = "status",
+  onAskAgent,
   onBack,
+  onCreateCodingPacket,
   onViewApproval,
   onViewMemory,
   pendingApprovals,
@@ -77,14 +80,17 @@ export function DebateAnnexPage({
 }: {
   codingPacketGoal?: string;
   className?: string;
+  initialTab?: AnnexTab;
+  onAskAgent?: (ref: EvidenceRef) => void;
   onBack?: () => void;
+  onCreateCodingPacket?: () => void;
   onViewApproval?: () => void;
   onViewMemory?: () => void;
   pendingApprovals: number;
   runtime: RuntimeSnapshot;
   session: Stage3DebateSession;
 }) {
-  const [activeTab, setActiveTab] = useState<AnnexTab>("status");
+  const [activeTab, setActiveTab] = useState<AnnexTab>(initialTab);
   const now = useNow();
 
   const data = useMemo(
@@ -177,7 +183,14 @@ export function DebateAnnexPage({
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
         <div className="mx-auto max-w-4xl">
           {activeTab === "status" ? <StatusHubPanel items={data.statusHub} /> : null}
-          {activeTab === "evidence" ? <EvidencePanel refs={data.evidenceRefs} /> : null}
+          {activeTab === "evidence" ? (
+            <EvidencePanel
+              onAskAgent={onAskAgent}
+              onCreateCodingPacket={onCreateCodingPacket}
+              onViewApproval={onViewApproval}
+              refs={data.evidenceRefs}
+            />
+          ) : null}
           {activeTab === "agents" ? <AgentRelayPanel relay={data.agentRelay} /> : null}
           {activeTab === "memory" ? <MemoryPanel recall={data.memoryRecall} onViewMemory={onViewMemory} /> : null}
           {activeTab === "queue" ? <QueuePanel items={data.queueItems} onViewApproval={onViewApproval} /> : null}
@@ -383,7 +396,17 @@ function StatusHubPanel({ items }: { items: StatusItem[] }) {
   );
 }
 
-function EvidencePanel({ refs }: { refs: EvidenceRef[] }) {
+function EvidencePanel({
+  onAskAgent,
+  onCreateCodingPacket,
+  onViewApproval,
+  refs,
+}: {
+  onAskAgent?: (ref: EvidenceRef) => void;
+  onCreateCodingPacket?: () => void;
+  onViewApproval?: () => void;
+  refs: EvidenceRef[];
+}) {
   if (!refs.length) return <EmptyState icon={FileText} message="근거가 없습니다" />;
 
   const relevanceColor = {
@@ -401,6 +424,25 @@ function EvidencePanel({ refs }: { refs: EvidenceRef[] }) {
         >
           <p className="text-sm font-medium text-zinc-100">{ref.title}</p>
           <p className="mt-1 text-xs text-zinc-500">{ref.source}</p>
+          {onCreateCodingPacket || onAskAgent || onViewApproval ? (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {onCreateCodingPacket ? (
+                <Button className="h-7 px-2 text-[11px]" onClick={onCreateCodingPacket} size="sm" variant="secondary">
+                  패킷으로
+                </Button>
+              ) : null}
+              {onAskAgent ? (
+                <Button className="h-7 px-2 text-[11px]" onClick={() => onAskAgent(ref)} size="sm" variant="outline">
+                  대화로
+                </Button>
+              ) : null}
+              {onViewApproval ? (
+                <Button className="h-7 px-2 text-[11px]" onClick={onViewApproval} size="sm" variant="ghost">
+                  승인 큐
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ))}
     </div>
