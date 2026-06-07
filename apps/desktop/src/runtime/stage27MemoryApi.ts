@@ -165,7 +165,7 @@ export function createAdapterBackedMementoMemoryApi({
       }
       return Promise.resolve({
         sessionId,
-        summary: `${adapter.profileId} does not expose reflect(); using adapter-backed Memento fallback.`,
+        summary: `${adapter.profileId} 어댑터가 reflect()를 제공하지 않아 adapter-backed Memento fallback을 사용합니다.`,
         decisions: [],
         risks: [],
         createdAt,

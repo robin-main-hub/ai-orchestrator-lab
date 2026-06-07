@@ -77,6 +77,35 @@ describe("stage27 local memento memory api", () => {
 });
 
 describe("stage27 adapter-backed memento memory api", () => {
+  it("uses Korean reflect fallback copy when the adapter has no reflect method", async () => {
+    const base = new MockMemoryAdapter({
+      profileId: "evolvememento_mock",
+      records: createSeedMemoryRecords(createdAt),
+      createdAt,
+    });
+    const adapterWithoutReflect: MemoryAdapter = {
+      profileId: base.profileId,
+      kind: base.kind,
+      recall: base.recall.bind(base),
+      remember: base.remember.bind(base),
+      memoryContext: base.memoryContext.bind(base),
+      stats: base.stats.bind(base),
+      pin: base.pin.bind(base),
+      forget: base.forget.bind(base),
+      activateMemories: base.activateMemories.bind(base),
+      createRelations: base.createRelations.bind(base),
+    };
+    const api = createAdapterBackedMementoMemoryApi({
+      adapter: adapterWithoutReflect,
+      createdAt,
+    });
+
+    const reflection = await api.reflect("session_desktop_001");
+
+    expect(reflection.summary).toBe("evolvememento_mock 어댑터가 reflect()를 제공하지 않아 adapter-backed Memento fallback을 사용합니다.");
+    expect(reflection.summary).not.toContain("does not expose");
+  });
+
   it("can route Memento calls through the shared MemoryAdapter boundary", async () => {
     const api = createAdapterBackedMementoMemoryApi({
       adapter: new MockMemoryAdapter({
