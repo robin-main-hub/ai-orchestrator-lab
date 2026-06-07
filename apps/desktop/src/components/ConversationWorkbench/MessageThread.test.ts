@@ -40,6 +40,7 @@ describe("MessageThread pending assistant state", () => {
     expect(shouldShowAssistantPendingBubble([message("user")], "preparing")).toBe(true);
     expect(shouldShowAssistantPendingBubble([message("user")], "responding")).toBe(true);
     expect(shouldShowAssistantPendingBubble([message("user")], "tooling")).toBe(true);
+    expect(shouldShowAssistantPendingBubble([message("user")], "testing")).toBe(true);
     expect(shouldShowAssistantPendingBubble([message("user")], "waiting_approval")).toBe(true);
   });
 
@@ -55,6 +56,7 @@ describe("MessageThread pending assistant state", () => {
     expect(assistantPendingLabel("tooling")).toBe("도구를 고르는 중이에요");
     expect(assistantPendingLabel("capturing")).toBe("작업창을 읽는 중이에요");
     expect(assistantPendingLabel("dispatching")).toBe("명령을 전달하는 중이에요");
+    expect(assistantPendingLabel("testing")).toBe("검증을 돌리는 중이에요");
     expect(assistantPendingLabel("waiting_approval")).toBe("승인을 기다리고 있어요");
     expect(assistantPendingLabel("error")).toBe("막힌 원인을 정리하고 있어요");
   });

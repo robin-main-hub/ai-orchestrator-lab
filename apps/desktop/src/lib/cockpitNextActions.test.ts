@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { OperatorCockpitSnapshot } from "@ai-orchestrator/protocol";
 import type { OrchestrationMaturityReport } from "./orchestrationMaturity";
 import type { SettingsDiagnostics } from "./settingsDiagnostics";
-import { deriveCockpitNextActions } from "./cockpitNextActions";
+import { deriveCockpitNextActions, resolveCockpitDetailFocus } from "./cockpitNextActions";
 
 const diagnostics = {
   nextActions: ["공급자 상태 점검을 다시 실행"],
@@ -187,5 +187,47 @@ describe("deriveCockpitNextActions", () => {
         targetSurface: "maturity",
       },
     ]);
+  });
+
+  it("세부 정보로 들어가는 다음 행동은 구체적인 카드 초점을 함께 계산한다", () => {
+    expect(
+      resolveCockpitDetailFocus({
+        ctaLabel: "영수증 점검",
+        id: "receipt_unsafe",
+        label: "공개 영수증 마스킹 점검: 1건",
+        priority: "high",
+        source: "receipt",
+        targetSurface: "receipts",
+      }),
+    ).toEqual({
+      helper: "작업 영수증 장부에서 공개 마스킹 상태를 먼저 확인합니다.",
+      label: "작업 영수증",
+      surface: "receipts",
+    });
+
+    expect(
+      resolveCockpitDetailFocus({
+        ctaLabel: "성숙도 보기",
+        id: "maturity_0",
+        label: "작업 대기열 흐름 결과를 확인",
+        priority: "normal",
+        source: "maturity",
+        targetSurface: "maturity",
+      }),
+    ).toMatchObject({
+      label: "실사용 성숙도",
+      surface: "maturity",
+    });
+
+    expect(
+      resolveCockpitDetailFocus({
+        ctaLabel: "워커 확인",
+        id: "worker_active_agent_builder",
+        label: "작업 중: 히라사와 유이 결과 확인",
+        priority: "normal",
+        source: "worker",
+        targetSurface: "fleet",
+      }),
+    ).toBeUndefined();
   });
 });

@@ -1,8 +1,10 @@
 import {
   createPublicTraceSafetyReport,
   createPublicWorkReceiptSummary,
+  maskPublicWorkTraceForRender,
   type PublicWorkTrace,
 } from "./publicWorkTrace";
+import { inspectPublicText, sanitizePublicText } from "./publicRedaction";
 
 export type WorkTraceSearchSource = {
   createdAt?: string;
@@ -21,25 +23,31 @@ export type WorkTraceSearchItem = WorkTraceSearchSource & {
 
 export function createWorkTraceSearchIndex(sources: WorkTraceSearchSource[]): WorkTraceSearchItem[] {
   return sources.map((source) => {
-    const safety = createPublicTraceSafetyReport(source.trace);
-    const receipt = createPublicWorkReceiptSummary(source.trace);
+    const traceSafety = createPublicTraceSafetyReport(source.trace);
+    const titleSafety = inspectPublicText(source.title);
+    const isSafe = traceSafety.isSafe && titleSafety.isSafe;
+    const renderTrace = maskPublicWorkTraceForRender(source.trace);
+    const receipt = createPublicWorkReceiptSummary(renderTrace);
+    const safeTitle = sanitizePublicText(source.title);
     const searchText = [
       source.id,
       source.kind,
-      source.title,
+      safeTitle,
       receipt?.compactLabel,
-      ...source.trace.groups.flatMap((group) => [
+      ...renderTrace.groups.flatMap((group) => [
         group.title,
         ...group.items.flatMap((item) => [item.label, item.value]),
       ]),
-      ...(source.trace.receipt?.items.flatMap((item) => [item.label, item.value]) ?? []),
+      ...(renderTrace.receipt?.items.flatMap((item) => [item.label, item.value]) ?? []),
     ].filter(Boolean).join(" ").toLowerCase();
 
     return {
       ...source,
-      receiptStatus: source.trace.receipt?.status,
-      safetyLabel: safety.isSafe ? "검색 가능" : "검색 제외 필요",
-      searchable: safety.isSafe,
+      receiptStatus: renderTrace.receipt?.status,
+      safetyLabel: isSafe ? "검색 가능" : "검색 제외 필요",
+      searchable: isSafe,
+      title: safeTitle,
+      trace: renderTrace,
       searchText,
     };
   });

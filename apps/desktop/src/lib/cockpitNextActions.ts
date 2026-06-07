@@ -14,6 +14,18 @@ export type CockpitNextActionItem = {
   targetSurface: "approvals" | "control_queue" | "diagnostics" | "fleet" | "handoffs" | "maturity" | "receipts";
 };
 
+export type CockpitDetailFocusSurface =
+  | "diagnostics"
+  | "handoffs"
+  | "maturity"
+  | "receipts";
+
+export type CockpitDetailFocus = {
+  helper: string;
+  label: string;
+  surface: CockpitDetailFocusSurface;
+};
+
 export function deriveCockpitNextActions({
   controlQueue,
   diagnostics,
@@ -126,6 +138,38 @@ export function deriveCockpitNextActions({
     },
   ];
   return fallbackActions.slice(0, limit);
+}
+
+export function resolveCockpitDetailFocus(action: CockpitNextActionItem): CockpitDetailFocus | undefined {
+  if (action.targetSurface === "receipts") {
+    return {
+      helper: "작업 영수증 장부에서 공개 마스킹 상태를 먼저 확인합니다.",
+      label: "작업 영수증",
+      surface: "receipts",
+    };
+  }
+  if (action.targetSurface === "maturity") {
+    return {
+      helper: "실사용 성숙도에서 부족한 큰 바위와 다음 조치를 확인합니다.",
+      label: "실사용 성숙도",
+      surface: "maturity",
+    };
+  }
+  if (action.targetSurface === "diagnostics") {
+    return {
+      helper: "설정 진단에서 막힌 공급자, 기억, 런타임 상태를 확인합니다.",
+      label: "설정 진단",
+      surface: "diagnostics",
+    };
+  }
+  if (action.targetSurface === "handoffs") {
+    return {
+      helper: "핸드오프 카드에서 소유자, 누락 정보, 다음 실행 슬롯을 확인합니다.",
+      label: "핸드오프",
+      surface: "handoffs",
+    };
+  }
+  return undefined;
 }
 
 function dedupeByLabel(items: CockpitNextActionItem[]): CockpitNextActionItem[] {

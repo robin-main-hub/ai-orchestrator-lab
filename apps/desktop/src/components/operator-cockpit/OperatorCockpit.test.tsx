@@ -192,6 +192,55 @@ describe("OperatorCockpit", () => {
     expect(html).not.toContain("terminal_run");
   });
 
+  it("기본 세부 정보가 열린 상태에서는 다음 행동 목적지 안내를 표시하지 않는다", () => {
+    const diagnostics = createSettingsDiagnostics({
+      agentCount: 1,
+      enabledProviderCount: 1,
+      memoryAdapterStatus: "ready",
+      providerSmokeReadyCount: 1,
+      runtimeStatus: "online",
+      workerCount: 1,
+    });
+    const maturity = createOrchestrationMaturityReport({
+      attachments: { acceptedTypeCount: 2, hasProcessingPipeline: true, pendingCount: 0 },
+      controlQueue: { connectedLaneCount: 6, pendingApprovalCount: 0, workItemProjectionCount: 1 },
+      debate: { codingImpactCount: 1, decisionCount: 1, hasCodingPacketProjection: true, readinessState: "ready" },
+      e2e: { desktopTestCount: 357, hasProviderSmokeHarness: true, hasVisualSmokeChecklist: true },
+      memory: { agentInstallCount: 1, curatorCandidateCount: 1, installedAgentCount: 1, promotedCount: 1 },
+      onboarding: { blockingCheckCount: 0, passedCheckCount: 1, totalCheckCount: 1 },
+      provider: { assignedAgentCount: 1, fallbackReadyCount: 1, profileCount: 1, smokeReadyCount: 1 },
+      receipts: { receiptCount: 1, searchableCount: 1, unsafeReceiptCount: 0 },
+      tmux: { hasRecoveryPlan: true, paneCount: 1, timelineBlockCount: 1 },
+    });
+    const smokePlan = createProductionSmokePlan({ includeLiveProvider: false, includeVisual: true });
+
+    const html = renderToStaticMarkup(
+      <OperatorCockpit
+        defaultDetailsOpen
+        readiness={{
+          diagnostics,
+          maturity,
+          nextActions: [
+            {
+              ctaLabel: "영수증 점검",
+              id: "receipt_unsafe",
+              label: "공개 영수증 마스킹 점검: 1건",
+              priority: "high",
+              source: "receipt",
+              targetSurface: "receipts",
+            },
+          ],
+          smokePlan,
+          workTraceItems: [workTraceItem],
+        }}
+        snapshot={snapshot}
+      />,
+    );
+
+    expect(html).toContain("작업 영수증 장부");
+    expect(html).not.toContain("작업 영수증 장부에서 공개 마스킹 상태를 먼저 확인합니다.");
+  });
+
   it("워커 행에서 해당 에이전트 대화방을 여는 CTA를 렌더링한다", () => {
     const html = renderToStaticMarkup(
       <OperatorCockpit

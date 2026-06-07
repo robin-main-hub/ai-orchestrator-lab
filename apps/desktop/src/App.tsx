@@ -147,6 +147,7 @@ import { createSettingsDiagnostics } from "./lib/settingsDiagnostics";
 import { createProductionSmokePlan } from "./lib/productionSmokePlan";
 import { createOrchestrationMaturityReport } from "./lib/orchestrationMaturity";
 import { deriveCockpitNextActions } from "./lib/cockpitNextActions";
+import { resolveExternalIngressTargetAgentId } from "./lib/externalIngressRouting";
 import {
   createAgentChannelMemoryScope,
   createAgentChannelMemoryInstallAudit,
@@ -2368,6 +2369,7 @@ export function App() {
       return;
     }
 
+    const externalIngressTargetAgentId = resolveExternalIngressTargetAgentId({ agents });
     const externalIngressMessage: ConversationMessage = {
       id: `message_external_ingress_${crypto.randomUUID()}`,
       sessionId: activeSessionId,
@@ -2375,7 +2377,7 @@ export function App() {
       content: normalizedEvent.normalizedText,
       createdAt: receivedAt,
       metadata: {
-        agentId: selectedAgentId,
+        agentId: externalIngressTargetAgentId,
         channel: normalizedEvent.channel,
         ingressEventId: normalizedEvent.id,
         approvalState: snapshot.result.approvalState,
@@ -2383,7 +2385,12 @@ export function App() {
       },
     };
 
-    setConversationMessages((messages) => [...messages, externalIngressMessage]);
+    setConversationMessagesByAgentId((channels) =>
+      updateAgentChannelMessages(channels, externalIngressTargetAgentId, (messages) => [
+        ...messages,
+        externalIngressMessage,
+      ]),
+    );
     prependMemoryRecord({
       id: `memory_ingress_${normalizedEvent.id}`,
       layer: "fragment",
@@ -2756,6 +2763,9 @@ export function App() {
       window.setTimeout(() => {
         setAgentActivity(selectedAgent.id, "dispatching");
       }, 220);
+      window.setTimeout(() => {
+        setAgentActivity(selectedAgent.id, "testing");
+      }, 680);
       window.setTimeout(() => {
         setAgentActivity(selectedAgent.id, "idle");
       }, 1200);
@@ -3520,7 +3530,7 @@ export function App() {
         } else if (activity === "error") {
           status = "error";
           statusRingColor = "red";
-        } else if (activity === "preparing" || activity === "responding" || activity === "tooling" || activity === "capturing" || activity === "dispatching") {
+        } else if (activity === "preparing" || activity === "responding" || activity === "tooling" || activity === "capturing" || activity === "dispatching" || activity === "testing") {
           status = "working";
           statusRingColor = "green";
         } else {

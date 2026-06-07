@@ -17,7 +17,11 @@ import type { OperatorCockpitHandoff, OperatorCockpitSnapshot } from "@ai-orches
 import type { OrchestrationMaturityReport } from "../../lib/orchestrationMaturity";
 import type { ProductionSmokePlan } from "../../lib/productionSmokePlan";
 import type { SettingsDiagnostics } from "../../lib/settingsDiagnostics";
-import type { CockpitNextActionItem } from "../../lib/cockpitNextActions";
+import {
+  resolveCockpitDetailFocus,
+  type CockpitDetailFocus,
+  type CockpitNextActionItem,
+} from "../../lib/cockpitNextActions";
 import type { WorkTraceSearchItem } from "../../lib/workTraceSearch";
 import { ApprovalEvidenceCard } from "./ApprovalEvidenceCard";
 import { Badge } from "./Badge";
@@ -64,6 +68,7 @@ export function OperatorCockpit({
   };
 }) {
   const [showDetails, setShowDetails] = useState(defaultDetailsOpen);
+  const [detailFocus, setDetailFocus] = useState<CockpitDetailFocus | undefined>();
   const blockedCount = snapshot.fleet.filter((worker) => worker.status === "blocked" || worker.status === "error").length;
   const approvalCount = snapshot.approvals.length;
   const riskyApprovalCount = snapshot.approvals.filter((approval) => approval.payloadBindingStatus !== "bound").length;
@@ -100,7 +105,14 @@ export function OperatorCockpit({
         return;
       }
     }
+    const nextFocus = resolveCockpitDetailFocus(action);
+    if (nextFocus) {
+      setDetailFocus(nextFocus);
+      setShowDetails(true);
+      return;
+    }
     if (action.targetSurface !== "fleet") {
+      setDetailFocus(undefined);
       setShowDetails(true);
     }
   };
@@ -240,19 +252,28 @@ export function OperatorCockpit({
               onClick={() => setShowDetails((current) => !current)}
               type="button"
             >
-              <span className="flex items-center gap-2 text-sm font-medium text-zinc-200">
+              <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-zinc-200">
                 작전 세부 정보
-                <span className="text-xs font-normal text-zinc-500">
-                  핸드오프 · 기억 · 라우팅 · 복구 · 디스패치
+                <span className="truncate text-xs font-normal text-zinc-500">
+                  {detailFocus
+                    ? `${detailFocus.label} 안내 중`
+                    : "핸드오프 · 기억 · 라우팅 · 복구 · 디스패치"}
                 </span>
               </span>
               <ChevronDown className={`h-4 w-4 text-zinc-500 transition-transform ${showDetails ? "rotate-180" : ""}`} />
             </button>
             {showDetails ? (
               <div className="border-t border-zinc-800/60 p-4">
+                {detailFocus ? <DetailFocusBanner focus={detailFocus} /> : null}
                 <div className="grid gap-4 lg:grid-cols-12">
                   {readiness ? (
-                    <div className="lg:col-span-12">
+                    <div
+                      className={`lg:col-span-12 ${
+                        detailFocus?.surface === "maturity" || detailFocus?.surface === "diagnostics"
+                          ? "rounded-xl ring-1 ring-cyan-300/35 shadow-[0_0_32px_rgba(6,182,212,0.12)]"
+                          : ""
+                      }`}
+                    >
                       <MaturityReadinessCard
                         diagnostics={readiness.diagnostics}
                         maturity={readiness.maturity}
@@ -261,12 +282,26 @@ export function OperatorCockpit({
                     </div>
                   ) : null}
                   {readiness?.workTraceItems ? (
-                    <div className="lg:col-span-12">
+                    <div
+                      className={`lg:col-span-12 ${
+                        detailFocus?.surface === "receipts"
+                          ? "rounded-xl ring-1 ring-cyan-300/35 shadow-[0_0_32px_rgba(6,182,212,0.12)]"
+                          : ""
+                      }`}
+                    >
                       <WorkReceiptLedgerCard items={readiness.workTraceItems} onOpenTrace={onOpenWorkTrace} />
                     </div>
                   ) : null}
                   <div className="space-y-4 lg:col-span-5">
-                    <HandoffCard handoffs={snapshot.handoffs} onApproveHandoff={onApproveHandoff} />
+                    <div
+                      className={
+                        detailFocus?.surface === "handoffs"
+                          ? "rounded-xl ring-1 ring-cyan-300/35 shadow-[0_0_32px_rgba(6,182,212,0.12)]"
+                          : ""
+                      }
+                    >
+                      <HandoffCard handoffs={snapshot.handoffs} onApproveHandoff={onApproveHandoff} />
+                    </div>
                     <MemoryRecallCard memory={snapshot.memory} onOpen={onOpenMemory} />
                   </div>
                   <div className="space-y-4 lg:col-span-4">
@@ -399,7 +434,7 @@ function NextActionStrip({
           >
             <span className="min-w-0">
               <span className="block truncate font-semibold text-zinc-50">{primaryAction.label}</span>
-              <span className="mt-0.5 block text-[11px] text-white/55">누르면 관련 영역을 바로 펼칩니다.</span>
+              <span className="mt-0.5 block text-[11px] text-white/55">누르면 관련 카드로 바로 안내합니다.</span>
             </span>
             <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[10px] font-semibold text-white/85 transition-colors group-hover:bg-white/15">
               {primaryAction.ctaLabel}
@@ -444,6 +479,16 @@ function NextActionButton({
         {action.ctaLabel}
       </span>
     </button>
+  );
+}
+
+function DetailFocusBanner({ focus }: { focus: CockpitDetailFocus }) {
+  return (
+    <div className="mb-3 rounded-lg border border-cyan-400/25 bg-cyan-400/[0.07] px-3 py-2 text-xs text-cyan-100 shadow-[0_0_24px_rgba(6,182,212,0.08)]">
+      <span className="font-semibold">{focus.label}</span>
+      <span className="mx-2 text-cyan-300/60">/</span>
+      <span className="text-cyan-100/80">{focus.helper}</span>
+    </div>
   );
 }
 

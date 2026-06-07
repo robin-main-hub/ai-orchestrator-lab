@@ -521,7 +521,7 @@ function ConversationMetaRow({
 
 function mapConversationAgentState(status: AgentActivityStatus): AgentState {
   if (status === "preparing") return "thinking";
-  if (status === "responding" || status === "tooling" || status === "capturing" || status === "dispatching") {
+  if (status === "responding" || status === "tooling" || status === "capturing" || status === "dispatching" || status === "testing") {
     return "responding";
   }
   if (status === "waiting_approval") return "waiting_approval";
@@ -534,6 +534,7 @@ function createAgentWorkStatusLabel(status: AgentActivityStatus, displayName: st
   if (status === "tooling") return `${displayName}가 도구 후보를 고르는 중`;
   if (status === "capturing") return `${displayName}가 작업창을 읽는 중`;
   if (status === "dispatching") return `${displayName}가 명령을 전달하는 중`;
+  if (status === "testing") return `${displayName}가 검증을 돌리는 중`;
   if (status === "waiting_approval") return `${displayName}가 승인을 기다리는 중`;
   if (status === "responding") return `${displayName}가 답변을 다듬는 중`;
   if (status === "error") return `${displayName}가 막힌 원인을 정리하는 중`;
