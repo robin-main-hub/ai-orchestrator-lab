@@ -111,9 +111,21 @@ export function deriveCockpitNextActions({
       })),
   ];
 
-  return dedupeByLabel(candidates)
+  const visibleCandidates = dedupeByLabel(candidates)
     .sort((left, right) => priorityRank(right.priority) - priorityRank(left.priority))
     .slice(0, limit);
+  if (visibleCandidates.length > 0) return visibleCandidates;
+  const fallbackActions: CockpitNextActionItem[] = [
+    {
+      ctaLabel: "성숙도 보기",
+      id: "default_next_big_rock",
+      label: "다음 큰 바위 선정: 성숙도와 작업 영수증을 확인",
+      priority: "normal",
+      source: "maturity",
+      targetSurface: "maturity",
+    },
+  ];
+  return fallbackActions.slice(0, limit);
 }
 
 function dedupeByLabel(items: CockpitNextActionItem[]): CockpitNextActionItem[] {
