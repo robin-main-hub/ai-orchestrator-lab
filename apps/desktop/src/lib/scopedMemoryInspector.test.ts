@@ -42,6 +42,8 @@ const events: EventEnvelope[] = [];
 const orchestratorScope: AgentChannelMemoryScope = {
   agentId: "agent_orchestrator",
   providerProfileId: "provider_mimo",
+  roomId: "room_session_desktop_001_agent_orchestrator",
+  roomLabel: "에이전트 전용 방",
   sessionId: "session_desktop_001",
   namespace: "agent:agent_orchestrator/session:session_desktop_001/provider:provider_mimo",
   recallTraceId: "recall_agent_orchestrator_session_desktop_001_provider_mimo",
@@ -50,6 +52,8 @@ const orchestratorScope: AgentChannelMemoryScope = {
 const reviewerScope: AgentChannelMemoryScope = {
   agentId: "agent_reviewer",
   providerProfileId: "provider_mimo",
+  roomId: "room_session_desktop_001_agent_reviewer",
+  roomLabel: "에이전트 전용 방",
   sessionId: "session_desktop_001",
   namespace: "agent:agent_reviewer/session:session_desktop_001/provider:provider_mimo",
   recallTraceId: "recall_agent_reviewer_session_desktop_001_provider_mimo",

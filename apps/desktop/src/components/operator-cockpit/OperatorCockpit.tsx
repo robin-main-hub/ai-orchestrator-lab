@@ -40,6 +40,7 @@ export function OperatorCockpit({
   onOpenMemory,
   onOpenProviderRouting,
   onOpenRecovery,
+  onOpenControlQueue,
   onOpenAgentConversation,
   readiness,
 }: {
@@ -49,6 +50,7 @@ export function OperatorCockpit({
   onOpenMemory?: () => void;
   onOpenProviderRouting?: () => void;
   onOpenRecovery?: () => void;
+  onOpenControlQueue?: () => void;
   onOpenAgentConversation?: (agentId: string) => void;
   readiness?: {
     diagnostics: SettingsDiagnostics;
@@ -74,6 +76,21 @@ export function OperatorCockpit({
     if (action.targetSurface === "approvals" && onPreviewEvidence) {
       onPreviewEvidence();
       return;
+    }
+    if (action.targetSurface === "control_queue") {
+      (onOpenControlQueue ?? onPreviewEvidence)?.();
+      return;
+    }
+    if (action.targetSurface === "diagnostics" && onOpenProviderRouting) {
+      onOpenProviderRouting();
+      return;
+    }
+    if (action.targetSurface === "fleet" && onOpenAgentConversation) {
+      const workerId = action.id.replace(/^worker(?:_active)?_/, "");
+      if (workerId && workerId !== action.id) {
+        onOpenAgentConversation(workerId);
+        return;
+      }
     }
     if (action.targetSurface !== "fleet") {
       setShowDetails(true);
