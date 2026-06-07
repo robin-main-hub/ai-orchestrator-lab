@@ -378,7 +378,7 @@ function RecallTraceList({
         type="button"
       >
         <div className="flex items-center gap-2">
-          <span className="font-medium text-foreground">Recall Trace</span>
+          <span className="font-medium text-foreground">기억 조회 추적</span>
           <span className="text-muted-foreground">{traces.length}</span>
         </div>
         {expanded ? (
@@ -469,7 +469,7 @@ function RecallTraceRow({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-36">
               <DropdownMenuItem onSelect={() => onPin(result.record.id)}>
-                기억 고정 (Pin)
+                기억 고정
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => onActivate(result.record.id)}>
                 기억 활성화
@@ -791,10 +791,10 @@ function EvolveMementoManagerDialog({
                             {record.title}
                           </h4>
                           <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase font-mono">
-                            {record.kind}
+                            {mementoKindLabel(record.kind)}
                           </span>
                           <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase font-mono">
-                            {record.scope ?? "auto"}
+                            {mementoScopeLabel(record.scope)}
                           </span>
                           <span className={cn(
                             "text-[9px] px-1.5 py-0.5 rounded uppercase font-mono font-medium",
@@ -802,7 +802,7 @@ function EvolveMementoManagerDialog({
                             record.trustLevel === "untrusted" ? "bg-destructive/15 text-destructive animate-pulse" :
                             "bg-warning/15 text-warning",
                           )}>
-                            {record.trustLevel}
+                            {mementoTrustLevelLabel(record.trustLevel)}
                           </span>
                           {record.pinned ? (
                             <StatusBadge variant="primary" size="sm" className="gap-0.5">
@@ -841,7 +841,7 @@ function EvolveMementoManagerDialog({
                               onClick={() => onPin(record.id)}
                             >
                               <Pin className="h-3 w-3" />
-                              Pin
+                              {mementoActionLabel("pin")}
                             </Button>
                           )}
                           {record.activationState !== "active" && (
@@ -851,7 +851,7 @@ function EvolveMementoManagerDialog({
                               className="h-7 text-[10px] gap-1 px-2.5 text-primary hover:text-primary"
                               onClick={() => onActivate(record.id)}
                             >
-                              Activate
+                              {mementoActionLabel("activate")}
                             </Button>
                           )}
                           <Button
@@ -861,7 +861,7 @@ function EvolveMementoManagerDialog({
                             onClick={() => onForget(record.id)}
                           >
                             <Trash2 className="h-3 w-3" />
-                            Forget
+                            {mementoActionLabel("forget")}
                           </Button>
                         </div>
                       </div>
@@ -913,12 +913,12 @@ function EvolveMementoManagerDialog({
                               size="sm"
                               className="uppercase font-mono font-bold"
                             >
-                              {relation.kind}
+                              {mementoRelationKindLabel(relation.kind)}
                             </StatusBadge>
                           </div>
                         </div>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          {relation.reason}
+                          {mementoRelationReasonLabel(relation.reason)}
                         </p>
                       </div>
                     );
@@ -936,7 +936,7 @@ function EvolveMementoManagerDialog({
                   <div className="text-center py-10 bg-card/30 border border-border/80 border-dashed rounded-lg">
                     <Check className="h-8 w-8 text-success mx-auto mb-2" />
                     <p className="text-xs font-medium text-foreground">감지된 메모리 충돌이나 정제 대상이 없습니다.</p>
-                    <p className="text-[10px] text-muted-foreground mt-1">EvolveMemento의 기억 상태가 아주 건강합니다 (Good).</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">EvolveMemento의 기억 상태가 아주 건강합니다.</p>
                   </div>
                 ) : (
                   inspector.issues.map((issue) => {
@@ -968,7 +968,7 @@ function EvolveMementoManagerDialog({
                               {issue.kind === "duplicate" ? "중복 의심 기억" :
                                issue.kind === "contradiction" ? "상호 모순 발생" :
                                issue.kind === "untrusted_active" ? "비신뢰 기억 활성화 검토" :
-                               issue.kind === "stale" ? "오래된 기억 (Stale)" :
+                               issue.kind === "stale" ? "오래된 기억" :
                                "누락된 관계 연결"}
                             </span>
                           </div>
@@ -981,7 +981,7 @@ function EvolveMementoManagerDialog({
                             size="sm"
                             className="uppercase font-mono font-bold"
                           >
-                            {issue.severity}
+                            {mementoSeverityLabel(issue.severity)}
                           </StatusBadge>
                         </div>
 
@@ -1010,7 +1010,7 @@ function EvolveMementoManagerDialog({
                                 onClick={() => onForget(record.id)}
                               >
                                 <Trash2 className="h-2.5 w-2.5" />
-                                Forget
+                                {mementoActionLabel("forget")}
                               </Button>
                             </div>
                           ))}
@@ -1021,7 +1021,7 @@ function EvolveMementoManagerDialog({
                             권장 행동 조치:
                           </span>
                           <span className="leading-relaxed">
-                            {issue.recommendation}
+                            {mementoIssueRecommendationLabel(issue.recommendation)}
                           </span>
                         </div>
                       </div>
@@ -1054,6 +1054,66 @@ function recallReasonLabel(reason: string) {
       "신뢰되지 않은 기억은 고정 전까지 격리됨",
   };
   return labels[reason] ?? reason;
+}
+
+export function mementoActionLabel(action: string) {
+  const labels: Record<string, string> = {
+    activate: "활성화",
+    forget: "삭제",
+    pin: "고정",
+  };
+  return labels[action] ?? action;
+}
+
+export function mementoRelationKindLabel(kind: string) {
+  const labels: Record<string, string> = {
+    contradicts: "모순",
+    related: "관련",
+    supports: "지지",
+  };
+  return labels[kind] ?? kind;
+}
+
+export function mementoRelationReasonLabel(reason: string) {
+  const labels: Record<string, string> = {
+    "overlapping topic with opposite action language": "같은 주제에서 서로 반대되는 실행 표현이 겹칩니다.",
+    "shared tags, terms, scope, or kind": "태그, 용어, 범위 또는 기억 종류가 서로 겹칩니다.",
+  };
+  return labels[reason] ?? reason;
+}
+
+export function mementoSeverityLabel(severity: string) {
+  const labels: Record<string, string> = {
+    high: "높음",
+    low: "낮음",
+    medium: "중간",
+  };
+  return labels[severity] ?? severity;
+}
+
+export function mementoTrustLevelLabel(level: string) {
+  const labels: Record<string, string> = {
+    provisional: "임시",
+    trusted: "신뢰됨",
+    untrusted: "미신뢰",
+  };
+  return labels[level] ?? level;
+}
+
+export function mementoIssueRecommendationLabel(recommendation: string) {
+  const labels: Record<string, string> = {
+    "Demote, redact, or re-verify this memory before sending it to strong or remote models.":
+      "강한 모델이나 원격 모델에 보내기 전에 이 기억을 낮추거나 마스킹하거나 다시 검증하세요.",
+    "Merge these fragments or keep the newer one as the authoritative memory.":
+      "중복 조각을 병합하거나 더 최신 항목을 기준 기억으로 유지하세요.",
+    "Pinned memories should be linked so the context packet can restore the project map.":
+      "고정된 기억끼리 연결해 컨텍스트 패킷이 프로젝트 지도를 복구할 수 있게 하세요.",
+    "Refresh this old memory or let the curator archive it.":
+      "오래된 기억을 새로 확인하거나 큐레이터가 보관하도록 두세요.",
+    "Review which memory should win before automatic recall uses both.":
+      "자동 기억 조회가 두 항목을 함께 쓰기 전에 어떤 기억을 우선할지 검토하세요.",
+  };
+  return labels[recommendation] ?? recommendation;
 }
 
 function mementoScopeLabel(scope?: MemoryRecord["scope"]) {

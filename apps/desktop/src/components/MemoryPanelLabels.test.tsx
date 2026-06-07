@@ -2,7 +2,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { CodingPacket, ConversationMessage, EventEnvelope } from "@ai-orchestrator/protocol";
 import { createStage6MemoryInspector } from "../runtime/stage6Memory";
-import { EvolveMementoPanel, MEMORY_PANEL_LABELS } from "./EvolveMementoPanel";
+import {
+  EvolveMementoPanel,
+  MEMORY_PANEL_LABELS,
+  mementoActionLabel,
+  mementoIssueRecommendationLabel,
+  mementoRelationKindLabel,
+  mementoSeverityLabel,
+  mementoTrustLevelLabel,
+} from "./EvolveMementoPanel";
 
 const packet: CodingPacket = {
   constraints: ["원문 비밀값 저장 금지"],
@@ -75,5 +83,27 @@ describe("memory panel labels", () => {
     expect(MEMORY_PANEL_LABELS.kindFilter).toBe("종류");
     expect(MEMORY_PANEL_LABELS.pinned).toBe("고정됨");
     expect(MEMORY_PANEL_LABELS.active).toBe("활성");
+  });
+
+  it("maps manager action, relation, severity, trust, and recommendation labels to Korean", () => {
+    expect(mementoActionLabel("pin")).toBe("고정");
+    expect(mementoActionLabel("activate")).toBe("활성화");
+    expect(mementoActionLabel("forget")).toBe("삭제");
+    expect(mementoRelationKindLabel("supports")).toBe("지지");
+    expect(mementoRelationKindLabel("contradicts")).toBe("모순");
+    expect(mementoSeverityLabel("high")).toBe("높음");
+    expect(mementoTrustLevelLabel("trusted")).toBe("신뢰됨");
+    expect(mementoIssueRecommendationLabel("Merge these fragments or keep the newer one as the authoritative memory.")).toBe(
+      "중복 조각을 병합하거나 더 최신 항목을 기준 기억으로 유지하세요.",
+    );
+    expect(mementoIssueRecommendationLabel("Review which memory should win before automatic recall uses both.")).toBe(
+      "자동 기억 조회가 두 항목을 함께 쓰기 전에 어떤 기억을 우선할지 검토하세요.",
+    );
+    expect(mementoIssueRecommendationLabel("Demote, redact, or re-verify this memory before sending it to strong or remote models.")).toBe(
+      "강한 모델이나 원격 모델에 보내기 전에 이 기억을 낮추거나 마스킹하거나 다시 검증하세요.",
+    );
+    expect(mementoIssueRecommendationLabel("Refresh this old memory or let the curator archive it.")).toBe(
+      "오래된 기억을 새로 확인하거나 큐레이터가 보관하도록 두세요.",
+    );
   });
 });
