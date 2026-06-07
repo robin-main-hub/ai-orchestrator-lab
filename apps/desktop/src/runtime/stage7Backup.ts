@@ -242,7 +242,7 @@ function renderStage7ObsidianMarkdown({
     `- verification: ${safePacket.verificationPlan.join(", ")}`,
     "",
     "## Agent Run",
-    agentRun ? `- ${agentRun.id}: ${agentRun.status} / verifier ${agentRun.verifier.status}` : "- not created",
+    agentRun ? `- ${agentRun.id}: ${agentRun.status} / 검증 ${agentRun.verifier.status}` : "- 생성되지 않음",
     "",
     "## Recall Trace",
     ...formatRecallTrace(memoryInspector),
@@ -411,18 +411,33 @@ function collectDelegationRecords(events: EventEnvelope[]): Stage7DelegationReco
 
 function formatDelegationRecords(records: Stage7DelegationRecord[]) {
   if (records.length === 0) {
-    return ["- none"];
+    return ["- 없음"];
   }
 
   return records.map((record) => {
-    const target = record.targetAgentId ?? record.target ?? "unknown";
+    const target = record.targetAgentId ?? record.target ?? "대상 미확인";
     const route = record.route ? ` / ${record.route}` : "";
     const authority = record.authorityLevel ? ` / ${record.authorityLevel}` : "";
     const reason = record.reason ? ` :: ${record.reason}` : "";
-    const prompt = record.promptPreview ? ` / task: ${record.promptPreview}` : "";
-    const response = record.responsePreview ? ` / result: ${record.responsePreview}` : "";
-    return `- ${record.createdAt} :: ${record.status} :: ${record.sourceAgentId ?? "unknown"} -> ${target}${authority}${route}${reason}${prompt}${response}`;
+    const prompt = record.promptPreview ? ` / 작업: ${record.promptPreview}` : "";
+    const response = record.responsePreview ? ` / 결과: ${record.responsePreview}` : "";
+    return `- ${record.createdAt} :: ${delegationStatusLabel(record.status)} :: ${record.sourceAgentId ?? "출처 미확인"} -> ${target}${authority}${route}${reason}${prompt}${response}`;
   });
+}
+
+function delegationStatusLabel(status: Stage7DelegationRecord["status"]) {
+  const labels: Record<Stage7DelegationRecord["status"], string> = {
+    detected: "감지",
+    dispatched: "전송",
+    succeeded: "성공",
+    failed: "실패",
+    blocked: "차단",
+    unknown_target: "대상 미확인",
+    self_blocked: "자기 위임 차단",
+    followup_completed: "후속 완료",
+    followup_failed: "후속 실패",
+  };
+  return labels[status];
 }
 
 function countDelegationsByStatus(records: Stage7DelegationRecord[]) {
@@ -447,16 +462,16 @@ function countDelegationsByStatus(records: Stage7DelegationRecord[]) {
 
 function formatRecallTrace(memoryInspector: Stage6MemoryInspector) {
   if (memoryInspector.trace.results.length === 0) {
-    return ["- none"];
+    return ["- 없음"];
   }
 
   return memoryInspector.trace.results.map((result) => {
     const fusion = result.fusionDetail?.views.length
-      ? ` / fusion: ${result.fusionDetail.views
+      ? ` / 융합: ${result.fusionDetail.views
           .map((view) => `${view.view}#${view.rank}:${Number(view.rawScore.toFixed(3))}`)
           .join(", ")}`
-      : " / fusion: pinned-or-active";
-    return `- ${result.usedInDecision ? "used" : "blocked"} :: ${result.record.title} (${result.record.layer}, score ${Number(result.score.toFixed(3))}, ${result.reason}${fusion})`;
+      : " / 융합: 고정 또는 활성";
+    return `- ${result.usedInDecision ? "사용" : "차단"} :: ${result.record.title} (${result.record.layer}, 점수 ${Number(result.score.toFixed(3))}, ${result.reason}${fusion})`;
   });
 }
 
@@ -495,7 +510,7 @@ function createEvolveMementoProjection(memoryInspector: Stage6MemoryInspector) {
 
   return {
     engine: "EvolveMemento",
-    placement: "Question first; dynamic recall context below question",
+    placement: "질문 먼저, 동적 기억 조회 맥락은 질문 아래 배치",
     enrichedRecords: enrichedRecords.length,
     fusionResults: fusion.filter((result) => result.mode !== "none").length,
     viewCounts,
@@ -509,13 +524,13 @@ function createEvolveMementoProjection(memoryInspector: Stage6MemoryInspector) {
 function formatEvolveMementoIndex(memoryInspector: Stage6MemoryInspector) {
   const projection = createEvolveMementoProjection(memoryInspector);
   return [
-    `- engine: ${projection.engine}`,
-    `- placement: ${projection.placement}`,
-    `- enriched records: ${projection.enrichedRecords}`,
-    `- fusion results: ${projection.fusionResults}`,
-    `- view counts: lexical ${projection.viewCounts.lexical ?? 0}, semantic ${projection.viewCounts.semantic ?? 0}, metadata ${projection.viewCounts.metadata ?? 0}`,
-    `- average importance: ${projection.importanceAverage ?? "n/a"}`,
-    `- reinforcement total: ${projection.reinforcementTotal}`,
+    `- 엔진: ${projection.engine}`,
+    `- 배치: ${projection.placement}`,
+    `- 보강 기억: ${projection.enrichedRecords}`,
+    `- 융합 결과: ${projection.fusionResults}`,
+    `- 조회 관점: 어휘 ${projection.viewCounts.lexical ?? 0}, 의미 ${projection.viewCounts.semantic ?? 0}, 메타데이터 ${projection.viewCounts.metadata ?? 0}`,
+    `- 평균 중요도: ${projection.importanceAverage ?? "없음"}`,
+    `- 강화 합계: ${projection.reinforcementTotal}`,
   ];
 }
 
@@ -570,7 +585,7 @@ function truncate(value: string, max: number): string {
 
 function formatMemoryRelations(memoryInspector: Stage6MemoryInspector) {
   if (memoryInspector.relations.length === 0) {
-    return ["- none"];
+    return ["- 없음"];
   }
 
   return memoryInspector.relations.map(
@@ -581,7 +596,7 @@ function formatMemoryRelations(memoryInspector: Stage6MemoryInspector) {
 
 function formatMemoryIssues(memoryInspector: Stage6MemoryInspector) {
   if (memoryInspector.issues.length === 0) {
-    return ["- none"];
+    return ["- 없음"];
   }
 
   return memoryInspector.issues.map(
@@ -626,11 +641,11 @@ function createQueueItem(
   const reason =
     artifact.status === "ready"
       ? artifact.target === "obsidian"
-        ? "local markdown export can run offline"
-        : "remote projection is ready"
+        ? "로컬 마크다운 내보내기는 오프라인에서도 실행할 수 있습니다."
+        : "원격 투영 준비 완료"
       : runtime.dgxStatus === "online"
-        ? "waiting for external service adapter"
-        : "queued until dgx-02 or network projection adapter is reachable";
+        ? "외부 서비스 어댑터 대기 중"
+        : "DGX-02 또는 네트워크 투영 어댑터에 닿을 때까지 대기열에 보관";
 
   return {
     id: `backup_queue_${artifact.target}_${stableId(`${artifact.id}:${previous?.status ?? "new"}`)}`,
@@ -654,7 +669,7 @@ function createMobilePolicy(): MobileActionPolicy {
 
 function formatList(items: string[]): string {
   if (items.length === 0) {
-    return "- none";
+    return "- 없음";
   }
 
   return items.map((item) => `- ${item}`).join("\n");
