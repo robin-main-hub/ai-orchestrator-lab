@@ -33,6 +33,7 @@ import {
   createMemoryCuratorPersistencePlan,
   type MemoryCuratorPersistencePlan,
 } from "../lib/memoryCuratorRuntime";
+import type { MemoryCuratorCandidate } from "../lib/memoryCuratorApproval";
 
 type AppendWorkbenchEvent = <T>(type: string, payload: T) => EventEnvelope<T>;
 
@@ -252,6 +253,28 @@ export function useMemoryController({
     setMemoryRecords((records) => [memoryRecord, ...records]);
   }
 
+  function handleQueueMemoryCuratorCandidate(candidate: MemoryCuratorCandidate) {
+    setMemoryRecords((records) => {
+      if (records.some((record) => record.id === candidate.record.id)) {
+        return records;
+      }
+      return [candidate.record, ...records];
+    });
+    markMemorySyncing(new Date().toISOString());
+    appendEvent("memory.curator.candidate.created", {
+      agentId: candidate.agentId,
+      candidateId: candidate.id,
+      evidenceRefs: candidate.evidenceRefs,
+      memoryScope: memoryScope?.namespace,
+      reason: candidate.reason,
+      recallTraceId: memoryScope?.recallTraceId,
+      recordId: candidate.record.id,
+      targetActivationState: candidate.targetActivationState,
+      trustLevel: candidate.record.trustLevel,
+    });
+    requestRemember(candidate.record);
+  }
+
   function handleMemoryMutationError(operation: string, recordIds: string[], error: unknown) {
     if (isMemoryAdapterError(error) && error.category === "promotion_pending") {
       appendEvent("memory.curator.promotion.pending", {
@@ -384,6 +407,7 @@ export function useMemoryController({
     handleActivateMemory,
     handleForgetMemory,
     handlePinMemory,
+    handleQueueMemoryCuratorCandidate,
     handleRememberCurrentContext,
     memoryInspector,
     memoryRecords,

@@ -175,6 +175,7 @@ import {
 } from "./lib/agentRuntimeConfig";
 import { applyAgentIdentityResponseGuard } from "./lib/agentIdentityResponseGuard";
 import { createMemoryGovernanceSummary } from "./lib/memoryGovernance";
+import { createConversationTurnMemoryCandidate } from "./lib/memoryCuratorRuntime";
 import { createProviderRoutingConsoleItems } from "./lib/providerRoutingConsole";
 import {
   agentRoleLabel,
@@ -655,6 +656,7 @@ export function App() {
     handleActivateMemory,
     handleForgetMemory,
     handlePinMemory,
+    handleQueueMemoryCuratorCandidate,
     handleRememberCurrentContext,
     memoryInspector,
     memoryRecords,
@@ -1696,6 +1698,22 @@ export function App() {
       missingInfo: [],
       createdAt: assistantMessage.createdAt,
     };
+    const shouldCreateMemoryCandidate =
+      !completionMetadata.error && !completionMetadata.requiresServerApproval && reply.trim().length > 0;
+    if (shouldCreateMemoryCandidate) {
+      const memoryCandidate = createConversationTurnMemoryCandidate({
+        agentId: selectedAgent.id,
+        agentName: selectedAgent.name,
+        assistantMessage,
+        createdAt: assistantMessage.createdAt,
+        memoryScopeNamespace: selectedAgentMemoryScope.namespace,
+        providerProfileId: selectedProvider.id,
+        recallTraceId: selectedAgentMemoryScope.recallTraceId,
+        trustLevel: selectedProvider.trustLevel ?? "limited",
+        userMessage,
+      });
+      handleQueueMemoryCuratorCandidate(memoryCandidate);
+    }
     if (activeSessionIdRef.current === targetSessionId) {
       setAgentActivity(selectedAgent.id, "responding");
       setConversationMessages((messages) => [...messages, assistantMessage]);
@@ -3437,7 +3455,10 @@ export function App() {
       memory: {
         agentInstallCount: memoryInstallAudit.totalAgents,
         curatorCandidateCount: memoryRecords.filter(
-          (record) => record.activationState === "quarantined" || record.trustLevel === "untrusted",
+          (record) =>
+            record.activationState === "suggested" ||
+            record.activationState === "quarantined" ||
+            record.trustLevel === "untrusted",
         ).length,
         installedAgentCount: memoryInstallAudit.installedCount,
         promotedCount: memoryRecords.filter((record) => record.activationState === "active" || record.pinned).length,
