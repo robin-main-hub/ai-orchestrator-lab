@@ -38,6 +38,18 @@ describe("applyAgentIdentityResponseGuard", () => {
     expect(guarded.content).not.toContain("역할명으로");
   });
 
+  it("corrects direct Korean name requests that do not use question words", () => {
+    const guarded = applyAgentIdentityResponseGuard({
+      agent,
+      content: "이름은 따로 없어. 역할로 부르면 돼.",
+      userContent: "네 이름 알려줘",
+    });
+
+    expect(guarded.guardApplied).toBe(true);
+    expect(guarded.content).toContain("마키마");
+    expect(guarded.content).not.toContain("이름은 따로 없어");
+  });
+
   it("does not rewrite ordinary answers", () => {
     const guarded = applyAgentIdentityResponseGuard({
       agent,
