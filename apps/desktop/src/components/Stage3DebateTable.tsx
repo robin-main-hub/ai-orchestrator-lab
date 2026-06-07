@@ -77,6 +77,7 @@ export function Stage3DebateTable({
   );
   const consensus = useMemo(() => deriveConsensus(session), [session]);
   const readiness = useMemo(() => deriveDebateDecisionReadiness(session), [session]);
+  const decisionRail = useMemo(() => deriveDecisionRail(session), [session]);
 
   return (
     <section
@@ -131,6 +132,14 @@ export function Stage3DebateTable({
               </Button>
             </div>
           </div>
+
+          <DecisionRail
+            codingImpactCount={decisionRail.codingImpactCount}
+            decisionCount={decisionRail.decisionCount}
+            evidenceCount={decisionRail.evidenceCount}
+            nextActionLabel={readiness.nextActionLabel}
+            riskCount={decisionRail.riskCount}
+          />
 
           <div className="mt-4 flex items-center gap-1 overflow-x-auto pb-1">
             {session.rounds.map((round, index) => {
@@ -213,6 +222,92 @@ export function Stage3DebateTable({
         </div>
       </footer>
     </section>
+  );
+}
+
+function deriveDecisionRail(session: Stage3DebateSession) {
+  let codingImpactCount = 0;
+  let decisionCount = 0;
+  let evidenceCount = 0;
+  let riskCount = 0;
+
+  for (const round of session.rounds) {
+    for (const utterance of round.utterances) {
+      if (utterance.decisionId) decisionCount += 1;
+      if (utterance.tags.includes("risk")) riskCount += 1;
+      if (utterance.tags.includes("coding_impact")) codingImpactCount += 1;
+      evidenceCount += utterance.evidenceRefIds?.length ?? 0;
+    }
+  }
+
+  return { codingImpactCount, decisionCount, evidenceCount, riskCount };
+}
+
+function DecisionRail({
+  codingImpactCount,
+  decisionCount,
+  evidenceCount,
+  nextActionLabel,
+  riskCount,
+}: {
+  codingImpactCount: number;
+  decisionCount: number;
+  evidenceCount: number;
+  nextActionLabel: string;
+  riskCount: number;
+}) {
+  return (
+    <div className="mt-4 rounded-xl border border-violet-400/15 bg-[linear-gradient(135deg,rgba(139,92,246,0.10),rgba(24,24,27,0.52))] p-3 shadow-[0_0_32px_rgba(139,92,246,0.08)]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-300/25 bg-violet-400/10 px-2.5 py-1 text-[10px] font-semibold text-violet-100">
+              <GitMerge className="h-3 w-3" />
+              결정 레일
+            </span>
+            <span className="rounded-full border border-zinc-700/70 bg-zinc-950/45 px-2 py-1 text-[10px] text-zinc-400">
+              다음 행동
+            </span>
+          </div>
+          <p className="mt-2 truncate text-sm font-semibold text-zinc-100" title={nextActionLabel}>
+            {nextActionLabel}
+          </p>
+        </div>
+        <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4">
+          <DecisionRailMetric label="결정" value={`결정 ${decisionCount}건`} tone="violet" />
+          <DecisionRailMetric label="리스크" value={`리스크 ${riskCount}건`} tone={riskCount > 0 ? "amber" : "zinc"} />
+          <DecisionRailMetric label="근거" value={`근거 ${evidenceCount}건`} tone="blue" />
+          <DecisionRailMetric label="패킷" value={codingImpactCount > 0 ? "패킷 만들기" : "패킷 대기"} tone={codingImpactCount > 0 ? "cyan" : "zinc"} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DecisionRailMetric({
+  label,
+  tone,
+  value,
+}: {
+  label: string;
+  tone: "amber" | "blue" | "cyan" | "violet" | "zinc";
+  value: string;
+}) {
+  const toneClass = {
+    amber: "border-amber-400/20 bg-amber-400/10 text-amber-100",
+    blue: "border-blue-400/20 bg-blue-400/10 text-blue-100",
+    cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-100",
+    violet: "border-violet-400/20 bg-violet-400/10 text-violet-100",
+    zinc: "border-zinc-700/70 bg-zinc-950/45 text-zinc-400",
+  }[tone];
+
+  return (
+    <div className={`min-w-0 rounded-lg border px-2.5 py-1.5 ${toneClass}`}>
+      <p className="text-[9px] font-semibold text-current/65">{label}</p>
+      <p className="mt-0.5 truncate text-[11px] font-semibold text-zinc-50" title={value}>
+        {value}
+      </p>
+    </div>
   );
 }
 
