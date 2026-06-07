@@ -3,18 +3,20 @@ import type {
   CodingPacket,
   ConversationMessage,
   EventEnvelope,
+  MemoryInput,
   MemoryRecord,
   MemoryRelation,
   ProviderProfile,
   Reflection,
 } from "@ai-orchestrator/protocol";
-import { DgxSimpleMemMemoryAdapter } from "@ai-orchestrator/memory";
+import { DgxSimpleMemMemoryAdapter, isMemoryAdapterError } from "@ai-orchestrator/memory";
 import {
   activateMemoryRecord,
   createStage6MemoryInspector,
   forgetMemoryRecord,
   pinMemoryRecord,
   rememberStage6Context,
+  runMemoryReflectionWorker,
   type Stage6MemoryInspector,
 } from "../runtime/stage6Memory";
 import { initialMemoryRecords } from "../seeds/memory";
@@ -27,6 +29,10 @@ import {
   canCommitMemoryScopeResult,
   createMemoryControllerScopeKey,
 } from "../lib/memoryControllerScope";
+import {
+  createMemoryCuratorPersistencePlan,
+  type MemoryCuratorPersistencePlan,
+} from "../lib/memoryCuratorRuntime";
 
 type AppendWorkbenchEvent = <T>(type: string, payload: T) => EventEnvelope<T>;
 
@@ -57,9 +63,16 @@ export function useMemoryController({
   const [adapterReflection, setAdapterReflection] = useState<Reflection | null>(null);
   const memoryScopeKey = createMemoryControllerScopeKey(memoryScope);
   const memoryScopeKeyRef = useRef(memoryScopeKey);
+  const appendEventRef = useRef(appendEvent);
+  const markMemorySyncingRef = useRef(markMemorySyncing);
   const memoryAdapterProfileId = memoryScope
     ? `desktop_dgx_simplemem_${memoryScope.recallTraceId}`
     : "desktop_dgx_simplemem";
+
+  useEffect(() => {
+    appendEventRef.current = appendEvent;
+    markMemorySyncingRef.current = markMemorySyncing;
+  }, [appendEvent, markMemorySyncing]);
 
   const memoryAdapter = useMemo(
     () =>
@@ -71,7 +84,30 @@ export function useMemoryController({
   );
 
   const memoryApi = useMemo(
-    () => createAdapterBackedMementoMemoryApi({ adapter: memoryAdapter, operationScope: memoryScope }),
+    () =>
+      createAdapterBackedMementoMemoryApi({
+        adapter: memoryAdapter,
+        operationScope: memoryScope,
+        context: {
+          appendEvent: async (event) => {
+            appendEventRef.current(event.type, {
+              ...event.payload,
+              adapterEventId: event.id,
+              adapterEventCreatedAt: event.createdAt,
+              memoryScope: memoryScope?.namespace,
+              recallTraceId: memoryScope?.recallTraceId,
+            });
+          },
+          onAdapterError: (error) => {
+            appendEventRef.current("memory.adapter.error", {
+              category: error.category,
+              message: error.message,
+              memoryScope: memoryScope?.namespace,
+              recallTraceId: memoryScope?.recallTraceId,
+            });
+          },
+        },
+      }),
     [memoryAdapter, memoryScope],
   );
 
@@ -131,6 +167,53 @@ export function useMemoryController({
   useEffect(() => {
     let active = true;
     const expectedScopeKey = memoryScopeKey;
+    if (memoryRecords.length < 2) {
+      return () => {
+        active = false;
+      };
+    }
+
+    const now = new Date().toISOString();
+    runMemoryReflectionWorker({
+      records: memoryRecords,
+      sessionId: memoryScope?.sessionId,
+      projectId: memoryRecords[0]?.projectId,
+      now,
+    }).then((result) => {
+      if (!active || !canCommitMemoryScopeResult({ currentScopeKey: memoryScopeKeyRef.current, expectedScopeKey })) return;
+      if (result.fixedCount === 0) return;
+
+      const persistencePlan = createMemoryCuratorPersistencePlan(memoryRecords, result.resolvedRecords);
+      setMemoryRecords(result.resolvedRecords);
+      markMemorySyncingRef.current(now);
+      appendEventRef.current("memory.reflection_worker.resolved", {
+        fixedCount: result.fixedCount,
+        changedRecordIds: persistencePlan.changedRecordIds,
+        forgetRecordIds: persistencePlan.forgetRecordIds,
+        activateRecordIds: persistencePlan.activateRecordIds,
+        quarantineRecordIds: persistencePlan.quarantineRecordIds,
+        remainingIssueCount: result.newIssues.length,
+        memoryScope: memoryScope?.namespace,
+        recallTraceId: memoryScope?.recallTraceId,
+        sourceChannel: "desktop",
+      });
+      void persistMemoryCuratorPlan(persistencePlan);
+    }).catch((error: unknown) => {
+      appendEventRef.current("memory.reflection_worker.error", {
+        message: error instanceof Error ? error.message : "unknown memory reflection worker error",
+        memoryScope: memoryScope?.namespace,
+        recallTraceId: memoryScope?.recallTraceId,
+      });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [memoryApi, memoryRecords, memoryScope, memoryScopeKey]);
+
+  useEffect(() => {
+    let active = true;
+    const expectedScopeKey = memoryScopeKey;
     memoryApi
       .reflect(expectedScopeKey)
       .then((reflection) => {
@@ -169,6 +252,65 @@ export function useMemoryController({
     setMemoryRecords((records) => [memoryRecord, ...records]);
   }
 
+  function handleMemoryMutationError(operation: string, recordIds: string[], error: unknown) {
+    if (isMemoryAdapterError(error) && error.category === "promotion_pending") {
+      appendEvent("memory.curator.promotion.pending", {
+        operation,
+        recordIds,
+        category: error.category,
+        memoryScope: memoryScope?.namespace,
+        recallTraceId: memoryScope?.recallTraceId,
+      });
+      return;
+    }
+    appendEvent("memory.curator.persistence.error", {
+      operation,
+      recordIds,
+      message: error instanceof Error ? error.message : "unknown memory mutation error",
+      memoryScope: memoryScope?.namespace,
+      recallTraceId: memoryScope?.recallTraceId,
+    });
+  }
+
+  function requestRemember(record: MemoryRecord) {
+    const input: MemoryInput = {
+      layer: record.layer,
+      scope: record.scope,
+      kind: record.kind,
+      title: record.title,
+      content: record.content,
+      sourceChannel: record.sourceChannel,
+      trustLevel: record.trustLevel,
+      projectId: record.projectId,
+      sessionId: record.sessionId,
+      tags: record.tags,
+    };
+    void memoryApi.remember(input).catch((error: unknown) => {
+      handleMemoryMutationError("remember", [record.id], error);
+    });
+  }
+
+  function persistMemoryCuratorPlan(plan: MemoryCuratorPersistencePlan) {
+    if (plan.activateRecordIds.length > 0) {
+      void memoryApi.activateMemories(plan.activateRecordIds).catch((error: unknown) => {
+        handleMemoryMutationError("activate", plan.activateRecordIds, error);
+      });
+    }
+    for (const recordId of plan.forgetRecordIds) {
+      void memoryApi.forget(recordId).catch((error: unknown) => {
+        handleMemoryMutationError("forget", [recordId], error);
+      });
+    }
+    if (plan.quarantineRecordIds.length > 0) {
+      appendEvent("memory.quarantine.requested", {
+        recordIds: plan.quarantineRecordIds,
+        policy: "reflection_worker",
+        memoryScope: memoryScope?.namespace,
+        recallTraceId: memoryScope?.recallTraceId,
+      });
+    }
+  }
+
   function handleRememberCurrentContext() {
     const createdAt = new Date().toISOString();
     const candidates = rememberStage6Context({
@@ -199,6 +341,9 @@ export function useMemoryController({
       usedCount: memoryInspector.trace.results.filter((result) => result.usedInDecision).length,
       blockedCount: memoryInspector.blockedCount,
     });
+    for (const candidate of candidates) {
+      requestRemember(candidate);
+    }
   }
 
   function handlePinMemory(recordId: string) {
@@ -206,6 +351,9 @@ export function useMemoryController({
     appendEvent("memory.pin.updated", {
       recordId,
       pinned: true,
+    });
+    void memoryApi.pin(recordId).catch((error: unknown) => {
+      handleMemoryMutationError("pin", [recordId], error);
     });
   }
 
@@ -215,6 +363,9 @@ export function useMemoryController({
       recordId,
       activationState: "active",
     });
+    void memoryApi.activateMemories([recordId]).catch((error: unknown) => {
+      handleMemoryMutationError("activate", [recordId], error);
+    });
   }
 
   function handleForgetMemory(recordId: string) {
@@ -222,6 +373,9 @@ export function useMemoryController({
     appendEvent("memory.forget.requested", {
       recordId,
       policy: "tombstone_projection",
+    });
+    void memoryApi.forget(recordId).catch((error: unknown) => {
+      handleMemoryMutationError("forget", [recordId], error);
     });
   }
 
