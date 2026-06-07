@@ -58,17 +58,19 @@ export function createConversationPipelineMessages({
   const runtimeConfig = createAgentRuntimeConfigSection(agent, configFiles);
   const roleToolConfig = createAgentRoleToolRuntimeSummary(agent);
   const displayName = agentPrimaryDisplayName(agent);
-  const bundledSoulMd = getBundledAgentPersonaContentByPath(persona?.soulMdPath);
-  const bundledAgentsMd = getBundledAgentPersonaContentByPath(persona?.agentsMdPath);
+  const personaInjectionDisabled = agent.configSource === "off" || agent.soulMode === "off";
+  const personaInjectionEnabled = Boolean(persona && !personaInjectionDisabled);
+  const bundledSoulMd = personaInjectionEnabled ? getBundledAgentPersonaContentByPath(persona?.soulMdPath) : undefined;
+  const bundledAgentsMd = personaInjectionEnabled ? getBundledAgentPersonaContentByPath(persona?.agentsMdPath) : undefined;
   const soulPromptText = bundledSoulMd ?? persona?.soulSummary;
   const agentsPromptText = bundledAgentsMd ?? persona?.agentsInstruction;
-  const personaSoulApplied = Boolean(persona && soulPromptText?.trim());
-  const personaAgentsMdApplied = Boolean(persona && agentsPromptText?.trim());
+  const personaSoulApplied = Boolean(personaInjectionEnabled && soulPromptText?.trim());
+  const personaAgentsMdApplied = Boolean(personaInjectionEnabled && agentsPromptText?.trim());
   const personaFragment = createConversationPersonaFragment({
     agent,
-    agentsPromptText,
-    persona,
-    soulPromptText,
+    agentsPromptText: personaInjectionEnabled ? agentsPromptText : undefined,
+    persona: personaInjectionEnabled ? persona : undefined,
+    soulPromptText: personaInjectionEnabled ? soulPromptText : undefined,
   });
   const attachmentContext = createAttachmentContext(userMessage);
   const longContextTruncated = previousMessages.length > 8;
@@ -82,13 +84,17 @@ export function createConversationPipelineMessages({
   const systemContent = [
     "AI Orchestrator Lab conversation pipeline.",
     "Reply in Korean unless the user explicitly asks for another language.",
-    "The active agent persona is binding: preserve its SOUL.md voice, judgment style, and forbidden style while staying concise and truthful.",
+    personaInjectionEnabled
+      ? "The active agent persona is binding: preserve its SOUL.md voice, judgment style, and forbidden style while staying concise and truthful."
+      : personaInjectionDisabled
+        ? "The active agent identity is binding, but SOUL/AGENTS body injection is disabled for this run."
+        : "The active agent role profile is binding; use the role contract and memory scope without inventing missing SOUL text.",
     `Identity contract: your name is ${displayName}. If the user asks your name, answer ${displayName}; do not say you have no name and do not replace it with only the role.`,
     `Name QA contract: when the user asks "네 이름은 뭐야", "이름", "누구야", or similar identity questions, answer first as "${displayName}" and then explain your role only if useful.`,
     `Agent: ${displayName} / role: ${agent.role}`,
     agent.name !== displayName ? `Legacy profile label: ${sanitizePipelineText(agent.name)}` : undefined,
     `Provider: ${provider.name} / model: ${modelId}`,
-    persona
+    personaInjectionEnabled && persona
       ? [
           personaFragment.promptText ? `Official persona fragment:\n${sanitizePipelineText(personaFragment.promptText)}` : undefined,
           `SOUL.md path: ${sanitizePipelineText(persona.soulMdPath)}`,
@@ -104,7 +110,9 @@ export function createConversationPipelineMessages({
             ? `Forbidden style: ${sanitizePipelineText(persona.forbiddenStyle)}`
             : undefined,
         ].filter(Boolean).join("\n")
-      : "SOUL.md: default role profile",
+      : persona
+        ? "SOUL/AGENTS injection: disabled for this run"
+        : "SOUL.md: default role profile",
     createAgentChannelRuntimeSummary(memoryScope),
     roleToolConfig.promptText,
     runtimeConfig.promptText,
@@ -149,8 +157,8 @@ export function createConversationPipelineMessages({
       personaAgentsMdApplied,
       personaSafetyApplied: personaFragment.safetyApplied,
       personaFragmentsInjected: personaFragment.fragmentsInjected,
-      personaSoulMdPath: persona?.soulMdPath,
-      personaAgentsMdPath: persona?.agentsMdPath,
+      personaSoulMdPath: personaInjectionEnabled ? persona?.soulMdPath : undefined,
+      personaAgentsMdPath: personaInjectionEnabled ? persona?.agentsMdPath : undefined,
       roleToolProfileLabel: roleToolConfig.label,
       roleToolProfileTools: roleToolConfig.tools,
     },
