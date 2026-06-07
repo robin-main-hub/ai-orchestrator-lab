@@ -12,11 +12,11 @@ import { cn } from "../lib/utils";
  *
  * The §8 table:
  *
- *   1 Suggest only             — read_only
- *   2 Draft                    — read_only + draft 권한
- *   3 Execute with approval    — write_files + approval gate ON
- *   4 Autopilot — low-risk     — write_files + auto-approve low-risk
- *   5 Autopilot — trusted prov.— run_safe_commands + trust-bound
+ *   1 제안만                  — read_only
+ *   2 초안                    — read_only + draft 권한
+ *   3 승인 후 실행            — write_files + approval gate ON
+ *   4 저위험 자동             — write_files + auto-approve low-risk
+ *   5 신뢰 실행자 자동        — run_safe_commands + trust-bound
  *
  * Status (§8 보류 마크 🟡): the `permissionLevel` enum has 7 values
  * (read_only / write_files / run_safe_commands / run_dangerous_commands
@@ -31,7 +31,7 @@ import { cn } from "../lib/utils";
  * Controlled / uncontrolled:
  *   - If `value` + `onChange` are passed, the component is controlled.
  *   - Otherwise it manages local state seeded from `initialLevel`
- *     (default 3 — "Execute with approval", matches §8 's recommended
+ *     (default 3 — "승인 후 실행", matches §8 's recommended
  *     companion default).
  */
 
@@ -60,8 +60,8 @@ type LevelDef = {
 const LEVELS: LevelDef[] = [
   {
     level: 1,
-    shortLabel: "Suggest",
-    fullLabel: "Suggest only",
+    shortLabel: "제안",
+    fullLabel: "제안만",
     description: "제안만, 사용자가 직접 모든 적용. 읽기 전용.",
     permissionHint: "read_only",
     approvalHint: "모든 액션 수동",
@@ -69,38 +69,38 @@ const LEVELS: LevelDef[] = [
   },
   {
     level: 2,
-    shortLabel: "Draft",
-    fullLabel: "Draft",
-    description: "draft 작성, 사용자 review 후 적용.",
+    shortLabel: "초안",
+    fullLabel: "초안 작성",
+    description: "초안을 작성하고 사용자 검토 후 적용.",
     permissionHint: "read_only",
-    approvalHint: "draft → review",
+    approvalHint: "초안 → 검토",
     icon: <FileEdit size={12} />,
   },
   {
     level: 3,
-    shortLabel: "Approve",
-    fullLabel: "Execute with approval",
-    description: "매 action 마다 사용자 승인. 채아린(companion) 기본값.",
+    shortLabel: "승인",
+    fullLabel: "승인 후 실행",
+    description: "매 작업마다 사용자 승인. 채아린(companion) 기본값.",
     permissionHint: "write_files",
     approvalHint: "매 action 승인 필요",
     icon: <ShieldCheck size={12} />,
   },
   {
     level: 4,
-    shortLabel: "Autopilot+",
-    fullLabel: "Autopilot — low-risk",
-    description: "저위험(read/search/format)은 자동, 위험은 승인.",
+    shortLabel: "저위험 자동",
+    fullLabel: "저위험 자동 실행",
+    description: "저위험 읽기/검색/포맷은 자동, 위험 작업은 승인.",
     permissionHint: "write_files",
     approvalHint: "고위험만 승인",
     icon: <Sparkles size={12} />,
   },
   {
     level: 5,
-    shortLabel: "Autopilot⚡",
-    fullLabel: "Autopilot — trusted provider",
-    description: "신뢰 provider (DGX local) 에서만 full autonomy.",
+    shortLabel: "신뢰 자동",
+    fullLabel: "신뢰 실행자 자동",
+    description: "신뢰 프로바이더(DGX local)에서만 높은 자율성을 허용.",
     permissionHint: "run_safe_commands",
-    approvalHint: "trust-bound, 자동",
+    approvalHint: "신뢰 범위 안에서 자동",
     icon: <Zap size={12} />,
   },
 ];
@@ -169,10 +169,10 @@ export function AutonomySlider({
 
       <div className="autonomy-slider__meta">
         <span>
-          permission <em>{currentDef.permissionHint}</em>
+          권한 <em>{currentDef.permissionHint}</em>
         </span>
         <span>
-          approval <em>{currentDef.approvalHint}</em>
+          승인 <em>{currentDef.approvalHint}</em>
         </span>
       </div>
 
