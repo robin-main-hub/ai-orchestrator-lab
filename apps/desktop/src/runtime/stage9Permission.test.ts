@@ -258,6 +258,13 @@ describe("stage9 permission matrix", () => {
 
     expect(result.requiresApproval).toBe(true);
     expect(result.queueItem?.sourceItemId).toBe(result.item.id);
+    expect(result.queueItem).toEqual(
+      expect.objectContaining({
+        action: "provider_completion",
+        reason: result.item.reason,
+        sourceTrust: "limited",
+      }),
+    );
     expect(result.item.reason).toContain("requires approval");
   });
 
@@ -293,5 +300,31 @@ describe("stage9 permission matrix", () => {
 
     expect(result.requiresApproval).toBe(true);
     expect(result.item.reason).toContain("exceeds budget");
+    expect(result.queueItem?.costEstimateTokens).toBe(120_000);
+  });
+
+  it("keeps replay metadata on queued gate approvals", () => {
+    const gateInput = {
+      sessionId: "session_desktop_001",
+      subjectId: "tmux_dispatch",
+      actor: "agent" as const,
+      channel: "desktop" as const,
+      sourceTrust: "trusted" as const,
+      action: "terminal_run" as const,
+      requestedLevels: ["run_safe_commands"] as PermissionLevel[],
+      replayKind: "tmux_dispatch" as const,
+      replayEndpoint: "/tmux/dispatch",
+      createdAt,
+    };
+
+    const result = evaluatePermissionGate(gateInput);
+
+    expect(result.requiresApproval).toBe(true);
+    expect(result.queueItem).toEqual(
+      expect.objectContaining({
+        replayKind: "tmux_dispatch",
+        replayEndpoint: "/tmux/dispatch",
+      }),
+    );
   });
 });
