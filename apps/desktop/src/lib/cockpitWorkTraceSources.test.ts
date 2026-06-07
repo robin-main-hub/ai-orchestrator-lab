@@ -23,6 +23,18 @@ const userMessage: ConversationMessage = {
   role: "user",
   content: "검토해줘.",
   createdAt: "2026-06-05T08:00:00.000Z",
+  metadata: {
+    attachmentProcessingPlans: [
+      {
+        kind: "image",
+        name: "screen.png",
+        processingMode: "vision_candidate",
+        size: 120_000,
+        status: "accepted",
+        storage: "metadata_only",
+      },
+    ],
+  },
 };
 
 const debateSession: Stage3DebateSession = {
@@ -88,7 +100,11 @@ describe("createCockpitWorkTraceSources", () => {
       tmuxBlocks: [tmuxBlock],
     });
 
-    expect(sources.map((source) => source.kind)).toEqual(["conversation", "debate", "tmux"]);
+    expect(sources.map((source) => source.kind)).toEqual(["conversation", "conversation", "debate", "tmux"]);
+    expect(sources[0]).toMatchObject({
+      id: "msg_user_1",
+      title: "사용자 첨부 공개 영수증",
+    });
     expect(sources.find((source) => source.kind === "debate")).toMatchObject({
       id: "utterance_1",
       title: "토론 공개 영수증 · 최종 결정",
