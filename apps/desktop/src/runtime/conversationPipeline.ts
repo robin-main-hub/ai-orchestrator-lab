@@ -1,3 +1,7 @@
+import {
+  buildPersonaPromptFragment,
+  type PersonaFragment,
+} from "@ai-orchestrator/agents";
 import type { ConversationMessage, ProviderProfile } from "@ai-orchestrator/protocol";
 import type {
   AgentConfigFile,
@@ -11,7 +15,11 @@ import {
   createAgentRuntimeConfigSection,
 } from "../lib/agentRuntimeConfig";
 import { agentIdentityKey, agentPrimaryDisplayName } from "../lib/agentDisplay";
-import { getBundledAgentPersonaContentByPath } from "../lib/agentPersonaContent";
+import {
+  getBundledAgentPersonaContent,
+  getBundledAgentPersonaContentByPath,
+  getBundledAgentSafetyContent,
+} from "../lib/agentPersonaContent";
 import { sanitizePublicText } from "../lib/publicRedaction";
 import type { Stage6MemoryInspector } from "./stage6Memory";
 
@@ -56,6 +64,12 @@ export function createConversationPipelineMessages({
   const agentsPromptText = bundledAgentsMd ?? persona?.agentsInstruction;
   const personaSoulApplied = Boolean(persona && soulPromptText?.trim());
   const personaAgentsMdApplied = Boolean(persona && agentsPromptText?.trim());
+  const personaFragment = createConversationPersonaFragment({
+    agent,
+    agentsPromptText,
+    persona,
+    soulPromptText,
+  });
   const longContextTruncated = previousMessages.length > 8;
   const continuityWarning =
     longContextTruncated && recalledMemories.length === 0
@@ -74,6 +88,7 @@ export function createConversationPipelineMessages({
     `Provider: ${provider.name} / model: ${modelId}`,
     persona
       ? [
+          personaFragment.promptText ? `Official persona fragment:\n${sanitizePipelineText(personaFragment.promptText)}` : undefined,
           `SOUL.md path: ${sanitizePipelineText(persona.soulMdPath)}`,
           `SOUL.md content:\n${sanitizePipelineText(soulPromptText ?? persona.soulSummary)}`,
           persona.soulExampleDialogue
@@ -129,6 +144,8 @@ export function createConversationPipelineMessages({
       personaIdentityKey: agentIdentityKey(agent),
       personaSoulApplied,
       personaAgentsMdApplied,
+      personaSafetyApplied: personaFragment.safetyApplied,
+      personaFragmentsInjected: personaFragment.fragmentsInjected,
       personaSoulMdPath: persona?.soulMdPath,
       personaAgentsMdPath: persona?.agentsMdPath,
       roleToolProfileLabel: roleToolConfig.label,
@@ -137,6 +154,71 @@ export function createConversationPipelineMessages({
   };
 
   return [systemMessage, ...previousMessages.slice(-8), userMessage];
+}
+
+function createConversationPersonaFragment({
+  agent,
+  agentsPromptText,
+  persona,
+  soulPromptText,
+}: {
+  agent: WorkbenchAgent;
+  agentsPromptText?: string;
+  persona?: AgentPersonaSettings;
+  soulPromptText?: string;
+}) {
+  if (!persona) {
+    return { fragmentsInjected: [] as string[], promptText: "", safetyApplied: false };
+  }
+
+  const personaName = readPersonaNameFromPath(persona.soulMdPath) ?? agent.personaName ?? agent.role;
+  const bundled = getBundledAgentPersonaContent(personaName);
+  const fragments: PersonaFragment[] = [];
+
+  if (bundled?.identityMd) {
+    fragments.push({
+      source: "identity",
+      relativePath: `agents/${personaName}/IDENTITY.md`,
+      content: bundled.identityMd,
+    });
+  }
+  if (soulPromptText?.trim()) {
+    fragments.push({
+      source: "soul",
+      relativePath: persona.soulMdPath,
+      content: soulPromptText,
+    });
+  }
+  if (agentsPromptText?.trim()) {
+    fragments.push({
+      source: "agents",
+      relativePath: persona.agentsMdPath,
+      content: agentsPromptText,
+    });
+  }
+  if (bundled?.userMd) {
+    fragments.push({
+      source: "user",
+      relativePath: `agents/${personaName}/USER.md`,
+      content: bundled.userMd,
+    });
+  }
+
+  const safetyContent = getBundledAgentSafetyContent() ?? null;
+  return {
+    fragmentsInjected: fragments.map((fragment) => fragment.relativePath),
+    promptText: buildPersonaPromptFragment({
+      fragments,
+      mode: "soul_plus_agents",
+      personaName,
+      safetyContent,
+    }),
+    safetyApplied: Boolean(safetyContent),
+  };
+}
+
+function readPersonaNameFromPath(path: string | undefined) {
+  return path?.match(/agents\/([^/]+)\//)?.[1];
 }
 
 function sanitizePipelineText(value: string): string {
