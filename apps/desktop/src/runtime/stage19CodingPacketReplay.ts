@@ -23,6 +23,8 @@ export function extractLatestCodingPacketFromEvents(events: EventEnvelope[]): St
     };
   }
 
+  let firstInvalid: Stage19CodingPacketReplayResult | undefined = undefined;
+
   for (const event of packetEvents) {
     const payload = event.payload as CodingPacketCreatedPayload;
     if (!payload?.packet) {
@@ -31,12 +33,15 @@ export function extractLatestCodingPacketFromEvents(events: EventEnvelope[]): St
 
     const parsed = codingPacketSchema.safeParse(payload.packet);
     if (!parsed.success) {
-      return {
-        status: "invalid",
-        eventId: event.id,
-        createdAt: event.createdAt,
-        error: parsed.error.issues.map((issue) => issue.message).join("; "),
-      };
+      if (!firstInvalid) {
+        firstInvalid = {
+          status: "invalid",
+          eventId: event.id,
+          createdAt: event.createdAt,
+          error: parsed.error.issues.map((issue) => issue.message).join("; "),
+        };
+      }
+      continue;
     }
 
     return {
@@ -47,7 +52,7 @@ export function extractLatestCodingPacketFromEvents(events: EventEnvelope[]): St
     };
   }
 
-  return {
+  return firstInvalid ?? {
     status: "missing",
   };
 }

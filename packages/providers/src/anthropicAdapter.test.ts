@@ -133,6 +133,42 @@ describe("AnthropicAdapter — request shape", () => {
     expect(captured!.messages[0]).toEqual({ role: "user", content: "ping" });
   });
 
+  it("drops blank text messages before building the Anthropic request body", async () => {
+    let captured: { system?: string; messages: Array<{ role: string; content: string }> } | null = null;
+    const { fetch } = recordedFetch((call) => {
+      captured = JSON.parse(call.body ?? "{}") as {
+        system?: string;
+        messages: Array<{ role: string; content: string }>;
+      };
+      return {
+        ok: true,
+        status: 200,
+        body: JSON.stringify({
+          type: "message",
+          content: [{ type: "text", text: "OK" }],
+          stop_reason: "end_turn",
+        }),
+      };
+    });
+    const adapter = new AnthropicAdapter({
+      profileId: "p",
+      baseUrl: "https://api.apikey.fun",
+      fetchImpl: fetch,
+    });
+    await adapter.complete(
+      baseRequest({
+        messages: [
+          { role: "system", content: "   " },
+          { role: "user", content: "" },
+          { role: "user", content: "ping" },
+        ],
+      }),
+      createAdapterContext({ secret: "k" }),
+    );
+    expect(captured!.system).toBeUndefined();
+    expect(captured!.messages).toEqual([{ role: "user", content: "ping" }]);
+  });
+
   it("includes max_tokens (Anthropic requires it)", async () => {
     let body: Record<string, unknown> | null = null;
     const { fetch } = recordedFetch((call) => {
