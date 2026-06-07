@@ -65,6 +65,21 @@ describe("createOpenAIChatMessages", () => {
 
     expect(messages).toEqual([{ role: "system", content: "Default prompt." }]);
   });
+
+  it("ignores malformed non-string content before building request messages", () => {
+    const malformedMessages = [
+      { role: "system", content: { text: "object system" } },
+      { role: "user", content: { text: "object user" } },
+      { role: "user", content: "valid user" },
+    ] as unknown as ProviderCompletionRequest["messages"];
+
+    const messages = createOpenAIChatMessages(malformedMessages, "Default prompt.");
+
+    expect(messages).toEqual([
+      { role: "system", content: "Default prompt." },
+      { role: "user", content: "valid user" },
+    ]);
+  });
 });
 
 describe("OpenAICompatibleAdapter", () => {
