@@ -30,6 +30,7 @@ import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import { PublicWorkTracePanel } from "../PublicWorkTracePanel";
 import { createConversationMessagePublicWorkTrace } from "../../lib/publicWorkTrace";
 import { agentInitialsForDisplay, agentPrimaryDisplayName } from "../../lib/agentDisplay";
+import type { AgentThinkingStep } from "../../lib/agentThinkingIndicator";
 
 export type DelegationPreviewItem = {
   id: string;
@@ -112,6 +113,7 @@ export function MessageThread({
               agent={selectedAgent}
               agentVisualsById={agentVisualsById}
               label={thinkingIndicator.label}
+              steps={thinkingIndicator.steps}
             />
           ) : null}
         </div>
@@ -138,11 +140,13 @@ function AssistantPendingBubble({
   agent,
   agentVisualsById,
   label,
+  steps,
 }: {
   activity?: AgentActivityStatus;
   agent: WorkbenchAgent;
   agentVisualsById?: Record<string, AgentVisualSettings>;
   label: string;
+  steps: AgentThinkingStep[];
 }) {
   const visual = agentVisualsById?.[agent.id];
   const status = activity === "responding" ? ("active" as const) : ("pending" as const);
@@ -169,6 +173,31 @@ function AssistantPendingBubble({
             <span className="message-thinking-dot [animation-delay:160ms]" />
             <span className="message-thinking-dot [animation-delay:320ms]" />
           </span>
+        </div>
+        <div className="flex max-w-[82%] flex-wrap gap-1.5 px-1" aria-label="응답 준비 단계">
+          {steps.map((step) => (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${
+                step.state === "done"
+                  ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-200"
+                  : step.state === "active"
+                    ? "border-cyan-400/25 bg-cyan-500/10 text-cyan-100"
+                    : "border-zinc-700/60 bg-zinc-900/60 text-zinc-500"
+              }`}
+              key={step.label}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  step.state === "active"
+                    ? "animate-pulse bg-cyan-300"
+                    : step.state === "done"
+                      ? "bg-emerald-300"
+                      : "bg-zinc-600"
+                }`}
+              />
+              {step.label}
+            </span>
+          ))}
         </div>
       </div>
     </div>
