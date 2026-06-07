@@ -175,6 +175,7 @@ import {
   createAgentRoleToolRuntimeSummary,
 } from "./lib/agentRuntimeConfig";
 import { applyAgentIdentityResponseGuard } from "./lib/agentIdentityResponseGuard";
+import { createCompletionMemoryRecallMessages } from "./lib/agentCompletionRecall";
 import { createMemoryGovernanceSummary } from "./lib/memoryGovernance";
 import { createConversationTurnMemoryCandidate } from "./lib/memoryCuratorRuntime";
 import { createProviderRoutingConsoleItems } from "./lib/providerRoutingConsole";
@@ -1089,9 +1090,13 @@ export function App() {
       fallbackProviderProfileId: provider.id ?? agent.providerProfileId ?? "provider_unassigned",
       sessionId: activeSessionId,
     });
+    const recallMessages = createCompletionMemoryRecallMessages(
+      completionContext.previousMessages,
+      userMessage,
+    );
     const targetMemoryInspector = await createScopedMemoryInspector(
       completionContext.memoryScope,
-      completionContext.previousMessages,
+      recallMessages,
       provider,
     );
     const pipelineMessages = createConversationPipelineMessages({

@@ -219,6 +219,38 @@ describe("conversation pipeline runtime helper", () => {
     expect(pipeline[0]?.content).toContain("허용 도구: test.run, build.check, evidence.check");
   });
 
+  it("respects soulMode off by keeping identity contract but not injecting SOUL/AGENTS bodies", () => {
+    const userMessage = message("message_user_latest", "user", "이름과 역할만 알려줘");
+    const soulOffAgent = {
+      ...agent,
+      soulMode: "off",
+    } satisfies WorkbenchAgent;
+
+    const pipeline = createConversationPipelineMessages({
+      agent: soulOffAgent,
+      configFiles,
+      memory,
+      memoryScope,
+      modelId: "mimo-v2.5-pro",
+      persona,
+      previousMessages: [],
+      provider,
+      systemMessageId: "message_system_pipeline_soul_off_test",
+      userMessage,
+    });
+    const system = pipeline[0]!;
+
+    expect(system.content).toContain("Identity contract: your name is 마키마");
+    expect(system.content).not.toContain("SOUL.md content:");
+    expect(system.content).not.toContain("AGENTS.md operational rules:");
+    expect(system.content).not.toContain("Official persona fragment:");
+    expect(system.metadata).toMatchObject({
+      personaSoulApplied: false,
+      personaAgentsMdApplied: false,
+      personaFragmentsInjected: [],
+    });
+  });
+
   it("does not inject another agent channel's scoped memories", () => {
     const userMessage = message("message_user_latest", "user", "내 기억만 써줘");
     const mixedMemory = {

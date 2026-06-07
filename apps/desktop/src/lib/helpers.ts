@@ -213,7 +213,15 @@ export function attachmentCapabilityLabel(model?: ModelDescriptor) {
 }
 
 export function agentProfileSlug(agent: WorkbenchAgent) {
-  return agent.role.replaceAll("_", "-") || slugifyProviderName(agent.name, agent.id);
+  return sanitizeAgentPersonaDirectory(agent.personaName ?? agent.role) || slugifyProviderName(agent.name, agent.id);
+}
+
+function sanitizeAgentPersonaDirectory(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 export function defaultVoicePresetForRole(role: WorkbenchAgent["role"]): AgentVoicePreset {
