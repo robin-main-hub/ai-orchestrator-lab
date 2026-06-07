@@ -36,7 +36,7 @@ describe("agentDisplay", () => {
     });
 
     expect(agentPrimaryDisplayName(yohane)).toBe("츠시마 요시코");
-    expect(agentSecondaryDisplayLabel(yohane)).toBe("Skeptic · 4차원 아이디어 뱅크");
+    expect(agentSecondaryDisplayLabel(yohane)).toBe("비판자 · 4차원 아이디어 뱅크");
     expect(agentInitialsForDisplay(yohane)).toBe("츠시");
   });
 
@@ -49,6 +49,9 @@ describe("agentDisplay", () => {
 
       expect(displayName, seededAgent.id).toBeTruthy();
       expect(secondaryLabel, seededAgent.id).toContain(" · ");
+      expect(secondaryLabel, seededAgent.id).not.toMatch(
+        /\b(Architect|Auditor|Builder|Companion|Domain Expert|Executor|External|Memory Curator|Negotiator|Orchestrator|Researcher|Reviewer|Risk Officer|Skeptic|Verifier|Watchdog)\b/,
+      );
       expect(
         displayName !== seededAgent.name || /[가-힣]/.test(displayName),
         seededAgent.id,

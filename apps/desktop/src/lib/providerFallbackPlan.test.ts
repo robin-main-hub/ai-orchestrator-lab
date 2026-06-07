@@ -32,7 +32,7 @@ describe("providerFallbackPlan", () => {
     expect(plan.retryable).toBe(false);
   });
 
-  it("네트워크/timeout 장애는 신뢰 가능한 대체 provider를 제안한다", () => {
+  it("네트워크/timeout 장애는 신뢰 가능한 대체 공급자를 제안한다", () => {
     const plan = deriveProviderFallbackPlan({
       lastErrorCategory: "timeout",
       providers: [
@@ -45,7 +45,8 @@ describe("providerFallbackPlan", () => {
 
     expect(plan.status).toBe("available");
     expect(plan.candidateProviderId).toBe("provider_backup");
-    expect(plan.label).toBe("대체 Provider 준비");
+    expect(plan.label).toBe("대체 공급자 준비");
+    expect(plan.reason).toContain("응답 지연 장애");
     expect(plan.retryable).toBe(true);
   });
 
@@ -80,9 +81,11 @@ describe("providerFallbackPlan", () => {
 
     expect(reply).toContain("MiMo Token Plan OpenAI 호출이 막혔어");
     expect(reply).toContain("네트워크");
-    expect(reply).toContain("대체 Provider 준비");
+    expect(reply).toContain("대체 공급자 준비");
     expect(reply).toContain("Mock 안전 경로");
     expect(reply).not.toContain("http://dgx-02:4317");
+    expect(reply).not.toContain("Provider");
+    expect(reply).not.toContain("fallback");
     expect(reply).toContain("[redacted:url]");
   });
 });

@@ -335,7 +335,7 @@ describe("publicWorkTrace", () => {
     const trace = createDebateUtterancePublicWorkTrace(utterance);
 
     expect(trace.groups[0]?.items).toContainEqual(
-      expect.objectContaining({ label: "토론 단계", value: "검증 라운드 · Verifier" }),
+      expect.objectContaining({ label: "토론 단계", value: "검증 라운드 · 검증자" }),
     );
     expect(trace.groups[2]?.items).toContainEqual(
       expect.objectContaining({ label: "근거", value: "2개 evidence ref" }),

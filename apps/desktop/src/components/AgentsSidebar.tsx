@@ -13,7 +13,6 @@ import { providerDisplayLabel } from "../lib/helpers";
 import {
   agentPrimaryDisplayName,
   agentSecondaryDisplayLabel,
-  englishRoleLabelByRole,
 } from "../lib/agentDisplay";
 import { getAgentToolProfileSummary } from "../lib/agentToolProfiles";
 import { cn } from "@/lib/utils";
@@ -84,10 +83,6 @@ export type AgentsSidebarProps = {
 };
 
 type AgentCategory = "core" | "specialist" | "companion";
-
-function englishRoleLabel(role: WorkbenchAgent["role"]) {
-  return englishRoleLabelByRole[role];
-}
 
 function roleToCategory(role: WorkbenchAgent["role"]): AgentCategory {
   switch (role) {
