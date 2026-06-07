@@ -1,4 +1,4 @@
-import { FileText, Search, ShieldCheck, ShieldX } from "lucide-react";
+import { ExternalLink, FileText, Search, ShieldCheck, ShieldX } from "lucide-react";
 import type { WorkTraceSearchItem } from "../../lib/workTraceSearch";
 import { Badge } from "./Badge";
 import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
@@ -68,6 +68,20 @@ export function WorkReceiptLedgerCard({ items }: { items: WorkTraceSearchItem[] 
             아직 표시할 공개 영수증이 없습니다.
           </div>
         )}
+      </div>
+      <div className="border-t border-zinc-800/60 px-4 py-3">
+        <a
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-cyan-200 transition-colors hover:text-cyan-100"
+          href="https://github.com/robin-main-hub/ai-orchestrator-lab/issues/251"
+          rel="noreferrer"
+          target="_blank"
+        >
+          GitHub #251 운영 장부
+          <ExternalLink className="h-3 w-3" />
+        </a>
+        <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+          PR, 테스트, 에이전트 보고, 보정 기록은 공개 영수증과 함께 이 장부에 남깁니다.
+        </p>
       </div>
     </GlassPanel>
   );
