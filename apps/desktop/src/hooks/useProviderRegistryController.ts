@@ -44,21 +44,21 @@ export function createAuthBinding(provider?: ProviderProfile): WorkbenchAgent["a
   if (!provider) {
     return {
       mode: "provider_profile",
-      label: "credential pending",
+      label: "인증 정보 대기",
     };
   }
 
   if (provider.id === "provider_mock_local") {
     return {
       mode: "local",
-      label: "local runtime",
+      label: "로컬 런타임",
       providerProfileId: provider.id,
     };
   }
 
   return {
     mode: provider.tags.includes("oauth") ? "oauth" : "provider_profile",
-    label: provider.tags.includes("oauth") ? "OAuth/API profile" : "API secretRef",
+    label: provider.tags.includes("oauth") ? "OAuth/API 프로필" : "API 비밀키 참조",
     providerProfileId: provider.id,
     secretRefId: provider.secretRef?.id,
     oauthRef: provider.tags.includes("oauth") ? "oauth_pending" : undefined,
