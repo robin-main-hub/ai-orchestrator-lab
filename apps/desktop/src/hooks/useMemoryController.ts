@@ -31,6 +31,8 @@ import {
 } from "../lib/memoryControllerScope";
 import {
   createMemoryCuratorPersistencePlan,
+  mergeMemoryRecordsWithCuratorLedger,
+  writeMemoryCuratorCandidate,
   type MemoryCuratorPersistencePlan,
 } from "../lib/memoryCuratorRuntime";
 import type { MemoryCuratorCandidate } from "../lib/memoryCuratorApproval";
@@ -131,7 +133,10 @@ export function useMemoryController({
       .recall({ query: recallQuery, sessionId: memoryScope?.sessionId, limit: 50 })
       .then((results) => {
         if (!active || !canCommitMemoryScopeResult({ currentScopeKey: memoryScopeKeyRef.current, expectedScopeKey })) return;
-        setMemoryRecords(results.map((result) => result.record));
+        setMemoryRecords(mergeMemoryRecordsWithCuratorLedger(
+          results.map((result) => result.record),
+          expectedScopeKey,
+        ));
         setAdapterStatus("ready");
       })
       .catch(() => {
@@ -254,13 +259,19 @@ export function useMemoryController({
   }
 
   function handleQueueMemoryCuratorCandidate(candidate: MemoryCuratorCandidate) {
+    const updatedAt = new Date().toISOString();
+    writeMemoryCuratorCandidate({
+      candidate,
+      scopeKey: memoryScopeKeyRef.current,
+      updatedAt,
+    });
     setMemoryRecords((records) => {
       if (records.some((record) => record.id === candidate.record.id)) {
         return records;
       }
       return [candidate.record, ...records];
     });
-    markMemorySyncing(new Date().toISOString());
+    markMemorySyncing(updatedAt);
     appendEvent("memory.curator.candidate.created", {
       agentId: candidate.agentId,
       candidateId: candidate.id,
