@@ -14,6 +14,10 @@ export type AgentIdentityResponseGuardResult = {
 
 const nameQuestionPatterns = [
   /이름.*(뭐|뭔|누구)/,
+  /이름.*(알려|말해|있어|있니|있냐)/,
+  /너.*이름/,
+  /네.*이름/,
+  /성함.*(뭐|뭔|누구|알려|말해)/,
   /누구(야|세요|냐)/,
   /who are you/i,
   /what(?:'s| is) your name/i,
