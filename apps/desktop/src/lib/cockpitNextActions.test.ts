@@ -168,4 +168,24 @@ describe("deriveCockpitNextActions", () => {
       targetSurface: "control_queue",
     });
   });
+
+  it("막힌 것이 없을 때도 다음 큰 바위 점검 행동을 남긴다", () => {
+    const actions = deriveCockpitNextActions({
+      diagnostics: { nextActions: [] } as unknown as SettingsDiagnostics,
+      maturity: { nextActions: [], overallStatus: "ready" } as unknown as OrchestrationMaturityReport,
+      snapshot: { ...snapshot, approvals: [], fleet: [], handoffs: [] } as unknown as OperatorCockpitSnapshot,
+      workTraceItems: [],
+    });
+
+    expect(actions).toEqual([
+      {
+        ctaLabel: "성숙도 보기",
+        id: "default_next_big_rock",
+        label: "다음 큰 바위 선정: 성숙도와 작업 영수증을 확인",
+        priority: "normal",
+        source: "maturity",
+        targetSurface: "maturity",
+      },
+    ]);
+  });
 });
