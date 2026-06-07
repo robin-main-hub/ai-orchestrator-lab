@@ -8,6 +8,13 @@ import type {
   TmuxPaneRole,
 } from "@ai-orchestrator/protocol";
 import { StatusBadge } from "@/ui/status-badge";
+import {
+  approvalServerStatusLabel,
+  ingressApprovalStateLabel,
+  ingressConfidenceLabel,
+  providerReadinessLabel,
+  tmuxRedispatchOutcomeLabel,
+} from "../lib/railStatusLabels";
 import type { DesktopApprovalListResponse } from "../runtime/stage34ApprovalServer";
 import type { Stage7BackupSnapshot } from "../runtime/stage7Backup";
 import type { Stage8IngressSnapshot } from "../runtime/stage8Ingress";
@@ -68,37 +75,39 @@ export function OperationsRailPanel({
     <section className="mini-panel rail-panel ops-rail-panel">
       <header>
         <ShieldCheck size={16} />
-        <span>Ops</span>
+        <span>운영</span>
         <div className="rail-action-row">
-          <button className="rail-icon-button" onClick={onImportExternalIngress} title="Import External Ingress" type="button">
+          <button className="rail-icon-button" onClick={onImportExternalIngress} title="외부 인입 가져오기" type="button">
             <Smartphone size={13} />
           </button>
-          <button className="rail-icon-button" onClick={onExportBackup} title="Export Backup" type="button">
+          <button className="rail-icon-button" onClick={onExportBackup} title="백업 내보내기" type="button">
             <Archive size={13} />
           </button>
-          <button className="rail-icon-button" onClick={onCheckProviderVault} title="Check Provider Vault" type="button">
+          <button className="rail-icon-button" onClick={onCheckProviderVault} title="프로바이더 보관소 점검" type="button">
             <KeyRound size={13} />
           </button>
-          <button className="rail-icon-button" onClick={onRefreshApprovals} title="Refresh DGX approvals" type="button">
+          <button className="rail-icon-button" onClick={onRefreshApprovals} title="DGX 승인 새로고침" type="button">
             <RefreshCw size={13} />
           </button>
         </div>
       </header>
       <div className="rail-stat-list">
         <div>
-          <span>permission</span>
-          <strong>{permissionSnapshot.summary.pending} local / {serverPending} DGX</strong>
+          <span>권한</span>
+          <strong>{permissionSnapshot.summary.pending} 로컬 / {serverPending} DGX</strong>
         </div>
         <div>
-          <span>ingress</span>
-          <strong>{ingressSnapshot.result.confidence} / {ingressSnapshot.result.approvalState}</strong>
+          <span>인입</span>
+          <strong>
+            {ingressConfidenceLabel(ingressSnapshot.result.confidence)} / {ingressApprovalStateLabel(ingressSnapshot.result.approvalState)}
+          </strong>
         </div>
         <div>
-          <span>backup</span>
-          <strong>{backupSnapshot.summary.ready} ready / {backupSnapshot.summary.queued} queued</strong>
+          <span>백업</span>
+          <strong>{backupSnapshot.summary.ready} 준비 / {backupSnapshot.summary.queued} 대기</strong>
         </div>
         <div>
-          <span>provider</span>
+          <span>프로바이더</span>
           <StatusBadge
             size="sm"
             variant={
@@ -109,12 +118,12 @@ export function OperationsRailPanel({
                   : "danger"
             }
           >
-            {providerReadiness.status}
+            {providerReadinessLabel(providerReadiness.status)}
           </StatusBadge>
         </div>
         <div>
-          <span>vault</span>
-          <strong>{secretVaultSnapshot.summary.available}/{secretVaultSnapshot.entries.length} available</strong>
+          <span>보관소</span>
+          <strong>{secretVaultSnapshot.summary.available}/{secretVaultSnapshot.entries.length} 사용 가능</strong>
         </div>
       </div>
       <div className="server-approval-queue">
@@ -122,8 +131,8 @@ export function OperationsRailPanel({
           <span>DGX 승인 큐</span>
           <strong>
             {approvalServerStatus === "loading"
-              ? "loading"
-              : `${serverPending} pending${tmuxRedispatchPending > 0 ? ` / ${tmuxRedispatchPending} tmux` : ""}`}
+              ? approvalServerStatusLabel(approvalServerStatus)
+              : `${serverPending}건 대기${tmuxRedispatchPending > 0 ? ` / tmux ${tmuxRedispatchPending}건` : ""}`}
           </strong>
         </header>
         {approvalError ? <p className="server-approval-error">{approvalError}</p> : null}
@@ -145,7 +154,7 @@ export function OperationsRailPanel({
               <div>
                 <strong>{approval.action}</strong>
                 <span>{approval.reason}</span>
-                <small>{approval.requestedLevels.join(", ") || "policy review"}</small>
+                <small>{approval.requestedLevels.join(", ") || "정책 검토"}</small>
                 {pendingTmuxApprovalKeySet.has(approval.id) ||
                 (approval.sourceItemId ? pendingTmuxApprovalKeySet.has(approval.sourceItemId) : false) ? (
                   <em>승인 후 tmux 재전송</em>
@@ -155,7 +164,7 @@ export function OperationsRailPanel({
                 <button
                   disabled={approvalBusyId === approval.id}
                   onClick={() => onResolveServerApproval(approval, "approved")}
-                  title="Approve"
+                  title="승인"
                   type="button"
                 >
                   <Check size={12} />
@@ -163,7 +172,7 @@ export function OperationsRailPanel({
                 <button
                   disabled={approvalBusyId === approval.id}
                   onClick={() => onResolveServerApproval(approval, "rejected")}
-                  title="Reject"
+                  title="거부"
                   type="button"
                 >
                   <X size={12} />
@@ -197,7 +206,7 @@ export function OperationsRailPanel({
                         : "warning"
                 }
               >
-                {outcome.status}
+                {tmuxRedispatchOutcomeLabel(outcome.status)}
               </StatusBadge>
             </article>
           ))}

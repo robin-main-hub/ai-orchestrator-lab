@@ -1,6 +1,7 @@
 import { Archive, RefreshCw } from "lucide-react";
 import type { BackupProjection } from "@ai-orchestrator/protocol";
 import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
+import { backupStatusLabel } from "../lib/railStatusLabels";
 import type { Stage7BackupSnapshot } from "../runtime/stage7Backup";
 
 export function BackupRailMenu({
@@ -18,22 +19,22 @@ export function BackupRailMenu({
     <section className="mini-panel rail-panel backup-rail-panel">
       <header>
         <Archive size={16} />
-        <span>Backup</span>
+        <span>백업</span>
         <button className="rail-icon-button" onClick={onExportBackup} title="Projection 생성" type="button">
           <RefreshCw size={13} />
         </button>
       </header>
       <div className="rail-stat-list">
         <div>
-          <span>ready</span>
+          <span>준비됨</span>
           <strong>{snapshot.summary.ready}</strong>
         </div>
         <div>
-          <span>queued</span>
+          <span>대기 중</span>
           <strong>{snapshot.summary.queued}</strong>
         </div>
         <div>
-          <span>redacted</span>
+          <span>마스킹됨</span>
           <strong>{snapshot.summary.redacted}</strong>
         </div>
       </div>
@@ -43,9 +44,9 @@ export function BackupRailMenu({
             <strong>{projection.target}</strong>
             <span>
               <StatusBadge size="sm" variant={backupStatusBadgeVariant(projection.status)}>
-                {projection.status}
+                {backupStatusLabel(projection.status)}
               </StatusBadge>{" "}
-              / redaction {projection.redactionApplied ? "on" : "off"}
+              / 마스킹 {projection.redactionApplied ? "켜짐" : "꺼짐"}
             </span>
           </article>
         ))}
@@ -56,7 +57,7 @@ export function BackupRailMenu({
             <strong>{artifact.title}</strong>
             <span>
               <StatusBadge size="sm" variant={backupStatusBadgeVariant(artifact.status)}>
-                {artifact.status}
+                {backupStatusLabel(artifact.status)}
               </StatusBadge>{" "}
               / {artifact.target} / {artifact.format}
             </span>
@@ -74,4 +75,3 @@ function backupStatusBadgeVariant(status: string): StatusBadgeVariant {
   if (status === "queued" || status === "pending") return "warning";
   return "muted";
 }
-
