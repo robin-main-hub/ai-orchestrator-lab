@@ -1,4 +1,5 @@
 import type { DelegateTag } from "@ai-orchestrator/agents";
+import { agentPrimaryDisplayName } from "../lib/agentDisplay";
 import type { WorkbenchAgent } from "../types";
 
 export type WorkbenchCompletionPurpose = "primary" | "delegation_subagent" | "delegation_followup";
@@ -101,8 +102,9 @@ export function buildDelegatedAgentPrompt({
   originalUserMessage: string;
   tag: DelegateTag;
 }) {
+  const callerName = agentPrimaryDisplayName(caller);
   return [
-    `[Delegated by ${caller.name} / ${caller.role}]`,
+    `[Delegated by ${callerName} / ${caller.role}]`,
     "",
     "You are being called as a specialist sub-agent inside AI Orchestrator Lab.",
     "Answer in Korean unless the task explicitly asks for another language.",
@@ -128,8 +130,9 @@ export function buildDelegationFollowupPrompt({
   originalUserMessage: string;
   outcomes: DesktopDelegationOutcome[];
 }) {
+  const callerName = agentPrimaryDisplayName(caller);
   const lines: string[] = [
-    `${caller.name}가 작업 일부를 하위 에이전트에게 위임했습니다. 이제 당신의 목소리로 최종 사용자 응답을 작성하세요.`,
+    `${withSubjectParticle(callerName)} 작업 일부를 하위 에이전트에게 위임했습니다. 이제 당신의 목소리로 최종 사용자 응답을 작성하세요.`,
     "새 <delegate> 태그를 추가로 출력하지 마세요. 위임은 한 번의 순환으로만 처리합니다.",
     "하위 에이전트가 실패했거나 사용할 수 없었다면 투명하게 밝히고, 남아 있는 근거로 계속 진행하세요.",
     "",
@@ -182,4 +185,15 @@ function stripDelegateTags(value: string) {
 
 function truncateDelegationText(value: string, maxLength: number) {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`;
+}
+
+function withSubjectParticle(value: string) {
+  const last = value.trim().at(-1);
+  if (!last) return "이 동료가";
+  const code = last.charCodeAt(0);
+  if (code < 0xac00 || code > 0xd7a3) {
+    return `${value}가`;
+  }
+  const hasFinalConsonant = (code - 0xac00) % 28 !== 0;
+  return `${value}${hasFinalConsonant ? "이" : "가"}`;
 }

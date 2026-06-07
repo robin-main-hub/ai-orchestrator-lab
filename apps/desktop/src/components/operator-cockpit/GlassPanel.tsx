@@ -12,16 +12,19 @@ const panelVariants: Record<GlassPanelVariant, string> = {
 };
 
 export function GlassPanel({
+  ariaLabel,
   children,
   className,
   variant = "default",
 }: {
+  ariaLabel?: string;
   children: React.ReactNode;
   className?: string;
   variant?: GlassPanelVariant;
 }) {
   return (
     <section
+      aria-label={ariaLabel}
       className={cn(
         "overflow-hidden rounded-lg border transition-colors duration-200",
         panelVariants[variant],

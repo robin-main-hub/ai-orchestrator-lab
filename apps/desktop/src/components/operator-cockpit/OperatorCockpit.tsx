@@ -41,6 +41,7 @@ export function OperatorCockpit({
   onOpenRecovery,
   onOpenControlQueue,
   onOpenAgentConversation,
+  onOpenWorkTrace,
   onApproveHandoff,
   readiness,
 }: {
@@ -52,6 +53,7 @@ export function OperatorCockpit({
   onOpenRecovery?: () => void;
   onOpenControlQueue?: () => void;
   onOpenAgentConversation?: (agentId: string) => void;
+  onOpenWorkTrace?: (item: WorkTraceSearchItem) => void;
   onApproveHandoff?: (handoffId: string) => void;
   readiness?: {
     diagnostics: SettingsDiagnostics;
@@ -260,7 +262,7 @@ export function OperatorCockpit({
                   ) : null}
                   {readiness?.workTraceItems ? (
                     <div className="lg:col-span-12">
-                      <WorkReceiptLedgerCard items={readiness.workTraceItems} />
+                      <WorkReceiptLedgerCard items={readiness.workTraceItems} onOpenTrace={onOpenWorkTrace} />
                     </div>
                   ) : null}
                   <div className="space-y-4 lg:col-span-5">
