@@ -78,7 +78,7 @@ export function createAgentModelRouteLabel({
   providerName?: string;
   source?: "agent" | "provider_default" | "catalog";
 }) {
-  const providerLabel = providerName ? providerDisplayLabel(providerName) : "Provider 미지정";
+  const providerLabel = providerName ? providerDisplayLabel(providerName) : "공급자 미지정";
   const trimmedModelId = modelId?.trim();
   const trimmedModelName = modelName?.trim();
   const modelLabel =
@@ -89,7 +89,7 @@ export function createAgentModelRouteLabel({
     source === "agent"
       ? "에이전트 고정"
       : source === "provider_default"
-        ? "Provider 기본"
+        ? "공급자 기본"
         : source === "catalog"
           ? "카탈로그 후보"
           : undefined;

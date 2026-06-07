@@ -65,20 +65,20 @@ export function ProviderRegistrationMenu({
                 <strong>{routingItem?.displayName ?? profile.name}</strong>
                 <span>
                   {routingItem
-                    ? `${routingItem.trustLabel} / ${routingItem.modelCount} models / ${routingItem.discoveryLabel}`
-                    : `${profile.trustLevel} / ${modelCount} models / ${discovery?.status ?? "cached"}`}
+                    ? `${routingItem.trustLabel} / 모델 ${routingItem.modelCount}개 / ${routingItem.discoveryLabel}`
+                    : `${profile.trustLevel} / 모델 ${modelCount}개 / ${discovery?.status ?? "캐시됨"}`}
                 </span>
                 <span>
                   {routingItem
-                    ? `${routingItem.assignedAgentCount} agents / ${routingItem.readinessLabel} / ${routingItem.secretPolicyLabel}`
+                    ? `에이전트 ${routingItem.assignedAgentCount}명 / ${routingItem.readinessLabel} / ${routingItem.secretPolicyLabel}`
                     : "라우팅 요약 대기"}
                 </span>
               </div>
               <button
-                aria-label={`${profile.name} model discovery`}
+                aria-label={`${profile.name} 모델 확인`}
                 className="rail-icon-button"
                 onClick={() => onDiscoverModels(profile.id)}
-                title="model discovery"
+                title="모델 확인"
                 type="button"
               >
                 <RefreshCw size={13} />
@@ -87,7 +87,7 @@ export function ProviderRegistrationMenu({
                 aria-label={`${profile.name} 이름 변경`}
                 className="rail-icon-button"
                 onClick={() => onRenameProvider(profile.id)}
-                title="provider 이름 변경"
+                title="공급자 이름 변경"
                 type="button"
               >
                 <Pencil size={13} />
@@ -97,7 +97,7 @@ export function ProviderRegistrationMenu({
                 className="rail-icon-button"
                 disabled={isInUse || profiles.length <= 1}
                 onClick={() => onRemoveProvider(profile.id)}
-                title={isInUse ? "agent가 사용 중이라 삭제할 수 없음" : "provider 삭제"}
+                title={isInUse ? "에이전트가 사용 중이라 삭제할 수 없음" : "공급자 삭제"}
                 type="button"
               >
                 <Trash2 size={13} />

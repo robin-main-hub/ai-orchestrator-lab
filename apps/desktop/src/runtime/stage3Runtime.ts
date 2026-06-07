@@ -95,7 +95,7 @@ export function createStage3DebateSession({
         agentId: agent.id,
         name: agent.name,
         role: agent.role,
-        providerName: provider?.name ?? "Provider 미지정",
+        providerName: provider?.name ?? "공급자 미지정",
         modelId: agent.modelId ?? provider?.defaultModel ?? "모델 연결 대기",
       };
     });

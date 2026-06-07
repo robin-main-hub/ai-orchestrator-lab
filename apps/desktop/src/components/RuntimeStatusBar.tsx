@@ -209,12 +209,13 @@ function HealthIndicator({
   }[health];
   const primaryNode = snapshot.runtimeNodes.find((node) => node.isPrimary);
   const dgxLabel = primaryNode?.label ?? snapshot.syncTopology.authorityLabel ?? "DGX";
+  const providerLabel = providerName || "공급자 미지정";
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button
-          aria-label={`시스템 상태: ${title}`}
+          aria-label={`시스템 상태: ${title} · ${providerLabel}`}
           className="h-8 gap-2 px-2 text-xs text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-100"
           size="sm"
           variant="ghost"
@@ -235,7 +236,7 @@ function HealthIndicator({
             <h4 className="text-sm font-medium text-zinc-100">{title}</h4>
           </div>
           <p className="mt-1 text-xs text-zinc-500">
-            런타임 상태 요약 · {providerName || "Provider 미지정"}
+            런타임 상태 요약 · {providerLabel}
           </p>
         </div>
         <div className="space-y-1 p-2">

@@ -142,7 +142,7 @@ export function createCodingPacketFromConversation({ messages, agent, provider }
     : "에이전트 대기";
   const providerLine = provider
     ? `${provider.name} / ${provider.kind} / ${provider.defaultModel ?? "모델 연결 대기"}`
-    : "Provider 미지정";
+    : "공급자 미지정";
 
   return {
     goal: lastUserMessage?.content ?? "Conversation Workbench에서 코딩 목표 정리",
