@@ -29,6 +29,7 @@ import {
   canCommitMemoryScopeResult,
   createMemoryControllerScopeKey,
 } from "../lib/memoryControllerScope";
+import { resolveScopedMemoryInspector } from "../lib/scopedMemoryInspector";
 import {
   createMemoryCuratorPersistencePlan,
   mergeMemoryRecordsWithCuratorLedger,
@@ -382,6 +383,58 @@ export function useMemoryController({
     }
   }
 
+  async function createScopedMemoryInspector(
+    targetScope: AgentChannelMemoryScope,
+    scopedMessages: ConversationMessage[],
+    scopedProvider = provider,
+  ): Promise<Stage6MemoryInspector> {
+    return resolveScopedMemoryInspector({
+      currentInspector: memoryInspector,
+      currentScope: memoryScope,
+      targetScope,
+      recallRecords: async (scope) => {
+        const scopedAdapter = new DgxSimpleMemMemoryAdapter({
+          profileId: `desktop_dgx_simplemem_${scope.recallTraceId}`,
+          seedRecords: initialMemoryRecords,
+        });
+        const scopedApi = createAdapterBackedMementoMemoryApi({
+          adapter: scopedAdapter,
+          operationScope: scope,
+          context: {
+            appendEvent: async (event) => {
+              appendEventRef.current(event.type, {
+                ...event.payload,
+                adapterEventId: event.id,
+                adapterEventCreatedAt: event.createdAt,
+                memoryScope: scope.namespace,
+                recallTraceId: scope.recallTraceId,
+              });
+            },
+            onAdapterError: (error) => {
+              appendEventRef.current("memory.adapter.error", {
+                category: error.category,
+                message: error.message,
+                memoryScope: scope.namespace,
+                recallTraceId: scope.recallTraceId,
+              });
+            },
+          },
+        });
+        const recallQuery = createAgentChannelRecallQuery(scope, packet.goal ?? "");
+        const results = await scopedApi.recall({ query: recallQuery, sessionId: scope.sessionId, limit: 50 });
+        return mergeMemoryRecordsWithCuratorLedger(
+          results.map((result) => result.record),
+          createMemoryControllerScopeKey(scope),
+        );
+      },
+      messages: scopedMessages,
+      packet,
+      events,
+      provider: scopedProvider,
+      createdAt: runtimeUpdatedAt,
+    });
+  }
+
   function handlePinMemory(recordId: string) {
     setMemoryRecords((records) => pinMemoryRecord(records, recordId));
     appendEvent("memory.pin.updated", {
@@ -417,6 +470,7 @@ export function useMemoryController({
 
   return {
     adapterStatus,
+    createScopedMemoryInspector,
     handleActivateMemory,
     handleForgetMemory,
     handlePinMemory,
