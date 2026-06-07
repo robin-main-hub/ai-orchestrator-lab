@@ -54,5 +54,7 @@ describe("WorkReceiptLedgerCard", () => {
     expect(html).toContain("토론 실행 영수증");
     expect(html).toContain("검색 가능");
     expect(html).toContain("검색 제외 필요");
+    expect(html).toContain("GitHub #251");
+    expect(html).toContain("https://github.com/robin-main-hub/ai-orchestrator-lab/issues/251");
   });
 });
