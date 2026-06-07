@@ -3892,6 +3892,10 @@ export function App() {
             />
           ) : mode === "cockpit" ? (
             <OperatorCockpit
+              onOpenAgentConversation={(agentId) => {
+                setSelectedAgentId(agentId);
+                setMode("conversation");
+              }}
               onOpenMemory={openMemoryFromCockpit}
               onOpenProviderRouting={openProviderRoutingFromCockpit}
               onOpenRecovery={openRecoveryFromCockpit}
