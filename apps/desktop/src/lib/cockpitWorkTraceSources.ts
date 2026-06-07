@@ -19,7 +19,22 @@ export function createCockpitWorkTraceSources({
   debateSession,
   tmuxBlocks,
 }: CockpitWorkTraceSourceInput): WorkTraceSearchSource[] {
-  const conversationTraceSources: WorkTraceSearchSource[] = conversationMessages
+  const userAttachmentTraceSources: WorkTraceSearchSource[] = conversationMessages
+    .filter((message) => message.role === "user")
+    .map((message) => ({
+      message,
+      trace: createConversationMessagePublicWorkTrace(message),
+    }))
+    .filter(({ trace }) => trace.groups.length > 0 || Boolean(trace.receipt))
+    .slice(-12)
+    .map(({ message, trace }) => ({
+      id: message.id,
+      kind: "conversation",
+      title: "사용자 첨부 공개 영수증",
+      trace,
+    }));
+
+  const assistantTraceSources: WorkTraceSearchSource[] = conversationMessages
     .filter((message) => message.role === "assistant")
     .slice(-12)
     .map((message) => ({
@@ -55,5 +70,5 @@ export function createCockpitWorkTraceSources({
     trace: createTerminalBlockPublicWorkTrace(block),
   }));
 
-  return [...conversationTraceSources, ...debateTraceSources, ...tmuxTraceSources];
+  return [...userAttachmentTraceSources, ...assistantTraceSources, ...debateTraceSources, ...tmuxTraceSources];
 }
