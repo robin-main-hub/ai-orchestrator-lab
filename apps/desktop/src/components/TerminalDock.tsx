@@ -181,15 +181,19 @@ export function TerminalDock({
           type="dgx"
           tone={dgxTone}
           stamp={dgxBridge.authorityNodeId}
-          title={`원격 ${terminalStatusLabel(dgxBridge.response.status)} · 동기화 ${dgxBridge.syncMode}`}
-          meta={`대체 경로 ${dgxBridge.localFallbackEnabled ? dgxBridge.response.fallbackMode : "없음"}`}
+          title={`원격 ${terminalStatusLabel(dgxBridge.response.status)} · 동기화 ${terminalSyncModeLabel(dgxBridge.syncMode)}`}
+          meta={`대체 경로 ${
+            dgxBridge.localFallbackEnabled
+              ? terminalFallbackModeLabel(dgxBridge.response.fallbackMode)
+              : "없음"
+          }`}
         />
 
         <Block
           type="vault"
           tone={vaultTone}
           stamp={`vault ${providerReadiness.modelCount}m`}
-          title={providerReadiness.reason}
+          title={terminalProviderReasonLabel(providerReadiness.reason)}
           meta={`비밀값 ${terminalStatusLabel(providerReadiness.secretAvailability)} · 기억 ${providerReadiness.canUseAutomaticMemory ? "자동" : "수동"} · 원문 저장 없음`}
           actions={
             <button
@@ -378,7 +382,7 @@ function EventLogBlock({
         <ul className="terminal-dock-v2__event-list">
           {formattedEvents.map((event) => (
             <li key={event.id}>
-              <span>{event.type}</span>
+              <span>{terminalEventTypeLabel(event.type)}</span>
               <small>{event.time}</small>
             </li>
           ))}
@@ -418,6 +422,7 @@ function terminalStatusLabel(status: string): string {
     denied: "거부됨",
     expired: "만료됨",
     failed: "실패",
+    fallback_required: "대체 필요",
     passed: "통과",
     pending: "대기",
     pending_approval: "승인 대기",
@@ -431,4 +436,47 @@ function terminalStatusLabel(status: string): string {
     syncing: "동기화 중",
   };
   return labels[status] ?? status;
+}
+
+function terminalFallbackModeLabel(mode: string): string {
+  const labels: Record<string, string> = {
+    local_cli: "로컬 CLI",
+    none: "없음",
+  };
+  return labels[mode] ?? mode;
+}
+
+export function terminalSyncModeLabel(mode: string): string {
+  const labels: Record<string, string> = {
+    dgx02_authoritative_with_client_cache: "DGX 권위 노드 + 데스크톱 캐시",
+    mirror: "미러 동기화",
+    server_authoritative_with_local_outbox: "서버 권위 + 로컬 발신함",
+  };
+  return labels[mode] ?? mode;
+}
+
+export function terminalProviderReasonLabel(reason: string): string {
+  const labels: Record<string, string> = {
+    "DGX-02 trusted vLLM provider is reachable through the remote runtime gate":
+      "DGX-02 신뢰 vLLM 공급자를 원격 런타임 게이트로 사용할 수 있습니다.",
+    "credential is missing from secret vault": "비밀값 금고에 필요한 인증 정보가 없습니다.",
+    "model discovery has no selectable models": "모델 검색 결과에서 선택할 수 있는 모델이 없습니다.",
+    "provider disabled": "공급자가 비활성화되어 있습니다.",
+    "provider has model metadata and a non-persisted secret reference":
+      "모델 정보와 비저장 비밀값 참조가 준비되었습니다.",
+    "provider not selected": "공급자를 선택해야 합니다.",
+    "untrusted provider can run only after explicit approval and reduced memory context":
+      "미신뢰 공급자는 명시 승인과 축소된 기억 맥락으로만 실행할 수 있습니다.",
+  };
+  return labels[reason] ?? reason;
+}
+
+export function terminalEventTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    "coding_packet.created": "코딩 패킷 생성",
+    "tmux.dispatch.approved": "Tmux 실행 승인",
+    "tmux.dispatch.rejected": "Tmux 실행 거부",
+    "tmux.dispatch.requested": "Tmux 실행 요청",
+  };
+  return labels[type] ?? type;
 }

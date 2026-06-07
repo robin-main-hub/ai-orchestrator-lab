@@ -10,7 +10,12 @@ import { AutonomySlider } from "./AutonomySlider";
 import { CodingPacketPanel } from "./CodingPacketPanel";
 import { IngressGuardPanel } from "./IngressGuardPanel";
 import { ProjectRailPanel } from "./ProjectRailPanel";
-import { TerminalDock } from "./TerminalDock";
+import {
+  TerminalDock,
+  terminalEventTypeLabel,
+  terminalProviderReasonLabel,
+  terminalSyncModeLabel,
+} from "./TerminalDock";
 
 const packet: CodingPacket = {
   constraints: ["비밀값 원문 저장 금지"],
@@ -134,9 +139,9 @@ describe("secondary panel labels", () => {
           dgxBridge={{
             authorityNodeId: "dgx-02",
             heartbeat: { checkedAt: "2026-06-06T00:00:00.000Z", latencyMs: 12, status: "connected" },
-            localFallbackEnabled: false,
-            response: { fallbackMode: "none", status: "ready" },
-            syncMode: "mirror",
+            localFallbackEnabled: true,
+            response: { fallbackMode: "local_cli", status: "fallback_required" },
+            syncMode: "dgx02_authoritative_with_client_cache",
           } as never}
           events={events}
           eventSyncState={{
@@ -159,7 +164,7 @@ describe("secondary panel labels", () => {
           providerReadiness={{
             canUseAutomaticMemory: true,
             modelCount: 1,
-            reason: "준비됨",
+            reason: "provider not selected",
             secretAvailability: "available",
             status: "ready",
           } as never}
@@ -179,13 +184,35 @@ describe("secondary panel labels", () => {
     expect(html).toContain("개요");
     expect(html).toContain("인입 보호");
     expect(html).toContain("터미널 / 실행 로그");
+    expect(html).toContain("대체 경로 로컬 CLI");
+    expect(html).toContain("동기화 DGX 권위 노드 + 데스크톱 캐시");
+    expect(html).toContain("공급자를 선택해야 합니다.");
     expect(html).toContain("코딩 패킷");
     expect(html).toContain("리뷰");
     expect(html).not.toContain("Project");
     expect(html).not.toContain("Overview");
     expect(html).not.toContain("Ingress Guard");
     expect(html).not.toContain("Terminal / Run Log");
+    expect(html).not.toContain("fallback_required");
+    expect(html).not.toContain("local_cli");
+    expect(html).not.toContain("dgx02_authoritative_with_client_cache");
+    expect(html).not.toContain("provider not selected");
     expect(html).not.toContain("Coding Packet");
     expect(html).not.toContain("Review");
+  });
+
+  it("maps terminal internal status values to Korean public labels", () => {
+    expect(terminalSyncModeLabel("mirror")).toBe("미러 동기화");
+    expect(terminalSyncModeLabel("dgx02_authoritative_with_client_cache")).toBe(
+      "DGX 권위 노드 + 데스크톱 캐시",
+    );
+    expect(terminalProviderReasonLabel("credential is missing from secret vault")).toBe(
+      "비밀값 금고에 필요한 인증 정보가 없습니다.",
+    );
+    expect(terminalProviderReasonLabel("provider has model metadata and a non-persisted secret reference")).toBe(
+      "모델 정보와 비저장 비밀값 참조가 준비되었습니다.",
+    );
+    expect(terminalEventTypeLabel("coding_packet.created")).toBe("코딩 패킷 생성");
+    expect(terminalEventTypeLabel("tmux.dispatch.requested")).toBe("Tmux 실행 요청");
   });
 });
