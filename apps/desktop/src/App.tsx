@@ -1325,6 +1325,9 @@ export function App() {
 
       try {
         setAgentActivity(targetAgent.id, "preparing");
+        window.setTimeout(() => {
+          setAgentActivity(targetAgent.id, "tooling");
+        }, 120);
         const targetResult = await completeWorkbenchAgent({
           agent: targetAgent,
           approvalState: targetApprovalState,
@@ -1361,6 +1364,7 @@ export function App() {
         });
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
+        setAgentActivity(targetAgent.id, "error");
         outcomes.push({
           kind: "failed",
           tag,
@@ -1380,7 +1384,7 @@ export function App() {
       } finally {
         window.setTimeout(() => {
           setAgentActivity(targetAgent.id, "idle");
-        }, 450);
+        }, 900);
       }
     }
 
@@ -1527,6 +1531,7 @@ export function App() {
       if (activeSessionIdRef.current === targetSessionId) {
         setConversationMessages((messages) => [...messages, userMessage, blockedMessage]);
       }
+      setAgentActivity(selectedAgent.id, providerNeedsApproval ? "waiting_approval" : "error");
       setDraftMessage("");
       setDraftAttachments([]);
       setDraftRejectedAttachmentPlans([]);
@@ -1623,6 +1628,7 @@ export function App() {
       authLabel,
       routePreference: isDgxRoutedProvider(selectedProvider) ? "server_proxy" : "mock",
     }, { sessionId: targetSessionId });
+    setAgentActivity(selectedAgent.id, "tooling");
 
     let reply = "";
     let completionMetadata: Record<string, unknown> = {};
@@ -1689,6 +1695,7 @@ export function App() {
           attachmentCount: attachmentMetadata.length,
           ...(attachmentProcessingPlans.length > 0 ? { attachmentProcessingPlans } : {}),
         };
+        setAgentActivity(selectedAgent.id, "waiting_approval");
         appendEvent("provider.completion.approval_required", {
           agentId: selectedAgent.id,
           providerProfileId: selectedProvider.id,
@@ -1709,6 +1716,7 @@ export function App() {
           error: errorMessage,
           realProviderCall: false,
         };
+        setAgentActivity(selectedAgent.id, "error");
         appendEvent("provider.completion.dgx.failed", {
           agentId: selectedAgent.id,
           providerProfileId: selectedProvider.id,
@@ -1767,7 +1775,12 @@ export function App() {
       handleQueueMemoryCuratorCandidate(memoryCandidate);
     }
     if (activeSessionIdRef.current === targetSessionId) {
-      setAgentActivity(selectedAgent.id, "responding");
+      const nextActivity: AgentActivityStatus = completionMetadata.requiresServerApproval
+        ? "waiting_approval"
+        : completionMetadata.error
+          ? "error"
+          : "responding";
+      setAgentActivity(selectedAgent.id, nextActivity);
       setConversationMessages((messages) => [...messages, assistantMessage]);
       prependAssistantDraft(assistantDraft);
       updateWorkItem(workItem.id, {
@@ -1775,9 +1788,11 @@ export function App() {
         status: completionMetadata.realProviderCall ? "drafted" : "waiting_input",
         updatedAt: assistantMessage.createdAt,
       });
-      window.setTimeout(() => {
-        setAgentActivity(selectedAgent.id, "idle");
-      }, 450);
+      if (nextActivity === "responding") {
+        window.setTimeout(() => {
+          setAgentActivity(selectedAgent.id, "idle");
+        }, 450);
+      }
     } else {
       setAgentActivity(selectedAgent.id, "idle");
     }
@@ -2521,13 +2536,13 @@ export function App() {
     });
     setDgxBridgeState(bridge);
     if (selectedAgent) {
-      setAgentActivity(selectedAgent.id, "preparing");
+      setAgentActivity(selectedAgent.id, "tooling");
       window.setTimeout(() => {
-        setAgentActivity(selectedAgent.id, "responding");
+        setAgentActivity(selectedAgent.id, "dispatching");
       }, 220);
       window.setTimeout(() => {
         setAgentActivity(selectedAgent.id, "idle");
-      }, 900);
+      }, 1200);
     }
     appendEvent("agent.run.planned", {
       runId: run.id,
@@ -3236,7 +3251,13 @@ export function App() {
         if (activity === "idle") {
           status = "idle";
           statusRingColor = "gray";
-        } else if (activity === "preparing" || activity === "responding") {
+        } else if (activity === "waiting_approval") {
+          status = "waiting_approval";
+          statusRingColor = "yellow";
+        } else if (activity === "error") {
+          status = "error";
+          statusRingColor = "red";
+        } else if (activity === "preparing" || activity === "responding" || activity === "tooling" || activity === "capturing" || activity === "dispatching") {
           status = "working";
           statusRingColor = "green";
         } else {

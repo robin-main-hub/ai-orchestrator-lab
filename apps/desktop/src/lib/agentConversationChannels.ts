@@ -9,6 +9,8 @@ export type AgentConversationChannels = Record<string, ConversationMessage[]>;
 export type AgentChannelMemoryScope = {
   agentId: string;
   providerProfileId: string;
+  roomId?: string;
+  roomLabel?: string;
   sessionId: string;
   namespace: string;
   recallTraceId: string;
@@ -120,6 +122,8 @@ export function createAgentChannelMemoryScope(
   return {
     agentId: safeAgentId,
     providerProfileId: safeProviderProfileId,
+    roomId: `room_${safeSessionId}_${safeAgentId}`,
+    roomLabel: "에이전트 전용 방",
     sessionId: safeSessionId,
     namespace: `agent:${safeAgentId}/session:${safeSessionId}/provider:${safeProviderProfileId}`,
     recallTraceId: `recall_${safeAgentId}_${safeSessionId}_${safeProviderProfileId}`,

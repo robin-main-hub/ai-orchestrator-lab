@@ -24,6 +24,8 @@ describe("MessageThread pending assistant state", () => {
   it("shows a pending assistant bubble after a user message while the selected agent is preparing or responding", () => {
     expect(shouldShowAssistantPendingBubble([message("user")], "preparing")).toBe(true);
     expect(shouldShowAssistantPendingBubble([message("user")], "responding")).toBe(true);
+    expect(shouldShowAssistantPendingBubble([message("user")], "tooling")).toBe(true);
+    expect(shouldShowAssistantPendingBubble([message("user")], "waiting_approval")).toBe(true);
   });
 
   it("does not show a pending assistant bubble after an assistant message or while idle", () => {
@@ -35,6 +37,11 @@ describe("MessageThread pending assistant state", () => {
   it("uses Korean status copy for the visible waiting state", () => {
     expect(assistantPendingLabel("preparing")).toBe("요청을 정리하고 있어요");
     expect(assistantPendingLabel("responding")).toBe("답변을 다듬고 있어요");
+    expect(assistantPendingLabel("tooling")).toBe("도구를 고르는 중이에요");
+    expect(assistantPendingLabel("capturing")).toBe("작업창을 읽는 중이에요");
+    expect(assistantPendingLabel("dispatching")).toBe("명령을 전달하는 중이에요");
+    expect(assistantPendingLabel("waiting_approval")).toBe("승인을 기다리고 있어요");
+    expect(assistantPendingLabel("error")).toBe("막힌 원인을 정리하고 있어요");
   });
 
   it("keeps provider failure status visible on assistant messages without leaking raw URLs", () => {
