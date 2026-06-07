@@ -16,6 +16,7 @@ import {
 import type { AgentProfile, DebateTag, DebateUtterance } from "@ai-orchestrator/protocol";
 import { defaultAgentProfiles } from "@ai-orchestrator/agents";
 import { cn } from "@/lib/utils";
+import { agentRoleLabel } from "../lib/helpers";
 import { Button } from "@/ui/button";
 import {
   debateChamberCopy,
@@ -460,10 +461,7 @@ function deriveConsensus(session: Stage3DebateSession) {
 }
 
 function roleLabel(role: AgentProfile["role"]) {
-  return role
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+  return agentRoleLabel(role);
 }
 
 function debateTagLabel(tag: DebateTag) {

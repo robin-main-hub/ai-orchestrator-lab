@@ -1,4 +1,3 @@
-import type { AgentRole } from "@ai-orchestrator/protocol";
 import type { WorkbenchAgent } from "../types";
 import { agentRoleLabel } from "./helpers";
 
@@ -29,26 +28,6 @@ export const agentDisplayRoleLabelByIdentity: Record<string, string> = {
   yohane: "4차원 아이디어 뱅크",
 };
 
-export const englishRoleLabelByRole: Record<AgentRole, string> = {
-  architect: "Architect",
-  auditor: "Auditor",
-  builder: "Builder",
-  companion: "Companion",
-  domain_expert: "Domain Expert",
-  executor: "Executor",
-  external: "External",
-  mediator: "Mediator",
-  memory_curator: "Memory Curator",
-  negotiator: "Negotiator",
-  orchestrator: "Orchestrator",
-  researcher: "Researcher",
-  reviewer: "Reviewer",
-  risk_officer: "Risk Officer",
-  skeptic: "Skeptic",
-  verifier: "Verifier",
-  watchdog: "Watchdog",
-};
-
 export function agentIdentityKey(agent: Pick<WorkbenchAgent, "personaName" | "role">) {
   return agent.personaName ?? agent.role;
 }
@@ -59,8 +38,8 @@ export function agentPrimaryDisplayName(agent: Pick<WorkbenchAgent, "name" | "pe
 
 export function agentSecondaryDisplayLabel(agent: Pick<WorkbenchAgent, "personaName" | "role">) {
   const identityKey = agentIdentityKey(agent);
-  const roleLabel = agentDisplayRoleLabelByIdentity[identityKey] ?? agentRoleLabel(agent.role);
-  return `${englishRoleLabelByRole[agent.role]} · ${roleLabel}`;
+  const detailLabel = agentDisplayRoleLabelByIdentity[identityKey] ?? "기본 역할";
+  return `${agentRoleLabel(agent.role)} · ${detailLabel}`;
 }
 
 export function agentInitialsForDisplay(agent: Pick<WorkbenchAgent, "name" | "personaName" | "role">) {

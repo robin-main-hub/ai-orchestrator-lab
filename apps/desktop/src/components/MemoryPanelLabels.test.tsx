@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { CodingPacket, ConversationMessage, EventEnvelope } from "@ai-orchestrator/protocol";
+import type { CodingPacket, ConversationMessage, EventEnvelope, MemoryRecord } from "@ai-orchestrator/protocol";
 import { createStage6MemoryInspector } from "../runtime/stage6Memory";
 import {
   EvolveMementoPanel,
@@ -105,5 +105,80 @@ describe("memory panel labels", () => {
     expect(mementoIssueRecommendationLabel("Refresh this old memory or let the curator archive it.")).toBe(
       "오래된 기억을 새로 확인하거나 큐레이터가 보관하도록 두세요.",
     );
+  });
+
+  it("keeps recall trace tooltip metadata labels Korean", () => {
+    const records: MemoryRecord[] = [
+      {
+        activationState: "active",
+        content: "마키마가 기억 패널의 작업 주제와 도구 호출 맥락을 유지합니다.",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        entities: ["EvolveMemento"],
+        entityReinforcement: 1.2,
+        id: "memory_tooltip_labels",
+        importance: 0.86,
+        keywords: ["도구 호출"],
+        kind: "context",
+        layer: "project_memory",
+        persons: ["마키마"],
+        pinned: true,
+        scope: "project",
+        sourceChannel: "desktop",
+        title: "기억 패널 툴팁",
+        topic: "작업 주제",
+        trustLevel: "trusted",
+      },
+    ];
+    const inspector = createStage6MemoryInspector({
+      events,
+      messages,
+      packet,
+      records,
+    });
+    const inspectorWithFusion = {
+      ...inspector,
+      trace: {
+        ...inspector.trace,
+        results: inspector.trace.results.map((result) => ({
+          ...result,
+          fusionDetail: {
+            fusionMode: "rrf" as const,
+            views: [
+              {
+                rank: 1,
+                rawScore: 1.25,
+                view: "lexical" as const,
+              },
+            ],
+          },
+        })),
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      <EvolveMementoPanel
+        adapterStatus="ready"
+        inspector={inspectorWithFusion}
+        onActivate={vi.fn()}
+        onForget={vi.fn()}
+        onPin={vi.fn()}
+        onRemember={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain("중요도 85%");
+    expect(html).toContain("주제: 작업 주제");
+    expect(html).toContain("인물: 마키마");
+    expect(html).toContain("개체: EvolveMemento");
+    expect(html).toContain("키워드: 도구 호출");
+    expect(html).toContain("융합 방식:");
+    expect(html).toContain("순위 #");
+    expect(html).not.toContain("importance ");
+    expect(html).not.toContain("topic:");
+    expect(html).not.toContain("person:");
+    expect(html).not.toContain("entity:");
+    expect(html).not.toContain("keyword:");
+    expect(html).not.toContain("fusion mode:");
+    expect(html).not.toContain("(raw ");
   });
 });

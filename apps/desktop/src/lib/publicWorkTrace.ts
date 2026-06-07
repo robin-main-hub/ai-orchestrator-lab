@@ -4,6 +4,7 @@ import {
   summarizeAttachmentProcessingPlans,
   type AttachmentProcessingPlan,
 } from "./attachmentProcessing";
+import { agentRoleLabel } from "./helpers";
 import { PUBLIC_WORK_PHASES } from "./publicWorkPhases";
 import { compactPublicText, inspectPublicText, sanitizePublicText } from "./publicRedaction";
 
@@ -578,11 +579,8 @@ function readAttachmentProcessingPlans(value: unknown): AttachmentProcessingPlan
   });
 }
 
-function roleDisplayLabel(role: string) {
-  return role
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+function roleDisplayLabel(role: Stage3DebateUtteranceView["agentRole"]) {
+  return agentRoleLabel(role);
 }
 
 function sanitize(value: string) {

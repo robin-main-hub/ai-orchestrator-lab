@@ -506,7 +506,7 @@ function ImportanceBar({
   return (
     <div
       className="mt-1.5 flex items-center gap-1.5"
-      title={`importance ${pct.toFixed(0)}% · reinforce +${(reinforcement ?? 0).toFixed(1)}`}
+      title={`중요도 ${pct.toFixed(0)}% · 강화 +${(reinforcement ?? 0).toFixed(1)}`}
     >
       <div className="relative h-1 flex-1 overflow-hidden rounded-full bg-card/70">
         <div
@@ -535,26 +535,26 @@ function RecordChips({ record }: { record: MemoryRecord }) {
   return (
     <div className="mt-1.5 flex flex-wrap gap-1">
       {topic ? (
-        <Chip tone="primary" title={`topic: ${topic}`}>
+        <Chip tone="primary" title={`주제: ${topic}`}>
           <Hash className="h-2.5 w-2.5" />
           {topic}
         </Chip>
       ) : null}
       {persons.slice(0, 3).map((p) => (
-        <Chip key={`p-${p}`} title={`person: ${p}`} tone="violet">
+        <Chip key={`p-${p}`} title={`인물: ${p}`} tone="violet">
           <UserRound className="h-2.5 w-2.5" />
           {p}
         </Chip>
       ))}
       {persons.length > 3 ? <ChipOverflow count={persons.length - 3} /> : null}
       {entities.slice(0, 3).map((e) => (
-        <Chip key={`e-${e}`} title={`entity: ${e}`} tone="warning">
+        <Chip key={`e-${e}`} title={`개체: ${e}`} tone="warning">
           {e}
         </Chip>
       ))}
       {entities.length > 3 ? <ChipOverflow count={entities.length - 3} /> : null}
       {keywords.slice(0, 5).map((k) => (
-        <Chip key={`k-${k}`} title={`keyword: ${k}`}>
+        <Chip key={`k-${k}`} title={`키워드: ${k}`}>
           {k}
         </Chip>
       ))}
@@ -601,10 +601,15 @@ function FusionBreakdown({ detail }: { detail?: RecallResult["fusionDetail"] }) 
     semantic: "sem",
     metadata: "meta",
   };
+  const viewLabel: Record<"lexical" | "semantic" | "metadata", string> = {
+    lexical: "어휘",
+    semantic: "의미",
+    metadata: "메타데이터",
+  };
   return (
     <div
       className="mt-1.5 flex flex-wrap items-center gap-1 rounded bg-card/70 px-1 py-0.5 font-mono"
-      title={`fusion mode: ${detail.fusionMode} (RRF k=60)`}
+      title={`융합 방식: ${detail.fusionMode.toUpperCase()} (RRF k=60)`}
     >
       <span className="text-[8.5px] uppercase tracking-wider text-muted-foreground">
         {detail.fusionMode}
@@ -617,7 +622,7 @@ function FusionBreakdown({ detail }: { detail?: RecallResult["fusionDetail"] }) 
         return (
           <span
             key={`${v.view}-${v.rank}`}
-            title={`${v.view} rank #${v.rank} (raw ${v.rawScore.toFixed(2)})`}
+            title={`${viewLabel[v.view]} 순위 #${v.rank} (원점수 ${v.rawScore.toFixed(2)})`}
           >
             <StatusBadge variant={variant} size="sm" className="font-mono">
               {viewShort[v.view]}#{v.rank}
