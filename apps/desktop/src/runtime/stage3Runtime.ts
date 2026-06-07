@@ -18,6 +18,7 @@ import {
   type DebateEngineAgentSlot,
   type LlmCompletionFn,
 } from "@ai-orchestrator/agents";
+import { agentPrimaryDisplayName } from "../lib/agentDisplay";
 import { requestDgxProviderCompletion } from "./stage12DgxProvider";
 
 
@@ -93,7 +94,7 @@ export function createStage3DebateSession({
       const provider = providers.find((profile) => profile.id === agent.providerProfileId);
       return {
         agentId: agent.id,
-        name: agent.name,
+        name: agentPrimaryDisplayName(agent),
         role: agent.role,
         providerName: provider?.name ?? "공급자 미지정",
         modelId: agent.modelId ?? provider?.defaultModel ?? "모델 연결 대기",
@@ -231,8 +232,8 @@ function createHumanPeek(
     {
       id: "peek_spawn_architect",
       kind: "spawn",
-      actor: orchestrator?.name ?? "Orchestrator",
-      target: architect?.name ?? "Architect",
+      actor: orchestrator?.name ?? "지휘자",
+      target: architect?.name ?? "설계자",
       summary: "Debate Context를 전달하고 1차 구조 제안을 요청",
       state: "observed",
       createdAt,
@@ -240,8 +241,8 @@ function createHumanPeek(
     {
       id: "peek_send_reviewer",
       kind: "send",
-      actor: orchestrator?.name ?? "Orchestrator",
-      target: reviewer?.name ?? "Reviewer",
+      actor: orchestrator?.name ?? "지휘자",
+      target: reviewer?.name ?? "검토자",
       summary: "리스크/누락/보안 경계 검토 요청",
       state: "observed",
       createdAt,
@@ -249,8 +250,8 @@ function createHumanPeek(
     {
       id: "peek_yield_summary",
       kind: "yield",
-      actor: reviewer?.name ?? "Reviewer",
-      target: orchestrator?.name ?? "Orchestrator",
+      actor: reviewer?.name ?? "검토자",
+      target: orchestrator?.name ?? "지휘자",
       summary: `${rounds.length}개 라운드, ${events.length}개 최근 이벤트 기준으로 결과 반환`,
       state: "pending",
       createdAt,

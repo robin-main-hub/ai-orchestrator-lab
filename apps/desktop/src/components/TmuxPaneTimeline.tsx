@@ -57,7 +57,7 @@ export function TmuxPaneTimeline({ blocks, limit = 5 }: TmuxPaneTimelineProps) {
       </header>
       {visible.length === 0 ? (
         <p className="tmux-pane-timeline__empty">
-          아직 기록된 block 없음. dispatch / capture 시 자동으로 누적됩니다.
+          아직 기록된 작업 기록이 없습니다. 전송/수집이 진행되면 자동으로 누적됩니다.
         </p>
       ) : (
         <ol className="tmux-pane-timeline__list">
@@ -125,7 +125,7 @@ function TimelineBlockRow({ block }: { block: TerminalTimelineBlock }) {
                 <span>{statusLabel(block.status)}</span>
                 {block.redactionApplied ? <em>마스킹됨</em> : null}
                 {block.approvalId ? <span>승인:{block.approvalId.slice(-6)}</span> : null}
-                {block.runId ? <span>run:{block.runId.slice(-6)}</span> : null}
+                {block.runId ? <span>실행:{block.runId.slice(-6)}</span> : null}
               </footer>
             </div>
           ) : null}
@@ -183,7 +183,7 @@ function kindLabel(kind: TerminalTimelineBlockKind): string {
     command_intent: "의도",
     approval: "승인",
     dry_run: "리허설",
-    dispatch: "발사",
+    dispatch: "전송",
     capture: "수집",
     handoff: "넘김",
     note: "메모",
