@@ -992,9 +992,18 @@ export function App() {
       maxAttachmentCount: maxDraftAttachments,
       modelModalities: getModelInputModalities(selectedModel),
     });
-    const nextAttachments = incomingFiles
-      .filter((_, index) => processingPlans[index]?.status === "accepted")
-      .map(createDraftAttachment);
+    const nextAttachments = incomingFiles.flatMap((file, index) => {
+      const plan = processingPlans[index];
+      if (!plan || plan.status !== "accepted") return [];
+      return [
+        {
+          ...createDraftAttachment(file),
+          processingMode: plan.processingMode,
+          processingStatus: plan.status,
+          processingReason: plan.reason,
+        },
+      ];
+    });
     const rejectedPlans = processingPlans.filter((plan) => plan.status === "rejected");
 
     if (nextAttachments.length === 0) {
@@ -1410,11 +1419,21 @@ export function App() {
     const modelId = selectedModel?.id ?? selectedAgent.modelId ?? selectedProvider.defaultModel ?? "model pending";
     const messageContent = content || `첨부 ${attachments.length}개`;
     const attachmentMetadata = attachments.map((attachment) => ({ ...attachment }));
+    const attachmentProcessingPlans = attachmentMetadata.map((attachment) => ({
+      kind: attachment.kind,
+      name: attachment.name,
+      processingMode: attachment.processingMode ?? "metadata_only",
+      reason: attachment.processingReason,
+      size: attachment.size,
+      status: attachment.processingStatus ?? "accepted",
+      storage: attachment.storage,
+    }));
     const userMessageMetadata = {
       agentId: selectedAgent.id,
       memoryScope: selectedAgentMemoryScope.namespace,
       recallTraceId: selectedAgentMemoryScope.recallTraceId,
       ...(attachmentMetadata.length > 0 ? { attachments: attachmentMetadata } : {}),
+      ...(attachmentProcessingPlans.length > 0 ? { attachmentProcessingPlans } : {}),
     };
     const userMessage: ConversationMessage = {
       id: `message_user_${crypto.randomUUID()}`,
@@ -1475,6 +1494,7 @@ export function App() {
         contentLength: messageContent.length,
         attachmentCount: attachmentMetadata.length,
         attachments: attachmentMetadata,
+        attachmentProcessingPlans,
         attachmentStorage: "metadata_only",
         redaction: "applied",
       }, { sessionId: targetSessionId });
@@ -1487,6 +1507,7 @@ export function App() {
         reason: providerReadiness.reason,
         requestedMessageLength: messageContent.length,
         attachmentCount: attachmentMetadata.length,
+        attachmentProcessingPlans,
         retryStored: providerNeedsApproval,
         redaction: "applied",
       }, { sessionId: targetSessionId });
@@ -1513,6 +1534,7 @@ export function App() {
       contentLength: messageContent.length,
       attachmentCount: attachmentMetadata.length,
       attachments: attachmentMetadata,
+      attachmentProcessingPlans,
       attachmentStorage: "metadata_only",
       redaction: "applied",
     }, { sessionId: targetSessionId });
@@ -1656,6 +1678,7 @@ export function App() {
         authMode,
         memoryScope: selectedAgentMemoryScope.namespace,
         recallTraceId: selectedAgentMemoryScope.recallTraceId,
+        ...(attachmentProcessingPlans.length > 0 ? { attachmentProcessingPlans } : {}),
         ...completionMetadata,
       },
     };
