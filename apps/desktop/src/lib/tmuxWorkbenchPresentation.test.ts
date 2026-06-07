@@ -34,6 +34,7 @@ describe("tmuxWorkbenchPresentation", () => {
 
   it("pane 상태 라벨을 사용자 표면에서 한국어로 바꾼다", () => {
     expect(tmuxPaneStateLabel("chat active")).toBe("대화 중");
+    expect(tmuxPaneStateLabel("blocked")).toBe("차단됨");
     expect(tmuxPaneStateLabel("dispatch gated")).toBe("승인 필요");
     expect(tmuxPaneStateLabel("watch only")).toBe("감시 전용");
     expect(tmuxPaneStateLabel("idle")).toBe("대기");

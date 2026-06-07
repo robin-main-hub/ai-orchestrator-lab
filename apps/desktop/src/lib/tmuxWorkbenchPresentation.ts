@@ -52,6 +52,7 @@ export function formatTmuxDifficultyLabel(difficulty: TmuxWorkbenchDifficulty) {
 export function tmuxPaneStateLabel(state: string) {
   const labels: Record<string, string> = {
     active: "활성",
+    blocked: "차단됨",
     "capture failed": "읽기 실패",
     captured: "읽음",
     capturing: "읽는 중",

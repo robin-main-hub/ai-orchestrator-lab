@@ -61,6 +61,36 @@ describe("Stage3DebateTable", () => {
     expect(html).not.toContain("Reviewer");
   });
 
+  it("라운드 탭에 점만 남기지 않고 현재 상태를 한국어로 함께 표시한다", () => {
+    const html = renderToStaticMarkup(
+      <Stage3DebateTable
+        onCreateCodingPacket={() => undefined}
+        session={{
+          ...session,
+          rounds: [
+            session.rounds[0]!,
+            {
+              ...session.rounds[0]!,
+              id: "round_running",
+              status: "running",
+              title: "실시간 반론",
+            },
+            {
+              ...session.rounds[0]!,
+              id: "round_blocked",
+              status: "blocked",
+              title: "차단된 검토",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(html).toContain("완료");
+    expect(html).toContain("진행 중");
+    expect(html).toContain("차단됨");
+  });
+
   it("보조 근거가 없는 일반 발언에는 검토 근거 접힘을 노출하지 않는다", () => {
     const html = renderToStaticMarkup(
       <Stage3DebateTable
