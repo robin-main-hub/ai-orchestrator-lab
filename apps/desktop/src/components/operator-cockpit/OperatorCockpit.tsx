@@ -67,6 +67,7 @@ export function OperatorCockpit({
   const riskyApprovalCount = snapshot.approvals.filter((approval) => approval.payloadBindingStatus !== "bound").length;
   const workingCount = snapshot.fleet.filter((worker) => worker.status === "working").length;
   const criticalApprovalCount = snapshot.approvals.filter((approval) => approval.securityRisk === "high").length;
+  const serverProjection = resolveServerProjectionGlance(snapshot.recovery.healthIndicators);
   const actionableHandoffs = snapshot.handoffs.filter((handoff) =>
     handoff.id && handoff.approvalState === "required" && handoff.targetSurface === "execution_slot"
   );
@@ -164,7 +165,7 @@ export function OperatorCockpit({
 
       <div className="relative z-[1] flex-1 overflow-y-auto p-4">
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
             <GlanceTile
               icon={<Users className="h-4 w-4" />}
               label="워커 함대"
@@ -185,6 +186,13 @@ export function OperatorCockpit({
               value={formatOperatorModelLabel(snapshot.routing.selectedModelId)}
               hint={formatOperatorProviderLabel(snapshot.routing.providerLabel)}
               tone={snapshot.routing.fallbackStatus === "active" ? "warning" : "normal"}
+            />
+            <GlanceTile
+              icon={<Server className="h-4 w-4" />}
+              label="서버 투영"
+              value={serverProjection.value}
+              hint={serverProjection.hint}
+              tone={serverProjection.tone}
             />
             <GlanceTile
               icon={<Database className="h-4 w-4" />}
@@ -274,6 +282,45 @@ export function OperatorCockpit({
       </div>
     </div>
   );
+}
+
+function resolveServerProjectionGlance(
+  healthIndicators: string[],
+): { hint: string; tone: "danger" | "normal" | "success" | "warning"; value: string } {
+  const indicator = healthIndicators.find((item) => item.includes("서버 스냅샷"));
+  if (!indicator) {
+    return {
+      hint: "서버 스냅샷은 세부 정보에서 확인",
+      tone: "normal",
+      value: "상태 확인",
+    };
+  }
+  if (indicator.includes("동기화됨")) {
+    return {
+      hint: indicator,
+      tone: "success",
+      value: "동기화됨",
+    };
+  }
+  if (indicator.includes("실패")) {
+    return {
+      hint: indicator,
+      tone: "danger",
+      value: "실패",
+    };
+  }
+  if (indicator.includes("동기화 중")) {
+    return {
+      hint: indicator,
+      tone: "warning",
+      value: "동기화 중",
+    };
+  }
+  return {
+    hint: indicator,
+    tone: "warning",
+    value: "로컬 투영",
+  };
 }
 
 function PendingHandoffStrip({
