@@ -40,7 +40,7 @@ export function createProductionSmokePlan({
       { id: "boot", label: "앱 부팅과 기본 관제판 진입", mode: "automated" },
       { id: "conversation", label: "에이전트 대화와 대기 표시", mode: "automated" },
       { id: "agent_memory", label: "에이전트별 SOUL/AGENTS/장기 기억 준비", mode: "automated" },
-      { id: "control_queue", label: "작업 대기열 레인 동작", mode: "automated" },
+      { id: "control_queue", label: "작업 대기열 흐름 동작", mode: "automated" },
       { id: "debate_packet", label: "토론 결정에서 코딩 패킷 생성", mode: "automated" },
       { id: "tmux_recovery", label: "Tmux 재실행/캡처/복구 판정", mode: "automated" },
       {

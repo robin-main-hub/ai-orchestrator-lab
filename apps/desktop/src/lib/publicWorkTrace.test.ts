@@ -129,19 +129,19 @@ describe("publicWorkTrace", () => {
     expect(trace.groups[0]?.items).toContainEqual(
       expect.objectContaining({
         label: "토큰 사용",
-        value: "128 total tokens",
+        value: "총 토큰 128개",
       }),
     );
     expect(trace.groups[1]?.items).toContainEqual(
       expect.objectContaining({
         label: "위임 제안",
-        value: "verifier · succeeded",
+        value: "verifier · 성공",
       }),
     );
     expect(trace.groups[1]?.items).toContainEqual(
       expect.objectContaining({
         label: "런타임 규칙",
-        value: "2개 config 적용",
+        value: "설정 2개 적용",
       }),
     );
     expect(trace.groups[1]?.items).toContainEqual(
@@ -171,7 +171,7 @@ describe("publicWorkTrace", () => {
     expect(trace.groups[2]?.items).toContainEqual(
       expect.objectContaining({
         label: "기억 조회",
-        value: "4개 recall · recall_agent_orchestrator_session_main_provider_mimo_token_openai",
+        value: "기억 4개 조회 · recall_agent_orchestrator_session_main_provider_mimo_token_openai",
       }),
     );
   });
@@ -338,7 +338,10 @@ describe("publicWorkTrace", () => {
       expect.objectContaining({ label: "토론 단계", value: "검증 라운드 · 검증자" }),
     );
     expect(trace.groups[2]?.items).toContainEqual(
-      expect.objectContaining({ label: "근거", value: "2개 evidence ref" }),
+      expect.objectContaining({ label: "근거", value: "근거 참조 2개" }),
+    );
+    expect(trace.groups[1]?.items).toContainEqual(
+      expect.objectContaining({ label: "코딩 영향", value: "코딩 참조 1개" }),
     );
   });
 
@@ -372,10 +375,54 @@ describe("publicWorkTrace", () => {
       ],
     });
     expect(trace.groups[0]?.items).toContainEqual(
-      expect.objectContaining({ label: "tmux 단계", value: "dispatch · completed" }),
+      expect.objectContaining({ label: "tmux 단계", value: "디스패치 · 완료" }),
     );
     expect(trace.groups[2]?.items).toContainEqual(
       expect.objectContaining({ label: "출력", value: "153 passed" }),
     );
+  });
+
+  it("공개 trace 표시값에는 작업 용어 영어 찌꺼기를 남기지 않는다", () => {
+    const messageTrace = createConversationMessagePublicWorkTrace({
+      id: "msg_assistant_visible_copy",
+      sessionId: "session_main",
+      role: "assistant",
+      content: "응답",
+      createdAt: "2026-06-05T08:00:00.000Z",
+      metadata: {
+        realProviderCall: false,
+        usage: { totalTokens: 9 },
+        recalledMemoryCount: 2,
+        recallTraceId: "recall_visible",
+      },
+    });
+    const debateTrace = createDebateUtterancePublicWorkTrace({
+      id: "utt_visible",
+      agentId: "agent_reviewer",
+      roundId: "round_visible",
+      content: "근거가 필요합니다.",
+      tags: ["risk"],
+      evidenceRefIds: ["evidence_1"],
+      codingImpactRefs: ["coding_1"],
+      createdAt: "2026-06-05T08:00:00.000Z",
+      agentName: "시노미야 카구야",
+      agentRole: "reviewer",
+      roundTitle: "검토 라운드",
+    });
+    const visibleValues = [
+      ...messageTrace.groups.flatMap((group) => group.items.flatMap((item) => [item.label, item.value])),
+      ...debateTrace.groups.flatMap((group) => group.items.flatMap((item) => [item.label, item.value])),
+      createPublicWorkReceiptSummary(messageTrace)?.statusLabel,
+    ].join("\n");
+
+    expect(visibleValues).not.toContain("fallback");
+    expect(visibleValues).not.toContain("total tokens");
+    expect(visibleValues).not.toContain("coding ref");
+    expect(visibleValues).not.toContain("evidence ref");
+    expect(visibleValues).not.toContain("recall ·");
+    expect(visibleValues).not.toContain("폴백");
+    expect(visibleValues).toContain("대체 경로");
+    expect(visibleValues).toContain("총 토큰 9개");
+    expect(visibleValues).toContain("기억 2개 조회");
   });
 });

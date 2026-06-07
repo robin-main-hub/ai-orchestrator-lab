@@ -1077,6 +1077,18 @@ export function App() {
       completionContext.previousMessages,
       provider,
     );
+    const pipelineMessages = createConversationPipelineMessages({
+      agent,
+      configFiles: agentConfigFiles,
+      memory: targetMemoryInspector,
+      memoryScope: completionContext.memoryScope,
+      modelId,
+      persona,
+      previousMessages: completionContext.previousMessages,
+      provider,
+      userMessage,
+    });
+    const pipelineMetadata = pipelineMessages[0]?.metadata ?? {};
     if (!isDgxRoutedProvider(provider)) {
       const recalledMemoryCount = targetMemoryInspector.trace.results.filter((result) => result.usedInDecision).length;
       const guardedReply = applyAgentIdentityResponseGuard({
@@ -1095,30 +1107,26 @@ export function App() {
           providerProfileId: provider.id,
           realProviderCall: false,
           route: "mock",
-          memoryTraceId: targetMemoryInspector.trace.id,
-          recalledMemoryCount,
-          runtimeConfigFileIds: agentConfigFiles
-            .filter((configFile) => configFile.linkedAgentIds.includes(agent.id))
-            .map((configFile) => configFile.id),
-          roleToolProfileLabel: roleToolConfig.label,
-          roleToolProfileTools: roleToolConfig.tools,
+          memoryTraceId: pipelineMetadata.memoryTraceId ?? targetMemoryInspector.trace.id,
+          recalledMemoryCount: pipelineMetadata.recalledMemoryCount ?? recalledMemoryCount,
+          runtimeConfigFileIds: pipelineMetadata.runtimeConfigFileIds,
+          roleToolProfileLabel: pipelineMetadata.roleToolProfileLabel ?? roleToolConfig.label,
+          roleToolProfileTools: pipelineMetadata.roleToolProfileTools ?? roleToolConfig.tools,
+          personaDisplayName: pipelineMetadata.personaDisplayName,
+          personaIdentityKey: pipelineMetadata.personaIdentityKey,
+          personaSoulApplied: pipelineMetadata.personaSoulApplied,
+          personaAgentsMdApplied: pipelineMetadata.personaAgentsMdApplied,
+          personaSafetyApplied: pipelineMetadata.personaSafetyApplied,
+          personaFragmentsInjected: pipelineMetadata.personaFragmentsInjected,
+          personaSoulMdPath: pipelineMetadata.personaSoulMdPath,
+          personaAgentsMdPath: pipelineMetadata.personaAgentsMdPath,
+          recallTraceId: pipelineMetadata.recallTraceId,
           identityGuardApplied: guardedReply.guardApplied,
           purpose,
         },
       };
     }
 
-    const pipelineMessages = createConversationPipelineMessages({
-      agent,
-      configFiles: agentConfigFiles,
-      memory: targetMemoryInspector,
-      memoryScope: completionContext.memoryScope,
-      modelId,
-      persona,
-      previousMessages: completionContext.previousMessages,
-      provider,
-      userMessage,
-    });
     appendEvent("prompt.pipeline.assembled", {
       agentId: agent.id,
       providerProfileId: provider.id,
@@ -1138,7 +1146,6 @@ export function App() {
       approvalState,
       permissionDecision,
     });
-    const pipelineMetadata = pipelineMessages[0]?.metadata ?? {};
     appendEvent("provider.completion.dgx.succeeded", {
       agentId: agent.id,
       providerProfileId: provider.id,

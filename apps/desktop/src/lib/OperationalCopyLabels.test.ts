@@ -59,7 +59,7 @@ describe("operational copy labels", () => {
       workerCount: 3,
     }).items.map((item) => item.label).join("\n");
 
-    expect(smokeLabels).toContain("작업 대기열 레인 동작");
+    expect(smokeLabels).toContain("작업 대기열 흐름 동작");
     expect(smokeLabels).toContain("토론 결정에서 코딩 패킷 생성");
     expect(smokeLabels).toContain("프로바이더 대체 경로와 실제 호출");
     expect(settingsLabels).toContain("프로바이더 호출 점검 1개 준비");

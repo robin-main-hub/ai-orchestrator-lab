@@ -41,6 +41,7 @@ import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { AgentPortrait, type AgentState } from "../shared/AgentActivity";
 import { AgentConfigDrawer } from "../AgentConfigDrawer";
+import { AgentConversationFlowPanel } from "./AgentConversationFlowPanel";
 import { AgentLiveWorkStatus } from "./AgentLiveWorkStatus";
 import { AgentMemoryContinuityPanel } from "./AgentMemoryContinuityPanel";
 import { AgentSkillProfilePanel } from "./AgentSkillProfilePanel";
@@ -357,6 +358,14 @@ export function ConversationWorkbench({
             toolLabels={toolLabels}
             personaAgentsMdApplied={personaAgentsMdApplied}
             personaSoulApplied={personaSoulApplied}
+          />
+          <AgentConversationFlowPanel
+            adapterStatus={memoryAdapterStatus}
+            memoryRecordCount={memoryRecordCount}
+            memoryScope={memoryScope}
+            selectedAgent={selectedAgent}
+            selectedModel={selectedModel}
+            selectedProvider={selectedProvider}
           />
           <div className="shrink-0 border-b border-zinc-900/80 bg-zinc-950/90 px-4 py-2">
             <div className="mx-auto grid max-w-5xl gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">

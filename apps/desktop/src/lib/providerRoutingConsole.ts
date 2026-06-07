@@ -128,7 +128,7 @@ function trustToneFor(trust: SourceTrust): ProviderRoutingConsoleTone {
 
 function secretPolicyLabelFor(label: string | undefined, hasSecretRef: boolean): string {
   if (!hasSecretRef) return "비밀값 없음";
-  if (!label) return "서버 SecretRef 사용";
-  if (label.includes("SecretRef")) return "서버 SecretRef 사용";
+  if (!label) return "서버 비밀값 참조 사용";
+  if (label.includes("SecretRef")) return "서버 비밀값 참조 사용";
   return sanitizeProviderConsoleText(label);
 }
