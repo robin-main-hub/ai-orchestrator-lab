@@ -13,6 +13,11 @@ export function resolveOperatorWorkerSkillDisplay(role: AgentRole) {
   return {
     boundaryLabel: summary.runtime.boundaryLabel,
     label: summary.label,
-    tools: getAgentToolBadgeLabels(role),
+    tools: getAgentToolBadgeLabels(role).map(operatorToolLabel),
   };
+}
+
+function operatorToolLabel(label: string) {
+  if (label === "Tmux 계획") return "터미널 계획";
+  return label;
 }

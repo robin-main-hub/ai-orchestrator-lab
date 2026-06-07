@@ -168,7 +168,7 @@ export function resolveAssistantMessageStatusSummary(
   }
   if (metadata.realProviderCall === true) {
     return {
-      detail: "공급자 응답이 기록되고 공개 작업 로그로 요약되었습니다.",
+      detail: "모델 응답이 기록되고 공개 작업 로그로 요약되었습니다.",
       label: "응답 기록",
       variant: "success",
     };
@@ -187,7 +187,7 @@ export function createAssistantRuntimeEvidenceBadges(message: ConversationMessag
     badges.push({ label: `기억 ${recalledMemoryCount}개`, variant: recalledMemoryCount > 0 ? "success" : "muted" });
   }
   const runtimeConfigCount = readStringArray(metadata.runtimeConfigFileIds).length;
-  if (runtimeConfigCount > 0) badges.push({ label: `설정 ${runtimeConfigCount}개`, variant: "primary" });
+  if (runtimeConfigCount > 0) badges.push({ label: `인격 파일 ${runtimeConfigCount}개`, variant: "primary" });
   const toolCount = readStringArray(metadata.roleToolProfileTools).length;
   if (toolCount > 0) badges.push({ label: `도구 ${toolCount}개`, variant: "primary" });
   return badges;
@@ -325,6 +325,7 @@ function MessageBubble({
             {attachments.length > 0 ? (
               <MessageAttachments attachments={attachments} />
             ) : null}
+            <PublicWorkTracePanel trace={publicWorkTrace} />
           </div>
         </div>
         <div className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cyan-200/30 bg-cyan-500/20 text-cyan-100 shadow-[0_0_20px_rgba(34,211,238,0.22)]">
@@ -441,10 +442,34 @@ function readAttachmentProcessingMode(attachment: ConversationAttachment) {
     : undefined;
 }
 
-function attachmentProcessingLabel(processingMode: "vision_candidate" | "document_candidate" | "metadata_only") {
-  if (processingMode === "vision_candidate") return "vision 후보";
+export function attachmentProcessingLabel(processingMode: "vision_candidate" | "document_candidate" | "metadata_only") {
+  if (processingMode === "vision_candidate") return "이미지 후보";
   if (processingMode === "document_candidate") return "문서 후보";
-  return "metadata";
+  return "파일 정보만";
+}
+
+export function approvalPermissionListLabel(permissions: string[]) {
+  const labels = permissions
+    .map((permission) => approvalPermissionLabel(permission))
+    .filter((label, index, all) => all.indexOf(label) === index);
+  return labels.length > 0 ? labels.join(", ") : "보기 전용";
+}
+
+function approvalPermissionLabel(permission: string) {
+  switch (permission) {
+    case "read_only":
+      return "보기 전용";
+    case "provider_completion":
+      return "모델 호출";
+    case "terminal_run":
+      return "터미널 실행";
+    case "network":
+      return "네트워크";
+    case "local_filesystem":
+      return "로컬 파일 접근";
+    default:
+      return permission.replace(/_/g, " ");
+  }
 }
 
 function ApprovalQueueInline({
@@ -485,7 +510,7 @@ function ApprovalQueueInline({
                   {item.summary}
                 </p>
                 <p className="truncate text-[10px] text-zinc-500">
-                  {item.permissions.join(", ") || "read_only"}
+                  {approvalPermissionListLabel(item.permissions)}
                   {restoresDraft ? " · 승인 시 입력창 복원" : ""}
                 </p>
               </div>

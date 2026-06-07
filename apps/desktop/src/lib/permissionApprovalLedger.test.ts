@@ -137,7 +137,7 @@ describe("permissionApprovalLedger", () => {
       expect.objectContaining({
         approvalState: "approved",
         actionSummary: "tmux 전송",
-        decisionReason: "sent to [local-path] with [secret]",
+        decisionReason: "로컬 경로 전송 · 비밀값 마스킹됨",
         policyCode: "OPERATOR-APPROVED",
       }),
     );

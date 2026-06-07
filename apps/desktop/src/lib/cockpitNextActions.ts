@@ -56,7 +56,7 @@ export function deriveCockpitNextActions({
     ...snapshot.approvals.map((approval) => ({
       ctaLabel: "승인 대기열 보기",
       id: `approval_${approval.blockReason}`,
-      label: `승인 필요: ${approval.blockReason}`,
+      label: `승인 필요: ${approvalBlockReasonLabel(approval.blockReason)}`,
       priority: approval.securityRisk === "high" ? ("high" as const) : ("warning" as const),
       source: "approval" as const,
       targetSurface: "approvals" as const,
@@ -130,4 +130,21 @@ function priorityRank(priority: CockpitNextActionItem["priority"]) {
   if (priority === "high") return 3;
   if (priority === "warning") return 2;
   return 1;
+}
+
+function approvalBlockReasonLabel(reason: string) {
+  const normalized = reason.trim().toLowerCase();
+  if (normalized.includes("terminal_run") || normalized.includes("terminal run")) {
+    return "터미널 실행 권한";
+  }
+  if (normalized.includes("file_write") || normalized.includes("write")) {
+    return "파일 변경 권한";
+  }
+  if (normalized.includes("network") || normalized.includes("http")) {
+    return "네트워크 접근 권한";
+  }
+  if (normalized.includes("danger") || normalized.includes("destructive")) {
+    return "고위험 작업 권한";
+  }
+  return "승인 사유 확인";
 }

@@ -153,7 +153,7 @@ export function OperatorCockpit({
               icon={<CheckSquare className="h-4 w-4" />}
               label="승인 대기"
               value={`${approvalCount}`}
-              hint={criticalApprovalCount > 0 ? `${criticalApprovalCount} high risk` : "건"}
+              hint={criticalApprovalCount > 0 ? `고위험 ${criticalApprovalCount}건` : "건"}
               tone={approvalCount > 0 ? "warning" : "normal"}
             />
             <GlanceTile
@@ -251,35 +251,97 @@ function NextActionStrip({
   actions: CockpitNextActionItem[];
   onActivate: (action: CockpitNextActionItem) => void;
 }) {
+  const primaryAction = actions[0];
+  const secondaryActions = actions.slice(1);
+  if (!primaryAction) return null;
+
   return (
-    <div className="rounded-xl border border-zinc-800/70 bg-zinc-900/35 px-3 py-2 backdrop-blur-xl">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-          다음 행동
-        </span>
-        {actions.map((action) => (
+    <section
+      aria-label="다음 행동"
+      className={`rounded-lg border px-3 py-3 backdrop-blur-xl ${nextActionPanelTone(primaryAction.priority)}`}
+    >
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <div className="min-w-0">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+              <CheckSquare className="h-3 w-3" />
+              지금 할 일
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-semibold text-white/70">
+              {priorityLabel(primaryAction.priority)}
+            </span>
+          </div>
           <button
-            className={`inline-flex min-w-0 max-w-full items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] transition-colors hover:border-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 ${
-              action.priority === "high"
-                ? "border-rose-400/25 bg-rose-500/10 text-rose-100"
-                : action.priority === "warning"
-                  ? "border-amber-400/25 bg-amber-500/10 text-amber-100"
-                  : "border-cyan-400/20 bg-cyan-500/10 text-cyan-100"
-            }`}
-            key={action.id}
-            onClick={() => onActivate(action)}
+            className={`group flex w-full min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 ${nextActionButtonTone(primaryAction.priority)}`}
+            onClick={() => onActivate(primaryAction)}
             type="button"
           >
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
-            <span className="truncate">{action.label}</span>
-            <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white/80">
-              {action.ctaLabel}
+            <span className="min-w-0">
+              <span className="block truncate font-semibold text-zinc-50">{primaryAction.label}</span>
+              <span className="mt-0.5 block text-[11px] text-white/55">누르면 관련 영역을 바로 펼칩니다.</span>
+            </span>
+            <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[10px] font-semibold text-white/85 transition-colors group-hover:bg-white/15">
+              {primaryAction.ctaLabel}
             </span>
           </button>
-        ))}
+        </div>
+
+        {secondaryActions.length > 0 ? (
+          <details className="group min-w-0 lg:w-64">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-zinc-800/70 bg-black/15 px-3 py-2 text-[11px] font-semibold text-zinc-300 transition-colors hover:border-zinc-700 hover:bg-black/25">
+              <span>다른 후보 {secondaryActions.length}건</span>
+              <ChevronDown className="h-3.5 w-3.5 text-zinc-500 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="mt-2 space-y-1.5">
+              {secondaryActions.map((action) => (
+                <NextActionButton action={action} key={action.id} onActivate={onActivate} />
+              ))}
+            </div>
+          </details>
+        ) : null}
       </div>
-    </div>
+    </section>
   );
+}
+
+function NextActionButton({
+  action,
+  onActivate,
+}: {
+  action: CockpitNextActionItem;
+  onActivate: (action: CockpitNextActionItem) => void;
+}) {
+  return (
+    <button
+      className={`flex w-full min-w-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-[11px] transition-colors hover:border-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 ${nextActionButtonTone(action.priority)}`}
+      onClick={() => onActivate(action)}
+      type="button"
+    >
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
+      <span className="min-w-0 flex-1 truncate">{action.label}</span>
+      <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white/80">
+        {action.ctaLabel}
+      </span>
+    </button>
+  );
+}
+
+function nextActionPanelTone(priority: CockpitNextActionItem["priority"]) {
+  if (priority === "high") return "border-rose-500/25 bg-rose-950/20";
+  if (priority === "warning") return "border-amber-500/25 bg-amber-950/15";
+  return "border-cyan-500/20 bg-zinc-900/40";
+}
+
+function nextActionButtonTone(priority: CockpitNextActionItem["priority"]) {
+  if (priority === "high") return "border-rose-400/25 bg-rose-500/10 text-rose-100";
+  if (priority === "warning") return "border-amber-400/25 bg-amber-500/10 text-amber-100";
+  return "border-cyan-400/20 bg-cyan-500/10 text-cyan-100";
+}
+
+function priorityLabel(priority: CockpitNextActionItem["priority"]) {
+  if (priority === "high") return "즉시";
+  if (priority === "warning") return "점검";
+  return "다음";
 }
 
 function GlanceTile({

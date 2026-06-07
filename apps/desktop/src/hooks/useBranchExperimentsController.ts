@@ -6,6 +6,7 @@ import type {
   EventEnvelope,
 } from "@ai-orchestrator/protocol";
 import { initialBranchExperiments } from "../seeds/conversation";
+import { contextPackTierLabel } from "../lib/uiLabels";
 
 type AppendWorkbenchEvent = <T>(type: string, payload: T) => EventEnvelope<T>;
 
@@ -30,7 +31,7 @@ export function useBranchExperimentsController({
     () =>
       branchExperiments
         .filter((branch) => branch.status === "adopted")
-        .map((branch) => `Adopted branch ${branch.title}: ${branch.summary}`)
+        .map((branch) => `채택된 대안 검토 ${branch.title}: ${branch.summary}`)
         .slice(0, 3),
     [branchExperiments],
   );
@@ -41,10 +42,10 @@ export function useBranchExperimentsController({
     const nextBranch: BranchExperiment = {
       id: `branch_${crypto.randomUUID()}`,
       sourceSessionId: activeSessionId,
-      title: `shadow: ${agentName} ${branchExperiments.length + 1}`,
+      title: `대안 검토 ${branchExperiments.length + 1}: ${agentName}`,
       agentName,
       status: "ready",
-      summary: `${agentName}가 ${contextPackTier} ContextPack으로 현재 요구사항을 별도 shadow conversation에서 검토한 결과`,
+      summary: `${agentName}가 ${contextPackTierLabel(contextPackTier)} 맥락 묶음으로 현재 요구사항을 별도 검토한 결과`,
       createdAt,
     };
 
@@ -67,12 +68,13 @@ export function useBranchExperimentsController({
       id: `message_branch_adopted_${crypto.randomUUID()}`,
       sessionId: activeSessionId,
       role: "assistant",
-      content: `Branch 채택: ${branch.title} - ${branch.summary}`,
+      content: `대안 검토 채택: ${branch.title} - ${branch.summary}`,
       createdAt,
       metadata: {
         branchId: branch.id,
         branchAdopted: true,
         contextPolicy: "summary_only",
+        contextPolicyLabel: "요약만 반영",
       },
     };
 

@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
-import { createDefaultPersonaSettings, agentRoleLabel } from "../lib/helpers";
+import { createDefaultPersonaSettings, agentRoleLabel, formatModelDisplayName } from "../lib/helpers";
 import {
   agentConfigPanelTitle,
   configSourceLabel,
@@ -99,7 +99,7 @@ export function AgentConfigDrawer({
             </label>
             <label>
               <span>모델</span>
-              <input readOnly value={agent.modelId ?? provider?.defaultModel ?? "모델 연결 대기"} />
+              <input readOnly value={formatModelDisplayName(agent.modelId ?? provider?.defaultModel)} />
             </label>
           </div>
         ) : null}

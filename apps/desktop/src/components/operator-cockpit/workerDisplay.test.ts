@@ -45,7 +45,7 @@ describe("resolveOperatorWorkerDisplay", () => {
     expect(resolveOperatorWorkerSkillDisplay("orchestrator")).toEqual({
       boundaryLabel: "승인 필요 1개",
       label: "지휘 도구",
-      tools: ["작업 대기열", "승인 확인", "Tmux 계획"],
+      tools: ["작업 대기열", "승인 확인", "터미널 계획"],
     });
 
     expect(resolveOperatorWorkerSkillDisplay("verifier")).toEqual({

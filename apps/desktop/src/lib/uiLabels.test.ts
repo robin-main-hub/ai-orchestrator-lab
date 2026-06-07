@@ -3,6 +3,7 @@ import type { ConversationMessage } from "@ai-orchestrator/protocol";
 import type { WorkbenchAgent } from "../types";
 import {
   contextPackTierLabel,
+  branchAgentNameLabel,
   guardStepLabel,
   insightCategoryLabel,
   messageLabel,
@@ -46,6 +47,10 @@ describe("messageLabel", () => {
       ),
     ).toBe("마키마");
   });
+
+  it("maps raw metadata role names to Korean character names when the agent list is absent", () => {
+    expect(messageLabel(assistantMessage({ agentName: "orchestrator" }))).toBe("마키마");
+  });
 });
 
 describe("Korean UI labels", () => {
@@ -61,5 +66,11 @@ describe("Korean UI labels", () => {
     expect(guardStepLabel("pii_secret_block")).toBe("개인정보/비밀");
     expect(soulModeLabel("retrieved")).toBe("검색된 기억");
     expect(contextPackTierLabel("standard")).toBe("표준");
+  });
+
+  it("maps branch experiment agent labels to character names", () => {
+    expect(branchAgentNameLabel("Architect")).toBe("오시노 시노부");
+    expect(branchAgentNameLabel("Reviewer")).toBe("시노미야 카구야");
+    expect(branchAgentNameLabel("Orchestrator")).toBe("마키마");
   });
 });

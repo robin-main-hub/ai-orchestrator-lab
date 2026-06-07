@@ -22,6 +22,12 @@ export type AttachmentProcessingSummary = {
   rejectedCount: number;
 };
 
+export type MessageAttachmentProcessingSource = ConversationAttachment & {
+  processingMode?: AttachmentProcessingPlan["processingMode"];
+  processingReason?: string;
+  processingStatus?: AttachmentProcessingPlan["status"];
+};
+
 export function createAttachmentProcessingPlan({
   currentAttachmentCount,
   files,
@@ -73,9 +79,9 @@ export function summarizeAttachmentProcessingPlans(plans: AttachmentProcessingPl
   const metadataCount = accepted.filter((plan) => plan.processingMode === "metadata_only").length;
   const parts = [
     `첨부 ${accepted.length}개 준비`,
-    visionCount > 0 ? `이미지 vision 후보 ${visionCount}` : undefined,
+    visionCount > 0 ? `이미지 확인 후보 ${visionCount}` : undefined,
     documentCount > 0 ? `문서 후보 ${documentCount}` : undefined,
-    metadataCount > 0 ? `metadata 후보 ${metadataCount}` : undefined,
+    metadataCount > 0 ? `파일 정보 후보 ${metadataCount}` : undefined,
     rejectedCount > 0 ? `거부 ${rejectedCount}` : undefined,
   ].filter(Boolean);
 
@@ -84,6 +90,28 @@ export function summarizeAttachmentProcessingPlans(plans: AttachmentProcessingPl
     label: parts.join(" · "),
     rejectedCount,
   };
+}
+
+export function createAttachmentProcessingPlansForMessage({
+  attachments,
+  rejectedPlans = [],
+}: {
+  attachments: MessageAttachmentProcessingSource[];
+  rejectedPlans?: AttachmentProcessingPlan[];
+}): AttachmentProcessingPlan[] {
+  const acceptedPlans = attachments.map((attachment) => ({
+    kind: attachment.kind,
+    name: attachment.name,
+    processingMode: attachment.processingMode ?? "metadata_only",
+    reason: attachment.processingReason,
+    size: attachment.size,
+    status: attachment.processingStatus ?? "accepted",
+    storage: attachment.storage,
+  }));
+  return [
+    ...acceptedPlans,
+    ...rejectedPlans.filter((plan) => plan.status === "rejected"),
+  ];
 }
 
 function classifyAttachmentKind(file: AttachmentProcessingFile): ConversationAttachment["kind"] {
