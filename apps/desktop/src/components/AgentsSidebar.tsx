@@ -305,8 +305,6 @@ function AgentCard({
 }: SharedCardProps & { agent: WorkbenchAgent }) {
   const isSelected = agent.id === selectedAgentId;
   const activity = agentActivityById[agent.id] ?? "idle";
-  const isResponding = activity === "responding";
-  const isPreparing = activity === "preparing";
   const visual = agentVisualsById[agent.id];
   const providerModels = agent.providerProfileId
     ? modelCatalog[agent.providerProfileId] ?? []
@@ -329,6 +327,7 @@ function AgentCard({
   const primaryDisplayName = agentPrimaryDisplayName(agent);
   const secondaryDisplayLabel = agentSecondaryDisplayLabel(agent);
   const toolProfileSummary = getAgentToolProfileSummary(agent.role);
+  const statusBadge = activityBadgeForAgent(activity);
 
   return (
     <div
@@ -351,15 +350,7 @@ function AgentCard({
           <AvatarWithStatus
             initials={agent.name.slice(0, 2).toUpperCase()}
             roleColor={roleColorFromRole(agent.role)}
-            status={
-              isResponding
-                ? "active"
-                : isPreparing
-                  ? "pending"
-                  : activity === "idle"
-                    ? "idle"
-                    : "online"
-            }
+            status={avatarStatusForAgentActivity(activity)}
             avatarDataUrl={visual?.avatarDataUrl}
             size="sm"
             className="shrink-0"
@@ -510,25 +501,36 @@ function AgentCard({
           ) : null}
         </div>
 
-        {/* in use indicator */}
-        {isResponding ? (
+        {statusBadge ? (
           <StatusBadge
             className="justify-self-end whitespace-nowrap"
             size="sm"
-            variant="success"
+            variant={statusBadge.variant}
           >
-            in use
-          </StatusBadge>
-        ) : isPreparing ? (
-          <StatusBadge
-            className="justify-self-end whitespace-nowrap"
-            size="sm"
-            variant="warning"
-          >
-            prepare
+            {statusBadge.label}
           </StatusBadge>
         ) : null}
       </div>
     </div>
   );
+}
+
+function avatarStatusForAgentActivity(activity: AgentActivityStatus) {
+  if (activity === "preparing" || activity === "waiting_approval") return "pending";
+  if (activity === "responding" || activity === "tooling" || activity === "capturing" || activity === "dispatching") {
+    return "active";
+  }
+  if (activity === "error") return "offline";
+  return "idle";
+}
+
+function activityBadgeForAgent(activity: AgentActivityStatus): { label: string; variant: "danger" | "success" | "warning" } | null {
+  if (activity === "responding") return { label: "응답 중", variant: "success" };
+  if (activity === "preparing") return { label: "준비 중", variant: "warning" };
+  if (activity === "tooling") return { label: "도구 중", variant: "warning" };
+  if (activity === "capturing") return { label: "읽는 중", variant: "warning" };
+  if (activity === "dispatching") return { label: "전송 중", variant: "success" };
+  if (activity === "waiting_approval") return { label: "승인 대기", variant: "warning" };
+  if (activity === "error") return { label: "오류", variant: "danger" };
+  return null;
 }

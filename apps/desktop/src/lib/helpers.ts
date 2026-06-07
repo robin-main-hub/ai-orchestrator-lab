@@ -78,7 +78,7 @@ export function createAgentModelRouteLabel({
   providerName?: string;
   source?: "agent" | "provider_default" | "catalog";
 }) {
-  const providerLabel = providerName ? providerDisplayLabel(providerName) : "공급자 미지정";
+  const providerLabel = providerName ? providerDisplayLabel(providerName) : "공급자 대기";
   const trimmedModelId = modelId?.trim();
   const trimmedModelName = modelName?.trim();
   const modelLabel = formatModelDisplayName(trimmedModelName || trimmedModelId);

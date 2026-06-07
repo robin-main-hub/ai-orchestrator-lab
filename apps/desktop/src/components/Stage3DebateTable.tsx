@@ -376,7 +376,19 @@ function UtteranceCard({
             </footer>
           ) : null}
 
-          <PublicWorkTracePanel trace={publicWorkTrace} />
+          {hasProvenance ? (
+            <details className="group rounded-lg border border-zinc-800/60 bg-black/15">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-[11px] font-semibold text-zinc-400 transition-colors hover:text-zinc-200">
+                <span>검토 근거 보기</span>
+                <span className="text-[10px] font-normal text-zinc-600 group-open:hidden">
+                  공개 로그는 보조 정보로 접어둠
+                </span>
+              </summary>
+              <div className="border-t border-zinc-800/60 p-2">
+                <PublicWorkTracePanel trace={publicWorkTrace} />
+              </div>
+            </details>
+          ) : null}
         </div>
       </div>
     </article>
