@@ -11,6 +11,7 @@ import { GlassPanel, GlassPanelHeader } from "./GlassPanel";
 import { useAgentExpression } from "./useAgentExpression";
 import { badgeColorForStatus, workerStatusLabel } from "./presentation";
 import {
+  formatOperatorWorktreeLabel,
   resolveOperatorWorkerDetailDisplay,
   resolveOperatorWorkerDisplay,
   resolveOperatorWorkerSkillDisplay,
@@ -164,7 +165,7 @@ function WorkerRow({
             {worker.worktree ? (
               <span className="inline-flex min-w-0 items-center gap-1">
                 <FolderGit2 className="h-3 w-3 text-cyan-500/70" />
-                <span className="truncate">{worker.worktree}</span>
+                <span className="truncate">{formatOperatorWorktreeLabel(worker.worktree)}</span>
               </span>
             ) : null}
             {worker.branch ? (

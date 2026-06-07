@@ -153,7 +153,10 @@ export function Stage3DebateTable({
                       round.status === "running" && "animate-pulse",
                     )}
                   />
-                  {round.title}
+                  <span>{round.title}</span>
+                  <span className="rounded-full border border-zinc-700/70 bg-zinc-950/45 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">
+                    {roundStatusLabel(round.status)}
+                  </span>
                 </button>
               );
             })}
@@ -226,6 +229,16 @@ function roundDotColor(index: number, status: Stage3DebateSession["rounds"][numb
   if (status === "pending") return "bg-zinc-600";
   const completedAccentColors = ["bg-zinc-500", "bg-violet-500", "bg-blue-500", "bg-rose-500", "bg-amber-500"];
   return completedAccentColors[index % completedAccentColors.length];
+}
+
+function roundStatusLabel(status: Stage3DebateSession["rounds"][number]["status"]) {
+  const labels: Record<Stage3DebateSession["rounds"][number]["status"], string> = {
+    blocked: "차단됨",
+    completed: "완료",
+    pending: "대기",
+    running: "진행 중",
+  };
+  return labels[status] ?? status;
 }
 
 function createUtteranceView(
