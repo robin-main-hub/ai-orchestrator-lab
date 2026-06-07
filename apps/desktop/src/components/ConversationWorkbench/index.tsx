@@ -466,10 +466,10 @@ function AgentCapabilityStrip({
         <span className="shrink-0 rounded-full border border-cyan-300/20 bg-cyan-500/10 px-2.5 py-1 text-[11px] text-cyan-100">
           {toolGroupLabel} · {toolBoundaryLabel}
         </span>
-        {toolLabels.map((label) => (
+        {toolLabels.map((label, index) => (
           <span
             className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-zinc-300"
-            key={label}
+            key={`${label}:${index}`}
           >
             {label}
           </span>

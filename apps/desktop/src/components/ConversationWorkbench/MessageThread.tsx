@@ -386,8 +386,8 @@ function MessageBubble({
           ) : null}
           {runtimeEvidenceBadges.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1.5" aria-label="응답 근거 배지">
-              {runtimeEvidenceBadges.map((badge) => (
-                <StatusBadge key={badge.label} size="sm" variant={badge.variant}>
+              {runtimeEvidenceBadges.map((badge, index) => (
+                <StatusBadge key={`${badge.label}:${index}`} size="sm" variant={badge.variant}>
                   {badge.label}
                 </StatusBadge>
               ))}
