@@ -64,6 +64,9 @@ function classifyAttachmentKind(file: AttachmentProcessingFile): ConversationAtt
 }
 
 function supportsKind(kind: ConversationAttachment["kind"], modelModalities: string[]): boolean {
+  if (kind === "document") {
+    return modelModalities.includes("text") || modelModalities.includes("document");
+  }
   return modelModalities.includes(kind);
 }
 
@@ -72,7 +75,7 @@ function processingModeFor(
   modelModalities: string[],
 ): AttachmentProcessingPlan["processingMode"] {
   if (kind === "image" && modelModalities.includes("image")) return "vision_candidate";
-  if (kind === "document" && modelModalities.includes("document")) return "document_candidate";
+  if (kind === "document" && (modelModalities.includes("document") || modelModalities.includes("text"))) return "document_candidate";
   return "metadata_only";
 }
 
