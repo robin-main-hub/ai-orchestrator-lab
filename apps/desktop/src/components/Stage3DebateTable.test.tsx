@@ -55,5 +55,7 @@ describe("Stage3DebateTable", () => {
     expect(html).toContain("공개 작업 로그");
     expect(html).toContain("토론 실행 영수증");
     expect(html).toContain("코딩 영향");
+    expect(html).toContain("검토자");
+    expect(html).not.toContain("Reviewer");
   });
 });

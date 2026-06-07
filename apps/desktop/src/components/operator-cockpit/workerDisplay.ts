@@ -46,26 +46,6 @@ const personaNameByKey: Record<string, string> = {
   yohane: "츠시마 요시코",
 };
 
-const englishRoleLabelByRole: Record<AgentRole, string> = {
-  architect: "Architect",
-  auditor: "Auditor",
-  builder: "Builder",
-  companion: "Companion",
-  domain_expert: "Domain Expert",
-  executor: "Executor",
-  external: "External",
-  mediator: "Mediator",
-  memory_curator: "Memory Curator",
-  negotiator: "Negotiator",
-  orchestrator: "Orchestrator",
-  researcher: "Researcher",
-  reviewer: "Reviewer",
-  risk_officer: "Risk Officer",
-  skeptic: "Skeptic",
-  verifier: "Verifier",
-  watchdog: "Watchdog",
-};
-
 const koreanRoleLabelByRole: Record<AgentRole, string> = {
   architect: "설계자",
   auditor: "감사자",
@@ -103,12 +83,13 @@ export function normalizeWorkerPersonaKey(workerId: string, role: AgentRole) {
 
 export function resolveOperatorWorkerDisplay(worker: Pick<OperatorCockpitWorkerFleet, "role" | "workerId">) {
   const personaKey = normalizeWorkerPersonaKey(worker.workerId, worker.role);
-  const koreanRoleLabel = personaRoleOverrideByKey[personaKey] ?? koreanRoleLabelByRole[worker.role];
+  const koreanRoleLabel = koreanRoleLabelByRole[worker.role];
+  const detailLabel = personaRoleOverrideByKey[personaKey] ?? "기본 역할";
 
   return {
     displayName: personaNameByKey[personaKey] ?? worker.workerId,
     portraitAgentId: personaKey,
-    roleLabel: `${englishRoleLabelByRole[worker.role]} · ${koreanRoleLabel}`,
+    roleLabel: `${koreanRoleLabel} · ${detailLabel}`,
   };
 }
 
