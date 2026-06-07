@@ -149,6 +149,7 @@ import { deriveTmuxRecoveryPlan } from "./lib/tmuxRecoveryPlan";
 import { createSettingsDiagnostics } from "./lib/settingsDiagnostics";
 import { createProductionSmokePlan } from "./lib/productionSmokePlan";
 import { createOrchestrationMaturityReport } from "./lib/orchestrationMaturity";
+import { deriveCockpitNextActions } from "./lib/cockpitNextActions";
 import {
   createAgentChannelMemoryScope,
   createAgentChannelMemoryInstallAudit,
@@ -175,6 +176,7 @@ import {
   createAgentRoleToolRuntimeAudit,
   createAgentRoleToolRuntimeSummary,
 } from "./lib/agentRuntimeConfig";
+import { applyAgentIdentityResponseGuard } from "./lib/agentIdentityResponseGuard";
 import { createMemoryGovernanceSummary } from "./lib/memoryGovernance";
 import { createProviderRoutingConsoleItems } from "./lib/providerRoutingConsole";
 import {
@@ -1055,12 +1057,17 @@ export function App() {
     const roleToolConfig = createAgentRoleToolRuntimeSummary(agent);
     if (!isDgxRoutedProvider(provider)) {
       const recalledMemoryCount = memoryInspector.trace.results.filter((result) => result.usedInDecision).length;
-      return {
+      const guardedReply = applyAgentIdentityResponseGuard({
+        agent,
         content: buildMockAssistantReply({
           content: userMessage.content,
           agent,
           provider,
         }),
+        userContent: userMessage.content,
+      });
+      return {
+        content: guardedReply.content,
         metadata: {
           modelId,
           providerProfileId: provider.id,
@@ -1073,6 +1080,7 @@ export function App() {
             .map((configFile) => configFile.id),
           roleToolProfileLabel: roleToolConfig.label,
           roleToolProfileTools: roleToolConfig.tools,
+          identityGuardApplied: guardedReply.guardApplied,
           purpose,
         },
       };
@@ -1119,8 +1127,13 @@ export function App() {
       usage: result.usage,
       purpose,
     });
-    return {
+    const guardedReply = applyAgentIdentityResponseGuard({
+      agent,
       content: result.content,
+      userContent: userMessage.content,
+    });
+    return {
+      content: guardedReply.content,
       metadata: {
         endpoint: result.endpoint,
         modelId,
@@ -1134,6 +1147,7 @@ export function App() {
         roleToolProfileLabel: pipelineMetadata.roleToolProfileLabel,
         roleToolProfileTools: pipelineMetadata.roleToolProfileTools,
         realProviderCall: true,
+        identityGuardApplied: guardedReply.guardApplied,
         purpose,
       },
     };
@@ -3443,6 +3457,11 @@ export function App() {
     return {
       diagnostics,
       maturity,
+      nextActions: deriveCockpitNextActions({
+        diagnostics,
+        maturity,
+        snapshot: cockpitSnapshot,
+      }),
       smokePlan,
     };
   }, [
@@ -3450,6 +3469,7 @@ export function App() {
     agents,
     assistantDrafts,
     codingPacketState.goal,
+    cockpitSnapshot,
     conversationMessages,
     debateSession,
     draftAttachments.length,
