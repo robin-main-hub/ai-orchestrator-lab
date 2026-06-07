@@ -3,6 +3,7 @@ import type { TerminalTimelineBlock } from "@ai-orchestrator/protocol";
 import {
   createTmuxOperationFailedBlock,
   createTmuxOperationStartedBlock,
+  deriveTmuxCommandCenterForTest,
   resolveTmuxTimelineBlocks,
 } from "./TmuxSwarmBoard";
 import { makeSyntheticBlock } from "./TmuxPaneTimeline";
@@ -107,5 +108,23 @@ describe("tmux live operation timeline blocks", () => {
     expect(block.title).toBe("백엔드 전송 실패");
     expect(block.summary).toBe("[redacted:url] failed");
     expect(block.redactionApplied).toBe(true);
+  });
+});
+
+describe("deriveTmuxCommandCenter", () => {
+  it("선택된 작업창의 다음 명령과 최근 결과를 작업대 상단 요약으로 만든다", () => {
+    const summary = deriveTmuxCommandCenterForTest({
+      commandDraft: "pnpm test",
+      lastOutput: "테스트 12개 통과",
+      paneRoleLabel: "검증",
+      paneStateLabel: "검증 중",
+      paneTitle: "검증 작업창",
+    });
+
+    expect(summary.title).toBe("검증 작업창");
+    expect(summary.statusLabel).toBe("검증 중");
+    expect(summary.commandLabel).toBe("pnpm test");
+    expect(summary.outputLabel).toBe("테스트 12개 통과");
+    expect(summary.roleLabel).toBe("검증");
   });
 });
