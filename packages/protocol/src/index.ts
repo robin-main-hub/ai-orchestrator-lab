@@ -2261,8 +2261,12 @@ export const operatorCockpitApprovalEvidenceSchema = z.object({
 export type OperatorCockpitApprovalEvidence = z.infer<typeof operatorCockpitApprovalEvidenceSchema>;
 
 export const operatorCockpitHandoffSchema = z.object({
+  id: z.string().optional(),
   ownerAgentId: z.string(),
   nextAction: z.string(),
+  targetSurface: handoffTargetSurfaceSchema.optional(),
+  payloadRef: z.string().optional(),
+  approvalState: z.enum(["not_required", "required", "approved", "rejected", "expired"]).optional(),
   missingInfoSlots: z.array(missingInfoSlotSchema),
   evidenceRefs: z.array(evidenceRefSchema).optional(),
 });

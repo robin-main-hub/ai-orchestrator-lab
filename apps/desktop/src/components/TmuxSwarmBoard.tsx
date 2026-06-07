@@ -539,7 +539,7 @@ function TmuxPaneDetail({
   timelineBlocks: TerminalTimelineBlock[];
 }) {
   const state = mapTmuxPaneStateToAgentState(pane.state);
-  const commandDisabled = pane.state === "idle";
+  const commandDisabled = false;
   const surfaceLabel = formatTmuxPaneSurfaceLabel(pane.id);
 
   return (
