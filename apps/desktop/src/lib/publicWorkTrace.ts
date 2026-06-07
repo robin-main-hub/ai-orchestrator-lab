@@ -106,6 +106,26 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
     });
   }
 
+  const personaDisplayName = readString(metadata.personaDisplayName);
+  const personaSoulApplied = readBoolean(metadata.personaSoulApplied);
+  const personaAgentsMdApplied = readBoolean(metadata.personaAgentsMdApplied);
+  if (personaDisplayName || personaSoulApplied !== undefined || personaAgentsMdApplied !== undefined) {
+    const appliedLabels = [
+      personaSoulApplied ? "SOUL.md 적용" : personaSoulApplied === false ? "SOUL.md 대기" : undefined,
+      personaAgentsMdApplied ? "AGENTS.md 적용" : personaAgentsMdApplied === false ? "AGENTS.md 대기" : undefined,
+    ].filter(Boolean);
+    commands.push({
+      id: "persona-config",
+      label: "인격 설정",
+      tone: personaSoulApplied && personaAgentsMdApplied ? "success" : "warning",
+      value: sanitize(
+        [personaDisplayName, appliedLabels.length > 0 ? appliedLabels.join(" · ") : "설정 확인 중"]
+          .filter(Boolean)
+          .join(" · "),
+      ),
+    });
+  }
+
   const roleToolProfileLabel = readString(metadata.roleToolProfileLabel);
   const roleToolProfileTools = readStringArray(metadata.roleToolProfileTools);
   if (roleToolProfileLabel || roleToolProfileTools.length > 0) {
