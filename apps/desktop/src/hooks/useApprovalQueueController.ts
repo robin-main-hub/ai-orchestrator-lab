@@ -211,15 +211,36 @@ export function useApprovalQueueController({
         pendingTmuxDispatchByApprovalKey[approval.id] ??
         (approval.sourceItemId ? pendingTmuxDispatchByApprovalKey[approval.sourceItemId] : undefined);
       if (state === "approved" && pendingTmuxRequest && !replayedByServer) {
-        try {
-          const approvedRequest: DesktopTmuxDispatchRequest = {
-            ...pendingTmuxRequest,
-            id: `${pendingTmuxRequest.id}_approved_${Date.now()}`,
-            approvalState: "approved",
-            dispatchMode: "execute_if_approved",
-            createdAt: decidedAt,
+        if (approval.replay) {
+          setApprovalServerError("서버 재실행(Replay)에 실패하여 디스패치를 중단했습니다.");
+          const outcome: TmuxRedispatchOutcome = {
+            approvalId: approval.id,
+            createdAt: new Date().toISOString(),
+            reason: "서버 재실행 실패로 인한 디스패치 중단",
+            role: pendingTmuxRequest.role,
+            sourceItemId: approval.sourceItemId,
+            status: "failed",
           };
-          const preflight = await requestTmuxPreflight({ request: approvedRequest });
+          setTmuxRedispatchOutcomes((current) => [outcome, ...current].slice(0, 5));
+          onTmuxOutcome?.({
+            role: pendingTmuxRequest.role,
+            action: "approved",
+            status: "failed",
+            reason: "서버 재실행 실패로 인한 디스패치 중단",
+            approvalId: approval.id,
+            sourceItemId: approval.sourceItemId,
+            commandPreview: pendingTmuxRequest.commandPreview,
+          });
+        } else {
+          try {
+            const approvedRequest: DesktopTmuxDispatchRequest = {
+              ...pendingTmuxRequest,
+              id: `${pendingTmuxRequest.id}_approved_${Date.now()}`,
+              approvalState: "approved",
+              dispatchMode: "execute_if_approved",
+              createdAt: decidedAt,
+            };
+            const preflight = await requestTmuxPreflight({ request: approvedRequest });
           appendEvent("tmux.dispatch.preflight_checked", {
             approvalId: approval.id,
             sourceItemId: approval.sourceItemId,
@@ -301,6 +322,7 @@ export function useApprovalQueueController({
             commandPreview: pendingTmuxRequest.commandPreview,
           });
         }
+      }
       } else if (state === "rejected" && pendingTmuxRequest) {
         const outcome: TmuxRedispatchOutcome = {
           approvalId: approval.id,
