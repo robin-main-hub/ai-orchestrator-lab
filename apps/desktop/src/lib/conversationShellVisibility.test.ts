@@ -76,6 +76,7 @@ describe("getConversationShellVisibility", () => {
 
   it("identifies the black v0 focus surfaces that must not show management rails", () => {
     expect(isFocusedV0Surface("conversation")).toBe(true);
+    expect(isFocusedV0Surface("agents")).toBe(true);
     expect(isFocusedV0Surface("debate")).toBe(true);
     expect(isFocusedV0Surface("tmux")).toBe(true);
     expect(isFocusedV0Surface("cockpit")).toBe(true);
