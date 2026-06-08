@@ -47,6 +47,8 @@ type ProviderCompletionPermissionRequiredPayload = {
 const defaultDgxSystemPrompt =
   "Answer directly in Korean when the user writes Korean. Do not reveal reasoning or a thinking process.";
 
+const defaultFetchImpl: typeof fetch = (input, init) => fetch(input, init);
+
 export type Stage12DgxCompletionInput = {
   provider: ProviderProfile;
   modelId: string;
@@ -92,7 +94,7 @@ export async function requestDgxVllmCompletion({
   provider,
   modelId,
   messages,
-  fetchImpl = fetch,
+  fetchImpl = defaultFetchImpl,
   proxyBaseUrl,
   proxyTimeoutMs = 30_000,
   allowDirectFallback = false,
@@ -140,7 +142,7 @@ export async function requestDgxProviderCompletion({
   provider,
   modelId,
   messages,
-  fetchImpl = fetch,
+  fetchImpl = defaultFetchImpl,
   proxyBaseUrl,
   proxyTimeoutMs = 30_000,
   approvalState,

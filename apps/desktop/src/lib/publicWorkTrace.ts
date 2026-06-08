@@ -117,13 +117,25 @@ export function createConversationMessagePublicWorkTrace(message: ConversationMe
     });
   }
 
-  const error = readString(metadata.error) ?? readString(metadata.fallbackReason);
+  const error = readString(metadata.error);
   if (error) {
     steps.push({
       id: "runtime-warning",
       label: "실행 경고",
       tone: "danger",
       value: sanitize(error),
+    });
+  }
+  const fallbackReason = readString(metadata.fallbackReason);
+  if (!error && fallbackReason) {
+    const directProviderSucceeded = route === "direct_provider";
+    steps.push({
+      id: "runtime-fallback",
+      label: directProviderSucceeded ? "프록시 우회" : "대체 경로",
+      tone: directProviderSucceeded ? "success" : "warning",
+      value: directProviderSucceeded
+        ? "DGX 프록시 미응답 · 기본 MiMo 직접 호출 성공"
+        : sanitize(fallbackReason),
     });
   }
 

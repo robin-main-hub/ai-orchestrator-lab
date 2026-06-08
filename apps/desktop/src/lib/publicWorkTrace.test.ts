@@ -284,6 +284,32 @@ describe("publicWorkTrace", () => {
     });
   });
 
+  it("직접 provider 호출이 성공한 fallback은 실패 경고가 아니라 프록시 우회 성공으로 표시한다", () => {
+    const trace = createConversationMessagePublicWorkTrace({
+      id: "msg_direct_fallback",
+      role: "assistant",
+      content: "응답",
+      createdAt: "2026-06-06T00:00:00.000Z",
+      sessionId: "session_main",
+      metadata: {
+        fallbackReason: "http://dgx-02:4317: Failed to fetch",
+        modelId: "mimo-v2.5-pro",
+        providerProfileId: "provider_mimo_token_openai",
+        realProviderCall: true,
+        route: "direct_provider",
+      },
+    });
+
+    expect(trace.groups[0]?.items).toContainEqual(
+      expect.objectContaining({
+        label: "프록시 우회",
+        tone: "success",
+        value: "DGX 프록시 미응답 · 기본 MiMo 직접 호출 성공",
+      }),
+    );
+    expect(JSON.stringify(trace)).not.toContain("Failed to fetch");
+  });
+
   it("공개 작업 로그는 내부 추론과 원문 도구 입력을 요약 경계로 마스킹한다", () => {
     const message: ConversationMessage = {
       id: "msg_assistant_cot",
