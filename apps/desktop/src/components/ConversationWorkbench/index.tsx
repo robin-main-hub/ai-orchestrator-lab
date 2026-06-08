@@ -31,6 +31,7 @@ import { resolveAgentThinkingIndicator } from "../../lib/agentThinkingIndicator"
 import { getConversationWorkbenchVisibility } from "../../lib/conversationWorkbenchVisibility";
 import {
   createMakimaDelegationCards,
+  type MakimaDelegationAssignmentView,
   type MakimaDelegationCard,
 } from "../../lib/makimaDelegation";
 import type {
@@ -74,7 +75,7 @@ export function ConversationWorkbench({
   branchExperiments,
   contextPackTier,
   controlQueueContinuity,
-  delegatedAgentIds,
+  delegationAssignmentsByAgentId,
   draftAttachments,
   draftMessage,
   maxDraftAttachments,
@@ -95,6 +96,7 @@ export function ConversationWorkbench({
   onCreateDelegationAssignment,
   onDraftMessageChange,
   onOpenDelegatedAgentConversation,
+  onProgressDelegationAssignment,
   onImportExternalIngress,
   onPromoteToDebate,
   onRejectPermission,
@@ -133,7 +135,7 @@ export function ConversationWorkbench({
   branchExperiments: BranchExperiment[];
   contextPackTier: ContextPackTier;
   controlQueueContinuity?: ControlQueueContinuitySummary;
-  delegatedAgentIds?: string[];
+  delegationAssignmentsByAgentId?: Record<string, MakimaDelegationAssignmentView>;
   draftAttachments: DraftAttachment[];
   draftMessage: string;
   maxDraftAttachments: number;
@@ -154,6 +156,7 @@ export function ConversationWorkbench({
   onCreateDelegationAssignment?: (card: MakimaDelegationCard) => void;
   onDraftMessageChange: (value: string) => void;
   onOpenDelegatedAgentConversation?: (agentId: string) => void;
+  onProgressDelegationAssignment?: (card: MakimaDelegationCard, assignment: MakimaDelegationAssignmentView) => void;
   onImportExternalIngress: () => void;
   onPromoteToDebate: () => void;
   onRejectPermission: (sourceItemId: string) => void;
@@ -534,11 +537,12 @@ export function ConversationWorkbench({
 
       {selectedAgent?.role === "orchestrator" && onCreateDelegationAssignment ? (
         <MakimaDelegationConsole
-          assignedTargetAgentIds={delegatedAgentIds}
+          assignmentsByAgentId={delegationAssignmentsByAgentId}
           cards={makimaDelegationCards}
           onCreateAllAssignments={(cards) => cards.forEach(onCreateDelegationAssignment)}
           onCreateAssignment={onCreateDelegationAssignment}
           onOpenAssignedAgent={onOpenDelegatedAgentConversation}
+          onProgressAssignment={onProgressDelegationAssignment}
           request={delegationRequest}
         />
       ) : null}

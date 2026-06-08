@@ -1,28 +1,33 @@
 import { CheckCircle2, GitBranch, Play, Sparkles, UsersRound } from "lucide-react";
 import { Button } from "@/ui/button";
-import type { MakimaDelegationCard } from "../../lib/makimaDelegation";
+import {
+  createMakimaDelegationStatusCopy,
+  type MakimaDelegationAssignmentView,
+  type MakimaDelegationCard,
+} from "../../lib/makimaDelegation";
 
 export function MakimaDelegationConsole({
-  assignedTargetAgentIds = [],
+  assignmentsByAgentId = {},
   cards,
   request,
   onCreateAssignment,
   onCreateAllAssignments,
   onOpenAssignedAgent,
+  onProgressAssignment,
 }: {
-  assignedTargetAgentIds?: string[];
+  assignmentsByAgentId?: Record<string, MakimaDelegationAssignmentView>;
   cards: MakimaDelegationCard[];
   request: string;
   onCreateAssignment: (card: MakimaDelegationCard) => void;
   onCreateAllAssignments: (cards: MakimaDelegationCard[]) => void;
   onOpenAssignedAgent?: (agentId: string) => void;
+  onProgressAssignment?: (card: MakimaDelegationCard, assignment: MakimaDelegationAssignmentView) => void;
 }) {
   if (cards.length === 0) {
     return null;
   }
 
-  const assignedTargetAgents = new Set(assignedTargetAgentIds);
-  const unassignedCards = cards.filter((card) => !assignedTargetAgents.has(card.targetAgentId));
+  const unassignedCards = cards.filter((card) => !assignmentsByAgentId[card.targetAgentId]);
 
   return (
     <section
@@ -63,72 +68,89 @@ export function MakimaDelegationConsole({
 
         <div className="grid gap-2 xl:grid-cols-5">
           {cards.map((card) => {
-            const assigned = assignedTargetAgents.has(card.targetAgentId);
+            const assignment = assignmentsByAgentId[card.targetAgentId];
+            const assigned = Boolean(assignment);
+            const statusCopy = createMakimaDelegationStatusCopy(assignment);
 
             return (
-            <article
-              className={`group flex min-h-44 flex-col justify-between rounded-2xl border p-3 shadow-[0_18px_60px_rgba(0,0,0,0.28)] transition ${
-                assigned
-                  ? "border-emerald-300/20 bg-emerald-950/20"
-                  : "border-white/10 bg-zinc-950/70 hover:border-cyan-300/30 hover:bg-zinc-900/80"
-              }`}
-              key={card.id}
-            >
-              <div className="space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-zinc-100">{card.targetAgentName}</p>
-                    <p className="text-[11px] text-cyan-200">{card.targetRoleLabel} · {card.toolLabel}</p>
-                  </div>
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500">
-                    {assigned ? "assigned" : card.priority}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-[13px] font-medium text-zinc-200">{card.title.replace(`${card.targetAgentName}에게 `, "")}</p>
-                  <p className="mt-1 line-clamp-3 text-[11px] leading-5 text-zinc-500">{card.summary}</p>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {card.toolPreview.map((tool) => (
-                    <span
-                      className="rounded-full border border-violet-300/15 bg-violet-400/10 px-2 py-0.5 text-[10px] text-violet-100"
-                      key={tool}
-                    >
-                      {tool}
+              <article
+                className={`group flex min-h-44 flex-col justify-between rounded-2xl border p-3 shadow-[0_18px_60px_rgba(0,0,0,0.28)] transition ${
+                  assigned
+                    ? "border-emerald-300/20 bg-emerald-950/20"
+                    : "border-white/10 bg-zinc-950/70 hover:border-cyan-300/30 hover:bg-zinc-900/80"
+                }`}
+                key={card.id}
+              >
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-zinc-100">{card.targetAgentName}</p>
+                      <p className="text-[11px] text-cyan-200">{card.targetRoleLabel} · {card.toolLabel}</p>
+                    </div>
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] tracking-wide ${statusToneClass(statusCopy.tone)}`}>
+                      {statusCopy.label}
                     </span>
-                  ))}
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-medium text-zinc-200">{card.title.replace(`${card.targetAgentName}에게 `, "")}</p>
+                    <p className="mt-1 line-clamp-3 text-[11px] leading-5 text-zinc-500">{card.summary}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {card.toolPreview.map((tool) => (
+                      <span
+                        className="rounded-full border border-violet-300/15 bg-violet-400/10 px-2 py-0.5 text-[10px] text-violet-100"
+                        key={tool}
+                      >
+                        {tool}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/10 pt-2">
-                <span className="inline-flex items-center gap-1 text-[10px] text-zinc-500">
-                  <GitBranch className="h-3 w-3" />
-                  {surfaceLabel(card.targetSurface)}
-                </span>
-                {assigned ? (
-                  <Button
-                    className="h-7 border-cyan-300/20 bg-cyan-400/10 px-2 text-[11px] text-cyan-100 hover:bg-cyan-400/15"
-                    onClick={() => onOpenAssignedAgent?.(card.targetAgentId)}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    <Play className="h-3 w-3" />
-                    대화 열기
-                  </Button>
-                ) : (
-                  <Button
-                    className="h-7 border-emerald-300/20 bg-emerald-400/10 px-2 text-[11px] text-emerald-100 hover:bg-emerald-400/15"
-                    onClick={() => onCreateAssignment(card)}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    <Play className="h-3 w-3" />
-                    배정
-                  </Button>
-                )}
-              </div>
-            </article>
+                <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/10 pt-2">
+                  <span className="inline-flex items-center gap-1 text-[10px] text-zinc-500">
+                    <GitBranch className="h-3 w-3" />
+                    {surfaceLabel(card.targetSurface)}
+                  </span>
+                  {assigned && assignment ? (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        className="h-7 border-cyan-300/20 bg-cyan-400/10 px-2 text-[11px] text-cyan-100 hover:bg-cyan-400/15"
+                        onClick={() =>
+                          assignment.status === "done"
+                            ? onOpenAssignedAgent?.(card.targetAgentId)
+                            : onProgressAssignment?.(card, assignment)
+                        }
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        <Play className="h-3 w-3" />
+                        {statusCopy.actionLabel}
+                      </Button>
+                      <Button
+                        className="h-7 border-white/10 bg-white/[0.03] px-2 text-[11px] text-zinc-300 hover:bg-white/[0.06]"
+                        onClick={() => onOpenAssignedAgent?.(card.targetAgentId)}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        대화
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      className="h-7 border-emerald-300/20 bg-emerald-400/10 px-2 text-[11px] text-emerald-100 hover:bg-emerald-400/15"
+                      onClick={() => onCreateAssignment(card)}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <Play className="h-3 w-3" />
+                      배정
+                    </Button>
+                  )}
+                </div>
+              </article>
             );
           })}
         </div>
@@ -154,4 +176,16 @@ function surfaceLabel(surface: MakimaDelegationCard["targetSurface"]) {
     tmux: "Tmux",
   };
   return labels[surface] ?? surface;
+}
+
+function statusToneClass(tone: ReturnType<typeof createMakimaDelegationStatusCopy>["tone"]) {
+  const classes = {
+    amber: "border-amber-300/20 bg-amber-400/10 text-amber-100",
+    cyan: "border-cyan-300/20 bg-cyan-400/10 text-cyan-100",
+    emerald: "border-emerald-300/20 bg-emerald-400/10 text-emerald-100",
+    rose: "border-rose-300/20 bg-rose-400/10 text-rose-100",
+    violet: "border-violet-300/20 bg-violet-400/10 text-violet-100",
+  } satisfies Record<ReturnType<typeof createMakimaDelegationStatusCopy>["tone"], string>;
+
+  return classes[tone];
 }
