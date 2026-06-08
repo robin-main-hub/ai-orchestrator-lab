@@ -106,7 +106,7 @@ describe("providerFallbackPlan", () => {
     expect(reply).toContain("[redacted:url]");
   });
 
-  it("서버 프록시 네트워크 장애에는 세션 키 직접 폴백 연결을 안내한다", () => {
+  it("서버 프록시 네트워크 장애에는 기본 API 키 연결을 안내한다", () => {
     const reply = createProviderFailureConversationReply({
       agentDisplayName: "마키마",
       errorMessage: "http://dgx-02:4317: Failed to fetch",
@@ -119,8 +119,8 @@ describe("providerFallbackPlan", () => {
       providers: [provider({ id: "provider_mimo_token_openai", name: "MiMo Token Plan OpenAI" })],
     });
 
-    expect(reply).toContain("세션 키 연결");
-    expect(reply).toContain("DGX 없이도 같은 에이전트 방에서 이어서 대화");
+    expect(reply).toContain("기본 API 키 연결");
+    expect(reply).toContain("별도 모델/키 설정이 없을 때 이 경로로 계속 대화");
     expect(reply).not.toContain("http://dgx-02:4317");
   });
 });
