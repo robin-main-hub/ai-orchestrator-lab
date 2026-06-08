@@ -16,6 +16,19 @@ export type MakimaDelegationCard = {
   priority: WorkItem["priority"];
 };
 
+export type MakimaDelegationAssignmentView = {
+  lane: WorkItem["lane"];
+  status: WorkItem["status"];
+  updatedAt?: string;
+  workItemId: string;
+};
+
+export type MakimaDelegationStatusCopy = {
+  actionLabel: string;
+  label: string;
+  tone: "amber" | "cyan" | "emerald" | "rose" | "violet";
+};
+
 const roleDelegationOrder: Array<{
   role: WorkbenchAgent["role"];
   title: string;
@@ -184,6 +197,26 @@ export function createMakimaDelegationWorkItems({
   };
 
   return { handoff, workItem };
+}
+
+export function createMakimaDelegationStatusCopy(
+  assignment?: MakimaDelegationAssignmentView,
+): MakimaDelegationStatusCopy {
+  if (!assignment) {
+    return { actionLabel: "배정", label: "미배정", tone: "violet" };
+  }
+
+  const copies: Partial<Record<WorkItem["status"], MakimaDelegationStatusCopy>> = {
+    blocked: { actionLabel: "다시 시작", label: "막힘", tone: "rose" },
+    done: { actionLabel: "대화 열기", label: "완료", tone: "emerald" },
+    in_progress: { actionLabel: "검토 요청", label: "작업 중", tone: "cyan" },
+    planned: { actionLabel: "작업 시작", label: "배정됨", tone: "amber" },
+    ready_for_review: { actionLabel: "완료 처리", label: "검토 대기", tone: "violet" },
+    running: { actionLabel: "검토 요청", label: "실행 중", tone: "cyan" },
+    waiting_approval: { actionLabel: "완료 처리", label: "승인 대기", tone: "amber" },
+  };
+
+  return copies[assignment.status] ?? { actionLabel: "대화 열기", label: "진행 중", tone: "cyan" };
 }
 
 function normalizeDelegationRequest(request: string) {
