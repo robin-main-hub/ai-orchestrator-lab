@@ -20,6 +20,7 @@ import type {
 import { providerProfilesStorageKey } from "../lib/appConstants";
 import { slugifyProviderName } from "../lib/helpers";
 import {
+  createMimoTokenPlanDefaultCredentials,
   readProviderDefaultCredentials,
   writeProviderDefaultCredentials,
 } from "../lib/providerDefaultCredentials";
@@ -83,6 +84,9 @@ export function useProviderRegistryController({
     typeof window === "undefined"
       ? {}
       : readProviderDefaultCredentials({
+          fallbackCredentials: createMimoTokenPlanDefaultCredentials(
+            import.meta.env.VITE_MIMO_TOKEN_PLAN_API_KEY ?? import.meta.env.VITE_MIMO_API_KEY,
+          ),
           legacySessionStorage: window.sessionStorage,
           persistentStorage: window.localStorage,
         }),

@@ -4,6 +4,7 @@ import {
   providerDefaultCredentialsStorageKey,
 } from "./appConstants";
 import {
+  createMimoTokenPlanDefaultCredentials,
   parseProviderDefaultCredentials,
   readProviderDefaultCredentials,
   writeProviderDefaultCredentials,
@@ -28,6 +29,37 @@ describe("provider default credentials", () => {
       provider_mimo_token_openai: "default-key",
     });
     expect(storage.getItem).toHaveBeenCalledWith(providerDefaultCredentialsStorageKey);
+  });
+
+  it("MiMo Token Plan 기본 인증값을 두 호환 provider에 함께 매핑한다", () => {
+    expect(createMimoTokenPlanDefaultCredentials(" mimo-key ")).toEqual({
+      provider_mimo_token_anthropic: "mimo-key",
+      provider_mimo_token_openai: "mimo-key",
+    });
+    expect(createMimoTokenPlanDefaultCredentials("   ")).toEqual({});
+  });
+
+  it("환경 기본 인증값은 기존 localStorage 값을 덮어쓰지 않고 빠진 MiMo provider만 채운다", () => {
+    const storage = {
+      getItem: vi.fn(() => JSON.stringify({ provider_mimo_token_openai: "user-key" })),
+      removeItem: vi.fn(),
+      setItem: vi.fn(),
+    };
+
+    expect(
+      readProviderDefaultCredentials({
+        fallbackCredentials: createMimoTokenPlanDefaultCredentials("env-key"),
+        persistentStorage: storage,
+      }),
+    ).toEqual({
+      provider_mimo_token_anthropic: "env-key",
+      provider_mimo_token_openai: "user-key",
+    });
+    expect(storage.setItem).toHaveBeenCalledWith(providerDefaultCredentialsStorageKey, expect.any(String));
+    expect(JSON.parse(storage.setItem.mock.calls[0]?.[1] ?? "{}")).toEqual({
+      provider_mimo_token_anthropic: "env-key",
+      provider_mimo_token_openai: "user-key",
+    });
   });
 
   it("기존 sessionStorage 저장값을 localStorage 기본 인증값으로 마이그레이션한다", () => {
@@ -80,5 +112,31 @@ describe("provider default credentials", () => {
 
     expect(storage.removeItem).toHaveBeenCalledWith(providerDefaultCredentialsStorageKey);
     expect(storage.setItem).not.toHaveBeenCalled();
+  });
+
+  it("localStorage quota가 가득 차도 앱 시작을 막지 않는다", () => {
+    const storage = {
+      getItem: vi.fn(() => null),
+      removeItem: vi.fn(),
+      setItem: vi.fn(() => {
+        throw new DOMException("quota", "QuotaExceededError");
+      }),
+    };
+
+    expect(() =>
+      readProviderDefaultCredentials({
+        fallbackCredentials: createMimoTokenPlanDefaultCredentials("env-key"),
+        persistentStorage: storage,
+      }),
+    ).not.toThrow();
+    expect(
+      readProviderDefaultCredentials({
+        fallbackCredentials: createMimoTokenPlanDefaultCredentials("env-key"),
+        persistentStorage: storage,
+      }),
+    ).toEqual({
+      provider_mimo_token_anthropic: "env-key",
+      provider_mimo_token_openai: "env-key",
+    });
   });
 });
