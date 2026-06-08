@@ -1,5 +1,5 @@
 import type { ModelDescriptor, ProviderProfile } from "@ai-orchestrator/protocol";
-import { Cpu, FileText, KeyRound, Sparkles, type LucideIcon } from "lucide-react";
+import { FileText, KeyRound, Sparkles, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { WorkbenchAgent } from "../../types";
 import { formatModelDisplayName } from "../../lib/helpers";
@@ -34,6 +34,11 @@ export function AgentQuickSwitchPanel({
     providers,
     selectedProviderId: selectedAgent.providerProfileId,
   });
+  const providerGroups = createProviderModelGroups(
+    visibleProviders,
+    modelCatalog,
+    selectedAgent.modelId,
+  );
   const agentName = agentPrimaryDisplayName(selectedAgent);
 
   return (
@@ -58,39 +63,13 @@ export function AgentQuickSwitchPanel({
         </span>
       </div>
 
-      <QuickSwitchGroup icon={KeyRound} label="공급자">
-        {visibleProviders.length > 0 ? (
-          visibleProviders.map((provider) => (
-            <QuickSwitchButton
-              active={provider.id === selectedAgent.providerProfileId}
-              key={provider.id}
-              label={provider.name}
-              onClick={() => onAssignProvider(selectedAgent.id, provider.id)}
-            />
-          ))
-        ) : (
-          <span className="rounded-full border border-zinc-800 bg-zinc-950/70 px-2.5 py-1 text-[10px] text-zinc-500">
-            등록된 API/OAuth 대기
-          </span>
-        )}
-      </QuickSwitchGroup>
-
-      <QuickSwitchGroup icon={Cpu} label="모델">
-        {visibleModels.length > 0 ? (
-          visibleModels.map((model) => (
-            <QuickSwitchButton
-              active={model.id === selectedAgent.modelId}
-              key={model.id}
-              label={formatModelDisplayName(model.name ?? model.id)}
-              onClick={() => onAssignModel(selectedAgent.id, model.id)}
-            />
-          ))
-        ) : (
-          <span className="rounded-full border border-zinc-800 bg-zinc-950/70 px-2.5 py-1 text-[10px] text-zinc-500">
-            모델 목록 대기
-          </span>
-        )}
-      </QuickSwitchGroup>
+      <ProviderModelSwitchBoard
+        groups={providerGroups}
+        onAssignModel={onAssignModel}
+        onAssignProvider={onAssignProvider}
+        selectedAgent={selectedAgent}
+        visibleModelCount={visibleModels.length}
+      />
 
       <QuickSwitchGroup icon={Sparkles} label="SOUL">
         <QuickSwitchButton
@@ -136,6 +115,145 @@ export function AgentQuickSwitchPanel({
   );
 }
 
+function ProviderModelSwitchBoard({
+  groups,
+  onAssignModel,
+  onAssignProvider,
+  selectedAgent,
+  visibleModelCount,
+}: {
+  groups: Array<{
+    label: string;
+    entries: Array<{
+      models: ModelDescriptor[];
+      provider: ProviderProfile;
+    }>;
+  }>;
+  onAssignModel: (agentId: string, modelId: string) => void;
+  onAssignProvider: (agentId: string, providerId: string) => void;
+  selectedAgent: WorkbenchAgent;
+  visibleModelCount: number;
+}) {
+  return (
+    <div className="mt-3">
+      <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+        <KeyRound className="h-3 w-3 text-zinc-400" />
+        공급업체별 모델
+      </p>
+      {groups.length > 0 ? (
+        <div className="space-y-2">
+          {groups.map(({ entries, label }) => {
+            const providerActive = entries.some(({ provider }) => provider.id === selectedAgent.providerProfileId);
+            const modelOptions = createVendorModelOptions(entries, selectedAgent.providerProfileId, selectedAgent.modelId);
+            return (
+              <article
+                className={`rounded-lg border p-2 ${
+                  providerActive
+                    ? "border-cyan-300/25 bg-cyan-400/[0.055]"
+                    : "border-white/10 bg-black/20"
+                }`}
+                key={label}
+              >
+                <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
+                  <span
+                    className={`min-w-0 rounded-md px-2 py-1 text-left text-[11px] font-semibold ${
+                      providerActive ? "bg-cyan-400/12 text-cyan-100" : "text-zinc-200"
+                    }`}
+                  >
+                    <span className="block truncate">{label}</span>
+                  </span>
+                  <span className="shrink-0 text-[9px] text-zinc-600">{modelOptions.length}개 모델</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {modelOptions.length > 0 ? (
+                    modelOptions.map(({ active, label: modelLabel, model, provider }) => {
+                      const entryProviderActive = provider.id === selectedAgent.providerProfileId;
+                      return (
+                        <QuickSwitchButton
+                          active={active}
+                          key={`${provider.id}:${model.id}`}
+                          label={modelLabel}
+                          onClick={() => {
+                            if (!entryProviderActive) {
+                              onAssignProvider(selectedAgent.id, provider.id);
+                            }
+                            onAssignModel(selectedAgent.id, model.id);
+                          }}
+                        />
+                      );
+                    })
+                  ) : (
+                    entries.map(({ provider }) => (
+                      <QuickSwitchButton
+                        active={provider.id === selectedAgent.providerProfileId}
+                        key={provider.id}
+                        label={provider.name}
+                        onClick={() => onAssignProvider(selectedAgent.id, provider.id)}
+                      />
+                    ))
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <span className="rounded-full border border-zinc-800 bg-zinc-950/70 px-2.5 py-1 text-[10px] text-zinc-500">
+          등록된 API/OAuth 대기
+        </span>
+      )}
+      {visibleModelCount === 0 && groups.length > 0 ? (
+        <p className="mt-1 text-[10px] text-zinc-600">현재 공급업체의 모델 목록은 아직 대기 중입니다.</p>
+      ) : null}
+    </div>
+  );
+}
+
+function createVendorModelOptions(
+  entries: Array<{ models: ModelDescriptor[]; provider: ProviderProfile }>,
+  selectedProviderId?: string,
+  selectedModelId?: string,
+) {
+  const optionByLabel = new Map<
+    string,
+    {
+      active: boolean;
+      label: string;
+      model: ModelDescriptor;
+      provider: ProviderProfile;
+    }
+  >();
+
+  for (const { models, provider } of entries) {
+    for (const model of models) {
+      const label = formatModelDisplayName(model.name ?? model.id);
+      const active = provider.id === selectedProviderId && model.id === selectedModelId;
+      const existing = optionByLabel.get(label);
+      if (!existing || active || (provider.id === selectedProviderId && !existing.active)) {
+        optionByLabel.set(label, { active, label, model, provider });
+      }
+    }
+  }
+
+  return Array.from(optionByLabel.values());
+}
+
+function createProviderModelGroups(
+  providers: ProviderProfile[],
+  modelCatalog: Record<string, ModelDescriptor[]>,
+  selectedModelId?: string,
+) {
+  const groups = new Map<string, Array<{ models: ModelDescriptor[]; provider: ProviderProfile }>>();
+  for (const provider of providers) {
+    const label = providerVendorLabel(provider);
+    const models = compactModels(modelCatalog[provider.id] ?? [], selectedModelId, provider.defaultModel);
+    const entries = groups.get(label) ?? [];
+    entries.push({ models, provider });
+    groups.set(label, entries);
+  }
+  return Array.from(groups, ([label, entries]) => ({ entries, label }));
+}
+
 function compactModels(
   models: ModelDescriptor[],
   selectedModelId?: string,
@@ -159,6 +277,19 @@ function modelRank(model: ModelDescriptor, selectedModelId?: string, defaultMode
   if (value.includes("opus") || value.includes("pro") || value.includes("r1")) return 2;
   if (value.includes("sonnet") || value.includes("v2.5")) return 3;
   return 4;
+}
+
+function providerVendorLabel(provider: ProviderProfile) {
+  const raw = `${provider.name} ${provider.id} ${provider.tags.join(" ")}`.toLowerCase();
+  if (raw.includes("deepseek")) return "DeepSeek";
+  if (raw.includes("openrouter")) return "OpenRouter";
+  if (raw.includes("mimo")) return "MiMo";
+  if (raw.includes("apikey.fun") || raw.includes("claude") || raw.includes("anthropic")) return "Claude";
+  if (raw.includes("openai")) return "OpenAI";
+  if (raw.includes("grok")) return "Grok";
+  if (raw.includes("codex")) return "Codex";
+  if (raw.includes("ollama")) return "Ollama";
+  return provider.name;
 }
 
 function normalizeConfigSource(agent: WorkbenchAgent): WorkbenchAgent["configSource"] {
