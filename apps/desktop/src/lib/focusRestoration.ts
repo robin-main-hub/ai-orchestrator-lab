@@ -3,6 +3,7 @@ import type { CenterMode } from "../types";
 export type FocusHistory = Partial<Record<CenterMode, string>>;
 
 export const createInitialFocusHistory = (): Record<CenterMode, string> => ({
+  agents: "",
   annex: "",
   cockpit: "",
   conversation: "",
@@ -11,6 +12,7 @@ export const createInitialFocusHistory = (): Record<CenterMode, string> => ({
 });
 
 const fallbackFocusSelectors: Record<CenterMode, string> = {
+  agents: '[data-focus-id="agent-skill-profile-panel"]',
   annex: '[data-focus-id="debate-annex-container"]',
   cockpit: '[data-focus-id="cockpit-container"]',
   conversation: 'textarea[data-focus-id="composer-textarea"]',

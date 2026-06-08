@@ -8,6 +8,7 @@ import {
   Scale,
   Terminal,
   Menu,
+  Users,
 } from "lucide-react";
 import type { ElementType } from "react";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
@@ -25,6 +26,7 @@ const modeConfig: Array<{
   shortLabel?: string;
 }> = [
   { id: "conversation", label: "대화", icon: MessageSquare, shortLabel: "대화" },
+  { id: "agents", label: "agents", icon: Users, shortLabel: "agents" },
   { id: "debate", label: "토론", icon: Scale },
   { id: "tmux", label: "Tmux", icon: Terminal },
   { id: "cockpit", label: "운영 관제판", icon: LayoutDashboard, shortLabel: "관제판" },

@@ -102,6 +102,7 @@ export function ConversationWorkbench({
   selectedAgentId,
   selectedModel,
   selectedProvider,
+  viewMode = "chat",
   agentVisualsById,
   agentActivityById,
 }: {
@@ -151,6 +152,7 @@ export function ConversationWorkbench({
   selectedAgentId?: string;
   selectedModel?: ModelDescriptor;
   selectedProvider?: ProviderProfile;
+  viewMode?: "chat" | "agents";
   agentVisualsById?: Record<string, AgentVisualSettings>;
   agentActivityById?: Record<string, AgentActivityStatus>;
 }) {
@@ -357,7 +359,7 @@ export function ConversationWorkbench({
         </div>
       </header>
 
-      {selectedAgent && toolProfileSummary ? (
+      {viewMode === "agents" && selectedAgent && toolProfileSummary ? (
         <>
           <AgentConversationMissionBrief
             continuityDetail={agentChatContinuity.detail}

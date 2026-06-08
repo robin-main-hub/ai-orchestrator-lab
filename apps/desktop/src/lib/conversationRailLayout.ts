@@ -15,7 +15,7 @@ export function getConversationRailLayout({
   configLibraryActive,
   mode,
 }: ConversationRailLayoutInput): ConversationRailLayout {
-  if (mode === "conversation" && !configLibraryActive) {
+  if ((mode === "conversation" || mode === "agents") && !configLibraryActive) {
     return {
       rightRailMaxWidthPx: 420,
       rightRailMinWidthPx: 360,

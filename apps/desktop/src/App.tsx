@@ -3260,9 +3260,16 @@ export function App() {
       id: "switch.conversation",
       verb: "전환",
       label: "대화",
-      hint: "본 대화 보드로 전환",
+      hint: "선택 에이전트와 바로 대화",
       shortcut: "⌘1",
       run: () => setMode("conversation"),
+    },
+    {
+      id: "switch.agents",
+      verb: "전환",
+      label: "agents",
+      hint: "에이전트 상세, 스킬, 기억, SOUL/AGENTS 설정",
+      run: () => setMode("agents"),
     },
     {
       id: "switch.debate",
@@ -3344,7 +3351,7 @@ export function App() {
       label: "선택 에이전트 스킬 보기",
       hint: "SOUL/AGENTS/EvolveMemento 적용 지침 확인",
       run: () => {
-        setMode("conversation");
+        setMode("agents");
         queueMicrotask(() => {
           document.querySelector<HTMLElement>("[data-focus-id='agent-skill-profile-panel']")?.focus();
         });
@@ -3993,7 +4000,7 @@ export function App() {
       } ${
         mode === "debate" ? "debate-focus-shell" : ""
       } ${
-        mode === "conversation" && !configLibraryActive ? "conversation-v0-shell" : ""
+        (mode === "conversation" || mode === "agents") && !configLibraryActive ? "conversation-v0-shell" : ""
       }`}
       style={{
         "--conversation-right-rail-max": `${railLayout.rightRailMaxWidthPx}px`,
@@ -4236,7 +4243,7 @@ export function App() {
               selectedConfigFileId={selectedConfigFileId}
               variant="workbench"
             />
-          ) : mode === "conversation" ? (
+          ) : mode === "conversation" || mode === "agents" ? (
             <ConversationWorkbench
               activeSessionId={activeSessionId}
               agentConfigPanel={agentConfigPanel}
@@ -4284,6 +4291,7 @@ export function App() {
               selectedAgentId={selectedAgent?.id}
               selectedModel={selectedModel}
               selectedProvider={selectedProvider}
+              viewMode={mode === "agents" ? "agents" : "chat"}
               agentVisualsById={agentVisualsById}
               agentActivityById={agentActivityById}
             />
@@ -4458,6 +4466,7 @@ export function App() {
 
 function parseStoredCenterMode(value: unknown): CenterMode {
   return value === "conversation" ||
+    value === "agents" ||
     value === "debate" ||
     value === "tmux" ||
     value === "cockpit" ||
