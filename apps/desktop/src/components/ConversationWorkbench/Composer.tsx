@@ -66,13 +66,13 @@ export function Composer({
 
       {!draftMessage.trim() && promptSuggestions?.length ? (
         <div className="border-b border-white/10 px-4 py-3">
-          <div className="flex w-full flex-col items-stretch gap-1.5">
+          <div className="flex w-full flex-col items-start gap-1.5">
             <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-600">
               바로 물어보기
             </span>
             {promptSuggestions.map((suggestion) => (
               <button
-                className="w-full rounded-lg border border-white/10 bg-white/[0.035] px-3 py-2 text-left text-[12px] leading-snug text-zinc-300 transition hover:border-cyan-300/30 hover:bg-cyan-400/[0.08] hover:text-cyan-100"
+                className="max-w-full rounded-2xl border border-white/10 bg-white/[0.035] px-3 py-2 text-left text-[12px] leading-snug text-zinc-300 transition hover:border-cyan-300/30 hover:bg-cyan-400/[0.08] hover:text-cyan-100"
                 key={suggestion}
                 onClick={() => onDraftMessageChange(suggestion)}
                 title={suggestion}
