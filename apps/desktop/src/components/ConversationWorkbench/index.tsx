@@ -96,6 +96,7 @@ export function ConversationWorkbench({
   onOpenAgentConfig,
   onAssignModel,
   onAssignProvider,
+  onRefreshProviderModels,
   onUpdateAgentConfig,
   onUpdateAgentPersona,
   pendingProviderRetry,
@@ -151,6 +152,7 @@ export function ConversationWorkbench({
   onOpenAgentConfig: (tab: AgentConfigTab) => void;
   onAssignModel: (agentId: string, modelId: string) => void;
   onAssignProvider: (agentId: string, providerId: string) => void;
+  onRefreshProviderModels?: (providerId: string) => Promise<void> | void;
   onUpdateAgentConfig: (patch: Partial<Pick<WorkbenchAgent, "configSource" | "soulMode">>) => void;
   onUpdateAgentPersona: (patch: Partial<AgentPersonaSettings>) => void;
   pendingProviderRetry?: PendingProviderRetry;
@@ -243,7 +245,16 @@ export function ConversationWorkbench({
       document.querySelector<HTMLElement>(`[data-focus-id="${focusId}"]`)?.focus({ preventScroll: false });
     });
   };
-  const focusQuickSwitchPanel = () => focusAgentsPanel("agent-quick-switch-panel");
+  const focusMissionBriefPanel = () => focusAgentsPanel("agent-mission-brief");
+  const refreshSelectedProviderModels = () => {
+    if (selectedProvider?.id && onRefreshProviderModels) {
+      void onRefreshProviderModels(selectedProvider.id);
+    }
+  };
+  const focusQuickSwitchPanel = () => {
+    refreshSelectedProviderModels();
+    focusAgentsPanel("agent-quick-switch-panel");
+  };
   const focusMemoryPanel = () => focusAgentsPanel("agent-memory-continuity-panel");
   const focusSkillPanel = () => focusAgentsPanel("agent-skill-profile-panel");
   const applyPromptSuggestion = (prompt: string) => {
@@ -452,6 +463,8 @@ export function ConversationWorkbench({
                 modelCatalog={modelCatalog}
                 onAssignModel={onAssignModel}
                 onAssignProvider={onAssignProvider}
+                onBack={focusMissionBriefPanel}
+                onRefreshModels={onRefreshProviderModels}
                 onUpdateAgentConfig={onUpdateAgentConfig}
                 providers={providers}
                 selectedAgent={selectedAgent}
