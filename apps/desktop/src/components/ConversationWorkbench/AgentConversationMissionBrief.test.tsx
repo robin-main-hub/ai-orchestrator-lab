@@ -31,4 +31,23 @@ describe("AgentConversationMissionBrief", () => {
     expect(html).toContain("초안 적용");
     expect(html).not.toContain("Orchestrator");
   });
+
+  it("첫 답변 전에는 맥락 없는 바로 물어보기 초안을 적용 버튼으로 노출하지 않는다", () => {
+    const html = renderToStaticMarkup(
+      <AgentConversationMissionBrief
+        continuityDetail="마키마와 새 대화를 시작합니다."
+        memoryQualityLabel="기억 준비"
+        modelLabel="대화 모델 · MiMo"
+        personaAppliedLabel="SOUL/AGENTS 적용"
+        selectedAgentName="마키마"
+        toolLabels={["대화", "기억"]}
+        workStatusLabel="대기"
+      />,
+    );
+
+    expect(html).toContain("답변을 받은 뒤 맥락 기반 추천을 표시합니다");
+    expect(html).toContain("답변 후 생성");
+    expect(html).not.toContain("초안 적용");
+    expect(html).not.toContain("지금 상황을 요약해줘");
+  });
 });
