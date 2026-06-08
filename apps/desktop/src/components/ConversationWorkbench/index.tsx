@@ -39,6 +39,7 @@ import type {
   AgentVisualSettings,
   AgentActivityStatus,
 } from "../../types";
+import { useState } from "react";
 import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { AgentPortrait, type AgentState } from "../shared/AgentActivity";
@@ -55,6 +56,8 @@ import { ProviderReadinessPreflight } from "./ProviderReadinessPreflight";
 // Sub-components
 import { MessageThread } from "./MessageThread";
 import { Composer } from "./Composer";
+
+type AgentDetailPanel = "none" | "memory" | "model" | "skills";
 
 export function ConversationWorkbench({
   activeSessionId,
@@ -169,6 +172,7 @@ export function ConversationWorkbench({
   agentVisualsById?: Record<string, AgentVisualSettings>;
   agentActivityById?: Record<string, AgentActivityStatus>;
 }) {
+  const [activeAgentDetailPanel, setActiveAgentDetailPanel] = useState<AgentDetailPanel>("none");
   const persona = agentPersona ?? (selectedAgent ? createDefaultPersonaSettings(selectedAgent) : undefined);
   const memoryMode = selectedProvider?.trustLevel === "trusted" ? "auto" : "manual";
   const attachmentEnabled = Boolean(selectedAgent && modelSupportsAnyAttachment(selectedModel));
@@ -245,7 +249,14 @@ export function ConversationWorkbench({
       document.querySelector<HTMLElement>(`[data-focus-id="${focusId}"]`)?.focus({ preventScroll: false });
     });
   };
-  const focusMissionBriefPanel = () => focusAgentsPanel("agent-mission-brief");
+  const focusMissionBriefPanel = () => {
+    setActiveAgentDetailPanel("none");
+    focusAgentsPanel("agent-mission-brief");
+  };
+  const openAgentDetailPanel = (panel: Exclude<AgentDetailPanel, "none">, focusId: string) => {
+    setActiveAgentDetailPanel(panel);
+    focusAgentsPanel(focusId);
+  };
   const refreshSelectedProviderModels = () => {
     if (selectedProvider?.id && onRefreshProviderModels) {
       void onRefreshProviderModels(selectedProvider.id);
@@ -253,10 +264,10 @@ export function ConversationWorkbench({
   };
   const focusQuickSwitchPanel = () => {
     refreshSelectedProviderModels();
-    focusAgentsPanel("agent-quick-switch-panel");
+    openAgentDetailPanel("model", "agent-quick-switch-panel");
   };
-  const focusMemoryPanel = () => focusAgentsPanel("agent-memory-continuity-panel");
-  const focusSkillPanel = () => focusAgentsPanel("agent-skill-profile-panel");
+  const focusMemoryPanel = () => openAgentDetailPanel("memory", "agent-memory-continuity-panel");
+  const focusSkillPanel = () => openAgentDetailPanel("skills", "agent-skill-profile-panel");
   const applyPromptSuggestion = (prompt: string) => {
     onDraftMessageChange(prompt);
     window.requestAnimationFrame(() => {
@@ -353,7 +364,14 @@ export function ConversationWorkbench({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          <Button className="hidden h-8 gap-1.5 px-2 text-xs lg:inline-flex" disabled={!canDelegate} onClick={onPromoteToDebate} size="sm" variant="ghost">
+          <Button
+            className="hidden h-8 gap-1.5 px-2 text-xs lg:inline-flex"
+            disabled={!canDelegate}
+            onClick={onPromoteToDebate}
+            size="sm"
+            title={canDelegate ? "현재 대화를 토론으로 넘깁니다" : "오케스트레이터 또는 동반자 역할에서만 토론으로 넘길 수 있습니다"}
+            variant="ghost"
+          >
             <Swords className="h-3.5 w-3.5" />
             토론
           </Button>
@@ -407,7 +425,7 @@ export function ConversationWorkbench({
             modelLabel={`대화 모델 · ${selectedAgentModelRouteLabel}`}
             nextPrompt={promptSuggestions[0]}
             onApplyNextPrompt={applyPromptSuggestion}
-            onEditMemory={() => onOpenAgentConfig("injection")}
+            onEditMemory={focusMemoryPanel}
             onEditModel={focusQuickSwitchPanel}
             onEditPersona={() => onOpenAgentConfig("soul")}
             personaAppliedLabel={personaSoulApplied && personaAgentsMdApplied ? "SOUL/AGENTS 적용" : "인격 설정 확인"}
@@ -427,51 +445,61 @@ export function ConversationWorkbench({
             personaSoulApplied={personaSoulApplied}
             workStatusLabel={selectedAgentWorkStatusLabel}
           />
-          <AgentConversationFlowPanel
-            adapterStatus={memoryAdapterStatus}
-            memoryRecordCount={memoryRecordCount}
-            memoryScope={memoryScope}
-            selectedAgent={selectedAgent}
-            selectedModel={selectedModel}
-            selectedProvider={selectedProvider}
-          />
-          <div className="shrink-0 border-b border-zinc-900/80 bg-zinc-950/90 px-4 py-2">
-            <div className="mx-auto grid max-w-5xl gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-              <AgentMemoryContinuityPanel
-                adapterStatus={memoryAdapterStatus}
-                agentName={selectedAgentDisplayName}
-                memoryRecordCount={memoryRecordCount}
-                memoryScope={memoryScope}
-                messageCount={messages.length}
-                onEditAgents={() => onOpenAgentConfig("agents_md")}
-                onEditMemory={() => onOpenAgentConfig("injection")}
-                onEditSoul={() => onOpenAgentConfig("soul")}
-                onViewTools={focusSkillPanel}
-                personaAgentsMdApplied={personaAgentsMdApplied}
-                personaSoulApplied={personaSoulApplied}
-                toolLabels={toolLabels}
-              />
-              <AgentSkillProfilePanel
-                displayName={selectedAgentDisplayName}
-                onOpenConfig={() => onOpenAgentConfig("agents_md")}
-                onViewToolOptions={focusMemoryPanel}
-                role={selectedAgent.role}
-                runtimeConfigFiles={selectedAgentRuntimeConfigFiles}
-              />
-              <AgentQuickSwitchPanel
-                defaultCredentialProviderIds={defaultCredentialProviderIds}
-                modelCatalog={modelCatalog}
-                onAssignModel={onAssignModel}
-                onAssignProvider={onAssignProvider}
-                onBack={focusMissionBriefPanel}
-                onRefreshModels={onRefreshProviderModels}
-                onUpdateAgentConfig={onUpdateAgentConfig}
-                providers={providers}
-                selectedAgent={selectedAgent}
-                selectedProvider={selectedProvider}
-              />
+          {activeAgentDetailPanel !== "none" ? (
+            <div className="shrink-0 border-b border-zinc-900/80 bg-zinc-950/90 px-4 py-2">
+              <div className="mx-auto max-w-5xl">
+                {activeAgentDetailPanel === "memory" ? (
+                  <div className="grid gap-2 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+                    <AgentMemoryContinuityPanel
+                      adapterStatus={memoryAdapterStatus}
+                      agentName={selectedAgentDisplayName}
+                      memoryRecordCount={memoryRecordCount}
+                      memoryScope={memoryScope}
+                      messageCount={messages.length}
+                      onEditAgents={() => onOpenAgentConfig("agents_md")}
+                      onEditMemory={() => onOpenAgentConfig("injection")}
+                      onEditSoul={() => onOpenAgentConfig("soul")}
+                      onViewTools={focusSkillPanel}
+                      personaAgentsMdApplied={personaAgentsMdApplied}
+                      personaSoulApplied={personaSoulApplied}
+                      toolLabels={toolLabels}
+                    />
+                    <AgentConversationFlowPanel
+                      adapterStatus={memoryAdapterStatus}
+                      memoryRecordCount={memoryRecordCount}
+                      memoryScope={memoryScope}
+                      selectedAgent={selectedAgent}
+                      selectedModel={selectedModel}
+                      selectedProvider={selectedProvider}
+                    />
+                  </div>
+                ) : null}
+                {activeAgentDetailPanel === "skills" ? (
+                  <AgentSkillProfilePanel
+                    displayName={selectedAgentDisplayName}
+                    onOpenConfig={() => onOpenAgentConfig("agents_md")}
+                    onViewToolOptions={focusMemoryPanel}
+                    role={selectedAgent.role}
+                    runtimeConfigFiles={selectedAgentRuntimeConfigFiles}
+                  />
+                ) : null}
+                {activeAgentDetailPanel === "model" ? (
+                  <AgentQuickSwitchPanel
+                    defaultCredentialProviderIds={defaultCredentialProviderIds}
+                    modelCatalog={modelCatalog}
+                    onAssignModel={onAssignModel}
+                    onAssignProvider={onAssignProvider}
+                    onBack={focusMissionBriefPanel}
+                    onRefreshModels={onRefreshProviderModels}
+                    onUpdateAgentConfig={onUpdateAgentConfig}
+                    providers={providers}
+                    selectedAgent={selectedAgent}
+                    selectedProvider={selectedProvider}
+                  />
+                ) : null}
+              </div>
             </div>
-          </div>
+          ) : null}
           {selectedAgentThinkingIndicator ? (
             <AgentLiveWorkStatus displayName={selectedAgentDisplayName} indicator={selectedAgentThinkingIndicator} />
           ) : null}
