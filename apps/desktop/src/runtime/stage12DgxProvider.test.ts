@@ -7,6 +7,7 @@ import {
   ProviderCompletionPermissionRequiredError,
   requestDgxProviderCompletion,
   requestDgxVllmCompletion,
+  resolveDirectProviderBaseUrl,
 } from "./stage12DgxProvider";
 import {
   DGX02_LAN_ORCHESTRATOR_BASE_URL,
@@ -279,6 +280,39 @@ describe("stage12 DGX provider completion", () => {
       fallbackReason: expect.stringContaining("DGX-02 server proxy failed"),
       usage: { inputTokens: 11, outputTokens: 7, totalTokens: 18 },
     });
+  });
+
+  it("routes MiMo browser direct fallback through the same-origin Vite proxy", () => {
+    expect(
+      resolveDirectProviderBaseUrl(
+        {
+          id: "provider_mimo_token_openai",
+          name: "MiMo Token Plan OpenAI",
+          kind: "openai",
+          baseUrl: "https://token-plan-sgp.xiaomimimo.com/v1",
+          defaultModel: "mimo-v2.5-pro",
+          enabled: true,
+          tags: ["server-proxy", "mimo", "openai-compatible"],
+          trustLevel: "limited",
+        },
+        "http://127.0.0.1:5173",
+      ),
+    ).toBe("http://127.0.0.1:5173/mimo-token-openai");
+    expect(
+      resolveDirectProviderBaseUrl(
+        {
+          id: "provider_mimo_token_anthropic",
+          name: "MiMo Token Plan Anthropic",
+          kind: "anthropic",
+          baseUrl: "https://token-plan-sgp.xiaomimimo.com/anthropic",
+          defaultModel: "mimo-v2.5-pro",
+          enabled: true,
+          tags: ["server-proxy", "mimo", "anthropic-compatible"],
+          trustLevel: "limited",
+        },
+        "http://127.0.0.1:5173",
+      ),
+    ).toBe("http://127.0.0.1:5173/mimo-token-anthropic");
   });
 
   it("can direct-fallback server-proxy Anthropic-compatible providers with an explicit session secret", async () => {

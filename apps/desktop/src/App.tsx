@@ -1897,6 +1897,7 @@ export function App() {
         const shouldUseMockFallback =
           (errorCategory === "network" || errorCategory === "timeout") &&
           isDgxRoutedProvider(selectedProvider) &&
+          !selectedProvider.tags.includes("mimo") &&
           fallbackProvider?.id === "provider_mock_local";
 
         if (shouldUseMockFallback) {

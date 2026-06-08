@@ -20,6 +20,10 @@ import type {
 import { providerProfilesStorageKey } from "../lib/appConstants";
 import { slugifyProviderName } from "../lib/helpers";
 import {
+  readProviderSessionSecrets,
+  writeProviderSessionSecrets,
+} from "../lib/providerSessionSecrets";
+import {
   createInitialProviderProfiles,
   createModelDiscoveryFromRegistryEntry,
   mergeProviderProfilesFromRegistry,
@@ -75,7 +79,9 @@ export function useProviderRegistryController({
 }: ProviderRegistryControllerInput) {
   const [providerRegistrationOpen, setProviderRegistrationOpen] = useState(false);
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(createInitialProviderProfiles);
-  const [sessionSecretsByProviderId, setSessionSecretsByProviderId] = useState<Record<string, string>>({});
+  const [sessionSecretsByProviderId, setSessionSecretsByProviderId] = useState<Record<string, string>>(() =>
+    typeof window === "undefined" ? {} : readProviderSessionSecrets(window.sessionStorage),
+  );
   const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(seededModelCatalog);
   const [modelDiscoveryByProviderId, setModelDiscoveryByProviderId] = useState<Record<string, ModelDiscoverySnapshot>>(
     {},
@@ -281,6 +287,7 @@ export function useProviderRegistryController({
       if (!trimmedSecret) {
         setSessionSecretsByProviderId((current) => {
           const { [providerId]: _removed, ...rest } = current;
+          writeProviderSessionSecrets(window.sessionStorage, rest);
           return rest;
         });
         appendEvent("provider.session_secret.cleared", {
@@ -290,10 +297,14 @@ export function useProviderRegistryController({
         return;
       }
 
-      setSessionSecretsByProviderId((current) => ({
-        ...current,
-        [providerId]: trimmedSecret,
-      }));
+      setSessionSecretsByProviderId((current) => {
+        const next = {
+          ...current,
+          [providerId]: trimmedSecret,
+        };
+        writeProviderSessionSecrets(window.sessionStorage, next);
+        return next;
+      });
       appendEvent("provider.session_secret.bound", {
         providerProfileId: provider.id,
         secretRefId: provider.secretRef?.id,
