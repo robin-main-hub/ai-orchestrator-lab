@@ -17,6 +17,7 @@ export interface ConversationShellVisibility {
 export function isFocusedV0Surface(mode: CenterMode): boolean {
   return (
     mode === "conversation" ||
+    mode === "agents" ||
     mode === "debate" ||
     mode === "tmux" ||
     mode === "cockpit" ||
