@@ -12,6 +12,8 @@ export type ProviderFallbackPlan = {
   trustDowngrade: boolean;
 };
 
+const preferredLocalFallbackProviderId = "provider_mock_local";
+
 export function inferProviderErrorCategory(message: string): ProviderErrorCategory {
   const normalized = message.toLowerCase();
   if (normalized.includes("unauthorized") || normalized.includes("forbidden") || /\b(401|403)\b/.test(normalized)) {
@@ -104,9 +106,11 @@ export function deriveProviderFallbackPlan({
   }
 
   const selected = providers.find((provider) => provider.id === selectedProviderId);
-  const candidate = providers
-    .filter((provider) => provider.id !== selectedProviderId && provider.enabled)
-    .sort((a, b) => trustRank(b.trustLevel) - trustRank(a.trustLevel))[0];
+  const candidate = resolveProviderFallbackCandidate({
+    lastErrorCategory,
+    providers,
+    selectedProviderId,
+  });
 
   if (!candidate) {
     return {
@@ -126,6 +130,28 @@ export function deriveProviderFallbackPlan({
     status: "available",
     trustDowngrade: selected ? trustRank(candidate.trustLevel) < trustRank(selected.trustLevel) : false,
   };
+}
+
+export function resolveProviderFallbackCandidate({
+  lastErrorCategory,
+  providers,
+  selectedProviderId,
+}: {
+  lastErrorCategory: ProviderErrorCategory;
+  providers: ProviderProfile[];
+  selectedProviderId: string;
+}) {
+  if (lastErrorCategory === "auth") {
+    return undefined;
+  }
+
+  const enabledCandidates = providers.filter((provider) => provider.id !== selectedProviderId && provider.enabled);
+  const preferredLocal = enabledCandidates.find((provider) => provider.id === preferredLocalFallbackProviderId);
+  if (preferredLocal) {
+    return preferredLocal;
+  }
+
+  return enabledCandidates.sort((a, b) => trustRank(b.trustLevel) - trustRank(a.trustLevel))[0];
 }
 
 function trustRank(trust: SourceTrust): number {
