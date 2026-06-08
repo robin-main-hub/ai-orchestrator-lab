@@ -70,13 +70,13 @@ describe("ProviderProfilesManagerPanel labels", () => {
         }}
         modelDiscoveryByProviderId={{ provider_mimo_token_openai: discovery }}
         onAddProvider={vi.fn()}
-        onBindSessionSecret={vi.fn()}
+        onBindDefaultCredential={vi.fn()}
         onDiscoverModels={vi.fn()}
         onRemoveProvider={vi.fn()}
         onRenameProvider={vi.fn()}
         profiles={profiles}
         routingConsoleItems={routingConsoleItems}
-        sessionSecretProviderIds={new Set(["provider_mimo_token_openai"])}
+        defaultCredentialProviderIds={new Set(["provider_mimo_token_openai"])}
         usedProviderIds={new Set(["provider_mimo_token_openai"])}
       />,
     );
@@ -87,8 +87,8 @@ describe("ProviderProfilesManagerPanel labels", () => {
     expect(html).toContain("시드");
     expect(html).toContain("신뢰");
     expect(html).toContain("모델 다시 확인");
-    expect(html).toContain("세션 키 연결");
-    expect(html).toContain("세션 키 준비");
+    expect(html).toContain("기본 API 키 연결");
+    expect(html).toContain("기본 API 키 준비");
     expect(html).toContain("공급자 이름 변경");
     expect(html).toContain("에이전트가 사용 중이라 삭제할 수 없음");
     expect(html).not.toContain("1 agents");

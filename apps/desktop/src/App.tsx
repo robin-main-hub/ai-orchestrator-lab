@@ -601,11 +601,11 @@ export function App() {
   });
   const configLibraryActive = activeNavItem === "config_files";
   const {
-	    activeProvider,
-	    handleAddProvider,
-	    handleBindProviderSessionSecret,
-	    handleCheckProviderVault,
-	    handleDiscoverProviderModels,
+    activeProvider,
+    handleAddProvider,
+    handleBindProviderDefaultCredential,
+    handleCheckProviderVault,
+    handleDiscoverProviderModels,
     handleRegisterProvider,
     handleRemoveProvider,
     handleRenameProvider,
@@ -615,14 +615,14 @@ export function App() {
     modelDiscoveryByProviderId,
     providerProfiles,
     providerReadiness,
-	    providerRegistrationOpen,
-	    refreshDgxProviderRegistry,
-	    resolveProviderSessionSecret,
-	    secretVaultSnapshot,
-	    selectedModel,
-	    selectedProvider,
-	    sessionSecretProviderIds,
-	    setProviderRegistrationOpen,
+    providerRegistrationOpen,
+    refreshDgxProviderRegistry,
+    resolveProviderDefaultCredential,
+    secretVaultSnapshot,
+    selectedModel,
+    selectedProvider,
+    defaultCredentialProviderIds,
+    setProviderRegistrationOpen,
     usedProviderIds,
   } = useProviderRegistryController({
     activeProviderProfileId: runtimeSnapshotState.activeProviderProfileId,
@@ -1292,14 +1292,14 @@ export function App() {
       purpose,
       redaction: "applied",
     });
-	    const result = await requestDgxProviderCompletion({
-	      provider,
-	      modelId,
-	      messages: pipelineMessages,
-	      approvalState,
-	      permissionDecision,
-	      localSecretResolver: resolveProviderSessionSecret,
-	    });
+    const result = await requestDgxProviderCompletion({
+      provider,
+      modelId,
+      messages: pipelineMessages,
+      approvalState,
+      permissionDecision,
+      localSecretResolver: resolveProviderDefaultCredential,
+    });
     appendEvent("provider.completion.dgx.succeeded", {
       agentId: agent.id,
       providerProfileId: provider.id,
@@ -1924,7 +1924,7 @@ export function App() {
               userMessage,
             });
             const actorName = agentPrimaryDisplayName(selectedAgent);
-            reply = `${actorName}가 ${selectedProvider.name} 네트워크 장애를 감지해서 Mock Local Provider로 임시 대화 경로를 열었어. DGX 프록시가 돌아오거나 세션 키를 연결하면 원래 공급자로 복귀할 수 있어.\n\n${fallbackResult.content}`;
+            reply = `${actorName}가 ${selectedProvider.name} 네트워크 장애를 감지해서 Mock Local Provider로 임시 대화 경로를 열었어. DGX 프록시가 돌아오거나 기본 API 키를 연결하면 원래 공급자로 복귀할 수 있어.\n\n${fallbackResult.content}`;
             completionMetadata = {
               ...fallbackResult.metadata,
               modelId: fallbackModelId,
@@ -4148,14 +4148,14 @@ export function App() {
 	                setProviderRegistrationOpen(false);
 	                setActiveNavItem("sessions");
 	              }}
-	              onBindSessionSecret={handleBindProviderSessionSecret}
+              onBindDefaultCredential={handleBindProviderDefaultCredential}
 	              onDiscoverModels={handleDiscoverProviderModels}
               onRemoveProvider={handleRemoveProvider}
               onRenameProvider={handleRenameProvider}
               onRegister={handleRegisterProvider}
 	              profiles={providerProfiles}
 	              routingConsoleItems={providerRoutingConsoleItems}
-	              sessionSecretProviderIds={sessionSecretProviderIds}
+	              defaultCredentialProviderIds={defaultCredentialProviderIds}
 	              usedProviderIds={usedProviderIds}
 	            />
           ) : null}

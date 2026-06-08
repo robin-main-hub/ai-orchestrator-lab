@@ -20,9 +20,9 @@ import type {
 import { providerProfilesStorageKey } from "../lib/appConstants";
 import { slugifyProviderName } from "../lib/helpers";
 import {
-  readProviderSessionSecrets,
-  writeProviderSessionSecrets,
-} from "../lib/providerSessionSecrets";
+  readProviderDefaultCredentials,
+  writeProviderDefaultCredentials,
+} from "../lib/providerDefaultCredentials";
 import {
   createInitialProviderProfiles,
   createModelDiscoveryFromRegistryEntry,
@@ -79,8 +79,13 @@ export function useProviderRegistryController({
 }: ProviderRegistryControllerInput) {
   const [providerRegistrationOpen, setProviderRegistrationOpen] = useState(false);
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>(createInitialProviderProfiles);
-  const [sessionSecretsByProviderId, setSessionSecretsByProviderId] = useState<Record<string, string>>(() =>
-    typeof window === "undefined" ? {} : readProviderSessionSecrets(window.sessionStorage),
+  const [defaultCredentialsByProviderId, setDefaultCredentialsByProviderId] = useState<Record<string, string>>(() =>
+    typeof window === "undefined"
+      ? {}
+      : readProviderDefaultCredentials({
+          legacySessionStorage: window.sessionStorage,
+          persistentStorage: window.localStorage,
+        }),
   );
   const [modelCatalog, setModelCatalog] = useState<ModelCatalog>(seededModelCatalog);
   const [modelDiscoveryByProviderId, setModelDiscoveryByProviderId] = useState<Record<string, ModelDiscoverySnapshot>>(
@@ -119,9 +124,9 @@ export function useProviderRegistryController({
     );
   }, [modelCatalog, selectedAgent, selectedProvider]);
 
-  const sessionSecretProviderIds = useMemo(
-    () => new Set(Object.keys(sessionSecretsByProviderId)),
-    [sessionSecretsByProviderId],
+  const defaultCredentialProviderIds = useMemo(
+    () => new Set(Object.keys(defaultCredentialsByProviderId)),
+    [defaultCredentialsByProviderId],
   );
 
   const secretVaultSnapshot = useMemo(
@@ -268,7 +273,7 @@ export function useProviderRegistryController({
     handleRegisterProvider("api_key");
   }, [handleRegisterProvider]);
 
-  const handleBindProviderSessionSecret = useCallback(
+  const handleBindProviderDefaultCredential = useCallback(
     (providerId: string) => {
       const provider = providerProfiles.find((profile) => profile.id === providerId);
       if (!provider) {
@@ -276,7 +281,7 @@ export function useProviderRegistryController({
       }
 
       const rawSecret = window.prompt(
-        `${provider.name} 세션 API 키 붙여넣기`,
+        `${provider.name} 기본 API 키 붙여넣기`,
         "",
       );
       if (rawSecret === null) {
@@ -285,39 +290,39 @@ export function useProviderRegistryController({
 
       const trimmedSecret = rawSecret.trim();
       if (!trimmedSecret) {
-        setSessionSecretsByProviderId((current) => {
+        setDefaultCredentialsByProviderId((current) => {
           const { [providerId]: _removed, ...rest } = current;
-          writeProviderSessionSecrets(window.sessionStorage, rest);
+          writeProviderDefaultCredentials(window.localStorage, rest);
           return rest;
         });
-        appendEvent("provider.session_secret.cleared", {
+        appendEvent("provider.default_credential.cleared", {
           providerProfileId: provider.id,
-          rawSecretPersisted: false,
+          rawSecretPersisted: true,
         });
         return;
       }
 
-      setSessionSecretsByProviderId((current) => {
+      setDefaultCredentialsByProviderId((current) => {
         const next = {
           ...current,
           [providerId]: trimmedSecret,
         };
-        writeProviderSessionSecrets(window.sessionStorage, next);
+        writeProviderDefaultCredentials(window.localStorage, next);
         return next;
       });
-      appendEvent("provider.session_secret.bound", {
+      appendEvent("provider.default_credential.bound", {
         providerProfileId: provider.id,
         secretRefId: provider.secretRef?.id,
         redactedPreview: maskSecret(trimmedSecret),
-        rawSecretPersisted: false,
+        rawSecretPersisted: true,
       });
     },
     [appendEvent, providerProfiles],
   );
 
-  const resolveProviderSessionSecret = useCallback(
-    (provider: ProviderProfile) => sessionSecretsByProviderId[provider.id],
-    [sessionSecretsByProviderId],
+  const resolveProviderDefaultCredential = useCallback(
+    (provider: ProviderProfile) => defaultCredentialsByProviderId[provider.id],
+    [defaultCredentialsByProviderId],
   );
 
   const handleDiscoverProviderModels = useCallback(
@@ -545,7 +550,7 @@ export function useProviderRegistryController({
   return {
     activeProvider,
     handleAddProvider,
-    handleBindProviderSessionSecret,
+    handleBindProviderDefaultCredential,
     handleCheckProviderVault,
     handleDiscoverProviderModels,
     handleRegisterProvider,
@@ -559,11 +564,11 @@ export function useProviderRegistryController({
     providerReadiness,
     providerRegistrationOpen,
     refreshDgxProviderRegistry,
-    resolveProviderSessionSecret,
+    resolveProviderDefaultCredential,
     secretVaultSnapshot,
     selectedModel,
     selectedProvider,
-    sessionSecretProviderIds,
+    defaultCredentialProviderIds,
     setProviderRegistrationOpen,
     usedProviderIds,
   };
