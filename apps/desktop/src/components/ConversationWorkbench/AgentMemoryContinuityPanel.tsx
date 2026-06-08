@@ -9,6 +9,10 @@ export function AgentMemoryContinuityPanel({
   memoryRecordCount,
   memoryScope,
   messageCount,
+  onEditAgents,
+  onEditMemory,
+  onEditSoul,
+  onViewTools,
   personaAgentsMdApplied,
   personaSoulApplied,
   toolLabels = [],
@@ -18,6 +22,10 @@ export function AgentMemoryContinuityPanel({
   memoryRecordCount: number;
   memoryScope?: AgentChannelMemoryScope;
   messageCount: number;
+  onEditAgents?: () => void;
+  onEditMemory?: () => void;
+  onEditSoul?: () => void;
+  onViewTools?: () => void;
   personaAgentsMdApplied: boolean;
   personaSoulApplied: boolean;
   toolLabels?: string[];
@@ -61,24 +69,32 @@ export function AgentMemoryContinuityPanel({
           detail={personaSoulApplied ? "말투와 성격 단서 적용" : "말투 단서 대기"}
           icon={Sparkles}
           label={personaSoulApplied ? "SOUL 적용" : "SOUL 대기"}
+          onClick={onEditSoul}
+          actionLabel="SOUL 수정"
           tone={personaSoulApplied ? "ready" : "pending"}
         />
         <MemoryContinuityBadge
           detail={personaAgentsMdApplied ? "작업 규칙을 같이 봄" : "작업 규칙 대기"}
           icon={Sparkles}
           label={personaAgentsMdApplied ? "AGENTS 적용" : "AGENTS 대기"}
+          onClick={onEditAgents}
+          actionLabel="AGENTS 수정"
           tone={personaAgentsMdApplied ? "ready" : "pending"}
         />
         <MemoryContinuityBadge
           detail={conversationLabel}
           icon={MessageCircle}
           label={scopeLabel}
+          onClick={onEditMemory}
+          actionLabel="기억 주입"
           tone={memoryScope ? "ready" : "pending"}
         />
         <MemoryContinuityBadge
           detail={toolCueLabel}
           icon={Wrench}
           label={traceLabel}
+          onClick={onViewTools}
+          actionLabel="도구 보기"
           tone={memoryScope?.recallTraceId ? "ready" : "pending"}
         />
       </div>
@@ -87,29 +103,50 @@ export function AgentMemoryContinuityPanel({
 }
 
 function MemoryContinuityBadge({
+  actionLabel,
   detail,
   icon: Icon,
   label,
+  onClick,
   tone,
 }: {
+  actionLabel?: string;
   detail: string;
   icon: typeof BrainCircuit;
   label: string;
+  onClick?: () => void;
   tone: "pending" | "ready";
 }) {
-  return (
-    <span
-      className={`inline-flex min-w-0 items-start gap-1.5 rounded-md border px-2 py-1.5 text-[10px] ${
-        tone === "ready"
-          ? "border-violet-300/20 bg-violet-400/10 text-violet-100"
-          : "border-zinc-700/70 bg-zinc-950/50 text-zinc-500"
-      }`}
-    >
+  const content = (
+    <>
       <Icon className="mt-0.5 h-3 w-3 shrink-0" />
       <span className="min-w-0">
         <span className="block truncate font-medium">{label}</span>
         <span className="block truncate opacity-70">{detail}</span>
+        {actionLabel ? <span className="block text-[9px] text-cyan-200/80">{actionLabel}</span> : null}
       </span>
-    </span>
+    </>
+  );
+
+  const className = `inline-flex min-w-0 items-start gap-1.5 rounded-md border px-2 py-1.5 text-left text-[10px] ${
+    tone === "ready"
+      ? "border-violet-300/20 bg-violet-400/10 text-violet-100"
+      : "border-zinc-700/70 bg-zinc-950/50 text-zinc-500"
+  }`;
+
+  if (onClick) {
+    return (
+      <button
+        className={`${className} transition hover:border-cyan-300/35 hover:bg-cyan-400/[0.07] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40`}
+        onClick={onClick}
+        type="button"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <span className={className}>{content}</span>
   );
 }
