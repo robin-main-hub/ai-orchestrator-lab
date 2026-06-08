@@ -507,6 +507,17 @@ export function App() {
       }),
     [assistantDrafts, workItemHandoffs, workItems],
   );
+  const makimaDelegatedAgentIds = useMemo(
+    () =>
+      workItems
+        .filter((item) =>
+          item.status !== "archived" &&
+          item.ownerAgentId &&
+          item.sourceRefs.some((source) => source.title === "Makima Delegation Console")
+        )
+        .map((item) => item.ownerAgentId as string),
+    [workItems],
+  );
 
   function handleApproveWorkItemHandoffAndRoute(handoffId: string) {
     const targetHandoff = workItemHandoffs.find((handoff) => handoff.id === handoffId);
@@ -2691,6 +2702,13 @@ export function App() {
   }
 
   function handleCreateMakimaDelegationAssignment(card: MakimaDelegationCard) {
+    if (makimaDelegatedAgentIds.includes(card.targetAgentId)) {
+      setSelectedAgentId(card.targetAgentId);
+      setMode("conversation");
+      setApprovalDrawerOpen(false);
+      return;
+    }
+
     const createdAt = new Date().toISOString();
     const latestUserMessage =
       conversationMessages
@@ -2715,6 +2733,12 @@ export function App() {
       targetSurface: handoff.targetSurface,
       workItemId: workItem.id,
     });
+  }
+
+  function handleOpenDelegatedAgentConversation(agentId: string) {
+    setSelectedAgentId(agentId);
+    setMode("conversation");
+    setApprovalDrawerOpen(false);
   }
 
   function handleControlQueueAsk(item: ApprovalQueueItem) {
@@ -4285,6 +4309,7 @@ export function App() {
               branchExperiments={branchExperiments}
               contextPackTier={contextPackTier}
               controlQueueContinuity={controlQueueContinuity}
+              delegatedAgentIds={makimaDelegatedAgentIds}
               draftAttachments={draftAttachments}
               draftMessage={draftMessage}
               maxDraftAttachments={maxDraftAttachments}
@@ -4305,6 +4330,7 @@ export function App() {
               onCreateCodingPacket={handleCreateCodingPacket}
               onCreateDelegationAssignment={handleCreateMakimaDelegationAssignment}
               onDraftMessageChange={setDraftMessage}
+              onOpenDelegatedAgentConversation={handleOpenDelegatedAgentConversation}
               onImportExternalIngress={handleImportExternalIngress}
               onPromoteToDebate={handlePromoteToDebate}
               onRejectPermission={(sourceItemId) => handleResolvePermission(sourceItemId, "rejected")}
