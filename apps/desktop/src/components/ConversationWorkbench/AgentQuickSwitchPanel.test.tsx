@@ -120,6 +120,8 @@ describe("AgentQuickSwitchPanel", () => {
         }}
         onAssignModel={vi.fn()}
         onAssignProvider={vi.fn()}
+        onBack={vi.fn()}
+        onRefreshModels={vi.fn()}
         onUpdateAgentConfig={vi.fn()}
         providers={providers}
         selectedAgent={selectedAgent}
@@ -145,6 +147,9 @@ describe("AgentQuickSwitchPanel", () => {
     expect(html).toContain("AGENTS");
     expect(html).toContain("Markdown");
     expect(html).toContain("내부");
+    expect(html).toContain("← Agents로 돌아가기");
+    expect(html).toContain("모델 목록 새로고침");
+    expect(html).toContain("패널을 열 때도 현재 공급업체 모델을 다시 확인합니다");
     expect(html).not.toContain("undefined");
   });
 });

@@ -1,6 +1,6 @@
 import type { ModelDescriptor, ProviderProfile } from "@ai-orchestrator/protocol";
-import { FileText, KeyRound, Sparkles, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { ArrowLeft, FileText, KeyRound, RefreshCw, Sparkles, type LucideIcon } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import type { WorkbenchAgent } from "../../types";
 import { formatModelDisplayName } from "../../lib/helpers";
 import { agentPrimaryDisplayName } from "../../lib/agentDisplay";
@@ -12,6 +12,8 @@ export function AgentQuickSwitchPanel({
   modelCatalog,
   onAssignModel,
   onAssignProvider,
+  onBack,
+  onRefreshModels,
   onUpdateAgentConfig,
   providers,
   selectedAgent,
@@ -22,11 +24,14 @@ export function AgentQuickSwitchPanel({
   modelCatalog: Record<string, ModelDescriptor[]>;
   onAssignModel: (agentId: string, modelId: string) => void;
   onAssignProvider: (agentId: string, providerId: string) => void;
+  onBack?: () => void;
+  onRefreshModels?: (providerId: string) => Promise<void> | void;
   onUpdateAgentConfig: (patch: AgentConfigPatch) => void;
   providers: ProviderProfile[];
   selectedAgent: WorkbenchAgent;
   selectedProvider?: ProviderProfile;
 }) {
+  const [refreshingModels, setRefreshingModels] = useState(false);
   const providerModels = selectedProvider ? (modelCatalog[selectedProvider.id] ?? []) : [];
   const visibleModels = compactModels(providerModels, selectedAgent.modelId, selectedProvider?.defaultModel);
   const visibleProviders = selectQuickSwitchProviders({
@@ -40,6 +45,16 @@ export function AgentQuickSwitchPanel({
     selectedAgent.modelId,
   );
   const agentName = agentPrimaryDisplayName(selectedAgent);
+  const canRefreshModels = Boolean(selectedProvider && onRefreshModels);
+  const handleRefreshModels = async () => {
+    if (!selectedProvider || !onRefreshModels || refreshingModels) return;
+    setRefreshingModels(true);
+    try {
+      await onRefreshModels(selectedProvider.id);
+    } finally {
+      setRefreshingModels(false);
+    }
+  };
 
   return (
     <section
@@ -47,6 +62,27 @@ export function AgentQuickSwitchPanel({
       data-focus-id="agent-quick-switch-panel"
       tabIndex={-1}
     >
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <button
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-[10px] font-semibold text-zinc-300 transition hover:border-cyan-300/30 hover:bg-cyan-400/[0.08] hover:text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 disabled:cursor-not-allowed disabled:opacity-45"
+          disabled={!onBack}
+          onClick={onBack}
+          type="button"
+        >
+          <ArrowLeft className="h-3 w-3" />
+          ← Agents로 돌아가기
+        </button>
+        <button
+          className="inline-flex items-center gap-1.5 rounded-full border border-violet-300/20 bg-violet-400/10 px-2.5 py-1 text-[10px] font-semibold text-violet-100 transition hover:border-violet-200/40 hover:bg-violet-400/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/40 disabled:cursor-not-allowed disabled:opacity-45"
+          disabled={!canRefreshModels || refreshingModels}
+          onClick={handleRefreshModels}
+          type="button"
+        >
+          <RefreshCw className={`h-3 w-3 ${refreshingModels ? "animate-spin" : ""}`} />
+          {refreshingModels ? "새로고침 중" : "모델 목록 새로고침"}
+        </button>
+      </div>
+
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-200/80">
@@ -56,6 +92,7 @@ export function AgentQuickSwitchPanel({
           <p className="mt-1 text-sm font-semibold text-zinc-100">{agentName} 설정을 바로 바꿉니다</p>
           <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
             대화 중에도 공급자, 모델, SOUL, AGENTS 지침을 한 번에 전환합니다.
+            {onRefreshModels ? " 패널을 열 때도 현재 공급업체 모델을 다시 확인합니다." : ""}
           </p>
         </div>
         <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] text-zinc-400">

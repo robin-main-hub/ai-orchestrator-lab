@@ -32,7 +32,11 @@ export function AgentConversationMissionBrief({
   const suggestedPrompt = nextPrompt ?? "지금 상황을 요약해줘";
 
   return (
-    <section className="shrink-0 border-b border-violet-400/10 bg-[radial-gradient(circle_at_12%_0%,rgba(139,92,246,0.14),transparent_34%),linear-gradient(180deg,rgba(24,24,27,0.94),rgba(9,9,11,0.96))] px-4 py-3">
+    <section
+      className="shrink-0 border-b border-violet-400/10 bg-[radial-gradient(circle_at_12%_0%,rgba(139,92,246,0.14),transparent_34%),linear-gradient(180deg,rgba(24,24,27,0.94),rgba(9,9,11,0.96))] px-4 py-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/40"
+      data-focus-id="agent-mission-brief"
+      tabIndex={-1}
+    >
       <div className="mx-auto grid max-w-5xl gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.035] p-3 shadow-[0_0_36px_rgba(139,92,246,0.08)] backdrop-blur-xl">
           <div className="flex flex-wrap items-center gap-2">

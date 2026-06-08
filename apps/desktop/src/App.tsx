@@ -4368,6 +4368,7 @@ export function App() {
               onOpenAgentConfig={openAgentConfigPanel}
               onAssignModel={handleAssignModel}
               onAssignProvider={handleAssignProvider}
+              onRefreshProviderModels={handleDiscoverProviderModels}
               onUpdateAgentConfig={updateSelectedAgentConfig}
               onUpdateAgentPersona={updateSelectedAgentPersona}
               pendingProviderRetry={pendingProviderRetry}
