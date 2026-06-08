@@ -101,6 +101,7 @@ export function ConversationWorkbench({
   pendingProviderRetry,
   permissionSnapshot,
   providerReadiness,
+  defaultCredentialProviderIds,
   modelCatalog,
   providers,
   selectedAgent,
@@ -155,6 +156,7 @@ export function ConversationWorkbench({
   pendingProviderRetry?: PendingProviderRetry;
   permissionSnapshot: PermissionMatrixSnapshot;
   providerReadiness: ProviderRuntimeReadiness;
+  defaultCredentialProviderIds?: Set<string>;
   modelCatalog: Record<string, ModelDescriptor[]>;
   providers: ProviderProfile[];
   selectedAgent?: WorkbenchAgent;
@@ -422,6 +424,7 @@ export function ConversationWorkbench({
                 runtimeConfigFiles={selectedAgentRuntimeConfigFiles}
               />
               <AgentQuickSwitchPanel
+                defaultCredentialProviderIds={defaultCredentialProviderIds}
                 modelCatalog={modelCatalog}
                 onAssignModel={onAssignModel}
                 onAssignProvider={onAssignProvider}

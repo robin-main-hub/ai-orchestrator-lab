@@ -33,8 +33,24 @@ const providers: ProviderProfile[] = [
     id: "provider_apifun_claude",
     kind: "anthropic",
     name: "APIKey.fun Claude A",
+    secretRef: {
+      id: "secret_claude_a",
+      label: "Claude A",
+      redactedPreview: "dgx-02:ANTHROPIC_API_KEY",
+      scope: "profile",
+      transient: false,
+    },
     tags: ["apikey.fun"],
     trustLevel: "limited",
+  },
+  {
+    defaultModel: "mock-orchestrator",
+    enabled: true,
+    id: "provider_mock_local",
+    kind: "custom",
+    name: "Mock Local Provider",
+    tags: ["mock"],
+    trustLevel: "trusted",
   },
 ];
 
@@ -61,6 +77,7 @@ describe("AgentQuickSwitchPanel", () => {
   it("에이전트의 모델, 공급자, SOUL, AGENTS를 한 번에 바꾸는 선택지를 보여준다", () => {
     const html = renderToStaticMarkup(
       <AgentQuickSwitchPanel
+        defaultCredentialProviderIds={new Set(["provider_mimo_token_openai"])}
         modelCatalog={{ provider_mimo_token_openai: models }}
         onAssignModel={vi.fn()}
         onAssignProvider={vi.fn()}
@@ -74,6 +91,7 @@ describe("AgentQuickSwitchPanel", () => {
     expect(html).toContain("원클릭 전환");
     expect(html).toContain("MiMo Token Plan OpenAI");
     expect(html).toContain("APIKey.fun Claude A");
+    expect(html).not.toContain("Mock Local Provider");
     expect(html).toContain("MiMo V2.5 Pro");
     expect(html).toContain("MiMo V2.5 ASR");
     expect(html).toContain("SOUL");
