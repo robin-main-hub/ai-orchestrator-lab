@@ -29,6 +29,10 @@ import { getAgentToolBadgeLabels, getAgentToolProfileSummary } from "../../lib/a
 import { selectAgentRuntimeConfigFiles } from "../../lib/agentRuntimeConfig";
 import { resolveAgentThinkingIndicator } from "../../lib/agentThinkingIndicator";
 import { getConversationWorkbenchVisibility } from "../../lib/conversationWorkbenchVisibility";
+import {
+  createMakimaDelegationCards,
+  type MakimaDelegationCard,
+} from "../../lib/makimaDelegation";
 import type {
   AgentConfigFile,
   AgentConfigTab,
@@ -52,6 +56,7 @@ import { AgentQuickSwitchPanel } from "./AgentQuickSwitchPanel";
 import { AgentRosterSkillPicker } from "./AgentRosterSkillPicker";
 import { AgentSkillProfilePanel } from "./AgentSkillProfilePanel";
 import { ProviderReadinessPreflight } from "./ProviderReadinessPreflight";
+import { MakimaDelegationConsole } from "./MakimaDelegationConsole";
 
 // Sub-components
 import { MessageThread } from "./MessageThread";
@@ -86,6 +91,7 @@ export function ConversationWorkbench({
   onCreateBranch,
   onCreateAgentRun,
   onCreateCodingPacket,
+  onCreateDelegationAssignment,
   onDraftMessageChange,
   onImportExternalIngress,
   onPromoteToDebate,
@@ -142,6 +148,7 @@ export function ConversationWorkbench({
   onCreateBranch: () => void;
   onCreateAgentRun: () => void;
   onCreateCodingPacket: () => void;
+  onCreateDelegationAssignment?: (card: MakimaDelegationCard) => void;
   onDraftMessageChange: (value: string) => void;
   onImportExternalIngress: () => void;
   onPromoteToDebate: () => void;
@@ -220,6 +227,15 @@ export function ConversationWorkbench({
         role: selectedAgent.role,
       })
     : [];
+  const latestUserMessageContent = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
+  const delegationRequest = draftMessage.trim() || latestUserMessageContent.trim();
+  const makimaDelegationCards =
+    selectedAgent?.role === "orchestrator"
+      ? createMakimaDelegationCards({
+          agents,
+          request: delegationRequest,
+        })
+      : [];
   const selectedAgentModelRouteSource =
     selectedAgent?.modelId && selectedModel?.id === selectedAgent.modelId
       ? "agent"
@@ -510,6 +526,15 @@ export function ConversationWorkbench({
             selectedModelName={selectedModel?.name ?? selectedModel?.id ?? selectedAgent?.modelId}
           />
         </>
+      ) : null}
+
+      {selectedAgent?.role === "orchestrator" && onCreateDelegationAssignment ? (
+        <MakimaDelegationConsole
+          cards={makimaDelegationCards}
+          onCreateAllAssignments={(cards) => cards.forEach(onCreateDelegationAssignment)}
+          onCreateAssignment={onCreateDelegationAssignment}
+          request={delegationRequest}
+        />
       ) : null}
 
       <MessageThread

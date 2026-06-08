@@ -277,6 +277,10 @@ import { useWorkItemsController } from "./hooks/useWorkItemsController";
 import { applyAgentProviderAssignment } from "./lib/agentProviderAssignment";
 import { parseStoredAgentProfiles, parseStoredSelectedAgentId } from "./lib/agentProfilePersistence";
 import { getRestoreFocusSelector, type FocusHistory } from "./lib/focusRestoration";
+import {
+  createMakimaDelegationWorkItems,
+  type MakimaDelegationCard,
+} from "./lib/makimaDelegation";
 import { readJsonState, writeJsonState } from "./lib/persistentJsonState";
 import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbenchDerived";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
@@ -2686,6 +2690,33 @@ export function App() {
     handleResolvePermissionItem(pendingItem.sourceItemId, state);
   }
 
+  function handleCreateMakimaDelegationAssignment(card: MakimaDelegationCard) {
+    const createdAt = new Date().toISOString();
+    const latestUserMessage =
+      conversationMessages
+        .filter((message) => message.role === "user")
+        .at(-1)?.content ?? "";
+    const request = draftMessage.trim() || latestUserMessage.trim() || card.summary;
+    const { handoff, workItem } = createMakimaDelegationWorkItems({
+      card,
+      createdAt,
+      orchestratorAgentId: selectedAgent?.id,
+      request,
+      sessionId: activeSessionId,
+    });
+
+    prependWorkItem(workItem);
+    prependWorkItemHandoff(handoff);
+    setMode("cockpit");
+    setApprovalDrawerOpen(false);
+    appendEvent("makima.delegation.assignment.created", {
+      handoffId: handoff.id,
+      ownerAgentId: card.targetAgentId,
+      targetSurface: handoff.targetSurface,
+      workItemId: workItem.id,
+    });
+  }
+
   function handleControlQueueAsk(item: ApprovalQueueItem) {
     const createdAt = new Date().toISOString();
     const workItem = createControlQueueAskItem(item, {
@@ -4272,6 +4303,7 @@ export function App() {
               onCreateBranch={handleCreateBranchExperiment}
               onCreateAgentRun={handleCreateAgentRun}
               onCreateCodingPacket={handleCreateCodingPacket}
+              onCreateDelegationAssignment={handleCreateMakimaDelegationAssignment}
               onDraftMessageChange={setDraftMessage}
               onImportExternalIngress={handleImportExternalIngress}
               onPromoteToDebate={handlePromoteToDebate}
