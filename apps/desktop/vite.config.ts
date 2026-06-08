@@ -13,6 +13,20 @@ export default defineConfig({
   // glob needed) and emits the CSS layer the new `@theme inline` syntax
   // in tokens.css expects.
   plugins: [react(), tailwindcss()],
+  server: {
+    proxy: {
+      "/mimo-token-anthropic": {
+        changeOrigin: true,
+        rewrite: (proxyPath) => proxyPath.replace(/^\/mimo-token-anthropic/, "/anthropic"),
+        target: "https://token-plan-sgp.xiaomimimo.com",
+      },
+      "/mimo-token-openai": {
+        changeOrigin: true,
+        rewrite: (proxyPath) => proxyPath.replace(/^\/mimo-token-openai/, "/v1"),
+        target: "https://token-plan-sgp.xiaomimimo.com",
+      },
+    },
+  },
   resolve: {
     alias: {
       "@ai-orchestrator/protocol": path.resolve(repoRoot, "packages/protocol/src/index.ts"),

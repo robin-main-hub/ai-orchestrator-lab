@@ -427,12 +427,28 @@ function createDirectProviderCompletionRequest(
   };
 }
 
+export function resolveDirectProviderBaseUrl(provider: ProviderProfile, browserOrigin = resolveBrowserOrigin()) {
+  if (!browserOrigin) {
+    return provider.baseUrl;
+  }
+
+  if (provider.id === "provider_mimo_token_openai") {
+    return `${browserOrigin}/mimo-token-openai`;
+  }
+  if (provider.id === "provider_mimo_token_anthropic") {
+    return `${browserOrigin}/mimo-token-anthropic`;
+  }
+
+  return provider.baseUrl;
+}
+
 function createDirectProviderAdapter(provider: ProviderProfile, fetchImpl: typeof fetch) {
   const modelIds = provider.defaultModel ? [provider.defaultModel] : [];
+  const baseUrl = resolveDirectProviderBaseUrl(provider) ?? "";
   if (provider.kind === "anthropic" || provider.tags.includes("anthropic-compatible")) {
     return new AnthropicAdapter({
       profileId: provider.id,
-      baseUrl: provider.baseUrl ?? "",
+      baseUrl,
       modelIds,
       fetchImpl,
       temperature: 0.2,
@@ -447,7 +463,7 @@ function createDirectProviderAdapter(provider: ProviderProfile, fetchImpl: typeo
     return new OpenAICompatibleAdapter({
       profileId: provider.id,
       kind: provider.kind === "openrouter" ? "openrouter" : "openai",
-      baseUrl: provider.baseUrl ?? "",
+      baseUrl,
       modelIds,
       fetchImpl,
       maxTokens: 512,
@@ -456,6 +472,14 @@ function createDirectProviderAdapter(provider: ProviderProfile, fetchImpl: typeo
   }
 
   return undefined;
+}
+
+function resolveBrowserOrigin() {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  return window.location.origin;
 }
 
 async function fetchWithTimeout(fetchImpl: typeof fetch, input: string, init: RequestInit, timeoutMs: number) {
