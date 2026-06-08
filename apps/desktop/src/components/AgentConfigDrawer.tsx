@@ -1,6 +1,15 @@
-import { X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Download, Save, X } from "lucide-react";
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
 import { createDefaultPersonaSettings, agentRoleLabel, formatModelDisplayName } from "../lib/helpers";
+import {
+  applySoulPresetToPersona,
+  createSoulPresetFromPersona,
+  getSoulPresetsForAgent,
+  readAgentSoulPresetState,
+  upsertSoulPreset,
+  writeAgentSoulPresetState,
+} from "../lib/agentSoulPresetStorage";
 import {
   agentConfigPanelTitle,
   configSourceLabel,
@@ -49,6 +58,35 @@ export function AgentConfigDrawer({
 }) {
   const soulFiles = configFiles.filter((file) => file.kind === "soul");
   const agentsFiles = configFiles.filter((file) => file.kind === "agents");
+  const [soulPresetState, setSoulPresetState] = useState(() => readAgentSoulPresetState());
+  const soulPresets = useMemo(() => getSoulPresetsForAgent(soulPresetState, agent.id), [agent.id, soulPresetState]);
+  const [selectedSoulPresetId, setSelectedSoulPresetId] = useState("");
+  const selectedSoulPreset = soulPresets.find((preset) => preset.id === selectedSoulPresetId);
+
+  function handleSaveSoulPreset() {
+    const preset = createSoulPresetFromPersona({
+      agentId: agent.id,
+      label: `${agent.name} Soul ${new Date().toLocaleString("ko-KR", {
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        month: "2-digit",
+      })}`,
+      persona,
+    });
+    const nextState = upsertSoulPreset(soulPresetState, preset);
+    setSoulPresetState(nextState);
+    setSelectedSoulPresetId(preset.id);
+    writeAgentSoulPresetState(nextState);
+  }
+
+  function handleLoadSoulPreset() {
+    if (!selectedSoulPreset) {
+      return;
+    }
+
+    onUpdatePersona(applySoulPresetToPersona(selectedSoulPreset));
+  }
 
   return (
     <aside className="agent-config-drawer" aria-label="에이전트 프로필 설정">
@@ -105,6 +143,34 @@ export function AgentConfigDrawer({
         ) : null}
         {activeTab === "soul" ? (
           <div className="agent-config-stack soul-config-panel">
+            <section className="agent-soul-preset-panel" aria-label="SOUL 저장 및 불러오기">
+              <div>
+                <strong>SOUL 저장본</strong>
+                <span>지금 말투와 예시를 저장해 두고, 다른 실험 후에도 즉시 되돌릴 수 있습니다.</span>
+              </div>
+              <div className="agent-soul-preset-actions">
+                <button type="button" onClick={handleSaveSoulPreset}>
+                  <Save size={14} />
+                  현재 Soul 저장
+                </button>
+                <select
+                  aria-label="저장된 SOUL 선택"
+                  value={selectedSoulPresetId}
+                  onChange={(event) => setSelectedSoulPresetId(event.target.value)}
+                >
+                  <option value="">저장본 선택</option>
+                  {soulPresets.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" onClick={handleLoadSoulPreset} disabled={!selectedSoulPreset}>
+                  <Download size={14} />
+                  불러와 적용
+                </button>
+              </div>
+            </section>
             <label>
               <span>라이브러리에서 선택</span>
               <select
