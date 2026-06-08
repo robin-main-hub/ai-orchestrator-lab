@@ -4373,6 +4373,7 @@ export function App() {
               pendingProviderRetry={pendingProviderRetry}
               permissionSnapshot={permissionSnapshot}
               providerReadiness={providerReadiness}
+              defaultCredentialProviderIds={defaultCredentialProviderIds}
               modelCatalog={modelCatalog}
               providers={providerProfiles}
               selectedAgent={selectedAgent}
