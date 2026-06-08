@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AgentProfile, ConversationMessage, ProviderProfile } from "@ai-orchestrator/protocol";
 import {
   InMemoryEventStore,
+  buildMockAssistantReply,
   createCodingPacketFromConversation,
   createStage2Event,
   redactForEventStore,
@@ -60,6 +61,21 @@ describe("stage2 runtime helpers", () => {
     expect(packet.goal).toBe("Build the stage2 event flow");
     expect(packet.filesToInspect).toContain("apps/desktop/src/runtime/stage2Runtime.ts");
     expect(packet.decisions.join(" ")).toContain("Event Store");
+  });
+
+  it("mock 답변은 명시된 실행 모델명을 agent 고정 모델보다 우선 표시한다", () => {
+    const reply = buildMockAssistantReply({
+      agent: {
+        ...agent,
+        modelId: "mimo-v2.5-pro",
+      },
+      content: "fallback 확인",
+      modelId: "mock-orchestrator",
+      provider,
+    });
+
+    expect(reply).toContain("Mock Provider / mock-orchestrator");
+    expect(reply).not.toContain("mimo-v2.5-pro");
   });
 
   it("carries attachment processing summaries into coding packet context", () => {

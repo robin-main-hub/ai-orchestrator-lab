@@ -124,9 +124,10 @@ export function redactForEventStore(value: unknown): unknown {
 export function buildMockAssistantReply(params: {
   content: string;
   agent: AgentProfile;
+  modelId?: string;
   provider: ProviderProfile;
 }): string {
-  const modelId = params.agent.modelId ?? params.provider.defaultModel ?? "모델 연결 대기";
+  const modelId = params.modelId ?? params.agent.modelId ?? params.provider.defaultModel ?? "모델 연결 대기";
 
   return [
     `${params.agent.name}이 ${params.provider.name} / ${modelId} 바인딩으로 응답했어.`,

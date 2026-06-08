@@ -4,6 +4,7 @@ import {
   createProviderFailureConversationReply,
   deriveProviderFallbackPlan,
   inferProviderErrorCategory,
+  resolveProviderFallbackCandidate,
 } from "./providerFallbackPlan";
 
 function provider(patch: Partial<ProviderProfile>): ProviderProfile {
@@ -60,6 +61,20 @@ describe("providerFallbackPlan", () => {
     expect(plan.status).toBe("blocked");
     expect(plan.retryable).toBe(false);
     expect(plan.label).toBe("권한 점검 필요");
+  });
+
+  it("네트워크 장애에서는 Mock Local Provider를 우선 대체 경로로 고른다", () => {
+    const candidate = resolveProviderFallbackCandidate({
+      lastErrorCategory: "network",
+      providers: [
+        provider({ id: "provider_mimo_token_openai", trustLevel: "limited" }),
+        provider({ id: "provider_openai_compat", name: "OpenAI 호환", trustLevel: "trusted" }),
+        provider({ id: "provider_mock_local", name: "Mock Local Provider", trustLevel: "trusted" }),
+      ],
+      selectedProviderId: "provider_mimo_token_openai",
+    });
+
+    expect(candidate?.id).toBe("provider_mock_local");
   });
 
   it("fetch 실패를 네트워크 장애로 분류한다", () => {
