@@ -3,19 +3,26 @@ import { Button } from "@/ui/button";
 import type { MakimaDelegationCard } from "../../lib/makimaDelegation";
 
 export function MakimaDelegationConsole({
+  assignedTargetAgentIds = [],
   cards,
   request,
   onCreateAssignment,
   onCreateAllAssignments,
+  onOpenAssignedAgent,
 }: {
+  assignedTargetAgentIds?: string[];
   cards: MakimaDelegationCard[];
   request: string;
   onCreateAssignment: (card: MakimaDelegationCard) => void;
   onCreateAllAssignments: (cards: MakimaDelegationCard[]) => void;
+  onOpenAssignedAgent?: (agentId: string) => void;
 }) {
   if (cards.length === 0) {
     return null;
   }
+
+  const assignedTargetAgents = new Set(assignedTargetAgentIds);
+  const unassignedCards = cards.filter((card) => !assignedTargetAgents.has(card.targetAgentId));
 
   return (
     <section
@@ -37,14 +44,15 @@ export function MakimaDelegationConsole({
             </div>
           </div>
           <Button
-            className="h-8 border-cyan-300/20 bg-cyan-400/10 px-3 text-xs text-cyan-100 hover:bg-cyan-400/15"
-            onClick={() => onCreateAllAssignments(cards)}
+            className="h-8 border-cyan-300/20 bg-cyan-400/10 px-3 text-xs text-cyan-100 hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:border-zinc-700/60 disabled:bg-zinc-900/50 disabled:text-zinc-500"
+            disabled={unassignedCards.length === 0}
+            onClick={() => onCreateAllAssignments(unassignedCards)}
             size="sm"
             type="button"
             variant="outline"
           >
             <Sparkles className="h-3.5 w-3.5" />
-            전체 배정 생성
+            {unassignedCards.length === 0 ? "전체 배정됨" : "전체 배정 생성"}
           </Button>
         </div>
 
@@ -54,9 +62,16 @@ export function MakimaDelegationConsole({
         </div>
 
         <div className="grid gap-2 xl:grid-cols-5">
-          {cards.map((card) => (
+          {cards.map((card) => {
+            const assigned = assignedTargetAgents.has(card.targetAgentId);
+
+            return (
             <article
-              className="group flex min-h-44 flex-col justify-between rounded-2xl border border-white/10 bg-zinc-950/70 p-3 shadow-[0_18px_60px_rgba(0,0,0,0.28)] transition hover:border-cyan-300/30 hover:bg-zinc-900/80"
+              className={`group flex min-h-44 flex-col justify-between rounded-2xl border p-3 shadow-[0_18px_60px_rgba(0,0,0,0.28)] transition ${
+                assigned
+                  ? "border-emerald-300/20 bg-emerald-950/20"
+                  : "border-white/10 bg-zinc-950/70 hover:border-cyan-300/30 hover:bg-zinc-900/80"
+              }`}
               key={card.id}
             >
               <div className="space-y-3">
@@ -66,7 +81,7 @@ export function MakimaDelegationConsole({
                     <p className="text-[11px] text-cyan-200">{card.targetRoleLabel} · {card.toolLabel}</p>
                   </div>
                   <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500">
-                    {card.priority}
+                    {assigned ? "assigned" : card.priority}
                   </span>
                 </div>
                 <div>
@@ -89,19 +104,33 @@ export function MakimaDelegationConsole({
                   <GitBranch className="h-3 w-3" />
                   {surfaceLabel(card.targetSurface)}
                 </span>
-                <Button
-                  className="h-7 border-emerald-300/20 bg-emerald-400/10 px-2 text-[11px] text-emerald-100 hover:bg-emerald-400/15"
-                  onClick={() => onCreateAssignment(card)}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  <Play className="h-3 w-3" />
-                  배정
-                </Button>
+                {assigned ? (
+                  <Button
+                    className="h-7 border-cyan-300/20 bg-cyan-400/10 px-2 text-[11px] text-cyan-100 hover:bg-cyan-400/15"
+                    onClick={() => onOpenAssignedAgent?.(card.targetAgentId)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Play className="h-3 w-3" />
+                    대화 열기
+                  </Button>
+                ) : (
+                  <Button
+                    className="h-7 border-emerald-300/20 bg-emerald-400/10 px-2 text-[11px] text-emerald-100 hover:bg-emerald-400/15"
+                    onClick={() => onCreateAssignment(card)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Play className="h-3 w-3" />
+                    배정
+                  </Button>
+                )}
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
 
         <div className="flex items-center gap-2 text-[11px] text-zinc-500">
