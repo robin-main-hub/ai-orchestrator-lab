@@ -5,6 +5,7 @@ import { sanitizePublicText } from "./publicRedaction";
 export type AgentConversationPromptSuggestionsInput = {
   activity: AgentActivityStatus;
   displayName: string;
+  lastAssistantMessageContent?: string;
   memoryRecordCount: number;
   messageCount: number;
   pendingApprovalCount: number;
@@ -14,14 +15,20 @@ export type AgentConversationPromptSuggestionsInput = {
 export function createAgentConversationPromptSuggestions({
   activity,
   displayName,
+  lastAssistantMessageContent,
   memoryRecordCount,
   messageCount,
   pendingApprovalCount,
   role,
 }: AgentConversationPromptSuggestionsInput): string[] {
   const name = sanitizePublicText(displayName.trim() || "이 동료");
+  const latestAnswer = sanitizePublicText(lastAssistantMessageContent?.trim() ?? "");
+  if (!latestAnswer) {
+    return [];
+  }
+
   const suggestions = [
-    createRolePrompt(role, name),
+    createContextFollowupPrompt(role, name, latestAnswer),
     createQueuePrompt(name, pendingApprovalCount, activity),
     createContinuityPrompt(name, memoryRecordCount, messageCount),
   ];
@@ -32,27 +39,41 @@ export function createAgentConversationPromptSuggestions({
     .slice(0, 3);
 }
 
-function createRolePrompt(role: AgentRole, name: string) {
+function createContextFollowupPrompt(role: AgentRole, name: string, latestAnswer: string) {
+  const lower = latestAnswer.toLowerCase();
+  if (lower.includes("mock local provider") || latestAnswer.includes("대체 경로")) {
+    return `${name}, 방금 대체 경로가 실제 작업 흐름에 미치는 영향과 원래 공급자로 복귀할 조건을 정리해줘.`;
+  }
+  if (latestAnswer.includes("승인") || latestAnswer.includes("권한")) {
+    return `${name}, 방금 답변 기준으로 지금 승인해야 할 항목과 미뤄도 되는 항목을 나눠줘.`;
+  }
+  if (latestAnswer.includes("테스트") || latestAnswer.includes("검증")) {
+    return `${name}, 방금 말한 검증을 내가 바로 실행할 순서로 압축해줘.`;
+  }
+  if (latestAnswer.includes("기억") || latestAnswer.includes("맥락")) {
+    return `${name}, 방금 답변에서 장기 기억으로 남길 것과 버릴 것을 골라줘.`;
+  }
+
   const prompts: Record<AgentRole, string> = {
-    architect: `${name}, 지금 구조에서 가장 먼저 고쳐야 할 경계와 설계 결정을 정리해줘.`,
-    auditor: `${name}, 이번 변경 범위와 증거가 맞는지 감사 관점으로 봐줘.`,
-    builder: `${name}, 바로 구현 가능한 최소 작업 단위와 수정 파일을 잡아줘.`,
-    companion: `${name}, 내가 이어가기 쉬운 다음 질문과 작업 흐름을 만들어줘.`,
-    domain_expert: `${name}, 이 문제에 필요한 전문 맥락과 빠진 전제를 먼저 설명해줘.`,
-    executor: `${name}, 지금 실행할 명령과 승인 경계를 먼저 보여줘.`,
-    external: `${name}, 외부에 전달해도 되는 요약과 내부에 남길 맥락을 분리해줘.`,
-    mediator: `${name}, 서로 충돌하는 의견을 합의 가능한 결정문으로 정리해줘.`,
-    memory_curator: `${name}, 이 대화방에서 기억해야 할 것과 버려도 되는 것을 골라줘.`,
-    negotiator: `${name}, 상대가 받아들일 제안과 우리가 지킬 선을 함께 써줘.`,
-    orchestrator: `${name}, 지금 막힌 일과 다음 큰 바위부터 순서대로 정리해줘.`,
-    researcher: `${name}, 믿을 수 있는 자료와 확인해야 할 출처를 먼저 골라줘.`,
-    reviewer: `${name}, 이 변경에서 회귀할 수 있는 지점과 빠진 테스트를 찾아줘.`,
-    risk_officer: `${name}, 최악의 실패 시나리오와 되돌림 계획을 먼저 잡아줘.`,
-    skeptic: `${name}, 내가 놓친 반례와 불편한 가정을 먼저 찔러줘.`,
-    verifier: `${name}, 지금 통과해야 할 검증 명령과 성공 기준을 정리해줘.`,
-    watchdog: `${name}, 지금 흐름에서 이상 신호와 방치된 작업을 찾아줘.`,
+    architect: `${name}, 방금 답변을 기준으로 설계 경계와 다음 수정 단위를 다시 잡아줘.`,
+    auditor: `${name}, 방금 답변에서 증거가 부족한 부분과 검수 포인트를 골라줘.`,
+    builder: `${name}, 방금 답변을 바로 코드 작업으로 옮기려면 어떤 파일부터 볼지 정리해줘.`,
+    companion: `${name}, 방금 흐름을 이어가기 쉬운 다음 질문 3개로 바꿔줘.`,
+    domain_expert: `${name}, 방금 답변에서 빠진 전문 전제나 확인해야 할 개념을 보강해줘.`,
+    executor: `${name}, 방금 답변을 실행하려면 명령, 승인, 되돌림 순서를 나눠줘.`,
+    external: `${name}, 방금 답변을 외부 공유용 요약과 내부 메모로 분리해줘.`,
+    mediator: `${name}, 방금 답변에서 결정된 것과 아직 합의가 필요한 것을 나눠줘.`,
+    memory_curator: `${name}, 방금 답변에서 이 에이전트 방에 기억할 핵심만 골라줘.`,
+    negotiator: `${name}, 방금 답변을 제안서로 바꾸면 어떤 양보와 조건이 필요한지 정리해줘.`,
+    orchestrator: `${name}, 방금 답변 기준으로 다음 큰 바위와 즉시 할 일을 분리해줘.`,
+    researcher: `${name}, 방금 답변에서 추가 조사해야 할 출처와 검증 질문을 골라줘.`,
+    reviewer: `${name}, 방금 답변에서 회귀 위험과 빠진 테스트만 짚어줘.`,
+    risk_officer: `${name}, 방금 답변의 실패 시나리오와 되돌림 기준을 정리해줘.`,
+    skeptic: `${name}, 방금 답변에서 가장 약한 가정과 반례를 찔러줘.`,
+    verifier: `${name}, 방금 답변을 통과시키기 위한 검증 명령과 성공 기준을 써줘.`,
+    watchdog: `${name}, 방금 답변 이후 방치하면 위험한 신호를 찾아줘.`,
   };
-  return prompts[role] ?? `${name}, 지금 맡기 좋은 일을 먼저 제안해줘.`;
+  return prompts[role] ?? `${name}, 방금 답변을 기준으로 다음 행동을 제안해줘.`;
 }
 
 function createQueuePrompt(name: string, pendingApprovalCount: number, activity: AgentActivityStatus) {

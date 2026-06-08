@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createAgentConversationPromptSuggestions } from "./agentConversationPrompts";
 
 describe("createAgentConversationPromptSuggestions", () => {
-  it("역할과 현재 상태에 맞는 대화 시작 제안을 만든다", () => {
+  it("에이전트 답변이 아직 없으면 바로 물어보기 제안을 만들지 않는다", () => {
     expect(
       createAgentConversationPromptSuggestions({
         activity: "idle",
@@ -12,8 +12,22 @@ describe("createAgentConversationPromptSuggestions", () => {
         pendingApprovalCount: 1,
         role: "orchestrator",
       }),
+    ).toEqual([]);
+  });
+
+  it("마지막 답변 맥락을 기준으로 후속 질문을 만든다", () => {
+    expect(
+      createAgentConversationPromptSuggestions({
+        activity: "idle",
+        displayName: "마키마",
+        lastAssistantMessageContent: "Mock Local Provider 대체 경로로 이어서 응답했고 원래 공급자는 DGX 복구 뒤 복귀할 수 있어.",
+        memoryRecordCount: 4,
+        messageCount: 2,
+        pendingApprovalCount: 1,
+        role: "orchestrator",
+      }),
     ).toEqual([
-      "마키마, 지금 막힌 일과 다음 큰 바위부터 순서대로 정리해줘.",
+      "마키마, 방금 대체 경로가 실제 작업 흐름에 미치는 영향과 원래 공급자로 복귀할 조건을 정리해줘.",
       "마키마, 승인 대기 1건을 먼저 처리해야 하는지 판단해줘.",
       "마키마, 지난 기억 4개를 참고해서 이어서 할 일을 제안해줘.",
     ]);
@@ -23,13 +37,14 @@ describe("createAgentConversationPromptSuggestions", () => {
     const suggestions = createAgentConversationPromptSuggestions({
       activity: "waiting_approval",
       displayName: "렘",
+      lastAssistantMessageContent: "터미널 실행 전 승인과 되돌림 계획이 필요합니다.",
       memoryRecordCount: 0,
       messageCount: 0,
       pendingApprovalCount: 2,
       role: "executor",
     });
 
-    expect(suggestions[0]).toBe("렘, 지금 실행할 명령과 승인 경계를 먼저 보여줘.");
+    expect(suggestions[0]).toBe("렘, 방금 답변 기준으로 지금 승인해야 할 항목과 미뤄도 되는 항목을 나눠줘.");
     expect(suggestions).toContain("렘, 승인 대기 2건을 먼저 처리해야 하는지 판단해줘.");
   });
 });
