@@ -178,7 +178,10 @@ function ProviderModelSwitchBoard({
         공급업체별 모델
       </p>
       {groups.length > 0 ? (
-        <div className="space-y-2">
+        <div
+          className="max-h-80 space-y-2 overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(34,211,238,0.35)_rgba(24,24,27,0.45)] [scrollbar-width:thin]"
+          data-testid="agent-model-scroll-region"
+        >
           {groups.map(({ entries, label }) => {
             const providerActive = entries.some(({ provider }) => provider.id === selectedAgent.providerProfileId);
             const modelOptions = createVendorModelOptions(entries, selectedAgent.providerProfileId, selectedAgent.modelId);

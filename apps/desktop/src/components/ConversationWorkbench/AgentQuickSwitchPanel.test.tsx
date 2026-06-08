@@ -150,6 +150,9 @@ describe("AgentQuickSwitchPanel", () => {
     expect(html).toContain("← Agents로 돌아가기");
     expect(html).toContain("모델 목록 새로고침");
     expect(html).toContain("패널을 열 때도 현재 공급업체 모델을 다시 확인합니다");
+    expect(html).toContain("data-testid=\"agent-model-scroll-region\"");
+    expect(html).toContain("max-h-80");
+    expect(html).toContain("overflow-y-auto");
     expect(html).not.toContain("undefined");
   });
 });
