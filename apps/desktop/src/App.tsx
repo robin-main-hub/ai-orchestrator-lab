@@ -278,6 +278,7 @@ import { applyAgentProviderAssignment } from "./lib/agentProviderAssignment";
 import { parseStoredAgentProfiles, parseStoredSelectedAgentId } from "./lib/agentProfilePersistence";
 import { getRestoreFocusSelector, type FocusHistory } from "./lib/focusRestoration";
 import {
+  type MakimaDelegationAssignmentView,
   createMakimaDelegationWorkItems,
   type MakimaDelegationCard,
 } from "./lib/makimaDelegation";
@@ -507,15 +508,26 @@ export function App() {
       }),
     [assistantDrafts, workItemHandoffs, workItems],
   );
-  const makimaDelegatedAgentIds = useMemo(
+  const makimaDelegationAssignmentsByAgentId = useMemo(
     () =>
-      workItems
-        .filter((item) =>
-          item.status !== "archived" &&
-          item.ownerAgentId &&
-          item.sourceRefs.some((source) => source.title === "Makima Delegation Console")
-        )
-        .map((item) => item.ownerAgentId as string),
+      workItems.reduce<Record<string, MakimaDelegationAssignmentView>>((assignments, item) => {
+        if (
+          item.status === "archived" ||
+          !item.ownerAgentId ||
+          !item.sourceRefs.some((source) => source.title === "Makima Delegation Console") ||
+          assignments[item.ownerAgentId]
+        ) {
+          return assignments;
+        }
+
+        assignments[item.ownerAgentId] = {
+          lane: item.lane,
+          status: item.status,
+          updatedAt: item.updatedAt,
+          workItemId: item.id,
+        };
+        return assignments;
+      }, {}),
     [workItems],
   );
 
@@ -2702,7 +2714,7 @@ export function App() {
   }
 
   function handleCreateMakimaDelegationAssignment(card: MakimaDelegationCard) {
-    if (makimaDelegatedAgentIds.includes(card.targetAgentId)) {
+    if (makimaDelegationAssignmentsByAgentId[card.targetAgentId]) {
       setSelectedAgentId(card.targetAgentId);
       setMode("conversation");
       setApprovalDrawerOpen(false);
@@ -2739,6 +2751,29 @@ export function App() {
     setSelectedAgentId(agentId);
     setMode("conversation");
     setApprovalDrawerOpen(false);
+  }
+
+  function handleProgressMakimaDelegationAssignment(
+    card: MakimaDelegationCard,
+    assignment: MakimaDelegationAssignmentView,
+  ) {
+    const updatedAt = new Date().toISOString();
+    const nextState = nextMakimaDelegationWorkState(assignment.status);
+
+    updateWorkItem(assignment.workItemId, {
+      lane: nextState.lane,
+      status: nextState.status,
+      updatedAt,
+    });
+    setAgentActivityById((current) => ({
+      ...current,
+      [card.targetAgentId]: nextState.activity,
+    }));
+    appendEvent("makima.delegation.assignment.progressed", {
+      ownerAgentId: card.targetAgentId,
+      status: nextState.status,
+      workItemId: assignment.workItemId,
+    });
   }
 
   function handleControlQueueAsk(item: ApprovalQueueItem) {
@@ -4309,7 +4344,7 @@ export function App() {
               branchExperiments={branchExperiments}
               contextPackTier={contextPackTier}
               controlQueueContinuity={controlQueueContinuity}
-              delegatedAgentIds={makimaDelegatedAgentIds}
+              delegationAssignmentsByAgentId={makimaDelegationAssignmentsByAgentId}
               draftAttachments={draftAttachments}
               draftMessage={draftMessage}
               maxDraftAttachments={maxDraftAttachments}
@@ -4331,6 +4366,7 @@ export function App() {
               onCreateDelegationAssignment={handleCreateMakimaDelegationAssignment}
               onDraftMessageChange={setDraftMessage}
               onOpenDelegatedAgentConversation={handleOpenDelegatedAgentConversation}
+              onProgressDelegationAssignment={handleProgressMakimaDelegationAssignment}
               onImportExternalIngress={handleImportExternalIngress}
               onPromoteToDebate={handlePromoteToDebate}
               onRejectPermission={(sourceItemId) => handleResolvePermission(sourceItemId, "rejected")}
@@ -4538,4 +4574,24 @@ function parseStoredCenterMode(value: unknown): CenterMode {
     value === "annex"
     ? value
     : "cockpit";
+}
+
+function nextMakimaDelegationWorkState(status: MakimaDelegationAssignmentView["status"]): {
+  activity: AgentActivityStatus;
+  lane: MakimaDelegationAssignmentView["lane"];
+  status: MakimaDelegationAssignmentView["status"];
+} {
+  if (status === "planned" || status === "blocked") {
+    return { activity: "dispatching", lane: "auto", status: "in_progress" };
+  }
+
+  if (status === "in_progress" || status === "running") {
+    return { activity: "waiting_approval", lane: "check", status: "ready_for_review" };
+  }
+
+  if (status === "ready_for_review" || status === "waiting_approval") {
+    return { activity: "idle", lane: "approve", status: "done" };
+  }
+
+  return { activity: "idle", lane: "auto", status: "done" };
 }

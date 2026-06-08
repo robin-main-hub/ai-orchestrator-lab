@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WorkbenchAgent } from "../types";
 import {
   createMakimaDelegationCards,
+  createMakimaDelegationStatusCopy,
   createMakimaDelegationWorkItems,
 } from "./makimaDelegation";
 
@@ -63,6 +64,24 @@ describe("makimaDelegation", () => {
       targetSurface: "execution_slot",
       workItemId: result.workItem.id,
     });
+  });
+
+  it("마키마 배정 상태를 다음 액션 문구로 압축한다", () => {
+    expect(createMakimaDelegationStatusCopy().actionLabel).toBe("배정");
+    expect(createMakimaDelegationStatusCopy({
+      lane: "auto",
+      status: "planned",
+      workItemId: "work_item_1",
+    })).toMatchObject({
+      actionLabel: "작업 시작",
+      label: "배정됨",
+      tone: "amber",
+    });
+    expect(createMakimaDelegationStatusCopy({
+      lane: "check",
+      status: "ready_for_review",
+      workItemId: "work_item_2",
+    }).actionLabel).toBe("완료 처리");
   });
 });
 
