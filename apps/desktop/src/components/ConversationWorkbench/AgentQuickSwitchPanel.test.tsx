@@ -44,6 +44,22 @@ const providers: ProviderProfile[] = [
     trustLevel: "limited",
   },
   {
+    defaultModel: "claude-opus-4-7",
+    enabled: true,
+    id: "provider_apifun_claude_b",
+    kind: "anthropic",
+    name: "APIKey.fun Claude B",
+    secretRef: {
+      id: "secret_claude_b",
+      label: "Claude B",
+      redactedPreview: "dgx-02:ANTHROPIC_API_KEY_ALT",
+      scope: "profile",
+      transient: false,
+    },
+    tags: ["apikey.fun"],
+    trustLevel: "limited",
+  },
+  {
     defaultModel: "mock-orchestrator",
     enabled: true,
     id: "provider_mock_local",
@@ -73,12 +89,35 @@ const models: ModelDescriptor[] = [
   },
 ];
 
+const claudeModels: ModelDescriptor[] = [
+  {
+    id: "claude-opus-4-8",
+    name: "claude-opus-4-8",
+    providerProfileId: "provider_apifun_claude",
+    supportsStreaming: true,
+    supportsTools: true,
+    tags: [],
+  },
+  {
+    id: "claude-opus-4-7",
+    name: "claude-opus-4-7",
+    providerProfileId: "provider_apifun_claude_b",
+    supportsStreaming: true,
+    supportsTools: true,
+    tags: [],
+  },
+];
+
 describe("AgentQuickSwitchPanel", () => {
   it("에이전트의 모델, 공급자, SOUL, AGENTS를 한 번에 바꾸는 선택지를 보여준다", () => {
     const html = renderToStaticMarkup(
       <AgentQuickSwitchPanel
         defaultCredentialProviderIds={new Set(["provider_mimo_token_openai"])}
-        modelCatalog={{ provider_mimo_token_openai: models }}
+        modelCatalog={{
+          provider_apifun_claude: claudeModels.filter((model) => model.providerProfileId === "provider_apifun_claude"),
+          provider_apifun_claude_b: claudeModels.filter((model) => model.providerProfileId === "provider_apifun_claude_b"),
+          provider_mimo_token_openai: models,
+        }}
         onAssignModel={vi.fn()}
         onAssignProvider={vi.fn()}
         onUpdateAgentConfig={vi.fn()}
@@ -89,11 +128,17 @@ describe("AgentQuickSwitchPanel", () => {
     );
 
     expect(html).toContain("원클릭 전환");
-    expect(html).toContain("MiMo Token Plan OpenAI");
-    expect(html).toContain("APIKey.fun Claude A");
+    expect(html).toContain("공급업체별 모델");
+    expect(html).toContain("MiMo");
+    expect(html).toContain("Claude");
+    expect(html).not.toContain("MiMo Token Plan OpenAI");
+    expect(html).not.toContain("APIKey.fun Claude A");
+    expect(html).not.toContain("APIKey.fun Claude B");
     expect(html).not.toContain("Mock Local Provider");
     expect(html).toContain("MiMo V2.5 Pro");
     expect(html).toContain("MiMo V2.5 ASR");
+    expect(html).toContain("Claude Opus 4.8");
+    expect(html).toContain("Claude Opus 4.7");
     expect(html).toContain("SOUL");
     expect(html).toContain("요약");
     expect(html).toContain("검색 기억");
