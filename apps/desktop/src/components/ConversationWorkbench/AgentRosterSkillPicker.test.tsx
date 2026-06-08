@@ -31,7 +31,7 @@ const agents: WorkbenchAgent[] = [
 ];
 
 describe("AgentRosterSkillPicker", () => {
-  it("에이전트 선택 전에 이름, 역할, 스킬, 모델 경로를 함께 보여준다", () => {
+  it("에이전트 선택 전에 이름과 핵심 조작 버튼만 깔끔하게 보여준다", () => {
     const html = renderToStaticMarkup(
       <AgentRosterSkillPicker
         agents={agents}
@@ -44,13 +44,15 @@ describe("AgentRosterSkillPicker", () => {
     expect(html).toContain("대화 동료 선택");
     expect(html).toContain("마키마");
     expect(html).toContain("렘");
-    expect(html).toContain("지휘 도구");
-    expect(html).toContain("실행 도구");
-    expect(html).toContain("작업 대기열");
-    expect(html).toContain("Tmux 전달");
-    expect(html).toContain("MiMo V2.5 Pro");
-    expect(html).toContain("Claude Opus 4.8");
-    expect(html).toContain("3개 메시지");
+    expect(html).toContain("스킬");
+    expect(html).toContain("모델");
+    expect(html).toContain("3개 대화");
+    expect(html).not.toContain("지휘 도구");
+    expect(html).not.toContain("실행 도구");
+    expect(html).not.toContain("작업 대기열");
+    expect(html).not.toContain("Tmux 전달");
+    expect(html).not.toContain("MiMo V2.5 Pro");
+    expect(html).not.toContain("Claude Opus 4.8");
     expect(html).not.toContain("agent_executor");
   });
 });
