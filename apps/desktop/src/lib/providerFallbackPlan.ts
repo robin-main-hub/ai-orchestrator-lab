@@ -13,6 +13,10 @@ export type ProviderFallbackPlan = {
 };
 
 const preferredLocalFallbackProviderId = "provider_mock_local";
+const defaultDirectCredentialProviderIds = new Set([
+  "provider_mimo_token_openai",
+  "provider_mimo_token_anthropic",
+]);
 
 export function inferProviderErrorCategory(message: string): ProviderErrorCategory {
   const normalized = message.toLowerCase();
@@ -64,12 +68,17 @@ export function createProviderFailureConversationReply({
   const safeError = sanitizePublicText(errorMessage);
   const categoryLabel = providerErrorCategoryLabel(category);
   const actorLabel = agentDisplayName?.trim() ? `${sanitizePublicText(agentDisplayName.trim())}가` : "선택 에이전트가";
-  const defaultCredentialHint =
-    category === "network" && provider.tags.includes("server-proxy") && provider.baseUrl
-      ? "\n\n기본 API 키 연결: 공급자 콘솔에서 이 Provider의 기본 인증값을 붙이면 별도 모델/키 설정이 없을 때 이 경로로 계속 대화할 수 있어."
-      : "";
-  const nextAction =
-    plan.status === "available" && plan.candidateProviderId
+  const directCredentialAvailable = Boolean(category === "network" && provider.tags.includes("server-proxy") && provider.baseUrl);
+  const directRetryLabel =
+    provider.tags.includes("mimo") || defaultDirectCredentialProviderIds.has(provider.id)
+      ? "MiMo 직접 경로 재시도"
+      : "현재 공급자 직접 경로 재시도";
+  const defaultCredentialHint = directCredentialAvailable
+    ? "\n\n기본 API 키 연결: 공급자 콘솔에서 이 공급자에 기본 인증값을 붙이면 별도 모델/키 설정이 없을 때 이 경로로 계속 대화할 수 있어."
+    : "";
+  const nextAction = directCredentialAvailable
+    ? `${directRetryLabel}: 기본 인증값이 연결되어 있으면 DGX 프록시 없이 같은 공급자 경로로 다시 호출해줘.`
+    : plan.status === "available" && plan.candidateProviderId
       ? `${plan.label}: ${providers.find((candidate) => candidate.id === plan.candidateProviderId)?.name ?? plan.candidateProviderId} 경로를 확인해줘.`
       : `${plan.label}: ${plan.reason}`;
 
@@ -146,12 +155,23 @@ export function resolveProviderFallbackCandidate({
   }
 
   const enabledCandidates = providers.filter((provider) => provider.id !== selectedProviderId && provider.enabled);
+  const trustedRemoteCandidates = enabledCandidates.filter((provider) => provider.id !== preferredLocalFallbackProviderId);
+  const preferredDirectCredential = trustedRemoteCandidates.find((provider) => defaultDirectCredentialProviderIds.has(provider.id));
+  if (preferredDirectCredential) {
+    return preferredDirectCredential;
+  }
+
+  const bestRemote = trustedRemoteCandidates.sort((a, b) => trustRank(b.trustLevel) - trustRank(a.trustLevel))[0];
+  if (bestRemote) {
+    return bestRemote;
+  }
+
   const preferredLocal = enabledCandidates.find((provider) => provider.id === preferredLocalFallbackProviderId);
-  if (preferredLocal) {
+  if (preferredLocal && selectedProviderId === preferredLocalFallbackProviderId) {
     return preferredLocal;
   }
 
-  return enabledCandidates.sort((a, b) => trustRank(b.trustLevel) - trustRank(a.trustLevel))[0];
+  return undefined;
 }
 
 function trustRank(trust: SourceTrust): number {
