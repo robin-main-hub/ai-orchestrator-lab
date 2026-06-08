@@ -4366,11 +4366,15 @@ export function App() {
               onReturn={handleCloseAgentConfig}
               returnLabel={returnModeAfterConfigClose === "annex" ? "← Annex로" : undefined}
               onOpenAgentConfig={openAgentConfigPanel}
+              onAssignModel={handleAssignModel}
+              onAssignProvider={handleAssignProvider}
               onUpdateAgentConfig={updateSelectedAgentConfig}
               onUpdateAgentPersona={updateSelectedAgentPersona}
               pendingProviderRetry={pendingProviderRetry}
               permissionSnapshot={permissionSnapshot}
               providerReadiness={providerReadiness}
+              modelCatalog={modelCatalog}
+              providers={providerProfiles}
               selectedAgent={selectedAgent}
               selectedAgentId={selectedAgent?.id}
               selectedModel={selectedModel}

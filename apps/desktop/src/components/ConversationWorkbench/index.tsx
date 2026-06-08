@@ -47,6 +47,7 @@ import { AgentConversationMissionBrief } from "./AgentConversationMissionBrief";
 import { AgentConversationFlowPanel } from "./AgentConversationFlowPanel";
 import { AgentLiveWorkStatus } from "./AgentLiveWorkStatus";
 import { AgentMemoryContinuityPanel } from "./AgentMemoryContinuityPanel";
+import { AgentQuickSwitchPanel } from "./AgentQuickSwitchPanel";
 import { AgentRosterSkillPicker } from "./AgentRosterSkillPicker";
 import { AgentSkillProfilePanel } from "./AgentSkillProfilePanel";
 import { ProviderReadinessPreflight } from "./ProviderReadinessPreflight";
@@ -93,11 +94,15 @@ export function ConversationWorkbench({
   onReturn,
   returnLabel,
   onOpenAgentConfig,
+  onAssignModel,
+  onAssignProvider,
   onUpdateAgentConfig,
   onUpdateAgentPersona,
   pendingProviderRetry,
   permissionSnapshot,
   providerReadiness,
+  modelCatalog,
+  providers,
   selectedAgent,
   selectedAgentId,
   selectedModel,
@@ -143,11 +148,15 @@ export function ConversationWorkbench({
   onReturn?: () => void;
   returnLabel?: string;
   onOpenAgentConfig: (tab: AgentConfigTab) => void;
+  onAssignModel: (agentId: string, modelId: string) => void;
+  onAssignProvider: (agentId: string, providerId: string) => void;
   onUpdateAgentConfig: (patch: Partial<Pick<WorkbenchAgent, "configSource" | "soulMode">>) => void;
   onUpdateAgentPersona: (patch: Partial<AgentPersonaSettings>) => void;
   pendingProviderRetry?: PendingProviderRetry;
   permissionSnapshot: PermissionMatrixSnapshot;
   providerReadiness: ProviderRuntimeReadiness;
+  modelCatalog: Record<string, ModelDescriptor[]>;
+  providers: ProviderProfile[];
   selectedAgent?: WorkbenchAgent;
   selectedAgentId?: string;
   selectedModel?: ModelDescriptor;
@@ -396,7 +405,7 @@ export function ConversationWorkbench({
             selectedProvider={selectedProvider}
           />
           <div className="shrink-0 border-b border-zinc-900/80 bg-zinc-950/90 px-4 py-2">
-            <div className="mx-auto grid max-w-5xl gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="mx-auto grid max-w-5xl gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <AgentMemoryContinuityPanel
                 adapterStatus={memoryAdapterStatus}
                 agentName={selectedAgentDisplayName}
@@ -411,6 +420,15 @@ export function ConversationWorkbench({
                 displayName={selectedAgentDisplayName}
                 role={selectedAgent.role}
                 runtimeConfigFiles={selectedAgentRuntimeConfigFiles}
+              />
+              <AgentQuickSwitchPanel
+                modelCatalog={modelCatalog}
+                onAssignModel={onAssignModel}
+                onAssignProvider={onAssignProvider}
+                onUpdateAgentConfig={onUpdateAgentConfig}
+                providers={providers}
+                selectedAgent={selectedAgent}
+                selectedProvider={selectedProvider}
               />
             </div>
           </div>
