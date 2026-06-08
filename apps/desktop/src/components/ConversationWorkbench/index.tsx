@@ -74,6 +74,7 @@ export function ConversationWorkbench({
   branchExperiments,
   contextPackTier,
   controlQueueContinuity,
+  delegatedAgentIds,
   draftAttachments,
   draftMessage,
   maxDraftAttachments,
@@ -93,6 +94,7 @@ export function ConversationWorkbench({
   onCreateCodingPacket,
   onCreateDelegationAssignment,
   onDraftMessageChange,
+  onOpenDelegatedAgentConversation,
   onImportExternalIngress,
   onPromoteToDebate,
   onRejectPermission,
@@ -131,6 +133,7 @@ export function ConversationWorkbench({
   branchExperiments: BranchExperiment[];
   contextPackTier: ContextPackTier;
   controlQueueContinuity?: ControlQueueContinuitySummary;
+  delegatedAgentIds?: string[];
   draftAttachments: DraftAttachment[];
   draftMessage: string;
   maxDraftAttachments: number;
@@ -150,6 +153,7 @@ export function ConversationWorkbench({
   onCreateCodingPacket: () => void;
   onCreateDelegationAssignment?: (card: MakimaDelegationCard) => void;
   onDraftMessageChange: (value: string) => void;
+  onOpenDelegatedAgentConversation?: (agentId: string) => void;
   onImportExternalIngress: () => void;
   onPromoteToDebate: () => void;
   onRejectPermission: (sourceItemId: string) => void;
@@ -530,9 +534,11 @@ export function ConversationWorkbench({
 
       {selectedAgent?.role === "orchestrator" && onCreateDelegationAssignment ? (
         <MakimaDelegationConsole
+          assignedTargetAgentIds={delegatedAgentIds}
           cards={makimaDelegationCards}
           onCreateAllAssignments={(cards) => cards.forEach(onCreateDelegationAssignment)}
           onCreateAssignment={onCreateDelegationAssignment}
+          onOpenAssignedAgent={onOpenDelegatedAgentConversation}
           request={delegationRequest}
         />
       ) : null}
