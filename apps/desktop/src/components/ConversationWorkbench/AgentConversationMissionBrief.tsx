@@ -29,7 +29,8 @@ export function AgentConversationMissionBrief({
   workStatusLabel: string;
 }) {
   const visibleTools = toolLabels.length > 0 ? toolLabels : ["대화", "기억", "요약"];
-  const suggestedPrompt = nextPrompt ?? "지금 상황을 요약해줘";
+  const hasContextualPrompt = Boolean(nextPrompt?.trim());
+  const suggestedPrompt = nextPrompt?.trim() ?? "답변을 받은 뒤 맥락 기반 추천을 표시합니다";
 
   return (
     <section
@@ -69,10 +70,10 @@ export function AgentConversationMissionBrief({
           <BriefFact actionLabel="기억 설정" icon={<Database className="h-3.5 w-3.5" />} label="기억" onClick={onEditMemory} value={memoryQualityLabel} />
           <BriefFact actionLabel="인격 수정" icon={<Sparkles className="h-3.5 w-3.5" />} label="인격" onClick={onEditPersona} value={personaAppliedLabel} />
           <BriefFact
-            actionLabel="초안 적용"
+            actionLabel={hasContextualPrompt ? "초안 적용" : "답변 후 생성"}
             icon={<Wrench className="h-3.5 w-3.5" />}
             label="다음 제안"
-            onClick={onApplyNextPrompt ? () => onApplyNextPrompt(suggestedPrompt) : undefined}
+            onClick={hasContextualPrompt && onApplyNextPrompt ? () => onApplyNextPrompt(suggestedPrompt) : undefined}
             value={suggestedPrompt}
           />
         </div>

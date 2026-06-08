@@ -45,12 +45,13 @@ export function AgentQuickSwitchPanel({
     selectedAgent.modelId,
   );
   const agentName = agentPrimaryDisplayName(selectedAgent);
-  const canRefreshModels = Boolean(selectedProvider && onRefreshModels);
+  const refreshableProviders = visibleProviders.filter((provider) => provider.id !== "provider_mock_local");
+  const canRefreshModels = Boolean(refreshableProviders.length > 0 && onRefreshModels);
   const handleRefreshModels = async () => {
-    if (!selectedProvider || !onRefreshModels || refreshingModels) return;
+    if (!onRefreshModels || refreshingModels || refreshableProviders.length === 0) return;
     setRefreshingModels(true);
     try {
-      await onRefreshModels(selectedProvider.id);
+      await Promise.all(refreshableProviders.map((provider) => onRefreshModels(provider.id)));
     } finally {
       setRefreshingModels(false);
     }
@@ -79,7 +80,7 @@ export function AgentQuickSwitchPanel({
           type="button"
         >
           <RefreshCw className={`h-3 w-3 ${refreshingModels ? "animate-spin" : ""}`} />
-          {refreshingModels ? "새로고침 중" : "모델 목록 새로고침"}
+          {refreshingModels ? "새로고침 중" : "표시된 모델 새로고침"}
         </button>
       </div>
 
@@ -92,7 +93,7 @@ export function AgentQuickSwitchPanel({
           <p className="mt-1 text-sm font-semibold text-zinc-100">{agentName} 설정을 바로 바꿉니다</p>
           <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
             대화 중에도 공급자, 모델, SOUL, AGENTS 지침을 한 번에 전환합니다.
-            {onRefreshModels ? " 패널을 열 때도 현재 공급업체 모델을 다시 확인합니다." : ""}
+            {onRefreshModels ? " 패널을 열 때 표시된 공급업체 모델을 다시 확인합니다." : ""}
           </p>
         </div>
         <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] text-zinc-400">
@@ -372,7 +373,7 @@ function QuickSwitchButton({
   return (
     <button
       aria-pressed={active}
-      className={`max-w-full rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
+      className={`max-w-full rounded-full border px-2.5 py-1 text-[10px] font-medium leading-snug transition ${
         active
           ? "border-cyan-300/40 bg-cyan-400/12 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.08)]"
           : "border-white/10 bg-black/25 text-zinc-300 hover:border-violet-300/30 hover:bg-violet-500/10 hover:text-violet-100"
@@ -381,7 +382,7 @@ function QuickSwitchButton({
       title={label}
       type="button"
     >
-      <span className="block max-w-[13rem] truncate">{label}</span>
+      <span className="block max-w-[18rem] whitespace-normal break-words text-left">{label}</span>
     </button>
   );
 }

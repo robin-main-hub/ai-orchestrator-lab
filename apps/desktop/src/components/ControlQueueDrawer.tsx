@@ -65,14 +65,13 @@ const LANES: Array<{
   id: LaneId;
   label: string;
   icon: React.ReactNode;
-  status: "live" | "soon";
 }> = [
-  { id: "approve", label: controlQueueLaneLabel("approve"), icon: <Check className="h-3 w-3" />, status: "live" },
-  { id: "ask", label: controlQueueLaneLabel("ask"), icon: <HelpCircle className="h-3 w-3" />, status: "live" },
-  { id: "edit", label: controlQueueLaneLabel("edit"), icon: <Edit3 className="h-3 w-3" />, status: "live" },
-  { id: "delegate", label: controlQueueLaneLabel("delegate"), icon: <Forward className="h-3 w-3" />, status: "live" },
-  { id: "block", label: controlQueueLaneLabel("block"), icon: <ShieldOff className="h-3 w-3" />, status: "live" },
-  { id: "archive", label: controlQueueLaneLabel("archive"), icon: <XCircle className="h-3 w-3" />, status: "live" },
+  { id: "approve", label: controlQueueLaneLabel("approve"), icon: <Check className="h-3 w-3" /> },
+  { id: "ask", label: controlQueueLaneLabel("ask"), icon: <HelpCircle className="h-3 w-3" /> },
+  { id: "edit", label: controlQueueLaneLabel("edit"), icon: <Edit3 className="h-3 w-3" /> },
+  { id: "delegate", label: controlQueueLaneLabel("delegate"), icon: <Forward className="h-3 w-3" /> },
+  { id: "block", label: controlQueueLaneLabel("block"), icon: <ShieldOff className="h-3 w-3" /> },
+  { id: "archive", label: controlQueueLaneLabel("archive"), icon: <XCircle className="h-3 w-3" /> },
 ];
 
 const FOCUSABLE_SELECTOR = [
@@ -244,12 +243,10 @@ export function ControlQueueDrawer({
         {LANES.map((lane) => (
           <LaneChip
             active={activeLane === lane.id}
-            disabled={lane.status === "soon"}
             icon={lane.icon}
             key={lane.id}
             label={lane.label}
             onClick={() => setActiveLane(lane.id)}
-            soon={lane.status === "soon"}
           />
         ))}
       </div>
@@ -288,7 +285,7 @@ export function ControlQueueDrawer({
       {/* Footer */}
       <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-[10px] text-muted-foreground">
         <span className="font-mono">
-          {LANES.filter((l) => l.status === "live").length}개 동작 · 작업 항목 연결됨
+          {LANES.length}개 동작 · 작업 항목 연결됨
         </span>
         <kbd className="rounded border border-border bg-card/60 px-1 py-0 font-mono">
           esc
@@ -327,19 +324,15 @@ function SummaryCell({
 function LaneChip({
   active,
   count,
-  disabled,
   icon,
   label,
   onClick,
-  soon,
 }: {
   active: boolean;
   count?: number;
-  disabled?: boolean;
   icon?: React.ReactNode;
   label: string;
   onClick: () => void;
-  soon?: boolean;
 }) {
   const variant = label === controlQueueLaneLabel("approve") ? "success"
     : label === controlQueueLaneLabel("ask") ? "primary"
@@ -357,12 +350,10 @@ function LaneChip({
         active
           ? "border-primary bg-primary/15 text-primary"
           : "border-border bg-card/40 text-muted-foreground hover:border-primary/45",
-        disabled && "cursor-not-allowed opacity-40 hover:border-border",
       )}
-      disabled={disabled}
       onClick={onClick}
       role="tab"
-      title={soon ? "비활성화됨" : undefined}
+      title={controlQueueActionFeedback(labelToLaneId(label))}
       type="button"
     >
       {icon}
@@ -509,13 +500,11 @@ function ActionButton({
   label,
   onClick,
   tone,
-  disabled,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick?: () => void;
   tone?: "primary" | "destructive";
-  disabled?: boolean;
 }) {
   const buttonVariant =
     tone === "primary" ? "default" : tone === "destructive" ? "destructive" : "outline";
@@ -523,13 +512,9 @@ function ActionButton({
   return (
     <Button
       variant={buttonVariant}
-      className={cn(
-        "h-7 gap-1 px-1.5 text-[10px] font-mono transition-all",
-        disabled && "cursor-not-allowed border-dashed bg-transparent opacity-30 hover:bg-transparent",
-      )}
-      disabled={disabled}
+      className="h-7 gap-1 px-1.5 text-[10px] font-mono transition-all"
       onClick={onClick}
-      title={disabled ? "비활성화됨" : controlQueueActionFeedback(labelToLaneId(label))}
+      title={controlQueueActionFeedback(labelToLaneId(label))}
       type="button"
     >
       {icon}

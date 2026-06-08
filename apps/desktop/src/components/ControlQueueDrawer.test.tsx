@@ -51,6 +51,8 @@ describe("ControlQueueDrawer", () => {
     expect(html).toContain("승인 대기 1건");
     expect(html).toContain("질문·수정·위임으로 흐름 정리");
     expect(html).toContain("터미널 실행 승인 필요");
+    expect(html).toContain("6개 동작 · 작업 항목 연결됨");
+    expect(html).not.toContain("비활성화됨");
     expect(html).not.toContain("Control Queue");
   });
 });
