@@ -189,10 +189,14 @@ export function ConversationWorkbench({
   const selectedAgentInitials = selectedAgent ? agentInitialsForDisplay(selectedAgent) : "AI";
   const selectedAgentSubtitle = selectedAgent ? agentSecondaryDisplayLabel(selectedAgent) : "대기";
   const selectedAgentWorkStatusLabel = createAgentWorkStatusLabel(selectedAgentActivity, selectedAgentDisplayName);
+  const latestConversationMessage = messages.at(-1);
+  const latestAssistantMessageContent =
+    latestConversationMessage?.role === "assistant" ? latestConversationMessage.content : undefined;
   const promptSuggestions = selectedAgent
     ? createAgentConversationPromptSuggestions({
         activity: selectedAgentActivity,
         displayName: selectedAgentDisplayName,
+        lastAssistantMessageContent: latestAssistantMessageContent,
         memoryRecordCount,
         messageCount: messages.length,
         pendingApprovalCount: permissionSnapshot.queue.length,
