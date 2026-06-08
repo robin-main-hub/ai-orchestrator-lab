@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import type { WorkbenchAgent } from "../../types";
 import { formatModelDisplayName } from "../../lib/helpers";
 import { agentPrimaryDisplayName } from "../../lib/agentDisplay";
+import { selectQuickSwitchProviders } from "../../lib/providerQuickSwitchOptions";
 
 type AgentConfigPatch = Partial<Pick<WorkbenchAgent, "configSource" | "soulMode">>;
 
@@ -15,7 +16,9 @@ export function AgentQuickSwitchPanel({
   providers,
   selectedAgent,
   selectedProvider,
+  defaultCredentialProviderIds = new Set(),
 }: {
+  defaultCredentialProviderIds?: Set<string>;
   modelCatalog: Record<string, ModelDescriptor[]>;
   onAssignModel: (agentId: string, modelId: string) => void;
   onAssignProvider: (agentId: string, providerId: string) => void;
@@ -26,6 +29,11 @@ export function AgentQuickSwitchPanel({
 }) {
   const providerModels = selectedProvider ? (modelCatalog[selectedProvider.id] ?? []) : [];
   const visibleModels = compactModels(providerModels, selectedAgent.modelId, selectedProvider?.defaultModel);
+  const visibleProviders = selectQuickSwitchProviders({
+    defaultCredentialProviderIds,
+    providers,
+    selectedProviderId: selectedAgent.providerProfileId,
+  });
   const agentName = agentPrimaryDisplayName(selectedAgent);
 
   return (
@@ -51,14 +59,20 @@ export function AgentQuickSwitchPanel({
       </div>
 
       <QuickSwitchGroup icon={KeyRound} label="공급자">
-        {providers.map((provider) => (
-          <QuickSwitchButton
-            active={provider.id === selectedAgent.providerProfileId}
-            key={provider.id}
-            label={provider.name}
-            onClick={() => onAssignProvider(selectedAgent.id, provider.id)}
-          />
-        ))}
+        {visibleProviders.length > 0 ? (
+          visibleProviders.map((provider) => (
+            <QuickSwitchButton
+              active={provider.id === selectedAgent.providerProfileId}
+              key={provider.id}
+              label={provider.name}
+              onClick={() => onAssignProvider(selectedAgent.id, provider.id)}
+            />
+          ))
+        ) : (
+          <span className="rounded-full border border-zinc-800 bg-zinc-950/70 px-2.5 py-1 text-[10px] text-zinc-500">
+            등록된 API/OAuth 대기
+          </span>
+        )}
       </QuickSwitchGroup>
 
       <QuickSwitchGroup icon={Cpu} label="모델">
