@@ -9,10 +9,14 @@ import {
 
 export function AgentSkillProfilePanel({
   displayName,
+  onOpenConfig,
+  onViewToolOptions,
   role,
   runtimeConfigFiles = [],
 }: {
   displayName?: string;
+  onOpenConfig?: () => void;
+  onViewToolOptions?: () => void;
   role: AgentRole;
   runtimeConfigFiles?: AgentConfigFile[];
 }) {
@@ -49,19 +53,12 @@ export function AgentSkillProfilePanel({
         <SkillCue icon={Wrench} label="호흡" value={collaboration.rhythmLabel} />
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
-        <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-medium text-cyan-100">
-          {summary.label}
-        </span>
+        <SkillOptionButton active label={summary.label} onClick={onViewToolOptions} />
         {tools.map((tool) => (
-          <span
-            className="rounded-full border border-zinc-700/80 bg-zinc-950/60 px-2 py-0.5 text-[10px] font-medium text-zinc-200"
-            key={tool}
-          >
-            {tool}
-          </span>
+          <SkillOptionButton key={tool} label={tool} onClick={onViewToolOptions} />
         ))}
       </div>
-      <RuntimeConfigList files={visibleRuntimeFiles} hiddenCount={hiddenRuntimeFileCount} />
+      <RuntimeConfigList files={visibleRuntimeFiles} hiddenCount={hiddenRuntimeFileCount} onOpenConfig={onOpenConfig} />
       <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">
         실제 호출은 목적과 권한을 먼저 맞춘 뒤 진행하고, 대화에는 확인 가능한 작업 흔적만 남깁니다.
       </p>
@@ -72,9 +69,11 @@ export function AgentSkillProfilePanel({
 function RuntimeConfigList({
   files,
   hiddenCount,
+  onOpenConfig,
 }: {
   files: AgentConfigFile[];
   hiddenCount: number;
+  onOpenConfig?: () => void;
 }) {
   if (files.length === 0) {
     return (
@@ -83,7 +82,14 @@ function RuntimeConfigList({
           <FileText className="h-3 w-3 text-zinc-500" />
           실제 적용 지침
         </p>
-        <p className="mt-1 text-[10px] text-zinc-600">연결된 SOUL/AGENTS/스킬 파일이 없습니다.</p>
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <p className="text-[10px] text-zinc-600">연결된 SOUL/AGENTS/스킬 파일이 없습니다.</p>
+          {onOpenConfig ? (
+            <button className="text-[10px] font-medium text-cyan-200 hover:text-cyan-100" onClick={onOpenConfig} type="button">
+              연결
+            </button>
+          ) : null}
+        </div>
       </div>
     );
   }
@@ -99,6 +105,11 @@ function RuntimeConfigList({
           <span className="rounded-full border border-violet-300/15 bg-violet-500/10 px-1.5 py-0.5 text-[9px] text-violet-100">
             +{hiddenCount}
           </span>
+        ) : null}
+        {onOpenConfig ? (
+          <button className="rounded-full border border-cyan-300/20 px-1.5 py-0.5 text-[9px] text-cyan-100" onClick={onOpenConfig} type="button">
+            편집
+          </button>
         ) : null}
       </div>
       <div className="mt-2 space-y-1.5">
@@ -119,6 +130,34 @@ function RuntimeConfigList({
         ))}
       </div>
     </div>
+  );
+}
+
+function SkillOptionButton({
+  active = false,
+  label,
+  onClick,
+}: {
+  active?: boolean;
+  label: string;
+  onClick?: () => void;
+}) {
+  const className = `rounded-full border px-2 py-0.5 text-[10px] font-medium transition ${
+    active
+      ? "border-cyan-300/20 bg-cyan-400/10 text-cyan-100"
+      : "border-zinc-700/80 bg-zinc-950/60 text-zinc-200"
+  }`;
+
+  if (!onClick) return <span className={className}>{label}</span>;
+
+  return (
+    <button
+      className={`${className} hover:border-cyan-300/35 hover:bg-cyan-400/[0.07] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40`}
+      onClick={onClick}
+      type="button"
+    >
+      {label}
+    </button>
   );
 }
 
