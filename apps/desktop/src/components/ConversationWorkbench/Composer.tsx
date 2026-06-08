@@ -86,7 +86,7 @@ export function Composer({
       ) : null}
 
       <form
-        className="mx-auto flex max-w-4xl items-end gap-2 p-3"
+        className="mx-auto flex max-w-4xl items-start gap-2 p-3"
         onSubmit={(event) => {
           event.preventDefault();
           if (canSend) onSendMessage();
@@ -176,7 +176,7 @@ export function Composer({
 
         {/* Send */}
         <Button
-          className="h-10 gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 text-white shadow-lg shadow-cyan-950/30 hover:from-cyan-400 hover:to-violet-400"
+          className="mt-1 h-10 gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 text-white shadow-lg shadow-cyan-950/30 hover:from-cyan-400 hover:to-violet-400"
           disabled={!canSend}
           type="submit"
         >
