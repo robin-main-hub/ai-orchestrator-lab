@@ -2492,6 +2492,75 @@ button {
   min-height: 112px;
 }
 
+.agent-soul-preset-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(34, 211, 238, 0.08), rgba(139, 92, 246, 0.06)),
+    rgba(2, 6, 23, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.agent-soul-preset-panel > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.agent-soul-preset-panel strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.agent-soul-preset-panel span {
+  color: var(--subtle);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.agent-soul-preset-actions {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  gap: 6px;
+  align-items: center;
+}
+
+.agent-soul-preset-actions button,
+.agent-soul-preset-actions select {
+  min-height: 30px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(0, 47, 56, 0.92);
+  color: var(--text);
+  font-size: 10px;
+}
+
+.agent-soul-preset-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 9px;
+  cursor: pointer;
+}
+
+.agent-soul-preset-actions select {
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.agent-soul-preset-actions button:hover:not(:disabled) {
+  border-color: var(--cyan);
+  background: rgba(6, 182, 212, 0.16);
+}
+
+.agent-soul-preset-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .creativity-options {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

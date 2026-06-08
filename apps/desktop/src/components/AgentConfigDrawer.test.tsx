@@ -61,4 +61,12 @@ describe("AgentConfigDrawer", () => {
     expect(html).not.toContain("source:");
     expect(html).not.toContain("not injected");
   });
+
+  it("shows save and load controls on the SOUL tab", () => {
+    const html = renderDrawer("soul");
+    expect(html).toContain("SOUL 저장본");
+    expect(html).toContain("현재 Soul 저장");
+    expect(html).toContain("저장본 선택");
+    expect(html).toContain("불러와 적용");
+  });
 });
