@@ -127,10 +127,95 @@ export function OperatorCockpit({
       setShowDetails(true);
     }
   };
+  const openDetailsWithFocus = (focus: CockpitDetailFocus) => {
+    setDetailFocus(focus);
+    setShowDetails(true);
+  };
+  const openApprovals = () => {
+    if (onOpenControlQueue) {
+      onOpenControlQueue();
+      return;
+    }
+    if (onPreviewEvidence) {
+      onPreviewEvidence();
+      return;
+    }
+    openDetailsWithFocus({
+      helper: "승인 대기열과 실행 권한 요청을 먼저 확인합니다.",
+      label: "승인 대기열",
+      surface: "diagnostics",
+    });
+  };
+  const openFleet = () => {
+    const activeWorker =
+      snapshot.fleet.find((worker) => worker.status === "working") ??
+      snapshot.fleet.find((worker) => worker.status === "blocked" || worker.status === "error") ??
+      snapshot.fleet[0];
+    if (activeWorker && onOpenAgentConversation) {
+      onOpenAgentConversation(activeWorker.workerId);
+      return;
+    }
+    openDetailsWithFocus({
+      helper: "워커 함대 카드에서 작업 중, 차단, 대기 상태를 확인합니다.",
+      label: "워커 함대",
+      surface: "diagnostics",
+    });
+  };
+  const openMemoryPanel = () => {
+    if (onOpenMemory) {
+      onOpenMemory();
+      return;
+    }
+    openDetailsWithFocus({
+      helper: "기억/복구 카드에서 미러 상태와 맥락 경고를 확인합니다.",
+      label: "기억 / 복구",
+      surface: "diagnostics",
+    });
+  };
+  const openProviderPanel = () => {
+    if (onOpenProviderRouting) {
+      onOpenProviderRouting();
+      return;
+    }
+    openDetailsWithFocus({
+      helper: "공급자 라우팅 카드에서 현재 모델, fallback, 신뢰도를 확인합니다.",
+      label: "공급자 라우팅",
+      surface: "diagnostics",
+    });
+  };
+  const openRecoveryPanel = () => {
+    if (onOpenRecovery) {
+      onOpenRecovery();
+      return;
+    }
+    openDetailsWithFocus({
+      helper: "복구/연속성 카드에서 서버 투영과 outbox 동기화를 확인합니다.",
+      label: "복구 / 연속성",
+      surface: "diagnostics",
+    });
+  };
+  const openReceipts = () => {
+    openDetailsWithFocus({
+      helper: "작업 영수증 장부에서 공개 마스킹 상태와 최근 성과를 확인합니다.",
+      label: "작업 영수증",
+      surface: "receipts",
+    });
+  };
+  const openRisks = () => {
+    if (blockedCount > 0) {
+      openFleet();
+      return;
+    }
+    openDetailsWithFocus({
+      helper: "설정 진단과 Production smoke에서 남은 차단 축을 확인합니다.",
+      label: "위험 / 차단",
+      surface: "diagnostics",
+    });
+  };
 
   return (
     <div
-      aria-label="운영자 관제판 읽기 전용 지휘 화면"
+      aria-label="운영자 관제판 조작 가능한 지휘 화면"
       className="relative flex h-full min-h-0 flex-col overflow-hidden bg-transparent text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
       data-focus-id="cockpit-container"
       tabIndex={-1}
@@ -154,7 +239,7 @@ export function OperatorCockpit({
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="truncate text-sm font-semibold tracking-tight text-zinc-100">운영자 관제판</h1>
                 <Badge color="outline" size="xs">
-                  읽기 전용 지휘 화면
+                  조작 가능한 지휘 화면
                 </Badge>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
@@ -196,6 +281,8 @@ export function OperatorCockpit({
               label="워커 함대"
               value={`${workingCount} / ${snapshot.fleet.length}`}
               hint="작업 중"
+              onClick={openFleet}
+              actionLabel="워커 함대 보기"
               tone={blockedCount > 0 ? "warning" : "normal"}
             />
             <GlanceTile
@@ -203,6 +290,8 @@ export function OperatorCockpit({
               label="승인 대기"
               value={`${approvalCount}`}
               hint={criticalApprovalCount > 0 ? `고위험 ${criticalApprovalCount}건` : "건"}
+              onClick={openApprovals}
+              actionLabel="승인 대기 열기"
               tone={approvalCount > 0 ? "warning" : "normal"}
             />
             <GlanceTile
@@ -210,6 +299,8 @@ export function OperatorCockpit({
               label="현재 대화 모델"
               value={formatOperatorModelLabel(snapshot.routing.selectedModelId)}
               hint={formatOperatorProviderLabel(snapshot.routing.providerLabel)}
+              onClick={openProviderPanel}
+              actionLabel="모델 경로 열기"
               tone={snapshot.routing.fallbackStatus === "active" ? "warning" : "normal"}
             />
             <GlanceTile
@@ -217,6 +308,8 @@ export function OperatorCockpit({
               label="서버 투영"
               value={serverProjection.value}
               hint={serverProjection.hint}
+              onClick={openRecoveryPanel}
+              actionLabel="서버 상태 열기"
               tone={serverProjection.tone}
             />
             <GlanceTile
@@ -224,6 +317,8 @@ export function OperatorCockpit({
               label="기억 / 복구"
               value={snapshot.memory.dgxMirrorHealth === "healthy" ? "동기화됨" : "점검 필요"}
               hint={`미러 ${mirrorHealthLabel(snapshot.memory.dgxMirrorHealth)}`}
+              onClick={openMemoryPanel}
+              actionLabel="기억 상태 열기"
               tone={snapshot.memory.dgxMirrorHealth === "healthy" ? "success" : "warning"}
             />
             <GlanceTile
@@ -231,6 +326,8 @@ export function OperatorCockpit({
               label="위험 / 차단"
               value={`${blockedCount}`}
               hint={blockedCount > 0 ? "차단된 워커" : "이상 없음"}
+              onClick={openRisks}
+              actionLabel={blockedCount > 0 ? "차단 원인 보기" : "진단 보기"}
               tone={blockedCount > 0 ? "danger" : "success"}
             />
           </div>
@@ -240,6 +337,11 @@ export function OperatorCockpit({
             blockedCount={blockedCount}
             memoryHealthLabel={mirrorHealthLabel(snapshot.memory.dgxMirrorHealth)}
             nextActionLabel={readiness?.nextActions?.[0]?.label}
+            onOpenApprovals={openApprovals}
+            onOpenFleet={openFleet}
+            onOpenMemory={openMemoryPanel}
+            onOpenReceipts={openReceipts}
+            onOpenRisks={openRisks}
             receiptCount={readiness?.workTraceItems?.length ?? 0}
             workingCount={workingCount}
           />
@@ -351,6 +453,11 @@ function MissionCommandDeck({
   blockedCount,
   memoryHealthLabel,
   nextActionLabel,
+  onOpenApprovals,
+  onOpenFleet,
+  onOpenMemory,
+  onOpenReceipts,
+  onOpenRisks,
   receiptCount,
   workingCount,
 }: {
@@ -358,6 +465,11 @@ function MissionCommandDeck({
   blockedCount: number;
   memoryHealthLabel: string;
   nextActionLabel?: string;
+  onOpenApprovals: () => void;
+  onOpenFleet: () => void;
+  onOpenMemory: () => void;
+  onOpenReceipts: () => void;
+  onOpenRisks: () => void;
   receiptCount: number;
   workingCount: number;
 }) {
@@ -386,14 +498,44 @@ function MissionCommandDeck({
           </p>
         </div>
         <div className="grid grid-cols-2 gap-2 p-3">
-          <MissionMetric icon={<Activity className="h-3.5 w-3.5" />} label="승인" value={`승인 ${approvalCount}건 대기`} tone={approvalCount > 0 ? "amber" : "emerald"} />
-          <MissionMetric icon={<Users className="h-3.5 w-3.5" />} label="워커" value={`워커 ${workingCount}명 작업 중`} tone={workingCount > 0 ? "cyan" : "zinc"} />
-          <MissionMetric icon={<Database className="h-3.5 w-3.5" />} label="기억" value={`기억 ${memoryHealthLabel}`} tone={memoryHealthLabel === "정상" ? "emerald" : "amber"} />
-          <MissionMetric icon={<FileText className="h-3.5 w-3.5" />} label="성과" value={`성과 장부 ${receiptCount}건`} tone={receiptCount > 0 ? "violet" : "zinc"} />
           <MissionMetric
+            actionLabel="승인 대기 열기"
+            icon={<Activity className="h-3.5 w-3.5" />}
+            label="승인"
+            onClick={onOpenApprovals}
+            value={`승인 ${approvalCount}건 대기`}
+            tone={approvalCount > 0 ? "amber" : "emerald"}
+          />
+          <MissionMetric
+            actionLabel="워커 함대 보기"
+            icon={<Users className="h-3.5 w-3.5" />}
+            label="워커"
+            onClick={onOpenFleet}
+            value={`워커 ${workingCount}명 작업 중`}
+            tone={workingCount > 0 ? "cyan" : "zinc"}
+          />
+          <MissionMetric
+            actionLabel="기억 상태 열기"
+            icon={<Database className="h-3.5 w-3.5" />}
+            label="기억"
+            onClick={onOpenMemory}
+            value={`기억 ${memoryHealthLabel}`}
+            tone={memoryHealthLabel === "정상" ? "emerald" : "amber"}
+          />
+          <MissionMetric
+            actionLabel="성과 장부 열기"
+            icon={<FileText className="h-3.5 w-3.5" />}
+            label="성과"
+            onClick={onOpenReceipts}
+            value={`성과 장부 ${receiptCount}건`}
+            tone={receiptCount > 0 ? "violet" : "zinc"}
+          />
+          <MissionMetric
+            actionLabel={blockedCount > 0 ? "차단 원인 보기" : "진단 보기"}
             className="col-span-2"
             icon={<ShieldAlert className="h-3.5 w-3.5" />}
             label="차단"
+            onClick={onOpenRisks}
             value={blockedCount > 0 ? `차단 ${blockedCount}건 확인 필요` : "차단 없음"}
             tone={blockedCount > 0 ? "rose" : "emerald"}
           />
@@ -404,15 +546,19 @@ function MissionCommandDeck({
 }
 
 function MissionMetric({
+  actionLabel,
   className,
   icon,
   label,
+  onClick,
   tone,
   value,
 }: {
+  actionLabel: string;
   className?: string;
   icon: ReactNode;
   label: string;
+  onClick: () => void;
   tone: "amber" | "cyan" | "emerald" | "rose" | "violet" | "zinc";
   value: string;
 }) {
@@ -426,7 +572,11 @@ function MissionMetric({
   }[tone];
 
   return (
-    <div className={`min-w-0 rounded-lg border px-3 py-2 ${toneClass} ${className ?? ""}`}>
+    <button
+      className={`group min-w-0 rounded-lg border px-3 py-2 text-left transition-colors hover:border-cyan-300/35 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50 ${toneClass} ${className ?? ""}`}
+      onClick={onClick}
+      type="button"
+    >
       <p className="flex items-center gap-1.5 text-[10px] font-semibold text-current/70">
         {icon}
         {label}
@@ -434,7 +584,10 @@ function MissionMetric({
       <p className="mt-1 truncate text-[12px] font-semibold text-zinc-50" title={value}>
         {value}
       </p>
-    </div>
+      <span className="mt-1 inline-flex text-[10px] font-semibold text-cyan-100/70 transition-colors group-hover:text-cyan-100">
+        {actionLabel}
+      </span>
+    </button>
   );
 }
 
@@ -628,14 +781,18 @@ function priorityLabel(priority: CockpitNextActionItem["priority"]) {
 }
 
 function GlanceTile({
+  actionLabel,
   icon,
   label,
+  onClick,
   value,
   hint,
   tone,
 }: {
+  actionLabel: string;
   icon: ReactNode;
   label: string;
+  onClick: () => void;
   value: string;
   hint: string;
   tone: "danger" | "normal" | "success" | "warning";
@@ -648,13 +805,20 @@ function GlanceTile({
   }[tone];
 
   return (
-    <div className={`rounded-xl border p-3 backdrop-blur-xl ${toneClass}`}>
+    <button
+      className={`group rounded-xl border p-3 text-left backdrop-blur-xl transition-colors hover:border-cyan-300/35 hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50 ${toneClass}`}
+      onClick={onClick}
+      type="button"
+    >
       <div className="flex items-center justify-between text-zinc-500">
         <span className="text-[10px] font-medium uppercase tracking-wider">{label}</span>
         {icon}
       </div>
       <div className="mt-2 truncate text-lg font-semibold text-zinc-100">{value}</div>
       <p className="mt-0.5 truncate text-[11px] text-zinc-500">{hint}</p>
-    </div>
+      <span className="mt-2 inline-flex text-[10px] font-semibold text-cyan-100/70 transition-colors group-hover:text-cyan-100">
+        {actionLabel}
+      </span>
+    </button>
   );
 }
