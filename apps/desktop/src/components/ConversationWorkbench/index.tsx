@@ -291,6 +291,17 @@ export function ConversationWorkbench({
   };
   const focusMemoryPanel = () => openAgentDetailPanel("memory", "agent-memory-continuity-panel");
   const focusSkillPanel = () => openAgentDetailPanel("skills", "agent-skill-profile-panel");
+  const openAgentDetailForRoster = (agentId: string, panel: Exclude<AgentDetailPanel, "none">) => {
+    onSelectAgent(agentId);
+    openAgentDetailPanel(
+      panel,
+      panel === "model"
+        ? "agent-quick-switch-panel"
+        : panel === "memory"
+          ? "agent-memory-continuity-panel"
+          : "agent-skill-profile-panel",
+    );
+  };
   const applyPromptSuggestion = (prompt: string) => {
     onDraftMessageChange(prompt);
     window.requestAnimationFrame(() => {
@@ -349,6 +360,9 @@ export function ConversationWorkbench({
                 agentActivityById={agentActivityById}
                 agents={agents}
                 messageCountByAgentId={messageCountByAgentId}
+                onOpenMemory={(agentId) => openAgentDetailForRoster(agentId, "memory")}
+                onOpenModel={(agentId) => openAgentDetailForRoster(agentId, "model")}
+                onOpenSkills={(agentId) => openAgentDetailForRoster(agentId, "skills")}
                 onSelectAgent={onSelectAgent}
                 selectedAgentId={selectedAgentId}
               />

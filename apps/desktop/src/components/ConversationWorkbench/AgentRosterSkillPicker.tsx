@@ -14,12 +14,18 @@ export function AgentRosterSkillPicker({
   agents,
   agentActivityById,
   messageCountByAgentId,
+  onOpenMemory,
+  onOpenModel,
+  onOpenSkills,
   onSelectAgent,
   selectedAgentId,
 }: {
   agents: WorkbenchAgent[];
   agentActivityById?: Record<string, AgentActivityStatus>;
   messageCountByAgentId?: Record<string, number>;
+  onOpenMemory?: (agentId: string) => void;
+  onOpenModel?: (agentId: string) => void;
+  onOpenSkills?: (agentId: string) => void;
   onSelectAgent: (agentId: string) => void;
   selectedAgentId?: string;
 }) {
@@ -43,18 +49,20 @@ export function AgentRosterSkillPicker({
           const messageCount = messageCountByAgentId?.[agent.id] ?? 0;
 
           return (
-            <button
-              aria-current={selected ? "true" : undefined}
+            <article
               className={`group w-full rounded-xl border px-3 py-2 text-left transition ${
                 selected
                   ? "border-cyan-300/35 bg-cyan-400/10 shadow-[0_0_26px_rgba(34,211,238,0.08)]"
                   : "border-zinc-800/80 bg-zinc-950/55 hover:border-zinc-700 hover:bg-zinc-900/80"
               }`}
               key={agent.id}
-              onClick={() => onSelectAgent(agent.id)}
-              type="button"
             >
-              <div className="flex items-start gap-3">
+              <button
+                aria-current={selected ? "true" : undefined}
+                className="flex w-full items-start gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40"
+                onClick={() => onSelectAgent(agent.id)}
+                type="button"
+              >
                 <AgentPortrait
                   initials={agentInitialsForDisplay(agent)}
                   state={state}
@@ -68,20 +76,28 @@ export function AgentRosterSkillPicker({
                     </div>
                     {selected ? <CheckCircle2 className="h-4 w-4 shrink-0 text-cyan-200" /> : null}
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <RosterChip icon={Wrench} value={toolSummary.label} />
-                    {toolSummary.visibleBadges.slice(0, 2).map((label) => (
-                      <RosterChip key={label} value={label} />
-                    ))}
-                    <RosterChip icon={Route} value={formatModelDisplayName(agent.modelId ?? "모델 대기")} />
-                    <RosterChip icon={MessageCircle} value={messageCount > 0 ? `${messageCount}개 메시지` : "새 대화"} />
-                  </div>
                   <p className="mt-2 line-clamp-1 text-[10px] text-zinc-600">
                     {describeRoleWork(agent.role)} · {toolSummary.runtime.boundaryLabel}
                   </p>
                 </div>
+              </button>
+              <div className="mt-2 flex flex-wrap gap-1.5 pl-11">
+                <RosterChip icon={Wrench} onClick={() => onOpenSkills?.(agent.id)} value={toolSummary.label} />
+                {toolSummary.visibleBadges.slice(0, 2).map((label) => (
+                  <RosterChip key={label} onClick={() => onOpenSkills?.(agent.id)} value={label} />
+                ))}
+                <RosterChip
+                  icon={Route}
+                  onClick={() => onOpenModel?.(agent.id)}
+                  value={formatModelDisplayName(agent.modelId ?? "모델 대기")}
+                />
+                <RosterChip
+                  icon={MessageCircle}
+                  onClick={() => (messageCount > 0 ? onSelectAgent(agent.id) : onOpenMemory?.(agent.id))}
+                  value={messageCount > 0 ? `${messageCount}개 메시지` : "새 대화"}
+                />
               </div>
-            </button>
+            </article>
           );
         })}
       </div>
@@ -89,7 +105,21 @@ export function AgentRosterSkillPicker({
   );
 }
 
-function RosterChip({ icon: Icon, value }: { icon?: typeof Wrench; value: string }) {
+function RosterChip({ icon: Icon, onClick, value }: { icon?: typeof Wrench; onClick?: () => void; value: string }) {
+  if (onClick) {
+    return (
+      <button
+        className="inline-flex max-w-full items-center gap-1 rounded-full border border-white/10 bg-black/25 px-2 py-0.5 text-[10px] font-medium text-zinc-300 transition hover:border-cyan-300/30 hover:bg-cyan-400/10 hover:text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/35"
+        onClick={onClick}
+        title={value}
+        type="button"
+      >
+        {Icon ? <Icon className="h-3 w-3 shrink-0 text-cyan-200/70" /> : null}
+        <span className="truncate">{value}</span>
+      </button>
+    );
+  }
+
   return (
     <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-white/10 bg-black/25 px-2 py-0.5 text-[10px] font-medium text-zinc-300">
       {Icon ? <Icon className="h-3 w-3 shrink-0 text-cyan-200/70" /> : null}
