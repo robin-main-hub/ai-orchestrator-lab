@@ -87,6 +87,54 @@ const models: ModelDescriptor[] = [
     supportsTools: false,
     tags: [],
   },
+  {
+    id: "mimo-v2.5",
+    name: "mimo-v2.5",
+    providerProfileId: "provider_mimo_token_openai",
+    supportsStreaming: true,
+    supportsTools: true,
+    tags: [],
+  },
+  {
+    id: "mimo-v2.5-asr-2",
+    name: "mimo-v2.5-asr-2",
+    providerProfileId: "provider_mimo_token_openai",
+    supportsStreaming: true,
+    supportsTools: false,
+    tags: [],
+  },
+  {
+    id: "mimo-v2.5-code",
+    name: "mimo-v2.5-code",
+    providerProfileId: "provider_mimo_token_openai",
+    supportsStreaming: true,
+    supportsTools: true,
+    tags: [],
+  },
+  {
+    id: "mimo-v2.5-reasoner",
+    name: "mimo-v2.5-reasoner",
+    providerProfileId: "provider_mimo_token_openai",
+    supportsStreaming: true,
+    supportsTools: true,
+    tags: [],
+  },
+  {
+    id: "mimo-v2.5-long-context",
+    name: "mimo-v2.5-long-context",
+    providerProfileId: "provider_mimo_token_openai",
+    supportsStreaming: true,
+    supportsTools: true,
+    tags: [],
+  },
+  {
+    id: "mimo-v2.5-research",
+    name: "mimo-v2.5-research",
+    providerProfileId: "provider_mimo_token_openai",
+    supportsStreaming: true,
+    supportsTools: true,
+    tags: [],
+  },
 ];
 
 const claudeModels: ModelDescriptor[] = [
@@ -139,6 +187,8 @@ describe("AgentQuickSwitchPanel", () => {
     expect(html).not.toContain("Mock Local Provider");
     expect(html).toContain("MiMo V2.5 Pro");
     expect(html).toContain("MiMo V2.5 ASR");
+    expect(html).toContain("MiMo V2.5 Long Context");
+    expect(html).toContain("MiMo V2.5 Research");
     expect(html).toContain("Claude Opus 4.8");
     expect(html).toContain("Claude Opus 4.7");
     expect(html).toContain("SOUL");
