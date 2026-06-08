@@ -191,7 +191,11 @@ import { createCompletionMemoryRecallMessages } from "./lib/agentCompletionRecal
 import { createMemoryGovernanceSummary } from "./lib/memoryGovernance";
 import { createConversationTurnMemoryCandidate } from "./lib/memoryCuratorRuntime";
 import { createProviderRoutingConsoleItems } from "./lib/providerRoutingConsole";
-import { createProviderFailureConversationReply } from "./lib/providerFallbackPlan";
+import {
+  createProviderFailureConversationReply,
+  inferProviderErrorCategory,
+  resolveProviderFallbackCandidate,
+} from "./lib/providerFallbackPlan";
 import {
   createProviderReplayConversationMessage,
   createProviderReplayMemoryCandidate,
@@ -1244,6 +1248,7 @@ export function App() {
         content: buildMockAssistantReply({
           content: userMessage.content,
           agent,
+          modelId,
           provider,
         }),
         userContent: userMessage.content,
@@ -1883,23 +1888,101 @@ export function App() {
         }, { sessionId: targetSessionId });
       } else {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        reply = createProviderFailureConversationReply({
-          agentDisplayName: agentPrimaryDisplayName(selectedAgent),
-          errorMessage,
-          provider: selectedProvider,
+        const errorCategory = inferProviderErrorCategory(errorMessage);
+        const fallbackProvider = resolveProviderFallbackCandidate({
+          lastErrorCategory: errorCategory,
           providers: providerProfiles,
+          selectedProviderId: selectedProvider.id,
         });
-        completionMetadata = {
-          error: errorMessage,
-          realProviderCall: false,
-        };
-        setAgentActivity(selectedAgent.id, "error");
-        appendEvent("provider.completion.dgx.failed", {
-          agentId: selectedAgent.id,
-          providerProfileId: selectedProvider.id,
-          modelId,
-          error: errorMessage,
-        }, { sessionId: targetSessionId });
+        const shouldUseMockFallback =
+          (errorCategory === "network" || errorCategory === "timeout") &&
+          isDgxRoutedProvider(selectedProvider) &&
+          fallbackProvider?.id === "provider_mock_local";
+
+        if (shouldUseMockFallback) {
+          const fallbackModelId =
+            modelCatalog[fallbackProvider.id]?.[0]?.id ?? fallbackProvider.defaultModel ?? "mock-orchestrator";
+          appendEvent("provider.completion.mock_fallback.requested", {
+            agentId: selectedAgent.id,
+            fromProviderProfileId: selectedProvider.id,
+            fromModelId: modelId,
+            toProviderProfileId: fallbackProvider.id,
+            toModelId: fallbackModelId,
+            reason: errorCategory,
+            redaction: "applied",
+          }, { sessionId: targetSessionId });
+          try {
+            const fallbackResult = await completeWorkbenchAgent({
+              agent: selectedAgent,
+              approvalState: "approved",
+              createdAt,
+              modelId: fallbackModelId,
+              persona: selectedAgentPersona,
+              provider: fallbackProvider,
+              purpose: "primary",
+              userMessage,
+            });
+            const actorName = agentPrimaryDisplayName(selectedAgent);
+            reply = `${actorName}가 ${selectedProvider.name} 네트워크 장애를 감지해서 Mock Local Provider로 임시 대화 경로를 열었어. DGX 프록시가 돌아오거나 세션 키를 연결하면 원래 공급자로 복귀할 수 있어.\n\n${fallbackResult.content}`;
+            completionMetadata = {
+              ...fallbackResult.metadata,
+              modelId: fallbackModelId,
+              providerFallbackFrom: selectedProvider.id,
+              providerFallbackReason: errorCategory,
+              providerFallbackTo: fallbackProvider.id,
+              providerProfileId: fallbackProvider.id,
+              realProviderCall: false,
+            };
+            setAgentActivity(selectedAgent.id, "responding");
+            appendEvent("provider.completion.mock_fallback.succeeded", {
+              agentId: selectedAgent.id,
+              fromProviderProfileId: selectedProvider.id,
+              toProviderProfileId: fallbackProvider.id,
+              toModelId: fallbackModelId,
+              reason: errorCategory,
+              redaction: "applied",
+            }, { sessionId: targetSessionId });
+          } catch (fallbackError) {
+            reply = createProviderFailureConversationReply({
+              agentDisplayName: agentPrimaryDisplayName(selectedAgent),
+              errorMessage,
+              provider: selectedProvider,
+              providers: providerProfiles,
+            });
+            completionMetadata = {
+              error: errorMessage,
+              fallbackError: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+              realProviderCall: false,
+            };
+            setAgentActivity(selectedAgent.id, "error");
+            appendEvent("provider.completion.mock_fallback.failed", {
+              agentId: selectedAgent.id,
+              fromProviderProfileId: selectedProvider.id,
+              toProviderProfileId: fallbackProvider.id,
+              error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+              reason: errorCategory,
+              redaction: "applied",
+            }, { sessionId: targetSessionId });
+          }
+        } else {
+          reply = createProviderFailureConversationReply({
+            agentDisplayName: agentPrimaryDisplayName(selectedAgent),
+            errorMessage,
+            provider: selectedProvider,
+            providers: providerProfiles,
+          });
+          completionMetadata = {
+            error: errorMessage,
+            realProviderCall: false,
+          };
+          setAgentActivity(selectedAgent.id, "error");
+          appendEvent("provider.completion.dgx.failed", {
+            agentId: selectedAgent.id,
+            providerProfileId: selectedProvider.id,
+            modelId,
+            error: errorMessage,
+          }, { sessionId: targetSessionId });
+        }
       }
     }
 
