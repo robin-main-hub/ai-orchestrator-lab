@@ -1,6 +1,6 @@
 import type { ModelDescriptor, ProviderProfile } from "@ai-orchestrator/protocol";
 import { ArrowLeft, FileText, KeyRound, RefreshCw, Sparkles, type LucideIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { WorkbenchAgent } from "../../types";
 import { formatModelDisplayName } from "../../lib/helpers";
 import { agentPrimaryDisplayName } from "../../lib/agentDisplay";
@@ -47,6 +47,7 @@ export function AgentQuickSwitchPanel({
   const agentName = agentPrimaryDisplayName(selectedAgent);
   const refreshableProviders = visibleProviders.filter((provider) => provider.id !== "provider_mock_local");
   const canRefreshModels = Boolean(refreshableProviders.length > 0 && onRefreshModels);
+  const initialRefreshRequested = useRef(false);
   const handleRefreshModels = async () => {
     if (!onRefreshModels || refreshingModels || refreshableProviders.length === 0) return;
     setRefreshingModels(true);
@@ -56,6 +57,11 @@ export function AgentQuickSwitchPanel({
       setRefreshingModels(false);
     }
   };
+  useEffect(() => {
+    if (!canRefreshModels || initialRefreshRequested.current) return;
+    initialRefreshRequested.current = true;
+    void handleRefreshModels();
+  }, [canRefreshModels]);
 
   return (
     <section
@@ -307,8 +313,7 @@ function compactModels(
       seen.add(model.id);
       return true;
     })
-    .sort((a, b) => modelRank(a, selectedModelId, defaultModelId) - modelRank(b, selectedModelId, defaultModelId))
-    .slice(0, 6);
+    .sort((a, b) => modelRank(a, selectedModelId, defaultModelId) - modelRank(b, selectedModelId, defaultModelId));
 }
 
 function modelRank(model: ModelDescriptor, selectedModelId?: string, defaultModelId?: string) {
