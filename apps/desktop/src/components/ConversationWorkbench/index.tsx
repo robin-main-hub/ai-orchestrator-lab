@@ -238,6 +238,20 @@ export function ConversationWorkbench({
     ? agents.find((agent) => agent.id === pendingProviderRetry.agentId) ?? selectedAgent
     : undefined;
   const pendingRetryAgentName = pendingRetryAgent ? agentPrimaryDisplayName(pendingRetryAgent) : undefined;
+  const focusAgentsPanel = (focusId: string) => {
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(`[data-focus-id="${focusId}"]`)?.focus({ preventScroll: false });
+    });
+  };
+  const focusQuickSwitchPanel = () => focusAgentsPanel("agent-quick-switch-panel");
+  const focusMemoryPanel = () => focusAgentsPanel("agent-memory-continuity-panel");
+  const focusSkillPanel = () => focusAgentsPanel("agent-skill-profile-panel");
+  const applyPromptSuggestion = (prompt: string) => {
+    onDraftMessageChange(prompt);
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>("[data-focus-id='composer-textarea']")?.focus({ preventScroll: false });
+    });
+  };
 
   return (
     <section className="conversation-workbench flex h-full flex-col bg-zinc-950">
@@ -381,6 +395,10 @@ export function ConversationWorkbench({
             memoryQualityLabel={agentChatContinuity.memoryQualityLabel}
             modelLabel={`대화 모델 · ${selectedAgentModelRouteLabel}`}
             nextPrompt={promptSuggestions[0]}
+            onApplyNextPrompt={applyPromptSuggestion}
+            onEditMemory={() => onOpenAgentConfig("injection")}
+            onEditModel={focusQuickSwitchPanel}
+            onEditPersona={() => onOpenAgentConfig("soul")}
             personaAppliedLabel={personaSoulApplied && personaAgentsMdApplied ? "SOUL/AGENTS 적용" : "인격 설정 확인"}
             selectedAgentName={selectedAgentDisplayName}
             toolLabels={toolLabels}
@@ -414,12 +432,18 @@ export function ConversationWorkbench({
                 memoryRecordCount={memoryRecordCount}
                 memoryScope={memoryScope}
                 messageCount={messages.length}
+                onEditAgents={() => onOpenAgentConfig("agents_md")}
+                onEditMemory={() => onOpenAgentConfig("injection")}
+                onEditSoul={() => onOpenAgentConfig("soul")}
+                onViewTools={focusSkillPanel}
                 personaAgentsMdApplied={personaAgentsMdApplied}
                 personaSoulApplied={personaSoulApplied}
                 toolLabels={toolLabels}
               />
               <AgentSkillProfilePanel
                 displayName={selectedAgentDisplayName}
+                onOpenConfig={() => onOpenAgentConfig("agents_md")}
+                onViewToolOptions={focusMemoryPanel}
                 role={selectedAgent.role}
                 runtimeConfigFiles={selectedAgentRuntimeConfigFiles}
               />

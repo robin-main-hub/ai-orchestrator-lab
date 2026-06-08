@@ -36,6 +36,10 @@ describe("AgentMemoryContinuityPanel", () => {
     expect(html).toContain("조회 흔적 남길 준비됨");
     expect(html).toContain("도구: 작업 대기열, 승인 확인");
     expect(html).toContain("작업 대기열, 승인 확인 참고");
+    expect(html).toContain("SOUL 수정");
+    expect(html).toContain("AGENTS 수정");
+    expect(html).toContain("기억 주입");
+    expect(html).toContain("도구 보기");
     expect(html).not.toContain("도구 준비 대기");
     expect(html).not.toContain("session_desktop_001");
     expect(html).not.toContain("provider_mimo_token_openai");

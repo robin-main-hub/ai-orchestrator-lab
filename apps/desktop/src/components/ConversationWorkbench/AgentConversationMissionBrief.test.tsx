@@ -25,6 +25,10 @@ describe("AgentConversationMissionBrief", () => {
     expect(html).toContain("SOUL/AGENTS 적용");
     expect(html).toContain("코드 읽기");
     expect(html).toContain("지금 막힌 테스트부터 정리해줘");
+    expect(html).toContain("모델 선택");
+    expect(html).toContain("기억 설정");
+    expect(html).toContain("인격 수정");
+    expect(html).toContain("초안 적용");
     expect(html).not.toContain("Orchestrator");
   });
 });

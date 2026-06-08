@@ -6,6 +6,10 @@ export function AgentConversationMissionBrief({
   memoryQualityLabel,
   modelLabel,
   nextPrompt,
+  onApplyNextPrompt,
+  onEditMemory,
+  onEditPersona,
+  onEditModel,
   personaAppliedLabel,
   selectedAgentName,
   toolLabels,
@@ -15,12 +19,17 @@ export function AgentConversationMissionBrief({
   memoryQualityLabel: string;
   modelLabel: string;
   nextPrompt?: string;
+  onApplyNextPrompt?: (prompt: string) => void;
+  onEditMemory?: () => void;
+  onEditModel?: () => void;
+  onEditPersona?: () => void;
   personaAppliedLabel: string;
   selectedAgentName: string;
   toolLabels: string[];
   workStatusLabel: string;
 }) {
   const visibleTools = toolLabels.length > 0 ? toolLabels : ["대화", "기억", "요약"];
+  const suggestedPrompt = nextPrompt ?? "지금 상황을 요약해줘";
 
   return (
     <section className="shrink-0 border-b border-violet-400/10 bg-[radial-gradient(circle_at_12%_0%,rgba(139,92,246,0.14),transparent_34%),linear-gradient(180deg,rgba(24,24,27,0.94),rgba(9,9,11,0.96))] px-4 py-3">
@@ -52,10 +61,16 @@ export function AgentConversationMissionBrief({
         </div>
 
         <div className="grid min-w-0 gap-2 sm:grid-cols-2">
-          <BriefFact icon={<Route className="h-3.5 w-3.5" />} label="모델" value={modelLabel} />
-          <BriefFact icon={<Database className="h-3.5 w-3.5" />} label="기억" value={memoryQualityLabel} />
-          <BriefFact icon={<Sparkles className="h-3.5 w-3.5" />} label="인격" value={personaAppliedLabel} />
-          <BriefFact icon={<Wrench className="h-3.5 w-3.5" />} label="다음 제안" value={nextPrompt ?? "지금 상황을 요약해줘"} />
+          <BriefFact actionLabel="모델 선택" icon={<Route className="h-3.5 w-3.5" />} label="모델" onClick={onEditModel} value={modelLabel} />
+          <BriefFact actionLabel="기억 설정" icon={<Database className="h-3.5 w-3.5" />} label="기억" onClick={onEditMemory} value={memoryQualityLabel} />
+          <BriefFact actionLabel="인격 수정" icon={<Sparkles className="h-3.5 w-3.5" />} label="인격" onClick={onEditPersona} value={personaAppliedLabel} />
+          <BriefFact
+            actionLabel="초안 적용"
+            icon={<Wrench className="h-3.5 w-3.5" />}
+            label="다음 제안"
+            onClick={onApplyNextPrompt ? () => onApplyNextPrompt(suggestedPrompt) : undefined}
+            value={suggestedPrompt}
+          />
         </div>
       </div>
     </section>
@@ -63,16 +78,20 @@ export function AgentConversationMissionBrief({
 }
 
 function BriefFact({
+  actionLabel,
   icon,
   label,
+  onClick,
   value,
 }: {
+  actionLabel?: string;
   icon: ReactNode;
   label: string;
+  onClick?: () => void;
   value: string;
 }) {
-  return (
-    <div className="min-w-0 rounded-lg border border-white/10 bg-zinc-950/50 px-3 py-2">
+  const content = (
+    <>
       <p className="flex items-center gap-1.5 text-[10px] font-semibold text-zinc-500">
         {icon}
         {label}
@@ -80,6 +99,27 @@ function BriefFact({
       <p className="mt-1 truncate text-xs font-medium text-zinc-100" title={value}>
         {value}
       </p>
+      {actionLabel ? (
+        <span className="mt-1 inline-flex text-[9px] font-medium text-cyan-200/80">{actionLabel}</span>
+      ) : null}
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        className="min-w-0 rounded-lg border border-white/10 bg-zinc-950/50 px-3 py-2 text-left transition hover:border-cyan-300/30 hover:bg-cyan-400/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40"
+        onClick={onClick}
+        type="button"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className="min-w-0 rounded-lg border border-white/10 bg-zinc-950/50 px-3 py-2">
+      {content}
     </div>
   );
 }
