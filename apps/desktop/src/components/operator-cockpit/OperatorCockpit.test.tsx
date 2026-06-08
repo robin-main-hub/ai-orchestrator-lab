@@ -262,6 +262,9 @@ describe("OperatorCockpit", () => {
     expect(html).toContain("승인 1건 대기");
     expect(html).toContain("워커 1명 작업 중");
     expect(html).toContain("성과 장부 1건");
+    expect(html).toContain("승인 대기 열기");
+    expect(html).toContain("성과 장부 열기");
+    expect(html).toContain("워커 함대 보기");
   });
 
   it("기본 세부 정보가 열린 상태에서는 다음 행동 목적지 안내를 표시하지 않는다", () => {
