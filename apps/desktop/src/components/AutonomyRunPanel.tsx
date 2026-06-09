@@ -39,6 +39,7 @@ export function AutonomyRunPanel({
   personaOptions,
   steps,
   history,
+  notice,
   onFieldChange,
   onRun,
   onLoadFromPacket,
@@ -51,6 +52,8 @@ export function AutonomyRunPanel({
   personaOptions?: ReadonlyArray<string>;
   steps?: ReadonlyArray<AutonomyStepRow>;
   history?: ReadonlyArray<AutonomyRunSummary>;
+  /** advisory notice shown near the run button (e.g. mode downgraded by a gate) */
+  notice?: string;
   onFieldChange: (patch: Partial<AutonomyRunForm>) => void;
   onRun: () => void;
   /** when provided, shows a button to (re)load the form from the current CodingPacket */
@@ -156,6 +159,7 @@ export function AutonomyRunPanel({
           <span>{running ? "실행 중…" : "자율 실행 시작"}</span>
         </button>
         {!runnable.ok && runnable.reason ? <p className="autonomy-run-hint">{runnable.reason}</p> : null}
+        {runnable.ok && notice ? <p className="autonomy-run-notice">{notice}</p> : null}
       </div>
 
       {error ? (
