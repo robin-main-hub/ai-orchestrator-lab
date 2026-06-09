@@ -260,6 +260,10 @@ export function ConversationWorkbench({
   const toolLabels = selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role).slice(0, 3) : [];
   const toolProfileSummary = selectedAgent ? getAgentToolProfileSummary(selectedAgent.role) : undefined;
   const selectedAgentRuntimeConfigFiles = selectedAgent ? selectAgentRuntimeConfigFiles(selectedAgent, configFiles) : [];
+  const selectedAgentLearnedSkillLabels = selectedAgentRuntimeConfigFiles
+    .filter((file) => file.kind === "skill")
+    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+    .map((file) => file.label);
   const headerMemoryLabel = createAgentChannelHeaderMemoryLabel(memoryScope);
   const personaSoulApplied = Boolean(persona?.soulMdPath || persona?.soulSummary);
   const personaAgentsMdApplied = Boolean(persona?.agentsMdPath || persona?.agentsInstruction);
@@ -485,6 +489,7 @@ export function ConversationWorkbench({
           <AgentHermesControlCard
             continuityDetail={agentChatContinuity.detail}
             displayName={selectedAgentDisplayName}
+            learnedSkillLabels={selectedAgentLearnedSkillLabels}
             memoryQualityLabel={agentChatContinuity.memoryQualityLabel}
             modelLabel={`대화 모델 · ${selectedAgentModelRouteLabel}`}
             nextPrompt={promptSuggestions[0]}
