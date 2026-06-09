@@ -1,5 +1,6 @@
 import {
   Archive,
+  Bot,
   FileText,
   KeyRound,
   LayoutDashboard,
@@ -86,6 +87,7 @@ export const navItems: NavItem[] = [
   { id: "config_files", label: "설정파일", icon: FileText },
   { id: "channels", label: "채널", icon: RadioTower },
   { id: "backup", label: "백업", icon: Archive },
+  { id: "autonomy", label: "자율실행", icon: Bot },
 ];
 
 
