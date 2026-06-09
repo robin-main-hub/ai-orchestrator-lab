@@ -12,7 +12,6 @@ export type ProviderFallbackPlan = {
   trustDowngrade: boolean;
 };
 
-const preferredLocalFallbackProviderId = "provider_mock_local";
 const defaultDirectCredentialProviderIds = new Set([
   "provider_mimo_token_openai",
   "provider_mimo_token_anthropic",
@@ -154,24 +153,24 @@ export function resolveProviderFallbackCandidate({
     return undefined;
   }
 
-  const enabledCandidates = providers.filter((provider) => provider.id !== selectedProviderId && provider.enabled);
-  const trustedRemoteCandidates = enabledCandidates.filter((provider) => provider.id !== preferredLocalFallbackProviderId);
-  const preferredDirectCredential = trustedRemoteCandidates.find((provider) => defaultDirectCredentialProviderIds.has(provider.id));
+  const enabledCandidates = providers.filter(
+    (provider) => provider.id !== selectedProviderId && provider.enabled && !isMockProvider(provider),
+  );
+  const preferredDirectCredential = enabledCandidates.find((provider) => defaultDirectCredentialProviderIds.has(provider.id));
   if (preferredDirectCredential) {
     return preferredDirectCredential;
   }
 
-  const bestRemote = trustedRemoteCandidates.sort((a, b) => trustRank(b.trustLevel) - trustRank(a.trustLevel))[0];
+  const bestRemote = enabledCandidates.sort((a, b) => trustRank(b.trustLevel) - trustRank(a.trustLevel))[0];
   if (bestRemote) {
     return bestRemote;
   }
 
-  const preferredLocal = enabledCandidates.find((provider) => provider.id === preferredLocalFallbackProviderId);
-  if (preferredLocal && selectedProviderId === preferredLocalFallbackProviderId) {
-    return preferredLocal;
-  }
-
   return undefined;
+}
+
+function isMockProvider(provider: ProviderProfile): boolean {
+  return provider.id === "provider_mock_local" || provider.tags.includes("mock");
 }
 
 function trustRank(trust: SourceTrust): number {

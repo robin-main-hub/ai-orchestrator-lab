@@ -40,12 +40,18 @@ function sanitizeStoredAgent(candidate: unknown): WorkbenchAgent | undefined {
     name: value.name,
     kind: value.kind,
     role: value.role,
-    providerProfileId: typeof value.providerProfileId === "string" ? value.providerProfileId : undefined,
-    modelId: typeof value.modelId === "string" ? value.modelId : undefined,
+    providerProfileId:
+      typeof value.providerProfileId === "string" && !isMockProviderId(value.providerProfileId)
+        ? value.providerProfileId
+        : undefined,
+    modelId: typeof value.modelId === "string" && !isMockModelId(value.modelId) ? value.modelId : undefined,
     soulMode: isSoulMode(value.soulMode) ? value.soulMode : "summary",
     configSource: isConfigSource(value.configSource) ? value.configSource : "internal",
     enabled: value.enabled !== false,
-    authBinding: value.authBinding,
+    authBinding:
+      value.authBinding?.providerProfileId && isMockProviderId(value.authBinding.providerProfileId)
+        ? undefined
+        : value.authBinding,
   };
 }
 
@@ -64,6 +70,14 @@ function mergeSeedDefaults(storedAgent: WorkbenchAgent, seededAgent?: WorkbenchA
     modelId,
     authBinding,
   };
+}
+
+function isMockProviderId(providerProfileId?: string): boolean {
+  return providerProfileId === "provider_mock_local" || providerProfileId?.startsWith("provider_mock_") === true;
+}
+
+function isMockModelId(modelId?: string): boolean {
+  return modelId?.startsWith("mock-") === true;
 }
 
 export function parseStoredAgentProfiles(value: unknown, seededAgents: WorkbenchAgent[]): WorkbenchAgent[] {

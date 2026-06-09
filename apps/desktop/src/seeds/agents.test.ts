@@ -17,6 +17,13 @@ describe("seeded MiMo Token Plan bindings", () => {
     expect(seededModelCatalog.provider_mimo_token_anthropic?.map((model) => model.id)).toContain("mimo-v2.5-pro");
   });
 
+  it("does not expose mock providers or mock models in runtime seeds", () => {
+    expect(seededProviderProfiles.some((provider) => provider.id === "provider_mock_local")).toBe(false);
+    expect(seededProviderProfiles.some((provider) => provider.tags.includes("mock"))).toBe(false);
+    expect(seededModelCatalog.provider_mock_local).toBeUndefined();
+    expect(Object.values(seededModelCatalog).flat().some((model) => model.id.startsWith("mock-"))).toBe(false);
+  });
+
   it("binds every seeded agent to the MiMo OpenAI-compatible token-plan provider", () => {
     expect(seededAgentProfiles.length).toBeGreaterThan(0);
     for (const agent of seededAgentProfiles) {

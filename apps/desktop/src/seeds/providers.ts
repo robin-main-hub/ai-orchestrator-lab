@@ -1,7 +1,4 @@
-import {
-  MockProviderAdapter,
-  createProviderProfile,
-} from "@ai-orchestrator/providers";
+import { createProviderProfile } from "@ai-orchestrator/providers";
 import type {
   ModelDescriptor,
   ModelDiscoverySnapshot,
@@ -18,7 +15,6 @@ import {
 import { createDgxVaultSecretRef } from "../lib/helpers";
 
 export const seededProviderProfiles: ProviderProfile[] = [
-  new MockProviderAdapter().profile,
   createProviderProfile({
     id: "provider_dgx02_vllm",
     name: "DGX-02 vLLM",
@@ -202,15 +198,18 @@ export function createInitialProviderProfiles() {
       return seededProviderProfiles;
     }
 
-    const storedProfiles = parsed.filter(
-      (profile): profile is ProviderProfile =>
-        Boolean(profile) &&
-        typeof profile.id === "string" &&
-        typeof profile.name === "string" &&
-        typeof profile.kind === "string" &&
-        typeof profile.enabled === "boolean" &&
-        Array.isArray(profile.tags),
-    ).map(sanitizeProviderProfile);
+    const storedProfiles = parsed
+      .filter(
+        (profile): profile is ProviderProfile =>
+          Boolean(profile) &&
+          typeof profile.id === "string" &&
+          typeof profile.name === "string" &&
+          typeof profile.kind === "string" &&
+          typeof profile.enabled === "boolean" &&
+          Array.isArray(profile.tags),
+      )
+      .map(sanitizeProviderProfile)
+      .filter((profile) => !isMockProviderProfile(profile));
     if (window.localStorage.getItem(providerProfilesSeedVersionKey) !== providerProfilesSeedVersion) {
       const storedIds = new Set(storedProfiles.map((profile) => profile.id));
       const missingSeeds = seededProviderProfiles.filter((profile) => !storedIds.has(profile.id));
@@ -272,12 +271,15 @@ function sanitizeProviderProfile(profile: ProviderProfile): ProviderProfile {
   return profile;
 }
 
+function isMockProviderProfile(profile: ProviderProfile): boolean {
+  return profile.id === "provider_mock_local" || profile.tags.includes("mock");
+}
+
 function inferModelInputModalities(modelId: string): ModelDescriptor["inputModalities"] {
   const id = modelId.toLowerCase();
   const modalities: NonNullable<ModelDescriptor["inputModalities"]> = ["text"];
 
   if (
-    id.includes("mock-orchestrator") ||
     id.includes("gpt-5.5-pro") ||
     id.includes("gpt-4.1") ||
     id.includes("gemini") ||
@@ -320,11 +322,6 @@ function createModel(providerProfileId: string, id: string, tags: string[] = [])
 }
 
 export const seededModelCatalog: ModelCatalog = {
-  provider_mock_local: [
-    createModel("provider_mock_local", "mock-orchestrator", ["conversation", "debate"]),
-    createModel("provider_mock_local", "mock-reviewer", ["review"]),
-    createModel("provider_mock_local", "mock-builder", ["coding"]),
-  ],
   provider_dgx02_vllm: [
     createModel("provider_dgx02_vllm", "qwen36-domain-lora-v5-prisma", ["dgx", "vllm", "rag"]),
   ],
