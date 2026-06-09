@@ -4,8 +4,10 @@ import type { CodingPacket, EventEnvelope, TerminalHostKind } from "@ai-orchestr
 import { runAutonomousPersonaTask } from "../lib/autonomousRun";
 import { createAutonomyRunEvents, type AutonomyRunEventContext } from "../lib/autonomyRunEvents";
 import { projectAutonomyRunHistory } from "../lib/autonomyRunHistory";
+import { createAutonomyRunMemoryCandidate } from "../lib/autonomyRunMemory";
 import type { DebateDecisionReadinessState } from "../lib/debateDecisionReadiness";
 import { evaluateExecutionHandoffGate } from "../lib/executionHandoffGate";
+import type { MemoryCuratorCandidate } from "../lib/memoryCuratorApproval";
 import {
   buildAutonomyRunInput,
   DEFAULT_AUTONOMY_FORM,
@@ -42,6 +44,7 @@ export function AutonomyRunContainer({
   onRunEvents,
   historyEvents,
   decisionReadiness,
+  onRunMemory,
 }: {
   sessionId?: string;
   serverBaseUrl?: string | string[];
@@ -55,6 +58,8 @@ export function AutonomyRunContainer({
   historyEvents?: ReadonlyArray<EventEnvelope>;
   /** debate decision readiness — gates/forces the handoff mode when provided */
   decisionReadiness?: DebateDecisionReadinessState;
+  /** receives a long-term memory candidate summarizing a finished run */
+  onRunMemory?: (candidate: MemoryCuratorCandidate) => void;
 }) {
   const [form, setForm] = useState<AutonomyRunForm>(() =>
     seedPacket ? codingPacketToAutonomyForm(seedPacket) : DEFAULT_AUTONOMY_FORM,
@@ -117,6 +122,20 @@ export function AutonomyRunContainer({
           now: startedAt,
         };
         onRunEvents(createAutonomyRunEvents(ctx, collected, result));
+      }
+      if (onRunMemory && result.ok) {
+        onRunMemory(
+          createAutonomyRunMemoryCandidate({
+            runId,
+            sessionId,
+            personaName: effectiveForm.personaName.trim(),
+            role: effectiveForm.role,
+            goal: effectiveForm.goal.trim(),
+            loopStatus: result.loopStatus,
+            stepCount: collected.length,
+            createdAt: startedAt,
+          }),
+        );
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
