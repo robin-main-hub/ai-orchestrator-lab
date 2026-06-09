@@ -27,14 +27,14 @@ const oauthProvider: ProviderProfile = {
 };
 
 describe("provider auth binding labels", () => {
-  it("uses Korean labels for missing, local, API, and OAuth auth states", () => {
+  it("uses Korean labels for missing, API, and OAuth auth states without mock special cases", () => {
     expect(createAuthBinding()).toMatchObject({
       label: "인증 정보 대기",
       mode: "provider_profile",
     });
     expect(createAuthBinding({ ...apiProvider, id: "provider_mock_local" })).toMatchObject({
-      label: "로컬 런타임",
-      mode: "local",
+      label: "API 비밀키 참조",
+      mode: "provider_profile",
     });
     expect(createAuthBinding(apiProvider)).toMatchObject({
       label: "API 비밀키 참조",

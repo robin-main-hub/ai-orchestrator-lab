@@ -54,14 +54,6 @@ export function createAuthBinding(provider?: ProviderProfile): WorkbenchAgent["a
     };
   }
 
-  if (provider.id === "provider_mock_local") {
-    return {
-      mode: "local",
-      label: "로컬 런타임",
-      providerProfileId: provider.id,
-    };
-  }
-
   return {
     mode: provider.tags.includes("oauth") ? "oauth" : "provider_profile",
     label: provider.tags.includes("oauth") ? "OAuth/API 프로필" : "API 비밀키 참조",
@@ -112,10 +104,15 @@ export function useProviderRegistryController({
   );
 
   const selectedProvider = useMemo(
-    () =>
-      providerProfiles.find((profile) => profile.id === selectedAgent?.providerProfileId) ??
-      activeProvider ??
-      providerProfiles[0],
+    () => {
+      const mimoDefaultProvider = providerProfiles.find((profile) => profile.id === "provider_mimo_token_openai");
+      return (
+        providerProfiles.find((profile) => profile.id === selectedAgent?.providerProfileId) ??
+        activeProvider ??
+        mimoDefaultProvider ??
+        providerProfiles[0]
+      );
+    },
     [activeProvider, providerProfiles, selectedAgent],
   );
 
