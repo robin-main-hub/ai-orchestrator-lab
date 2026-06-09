@@ -103,6 +103,7 @@ import { createCorsHeaders } from "./http/cors.js";
 import { RequestBodyTooLargeError, readJsonBody, readRawBody } from "./http/requestBody.js";
 import { handleApprovalRoute } from "./routes/approvals.js";
 import { handleTmuxRoute } from "./routes/tmux.js";
+import { acquireStorageLock } from "./storage/storageLock.js";
 import { handleVerifyPacketRoute } from "./routes/verifyPacket.js";
 export { pickAllowedOrigin, resolveAllowedOrigins } from "./http/cors.js";
 
@@ -5355,7 +5356,25 @@ export class NonceRegistry {
 
 export function startServer(port = Number(process.env.PORT ?? 4317)) {
   const eventStorage = createJsonlServerEventStorage();
-  
+
+  // Advisory single-writer guard: two servers sharing one EVENT_STORAGE_DIR
+  // interleave JSONL writes and corrupt approval state. Warn (or refuse, when
+  // ORCHESTRATOR_STORAGE_LOCK_STRICT=1) instead of corrupting shared state.
+  void mkdir(eventStorage.storageDir, { recursive: true })
+    .then(() =>
+      acquireStorageLock({
+        lockPath: join(eventStorage.storageDir, "events.lock"),
+        port,
+        host: process.env.ORCHESTRATOR_HOST,
+        strict: process.env.ORCHESTRATOR_STORAGE_LOCK_STRICT === "1",
+      }),
+    )
+    .catch((error) => {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    });
+
+
   const memoryAdapterKind = (process.env.MEMORY_ADAPTER ?? "local_heuristic") as MemoryAdapterKind;
   let rawMemoryAdapter: MemoryAdapter;
   if (memoryAdapterKind === "memento_mcp") {
