@@ -85,12 +85,14 @@ export function buildAutonomyRunInput(
     maxIterations?: number;
     runId?: string;
     onStep?: RunAutonomousPersonaTaskInput["onStep"];
+    /** reuse a persistent registry (shared pane pool) instead of a fresh one per run */
+    registry?: RunAutonomousPersonaTaskInput["registry"];
   },
 ): RunAutonomousPersonaTaskInput {
   const personaName = form.personaName.trim();
   const panes = deps.panes ?? DEFAULT_SWARM_PANES;
   return {
-    registry: createSummonRegistry(panes.map((pane) => ({ paneId: pane.paneId, role: pane.role }))),
+    registry: deps.registry ?? createSummonRegistry(panes.map((pane) => ({ paneId: pane.paneId, role: pane.role }))),
     summon: { personaName, sessionId: deps.sessionId, preferredRole: form.role },
     persona: deps.persona ?? headerOnlyPersona(personaName),
     packet: {
