@@ -35,6 +35,7 @@ export function AutonomyRunPanel({
   steps,
   onFieldChange,
   onRun,
+  onLoadFromPacket,
 }: {
   form: AutonomyRunForm;
   runnable: RunnableVerdict;
@@ -45,6 +46,8 @@ export function AutonomyRunPanel({
   steps?: ReadonlyArray<AutonomyStepRow>;
   onFieldChange: (patch: Partial<AutonomyRunForm>) => void;
   onRun: () => void;
+  /** when provided, shows a button to (re)load the form from the current CodingPacket */
+  onLoadFromPacket?: () => void;
 }) {
   const disabled = running || !runnable.ok;
 
@@ -56,6 +59,17 @@ export function AutonomyRunPanel({
         <StatusBadge size="sm" variant={running ? "primary" : "muted"}>
           {running ? "실행 중" : "대기"}
         </StatusBadge>
+        {onLoadFromPacket ? (
+          <button
+            className="rail-icon-button autonomy-load-packet"
+            disabled={running}
+            onClick={onLoadFromPacket}
+            title="현재 CodingPacket에서 불러오기"
+            type="button"
+          >
+            패킷 불러오기
+          </button>
+        ) : null}
       </header>
 
       <div className="autonomy-run-form">

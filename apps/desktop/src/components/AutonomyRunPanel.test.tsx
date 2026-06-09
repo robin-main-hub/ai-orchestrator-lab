@@ -25,6 +25,7 @@ function render(props: Partial<Parameters<typeof AutonomyRunPanel>[0]> = {}) {
       steps={props.steps}
       onFieldChange={noop}
       onRun={noop}
+      onLoadFromPacket={props.onLoadFromPacket}
     />,
   );
 }
@@ -79,6 +80,11 @@ describe("AutonomyRunPanel", () => {
     const html = render({ error: "DGX-02 tmux endpoint unavailable" });
     expect(html).toContain("오류");
     expect(html).toContain("DGX-02 tmux endpoint unavailable");
+  });
+
+  it("shows the load-from-packet button only when the handler is provided", () => {
+    expect(render({ onLoadFromPacket: () => {} })).toContain("패킷 불러오기");
+    expect(render()).not.toContain("패킷 불러오기");
   });
 
   it("renders the iteration timeline when steps are present", () => {
