@@ -34,9 +34,9 @@ export const runtimeSnapshot: RuntimeSnapshot = {
   ],
   localModels: [
     {
-      id: "mock-orchestrator",
-      name: "mock-orchestrator",
-      runner: "mock",
+      id: "mimo-v2.5-pro",
+      name: "mimo-v2.5-pro",
+      runner: "custom",
       status: "online",
       contextWindow: 128_000,
     },

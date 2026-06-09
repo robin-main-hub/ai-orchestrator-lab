@@ -99,6 +99,41 @@ describe("agent profile persistence", () => {
     });
   });
 
+  it("replaces stale mock provider assignments with MiMo defaults", () => {
+    const restored = parseStoredAgentProfiles(
+      [
+        {
+          id: "agent_seed_1",
+          name: "Seed One Legacy Mock",
+          kind: "real",
+          role: "orchestrator",
+          providerProfileId: "provider_mock_local",
+          modelId: "mock-orchestrator",
+          authBinding: {
+            mode: "local",
+            label: "로컬 런타임",
+            providerProfileId: "provider_mock_local",
+          },
+          soulMode: "summary",
+          configSource: "internal",
+          enabled: true,
+        },
+      ],
+      seededAgents,
+    );
+
+    expect(restored[0]).toMatchObject({
+      id: "agent_seed_1",
+      providerProfileId: "provider_mimo_token_openai",
+      modelId: "mimo-v2.5-pro",
+      authBinding: {
+        mode: "provider_profile",
+        providerProfileId: "provider_mimo_token_openai",
+        secretRefId: "dgx-02:MIMO_API_KEY",
+      },
+    });
+  });
+
   it("restores selected agent only when it still exists", () => {
     expect(parseStoredSelectedAgentId("agent_seed_2", seededAgents)).toBe("agent_seed_2");
     expect(parseStoredSelectedAgentId("missing", seededAgents)).toBe("agent_seed_1");

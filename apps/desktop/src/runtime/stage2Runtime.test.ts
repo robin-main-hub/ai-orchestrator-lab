@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { AgentProfile, ConversationMessage, ProviderProfile } from "@ai-orchestrator/protocol";
 import {
   InMemoryEventStore,
-  buildMockAssistantReply,
   createCodingPacketFromConversation,
   createStage2Event,
   redactForEventStore,
@@ -20,13 +19,13 @@ const agent: AgentProfile = {
 };
 
 const provider: ProviderProfile = {
-  id: "provider_mock",
-  name: "Mock Provider",
-  kind: "custom",
-  defaultModel: "mock-orchestrator",
+  id: "provider_mimo_token_openai",
+  name: "MiMo Token Plan OpenAI",
+  kind: "openai",
+  defaultModel: "mimo-v2.5-pro",
   enabled: true,
-  tags: ["mock"],
-  trustLevel: "trusted",
+  tags: ["mimo", "token-plan", "server-proxy"],
+  trustLevel: "limited",
 };
 
 const messages: ConversationMessage[] = [
@@ -61,21 +60,6 @@ describe("stage2 runtime helpers", () => {
     expect(packet.goal).toBe("Build the stage2 event flow");
     expect(packet.filesToInspect).toContain("apps/desktop/src/runtime/stage2Runtime.ts");
     expect(packet.decisions.join(" ")).toContain("Event Store");
-  });
-
-  it("mock 답변은 명시된 실행 모델명을 agent 고정 모델보다 우선 표시한다", () => {
-    const reply = buildMockAssistantReply({
-      agent: {
-        ...agent,
-        modelId: "mimo-v2.5-pro",
-      },
-      content: "fallback 확인",
-      modelId: "mock-orchestrator",
-      provider,
-    });
-
-    expect(reply).toContain("Mock Provider / mock-orchestrator");
-    expect(reply).not.toContain("mimo-v2.5-pro");
   });
 
   it("carries attachment processing summaries into coding packet context", () => {

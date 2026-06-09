@@ -20,7 +20,6 @@ import {
 } from "@ai-orchestrator/agents";
 import {
   appendEventToLog,
-  buildMockAssistantReply,
   createCodingPacketFromConversation,
   createStage2Event,
   DEFAULT_SESSION_ID,
@@ -184,7 +183,6 @@ import {
 } from "./lib/controlQueueUnifiedApprovals";
 import {
   createAgentRoleToolRuntimeAudit,
-  createAgentRoleToolRuntimeSummary,
 } from "./lib/agentRuntimeConfig";
 import { applyAgentIdentityResponseGuard } from "./lib/agentIdentityResponseGuard";
 import { createCompletionMemoryRecallMessages } from "./lib/agentCompletionRecall";
@@ -1236,7 +1234,6 @@ export function App() {
     purpose: WorkbenchCompletionPurpose;
     userMessage: ConversationMessage;
   }): Promise<WorkbenchCompletionResult> {
-    const roleToolConfig = createAgentRoleToolRuntimeSummary(agent);
     const completionContext = resolveAgentCompletionContext({
       agent,
       channels: conversationMessagesByAgentId,
@@ -1264,45 +1261,6 @@ export function App() {
       userMessage,
     });
     const pipelineMetadata = pipelineMessages[0]?.metadata ?? {};
-    if (!isDgxRoutedProvider(provider)) {
-      const recalledMemoryCount = targetMemoryInspector.trace.results.filter((result) => result.usedInDecision).length;
-      const guardedReply = applyAgentIdentityResponseGuard({
-        agent,
-        content: buildMockAssistantReply({
-          content: userMessage.content,
-          agent,
-          modelId,
-          provider,
-        }),
-        userContent: userMessage.content,
-      });
-      return {
-        content: guardedReply.content,
-        metadata: {
-          modelId,
-          providerProfileId: provider.id,
-          realProviderCall: false,
-          route: "mock",
-          memoryTraceId: pipelineMetadata.memoryTraceId ?? targetMemoryInspector.trace.id,
-          recalledMemoryCount: pipelineMetadata.recalledMemoryCount ?? recalledMemoryCount,
-          runtimeConfigFileIds: pipelineMetadata.runtimeConfigFileIds,
-          roleToolProfileLabel: pipelineMetadata.roleToolProfileLabel ?? roleToolConfig.label,
-          roleToolProfileTools: pipelineMetadata.roleToolProfileTools ?? roleToolConfig.tools,
-          personaDisplayName: pipelineMetadata.personaDisplayName,
-          personaIdentityKey: pipelineMetadata.personaIdentityKey,
-          personaSoulApplied: pipelineMetadata.personaSoulApplied,
-          personaAgentsMdApplied: pipelineMetadata.personaAgentsMdApplied,
-          personaSafetyApplied: pipelineMetadata.personaSafetyApplied,
-          personaFragmentsInjected: pipelineMetadata.personaFragmentsInjected,
-          personaSoulMdPath: pipelineMetadata.personaSoulMdPath,
-          personaAgentsMdPath: pipelineMetadata.personaAgentsMdPath,
-          recallTraceId: pipelineMetadata.recallTraceId,
-          identityGuardApplied: guardedReply.guardApplied,
-          purpose,
-        },
-      };
-    }
-
     appendEvent("prompt.pipeline.assembled", {
       agentId: agent.id,
       providerProfileId: provider.id,
@@ -1823,13 +1781,13 @@ export function App() {
       createdAt,
     };
     prependWorkItem(workItem);
-    appendEvent(isDgxRoutedProvider(selectedProvider) ? "provider.completion.dgx.requested" : "provider.completion.mocked", {
+    appendEvent("provider.completion.requested", {
       agentId: selectedAgent.id,
       providerProfileId: selectedProvider.id,
       modelId,
       authMode,
       authLabel,
-      routePreference: isDgxRoutedProvider(selectedProvider) ? "server_proxy" : "mock",
+      routePreference: isDgxRoutedProvider(selectedProvider) ? "server_proxy" : "direct_provider",
     }, { sessionId: targetSessionId });
     setAgentActivity(selectedAgent.id, "tooling");
 

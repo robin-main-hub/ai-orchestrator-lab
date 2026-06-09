@@ -20,14 +20,14 @@ describe("createAgentConversationPromptSuggestions", () => {
       createAgentConversationPromptSuggestions({
         activity: "idle",
         displayName: "마키마",
-        lastAssistantMessageContent: "Mock Local Provider 대체 경로로 이어서 응답했고 원래 공급자는 DGX 복구 뒤 복귀할 수 있어.",
+        lastAssistantMessageContent: "MiMo Token Plan 직접 경로로 이어서 응답했고 원래 서버 프록시는 DGX 복구 뒤 복귀할 수 있어.",
         memoryRecordCount: 4,
         messageCount: 2,
         pendingApprovalCount: 1,
         role: "orchestrator",
       }),
     ).toEqual([
-      "마키마, 방금 대체 경로가 실제 작업 흐름에 미치는 영향과 원래 공급자로 복귀할 조건을 정리해줘.",
+      "마키마, 방금 답변 기준으로 다음 큰 바위와 즉시 할 일을 분리해줘.",
       "마키마, 승인 대기 1건을 먼저 처리해야 하는지 판단해줘.",
       "마키마, 지난 기억 4개를 참고해서 이어서 할 일을 제안해줘.",
     ]);

@@ -121,21 +121,6 @@ export function redactForEventStore(value: unknown): unknown {
   return value;
 }
 
-export function buildMockAssistantReply(params: {
-  content: string;
-  agent: AgentProfile;
-  modelId?: string;
-  provider: ProviderProfile;
-}): string {
-  const modelId = params.modelId ?? params.agent.modelId ?? params.provider.defaultModel ?? "모델 연결 대기";
-
-  return [
-    `${params.agent.name}이 ${params.provider.name} / ${modelId} 바인딩으로 응답했어.`,
-    "Stage2에서는 실제 네트워크 호출 대신 이 턴을 Event Store에 남기고, 이후 Coding Packet과 백업 projection으로 넘길 수 있게 처리한다.",
-    `입력 길이: ${params.content.length}자.`,
-  ].join(" ");
-}
-
 export function createCodingPacketFromConversation({ messages, agent, provider }: CodingPacketInput): CodingPacket {
   const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
   const recentContext = messages.slice(-8).map((message) => `${message.role}: ${message.content}`);
@@ -160,7 +145,7 @@ export function createCodingPacketFromConversation({ messages, agent, provider }
     decisions: [
       "대화 기록은 Event Store 이벤트로 먼저 남긴다.",
       "코딩 전달은 자연어 요약이 아니라 CodingPacket 구조로 유지한다.",
-      "실제 모델 호출과 터미널 실행은 provider/runtime permission 연결 전까지 mock 상태로 둔다.",
+      "대화 응답은 기본 MiMo 공급자 경로로 호출하고, 터미널 실행은 approval state가 붙은 뒤에만 진행한다.",
     ],
     rejectedOptions: [
       "대화 전문을 그대로 실행 에이전트에게 넘기기",
@@ -168,7 +153,7 @@ export function createCodingPacketFromConversation({ messages, agent, provider }
     ],
     constraints: [
       "API key, bearer token, auth token은 event emit 직전 redaction을 통과해야 한다.",
-      "DGX-02가 내려가면 MacBook은 로컬 outbox와 mock/local model 흐름으로 버티고, Home PC는 DGX 복구 대기 상태로 둔다.",
+      "DGX-02가 내려가도 MacBook은 로컬 outbox와 MiMo 기본 공급자 경로를 우선 유지하고, Home PC는 DGX 복구 대기 상태로 둔다.",
       "터미널 실행은 approval state가 붙기 전까지 UI slot으로만 표시한다.",
     ],
     filesToInspect: [

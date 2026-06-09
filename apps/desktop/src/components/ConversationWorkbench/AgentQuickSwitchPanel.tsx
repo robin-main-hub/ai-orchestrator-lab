@@ -45,7 +45,7 @@ export function AgentQuickSwitchPanel({
     selectedAgent.modelId,
   );
   const agentName = agentPrimaryDisplayName(selectedAgent);
-  const refreshableProviders = visibleProviders.filter((provider) => provider.id !== "provider_mock_local");
+  const refreshableProviders = visibleProviders.filter((provider) => !provider.tags.includes("mock"));
   const canRefreshModels = Boolean(refreshableProviders.length > 0 && onRefreshModels);
   const initialRefreshRequested = useRef(false);
   const handleRefreshModels = async () => {
