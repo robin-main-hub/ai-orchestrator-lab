@@ -103,6 +103,8 @@ export type RunAutonomousPersonaTaskInput = {
   safePrefixes?: ReadonlyArray<string>;
   extraSafePrefixes?: ReadonlyArray<string>;
   logger?: (message: string) => void;
+  /** observer invoked once per loop iteration (for a live timeline) */
+  onStep?: ClosedLoopEffects["onStep"];
 };
 
 export async function runAutonomousPersonaTask(input: RunAutonomousPersonaTaskInput): Promise<PersonaTaskOutcome> {
@@ -135,6 +137,7 @@ export async function runAutonomousPersonaTask(input: RunAutonomousPersonaTaskIn
       newId: (stepIndex) => `${runId}_${session.id}_${seq++}_${stepIndex}`,
       now,
       escalateNotify: input.logger,
+      onStep: input.onStep,
       dispatchClient: input.clients?.dispatchClient,
       captureClient: input.clients?.captureClient,
       replayClient: input.clients?.replayClient,

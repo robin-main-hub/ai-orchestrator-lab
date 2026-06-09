@@ -84,6 +84,7 @@ export function buildAutonomyRunInput(
     now?: () => string;
     maxIterations?: number;
     runId?: string;
+    onStep?: RunAutonomousPersonaTaskInput["onStep"];
   },
 ): RunAutonomousPersonaTaskInput {
   const personaName = form.personaName.trim();
@@ -109,6 +110,7 @@ export function buildAutonomyRunInput(
     now: deps.now,
     maxIterations: deps.maxIterations,
     runId: deps.runId,
+    onStep: deps.onStep,
   };
 }
 
