@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { loadPersona, type LoadedPersona } from "@ai-orchestrator/agents";
-import type { CodingPacket, TerminalHostKind } from "@ai-orchestrator/protocol";
+import type { CodingPacket, EventEnvelope, TerminalHostKind } from "@ai-orchestrator/protocol";
 import { runAutonomousPersonaTask } from "../lib/autonomousRun";
+import { createAutonomyRunEvents, type AutonomyRunEventContext } from "../lib/autonomyRunEvents";
 import {
   buildAutonomyRunInput,
   DEFAULT_AUTONOMY_FORM,
@@ -35,6 +36,7 @@ export function AutonomyRunContainer({
   host = "dgx_02",
   tmuxSessionName = "ai-swarm",
   seedPacket,
+  onRunEvents,
 }: {
   sessionId?: string;
   serverBaseUrl?: string | string[];
@@ -42,6 +44,8 @@ export function AutonomyRunContainer({
   tmuxSessionName?: string;
   /** prefill the form from a CodingPacket (e.g. the current debate/conversation packet) */
   seedPacket?: CodingPacket;
+  /** receives the audit/replay event envelopes for a finished run */
+  onRunEvents?: (events: EventEnvelope[]) => void;
 }) {
   const [form, setForm] = useState<AutonomyRunForm>(() =>
     seedPacket ? codingPacketToAutonomyForm(seedPacket) : DEFAULT_AUTONOMY_FORM,
@@ -61,21 +65,41 @@ export function AutonomyRunContainer({
     setError(null);
     setOutcome(null);
     setSteps([]);
+    const collected: AutonomyStepRow[] = [];
+    const stamp = Date.now();
+    const runId = `desktop_${stamp}`;
+    const startedAt = new Date().toISOString();
     try {
-      const stamp = Date.now();
       const persona = await loadPersonaOrHeader(form.personaName.trim());
       const input = buildAutonomyRunInput(form, {
         sessionId,
         persona,
         ctx: {
-          now: new Date().toISOString(),
+          now: startedAt,
           makeSessionId: (personaName, paneId) => `as_${personaName}_${paneId}_${stamp}`,
         },
         server: { serverBaseUrl, host, tmuxSessionName },
-        runId: `desktop_${stamp}`,
-        onStep: (result) => setSteps((current) => [...current, stepRowFromReduce(result, current.length + 1)]),
+        runId,
+        onStep: (result) => {
+          const row = stepRowFromReduce(result, collected.length + 1);
+          collected.push(row);
+          setSteps((current) => [...current, row]);
+        },
       });
-      setOutcome(await runAutonomousPersonaTask(input));
+      const result = await runAutonomousPersonaTask(input);
+      setOutcome(result);
+      if (onRunEvents) {
+        const ctx: AutonomyRunEventContext = {
+          sessionId,
+          runId,
+          personaName: form.personaName.trim(),
+          role: form.role,
+          mode: form.mode,
+          goal: form.goal.trim(),
+          now: startedAt,
+        };
+        onRunEvents(createAutonomyRunEvents(ctx, collected, result));
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
