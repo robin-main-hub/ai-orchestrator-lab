@@ -4203,6 +4203,7 @@ export function App() {
               decisionReadiness={deriveDebateDecisionReadiness(debateSession).state}
               historyEvents={eventLog}
               onRunEvents={(events) => setEventLog((current) => [...current, ...events])}
+              onRunMemory={handleQueueMemoryCuratorCandidate}
               seedPacket={codingPacketState}
             />
           ) : null}
