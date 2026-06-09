@@ -3381,7 +3381,7 @@ export function App() {
     {
       id: "switch.cockpit",
       verb: "전환",
-      label: "운영 관제판",
+      label: "관제판",
       hint: "실시간 명령 보기",
       shortcut: "⌘4",
       run: () => setMode("cockpit"),

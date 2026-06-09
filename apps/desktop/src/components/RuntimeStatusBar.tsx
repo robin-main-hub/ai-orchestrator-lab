@@ -97,6 +97,7 @@ export function RuntimeStatusBar({
               {modeConfig.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeMode === item.id;
+                const displayLabel = item.shortLabel ?? item.label;
                 return (
                   <button
                     aria-current={isActive ? "page" : undefined}
@@ -111,7 +112,7 @@ export function RuntimeStatusBar({
                     type="button"
                   >
                     <Icon className="h-4 w-4" />
-                    <span>{item.label}</span>
+                    <span>{displayLabel}</span>
                   </button>
                 );
               })}
@@ -133,18 +134,19 @@ export function RuntimeStatusBar({
         </div>
       </div>
 
-      <nav className="hidden items-center gap-1 rounded-lg border border-zinc-800/70 bg-zinc-900/70 p-1 md:flex">
+      <nav className="hidden items-center gap-1 rounded-full border border-white/10 bg-black/45 p-1 shadow-[0_0_28px_rgba(0,0,0,0.35)] backdrop-blur-xl md:flex">
         {modeConfig.map((item) => {
           const Icon = item.icon;
           const isActive = activeMode === item.id;
+          const displayLabel = item.shortLabel ?? item.label;
           return (
             <button
               aria-label={`${item.label} 모드`}
               className={cn(
-                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+                "group relative flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-all",
                 isActive
-                  ? "bg-zinc-800 text-zinc-100 shadow-sm"
-                  : "text-zinc-500 hover:bg-zinc-800/50 hover:text-zinc-100",
+                  ? "border-cyan-300/25 bg-white/[0.08] text-zinc-50 shadow-[0_0_18px_rgba(34,211,238,0.10)]"
+                  : "border-transparent text-zinc-500 hover:border-white/10 hover:bg-white/[0.04] hover:text-zinc-100",
               )}
               data-focus-id={`mode-tab-${item.id}`}
               key={item.id}
@@ -152,9 +154,9 @@ export function RuntimeStatusBar({
               title={item.label}
               type="button"
             >
-              <Icon className="h-3.5 w-3.5" />
-              <span className="hidden lg:inline">{item.label}</span>
-              <span className="lg:hidden">{item.shortLabel ?? item.label}</span>
+              {isActive ? <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.75)]" /> : null}
+              <Icon className={cn("h-3.5 w-3.5", isActive ? "text-cyan-200" : "text-zinc-500 group-hover:text-zinc-300")} />
+              <span>{displayLabel}</span>
             </button>
           );
         })}
@@ -163,7 +165,7 @@ export function RuntimeStatusBar({
       <div className="flex shrink-0 items-center gap-2">
         <Button
           aria-label="명령 팔레트 열기"
-          className="h-8 gap-2 border-zinc-800/80 bg-zinc-900/50 px-2.5 text-xs text-zinc-500 hover:bg-zinc-800/80 hover:text-zinc-100"
+          className="h-8 gap-2 rounded-full border-white/10 bg-black/35 px-2.5 text-xs text-zinc-500 hover:border-cyan-300/25 hover:bg-white/[0.06] hover:text-zinc-100"
           onClick={onCommandPalette}
           size="sm"
           title="명령 팔레트"
@@ -218,9 +220,9 @@ function HealthIndicator({
       <PopoverTrigger asChild>
         <Button
           aria-label={`시스템 상태: ${title} · ${providerLabel}`}
-          className="h-8 gap-2 px-2 text-xs text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-100"
+          className="h-8 gap-2 rounded-full border border-white/10 bg-black/25 px-2.5 text-xs text-zinc-500 hover:border-cyan-300/25 hover:bg-white/[0.06] hover:text-zinc-100"
           size="sm"
-          variant="ghost"
+          variant="outline"
         >
           <span className={cn("h-2 w-2 rounded-full", dotClass, health !== "healthy" && "animate-pulse")} />
           <Activity className="h-3.5 w-3.5" />
