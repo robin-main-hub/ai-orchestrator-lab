@@ -35,8 +35,12 @@ export type ClosedLoopRuntimeDeps = {
   tmuxSessionName?: string;
   serverBaseUrl?: string | string[];
   fetchImpl?: typeof fetch;
-  /** resolves once a human decides on the queued approval (mode A: poll the Ops queue) */
-  awaitApprovalDecision: (sourceItemId: string) => Promise<ApprovalDecisionOutcome>;
+  /**
+   * Resolves the queued approval for a dispatched command. Mode A polls the
+   * Ops queue for a human grant; mode B may auto-approve safe commands. The
+   * dispatched command is passed as context so a policy can decide on it.
+   */
+  awaitApprovalDecision: (sourceItemId: string, context: { command: string }) => Promise<ApprovalDecisionOutcome>;
   /** deterministic id per dispatched step; receives the step index (-1 for captures) */
   newId: (stepIndex: number) => string;
   now?: () => string;
@@ -89,7 +93,7 @@ export function createClosedLoopEffects(deps: ClosedLoopRuntimeDeps): ClosedLoop
 
       // pending_approval / recorded: a human must approve in the Ops queue first.
       const sourceItemId = response.approval?.sourceItemId ?? id;
-      const decision = await deps.awaitApprovalDecision(sourceItemId);
+      const decision = await deps.awaitApprovalDecision(sourceItemId, { command });
       if (decision !== "approved") {
         throw new Error(`approval ${decision} for verification step ${stepIndex}`);
       }
