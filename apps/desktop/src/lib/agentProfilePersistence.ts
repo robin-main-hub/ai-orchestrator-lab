@@ -49,6 +49,23 @@ function sanitizeStoredAgent(candidate: unknown): WorkbenchAgent | undefined {
   };
 }
 
+function mergeSeedDefaults(storedAgent: WorkbenchAgent, seededAgent?: WorkbenchAgent): WorkbenchAgent {
+  if (!seededAgent) return storedAgent;
+
+  const providerProfileId = storedAgent.providerProfileId ?? seededAgent.providerProfileId;
+  const modelId = storedAgent.modelId ?? seededAgent.modelId;
+  const authBinding =
+    storedAgent.authBinding ??
+    (providerProfileId === seededAgent.providerProfileId ? seededAgent.authBinding : undefined);
+
+  return {
+    ...storedAgent,
+    providerProfileId,
+    modelId,
+    authBinding,
+  };
+}
+
 export function parseStoredAgentProfiles(value: unknown, seededAgents: WorkbenchAgent[]): WorkbenchAgent[] {
   if (!Array.isArray(value)) {
     return seededAgents;
@@ -59,9 +76,11 @@ export function parseStoredAgentProfiles(value: unknown, seededAgents: Workbench
     return seededAgents;
   }
 
-  const storedIds = new Set(storedAgents.map((agent) => agent.id));
+  const seededAgentById = new Map(seededAgents.map((agent) => [agent.id, agent]));
+  const restoredAgents = storedAgents.map((agent) => mergeSeedDefaults(agent, seededAgentById.get(agent.id)));
+  const storedIds = new Set(restoredAgents.map((agent) => agent.id));
   const missingSeeds = seededAgents.filter((agent) => !storedIds.has(agent.id));
-  return [...storedAgents, ...missingSeeds];
+  return [...restoredAgents, ...missingSeeds];
 }
 
 export function parseStoredSelectedAgentId(value: unknown, agents: WorkbenchAgent[]): string {

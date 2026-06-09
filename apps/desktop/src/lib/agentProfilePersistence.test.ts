@@ -8,6 +8,14 @@ const seededAgents: WorkbenchAgent[] = [
     name: "Seed One",
     kind: "real",
     role: "orchestrator",
+    providerProfileId: "provider_mimo_token_openai",
+    modelId: "mimo-v2.5-pro",
+    authBinding: {
+      mode: "provider_profile",
+      label: "MiMo Token Plan",
+      providerProfileId: "provider_mimo_token_openai",
+      secretRefId: "dgx-02:MIMO_API_KEY",
+    },
     soulMode: "summary",
     configSource: "internal",
     enabled: true,
@@ -17,6 +25,14 @@ const seededAgents: WorkbenchAgent[] = [
     name: "Seed Two",
     kind: "virtual",
     role: "verifier",
+    providerProfileId: "provider_mimo_token_openai",
+    modelId: "mimo-v2.5-pro",
+    authBinding: {
+      mode: "provider_profile",
+      label: "MiMo Token Plan",
+      providerProfileId: "provider_mimo_token_openai",
+      secretRefId: "dgx-02:MIMO_API_KEY",
+    },
     soulMode: "retrieved",
     configSource: "internal",
     enabled: true,
@@ -54,6 +70,33 @@ describe("agent profile persistence", () => {
       providerProfileId: "provider_custom",
     });
     expect(restored[1]?.id).toBe("agent_seed_2");
+  });
+
+  it("backfills MiMo defaults for stored agents that predate provider bindings", () => {
+    const restored = parseStoredAgentProfiles(
+      [
+        {
+          id: "agent_seed_1",
+          name: "Seed One Legacy",
+          kind: "real",
+          role: "orchestrator",
+          soulMode: "summary",
+          configSource: "internal",
+          enabled: true,
+        },
+      ],
+      seededAgents,
+    );
+
+    expect(restored[0]).toMatchObject({
+      id: "agent_seed_1",
+      providerProfileId: "provider_mimo_token_openai",
+      modelId: "mimo-v2.5-pro",
+      authBinding: {
+        providerProfileId: "provider_mimo_token_openai",
+        secretRefId: "dgx-02:MIMO_API_KEY",
+      },
+    });
   });
 
   it("restores selected agent only when it still exists", () => {
