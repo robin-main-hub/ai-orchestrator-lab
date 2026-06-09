@@ -21,6 +21,7 @@ import {
   runHistoryStatusVariant,
   type AutonomyRunSummary,
 } from "../lib/autonomyRunHistory";
+import { rosterRowLabel, rosterRowVariant, type AutonomyRosterSummary } from "../lib/autonomyRoster";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
 
 const MODES: AutonomyMode[] = ["human", "auto_safe"];
@@ -39,6 +40,7 @@ export function AutonomyRunPanel({
   personaOptions,
   steps,
   history,
+  roster,
   notice,
   onFieldChange,
   onRun,
@@ -52,6 +54,7 @@ export function AutonomyRunPanel({
   personaOptions?: ReadonlyArray<string>;
   steps?: ReadonlyArray<AutonomyStepRow>;
   history?: ReadonlyArray<AutonomyRunSummary>;
+  roster?: AutonomyRosterSummary;
   /** advisory notice shown near the run button (e.g. mode downgraded by a gate) */
   notice?: string;
   onFieldChange: (patch: Partial<AutonomyRunForm>) => void;
@@ -168,6 +171,24 @@ export function AutonomyRunPanel({
             오류
           </StatusBadge>
           <span>{error}</span>
+        </div>
+      ) : null}
+
+      {roster && roster.rows.length > 0 ? (
+        <div className="autonomy-run-roster">
+          <h4>pane 로스터 · 점유 {roster.busyCount} / 비어있음 {roster.freeCount}</h4>
+          <ul>
+            {roster.rows.map((row) => (
+              <li key={row.paneId}>
+                <StatusBadge size="sm" variant={rosterRowVariant(row.busy)}>
+                  {row.role}
+                </StatusBadge>
+                <span className="autonomy-roster-meta">
+                  {row.paneId} · {rosterRowLabel(row)}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 
