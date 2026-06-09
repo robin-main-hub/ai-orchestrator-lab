@@ -5371,7 +5371,12 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     )
     .catch((error) => {
       console.error(error instanceof Error ? error.message : String(error));
-      process.exit(1);
+      // Only a strict-mode contention refusal should take the process down.
+      // Otherwise this best-effort guard must never exit (it would also kill
+      // test runners that start the server in-process).
+      if (process.env.ORCHESTRATOR_STORAGE_LOCK_STRICT === "1") {
+        process.exit(1);
+      }
     });
 
 
