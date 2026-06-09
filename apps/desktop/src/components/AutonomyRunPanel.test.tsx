@@ -24,6 +24,7 @@ function render(props: Partial<Parameters<typeof AutonomyRunPanel>[0]> = {}) {
       personaOptions={props.personaOptions}
       steps={props.steps}
       history={props.history}
+      notice={props.notice}
       onFieldChange={noop}
       onRun={noop}
       onLoadFromPacket={props.onLoadFromPacket}

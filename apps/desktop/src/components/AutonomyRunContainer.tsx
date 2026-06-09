@@ -4,6 +4,8 @@ import type { CodingPacket, EventEnvelope, TerminalHostKind } from "@ai-orchestr
 import { runAutonomousPersonaTask } from "../lib/autonomousRun";
 import { createAutonomyRunEvents, type AutonomyRunEventContext } from "../lib/autonomyRunEvents";
 import { projectAutonomyRunHistory } from "../lib/autonomyRunHistory";
+import type { DebateDecisionReadinessState } from "../lib/debateDecisionReadiness";
+import { evaluateExecutionHandoffGate } from "../lib/executionHandoffGate";
 import {
   buildAutonomyRunInput,
   DEFAULT_AUTONOMY_FORM,
@@ -39,6 +41,7 @@ export function AutonomyRunContainer({
   seedPacket,
   onRunEvents,
   historyEvents,
+  decisionReadiness,
 }: {
   sessionId?: string;
   serverBaseUrl?: string | string[];
@@ -50,6 +53,8 @@ export function AutonomyRunContainer({
   onRunEvents?: (events: EventEnvelope[]) => void;
   /** event log to project past autonomy runs from (for the history view) */
   historyEvents?: ReadonlyArray<EventEnvelope>;
+  /** debate decision readiness — gates/forces the handoff mode when provided */
+  decisionReadiness?: DebateDecisionReadinessState;
 }) {
   const [form, setForm] = useState<AutonomyRunForm>(() =>
     seedPacket ? codingPacketToAutonomyForm(seedPacket) : DEFAULT_AUTONOMY_FORM,
@@ -59,7 +64,14 @@ export function AutonomyRunContainer({
   const [error, setError] = useState<string | null>(null);
   const [steps, setSteps] = useState<AutonomyStepRow[]>([]);
 
-  const runnable = isRunnable(form);
+  const gate =
+    decisionReadiness !== undefined
+      ? evaluateExecutionHandoffGate({ readiness: decisionReadiness, requestedMode: form.mode })
+      : undefined;
+
+  const baseRunnable = isRunnable(form);
+  const runnable = gate && !gate.allowed ? { ok: false, reason: gate.reason } : baseRunnable;
+  const notice = gate && gate.allowed && gate.modeDowngraded ? gate.reason : undefined;
 
   const onRun = async () => {
     if (running || !runnable.ok) {
@@ -73,9 +85,11 @@ export function AutonomyRunContainer({
     const stamp = Date.now();
     const runId = `desktop_${stamp}`;
     const startedAt = new Date().toISOString();
+    // The handoff gate may downgrade the mode (e.g. needs_review -> human).
+    const effectiveForm = gate ? { ...form, mode: gate.effectiveMode } : form;
     try {
-      const persona = await loadPersonaOrHeader(form.personaName.trim());
-      const input = buildAutonomyRunInput(form, {
+      const persona = await loadPersonaOrHeader(effectiveForm.personaName.trim());
+      const input = buildAutonomyRunInput(effectiveForm, {
         sessionId,
         persona,
         ctx: {
@@ -96,10 +110,10 @@ export function AutonomyRunContainer({
         const ctx: AutonomyRunEventContext = {
           sessionId,
           runId,
-          personaName: form.personaName.trim(),
-          role: form.role,
-          mode: form.mode,
-          goal: form.goal.trim(),
+          personaName: effectiveForm.personaName.trim(),
+          role: effectiveForm.role,
+          mode: effectiveForm.mode,
+          goal: effectiveForm.goal.trim(),
           now: startedAt,
         };
         onRunEvents(createAutonomyRunEvents(ctx, collected, result));
@@ -118,6 +132,7 @@ export function AutonomyRunContainer({
       onFieldChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
       onRun={onRun}
       history={historyEvents ? projectAutonomyRunHistory(historyEvents) : undefined}
+      notice={notice}
       onLoadFromPacket={seedPacket ? () => setForm(codingPacketToAutonomyForm(seedPacket)) : undefined}
       outcome={outcome}
       personaOptions={bundledPersonaNames}
