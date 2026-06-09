@@ -4198,7 +4198,7 @@ export function App() {
             />
           ) : null}
 
-          {activeNavItem === "autonomy" ? <AutonomyRunContainer /> : null}
+          {activeNavItem === "autonomy" ? <AutonomyRunContainer seedPacket={codingPacketState} /> : null}
 
           <section className="mini-panel legacy-runtime-panel">
             <header>
