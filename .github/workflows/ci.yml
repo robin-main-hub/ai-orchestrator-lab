@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: build + test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node from .nvmrc
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Enable Corepack (pnpm)
+        run: corepack enable
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: corepack pnpm -r --sort build
+
+      - name: Test all packages
+        run: corepack pnpm -r --if-present test
+
+# Note: provider/DGX smoke scripts (provider:smoke:*, server:smoke,
+# tmux:smoke:dry-run, orchestration:mvp:audit) are intentionally NOT run here —
+# they require live endpoints / API keys / a running server. They stay as
+# operator-run checks. CI is kept hermetic: install, build, unit/contract tests.
