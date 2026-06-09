@@ -110,4 +110,31 @@ describe("acquireStorageLock", () => {
     });
     expect(result.acquired).toBe(true);
   });
+
+  it("treats an unreadable lock file (non-ENOENT) as absent rather than throwing", async () => {
+    const writeFileImpl = vi.fn().mockResolvedValue(undefined);
+    const readFileImpl = vi.fn().mockRejectedValue(Object.assign(new Error("EACCES"), { code: "EACCES" }));
+    const result = await acquireStorageLock({
+      lockPath: "/x/events.lock",
+      selfPid: 11,
+      readFileImpl,
+      writeFileImpl,
+    });
+    expect(result.acquired).toBe(true);
+  });
+
+  it("never throws when writing the lock fails — it is best-effort", async () => {
+    const readFileImpl = vi.fn().mockRejectedValue(Object.assign(new Error("nope"), { code: "ENOENT" }));
+    const writeFileImpl = vi.fn().mockRejectedValue(Object.assign(new Error("EROFS"), { code: "EROFS" }));
+    const logger = vi.fn();
+    const result = await acquireStorageLock({
+      lockPath: "/x/events.lock",
+      selfPid: 11,
+      readFileImpl,
+      writeFileImpl,
+      logger,
+    });
+    expect(result.acquired).toBe(false);
+    expect(logger).toHaveBeenCalled();
+  });
 });

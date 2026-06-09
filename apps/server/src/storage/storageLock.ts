@@ -113,8 +113,19 @@ export async function acquireStorageLock(input: {
   }
 
   const record: StorageLockRecord = { pid: selfPid, port: input.port, host: input.host, acquiredAt: now() };
-  await writeFileImpl(input.lockPath, `${JSON.stringify(record)}\n`);
-  return { acquired: true, decision };
+  try {
+    await writeFileImpl(input.lockPath, `${JSON.stringify(record)}\n`);
+    return { acquired: true, decision };
+  } catch (error) {
+    // Writing the advisory lock must never take the server down. Log and carry
+    // on without owning the lock — this is a best-effort guard, not a mutex.
+    logger(
+      `[orchestrator-server] could not write event storage lock: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return { acquired: false, decision };
+  }
 }
 
 async function readLockRecord(
@@ -124,11 +135,10 @@ async function readLockRecord(
   let raw: string;
   try {
     raw = await readFileImpl(lockPath);
-  } catch (error) {
-    if ((error as { code?: string }).code === "ENOENT") {
-      return null;
-    }
-    throw error;
+  } catch {
+    // Missing OR unreadable lock -> treat as absent. A read error must not
+    // crash startup; the worst case is we proceed without seeing a lock.
+    return null;
   }
   try {
     const parsed = JSON.parse(raw) as Partial<StorageLockRecord>;
