@@ -23,6 +23,7 @@ function render(props: Partial<Parameters<typeof AutonomyRunPanel>[0]> = {}) {
       error={props.error ?? null}
       personaOptions={props.personaOptions}
       steps={props.steps}
+      history={props.history}
       onFieldChange={noop}
       onRun={noop}
       onLoadFromPacket={props.onLoadFromPacket}
@@ -85,6 +86,18 @@ describe("AutonomyRunPanel", () => {
   it("shows the load-from-packet button only when the handler is provided", () => {
     expect(render({ onLoadFromPacket: () => {} })).toContain("패킷 불러오기");
     expect(render()).not.toContain("패킷 불러오기");
+  });
+
+  it("renders the run history when present", () => {
+    const html = render({
+      history: [
+        { runId: "r1", personaName: "makise", role: "qa", goal: "fix bug", stepCount: 2, status: "completed" },
+      ],
+    });
+    expect(html).toContain("실행 기록");
+    expect(html).toContain("makise");
+    expect(html).toContain("fix bug");
+    expect(html).toContain("완료");
   });
 
   it("renders the iteration timeline when steps are present", () => {

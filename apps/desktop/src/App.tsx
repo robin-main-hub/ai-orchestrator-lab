@@ -4200,6 +4200,7 @@ export function App() {
 
           {activeNavItem === "autonomy" ? (
             <AutonomyRunContainer
+              historyEvents={eventLog}
               onRunEvents={(events) => setEventLog((current) => [...current, ...events])}
               seedPacket={codingPacketState}
             />

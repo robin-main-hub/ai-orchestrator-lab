@@ -16,6 +16,11 @@ import {
   outcomeLabel,
   type AutonomyStepRow,
 } from "../lib/autonomyTimeline";
+import {
+  runHistoryStatusLabel,
+  runHistoryStatusVariant,
+  type AutonomyRunSummary,
+} from "../lib/autonomyRunHistory";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
 
 const MODES: AutonomyMode[] = ["human", "auto_safe"];
@@ -33,6 +38,7 @@ export function AutonomyRunPanel({
   error,
   personaOptions,
   steps,
+  history,
   onFieldChange,
   onRun,
   onLoadFromPacket,
@@ -44,6 +50,7 @@ export function AutonomyRunPanel({
   error?: string | null;
   personaOptions?: ReadonlyArray<string>;
   steps?: ReadonlyArray<AutonomyStepRow>;
+  history?: ReadonlyArray<AutonomyRunSummary>;
   onFieldChange: (patch: Partial<AutonomyRunForm>) => void;
   onRun: () => void;
   /** when provided, shows a button to (re)load the form from the current CodingPacket */
@@ -176,6 +183,26 @@ export function AutonomyRunPanel({
             </li>
           ))}
         </ol>
+      ) : null}
+
+      {history && history.length > 0 ? (
+        <div className="autonomy-run-history">
+          <h4>실행 기록</h4>
+          <ul>
+            {history.slice(-8).reverse().map((run) => (
+              <li key={run.runId}>
+                <StatusBadge size="sm" variant={runHistoryStatusVariant(run.status)}>
+                  {runHistoryStatusLabel(run.status)}
+                </StatusBadge>
+                <span className="autonomy-history-meta">
+                  {(run.personaName || "?")}
+                  {run.role ? ` · ${run.role}` : ""} · {run.stepCount}단계
+                </span>
+                {run.goal ? <span className="autonomy-history-goal">{run.goal}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
     </section>
   );

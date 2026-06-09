@@ -3,6 +3,7 @@ import { loadPersona, type LoadedPersona } from "@ai-orchestrator/agents";
 import type { CodingPacket, EventEnvelope, TerminalHostKind } from "@ai-orchestrator/protocol";
 import { runAutonomousPersonaTask } from "../lib/autonomousRun";
 import { createAutonomyRunEvents, type AutonomyRunEventContext } from "../lib/autonomyRunEvents";
+import { projectAutonomyRunHistory } from "../lib/autonomyRunHistory";
 import {
   buildAutonomyRunInput,
   DEFAULT_AUTONOMY_FORM,
@@ -37,6 +38,7 @@ export function AutonomyRunContainer({
   tmuxSessionName = "ai-swarm",
   seedPacket,
   onRunEvents,
+  historyEvents,
 }: {
   sessionId?: string;
   serverBaseUrl?: string | string[];
@@ -46,6 +48,8 @@ export function AutonomyRunContainer({
   seedPacket?: CodingPacket;
   /** receives the audit/replay event envelopes for a finished run */
   onRunEvents?: (events: EventEnvelope[]) => void;
+  /** event log to project past autonomy runs from (for the history view) */
+  historyEvents?: ReadonlyArray<EventEnvelope>;
 }) {
   const [form, setForm] = useState<AutonomyRunForm>(() =>
     seedPacket ? codingPacketToAutonomyForm(seedPacket) : DEFAULT_AUTONOMY_FORM,
@@ -113,6 +117,7 @@ export function AutonomyRunContainer({
       form={form}
       onFieldChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
       onRun={onRun}
+      history={historyEvents ? projectAutonomyRunHistory(historyEvents) : undefined}
       onLoadFromPacket={seedPacket ? () => setForm(codingPacketToAutonomyForm(seedPacket)) : undefined}
       outcome={outcome}
       personaOptions={bundledPersonaNames}
