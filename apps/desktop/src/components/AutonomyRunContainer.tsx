@@ -9,6 +9,7 @@ import {
   isRunnable,
   type AutonomyRunForm,
 } from "../lib/autonomyRunForm";
+import { stepRowFromReduce, type AutonomyStepRow } from "../lib/autonomyTimeline";
 import { bundledPersonaNames, personaFileSource } from "../lib/personaBundleSource";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
 import { AutonomyRunPanel } from "./AutonomyRunPanel";
@@ -42,6 +43,7 @@ export function AutonomyRunContainer({
   const [running, setRunning] = useState(false);
   const [outcome, setOutcome] = useState<PersonaTaskOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [steps, setSteps] = useState<AutonomyStepRow[]>([]);
 
   const runnable = isRunnable(form);
 
@@ -52,6 +54,7 @@ export function AutonomyRunContainer({
     setRunning(true);
     setError(null);
     setOutcome(null);
+    setSteps([]);
     try {
       const stamp = Date.now();
       const persona = await loadPersonaOrHeader(form.personaName.trim());
@@ -64,6 +67,7 @@ export function AutonomyRunContainer({
         },
         server: { serverBaseUrl, host, tmuxSessionName },
         runId: `desktop_${stamp}`,
+        onStep: (result) => setSteps((current) => [...current, stepRowFromReduce(result, current.length + 1)]),
       });
       setOutcome(await runAutonomousPersonaTask(input));
     } catch (caught) {
@@ -83,6 +87,7 @@ export function AutonomyRunContainer({
       personaOptions={bundledPersonaNames}
       runnable={runnable}
       running={running}
+      steps={steps}
     />
   );
 }

@@ -46,6 +46,8 @@ export type ClosedLoopRuntimeDeps = {
   now?: () => string;
   /** notified when the loop escalates (blocked / stuck / iteration cap) */
   escalateNotify?: (reason: string) => Promise<void> | void;
+  /** observer invoked once per loop iteration (for live timelines/telemetry) */
+  onStep?: ClosedLoopEffects["onStep"];
   // injected clients (default to the real DGX clients)
   dispatchClient?: typeof requestTmuxDispatch;
   captureClient?: typeof requestTmuxCapture;
@@ -122,6 +124,8 @@ export function createClosedLoopEffects(deps: ClosedLoopRuntimeDeps): ClosedLoop
         await deps.escalateNotify(reason);
       }
     },
+
+    onStep: deps.onStep,
   };
 }
 
