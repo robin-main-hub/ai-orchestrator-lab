@@ -142,6 +142,8 @@ import { createCockpitWorkTraceSources } from "./lib/cockpitWorkTraceSources";
 import { createWorkTraceSearchIndex, type WorkTraceSearchItem } from "./lib/workTraceSearch";
 import { deriveDebateDecisionReadiness } from "./lib/debateDecisionReadiness";
 import { deriveTmuxRecoveryPlan } from "./lib/tmuxRecoveryPlan";
+import { createSummonRegistry, type SummonRegistry } from "./lib/personaSummon";
+import { DEFAULT_SWARM_PANES } from "./lib/autonomyRunForm";
 import { createSettingsDiagnostics } from "./lib/settingsDiagnostics";
 import { createProductionSmokePlan } from "./lib/productionSmokePlan";
 import { createOrchestrationMaturityReport } from "./lib/orchestrationMaturity";
@@ -483,6 +485,9 @@ export function App() {
   }, [activeSessionId]);
 
   const [codingPacketState, setCodingPacketState] = useState<CodingPacket>(codingPacket);
+  const [summonRegistry, setSummonRegistry] = useState<SummonRegistry>(() =>
+    createSummonRegistry(DEFAULT_SWARM_PANES.map((pane) => ({ paneId: pane.paneId, role: pane.role }))),
+  );
   const [contextPackTier, setContextPackTier] = useState<ContextPackTier>("standard");
   const [reviewMode, setReviewMode] = useState<ReviewMode>("quick");
   const {
@@ -4202,8 +4207,10 @@ export function App() {
             <AutonomyRunContainer
               decisionReadiness={deriveDebateDecisionReadiness(debateSession).state}
               historyEvents={eventLog}
+              onRegistryChange={setSummonRegistry}
               onRunEvents={(events) => setEventLog((current) => [...current, ...events])}
               onRunMemory={handleQueueMemoryCuratorCandidate}
+              registry={summonRegistry}
               seedPacket={codingPacketState}
             />
           ) : null}
