@@ -54,7 +54,15 @@ export type AgentVisualSettings = {
   avatarDataUrl?: string;
   avatarUpdatedAt?: string;
 };
-export type NavItemId = "sessions" | "projects" | "providers" | "config_files" | "channels" | "backup" | "cockpit";
+export type NavItemId =
+  | "sessions"
+  | "projects"
+  | "providers"
+  | "config_files"
+  | "channels"
+  | "backup"
+  | "cockpit"
+  | "autonomy";
 export type NavItem = {
   id: NavItemId;
   label: string;

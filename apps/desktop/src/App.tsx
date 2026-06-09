@@ -240,6 +240,7 @@ import {
 import { ControlQueueDrawer } from "./components/ControlQueueDrawer";
 import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
 import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
+import { AutonomyRunContainer } from "./components/AutonomyRunContainer";
 import { OperatorCockpit } from "./components/operator-cockpit/OperatorCockpit";
 import { AgentsSidebar } from "./components/AgentsSidebar";
 import { BackupRailMenu } from "./components/BackupRailMenu";
@@ -4196,6 +4197,8 @@ export function App() {
               snapshot={backupSnapshot}
             />
           ) : null}
+
+          {activeNavItem === "autonomy" ? <AutonomyRunContainer /> : null}
 
           <section className="mini-panel legacy-runtime-panel">
             <header>
