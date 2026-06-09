@@ -24,6 +24,7 @@ function render(props: Partial<Parameters<typeof AutonomyRunPanel>[0]> = {}) {
       personaOptions={props.personaOptions}
       steps={props.steps}
       history={props.history}
+      roster={props.roster}
       notice={props.notice}
       onFieldChange={noop}
       onRun={noop}
@@ -87,6 +88,22 @@ describe("AutonomyRunPanel", () => {
   it("shows the load-from-packet button only when the handler is provided", () => {
     expect(render({ onLoadFromPacket: () => {} })).toContain("패킷 불러오기");
     expect(render()).not.toContain("패킷 불러오기");
+  });
+
+  it("renders the pane roster when present", () => {
+    const html = render({
+      roster: {
+        rows: [
+          { paneId: "%1", role: "code", busy: true, agentId: "makise" },
+          { paneId: "%2", role: "qa", busy: false },
+        ],
+        busyCount: 1,
+        freeCount: 1,
+      },
+    });
+    expect(html).toContain("pane 로스터");
+    expect(html).toContain("makise 점유");
+    expect(html).toContain("비어 있음");
   });
 
   it("renders the run history when present", () => {

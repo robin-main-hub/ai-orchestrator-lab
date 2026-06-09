@@ -4,6 +4,7 @@ import type { CodingPacket, EventEnvelope, TerminalHostKind } from "@ai-orchestr
 import { runAutonomousPersonaTask } from "../lib/autonomousRun";
 import { createAutonomyRunEvents, type AutonomyRunEventContext } from "../lib/autonomyRunEvents";
 import { projectAutonomyRunHistory } from "../lib/autonomyRunHistory";
+import { rosterFromRegistry } from "../lib/autonomyRoster";
 import { createAutonomyRunMemoryCandidate } from "../lib/autonomyRunMemory";
 import type { DebateDecisionReadinessState } from "../lib/debateDecisionReadiness";
 import { evaluateExecutionHandoffGate } from "../lib/executionHandoffGate";
@@ -162,6 +163,7 @@ export function AutonomyRunContainer({
       onRun={onRun}
       history={historyEvents ? projectAutonomyRunHistory(historyEvents) : undefined}
       notice={notice}
+      roster={registry ? rosterFromRegistry(registry) : undefined}
       onLoadFromPacket={seedPacket ? () => setForm(codingPacketToAutonomyForm(seedPacket)) : undefined}
       outcome={outcome}
       personaOptions={bundledPersonaNames}
