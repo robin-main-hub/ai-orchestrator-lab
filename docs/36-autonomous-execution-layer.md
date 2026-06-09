@@ -105,9 +105,26 @@ running server.
   redaction path as a human dispatch.
 - Ambiguity is resolved toward a human (escalate), not toward action.
 
+## Desktop surface
+
+The left-nav **자율실행** tab (`AutonomyRunPanel` / `AutonomyRunContainer`)
+drives the whole layer:
+
+- Pick a persona (autocomplete from the bundled `agents/<name>` set), role
+  pane, goal, verification steps, and approval mode; **패킷 불러오기** prefills
+  from the current CodingPacket (`codingPacketToAutonomyForm`).
+- Real persona identity is loaded from markdown bundled at build time
+  (`personaBundleSource` via Vite `import.meta.glob`), not header-only.
+- The handoff is gated on debate decision readiness (`executionHandoffGate`):
+  a blocked debate can't run; a needs-review debate is forced to human mode.
+- A live **iteration timeline** shows each step's outcome/decision; finished
+  runs are recorded as `autonomy.run.*` events (`autonomyRunEvents`) and shown
+  in a **실행 기록** history (`autonomyRunHistory`).
+
 ## Not yet built
 
-- UI surface to start a run and render each iteration's timeline.
 - Dynamic pane roles beyond the fixed 10-role `tmuxPaneRole` enum.
-- Real persona-file loading wiring in the desktop renderer (bundle vs node
-  source) and provider routing for the model the worker uses.
+- Recording run summaries into long-term memory.
+- DGX-02 deploy automation for the real `send-keys` path.
+- Provider routing for the worker's model is handled by the existing provider
+  layer (per-agent assignment + MIMO defaults + fallback), not here.
