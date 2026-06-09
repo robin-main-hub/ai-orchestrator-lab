@@ -21,6 +21,8 @@ function render(props: Partial<Parameters<typeof AutonomyRunPanel>[0]> = {}) {
       running={props.running ?? false}
       outcome={props.outcome ?? null}
       error={props.error ?? null}
+      personaOptions={props.personaOptions}
+      steps={props.steps}
       onFieldChange={noop}
       onRun={noop}
     />,
@@ -77,5 +79,18 @@ describe("AutonomyRunPanel", () => {
     const html = render({ error: "DGX-02 tmux endpoint unavailable" });
     expect(html).toContain("오류");
     expect(html).toContain("DGX-02 tmux endpoint unavailable");
+  });
+
+  it("renders the iteration timeline when steps are present", () => {
+    const html = render({
+      steps: [
+        { step: 1, outcome: "completed", action: "dispatch_next", reason: "step completed" },
+        { step: 2, outcome: "blocked", action: "escalate_approval", reason: "worker is blocked" },
+      ],
+    });
+    expect(html).toContain("다음 단계 전송");
+    expect(html).toContain("사람에게 에스컬레이트");
+    expect(html).toContain("worker is blocked");
+    expect(html).toContain("#2");
   });
 });

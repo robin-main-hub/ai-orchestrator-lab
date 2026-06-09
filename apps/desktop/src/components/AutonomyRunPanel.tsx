@@ -10,6 +10,12 @@ import {
   type AutonomyRunForm,
   type RunnableVerdict,
 } from "../lib/autonomyRunForm";
+import {
+  actionBadgeVariant,
+  actionLabel,
+  outcomeLabel,
+  type AutonomyStepRow,
+} from "../lib/autonomyTimeline";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
 
 const MODES: AutonomyMode[] = ["human", "auto_safe"];
@@ -26,6 +32,7 @@ export function AutonomyRunPanel({
   outcome,
   error,
   personaOptions,
+  steps,
   onFieldChange,
   onRun,
 }: {
@@ -35,6 +42,7 @@ export function AutonomyRunPanel({
   outcome?: PersonaTaskOutcome | null;
   error?: string | null;
   personaOptions?: ReadonlyArray<string>;
+  steps?: ReadonlyArray<AutonomyStepRow>;
   onFieldChange: (patch: Partial<AutonomyRunForm>) => void;
   onRun: () => void;
 }) {
@@ -139,6 +147,22 @@ export function AutonomyRunPanel({
       ) : null}
 
       {outcome ? <AutonomyRunOutcome outcome={outcome} /> : null}
+
+      {steps && steps.length > 0 ? (
+        <ol className="autonomy-run-timeline">
+          {steps.map((row, index) => (
+            <li key={`${row.step}-${index}`}>
+              <StatusBadge size="sm" variant={actionBadgeVariant(row.action)}>
+                {actionLabel(row.action)}
+              </StatusBadge>
+              <span className="autonomy-step-outcome">
+                #{row.step} · {outcomeLabel(row.outcome)}
+              </span>
+              <span className="autonomy-step-reason">{row.reason}</span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
     </section>
   );
 }
