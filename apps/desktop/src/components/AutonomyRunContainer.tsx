@@ -1,14 +1,26 @@
 import { useState } from "react";
+import { loadPersona, type LoadedPersona } from "@ai-orchestrator/agents";
 import type { TerminalHostKind } from "@ai-orchestrator/protocol";
 import { runAutonomousPersonaTask } from "../lib/autonomousRun";
 import {
   buildAutonomyRunInput,
   DEFAULT_AUTONOMY_FORM,
+  headerOnlyPersona,
   isRunnable,
   type AutonomyRunForm,
 } from "../lib/autonomyRunForm";
+import { bundledPersonaNames, personaFileSource } from "../lib/personaBundleSource";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
 import { AutonomyRunPanel } from "./AutonomyRunPanel";
+
+async function loadPersonaOrHeader(personaName: string): Promise<LoadedPersona> {
+  try {
+    return await loadPersona(personaName, "soul_plus_agents", personaFileSource);
+  } catch {
+    // Persona has no bundled SOUL.md/AGENTS.md — fall back to a header-only identity.
+    return headerOnlyPersona(personaName);
+  }
+}
 
 /**
  * Stateful container that owns the Autonomy Run form and the run lifecycle, and
@@ -42,11 +54,13 @@ export function AutonomyRunContainer({
     setOutcome(null);
     try {
       const stamp = Date.now();
+      const persona = await loadPersonaOrHeader(form.personaName.trim());
       const input = buildAutonomyRunInput(form, {
         sessionId,
+        persona,
         ctx: {
           now: new Date().toISOString(),
-          makeSessionId: (persona, paneId) => `as_${persona}_${paneId}_${stamp}`,
+          makeSessionId: (personaName, paneId) => `as_${personaName}_${paneId}_${stamp}`,
         },
         server: { serverBaseUrl, host, tmuxSessionName },
         runId: `desktop_${stamp}`,
@@ -66,6 +80,7 @@ export function AutonomyRunContainer({
       onFieldChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
       onRun={onRun}
       outcome={outcome}
+      personaOptions={bundledPersonaNames}
       runnable={runnable}
       running={running}
     />

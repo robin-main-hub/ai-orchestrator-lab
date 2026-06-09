@@ -25,6 +25,7 @@ export function AutonomyRunPanel({
   running,
   outcome,
   error,
+  personaOptions,
   onFieldChange,
   onRun,
 }: {
@@ -33,6 +34,7 @@ export function AutonomyRunPanel({
   running: boolean;
   outcome?: PersonaTaskOutcome | null;
   error?: string | null;
+  personaOptions?: ReadonlyArray<string>;
   onFieldChange: (patch: Partial<AutonomyRunForm>) => void;
   onRun: () => void;
 }) {
@@ -53,11 +55,19 @@ export function AutonomyRunPanel({
           <span>페르소나</span>
           <input
             disabled={running}
+            list={personaOptions && personaOptions.length > 0 ? "autonomy-persona-options" : undefined}
             onChange={(event) => onFieldChange({ personaName: event.target.value })}
-            placeholder="예: makise"
+            placeholder="예: architect"
             type="text"
             value={form.personaName}
           />
+          {personaOptions && personaOptions.length > 0 ? (
+            <datalist id="autonomy-persona-options">
+              {personaOptions.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+          ) : null}
         </label>
 
         <label>
