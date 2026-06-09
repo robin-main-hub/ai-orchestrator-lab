@@ -335,9 +335,10 @@ describe("OperatorCockpit", () => {
     expect(html).not.toContain("provider 대기");
   });
 
-  it("서버 스냅샷이 붙지 않았을 때도 첫 화면에서 로컬 투영 상태를 명확히 보여준다", () => {
+  it("서버 스냅샷이 붙지 않았을 때도 세부 정보에서 로컬 투영 상태를 확인할 수 있다", () => {
     const html = renderToStaticMarkup(
       <OperatorCockpit
+        defaultDetailsOpen
         snapshot={{
           ...snapshot,
           recovery: {
@@ -348,7 +349,6 @@ describe("OperatorCockpit", () => {
       />,
     );
 
-    expect(html).toContain("서버 투영");
     expect(html).toContain("로컬 투영");
     expect(html).toContain("서버 스냅샷 미연결");
   });

@@ -344,21 +344,22 @@ export function TmuxSwarmBoard({
         </div>
       </header>
 
-      <div className="flex flex-col gap-2 border-b border-zinc-800/60 bg-zinc-900/30 px-4 py-2 sm:flex-row sm:items-center md:px-5">
-        <div className="min-w-0 flex-1">
-          <div className="text-[10px] uppercase tracking-wider text-zinc-600">
-            {tmuxWorkbenchCopy.recommendationLabel}
+      <details className="group border-b border-zinc-800/60 bg-zinc-900/30 px-4 py-2 md:px-5">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs text-zinc-400 transition-colors hover:text-zinc-100">
+          <span className="font-semibold">{tmuxWorkbenchCopy.recommendationLabel}</span>
+          <span className="text-[11px] text-zinc-600 group-open:hidden">작업 구성 보기</span>
+        </summary>
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <p className="min-w-0 flex-1 text-xs leading-relaxed text-zinc-300">{recommendation.summary}</p>
+          <div className="flex flex-wrap gap-1 sm:ml-auto">
+            {recommendation.recommendedRoles.map((role) => (
+              <StatusBadge variant="muted" size="sm" key={role}>
+                {tmuxPaneRoleLabel(role)}
+              </StatusBadge>
+            ))}
           </div>
-          <p className="truncate text-xs text-zinc-200">{recommendation.summary}</p>
         </div>
-        <div className="flex flex-wrap gap-1 sm:ml-auto">
-          {recommendation.recommendedRoles.map((role) => (
-            <StatusBadge variant="muted" size="sm" key={role}>
-              {tmuxPaneRoleLabel(role)}
-            </StatusBadge>
-          ))}
-        </div>
-      </div>
+      </details>
 
       {commandCenter ? <TmuxCommandCenter summary={commandCenter} /> : null}
 
