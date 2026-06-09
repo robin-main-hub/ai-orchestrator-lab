@@ -103,9 +103,11 @@ export function Stage3DebateTable({
                 <h1 className="mt-1 text-balance text-lg font-semibold text-zinc-100">
                   {session.problem}
                 </h1>
-                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-zinc-500">
-                  {session.summary}
-                </p>
+                {session.summary ? (
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                    {onOpenAnnex ? "긴 원문과 실행 맥락은 보조자료에서 확인합니다." : session.summary}
+                  </p>
+                ) : null}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2 sm:ml-auto">

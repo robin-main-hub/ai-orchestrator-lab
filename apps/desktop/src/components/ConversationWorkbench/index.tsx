@@ -392,13 +392,34 @@ export function ConversationWorkbench({
           </PopoverContent>
         </Popover>
 
-        <div className="hidden items-center gap-2 text-[11px] text-zinc-500 sm:flex">
-          <Database className="h-3.5 w-3.5 text-emerald-500" />
-          <span>이전 대화 이어받음</span>
-          {controlQueueContinuity?.hasItems ? <span>· {controlQueueContinuity.label}</span> : null}
-          {agentToolRuntimeLabel ? <span>· {agentToolRuntimeLabel}</span> : null}
-          {headerMemoryLabel ? <span>· {headerMemoryLabel}</span> : null}
-        </div>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              aria-label="대화 상태 요약 보기"
+              className="hidden h-8 gap-1.5 rounded-full border border-zinc-800/80 bg-zinc-900/70 px-2 text-[11px] text-zinc-400 hover:border-cyan-500/30 hover:text-cyan-100 sm:inline-flex"
+              size="sm"
+              variant="ghost"
+            >
+              <Database className="h-3.5 w-3.5 text-cyan-400" />
+              상태 요약
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-72 border-zinc-800 bg-zinc-900/95 p-3 text-zinc-100 backdrop-blur-xl">
+            <div className="space-y-2 text-xs">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">대화 연속성</p>
+              <ConversationMetaRow icon={Database} label="이전 대화" value="이어받음" />
+              {controlQueueContinuity?.hasItems ? (
+                <ConversationMetaRow icon={Archive} label="큐 연속성" value={controlQueueContinuity.label} />
+              ) : null}
+              {agentToolRuntimeLabel ? (
+                <ConversationMetaRow icon={Wrench} label="도구 상태" value={agentToolRuntimeLabel} />
+              ) : null}
+              {headerMemoryLabel ? (
+                <ConversationMetaRow icon={Sparkles} label="기억 상태" value={headerMemoryLabel} />
+              ) : null}
+            </div>
+          </PopoverContent>
+        </Popover>
 
         <div className="flex shrink-0 items-center gap-1">
           <Button
@@ -549,7 +570,7 @@ export function ConversationWorkbench({
         </>
       ) : null}
 
-      {selectedAgent?.role === "orchestrator" && onCreateDelegationAssignment ? (
+      {viewMode === "agents" && selectedAgent?.role === "orchestrator" && onCreateDelegationAssignment ? (
         <MakimaDelegationConsole
           assignmentsByAgentId={delegationAssignmentsByAgentId}
           cards={makimaDelegationCards}
