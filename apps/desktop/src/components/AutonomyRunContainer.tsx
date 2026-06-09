@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { loadPersona, type LoadedPersona } from "@ai-orchestrator/agents";
-import type { TerminalHostKind } from "@ai-orchestrator/protocol";
+import type { CodingPacket, TerminalHostKind } from "@ai-orchestrator/protocol";
 import { runAutonomousPersonaTask } from "../lib/autonomousRun";
 import {
   buildAutonomyRunInput,
@@ -9,6 +9,7 @@ import {
   isRunnable,
   type AutonomyRunForm,
 } from "../lib/autonomyRunForm";
+import { codingPacketToAutonomyForm } from "../lib/codingPacketToAutonomyForm";
 import { stepRowFromReduce, type AutonomyStepRow } from "../lib/autonomyTimeline";
 import { bundledPersonaNames, personaFileSource } from "../lib/personaBundleSource";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
@@ -33,13 +34,18 @@ export function AutonomyRunContainer({
   serverBaseUrl,
   host = "dgx_02",
   tmuxSessionName = "ai-swarm",
+  seedPacket,
 }: {
   sessionId?: string;
   serverBaseUrl?: string | string[];
   host?: TerminalHostKind;
   tmuxSessionName?: string;
+  /** prefill the form from a CodingPacket (e.g. the current debate/conversation packet) */
+  seedPacket?: CodingPacket;
 }) {
-  const [form, setForm] = useState<AutonomyRunForm>(DEFAULT_AUTONOMY_FORM);
+  const [form, setForm] = useState<AutonomyRunForm>(() =>
+    seedPacket ? codingPacketToAutonomyForm(seedPacket) : DEFAULT_AUTONOMY_FORM,
+  );
   const [running, setRunning] = useState(false);
   const [outcome, setOutcome] = useState<PersonaTaskOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +89,7 @@ export function AutonomyRunContainer({
       form={form}
       onFieldChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
       onRun={onRun}
+      onLoadFromPacket={seedPacket ? () => setForm(codingPacketToAutonomyForm(seedPacket)) : undefined}
       outcome={outcome}
       personaOptions={bundledPersonaNames}
       runnable={runnable}
