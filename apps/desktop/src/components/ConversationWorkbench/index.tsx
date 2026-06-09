@@ -49,8 +49,8 @@ import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { AgentPortrait, type AgentState } from "../shared/AgentActivity";
 import { AgentConfigDrawer } from "../AgentConfigDrawer";
-import { AgentConversationMissionBrief } from "./AgentConversationMissionBrief";
 import { AgentConversationFlowPanel } from "./AgentConversationFlowPanel";
+import { AgentHermesControlCard } from "./AgentHermesControlCard";
 import { AgentLiveWorkStatus } from "./AgentLiveWorkStatus";
 import { AgentMemoryContinuityPanel } from "./AgentMemoryContinuityPanel";
 import { AgentQuickSwitchPanel } from "./AgentQuickSwitchPanel";
@@ -308,6 +308,11 @@ export function ConversationWorkbench({
       document.querySelector<HTMLElement>("[data-focus-id='composer-textarea']")?.focus({ preventScroll: false });
     });
   };
+  const focusComposer = () => {
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>("[data-focus-id='composer-textarea']")?.focus({ preventScroll: false });
+    });
+  };
 
   return (
     <section className="conversation-workbench flex h-full flex-col bg-zinc-950">
@@ -477,25 +482,19 @@ export function ConversationWorkbench({
 
       {viewMode === "agents" && selectedAgent && toolProfileSummary ? (
         <>
-          <AgentConversationMissionBrief
-            continuityDetail={agentChatContinuity.detail}
-            memoryQualityLabel={agentChatContinuity.memoryQualityLabel}
-            modelLabel={`대화 모델 · ${selectedAgentModelRouteLabel}`}
-            nextPrompt={promptSuggestions[0]}
-            onApplyNextPrompt={applyPromptSuggestion}
-            onEditMemory={focusMemoryPanel}
-            onEditModel={focusQuickSwitchPanel}
-            onEditPersona={() => onOpenAgentConfig("soul")}
-            personaAppliedLabel={personaSoulApplied && personaAgentsMdApplied ? "SOUL/AGENTS 적용" : "인격 설정 확인"}
-            selectedAgentName={selectedAgentDisplayName}
-            toolLabels={toolLabels}
-            workStatusLabel={selectedAgentWorkStatusLabel}
-          />
-          <AgentCapabilityStrip
+          <AgentHermesControlCard
             continuityDetail={agentChatContinuity.detail}
             displayName={selectedAgentDisplayName}
             memoryQualityLabel={agentChatContinuity.memoryQualityLabel}
             modelLabel={`대화 모델 · ${selectedAgentModelRouteLabel}`}
+            nextPrompt={promptSuggestions[0]}
+            onApplyNextPrompt={applyPromptSuggestion}
+            onEditAgents={() => onOpenAgentConfig("agents_md")}
+            onEditMemory={focusMemoryPanel}
+            onEditModel={focusQuickSwitchPanel}
+            onEditSoul={() => onOpenAgentConfig("soul")}
+            onFocusChat={focusComposer}
+            onViewSkills={focusSkillPanel}
             toolBoundaryLabel={toolProfileSummary.runtime.boundaryLabel}
             toolGroupLabel={toolProfileSummary.label}
             toolLabels={toolLabels}
@@ -614,67 +613,6 @@ export function ConversationWorkbench({
         showDelegationChips={workbenchVisibility.showComposerDelegationChips}
       />
     </section>
-  );
-}
-
-function AgentCapabilityStrip({
-  continuityDetail,
-  displayName,
-  memoryQualityLabel,
-  modelLabel,
-  toolBoundaryLabel,
-  toolGroupLabel,
-  toolLabels,
-  personaAgentsMdApplied,
-  personaSoulApplied,
-  workStatusLabel,
-}: {
-  continuityDetail: string;
-  displayName: string;
-  memoryQualityLabel: string;
-  modelLabel: string;
-  toolBoundaryLabel: string;
-  toolGroupLabel: string;
-  toolLabels: string[];
-  personaAgentsMdApplied: boolean;
-  personaSoulApplied: boolean;
-  workStatusLabel: string;
-}) {
-  return (
-    <div className="shrink-0 border-b border-zinc-900/80 bg-zinc-950/95 px-4 py-2">
-      <div className="mx-auto flex max-w-5xl items-center gap-2 overflow-x-auto">
-        <span className="shrink-0 rounded-full border border-violet-300/20 bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-100">
-          {displayName} 전용 방
-        </span>
-        <span className="shrink-0 rounded-full border border-amber-300/20 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-100">
-          지금 · {workStatusLabel}
-        </span>
-        <span
-          className="shrink-0 rounded-full border border-fuchsia-300/20 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] text-fuchsia-100"
-          title={`${personaSoulApplied ? "SOUL.md 적용됨" : "SOUL.md 대기"} · ${personaAgentsMdApplied ? "AGENTS.md 적용됨" : "AGENTS.md 대기"}`}
-        >
-          {personaSoulApplied && personaAgentsMdApplied ? "SOUL/AGENTS 적용" : "인격 설정 확인"}
-        </span>
-        <span className="shrink-0 rounded-full border border-cyan-300/20 bg-cyan-500/10 px-2.5 py-1 text-[11px] text-cyan-100">
-          {toolGroupLabel} · {toolBoundaryLabel}
-        </span>
-        {toolLabels.map((label, index) => (
-          <span
-            className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-zinc-300"
-            key={`${label}:${index}`}
-          >
-            {label}
-          </span>
-        ))}
-        <span className="shrink-0 rounded-full border border-emerald-300/15 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-100">
-          {memoryQualityLabel}
-        </span>
-        <span className="min-w-40 shrink-0 truncate rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-zinc-400">
-          {modelLabel}
-        </span>
-        <span className="min-w-60 truncate text-[11px] text-zinc-600">{continuityDetail}</span>
-      </div>
-    </div>
   );
 }
 
