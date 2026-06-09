@@ -19,8 +19,8 @@ Desktop Tmux Workbench
 -> Ops approval queue refresh
 -> operator approve
 -> /approvals/grant
--> desktop redispatch
--> /tmux/dispatch with approvalState=approved
+-> desktop replay
+-> /approvals/replay (server re-runs the stored dispatch payload)
 -> dry-run accepted
 -> Ops redispatch outcome
 ```
@@ -96,5 +96,10 @@ The script verifies:
 - `/tmux/preflight` returns permission, audit checks, and timeline blocks;
 - `/tmux/dispatch` with `approvalState=required` queues an approval;
 - `/approvals/grant` approves that dispatch;
-- `/tmux/dispatch` with `approvalState=approved` returns `dry_run`;
+- `/approvals/replay` re-runs the stored dispatch payload and returns `dry_run`;
 - `dispatch.attempted=false`, proving no real `tmux send-keys` ran.
+
+> Note: re-POSTing `/tmux/dispatch` with a fabricated `approvalState=approved`
+> request is intentionally rejected by the approval-bypass gate. Approved
+> dispatches must go through `/approvals/replay`, which is also what the
+> desktop client does.
