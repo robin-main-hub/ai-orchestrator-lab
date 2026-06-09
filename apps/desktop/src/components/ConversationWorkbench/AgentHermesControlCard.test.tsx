@@ -11,6 +11,7 @@ describe("AgentHermesControlCard", () => {
       <AgentHermesControlCard
         continuityDetail="마키마 전용 방에서 이전 대화와 기억을 이어받습니다."
         displayName="마키마"
+        learnedSkillLabels={["EvolveMemento 연속 기억 스킬", "역할별 도구 호출 프로필"]}
         memoryQualityLabel="장기 기억 품질 양호"
         modelLabel="대화 모델 · MiMo V2.5 Pro"
         nextPrompt="지금 승인해야 할 일을 정리해줘"
@@ -29,6 +30,8 @@ describe("AgentHermesControlCard", () => {
     expect(html).toContain("모델");
     expect(html).toContain("기억");
     expect(html).toContain("스킬");
+    expect(html).toContain("학습 스킬 2개");
+    expect(html).toContain("EvolveMemento 연속 기억 스킬 외 1개");
     expect(html).toContain("SOUL");
     expect(html).toContain("AGENTS");
     expect(html).toContain("초안 적용");
@@ -46,6 +49,7 @@ describe("AgentHermesControlCard", () => {
         <AgentHermesControlCard
           continuityDetail={`${displayName} 전용 채널과 기억을 사용합니다.`}
           displayName={displayName}
+          learnedSkillLabels={["EvolveMemento 연속 기억 스킬", "역할별 도구 호출 프로필"]}
           memoryQualityLabel="장기 기억 품질 양호"
           modelLabel={`대화 모델 · ${agent.modelId ?? "기본 모델"}`}
           personaAgentsMdApplied
@@ -61,8 +65,30 @@ describe("AgentHermesControlCard", () => {
       expect(html, agent.id).toContain(summary.label);
       expect(html, agent.id).toContain("장기 기억 품질 양호");
       expect(html, agent.id).toContain("대화방");
+      expect(html, agent.id).toContain("학습 스킬 2개");
       expect(html, agent.id).toContain("SOUL 적용");
       expect(html, agent.id).toContain("AGENTS 적용");
     }
+  });
+
+  it("새로 습득한 스킬이 없으면 대기 상태를 명확히 표시한다", () => {
+    const html = renderToStaticMarkup(
+      <AgentHermesControlCard
+        continuityDetail="전용 채널 준비 중"
+        displayName="신규 에이전트"
+        memoryQualityLabel="장기 기억 대기"
+        modelLabel="대화 모델 · 기본"
+        personaAgentsMdApplied={false}
+        personaSoulApplied={false}
+        toolBoundaryLabel="읽기 전용"
+        toolGroupLabel="보조 도구"
+        toolLabels={[]}
+        workStatusLabel="대기"
+      />,
+    );
+
+    expect(html).toContain("학습 스킬 대기");
+    expect(html).toContain("스킬 습득 대기");
+    expect(html).toContain("습득 0개");
   });
 });

@@ -6,6 +6,7 @@ export function AgentHermesControlCard({
   displayName,
   memoryQualityLabel,
   modelLabel,
+  learnedSkillLabels = [],
   nextPrompt,
   onApplyNextPrompt,
   onEditAgents,
@@ -23,6 +24,7 @@ export function AgentHermesControlCard({
 }: {
   continuityDetail: string;
   displayName: string;
+  learnedSkillLabels?: string[];
   memoryQualityLabel: string;
   modelLabel: string;
   nextPrompt?: string;
@@ -42,6 +44,12 @@ export function AgentHermesControlCard({
 }) {
   const hasPrompt = Boolean(nextPrompt?.trim());
   const visibleTools = toolLabels.length > 0 ? toolLabels : ["대화", "기억", "인계"];
+  const visibleLearnedSkills = learnedSkillLabels.map((label) => label.trim()).filter(Boolean).slice(0, 3);
+  const learnedSkillCount = learnedSkillLabels.filter((label) => label.trim()).length;
+  const learnedSkillSummary =
+    learnedSkillCount > 0
+      ? `${visibleLearnedSkills[0]}${learnedSkillCount > 1 ? ` 외 ${learnedSkillCount - 1}개` : ""}`
+      : "스킬 습득 대기";
   const soulLabel = personaSoulApplied ? "SOUL 적용" : "SOUL 설정 필요";
   const agentsLabel = personaAgentsMdApplied ? "AGENTS 적용" : "AGENTS 설정 필요";
 
@@ -68,9 +76,19 @@ export function AgentHermesControlCard({
             <HermesPill label={toolGroupLabel} tone="cyan" />
             <HermesPill label={toolBoundaryLabel} tone="amber" />
             <HermesPill label={memoryQualityLabel} tone="violet" />
+            <HermesPill
+              label={learnedSkillCount > 0 ? `학습 스킬 ${learnedSkillCount}개` : "학습 스킬 대기"}
+              tone={learnedSkillCount > 0 ? "emerald" : "zinc"}
+            />
             {visibleTools.map((label) => (
               <HermesPill key={label} label={label} tone="zinc" />
             ))}
+          </div>
+          <div className="mt-3 rounded-lg border border-emerald-300/15 bg-emerald-400/[0.045] px-2.5 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-100/80">습득한 스킬</p>
+            <p className="mt-1 truncate text-xs font-medium text-zinc-100" title={learnedSkillSummary}>
+              {learnedSkillSummary}
+            </p>
           </div>
         </div>
 
@@ -78,7 +96,7 @@ export function AgentHermesControlCard({
           <HermesAction icon={MessageCircle} label="대화방" onClick={onFocusChat} value={`${displayName}와 이어서 대화`} />
           <HermesAction icon={Route} label="모델" onClick={onEditModel} value={modelLabel} />
           <HermesAction icon={BrainCircuit} label="기억" onClick={onEditMemory} value={memoryQualityLabel} />
-          <HermesAction icon={Wrench} label="스킬" onClick={onViewSkills} value={`${toolGroupLabel} · ${visibleTools.length}개`} />
+          <HermesAction icon={Wrench} label="스킬" onClick={onViewSkills} value={`${toolGroupLabel} · 습득 ${learnedSkillCount}개`} />
           <HermesAction icon={Sparkles} label="SOUL" onClick={onEditSoul} value={soulLabel} />
           <HermesAction icon={Sparkles} label="AGENTS" onClick={onEditAgents} value={agentsLabel} />
         </div>
@@ -146,10 +164,11 @@ function HermesAction({
   );
 }
 
-function HermesPill({ label, tone }: { label: string; tone: "amber" | "cyan" | "violet" | "zinc" }) {
+function HermesPill({ label, tone }: { label: string; tone: "amber" | "cyan" | "emerald" | "violet" | "zinc" }) {
   const className = {
     amber: "border-amber-300/20 bg-amber-400/10 text-amber-100",
     cyan: "border-cyan-300/20 bg-cyan-400/10 text-cyan-100",
+    emerald: "border-emerald-300/20 bg-emerald-400/10 text-emerald-100",
     violet: "border-violet-300/20 bg-violet-400/10 text-violet-100",
     zinc: "border-white/10 bg-white/[0.04] text-zinc-300",
   }[tone];
