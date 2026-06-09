@@ -8,6 +8,7 @@ import { createAutonomyRunMemoryCandidate } from "../lib/autonomyRunMemory";
 import type { DebateDecisionReadinessState } from "../lib/debateDecisionReadiness";
 import { evaluateExecutionHandoffGate } from "../lib/executionHandoffGate";
 import type { MemoryCuratorCandidate } from "../lib/memoryCuratorApproval";
+import type { SummonRegistry } from "../lib/personaSummon";
 import {
   buildAutonomyRunInput,
   DEFAULT_AUTONOMY_FORM,
@@ -45,6 +46,8 @@ export function AutonomyRunContainer({
   historyEvents,
   decisionReadiness,
   onRunMemory,
+  registry,
+  onRegistryChange,
 }: {
   sessionId?: string;
   serverBaseUrl?: string | string[];
@@ -60,6 +63,9 @@ export function AutonomyRunContainer({
   decisionReadiness?: DebateDecisionReadinessState;
   /** receives a long-term memory candidate summarizing a finished run */
   onRunMemory?: (candidate: MemoryCuratorCandidate) => void;
+  /** persistent shared pane pool; when provided, runs allocate from and update it */
+  registry?: SummonRegistry;
+  onRegistryChange?: (registry: SummonRegistry) => void;
 }) {
   const [form, setForm] = useState<AutonomyRunForm>(() =>
     seedPacket ? codingPacketToAutonomyForm(seedPacket) : DEFAULT_AUTONOMY_FORM,
@@ -103,6 +109,7 @@ export function AutonomyRunContainer({
         },
         server: { serverBaseUrl, host, tmuxSessionName },
         runId,
+        registry,
         onStep: (result) => {
           const row = stepRowFromReduce(result, collected.length + 1);
           collected.push(row);
@@ -111,6 +118,9 @@ export function AutonomyRunContainer({
       });
       const result = await runAutonomousPersonaTask(input);
       setOutcome(result);
+      if (onRegistryChange && result.ok) {
+        onRegistryChange(result.registry);
+      }
       if (onRunEvents) {
         const ctx: AutonomyRunEventContext = {
           sessionId,

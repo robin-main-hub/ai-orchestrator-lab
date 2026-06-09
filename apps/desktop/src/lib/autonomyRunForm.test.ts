@@ -51,6 +51,12 @@ describe("buildAutonomyRunInput", () => {
     expect(input.persona.personaName).toBe("makise");
   });
 
+  it("reuses a provided registry instead of building a fresh one", () => {
+    const registry = { panes: [{ paneId: "%9", role: "code" as const, status: "free" as const }], sessions: [] };
+    const input = buildAutonomyRunInput(form(), { sessionId: "s1", ctx, registry });
+    expect(input.registry).toBe(registry);
+  });
+
   it("uses a header-only persona by default and trims the name", () => {
     const persona = headerOnlyPersona("  makise  ".trim());
     expect(persona.fragments).toEqual([]);
