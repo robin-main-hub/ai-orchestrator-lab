@@ -249,6 +249,7 @@ import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
 import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
 import { AutonomyRunContainer } from "./components/AutonomyRunContainer";
 import { ParallelMissionContainer } from "./components/ParallelMissionContainer";
+import { CodingWorkbench } from "./components/coding/CodingWorkbench";
 import { OperatorCockpit } from "./components/operator-cockpit/OperatorCockpit";
 import { AgentsSidebar } from "./components/AgentsSidebar";
 import { BackupRailMenu } from "./components/BackupRailMenu";
@@ -4036,6 +4037,7 @@ export function App() {
     activeNavItem === "dashboard" ||
     activeNavItem === "autonomy" ||
     activeNavItem === "parallel" ||
+    activeNavItem === "coding" ||
     activeNavItem === "runtime";
   const shellVisibility = getConversationShellVisibility({
     configLibraryActive,
@@ -4388,6 +4390,8 @@ export function App() {
             />
           ) : activeNavItem === "parallel" ? (
             <ParallelMissionContainer />
+          ) : activeNavItem === "coding" ? (
+            <CodingWorkbench providerProfiles={providerProfiles} />
           ) : configLibraryActive ? (
             <ConfigLibraryPanel
               configFiles={agentConfigFiles}
