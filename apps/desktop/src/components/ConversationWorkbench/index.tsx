@@ -51,6 +51,7 @@ import { AgentPortrait, type AgentState } from "../shared/AgentActivity";
 import { AgentConfigDrawer } from "../AgentConfigDrawer";
 import { AgentConversationFlowPanel } from "./AgentConversationFlowPanel";
 import { AgentHermesControlCard } from "./AgentHermesControlCard";
+import { LiveTerminalPanel } from "./LiveTerminalPanel";
 import {
   ChatSidePanel,
   ChatSidePanelMenu,
@@ -676,19 +677,7 @@ export function ConversationWorkbench({
             )
           ) : null}
           {sidePanelMode === "terminal" ? (
-            permissionSnapshot.queue.length > 0 ? (
-              <ol className="flex flex-col gap-2 p-3 font-mono">
-                {permissionSnapshot.queue.slice(0, 20).map((item) => (
-                  <li className="rounded-lg border border-white/10 bg-black/40 p-2.5 text-[11px] text-zinc-300" key={item.sourceItemId}>
-                    <span className="text-amber-300">대기</span> {item.summary}
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="p-6 text-center text-[12.5px] text-zinc-500">
-                승인 게이트 큐가 비어 있습니다. 에이전트가 명령을 보내면 여기로 흐릅니다.
-              </p>
-            )
+            <LiveTerminalPanel sessionId={activeSessionId} />
           ) : null}
           {sidePanelMode === "preview" || sidePanelMode === "diff" || sidePanelMode === "files" ? (
             <ChatSidePanelStub mode={sidePanelMode} />
