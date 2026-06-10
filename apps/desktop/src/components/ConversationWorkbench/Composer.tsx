@@ -5,6 +5,7 @@ import {
   X,
   Send,
   Paperclip,
+  Pencil,
 } from "lucide-react";
 import type { ModelDescriptor } from "@ai-orchestrator/protocol";
 import { Button } from "@/ui/button";
@@ -27,6 +28,7 @@ export function Composer({
   onDraftMessageChange,
   onRemoveDraftAttachment,
   onSendMessage,
+  onSendSuggestion,
   promptSuggestions,
   selectedAgent,
   selectedModel,
@@ -43,6 +45,8 @@ export function Composer({
   onDraftMessageChange: (value: string) => void;
   onRemoveDraftAttachment: (attachmentId: string) => void;
   onSendMessage: () => void;
+  /** 추천대화 클릭 시 즉시 전송 */
+  onSendSuggestion?: (text: string) => void;
   promptSuggestions?: string[];
   selectedAgent?: WorkbenchAgent;
   selectedModel?: ModelDescriptor;
@@ -51,6 +55,16 @@ export function Composer({
   const canSend =
     Boolean(selectedAgent) &&
     (draftMessage.trim().length > 0 || draftAttachments.length > 0);
+
+  // 자동 성장: 긴 추천대화/멀티라인 입력이 들어와도 줄이 잘리지 않게
+  // scrollHeight에 맞춰 높이를 키운다 (최대 5줄 가량, 이후 스크롤).
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+  React.useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 168)}px`;
+  }, [draftMessage]);
   const toolLabels = selectedAgent ? getAgentToolBadgeLabels(selectedAgent.role).slice(0, 3) : [];
 
   return (
@@ -71,15 +85,25 @@ export function Composer({
               바로 물어보기
             </span>
             {promptSuggestions.map((suggestion) => (
-              <button
-                className="max-w-full rounded-2xl border border-white/10 bg-white/[0.035] px-3 py-2 text-left text-[12px] leading-snug text-zinc-300 transition hover:border-cyan-300/30 hover:bg-cyan-400/[0.08] hover:text-cyan-100"
-                key={suggestion}
-                onClick={() => onDraftMessageChange(suggestion)}
-                title={suggestion}
-                type="button"
-              >
-                {suggestion}
-              </button>
+              <div className="flex w-full max-w-full items-stretch gap-1" key={suggestion}>
+                <button
+                  className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/[0.035] px-3 py-2 text-left text-[12px] leading-snug text-zinc-300 transition hover:border-cyan-300/30 hover:bg-cyan-400/[0.08] hover:text-cyan-100"
+                  onClick={() => (onSendSuggestion ? onSendSuggestion(suggestion) : onDraftMessageChange(suggestion))}
+                  title="클릭하면 바로 전송"
+                  type="button"
+                >
+                  {suggestion}
+                </button>
+                <button
+                  aria-label="이 추천대화를 수정해서 보내기"
+                  className="shrink-0 self-center rounded-xl border border-white/10 bg-white/[0.03] p-2 text-zinc-500 transition hover:border-violet-300/40 hover:bg-violet-400/[0.1] hover:text-violet-200"
+                  onClick={() => onDraftMessageChange(suggestion)}
+                  title="수정해서 보내기"
+                  type="button"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              </div>
             ))}
           </div>
         </div>
@@ -126,6 +150,7 @@ export function Composer({
         {/* Textarea */}
         <div className="relative flex-1">
           <textarea
+            ref={textareaRef}
             aria-label="메시지 입력"
             className="min-h-[56px] w-full resize-none rounded-2xl border border-white/10 bg-zinc-900/70 px-4 py-3 pr-14 text-sm leading-6 text-zinc-100 shadow-inner shadow-black/20 outline-none placeholder:text-zinc-600 transition-colors focus-visible:border-cyan-400/50 focus-visible:bg-zinc-900"
             data-focus-id="composer-textarea"
