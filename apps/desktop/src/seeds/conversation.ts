@@ -7,6 +7,8 @@ import {
   LayoutGrid,
   MessageSquare,
   RadioTower,
+  Server,
+  Sparkles,
 } from "lucide-react";
 import {
   createCodingPacketDraft,
@@ -24,7 +26,7 @@ import type {
 import { DEFAULT_SESSION_ID, createStage2Event } from "../runtime/stage2Runtime";
 import { createStage4AgentRun } from "../runtime/stage4Runtime";
 import { now } from "../lib/appConstants";
-import type { NavItem } from "../types";
+import type { NavItem, NavSection } from "../types";
 import { seededAgentProfiles } from "./agents";
 
 const debateContext: DebateContext = {
@@ -81,16 +83,38 @@ export const backupProjections: BackupProjection[] = [
   },
 ];
 
-export const navItems: NavItem[] = [
-  { id: "sessions", label: "세션", icon: MessageSquare },
-  { id: "projects", label: "프로젝트", icon: LayoutDashboard },
-  { id: "providers", label: "프로바이더", icon: KeyRound },
-  { id: "config_files", label: "설정파일", icon: FileText },
-  { id: "channels", label: "채널", icon: RadioTower },
-  { id: "backup", label: "백업", icon: Archive },
-  { id: "autonomy", label: "자율실행", icon: Bot },
-  { id: "parallel", label: "병렬실행", icon: LayoutGrid },
+export const navSections: NavSection[] = [
+  {
+    id: "main",
+    label: "메인",
+    items: [
+      { id: "dashboard", label: "대시보드", icon: Sparkles },
+      { id: "sessions", label: "세션", icon: MessageSquare },
+      { id: "projects", label: "프로젝트", icon: LayoutDashboard },
+    ],
+  },
+  {
+    id: "operations",
+    label: "작전",
+    items: [
+      { id: "autonomy", label: "자율실행", icon: Bot },
+      { id: "parallel", label: "병렬실행", icon: LayoutGrid },
+    ],
+  },
+  {
+    id: "system",
+    label: "시스템",
+    items: [
+      { id: "providers", label: "프로바이더", icon: KeyRound },
+      { id: "config_files", label: "설정파일", icon: FileText },
+      { id: "channels", label: "채널", icon: RadioTower },
+      { id: "backup", label: "백업", icon: Archive },
+      { id: "runtime", label: "런타임", icon: Server },
+    ],
+  },
 ];
+
+export const navItems: NavItem[] = navSections.flatMap((section) => section.items);
 
 
 

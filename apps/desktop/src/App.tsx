@@ -236,9 +236,14 @@ import {
   initialAgentRun,
   initialConversationMessages,
   initialEventLog,
-  navItems,
+  navSections,
   terminalSlots,
 } from "./seeds/conversation";
+import { DashboardView } from "./components/DashboardView";
+import { projectAutonomyRunHistory } from "./lib/autonomyRunHistory";
+import { loadHermesPool } from "./lib/hermesPoolStore";
+import { summarizeHermesPool } from "./lib/hermesSlotPool";
+import { personaAvatars as dashboardPersonaAvatars } from "./lib/personaAvatarSource";
 import { ControlQueueDrawer } from "./components/ControlQueueDrawer";
 import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
 import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
@@ -309,7 +314,7 @@ export function App() {
     status: "idle",
   });
   const [adminRailOpen, setAdminRailOpen] = useState(false);
-  const [activeNavItem, setActiveNavItem] = useState<NavItemId>("sessions");
+  const [activeNavItem, setActiveNavItem] = useState<NavItemId>("dashboard");
   const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [cheatSheetOpen, setCheatSheetOpen] = useState(false);
@@ -4027,17 +4032,40 @@ export function App() {
     workItems,
   ]);
 
+  const navCenterActive =
+    activeNavItem === "dashboard" ||
+    activeNavItem === "autonomy" ||
+    activeNavItem === "parallel" ||
+    activeNavItem === "runtime";
   const shellVisibility = getConversationShellVisibility({
     configLibraryActive,
     mode,
+    navCenterActive,
   });
   const railLayout = getConversationRailLayout({
     configLibraryActive,
     mode,
   });
-  const focusedV0Surface = !configLibraryActive && isFocusedV0Surface(mode);
+  const focusedV0Surface = !configLibraryActive && !navCenterActive && isFocusedV0Surface(mode);
   const leftRailVisible = shellVisibility.showLeftRail || providerRegistrationOpen || adminRailOpen;
-  const rightRailVisible = !focusedV0Surface;
+  const rightRailVisible = !focusedV0Surface && !navCenterActive;
+
+  // Switching the top-bar mode (대화/토론/Tmux/콕핏…) hands the center back to
+  // that mode — leave the nav-owned center view so the tabs never look dead.
+  const previousModeRef = useRef(mode);
+  useEffect(() => {
+    if (previousModeRef.current === mode) {
+      return;
+    }
+    previousModeRef.current = mode;
+    if (navCenterActive) {
+      setActiveNavItem("sessions");
+      setProviderRegistrationOpen(false);
+      // the admin rail was opened to navigate here — close it so focused
+      // surfaces (토론/Tmux/콕핏) get their full-bleed stage back
+      setAdminRailOpen(false);
+    }
+  }, [mode, navCenterActive]);
 
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
@@ -4049,14 +4077,18 @@ export function App() {
 
   return (
     <div
-      className={`app-shell ${mode === "tmux" ? "tmux-focus-shell" : ""} ${
-        mode === "cockpit" ? "cockpit-focus-shell" : ""
+      className={`app-shell ${navCenterActive ? "nav-center-shell" : ""} ${
+        !navCenterActive && mode === "tmux" ? "tmux-focus-shell" : ""
       } ${
-        mode === "annex" ? "annex-focus-shell" : ""
+        !navCenterActive && mode === "cockpit" ? "cockpit-focus-shell" : ""
       } ${
-        mode === "debate" ? "debate-focus-shell" : ""
+        !navCenterActive && mode === "annex" ? "annex-focus-shell" : ""
       } ${
-        (mode === "conversation" || mode === "agents") && !configLibraryActive ? "conversation-v0-shell" : ""
+        !navCenterActive && mode === "debate" ? "debate-focus-shell" : ""
+      } ${
+        !navCenterActive && (mode === "conversation" || mode === "agents") && !configLibraryActive
+          ? "conversation-v0-shell"
+          : ""
       }`}
       style={{
         "--conversation-right-rail-max": `${railLayout.rightRailMaxWidthPx}px`,
@@ -4066,9 +4098,20 @@ export function App() {
     >
       <RuntimeStatusBar
         drawerAvailable={leftRailVisible}
+        homeActive={activeNavItem === "dashboard"}
         mode={mode}
-        onChangeMode={setMode}
+        onChangeMode={(nextMode) => {
+          setMode(nextMode);
+          // a top-bar tab always claims the center — leave any nav-owned view,
+          // even when the mode value itself is unchanged
+          if (navCenterActive) {
+            setActiveNavItem("sessions");
+            setProviderRegistrationOpen(false);
+            setAdminRailOpen(false);
+          }
+        }}
         onCommandPalette={() => setCommandPaletteOpen(true)}
+        onHome={() => openManagementRail("dashboard")}
         onOpenOpsDetail={() => setMode("cockpit")}
         onProbeDgx={handleProbeDgx}
         onToggleDrawer={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
@@ -4089,28 +4132,33 @@ export function App() {
           >
 
           <nav className="nav-stack">
-            {navItems.map((item) => {
-              const isActive = activeNavItem === item.id;
-              return (
-                <button
-                  aria-expanded={isActive}
-                  className={`nav-item ${isActive ? "active" : ""}`}
-                  key={item.id}
-                  onClick={() => {
-                    setAdminRailOpen(true);
-                    setActiveNavItem(item.id);
-                    setProviderRegistrationOpen(item.id === "providers");
-                    setIsMobileDrawerOpen(false);
-                  }}
-                  title={`${item.label} 메뉴`}
-                  type="button"
-                >
-                  <item.icon size={18} />
-                  <span>{item.label}</span>
-                  {isActive ? <ChevronRight size={16} /> : null}
-                </button>
-              );
-            })}
+            {navSections.map((section) => (
+              <div className="nav-section" key={section.id}>
+                <p className="nav-section__label">{section.label}</p>
+                {section.items.map((item) => {
+                  const isActive = activeNavItem === item.id;
+                  return (
+                    <button
+                      aria-expanded={isActive}
+                      className={`nav-item ${isActive ? "active" : ""}`}
+                      key={item.id}
+                      onClick={() => {
+                        setAdminRailOpen(true);
+                        setActiveNavItem(item.id);
+                        setProviderRegistrationOpen(item.id === "providers");
+                        setIsMobileDrawerOpen(false);
+                      }}
+                      title={`${item.label} 메뉴`}
+                      type="button"
+                    >
+                      <item.icon size={18} />
+                      <span>{item.label}</span>
+                      {isActive ? <ChevronRight size={16} /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
           {providerRegistrationOpen ? (
             <ProviderRegistrationMenu
@@ -4204,20 +4252,15 @@ export function App() {
             />
           ) : null}
 
-          {activeNavItem === "autonomy" ? (
-            <AutonomyRunContainer
-              decisionReadiness={deriveDebateDecisionReadiness(debateSession).state}
-              historyEvents={eventLog}
-              onRegistryChange={setSummonRegistry}
-              onRunEvents={(events) => setEventLog((current) => [...current, ...events])}
-              onRunMemory={handleQueueMemoryCuratorCandidate}
-              registry={summonRegistry}
-              seedPacket={codingPacketState}
-            />
-          ) : null}
-
-          {activeNavItem === "parallel" ? <ParallelMissionContainer /> : null}
-
+          {activeNavItem === "runtime" ? (
+          <>
+          <RuntimeRailPanel
+            dgxRouteDiagnostics={dgxRouteDiagnostics}
+            onProbeDgx={handleProbeDgx}
+            onRequestReboot={handleRequestDeviceReboot}
+            rebootWatchdogs={rebootWatchdogs}
+            snapshot={runtimeSnapshotState}
+          />
           <section className="mini-panel legacy-runtime-panel">
             <header>
               <Server size={16} />
@@ -4266,6 +4309,8 @@ export function App() {
                 ))}
             </div>
           </section>
+          </>
+          ) : null}
           </aside>
         ) : null}
 
@@ -4300,7 +4345,50 @@ export function App() {
             </div>
           ) : null}
 
-          {configLibraryActive ? (
+          {activeNavItem === "dashboard" ? (
+            <DashboardView
+              personas={[
+                {
+                  personaName: "kurumi",
+                  displayName: "토키사키 쿠루미",
+                  role: "companion",
+                  avatarUrl: dashboardPersonaAvatars["kurumi"],
+                  tagline: "「시간은 내가 관리할게. 오빠는 명령만 내려줘♡」",
+                },
+                {
+                  personaName: "yuno",
+                  displayName: "가사이 유노",
+                  role: "auditor",
+                  avatarUrl: dashboardPersonaAvatars["yuno"],
+                  tagline: "「오빠~♡ 다른 에이전트들, 내가 다 보고 있을게.」",
+                },
+              ]}
+              runtime={runtimeSnapshotState}
+              hermesPool={summarizeHermesPool(loadHermesPool())}
+              pendingApprovals={permissionSnapshot.summary.pending}
+              history={projectAutonomyRunHistory(eventLog)}
+              onNavigate={(target) => {
+                if (target.mode) {
+                  setMode(target.mode);
+                }
+                const nextNav = target.nav ?? "sessions";
+                setActiveNavItem(nextNav);
+                setProviderRegistrationOpen(nextNav === "providers");
+              }}
+            />
+          ) : activeNavItem === "autonomy" ? (
+            <AutonomyRunContainer
+              decisionReadiness={deriveDebateDecisionReadiness(debateSession).state}
+              historyEvents={eventLog}
+              onRegistryChange={setSummonRegistry}
+              onRunEvents={(events) => setEventLog((current) => [...current, ...events])}
+              onRunMemory={handleQueueMemoryCuratorCandidate}
+              registry={summonRegistry}
+              seedPacket={codingPacketState}
+            />
+          ) : activeNavItem === "parallel" ? (
+            <ParallelMissionContainer />
+          ) : configLibraryActive ? (
             <ConfigLibraryPanel
               configFiles={agentConfigFiles}
               onCreateConfigFile={handleCreateConfigFile}

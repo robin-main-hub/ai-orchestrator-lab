@@ -3,6 +3,8 @@ import type { CenterMode } from "../types";
 export interface ConversationShellVisibilityInput {
   configLibraryActive: boolean;
   mode: CenterMode;
+  /** a left-nav center view (대시보드/자율실행/병렬실행/런타임) owns the center board */
+  navCenterActive?: boolean;
 }
 
 export interface ConversationShellVisibility {
@@ -28,7 +30,21 @@ export function isFocusedV0Surface(mode: CenterMode): boolean {
 export function getConversationShellVisibility({
   configLibraryActive,
   mode,
+  navCenterActive,
 }: ConversationShellVisibilityInput): ConversationShellVisibility {
+  if (navCenterActive) {
+    // nav-owned center views keep the sidebar for navigation and drop the
+    // conversation-specific chrome — one clean surface per tab.
+    return {
+      showCodingPacketPanel: false,
+      showEvolveMementoPanel: false,
+      showLeftRail: true,
+      showTerminalDock: false,
+      showToolbarActions: false,
+      showWorkItemHandoffPanel: false,
+    };
+  }
+
   if (configLibraryActive) {
     return {
       showCodingPacketPanel: false,
