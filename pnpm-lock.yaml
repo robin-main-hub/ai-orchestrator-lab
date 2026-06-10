@@ -164,6 +164,8 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
+  packages/mcp: {}
+
   packages/memory:
     dependencies:
       '@ai-orchestrator/protocol':
