@@ -8022,3 +8022,86 @@ body:has(.app-shell.annex-focus-shell) {
     linear-gradient(120deg, #ff4f9d, #ffd166, #46f0a0, #46ecff, #9b6bff, #ff4f9d) border-box;
   box-shadow: 0 0 14px rgba(255, 122, 192, 0.4);
 }
+
+/* ── #6 Autonomy mission HUD ──────────────────────────────────────────── */
+.autonomy-hud {
+  position: relative;
+  font-family: var(--font-mono, monospace);
+}
+.autonomy-hud::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(70, 236, 255, 0.05) 0,
+    rgba(70, 236, 255, 0.05) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  border-radius: 8px;
+}
+.autonomy-hud .hud-step {
+  border-left: 2px solid rgba(255, 255, 255, 0.12);
+  padding-left: 8px;
+}
+.autonomy-hud .hud-dispatch_next {
+  border-left-color: #46ecff;
+}
+.autonomy-hud .hud-complete {
+  border-left-color: #46f0a0;
+  animation: hud-pulse-green 1.4s ease-in-out 2;
+}
+.autonomy-hud .hud-escalate_approval {
+  border-left-color: #ff4f4f;
+  animation: hud-blink-red 0.8s step-start infinite;
+}
+.autonomy-hud .hud-fail {
+  border-left-color: #ff4f4f;
+}
+@keyframes hud-pulse-green {
+  0%,
+  100% {
+    box-shadow: -2px 0 0 0 #46f0a0;
+  }
+  50% {
+    box-shadow: -2px 0 10px 0 #46f0a0;
+  }
+}
+@keyframes hud-blink-red {
+  50% {
+    border-left-color: rgba(255, 79, 79, 0.25);
+  }
+}
+.autonomy-hud-alarm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: #ffd166;
+  background: rgba(60, 40, 0, 0.35);
+  border: 1px solid rgba(255, 209, 102, 0.5);
+}
+.autonomy-hud-beacon {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ffae00;
+  animation: hud-beacon 0.9s ease-in-out infinite;
+}
+@keyframes hud-beacon {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 174, 0, 0.7);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 8px 3px rgba(255, 174, 0, 0.5);
+    opacity: 0.5;
+  }
+}

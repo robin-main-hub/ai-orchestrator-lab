@@ -144,6 +144,19 @@ describe("AutonomyRunPanel", () => {
     expect(html).toContain("완료");
   });
 
+  it("renders the mission HUD classes and the auth-required alarm on escalation", () => {
+    const html = render({
+      steps: [
+        { step: 1, outcome: "completed", action: "dispatch_next", reason: "go" },
+        { step: 2, outcome: "blocked", action: "escalate_approval", reason: "blocked" },
+      ],
+    });
+    expect(html).toContain("autonomy-hud");
+    expect(html).toContain("hud-escalate_approval");
+    expect(html).toContain("autonomy-hud-alarm");
+    expect(html).toContain("auth required");
+  });
+
   it("renders the iteration timeline when steps are present", () => {
     const html = render({
       steps: [

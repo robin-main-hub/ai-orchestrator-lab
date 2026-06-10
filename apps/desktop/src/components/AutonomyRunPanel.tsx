@@ -240,10 +240,18 @@ export function AutonomyRunPanel({
 
       {outcome ? <AutonomyRunOutcome outcome={outcome} /> : null}
 
+      {(steps && steps.some((s) => s.action === "escalate_approval")) ||
+      (outcome?.ok && outcome.loopStatus === "awaiting_human") ? (
+        <div className="autonomy-hud-alarm" role="status">
+          <span className="autonomy-hud-beacon" aria-hidden="true" />
+          auth required — 사람 승인 대기
+        </div>
+      ) : null}
+
       {steps && steps.length > 0 ? (
-        <ol className="autonomy-run-timeline">
+        <ol className="autonomy-run-timeline autonomy-hud">
           {steps.map((row, index) => (
-            <li key={`${row.step}-${index}`}>
+            <li key={`${row.step}-${index}`} className={`hud-step hud-${row.action}`}>
               <StatusBadge size="sm" variant={actionBadgeVariant(row.action)}>
                 {actionLabel(row.action)}
               </StatusBadge>
