@@ -35,3 +35,25 @@
 - `apps/desktop/src/lib/personaAgentSet.ts` — 세트 해석 + 헤더 생성 (순수)
 - `personaSummonPlan.buildPersonaInjectionPlan` — boot → identity → kickoff 순서
 - `personaTaskRunner` / `autonomousRun` / `parallelAutonomy` — agentSet 패스스루
+
+---
+
+# 40b — Hermes 슬롯 풀 (스티키 바인딩)
+
+"매 소환마다 새 세션"은 버려진 세션 기록을 무한 누적시킨다. 대신:
+
+- **스티키 재사용** — 슬롯을 가진 페르소나는 자기 에이전트를 그대로 다시 쓴다
+  (히스토리 연속성 유지, 리셋 없음, 신규 세션 기록 없음).
+- **여유 슬롯 부착** — 새 페르소나는 여유 슬롯에 바인딩. 한 번도 안 쓴 슬롯이면
+  리셋조차 불필요.
+- **재활용 리셋** — 해제(release)된 슬롯에 *다른* 캐릭터가 들어올 때만 리셋
+  명령(기본 `/new`, 변경 가능)을 게이트 통과로 1회 디스패치.
+- **증설** — 여유가 0이 되면 그때 새 Hermes 에이전트 슬롯을 1개 추가. 이후로는
+  로스터가 실제로 늘어나는 만큼만 하나씩 증가.
+
+기본 풀: **12 슬롯** (`DEFAULT_HERMES_POOL_SIZE` — 7개 swarm pane 역할 + 병렬
+미션/신규 캐릭터 여유분). 바인딩은 localStorage(`ai-orch.hermesSlotPool.v1`)에
+영속되어 앱 재시작에도 유지된다. 콘솔 헤더에 "사용 n · 여유 m (총 t)" 표시.
+
+코드: `hermesSlotPool.ts` (순수 상태기계) + `hermesPoolStore.ts` (영속) +
+`personaAgentSet.slotId/bootSteps` 통합.
