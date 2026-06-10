@@ -22,6 +22,8 @@
     "deploy:dgx02": "node scripts/deploy-dgx02.mjs",
     "deploy:dgx02:dry-run": "node scripts/deploy-dgx02.mjs --dry-run",
     "deploy:dgx02:validate": "node scripts/deploy-dgx02.mjs --validate-only",
+    "persona:import": "node scripts/character-card.mjs import",
+    "persona:export": "node scripts/character-card.mjs export",
     "tmux:smoke:dry-run": "node scripts/smoke-tmux-dry-run.mjs",
     "antigravity:ultra-task": "node scripts/create-antigravity-ultra-task.mjs",
     "antigravity:pro1-task": "node scripts/create-antigravity-pro1-task.mjs",
