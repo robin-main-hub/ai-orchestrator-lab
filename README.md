@@ -1,8 +1,10 @@
 # AI Orchestrator Lab
 
-맥북에서 실행되는 데스크톱 AI 오케스트레이터와 `dgx-02` 서버를 함께 사용하는 멀티 에이전트 작업실입니다.
+데스크톱 AI 오케스트레이터와 `dgx-02` 서버를 함께 쓰는, **캐릭터 기반 멀티 에이전트 코딩 OS**입니다. 맥북/홈 PC가 지휘실, `dgx-02`가 메인 authority·실행 서버입니다.
 
-이 저장소는 단순한 채팅 앱이나 토론 UI가 아니라, 여러 모델과 여러 에이전트를 한 화면에서 조율하고, 토론 결과를 실제 코딩 작업으로 넘기며, 서버가 죽었을 때도 로컬 모델로 제한 운용되는 전체 시스템을 목표로 합니다.
+단순한 채팅 앱이나 토론 UI가 아니라, 애니메이션 캐릭터 페르소나를 입은 여러 에이전트가 한 화면에서 조율되고, 토론 결과가 실제 코딩 작업으로 이어지며, opencode처럼 대화창에서 코딩하고, 여러 에이전트가 각자의 터미널·워크트리에서 병렬로 일하는 전체 시스템을 목표로 합니다. 모든 명령은 권한·승인·리댁션 게이트를 통과하고, 서버가 죽으면 로컬 모델로 제한 운용됩니다.
+
+> 방향을 한 줄로: **"OpenCode/Claude/Codex를 대체하지 않고, 캐릭터화된 역할·worktree·tmux pane·permission policy·event stream으로 감싸는 오케스트레이터."** (조사 근거: [docs/45](docs/45-chat-coding-roadmap.md), [docs/43](docs/43-chat-coding-research.md))
 
 ## 목표
 
@@ -39,6 +41,44 @@
 - 모바일 읽기/승인 대시보드
 - 실행 리플레이, 비용 가드, 권한 매트릭스
 
+## 지금까지 구축한 핵심 시스템 (2026-06)
+
+초기 Stage12~42 골격(아래 변경 로그) 위에, 이번 분기에 다음 시스템들을 end-to-end로 구현·머지했습니다. 모든 도구 실행은 동일한 승인·권한·리댁션 게이트를 통과합니다.
+
+### 자율·병렬 실행 엔진
+- **폐루프 자율실행** — 페르소나 소환 → 정체성 주입 → 검증 계획을 폐루프로 완주. 사람 승인(mode A) / safe 자동승인(mode B). (`자율실행` 탭)
+- **병렬 스웜** (Manus/Kimi식) — N 미션을 각자의 pane에서 동시 실행, 라이브 멀티터미널 보드. allocate(순차)/run(동시) 분리로 pane 충돌 0. (`병렬실행` 탭, [docs/39](docs/39-parallel-worktree.md))
+- **미션당 git worktree 격리** — OSS 오케스트레이터 합의 프리미티브. setup→정체성→teardown, completed만 정리. [docs/39](docs/39-parallel-worktree.md)
+- **자가 체크인 + 브로드캐스트** — 무응답 에이전트 자동 nudge(Tmux-Orchestrator 패턴), 실행 중 전체 일괄 지시(NTM 패턴).
+- **Hermes 스티키 슬롯 풀** — 페르소나↔에이전트 슬롯 고정(히스토리 연속), 재활용 시에만 리셋, 고갈 시 1개씩 증설. [docs/40](docs/40-persona-agent-set.md)
+
+### 캐릭터·페르소나
+- **페르소나 = 원자적 에이전트 세트** — SOUL/AGENTS + 선언 역할/권한 + 새 Hermes 세션이 한 세트로 이동. [docs/40](docs/40-persona-agent-set.md)
+- **캐릭터 도감 18인** — 가챠 카드(레어도/HP=기억/MP=신뢰), 상세 모달(영혼 발췌·소환 액션·tmux 배치), 28표정 갤러리.
+- **초상 18/18 + 28표정 11인** — 실제 일러스트 아바타 + go_emotions 28감정 스프라이트(288px WebP), 외부 산출물 임포터(`pnpm import:expressions`). [docs/37](docs/37-persona-expressions.md)
+- **쿠루미/유노 스왑** — 채아린→토키사키 쿠루미(메인 OS), 소라→가사이 유노(독립 감사)로 전면 교체.
+- **로어북/월드인포 (옵션·멀티테넌트)** — 키워드 트리거 컨텍스트 주입, 테넌트 격리, SillyTavern 카드 임포트. [docs/41](docs/41-lorebook.md)
+
+### 대화형 코딩 (opencode급)
+- **코딩 워크벤치** (`코딩` 탭) — Plan/Build 모드, SSE 스트리밍, bash/read/grep/glob/write/edit/todo 도구 루프, 슬래시 11종, @파일 멘션, 체크포인트/undo, /compact·/share·/init. [docs/42](docs/42-coding-workbench.md)
+- **Codex식 사이드 패널** — 대화를 가리지 않는 우측 분할(미리보기/Diff/터미널/파일/백그라운드 작업/계획).
+- **진짜 라이브 터미널** — dgx-swarm tmux pane의 실제 출력을 capture-pane으로 폴링(읽기 전용), 게이트 통과 명령 전송.
+- **답변 기반 추천대화** — 에이전트의 마지막 답변에서 파생, 클릭 즉시 전송 + 연필 수정.
+
+### 리서치 (Manus + Kimi식)
+- **리서치 스웜** (`리서치` 탭) — N 페르소나 요원이 한 주제를 병렬 조사. 마스터플랜 체크리스트 + Agent's Computer 타임라인 + 하단 동사 스트립 + 합본 보고서 다운로드. completion 기반(게이트/curl/pane 우회). [docs/44](docs/44-research-swarm.md)
+
+### UI·테마
+- **대시보드 랜딩** — 시스템 펄스 + 캐릭터 파티 + 작전 타일 + 최근 실행.
+- **사이드바 3그룹**(메인/작전/시스템) + nav-center 풀와이드 + 반응형(가로/세로 비율 무관).
+- **v0 블랙글래스 테마** — zinc 글래스 + 바이올렛 액센트, white-alpha 보더, 앰비언트 글로우.
+
+### 보안·인프라
+- SMB급 방어(gitleaks, pnpm audit, rate-limit), provider-completion HMAC 서명, dgx-02 서버 자동복구(`Restart=always`).
+- 연결 실패 시 저장된 다른 프로바이더/OAuth로 전환 제안.
+
+> 상세 PR 이력은 GitHub PR #448~#473 및 git 로그에 있습니다. 다음 단계는 [docs/45](docs/45-chat-coding-roadmap.md)의 Phase A~F(Diff/Files 패널 실연결, `/fork`, Mission 객체 통합, verifier+순차병합, 모델 라우팅 엔진, runtime isolation) — 대부분 dgx-02 재배포 후 진행합니다.
+
 ## 참고 방향
 
 - tunaFlow: 데스크톱 오케스트레이터, CLI 에이전트 연결, 코드 작업 흐름
@@ -50,46 +90,40 @@
 
 ```text
 apps/
-  desktop/        # 맥북에서 실행되는 데스크톱 프론트엔드
+  desktop/        # 데스크톱 프론트엔드 (Vite/React, Tauri 셸 목표)
   server/         # dgx-02에서 실행되는 오케스트레이션 서버
 packages/
-  protocol/       # 데스크톱-서버-에이전트 공통 스키마
+  protocol/       # 데스크톱-서버-에이전트 공통 스키마 (Zod)
   providers/      # OpenAI/Anthropic/OpenRouter/Ollama/리셀러 API 어댑터
-  agents/         # 에이전트 런타임, 토론 엔진, 코딩 전달 엔진
+  agents/         # 에이전트 런타임, 토론 엔진, 코딩 전달, 로어북 엔진
+  memory/         # 장기 메모리 어댑터
+  mcp/            # 스웜 제어 MCP 프런트도어
 agents/
-  orchestrator/   # 기본 SOUL.md / AGENTS.md 프로필 파일
-docs/
-  00-product-brief.md
-  01-architecture.md
-  02-feature-map.md
-  03-provider-profiles.md
-  04-agent-orchestration.md
-  05-memory-memento.md
-  06-roadmap.md
-  07-dgx-local-fallback.md
-  08-ui-direction.md
-  09-agent-soul.md
-  10-backup-and-mobile.md
-  11-conversation-mode.md
-  12-external-review-plan.md
-  13-event-store-permission-redaction.md
-  14-product-strategy-vertical-slice.md
-  15-agent-topology-and-ingress-guards.md
-  16-codex-implementation-handoff.md
-  17-role-based-tmux-agent-swarm.md
-  18-memento-mcp-structure-check.md
-  19-tmux-session-runtime.md
-  20-dcinside-reference-1185913.md
-  21-tauri-desktop-shell.md
-  22-endruin-domain-dgx02.md
-  23-dgx02-provider-registry.md
-  24-provider-adapters.md
-  25-anthropic-adapter-spec.md
-  26-dgx-proxy-diagnostics.md
-  27-vertical-slice-test-plan.md
-  28-simplemem-continuity-memory.md
-  review-board.md
-  research-notes.md
+  <slug>/         # 캐릭터 18인: SOUL/AGENTS/IDENTITY/USER.md + avatar.* + expressions/
+  SAFETY.md       # 공통 안전 경계
+lorebooks/        # 월드인포 JSON (옵션·멀티테넌트)
+scripts/          # dgx-02 배포, swarm-send/capture, import-expressions 등
+docs/             # 00~45 설계 문서 (아래 주요 항목)
+```
+
+주요 설계 문서:
+
+```text
+00~16  제품 정의 · 아키텍처 · 프로바이더 · 메모리 · UI 방향 · 권한/리댁션
+17     role-based tmux agent swarm (10-pane 역할 구조)
+19     tmux session runtime (capture/send 게이트)
+21~28  Tauri 셸 · endruin 도메인 · provider 레지스트리/어댑터 · SimpleMem
+29~35  권한 엔진 · 보안 감사 · 스트리밍 · 메모리 어댑터 · dgx-02 배포 런북 · 개인 워커
+36     autonomous-execution-layer (폐루프 자율실행)
+37     persona-expressions (28표정 분류 + 가챠 카드)
+38     swarm-mcp (MCP 스웜 제어)
+39     parallel-worktree (병렬 격리 + 체크인/브로드캐스트)
+40     persona-agent-set (원자적 세트 + Hermes 슬롯 풀)
+41     lorebook (옵션·멀티테넌트 월드인포)
+42     coding-workbench (opencode급 코딩 UX)
+43     chat-coding-research (opencode 내부 + 터미널 에이전트 논문 정독)
+44     research-swarm (Manus/Kimi식 리서치 콘솔)
+45     chat-coding-roadmap (Manus 3편 + Kimi 보고서 종합 로드맵)
 ```
 
 ## 실행 방법
@@ -105,19 +139,21 @@ corepack pnpm build
 corepack pnpm dev
 ```
 
-데스크톱 앱은 현재 Vite 기반 프론트엔드 골격입니다. 실제 Tauri/Electron 네이티브 래퍼, 모델 호출, 터미널 실행은 아직 연결하지 않았습니다. DGX 원격 실행은 실제 명령 실행 없이 heartbeat, remote-run request, approval gate, local fallback 경계를 타입과 mock runtime으로만 연결했습니다.
+데스크톱 앱은 Vite/React 프런트엔드이며 Tauri 네이티브 셸이 목표입니다([docs/21](docs/21-tauri-desktop-shell.md)). 모델 호출은 dgx-02 server-proxy(`/provider-completions`)를 HMAC 서명으로 통과하고, tmux 실행은 capture(읽기 전용)·send-keys(승인 게이트) 경로가 서버에 구현되어 있습니다.
 
 ## 현재 상태
 
-첫 코드 골격을 구현 중입니다.
+데스크톱 패키지는 **792개 테스트**가 통과하며, 위 "핵심 시스템"이 실제 UI로 동작합니다.
 
-- `packages/protocol`: 공통 타입, Zod 스키마, EventStore/Permission/MemoryTrace/DGX 실행/Backup Projection/Ingress Guard/Permission Matrix/tmux terminal runtime 인터페이스
-- `packages/providers`: provider adapter interface, credential parser, mock model discovery, secret vault/readiness snapshot
-- `packages/agents`: debate round template과 CodingPacket draft builder
-- `apps/desktop`: Orchestrator Board UI skeleton, Conversation/Debate/Coding Packet/Tmux preview, Agent Runtime, DGX Bridge 카드, Memento Inspector/API adapter, Backup Projection 패널, Ingress Guard 패널, Permission Matrix dock, Provider model discovery, Provider Vault readiness
-- `apps/server`: DGX 서버 health/runtime/heartbeat/model registry/completion proxy, vLLM probe, remote-run placeholder
+- `packages/protocol`: 공통 타입·Zod 스키마(EventStore/Permission/MemoryTrace/DGX 실행/Backup/Ingress Guard/tmux runtime/provider completion)
+- `packages/providers`: provider adapter, credential parser, model discovery, secret vault/readiness
+- `packages/agents`: 토론 엔진, CodingPacket 빌더, 의장 종합, 캐릭터 카드 컨버터, **로어북 엔진**, 18인 기본 프로필
+- `apps/desktop`: 대시보드 · 대화(코딩 사이드 패널·라이브 터미널) · 자율실행 · 병렬실행 · 코딩 워크벤치 · 리서치 스웜 · 토론 · Tmux 스웜 · 관제판 · 프로바이더/설정/채널/백업/런타임
+- `apps/server`: health/runtime/heartbeat/model registry, `/provider-completions`(+stream), `/events/sync`, `/sessions`, tmux dispatch/capture(swarm-send/capture.sh), 권한·리댁션 게이트
 
-실제 API 키는 저장하지 않고 `SecretRef` 개념으로만 표시합니다. DGX-02 vLLM 모델 호출은 server proxy 우선, direct fallback 보조 경로로 연결되어 있습니다. 터미널 실행은 보안/권한 경계가 더 잡힌 뒤 연결합니다.
+실제 API 키는 `SecretRef`로만 표시하고 저장하지 않습니다. dgx-02 vLLM 호출은 server-proxy 우선·direct fallback, send-keys는 환경 게이트(`ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS`)와 승인 뒤에만 실행됩니다.
+
+> **알려진 미반영**: dgx-02에 떠 있는 서버는 옛 배포 스냅샷이라 일부 최신 변경(CORS allow-headers의 `x-dgx-*`, 그동안 머지한 기능들)이 반영되지 않았습니다. 실제 Tauri 앱은 브라우저 CORS를 우회해 동작하지만, dev 브라우저 검증과 최신 서버 기능을 위해 **dgx-02 재배포**(`scripts/dgx-02/`)가 필요합니다.
 ## Stage12
 
 - `DGX-02 vLLM` provider profile을 기본 등록한다.
@@ -357,3 +393,15 @@ corepack pnpm dev
 - Conversation의 Agent Profile drawer에 `기본값` 버튼을 추가해 선택된 에이전트의 SOUL/AGENTS/창의성 기본값을 다시 불러올 수 있게 했다.
 - 기본 persona seed는 에이전트 이름이 아니라 역할 기반 경로(`agents/orchestrator/SOUL.md`)를 사용한다.
 - `docs/20-dcinside-reference-1185913.md`에는 아직 본문 확인이 끝나지 않은 DCInside 추가 레퍼런스를 검증 대기 상태로 등록했다.
+
+## 이후 분기 (PR #448~#473) — 캐릭터 멀티에이전트 코딩 OS
+
+Stage 단위 미세 로그 대신, 이 분기는 시스템 단위로 묶어 위 **"지금까지 구축한 핵심 시스템"** 섹션에 정리했습니다. PR 번호로 추적되는 주요 항목:
+
+- 자율·병렬 실행: 폐루프 자율실행(#448 이전 기반)·병렬 스웜(#448)·worktree 격리(#449)·체크인/브로드캐스트(#450)·페르소나=세트(#451)·Hermes 슬롯 풀(#452)·로어북(#453)
+- UI·테마: IA 개편/대시보드(#454)·v0 블랙글래스(#455)·프리미엄 폴리시(#457)·반응형/사이드 패널(#472)
+- 캐릭터: 도감 클릭 상세(#460)·초상 18인(#461,#465,#466,#467)·28표정(#463,#464)·tmux 배치 표시(#459)·도감 전원(#462)
+- 코딩·리서치: 코딩 워크벤치(#456)·리서치 스웜(#469)·라이브 터미널(#473)·추천대화 개선(#468,#472)
+- 인프라·수정: completion HMAC 인증(#470)·프로바이더 전환 제안(#471)
+
+각 PR의 상세 설명은 GitHub와 커밋 메시지에 보존되어 있습니다.
