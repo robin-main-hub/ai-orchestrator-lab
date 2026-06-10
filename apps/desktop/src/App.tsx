@@ -294,6 +294,8 @@ import {
 import { readJsonState, writeJsonState } from "./lib/persistentJsonState";
 import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbenchDerived";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
+import { SummonTheater } from "./components/SummonTheater";
+import { createMakimaDelegationCards } from "./lib/makimaDelegation";
 
 const CENTER_MODE_STORAGE_KEY = "ai-orchestrator.center-mode.v1";
 
@@ -4039,6 +4041,7 @@ export function App() {
     activeNavItem === "dashboard" ||
     activeNavItem === "autonomy" ||
     activeNavItem === "parallel" ||
+    activeNavItem === "theater" ||
     activeNavItem === "coding" ||
     activeNavItem === "research" ||
     activeNavItem === "runtime";
@@ -4421,6 +4424,16 @@ export function App() {
             />
           ) : activeNavItem === "parallel" ? (
             <ParallelMissionContainer key={summonSeedPersona ?? "parallel"} seedPersonaName={summonSeedPersona ?? undefined} />
+          ) : activeNavItem === "theater" ? (
+            <SummonTheater
+              agents={agents}
+              assignmentsByAgentId={makimaDelegationAssignmentsByAgentId}
+              cards={createMakimaDelegationCards({
+                agents,
+                request:
+                  [...conversationMessages].reverse().find((message) => message.role === "user")?.content ?? "",
+              })}
+            />
           ) : activeNavItem === "coding" ? (
             <CodingWorkbench providerProfiles={providerProfiles} />
           ) : activeNavItem === "research" ? (

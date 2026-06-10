@@ -67,6 +67,7 @@ export type NavItemId =
   | "cockpit"
   | "autonomy"
   | "parallel"
+  | "theater"
   | "coding"
   | "research"
   | "runtime";
