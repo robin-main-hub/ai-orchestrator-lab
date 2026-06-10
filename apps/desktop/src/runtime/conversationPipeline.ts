@@ -10,6 +10,7 @@ import type {
 } from "../types";
 import type { AgentChannelMemoryScope } from "../lib/agentConversationChannels";
 import { evaluateAnswerability } from "../lib/answerabilityGuard";
+import { detectEntityAmbiguity } from "../lib/ambiguityGuard";
 import {
   createAgentChannelRuntimeSummary,
   createAgentRoleToolRuntimeSummary,
@@ -54,6 +55,8 @@ export function createConversationPipelineMessages({
   );
   // 패치 P2: 내용 기반(부스트 제외) 점수로 답변가능성 판정 — 핀고정 무관 기억 차단
   const answerability = evaluateAnswerability(scopedResults);
+  // 패치 P3: 비슷한 점수의 서로 다른 엔티티 기억이 섞이면 모호 — 단정 대신 되묻게
+  const ambiguity = detectEntityAmbiguity(answerability.groundedResults);
   const recalledMemories = answerability.groundedResults
     .slice(0, 5)
     .map(
@@ -124,6 +127,7 @@ export function createConversationPipelineMessages({
     answerability.answerable && recalledMemories.length > 0
       ? `EvolveMemento recall:\n${recalledMemories.join("\n")}`
       : answerability.idkDirective ?? "EvolveMemento recall: no selected records",
+    ambiguity.ambiguous ? ambiguity.directive : undefined,
     attachmentContext,
     continuityWarning,
     agent.role === "companion" || agent.role === "orchestrator"
