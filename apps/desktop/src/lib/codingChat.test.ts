@@ -150,3 +150,23 @@ describe("sessionToMarkdown", () => {
     expect(markdown).toContain("## 사용자");
   });
 });
+
+import { shouldAutoCompact, AUTO_COMPACT_INPUT_TOKEN_THRESHOLD, addUsage as addUsageFn } from "./codingChat";
+
+describe("MT-OSC 자동 응축 게이트 (shouldAutoCompact)", () => {
+  it("임계 미만이면 자동 응축 안 함", () => {
+    let session = baseSession();
+    for (let i = 0; i < 10; i += 1) session = appendUserMessage(session, { id: `m${i}`, text: `msg ${i}`, now: NOW });
+    expect(shouldAutoCompact(session, AUTO_COMPACT_INPUT_TOKEN_THRESHOLD - 1)).toBe(false);
+  });
+  it("임계 초과 + 짧은 대화면 자동 응축 진행", () => {
+    let session = baseSession();
+    for (let i = 0; i < 12; i += 1) session = appendUserMessage(session, { id: `m${i}`, text: `짧은 메시지 ${i}`, now: NOW });
+    expect(shouldAutoCompact(session, AUTO_COMPACT_INPUT_TOKEN_THRESHOLD + 5000)).toBe(true);
+  });
+  it("force=true(수동 /compact)는 임계 무관 진행", () => {
+    let session = baseSession();
+    for (let i = 0; i < 8; i += 1) session = appendUserMessage(session, { id: `m${i}`, text: `m${i}`, now: NOW });
+    expect(shouldAutoCompact(session, 0, true)).toBe(true);
+  });
+});
