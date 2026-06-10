@@ -4,6 +4,7 @@ import type {
   ProviderCompletionResponse,
 } from "@ai-orchestrator/protocol";
 import { resolveConfiguredDgxServerBaseUrls, resolveDgxServerBaseUrls } from "../runtime/stage30DgxEndpoints";
+import { createDgxOrchestratorJsonHeaders } from "../runtime/stage31DgxAuth";
 
 /**
  * Thin fetch client for the server's provider-completion endpoints — the
@@ -30,16 +31,20 @@ export async function requestCompletion(
   options?: CompletionClientOptions,
 ): Promise<ProviderCompletionResponse> {
   const fetchImpl = options?.fetchImpl ?? fetch;
-  const response = await fetchImpl(`${firstBaseUrl(options)}/provider-completions`, {
+  const baseUrl = firstBaseUrl(options);
+  const body = JSON.stringify(request);
+  const response = await fetchImpl(`${baseUrl}/provider-completions`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(request),
+    headers: await createDgxOrchestratorJsonHeaders("POST", "/provider-completions", baseUrl, { body }),
+    body,
   });
-  const body = (await response.json()) as ProviderCompletionResponse & { error?: string; message?: string };
+  const payload = (await response.json()) as ProviderCompletionResponse & { error?: string; message?: string };
   if (!response.ok) {
-    throw new Error(body.error ? `${body.error}${body.message ? `: ${body.message}` : ""}` : `HTTP ${response.status}`);
+    throw new Error(
+      payload.error ? `${payload.error}${payload.message ? `: ${payload.message}` : ""}` : `HTTP ${response.status}`,
+    );
   }
-  return body;
+  return payload;
 }
 
 export type StreamCallbacks = {
@@ -62,10 +67,12 @@ export async function streamCompletion(
   options?: CompletionClientOptions & StreamCallbacks,
 ): Promise<{ content: string; usage?: { inputTokens?: number; outputTokens?: number } }> {
   const fetchImpl = options?.fetchImpl ?? fetch;
-  const response = await fetchImpl(`${firstBaseUrl(options)}/provider-completions/stream`, {
+  const baseUrl = firstBaseUrl(options);
+  const body = JSON.stringify(request);
+  const response = await fetchImpl(`${baseUrl}/provider-completions/stream`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(request),
+    headers: await createDgxOrchestratorJsonHeaders("POST", "/provider-completions/stream", baseUrl, { body }),
+    body,
     signal: options?.signal,
   });
   if (!response.ok || !response.body) {
