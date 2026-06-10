@@ -93,21 +93,25 @@ export function WorkbenchHeader({
         <HeaderChip
           label="프로필"
           onClick={() => onOpenAgentConfig("profile")}
+          title="에이전트 이름·역할·기본 프로필 설정"
           value={selectedAgent ? agentRoleLabel(selectedAgent.role) : "대기"}
         />
         <HeaderChip
           label="SOUL"
           onClick={() => onOpenAgentConfig("soul")}
+          title="말투·페르소나 정체성(SOUL.md) 모드 변경"
           value={selectedAgent ? soulModeLabel(selectedAgent.soulMode) : "off"}
         />
         <HeaderChip
           label="창의성"
           onClick={() => onOpenAgentConfig("creativity")}
+          title="응답 온도(보수적↔실험적) 조절"
           value={persona ? creativityLevelLabel(persona.creativityLevel) : "균형"}
         />
         <HeaderChip
           label="기억"
           onClick={() => onOpenAgentConfig("injection")}
+          title="기억 주입 모드(internal/markdown/off) 설정"
           value={memoryMode}
         />
         <HeaderChip
@@ -172,7 +176,7 @@ function HeaderChip({
 }) {
   return (
     <button
-      className="flex flex-col items-end rounded-md px-2 py-1 text-[10px] transition-colors hover:bg-card/60"
+      className="flex flex-col items-end rounded-md px-2 py-1 text-[10px] transition-colors hover:bg-card/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
       onClick={onClick}
       title={title}
       type="button"

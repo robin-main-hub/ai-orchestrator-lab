@@ -374,7 +374,7 @@ export function ResearchSwarmContainer({
                   type="button"
                 >
                   {personaAvatars[run.personaName] ? (
-                    <img src={personaAvatars[run.personaName]} alt="" />
+                    <img src={personaAvatars[run.personaName]} alt={run.displayName} />
                   ) : (
                     <span className="research-strip__ph">?</span>
                   )}

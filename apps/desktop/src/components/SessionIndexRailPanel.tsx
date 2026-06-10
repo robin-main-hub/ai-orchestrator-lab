@@ -23,13 +23,13 @@ export function SessionIndexRailPanel({
       <header>
         <Database size={16} />
         <span>세션</span>
-        <button className="rail-icon-button" onClick={onCreateSession} title="새 세션 만들기" type="button">
+        <button className="rail-icon-button" onClick={onCreateSession} aria-label="새 세션 만들기" title="새 세션 만들기" type="button">
           <Plus size={13} />
         </button>
-        <button className="rail-icon-button" onClick={onRenameActiveSession} title="현재 세션 이름 변경" type="button">
+        <button className="rail-icon-button" onClick={onRenameActiveSession} aria-label="현재 세션 이름 변경" title="현재 세션 이름 변경" type="button">
           <Pencil size={13} />
         </button>
-        <button className="rail-icon-button" onClick={onRefresh} title="DGX-02 세션 다시 조회" type="button">
+        <button className="rail-icon-button" onClick={onRefresh} aria-label="DGX-02 세션 다시 조회" title="DGX-02 세션 다시 조회" type="button">
           <RefreshCw size={13} />
         </button>
       </header>

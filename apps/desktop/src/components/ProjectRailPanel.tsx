@@ -90,10 +90,10 @@ export function ProjectRailPanel({
         <LayoutDashboard size={16} />
         <span>프로젝트</span>
         <div className="rail-action-row">
-          <button className="rail-icon-button" onClick={onCreateCodingPacket} title="코딩 패킷 생성" type="button">
+          <button className="rail-icon-button" onClick={onCreateCodingPacket} aria-label="코딩 패킷 생성" title="코딩 패킷 생성" type="button">
             <Send size={13} />
           </button>
-          <button className="rail-icon-button" onClick={onCreateAgentRun} title="에이전트 실행 준비" type="button">
+          <button className="rail-icon-button" onClick={onCreateAgentRun} aria-label="에이전트 실행 준비" title="에이전트 실행 준비" type="button">
             <Play size={13} />
           </button>
         </div>
@@ -222,7 +222,7 @@ export function ProjectRailPanel({
 
       {/* 메타 에이전트 온보딩 박스: PM 지침에 따라 패널 하단에 고정 */}
       <div className="meta-onboarding-box border-t border-border/40 pt-2 mt-2 shrink-0">
-        <button className="rail-icon-button" onClick={onRunMetaOnboarding} title="메타 에이전트 온보딩" type="button">
+        <button className="rail-icon-button" onClick={onRunMetaOnboarding} aria-label="메타 에이전트 온보딩" title="메타 에이전트 온보딩" type="button">
           <Bot size={13} />
         </button>
         <div>
