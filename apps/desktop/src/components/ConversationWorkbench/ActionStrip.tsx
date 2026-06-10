@@ -60,15 +60,6 @@ export function ActionStrip({
       />
       <Button
         className="h-7 gap-1.5 text-xs"
-        onClick={onBackupProjection}
-        size="sm"
-        variant="ghost"
-      >
-        <Archive className="h-3.5 w-3.5" />
-        백업 상태
-      </Button>
-      <Button
-        className="h-7 gap-1.5 text-xs"
         onClick={onImportExternalIngress}
         size="sm"
         variant="ghost"
