@@ -8,7 +8,9 @@ import { SELECTABLE_PANE_ROLES, headerOnlyPersona, modeLabel } from "../lib/auto
 import { stepRowFromReduce } from "../lib/autonomyTimeline";
 import { personaFileSource, bundledPersonaNames } from "../lib/personaBundleSource";
 import { createSummonRegistry } from "../lib/personaSummon";
+import { buildWorkspacePlan, workspaceSafePrefixes } from "../lib/missionWorkspace";
 import {
+  applyMissionBranch,
   applyMissionResults,
   applyMissionStep,
   applyMissionUpdate,
@@ -56,6 +58,11 @@ export function ParallelMissionContainer({
   const [running, setRunning] = useState(false);
   const [board, setBoard] = useState<ParallelBoard>({ cards: [] });
   const [error, setError] = useState<string | null>(null);
+  // git worktree isolation (the OSS-orchestrator consensus primitive): when on,
+  // every mission gets its own worktree + branch in the shared repo.
+  const [isolate, setIsolate] = useState(false);
+  const [repoPath, setRepoPath] = useState("");
+  const [baseBranch, setBaseBranch] = useState("main");
 
   const verdict = areDraftsRunnable(drafts);
 
@@ -68,8 +75,21 @@ export function ParallelMissionContainer({
     if (running || !verdict.ok) return;
     setRunning(true);
     setError(null);
-    setBoard(createParallelBoard(drafts));
-    const stamp = drafts.map((d) => d.id).join("-");
+    const stamp = `${Date.now()}`;
+    const workspaceConfig =
+      isolate && repoPath.trim()
+        ? { repoPath: repoPath.trim(), baseBranch: baseBranch.trim() || "main" }
+        : undefined;
+    const workspaceByMission = new Map(
+      workspaceConfig
+        ? drafts.map((draft) => [draft.id, buildWorkspacePlan(`par_${stamp}_${draft.id}`, workspaceConfig)] as const)
+        : [],
+    );
+    let initialBoard = createParallelBoard(drafts);
+    for (const [missionId, plan] of workspaceByMission) {
+      initialBoard = applyMissionBranch(initialBoard, missionId, plan.branchName);
+    }
+    setBoard(initialBoard);
     try {
       // Pre-load every persona so the spec builder can hand a sync map to the engine.
       const personaByName = new Map<string, LoadedPersona>();
@@ -83,7 +103,7 @@ export function ParallelMissionContainer({
       const specs = buildMissionSpecs(drafts, {
         sessionId,
         personaFor: (name) => personaByName.get(name) ?? headerOnlyPersona(name),
-      });
+      }).map((spec) => ({ ...spec, workspace: workspaceByMission.get(spec.id) }));
 
       // One pane per mission (matching its role) so every queued mission can be
       // allocated; the engine still rejects gracefully if capacity runs short.
@@ -101,6 +121,8 @@ export function ParallelMissionContainer({
         server: { serverBaseUrl, host, tmuxSessionName },
         maxConcurrency,
         runId: `parallel_${stamp}`,
+        // in auto_safe mode, repo-scoped `worktree add` may auto-approve; teardown never does
+        extraSafePrefixes: workspaceConfig ? workspaceSafePrefixes(workspaceConfig) : undefined,
         onMissionUpdate: (update) => setBoard((current) => applyMissionUpdate(current, update)),
         onMissionStep: (missionId, step) =>
           setBoard((current) => {
@@ -142,6 +164,39 @@ export function ParallelMissionContainer({
           </button>
         </div>
       </header>
+
+      <div className="parallel-workspace">
+        <label className="parallel-workspace__toggle">
+          <input
+            type="checkbox"
+            checked={isolate}
+            onChange={(event) => setIsolate(event.target.checked)}
+            disabled={running}
+          />
+          워크트리 격리 — 미션마다 전용 git worktree + 브랜치에서 작업 (같은 레포 동시 수정 가능)
+        </label>
+        {isolate ? (
+          <div className="parallel-workspace__fields">
+            <input
+              className="parallel-workspace__repo"
+              placeholder="레포 절대 경로 (실행 호스트 기준, 예: /home/robin/ai-orchestrator-lab)"
+              value={repoPath}
+              onChange={(event) => setRepoPath(event.target.value)}
+              disabled={running}
+            />
+            <input
+              className="parallel-workspace__base"
+              placeholder="베이스 브랜치"
+              value={baseBranch}
+              onChange={(event) => setBaseBranch(event.target.value)}
+              disabled={running}
+            />
+          </div>
+        ) : null}
+        {isolate && !repoPath.trim() && !running ? (
+          <p className="parallel-console__hint">레포 경로를 입력해야 워크트리 격리가 적용됩니다.</p>
+        ) : null}
+      </div>
 
       {!verdict.ok && !running ? <p className="parallel-console__hint">{verdict.reason}</p> : null}
       {error ? <p className="parallel-console__error">⚠ {error}</p> : null}
