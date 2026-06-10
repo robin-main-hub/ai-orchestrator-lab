@@ -226,7 +226,7 @@ button {
   overflow: hidden;
   background:
     linear-gradient(90deg, rgba(99, 210, 189, 0.04), transparent 34%),
-    #12110f;
+    rgba(0, 0, 0, 0.38);
 }
 
 .center-board.tmux-center-board {
@@ -352,7 +352,7 @@ button {
   height: 42px;
   border: 1px solid #57442c;
   border-radius: 8px;
-  background: #2a2117;
+  background: rgba(255, 255, 255, 0.07);
   color: var(--amber);
 }
 
@@ -373,7 +373,7 @@ button {
   min-height: 36px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: #171613;
+  background: rgba(255, 255, 255, 0.04);
   cursor: pointer;
 }
 
@@ -659,7 +659,7 @@ button {
   padding: 7px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .rail-node-grid article.locked {
@@ -782,7 +782,7 @@ button {
   padding: 7px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .session-index-summary strong,
@@ -879,7 +879,7 @@ button {
   padding: 7px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
   color: var(--muted);
   font-size: 10px;
   line-height: 1.35;
@@ -1139,7 +1139,7 @@ button {
   padding: 7px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
   color: inherit;
   cursor: pointer;
   text-align: left;
@@ -1260,7 +1260,7 @@ button {
   padding: 7px;
   border: 1px solid #6b4e24;
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
   color: var(--amber);
   font-size: 9.5px;
   line-height: 1.35;
@@ -1350,7 +1350,7 @@ button {
   padding: 8px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .rail-hero-card span,
@@ -1558,7 +1558,7 @@ button {
   padding: 6px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .rail-insight-list article.ok {
@@ -1746,7 +1746,7 @@ button {
   padding: 6px;
   border: 1px solid var(--line-soft);
   border-radius: 7px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .window-checklist article.ready {
@@ -1891,7 +1891,7 @@ button {
   padding: 9px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .runtime-node,
@@ -2015,7 +2015,7 @@ button {
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #0f0f0e;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .mode-switch button {
@@ -2026,7 +2026,7 @@ button {
 }
 
 .mode-switch button.active {
-  background: #2b2318;
+  background: rgba(255, 255, 255, 0.07);
   color: var(--text);
 }
 
@@ -2039,7 +2039,7 @@ button {
   padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #0f0f0e;
+  background: rgba(0, 0, 0, 0.4);
   color: var(--muted);
 }
 
@@ -2282,7 +2282,7 @@ button {
   padding: 8px;
   border: 1px solid #6b4e24;
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 /* ── AutonomySlider — design-decisions §8 5-level ─────────────── */
@@ -2732,7 +2732,7 @@ button {
   padding: 8px;
   border: 1px solid #826033;
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
   box-shadow: 0 8px 18px rgb(0 0 0 / 20%);
 }
 
@@ -2923,13 +2923,13 @@ button {
   padding: 9px 10px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .message.user {
   justify-self: end;
   border-color: #4d3b22;
-  background: #211a12;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .message.assistant {
@@ -3311,7 +3311,7 @@ button {
   padding: 14px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #151411;
+  background: rgba(0, 0, 0, 0.35);
 }
 
 .debate-panel.stage3 .debate-card {
@@ -3383,7 +3383,7 @@ button {
   padding: 7px 8px;
   border: 1px solid #6b4e24;
   border-radius: 8px;
-  background: #16140f;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .tmux-gate svg {
@@ -3433,7 +3433,7 @@ button {
   padding: 7px;
   border: 1px solid #6b4e24;
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .tmux-recommendation-meter strong {
@@ -3528,7 +3528,7 @@ button {
 
 .tmux-chat-stream article.user {
   border-color: #4d3b22;
-  background: #18130e;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .tmux-chat-stream article span {
@@ -4232,7 +4232,7 @@ button {
   padding: 6px;
   border: 1px solid var(--line-soft);
   border-radius: 7px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .work-handoff-card strong,
@@ -4632,7 +4632,7 @@ button {
   padding: 7px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .provider-row strong,
@@ -4882,7 +4882,7 @@ button {
   padding: 7px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .memory-stat-grid span,
@@ -4914,7 +4914,7 @@ button {
   padding: 6px;
   border: 1px solid var(--line-soft);
   border-radius: 7px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .memento-tool-grid span,
@@ -5070,7 +5070,7 @@ button {
   padding: 7px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .recall-trace-list article.used {
@@ -5611,7 +5611,7 @@ button {
   padding: 6px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .ingress-summary span,
@@ -5696,7 +5696,7 @@ button {
   padding: 7px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .approval-queue-list > span,
@@ -5842,7 +5842,7 @@ button {
 }
 
 .agent-avatar.has-image {
-  background: #0d0d0c;
+  background: rgba(0, 0, 0, 0.45);
   color: transparent;
 }
 
@@ -5887,7 +5887,7 @@ button {
   padding: 9px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .backup-cell span,
@@ -5917,7 +5917,7 @@ button {
   padding: 6px;
   border: 1px solid var(--line-soft);
   border-radius: 7px;
-  background: #0d0d0c;
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .backup-summary span,
@@ -5999,7 +5999,7 @@ button {
   padding: 7px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .mobile-policy-list span,
@@ -6147,7 +6147,7 @@ button {
   padding: 6px 7px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #141311;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .packet-column strong {
@@ -6206,7 +6206,7 @@ button {
   padding: 8px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #0d0d0c;
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .terminal-slot header,
@@ -6635,12 +6635,12 @@ button {
 
 .terminal-dock-v2__block--warn {
   border-left-color: var(--amber);
-  background: #11100b;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .terminal-dock-v2__block--bad {
   border-left-color: var(--rose);
-  background: #170b0c;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .terminal-dock-v2__block--neutral {
@@ -7305,7 +7305,7 @@ button {
 .approval-queue-card {
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #0d0d0c;
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .approval-empty-state {
@@ -7492,7 +7492,7 @@ button {
   padding: 14px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: #0d0d0c;
+  background: rgba(0, 0, 0, 0.45);
   color: var(--green);
 }
 
@@ -7507,7 +7507,7 @@ button {
   border: 1px solid var(--line-soft);
   border-left: 3px solid var(--amber);
   border-radius: 8px;
-  background: #0d0d0c;
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .control-queue__card header {
@@ -9106,4 +9106,29 @@ body:has(.app-shell.annex-focus-shell) {
 .dashboard__run {
   border: 1px solid rgba(255, 255, 255, 0.07);
   background: rgba(0, 0, 0, 0.3);
+}
+
+/* --- 캐릭터 도감 grid --- */
+.dashboard__codex {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(204px, 1fr));
+  gap: 12px;
+}
+.dashboard__codex-card {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 160ms ease;
+}
+.dashboard__codex-card:hover {
+  transform: translateY(-3px);
+}
+.dashboard__codex-caption {
+  font-size: 10.5px;
+  color: var(--muted);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
