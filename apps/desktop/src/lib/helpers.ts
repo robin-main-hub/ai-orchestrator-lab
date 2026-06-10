@@ -479,10 +479,14 @@ export function createInitialAgentVisualSettings(agents: WorkbenchAgent[]): Reco
     }
 
     const parsed = JSON.parse(stored) as Record<string, AgentVisualSettings>;
-    return {
-      ...defaults,
-      ...parsed,
-    };
+    // Per-key deep merge so a stored EMPTY entry ({}) — written by add-agent,
+    // clear-avatar, or any run that predated the bundled avatar.* files — does
+    // not shadow the bundled fallback. A stored avatarDataUrl still wins.
+    const merged: Record<string, AgentVisualSettings> = { ...defaults };
+    for (const [id, value] of Object.entries(parsed)) {
+      merged[id] = { ...(defaults[id] ?? {}), ...value };
+    }
+    return merged;
   } catch {
     return defaults;
   }

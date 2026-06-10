@@ -1,5 +1,6 @@
 import type { AgentRole } from "@ai-orchestrator/protocol";
 import type { AgentExpression, AgentPortraitSet } from "../types/agent-expressions";
+import { resolvePersonaPortraitUrl } from "../../../lib/personaPortrait";
 
 const expressions: AgentExpression[] = [
   "neutral",
@@ -60,12 +61,32 @@ export function createFallbackPortraitSet({
 export const agentPortraitRegistry: AgentPortraitSet[] = [];
 
 export function getAgentPortraitSet(agentId: string, role: AgentRole, displayName = agentId) {
-  return (
-    agentPortraitRegistry.find((portrait) => portrait.agentId === agentId) ??
-    createFallbackPortraitSet({
+  const registered = agentPortraitRegistry.find((portrait) => portrait.agentId === agentId);
+  if (registered) {
+    return registered;
+  }
+
+  // Resolve the bundled character art the same way tmux does (persona key → role)
+  // so the cockpit shows real portraits instead of always falling back to initials.
+  const bundledUrl = resolvePersonaPortraitUrl(agentId, role);
+  if (bundledUrl) {
+    const portraits = expressions.reduce(
+      (paths, expression) => ({ ...paths, [expression]: bundledUrl }),
+      {} as Record<AgentExpression, string>,
+    );
+    return {
       agentId,
+      defaultExpression: "neutral",
       glowColor: roleGlowColors[role] ?? "#71717a",
+      imageAssetsAvailable: true,
       name: displayName,
-    })
-  );
+      portraits,
+    } satisfies AgentPortraitSet;
+  }
+
+  return createFallbackPortraitSet({
+    agentId,
+    glowColor: roleGlowColors[role] ?? "#71717a",
+    name: displayName,
+  });
 }
