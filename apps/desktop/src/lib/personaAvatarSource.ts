@@ -1,5 +1,5 @@
 import { normalizeGlobMap } from "./personaFileBundle";
-import { avatarMapFromGlob } from "./personaAvatarBundle";
+import { avatarMapFromGlob, spriteMapFromGlob } from "./personaAvatarBundle";
 
 /**
  * Build-time bundle of persona portraits (agents/<slug>/avatar.*) into asset
@@ -15,3 +15,11 @@ const rawAvatars = import.meta.glob("../../../../agents/**/avatar.{png,jpg,jpeg,
 }) as Record<string, string>;
 
 export const personaAvatars = avatarMapFromGlob(normalizeGlobMap(rawAvatars));
+
+const rawSprites = import.meta.glob("../../../../agents/**/expressions/*.{png,jpg,jpeg,webp}", {
+  query: "?url",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
+export const personaSprites = spriteMapFromGlob(normalizeGlobMap(rawSprites));
