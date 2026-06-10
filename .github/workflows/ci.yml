@@ -36,6 +36,31 @@ jobs:
       - name: Test all packages
         run: corepack pnpm -r --if-present test
 
+  security:
+    name: secret scan + dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for secret scan)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Use Node from .nvmrc
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Enable Corepack (pnpm)
+        run: corepack enable
+
+      - name: Dependency audit (high+)
+        run: corepack pnpm audit --prod --audit-level high
+
 # Note: provider/DGX smoke scripts (provider:smoke:*, server:smoke,
 # tmux:smoke:dry-run, orchestration:mvp:audit) are intentionally NOT run here —
 # they require live endpoints / API keys / a running server. They stay as
