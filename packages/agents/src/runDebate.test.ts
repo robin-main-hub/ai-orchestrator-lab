@@ -192,3 +192,70 @@ describe("runDebate orchestration", () => {
     expect(result.roundResults.length).toBe(0);
   });
 });
+
+import { withPriorRounds } from "./runDebate.js";
+import type { DebateRound } from "@ai-orchestrator/protocol";
+
+function capturingSlot(agent: AgentProfile, content: string, sink: string[]): DebateEngineAgentSlot {
+  return {
+    agent,
+    systemPrompt: `당신은 ${agent.name}입니다.`,
+    modelId: `mock-${agent.role}`,
+    complete: async (req: ProviderCompletionRequest): Promise<ProviderCompletionResponse> => {
+      const userPrompt = [...req.messages].reverse().find((m) => m.role === "user")?.content ?? "";
+      sink.push(userPrompt);
+      return {
+        id: `resp_${req.id}`,
+        requestId: req.id,
+        providerProfileId: req.providerProfileId,
+        modelId: req.modelId,
+        route: req.routePreference,
+        status: "succeeded",
+        content,
+        endpoint: "mock://capture",
+        createdAt: NOW.toISOString(),
+      };
+    },
+  };
+}
+
+describe("withPriorRounds — 이전 라운드 발언 접기 (#2)", () => {
+  it("완료된 라운드 발언을 conversationSummary에 붙인다", () => {
+    const round = {
+      id: "r1",
+      title: "1차 제안",
+      kind: "initial_proposals",
+      status: "completed",
+      utterances: [{ id: "u1", agentId: "agent_architect", roundId: "r1", content: "모놀리식 대신 모듈 분리 제안", tags: [], createdAt: NOW.toISOString() }],
+    } as unknown as DebateRound;
+    const augmented = withPriorRounds(CTX, [round]);
+    expect(augmented.conversationSummary).toContain("이전 라운드 발언");
+    expect(augmented.conversationSummary).toContain("모듈 분리 제안");
+    expect(augmented.conversationSummary).toContain("agent_architect");
+  });
+
+  it("발언 없는 라운드는 원본 컨텍스트 그대로", () => {
+    const empty = { id: "r0", title: "x", kind: "problem_definition", status: "completed", utterances: [] } as unknown as DebateRound;
+    expect(withPriorRounds(CTX, [empty])).toBe(CTX);
+  });
+
+  it("end-to-end: 후속 라운드 프롬프트에 이전 발언이 들어간다", async () => {
+    const prompts: string[] = [];
+    const architect = profile("agent_architect", "시노부", "architect");
+    const skeptic = profile("agent_skeptic", "아스카", "skeptic");
+    const initial = createDebateRounds("debate_fold");
+    const result = await runDebate({
+      debateId: "debate_fold",
+      context: CTX,
+      initialRounds: initial,
+      slots: [
+        capturingSlot(architect, "SIGNATURE_ARCH_PROPOSAL", prompts),
+        capturingSlot(skeptic, "비판합니다", prompts),
+      ],
+    });
+    expect(result.finished).toBe(true);
+    // 첫 프롬프트엔 아직 이전 발언 없음, 이후 어딘가엔 1라운드 발언이 접혀 들어감
+    expect(prompts[0]).not.toContain("SIGNATURE_ARCH_PROPOSAL");
+    expect(prompts.some((p) => p.includes("SIGNATURE_ARCH_PROPOSAL"))).toBe(true);
+  });
+});

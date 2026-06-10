@@ -104,6 +104,20 @@ export function Stage3DebateTable({
                 <h1 className="mt-1 text-balance text-lg font-semibold text-zinc-100">
                   {session.problem}
                 </h1>
+                {session.runState === "running" ? (
+                  <p className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-cyan-300/30 bg-cyan-400/10 px-2 py-0.5 text-[11px] text-cyan-200">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
+                    에이전트들이 실제로 토론하는 중… 라운드가 차오릅니다
+                  </p>
+                ) : session.runState === "error" ? (
+                  <p className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-rose-300/30 bg-rose-400/10 px-2 py-0.5 text-[11px] text-rose-200">
+                    토론 엔진 실행 실패 — {session.runError ?? "공급자/서버 확인 필요"}
+                  </p>
+                ) : session.runState === "live" ? (
+                  <p className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-300/30 bg-emerald-400/10 px-2 py-0.5 text-[11px] text-emerald-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> 실제 에이전트 응답
+                  </p>
+                ) : null}
                 {session.summary ? (
                   <p className="mt-1 text-xs leading-relaxed text-zinc-500">
                     {onOpenAnnex ? "긴 원문과 실행 맥락은 보조자료에서 확인합니다." : session.summary}
