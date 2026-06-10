@@ -380,9 +380,19 @@ button {
 .nav-item {
   justify-content: flex-start;
   width: 100%;
-  min-height: 32px;
+  min-height: 34px;
   padding: 0 10px;
   color: var(--muted);
+  border-color: transparent;
+  background: transparent;
+  border-radius: 9px;
+  position: relative;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
 }
 
 .nav-item svg:last-child {
@@ -390,9 +400,25 @@ button {
 }
 
 .nav-item.active {
-  border-color: #6d5130;
-  background: #251f17;
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.07);
   color: var(--text);
+}
+
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #a78bfa, #7c3aed);
+  box-shadow: 0 0 10px rgba(167, 139, 250, 0.6);
+}
+
+.nav-item.active svg:first-child {
+  color: #c4b5fd;
 }
 
 .provider-registration-menu {
@@ -8750,17 +8776,41 @@ body:has(.app-shell.annex-focus-shell) {
   width: 100%;
 }
 .dashboard__hero {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
   flex-wrap: wrap;
-  padding: 26px 28px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background:
-    radial-gradient(1200px 300px at 10% -40%, color-mix(in srgb, var(--cyan) 16%, transparent), transparent 70%),
-    color-mix(in srgb, var(--panel) 70%, transparent);
+  padding: 30px 32px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(16px);
+}
+
+.dashboard__hero::before,
+.dashboard__hero::after {
+  content: "";
+  position: absolute;
+  width: 240px;
+  height: 240px;
+  border-radius: 999px;
+  filter: blur(72px);
+  pointer-events: none;
+}
+
+.dashboard__hero::before {
+  top: -120px;
+  right: -60px;
+  background: rgba(139, 92, 246, 0.22);
+}
+
+.dashboard__hero::after {
+  bottom: -140px;
+  left: -80px;
+  background: rgba(59, 130, 246, 0.10);
 }
 .dashboard__eyebrow {
   margin: 0 0 6px;
@@ -8793,13 +8843,15 @@ body:has(.app-shell.annex-focus-shell) {
   flex-wrap: wrap;
 }
 .dashboard__pulse-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 9px 13px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--panel) 85%, black);
+  padding: 9px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
   color: var(--text);
   font-size: 12px;
 }
@@ -8823,10 +8875,10 @@ body:has(.app-shell.annex-focus-shell) {
 }
 .dashboard__section-title {
   margin: 0;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  color: rgba(255, 255, 255, 0.38);
   text-transform: uppercase;
 }
 .dashboard__party {
@@ -8856,23 +8908,51 @@ body:has(.app-shell.annex-focus-shell) {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 7px;
-  padding: 16px 16px 14px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--panel) 75%, transparent);
+  gap: 9px;
+  padding: 18px 18px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
   color: var(--text);
   cursor: pointer;
   text-align: left;
-  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 .dashboard__tile:hover {
-  border-color: color-mix(in srgb, var(--cyan) 55%, var(--line));
-  box-shadow: 0 0 22px -10px var(--cyan);
-  transform: translateY(-1px);
+  border-color: rgba(196, 181, 253, 0.35);
+  box-shadow: 0 8px 32px -12px rgba(139, 92, 246, 0.45);
+  transform: translateY(-2px) scale(1.01);
 }
-.dashboard__tile-icon {
-  color: var(--cyan);
+.dashboard__tile-chip {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(124, 58, 237, 0.12));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  color: #c4b5fd;
+}
+.dashboard__tile--parallel .dashboard__tile-chip {
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.22), rgba(20, 184, 166, 0.10));
+  color: #7ef0dd;
+}
+.dashboard__tile--debate .dashboard__tile-chip {
+  background: linear-gradient(135deg, rgba(244, 114, 182, 0.22), rgba(219, 39, 119, 0.10));
+  color: #f9a8d4;
+}
+.dashboard__tile--swarm .dashboard__tile-chip {
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.22), rgba(16, 185, 129, 0.10));
+  color: #6ee7b7;
+}
+.dashboard__tile--cockpit .dashboard__tile-chip {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.22), rgba(217, 119, 6, 0.10));
+  color: #fcd34d;
+}
+.dashboard__tile--sessions .dashboard__tile-chip {
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.22), rgba(37, 99, 235, 0.10));
+  color: #93c5fd;
 }
 .dashboard__tile-label {
   font-size: 14px;
@@ -9011,4 +9091,19 @@ body:has(.app-shell.annex-focus-shell) {
   white-space: nowrap;
   font-size: 11.5px;
   margin-left: auto;
+}
+
+/* --- v0 premium micro-interactions --- */
+@keyframes shimmer {
+  100% { transform: translateX(200%); }
+}
+.dashboard__party-member {
+  transition: transform 180ms ease;
+}
+.dashboard__party-member:hover {
+  transform: translateY(-3px);
+}
+.dashboard__run {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(0, 0, 0, 0.3);
 }
