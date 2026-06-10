@@ -24,6 +24,7 @@ if (typeof window !== "undefined") {
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { AppErrorBoundary } from "./components/AppErrorBoundary";
 
 // Font packages — bundled via Vite so the desktop works offline. Inter
 // covers Latin. JetBrains Mono is reserved for the terminal dock and
@@ -55,7 +56,9 @@ void import("./App")
   .then(({ App }) => {
     root.render(
       <StrictMode>
-        <App />
+        <AppErrorBoundary>
+          <App />
+        </AppErrorBoundary>
       </StrictMode>,
     );
   })
