@@ -8,6 +8,7 @@ import {
   beginAssistantMessage,
   buildSystemPrompt,
   compactSession,
+  shouldAutoCompact,
   createCodingSession,
   extractMentions,
   parseSlashCommand,
@@ -222,7 +223,14 @@ export function CodingWorkbench({
             const messageId = assistantMessageId;
             patchSession(session.id, (current) => updateToolCall(current, { messageId, call: event.call, now: stamp }));
           } else if (event.type === "usage") {
-            patchSession(session.id, (current) => addUsage(current, event.usage, stamp));
+            patchSession(session.id, (current) => {
+              const next = addUsage(current, event.usage, stamp);
+              // MT-OSC 자동 응축 — 입력 토큰이 임계를 넘고 Decider가 허용하면 백그라운드 압축
+              if (shouldAutoCompact(next, event.usage.inputTokens ?? 0)) {
+                return compactSession(next, { now: stamp });
+              }
+              return next;
+            });
           }
         },
       });
