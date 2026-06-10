@@ -6,7 +6,7 @@ import {
   agentSecondaryDisplayLabel,
 } from "../../lib/agentDisplay";
 import { getAgentToolProfileSummary } from "../../lib/agentToolProfiles";
-import { formatModelDisplayName } from "../../lib/helpers";
+import { resolvePersonaPortraitUrl } from "../../lib/personaPortrait";
 import type { AgentActivityStatus, WorkbenchAgent } from "../../types";
 import { AgentPortrait, type AgentState } from "../shared/AgentActivity";
 
@@ -46,7 +46,8 @@ export function AgentRosterSkillPicker({
           const activity = agentActivityById?.[agent.id] ?? "idle";
           const state = mapRosterAgentState(activity);
           const messageCount = messageCountByAgentId?.[agent.id] ?? 0;
-          const messageActionLabel = messageCount > 0 ? `${messageCount}개 대화` : "새 대화";
+          const messageActionLabel = messageCount > 0 ? `대화 ${messageCount}` : "새 대화";
+          const portraitUrl = resolvePersonaPortraitUrl(agent.personaName, agent.role);
 
           return (
             <article
@@ -64,6 +65,7 @@ export function AgentRosterSkillPicker({
                 type="button"
               >
                 <AgentPortrait
+                  avatarUrl={portraitUrl}
                   initials={agentInitialsForDisplay(agent)}
                   state={state}
                   tintClassName={selected ? "bg-cyan-400/15 text-cyan-100" : "bg-violet-500/10 text-violet-200"}
@@ -78,7 +80,7 @@ export function AgentRosterSkillPicker({
                   </div>
                 </div>
               </button>
-              <div className="mt-2 grid grid-cols-3 gap-1.5 pl-11">
+              <div className="mt-2 grid grid-cols-3 gap-1.5">
                 <RosterAction icon={Wrench} label="스킬" onClick={() => onOpenSkills?.(agent.id)} title={describeRoleWork(agent.role)} />
                 <RosterAction
                   icon={Route}
@@ -90,7 +92,7 @@ export function AgentRosterSkillPicker({
                   icon={MessageCircle}
                   label={messageActionLabel}
                   onClick={() => (messageCount > 0 ? onSelectAgent(agent.id) : onOpenMemory?.(agent.id))}
-                  title={messageActionLabel}
+                  title={messageCount > 0 ? `${messageCount}개 대화 열기` : "새 대화 시작"}
                 />
               </div>
             </article>
@@ -121,7 +123,7 @@ function RosterAction({
       type="button"
     >
       <Icon className="h-3 w-3 shrink-0 text-cyan-200/60" />
-      <span className="truncate">{label}</span>
+      <span className="whitespace-nowrap">{label}</span>
     </button>
   );
 }
