@@ -1,4 +1,4 @@
-import { Archive, Check, KeyRound, RefreshCw, ShieldCheck, Smartphone, X } from "lucide-react";
+import { Archive, ChevronRight, KeyRound, RefreshCw, ShieldCheck, Smartphone } from "lucide-react";
 import type {
   ApprovalRequest,
   ApprovalState,
@@ -29,7 +29,6 @@ export type TmuxRedispatchOutcome = {
 };
 
 export function OperationsRailPanel({
-  approvalBusyId,
   approvalError,
   approvalServerStatus,
   approvalServerSnapshot,
@@ -39,14 +38,13 @@ export function OperationsRailPanel({
   onExportBackup,
   onImportExternalIngress,
   onRefreshApprovals,
-  onResolveServerApproval,
+  onOpenControlQueue,
   pendingTmuxApprovalKeys = [],
   permissionSnapshot,
   providerReadiness,
   secretVaultSnapshot,
   tmuxRedispatchOutcomes = [],
 }: {
-  approvalBusyId?: string;
   approvalError?: string;
   approvalServerStatus: "idle" | "loading" | "error" | "ready";
   approvalServerSnapshot?: DesktopApprovalListResponse;
@@ -56,7 +54,8 @@ export function OperationsRailPanel({
   onExportBackup: () => void;
   onImportExternalIngress: () => void;
   onRefreshApprovals: () => void;
-  onResolveServerApproval: (approval: ApprovalRequest, state: Extract<ApprovalState, "approved" | "rejected">) => void;
+  /** 승인/거부는 Control Queue 드로어가 정본 — 여기선 딥링크만 */
+  onOpenControlQueue?: () => void;
   pendingTmuxApprovalKeys?: string[];
   permissionSnapshot: PermissionMatrixSnapshot;
   providerReadiness: ProviderRuntimeReadiness;
@@ -162,23 +161,13 @@ export function OperationsRailPanel({
               </div>
               <div className="server-approval-actions">
                 <button
-                  aria-label="승인"
-                  disabled={approvalBusyId === approval.id}
-                  onClick={() => onResolveServerApproval(approval, "approved")}
-                  title="승인"
+                  aria-label="Control Queue에서 처리"
+                  disabled={!onOpenControlQueue}
+                  onClick={() => onOpenControlQueue?.()}
+                  title="Control Queue 드로어에서 승인/거부 (⌘⇧A)"
                   type="button"
                 >
-                  <Check size={12} />
-                </button>
-                <button
-                  aria-label="거부"
-                  className="is-reject"
-                  disabled={approvalBusyId === approval.id}
-                  onClick={() => onResolveServerApproval(approval, "rejected")}
-                  title="거부"
-                  type="button"
-                >
-                  <X size={12} />
+                  <ChevronRight size={12} />
                 </button>
               </div>
             </article>
