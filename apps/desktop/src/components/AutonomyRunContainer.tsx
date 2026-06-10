@@ -21,7 +21,9 @@ import { codingPacketToAutonomyForm } from "../lib/codingPacketToAutonomyForm";
 import { stepRowFromReduce, type AutonomyStepRow } from "../lib/autonomyTimeline";
 import { bundledPersonaNames, personaFileSource } from "../lib/personaBundleSource";
 import { personaAvatars, personaSprites } from "../lib/personaAvatarSource";
-import { resolvePersonaAgentSet } from "../lib/personaAgentSet";
+import { DEFAULT_HERMES_RESET_COMMAND, resolvePersonaAgentSet } from "../lib/personaAgentSet";
+import { acquireHermesSlot } from "../lib/hermesSlotPool";
+import { loadHermesPool, saveHermesPool } from "../lib/hermesPoolStore";
 import { classifyExpression } from "../lib/expressionClassifier";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
 import { AutonomyRunPanel } from "./AutonomyRunPanel";
@@ -105,13 +107,17 @@ export function AutonomyRunContainer({
     try {
       const personaName = effectiveForm.personaName.trim();
       const persona = await loadPersonaOrHeader(personaName);
+      // Sticky Hermes slot: the persona keeps her own agent across runs; a
+      // reset is dispatched only when a recycled slot changes characters.
+      const slotAcquisition = acquireHermesSlot(loadHermesPool(), personaName);
+      saveHermesPool(slotAcquisition.pool);
       const input = buildAutonomyRunInput(effectiveForm, {
         sessionId,
         persona,
-        // persona = atomic agent set: a NEW Hermes session boots in the pane
-        // before the identity lands, so the character never inherits the
-        // previous occupant's context (soul + agents + role move together).
-        agentSet: resolvePersonaAgentSet(personaName),
+        agentSet: resolvePersonaAgentSet(personaName, {
+          slotId: slotAcquisition.slot.id,
+          bootSteps: slotAcquisition.requiresBoot ? [DEFAULT_HERMES_RESET_COMMAND] : [],
+        }),
         ctx: {
           now: startedAt,
           makeSessionId: (personaName, paneId) => `as_${personaName}_${paneId}_${stamp}`,

@@ -78,27 +78,30 @@ describe("buildPersonaInjectionPlan", () => {
     );
   });
 
-  it("agent set: fresh-session boot precedes the identity, and the header carries the declared role", () => {
+  it("agent set on a recycled slot: reset boot precedes the identity, header carries slot + declared role", () => {
     const plan = buildPersonaInjectionPlan({
       session: session({ agentId: "kurumi", role: "orchestrator" }),
       persona: persona({ personaName: "kurumi" }),
       kickoffTask: "Run the swarm.",
-      agentSet: resolvePersonaAgentSet("kurumi"),
+      agentSet: resolvePersonaAgentSet("kurumi", { slotId: "hermes-02", bootSteps: ["/new"] }),
     });
-    // boot -> identity -> kickoff: soul, agents, and role land on a NEW agent session
+    // reset -> identity -> kickoff: the recycled slot inherits nothing
     expect(plan.bootSteps).toEqual(["/new"]);
     expect(plan.steps).toEqual(["/new", plan.injectionText, "Run the swarm."]);
-    expect(plan.injectionText).toContain("fresh hermes agent session");
+    expect(plan.injectionText).toContain("slot hermes-02");
+    expect(plan.injectionText).toContain("freshly reset session");
     expect(plan.injectionText).toContain("Declared role: companion");
   });
 
-  it("agent set with empty boot keeps the legacy reuse-session behavior", () => {
+  it("agent set on a sticky slot: no boot, the persona keeps her own agent", () => {
     const plan = buildPersonaInjectionPlan({
       session: session(),
       persona: persona(),
-      agentSet: resolvePersonaAgentSet("makise", { bootSteps: [] }),
+      agentSet: resolvePersonaAgentSet("makise", { slotId: "hermes-01" }),
     });
     expect(plan.bootSteps).toEqual([]);
     expect(plan.steps).toEqual([plan.injectionText]);
+    expect(plan.injectionText).toContain("slot hermes-01");
+    expect(plan.injectionText).not.toContain("freshly reset");
   });
 });
