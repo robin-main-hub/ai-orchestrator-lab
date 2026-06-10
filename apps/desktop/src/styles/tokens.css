@@ -89,8 +89,8 @@
   --warning-foreground: #0a0a0b;
 
   /* Borders and inputs */
-  --border: #27272a;              /* zinc-800 */
-  --border-subtle: #1f1f23;
+  --border: rgba(255, 255, 255, 0.08);   /* v0: white-alpha glass border */
+  --border-subtle: rgba(255, 255, 255, 0.05);
   --border-focus: #a78bfa;        /* match --primary */
   --input: #141417;               /* match --card */
   --ring: #a78bfa;                /* match --primary */

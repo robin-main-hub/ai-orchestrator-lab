@@ -128,12 +128,14 @@ export function DashboardView({
             const Icon = ACTION_ICONS[action.icon];
             return (
               <button
-                className="dashboard__tile"
+                className={`dashboard__tile dashboard__tile--${action.icon}`}
                 key={action.id}
                 onClick={() => onNavigate(action.target)}
                 type="button"
               >
-                <Icon size={20} aria-hidden className="dashboard__tile-icon" />
+                <span className="dashboard__tile-chip" aria-hidden>
+                  <Icon size={18} />
+                </span>
                 <span className="dashboard__tile-label">{action.label}</span>
                 <span className="dashboard__tile-desc">{action.description}</span>
               </button>
