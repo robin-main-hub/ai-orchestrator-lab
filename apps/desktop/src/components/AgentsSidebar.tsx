@@ -382,7 +382,7 @@ function AgentCard({
           </div>
         </button>
 
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
           <Button
             aria-label={`${agent.name} 설정`}
             className="h-6 w-6"

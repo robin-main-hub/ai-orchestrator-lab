@@ -77,16 +77,16 @@ export function OperationsRailPanel({
         <ShieldCheck size={16} />
         <span>운영</span>
         <div className="rail-action-row">
-          <button className="rail-icon-button" onClick={onImportExternalIngress} title="외부 인입 가져오기" type="button">
+          <button className="rail-icon-button" onClick={onImportExternalIngress} aria-label="외부 인입 가져오기" title="외부 인입 가져오기" type="button">
             <Smartphone size={13} />
           </button>
-          <button className="rail-icon-button" onClick={onExportBackup} title="백업 내보내기" type="button">
+          <button className="rail-icon-button" onClick={onExportBackup} aria-label="백업 내보내기" title="백업 내보내기" type="button">
             <Archive size={13} />
           </button>
-          <button className="rail-icon-button" onClick={onCheckProviderVault} title="프로바이더 보관소 점검" type="button">
+          <button className="rail-icon-button" onClick={onCheckProviderVault} aria-label="프로바이더 보관소 점검" title="프로바이더 보관소 점검" type="button">
             <KeyRound size={13} />
           </button>
-          <button className="rail-icon-button" onClick={onRefreshApprovals} title="DGX 승인 새로고침" type="button">
+          <button className="rail-icon-button" onClick={onRefreshApprovals} aria-label="DGX 승인 새로고침" title="DGX 승인 새로고침" type="button">
             <RefreshCw size={13} />
           </button>
         </div>
@@ -162,6 +162,7 @@ export function OperationsRailPanel({
               </div>
               <div className="server-approval-actions">
                 <button
+                  aria-label="승인"
                   disabled={approvalBusyId === approval.id}
                   onClick={() => onResolveServerApproval(approval, "approved")}
                   title="승인"
@@ -170,6 +171,8 @@ export function OperationsRailPanel({
                   <Check size={12} />
                 </button>
                 <button
+                  aria-label="거부"
+                  className="is-reject"
                   disabled={approvalBusyId === approval.id}
                   onClick={() => onResolveServerApproval(approval, "rejected")}
                   title="거부"

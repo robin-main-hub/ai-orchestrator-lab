@@ -28,7 +28,7 @@ export function RuntimeRailPanel({
       <header>
         <Server size={16} />
         <span>시스템</span>
-        <button className="rail-icon-button" onClick={onProbeDgx} title="DGX-02 점검" type="button">
+        <button className="rail-icon-button" onClick={onProbeDgx} aria-label="DGX-02 점검" title="DGX-02 점검" type="button">
           <RefreshCw size={13} />
         </button>
       </header>
@@ -38,7 +38,8 @@ export function RuntimeRailPanel({
             <div className="rail-node-head">
               <span>{node.label}</span>
               <button
-                className="rail-icon-button"
+                aria-label={`${node.label} 재시작 승인`}
+                className="rail-icon-button is-destructive"
                 onClick={() => onRequestReboot(node.id as DeviceRebootRequest["targetNodeId"])}
                 title={`${node.label} 재시작 승인`}
                 type="button"

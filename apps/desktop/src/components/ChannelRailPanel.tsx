@@ -28,7 +28,7 @@ export function ChannelRailPanel({
       <header>
         <RadioTower size={16} />
         <span>채널</span>
-        <button className="rail-icon-button" onClick={onImportExternalIngress} title="외부 인입 가져오기" type="button">
+        <button className="rail-icon-button" onClick={onImportExternalIngress} aria-label="외부 인입 가져오기" title="외부 인입 가져오기" type="button">
           <Smartphone size={13} />
         </button>
       </header>

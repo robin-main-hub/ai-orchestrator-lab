@@ -20,7 +20,7 @@ export function BackupRailMenu({
       <header>
         <Archive size={16} />
         <span>백업</span>
-        <button className="rail-icon-button" onClick={onExportBackup} title="Projection 생성" type="button">
+        <button className="rail-icon-button" onClick={onExportBackup} aria-label="Projection 생성" title="Projection 생성" type="button">
           <RefreshCw size={13} />
         </button>
       </header>
