@@ -1,11 +1,18 @@
-import { useState } from "react";
-import { Play, Plus, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { Megaphone, Play, Plus, Trash2 } from "lucide-react";
 import { loadPersona, type LoadedPersona } from "@ai-orchestrator/agents";
 import type { TerminalHostKind, TmuxPaneRole } from "@ai-orchestrator/protocol";
-import { runParallelAutonomy } from "../lib/parallelAutonomy";
+import {
+  broadcastToMissions,
+  createCheckInTargets,
+  runParallelAutonomy,
+  type LiveMissionTarget,
+  type MissionRuntimeBinding,
+} from "../lib/parallelAutonomy";
 import type { AutonomyMode } from "../lib/autonomousRun";
 import { SELECTABLE_PANE_ROLES, headerOnlyPersona, modeLabel } from "../lib/autonomyRunForm";
 import { stepRowFromReduce } from "../lib/autonomyTimeline";
+import { createCheckInState, runCheckInSweep, startCheckInLoop, type CheckInState } from "../lib/missionCheckIn";
 import { personaFileSource, bundledPersonaNames } from "../lib/personaBundleSource";
 import { createSummonRegistry } from "../lib/personaSummon";
 import { buildWorkspacePlan, workspaceSafePrefixes } from "../lib/missionWorkspace";
@@ -63,6 +70,24 @@ export function ParallelMissionContainer({
   const [isolate, setIsolate] = useState(false);
   const [repoPath, setRepoPath] = useState("");
   const [baseBranch, setBaseBranch] = useState("main");
+  // Tmux-Orchestrator-style self check-ins: every N minutes, sweep the running
+  // missions and nudge the ones whose pane output stopped moving.
+  const [checkInEnabled, setCheckInEnabled] = useState(true);
+  const [checkInMinutes, setCheckInMinutes] = useState(5);
+  const [checkInNote, setCheckInNote] = useState<string | null>(null);
+  // NTM-style broadcast: one instruction to every live mission at once.
+  const [broadcastText, setBroadcastText] = useState("");
+  const [broadcastNote, setBroadcastNote] = useState<string | null>(null);
+  const [broadcasting, setBroadcasting] = useState(false);
+
+  // Live run bindings (filled by onAllocations, pruned as missions finish) so
+  // broadcast/check-in can reach the panes while runParallelAutonomy is in flight.
+  const allocationsRef = useRef<ReadonlyArray<LiveMissionTarget>>([]);
+  const doneIdsRef = useRef<Set<string>>(new Set());
+  const checkInStateRef = useRef<CheckInState>(createCheckInState());
+  const bindingRef = useRef<MissionRuntimeBinding | null>(null);
+
+  const liveTargets = () => allocationsRef.current.filter((t) => !doneIdsRef.current.has(t.missionId));
 
   const verdict = areDraftsRunnable(drafts);
 
@@ -71,10 +96,37 @@ export function ParallelMissionContainer({
   const addDraft = () => setDrafts((current) => [...current, emptyDraft("code")]);
   const removeDraft = (id: string) => setDrafts((current) => current.filter((draft) => draft.id !== id));
 
+  const onBroadcast = async () => {
+    const message = broadcastText.trim();
+    if (!message || broadcasting) return;
+    const targets = liveTargets();
+    if (targets.length === 0 || !bindingRef.current) {
+      setBroadcastNote("실행 중인 미션이 없습니다.");
+      return;
+    }
+    setBroadcasting(true);
+    setBroadcastNote("전송 중…");
+    try {
+      const results = await broadcastToMissions({ targets, message, binding: bindingRef.current });
+      const ok = results.filter((r) => r.ok).length;
+      setBroadcastNote(`브로드캐스트 ${ok}/${results.length} 전송됨`);
+      if (ok > 0) setBroadcastText("");
+    } catch (caught) {
+      setBroadcastNote(`브로드캐스트 실패: ${caught instanceof Error ? caught.message : String(caught)}`);
+    } finally {
+      setBroadcasting(false);
+    }
+  };
+
   const onRun = async () => {
     if (running || !verdict.ok) return;
     setRunning(true);
     setError(null);
+    setBroadcastNote(null);
+    setCheckInNote(null);
+    allocationsRef.current = [];
+    doneIdsRef.current = new Set();
+    checkInStateRef.current = createCheckInState();
     const stamp = `${Date.now()}`;
     const workspaceConfig =
       isolate && repoPath.trim()
@@ -90,6 +142,26 @@ export function ParallelMissionContainer({
       initialBoard = applyMissionBranch(initialBoard, missionId, plan.branchName);
     }
     setBoard(initialBoard);
+
+    const server = { serverBaseUrl, host, tmuxSessionName };
+    bindingRef.current = { mode, server, runId: `parallel_${stamp}` };
+
+    let checkInLoop: { stop: () => void } | null = null;
+    if (checkInEnabled) {
+      checkInLoop = startCheckInLoop({
+        intervalMs: Math.max(1, checkInMinutes) * 60_000,
+        tick: async () => {
+          const targets = liveTargets();
+          if (targets.length === 0 || !bindingRef.current) return;
+          const bound = createCheckInTargets({ targets, binding: bindingRef.current });
+          const result = await runCheckInSweep({ targets: bound, state: checkInStateRef.current });
+          checkInStateRef.current = result.state;
+          const nudged = result.rows.filter((row) => row.nudged).length;
+          setCheckInNote(`마지막 체크인: 대상 ${result.rows.length} · 무응답 nudge ${nudged}`);
+        },
+      });
+    }
+
     try {
       // Pre-load every persona so the spec builder can hand a sync map to the engine.
       const personaByName = new Map<string, LoadedPersona>();
@@ -118,12 +190,18 @@ export function ParallelMissionContainer({
           makeSessionId: (personaName, paneId) => `as_${personaName}_${paneId}_${stamp}`,
         },
         mode,
-        server: { serverBaseUrl, host, tmuxSessionName },
+        server,
         maxConcurrency,
         runId: `parallel_${stamp}`,
         // in auto_safe mode, repo-scoped `worktree add` may auto-approve; teardown never does
         extraSafePrefixes: workspaceConfig ? workspaceSafePrefixes(workspaceConfig) : undefined,
-        onMissionUpdate: (update) => setBoard((current) => applyMissionUpdate(current, update)),
+        onAllocations: (allocations) => {
+          allocationsRef.current = allocations;
+        },
+        onMissionUpdate: (update) => {
+          if (update.phase === "done") doneIdsRef.current.add(update.missionId);
+          setBoard((current) => applyMissionUpdate(current, update));
+        },
         onMissionStep: (missionId, step) =>
           setBoard((current) => {
             const card = current.cards.find((c) => c.id === missionId);
@@ -134,6 +212,7 @@ export function ParallelMissionContainer({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
+      checkInLoop?.stop();
       setRunning(false);
     }
   };
@@ -196,7 +275,55 @@ export function ParallelMissionContainer({
         {isolate && !repoPath.trim() && !running ? (
           <p className="parallel-console__hint">레포 경로를 입력해야 워크트리 격리가 적용됩니다.</p>
         ) : null}
+        <label className="parallel-workspace__toggle">
+          <input
+            type="checkbox"
+            checked={checkInEnabled}
+            onChange={(event) => setCheckInEnabled(event.target.checked)}
+            disabled={running}
+          />
+          자가 체크인 — 무응답 에이전트에게 자동으로 진행 보고를 요구 (Tmux-Orchestrator 패턴)
+          <select
+            className="parallel-checkin__interval"
+            value={checkInMinutes}
+            onChange={(event) => setCheckInMinutes(Number(event.target.value))}
+            disabled={running || !checkInEnabled}
+            aria-label="체크인 주기"
+          >
+            {[1, 5, 10, 30].map((minutes) => (
+              <option key={minutes} value={minutes}>
+                {minutes}분마다
+              </option>
+            ))}
+          </select>
+        </label>
+        {checkInNote ? <p className="parallel-console__hint">{checkInNote}</p> : null}
       </div>
+
+      {running ? (
+        <div className="parallel-broadcast">
+          <Megaphone size={14} aria-hidden />
+          <input
+            className="parallel-broadcast__input"
+            placeholder="실행 중인 모든 에이전트에게 일괄 지시 (브로드캐스트)"
+            value={broadcastText}
+            onChange={(event) => setBroadcastText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void onBroadcast();
+            }}
+            disabled={broadcasting}
+          />
+          <button
+            type="button"
+            className="parallel-broadcast__send"
+            onClick={() => void onBroadcast()}
+            disabled={broadcasting || !broadcastText.trim()}
+          >
+            {broadcasting ? "전송 중…" : "전체 지시"}
+          </button>
+          {broadcastNote ? <span className="parallel-broadcast__note">{broadcastNote}</span> : null}
+        </div>
+      ) : null}
 
       {!verdict.ok && !running ? <p className="parallel-console__hint">{verdict.reason}</p> : null}
       {error ? <p className="parallel-console__error">⚠ {error}</p> : null}

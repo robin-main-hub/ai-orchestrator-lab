@@ -2,7 +2,14 @@ import type { LoadedPersona } from "@ai-orchestrator/agents";
 import type { CodingPacket } from "@ai-orchestrator/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { buildWorkspacePlan } from "./missionWorkspace";
-import { runParallelAutonomy, type ParallelMissionSpec } from "./parallelAutonomy";
+import { runCheckInSweep, createCheckInState } from "./missionCheckIn";
+import {
+  broadcastToMissions,
+  createCheckInTargets,
+  runParallelAutonomy,
+  type LiveMissionTarget,
+  type ParallelMissionSpec,
+} from "./parallelAutonomy";
 import { createSummonRegistry, type SummonContext } from "./personaSummon";
 
 const ctx: SummonContext = {
@@ -179,5 +186,112 @@ describe("runParallelAutonomy", () => {
     expect(results[0]).toMatchObject({ ok: true, loopStatus: "failed" });
     expect(dispatched.some((c) => c.includes("worktree add"))).toBe(true);
     expect(dispatched.some((c) => c.includes("worktree remove"))).toBe(false);
+  });
+
+  it("onAllocations exposes live session bindings before missions finish", async () => {
+    const dispatchClient = vi.fn(async () => dispatchResponse());
+    const captureClient = vi.fn(async () => ({
+      status: "captured",
+      reason: "ok",
+      payload: { outputPreview: "All tests passed", lineCount: 1 },
+    }) as any);
+
+    let live: ReadonlyArray<LiveMissionTarget> = [];
+    await runParallelAutonomy({
+      registry: createSummonRegistry([
+        { paneId: "%1", role: "qa" },
+        { paneId: "%2", role: "qa" },
+      ]),
+      missions: [spec("aoi", "qa"), spec("rin", "qa")],
+      ctx,
+      mode: "human",
+      clients: { dispatchClient, captureClient },
+      now: () => "2026-06-10T00:00:00.000Z",
+      onAllocations: (allocations) => {
+        live = allocations;
+      },
+    });
+    expect(live.map((t) => t.missionId).sort()).toEqual(["aoi", "rin"]);
+    expect(new Set(live.map((t) => t.session.paneId)).size).toBe(2);
+  });
+});
+
+describe("broadcastToMissions", () => {
+  it("dispatches the gated instruction to every live pane", async () => {
+    const dispatchedByPane = new Map<string, string[]>();
+    const dispatchClient = vi.fn(async ({ request }: any) => {
+      const list = dispatchedByPane.get(request.paneId) ?? [];
+      list.push(request.commandPreview);
+      dispatchedByPane.set(request.paneId, list);
+      return dispatchResponse();
+    });
+
+    const targets: LiveMissionTarget[] = [
+      { missionId: "aoi", session: { id: "s1", sessionId: "x", role: "qa", paneId: "%1" } as any },
+      { missionId: "rin", session: { id: "s2", sessionId: "x", role: "qa", paneId: "%2" } as any },
+    ];
+    const results = await broadcastToMissions({
+      targets,
+      message: "中간 보고해줘",
+      binding: { mode: "human", clients: { dispatchClient }, runId: "r1" },
+    });
+
+    expect(results.every((r) => r.ok)).toBe(true);
+    expect(dispatchedByPane.get("%1")![0]).toBe("[브로드캐스트] 中간 보고해줘");
+    expect(dispatchedByPane.get("%2")![0]).toBe("[브로드캐스트] 中간 보고해줘");
+  });
+
+  it("reports per-target failures without failing the others", async () => {
+    const dispatchClient = vi.fn(async ({ request }: any) => {
+      if (request.paneId === "%2") throw new Error("pane gone");
+      return dispatchResponse();
+    });
+    const targets: LiveMissionTarget[] = [
+      { missionId: "aoi", session: { id: "s1", sessionId: "x", role: "qa", paneId: "%1" } as any },
+      { missionId: "rin", session: { id: "s2", sessionId: "x", role: "qa", paneId: "%2" } as any },
+    ];
+    const results = await broadcastToMissions({
+      targets,
+      message: "hi",
+      binding: { mode: "human", clients: { dispatchClient } },
+    });
+    expect(results.find((r) => r.missionId === "aoi")).toMatchObject({ ok: true });
+    expect(results.find((r) => r.missionId === "rin")).toMatchObject({ ok: false, error: "pane gone" });
+  });
+});
+
+describe("createCheckInTargets", () => {
+  it("binds gated capture + nudge so the sweep nudges only stalled panes", async () => {
+    const dispatched: Array<{ paneId: string; command: string }> = [];
+    const dispatchClient = vi.fn(async ({ request }: any) => {
+      dispatched.push({ paneId: request.paneId, command: request.commandPreview });
+      return dispatchResponse();
+    });
+    const outputs: Record<string, string[]> = { "%1": ["same", "same"], "%2": ["a", "b"] };
+    const calls: Record<string, number> = { "%1": 0, "%2": 0 };
+    const captureClient = vi.fn(async ({ request }: any) => {
+      const seq = outputs[request.paneId]!;
+      const index = Math.min(calls[request.paneId]!++, seq.length - 1);
+      return { status: "captured", reason: "ok", payload: { outputPreview: seq[index], lineCount: 1 } } as any;
+    });
+
+    const targets = createCheckInTargets({
+      targets: [
+        { missionId: "quiet", session: { id: "s1", sessionId: "x", role: "qa", paneId: "%1" } as any },
+        { missionId: "busy", session: { id: "s2", sessionId: "x", role: "qa", paneId: "%2" } as any },
+      ],
+      binding: { mode: "human", clients: { dispatchClient, captureClient }, runId: "r1" },
+    });
+
+    let state = createCheckInState();
+    ({ state } = await runCheckInSweep({ targets, state })); // baseline
+    const { rows } = await runCheckInSweep({ targets, state });
+
+    expect(rows.find((r) => r.missionId === "quiet")).toMatchObject({ status: "stalled", nudged: true });
+    expect(rows.find((r) => r.missionId === "busy")).toMatchObject({ status: "active", nudged: false });
+    // the nudge went to the stalled pane only, through the gate
+    expect(dispatched).toHaveLength(1);
+    expect(dispatched[0]!.paneId).toBe("%1");
+    expect(dispatched[0]!.command).toContain("정기 체크인");
   });
 });

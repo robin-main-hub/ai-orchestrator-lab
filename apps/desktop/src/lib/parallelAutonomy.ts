@@ -7,6 +7,7 @@ import {
   type AutonomyMode,
   type AutonomyServerConfig,
 } from "./autonomousRun";
+import type { CheckInTarget } from "./missionCheckIn";
 import type { WorkspacePlan } from "./missionWorkspace";
 import {
   runParallelMissions,
@@ -63,6 +64,8 @@ export type RunParallelAutonomyInput = {
   logger?: (message: string) => void;
   /** running/done transitions per mission, for a live multi-terminal board */
   onMissionUpdate?: (update: MissionUpdate) => void;
+  /** fired once after allocation — exposes live session bindings for broadcast/check-in while the run is in flight */
+  onAllocations?: (allocations: ReadonlyArray<LiveMissionTarget>) => void;
   /** per-mission loop-iteration observer (drives each mission's terminal feed) */
   onMissionStep?: (missionId: string, step: Parameters<NonNullable<ClosedLoopEffects["onStep"]>>[0]) => void;
 };
@@ -87,6 +90,12 @@ export async function runParallelAutonomy(
     ctx: input.ctx,
     maxConcurrency: input.maxConcurrency,
     onUpdate: input.onMissionUpdate,
+    onAllocate: input.onAllocations
+      ? (allocations) =>
+          input.onAllocations!(
+            allocations.map((entry) => ({ missionId: entry.mission.id, session: entry.session })),
+          )
+      : undefined,
     now,
     runMission: async ({ mission, session }) => {
       // Each mission gets its own effects factory so the onStep observer and the
@@ -148,5 +157,81 @@ export async function runParallelAutonomy(
       }
       return status;
     },
+  });
+}
+
+/** a live (allocated, not yet finished) mission's session binding */
+export type LiveMissionTarget = { missionId: string; session: AgentSession };
+
+export type MissionRuntimeBinding = {
+  mode: AutonomyMode;
+  server?: AutonomyServerConfig;
+  clients?: AutonomyClientOverrides;
+  runId?: string;
+  logger?: (message: string) => void;
+};
+
+export type BroadcastResult = { missionId: string; ok: boolean; error?: string };
+
+/**
+ * NTM-style broadcast: dispatch one instruction to every live mission's pane
+ * at once — each dispatch flows through the same permission/approval/redaction
+ * gate as the missions' own commands.
+ */
+export async function broadcastToMissions(input: {
+  targets: ReadonlyArray<LiveMissionTarget>;
+  message: string;
+  binding: MissionRuntimeBinding;
+}): Promise<BroadcastResult[]> {
+  const { binding } = input;
+  const createEffects = createAutonomyEffectsFactory({
+    mode: binding.mode,
+    server: binding.server,
+    clients: binding.clients,
+    runId: binding.runId ? `${binding.runId}_bcast` : "bcast",
+    logger: binding.logger,
+  });
+  return Promise.all(
+    input.targets.map(async (target): Promise<BroadcastResult> => {
+      try {
+        await createEffects(target.session).dispatch(`[브로드캐스트] ${input.message}`, { stepIndex: -300 });
+        return { missionId: target.missionId, ok: true };
+      } catch (error) {
+        return {
+          missionId: target.missionId,
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }),
+  );
+}
+
+/**
+ * Bind live missions to gated capture/nudge effects so the check-in scheduler
+ * (missionCheckIn.ts) can sweep them: capture reads the pane through the gate,
+ * nudge dispatches an instruction through the gate.
+ */
+export function createCheckInTargets(input: {
+  targets: ReadonlyArray<LiveMissionTarget>;
+  binding: MissionRuntimeBinding;
+}): CheckInTarget[] {
+  const { binding } = input;
+  const createEffects = createAutonomyEffectsFactory({
+    mode: binding.mode,
+    server: binding.server,
+    clients: binding.clients,
+    runId: binding.runId ? `${binding.runId}_checkin` : "checkin",
+    logger: binding.logger,
+  });
+  return input.targets.map((target) => {
+    const effects = createEffects(target.session);
+    return {
+      missionId: target.missionId,
+      capture: async () => await effects.capture(),
+      nudge: async (message) => {
+        await effects.dispatch(message, { stepIndex: -400 });
+      },
+    };
   });
 }
