@@ -563,6 +563,19 @@ export type { DebateSummaryOptions, TagDistribution } from './debateSummary.js';
 export { extractCodingPacketFromDebate } from "./codingPacketFromDebate.js";
 export type { ExtractCodingPacketOptions } from "./codingPacketFromDebate.js";
 
+export {
+  synthesizeChairmanDecision,
+  chairmanDecisionToNotes,
+  withChairmanSynthesis,
+} from "./chairmanSynthesis.js";
+export type {
+  ChairmanDecision,
+  ChairmanAdoptedPoint,
+  ChairmanContestedPoint,
+  ChairmanSynthesisOptions,
+  ConsensusLevel,
+} from "./chairmanSynthesis.js";
+
 export { runDebate } from "./runDebate.js";
 export type { RunDebateParams, RunDebateResult } from "./runDebate.js";
 
