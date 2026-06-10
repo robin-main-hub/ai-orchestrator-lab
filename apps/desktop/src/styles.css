@@ -8577,3 +8577,50 @@ body:has(.app-shell.annex-focus-shell) {
   flex-basis: 100%;
   padding-left: 14px;
 }
+
+/* --- worktree isolation settings + branch tag --- */
+.parallel-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.parallel-workspace__toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+.parallel-workspace__fields {
+  display: flex;
+  gap: 8px;
+}
+.parallel-workspace__repo {
+  flex: 1;
+}
+.parallel-workspace__base {
+  width: 160px;
+}
+.parallel-workspace__repo,
+.parallel-workspace__base {
+  background: color-mix(in srgb, var(--panel) 88%, black);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 7px 9px;
+  font-size: 12.5px;
+  font-family: var(--font-mono, monospace);
+}
+.parallel-terminal__branch {
+  font-size: 10.5px;
+  font-family: var(--font-mono, monospace);
+  color: #34d399;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}

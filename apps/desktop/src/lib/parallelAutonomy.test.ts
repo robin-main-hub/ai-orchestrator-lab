@@ -1,6 +1,7 @@
 import type { LoadedPersona } from "@ai-orchestrator/agents";
 import type { CodingPacket } from "@ai-orchestrator/protocol";
 import { describe, expect, it, vi } from "vitest";
+import { buildWorkspacePlan } from "./missionWorkspace";
 import { runParallelAutonomy, type ParallelMissionSpec } from "./parallelAutonomy";
 import { createSummonRegistry, type SummonContext } from "./personaSummon";
 
@@ -114,5 +115,69 @@ describe("runParallelAutonomy", () => {
 
     expect(results.find((r) => !r.ok)).toMatchObject({ ok: false, reason: "no_free_pane" });
     expect(results.find((r) => r.ok)).toMatchObject({ ok: true, loopStatus: "completed" });
+  });
+
+  it("worktree workspace: gated setup before injection, kickoff preamble, teardown after completion", async () => {
+    const dispatched: string[] = [];
+    const dispatchClient = vi.fn(async ({ request }: any) => {
+      dispatched.push(request.commandPreview);
+      return dispatchResponse();
+    });
+    const captureClient = vi.fn(async () => ({
+      status: "captured",
+      reason: "ok",
+      payload: { outputPreview: "All tests passed", lineCount: 1 },
+    }) as any);
+
+    const workspace = buildWorkspacePlan("run1_m1", { repoPath: "/srv/repo", cleanup: true });
+    const { results } = await runParallelAutonomy({
+      registry: createSummonRegistry([{ paneId: "%1", role: "code" }]),
+      missions: [{ ...spec("aoi", "code"), workspace }],
+      ctx,
+      mode: "human",
+      clients: { dispatchClient, captureClient },
+      now: () => "2026-06-10T00:00:00.000Z",
+    });
+
+    expect(results[0]).toMatchObject({ ok: true, loopStatus: "completed" });
+    // setup is the very first gated dispatch — before identity injection
+    expect(dispatched[0]).toContain("worktree add");
+    const injectionIndex = dispatched.findIndex((c) => c.includes("-identity"));
+    expect(injectionIndex).toBeGreaterThan(0);
+    // kickoff carries the worktree preamble + the original goal
+    const kickoff = dispatched.find((c) => c.includes("워크스페이스 격리"));
+    expect(kickoff).toBeDefined();
+    expect(kickoff).toContain("goal-aoi");
+    // cleanup teardown ran after completion
+    expect(dispatched.some((c) => c.includes("worktree remove"))).toBe(true);
+    expect(dispatched.indexOf(dispatched.find((c) => c.includes("worktree remove"))!)).toBeGreaterThan(injectionIndex);
+  });
+
+  it("a failed mission keeps its worktree (no teardown)", async () => {
+    const dispatched: string[] = [];
+    const dispatchClient = vi.fn(async ({ request }: any) => {
+      dispatched.push(request.commandPreview);
+      return dispatchResponse();
+    });
+    // pane reports a hard failure -> loop fails
+    const captureClient = vi.fn(async () => ({
+      status: "captured",
+      reason: "ok",
+      payload: { outputPreview: "error: cannot compile", lineCount: 1 },
+    }) as any);
+
+    const workspace = buildWorkspacePlan("run1_m1", { repoPath: "/srv/repo", cleanup: true });
+    const { results } = await runParallelAutonomy({
+      registry: createSummonRegistry([{ paneId: "%1", role: "code" }]),
+      missions: [{ ...spec("aoi", "code"), workspace }],
+      ctx,
+      mode: "human",
+      clients: { dispatchClient, captureClient },
+      now: () => "2026-06-10T00:00:00.000Z",
+    });
+
+    expect(results[0]).toMatchObject({ ok: true, loopStatus: "failed" });
+    expect(dispatched.some((c) => c.includes("worktree add"))).toBe(true);
+    expect(dispatched.some((c) => c.includes("worktree remove"))).toBe(false);
   });
 });

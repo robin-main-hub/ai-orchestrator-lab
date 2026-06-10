@@ -86,6 +86,8 @@ export type ParallelBoardCard = {
   /** allocation rejection reason, when status === "rejected" */
   rejection?: "no_free_pane" | "already_summoned";
   paneId?: string;
+  /** isolated git worktree branch this mission works on, when workspace isolation is enabled */
+  branch?: string;
   steps: AutonomyStepRow[];
 };
 
@@ -106,6 +108,11 @@ export function createParallelBoard(drafts: ReadonlyArray<ParallelMissionDraft>)
 
 function patchCard(board: ParallelBoard, id: string, patch: (card: ParallelBoardCard) => ParallelBoardCard): ParallelBoard {
   return { cards: board.cards.map((card) => (card.id === id ? patch(card) : card)) };
+}
+
+/** tag a mission's card with its isolated worktree branch. */
+export function applyMissionBranch(board: ParallelBoard, missionId: string, branch: string): ParallelBoard {
+  return patchCard(board, missionId, (card) => ({ ...card, branch }));
 }
 
 /** running/done phase transition from the live mission stream. */

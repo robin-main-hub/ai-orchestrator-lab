@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
+  applyMissionBranch,
   applyMissionResults,
   applyMissionStep,
   applyMissionUpdate,
@@ -25,6 +26,7 @@ describe("ParallelMissionBoard", () => {
 
   it("renders one terminal per mission with persona, role, status and live step feed", () => {
     let board = createParallelBoard([draft("m1", "kurumi"), draft("m2", "yuno")]);
+    board = applyMissionBranch(board, "m1", "agent/par_1_m1");
     board = applyMissionUpdate(board, { missionId: "m1", phase: "running" });
     board = applyMissionStep(board, "m1", { step: 1, outcome: "progressing", action: "dispatch_next", reason: "다음" });
     board = applyMissionResults(board, [
@@ -36,6 +38,7 @@ describe("ParallelMissionBoard", () => {
     expect(html).toContain("kurumi");
     expect(html).toContain("yuno");
     expect(html).toContain("%par0"); // pane binding shown
+    expect(html).toContain("agent/par_1_m1"); // worktree branch shown
     expect(html).toContain("완료"); // m1 completed badge
     expect(html).toContain("빈 pane 없음"); // m2 rejection
     expect(html).toContain("다음"); // step reason in the feed
