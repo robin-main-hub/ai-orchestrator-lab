@@ -123,8 +123,15 @@ drives the whole layer:
 
 ## Not yet built
 
-- Dynamic pane roles beyond the fixed 10-role `tmuxPaneRole` enum.
-- Recording run summaries into long-term memory.
-- DGX-02 deploy automation for the real `send-keys` path.
+- Dynamic pane roles beyond the fixed 10-role `tmuxPaneRole` enum —
+  deliberately deferred: the enum is load-bearing across many files, the server
+  permission gate, and the swarm shell scripts (physical pane keys ARE role
+  names), while "summon any persona into any role pane" already ships the
+  user-facing flexibility.
 - Provider routing for the worker's model is handled by the existing provider
   layer (per-agent assignment + MIMO defaults + fallback), not here.
+
+Shipped since this doc was first written: run summaries → long-term memory
+candidates (`autonomyRunMemory`, curator-approved); the pane roster + run
+history + debate-readiness gate; and the gated DGX-02 deploy automation
+(`scripts/deploy-dgx02.mjs`, see docs/33).
