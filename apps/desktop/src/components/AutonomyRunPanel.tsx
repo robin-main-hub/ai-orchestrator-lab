@@ -25,6 +25,7 @@ import { rosterRowLabel, rosterRowVariant, type AutonomyRosterSummary } from "..
 import { resolvePersonaSprite, type PersonaSpriteMap } from "../lib/personaAvatarBundle";
 import { buildPersonaCard } from "../lib/personaCard";
 import { PersonaCard } from "./PersonaCard";
+import { ResultStamp, stampForLoopStatus } from "./ResultStamp";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
 
 const MODES: AutonomyMode[] = ["human", "auto_safe"];
@@ -195,7 +196,7 @@ export function AutonomyRunPanel({
           </select>
         </label>
 
-        <button className="autonomy-run-button" disabled={disabled} onClick={onRun} type="button">
+        <button className="autonomy-run-button glitch-hover" disabled={disabled} onClick={onRun} type="button">
           <Play size={13} />
           <span>{running ? "실행 중…" : "자율 실행 시작"}</span>
         </button>
@@ -300,8 +301,10 @@ function AutonomyRunOutcome({ outcome }: { outcome: PersonaTaskOutcome }) {
   }
 
   const busyPanes = outcome.registry.panes.filter((pane) => pane.status === "busy").length;
+  const stamp = stampForLoopStatus(outcome.loopStatus);
   return (
     <div className="autonomy-run-result">
+      <ResultStamp label={stamp.label} tone={stamp.tone} />
       <StatusBadge size="sm" variant={loopStatusBadgeVariant(outcome.loopStatus)}>
         {loopStatusLabel(outcome.loopStatus)}
       </StatusBadge>
