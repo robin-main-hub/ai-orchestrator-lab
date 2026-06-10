@@ -93,6 +93,19 @@ describe("buildPersonaInjectionPlan", () => {
     expect(plan.injectionText).toContain("Declared role: companion");
   });
 
+  it("appends an optional world-info fragment after the identity (lorebook)", () => {
+    const plan = buildPersonaInjectionPlan({
+      session: session(),
+      persona: persona(),
+      worldInfo: "## World Info (lorebook)\n[로어] DGX-01은 보호 대상이다.",
+    });
+    expect(plan.injectionText).toContain("Rational, precise voice.");
+    expect(plan.injectionText.indexOf("World Info")).toBeGreaterThan(plan.injectionText.indexOf("Rational"));
+    // blank world info is a no-op
+    const plain = buildPersonaInjectionPlan({ session: session(), persona: persona(), worldInfo: "  " });
+    expect(plain.injectionText).not.toContain("World Info");
+  });
+
   it("agent set on a sticky slot: no boot, the persona keeps her own agent", () => {
     const plan = buildPersonaInjectionPlan({
       session: session(),

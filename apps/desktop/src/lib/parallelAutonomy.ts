@@ -52,6 +52,8 @@ export type ParallelMissionSpec = {
    * previous character's context, and the declared role travels with the soul.
    */
   agentSet?: PersonaAgentSet;
+  /** optional lorebook/world-info fragment appended to this mission's identity injection */
+  worldInfo?: string;
 };
 
 export type RunParallelAutonomyInput = {
@@ -146,6 +148,7 @@ export async function runParallelAutonomy(
         effects,
         kickoffTask,
         agentSet: specById.get(mission.id)?.agentSet,
+        worldInfo: specById.get(mission.id)?.worldInfo,
         maxIterations: input.maxIterations,
       });
 

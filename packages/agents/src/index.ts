@@ -581,6 +581,23 @@ export { runDebate } from "./runDebate.js";
 export type { RunDebateParams, RunDebateResult } from "./runDebate.js";
 
 export {
+  buildLorebookFragment,
+  characterBookToLorebook,
+  DEFAULT_LOREBOOK_TENANT,
+  isLorebook,
+  scanLorebooks,
+  SHARED_LOREBOOK_TENANT,
+} from "./lorebook.js";
+export type {
+  CharacterBook,
+  CharacterBookEntry,
+  Lorebook,
+  LorebookEntry,
+  LorebookMatch,
+  LorebookScanOptions,
+} from "./lorebook.js";
+
+export {
   characterCardToPersonaFiles,
   personaFilesToCharacterCard,
   normalizeCharacterCard,

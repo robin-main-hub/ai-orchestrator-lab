@@ -89,6 +89,8 @@ export function buildAutonomyRunInput(
     registry?: RunAutonomousPersonaTaskInput["registry"];
     /** persona's atomic agent set: fresh Hermes session boot + declared role travel with the soul */
     agentSet?: RunAutonomousPersonaTaskInput["agentSet"];
+    /** optional lorebook/world-info fragment appended to the identity injection */
+    worldInfo?: string;
   },
 ): RunAutonomousPersonaTaskInput {
   const personaName = form.personaName.trim();
@@ -116,6 +118,7 @@ export function buildAutonomyRunInput(
     runId: deps.runId,
     onStep: deps.onStep,
     agentSet: deps.agentSet,
+    worldInfo: deps.worldInfo,
   };
 }
 

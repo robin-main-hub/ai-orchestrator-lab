@@ -99,6 +99,8 @@ export type RunAutonomousPersonaTaskInput = {
   kickoffTask?: string;
   /** persona's atomic agent set: fresh Hermes session boot + declared role travel with the soul */
   agentSet?: PersonaAgentSet;
+  /** optional lorebook/world-info fragment appended to the identity injection */
+  worldInfo?: string;
   maxIterations?: number;
   /** unique-id seed for dispatched commands; defaults to a timestamp-free counter prefix */
   runId?: string;
@@ -189,6 +191,7 @@ export async function runAutonomousPersonaTask(input: RunAutonomousPersonaTaskIn
     createEffects,
     kickoffTask: input.kickoffTask,
     agentSet: input.agentSet,
+    worldInfo: input.worldInfo,
     maxIterations: input.maxIterations,
     now,
   });
