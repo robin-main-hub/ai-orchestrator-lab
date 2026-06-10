@@ -322,7 +322,7 @@ export function TmuxSwarmBoard({
   return (
     <section
       aria-label={tmuxWorkbenchCopy.kicker}
-      className="flex h-full flex-col overflow-hidden bg-zinc-950 text-zinc-100 focus:outline-none"
+      className="cockpit-bridge flex h-full flex-col overflow-hidden bg-zinc-950 text-zinc-100 focus:outline-none"
       data-focus-id="tmux-swarm-board-container"
       tabIndex={-1}
     >

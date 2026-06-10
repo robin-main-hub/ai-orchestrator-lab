@@ -8166,3 +8166,46 @@ body:has(.app-shell.annex-focus-shell) {
     animation: none;
   }
 }
+
+/* ── #5 tmux swarm = battleship bridge cockpit ────────────────────────── */
+.cockpit-bridge {
+  position: relative;
+}
+.cockpit-bridge::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(70, 236, 255, 0.035) 0,
+    rgba(70, 236, 255, 0.035) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+}
+.cockpit-bridge::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  pointer-events: none;
+  z-index: 5;
+  border-radius: 10px;
+  background:
+    linear-gradient(#46ecff, #46ecff) left top / 18px 2px no-repeat,
+    linear-gradient(#46ecff, #46ecff) left top / 2px 18px no-repeat,
+    linear-gradient(#46ecff, #46ecff) right top / 18px 2px no-repeat,
+    linear-gradient(#46ecff, #46ecff) right top / 2px 18px no-repeat,
+    linear-gradient(#46ecff, #46ecff) left bottom / 18px 2px no-repeat,
+    linear-gradient(#46ecff, #46ecff) left bottom / 2px 18px no-repeat,
+    linear-gradient(#46ecff, #46ecff) right bottom / 18px 2px no-repeat,
+    linear-gradient(#46ecff, #46ecff) right bottom / 2px 18px no-repeat;
+  opacity: 0.45;
+}
+.cockpit-pane {
+  position: relative;
+}
+.cockpit-pane:hover {
+  box-shadow: 0 0 0 1px rgba(70, 236, 255, 0.35), 0 0 16px rgba(70, 236, 255, 0.18);
+}
