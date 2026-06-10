@@ -45,6 +45,12 @@ export function buildPersonaInjectionPlan(input: {
    * role so soul, agents, and role land as one unit.
    */
   agentSet?: PersonaAgentSet;
+  /**
+   * OPTIONAL lorebook/world-info fragment (built via @ai-orchestrator/agents
+   * scanLorebooks + buildLorebookFragment). Appended after the identity so the
+   * persona reads matched lore as part of its briefing. Empty/absent = no-op.
+   */
+  worldInfo?: string;
 }): PersonaInjectionPlan {
   const { session, persona, kickoffTask, agentSet } = input;
   if (!session.paneId) {
@@ -61,7 +67,9 @@ export function buildPersonaInjectionPlan(input: {
   const fragment = buildPersonaPromptFragment(persona, { headerLine });
   // Even when a persona has no SOUL/AGENTS files, give the worker at least the
   // header so the pane has an explicit identity tag.
-  const injectionText = fragment.trim().length > 0 ? fragment : headerLine;
+  const identityText = fragment.trim().length > 0 ? fragment : headerLine;
+  const worldInfo = input.worldInfo?.trim();
+  const injectionText = worldInfo ? `${identityText}\n\n${worldInfo}` : identityText;
 
   const bootSteps = agentSet ? [...agentSet.bootSteps] : [];
   const kickoff = kickoffTask?.trim();

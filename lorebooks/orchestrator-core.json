@@ -1,0 +1,33 @@
+{
+  "id": "orchestrator-core",
+  "name": "Orchestrator Core Lore",
+  "tenantId": "default",
+  "enabled": true,
+  "description": "REFLECORE 오케스트레이터의 기본 월드인포. 미션 텍스트에 키워드가 등장할 때만 주입된다.",
+  "entries": [
+    {
+      "id": "dgx01-protection",
+      "keys": ["DGX-01", "dgx01", "메인 서버"],
+      "content": "[로어] DGX-01은 보호 대상 메인 서버다. 어떤 에이전트도 DGX-01의 설정/데이터를 직접 변경하지 않는다. 변경이 필요하면 반드시 승인 게이트를 거쳐 오빠의 확인을 받는다.",
+      "enabled": true,
+      "insertionOrder": 0,
+      "comment": "메인 서버 보호 규칙"
+    },
+    {
+      "id": "swarm-glossary",
+      "keys": ["스웜", "swarm", "pane"],
+      "content": "[로어] 스웜은 tmux pane들로 구성된 실행 공간이다. pane 역할: code/architect/frontend/backend/qa/research/memory. 모든 dispatch는 승인·권한·리댁션 게이트를 통과한다.",
+      "enabled": true,
+      "insertionOrder": 1,
+      "comment": "스웜 용어"
+    },
+    {
+      "id": "hermes-slots",
+      "keys": ["슬롯", "hermes", "에르메스"],
+      "content": "[로어] 모든 에이전트는 Hermes 에이전트로 운용된다. 페르소나는 스티키 슬롯에 바인딩되어 자기 히스토리를 유지하고, 재활용 슬롯에 다른 캐릭터가 들어올 때만 세션이 리셋된다.",
+      "enabled": true,
+      "insertionOrder": 2,
+      "comment": "Hermes 슬롯 풀"
+    }
+  ]
+}

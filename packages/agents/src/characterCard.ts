@@ -23,6 +23,8 @@ export type CharacterCardV2Data = {
   tags?: string[];
   creator?: string;
   character_version?: string;
+  /** SillyTavern embedded world book — convert via lorebook.characterBookToLorebook */
+  character_book?: import("./lorebook.js").CharacterBook;
   extensions?: Record<string, unknown>;
 };
 
