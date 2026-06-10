@@ -507,3 +507,54 @@ describe("conversation pipeline runtime helper", () => {
     expect(content).toContain("[REDACTED:internal]");
   });
 });
+
+describe("patch P3 — 불충분명세 후보 헤지 주입", () => {
+  it("비슷한 점수의 서로 다른 엔티티 기억이면 되묻기 지시가 시스템 프롬프트에 들어간다", () => {
+    const ambiguousMemory = {
+      trace: {
+        id: "trace_ambig",
+        results: [
+          {
+            usedInDecision: true,
+            score: 0.62,
+            fusionDetail: { views: [{ view: "lexical", rank: 1, rawScore: 0.5 }], fusionMode: "rrf" },
+            record: {
+              title: "아스카 기억",
+              content: "아스카는 회의론자",
+              sessionId: "session_main",
+              persons: ["아스카"],
+              tags: ["agent:agent_orchestrator", "provider:provider_mimo_token_openai", "tenant:eva"],
+            },
+          },
+          {
+            usedInDecision: true,
+            score: 0.58,
+            fusionDetail: { views: [{ view: "lexical", rank: 1, rawScore: 0.46 }], fusionMode: "rrf" },
+            record: {
+              title: "레이 기억",
+              content: "레이는 기억 큐레이터",
+              sessionId: "session_main",
+              persons: ["레이"],
+              tags: ["agent:agent_orchestrator", "provider:provider_mimo_token_openai", "tenant:eva"],
+            },
+          },
+        ],
+      },
+    } as unknown as Stage6MemoryInspector;
+
+    const pipeline = createConversationPipelineMessages({
+      agent,
+      configFiles: [],
+      memory: ambiguousMemory,
+      memoryScope,
+      modelId: "mimo-v2.5-pro",
+      previousMessages: [],
+      provider,
+      systemMessageId: "message_system_pipeline_ambiguity_test",
+      userMessage: message("message_user_ambig", "user", "걔 누구였지?"),
+    });
+
+    expect(pipeline[0]?.content).toContain("모호한 참조");
+    expect(pipeline[0]?.content).toContain("되물어라");
+  });
+});
