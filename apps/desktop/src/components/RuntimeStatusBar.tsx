@@ -6,6 +6,7 @@ import {
   Search,
   Settings,
   Scale,
+  Sparkles,
   Terminal,
   Menu,
   Users,
@@ -34,9 +35,11 @@ const modeConfig: Array<{
 
 export function RuntimeStatusBar({
   drawerAvailable,
+  homeActive,
   mode,
   onChangeMode,
   onCommandPalette,
+  onHome,
   onOpenOpsDetail,
   onProbeDgx,
   onToggleDrawer,
@@ -44,9 +47,13 @@ export function RuntimeStatusBar({
   snapshot,
 }: {
   drawerAvailable: boolean;
+  /** highlight the 홈(대시보드) pill */
+  homeActive?: boolean;
   mode: CenterMode;
   onChangeMode: (mode: CenterMode) => void;
   onCommandPalette: () => void;
+  /** jump to the 대시보드 landing view */
+  onHome?: () => void;
   onOpenOpsDetail: () => void;
   onProbeDgx: () => void;
   onToggleDrawer: () => void;
@@ -135,9 +142,30 @@ export function RuntimeStatusBar({
       </div>
 
       <nav className="hidden items-center gap-1 rounded-full border border-white/10 bg-black/45 p-1 shadow-[0_0_28px_rgba(0,0,0,0.35)] backdrop-blur-xl md:flex">
+        {onHome ? (
+          <button
+            aria-label="대시보드 홈"
+            className={cn(
+              "group relative flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-all",
+              homeActive
+                ? "border-cyan-300/25 bg-white/[0.08] text-zinc-50 shadow-[0_0_18px_rgba(34,211,238,0.10)]"
+                : "border-transparent text-zinc-500 hover:border-white/10 hover:bg-white/[0.04] hover:text-zinc-100",
+            )}
+            data-focus-id="mode-tab-home"
+            onClick={onHome}
+            title="대시보드"
+            type="button"
+          >
+            {homeActive ? (
+              <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.75)]" />
+            ) : null}
+            <Sparkles className={cn("h-3.5 w-3.5", homeActive ? "text-cyan-200" : "text-zinc-500 group-hover:text-zinc-300")} />
+            <span>홈</span>
+          </button>
+        ) : null}
         {modeConfig.map((item) => {
           const Icon = item.icon;
-          const isActive = activeMode === item.id;
+          const isActive = activeMode === item.id && !homeActive;
           const displayLabel = item.shortLabel ?? item.label;
           return (
             <button

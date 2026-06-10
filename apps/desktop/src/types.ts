@@ -55,6 +55,7 @@ export type AgentVisualSettings = {
   avatarUpdatedAt?: string;
 };
 export type NavItemId =
+  | "dashboard"
   | "sessions"
   | "projects"
   | "providers"
@@ -63,11 +64,18 @@ export type NavItemId =
   | "backup"
   | "cockpit"
   | "autonomy"
-  | "parallel";
+  | "parallel"
+  | "runtime";
 export type NavItem = {
   id: NavItemId;
   label: string;
   icon: LucideIcon;
+};
+/** Sidebar group: a titled cluster of nav items (메인 / 작전 / 시스템). */
+export type NavSection = {
+  id: string;
+  label: string;
+  items: NavItem[];
 };
 export type AgentConfigFileKind = "soul" | "agents" | "skill" | "memory_policy" | "prompt_template";
 export type AgentConfigFileScope = "global" | "project" | "agent";
