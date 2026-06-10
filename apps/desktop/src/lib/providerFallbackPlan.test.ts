@@ -18,6 +18,8 @@ function provider(patch: Partial<ProviderProfile>): ProviderProfile {
     tags: patch.tags ?? ["server-proxy"],
     trustLevel: patch.trustLevel ?? "trusted",
     secretRef: patch.secretRef,
+    apiKeyRef: patch.apiKeyRef,
+    authHeader: patch.authHeader,
   };
 }
 
@@ -108,13 +110,44 @@ describe("providerFallbackPlan", () => {
     expect(reply).toContain("마키마가");
     expect(reply).toContain("MiMo Token Plan OpenAI 호출에서 막혔어");
     expect(reply).toContain("네트워크");
+    // 대체가 mock뿐이라 전환 후보가 없으면, 직접 경로 재시도 + 등록 유도
     expect(reply).toContain("MiMo 직접 경로 재시도");
-    expect(reply).toContain("기본 인증값");
+    expect(reply).toContain("다른 API 키나 OAuth를 등록");
     expect(reply).not.toContain("Mock");
     expect(reply).not.toContain("http://dgx-02:4317");
     expect(reply).not.toContain("Provider");
     expect(reply).not.toContain("fallback");
     expect(reply).toContain("[redacted:url]");
+  });
+
+  it("저장된 다른 공급자가 있으면 같은 경로 재시도가 아니라 그 인증으로 전환을 1순위로 제안한다", () => {
+    const reply = createProviderFailureConversationReply({
+      agentDisplayName: "마키마",
+      errorMessage: "http://dgx-02:4317: Failed to fetch",
+      provider: provider({
+        baseUrl: "https://token-plan-sgp.xiaomimimo.com/v1",
+        id: "provider_mimo_token_openai",
+        name: "MiMo Token Plan OpenAI",
+        tags: ["server-proxy", "mimo", "openai-compatible"],
+      }),
+      providers: [
+        provider({ id: "provider_mimo_token_openai", name: "MiMo Token Plan OpenAI", tags: ["server-proxy"] }),
+        provider({
+          id: "provider_claude_oauth",
+          name: "Claude OAuth",
+          trustLevel: "trusted",
+          tags: ["oauth"],
+          secretRef: { id: "oauth_claude", label: "Claude OAuth 세션", scope: "session", redactedPreview: "***", transient: true },
+        }),
+        provider({ id: "provider_openrouter_key", name: "OpenRouter", trustLevel: "limited", tags: [], apiKeyRef: "key_or" }),
+      ],
+    });
+    expect(reply).toContain("저장된 다른 공급자로 전환");
+    expect(reply).toContain("Claude OAuth(OAuth)");
+    expect(reply).toContain("OpenRouter(API 키)");
+    // 신뢰도 높은 OAuth가 먼저
+    expect(reply.indexOf("Claude OAuth")).toBeLessThan(reply.indexOf("OpenRouter"));
+    expect(reply).not.toContain("http://dgx-02:4317");
   });
 
   it("서버 프록시 네트워크 장애에는 기본 API 키 연결을 안내한다", () => {
@@ -130,8 +163,9 @@ describe("providerFallbackPlan", () => {
       providers: [provider({ id: "provider_mimo_token_openai", name: "MiMo Token Plan OpenAI" })],
     });
 
-    expect(reply).toContain("기본 API 키 연결");
-    expect(reply).toContain("별도 모델/키 설정이 없을 때 이 경로로 계속 대화");
+    expect(reply).toContain("MiMo 직접 경로 재시도");
+    expect(reply).toContain("별도 모델/키 설정이 없을 때 같은 경로로도 계속 대화");
+    expect(reply).toContain("다른 API 키나 OAuth를 등록");
     expect(reply).not.toContain("http://dgx-02:4317");
   });
 });
