@@ -27,6 +27,7 @@ import {
 } from "./runtime/stage2Runtime";
 import {
   createStage3DebateSession,
+  runStage3DebateSession,
   type Stage3DebateSession,
 } from "./runtime/stage3Runtime";
 import {
@@ -2132,28 +2133,48 @@ export function App() {
     });
   }
 
-  function handlePromoteToDebate() {
-    const session = createStage3DebateSession({
+  async function handlePromoteToDebate() {
+    const input = {
       messages: conversationMessages,
       agents,
       providers: providerProfiles,
       events: eventLog,
       runtime: runtimeSnapshotState,
-    });
-
-    setDebateSession(session);
+    };
+    // Show the skeleton immediately (rounds pending) and switch to the chamber,
+    // then run the REAL multi-agent engine to fill rounds with live responses.
+    const skeleton = createStage3DebateSession(input);
+    skeleton.runState = "running";
+    setDebateSession(skeleton);
     setMode("debate");
     appendEvent("debate.context.promoted", {
-      debateId: session.id,
-      participantCount: session.participants.length,
-      roundCount: session.rounds.length,
-      problemLength: session.problem.length,
+      debateId: skeleton.id,
+      participantCount: skeleton.participants.length,
+      roundCount: skeleton.rounds.length,
+      problemLength: skeleton.problem.length,
     });
     appendEvent("debate.round.started", {
-      debateId: session.id,
-      roundId: session.rounds[0]?.id,
-      kind: session.rounds[0]?.kind,
+      debateId: skeleton.id,
+      roundId: skeleton.rounds[0]?.id,
+      kind: skeleton.rounds[0]?.kind,
     });
+
+    try {
+      const live = await runStage3DebateSession({ ...input, debateId: skeleton.id });
+      live.runState = "live";
+      setDebateSession(live);
+      appendEvent("debate.run.completed", {
+        debateId: live.id,
+        roundCount: live.rounds.length,
+        utteranceCount: live.rounds.reduce((sum, round) => sum + round.utterances.length, 0),
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      setDebateSession((current) =>
+        current.id === skeleton.id ? { ...current, runState: "error", runError: reason } : current,
+      );
+      appendEvent("debate.run.failed", { debateId: skeleton.id, reason });
+    }
   }
 
   function handleRunOsDebate() {

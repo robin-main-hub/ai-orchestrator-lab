@@ -83,10 +83,15 @@ export async function runDebate(params: RunDebateParams): Promise<RunDebateResul
     }
 
     const currentRound = rounds[currentIndex]!;
+    // Fold completed prior rounds' utterances into the context so later-round
+    // agents actually react to what was already said (cross_critique /
+    // refinement rounds instruct "cite which utterance you criticize", but
+    // without this the prompt only carried the static conversation summary).
+    const roundContext = withPriorRounds(context, rounds.slice(0, currentIndex));
     const result = await runDebateRound({
       debateId,
       round: currentRound,
-      context,
+      context: roundContext,
       slots,
       options: engineOptions,
     });
@@ -118,4 +123,27 @@ export async function runDebate(params: RunDebateParams): Promise<RunDebateResul
   }
 
   return { rounds, roundResults, finished, stoppedEarly };
+}
+
+/**
+ * Append completed prior rounds' utterances to the debate context's
+ * conversationSummary so each round's prompt (buildRoundUserPrompt) carries
+ * what was already said. Pure — returns the original context when there is
+ * nothing to fold so the no-prior-rounds prompt is unchanged.
+ */
+export function withPriorRounds(context: DebateContext, priorRounds: DebateRound[]): DebateContext {
+  const spoken = priorRounds.filter((round) => round.utterances.length > 0);
+  if (spoken.length === 0) return context;
+  const block: string[] = ["", "## 이전 라운드 발언"];
+  for (const round of spoken) {
+    block.push(`### ${round.title}`);
+    for (const utterance of round.utterances) {
+      const text = utterance.content.length > 600 ? `${utterance.content.slice(0, 599)}…` : utterance.content;
+      block.push(`- (${utterance.agentId}) ${text}`);
+    }
+  }
+  return {
+    ...context,
+    conversationSummary: `${context.conversationSummary}${block.join("\n")}`,
+  };
 }
