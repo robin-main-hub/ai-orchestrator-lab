@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState , useSyncExternalStore} from "react";
 import { CircleStop, FileDiff, GitBranch, Hammer, PanelRightOpen, Plus, RotateCcw, Send, ShieldCheck, Telescope, Terminal, Trash2, XCircle } from "lucide-react";
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
 import { StatusBadge } from "@/ui/status-badge";
@@ -32,67 +32,17 @@ import { createGatedToolExecutor, runCodingTurn, toolToCommand } from "../../lib
 import { workspaceChangeLedger } from "../../lib/workspaceChangeLedger";
 import { createApprovalStrategy, type AutonomyMode } from "../../lib/autonomousRun";
 import { createClosedLoopEffects } from "../../lib/closedLoopRuntime";
+import {
+  createMission,
+  workbenchMissionStore,
+  type MissionStatus,
+  type WorkbenchMission,
+} from "../../lib/workbenchMissions";
 import { CodingThread } from "./CodingThread";
 
-type MissionStatus = "running" | "done" | "blocked" | "failed" | "needs_review" | "killed" | "cleanup_ready";
 
-type WorkbenchMission = {
-  id: string;
-  title: string;
-  role: string;
-  agent: string;
-  model: string;
-  status: MissionStatus;
-  worktree: { branch: string; path: string; baseBranch: string };
-  allowedPaths: string[];
-  deniedPaths: string[];
-  tmux: { session: string; window: string; pane: string };
-  gates: string[];
-  artifacts: string[];
-  diffPath: string;
-  testOutputPath: string;
-  heartbeat: string;
-  lastOutput: string;
-  events: Array<{ id: string; at: string; text: string }>;
-};
 
-const MISSIONS_STORAGE_KEY = "orch.codingWorkbench.missions.v1";
 
-function loadMissions(): WorkbenchMission[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(MISSIONS_STORAGE_KEY) ?? "[]") as WorkbenchMission[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function createMission(input: { role?: string; task?: string; model?: string; baseBranch?: string }): WorkbenchMission {
-  const now = new Date().toISOString();
-  const slug = (input.task || "agent task").toLowerCase().replace(/[^a-z0-9가-힣]+/g, "-").replace(/^-|-$/g, "").slice(0, 32) || "agent-task";
-  const id = `ms_${Date.now().toString(36)}`;
-  const role = input.role || "Implementer";
-  return {
-    id,
-    title: input.task || `${role} 병렬 작업`,
-    role,
-    agent: role === "QA/Verifier" ? "qa-verifier" : role.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-    model: input.model || "route: task complexity policy",
-    status: "blocked",
-    worktree: { branch: `agent/${slug}-${id.slice(-4)}`, path: `../ai-orchestrator-lab__worktrees/${slug}`, baseBranch: input.baseBranch || "main" },
-    allowedPaths: ["apps/desktop/src/**", "docs/**"],
-    deniedPaths: [".env", "**/secrets/**", "node_modules/**"],
-    tmux: { session: `orch-${id}`, window: "worker", pane: "0" },
-    gates: ["human approval before send-keys", "diff review before merge", "sequential merge queue only"],
-    artifacts: [],
-    diffPath: `artifacts/${id}/changes.diff`,
-    testOutputPath: `artifacts/${id}/verify.log`,
-    heartbeat: now,
-    lastOutput: "Mission shell is prepared as a safe fallback. Actual tmux/worktree runner is not attached yet.",
-    events: [{ id: `ev_${Date.now()}`, at: now, text: "Mission created from /fork fallback UI." }],
-  };
-}
 
 function statusLabel(status: MissionStatus): string {
   return { running: "running", done: "done", blocked: "blocked", failed: "failed", needs_review: "needs_review", killed: "killed", cleanup_ready: "cleanup_ready" }[status];
@@ -124,7 +74,12 @@ export function CodingWorkbench({
   const [running, setRunning] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [missionPanelOpen, setMissionPanelOpen] = useState(true);
-  const [missions, setMissions] = useState<WorkbenchMission[]>(() => loadMissions());
+  const missions = useSyncExternalStore(
+    workbenchMissionStore.subscribe,
+    workbenchMissionStore.getSnapshot,
+    workbenchMissionStore.getSnapshot,
+  );
+  const setMissions = workbenchMissionStore.setMissions;
   const [approvalMode, setApprovalMode] = useState<AutonomyMode>("human");
   const cancelRef = useRef(false);
   const modelSelectRef = useRef<HTMLInputElement | null>(null);
@@ -136,10 +91,6 @@ export function CodingWorkbench({
     const needle = draft.trim().toLowerCase();
     return SLASH_COMMANDS.filter((command) => command.name.startsWith(needle)).slice(0, 12);
   }, [draft]);
-
-  useEffect(() => {
-    window.localStorage.setItem(MISSIONS_STORAGE_KEY, JSON.stringify(missions));
-  }, [missions]);
 
   const persist = (next: CodingSession[]) => {
     setSessions(next);

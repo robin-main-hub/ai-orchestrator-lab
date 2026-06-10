@@ -8,7 +8,7 @@ import type {
   ProviderProfile,
   ProviderRuntimeReadiness,
 } from "@ai-orchestrator/protocol";
-import { Activity, Archive, ChevronDown, Cpu, Database, FileText, Package, Play, Smartphone, Sparkles, Swords, Wrench } from "lucide-react";
+import { Activity, Archive, ChevronDown, Cpu, Database, FileText, GitFork, Package, Play, Smartphone, Sparkles, Swords, Wrench } from "lucide-react";
 import type { AgentChannelMemoryScope } from "../../lib/agentConversationChannels";
 import type { ControlQueueContinuitySummary } from "../../lib/controlQueueContinuity";
 import {
@@ -67,6 +67,8 @@ import { ProviderReadinessPreflight } from "./ProviderReadinessPreflight";
 import { MakimaDelegationConsole } from "./MakimaDelegationConsole";
 import { WorkTheater } from "./WorkTheater";
 import { WorkspaceDiffPanel, WorkspaceFilesPanel } from "./WorkspaceChangesPanel";
+import { buildForkBrief, forkMissionFromConversation } from "../../lib/conversationFork";
+import { workbenchMissionStore } from "../../lib/workbenchMissions";
 
 // Sub-components
 import { MessageThread } from "./MessageThread";
@@ -648,19 +650,26 @@ export function ConversationWorkbench({
 
         <ChatSidePanel mode={sidePanelMode} onClose={() => setSidePanelMode("none")}>
           {sidePanelMode === "background" ? (
-            onCreateDelegationAssignment ? (
-              <MakimaDelegationConsole
+            <>
+              <ForkConversationButton
+                draft={draftMessage}
+                messages={messages}
+                sessionTitle={selectedAgent?.name}
+              />
+              {onCreateDelegationAssignment ? (
+                <MakimaDelegationConsole
                 assignmentsByAgentId={delegationAssignmentsByAgentId}
                 cards={makimaDelegationCards}
                 onCreateAllAssignments={(cards) => cards.forEach(onCreateDelegationAssignment)}
                 onCreateAssignment={onCreateDelegationAssignment}
                 onOpenAssignedAgent={onOpenDelegatedAgentConversation}
-                onProgressAssignment={onProgressDelegationAssignment}
-                request={delegationRequest}
-              />
-            ) : (
-              <ChatSidePanelStub mode="background" />
-            )
+                  onProgressAssignment={onProgressDelegationAssignment}
+                  request={delegationRequest}
+                />
+              ) : (
+                <ChatSidePanelStub mode="background" />
+              )}
+            </>
           ) : null}
           {sidePanelMode === "plan" ? (
             <WorkTheater
@@ -729,4 +738,45 @@ function createAgentWorkStatusLabel(status: AgentActivityStatus, displayName: st
   if (status === "responding") return `${displayName}가 답변을 다듬는 중`;
   if (status === "error") return `${displayName}가 막힌 원인을 정리하는 중`;
   return `${displayName}가 다음 말을 기다리는 중`;
+}
+
+/** Phase B — 이 대화를 격리 worker 미션으로 포크 (코딩 탭 Mission Board에 나타남) */
+function ForkConversationButton({
+  messages,
+  draft,
+  sessionTitle,
+}: {
+  messages: ConversationMessage[];
+  draft: string;
+  sessionTitle?: string;
+}) {
+  const [forked, setForked] = useState<string | null>(null);
+  const canFork = messages.some((message) => message.role === "user") || draft.trim().length > 0;
+  return (
+    <div className="border-b border-white/10 p-3">
+      <button
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-violet-300/30 bg-violet-500/10 px-3 py-2.5 text-[12.5px] font-semibold text-violet-100 transition-colors hover:bg-violet-500/20 disabled:opacity-40"
+        disabled={!canFork}
+        onClick={() => {
+          const brief = buildForkBrief({ messages, draft });
+          const mission = forkMissionFromConversation({ brief, sessionTitle });
+          workbenchMissionStore.add(mission);
+          setForked(mission.title);
+        }}
+        type="button"
+      >
+        <GitFork className="h-4 w-4" /> 이 대화를 worker로 포크
+      </button>
+      {forked ? (
+        <p className="mt-2 text-[11px] leading-relaxed text-emerald-200">
+          포크됨 — <span className="font-semibold">{forked}</span>. 코딩 탭의 Mission Board에서 격리 worker(worktree·tmux)로 이어집니다.
+          자동 병합은 막혀 있고 diff/verify 게이트를 거칩니다.
+        </p>
+      ) : (
+        <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">
+          현재 대화의 맥락과 @멘션 파일을 brief로 묶어 격리 worker 미션을 만듭니다.
+        </p>
+      )}
+    </div>
+  );
 }
