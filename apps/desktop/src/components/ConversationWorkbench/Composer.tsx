@@ -127,7 +127,7 @@ export function Composer({
         <div className="relative flex-1">
           <textarea
             aria-label="메시지 입력"
-            className="min-h-[48px] w-full resize-none rounded-2xl border border-white/10 bg-zinc-900/70 px-4 py-3 pr-14 text-sm text-zinc-100 shadow-inner shadow-black/20 outline-none placeholder:text-zinc-600 transition-colors focus-visible:border-cyan-400/50 focus-visible:bg-zinc-900"
+            className="min-h-[56px] w-full resize-none rounded-2xl border border-white/10 bg-zinc-900/70 px-4 py-3 pr-14 text-sm leading-6 text-zinc-100 shadow-inner shadow-black/20 outline-none placeholder:text-zinc-600 transition-colors focus-visible:border-cyan-400/50 focus-visible:bg-zinc-900"
             data-focus-id="composer-textarea"
             onChange={(event) => onDraftMessageChange(event.target.value)}
             onKeyDown={(event) => {
