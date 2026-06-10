@@ -340,36 +340,36 @@ describe("buildPersonaPromptFragment — SAFETY injection", () => {
 describe("loadPersona — optional IDENTITY.md / USER.md fragments", () => {
   it("loads IDENTITY.md when present (slotted before character body)", async () => {
     const src = createInMemoryPersonaSource({
-      "agents/chae_arin/SOUL.md": "soul body",
-      "agents/chae_arin/AGENTS.md": "agents body",
-      "agents/chae_arin/IDENTITY.md": "# Identity\n\nWho am I.",
+      "agents/kurumi/SOUL.md": "soul body",
+      "agents/kurumi/AGENTS.md": "agents body",
+      "agents/kurumi/IDENTITY.md": "# Identity\n\nWho am I.",
     });
-    const loaded = await loadPersona("chae_arin", "soul_plus_agents", src);
+    const loaded = await loadPersona("kurumi", "soul_plus_agents", src);
     const sources = loaded.fragments.map((f) => f.source);
     // IDENTITY first, then mandatory SOUL → AGENTS
     expect(sources).toEqual(["identity", "soul", "agents"]);
-    expect(loaded.fragments[0]!.relativePath).toBe("agents/chae_arin/IDENTITY.md");
+    expect(loaded.fragments[0]!.relativePath).toBe("agents/kurumi/IDENTITY.md");
   });
 
   it("loads USER.md when present (slotted after character body)", async () => {
     const src = createInMemoryPersonaSource({
-      "agents/chae_arin/SOUL.md": "soul body",
-      "agents/chae_arin/AGENTS.md": "agents body",
-      "agents/chae_arin/USER.md": "# User\n\nAbout 오빠.",
+      "agents/kurumi/SOUL.md": "soul body",
+      "agents/kurumi/AGENTS.md": "agents body",
+      "agents/kurumi/USER.md": "# User\n\nAbout 오빠.",
     });
-    const loaded = await loadPersona("chae_arin", "soul_plus_agents", src);
+    const loaded = await loadPersona("kurumi", "soul_plus_agents", src);
     const sources = loaded.fragments.map((f) => f.source);
     expect(sources).toEqual(["soul", "agents", "user"]);
   });
 
   it("loads IDENTITY + USER together in the canonical 4-file shape", async () => {
     const src = createInMemoryPersonaSource({
-      "agents/chae_arin/SOUL.md": "soul body",
-      "agents/chae_arin/AGENTS.md": "agents body",
-      "agents/chae_arin/IDENTITY.md": "identity body",
-      "agents/chae_arin/USER.md": "user body",
+      "agents/kurumi/SOUL.md": "soul body",
+      "agents/kurumi/AGENTS.md": "agents body",
+      "agents/kurumi/IDENTITY.md": "identity body",
+      "agents/kurumi/USER.md": "user body",
     });
-    const loaded = await loadPersona("chae_arin", "soul_plus_agents", src);
+    const loaded = await loadPersona("kurumi", "soul_plus_agents", src);
     const sources = loaded.fragments.map((f) => f.source);
     // identity → soul → agents → user
     expect(sources).toEqual(["identity", "soul", "agents", "user"]);
@@ -400,22 +400,22 @@ describe("loadPersona — optional IDENTITY.md / USER.md fragments", () => {
   });
 });
 
-describe("buildPersonaPromptFragment — 4-file companion (chae_arin shape)", () => {
+describe("buildPersonaPromptFragment — 4-file companion (kurumi shape)", () => {
   it("renders all four fragments with their relativePath headings in order", async () => {
     const src = createInMemoryPersonaSource({
       "agents/SAFETY.md": "# Safety rules\n",
-      "agents/chae_arin/IDENTITY.md": "## who\nchaerin",
-      "agents/chae_arin/SOUL.md": "## voice\nplayful",
-      "agents/chae_arin/AGENTS.md": "## rules\nbe playful",
-      "agents/chae_arin/USER.md": "## user\n오빠",
+      "agents/kurumi/IDENTITY.md": "## who\nkurumi",
+      "agents/kurumi/SOUL.md": "## voice\nplayful",
+      "agents/kurumi/AGENTS.md": "## rules\nbe playful",
+      "agents/kurumi/USER.md": "## user\n오빠",
     });
-    const loaded = await loadPersona("chae_arin", "soul_plus_agents", src);
+    const loaded = await loadPersona("kurumi", "soul_plus_agents", src);
     const out = buildPersonaPromptFragment(loaded);
     // Each fragment heading appears
-    expect(out).toContain("## From agents/chae_arin/IDENTITY.md");
-    expect(out).toContain("## From agents/chae_arin/SOUL.md");
-    expect(out).toContain("## From agents/chae_arin/AGENTS.md");
-    expect(out).toContain("## From agents/chae_arin/USER.md");
+    expect(out).toContain("## From agents/kurumi/IDENTITY.md");
+    expect(out).toContain("## From agents/kurumi/SOUL.md");
+    expect(out).toContain("## From agents/kurumi/AGENTS.md");
+    expect(out).toContain("## From agents/kurumi/USER.md");
     // Order: IDENTITY before SOUL, SOUL before AGENTS, AGENTS before USER
     const idxId = out.indexOf("IDENTITY.md");
     const idxSoul = out.indexOf("SOUL.md");

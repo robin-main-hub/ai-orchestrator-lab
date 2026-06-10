@@ -233,7 +233,7 @@ export const agentRoleSchema = z.enum([
   // specialization). Designed for character-driven profiles that act as
   // the user's primary day-to-day assistant rather than a single-role
   // specialist. Typically paired with a personaName override (e.g.
-  // chae_arin) and configSource: "markdown" so the full character files
+  // kurumi) and configSource: "markdown" so the full character files
   // load. Permission level usually starts at "write_files" so the
   // companion can self-edit its own SOUL/AGENTS/IDENTITY/USER files
   // (the actual write still goes through the permission gate + user

@@ -1785,10 +1785,10 @@ function createServerAgentDelegationMockCompletionFactory() {
     callCount += 1;
     const content =
       callCount === 1
-        ? `채아린이 하위 에이전트에게 확인할게. <delegate to="researcher">${request.messages.at(-1)?.content ?? "조사"}</delegate>`
+        ? `쿠루미이 하위 에이전트에게 확인할게. <delegate to="researcher">${request.messages.at(-1)?.content ?? "조사"}</delegate>`
         : callCount === 2
           ? "마오마오 조사 결과: 핵심 근거 3개와 리스크 1개를 확인했어."
-          : "채아린 최종 정리: 하위 에이전트 확인까지 반영해서 바로 실행 가능한 결론으로 묶었어.";
+          : "쿠루미 최종 정리: 하위 에이전트 확인까지 반영해서 바로 실행 가능한 결론으로 묶었어.";
     return {
       id: `provider_completion_response_mock_${callCount}`,
       requestId: request.id,

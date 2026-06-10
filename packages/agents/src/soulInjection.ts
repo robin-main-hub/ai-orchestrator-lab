@@ -131,7 +131,7 @@ export async function buildAgentSystemPrompt(
 }
 
 function canonicalPersonaNameForRole(role: string): string {
-  if (role === "companion") return "chae_arin";
+  if (role === "companion") return "kurumi";
   return role;
 }
 

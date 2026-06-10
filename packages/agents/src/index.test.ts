@@ -259,7 +259,7 @@ describe("defaultAgentProfiles", () => {
   it("covers every persona that has a SOUL.md directory under agents/", () => {
     // Each defaultAgentProfile has a matching agents/<role>/ markdown
     // directory (or agents/<personaName>/ when overridden — e.g. Yohane,
-    // chae_arin). Regression guard: if someone removes one of these the
+    // kurumi). Regression guard: if someone removes one of these the
     // test fails with a specific role name, not a vague "missing item".
     const roles = defaultAgentProfiles.map((p) => p.role);
     expect(roles).toContain("orchestrator");
