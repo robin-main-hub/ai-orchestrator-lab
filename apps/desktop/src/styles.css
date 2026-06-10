@@ -46,8 +46,8 @@
 }
 
 body {
-  min-width: 1180px;
-  min-height: 760px;
+  min-width: 640px;
+  min-height: 480px;
   margin: 0;
   background:
     linear-gradient(180deg, rgba(139, 92, 246, 0.08), transparent 260px),
@@ -7718,7 +7718,7 @@ button {
 
 @media (max-width: 1240px) {
   body {
-    min-width: 980px;
+    min-width: 640px;
   }
 
   .app-shell {
@@ -7757,22 +7757,22 @@ button {
 }
 
 @media (max-width: 1180px), (max-height: 760px) {
-  body:has(.app-shell:not(.tmux-focus-shell):not(.cockpit-focus-shell):not(.annex-focus-shell):not(.debate-focus-shell):not(.conversation-v0-shell)) {
+  body:has(.app-shell:not(.tmux-focus-shell):not(.cockpit-focus-shell):not(.annex-focus-shell):not(.debate-focus-shell):not(.conversation-v0-shell):not(.nav-center-shell)) {
     overflow: auto !important;
     height: auto !important;
   }
-  .app-shell:not(.tmux-focus-shell):not(.cockpit-focus-shell):not(.annex-focus-shell):not(.debate-focus-shell):not(.conversation-v0-shell) {
+  .app-shell:not(.tmux-focus-shell):not(.cockpit-focus-shell):not(.annex-focus-shell):not(.debate-focus-shell):not(.conversation-v0-shell):not(.nav-center-shell) {
     width: 1180px !important;
     height: 760px !important;
     overflow: visible !important;
   }
-  body:has(.app-shell.tmux-focus-shell), body:has(.app-shell.cockpit-focus-shell), body:has(.app-shell.annex-focus-shell), body:has(.app-shell.debate-focus-shell), body:has(.app-shell.conversation-v0-shell) {
+  body:has(.app-shell.tmux-focus-shell), body:has(.app-shell.cockpit-focus-shell), body:has(.app-shell.annex-focus-shell), body:has(.app-shell.debate-focus-shell), body:has(.app-shell.conversation-v0-shell), body:has(.app-shell.nav-center-shell) {
     min-width: 0 !important;
     min-height: 0 !important;
     overflow: hidden !important;
     height: 100% !important;
   }
-  .app-shell.tmux-focus-shell, .app-shell.cockpit-focus-shell, .app-shell.annex-focus-shell, .app-shell.debate-focus-shell, .app-shell.conversation-v0-shell {
+  .app-shell.tmux-focus-shell, .app-shell.cockpit-focus-shell, .app-shell.annex-focus-shell, .app-shell.debate-focus-shell, .app-shell.conversation-v0-shell, .app-shell.nav-center-shell {
     width: 100% !important;
     height: 100dvh !important;
     overflow: hidden !important;
@@ -7787,7 +7787,7 @@ button {
     overflow: hidden !important;
     height: 100dvh !important;
   }
-  .app-shell, .app-shell:not(.tmux-focus-shell):not(.cockpit-focus-shell):not(.annex-focus-shell):not(.debate-focus-shell):not(.conversation-v0-shell) {
+  .app-shell, .app-shell:not(.tmux-focus-shell):not(.cockpit-focus-shell):not(.annex-focus-shell):not(.debate-focus-shell):not(.conversation-v0-shell):not(.nav-center-shell) {
     grid-template-columns: minmax(0, 1fr) !important;
     grid-template-rows: 48px minmax(0, 1fr) !important;
     width: 100vw !important;
@@ -9376,4 +9376,73 @@ body:has(.app-shell.annex-focus-shell) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* --- 반응형: 대시보드가 어떤 창 비율에서도 깨지지 않게 --- */
+@media (max-width: 1100px) {
+  .dashboard {
+    padding: 18px 16px 28px;
+    gap: 18px;
+  }
+  .dashboard__hero {
+    padding: 20px;
+  }
+  .dashboard__title {
+    font-size: 22px;
+  }
+  .dashboard__pulse {
+    width: 100%;
+  }
+  .dashboard__party {
+    gap: 12px;
+  }
+  .dashboard__party-member {
+    max-width: none;
+    flex: 1 1 220px;
+    min-width: 200px;
+  }
+  .dashboard__codex {
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  }
+  .dashboard__tiles {
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  }
+}
+@media (max-width: 860px) {
+  .app-shell.nav-center-shell {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+  .dashboard__codex {
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  }
+  .dashboard__codex .persona-card.compact {
+    height: 176px;
+  }
+  .persona-card.compact .persona-card-banner {
+    height: 88px;
+  }
+}
+@media (max-height: 700px) {
+  .dashboard {
+    padding-top: 14px;
+    gap: 14px;
+  }
+  .dashboard__hero {
+    padding: 16px 20px;
+  }
+}
+/* 카드 그리드 항목이 그리드 폭보다 넓어지는 것 방지 */
+.dashboard__codex-card,
+.dashboard__tile,
+.dashboard__party-member {
+  min-width: 0;
+}
+.persona-card {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Codex식 사이드 패널 안에서는 위임 카드 그리드를 1열로 — 세로 글자 깨짐 방지 */
+.chat-side-panel-body .grid {
+  grid-template-columns: 1fr !important;
 }
