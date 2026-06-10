@@ -344,7 +344,7 @@ describe("conversation pipeline runtime helper", () => {
     expect(pipeline[0]?.metadata?.recalledMemoryCount).toBe(1);
   });
 
-  it("warns the agent when older turns were truncated and no scoped recall matched", () => {
+  it("injects the IDK directive when no scoped recall matched (patch P2)", () => {
     const userMessage = message("message_user_latest", "user", "아까 말한 결정 이어서 해");
     const emptyMemory = {
       trace: {
@@ -367,8 +367,9 @@ describe("conversation pipeline runtime helper", () => {
       userMessage,
     });
 
-    expect(pipeline[0]?.content).toContain("Long conversation continuity");
-    expect(pipeline[0]?.content).toContain("ask a short clarification");
+    // 패치 P2: 무관/무근거 recall에는 continuityWarning 대신 명시적 IDK 지시가 들어간다
+    expect(pipeline[0]?.content).toContain("관련 기억 없음");
+    expect(pipeline[0]?.content).toContain("지어내지 말");
     expect(pipeline[0]?.metadata?.longContextTruncated).toBe(true);
   });
 
