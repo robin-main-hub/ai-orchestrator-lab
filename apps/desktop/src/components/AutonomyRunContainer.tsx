@@ -20,6 +20,7 @@ import {
 import { codingPacketToAutonomyForm } from "../lib/codingPacketToAutonomyForm";
 import { stepRowFromReduce, type AutonomyStepRow } from "../lib/autonomyTimeline";
 import { bundledPersonaNames, personaFileSource } from "../lib/personaBundleSource";
+import { personaAvatars } from "../lib/personaAvatarSource";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
 import { AutonomyRunPanel } from "./AutonomyRunPanel";
 
@@ -163,6 +164,7 @@ export function AutonomyRunContainer({
       onRun={onRun}
       history={historyEvents ? projectAutonomyRunHistory(historyEvents) : undefined}
       notice={notice}
+      personaAvatars={personaAvatars}
       roster={registry ? rosterFromRegistry(registry) : undefined}
       onLoadFromPacket={seedPacket ? () => setForm(codingPacketToAutonomyForm(seedPacket)) : undefined}
       outcome={outcome}

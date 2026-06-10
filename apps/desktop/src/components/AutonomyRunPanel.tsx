@@ -42,6 +42,7 @@ export function AutonomyRunPanel({
   history,
   roster,
   notice,
+  personaAvatars,
   onFieldChange,
   onRun,
   onLoadFromPacket,
@@ -57,17 +58,24 @@ export function AutonomyRunPanel({
   roster?: AutonomyRosterSummary;
   /** advisory notice shown near the run button (e.g. mode downgraded by a gate) */
   notice?: string;
+  /** persona slug -> avatar image url (from imported character cards) */
+  personaAvatars?: Record<string, string>;
   onFieldChange: (patch: Partial<AutonomyRunForm>) => void;
   onRun: () => void;
   /** when provided, shows a button to (re)load the form from the current CodingPacket */
   onLoadFromPacket?: () => void;
 }) {
   const disabled = running || !runnable.ok;
+  const selectedAvatar = personaAvatars?.[form.personaName.trim()];
 
   return (
     <section className="mini-panel autonomy-run-panel">
       <header>
-        <Bot size={16} />
+        {selectedAvatar ? (
+          <img className="autonomy-persona-avatar" src={selectedAvatar} alt="" width={18} height={18} />
+        ) : (
+          <Bot size={16} />
+        )}
         <span>자율 실행</span>
         <StatusBadge size="sm" variant={running ? "primary" : "muted"}>
           {running ? "실행 중" : "대기"}
@@ -178,16 +186,22 @@ export function AutonomyRunPanel({
         <div className="autonomy-run-roster">
           <h4>pane 로스터 · 점유 {roster.busyCount} / 비어있음 {roster.freeCount}</h4>
           <ul>
-            {roster.rows.map((row) => (
-              <li key={row.paneId}>
-                <StatusBadge size="sm" variant={rosterRowVariant(row.busy)}>
-                  {row.role}
-                </StatusBadge>
-                <span className="autonomy-roster-meta">
-                  {row.paneId} · {rosterRowLabel(row)}
-                </span>
-              </li>
-            ))}
+            {roster.rows.map((row) => {
+              const avatar = row.agentId ? personaAvatars?.[row.agentId] : undefined;
+              return (
+                <li key={row.paneId}>
+                  {avatar ? (
+                    <img className="autonomy-roster-avatar" src={avatar} alt="" width={16} height={16} />
+                  ) : null}
+                  <StatusBadge size="sm" variant={rosterRowVariant(row.busy)}>
+                    {row.role}
+                  </StatusBadge>
+                  <span className="autonomy-roster-meta">
+                    {row.paneId} · {rosterRowLabel(row)}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
