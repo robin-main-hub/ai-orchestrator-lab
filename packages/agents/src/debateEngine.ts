@@ -180,7 +180,7 @@ const ROUND_INSTRUCTION: Record<DebateRoundKind, string> = {
   initial_proposals:
     "이 라운드의 목표는 1차 제안을 내놓는 것이다. 한 가지 구체적인 접근을 제시하고 핵심 근거 2~3개를 붙여라.",
   cross_critique:
-    "이 라운드의 목표는 다른 에이전트의 제안을 비판하는 것이다. 동의/반대/근거/리스크 중 하나를 명시하고, 어떤 발언에 대한 비판인지 분명히 인용하라.",
+    "이 라운드의 목표는 다른 에이전트의 제안을 비판하는 것이다. 동의/반대/근거/리스크 중 하나를 명시하고, 어떤 발언에 대한 비판인지 분명히 인용하라. 특정 에이전트의 제안을 수용하면 `[[accept:역할]]`, 거부하면 `[[reject:역할]]`을 발언에 포함하라(예: [[reject:architect]]).",
   orchestrator_summary:
     "이 라운드의 목표는 지금까지의 합의/불일치/미결 항목을 짧게 요약하는 것이다. 정렬되지 않은 결정은 명시적으로 ‘미결’로 남겨라.",
   refinement:
@@ -561,4 +561,96 @@ export function deriveStanceTrajectories(rounds: DebateRound[]): AgentStanceTraj
 /** 토론이 실제로 입장을 바꾸며 진행됐는지 (parallel-monologue 탐지) */
 export function debateHadPositionChanges(rounds: DebateRound[]): boolean {
   return deriveStanceTrajectories(rounds).some((trajectory) => trajectory.changeCount > 0);
+}
+
+// ── 패치 3: 상호 인용 링크 (accept/reject/ref 마커 → 스키마 필드) ──
+
+const ACCEPT_MARKER = /\[\[accept:([^\]]+)\]\]/gi;
+const REJECT_MARKER = /\[\[reject:([^\]]+)\]\]/gi;
+const REF_MARKER = /\[\[ref:([^\]]+)\]\]/gi;
+
+function resolveTargetUtterance(
+  token: string,
+  priorUtterances: DebateUtterance[],
+  selfAgentId: string,
+): DebateUtterance | undefined {
+  const needle = token.trim().toLowerCase();
+  if (!needle) return undefined;
+  // 가장 최근 발언부터, 본인 제외, agentId가 토큰을 포함하거나 역할 일치
+  for (let i = priorUtterances.length - 1; i >= 0; i -= 1) {
+    const candidate = priorUtterances[i]!;
+    if (candidate.agentId === selfAgentId) continue;
+    const id = candidate.agentId.toLowerCase();
+    if (id === needle || id.includes(needle) || id.endsWith(`_${needle}`)) return candidate;
+  }
+  return undefined;
+}
+
+function collectMarkers(content: string, re: RegExp): string[] {
+  const out: string[] = [];
+  re.lastIndex = 0;
+  for (let match = re.exec(content); match; match = re.exec(content)) {
+    out.push(match[1]!);
+  }
+  return out;
+}
+
+/**
+ * 라운드 전체 발언에 상호 인용 링크를 적용(순수). 각 발언의
+ * [[accept:X]]/[[reject:X]]/[[ref:X]] 마커를 직전 발언으로 해석해 대상 발언의
+ * acceptedBy/rejectedBy에 인용자 agentId를 추가하고, 비판 발언엔 parentUtteranceId를
+ * 단다. chairmanSynthesis의 confidence가 이 신호로 비로소 0.5에서 벗어난다.
+ */
+export function applyDebateCrossLinks(rounds: DebateRound[]): DebateRound[] {
+  // 발언을 시간순으로 펼쳐 누적 — 대상 해석은 "지금까지 나온 발언" 기준
+  const flat: DebateUtterance[] = [];
+  const acceptedBy = new Map<string, Set<string>>();
+  const rejectedBy = new Map<string, Set<string>>();
+  const parentOf = new Map<string, string>();
+
+  for (const round of rounds) {
+    for (const utterance of round.utterances) {
+      const accepts = collectMarkers(utterance.content, ACCEPT_MARKER);
+      const rejects = collectMarkers(utterance.content, REJECT_MARKER);
+      const refs = collectMarkers(utterance.content, REF_MARKER);
+
+      for (const token of accepts) {
+        const target = resolveTargetUtterance(token, flat, utterance.agentId);
+        if (target) {
+          if (!acceptedBy.has(target.id)) acceptedBy.set(target.id, new Set());
+          acceptedBy.get(target.id)!.add(utterance.agentId);
+          if (!parentOf.has(utterance.id)) parentOf.set(utterance.id, target.id);
+        }
+      }
+      for (const token of rejects) {
+        const target = resolveTargetUtterance(token, flat, utterance.agentId);
+        if (target) {
+          if (!rejectedBy.has(target.id)) rejectedBy.set(target.id, new Set());
+          rejectedBy.get(target.id)!.add(utterance.agentId);
+          if (!parentOf.has(utterance.id)) parentOf.set(utterance.id, target.id);
+        }
+      }
+      for (const token of refs) {
+        const target = resolveTargetUtterance(token, flat, utterance.agentId);
+        if (target && !parentOf.has(utterance.id)) parentOf.set(utterance.id, target.id);
+      }
+      flat.push(utterance);
+    }
+  }
+
+  return rounds.map((round) => ({
+    ...round,
+    utterances: round.utterances.map((utterance) => {
+      const accepted = acceptedBy.get(utterance.id);
+      const rejected = rejectedBy.get(utterance.id);
+      const parent = parentOf.get(utterance.id);
+      if (!accepted && !rejected && !parent) return utterance;
+      return {
+        ...utterance,
+        ...(accepted ? { acceptedBy: [...accepted] } : {}),
+        ...(rejected ? { rejectedBy: [...rejected] } : {}),
+        ...(parent ? { parentUtteranceId: parent } : {}),
+      };
+    }),
+  }));
 }
