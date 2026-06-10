@@ -4,6 +4,7 @@ import {
   FileText,
   KeyRound,
   LayoutDashboard,
+  LayoutGrid,
   MessageSquare,
   RadioTower,
 } from "lucide-react";
@@ -88,6 +89,7 @@ export const navItems: NavItem[] = [
   { id: "channels", label: "채널", icon: RadioTower },
   { id: "backup", label: "백업", icon: Archive },
   { id: "autonomy", label: "자율실행", icon: Bot },
+  { id: "parallel", label: "병렬실행", icon: LayoutGrid },
 ];
 
 

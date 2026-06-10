@@ -243,6 +243,7 @@ import { ControlQueueDrawer } from "./components/ControlQueueDrawer";
 import { AgentConfigDrawer } from "./components/AgentConfigDrawer";
 import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
 import { AutonomyRunContainer } from "./components/AutonomyRunContainer";
+import { ParallelMissionContainer } from "./components/ParallelMissionContainer";
 import { OperatorCockpit } from "./components/operator-cockpit/OperatorCockpit";
 import { AgentsSidebar } from "./components/AgentsSidebar";
 import { BackupRailMenu } from "./components/BackupRailMenu";
@@ -4214,6 +4215,8 @@ export function App() {
               seedPacket={codingPacketState}
             />
           ) : null}
+
+          {activeNavItem === "parallel" ? <ParallelMissionContainer /> : null}
 
           <section className="mini-panel legacy-runtime-panel">
             <header>

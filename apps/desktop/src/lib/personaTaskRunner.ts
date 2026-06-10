@@ -65,9 +65,41 @@ export async function runPersonaCodingTask(input: {
 
   const { session } = summon;
   let registry = markRunning(summon.registry, session.id, now());
-  const effects = input.createEffects(session);
+  const loopStatus = await runSummonedMission({
+    session,
+    persona: input.persona,
+    packet: input.packet,
+    effects: input.createEffects(session),
+    kickoffTask: input.kickoffTask,
+    maxIterations: input.maxIterations,
+  });
 
-  // 1) Inject identity (+ kickoff task) through the gated dispatch path.
+  // Release / fail / retain the pane based on the loop outcome. awaiting_human
+  // keeps the session active so the pane stays bound until a human resolves it.
+  if (loopStatus === "completed") {
+    registry = releasePersona(registry, session.id, now());
+  } else if (loopStatus === "failed") {
+    registry = failPersona(registry, session.id, now());
+  }
+
+  return { ok: true, registry, session, loopStatus };
+}
+
+/**
+ * Inject a summoned persona's identity and drive its CodingPacket verification
+ * plan to a terminal LoopStatus. Does NOT touch the registry — the caller owns
+ * pane allocation/release. Extracted so the parallel runner can drive many
+ * already-summoned sessions concurrently without registry contention.
+ */
+export async function runSummonedMission(input: {
+  session: AgentSession;
+  persona: LoadedPersona;
+  packet: CodingPacket;
+  effects: ClosedLoopEffects;
+  kickoffTask?: string;
+  maxIterations?: number;
+}): Promise<LoopStatus> {
+  const { session, effects } = input;
   const plan = buildPersonaInjectionPlan({
     session,
     persona: input.persona,
@@ -75,29 +107,16 @@ export async function runPersonaCodingTask(input: {
   });
   try {
     for (let index = 0; index < plan.steps.length; index += 1) {
-      // Negative step indices keep injection ids distinct from verification steps.
       await effects.dispatch(plan.steps[index]!, { stepIndex: -(index + 1) });
     }
   } catch (error) {
     await safeEscalate(effects, `identity injection failed: ${describe(error)}`, session);
-    registry = failPersona(registry, session.id, now());
-    return { ok: true, registry, session, loopStatus: "failed" };
+    return "failed";
   }
 
-  // 2) Drive the verification plan to a terminal state.
   const state = createInitialLoopState(input.packet.verificationPlan);
   const final = await runClosedLoop({ state, effects, maxIterations: input.maxIterations });
-
-  // 3) Release / fail / retain the pane based on the loop outcome.
-  if (final.status === "completed") {
-    registry = releasePersona(registry, session.id, now());
-  } else if (final.status === "failed") {
-    registry = failPersona(registry, session.id, now());
-  }
-  // awaiting_human: leave the session active so the pane stays bound while a
-  // human resolves the queued approval.
-
-  return { ok: true, registry, session, loopStatus: final.status };
+  return final.status;
 }
 
 async function safeEscalate(effects: ClosedLoopEffects, reason: string, session: AgentSession): Promise<void> {
