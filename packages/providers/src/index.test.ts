@@ -15,7 +15,7 @@ describe("provider credential parsing and model discovery", () => {
     const parsed = parseProviderCredentialInput(
       [
         'export ANTHROPIC_BASE_URL="https://api.apikey.fun"',
-        'export ANTHROPIC_AUTH_TOKEN="sk-bf59d514ae041fbaece4a5cc8f07a996e6bfe97ec394cc0a856b2339cd0a42f0"',
+        'export ANTHROPIC_AUTH_TOKEN="sk-redactiontestfixturedonotuse000000000000000000000000000000f1x7"',
         "export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
       ].join("\n"),
       createdAt,
@@ -25,8 +25,8 @@ describe("provider credential parsing and model discovery", () => {
     expect(parsed.providerKind).toBe("anthropic");
     expect(parsed.baseUrl).toBe("https://api.apikey.fun");
     expect(parsed.trustLevel).toBe("untrusted");
-    expect(parsed.secretRef?.redactedPreview).toBe("sk-...42f0");
-    expect(JSON.stringify(parsed)).not.toContain("bf59d514");
+    expect(parsed.secretRef?.redactedPreview).toBe("sk-...f1x7");
+    expect(JSON.stringify(parsed)).not.toContain("redactiontestfixture");
   });
 
   it("parses VSCode Claude Code JSON env into a secretRef profile", () => {
