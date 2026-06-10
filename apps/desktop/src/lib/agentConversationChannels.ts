@@ -1,4 +1,5 @@
 import type { ConversationMessage } from "@ai-orchestrator/protocol";
+import { rewriteRecallQuery } from "./recallQueryRewrite";
 
 export type AgentChannelSeed = {
   id: string;
