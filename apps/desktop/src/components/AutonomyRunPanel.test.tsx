@@ -74,6 +74,8 @@ describe("AutonomyRunPanel", () => {
     const html = render({ outcome });
     expect(html).toContain("완료");
     expect(html).toContain("makise");
+    expect(html).toContain("result-stamp-success"); // 完了 hanko stamp
+    expect(html).toContain("完了");
   });
 
   it("renders a no_free_pane outcome", () => {
