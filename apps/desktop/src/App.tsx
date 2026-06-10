@@ -250,6 +250,7 @@ import { AgentSettingsPanel } from "./components/AgentSettingsPanel";
 import { AutonomyRunContainer } from "./components/AutonomyRunContainer";
 import { ParallelMissionContainer } from "./components/ParallelMissionContainer";
 import { CodingWorkbench } from "./components/coding/CodingWorkbench";
+import { ResearchSwarmContainer } from "./components/research/ResearchSwarmContainer";
 import { OperatorCockpit } from "./components/operator-cockpit/OperatorCockpit";
 import { AgentsSidebar } from "./components/AgentsSidebar";
 import { BackupRailMenu } from "./components/BackupRailMenu";
@@ -4039,6 +4040,7 @@ export function App() {
     activeNavItem === "autonomy" ||
     activeNavItem === "parallel" ||
     activeNavItem === "coding" ||
+    activeNavItem === "research" ||
     activeNavItem === "runtime";
   const shellVisibility = getConversationShellVisibility({
     configLibraryActive,
@@ -4401,6 +4403,8 @@ export function App() {
             <ParallelMissionContainer key={summonSeedPersona ?? "parallel"} seedPersonaName={summonSeedPersona ?? undefined} />
           ) : activeNavItem === "coding" ? (
             <CodingWorkbench providerProfiles={providerProfiles} />
+          ) : activeNavItem === "research" ? (
+            <ResearchSwarmContainer providerProfiles={providerProfiles} />
           ) : configLibraryActive ? (
             <ConfigLibraryPanel
               configFiles={agentConfigFiles}

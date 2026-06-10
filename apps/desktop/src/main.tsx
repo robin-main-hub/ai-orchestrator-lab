@@ -47,6 +47,7 @@ import "@fontsource/jetbrains-mono/500.css";
 import "./styles/tokens.css";
 import "./styles.css";
 import "./styles/coding-workbench.css";
+import "./styles/research-swarm.css";
 
 const root = createRoot(document.getElementById("root")!);
 
