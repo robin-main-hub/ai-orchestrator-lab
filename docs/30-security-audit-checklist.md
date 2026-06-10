@@ -32,7 +32,7 @@
 | N | Approval queue / 2FA | Spec + mobile 더보기 탭 자리 | docs/29 §7 — 구현은 F4~F5 |
 | O | Logging hygiene | `redactSecretsForLog` everywhere stderr → user-facing | C2 + adapter `onRawError` callback |
 | P | DGX deployment | RAM safety 3 rules | user memory + work-board |
-| Q | Rate limiting | None (server) | 미구현 — adapter category만 |
+| Q | Rate limiting | Per-client failed-auth limit (10/60s → 429) | #435 (`security/authRateLimiter`) |
 | R | Audit log (PermissionMatrixItem) | Type only | docs/29 §3 step 8 — 구현은 F3 |
 | S | Adapter contract conformance | Contract test fixtures | #33 |
 
@@ -141,16 +141,16 @@
 | typecheck | ✅ `pnpm typecheck` | — |
 | unit test (어댑터 contract) | ✅ `pnpm --filter @ai-orchestrator/providers test` | 모든 어댑터에 contract 적용 |
 | server smoke (auth/413/400/200) | ✅ `pnpm server:smoke` | regression mode 항상 실행 |
-| secret 패턴 grep on PR diff | ❌ | CI에서 `git diff main..HEAD | grep -E "sk-|Bearer [a-zA-Z]"` 같은 룰 추가 |
+| secret 패턴 스캔 | ✅ CI `security` job — gitleaks (full history) | #435 |
 | permission policy snapshot test | ❌ | F3 이후 — 정책 매트릭스 변경 감지 |
-| dependency CVE scan | ❌ | `npm audit` / GitHub Dependabot |
+| dependency CVE scan | ✅ CI `security` job — `pnpm audit --prod --audit-level high` | #435 (Dependabot은 향후) |
 | TLS expiry monitoring | ❌ | Cloudflare 자동 + 별도 cron 알림 |
 
 ## 7. 미구현 / 알려진 위험 (work-board 백로그)
 
 | Risk | 등급 | 닫힐 시점 |
 |---|---|---|
-| Server rate limit 없음 | Low (현재) → High (외부 사용자 늘면) | 별도 PR |
+| ~~Server rate limit 없음~~ | ~~Low → High~~ | ✅ #435 — per-client failed-auth 429 |
 | Permission/Approval enforcement (typed only) | High | F1~F3 코덱스 |
 | Redaction rule pipeline 5 stage 중 (1, 2, 3) 부분만 | Medium | F7 코덱스 |
 | Ingress guard 7-step receiver 0 구현 | Medium | F9 |
@@ -267,3 +267,48 @@
 - registry에 CLI provider metadata가 올바르게 등록되는지
 
 머지 차단 기준: 위 항목 중 Critical에 해당하는 항목이 하나라도 미준수 시 차단.
+
+## 13. 운영 보안 (코드 밖) — 중소기업 기본기
+
+이 문서의 §1~§12는 **코드/PR** 보안이다. 하지만 중소기업이 실제로 가장 많이 뚫리는 곳은
+코드가 아니라 **운영·계정·사람**이다 (피싱 → 계정 탈취, 랜섬웨어, 미패치 취약점).
+위협 모델은 표적 공격이 아니라 **기회성 공격**(자동 스캐너, 무차별 대입, 대량 피싱)이다.
+아래는 코드 변경 없이 운영자가 챙기는 기본 방어선이며, 분기마다 한 번씩 재확인한다.
+
+### 13.1 계정/접근
+
+- [ ] **`ORCHESTRATOR_API_TOKEN`을 강한 랜덤 값으로** — `openssl rand -hex 32`.
+  데스크톱/모바일 클라이언트와 동일 값. dev-fallback 토큰(`dev-orchestrator-token`)은
+  `scripts/deploy-dgx02.mjs` preflight가 프로덕션 배포에서 거부하지만, 약한 실토큰은
+  거른지 못하므로 사람이 책임진다. 토큰은 분기마다 또는 인원 변동 시 회전.
+- [ ] **2FA 필수 계정**: GitHub(이 repo push 권한), Cloudflare(터널/DNS),
+  도메인 등록기관, MIMO/provider 콘솔. 중소기업 침해의 다수가 계정 탈취에서 시작한다.
+- [ ] **퇴사/외주 종료 시** 해당 인원의 토큰·SSH 키·GitHub 협업자 권한 즉시 회수.
+- [ ] DGX-02 SSH는 **키 인증만**(패스워드 로그인 비활성), 가능하면 Tailscale/VPN 뒤로.
+
+### 13.2 데이터/복구
+
+- [ ] **백업 최소 1벌은 오프라인 또는 별도 계정**(랜섬웨어·계정탈취 대비). 같은 클라우드
+  계정 안의 백업은 그 계정이 털리면 같이 사라진다. `EVENT_STORAGE_DIR`(이벤트 원본)과
+  Obsidian/Notion 백업을 주기적으로 별도 매체에 복제하고, **복구를 실제로 한 번 테스트**.
+- [ ] `.env`·OAuth 세션 파일(`~/.codex/*`, `~/.grok/*` 등)은 절대 커밋 금지
+  (`.gitignore`로 차단됨 + CI gitleaks가 히스토리 스캔). 노출 시 즉시 회전.
+
+### 13.3 패치/표면
+
+- [ ] **OS·브라우저·Node·pnpm 자동 업데이트 켜기** — 기회성 공격 대부분은 알려진
+  미패치 취약점을 노린다. 의존성은 CI `pnpm audit`가 high+를 막는다(§6).
+- [ ] **Cloudflare 무료 플랜이라도** 기본 WAF / 봇 차단 / 필요 시 "Under Attack" 모드를
+  켠다 — 서버의 per-client 429(§Q) 위에 네트워크 한 겹을 더한다.
+- [ ] 공개로 열어둔 endpoint를 주기적으로 점검: `corepack pnpm deploy:dgx02:validate`로
+  보호 endpoint가 무토큰 401 / 토큰 200인지 확인(노출 회귀 감지).
+
+### 13.4 사람
+
+- [ ] 모르는 첨부/링크는 열기 전 의심 (피싱이 1순위 침투 경로).
+- [ ] 비밀번호 매니저 사용, 계정별 고유 비밀번호.
+- [ ] 사고 시 연락/대응 순서를 한 페이지로 적어둔다(누가 토큰 회전, 누가 터널 차단 —
+  `sudo systemctl stop cloudflared-orchestrator`가 1차 차단 스위치).
+
+> 이 절은 "완벽"이 목표가 아니라 **기본기**다. 대기업식 SIEM/EDR/침투테스트는 범위 밖이며,
+> 적이 특정되지 않은 중소기업에서는 위 기본선만으로 기회성 위협의 대부분을 막는다.
