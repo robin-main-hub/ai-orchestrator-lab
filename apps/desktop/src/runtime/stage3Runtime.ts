@@ -55,6 +55,10 @@ export type Stage3DebateSession = {
   humanPeek: HumanPeekEntry[];
   statusHub: StatusHubItem[];
   promotedAt: string;
+  /** 실제 멀티에이전트 엔진 실행 상태 (mock=박힌 데모, running=호출 중, live=실제 응답, error=실패) */
+  runState?: "mock" | "running" | "live" | "error";
+  /** runState==="error"일 때의 사유 */
+  runError?: string;
 };
 
 export type Stage3DebateInput = {
