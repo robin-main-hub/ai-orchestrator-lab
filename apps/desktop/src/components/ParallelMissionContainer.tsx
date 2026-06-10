@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Megaphone, Play, Plus, Trash2 } from "lucide-react";
-import { loadPersona, type LoadedPersona } from "@ai-orchestrator/agents";
+import { buildLorebookFragment, loadPersona, scanLorebooks, type LoadedPersona } from "@ai-orchestrator/agents";
 import type { TerminalHostKind, TmuxPaneRole } from "@ai-orchestrator/protocol";
 import {
   broadcastToMissions,
@@ -13,6 +13,7 @@ import type { AutonomyMode } from "../lib/autonomousRun";
 import { SELECTABLE_PANE_ROLES, headerOnlyPersona, modeLabel } from "../lib/autonomyRunForm";
 import { stepRowFromReduce } from "../lib/autonomyTimeline";
 import { createCheckInState, runCheckInSweep, startCheckInLoop, type CheckInState } from "../lib/missionCheckIn";
+import { bundledLorebooks, bundledLorebookTenants } from "../lib/lorebookSource";
 import { personaFileSource, bundledPersonaNames } from "../lib/personaBundleSource";
 import { DEFAULT_HERMES_RESET_COMMAND, resolvePersonaAgentSet, type PersonaAgentSet } from "../lib/personaAgentSet";
 import { acquireHermesSlot, summarizeHermesPool } from "../lib/hermesSlotPool";
@@ -82,6 +83,9 @@ export function ParallelMissionContainer({
   // only when a recycled slot changes hands. Spare exhausted -> provision one.
   const [hermesPool, setHermesPool] = useState(() => loadHermesPool());
   const [resetCommand, setResetCommand] = useState(DEFAULT_HERMES_RESET_COMMAND);
+  // OPTIONAL lorebook/world-info: OFF by default; multi-tenant via tenant id.
+  const [loreEnabled, setLoreEnabled] = useState(false);
+  const [loreTenant, setLoreTenant] = useState("default");
   // NTM-style broadcast: one instruction to every live mission at once.
   const [broadcastText, setBroadcastText] = useState("");
   const [broadcastNote, setBroadcastNote] = useState<string | null>(null);
@@ -202,12 +206,27 @@ export function ParallelMissionContainer({
       const specs = buildMissionSpecs(drafts, {
         sessionId,
         personaFor: (name) => personaByName.get(name) ?? headerOnlyPersona(name),
-      }).map((spec) => ({
-        ...spec,
-        workspace: workspaceByMission.get(spec.id),
-        // sticky Hermes slot per persona: soul + agents + role + agent move as one set
-        agentSet: agentSetByMission.get(spec.id),
-      }));
+      }).map((spec) => {
+        // optional world info: scan this mission's own text against the active tenant's books
+        const draft = drafts.find((d) => d.id === spec.id);
+        const worldInfo =
+          loreEnabled && draft
+            ? buildLorebookFragment(
+                scanLorebooks(
+                  bundledLorebooks,
+                  `${draft.goal}\n${draft.verificationStepsText}\n${draft.kickoffTask ?? ""}`,
+                  { tenantId: loreTenant.trim() || "default" },
+                ),
+              ) || undefined
+            : undefined;
+        return {
+          ...spec,
+          workspace: workspaceByMission.get(spec.id),
+          // sticky Hermes slot per persona: soul + agents + role + agent move as one set
+          agentSet: agentSetByMission.get(spec.id),
+          worldInfo,
+        };
+      });
 
       // One pane per mission (matching its role) so every queued mission can be
       // allocated; the engine still rejects gracefully if capacity runs short.
@@ -345,6 +364,29 @@ export function ParallelMissionContainer({
           </select>
         </label>
         {checkInNote ? <p className="parallel-console__hint">{checkInNote}</p> : null}
+        <label className="parallel-workspace__toggle">
+          <input
+            type="checkbox"
+            checked={loreEnabled}
+            onChange={(event) => setLoreEnabled(event.target.checked)}
+            disabled={running}
+          />
+          로어북 주입 (옵션) — 미션 텍스트에 키워드가 등장하는 월드인포만 정체성에 덧붙임 · 테넌트:
+          <input
+            className="parallel-lore__tenant"
+            list="parallel-lore-tenants"
+            value={loreTenant}
+            onChange={(event) => setLoreTenant(event.target.value)}
+            disabled={running || !loreEnabled}
+            aria-label="로어북 테넌트"
+            title="이 테넌트 소유 + shared 로어북만 스캔됩니다 (멀티테넌트 격리)"
+          />
+          <datalist id="parallel-lore-tenants">
+            {bundledLorebookTenants.map((tenant) => (
+              <option key={tenant} value={tenant} />
+            ))}
+          </datalist>
+        </label>
       </div>
 
       {running ? (
