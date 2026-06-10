@@ -40,6 +40,7 @@ export function TmuxPaneCard({
   onCommandDraftChange,
   onDispatch,
   pane,
+  matchedPersonas,
   timelineBlocks,
   visual,
 }: {
@@ -58,6 +59,8 @@ export function TmuxPaneCard({
     agent?: WorkbenchAgent;
     signal: string;
   };
+  /** 이 pane 워크스테이션에 배치 가능한 캐릭터 명단 (도감 매칭) */
+  matchedPersonas?: ReadonlyArray<{ personaName: string; displayName: string }>;
   /** Stage 2-6: optional Warp-style timeline blocks for this pane. */
   timelineBlocks?: TerminalTimelineBlock[];
   visual?: AgentVisualSettings;
@@ -126,6 +129,22 @@ export function TmuxPaneCard({
           {pane.agent?.modelId ?? "모델 대기"}
         </span>
       </div>
+
+      {/* 배치 가능한 캐릭터 (도감 매칭) — 매칭 없는 pane은 행 자체를 생략 */}
+      {matchedPersonas && matchedPersonas.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1 border-b border-white/[0.07] px-3 py-2">
+          <span className="mr-1 text-[10px] uppercase tracking-wider text-zinc-600">소환 후보</span>
+          {matchedPersonas.map((persona) => (
+            <span
+              className="rounded-full border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-200"
+              key={persona.personaName}
+              title={`agents/${persona.personaName}`}
+            >
+              {persona.displayName}
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       {/* Signal text */}
       <p className="line-clamp-2 px-3 py-2 text-[10px] text-zinc-500">
