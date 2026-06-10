@@ -82,4 +82,17 @@ describe("getConversationShellVisibility", () => {
     expect(isFocusedV0Surface("cockpit")).toBe(true);
     expect(isFocusedV0Surface("annex")).toBe(true);
   });
+
+  it("nav-center views (대시보드/작전 탭) keep the sidebar and own a clean center", () => {
+    const visibility = getConversationShellVisibility({
+      configLibraryActive: false,
+      mode: "conversation",
+      navCenterActive: true,
+    });
+    expect(visibility.showLeftRail).toBe(true);
+    expect(visibility.showToolbarActions).toBe(false);
+    expect(visibility.showTerminalDock).toBe(false);
+    expect(visibility.showCodingPacketPanel).toBe(false);
+    expect(visibility.showWorkItemHandoffPanel).toBe(false);
+  });
 });
