@@ -24,6 +24,7 @@ export type {
 } from "./personaLoader.js";
 
 export {
+  applyDebateCrossLinks,
   buildRoundUserPrompt,
   debateHadPositionChanges,
   deriveStanceTrajectories,

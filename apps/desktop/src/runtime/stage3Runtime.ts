@@ -12,6 +12,7 @@ import type {
   CodingPacket,
 } from "@ai-orchestrator/protocol";
 import {
+  applyDebateCrossLinks,
   runDebate,
   buildAgentSystemPrompt,
   type DebateContext,
@@ -437,13 +438,14 @@ export async function runStage3DebateSession(
     },
   });
 
-  // Re-assemble human peek and status hub with actual utterances count
+  // 패치 3: accept/reject/ref 마커를 스키마 링크로 — 의장 confidence가 진짜 신호를 받는다
+  const linkedRounds = applyDebateCrossLinks(debateResult.rounds);
   const updatedParticipants = baseSession.participants;
-  const updatedHumanPeek = createHumanPeek(updatedParticipants, debateResult.rounds, input.events, baseSession.promotedAt);
+  const updatedHumanPeek = createHumanPeek(updatedParticipants, linkedRounds, input.events, baseSession.promotedAt);
 
   return {
     ...baseSession,
-    rounds: debateResult.rounds,
+    rounds: linkedRounds,
     humanPeek: updatedHumanPeek,
   };
 }
