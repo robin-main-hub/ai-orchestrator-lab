@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Brain,
   ChevronRight,
@@ -296,6 +296,20 @@ import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbe
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 
 const CENTER_MODE_STORAGE_KEY = "ai-orchestrator.center-mode.v1";
+const RIGHT_RAIL_WIDTH_STORAGE_KEY = "ai-orchestrator.conversation-right-rail-width.v1";
+const RIGHT_RAIL_RESIZER_WIDTH_PX = 10;
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function parseStoredRightRailWidth(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+
+  return Math.round(value);
+}
 
 type RemoteCockpitSnapshotState = {
   status: "idle" | "loading" | "loaded" | "failed";
@@ -4053,7 +4067,8 @@ export function App() {
   });
   const focusedV0Surface = !configLibraryActive && !navCenterActive && isFocusedV0Surface(mode);
   const leftRailVisible = shellVisibility.showLeftRail || providerRegistrationOpen || adminRailOpen;
-  const rightRailVisible = !focusedV0Surface && !navCenterActive;
+  const conversationRightRailVisible = !configLibraryActive && (mode === "conversation" || mode === "agents");
+  const rightRailVisible = !navCenterActive && (conversationRightRailVisible || !focusedV0Surface);
 
   // Switching the top-bar mode (대화/토론/Tmux/콕핏…) hands the center back to
   // that mode — leave the nav-owned center view so the tabs never look dead.
@@ -4073,6 +4088,113 @@ export function App() {
   }, [mode, navCenterActive]);
 
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [rightRailWidthPx, setRightRailWidthPx] = useState<number | undefined>(() =>
+    readJsonState(RIGHT_RAIL_WIDTH_STORAGE_KEY, undefined, parseStoredRightRailWidth),
+  );
+  const [rightRailDragging, setRightRailDragging] = useState(false);
+  const activeRightRailWidthPx = clampNumber(
+    rightRailWidthPx ?? railLayout.rightRailWidthPx,
+    railLayout.rightRailMinWidthPx,
+    railLayout.rightRailMaxWidthPx,
+  );
+
+  useEffect(() => {
+    if (rightRailWidthPx === undefined) {
+      return;
+    }
+    writeJsonState(RIGHT_RAIL_WIDTH_STORAGE_KEY, activeRightRailWidthPx);
+  }, [activeRightRailWidthPx, rightRailWidthPx]);
+
+  useEffect(() => {
+    if (rightRailWidthPx === undefined) {
+      return;
+    }
+    if (rightRailWidthPx !== activeRightRailWidthPx) {
+      setRightRailWidthPx(activeRightRailWidthPx);
+    }
+  }, [activeRightRailWidthPx, rightRailWidthPx]);
+
+  const handleRightRailResizePointerDown = useCallback(
+    (event: PointerEvent<HTMLButtonElement>) => {
+      if (!rightRailVisible) {
+        return;
+      }
+
+      event.preventDefault();
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // Some synthetic/browser automation events cannot be captured. The
+        // document/window listeners below still keep the splitter usable.
+      }
+      setRightRailDragging(true);
+
+      const updateWidthFromClientX = (clientX: number) => {
+        const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+        const nextWidth = clampNumber(
+          viewportWidth - clientX - RIGHT_RAIL_RESIZER_WIDTH_PX / 2,
+          railLayout.rightRailMinWidthPx,
+          railLayout.rightRailMaxWidthPx,
+        );
+        setRightRailWidthPx(Math.round(nextWidth));
+      };
+
+      updateWidthFromClientX(event.clientX);
+
+      const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
+        updateWidthFromClientX(moveEvent.clientX);
+      };
+
+      const handlePointerUp = () => {
+        setRightRailDragging(false);
+        window.removeEventListener("pointermove", handlePointerMove);
+        document.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+        document.removeEventListener("pointerup", handlePointerUp);
+        window.removeEventListener("pointercancel", handlePointerUp);
+        document.removeEventListener("pointercancel", handlePointerUp);
+      };
+
+      window.addEventListener("pointermove", handlePointerMove);
+      document.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp, { once: true });
+      document.addEventListener("pointerup", handlePointerUp, { once: true });
+      window.addEventListener("pointercancel", handlePointerUp, { once: true });
+      document.addEventListener("pointercancel", handlePointerUp, { once: true });
+    },
+    [railLayout.rightRailMaxWidthPx, railLayout.rightRailMinWidthPx, rightRailVisible],
+  );
+
+  const handleRightRailResizeKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>) => {
+      if (!rightRailVisible) {
+        return;
+      }
+
+      const step = event.shiftKey ? 48 : 24;
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setRightRailWidthPx((current) =>
+          clampNumber((current ?? activeRightRailWidthPx) + step, railLayout.rightRailMinWidthPx, railLayout.rightRailMaxWidthPx),
+        );
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setRightRailWidthPx((current) =>
+          clampNumber((current ?? activeRightRailWidthPx) - step, railLayout.rightRailMinWidthPx, railLayout.rightRailMaxWidthPx),
+        );
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        setRightRailWidthPx(railLayout.rightRailMinWidthPx);
+      }
+      if (event.key === "End") {
+        event.preventDefault();
+        setRightRailWidthPx(railLayout.rightRailMaxWidthPx);
+      }
+    },
+    [activeRightRailWidthPx, railLayout.rightRailMaxWidthPx, railLayout.rightRailMinWidthPx, rightRailVisible],
+  );
 
   useEffect(() => {
     if (!leftRailVisible && isMobileDrawerOpen) {
@@ -4094,11 +4216,12 @@ export function App() {
         !navCenterActive && (mode === "conversation" || mode === "agents") && !configLibraryActive
           ? "conversation-v0-shell"
           : ""
-      }`}
+      } ${rightRailVisible ? "has-right-rail" : ""}`}
       style={{
         "--conversation-right-rail-max": `${railLayout.rightRailMaxWidthPx}px`,
         "--conversation-right-rail-min": `${railLayout.rightRailMinWidthPx}px`,
-        "--conversation-right-rail-width": `${railLayout.rightRailWidthPx}px`,
+        "--conversation-right-rail-width": `${activeRightRailWidthPx}px`,
+        "--conversation-right-rail-resizer-width": `${RIGHT_RAIL_RESIZER_WIDTH_PX}px`,
       } as React.CSSProperties}
     >
       <RuntimeStatusBar
@@ -4565,7 +4688,21 @@ export function App() {
         </section>
 
         {rightRailVisible ? (
-          <aside className="right-rail" aria-label="모델과 에이전트 상태">
+          <>
+            <button
+              aria-label="오른쪽 패널 너비 조절"
+              aria-orientation="vertical"
+              role="separator"
+              aria-valuemax={railLayout.rightRailMaxWidthPx}
+              aria-valuemin={railLayout.rightRailMinWidthPx}
+              aria-valuenow={activeRightRailWidthPx}
+              className={`right-rail-resizer ${rightRailDragging ? "dragging" : ""}`}
+              onKeyDown={handleRightRailResizeKeyDown}
+              onPointerDown={handleRightRailResizePointerDown}
+              title="드래그해서 미리보기/상태 패널 폭 조절"
+              type="button"
+            />
+            <aside className="right-rail" aria-label="모델과 에이전트 상태">
             <AgentsSidebar
               agents={agents}
               agentActivityById={agentActivityById}
@@ -4596,7 +4733,8 @@ export function App() {
             {shellVisibility.showEvolveMementoPanel ? (
               <HumanPeekPanel ingressSnapshot={ingressSnapshot} />
             ) : null}
-          </aside>
+            </aside>
+          </>
         ) : null}
       </main>
       {shellVisibility.showTerminalDock ? (
