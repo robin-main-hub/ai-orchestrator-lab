@@ -8702,3 +8702,16 @@ body:has(.app-shell.annex-focus-shell) {
   font-family: var(--font-mono, monospace);
   font-size: 12px;
 }
+
+/* --- lorebook tenant field --- */
+.parallel-lore__tenant {
+  margin-left: 6px;
+  width: 120px;
+  background: color-mix(in srgb, var(--panel) 88%, black);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 4px 7px;
+  font-size: 11.5px;
+  font-family: var(--font-mono, monospace);
+}

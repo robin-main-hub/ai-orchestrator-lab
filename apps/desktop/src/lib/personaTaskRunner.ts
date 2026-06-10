@@ -56,6 +56,8 @@ export async function runPersonaCodingTask(input: {
   kickoffTask?: string;
   /** persona's atomic agent set: fresh Hermes session boot + declared role travel with the soul */
   agentSet?: PersonaAgentSet;
+  /** optional lorebook/world-info fragment appended to the identity injection */
+  worldInfo?: string;
   maxIterations?: number;
   now?: () => string;
 }): Promise<PersonaTaskOutcome> {
@@ -75,6 +77,7 @@ export async function runPersonaCodingTask(input: {
     effects: input.createEffects(session),
     kickoffTask: input.kickoffTask,
     agentSet: input.agentSet,
+    worldInfo: input.worldInfo,
     maxIterations: input.maxIterations,
   });
 
@@ -103,6 +106,8 @@ export async function runSummonedMission(input: {
   kickoffTask?: string;
   /** persona's atomic agent set: boots a fresh Hermes session before injecting the identity */
   agentSet?: PersonaAgentSet;
+  /** optional lorebook/world-info fragment appended to the identity injection */
+  worldInfo?: string;
   maxIterations?: number;
 }): Promise<LoopStatus> {
   const { session, effects } = input;
@@ -111,6 +116,7 @@ export async function runSummonedMission(input: {
     persona: input.persona,
     kickoffTask: input.kickoffTask ?? input.packet.goal,
     agentSet: input.agentSet,
+    worldInfo: input.worldInfo,
   });
   try {
     for (let index = 0; index < plan.steps.length; index += 1) {

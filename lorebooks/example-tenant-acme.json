@@ -1,0 +1,17 @@
+{
+  "id": "example-tenant-acme",
+  "name": "ACME Corp World Info (example tenant)",
+  "tenantId": "acme",
+  "enabled": true,
+  "description": "멀티테넌트 데모: tenantId가 'acme'인 스캔에서만 보인다. 다른 회사용 월드인포를 같은 배포에 격리 수용하는 예시.",
+  "entries": [
+    {
+      "id": "acme-naming",
+      "keys": ["ACME", "acme"],
+      "content": "[ACME 로어] ACME 사의 서비스 네이밍 규칙: 모든 마이크로서비스는 acme-<domain>-<svc> 형식을 따른다.",
+      "enabled": true,
+      "insertionOrder": 0,
+      "comment": "예시 테넌트 항목"
+    }
+  ]
+}
