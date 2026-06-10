@@ -6,7 +6,7 @@ import type {
   ProviderCompletionRequest,
   ProviderCompletionResponse,
 } from "@ai-orchestrator/protocol";
-import type { AutorunCommandResult } from "./autorunSafety";
+import type { AutorunCommandResult } from "./autorunSafety.js";
 import {
   getAutorunMode,
   getAutorunModelId,
@@ -15,7 +15,7 @@ import {
   rejectUnlessExperimentalAutorunEnabled,
   runAllowedVerificationCommand,
   writeGeneratedFileSafely,
-} from "./autorunSafety";
+} from "./autorunSafety.js";
 
 export type VerifyPacketRouteDependencies = {
   request: IncomingMessage;
