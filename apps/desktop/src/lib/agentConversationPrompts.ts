@@ -2,6 +2,21 @@ import type { AgentRole } from "@ai-orchestrator/protocol";
 import type { AgentActivityStatus } from "../types";
 import { sanitizePublicText } from "./publicRedaction";
 
+/**
+ * 추천대화 — 에이전트의 "방금 답변"을 근거로 다음 메시지 3개를 제안한다.
+ *
+ * 사용자 의도(명시 지시):
+ *  1. 세 개 전부 마지막 어시스턴트 답변에서 파생될 것 — 일반 문구 금지.
+ *  2. 에이전트가 아직 답하지 않았거나 생각 중이면 아무것도 띄우지 말 것.
+ *
+ * 구조: 답변을 신호로 분해(오류/제안 행동/단정/질문/주제)한 뒤 세 슬롯을 채운다.
+ *   ① 파고들기 — 답변의 핵심 문장을 인용해 원인/세부를 더 묻는다
+ *   ② 실행 — 답변이 제안한 다음 조치를 그대로 실행 지시로 바꾼다
+ *   ③ 검증 — 답변의 단정을 검증하거나, 답변이 남긴 질문에 답을 요구한다
+ * LLM 호출 없이 순수 분석으로 동작해 공급자가 죽어 있어도(바로 그 순간이
+ * 추천이 가장 필요한 때다) 항상 답변 기반 제안이 나온다.
+ */
+
 export type AgentConversationPromptSuggestionsInput = {
   activity: AgentActivityStatus;
   displayName: string;
@@ -12,89 +27,143 @@ export type AgentConversationPromptSuggestionsInput = {
   role: AgentRole;
 };
 
+const BUSY_ACTIVITIES: ReadonlySet<AgentActivityStatus> = new Set<AgentActivityStatus>([
+  "preparing",
+  "tooling",
+  "capturing",
+  "dispatching",
+  "testing",
+  "responding",
+]);
+
 export function createAgentConversationPromptSuggestions({
   activity,
   displayName,
   lastAssistantMessageContent,
-  memoryRecordCount,
-  messageCount,
-  pendingApprovalCount,
-  role,
 }: AgentConversationPromptSuggestionsInput): string[] {
   const name = sanitizePublicText(displayName.trim() || "이 동료");
-  const latestAnswer = sanitizePublicText(lastAssistantMessageContent?.trim() ?? "");
-  if (!latestAnswer) {
+  const answer = sanitizePublicText(lastAssistantMessageContent?.trim() ?? "");
+  // 답변이 없거나(첫 화면) 아직 생각/응답 중이면 추천을 띄우지 않는다.
+  if (!answer || BUSY_ACTIVITIES.has(activity)) {
     return [];
   }
 
+  const signals = extractAnswerSignals(answer);
   const suggestions = [
-    createContextFollowupPrompt(role, name, latestAnswer),
-    createQueuePrompt(name, pendingApprovalCount, activity),
-    createContinuityPrompt(name, memoryRecordCount, messageCount),
+    digDeeperPrompt(name, signals),
+    executeProposalPrompt(name, signals),
+    verifyOrAnswerPrompt(name, signals),
   ];
 
-  return suggestions
-    .map((suggestion) => sanitizePublicText(suggestion))
-    .filter(Boolean)
-    .slice(0, 3);
+  const unique: string[] = [];
+  for (const suggestion of suggestions) {
+    const clean = sanitizePublicText(suggestion);
+    if (clean && !unique.includes(clean)) {
+      unique.push(clean);
+    }
+  }
+  return unique.slice(0, 3);
 }
 
-function createContextFollowupPrompt(role: AgentRole, name: string, latestAnswer: string) {
-  const lower = latestAnswer.toLowerCase();
-  if (lower.includes("mock local provider") || latestAnswer.includes("대체 경로")) {
-    return `${name}, 방금 대체 경로가 실제 작업 흐름에 미치는 영향과 원래 공급자로 복귀할 조건을 정리해줘.`;
-  }
-  if (latestAnswer.includes("승인") || latestAnswer.includes("권한")) {
-    return `${name}, 방금 답변 기준으로 지금 승인해야 할 항목과 미뤄도 되는 항목을 나눠줘.`;
-  }
-  if (latestAnswer.includes("테스트") || latestAnswer.includes("검증")) {
-    return `${name}, 방금 말한 검증을 내가 바로 실행할 순서로 압축해줘.`;
-  }
-  if (latestAnswer.includes("기억") || latestAnswer.includes("맥락")) {
-    return `${name}, 방금 답변에서 장기 기억으로 남길 것과 버릴 것을 골라줘.`;
-  }
+// ─── 답변 신호 분해 ─────────────────────────────────────────────────────────
 
-  const prompts: Record<AgentRole, string> = {
-    architect: `${name}, 방금 답변을 기준으로 설계 경계와 다음 수정 단위를 다시 잡아줘.`,
-    auditor: `${name}, 방금 답변에서 증거가 부족한 부분과 검수 포인트를 골라줘.`,
-    builder: `${name}, 방금 답변을 바로 코드 작업으로 옮기려면 어떤 파일부터 볼지 정리해줘.`,
-    companion: `${name}, 방금 흐름을 이어가기 쉬운 다음 질문 3개로 바꿔줘.`,
-    domain_expert: `${name}, 방금 답변에서 빠진 전문 전제나 확인해야 할 개념을 보강해줘.`,
-    executor: `${name}, 방금 답변을 실행하려면 명령, 승인, 되돌림 순서를 나눠줘.`,
-    external: `${name}, 방금 답변을 외부 공유용 요약과 내부 메모로 분리해줘.`,
-    mediator: `${name}, 방금 답변에서 결정된 것과 아직 합의가 필요한 것을 나눠줘.`,
-    memory_curator: `${name}, 방금 답변에서 이 에이전트 방에 기억할 핵심만 골라줘.`,
-    negotiator: `${name}, 방금 답변을 제안서로 바꾸면 어떤 양보와 조건이 필요한지 정리해줘.`,
-    orchestrator: `${name}, 방금 답변 기준으로 다음 큰 바위와 즉시 할 일을 분리해줘.`,
-    researcher: `${name}, 방금 답변에서 추가 조사해야 할 출처와 검증 질문을 골라줘.`,
-    reviewer: `${name}, 방금 답변에서 회귀 위험과 빠진 테스트만 짚어줘.`,
-    risk_officer: `${name}, 방금 답변의 실패 시나리오와 되돌림 기준을 정리해줘.`,
-    skeptic: `${name}, 방금 답변에서 가장 약한 가정과 반례를 찔러줘.`,
-    verifier: `${name}, 방금 답변을 통과시키기 위한 검증 명령과 성공 기준을 써줘.`,
-    watchdog: `${name}, 방금 답변 이후 방치하면 위험한 신호를 찾아줘.`,
+export type AnswerSignals = {
+  /** 답변의 첫 핵심 문장 (인용용, 60자 클램프) */
+  headline: string;
+  /** 오류/막힘을 보고하는 답변인가 */
+  isError: boolean;
+  /** 답변이 제안한 다음 조치 문장 (있다면) */
+  proposedAction?: string;
+  /** 답변이 사용자에게 되물은 질문 (있다면) */
+  openQuestion?: string;
+  /** 감지된 주제 */
+  topic: "approval" | "test" | "memory" | "network" | "design" | "general";
+};
+
+/** 답변이 행동을 제안하는 문형: 명시 라벨 + "~(하/되/붙이/연결하)면 …" 조건 제안형 */
+const ACTION_CUE_RE =
+  /(다음 조치|재시도|다시 (호출|시도)|추천\s*:|제안\s*:|방법\s*:)|[가-힣A-Za-z]+(하|되|이)면\s*(더 |좋|안전|할 수|돼|됩니)/;
+const ERROR_CUES = ["실패", "막혔", "오류", "에러", "failed", "error", "unreachable", "차단", "거부"];
+
+function clamp(text: string, limit = 60): string {
+  const single = text.replace(/\s+/g, " ").trim();
+  return single.length > limit ? `${single.slice(0, limit)}…` : single;
+}
+
+export function extractAnswerSignals(answer: string): AnswerSignals {
+  const sentences = answer
+    .split(/(?<=[.!?다요])\s+|\n+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 4);
+  const headline = clamp(sentences[0] ?? answer);
+  const lower = answer.toLowerCase();
+
+  const isError = ERROR_CUES.some((cue) => lower.includes(cue));
+  const proposedAction = sentences.find((sentence) => ACTION_CUE_RE.test(sentence));
+  const openQuestion = [...sentences].reverse().find((sentence) => /[?？]$/.test(sentence));
+
+  const topic: AnswerSignals["topic"] =
+    isError && (lower.includes("네트워크") || lower.includes("fetch") || lower.includes("호출") || lower.includes("연결"))
+      ? "network"
+      : answer.includes("승인") || answer.includes("권한")
+        ? "approval"
+        : answer.includes("테스트") || answer.includes("검증")
+          ? "test"
+          : answer.includes("기억") || answer.includes("맥락")
+            ? "memory"
+            : answer.includes("설계") || answer.includes("구조")
+              ? "design"
+              : "general";
+
+  return {
+    headline,
+    isError,
+    proposedAction: proposedAction ? clamp(proposedAction, 70) : undefined,
+    openQuestion: openQuestion ? clamp(openQuestion, 70) : undefined,
+    topic,
   };
-  return prompts[role] ?? `${name}, 방금 답변을 기준으로 다음 행동을 제안해줘.`;
 }
 
-function createQueuePrompt(name: string, pendingApprovalCount: number, activity: AgentActivityStatus) {
-  if (pendingApprovalCount > 0) {
-    return `${name}, 승인 대기 ${pendingApprovalCount}건을 먼저 처리해야 하는지 판단해줘.`;
+// ─── 슬롯 ①: 답변의 핵심을 파고들기 ────────────────────────────────────────
+
+function digDeeperPrompt(name: string, signals: AnswerSignals): string {
+  if (signals.isError) {
+    return `${name}, 방금 "${signals.headline}" 라고 했는데 — 원인을 단계별로 좁혀서 어디서 끊기는지 진단해줘.`;
   }
-  if (activity === "error") {
-    return `${name}, 방금 막힌 원인을 사용자 관점에서 짧게 정리해줘.`;
+  switch (signals.topic) {
+    case "approval":
+      return `${name}, 방금 답변에서 말한 승인 항목별로 승인/보류 근거를 한 줄씩 붙여줘.`;
+    case "test":
+      return `${name}, 방금 말한 검증을 내가 그대로 실행할 명령 순서로 바꿔줘.`;
+    case "memory":
+      return `${name}, 방금 답변에서 장기 기억으로 남길 문장만 골라서 보여줘.`;
+    case "design":
+      return `${name}, 방금 설명한 구조에서 가장 위험한 결합 지점을 짚어줘.`;
+    default:
+      return `${name}, 방금 "${signals.headline}" 부분을 구체 예시와 함께 더 풀어줘.`;
   }
-  if (activity === "waiting_approval") {
-    return `${name}, 어떤 승인이 필요한지 근거와 함께 보여줘.`;
-  }
-  return `${name}, 지금 바로 실행 가능한 다음 행동 3개를 제안해줘.`;
 }
 
-function createContinuityPrompt(name: string, memoryRecordCount: number, messageCount: number) {
-  if (memoryRecordCount > 0) {
-    return `${name}, 지난 기억 ${memoryRecordCount}개를 참고해서 이어서 할 일을 제안해줘.`;
+// ─── 슬롯 ②: 답변이 제안한 행동을 실행으로 ─────────────────────────────────
+
+function executeProposalPrompt(name: string, signals: AnswerSignals): string {
+  if (signals.proposedAction) {
+    return `${name}, 방금 제안한 "${signals.proposedAction}" — 그대로 진행해줘.`;
   }
-  if (messageCount > 0) {
-    return `${name}, 방금 대화 ${messageCount}개를 요약하고 다음 액션을 잡아줘.`;
+  if (signals.isError) {
+    return `${name}, 방금 막힌 호출을 다른 경로(직접 공급자/로컬)로 한 번 더 시도해줘.`;
   }
-  return `${name}, 너의 역할과 잘 쓰는 도구를 먼저 소개해줘.`;
+  return `${name}, 방금 답변을 실행 단계 3개로 쪼개서 첫 단계부터 시작해줘.`;
+}
+
+// ─── 슬롯 ③: 단정 검증 또는 남긴 질문에 답하기 ─────────────────────────────
+
+function verifyOrAnswerPrompt(name: string, signals: AnswerSignals): string {
+  if (signals.openQuestion) {
+    return `${name}, 네가 물어본 "${signals.openQuestion}" — 선택지를 장단점과 함께 제시해줘, 내가 고를게.`;
+  }
+  if (signals.isError) {
+    return `${name}, "${signals.headline}" 판단의 근거 로그를 보여주고, 네트워크가 아닐 가능성도 검토해줘.`;
+  }
+  return `${name}, 방금 답변에서 가장 자신 없는 가정 하나를 골라 어떻게 확인할지 알려줘.`;
 }

@@ -114,7 +114,14 @@ export async function runCodingTurn(input: RunCodingTurnInput): Promise<TurnOutc
       results.push(`[tool_result ${call.tool}${tag}]\n${result.output}`);
     }
 
-    conversation.push({ role: "user", content: results.join("\n\n") });
+    let toolResultPayload = results.join("\n\n");
+    // instruction fade-out 대응 (arXiv 2603.05344의 핵심 교훈): 도구 루프가
+    // 깊어지면 초기 지시가 희미해진다 — 결정 지점에 가이드를 재주입한다.
+    if (round >= 2) {
+      const original = input.messages.find((message) => message.role === "user")?.content ?? "";
+      toolResultPayload += `\n\n[시스템 리마인더] 원래 요청을 상기하세요: "${original.slice(0, 160)}". 지금까지의 도구 결과로 충분하면 추가 호출 없이 결론을 텍스트로 정리하세요. (도구 라운드 ${round + 1}/${maxRounds})`;
+    }
+    conversation.push({ role: "user", content: toolResultPayload });
   }
 
   return { status: "max_rounds", rounds: maxRounds };
