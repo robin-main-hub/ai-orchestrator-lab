@@ -11,6 +11,7 @@
     "test": "pnpm build && pnpm -r --if-present test",
     "lint": "pnpm typecheck",
     "clean": "node scripts/clean-workspace.mjs",
+    "import:expressions": "node scripts/import-expressions.mjs",
     "server:build": "pnpm --filter @ai-orchestrator/server build",
     "server:start": "corepack pnpm --filter @ai-orchestrator/server start",
     "server:smoke": "node scripts/smoke-dgx-server.mjs",
