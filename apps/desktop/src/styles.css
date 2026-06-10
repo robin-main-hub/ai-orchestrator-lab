@@ -9503,3 +9503,196 @@ body:has(.app-shell.annex-focus-shell) {
 .chat-side-panel-body .grid {
   grid-template-columns: 1fr !important;
 }
+
+
+.coding-workbench {
+  grid-template-columns: minmax(180px, 230px) minmax(0, 1fr) minmax(280px, 360px);
+}
+
+.coding-mission-board {
+  min-width: 0;
+  border-left: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  background: color-mix(in srgb, var(--panel, #111827) 88%, transparent);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.coding-mission-board__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+}
+
+.coding-mission-board__header p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.coding-mission-board__header span,
+.coding-mission-empty p,
+.coding-mission-output,
+.coding-mission-events,
+.coding-mission-meta dd,
+.coding-mission-meta dt {
+  overflow-wrap: anywhere;
+}
+
+.coding-mission-board__header span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted-foreground, #9ca3af);
+  font-size: 11px;
+}
+
+.coding-mission-board__header button,
+.coding-mission-board-toggle,
+.coding-mission-actions button,
+.coding-mission-empty button {
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  background: var(--surface, rgba(255, 255, 255, 0.04));
+  color: inherit;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 6px 9px;
+  cursor: pointer;
+}
+
+.coding-mission-empty {
+  margin: 14px;
+  padding: 14px;
+  border: 1px dashed var(--border, rgba(255, 255, 255, 0.14));
+  border-radius: 14px;
+  color: var(--muted-foreground, #9ca3af);
+}
+
+.coding-missions-board-list {
+  list-style: none;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+}
+
+.coding-mission-card {
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.coding-mission-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.coding-mission-card__top strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.coding-mission-card__top span {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 10px;
+  color: var(--muted-foreground, #9ca3af);
+}
+
+.coding-mission-card__top span[data-status="running"],
+.coding-mission-card__top span[data-status="needs_review"] {
+  color: #67e8f9;
+  border-color: rgba(103, 232, 249, 0.35);
+}
+
+.coding-mission-card__top span[data-status="killed"],
+.coding-mission-card__top span[data-status="failed"] {
+  color: #fca5a5;
+  border-color: rgba(252, 165, 165, 0.35);
+}
+
+.coding-mission-meta {
+  margin: 10px 0;
+  display: grid;
+  gap: 6px;
+}
+
+.coding-mission-meta div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.coding-mission-meta dt {
+  color: var(--muted-foreground, #9ca3af);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.coding-mission-meta dd {
+  margin: 0;
+  font-size: 11px;
+}
+
+.coding-mission-output {
+  margin: 8px 0;
+  color: var(--muted-foreground, #9ca3af);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.coding-mission-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.coding-mission-actions button {
+  min-height: 28px;
+  font-size: 11px;
+}
+
+.coding-mission-events {
+  margin-top: 10px;
+  color: var(--muted-foreground, #9ca3af);
+  font-size: 11px;
+}
+
+.coding-mission-events summary {
+  cursor: pointer;
+  color: var(--foreground, #e5e7eb);
+}
+
+.coding-mission-events p {
+  margin: 6px 0 0;
+  line-height: 1.4;
+}
+
+.coding-mission-board-toggle {
+  align-self: start;
+  margin: 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .coding-workbench {
+    grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+  }
+
+  .coding-mission-board,
+  .coding-mission-board-toggle {
+    display: none;
+  }
+}
