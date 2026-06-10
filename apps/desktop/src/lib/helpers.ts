@@ -91,7 +91,29 @@ export function createAgentModelRouteLabel({
           ? "카탈로그 후보"
           : undefined;
 
-  return `${sourceLabel ? `${sourceLabel} · ` : ""}${providerLabel} / ${modelLabel}`;
+  return `${sourceLabel ? `${sourceLabel} · ` : ""}${joinProviderModelLabel(providerLabel, modelLabel)}`;
+}
+
+/**
+ * 공급자/모델 라벨 합치기 — 같은 브랜드면 중복 제거.
+ * "MiMo" + "MiMo V2.5 Pro" → "MiMo V2.5 Pro" (GPT처럼; "OpenAI의 GPT5.5" 방지)
+ * 다른 브랜드(리셀러 라우팅 등)면 "모델 · 공급자"로 출처를 보존한다.
+ */
+export function joinProviderModelLabel(providerLabel: string, modelLabel: string): string {
+  const provider = providerLabel.trim();
+  const model = modelLabel.trim();
+  if (!model || model === "모델 연결 대기" || model === "모델 대기") {
+    return provider;
+  }
+  if (!provider || provider === "공급자 대기") {
+    return model;
+  }
+  const lowerProvider = provider.toLowerCase();
+  const lowerModel = model.toLowerCase();
+  if (lowerModel.startsWith(lowerProvider) || lowerProvider.startsWith(lowerModel)) {
+    return model;
+  }
+  return `${model} · ${provider}`;
 }
 
 export function formatModelDisplayName(value?: string) {
