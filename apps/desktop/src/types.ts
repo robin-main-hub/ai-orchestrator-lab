@@ -39,6 +39,8 @@ export type Stage3DebateUtteranceView = DebateUtterance & {
   roundTitle: string;
   agentName: string;
   agentRole: AgentProfile["role"];
+  /** 번들 캐릭터 초상화 URL (personaName→role 해석), 없으면 이니셜 폴백 */
+  portraitUrl?: string;
 };
 export type AgentPersonaSettings = {
   voicePreset: AgentVoicePreset;
