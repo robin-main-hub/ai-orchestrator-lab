@@ -46,6 +46,7 @@ import "@fontsource/jetbrains-mono/500.css";
 // without overlap.
 import "./styles/tokens.css";
 import "./styles.css";
+import "./styles/coding-workbench.css";
 
 const root = createRoot(document.getElementById("root")!);
 
