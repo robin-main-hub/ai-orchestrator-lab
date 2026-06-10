@@ -7990,7 +7990,11 @@ body:has(.app-shell.annex-focus-shell) {
   flex: 1 1 auto;
 }
 .persona-card-id strong {
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .persona-card-emblem {
   font-size: 11px;
@@ -9322,4 +9326,54 @@ body:has(.app-shell.annex-focus-shell) {
   inset: 0;
   background: linear-gradient(180deg, transparent 55%, rgba(8, 8, 11, 0.85));
   pointer-events: none;
+}
+
+/* uniform codex card heights: fixed banner + single-line name = same box */
+.dashboard__codex .persona-card.compact {
+  height: 196px;
+  display: flex;
+  flex-direction: column;
+}
+.dashboard__codex .persona-card.compact .persona-card-stats {
+  margin-top: auto;
+}
+.dashboard__codex-caption {
+  min-height: 14px;
+}
+
+/* --- 표정 갤러리 --- */
+.codex-modal__expressions {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 14px 16px;
+}
+.codex-modal__expression-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.codex-modal__expression {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.codex-modal__expression img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.codex-modal__expression figcaption {
+  font-size: 9px;
+  color: var(--muted);
+  text-align: center;
+  font-family: var(--font-mono, monospace);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

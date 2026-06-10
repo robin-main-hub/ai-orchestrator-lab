@@ -92,12 +92,15 @@ export function AgentPortrait({
   size = "md",
   tintClassName = "bg-zinc-800 text-zinc-200",
   className,
+  avatarUrl,
 }: {
   initials: string;
   state: AgentState;
   size?: keyof typeof sizeMap;
   tintClassName?: string;
   className?: string;
+  /** persona portrait — fills the square instead of initials when present */
+  avatarUrl?: string;
 }) {
   const cfg = agentStateConfig[state];
   const s = sizeMap[size];
@@ -119,6 +122,8 @@ export function AgentPortrait({
           <AlertTriangle className={cn(s.icon, "text-rose-400")} />
         ) : state === "success" ? (
           <Check className={cn(s.icon, "text-cyan-400")} />
+        ) : avatarUrl ? (
+          <img alt="" className="h-full w-full rounded-[inherit] object-cover" src={avatarUrl} />
         ) : (
           <span>{initials}</span>
         )}
