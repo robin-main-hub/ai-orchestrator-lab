@@ -478,10 +478,6 @@ export function ConversationWorkbench({
               </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-64 border-zinc-800 bg-zinc-900/95 p-2 text-zinc-100 backdrop-blur-xl">
-              <Button className="w-full justify-start text-xs" onClick={onBackupProjection} size="sm" variant="ghost">
-                <Archive className="h-3.5 w-3.5" />
-                백업 상태
-              </Button>
               <Button className="w-full justify-start text-xs" onClick={onImportExternalIngress} size="sm" variant="ghost">
                 <Smartphone className="h-3.5 w-3.5" />
                 외부 인입

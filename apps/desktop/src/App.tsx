@@ -6,7 +6,6 @@ import {
   GitBranch,
   MessageSquare,
   Send,
-  Server,
   ShieldCheck,
   Terminal,
 } from "lucide-react";
@@ -215,7 +214,6 @@ import {
   reprocessMessageAttachmentsForModel,
   type AttachmentProcessingPlan,
 } from "./lib/attachmentProcessing";
-import { statusTone } from "./lib/uiLabels";
 import {
   createCockpitLocalHealthIndicators,
   createCockpitServerSnapshotIndicator,
@@ -267,7 +265,6 @@ import { EvolveMementoPanel } from "./components/EvolveMementoPanel";
 import { HumanPeekPanel } from "./components/HumanPeekPanel";
 import { OperationsRailPanel } from "./components/OperationsRailPanel";
 import { ProjectRailPanel } from "./components/ProjectRailPanel";
-import { ProviderProfilesManagerPanel } from "./components/ProviderProfilesManagerPanel";
 import { ProviderRegistrationMenu } from "./components/ProviderRegistrationMenu";
 import { RuntimeRailPanel } from "./components/RuntimeRailPanel";
 import { RuntimeStatusBar } from "./components/RuntimeStatusBar";
@@ -4419,64 +4416,14 @@ export function App() {
           </div>
 ) : activeNavItem === "runtime" ? (
             <div className="nav-center-page" data-page="runtime">
-          <>
-          <RuntimeRailPanel
-            dgxRouteDiagnostics={dgxRouteDiagnostics}
-            onProbeDgx={handleProbeDgx}
-            onRequestReboot={handleRequestDeviceReboot}
-            rebootWatchdogs={rebootWatchdogs}
-            snapshot={runtimeSnapshotState}
-          />
-          <section className="mini-panel legacy-runtime-panel">
-            <header>
-              <Server size={16} />
-              <span>Runtime</span>
-            </header>
-            <div className="runtime-node-list">
-              {runtimeSnapshotState.runtimeNodes.map((node) => (
-                <div className="runtime-node" key={node.id}>
-                  <div>
-                    <strong>{node.label}</strong>
-                    {node.isPrimary ? <span>main server</span> : <span>{node.role}</span>}
-                  </div>
-                  <em className={statusTone(node.status)}>{node.status}</em>
-                </div>
-              ))}
+              <RuntimeRailPanel
+                dgxRouteDiagnostics={dgxRouteDiagnostics}
+                onProbeDgx={handleProbeDgx}
+                onRequestReboot={handleRequestDeviceReboot}
+                rebootWatchdogs={rebootWatchdogs}
+                snapshot={runtimeSnapshotState}
+              />
             </div>
-            <div className="local-model-list">
-              <span>Local Models</span>
-              {runtimeSnapshotState.localModels.map((model) => (
-                <div className="local-model" key={model.id}>
-                  <strong>{model.name}</strong>
-                  <em className={statusTone(model.status)}>{model.runner}</em>
-                </div>
-              ))}
-            </div>
-            <div className="memory-sync-note">
-              <strong>Memory Sync</strong>
-              <span>EvolveMemento / 장기기억과 로컬 캐시 동기화 상태</span>
-              <em className={statusTone(runtimeSnapshotState.memorySyncStatus)}>{runtimeSnapshotState.memorySyncStatus}</em>
-            </div>
-            <div className="sync-authority-note">
-              <strong>Event Storage Authority</strong>
-              <span>{runtimeSnapshotState.syncTopology.authorityLabel}</span>
-              <em>source</em>
-            </div>
-            <div className="client-sync-list">
-              <span>Projection / Clients</span>
-              {runtimeSnapshotState.syncTopology.clients
-                .filter((client) => client.id !== runtimeSnapshotState.syncTopology.authorityNodeId)
-                .map((client) => (
-                  <div className="client-sync-row" key={client.id}>
-                    <strong>{client.label}</strong>
-                    <span>{client.localStore} / outbox {client.outboxCount}</span>
-                    <em className={statusTone(client.status)}>{client.status}</em>
-                  </div>
-                ))}
-            </div>
-          </section>
-          </>
-          </div>
           ) : configLibraryActive ? (
             <ConfigLibraryPanel
               configFiles={agentConfigFiles}
