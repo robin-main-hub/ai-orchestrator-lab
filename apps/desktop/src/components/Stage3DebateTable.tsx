@@ -14,7 +14,7 @@ import {
   XCircle,
 } from "lucide-react";
 import type { AgentProfile, DebateTag, DebateUtterance } from "@ai-orchestrator/protocol";
-import { defaultAgentProfiles } from "@ai-orchestrator/agents";
+import { defaultAgentProfiles, synthesizeChairmanDecision, type ChairmanDecision } from "@ai-orchestrator/agents";
 import { cn } from "@/lib/utils";
 import { agentRoleLabel } from "../lib/helpers";
 import { Button } from "@/ui/button";
@@ -157,6 +157,8 @@ export function Stage3DebateTable({
             nextActionLabel={readiness.nextActionLabel}
             riskCount={decisionRail.riskCount}
           />
+
+          <ChairmanDecisionCard session={session} />
 
           <div className="mt-4 flex items-center gap-1 overflow-x-auto pb-1">
             {session.rounds.map((round, index) => {
@@ -641,4 +643,83 @@ function debateTagLabel(tag: DebateTag) {
     risk: "리스크",
   };
   return labels[tag];
+}
+
+
+/** 의장 결정 카드 — 토론이 도달한 결론(채택/대립/리스크 + 합의 수준)을 보여준다 (#4) */
+function ChairmanDecisionCard({ session }: { session: Stage3DebateSession }) {
+  const decision = useMemo<ChairmanDecision | null>(() => {
+    const hasContent = session.rounds.some((round) => round.utterances.length > 0);
+    if (!hasContent) return null;
+    return synthesizeChairmanDecision(
+      {
+        sessionId: session.id,
+        problem: session.problem,
+        conversationSummary: session.summary,
+        constraints: [],
+        openQuestions: [],
+        userPreferences: [],
+        memoryTraceIds: [],
+      },
+      session.rounds,
+    );
+  }, [session]);
+
+  if (!decision) return null;
+
+  const consensusTone =
+    decision.consensusLevel === "strong"
+      ? "text-emerald-300"
+      : decision.consensusLevel === "moderate"
+        ? "text-cyan-300"
+        : "text-amber-300";
+  const consensusLabel =
+    decision.consensusLevel === "strong" ? "강한 합의" : decision.consensusLevel === "moderate" ? "중간 합의" : "의견 분열";
+
+  return (
+    <section className="mt-4 rounded-2xl border border-violet-300/20 bg-violet-500/[0.06] p-4">
+      <div className="flex items-center gap-2">
+        <Scale className="h-4 w-4 text-violet-300" />
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-violet-200">의장 결정</span>
+        <span className="flex-1" />
+        <span className={cn("text-[11px] font-semibold", consensusTone)}>
+          {consensusLabel} · confidence {decision.confidence.toFixed(2)}
+        </span>
+      </div>
+      <p className="mt-2 text-balance text-sm font-medium leading-relaxed text-zinc-100">{decision.statement}</p>
+      <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/10">
+        <div className="h-full rounded-full bg-violet-400" style={{ width: `${Math.round(decision.confidence * 100)}%` }} />
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        {decision.adopted.length > 0 ? (
+          <div>
+            <p className="text-[10.5px] font-semibold uppercase tracking-wide text-emerald-300">채택 ({decision.adopted.length})</p>
+            <ul className="mt-1 space-y-1">
+              {decision.adopted.slice(0, 4).map((point, index) => (
+                <li className="line-clamp-2 text-[12px] leading-snug text-zinc-300" key={index}>
+                  · {point.point} <span className="text-emerald-400/70">+{point.support}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {decision.contested.length > 0 ? (
+          <div>
+            <p className="text-[10.5px] font-semibold uppercase tracking-wide text-amber-300">대립 ({decision.contested.length})</p>
+            <ul className="mt-1 space-y-1">
+              {decision.contested.slice(0, 4).map((point, index) => (
+                <li className="line-clamp-2 text-[12px] leading-snug text-zinc-300" key={index}>
+                  · {point.point} <span className="text-amber-400/70">{point.for}↑ {point.against}↓</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+      {decision.risks.length > 0 ? (
+        <p className="mt-2 text-[11px] text-rose-300/80">리스크: {decision.risks.slice(0, 3).join(" · ")}</p>
+      ) : null}
+    </section>
+  );
 }
