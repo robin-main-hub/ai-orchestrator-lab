@@ -184,7 +184,7 @@ const ROUND_INSTRUCTION: Record<DebateRoundKind, string> = {
   orchestrator_summary:
     "이 라운드의 목표는 지금까지의 합의/불일치/미결 항목을 짧게 요약하는 것이다. 정렬되지 않은 결정은 명시적으로 ‘미결’로 남겨라.",
   refinement:
-    "이 라운드의 목표는 보완안을 내놓는 것이다. 직전 비판을 흡수해 1차 제안을 어떻게 고칠지 차분히 적고, 코딩 영향(파일/스키마/모듈)이 있다면 함께 기록하라.",
+    "이 라운드의 목표는 보완안을 내놓는 것이다. 직전 비판을 흡수해 1차 제안을 어떻게 고칠지 차분히 적어라. 첫 줄에 본인 입장이 바뀌었는지 명시하라('입장 유지' 또는 '입장 변경: …'). 코딩 영향(파일/스키마/모듈)이 있다면 함께 기록하라.",
   final_decision:
     "이 라운드의 목표는 단일 결정을 내리는 것이다. 채택안과 그 근거, 거부된 옵션과 그 이유를 분리해 적어라.",
   coding_packet:
@@ -476,4 +476,89 @@ export async function runDebateRound(
   await Promise.all(tasks);
 
   return { utterances, agentErrors };
+}
+
+// ── 패치 5: 입장(stance) 추적 + 라운드 간 입장 변화 ──
+
+/** 태그를 입장 극성으로 — 토론이 수렴 중인지 발산 중인지 읽는다 */
+export type StancePolarity = "support" | "oppose" | "neutral";
+
+export function tagPolarity(tag: DebateTag): StancePolarity {
+  switch (tag) {
+    case "agreement":
+      return "support";
+    case "objection":
+    case "risk":
+      return "oppose";
+    case "evidence":
+    case "coding_impact":
+    default:
+      return "neutral";
+  }
+}
+
+export type AgentStancePoint = {
+  roundId: string;
+  roundKind: DebateRoundKind;
+  tag: DebateTag;
+  polarity: StancePolarity;
+};
+
+export type AgentStanceTrajectory = {
+  agentId: string;
+  points: AgentStancePoint[];
+  /** 입장 극성이 라운드 사이에 바뀐 횟수 (support↔oppose 등) */
+  changeCount: number;
+  /** 마지막 유효 입장 */
+  finalPolarity: StancePolarity;
+  /** 사람이 읽을 한 줄 요약 */
+  summary: string;
+};
+
+/**
+ * 라운드 전체에서 에이전트별 입장 궤적을 도출(순수). 같은 에이전트의 발언을
+ * 라운드 순서대로 모아 극성 변화를 센다. 토론이 진짜 reasoning인지(입장이
+ * 비판 후 바뀌는지) parallel monologue인지(아무도 안 바뀜) 드러낸다.
+ */
+export function deriveStanceTrajectories(rounds: DebateRound[]): AgentStanceTrajectory[] {
+  const byAgent = new Map<string, AgentStancePoint[]>();
+  for (const round of rounds) {
+    for (const utterance of round.utterances) {
+      const tag = (utterance.tags?.[0] as DebateTag | undefined) ?? "evidence";
+      const point: AgentStancePoint = {
+        roundId: round.id,
+        roundKind: round.kind,
+        tag,
+        polarity: tagPolarity(tag),
+      };
+      const existing = byAgent.get(utterance.agentId);
+      if (existing) existing.push(point);
+      else byAgent.set(utterance.agentId, [point]);
+    }
+  }
+
+  const trajectories: AgentStanceTrajectory[] = [];
+  for (const [agentId, points] of byAgent) {
+    let changeCount = 0;
+    let lastDecisive: StancePolarity | null = null;
+    for (const point of points) {
+      if (point.polarity === "neutral") continue;
+      if (lastDecisive !== null && lastDecisive !== point.polarity) changeCount += 1;
+      lastDecisive = point.polarity;
+    }
+    const finalPolarity = lastDecisive ?? "neutral";
+    const summary =
+      changeCount === 0
+        ? finalPolarity === "neutral"
+          ? "입장 표명 없음"
+          : `일관된 ${finalPolarity === "support" ? "지지" : "반대"}`
+        : `${changeCount}회 입장 변화 → 최종 ${finalPolarity === "support" ? "지지" : finalPolarity === "oppose" ? "반대" : "중립"}`;
+    trajectories.push({ agentId, points, changeCount, finalPolarity, summary });
+  }
+  return trajectories;
+}
+
+/** 토론이 실제로 입장을 바꾸며 진행됐는지 (parallel-monologue 탐지) */
+export function debateHadPositionChanges(rounds: DebateRound[]): boolean {
+  return deriveStanceTrajectories(rounds).some((trajectory) => trajectory.changeCount > 0);
 }

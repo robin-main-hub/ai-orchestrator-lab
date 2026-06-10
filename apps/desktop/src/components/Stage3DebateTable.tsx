@@ -14,7 +14,7 @@ import {
   XCircle,
 } from "lucide-react";
 import type { AgentProfile, DebateTag, DebateUtterance } from "@ai-orchestrator/protocol";
-import { defaultAgentProfiles, synthesizeChairmanDecision, type ChairmanDecision } from "@ai-orchestrator/agents";
+import { defaultAgentProfiles, deriveStanceTrajectories, synthesizeChairmanDecision, type ChairmanDecision } from "@ai-orchestrator/agents";
 import { cn } from "@/lib/utils";
 import { agentRoleLabel } from "../lib/helpers";
 import { Button } from "@/ui/button";
@@ -159,6 +159,7 @@ export function Stage3DebateTable({
           />
 
           <ChairmanDecisionCard session={session} />
+          <StanceTrajectoryStrip session={session} />
 
           <div className="mt-4 flex items-center gap-1 overflow-x-auto pb-1">
             {session.rounds.map((round, index) => {
@@ -647,6 +648,59 @@ function debateTagLabel(tag: DebateTag) {
 
 
 /** 의장 결정 카드 — 토론이 도달한 결론(채택/대립/리스크 + 합의 수준)을 보여준다 (#4) */
+/** 패치 5 — 에이전트별 입장 궤적: 토론이 진짜 reasoning인지(입장 변화) 드러낸다 */
+function StanceTrajectoryStrip({ session }: { session: Stage3DebateSession }) {
+  const trajectories = deriveStanceTrajectories(session.rounds);
+  if (trajectories.length === 0) return null;
+  const nameOf = (agentId: string) => {
+    const participant = session.participants.find((candidate) => candidate.agentId === agentId);
+    return participant ? resolveDebateParticipantDisplayName(participant) : resolveFallbackAgent(agentId).name;
+  };
+  const anyChange = trajectories.some((trajectory) => trajectory.changeCount > 0);
+  return (
+    <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-[11px] font-semibold text-zinc-300">입장 궤적</span>
+        <span
+          className={cn(
+            "rounded-full px-1.5 py-0.5 text-[9.5px]",
+            anyChange ? "bg-emerald-400/10 text-emerald-300" : "bg-amber-400/10 text-amber-300",
+          )}
+        >
+          {anyChange ? "입장 변화 있음 — 상호 반응 토론" : "입장 변화 없음 — 평행 발언 주의"}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {trajectories.map((trajectory) => (
+          <div
+            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-zinc-950/40 px-2 py-1"
+            key={trajectory.agentId}
+          >
+            <span className="text-[11px] font-medium text-zinc-200">{nameOf(trajectory.agentId)}</span>
+            <span className="flex items-center gap-0.5">
+              {trajectory.points.map((point, index) => (
+                <span
+                  className={cn(
+                    "h-2 w-2 rounded-full",
+                    point.polarity === "support"
+                      ? "bg-emerald-400"
+                      : point.polarity === "oppose"
+                        ? "bg-rose-400"
+                        : "bg-zinc-600",
+                  )}
+                  key={index}
+                  title={`${point.roundKind}: ${point.tag}`}
+                />
+              ))}
+            </span>
+            <span className="text-[10px] text-zinc-500">{trajectory.summary}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ChairmanDecisionCard({ session }: { session: Stage3DebateSession }) {
   const decision = useMemo<ChairmanDecision | null>(() => {
     const hasContent = session.rounds.some((round) => round.utterances.length > 0);
