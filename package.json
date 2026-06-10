@@ -15,6 +15,7 @@
     "server:build": "pnpm --filter @ai-orchestrator/server build",
     "server:start": "corepack pnpm --filter @ai-orchestrator/server start",
     "server:smoke": "node scripts/smoke-dgx-server.mjs",
+    "server:smoke:boot": "node scripts/smoke-server-boot.mjs",
     "provider:smoke:ai": "node scripts/provider-ai-smoke.mjs --list",
     "provider:smoke:ai:all": "node scripts/provider-ai-smoke.mjs --run-all",
     "provider:smoke:ai:manifest": "node scripts/smoke-provider-ai-manifest.mjs",
