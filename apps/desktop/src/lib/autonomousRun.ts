@@ -107,7 +107,23 @@ export type RunAutonomousPersonaTaskInput = {
   onStep?: ClosedLoopEffects["onStep"];
 };
 
-export async function runAutonomousPersonaTask(input: RunAutonomousPersonaTaskInput): Promise<PersonaTaskOutcome> {
+/**
+ * Build the per-session closed-loop effects factory for an autonomy run: a
+ * mode-aware approval strategy plus a gated dispatch/capture/replay adapter
+ * bound to each summoned session's pane. Shared by the single-mission entry
+ * point and the parallel runner so both drive identical, fully-gated effects.
+ */
+export function createAutonomyEffectsFactory(input: {
+  mode: AutonomyMode;
+  server?: AutonomyServerConfig;
+  clients?: AutonomyClientOverrides;
+  runId?: string;
+  now?: () => string;
+  safePrefixes?: ReadonlyArray<string>;
+  extraSafePrefixes?: ReadonlyArray<string>;
+  logger?: (message: string) => void;
+  onStep?: ClosedLoopEffects["onStep"];
+}): (session: AgentSession) => ClosedLoopEffects {
   const server = input.server ?? {};
   const runId = input.runId ?? "run";
   const now = input.now ?? (() => new Date().toISOString());
@@ -120,9 +136,10 @@ export async function runAutonomousPersonaTask(input: RunAutonomousPersonaTaskIn
     logger: input.logger,
   });
 
-  const createEffects = (session: AgentSession): ClosedLoopEffects => {
+  return (session: AgentSession): ClosedLoopEffects => {
     // Monotonic counter guarantees unique dispatch ids (and thus approval
-    // source ids) across iterations and captures within this run.
+    // source ids) across iterations and captures within this run. Including
+    // session.id in the prefix keeps ids distinct across parallel missions.
     let seq = 0;
     return createClosedLoopEffects({
       sessionId: session.sessionId,
@@ -143,6 +160,22 @@ export async function runAutonomousPersonaTask(input: RunAutonomousPersonaTaskIn
       replayClient: input.clients?.replayClient,
     });
   };
+}
+
+export async function runAutonomousPersonaTask(input: RunAutonomousPersonaTaskInput): Promise<PersonaTaskOutcome> {
+  const now = input.now ?? (() => new Date().toISOString());
+
+  const createEffects = createAutonomyEffectsFactory({
+    mode: input.mode,
+    server: input.server,
+    clients: input.clients,
+    runId: input.runId,
+    now,
+    safePrefixes: input.safePrefixes,
+    extraSafePrefixes: input.extraSafePrefixes,
+    logger: input.logger,
+    onStep: input.onStep,
+  });
 
   return runPersonaCodingTask({
     registry: input.registry,
