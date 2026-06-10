@@ -19,3 +19,33 @@ export function avatarMapFromGlob(map: Record<string, string>): Record<string, s
   }
   return avatars;
 }
+
+const SPRITE_KEY_RE = /^agents\/([^/]+)\/expressions\/([a-z_]+)\.(?:png|jpe?g|webp)$/i;
+
+export type PersonaSpriteMap = Record<string, Record<string, string>>;
+
+/** Map agents/<slug>/expressions/<expr>.* keys to { slug -> { expression -> url } }. */
+export function spriteMapFromGlob(map: Record<string, string>): PersonaSpriteMap {
+  const sprites: PersonaSpriteMap = {};
+  for (const [key, url] of Object.entries(map)) {
+    const match = SPRITE_KEY_RE.exec(key);
+    if (!match) continue;
+    const slug = match[1]!;
+    const expression = match[2]!.toLowerCase();
+    (sprites[slug] ??= {})[expression] = url;
+  }
+  return sprites;
+}
+
+/**
+ * Resolve a persona's portrait for an expression, with fallback:
+ * expression sprite -> neutral sprite -> base avatar -> undefined.
+ */
+export function resolvePersonaSprite(
+  slug: string,
+  expression: string,
+  deps: { sprites?: PersonaSpriteMap; avatars?: Record<string, string> },
+): string | undefined {
+  const personaSprites = deps.sprites?.[slug];
+  return personaSprites?.[expression] ?? personaSprites?.neutral ?? deps.avatars?.[slug];
+}
