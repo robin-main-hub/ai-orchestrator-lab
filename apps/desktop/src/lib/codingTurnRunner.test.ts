@@ -83,6 +83,29 @@ describe("runCodingTurn", () => {
     expect(executeTool).toHaveBeenCalledTimes(3);
   });
 
+  it("deep tool loops re-inject the original request (instruction fade-out guard)", async () => {
+    const seenPayloads: WireMessage[][] = [];
+    const complete = vi.fn(async (messages: WireMessage[]) => {
+      seenPayloads.push(messages.map((m) => ({ ...m })));
+      return { content: toolReply };
+    });
+    const executeTool = vi.fn(async () => ({ status: "completed" as const, output: "ok" }));
+    await runCodingTurn({
+      messages: [system, user],
+      agentMode: "build",
+      complete,
+      executeTool,
+      onEvent: () => {},
+      makeToolId: (round, index) => `r${round}t${index}`,
+      maxToolRounds: 4,
+    });
+    // 첫 두 라운드 결과엔 리마인더 없음, 3라운드째(round>=2)부터 원래 요청 재주입
+    const lastOf = (payload: WireMessage[]) => payload[payload.length - 1]!.content;
+    expect(lastOf(seenPayloads[2]!)).not.toContain("[시스템 리마인더]");
+    expect(lastOf(seenPayloads[3]!)).toContain("[시스템 리마인더]");
+    expect(lastOf(seenPayloads[3]!)).toContain("pnpm test 돌려줘");
+  });
+
   it("cooperative cancel stops between rounds", async () => {
     let cancelled = false;
     const complete = vi.fn(async () => {
