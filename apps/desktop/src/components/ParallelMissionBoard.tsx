@@ -38,6 +38,11 @@ function MissionTerminal({ card }: { card: ParallelBoardCard }) {
         <span className="parallel-terminal__title">{card.personaName}</span>
         <span className="parallel-terminal__role">{card.role}</span>
         {card.paneId ? <span className="parallel-terminal__pane">{card.paneId}</span> : null}
+        {card.branch ? (
+          <span className="parallel-terminal__branch" title={`worktree 브랜치 ${card.branch}`}>
+            ⎇ {card.branch}
+          </span>
+        ) : null}
         <span className="parallel-terminal__spacer" />
         <StatusBadge variant={badge.variant}>{badge.label}</StatusBadge>
       </header>

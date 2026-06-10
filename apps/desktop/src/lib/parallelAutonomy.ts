@@ -7,6 +7,7 @@ import {
   type AutonomyMode,
   type AutonomyServerConfig,
 } from "./autonomousRun";
+import type { WorkspacePlan } from "./missionWorkspace";
 import {
   runParallelMissions,
   type Mission,
@@ -36,6 +37,13 @@ export type ParallelMissionSpec = {
   persona: LoadedPersona;
   packet: CodingPacket;
   kickoffTask?: string;
+  /**
+   * git worktree isolation for this mission: setup commands run (gated) before
+   * identity injection, the kickoff gets the worktree preamble, and teardown
+   * runs (gated) only after a COMPLETED mission. A failed/awaiting mission
+   * keeps its worktree for inspection.
+   */
+  workspace?: WorkspacePlan;
 };
 
 export type RunParallelAutonomyInput = {
@@ -71,6 +79,7 @@ export async function runParallelAutonomy(
     packet: spec.packet,
     kickoffTask: spec.kickoffTask,
   }));
+  const specById = new Map(input.missions.map((spec) => [spec.id, spec]));
 
   return runParallelMissions({
     registry: input.registry,
@@ -95,14 +104,49 @@ export async function runParallelAutonomy(
         onStep: input.onMissionStep ? (step) => input.onMissionStep!(mission.id, step) : undefined,
       });
 
-      return runSummonedMission({
+      const effects = createEffects(session as AgentSession);
+      const workspace = specById.get(mission.id)?.workspace;
+
+      if (workspace) {
+        try {
+          for (let index = 0; index < workspace.setupCommands.length; index += 1) {
+            await effects.dispatch(workspace.setupCommands[index]!, { stepIndex: -(100 + index) });
+          }
+        } catch (error) {
+          input.logger?.(
+            `[${mission.id}] workspace setup failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          throw error; // engine marks this mission failed
+        }
+      }
+
+      const baseKickoff = mission.kickoffTask ?? mission.packet.goal;
+      const kickoffTask = workspace ? `${workspace.kickoffPreamble}\n${baseKickoff}` : mission.kickoffTask;
+
+      const status = await runSummonedMission({
         session,
         persona: mission.persona,
         packet: mission.packet,
-        effects: createEffects(session as AgentSession),
-        kickoffTask: mission.kickoffTask,
+        effects,
+        kickoffTask,
         maxIterations: input.maxIterations,
       });
+
+      if (workspace && status === "completed") {
+        for (let index = 0; index < workspace.teardownCommands.length; index += 1) {
+          try {
+            await effects.dispatch(workspace.teardownCommands[index]!, { stepIndex: -(200 + index) });
+          } catch (error) {
+            // teardown is best-effort: a leftover worktree must not flip a completed mission
+            input.logger?.(
+              `[${mission.id}] workspace teardown failed (worktree left in place): ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+          }
+        }
+      }
+      return status;
     },
   });
 }
