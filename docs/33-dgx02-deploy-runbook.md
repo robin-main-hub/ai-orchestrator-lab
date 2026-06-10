@@ -34,6 +34,30 @@ ORCHESTRATOR_TMUX_DRY_RUN=1
 ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS=
 ```
 
+## Automated Deploy
+
+The sequence below is encoded in `scripts/deploy-dgx02.mjs` with safety gates
+the manual checklist can't enforce:
+
+```bash
+# full gated deploy (run on DGX-02)
+ORCHESTRATOR_API_TOKEN=... corepack pnpm deploy:dgx02
+
+# print the plan without executing anything
+corepack pnpm deploy:dgx02:dry-run
+
+# just the auth trio against a running server
+corepack pnpm deploy:dgx02:validate -- --base-url http://127.0.0.1:4317
+```
+
+Gates: the public tunnel is never reopened unless the local auth trio passed;
+a public endpoint answering without a bearer triggers an immediate tunnel stop
+(auto-rollback); deploying with the dev fallback token or with
+`ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS=1` (without `--allow-send-keys`) is refused
+at preflight. Tokens are redacted from all output.
+
+The manual sequence below remains the reference for what the script does.
+
 ## Safe Deploy Sequence
 
 1. Close the public tunnel while deploying:
