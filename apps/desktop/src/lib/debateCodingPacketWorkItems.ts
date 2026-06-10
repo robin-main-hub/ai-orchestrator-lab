@@ -4,7 +4,13 @@ import type {
   WorkItem,
   WorkItemHandoff,
 } from "@ai-orchestrator/protocol";
-import { assertSafeCodingPacket, extractCodingPacketFromDebate, type DebateContext } from "@ai-orchestrator/agents";
+import {
+  assertSafeCodingPacket,
+  extractCodingPacketFromDebate,
+  synthesizeChairmanDecision,
+  withChairmanSynthesis,
+  type DebateContext,
+} from "@ai-orchestrator/agents";
 import type { Stage3DebateSession } from "../runtime/stage3Runtime";
 import { deriveDebateDecisionReadiness, type DebateDecisionReadiness } from "./debateDecisionReadiness";
 import { sanitizePublicText } from "./publicRedaction";
@@ -14,6 +20,8 @@ export type DebateCodingPacketProjectionInput = {
   session: Stage3DebateSession;
   sessionId: string;
   userPreferences?: string[];
+  /** apply the LLM-Council chairman synthesis (rank adopted points, summarize). default true. */
+  chairman?: boolean;
 };
 
 export type DebateCodingPacketProjection = {
@@ -39,6 +47,7 @@ export function createDebateCodingPacketProjection({
   session,
   sessionId,
   userPreferences = [],
+  chairman = true,
 }: DebateCodingPacketProjectionInput): DebateCodingPacketProjection {
   const readiness = deriveDebateDecisionReadiness(session);
   const debateContext: DebateContext = {
@@ -50,7 +59,10 @@ export function createDebateCodingPacketProjection({
     sessionId,
     userPreferences,
   };
-  const extractedPacket = extractCodingPacketFromDebate(debateContext, session.rounds);
+  const rawPacket = extractCodingPacketFromDebate(debateContext, session.rounds);
+  const extractedPacket = chairman
+    ? withChairmanSynthesis(rawPacket, synthesizeChairmanDecision(debateContext, session.rounds))
+    : rawPacket;
   const packet = assertSafeCodingPacket({
     ...extractedPacket,
     context: [
