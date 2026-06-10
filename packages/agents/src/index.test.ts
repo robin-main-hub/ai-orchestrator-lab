@@ -252,7 +252,7 @@ describe("assertSafeCodingPacket", () => {
 });
 
 describe("defaultAgentProfiles", () => {
-  it("ships 18 profiles: 10 core + Yohane + 6 R3.2 + chae_arin (companion)", () => {
+  it("ships 18 profiles: 10 core + Yohane + 6 R3.2 + kurumi (companion)", () => {
     expect(defaultAgentProfiles).toHaveLength(18);
   });
 
@@ -283,31 +283,31 @@ describe("defaultAgentProfiles", () => {
     expect(roles).toContain("companion");
   });
 
-  it("uses personaName override only when needed (Yohane + chae_arin today)", () => {
+  it("uses personaName override only when needed (Yohane + kurumi today)", () => {
     // R3.1 personaName invariant: every personaName must point at an
     // agents/<personaName>/ directory; profiles without an override
     // fall back to agents/<role>/. Today two profiles use the override:
     //   - Yohane (second skeptic) → agents/yohane/
-    //   - 채아린 (companion) → agents/chae_arin/
+    //   - 쿠루미 (companion) → agents/kurumi/
     const overrides = defaultAgentProfiles
       .map((p) => p.personaName)
       .filter((name): name is string => Boolean(name));
     expect(overrides).toContain("yohane");
-    expect(overrides).toContain("chae_arin");
+    expect(overrides).toContain("kurumi");
   });
 
-  it("chae_arin (companion) is the user's primary assistant — enabled, real, markdown-loaded", () => {
-    const chaerin = defaultAgentProfiles.find((p) => p.personaName === "chae_arin");
-    expect(chaerin).toBeDefined();
-    expect(chaerin!.role).toBe("companion");
-    expect(chaerin!.kind).toBe("real");
-    expect(chaerin!.configSource).toBe("markdown");
-    expect(chaerin!.enabled).toBe(true);
-    expect(chaerin!.soulMode).toBe("full");
+  it("kurumi (companion) is the user's primary assistant — enabled, real, markdown-loaded", () => {
+    const kurumi = defaultAgentProfiles.find((p) => p.personaName === "kurumi");
+    expect(kurumi).toBeDefined();
+    expect(kurumi!.role).toBe("companion");
+    expect(kurumi!.kind).toBe("real");
+    expect(kurumi!.configSource).toBe("markdown");
+    expect(kurumi!.enabled).toBe(true);
+    expect(kurumi!.soulMode).toBe("full");
     // write_files unlocks self-editing of her own SOUL/AGENTS/IDENTITY/USER
     // files. Actual file mutations still go through the F2 permission
     // gate + user confirm; the level just authorizes the request.
-    expect(chaerin!.permissionLevel).toBe("write_files");
+    expect(kurumi!.permissionLevel).toBe("write_files");
   });
 
   it("keeps the executor disabled by default (requires F2 permission gate)", () => {

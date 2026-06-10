@@ -11,7 +11,7 @@ import {
 import type { WorkbenchAgent } from "../types";
 
 const agents = defaultAgentProfiles as WorkbenchAgent[];
-const chaeArin = agents.find((agent) => agent.personaName === "chae_arin")!;
+const kurumi = agents.find((agent) => agent.personaName === "kurumi")!;
 const orchestrator = agents.find((agent) => agent.role === "orchestrator")!;
 
 function makeTag(target: string): DelegateTag {
@@ -26,18 +26,18 @@ function makeTag(target: string): DelegateTag {
 
 describe("stage35DelegationRuntime", () => {
   it("treats companion delegation as orchestrator-plus authority", () => {
-    expect(delegationAuthorityLevel(chaeArin)).toBe("orchestrator_plus");
+    expect(delegationAuthorityLevel(kurumi)).toBe("orchestrator_plus");
   });
 
-  it("lets Chae Arin target every registered sub-agent role, including sensitive roles as completion-only targets", () => {
+  it("lets Kurumi target every registered sub-agent role, including sensitive roles as completion-only targets", () => {
     for (const target of ["researcher", "executor", "external", "auditor"]) {
-      expect(resolveDelegationTargetAgent(target, chaeArin, agents)?.role).toBe(target);
+      expect(resolveDelegationTargetAgent(target, kurumi, agents)?.role).toBe(target);
     }
   });
 
   it("does not resolve self-delegation back to the caller", () => {
-    expect(resolveDelegationTargetAgent("companion", chaeArin, agents)?.id).not.toBe(chaeArin.id);
-    expect(resolveDelegationTargetAgent("chae_arin", chaeArin, agents)).toBeUndefined();
+    expect(resolveDelegationTargetAgent("companion", kurumi, agents)?.id).not.toBe(kurumi.id);
+    expect(resolveDelegationTargetAgent("chae_arin", kurumi, agents)).toBeUndefined();
   });
 
   it("위임 프롬프트에도 내부 역할명이 아니라 캐릭터 이름을 쓴다", () => {
@@ -53,13 +53,13 @@ describe("stage35DelegationRuntime", () => {
 
   it("위임 후 종합 프롬프트도 호출자 캐릭터 이름으로 시작한다", () => {
     const prompt = buildDelegationFollowupPrompt({
-      caller: chaeArin,
+      caller: kurumi,
       initialReply: '<delegate to="researcher">확인</delegate>',
       originalUserMessage: "시장 확인해줘",
       outcomes: [],
     });
 
-    expect(prompt).toContain("채아린이 작업 일부를 하위 에이전트에게 위임했습니다.");
+    expect(prompt).toContain("쿠루미가 작업 일부를 하위 에이전트에게 위임했습니다.");
     expect(prompt).not.toContain("Chae");
   });
 
@@ -85,7 +85,7 @@ describe("stage35DelegationRuntime", () => {
 
   it("builds a follow-up prompt that prevents chain delegation", () => {
     const prompt = buildDelegationFollowupPrompt({
-      caller: chaeArin,
+      caller: kurumi,
       initialReply: '<delegate to="researcher">확인</delegate>',
       originalUserMessage: "시장 확인해줘",
       outcomes: [
@@ -110,7 +110,7 @@ describe("stage35DelegationRuntime", () => {
 
   it("uses Korean status lines in delegation follow-up prompts", () => {
     const prompt = buildDelegationFollowupPrompt({
-      caller: chaeArin,
+      caller: kurumi,
       initialReply: '<delegate to="researcher">확인</delegate>',
       originalUserMessage: "시장 확인해줘",
       outcomes: [
