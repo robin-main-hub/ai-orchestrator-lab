@@ -1,6 +1,7 @@
 import {
   Archive,
   Bot,
+  Code2,
   FileText,
   KeyRound,
   LayoutDashboard,
@@ -99,6 +100,7 @@ export const navSections: NavSection[] = [
     items: [
       { id: "autonomy", label: "자율실행", icon: Bot },
       { id: "parallel", label: "병렬실행", icon: LayoutGrid },
+      { id: "coding", label: "코딩", icon: Code2 },
     ],
   },
   {
