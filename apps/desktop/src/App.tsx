@@ -316,6 +316,7 @@ export function App() {
   });
   const [adminRailOpen, setAdminRailOpen] = useState(false);
   const [activeNavItem, setActiveNavItem] = useState<NavItemId>("dashboard");
+  const [summonSeedPersona, setSummonSeedPersona] = useState<string | null>(null);
   const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [cheatSheetOpen, setCheatSheetOpen] = useState(false);
@@ -4378,9 +4379,16 @@ export function App() {
                 setActiveNavItem(nextNav);
                 setProviderRegistrationOpen(nextNav === "providers");
               }}
+              onSummonPersona={(personaName, target) => {
+                setSummonSeedPersona(personaName);
+                setActiveNavItem(target);
+                setProviderRegistrationOpen(false);
+              }}
             />
           ) : activeNavItem === "autonomy" ? (
             <AutonomyRunContainer
+              key={summonSeedPersona ?? "autonomy"}
+              seedPersonaName={summonSeedPersona ?? undefined}
               decisionReadiness={deriveDebateDecisionReadiness(debateSession).state}
               historyEvents={eventLog}
               onRegistryChange={setSummonRegistry}
@@ -4390,7 +4398,7 @@ export function App() {
               seedPacket={codingPacketState}
             />
           ) : activeNavItem === "parallel" ? (
-            <ParallelMissionContainer />
+            <ParallelMissionContainer key={summonSeedPersona ?? "parallel"} seedPersonaName={summonSeedPersona ?? undefined} />
           ) : activeNavItem === "coding" ? (
             <CodingWorkbench providerProfiles={providerProfiles} />
           ) : configLibraryActive ? (

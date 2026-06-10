@@ -54,6 +54,7 @@ export function AutonomyRunContainer({
   onRunMemory,
   registry,
   onRegistryChange,
+  seedPersonaName,
 }: {
   sessionId?: string;
   serverBaseUrl?: string | string[];
@@ -72,10 +73,15 @@ export function AutonomyRunContainer({
   /** persistent shared pane pool; when provided, runs allocate from and update it */
   registry?: SummonRegistry;
   onRegistryChange?: (registry: SummonRegistry) => void;
+  /** 도감 소환: 폼에 이 페르소나를 프리필 */
+  seedPersonaName?: string;
 }) {
-  const [form, setForm] = useState<AutonomyRunForm>(() =>
-    seedPacket ? codingPacketToAutonomyForm(seedPacket) : DEFAULT_AUTONOMY_FORM,
-  );
+  const [form, setForm] = useState<AutonomyRunForm>(() => {
+    const base = seedPacket ? codingPacketToAutonomyForm(seedPacket) : DEFAULT_AUTONOMY_FORM;
+    if (!seedPersonaName) return base;
+    const set = resolvePersonaAgentSet(seedPersonaName);
+    return { ...base, personaName: seedPersonaName, role: set.preferredPaneRole ?? base.role };
+  });
   const [running, setRunning] = useState(false);
   const [outcome, setOutcome] = useState<PersonaTaskOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);

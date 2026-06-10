@@ -1,5 +1,10 @@
+import { useState } from "react";
 import { Bot, Cpu, LayoutGrid, MessagesSquare, Radar, ShieldCheck, Swords, TerminalSquare } from "lucide-react";
 import { StatusBadge } from "@/ui/status-badge";
+import { loadHermesPool } from "../lib/hermesPoolStore";
+import { buildCodexDetail, type CodexDetail } from "../lib/personaCodexDetail";
+import { personaBundleMap } from "../lib/personaBundleSource";
+import { PersonaCodexModal } from "./PersonaCodexModal";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import type { CenterMode, NavItemId } from "../types";
 import type { AutonomyRunSummary } from "../lib/autonomyRunHistory";
@@ -59,6 +64,7 @@ export function DashboardView({
   pendingApprovals,
   history,
   onNavigate,
+  onSummonPersona,
 }: {
   personas: DashboardPersona[];
   /** avatar url per persona slug — codex cards pick art up automatically */
@@ -68,9 +74,12 @@ export function DashboardView({
   pendingApprovals: number;
   history?: AutonomyRunSummary[];
   onNavigate: (target: { nav?: NavItemId; mode?: CenterMode }) => void;
+  /** 도감 상세에서 "소환" — 대상 탭으로 이동하며 페르소나를 프리필 */
+  onSummonPersona?: (personaName: string, target: "autonomy" | "parallel") => void;
 }) {
   const onlineNodes = runtime.runtimeNodes.filter((node) => node.status === "online").length;
   const recentRuns = (history ?? []).slice(0, 4);
+  const [codexDetail, setCodexDetail] = useState<CodexDetail | null>(null);
 
   return (
     <div className="dashboard">
@@ -129,7 +138,17 @@ export function DashboardView({
         <h2 className="dashboard__section-title">캐릭터 도감 — 전원 {PERSONA_CODEX.length}인</h2>
         <div className="dashboard__codex">
           {PERSONA_CODEX.map((entry) => (
-            <figure className="dashboard__codex-card" key={entry.personaName}>
+            <button
+              className="dashboard__codex-card"
+              key={entry.personaName}
+              onClick={() =>
+                setCodexDetail(
+                  buildCodexDetail(entry, { bundleMap: personaBundleMap, slots: loadHermesPool().slots }),
+                )
+              }
+              title={`${entry.displayName} 상세 보기`}
+              type="button"
+            >
               <PersonaCard
                 compact
                 card={buildPersonaCard({
@@ -139,8 +158,8 @@ export function DashboardView({
                   avatarUrl: personaAvatars[entry.personaName],
                 })}
               />
-              <figcaption className="dashboard__codex-caption">{entry.caption}</figcaption>
-            </figure>
+              <span className="dashboard__codex-caption">{entry.caption}</span>
+            </button>
           ))}
         </div>
       </section>
@@ -185,6 +204,26 @@ export function DashboardView({
             ))}
           </ul>
         </section>
+      ) : null}
+
+      {codexDetail ? (
+        <PersonaCodexModal
+          detail={codexDetail}
+          avatarUrl={personaAvatars[codexDetail.entry.personaName]}
+          onClose={() => setCodexDetail(null)}
+          onSummonAutonomy={(personaName) => {
+            setCodexDetail(null);
+            onSummonPersona?.(personaName, "autonomy");
+          }}
+          onSummonParallel={(personaName) => {
+            setCodexDetail(null);
+            onSummonPersona?.(personaName, "parallel");
+          }}
+          onOpenSwarm={() => {
+            setCodexDetail(null);
+            onNavigate({ mode: "tmux" });
+          }}
+        />
       ) : null}
     </div>
   );
