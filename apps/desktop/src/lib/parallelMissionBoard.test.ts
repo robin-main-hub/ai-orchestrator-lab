@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AutonomyStepRow } from "./autonomyTimeline";
 import type { MissionResult } from "./parallelMissions";
 import {
+  applyMissionBranch,
   applyMissionResults,
   applyMissionStep,
   applyMissionUpdate,
@@ -78,6 +79,12 @@ describe("board reducer", () => {
     const m2 = board.cards.find((c) => c.id === "m2")!;
     expect(m2.status).toBe("rejected");
     expect(m2.rejection).toBe("no_free_pane");
+  });
+
+  it("tags a card with its worktree branch", () => {
+    let board = createParallelBoard([draft({ id: "m1" })]);
+    board = applyMissionBranch(board, "m1", "agent/par_1_m1");
+    expect(board.cards[0]!.branch).toBe("agent/par_1_m1");
   });
 
   it("summarizes terminal states", () => {
