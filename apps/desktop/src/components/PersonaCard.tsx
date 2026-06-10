@@ -10,6 +10,11 @@ import { rarityBadgeVariant, rarityClassName, type PersonaCardModel } from "../l
 export function PersonaCard({ card, compact = false }: { card: PersonaCardModel; compact?: boolean }) {
   return (
     <article className={`persona-card ${rarityClassName(card.rarity)} ${compact ? "compact" : ""}`}>
+      {card.avatarUrl ? (
+        <div className="persona-card-banner">
+          <img src={card.avatarUrl} alt="" loading="lazy" />
+        </div>
+      ) : null}
       <header className="persona-card-header">
         {card.avatarUrl ? (
           <img className="persona-card-portrait" src={card.avatarUrl} alt="" width={compact ? 32 : 56} height={compact ? 32 : 56} />
