@@ -37,24 +37,30 @@
  *   we can recover the "designer-intended" palette later if we choose.
  */
 :root {
-  /* Base palette — Deep teal with green undertones */
-  --background: #002d35;          /* was #04161a — match legacy --bg */
-  --foreground: #d7eef2;          /* was #e8f4f8 — match legacy --text */
+  /*
+   * Base palette — v0 "premium black-glass" (PR: v0 theme alignment).
+   * Source: coding-packet-redesign v0 export globals.css (.dark block).
+   * Near-black zinc surfaces, violet primary accent, cyan/emerald for
+   * success, amber waiting, rose blocked — the v0 status accent scale.
+   * (Previous "Deep Teal" palette is recoverable from git history.)
+   */
+  --background: #0a0a0b;          /* v0 oklch(0.1 0 0) — zinc-950 glass base */
+  --foreground: #fafafa;          /* v0 oklch(0.985 0 0) */
 
   /* Surface layers */
-  --card: #00343d;                /* was #0a2428 — match legacy --panel */
-  --card-foreground: #d7eef2;
-  --popover: #004250;             /* was #0d3640 — match legacy --panel-strong */
-  --popover-foreground: #d7eef2;
+  --card: #141417;                /* v0 oklch(0.145 0 0) — zinc-900 glass */
+  --card-foreground: #fafafa;
+  --popover: #1c1c20;
+  --popover-foreground: #fafafa;
 
-  /* Primary — cyan accent (legacy --cyan retained) */
-  --primary: #29d7e6;             /* was #5fd3e2 — match legacy --cyan */
-  --primary-foreground: #002d35;
-  --primary-muted: #18b8b0;       /* was #3a9ba8 — match legacy --teal */
+  /* Primary — violet accent (v0 status scale: violet = primary) */
+  --primary: #a78bfa;             /* violet-400 */
+  --primary-foreground: #0a0a0b;
+  --primary-muted: #2dd4bf;       /* teal-400 — secondary accent */
 
   /* Secondary */
-  --secondary: #004250;           /* match --popover */
-  --secondary-foreground: #d7eef2;
+  --secondary: #1c1c20;           /* match --popover */
+  --secondary-foreground: #fafafa;
 
   /*
    * Muted — INTENTIONALLY UNCHANGED from v0 spec.
@@ -67,27 +73,27 @@
    *     which resolve here.
    *   - legacy code continues to read `var(--muted)` from styles.css.
    */
-  --muted: #1a4a52;
-  --muted-foreground: #8ebbc3;    /* was #8ba4ab — match legacy --muted */
+  --muted: #232328;               /* v0 oklch(0.269 0 0) surface tint */
+  --muted-foreground: #a1a1aa;    /* zinc-400 */
 
   /* Accent */
-  --accent: #004250;              /* match --popover */
-  --accent-foreground: #29d7e6;   /* match --primary */
+  --accent: #1c1c20;              /* match --popover */
+  --accent-foreground: #a78bfa;   /* match --primary */
 
-  /* Semantic colors — aligned to legacy --rose / --green / --amber */
-  --destructive: #ff7d90;         /* was #f87171 — match legacy --rose */
+  /* Semantic colors — v0 status scale */
+  --destructive: #fb7185;         /* rose-400 */
   --destructive-foreground: #fef2f2;
-  --success: #54e0a0;             /* was #34d399 — match legacy --green */
-  --success-foreground: #002d35;
-  --warning: #d8c65d;             /* was #fbbf24 — match legacy --amber */
-  --warning-foreground: #002d35;
+  --success: #34d399;             /* emerald-400 */
+  --success-foreground: #0a0a0b;
+  --warning: #fbbf24;             /* amber-400 */
+  --warning-foreground: #0a0a0b;
 
   /* Borders and inputs */
-  --border: #0a5a68;              /* was #1a4a52 — match legacy --line */
-  --border-subtle: #064852;       /* NEW — match legacy --line-soft */
-  --border-focus: #29d7e6;        /* match --primary */
-  --input: #00343d;               /* match --card */
-  --ring: #29d7e6;                /* match --primary */
+  --border: #27272a;              /* zinc-800 */
+  --border-subtle: #1f1f23;
+  --border-focus: #a78bfa;        /* match --primary */
+  --input: #141417;               /* match --card */
+  --ring: #a78bfa;                /* match --primary */
 
   /* Chart colors */
   --chart-1: #5fd3e2;
@@ -97,21 +103,21 @@
   --chart-5: #a78bfa;
 
   /* Sidebar */
-  --sidebar: #061b20;
-  --sidebar-foreground: #e8f4f8;
-  --sidebar-primary: #5fd3e2;
-  --sidebar-primary-foreground: #04161a;
-  --sidebar-accent: #0d3640;
-  --sidebar-accent-foreground: #e8f4f8;
-  --sidebar-border: #1a4a52;
-  --sidebar-ring: #5fd3e2;
+  --sidebar: #101013;
+  --sidebar-foreground: #fafafa;
+  --sidebar-primary: #a78bfa;
+  --sidebar-primary-foreground: #0a0a0b;
+  --sidebar-accent: #1c1c20;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #27272a;
+  --sidebar-ring: #a78bfa;
 
   /* Custom tokens for the app */
-  --surface: #0a2428;
-  --surface-elevated: #0d3640;
-  --text-primary: #e8f4f8;
-  --text-secondary: #8ba4ab;
-  --text-muted: #4a6670;
+  --surface: #141417;
+  --surface-elevated: #1c1c20;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #62626b;
 
   /* Status colors — aligned to legacy semantic colors */
   --status-online: var(--success);
