@@ -687,7 +687,6 @@ export function ConversationWorkbench({
           ) : null}
           {sidePanelMode === "diff" ? <WorkspaceDiffPanel /> : null}
           {sidePanelMode === "files" ? <WorkspaceFilesPanel /> : null}
-          {sidePanelMode === "preview" ? <ChatSidePanelStub mode="preview" /> : null}
         </ChatSidePanel>
       </div>
     </section>

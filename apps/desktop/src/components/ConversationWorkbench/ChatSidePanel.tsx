@@ -33,7 +33,6 @@ import {
 
 export type ChatSidePanelMode =
   | "none"
-  | "preview"
   | "diff"
   | "terminal"
   | "files"
@@ -47,7 +46,6 @@ const PANEL_ITEMS: Array<{
   icon: typeof Eye;
   shortcut?: string;
 }> = [
-  { mode: "preview", label: "미리보기", icon: Eye, shortcut: "⇧+Ctrl+P" },
   { mode: "diff", label: "Diff", icon: FileDiff, shortcut: "⇧+Ctrl+D" },
   { mode: "terminal", label: "터미널", icon: TerminalSquare, shortcut: "Ctrl+`" },
   { mode: "files", label: "파일", icon: Files, shortcut: "⇧+Ctrl+F" },
@@ -241,7 +239,6 @@ export function ChatSidePanel({
 /** 아직 데이터 소스가 연결되지 않은 모드의 정직한 안내 */
 export function ChatSidePanelStub({ mode }: { mode: ChatSidePanelMode }) {
   const guide: Partial<Record<ChatSidePanelMode, string>> = {
-    preview: "실행 중인 dev 서버/페이지 미리보기는 코딩 탭의 작업과 연결됩니다. 코딩 워크벤치에서 미션이 돌면 여기서 결과 화면을 봅니다.",
     diff: "에이전트가 만든 변경 diff가 여기에 표시됩니다. 코딩 탭에서 edit/write 도구가 실행되면 자동으로 누적됩니다.",
     files: "이 대화에서 멘션(@경로)되었거나 에이전트가 만진 파일 목록이 여기에 모입니다.",
     agents: "에이전트 레일이 여기로 들어옵니다. 모델/프로바이더 배정과 에이전트 선택을 패널에서 바로 합니다.",
