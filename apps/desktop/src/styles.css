@@ -9646,3 +9646,15 @@ body:has(.app-shell.annex-focus-shell) {
   max-width: 100%;
   min-width: 0;
 }
+
+/* ── Summon Theater (Cyber-Neon) ── */
+@keyframes summon-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes summon-spin-rev { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
+@keyframes summon-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.92; }
+  50% { transform: scale(1.04); opacity: 1; }
+}
+.summon-spin { animation: summon-spin 24s linear infinite; }
+.summon-spin-rev { animation: summon-spin-rev 36s linear infinite; }
+.summon-breathe { animation: summon-breathe 3.2s ease-in-out infinite; }
+.summon-spin-icon { animation: summon-spin 1.6s linear infinite; }

@@ -26,6 +26,7 @@ import {
 } from "../../lib/helpers";
 import { messageLabel } from "../../lib/uiLabels";
 import { AvatarWithStatus, roleColorFromRole } from "@/ui/avatar-with-status";
+import { resolvePersonaPortraitUrl } from "../../lib/personaPortrait";
 import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import { PublicWorkTracePanel } from "../PublicWorkTracePanel";
 import { createConversationMessagePublicWorkTrace } from "../../lib/publicWorkTrace";
@@ -96,7 +97,14 @@ export function MessageThread({
             <DelegationInline items={delegationItems} />
           ) : null}
           {messages.length === 0 ? (
-            <EmptyConversation summary={agentChatContinuity} />
+            <EmptyConversation
+              portraitUrl={
+                (selectedAgent && agentVisualsById?.[selectedAgent.id]?.avatarDataUrl) ??
+                resolvePersonaPortraitUrl(selectedAgent?.personaName, selectedAgent?.role)
+              }
+              agentName={selectedAgent?.name}
+              summary={agentChatContinuity}
+            />
           ) : (
             messages.map((message) => (
               <MessageBubble
@@ -306,12 +314,28 @@ function AssistantPendingBubble({
   );
 }
 
-function EmptyConversation({ summary }: { summary: AgentChatContinuitySummary }) {
+function EmptyConversation({
+  summary,
+  portraitUrl,
+  agentName,
+}: {
+  summary: AgentChatContinuitySummary;
+  portraitUrl?: string;
+  agentName?: string;
+}) {
   return (
     <div className="flex min-h-[360px] flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/[0.03] px-6 py-16 text-center shadow-2xl shadow-black/30 backdrop-blur-xl">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-400/25 bg-cyan-400/10 shadow-[0_0_32px_rgba(34,211,238,0.18)]">
-        <Sparkles className="h-6 w-6 text-cyan-300" />
-      </div>
+      {portraitUrl ? (
+        <img
+          alt={agentName ?? "에이전트"}
+          className="h-20 w-20 rounded-2xl border border-violet-300/30 object-cover shadow-[0_0_40px_rgba(167,139,250,0.25)] ring-1 ring-white/10"
+          src={portraitUrl}
+        />
+      ) : (
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-400/25 bg-cyan-400/10 shadow-[0_0_32px_rgba(34,211,238,0.18)]">
+          <Sparkles className="h-6 w-6 text-cyan-300" />
+        </div>
+      )}
       <h3 className="mt-5 text-base font-semibold text-zinc-100">
         {summary.title}
       </h3>
