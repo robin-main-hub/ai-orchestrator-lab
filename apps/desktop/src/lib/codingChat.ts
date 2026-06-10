@@ -1,0 +1,467 @@
+/**
+ * 코딩 워크벤치 — pure session model, reducer, and protocol parsers.
+ *
+ * The chat tab evolves into an opencode-style coding surface: the assistant
+ * drives real tools (bash/read/grep/glob/write/edit/todo) through the same
+ * permission/approval/redaction gate as everything else in the OS. This module
+ * is the side-effect-free core: session state, the tool-call wire protocol
+ * (fenced ```tool JSON blocks), slash commands, @file mentions, checkpoints,
+ * compaction. The runner (codingTurnRunner) and the React container build on it.
+ */
+
+export type CodingToolName = "bash" | "read" | "grep" | "glob" | "write" | "edit" | "todo";
+
+export type ToolStatus = "proposed" | "pending_approval" | "running" | "completed" | "failed" | "denied";
+
+export type ToolCall = {
+  id: string;
+  tool: CodingToolName;
+  /** one-line summary shown on the card header */
+  title: string;
+  input: Record<string, unknown>;
+  status: ToolStatus;
+  output?: string;
+  error?: string;
+};
+
+export type ChatPart =
+  | { type: "text"; text: string }
+  | { type: "tool"; call: ToolCall };
+
+export type ChatRole = "user" | "assistant";
+
+export type ChatMessage = {
+  id: string;
+  role: ChatRole;
+  parts: ChatPart[];
+  createdAt: string;
+};
+
+export type AgentMode = "build" | "plan";
+
+export type SessionStatus = "idle" | "thinking" | "tooling" | "error";
+
+export type Checkpoint = {
+  id: string;
+  label: string;
+  /** message count at checkpoint time — undo truncates back to this */
+  messageCount: number;
+  createdAt: string;
+};
+
+export type CodingSession = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  status: SessionStatus;
+  agentMode: AgentMode;
+  providerProfileId: string;
+  modelId: string;
+  messages: ChatMessage[];
+  usage: { inputTokens: number; outputTokens: number };
+  checkpoints: Checkpoint[];
+  error?: string;
+  /** summary inserted by /compact, prepended to the provider payload */
+  compactedSummary?: string;
+};
+
+export function createCodingSession(input: {
+  id: string;
+  now: string;
+  providerProfileId?: string;
+  modelId?: string;
+  title?: string;
+}): CodingSession {
+  return {
+    id: input.id,
+    title: input.title ?? "새 코딩 세션",
+    createdAt: input.now,
+    updatedAt: input.now,
+    status: "idle",
+    agentMode: "build",
+    providerProfileId: input.providerProfileId ?? "",
+    modelId: input.modelId ?? "",
+    messages: [],
+    usage: { inputTokens: 0, outputTokens: 0 },
+    checkpoints: [],
+  };
+}
+
+function touch(session: CodingSession, now: string): CodingSession {
+  return { ...session, updatedAt: now };
+}
+
+export function appendUserMessage(
+  session: CodingSession,
+  input: { id: string; text: string; now: string },
+): CodingSession {
+  const message: ChatMessage = {
+    id: input.id,
+    role: "user",
+    parts: [{ type: "text", text: input.text }],
+    createdAt: input.now,
+  };
+  const title =
+    session.messages.length === 0 && session.title === "새 코딩 세션"
+      ? input.text.slice(0, 48)
+      : session.title;
+  return touch({ ...session, title, messages: [...session.messages, message], status: "thinking", error: undefined }, input.now);
+}
+
+export function beginAssistantMessage(
+  session: CodingSession,
+  input: { id: string; now: string },
+): CodingSession {
+  const message: ChatMessage = { id: input.id, role: "assistant", parts: [], createdAt: input.now };
+  return touch({ ...session, messages: [...session.messages, message] }, input.now);
+}
+
+function mapMessage(
+  session: CodingSession,
+  messageId: string,
+  map: (message: ChatMessage) => ChatMessage,
+): CodingSession {
+  return {
+    ...session,
+    messages: session.messages.map((message) => (message.id === messageId ? map(message) : message)),
+  };
+}
+
+/** streaming text: replace (not append) the trailing text part of the message */
+export function setAssistantDraftText(
+  session: CodingSession,
+  input: { messageId: string; text: string; now: string },
+): CodingSession {
+  return touch(
+    mapMessage(session, input.messageId, (message) => {
+      const parts = [...message.parts];
+      const last = parts[parts.length - 1];
+      if (last && last.type === "text") {
+        parts[parts.length - 1] = { type: "text", text: input.text };
+      } else if (input.text.length > 0) {
+        parts.push({ type: "text", text: input.text });
+      }
+      return { ...message, parts };
+    }),
+    input.now,
+  );
+}
+
+/** finalize an assistant reply: replace the draft with parsed text+tool parts */
+export function setAssistantParts(
+  session: CodingSession,
+  input: { messageId: string; parts: ChatPart[]; now: string },
+): CodingSession {
+  return touch(
+    mapMessage(session, input.messageId, (message) => ({ ...message, parts: input.parts })),
+    input.now,
+  );
+}
+
+export function updateToolCall(
+  session: CodingSession,
+  input: { messageId: string; call: Partial<ToolCall> & { id: string }; now: string },
+): CodingSession {
+  return touch(
+    mapMessage(session, input.messageId, (message) => ({
+      ...message,
+      parts: message.parts.map((part) =>
+        part.type === "tool" && part.call.id === input.call.id
+          ? { type: "tool", call: { ...part.call, ...input.call } }
+          : part,
+      ),
+    })),
+    input.now,
+  );
+}
+
+export function setSessionStatus(session: CodingSession, status: SessionStatus, now: string): CodingSession {
+  return touch({ ...session, status }, now);
+}
+
+export function setSessionError(session: CodingSession, error: string, now: string): CodingSession {
+  return touch({ ...session, status: "error", error }, now);
+}
+
+export function addUsage(
+  session: CodingSession,
+  usage: { inputTokens?: number; outputTokens?: number },
+  now: string,
+): CodingSession {
+  return touch(
+    {
+      ...session,
+      usage: {
+        inputTokens: session.usage.inputTokens + (usage.inputTokens ?? 0),
+        outputTokens: session.usage.outputTokens + (usage.outputTokens ?? 0),
+      },
+    },
+    now,
+  );
+}
+
+/** checkpoint before each user turn so /undo can rewind whole turns */
+export function pushCheckpoint(
+  session: CodingSession,
+  input: { id: string; label: string; now: string },
+): CodingSession {
+  return {
+    ...session,
+    checkpoints: [
+      ...session.checkpoints,
+      { id: input.id, label: input.label, messageCount: session.messages.length, createdAt: input.now },
+    ],
+  };
+}
+
+/** /undo — rewind to the latest checkpoint (drops the last turn) */
+export function undoToLastCheckpoint(session: CodingSession, now: string): CodingSession {
+  const checkpoint = session.checkpoints[session.checkpoints.length - 1];
+  if (!checkpoint) return session;
+  return touch(
+    {
+      ...session,
+      messages: session.messages.slice(0, checkpoint.messageCount),
+      checkpoints: session.checkpoints.slice(0, -1),
+      status: "idle",
+      error: undefined,
+    },
+    now,
+  );
+}
+
+/** /compact — fold all but the last `keepTurns` messages into a summary stub */
+export function compactSession(session: CodingSession, input: { keepMessages?: number; now: string }): CodingSession {
+  const keep = input.keepMessages ?? 6;
+  if (session.messages.length <= keep) return session;
+  const dropped = session.messages.slice(0, session.messages.length - keep);
+  const summaryLines = dropped
+    .map((message) => {
+      const text = message.parts
+        .map((part) => (part.type === "text" ? part.text : `[${part.call.tool}: ${part.call.title}]`))
+        .join(" ")
+        .slice(0, 160);
+      return `- ${message.role === "user" ? "사용자" : "어시스턴트"}: ${text}`;
+    })
+    .join("\n");
+  const summary = `${session.compactedSummary ? `${session.compactedSummary}\n` : ""}${summaryLines}`;
+  return touch(
+    {
+      ...session,
+      messages: session.messages.slice(session.messages.length - keep),
+      compactedSummary: summary,
+      checkpoints: [],
+    },
+    input.now,
+  );
+}
+
+// ─── assistant reply wire protocol ─────────────────────────────────────────
+//
+// The model emits tool invocations as fenced blocks:
+//   ```tool
+//   {"tool":"bash","command":"pnpm test"}
+//   ```
+// Everything else is plain text. parseAssistantReply splits a reply into
+// ordered text/tool parts; invalid JSON blocks degrade to visible text so
+// nothing is silently lost.
+
+const TOOL_FENCE = /```tool\s*\n([\s\S]*?)```/g;
+
+const TOOL_NAMES: ReadonlySet<string> = new Set(["bash", "read", "grep", "glob", "write", "edit", "todo"]);
+
+export function toolTitle(tool: CodingToolName, input: Record<string, unknown>): string {
+  switch (tool) {
+    case "bash":
+      return String(input.command ?? "").slice(0, 80) || "명령 실행";
+    case "read":
+      return `읽기 ${String(input.path ?? "")}`;
+    case "grep":
+      return `검색 "${String(input.pattern ?? "")}"`;
+    case "glob":
+      return `파일 찾기 ${String(input.pattern ?? "")}`;
+    case "write":
+      return `파일 쓰기 ${String(input.path ?? "")}`;
+    case "edit":
+      return `수정 ${String(input.path ?? "")}`;
+    case "todo":
+    default:
+      return "할 일 목록";
+  }
+}
+
+export function parseAssistantReply(
+  text: string,
+  makeId: (index: number) => string,
+): { parts: ChatPart[]; toolCalls: ToolCall[] } {
+  const parts: ChatPart[] = [];
+  const toolCalls: ToolCall[] = [];
+  let cursor = 0;
+  let toolIndex = 0;
+  TOOL_FENCE.lastIndex = 0;
+  for (let match = TOOL_FENCE.exec(text); match; match = TOOL_FENCE.exec(text)) {
+    const before = text.slice(cursor, match.index).trim();
+    if (before) parts.push({ type: "text", text: before });
+    cursor = match.index + match[0].length;
+    const raw = match[1]!.trim();
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      const candidate = JSON.parse(raw) as Record<string, unknown>;
+      if (candidate && typeof candidate === "object" && TOOL_NAMES.has(String(candidate.tool))) {
+        parsed = candidate;
+      }
+    } catch {
+      parsed = null;
+    }
+    if (!parsed) {
+      parts.push({ type: "text", text: raw });
+      continue;
+    }
+    const tool = String(parsed.tool) as CodingToolName;
+    const { tool: _ignored, ...input } = parsed;
+    const call: ToolCall = {
+      id: makeId(toolIndex++),
+      tool,
+      title: toolTitle(tool, input),
+      input,
+      status: "proposed",
+    };
+    toolCalls.push(call);
+    parts.push({ type: "tool", call });
+  }
+  const tail = text.slice(cursor).trim();
+  if (tail) parts.push({ type: "text", text: tail });
+  if (parts.length === 0) parts.push({ type: "text", text: "" });
+  return { parts, toolCalls };
+}
+
+// ─── slash commands ─────────────────────────────────────────────────────────
+
+export type SlashCommand =
+  | { kind: "new" }
+  | { kind: "sessions" }
+  | { kind: "models" }
+  | { kind: "compact" }
+  | { kind: "undo" }
+  | { kind: "clear" }
+  | { kind: "share" }
+  | { kind: "init" }
+  | { kind: "plan" }
+  | { kind: "build" }
+  | { kind: "help" }
+  | { kind: "unknown"; name: string };
+
+export const SLASH_COMMANDS: ReadonlyArray<{ name: string; description: string }> = [
+  { name: "/new", description: "새 코딩 세션 시작" },
+  { name: "/sessions", description: "세션 목록 열기" },
+  { name: "/models", description: "모델/프로바이더 선택" },
+  { name: "/compact", description: "대화 압축 (요약으로 접기)" },
+  { name: "/undo", description: "마지막 턴 되돌리기" },
+  { name: "/clear", description: "현재 세션 메시지 비우기" },
+  { name: "/share", description: "대화를 마크다운으로 복사" },
+  { name: "/init", description: "프로젝트 분석 후 AGENTS.md 제안" },
+  { name: "/plan", description: "플랜 모드 (읽기 전용 도구만)" },
+  { name: "/build", description: "빌드 모드 (모든 도구)" },
+  { name: "/help", description: "도움말" },
+];
+
+export function parseSlashCommand(input: string): SlashCommand | null {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("/")) return null;
+  const name = trimmed.split(/\s+/)[0]!.toLowerCase();
+  switch (name) {
+    case "/new": return { kind: "new" };
+    case "/sessions": return { kind: "sessions" };
+    case "/models": return { kind: "models" };
+    case "/compact": return { kind: "compact" };
+    case "/undo": return { kind: "undo" };
+    case "/clear": return { kind: "clear" };
+    case "/share": return { kind: "share" };
+    case "/init": return { kind: "init" };
+    case "/plan": return { kind: "plan" };
+    case "/build": return { kind: "build" };
+    case "/help": return { kind: "help" };
+    default: return { kind: "unknown", name };
+  }
+}
+
+/** @path mentions — surfaced to the system prompt so the agent reads them first */
+export function extractMentions(text: string): string[] {
+  const matches = text.match(/@([\w./\\-]+)/g) ?? [];
+  return [...new Set(matches.map((token) => token.slice(1)))];
+}
+
+// ─── provider payload assembly ──────────────────────────────────────────────
+
+export function buildSystemPrompt(input: {
+  agentMode: AgentMode;
+  mentions?: ReadonlyArray<string>;
+  workingDir?: string;
+}): string {
+  const lines = [
+    "당신은 이 데스크톱 오케스트레이터에 내장된 코딩 에이전트입니다. 한국어로 간결하게 답하세요.",
+    "도구가 필요하면 reply 안에 아래 형식의 fenced block을 포함하세요 (여러 개 가능, 결과를 받은 뒤 계속됩니다):",
+    '```tool\n{"tool":"bash","command":"<쉘 명령>"}\n```',
+    '사용 가능한 도구: {"tool":"bash","command"} · {"tool":"read","path"} · {"tool":"grep","pattern","path"?} · {"tool":"glob","pattern"} · {"tool":"write","path","content"} · {"tool":"edit","path","diff"} (unified diff) · {"tool":"todo","items":["..."]}.',
+    "모든 명령은 승인 게이트를 통과하며 출력이 다음 메시지로 전달됩니다. 도구 호출이 더 필요 없으면 일반 텍스트로만 마무리하세요.",
+  ];
+  if (input.agentMode === "plan") {
+    lines.push(
+      "지금은 PLAN 모드입니다: bash/write/edit 같은 변경 도구는 실행되지 않습니다. read/grep/glob으로 조사하고, 변경은 계획으로만 제시하세요.",
+    );
+  }
+  if (input.workingDir) {
+    lines.push(`작업 디렉터리: ${input.workingDir}`);
+  }
+  if (input.mentions && input.mentions.length > 0) {
+    lines.push(`사용자가 멘션한 파일(@): ${input.mentions.join(", ")} — 먼저 read 도구로 확인하세요.`);
+  }
+  return lines.join("\n");
+}
+
+/** flatten session messages into the provider wire format (with tool results inline) */
+export function toProviderMessages(session: CodingSession): Array<{ role: "user" | "assistant" | "system"; content: string }> {
+  const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [];
+  if (session.compactedSummary) {
+    messages.push({ role: "system", content: `이전 대화 요약:\n${session.compactedSummary}` });
+  }
+  for (const message of session.messages) {
+    const content = message.parts
+      .map((part) => {
+        if (part.type === "text") return part.text;
+        const call = part.call;
+        const result =
+          call.status === "completed"
+            ? `\n[tool_result ${call.tool}]\n${call.output ?? ""}`
+            : call.status === "failed"
+              ? `\n[tool_result ${call.tool} FAILED]\n${call.error ?? call.output ?? ""}`
+              : call.status === "denied"
+                ? `\n[tool_result ${call.tool} DENIED] 사용자가 실행을 거부했습니다`
+                : "";
+        return `[tool ${call.tool}] ${call.title}${result}`;
+      })
+      .join("\n");
+    messages.push({ role: message.role, content });
+  }
+  return messages;
+}
+
+/** /share — render the session as a markdown transcript */
+export function sessionToMarkdown(session: CodingSession): string {
+  const lines: string[] = [`# ${session.title}`, ""];
+  for (const message of session.messages) {
+    lines.push(`## ${message.role === "user" ? "사용자" : "어시스턴트"}`);
+    for (const part of message.parts) {
+      if (part.type === "text") {
+        lines.push(part.text, "");
+      } else {
+        lines.push(`> 도구 ${part.call.tool}: ${part.call.title} — ${part.call.status}`);
+        if (part.call.output) {
+          lines.push("```", part.call.output.slice(0, 2000), "```", "");
+        }
+      }
+    }
+  }
+  return lines.join("\n");
+}

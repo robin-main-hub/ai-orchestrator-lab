@@ -65,6 +65,7 @@ export type NavItemId =
   | "cockpit"
   | "autonomy"
   | "parallel"
+  | "coding"
   | "runtime";
 export type NavItem = {
   id: NavItemId;
