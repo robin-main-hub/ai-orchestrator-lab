@@ -68,7 +68,11 @@ export function resolvePersonaAgentSet(
   },
 ): PersonaAgentSet {
   const profiles = options?.profiles ?? defaultAgentProfiles;
-  const profile = profiles.find((candidate) => candidate.personaName === personaName);
+  // explicit personaName binding first; fall back to slug === role (most
+  // bundled personas live at agents/<role>/, e.g. verifier, architect)
+  const profile =
+    profiles.find((candidate) => candidate.personaName === personaName) ??
+    profiles.find((candidate) => candidate.role === personaName);
   const preferredPaneRole = profile ? AGENT_ROLE_TO_PANE_ROLE[profile.role] : undefined;
   return {
     personaName,
