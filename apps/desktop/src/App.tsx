@@ -29,6 +29,7 @@ import {
   runStage3DebateSession,
   type Stage3DebateSession,
 } from "./runtime/stage3Runtime";
+import type { CockpitDetailFocus } from "./lib/cockpitNextActions";
 import {
   createStage4AgentRun,
   type Stage4AgentRun,
@@ -583,6 +584,7 @@ export function App() {
     });
   }
 
+  const [cockpitFocus, setCockpitFocus] = useState<CockpitDetailFocus | undefined>();
   const [debateSession, setDebateSession] = useState<Stage3DebateSession>(() =>
     createStage3DebateSession({
       messages: initialConversationMessages,
@@ -3420,14 +3422,20 @@ export function App() {
       verb: "점검",
       label: "20개 큰 바위 로드맵",
       hint: "Cockpit 세부 정보에서 성숙한 OS 기준 확인",
-      run: () => setMode("cockpit"),
+      run: () => {
+        setCockpitFocus({ label: "다음 큰 바위", helper: "성숙도와 작업 영수증을 확인", surface: "maturity" });
+        setMode("cockpit");
+      },
     },
     {
       id: "open.receipts",
       verb: "점검",
       label: "작업 영수증 장부",
       hint: "마스킹, 테스트, 실패 후 수정 기록 확인",
-      run: () => setMode("cockpit"),
+      run: () => {
+        setCockpitFocus({ label: "작업 영수증", helper: "마스킹·테스트·수정 기록", surface: "receipts" });
+        setMode("cockpit");
+      },
     },
     {
       id: "agent.skills",
@@ -3460,7 +3468,10 @@ export function App() {
       verb: "검수",
       label: "v0 검은 테마 시각 QA",
       hint: "Cockpit 기준으로 화면 노이즈와 색상 상태 점검",
-      run: () => setMode("cockpit"),
+      run: () => {
+        setCockpitFocus({ label: "진단", helper: "화면 노이즈·색상 상태 점검", surface: "diagnostics" });
+        setMode("cockpit");
+      },
     },
     {
       id: "memory.remember",
@@ -4244,10 +4255,6 @@ export function App() {
                   <ShieldCheck size={16} />
                   Queue {permissionSnapshot.summary.pending}
                 </button>
-                <button className="ghost-button" onClick={handleRememberCurrentContext} type="button">
-                  <Database size={16} />
-                  Memory
-                </button>
                 <button className="primary-button" onClick={() => handleCreateCodingPacket()} type="button">
                   <Send size={16} />
                   Coding Packet
@@ -4529,6 +4536,7 @@ export function App() {
             />
           ) : mode === "cockpit" ? (
             <OperatorCockpit
+              initialFocus={cockpitFocus}
               onOpenAgentConversation={(agentId) => {
                 setSelectedAgentId(agentId);
                 setMode("conversation");
