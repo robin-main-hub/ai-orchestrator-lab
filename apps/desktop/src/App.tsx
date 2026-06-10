@@ -4347,7 +4347,6 @@ export function App() {
                 snapshot={runtimeSnapshotState}
               />
               <OperationsRailPanel
-                approvalBusyId={approvalServerBusyId}
                 approvalError={approvalServerError}
                 approvalServerSnapshot={approvalServerSnapshot}
                 approvalServerStatus={approvalServerStatus}
@@ -4357,7 +4356,7 @@ export function App() {
                 onExportBackup={handleExportBackupProjections}
                 onImportExternalIngress={handleImportExternalIngress}
                 onRefreshApprovals={handleRefreshApprovalQueue}
-                onResolveServerApproval={handleResolveServerApproval}
+                onOpenControlQueue={() => setApprovalDrawerOpen(true)}
                 pendingTmuxApprovalKeys={pendingTmuxApprovalKeys}
                 permissionSnapshot={permissionSnapshot}
                 providerReadiness={providerReadiness}
