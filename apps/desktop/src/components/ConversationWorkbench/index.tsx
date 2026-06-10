@@ -65,6 +65,7 @@ import { AgentRosterSkillPicker } from "./AgentRosterSkillPicker";
 import { AgentSkillProfilePanel } from "./AgentSkillProfilePanel";
 import { ProviderReadinessPreflight } from "./ProviderReadinessPreflight";
 import { MakimaDelegationConsole } from "./MakimaDelegationConsole";
+import { WorkTheater } from "./WorkTheater";
 
 // Sub-components
 import { MessageThread } from "./MessageThread";
@@ -661,23 +662,12 @@ export function ConversationWorkbench({
             )
           ) : null}
           {sidePanelMode === "plan" ? (
-            makimaDelegationCards.length > 0 ? (
-              <ol className="flex flex-col gap-2 p-3">
-                {makimaDelegationCards.map((card, index) => (
-                  <li className="rounded-xl border border-white/10 bg-white/[0.03] p-3" key={card.id}>
-                    <p className="text-[11px] font-semibold text-violet-200">
-                      {index + 1}. {card.targetAgentName} · {card.targetRoleLabel}
-                    </p>
-                    <p className="mt-1 text-[12px] leading-relaxed text-zinc-300">{card.title}</p>
-                    <p className="mt-1 text-[11px] text-zinc-500">{card.summary}</p>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="p-6 text-center text-[12.5px] text-zinc-500">
-                지휘자에게 요청을 보내면 작업 분해 계획이 여기에 표시됩니다.
-              </p>
-            )
+            <WorkTheater
+              agents={agents}
+              assignmentsByAgentId={delegationAssignmentsByAgentId}
+              cards={makimaDelegationCards}
+              onOpenAgent={onOpenDelegatedAgentConversation}
+            />
           ) : null}
           {sidePanelMode === "terminal" ? (
             <LiveTerminalPanel sessionId={activeSessionId} />
