@@ -4365,6 +4365,7 @@ export function App() {
                   tagline: "「오빠~♡ 다른 에이전트들, 내가 다 보고 있을게.」",
                 },
               ]}
+              personaAvatars={dashboardPersonaAvatars}
               runtime={runtimeSnapshotState}
               hermesPool={summarizeHermesPool(loadHermesPool())}
               pendingApprovals={permissionSnapshot.summary.pending}

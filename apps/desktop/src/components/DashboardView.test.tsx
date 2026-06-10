@@ -33,6 +33,11 @@ describe("DashboardView", () => {
     expect(html).toContain("3건"); // pending approvals
     expect(html).toContain("토키사키 쿠루미");
     expect(html).toContain("가사이 유노");
+    // 캐릭터 도감: 전원 18인이 카드로 렌더된다
+    expect(html).toContain("캐릭터 도감 — 전원 18인");
+    for (const name of ["마키마", "마키세 크리스", "아스카 랑그레이", "렘", "프리렌", "카츠라기 미사토"]) {
+      expect(html).toContain(name);
+    }
     expect(html).toContain("병렬실행"); // mission tile
     expect(html).toContain("토론 무대");
     expect(html).toContain("위젯 구현"); // recent run
