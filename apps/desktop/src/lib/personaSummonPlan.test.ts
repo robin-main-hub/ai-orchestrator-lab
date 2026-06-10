@@ -1,6 +1,7 @@
 import type { LoadedPersona } from "@ai-orchestrator/agents";
 import type { AgentSession } from "@ai-orchestrator/protocol";
 import { describe, expect, it } from "vitest";
+import { resolvePersonaAgentSet } from "./personaAgentSet";
 import { buildPersonaInjectionPlan } from "./personaSummonPlan";
 
 const session = (overrides: Partial<AgentSession> = {}): AgentSession => ({
@@ -75,5 +76,29 @@ describe("buildPersonaInjectionPlan", () => {
     expect(() => buildPersonaInjectionPlan({ session: session({ paneId: undefined }), persona: persona() })).toThrow(
       /no pane bound/,
     );
+  });
+
+  it("agent set: fresh-session boot precedes the identity, and the header carries the declared role", () => {
+    const plan = buildPersonaInjectionPlan({
+      session: session({ agentId: "kurumi", role: "orchestrator" }),
+      persona: persona({ personaName: "kurumi" }),
+      kickoffTask: "Run the swarm.",
+      agentSet: resolvePersonaAgentSet("kurumi"),
+    });
+    // boot -> identity -> kickoff: soul, agents, and role land on a NEW agent session
+    expect(plan.bootSteps).toEqual(["/new"]);
+    expect(plan.steps).toEqual(["/new", plan.injectionText, "Run the swarm."]);
+    expect(plan.injectionText).toContain("fresh hermes agent session");
+    expect(plan.injectionText).toContain("Declared role: companion");
+  });
+
+  it("agent set with empty boot keeps the legacy reuse-session behavior", () => {
+    const plan = buildPersonaInjectionPlan({
+      session: session(),
+      persona: persona(),
+      agentSet: resolvePersonaAgentSet("makise", { bootSteps: [] }),
+    });
+    expect(plan.bootSteps).toEqual([]);
+    expect(plan.steps).toEqual([plan.injectionText]);
   });
 });

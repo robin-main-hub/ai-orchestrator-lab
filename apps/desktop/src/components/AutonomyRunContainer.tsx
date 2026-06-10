@@ -21,6 +21,7 @@ import { codingPacketToAutonomyForm } from "../lib/codingPacketToAutonomyForm";
 import { stepRowFromReduce, type AutonomyStepRow } from "../lib/autonomyTimeline";
 import { bundledPersonaNames, personaFileSource } from "../lib/personaBundleSource";
 import { personaAvatars, personaSprites } from "../lib/personaAvatarSource";
+import { resolvePersonaAgentSet } from "../lib/personaAgentSet";
 import { classifyExpression } from "../lib/expressionClassifier";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
 import { AutonomyRunPanel } from "./AutonomyRunPanel";
@@ -102,10 +103,15 @@ export function AutonomyRunContainer({
     // The handoff gate may downgrade the mode (e.g. needs_review -> human).
     const effectiveForm = gate ? { ...form, mode: gate.effectiveMode } : form;
     try {
-      const persona = await loadPersonaOrHeader(effectiveForm.personaName.trim());
+      const personaName = effectiveForm.personaName.trim();
+      const persona = await loadPersonaOrHeader(personaName);
       const input = buildAutonomyRunInput(effectiveForm, {
         sessionId,
         persona,
+        // persona = atomic agent set: a NEW Hermes session boots in the pane
+        // before the identity lands, so the character never inherits the
+        // previous occupant's context (soul + agents + role move together).
+        agentSet: resolvePersonaAgentSet(personaName),
         ctx: {
           now: startedAt,
           makeSessionId: (personaName, paneId) => `as_${personaName}_${paneId}_${stamp}`,
