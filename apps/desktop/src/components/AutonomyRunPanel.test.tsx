@@ -26,6 +26,7 @@ function render(props: Partial<Parameters<typeof AutonomyRunPanel>[0]> = {}) {
       history={props.history}
       roster={props.roster}
       notice={props.notice}
+      personaAvatars={props.personaAvatars}
       onFieldChange={noop}
       onRun={noop}
       onLoadFromPacket={props.onLoadFromPacket}
@@ -88,6 +89,20 @@ describe("AutonomyRunPanel", () => {
   it("shows the load-from-packet button only when the handler is provided", () => {
     expect(render({ onLoadFromPacket: () => {} })).toContain("패킷 불러오기");
     expect(render()).not.toContain("패킷 불러오기");
+  });
+
+  it("shows the persona avatar when the typed persona has one", () => {
+    const html = render({
+      form: form({ personaName: "makima" }),
+      personaAvatars: { makima: "/assets/makima.png" },
+    });
+    expect(html).toContain("autonomy-persona-avatar");
+    expect(html).toContain("/assets/makima.png");
+  });
+
+  it("falls back to the bot icon when the persona has no avatar", () => {
+    const html = render({ form: form({ personaName: "architect" }), personaAvatars: { makima: "/x.png" } });
+    expect(html).not.toContain("autonomy-persona-avatar");
   });
 
   it("renders the pane roster when present", () => {
