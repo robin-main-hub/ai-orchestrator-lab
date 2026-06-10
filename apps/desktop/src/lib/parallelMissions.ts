@@ -86,6 +86,8 @@ export type RunParallelMissionsInput = {
   maxConcurrency?: number;
   /** live per-mission phase updates */
   onUpdate?: (update: MissionUpdate) => void;
+  /** fired once after the allocation phase, before any mission runs — gives callers (broadcast/check-in) the live session bindings */
+  onAllocate?: (allocations: ReadonlyArray<MissionAllocation>) => void;
   now?: () => string;
 };
 
@@ -94,6 +96,7 @@ export async function runParallelMissions(
 ): Promise<{ registry: SummonRegistry; results: MissionResult[] }> {
   const now = input.now ?? (() => new Date().toISOString());
   const { registry, allocations, rejected } = allocateMissions(input.registry, input.missions, input.ctx);
+  input.onAllocate?.(allocations);
 
   const results: MissionResult[] = rejected.map((entry) => ({
     missionId: entry.mission.id,
