@@ -25,17 +25,23 @@ export type {
 
 export {
   buildRoundUserPrompt,
+  debateHadPositionChanges,
+  deriveStanceTrajectories,
   inferUtteranceTag,
   pickAgentsForRound,
   runDebateRound,
+  tagPolarity,
 } from "./debateEngine.js";
 export type {
+  AgentStancePoint,
+  AgentStanceTrajectory,
   DebateAgentError,
   DebateEngineAgentSlot,
   DebateEngineOptions,
   LlmCompletionFn,
   RunDebateRoundParams,
   RunDebateRoundResult,
+  StancePolarity,
 } from "./debateEngine.js";
 
 export {
