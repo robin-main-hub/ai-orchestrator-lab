@@ -5,26 +5,25 @@ import type { AgentProfile, AgentRole, TmuxPaneRole } from "@ai-orchestrator/pro
  * Persona = an ATOMIC agent set. Injecting a different character is not a text
  * edit on whatever Hermes agent happens to live in the pane — the SOUL/AGENTS
  * files, the declared profile (role + permission level), and the backing
- * Hermes agent session move together as one unit:
+ * Hermes agent SLOT move together as one unit.
  *
- *   boot a FRESH Hermes agent session (no inherited context from the previous
- *   character) -> inject the persona's identity -> work under its declared role.
- *
- * This module resolves that set from the canonical profile registry
- * (`defaultAgentProfiles`, keyed by personaName) and carries the fresh-session
- * boot steps. The boot steps are ordinary dispatch strings — the runners send
- * them through the same permission/approval/redaction gate as everything else.
+ * Slots are sticky (see hermesSlotPool.ts): a persona reuses her own agent —
+ * her history stays hers, with no reset and no discarded-session pile-up. A
+ * reset boot step is dispatched only when a recycled slot is handed to a
+ * DIFFERENT character, so nothing is inherited across characters. Boot steps
+ * are ordinary dispatch strings — the runners send them through the same
+ * permission/approval/redaction gate as everything else.
  */
 
 /** All of the user's agents run as Hermes agents. */
 export const AGENT_BACKEND = "hermes" as const;
 
 /**
- * Default fresh-session boot for a Hermes agent CLI pane: `/new` discards the
- * previous character's context so the incoming persona starts clean. Override
+ * Default reset command for a Hermes agent CLI pane: `/new` discards the
+ * previous character's context when a recycled slot changes hands. Override
  * per deployment if the pane's CLI uses a different reset command.
  */
-export const DEFAULT_HERMES_BOOT_STEPS: ReadonlyArray<string> = ["/new"];
+export const DEFAULT_HERMES_RESET_COMMAND = "/new";
 
 export type PersonaAgentSet = {
   personaName: string;
@@ -33,7 +32,9 @@ export type PersonaAgentSet = {
   profile?: AgentProfile;
   /** pane role derived from the declared agent role */
   preferredPaneRole?: TmuxPaneRole;
-  /** fresh-agent boot steps dispatched (gated) BEFORE identity injection */
+  /** sticky Hermes slot this persona is bound to, when allocated from the pool */
+  slotId?: string;
+  /** boot/reset steps dispatched (gated) BEFORE identity injection — empty when the slot is reused or brand-new */
   bootSteps: string[];
 };
 
@@ -58,8 +59,10 @@ export const AGENT_ROLE_TO_PANE_ROLE: Partial<Record<AgentRole, TmuxPaneRole>> =
 export function resolvePersonaAgentSet(
   personaName: string,
   options?: {
-    /** override the fresh-session boot (empty array = reuse the pane's current agent session) */
+    /** boot/reset steps to dispatch before identity injection (default: none — slot reuse) */
     bootSteps?: ReadonlyArray<string>;
+    /** sticky Hermes slot this persona occupies */
+    slotId?: string;
     /** profile registry override, for tests or imported personas */
     profiles?: ReadonlyArray<AgentProfile>;
   },
@@ -72,21 +75,23 @@ export function resolvePersonaAgentSet(
     backend: AGENT_BACKEND,
     profile,
     preferredPaneRole,
-    bootSteps: [...(options?.bootSteps ?? DEFAULT_HERMES_BOOT_STEPS)],
+    slotId: options?.slotId,
+    bootSteps: [...(options?.bootSteps ?? [])],
   };
 }
 
 /**
- * Identity header for a freshly booted agent: announces the declared role and
- * permission level alongside the persona, so the new Hermes session knows the
- * whole set it embodies — not just the prose.
+ * Identity header announcing the whole set the agent embodies — persona, its
+ * sticky Hermes slot, the declared role and permission level — not just prose.
  */
 export function agentSetHeaderLine(set: PersonaAgentSet, paneRole: TmuxPaneRole): string {
+  const slot = set.slotId ? ` (slot ${set.slotId})` : "";
+  const freshness = set.bootSteps.length > 0 ? " on a freshly reset session" : "";
   const declared = set.profile
     ? ` Declared role: ${set.profile.role}${set.profile.permissionLevel ? ` (permission: ${set.profile.permissionLevel})` : ""}.`
     : "";
   return (
-    `You are a fresh ${set.backend} agent session. You are now operating as "${set.personaName}" ` +
+    `You are ${set.backend} agent${slot}${freshness}. You are now operating as "${set.personaName}" ` +
     `in the ${paneRole} pane.${declared} Adopt the identity below and stay in it.`
   );
 }

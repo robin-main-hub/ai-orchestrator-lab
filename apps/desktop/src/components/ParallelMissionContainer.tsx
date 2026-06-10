@@ -14,7 +14,9 @@ import { SELECTABLE_PANE_ROLES, headerOnlyPersona, modeLabel } from "../lib/auto
 import { stepRowFromReduce } from "../lib/autonomyTimeline";
 import { createCheckInState, runCheckInSweep, startCheckInLoop, type CheckInState } from "../lib/missionCheckIn";
 import { personaFileSource, bundledPersonaNames } from "../lib/personaBundleSource";
-import { resolvePersonaAgentSet } from "../lib/personaAgentSet";
+import { DEFAULT_HERMES_RESET_COMMAND, resolvePersonaAgentSet, type PersonaAgentSet } from "../lib/personaAgentSet";
+import { acquireHermesSlot, summarizeHermesPool } from "../lib/hermesSlotPool";
+import { loadHermesPool, saveHermesPool } from "../lib/hermesPoolStore";
 import { createSummonRegistry } from "../lib/personaSummon";
 import { buildWorkspacePlan, workspaceSafePrefixes } from "../lib/missionWorkspace";
 import {
@@ -76,10 +78,10 @@ export function ParallelMissionContainer({
   const [checkInEnabled, setCheckInEnabled] = useState(true);
   const [checkInMinutes, setCheckInMinutes] = useState(5);
   const [checkInNote, setCheckInNote] = useState<string | null>(null);
-  // Persona = atomic agent set: boot a fresh Hermes session per mission so the
-  // incoming character never inherits the previous occupant's context.
-  const [freshAgent, setFreshAgent] = useState(true);
-  const [bootCommand, setBootCommand] = useState("/new");
+  // Hermes slot pool: persona ↔ agent bindings are sticky; a reset is dispatched
+  // only when a recycled slot changes hands. Spare exhausted -> provision one.
+  const [hermesPool, setHermesPool] = useState(() => loadHermesPool());
+  const [resetCommand, setResetCommand] = useState(DEFAULT_HERMES_RESET_COMMAND);
   // NTM-style broadcast: one instruction to every live mission at once.
   const [broadcastText, setBroadcastText] = useState("");
   const [broadcastNote, setBroadcastNote] = useState<string | null>(null);
@@ -148,6 +150,26 @@ export function ParallelMissionContainer({
     }
     setBoard(initialBoard);
 
+    // Acquire a sticky Hermes slot per mission (sequentially over the shared
+    // pool): same persona -> her own agent; new persona -> spare; exhausted ->
+    // provision exactly one new agent. Persisted so bindings survive restarts.
+    let nextPool = loadHermesPool();
+    const agentSetByMission = new Map<string, PersonaAgentSet>();
+    for (const draft of drafts) {
+      const personaName = draft.personaName.trim();
+      const acquisition = acquireHermesSlot(nextPool, personaName);
+      nextPool = acquisition.pool;
+      agentSetByMission.set(
+        draft.id,
+        resolvePersonaAgentSet(personaName, {
+          slotId: acquisition.slot.id,
+          bootSteps: acquisition.requiresBoot ? [resetCommand.trim() || DEFAULT_HERMES_RESET_COMMAND] : [],
+        }),
+      );
+    }
+    saveHermesPool(nextPool);
+    setHermesPool(nextPool);
+
     const server = { serverBaseUrl, host, tmuxSessionName };
     bindingRef.current = { mode, server, runId: `parallel_${stamp}` };
 
@@ -183,10 +205,8 @@ export function ParallelMissionContainer({
       }).map((spec) => ({
         ...spec,
         workspace: workspaceByMission.get(spec.id),
-        // fresh Hermes session per mission: soul + agents + role land as one set
-        agentSet: freshAgent
-          ? resolvePersonaAgentSet(spec.summon.personaName, { bootSteps: [bootCommand.trim() || "/new"] })
-          : undefined,
+        // sticky Hermes slot per persona: soul + agents + role + agent move as one set
+        agentSet: agentSetByMission.get(spec.id),
       }));
 
       // One pane per mission (matching its role) so every queued mission can be
@@ -287,23 +307,21 @@ export function ParallelMissionContainer({
         {isolate && !repoPath.trim() && !running ? (
           <p className="parallel-console__hint">레포 경로를 입력해야 워크트리 격리가 적용됩니다.</p>
         ) : null}
-        <label className="parallel-workspace__toggle">
-          <input
-            type="checkbox"
-            checked={freshAgent}
-            onChange={(event) => setFreshAgent(event.target.checked)}
-            disabled={running}
-          />
-          새 Hermes 세션 핸드오프 — 페르소나마다 새 에이전트 세션을 부팅해 SOUL·AGENTS·역할이 한 세트로 주입 (이전 캐릭터 컨텍스트 미상속)
+        <div className="parallel-workspace__toggle parallel-slots">
+          <span className="parallel-slots__summary">
+            Hermes 슬롯: 사용 {summarizeHermesPool(hermesPool).bound} · 여유 {summarizeHermesPool(hermesPool).spare}
+            {" "}(총 {summarizeHermesPool(hermesPool).total})
+          </span>
+          — 페르소나마다 고정(스티키) 슬롯에 SOUL·AGENTS·역할이 한 세트로 주입. 여유 소진 시 1개씩 자동 증설, 슬롯 재활용 시에만 리셋:
           <input
             className="parallel-agentset__boot"
-            value={bootCommand}
-            onChange={(event) => setBootCommand(event.target.value)}
-            disabled={running || !freshAgent}
-            aria-label="에이전트 세션 부트 명령"
-            title="pane의 에이전트 CLI 새 세션 명령 (기본 /new)"
+            value={resetCommand}
+            onChange={(event) => setResetCommand(event.target.value)}
+            disabled={running}
+            aria-label="슬롯 재활용 리셋 명령"
+            title="재활용된 슬롯에 다른 캐릭터가 들어올 때만 디스패치 (기본 /new)"
           />
-        </label>
+        </div>
         <label className="parallel-workspace__toggle">
           <input
             type="checkbox"
