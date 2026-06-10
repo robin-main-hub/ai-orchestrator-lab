@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { CircleCheck, Hourglass, KeyRound, LoaderCircle, ShieldAlert } from "lucide-react";
+import type { EventEnvelope } from "@ai-orchestrator/protocol";
 import type { WorkbenchAgent } from "../types";
 import type { MakimaDelegationAssignmentView, MakimaDelegationCard } from "../lib/makimaDelegation";
+import { TimelineScrubber } from "./TimelineScrubber";
 import { PERSONA_CODEX } from "../lib/personaCodex";
 import { buildPersonaCard, type PersonaRarity } from "../lib/personaCard";
 import { resolvePersonaPortraitUrl } from "../lib/personaPortrait";
@@ -131,10 +133,13 @@ export function SummonTheater({
   cards,
   assignmentsByAgentId,
   agents,
+  events = [],
 }: {
   cards: ReadonlyArray<MakimaDelegationCard>;
   assignmentsByAgentId?: Record<string, MakimaDelegationAssignmentView>;
   agents: ReadonlyArray<WorkbenchAgent>;
+  /** 세션 이벤트 로그 — 하단 타임라인 되감기 스크러버용 */
+  events?: ReadonlyArray<EventEnvelope>;
 }) {
   const rows = useMemo(
     () =>
@@ -245,11 +250,14 @@ export function SummonTheater({
         </section>
       </div>
 
-      <footer className="mt-5 shrink-0 rounded-xl border border-white/10 bg-black/60 px-4 py-3 font-mono text-[13px]">
-        <span className="text-pink-400">&gt; </span>
-        <span className="text-zinc-200">{command.slice(2, typed + 2)}</span>
-        <span className="summon-breathe ml-0.5 inline-block h-4 w-2 translate-y-0.5 bg-violet-400" />
-      </footer>
+      <div className="mt-5 shrink-0 space-y-2.5">
+        <TimelineScrubber events={events} />
+        <footer className="rounded-xl border border-white/10 bg-black/60 px-4 py-3 font-mono text-[13px]">
+          <span className="text-pink-400">&gt; </span>
+          <span className="text-zinc-200">{command.slice(2, typed + 2)}</span>
+          <span className="summon-breathe ml-0.5 inline-block h-4 w-2 translate-y-0.5 bg-violet-400" />
+        </footer>
+      </div>
     </div>
   );
 }
