@@ -70,7 +70,7 @@ export function TmuxPaneCard({
     timelineBlocks: timelineBlocks ?? [],
   });
   return (
-    <div className="flex min-h-[260px] flex-col rounded-lg border border-zinc-800/60 bg-zinc-900/40 shadow-xl shadow-black/25 backdrop-blur-xl transition-colors hover:border-zinc-700/60">
+    <div className="cockpit-pane flex min-h-[260px] flex-col rounded-lg border border-zinc-800/60 bg-zinc-900/40 shadow-xl shadow-black/25 backdrop-blur-xl transition-colors hover:border-zinc-700/60">
       {/* Header: avatar + title + status */}
       <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
