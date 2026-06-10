@@ -39,7 +39,7 @@ export type ChatMessage = {
 
 export type AgentMode = "build" | "plan";
 
-export type SessionStatus = "idle" | "thinking" | "tooling" | "error";
+export type SessionStatus = "idle" | "thinking" | "tooling" | "waiting_approval" | "error" | "done";
 
 export type Checkpoint = {
   id: string;
@@ -61,6 +61,7 @@ export type CodingSession = {
   messages: ChatMessage[];
   usage: { inputTokens: number; outputTokens: number };
   checkpoints: Checkpoint[];
+  redoStack?: ChatMessage[][];
   error?: string;
   /** summary inserted by /compact, prepended to the provider payload */
   compactedSummary?: string;
@@ -106,7 +107,7 @@ export function appendUserMessage(
     session.messages.length === 0 && session.title === "새 코딩 세션"
       ? input.text.slice(0, 48)
       : session.title;
-  return touch({ ...session, title, messages: [...session.messages, message], status: "thinking", error: undefined }, input.now);
+  return touch({ ...session, title, messages: [...session.messages, message], redoStack: [], status: "thinking", error: undefined }, input.now);
 }
 
 export function beginAssistantMessage(
@@ -219,11 +220,30 @@ export function pushCheckpoint(
 export function undoToLastCheckpoint(session: CodingSession, now: string): CodingSession {
   const checkpoint = session.checkpoints[session.checkpoints.length - 1];
   if (!checkpoint) return session;
+  const dropped = session.messages.slice(checkpoint.messageCount);
   return touch(
     {
       ...session,
       messages: session.messages.slice(0, checkpoint.messageCount),
       checkpoints: session.checkpoints.slice(0, -1),
+      redoStack: dropped.length > 0 ? [...(session.redoStack ?? []), dropped] : (session.redoStack ?? []),
+      status: "idle",
+      error: undefined,
+    },
+    now,
+  );
+}
+
+/** /redo — re-apply the most recently undone turn snapshot. */
+export function redoLastUndo(session: CodingSession, now: string): CodingSession {
+  const stack = session.redoStack ?? [];
+  const restored = stack[stack.length - 1];
+  if (!restored || restored.length === 0) return session;
+  return touch(
+    {
+      ...session,
+      messages: [...session.messages, ...restored],
+      redoStack: stack.slice(0, -1),
       status: "idle",
       error: undefined,
     },
@@ -252,6 +272,7 @@ export function compactSession(session: CodingSession, input: { keepMessages?: n
       messages: session.messages.slice(session.messages.length - keep),
       compactedSummary: summary,
       checkpoints: [],
+      redoStack: [],
     },
     input.now,
   );
@@ -344,11 +365,19 @@ export type SlashCommand =
   | { kind: "models" }
   | { kind: "compact" }
   | { kind: "undo" }
+  | { kind: "redo" }
   | { kind: "clear" }
   | { kind: "share" }
   | { kind: "init" }
   | { kind: "plan" }
   | { kind: "build" }
+  | { kind: "fork"; role?: string; task?: string }
+  | { kind: "missions" }
+  | { kind: "attach"; missionId?: string }
+  | { kind: "diff"; missionId?: string }
+  | { kind: "verify"; missionId?: string }
+  | { kind: "kill"; missionId?: string }
+  | { kind: "cleanup"; missionId?: string }
   | { kind: "help" }
   | { kind: "unknown"; name: string };
 
@@ -358,29 +387,60 @@ export const SLASH_COMMANDS: ReadonlyArray<{ name: string; description: string }
   { name: "/models", description: "모델/프로바이더 선택" },
   { name: "/compact", description: "대화 압축 (요약으로 접기)" },
   { name: "/undo", description: "마지막 턴 되돌리기" },
+  { name: "/redo", description: "되돌린 턴 다시 적용" },
   { name: "/clear", description: "현재 세션 메시지 비우기" },
   { name: "/share", description: "대화를 마크다운으로 복사" },
+  { name: "/fork", description: "role/task로 격리 mission 생성" },
+  { name: "/missions", description: "Mission Board 열기" },
+  { name: "/attach", description: "mission worker surface 연결/캡처" },
+  { name: "/diff", description: "mission diff/review fallback 열기" },
+  { name: "/verify", description: "mission 검증 실행 또는 fallback 기록" },
+  { name: "/kill", description: "mission worker 중지 승인 흐름" },
+  { name: "/cleanup", description: "worktree/tmux cleanup 승인 흐름" },
   { name: "/init", description: "프로젝트 분석 후 AGENTS.md 제안" },
   { name: "/plan", description: "플랜 모드 (읽기 전용 도구만)" },
   { name: "/build", description: "빌드 모드 (모든 도구)" },
   { name: "/help", description: "도움말" },
 ];
 
+function parseSlashArgs(raw: string): Record<string, string> {
+  const args: Record<string, string> = {};
+  const pattern = /(\w+)=((?:"[^"]+")|(?:'[^']+')|\S+)/g;
+  for (let match = pattern.exec(raw); match; match = pattern.exec(raw)) {
+    args[match[1]!] = match[2]!.replace(/^['"]|['"]$/g, "");
+  }
+  return args;
+}
+
+function parseMissionId(raw: string): string | undefined {
+  const [, ...rest] = raw.trim().split(/\s+/);
+  return rest.join(" ").trim() || undefined;
+}
+
 export function parseSlashCommand(input: string): SlashCommand | null {
   const trimmed = input.trim();
   if (!trimmed.startsWith("/")) return null;
   const name = trimmed.split(/\s+/)[0]!.toLowerCase();
+  const args = parseSlashArgs(trimmed);
   switch (name) {
     case "/new": return { kind: "new" };
     case "/sessions": return { kind: "sessions" };
     case "/models": return { kind: "models" };
     case "/compact": return { kind: "compact" };
     case "/undo": return { kind: "undo" };
+    case "/redo": return { kind: "redo" };
     case "/clear": return { kind: "clear" };
     case "/share": return { kind: "share" };
     case "/init": return { kind: "init" };
     case "/plan": return { kind: "plan" };
     case "/build": return { kind: "build" };
+    case "/fork": return { kind: "fork", role: args.role, task: args.task ?? trimmed.replace(/^\/fork\s*/i, "").trim() };
+    case "/missions": return { kind: "missions" };
+    case "/attach": return { kind: "attach", missionId: parseMissionId(trimmed) };
+    case "/diff": return { kind: "diff", missionId: parseMissionId(trimmed) };
+    case "/verify": return { kind: "verify", missionId: parseMissionId(trimmed) };
+    case "/kill": return { kind: "kill", missionId: parseMissionId(trimmed) };
+    case "/cleanup": return { kind: "cleanup", missionId: parseMissionId(trimmed) };
     case "/help": return { kind: "help" };
     default: return { kind: "unknown", name };
   }
