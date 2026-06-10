@@ -263,3 +263,54 @@ describe("stage3 debate runtime", () => {
     );
   });
 });
+
+describe("patch 19 — 3~4턴 실토론 시뮬레이션 (fold-prior + 상호 인용)", () => {
+  it("이전 라운드 발언이 후속 라운드 프롬프트에 접혀 들어가고, 에이전트가 이를 인용한다", async () => {
+    const capturedPrompts: Array<{ body: string }> = [];
+    const fakeFetch = async (_url: string, init?: RequestInit) => {
+      const body = String(init?.body ?? "");
+      capturedPrompts.push({ body });
+      // 역할별/맥락별 응답: 설계자는 PLAN-ALPHA 제안, 이후 라운드에서 프롬프트에
+      // PLAN-ALPHA가 보이면(=fold-prior 작동) 그걸 인용해 비판한다.
+      const isArchitect = body.includes("mock-architect");
+      const seesPlan = body.includes("PLAN-ALPHA");
+      const content = isArchitect
+        ? "PLAN-ALPHA: 어댑터 계층을 분리하는 설계를 제안합니다. [[tag:proposal]]"
+        : seesPlan
+          ? "PLAN-ALPHA의 어댑터 분리는 마이그레이션 위험이 있습니다. [[tag:risk]]"
+          : "맥락 검토 중입니다. [[tag:agreement]]";
+      return {
+        ok: true,
+        text: async () => JSON.stringify({ status: "succeeded", content, route: "server_proxy" }),
+      } as Response;
+    };
+
+    const session = await runStage3DebateSession({
+      messages,
+      agents,
+      providers,
+      events,
+      runtime,
+      fetchImpl: fakeFetch as any,
+      createdAt: "2026-06-11T00:00:00.000Z",
+    });
+
+    // ① 3~4턴 이상 실제 진행: 7라운드 전부 발언이 채워짐
+    const filledRounds = session.rounds.filter((round) => round.utterances.length > 0);
+    expect(filledRounds.length).toBeGreaterThanOrEqual(4);
+
+    // ② fold-prior: 설계자의 PLAN-ALPHA가 어떤 후속 요청 프롬프트에 포함됨
+    const promptsWithPlan = capturedPrompts.filter((req) => req.body.includes("PLAN-ALPHA"));
+    expect(promptsWithPlan.length).toBeGreaterThan(0);
+
+    // ③ 상호 인용: 비판 라운드 발언 중 PLAN-ALPHA를 인용한 발언이 존재
+    const allUtterances = session.rounds.flatMap((round) => round.utterances);
+    const citing = allUtterances.filter((utterance) => utterance.content.includes("PLAN-ALPHA의"));
+    expect(citing.length).toBeGreaterThan(0);
+
+    // ④ 라운드 상태 전이: 채워진 라운드는 completed
+    for (const round of filledRounds) {
+      expect(round.status).toBe("completed");
+    }
+  });
+});
