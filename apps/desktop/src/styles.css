@@ -8690,3 +8690,15 @@ body:has(.app-shell.annex-focus-shell) {
   font-size: 11.5px;
   font-family: var(--font-mono, monospace);
 }
+
+/* --- hermes slot pool summary --- */
+.parallel-slots {
+  flex-wrap: wrap;
+  cursor: default;
+}
+.parallel-slots__summary {
+  font-weight: 700;
+  color: var(--cyan);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}

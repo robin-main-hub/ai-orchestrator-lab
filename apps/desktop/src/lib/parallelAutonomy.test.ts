@@ -188,7 +188,7 @@ describe("runParallelAutonomy", () => {
     expect(dispatched.some((c) => c.includes("worktree remove"))).toBe(false);
   });
 
-  it("agent set: each mission boots a FRESH hermes session before its identity lands", async () => {
+  it("agent set: a recycled slot is reset before the identity lands; a sticky slot is not", async () => {
     const dispatchedByPane = new Map<string, string[]>();
     const dispatchClient = vi.fn(async ({ request }: any) => {
       const list = dispatchedByPane.get(request.paneId) ?? [];
@@ -209,8 +209,9 @@ describe("runParallelAutonomy", () => {
         { paneId: "%2", role: "qa" },
       ]),
       missions: [
-        { ...spec("aoi", "qa"), agentSet: resolvePersonaAgentSet("aoi") },
-        { ...spec("rin", "qa"), agentSet: resolvePersonaAgentSet("rin") },
+        // aoi takes a recycled slot -> reset; rin reuses her sticky slot -> no reset
+        { ...spec("aoi", "qa"), agentSet: resolvePersonaAgentSet("aoi", { slotId: "hermes-01", bootSteps: ["/new"] }) },
+        { ...spec("rin", "qa"), agentSet: resolvePersonaAgentSet("rin", { slotId: "hermes-02" }) },
       ],
       ctx,
       mode: "human",
@@ -218,13 +219,20 @@ describe("runParallelAutonomy", () => {
       now: () => "2026-06-10T00:00:00.000Z",
     });
 
-    for (const commands of dispatchedByPane.values()) {
-      expect(commands[0]).toBe("/new"); // fresh session first — no inherited context
-      const bootIndex = commands.indexOf("/new");
-      const identityIndex = commands.findIndex((c) => c.includes("-identity"));
-      expect(identityIndex).toBeGreaterThan(bootIndex);
-      expect(commands[identityIndex]).toContain("fresh hermes agent session");
-    }
+    const allPaneCommands = [...dispatchedByPane.values()];
+    const recycled = allPaneCommands.find((commands) => commands[0] === "/new");
+    const sticky = allPaneCommands.find((commands) => commands[0] !== "/new");
+    expect(recycled).toBeDefined();
+    expect(sticky).toBeDefined();
+    // recycled: reset first, then identity announcing the slot + reset
+    const identityIndex = recycled!.findIndex((c) => c.includes("-identity"));
+    expect(identityIndex).toBeGreaterThan(0);
+    expect(recycled![identityIndex]).toContain("slot hermes-01");
+    expect(recycled![identityIndex]).toContain("freshly reset session");
+    // sticky: identity lands directly on the persona's own agent
+    expect(sticky![0]).toContain("-identity");
+    expect(sticky![0]).toContain("slot hermes-02");
+    expect(sticky![0]).not.toContain("freshly reset");
   });
 
   it("onAllocations exposes live session bindings before missions finish", async () => {
