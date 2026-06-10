@@ -62,7 +62,8 @@ export type NavItemId =
   | "channels"
   | "backup"
   | "cockpit"
-  | "autonomy";
+  | "autonomy"
+  | "parallel";
 export type NavItem = {
   id: NavItemId;
   label: string;
