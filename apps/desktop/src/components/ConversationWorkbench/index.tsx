@@ -74,6 +74,7 @@ type AgentDetailPanel = "none" | "memory" | "model" | "skills";
 
 export function ConversationWorkbench({
   activeSessionId,
+  agentsPanel,
   agentToolRuntimeLabel,
   agentConfigPanel,
   configFiles,
@@ -135,6 +136,8 @@ export function ConversationWorkbench({
   agentActivityById,
 }: {
   activeSessionId: string;
+  /** "에이전트" 사이드 패널 모드에 주입되는 에이전트 레일 (App의 AgentsSidebar) */
+  agentsPanel?: React.ReactNode;
   agentToolRuntimeLabel?: string;
   agentConfigPanel: { open: boolean; tab: AgentConfigTab };
   configFiles: AgentConfigFile[];
@@ -678,6 +681,13 @@ export function ConversationWorkbench({
           ) : null}
           {sidePanelMode === "terminal" ? (
             <LiveTerminalPanel sessionId={activeSessionId} />
+          ) : null}
+          {sidePanelMode === "agents" ? (
+            agentsPanel ? (
+              <div className="chat-side-panel-agents p-2">{agentsPanel}</div>
+            ) : (
+              <ChatSidePanelStub mode="agents" />
+            )
           ) : null}
           {sidePanelMode === "preview" || sidePanelMode === "diff" || sidePanelMode === "files" ? (
             <ChatSidePanelStub mode={sidePanelMode} />

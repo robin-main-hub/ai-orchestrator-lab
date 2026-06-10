@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  Bot,
   ChevronDown,
   Eye,
   FileDiff,
@@ -13,6 +14,14 @@ import {
 import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { cn } from "@/lib/utils";
+import {
+  CHAT_SIDE_PANEL_MAX_WIDTH_PX,
+  CHAT_SIDE_PANEL_MIN_WIDTH_PX,
+  CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY,
+  panelWidthAfterKey,
+  panelWidthFromPointerX,
+  parseStoredPanelWidth,
+} from "../../lib/chatSidePanelWidth";
 
 /**
  * Codex식 확장 패널 — 대화를 가리지 않는 우측 분할 패널.
@@ -29,7 +38,8 @@ export type ChatSidePanelMode =
   | "terminal"
   | "files"
   | "background"
-  | "plan";
+  | "plan"
+  | "agents";
 
 const PANEL_ITEMS: Array<{
   mode: Exclude<ChatSidePanelMode, "none">;
@@ -43,6 +53,7 @@ const PANEL_ITEMS: Array<{
   { mode: "files", label: "파일", icon: Files, shortcut: "⇧+Ctrl+F" },
   { mode: "background", label: "백그라운드 작업", icon: Users },
   { mode: "plan", label: "계획", icon: ListTodo },
+  { mode: "agents", label: "에이전트", icon: Bot },
 ];
 
 export function panelLabel(mode: ChatSidePanelMode): string {
@@ -128,12 +139,87 @@ export function ChatSidePanel({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const [widthPx, setWidthPx] = useState<number>(() => {
+    try {
+      return parseStoredPanelWidth(window.localStorage.getItem(CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY));
+    } catch {
+      return parseStoredPanelWidth(undefined);
+    }
+  });
+  const [dragging, setDragging] = useState(false);
+  const asideRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY, String(widthPx));
+    } catch {
+      // storage 불가 환경(사파리 프라이빗 등)에서는 세션 한정으로만 유지
+    }
+  }, [widthPx]);
+
   if (mode === "none") return null;
+
+  const onResizerPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const anchorRight = asideRef.current?.getBoundingClientRect().right ?? window.innerWidth;
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // 합성/자동화 이벤트는 capture가 안 될 수 있음 — window 리스너로 충분
+    }
+    setDragging(true);
+    const onMove = (moveEvent: globalThis.PointerEvent) => {
+      setWidthPx(panelWidthFromPointerX(anchorRight, moveEvent.clientX));
+    };
+    const onUp = () => {
+      setDragging(false);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+    window.addEventListener("pointercancel", onUp, { once: true });
+  };
+
   return (
-    <aside
-      aria-label={`${panelLabel(mode)} 패널`}
-      className="flex w-[360px] max-w-[44vw] shrink-0 flex-col border-l border-white/10 bg-zinc-950/95 backdrop-blur-xl max-md:hidden"
-    >
+    <>
+      <button
+        aria-label="패널 너비 조절"
+        aria-orientation="vertical"
+        aria-valuemax={CHAT_SIDE_PANEL_MAX_WIDTH_PX}
+        aria-valuemin={CHAT_SIDE_PANEL_MIN_WIDTH_PX}
+        aria-valuenow={widthPx}
+        className={cn(
+          "group relative w-1.5 shrink-0 cursor-col-resize touch-none rounded-none border-0 bg-transparent p-0 outline-none max-md:hidden",
+          "focus-visible:ring-2 focus-visible:ring-cyan-300/60",
+        )}
+        onKeyDown={(event) => {
+          const next = panelWidthAfterKey(widthPx, event.key, event.shiftKey);
+          if (next !== undefined) {
+            event.preventDefault();
+            setWidthPx(next);
+          }
+        }}
+        onPointerDown={onResizerPointerDown}
+        role="separator"
+        title="드래그해서 패널 폭 조절"
+        type="button"
+      >
+        <span
+          className={cn(
+            "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/10 transition-all",
+            "group-hover:w-[3px] group-hover:bg-cyan-300/70",
+            dragging && "w-[3px] bg-cyan-300/90",
+          )}
+        />
+      </button>
+      <aside
+        aria-label={`${panelLabel(mode)} 패널`}
+        className="flex max-w-[44vw] shrink-0 flex-col border-l border-white/10 bg-zinc-950/95 backdrop-blur-xl max-md:hidden"
+        ref={asideRef}
+        style={{ width: `${widthPx}px` }}
+      >
       <header className="flex h-10 shrink-0 items-center gap-2 border-b border-white/10 px-3">
         <span className="text-[12px] font-semibold text-zinc-200">{panelLabel(mode)}</span>
         <span className="flex-1" />
@@ -146,8 +232,9 @@ export function ChatSidePanel({
           <X className="h-3.5 w-3.5" />
         </button>
       </header>
-      <div className="chat-side-panel-body min-h-0 flex-1 overflow-y-auto">{children}</div>
-    </aside>
+        <div className="chat-side-panel-body min-h-0 flex-1 overflow-y-auto">{children}</div>
+      </aside>
+    </>
   );
 }
 
@@ -157,6 +244,7 @@ export function ChatSidePanelStub({ mode }: { mode: ChatSidePanelMode }) {
     preview: "실행 중인 dev 서버/페이지 미리보기는 코딩 탭의 작업과 연결됩니다. 코딩 워크벤치에서 미션이 돌면 여기서 결과 화면을 봅니다.",
     diff: "에이전트가 만든 변경 diff가 여기에 표시됩니다. 코딩 탭에서 edit/write 도구가 실행되면 자동으로 누적됩니다.",
     files: "이 대화에서 멘션(@경로)되었거나 에이전트가 만진 파일 목록이 여기에 모입니다.",
+    agents: "에이전트 레일이 여기로 들어옵니다. 모델/프로바이더 배정과 에이전트 선택을 패널에서 바로 합니다.",
   };
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
