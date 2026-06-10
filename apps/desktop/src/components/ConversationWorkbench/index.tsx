@@ -463,10 +463,6 @@ export function ConversationWorkbench({
             <Swords className="h-3.5 w-3.5" />
             토론
           </Button>
-          <Button className="hidden h-8 gap-1.5 px-2 text-xs md:inline-flex" onClick={onCreateCodingPacket} size="sm" variant="ghost">
-            <Package className="h-3.5 w-3.5" />
-            패킷
-          </Button>
           <Button className="hidden h-8 gap-1.5 px-2 text-xs xl:inline-flex" onClick={onCreateAgentRun} size="sm" variant="ghost">
             <Play className="h-3.5 w-3.5" />
             실행
