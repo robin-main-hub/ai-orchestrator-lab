@@ -7924,3 +7924,101 @@ body:has(.app-shell.annex-focus-shell) {
     transform: translateY(-2px);
   }
 }
+
+/* ── Persona gacha cards + autonomy avatars/expressions ───────────────── */
+.autonomy-persona-avatar,
+.autonomy-roster-avatar {
+  border-radius: 50%;
+  object-fit: cover;
+  vertical-align: middle;
+}
+
+.persona-card {
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  background: rgba(20, 20, 40, 0.55);
+}
+.persona-card.compact {
+  padding: 8px 10px;
+}
+.persona-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.persona-card-portrait {
+  border-radius: 50%;
+  object-fit: cover;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  flex: 0 0 auto;
+}
+.persona-card-id {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.persona-card-id strong {
+  font-weight: 500;
+}
+.persona-card-emblem {
+  font-size: 11px;
+  opacity: 0.7;
+}
+.persona-card-stats {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+.persona-card-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 0;
+  font-size: 11px;
+}
+.persona-card-stat-label em {
+  opacity: 0.6;
+  font-style: normal;
+}
+.persona-card-stat-bar {
+  flex: 1 1 auto;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.persona-card-stat-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+.persona-card-stat.hp .persona-card-stat-fill {
+  background: #46f0a0;
+}
+.persona-card-stat.mp .persona-card-stat-fill {
+  background: #46ecff;
+}
+.persona-card-rarity-n {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.persona-card-rarity-r {
+  border-color: #378add;
+  box-shadow: 0 0 8px rgba(55, 138, 221, 0.35);
+}
+.persona-card-rarity-sr {
+  border-color: #9b6bff;
+  box-shadow: 0 0 10px rgba(155, 107, 255, 0.45);
+}
+.persona-card-rarity-ssr {
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(rgba(20, 20, 40, 0.8), rgba(20, 20, 40, 0.8)) padding-box,
+    linear-gradient(120deg, #ff4f9d, #ffd166, #46f0a0, #46ecff, #9b6bff, #ff4f9d) border-box;
+  box-shadow: 0 0 14px rgba(255, 122, 192, 0.4);
+}
