@@ -4428,6 +4428,7 @@ export function App() {
             <SummonTheater
               agents={agents}
               assignmentsByAgentId={makimaDelegationAssignmentsByAgentId}
+              events={eventLog}
               cards={createMakimaDelegationCards({
                 agents,
                 request:
