@@ -188,12 +188,21 @@ export function CodingThread({
           </p>
         </div>
       ) : (
-        messages.map((message) => (
-          <article className={`coding-message coding-message--${message.role}`} key={message.id}>
-            <header className="coding-message__role">{message.role === "user" ? "나" : "에이전트"}</header>
-            <MessageParts parts={message.parts} onApplyEdit={message.role === "assistant" ? onApplyEdit : undefined} />
-          </article>
-        ))
+        messages.map((message) => {
+          const isEmpty =
+            message.parts.length === 0 ||
+            message.parts.every((part) => part.type === "text" && !part.text.trim());
+          return (
+            <article className={`coding-message coding-message--${message.role}`} key={message.id}>
+              <header className="coding-message__role">{message.role === "user" ? "나" : "에이전트"}</header>
+              {isEmpty && message.role === "assistant" && !thinking ? (
+                <p className="coding-message__void">(응답이 도착하지 않았습니다 — 상단 오류를 확인하세요)</p>
+              ) : (
+                <MessageParts parts={message.parts} onApplyEdit={message.role === "assistant" ? onApplyEdit : undefined} />
+              )}
+            </article>
+          );
+        })
       )}
       {thinking ? (
         <div className="coding-thinking" role="status" aria-label="응답 생성 중">
