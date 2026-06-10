@@ -7,6 +7,7 @@ import {
   pollForApprovalDecision,
   type ApprovalDecisionOutcome,
 } from "./closedLoopRuntime";
+import type { PersonaAgentSet } from "./personaAgentSet";
 import { runPersonaCodingTask, type PersonaTaskOutcome } from "./personaTaskRunner";
 import type { SummonContext, SummonInput, SummonRegistry } from "./personaSummon";
 
@@ -96,6 +97,8 @@ export type RunAutonomousPersonaTaskInput = {
   server?: AutonomyServerConfig;
   clients?: AutonomyClientOverrides;
   kickoffTask?: string;
+  /** persona's atomic agent set: fresh Hermes session boot + declared role travel with the soul */
+  agentSet?: PersonaAgentSet;
   maxIterations?: number;
   /** unique-id seed for dispatched commands; defaults to a timestamp-free counter prefix */
   runId?: string;
@@ -185,6 +188,7 @@ export async function runAutonomousPersonaTask(input: RunAutonomousPersonaTaskIn
     ctx: input.ctx,
     createEffects,
     kickoffTask: input.kickoffTask,
+    agentSet: input.agentSet,
     maxIterations: input.maxIterations,
     now,
   });

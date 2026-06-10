@@ -1,5 +1,6 @@
 import { buildPersonaPromptFragment, type LoadedPersona } from "@ai-orchestrator/agents";
 import type { AgentSession, TmuxPaneRole } from "@ai-orchestrator/protocol";
+import { agentSetHeaderLine, type PersonaAgentSet } from "./personaAgentSet";
 
 /**
  * Turn a summoned AgentSession + its loaded persona into the concrete dispatch
@@ -22,9 +23,11 @@ export type PersonaInjectionPlan = {
   agentId: string;
   paneId: string;
   role: TmuxPaneRole;
+  /** fresh-agent boot steps (from the persona's agent set), dispatched before the identity */
+  bootSteps: string[];
   /** identity preamble (safety boundaries + persona fragments) to send first */
   injectionText: string;
-  /** ordered dispatch steps: identity injection, then the optional kickoff task */
+  /** ordered dispatch steps: agent boot, identity injection, then the optional kickoff task */
   steps: string[];
 };
 
@@ -34,8 +37,16 @@ export function buildPersonaInjectionPlan(input: {
   kickoffTask?: string;
   /** override the default header line placed atop the identity blob */
   headerLine?: string;
+  /**
+   * The persona's atomic agent set (SOUL/AGENTS + declared role/permission +
+   * backing agent session). When present, its boot steps are prepended so the
+   * pane gets a FRESH Hermes agent session — the new character never inherits
+   * the previous character's context — and the header announces the declared
+   * role so soul, agents, and role land as one unit.
+   */
+  agentSet?: PersonaAgentSet;
 }): PersonaInjectionPlan {
-  const { session, persona, kickoffTask } = input;
+  const { session, persona, kickoffTask, agentSet } = input;
   if (!session.paneId) {
     throw new Error(`cannot build injection plan: session ${session.id} has no pane bound`);
   }
@@ -43,20 +54,24 @@ export function buildPersonaInjectionPlan(input: {
   const agentId = session.agentId ?? persona.personaName;
   const headerLine =
     input.headerLine ??
-    `You are now operating as "${agentId}" in the ${session.role} pane. Adopt the identity below and stay in it.`;
+    (agentSet
+      ? agentSetHeaderLine(agentSet, session.role)
+      : `You are now operating as "${agentId}" in the ${session.role} pane. Adopt the identity below and stay in it.`);
 
   const fragment = buildPersonaPromptFragment(persona, { headerLine });
   // Even when a persona has no SOUL/AGENTS files, give the worker at least the
   // header so the pane has an explicit identity tag.
   const injectionText = fragment.trim().length > 0 ? fragment : headerLine;
 
+  const bootSteps = agentSet ? [...agentSet.bootSteps] : [];
   const kickoff = kickoffTask?.trim();
-  const steps = kickoff ? [injectionText, kickoff] : [injectionText];
+  const steps = kickoff ? [...bootSteps, injectionText, kickoff] : [...bootSteps, injectionText];
 
   return {
     agentId,
     paneId: session.paneId,
     role: session.role,
+    bootSteps,
     injectionText,
     steps,
   };

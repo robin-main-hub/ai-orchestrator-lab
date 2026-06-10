@@ -14,6 +14,7 @@ import { SELECTABLE_PANE_ROLES, headerOnlyPersona, modeLabel } from "../lib/auto
 import { stepRowFromReduce } from "../lib/autonomyTimeline";
 import { createCheckInState, runCheckInSweep, startCheckInLoop, type CheckInState } from "../lib/missionCheckIn";
 import { personaFileSource, bundledPersonaNames } from "../lib/personaBundleSource";
+import { resolvePersonaAgentSet } from "../lib/personaAgentSet";
 import { createSummonRegistry } from "../lib/personaSummon";
 import { buildWorkspacePlan, workspaceSafePrefixes } from "../lib/missionWorkspace";
 import {
@@ -75,6 +76,10 @@ export function ParallelMissionContainer({
   const [checkInEnabled, setCheckInEnabled] = useState(true);
   const [checkInMinutes, setCheckInMinutes] = useState(5);
   const [checkInNote, setCheckInNote] = useState<string | null>(null);
+  // Persona = atomic agent set: boot a fresh Hermes session per mission so the
+  // incoming character never inherits the previous occupant's context.
+  const [freshAgent, setFreshAgent] = useState(true);
+  const [bootCommand, setBootCommand] = useState("/new");
   // NTM-style broadcast: one instruction to every live mission at once.
   const [broadcastText, setBroadcastText] = useState("");
   const [broadcastNote, setBroadcastNote] = useState<string | null>(null);
@@ -175,7 +180,14 @@ export function ParallelMissionContainer({
       const specs = buildMissionSpecs(drafts, {
         sessionId,
         personaFor: (name) => personaByName.get(name) ?? headerOnlyPersona(name),
-      }).map((spec) => ({ ...spec, workspace: workspaceByMission.get(spec.id) }));
+      }).map((spec) => ({
+        ...spec,
+        workspace: workspaceByMission.get(spec.id),
+        // fresh Hermes session per mission: soul + agents + role land as one set
+        agentSet: freshAgent
+          ? resolvePersonaAgentSet(spec.summon.personaName, { bootSteps: [bootCommand.trim() || "/new"] })
+          : undefined,
+      }));
 
       // One pane per mission (matching its role) so every queued mission can be
       // allocated; the engine still rejects gracefully if capacity runs short.
@@ -278,6 +290,23 @@ export function ParallelMissionContainer({
         <label className="parallel-workspace__toggle">
           <input
             type="checkbox"
+            checked={freshAgent}
+            onChange={(event) => setFreshAgent(event.target.checked)}
+            disabled={running}
+          />
+          새 Hermes 세션 핸드오프 — 페르소나마다 새 에이전트 세션을 부팅해 SOUL·AGENTS·역할이 한 세트로 주입 (이전 캐릭터 컨텍스트 미상속)
+          <input
+            className="parallel-agentset__boot"
+            value={bootCommand}
+            onChange={(event) => setBootCommand(event.target.value)}
+            disabled={running || !freshAgent}
+            aria-label="에이전트 세션 부트 명령"
+            title="pane의 에이전트 CLI 새 세션 명령 (기본 /new)"
+          />
+        </label>
+        <label className="parallel-workspace__toggle">
+          <input
+            type="checkbox"
             checked={checkInEnabled}
             onChange={(event) => setCheckInEnabled(event.target.checked)}
             disabled={running}
@@ -337,7 +366,16 @@ export function ParallelMissionContainer({
                 list="parallel-persona-options"
                 placeholder="페르소나 (예: kurumi)"
                 value={draft.personaName}
-                onChange={(event) => patchDraft(draft.id, { personaName: event.target.value })}
+                onChange={(event) => {
+                  const personaName = event.target.value;
+                  // role travels with the persona: a registered character pulls
+                  // its declared pane role in automatically (still overridable)
+                  const set = resolvePersonaAgentSet(personaName.trim());
+                  patchDraft(
+                    draft.id,
+                    set.preferredPaneRole ? { personaName, role: set.preferredPaneRole } : { personaName },
+                  );
+                }}
                 disabled={running}
               />
               <select

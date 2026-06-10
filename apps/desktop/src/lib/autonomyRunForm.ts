@@ -87,6 +87,8 @@ export function buildAutonomyRunInput(
     onStep?: RunAutonomousPersonaTaskInput["onStep"];
     /** reuse a persistent registry (shared pane pool) instead of a fresh one per run */
     registry?: RunAutonomousPersonaTaskInput["registry"];
+    /** persona's atomic agent set: fresh Hermes session boot + declared role travel with the soul */
+    agentSet?: RunAutonomousPersonaTaskInput["agentSet"];
   },
 ): RunAutonomousPersonaTaskInput {
   const personaName = form.personaName.trim();
@@ -113,6 +115,7 @@ export function buildAutonomyRunInput(
     maxIterations: deps.maxIterations,
     runId: deps.runId,
     onStep: deps.onStep,
+    agentSet: deps.agentSet,
   };
 }
 
