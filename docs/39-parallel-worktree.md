@@ -32,3 +32,28 @@
 - `apps/desktop/src/lib/parallelAutonomy.ts` — `ParallelMissionSpec.workspace` 통합
 - `apps/desktop/src/components/ParallelMissionContainer.tsx` — 격리 토글 UI
 - 보드 터미널 카드에 `⎇ 브랜치` 태그 표시
+
+---
+
+# 39b — 자가 체크인 + 브로드캐스트
+
+같은 병렬 콘솔에 얹은 두 번째 배치 (해외 패턴 이식):
+
+## 자가 체크인 (Tmux-Orchestrator 패턴)
+
+- `lib/missionCheckIn.ts` — N분마다 실행 중인 미션의 pane 출력을 캡처하고,
+  **직전 sweep과 출력이 동일한(=조용해진)** 에이전트에게만 게이트 통과 nudge를
+  디스패치한다. 활발히 움직이는 pane은 건드리지 않는다.
+- 첫 sweep은 베이스라인만 기록 (멈춤 여부를 알 수 없으므로 nudge 없음).
+- 캡처 실패는 보고만 하고 nudge하지 않음 (pane이 사라졌을 수 있음). nudge 실패는
+  sweep을 죽이지 않음. 느린 sweep이 겹치면 다음 tick을 건너뜀.
+- UI: "자가 체크인" 토글 + 주기(1/5/10/30분), 마지막 sweep 요약 표시.
+
+## 브로드캐스트 (NTM 패턴)
+
+- `parallelAutonomy.broadcastToMissions` — 실행 중인 모든 미션 pane에
+  `[브로드캐스트] <지시>` 를 한 번에 디스패치. 각 디스패치는 미션 자체 명령과
+  동일한 승인·권한·리댁션 게이트를 통과한다. 대상별 성공/실패 개별 보고.
+- 라이브 세션 접근은 엔진의 `onAllocate` 훅(할당 직후 1회 발화)으로 노출되며,
+  완료된 미션은 대상에서 자동 제외된다.
+- UI: 실행 중에만 보이는 브로드캐스트 바 (Enter 또는 "전체 지시").
