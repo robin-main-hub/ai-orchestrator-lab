@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Activity,
   BrainCircuit,
@@ -51,8 +51,11 @@ export function OperatorCockpit({
   onOpenWorkTrace,
   onApproveHandoff,
   readiness,
+  initialFocus,
 }: {
   defaultDetailsOpen?: boolean;
+  /** 명령 팔레트가 특정 카드(성숙도/영수증/진단)로 deep-link할 때 */
+  initialFocus?: CockpitDetailFocus;
   snapshot: OperatorCockpitSnapshot;
   onPreviewEvidence?: () => void;
   onOpenMemory?: () => void;
@@ -72,6 +75,14 @@ export function OperatorCockpit({
 }) {
   const [showDetails, setShowDetails] = useState(defaultDetailsOpen);
   const [detailFocus, setDetailFocus] = useState<CockpitDetailFocus | undefined>();
+  useEffect(() => {
+    if (!initialFocus) return;
+    setDetailFocus(initialFocus);
+    setShowDetails(true);
+    const surfaceId = initialFocus.surface === "diagnostics" ? "maturity" : initialFocus.surface;
+    const id = `cockpit-section-${surfaceId}`;
+    window.requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }, [initialFocus]);
   const blockedCount = snapshot.fleet.filter((worker) => worker.status === "blocked" || worker.status === "error").length;
   const approvalCount = snapshot.approvals.length;
   const riskyApprovalCount = snapshot.approvals.filter((approval) => approval.payloadBindingStatus !== "bound").length;
@@ -371,6 +382,7 @@ export function OperatorCockpit({
                 <div className="grid gap-4 lg:grid-cols-12">
                   {readiness ? (
                     <div
+                      id="cockpit-section-maturity"
                       className={`lg:col-span-12 ${
                         detailFocus?.surface === "maturity" || detailFocus?.surface === "diagnostics"
                           ? "rounded-xl ring-1 ring-cyan-300/35 shadow-[0_0_32px_rgba(6,182,212,0.12)]"
@@ -391,6 +403,7 @@ export function OperatorCockpit({
                   ) : null}
                   {readiness?.workTraceItems ? (
                     <div
+                      id="cockpit-section-receipts"
                       className={`lg:col-span-12 ${
                         detailFocus?.surface === "receipts"
                           ? "rounded-xl ring-1 ring-cyan-300/35 shadow-[0_0_32px_rgba(6,182,212,0.12)]"
@@ -402,6 +415,7 @@ export function OperatorCockpit({
                   ) : null}
                   <div className="space-y-4 lg:col-span-5">
                     <div
+                      id="cockpit-section-handoffs"
                       className={
                         detailFocus?.surface === "handoffs"
                           ? "rounded-xl ring-1 ring-cyan-300/35 shadow-[0_0_32px_rgba(6,182,212,0.12)]"
