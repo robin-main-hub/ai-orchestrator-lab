@@ -50,7 +50,7 @@ const events: EventEnvelope[] = [
     sessionId: "session_desktop_001",
     type: "agent.delegation.detected",
     payload: {
-      sourceAgentId: "agent_chaerin",
+      sourceAgentId: "agent_kurumi",
       sourceRole: "companion",
       authorityLevel: "orchestrator_plus",
       targets: ["researcher"],
@@ -65,7 +65,7 @@ const events: EventEnvelope[] = [
     sessionId: "session_desktop_001",
     type: "agent.delegation.succeeded",
     payload: {
-      sourceAgentId: "agent_chaerin",
+      sourceAgentId: "agent_kurumi",
       target: "researcher",
       targetAgentId: "agent_researcher",
       targetRole: "researcher",
@@ -171,7 +171,7 @@ describe("stage7 backup projections", () => {
     expect(obsidianContent).toContain("## Memory Relations");
     expect(obsidianContent).toContain("## Memory Reflection Issues");
     expect(obsidianContent).toContain("## Delegation Timeline");
-    expect(obsidianContent).toContain("agent_chaerin -> agent_researcher");
+    expect(obsidianContent).toContain("agent_kurumi -> agent_researcher");
     expect(obsidianContent).toContain("차단 :: agent_builder -> executor");
     expect(obsidianContent).not.toContain("sk-delegation-secret-token");
     expect(snapshot.artifacts.find((artifact) => artifact.target === "notion")?.status).toBe("queued");

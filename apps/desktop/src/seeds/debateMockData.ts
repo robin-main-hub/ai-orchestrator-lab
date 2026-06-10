@@ -154,7 +154,7 @@ export const debateMockScenarios = debateMockDataset.scenarios;
 /**
  * Subset helper. Pass one or more categories; returns scenarios in their
  * declared order. Useful for demo screens that want a focused slice
- * (e.g. only `companion_delegation` to showcase 채아린's delegate flow).
+ * (e.g. only `companion_delegation` to showcase 쿠루미's delegate flow).
  */
 export function debateMockScenariosByCategory(
   ...categories: DebateMockCategory[]

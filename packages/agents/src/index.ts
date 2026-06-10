@@ -424,12 +424,13 @@ export const defaultAgentProfiles: AgentProfile[] = [
   },
   {
     id: "agent_auditor",
-    name: "Auditor",
+    name: "가사이 유노",
     kind: "virtual",
     role: "auditor",
-    // Sora — independent compliance sentinel. Read-only by design.
+    personaName: "yuno",
+    // Yuno — independent yandere auditor (replaces Yuno). Read-only by design.
     // configSource stays "internal" by default per the virtual-personas
-    // invariant; flip to "markdown" + loadPersona when promoting Sora
+    // invariant; flip to "markdown" + loadPersona when promoting Yuno
     // into an active audit round.
     soulMode: "retrieved",
     configSource: "internal",
