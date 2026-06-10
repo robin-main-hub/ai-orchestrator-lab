@@ -58,15 +58,6 @@ export function ActionStrip({
         label="실행 슬롯"
         onClick={onCreateAgentRun}
       />
-      <Button
-        className="h-7 gap-1.5 text-xs"
-        onClick={onImportExternalIngress}
-        size="sm"
-        variant="ghost"
-      >
-        <Smartphone className="h-3.5 w-3.5" />
-        외부 인입
-      </Button>
       {showOverflowBranchControls ? (
         <div className="ml-auto flex items-center gap-2 rounded-md border border-border bg-card/40 px-2 py-1 text-[10px]">
           <Database className="h-3 w-3 text-muted-foreground" />
