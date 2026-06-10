@@ -104,6 +104,9 @@ import { RequestBodyTooLargeError, readJsonBody, readRawBody } from "./http/requ
 import { handleApprovalRoute } from "./routes/approvals.js";
 import { handleTmuxRoute } from "./routes/tmux.js";
 import { acquireStorageLock } from "./storage/storageLock.js";
+import { AuthRateLimiter, resolveClientKey } from "./security/authRateLimiter.js";
+import { timingSafeStringEqual } from "./security/timingSafeCompare.js";
+import { createSecurityHeaders } from "./http/securityHeaders.js";
 import { handleVerifyPacketRoute } from "./routes/verifyPacket.js";
 export { pickAllowedOrigin, resolveAllowedOrigins } from "./http/cors.js";
 
@@ -5401,6 +5404,7 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
   });
 
   const nonceRegistry = new NonceRegistry();
+  const authRateLimiter = new AuthRateLimiter();
 
   const apiToken = resolveOrchestratorApiToken();
   const expectedAuthorization = `Bearer ${apiToken}`;
@@ -5414,13 +5418,36 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
     const respondJson = (statusCode: number, payload: unknown) => {
       response.writeHead(statusCode, {
         "content-type": "application/json; charset=utf-8",
+        ...createSecurityHeaders(),
         ...corsHeaders,
       });
       response.end(JSON.stringify(payload));
     };
 
     const requireAuth = async (): Promise<boolean> => {
-      if (request.headers.authorization === expectedAuthorization) return true;
+      const clientKey = resolveClientKey(request);
+      if (authRateLimiter.isBlocked(clientKey)) {
+        response.setHeader("retry-after", String(Math.ceil(authRateLimiter.windowMs / 1000)));
+        respondJson(429, { error: "too_many_failed_auth_attempts" });
+        return false;
+      }
+
+      // Counts toward the per-client failed-auth budget. Body-shape errors
+      // (413/400) and capacity errors (503) are not auth failures and respond
+      // directly without touching the limiter.
+      const denyAuth = (payload: unknown): false => {
+        authRateLimiter.recordFailure(clientKey);
+        respondJson(401, payload);
+        return false;
+      };
+
+      if (
+        typeof request.headers.authorization === "string" &&
+        timingSafeStringEqual(request.headers.authorization, expectedAuthorization)
+      ) {
+        authRateLimiter.recordSuccess(clientKey);
+        return true;
+      }
 
       const signatureHeader = request.headers["x-dgx-signature"];
       const timestampHeader = request.headers["x-dgx-timestamp"];
@@ -5434,8 +5461,7 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         const hexSha256Pattern = /^[0-9a-fA-F]{64}$/;
 
         if (!hexSha256Pattern.test(bodyHash) || !nonce) {
-          respondJson(401, { error: "unauthorized" });
-          return false;
+          return denyAuth({ error: "unauthorized" });
         }
 
         const timestamp = Number(timestampHeader);
@@ -5443,8 +5469,7 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         const now = Date.now();
 
         if (isNaN(timestamp) || Math.abs(now - timestamp) > driftWindowMs) {
-          respondJson(401, { error: "clock_drift_exceeded" });
-          return false;
+          return denyAuth({ error: "clock_drift_exceeded" });
         }
 
         const signedPath = `${pathname}${requestUrl.search}`;
@@ -5456,14 +5481,12 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         const signaturesMatch = crypto.timingSafeEqual(expectedBuffer, userBuffer) && hexSha256Pattern.test(userSig);
 
         if (!signaturesMatch) {
-          respondJson(401, { error: "unauthorized" });
-          return false;
+          return denyAuth({ error: "unauthorized" });
         }
 
         if (nonceRegistry.has(nonce)) {
           response.setHeader("connection", "close");
-          respondJson(401, { error: "replay_detected" });
-          return false;
+          return denyAuth({ error: "replay_detected" });
         }
 
         let rawBody: string;
@@ -5486,14 +5509,12 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         const userBodyHashBuffer = Buffer.from(bodyHash, "hex");
 
         if (!crypto.timingSafeEqual(expectedBodyHashBuffer, userBodyHashBuffer)) {
-          respondJson(401, { error: "unauthorized" });
-          return false;
+          return denyAuth({ error: "unauthorized" });
         }
 
         if (nonceRegistry.has(nonce)) {
           response.setHeader("connection", "close");
-          respondJson(401, { error: "replay_detected" });
-          return false;
+          return denyAuth({ error: "replay_detected" });
         }
 
         try {
@@ -5502,11 +5523,11 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
           respondJson(503, { error: error instanceof Error ? error.message : "nonce_registry_capacity_exceeded" });
           return false;
         }
+        authRateLimiter.recordSuccess(clientKey);
         return true;
       }
 
-      respondJson(401, { error: "unauthorized" });
-      return false;
+      return denyAuth({ error: "unauthorized" });
     };
 
     if (request.method === "OPTIONS") {
