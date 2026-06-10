@@ -261,7 +261,6 @@ import { CommandPalette, type CommandEntry } from "./components/CommandPalette";
 import { ConfigLibraryPanel } from "./components/ConfigLibraryPanel";
 import { ConversationWorkbench } from "./components/ConversationWorkbench";
 import { DebateAnnexPage } from "./components/debate-chamber/DebateAnnexPage";
-import { IngressGuardPanel } from "./components/IngressGuardPanel";
 import { EvolveMementoPanel } from "./components/EvolveMementoPanel";
 import { HumanPeekPanel } from "./components/HumanPeekPanel";
 import { OperationsRailPanel } from "./components/OperationsRailPanel";
