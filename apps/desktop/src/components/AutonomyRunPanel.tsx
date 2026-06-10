@@ -23,6 +23,8 @@ import {
 } from "../lib/autonomyRunHistory";
 import { rosterRowLabel, rosterRowVariant, type AutonomyRosterSummary } from "../lib/autonomyRoster";
 import { resolvePersonaSprite, type PersonaSpriteMap } from "../lib/personaAvatarBundle";
+import { buildPersonaCard } from "../lib/personaCard";
+import { PersonaCard } from "./PersonaCard";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
 
 const MODES: AutonomyMode[] = ["human", "auto_safe"];
@@ -129,6 +131,17 @@ export function AutonomyRunPanel({
             </datalist>
           ) : null}
         </label>
+
+        {form.personaName.trim() ? (
+          <PersonaCard
+            compact
+            card={buildPersonaCard({
+              personaName: form.personaName.trim(),
+              role: form.role,
+              avatarUrl: personaPortrait,
+            })}
+          />
+        ) : null}
 
         <label>
           <span>역할 pane</span>

@@ -523,8 +523,8 @@ export const defaultAgentProfiles: AgentProfile[] = [
   },
   // ─── Companion (전속 비서 / 만능 character) ──────────────────────────
   {
-    id: "agent_chaerin",
-    name: "채아린",
+    id: "agent_kurumi",
+    name: "쿠루미",
     // kind: "real" because she is the user's primary day-to-day
     // assistant in conversation mode (Misato follows the same pattern
     // for the same reason). Her configSource is "markdown" so the full
@@ -533,7 +533,7 @@ export const defaultAgentProfiles: AgentProfile[] = [
     // is too thin to preserve the character voice.
     kind: "real",
     role: "companion",
-    personaName: "chae_arin",
+    personaName: "kurumi",
     soulMode: "full",
     configSource: "markdown",
     enabled: true,
