@@ -17,6 +17,7 @@ import { StatusBadge } from "@/ui/status-badge";
 import { Button } from "@/ui/button";
 import { AgentPortrait, AgentStatePill, type AgentState } from "./shared/AgentActivity";
 import { makeSyntheticBlock, TmuxPaneTimeline } from "./TmuxPaneTimeline";
+import { codexByPaneRole } from "../lib/personaPaneRoster";
 import {
   compactTmuxPreview,
   formatTmuxDifficultyLabel,
@@ -581,6 +582,11 @@ function TmuxFleetRow({
         <p className="truncate text-xs text-zinc-500">
           {pane.agent?.name ?? tmuxPaneRoleLabel(pane.roleKey)} · {pane.role}
         </p>
+        {(codexByPaneRole()[pane.roleKey] ?? []).length > 0 ? (
+          <p className="truncate text-[10px] text-violet-300/80">
+            ★ {(codexByPaneRole()[pane.roleKey] ?? []).map((entry) => entry.displayName).join(" · ")}
+          </p>
+        ) : null}
       </div>
       <AgentStatePill state={state} />
     </button>
@@ -622,6 +628,20 @@ function TmuxPaneDetail({
             <span className="text-[10px] text-zinc-600">{surfaceLabel}</span>
           </div>
           <p className="truncate text-xs text-zinc-500">{pane.agent?.name ?? "담당 에이전트 미정"} · {pane.role}</p>
+          {(codexByPaneRole()[pane.roleKey] ?? []).length > 0 ? (
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              <span className="text-[9px] uppercase tracking-wider text-zinc-600">소환 후보</span>
+              {(codexByPaneRole()[pane.roleKey] ?? []).map((entry) => (
+                <span
+                  className="rounded-full border border-violet-400/20 bg-violet-500/10 px-1.5 py-px text-[10px] text-violet-200"
+                  key={entry.personaName}
+                  title={entry.caption}
+                >
+                  {entry.displayName}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
         <AgentStatePill state={state} />
       </div>
