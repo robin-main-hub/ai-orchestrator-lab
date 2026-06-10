@@ -188,6 +188,45 @@ describe("runParallelAutonomy", () => {
     expect(dispatched.some((c) => c.includes("worktree remove"))).toBe(false);
   });
 
+  it("agent set: each mission boots a FRESH hermes session before its identity lands", async () => {
+    const dispatchedByPane = new Map<string, string[]>();
+    const dispatchClient = vi.fn(async ({ request }: any) => {
+      const list = dispatchedByPane.get(request.paneId) ?? [];
+      list.push(request.commandPreview);
+      dispatchedByPane.set(request.paneId, list);
+      return dispatchResponse();
+    });
+    const captureClient = vi.fn(async () => ({
+      status: "captured",
+      reason: "ok",
+      payload: { outputPreview: "All tests passed", lineCount: 1 },
+    }) as any);
+
+    const { resolvePersonaAgentSet } = await import("./personaAgentSet");
+    await runParallelAutonomy({
+      registry: createSummonRegistry([
+        { paneId: "%1", role: "qa" },
+        { paneId: "%2", role: "qa" },
+      ]),
+      missions: [
+        { ...spec("aoi", "qa"), agentSet: resolvePersonaAgentSet("aoi") },
+        { ...spec("rin", "qa"), agentSet: resolvePersonaAgentSet("rin") },
+      ],
+      ctx,
+      mode: "human",
+      clients: { dispatchClient, captureClient },
+      now: () => "2026-06-10T00:00:00.000Z",
+    });
+
+    for (const commands of dispatchedByPane.values()) {
+      expect(commands[0]).toBe("/new"); // fresh session first — no inherited context
+      const bootIndex = commands.indexOf("/new");
+      const identityIndex = commands.findIndex((c) => c.includes("-identity"));
+      expect(identityIndex).toBeGreaterThan(bootIndex);
+      expect(commands[identityIndex]).toContain("fresh hermes agent session");
+    }
+  });
+
   it("onAllocations exposes live session bindings before missions finish", async () => {
     const dispatchClient = vi.fn(async () => dispatchResponse());
     const captureClient = vi.fn(async () => ({

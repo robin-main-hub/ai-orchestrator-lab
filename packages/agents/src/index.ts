@@ -428,7 +428,7 @@ export const defaultAgentProfiles: AgentProfile[] = [
     kind: "virtual",
     role: "auditor",
     personaName: "yuno",
-    // Yuno — independent yandere auditor (replaces Yuno). Read-only by design.
+    // Yuno — independent yandere auditor. Read-only by design.
     // configSource stays "internal" by default per the virtual-personas
     // invariant; flip to "markdown" + loadPersona when promoting Yuno
     // into an active audit round.

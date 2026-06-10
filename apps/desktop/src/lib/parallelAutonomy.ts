@@ -9,6 +9,7 @@ import {
 } from "./autonomousRun";
 import type { CheckInTarget } from "./missionCheckIn";
 import type { WorkspacePlan } from "./missionWorkspace";
+import type { PersonaAgentSet } from "./personaAgentSet";
 import {
   runParallelMissions,
   type Mission,
@@ -45,6 +46,12 @@ export type ParallelMissionSpec = {
    * keeps its worktree for inspection.
    */
   workspace?: WorkspacePlan;
+  /**
+   * persona's atomic agent set: boots a FRESH Hermes session in the pane
+   * before identity injection, so the incoming character never inherits the
+   * previous character's context, and the declared role travels with the soul.
+   */
+  agentSet?: PersonaAgentSet;
 };
 
 export type RunParallelAutonomyInput = {
@@ -138,6 +145,7 @@ export async function runParallelAutonomy(
         packet: mission.packet,
         effects,
         kickoffTask,
+        agentSet: specById.get(mission.id)?.agentSet,
         maxIterations: input.maxIterations,
       });
 

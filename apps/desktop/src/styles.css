@@ -8677,3 +8677,16 @@ body:has(.app-shell.annex-focus-shell) {
   padding: 4px 7px;
   font-size: 11.5px;
 }
+
+/* --- agent-set boot command field --- */
+.parallel-agentset__boot {
+  margin-left: 6px;
+  width: 90px;
+  background: color-mix(in srgb, var(--panel) 88%, black);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 4px 7px;
+  font-size: 11.5px;
+  font-family: var(--font-mono, monospace);
+}

@@ -15,6 +15,7 @@ import {
   type SummonInput,
   type SummonRegistry,
 } from "./personaSummon";
+import type { PersonaAgentSet } from "./personaAgentSet";
 import { buildPersonaInjectionPlan } from "./personaSummonPlan";
 
 /**
@@ -53,6 +54,8 @@ export async function runPersonaCodingTask(input: {
   createEffects: (session: AgentSession) => ClosedLoopEffects;
   /** first instruction after identity injection; defaults to the packet goal */
   kickoffTask?: string;
+  /** persona's atomic agent set: fresh Hermes session boot + declared role travel with the soul */
+  agentSet?: PersonaAgentSet;
   maxIterations?: number;
   now?: () => string;
 }): Promise<PersonaTaskOutcome> {
@@ -71,6 +74,7 @@ export async function runPersonaCodingTask(input: {
     packet: input.packet,
     effects: input.createEffects(session),
     kickoffTask: input.kickoffTask,
+    agentSet: input.agentSet,
     maxIterations: input.maxIterations,
   });
 
@@ -97,6 +101,8 @@ export async function runSummonedMission(input: {
   packet: CodingPacket;
   effects: ClosedLoopEffects;
   kickoffTask?: string;
+  /** persona's atomic agent set: boots a fresh Hermes session before injecting the identity */
+  agentSet?: PersonaAgentSet;
   maxIterations?: number;
 }): Promise<LoopStatus> {
   const { session, effects } = input;
@@ -104,6 +110,7 @@ export async function runSummonedMission(input: {
     session,
     persona: input.persona,
     kickoffTask: input.kickoffTask ?? input.packet.goal,
+    agentSet: input.agentSet,
   });
   try {
     for (let index = 0; index < plan.steps.length; index += 1) {
