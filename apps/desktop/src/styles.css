@@ -633,6 +633,21 @@ button {
   cursor: not-allowed;
   opacity: 0.35;
 }
+.rail-icon-button:hover:not(:disabled) {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--cyan) 55%, var(--line));
+  background: rgba(255, 255, 255, 0.05);
+}
+.rail-icon-button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+/* 파괴적 액션(노드 재부팅 등) — rose 경고색 */
+.rail-icon-button.is-destructive:hover:not(:disabled) {
+  color: var(--rose);
+  border-color: color-mix(in srgb, var(--rose) 60%, var(--line));
+  background: color-mix(in srgb, var(--rose) 12%, transparent);
+}
 
 .rail-panel header .rail-icon-button {
   margin-left: auto;
@@ -974,6 +989,21 @@ button {
 .server-approval-actions button:disabled {
   cursor: wait;
   opacity: 0.5;
+}
+.server-approval-actions button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: color-mix(in srgb, var(--cyan) 55%, var(--line));
+}
+.server-approval-actions button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+.server-approval-actions button.is-reject {
+  color: var(--rose);
+}
+.server-approval-actions button.is-reject:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--rose) 60%, var(--line));
+  background: color-mix(in srgb, var(--rose) 12%, transparent);
 }
 
 .server-approval-outcomes {

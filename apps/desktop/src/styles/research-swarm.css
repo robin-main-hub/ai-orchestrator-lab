@@ -570,3 +570,15 @@
   border-color: rgba(244, 63, 94, 0.5);
   background: rgba(244, 63, 94, 0.14);
 }
+
+/* 키보드 포커스 링 — 로스터/스트립/셋업 컨트롤 */
+.research-roster__item:focus-visible,
+.research-strip__agent:focus-visible,
+.research-setup__run:focus-visible,
+.research-setup__add:focus-visible,
+.research-actionbar__report:focus-visible,
+.research-actionbar__new:focus-visible,
+.research-actionbar__stop:focus-visible {
+  outline: 2px solid var(--ring, #a78bfa);
+  outline-offset: 2px;
+}
