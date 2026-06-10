@@ -288,7 +288,7 @@ export function OperatorCockpit({
               icon={<CheckSquare className="h-4 w-4" />}
               label="승인 대기"
               value={`${approvalCount}`}
-              hint={criticalApprovalCount > 0 ? `고위험 ${criticalApprovalCount}건` : "건"}
+              hint={criticalApprovalCount > 0 ? `고위험 ${criticalApprovalCount}건` : "이상 없음"}
               onClick={openApprovals}
               actionLabel="승인 대기 열기"
               tone={approvalCount > 0 ? "warning" : "normal"}
