@@ -51,6 +51,12 @@ import { AgentPortrait, type AgentState } from "../shared/AgentActivity";
 import { AgentConfigDrawer } from "../AgentConfigDrawer";
 import { AgentConversationFlowPanel } from "./AgentConversationFlowPanel";
 import { AgentHermesControlCard } from "./AgentHermesControlCard";
+import {
+  ChatSidePanel,
+  ChatSidePanelMenu,
+  ChatSidePanelStub,
+  type ChatSidePanelMode,
+} from "./ChatSidePanel";
 import { AgentLiveWorkStatus } from "./AgentLiveWorkStatus";
 import { AgentMemoryContinuityPanel } from "./AgentMemoryContinuityPanel";
 import { AgentQuickSwitchPanel } from "./AgentQuickSwitchPanel";
@@ -103,6 +109,7 @@ export function ConversationWorkbench({
   onRemoveDraftAttachment,
   onSelectAgent,
   onSendMessage,
+  onSendSuggestion,
   onCloseAgentConfig,
   onReturn,
   returnLabel,
@@ -163,6 +170,8 @@ export function ConversationWorkbench({
   onRemoveDraftAttachment: (attachmentId: string) => void;
   onSelectAgent: (agentId: string) => void;
   onSendMessage: () => void;
+  /** 추천대화 즉시 전송 (드래프트 거치지 않음) */
+  onSendSuggestion?: (text: string) => void;
   onCloseAgentConfig: () => void;
   onReturn?: () => void;
   returnLabel?: string;
@@ -306,6 +315,10 @@ export function ConversationWorkbench({
           : "agent-skill-profile-panel",
     );
   };
+  // Codex식 확장 패널 — 대화를 가리지 않는 우측 분할
+  const [sidePanelMode, setSidePanelMode] = useState<ChatSidePanelMode>("none");
+  const backgroundAssignmentCount = Object.keys(delegationAssignmentsByAgentId ?? {}).length;
+
   const applyPromptSuggestion = (prompt: string) => {
     onDraftMessageChange(prompt);
     window.requestAnimationFrame(() => {
@@ -481,6 +494,11 @@ export function ConversationWorkbench({
               </Button>
             </PopoverContent>
           </Popover>
+          <ChatSidePanelMenu
+            backgroundBadge={backgroundAssignmentCount || undefined}
+            mode={sidePanelMode}
+            onChangeMode={setSidePanelMode}
+          />
         </div>
       </header>
 
@@ -574,18 +592,20 @@ export function ConversationWorkbench({
         </>
       ) : null}
 
-      {viewMode === "agents" && selectedAgent?.role === "orchestrator" && onCreateDelegationAssignment ? (
-        <MakimaDelegationConsole
-          assignmentsByAgentId={delegationAssignmentsByAgentId}
-          cards={makimaDelegationCards}
-          onCreateAllAssignments={(cards) => cards.forEach(onCreateDelegationAssignment)}
-          onCreateAssignment={onCreateDelegationAssignment}
-          onOpenAssignedAgent={onOpenDelegatedAgentConversation}
-          onProgressAssignment={onProgressDelegationAssignment}
-          request={delegationRequest}
-        />
+      {viewMode === "agents" && selectedAgent?.role === "orchestrator" && onCreateDelegationAssignment &&
+       (makimaDelegationCards.length > 0 || backgroundAssignmentCount > 0) && sidePanelMode !== "background" ? (
+        <button
+          className="flex shrink-0 items-center gap-2 border-b border-white/10 bg-violet-500/[0.07] px-4 py-1.5 text-left text-[11.5px] text-violet-200 transition hover:bg-violet-500/[0.12]"
+          onClick={() => setSidePanelMode("background")}
+          type="button"
+        >
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-400" />
+          백그라운드 작업 — 위임 후보 {makimaDelegationCards.length}건 · 출격 {backgroundAssignmentCount}명 (패널에서 보기)
+        </button>
       ) : null}
 
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
       <MessageThread
         agentChatContinuity={agentChatContinuity}
         messages={messages}
@@ -612,11 +632,69 @@ export function ConversationWorkbench({
         onDraftMessageChange={onDraftMessageChange}
         onRemoveDraftAttachment={onRemoveDraftAttachment}
         onSendMessage={onSendMessage}
+        onSendSuggestion={onSendSuggestion}
         promptSuggestions={promptSuggestions}
         selectedAgent={selectedAgent}
         selectedModel={selectedModel}
         showDelegationChips={workbenchVisibility.showComposerDelegationChips}
       />
+        </div>
+
+        <ChatSidePanel mode={sidePanelMode} onClose={() => setSidePanelMode("none")}>
+          {sidePanelMode === "background" ? (
+            onCreateDelegationAssignment ? (
+              <MakimaDelegationConsole
+                assignmentsByAgentId={delegationAssignmentsByAgentId}
+                cards={makimaDelegationCards}
+                onCreateAllAssignments={(cards) => cards.forEach(onCreateDelegationAssignment)}
+                onCreateAssignment={onCreateDelegationAssignment}
+                onOpenAssignedAgent={onOpenDelegatedAgentConversation}
+                onProgressAssignment={onProgressDelegationAssignment}
+                request={delegationRequest}
+              />
+            ) : (
+              <ChatSidePanelStub mode="background" />
+            )
+          ) : null}
+          {sidePanelMode === "plan" ? (
+            makimaDelegationCards.length > 0 ? (
+              <ol className="flex flex-col gap-2 p-3">
+                {makimaDelegationCards.map((card, index) => (
+                  <li className="rounded-xl border border-white/10 bg-white/[0.03] p-3" key={card.id}>
+                    <p className="text-[11px] font-semibold text-violet-200">
+                      {index + 1}. {card.targetAgentName} · {card.targetRoleLabel}
+                    </p>
+                    <p className="mt-1 text-[12px] leading-relaxed text-zinc-300">{card.title}</p>
+                    <p className="mt-1 text-[11px] text-zinc-500">{card.summary}</p>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="p-6 text-center text-[12.5px] text-zinc-500">
+                지휘자에게 요청을 보내면 작업 분해 계획이 여기에 표시됩니다.
+              </p>
+            )
+          ) : null}
+          {sidePanelMode === "terminal" ? (
+            permissionSnapshot.queue.length > 0 ? (
+              <ol className="flex flex-col gap-2 p-3 font-mono">
+                {permissionSnapshot.queue.slice(0, 20).map((item) => (
+                  <li className="rounded-lg border border-white/10 bg-black/40 p-2.5 text-[11px] text-zinc-300" key={item.sourceItemId}>
+                    <span className="text-amber-300">대기</span> {item.summary}
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="p-6 text-center text-[12.5px] text-zinc-500">
+                승인 게이트 큐가 비어 있습니다. 에이전트가 명령을 보내면 여기로 흐릅니다.
+              </p>
+            )
+          ) : null}
+          {sidePanelMode === "preview" || sidePanelMode === "diff" || sidePanelMode === "files" ? (
+            <ChatSidePanelStub mode={sidePanelMode} />
+          ) : null}
+        </ChatSidePanel>
+      </div>
     </section>
   );
 }

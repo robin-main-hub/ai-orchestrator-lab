@@ -1591,8 +1591,8 @@ export function App() {
 
   }
 
-  async function handleSendMessageStage2() {
-    const content = draftMessage.trim();
+  async function handleSendMessageStage2(overrideContent?: string) {
+    const content = (overrideContent ?? draftMessage).trim();
     if ((!content && draftAttachments.length === 0) || !selectedAgent || !selectedProvider) {
       return;
     }
@@ -4457,6 +4457,7 @@ export function App() {
               onRemoveDraftAttachment={handleRemoveDraftAttachment}
               onSelectAgent={setSelectedAgentId}
               onSendMessage={handleSendMessageStage2}
+              onSendSuggestion={(text) => void handleSendMessageStage2(text)}
               onCloseAgentConfig={handleCloseAgentConfig}
               onReturn={handleCloseAgentConfig}
               returnLabel={returnModeAfterConfigClose === "annex" ? "← Annex로" : undefined}
