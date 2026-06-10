@@ -99,7 +99,13 @@ async function runImport() {
   await mkdir(dir, { recursive: true });
   await writeFile(soulPath, files.soulMd, "utf8");
   await writeFile(agentsPath, files.agentsMd, "utf8");
-  console.log(`[character-card] imported -> agents/${slug}/SOUL.md + AGENTS.md`);
+  let avatarNote = "";
+  if (resolve(target).toLowerCase().endsWith(".png")) {
+    // The SillyTavern card PNG is itself the portrait — keep it as the avatar.
+    await writeFile(join(dir, "avatar.png"), await readFile(resolve(target)));
+    avatarNote = " + avatar.png";
+  }
+  console.log(`[character-card] imported -> agents/${slug}/SOUL.md + AGENTS.md${avatarNote}`);
   console.log(`  소환: 자율실행 패널에서 페르소나 이름 "${slug}" 로 summon 가능`);
 }
 
