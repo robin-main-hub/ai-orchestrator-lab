@@ -187,7 +187,7 @@ export type CompanionTurnOptions = {
 };
 
 export type CompanionTurnInput = {
-  /** Caller slot (typically a companion such as 채아린). */
+  /** Caller slot (typically a companion such as 쿠루미). */
   caller: DebateEngineAgentSlot;
   /** Conversation context — feeds into the caller's initial prompt. */
   context: DebateContext;

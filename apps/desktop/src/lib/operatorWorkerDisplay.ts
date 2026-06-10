@@ -2,7 +2,7 @@ import type { AgentRole, OperatorCockpitWorkerFleet } from "@ai-orchestrator/pro
 
 export const operatorPersonaKeyByWorkerId: Record<string, string> = {
   agent_architect: "architect",
-  agent_auditor: "auditor",
+  agent_auditor: "yuno",
   agent_builder: "builder",
   agent_kurumi: "kurumi",
   agent_domain_expert: "domain_expert",
@@ -23,7 +23,8 @@ export const operatorPersonaKeyByWorkerId: Record<string, string> = {
 
 export const operatorPersonaNameByKey: Record<string, string> = {
   architect: "오시노 시노부",
-  auditor: "카스가노 소라",
+  auditor: "가사이 유노",
+  yuno: "가사이 유노",
   builder: "히라사와 유이",
   kurumi: "쿠루미",
   domain_expert: "헤르타",

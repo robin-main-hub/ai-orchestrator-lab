@@ -88,7 +88,7 @@ describe("lifecycle transitions", () => {
   });
 
   it("frees the pane on release (completed) and on failure", () => {
-    const summon = summonPersona(roster(), { personaName: "sora", sessionId: "s1", preferredRole: "code" }, ctx());
+    const summon = summonPersona(roster(), { personaName: "yuno", sessionId: "s1", preferredRole: "code" }, ctx());
     expect(summon.ok).toBe(true);
     if (!summon.ok) return;
     const released = releasePersona(summon.registry, summon.session.id, "2026-06-10T00:03:00.000Z");

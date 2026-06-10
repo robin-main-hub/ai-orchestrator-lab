@@ -110,7 +110,7 @@ describe("parseDelegateTags", () => {
 
 describe("delegation policy", () => {
   it("treats companion and orchestrator as orchestrator_plus authority", () => {
-    expect(delegationAuthorityLevel(makeProfile({ id: "agent_chaerin", role: "companion" }))).toBe(
+    expect(delegationAuthorityLevel(makeProfile({ id: "agent_kurumi", role: "companion" }))).toBe(
       "orchestrator_plus",
     );
     expect(delegationAuthorityLevel(makeProfile({ id: "agent_orchestrator", role: "orchestrator" }))).toBe(
@@ -128,7 +128,7 @@ describe("delegation policy", () => {
 
   it("allows companion to delegate to executor as completion-only", () => {
     const decision = evaluateDelegationPolicy({
-      caller: makeProfile({ id: "agent_chaerin", role: "companion" }),
+      caller: makeProfile({ id: "agent_kurumi", role: "companion" }),
       target: makeProfile({ id: "agent_executor", role: "executor" }),
       targetKey: "executor",
     });
@@ -152,7 +152,7 @@ describe("delegation policy", () => {
 describe("runCompanionTurn — short-circuit (no tags)", () => {
   it("returns initial content as-is when no <delegate> tags", async () => {
     const caller = makeSlot(
-      makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
       returningOnce("오빠~ 그냥 내가 답할 수 있어! ♡"),
     );
     const input: CompanionTurnInput = {
@@ -171,7 +171,7 @@ describe("runCompanionTurn — short-circuit (no tags)", () => {
 describe("runCompanionTurn — single happy-path delegation", () => {
   it("calls target adapter once and produces a follow-up final answer", async () => {
     const caller = makeSlot(
-      makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
       returningOnce(
         `오빠~ 잠깐만, 마오마오한테 물어볼게~ <delegate to="researcher">2024 HTV 시장 규모</delegate>`,
         `오빠~ 마오마오가 알아봤어! 2024년 HTV 시장은 ~~ 라네! ♡`,
@@ -221,7 +221,7 @@ describe("runCompanionTurn — completion-only gated targets", () => {
       },
     );
     const caller = makeSlot(
-      makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
       returningOnce(`<delegate to="executor">rm -rf /</delegate>`, `위임 안 됐어 오빠`),
     );
     const result = await runCompanionTurn({
@@ -251,7 +251,7 @@ describe("runCompanionTurn — completion-only gated targets", () => {
       returningOnce("external draft only"),
     );
     const caller = makeSlot(
-      makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
       returningOnce(`<delegate to="external">send to external channel</delegate>`, `못 보냈어`),
     );
     const result = await runCompanionTurn({
@@ -273,7 +273,7 @@ describe("runCompanionTurn — completion-only gated targets", () => {
       returningOnce("audit draft only"),
     );
     const caller = makeSlot(
-      makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
       returningOnce(`<delegate to="auditor">감사 좀</delegate>`, `못 위임`),
     );
     const result = await runCompanionTurn({
@@ -295,7 +295,7 @@ describe("runCompanionTurn — completion-only gated targets", () => {
       returningOnce("did the thing"),
     );
     const caller = makeSlot(
-      makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
       returningOnce(`<delegate to="executor">do</delegate>`, `최종 답변`),
     );
     const result = await runCompanionTurn({
@@ -312,7 +312,7 @@ describe("runCompanionTurn — completion-only gated targets", () => {
 describe("runCompanionTurn — self_delegation + unknown_target", () => {
   it("rejects self-delegation by role", async () => {
     const caller = makeSlot(
-      makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
       returningOnce(`<delegate to="companion">do it</delegate>`, `nope`),
     );
     const result = await runCompanionTurn({
@@ -326,8 +326,8 @@ describe("runCompanionTurn — self_delegation + unknown_target", () => {
 
   it("rejects self-delegation by personaName", async () => {
     const caller = makeSlot(
-      makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
-      returningOnce(`<delegate to="chae_arin">do it</delegate>`, `nope`),
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
+      returningOnce(`<delegate to="kurumi">do it</delegate>`, `nope`),
     );
     const result = await runCompanionTurn({
       caller,
@@ -340,7 +340,7 @@ describe("runCompanionTurn — self_delegation + unknown_target", () => {
 
   it("records unknown_target when no slot registered for the name", async () => {
     const caller = makeSlot(
-      makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
       returningOnce(`<delegate to="ghost">no one home</delegate>`, `없네`),
     );
     const result = await runCompanionTurn({
@@ -378,7 +378,7 @@ describe("runCompanionTurn — depth=1 invariant", () => {
       },
     );
     const caller = makeSlot(
-      makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
       returningOnce(`<delegate to="researcher">go</delegate>`, `최종 답`),
     );
     await runCompanionTurn({
@@ -416,7 +416,7 @@ describe("runCompanionTurn — maxDelegatesPerTurn cap", () => {
       },
     );
     const caller = makeSlot(
-      makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
       returningOnce(
         `<delegate to="researcher">a</delegate><delegate to="domain_expert">b</delegate><delegate to="negotiator">c</delegate>`,
         `done`,
@@ -454,7 +454,7 @@ describe("runCompanionTurn — sub-agent failure isolation", () => {
       },
     );
     const caller = makeSlot(
-      makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
       returningOnce(`<delegate to="researcher">a</delegate>`, `미안 오빠 정보 못 가져왔어`),
     );
     const result = await runCompanionTurn({
@@ -480,7 +480,7 @@ describe("runCompanionTurn — sub-agent failure isolation", () => {
     });
     const target = makeSlot(makeProfile({ id: "r1", role: "researcher" }), failingStatus);
     const caller = makeSlot(
-      makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
       returningOnce(`<delegate to="researcher">a</delegate>`, `못 가져왔어`),
     );
     const result = await runCompanionTurn({
@@ -514,7 +514,7 @@ describe("runCompanionTurn — follow-up turn shape", () => {
     };
     const target = makeSlot(makeProfile({ id: "r1", role: "researcher" }), returningOnce("sub result"));
     const caller = makeSlot(
-      makeProfile({ id: "agent_chaerin", role: "companion", personaName: "chae_arin" }),
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
       callerFn,
     );
     await runCompanionTurn({

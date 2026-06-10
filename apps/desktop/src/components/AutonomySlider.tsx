@@ -80,7 +80,7 @@ const LEVELS: LevelDef[] = [
     level: 3,
     shortLabel: "승인",
     fullLabel: "승인 후 실행",
-    description: "매 작업마다 사용자 승인. 채아린(companion) 기본값.",
+    description: "매 작업마다 사용자 승인. 쿠루미(companion) 기본값.",
     permissionHint: "write_files",
     approvalHint: "매 action 승인 필요",
     icon: <ShieldCheck size={12} />,

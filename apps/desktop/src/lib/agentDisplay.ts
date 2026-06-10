@@ -3,7 +3,8 @@ import { agentRoleLabel } from "./helpers";
 
 export const agentKoreanNameByIdentity: Record<string, string> = {
   architect: "오시노 시노부",
-  auditor: "카스가노 소라",
+  auditor: "가사이 유노",
+  yuno: "가사이 유노",
   builder: "히라사와 유이",
   kurumi: "쿠루미",
   companion: "쿠루미",

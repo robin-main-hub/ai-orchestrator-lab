@@ -37,7 +37,7 @@ describe("stage35DelegationRuntime", () => {
 
   it("does not resolve self-delegation back to the caller", () => {
     expect(resolveDelegationTargetAgent("companion", kurumi, agents)?.id).not.toBe(kurumi.id);
-    expect(resolveDelegationTargetAgent("chae_arin", kurumi, agents)).toBeUndefined();
+    expect(resolveDelegationTargetAgent("kurumi", kurumi, agents)).toBeUndefined();
   });
 
   it("위임 프롬프트에도 내부 역할명이 아니라 캐릭터 이름을 쓴다", () => {
@@ -135,7 +135,7 @@ describe("stage35DelegationRuntime", () => {
         },
         {
           kind: "self_delegation",
-          tag: makeTag("chae_arin"),
+          tag: makeTag("kurumi"),
         },
         {
           kind: "failed",
