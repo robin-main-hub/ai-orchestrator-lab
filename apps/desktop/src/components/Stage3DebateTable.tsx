@@ -30,6 +30,7 @@ import { deriveDebateDecisionReadiness } from "../lib/debateDecisionReadiness";
 import { createDebateUtterancePublicWorkTrace } from "../lib/publicWorkTrace";
 import type { Stage3DebateSession } from "../runtime/stage3Runtime";
 import type { Stage3DebateUtteranceView } from "../types";
+import { resolvePersonaPortraitUrl } from "../lib/personaPortrait";
 import { PublicWorkTracePanel } from "./PublicWorkTracePanel";
 
 type Stance = DebateStance;
@@ -346,10 +347,13 @@ function createUtteranceView(
 ): Stage3DebateUtteranceView {
   const participant = session.participants.find((p) => p.agentId === utterance.agentId);
   const fallback = resolveFallbackAgent(utterance.agentId);
+  const role = participant?.role ?? fallback.role;
+  const personaName = defaultAgentProfiles.find((p) => p.id === utterance.agentId)?.personaName;
   return {
     ...utterance,
     agentName: participant ? resolveDebateParticipantDisplayName(participant) : fallback.name,
-    agentRole: participant?.role ?? fallback.role,
+    agentRole: role,
+    portraitUrl: resolvePersonaPortraitUrl(personaName, role),
     roundTitle,
   };
 }
@@ -436,15 +440,24 @@ function UtteranceCard({
         <div className="min-w-0 flex-1 space-y-3">
           <header className="flex items-start justify-between gap-2">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <div
-                className={cn(
-                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold",
-                  roleTone.bg,
-                  roleTone.text,
-                )}
-              >
-                {utterance.agentName.slice(0, 2).toUpperCase()}
-              </div>
+              {utterance.portraitUrl ? (
+                <img
+                  alt={utterance.agentName}
+                  className="h-7 w-7 shrink-0 rounded-lg object-cover ring-1 ring-white/10"
+                  loading="lazy"
+                  src={utterance.portraitUrl}
+                />
+              ) : (
+                <div
+                  className={cn(
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold",
+                    roleTone.bg,
+                    roleTone.text,
+                  )}
+                >
+                  {utterance.agentName.slice(0, 2).toUpperCase()}
+                </div>
+              )}
               <div className="min-w-0">
                 <div className={cn("truncate text-sm font-medium", roleTone.text)}>
                   {utterance.agentName}
