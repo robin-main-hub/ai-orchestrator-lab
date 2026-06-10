@@ -57,14 +57,22 @@ export function ParallelMissionContainer({
   host = "dgx_02",
   tmuxSessionName = "ai-swarm",
   maxConcurrency = 4,
+  seedPersonaName,
 }: {
   sessionId?: string;
   serverBaseUrl?: string | string[];
   host?: TerminalHostKind;
   tmuxSessionName?: string;
   maxConcurrency?: number;
+  /** 도감 소환: 첫 미션 드래프트에 이 페르소나를 프리필 */
+  seedPersonaName?: string;
 }) {
-  const [drafts, setDrafts] = useState<ParallelMissionDraft[]>(() => [emptyDraft("code"), emptyDraft("qa")]);
+  const [drafts, setDrafts] = useState<ParallelMissionDraft[]>(() => {
+    if (!seedPersonaName) return [emptyDraft("code"), emptyDraft("qa")];
+    const set = resolvePersonaAgentSet(seedPersonaName);
+    const seeded = emptyDraft(set.preferredPaneRole ?? "code");
+    return [{ ...seeded, personaName: seedPersonaName }, emptyDraft("qa")];
+  });
   const [mode, setMode] = useState<AutonomyMode>("human");
   const [running, setRunning] = useState(false);
   const [board, setBoard] = useState<ParallelBoard>({ cards: [] });
