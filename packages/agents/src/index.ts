@@ -565,3 +565,18 @@ export type { ExtractCodingPacketOptions } from "./codingPacketFromDebate.js";
 
 export { runDebate } from "./runDebate.js";
 export type { RunDebateParams, RunDebateResult } from "./runDebate.js";
+
+export {
+  characterCardToPersonaFiles,
+  personaFilesToCharacterCard,
+  normalizeCharacterCard,
+  extractMarkdownSection,
+  soulEssence,
+  personaSlug,
+} from "./characterCard.js";
+export type {
+  CharacterCardV1,
+  CharacterCardV2,
+  CharacterCardV2Data,
+  PersonaFiles,
+} from "./characterCard.js";
