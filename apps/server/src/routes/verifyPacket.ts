@@ -1,62 +1,21 @@
 import type { IncomingMessage } from "node:http";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { codingPacketSchema } from "@ai-orchestrator/protocol";
-import type { CodingPacket } from "@ai-orchestrator/protocol";
-
-type ExecFileAsync = (
-  file: string,
-  args: string[],
-  options: { cwd: string; timeout: number; env?: NodeJS.ProcessEnv },
-) => Promise<{ stdout: string; stderr: string }>;
-
-const defaultExecFileAsync = promisify(execFile) as ExecFileAsync;
-
-const allowedCommands: Record<string, { file: string; args: string[] }> = {
-  "corepack pnpm --filter @ai-orchestrator/protocol test": {
-    file: "corepack",
-    args: ["pnpm", "--filter", "@ai-orchestrator/protocol", "test"],
-  },
-  "pnpm --filter @ai-orchestrator/protocol test": {
-    file: "pnpm",
-    args: ["--filter", "@ai-orchestrator/protocol", "test"],
-  },
-};
-
-function createSubprocessEnv(): NodeJS.ProcessEnv {
-  return {
-    CI: process.env.CI,
-    COREPACK_HOME: process.env.COREPACK_HOME,
-    HOME: process.env.HOME,
-    NODE_ENV: process.env.NODE_ENV,
-    PATH: process.env.PATH,
-    PNPM_HOME: process.env.PNPM_HOME,
-  };
-}
-
-function limitOutputLength(output: string, maxLength = 20_000): string {
-  if (output.length <= maxLength) return output;
-  return `${output.slice(0, maxLength)}\n\n[... Output truncated due to size limits ...]`;
-}
-
-function redactSecretLikeValues(output: string): string {
-  return output
-    .replace(/\bBearer\s+[A-Za-z0-9._:-]+/gi, "Bearer <redacted>")
-    .replace(/\bsk-[A-Za-z0-9_-]{12,}/g, "<redacted>")
-    .replace(/\b([A-Z0-9_]*(?:API[_-]?KEY|AUTH[_-]?TOKEN|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*)=([^\s]+)/gi, "$1=<redacted>");
-}
-
-function sanitizeSubprocessOutput(output: unknown): string {
-  if (output == null) return "";
-  let sanitized = String(output);
-  const cwd = process.cwd();
-  if (cwd) {
-    sanitized = sanitized.split(cwd).join("<root>");
-  }
-  sanitized = redactSecretLikeValues(sanitized);
-  return limitOutputLength(sanitized);
-}
+import type {
+  CodingPacket,
+  ProviderCompletionRequest,
+  ProviderCompletionResponse,
+} from "@ai-orchestrator/protocol";
+import type { AutorunCommandResult } from "./autorunSafety";
+import {
+  getAutorunMode,
+  getAutorunModelId,
+  getAutorunProviderProfileId,
+  redactForPublishPhase,
+  rejectUnlessExperimentalAutorunEnabled,
+  runAllowedVerificationCommand,
+  writeGeneratedFileSafely,
+} from "./autorunSafety";
 
 export type VerifyPacketRouteDependencies = {
   request: IncomingMessage;
@@ -65,16 +24,14 @@ export type VerifyPacketRouteDependencies = {
   readJsonBody: (request: IncomingMessage) => Promise<unknown>;
   isRequestBodyTooLargeError: (error: unknown) => error is { limit: number };
   respondJson: (statusCode: number, payload: unknown) => void;
-  execFileAsync?: ExecFileAsync;
+  completeProvider?: (
+    request: ProviderCompletionRequest,
+  ) => Promise<ProviderCompletionResponse>;
+  runVerificationCommand?: (
+    command: string,
+    attempt: number,
+  ) => Promise<AutorunCommandResult>;
 };
-
-function isPacketVerificationAllowed(): boolean {
-  const rawEnv = process.env.NODE_ENV;
-  const nodeEnv = (rawEnv || "production").toLowerCase().trim();
-  const safeEnvironments = ["development", "dev", "test", "local"];
-  const blockedEnvironments = ["production", "prod", "staging"];
-  return safeEnvironments.includes(nodeEnv) && !blockedEnvironments.includes(nodeEnv);
-}
 
 export async function handleVerifyPacketRoute({
   request,
@@ -83,20 +40,19 @@ export async function handleVerifyPacketRoute({
   readJsonBody,
   isRequestBodyTooLargeError,
   respondJson,
-  execFileAsync = defaultExecFileAsync,
+  completeProvider,
+  runVerificationCommand = runAllowedVerificationCommand,
 }: VerifyPacketRouteDependencies): Promise<boolean> {
   if (pathname === "/verify-packet" && method === "POST") {
-    if (!isPacketVerificationAllowed()) {
-      respondJson(403, {
-        error: "production_execution_blocked",
-        message: "Coding packet verification command execution is disabled in production.",
-      });
+    if (rejectUnlessExperimentalAutorunEnabled(respondJson)) {
       return true;
     }
 
     let payload: CodingPacket;
     try {
-      payload = codingPacketSchema.parse(await readJsonBody(request)) as CodingPacket;
+      payload = codingPacketSchema.parse(
+        await readJsonBody(request),
+      ) as CodingPacket;
     } catch (error) {
       if (isRequestBodyTooLargeError(error)) {
         respondJson(413, { error: "payload_too_large", limit: error.limit });
@@ -110,48 +66,87 @@ export async function handleVerifyPacketRoute({
     }
 
     try {
-      // Validate that all requested commands are strictly whitelisted
-      for (const cmd of payload.verificationPlan) {
-        if (!allowedCommands[cmd]) {
-          respondJson(400, {
-            error: "command_not_allowed",
-            message: `Command "${cmd}" is not in the whitelist of allowed commands.`,
-          });
-          return true;
-        }
-      }
-
-      const commands = payload.verificationPlan;
-      const results = [];
+      const commands = payload.verificationPlan.filter(
+        (cmd) => typeof cmd === "string" && cmd.trim().length > 0,
+      );
+      const autorunMode = getAutorunMode();
+      const results: AutorunCommandResult[] = [];
+      const fileApplications = [];
       let passed = true;
 
       for (const cmd of commands) {
-        try {
-          // Execute in workspace root
-          const command = allowedCommands[cmd];
-          if (!command) {
-            throw new Error(`Command "${cmd}" is not in the whitelist of allowed commands.`);
+        let attempts = 0;
+        let cmdPassed = false;
+        const maxAttempts =
+          autorunMode === "auto_safe" || autorunMode === "lab_yolo" ? 3 : 1;
+
+        while (attempts < maxAttempts && !cmdPassed) {
+          attempts++;
+          const commandResult = await runVerificationCommand(cmd, attempts);
+          if (commandResult.status === "pass") {
+            results.push(commandResult);
+            cmdPassed = true;
+            continue;
           }
-          const { stdout, stderr } = await execFileAsync(command.file, command.args, {
-            cwd: process.cwd(),
-            env: createSubprocessEnv(),
-            timeout: 15000,
-          });
-          results.push({
-            label: cmd,
-            status: "pass",
-            stdout: sanitizeSubprocessOutput(stdout),
-            stderr: sanitizeSubprocessOutput(stderr),
-          });
-        } catch (execError: any) {
-          passed = false;
-          results.push({
-            label: cmd,
-            status: "fail",
-            stdout: sanitizeSubprocessOutput(execError.stdout),
-            stderr: sanitizeSubprocessOutput(execError.stderr || execError.message),
-          });
-          break; // Stop on first failure
+
+          if (isNonRetryableVerificationFailure(commandResult.stderr)) {
+            passed = false;
+            results.push(commandResult);
+            break;
+          }
+
+          if (attempts < maxAttempts && completeProvider) {
+            const prompt = `The command "${cmd}" failed with the following redacted output:\n\nSTDOUT:\n${commandResult.stdout}\n\nSTDERR:\n${commandResult.stderr}\n\nPlease fix the issues. Output the fixed files using the following format for each file:\n\n\`\`\`filepath\nfilecontent\n\`\`\`\n\nOnly provide the files that need to be changed. Do not output anything else.`;
+
+            try {
+              const fixResponse = await completeProvider({
+                id: randomUUID(),
+                sessionId: randomUUID(),
+                providerProfileId: getAutorunProviderProfileId(),
+                modelId: getAutorunModelId(),
+                messages: [
+                  {
+                    role: "system",
+                    content:
+                      "You are an automated coding assistant. Provide minimal fixes for failing tests. Never include secrets. Format your response exactly as requested.",
+                  },
+                  { role: "user", content: prompt },
+                ],
+                source: "server",
+                routePreference: "server_proxy",
+                createdAt: new Date().toISOString(),
+              });
+
+              if (fixResponse.content) {
+                const content = redactForPublishPhase(fixResponse.content);
+                const fileRegex = /```([^\n]+)\n([\s\S]*?)```/g;
+                let match;
+                while ((match = fileRegex.exec(content)) !== null) {
+                  const filePath = match[1]?.trim();
+                  const fileContent = match[2];
+                  if (filePath && fileContent !== undefined) {
+                    fileApplications.push(
+                      await writeGeneratedFileSafely({
+                        relativePath: filePath,
+                        content: fileContent,
+                        source: "verify-packet",
+                        mode: autorunMode,
+                      }),
+                    );
+                  }
+                }
+              }
+            } catch (fixError) {
+              console.error("Auto-fix generation failed:", fixError);
+            }
+          } else {
+            passed = false;
+            results.push(commandResult);
+            break;
+          }
+        }
+        if (!passed) {
+          break;
         }
       }
 
@@ -161,23 +156,34 @@ export async function handleVerifyPacketRoute({
           label: "No executable commands found in verificationPlan",
           status: "fail",
           stdout: "",
-          stderr: "Verification plan must contain allowed commands."
+          stderr:
+            "Verification plan must contain pnpm, corepack pnpm, or npx --yes pnpm@10.11.0 commands.",
+          attempt: 1,
         });
       }
 
       const report = {
         id: `verifier_${randomUUID()}`,
         status: passed ? "passed" : "warning",
-        checks: results.map((r) => ({ label: r.label, status: r.status })),
+        checks: results.map((result) => ({
+          label: result.label,
+          status: result.status,
+        })),
         notes: [
           `Verification executed ${commands.length} commands.`,
-          ...results.filter((r) => r.status === "fail").map((r) => `Failed on: ${r.label}\n${r.stderr}`),
+          ...results
+            .filter((result) => result.status === "fail")
+            .map((result) => `Failed on: ${result.label}\n${result.stderr}`),
         ],
         rawOutputs: results,
-        message: passed ? "All tests passed successfully" : "Some tests failed",
+        fileApplications,
+        autorunMode,
+        message: passed
+          ? "All tests passed successfully"
+          : "Some tests failed",
         exitCode: passed ? 0 : 1,
-        stdout: results.map(r => r.stdout).join("\n"),
-        stderr: results.map(r => r.stderr).join("\n"),
+        stdout: results.map((result) => result.stdout).join("\n"),
+        stderr: results.map((result) => result.stderr).join("\n"),
       };
 
       respondJson(200, report);
@@ -192,4 +198,13 @@ export async function handleVerifyPacketRoute({
   }
 
   return false;
+}
+
+function isNonRetryableVerificationFailure(stderr: string): boolean {
+  return (
+    stderr.includes("not allowed") ||
+    stderr.includes("Unsupported pnpm") ||
+    stderr.includes("Only pnpm") ||
+    stderr.includes("must include")
+  );
 }

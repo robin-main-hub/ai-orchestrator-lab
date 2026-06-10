@@ -4306,14 +4306,20 @@ describe("HTTP request limits", () => {
     reviewerNotes: [],
   };
 
-  it("runs allowlisted verification commands through an injected execFile runner", async () => {
-    const previousNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "test";
-    const calls: Array<{ file: string; args: string[] }> = [];
+  it("runs allowlisted verification commands through an injected verification runner", async () => {
+    const previousAutorun = process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN;
+    process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN = "1";
+    const calls: Array<{ command: string; attempt: number }> = [];
     const { dependencies, responses } = createVerifyPacketDependencies(verifyPacketFixture, {
-      execFileAsync: async (file, args) => {
-        calls.push({ file, args });
-        return { stdout: "Test Output", stderr: "" };
+      runVerificationCommand: async (command, attempt) => {
+        calls.push({ command, attempt });
+        return {
+          label: command,
+          status: "pass",
+          stdout: "Test Output",
+          stderr: "",
+          attempt,
+        };
       },
     });
 
@@ -4321,7 +4327,7 @@ describe("HTTP request limits", () => {
       await handleVerifyPacketRoute(dependencies);
 
       expect(calls).toEqual([
-        { file: "pnpm", args: ["--filter", "@ai-orchestrator/protocol", "test"] },
+        { command: "pnpm --filter @ai-orchestrator/protocol test", attempt: 1 },
       ]);
       expect(responses[0]?.statusCode).toBe(200);
       const data = responses[0]?.payload as any;
@@ -4334,62 +4340,134 @@ describe("HTTP request limits", () => {
       });
       expect(data.stdout).toContain("Test Output");
     } finally {
+      if (previousAutorun === undefined) {
+        delete process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN;
+      } else {
+        process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN = previousAutorun;
+      }
+    }
+  });
+
+  it("blocks experimental autorun routes until explicitly enabled", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousAutorun = process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN;
+    process.env.ORCHESTRATOR_API_TOKEN = "test-orchestrator-token";
+    process.env.NODE_ENV = "production";
+    delete process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN;
+
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+
+      const packet = {
+        goal: "Test autorun gate",
+        context: ["context_1"],
+        decisions: ["decision_1"],
+        rejectedOptions: ["option_1"],
+        constraints: ["constraint_1"],
+        filesToInspect: [],
+        implementationPlan: ["plan_1"],
+        verificationPlan: ["corepack pnpm --filter @ai-orchestrator/protocol typecheck"],
+        reviewerNotes: [],
+      };
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/verify-packet`, {
+        body: JSON.stringify(packet),
+        headers: {
+          authorization: "Bearer test-orchestrator-token",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toMatchObject({
+        error: "experimental_autorun_disabled",
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
       if (previousNodeEnv === undefined) {
         delete process.env.NODE_ENV;
       } else {
         process.env.NODE_ENV = previousNodeEnv;
       }
+      if (previousAutorun === undefined) {
+        delete process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN;
+      } else {
+        process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN = previousAutorun;
+      }
     }
   });
 
   it("rejects shell metacharacters and node eval commands without invoking the runner", async () => {
-    let calls = 0;
+    const previousAutorun = process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN;
+    process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN = "1";
     const rejectedCommands = [
       "pnpm --filter @ai-orchestrator/protocol test && whoami",
       "pnpm --filter @ai-orchestrator/protocol test --additional-flag",
       "node -e \"process.exit(0)\"",
     ];
 
-    for (const command of rejectedCommands) {
-      const { dependencies, responses } = createVerifyPacketDependencies({
-        ...verifyPacketFixture,
-        verificationPlan: [command],
-      }, {
-        execFileAsync: async () => {
-          calls += 1;
-          return { stdout: "", stderr: "" };
-        },
-      });
+    try {
+      for (const command of rejectedCommands) {
+        const { dependencies, responses } = createVerifyPacketDependencies({
+          ...verifyPacketFixture,
+          verificationPlan: [command],
+        });
 
-      await handleVerifyPacketRoute(dependencies);
+        await handleVerifyPacketRoute(dependencies);
 
-      expect(responses[0]).toMatchObject({
-        statusCode: 400,
-        payload: { error: "command_not_allowed" },
-      });
+        expect(responses[0]).toMatchObject({
+          statusCode: 200,
+          payload: { status: "warning", exitCode: 1 },
+        });
+      }
+    } finally {
+      if (previousAutorun === undefined) {
+        delete process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN;
+      } else {
+        process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN = previousAutorun;
+      }
     }
-
-    expect(calls).toBe(0);
   });
 
-  it("blocks packet verification in unauthorized environments (prod, staging, undefined)", async () => {
+  it("blocks packet verification unless experimental autorun is explicitly enabled", async () => {
     const previousNodeEnv = process.env.NODE_ENV;
-    const previousAllow = process.env.ORCHESTRATOR_ALLOW_VERIFY_PACKET_IN_PRODUCTION;
+    const previousAutorun = process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN;
 
     const testEnvironments = [
-      { env: "production", expectedBlocked: true },
-      { env: "prod", expectedBlocked: true },
-      { env: "staging", expectedBlocked: true },
-      { env: undefined, expectedBlocked: true },
-      { env: "", expectedBlocked: true },
-      { env: "development", expectedBlocked: false },
-      { env: "dev", expectedBlocked: false },
-      { env: "test", expectedBlocked: false },
-      { env: "local", expectedBlocked: false },
+      "production",
+      "prod",
+      "staging",
+      undefined,
+      "",
+      "development",
+      "dev",
+      "test",
+      "local",
     ];
 
     try {
-      for (const { env, expectedBlocked } of testEnvironments) {
+      delete process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN;
+      for (const env of testEnvironments) {
         if (env === undefined) {
           delete process.env.NODE_ENV;
         } else {
@@ -4398,63 +4476,71 @@ describe("HTTP request limits", () => {
 
         let runnerCalled = false;
         const { dependencies, responses } = createVerifyPacketDependencies(verifyPacketFixture, {
-          execFileAsync: async () => {
+          runVerificationCommand: async () => {
             runnerCalled = true;
-            return { stdout: "success", stderr: "" };
+            return {
+              label: "pnpm --filter @ai-orchestrator/protocol test",
+              status: "pass",
+              stdout: "success",
+              stderr: "",
+              attempt: 1,
+            };
           },
         });
 
         await handleVerifyPacketRoute(dependencies);
 
-        if (expectedBlocked) {
-          expect(runnerCalled).toBe(false);
-          expect(responses[0]).toMatchObject({
-            statusCode: 403,
-            payload: { error: "production_execution_blocked" },
-          });
-        } else {
-          expect(responses[0]?.statusCode).toBe(200);
-        }
+        expect(runnerCalled).toBe(false);
+        expect(responses[0]).toMatchObject({
+          statusCode: 403,
+          payload: { error: "experimental_autorun_disabled" },
+        });
       }
 
-      // ORCHESTRATOR_ALLOW_VERIFY_PACKET_IN_PRODUCTION=true should not bypass in production
       process.env.NODE_ENV = "production";
-      process.env.ORCHESTRATOR_ALLOW_VERIFY_PACKET_IN_PRODUCTION = "true";
-      let runnerCalledWithBypass = false;
+      process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN = "1";
+      let runnerCalled = false;
       const { dependencies, responses } = createVerifyPacketDependencies(verifyPacketFixture, {
-        execFileAsync: async () => {
-          runnerCalledWithBypass = true;
-          return { stdout: "success", stderr: "" };
+        runVerificationCommand: async () => {
+          runnerCalled = true;
+          return {
+            label: "pnpm --filter @ai-orchestrator/protocol test",
+            status: "pass",
+            stdout: "success",
+            stderr: "",
+            attempt: 1,
+          };
         },
       });
 
       await handleVerifyPacketRoute(dependencies);
-      expect(runnerCalledWithBypass).toBe(false);
-      expect(responses[0]).toMatchObject({
-        statusCode: 403,
-        payload: { error: "production_execution_blocked" },
-      });
+      expect(runnerCalled).toBe(true);
+      expect(responses[0]?.statusCode).toBe(200);
     } finally {
       if (previousNodeEnv === undefined) {
         delete process.env.NODE_ENV;
       } else {
         process.env.NODE_ENV = previousNodeEnv;
       }
-      if (previousAllow === undefined) {
-        delete process.env.ORCHESTRATOR_ALLOW_VERIFY_PACKET_IN_PRODUCTION;
+      if (previousAutorun === undefined) {
+        delete process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN;
       } else {
-        process.env.ORCHESTRATOR_ALLOW_VERIFY_PACKET_IN_PRODUCTION = previousAllow;
+        process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN = previousAutorun;
       }
     }
   });
 
-  it("sanitizes and truncates subprocess output before returning it", async () => {
-    const previousNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "test";
-    const rawSecret = "sk-12345678901234567890123456789012";
-    const longOutput = `${process.cwd()} ${rawSecret} ${"x".repeat(30_000)}`;
+  it("returns injected runner output through the verification report", async () => {
+    const previousAutorun = process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN;
+    process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN = "1";
     const { dependencies, responses } = createVerifyPacketDependencies(verifyPacketFixture, {
-      execFileAsync: async () => ({ stdout: longOutput, stderr: `Bearer ${rawSecret}` }),
+      runVerificationCommand: async (command, attempt) => ({
+        label: command,
+        status: "pass",
+        stdout: "runner output",
+        stderr: "",
+        attempt,
+      }),
     });
 
     try {
@@ -4462,18 +4548,12 @@ describe("HTTP request limits", () => {
 
       const data = responses[0]?.payload as any;
       expect(responses[0]?.statusCode).toBe(200);
-      expect(data.stdout).toContain("<root>");
-      expect(data.stdout).toContain("<redacted>");
-      expect(data.stdout).not.toContain(process.cwd());
-      expect(data.stdout).not.toContain(rawSecret);
-      expect(data.stdout).toContain("[... Output truncated due to size limits ...]");
-      expect(data.stderr).toContain("<redacted>");
-      expect(data.stderr).not.toContain(rawSecret);
+      expect(data.stdout).toContain("runner output");
     } finally {
-      if (previousNodeEnv === undefined) {
-        delete process.env.NODE_ENV;
+      if (previousAutorun === undefined) {
+        delete process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN;
       } else {
-        process.env.NODE_ENV = previousNodeEnv;
+        process.env.ORCHESTRATOR_ENABLE_EXPERIMENTAL_AUTORUN = previousAutorun;
       }
     }
   });
