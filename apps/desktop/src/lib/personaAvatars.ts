@@ -31,7 +31,7 @@ const avatarModules = import.meta.glob(
 const avatarByPersonaName: Record<string, string> = (() => {
   const out: Record<string, string> = {};
   for (const [path, url] of Object.entries(avatarModules)) {
-    // path looks like "../../../../agents/chae_arin/avatar.svg" — pull
+    // path looks like "../../../../agents/kurumi/avatar.svg" — pull
     // out the dir name between "agents/" and "/avatar".
     const match = path.match(/agents\/([^/]+)\/avatar\.[^/]+$/);
     if (!match) continue;
@@ -51,7 +51,7 @@ const avatarByPersonaName: Record<string, string> = (() => {
  * Looks up a persona's bundled avatar URL.
  *
  * Pass `personaName` for profiles that use the R3.1 override (e.g.
- * `chae_arin`, `yohane`), `role` otherwise. Returns `undefined` when no
+ * `kurumi`, `yohane`), `role` otherwise. Returns `undefined` when no
  * `avatar.*` file exists for that directory — callers should fall back
  * to the user-uploaded `visual.avatarDataUrl` or to the initials
  * fallback rendered by `<AgentAvatar>`.

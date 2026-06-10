@@ -187,8 +187,8 @@ describe("buildAgentSystemPrompt", () => {
 
   it("falls back to the canonical companion persona directory", async () => {
     const source = createInMemoryPersonaSource({
-      "agents/chae_arin/SOUL.md": "# Chae Arin Soul",
-      "agents/chae_arin/AGENTS.md": "# Chae Arin Rules",
+      "agents/kurumi/SOUL.md": "# Kurumi Soul",
+      "agents/kurumi/AGENTS.md": "# Kurumi Rules",
       "agents/SAFETY.md": SAFETY,
     });
 
@@ -197,11 +197,11 @@ describe("buildAgentSystemPrompt", () => {
       source,
     );
 
-    expect(report.personaName).toBe("chae_arin");
+    expect(report.personaName).toBe("kurumi");
     expect(report.mode).toBe("full");
     expect(report.fragmentsInjected).toEqual([
-      "agents/chae_arin/SOUL.md",
-      "agents/chae_arin/AGENTS.md",
+      "agents/kurumi/SOUL.md",
+      "agents/kurumi/AGENTS.md",
     ]);
   });
 });

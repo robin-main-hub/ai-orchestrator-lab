@@ -2269,12 +2269,12 @@ describe("server agent delegation endpoint core", () => {
     id: "agent_delegation_test_1",
     sessionId: "session_1",
     caller: {
-      agentId: "agent_chaerin",
+      agentId: "agent_kurumi",
       role: "companion",
-      personaName: "chaerin",
+      personaName: "kurumi",
       providerProfileId: "provider_dgx02_vllm",
       modelId: "qwen36-gio-lora-v5-prisma",
-      systemPrompt: "You are Chaerin.",
+      systemPrompt: "You are Kurumi.",
     },
     userMessage: "시장 규모를 확인하고 결론을 줘.",
     targets: [
@@ -2328,7 +2328,7 @@ describe("server agent delegation endpoint core", () => {
           modelId: request.modelId,
           route: request.routePreference,
           status: "succeeded",
-          content: "채아린 최종: 마오마오 확인을 반영해 톱5를 정리했어.",
+          content: "쿠루미 최종: 마오마오 확인을 반영해 톱5를 정리했어.",
           createdAt: request.createdAt,
         };
       },
@@ -2338,7 +2338,7 @@ describe("server agent delegation endpoint core", () => {
 
     expect(seenRequests).toHaveLength(3);
     expect(response.shortCircuited).toBe(false);
-    expect(response.finalContent).toContain("채아린 최종");
+    expect(response.finalContent).toContain("쿠루미 최종");
     expect(response.delegations).toMatchObject([
       {
         kind: "succeeded",
@@ -2373,7 +2373,7 @@ describe("server agent delegation endpoint core", () => {
           content:
             request.id.includes("initial")
               ? '<delegate to="researcher">자료 확인</delegate>'
-              : "채아린 최종: 대상이 없어서 직접 정리했어.",
+              : "쿠루미 최종: 대상이 없어서 직접 정리했어.",
           createdAt: request.createdAt,
         }),
         now: "2026-05-25T00:00:00.000Z",
@@ -2388,7 +2388,7 @@ describe("server agent delegation endpoint core", () => {
     ]);
     expect(response.events.map((event) => event.type)).toContain("agent.delegation.unknown_target");
     expectValidAgentDelegationEvents(response.events);
-    expect(response.finalContent).toContain("채아린 최종");
+    expect(response.finalContent).toContain("쿠루미 최종");
   });
 });
 
@@ -2418,9 +2418,9 @@ describe("HTTP request limits", () => {
           sessionId: "session_http",
           executionMode: "mock",
           caller: {
-            agentId: "agent_chaerin",
+            agentId: "agent_kurumi",
             role: "companion",
-            personaName: "chaerin",
+            personaName: "kurumi",
             providerProfileId: "provider_dgx02_vllm",
             modelId: "qwen36-gio-lora-v5-prisma",
           },
@@ -2502,9 +2502,9 @@ describe("HTTP request limits", () => {
           sessionId: "session_http",
           executionMode: "mock",
           caller: {
-            agentId: "agent_chaerin",
+            agentId: "agent_kurumi",
             role: "companion",
-            personaName: "chaerin",
+            personaName: "kurumi",
             providerProfileId: "provider_dgx02_vllm",
             modelId: "qwen36-gio-lora-v5-prisma",
           },
@@ -2611,9 +2611,9 @@ describe("HTTP request limits", () => {
           sessionId: "session_http",
           executionMode: "mock",
           caller: {
-            agentId: "agent_chaerin",
+            agentId: "agent_kurumi",
             role: "companion",
-            personaName: "chaerin",
+            personaName: "kurumi",
             providerProfileId: "provider_dgx02_vllm",
             modelId: "qwen36-gio-lora-v5-prisma",
           },
@@ -2687,9 +2687,9 @@ describe("HTTP request limits", () => {
           id: "agent_delegation_live_permission",
           sessionId: "session_http_permission",
           caller: {
-            agentId: "agent_chaerin",
+            agentId: "agent_kurumi",
             role: "companion",
-            personaName: "chaerin",
+            personaName: "kurumi",
             providerProfileId: "provider_apifun_claude",
             modelId: "claude-opus-4-6",
           },
@@ -2792,7 +2792,7 @@ describe("HTTP request limits", () => {
         id: "approval_agent_delegation_replay",
         sessionId: "session_replay",
         sourceItemId: "agent_delegation_replay_source",
-        subjectId: "agent_chaerin:agent_maomao",
+        subjectId: "agent_kurumi:agent_maomao",
         actor: "user" as const,
         channel: "desktop" as const,
         sourceTrust: "trusted" as const,
@@ -2810,9 +2810,9 @@ describe("HTTP request limits", () => {
             sessionId: "session_replay",
             executionMode: "mock",
             caller: {
-              agentId: "agent_chaerin",
+              agentId: "agent_kurumi",
               role: "companion",
-              personaName: "chaerin",
+              personaName: "kurumi",
               providerProfileId: "provider_dgx02_vllm",
               modelId: "qwen36-gio-lora-v5-prisma",
             },

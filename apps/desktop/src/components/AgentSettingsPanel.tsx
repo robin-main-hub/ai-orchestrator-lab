@@ -143,7 +143,7 @@ export function AgentSettingsPanel({
 }
 
 /**
- * design-decisions.md §8 — 채아린(companion) Level 3, Maomao(researcher)
+ * design-decisions.md §8 — 쿠루미(companion) Level 3, Maomao(researcher)
  * read-only 작업 Level 4, Executor 같은 위험 role 은 Level 3 이하.
  */
 function initialAutonomyForRole(role: WorkbenchAgent["role"]): AutonomyLevel {

@@ -293,18 +293,18 @@ describe("protocol schemas", () => {
 
   it("validates delegation event payloads for companion sub-agent routing", () => {
     const detected = agentDelegationDetectedPayloadSchema.parse({
-      sourceAgentId: "agent_chae_arin",
-      sourceAgentName: "채아린",
+      sourceAgentId: "agent_kurumi",
+      sourceAgentName: "쿠루미",
       sourceRole: "companion",
-      sourcePersonaName: "chae_arin",
+      sourcePersonaName: "kurumi",
       authorityLevel: "orchestrator_plus",
       targets: ["researcher", "executor"],
       count: 2,
       depthLimit: 1,
     });
     const dispatched = agentDelegationDispatchedPayloadSchema.parse({
-      sourceAgentId: "agent_chae_arin",
-      sourceAgentName: "채아린",
+      sourceAgentId: "agent_kurumi",
+      sourceAgentName: "쿠루미",
       targetAgentId: "agent_maomao",
       targetAgentName: "Maomao",
       targetRole: "researcher",
@@ -316,7 +316,7 @@ describe("protocol schemas", () => {
       depthLimit: 1,
     });
     const succeeded = agentDelegationSucceededPayloadSchema.parse({
-      sourceAgentId: "agent_chae_arin",
+      sourceAgentId: "agent_kurumi",
       targetAgentId: "agent_maomao",
       targetAgentName: "Maomao",
       targetRole: "researcher",
@@ -327,8 +327,8 @@ describe("protocol schemas", () => {
       realProviderCall: true,
     });
     const followup = agentDelegationFollowupCompletedPayloadSchema.parse({
-      sourceAgentId: "agent_chae_arin",
-      sourceAgentName: "채아린",
+      sourceAgentId: "agent_kurumi",
+      sourceAgentName: "쿠루미",
       outcomeCount: 2,
       succeededCount: 1,
       blockedCount: 1,
@@ -367,10 +367,10 @@ describe("protocol schemas", () => {
         id: "event_detected",
         type: "agent.delegation.detected",
         payload: {
-          sourceAgentId: "agent_chae_arin",
-          sourceAgentName: "채아린",
+          sourceAgentId: "agent_kurumi",
+          sourceAgentName: "쿠루미",
           sourceRole: "companion",
-          sourcePersonaName: "chae_arin",
+          sourcePersonaName: "kurumi",
           authorityLevel: "orchestrator_plus",
           targets: ["researcher", "ghost"],
           count: 2,
@@ -383,7 +383,7 @@ describe("protocol schemas", () => {
         id: "event_unknown",
         type: "agent.delegation.unknown_target",
         payload: {
-          sourceAgentId: "agent_chae_arin",
+          sourceAgentId: "agent_kurumi",
           target: "ghost",
           promptLength: 12,
         },
@@ -394,8 +394,8 @@ describe("protocol schemas", () => {
         id: "event_dispatch",
         type: "agent.delegation.dispatched",
         payload: {
-          sourceAgentId: "agent_chae_arin",
-          sourceAgentName: "채아린",
+          sourceAgentId: "agent_kurumi",
+          sourceAgentName: "쿠루미",
           targetAgentId: "agent_maomao",
           targetAgentName: "Maomao",
           targetRole: "researcher",
@@ -413,7 +413,7 @@ describe("protocol schemas", () => {
         id: "event_success",
         type: "agent.delegation.succeeded",
         payload: {
-          sourceAgentId: "agent_chae_arin",
+          sourceAgentId: "agent_kurumi",
           targetAgentId: "agent_maomao",
           targetAgentName: "Maomao",
           targetRole: "researcher",
@@ -430,8 +430,8 @@ describe("protocol schemas", () => {
         id: "event_followup",
         type: "agent.delegation.followup.completed",
         payload: {
-          sourceAgentId: "agent_chae_arin",
-          sourceAgentName: "채아린",
+          sourceAgentId: "agent_kurumi",
+          sourceAgentName: "쿠루미",
           outcomeCount: 2,
           succeededCount: 1,
           blockedCount: 1,
