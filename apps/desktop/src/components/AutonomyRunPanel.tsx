@@ -22,6 +22,7 @@ import {
   type AutonomyRunSummary,
 } from "../lib/autonomyRunHistory";
 import { rosterRowLabel, rosterRowVariant, type AutonomyRosterSummary } from "../lib/autonomyRoster";
+import { resolvePersonaSprite, type PersonaSpriteMap } from "../lib/personaAvatarBundle";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
 
 const MODES: AutonomyMode[] = ["human", "auto_safe"];
@@ -43,6 +44,8 @@ export function AutonomyRunPanel({
   roster,
   notice,
   personaAvatars,
+  personaSprites,
+  expression,
   onFieldChange,
   onRun,
   onLoadFromPacket,
@@ -60,19 +63,33 @@ export function AutonomyRunPanel({
   notice?: string;
   /** persona slug -> avatar image url (from imported character cards) */
   personaAvatars?: Record<string, string>;
+  /** persona slug -> { expression -> sprite url } */
+  personaSprites?: PersonaSpriteMap;
+  /** current expression key for the selected persona's portrait */
+  expression?: string;
   onFieldChange: (patch: Partial<AutonomyRunForm>) => void;
   onRun: () => void;
   /** when provided, shows a button to (re)load the form from the current CodingPacket */
   onLoadFromPacket?: () => void;
 }) {
   const disabled = running || !runnable.ok;
-  const selectedAvatar = personaAvatars?.[form.personaName.trim()];
+  const personaPortrait = resolvePersonaSprite(form.personaName.trim(), expression ?? "neutral", {
+    sprites: personaSprites,
+    avatars: personaAvatars,
+  });
 
   return (
     <section className="mini-panel autonomy-run-panel">
       <header>
-        {selectedAvatar ? (
-          <img className="autonomy-persona-avatar" src={selectedAvatar} alt="" width={18} height={18} />
+        {personaPortrait ? (
+          <img
+            className="autonomy-persona-avatar"
+            src={personaPortrait}
+            alt=""
+            title={expression ? `표정: ${expression}` : undefined}
+            width={18}
+            height={18}
+          />
         ) : (
           <Bot size={16} />
         )}
@@ -187,7 +204,9 @@ export function AutonomyRunPanel({
           <h4>pane 로스터 · 점유 {roster.busyCount} / 비어있음 {roster.freeCount}</h4>
           <ul>
             {roster.rows.map((row) => {
-              const avatar = row.agentId ? personaAvatars?.[row.agentId] : undefined;
+              const avatar = row.agentId
+                ? resolvePersonaSprite(row.agentId, "neutral", { sprites: personaSprites, avatars: personaAvatars })
+                : undefined;
               return (
                 <li key={row.paneId}>
                   {avatar ? (

@@ -27,6 +27,8 @@ function render(props: Partial<Parameters<typeof AutonomyRunPanel>[0]> = {}) {
       roster={props.roster}
       notice={props.notice}
       personaAvatars={props.personaAvatars}
+      personaSprites={props.personaSprites}
+      expression={props.expression}
       onFieldChange={noop}
       onRun={noop}
       onLoadFromPacket={props.onLoadFromPacket}
@@ -103,6 +105,15 @@ describe("AutonomyRunPanel", () => {
   it("falls back to the bot icon when the persona has no avatar", () => {
     const html = render({ form: form({ personaName: "architect" }), personaAvatars: { makima: "/x.png" } });
     expect(html).not.toContain("autonomy-persona-avatar");
+  });
+
+  it("shows the expression sprite for the current emotion, with neutral fallback", () => {
+    const sprites = { makima: { neutral: "/n.png", pride: "/pride.png" } };
+    const proud = render({ form: form({ personaName: "makima" }), personaSprites: sprites, expression: "pride" });
+    expect(proud).toContain("/pride.png");
+    expect(proud).toContain("표정: pride");
+    const noSprite = render({ form: form({ personaName: "makima" }), personaSprites: sprites, expression: "anger" });
+    expect(noSprite).toContain("/n.png"); // anger missing -> neutral sprite
   });
 
   it("renders the pane roster when present", () => {

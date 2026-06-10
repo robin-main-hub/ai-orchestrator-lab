@@ -20,7 +20,8 @@ import {
 import { codingPacketToAutonomyForm } from "../lib/codingPacketToAutonomyForm";
 import { stepRowFromReduce, type AutonomyStepRow } from "../lib/autonomyTimeline";
 import { bundledPersonaNames, personaFileSource } from "../lib/personaBundleSource";
-import { personaAvatars } from "../lib/personaAvatarSource";
+import { personaAvatars, personaSprites } from "../lib/personaAvatarSource";
+import { classifyExpression } from "../lib/expressionClassifier";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
 import { AutonomyRunPanel } from "./AutonomyRunPanel";
 
@@ -163,8 +164,14 @@ export function AutonomyRunContainer({
       onFieldChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
       onRun={onRun}
       history={historyEvents ? projectAutonomyRunHistory(historyEvents) : undefined}
+      expression={classifyExpression({
+        outcome: running ? steps[steps.length - 1]?.outcome : undefined,
+        loopStatus: outcome?.ok ? outcome.loopStatus : undefined,
+        running,
+      })}
       notice={notice}
       personaAvatars={personaAvatars}
+      personaSprites={personaSprites}
       roster={registry ? rosterFromRegistry(registry) : undefined}
       onLoadFromPacket={seedPacket ? () => setForm(codingPacketToAutonomyForm(seedPacket)) : undefined}
       outcome={outcome}
