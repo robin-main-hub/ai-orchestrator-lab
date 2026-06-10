@@ -66,6 +66,7 @@ import { AgentSkillProfilePanel } from "./AgentSkillProfilePanel";
 import { ProviderReadinessPreflight } from "./ProviderReadinessPreflight";
 import { MakimaDelegationConsole } from "./MakimaDelegationConsole";
 import { WorkTheater } from "./WorkTheater";
+import { WorkspaceDiffPanel, WorkspaceFilesPanel } from "./WorkspaceChangesPanel";
 
 // Sub-components
 import { MessageThread } from "./MessageThread";
@@ -679,9 +680,9 @@ export function ConversationWorkbench({
               <ChatSidePanelStub mode="agents" />
             )
           ) : null}
-          {sidePanelMode === "preview" || sidePanelMode === "diff" || sidePanelMode === "files" ? (
-            <ChatSidePanelStub mode={sidePanelMode} />
-          ) : null}
+          {sidePanelMode === "diff" ? <WorkspaceDiffPanel /> : null}
+          {sidePanelMode === "files" ? <WorkspaceFilesPanel /> : null}
+          {sidePanelMode === "preview" ? <ChatSidePanelStub mode="preview" /> : null}
         </ChatSidePanel>
       </div>
     </section>

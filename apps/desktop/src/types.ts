@@ -57,6 +57,7 @@ export type AgentVisualSettings = {
   avatarUpdatedAt?: string;
 };
 export type NavItemId =
+  | "none"
   | "dashboard"
   | "sessions"
   | "projects"

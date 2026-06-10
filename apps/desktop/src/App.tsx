@@ -4138,7 +4138,7 @@ export function App() {
           // a top-bar tab always claims the center — leave any nav-owned view,
           // even when the mode value itself is unchanged
           if (navCenterActive) {
-            setActiveNavItem("sessions");
+            setActiveNavItem("none");
             setProviderRegistrationOpen(false);
             setAdminRailOpen(false);
           }

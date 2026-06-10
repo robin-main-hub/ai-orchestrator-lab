@@ -29,6 +29,7 @@ import {
 import { requestCompletion, streamCompletion } from "../../lib/codingAgentClient";
 import { loadCodingSessions, saveCodingSessions } from "../../lib/codingChatStore";
 import { createGatedToolExecutor, runCodingTurn, toolToCommand } from "../../lib/codingTurnRunner";
+import { workspaceChangeLedger } from "../../lib/workspaceChangeLedger";
 import { createApprovalStrategy, type AutonomyMode } from "../../lib/autonomousRun";
 import { createClosedLoopEffects } from "../../lib/closedLoopRuntime";
 import { CodingThread } from "./CodingThread";
@@ -204,7 +205,12 @@ export function CodingWorkbench({
     const mentions = extractMentions(userText);
     const system = buildSystemPrompt({ agentMode: working.agentMode, mentions, workingDir });
     const effects = buildEffects(working);
-    const executeTool = createGatedToolExecutor(effects);
+    const gatedExecutor = createGatedToolExecutor(effects);
+    // Phase A: 모든 도구 호출을 워크스페이스 변경 원장에 기록 — 대화 탭 Diff/Files 패널이 구독
+    const executeTool: typeof gatedExecutor = async (call) => {
+      workspaceChangeLedger.recordToolCall(call);
+      return gatedExecutor(call);
+    };
 
     let assistantMessageId = "";
     let requestSeq = 0;
