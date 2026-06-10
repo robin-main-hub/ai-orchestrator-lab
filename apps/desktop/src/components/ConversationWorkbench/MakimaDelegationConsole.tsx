@@ -115,6 +115,7 @@ export function MakimaDelegationConsole({
                     <div className="flex items-center gap-1">
                       <Button
                         className="h-7 border-cyan-300/20 bg-cyan-400/10 px-2 text-[11px] text-cyan-100 hover:bg-cyan-400/15"
+                        disabled={assignment.status === "done" ? !onOpenAssignedAgent : !onProgressAssignment}
                         onClick={() =>
                           assignment.status === "done"
                             ? onOpenAssignedAgent?.(card.targetAgentId)
@@ -129,6 +130,7 @@ export function MakimaDelegationConsole({
                       </Button>
                       <Button
                         className="h-7 border-white/10 bg-white/[0.03] px-2 text-[11px] text-zinc-300 hover:bg-white/[0.06]"
+                        disabled={!onOpenAssignedAgent}
                         onClick={() => onOpenAssignedAgent?.(card.targetAgentId)}
                         size="sm"
                         type="button"

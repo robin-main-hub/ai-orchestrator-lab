@@ -43,9 +43,10 @@ function StepRow({ step }: { step: ResearchStep }) {
     <li className={`research-step research-step--${step.status}`}>
       <button
         className="research-step__row"
+        disabled={!hasBody}
         onClick={() => hasBody && setOpen((value) => !value)}
         type="button"
-        aria-expanded={open}
+        aria-expanded={hasBody ? open : undefined}
       >
         <Icon size={14} aria-hidden className="research-step__icon" />
         <span className="research-step__verb">{STEP_VERB[step.kind]}</span>
