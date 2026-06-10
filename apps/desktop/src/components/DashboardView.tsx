@@ -6,6 +6,7 @@ import type { AutonomyRunSummary } from "../lib/autonomyRunHistory";
 import { runHistoryStatusLabel, runHistoryStatusVariant } from "../lib/autonomyRunHistory";
 import type { HermesPoolSummary } from "../lib/hermesSlotPool";
 import { buildPersonaCard } from "../lib/personaCard";
+import { PERSONA_CODEX } from "../lib/personaCodex";
 import { PersonaCard } from "./PersonaCard";
 
 /**
@@ -52,6 +53,7 @@ export type DashboardPersona = {
 
 export function DashboardView({
   personas,
+  personaAvatars = {},
   runtime,
   hermesPool,
   pendingApprovals,
@@ -59,6 +61,8 @@ export function DashboardView({
   onNavigate,
 }: {
   personas: DashboardPersona[];
+  /** avatar url per persona slug — codex cards pick art up automatically */
+  personaAvatars?: Record<string, string | undefined>;
   runtime: RuntimeSnapshot;
   hermesPool: HermesPoolSummary;
   pendingApprovals: number;
@@ -116,6 +120,26 @@ export function DashboardView({
                 })}
               />
               <figcaption className="dashboard__party-tagline">{persona.tagline}</figcaption>
+            </figure>
+          ))}
+        </div>
+      </section>
+
+      <section className="dashboard__section" aria-label="캐릭터 도감">
+        <h2 className="dashboard__section-title">캐릭터 도감 — 전원 {PERSONA_CODEX.length}인</h2>
+        <div className="dashboard__codex">
+          {PERSONA_CODEX.map((entry) => (
+            <figure className="dashboard__codex-card" key={entry.personaName}>
+              <PersonaCard
+                compact
+                card={buildPersonaCard({
+                  personaName: entry.personaName,
+                  displayName: entry.displayName,
+                  role: entry.role as never,
+                  avatarUrl: personaAvatars[entry.personaName],
+                })}
+              />
+              <figcaption className="dashboard__codex-caption">{entry.caption}</figcaption>
             </figure>
           ))}
         </div>
