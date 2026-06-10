@@ -108,16 +108,6 @@ button {
   grid-template-rows: 48px minmax(0, 1fr);
 }
 
-.app-shell.conversation-v0-shell.has-right-rail {
-  grid-template-columns:
-    minmax(0, 1fr)
-    var(--conversation-right-rail-resizer-width, 10px)
-    minmax(
-      var(--conversation-right-rail-min, 320px),
-      var(--conversation-right-rail-width, 390px)
-    );
-}
-
 .status-bar {
   grid-column: 2;
   grid-row: 1;
@@ -285,57 +275,11 @@ button {
   background: transparent;
 }
 
-.conversation-v0-shell .right-rail-resizer {
-  position: relative;
-  z-index: 8;
+.conversation-v0-shell .right-rail {
   grid-column: 2;
   grid-row: 1 / 3;
-  width: var(--conversation-right-rail-resizer-width, 10px);
-  min-width: var(--conversation-right-rail-resizer-width, 10px);
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  cursor: col-resize;
-  touch-action: none;
-}
-
-.conversation-v0-shell .right-rail-resizer::before {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 1px;
-  content: "";
-  background: rgba(63, 63, 70, 0.7);
-  transform: translateX(-50%);
-  transition:
-    width 120ms ease,
-    background 120ms ease,
-    box-shadow 120ms ease;
-}
-
-.conversation-v0-shell .right-rail-resizer:hover::before,
-.conversation-v0-shell .right-rail-resizer.dragging::before,
-.conversation-v0-shell .right-rail-resizer:focus-visible::before {
-  width: 3px;
-  background: color-mix(in srgb, var(--cyan) 82%, white 8%);
-  box-shadow: 0 0 18px color-mix(in srgb, var(--cyan) 36%, transparent);
-}
-
-.conversation-v0-shell .right-rail-resizer:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--cyan) 72%, white 8%);
-  outline-offset: -2px;
-}
-
-.conversation-v0-shell .right-rail {
-  grid-column: 3;
-  grid-row: 1 / 3;
   grid-template-rows: minmax(0, 1fr);
-  width: 100%;
-  min-width: var(--conversation-right-rail-min, 320px);
+  width: var(--conversation-right-rail-width, 390px);
   max-width: var(--conversation-right-rail-max, 420px);
 }
 
@@ -7862,8 +7806,7 @@ button {
   }
 
   /* Hide right rail completely on mobile to prevent overflow */
-  .right-rail,
-  .right-rail-resizer {
+  .right-rail {
     display: none !important;
   }
 
@@ -9695,4 +9638,11 @@ body:has(.app-shell.annex-focus-shell) {
   .coding-mission-board-toggle {
     display: none;
   }
+}
+
+/* "에이전트" 사이드 패널 모드 — AgentsSidebar가 패널 폭에 맞게 흐르도록 */
+.chat-side-panel-agents > * {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
