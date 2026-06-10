@@ -4,6 +4,7 @@ import { StatusBadge } from "@/ui/status-badge";
 import { loadHermesPool } from "../lib/hermesPoolStore";
 import { buildCodexDetail, type CodexDetail } from "../lib/personaCodexDetail";
 import { personaBundleMap } from "../lib/personaBundleSource";
+import { personaSprites } from "../lib/personaAvatarSource";
 import { PersonaCodexModal } from "./PersonaCodexModal";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import type { CenterMode, NavItemId } from "../types";
@@ -210,6 +211,7 @@ export function DashboardView({
         <PersonaCodexModal
           detail={codexDetail}
           avatarUrl={personaAvatars[codexDetail.entry.personaName]}
+          expressions={personaSprites[codexDetail.entry.personaName]}
           onClose={() => setCodexDetail(null)}
           onSummonAutonomy={(personaName) => {
             setCodexDetail(null);

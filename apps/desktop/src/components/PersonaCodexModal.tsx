@@ -13,6 +13,7 @@ import { PersonaCard } from "./PersonaCard";
 export function PersonaCodexModal({
   detail,
   avatarUrl,
+  expressions,
   onClose,
   onSummonAutonomy,
   onSummonParallel,
@@ -20,6 +21,8 @@ export function PersonaCodexModal({
 }: {
   detail: CodexDetail;
   avatarUrl?: string;
+  /** 28표정 스프라이트 (agents/<slug>/expressions/<표정>.png) — 있으면 갤러리 표시 */
+  expressions?: Record<string, string>;
   onClose: () => void;
   /** 자율실행 탭으로 이동 + 이 페르소나 프리필 */
   onSummonAutonomy: (personaName: string) => void;
@@ -81,6 +84,22 @@ export function PersonaCodexModal({
                 </p>
               )}
             </div>
+
+            {expressions && Object.keys(expressions).length > 0 ? (
+              <div className="codex-modal__expressions">
+                <h3 className="codex-modal__soul-title">
+                  <Sparkles size={13} aria-hidden /> 표정 — {Object.keys(expressions).length}종
+                </h3>
+                <div className="codex-modal__expression-grid">
+                  {Object.entries(expressions).map(([expression, url]) => (
+                    <figure className="codex-modal__expression" key={expression}>
+                      <img alt={expression} loading="lazy" src={url} />
+                      <figcaption>{expression}</figcaption>
+                    </figure>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <div className="codex-modal__actions">
               <button className="codex-modal__action codex-modal__action--primary" onClick={() => onSummonAutonomy(entry.personaName)} type="button">

@@ -18,6 +18,7 @@ import { Button } from "@/ui/button";
 import { AgentPortrait, AgentStatePill, type AgentState } from "./shared/AgentActivity";
 import { makeSyntheticBlock, TmuxPaneTimeline } from "./TmuxPaneTimeline";
 import { codexByPaneRole } from "../lib/personaPaneRoster";
+import { personaAvatars } from "../lib/personaAvatarSource";
 import {
   compactTmuxPreview,
   formatTmuxDifficultyLabel,
@@ -550,6 +551,25 @@ function FleetStat({ dotClass, label, value }: { dotClass: string; label: string
   );
 }
 
+/**
+ * pane 초상 해석: 배정 에이전트의 personaName → 역할 슬러그(agents/<role>) →
+ * 이 워크스테이션의 첫 소환 후보 순으로 아바타를 찾는다. 후보조차 없는
+ * 역할 전용 pane(프론트/백엔드 등)만 이니셜로 남는다.
+ */
+function panePortraitUrl(pane: TmuxPaneDefinition): string | undefined {
+  if (pane.agent?.personaName && personaAvatars[pane.agent.personaName]) {
+    return personaAvatars[pane.agent.personaName];
+  }
+  if (pane.agent && personaAvatars[pane.agent.role]) {
+    return personaAvatars[pane.agent.role];
+  }
+  for (const entry of codexByPaneRole()[pane.roleKey] ?? []) {
+    const url = personaAvatars[entry.personaName];
+    if (url) return url;
+  }
+  return undefined;
+}
+
 function TmuxFleetRow({
   pane,
   isSelected,
@@ -573,7 +593,7 @@ function TmuxFleetRow({
       onClick={onSelect}
       type="button"
     >
-      <AgentPortrait initials={initials} state={state} size="sm" tintClassName="bg-zinc-800 text-zinc-300" />
+      <AgentPortrait avatarUrl={panePortraitUrl(pane)} initials={initials} state={state} size="sm" tintClassName="bg-zinc-800 text-zinc-300" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-medium text-zinc-100">{pane.title}</span>
@@ -621,7 +641,7 @@ function TmuxPaneDetail({
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex shrink-0 items-center gap-3 border-b border-zinc-800/60 px-5 py-3.5">
-        <AgentPortrait initials={pane.agent ? getInitials(pane.agent.name) : getInitials(pane.title)} state={state} size="md" tintClassName="bg-zinc-800 text-zinc-200" />
+        <AgentPortrait avatarUrl={panePortraitUrl(pane)} initials={pane.agent ? getInitials(pane.agent.name) : getInitials(pane.title)} state={state} size="md" tintClassName="bg-zinc-800 text-zinc-200" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h2 className="truncate text-sm font-medium text-zinc-100">{pane.title}</h2>
