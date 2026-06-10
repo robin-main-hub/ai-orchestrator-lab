@@ -9,6 +9,7 @@ import type {
   WorkbenchAgent,
 } from "../types";
 import type { AgentChannelMemoryScope } from "../lib/agentConversationChannels";
+import { evaluateAnswerability } from "../lib/answerabilityGuard";
 import {
   createAgentChannelRuntimeSummary,
   createAgentRoleToolRuntimeSummary,
@@ -48,8 +49,12 @@ export function createConversationPipelineMessages({
   systemMessageId = `message_system_pipeline_${crypto.randomUUID()}`,
   userMessage,
 }: CreateConversationPipelineMessagesInput): ConversationMessage[] {
-  const recalledMemories = memory.trace.results
-    .filter((result) => result.usedInDecision && memoryResultMatchesScope(result, memoryScope))
+  const scopedResults = memory.trace.results.filter(
+    (result) => result.usedInDecision && memoryResultMatchesScope(result, memoryScope),
+  );
+  // 패치 P2: 내용 기반(부스트 제외) 점수로 답변가능성 판정 — 핀고정 무관 기억 차단
+  const answerability = evaluateAnswerability(scopedResults);
+  const recalledMemories = answerability.groundedResults
     .slice(0, 5)
     .map(
       (result, index) =>
@@ -75,7 +80,7 @@ export function createConversationPipelineMessages({
   const attachmentContext = createAttachmentContext(userMessage);
   const longContextTruncated = previousMessages.length > 8;
   const continuityWarning =
-    longContextTruncated && recalledMemories.length === 0
+    longContextTruncated && recalledMemories.length === 0 && answerability.answerable
       ? [
           "Long conversation continuity: older turns were compacted out of the live prompt and no EvolveMemento recall matched this agent scope.",
           "If the answer depends on earlier context, ask a short clarification instead of inventing missing details.",
@@ -116,9 +121,9 @@ export function createConversationPipelineMessages({
     createAgentChannelRuntimeSummary(memoryScope),
     roleToolConfig.promptText,
     runtimeConfig.promptText,
-    recalledMemories.length > 0
+    answerability.answerable && recalledMemories.length > 0
       ? `EvolveMemento recall:\n${recalledMemories.join("\n")}`
-      : "EvolveMemento recall: no selected records",
+      : answerability.idkDirective ?? "EvolveMemento recall: no selected records",
     attachmentContext,
     continuityWarning,
     agent.role === "companion" || agent.role === "orchestrator"
