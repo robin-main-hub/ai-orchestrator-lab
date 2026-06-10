@@ -9,6 +9,14 @@
  * compaction. The runner (codingTurnRunner) and the React container build on it.
  */
 
+import {
+  condense,
+  estimateTokens,
+  renderCondensate,
+  shouldWithholdCondensation,
+  type CondenserTurn,
+} from "./conversationCondenser";
+
 export type CodingToolName = "bash" | "read" | "grep" | "glob" | "write" | "edit" | "todo";
 
 export type ToolStatus = "proposed" | "pending_approval" | "running" | "completed" | "failed" | "denied";
@@ -252,30 +260,73 @@ export function redoLastUndo(session: CodingSession, now: string): CodingSession
 }
 
 /** /compact — fold all but the last `keepTurns` messages into a summary stub */
+/** 코딩 메시지를 응축기 입력 턴으로 — 도구 호출은 제목+상태, 실패 출력은 머리·꼬리 보존 */
+function messageToCondenserText(message: ChatMessage): string {
+  return message.parts
+    .map((part) => {
+      if (part.type === "text") return part.text;
+      const status = part.call.status === "failed" ? "error" : "ok";
+      const base = `[tool: ${part.call.title} → ${status}]`;
+      if (part.call.status === "failed" && part.call.output) {
+        const out = part.call.output;
+        const head = out.slice(0, 200);
+        const tail = out.length > 400 ? ` … ${out.slice(-200)}` : "";
+        return `${base} ${head}${tail}`;
+      }
+      return base;
+    })
+    .join(" ");
+}
+
 export function compactSession(session: CodingSession, input: { keepMessages?: number; now: string }): CodingSession {
   const keep = input.keepMessages ?? 6;
   if (session.messages.length <= keep) return session;
   const dropped = session.messages.slice(0, session.messages.length - keep);
-  const summaryLines = dropped
-    .map((message) => {
-      const text = message.parts
-        .map((part) => (part.type === "text" ? part.text : `[${part.call.tool}: ${part.call.title}]`))
-        .join(" ")
-        .slice(0, 160);
-      return `- ${message.role === "user" ? "사용자" : "어시스턴트"}: ${text}`;
-    })
-    .join("\n");
-  const summary = `${session.compactedSummary ? `${session.compactedSummary}\n` : ""}${summaryLines}`;
+
+  // MT-OSC 추출형 응축 — 기계적 160자 잘림 대신 핵심 정보 클래스(파일경로/에러/결정/숫자/정정)
+  // 보존. 이전 요약을 prior 쌍으로 접어 재응축하므로 요약이 단조 증가하지 않는다.
+  const priorPair = session.compactedSummary
+    ? { humanInput: "(이전 압축 요약)", assistant: session.compactedSummary, reasoning: "prior" }
+    : undefined;
+  const window: CondenserTurn[] = dropped.map((message) => ({
+    id: message.id,
+    role: message.role === "user" ? "user" : "assistant",
+    text: messageToCondenserText(message),
+  }));
+  const condensate = condense({
+    prior: priorPair ? { pairs: [priorPair], tokenEstimate: estimateTokens(session.compactedSummary ?? ""), version: 0 } : null,
+    window,
+  });
+
   return touch(
     {
       ...session,
       messages: session.messages.slice(session.messages.length - keep),
-      compactedSummary: summary,
+      compactedSummary: renderCondensate(condensate),
       checkpoints: [],
       redoStack: [],
     },
     input.now,
   );
+}
+
+/** usage 기반 자동 응축 임계 (마지막 요청 입력 토큰이 이를 넘으면 /compact 권장) */
+export const AUTO_COMPACT_INPUT_TOKEN_THRESHOLD = 12000;
+
+/**
+ * 이번 응축을 진행해도 되는지(Decider) — 활발한 리파인먼트 아크면 보류해 보호.
+ * force=true(수동 /compact)면 항상 진행.
+ */
+export function shouldAutoCompact(session: CodingSession, lastInputTokens: number, force = false): boolean {
+  if (force) return session.messages.length > 6;
+  if (lastInputTokens <= AUTO_COMPACT_INPUT_TOKEN_THRESHOLD) return false;
+  if (session.messages.length <= 6) return false;
+  const dropped = session.messages.slice(0, session.messages.length - 6);
+  const turns: CondenserTurn[] = dropped.map((message) => ({
+    role: message.role === "user" ? "user" : "assistant",
+    text: messageToCondenserText(message),
+  }));
+  return !shouldWithholdCondensation(turns);
 }
 
 // ─── assistant reply wire protocol ─────────────────────────────────────────
