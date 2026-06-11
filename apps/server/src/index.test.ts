@@ -839,7 +839,7 @@ describe("server health placeholder", () => {
               top_p?: number;
             };
             expect(body.model).toBe("mimo-v2.5-pro");
-            expect(body.max_completion_tokens).toBe(512);
+            expect(body.max_completion_tokens).toBe(4096);
             expect(body.thinking?.type).toBe("disabled");
             expect(body.top_p).toBe(0.95);
             expect(body.messages[0]?.role).toBe("system");
