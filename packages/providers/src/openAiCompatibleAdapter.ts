@@ -1,5 +1,6 @@
 import type {
   ModelDescriptor,
+  ProviderCompletionAttachment,
   ProviderCompletionMessage,
   ProviderCompletionRequest,
   ProviderCompletionResponse,
@@ -140,7 +141,7 @@ export class OpenAICompatibleAdapter implements LlmAdapter {
       const response = await this.fetchImpl(endpoint, {
         method: "POST",
         headers: this.createHeaders(secret),
-        body: JSON.stringify(this.createRequestBody(request.modelId, request.messages)),
+        body: JSON.stringify(this.createRequestBody(request)),
         signal: createRequestSignal(ctx),
       });
       const rawText = await response.text();
@@ -199,7 +200,7 @@ export class OpenAICompatibleAdapter implements LlmAdapter {
     try {
       const secret = await this.resolveSecret(ctx);
       const requestBody = {
-        ...this.createRequestBody(request.modelId, request.messages),
+        ...this.createRequestBody(request),
         stream: true,
         stream_options: { include_usage: true },
       };
@@ -310,10 +311,13 @@ export class OpenAICompatibleAdapter implements LlmAdapter {
     return headers;
   }
 
-  private createRequestBody(modelId: string, messages: ProviderCompletionMessage[]) {
+  private createRequestBody(request: ProviderCompletionRequest) {
     return {
-      model: modelId,
-      messages: createOpenAIChatMessages(messages, this.defaultSystemPrompt, this.maxContextMessages),
+      model: request.modelId,
+      messages: applyOpenAIImageAttachments(
+        createOpenAIChatMessages(request.messages, this.defaultSystemPrompt, this.maxContextMessages),
+        request.attachments,
+      ),
       max_tokens: this.maxTokens,
       temperature: this.temperature,
       ...this.extraBody,
@@ -368,6 +372,50 @@ export function createOpenAIChatMessages(
     },
     ...(contextLimit > 0 ? chatMessages.slice(-contextLimit) : []),
   ];
+}
+
+export type OpenAIChatContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+export type OpenAIChatMessageLike = {
+  role: "system" | "assistant" | "user" | "tool";
+  content: string | OpenAIChatContentPart[];
+};
+
+/**
+ * Attaches image data URLs to the last user message as OpenAI multimodal
+ * content parts. Non-image attachments (textContent riders) are handled
+ * upstream in the prompt pipeline, so only `kind: "image"` with a data URL
+ * is mapped here. Returns the input array untouched when there is nothing
+ * to attach.
+ */
+export function applyOpenAIImageAttachments<T extends OpenAIChatMessageLike>(
+  chatMessages: T[],
+  attachments?: ProviderCompletionAttachment[],
+): OpenAIChatMessageLike[] {
+  const imageUrls = (attachments ?? [])
+    .filter(
+      (attachment) =>
+        attachment.kind === "image" &&
+        typeof attachment.dataUrl === "string" &&
+        attachment.dataUrl.startsWith("data:"),
+    )
+    .map((attachment) => attachment.dataUrl as string);
+  if (imageUrls.length === 0) return chatMessages;
+
+  for (let index = chatMessages.length - 1; index >= 0; index -= 1) {
+    const message = chatMessages[index]!;
+    if (message.role !== "user" || typeof message.content !== "string") continue;
+    const parts: OpenAIChatContentPart[] = [
+      { type: "text", text: message.content },
+      ...imageUrls.map((url): OpenAIChatContentPart => ({ type: "image_url", image_url: { url } })),
+    ];
+    const next: OpenAIChatMessageLike[] = chatMessages.slice();
+    next[index] = { ...message, content: parts };
+    return next;
+  }
+  return chatMessages;
 }
 
 // createRequestSignal moved to ./signal.ts.

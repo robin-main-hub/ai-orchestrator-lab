@@ -58,7 +58,7 @@ export const DEFAULT_SAFE_COMMAND_PREFIXES: ReadonlyArray<string> = [
 
 // Shell features that could chain a second command or expand into one, plus
 // tokens that mutate the machine / reach the network. Any hit = not auto-safe.
-const DANGEROUS_PATTERN =
+export const DANGEROUS_PATTERN =
   /[;&|<>`$(){}]|\n|\r|--force|-rf\b|\bsudo\b|\brm\b|\bmv\b|\bcp\b|\bdd\b|\bmkfs\b|\bchmod\b|\bchown\b|\bln\b|\bcurl\b|\bwget\b|\bnc\b|\bssh\b|\bscp\b|\brsync\b|\bkill\b|\bshutdown\b|\breboot\b|\binstall\b|\buninstall\b|\badd\b|\bpublish\b|\bgit\s+push\b|\bgit\s+reset\b|\bgit\s+clean\b|\bgit\s+checkout\b|\bgit\s+commit\b|\bgit\s+rebase\b/i;
 
 export type SafeCommandVerdict = { allowed: boolean; reason: string };
