@@ -152,6 +152,7 @@ export function Stage3DebateTable({
 
           <DecisionRail
             codingImpactCount={decisionRail.codingImpactCount}
+            onCreateCodingPacket={onCreateCodingPacket}
             decisionCount={decisionRail.decisionCount}
             evidenceCount={decisionRail.evidenceCount}
             nextActionLabel={readiness.nextActionLabel}
@@ -269,12 +270,14 @@ function DecisionRail({
   evidenceCount,
   nextActionLabel,
   riskCount,
+  onCreateCodingPacket,
 }: {
   codingImpactCount: number;
   decisionCount: number;
   evidenceCount: number;
   nextActionLabel: string;
   riskCount: number;
+  onCreateCodingPacket: () => void;
 }) {
   return (
     <div className="mt-4 rounded-xl border border-violet-400/15 bg-[linear-gradient(135deg,rgba(139,92,246,0.10),rgba(24,24,27,0.52))] p-3 shadow-[0_0_32px_rgba(139,92,246,0.08)]">
@@ -297,7 +300,12 @@ function DecisionRail({
           <DecisionRailMetric label="결정" value={`결정 ${decisionCount}건`} tone="violet" />
           <DecisionRailMetric label="리스크" value={`리스크 ${riskCount}건`} tone={riskCount > 0 ? "amber" : "zinc"} />
           <DecisionRailMetric label="근거" value={`근거 ${evidenceCount}건`} tone="blue" />
-          <DecisionRailMetric label="패킷" value={codingImpactCount > 0 ? "패킷 만들기" : "패킷 대기"} tone={codingImpactCount > 0 ? "cyan" : "zinc"} />
+          <DecisionRailMetric
+            label="패킷"
+            value={codingImpactCount > 0 ? "패킷 만들기" : "패킷 대기"}
+            tone={codingImpactCount > 0 ? "cyan" : "zinc"}
+            onAction={codingImpactCount > 0 ? onCreateCodingPacket : undefined}
+          />
         </div>
       </div>
     </div>
@@ -308,10 +316,13 @@ function DecisionRailMetric({
   label,
   tone,
   value,
+  onAction,
 }: {
   label: string;
   tone: "amber" | "blue" | "cyan" | "violet" | "zinc";
   value: string;
+  /** 있으면 클릭 가능한 액션 버튼으로 렌더 (예: 패킷 만들기) */
+  onAction?: () => void;
 }) {
   const toneClass = {
     amber: "border-amber-400/20 bg-amber-400/10 text-amber-100",
@@ -321,14 +332,27 @@ function DecisionRailMetric({
     zinc: "border-zinc-700/70 bg-zinc-950/45 text-zinc-400",
   }[tone];
 
-  return (
-    <div className={`min-w-0 rounded-lg border px-2.5 py-1.5 ${toneClass}`}>
+  const inner = (
+    <>
       <p className="text-[9px] font-semibold text-current/65">{label}</p>
       <p className="mt-0.5 truncate text-[11px] font-semibold text-zinc-50" title={value}>
         {value}
       </p>
-    </div>
+    </>
   );
+  if (onAction) {
+    return (
+      <button
+        className={`min-w-0 rounded-lg border px-2.5 py-1.5 text-left transition hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 ${toneClass}`}
+        onClick={onAction}
+        title="이 토론을 코딩 패킷으로 만들기"
+        type="button"
+      >
+        {inner}
+      </button>
+    );
+  }
+  return <div className={`min-w-0 rounded-lg border px-2.5 py-1.5 ${toneClass}`}>{inner}</div>;
 }
 
 function resolveDefaultRoundIndex(session: Stage3DebateSession) {
