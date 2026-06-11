@@ -4789,10 +4789,14 @@ export function App() {
                 if (target.mode) {
                   setMode(target.mode);
                 }
-                const nextNav = target.nav ?? "sessions";
+                // mode만 있고 nav가 없으면 모드 화면(콕핏/토론/tmux)이 중앙을 온전히
+                // 차지하도록 nav를 비운다. (기존엔 "sessions"로 떨어져 엉뚱한 페이지가 떴음)
+                const nextNav = target.nav ?? (target.mode ? "none" : "sessions");
                 setActiveNavItem(nextNav);
                 setProviderRegistrationOpen(nextNav === "providers");
+                setAdminRailOpen(false);
               }}
+              onOpenApprovalQueue={() => setApprovalDrawerOpen(true)}
               onSummonPersona={(personaName, target) => {
                 setSummonSeedPersona(personaName);
                 setSummonSeedMode(target === "parallel" ? "parallel" : "single");
