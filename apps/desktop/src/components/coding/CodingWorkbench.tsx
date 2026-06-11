@@ -340,7 +340,7 @@ export function CodingWorkbench({
         appendMissionEvent(command.missionId, "Verify requested. Run pnpm typecheck/build/test in the worker before approval; fallback event recorded.", "needs_review");
         break;
       case "kill":
-        appendMissionEvent(command.missionId, "Kill requested. Dangerous tmux kill is gated; user approval is required before sending control commands.", "killed");
+        appendMissionEvent(command.missionId, "Kill 요청됨 — 위험한 tmux kill은 게이트 통과 필요. 승인 전까지 종료되지 않습니다.", "blocked");
         break;
       case "cleanup":
         appendMissionEvent(command.missionId, "Cleanup requested. Worktree/tmux/branch cleanup is staged and must be confirmed before destructive action.", "cleanup_ready");
@@ -584,10 +584,10 @@ export function CodingWorkbench({
                   </dl>
                   <p className="coding-mission-output">{mission.lastOutput}</p>
                   <div className="coding-mission-actions">
-                    <button onClick={() => appendMissionEvent(mission.id, "Attach fallback opened; capture output will be appended here once tmux route is wired.", "running")} type="button"><Terminal size={13} aria-hidden /> attach</button>
+                    <button onClick={() => appendMissionEvent(mission.id, "Attach 대기 — tmux 라우트가 연결되면 캡처 출력이 여기 누적됩니다. (아직 연결 안 됨)", "blocked")} type="button"><Terminal size={13} aria-hidden /> attach</button>
                     <button onClick={() => appendMissionEvent(mission.id, `Diff artifact: ${mission.diffPath}. Awaiting changed files/stat before approval.`, "needs_review")} type="button"><FileDiff size={13} aria-hidden /> diff</button>
                     <button onClick={() => appendMissionEvent(mission.id, `Verify artifact: ${mission.testOutputPath}. Typecheck/build/test gate queued.`, "needs_review")} type="button"><ShieldCheck size={13} aria-hidden /> verify</button>
-                    <button onClick={() => appendMissionEvent(mission.id, "Kill requires explicit approval before tmux send-keys/kill-pane.", "killed")} type="button"><CircleStop size={13} aria-hidden /> kill</button>
+                    <button onClick={() => appendMissionEvent(mission.id, "Kill 승인 대기 — tmux send-keys/kill-pane 전에 명시적 승인이 필요합니다. (아직 종료 안 됨)", "blocked")} type="button"><CircleStop size={13} aria-hidden /> kill</button>
                     <button onClick={() => appendMissionEvent(mission.id, "Cleanup staged: remove worktree, close tmux window, delete branch after approval.", "cleanup_ready")} type="button"><RotateCcw size={13} aria-hidden /> cleanup</button>
                   </div>
                   <details className="coding-mission-events">
