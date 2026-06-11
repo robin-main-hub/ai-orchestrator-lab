@@ -16,7 +16,8 @@ export function AgentSkillProfilePanel({
 }: {
   displayName?: string;
   onOpenConfig?: () => void;
-  onViewToolOptions?: () => void;
+  /** 도구 칩 클릭 — 해당 도구의 권한·경계가 정의된 AGENTS.md 설정을 연다 */
+  onViewToolOptions?: (toolLabel: string) => void;
   role: AgentRole;
   runtimeConfigFiles?: AgentConfigFile[];
 }) {
@@ -53,9 +54,9 @@ export function AgentSkillProfilePanel({
         <SkillCue icon={Wrench} label="호흡" value={collaboration.rhythmLabel} />
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
-        <SkillOptionButton active label={summary.label} onClick={onViewToolOptions} />
+        <SkillOptionButton active label={summary.label} onClick={() => onViewToolOptions?.(summary.label)} />
         {tools.map((tool) => (
-          <SkillOptionButton key={tool} label={tool} onClick={onViewToolOptions} />
+          <SkillOptionButton key={tool} label={tool} onClick={() => onViewToolOptions?.(tool)} />
         ))}
       </div>
       <RuntimeConfigList files={visibleRuntimeFiles} hiddenCount={hiddenRuntimeFileCount} onOpenConfig={onOpenConfig} />
