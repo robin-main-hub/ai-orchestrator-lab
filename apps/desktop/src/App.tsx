@@ -344,6 +344,7 @@ export function App() {
   const [summonSeedPersona, setSummonSeedPersona] = useState<string | null>(null);
   const [summonSeedMode, setSummonSeedMode] = useState<RunMode>("single");
   const [conversationViewMode, setConversationViewMode] = useState<"chat" | "agents">("chat");
+  const [annexInitialTab, setAnnexInitialTab] = useState<"status" | "memory" | "queue">("status");
   const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [cheatSheetOpen, setCheatSheetOpen] = useState(false);
@@ -3533,12 +3534,12 @@ export function App() {
   }
 
   function openMemoryFromCockpit() {
-    setReturnModeAfterConfigClose("cockpit");
-    setMode("conversation");
-    setAgentConfigPanel({ open: true, tab: "injection" });
+    setAnnexInitialTab("memory");
+    setMode("annex");
   }
 
   function openRecoveryFromCockpit() {
+    setAnnexInitialTab("queue");
     setMode("annex");
   }
 
@@ -5059,6 +5060,7 @@ export function App() {
             />
           ) : mode === "annex" ? (
             <DebateAnnexPage
+              initialTab={annexInitialTab}
               codingPacketGoal={codingPacketState.goal}
               onAskAgent={handleAskAgentFromAnnex}
               onBack={() => setMode("debate")}

@@ -392,7 +392,8 @@ export function TmuxSwarmBoard({
               onCommandDraftChange={(value) => updateCommandDraft(selectedPane.roleKey, value)}
               onDispatch={() => void handleDispatchPane(selectedPane)}
               onReject={() => {
-                setBoardNotice(tmuxBoardCopyLabels.rejectFromQueueNotice);
+                updateCommandDraft(selectedPane.roleKey, "");
+                setBoardNotice(sanitizeTmuxWorkbenchText(`${selectedPane.title}: 대기 중인 명령을 취소했습니다.`));
               }}
               pane={{
                 ...selectedPane,
