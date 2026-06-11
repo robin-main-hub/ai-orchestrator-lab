@@ -98,8 +98,7 @@ export const navSections: NavSection[] = [
     id: "operations",
     label: "작전",
     items: [
-      { id: "autonomy", label: "자율실행", icon: Bot },
-      { id: "parallel", label: "병렬실행", icon: LayoutGrid },
+      { id: "run", label: "실행", icon: Bot },
       { id: "theater", label: "작전극장", icon: Sparkles },
       { id: "coding", label: "코딩", icon: Code2 },
       { id: "research", label: "리서치", icon: FlaskConical },

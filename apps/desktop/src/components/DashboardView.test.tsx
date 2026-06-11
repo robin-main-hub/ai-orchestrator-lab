@@ -38,7 +38,7 @@ describe("DashboardView", () => {
     for (const name of ["마키마", "마키세 크리스", "아스카 랑그레이", "렘", "프리렌", "카츠라기 미사토"]) {
       expect(html).toContain(name);
     }
-    expect(html).toContain("병렬실행"); // mission tile
+    expect(html).toContain("실행"); // unified run tile (자율 1 / 병렬 N)
     expect(html).toContain("토론 무대");
     expect(html).toContain("위젯 구현"); // recent run
   });
