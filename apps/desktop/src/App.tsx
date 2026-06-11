@@ -316,6 +316,7 @@ import { readJsonState, writeJsonState } from "./lib/persistentJsonState";
 import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbenchDerived";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 import { SummonTheater } from "./components/SummonTheater";
+import { RunWorkspace, type RunMode } from "./components/RunWorkspace";
 import { createMakimaDelegationCards } from "./lib/makimaDelegation";
 
 const CENTER_MODE_STORAGE_KEY = "ai-orchestrator.center-mode.v1";
@@ -341,6 +342,7 @@ export function App() {
   const [adminRailOpen, setAdminRailOpen] = useState(false);
   const [activeNavItem, setActiveNavItem] = useState<NavItemId>("dashboard");
   const [summonSeedPersona, setSummonSeedPersona] = useState<string | null>(null);
+  const [summonSeedMode, setSummonSeedMode] = useState<RunMode>("single");
   const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [cheatSheetOpen, setCheatSheetOpen] = useState(false);
@@ -4576,8 +4578,7 @@ export function App() {
     activeNavItem === "providers" ||
     activeNavItem === "channels" ||
     activeNavItem === "backup" ||
-    activeNavItem === "autonomy" ||
-    activeNavItem === "parallel" ||
+    activeNavItem === "run" ||
     activeNavItem === "theater" ||
     activeNavItem === "coding" ||
     activeNavItem === "research" ||
@@ -4799,24 +4800,27 @@ export function App() {
               }}
               onSummonPersona={(personaName, target) => {
                 setSummonSeedPersona(personaName);
-                setActiveNavItem(target);
+                setSummonSeedMode(target === "parallel" ? "parallel" : "single");
+                setActiveNavItem("run");
                 setProviderRegistrationOpen(false);
               }}
             />
-          ) : activeNavItem === "autonomy" ? (
-            <AutonomyRunContainer
-              key={summonSeedPersona ?? "autonomy"}
-              seedPersonaName={summonSeedPersona ?? undefined}
-              decisionReadiness={deriveDebateDecisionReadiness(debateSession).state}
-              historyEvents={eventLog}
-              onRegistryChange={setSummonRegistry}
-              onRunEvents={(events) => setEventLog((current) => [...current, ...events])}
-              onRunMemory={handleQueueMemoryCuratorCandidate}
-              registry={summonRegistry}
-              seedPacket={codingPacketState}
+          ) : activeNavItem === "run" ? (
+            <RunWorkspace
+              key={summonSeedPersona ?? "run"}
+              initialMode={summonSeedMode}
+              autonomyProps={{
+                seedPersonaName: summonSeedPersona ?? undefined,
+                decisionReadiness: deriveDebateDecisionReadiness(debateSession).state,
+                historyEvents: eventLog,
+                onRegistryChange: setSummonRegistry,
+                onRunEvents: (events) => setEventLog((current) => [...current, ...events]),
+                onRunMemory: handleQueueMemoryCuratorCandidate,
+                registry: summonRegistry,
+                seedPacket: codingPacketState,
+              }}
+              parallelProps={{ seedPersonaName: summonSeedPersona ?? undefined }}
             />
-          ) : activeNavItem === "parallel" ? (
-            <ParallelMissionContainer key={summonSeedPersona ?? "parallel"} seedPersonaName={summonSeedPersona ?? undefined} />
           ) : activeNavItem === "theater" ? (
             <SummonTheater
               agents={agents}

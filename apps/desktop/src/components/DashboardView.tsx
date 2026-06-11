@@ -32,8 +32,7 @@ export type DashboardQuickAction = {
 };
 
 const QUICK_ACTIONS: DashboardQuickAction[] = [
-  { id: "autonomy", label: "자율실행", description: "페르소나 1명에게 미션을 맡기고 폐루프로 완주", icon: "autonomy", target: { nav: "autonomy" } },
-  { id: "parallel", label: "병렬실행", description: "여러 에이전트를 각자의 터미널에서 동시 가동", icon: "parallel", target: { nav: "parallel" } },
+  { id: "run", label: "실행", description: "페르소나 1명(자율) 또는 N명(병렬)에게 미션을 맡겨 폐루프로 완주", icon: "autonomy", target: { nav: "run" } },
   { id: "debate", label: "토론 무대", description: "에이전트 합의 라운드 → 의장 종합 → 코딩 패킷", icon: "debate", target: { mode: "debate" } },
   { id: "swarm", label: "스웜 보드", description: "tmux pane 실황과 게이트 큐를 한 화면에서", icon: "swarm", target: { mode: "tmux" } },
   { id: "cockpit", label: "콕핏", description: "운영자 시점의 시스템 전황판", icon: "cockpit", target: { mode: "cockpit" } },
