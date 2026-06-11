@@ -4483,7 +4483,7 @@ export async function createDgxProviderCompletionStreamResponse(
       baseUrl: config.baseUrl,
       modelIds: config.defaultModelIds,
       requiresAuth: !config.noAuth,
-      defaultMaxTokens: 512,
+      defaultMaxTokens: 4096,
       temperature: 0.2,
       fetchImpl,
     });
@@ -4789,7 +4789,7 @@ function createOpenAICompatibleServerCompletion(params: {
     },
     {
       resolveSecret: async () => params.apiKey,
-      timeoutMs: 30_000,
+      timeoutMs: 120_000,
       onRawError(status, redactedSnippet) {
         if (redactedSnippet) {
           console.warn(`OpenAI-compatible adapter warning (${status}): ${redactedSnippet}`);
@@ -4813,7 +4813,7 @@ function createAnthropicServerCompletion(params: {
     baseUrl: params.baseUrl,
     modelIds: params.modelIds,
     requiresAuth: params.requiresAuth,
-    defaultMaxTokens: 512,
+    defaultMaxTokens: 4096,
     temperature: 0.2,
     fetchImpl: params.fetchImpl,
   });
@@ -4836,7 +4836,7 @@ function createAnthropicServerCompletion(params: {
     },
     {
       resolveSecret: async () => params.apiKey,
-      timeoutMs: 30_000,
+      timeoutMs: 120_000,
       onRawError(status, redactedSnippet) {
         if (redactedSnippet) {
           console.warn(`Anthropic adapter warning (${status}): ${redactedSnippet}`);
