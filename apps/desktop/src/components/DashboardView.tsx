@@ -33,9 +33,9 @@ export type DashboardQuickAction = {
 
 const QUICK_ACTIONS: DashboardQuickAction[] = [
   { id: "run", label: "실행", description: "페르소나 1명(자율) 또는 N명(병렬)에게 미션을 맡겨 폐루프로 완주", icon: "autonomy", target: { nav: "run" } },
-  { id: "debate", label: "토론 무대", description: "에이전트 합의 라운드 → 의장 종합 → 코딩 패킷", icon: "debate", target: { mode: "debate" } },
-  { id: "swarm", label: "스웜 보드", description: "tmux pane 실황과 게이트 큐를 한 화면에서", icon: "swarm", target: { mode: "tmux" } },
-  { id: "cockpit", label: "콕핏", description: "운영자 시점의 시스템 전황판", icon: "cockpit", target: { mode: "cockpit" } },
+  { id: "debate", label: "토론 무대", description: "에이전트 합의 라운드 → 의장 종합 → 코딩 패킷", icon: "debate", target: { nav: "none", mode: "debate" } },
+  { id: "swarm", label: "스웜 보드", description: "tmux pane 실황과 게이트 큐를 한 화면에서", icon: "swarm", target: { nav: "none", mode: "tmux" } },
+  { id: "cockpit", label: "콕핏", description: "운영자 시점의 시스템 전황판", icon: "cockpit", target: { nav: "none", mode: "cockpit" } },
   { id: "sessions", label: "대화", description: "쿠루미와의 일상 — 모든 것은 여기서 시작", icon: "sessions", target: { nav: "sessions", mode: "conversation" } },
 ];
 
@@ -64,6 +64,7 @@ export function DashboardView({
   pendingApprovals,
   history,
   onNavigate,
+  onOpenApprovalQueue,
   onSummonPersona,
 }: {
   personas: DashboardPersona[];
@@ -74,6 +75,8 @@ export function DashboardView({
   pendingApprovals: number;
   history?: AutonomyRunSummary[];
   onNavigate: (target: { nav?: NavItemId; mode?: CenterMode }) => void;
+  /** 승인 대기 펄스 클릭 — Control Queue 드로어 열기 */
+  onOpenApprovalQueue?: () => void;
   /** 도감 상세에서 "소환" — 대상 탭으로 이동하며 페르소나를 프리필 */
   onSummonPersona?: (personaName: string, target: "autonomy" | "parallel") => void;
 }) {
@@ -104,7 +107,7 @@ export function DashboardView({
           </div>
           <button
             className={`dashboard__pulse-item dashboard__pulse-button ${pendingApprovals > 0 ? "attention" : ""}`}
-            onClick={() => onNavigate({ mode: "cockpit" })}
+            onClick={() => onOpenApprovalQueue?.()}
             type="button"
             title="승인 큐 열기"
           >
