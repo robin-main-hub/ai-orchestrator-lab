@@ -4744,7 +4744,9 @@ export async function createServerProviderProxyCompletionResponse(
     fetchImpl,
     extraBody: config.providerProfileId === "provider_mimo_token_openai"
       ? {
-          max_completion_tokens: 512,
+          // MiMo는 max_tokens보다 이 필드를 우선한다 — 요청 rider를 따르고,
+          // 없으면 4096 (512 고정은 표/코드가 든 대화 답변을 중간에 끊었다)
+          max_completion_tokens: request.maxOutputTokens ?? 4096,
           thinking: {
             type: "disabled",
           },
