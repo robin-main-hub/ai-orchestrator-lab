@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState , useSyncExternalStore} from "react";
 import { CircleStop, FileDiff, GitBranch, Hammer, PanelRightOpen, Plus, RotateCcw, Send, ShieldCheck, Telescope, Terminal, Trash2, XCircle } from "lucide-react";
-import type { ProviderProfile } from "@ai-orchestrator/protocol";
+import type { ProviderProfile, TmuxPaneRole } from "@ai-orchestrator/protocol";
 import { StatusBadge } from "@/ui/status-badge";
 import {
   addUsage,
@@ -28,6 +28,7 @@ import {
   type ToolCall,
 } from "../../lib/codingChat";
 import { requestCompletion, streamCompletion } from "../../lib/codingAgentClient";
+import { requestTmuxCapture } from "../../runtime/stage33TmuxServer";
 import { loadCodingSessions, saveCodingSessions } from "../../lib/codingChatStore";
 import { createGatedToolExecutor, runCodingTurn, toolToCommand } from "../../lib/codingTurnRunner";
 import { workspaceChangeLedger } from "../../lib/workspaceChangeLedger";
@@ -275,6 +276,51 @@ export function CodingWorkbench({
     setMissionPanelOpen(true);
   };
 
+  // 미션 역할 → 프로비저닝된 ai-swarm pane 역할
+  const missionRoleToSwarmRole = (role: string): TmuxPaneRole => {
+    const r = role.toLowerCase();
+    if (r.includes("qa") || r.includes("verif") || r.includes("review")) return "qa";
+    if (r.includes("architect") || r.includes("design")) return "architect";
+    if (r.includes("research") || r.includes("scout")) return "research";
+    if (r.includes("front")) return "frontend";
+    if (r.includes("back")) return "backend";
+    return "code";
+  };
+
+  // attach — ai-swarm의 미션 역할 pane을 실제 캡처해 미션 출력에 흘려준다 (레이어1, 읽기전용)
+  const attachMission = async (missionId: string | undefined) => {
+    const targetId = missionId ?? missions[0]?.id;
+    const mission = missions.find((m) => m.id === targetId);
+    if (!mission) {
+      appendMissionEvent(missionId, "대상 Mission이 없습니다.", undefined);
+      return;
+    }
+    const swarmRole = missionRoleToSwarmRole(mission.role);
+    appendMissionEvent(mission.id, `Attach — ai-swarm ${swarmRole} pane 캡처 중…`, "running");
+    try {
+      const response = await requestTmuxCapture({
+        request: {
+          id: `mattach_${mission.id}_${Date.now()}`,
+          sessionId,
+          role: swarmRole,
+          lines: 80,
+          tmuxSessionName: "ai-swarm",
+          createdAt: new Date().toISOString(),
+        },
+        serverBaseUrl,
+      });
+      if (response.status === "captured" && response.payload) {
+        appendMissionEvent(mission.id, response.payload.outputPreview || "(출력 없음)", "running");
+      } else if (response.status === "disabled") {
+        appendMissionEvent(mission.id, `캡처 비활성: ${response.reason}`, "blocked");
+      } else {
+        appendMissionEvent(mission.id, `캡처 실패: ${response.reason ?? "서버 도달 불가"} — dgx-02 ai-swarm이 떠 있어야 합니다.`, "blocked");
+      }
+    } catch (error) {
+      appendMissionEvent(mission.id, `캡처 실패: ${error instanceof Error ? error.message : String(error)}`, "blocked");
+    }
+  };
+
   const handleSlash = async (session: CodingSession, raw: string): Promise<boolean> => {
     const command = parseSlashCommand(raw);
     if (!command) return false;
@@ -331,7 +377,7 @@ export function CodingWorkbench({
         setNotice("Mission Board를 열었습니다.");
         break;
       case "attach":
-        appendMissionEvent(command.missionId, "Attach requested. tmux capture is not connected in this browser session, so a safe worker surface fallback was opened.", "running");
+        await attachMission(command.missionId);
         break;
       case "diff":
         appendMissionEvent(command.missionId, "Diff preview requested. No diff artifact is present yet; awaiting worker output before human review.", "needs_review");
@@ -584,7 +630,7 @@ export function CodingWorkbench({
                   </dl>
                   <p className="coding-mission-output">{mission.lastOutput}</p>
                   <div className="coding-mission-actions">
-                    <button onClick={() => appendMissionEvent(mission.id, "Attach 대기 — tmux 라우트가 연결되면 캡처 출력이 여기 누적됩니다. (아직 연결 안 됨)", "blocked")} type="button"><Terminal size={13} aria-hidden /> attach</button>
+                    <button onClick={() => void attachMission(mission.id)} type="button"><Terminal size={13} aria-hidden /> attach</button>
                     <button onClick={() => appendMissionEvent(mission.id, `Diff artifact: ${mission.diffPath}. Awaiting changed files/stat before approval.`, "needs_review")} type="button"><FileDiff size={13} aria-hidden /> diff</button>
                     <button onClick={() => appendMissionEvent(mission.id, `Verify artifact: ${mission.testOutputPath}. Typecheck/build/test gate queued.`, "needs_review")} type="button"><ShieldCheck size={13} aria-hidden /> verify</button>
                     <button onClick={() => appendMissionEvent(mission.id, "Kill 승인 대기 — tmux send-keys/kill-pane 전에 명시적 승인이 필요합니다. (아직 종료 안 됨)", "blocked")} type="button"><CircleStop size={13} aria-hidden /> kill</button>

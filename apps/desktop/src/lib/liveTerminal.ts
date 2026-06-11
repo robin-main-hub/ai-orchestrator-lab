@@ -1,7 +1,7 @@
 import type { TmuxPaneRole } from "@ai-orchestrator/protocol";
 
 /**
- * 진짜 터미널 — dgx-swarm tmux pane의 실제 출력을 capture-pane으로 가져와 보여주는
+ * 진짜 터미널 — ai-swarm tmux pane의 실제 출력을 capture-pane으로 가져와 보여주는
  * 라이브 뷰의 순수 코어. capture는 읽기 전용이라 승인 게이트가 필요 없다(서버
  * swarm-capture.sh가 `tmux capture-pane -p`를 그대로 실행). 명령 전송은 별도로
  * 기존 dispatch 게이트(승인→replay→send-keys)를 탄다.

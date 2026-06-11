@@ -14,7 +14,7 @@ import {
 } from "../../lib/liveTerminal";
 
 /**
- * 진짜 터미널 — dgx-swarm tmux pane의 실제 출력을 capture-pane으로 폴링해 보여준다
+ * 진짜 터미널 — ai-swarm tmux pane의 실제 출력을 capture-pane으로 폴링해 보여준다
  * (읽기 전용, 승인 게이트 불필요). 명령 전송은 기존 dispatch 게이트(승인→replay→
  * send-keys)를 그대로 탄다. 서버가 unreachable이거나 send-keys 게이트가 꺼져
  * 있으면 상태로 정직하게 표시한다.
@@ -22,7 +22,7 @@ import {
 export function LiveTerminalPanel({
   sessionId,
   serverBaseUrl,
-  tmuxSessionName = "dgx-swarm",
+  tmuxSessionName = "ai-swarm",
 }: {
   sessionId: string;
   serverBaseUrl?: string | string[];
