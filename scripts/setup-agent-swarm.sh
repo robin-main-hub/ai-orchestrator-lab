@@ -98,7 +98,9 @@ if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
   tmux kill-session -t "$SESSION_NAME"
 fi
 
-discussion_pane="$(tmux new-session -d -s "$SESSION_NAME" -n "swarm" -c "$PWD" -P -F "#{pane_id}")"
+# Force a large detached window so 10 panes fit even when this runs headless
+# over SSH (default 80x24 has no room past ~4 splits → "no space for new pane").
+discussion_pane="$(tmux new-session -d -s "$SESSION_NAME" -n "swarm" -x 320 -y 90 -c "$PWD" -P -F "#{pane_id}")"
 tmux set-option -t "$SESSION_NAME" pane-border-status top >/dev/null
 tmux set-option -t "$SESSION_NAME" pane-border-format "#{pane_index}: #{pane_title}" >/dev/null
 
@@ -112,6 +114,8 @@ for ((i = 1; i < PANE_COUNT; i++)); do
   next_pane="$(tmux split-window -t "$SESSION_NAME:0" -c "$PWD" -P -F "#{pane_id}")"
   tmux select-pane -t "$next_pane" -T "${titles[$i]}"
   pane_ids+=("$next_pane")
+  # Re-tile after every split so each pane keeps enough room for the next one.
+  tmux select-layout -t "$SESSION_NAME" tiled >/dev/null
 done
 
 tmux select-layout -t "$SESSION_NAME" tiled >/dev/null
