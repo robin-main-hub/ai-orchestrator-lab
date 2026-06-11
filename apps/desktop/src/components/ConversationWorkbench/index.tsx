@@ -620,7 +620,7 @@ export function ConversationWorkbench({
                   <AgentSkillProfilePanel
                     displayName={selectedAgentDisplayName}
                     onOpenConfig={() => onOpenAgentConfig("agents_md")}
-                    onViewToolOptions={focusMemoryPanel}
+                    onViewToolOptions={() => onOpenAgentConfig("agents_md")}
                     role={selectedAgent.role}
                     runtimeConfigFiles={selectedAgentRuntimeConfigFiles}
                   />
