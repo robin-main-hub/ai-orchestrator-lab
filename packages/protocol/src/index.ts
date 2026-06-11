@@ -662,6 +662,8 @@ export const providerCompletionRequestSchema = z.object({
   modelId: z.string().min(1).max(256),
   messages: z.array(providerCompletionMessageSchema).min(1).max(200),
   attachments: z.array(providerCompletionAttachmentSchema).max(6).optional(),
+  /** 응답 생성 토큰 상한 — 어댑터 기본값(512 등)을 호출자가 올릴 수 있다 (대화 턴 잘림 방지) */
+  maxOutputTokens: z.number().int().positive().max(32_000).optional(),
   source: eventSourceSchema,
   routePreference: providerCompletionRouteSchema,
   requestContext: providerCompletionRequestContextSchema.optional(),

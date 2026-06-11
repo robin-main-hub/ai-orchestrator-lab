@@ -49,11 +49,16 @@ export function createAgentConversationPromptSuggestions({
   }
 
   const signals = extractAnswerSignals(answer);
-  const suggestions = [
-    digDeeperPrompt(name, signals),
-    executeProposalPrompt(name, signals),
-    verifyOrAnswerPrompt(name, signals),
-  ];
+  // 에이전트가 사용자에게 확인 질문을 던진 턴 → 추천은 그 질문에 대한
+  // "보낼 수 있는 답변" 3개가 된다 (질문에 질문으로 답하지 않는다).
+  const suggestions =
+    signals.openQuestions.length > 0
+      ? answerCandidatePrompts(name, signals)
+      : [
+          digDeeperPrompt(name, signals),
+          executeProposalPrompt(name, signals),
+          verifyOrAnswerPrompt(name, signals),
+        ];
 
   const unique: string[] = [];
   for (const suggestion of suggestions) {
@@ -65,6 +70,23 @@ export function createAgentConversationPromptSuggestions({
   return unique.slice(0, 3);
 }
 
+// ─── 답변 후보 모드: 에이전트의 확인 질문에 바로 보낼 답 3개 ────────────────
+
+function answerCandidatePrompts(name: string, signals: AnswerSignals): string[] {
+  const [first, second] = signals.openQuestions;
+  const candidates: string[] = [];
+  if (first) {
+    candidates.push(`"${first}" — 응, 그렇게 진행해줘.`);
+  }
+  if (second) {
+    candidates.push(`"${second}" — 네가 더 합리적이라고 보는 쪽으로 정해줘.`);
+  } else if (first) {
+    candidates.push(`"${first}" — 아니, 다른 대안을 장단점과 함께 2개만 제시해줘.`);
+  }
+  candidates.push(`${name}, 확인 질문은 전부 네 판단대로 기본값으로 정하고 — 결정 요약만 보여준 뒤 바로 시작해줘.`);
+  return candidates;
+}
+
 // ─── 답변 신호 분해 ─────────────────────────────────────────────────────────
 
 export type AnswerSignals = {
@@ -74,8 +96,10 @@ export type AnswerSignals = {
   isError: boolean;
   /** 답변이 제안한 다음 조치 문장 (있다면) */
   proposedAction?: string;
-  /** 답변이 사용자에게 되물은 질문 (있다면) */
+  /** 답변이 사용자에게 되물은 질문 (있다면, 마지막 것) */
   openQuestion?: string;
+  /** 답변 안의 확인 질문 전부 (표 셀 안 질문 포함, 순서 유지, 최대 4개) */
+  openQuestions: string[];
   /** 감지된 주제 */
   topic: "approval" | "test" | "memory" | "network" | "design" | "general";
 };
@@ -100,7 +124,17 @@ export function extractAnswerSignals(answer: string): AnswerSignals {
 
   const isError = ERROR_CUES.some((cue) => lower.includes(cue));
   const proposedAction = sentences.find((sentence) => ACTION_CUE_RE.test(sentence));
-  const openQuestion = [...sentences].reverse().find((sentence) => /[?？]$/.test(sentence));
+  // 확인 질문 수집 — 문장 끝 ? 뿐 아니라 표 셀("| 항목 | …할까요? |")이나
+  // 한국어 의문형 어미("~할까/까요/나요/는지")로 끝나는 줄도 질문으로 본다.
+  const openQuestions = sentences
+    .filter(
+      (sentence) =>
+        /[?？]/.test(sentence) || /(할까|까요|나요|ㄹ까요|는지요?|건가요|인가요)\s*$/.test(sentence),
+    )
+    .map((sentence) => clamp(stripTableDecorations(sentence), 70))
+    .filter((sentence, index, all) => sentence.length > 4 && all.indexOf(sentence) === index)
+    .slice(0, 4);
+  const openQuestion = openQuestions.at(-1);
 
   const topic: AnswerSignals["topic"] =
     isError && (lower.includes("네트워크") || lower.includes("fetch") || lower.includes("호출") || lower.includes("연결"))
@@ -119,9 +153,20 @@ export function extractAnswerSignals(answer: string): AnswerSignals {
     headline,
     isError,
     proposedAction: proposedAction ? clamp(proposedAction, 70) : undefined,
-    openQuestion: openQuestion ? clamp(openQuestion, 70) : undefined,
+    openQuestion,
+    openQuestions,
     topic,
   };
+}
+
+/** 마크다운 표/볼드 장식 제거 — "| **플랫폼** | 웹으로 만들까요? |" → "플랫폼 웹으로 만들까요?" */
+function stripTableDecorations(sentence: string): string {
+  return sentence
+    .replace(/\|/g, " ")
+    .replace(/\*\*/g, "")
+    .replace(/^[-:\s]+|[-:\s]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // ─── 슬롯 ①: 답변의 핵심을 파고들기 ────────────────────────────────────────

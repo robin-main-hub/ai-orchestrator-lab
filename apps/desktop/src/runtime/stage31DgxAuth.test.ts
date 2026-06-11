@@ -1,5 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   __test,
   createDgxOrchestratorAuthHeaders,
@@ -8,6 +8,14 @@ import {
 } from "./stage31DgxAuth";
 
 const DEV_TOKEN = "dev-orchestrator-token";
+
+// 로컬 .env에 실제 토큰이 있어도 테스트는 dev 폴백 토큰 기준으로 — 머신 환경 비의존
+beforeAll(() => {
+  vi.stubEnv("VITE_ORCHESTRATOR_API_TOKEN", "");
+});
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
 
 function expectedBodyHash(body = "") {
   return createHash("sha256")

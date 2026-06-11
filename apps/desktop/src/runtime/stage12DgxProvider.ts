@@ -215,6 +215,9 @@ export async function requestDgxProviderCompletion({
   }
 }
 
+/** 대화 턴 기본 응답 상한 — 어댑터 기본 512는 표/코드가 든 답변을 중간에 끊는다 */
+export const CONVERSATION_MAX_OUTPUT_TOKENS = 4096;
+
 export function createProviderCompletionProxyRequest(
   provider: ProviderProfile,
   modelId: string,
@@ -230,6 +233,7 @@ export function createProviderCompletionProxyRequest(
       role: message.role,
       content: message.content,
     })),
+    maxOutputTokens: CONVERSATION_MAX_OUTPUT_TOKENS,
     source: "desktop",
     routePreference: "server_proxy",
     createdAt: new Date().toISOString(),
@@ -599,6 +603,7 @@ function createDirectProviderCompletionRequest(
       role: message.role,
       content: message.content,
     })),
+    maxOutputTokens: CONVERSATION_MAX_OUTPUT_TOKENS,
     source: "desktop",
     routePreference: "direct_provider",
     createdAt: new Date().toISOString(),
@@ -725,7 +730,7 @@ export function createDgxVllmRequestBody(modelId: string, messages: Conversation
     // vLLM speaks the OpenAI multimodal dialect, so image attachments reuse
     // the same image_url content-part mapping as the OpenAI adapter (item 3)
     messages: applyOpenAIImageAttachments(createDgxChatMessages(messages), resolveProviderAttachments(messages)),
-    max_tokens: 512,
+    max_tokens: CONVERSATION_MAX_OUTPUT_TOKENS,
     temperature: 0.2,
     chat_template_kwargs: {
       enable_thinking: false,
