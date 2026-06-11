@@ -393,6 +393,30 @@ async function requestDgxVllmCompletionViaProxy({
   };
 }
 
+/** 스트림 무활동 한도 — 이 시간 동안 청크가 없으면 죽은 연결로 보고 끊는다 */
+const STREAM_STALL_TIMEOUT_MS = 90_000;
+
+/** reader.read()에 무활동 데드라인을 건다 — 서버 재시작 등으로 멈춘 SSE에서 영원히 기다리지 않게 */
+async function readWithStallGuard(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  stallMs: number,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`DGX-02 stream stalled: ${Math.round(stallMs / 1000)}초간 응답 없음`)),
+          stallMs,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** parse one SSE line ("data: {...}") into a chunk event */
 function parseProviderChunkLine(line: string): ProviderCompletionChunkEvent | null {
   if (!line.startsWith("data:")) return null;
@@ -426,6 +450,9 @@ async function requestDgxCompletionViaProxyStream({
   const body = JSON.stringify(
     createProviderCompletionProxyRequest(provider, modelId, messages, { approvalState, permissionDecision }),
   );
+  // SSE는 헤더가 즉시 도착한다 — 연결 자체는 짧게(15초) 가드하고,
+  // 본문은 아래 무활동 감시(90초)로 지킨다. 서버 재시작 등으로 스트림이
+  // 죽으면 몇 분씩 멈춘 듯 보이는 대신 빠르게 비스트림 폴백으로 넘어간다.
   const response = await fetchWithTimeout(
     fetchImpl,
     endpoint,
@@ -434,7 +461,7 @@ async function requestDgxCompletionViaProxyStream({
       headers: await createDgxOrchestratorJsonHeaders("POST", "/provider-completions/stream", endpoint, { body }),
       body,
     },
-    proxyTimeoutMs,
+    Math.min(proxyTimeoutMs, 15_000),
     abortSignal,
   );
 
@@ -476,7 +503,7 @@ async function requestDgxCompletionViaProxyStream({
 
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readWithStallGuard(reader, STREAM_STALL_TIMEOUT_MS);
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       let separator = buffer.indexOf("\n");
@@ -488,6 +515,10 @@ async function requestDgxCompletionViaProxyStream({
     }
     buffer += decoder.decode();
     if (buffer.trim()) handleLine(buffer.trim());
+  } catch (error) {
+    // 정체/끊김 시 연결을 정리하고 위로 던진다 → 호출부가 비스트림 POST로 폴백
+    void reader.cancel().catch(() => {});
+    throw error;
   } finally {
     reader.releaseLock();
   }

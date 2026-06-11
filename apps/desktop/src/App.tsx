@@ -94,8 +94,8 @@ import { readAttachmentContent } from "./lib/attachmentContent";
 import { condense, renderCondensate, type Condensate, type CondenserTurn } from "./lib/conversationCondenser";
 import { buildForkBrief, forkMissionFromConversation } from "./lib/conversationFork";
 import { workbenchMissionStore } from "./lib/workbenchMissions";
-import { createApprovalStrategy } from "./lib/autonomousRun";
-import { createClosedLoopEffects } from "./lib/closedLoopRuntime";
+import { createAutoApproveStrategy } from "./lib/autoApproveStrategy";
+import { createClosedLoopEffects, pollForApprovalDecision } from "./lib/closedLoopRuntime";
 import { createGatedToolExecutor, type WireMessage } from "./lib/codingTurnRunner";
 import { workspaceChangeLedger } from "./lib/workspaceChangeLedger";
 import {
@@ -2165,8 +2165,18 @@ export function App() {
       if (result.pipelineMessages && replyRequestsTools(reply) && !conversationTurnCancelledRef.current) {
         const turnId = crypto.randomUUID().slice(0, 8);
         let gateSequence = 0;
+        // 인간 승인으로 넘어가는 순간: 승인 대기열을 새로고침해 인라인 카드를 띄우고,
+        // 드래프트 버블에 대기 상태를 노출한다 (안 그러면 "정체"처럼 보인다)
+        const humanWithVisibility = async (sourceItemId: string, context: { command: string }) => {
+          void handleRefreshApprovalQueue();
+          setStreamingPreview({
+            agentId: selectedAgent.id,
+            text: `${streamedSoFar.trim() ? `${streamedSoFar}\n\n` : ""}⏳ 승인 대기: ${context.command.slice(0, 120)}\n위 승인 카드에서 허용/거절을 선택하세요 (최대 120초).`,
+          });
+          return pollForApprovalDecision({ sourceItemId });
+        };
         const approvalStrategy = createPatternApprovalStrategy({
-          base: createApprovalStrategy("auto_safe", {}),
+          base: createAutoApproveStrategy({ fallback: humanWithVisibility }),
           getApprovedPrefixes: () => sessionApprovedPrefixesRef.current,
           grant: async (sourceItemId, context) => {
             const grantResult = await grantDgxApproval({
