@@ -178,6 +178,8 @@ export function CodingWorkbench({
         providerProfileId: working.providerProfileId,
         modelId: working.modelId,
         messages,
+        // 코드/diff가 든 답변은 길다 — 어댑터 기본 512에서 끊기지 않게 상한을 올린다
+        maxOutputTokens: 8192,
         source: "desktop" as const,
         routePreference: "server_proxy" as const,
         requestContext: { userId: "owner", routeType: "personal" as const, humanInitiated: true },
