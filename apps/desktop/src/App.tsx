@@ -4923,16 +4923,6 @@ export function App() {
               snapshot={backupSnapshot}
             />
           </div>
-) : activeNavItem === "runtime" ? (
-            <div className="nav-center-page" data-page="runtime">
-              <RuntimeRailPanel
-                dgxRouteDiagnostics={dgxRouteDiagnostics}
-                onProbeDgx={handleProbeDgx}
-                onRequestReboot={handleRequestDeviceReboot}
-                rebootWatchdogs={rebootWatchdogs}
-                snapshot={runtimeSnapshotState}
-              />
-            </div>
           ) : configLibraryActive ? (
             <ConfigLibraryPanel
               configFiles={agentConfigFiles}

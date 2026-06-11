@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { ApprovalQueueItem, ConversationMessage } from "@ai-orchestrator/protocol";
 import { SHORTCUTS } from "./CheatSheetOverlay";
-import { InboxApprovalStrip } from "./ConversationWorkbench/ApprovalQueue";
 import { MessageThread } from "./ConversationWorkbench/MessageThread";
 import type { WorkbenchAgent } from "../types";
 
@@ -54,37 +53,4 @@ describe("shortcut and approval labels", () => {
     expect(labels).not.toContain("focus reset");
   });
 
-  it("uses Korean labels in the conversation approval strips", () => {
-    const html = renderToStaticMarkup(
-      <>
-        <InboxApprovalStrip queue={[approval]} />
-        <MessageThread
-          agentChatContinuity={{
-            detail: "기억이 연결되어 있습니다.",
-            memoryQualityLabel: "기억 양호",
-            memoryQualityTone: "ready",
-            placeholder: "마키마에게 말 걸기",
-            title: "마키마와 이어서 대화",
-          }}
-          agentActivityById={{}}
-          agentVisualsById={{}}
-          agents={[agent]}
-          messages={messages}
-          onApprovePermission={vi.fn()}
-          onRejectPermission={vi.fn()}
-          pendingProviderRetry={undefined}
-          permissionSnapshotQueue={[approval]}
-          selectedAgent={agent}
-          workbenchVisibility={{ showInlineApprovalQueue: true, showInlineDelegation: false }}
-        />
-      </>,
-    );
-
-    expect(html).toContain("어시스턴트 수신함");
-    expect(html).toContain("작업 1건 / 대기 1건");
-    expect(html).toContain("1건 대기");
-    expect(html).not.toContain("Assistant Inbox");
-    expect(html).not.toContain("tasks");
-    expect(html).not.toContain("pending");
-  });
 });

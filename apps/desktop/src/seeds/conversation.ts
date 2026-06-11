@@ -9,7 +9,6 @@ import {
   LayoutGrid,
   MessageSquare,
   RadioTower,
-  Server,
   Sparkles,
 } from "lucide-react";
 import {
@@ -114,7 +113,6 @@ export const navSections: NavSection[] = [
       { id: "config_files", label: "설정파일", icon: FileText },
       { id: "channels", label: "채널", icon: RadioTower },
       { id: "backup", label: "백업", icon: Archive },
-      { id: "runtime", label: "런타임", icon: Server },
     ],
   },
 ];
