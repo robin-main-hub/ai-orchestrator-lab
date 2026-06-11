@@ -65,7 +65,6 @@ export type NavItemId =
   | "config_files"
   | "channels"
   | "backup"
-  | "cockpit"
   | "autonomy"
   | "parallel"
   | "theater"

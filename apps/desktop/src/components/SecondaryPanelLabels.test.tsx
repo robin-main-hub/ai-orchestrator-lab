@@ -8,7 +8,6 @@ import type { WorkbenchAgent } from "../types";
 import { AgentSettingsPanel } from "./AgentSettingsPanel";
 import { AutonomySlider } from "./AutonomySlider";
 import { CodingPacketPanel } from "./CodingPacketPanel";
-import { IngressGuardPanel } from "./IngressGuardPanel";
 import { ProjectRailPanel } from "./ProjectRailPanel";
 import {
   TerminalDock,
@@ -112,10 +111,6 @@ describe("secondary panel labels", () => {
       packet,
       records: [],
     });
-    const ingressSnapshot = createStage8IngressSnapshot({
-      ...createExternalIngressDemoInput("2026-06-06T00:00:00.000Z"),
-      channel: "api",
-    });
 
     const html = renderToStaticMarkup(
       <>
@@ -133,7 +128,6 @@ describe("secondary panel labels", () => {
           reviewMode="quick"
           sessionId="session_desktop_001"
         />
-        <IngressGuardPanel onImportExternalIngress={vi.fn()} snapshot={ingressSnapshot} />
         <TerminalDock
           agentRun={agentRun}
           dgxBridge={{
@@ -182,7 +176,6 @@ describe("secondary panel labels", () => {
 
     expect(html).toContain("프로젝트");
     expect(html).toContain("개요");
-    expect(html).toContain("인입 보호");
     expect(html).toContain("터미널 / 실행 로그");
     expect(html).toContain("대체 경로 로컬 CLI");
     expect(html).toContain("동기화 DGX 권위 노드 + 데스크톱 캐시");
