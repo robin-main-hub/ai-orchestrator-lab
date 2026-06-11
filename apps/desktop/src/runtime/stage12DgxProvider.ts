@@ -104,7 +104,7 @@ export async function requestDgxVllmCompletion({
   messages,
   fetchImpl = defaultFetchImpl,
   proxyBaseUrl,
-  proxyTimeoutMs = 30_000,
+  proxyTimeoutMs = 120_000,
   allowDirectFallback = false,
   approvalState,
   permissionDecision,
@@ -156,7 +156,7 @@ export async function requestDgxProviderCompletion({
   messages,
   fetchImpl = defaultFetchImpl,
   proxyBaseUrl,
-  proxyTimeoutMs = 30_000,
+  proxyTimeoutMs = 120_000,
   approvalState,
   permissionDecision,
   localSecretResolver,
@@ -573,7 +573,7 @@ async function requestServerProxyProviderCompletionDirect({
     request,
     createAdapterContext({
       secret: localSecret,
-      timeoutMs: 30_000,
+      timeoutMs: 120_000,
     }),
   );
 
