@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import type { AgentProfile, ConversationAttachment, DebateUtterance, ModelDescriptor } from "@ai-orchestrator/protocol";
 import type { AttachmentProcessingPlan } from "./lib/attachmentProcessing";
 
-export type CenterMode = "conversation" | "agents" | "debate" | "tmux" | "cockpit" | "annex";
+export type CenterMode = "conversation" | "debate" | "tmux" | "cockpit" | "annex";
 export type AgentActivityStatus =
   | "idle"
   | "preparing"
