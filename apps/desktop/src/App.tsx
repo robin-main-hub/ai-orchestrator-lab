@@ -2217,6 +2217,23 @@ export function App() {
           onEvent: (event) => {
             if (event.type === "assistant_delta") reportDelta(event.text);
             if (event.type === "tool_status") {
+              // 도구 진행 상황을 드래프트 버블에 실시간 노출 — 사용자가 "지금 뭘 하는지" 본다
+              const progressLabel =
+                event.call.status === "running"
+                  ? `⚙ ${event.call.title} 실행 중…`
+                  : event.call.status === "completed"
+                    ? `✓ ${event.call.title} 완료`
+                    : event.call.status === "denied"
+                      ? `✋ ${event.call.title} 차단됨`
+                      : event.call.status === "failed"
+                        ? `✗ ${event.call.title} 실패`
+                        : undefined;
+              if (progressLabel) {
+                setStreamingPreview({
+                  agentId: selectedAgent.id,
+                  text: `${streamedSoFar.trim() ? `${streamedSoFar}\n\n` : ""}${progressLabel}`,
+                });
+              }
               appendEvent("conversation.tool.status", {
                 toolCallId: event.call.id,
                 tool: event.call.tool,

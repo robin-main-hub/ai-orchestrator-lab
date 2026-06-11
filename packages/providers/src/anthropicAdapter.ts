@@ -364,7 +364,7 @@ export class AnthropicAdapter implements LlmAdapter {
     const body: Record<string, unknown> = {
       model: request.modelId,
       messages: applyAnthropicImageAttachments(messages, request.attachments),
-      max_tokens: this.defaultMaxTokens,
+      max_tokens: request.maxOutputTokens ?? this.defaultMaxTokens,
       ...this.extraBody,
     };
     if (system) body.system = system;

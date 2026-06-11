@@ -47,14 +47,41 @@ describe("createAgentConversationPromptSuggestions", () => {
     expect(suggestions[2]).toContain("근거");
   });
 
-  it("답변이 질문으로 끝나면 세 번째 제안이 그 질문에 답하도록 유도한다", () => {
+  it("에이전트가 확인 질문을 던지면 추천이 '보낼 수 있는 답변' 3개로 바뀐다", () => {
     const suggestions = createAgentConversationPromptSuggestions({
       ...base,
       activity: "idle",
       lastAssistantMessageContent: "두 가지 경로가 있어. 어느 쪽으로 진행할까?",
     });
-    expect(suggestions[2]).toContain("어느 쪽으로 진행할까?");
-    expect(suggestions[2]).toContain("선택지");
+    expect(suggestions).toHaveLength(3);
+    // ① 질문을 인용한 긍정 답변
+    expect(suggestions[0]).toContain("어느 쪽으로 진행할까?");
+    expect(suggestions[0]).toContain("응, 그렇게 진행해줘");
+    // ② 대안 요구 답변
+    expect(suggestions[1]).toContain("다른 대안");
+    // ③ 전부 위임하고 시작
+    expect(suggestions[2]).toContain("네 판단대로");
+    expect(suggestions[2]).toContain("바로 시작해줘");
+  });
+
+  it("마크다운 표 안의 확인 질문도 답변 후보로 변환한다 (테트리스 시나리오)", () => {
+    const suggestions = createAgentConversationPromptSuggestions({
+      ...base,
+      activity: "idle",
+      lastAssistantMessageContent: [
+        "테트리스, 좋네요. 실행 전에 몇 가지 확인하겠습니다.",
+        "| 항목 | 질문 |",
+        "|------|------|",
+        "| **플랫폼** | 웹 브라우저(HTML/Canvas)로 만들까요? |",
+        "| **조작** | 키보드 기본으로 갈까요? |",
+      ].join("\n"),
+    });
+    expect(suggestions).toHaveLength(3);
+    expect(suggestions[0]).toContain("웹 브라우저(HTML/Canvas)로 만들까요?");
+    expect(suggestions[0]).not.toContain("|");
+    expect(suggestions[0]).toContain("응, 그렇게 진행해줘");
+    expect(suggestions[1]).toContain("키보드 기본으로 갈까요?");
+    expect(suggestions[2]).toContain("네 판단대로");
   });
 
   it("일반 답변도 세 슬롯(파고들기/실행/검증)이 모두 답변 기반", () => {

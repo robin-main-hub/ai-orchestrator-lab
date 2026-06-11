@@ -318,7 +318,7 @@ export class OpenAICompatibleAdapter implements LlmAdapter {
         createOpenAIChatMessages(request.messages, this.defaultSystemPrompt, this.maxContextMessages),
         request.attachments,
       ),
-      max_tokens: this.maxTokens,
+      max_tokens: request.maxOutputTokens ?? this.maxTokens,
       temperature: this.temperature,
       ...this.extraBody,
     };

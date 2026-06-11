@@ -4514,7 +4514,7 @@ export async function createDgxProviderCompletionStreamResponse(
     supportsModelList: config.supportsModelList,
     requiresAuth: !config.noAuth,
     defaultSystemPrompt: defaultDgxSystemPrompt,
-    maxTokens: 512,
+    maxTokens: 4096,
     temperature: 0.2,
     fetchImpl,
   });
@@ -4774,7 +4774,7 @@ function createOpenAICompatibleServerCompletion(params: {
     supportsModelList: params.supportsModelList,
     requiresAuth: params.requiresAuth,
     defaultSystemPrompt: defaultDgxSystemPrompt,
-    maxTokens: 512,
+    maxTokens: 4096,
     temperature: 0.2,
     extraBody: params.extraBody,
     fetchImpl: params.fetchImpl,
