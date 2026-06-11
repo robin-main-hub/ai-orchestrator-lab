@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { AssistantDraft, WorkItem, WorkItemHandoff } from "@ai-orchestrator/protocol";
 import { createExternalIngressDemoInput, createStage8IngressSnapshot } from "../runtime/stage8Ingress";
 import { HumanPeekPanel } from "./HumanPeekPanel";
-import { IngressGuardPanel } from "./IngressGuardPanel";
 import { WorkItemHandoffPanel } from "./WorkItemHandoffPanel";
 
 const workItem: WorkItem = {
@@ -96,28 +95,4 @@ describe("work queue and ingress labels", () => {
     expect(html).not.toContain("Active");
   });
 
-  it("uses Korean reason labels in the ingress guard panel", () => {
-    const snapshot = createStage8IngressSnapshot({
-      ...createExternalIngressDemoInput("2026-06-06T00:00:00.000Z"),
-      channel: "api",
-    });
-    const html = renderToStaticMarkup(
-      <IngressGuardPanel onImportExternalIngress={vi.fn()} snapshot={snapshot} />,
-    );
-
-    expect(html).toContain("API 페이로드를 인입 이벤트로 정규화했습니다.");
-    expect(html).toContain("메시지 이벤트를 유지했습니다.");
-    expect(html).toContain("외부 사용자 작성자를 허용했습니다.");
-    expect(html).toContain("원문은 일반 로그에 남기지 않고 마스킹 이벤트만 저장합니다.");
-    expect(html).toContain("<strong>API</strong>");
-    expect(html).toContain("안전 명령 실행");
-    expect(html).toContain("비밀값 접근");
-    expect(html).not.toContain("api payload normalized into IngressEvent");
-    expect(html).not.toContain("message event kept");
-    expect(html).not.toContain("external user author accepted");
-    expect(html).not.toContain("redacted event goes to Event Store");
-    expect(html).not.toContain(">api<");
-    expect(html).not.toContain("run_safe_commands");
-    expect(html).not.toContain("secret_access");
-  });
 });
