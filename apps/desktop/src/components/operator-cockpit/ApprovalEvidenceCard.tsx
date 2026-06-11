@@ -108,12 +108,7 @@ export function ApprovalEvidenceCard({
                   </div>
                 )}
 
-                {approval.tamperWarning ? (
-                  <div className="mt-2 flex items-center gap-2 rounded bg-rose-500/10 px-2 py-1.5 text-[11px] font-semibold text-rose-400">
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    변조 경고: {approval.securityRisk || "페이로드 서명 검증 실패"}
-                  </div>
-                ) : null}
+
               </div>
             </article>
           ))}
