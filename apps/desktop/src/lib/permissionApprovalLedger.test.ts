@@ -99,7 +99,7 @@ describe("permissionApprovalLedger", () => {
     );
   });
 
-  it("redacts secrets and marks untrusted sources without claiming verified replay", () => {
+  it("redacts secrets and labels untrusted source policy without forger-tamper theater", () => {
     const ledger = createPermissionApprovalLedger({ permissionSnapshot: snapshot });
     const combined = ledger.map((item) => `${item.actionSummary} ${item.decisionReason} ${item.replayPayloadDigest}`).join("\n");
     const untrusted = ledger.find((item) => item.dispatchId === "permission_external_webhook_1");
@@ -110,11 +110,13 @@ describe("permissionApprovalLedger", () => {
     expect(combined).not.toContain("sk-live-secret");
     expect(untrusted).toEqual(
       expect.objectContaining({
-        tamperWarning: true,
-        tamperReason: "비신뢰 출처: api",
+        tamperWarning: false,
         policyCode: "TRUST-UNTRUSTED",
       }),
     );
+    // de-theatered: no manufactured forger warning, and the digest never poses as sha256
+    expect(untrusted?.tamperReason).toBeUndefined();
+    expect(JSON.stringify(untrusted)).not.toContain("sha256:");
   });
 
   it("keeps tmux outcomes as execution records with safe Korean reasons", () => {

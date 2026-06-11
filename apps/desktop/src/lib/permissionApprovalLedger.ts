@@ -46,7 +46,6 @@ function createPermissionRecord(
   item: PermissionMatrixItem,
   decisionEvent?: LedgerDecisionEvent,
 ): OperatorCockpitDispatchHistory {
-  const tamperWarning = item.sourceTrust === "untrusted";
   const approvalState = decisionEvent?.state ?? item.state;
   const createdAt = decisionEvent?.decidedAt ?? item.createdAt;
   return {
@@ -58,8 +57,7 @@ function createPermissionRecord(
     ledgerDigest: createLedgerDigest(`${item.sessionId}:${item.id}:${approvalState}:${createdAt}`),
     policyCode: policyCodeForPermission(item, approvalState),
     replayPayloadDigest: createDeterministicDigest(`${item.id}:${item.subjectId}:${item.action}:${approvalState}`),
-    tamperWarning,
-    tamperReason: tamperWarning ? `비신뢰 출처: ${sanitizeControlQueueText(item.channel)}` : undefined,
+    tamperWarning: false,
     sourceTrust: item.sourceTrust,
     evidenceRefs: [
       {
@@ -79,7 +77,6 @@ function createTmuxOutcomeRecord(
   sourceItem?: PermissionMatrixItem,
 ): OperatorCockpitDispatchHistory {
   const approvalState = approvalStateFromTmuxStatus(outcome.status);
-  const tamperWarning = sourceItem?.sourceTrust === "untrusted" || outcome.status === "blocked";
   return {
     dispatchId: outcome.approvalId,
     requesterAgentId: outcome.role,
@@ -91,13 +88,7 @@ function createTmuxOutcomeRecord(
     replayPayloadDigest: outcome.sourceItemId
       ? createDeterministicDigest(`${outcome.approvalId}:${outcome.sourceItemId}`)
       : "unavailable",
-    tamperWarning,
-    tamperReason:
-      sourceItem?.sourceTrust === "untrusted"
-        ? `비신뢰 전송 출처: ${sanitizeControlQueueText(sourceItem.channel)}`
-        : outcome.status === "blocked"
-          ? sanitizeControlQueueText(outcome.reason || "차단됨")
-          : undefined,
+    tamperWarning: false,
     sourceTrust: sourceItem?.sourceTrust,
     evidenceRefs: outcome.sourceItemId
       ? [
@@ -218,15 +209,18 @@ function isApprovalState(value: unknown): value is ApprovalState {
   return value === "not_required" || value === "required" || value === "approved" || value === "rejected" || value === "expired";
 }
 
+// 결정론적 참조 id (FNV-1a 32bit). 암호 해시가 아니므로 'sha256:' 처럼 위장하지
+// 않고 'ref:'로 정직하게 라벨한다 — 단일 오너 환경에선 변조 증명이 아니라 단순
+// 식별/중복제거 용도다.
 function createDeterministicDigest(value: string) {
   let hash = 0x811c9dc5;
   for (const char of value) {
     hash ^= char.charCodeAt(0);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
-  return `sha256:${hash.toString(16).padStart(8, "0")}`;
+  return `ref:${hash.toString(16).padStart(8, "0")}`;
 }
 
 function createLedgerDigest(value: string) {
-  return `ledger:${createDeterministicDigest(value).replace("sha256:", "")}`;
+  return `ledger:${createDeterministicDigest(value).replace("ref:", "")}`;
 }
