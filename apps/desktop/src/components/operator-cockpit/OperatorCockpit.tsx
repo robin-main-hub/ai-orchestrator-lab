@@ -96,8 +96,7 @@ export function OperatorCockpit({
     blockedCount +
     riskyApprovalCount +
     snapshot.handoffs.reduce((count, handoff) => count + handoff.missingInfoSlots.length, 0) +
-    snapshot.memory.contradictionWarnings.length +
-    snapshot.dispatchHistory.filter((dispatch) => dispatch.tamperWarning).length;
+    snapshot.memory.contradictionWarnings.length;
   const experienceRoadmap = readiness
     ? createExperienceRoadmap({
         diagnostics: readiness.diagnostics,

@@ -4246,16 +4246,9 @@ export function App() {
             hasReplayMetadata: Boolean(q.replayKind && q.replayEndpoint),
             sourceTrust: matrixItem?.sourceTrust ?? q.sourceTrust,
           });
-          let tamperWarning = false;
           let securityRisk: string | undefined = undefined;
 
           if (matrixItem) {
-            // Determine tamper warning and security risk based on sourceTrust
-            if (matrixItem.sourceTrust === "untrusted") {
-              tamperWarning = true;
-              securityRisk = `비신뢰 출처 감지: ${sanitizeCockpitProjectionText(matrixItem.channel)}`;
-            }
-
             // Extract EvidenceRefs and CommandPreview based on category
             if (matrixItem.id.startsWith("permission_external_")) {
               const extId = matrixItem.id.replace("permission_external_", "");
@@ -4310,7 +4303,7 @@ export function App() {
             evidenceRefs,
             commandPreview,
             payloadBindingStatus,
-            tamperWarning,
+            tamperWarning: false,
             securityRisk,
           };
         }),

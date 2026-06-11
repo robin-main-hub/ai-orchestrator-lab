@@ -68,12 +68,6 @@ export function DispatchHistoryCard({ history }: { history: OperatorCockpitDispa
                 ) : null}
               </div>
 
-              {dispatch.tamperWarning && (
-                <div className="mt-3 flex items-center gap-2 rounded-md border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-300">
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  {dispatch.tamperReason || "변조 경고 감지"}
-                </div>
-              )}
             </article>
           ))}
         </div>
