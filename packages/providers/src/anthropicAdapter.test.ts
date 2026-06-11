@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ProviderCompletionRequest } from "@ai-orchestrator/protocol";
 import {
   AnthropicAdapter,
+  applyAnthropicImageAttachments,
   extractAnthropicText,
   splitSystemAndMessages,
 } from "./anthropicAdapter";
@@ -601,5 +602,79 @@ describe("AnthropicAdapter — AdapterError instance check", () => {
         cacheReadInputTokens: 0,
       },
     });
+  });
+});
+
+describe("applyAnthropicImageAttachments", () => {
+  it("converts the last user turn into text + base64 image blocks", () => {
+    const result = applyAnthropicImageAttachments(
+      [
+        { role: "user", content: "first" },
+        { role: "assistant", content: "reply" },
+        { role: "user", content: "describe this" },
+      ],
+      [
+        { name: "shot.png", kind: "image", mimeType: "image/png", dataUrl: "data:image/png;base64,AAAA" },
+        { name: "broken.png", kind: "image", mimeType: "image/png", dataUrl: "not-a-data-url" },
+      ],
+    );
+
+    expect(result[2]).toEqual({
+      role: "user",
+      content: [
+        { type: "text", text: "describe this" },
+        { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
+      ],
+    });
+    expect(result[0]).toEqual({ role: "user", content: "first" });
+  });
+
+  it("returns the input unchanged when no attachment parses to a base64 image", () => {
+    const input = [{ role: "user" as const, content: "hello" }];
+    expect(applyAnthropicImageAttachments(input, undefined)).toBe(input);
+    expect(
+      applyAnthropicImageAttachments(input, [
+        { name: "notes.txt", kind: "document", mimeType: "text/plain", textContent: "hi" },
+      ]),
+    ).toBe(input);
+  });
+});
+
+describe("AnthropicAdapter — image attachments", () => {
+  it("sends content blocks when the request carries image attachments", async () => {
+    const { fetch: fetchImpl, calls } = recordedFetch(() => ({
+      ok: true,
+      status: 200,
+      body: {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "text", text: "ok" }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      },
+    }));
+    const adapter = new AnthropicAdapter({
+      profileId: "provider_apifun_claude",
+      baseUrl: "https://api.test.local",
+      fetchImpl,
+    });
+
+    const response = await adapter.complete(
+      baseRequest({
+        attachments: [
+          { name: "shot.jpg", kind: "image", mimeType: "image/jpeg", dataUrl: "data:image/jpeg;base64,CCCC" },
+        ],
+      }),
+      createAdapterContext({ secret: "sk-ant-secret" }),
+    );
+
+    expect(response.status).toBe("succeeded");
+    const body = JSON.parse(calls[0]!.body!);
+    const lastMessage = body.messages[body.messages.length - 1];
+    expect(lastMessage.role).toBe("user");
+    expect(lastMessage.content).toEqual([
+      { type: "text", text: expect.any(String) },
+      { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "CCCC" } },
+    ]);
   });
 });

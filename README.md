@@ -61,6 +61,15 @@
 
 ### 대화형 코딩 (opencode급)
 - **코딩 워크벤치** (`코딩` 탭) — Plan/Build 모드, SSE 스트리밍, bash/read/grep/glob/write/edit/todo 도구 루프, 슬래시 11종, @파일 멘션, 체크포인트/undo, /compact·/share·/init. [docs/42](docs/42-coding-workbench.md)
+- **대화 워크벤치 OpenCode급 업그레이드** (2026-06-11, 14항목) — `대화` 탭이 코딩 워크벤치와 같은 메커니즘으로 동작:
+  - 스트리밍 델타 렌더링(점진 드래프트 버블) + 중지 버튼(부분 응답 확정), 프록시 SSE 실패 시 비스트림 폴백
+  - 대화 내 도구 루프 — 답변의 tool 펜스를 승인 게이트(dispatch→approve→replay)로 실행, 결과 재투입 ≤8라운드, 변경 도구 성공 시 `tsc --noEmit` 진단 라운드 자동 실행(LSP 훅)
+  - 첨부 실전달 — 이미지→base64 비전 블록(OpenAI `image_url`/Anthropic `image`/vLLM), 텍스트류→본문 인라인. metadata_only 시대 종료
+  - Plan/Build 모드 토글(컴포저) — Plan은 읽기 전용(변경 도구 차단) + 같은 프로바이더 저비용 모델로 워크로드 라우팅
+  - 자동 압축 — 컨텍스트 90% 도달 시 MT-OSC 응축기로 옛 턴 압축 후 시스템 프롬프트에 요약 주입(중복 응축 방지 워터마크)
+  - `/fork` `/compact` `/plan` `/build` `/help` 슬래시 명령, busy 중 메시지 큐잉(턴 종료 후 자동 발송, 큐 칩 UI)
+  - 턴 롤백(비파괴: 대화 절단 + 변경 파일 안내), 패턴 영구 승인("이 명령 계열 세션 동안 허용" — 위험 명령은 항상 인간 게이트)
+  - 지수 백오프 재시도(권한/인증 오류는 절대 재시도 안 함), 토큰·비용 HUD 칩(컨텍스트 80% 경고 + 압축 배지)
 - **Codex식 사이드 패널** — 대화를 가리지 않는 우측 분할(미리보기/Diff/터미널/파일/백그라운드 작업/계획).
 - **진짜 라이브 터미널** — dgx-swarm tmux pane의 실제 출력을 capture-pane으로 폴링(읽기 전용), 게이트 통과 명령 전송.
 - **답변 기반 추천대화** — 에이전트의 마지막 답변에서 파생, 클릭 즉시 전송 + 연필 수정.
@@ -77,7 +86,7 @@
 - SMB급 방어(gitleaks, pnpm audit, rate-limit), provider-completion HMAC 서명, dgx-02 서버 자동복구(`Restart=always`).
 - 연결 실패 시 저장된 다른 프로바이더/OAuth로 전환 제안.
 
-> 상세 PR 이력은 GitHub PR #448~#473 및 git 로그에 있습니다. 다음 단계는 [docs/45](docs/45-chat-coding-roadmap.md)의 Phase A~F(Diff/Files 패널 실연결, `/fork`, Mission 객체 통합, verifier+순차병합, 모델 라우팅 엔진, runtime isolation) — 대부분 dgx-02 재배포 후 진행합니다.
+> 상세 PR 이력은 GitHub PR #448~#473 및 git 로그에 있습니다. [docs/45](docs/45-chat-coding-roadmap.md) Phase A~F 중 `/fork`·모델 라우팅·Diff/Files 연동(워크스페이스 변경 원장)은 2026-06-11 대화 워크벤치 업그레이드로 구현됐고, 남은 단계는 Mission 객체 통합, verifier+순차병합, runtime isolation — 대부분 dgx-02 재배포 후 진행합니다.
 
 ## 참고 방향
 

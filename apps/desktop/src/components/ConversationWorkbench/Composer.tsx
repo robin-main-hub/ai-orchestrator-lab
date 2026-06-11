@@ -6,6 +6,9 @@ import {
   Send,
   Paperclip,
   Pencil,
+  Hammer,
+  Square,
+  Telescope,
 } from "lucide-react";
 import type { ModelDescriptor } from "@ai-orchestrator/protocol";
 import { Button } from "@/ui/button";
@@ -33,6 +36,12 @@ export function Composer({
   selectedAgent,
   selectedModel,
   showDelegationChips,
+  agentMode = "build",
+  onAgentModeChange,
+  turnActive = false,
+  onStopTurn,
+  queuedMessages,
+  onRemoveQueuedMessage,
 }: {
   attachmentAccept: string;
   attachmentEnabled: boolean;
@@ -51,10 +60,20 @@ export function Composer({
   selectedAgent?: WorkbenchAgent;
   selectedModel?: ModelDescriptor;
   showDelegationChips: boolean;
+  /** 항목 4 — 플랜(읽기 전용)/빌드 토글 */
+  agentMode?: "build" | "plan";
+  onAgentModeChange?: (mode: "build" | "plan") => void;
+  /** 항목 1 — 턴 진행 중이면 보내기 대신 중지 버튼 */
+  turnActive?: boolean;
+  onStopTurn?: () => void;
+  /** 항목 8 — 대기 중인 메시지 큐 */
+  queuedMessages?: string[];
+  onRemoveQueuedMessage?: (index: number) => void;
 }) {
   const canSend =
     Boolean(selectedAgent) &&
     (draftMessage.trim().length > 0 || draftAttachments.length > 0);
+  const showStopButton = turnActive && Boolean(onStopTurn);
 
   // 자동 성장: 긴 추천대화/멀티라인 입력이 들어와도 줄이 잘리지 않게
   // scrollHeight에 맞춰 높이를 키운다 (최대 5줄 가량, 이후 스크롤).
@@ -69,6 +88,65 @@ export function Composer({
 
   return (
     <div className="shrink-0 border-t border-white/10 bg-zinc-950/90 shadow-[0_-20px_50px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+      {/* 항목 4 — 플랜/빌드 모드 토글 + 항목 8 큐 칩 */}
+      {onAgentModeChange || (queuedMessages && queuedMessages.length > 0) ? (
+        <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-1.5">
+          {onAgentModeChange ? (
+            <div className="inline-flex overflow-hidden rounded-lg border border-white/10" role="tablist">
+              <button
+                aria-selected={agentMode === "build"}
+                className={cn(
+                  "inline-flex items-center gap-1 px-2.5 py-1 text-[11px] transition-colors",
+                  agentMode === "build"
+                    ? "bg-cyan-500/20 font-semibold text-cyan-100"
+                    : "bg-transparent text-zinc-500 hover:text-zinc-300",
+                )}
+                onClick={() => onAgentModeChange("build")}
+                role="tab"
+                title="모든 도구가 승인 게이트를 거쳐 실행됩니다"
+                type="button"
+              >
+                <Hammer className="h-3 w-3" /> 빌드
+              </button>
+              <button
+                aria-selected={agentMode === "plan"}
+                className={cn(
+                  "inline-flex items-center gap-1 px-2.5 py-1 text-[11px] transition-colors",
+                  agentMode === "plan"
+                    ? "bg-violet-500/20 font-semibold text-violet-100"
+                    : "bg-transparent text-zinc-500 hover:text-zinc-300",
+                )}
+                onClick={() => onAgentModeChange("plan")}
+                role="tab"
+                title="읽기 전용 — 변경 도구(bash/write/edit)가 차단됩니다"
+                type="button"
+              >
+                <Telescope className="h-3 w-3" /> 플랜
+              </button>
+            </div>
+          ) : null}
+          {queuedMessages?.map((queued, index) => (
+            <span
+              className="inline-flex max-w-[220px] items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10.5px] text-amber-200"
+              key={`${index}_${queued.slice(0, 12)}`}
+              title={`턴 종료 후 자동 발송: ${queued}`}
+            >
+              <span className="truncate">대기 {index + 1}: {queued}</span>
+              {onRemoveQueuedMessage ? (
+                <button
+                  aria-label={`대기 메시지 ${index + 1} 제거`}
+                  className="shrink-0 text-amber-300/70 hover:text-amber-100"
+                  onClick={() => onRemoveQueuedMessage(index)}
+                  type="button"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              ) : null}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
       {/* Delegation chips (companion only) */}
       {showDelegationChips ? (
         <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-2">
@@ -199,15 +277,28 @@ export function Composer({
           ) : null}
         </div>
 
-        {/* Send */}
-        <Button
-          className="h-10 gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 text-white shadow-lg shadow-cyan-950/30 hover:from-cyan-400 hover:to-violet-400"
-          disabled={!canSend}
-          type="submit"
-        >
-          <Send className="h-4 w-4" />
-          <span className="hidden sm:inline">보내기</span>
-        </Button>
+        {/* Send / Stop (항목 1) */}
+        {showStopButton ? (
+          <Button
+            aria-label="응답 생성 중지"
+            className="h-10 gap-2 rounded-xl border border-red-500/40 bg-red-500/15 px-4 text-red-200 hover:bg-red-500/25"
+            onClick={() => onStopTurn?.()}
+            type="button"
+            variant="ghost"
+          >
+            <Square className="h-4 w-4 fill-current" />
+            <span className="hidden sm:inline">중지</span>
+          </Button>
+        ) : (
+          <Button
+            className="h-10 gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 text-white shadow-lg shadow-cyan-950/30 hover:from-cyan-400 hover:to-violet-400"
+            disabled={!canSend}
+            type="submit"
+          >
+            <Send className="h-4 w-4" />
+            <span className="hidden sm:inline">보내기</span>
+          </Button>
+        )}
       </form>
     </div>
   );

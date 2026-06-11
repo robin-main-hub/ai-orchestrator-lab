@@ -7,7 +7,10 @@ import {
   GitBranch,
   Sparkles,
   UserRound,
+  Undo2,
+  TerminalSquare,
 } from "lucide-react";
+import { useState } from "react";
 import { parseDelegateTags } from "@ai-orchestrator/agents";
 import type {
   ConversationMessage,
@@ -56,6 +59,9 @@ export function MessageThread({
   agents,
   agentVisualsById,
   agentActivityById,
+  streamingPreview,
+  onRollbackTurn,
+  onApproveCommandPattern,
 }: {
   agentChatContinuity: AgentChatContinuitySummary;
   messages: ConversationMessage[];
@@ -71,10 +77,21 @@ export function MessageThread({
   agents: WorkbenchAgent[];
   agentVisualsById?: Record<string, AgentVisualSettings>;
   agentActivityById?: Record<string, AgentActivityStatus>;
+  /** 항목 1 — 진행 중 스트리밍 텍스트(점진 렌더링) */
+  streamingPreview?: { agentId: string; text: string } | null;
+  /** 항목 9 — 어시스턴트 턴 롤백 */
+  onRollbackTurn?: (assistantMessageId: string) => void;
+  /** 항목 10 — "이 명령 계열 세션 동안 허용" */
+  onApproveCommandPattern?: (command: string) => void;
 }) {
   const delegationItems = createDelegationPreviewItems(messages, agents);
   const thinkingIndicator = resolveAgentThinkingIndicator(selectedAgent?.id, agentActivityById);
-  const showPendingBubble = shouldShowAssistantPendingBubble(messages, thinkingIndicator?.status);
+  const streamingDraftText =
+    streamingPreview && selectedAgent && streamingPreview.agentId === selectedAgent.id && streamingPreview.text.trim()
+      ? streamingPreview.text
+      : undefined;
+  const showPendingBubble =
+    !streamingDraftText && shouldShowAssistantPendingBubble(messages, thinkingIndicator?.status);
 
   return (
     <div className="relative flex-1 overflow-hidden bg-zinc-950">
@@ -88,6 +105,7 @@ export function MessageThread({
           {workbenchVisibility.showInlineApprovalQueue ? (
             <ApprovalQueueInline
               onApprove={onApprovePermission}
+              onApprovePattern={onApproveCommandPattern}
               onReject={onRejectPermission}
               pendingProviderRetry={pendingProviderRetry}
               queue={permissionSnapshotQueue}
@@ -114,9 +132,17 @@ export function MessageThread({
                 agents={agents}
                 agentVisualsById={agentVisualsById}
                 agentActivityById={agentActivityById}
+                onRollbackTurn={onRollbackTurn}
               />
             ))
           )}
+          {streamingDraftText && selectedAgent ? (
+            <StreamingDraftBubble
+              agent={selectedAgent}
+              agentVisualsById={agentVisualsById}
+              text={streamingDraftText}
+            />
+          ) : null}
           {showPendingBubble && selectedAgent && thinkingIndicator ? (
             <AssistantPendingBubble
               activity={thinkingIndicator.status}
@@ -314,6 +340,43 @@ function AssistantPendingBubble({
   );
 }
 
+/** 항목 1 — 스트리밍 중 점진 렌더링되는 드래프트 버블 */
+function StreamingDraftBubble({
+  agent,
+  agentVisualsById,
+  text,
+}: {
+  agent: WorkbenchAgent;
+  agentVisualsById?: Record<string, AgentVisualSettings>;
+  text: string;
+}) {
+  const visual = agentVisualsById?.[agent.id];
+  const displayName = agentPrimaryDisplayName(agent);
+  return (
+    <div className="flex gap-3 py-1.5" aria-live="polite" aria-label={`${displayName} 응답 작성 중`} data-testid="streaming-draft-bubble">
+      <AvatarWithStatus
+        initials={agentInitialsForDisplay(agent)}
+        roleColor={roleColorFromRole(agent.role)}
+        status="active"
+        avatarDataUrl={visual?.avatarDataUrl}
+        size="sm"
+      />
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-xs font-semibold text-zinc-200">{displayName}</span>
+          <span className="text-[10px] text-cyan-400">작성 중…</span>
+        </div>
+        <div className="rounded-2xl rounded-tl-md border border-cyan-300/15 bg-zinc-900/70 p-3 shadow-lg shadow-black/20 backdrop-blur-xl">
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
+            {text}
+            <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse bg-cyan-300 align-middle" aria-hidden="true" />
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EmptyConversation({
   summary,
   portraitUrl,
@@ -361,15 +424,18 @@ function MessageBubble({
   agents,
   agentVisualsById,
   agentActivityById,
+  onRollbackTurn,
 }: {
   message: ConversationMessage;
   selectedAgent?: WorkbenchAgent;
   agents: WorkbenchAgent[];
   agentVisualsById?: Record<string, AgentVisualSettings>;
   agentActivityById?: Record<string, AgentActivityStatus>;
+  onRollbackTurn?: (assistantMessageId: string) => void;
 }) {
   const attachments = getMessageAttachments(message);
   const attachmentProcessingPlans = readMessageAttachmentProcessingPlans(message);
+  const toolCallChips = readMessageToolCalls(message);
   const label = messageLabel(message, selectedAgent, agents);
   const publicWorkTrace = createConversationMessagePublicWorkTrace(message);
   const assistantStatusSummary = resolveAssistantMessageStatusSummary(message);
@@ -435,14 +501,32 @@ function MessageBubble({
         size="sm"
       />
       <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex items-center gap-2 px-1">
+        <div className="group flex items-center gap-2 px-1">
           <span className="text-xs font-semibold text-zinc-200">{label}</span>
           <span className="text-[10px] text-zinc-600">{time}</span>
+          {onRollbackTurn && message.metadata?.notice !== true ? (
+            <button
+              aria-label="이 턴으로 되돌리기"
+              className="ml-auto hidden items-center gap-1 rounded-md border border-zinc-700/70 bg-zinc-900/80 px-1.5 py-0.5 text-[10px] text-zinc-400 transition hover:border-amber-400/40 hover:text-amber-200 group-hover:inline-flex"
+              onClick={() => onRollbackTurn(message.id)}
+              title="이 턴(사용자 메시지 포함)을 대화에서 제거합니다 — 파일은 자동 복원되지 않음"
+              type="button"
+            >
+              <Undo2 className="h-3 w-3" /> 되돌리기
+            </button>
+          ) : null}
         </div>
         <div className="rounded-2xl rounded-tl-md border border-white/10 bg-zinc-900/70 p-3 shadow-lg shadow-black/20 backdrop-blur-xl">
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
             {message.content}
           </p>
+          {toolCallChips.length > 0 ? (
+            <div className="mt-2 space-y-1" aria-label="도구 실행 기록">
+              {toolCallChips.map((call) => (
+                <ToolCallChip call={call} key={call.id} />
+              ))}
+            </div>
+          ) : null}
           {attachments.length > 0 ? (
             <MessageAttachments attachments={attachments} processingPlans={attachmentProcessingPlans} />
           ) : null}
@@ -466,6 +550,56 @@ function MessageBubble({
           <PublicWorkTracePanel trace={publicWorkTrace} />
         </div>
       </div>
+    </div>
+  );
+}
+
+type MessageToolCallChipData = {
+  id: string;
+  tool: string;
+  title: string;
+  status: string;
+  output?: string;
+};
+
+/** assistant metadata.toolCalls(대화 도구 루프 기록)를 표시용으로 파싱 */
+export function readMessageToolCalls(message: ConversationMessage): MessageToolCallChipData[] {
+  const raw = message.metadata?.toolCalls;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .map((entry, index) => ({
+      id: typeof entry.id === "string" ? entry.id : `tool_${index}`,
+      tool: typeof entry.tool === "string" ? entry.tool : "tool",
+      title: typeof entry.title === "string" ? entry.title : String(entry.tool ?? "tool"),
+      status: typeof entry.status === "string" ? entry.status : "completed",
+      output: typeof entry.output === "string" ? entry.output : undefined,
+    }));
+}
+
+/** 항목 2 — 도구 호출 칩: 상태·명령, 클릭하면 출력 미리보기 */
+function ToolCallChip({ call }: { call: MessageToolCallChipData }) {
+  const [expanded, setExpanded] = useState(false);
+  const statusVariant: StatusBadgeVariant =
+    call.status === "completed" ? "success" : call.status === "denied" ? "warning" : call.status === "failed" ? "danger" : "muted";
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/25">
+      <button
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
+        onClick={() => setExpanded((value) => !value)}
+        type="button"
+      >
+        <TerminalSquare className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
+        <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-300">{call.title}</span>
+        <StatusBadge size="sm" variant={statusVariant}>
+          {call.status === "completed" ? "완료" : call.status === "denied" ? "차단" : call.status === "failed" ? "실패" : call.status}
+        </StatusBadge>
+      </button>
+      {expanded && call.output ? (
+        <pre className="max-h-40 overflow-auto border-t border-white/10 px-2.5 py-2 text-[10.5px] leading-relaxed text-zinc-400">
+          {call.output}
+        </pre>
+      ) : null}
     </div>
   );
 }
@@ -598,11 +732,14 @@ function approvalPermissionLabel(permission: string) {
 
 function ApprovalQueueInline({
   onApprove,
+  onApprovePattern,
   onReject,
   pendingProviderRetry,
   queue,
 }: {
   onApprove: (sourceItemId: string) => void;
+  /** 항목 10 — 승인하면서 같은 명령 계열을 세션 동안 자동 허용 */
+  onApprovePattern?: (command: string) => void;
   onReject: (sourceItemId: string) => void;
   pendingProviderRetry?: PendingProviderRetry;
   queue: ApprovalQueueItem[];
@@ -647,6 +784,21 @@ function ApprovalQueueInline({
                   <Check className="h-3 w-3" />
                   승인
                 </Button>
+                {onApprovePattern ? (
+                  <Button
+                    className="h-7 gap-1 text-xs text-cyan-200"
+                    onClick={() => {
+                      onApprovePattern(item.summary);
+                      onApprove(item.sourceItemId);
+                    }}
+                    size="sm"
+                    title="이 명령 계열(프리픽스)을 세션 동안 자동 승인합니다"
+                    variant="ghost"
+                  >
+                    <Check className="h-3 w-3" />
+                    계열 허용
+                  </Button>
+                ) : null}
                 <Button
                   className="h-7 gap-1 text-xs"
                   onClick={() => onReject(item.sourceItemId)}

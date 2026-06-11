@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ProviderCompletionRequest } from "@ai-orchestrator/protocol";
 import { createAdapterContext } from "./adapter";
-import { createOpenAIChatMessages, OpenAICompatibleAdapter, type AdapterFetchLike } from "./openAiCompatibleAdapter";
+import {
+  applyOpenAIImageAttachments,
+  createOpenAIChatMessages,
+  OpenAICompatibleAdapter,
+  type AdapterFetchLike,
+} from "./openAiCompatibleAdapter";
 
 function baseRequest(overrides: Partial<ProviderCompletionRequest> = {}): ProviderCompletionRequest {
   return {
@@ -302,5 +307,79 @@ describe("OpenAICompatibleAdapter", () => {
         totalTokens: 12,
       },
     });
+  });
+});
+
+describe("applyOpenAIImageAttachments", () => {
+  it("converts the last user message into text + image_url content parts", () => {
+    const result = applyOpenAIImageAttachments(
+      [
+        { role: "system", content: "sys" },
+        { role: "user", content: "first" },
+        { role: "assistant", content: "reply" },
+        { role: "user", content: "describe this" },
+      ],
+      [
+        { name: "shot.png", kind: "image", mimeType: "image/png", dataUrl: "data:image/png;base64,AAAA" },
+      ],
+    );
+
+    expect(result[3]).toEqual({
+      role: "user",
+      content: [
+        { type: "text", text: "describe this" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+      ],
+    });
+    // earlier turns untouched
+    expect(result[1]).toEqual({ role: "user", content: "first" });
+  });
+
+  it("returns the input unchanged when there is no usable image attachment", () => {
+    const input = [{ role: "user" as const, content: "hello" }];
+    expect(applyOpenAIImageAttachments(input, undefined)).toBe(input);
+    expect(
+      applyOpenAIImageAttachments(input, [
+        { name: "notes.txt", kind: "document", mimeType: "text/plain", textContent: "hi" },
+        { name: "broken.png", kind: "image", mimeType: "image/png" },
+      ]),
+    ).toBe(input);
+  });
+});
+
+describe("OpenAICompatibleAdapter — image attachments", () => {
+  it("sends multimodal content parts when the request carries image attachments", async () => {
+    const captured: string[] = [];
+    const fetchImpl: AdapterFetchLike = async (_input, init) => {
+      captured.push(init?.body ?? "");
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ choices: [{ message: { content: "ok" } }] }),
+      };
+    };
+    const adapter = new OpenAICompatibleAdapter({
+      profileId: "provider_openai_compatible",
+      baseUrl: "https://api.test.local/v1",
+      fetchImpl,
+    });
+
+    const response = await adapter.complete(
+      baseRequest({
+        attachments: [
+          { name: "shot.png", kind: "image", mimeType: "image/png", dataUrl: "data:image/png;base64,BBBB" },
+        ],
+      }),
+      createAdapterContext({ secret: "sk-test" }),
+    );
+
+    expect(response.status).toBe("succeeded");
+    const body = JSON.parse(captured[0]!);
+    const lastMessage = body.messages[body.messages.length - 1];
+    expect(lastMessage.role).toBe("user");
+    expect(lastMessage.content).toEqual([
+      { type: "text", text: "Reply OK only" },
+      { type: "image_url", image_url: { url: "data:image/png;base64,BBBB" } },
+    ]);
   });
 });

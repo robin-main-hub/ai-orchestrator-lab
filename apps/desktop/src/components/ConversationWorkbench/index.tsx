@@ -69,6 +69,11 @@ import { WorkTheater } from "./WorkTheater";
 import { WorkspaceDiffPanel, WorkspaceFilesPanel } from "./WorkspaceChangesPanel";
 import { buildForkBrief, forkMissionFromConversation } from "../../lib/conversationFork";
 import { workbenchMissionStore } from "../../lib/workbenchMissions";
+import {
+  contextUsagePercent,
+  estimateCostUsd,
+  type ConversationUsageSummary,
+} from "../../lib/conversationUsage";
 
 // Sub-components
 import { MessageThread } from "./MessageThread";
@@ -138,6 +143,16 @@ export function ConversationWorkbench({
   viewMode = "chat",
   agentVisualsById,
   agentActivityById,
+  agentMode = "build",
+  onAgentModeChange,
+  streamingPreview,
+  queuedMessages,
+  onRemoveQueuedMessage,
+  onStopTurn,
+  usageSummary,
+  compactedVersion,
+  onRollbackTurn,
+  onApproveCommandPattern,
 }: {
   activeSessionId: string;
   /** "에이전트" 사이드 패널 모드에 주입되는 에이전트 레일 (App의 AgentsSidebar) */
@@ -202,6 +217,24 @@ export function ConversationWorkbench({
   viewMode?: "chat" | "agents";
   agentVisualsById?: Record<string, AgentVisualSettings>;
   agentActivityById?: Record<string, AgentActivityStatus>;
+  /** 항목 4 — 플랜(읽기 전용)/빌드 모드 */
+  agentMode?: "build" | "plan";
+  onAgentModeChange?: (mode: "build" | "plan") => void;
+  /** 항목 1 — 진행 중 스트리밍 텍스트 */
+  streamingPreview?: { agentId: string; text: string } | null;
+  /** 항목 8 — 턴 종료 후 자동 발송될 대기 메시지 */
+  queuedMessages?: string[];
+  onRemoveQueuedMessage?: (index: number) => void;
+  /** 항목 1 — 진행 중 턴 중지 */
+  onStopTurn?: () => void;
+  /** 항목 12 — 토큰/비용 HUD */
+  usageSummary?: ConversationUsageSummary;
+  /** 항목 6 — 자동 압축 적용 횟수(배지) */
+  compactedVersion?: number;
+  /** 항목 9 — 턴 롤백 */
+  onRollbackTurn?: (assistantMessageId: string) => void;
+  /** 항목 10 — "이 명령 계열 세션 동안 허용" */
+  onApproveCommandPattern?: (command: string) => void;
 }) {
   const [activeAgentDetailPanel, setActiveAgentDetailPanel] = useState<AgentDetailPanel>("none");
   const persona = agentPersona ?? (selectedAgent ? createDefaultPersonaSettings(selectedAgent) : undefined);
@@ -452,6 +485,14 @@ export function ConversationWorkbench({
         </Popover>
 
         <div className="flex shrink-0 items-center gap-1">
+          {usageSummary && usageSummary.turns > 0 ? (
+            <UsageHudChip
+              compactedVersion={compactedVersion}
+              contextWindow={selectedModel?.contextWindow}
+              modelId={selectedModel?.id}
+              usage={usageSummary}
+            />
+          ) : null}
           <Button
             className="hidden h-8 gap-1.5 px-2 text-xs lg:inline-flex"
             disabled={!canDelegate}
@@ -614,6 +655,9 @@ export function ConversationWorkbench({
         agents={agents}
         agentVisualsById={agentVisualsById}
         agentActivityById={agentActivityById}
+        streamingPreview={streamingPreview}
+        onRollbackTurn={onRollbackTurn}
+        onApproveCommandPattern={onApproveCommandPattern}
       />
 
       <Composer
@@ -633,6 +677,12 @@ export function ConversationWorkbench({
         selectedAgent={selectedAgent}
         selectedModel={selectedModel}
         showDelegationChips={workbenchVisibility.showComposerDelegationChips}
+        agentMode={agentMode}
+        onAgentModeChange={onAgentModeChange}
+        turnActive={selectedAgentActivity === "tooling" || selectedAgentActivity === "preparing"}
+        onStopTurn={onStopTurn}
+        queuedMessages={queuedMessages}
+        onRemoveQueuedMessage={onRemoveQueuedMessage}
       />
         </div>
 
@@ -682,6 +732,46 @@ export function ConversationWorkbench({
         </ChatSidePanel>
       </div>
     </section>
+  );
+}
+
+/** 항목 6·12 — 토큰/비용 HUD 칩: 컨텍스트 80% 이상이면 경고색, 압축 적용 시 배지 */
+function UsageHudChip({
+  usage,
+  modelId,
+  contextWindow,
+  compactedVersion,
+}: {
+  usage: ConversationUsageSummary;
+  modelId?: string;
+  contextWindow?: number;
+  compactedVersion?: number;
+}) {
+  const percent = contextUsagePercent(usage.lastInputTokens, contextWindow);
+  const costUsd = usage.estimatedCostUsd ?? estimateCostUsd(modelId, usage);
+  const warning = percent >= 80;
+  const formatTokens = (value: number) =>
+    value >= 1000 ? `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}k` : String(value);
+  return (
+    <span
+      className={`hidden items-center gap-1.5 rounded-full border px-2 py-1 text-[10.5px] tabular-nums md:inline-flex ${
+        warning
+          ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+          : "border-zinc-800/80 bg-zinc-900/70 text-zinc-400"
+      }`}
+      data-testid="conversation-usage-hud"
+      title={`입력 ${usage.inputTokens.toLocaleString()} · 출력 ${usage.outputTokens.toLocaleString()} 토큰 · ${usage.turns}턴${
+        costUsd !== undefined ? ` · 약 $${costUsd.toFixed(4)}` : ""
+      }${contextWindow ? ` · 컨텍스트 ${percent}%` : ""}`}
+    >
+      <Cpu className="h-3 w-3" />
+      {formatTokens(usage.totalTokens)} tok
+      {costUsd !== undefined ? <span>· ${costUsd >= 0.01 ? costUsd.toFixed(2) : costUsd.toFixed(4)}</span> : null}
+      {contextWindow && percent > 0 ? <span className={warning ? "font-semibold" : ""}>· {percent}%</span> : null}
+      {compactedVersion ? (
+        <span className="rounded-full bg-cyan-500/15 px-1.5 text-cyan-300">압축됨 v{compactedVersion}</span>
+      ) : null}
+    </span>
   );
 }
 
