@@ -2,6 +2,8 @@ import type {
   ApprovalState,
   ConversationMessage,
   PermissionDecision,
+  ProviderCompletionAttachment,
+  ProviderCompletionChunkEvent,
   ProviderCompletionRequest,
   ProviderCompletionResponse,
   ProviderCompletionRoute,
@@ -11,8 +13,10 @@ import type {
 import {
   AnthropicAdapter,
   OpenAICompatibleAdapter,
+  applyOpenAIImageAttachments,
   createAdapterContext,
 } from "@ai-orchestrator/providers";
+import { extractMessageAttachments, toProviderAttachments } from "../lib/attachmentContent";
 import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
 import { createDgxOrchestratorJsonHeaders } from "./stage31DgxAuth";
 
@@ -60,6 +64,10 @@ export type Stage12DgxCompletionInput = {
   approvalState?: ApprovalState;
   permissionDecision?: PermissionDecision;
   localSecretResolver?: (provider: ProviderProfile) => Promise<string | undefined> | string | undefined;
+  /** when set, the proxy route streams via SSE and reports accumulated text per delta */
+  onDelta?: (textSoFar: string) => void;
+  /** cooperative cancellation for the in-flight completion (stop button) */
+  abortSignal?: AbortSignal;
 };
 
 export type Stage12DgxCompletionResult = {
@@ -100,6 +108,8 @@ export async function requestDgxVllmCompletion({
   allowDirectFallback = false,
   approvalState,
   permissionDecision,
+  onDelta,
+  abortSignal,
 }: Stage12DgxCompletionInput): Promise<Stage12DgxCompletionResult> {
   try {
     return await requestDgxProviderCompletionViaProxyFallback({
@@ -111,6 +121,8 @@ export async function requestDgxVllmCompletion({
       proxyTimeoutMs,
       approvalState,
       permissionDecision,
+      onDelta,
+      abortSignal,
     });
   } catch (proxyError) {
     if (!allowDirectFallback) {
@@ -148,6 +160,8 @@ export async function requestDgxProviderCompletion({
   approvalState,
   permissionDecision,
   localSecretResolver,
+  onDelta,
+  abortSignal,
 }: Stage12DgxCompletionInput): Promise<Stage12DgxCompletionResult> {
   if (isDgxVllmProvider(provider)) {
     return requestDgxVllmCompletion({
@@ -160,6 +174,8 @@ export async function requestDgxProviderCompletion({
       approvalState,
       permissionDecision,
       localSecretResolver,
+      onDelta,
+      abortSignal,
     });
   }
 
@@ -173,6 +189,8 @@ export async function requestDgxProviderCompletion({
       proxyTimeoutMs,
       approvalState,
       permissionDecision,
+      onDelta,
+      abortSignal,
     });
   } catch (proxyError) {
     if (proxyError instanceof ProviderCompletionPermissionRequiredError) {
@@ -224,7 +242,21 @@ export function createProviderCompletionProxyRequest(
     request.permissionDecision = permission.permissionDecision;
   }
 
+  const attachments = resolveProviderAttachments(messages);
+  if (attachments) {
+    request.attachments = attachments;
+  }
+
   return request;
+}
+
+/** image/text content riders from the latest user message (item 3) */
+function resolveProviderAttachments(
+  messages: ConversationMessage[],
+): ProviderCompletionAttachment[] | undefined {
+  const lastUser = [...messages].reverse().find((message) => message.role === "user");
+  if (!lastUser) return undefined;
+  return toProviderAttachments(extractMessageAttachments(lastUser.metadata));
 }
 
 function compactProviderProxyMessages(messages: ConversationMessage[]) {
@@ -249,8 +281,10 @@ async function requestDgxProviderCompletionViaProxyFallback({
   proxyTimeoutMs,
   approvalState,
   permissionDecision,
+  onDelta,
+  abortSignal,
 }: Required<Pick<Stage12DgxCompletionInput, "provider" | "modelId" | "messages" | "fetchImpl" | "proxyTimeoutMs">> &
-  Pick<Stage12DgxCompletionInput, "approvalState" | "permissionDecision"> &
+  Pick<Stage12DgxCompletionInput, "approvalState" | "permissionDecision" | "onDelta" | "abortSignal"> &
   Pick<Stage12DgxCompletionInput, "proxyBaseUrl">): Promise<Stage12DgxCompletionResult> {
   let lastError: unknown;
   const errors: string[] = [];
@@ -265,9 +299,14 @@ async function requestDgxProviderCompletionViaProxyFallback({
         proxyTimeoutMs,
         approvalState,
         permissionDecision,
+        onDelta,
+        abortSignal,
       });
     } catch (error) {
       if (error instanceof ProviderCompletionPermissionRequiredError) {
+        throw error;
+      }
+      if (abortSignal?.aborted) {
         throw error;
       }
       lastError = error;
@@ -287,8 +326,33 @@ async function requestDgxVllmCompletionViaProxy({
   proxyTimeoutMs,
   approvalState,
   permissionDecision,
+  onDelta,
+  abortSignal,
 }: Required<Pick<Stage12DgxCompletionInput, "provider" | "modelId" | "messages" | "fetchImpl" | "proxyBaseUrl" | "proxyTimeoutMs">> &
-  Pick<Stage12DgxCompletionInput, "approvalState" | "permissionDecision">): Promise<Stage12DgxCompletionResult> {
+  Pick<Stage12DgxCompletionInput, "approvalState" | "permissionDecision" | "onDelta" | "abortSignal">): Promise<Stage12DgxCompletionResult> {
+  if (onDelta) {
+    try {
+      return await requestDgxCompletionViaProxyStream({
+        provider,
+        modelId,
+        messages,
+        fetchImpl,
+        proxyBaseUrl,
+        proxyTimeoutMs,
+        approvalState,
+        permissionDecision,
+        onDelta,
+        abortSignal,
+      });
+    } catch (error) {
+      // permission gates and explicit user aborts are terminal; anything else
+      // (no SSE support, parse failure) degrades to the non-stream POST below
+      if (error instanceof ProviderCompletionPermissionRequiredError || abortSignal?.aborted) {
+        throw error;
+      }
+    }
+  }
+
   const endpoint = `${String(proxyBaseUrl).replace(/\/$/, "")}/provider-completions`;
   const body = JSON.stringify(createProviderCompletionProxyRequest(provider, modelId, messages, { approvalState, permissionDecision }));
   const response = await fetchWithTimeout(
@@ -300,6 +364,7 @@ async function requestDgxVllmCompletionViaProxy({
       body,
     },
     proxyTimeoutMs,
+    abortSignal,
   );
 
   const rawText = await response.text();
@@ -321,6 +386,117 @@ async function requestDgxVllmCompletionViaProxy({
     endpoint: parsed.endpoint ?? endpoint,
     route: parsed.route,
     usage: parsed.usage,
+  };
+}
+
+/** parse one SSE line ("data: {...}") into a chunk event */
+function parseProviderChunkLine(line: string): ProviderCompletionChunkEvent | null {
+  if (!line.startsWith("data:")) return null;
+  try {
+    return JSON.parse(line.slice(5).trim()) as ProviderCompletionChunkEvent;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Streaming variant of the proxy completion (item 1): consumes the server's
+ * `/provider-completions/stream` SSE endpoint, reporting accumulated text on
+ * every delta. Same HMAC headers and permission-error contract as the
+ * non-stream POST; the caller falls back to that POST when this throws.
+ */
+async function requestDgxCompletionViaProxyStream({
+  provider,
+  modelId,
+  messages,
+  fetchImpl,
+  proxyBaseUrl,
+  proxyTimeoutMs,
+  approvalState,
+  permissionDecision,
+  onDelta,
+  abortSignal,
+}: Required<Pick<Stage12DgxCompletionInput, "provider" | "modelId" | "messages" | "fetchImpl" | "proxyBaseUrl" | "proxyTimeoutMs">> &
+  Pick<Stage12DgxCompletionInput, "approvalState" | "permissionDecision" | "onDelta" | "abortSignal">): Promise<Stage12DgxCompletionResult> {
+  const endpoint = `${String(proxyBaseUrl).replace(/\/$/, "")}/provider-completions/stream`;
+  const body = JSON.stringify(
+    createProviderCompletionProxyRequest(provider, modelId, messages, { approvalState, permissionDecision }),
+  );
+  const response = await fetchWithTimeout(
+    fetchImpl,
+    endpoint,
+    {
+      method: "POST",
+      headers: await createDgxOrchestratorJsonHeaders("POST", "/provider-completions/stream", endpoint, { body }),
+      body,
+    },
+    proxyTimeoutMs,
+    abortSignal,
+  );
+
+  if (!response.ok) {
+    const rawText = await response.text();
+    const permissionError = parseProviderCompletionPermissionRequired(rawText);
+    if (permissionError) {
+      throw permissionError;
+    }
+    throw new Error(`DGX-02 stream proxy failed: ${response.status} ${rawText.slice(0, 240)}`);
+  }
+  if (!response.body) {
+    throw new Error("DGX-02 stream proxy returned no body");
+  }
+
+  const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let content = "";
+  let finalContent: string | null = null;
+  let usage: ProviderCompletionUsage | undefined;
+  let streamError: string | undefined;
+
+  const handleLine = (line: string) => {
+    const chunk = parseProviderChunkLine(line);
+    if (!chunk) return;
+    if (chunk.type === "delta") {
+      content += chunk.delta;
+      onDelta?.(content);
+    } else if (chunk.type === "done") {
+      finalContent = chunk.finalContent;
+      if (chunk.usage) usage = chunk.usage;
+    } else if (chunk.type === "usage") {
+      usage = chunk.usage;
+    } else if (chunk.type === "error") {
+      streamError = chunk.error.message;
+    }
+  };
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let separator = buffer.indexOf("\n");
+      while (separator >= 0) {
+        handleLine(buffer.slice(0, separator).trim());
+        buffer = buffer.slice(separator + 1);
+        separator = buffer.indexOf("\n");
+      }
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) handleLine(buffer.trim());
+  } finally {
+    reader.releaseLock();
+  }
+
+  const resolved = (finalContent ?? content).trim();
+  if (!resolved) {
+    throw new Error(streamError ?? "DGX-02 stream returned no content");
+  }
+  return {
+    content: resolved,
+    endpoint,
+    route: "server_proxy",
+    usage,
   };
 }
 
@@ -414,7 +590,7 @@ function createDirectProviderCompletionRequest(
   modelId: string,
   messages: ConversationMessage[],
 ): ProviderCompletionRequest {
-  return {
+  const request: ProviderCompletionRequest = {
     id: `provider_completion_direct_${crypto.randomUUID()}`,
     sessionId: messages.at(-1)?.sessionId ?? "session_desktop_001",
     providerProfileId: provider.id,
@@ -427,6 +603,13 @@ function createDirectProviderCompletionRequest(
     routePreference: "direct_provider",
     createdAt: new Date().toISOString(),
   };
+
+  const attachments = resolveProviderAttachments(messages);
+  if (attachments) {
+    request.attachments = attachments;
+  }
+
+  return request;
 }
 
 export function resolveDirectProviderBaseUrl(provider: ProviderProfile, browserOrigin = resolveBrowserOrigin()) {
@@ -484,11 +667,23 @@ function resolveBrowserOrigin() {
   return window.location.origin;
 }
 
-async function fetchWithTimeout(fetchImpl: typeof fetch, input: string, init: RequestInit, timeoutMs: number) {
+async function fetchWithTimeout(
+  fetchImpl: typeof fetch,
+  input: string,
+  init: RequestInit,
+  timeoutMs: number,
+  outerSignal?: AbortSignal,
+) {
   const controller = new AbortController();
   const timeoutId = globalThis.setTimeout(() => {
     controller.abort();
   }, timeoutMs);
+  // the listener intentionally outlives this call: fetch resolves at headers,
+  // and an SSE body is consumed afterwards — stop must still abort that read
+  if (outerSignal) {
+    if (outerSignal.aborted) controller.abort();
+    else outerSignal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
 
   try {
     return await fetchImpl(input, {
@@ -527,7 +722,9 @@ function parseProviderCompletionPermissionRequired(rawText: string) {
 export function createDgxVllmRequestBody(modelId: string, messages: ConversationMessage[]) {
   return {
     model: modelId,
-    messages: createDgxChatMessages(messages),
+    // vLLM speaks the OpenAI multimodal dialect, so image attachments reuse
+    // the same image_url content-part mapping as the OpenAI adapter (item 3)
+    messages: applyOpenAIImageAttachments(createDgxChatMessages(messages), resolveProviderAttachments(messages)),
     max_tokens: 512,
     temperature: 0.2,
     chat_template_kwargs: {

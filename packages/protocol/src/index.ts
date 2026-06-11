@@ -288,6 +288,18 @@ export const conversationAttachmentSchema = z.object({
   mimeType: z.string(),
   size: z.number().nonnegative(),
   storage: conversationAttachmentStorageSchema,
+  /**
+   * Extracted text body for document attachments (storage: local_cache).
+   * Capped so a pasted log cannot blow the event log; `truncated` marks
+   * whether the original was longer. Absent for metadata_only attachments.
+   */
+  textContent: z.string().max(200_000).optional(),
+  /**
+   * base64 data URL for image attachments (storage: local_cache) so vision
+   * models can receive the actual pixels through the provider request.
+   */
+  dataUrl: z.string().max(8_000_000).optional(),
+  truncated: z.boolean().optional(),
 });
 export type ConversationAttachment = z.infer<typeof conversationAttachmentSchema>;
 
@@ -626,12 +638,30 @@ export const providerCompletionMessageSchema = z.object({
 });
 export type ProviderCompletionMessage = z.infer<typeof providerCompletionMessageSchema>;
 
+/**
+ * Multimodal payload rider for a completion request. Adapters that support
+ * vision (Anthropic messages, OpenAI-compatible chat) attach these to the
+ * LAST user turn; text-only adapters ignore them. Kept separate from the
+ * message array so the wire format of `messages` stays plain strings.
+ */
+export const providerCompletionAttachmentSchema = z.object({
+  name: z.string().min(1).max(512),
+  kind: conversationAttachmentKindSchema,
+  mimeType: z.string().min(1).max(256),
+  /** base64 data URL (image kinds) */
+  dataUrl: z.string().max(8_000_000).optional(),
+  /** extracted text body (document kinds) */
+  textContent: z.string().max(200_000).optional(),
+});
+export type ProviderCompletionAttachment = z.infer<typeof providerCompletionAttachmentSchema>;
+
 export const providerCompletionRequestSchema = z.object({
   id: z.string().min(1).max(256),
   sessionId: z.string().min(1).max(256),
   providerProfileId: z.string().min(1).max(256),
   modelId: z.string().min(1).max(256),
   messages: z.array(providerCompletionMessageSchema).min(1).max(200),
+  attachments: z.array(providerCompletionAttachmentSchema).max(6).optional(),
   source: eventSourceSchema,
   routePreference: providerCompletionRouteSchema,
   requestContext: providerCompletionRequestContextSchema.optional(),

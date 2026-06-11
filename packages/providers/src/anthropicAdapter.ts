@@ -1,5 +1,6 @@
 import type {
   ModelDescriptor,
+  ProviderCompletionAttachment,
   ProviderCompletionMessage,
   ProviderCompletionRequest,
   ProviderCompletionResponse,
@@ -362,7 +363,7 @@ export class AnthropicAdapter implements LlmAdapter {
 
     const body: Record<string, unknown> = {
       model: request.modelId,
-      messages,
+      messages: applyAnthropicImageAttachments(messages, request.attachments),
       max_tokens: this.defaultMaxTokens,
       ...this.extraBody,
     };
@@ -439,6 +440,47 @@ function assertAnthropicMessageOrder(
       );
     }
   }
+}
+
+export type AnthropicUserContentBlock =
+  | { type: "text"; text: string }
+  | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
+
+const DATA_URL_PATTERN = /^data:(.+?);base64,(.*)$/;
+
+/**
+ * Attaches base64 image attachments to the last user message as Anthropic
+ * content blocks. Attachments without a parseable base64 data URL are
+ * skipped; when nothing applies the original messages array is returned.
+ */
+export function applyAnthropicImageAttachments(
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  attachments?: ProviderCompletionAttachment[],
+): Array<{ role: "user" | "assistant"; content: string | AnthropicUserContentBlock[] }> {
+  const imageBlocks: AnthropicUserContentBlock[] = [];
+  for (const attachment of attachments ?? []) {
+    if (attachment.kind !== "image" || typeof attachment.dataUrl !== "string") continue;
+    const match = DATA_URL_PATTERN.exec(attachment.dataUrl);
+    if (!match || !match[2]) continue;
+    imageBlocks.push({
+      type: "image",
+      source: { type: "base64", media_type: match[1]!, data: match[2] },
+    });
+  }
+  if (imageBlocks.length === 0) return messages;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if (message.role !== "user") continue;
+    const next: Array<{ role: "user" | "assistant"; content: string | AnthropicUserContentBlock[] }> =
+      messages.slice();
+    next[index] = {
+      role: "user",
+      content: [{ type: "text", text: message.content }, ...imageBlocks],
+    };
+    return next;
+  }
+  return messages;
 }
 
 export function extractAnthropicText(content: AnthropicContentBlock[]): string {

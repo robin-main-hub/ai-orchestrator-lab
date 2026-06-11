@@ -7,6 +7,8 @@ export type WorkbenchCompletionPurpose = "primary" | "delegation_subagent" | "de
 export type WorkbenchCompletionResult = {
   content: string;
   metadata: Record<string, unknown>;
+  /** the exact prompt messages sent — the conversation tool loop re-completes on top of these */
+  pipelineMessages?: Array<{ role: "user" | "assistant" | "system" | "tool"; content: string }>;
 };
 
 export type DesktopDelegationOutcome =

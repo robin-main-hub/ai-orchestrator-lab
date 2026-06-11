@@ -414,3 +414,131 @@ describe("stage12 DGX provider completion", () => {
     expect(calls).toEqual(["http://127.0.0.1:4317/provider-completions"]);
   });
 });
+
+describe("stage12 streaming + attachment riders", () => {
+  const sseFrames = [
+    'data: {"type":"delta","requestId":"req_1","sequence":0,"delta":"안녕"}',
+    "",
+    'data: {"type":"delta","requestId":"req_1","sequence":1,"delta":"하세요"}',
+    "",
+    'data: {"type":"usage","requestId":"req_1","usage":{"inputTokens":5,"outputTokens":2,"totalTokens":7}}',
+    "",
+    'data: {"type":"done","requestId":"req_1","finalContent":"안녕하세요","endpoint":"http://dgx-02:8001/v1/chat/completions","createdAt":"2026-06-11T00:00:00.000Z","completedAt":"2026-06-11T00:00:01.000Z"}',
+    "",
+    "",
+  ].join("\n");
+
+  it("streams via the SSE proxy endpoint when onDelta is provided", async () => {
+    const calls: string[] = [];
+    const deltas: string[] = [];
+    const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(String(url));
+      expectHttpHmacHeaders(init?.headers as Record<string, string>);
+      return new Response(sseFrames, { status: 200 });
+    };
+
+    const result = await requestDgxProviderCompletion({
+      provider,
+      modelId: "qwen36-gio-lora-v5-prisma",
+      messages,
+      fetchImpl,
+      proxyBaseUrl: "http://127.0.0.1:4317",
+      onDelta: (textSoFar) => deltas.push(textSoFar),
+    });
+
+    expect(calls).toEqual(["http://127.0.0.1:4317/provider-completions/stream"]);
+    expect(deltas).toEqual(["안녕", "안녕하세요"]);
+    expect(result.content).toBe("안녕하세요");
+    expect(result.route).toBe("server_proxy");
+    expect(result.usage?.totalTokens).toBe(7);
+  });
+
+  it("falls back to the non-stream POST when the SSE endpoint fails", async () => {
+    const calls: string[] = [];
+    const fetchImpl = async (url: RequestInfo | URL) => {
+      calls.push(String(url));
+      if (String(url).endsWith("/stream")) {
+        return new Response("not found", { status: 404 });
+      }
+      return new Response(
+        JSON.stringify({
+          id: "provider_completion_response_2",
+          requestId: "provider_completion_request_2",
+          providerProfileId: provider.id,
+          modelId: "qwen36-gio-lora-v5-prisma",
+          route: "server_proxy",
+          status: "succeeded",
+          content: "비스트림 폴백 응답",
+          endpoint: "http://dgx-02:8001/v1/chat/completions",
+          createdAt: "2026-06-11T00:00:00.000Z",
+        }),
+        { status: 200 },
+      );
+    };
+
+    const result = await requestDgxProviderCompletion({
+      provider,
+      modelId: "qwen36-gio-lora-v5-prisma",
+      messages,
+      fetchImpl,
+      proxyBaseUrl: "http://127.0.0.1:4317",
+      onDelta: () => {},
+    });
+
+    expect(calls).toEqual([
+      "http://127.0.0.1:4317/provider-completions/stream",
+      "http://127.0.0.1:4317/provider-completions",
+    ]);
+    expect(result.content).toBe("비스트림 폴백 응답");
+  });
+
+  it("adds attachment riders from the latest user message metadata", () => {
+    const attachedMessages: ConversationMessage[] = [
+      {
+        ...messages[0]!,
+        metadata: {
+          attachments: [
+            {
+              id: "attachment_1",
+              name: "shot.png",
+              kind: "image",
+              mimeType: "image/png",
+              size: 4,
+              storage: "local_cache",
+              dataUrl: "data:image/png;base64,AAAA",
+            },
+            {
+              id: "attachment_2",
+              name: "meta-only.pdf",
+              kind: "document",
+              mimeType: "application/pdf",
+              size: 9,
+              storage: "metadata_only",
+            },
+          ],
+        },
+      },
+    ];
+
+    const request = createProviderCompletionProxyRequest(provider, "qwen36-gio-lora-v5-prisma", attachedMessages);
+    expect(request.attachments).toHaveLength(1);
+    expect(request.attachments?.[0]).toMatchObject({
+      name: "shot.png",
+      kind: "image",
+      dataUrl: "data:image/png;base64,AAAA",
+    });
+
+    const body = createDgxVllmRequestBody("qwen36-gio-lora-v5-prisma", attachedMessages);
+    const lastMessage = body.messages[body.messages.length - 1] as { role: string; content: unknown };
+    expect(lastMessage.role).toBe("user");
+    expect(lastMessage.content).toEqual([
+      { type: "text", text: "Can DGX answer now?" },
+      { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+    ]);
+  });
+
+  it("keeps plain requests without attachment riders", () => {
+    const request = createProviderCompletionProxyRequest(provider, "qwen36-gio-lora-v5-prisma", messages);
+    expect(request.attachments).toBeUndefined();
+  });
+});

@@ -25,16 +25,21 @@ export type {
 export { AdapterError, redactSecretsForLog, truncateForLog } from "./errors.js";
 export { MockLlmAdapter, type MockLlmAdapterOptions } from "./mockLlmAdapter.js";
 export {
+  applyOpenAIImageAttachments,
   createOpenAIChatMessages,
   OpenAICompatibleAdapter,
   type AdapterFetchLike,
+  type OpenAIChatContentPart,
+  type OpenAIChatMessageLike,
   type OpenAICompatibleAdapterOptions,
 } from "./openAiCompatibleAdapter.js";
 export {
   AnthropicAdapter,
+  applyAnthropicImageAttachments,
   extractAnthropicText,
   splitSystemAndMessages,
   type AnthropicAdapterOptions,
+  type AnthropicUserContentBlock,
 } from "./anthropicAdapter.js";
 export {
   createOllamaMessages,

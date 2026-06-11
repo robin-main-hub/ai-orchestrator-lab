@@ -36,6 +36,12 @@ export type CreateConversationPipelineMessagesInput = {
   provider: Pick<ProviderProfile, "id" | "name">;
   systemMessageId?: string;
   userMessage: ConversationMessage;
+  /** plan = read-only investigation; mutating tools are blocked (item 4) */
+  agentMode?: "build" | "plan";
+  /** auto-compaction summary of older turns, injected into the system prompt (item 6) */
+  condensedSummary?: string;
+  /** enable the ```tool fence instruction block (item 2) */
+  toolLoopEnabled?: boolean;
 };
 
 export function createConversationPipelineMessages({
@@ -49,6 +55,9 @@ export function createConversationPipelineMessages({
   provider,
   systemMessageId = `message_system_pipeline_${crypto.randomUUID()}`,
   userMessage,
+  agentMode,
+  condensedSummary,
+  toolLoopEnabled,
 }: CreateConversationPipelineMessagesInput): ConversationMessage[] {
   const scopedResults = memory.trace.results.filter(
     (result) => result.usedInDecision && memoryResultMatchesScope(result, memoryScope),
@@ -130,6 +139,13 @@ export function createConversationPipelineMessages({
     ambiguity.ambiguous ? ambiguity.directive : undefined,
     attachmentContext,
     continuityWarning,
+    condensedSummary?.trim()
+      ? `이전 대화 자동 압축 요약 (오래된 턴은 프롬프트에서 제외됨):\n${sanitizePipelineText(condensedSummary)}`
+      : undefined,
+    toolLoopEnabled ? createToolLoopInstruction(agentMode) : undefined,
+    agentMode === "plan"
+      ? "지금은 PLAN 모드입니다: bash/write/edit 같은 변경 도구는 실행되지 않습니다. 읽기·분석·계획만 수행하세요."
+      : undefined,
     agent.role === "companion" || agent.role === "orchestrator"
       ? [
           "Delegation: You may command registered sub-agents with <delegate to=\"role_or_persona\">task</delegate>.",
@@ -170,11 +186,34 @@ export function createConversationPipelineMessages({
       personaAgentsMdPath: personaInjectionEnabled ? persona?.agentsMdPath : undefined,
       roleToolProfileLabel: roleToolConfig.label,
       roleToolProfileTools: roleToolConfig.tools,
+      agentMode: agentMode ?? "build",
+      toolLoopEnabled: Boolean(toolLoopEnabled),
+      condensedSummaryApplied: Boolean(condensedSummary?.trim()),
     },
   };
 
   return [systemMessage, ...previousMessages.slice(-8), userMessage];
 }
+
+function createToolLoopInstruction(agentMode?: "build" | "plan"): string {
+  return [
+    "도구 사용 (워크스페이스 작업): 파일/저장소 작업이 필요하면 답변 안에 아래 형식의 tool 펜스를 포함한다.",
+    "```tool",
+    '{"tool":"bash","command":"ls -la"}',
+    "```",
+    '사용 가능 도구: bash{"command"}, read{"path"}, grep{"pattern","path"?}, glob{"pattern"}, write{"path","content"}, edit{"path","oldText","newText"}, todo{"items":[]}.',
+    "모든 도구는 사용자 승인 게이트를 거쳐 실행되며, 결과는 다음 사용자 턴에 [tool_result ...] 블록으로 전달된다.",
+    "결과를 받기 전에는 실행이 완료됐다고 주장하지 않는다. 결과가 충분하면 도구 호출 없이 텍스트로 결론을 정리한다.",
+    agentMode === "plan"
+      ? "PLAN 모드에서는 bash/write/edit가 거부되므로 read/grep/glob/todo만 제안한다."
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** prompt budget per inlined text attachment — attachments already cap at 64K on read */
+const ATTACHMENT_INLINE_CHAR_LIMIT = 12_000;
 
 function createAttachmentContext(userMessage: ConversationMessage): string | undefined {
   const metadata = userMessage.metadata as
@@ -190,6 +229,33 @@ function createAttachmentContext(userMessage: ConversationMessage): string | und
     return undefined;
   }
 
+  const contentBlocks: string[] = [];
+  let metadataOnlyCount = 0;
+
+  const attachmentLines = attachments.slice(0, 8).map((attachment, index) => {
+    const name = sanitizePipelineText(readMetadataString(attachment.name, `attachment_${index + 1}`));
+    const kind = sanitizePipelineText(readMetadataString(attachment.kind, "unknown"));
+    const storage = sanitizePipelineText(readMetadataString(attachment.storage, "metadata_only"));
+    const dataUrl = typeof attachment.dataUrl === "string" ? attachment.dataUrl : "";
+    const textContent = typeof attachment.textContent === "string" ? attachment.textContent : "";
+
+    if (dataUrl.startsWith("data:")) {
+      return `${index + 1}. ${name} · kind=${kind} · 이미지 바이트가 이 요청에 동봉됨 (비전 입력으로 직접 볼 수 있음)`;
+    }
+    if (textContent.trim()) {
+      const truncatedAtRead = attachment.truncated === true;
+      const overPromptBudget = textContent.length > ATTACHMENT_INLINE_CHAR_LIMIT;
+      const inlined = overPromptBudget ? textContent.slice(0, ATTACHMENT_INLINE_CHAR_LIMIT) : textContent;
+      const truncationNote = truncatedAtRead || overPromptBudget ? " (일부만 — 원본이 더 김)" : "";
+      contentBlocks.push(
+        [`--- 첨부 본문: ${name}${truncationNote} ---`, sanitizePipelineText(inlined), "--- 첨부 본문 끝 ---"].join("\n"),
+      );
+      return `${index + 1}. ${name} · kind=${kind} · 본문이 아래에 인라인됨${truncationNote}`;
+    }
+    metadataOnlyCount += 1;
+    return `${index + 1}. ${name} · kind=${kind} · storage=${storage} · 메타데이터만 (바이트 미전달)`;
+  });
+
   const planLines = plans.slice(0, 8).map((plan, index) => {
     const name = sanitizePipelineText(readMetadataString(plan.name, `attachment_${index + 1}`));
     const kind = sanitizePipelineText(readMetadataString(plan.kind, "unknown"));
@@ -201,21 +267,17 @@ function createAttachmentContext(userMessage: ConversationMessage): string | und
     return `${index + 1}. ${name} · kind=${kind} · mode=${mode} · storage=${storage} · status=${status}${reasonText}`;
   });
 
-  const attachmentLines =
-    planLines.length > 0
-      ? planLines
-      : attachments.slice(0, 8).map((attachment, index) => {
-          const name = sanitizePipelineText(readMetadataString(attachment.name, `attachment_${index + 1}`));
-          const kind = sanitizePipelineText(readMetadataString(attachment.kind, "unknown"));
-          const storage = sanitizePipelineText(readMetadataString(attachment.storage, "metadata_only"));
-          return `${index + 1}. ${name} · kind=${kind} · storage=${storage}`;
-        });
+  const lines = attachmentLines.length > 0 ? attachmentLines : planLines;
+  const disclaimer =
+    metadataOnlyCount > 0 || attachmentLines.length === 0
+      ? "메타데이터만 전달된 첨부가 있음 — 해당 파일 바이트는 아직 모델에 직접 전달되지 않음. 그 첨부 내용을 보았다고 주장하지 말고, 필요한 경우 추가 추출/권한을 요청한다."
+      : undefined;
+  const planSection =
+    attachmentLines.length > 0 && planLines.length > 0 ? ["처리 계획:", ...planLines] : [];
 
-  return [
-    "첨부 컨텍스트:",
-    "파일 바이트는 아직 모델에 직접 전달되지 않음. 첨부 내용을 보았다고 주장하지 말고, 필요한 경우 추가 추출/권한을 요청한다.",
-    ...attachmentLines,
-  ].join("\n");
+  return ["첨부 컨텍스트:", disclaimer, ...lines, ...planSection, ...contentBlocks]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function readMetadataString(value: unknown, fallback: string): string {

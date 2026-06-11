@@ -75,6 +75,29 @@ import {
   type WorkbenchCompletionResult,
 } from "./runtime/stage35DelegationRuntime";
 import { createConversationPipelineMessages } from "./runtime/conversationPipeline";
+import { replyRequestsTools, runConversationToolLoop } from "./runtime/conversationToolLoop";
+import { grantDgxApproval } from "./runtime/stage34ApprovalServer";
+import { withBackoffRetry } from "./lib/retryPolicy";
+import { selectModelForWorkload } from "./lib/modelWorkloadRouting";
+import {
+  shouldAutoCompactConversation,
+  summarizeConversationUsage,
+} from "./lib/conversationUsage";
+import { createPatternApprovalStrategy, extractCommandPrefix } from "./lib/sessionPatternApproval";
+import {
+  CONVERSATION_SLASH_HELP,
+  parseConversationSlashCommand,
+  type ConversationSlashCommand,
+} from "./lib/conversationSlashCommands";
+import { rollbackToTurn } from "./lib/conversationCheckpoints";
+import { readAttachmentContent } from "./lib/attachmentContent";
+import { condense, renderCondensate, type Condensate, type CondenserTurn } from "./lib/conversationCondenser";
+import { buildForkBrief, forkMissionFromConversation } from "./lib/conversationFork";
+import { workbenchMissionStore } from "./lib/workbenchMissions";
+import { createApprovalStrategy } from "./lib/autonomousRun";
+import { createClosedLoopEffects } from "./lib/closedLoopRuntime";
+import { createGatedToolExecutor, type WireMessage } from "./lib/codingTurnRunner";
+import { workspaceChangeLedger } from "./lib/workspaceChangeLedger";
 import {
   mergeConversationMessages,
   mergeEventReplayLogs,
@@ -433,6 +456,74 @@ export function App() {
   const [tmuxOutputs, setTmuxOutputs] = useState<Record<string, string>>({});
   const [tmuxTimelineBlocks, setTmuxTimelineBlocks] = useState<Record<string, TerminalTimelineBlock[]>>({});
   const [pendingProviderRetry, setPendingProviderRetry] = useState<PendingProviderRetry | undefined>();
+  // ── 대화 워크벤치 OpenCode 메커니즘 상태 (항목 1·4·6·8·10) ────────────────
+  const [conversationAgentMode, setConversationAgentMode] = useState<"build" | "plan">(() => {
+    try {
+      return localStorage.getItem("orch.conversation.agentMode.v1") === "plan" ? "plan" : "build";
+    } catch {
+      return "build";
+    }
+  });
+  const [streamingPreview, setStreamingPreview] = useState<{ agentId: string; text: string } | null>(null);
+  const [queuedConversationMessages, setQueuedConversationMessages] = useState<string[]>([]);
+  const [sessionApprovedPrefixes, setSessionApprovedPrefixes] = useState<string[]>([]);
+  const [conversationCondensateByAgentId, setConversationCondensateByAgentId] = useState<Record<string, Condensate>>({});
+  const conversationTurnAbortRef = useRef<AbortController | null>(null);
+  const conversationTurnCancelledRef = useRef(false);
+  const conversationTurnInFlightRef = useRef(false);
+  const queuedConversationMessagesRef = useRef<string[]>([]);
+  const sessionApprovedPrefixesRef = useRef<string[]>([]);
+  /** 에이전트별로 이미 응축한 메시지 수 — 같은 턴을 두 번 응축하지 않기 위한 워터마크 */
+  const conversationCondensedUpToRef = useRef<Record<string, number>>({});
+
+  const handleConversationAgentModeChange = useCallback((nextMode: "build" | "plan") => {
+    setConversationAgentMode(nextMode);
+    try {
+      localStorage.setItem("orch.conversation.agentMode.v1", nextMode);
+    } catch {
+      // localStorage 불가 환경(테스트 등)에서는 세션 상태만 유지
+    }
+  }, []);
+
+  const handleApproveCommandPattern = useCallback((command: string) => {
+    const prefix = extractCommandPrefix(command);
+    if (!prefix) return;
+    const next = Array.from(new Set([...sessionApprovedPrefixesRef.current, prefix]));
+    sessionApprovedPrefixesRef.current = next;
+    setSessionApprovedPrefixes(next);
+  }, []);
+
+  const enqueueConversationMessage = useCallback((content: string) => {
+    const next = [...queuedConversationMessagesRef.current, content];
+    queuedConversationMessagesRef.current = next;
+    setQueuedConversationMessages(next);
+  }, []);
+
+  const handleRemoveQueuedConversationMessage = useCallback((index: number) => {
+    const next = queuedConversationMessagesRef.current.filter((_, i) => i !== index);
+    queuedConversationMessagesRef.current = next;
+    setQueuedConversationMessages(next);
+  }, []);
+
+  const dequeueConversationMessage = useCallback((): string | undefined => {
+    const [next, ...rest] = queuedConversationMessagesRef.current;
+    if (next === undefined) return undefined;
+    queuedConversationMessagesRef.current = rest;
+    setQueuedConversationMessages(rest);
+    return next;
+  }, []);
+
+  const handleStopConversationTurn = useCallback(() => {
+    conversationTurnCancelledRef.current = true;
+    conversationTurnAbortRef.current?.abort();
+  }, []);
+  const conversationUsageSummaryByAgentId = useMemo(() => {
+    const summaries: Record<string, ReturnType<typeof summarizeConversationUsage>> = {};
+    for (const [agentId, channelMessages] of Object.entries(conversationMessagesByAgentId)) {
+      summaries[agentId] = summarizeConversationUsage(channelMessages);
+    }
+    return summaries;
+  }, [conversationMessagesByAgentId]);
 
   const handleTmuxOutcome = useCallback((outcome: TmuxOutcome) => {
     const role = outcome.role;
@@ -1173,18 +1264,22 @@ export function App() {
       maxAttachmentCount: maxDraftAttachments,
       modelModalities: getModelInputModalities(selectedModel),
     });
-    const nextAttachments = incomingFiles.flatMap((file, index) => {
+    const acceptedPairs = incomingFiles.flatMap((file, index) => {
       const plan = processingPlans[index];
       if (!plan || plan.status !== "accepted") return [];
       return [
         {
-          ...createDraftAttachment(file),
-          processingMode: plan.processingMode,
-          processingStatus: plan.status,
-          processingReason: plan.reason,
+          file,
+          attachment: {
+            ...createDraftAttachment(file),
+            processingMode: plan.processingMode,
+            processingStatus: plan.status,
+            processingReason: plan.reason,
+          },
         },
       ];
     });
+    const nextAttachments = acceptedPairs.map((pair) => pair.attachment);
     const rejectedPlans = processingPlans.filter((plan) => plan.status === "rejected");
 
     if (nextAttachments.length === 0) {
@@ -1200,6 +1295,16 @@ export function App() {
     }
 
     setDraftAttachments((current) => [...current, ...nextAttachments].slice(0, maxDraftAttachments));
+    // 항목 3 — 첨부 바이트 읽기: 이미지→dataURL(≤4MB), 텍스트류→본문 인라인(≤64K).
+    // 비동기로 채워 넣고, 읽기 실패 시 메타데이터 전용 전송으로 자연 강등된다.
+    for (const pair of acceptedPairs) {
+      void readAttachmentContent(pair.file, pair.attachment).then((hydrated) => {
+        if (hydrated === pair.attachment) return;
+        setDraftAttachments((current) =>
+          current.map((entry) => (entry.id === pair.attachment.id ? { ...entry, ...hydrated } : entry)),
+        );
+      });
+    }
     setDraftRejectedAttachmentPlans((current) =>
       createNextDraftRejectedAttachmentPlans({
         acceptedAttachmentCount: nextAttachments.length,
@@ -1239,6 +1344,8 @@ export function App() {
     provider,
     purpose,
     userMessage,
+    onDelta,
+    abortSignal,
   }: {
     agent: WorkbenchAgent;
     approvalState?: ApprovalState;
@@ -1249,6 +1356,8 @@ export function App() {
     provider: ProviderProfile;
     purpose: WorkbenchCompletionPurpose;
     userMessage: ConversationMessage;
+    onDelta?: (textSoFar: string) => void;
+    abortSignal?: AbortSignal;
   }): Promise<WorkbenchCompletionResult> {
     const completionContext = resolveAgentCompletionContext({
       agent,
@@ -1265,6 +1374,7 @@ export function App() {
       recallMessages,
       provider,
     );
+    const condensate = conversationCondensateByAgentId[agent.id];
     const pipelineMessages = createConversationPipelineMessages({
       agent,
       configFiles: agentConfigFiles,
@@ -1275,6 +1385,10 @@ export function App() {
       previousMessages: completionContext.previousMessages,
       provider,
       userMessage,
+      agentMode: conversationAgentMode,
+      condensedSummary: condensate ? renderCondensate(condensate) : undefined,
+      // 위임 서브에이전트 응답에서 tool 펜스가 나오면 위임 합성이 깨지므로 primary 턴에만 도구 지시를 넣는다
+      toolLoopEnabled: purpose === "primary",
     });
     const pipelineMetadata = pipelineMessages[0]?.metadata ?? {};
     appendEvent("prompt.pipeline.assembled", {
@@ -1289,14 +1403,31 @@ export function App() {
       purpose,
       redaction: "applied",
     });
-    const result = await requestDgxProviderCompletion({
-      provider,
-      modelId,
-      messages: pipelineMessages,
-      approvalState,
-      permissionDecision,
-      localSecretResolver: resolveProviderDefaultCredential,
-    });
+    const result = await withBackoffRetry(
+      () =>
+        requestDgxProviderCompletion({
+          provider,
+          modelId,
+          messages: pipelineMessages,
+          approvalState,
+          permissionDecision,
+          localSecretResolver: resolveProviderDefaultCredential,
+          onDelta,
+          abortSignal,
+        }),
+      {
+        onRetry: ({ attempt, delayMs, error }) =>
+          appendEvent("provider.completion.retried", {
+            agentId: agent.id,
+            providerProfileId: provider.id,
+            modelId,
+            attempt,
+            delayMs,
+            error: error instanceof Error ? error.message : String(error),
+            purpose,
+          }),
+      },
+    );
     appendEvent("provider.completion.dgx.succeeded", {
       agentId: agent.id,
       providerProfileId: provider.id,
@@ -1339,6 +1470,10 @@ export function App() {
         identityGuardApplied: guardedReply.guardApplied,
         purpose,
       },
+      pipelineMessages: pipelineMessages.map((message) => ({
+        role: message.role,
+        content: message.content,
+      })),
     };
   }
 
@@ -1592,6 +1727,157 @@ export function App() {
 
   }
 
+  /** 시스템 알림용 어시스턴트 메시지 (슬래시 명령·롤백 결과 등 — 프로바이더 호출 아님) */
+  function appendConversationNotice(
+    noticeContent: string,
+    sessionId: string,
+    extraMetadata: Record<string, unknown> = {},
+  ) {
+    const notice: ConversationMessage = {
+      id: `message_notice_${crypto.randomUUID()}`,
+      sessionId,
+      role: "assistant",
+      content: noticeContent,
+      createdAt: new Date().toISOString(),
+      metadata: {
+        agentId: selectedAgent?.id,
+        notice: true,
+        realProviderCall: false,
+        ...extraMetadata,
+      },
+    };
+    if (activeSessionIdRef.current === sessionId) {
+      setConversationMessages((messages) => [...messages, notice]);
+    }
+    appendEvent("conversation.message.created", {
+      messageId: notice.id,
+      role: "assistant",
+      content: notice.content,
+      metadata: notice.metadata,
+      redaction: "applied",
+    }, { sessionId });
+  }
+
+  /**
+   * 항목 6 — 파이프라인이 프롬프트에서 떨어뜨리는(마지막 8턴 이전) 메시지를
+   * MT-OSC 응축기로 압축해 다음 턴 시스템 프롬프트에 주입한다. 이미 응축한
+   * 구간은 건너뛰어 중복 응축을 막는다.
+   */
+  function compactConversationForAgent(agentId: string, sessionId: string, trigger: "auto" | "manual"): boolean {
+    const channelMessages = conversationMessagesByAgentId[agentId] ?? [];
+    const alreadyCondensedUpTo = conversationCondensedUpToRef.current[agentId] ?? 0;
+    const condenseEnd = Math.max(alreadyCondensedUpTo, channelMessages.length - 8);
+    const window: CondenserTurn[] = channelMessages
+      .slice(alreadyCondensedUpTo, condenseEnd)
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .filter((message) => message.metadata?.notice !== true)
+      .map((message) => ({
+        id: message.id,
+        role: message.role as "user" | "assistant",
+        text: message.content,
+      }));
+    if (window.length === 0) {
+      return false;
+    }
+    conversationCondensedUpToRef.current[agentId] = condenseEnd;
+    const next = condense({ prior: conversationCondensateByAgentId[agentId] ?? null, window });
+    setConversationCondensateByAgentId((current) => ({ ...current, [agentId]: next }));
+    appendEvent("conversation.compacted", {
+      agentId,
+      trigger,
+      pairCount: next.pairs.length,
+      tokenEstimate: next.tokenEstimate,
+      version: next.version,
+    }, { sessionId });
+    return true;
+  }
+
+  /** 항목 9 — 턴 롤백: 대화 절단 + 변경 파일 안내(파일은 자동 복원하지 않음) */
+  function handleRollbackConversationTurn(assistantMessageId: string) {
+    const sessionId = activeSessionIdRef.current;
+    const result = rollbackToTurn(conversationMessages, assistantMessageId);
+    if (!result) return;
+    setConversationMessages(() => result.messages);
+    appendEvent("conversation.turn.rolled_back", {
+      assistantMessageId,
+      removedCount: result.removedCount,
+      touchedFiles: result.touchedFiles,
+    }, { sessionId });
+    if (result.touchedFiles.length > 0) {
+      appendConversationNotice(
+        [
+          `턴을 되돌렸습니다 (메시지 ${result.removedCount}개 제거).`,
+          "이 턴의 도구 호출이 변경한 파일은 자동 복원되지 않습니다 — Diff 패널에서 확인하세요:",
+          ...result.touchedFiles.map((file) => `- ${file}`),
+        ].join("\n"),
+        sessionId,
+        { rollback: true, rolledBackMessageId: assistantMessageId },
+      );
+    }
+  }
+
+  /** 항목 4·6·7 — 대화 전용 슬래시 명령 */
+  function handleConversationSlashCommand(command: ConversationSlashCommand, sessionId: string) {
+    switch (command.kind) {
+      case "plan":
+      case "build": {
+        handleConversationAgentModeChange(command.kind);
+        appendEvent("conversation.agent_mode.changed", { agentMode: command.kind, via: "slash" }, { sessionId });
+        appendConversationNotice(
+          command.kind === "plan"
+            ? "PLAN 모드로 전환했습니다 — 변경 도구(bash/write/edit)는 차단되고 읽기/분석만 수행합니다."
+            : "BUILD 모드로 전환했습니다 — 모든 도구가 승인 게이트를 거쳐 실행됩니다.",
+          sessionId,
+          { slashCommand: command.kind },
+        );
+        return;
+      }
+      case "compact": {
+        const compacted = selectedAgent ? compactConversationForAgent(selectedAgent.id, sessionId, "manual") : false;
+        appendConversationNotice(
+          compacted
+            ? "이전 턴을 압축했습니다. 요약은 다음 턴부터 시스템 프롬프트에 주입됩니다."
+            : "압축할 이전 턴이 없습니다 (최근 8턴은 항상 원문으로 유지).",
+          sessionId,
+          { slashCommand: "compact" },
+        );
+        return;
+      }
+      case "fork": {
+        const brief = buildForkBrief({ messages: conversationMessages, draft: command.task });
+        const mission = forkMissionFromConversation({
+          brief,
+          model: selectedModel?.id,
+          sessionTitle: activeSessionId,
+        });
+        workbenchMissionStore.add(mission);
+        appendEvent("conversation.forked", {
+          missionId: mission.id,
+          task: brief.task,
+          mentionCount: brief.mentions.length,
+        }, { sessionId });
+        appendConversationNotice(
+          `대화를 미션으로 포크했습니다: "${brief.task}"\n코딩 워크벤치 미션 보드에서 격리 실행 후 diff/verify 게이트로 검토하세요.`,
+          sessionId,
+          { slashCommand: "fork", missionId: mission.id },
+        );
+        return;
+      }
+      case "help":
+      case "unknown":
+      default: {
+        appendConversationNotice(
+          command.kind === "unknown"
+            ? `알 수 없는 명령: /${command.name}\n\n${CONVERSATION_SLASH_HELP}`
+            : CONVERSATION_SLASH_HELP,
+          sessionId,
+          { slashCommand: command.kind },
+        );
+        return;
+      }
+    }
+  }
+
   async function handleSendMessageStage2(overrideContent?: string) {
     const content = (overrideContent ?? draftMessage).trim();
     if ((!content && draftAttachments.length === 0) || !selectedAgent || !selectedProvider) {
@@ -1600,9 +1886,37 @@ export function App() {
 
     const targetSessionId = activeSessionIdRef.current;
     const createdAt = new Date().toISOString();
+
+    // 슬래시 명령 (항목 4·6·7) — "/etc/..." 같은 경로성 입력은 명령으로 취급하지 않음
+    if (content.startsWith("/")) {
+      const slash = parseConversationSlashCommand(content);
+      if (slash && (slash.kind !== "unknown" || /^[a-z]+$/i.test(slash.name))) {
+        handleConversationSlashCommand(slash, targetSessionId);
+        if (!overrideContent) setDraftMessage("");
+        return;
+      }
+    }
+
+    // 항목 8 — 에이전트가 턴 진행 중이면 큐에 적재, 턴이 끝나면 자동 발송
+    if (conversationTurnInFlightRef.current) {
+      enqueueConversationMessage(content);
+      appendEvent("conversation.message.queued", {
+        position: queuedConversationMessagesRef.current.length,
+        contentLength: content.length,
+      }, { sessionId: targetSessionId });
+      if (!overrideContent) setDraftMessage("");
+      return;
+    }
     const authLabel = selectedAgent.authBinding?.label ?? "인증 정보 대기";
     const authMode = selectedAgent.authBinding?.mode ?? "provider_profile";
-    const modelId = selectedModel?.id ?? selectedAgent.modelId ?? selectedProvider.defaultModel ?? "모델 대기";
+    // 항목 5 — 워크로드 기반 라우팅: plan 모드는 같은 프로바이더의 저비용 모델로
+    const baseModelId = selectedModel?.id ?? selectedAgent.modelId ?? selectedProvider.defaultModel ?? "모델 대기";
+    const workloadRouting = selectModelForWorkload({
+      agentMode: conversationAgentMode,
+      selectedModelId: baseModelId,
+      catalogForProvider: modelCatalog[selectedProvider.id] ?? [],
+    });
+    const modelId = workloadRouting.modelId;
     const attachmentRecheck = selectedModel
       ? reprocessMessageAttachmentsForModel({
         attachments: draftAttachments,
@@ -1804,11 +2118,27 @@ export function App() {
       authMode,
       authLabel,
       routePreference: isDgxRoutedProvider(selectedProvider) ? "server_proxy" : "direct_provider",
+      agentMode: conversationAgentMode,
+      workloadRoutedBy: workloadRouting.routedBy,
+      workloadRoutingReason: workloadRouting.reason,
     }, { sessionId: targetSessionId });
     setAgentActivity(selectedAgent.id, "tooling");
 
+    // 항목 1 — 턴 수명주기: 스트리밍 미리보기 + 중지(abort) 지원
+    const turnAbortController = new AbortController();
+    conversationTurnAbortRef.current = turnAbortController;
+    conversationTurnCancelledRef.current = false;
+    conversationTurnInFlightRef.current = true;
+    let streamedSoFar = "";
+    const reportDelta = (text: string) => {
+      streamedSoFar = text;
+      setStreamingPreview({ agentId: selectedAgent.id, text });
+    };
+
     let reply = "";
     let completionMetadata: Record<string, unknown> = {};
+    let toolCallsMetadata: Array<Record<string, unknown>> | undefined;
+    let diagnosticsMetadata: Record<string, unknown> | undefined;
     try {
       const result = await completeWorkbenchAgent({
         agent: selectedAgent,
@@ -1820,9 +2150,114 @@ export function App() {
         provider: selectedProvider,
         purpose: "primary",
         userMessage,
+        onDelta: reportDelta,
+        abortSignal: turnAbortController.signal,
       });
       reply = result.content;
-      completionMetadata = result.metadata;
+      completionMetadata = {
+        ...result.metadata,
+        ...(workloadRouting.routedBy === "workload"
+          ? { workloadRoutedModelId: modelId, workloadRoutingReason: workloadRouting.reason }
+          : {}),
+      };
+
+      // 항목 2·10·13 — 응답에 tool 펜스가 있으면 게이트 도구 루프 실행
+      if (result.pipelineMessages && replyRequestsTools(reply) && !conversationTurnCancelledRef.current) {
+        const turnId = crypto.randomUUID().slice(0, 8);
+        let gateSequence = 0;
+        const approvalStrategy = createPatternApprovalStrategy({
+          base: createApprovalStrategy("auto_safe", {}),
+          getApprovedPrefixes: () => sessionApprovedPrefixesRef.current,
+          grant: async (sourceItemId, context) => {
+            const grantResult = await grantDgxApproval({
+              request: { sourceItemId, actor: "user", reason: `세션 패턴 승인: ${context.prefix}` },
+            });
+            return "status" in grantResult && grantResult.status === "approved";
+          },
+        });
+        const effects = createClosedLoopEffects({
+          sessionId: targetSessionId,
+          role: "code",
+          paneId: "role:code",
+          awaitApprovalDecision: approvalStrategy,
+          newId: (stepIndex) => `conv_${turnId}_${gateSequence++}_${stepIndex}`,
+          now: () => new Date().toISOString(),
+        });
+        const gatedExecutor = createGatedToolExecutor(effects);
+        const toolLoop = await runConversationToolLoop({
+          initialReply: reply,
+          baseMessages: result.pipelineMessages.filter(
+            (message): message is WireMessage => message.role !== "tool",
+          ),
+          agentMode: conversationAgentMode,
+          complete: async (wireMessages, hooks) => {
+            const completion = await requestDgxProviderCompletion({
+              provider: selectedProvider,
+              modelId,
+              messages: wireMessages.map((message) => ({
+                id: `message_toolloop_${crypto.randomUUID()}`,
+                sessionId: targetSessionId,
+                role: message.role,
+                content: message.content,
+                createdAt: new Date().toISOString(),
+              })),
+              approvalState: providerApprovalState,
+              permissionDecision: providerApprovalState === "approved" ? "allow" : undefined,
+              localSecretResolver: resolveProviderDefaultCredential,
+              onDelta: hooks.onDelta,
+              abortSignal: turnAbortController.signal,
+            });
+            return { content: completion.content, usage: completion.usage };
+          },
+          executeTool: async (call) => {
+            workspaceChangeLedger.recordToolCall(call);
+            return gatedExecutor(call);
+          },
+          makeToolId: (round, index) => `tool_${turnId}_${round}_${index}`,
+          onEvent: (event) => {
+            if (event.type === "assistant_delta") reportDelta(event.text);
+            if (event.type === "tool_status") {
+              appendEvent("conversation.tool.status", {
+                toolCallId: event.call.id,
+                tool: event.call.tool,
+                status: event.call.status,
+                title: event.call.title,
+                round: event.round,
+              }, { sessionId: targetSessionId });
+            }
+            if (event.type === "diagnostics") {
+              appendEvent("conversation.diagnostics.completed", {
+                command: event.call.title,
+                ok: event.ok,
+              }, { sessionId: targetSessionId });
+            }
+          },
+          isCancelled: () => conversationTurnCancelledRef.current,
+          diagnosticsCommand: conversationAgentMode === "build" ? "tsc --noEmit" : undefined,
+        });
+        reply = toolLoop.finalContent.trim() ? toolLoop.finalContent : reply;
+        toolCallsMetadata = toolLoop.toolCalls.map((call) => ({
+          id: call.id,
+          tool: call.tool,
+          title: call.title,
+          status: call.status,
+          input: call.input,
+          output: typeof call.output === "string" ? call.output.slice(0, 2000) : undefined,
+        }));
+        if (toolLoop.diagnostics) {
+          diagnosticsMetadata = {
+            command: toolLoop.diagnostics.command,
+            ok: toolLoop.diagnostics.ok,
+            output: toolLoop.diagnostics.output.slice(0, 2000),
+          };
+        }
+        completionMetadata = {
+          ...completionMetadata,
+          toolLoopRounds: toolLoop.rounds,
+          toolLoopStatus: toolLoop.status,
+        };
+      }
+
       const delegationRound = await executeDelegationRound({
         createdAt,
         initialReply: reply,
@@ -1849,7 +2284,24 @@ export function App() {
         };
       }
     } catch (error) {
-      if (error instanceof ProviderCompletionPermissionRequiredError) {
+      if (conversationTurnCancelledRef.current || turnAbortController.signal.aborted) {
+        // 항목 1 — 중지: 부분 스트림이 있으면 그대로 확정, 없으면 중단 알림만
+        reply = streamedSoFar.trim()
+          ? `${streamedSoFar}\n\n(사용자가 응답 생성을 중단함 — 부분 응답)`
+          : "(사용자가 응답 생성을 중단했습니다)";
+        completionMetadata = {
+          cancelled: true,
+          realProviderCall: Boolean(streamedSoFar.trim()),
+          partialLength: streamedSoFar.length,
+        };
+        setAgentActivity(selectedAgent.id, "idle");
+        appendEvent("provider.completion.cancelled", {
+          agentId: selectedAgent.id,
+          providerProfileId: selectedProvider.id,
+          modelId,
+          partialLength: streamedSoFar.length,
+        }, { sessionId: targetSessionId });
+      } else if (error instanceof ProviderCompletionPermissionRequiredError) {
         const permissionItemId = error.sourceItemId ?? error.approvalId ?? providerPermissionId;
         setPendingProviderRetry({
           permissionItemId,
@@ -1903,6 +2355,10 @@ export function App() {
           error: errorMessage,
         }, { sessionId: targetSessionId });
       }
+    } finally {
+      conversationTurnInFlightRef.current = false;
+      conversationTurnAbortRef.current = null;
+      setStreamingPreview(null);
     }
 
     const assistantMessage: ConversationMessage = {
@@ -1919,6 +2375,8 @@ export function App() {
         memoryScope: selectedAgentMemoryScope.namespace,
         recallTraceId: selectedAgentMemoryScope.recallTraceId,
         ...(attachmentProcessingPlans.length > 0 ? { attachmentProcessingPlans } : {}),
+        ...(toolCallsMetadata && toolCallsMetadata.length > 0 ? { toolCalls: toolCallsMetadata } : {}),
+        ...(diagnosticsMetadata ? { diagnostics: diagnosticsMetadata } : {}),
         ...completionMetadata,
       },
     };
@@ -1985,6 +2443,25 @@ export function App() {
       contentLength: reply.length,
       redaction: "applied",
     }, { sessionId: targetSessionId });
+
+    // 항목 6 — 컨텍스트 90% 초과 시 자동 압축 (다음 턴부터 응축 요약 주입)
+    const turnUsage = completionMetadata.usage as { inputTokens?: number } | undefined;
+    if (
+      shouldAutoCompactConversation({
+        lastInputTokens: turnUsage?.inputTokens,
+        contextWindow: selectedModel?.contextWindow,
+      })
+    ) {
+      compactConversationForAgent(selectedAgent.id, targetSessionId, "auto");
+    }
+
+    // 항목 8 — 턴이 끝났으니 큐 선두 메시지를 자동 발송
+    const nextQueued = dequeueConversationMessage();
+    if (nextQueued) {
+      window.setTimeout(() => {
+        void handleSendMessageStage2(nextQueued);
+      }, 80);
+    }
   }
 
   function handleCreateCodingPacket(sourceMode: CenterMode = mode) {
@@ -4505,6 +4982,16 @@ export function App() {
               viewMode={mode === "agents" ? "agents" : "chat"}
               agentVisualsById={agentVisualsById}
               agentActivityById={agentActivityById}
+              agentMode={conversationAgentMode}
+              onAgentModeChange={handleConversationAgentModeChange}
+              streamingPreview={streamingPreview}
+              queuedMessages={queuedConversationMessages}
+              onRemoveQueuedMessage={handleRemoveQueuedConversationMessage}
+              onStopTurn={handleStopConversationTurn}
+              usageSummary={selectedAgent ? conversationUsageSummaryByAgentId[selectedAgent.id] : undefined}
+              compactedVersion={selectedAgent ? conversationCondensateByAgentId[selectedAgent.id]?.version : undefined}
+              onRollbackTurn={handleRollbackConversationTurn}
+              onApproveCommandPattern={handleApproveCommandPattern}
             />
           ) : mode === "debate" ? (
             <Stage3DebateTable
