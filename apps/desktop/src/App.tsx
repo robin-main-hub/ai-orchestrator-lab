@@ -343,6 +343,7 @@ export function App() {
   const [activeNavItem, setActiveNavItem] = useState<NavItemId>("dashboard");
   const [summonSeedPersona, setSummonSeedPersona] = useState<string | null>(null);
   const [summonSeedMode, setSummonSeedMode] = useState<RunMode>("single");
+  const [conversationViewMode, setConversationViewMode] = useState<"chat" | "agents">("chat");
   const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [cheatSheetOpen, setCheatSheetOpen] = useState(false);
@@ -3860,7 +3861,7 @@ export function App() {
       verb: "전환",
       label: "agents",
       hint: "에이전트 상세, 스킬, 기억, SOUL/AGENTS 설정",
-      run: () => setMode("agents"),
+      run: () => { setMode("conversation"); setConversationViewMode("agents"); },
     },
     {
       id: "switch.debate",
@@ -3948,7 +3949,8 @@ export function App() {
       label: "선택 에이전트 스킬 보기",
       hint: "SOUL/AGENTS/EvolveMemento 적용 지침 확인",
       run: () => {
-        setMode("agents");
+        setMode("conversation");
+        setConversationViewMode("agents");
         queueMicrotask(() => {
           document.querySelector<HTMLElement>("[data-focus-id='agent-skill-profile-panel']")?.focus();
         });
@@ -4652,7 +4654,7 @@ export function App() {
       } ${
         !navCenterActive && mode === "debate" ? "debate-focus-shell" : ""
       } ${
-        !navCenterActive && (mode === "conversation" || mode === "agents") && !configLibraryActive
+        !navCenterActive && mode === "conversation" && !configLibraryActive
           ? "conversation-v0-shell"
           : ""
       }`}
@@ -4940,7 +4942,7 @@ export function App() {
               selectedConfigFileId={selectedConfigFileId}
               variant="workbench"
             />
-          ) : mode === "conversation" || mode === "agents" ? (
+          ) : mode === "conversation" ? (
             <ConversationWorkbench
               activeSessionId={activeSessionId}
               agentConfigPanel={agentConfigPanel}
@@ -5000,7 +5002,8 @@ export function App() {
               selectedAgentId={selectedAgent?.id}
               selectedModel={selectedModel}
               selectedProvider={selectedProvider}
-              viewMode={mode === "agents" ? "agents" : "chat"}
+              viewMode={conversationViewMode}
+              onChangeViewMode={setConversationViewMode}
               agentVisualsById={agentVisualsById}
               agentActivityById={agentActivityById}
               agentMode={conversationAgentMode}
@@ -5171,7 +5174,6 @@ export function App() {
 
 function parseStoredCenterMode(value: unknown): CenterMode {
   return value === "conversation" ||
-    value === "agents" ||
     value === "debate" ||
     value === "tmux" ||
     value === "cockpit" ||

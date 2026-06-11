@@ -141,6 +141,7 @@ export function ConversationWorkbench({
   selectedModel,
   selectedProvider,
   viewMode = "chat",
+  onChangeViewMode,
   agentVisualsById,
   agentActivityById,
   agentMode = "build",
@@ -215,6 +216,8 @@ export function ConversationWorkbench({
   selectedModel?: ModelDescriptor;
   selectedProvider?: ProviderProfile;
   viewMode?: "chat" | "agents";
+  /** 대화↔에이전트 뷰 토글 (App이 소유) */
+  onChangeViewMode?: (mode: "chat" | "agents") => void;
   agentVisualsById?: Record<string, AgentVisualSettings>;
   agentActivityById?: Record<string, AgentActivityStatus>;
   /** 항목 4 — 플랜(읽기 전용)/빌드 모드 */
@@ -485,6 +488,28 @@ export function ConversationWorkbench({
         </Popover>
 
         <div className="flex shrink-0 items-center gap-1">
+          {onChangeViewMode ? (
+            <div className="mr-1 hidden items-center rounded-lg border border-white/10 bg-white/[0.03] p-0.5 md:inline-flex">
+              <button
+                aria-pressed={viewMode === "chat"}
+                className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${viewMode === "chat" ? "bg-violet-400/15 text-violet-100" : "text-zinc-400 hover:text-zinc-100"}`}
+                onClick={() => onChangeViewMode("chat")}
+                title="대화 중심 뷰"
+                type="button"
+              >
+                대화
+              </button>
+              <button
+                aria-pressed={viewMode === "agents"}
+                className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${viewMode === "agents" ? "bg-violet-400/15 text-violet-100" : "text-zinc-400 hover:text-zinc-100"}`}
+                onClick={() => onChangeViewMode("agents")}
+                title="에이전트 상세·스킬·기억·위임 뷰"
+                type="button"
+              >
+                에이전트
+              </button>
+            </div>
+          ) : null}
           {usageSummary && usageSummary.turns > 0 ? (
             <UsageHudChip
               compactedVersion={compactedVersion}
