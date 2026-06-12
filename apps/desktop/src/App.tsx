@@ -5002,7 +5002,13 @@ export function App() {
               initialMode={summonSeedMode}
               autonomyProps={{
                 seedPersonaName: summonSeedPersona ?? undefined,
-                decisionReadiness: deriveDebateDecisionReadiness(debateSession).state,
+                decisionReadiness: deriveDebateDecisionReadiness(debateSession),
+                onOpenDebate: () => {
+                  setMode("debate");
+                  setActiveNavItem("none");
+                  setProviderRegistrationOpen(false);
+                  setAdminRailOpen(false);
+                },
                 historyEvents: eventLog,
                 onRegistryChange: setSummonRegistry,
                 onRunEvents: (events) => setEventLog((current) => [...current, ...events]),

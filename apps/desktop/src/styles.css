@@ -9066,6 +9066,25 @@ body:has(.app-shell.annex-focus-shell) {
   flex-direction: column;
   gap: 12px;
   margin-top: 12px;
+  /* 와이드 워크스페이스에서 입력줄이 화면 끝까지 늘어나지 않게 */
+  max-width: 760px;
+}
+.autonomy-run-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.autonomy-run-row > label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+@media (max-width: 640px) {
+  .autonomy-run-row {
+    grid-template-columns: 1fr;
+  }
 }
 .autonomy-run-form > label {
   display: flex;
@@ -9111,6 +9130,40 @@ body:has(.app-shell.annex-focus-shell) {
   margin: 0;
   font-size: 12px;
   color: var(--muted);
+}
+
+/* 실행이 막혔을 때: 사유·차단 목록·다음 행동을 버튼 위에서 바로 보여주는 콜아웃 */
+.autonomy-gate-callout {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+  font-size: 12px;
+}
+.autonomy-gate-reason {
+  margin: 0;
+  font-weight: 600;
+  color: var(--amber);
+}
+.autonomy-gate-blockers {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--muted);
+}
+.autonomy-gate-next {
+  margin: 0;
+  color: var(--muted);
+}
+.autonomy-open-debate {
+  align-self: flex-start;
+  width: auto;
+  min-width: 0;
 }
 
 /* 런타임 탭에서는 상세 패널을 다시 보여준다 (다른 탭에선 숨김 유지) */
@@ -9343,11 +9396,23 @@ body:has(.app-shell.annex-focus-shell) {
 .persona-card.compact .persona-card-banner {
   height: 108px;
 }
-.persona-card-banner img {
+/* 배너는 2층: blur cover 배경이 칸을 채우고, contain 전경이 그림 전체를 보여준다.
+   (배너 폭이 그림보다 훨씬 넓은 자율실행 폼에서 cover 단층은 머리카락 한 줄만 남긴다) */
+.persona-card-banner-backdrop {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 22%;
+  filter: blur(16px) saturate(1.15);
+  transform: scale(1.2);
+  opacity: 0.5;
+}
+.persona-card-banner-art {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   display: block;
 }
 .persona-card-banner::after {

@@ -22,6 +22,7 @@ import {
   type AutonomyRunSummary,
 } from "../lib/autonomyRunHistory";
 import { rosterRowLabel, rosterRowVariant, type AutonomyRosterSummary } from "../lib/autonomyRoster";
+import type { DebateDecisionReadiness } from "../lib/debateDecisionReadiness";
 import { resolvePersonaSprite, type PersonaSpriteMap } from "../lib/personaAvatarBundle";
 import { buildPersonaCard } from "../lib/personaCard";
 import { PersonaCard } from "./PersonaCard";
@@ -46,6 +47,8 @@ export function AutonomyRunPanel({
   history,
   roster,
   notice,
+  gateDetail,
+  onOpenDebate,
   personaAvatars,
   personaSprites,
   expression,
@@ -67,6 +70,10 @@ export function AutonomyRunPanel({
   roster?: AutonomyRosterSummary;
   /** advisory notice shown near the run button (e.g. mode downgraded by a gate) */
   notice?: string;
+  /** 실행이 게이트로 막혔을 때 보여줄 구체적 사유/다음 행동 (토론 결정 준비도) */
+  gateDetail?: Pick<DebateDecisionReadiness, "blockers" | "nextActionLabel">;
+  /** 게이트 콜아웃의 "토론으로 이동" 딥링크 (제공 시 버튼 노출) */
+  onOpenDebate?: () => void;
   /** persona slug -> avatar image url (from imported character cards) */
   personaAvatars?: Record<string, string>;
   /** persona slug -> { expression -> sprite url } */
@@ -165,20 +172,37 @@ export function AutonomyRunPanel({
           />
         ) : null}
 
-        <label>
-          <span>역할 pane</span>
-          <select
-            disabled={running}
-            onChange={(event) => onFieldChange({ role: event.target.value as TmuxPaneRole })}
-            value={form.role}
-          >
-            {SELECTABLE_PANE_ROLES.map((role) => (
-              <option key={role} value={role}>
-                {role}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="autonomy-run-row">
+          <label>
+            <span>역할 pane</span>
+            <select
+              disabled={running}
+              onChange={(event) => onFieldChange({ role: event.target.value as TmuxPaneRole })}
+              value={form.role}
+            >
+              {SELECTABLE_PANE_ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <span>승인 모드</span>
+            <select
+              disabled={running}
+              onChange={(event) => onFieldChange({ mode: event.target.value as AutonomyMode })}
+              value={form.mode}
+            >
+              {MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {modeLabel(mode)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         <label>
           <span>목표 (goal)</span>
@@ -202,26 +226,35 @@ export function AutonomyRunPanel({
           />
         </label>
 
-        <label>
-          <span>승인 모드</span>
-          <select
-            disabled={running}
-            onChange={(event) => onFieldChange({ mode: event.target.value as AutonomyMode })}
-            value={form.mode}
-          >
-            {MODES.map((mode) => (
-              <option key={mode} value={mode}>
-                {modeLabel(mode)}
-              </option>
-            ))}
-          </select>
-        </label>
+        {!runnable.ok && runnable.reason ? (
+          <div className="autonomy-gate-callout" role="alert">
+            <p className="autonomy-gate-reason">{runnable.reason}</p>
+            {gateDetail && gateDetail.blockers.length > 0 ? (
+              <ul className="autonomy-gate-blockers">
+                {gateDetail.blockers.map((blocker) => (
+                  <li key={blocker}>{blocker}</li>
+                ))}
+              </ul>
+            ) : null}
+            {gateDetail ? <p className="autonomy-gate-next">{gateDetail.nextActionLabel}</p> : null}
+            {onOpenDebate ? (
+              <button className="rail-icon-button autonomy-open-debate" onClick={onOpenDebate} type="button">
+                토론으로 이동
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
-        <button className="autonomy-run-button glitch-hover" disabled={disabled} onClick={onRun} type="button">
+        <button
+          className="autonomy-run-button glitch-hover"
+          disabled={disabled}
+          onClick={onRun}
+          title={!runnable.ok ? runnable.reason : undefined}
+          type="button"
+        >
           <Play size={13} />
           <span>{running ? "실행 중…" : "자율 실행 시작"}</span>
         </button>
-        {!runnable.ok && runnable.reason ? <p className="autonomy-run-hint">{runnable.reason}</p> : null}
         {runnable.ok && notice ? <p className="autonomy-run-notice">{notice}</p> : null}
       </div>
 

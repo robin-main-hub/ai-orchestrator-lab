@@ -22,4 +22,13 @@ describe("PersonaCard", () => {
     const withoutAvatar = buildPersonaCard({ personaName: "k", role: "skeptic" });
     expect(renderToStaticMarkup(<PersonaCard card={withoutAvatar} />)).toContain("placeholder");
   });
+
+  it("renders the banner as blur backdrop + contained art so any aspect ratio survives", () => {
+    const card = buildPersonaCard({ personaName: "k", role: "qa" as never, avatarUrl: "/a.png" });
+    const html = renderToStaticMarkup(<PersonaCard card={card} />);
+    expect(html).toContain("persona-card-banner-backdrop");
+    expect(html).toContain("persona-card-banner-art");
+    const withoutAvatar = buildPersonaCard({ personaName: "k", role: "skeptic" });
+    expect(renderToStaticMarkup(<PersonaCard card={withoutAvatar} />)).not.toContain("persona-card-banner");
+  });
 });
