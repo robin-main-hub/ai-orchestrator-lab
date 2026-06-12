@@ -99,6 +99,7 @@ import {
 } from "./lib/gitSnapshot";
 import { readAttachmentContent } from "./lib/attachmentContent";
 import { condense, renderCondensate, type Condensate, type CondenserTurn } from "./lib/conversationCondenser";
+import { buildCovenantFromPersona } from "./lib/personaCovenant";
 import { buildForkBrief, forkMissionFromConversation } from "./lib/conversationFork";
 import { workbenchMissionStore } from "./lib/workbenchMissions";
 import { createAutoApproveStrategy } from "./lib/autoApproveStrategy";
@@ -1877,7 +1878,10 @@ export function App() {
       return false;
     }
     conversationCondensedUpToRef.current[agentId] = condenseEnd;
-    const next = condense({ prior: conversationCondensateByAgentId[agentId] ?? null, window });
+    // P1-6: 해당 에이전트의 페르소나(SOUL.md 요약/금지 스타일/예시 대화)로 Covenant를
+    // 만들어, 압축 시 캐릭터 정체성·말투 발화가 소실되지 않게 한다.
+    const covenant = buildCovenantFromPersona(agentPersonaById[agentId]);
+    const next = condense({ prior: conversationCondensateByAgentId[agentId] ?? null, window, covenant });
     setConversationCondensateByAgentId((current) => ({ ...current, [agentId]: next }));
     appendEvent("conversation.compacted", {
       agentId,
