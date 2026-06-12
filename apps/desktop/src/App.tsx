@@ -84,6 +84,7 @@ import {
   summarizeConversationUsage,
 } from "./lib/conversationUsage";
 import { createPatternApprovalStrategy, extractCommandPrefix } from "./lib/sessionPatternApproval";
+import { DANGEROUS_PATTERN } from "./lib/safeCommandPolicy";
 import {
   CONVERSATION_SLASH_HELP,
   parseConversationSlashCommand,
@@ -473,6 +474,8 @@ export function App() {
     text: string;
     /** 도구 실행이 인간 승인을 기다리는 중 — 버블에 허용/계열 허용/거절 버튼을 띄운다 */
     pendingApproval?: { sourceItemId: string; command: string };
+    /** 진행 중 도구 호출 라이브 칩 — 실행되는 순간부터 상태가 갱신되며 쌓인다 */
+    toolCalls?: Array<{ id: string; tool: string; title: string; status: string; output?: string }>;
   } | null>(null);
   const [queuedConversationMessages, setQueuedConversationMessages] = useState<string[]>([]);
   const [sessionApprovedPrefixes, setSessionApprovedPrefixes] = useState<string[]>([]);
@@ -2217,10 +2220,19 @@ export function App() {
     conversationTurnAbortRef.current = turnAbortController;
     conversationTurnCancelledRef.current = false;
     conversationTurnInFlightRef.current = true;
+    // 안전망: 어떤 단계(스트림/도구/승인 폴링/진단)에서 hang하든 턴이 영원히
+    // in-flight로 남지 않도록 하드 데드라인을 건다. 만료 시 abort → catch가
+    // 부분 응답을 확정하고 finally가 inFlight를 풀어 큐가 다시 흐른다.
+    const TURN_HARD_DEADLINE_MS = 8 * 60_000;
+    const turnDeadlineTimer = window.setTimeout(() => {
+      conversationTurnCancelledRef.current = true;
+      turnAbortController.abort();
+    }, TURN_HARD_DEADLINE_MS);
     let streamedSoFar = "";
+    let liveToolCalls: Array<{ id: string; tool: string; title: string; status: string; output?: string }> = [];
     const reportDelta = (text: string) => {
       streamedSoFar = text;
-      setStreamingPreview({ agentId: selectedAgent.id, text });
+      setStreamingPreview({ agentId: selectedAgent.id, text, toolCalls: liveToolCalls });
     };
 
     let reply = "";
@@ -2334,30 +2346,37 @@ export function App() {
           },
           executeTool: async (call) => {
             workspaceChangeLedger.recordToolCall(call);
-            // bash만 인간 게이트(safe-prefix/패턴 승인 포함), 파일 도구는 자동 승인
-            return call.tool === "bash" ? gatedExecutor(call) : autoGrantExecutor(call);
+            // 파일 도구(write/edit/read/grep/glob/todo)는 항상 자동 승인.
+            if (call.tool !== "bash") return autoGrantExecutor(call);
+            // BUILD 모드 bash: 위험 명령(rm/sudo/curl/git push 등 DANGEROUS_PATTERN)만
+            // 인간 게이트로 묻고, mkdir·tsc·ls·node 같은 일반 빌드 명령은 자동 진행한다.
+            // (PLAN 모드면 bash 자체가 도구 루프 진입 전에 차단된다.)
+            const command = String((call.input as { command?: unknown }).command ?? "");
+            return DANGEROUS_PATTERN.test(command) ? gatedExecutor(call) : autoGrantExecutor(call);
           },
           makeToolId: (round, index) => `tool_${turnId}_${round}_${index}`,
           onEvent: (event) => {
             if (event.type === "assistant_delta") reportDelta(event.text);
             if (event.type === "tool_status") {
-              // 도구 진행 상황을 드래프트 버블에 실시간 노출 — 사용자가 "지금 뭘 하는지" 본다
-              const progressLabel =
-                event.call.status === "running"
-                  ? `⚙ ${event.call.title} 실행 중…`
-                  : event.call.status === "completed"
-                    ? `✓ ${event.call.title} 완료`
-                    : event.call.status === "denied"
-                      ? `✋ ${event.call.title} 차단됨`
-                      : event.call.status === "failed"
-                        ? `✗ ${event.call.title} 실패`
-                        : undefined;
-              if (progressLabel) {
-                setStreamingPreview({
-                  agentId: selectedAgent.id,
-                  text: `${streamedSoFar.trim() ? `${streamedSoFar}\n\n` : ""}${progressLabel}`,
-                });
-              }
+              // 도구 호출이 시작되는 순간부터 라이브 칩으로 버블에 쌓고, 같은 id는
+              // 상태만 갱신한다 — 작업 끝까지 기다리지 않고 진행 과정을 그대로 본다.
+              const chip = {
+                id: event.call.id,
+                tool: event.call.tool,
+                title: event.call.title,
+                status: event.call.status,
+                output: typeof event.call.output === "string" ? event.call.output.slice(0, 2000) : undefined,
+              };
+              const existingIndex = liveToolCalls.findIndex((c) => c.id === chip.id);
+              liveToolCalls =
+                existingIndex >= 0
+                  ? liveToolCalls.map((c, i) => (i === existingIndex ? chip : c))
+                  : [...liveToolCalls, chip];
+              setStreamingPreview({
+                agentId: selectedAgent.id,
+                text: streamedSoFar,
+                toolCalls: liveToolCalls,
+              });
               appendEvent("conversation.tool.status", {
                 toolCallId: event.call.id,
                 tool: event.call.tool,
@@ -2367,6 +2386,15 @@ export function App() {
               }, { sessionId: targetSessionId });
             }
             if (event.type === "diagnostics") {
+              const chip = {
+                id: event.call.id,
+                tool: event.call.tool,
+                title: event.call.title,
+                status: event.call.status,
+                output: typeof event.call.output === "string" ? event.call.output.slice(0, 2000) : undefined,
+              };
+              liveToolCalls = [...liveToolCalls.filter((c) => c.id !== chip.id), chip];
+              setStreamingPreview({ agentId: selectedAgent.id, text: streamedSoFar, toolCalls: liveToolCalls });
               appendEvent("conversation.diagnostics.completed", {
                 command: event.call.title,
                 ok: event.ok,
@@ -2497,6 +2525,7 @@ export function App() {
         }, { sessionId: targetSessionId });
       }
     } finally {
+      window.clearTimeout(turnDeadlineTimer);
       conversationTurnInFlightRef.current = false;
       conversationTurnAbortRef.current = null;
       setStreamingPreview(null);
