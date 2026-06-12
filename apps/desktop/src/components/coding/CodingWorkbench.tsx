@@ -88,6 +88,9 @@ export function CodingWorkbench({
   const modelSelectRef = useRef<HTMLInputElement | null>(null);
   // P0-3: read/write로 본 파일 내용을 세션 동안 누적 → repo-map(자동 파일 선택) 인덱스
   const fileCacheRef = useRef<Map<string, string>>(new Map());
+  // P0-3 후속: 세션 첫 턴에 전체 레포를 인덱싱한 repo-map(scripts/repo-map.mjs 출력)
+  const repoMapRef = useRef<string>("");
+  const repoMapBootstrappedRef = useRef(false);
 
   const active = sessions.find((session) => session.id === activeId) ?? null;
 
@@ -159,16 +162,39 @@ export function CodingWorkbench({
     patchSession(session.id, () => working);
 
     const mentions = extractMentions(userText);
-    // P0-3: 지금까지 누적한 파일들로 repo-map을 만들어 시스템 프롬프트에 주입.
-    // 2개 이상 봤을 때만(맵이 의미 있으려면) 생성한다.
-    const repoFiles = Array.from(fileCacheRef.current, ([path, content]) => ({ path, content }));
-    const repoMap =
-      repoFiles.length >= 2
-        ? buildRepoMap({ files: repoFiles, chatFiles: mentions, maxTokens: 800 }).repoMap
-        : "";
-    const system = buildSystemPrompt({ agentMode: working.agentMode, mentions, workingDir, repoMap });
     const effects = buildEffects(working);
     const gatedExecutor = createGatedToolExecutor(effects);
+
+    // P0-3 후속: 세션 첫 턴에 전체 레포를 한 번 인덱싱(scripts/repo-map.mjs)해
+    // repo-map을 시드한다 — read 누적만으론 첫 턴 맵이 비어 있다. 읽기 전용
+    // 명령이라 승인 게이트를 거쳐도 안전하고, 실패하면 read-누적 폴백으로 넘어간다.
+    if (!repoMapBootstrappedRef.current) {
+      repoMapBootstrappedRef.current = true;
+      try {
+        const mentionArg = mentions.length > 0 ? ` --chat ${mentions.join(",")}` : "";
+        const boot = await gatedExecutor({
+          id: `repomap_${session.id}`,
+          tool: "bash",
+          title: "repo-map 인덱싱",
+          input: { command: `node scripts/repo-map.mjs --max-tokens 1200${mentionArg}` },
+          status: "proposed",
+        });
+        if (boot.status === "completed" && boot.output.includes("저장소 맵")) {
+          repoMapRef.current = boot.output.trim();
+        }
+      } catch {
+        // 부트스트랩 실패 — read 누적 repo-map으로 폴백
+      }
+    }
+
+    // 전체 인덱싱 결과가 있으면 우선, 없으면 지금까지 read/write로 본 파일들로 생성.
+    const repoFiles = Array.from(fileCacheRef.current, ([path, content]) => ({ path, content }));
+    const repoMap =
+      repoMapRef.current ||
+      (repoFiles.length >= 2
+        ? buildRepoMap({ files: repoFiles, chatFiles: mentions, maxTokens: 800 }).repoMap
+        : "");
+    const system = buildSystemPrompt({ agentMode: working.agentMode, mentions, workingDir, repoMap });
     // Phase A: 모든 도구 호출을 워크스페이스 변경 원장에 기록 — 대화 탭 Diff/Files 패널이 구독
     const executeTool: typeof gatedExecutor = async (call) => {
       workspaceChangeLedger.recordToolCall(call);
