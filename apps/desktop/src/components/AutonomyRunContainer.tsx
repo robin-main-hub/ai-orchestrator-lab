@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { loadPersona, type LoadedPersona } from "@ai-orchestrator/agents";
 import type { CodingPacket, EventEnvelope, TerminalHostKind } from "@ai-orchestrator/protocol";
 import { runAutonomousPersonaTask } from "../lib/autonomousRun";
@@ -18,6 +18,7 @@ import {
   type AutonomyRunForm,
 } from "../lib/autonomyRunForm";
 import { codingPacketToAutonomyForm } from "../lib/codingPacketToAutonomyForm";
+import { autonomyRunStore, resolveInitialAutonomyForm } from "../lib/autonomyRunStore";
 import { stepRowFromReduce, type AutonomyStepRow } from "../lib/autonomyTimeline";
 import { bundledPersonaNames, personaFileSource } from "../lib/personaBundleSource";
 import { personaAvatars, personaSprites } from "../lib/personaAvatarSource";
@@ -56,6 +57,7 @@ export function AutonomyRunContainer({
   historyEvents,
   decisionReadiness,
   onOpenDebate,
+  onOpenApprovalQueue,
   onRunMemory,
   registry,
   onRegistryChange,
@@ -76,6 +78,8 @@ export function AutonomyRunContainer({
   decisionReadiness?: DebateDecisionReadiness;
   /** 게이트가 막혔을 때 토론 화면으로 이동하는 딥링크 */
   onOpenDebate?: () => void;
+  /** 사람 승인이 필요할 때 승인 드로어를 (탭 이동 없이) 여는 핸들러 */
+  onOpenApprovalQueue?: () => void;
   /** receives a long-term memory candidate summarizing a finished run */
   onRunMemory?: (candidate: MemoryCuratorCandidate) => void;
   /** persistent shared pane pool; when provided, runs allocate from and update it */
@@ -86,16 +90,22 @@ export function AutonomyRunContainer({
 }) {
   const [form, setForm] = useState<AutonomyRunForm>(() => {
     const base = seedPacket ? codingPacketToAutonomyForm(seedPacket) : DEFAULT_AUTONOMY_FORM;
-    if (!seedPersonaName) return base;
-    const set = resolvePersonaAgentSet(seedPersonaName);
-    return { ...base, personaName: seedPersonaName, role: set.preferredPaneRole ?? base.role };
+    const seeded = (() => {
+      if (!seedPersonaName) return base;
+      const set = resolvePersonaAgentSet(seedPersonaName);
+      return { ...base, personaName: seedPersonaName, role: set.preferredPaneRole ?? base.role };
+    })();
+    // 탭을 떠났다 돌아와도 편집하던 폼이 살아 있게 — 도감 소환만 시드가 우선
+    return resolveInitialAutonomyForm({ draft: autonomyRunStore.get().formDraft, seeded, seedPersonaName });
   });
-  const [running, setRunning] = useState(false);
-  const [outcome, setOutcome] = useState<PersonaTaskOutcome | null>(null);
+  // 미션 라이브 상태는 외부 스토어 구독 — 탭 이동으로 언마운트돼도 실행이 사라지지 않는다
+  const live = useSyncExternalStore(autonomyRunStore.subscribe, autonomyRunStore.get);
+  const { running, outcome, error, steps } = live;
+  useEffect(() => {
+    autonomyRunStore.set({ formDraft: form });
+  }, [form]);
   // P2-8: 표정 전환을 히스테리시스/쿨다운으로 안정화 (작업 상태가 빠르게 바뀌어도 깜빡임 방지)
   const expressionSmRef = useRef(new ExpressionStateMachine());
-  const [error, setError] = useState<string | null>(null);
-  const [steps, setSteps] = useState<AutonomyStepRow[]>([]);
 
   // P2-9: 캐릭터 음성(TTS). Kokoro 서버는 같은 dgx 호스트의 8880 포트.
   const kokoroBaseUrl = useMemo(() => deriveKokoroBaseUrl(serverBaseUrl), [serverBaseUrl]);
@@ -119,10 +129,7 @@ export function AutonomyRunContainer({
     if (running || !runnable.ok) {
       return;
     }
-    setRunning(true);
-    setError(null);
-    setOutcome(null);
-    setSteps([]);
+    autonomyRunStore.set({ running: true, error: null, outcome: null, steps: [] });
     const collected: AutonomyStepRow[] = [];
     const stamp = Date.now();
     const runId = `desktop_${stamp}`;
@@ -153,11 +160,11 @@ export function AutonomyRunContainer({
         onStep: (result) => {
           const row = stepRowFromReduce(result, collected.length + 1);
           collected.push(row);
-          setSteps((current) => [...current, row]);
+          autonomyRunStore.set({ steps: [...autonomyRunStore.get().steps, row] });
         },
       });
       const result = await runAutonomousPersonaTask(input);
-      setOutcome(result);
+      autonomyRunStore.set({ outcome: result });
       if (onRegistryChange && result.ok) {
         onRegistryChange(result.registry);
       }
@@ -188,9 +195,9 @@ export function AutonomyRunContainer({
         );
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+      autonomyRunStore.set({ error: caught instanceof Error ? caught.message : String(caught) });
     } finally {
-      setRunning(false);
+      autonomyRunStore.set({ running: false });
     }
   };
 
@@ -214,6 +221,7 @@ export function AutonomyRunContainer({
       notice={notice}
       gateDetail={gate && !gate.allowed ? decisionReadiness : undefined}
       onOpenDebate={onOpenDebate}
+      onOpenApprovalQueue={onOpenApprovalQueue}
       personaAvatars={personaAvatars}
       personaSprites={personaSprites}
       roster={registry ? rosterFromRegistry(registry) : undefined}

@@ -49,6 +49,7 @@ export function AutonomyRunPanel({
   notice,
   gateDetail,
   onOpenDebate,
+  onOpenApprovalQueue,
   personaAvatars,
   personaSprites,
   expression,
@@ -74,6 +75,8 @@ export function AutonomyRunPanel({
   gateDetail?: Pick<DebateDecisionReadiness, "blockers" | "nextActionLabel">;
   /** 게이트 콜아웃의 "토론으로 이동" 딥링크 (제공 시 버튼 노출) */
   onOpenDebate?: () => void;
+  /** 사람 승인이 필요할 때 승인 드로어를 여는 핸들러 — 탭 이동 없이 제자리에서 승인 */
+  onOpenApprovalQueue?: () => void;
   /** persona slug -> avatar image url (from imported character cards) */
   personaAvatars?: Record<string, string>;
   /** persona slug -> { expression -> sprite url } */
@@ -271,10 +274,22 @@ export function AutonomyRunPanel({
       {outcome ? <AutonomyRunOutcome outcome={outcome} /> : null}
 
       {(steps && steps.some((s) => s.action === "escalate_approval")) ||
-      (outcome?.ok && outcome.loopStatus === "awaiting_human") ? (
+      (outcome?.ok && outcome.loopStatus === "awaiting_human") ||
+      (running && form.mode === "human") ? (
         <div className="autonomy-hud-alarm" role="status">
           <span className="autonomy-hud-beacon" aria-hidden="true" />
-          auth required — 사람 승인 대기
+          {running && form.mode === "human" && !(outcome?.ok && outcome.loopStatus === "awaiting_human")
+            ? "사람 승인 모드 — 디스패치마다 승인이 필요합니다"
+            : "auth required — 사람 승인 대기"}
+          {onOpenApprovalQueue ? (
+            <button
+              className="rail-icon-button autonomy-open-approvals"
+              onClick={onOpenApprovalQueue}
+              type="button"
+            >
+              승인 큐 열기
+            </button>
+          ) : null}
         </div>
       ) : null}
 
