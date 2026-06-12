@@ -73,6 +73,18 @@ describe("AutonomyRunPanel", () => {
     expect(html).toContain("토론으로 이동");
   });
 
+  it("hides the next-action line when it merely repeats the first blocker", () => {
+    const html = render({
+      runnable: { ok: false, reason: "토론 결정이 막혀 있어 실행으로 넘길 수 없습니다" },
+      gateDetail: {
+        blockers: ["최종 결정 라운드가 아직 진행 중"],
+        nextActionLabel: "최종 결정 라운드가 아직 진행 중",
+      },
+    });
+    expect(html).not.toContain("autonomy-gate-next");
+    expect(html.split("최종 결정 라운드가 아직 진행 중").length - 1).toBe(1);
+  });
+
   it("omits the debate deep-link button when no handler is provided", () => {
     const html = render({
       runnable: { ok: false, reason: "토론 결정이 막혀 있어 실행으로 넘길 수 없습니다" },

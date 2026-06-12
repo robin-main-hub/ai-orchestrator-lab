@@ -236,7 +236,9 @@ export function AutonomyRunPanel({
                 ))}
               </ul>
             ) : null}
-            {gateDetail ? <p className="autonomy-gate-next">{gateDetail.nextActionLabel}</p> : null}
+            {gateDetail && !gateDetail.blockers.includes(gateDetail.nextActionLabel) ? (
+              <p className="autonomy-gate-next">{gateDetail.nextActionLabel}</p>
+            ) : null}
             {onOpenDebate ? (
               <button className="rail-icon-button autonomy-open-debate" onClick={onOpenDebate} type="button">
                 토론으로 이동
