@@ -26,6 +26,7 @@ import {
   type DebateEngineOptions,
   type RunDebateRoundResult,
 } from "./debateEngine.js";
+import { detectConsensus, type ConsensusState } from "./debateConsensus.js";
 
 export type RunDebateParams = {
   debateId: string;
@@ -44,6 +45,11 @@ export type RunDebateParams = {
     result: RunDebateRoundResult;
     rounds: DebateRound[];
   }) => boolean;
+  /**
+   * P1-7: 합의 기반 자동 조기 종료(Aegean). 제공되면 매 라운드 후 발언들의
+   * 의미적 합의를 감지해, 다수 의견이 β 라운드 지속되면 남은 라운드를 건너뛴다.
+   */
+  consensus?: { alpha?: number; beta?: number; similarityThreshold?: number };
 };
 
 export type RunDebateResult = {
@@ -55,6 +61,9 @@ export type RunDebateResult = {
   finished: boolean;
   /** True if shouldStop returned true; rounds beyond that stayed pending. */
   stoppedEarly: boolean;
+  /** P1-7: 합의로 조기 종료됐는가 + 그때의 다수 비율(0~1). */
+  consensusReached?: boolean;
+  consensusConfidence?: number;
 };
 
 export async function runDebate(params: RunDebateParams): Promise<RunDebateResult> {
@@ -73,6 +82,9 @@ export async function runDebate(params: RunDebateParams): Promise<RunDebateResul
   const roundResults: Array<{ roundId: string; result: RunDebateRoundResult }> = [];
   let stoppedEarly = false;
   let finished = false;
+  let consensusState: ConsensusState = { majority: null, stability: 0 };
+  let consensusReached = false;
+  let consensusConfidence = 0;
 
   while (true) {
     const currentIndex = rounds.findIndex((r) => r.status === "running");
@@ -113,6 +125,22 @@ export async function runDebate(params: RunDebateParams): Promise<RunDebateResul
       break;
     }
 
+    // P1-7: 합의 기반 조기 종료 (Aegean). 이번 라운드 발언들의 의미적 합의 추적.
+    if (params.consensus) {
+      const responses = result.utterances.map((u) => u.content).filter(Boolean);
+      const cr = detectConsensus({ responses, ...params.consensus, prior: consensusState });
+      consensusState = cr.next;
+      if (cr.status === "consensus") {
+        rounds = rounds.map((r, idx): DebateRound =>
+          idx === currentIndex ? { ...r, status: "completed" } : r,
+        );
+        stoppedEarly = true;
+        consensusReached = true;
+        consensusConfidence = cr.confidence;
+        break;
+      }
+    }
+
     // Transition status via the existing advance helper
     const advance = advanceDebateRound(rounds, stitchedRound.id);
     rounds = advance.rounds;
@@ -122,7 +150,7 @@ export async function runDebate(params: RunDebateParams): Promise<RunDebateResul
     }
   }
 
-  return { rounds, roundResults, finished, stoppedEarly };
+  return { rounds, roundResults, finished, stoppedEarly, consensusReached, consensusConfidence };
 }
 
 /**
