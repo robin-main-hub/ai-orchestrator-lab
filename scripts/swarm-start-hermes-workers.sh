@@ -230,6 +230,18 @@ if [[ "$status_only" == true ]]; then
   exit 0
 fi
 
+# Preflight: the desktop's persona boot step dispatches `/new` unattended.
+# Hermes confirms destructive slash commands by default, which would stall an
+# autonomous run on an interactive [1/2/3] prompt. Warn when the silence flag
+# is not present in the Hermes config (set via the prompt's "Always Approve"
+# or `approvals.destructive_slash_confirm: false` in config.yaml).
+hermes_config="${HERMES_HOME:-$HOME/.hermes}/config.yaml"
+if [[ -f "$hermes_config" ]] && ! grep -q "destructive_slash_confirm:[[:space:]]*false" "$hermes_config"; then
+  echo "Warning: ${hermes_config} does not disable destructive-slash confirmation." >&2
+  echo "An unattended '/new' boot step will stall on a confirmation prompt until" >&2
+  echo "'approvals.destructive_slash_confirm: false' is set (or approved once interactively)." >&2
+fi
+
 command_line="${HERMES_BIN} chat"
 if [[ -n "$MODEL" ]]; then
   command_line="${command_line} --model ${MODEL}"
