@@ -82,6 +82,7 @@ export function MessageThread({
     agentId: string;
     text: string;
     pendingApproval?: { sourceItemId: string; command: string };
+    toolCalls?: Array<{ id: string; tool: string; title: string; status: string; output?: string }>;
   } | null;
   /** 항목 9 — 어시스턴트 턴 롤백 */
   onRollbackTurn?: (assistantMessageId: string) => void;
@@ -90,12 +91,17 @@ export function MessageThread({
 }) {
   const delegationItems = createDelegationPreviewItems(messages, agents);
   const thinkingIndicator = resolveAgentThinkingIndicator(selectedAgent?.id, agentActivityById);
-  const streamingDraftText =
-    streamingPreview && selectedAgent && streamingPreview.agentId === selectedAgent.id && streamingPreview.text.trim()
-      ? streamingPreview.text
+  // 같은 채널의 진행 중 스트림이면 텍스트·도구칩·승인대기 중 무엇이든 있으면 버블을 띄운다
+  const activeStream =
+    streamingPreview && selectedAgent && streamingPreview.agentId === selectedAgent.id
+      ? streamingPreview
       : undefined;
+  const hasStreamContent = Boolean(
+    activeStream &&
+      (activeStream.text.trim() || (activeStream.toolCalls?.length ?? 0) > 0 || activeStream.pendingApproval),
+  );
   const showPendingBubble =
-    !streamingDraftText && shouldShowAssistantPendingBubble(messages, thinkingIndicator?.status);
+    !hasStreamContent && shouldShowAssistantPendingBubble(messages, thinkingIndicator?.status);
 
   return (
     <div className="relative flex-1 overflow-hidden bg-zinc-950">
@@ -140,12 +146,13 @@ export function MessageThread({
               />
             ))
           )}
-          {streamingDraftText && selectedAgent ? (
+          {hasStreamContent && selectedAgent && activeStream ? (
             <StreamingDraftBubble
               agent={selectedAgent}
               agentVisualsById={agentVisualsById}
-              text={streamingDraftText}
-              pendingApproval={streamingPreview?.pendingApproval}
+              text={activeStream.text}
+              toolCalls={activeStream.toolCalls}
+              pendingApproval={activeStream.pendingApproval}
               onApprove={onApprovePermission}
               onApprovePattern={onApproveCommandPattern}
               onReject={onRejectPermission}
@@ -353,6 +360,7 @@ function StreamingDraftBubble({
   agent,
   agentVisualsById,
   text,
+  toolCalls,
   pendingApproval,
   onApprove,
   onApprovePattern,
@@ -361,6 +369,7 @@ function StreamingDraftBubble({
   agent: WorkbenchAgent;
   agentVisualsById?: Record<string, AgentVisualSettings>;
   text: string;
+  toolCalls?: Array<{ id: string; tool: string; title: string; status: string; output?: string }>;
   pendingApproval?: { sourceItemId: string; command: string };
   onApprove?: (sourceItemId: string) => void;
   onApprovePattern?: (command: string) => void;
@@ -368,6 +377,12 @@ function StreamingDraftBubble({
 }) {
   const visual = agentVisualsById?.[agent.id];
   const displayName = agentPrimaryDisplayName(agent);
+  const activeToolCount = (toolCalls ?? []).filter((c) => c.status === "running" || c.status === "proposed").length;
+  const statusLabel = pendingApproval
+    ? "승인 대기 중"
+    : activeToolCount > 0
+      ? `도구 ${activeToolCount}개 실행 중…`
+      : "작성 중…";
   return (
     <div className="flex gap-3 py-1.5" aria-live="polite" aria-label={`${displayName} 응답 작성 중`} data-testid="streaming-draft-bubble">
       <AvatarWithStatus
@@ -380,15 +395,24 @@ function StreamingDraftBubble({
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2 px-1">
           <span className="text-xs font-semibold text-zinc-200">{displayName}</span>
-          <span className="text-[10px] text-cyan-400">{pendingApproval ? "승인 대기 중" : "작성 중…"}</span>
+          <span className="text-[10px] text-cyan-400">{statusLabel}</span>
         </div>
         <div className="rounded-2xl rounded-tl-md border border-cyan-300/15 bg-zinc-900/70 p-3 shadow-lg shadow-black/20 backdrop-blur-xl">
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
-            {text}
-            {!pendingApproval ? (
-              <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse bg-cyan-300 align-middle" aria-hidden="true" />
-            ) : null}
-          </p>
+          {text.trim() ? (
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
+              {text}
+              {!pendingApproval ? (
+                <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse bg-cyan-300 align-middle" aria-hidden="true" />
+              ) : null}
+            </p>
+          ) : null}
+          {toolCalls && toolCalls.length > 0 ? (
+            <div className={`space-y-1 ${text.trim() ? "mt-2" : ""}`} aria-label="진행 중 도구">
+              {toolCalls.map((call) => (
+                <ToolCallChip call={call} key={call.id} />
+              ))}
+            </div>
+          ) : null}
           {pendingApproval ? (
             <div
               className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2"
@@ -636,19 +660,40 @@ export function readMessageToolCalls(message: ConversationMessage): MessageToolC
 /** 항목 2 — 도구 호출 칩: 상태·명령, 클릭하면 출력 미리보기 */
 function ToolCallChip({ call }: { call: MessageToolCallChipData }) {
   const [expanded, setExpanded] = useState(false);
+  const isActive = call.status === "running" || call.status === "proposed";
   const statusVariant: StatusBadgeVariant =
-    call.status === "completed" ? "success" : call.status === "denied" ? "warning" : call.status === "failed" ? "danger" : "muted";
+    call.status === "completed"
+      ? "success"
+      : call.status === "denied"
+        ? "warning"
+        : call.status === "failed"
+          ? "danger"
+          : isActive
+            ? "primary"
+            : "muted";
+  const statusText =
+    call.status === "completed"
+      ? "완료"
+      : call.status === "denied"
+        ? "차단"
+        : call.status === "failed"
+          ? "실패"
+          : call.status === "running"
+            ? "실행 중"
+            : call.status === "proposed"
+              ? "대기"
+              : call.status;
   return (
-    <div className="rounded-xl border border-white/10 bg-black/25">
+    <div className={`rounded-xl border bg-black/25 ${isActive ? "border-cyan-400/30" : "border-white/10"}`}>
       <button
         className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
         onClick={() => setExpanded((value) => !value)}
         type="button"
       >
-        <TerminalSquare className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
+        <TerminalSquare className={`h-3.5 w-3.5 shrink-0 ${isActive ? "animate-pulse text-cyan-300" : "text-cyan-300"}`} />
         <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-300">{call.title}</span>
         <StatusBadge size="sm" variant={statusVariant}>
-          {call.status === "completed" ? "완료" : call.status === "denied" ? "차단" : call.status === "failed" ? "실패" : call.status}
+          {statusText}
         </StatusBadge>
       </button>
       {expanded && call.output ? (
