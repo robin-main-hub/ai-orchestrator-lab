@@ -1,1 +1,1 @@
-// placeholder 2
+export const hello = "world";
