@@ -20,6 +20,7 @@ import {
   type LlmCompletionFn,
 } from "@ai-orchestrator/agents";
 import { agentPrimaryDisplayName } from "../lib/agentDisplay";
+import { promoteDebateDecisions } from "../lib/promoteDebateDecisions";
 import { requestDgxProviderCompletion } from "./stage12DgxProvider";
 
 
@@ -447,7 +448,8 @@ export async function runStage3DebateSession(
   });
 
   // 패치 3: accept/reject/ref 마커를 스키마 링크로 — 의장 confidence가 진짜 신호를 받는다
-  const linkedRounds = applyDebateCrossLinks(debateResult.rounds);
+  // + 결정 노드/코딩 영향 승격: 이게 없으면 결정 준비도 게이트가 모든 실토론을 차단한다
+  const linkedRounds = promoteDebateDecisions(applyDebateCrossLinks(debateResult.rounds));
   const updatedParticipants = baseSession.participants;
   const updatedHumanPeek = createHumanPeek(updatedParticipants, linkedRounds, input.events, baseSession.promotedAt);
 
