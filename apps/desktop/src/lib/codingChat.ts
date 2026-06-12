@@ -509,6 +509,8 @@ export function buildSystemPrompt(input: {
   agentMode: AgentMode;
   mentions?: ReadonlyArray<string>;
   workingDir?: string;
+  /** P0-3: 관련 파일 자동 선택 결과(repo-map) — 있으면 시스템 프롬프트에 주입 */
+  repoMap?: string;
 }): string {
   const lines = [
     "당신은 이 데스크톱 오케스트레이터에 내장된 코딩 에이전트입니다. 한국어로 간결하게 답하세요.",
@@ -528,6 +530,11 @@ export function buildSystemPrompt(input: {
   }
   if (input.mentions && input.mentions.length > 0) {
     lines.push(`사용자가 멘션한 파일(@): ${input.mentions.join(", ")} — 먼저 read 도구로 확인하세요.`);
+  }
+  if (input.repoMap && input.repoMap.trim()) {
+    lines.push(
+      `${input.repoMap}\n위 맵은 지금까지 본 파일들의 시그니처 요약입니다(전체 코드 아님). 필요한 파일은 read로 전체를 확인하세요.`,
+    );
   }
   return lines.join("\n");
 }
