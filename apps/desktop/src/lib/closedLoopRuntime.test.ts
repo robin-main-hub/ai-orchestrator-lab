@@ -31,7 +31,7 @@ describe("createClosedLoopEffects.dispatch (mode A)", () => {
     await effects.dispatch("run tests", { stepIndex: 0 });
 
     expect(dispatchClient).toHaveBeenCalledOnce();
-    expect(awaitApprovalDecision).toHaveBeenCalledWith("cmd_0", { command: "run tests" });
+    expect(awaitApprovalDecision).toHaveBeenCalledWith("cmd_0", { command: "run tests", stepIndex: 0 });
     expect(replayClient).toHaveBeenCalledOnce();
     expect(replayClient).toHaveBeenCalledWith(
       expect.objectContaining({ request: expect.objectContaining({ sourceItemId: "cmd_0" }) }),

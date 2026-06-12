@@ -30,15 +30,22 @@ export function createAutoApproveStrategy(deps: {
   /** extend the default allowlist */
   extraSafePrefixes?: ReadonlyArray<string>;
   logger?: (message: string) => void;
-}): (sourceItemId: string, context: { command: string }) => Promise<ApprovalDecisionOutcome> {
+}): (sourceItemId: string, context: { command: string; stepIndex?: number }) => Promise<ApprovalDecisionOutcome> {
   const grant = deps.grant ?? grantDgxApproval;
   const logger = deps.logger ?? (() => {});
 
   return async (sourceItemId, context) => {
-    const verdict = isAutoApprovableCommand(context.command, {
-      safePrefixes: deps.safePrefixes,
-      extraSafePrefixes: deps.extraSafePrefixes,
-    });
+    // 소환 플랜 단계(음수 stepIndex): 부트/정체성 주입/킥오프는 모델 산출물이
+    // 아니라 앱이 번들 페르소나 파일과 사용자 입력으로 조립한 텍스트라
+    // mode B에서 자동 승인한다. 루프의 검증 명령(0 이상)은 그대로 접두사
+    // 허용 목록을 통과해야 한다.
+    const summonPlanStep = typeof context.stepIndex === "number" && context.stepIndex < 0;
+    const verdict = summonPlanStep
+      ? { allowed: true as const, reason: "persona summon-plan step (app-assembled)" }
+      : isAutoApprovableCommand(context.command, {
+          safePrefixes: deps.safePrefixes,
+          extraSafePrefixes: deps.extraSafePrefixes,
+        });
 
     if (!verdict.allowed) {
       logger(`mode B: "${context.command}" not auto-approvable (${verdict.reason}); deferring to human`);

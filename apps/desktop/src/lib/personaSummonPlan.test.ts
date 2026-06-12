@@ -2,7 +2,7 @@ import type { LoadedPersona } from "@ai-orchestrator/agents";
 import type { AgentSession } from "@ai-orchestrator/protocol";
 import { describe, expect, it } from "vitest";
 import { resolvePersonaAgentSet } from "./personaAgentSet";
-import { buildPersonaInjectionPlan } from "./personaSummonPlan";
+import { buildPersonaInjectionPlan, chunkDispatchText, MAX_DISPATCH_TEXT_LENGTH } from "./personaSummonPlan";
 
 const session = (overrides: Partial<AgentSession> = {}): AgentSession => ({
   id: "as_makise_%2",
@@ -116,5 +116,57 @@ describe("buildPersonaInjectionPlan", () => {
     expect(plan.steps).toEqual([plan.injectionText]);
     expect(plan.injectionText).toContain("slot hermes-01");
     expect(plan.injectionText).not.toContain("freshly reset");
+  });
+
+  it("splits an oversized identity into dispatch-sized chunks with continuation markers", () => {
+    // 풀 소울 페르소나(architect ≈ 18K)가 서버 commandPreview 8000자 제한에
+    // 걸려 identity injection failed: 400 으로 즉사하던 회귀 케이스
+    const bigSoul = Array.from({ length: 400 }, (_, i) => `soul line ${i} — ${"x".repeat(40)}`).join("\n");
+    const plan = buildPersonaInjectionPlan({
+      session: session(),
+      persona: persona({
+        fragments: [{ source: "soul", relativePath: "agents/makise/SOUL.md", content: bigSoul }],
+      }),
+      kickoffTask: "Run.",
+    });
+
+    const identitySteps = plan.steps.slice(0, -1);
+    expect(identitySteps.length).toBeGreaterThan(1);
+    for (const step of identitySteps) {
+      expect(step.length).toBeLessThanOrEqual(8_000);
+    }
+    expect(identitySteps[0]).toContain("identity continues in the next message");
+    expect(identitySteps.at(-1)).toContain("(identity continued)");
+    expect(identitySteps.at(-1)).not.toContain("identity continues in the next message");
+    expect(plan.steps.at(-1)).toBe("Run.");
+  });
+
+  it("keeps a short identity as a single unmarked step", () => {
+    const plan = buildPersonaInjectionPlan({ session: session(), persona: persona() });
+    expect(plan.steps).toEqual([plan.injectionText]);
+    expect(plan.injectionText).not.toContain("identity continues");
+  });
+});
+
+describe("chunkDispatchText", () => {
+  it("returns short text as a single chunk", () => {
+    expect(chunkDispatchText("hello\nworld")).toEqual(["hello\nworld"]);
+  });
+
+  it("splits on line boundaries and reassembles losslessly", () => {
+    const text = Array.from({ length: 300 }, (_, i) => `line ${i} ${"y".repeat(50)}`).join("\n");
+    const chunks = chunkDispatchText(text, 2_000);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(2_000);
+    }
+    expect(chunks.join("\n")).toBe(text);
+  });
+
+  it("force-splits a single line longer than the limit", () => {
+    const text = "z".repeat(MAX_DISPATCH_TEXT_LENGTH * 2 + 10);
+    const chunks = chunkDispatchText(text);
+    expect(chunks.length).toBe(3);
+    expect(chunks.join("")).toBe(text);
   });
 });

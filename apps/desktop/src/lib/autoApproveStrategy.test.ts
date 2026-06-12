@@ -42,6 +42,36 @@ describe("createAutoApproveStrategy", () => {
     expect(outcome).toBe("rejected");
   });
 
+  it("auto-approves summon-plan steps (negative stepIndex) even when the text is not a safe command", async () => {
+    // 정체성 주입(풀 소울 마크다운)은 접두사 허용 목록에 절대 안 걸린다 —
+    // stepIndex<0 표시로 자동 승인되지 않으면 auto_safe 실행이 시작조차 못 한다
+    const grant = grantOk();
+    const fallback = vi.fn();
+    const strategy = createAutoApproveStrategy({ grant, fallback });
+
+    const outcome = await strategy("src1", {
+      command: 'You are now operating as "architect"...\n# System Safety Boundaries\n...',
+      stepIndex: -2,
+    });
+
+    expect(outcome).toBe("approved");
+    expect(grant).toHaveBeenCalledOnce();
+    expect(grant.mock.calls[0]?.[0].request.reason).toContain("summon-plan");
+    expect(fallback).not.toHaveBeenCalled();
+  });
+
+  it("keeps loop verification steps (stepIndex >= 0) under the prefix allowlist", async () => {
+    const grant = grantOk();
+    const fallback = vi.fn().mockResolvedValue("rejected" as const);
+    const strategy = createAutoApproveStrategy({ grant, fallback });
+
+    const outcome = await strategy("src1", { command: "rm -rf node_modules", stepIndex: 0 });
+
+    expect(grant).not.toHaveBeenCalled();
+    expect(fallback).toHaveBeenCalledOnce();
+    expect(outcome).toBe("rejected");
+  });
+
   it("honors a custom allowlist", async () => {
     const grant = grantOk();
     const fallback = vi.fn().mockResolvedValue("rejected" as const);

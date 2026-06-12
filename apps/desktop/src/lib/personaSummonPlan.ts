@@ -31,6 +31,65 @@ export type PersonaInjectionPlan = {
   steps: string[];
 };
 
+/**
+ * 서버 /tmux/dispatch는 commandPreview(=실행 페이로드)를 8000자로 제한한다.
+ * 풀 소울 페르소나(SAFETY+SOUL+AGENTS ≈ 18K)는 한 번에 못 들어가므로 주입
+ * 텍스트를 이 한도 이하 조각으로 나눠 보낸다. 연속 마커가 붙어도 8000을
+ * 넘지 않도록 여유를 둔 값.
+ */
+export const MAX_DISPATCH_TEXT_LENGTH = 7_600;
+
+const CONTINUATION_SUFFIX = "\n\n(identity continues in the next message — do not respond yet)";
+const CONTINUATION_PREFIX = "(identity continued)\n\n";
+
+/** 줄 경계를 지키며 디스패치 한도 이하 조각으로 분할한다. 한 줄이 한도를 넘으면 글자 단위로 강제 분할. */
+export function chunkDispatchText(text: string, maxLength = MAX_DISPATCH_TEXT_LENGTH): string[] {
+  if (text.length <= maxLength) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  let current = "";
+  for (const line of text.split("\n")) {
+    const candidate = current ? `${current}\n${line}` : line;
+    if (candidate.length <= maxLength) {
+      current = candidate;
+      continue;
+    }
+    if (current) {
+      chunks.push(current);
+      current = "";
+    }
+    if (line.length <= maxLength) {
+      current = line;
+      continue;
+    }
+    for (let offset = 0; offset < line.length; offset += maxLength) {
+      const piece = line.slice(offset, offset + maxLength);
+      if (piece.length === maxLength) {
+        chunks.push(piece);
+      } else {
+        current = piece;
+      }
+    }
+  }
+  if (current) {
+    chunks.push(current);
+  }
+  return chunks;
+}
+
+/** 다중 조각 주입에 연속 마커를 달아 pane 에이전트가 중간에 응답하지 않게 한다. */
+function markContinuations(chunks: string[]): string[] {
+  if (chunks.length <= 1) {
+    return chunks;
+  }
+  return chunks.map((chunk, index) => {
+    const prefixed = index === 0 ? chunk : `${CONTINUATION_PREFIX}${chunk}`;
+    return index === chunks.length - 1 ? prefixed : `${prefixed}${CONTINUATION_SUFFIX}`;
+  });
+}
+
 export function buildPersonaInjectionPlan(input: {
   session: AgentSession;
   persona: LoadedPersona;
@@ -73,7 +132,8 @@ export function buildPersonaInjectionPlan(input: {
 
   const bootSteps = agentSet ? [...agentSet.bootSteps] : [];
   const kickoff = kickoffTask?.trim();
-  const steps = kickoff ? [...bootSteps, injectionText, kickoff] : [...bootSteps, injectionText];
+  const injectionChunks = markContinuations(chunkDispatchText(injectionText));
+  const steps = kickoff ? [...bootSteps, ...injectionChunks, kickoff] : [...bootSteps, ...injectionChunks];
 
   return {
     agentId,
