@@ -28,6 +28,7 @@ function render(props: Partial<Parameters<typeof AutonomyRunPanel>[0]> = {}) {
       notice={props.notice}
       gateDetail={props.gateDetail}
       onOpenDebate={props.onOpenDebate}
+      onOpenApprovalQueue={props.onOpenApprovalQueue}
       personaAvatars={props.personaAvatars}
       personaSprites={props.personaSprites}
       expression={props.expression}
@@ -189,6 +190,19 @@ describe("AutonomyRunPanel", () => {
     expect(html).toContain("makise");
     expect(html).toContain("fix bug");
     expect(html).toContain("완료");
+  });
+
+  it("shows an in-place approval-queue button while running in human mode", () => {
+    const html = render({
+      running: true,
+      form: form({ mode: "human" }),
+      onOpenApprovalQueue: noop,
+    });
+    expect(html).toContain("사람 승인 모드");
+    expect(html).toContain("승인 큐 열기");
+    // auto_safe 실행 중에는 알람이 뜨지 않는다
+    const autoSafe = render({ running: true, form: form({ mode: "auto_safe" }), onOpenApprovalQueue: noop });
+    expect(autoSafe).not.toContain("승인 큐 열기");
   });
 
   it("renders the mission HUD classes and the auth-required alarm on escalation", () => {
