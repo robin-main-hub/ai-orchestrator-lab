@@ -254,6 +254,8 @@ import {
 } from "./lib/cockpitProjectionHealth";
 import { createPermissionApprovalLedger } from "./lib/permissionApprovalLedger";
 import { seededProviderProfiles } from "./seeds/providers";
+import { sampleDebateSession } from "./seeds/sampleDebate";
+import { resolveInitialDebateSession } from "./lib/initialDebateSession";
 import {
   initialDgxBridge,
   initialIngressSnapshot,
@@ -695,13 +697,17 @@ export function App() {
 
   const [cockpitFocus, setCockpitFocus] = useState<CockpitDetailFocus | undefined>();
   const [debateSession, setDebateSession] = useState<Stage3DebateSession>(() =>
-    createStage3DebateSession({
-      messages: initialConversationMessages,
-      agents: seededAgentProfiles,
-      providers: seededProviderProfiles,
-      events: initialEventLog,
-      runtime: runtimeSnapshot,
-      createdAt: now,
+    resolveInitialDebateSession({
+      sample: sampleDebateSession,
+      fallback: () =>
+        createStage3DebateSession({
+          messages: initialConversationMessages,
+          agents: seededAgentProfiles,
+          providers: seededProviderProfiles,
+          events: initialEventLog,
+          runtime: runtimeSnapshot,
+          createdAt: now,
+        }),
     }),
   );
   const [agentRunState, setAgentRunState] = useState<Stage4AgentRun>(initialAgentRun);
