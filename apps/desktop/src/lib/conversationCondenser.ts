@@ -1,3 +1,5 @@
+import { detectPersonaFeedback, detectPersonaExpression, type PersonaCovenant } from "./personaCovenant";
+
 /**
  * MT-OSC 대화 응축기 (arXiv 2604.08782 적용).
  *
@@ -209,26 +211,46 @@ export function extractCriticalInfo(text: string): { facts: string[]; classes: s
 
 function condenseUser(text: string, capChars: number): string {
   const trimmed = text.trim();
+  // P1-6: 사용자의 페르소나 피드백(말투/성격/너답게…)은 캐릭터 유지에 결정적이라
+  // 길어도 거의 verbatim으로 보존한다(요약 시 캐릭터가 무너짐).
+  if (detectPersonaFeedback(trimmed)) return trimmed.slice(0, Math.max(capChars * 2, 400));
   if (trimmed.length <= capChars) return trimmed;
   // 초과 시: 첫 문장 + 핵심 정보 포함 문장
   const sentences = trimmed.split(/(?<=[.!?\n])/u).map((s) => s.trim()).filter(Boolean);
   const kept: string[] = [];
   if (sentences[0]) kept.push(sentences[0]);
   for (const sentence of sentences.slice(1)) {
-    if (extractCriticalInfo(sentence).classes.length > 0) kept.push(sentence);
+    if (extractCriticalInfo(sentence).classes.length > 0 || detectPersonaFeedback(sentence)) {
+      kept.push(sentence);
+    }
     if (kept.join(" ").length > capChars) break;
   }
   return kept.join(" ").slice(0, capChars + 80);
 }
 
-function condenseAssistant(text: string): { summary: string; classes: string[] } {
+function condenseAssistant(
+  text: string,
+  covenant?: PersonaCovenant,
+): { summary: string; classes: string[] } {
   const trimmed = text.trim();
   const { facts, classes } = extractCriticalInfo(trimmed);
   const head = firstSentence(trimmed);
   const kept: string[] = [];
   dedupePush(kept, head);
   for (const fact of facts.slice(0, 3)) dedupePush(kept, fact);
-  return { summary: kept.join(" / ").slice(0, 360), classes };
+  // P1-6: 페르소나 발화(1인칭 정체성/가치관 또는 covenant 캐치프레이즈)가 든 문장을
+  // 보존한다 — 응축본에서 캐릭터 보이스가 사라지지 않게.
+  const sentences = trimmed.split(/(?<=[.!?\n])/u).map((s) => s.trim()).filter(Boolean);
+  let personaKept = false;
+  for (const sentence of sentences) {
+    if (detectPersonaExpression(sentence, covenant)) {
+      dedupePush(kept, sentence);
+      personaKept = true;
+      if (kept.join(" / ").length > 420) break;
+    }
+  }
+  if (personaKept && !classes.includes("persona")) classes.push("persona");
+  return { summary: kept.join(" / ").slice(0, 480), classes };
 }
 
 /** 윈도(턴 목록)를 user↔assistant 쌍으로 묶음 */
@@ -248,10 +270,14 @@ function pairTurns(turns: CondenserTurn[]): Array<{ user: string; assistant: str
   return pairs;
 }
 
-function condensePairs(turns: CondenserTurn[], config: CondenserConfig): CondensedPair[] {
+function condensePairs(
+  turns: CondenserTurn[],
+  config: CondenserConfig,
+  covenant?: PersonaCovenant,
+): CondensedPair[] {
   return pairTurns(turns).map(({ user, assistant }) => {
     const humanInput = condenseUser(user, config.userVerbatimCapChars);
-    const { summary, classes } = condenseAssistant(assistant);
+    const { summary, classes } = condenseAssistant(assistant, covenant);
     const reasoning = classes.length > 0 ? `보존: ${classes.join(", ")}` : "요약(핵심 정보 없음)";
     return { humanInput, assistant: summary, reasoning };
   });
@@ -267,18 +293,24 @@ function condensateTokens(pairs: CondensedPair[]): number {
  * Decider가 보류를 권하면 prior를 그대로 돌려준다(호출부가 raw 유지).
  */
 export function condense(
-  input: { prior?: Condensate | null; window: CondenserTurn[] },
+  input: { prior?: Condensate | null; window: CondenserTurn[]; covenant?: PersonaCovenant },
   config: CondenserConfig = DEFAULT_CONDENSER_CONFIG,
 ): Condensate {
   const priorPairs = input.prior?.pairs ?? [];
-  const newPairs = condensePairs(input.window, config);
+  const newPairs = condensePairs(input.window, config, input.covenant);
   let pairs = [...priorPairs, ...newPairs];
 
-  // 예산 초과 시 정보 없는 오래된 쌍부터 제거
+  // 예산 초과 시 정보 없는 오래된 쌍부터 제거. 단 페르소나 보존 쌍은 마지막까지 지킨다.
   while (condensateTokens(pairs) > config.condensateBudgetTokens && pairs.length > 1) {
-    const dropIndex = pairs.findIndex((pair) => pair.reasoning.startsWith("요약"));
+    let dropIndex = pairs.findIndex(
+      (pair) => pair.reasoning.startsWith("요약") && !pair.reasoning.includes("persona"),
+    );
     if (dropIndex === -1) {
-      pairs = pairs.slice(1); // 다 핵심이면 가장 오래된 것
+      // 요약(비핵심) 쌍이 없으면 persona가 아닌 가장 오래된 쌍을 버린다
+      dropIndex = pairs.findIndex((pair) => !pair.reasoning.includes("persona"));
+    }
+    if (dropIndex === -1) {
+      pairs = pairs.slice(1); // 전부 persona면 가장 오래된 것 (성장 bound 유지)
     } else {
       pairs = [...pairs.slice(0, dropIndex), ...pairs.slice(dropIndex + 1)];
     }
