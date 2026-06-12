@@ -32,6 +32,12 @@ describe("selectTtsEngine — 라우팅", () => {
   it("로컬 불가면 openai 폴백", () => {
     expect(selectTtsEngine({ text: "<laugh> 좋아", localAvailable: false })).toBe("openai");
   });
+  it("감정 태그가 있어도 Orpheus 미설치면 kokoro로 우회", () => {
+    expect(selectTtsEngine({ text: "<laugh> 좋아", orpheusAvailable: false })).toBe("kokoro");
+  });
+  it("Orpheus 미설치 + 로컬 불가면 openai", () => {
+    expect(selectTtsEngine({ text: "<laugh> 좋아", orpheusAvailable: false, localAvailable: false })).toBe("openai");
+  });
 });
 
 describe("resolveCharacterVoice", () => {

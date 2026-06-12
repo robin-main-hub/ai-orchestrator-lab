@@ -1,4 +1,4 @@
-import { Bot, Play } from "lucide-react";
+import { Bot, Play, Volume2 } from "lucide-react";
 import type { TmuxPaneRole } from "@ai-orchestrator/protocol";
 import { StatusBadge } from "@/ui/status-badge";
 import type { AutonomyMode } from "../lib/autonomousRun";
@@ -52,6 +52,9 @@ export function AutonomyRunPanel({
   onFieldChange,
   onRun,
   onLoadFromPacket,
+  onSpeak,
+  speaking,
+  speakDisabledReason,
 }: {
   form: AutonomyRunForm;
   runnable: RunnableVerdict;
@@ -74,6 +77,12 @@ export function AutonomyRunPanel({
   onRun: () => void;
   /** when provided, shows a button to (re)load the form from the current CodingPacket */
   onLoadFromPacket?: () => void;
+  /** P2-9: 캐릭터 목소리로 현재 결과를 읽어주는 핸들러 (제공 시 "말하기" 버튼 노출) */
+  onSpeak?: () => void;
+  /** TTS 합성/재생 진행 중 */
+  speaking?: boolean;
+  /** 말하기가 불가능한 이유(있으면 버튼 비활성 + 툴팁) */
+  speakDisabledReason?: string;
 }) {
   const disabled = running || !runnable.ok;
   const personaPortrait = resolvePersonaSprite(form.personaName.trim(), expression ?? "neutral", {
@@ -109,6 +118,18 @@ export function AutonomyRunPanel({
             type="button"
           >
             패킷 불러오기
+          </button>
+        ) : null}
+        {onSpeak ? (
+          <button
+            className="rail-icon-button autonomy-speak"
+            disabled={speaking || Boolean(speakDisabledReason)}
+            onClick={onSpeak}
+            title={speakDisabledReason ?? (speaking ? "재생 중…" : "결과를 캐릭터 목소리로 듣기")}
+            type="button"
+          >
+            <Volume2 size={14} />
+            {speaking ? "재생 중…" : "말하기"}
           </button>
         ) : null}
       </header>
