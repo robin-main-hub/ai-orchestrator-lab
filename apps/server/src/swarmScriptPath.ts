@@ -48,3 +48,15 @@ export function resolveSwarmScriptPath(
   // 기대 위치를 가리키게 한다 (cwd/apps-server 경로가 아니라).
   return candidates.find((candidate) => exists(candidate)) ?? rootCandidate;
 }
+
+/**
+ * 스웜 스크립트를 spawn할 때 쓸 작업 디렉터리(모노레포 루트).
+ *
+ * 스크립트 내부는 STATE_DIR을 상대경로 `.ai-swarm/`로 잡는다 — 즉 cwd가 루트여야
+ * `.ai-swarm/ai-swarm.env`를 찾는다. 서버는 cwd=apps/server로 뜨므로 spawn 시
+ * 이 값을 execFile의 cwd로 넘겨야 "Missing swarm env file"을 피한다.
+ * 인자로 받은 스크립트 경로(`<root>/scripts/swarm-X.sh`)의 두 단계 위가 루트.
+ */
+export function swarmScriptCwd(scriptPath: string): string {
+  return resolve(dirname(scriptPath), "..");
+}

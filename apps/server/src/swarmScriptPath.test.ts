@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveSwarmScriptPath } from "./swarmScriptPath";
+import { resolveSwarmScriptPath, swarmScriptCwd } from "./swarmScriptPath";
 
 const ROOT = "/home/robin/ai-orchestrator-lab";
 const MODULE_DIR = `${ROOT}/apps/server/dist`;
@@ -36,5 +36,13 @@ describe("resolveSwarmScriptPath", () => {
       exists: () => false,
     });
     expect(path).toBe(`${ROOT}/scripts/swarm-capture.sh`);
+  });
+});
+
+describe("swarmScriptCwd", () => {
+  it("returns the monorepo root so scripts find .ai-swarm/ via their relative STATE_DIR", () => {
+    // 스크립트가 STATE_DIR=.ai-swarm 을 상대경로로 잡으므로 cwd가 루트여야
+    // "Missing swarm env file"이 안 난다
+    expect(swarmScriptCwd(`${ROOT}/scripts/swarm-capture.sh`)).toBe(ROOT);
   });
 });
