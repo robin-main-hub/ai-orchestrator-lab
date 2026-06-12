@@ -101,4 +101,25 @@ describe("condense — 추출형 + 순차 + 예산 bound", () => {
   it("estimateTokens ~ chars/4", () => {
     expect(estimateTokens("12345678")).toBe(2);
   });
+
+  it("P1-6: 페르소나 발화 문장은 응축본에서 보존된다", () => {
+    const longAssistant =
+      "파일을 열어서 확인했습니다. ".repeat(5) +
+      "나는 절대 거짓을 말하지 않는다. " +
+      "그리고 빌드를 돌렸습니다. ".repeat(5);
+    const c = condense({
+      window: [u("작업 진행해"), a(longAssistant)],
+      covenant: { keywords: [], catchphrases: [] },
+    });
+    const pair = c.pairs[c.pairs.length - 1]!;
+    expect(pair.assistant).toContain("거짓을 말하지 않는다");
+    expect(pair.reasoning).toContain("persona");
+  });
+
+  it("P1-6: 사용자 페르소나 피드백은 거의 verbatim 보존", () => {
+    const feedback = "말투가 너무 차가워, 좀 더 다정하게 말해줘. 너답게 행동하라고. ".repeat(3);
+    const c = condense({ window: [u(feedback), a("알겠습니다")] });
+    expect(c.pairs[0]!.humanInput).toContain("말투가 너무 차가워");
+    expect(c.pairs[0]!.humanInput.length).toBeGreaterThan(100);
+  });
 });
