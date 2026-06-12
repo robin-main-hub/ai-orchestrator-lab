@@ -5015,6 +5015,7 @@ export function App() {
                   setProviderRegistrationOpen(false);
                   setAdminRailOpen(false);
                 },
+                onOpenApprovalQueue: () => setApprovalDrawerOpen(true),
                 historyEvents: eventLog,
                 onRegistryChange: setSummonRegistry,
                 onRunEvents: (events) => setEventLog((current) => [...current, ...events]),
