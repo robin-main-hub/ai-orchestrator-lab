@@ -36,6 +36,21 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   exit 0
 fi
 
+# P0-2: --timeout <sec>은 비인터랙티브 일회성 명령(pnpm test, tsc 등)을
+# `setsid timeout --kill-after=10s <sec>`로 감싸 보낸다. setsid로 새 process
+# group을 만들어 timeout 만료 시 그룹 전체가 종료되므로, 자식이 orphan으로
+# 남아 pane을 "working"에 묶는 hang(Codex #4337 계열)을 차단한다.
+# 인터랙티브 도구(codex/claude 대화 등)에는 쓰지 말 것 — 기본은 래핑 안 함.
+send_timeout=""
+if [[ "${1:-}" == "--timeout" ]]; then
+  send_timeout="${2:-}"
+  shift 2 || { usage >&2; exit 2; }
+  if ! [[ "$send_timeout" =~ ^[0-9]+$ ]]; then
+    echo "--timeout requires an integer number of seconds." >&2
+    exit 2
+  fi
+fi
+
 if [[ $# -lt 2 ]]; then
   usage >&2
   exit 2
@@ -44,6 +59,14 @@ fi
 role="$1"
 shift
 command_text="$*"
+
+if [[ -n "$send_timeout" ]]; then
+  if command -v setsid >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
+    command_text="setsid timeout --signal=TERM --kill-after=10s ${send_timeout}s ${command_text}"
+  elif command -v timeout >/dev/null 2>&1; then
+    command_text="timeout --signal=TERM --kill-after=10s ${send_timeout}s ${command_text}"
+  fi
+fi
 
 if ! command -v tmux >/dev/null 2>&1; then
   echo "tmux is not installed or not on PATH." >&2

@@ -95,7 +95,14 @@ if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     echo "tmux session '$SESSION_NAME' already exists. Re-run with --reset to recreate it." >&2
     exit 1
   fi
-  tmux kill-session -t "$SESSION_NAME"
+  # P0-2: kill-session만 하면 pane 안의 자식 프로세스가 orphan으로 남는다.
+  # swarm-cleanup.sh가 각 pane 프로세스 트리를 회수한 뒤 세션을 종료한다.
+  cleanup_script="$(dirname "$0")/swarm-cleanup.sh"
+  if [[ -f "$cleanup_script" ]]; then
+    AI_SWARM_SESSION="$SESSION_NAME" AI_SWARM_STATE_DIR="$STATE_DIR" bash "$cleanup_script" || true
+  else
+    tmux kill-session -t "$SESSION_NAME"
+  fi
 fi
 
 # Force a large detached window so 10 panes fit even when this runs headless
@@ -131,6 +138,10 @@ tmux select-layout -t "$SESSION_NAME" tiled >/dev/null
 } > "$ENV_FILE"
 
 for i in "${!pane_ids[@]}"; do
+  # P0-2: job control(monitor mode)을 켜면 pane shell이 실행하는 각 foreground
+  # 명령이 자기 process group을 갖는다 → 정리/종료 시 그룹 단위로 시그널 전달이
+  # 가능해지고, 자식이 부모와 함께 회수되기 쉬워진다.
+  tmux send-keys -t "${pane_ids[$i]}" "set -m 2>/dev/null || true" C-m
   tmux send-keys -t "${pane_ids[$i]}" "printf '\\033]2;%s\\033\\\\' '${titles[$i]}'" C-m
   tmux send-keys -t "${pane_ids[$i]}" "echo '${titles[$i]} ready. Role: ${roles[$i]}.'" C-m
 done
