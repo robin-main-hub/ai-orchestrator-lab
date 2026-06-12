@@ -31,6 +31,7 @@ The first implemented tmux layer is deliberately conservative:
 - `scripts/swarm-capture.sh` captures pane output read-only and redacts obvious secrets.
 - `scripts/swarm-start-claude-workers.sh` can start persistent interactive Claude Code workers inside selected panes.
 - `scripts/swarm-claude-task.sh` sends structured task prompts to those interactive Claude worker panes.
+- `scripts/swarm-start-hermes-workers.sh` starts persistent interactive Hermes Agent workers inside the agent panes — the runtime the desktop autonomous runner (persona summon → identity injection → closed loop) actually targets. `setup-agent-swarm.sh --with-hermes` runs it automatically after provisioning.
 - Gemini CLI remains disconnected until CLI setup is done.
 - The helper refuses obvious secret-bearing command text.
 - The desktop UI still treats tmux as a permissioned execution backend, not an untracked side channel.
@@ -410,6 +411,35 @@ scripts/swarm-capture.sh architect
 `scripts/swarm-start-claude-workers.sh` starts `claude` in selected panes with a stable worker name and records non-secret pane metadata in `.ai-swarm`. It defaults to `--permission-mode plan` so workers inspect and plan before edits.
 
 `scripts/swarm-claude-task.sh` uses `tmux load-buffer` and `paste-buffer` for task prompts. It wraps task text in a structured packet, refuses obvious secrets, and writes only redacted dispatch metadata to `.ai-swarm`.
+
+## Interactive Hermes Workers
+
+The repository also includes:
+
+```text
+scripts/swarm-start-hermes-workers.sh
+```
+
+The desktop autonomous runner does not execute shell commands in agent panes — it types persona identity text, kickoff tasks, and verification steps into the pane through the gated dispatch path (`/tmux/dispatch` → approval → `swarm-send.sh`). That only produces useful work when an interactive agent CLI is already running in the pane; against a bare shell the injected text would be interpreted as shell commands. This script is the provisioning layer that closes that gap.
+
+It:
+
+- starts `hermes chat` (interactive only — never `-q`/headless) in each selected agent pane;
+- defaults to the seven agent roles (`code,architect,frontend,backend,qa,research,memory`), leaving discussion/orchestrator/status as control panes;
+- resolves the Hermes binary from `--hermes-bin`/`HERMES_BIN_PATH`, then PATH, then `~/hermes-venv/bin/hermes`;
+- is idempotent — a pane whose foreground process is no longer an idle shell is skipped, so re-running it as a readiness pass before an autonomous run is safe;
+- waits for each launched pane to leave the idle shell and reports workers that failed to come up;
+- supports `--status` for a read-only per-role readiness report;
+- records only non-secret worker metadata in `.ai-swarm/ai-swarm.hermes-workers.env` and refuses launch arguments that look like secrets.
+
+Example first-run shape:
+
+```bash
+scripts/setup-agent-swarm.sh --reset --with-hermes
+scripts/swarm-start-hermes-workers.sh --status
+```
+
+The persona boot/reset command (`/new`, see docs/40-persona-agent-set.md) is intentionally NOT sent by this script. Session resets belong to the app's gated dispatch path so they stay audited; this layer only guarantees a live Hermes CLI exists for those dispatches to land in.
 
 Operational rules:
 

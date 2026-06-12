@@ -151,6 +151,19 @@ It:
 
 The app-facing runtime should still model these sends as `TerminalCommandIntent` records and route real dispatch through the same approval, dry-run, and redaction gates as any other tmux send.
 
+## Interactive Hermes Worker Provisioning
+
+`scripts/swarm-start-hermes-workers.sh` provisions the pane runtime the desktop autonomous runner depends on.
+
+The persona/closed-loop path (`personaTaskRunner` → `closedLoopRuntime`) dispatches text into agent panes; that text is meaningful only to an interactive agent CLI already running there. A bare-shell pane would interpret injected identity text as shell commands, so autonomous runs must not start until the worker layer is up.
+
+Rules:
+
+- start workers at pane creation (`setup-agent-swarm.sh --with-hermes`) or re-run the starter as an idempotent readiness pass before an autonomous run;
+- `--status` is the read-only readiness probe (idle-shell vs worker per role);
+- the starter never sends task prompts, persona text, or session resets — those stay on the gated dispatch path;
+- worker metadata lives in `.ai-swarm/<session>.hermes-workers.env` and contains no secrets.
+
 ## Control Mode Later
 
 tmux control mode should be considered after basic capture works.
