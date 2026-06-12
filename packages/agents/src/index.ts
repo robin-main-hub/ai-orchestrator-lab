@@ -567,6 +567,19 @@ export { buildAgentSystemPrompt, estimateTokens, soulModeToPersonaSourceMode } f
 export type { SoulInjectionReport } from './soulInjection.js';
 export { buildDebateSummary, countTagDistribution } from './debateSummary.js';
 export type { DebateSummaryOptions, TagDistribution } from './debateSummary.js';
+export {
+  textSimilarity,
+  clusterResponses,
+  detectConsensus,
+  classifyInterruptPriority,
+  shouldInterrupt,
+} from './debateConsensus.js';
+export type {
+  ResponseCluster,
+  ConsensusState,
+  ConsensusResult,
+  InterruptPriority,
+} from './debateConsensus.js';
 
 export { extractCodingPacketFromDebate } from "./codingPacketFromDebate.js";
 export type { ExtractCodingPacketOptions } from "./codingPacketFromDebate.js";
