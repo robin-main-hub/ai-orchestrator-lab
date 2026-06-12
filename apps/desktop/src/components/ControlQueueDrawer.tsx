@@ -24,6 +24,8 @@ import {
   controlQueueStateLabel,
   type ControlQueueLaneId,
 } from "@/lib/controlQueuePresentation";
+import { tmuxRedispatchOutcomeLabel } from "../lib/railStatusLabels";
+import type { TmuxRedispatchOutcome } from "./OperationsRailPanel";
 import { Button } from "@/ui/button";
 import { StatusBadge } from "@/ui/status-badge";
 
@@ -57,6 +59,8 @@ export type ControlQueueDrawerProps = {
   onReject: (sourceItemId: string) => void;
   open: boolean;
   snapshot: PermissionMatrixSnapshot;
+  /** 승인 직후 tmux 재전송 결과 — 승인을 누른 바로 그 자리에서 blocked/실패 사유를 보여준다 */
+  redispatchOutcomes?: TmuxRedispatchOutcome[];
 };
 
 type LaneId = ControlQueueLaneId;
@@ -93,6 +97,7 @@ export function ControlQueueDrawer({
   onReject,
   open,
   snapshot,
+  redispatchOutcomes = [],
 }: ControlQueueDrawerProps) {
   const [activeLane, setActiveLane] = useState<LaneId | "all">("all");
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -227,6 +232,31 @@ export function ControlQueueDrawer({
         <SummaryCell label="승인됨" tone="success" value={snapshot.summary.approved} />
         <SummaryCell label="거부됨" tone="destructive" value={snapshot.summary.denied} />
       </div>
+
+      {/* 승인 직후 재전송 결과 — 승인이 blocked/실패로 끝나면 그 이유를 여기서 바로 보여준다 */}
+      {redispatchOutcomes.length > 0 ? (
+        <div aria-label="승인 후 재전송 결과" className="space-y-1 border-b border-border px-3 py-2">
+          {redispatchOutcomes.slice(0, 2).map((outcome) => {
+            const ok = outcome.status === "sent" || outcome.status === "recorded";
+            return (
+              <div className="flex items-start gap-2 text-xs" key={`${outcome.approvalId}:${outcome.createdAt}`}>
+                <span
+                  className={`mt-0.5 inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                    ok
+                      ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-200"
+                      : "border-red-300/25 bg-red-400/10 text-red-200"
+                  }`}
+                >
+                  {outcome.role} · {tmuxRedispatchOutcomeLabel(outcome.status)}
+                </span>
+                {outcome.reason ? (
+                  <span className="min-w-0 break-all leading-5 text-muted-foreground">{outcome.reason}</span>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
 
       {/* Lane chips */}
       <div

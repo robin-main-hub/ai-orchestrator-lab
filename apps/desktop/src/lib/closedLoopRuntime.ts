@@ -24,7 +24,8 @@ import type { ClosedLoopEffects } from "./closedLoopController";
  * touching the controller or this adapter's shape.
  */
 
-export type ApprovalDecisionOutcome = "approved" | "rejected";
+/** timeout = 아무도 결정하지 않은 채 폴링 창이 끝남 — 사람의 거부(rejected)와 구분해 표기 */
+export type ApprovalDecisionOutcome = "approved" | "rejected" | "timeout";
 
 export type ClosedLoopRuntimeDeps = {
   sessionId: string;
@@ -100,7 +101,11 @@ export function createClosedLoopEffects(deps: ClosedLoopRuntimeDeps): ClosedLoop
       const sourceItemId = response.approval?.sourceItemId ?? id;
       const decision = await deps.awaitApprovalDecision(sourceItemId, { command, stepIndex });
       if (decision !== "approved") {
-        throw new Error(`approval ${decision} for verification step ${stepIndex}`);
+        throw new Error(
+          decision === "timeout"
+            ? `approval timeout for verification step ${stepIndex} — 승인 큐에서 제한 시간 내 결정이 없었습니다`
+            : `approval ${decision} for verification step ${stepIndex}`,
+        );
       }
 
       const replay: DesktopApprovalReplayResponse = await replayClient({
@@ -164,7 +169,7 @@ export async function pollForApprovalDecision(input: {
       return "rejected";
     }
     if (nowMs() - startedAt >= timeoutMs) {
-      return "rejected";
+      return "timeout";
     }
     await sleep(intervalMs);
   }

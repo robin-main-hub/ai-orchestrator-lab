@@ -55,4 +55,35 @@ describe("ControlQueueDrawer", () => {
     expect(html).not.toContain("비활성화됨");
     expect(html).not.toContain("Control Queue");
   });
+
+  it("승인 직후 재전송이 막히면 그 이유를 드로어 안에서 바로 보여준다", () => {
+    // 승인 클릭 → 서버 게이트(blocked)인데 드로어에 아무것도 안 떠서
+    // "승인했는데 아무 일도 안 일어남"으로 보이던 회귀 케이스
+    const html = renderToStaticMarkup(
+      <ControlQueueDrawer
+        onAsk={vi.fn()}
+        onApprove={vi.fn()}
+        onBlock={vi.fn()}
+        onClose={vi.fn()}
+        onDelegate={vi.fn()}
+        onEdit={vi.fn()}
+        onReject={vi.fn()}
+        open
+        redispatchOutcomes={[
+          {
+            approvalId: "approval_1",
+            createdAt: "2026-06-13T00:00:00.000Z",
+            reason: "ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS is not enabled on this server",
+            role: "code",
+            status: "blocked",
+          },
+        ]}
+        snapshot={snapshot}
+      />,
+    );
+
+    expect(html).toContain("승인 후 재전송 결과");
+    expect(html).toContain("차단");
+    expect(html).toContain("ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS is not enabled on this server");
+  });
 });

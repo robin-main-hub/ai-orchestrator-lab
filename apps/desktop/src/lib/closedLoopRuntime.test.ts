@@ -115,7 +115,8 @@ describe("pollForApprovalDecision", () => {
     expect(outcome).toBe("rejected");
   });
 
-  it("gives up (rejected) once the timeout elapses", async () => {
+  it("resolves timeout (not rejected) when nobody decides within the window", async () => {
+    // 사람이 거부한 적 없는데 "거부됨"으로 보이던 회귀 케이스 — 타임아웃은 별도 상태다
     const fetchQueue = vi.fn().mockResolvedValue({ approvals: [], queue: [] } as any);
     let t = 0;
     const outcome = await pollForApprovalDecision({
@@ -127,6 +128,6 @@ describe("pollForApprovalDecision", () => {
       timeoutMs: 1_000,
       nowMs: () => t,
     });
-    expect(outcome).toBe("rejected");
+    expect(outcome).toBe("timeout");
   });
 });

@@ -4,6 +4,7 @@ import type { StatusBadgeVariant } from "@/ui/status-badge";
 import type { AutonomyMode, RunAutonomousPersonaTaskInput } from "./autonomousRun";
 import type { LoopStatus } from "./closedLoopController";
 import { createSummonRegistry, type SummonContext } from "./personaSummon";
+import { isAutoApprovableCommand } from "./safeCommandPolicy";
 
 /**
  * Pure form model + input assembly for the Autonomy Run panel. Keeps all the
@@ -50,6 +51,19 @@ export function parseVerificationSteps(text: string): string[] {
 }
 
 export type RunnableVerdict = { ok: boolean; reason?: string };
+
+/**
+ * auto_safe 모드에서 자동승인되지 못할 검증 단계 목록. 입력 시점에 보여줘
+ * "실행이 조용히 사람 승인 대기에 빠지는" 함정을 미리 알린다.
+ */
+export function nonAutoApprovableSteps(form: AutonomyRunForm): string[] {
+  if (form.mode !== "auto_safe") {
+    return [];
+  }
+  return parseVerificationSteps(form.verificationStepsText).filter(
+    (step) => !isAutoApprovableCommand(step).allowed,
+  );
+}
 
 export function isRunnable(form: AutonomyRunForm): RunnableVerdict {
   if (!form.personaName.trim()) {

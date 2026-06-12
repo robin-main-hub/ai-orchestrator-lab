@@ -5,6 +5,7 @@ import {
   loopStatusBadgeVariant,
   loopStatusLabel,
   modeLabel,
+  nonAutoApprovableSteps,
   SELECTABLE_PANE_ROLES,
   type AutonomyRunForm,
   type RunnableVerdict,
@@ -50,6 +51,7 @@ export function AutonomyRunPanel({
   gateDetail,
   onOpenDebate,
   onOpenApprovalQueue,
+  approvalWaitNote,
   personaAvatars,
   personaSprites,
   expression,
@@ -77,6 +79,8 @@ export function AutonomyRunPanel({
   onOpenDebate?: () => void;
   /** 사람 승인이 필요할 때 승인 드로어를 여는 핸들러 — 탭 이동 없이 제자리에서 승인 */
   onOpenApprovalQueue?: () => void;
+  /** 디스패치가 승인 큐에서 대기 중일 때의 실시간 안내 (auto_safe에서 자동승인 불가 명령 등) */
+  approvalWaitNote?: string;
   /** persona slug -> avatar image url (from imported character cards) */
   personaAvatars?: Record<string, string>;
   /** persona slug -> { expression -> sprite url } */
@@ -226,6 +230,14 @@ export function AutonomyRunPanel({
             rows={4}
             value={form.verificationStepsText}
           />
+          {(() => {
+            const manualSteps = nonAutoApprovableSteps(form);
+            return manualSteps.length > 0 ? (
+              <p className="autonomy-step-warning">
+                자동승인 목록 밖 — 실행 시 사람 승인 필요: {manualSteps.join(", ")}
+              </p>
+            ) : null;
+          })()}
         </label>
 
         {!runnable.ok && runnable.reason ? (
@@ -275,12 +287,15 @@ export function AutonomyRunPanel({
 
       {(steps && steps.some((s) => s.action === "escalate_approval")) ||
       (outcome?.ok && outcome.loopStatus === "awaiting_human") ||
-      (running && form.mode === "human") ? (
+      (running && form.mode === "human") ||
+      approvalWaitNote ? (
         <div className="autonomy-hud-alarm" role="status">
           <span className="autonomy-hud-beacon" aria-hidden="true" />
-          {running && form.mode === "human" && !(outcome?.ok && outcome.loopStatus === "awaiting_human")
-            ? "사람 승인 모드 — 디스패치마다 승인이 필요합니다"
-            : "auth required — 사람 승인 대기"}
+          {approvalWaitNote
+            ? approvalWaitNote
+            : running && form.mode === "human" && !(outcome?.ok && outcome.loopStatus === "awaiting_human")
+              ? "사람 승인 모드 — 디스패치마다 승인이 필요합니다"
+              : "auth required — 사람 승인 대기"}
           {onOpenApprovalQueue ? (
             <button
               className="rail-icon-button autonomy-open-approvals"
