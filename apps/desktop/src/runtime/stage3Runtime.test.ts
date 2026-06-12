@@ -252,6 +252,7 @@ describe("stage3 debate runtime", () => {
       runtime,
       fetchImpl: fakeFetch as any,
       createdAt: "2026-06-05T00:00:00.000Z",
+      consensus: false, // 모든 에이전트 발언 검증 — 합의 조기 종료 비활성
     });
 
     expect(seenBindings).toEqual(

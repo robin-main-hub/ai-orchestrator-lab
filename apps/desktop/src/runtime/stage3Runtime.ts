@@ -359,6 +359,11 @@ export async function runStage3DebateSession(
     debateId?: string;
     fetchImpl?: typeof fetch;
     perAgentTimeoutMs?: number;
+    /**
+     * P1-7: 합의 기반 조기 종료(Aegean). 켜면 라운드마다 발언들의 의미적 합의를
+     * 감지해, 다수 의견이 β 라운드 지속되면 남은 라운드를 건너뛴다. 기본 켬.
+     */
+    consensus?: { alpha?: number; beta?: number; similarityThreshold?: number } | false;
   },
 ): Promise<Stage3DebateSession> {
   const fetchImpl = input.fetchImpl ?? fetch;
@@ -436,6 +441,9 @@ export async function runStage3DebateSession(
       perAgentTimeoutMs: input.perAgentTimeoutMs ?? 30000,
       allowMultiPersonaRoles: allowMultiPersonaRoles.length > 0 ? allowMultiPersonaRoles : ["skeptic"],
     },
+    // P1-7: 명시적으로 false면 끄고, 아니면 기본 합의 종료(α는 발언자 과반 자동)
+    consensus:
+      input.consensus === false ? undefined : { beta: 2, similarityThreshold: 0.5, ...(input.consensus ?? {}) },
   });
 
   // 패치 3: accept/reject/ref 마커를 스키마 링크로 — 의장 confidence가 진짜 신호를 받는다
