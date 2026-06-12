@@ -1,5 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   __test,
   createDgxOrchestratorAuthHeaders,
@@ -9,12 +9,14 @@ import {
 
 const DEV_TOKEN = "dev-orchestrator-token";
 
-// 로컬 .env에 실제 토큰이 있어도 테스트는 dev 폴백 토큰 기준으로 — 머신 환경 비의존
+// 로컬 .env에 실제 토큰이 있어도 테스트는 dev 폴백 토큰 기준으로 — 머신 환경 비의존.
+// vi.stubEnv·test.env는 vitest 3에서 모듈별 import.meta.env 사본에 닿지 않으므로
+// 모듈이 제공하는 테스트 전용 오버라이드를 쓴다.
 beforeAll(() => {
-  vi.stubEnv("VITE_ORCHESTRATOR_API_TOKEN", "");
+  __test.setTokenOverrideForTests("");
 });
 afterAll(() => {
-  vi.unstubAllEnvs();
+  __test.setTokenOverrideForTests(null);
 });
 
 function expectedBodyHash(body = "") {
