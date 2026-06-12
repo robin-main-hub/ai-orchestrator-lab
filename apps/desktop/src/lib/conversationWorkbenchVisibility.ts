@@ -22,11 +22,13 @@ export interface V0ConversationActionItem {
 
 export function getConversationWorkbenchVisibility({
   pendingApprovalCount,
-  pendingProviderRetry,
 }: ConversationWorkbenchVisibilityInput): ConversationWorkbenchVisibility {
   return {
     showComposerDelegationChips: false,
-    showInlineApprovalQueue: pendingProviderRetry && pendingApprovalCount > 0,
+    // 승인 대기가 있으면 항상 카드를 띄운다 — 대화 도구 루프가 사람 승인을
+    // 기다리는 동안 카드가 없으면 턴이 멈춘 것처럼 보인다 (provider retry
+    // 시나리오에만 묶여 있던 과거 조건이 그 증상의 원인이었다)
+    showInlineApprovalQueue: pendingApprovalCount > 0,
     showInlineDelegation: false,
     showOverflowBranchControls: false,
   };

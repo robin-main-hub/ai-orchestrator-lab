@@ -62,6 +62,24 @@ describe("MessageThread — OpenCode 메커니즘", () => {
     expect(html).toContain("작성 중");
   });
 
+  it("승인 대기 중이면 드래프트 버블에 허용/계열 허용/거절 버튼을 띄운다", () => {
+    const html = renderThread({
+      streamingPreview: {
+        agentId: agent.id,
+        text: "⏳ 승인 대기: cat > tetris/index.html",
+        pendingApproval: { sourceItemId: "conv_item_1", command: 'cat > "tetris/index.html"' },
+      },
+      onApprovePermission: () => {},
+      onApproveCommandPattern: () => {},
+      onRejectPermission: () => {},
+    });
+    expect(html).toContain("streaming-approval-actions");
+    expect(html).toContain("허용");
+    expect(html).toContain("계열 허용");
+    expect(html).toContain("거절");
+    expect(html).toContain("승인 대기 중");
+  });
+
   it("다른 에이전트의 스트림은 현재 채널에 그리지 않는다", () => {
     const html = renderThread({
       streamingPreview: { agentId: "agent_other", text: "다른 채널 스트림" },

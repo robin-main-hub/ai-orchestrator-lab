@@ -468,7 +468,12 @@ export function App() {
       return "build";
     }
   });
-  const [streamingPreview, setStreamingPreview] = useState<{ agentId: string; text: string } | null>(null);
+  const [streamingPreview, setStreamingPreview] = useState<{
+    agentId: string;
+    text: string;
+    /** 도구 실행이 인간 승인을 기다리는 중 — 버블에 허용/계열 허용/거절 버튼을 띄운다 */
+    pendingApproval?: { sourceItemId: string; command: string };
+  } | null>(null);
   const [queuedConversationMessages, setQueuedConversationMessages] = useState<string[]>([]);
   const [sessionApprovedPrefixes, setSessionApprovedPrefixes] = useState<string[]>([]);
   const [conversationCondensateByAgentId, setConversationCondensateByAgentId] = useState<Record<string, Condensate>>({});
@@ -2254,7 +2259,8 @@ export function App() {
           void handleRefreshApprovalQueue();
           setStreamingPreview({
             agentId: selectedAgent.id,
-            text: `${streamedSoFar.trim() ? `${streamedSoFar}\n\n` : ""}⏳ 승인 대기: ${context.command.slice(0, 120)}\n위 승인 카드에서 허용/거절을 선택하세요 (최대 5분).`,
+            text: `${streamedSoFar.trim() ? `${streamedSoFar}\n\n` : ""}⏳ 승인 대기: ${context.command.slice(0, 120)}`,
+            pendingApproval: { sourceItemId, command: context.command },
           });
           return pollForApprovalDecision({ sourceItemId, timeoutMs: 300_000 });
         };
