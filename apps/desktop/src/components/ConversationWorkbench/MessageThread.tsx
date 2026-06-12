@@ -77,8 +77,12 @@ export function MessageThread({
   agents: WorkbenchAgent[];
   agentVisualsById?: Record<string, AgentVisualSettings>;
   agentActivityById?: Record<string, AgentActivityStatus>;
-  /** 항목 1 — 진행 중 스트리밍 텍스트(점진 렌더링) */
-  streamingPreview?: { agentId: string; text: string } | null;
+  /** 항목 1 — 진행 중 스트리밍 텍스트(점진 렌더링, 승인 대기 시 인라인 액션 포함) */
+  streamingPreview?: {
+    agentId: string;
+    text: string;
+    pendingApproval?: { sourceItemId: string; command: string };
+  } | null;
   /** 항목 9 — 어시스턴트 턴 롤백 */
   onRollbackTurn?: (assistantMessageId: string) => void;
   /** 항목 10 — "이 명령 계열 세션 동안 허용" */
@@ -141,6 +145,10 @@ export function MessageThread({
               agent={selectedAgent}
               agentVisualsById={agentVisualsById}
               text={streamingDraftText}
+              pendingApproval={streamingPreview?.pendingApproval}
+              onApprove={onApprovePermission}
+              onApprovePattern={onApproveCommandPattern}
+              onReject={onRejectPermission}
             />
           ) : null}
           {showPendingBubble && selectedAgent && thinkingIndicator ? (
@@ -340,15 +348,23 @@ function AssistantPendingBubble({
   );
 }
 
-/** 항목 1 — 스트리밍 중 점진 렌더링되는 드래프트 버블 */
+/** 항목 1 — 스트리밍 중 점진 렌더링되는 드래프트 버블 (+승인 대기 시 인라인 액션 3개) */
 function StreamingDraftBubble({
   agent,
   agentVisualsById,
   text,
+  pendingApproval,
+  onApprove,
+  onApprovePattern,
+  onReject,
 }: {
   agent: WorkbenchAgent;
   agentVisualsById?: Record<string, AgentVisualSettings>;
   text: string;
+  pendingApproval?: { sourceItemId: string; command: string };
+  onApprove?: (sourceItemId: string) => void;
+  onApprovePattern?: (command: string) => void;
+  onReject?: (sourceItemId: string) => void;
 }) {
   const visual = agentVisualsById?.[agent.id];
   const displayName = agentPrimaryDisplayName(agent);
@@ -364,13 +380,53 @@ function StreamingDraftBubble({
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2 px-1">
           <span className="text-xs font-semibold text-zinc-200">{displayName}</span>
-          <span className="text-[10px] text-cyan-400">작성 중…</span>
+          <span className="text-[10px] text-cyan-400">{pendingApproval ? "승인 대기 중" : "작성 중…"}</span>
         </div>
         <div className="rounded-2xl rounded-tl-md border border-cyan-300/15 bg-zinc-900/70 p-3 shadow-lg shadow-black/20 backdrop-blur-xl">
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
             {text}
-            <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse bg-cyan-300 align-middle" aria-hidden="true" />
+            {!pendingApproval ? (
+              <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse bg-cyan-300 align-middle" aria-hidden="true" />
+            ) : null}
           </p>
+          {pendingApproval ? (
+            <div
+              className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2"
+              data-testid="streaming-approval-actions"
+            >
+              <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-amber-300" />
+              <span className="text-[11px] text-amber-200">이 명령을 실행할까요?</span>
+              <div className="flex flex-wrap gap-1.5">
+                <Button
+                  className="h-7 gap-1 text-xs"
+                  onClick={() => onApprove?.(pendingApproval.sourceItemId)}
+                  size="sm"
+                >
+                  <Check className="h-3 w-3" /> 허용
+                </Button>
+                <Button
+                  className="h-7 gap-1 text-xs text-cyan-200"
+                  onClick={() => {
+                    onApprovePattern?.(pendingApproval.command);
+                    onApprove?.(pendingApproval.sourceItemId);
+                  }}
+                  size="sm"
+                  title="이 명령 계열(프리픽스)을 세션 동안 자동 승인합니다"
+                  variant="ghost"
+                >
+                  <Check className="h-3 w-3" /> 계열 허용
+                </Button>
+                <Button
+                  className="h-7 gap-1 text-xs text-red-200"
+                  onClick={() => onReject?.(pendingApproval.sourceItemId)}
+                  size="sm"
+                  variant="ghost"
+                >
+                  <X className="h-3 w-3" /> 거절
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
