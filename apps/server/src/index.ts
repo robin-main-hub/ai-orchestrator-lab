@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { resolveSwarmScriptPath } from "./swarmScriptPath.js";
+import { resolveSwarmScriptPath, swarmScriptCwd } from "./swarmScriptPath.js";
 import * as crypto from "node:crypto";
 import type {
   AgentDelegationAuthorityLevel,
@@ -3982,6 +3982,7 @@ async function dispatchServerTmuxCommandIfAllowed(
 
   try {
     const result = await execFileAsync(scriptPath, [request.role, request.commandPreview], {
+      cwd: swarmScriptCwd(scriptPath),
       env: getFilteredSubprocessEnv({
         AI_SWARM_SESSION: request.tmuxSessionName,
       }),
@@ -4014,6 +4015,7 @@ async function captureServerTmuxPane(request: ServerTmuxCaptureRequest): Promise
   });
   const timeoutMs = Number(process.env.ORCHESTRATOR_TMUX_CAPTURE_TIMEOUT_MS ?? 10_000);
   const result = await execFileAsync(scriptPath, [request.role, "--lines", String(request.lines)], {
+    cwd: swarmScriptCwd(scriptPath),
     env: getFilteredSubprocessEnv({
       AI_SWARM_SESSION: request.tmuxSessionName,
     }),
