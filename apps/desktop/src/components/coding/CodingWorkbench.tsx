@@ -32,6 +32,7 @@ import { requestTmuxCapture } from "../../runtime/stage33TmuxServer";
 import { loadCodingSessions, saveCodingSessions } from "../../lib/codingChatStore";
 import { createGatedToolExecutor, runCodingTurn, toolToCommand } from "../../lib/codingTurnRunner";
 import { workspaceChangeLedger } from "../../lib/workspaceChangeLedger";
+import { buildRepoMap } from "../../lib/repoMap";
 import { createApprovalStrategy, type AutonomyMode } from "../../lib/autonomousRun";
 import { createClosedLoopEffects } from "../../lib/closedLoopRuntime";
 import {
@@ -85,6 +86,8 @@ export function CodingWorkbench({
   const [approvalMode, setApprovalMode] = useState<AutonomyMode>("human");
   const cancelRef = useRef(false);
   const modelSelectRef = useRef<HTMLInputElement | null>(null);
+  // P0-3: read/write로 본 파일 내용을 세션 동안 누적 → repo-map(자동 파일 선택) 인덱스
+  const fileCacheRef = useRef<Map<string, string>>(new Map());
 
   const active = sessions.find((session) => session.id === activeId) ?? null;
 
@@ -156,13 +159,30 @@ export function CodingWorkbench({
     patchSession(session.id, () => working);
 
     const mentions = extractMentions(userText);
-    const system = buildSystemPrompt({ agentMode: working.agentMode, mentions, workingDir });
+    // P0-3: 지금까지 누적한 파일들로 repo-map을 만들어 시스템 프롬프트에 주입.
+    // 2개 이상 봤을 때만(맵이 의미 있으려면) 생성한다.
+    const repoFiles = Array.from(fileCacheRef.current, ([path, content]) => ({ path, content }));
+    const repoMap =
+      repoFiles.length >= 2
+        ? buildRepoMap({ files: repoFiles, chatFiles: mentions, maxTokens: 800 }).repoMap
+        : "";
+    const system = buildSystemPrompt({ agentMode: working.agentMode, mentions, workingDir, repoMap });
     const effects = buildEffects(working);
     const gatedExecutor = createGatedToolExecutor(effects);
     // Phase A: 모든 도구 호출을 워크스페이스 변경 원장에 기록 — 대화 탭 Diff/Files 패널이 구독
     const executeTool: typeof gatedExecutor = async (call) => {
       workspaceChangeLedger.recordToolCall(call);
-      return gatedExecutor(call);
+      const result = await gatedExecutor(call);
+      // P0-3: 파일 내용을 repo-map 인덱스에 누적 (write는 입력 콘텐츠, read는 출력)
+      const path = String(call.input.path ?? "").trim();
+      if (path) {
+        if (call.tool === "write" && typeof call.input.content === "string") {
+          fileCacheRef.current.set(path, call.input.content);
+        } else if (call.tool === "read" && result.status === "completed" && result.output) {
+          fileCacheRef.current.set(path, result.output);
+        }
+      }
+      return result;
     };
 
     let assistantMessageId = "";
