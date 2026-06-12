@@ -167,12 +167,17 @@ describe("toolToCommand", () => {
     const write = toolToCommand(call("write", { path: "a.txt", content: "hello\nworld" }))!;
     expect(write).toContain('cat > "a.txt"');
     expect(write).toContain("__ORCH_EOF__");
-    expect(toolToCommand(call("edit", { path: "a", diff: "x" }))).toBeNull();
+    // edit는 이제 search/replace를 python 적용 명령으로 변환 (전체 덮어쓰기 X)
+    const edit = toolToCommand(call("edit", { path: "a.ts", search: "x", replace: "y" }))!;
+    expect(edit).toContain("python3 - <<'__ORCH_PYEDIT__'");
+    expect(edit).toContain("os.replace(tmp,path)");
+    // 입력이 비면 null
+    expect(toolToCommand(call("edit", { path: "a.ts" }))).toBeNull();
   });
 });
 
 describe("createGatedToolExecutor", () => {
-  it("dispatches through the gate then captures output; todo/edit stay local", async () => {
+  it("dispatches through the gate then captures output; todo stays local, edit applies via the gate", async () => {
     const dispatched: string[] = [];
     const effects = {
       dispatch: vi.fn(async (command: string) => void dispatched.push(command)),
@@ -186,9 +191,19 @@ describe("createGatedToolExecutor", () => {
 
     const todo = await execute({ id: "t1", tool: "todo", title: "", input: { items: ["a", "b"] }, status: "running" });
     expect(todo.output).toBe("□ a\n□ b");
-    const edit = await execute({ id: "t2", tool: "edit", title: "", input: { path: "x", diff: "d" }, status: "running" });
+    expect(effects.dispatch).toHaveBeenCalledTimes(1); // todo stays local
+
+    // edit now applies through the gate (search/replace → python), no longer a local no-op
+    const edit = await execute({
+      id: "t2",
+      tool: "edit",
+      title: "",
+      input: { path: "x.ts", search: "a", replace: "b" },
+      status: "running",
+    });
     expect(edit.status).toBe("completed");
-    expect(effects.dispatch).toHaveBeenCalledTimes(1); // only bash hit the gate
+    expect(effects.dispatch).toHaveBeenCalledTimes(2);
+    expect(dispatched[1]).toContain("python3 - <<'__ORCH_PYEDIT__'");
   });
 });
 
