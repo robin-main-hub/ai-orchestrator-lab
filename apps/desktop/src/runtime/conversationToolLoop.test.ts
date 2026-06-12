@@ -145,10 +145,10 @@ describe("runConversationToolLoop", () => {
     expect(result.finalContent).toBe("파일을 수정했습니다");
   });
 
-  it("feeds diagnostics errors back to the model for one corrective round", async () => {
+  it("feeds STRUCTURED diagnostics back to the model when it can't fix", async () => {
     const { complete, seen } = completeQueue([
       "수정 완료",
-      "오류 원인: a.ts의 타입 불일치 — number를 string으로 바꿔야 합니다",
+      "오류 원인: a.ts의 타입 불일치 — number를 string으로 바꿔야 합니다", // 도구 없음 → 자기수정 중단
     ]);
     const result = await runConversationToolLoop({
       initialReply: fence('{"tool":"write","path":"a.ts","content":"x"}'),
@@ -165,9 +165,66 @@ describe("runConversationToolLoop", () => {
     expect(result.diagnostics).toMatchObject({ ok: false });
     expect(result.finalContent).toContain("수정 완료");
     expect(result.finalContent).toContain("타입 불일치");
-    // corrective round saw the diagnostics output
-    const lastConversation = seen[seen.length - 1]!;
-    expect(lastConversation[lastConversation.length - 1]!.content).toContain("error TS2322");
+    // 자기수정 피드백은 구조화된 형태(파일:라인 + 코드)로 전달된다
+    const feedback = seen[seen.length - 1]!.map((m) => m.content).join("\n");
+    expect(feedback).toContain("a.ts:3:1");
+    expect(feedback).toContain("TS2322");
+  });
+
+  it("자기수정: 진단 실패 → edit로 고치고 재진단하면 통과 (P1-4)", async () => {
+    const { complete } = completeQueue([
+      "파일을 작성했습니다", // 메인 루프 종료(도구 없음)
+      fence('{"tool":"edit","path":"a.ts","search":"bad","replace":"good"}'), // 자기수정 라운드
+      "타입 오류를 고쳤습니다",
+    ]);
+    let tscRuns = 0;
+    const result = await runConversationToolLoop({
+      initialReply: fence('{"tool":"write","path":"a.ts","content":"bad"}'),
+      baseMessages,
+      agentMode: "build",
+      complete,
+      executeTool: async (call: ToolCall) => {
+        if (call.tool === "bash") {
+          tscRuns += 1;
+          return tscRuns === 1
+            ? { status: "completed", output: "a.ts(1,1): error TS2322: bad type" } // 첫 진단 실패
+            : { status: "completed", output: "Found 0 errors." }; // 재진단 통과
+        }
+        return { status: "completed", output: "applied" };
+      },
+      makeToolId,
+      diagnosticsCommands: ["tsc --noEmit"],
+      maxFixAttempts: 2,
+    });
+    expect(tscRuns).toBe(2); // 최초 진단 + 자기수정 후 재진단
+    expect(result.diagnostics?.ok).toBe(true);
+    expect(result.diagnostics?.fixAttempts).toBe(1);
+    expect(result.toolCalls.some((c) => c.tool === "edit")).toBe(true);
+  });
+
+  it("다단계 파이프라인: 첫 단계(tsc) 실패 시 다음 단계로 넘어가지 않는다", async () => {
+    const { complete } = completeQueue(["작성 완료", "고치지 못했습니다"]);
+    const ran: string[] = [];
+    const result = await runConversationToolLoop({
+      initialReply: fence('{"tool":"write","path":"a.ts","content":"x"}'),
+      baseMessages,
+      agentMode: "build",
+      complete,
+      executeTool: async (call: ToolCall) => {
+        if (call.tool === "bash") {
+          ran.push(String(call.input.command));
+          return { status: "completed", output: "a.ts(1,1): error TS2322: nope" };
+        }
+        return { status: "completed", output: "written" };
+      },
+      makeToolId,
+      diagnosticsCommands: ["tsc --noEmit", "eslint ."],
+      maxFixAttempts: 1,
+    });
+    // tsc가 실패했으니 eslint 단계는 (수정 전엔) 실행되지 않는다
+    expect(ran.filter((c) => c.includes("tsc")).length).toBeGreaterThanOrEqual(1);
+    expect(ran.some((c) => c.includes("eslint"))).toBe(false);
+    expect(result.diagnostics?.stages?.[0]).toMatchObject({ tool: "tsc", ok: false });
   });
 
   it("skips diagnostics when no mutating tool succeeded", async () => {
