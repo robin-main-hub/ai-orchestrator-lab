@@ -6,6 +6,7 @@ import {
   isRunnable,
   loopStatusBadgeVariant,
   loopStatusLabel,
+  nonAutoApprovableSteps,
   parseVerificationSteps,
   type AutonomyRunForm,
 } from "./autonomyRunForm";
@@ -74,5 +75,25 @@ describe("loop status presentation", () => {
     expect(loopStatusBadgeVariant("completed")).toBe("success");
     expect(loopStatusBadgeVariant("failed")).toBe("danger");
     expect(loopStatusBadgeVariant("awaiting_human")).toBe("warning");
+  });
+});
+
+describe("nonAutoApprovableSteps", () => {
+  it("flags steps outside the safe allowlist only in auto_safe mode", () => {
+    const form = {
+      ...DEFAULT_AUTONOMY_FORM,
+      mode: "auto_safe" as const,
+      verificationStepsText: "pnpm typecheck\npnpm --version\nrm -rf dist",
+    };
+    expect(nonAutoApprovableSteps(form)).toEqual(["pnpm --version", "rm -rf dist"]);
+  });
+
+  it("returns nothing in human mode (every step needs approval anyway)", () => {
+    const form = {
+      ...DEFAULT_AUTONOMY_FORM,
+      mode: "human" as const,
+      verificationStepsText: "pnpm --version",
+    };
+    expect(nonAutoApprovableSteps(form)).toEqual([]);
   });
 });
