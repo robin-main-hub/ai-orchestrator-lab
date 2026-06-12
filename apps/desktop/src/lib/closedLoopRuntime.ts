@@ -40,7 +40,10 @@ export type ClosedLoopRuntimeDeps = {
    * Ops queue for a human grant; mode B may auto-approve safe commands. The
    * dispatched command is passed as context so a policy can decide on it.
    */
-  awaitApprovalDecision: (sourceItemId: string, context: { command: string }) => Promise<ApprovalDecisionOutcome>;
+  awaitApprovalDecision: (
+    sourceItemId: string,
+    context: { command: string; stepIndex?: number },
+  ) => Promise<ApprovalDecisionOutcome>;
   /** deterministic id per dispatched step; receives the step index (-1 for captures) */
   newId: (stepIndex: number) => string;
   now?: () => string;
@@ -95,7 +98,7 @@ export function createClosedLoopEffects(deps: ClosedLoopRuntimeDeps): ClosedLoop
 
       // pending_approval / recorded: a human must approve in the Ops queue first.
       const sourceItemId = response.approval?.sourceItemId ?? id;
-      const decision = await deps.awaitApprovalDecision(sourceItemId, { command });
+      const decision = await deps.awaitApprovalDecision(sourceItemId, { command, stepIndex });
       if (decision !== "approved") {
         throw new Error(`approval ${decision} for verification step ${stepIndex}`);
       }

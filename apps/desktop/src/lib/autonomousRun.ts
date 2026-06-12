@@ -32,7 +32,7 @@ export type AutonomyMode = "human" | "auto_safe";
 
 export type ApprovalStrategy = (
   sourceItemId: string,
-  context: { command: string },
+  context: { command: string; stepIndex?: number },
 ) => Promise<ApprovalDecisionOutcome>;
 
 export type AutonomyServerConfig = {
