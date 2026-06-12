@@ -7982,8 +7982,7 @@ body:has(.app-shell.annex-focus-shell) {
 }
 
 /* ── Persona gacha cards + autonomy avatars/expressions ───────────────── */
-.autonomy-persona-avatar,
-.autonomy-roster-avatar {
+.autonomy-persona-avatar {
   border-radius: 50%;
   object-fit: cover;
   vertical-align: middle;
@@ -9102,6 +9101,31 @@ body:has(.app-shell.annex-focus-shell) {
   color: var(--text);
   padding: 8px 10px;
   font-size: 13px;
+}
+/* 역할 pane 드롭다운 트리거 — 옆의 승인 모드 select와 같은 결로 보이게 */
+.role-pane-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--panel) 88%, black);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.role-pane-trigger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.role-pane-trigger-role {
+  flex: 1;
+}
+.role-pane-trigger-chevron {
+  opacity: 0.55;
+  flex-shrink: 0;
 }
 .autonomy-run-form textarea {
   font-family: var(--font-mono, monospace);
