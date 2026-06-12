@@ -19,8 +19,14 @@ export class DgxAuthCryptoError extends Error {
   }
 }
 
+// vitest 3은 모듈마다 import.meta.env 사본을 주입해서 테스트 쪽에서
+// vi.stubEnv·test.env·직접 대입 어느 것으로도 이 모듈이 읽는 env를 비울 수 없다.
+// 테스트가 __test.setTokenOverrideForTests로만 주입하는 우회 통로 (런타임 경로 불변).
+let testTokenOverride: string | null = null;
+
 export function resolveDgxOrchestratorApiToken() {
-  const token = ((import.meta as DesktopImportMeta).env?.VITE_ORCHESTRATOR_API_TOKEN ?? "").trim();
+  const raw = testTokenOverride ?? ((import.meta as DesktopImportMeta).env?.VITE_ORCHESTRATOR_API_TOKEN ?? "");
+  const token = raw.trim();
   return token || DEV_ORCHESTRATOR_API_TOKEN;
 }
 
@@ -239,5 +245,8 @@ function bytesToHex(bytes: Uint8Array) {
 }
 
 export const __test = {
+  setTokenOverrideForTests(value: string | null) {
+    testTokenOverride = value;
+  },
   writeSha256MessageLength,
 };
