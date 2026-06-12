@@ -6,7 +6,7 @@ import { createAutonomyRunEvents, type AutonomyRunEventContext } from "../lib/au
 import { projectAutonomyRunHistory } from "../lib/autonomyRunHistory";
 import { rosterFromRegistry } from "../lib/autonomyRoster";
 import { createAutonomyRunMemoryCandidate } from "../lib/autonomyRunMemory";
-import type { DebateDecisionReadinessState } from "../lib/debateDecisionReadiness";
+import type { DebateDecisionReadiness } from "../lib/debateDecisionReadiness";
 import { evaluateExecutionHandoffGate } from "../lib/executionHandoffGate";
 import type { MemoryCuratorCandidate } from "../lib/memoryCuratorApproval";
 import type { SummonRegistry } from "../lib/personaSummon";
@@ -55,6 +55,7 @@ export function AutonomyRunContainer({
   onRunEvents,
   historyEvents,
   decisionReadiness,
+  onOpenDebate,
   onRunMemory,
   registry,
   onRegistryChange,
@@ -70,8 +71,11 @@ export function AutonomyRunContainer({
   onRunEvents?: (events: EventEnvelope[]) => void;
   /** event log to project past autonomy runs from (for the history view) */
   historyEvents?: ReadonlyArray<EventEnvelope>;
-  /** debate decision readiness — gates/forces the handoff mode when provided */
-  decisionReadiness?: DebateDecisionReadinessState;
+  /** debate decision readiness — gates/forces the handoff mode when provided
+   *  (전체 객체를 받아 차단 사유·다음 행동까지 패널 콜아웃에 보여준다) */
+  decisionReadiness?: DebateDecisionReadiness;
+  /** 게이트가 막혔을 때 토론 화면으로 이동하는 딥링크 */
+  onOpenDebate?: () => void;
   /** receives a long-term memory candidate summarizing a finished run */
   onRunMemory?: (candidate: MemoryCuratorCandidate) => void;
   /** persistent shared pane pool; when provided, runs allocate from and update it */
@@ -104,7 +108,7 @@ export function AutonomyRunContainer({
 
   const gate =
     decisionReadiness !== undefined
-      ? evaluateExecutionHandoffGate({ readiness: decisionReadiness, requestedMode: form.mode })
+      ? evaluateExecutionHandoffGate({ readiness: decisionReadiness.state, requestedMode: form.mode })
       : undefined;
 
   const baseRunnable = isRunnable(form);
@@ -208,6 +212,8 @@ export function AutonomyRunContainer({
         }).expression
       }
       notice={notice}
+      gateDetail={gate && !gate.allowed ? decisionReadiness : undefined}
+      onOpenDebate={onOpenDebate}
       personaAvatars={personaAvatars}
       personaSprites={personaSprites}
       roster={registry ? rosterFromRegistry(registry) : undefined}

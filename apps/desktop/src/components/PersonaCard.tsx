@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Bot } from "lucide-react";
 import { StatusBadge } from "@/ui/status-badge";
 import { rarityBadgeVariant, rarityClassName, type PersonaCardModel } from "../lib/personaCard";
@@ -8,11 +9,21 @@ import { rarityBadgeVariant, rarityClassName, type PersonaCardModel } from "../l
  * emblem. Presentational + static-markup tested.
  */
 export function PersonaCard({ card, compact = false }: { card: PersonaCardModel; compact?: boolean }) {
+  // 아바타가 깨진 URL이면 배너 칸만 조용히 접는다 (헤더 초상은 placeholder가 받쳐줌)
+  const [bannerBroken, setBannerBroken] = useState(false);
   return (
     <article className={`persona-card ${rarityClassName(card.rarity)} ${compact ? "compact" : ""}`}>
-      {card.avatarUrl ? (
+      {card.avatarUrl && !bannerBroken ? (
         <div className="persona-card-banner">
-          <img src={card.avatarUrl} alt="" loading="lazy" />
+          {/* 배경은 blur cover로 칸을 채우고 전경은 contain — 정사각·투명배경 스프라이트도 잘리지 않는다 */}
+          <img className="persona-card-banner-backdrop" src={card.avatarUrl} alt="" aria-hidden="true" />
+          <img
+            className="persona-card-banner-art"
+            src={card.avatarUrl}
+            alt=""
+            loading="lazy"
+            onError={() => setBannerBroken(true)}
+          />
         </div>
       ) : null}
       <header className="persona-card-header">

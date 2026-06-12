@@ -26,6 +26,8 @@ function render(props: Partial<Parameters<typeof AutonomyRunPanel>[0]> = {}) {
       history={props.history}
       roster={props.roster}
       notice={props.notice}
+      gateDetail={props.gateDetail}
+      onOpenDebate={props.onOpenDebate}
       personaAvatars={props.personaAvatars}
       personaSprites={props.personaSprites}
       expression={props.expression}
@@ -50,6 +52,34 @@ describe("AutonomyRunPanel", () => {
     const html = render({ runnable: { ok: false, reason: "목표(goal)가 필요합니다" } });
     expect(html).toContain("disabled");
     expect(html).toContain("목표(goal)가 필요합니다");
+    // 비활성 사유는 버튼 자체에도 (툴팁으로) 달린다
+    expect(html).toContain('title="목표(goal)가 필요합니다"');
+  });
+
+  it("renders the gate callout with blockers, next action, and the debate deep-link", () => {
+    const html = render({
+      runnable: { ok: false, reason: "토론 결정이 막혀 있어 실행으로 넘길 수 없습니다" },
+      gateDetail: {
+        blockers: ["결정 노드 없음", "코딩 영향 발언 없음"],
+        nextActionLabel: "토론 결정 경계를 확인하세요.",
+      },
+      onOpenDebate: noop,
+    });
+    expect(html).toContain("autonomy-gate-callout");
+    expect(html).toContain("토론 결정이 막혀 있어 실행으로 넘길 수 없습니다");
+    expect(html).toContain("결정 노드 없음");
+    expect(html).toContain("코딩 영향 발언 없음");
+    expect(html).toContain("토론 결정 경계를 확인하세요.");
+    expect(html).toContain("토론으로 이동");
+  });
+
+  it("omits the debate deep-link button when no handler is provided", () => {
+    const html = render({
+      runnable: { ok: false, reason: "토론 결정이 막혀 있어 실행으로 넘길 수 없습니다" },
+      gateDetail: { blockers: [], nextActionLabel: "토론 결정 경계를 확인하세요." },
+    });
+    expect(html).toContain("autonomy-gate-callout");
+    expect(html).not.toContain("토론으로 이동");
   });
 
   it("shows the running state", () => {
