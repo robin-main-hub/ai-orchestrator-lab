@@ -91,6 +91,12 @@ import {
   type ConversationSlashCommand,
 } from "./lib/conversationSlashCommands";
 import { rollbackToTurn } from "./lib/conversationCheckpoints";
+import {
+  buildCreateSnapshotCommand,
+  buildRestoreFilesCommand,
+  parseSnapshotOutput,
+  resolveSnapshotRef,
+} from "./lib/gitSnapshot";
 import { readAttachmentContent } from "./lib/attachmentContent";
 import { condense, renderCondensate, type Condensate, type CondenserTurn } from "./lib/conversationCondenser";
 import { buildForkBrief, forkMissionFromConversation } from "./lib/conversationFork";
@@ -1883,9 +1889,10 @@ export function App() {
     return true;
   }
 
-  /** 항목 9 — 턴 롤백: 대화 절단 + 변경 파일 안내(파일은 자동 복원하지 않음) */
+  /** 항목 9 + P1-5 — 턴 롤백: 대화 절단 + git 스냅샷 기반 파일 복원 명령 안내 */
   function handleRollbackConversationTurn(assistantMessageId: string) {
     const sessionId = activeSessionIdRef.current;
+    const rolledMessage = conversationMessages.find((m) => m.id === assistantMessageId);
     const result = rollbackToTurn(conversationMessages, assistantMessageId);
     if (!result) return;
     setConversationMessages(() => result.messages);
@@ -1895,15 +1902,29 @@ export function App() {
       touchedFiles: result.touchedFiles,
     }, { sessionId });
     if (result.touchedFiles.length > 0) {
-      appendConversationNotice(
-        [
-          `턴을 되돌렸습니다 (메시지 ${result.removedCount}개 제거).`,
-          "이 턴의 도구 호출이 변경한 파일은 자동 복원되지 않습니다 — Diff 패널에서 확인하세요:",
-          ...result.touchedFiles.map((file) => `- ${file}`),
-        ].join("\n"),
-        sessionId,
-        { rollback: true, rolledBackMessageId: assistantMessageId },
-      );
+      // P1-5: 턴 스냅샷 ref가 있으면 그 시점으로, 없으면 HEAD 기준으로 복원.
+      // git checkout은 파괴적이라 자동 실행하지 않고 명령을 제시한다(비파괴 원칙).
+      const baseRef = (rolledMessage?.metadata?.snapshotRef as string | undefined) ?? "HEAD";
+      const restoreCommand = buildRestoreFilesCommand(baseRef, result.touchedFiles);
+      const lines = [
+        `턴을 되돌렸습니다 (메시지 ${result.removedCount}개 제거).`,
+        "이 턴이 변경한 파일:",
+        ...result.touchedFiles.map((file) => `- ${file}`),
+      ];
+      if (restoreCommand) {
+        lines.push(
+          "",
+          `파일도 ${baseRef === "HEAD" ? "마지막 커밋" : "턴 시작 시점"}으로 되돌리려면 이 명령을 실행하세요(코딩 탭/터미널):`,
+          "```",
+          restoreCommand,
+          "```",
+        );
+      }
+      appendConversationNotice(lines.join("\n"), sessionId, {
+        rollback: true,
+        rolledBackMessageId: assistantMessageId,
+        snapshotRef: baseRef,
+      });
     }
   }
 
@@ -2319,6 +2340,27 @@ export function App() {
           now: () => new Date().toISOString(),
         });
         const autoGrantExecutor = createGatedToolExecutor(autoGrantEffects);
+
+        // P1-5: 턴 시작 비파괴 스냅샷(git stash create). build 모드에서만, 실패해도
+        // 턴은 계속 진행. 스냅샷 ref를 어시스턴트 메시지 메타에 남겨 롤백 시 정확한
+        // 복원 기준으로 쓴다(없으면 HEAD).
+        let turnSnapshotRef: string | undefined;
+        if (conversationAgentMode === "build") {
+          try {
+            const snapId = `snap_${turnId}`;
+            const snap = await autoGrantExecutor({
+              id: `${turnId}_snap`,
+              tool: "bash",
+              title: "턴 스냅샷",
+              input: { command: buildCreateSnapshotCommand(snapId) },
+              status: "proposed",
+            });
+            turnSnapshotRef = resolveSnapshotRef(parseSnapshotOutput(snap.output)) ?? undefined;
+          } catch {
+            // 스냅샷 실패는 무시 — 롤백 시 HEAD 기준으로 폴백
+          }
+        }
+
         const toolLoop = await runConversationToolLoop({
           initialReply: reply,
           baseMessages: result.pipelineMessages.filter(
@@ -2429,6 +2471,7 @@ export function App() {
           ...completionMetadata,
           toolLoopRounds: toolLoop.rounds,
           toolLoopStatus: toolLoop.status,
+          ...(turnSnapshotRef ? { snapshotRef: turnSnapshotRef } : {}),
         };
       }
 
