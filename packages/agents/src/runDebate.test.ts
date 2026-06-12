@@ -191,6 +191,40 @@ describe("runDebate orchestration", () => {
     expect(result.stoppedEarly).toBe(false);
     expect(result.roundResults.length).toBe(0);
   });
+
+  it("P1-7: 합의가 β 라운드 지속되면 조기 종료한다", async () => {
+    // 라운드마다 2명 이상 발언하도록 여러 역할 슬롯을 주고, 전원 같은 결론 반복
+    const conclusion = "캐시를 도입하는 것이 최선이다. 캐시 도입에 찬성한다.";
+    const result = await runDebate({
+      debateId: "debate_consensus",
+      context: CTX,
+      initialRounds: createDebateRounds("debate_consensus"),
+      slots: [
+        slot(profile("c_orch", "지휘", "orchestrator"), conclusion),
+        slot(profile("c_arch", "시노부", "architect"), conclusion),
+        slot(profile("c_skep", "아스카", "skeptic"), conclusion),
+        slot(profile("c_build", "유이", "builder"), conclusion),
+      ],
+      consensus: { alpha: 2, beta: 2, similarityThreshold: 0.25 },
+    });
+    expect(result.consensusReached).toBe(true);
+    expect(result.stoppedEarly).toBe(true);
+    expect(result.consensusConfidence).toBeGreaterThanOrEqual(0.5);
+    expect(result.rounds.some((r) => r.status === "pending")).toBe(true);
+  });
+
+  it("P1-7: consensus 옵션이 없으면 기존처럼 전 라운드 진행", async () => {
+    const a = profile("agent_architect", "시노부", "architect");
+    const initial = createDebateRounds("debate_noconsensus");
+    const result = await runDebate({
+      debateId: "debate_noconsensus",
+      context: CTX,
+      initialRounds: initial,
+      slots: [slot(a, "동일 결론 반복")],
+    });
+    expect(result.consensusReached).toBeFalsy();
+    expect(result.finished).toBe(true);
+  });
 });
 
 import { withPriorRounds } from "./runDebate.js";
