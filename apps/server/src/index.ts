@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { resolveSwarmScriptPath } from "./swarmScriptPath";
+import { resolveSwarmScriptPath } from "./swarmScriptPath.js";
 import * as crypto from "node:crypto";
 import type {
   AgentDelegationAuthorityLevel,
@@ -6567,8 +6567,16 @@ function stableStringify(value: unknown): string {
 const entryPoint = process.argv[1] ? pathToFileURL(process.argv[1]).href : undefined;
 
 if (import.meta.url === entryPoint) {
-  const server = startServer();
-  const address = server.address();
-  const port = typeof address === "object" && address ? address.port : "unknown";
-  console.log(`AI Orchestrator runtime server listening on ${port}`);
+  // 부팅 스모크: `node dist/index.js --verify-boot` 는 listen 없이 즉시 종료한다.
+  // 여기까지 도달했다는 건 모든 ESM import(상대 .js 확장자 포함)가 해석됐다는
+  // 뜻 — build 스크립트가 이걸 호출해, 확장자 누락 같은 "타입체크는 통과하고
+  // 런타임에만 죽는" 회귀를 서버 부팅 루프가 아니라 빌드 시점에 잡는다.
+  if (process.argv.includes("--verify-boot")) {
+    console.log("AI Orchestrator runtime server boot check OK");
+  } else {
+    const server = startServer();
+    const address = server.address();
+    const port = typeof address === "object" && address ? address.port : "unknown";
+    console.log(`AI Orchestrator runtime server listening on ${port}`);
+  }
 }
