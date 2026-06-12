@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_AUTONOMY_FORM } from "./autonomyRunForm";
-import { createAutonomyRunStore, resolveInitialAutonomyForm } from "./autonomyRunStore";
+import { approvalWaitNoteFromLog, createAutonomyRunStore, resolveInitialAutonomyForm } from "./autonomyRunStore";
 
 describe("createAutonomyRunStore", () => {
   it("persists mission state across get calls and notifies subscribers on set", () => {
@@ -43,5 +43,20 @@ describe("resolveInitialAutonomyForm", () => {
 
   it("falls back to the seeded form when there is no draft", () => {
     expect(resolveInitialAutonomyForm({ draft: null, seeded })).toEqual(seeded);
+  });
+});
+
+describe("approvalWaitNoteFromLog", () => {
+  it("extracts the command from a mode-B defer log", () => {
+    const note = approvalWaitNoteFromLog(
+      'mode B: "pnpm --version" not auto-approvable (not in the safe-command allowlist); deferring to human',
+    );
+    expect(note).toContain("pnpm --version");
+    expect(note).toContain("사람 승인");
+  });
+
+  it("ignores unrelated log lines", () => {
+    expect(approvalWaitNoteFromLog('mode B: auto-approved "pnpm test"')).toBeNull();
+    expect(approvalWaitNoteFromLog("identity injection failed: x")).toBeNull();
   });
 });

@@ -19,6 +19,8 @@ export type AutonomyRunLiveState = {
   error: string | null;
   /** 마지막으로 편집한 폼 — 탭 이동 후 복원용 */
   formDraft: AutonomyRunForm | null;
+  /** 디스패치가 사람 승인을 기다리는 중일 때의 안내 (없으면 null) — 침묵 대기 방지 */
+  approvalWaitNote: string | null;
 };
 
 export type AutonomyRunStore = {
@@ -34,7 +36,22 @@ const INITIAL: AutonomyRunLiveState = {
   outcome: null,
   error: null,
   formDraft: null,
+  approvalWaitNote: null,
 };
+
+/**
+ * mode B 로그에서 "사람 승인 대기" 신호를 추출한다. 자동승인 불가 명령이
+ * 조용히 2분 폴링에 들어가 "멈춘 것처럼" 보이던 문제의 안내 문구 생성기.
+ * 해당 없으면 null.
+ */
+export function approvalWaitNoteFromLog(message: string): string | null {
+  if (!message.includes("deferring to human")) {
+    return null;
+  }
+  const quoted = /^mode B: "([\s\S]*?)" not auto-approvable/.exec(message)?.[1];
+  const preview = quoted ? `"${quoted.length > 48 ? `${quoted.slice(0, 47)}…` : quoted}"` : "이 단계";
+  return `${preview} — 자동승인 불가, 승인 큐에서 사람 승인이 필요합니다`;
+}
 
 export function createAutonomyRunStore(seed: Partial<AutonomyRunLiveState> = {}): AutonomyRunStore {
   let state: AutonomyRunLiveState = { ...INITIAL, ...seed };

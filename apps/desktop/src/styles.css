@@ -9156,6 +9156,13 @@ body:has(.app-shell.annex-focus-shell) {
   color: var(--muted);
 }
 
+/* auto_safe에서 자동승인 안 될 검증 단계를 입력 시점에 경고 */
+.autonomy-step-warning {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: var(--amber);
+}
+
 /* 실행이 막혔을 때: 사유·차단 목록·다음 행동을 버튼 위에서 바로 보여주는 콜아웃 */
 .autonomy-gate-callout {
   display: flex;

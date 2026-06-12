@@ -5360,6 +5360,7 @@ export function App() {
         onEdit={handleControlQueueEdit}
         onReject={(sourceItemId) => handleResolveUnifiedControlQueueItem(sourceItemId, "rejected")}
         open={approvalDrawerOpen}
+        redispatchOutcomes={tmuxRedispatchOutcomes}
         snapshot={unifiedControlQueueSnapshot}
       />
       <CommandPalette

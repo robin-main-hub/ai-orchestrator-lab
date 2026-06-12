@@ -18,7 +18,7 @@ import {
   type AutonomyRunForm,
 } from "../lib/autonomyRunForm";
 import { codingPacketToAutonomyForm } from "../lib/codingPacketToAutonomyForm";
-import { autonomyRunStore, resolveInitialAutonomyForm } from "../lib/autonomyRunStore";
+import { approvalWaitNoteFromLog, autonomyRunStore, resolveInitialAutonomyForm } from "../lib/autonomyRunStore";
 import { stepRowFromReduce, type AutonomyStepRow } from "../lib/autonomyTimeline";
 import { bundledPersonaNames, personaFileSource } from "../lib/personaBundleSource";
 import { personaAvatars, personaSprites } from "../lib/personaAvatarSource";
@@ -129,7 +129,7 @@ export function AutonomyRunContainer({
     if (running || !runnable.ok) {
       return;
     }
-    autonomyRunStore.set({ running: true, error: null, outcome: null, steps: [] });
+    autonomyRunStore.set({ running: true, error: null, outcome: null, steps: [], approvalWaitNote: null });
     const collected: AutonomyStepRow[] = [];
     const stamp = Date.now();
     const runId = `desktop_${stamp}`;
@@ -163,6 +163,15 @@ export function AutonomyRunContainer({
           autonomyRunStore.set({ steps: [...autonomyRunStore.get().steps, row] });
         },
       });
+      // 자동승인 불가 명령이 조용히 승인 대기에 빠질 때 패널에 안내를 띄운다
+      input.logger = (message: string) => {
+        const note = approvalWaitNoteFromLog(message);
+        if (note) {
+          autonomyRunStore.set({ approvalWaitNote: note });
+        } else if (message.includes("auto-approved")) {
+          autonomyRunStore.set({ approvalWaitNote: null });
+        }
+      };
       const result = await runAutonomousPersonaTask(input);
       autonomyRunStore.set({ outcome: result });
       if (onRegistryChange && result.ok) {
@@ -197,7 +206,7 @@ export function AutonomyRunContainer({
     } catch (caught) {
       autonomyRunStore.set({ error: caught instanceof Error ? caught.message : String(caught) });
     } finally {
-      autonomyRunStore.set({ running: false });
+      autonomyRunStore.set({ running: false, approvalWaitNote: null });
     }
   };
 
@@ -219,6 +228,7 @@ export function AutonomyRunContainer({
         }).expression
       }
       notice={notice}
+      approvalWaitNote={live.approvalWaitNote ?? undefined}
       gateDetail={gate && !gate.allowed ? decisionReadiness : undefined}
       onOpenDebate={onOpenDebate}
       onOpenApprovalQueue={onOpenApprovalQueue}

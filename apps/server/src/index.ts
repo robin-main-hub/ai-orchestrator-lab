@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { resolveSwarmScriptPath } from "./swarmScriptPath";
 import * as crypto from "node:crypto";
 import type {
   AgentDelegationAuthorityLevel,
@@ -3976,7 +3977,7 @@ async function dispatchServerTmuxCommandIfAllowed(
     };
   }
 
-  const scriptPath = process.env.TMUX_SWARM_SEND_SCRIPT ?? join(process.cwd(), "scripts", "swarm-send.sh");
+  const scriptPath = resolveSwarmScriptPath("swarm-send.sh", { envOverride: process.env.TMUX_SWARM_SEND_SCRIPT });
   const timeoutMs = Number(process.env.ORCHESTRATOR_TMUX_SEND_TIMEOUT_MS ?? 15_000);
 
   try {
@@ -4008,7 +4009,9 @@ async function dispatchServerTmuxCommandIfAllowed(
 }
 
 async function captureServerTmuxPane(request: ServerTmuxCaptureRequest): Promise<string> {
-  const scriptPath = process.env.TMUX_SWARM_CAPTURE_SCRIPT ?? join(process.cwd(), "scripts", "swarm-capture.sh");
+  const scriptPath = resolveSwarmScriptPath("swarm-capture.sh", {
+    envOverride: process.env.TMUX_SWARM_CAPTURE_SCRIPT,
+  });
   const timeoutMs = Number(process.env.ORCHESTRATOR_TMUX_CAPTURE_TIMEOUT_MS ?? 10_000);
   const result = await execFileAsync(scriptPath, [request.role, "--lines", String(request.lines)], {
     env: getFilteredSubprocessEnv({
