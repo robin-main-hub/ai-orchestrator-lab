@@ -1,11 +1,22 @@
 import { createServer } from "node:http";
 import { z } from "zod";
-import { mkdir, readFile, appendFile } from "node:fs/promises";
+import { mkdir, readFile, appendFile, stat, rename, readdir, unlink } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { createInterface } from "node:readline";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolveSwarmScriptPath, swarmScriptCwd } from "./swarmScriptPath.js";
+import {
+  ACTIVE_EVENT_LOG,
+  DEFAULT_EVENT_LOG_KEEP_SEGMENTS,
+  DEFAULT_EVENT_LOG_MAX_BYTES,
+  orderLogFilesOldestFirst,
+  rotatedSegmentName,
+  segmentsToPrune,
+  shouldRotateEventLog,
+} from "./eventLogRotation.js";
 import * as crypto from "node:crypto";
 import type {
   AgentDelegationAuthorityLevel,
@@ -5038,52 +5049,152 @@ export function createServerEventStorageState(): ServerEventStorageState {
 
 export function createJsonlServerEventStorage(storageDir = getDefaultEventStorageDir()): JsonlServerEventStorage {
   const resolvedStorageDir = resolve(storageDir);
-  const eventLogPath = join(resolvedStorageDir, "events.jsonl");
+  const eventLogPath = join(resolvedStorageDir, ACTIVE_EVENT_LOG);
   return {
     mode: "jsonl",
     storageDir: resolvedStorageDir,
     eventLogPath,
     loadedAt: new Date().toISOString(),
-    statePromise: loadServerEventStorageStateFromJsonl(eventLogPath),
+    // 활성 파일 + 회전된 모든 세그먼트를 오래된 것부터 스트리밍으로 복원
+    statePromise: loadServerEventStorageStateFromDir(resolvedStorageDir),
     queue: Promise.resolve(),
   };
 }
 
-export async function loadServerEventStorageStateFromJsonl(eventLogPath: string): Promise<ServerEventStorageState> {
-  const state = createServerEventStorageState();
-  let rawText = "";
-
+/** 한 JSONL 파일을 줄 단위 스트리밍으로 읽어 상태에 누적한다(메모리 스파이크 없음). */
+async function streamEventRecordsIntoState(state: ServerEventStorageState, filePath: string): Promise<void> {
+  let stream: ReturnType<typeof createReadStream>;
   try {
-    rawText = await readFile(eventLogPath, "utf8");
+    stream = createReadStream(filePath, "utf8");
   } catch (error) {
-    const code = (error as { code?: string }).code;
-    if (code === "ENOENT") {
-      return state;
+    if ((error as { code?: string }).code === "ENOENT") {
+      return;
     }
-
     throw error;
   }
 
-  for (const line of rawText.split(/\r?\n/)) {
-    if (!line.trim()) {
-      continue;
+  const rl = createInterface({ input: stream, crlfDelay: Infinity });
+  try {
+    for await (const line of rl) {
+      if (!line.trim()) {
+        continue;
+      }
+      const record = parseEventStorageRecord(line);
+      if (!record || state.eventsById.has(record.event.id)) {
+        continue;
+      }
+      state.revision = Math.max(state.revision, record.revision);
+      state.eventsById.set(record.event.id, record.event);
+      state.eventRevisionsById.set(record.event.id, record.revision);
+      const sessionEvents = state.eventsBySession.get(record.event.sessionId) ?? [];
+      sessionEvents.push(record.event.id);
+      state.eventsBySession.set(record.event.sessionId, sessionEvents);
+      state.lastStoredAt = record.storedAt;
     }
-
-    const record = parseEventStorageRecord(line);
-    if (!record || state.eventsById.has(record.event.id)) {
-      continue;
+  } catch (error) {
+    if ((error as { code?: string }).code !== "ENOENT") {
+      throw error;
     }
+  } finally {
+    rl.close();
+  }
+}
 
-    state.revision = Math.max(state.revision, record.revision);
-    state.eventsById.set(record.event.id, record.event);
-    state.eventRevisionsById.set(record.event.id, record.revision);
-    const sessionEvents = state.eventsBySession.get(record.event.sessionId) ?? [];
-    sessionEvents.push(record.event.id);
-    state.eventsBySession.set(record.event.sessionId, sessionEvents);
-    state.lastStoredAt = record.storedAt;
+/** 단일 파일 복원 — 시그니처 유지(기존 테스트/호출부 호환). 내부는 스트리밍. */
+export async function loadServerEventStorageStateFromJsonl(eventLogPath: string): Promise<ServerEventStorageState> {
+  const state = createServerEventStorageState();
+  await streamEventRecordsIntoState(state, eventLogPath);
+  return state;
+}
+
+/** 디렉터리의 활성 파일 + 회전 세그먼트 전체를 오래된 것부터 스트리밍 복원. */
+export async function loadServerEventStorageStateFromDir(storageDir: string): Promise<ServerEventStorageState> {
+  const state = createServerEventStorageState();
+  let entries: string[];
+  try {
+    entries = await readdir(storageDir);
+  } catch (error) {
+    if ((error as { code?: string }).code === "ENOENT") {
+      return state;
+    }
+    throw error;
   }
 
+  for (const fileName of orderLogFilesOldestFirst(entries)) {
+    await streamEventRecordsIntoState(state, join(storageDir, fileName));
+  }
   return state;
+}
+
+function resolveEventLogRotationPolicy(): { maxBytes: number; keepSegments: number } {
+  const maxBytes = Number(process.env.EVENT_LOG_MAX_BYTES ?? DEFAULT_EVENT_LOG_MAX_BYTES);
+  const keepSegments = Number(process.env.EVENT_LOG_KEEP_SEGMENTS ?? DEFAULT_EVENT_LOG_KEEP_SEGMENTS);
+  return {
+    maxBytes: Number.isFinite(maxBytes) && maxBytes >= 0 ? maxBytes : DEFAULT_EVENT_LOG_MAX_BYTES,
+    keepSegments:
+      Number.isFinite(keepSegments) && keepSegments >= 0 ? Math.floor(keepSegments) : DEFAULT_EVENT_LOG_KEEP_SEGMENTS,
+  };
+}
+
+/**
+ * append 직전 호출: 활성 파일이 임계에 닿았으면 타임스탬프 세그먼트로 회전하고,
+ * 보관 한도를 넘긴 가장 오래된 세그먼트를 정리한다. 회전/정리는 best-effort라
+ * 실패해도 append 자체를 막지 않는다(로그만). append 경로가 큐로 직렬화돼 있어
+ * 동시 회전은 일어나지 않는다.
+ */
+async function rotateEventLogIfNeeded(eventLogPath: string, nowMs: number): Promise<void> {
+  const { maxBytes, keepSegments } = resolveEventLogRotationPolicy();
+  const dir = dirname(eventLogPath);
+
+  let activeSize = 0;
+  try {
+    activeSize = (await stat(eventLogPath)).size;
+  } catch (error) {
+    if ((error as { code?: string }).code === "ENOENT") {
+      return; // 아직 활성 파일 없음 — 회전 불필요
+    }
+    throw error;
+  }
+
+  if (!shouldRotateEventLog(activeSize, maxBytes)) {
+    return;
+  }
+
+  // 같은 ms 충돌 시 빈 이름을 찾을 때까지 ms를 밀어 데이터 덮어쓰기를 막는다
+  let stampMs = nowMs;
+  let targetPath = join(dir, rotatedSegmentName(stampMs));
+  for (;;) {
+    try {
+      await stat(targetPath);
+      stampMs += 1;
+      targetPath = join(dir, rotatedSegmentName(stampMs));
+    } catch (error) {
+      if ((error as { code?: string }).code === "ENOENT") {
+        break;
+      }
+      throw error;
+    }
+  }
+
+  try {
+    await rename(eventLogPath, targetPath);
+    console.log(`event log rotated: ${ACTIVE_EVENT_LOG} (${activeSize} bytes) -> ${rotatedSegmentName(stampMs)}`);
+  } catch (error) {
+    console.warn(
+      `event log rotation failed (continuing to append): ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return;
+  }
+
+  try {
+    const entries = await readdir(dir);
+    for (const stale of segmentsToPrune(entries, keepSegments)) {
+      await unlink(join(dir, stale));
+      console.log(`event log segment pruned (over keep=${keepSegments}): ${stale}`);
+    }
+  } catch (error) {
+    console.warn(`event log prune failed (non-fatal): ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 export async function pushEventsToPersistentServerStorage(
@@ -6360,6 +6471,9 @@ async function appendAcceptedEventsToJsonl(
   }
 
   await mkdir(dirname(eventLogPath), { recursive: true });
+  // append 전에 회전 체크 — 활성 파일이 임계에 닿으면 세그먼트로 옮기고 새로 시작.
+  // 큐(enqueueStorageTask)로 직렬화돼 있어 동시 회전 경쟁이 없다.
+  await rotateEventLogIfNeeded(eventLogPath, Date.now());
   await appendFile(eventLogPath, `${records.map((record) => JSON.stringify(record)).join("\n")}\n`, "utf8");
 }
 
