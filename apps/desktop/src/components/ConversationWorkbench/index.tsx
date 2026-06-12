@@ -702,7 +702,7 @@ export function ConversationWorkbench({
         onRemoveDraftAttachment={onRemoveDraftAttachment}
         onSendMessage={onSendMessage}
         onSendSuggestion={onSendSuggestion}
-        promptSuggestions={promptSuggestions}
+        promptSuggestions={undefined}
         selectedAgent={selectedAgent}
         selectedModel={selectedModel}
         showDelegationChips={workbenchVisibility.showComposerDelegationChips}

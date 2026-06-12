@@ -2279,10 +2279,34 @@ export function App() {
           role: "code",
           paneId: "role:code",
           awaitApprovalDecision: approvalStrategy,
-          newId: (stepIndex) => `conv_${turnId}_${gateSequence++}_${stepIndex}`,
+          newId: (stepIndex) => `conv_${turnId}_h${gateSequence++}_${stepIndex}`,
           now: () => new Date().toISOString(),
         });
         const gatedExecutor = createGatedToolExecutor(effects);
+        // BUILD 모드 파일 도구(write/edit/read/grep/glob/todo)는 자동 승인 —
+        // 모드 토글이 곧 사용자의 사전 승인이며, 승인 기록은 서버에 그대로 남는다.
+        // 파일 쓸 때마다 사람 클릭을 기다리며 턴이 멈추던 흐름을 제거한다 (Codex 방식).
+        // bash만 safe-prefix 자동 / 위험 명령 인간 게이트를 유지한다.
+        let autoGateSequence = 0;
+        const autoGrantEffects = createClosedLoopEffects({
+          sessionId: targetSessionId,
+          role: "code",
+          paneId: "role:code",
+          awaitApprovalDecision: async (sourceItemId) => {
+            const granted = await grantDgxApproval({
+              request: {
+                sourceItemId,
+                actor: "user",
+                reason: "BUILD 모드 파일 도구 사전 승인 (대화 도구 루프)",
+                decidedAt: new Date().toISOString(),
+              },
+            });
+            return "status" in granted && granted.status === "approved" ? "approved" : "rejected";
+          },
+          newId: (stepIndex) => `conv_${turnId}_a${autoGateSequence++}_${stepIndex}`,
+          now: () => new Date().toISOString(),
+        });
+        const autoGrantExecutor = createGatedToolExecutor(autoGrantEffects);
         const toolLoop = await runConversationToolLoop({
           initialReply: reply,
           baseMessages: result.pipelineMessages.filter(
@@ -2310,7 +2334,8 @@ export function App() {
           },
           executeTool: async (call) => {
             workspaceChangeLedger.recordToolCall(call);
-            return gatedExecutor(call);
+            // bash만 인간 게이트(safe-prefix/패턴 승인 포함), 파일 도구는 자동 승인
+            return call.tool === "bash" ? gatedExecutor(call) : autoGrantExecutor(call);
           },
           makeToolId: (round, index) => `tool_${turnId}_${round}_${index}`,
           onEvent: (event) => {
