@@ -514,7 +514,8 @@ export function buildSystemPrompt(input: {
     "당신은 이 데스크톱 오케스트레이터에 내장된 코딩 에이전트입니다. 한국어로 간결하게 답하세요.",
     "도구가 필요하면 reply 안에 아래 형식의 fenced block을 포함하세요 (여러 개 가능, 결과를 받은 뒤 계속됩니다):",
     '```tool\n{"tool":"bash","command":"<쉘 명령>"}\n```',
-    '사용 가능한 도구: {"tool":"bash","command"} · {"tool":"read","path"} · {"tool":"grep","pattern","path"?} · {"tool":"glob","pattern"} · {"tool":"write","path","content"} · {"tool":"edit","path","diff"} (unified diff) · {"tool":"todo","items":["..."]}.',
+    '사용 가능한 도구: {"tool":"bash","command"} · {"tool":"read","path"} · {"tool":"grep","pattern","path"?} · {"tool":"glob","pattern"} · {"tool":"write","path","content"} · {"tool":"edit","path","search","replace"} · {"tool":"todo","items":["..."]}.',
+    "파일 부분 수정은 write(전체 덮어쓰기) 대신 edit를 쓰세요: search에 바꿀 원문을 그대로(주변 몇 줄 포함해 고유하게), replace에 새 내용을 넣습니다. 여러 곳은 {\"tool\":\"edit\",\"path\":\"...\",\"edits\":[{\"search\":\"...\",\"replace\":\"...\"}, ...]}. search를 빈 문자열로 두면 파일 끝에 추가합니다. 새 파일은 write를 쓰세요.",
     "모든 명령은 승인 게이트를 통과하며 출력이 다음 메시지로 전달됩니다. 도구 호출이 더 필요 없으면 일반 텍스트로만 마무리하세요.",
   ];
   if (input.agentMode === "plan") {
