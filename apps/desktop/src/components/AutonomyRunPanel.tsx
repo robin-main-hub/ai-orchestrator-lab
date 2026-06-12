@@ -1,5 +1,4 @@
 import { Bot, Play, Volume2 } from "lucide-react";
-import type { TmuxPaneRole } from "@ai-orchestrator/protocol";
 import { StatusBadge } from "@/ui/status-badge";
 import type { AutonomyMode } from "../lib/autonomousRun";
 import {
@@ -21,8 +20,9 @@ import {
   runHistoryStatusVariant,
   type AutonomyRunSummary,
 } from "../lib/autonomyRunHistory";
-import { rosterRowLabel, rosterRowVariant, type AutonomyRosterSummary } from "../lib/autonomyRoster";
+import { buildRolePaneOptions, type AutonomyRosterSummary } from "../lib/autonomyRoster";
 import type { DebateDecisionReadiness } from "../lib/debateDecisionReadiness";
+import { RolePaneSelect } from "./RolePaneSelect";
 import { resolvePersonaSprite, type PersonaSpriteMap } from "../lib/personaAvatarBundle";
 import { buildPersonaCard } from "../lib/personaCard";
 import { PersonaCard } from "./PersonaCard";
@@ -175,17 +175,16 @@ export function AutonomyRunPanel({
         <div className="autonomy-run-row">
           <label>
             <span>역할 pane</span>
-            <select
+            <RolePaneSelect
               disabled={running}
-              onChange={(event) => onFieldChange({ role: event.target.value as TmuxPaneRole })}
+              onChange={(role) => onFieldChange({ role })}
+              options={buildRolePaneOptions(SELECTABLE_PANE_ROLES, roster)}
+              resolveAvatar={(agentId) =>
+                resolvePersonaSprite(agentId, "neutral", { sprites: personaSprites, avatars: personaAvatars })
+              }
+              summary={roster ? `pane 점유 ${roster.busyCount} · 비어있음 ${roster.freeCount}` : undefined}
               value={form.role}
-            >
-              {SELECTABLE_PANE_ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </select>
+            />
           </label>
 
           <label>
@@ -266,32 +265,6 @@ export function AutonomyRunPanel({
             오류
           </StatusBadge>
           <span>{error}</span>
-        </div>
-      ) : null}
-
-      {roster && roster.rows.length > 0 ? (
-        <div className="autonomy-run-roster">
-          <h4>pane 로스터 · 점유 {roster.busyCount} / 비어있음 {roster.freeCount}</h4>
-          <ul>
-            {roster.rows.map((row) => {
-              const avatar = row.agentId
-                ? resolvePersonaSprite(row.agentId, "neutral", { sprites: personaSprites, avatars: personaAvatars })
-                : undefined;
-              return (
-                <li key={row.paneId}>
-                  {avatar ? (
-                    <img className="autonomy-roster-avatar" src={avatar} alt="" width={16} height={16} />
-                  ) : null}
-                  <StatusBadge size="sm" variant={rosterRowVariant(row.busy)}>
-                    {row.role}
-                  </StatusBadge>
-                  <span className="autonomy-roster-meta">
-                    {row.paneId} · {rosterRowLabel(row)}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
         </div>
       ) : null}
 

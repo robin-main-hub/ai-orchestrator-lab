@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rosterFromRegistry, rosterRowLabel, rosterRowVariant } from "./autonomyRoster";
+import { buildRolePaneOptions, rosterFromRegistry, rosterRowLabel, rosterRowVariant } from "./autonomyRoster";
 import type { SummonRegistry } from "./personaSummon";
 
 const registry: SummonRegistry = {
@@ -24,5 +24,28 @@ describe("rosterFromRegistry", () => {
     expect(rosterRowVariant(false)).toBe("muted");
     expect(rosterRowLabel({ paneId: "%1", role: "code", busy: true, agentId: "makise" })).toContain("makise");
     expect(rosterRowLabel({ paneId: "%2", role: "qa", busy: false })).toBe("비어 있음");
+  });
+});
+
+describe("buildRolePaneOptions", () => {
+  it("merges selectable roles with roster occupancy", () => {
+    const roster = rosterFromRegistry(registry);
+    const options = buildRolePaneOptions(["code", "qa"], roster);
+    expect(options[0]).toEqual({
+      role: "code",
+      paneId: "%1",
+      busy: true,
+      occupantId: "makise",
+      statusLabel: "makise 점유",
+    });
+    expect(options[1]).toMatchObject({ role: "qa", busy: false, statusLabel: "비어 있음" });
+  });
+
+  it("lists roles as free when no roster is connected or the role has no pane", () => {
+    expect(buildRolePaneOptions(["frontend"], undefined)).toEqual([
+      { role: "frontend", busy: false, statusLabel: "비어 있음" },
+    ]);
+    const roster = rosterFromRegistry(registry);
+    expect(buildRolePaneOptions(["backend"], roster)[0]).toMatchObject({ role: "backend", busy: false });
   });
 });

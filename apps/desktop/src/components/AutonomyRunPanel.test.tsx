@@ -160,20 +160,23 @@ describe("AutonomyRunPanel", () => {
     expect(noSprite).toContain("/n.png"); // anger missing -> neutral sprite
   });
 
-  it("renders the pane roster when present", () => {
-    const html = render({
-      roster: {
-        rows: [
-          { paneId: "%1", role: "code", busy: true, agentId: "makise" },
-          { paneId: "%2", role: "qa", busy: false },
-        ],
-        busyCount: 1,
-        freeCount: 1,
-      },
-    });
-    expect(html).toContain("pane 로스터");
-    expect(html).toContain("makise 점유");
-    expect(html).toContain("비어 있음");
+  it("shows the selected role's pane occupancy on the role dropdown trigger", () => {
+    const roster = {
+      rows: [
+        { paneId: "%1", role: "code", busy: true, agentId: "makise" },
+        { paneId: "%2", role: "qa", busy: false },
+      ],
+      busyCount: 1,
+      freeCount: 1,
+    };
+    // 선택된 역할의 상태가 트리거에 바로 보인다 (로스터 줄글 대체)
+    const free = render({ roster });
+    expect(free).toContain("role-pane-trigger");
+    expect(free).toContain("비어 있음");
+    const busy = render({ roster, form: form({ role: "code" }) });
+    expect(busy).toContain("makise 점유");
+    // 옛 로스터 목록은 더 이상 렌더되지 않는다
+    expect(free).not.toContain("pane 로스터");
   });
 
   it("renders the run history when present", () => {
