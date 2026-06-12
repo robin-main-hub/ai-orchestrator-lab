@@ -35,13 +35,20 @@ titles=(
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/setup-agent-swarm.sh [--reset] [--panes 4-10]
+  scripts/setup-agent-swarm.sh [--reset] [--panes 4-10] [--with-hermes] [--hermes-roles role,role]
 
 Creates the ai-swarm tmux session with 4 to 10 role-based panes.
 
 Options:
-  --reset   Kill and recreate an existing ai-swarm session.
-  --panes   Number of panes to create. Defaults to 10.
+  --reset         Kill and recreate an existing ai-swarm session.
+  --panes         Number of panes to create. Defaults to 10.
+  --with-hermes   After provisioning, start an interactive Hermes Agent
+                  worker in each agent pane via
+                  scripts/swarm-start-hermes-workers.sh. The desktop
+                  autonomous runner types persona/identity text into these
+                  panes, so they need a running agent CLI to be useful.
+  --hermes-roles  Roles passed through to the Hermes worker starter
+                  (default: code,architect,frontend,backend,qa,research,memory).
 
 Safety:
   - Does not store secrets.
@@ -51,10 +58,25 @@ USAGE
 }
 
 reset_existing=false
+with_hermes=false
+hermes_roles=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --reset)
       reset_existing=true
+      shift
+      ;;
+    --with-hermes)
+      with_hermes=true
+      shift
+      ;;
+    --hermes-roles)
+      shift
+      hermes_roles="${1:-}"
+      shift || true
+      ;;
+    --hermes-roles=*)
+      hermes_roles="${1#--hermes-roles=}"
       shift
       ;;
     --panes)
@@ -149,3 +171,17 @@ done
 echo "Created tmux session '${SESSION_NAME}'."
 echo "Pane ids saved to ${ENV_FILE}."
 echo "Attach with: tmux attach -t ${SESSION_NAME}"
+
+if [[ "$with_hermes" == true ]]; then
+  hermes_starter="$(dirname "$0")/swarm-start-hermes-workers.sh"
+  if [[ ! -f "$hermes_starter" ]]; then
+    echo "Missing ${hermes_starter}; cannot start Hermes workers." >&2
+    exit 1
+  fi
+  hermes_args=()
+  if [[ -n "$hermes_roles" ]]; then
+    hermes_args+=(--roles "$hermes_roles")
+  fi
+  AI_SWARM_SESSION="$SESSION_NAME" AI_SWARM_STATE_DIR="$STATE_DIR" \
+    bash "$hermes_starter" "${hermes_args[@]}"
+fi
