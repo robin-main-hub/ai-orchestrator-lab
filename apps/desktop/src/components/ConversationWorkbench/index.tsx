@@ -223,8 +223,12 @@ export function ConversationWorkbench({
   /** 항목 4 — 플랜(읽기 전용)/빌드 모드 */
   agentMode?: "build" | "plan";
   onAgentModeChange?: (mode: "build" | "plan") => void;
-  /** 항목 1 — 진행 중 스트리밍 텍스트 */
-  streamingPreview?: { agentId: string; text: string } | null;
+  /** 항목 1 — 진행 중 스트리밍 텍스트 (+승인 대기 시 인라인 액션) */
+  streamingPreview?: {
+    agentId: string;
+    text: string;
+    pendingApproval?: { sourceItemId: string; command: string };
+  } | null;
   /** 항목 8 — 턴 종료 후 자동 발송될 대기 메시지 */
   queuedMessages?: string[];
   onRemoveQueuedMessage?: (index: number) => void;
