@@ -2402,7 +2402,12 @@ export function App() {
             }
           },
           isCancelled: () => conversationTurnCancelledRef.current,
-          diagnosticsCommand: conversationAgentMode === "build" ? "tsc --noEmit" : undefined,
+          // P1-4: build 모드는 다단계 검증(타입체크 → 린트)을 순차로 돌리고,
+          // 실패 시 구조화 에러를 모델에 주어 edit/write로 자기수정하게 한다.
+          diagnosticsCommands:
+            conversationAgentMode === "build"
+              ? ["pnpm exec tsc --noEmit", "pnpm exec eslint ."]
+              : undefined,
         });
         reply = toolLoop.finalContent.trim() ? toolLoop.finalContent : reply;
         toolCallsMetadata = toolLoop.toolCalls.map((call) => ({
