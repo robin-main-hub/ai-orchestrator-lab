@@ -52,6 +52,30 @@ export type StreamCallbacks = {
   signal?: AbortSignal;
 };
 
+/** 스트림 무활동 한도 — 이 시간 동안 청크가 없으면 죽은 연결로 보고 끊는다 */
+const STREAM_STALL_TIMEOUT_MS = 90_000;
+
+/** reader.read()에 무활동 데드라인을 건다 — 서버가 헤더만 주고 본문을 멈추면 영원히 기다리지 않게 */
+async function readWithStallGuard<T>(
+  reader: ReadableStreamDefaultReader<T>,
+  stallMs: number,
+): Promise<ReadableStreamReadResult<T>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`stream stalled: ${Math.round(stallMs / 1000)}초간 응답 없음`)),
+          stallMs,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** parse one SSE frame body ("data: {...}") into a chunk event */
 function parseChunkLine(line: string): ProviderCompletionChunkEvent | null {
   if (!line.startsWith("data:")) return null;
@@ -69,12 +93,25 @@ export async function streamCompletion(
   const fetchImpl = options?.fetchImpl ?? fetch;
   const baseUrl = firstBaseUrl(options);
   const body = JSON.stringify(request);
-  const response = await fetchImpl(`${baseUrl}/provider-completions/stream`, {
-    method: "POST",
-    headers: await createDgxOrchestratorJsonHeaders("POST", "/provider-completions/stream", baseUrl, { body }),
-    body,
-    signal: options?.signal,
-  });
+  // 연결(헤더 수신) 단계 가드 15초 + 호출자 abort 신호 결합. SSE는 헤더가
+  // 즉시 와야 정상이므로 짧게 잡고, 본문은 아래 stall guard(90초)로 지킨다.
+  const connectController = new AbortController();
+  const connectTimer = setTimeout(() => connectController.abort(), 15_000);
+  if (options?.signal) {
+    if (options.signal.aborted) connectController.abort();
+    else options.signal.addEventListener("abort", () => connectController.abort(), { once: true });
+  }
+  let response: Awaited<ReturnType<typeof fetchImpl>>;
+  try {
+    response = await fetchImpl(`${baseUrl}/provider-completions/stream`, {
+      method: "POST",
+      headers: await createDgxOrchestratorJsonHeaders("POST", "/provider-completions/stream", baseUrl, { body }),
+      body,
+      signal: connectController.signal,
+    });
+  } finally {
+    clearTimeout(connectTimer);
+  }
   if (!response.ok || !response.body) {
     // permission/validation failures arrive as JSON — surface them
     let detail = `HTTP ${response.status}`;
@@ -95,8 +132,9 @@ export async function streamCompletion(
   let usage: { inputTokens?: number; outputTokens?: number } | undefined;
   let streamError: string | null = null;
 
+  try {
   for (;;) {
-    const { done, value } = await reader.read();
+    const { done, value } = await readWithStallGuard(reader, STREAM_STALL_TIMEOUT_MS);
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     let separator = buffer.indexOf("\n\n");
@@ -120,6 +158,13 @@ export async function streamCompletion(
         }
       }
     }
+  }
+  } catch (error) {
+    // 정체/끊김 시 연결을 정리하고 위로 던진다 → 호출부가 non-stream POST로 폴백
+    void reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
   }
 
   if (streamError && !finalContent && content.length === 0) {
