@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { loadPersona, type LoadedPersona } from "@ai-orchestrator/agents";
 import type { CodingPacket, EventEnvelope, TerminalHostKind } from "@ai-orchestrator/protocol";
 import { runAutonomousPersonaTask } from "../lib/autonomousRun";
@@ -25,6 +25,7 @@ import { DEFAULT_HERMES_RESET_COMMAND, resolvePersonaAgentSet } from "../lib/per
 import { acquireHermesSlot } from "../lib/hermesSlotPool";
 import { loadHermesPool, saveHermesPool } from "../lib/hermesPoolStore";
 import { classifyExpression } from "../lib/expressionClassifier";
+import { ExpressionStateMachine } from "../lib/expressionStateMachine";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
 import { AutonomyRunPanel } from "./AutonomyRunPanel";
 
@@ -84,6 +85,8 @@ export function AutonomyRunContainer({
   });
   const [running, setRunning] = useState(false);
   const [outcome, setOutcome] = useState<PersonaTaskOutcome | null>(null);
+  // P2-8: 표정 전환을 히스테리시스/쿨다운으로 안정화 (작업 상태가 빠르게 바뀌어도 깜빡임 방지)
+  const expressionSmRef = useRef(new ExpressionStateMachine());
   const [error, setError] = useState<string | null>(null);
   const [steps, setSteps] = useState<AutonomyStepRow[]>([]);
 
@@ -182,11 +185,16 @@ export function AutonomyRunContainer({
       onFieldChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
       onRun={onRun}
       history={historyEvents ? projectAutonomyRunHistory(historyEvents) : undefined}
-      expression={classifyExpression({
-        outcome: running ? steps[steps.length - 1]?.outcome : undefined,
-        loopStatus: outcome?.ok ? outcome.loopStatus : undefined,
-        running,
-      })}
+      expression={
+        expressionSmRef.current.update({
+          candidate: classifyExpression({
+            outcome: running ? steps[steps.length - 1]?.outcome : undefined,
+            loopStatus: outcome?.ok ? outcome.loopStatus : undefined,
+            running,
+          }),
+          nowMs: Date.now(),
+        }).expression
+      }
       notice={notice}
       personaAvatars={personaAvatars}
       personaSprites={personaSprites}
