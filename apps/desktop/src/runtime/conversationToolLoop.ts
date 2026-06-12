@@ -2,6 +2,7 @@ import type { AgentMode, ChatPart, ToolCall } from "../lib/codingChat";
 import { parseAssistantReply } from "../lib/codingChat";
 import { isToolAllowed, MUTATING_TOOLS } from "../lib/codingTurnRunner";
 import type { CompleteFn, ToolExecutionResult, ToolExecutor, WireMessage } from "../lib/codingTurnRunner";
+import { formatDiagnosticsForModel, parseDiagnostics } from "../lib/diagnosticsParser";
 
 /**
  * In-conversation tool loop (items 2 + 13). The conversation workbench has
@@ -35,8 +36,12 @@ export type ConversationToolLoopInput = {
   onEvent?: (event: ConversationToolLoopEvent) => void;
   isCancelled?: () => boolean;
   maxRounds?: number;
-  /** e.g. "pnpm exec tsc --noEmit" — run after mutating tools succeed */
+  /** e.g. "pnpm exec tsc --noEmit" — run after mutating tools succeed (단일, 하위호환) */
   diagnosticsCommand?: string;
+  /** P1-4: 다단계 검증 파이프라인 (예: tsc → eslint → test). 순차 실행, 첫 실패에서 중단. */
+  diagnosticsCommands?: string[];
+  /** P1-4: 진단 실패 시 모델이 실제로 고치도록 도구 호출을 허용하는 자기수정 횟수 (기본 2) */
+  maxFixAttempts?: number;
 };
 
 export type ConversationToolLoopResult = {
@@ -46,10 +51,19 @@ export type ConversationToolLoopResult = {
   /** every tool call across all rounds, in execution order, with final status */
   toolCalls: ToolCall[];
   rounds: number;
-  diagnostics?: { command: string; output: string; ok: boolean };
+  diagnostics?: {
+    command: string;
+    output: string;
+    ok: boolean;
+    /** P1-4: 각 단계 결과 (다단계 파이프라인일 때) */
+    stages?: Array<{ command: string; ok: boolean; tool: string; errorCount: number }>;
+    /** P1-4: 자기수정 시도 횟수 */
+    fixAttempts?: number;
+  };
 };
 
 const DEFAULT_MAX_ROUNDS = 8;
+const DEFAULT_MAX_FIX_ATTEMPTS = 2;
 
 export function partsToText(parts: ChatPart[]): string {
   return parts
@@ -150,52 +164,127 @@ export async function runConversationToolLoop(
 
   const base = finish("completed");
 
-  // ── diagnostics round (item 13) ──────────────────────────────────────────
-  if (!mutatingToolSucceeded || !input.diagnosticsCommand || input.isCancelled?.()) {
+  // ── diagnostics + self-correction (P1-4) ──────────────────────────────────
+  const diagnosticsCommands =
+    input.diagnosticsCommands && input.diagnosticsCommands.length > 0
+      ? input.diagnosticsCommands
+      : input.diagnosticsCommand
+        ? [input.diagnosticsCommand]
+        : [];
+  if (!mutatingToolSucceeded || diagnosticsCommands.length === 0 || input.isCancelled?.()) {
     return base;
   }
-  const diagCall: ToolCall = {
-    id: input.makeToolId(maxRounds, 0),
-    tool: "bash",
-    title: `진단: ${input.diagnosticsCommand}`,
-    input: { command: input.diagnosticsCommand },
-    status: "proposed",
+
+  const maxFixAttempts = input.maxFixAttempts ?? DEFAULT_MAX_FIX_ATTEMPTS;
+  let diagRoundId = maxRounds;
+  let correctedContent = base.finalContent;
+  let lastStages: Array<{ command: string; ok: boolean; tool: string; errorCount: number }> = [];
+  let firstFailOutput = "";
+  let firstFailCommand = "";
+
+  // 단계별 파이프라인을 1회 돌려, 첫 실패 단계의 구조화 에러를 반환한다.
+  const runPipelineOnce = async (): Promise<{ ok: boolean; feedback: string }> => {
+    lastStages = [];
+    firstFailOutput = "";
+    firstFailCommand = "";
+    for (const command of diagnosticsCommands) {
+      if (input.isCancelled?.()) return { ok: false, feedback: "" };
+      const call: ToolCall = {
+        id: input.makeToolId(diagRoundId, 0),
+        tool: "bash",
+        title: `진단: ${command}`,
+        input: { command },
+        status: "proposed",
+      };
+      diagRoundId += 1;
+      let result: ToolExecutionResult;
+      try {
+        result = await input.executeTool(call);
+      } catch (error) {
+        result = { status: "failed", output: error instanceof Error ? error.message : String(error) };
+      }
+      const report = parseDiagnostics(command, result.output, { toolStatus: result.status });
+      lastStages.push({ command, ok: report.ok, tool: report.tool, errorCount: report.errorCount });
+      const settled: ToolCall = { ...call, status: result.status, output: result.output };
+      onEvent({ type: "diagnostics", call: settled, ok: report.ok });
+      allToolCalls.push(settled);
+      if (!report.ok) {
+        firstFailOutput = result.output;
+        firstFailCommand = command;
+        return { ok: false, feedback: formatDiagnosticsForModel(report) };
+      }
+    }
+    return { ok: true, feedback: "" };
   };
-  let diagResult: ToolExecutionResult;
-  try {
-    diagResult = await input.executeTool(diagCall);
-  } catch (error) {
-    diagResult = { status: "failed", output: error instanceof Error ? error.message : String(error) };
-  }
-  const ok = diagResult.status === "completed" && !/\berror(\b|s\b| TS\d+)/i.test(diagResult.output);
-  const settledDiag: ToolCall = { ...diagCall, status: diagResult.status, output: diagResult.output };
-  onEvent({ type: "diagnostics", call: settledDiag, ok });
-  allToolCalls.push(settledDiag);
-  const diagnostics = { command: input.diagnosticsCommand, output: diagResult.output, ok };
 
-  if (ok || input.isCancelled?.()) {
-    return { ...base, diagnostics };
-  }
+  let attempt = 0;
+  let pipeline = await runPipelineOnce();
 
-  // one corrective round: surface the diagnostics to the model
-  conversation.push({
-    role: "user",
-    content: `[diagnostics ${input.diagnosticsCommand}]\n${diagResult.output.slice(0, 4000)}\n\n위 진단 출력에 오류가 있습니다. 수정 방안을 텍스트로 요약하세요 (추가 도구 호출 없이).`,
-  });
-  try {
-    const corrective = await input.complete([...conversation], {
-      onDelta: (text) => onEvent({ type: "assistant_delta", round: maxRounds, text }),
+  // 실패 시: 구조화 에러를 모델에 주고 실제 수정(edit/write)을 시도 → 재진단. 최대 N회.
+  while (!pipeline.ok && attempt < maxFixAttempts && !input.isCancelled?.()) {
+    attempt += 1;
+    conversation.push({
+      role: "user",
+      content: [
+        `[검증 실패 — 자기수정 ${attempt}/${maxFixAttempts}]`,
+        pipeline.feedback,
+        "",
+        "위 오류를 edit/write 도구로 직접 고치세요. 수정이 끝나면 도구 호출 없이 한 줄로 정리하세요.",
+      ].join("\n"),
     });
-    if (corrective.usage) onEvent({ type: "usage", usage: corrective.usage });
-    const { parts } = parseAssistantReply(corrective.content, (index) => input.makeToolId(maxRounds + 1, index));
-    const correctiveText = partsToText(parts);
-    return {
-      ...base,
-      finalContent: correctiveText ? `${base.finalContent}\n\n${correctiveText}`.trim() : base.finalContent,
-      rounds: rounds + 1,
-      diagnostics,
-    };
-  } catch {
-    return { ...base, diagnostics };
+    let fix: { content: string; usage?: { inputTokens?: number; outputTokens?: number } };
+    try {
+      fix = await input.complete([...conversation], {
+        onDelta: (text) => onEvent({ type: "assistant_delta", round: diagRoundId, text }),
+      });
+    } catch {
+      break;
+    }
+    if (fix.usage) onEvent({ type: "usage", usage: fix.usage });
+    const { parts, toolCalls: fixCalls } = parseAssistantReply(fix.content, (i) => input.makeToolId(diagRoundId, i));
+    conversation.push({ role: "assistant", content: fix.content });
+    const fixText = partsToText(parts);
+    if (fixText) correctedContent = `${correctedContent}\n\n${fixText}`.trim();
+
+    // 모델이 제안한 수정 도구를 게이트로 실행 (plan 모드면 차단)
+    let appliedFix = false;
+    const results: string[] = [];
+    for (const call of fixCalls) {
+      if (input.isCancelled?.()) break;
+      if (!isToolAllowed(call.tool, input.agentMode)) {
+        results.push(`[tool_result ${call.tool} DENIED] PLAN 모드 — 변경 도구 차단`);
+        continue;
+      }
+      onEvent({ type: "tool_status", round: diagRoundId, call: { ...call, status: "running" } });
+      let r: ToolExecutionResult;
+      try {
+        r = await input.executeTool(call);
+      } catch (error) {
+        r = { status: "failed", output: error instanceof Error ? error.message : String(error) };
+      }
+      const settled: ToolCall = { ...call, status: r.status, output: r.output, error: r.status === "failed" ? r.output : undefined };
+      onEvent({ type: "tool_status", round: diagRoundId, call: settled });
+      allToolCalls.push(settled);
+      if (r.status === "completed" && MUTATING_TOOLS.has(call.tool)) appliedFix = true;
+      results.push(`[tool_result ${call.tool}]\n${r.output}`);
+    }
+    if (results.length > 0) conversation.push({ role: "user", content: results.join("\n\n") });
+    diagRoundId += 1;
+
+    if (!appliedFix) break; // 모델이 수정 도구를 안 냈으면 더 돌려도 의미 없음
+    pipeline = await runPipelineOnce();
   }
+
+  return {
+    ...base,
+    finalContent: correctedContent,
+    rounds: diagRoundId - maxRounds + rounds,
+    diagnostics: {
+      command: firstFailCommand || diagnosticsCommands[diagnosticsCommands.length - 1]!,
+      output: firstFailOutput,
+      ok: pipeline.ok,
+      stages: lastStages,
+      fixAttempts: attempt,
+    },
+  };
 }
