@@ -52,6 +52,12 @@ export type EngineSelectionInput = {
   priority?: "speed" | "quality" | "balanced";
   /** 로컬 엔진 사용 가능 여부 (서버 헬스 등). 기본 true */
   localAvailable?: boolean;
+  /**
+   * Orpheus(감정 엔진) 가용 여부. 기본 true. dgx에는 Kokoro만 설치돼 있고
+   * Orpheus가 아직 없으면 false를 줘서, 감정 태그가 있어도 Kokoro(태그 제거)나
+   * OpenAI로 우회시킨다.
+   */
+  orpheusAvailable?: boolean;
 };
 
 /** 짧은 알림 기준 (자) */
@@ -62,10 +68,14 @@ export function selectTtsEngine(input: EngineSelectionInput): TtsEngine {
   const { tags } = parseEmotionTags(input.text);
   const priority = input.priority ?? "balanced";
   const localAvailable = input.localAvailable ?? true;
+  const orpheusAvailable = input.orpheusAvailable ?? true;
 
   if (!localAvailable) return "openai"; // 로컬 불가 → API 폴백
   if (priority === "quality") return "openai";
-  if (tags.length > 0) return "orpheus"; // 감정 태그 → 감정 지원 엔진
+  if (tags.length > 0) {
+    if (orpheusAvailable) return "orpheus"; // 감정 태그 → 감정 지원 엔진
+    return "kokoro"; // Orpheus 미설치 → Kokoro로 우회(태그는 buildTtsRequest에서 제거)
+  }
   if (priority === "speed" || input.text.trim().length <= SHORT_TEXT_CHARS) return "kokoro";
   return "kokoro"; // 로컬 우선 기본
 }
@@ -149,10 +159,16 @@ export async function speak(
     voiceOverride?: Partial<CharacterVoice>;
     priority?: EngineSelectionInput["priority"];
     localAvailable?: boolean;
+    orpheusAvailable?: boolean;
     synthesize: TtsSynthesizer;
   },
 ): Promise<{ request: TtsRequest | null; audioUrl?: string; error?: string }> {
-  const engine = selectTtsEngine({ text, priority: options.priority, localAvailable: options.localAvailable });
+  const engine = selectTtsEngine({
+    text,
+    priority: options.priority,
+    localAvailable: options.localAvailable,
+    orpheusAvailable: options.orpheusAvailable,
+  });
   const voice = resolveCharacterVoice(options.voicePreset, options.voiceOverride);
   const request = buildTtsRequest(text, engine, voice);
   if (!request) return { request: null, error: "발화할 텍스트가 없습니다." };

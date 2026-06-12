@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { loadPersona, type LoadedPersona } from "@ai-orchestrator/agents";
 import type { CodingPacket, EventEnvelope, TerminalHostKind } from "@ai-orchestrator/protocol";
 import { runAutonomousPersonaTask } from "../lib/autonomousRun";
@@ -27,6 +27,9 @@ import { loadHermesPool, saveHermesPool } from "../lib/hermesPoolStore";
 import { classifyExpression } from "../lib/expressionClassifier";
 import { ExpressionStateMachine } from "../lib/expressionStateMachine";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
+import { useTtsSpeaker } from "../lib/useTtsSpeaker";
+import { deriveKokoroBaseUrl, voicePresetForRole } from "../lib/ttsConfig";
+import { buildRunSpeechText } from "../lib/autonomyRunSpeech";
 import { AutonomyRunPanel } from "./AutonomyRunPanel";
 
 async function loadPersonaOrHeader(personaName: string): Promise<LoadedPersona> {
@@ -89,6 +92,15 @@ export function AutonomyRunContainer({
   const expressionSmRef = useRef(new ExpressionStateMachine());
   const [error, setError] = useState<string | null>(null);
   const [steps, setSteps] = useState<AutonomyStepRow[]>([]);
+
+  // P2-9: 캐릭터 음성(TTS). Kokoro 서버는 같은 dgx 호스트의 8880 포트.
+  const kokoroBaseUrl = useMemo(() => deriveKokoroBaseUrl(serverBaseUrl), [serverBaseUrl]);
+  const speaker = useTtsSpeaker({ baseUrl: kokoroBaseUrl });
+  const speechText = buildRunSpeechText({ personaName: form.personaName, outcome, running });
+  const onSpeak = () => {
+    if (!speechText) return;
+    void speaker.speak(speechText, { voicePreset: voicePresetForRole(form.role) });
+  };
 
   const gate =
     decisionReadiness !== undefined
@@ -205,6 +217,9 @@ export function AutonomyRunContainer({
       runnable={runnable}
       running={running}
       steps={steps}
+      onSpeak={onSpeak}
+      speaking={speaker.speaking}
+      speakDisabledReason={speechText ? undefined : "읽을 결과가 없습니다"}
     />
   );
 }
