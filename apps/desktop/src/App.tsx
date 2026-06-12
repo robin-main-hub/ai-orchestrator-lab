@@ -76,7 +76,7 @@ import {
 } from "./runtime/stage35DelegationRuntime";
 import { createConversationPipelineMessages } from "./runtime/conversationPipeline";
 import { replyRequestsTools, runConversationToolLoop } from "./runtime/conversationToolLoop";
-import { grantDgxApproval } from "./runtime/stage34ApprovalServer";
+import { grantDgxApproval, rejectDgxApproval } from "./runtime/stage34ApprovalServer";
 import { withBackoffRetry } from "./lib/retryPolicy";
 import { selectModelForWorkload } from "./lib/modelWorkloadRouting";
 import {
@@ -987,6 +987,85 @@ export function App() {
         permissionSnapshot,
       }),
     [approvalServerSnapshot, permissionSnapshot],
+  );
+  // 대화 탭 인라인 승인 카드용: 로컬(stage9) 권한 큐에 더해 서버 승인 대기 건
+  // (대화 도구 루프의 tmux dispatch 등)을 합쳐서 보여준다. 이게 없으면 도구
+  // 실행이 승인을 기다리는 동안 카드가 안 떠서 턴이 멈춘 것처럼 보인다.
+  const conversationPermissionSnapshot = useMemo(() => {
+    const serverApprovalItems = (approvalServerSnapshot?.approvals ?? [])
+      .filter((approval) => approval.state === "required")
+      .map((approval) => {
+        const payload = approval.replay?.payload as { commandPreview?: unknown } | undefined;
+        const commandPreview =
+          typeof payload?.commandPreview === "string" ? payload.commandPreview : undefined;
+        return {
+          id: approval.id,
+          sourceItemId: approval.sourceItemId ?? approval.id,
+          summary: commandPreview?.split("\n")[0]?.slice(0, 160) ?? approval.reason,
+          requestedBy: approval.actor,
+          action: approval.action,
+          reason: approval.reason,
+          sourceTrust: approval.sourceTrust,
+          permissions: approval.requestedLevels,
+          state: approval.state,
+          createdAt: approval.createdAt,
+          expiresAt: approval.expiresAt,
+          replayKind: approval.replay?.kind,
+        };
+      });
+    if (serverApprovalItems.length === 0) {
+      return permissionSnapshot;
+    }
+    const localSourceItemIds = new Set(permissionSnapshot.queue.map((item) => item.sourceItemId));
+    return {
+      ...permissionSnapshot,
+      queue: [
+        ...permissionSnapshot.queue,
+        ...serverApprovalItems.filter((item) => !localSourceItemIds.has(item.sourceItemId)),
+      ],
+    };
+  }, [approvalServerSnapshot, permissionSnapshot]);
+
+  /** 대화 카드 승인: 서버 승인 건이면 grant만 수행 — replay는 도구 루프 폴러가 1회 실행 (이중 실행 방지) */
+  const handleConversationApprovePermission = useCallback(
+    (sourceItemId: string) => {
+      const serverApproval = (approvalServerSnapshot?.approvals ?? []).find(
+        (approval) => (approval.sourceItemId ?? approval.id) === sourceItemId && approval.state === "required",
+      );
+      if (serverApproval) {
+        void grantDgxApproval({
+          request: {
+            approvalId: serverApproval.id,
+            actor: "user",
+            reason: "대화 인라인 승인",
+            decidedAt: new Date().toISOString(),
+          },
+        }).then(() => handleRefreshApprovalQueue());
+        return;
+      }
+      handleResolvePermission(sourceItemId, "approved");
+    },
+    [approvalServerSnapshot, handleRefreshApprovalQueue],
+  );
+  const handleConversationRejectPermission = useCallback(
+    (sourceItemId: string) => {
+      const serverApproval = (approvalServerSnapshot?.approvals ?? []).find(
+        (approval) => (approval.sourceItemId ?? approval.id) === sourceItemId && approval.state === "required",
+      );
+      if (serverApproval) {
+        void rejectDgxApproval({
+          request: {
+            approvalId: serverApproval.id,
+            actor: "user",
+            reason: "대화 인라인 거절",
+            decidedAt: new Date().toISOString(),
+          },
+        }).then(() => handleRefreshApprovalQueue());
+        return;
+      }
+      handleResolvePermission(sourceItemId, "rejected");
+    },
+    [approvalServerSnapshot, handleRefreshApprovalQueue],
   );
   const insightFindings = useMemo(
     () =>
@@ -2175,9 +2254,9 @@ export function App() {
           void handleRefreshApprovalQueue();
           setStreamingPreview({
             agentId: selectedAgent.id,
-            text: `${streamedSoFar.trim() ? `${streamedSoFar}\n\n` : ""}⏳ 승인 대기: ${context.command.slice(0, 120)}\n위 승인 카드에서 허용/거절을 선택하세요 (최대 120초).`,
+            text: `${streamedSoFar.trim() ? `${streamedSoFar}\n\n` : ""}⏳ 승인 대기: ${context.command.slice(0, 120)}\n위 승인 카드에서 허용/거절을 선택하세요 (최대 5분).`,
           });
-          return pollForApprovalDecision({ sourceItemId });
+          return pollForApprovalDecision({ sourceItemId, timeoutMs: 300_000 });
         };
         const approvalStrategy = createPatternApprovalStrategy({
           base: createAutoApproveStrategy({ fallback: humanWithVisibility }),
@@ -4963,7 +5042,7 @@ export function App() {
               messages={conversationMessages}
               onAddDraftAttachments={handleAddDraftAttachments}
               onAdoptBranch={handleAdoptBranchExperiment}
-              onApprovePermission={(sourceItemId) => handleResolvePermission(sourceItemId, "approved")}
+              onApprovePermission={handleConversationApprovePermission}
               onBackupProjection={handleExportBackupProjections}
               onContextPackTierChange={handleContextPackTierChange}
               onCreateBranch={handleCreateBranchExperiment}
@@ -4975,7 +5054,7 @@ export function App() {
               onProgressDelegationAssignment={handleProgressMakimaDelegationAssignment}
               onImportExternalIngress={handleImportExternalIngress}
               onPromoteToDebate={handlePromoteToDebate}
-              onRejectPermission={(sourceItemId) => handleResolvePermission(sourceItemId, "rejected")}
+              onRejectPermission={handleConversationRejectPermission}
               onRemoveDraftAttachment={handleRemoveDraftAttachment}
               onSelectAgent={setSelectedAgentId}
               onSendMessage={handleSendMessageStage2}
@@ -4991,7 +5070,7 @@ export function App() {
               onUpdateAgentConfig={updateSelectedAgentConfig}
               onUpdateAgentPersona={updateSelectedAgentPersona}
               pendingProviderRetry={pendingProviderRetry}
-              permissionSnapshot={permissionSnapshot}
+              permissionSnapshot={conversationPermissionSnapshot}
               providerReadiness={providerReadiness}
               defaultCredentialProviderIds={defaultCredentialProviderIds}
               modelCatalog={modelCatalog}
