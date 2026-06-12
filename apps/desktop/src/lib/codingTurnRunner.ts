@@ -1,5 +1,6 @@
 import type { AgentMode, ChatPart, CodingToolName, ToolCall } from "./codingChat";
 import { parseAssistantReply } from "./codingChat";
+import { buildEditApplyScript, normalizeEditInput } from "./editEngine";
 
 /**
  * The coding agent loop: send the conversation to the model, parse tool
@@ -159,7 +160,12 @@ export function toolToCommand(call: ToolCall): string | null {
       if (!path) return null;
       return `cat > "${path}" <<'__ORCH_EOF__'\n${content}\n__ORCH_EOF__`;
     }
-    case "edit":
+    case "edit": {
+      // P0-1: search/replace 블록을 4단계 계층 매칭으로 원자적 적용 (전체 덮어쓰기 X)
+      const path = String(input.path ?? "").trim();
+      const blocks = normalizeEditInput(input);
+      return buildEditApplyScript(path, blocks);
+    }
     case "todo":
     default:
       return null;
@@ -182,14 +188,15 @@ export function createGatedToolExecutor(effects: {
       const items = Array.isArray(call.input.items) ? call.input.items.map(String) : [];
       return { status: "completed", output: items.map((item) => `□ ${item}`).join("\n") || "(빈 목록)" };
     }
-    if (call.tool === "edit") {
-      return {
-        status: "completed",
-        output: "diff가 카드에 표시되었습니다. 적용하려면 write 도구로 전체 파일을 쓰거나 사용자가 적용 버튼을 누릅니다.",
-      };
-    }
     const command = toolToCommand(call);
     if (!command) {
+      // edit인데 명령이 없으면 search/replace 입력이 비었다는 뜻 — 명확히 안내
+      if (call.tool === "edit") {
+        return {
+          status: "failed",
+          output: 'edit 입력이 비어 있습니다. {"tool":"edit","path":"...","search":"...","replace":"..."} 형식으로 주세요.',
+        };
+      }
       return { status: "failed", output: `도구 입력이 비어 있습니다: ${call.tool}` };
     }
     sequence += 1;

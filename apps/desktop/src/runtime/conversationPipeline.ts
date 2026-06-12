@@ -201,7 +201,7 @@ function createToolLoopInstruction(agentMode?: "build" | "plan"): string {
     "```tool",
     '{"tool":"bash","command":"ls -la"}',
     "```",
-    '사용 가능 도구: bash{"command"}, read{"path"}, grep{"pattern","path"?}, glob{"pattern"}, write{"path","content"}, edit{"path","oldText","newText"}, todo{"items":[]}.',
+    '사용 가능 도구: bash{"command"}, read{"path"}, grep{"pattern","path"?}, glob{"pattern"}, write{"path","content"}, edit{"path","search","replace"} (부분 수정 — search에 바꿀 원문을 주변 몇 줄 포함해 고유하게, 여러 곳은 edits 배열), todo{"items":[]}.',
     "모든 도구는 사용자 승인 게이트를 거쳐 실행되며, 결과는 다음 사용자 턴에 [tool_result ...] 블록으로 전달된다.",
     "결과를 받기 전에는 실행이 완료됐다고 주장하지 않는다. 결과가 충분하면 도구 호출 없이 텍스트로 결론을 정리한다.",
     agentMode === "plan"
