@@ -18,5 +18,8 @@
     "@ai-orchestrator/protocol": "workspace:*",
     "@ai-orchestrator/providers": "workspace:*",
     "zod": "^3.25.76"
+  },
+  "optionalDependencies": {
+    "playwright-core": "^1.52.0"
   }
 }
