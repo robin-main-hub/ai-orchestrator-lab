@@ -78,6 +78,7 @@ import {
 // Sub-components
 import { MessageThread } from "./MessageThread";
 import { Composer } from "./Composer";
+import { ConversationAgentRail, ConversationAgentSpotlight } from "./ConversationAgentRail";
 
 type AgentDetailPanel = "none" | "memory" | "model" | "skills";
 
@@ -671,7 +672,21 @@ export function ConversationWorkbench({
       ) : null}
 
       <div className="flex min-h-0 flex-1">
+        <ConversationAgentRail
+          agentActivityById={agentActivityById}
+          agentVisualsById={agentVisualsById}
+          agents={agents}
+          onSelectAgent={onSelectAgent}
+          selectedAgentId={selectedAgentId}
+        />
         <div className="flex min-w-0 flex-1 flex-col">
+      <ConversationAgentSpotlight
+        activity={selectedAgentActivity}
+        agent={selectedAgent}
+        displayName={selectedAgentDisplayName}
+        visuals={selectedAgent ? agentVisualsById?.[selectedAgent.id] : undefined}
+        workStatusLabel={selectedAgentWorkStatusLabel}
+      />
       <MessageThread
         agentChatContinuity={agentChatContinuity}
         messages={messages}
@@ -702,7 +717,7 @@ export function ConversationWorkbench({
         onRemoveDraftAttachment={onRemoveDraftAttachment}
         onSendMessage={onSendMessage}
         onSendSuggestion={onSendSuggestion}
-        promptSuggestions={undefined}
+        promptSuggestions={promptSuggestions}
         selectedAgent={selectedAgent}
         selectedModel={selectedModel}
         showDelegationChips={workbenchVisibility.showComposerDelegationChips}
