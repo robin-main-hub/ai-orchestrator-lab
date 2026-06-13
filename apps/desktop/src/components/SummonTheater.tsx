@@ -54,6 +54,8 @@ const RARITY_META: Record<PersonaRarity, { badge: string; ring: string; glow: st
 
 type SummonEntry = {
   key: string;
+  /** 실제 에이전트 id — 있으면 카드 클릭으로 그 에이전트 대화를 연다(데모 파티는 없음) */
+  agentId?: string;
   jpName: string;
   koName: string;
   roleLabel: string;
@@ -63,7 +65,17 @@ type SummonEntry = {
   mp: number;
   accent: "violet" | "pink" | "teal";
   active: boolean;
+  /** 지금 이 에이전트가 있는 단계 (분류/판단/실행/대기/승인/완료) */
+  stageKo: string;
+  /** 단계 상태 톤 */
+  stageState: "blocked" | "active" | "waiting" | "done" | "idle";
+  /** 무슨 일을 하는지 — 위임 카드 제목 */
+  task?: string;
 };
+
+function stageLabelFor(stageIndex: number): string {
+  return THEATER_STAGES[Math.max(0, Math.min(stageIndex, THEATER_STAGES.length - 1))]!.ko;
+}
 
 function codexParty(count: number): SummonEntry[] {
   const accents: SummonEntry["accent"][] = ["violet", "pink", "teal"];
@@ -85,6 +97,8 @@ function codexParty(count: number): SummonEntry[] {
       mp: card.mp,
       accent: accents[index % accents.length]!,
       active: index === 0,
+      stageKo: "대기",
+      stageState: "idle" as const,
     };
   });
 }
@@ -100,8 +114,20 @@ function rowsToEntries(rows: TheaterRow[], agents: ReadonlyArray<WorkbenchAgent>
       role: (agent?.role ?? "builder") as never,
       avatarUrl: row.portraitUrl,
     });
+    const done = row.stageIndex >= THEATER_STAGES.length - 1;
+    const atApproval = THEATER_STAGES[row.stageIndex]?.key === "approve";
+    const stageState: SummonEntry["stageState"] = row.blocked
+      ? "blocked"
+      : done
+        ? "done"
+        : atApproval
+          ? "waiting"
+          : row.assigned
+            ? "active"
+            : "idle";
     return {
       key: row.agentId,
+      agentId: row.agentId,
       jpName: JP_NAME[personaKey] ?? row.name,
       koName: row.name,
       roleLabel: row.roleLabel,
@@ -111,6 +137,9 @@ function rowsToEntries(rows: TheaterRow[], agents: ReadonlyArray<WorkbenchAgent>
       mp: card.mp,
       accent: accents[index % accents.length]!,
       active: row.assigned && !row.blocked && row.stageIndex < THEATER_STAGES.length - 1,
+      stageKo: stageLabelFor(row.stageIndex),
+      stageState,
+      task: row.title || row.summary || undefined,
     };
   });
 }
@@ -134,12 +163,15 @@ export function SummonTheater({
   assignmentsByAgentId,
   agents,
   events = [],
+  onOpenAgent,
 }: {
   cards: ReadonlyArray<MakimaDelegationCard>;
   assignmentsByAgentId?: Record<string, MakimaDelegationAssignmentView>;
   agents: ReadonlyArray<WorkbenchAgent>;
   /** 세션 이벤트 로그 — 하단 타임라인 되감기 스크러버용 */
   events?: ReadonlyArray<EventEnvelope>;
+  /** 배정된 에이전트 카드/주인공 클릭 → 그 에이전트 대화 열기 */
+  onOpenAgent?: (agentId: string) => void;
 }) {
   const rows = useMemo(
     () =>
@@ -183,17 +215,22 @@ export function SummonTheater({
         <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-violet-300/30 bg-violet-500/15 text-violet-200 shadow-[0_0_18px_rgba(167,139,250,0.3)]">
           ✦
         </div>
-        <span className="border-b-2 border-violet-400/70 pb-0.5 font-mono text-[15px] font-semibold tracking-wide">
-          orchestrator
-        </span>
+        <div className="min-w-0">
+          <span className="border-b-2 border-violet-400/70 pb-0.5 font-mono text-[15px] font-semibold tracking-wide">
+            작전극장
+          </span>
+          <p className="mt-0.5 text-[11px] text-zinc-500">
+            지금 누가 어느 단계(분류→판단→실행→대기→승인→완료)에서 무슨 일을 하는지 한 화면으로. 카드를 누르면 그 에이전트와 바로 대화.
+          </p>
+        </div>
         <span className="flex-1" />
-        <span className="font-mono text-[11px] text-zinc-600">cyber-neon // ver 0.∞</span>
+        <span className="hidden font-mono text-[11px] text-zinc-600 sm:inline">cyber-neon // ver 0.∞</span>
       </header>
 
       <div className="mt-5 grid min-h-0 flex-1 gap-5 lg:grid-cols-[minmax(240px,300px)_minmax(0,1fr)_minmax(240px,300px)]">
         <section aria-label="소환 카드" className="flex min-w-0 flex-col gap-3">
           {entries.slice(0, 4).map((entry) => (
-            <SummonCard entry={entry} key={entry.key} />
+            <SummonCard entry={entry} key={entry.key} onOpen={onOpenAgent} />
           ))}
         </section>
 
@@ -214,13 +251,19 @@ export function SummonTheater({
             <div className="absolute inset-y-0 left-0 flex items-center">
               <span className="h-2.5 w-2.5 rotate-45 bg-teal-300 shadow-[0_0_10px_rgba(45,212,191,0.8)]" />
             </div>
-            <div className="summon-breathe absolute inset-[18%] overflow-hidden rounded-full border border-violet-300/30 bg-zinc-900 shadow-[0_0_60px_rgba(167,139,250,0.25)]">
+            <button
+              className="summon-breathe absolute inset-[18%] overflow-hidden rounded-full border border-violet-300/30 bg-zinc-900 shadow-[0_0_60px_rgba(167,139,250,0.25)] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/60 disabled:cursor-default"
+              disabled={!hero?.agentId || !onOpenAgent}
+              onClick={() => hero?.agentId && onOpenAgent?.(hero.agentId)}
+              title={hero?.agentId ? `${hero.koName}와 대화 열기` : undefined}
+              type="button"
+            >
               {hero?.portraitUrl ? (
                 <img alt={hero.koName} className="h-full w-full object-cover" src={hero.portraitUrl} />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-4xl">✦</div>
               )}
-            </div>
+            </button>
           </div>
           {hero ? (
             <div className="mt-5 flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[12px]">
@@ -262,15 +305,47 @@ export function SummonTheater({
   );
 }
 
-function SummonCard({ entry }: { entry: SummonEntry }) {
+const STAGE_TONE: Record<SummonEntry["stageState"], string> = {
+  blocked: "border-rose-300/50 bg-rose-400/10 text-rose-200",
+  active: "border-pink-300/50 bg-pink-400/10 text-pink-200",
+  waiting: "border-amber-300/50 bg-amber-400/10 text-amber-200",
+  done: "border-teal-300/40 bg-teal-400/[0.08] text-teal-200",
+  idle: "border-white/10 bg-white/[0.04] text-zinc-400",
+};
+const STAGE_STATE_LABEL: Record<SummonEntry["stageState"], string> = {
+  blocked: "막힘",
+  active: "진행",
+  waiting: "승인 대기",
+  done: "완료",
+  idle: "대기",
+};
+
+function SummonCard({ entry, onOpen }: { entry: SummonEntry; onOpen?: (agentId: string) => void }) {
   const meta = RARITY_META[entry.rarity];
+  const clickable = Boolean(entry.agentId && onOpen);
   return (
     <article
       className={cn(
-        "flex gap-3 rounded-2xl border bg-zinc-900/70 p-3 backdrop-blur",
+        "flex gap-3 rounded-2xl border bg-zinc-900/70 p-3 backdrop-blur transition-colors",
         entry.active ? "border-violet-300/40" : "border-white/10",
         entry.active && meta.glow,
+        clickable && "cursor-pointer hover:border-violet-300/50 hover:bg-zinc-900",
       )}
+      aria-label={clickable ? `${entry.koName}와 대화 열기 — ${entry.stageKo} 단계` : undefined}
+      onClick={clickable ? () => onOpen?.(entry.agentId!) : undefined}
+      onKeyDown={
+        clickable
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onOpen?.(entry.agentId!);
+              }
+            }
+          : undefined
+      }
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      title={clickable ? `${entry.koName}와 대화 열기` : undefined}
     >
       {entry.portraitUrl ? (
         <img
@@ -296,6 +371,13 @@ function SummonCard({ entry }: { entry: SummonEntry }) {
           </span>
         </div>
         <p className="mt-0.5 truncate font-mono text-[11px] text-violet-300">{entry.roleLabel}</p>
+        {/* 지금 어느 단계에서 무슨 일을 하는지 — 작전극장의 핵심 */}
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <span className={cn("shrink-0 rounded-md border px-1.5 py-0.5 text-[9.5px] font-semibold", STAGE_TONE[entry.stageState])}>
+            {entry.stageKo} · {STAGE_STATE_LABEL[entry.stageState]}
+          </span>
+          {entry.task ? <span className="truncate text-[10.5px] text-zinc-500">{entry.task}</span> : null}
+        </div>
         <StatBar color="bg-violet-400" label="HP 기억" value={entry.hp} />
         <StatBar color="bg-teal-300" label="MP 신뢰" value={entry.mp} />
       </div>

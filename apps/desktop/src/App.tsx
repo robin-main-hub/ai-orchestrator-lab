@@ -5086,6 +5086,7 @@ export function App() {
               agents={agents}
               assignmentsByAgentId={makimaDelegationAssignmentsByAgentId}
               events={eventLog}
+              onOpenAgent={handleOpenDelegatedAgentConversation}
               cards={createMakimaDelegationCards({
                 agents,
                 request:
