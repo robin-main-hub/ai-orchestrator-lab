@@ -45,6 +45,7 @@ export function Composer({
   queuedMessages,
   onRemoveQueuedMessage,
   onStartSwarmSearch,
+  onStartAppBuild,
 }: {
   attachmentAccept: string;
   attachmentEnabled: boolean;
@@ -74,6 +75,8 @@ export function Composer({
   onRemoveQueuedMessage?: (index: number) => void;
   /** "+" 도구 메뉴 → 스웜 서치: 현재 입력(또는 직전 대화)을 주제로 4~16명 자동 병렬 조사 */
   onStartSwarmSearch?: (topic: string) => void;
+  /** "+" 도구 메뉴 → 앱 빌드: 지금 대화를 구조화된 앱 초안으로(검토 패널). 자동 LLM 발사 없음 */
+  onStartAppBuild?: (draft: string) => void;
 }) {
   const canSend =
     Boolean(selectedAgent) &&
@@ -230,15 +233,15 @@ export function Composer({
           </span>
         </div>
 
-        {/* "+" 도구 메뉴 (MCP 스타일) — 현재는 스웜 서치 */}
-        {onStartSwarmSearch ? (
+        {/* "+" 도구 메뉴 (MCP 스타일) — 스웜 서치 / 앱 빌드 */}
+        {onStartSwarmSearch || onStartAppBuild ? (
           <div className="flex shrink-0 flex-col gap-1">
             <Popover>
               <PopoverTrigger asChild>
                 <button
                   aria-label="도구 추가"
                   className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-zinc-400 transition-colors hover:border-violet-400/30 hover:bg-violet-500/10 hover:text-violet-200"
-                  title="도구 — 스웜 서치"
+                  title="도구"
                   type="button"
                 >
                   <Plus className="h-4 w-4" />
@@ -246,19 +249,36 @@ export function Composer({
               </PopoverTrigger>
               <PopoverContent align="start" className="w-64 border-zinc-800 bg-zinc-900/95 p-1.5 text-zinc-100 backdrop-blur-xl">
                 <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-zinc-500">도구</p>
-                <button
-                  className="flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-violet-500/10"
-                  onClick={() => onStartSwarmSearch(draftMessage)}
-                  type="button"
-                >
-                  <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
-                  <span className="min-w-0">
-                    <span className="block text-[13px] font-medium">스웜 서치</span>
-                    <span className="block text-[11px] leading-snug text-zinc-500">
-                      지금 입력(또는 직전 대화)을 주제로 4~16명 요원이 자동 병렬 조사
+                {onStartSwarmSearch ? (
+                  <button
+                    className="flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-violet-500/10"
+                    onClick={() => onStartSwarmSearch(draftMessage)}
+                    type="button"
+                  >
+                    <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium">스웜 서치</span>
+                      <span className="block text-[11px] leading-snug text-zinc-500">
+                        지금 입력(또는 직전 대화)을 주제로 4~16명 요원이 자동 병렬 조사
+                      </span>
                     </span>
-                  </span>
-                </button>
+                  </button>
+                ) : null}
+                {onStartAppBuild ? (
+                  <button
+                    className="flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-cyan-500/10"
+                    onClick={() => onStartAppBuild(draftMessage)}
+                    type="button"
+                  >
+                    <Hammer className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium">앱 빌드</span>
+                      <span className="block text-[11px] leading-snug text-zinc-500">
+                        지금 대화를 구조화된 앱 초안으로 — 검토 후 미션 생성 (자동 LLM 발사 없음)
+                      </span>
+                    </span>
+                  </button>
+                ) : null}
               </PopoverContent>
             </Popover>
             <span className="text-center text-[9px] text-zinc-600">도구</span>

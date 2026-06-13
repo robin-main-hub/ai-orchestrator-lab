@@ -28,7 +28,7 @@ export const DESIGN_TEAM: ReadonlyArray<DesignTeamMember> = [
  */
 export function buildMissionCreateFromBlueprint(
   input: DesignBlueprintInput,
-  opts: { missionId: string; createdBy?: string; debateId?: string },
+  opts: { missionId: string; createdBy?: string; debateId?: string; sourceSessionId?: string },
 ): MissionCreateRequest {
   const workers: MissionWorkerAssignmentRequest[] = DESIGN_TEAM.map((member, index) => ({
     agentId: `design_${member.role}_${index + 1}`,
@@ -55,6 +55,7 @@ export function buildMissionCreateFromBlueprint(
     title: `[디자인] ${input.title}`.slice(0, 300),
     goal,
     debateId: opts.debateId, // 토론에서 승격된 미션이면 출처 토론 id를 단다(provenance)
+    sourceSessionId: opts.sourceSessionId, // 대화→앱빌더로 승격된 미션이면 출처 세션 id(provenance)
     truthStatus: "planned",
     createdBy: opts.createdBy ?? "design_blueprint",
     workers,

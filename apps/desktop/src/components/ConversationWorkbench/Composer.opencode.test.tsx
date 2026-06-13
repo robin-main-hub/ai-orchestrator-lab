@@ -66,6 +66,16 @@ describe("Composer — OpenCode 메커니즘", () => {
     expect(without).not.toContain('aria-label="도구 추가"');
   });
 
+  it('"+" 트리거는 onStartAppBuild만 있어도 렌더된다 (3순위 — 스웜 없이 앱빌드만으로도 노출)', () => {
+    // Popover 콘텐츠(메뉴 항목)는 닫힌 상태라 정적 마크업에 없다 — 트리거 게이트만 검증.
+    // 메뉴 항목 텍스트/클릭 동작은 통합 환경에서 확인.
+    const appOnly = renderComposer({ onStartAppBuild: () => {} });
+    expect(appOnly).toContain('aria-label="도구 추가"');
+
+    const neither = renderComposer();
+    expect(neither).not.toContain('aria-label="도구 추가"');
+  });
+
   it("대기 메시지 큐를 제거 버튼과 함께 렌더한다 (항목 8)", () => {
     const html = renderComposer({
       queuedMessages: ["다음 질문", "그 다음 질문"],
