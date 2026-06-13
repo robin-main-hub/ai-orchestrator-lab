@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { z } from "zod";
-import { mkdir, readFile, appendFile, stat, rename, readdir, unlink } from "node:fs/promises";
+import { mkdir, readFile, appendFile, stat, rename, readdir, unlink, writeFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { dirname, join, resolve } from "node:path";
@@ -78,6 +78,7 @@ import {
   agentRoleSchema,
   approvalDecisionRequestSchema,
   approvalRequestSchema,
+  buildObsidianSkillNote,
   codingPacketSchema,
   deriveMissionTrace,
   eventSyncPushRequestSchema,
@@ -5304,6 +5305,16 @@ export function createServerMissionStore(storage: JsonlServerEventStorage): Miss
     },
     // L4: 에러 카드 runner 라벨 — 선택된 sandbox runner와 일치(기본 local).
     verificationRunnerKind: () => (process.env.ORCHESTRATOR_SANDBOX_RUNNER ?? "local").trim().toLowerCase() || "local",
+    // L6: curator 승인(approved/pinned) skill을 Obsidian vault로 export(idempotent path).
+    // ORCHESTRATOR_SKILL_EXPORT_DIR 미설정이면 export 생략(큐는 그대로 approved 유지).
+    exportApprovedSkill: async (candidate) => {
+      const dir = process.env.ORCHESTRATOR_SKILL_EXPORT_DIR?.trim();
+      if (!dir) return;
+      const note = buildObsidianSkillNote(candidate); // path = skills/<id>.md (서버 생성 id, 안전)
+      const target = resolve(dir, note.path);
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, note.content, "utf8");
+    },
     // E1+L2: 검증 명령을 runner registry가 고른 sandbox에서 실행하고 종료코드를 관측한다.
     // ORCHESTRATOR_SANDBOX_RUNNER=local|docker|gvisor 정책을 따르며, docker/gVisor가
     // unavailable이면 fake fallback 없이 blocked/observed:false로 남긴다(local로 몰래

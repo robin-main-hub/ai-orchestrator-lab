@@ -3,6 +3,7 @@ import type { ServerMissionRecord } from "./productKernel.js";
 import {
   applyCuratorDecision,
   buildObsidianSkillNote,
+  deriveSkillArchiveQueue,
   deriveSkillCandidatesFromMission,
   isExportableSkill,
   type SkillArchiveCandidate,
@@ -67,5 +68,39 @@ describe("curator loop", () => {
     const b = buildObsidianSkillNote(c);
     expect(a.path).toBe("skills/skill_m1_merge.md");
     expect(a).toEqual(b);
+  });
+});
+
+describe("deriveSkillArchiveQueue", () => {
+  const c = candidateFixture();
+  function candidateFixture(): SkillArchiveCandidate {
+    return deriveSkillCandidatesFromMission(record(), now)[0]!;
+  }
+
+  it("created stays suggested until a curated decision lands (no auto-promotion)", () => {
+    const queue = deriveSkillArchiveQueue([
+      { type: "memory.skill_candidate.created", payload: { missionId: "m1", candidate: c } },
+    ]);
+    expect(queue).toHaveLength(1);
+    expect(queue[0]!.trustStatus).toBe("suggested");
+  });
+
+  it("applies the latest curated decision in append order (approve → pin)", () => {
+    const queue = deriveSkillArchiveQueue([
+      { type: "memory.skill_candidate.created", payload: { missionId: "m1", candidate: c } },
+      { type: "memory.skill_candidate.curated", payload: { missionId: "m1", candidateId: c.id, decision: "approve", trustStatus: "curator_approved" } },
+      { type: "memory.skill_candidate.curated", payload: { missionId: "m1", candidateId: c.id, decision: "pin", trustStatus: "pinned" } },
+    ]);
+    expect(queue[0]!.trustStatus).toBe("pinned");
+  });
+
+  it("ignores curated events for unknown candidates and de-dups created", () => {
+    const queue = deriveSkillArchiveQueue([
+      { type: "memory.skill_candidate.created", payload: { missionId: "m1", candidate: c } },
+      { type: "memory.skill_candidate.created", payload: { missionId: "m1", candidate: c } },
+      { type: "memory.skill_candidate.curated", payload: { missionId: "m1", candidateId: "ghost", decision: "approve", trustStatus: "curator_approved" } },
+    ]);
+    expect(queue).toHaveLength(1);
+    expect(queue[0]!.trustStatus).toBe("suggested");
   });
 });
