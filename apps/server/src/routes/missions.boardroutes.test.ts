@@ -316,4 +316,33 @@ describe("mission board routes", () => {
     expect(await handleMissionRoute(args)).toBe(true);
     expect(result().status).toBe(400);
   });
+
+  const DEBATE_PACKET = {
+    id: "dp1",
+    debateId: "debate_1",
+    kind: "design",
+    summary: "보드 개편",
+    adoptedDecisions: ["상단 신호 1개"],
+    rejectedOptions: [],
+    openQuestions: [],
+  };
+
+  it("POST /missions/from-debate promotes an actionable debate to a design mission", async () => {
+    const create = vi.fn(async () => record("m_debate_1", "running"));
+    const attachDesignBlueprint = vi.fn(async () => ({ mission: record("m_debate_1", "running"), blueprint: { acceptanceCriteria: [] } }));
+    const store = { create, attachDesignBlueprint } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/from-debate", "POST", { packet: DEBATE_PACKET, missionId: "m_debate_1" });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(201);
+    expect(create).toHaveBeenCalled();
+    expect(attachDesignBlueprint).toHaveBeenCalled();
+    expect((result().payload as { debatePacket: { debateId: string } }).debatePacket.debateId).toBe("debate_1");
+  });
+
+  it("POST /missions/from-debate 400s when the debate has no actionable decisions", async () => {
+    const store = {} as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/from-debate", "POST", { packet: { ...DEBATE_PACKET, adoptedDecisions: [] } });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(400);
+  });
 });

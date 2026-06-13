@@ -7,6 +7,7 @@ import type {
   MissionCreateRequest,
   MissionEventAppendRequest,
   MissionFromBlueprintRequest,
+  MissionFromDebateRequest,
   MissionFromTemplateRequest,
   MissionKanbanBoard,
   MissionMergeRequest,
@@ -288,6 +289,16 @@ export async function createDgxMissionFromBlueprint({
   timeoutMs = 8_000,
 }: MissionServerRequestInput & { request: MissionFromBlueprintRequest }): Promise<MissionResponse> {
   return requestMissionServerJson<MissionResponse>({ method: "POST", path: "/missions/from-blueprint", body: request, serverBaseUrl, fetchImpl, timeoutMs });
+}
+
+/** D6: 토론 결정 패킷 → 디자인 미션(실행 가능한 결정 없으면 400) */
+export async function createDgxMissionFromDebate({
+  request,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 8_000,
+}: MissionServerRequestInput & { request: MissionFromDebateRequest }): Promise<MissionResponse> {
+  return requestMissionServerJson<MissionResponse>({ method: "POST", path: "/missions/from-debate", body: request, serverBaseUrl, fetchImpl, timeoutMs });
 }
 
 /** L7: 템플릿 → 미션(현재는 보류 도메인이지만 seam은 둠) */

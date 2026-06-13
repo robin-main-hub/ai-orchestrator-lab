@@ -4,6 +4,7 @@ import {
   buildMissionCreateFromBlueprint,
   buildMissionCreateFromTemplate,
   CORE_WORKFLOW_TEMPLATES,
+  debateDecisionToBlueprintInput,
   defaultPreviewCommandForAppType,
   deriveMissionKanbanBoard,
   deriveMissionTrace,
@@ -12,6 +13,7 @@ import {
   findWorkflowTemplate,
   missingRequiredFields,
   missionFromBlueprintRequestSchema,
+  missionFromDebateRequestSchema,
   previewFromProbe,
   previewProbeRequestSchema,
   previewStartRequestSchema,
@@ -29,7 +31,9 @@ import {
   type MissionEventAppendRequest,
   type AppWorkspaceAttachRequest,
   type AppWorkspacePreview,
+  type DesignTargetSurface,
   type MissionFromBlueprintRequest,
+  type MissionFromDebateRequest,
   type VisualQaReport,
   type MissionFromTemplateRequest,
   type MissionRollbackOutcome,
@@ -228,6 +232,40 @@ export async function handleMissionRoute({
       });
     } catch (error) {
       respondJson(500, { error: "mission_from_blueprint_failed", message: error instanceof Error ? error.message : String(error) });
+    }
+    return true;
+  }
+
+  // D6: 토론 결정 패킷 → DesignBlueprint → 디자인 Mission(provenance debateId). 실행 가능한
+  // 결정이 없으면 400(말잔치 금지).
+  if (pathname === "/missions/from-debate" && method === "POST") {
+    let payload: MissionFromDebateRequest;
+    try {
+      payload = missionFromDebateRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, { error: "invalid_mission_from_debate_payload", message: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    const blueprintInput = debateDecisionToBlueprintInput(payload.packet, { targetSurface: payload.targetSurface as DesignTargetSurface | undefined });
+    if (!blueprintInput) {
+      respondJson(400, { error: "debate_not_actionable", message: "토론이 실행 가능한 결정(adoptedDecisions)을 내지 못해 Mission으로 승격할 수 없습니다" });
+      return true;
+    }
+    const missionId = payload.missionId ?? `mission_debate_${Date.now()}`;
+    try {
+      await store.create(buildMissionCreateFromBlueprint(blueprintInput, { missionId, createdBy: payload.createdBy, debateId: payload.packet.debateId }));
+      const result = await store.attachDesignBlueprint(missionId, blueprintInput);
+      if (!result) {
+        respondJson(500, { error: "mission_from_debate_failed", message: "blueprint attach did not materialize" });
+        return true;
+      }
+      respondJson(201, { mission: result.mission, blueprint: result.blueprint, debatePacket: payload.packet });
+    } catch (error) {
+      respondJson(500, { error: "mission_from_debate_failed", message: error instanceof Error ? error.message : String(error) });
     }
     return true;
   }
