@@ -1,31 +1,29 @@
 import { useCallback, useEffect, useState } from "react";
-import { createSandboxPlanFromCodingPacket } from "@ai-orchestrator/agents";
-import type { AgentSession, CodingPacket, TerminalHostKind } from "@ai-orchestrator/protocol";
-import { createAutonomyEffectsFactory } from "../lib/autonomousRun";
-import { createLegacyTmuxRunner } from "../lib/legacyTmuxRunner";
+import type { CodingPacket, MissionCreateRequest } from "@ai-orchestrator/protocol";
 import { mergeMissionBoard, type MissionBoardItem, type MissionBoardSnapshot } from "../lib/missionBoardModel";
-import { runMissionVerificationPlan } from "../lib/missionVerification";
-import { appendDgxMissionEvent, fetchDgxMission, fetchDgxMissions } from "../runtime/stage47MissionServer";
+import {
+  createDgxMission,
+  fetchDgxMissions,
+  mergeDgxMission,
+  verifyDgxMission,
+} from "../runtime/stage47MissionServer";
 import { MissionBoardPanel } from "./MissionBoardPanel";
 
 /**
- * Mission Board 컨테이너 — 서버 미션 인덱스 hydration(D1) + 검증 실행→기록(D2)
- * + 머지 큐 등록(D3)의 React 글루. 로직은 전부 순수 모듈(missionBoardModel /
- * missionVerification / sandboxPlan / legacyTmuxRunner)에 있고 여기는 배선만.
+ * Mission Board 컨테이너 — 풀 루프 글루:
+ *   패킷 → 미션 생성(POST /missions)
+ *   → 검증 실행(POST /missions/:id/verify, 서버가 실제 실행 → 진짜 observed)
+ *   → 병합 대기열(mission.merge.queued)
+ *   → 머지 실행(POST /missions/:id/merge)
+ * 로직은 전부 순수 모듈/서버에 있고 여기는 배선만. 서버가 죽어도 보드는 죽지 않는다.
  */
 export function MissionBoardContainer({
   serverBaseUrl,
-  host = "dgx_02",
-  tmuxSessionName = "ai-swarm",
-  sessionId = "session_desktop_001",
   packet,
   localItems,
 }: {
   serverBaseUrl?: string | string[];
-  host?: TerminalHostKind;
-  tmuxSessionName?: string;
-  sessionId?: string;
-  /** 검증 명령 소스 — 현재 CodingPacket의 verificationPlan을 사용 */
+  /** 검증 명령 소스 + 미션 생성 시드 — 현재 CodingPacket */
   packet?: CodingPacket;
   /** 서버 밖 로컬 임시 미션 (있으면 fallback으로 병합 표시) */
   localItems?: MissionBoardItem[];
@@ -34,8 +32,9 @@ export function MissionBoardContainer({
     mergeMissionBoard({ serverRecords: undefined, localItems, serverError: "아직 불러오지 않음" }),
   );
   const [loading, setLoading] = useState(false);
-  const [verifyingMissionId, setVerifyingMissionId] = useState<string | undefined>();
-  const [queueingMissionId, setQueueingMissionId] = useState<string | undefined>();
+  const [busyMissionId, setBusyMissionId] = useState<string | undefined>();
+  const [busyKind, setBusyKind] = useState<"verify" | "queue" | "merge" | undefined>();
+  const [creating, setCreating] = useState(false);
   const [notice, setNotice] = useState<string | undefined>();
 
   const refresh = useCallback(async () => {
@@ -44,7 +43,6 @@ export function MissionBoardContainer({
       const response = await fetchDgxMissions({ serverBaseUrl });
       setSnapshot(mergeMissionBoard({ serverRecords: response.missions, localItems }));
     } catch (error) {
-      // 서버가 죽어도 보드는 죽지 않는다 — 로컬 fallback 유지 + 사유 표기
       setSnapshot(
         mergeMissionBoard({
           serverRecords: undefined,
@@ -63,81 +61,79 @@ export function MissionBoardContainer({
 
   const verificationCommands = packet?.verificationPlan.filter((line) => line.trim().length > 0) ?? [];
 
-  const onVerify = useCallback(
-    async (item: MissionBoardItem) => {
-      if (verificationCommands.length === 0 || verifyingMissionId) {
+  const withBusy = useCallback(
+    async (missionId: string, kind: "verify" | "queue" | "merge", action: () => Promise<string>) => {
+      if (busyMissionId) {
         return;
       }
-      setVerifyingMissionId(item.missionId);
+      setBusyMissionId(missionId);
+      setBusyKind(kind);
       setNotice(undefined);
       try {
-        // 전체 미션 레코드에서 verifier capability를 가져온다 (보드 요약엔 없음)
-        const { mission } = await fetchDgxMission({ missionId: item.missionId, serverBaseUrl });
-        const verifier = mission.workers.find((worker) => worker.capability.mode === "sandbox_verify");
-        if (!verifier) {
-          setNotice("sandbox_verify 가능한 워커가 없습니다 — verifier/reviewer를 배정하세요");
-          return;
-        }
-
-        // 기존 자율실행과 동일한 게이트 경로: base effects → LegacyTmuxRunner
-        const session: AgentSession = {
-          id: `as_${verifier.agentId}_verify_${item.missionId}`,
-          sessionId,
-          agentId: verifier.agentId,
-          role: "qa",
-          backend: "tmux",
-          paneId: "role:qa",
-          status: "spawned",
-          createdAt: new Date().toISOString(),
-        };
-        const effects = createAutonomyEffectsFactory({
-          mode: "auto_safe",
-          server: { serverBaseUrl, host, tmuxSessionName },
-          runId: `mission_verify_${item.missionId}`,
-        })(session);
-        const runner = createLegacyTmuxRunner({ capability: verifier.capability, effects });
-
-        const requests = createSandboxPlanFromCodingPacket({
-          packet: { ...packetWithOnly(verificationCommands) },
-          missionId: item.missionId,
-          workerId: verifier.id,
-          mode: "verify",
-          now: new Date().toISOString(),
-        });
-        const { report } = await runMissionVerificationPlan({
-          requests,
-          runner,
-          missionId: item.missionId,
-          verifierAgentId: verifier.agentId,
-          reportId: `verify_${item.missionId}_${Date.now()}`,
-        });
-
-        await appendDgxMissionEvent({
-          missionId: item.missionId,
-          request: { type: "mission.verification.recorded", payload: { report } },
-          serverBaseUrl,
-        });
-        setNotice(
-          `검증 기록됨: ${report.status}${report.observed ? " (observed)" : " (종료코드 미관측 — legacy tmux)"}`,
-        );
+        setNotice(await action());
         await refresh();
       } catch (error) {
-        setNotice(`검증 실패: ${error instanceof Error ? error.message : String(error)}`);
+        setNotice(`${kind} 실패: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
-        setVerifyingMissionId(undefined);
+        setBusyMissionId(undefined);
+        setBusyKind(undefined);
       }
     },
-    [verificationCommands, verifyingMissionId, serverBaseUrl, host, tmuxSessionName, sessionId, refresh],
+    [busyMissionId, refresh],
+  );
+
+  const onCreateMission = useCallback(async () => {
+    if (!packet || creating) {
+      return;
+    }
+    setCreating(true);
+    setNotice(undefined);
+    try {
+      const stamp = Date.now();
+      const request: MissionCreateRequest = {
+        id: `mission_${stamp}`,
+        title: packet.goal.slice(0, 60) || "새 미션",
+        goal: packet.goal || "패킷에서 승격된 미션",
+        truthStatus: "observed",
+        createdBy: "desktop",
+        workers: [
+          { agentId: "agent_architect", role: "architect", displayName: "Architect", soulMode: "summary", configSource: "internal" },
+          { agentId: "agent_builder", role: "builder", displayName: "Builder", soulMode: "summary", configSource: "internal" },
+          { agentId: "agent_verifier", role: "verifier", displayName: "Verifier", soulMode: "summary", configSource: "internal" },
+        ],
+      };
+      await createDgxMission({ request, serverBaseUrl });
+      setNotice(`미션 생성됨: ${request.title}`);
+      await refresh();
+    } catch (error) {
+      setNotice(`미션 생성 실패: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setCreating(false);
+    }
+  }, [packet, creating, serverBaseUrl, refresh]);
+
+  const onVerify = useCallback(
+    (item: MissionBoardItem) =>
+      withBusy(item.missionId, "verify", async () => {
+        // 서버가 검증 명령을 실제로 실행하고 종료코드를 관측 → 진짜 observed
+        const { mission } = await verifyDgxMission({
+          missionId: item.missionId,
+          request: { commands: verificationCommands },
+          serverBaseUrl,
+        });
+        const report = mission.verificationReports.at(-1);
+        return `검증 완료: ${report?.status}${report?.observed ? " (observed)" : ""}`;
+      }),
+    [withBusy, verificationCommands, serverBaseUrl],
   );
 
   const onQueueMerge = useCallback(
-    async (item: MissionBoardItem) => {
-      if (!item.latestVerification || queueingMissionId) {
-        return;
-      }
-      setQueueingMissionId(item.missionId);
-      setNotice(undefined);
-      try {
+    (item: MissionBoardItem) =>
+      withBusy(item.missionId, "queue", async () => {
+        if (!item.latestVerification) {
+          throw new Error("검증 리포트가 없습니다");
+        }
+        const { appendDgxMissionEvent } = await import("../runtime/stage47MissionServer");
         await appendDgxMissionEvent({
           missionId: item.missionId,
           request: {
@@ -156,43 +152,38 @@ export function MissionBoardContainer({
           },
           serverBaseUrl,
         });
-        setNotice("병합 대기열에 등록됐습니다 (sequential merge queue)");
-        await refresh();
-      } catch (error) {
-        setNotice(`병합 대기열 등록 실패: ${error instanceof Error ? error.message : String(error)}`);
-      } finally {
-        setQueueingMissionId(undefined);
-      }
-    },
-    [queueingMissionId, serverBaseUrl, refresh],
+        return "병합 대기열에 등록됨";
+      }),
+    [withBusy, serverBaseUrl],
+  );
+
+  const onMerge = useCallback(
+    (item: MissionBoardItem) =>
+      withBusy(item.missionId, "merge", async () => {
+        const { mission } = await mergeDgxMission({
+          missionId: item.missionId,
+          request: { mergeQueueItemId: `merge_${item.missionId}_${item.latestVerification?.id}` },
+          serverBaseUrl,
+        });
+        return `머지 실행됨 — 미션 상태: ${mission.status}`;
+      }),
+    [withBusy, serverBaseUrl],
   );
 
   return (
     <MissionBoardPanel
       snapshot={snapshot}
       loading={loading}
-      verifyingMissionId={verifyingMissionId}
-      queueingMissionId={queueingMissionId}
+      creating={creating}
+      busyMissionId={busyMissionId}
+      busyKind={busyKind}
       notice={notice}
       onRefresh={() => void refresh()}
+      onCreateMission={packet ? () => void onCreateMission() : undefined}
       onVerify={(item) => void onVerify(item)}
       onQueueMerge={(item) => void onQueueMerge(item)}
+      onMerge={(item) => void onMerge(item)}
       verifyAvailable={verificationCommands.length > 0}
     />
   );
-}
-
-/** verificationPlan만 살린 최소 패킷 (sandboxPlan 입력용) */
-function packetWithOnly(verificationPlan: string[]): CodingPacket {
-  return {
-    goal: "mission verification",
-    context: [],
-    decisions: [],
-    rejectedOptions: [],
-    constraints: [],
-    filesToInspect: [],
-    implementationPlan: [],
-    verificationPlan,
-    reviewerNotes: [],
-  };
 }

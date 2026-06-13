@@ -2,6 +2,8 @@ import type { IncomingMessage } from "node:http";
 import {
   missionCreateRequestSchema,
   missionEventAppendRequestSchema,
+  missionMergeRequestSchema,
+  missionVerifyRequestSchema,
   type MissionCreateRequest,
   type MissionEventAppendRequest,
   type ServerMissionRecord,
@@ -30,6 +32,8 @@ export type MissionRouteDependencies = {
 
 const MISSION_PATH = /^\/missions\/([^/]+)$/;
 const MISSION_EVENTS_PATH = /^\/missions\/([^/]+)\/events$/;
+const MISSION_VERIFY_PATH = /^\/missions\/([^/]+)\/verify$/;
+const MISSION_MERGE_PATH = /^\/missions\/([^/]+)\/merge$/;
 
 export async function handleMissionRoute({
   store,
@@ -106,6 +110,80 @@ export async function handleMissionRoute({
       }
       respondJson(500, {
         error: "mission_event_append_failed",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return true;
+  }
+
+  const verifyMatch = MISSION_VERIFY_PATH.exec(pathname);
+  if (verifyMatch && method === "POST") {
+    const missionId = decodeURIComponent(verifyMatch[1]!);
+    let payload;
+    try {
+      payload = missionVerifyRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, {
+        error: "invalid_mission_verify_payload",
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return true;
+    }
+    try {
+      const mission = await store.verify(missionId, payload);
+      if (!mission) {
+        respondJson(404, { error: "mission_not_found", missionId });
+        return true;
+      }
+      respondJson(202, { mission });
+    } catch (error) {
+      if (error instanceof MissionEventValidationError) {
+        respondJson(400, { error: "mission_verify_rejected", message: error.message });
+        return true;
+      }
+      respondJson(500, {
+        error: "mission_verify_failed",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return true;
+  }
+
+  const mergeMatch = MISSION_MERGE_PATH.exec(pathname);
+  if (mergeMatch && method === "POST") {
+    const missionId = decodeURIComponent(mergeMatch[1]!);
+    let payload;
+    try {
+      payload = missionMergeRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, {
+        error: "invalid_mission_merge_payload",
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return true;
+    }
+    try {
+      const mission = await store.merge(missionId, payload);
+      if (!mission) {
+        respondJson(404, { error: "mission_not_found", missionId });
+        return true;
+      }
+      respondJson(202, { mission });
+    } catch (error) {
+      if (error instanceof MissionEventValidationError) {
+        respondJson(400, { error: "mission_merge_rejected", message: error.message });
+        return true;
+      }
+      respondJson(500, {
+        error: "mission_merge_failed",
         message: error instanceof Error ? error.message : String(error),
       });
     }

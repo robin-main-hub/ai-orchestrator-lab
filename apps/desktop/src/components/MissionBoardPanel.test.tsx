@@ -107,6 +107,44 @@ describe("MissionBoardPanel", () => {
     expect(unobserved).toContain("미관측");
   });
 
+  it("offers merge execution only when a queue item exists on a verified mission", () => {
+    const mergeable = renderToStaticMarkup(
+      <MissionBoardPanel
+        snapshot={snapshot([
+          item({
+            verificationCount: 1,
+            mergeQueueCount: 1,
+            latestVerification: { id: "v1", status: "passed", observed: true },
+          }),
+        ])}
+        onRefresh={noop}
+        onMerge={vi.fn()}
+      />,
+    );
+    expect(mergeable).toContain("머지 실행");
+
+    // 큐 항목이 없으면 머지 실행 버튼 없음
+    const noQueue = renderToStaticMarkup(
+      <MissionBoardPanel
+        snapshot={snapshot([
+          item({ verificationCount: 1, mergeQueueCount: 0, latestVerification: { id: "v1", status: "passed", observed: true } }),
+        ])}
+        onRefresh={noop}
+        onMerge={vi.fn()}
+      />,
+    );
+    expect(noQueue).not.toContain("머지 실행");
+  });
+
+  it("shows the create-mission button only when a handler is provided", () => {
+    expect(renderToStaticMarkup(<MissionBoardPanel snapshot={snapshot([])} onRefresh={noop} onCreateMission={vi.fn()} />)).toContain(
+      "패킷→미션 생성",
+    );
+    expect(renderToStaticMarkup(<MissionBoardPanel snapshot={snapshot([])} onRefresh={noop} />)).not.toContain(
+      "패킷→미션 생성",
+    );
+  });
+
   it("renders the empty state per connection state", () => {
     expect(renderToStaticMarkup(<MissionBoardPanel snapshot={snapshot([])} onRefresh={noop} />)).toContain(
       "저장된 미션이 없습니다",

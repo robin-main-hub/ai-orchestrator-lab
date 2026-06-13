@@ -118,6 +118,97 @@ describe("mission store + materialized index", () => {
   });
 });
 
+describe("server verification execution (E1)", () => {
+  it("runs the verification runner and records an observed report", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore({
+      ...deps,
+      runVerification: async ({ commands, missionId, verifierAgentId, reportId }) => ({
+        id: reportId,
+        missionId,
+        verifierAgentId,
+        status: "passed",
+        checks: commands.map((command, i) => ({
+          id: `c${i}`,
+          command,
+          status: "passed" as const,
+          exitCode: 0,
+          summary: "ok",
+          startedAt: "2026-06-13T00:00:00.000Z",
+        })),
+        artifactIds: [],
+        observed: true,
+        createdAt: "2026-06-13T00:00:00.000Z",
+      }),
+      nextNonce: () => "n1",
+    });
+    await store.create({ ...CREATE, workers: [{ agentId: "agent_verifier", role: "verifier", displayName: "Verifier", soulMode: "summary", configSource: "internal" }] });
+
+    const updated = await store.verify("mission_001", { commands: ["pnpm test"] });
+    expect(updated?.verificationReports).toHaveLength(1);
+    expect(updated?.verificationReports[0]!.observed).toBe(true);
+    expect(updated?.status).toBe("ready_to_merge");
+  });
+
+  it("rejects verify when no sandbox_verify worker exists", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore({ ...deps, runVerification: async () => ({}) as never });
+    await store.create({ ...CREATE, workers: [] }); // worker 없음
+    await expect(store.verify("mission_001", { commands: ["pnpm test"] })).rejects.toThrow(/sandbox_verify/);
+  });
+});
+
+describe("merge execution (E2)", () => {
+  async function seedQueued() {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    await store.appendEvent("mission_001", {
+      type: "mission.verification.recorded",
+      payload: {
+        report: {
+          id: "verify_pass",
+          missionId: "mission_001",
+          verifierAgentId: "agent_verifier",
+          status: "passed",
+          checks: [{ id: "c1", command: "pnpm test", status: "passed", exitCode: 0, summary: "ok", startedAt: "2026-06-13T00:00:00.000Z" }],
+          artifactIds: [],
+          observed: true,
+          createdAt: "2026-06-13T00:00:00.000Z",
+        },
+      },
+    });
+    await store.appendEvent("mission_001", {
+      type: "mission.merge.queued",
+      payload: {
+        item: {
+          id: "merge_1",
+          missionId: "mission_001",
+          branchName: "agent/mission_001",
+          status: "queued",
+          requiredVerificationReportId: "verify_pass",
+          reason: "verified",
+          queuedAt: "2026-06-13T00:00:01.000Z",
+        },
+      },
+    });
+    return store;
+  }
+
+  it("merges a queued item, transitions it to merged, and closes the mission", async () => {
+    const store = await seedQueued();
+    const merged = await store.merge("mission_001", { mergeQueueItemId: "merge_1", mergeCommitSha: "abc123" });
+    expect(merged?.status).toBe("merged");
+    expect(merged?.mergeQueueItems[0]!.status).toBe("merged");
+    expect(merged?.mergeQueueItems[0]!.mergeCommitSha).toBe("abc123");
+  });
+
+  it("rejects merging an unknown queue item", async () => {
+    const store = await seedQueued();
+    await expect(store.merge("mission_001", { mergeQueueItemId: "merge_ghost" })).rejects.toThrow(MissionEventValidationError);
+  });
+});
+
 describe("merge queue — only verified results may queue (D3)", () => {
   const passedReport = {
     report: {

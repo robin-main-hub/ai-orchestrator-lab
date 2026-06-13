@@ -87,6 +87,12 @@ export {
 export type {
   SandboxPlanInput,
 } from "./sandboxPlan.js";
+export {
+  DANGEROUS_PATTERN,
+  DEFAULT_SAFE_COMMAND_PREFIXES,
+  isAutoApprovableCommand,
+} from "./safeCommandPolicy.js";
+export type { SafeCommandVerdict } from "./safeCommandPolicy.js";
 
 export type DebateContext = {
   sessionId: string;

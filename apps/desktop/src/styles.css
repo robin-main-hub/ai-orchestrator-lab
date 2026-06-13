@@ -9224,8 +9224,10 @@ body:has(.app-shell.annex-focus-shell) {
   margin-top: 2px;
 }
 .mission-board-refresh,
+.mission-board-create,
 .mission-board-verify,
-.mission-board-queue {
+.mission-board-queue,
+.mission-board-merge {
   width: auto;
   min-width: 0;
 }
