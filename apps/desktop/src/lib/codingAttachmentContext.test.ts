@@ -47,12 +47,23 @@ describe("buildCodingAttachmentDelivery — 정직 2채널 전달", () => {
     expect(d.firstRequestContext).toContain("본문이 아래에 인라인됨");
   });
 
-  it("12K 초과 본문은 잘리고 잘림 표시", () => {
-    const big = "x".repeat(20_000);
+  it("항목 한도 초과 본문은 잘리고 잘림 표시 (기본 24K)", () => {
+    const big = "x".repeat(40_000);
     const d = buildCodingAttachmentDelivery([base({ name: "big.txt", storage: "local_cache", textContent: big })]);
     expect(d.firstRequestContext).toContain("일부만 — 원본이 더 김");
-    // 인라인 본문은 12K로 절단
-    expect(d.firstRequestContext!.length).toBeLessThan(20_000);
+    // 인라인 본문은 기본 24K로 절단
+    expect(d.firstRequestContext!.length).toBeLessThan(40_000);
+  });
+
+  it("inlineCharLimit/totalCharBudget 옵션으로 더 넉넉히 줄 수 있다(모델 인지)", () => {
+    const body = "y".repeat(30_000);
+    // 기본(24K)이면 잘리지만, 넉넉한 옵션을 주면 전체 인라인
+    const generous = buildCodingAttachmentDelivery([base({ name: "big.txt", storage: "local_cache", textContent: body })], {
+      inlineCharLimit: 60_000,
+      totalCharBudget: 120_000,
+    });
+    expect(generous.firstRequestContext).toContain(body);
+    expect(generous.firstRequestContext).not.toContain("일부만 — 원본이 더 김");
   });
 
   it("metadata_only는 미전달로 명시 + 디스클레이머", () => {
