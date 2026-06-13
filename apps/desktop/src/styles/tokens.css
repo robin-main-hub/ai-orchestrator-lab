@@ -163,6 +163,23 @@
   --role-companion: #fbbf24;
 
   --radius: 0.5rem;
+
+  /* ── Spacing & type scale (density pass, docs/54) ────────────────
+   * Legacy styles.css hardcoded padding/gap as bare px in ~670 places with no
+   * shared scale, so panels drifted tight and uneven ("밀도 vs 여백" 지적).
+   * These give a 4px-based rhythm; legacy BEM rules adopt them incrementally,
+   * densest panels first. Additive — unused tokens have no effect. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  /* Type scale — recover hierarchy: most legacy text sat in an 11–13px band,
+   * so title/body/meta read flat. Three rungs to separate them. */
+  --fs-meta: 12px;
+  --fs-body: 13px;
+  --fs-label: 14px;
 }
 
 /* Dark mode is the default for this app — single theme, no light mode. */

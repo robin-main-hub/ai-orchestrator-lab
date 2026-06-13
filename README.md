@@ -142,6 +142,7 @@ docs/             # 00~45 설계 문서 (아래 주요 항목)
 51     cockpit-three-level-drilldown (operator cockpit L1 health hero / L2 overview / L3 detail)
 52     dashboard-next-action (dashboard "next 1 action" from shared cockpit health rollup)
 53     action-flow-consistency (single openControlQueue entry + unified approval badge count)
+54     spacing-density-pass (4px spacing + type-scale tokens, densest legacy panels first)
 ```
 
 ## 실행 방법
