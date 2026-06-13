@@ -56,7 +56,7 @@ describe("buildFromBlueprintRequest", () => {
 });
 
 describe("appBuildSubmitPlan — 단순↔토론 라우팅", () => {
-  it("simple → from-blueprint 요청(provenance 포함), debate → blueprint 안 싣는 토론 핸드오프", () => {
+  it("simple → from-blueprint 요청(provenance), debate → 편집 blueprint+sourceSessionId를 실어 핸드오프", () => {
     const simple = appBuildSubmitPlan({ mode: "simple", blueprint: oneScreen, sourceSessionId: "session_3" });
     expect(simple.kind).toBe("mission");
     if (simple.kind === "mission") {
@@ -65,8 +65,12 @@ describe("appBuildSubmitPlan — 단순↔토론 라우팅", () => {
     }
 
     const debate = appBuildSubmitPlan({ mode: "debate", blueprint: oneScreen, sourceSessionId: "session_3" });
-    expect(debate.kind).toBe("debate"); // 토론은 blueprint를 싣지 않는다(정직 — 토론 엔진이 대화에서 재도출)
-    expect(debate).not.toHaveProperty("request");
+    expect(debate.kind).toBe("debate");
+    if (debate.kind === "debate") {
+      // 토론도 편집 초안을 실제로 싣는다(척 아님) + provenance
+      expect(debate.blueprint).toEqual(oneScreen);
+      expect(debate.sourceSessionId).toBe("session_3");
+    }
   });
 });
 
