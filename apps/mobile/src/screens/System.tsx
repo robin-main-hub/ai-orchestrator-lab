@@ -15,16 +15,30 @@ export function System() {
   const [probing, setProbing] = useState(false);
   const [lastProbeResult, setLastProbeResult] = useState<string | null>(null);
 
-  const handleProbe = () => {
+  const handleProbe = async () => {
     setProbing(true);
     setLastProbeResult(null);
-    // Mock probe — real probe goes through stage32DgxRouteDiagnostics in the
-    // backend-wiring follow-up PR.
-    window.setTimeout(() => {
-      setRuntime((r) => ({ ...r, lastProbeAt: new Date().toISOString(), status: "online" }));
-      setLastProbeResult("dgx-02:4317 → 200 OK · endruin.com → 200 OK");
+    // 실제 probe — 서버가 죽어 있으면 정직하게 offline. 가짜 200 OK를 위조하지
+    // 않는다(이전엔 네트워크 없이 항상 "정상 · 200 OK"를 띄워 실제 상태를 정반대로
+    // 오인시켰다).
+    const base =
+      (import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_DGX_SERVER_BASE_URL ??
+      "http://dgx-02:4317";
+    const probedAt = new Date().toISOString();
+    try {
+      const response = await fetch(`${base}/`, { method: "GET" });
+      // 401 = 서버는 살아있고 인증만 필요 → online으로 간주
+      const reachable = response.ok || response.status === 401;
+      setRuntime((r) => ({ ...r, lastProbeAt: probedAt, status: reachable ? "online" : "degraded" }));
+      setLastProbeResult(
+        `${base} → ${response.status}${response.status === 401 ? " (인증 필요 — 서버 정상)" : ""}`,
+      );
+    } catch (error) {
+      setRuntime((r) => ({ ...r, lastProbeAt: probedAt, status: "offline" }));
+      setLastProbeResult(`${base} → 연결 실패: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
       setProbing(false);
-    }, 900);
+    }
   };
 
   return (

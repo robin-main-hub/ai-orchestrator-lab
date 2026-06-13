@@ -138,6 +138,7 @@ docs/             # 00~45 설계 문서 (아래 주요 항목)
 47     sandbox-runner-integration (SandboxRunner seam + LegacyTmuxRunner adapter)
 48     mission-board-verification-merge (Mission Board hydration + verification record + merge queue)
 49     mission-full-loop-production (server verification runner + merge execution + UI full loop)
+50     merge-runner-and-honesty-pass (real git worktree merge + truthStatus/usability/fake-landing fixes)
 ```
 
 ## 실행 방법

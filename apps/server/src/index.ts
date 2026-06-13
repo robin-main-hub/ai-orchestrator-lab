@@ -117,6 +117,7 @@ import { handleApprovalRoute } from "./routes/approvals.js";
 import { handleMissionRoute } from "./routes/missions.js";
 import { createMissionStore, type MissionStore } from "./missions/missionStore.js";
 import { runLocalMissionVerification } from "./missions/localSandboxRunner.js";
+import { executeMerge, parseAllowedRepoRoots } from "./missions/gitWorktreeMergeRunner.js";
 import { handleTmuxRoute } from "./routes/tmux.js";
 import { acquireStorageLock } from "./storage/storageLock.js";
 import { AuthRateLimiter, resolveClientKey } from "./security/authRateLimiter.js";
@@ -5282,6 +5283,47 @@ export function createServerMissionStore(storage: JsonlServerEventStorage): Miss
           }
         },
       });
+    },
+    // D4a: 실제 git merge. repoRoot는 ORCHESTRATOR_ALLOWED_REPO_ROOTS에 명시된
+    // 것만 허용 — 미명시면 runner가 dry_run으로 떨어진다(합성 sha 금지). 모든
+    // git 호출은 execFile(shell:false).
+    runMerge: async ({ item, missionTitle }) => {
+      const allowedRepoRoots = parseAllowedRepoRoots(process.env.ORCHESTRATOR_ALLOWED_REPO_ROOTS);
+      const allowedTargetBranches = parseAllowedRepoRoots(process.env.ORCHESTRATOR_ALLOWED_MERGE_TARGETS).length
+        ? parseAllowedRepoRoots(process.env.ORCHESTRATOR_ALLOWED_MERGE_TARGETS)
+        : ["main", "develop"];
+      const result = await executeMerge({
+        item,
+        missionTitle,
+        allowedRepoRoots,
+        allowedTargetBranches,
+        now: () => new Date().toISOString(),
+        git: async (repoRoot, args) => {
+          try {
+            const { stdout, stderr } = await execFileAsync("git", ["-C", repoRoot, ...args], {
+              env: getFilteredSubprocessEnv({}),
+              timeout: Number(process.env.MISSION_MERGE_TIMEOUT_MS ?? 60_000),
+              maxBuffer: 4_000_000,
+              windowsHide: true,
+            });
+            return { exitCode: 0, stdout, stderr };
+          } catch (error) {
+            const e = error as { code?: number | string; stdout?: string; stderr?: string };
+            return {
+              exitCode: typeof e.code === "number" ? e.code : 1,
+              stdout: e.stdout ?? "",
+              stderr: e.stderr ?? "",
+            };
+          }
+        },
+      });
+      return {
+        status: result.status,
+        mergeCommitSha: result.mergeCommitSha,
+        reason: result.reason,
+        conflictFiles: result.conflictFiles,
+        completedAt: result.completedAt,
+      };
     },
   });
 }

@@ -137,12 +137,55 @@ describe("MissionBoardPanel", () => {
   });
 
   it("shows the create-mission button only when a handler is provided", () => {
-    expect(renderToStaticMarkup(<MissionBoardPanel snapshot={snapshot([])} onRefresh={noop} onCreateMission={vi.fn()} />)).toContain(
-      "패킷→미션 생성",
-    );
+    expect(
+      renderToStaticMarkup(<MissionBoardPanel snapshot={snapshot([])} onRefresh={noop} onCreateMission={vi.fn()} />),
+    ).toContain("mission-board-create");
     expect(renderToStaticMarkup(<MissionBoardPanel snapshot={snapshot([])} onRefresh={noop} />)).not.toContain(
-      "패킷→미션 생성",
+      "mission-board-create",
     );
+  });
+
+  it("displays merge outcome honestly — merged sha / conflict / dry_run", () => {
+    const merged = renderToStaticMarkup(
+      <MissionBoardPanel
+        snapshot={snapshot([item({ latestMerge: { id: "m1", status: "merged", sha: "a1b2c3d4e5f6", conflictCount: 0 } })])}
+        onRefresh={noop}
+      />,
+    );
+    expect(merged).toContain("머지됨");
+    expect(merged).toContain("a1b2c3d4e5"); // real sha 앞자리
+
+    const dryRun = renderToStaticMarkup(
+      <MissionBoardPanel
+        snapshot={snapshot([item({ latestMerge: { id: "m1", status: "dry_run", conflictCount: 0 } })])}
+        onRefresh={noop}
+      />,
+    );
+    expect(dryRun).toContain("실제 머지 안 함");
+
+    const conflict = renderToStaticMarkup(
+      <MissionBoardPanel
+        snapshot={snapshot([item({ latestMerge: { id: "m1", status: "conflict", conflictCount: 2 } })])}
+        onRefresh={noop}
+      />,
+    );
+    expect(conflict).toContain("머지 충돌");
+    expect(conflict).toContain("미션 미완료");
+  });
+
+  it("shows the verification failure reason on the card", () => {
+    const html = renderToStaticMarkup(
+      <MissionBoardPanel
+        snapshot={snapshot([
+          item({
+            verificationCount: 1,
+            latestVerification: { id: "v1", status: "failed", observed: true, failedCheck: "pnpm test → exit 1" },
+          }),
+        ])}
+        onRefresh={noop}
+      />,
+    );
+    expect(html).toContain("검증 실패: pnpm test → exit 1");
   });
 
   it("renders the empty state per connection state", () => {

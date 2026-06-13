@@ -118,6 +118,40 @@ describe("mission store + materialized index", () => {
   });
 });
 
+describe("truthStatus honesty — observed only with real verification", () => {
+  it("a freshly created mission is NOT observed (downgraded to configured if it claims so)", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    // 클라이언트가 observed를 주장해도 검증 0건이면 강등
+    await store.create({ ...CREATE, truthStatus: "observed" });
+    const record = (await store.list())[0]!;
+    expect(record.truthStatus).toBe("configured"); // observed 아님
+  });
+
+  it("becomes observed only after an observed passed verification is recorded", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create({ ...CREATE, truthStatus: "planned" });
+    await store.appendEvent("mission_001", {
+      type: "mission.verification.recorded",
+      payload: {
+        report: {
+          id: "verify_pass",
+          missionId: "mission_001",
+          verifierAgentId: "agent_verifier",
+          status: "passed",
+          checks: [{ id: "c1", command: "pnpm test", status: "passed", exitCode: 0, summary: "ok", startedAt: "2026-06-13T00:00:00.000Z" }],
+          artifactIds: [],
+          observed: true,
+          createdAt: "2026-06-13T00:00:00.000Z",
+        },
+      },
+    });
+    const record = (await store.list())[0]!;
+    expect(record.truthStatus).toBe("observed");
+  });
+});
+
 describe("server verification execution (E1)", () => {
   it("runs the verification runner and records an observed report", async () => {
     const { deps } = memoryDeps();
@@ -158,10 +192,21 @@ describe("server verification execution (E1)", () => {
   });
 });
 
-describe("merge execution (E2)", () => {
-  async function seedQueued() {
+describe("merge execution (E2/D4a)", () => {
+  async function seedQueued(runMerge?: Parameters<typeof createMissionStore>[0]["runMerge"]) {
     const { deps } = memoryDeps();
-    const store = createMissionStore(deps);
+    const store = createMissionStore({
+      ...deps,
+      runMerge:
+        runMerge ??
+        (async ({ item }) => ({
+          status: "merged" as const,
+          mergeCommitSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+          reason: "merged",
+          conflictFiles: [],
+          completedAt: "2026-06-13T00:00:02.000Z",
+        })),
+    });
     await store.create(CREATE);
     await store.appendEvent("mission_001", {
       type: "mission.verification.recorded",
@@ -195,12 +240,38 @@ describe("merge execution (E2)", () => {
     return store;
   }
 
-  it("merges a queued item, transitions it to merged, and closes the mission", async () => {
+  it("merges via the runner, storing the runner's REAL sha (not a client value) and closing the mission", async () => {
     const store = await seedQueued();
-    const merged = await store.merge("mission_001", { mergeQueueItemId: "merge_1", mergeCommitSha: "abc123" });
+    const merged = await store.merge("mission_001", { mergeQueueItemId: "merge_1" });
     expect(merged?.status).toBe("merged");
     expect(merged?.mergeQueueItems[0]!.status).toBe("merged");
-    expect(merged?.mergeQueueItems[0]!.mergeCommitSha).toBe("abc123");
+    expect(merged?.mergeQueueItems[0]!.mergeCommitSha).toBe("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
+  });
+
+  it("does NOT close the mission as merged on a conflict (records conflict instead)", async () => {
+    const store = await seedQueued(async ({ item }) => ({
+      status: "conflict",
+      reason: "merge conflict — aborted",
+      conflictFiles: ["src/a.ts"],
+      completedAt: "2026-06-13T00:00:02.000Z",
+    }));
+    const result = await store.merge("mission_001", { mergeQueueItemId: "merge_1" });
+    expect(result?.status).not.toBe("merged");
+    expect(result?.mergeQueueItems[0]!.status).toBe("conflict");
+    expect(result?.mergeQueueItems[0]!.conflictFiles).toEqual(["src/a.ts"]);
+  });
+
+  it("a dry_run (repo not allowlisted) does not close the mission and carries no sha", async () => {
+    const store = await seedQueued(async () => ({
+      status: "dry_run",
+      reason: "repoRoot not allowlisted",
+      conflictFiles: [],
+      completedAt: "2026-06-13T00:00:02.000Z",
+    }));
+    const result = await store.merge("mission_001", { mergeQueueItemId: "merge_1" });
+    expect(result?.status).not.toBe("merged");
+    expect(result?.mergeQueueItems[0]!.status).toBe("dry_run");
+    expect(result?.mergeQueueItems[0]!.mergeCommitSha).toBeUndefined();
   });
 
   it("rejects merging an unknown queue item", async () => {
