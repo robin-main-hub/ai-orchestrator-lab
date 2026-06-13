@@ -59,6 +59,13 @@ describe("Composer — OpenCode 메커니즘", () => {
     expect(idle).not.toContain("중지");
   });
 
+  it('onStartSwarmSearch가 있으면 "+" 도구 트리거를 렌더하고, 없으면 안 그린다', () => {
+    const withTool = renderComposer({ onStartSwarmSearch: () => {} });
+    expect(withTool).toContain('aria-label="도구 추가"');
+    const without = renderComposer();
+    expect(without).not.toContain('aria-label="도구 추가"');
+  });
+
   it("대기 메시지 큐를 제거 버튼과 함께 렌더한다 (항목 8)", () => {
     const html = renderComposer({
       queuedMessages: ["다음 질문", "그 다음 질문"],

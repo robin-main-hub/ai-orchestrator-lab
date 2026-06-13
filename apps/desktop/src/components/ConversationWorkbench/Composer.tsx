@@ -11,7 +11,9 @@ import {
   Telescope,
 } from "lucide-react";
 import type { ModelDescriptor } from "@ai-orchestrator/protocol";
+import { Plus, FlaskConical } from "lucide-react";
 import { Button } from "@/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { cn } from "@/lib/utils";
 import type { DraftAttachment, WorkbenchAgent } from "../../types";
 import {
@@ -42,6 +44,7 @@ export function Composer({
   onStopTurn,
   queuedMessages,
   onRemoveQueuedMessage,
+  onStartSwarmSearch,
 }: {
   attachmentAccept: string;
   attachmentEnabled: boolean;
@@ -69,6 +72,8 @@ export function Composer({
   /** 항목 8 — 대기 중인 메시지 큐 */
   queuedMessages?: string[];
   onRemoveQueuedMessage?: (index: number) => void;
+  /** "+" 도구 메뉴 → 스웜 서치: 현재 입력(또는 직전 대화)을 주제로 4~16명 자동 병렬 조사 */
+  onStartSwarmSearch?: (topic: string) => void;
 }) {
   const canSend =
     Boolean(selectedAgent) &&
@@ -224,6 +229,41 @@ export function Composer({
             {draftAttachments.length}/{maxDraftAttachments}
           </span>
         </div>
+
+        {/* "+" 도구 메뉴 (MCP 스타일) — 현재는 스웜 서치 */}
+        {onStartSwarmSearch ? (
+          <div className="flex shrink-0 flex-col gap-1">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  aria-label="도구 추가"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-zinc-400 transition-colors hover:border-violet-400/30 hover:bg-violet-500/10 hover:text-violet-200"
+                  title="도구 — 스웜 서치"
+                  type="button"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-64 border-zinc-800 bg-zinc-900/95 p-1.5 text-zinc-100 backdrop-blur-xl">
+                <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-zinc-500">도구</p>
+                <button
+                  className="flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-violet-500/10"
+                  onClick={() => onStartSwarmSearch(draftMessage)}
+                  type="button"
+                >
+                  <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-medium">스웜 서치</span>
+                    <span className="block text-[11px] leading-snug text-zinc-500">
+                      지금 입력(또는 직전 대화)을 주제로 4~16명 요원이 자동 병렬 조사
+                    </span>
+                  </span>
+                </button>
+              </PopoverContent>
+            </Popover>
+            <span className="text-center text-[9px] text-zinc-600">도구</span>
+          </div>
+        ) : null}
 
         {/* Textarea */}
         <div className="relative flex-1">

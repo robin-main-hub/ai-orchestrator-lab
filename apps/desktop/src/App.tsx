@@ -279,6 +279,7 @@ import { DashboardView } from "./components/DashboardView";
 import { projectAutonomyRunHistory } from "./lib/autonomyRunHistory";
 import { PERSONA_CODEX } from "./lib/personaCodex";
 import { selectDailyParty } from "./lib/dailyParty";
+import { planConversationSwarm, type SwarmDraft } from "./lib/conversationSwarmPlan";
 import { loadHermesPool, saveHermesPool } from "./lib/hermesPoolStore";
 import { acquireHermesSlot } from "./lib/hermesSlotPool";
 import { summarizeHermesPool } from "./lib/hermesSlotPool";
@@ -359,6 +360,8 @@ export function App() {
   const [activeNavItem, setActiveNavItem] = useState<NavItemId>("dashboard");
   const [summonSeedPersona, setSummonSeedPersona] = useState<string | null>(null);
   const [summonSeedMode, setSummonSeedMode] = useState<RunMode>("single");
+  // 대화창 "스웜 서치" → 리서치 뷰 자동 편성 시드 (주제 + 동적 4~16 요원)
+  const [swarmSeed, setSwarmSeed] = useState<{ id: string; topic: string; drafts: SwarmDraft[] } | null>(null);
   const [conversationViewMode, setConversationViewMode] = useState<"chat" | "agents">("chat");
   const [annexInitialTab, setAnnexInitialTab] = useState<"status" | "memory" | "queue">("status");
   const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
@@ -4808,6 +4811,18 @@ export function App() {
     setProviderRegistrationOpen(false);
     setAdminRailOpen(false);
   };
+  // 대화창 "+" → 스웜 서치: 입력(또는 직전 대화)을 주제로 4~16명 자동 편성 후 리서치 뷰로.
+  const handleStartSwarmSearch = (rawTopic: string) => {
+    const fromDraft = rawTopic.trim();
+    const lastUser = [...conversationMessages].reverse().find((message) => message.role === "user")?.content?.trim() ?? "";
+    const topic = fromDraft || lastUser;
+    if (!topic) return;
+    const plan = planConversationSwarm({ topic });
+    setSwarmSeed({ id: `swarm_${Date.now()}`, topic: plan.topic, drafts: plan.drafts });
+    setActiveNavItem("research");
+    setProviderRegistrationOpen(false);
+    setAdminRailOpen(false);
+  };
 
   // 단일 좌표 판정 — '중앙을 점유하는 nav 목록'은 lib/navSurface로 추출(유령 좌표
   // "runtime" 제거 포함). 두 useState(mode/activeNavItem)는 유지하되 판정은 한 곳에서.
@@ -5096,7 +5111,7 @@ export function App() {
           ) : activeNavItem === "coding" ? (
             <CodingWorkbench modelCatalog={modelCatalog} providerProfiles={providerProfiles} />
           ) : activeNavItem === "research" ? (
-            <ResearchSwarmContainer providerProfiles={providerProfiles} />
+            <ResearchSwarmContainer providerProfiles={providerProfiles} seed={swarmSeed ?? undefined} />
           ) : activeNavItem === "sessions" ? (
             <div className="nav-center-page" data-page="sessions">
             <>
@@ -5275,6 +5290,7 @@ export function App() {
               compactedVersion={selectedAgent ? conversationCondensateByAgentId[selectedAgent.id]?.version : undefined}
               onRollbackTurn={handleRollbackConversationTurn}
               onApproveCommandPattern={handleApproveCommandPattern}
+              onStartSwarmSearch={handleStartSwarmSearch}
             />
           ) : mode === "debate" ? (
             <Stage3DebateTable
