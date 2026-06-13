@@ -43,9 +43,9 @@ describe("AppBuildContainer — 정직성 + 검토 패널", () => {
     );
     expect(html).toContain("토론으로 보내기"); // debate 기본 → 토론 핸드오프 버튼
     expect(html).toContain("토론 권장");
-    // 정직성: 편집한 초안이 토론으로 흘러가는 척하지 않는다
-    expect(html).toContain("단순 경로");
-    expect(html).toContain("토론은 대화를 다시 논의");
+    // 편집한 초안이 토론으로 실제 전달됨을 정직하게 안내(척이 아니라 진짜)
+    expect(html).toContain("편집한 이 초안");
+    expect(html).toContain("검토·반박·개선");
   });
 
   it("disables 'AI로 초안 채우기' when no model is selected (정직: 모델 없으면 AI 비활성)", () => {

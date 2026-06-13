@@ -5,6 +5,7 @@ import type {
   DebateRoundKind,
   DebateTag,
   DebateUtterance,
+  DesignBlueprintInput,
   EventEnvelope,
   ProviderProfile,
   RuntimeSnapshot,
@@ -61,6 +62,10 @@ export type Stage3DebateSession = {
   runState?: "mock" | "running" | "live" | "error";
   /** runState==="error"일 때의 사유 */
   runError?: string;
+  /** 앱빌더 검토 패널에서 승격된 토론이면 출처 세션 id(provenance). conversation-only면 undefined. */
+  sourceSessionId?: string;
+  /** 앱빌더 초안에서 승격된 토론이면 그 초안 제목(맥락 표시용). conversation-only면 undefined. */
+  blueprintTitle?: string;
 };
 
 export type Stage3DebateInput = {
@@ -70,6 +75,13 @@ export type Stage3DebateInput = {
   events: EventEnvelope[];
   runtime: RuntimeSnapshot;
   createdAt?: string;
+  /**
+   * 앱빌더 검토 패널 → 토론 분기. 있으면 토론은 이 **편집된 초안을 검토·반박·개선**하는 것으로
+   * 문제를 잡는다(대화 마지막 발화 대신). 없으면 기존 conversation-only 동작 그대로.
+   */
+  blueprintContext?: DesignBlueprintInput;
+  /** 앱빌더 출처 세션(provenance) — debate record/이벤트에 남긴다. */
+  sourceSessionId?: string;
 };
 
 const roundTemplates: Array<{ kind: DebateRoundKind; title: string }> = [
@@ -82,6 +94,47 @@ const roundTemplates: Array<{ kind: DebateRoundKind; title: string }> = [
   { kind: "coding_packet", title: "코딩 패킷" },
 ];
 
+/**
+ * 토론 문제 도출(순수). 앱빌더 초안(blueprintContext)이 있으면 **그 편집된 초안을 검토·반박·
+ * 개선**하는 것으로 문제를 잡고(대화 마지막 발화 대신), 없으면 기존 conversation-only 동작.
+ * 초안/토론 입력은 planned일 뿐 observed가 아니다 — 여긴 문자열만 만든다(상태 주장 없음).
+ */
+export function deriveDebateProblem(input: { messages: ConversationMessage[]; blueprintContext?: DesignBlueprintInput }): string {
+  if (input.blueprintContext) {
+    const bp = input.blueprintContext;
+    // 항목당 캡 후 join — 거대 단일 화면이 아래 "검토·반박·개선" 지시를 2000자 밖으로 밀어내지 못하게.
+    const screens = bp.screens.map((screen) => `· ${screen.name} (주요액션 ${screen.primaryAction})`.slice(0, 200)).join("\n");
+    const accept = bp.acceptanceCriteria.length ? `\n수용 기준: ${bp.acceptanceCriteria.join("; ").slice(0, 400)}` : "";
+    return [
+      `[앱 초안 검토·반박·개선] "${bp.title}"`,
+      `의도: ${bp.userIntent}`,
+      `대상: ${bp.targetSurface} · 화면 ${bp.screens.length}개`,
+      screens,
+      accept,
+      "이 초안(planned)을 그대로 받지 말고, 화면 구조·주요 액션·빈/오류 상태·접근성을 검토·반박하고 개선안을 제시하라.",
+    ]
+      .filter(Boolean)
+      .join("\n")
+      .slice(0, 2_000);
+  }
+  const lastUserMessage = [...input.messages].reverse().find((message) => message.role === "user");
+  return lastUserMessage?.content ?? "Conversation context를 Debate Mode로 승격";
+}
+
+/**
+ * 초안의 화면/수용기준을 토론 constraints로(엔진 프롬프트에 들어간다). 초안 없으면 빈 배열.
+ * 토론 핸드오프 경로는 zod 검증을 거치지 않고(미션 경로만 거침) 엔진도 constraint를 truncate하지
+ * 않으므로, 항목 수(32)뿐 아니라 **항목당 길이(300자)도 여기서 가둔다** — 거대/악성 초안이
+ * 매 라운드 프롬프트를 부풀리는 것 방지(deriveDebateProblem의 2000자 클립과 같은 방어).
+ */
+export function blueprintDebateConstraints(blueprintContext?: DesignBlueprintInput): string[] {
+  if (!blueprintContext) return [];
+  return [
+    ...blueprintContext.screens.map((screen) => `화면 "${screen.name}": ${screen.purpose} — 주요 액션 ${screen.primaryAction}`.slice(0, 300)),
+    ...blueprintContext.acceptanceCriteria.map((criterion) => `수용 기준: ${criterion}`.slice(0, 300)),
+  ].slice(0, 32);
+}
+
 export function createStage3DebateSession({
   messages,
   agents,
@@ -89,10 +142,11 @@ export function createStage3DebateSession({
   events,
   runtime,
   createdAt = new Date().toISOString(),
+  blueprintContext,
+  sourceSessionId,
 }: Stage3DebateInput): Stage3DebateSession {
   const debateId = `debate_${crypto.randomUUID()}`;
-  const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
-  const problem = lastUserMessage?.content ?? "Conversation context를 Debate Mode로 승격";
+  const problem = deriveDebateProblem({ messages, blueprintContext });
   const summary = summarizeConversation(messages);
   const participants = agents
     .filter((agent) => agent.enabled)
@@ -126,12 +180,18 @@ export function createStage3DebateSession({
     id: debateId,
     problem,
     summary,
-    contextPreview: messages.slice(-5).map((message) => `${message.role}: ${message.content}`),
+    // 초안 승격이면 초안 제목을 맥락 미리보기 맨 앞에 둔다(어디서 왔는지 보이게).
+    contextPreview: [
+      ...(blueprintContext ? [`앱 초안: ${blueprintContext.title}`] : []),
+      ...messages.slice(-5).map((message) => `${message.role}: ${message.content}`),
+    ],
     participants,
     rounds,
     humanPeek: createHumanPeek(participants, rounds, events, createdAt),
     statusHub: createStatusHub(runtime, providers, events),
     promotedAt: createdAt,
+    sourceSessionId,
+    blueprintTitle: blueprintContext?.title,
   };
 }
 
@@ -373,16 +433,16 @@ export async function runStage3DebateSession(
     baseSession.id = input.debateId;
   }
 
-  // Extract debate context from input
-  const lastUserMessage = [...input.messages].reverse().find((m) => m.role === "user");
-  const problem = lastUserMessage?.content ?? "Conversation context를 Debate Mode로 승격";
+  // Extract debate context from input. 앱빌더 초안이 있으면 문제를 "초안 검토·반박·개선"으로
+  // 잡고, 화면/수용기준을 constraints로 넣어 에이전트 프롬프트까지 실제로 전달한다(척 아님).
+  const problem = deriveDebateProblem({ messages: input.messages, blueprintContext: input.blueprintContext });
   const summary = summarizeConversation(input.messages);
 
   const debateContext: DebateContext = {
-    sessionId: input.messages[0]?.sessionId ?? "session_desktop_001",
+    sessionId: input.sourceSessionId ?? input.messages[0]?.sessionId ?? "session_desktop_001",
     problem,
     conversationSummary: summary,
-    constraints: input.packet?.constraints ?? [],
+    constraints: [...blueprintDebateConstraints(input.blueprintContext), ...(input.packet?.constraints ?? [])],
     openQuestions: input.packet?.reviewerNotes ?? [],
     userPreferences: [],
     memoryTraceIds: [],

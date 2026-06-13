@@ -3,6 +3,7 @@ import type {
   BranchExperiment,
   ContextPackTier,
   ConversationMessage,
+  DesignBlueprintInput,
   ModelDescriptor,
   PermissionMatrixSnapshot,
   ProviderProfile,
@@ -194,7 +195,8 @@ export function ConversationWorkbench({
   onOpenDelegatedAgentConversation?: (agentId: string) => void;
   onProgressDelegationAssignment?: (card: MakimaDelegationCard, assignment: MakimaDelegationAssignmentView) => void;
   onImportExternalIngress: () => void;
-  onPromoteToDebate: () => void;
+  /** 토론 승격. 앱빌더 검토 패널에서 넘어오면 편집 초안/출처 세션을 실어 보낸다(인자 없으면 대화 기반). */
+  onPromoteToDebate: (seed?: { blueprintContext?: DesignBlueprintInput; sourceSessionId?: string }) => void;
   onRejectPermission: (sourceItemId: string) => void;
   onRemoveDraftAttachment: (attachmentId: string) => void;
   onSelectAgent: (agentId: string) => void;
@@ -548,7 +550,7 @@ export function ConversationWorkbench({
           <Button
             className="hidden h-8 gap-1.5 px-2 text-xs lg:inline-flex"
             disabled={!canDelegate}
-            onClick={onPromoteToDebate}
+            onClick={() => onPromoteToDebate()}
             size="sm"
             title={canDelegate ? "현재 대화를 토론으로 넘깁니다" : "오케스트레이터 또는 동반자 역할에서만 토론으로 넘길 수 있습니다"}
             variant="ghost"
@@ -761,7 +763,7 @@ export function ConversationWorkbench({
             seed={appBuildSeed}
             model={selectedModel ? { id: selectedModel.id, providerProfileId: selectedModel.providerProfileId } : undefined}
             onClose={() => setAppBuildSeed(null)}
-            onHandoffToDebate={onPromoteToDebate}
+            onHandoffToDebate={(blueprint) => onPromoteToDebate({ blueprintContext: blueprint, sourceSessionId: activeSessionId })}
           />
         ) : null}
 
