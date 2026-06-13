@@ -18,6 +18,7 @@ import {
   shouldRotateEventLog,
 } from "./eventLogRotation.js";
 import * as crypto from "node:crypto";
+import { connect as netConnect } from "node:net";
 import type {
   AgentDelegationAuthorityLevel,
   AgentDelegationEventPayload,
@@ -6610,6 +6611,20 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
             git: missionCheckpointGitExec,
           });
         },
+        // D4: preview 포트 실제 바인딩 probe(TCP connect). 연결되면 observed running,
+        // 아니면 정직하게 미바인딩(가짜 running 금지). dev 서버 spawn은 하지 않는다(관측만).
+        probePreview: async ({ host, port }) =>
+          new Promise<boolean>((resolvePromise) => {
+            const socket = netConnect({ host, port });
+            const finish = (ok: boolean) => {
+              socket.destroy();
+              resolvePromise(ok);
+            };
+            socket.setTimeout(2_000);
+            socket.once("connect", () => finish(true));
+            socket.once("timeout", () => finish(false));
+            socket.once("error", () => finish(false));
+          }),
       })
     ) {
       return;

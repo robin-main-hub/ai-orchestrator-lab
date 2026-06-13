@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appWorkspaceSchema, buildAppWorkspace } from "./appWorkspace.js";
+import { appWorkspaceSchema, buildAppWorkspace, derivePreviewPort, previewFromProbe } from "./appWorkspace.js";
 
 const now = () => "2026-06-13T00:00:00.000Z";
 
@@ -25,5 +25,31 @@ describe("buildAppWorkspace", () => {
     expect(ws.terminal.mode).toBe("verify");
     expect(ws.files.changedCount).toBe(0);
     expect(ws.appType).toBe("nextjs");
+  });
+});
+
+describe("derivePreviewPort", () => {
+  it("is deterministic and stays within the range", () => {
+    const a = derivePreviewPort("ws1");
+    expect(a).toBe(derivePreviewPort("ws1")); // 같은 워크스페이스 → 같은 포트
+    expect(a).toBeGreaterThanOrEqual(4400);
+    expect(a).toBeLessThan(5000);
+    expect(derivePreviewPort("ws2")).not.toBe(a); // 다른 워크스페이스는 (대개) 다름
+  });
+});
+
+describe("previewFromProbe", () => {
+  it("observed running ONLY when the port is actually bound", () => {
+    const bound = previewFromProbe({ bound: true, host: "127.0.0.1", port: 4401 });
+    expect(bound.status).toBe("running");
+    expect(bound.truthStatus).toBe("observed"); // 실제 바인딩 관측
+    expect(bound.url).toBe("http://127.0.0.1:4401");
+  });
+
+  it("unbound is failed/configured, never fake running/observed", () => {
+    const unbound = previewFromProbe({ bound: false, host: "127.0.0.1", port: 4401 });
+    expect(unbound.status).toBe("failed");
+    expect(unbound.truthStatus).not.toBe("observed");
+    expect(unbound.url).toBeUndefined();
   });
 });

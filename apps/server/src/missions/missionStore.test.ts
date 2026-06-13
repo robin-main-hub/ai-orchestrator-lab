@@ -717,6 +717,30 @@ describe("app workspace (D2)", () => {
     const store = createMissionStore(deps);
     expect(await store.attachWorkspace("ghost", { repoRootRef: "/repo", appType: "unknown", terminalMode: "read_only", runnerKind: "local" })).toBeUndefined();
   });
+
+  it("records a preview as observed only when probe says bound", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    const attached = await store.attachWorkspace("mission_001", { repoRootRef: "/repo", appType: "react_vite", terminalMode: "read_only", runnerKind: "local" });
+    const wsId = attached!.workspaces[0]!.id;
+
+    const running = await store.recordPreview("mission_001", wsId, { status: "running", port: 4401, url: "http://127.0.0.1:4401", truthStatus: "observed" });
+    expect(running?.workspaces[0]!.preview.status).toBe("running");
+    expect(running?.workspaces[0]!.preview.truthStatus).toBe("observed");
+
+    // 미바인딩 갱신은 observed가 아니다
+    const failed = await store.recordPreview("mission_001", wsId, { status: "failed", port: 4401, truthStatus: "configured" });
+    expect(failed?.workspaces[0]!.preview.status).toBe("failed");
+    expect(failed?.workspaces[0]!.preview.truthStatus).not.toBe("observed");
+  });
+
+  it("recordPreview returns undefined for an unknown workspace", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    expect(await store.recordPreview("mission_001", "ws_ghost", { status: "running", port: 1, truthStatus: "observed" })).toBeUndefined();
+  });
 });
 
 describe("design blueprint (D3)", () => {
