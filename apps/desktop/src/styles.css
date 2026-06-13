@@ -8218,6 +8218,25 @@ body:has(.app-shell.annex-focus-shell) {
   }
 }
 
+/* 토론 발언 강조 — 입장 점 클릭으로 점프했을 때 그 발언을 잠깐 비춘다 */
+.debate-utterance--flash {
+  animation: debate-utterance-flash 1.6s ease-out 1;
+}
+@keyframes debate-utterance-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(252, 211, 77, 0);
+    background: rgba(252, 211, 77, 0);
+  }
+  18% {
+    box-shadow: 0 0 0 2px rgba(252, 211, 77, 0.55);
+    background: rgba(252, 211, 77, 0.1);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(252, 211, 77, 0);
+    background: rgba(252, 211, 77, 0);
+  }
+}
+
 .glitch-hover:hover:not(:disabled) {
   animation: glitch-shift 0.28s steps(2) 1;
 }
@@ -8236,6 +8255,7 @@ body:has(.app-shell.annex-focus-shell) {
   .result-stamp,
   .glitch-hover:hover,
   .conversation-speaking,
+  .debate-utterance--flash,
   .autonomy-hud-beacon,
   .autonomy-hud .hud-complete,
   .autonomy-hud .hud-escalate_approval {

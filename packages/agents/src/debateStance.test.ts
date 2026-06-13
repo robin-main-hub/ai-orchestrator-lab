@@ -51,6 +51,19 @@ describe("patch 5 — stance trajectory", () => {
     expect(a.summary).toContain("일관된 지지");
   });
 
+  it("각 점은 발언 id를 갖고, 입장이 뒤집힌 점만 changed=true (어떤 발언이 설득했나 추적)", () => {
+    const rounds = [
+      round("r1", "initial_proposals", [{ agentId: "skeptic", tag: "objection" }]),
+      round("r2", "cross_critique", [{ agentId: "skeptic", tag: "objection" }]),
+      round("r3", "refinement", [{ agentId: "skeptic", tag: "agreement" }]),
+    ];
+    const skeptic = deriveStanceTrajectories(rounds).find((t) => t.agentId === "skeptic")!;
+    // 각 점이 발언 id를 가져 UI에서 그 발언으로 점프 가능
+    expect(skeptic.points.map((p) => p.utteranceId)).toEqual(["r1_0", "r2_0", "r3_0"]);
+    // 전향(반대→지지)이 일어난 r3 발언만 changed
+    expect(skeptic.points.map((p) => p.changed)).toEqual([false, false, true]);
+  });
+
   it("중립(evidence)은 극성 변화로 안 침", () => {
     const rounds = [
       round("r1", "initial_proposals", [{ agentId: "x", tag: "objection" }]),
