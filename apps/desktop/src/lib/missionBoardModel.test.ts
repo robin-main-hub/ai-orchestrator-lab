@@ -73,6 +73,7 @@ function serverRecord(overrides: Partial<ServerMissionRecord["mission"]> = {}, u
     checkpoints: [],
     errorCards: [],
     selfCorrections: [],
+    workspaces: [],
     updatedAt,
   };
 }

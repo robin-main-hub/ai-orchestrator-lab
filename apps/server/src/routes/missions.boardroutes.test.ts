@@ -166,4 +166,20 @@ describe("mission board routes", () => {
     expect(status).toBe(400);
     expect((payload as { missingFields: string[] }).missingFields).toContain("material");
   });
+
+  it("POST /missions/:id/workspace attaches an app workspace", async () => {
+    const attachWorkspace = vi.fn(async () => record("m1", "running"));
+    const store = { attachWorkspace } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/m1/workspace", "POST", { repoRootRef: "/repo", appType: "react_vite" });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(201);
+    expect(attachWorkspace).toHaveBeenCalled();
+  });
+
+  it("POST /missions/:id/workspace 404s an unknown mission", async () => {
+    const store = { attachWorkspace: async () => undefined } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/ghost/workspace", "POST", { repoRootRef: "/repo" });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(404);
+  });
 });

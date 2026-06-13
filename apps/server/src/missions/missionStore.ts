@@ -1,5 +1,6 @@
 import {
   applyCuratorDecision,
+  buildAppWorkspace,
   decideSelfCorrection,
   deriveSkillArchiveQueue,
   deriveSkillCandidatesFromMission,
@@ -11,6 +12,8 @@ import {
   missionWorkerAssignmentRequestSchema,
   parseSandboxError,
   sandboxErrorSignature,
+  type AppWorkspace,
+  type AppWorkspaceAttachRequest,
   type CuratorDecision,
   type EventEnvelope,
   type MissionCheckpoint,
@@ -95,6 +98,8 @@ export type MissionStore = {
   skills: (missionId: string) => Promise<SkillArchiveCandidate[] | undefined>;
   /** L6: curator 결정(approve/reject/pin) → trustStatus 전이 + 승인 시 export. 후보 없으면 undefined. */
   curateSkill: (missionId: string, candidateId: string, decision: CuratorDecision) => Promise<SkillArchiveCandidate | undefined>;
+  /** D2: Mission에 App Workspace를 붙인다(코딩/디자인 작업공간). 미션 없으면 undefined. */
+  attachWorkspace: (missionId: string, request: AppWorkspaceAttachRequest) => Promise<ServerMissionRecord | undefined>;
 };
 
 /** 머지 실행기 — repoRoot allowlist에 있으면 real git merge, 아니면 dry_run */
@@ -210,6 +215,19 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
       type,
       payload: record,
       createdAt: record.createdAt,
+      source: "server",
+      sourceTrust: "trusted",
+      redacted: true,
+    };
+  }
+
+  function workspaceAttachedEnvelope(missionId: string, workspace: AppWorkspace): EventEnvelope {
+    return {
+      id: `event_mission_workspace_attached_${workspace.id}`,
+      sessionId: missionId,
+      type: "mission.workspace.attached",
+      payload: { missionId, workspace },
+      createdAt: workspace.createdAt,
       source: "server",
       sourceTrust: "trusted",
       redacted: true,
@@ -632,6 +650,17 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
         }
       }
       return updated;
+    },
+
+    async attachWorkspace(missionId, request) {
+      if (!(await get(missionId))) return undefined;
+      const workspace = buildAppWorkspace(request, {
+        id: `workspace_${missionId}_${nextNonce()}`,
+        missionId,
+        now,
+      });
+      await commit(missionId, [workspaceAttachedEnvelope(missionId, workspace)]);
+      return get(missionId);
     },
   };
 }
