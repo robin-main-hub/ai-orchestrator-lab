@@ -149,11 +149,11 @@ describe("mission board routes", () => {
     expect((result().payload as { verificationPlan: unknown[] }).verificationPlan.length).toBeGreaterThan(0);
   });
 
-  it("POST /missions/from-template 404s a quarantined business template by default", async () => {
+  it("POST /missions/from-template 404s a removed business template", async () => {
     const store = {} as unknown as MissionStore;
     const { args, result } = deps(store, "/missions/from-template", "POST", { templateId: "example-domain_htv_quote", input: {} });
     expect(await handleMissionRoute(args)).toBe(true);
-    expect(result().status).toBe(404); // 회사 도메인 팩은 기본 registry에 없음
+    expect(result().status).toBe(404); // 회사 도메인 템플릿은 제품에서 제거됨
   });
 
   it("POST /missions/from-template 404s an unknown template", async () => {
