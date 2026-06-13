@@ -156,6 +156,7 @@ docs/             # 00~45 설계 문서 (아래 주요 항목)
 65     dashboard-daily-party (date-rotated party from hermes/history signals + clickable cards + why-today reason)
 66     work-theater-overhaul (per-card stage+task display + click-to-open-agent + page purpose)
 67     composer-swarm-search (composer "+" tool tab → auto-plan 4–16 research agents from the conversation)
+68     mission-kanban-and-trace (server-derived Kanban columns + live trace, no new storage) [Orchestration OS PR1]
 ```
 
 ## 실행 방법
