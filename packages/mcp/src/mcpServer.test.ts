@@ -100,18 +100,19 @@ describe("GitHub read-only MCP tools (D3)", () => {
     expect(names).toEqual(expect.arrayContaining(["github_status", "github_pr_list", "github_pr_read", "github_file_read"]));
   });
 
-  it("읽기 도구는 GET only(D3) — write는 comment_plan/comment_execute만(W1)", () => {
+  it("읽기 도구는 GET only(D3) — write는 comment_plan/comment_execute(W1) + branch_plan(W2)만", () => {
     const gh = SWARM_TOOLS.filter((t) => t.name.startsWith("github_"));
-    expect(gh.length).toBeGreaterThanOrEqual(6);
+    expect(gh.length).toBeGreaterThanOrEqual(7);
     // read-only는 GET만 — github_status / pr_list / pr_read / file_read
-    const readOnly = gh.filter((t) => !t.name.startsWith("github_comment_"));
+    const readOnly = gh.filter((t) => !/^github_(comment_|branch_)/.test(t.name));
     expect(readOnly.every((t) => t.method === "GET")).toBe(true);
-    // write는 comment_plan/comment_execute 두 개만(branch/commit/file_create/pr_create/merge 금지)
+    // write는 comment_plan/comment_execute + branch_plan 세 개만.
+    // 명시 차단: branch_execute는 W2b에서 분리, commit/file_create/pr_create/merge 등은 절대 추가 금지.
     const writeNames = gh.filter((t) => t.method === "POST").map((t) => t.name);
-    expect(writeNames.sort()).toEqual(["github_comment_execute", "github_comment_plan"]);
+    expect(writeNames.sort()).toEqual(["github_branch_plan", "github_comment_execute", "github_comment_plan"]);
     expect(
       SWARM_TOOLS.some((t) =>
-        /github_(branch|merge|commit|push|file_(create|write|update|delete)|pr_create|comment_(update|delete))/.test(t.name),
+        /github_(branch_execute|branch_delete|merge|commit|push|file_(create|write|update|delete)|pr_create|comment_(update|delete))/.test(t.name),
       ),
     ).toBe(false);
   });
@@ -144,10 +145,11 @@ describe("GitHub read-only MCP tools (D3)", () => {
     expect(executeTool?.method).toBe("POST");
     // MCP는 게이트 우회 통로가 아니다 — github_comment_create_direct 같은 우회 도구 금지
     expect(SWARM_TOOLS.some((t) => /github.*(direct|raw|skip|bypass)/.test(t.name))).toBe(false);
-    // write 가능한 다른 github 도구는 만들지 않는다(branch/commit/file_create/pr_create/merge)
+    // write 가능한 다른 github 도구는 만들지 않는다 — branch는 plan만(W2), execute/delete/force는 금지.
+    // commit/file_create/pr_create/merge는 어떤 형태로도 금지.
     expect(
       SWARM_TOOLS.some((t) =>
-        /github_(branch|commit|file_(create|write|update|delete)|pr_create|merge|comment_(update|delete))/.test(t.name),
+        /github_(branch_execute|branch_delete|branch_force|commit|file_(create|write|update|delete)|pr_create|merge|comment_(update|delete))/.test(t.name),
       ),
     ).toBe(false);
   });
