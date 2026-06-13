@@ -56,6 +56,9 @@ function clientStub(over: Partial<GithubReadonlyClient> & { token?: string } = {
     createBranchRef:
       over.createBranchRef ??
       (async (_o, _r, ref, sha) => ({ ref, sha, htmlUrl: "u" })),
+    putFileContents:
+      over.putFileContents ??
+      (async () => ({ commitSha: "stub-commit", blobSha: "stub-blob", htmlUrl: "u" })),
   };
 }
 
@@ -258,6 +261,55 @@ describe("W3a file change plan — 적대적 체크리스트", () => {
       { getFileContent });
     expect(calls[0]!.payload.outcome).toBe("blocked");
     expect(calls[0]!.payload.message).toContain("truncated");
+  });
+
+  it("(evidence shape) plan 응답이 승인 카드에 필요한 모든 필드를 한 번에 담는다", async () => {
+    // 승인 카드 evidence 요구사항(사용자 contract):
+    //   repo / branch / path / operation(create/update) / diff stat / bounded diff preview /
+    //   diffTruncated 표시 / GitHub mutation 미수행 표식(truthStatus="planned")
+    // 이 테스트가 깨지면 evidence 일부가 빠진 것 — UI 카드가 거짓 정보를 보여줄 위험.
+    const getFileContent = vi.fn(async () => ({
+      path: "src/x.ts", size: 24, sha: "EVIDENCE_BASE_SHA", htmlUrl: "u",
+      content: "const a = 1;\nconst b = 2;\n", truncated: false, encoding: "utf8" as const,
+    }));
+    const createBranchRef = vi.fn();
+    const postIssueComment = vi.fn();
+    const { calls } = await planRequest(
+      {
+        repoFullName: "robin/lab",
+        branchName: "agent/feature-x",
+        path: "src/x.ts",
+        newContent: "const a = 1;\nconst b = 2;\nconst c = 3;\n",
+        baseFileSha: "EVIDENCE_BASE_SHA",
+      },
+      { getFileContent });
+    expect(calls[0]!.payload.outcome).toBe("planned");
+    const plan = calls[0]!.payload.plan;
+    // 필수 evidence 필드 — 하나라도 빠지면 승인 카드가 거짓 표시를 할 수 있다.
+    expect(plan.repoFullName).toBe("robin/lab");
+    expect(plan.branchName).toBe("agent/feature-x");
+    expect(plan.branchRef).toBe("refs/heads/agent/feature-x");
+    expect(plan.path).toBe("src/x.ts");
+    expect(plan.operation).toBe("update");
+    expect(plan.baseFileSha).toBe("EVIDENCE_BASE_SHA");
+    expect(typeof plan.baseContentSha256).toBe("string");
+    expect(typeof plan.newContentSha256).toBe("string");
+    expect(plan.newContentSha256).not.toBe(plan.baseContentSha256); // 변경이 있어야 plan이 됨
+    expect(plan.newContentLength).toBeGreaterThan(0);
+    expect(typeof plan.diffPreview).toBe("string");
+    expect(plan.diffPreview).toContain("--- a/src/x.ts");
+    expect(plan.diffPreview).toContain("+++ b/src/x.ts");
+    expect(plan.diffPreview).toContain("+const c = 3;");
+    expect(plan.diffTruncated).toBe(false);
+    expect(plan.diffStat).toEqual({ additions: 1, deletions: 0 });
+    // GitHub mutation 미수행 표식 — UI는 이걸로 "계획 단계, 아직 GitHub에 쓰지 않음"을 결정한다.
+    expect(plan.status).toBe("approval_required");
+    expect(plan.truthStatus).toBe("planned");
+    expect(plan.createdAt).toBeTruthy();
+    expect(plan.expiresAt).toBeTruthy();
+    // 실제로 어떤 mutation도 호출되지 않음.
+    expect(createBranchRef).not.toHaveBeenCalled();
+    expect(postIssueComment).not.toHaveBeenCalled();
   });
 
   it("base 파일이 binary면 blocked(NUL 포함)", async () => {
