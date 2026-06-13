@@ -17,6 +17,29 @@ import type { DesignBlueprintInput, DesignTargetSurface } from "./designBlueprin
 export const debateDecisionKindSchema = z.enum(["coding", "design", "architecture"]);
 export type DebateDecisionKind = z.infer<typeof debateDecisionKindSchema>;
 
+/** 토론이 검토한 초안에 대해 권하는 다음 행동(순수 도출 — 모델 자동 실행 아님). */
+export const recommendedDebateNextActionSchema = z.enum(["promote_to_mission", "revise_blueprint", "ask_user"]);
+export type RecommendedDebateNextAction = z.infer<typeof recommendedDebateNextActionSchema>;
+
+/**
+ * 토론 결과를 "원본 blueprint 초안에 대한 리뷰"로 되돌려 잇는다(point 5). 토론이 초안에서
+ * 시작했을 때(blueprintContext), 무엇을 채택/반려했고 무엇이 위험이며 초안 대비 무엇이 바뀌는지
+ * (blueprintDelta)를 구조화한다. 모든 값은 실제 토론 패킷에서 derive되며 모델이 생성한 것이므로
+ * truthStatus는 항상 "generated"(observed 아님 — 가짜 관측 금지).
+ */
+export const blueprintDebateReviewSchema = z.object({
+  blueprintTitle: z.string(),
+  sourceSessionId: z.string().optional(),
+  adopted: z.array(z.string()),
+  rejected: z.array(z.string()),
+  risks: z.array(z.string()),
+  /** 채택된 결정 중 원본 수용 기준에 없던 것 = 초안에 대한 실제 변경 제안 */
+  blueprintDelta: z.array(z.string()),
+  recommendedNextAction: recommendedDebateNextActionSchema,
+  truthStatus: z.literal("generated"),
+});
+export type BlueprintDebateReview = z.infer<typeof blueprintDebateReviewSchema>;
+
 export const debateDecisionPacketSchema = z.object({
   id: z.string(),
   debateId: z.string(),
@@ -27,6 +50,8 @@ export const debateDecisionPacketSchema = z.object({
   openQuestions: z.array(z.string()).default([]),
   blueprintRef: z.string().optional(),
   missionDraftRef: z.string().optional(),
+  /** 초안에서 시작한 토론이면 그 초안에 대한 리뷰(point 5). conversation-only면 없음. */
+  blueprintReview: blueprintDebateReviewSchema.optional(),
 });
 export type DebateDecisionPacket = z.infer<typeof debateDecisionPacketSchema>;
 
@@ -51,6 +76,39 @@ export function shouldDebateBeforeMission(input: {
   if (input.kind === "design" && (input.surfacesChanged ?? 1) >= 2) return true;
   if (input.scope === "large") return true;
   return false;
+}
+
+/**
+ * 토론 결과 → 원본 blueprint에 대한 리뷰(순수, point 5). adopted/rejected/risks는 실제 패킷에서
+ * 그대로, blueprintDelta는 원본 수용 기준에 없던 채택 결정(결정적 diff), recommendedNextAction은
+ * adopted/risks로 결정적 도출. 모델 출력이므로 truthStatus="generated"(observed 아님).
+ *
+ * recommendedNextAction:
+ *   - 채택 결정 없음 → ask_user (토론이 합의 못 함)
+ *   - 미해결 질문(risks) 있음 → revise_blueprint (초안 보강 필요)
+ *   - 채택 있고 미해결 없음 → promote_to_mission
+ */
+export function deriveBlueprintDebateReview(
+  blueprint: Pick<DesignBlueprintInput, "title" | "acceptanceCriteria">,
+  packet: DebateDecisionPacket,
+  opts: { sourceSessionId?: string } = {},
+): BlueprintDebateReview {
+  const original = new Set(blueprint.acceptanceCriteria.map((criterion) => criterion.trim().toLowerCase()));
+  const adopted = packet.adoptedDecisions;
+  const risks = packet.openQuestions;
+  const blueprintDelta = adopted.filter((decision) => !original.has(decision.trim().toLowerCase()));
+  const recommendedNextAction: RecommendedDebateNextAction =
+    adopted.length === 0 ? "ask_user" : risks.length > 0 ? "revise_blueprint" : "promote_to_mission";
+  return {
+    blueprintTitle: blueprint.title,
+    ...(opts.sourceSessionId ? { sourceSessionId: opts.sourceSessionId } : {}),
+    adopted,
+    rejected: packet.rejectedOptions,
+    risks,
+    blueprintDelta,
+    recommendedNextAction,
+    truthStatus: "generated",
+  };
 }
 
 /**
