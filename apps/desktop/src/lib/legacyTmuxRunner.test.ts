@@ -1,7 +1,7 @@
 import type { AgentProfile, AgentRole } from "@ai-orchestrator/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { createAgentMissionCapability } from "@ai-orchestrator/agents";
-import { createLegacyTmuxRunner } from "./legacyTmuxRunner";
+import { createLegacyTmuxRunner, createSandboxGatedEffects } from "./legacyTmuxRunner";
 
 function capabilityFor(role: AgentRole, overrides: Partial<AgentProfile> = {}) {
   const profile: AgentProfile = {
@@ -111,5 +111,58 @@ describe("LegacyTmuxRunner exec/capture delegate to existing effects", () => {
   it("exposes its kind as legacy_tmux", () => {
     const runner = createLegacyTmuxRunner({ capability: capabilityFor("verifier"), effects: { dispatch: vi.fn(), capture: vi.fn() }, now });
     expect(runner.kind).toBe("legacy_tmux");
+  });
+});
+
+describe("createSandboxGatedEffects (live closed-loop wiring)", () => {
+  function baseEffects() {
+    return {
+      dispatch: vi.fn().mockResolvedValue(undefined),
+      capture: vi.fn().mockResolvedValue("output"),
+      escalate: vi.fn().mockResolvedValue(undefined),
+      onStep: vi.fn(),
+    };
+  }
+
+  it("routes a safe verify dispatch through preflight to the underlying dispatch", async () => {
+    const effects = baseEffects();
+    const gated = createSandboxGatedEffects({
+      effects,
+      capability: capabilityFor("verifier"),
+      runMode: "verify",
+      now,
+    });
+    await gated.dispatch("pnpm test", { stepIndex: 0 });
+    expect(effects.dispatch).toHaveBeenCalledWith("pnpm test", { stepIndex: 0 });
+  });
+
+  it("throws (so the loop escalates) when preflight blocks, without dispatching", async () => {
+    const effects = baseEffects();
+    const gated = createSandboxGatedEffects({
+      effects,
+      capability: capabilityFor("verifier"),
+      runMode: "verify",
+      now,
+    });
+    await expect(gated.dispatch("rm -rf /", { stepIndex: 0 })).rejects.toThrow(/sandbox blocked/);
+    expect(effects.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("blocks a companion build dispatch (write_files is request-right, not execute-right)", async () => {
+    const effects = baseEffects();
+    const companion = capabilityFor("companion", { permissionLevel: "write_files", personaName: "kurumi" });
+    const gated = createSandboxGatedEffects({ effects, capability: companion, runMode: "build", now });
+    await expect(gated.dispatch("apply patch", { stepIndex: 0 })).rejects.toThrow(/sandbox blocked/);
+    expect(effects.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("passes capture/escalate/onStep straight through to the base effects", async () => {
+    const effects = baseEffects();
+    const gated = createSandboxGatedEffects({ effects, capability: capabilityFor("verifier"), runMode: "verify", now });
+    await gated.capture();
+    await gated.escalate?.("reason", {} as never);
+    expect(effects.capture).toHaveBeenCalledOnce();
+    expect(effects.escalate).toHaveBeenCalledOnce();
+    expect(gated.onStep).toBe(effects.onStep);
   });
 });
