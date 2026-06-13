@@ -193,6 +193,23 @@
 .coding-message--user .coding-message__role {
   color: var(--cyan);
 }
+/* 사용자 메시지는 우측 정렬 버블 — 채팅처럼 "내가 말한 것"이 오른쪽에 */
+.coding-message--user {
+  align-items: flex-end;
+}
+.coding-message--user .coding-message__role {
+  text-align: right;
+}
+.coding-message--user .coding-text {
+  max-width: 80%;
+  padding: 9px 14px;
+  border-radius: 14px 14px 4px 14px;
+  background: rgba(99, 210, 189, 0.1);
+  border: 1px solid rgba(99, 210, 189, 0.22);
+}
+.coding-message--user .coding-text p {
+  margin: 0;
+}
 .coding-text p {
   margin: 0 0 8px;
   font-size: 13.5px;
