@@ -6,6 +6,7 @@ export * from "./missionCheckpoint.js";
 export * from "./sandboxErrorCard.js";
 export * from "./selfCorrection.js";
 export * from "./confidenceSignal.js";
+export * from "./skillArchive.js";
 
 export const runtimeStatusSchema = z.enum(["online", "degraded", "offline", "syncing"]);
 export type RuntimeStatus = z.infer<typeof runtimeStatusSchema>;
