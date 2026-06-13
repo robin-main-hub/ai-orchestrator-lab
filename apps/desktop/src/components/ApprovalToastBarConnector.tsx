@@ -8,25 +8,15 @@ import { ApprovalToastBar } from "./ApprovalToastBar";
 export function ApprovalToastBarConnector({
   queue,
   onApprove,
-  onApprovePattern,
   onReject,
   onOpenHistory,
 }: {
   queue: ApprovalQueueItem[];
   onApprove: (sourceItemId: string) => void;
-  onApprovePattern?: (command: string) => void;
   onReject: (sourceItemId: string) => void;
   onOpenHistory?: () => void;
 }) {
   const item = deriveApprovalToastItem(queue);
   if (!item) return null;
-  return (
-    <ApprovalToastBar
-      item={item}
-      onApprove={onApprove}
-      onApprovePattern={onApprovePattern}
-      onReject={onReject}
-      onOpenHistory={onOpenHistory}
-    />
-  );
+  return <ApprovalToastBar item={item} onApprove={onApprove} onReject={onReject} onOpenHistory={onOpenHistory} />;
 }

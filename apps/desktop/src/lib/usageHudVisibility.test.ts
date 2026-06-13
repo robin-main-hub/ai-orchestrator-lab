@@ -14,8 +14,10 @@ describe("shouldShowUsageHud", () => {
     expect(shouldShowUsageHud({ activity: "capturing", contextPercent: 30, now: NOW, turns: 1 })).toBe(true);
   });
 
-  it("idle이어도 컨텍스트 80% 이상이면 표시(경고)", () => {
+  it("idle이어도 컨텍스트 80% 이상이면 표시(경고) — 경계값 80 포함, 79는 숨김", () => {
     expect(shouldShowUsageHud({ activity: "idle", contextPercent: 85, now: NOW, turns: 5 })).toBe(true);
+    expect(shouldShowUsageHud({ activity: "idle", contextPercent: 80, now: NOW, turns: 5 })).toBe(true);
+    expect(shouldShowUsageHud({ activity: "idle", contextPercent: 79, now: NOW, turns: 5 })).toBe(false);
   });
 
   it("idle + 저컨텍스트 + 타임스탬프 없음이면 숨김", () => {
