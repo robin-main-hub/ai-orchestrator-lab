@@ -5092,7 +5092,7 @@ export function App() {
               })}
             />
           ) : activeNavItem === "coding" ? (
-            <CodingWorkbench providerProfiles={providerProfiles} />
+            <CodingWorkbench modelCatalog={modelCatalog} providerProfiles={providerProfiles} />
           ) : activeNavItem === "research" ? (
             <ResearchSwarmContainer providerProfiles={providerProfiles} />
           ) : activeNavItem === "sessions" ? (
