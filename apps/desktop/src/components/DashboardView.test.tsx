@@ -43,6 +43,55 @@ describe("DashboardView", () => {
     expect(html).toContain("위젯 구현"); // recent run
   });
 
+  it('renders the "다음 할 일" block from healthRollup with status + headline + CTA', () => {
+    const onActivate = vi.fn();
+    const html = renderToStaticMarkup(
+      <DashboardView
+        personas={[]}
+        runtime={runtime}
+        hermesPool={{ total: 12, bound: 0, spare: 12 }}
+        pendingApprovals={2}
+        healthRollup={{
+          level: "red",
+          headline: "워커 1건 차단 — 즉시 확인",
+          signalSummary: "차단 1 · 승인 2",
+          pendingCount: 3,
+          topAction: {
+            id: "worker_blocked_1",
+            label: "차단된 워커 확인",
+            ctaLabel: "차단 원인 보기",
+            priority: "high",
+            source: "worker",
+            targetSurface: "fleet",
+          },
+        }}
+        onActivateNextAction={onActivate}
+        history={[]}
+        onNavigate={vi.fn()}
+      />,
+    );
+    expect(html).toContain("다음 할 일"); // aria-label
+    expect(html).toContain("주의 필요"); // COCKPIT_HEALTH_LABEL.red
+    expect(html).toContain("차단 1 · 승인 2"); // signal summary
+    expect(html).toContain("워커 1건 차단 — 즉시 확인"); // headline
+    expect(html).toContain("차단 원인 보기"); // CTA label
+    expect(html).toContain("dashboard__next--red"); // level-colored accent
+  });
+
+  it("omits the 다음 할 일 block when no healthRollup is provided", () => {
+    const html = renderToStaticMarkup(
+      <DashboardView
+        personas={[]}
+        runtime={runtime}
+        hermesPool={{ total: 12, bound: 0, spare: 12 }}
+        pendingApprovals={0}
+        history={[]}
+        onNavigate={vi.fn()}
+      />,
+    );
+    expect(html).not.toContain("dashboard__next");
+  });
+
   it("omits the recent-runs section when there is no history", () => {
     const html = renderToStaticMarkup(
       <DashboardView

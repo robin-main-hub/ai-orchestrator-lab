@@ -1,6 +1,11 @@
+import type { OperatorCockpitSnapshot } from "@ai-orchestrator/protocol";
 import { describe, expect, it } from "vitest";
 import type { CockpitNextActionItem } from "./cockpitNextActions";
-import { COCKPIT_HEALTH_LABEL, deriveCockpitHealthRollup } from "./cockpitHealthRollup";
+import {
+  COCKPIT_HEALTH_LABEL,
+  deriveCockpitHealthFromSnapshot,
+  deriveCockpitHealthRollup,
+} from "./cockpitHealthRollup";
 
 function action(priority: CockpitNextActionItem["priority"], id = priority): CockpitNextActionItem {
   return {
@@ -67,5 +72,48 @@ describe("deriveCockpitHealthRollup", () => {
     const rollup = deriveCockpitHealthRollup({ ...base, blockedCount: 1, approvalCount: 2, fallbackActive: true });
     expect(rollup.signalSummary).toBe("차단 1 · 승인 2 · 폴백 활성");
     expect(rollup.pendingCount).toBe(4);
+  });
+});
+
+describe("deriveCockpitHealthFromSnapshot", () => {
+  function snapshot(overrides: {
+    fleet?: Array<{ status: string }>;
+    approvals?: Array<{ securityRisk: string }>;
+    fallbackStatus?: string;
+    dgxMirrorHealth?: string;
+  }): OperatorCockpitSnapshot {
+    return {
+      fleet: overrides.fleet ?? [],
+      approvals: overrides.approvals ?? [],
+      routing: { fallbackStatus: overrides.fallbackStatus ?? "inactive" },
+      memory: { dgxMirrorHealth: overrides.dgxMirrorHealth ?? "healthy" },
+    } as unknown as OperatorCockpitSnapshot;
+  }
+
+  it("derives the same red signal the cockpit shows from a snapshot (blocked worker)", () => {
+    const rollup = deriveCockpitHealthFromSnapshot(
+      snapshot({ fleet: [{ status: "blocked" }, { status: "working" }] }),
+      [],
+    );
+    expect(rollup.level).toBe("red");
+    expect(rollup.signalSummary).toContain("차단 1");
+  });
+
+  it("counts approvals and flags high-risk ones as red, plain ones as yellow", () => {
+    expect(
+      deriveCockpitHealthFromSnapshot(snapshot({ approvals: [{ securityRisk: "low" }] }), []).level,
+    ).toBe("yellow");
+    expect(
+      deriveCockpitHealthFromSnapshot(snapshot({ approvals: [{ securityRisk: "high" }] }), []).level,
+    ).toBe("red");
+  });
+
+  it("maps fallback active and disconnected DGX mirror to their signals", () => {
+    expect(deriveCockpitHealthFromSnapshot(snapshot({ fallbackStatus: "active" }), []).level).toBe("yellow");
+    expect(deriveCockpitHealthFromSnapshot(snapshot({ dgxMirrorHealth: "disconnected" }), []).level).toBe("red");
+  });
+
+  it("is green on a clean snapshot", () => {
+    expect(deriveCockpitHealthFromSnapshot(snapshot({}), []).level).toBe("green");
   });
 });

@@ -8808,6 +8808,105 @@ body:has(.app-shell.annex-focus-shell) {
   margin: 0 auto;
   width: 100%;
 }
+/* 다음 할 일 — 대시보드 첫 눈에 "지금 처리할 일 하나" (콕핏 L1과 같은 신호 소스) */
+.dashboard__next {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 26px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left-width: 4px;
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(16px);
+}
+.dashboard__next--red {
+  border-left-color: var(--rose);
+}
+.dashboard__next--yellow {
+  border-left-color: var(--amber);
+}
+.dashboard__next--green {
+  border-left-color: var(--green);
+}
+.dashboard__next-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.dashboard__next-dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 999px;
+}
+.dashboard__next--red .dashboard__next-dot {
+  background: var(--rose);
+  box-shadow: 0 0 0 4px rgba(251, 113, 133, 0.18);
+}
+.dashboard__next--yellow .dashboard__next-dot {
+  background: var(--amber);
+  box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.16);
+}
+.dashboard__next--green .dashboard__next-dot {
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.14);
+}
+.dashboard__next-status {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.dashboard__next--red .dashboard__next-status {
+  color: var(--rose);
+}
+.dashboard__next--yellow .dashboard__next-status {
+  color: var(--amber);
+}
+.dashboard__next--green .dashboard__next-status {
+  color: var(--green);
+}
+.dashboard__next-signal {
+  color: var(--muted);
+}
+.dashboard__next-headline {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text);
+}
+.dashboard__next-cta {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+.dashboard__next-cta:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.dashboard__next-cta:active {
+  transform: scale(0.98);
+}
+.dashboard__next--red .dashboard__next-cta {
+  border-color: rgba(251, 113, 133, 0.4);
+  background: rgba(251, 113, 133, 0.12);
+}
+.dashboard__next--red .dashboard__next-cta:hover {
+  background: rgba(251, 113, 133, 0.2);
+}
+
 .dashboard__hero {
   position: relative;
   overflow: hidden;
