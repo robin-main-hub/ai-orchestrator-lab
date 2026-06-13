@@ -1012,6 +1012,11 @@ export function App() {
       }),
     [approvalServerSnapshot, permissionSnapshot],
   );
+  // 승인/큐 진입의 단일 명명 핸들러 — 화면마다 인라인 () => setApprovalDrawerOpen(true)로
+  // 흩어져 있던 "Control Queue 열기"를 한 곳으로 모은다(액션 동선 일관화). 배지가 가리키는
+  // 수(unifiedControlQueueSnapshot.summary.pending)와 열리는 드로어 내용이 항상 같은 큐.
+  const openControlQueue = useCallback(() => setApprovalDrawerOpen(true), []);
+  const toggleControlQueue = useCallback(() => setApprovalDrawerOpen((open) => !open), []);
   // 대화 탭 인라인 승인 카드용: 로컬(stage9) 권한 큐에 더해 서버 승인 대기 건
   // (대화 도구 루프의 tmux dispatch 등)을 합쳐서 보여준다. 이게 없으면 도구
   // 실행이 승인을 기다리는 동안 카드가 안 떠서 턴이 멈춘 것처럼 보인다.
@@ -4025,7 +4030,7 @@ export function App() {
     }
 
     if (item.kind === "approval") {
-      setApprovalDrawerOpen(true);
+      openControlQueue();
       return;
     }
 
@@ -4122,7 +4127,7 @@ export function App() {
       label: "제어 대기열",
       hint: "승인 패널 열기/닫기",
       shortcut: "⌘⇧A",
-      run: () => setApprovalDrawerOpen((open) => !open),
+      run: toggleControlQueue,
     },
     {
       id: "open.big-rocks",
@@ -4256,7 +4261,7 @@ export function App() {
     onSwitchDebate: () => setMode("debate"),
     onSwitchTmux: () => setMode("tmux"),
     onSwitchCockpit: () => setMode("cockpit"),
-    onControlQueue: () => setApprovalDrawerOpen((open) => !open),
+    onControlQueue: toggleControlQueue,
     onCreateDebate: handlePromoteToDebate,
     onMementoRemember: handleRememberCurrentContext,
     onInvokeOrchestrator: () => {
@@ -4777,7 +4782,7 @@ export function App() {
   // 상세가 사는 콕핏으로 — 액션 동선을 한 패턴으로 묶는다.
   const handleDashboardNextAction = (action: CockpitNextActionItem) => {
     if (action.targetSurface === "approvals" || action.targetSurface === "control_queue") {
-      setApprovalDrawerOpen(true);
+      openControlQueue();
       return;
     }
     setMode("cockpit");
@@ -4965,14 +4970,14 @@ export function App() {
               <div className="toolbar-actions">
                 <button
                   className={`ghost-button approval-toolbar-button ${
-                    permissionSnapshot.summary.pending > 0 ? "needs-attention" : ""
+                    unifiedControlQueueSnapshot.summary.pending > 0 ? "needs-attention" : ""
                   }`}
-                  onClick={() => setApprovalDrawerOpen((open) => !open)}
+                  onClick={toggleControlQueue}
                   title="Control Queue (⌘⇧A)"
                   type="button"
                 >
                   <ShieldCheck size={16} />
-                  Queue {permissionSnapshot.summary.pending}
+                  Queue {unifiedControlQueueSnapshot.summary.pending}
                 </button>
                 <button className="primary-button" onClick={() => handleCreateCodingPacket()} type="button">
                   <Send size={16} />
@@ -5003,7 +5008,7 @@ export function App() {
               personaAvatars={dashboardPersonaAvatars}
               runtime={runtimeSnapshotState}
               hermesPool={summarizeHermesPool(loadHermesPool())}
-              pendingApprovals={permissionSnapshot.summary.pending}
+              pendingApprovals={unifiedControlQueueSnapshot.summary.pending}
               healthRollup={dashboardHealthRollup}
               onActivateNextAction={handleDashboardNextAction}
               history={projectAutonomyRunHistory(eventLog)}
@@ -5018,7 +5023,7 @@ export function App() {
                 setProviderRegistrationOpen(nextNav === "providers");
                 setAdminRailOpen(false);
               }}
-              onOpenApprovalQueue={() => setApprovalDrawerOpen(true)}
+              onOpenApprovalQueue={openControlQueue}
               onSummonPersona={(personaName, target) => {
                 setSummonSeedPersona(personaName);
                 setSummonSeedMode(target === "parallel" ? "parallel" : "single");
@@ -5039,7 +5044,7 @@ export function App() {
                   setProviderRegistrationOpen(false);
                   setAdminRailOpen(false);
                 },
-                onOpenApprovalQueue: () => setApprovalDrawerOpen(true),
+                onOpenApprovalQueue: openControlQueue,
                 historyEvents: eventLog,
                 onRegistryChange: setSummonRegistry,
                 onRunEvents: (events) => setEventLog((current) => [...current, ...events]),
@@ -5119,7 +5124,7 @@ export function App() {
                 onExportBackup={handleExportBackupProjections}
                 onImportExternalIngress={handleImportExternalIngress}
                 onRefreshApprovals={handleRefreshApprovalQueue}
-                onOpenControlQueue={() => setApprovalDrawerOpen(true)}
+                onOpenControlQueue={openControlQueue}
                 pendingTmuxApprovalKeys={pendingTmuxApprovalKeys}
                 permissionSnapshot={permissionSnapshot}
                 providerReadiness={providerReadiness}
@@ -5306,9 +5311,9 @@ export function App() {
               onOpenMemory={openMemoryFromCockpit}
               onOpenProviderRouting={openProviderRoutingFromCockpit}
               onOpenRecovery={openRecoveryFromCockpit}
-              onOpenControlQueue={() => setApprovalDrawerOpen(true)}
+              onOpenControlQueue={openControlQueue}
               onOpenWorkTrace={handleOpenWorkTrace}
-              onPreviewEvidence={() => setApprovalDrawerOpen(true)}
+              onPreviewEvidence={openControlQueue}
               onApproveHandoff={handleApproveWorkItemHandoffAndRoute}
               readiness={cockpitReadiness}
               snapshot={cockpitSnapshot}
@@ -5320,7 +5325,7 @@ export function App() {
               onAskAgent={handleAskAgentFromAnnex}
               onBack={() => setMode("debate")}
               onCreateCodingPacket={() => handleCreateCodingPacket("annex")}
-              onViewApproval={() => setApprovalDrawerOpen(true)}
+              onViewApproval={openControlQueue}
               onViewMemory={() => {
                 setReturnModeAfterConfigClose("annex");
                 setMode("conversation");
