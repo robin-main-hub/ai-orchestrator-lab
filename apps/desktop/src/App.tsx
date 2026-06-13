@@ -1367,7 +1367,7 @@ export function App() {
     }));
   }
 
-  function handleAddDraftAttachments(fileList: FileList | null) {
+  function handleAddDraftAttachments(fileList: FileList | File[] | null) {
     if (!fileList || !selectedModel || !modelSupportsAnyAttachment(selectedModel)) {
       appendEvent("conversation.attachment.blocked", {
         selectedModelId: selectedModel?.id ?? "model pending",
@@ -5250,6 +5250,7 @@ export function App() {
               messageCountByAgentId={conversationMessageCountByAgentId}
               messages={conversationMessages}
               onAddDraftAttachments={handleAddDraftAttachments}
+              rejectedAttachmentPlans={draftRejectedAttachmentPlans}
               onAdoptBranch={handleAdoptBranchExperiment}
               onApprovePermission={handleConversationApprovePermission}
               onBackupProjection={handleExportBackupProjections}

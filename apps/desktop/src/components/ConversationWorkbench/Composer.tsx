@@ -11,7 +11,7 @@ import {
   Telescope,
 } from "lucide-react";
 import type { ModelDescriptor } from "@ai-orchestrator/protocol";
-import { Plus, FlaskConical } from "lucide-react";
+import { Plus, FlaskConical, AlertTriangle, RefreshCcw } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,8 @@ import {
   attachmentCapabilityLabel,
 } from "../../lib/helpers";
 import { getAgentToolBadgeLabels } from "../../lib/agentToolProfiles";
+import type { AttachmentProcessingPlan } from "../../lib/attachmentProcessing";
+import { attachmentDeliveryNote, summarizeRejectedAttachments } from "../../lib/attachmentWarnings";
 
 export function Composer({
   attachmentAccept,
@@ -46,6 +48,8 @@ export function Composer({
   onRemoveQueuedMessage,
   onStartSwarmSearch,
   onStartAppBuild,
+  rejectedAttachmentPlans,
+  onOpenModelPicker,
 }: {
   attachmentAccept: string;
   attachmentEnabled: boolean;
@@ -54,7 +58,7 @@ export function Composer({
   draftAttachments: DraftAttachment[];
   draftMessage: string;
   maxDraftAttachments: number;
-  onAddDraftAttachments: (files: FileList | null) => void;
+  onAddDraftAttachments: (files: FileList | File[] | null) => void;
   onDraftMessageChange: (value: string) => void;
   onRemoveDraftAttachment: (attachmentId: string) => void;
   onSendMessage: () => void;
@@ -77,11 +81,27 @@ export function Composer({
   onStartSwarmSearch?: (topic: string) => void;
   /** "+" 도구 메뉴 → 앱 빌드: 지금 대화를 구조화된 앱 초안으로(검토 패널). 자동 LLM 발사 없음 */
   onStartAppBuild?: (draft: string) => void;
+  /** 직전 첨부 시 거부된 처리 플랜 — 조용히 실패하지 않게 경고로 표면화 */
+  rejectedAttachmentPlans?: AttachmentProcessingPlan[];
+  /** 모델 교체 CTA — 첨부 종류를 선택 모델이 지원 안 할 때 모델 선택을 연다 */
+  onOpenModelPicker?: () => void;
 }) {
   const canSend =
     Boolean(selectedAgent) &&
     (draftMessage.trim().length > 0 || draftAttachments.length > 0);
   const showStopButton = turnActive && Boolean(onStopTurn);
+  // 첨부 거부를 조용히 삼키지 않고 표면화(정직성).
+  const rejection = summarizeRejectedAttachments(rejectedAttachmentPlans);
+  // Win+Shift+S 등으로 클립보드에 든 이미지를 Ctrl+V로 붙이면 첨부로 추가. 텍스트 paste는 그대로.
+  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageFiles = Array.from(event.clipboardData?.items ?? [])
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+    if (imageFiles.length === 0) return; // 이미지 없으면 기본 텍스트 붙여넣기 유지
+    event.preventDefault();
+    onAddDraftAttachments(imageFiles);
+  };
 
   // 자동 성장: 긴 추천대화/멀티라인 입력이 들어와도 줄이 잘리지 않게
   // scrollHeight에 맞춰 높이를 키운다 (최대 5줄 가량, 이후 스크롤).
@@ -195,6 +215,29 @@ export function Composer({
         </div>
       ) : null}
 
+      {/* 첨부 거부 경고(조용한 실패 금지) — 모델 능력 미달이면 모델 교체 CTA */}
+      {rejection.count > 0 ? (
+        <div className="mx-auto flex max-w-4xl items-start gap-2 px-4 pt-2 text-[11px]" role="status">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+          <div className="min-w-0 flex-1 text-amber-200">
+            <span>{rejection.count}개 첨부가 추가되지 않았습니다 — {rejection.reasons.join(" · ")}</span>
+            {rejection.showModelCta ? (
+              onOpenModelPicker ? (
+                <button
+                  className="ml-2 inline-flex items-center gap-1 rounded-md border border-amber-300/30 bg-amber-500/10 px-2 py-0.5 text-amber-100 hover:bg-amber-500/20"
+                  onClick={onOpenModelPicker}
+                  type="button"
+                >
+                  <RefreshCcw className="h-3 w-3" /> 모델 바꾸기
+                </button>
+              ) : (
+                <span className="ml-1 text-amber-300">— 첨부를 지원하는 모델로 바꾸세요</span>
+              )
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <form
         className="mx-auto flex max-w-4xl items-start gap-2 p-3"
         onSubmit={(event) => {
@@ -293,6 +336,7 @@ export function Composer({
             className="min-h-[56px] w-full resize-none rounded-2xl border border-white/10 bg-zinc-900/70 px-4 py-3 pr-14 text-sm leading-6 text-zinc-100 shadow-inner shadow-black/20 outline-none placeholder:text-zinc-600 transition-colors focus-visible:border-cyan-400/50 focus-visible:bg-zinc-900"
             data-focus-id="composer-textarea"
             onChange={(event) => onDraftMessageChange(event.target.value)}
+            onPaste={handlePaste}
             onKeyDown={(event) => {
               if (
                 event.key !== "Enter" ||
@@ -310,29 +354,35 @@ export function Composer({
           />
           {draftAttachments.length > 0 ? (
             <div className="absolute bottom-2 left-2 right-12 flex flex-wrap gap-1">
-              {draftAttachments.map((attachment) => (
-                <span
-                  className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-black/50 px-1.5 py-0.5 text-[10px]"
-                  key={attachment.id}
-                >
-                  {attachment.kind === "image" ? (
-                    <ImageIcon className="h-2.5 w-2.5" />
-                  ) : (
-                    <FileText className="h-2.5 w-2.5" />
-                  )}
-                  <span className="max-w-[80px] truncate text-zinc-200">
-                    {attachment.name}
-                  </span>
-                  <button
-                    aria-label={`${attachment.name} 제거`}
-                    className="text-muted-foreground hover:text-destructive"
-                    onClick={() => onRemoveDraftAttachment(attachment.id)}
-                    type="button"
+              {draftAttachments.map((attachment) => {
+                // 정직 전달 안내: zip은 직접 못 읽음, excel은 구조 해석 주의, metadata_only는 내용 미전달.
+                const deliveryNote = attachmentDeliveryNote(attachment);
+                return (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-black/50 px-1.5 py-0.5 text-[10px]"
+                    key={attachment.id}
+                    title={deliveryNote}
                   >
-                    <X className="h-2.5 w-2.5" />
-                  </button>
-                </span>
-              ))}
+                    {attachment.kind === "image" ? (
+                      <ImageIcon className="h-2.5 w-2.5" />
+                    ) : (
+                      <FileText className="h-2.5 w-2.5" />
+                    )}
+                    <span className="max-w-[80px] truncate text-zinc-200">
+                      {attachment.name}
+                    </span>
+                    {deliveryNote ? <AlertTriangle className="h-2.5 w-2.5 text-amber-400" aria-label="전달 주의" /> : null}
+                    <button
+                      aria-label={`${attachment.name} 제거`}
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => onRemoveDraftAttachment(attachment.id)}
+                      type="button"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </span>
+                );
+              })}
             </div>
           ) : null}
         </div>

@@ -12,6 +12,7 @@ import type {
 import { buildBlueprintInputFromConversation } from "@ai-orchestrator/protocol";
 import { AppBuildContainer } from "../appbuild/AppBuildContainer";
 import type { AppBuildSeed } from "../../lib/appBuildModel";
+import type { AttachmentProcessingPlan } from "../../lib/attachmentProcessing";
 import { shouldShowUsageHud } from "../../lib/usageHudVisibility";
 import { deriveEmptyConversationHint } from "../../lib/emptyConversationHint";
 import { deriveConversationHeaderAlert } from "../../lib/conversationHeaderAlert";
@@ -110,6 +111,7 @@ export function ConversationWorkbench({
   messageCountByAgentId,
   messages,
   onAddDraftAttachments,
+  rejectedAttachmentPlans,
   onAdoptBranch,
   onApprovePermission,
   onBackupProjection,
@@ -184,7 +186,9 @@ export function ConversationWorkbench({
   memoryScope?: AgentChannelMemoryScope;
   messageCountByAgentId?: Record<string, number>;
   messages: ConversationMessage[];
-  onAddDraftAttachments: (files: FileList | null) => void;
+  onAddDraftAttachments: (files: FileList | File[] | null) => void;
+  /** 직전 첨부에서 거부된 처리 플랜 — Composer가 경고로 표면화 */
+  rejectedAttachmentPlans?: AttachmentProcessingPlan[];
   onAdoptBranch: () => void;
   onApprovePermission: (sourceItemId: string) => void;
   onBackupProjection: () => void;
@@ -763,6 +767,8 @@ export function ConversationWorkbench({
         onRemoveQueuedMessage={onRemoveQueuedMessage}
         onStartSwarmSearch={onStartSwarmSearch}
         onStartAppBuild={startAppBuild}
+        rejectedAttachmentPlans={rejectedAttachmentPlans}
+        onOpenModelPicker={selectedAgent ? () => openAgentDetailForRoster(selectedAgent.id, "model") : undefined}
       />
         </div>
 
