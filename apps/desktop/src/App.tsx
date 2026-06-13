@@ -4924,6 +4924,7 @@ export function App() {
                   return (
                     <button
                       aria-expanded={isActive}
+                      aria-label={item.label}
                       className={`nav-item ${isActive ? "active" : ""}`}
                       key={item.id}
                       onClick={() => {
