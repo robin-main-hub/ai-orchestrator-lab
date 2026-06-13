@@ -1,8 +1,15 @@
 import { z } from "zod";
-import type {
-  OrchestrationMissionStatus,
-  ServerMissionRecord,
-  TruthStatus,
+import {
+  missionCreatedPayloadSchema,
+  missionMergeQueuedPayloadSchema,
+  missionVerificationRecordedPayloadSchema,
+  missionWorkerAssignedPayloadSchema,
+  type MissionWorkerAssignment,
+  type OrchestrationMissionStatus,
+  type SequentialMergeQueueItem,
+  type ServerMissionRecord,
+  type TruthStatus,
+  type VerificationReport,
 } from "./productKernel.js";
 
 /**
@@ -228,84 +235,129 @@ function verificationSeverity(status: "pending" | "passed" | "failed" | "blocked
   return status === "passed" ? "success" : status === "failed" ? "error" : status === "blocked" ? "warning" : "info";
 }
 
+// ── Per-component trace builders ─────────────────────────────────────────────
+// 같은 매핑을 두 곳에서 쓴다: deriveMissionTrace(materialized record 전체 스냅샷)와
+// traceEventFromMissionEnvelope(라이브 SSE 증분). 한 함수로 묶어 스냅샷/스트림이
+// 절대 어긋나지 않게 한다.
+
+function createdTraceEvent(
+  mission: { missionId: string; title: string; truthStatus: TruthStatus },
+  createdAt: string,
+): MissionTraceEvent {
+  return {
+    id: `${mission.missionId}:created`,
+    missionId: mission.missionId,
+    type: "mission.created",
+    severity: "info",
+    title: "미션 생성",
+    summary: mission.title,
+    truthStatus: mission.truthStatus,
+    createdAt,
+  };
+}
+
+function workerTraceEvent(worker: MissionWorkerAssignment): MissionTraceEvent {
+  return {
+    id: `${worker.missionId}:worker:${worker.id}`,
+    missionId: worker.missionId,
+    workerId: worker.agentId,
+    type: "worker.assigned",
+    severity: "info",
+    title: `워커 배정 · ${worker.role}`,
+    summary: `${worker.agentId}${worker.branchName ? ` · ${worker.branchName}` : ""}`,
+    truthStatus: "configured",
+    createdAt: worker.assignedAt,
+  };
+}
+
+function verificationTraceEvent(report: VerificationReport, createdAt: string): MissionTraceEvent {
+  const failed = report.checks.find((check) => check.status === "failed");
+  return {
+    id: `${report.missionId}:verify:${report.id}`,
+    missionId: report.missionId,
+    workerId: report.verifierAgentId,
+    type: "verification.recorded",
+    severity: verificationSeverity(report.status),
+    title: `검증 ${report.status === "passed" ? "통과" : report.status === "failed" ? "실패" : report.status}`,
+    summary: `${report.checks.length}개 검사 · ${report.observed ? "실측(observed)" : "미관측"}`,
+    payloadPreview: redactTracePreview(failed?.summary),
+    truthStatus: report.observed ? "observed" : "simulated",
+    createdAt,
+  };
+}
+
+function mergeTraceEvent(item: SequentialMergeQueueItem): MissionTraceEvent {
+  const type: MissionTraceEventType =
+    item.status === "merged" ? "merge.completed" : item.status === "conflict" ? "merge.conflict" : "merge.queued";
+  const severity: MissionTraceSeverity =
+    item.status === "merged" ? "success" : item.status === "conflict" ? "error" : "info";
+  return {
+    id: `${item.missionId}:merge:${item.id}`,
+    missionId: item.missionId,
+    type,
+    severity,
+    title:
+      item.status === "merged"
+        ? "머지 완료"
+        : item.status === "conflict"
+          ? "머지 충돌"
+          : item.status === "dry_run"
+            ? "머지 드라이런"
+            : "머지 대기열",
+    summary:
+      item.status === "merged" && item.mergeCommitSha
+        ? `${item.branchName} → ${item.mergeCommitSha.slice(0, 10)}`
+        : item.status === "conflict"
+          ? `${item.conflictFiles.length}개 충돌 파일`
+          : item.reason,
+    truthStatus:
+      item.status === "merged" && item.mergeCommitSha ? "observed" : item.status === "dry_run" ? "configured" : "planned",
+    createdAt: item.queuedAt,
+  };
+}
+
 /**
  * mission 레코드의 구성요소(생성/워커/검증/머지)에서 trace 타임라인을 파생한다.
  * (터미널/승인 등 EventStorage 전역 이벤트로의 보강은 후속 — 여기서는 mission
  * 라이프사이클을 정직하게 재구성한다.)
  */
 export function deriveMissionTrace(record: ServerMissionRecord): MissionTraceEvent[] {
-  const missionId = record.mission.missionId;
-  const events: MissionTraceEvent[] = [];
-
-  events.push({
-    id: `${missionId}:created`,
-    missionId,
-    type: "mission.created",
-    severity: "info",
-    title: "미션 생성",
-    summary: record.mission.title,
-    truthStatus: record.mission.truthStatus,
-    createdAt: record.mission.createdAt,
-  });
-
-  for (const worker of record.workers) {
-    events.push({
-      id: `${missionId}:worker:${worker.id}`,
-      missionId,
-      workerId: worker.agentId,
-      type: "worker.assigned",
-      severity: "info",
-      title: `워커 배정 · ${worker.role}`,
-      summary: `${worker.agentId}${worker.branchName ? ` · ${worker.branchName}` : ""}`,
-      truthStatus: "configured",
-      createdAt: worker.assignedAt,
-    });
-  }
-
-  for (const report of record.verificationReports) {
-    const failed = report.checks.find((check) => check.status === "failed");
-    events.push({
-      id: `${missionId}:verify:${report.id}`,
-      missionId,
-      workerId: report.verifierAgentId,
-      type: "verification.recorded",
-      severity: verificationSeverity(report.status),
-      title: `검증 ${report.status === "passed" ? "통과" : report.status === "failed" ? "실패" : report.status}`,
-      summary: `${report.checks.length}개 검사 · ${report.observed ? "실측(observed)" : "미관측"}`,
-      payloadPreview: redactTracePreview(failed?.summary),
-      truthStatus: report.observed ? "observed" : "simulated",
-      createdAt: report.createdAt,
-    });
-  }
-
-  for (const item of record.mergeQueueItems) {
-    const type: MissionTraceEventType =
-      item.status === "merged" ? "merge.completed" : item.status === "conflict" ? "merge.conflict" : "merge.queued";
-    const severity: MissionTraceSeverity =
-      item.status === "merged" ? "success" : item.status === "conflict" ? "error" : "info";
-    events.push({
-      id: `${missionId}:merge:${item.id}`,
-      missionId,
-      type,
-      severity,
-      title:
-        item.status === "merged"
-          ? "머지 완료"
-          : item.status === "conflict"
-            ? "머지 충돌"
-            : item.status === "dry_run"
-              ? "머지 드라이런"
-              : "머지 대기열",
-      summary:
-        item.status === "merged" && item.mergeCommitSha
-          ? `${item.branchName} → ${item.mergeCommitSha.slice(0, 10)}`
-          : item.status === "conflict"
-            ? `${item.conflictFiles.length}개 충돌 파일`
-            : item.reason,
-      truthStatus: item.status === "merged" && item.mergeCommitSha ? "observed" : item.status === "dry_run" ? "configured" : "planned",
-      createdAt: item.queuedAt,
-    });
-  }
-
+  const events: MissionTraceEvent[] = [createdTraceEvent(record.mission, record.mission.createdAt)];
+  for (const worker of record.workers) events.push(workerTraceEvent(worker));
+  for (const report of record.verificationReports) events.push(verificationTraceEvent(report, report.createdAt));
+  for (const item of record.mergeQueueItems) events.push(mergeTraceEvent(item));
   return events.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+/**
+ * 하나의 mission.* 이벤트 봉투를 단일 trace 이벤트로 매핑한다 — 라이브 SSE 증분용.
+ * deriveMissionTrace와 같은 빌더를 쓰므로 스냅샷과 스트림이 항상 일치한다. payload는
+ * 신뢰하지 않고 스키마로 재검증하며, 매핑 대상이 아니거나 깨진 payload는 null(무시).
+ * mission.closed는 별도 trace 이벤트를 만들지 않는다(머지/실패 이벤트가 이미 상태를 전달).
+ */
+export function traceEventFromMissionEnvelope(envelope: {
+  type: string;
+  payload: unknown;
+  createdAt: string;
+}): MissionTraceEvent | null {
+  switch (envelope.type) {
+    case "mission.created": {
+      const parsed = missionCreatedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success ? createdTraceEvent(parsed.data, envelope.createdAt) : null;
+    }
+    case "mission.worker.assigned": {
+      const parsed = missionWorkerAssignedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success ? workerTraceEvent(parsed.data.worker) : null;
+    }
+    case "mission.verification.recorded": {
+      const parsed = missionVerificationRecordedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success ? verificationTraceEvent(parsed.data.report, parsed.data.report.createdAt) : null;
+    }
+    case "mission.merge.queued": {
+      const parsed = missionMergeQueuedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success ? mergeTraceEvent(parsed.data.item) : null;
+    }
+    default:
+      return null;
+  }
 }
