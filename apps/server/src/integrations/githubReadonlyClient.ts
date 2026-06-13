@@ -1,6 +1,7 @@
 import type {
   GithubConnectorStatus,
   GithubIssueSummary,
+  GithubPullRequestDetail,
   GithubPullRequestSummary,
   GithubRepoSummary,
 } from "@ai-orchestrator/protocol";
@@ -68,6 +69,7 @@ export type GithubReadonlyClient = {
   status(): GithubConnectorStatus;
   getRepoOverview(owner: string, repo: string): Promise<GithubRepoSummary>;
   listPullRequests(owner: string, repo: string, opts?: { state?: "open" | "closed" | "all"; perPage?: number }): Promise<GithubPullRequestSummary[]>;
+  getPullRequest(owner: string, repo: string, pullNumber: number): Promise<GithubPullRequestDetail>;
   listIssues(owner: string, repo: string, opts?: { state?: "open" | "closed" | "all"; perPage?: number }): Promise<GithubIssueSummary[]>;
 };
 
@@ -131,6 +133,31 @@ export function createGithubReadonlyClient(options: GithubReadonlyClientOptions 
         createdAt: String(pr.created_at ?? ""),
         updatedAt: String(pr.updated_at ?? ""),
       }));
+    },
+
+    async getPullRequest(owner, repo, pullNumber) {
+      const pr = (await getJson(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${encodeURIComponent(String(pullNumber))}`,
+      )) as Record<string, unknown>;
+      const numberOrNull = (value: unknown): number | null => (typeof value === "number" ? value : null);
+      return {
+        number: Number(pr.number ?? pullNumber),
+        title: String(pr.title ?? ""),
+        state: String(pr.state ?? ""),
+        author: String((pr.user as Record<string, unknown> | undefined)?.login ?? "unknown"),
+        draft: Boolean(pr.draft),
+        htmlUrl: String(pr.html_url ?? ""),
+        createdAt: String(pr.created_at ?? ""),
+        updatedAt: String(pr.updated_at ?? ""),
+        body: typeof pr.body === "string" ? pr.body : "",
+        baseRef: String((pr.base as Record<string, unknown> | undefined)?.ref ?? ""),
+        headRef: String((pr.head as Record<string, unknown> | undefined)?.ref ?? ""),
+        merged: Boolean(pr.merged),
+        additions: numberOrNull(pr.additions),
+        deletions: numberOrNull(pr.deletions),
+        changedFiles: numberOrNull(pr.changed_files),
+        commits: numberOrNull(pr.commits),
+      };
     },
 
     async listIssues(owner, repo, opts) {

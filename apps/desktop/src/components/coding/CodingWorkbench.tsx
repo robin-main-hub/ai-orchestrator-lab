@@ -44,6 +44,7 @@ import {
 } from "../../lib/workbenchMissions";
 import { CodingThread } from "./CodingThread";
 import { GithubConnectorChip } from "./GithubConnectorChip";
+import { GithubPullRequestPanel } from "./GithubPullRequestPanel";
 import { humanizeCodingError } from "../../lib/codingErrorMessage";
 import { useDraftAttachments } from "../../lib/useDraftAttachments";
 import { getModelInputModalities, formatAttachmentSize } from "../../lib/helpers";
@@ -857,6 +858,7 @@ export function CodingWorkbench({
               ))}
             </ul>
           )}
+          <GithubPullRequestPanel serverBaseUrl={serverBaseUrl} />
         </aside>
       ) : (
         <button className="coding-mission-board-toggle" onClick={() => setMissionPanelOpen(true)} type="button">

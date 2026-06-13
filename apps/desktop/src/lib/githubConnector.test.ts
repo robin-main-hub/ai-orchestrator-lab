@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GithubConnectorStatus } from "@ai-orchestrator/protocol";
-import { fetchGithubConnectorStatus, githubConnectorChipLabel, resolveServerBaseUrl } from "./githubConnector";
+import {
+  fetchGithubConnectorStatus,
+  fetchGithubPullRequest,
+  fetchGithubPullRequests,
+  githubConnectorChipLabel,
+  githubOutcomeLabel,
+  resolveServerBaseUrl,
+} from "./githubConnector";
 
 const status = (over: Partial<GithubConnectorStatus> = {}): GithubConnectorStatus => ({
   id: "github",
@@ -43,6 +50,61 @@ describe("fetchGithubConnectorStatus", () => {
       throw new Error("offline");
     });
     expect(await fetchGithubConnectorStatus("http://x", fetchImpl as unknown as typeof fetch)).toEqual({ state: "error", message: "offline" });
+  });
+});
+
+describe("fetchGithubPullRequests / fetchGithubPullRequest — 판별 결과", () => {
+  it("서버 주소 없으면 connection_failed (fetch 안 함)", async () => {
+    const fetchImpl = vi.fn();
+    const result = await fetchGithubPullRequests(undefined, "o", "r", fetchImpl as unknown as typeof fetch);
+    expect(result.outcome).toBe("connection_failed");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("observed면 data를 싣는다", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        outcome: "observed",
+        observedAt: "2026-06-13T00:00:00.000Z",
+        pullRequests: [{ number: 1, title: "t", state: "open", author: "a", draft: false, htmlUrl: "u", createdAt: "c", updatedAt: "u" }],
+      }),
+    );
+    const result = await fetchGithubPullRequests("http://x", "o", "r", fetchImpl as unknown as typeof fetch);
+    expect(result.outcome).toBe("observed");
+    expect(result.data).toHaveLength(1);
+    expect(result.observedAt).toBe("2026-06-13T00:00:00.000Z");
+  });
+
+  it("서버가 permission_denied면 그대로 전달(빈 배열로 위장 안 함)", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ outcome: "permission_denied", message: "권한 부족" }));
+    const result = await fetchGithubPullRequests("http://x", "o", "r", fetchImpl as unknown as typeof fetch);
+    expect(result.outcome).toBe("permission_denied");
+    expect(result.data).toBeUndefined();
+    expect(result.message).toContain("권한");
+  });
+
+  it("우리 서버 네트워크 실패는 connection_failed", async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("server down");
+    });
+    const result = await fetchGithubPullRequest("http://x", "o", "r", 1, fetchImpl as unknown as typeof fetch);
+    expect(result.outcome).toBe("connection_failed");
+  });
+
+  it("PR 상세 observed면 pullRequest를 싣는다", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ outcome: "observed", pullRequest: { number: 5, title: "x" } }));
+    const result = await fetchGithubPullRequest("http://x", "o", "r", 5, fetchImpl as unknown as typeof fetch);
+    expect(result.outcome).toBe("observed");
+    expect(result.data?.number).toBe(5);
+  });
+});
+
+describe("githubOutcomeLabel", () => {
+  it("outcome을 정직한 라벨/변형으로 매핑", () => {
+    expect(githubOutcomeLabel("observed")).toEqual({ text: "관측됨", variant: "success" });
+    expect(githubOutcomeLabel("not_configured").text).toBe("미설정");
+    expect(githubOutcomeLabel("permission_denied").text).toBe("권한 부족");
+    expect(githubOutcomeLabel("connection_failed")).toEqual({ text: "연결 실패", variant: "danger" });
   });
 });
 
