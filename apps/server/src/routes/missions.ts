@@ -1,5 +1,7 @@
 import type { IncomingMessage } from "node:http";
 import {
+  deriveMissionKanbanBoard,
+  deriveMissionTrace,
   missionCreateRequestSchema,
   missionEventAppendRequestSchema,
   missionMergeRequestSchema,
@@ -34,6 +36,7 @@ const MISSION_PATH = /^\/missions\/([^/]+)$/;
 const MISSION_EVENTS_PATH = /^\/missions\/([^/]+)\/events$/;
 const MISSION_VERIFY_PATH = /^\/missions\/([^/]+)\/verify$/;
 const MISSION_MERGE_PATH = /^\/missions\/([^/]+)\/merge$/;
+const MISSION_TRACE_PATH = /^\/missions\/([^/]+)\/trace$/;
 
 export async function handleMissionRoute({
   store,
@@ -75,6 +78,26 @@ export async function handleMissionRoute({
   if (pathname === "/missions" && method === "GET") {
     const missions: ServerMissionRecord[] = await store.list();
     respondJson(200, { missions });
+    return true;
+  }
+
+  // Kanban view — materialized missions를 컬럼으로 파생(새 저장소 없음). /missions/:id GET보다 먼저.
+  if (pathname === "/missions/kanban" && method === "GET") {
+    const missions: ServerMissionRecord[] = await store.list();
+    respondJson(200, { board: deriveMissionKanbanBoard(missions) });
+    return true;
+  }
+
+  // Live trace — 한 미션의 mission.* 라이프사이클을 시간순 trace로 파생(redacted).
+  const traceMatch = MISSION_TRACE_PATH.exec(pathname);
+  if (traceMatch && method === "GET") {
+    const missionId = decodeURIComponent(traceMatch[1]!);
+    const mission = await store.get(missionId);
+    if (!mission) {
+      respondJson(404, { error: "mission_not_found", missionId });
+      return true;
+    }
+    respondJson(200, { trace: deriveMissionTrace(mission) });
     return true;
   }
 
