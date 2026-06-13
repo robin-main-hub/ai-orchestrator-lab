@@ -447,6 +447,43 @@ export const githubFileChangePlanResponseSchema = z.object({
 });
 export type GithubFileChangePlanResponse = z.infer<typeof githubFileChangePlanResponseSchema>;
 
+// ──────────────────────────────────────────────────────────────────────────────
+// W3b: single-file create/update execute. plan을 거쳐야만 한다.
+// 안전 계약(사용자 확정):
+//   - approval ONLY (armed 없음 — 파일 변경은 comment write보다 위험)
+//   - 3중 sha 무결성: client payload sha == plan-store sha == execute 시점 GitHub 재GET sha
+//   - tryClaim + observedCache 멱등(중복 execute 시 PUT 1회만)
+//   - 보호 브랜치 PUT 금지(W2 정책 재사용, plan에서 막혔지만 execute에서 재평가)
+//   - delete / multi-file / binary / PR create / branch create / merge 절대 금지
+//   - MCP execute tool 추가하지 않음(plan tool만 — execute는 서버 단독)
+//   - 409/422 → conflict/already_exists로 정직 매핑(github_error로 흘리지 않음)
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const githubFileChangeExecuteRequestSchema = z.object({
+  planId: z.string(),
+  /** plan에 기록된 새 콘텐츠의 sha — execute가 같은 콘텐츠를 의도하는지 1차 확인. */
+  newContentSha256: z.string(),
+  /** update 시 plan이 본 base sha — execute가 같은 base를 가정하는지 1차 확인(create면 생략). */
+  baseFileSha: z.string().optional(),
+  /** approval-only — armed 없음. */
+  approvalId: z.string(),
+});
+export type GithubFileChangeExecuteRequest = z.infer<typeof githubFileChangeExecuteRequestSchema>;
+
+export const githubFileChangeExecuteResponseSchema = z.object({
+  outcome: githubFileChangeOutcomeSchema,
+  planId: z.string(),
+  /** PUT contents 성공 시 commit sha — observed 진실. */
+  commitSha: z.string().optional(),
+  /** PUT contents 성공 시 새 file blob sha. */
+  blobSha: z.string().optional(),
+  htmlUrl: z.string().optional(),
+  observedAt: z.string().optional(),
+  message: z.string().optional(),
+  truthStatus: z.enum(["planned", "observed", "configured"]),
+});
+export type GithubFileChangeExecuteResponse = z.infer<typeof githubFileChangeExecuteResponseSchema>;
+
 /** GET /integrations/github/repos/:owner/:repo/pulls|pulls/:n|issues|overview|file */
 export const githubReadonlyResourceResponseSchema = z.object({
   status: githubConnectorStatusSchema,

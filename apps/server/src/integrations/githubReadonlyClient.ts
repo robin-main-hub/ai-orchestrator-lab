@@ -99,6 +99,20 @@ export type GithubReadonlyClient = {
     refName: string,
     sha: string,
   ): Promise<{ ref: string; sha: string; htmlUrl: string }>;
+  /**
+   * W3b — PUT /repos/:owner/:repo/contents/:path. single file create/update.
+   * 호출자(서버 게이트)가 sha 무결성/approval/path policy를 사전에 통과시켜야 함.
+   * 응답 200(update)/201(create)일 때만 `{ commitSha, blobSha, htmlUrl }` 반환.
+   * 409(conflict)/422(sha mismatch 등)는 호출자가 outcome으로 매핑한다.
+   *
+   * content는 UTF-8 텍스트(서버가 base64로 인코딩해서 보냄). sha는 update 시에만 보낸다.
+   */
+  putFileContents(
+    owner: string,
+    repo: string,
+    path: string,
+    params: { branch: string; content: string; message: string; sha?: string },
+  ): Promise<{ commitSha: string; blobSha: string; htmlUrl: string }>;
 };
 
 export function createGithubReadonlyClient(options: GithubReadonlyClientOptions = {}): GithubReadonlyClient {
@@ -260,6 +274,58 @@ export function createGithubReadonlyClient(options: GithubReadonlyClientOptions 
       const objSha = String((raw.object as Record<string, unknown> | undefined)?.sha ?? sha);
       const htmlUrl = `https://github.com/${owner}/${repo}/tree/${respRef.replace(/^refs\/heads\//, "")}`;
       return { ref: respRef, sha: objSha, htmlUrl };
+    },
+
+    async putFileContents(owner, repo, path, params) {
+      if (!token) throw new GithubNotConfiguredError();
+      // base64 인코딩 — GitHub Contents API의 요구. 텍스트만 들어오는 게 게이트에서 강제됨.
+      const base64 = Buffer.from(params.content, "utf8").toString("base64");
+      const body: Record<string, unknown> = {
+        message: params.message,
+        content: base64,
+        branch: params.branch,
+      };
+      if (params.sha) body.sha = params.sha;
+      // path는 segment 단위로 인코딩(슬래시 보존) — getFileContent와 같은 규칙.
+      const encodedPath = path
+        .split("/")
+        .filter((segment) => segment.length > 0)
+        .map((segment) => encodeURIComponent(segment))
+        .join("/");
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodedPath}`,
+          {
+            method: "PUT",
+            headers: {
+              accept: "application/vnd.github+json",
+              authorization: `Bearer ${token}`,
+              "x-github-api-version": "2022-11-28",
+              "user-agent": "ai-orchestrator-lab-file-write",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(body),
+          },
+        );
+      } catch (error) {
+        throw new GithubReadonlyError(scrub(error instanceof Error ? error.message : String(error), token), 0);
+      }
+      // 200 = update, 201 = create. 그 외는 모두 실패.
+      if (response.status !== 200 && response.status !== 201) {
+        const text = await response.text().catch(() => "");
+        throw new GithubReadonlyError(scrub(`GitHub ${response.status}: ${text.slice(0, 200)}`, token), response.status);
+      }
+      const raw = (await response.json()) as Record<string, unknown>;
+      const commit = raw.commit as Record<string, unknown> | undefined;
+      const content = raw.content as Record<string, unknown> | undefined;
+      const commitSha = typeof commit?.sha === "string" ? commit.sha : "";
+      const blobSha = typeof content?.sha === "string" ? content.sha : "";
+      const htmlUrl = typeof content?.html_url === "string" ? content.html_url : `https://github.com/${owner}/${repo}/blob/${params.branch}/${path}`;
+      if (!commitSha || !blobSha) {
+        throw new GithubReadonlyError("GitHub PUT 응답에 commit.sha/blob.sha가 없습니다", 502);
+      }
+      return { commitSha, blobSha, htmlUrl };
     },
 
     async getFileContent(owner, repo, path, ref) {

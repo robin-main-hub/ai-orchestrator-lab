@@ -57,6 +57,9 @@ function clientStub(
     getRefSha: over.getRefSha ?? (async () => "stub-sha"),
     createBranchRef:
       over.createBranchRef ?? (async (_o, _r, ref, sha) => ({ ref, sha, htmlUrl: `https://github.com/${REPO}/tree/stub` })),
+    putFileContents:
+      over.putFileContents ??
+      (async () => ({ commitSha: "stub-commit", blobSha: "stub-blob", htmlUrl: "u" })),
   };
 }
 

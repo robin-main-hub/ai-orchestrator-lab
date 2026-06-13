@@ -26,13 +26,17 @@ import {
   contentSha256,
   evaluateFileChangeGate,
 } from "../integrations/githubFileChangeWriteGuards.js";
-import type { GithubFileChangePlanStore } from "../integrations/githubFileChangePlanStore.js";
+import {
+  getFileChangeObservedFor,
+  type GithubFileChangePlanStore,
+} from "../integrations/githubFileChangePlanStore.js";
 import { generateUnifiedDiff } from "../integrations/githubFileDiff.js";
 import {
   githubBranchCreateExecuteRequestSchema,
   githubBranchCreatePlanRequestSchema,
   githubCommentWriteExecuteRequestSchema,
   githubCommentWritePlanRequestSchema,
+  githubFileChangeExecuteRequestSchema,
   githubFileChangePlanRequestSchema,
   type GithubBranchCreateOutcome,
   type GithubBranchCreatePlan,
@@ -125,8 +129,11 @@ const COMMENT_EXECUTE_PATH = "/integrations/github/write/comment/execute";
 const BRANCH_PLAN_PATH = "/integrations/github/write/branch/plan";
 const BRANCH_EXECUTE_PATH = "/integrations/github/write/branch/execute";
 
-// W3a file change plan 경로 — plan only. execute(W3b)는 별도 phase에서 별도 path.
+// W3a file change plan 경로 — plan only. execute(W3b)는 별도 path.
 const FILE_PLAN_PATH = "/integrations/github/write/file/plan";
+
+// W3b file change execute — approval-only. armed 없음.
+const FILE_EXECUTE_PATH = "/integrations/github/write/file/execute";
 
 /** comment write 결과 — readonly outcome enum과 호환(observed 외에 planned/approval_required/blocked 추가) */
 function writeOutcomeForError(error: unknown): { outcome: GithubCommentWriteOutcome; message: string } {
@@ -752,6 +759,236 @@ async function handleFileChangePlan(deps: GithubRouteDependencies): Promise<bool
   return true;
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// W3b file change execute — GitHub PUT contents single file create/update.
+// 흐름:
+//   1) payload zod parse, plan store에서 record 조회
+//   2) observedCache 검사(멱등 — 이미 PUT 성공한 plan은 동일 결과 반환)
+//   3) 1차 sha 무결성: client newContentSha256 == plan.newContentSha256
+//                     (update 시) client baseFileSha == plan.baseFileSha
+//   4) approval 검증(approvalId + verifyApproval)
+//   5) plan 시점 gate 재평가(allowlist/branch/path/secret/binary — 환경 변경 대응)
+//   6) GitHub로 branch ref 재GET — 사라졌으면 blocked
+//   7) GitHub로 file GET — update면 sha가 plan.baseFileSha와 일치해야 함(plan 이후 누가 바꿨으면 차단)
+//                          create면 404여야 함(그 사이 생겼으면 already_exists)
+//   8) tryClaim(POST 직전 동기 점유)
+//   9) putFileContents(서버 생성 commit message + content base64)
+//   10) markCreated(commit/blob sha 저장), 응답
+//
+// 보호 정책:
+//   - delete 없음(API 경로 자체 미구현 — 호출자가 newContent 없이 보낼 수 없음)
+//   - multi-file 없음(plan은 단일 path 한정)
+//   - binary 없음(plan 단계와 execute 시점 둘 다 NUL 가드)
+//   - GitHub 409/422 → conflict/already_exists로 정직 매핑(github_error로 흘리지 않음)
+// ──────────────────────────────────────────────────────────────────────────────
+
+async function handleFileChangeExecute(deps: GithubRouteDependencies): Promise<boolean> {
+  const { respondJson, createClient, readJsonBody, request, writeRepoAllowlist, fileChangePlanStore, verifyApproval } = deps;
+  if (!readJsonBody || !request || !fileChangePlanStore) {
+    respondJson(500, { outcome: "github_error", message: "W3b dependencies not wired" });
+    return true;
+  }
+  let payload;
+  try {
+    payload = githubFileChangeExecuteRequestSchema.parse(await readJsonBody(request));
+  } catch (error) {
+    respondJson(400, { outcome: "blocked", message: error instanceof Error ? error.message : "잘못된 execute 요청" });
+    return true;
+  }
+  const record = fileChangePlanStore.get(payload.planId);
+  if (!record) {
+    respondJson(200, { outcome: "blocked", planId: payload.planId, truthStatus: "planned", message: "plan을 찾을 수 없거나 만료됨" });
+    return true;
+  }
+  // 멱등성 — 이미 PUT 성공한 plan은 같은 결과 그대로 반환.
+  const observed = getFileChangeObservedFor(payload.planId);
+  if (observed) {
+    respondJson(200, {
+      outcome: "observed",
+      planId: payload.planId,
+      commitSha: observed.commitSha,
+      blobSha: observed.blobSha,
+      htmlUrl: observed.htmlUrl,
+      observedAt: observed.observedAt,
+      truthStatus: "observed",
+    });
+    return true;
+  }
+  // 1차 sha 무결성 — client payload가 plan과 같은 콘텐츠/base를 의도하는지.
+  if (payload.newContentSha256 !== record.plan.newContentSha256) {
+    respondJson(200, {
+      outcome: "blocked",
+      planId: payload.planId,
+      truthStatus: "planned",
+      message: "newContentSha256 불일치 — plan과 다른 콘텐츠를 PUT하려고 합니다",
+    });
+    return true;
+  }
+  if (record.plan.operation === "update") {
+    if (!payload.baseFileSha || payload.baseFileSha !== record.plan.baseFileSha) {
+      respondJson(200, {
+        outcome: "blocked",
+        planId: payload.planId,
+        truthStatus: "planned",
+        message: `baseFileSha 불일치 — plan(${record.plan.baseFileSha ?? "n/a"})과 다른 base를 가정합니다`,
+      });
+      return true;
+    }
+  }
+  // approval 검증 — armed 없음, approvalId가 반드시 verifyApproval를 통과.
+  if (!payload.approvalId || !verifyApproval) {
+    respondJson(200, { outcome: "approval_required", planId: payload.planId, truthStatus: "planned", message: "approval이 필요합니다" });
+    return true;
+  }
+  const authorized = await verifyApproval(payload.approvalId);
+  if (!authorized) {
+    respondJson(200, { outcome: "blocked", planId: payload.planId, truthStatus: "planned", message: "approval이 승인되지 않았습니다" });
+    return true;
+  }
+  // 게이트 재평가 — 시간 경과 후 환경 변경(allowlist/secret 정책 변경 등) 대응.
+  const status = createClient().status();
+  const gate = evaluateFileChangeGate({
+    repoFullName: record.plan.repoFullName,
+    branchName: record.plan.branchName,
+    path: record.plan.path,
+    newContent: record.newContent,
+    allowlist: writeRepoAllowlist ?? [],
+    tokenPresent: status.tokenPresent,
+  });
+  if (gate.kind === "blocked") {
+    respondJson(200, { outcome: "blocked", planId: payload.planId, truthStatus: "planned", message: gate.reason });
+    return true;
+  }
+  const [owner, repo] = record.plan.repoFullName.split("/") as [string, string];
+  // branch ref 재GET — plan 이후 브랜치가 삭제됐을 가능성을 차단.
+  try {
+    await createClient().getRefSha(owner, repo, record.plan.branchName);
+  } catch (error) {
+    if (error instanceof GithubReadonlyError && error.status === 404) {
+      respondJson(200, {
+        outcome: "blocked",
+        planId: payload.planId,
+        truthStatus: "planned",
+        message: `target branch '${record.plan.branchName}'이(가) plan 이후 사라졌습니다 — 다시 만들고 plan부터 다시 하세요`,
+      });
+      return true;
+    }
+    const mapped = fileChangeOutcomeForError(error);
+    respondJson(200, { ...mapped, planId: record.plan.id, truthStatus: "planned" });
+    return true;
+  }
+  // 3중 sha 무결성의 마지막 단계 — 실제 GitHub에서 file을 재GET해 plan 시점과 같은지 확인.
+  if (record.plan.operation === "update") {
+    let currentSha: string;
+    try {
+      const file = await createClient().getFileContent(owner, repo, record.plan.path, record.plan.branchName);
+      currentSha = file.sha;
+    } catch (error) {
+      if (error instanceof GithubReadonlyError && error.status === 404) {
+        respondJson(200, {
+          outcome: "blocked",
+          planId: record.plan.id,
+          truthStatus: "planned",
+          message: `update plan이지만 ${record.plan.path}이(가) plan 이후 사라졌습니다 — 다시 plan부터`,
+        });
+        return true;
+      }
+      const mapped = fileChangeOutcomeForError(error);
+      respondJson(200, { ...mapped, planId: record.plan.id, truthStatus: "planned" });
+      return true;
+    }
+    if (currentSha !== record.plan.baseFileSha) {
+      respondJson(200, {
+        outcome: "blocked",
+        planId: record.plan.id,
+        truthStatus: "planned",
+        message: `${record.plan.path}의 file sha가 plan 시점 이후 변경됐습니다(plan ${record.plan.baseFileSha} → 현재 ${currentSha}) — 다시 plan부터`,
+      });
+      return true;
+    }
+  } else {
+    // create — 그 사이 같은 path에 파일이 생겼으면 overwrite 금지.
+    try {
+      await createClient().getFileContent(owner, repo, record.plan.path, record.plan.branchName);
+      // GET 성공 = 이미 존재
+      respondJson(200, {
+        outcome: "already_exists",
+        planId: record.plan.id,
+        truthStatus: "planned",
+        message: `create plan이지만 ${record.plan.path}이(가) plan 이후 생겼습니다 — overwrite 금지`,
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof GithubReadonlyError && error.status === 404) {
+        // good — 없음 → 만들 수 있음.
+      } else {
+        const mapped = fileChangeOutcomeForError(error);
+        respondJson(200, { ...mapped, planId: record.plan.id, truthStatus: "planned" });
+        return true;
+      }
+    }
+  }
+  // 동시 execute 차단 — POST 직전 동기 점유.
+  if (!fileChangePlanStore.tryClaim(record.plan.id)) {
+    respondJson(200, { outcome: "blocked", planId: record.plan.id, truthStatus: "planned", message: "동일 plan이 이미 실행 중입니다" });
+    return true;
+  }
+  // commit message는 서버가 결정 — 사용자 자유 입력은 받지 않음(예측 가능성/감사 용이성).
+  const commitMessage = record.plan.operation === "create"
+    ? `Apply planned file change (create): ${record.plan.path}`
+    : `Apply planned file change (update): ${record.plan.path}`;
+  try {
+    const result = await createClient().putFileContents(owner, repo, record.plan.path, {
+      branch: record.plan.branchName,
+      content: record.newContent,
+      message: commitMessage,
+      sha: record.plan.operation === "update" ? record.plan.baseFileSha : undefined,
+    });
+    const observedAt = deps.now?.() ?? new Date().toISOString();
+    fileChangePlanStore.markCreated(record.plan.id, {
+      commitSha: result.commitSha,
+      blobSha: result.blobSha,
+      htmlUrl: result.htmlUrl,
+      observedAt,
+    });
+    respondJson(200, {
+      outcome: "observed",
+      planId: record.plan.id,
+      commitSha: result.commitSha,
+      blobSha: result.blobSha,
+      htmlUrl: result.htmlUrl,
+      observedAt,
+      truthStatus: "observed",
+    });
+  } catch (error) {
+    fileChangePlanStore.release(record.plan.id);
+    // 409(conflict) / 422(sha mismatch 등)는 정직하게 매핑 — github_error로 흘리지 않는다.
+    if (error instanceof GithubReadonlyError) {
+      if (error.status === 409) {
+        respondJson(200, {
+          outcome: "blocked",
+          planId: record.plan.id,
+          truthStatus: "planned",
+          message: "GitHub: 충돌(409) — base sha 또는 branch 상태가 plan과 달라졌습니다",
+        });
+        return true;
+      }
+      if (error.status === 422) {
+        respondJson(200, {
+          outcome: "blocked",
+          planId: record.plan.id,
+          truthStatus: "planned",
+          message: "GitHub: 처리 불가(422) — sha/path/branch 조합이 유효하지 않습니다",
+        });
+        return true;
+      }
+    }
+    const mapped = fileChangeOutcomeForError(error);
+    respondJson(200, { ...mapped, planId: record.plan.id, truthStatus: "planned" });
+  }
+  return true;
+}
+
 export async function handleGithubRoute({
   pathname,
   method,
@@ -799,13 +1036,21 @@ export async function handleGithubRoute({
     }
     return handleBranchCreateExecute(commonDeps);
   }
-  // W3a file change plan — POST only(no execute path yet, W3b에서 추가).
+  // W3a file change plan — POST only.
   if (pathPrefixOnly === FILE_PLAN_PATH) {
     if ((method ?? "GET") !== "POST") {
       respondJson(405, { error: "method_not_allowed", message: "file change plan은 POST만 허용됩니다" });
       return true;
     }
     return handleFileChangePlan(commonDeps);
+  }
+  // W3b file change execute — POST only. MCP execute tool은 추가하지 않음(서버 단독).
+  if (pathPrefixOnly === FILE_EXECUTE_PATH) {
+    if ((method ?? "GET") !== "POST") {
+      respondJson(405, { error: "method_not_allowed", message: "file change execute는 POST만 허용됩니다" });
+      return true;
+    }
+    return handleFileChangeExecute(commonDeps);
   }
   if ((method ?? "GET") !== "GET") {
     // 그 외 read-only 경로는 비-GET 거절(기존 동작 유지).

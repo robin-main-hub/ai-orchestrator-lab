@@ -43,6 +43,9 @@ function clientStub(over: Partial<GithubReadonlyClient> & { token?: string } = {
     createBranchRef:
       over.createBranchRef ??
       (async (_o, _r, ref, sha) => ({ ref, sha, htmlUrl: "u" })),
+    putFileContents:
+      over.putFileContents ??
+      (async () => ({ commitSha: "stub-commit", blobSha: "stub-blob", htmlUrl: "u" })),
   };
 }
 
