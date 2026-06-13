@@ -126,6 +126,10 @@ describe("stage3 debate runtime", () => {
     expect(session.rounds.flatMap((round) => round.utterances).some((utterance) => utterance.tags.includes("risk"))).toBe(true);
     expect(session.humanPeek).toHaveLength(3);
     expect(session.statusHub.find((item) => item.id === "providers")?.value).toBe("2 active / 1 risky");
+    // 라이브 실행 전(스켈레톤/mock)에는 어떤 릴레이도 observed로 표시하지 않는다(가짜 관측 금지).
+    expect(
+      session.humanPeek.filter((peek) => peek.kind === "spawn" || peek.kind === "send").every((peek) => peek.state === "pending"),
+    ).toBe(true);
   });
 
   it("uses roles, not English names, to create mock debate utterances", () => {

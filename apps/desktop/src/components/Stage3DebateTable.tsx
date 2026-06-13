@@ -13,7 +13,7 @@ import {
   Scale,
   XCircle,
 } from "lucide-react";
-import type { AgentProfile, DebateTag, DebateUtterance } from "@ai-orchestrator/protocol";
+import type { AgentProfile, BlueprintDebateReview, DebateTag, DebateUtterance } from "@ai-orchestrator/protocol";
 import { defaultAgentProfiles, deriveStanceTrajectories, synthesizeChairmanDecision, type ChairmanDecision } from "@ai-orchestrator/agents";
 import { cn } from "@/lib/utils";
 import { agentRoleLabel } from "../lib/helpers";
@@ -163,6 +163,7 @@ export function Stage3DebateTable({
           />
 
           <ChairmanDecisionCard session={session} />
+          {session.blueprintReview ? <BlueprintReviewCard review={session.blueprintReview} /> : null}
           <StanceTrajectoryStrip session={session} />
 
           <div className="mt-4 flex items-center gap-1 overflow-x-auto pb-1">
@@ -819,6 +820,48 @@ function ChairmanDecisionCard({ session }: { session: Stage3DebateSession }) {
       </div>
       {decision.risks.length > 0 ? (
         <p className="mt-2 text-[11px] text-rose-300/80">리스크: {decision.risks.slice(0, 3).join(" · ")}</p>
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * point 5 — 초안에서 승격된 토론이 끝나면, 캐릭터 토론 결과를 원본 초안에 대한 리뷰로 보여준다.
+ * 모델 출력이므로 generated(observed 아님). 자동 적용 없음 — 표시 + 추천만.
+ */
+function BlueprintReviewCard({ review }: { review: BlueprintDebateReview }) {
+  const action =
+    review.recommendedNextAction === "promote_to_mission"
+      ? { label: "미션으로 승격 추천", tone: "text-emerald-300" }
+      : review.recommendedNextAction === "revise_blueprint"
+        ? { label: "초안 수정 후 진행 추천", tone: "text-amber-300" }
+        : { label: "사용자 확인 필요", tone: "text-rose-300" };
+  return (
+    <section className="mt-3 rounded-2xl border border-cyan-300/20 bg-cyan-500/[0.05] p-4" aria-label="토론 초안 리뷰">
+      <div className="flex items-center gap-2">
+        <Scale className="h-4 w-4 text-cyan-300" />
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-cyan-200">토론 리뷰 · {review.blueprintTitle}</span>
+        <span className="flex-1" />
+        <span className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 text-[9px] font-medium uppercase text-zinc-400" title="모델 출력 — 실제 관측 아님">
+          generated
+        </span>
+      </div>
+      <p className={cn("mt-2 text-[12px] font-semibold", action.tone)}>추천: {action.label}</p>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-400">
+        <span>유지할 결정 <b className="text-emerald-300">{review.adopted.length}</b></span>
+        <span>수정·반박 <b className="text-amber-300">{review.rejected.length}</b></span>
+        <span>위험 <b className="text-rose-300">{review.risks.length}</b></span>
+        <span>초안 변경 <b className="text-cyan-300">{review.blueprintDelta.length}</b></span>
+      </div>
+      {review.blueprintDelta.length > 0 ? (
+        <ul className="mt-2 space-y-1">
+          {review.blueprintDelta.slice(0, 4).map((delta, index) => (
+            <li className="line-clamp-2 text-[11.5px] leading-snug text-zinc-300" key={index}>· {delta}</li>
+          ))}
+        </ul>
+      ) : null}
+      {review.risks.length > 0 ? (
+        <p className="mt-2 text-[11px] text-rose-300/80">위험: {review.risks.slice(0, 3).join(" · ")}</p>
       ) : null}
     </section>
   );
