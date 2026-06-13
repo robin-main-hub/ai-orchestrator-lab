@@ -77,6 +77,7 @@ function serverRecord(overrides: Partial<ServerMissionRecord["mission"]> = {}, u
     designBlueprints: [],
     visualQaReports: [],
     designIssues: [],
+    scaffoldPlans: [],
     updatedAt,
   };
 }

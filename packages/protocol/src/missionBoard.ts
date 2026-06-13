@@ -12,6 +12,11 @@ import {
   type DesignIssueCard,
   type VisualQaReport,
 } from "./visualQa.js";
+import {
+  missionScaffoldAppliedPayloadSchema,
+  missionScaffoldPlannedPayloadSchema,
+  type ScaffoldPlan,
+} from "./scaffold.js";
 import type { MissionCheckpoint } from "./missionCheckpoint.js";
 import {
   missionErrorCardRecordedPayloadSchema,
@@ -220,6 +225,8 @@ export const missionTraceEventTypeSchema = z.enum([
   "design.blueprint.recorded",
   "visual_qa.recorded",
   "design.issue.recorded",
+  "scaffold.planned",
+  "scaffold.applied",
   "sandbox.preflight",
   "sandbox.exec.started",
   "sandbox.exec.completed",
@@ -382,6 +389,22 @@ function designIssueTraceEvent(issue: DesignIssueCard): MissionTraceEvent {
   };
 }
 
+function scaffoldTraceEvent(plan: ScaffoldPlan): MissionTraceEvent {
+  const applied = plan.apply?.status === "applied";
+  return {
+    id: `${plan.missionId}:scaffold:${plan.id}${applied ? ":applied" : ""}`,
+    missionId: plan.missionId,
+    type: applied ? "scaffold.applied" : "scaffold.planned",
+    severity: plan.apply?.status === "blocked" || plan.apply?.status === "failed" ? "warning" : applied ? "success" : "info",
+    title: applied ? `스캐폴드 적용 · ${plan.templateId}` : `스캐폴드 계획 · ${plan.templateId}`,
+    summary: applied
+      ? `${plan.apply?.appliedPaths.length ?? 0}개 파일 기록${plan.apply?.checkpointSha ? ` · cp ${plan.apply.checkpointSha.slice(0, 10)}` : ""}`
+      : `${plan.files.length}개 파일 (덮어쓰기 ${plan.hasOverwrites ? "있음" : "없음"})`,
+    truthStatus: applied ? (plan.apply?.observed ? "observed" : "configured") : "planned",
+    createdAt: plan.apply?.appliedAt ?? plan.createdAt,
+  };
+}
+
 function designBlueprintTraceEvent(blueprint: DesignBlueprint): MissionTraceEvent {
   return {
     id: `${blueprint.missionId}:blueprint:${blueprint.id}`,
@@ -473,6 +496,7 @@ export function deriveMissionTrace(record: ServerMissionRecord): MissionTraceEve
   for (const blueprint of record.designBlueprints ?? []) events.push(designBlueprintTraceEvent(blueprint));
   for (const report of record.visualQaReports ?? []) events.push(visualQaTraceEvent(report));
   for (const issue of record.designIssues ?? []) events.push(designIssueTraceEvent(issue));
+  for (const plan of record.scaffoldPlans ?? []) events.push(scaffoldTraceEvent(plan));
   for (const checkpoint of record.checkpoints ?? []) events.push(checkpointTraceEvent(checkpoint));
   for (const report of record.verificationReports) events.push(verificationTraceEvent(report, report.createdAt));
   for (const card of record.errorCards ?? []) events.push(errorCardTraceEvent(card));
@@ -526,6 +550,25 @@ export function traceEventFromMissionEnvelope(envelope: {
     case "mission.design.issue.recorded": {
       const parsed = missionDesignIssueRecordedPayloadSchema.safeParse(envelope.payload);
       return parsed.success ? designIssueTraceEvent(parsed.data.issue) : null;
+    }
+    case "mission.scaffold.planned": {
+      const parsed = missionScaffoldPlannedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success ? scaffoldTraceEvent(parsed.data.plan) : null;
+    }
+    case "mission.scaffold.applied": {
+      const parsed = missionScaffoldAppliedPayloadSchema.safeParse(envelope.payload);
+      if (!parsed.success) return null;
+      // applied 이벤트는 plan 전체를 들고 있지 않으므로 결과만으로 경량 trace 이벤트를 만든다
+      return {
+        id: `${parsed.data.missionId}:scaffold:${parsed.data.planId}:applied`,
+        missionId: parsed.data.missionId,
+        type: "scaffold.applied",
+        severity: parsed.data.result.status === "applied" ? "success" : "warning",
+        title: `스캐폴드 적용 · ${parsed.data.result.status}`,
+        summary: `${parsed.data.result.appliedPaths.length}개 파일 · ${parsed.data.result.reason}`,
+        truthStatus: parsed.data.result.observed ? "observed" : "configured",
+        createdAt: parsed.data.result.appliedAt,
+      };
     }
     case "mission.error_card.recorded": {
       const parsed = missionErrorCardRecordedPayloadSchema.safeParse(envelope.payload);
