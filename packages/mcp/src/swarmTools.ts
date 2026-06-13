@@ -206,6 +206,49 @@ export const SWARM_TOOLS: ReadonlyArray<SwarmToolDef> = [
       },
     },
   },
+  // ── GitHub W1 comment write (PR/Issue comment create — 유일한 write 표면) ────
+  // 두 도구 모두 서버 라우트로 forward만 한다(MCP 측에는 GitHub client 없음).
+  // 모든 검증(allowlist·secret·bodySha·target preflight·tryClaim·approval-or-armed)은
+  // 서버가 수행 — MCP가 게이트를 우회할 길이 없다.
+  {
+    name: "github_comment_plan",
+    description:
+      "Create a comment write PLAN (no GitHub POST). Server validates allowlist/secret/body. Result is approval_required or blocked — actual posting goes through github_comment_execute and the server gate.",
+    method: "POST",
+    path: "/integrations/github/write/comment/plan",
+    body: passthrough,
+    inputSchema: {
+      type: "object",
+      required: ["repoFullName", "number", "targetKind", "body"],
+      additionalProperties: true,
+      properties: {
+        repoFullName: { type: "string", description: 'GitHub repository, e.g. "owner/repo"' },
+        number: { type: "number", description: "PR or issue number" },
+        targetKind: { type: "string", enum: ["pull_request", "issue"] },
+        body: { type: "string", description: "comment body (will be hashed for replay integrity)" },
+      },
+    },
+  },
+  {
+    name: "github_comment_execute",
+    description:
+      "Execute a previously created plan. The server gate requires (approvalId AND approved) OR (autoExecuteArmed === true AND armedAt). bodySha256 must match the server-stored plan exactly. Only the server posts to GitHub.",
+    method: "POST",
+    path: "/integrations/github/write/comment/execute",
+    body: passthrough,
+    inputSchema: {
+      type: "object",
+      required: ["planId", "bodySha256"],
+      additionalProperties: true,
+      properties: {
+        planId: { type: "string" },
+        bodySha256: { type: "string" },
+        approvalId: { type: "string" },
+        autoExecuteArmed: { type: "boolean" },
+        armedAt: { type: "string" },
+      },
+    },
+  },
 ];
 
 export type SwarmToolDeps = {
