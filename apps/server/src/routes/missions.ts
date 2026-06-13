@@ -1,11 +1,14 @@
 import type { IncomingMessage } from "node:http";
 import {
   appWorkspaceAttachRequestSchema,
+  buildMissionCreateFromBlueprint,
   buildMissionCreateFromTemplate,
   deriveMissionKanbanBoard,
   deriveMissionTrace,
+  DESIGN_TEAM,
   findWorkflowTemplate,
   missingRequiredFields,
+  missionFromBlueprintRequestSchema,
   missionCheckpointCreateRequestSchema,
   missionCreateRequestSchema,
   missionEventAppendRequestSchema,
@@ -19,6 +22,7 @@ import {
   type MissionCreateRequest,
   type MissionEventAppendRequest,
   type AppWorkspaceAttachRequest,
+  type MissionFromBlueprintRequest,
   type MissionFromTemplateRequest,
   type MissionRollbackOutcome,
   type MissionRollbackRequest,
@@ -168,6 +172,39 @@ export async function handleMissionRoute({
       return true;
     }
     respondJson(200, { trace: deriveMissionTrace(mission) });
+    return true;
+  }
+
+  // D3: 디자인 청사진 → 실제 디자인 Mission(DESIGN_TEAM 배정 + 화면 planned 아티팩트).
+  if (pathname === "/missions/from-blueprint" && method === "POST") {
+    let payload: MissionFromBlueprintRequest;
+    try {
+      payload = missionFromBlueprintRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, { error: "invalid_mission_from_blueprint_payload", message: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    const missionId = payload.missionId ?? `mission_design_${Date.now()}`;
+    try {
+      await store.create(buildMissionCreateFromBlueprint(payload.blueprint, { missionId, createdBy: payload.createdBy }));
+      const result = await store.attachDesignBlueprint(missionId, payload.blueprint);
+      if (!result) {
+        respondJson(500, { error: "mission_from_blueprint_failed", message: "blueprint attach did not materialize" });
+        return true;
+      }
+      respondJson(201, {
+        mission: result.mission,
+        blueprint: result.blueprint,
+        designTeam: DESIGN_TEAM,
+        acceptanceCriteria: result.blueprint.acceptanceCriteria,
+      });
+    } catch (error) {
+      respondJson(500, { error: "mission_from_blueprint_failed", message: error instanceof Error ? error.message : String(error) });
+    }
     return true;
   }
 

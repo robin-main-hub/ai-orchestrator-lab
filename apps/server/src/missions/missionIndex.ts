@@ -3,6 +3,7 @@ import {
   missionCheckpointRecordedPayloadSchema,
   missionClosedPayloadSchema,
   missionCreatedPayloadSchema,
+  missionDesignBlueprintRecordedPayloadSchema,
   missionErrorCardRecordedPayloadSchema,
   missionMergeQueuedPayloadSchema,
   missionSelfCorrectionRecordSchema,
@@ -85,6 +86,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
         errorCards: [],
         selfCorrections: [],
         workspaces: [],
+        designBlueprints: [],
         updatedAt: event.createdAt,
       });
       continue;
@@ -147,6 +149,17 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
       } else {
         record.workspaces.push(parsed.data.workspace);
       }
+      record.updatedAt = event.createdAt;
+      continue;
+    }
+
+    if (event.type === "mission.design.blueprint.recorded") {
+      const parsed = missionDesignBlueprintRecordedPayloadSchema.safeParse(event.payload);
+      const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
+      if (!parsed.success || !record || record.designBlueprints.some((bp) => bp.id === parsed.data.blueprint.id)) {
+        continue;
+      }
+      record.designBlueprints.push(parsed.data.blueprint);
       record.updatedAt = event.createdAt;
       continue;
     }

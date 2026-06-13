@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { missionWorkspaceAttachedPayloadSchema, type AppWorkspace } from "./appWorkspace.js";
+import { missionDesignBlueprintRecordedPayloadSchema, type DesignBlueprint } from "./designBlueprint.js";
 import type { MissionCheckpoint } from "./missionCheckpoint.js";
 import {
   missionErrorCardRecordedPayloadSchema,
@@ -204,6 +205,7 @@ export const missionTraceEventTypeSchema = z.enum([
   "worker.started",
   "checkpoint.created",
   "workspace.attached",
+  "design.blueprint.recorded",
   "sandbox.preflight",
   "sandbox.exec.started",
   "sandbox.exec.completed",
@@ -327,6 +329,19 @@ function workspaceTraceEvent(workspace: AppWorkspace): MissionTraceEvent {
   };
 }
 
+function designBlueprintTraceEvent(blueprint: DesignBlueprint): MissionTraceEvent {
+  return {
+    id: `${blueprint.missionId}:blueprint:${blueprint.id}`,
+    missionId: blueprint.missionId,
+    type: "design.blueprint.recorded",
+    severity: "info",
+    title: `디자인 청사진 · ${blueprint.targetSurface}`,
+    summary: `${blueprint.title} · ${blueprint.screens.length}개 화면 · ${blueprint.acceptanceCriteria.length}개 수용기준`,
+    truthStatus: "planned", // 청사진은 계획 — 구현/관측 아님
+    createdAt: blueprint.createdAt,
+  };
+}
+
 function errorCardTraceEvent(card: SandboxErrorCard): MissionTraceEvent {
   const where = card.targetFile ? `${card.targetFile}${card.targetLine ? `:${card.targetLine}` : ""} · ` : "";
   return {
@@ -397,6 +412,7 @@ export function deriveMissionTrace(record: ServerMissionRecord): MissionTraceEve
   const events: MissionTraceEvent[] = [createdTraceEvent(record.mission, record.mission.createdAt)];
   for (const worker of record.workers) events.push(workerTraceEvent(worker));
   for (const workspace of record.workspaces ?? []) events.push(workspaceTraceEvent(workspace));
+  for (const blueprint of record.designBlueprints ?? []) events.push(designBlueprintTraceEvent(blueprint));
   for (const checkpoint of record.checkpoints ?? []) events.push(checkpointTraceEvent(checkpoint));
   for (const report of record.verificationReports) events.push(verificationTraceEvent(report, report.createdAt));
   for (const card of record.errorCards ?? []) events.push(errorCardTraceEvent(card));
@@ -432,6 +448,10 @@ export function traceEventFromMissionEnvelope(envelope: {
     case "mission.workspace.attached": {
       const parsed = missionWorkspaceAttachedPayloadSchema.safeParse(envelope.payload);
       return parsed.success ? workspaceTraceEvent(parsed.data.workspace) : null;
+    }
+    case "mission.design.blueprint.recorded": {
+      const parsed = missionDesignBlueprintRecordedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success ? designBlueprintTraceEvent(parsed.data.blueprint) : null;
     }
     case "mission.error_card.recorded": {
       const parsed = missionErrorCardRecordedPayloadSchema.safeParse(envelope.payload);
