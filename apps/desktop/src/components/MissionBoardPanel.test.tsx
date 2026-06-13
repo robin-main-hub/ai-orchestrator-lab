@@ -24,6 +24,10 @@ function item(overrides: Partial<MissionBoardItem> = {}): MissionBoardItem {
     artifactCount: 1,
     verificationCount: 0,
     mergeQueueCount: 0,
+    workspaceCount: 0,
+    designIssues: [],
+    errorCards: [],
+    selfCorrections: [],
     updatedAt: "2026-06-13T01:00:00.000Z",
     ...overrides,
   };
@@ -186,6 +190,48 @@ describe("MissionBoardPanel", () => {
       />,
     );
     expect(html).toContain("검증 실패: pnpm test → exit 1");
+  });
+
+  it("shows the Workspace 상세 toggle only when the mission has D2~D8 dimensions and a handler", () => {
+    const withWs = item({ workspaceCount: 1, workspace: { id: "ws_1", name: "demo-app", appType: "react_vite", previewStatus: "running", previewUrl: "http://127.0.0.1:4466", previewTruth: "observed" } });
+    const html = renderToStaticMarkup(<MissionBoardPanel snapshot={snapshot([withWs])} onRefresh={noop} onToggleDetail={vi.fn()} />);
+    expect(html).toContain("Workspace 상세");
+    expect(html).toContain("workspace 1");
+
+    // detail이 없으면 토글도 없음(죽은 토글 방지)
+    const bare = renderToStaticMarkup(<MissionBoardPanel snapshot={snapshot([item()])} onRefresh={noop} onToggleDetail={vi.fn()} />);
+    expect(bare).not.toContain("Workspace 상세");
+
+    // 핸들러가 없으면 토글도 없음
+    const noHandler = renderToStaticMarkup(<MissionBoardPanel snapshot={snapshot([withWs])} onRefresh={noop} />);
+    expect(noHandler).not.toContain("Workspace 상세");
+  });
+
+  it("expands honest workspace/preview/visualQA/issue/error detail without fabricating unseen state", () => {
+    const rich = item({
+      workspaceCount: 1,
+      workspace: { id: "ws_1", name: "demo-app", appType: "react_vite", previewStatus: "running", previewUrl: "http://127.0.0.1:4466", previewTruth: "observed" },
+      latestVisualQa: { id: "qa_1", workspaceId: "ws_1", status: "failed", truthStatus: "observed", issueCount: 2, previewUrl: "http://127.0.0.1:4466" },
+      designIssues: [
+        { id: "issue_1", kind: "visual_overflow", severity: "high", summary: "mobile 가로 overflow", recommendation: "max-width로 가두세요", evidenceRef: "/shots/ws_1/mobile.png", truthStatus: "observed" },
+      ],
+      errorCards: [{ id: "err_1", status: "failed", rootCause: "TS2532", directive: "가드하세요", targetFile: "src/x.ts", truthStatus: "observed" }],
+      selfCorrections: [{ id: "sc_1", action: "retry", attempt: 1, reason: "1회 재시도" }],
+    });
+    const expanded = renderToStaticMarkup(
+      <MissionBoardPanel snapshot={snapshot([rich])} onRefresh={noop} onToggleDetail={vi.fn()} expandedMissionId="mission_1" />,
+    );
+    expect(expanded).toContain("http://127.0.0.1:4466"); // observed running url
+    expect(expanded).toContain("가로 overflow"); // design issue kind label
+    expect(expanded).toContain("max-width로 가두세요"); // recommendation
+    expect(expanded).toContain("가드하세요"); // error directive
+    expect(expanded).toContain("1회 재시도"); // self-correction reason
+
+    // 접힌 상태(다른 미션이 펼쳐짐)에선 detail 본문 미노출
+    const collapsed = renderToStaticMarkup(
+      <MissionBoardPanel snapshot={snapshot([rich])} onRefresh={noop} onToggleDetail={vi.fn()} expandedMissionId="other" />,
+    );
+    expect(collapsed).not.toContain("max-width로 가두세요");
   });
 
   it("renders the empty state per connection state", () => {

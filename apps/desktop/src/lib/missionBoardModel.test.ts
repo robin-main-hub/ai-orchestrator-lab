@@ -94,6 +94,10 @@ function localItem(missionId: string, updatedAt = "2026-06-13T00:30:00.000Z"): M
     artifactCount: 0,
     verificationCount: 0,
     mergeQueueCount: 0,
+    workspaceCount: 0,
+    designIssues: [],
+    errorCards: [],
+    selfCorrections: [],
     updatedAt,
   };
 }
@@ -110,6 +114,88 @@ describe("mapServerMissionToBoardItem", () => {
       canMutateFiles: false,
       hermesSlotId: "hermes-03",
     });
+  });
+});
+
+describe("mapServerMissionToBoardItem — D2~D8 차원", () => {
+  it("flattens workspace/preview/visualQa/designIssues/errorCards/selfCorrections from the record", () => {
+    const base = serverRecord();
+    const record: ServerMissionRecord = {
+      ...base,
+      workspaces: [
+        {
+          id: "ws_1",
+          missionId: "mission_1",
+          repoRootRef: "/repos/demo-app",
+          appType: "react_vite",
+          preview: { status: "running", truthStatus: "observed", url: "http://127.0.0.1:4466", port: 4466 },
+          terminal: { runnerKind: "local", mode: "build" },
+          files: { changedCount: 3 },
+          createdAt: "2026-06-13T00:10:00.000Z",
+        },
+      ],
+      visualQaReports: [
+        {
+          id: "qa_1",
+          missionId: "mission_1",
+          workspaceId: "ws_1",
+          previewUrl: "http://127.0.0.1:4466",
+          checks: [],
+          issues: [],
+          status: "failed",
+          truthStatus: "observed",
+          createdAt: "2026-06-13T00:11:00.000Z",
+        },
+      ],
+      designIssues: [
+        {
+          id: "issue_1",
+          missionId: "mission_1",
+          workspaceId: "ws_1",
+          kind: "visual_overflow",
+          severity: "high",
+          summary: "mobile 가로 overflow",
+          recommendation: "max-width로 가두세요",
+          evidenceRef: "/shots/ws_1/mobile.png",
+          truthStatus: "observed",
+          createdAt: "2026-06-13T00:11:00.000Z",
+        },
+      ],
+      errorCards: [
+        {
+          id: "err_1",
+          missionId: "mission_1",
+          runnerKind: "local",
+          status: "failed",
+          rootCause: "TS2532 객체가 undefined일 수 있음",
+          directive: "옵셔널 체이닝으로 가드하세요",
+          targetFile: "src/x.ts",
+          stderrPreview: "x.ts(3,1): error TS2532",
+          truthStatus: "observed",
+          createdAt: "2026-06-13T00:12:00.000Z",
+        },
+      ],
+      selfCorrections: [
+        { id: "sc_1", missionId: "mission_1", attempt: 1, action: "retry", reason: "동일 에러 첫 발생 — 1회 재시도", createdAt: "2026-06-13T00:12:30.000Z" },
+      ],
+    };
+    const item = mapServerMissionToBoardItem(record);
+    expect(item.workspace).toMatchObject({ name: "repos/demo-app", appType: "react_vite", previewStatus: "running", previewUrl: "http://127.0.0.1:4466", previewTruth: "observed" });
+    expect(item.workspaceCount).toBe(1);
+    expect(item.latestVisualQa).toMatchObject({ status: "failed", truthStatus: "observed", issueCount: 0 });
+    expect(item.designIssues[0]).toMatchObject({ kind: "visual_overflow", severity: "high", evidenceRef: "/shots/ws_1/mobile.png" });
+    expect(item.errorCards[0]).toMatchObject({ status: "failed", targetFile: "src/x.ts" });
+    expect(item.selfCorrections[0]).toMatchObject({ action: "retry", attempt: 1 });
+  });
+
+  it("leaves dimensions empty/undefined when the record has none (no fabricated state)", () => {
+    const item = mapServerMissionToBoardItem(serverRecord());
+    expect(item.workspace).toBeUndefined();
+    expect(item.workspaceCount).toBe(0);
+    expect(item.latestVisualQa).toBeUndefined();
+    expect(item.designIssues).toEqual([]);
+    expect(item.errorCards).toEqual([]);
+    expect(item.selfCorrections).toEqual([]);
   });
 });
 
