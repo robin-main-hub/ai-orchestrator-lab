@@ -583,6 +583,29 @@
 .coding-attach-reject__close:hover {
   color: var(--text);
 }
+/* ── GitHub 읽기 전용 커넥터 칩 ──────────────────────────────────────── */
+.coding-gh-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 10.5px;
+  color: var(--text-dim, #9ca3af);
+  width: fit-content;
+}
+.coding-gh-chip--configured {
+  border-color: color-mix(in srgb, #34d399 45%, var(--line));
+  color: #6ee7b7;
+}
+.coding-gh-chip--error {
+  border-color: color-mix(in srgb, #fb7185 45%, var(--line));
+  color: #fda4af;
+}
+
 /* the workbench owns the full center height */
 .nav-center-shell .center-board:has(.coding-workbench) {
   overflow: hidden;
