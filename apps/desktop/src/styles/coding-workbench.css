@@ -828,6 +828,176 @@
   padding: 0;
 }
 
+/* ── 자동승인 (graded approval) UI ─────────────────────────────────── */
+.coding-approval__hint {
+  display: block;
+  margin-top: 3px;
+  font-size: 10.5px;
+  color: var(--text-dim, #9ca3af);
+}
+.coding-approval__prefixes {
+  margin-top: 6px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.coding-approval__prefixes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-dim, #9ca3af);
+}
+.coding-approval__prefixes-head button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-dim, #9ca3af);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.coding-approval__empty {
+  font-size: 11px;
+  color: var(--text-dim, #9ca3af);
+  margin: 0;
+}
+.coding-approval__prefix-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.coding-approval__prefix-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #34d399 40%, var(--line));
+  background: color-mix(in srgb, #34d399 8%, transparent);
+  font-size: 10.5px;
+  color: #6ee7b7;
+}
+.coding-approval__prefix-list code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+}
+.coding-approval__prefix-list button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+}
+.coding-approval__prefix-add {
+  display: flex;
+  gap: 5px;
+}
+.coding-approval__prefix-add input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 5px 7px;
+  font-size: 11.5px;
+}
+.coding-approval__prefix-add button {
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.coding-approval__prefix-add button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.coding-approval__warn {
+  margin: 0;
+  font-size: 10.5px;
+  color: #fbbf24;
+}
+
+/* ── 자동승인 활성화 경고 다이얼로그 (첫 arm) ───────────────────────── */
+.coding-auto-approval-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  padding: 16px;
+}
+.coding-auto-approval-dialog__card {
+  width: min(480px, 100%);
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, #fbbf24 45%, var(--line));
+  background: rgba(10, 10, 12, 0.96);
+  padding: 18px;
+  box-shadow: 0 18px 48px -10px rgba(0, 0, 0, 0.7);
+}
+.coding-auto-approval-dialog__card h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fbbf24;
+}
+.coding-auto-approval-dialog__mode {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+.coding-auto-approval-dialog__warning {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-line;
+}
+.coding-auto-approval-dialog__note {
+  margin: 0 0 14px;
+  font-size: 11px;
+  color: var(--text-dim, #9ca3af);
+}
+.coding-auto-approval-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.coding-auto-approval-dialog__actions button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.coding-auto-approval-dialog__confirm {
+  border-color: color-mix(in srgb, #fbbf24 60%, var(--line));
+  background: color-mix(in srgb, #fbbf24 14%, transparent);
+  color: #fbbf24;
+  font-weight: 600;
+}
+
 /* the workbench owns the full center height */
 .nav-center-shell .center-board:has(.coding-workbench) {
   overflow: hidden;
