@@ -55,6 +55,7 @@ export type PermissionGateInput = {
   reason?: string;
   costEstimateTokens?: number;
   maxAllowedTokens?: number;
+  commandPreview?: string;
   replayKind?: ApprovalReplayKind;
   replayEndpoint?: string;
   createdAt?: string;
@@ -119,6 +120,7 @@ export function evaluatePermissionGate({
   reason,
   costEstimateTokens,
   maxAllowedTokens,
+  commandPreview,
   replayKind,
   replayEndpoint,
   createdAt = new Date().toISOString(),
@@ -155,6 +157,7 @@ export function evaluatePermissionGate({
         maxAllowedTokens,
       }),
     costEstimateTokens,
+    commandPreview,
     replayKind,
     replayEndpoint,
     createdAt,
@@ -261,6 +264,8 @@ function createTerminalSlotItem(
       state === "not_required"
         ? "로컬 유휴 슬롯 — 표시 전용"
         : "터미널 명령 미리보기는 운영자의 명시적 승인이 필요합니다",
+    // 실제 명령 미리보기는 슬롯이 들고 있는 것만 싣는다(없으면 undefined) — 요약에서 합성 금지.
+    commandPreview: slot.lastCommandPreview,
     createdAt,
   };
 }
@@ -361,6 +366,7 @@ function createQueueItem(item: PermissionMatrixItem): ApprovalQueueItem {
     permissions: item.requestedLevels,
     state: item.state,
     costEstimateTokens: item.costEstimateTokens,
+    commandPreview: item.commandPreview,
     createdAt: item.createdAt,
     replayKind: item.replayKind,
     replayEndpoint: item.replayEndpoint,

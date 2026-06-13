@@ -40,8 +40,25 @@ describe("deriveApprovalToastItem", () => {
     expect(result).not.toHaveProperty("command"); // 정직: 큐엔 실제 명령이 없으니 command 미생성
   });
 
-  it("action=terminal_run 승인도 실행형으로 우선 인식(라벨만)", () => {
-    const result = deriveApprovalToastItem([makeItem({ sourceItemId: "s3", summary: "terminal_run from agent", action: "terminal_run" })]);
-    expect(result).toEqual({ sourceItemId: "s3", summary: "terminal_run from agent" });
+  it("action=terminal_run인데 실제 명령이 없으면 commandPreview 미생성(라벨만)", () => {
+    const result = deriveApprovalToastItem([makeItem({ sourceItemId: "s3", summary: "터미널 실행 · 빌드 검증", action: "terminal_run" })]);
+    expect(result).toEqual({ sourceItemId: "s3", summary: "터미널 실행 · 빌드 검증" });
+    expect(result).not.toHaveProperty("commandPreview");
+  });
+
+  it("진짜 commandPreview가 있으면 그대로 싣고 안전 계열 판정", () => {
+    const result = deriveApprovalToastItem([
+      makeItem({ sourceItemId: "s4", summary: "터미널 실행 · 목록", action: "terminal_run", commandPreview: "ls -la" }),
+    ]);
+    expect(result?.commandPreview).toBe("ls -la");
+    expect(result?.safeFamily).toBe(true);
+  });
+
+  it("위험 명령이면 commandPreview는 싣되 safeFamily=false", () => {
+    const result = deriveApprovalToastItem([
+      makeItem({ sourceItemId: "s5", summary: "터미널 실행 · 강제삭제", action: "terminal_run", commandPreview: "rm -rf build" }),
+    ]);
+    expect(result?.commandPreview).toBe("rm -rf build");
+    expect(result?.safeFamily).toBe(false);
   });
 });

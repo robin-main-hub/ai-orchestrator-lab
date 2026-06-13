@@ -1468,6 +1468,12 @@ export type PermissionMatrixItem = {
   decision: PermissionDecision;
   reason: string;
   costEstimateTokens?: number;
+  /**
+   * Real, redaction-safe shell command this item would run, when one genuinely
+   * exists (terminal/tmux dispatch). NEVER synthesized from the human summary —
+   * absent for provider/merge/rollback/secret items that have no command.
+   */
+  commandPreview?: string;
   replayKind?: ApprovalReplayKind;
   replayEndpoint?: string;
   createdAt: string;
@@ -1484,6 +1490,8 @@ export type ApprovalQueueItem = {
   permissions: PermissionLevel[];
   state: ApprovalState;
   costEstimateTokens?: number;
+  /** real command preview carried from the matrix item (terminal/tmux only); never fabricated */
+  commandPreview?: string;
   createdAt: string;
   expiresAt?: string;
   replayKind?: ApprovalReplayKind;
