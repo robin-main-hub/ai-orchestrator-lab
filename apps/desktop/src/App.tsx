@@ -4938,6 +4938,9 @@ export function App() {
         !navCenterActive && mode === "conversation" && !configLibraryActive
           ? "conversation-v0-shell"
           : ""
+      } ${
+        /* 설정파일 활성 시 좌측 레일을 아이콘 전용 60px로 유지 — 한글 라벨 회귀 방지 */
+        configLibraryActive ? "compact-rail-shell" : ""
       }`}
       style={{
         "--conversation-right-rail-max": `${railLayout.rightRailMaxWidthPx}px`,
@@ -4977,7 +4980,7 @@ export function App() {
         ) : null}
         {leftRailVisible ? (
           <aside
-            className={`left-rail ${providerRegistrationOpen ? "provider-mode" : ""} ${isMobileDrawerOpen ? "drawer-open" : ""}`}
+            className={`left-rail ${providerRegistrationOpen ? "provider-mode" : ""} ${isMobileDrawerOpen ? "drawer-open" : ""} ${configLibraryActive ? "compact" : ""}`}
             aria-label="오케스트레이터 네비게이션"
           >
 
