@@ -366,7 +366,11 @@ export function TmuxSwarmBoard({
       {commandCenter ? <TmuxCommandCenter summary={commandCenter} /> : null}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {/* pane 목록 — 2열 그리드(압축). 각 카드에 인라인 명령 입력 포함 */}
+        {/* 읽기 전용 관측 — 각 에이전트가 지금 뭘 하고 무슨 결론을 냈는지 한눈에.
+            명령/지시는 여기가 아니라 대화 탭에서 상대를 바꿔가며 한다. */}
+        <p className="shrink-0 px-3 pt-2 text-[11px] text-zinc-500">
+          관측 전용 — 에이전트의 활동·결론을 한눈에 봅니다. 지시·수정은 대화 탭에서 상대를 바꿔가며 하세요.
+        </p>
         <div className="grid shrink-0 grid-cols-2 gap-2 overflow-y-auto p-3 max-md:grid-cols-1">
           {visiblePanes.map((pane) => (
             <TmuxFleetRow
@@ -379,11 +383,7 @@ export function TmuxSwarmBoard({
               }}
               isSelected={selectedPane?.roleKey === pane.roleKey}
               onSelect={() => setSelectedRole(pane.roleKey)}
-              busy={busyByRole[pane.roleKey]}
-              commandDraft={commandDrafts[pane.roleKey] ?? defaultTmuxCommandForRole(pane.roleKey)}
-              onCommandDraftChange={(value) => updateCommandDraft(pane.roleKey, value)}
-              onCapture={() => void handleCapturePane(pane)}
-              onDispatch={() => void handleDispatchPane(pane)}
+              latestOutput={outputs[pane.roleKey]}
             />
           ))}
         </div>
@@ -579,37 +579,47 @@ function panePortraitUrl(pane: TmuxPaneDefinition): string | undefined {
   return undefined;
 }
 
+/** 마지막 출력에서 "결론" 한 줄을 뽑는다 — 마지막 비어있지 않은 줄(요약 관측용). */
+function latestConclusionLine(output: string | undefined): string | undefined {
+  if (!output) return undefined;
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const last = lines[lines.length - 1];
+  if (!last) return undefined;
+  return last.length > 140 ? `${last.slice(0, 139)}…` : last;
+}
+
 function TmuxFleetRow({
   pane,
   isSelected,
   onSelect,
-  busy,
-  commandDraft,
-  onCommandDraftChange,
-  onCapture,
-  onDispatch,
+  latestOutput,
 }: {
   pane: TmuxPaneDefinition;
   isSelected: boolean;
   onSelect: () => void;
-  busy?: PaneBusyState;
-  commandDraft: string;
-  onCommandDraftChange: (value: string) => void;
-  onCapture: () => void;
-  onDispatch: () => void;
+  /** 이 워커의 마지막 작업창 출력 — "무슨 답을 했는지/결론" 요약 표시(읽기 전용) */
+  latestOutput?: string;
 }) {
   const state = mapTmuxPaneStateToAgentState(pane.state);
   const initials = pane.agent ? getInitials(pane.agent.name) : getInitials(pane.title);
   const surfaceLabel = formatTmuxPaneSurfaceLabel(pane.id);
   const codex = codexByPaneRole()[pane.roleKey] ?? [];
+  const conclusion = latestConclusionLine(latestOutput);
 
+  // 읽기 전용 관측 카드 — 클릭하면 아래 풀와이드에서 전체 출력/타임라인을 본다.
   return (
-    <div
-      className={`flex flex-col gap-2 rounded-lg border px-3 py-2.5 transition-colors ${
+    <button
+      aria-label={`${pane.title} 관측 — ${tmuxPaneStateLabel(pane.state)}`}
+      className={`flex w-full flex-col gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors ${
         isSelected ? "border-amber-500/40 bg-amber-500/[0.06]" : "border-zinc-800/70 hover:border-zinc-700"
       }`}
+      onClick={onSelect}
+      type="button"
     >
-      <button className="flex w-full items-center gap-3 text-left" onClick={onSelect} type="button">
+      <div className="flex w-full items-center gap-3">
         <AgentPortrait avatarUrl={panePortraitUrl(pane)} initials={initials} state={state} size="sm" tintClassName="bg-zinc-800 text-zinc-300" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -626,41 +636,15 @@ function TmuxFleetRow({
           ) : null}
         </div>
         <AgentStatePill state={state} />
-      </button>
-      {/* pane별 인라인 명령 입력 — pane을 전환해도 입력 컨텍스트가 끊기지 않는다 */}
-      <div className="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/70 px-2 py-1 focus-within:border-amber-500/40">
-        <Terminal className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
-        <input
-          aria-label={`${pane.title} 명령 입력`}
-          className="min-w-0 flex-1 bg-transparent font-mono text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
-          onChange={(event) => onCommandDraftChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !busy && commandDraft.trim()) onDispatch();
-          }}
-          placeholder={`${surfaceLabel}에 명령...`}
-          type="text"
-          value={commandDraft}
-        />
-        <button
-          aria-label={`${pane.title} 작업창 읽기`}
-          className="shrink-0 rounded p-1 text-zinc-400 transition-colors hover:text-zinc-100 disabled:opacity-40"
-          disabled={Boolean(busy)}
-          onClick={onCapture}
-          type="button"
-        >
-          <Eye className="h-3.5 w-3.5" />
-        </button>
-        <button
-          aria-label={`${pane.title} 명령 전송`}
-          className="shrink-0 rounded bg-amber-600 p-1 text-white transition-colors hover:bg-amber-700 disabled:opacity-40"
-          disabled={Boolean(busy) || !commandDraft.trim()}
-          onClick={onDispatch}
-          type="button"
-        >
-          <Send className="h-3.5 w-3.5" />
-        </button>
       </div>
-    </div>
+      {/* 최근 결론/답변 한 줄 — 한눈에 "무슨 생각·결론" (읽기 전용) */}
+      <div className="flex items-start gap-1.5 rounded-lg border border-zinc-800/70 bg-zinc-950/50 px-2 py-1.5">
+        <Terminal className="mt-0.5 h-3 w-3 shrink-0 text-zinc-600" />
+        <span className={`min-w-0 flex-1 font-mono text-[11px] leading-snug ${conclusion ? "text-zinc-300" : "text-zinc-600"}`}>
+          {conclusion ?? "아직 출력 없음 — 활동을 기다리는 중"}
+        </span>
+      </div>
+    </button>
   );
 }
 
@@ -797,7 +781,16 @@ function TmuxPaneDetail({
         </div>
         <p className="mt-1.5 px-1 text-[10px] text-zinc-500">승인 게이트 준비됨 · 실제 전송은 승인 이후에만 실행됩니다.</p>
       </div>
-      ) : null}
+      ) : (
+        // 관측 전용 — 명령 입력 없이 "읽기(새로고침)"만. 지시는 대화 탭에서.
+        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-zinc-800/60 px-4 py-2.5">
+          <span className="text-[11px] text-zinc-500">관측 전용 · 지시는 대화 탭에서 상대를 바꿔가며 하세요</span>
+          <Button className="h-7 gap-1.5 px-2.5 text-xs" disabled={Boolean(busy)} onClick={onCapture} size="sm" variant="ghost">
+            <Eye className="h-3.5 w-3.5" />
+            읽기 새로고침
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
