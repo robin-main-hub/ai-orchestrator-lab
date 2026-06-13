@@ -195,7 +195,18 @@ async function main() {
       // 1d) preview start — 실제 dev 서버를 띄우고 포트 관측 → observed running
       const started = await api("POST", `/missions/${missionId}/workspace/${workspaceId}/preview/start`, { command: "node preview-server.mjs" });
       const sp = started.json?.preview;
-      record("preview start → observed running", started.status === 200 && sp && sp.status === "running" && sp.truthStatus === "observed", true, sp ? `${sp.status}/${sp.truthStatus} ${sp.url ?? ""}` : `status ${started.status}`);
+      const previewObserved = started.status === 200 && sp && sp.status === "running" && sp.truthStatus === "observed";
+      record("preview start → observed running", Boolean(previewObserved), true, sp ? `${sp.status}/${sp.truthStatus} ${sp.url ?? ""}` : `status ${started.status}`);
+
+      // 1d2) Visual QA — observed preview 위에서 HTML 관측(브라우저 검사는 probe 없으면 skipped)
+      if (previewObserved) {
+        const qa = await api("POST", `/missions/${missionId}/workspace/${workspaceId}/visual-qa`, {});
+        const rep = qa.json?.report;
+        const browserSkipped = (rep?.checks ?? []).some((c) => c.kind === "overflow" && c.status === "skipped");
+        record("visual qa observed (HTML) + browser checks skipped", qa.status === 200 && rep && rep.truthStatus === "observed" && browserSkipped, true, rep ? `${rep.status}/${rep.truthStatus} 이슈 ${rep.issues?.length ?? 0}` : `status ${qa.status}`);
+        // 최소 서버는 버튼이 없어 missing_primary_action 이슈가 잡혀야 한다(실측 이슈)
+        record("design issue caught (missing primary action)", (rep?.issues ?? []).some((i) => i.kind === "missing_primary_action"), false, `${rep?.issues?.length ?? 0} issue(s)`);
+      }
 
       // 1e) preview stop — 프로세스 정리(유령 dev 서버 방지)
       const stopped = await api("POST", `/missions/${missionId}/workspace/${workspaceId}/preview/stop`, {});

@@ -4,6 +4,8 @@ import {
   missionClosedPayloadSchema,
   missionCreatedPayloadSchema,
   missionDesignBlueprintRecordedPayloadSchema,
+  missionDesignIssueRecordedPayloadSchema,
+  missionVisualQaRecordedPayloadSchema,
   missionErrorCardRecordedPayloadSchema,
   missionMergeQueuedPayloadSchema,
   missionSelfCorrectionRecordSchema,
@@ -88,6 +90,8 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
         selfCorrections: [],
         workspaces: [],
         designBlueprints: [],
+        visualQaReports: [],
+        designIssues: [],
         updatedAt: event.createdAt,
       });
       continue;
@@ -174,6 +178,28 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
         continue;
       }
       record.designBlueprints.push(parsed.data.blueprint);
+      record.updatedAt = event.createdAt;
+      continue;
+    }
+
+    if (event.type === "mission.visual_qa.recorded") {
+      const parsed = missionVisualQaRecordedPayloadSchema.safeParse(event.payload);
+      const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
+      if (!parsed.success || !record || record.visualQaReports.some((r) => r.id === parsed.data.report.id)) {
+        continue;
+      }
+      record.visualQaReports.push(parsed.data.report);
+      record.updatedAt = event.createdAt;
+      continue;
+    }
+
+    if (event.type === "mission.design.issue.recorded") {
+      const parsed = missionDesignIssueRecordedPayloadSchema.safeParse(event.payload);
+      const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
+      if (!parsed.success || !record || record.designIssues.some((i) => i.id === parsed.data.issue.id)) {
+        continue;
+      }
+      record.designIssues.push(parsed.data.issue);
       record.updatedAt = event.createdAt;
       continue;
     }

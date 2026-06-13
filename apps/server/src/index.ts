@@ -79,6 +79,7 @@ import type {
 } from "@ai-orchestrator/protocol";
 import {
   agentRoleSchema,
+  analyzeVisualQa,
   approvalDecisionRequestSchema,
   approvalRequestSchema,
   buildObsidianSkillNote,
@@ -311,6 +312,37 @@ const realPreviewHttpProbe: PreviewHttpProbe = ({ host, port }) =>
   });
 
 const realPreviewWait = (ms: number) => new Promise<void>((resolvePromise) => setTimeout(resolvePromise, ms));
+
+/** D5b: observed preview URL의 HTML을 가져온다(HTTP-tier visual QA). 본문은 200KB 제한. */
+function fetchPreviewHtml(url: string): Promise<{ ok: boolean; status: number; html: string }> {
+  return new Promise((resolvePromise) => {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      resolvePromise({ ok: false, status: 0, html: "" });
+      return;
+    }
+    const req = httpGet(
+      { host: parsed.hostname, port: Number(parsed.port) || 80, path: parsed.pathname || "/", timeout: 3_000 },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk) => {
+          if (body.length < 200_000) body += String(chunk);
+        });
+        res.on("end", () => {
+          const status = res.statusCode ?? 0;
+          resolvePromise({ ok: status >= 200 && status < 400, status, html: body });
+        });
+      },
+    );
+    req.once("timeout", () => {
+      req.destroy();
+      resolvePromise({ ok: false, status: 0, html: "" });
+    });
+    req.once("error", () => resolvePromise({ ok: false, status: 0, html: "" }));
+  });
+}
 
 type ServerProviderProxyConfig = {
   providerProfileId: string;
@@ -6708,6 +6740,18 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
             pollIntervalMs: 300,
           }),
         stopPreview: async ({ workspaceId }) => stopPreviewProcess(workspaceId, previewProcessRegistry),
+        // D5b: observed preview HTML을 가져와 분석한다. 브라우저(Playwright) probe는 아직
+        // 미연결이라 브라우저 의존 검사는 skipped로 남는다(가짜 visual pass 금지).
+        runVisualQa: async ({ missionId, workspaceId, previewUrl }) => {
+          const http = await fetchPreviewHtml(previewUrl);
+          return analyzeVisualQa({
+            id: `visualqa_${workspaceId}_${Date.now()}`,
+            missionId,
+            workspaceId,
+            obs: { previewObserved: true, previewUrl, http },
+            now: () => new Date().toISOString(),
+          });
+        },
       })
     ) {
       return;

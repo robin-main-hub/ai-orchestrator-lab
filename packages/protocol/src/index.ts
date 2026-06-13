@@ -4,6 +4,7 @@ export * from "./productKernel.js";
 export * from "./appWorkspace.js";
 export * from "./designBlueprint.js";
 export * from "./designMission.js";
+export * from "./visualQa.js";
 export * from "./missionBoard.js";
 export * from "./missionRuntimeBus.js";
 export * from "./missionCheckpoint.js";
