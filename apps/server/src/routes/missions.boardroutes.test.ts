@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import type { ServerMissionRecord } from "@ai-orchestrator/protocol";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { MissionStore } from "../missions/missionStore.js";
 import { handleMissionRoute } from "./missions.js";
 
@@ -31,7 +31,7 @@ function fakeStore(records: ServerMissionRecord[]): MissionStore {
   } as unknown as MissionStore;
 }
 
-function deps(store: MissionStore, pathname: string, method: string) {
+function deps(store: MissionStore, pathname: string, method: string, body: unknown = {}, extra: Record<string, unknown> = {}) {
   let status = 0;
   let payload: unknown = null;
   return {
@@ -40,12 +40,13 @@ function deps(store: MissionStore, pathname: string, method: string) {
       request: {} as IncomingMessage,
       pathname,
       method,
-      readJsonBody: async () => ({}),
+      readJsonBody: async () => body,
       isRequestBodyTooLargeError: (_e: unknown): _e is { limit: number } => false,
-      respondJson: (code: number, body: unknown) => {
+      respondJson: (code: number, body2: unknown) => {
         status = code;
-        payload = body;
+        payload = body2;
       },
+      ...extra,
     },
     result: () => ({ status, payload }),
   };
@@ -80,5 +81,34 @@ describe("mission board routes", () => {
     const { args, result } = deps(store, "/missions/none/trace", "GET");
     expect(await handleMissionRoute(args)).toBe(true);
     expect(result().status).toBe(404);
+  });
+
+  it("POST /missions/:id/checkpoints returns the created checkpoint", async () => {
+    const store = fakeStore([record("m1", "running")]);
+    const runCheckpoint = vi.fn(async () => ({
+      ok: true as const,
+      checkpoint: { id: "cp1", missionId: "m1", repoRootRef: "/repo", gitRef: "HEAD", headSha: "abc1234", reason: "manual" as const, createdAt: "t", truthStatus: "observed" as const },
+    }));
+    const { args, result } = deps(store, "/missions/m1/checkpoints", "POST", { repoRoot: "/repo" }, { runCheckpoint });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(201);
+    expect(runCheckpoint).toHaveBeenCalled();
+  });
+
+  it("POST /missions/:id/checkpoints 501 when not configured", async () => {
+    const store = fakeStore([record("m1", "running")]);
+    const { args, result } = deps(store, "/missions/m1/checkpoints", "POST", { repoRoot: "/repo" });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(501);
+  });
+
+  it("POST /missions/:id/rollback maps blocked → 409", async () => {
+    const store = fakeStore([record("m1", "running")]);
+    const runRollback = vi.fn(async () => ({
+      missionId: "m1", status: "blocked" as const, reason: "not approved", observed: true, completedAt: "t",
+    }));
+    const { args, result } = deps(store, "/missions/m1/rollback", "POST", { repoRoot: "/repo", targetSha: "abc1234", approvalId: "a1" }, { runRollback });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(409);
   });
 });

@@ -157,6 +157,7 @@ docs/             # 00~45 설계 문서 (아래 주요 항목)
 66     work-theater-overhaul (per-card stage+task display + click-to-open-agent + page purpose)
 67     composer-swarm-search (composer "+" tool tab → auto-plan 4–16 research agents from the conversation)
 68     mission-kanban-and-trace (server-derived Kanban columns + live trace, no new storage) [Orchestration OS PR1]
+69     mission-checkpoint-rollback (git checkpoint sha + approval-gated reset --hard rollback) [Orchestration OS PR2]
 ```
 
 ## 실행 방법

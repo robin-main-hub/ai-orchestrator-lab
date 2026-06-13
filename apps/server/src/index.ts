@@ -117,7 +117,8 @@ import { handleApprovalRoute } from "./routes/approvals.js";
 import { handleMissionRoute } from "./routes/missions.js";
 import { createMissionStore, type MissionStore } from "./missions/missionStore.js";
 import { runLocalMissionVerification } from "./missions/localSandboxRunner.js";
-import { executeMerge, parseAllowedRepoRoots } from "./missions/gitWorktreeMergeRunner.js";
+import { executeMerge, parseAllowedRepoRoots, type GitExecFn } from "./missions/gitWorktreeMergeRunner.js";
+import { createMissionCheckpoint, executeMissionRollback } from "./missions/gitCheckpointRunner.js";
 import { handleTmuxRoute } from "./routes/tmux.js";
 import { acquireStorageLock } from "./storage/storageLock.js";
 import { AuthRateLimiter, resolveClientKey } from "./security/authRateLimiter.js";
@@ -221,6 +222,24 @@ export function getFilteredSubprocessEnv(customEnv?: Record<string, string>): No
   return filteredEnv;
 }
 
+/**
+ * 미션 checkpoint/rollback용 git 실행기 — merge 러너와 같은 execFile(shell:false) +
+ * env 화이트리스트 + 타임아웃. 인젝션 방지.
+ */
+const missionCheckpointGitExec: GitExecFn = async (repoRoot, args) => {
+  try {
+    const { stdout, stderr } = await execFileAsync("git", ["-C", repoRoot, ...args], {
+      env: getFilteredSubprocessEnv({}),
+      timeout: Number(process.env.MISSION_MERGE_TIMEOUT_MS ?? 60_000),
+      maxBuffer: 4_000_000,
+      windowsHide: true,
+    });
+    return { exitCode: 0, stdout, stderr };
+  } catch (error) {
+    const e = error as { code?: number | string; stdout?: string; stderr?: string };
+    return { exitCode: typeof e.code === "number" ? e.code : 1, stdout: e.stdout ?? "", stderr: e.stderr ?? "" };
+  }
+};
 
 type ServerProviderProxyConfig = {
   providerProfileId: string;
@@ -6455,6 +6474,43 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         isRequestBodyTooLargeError: (error): error is RequestBodyTooLargeError =>
           error instanceof RequestBodyTooLargeError,
         respondJson,
+        // checkpoint/rollback — 실제 git(execFile shell:false) + repoRoot allowlist + 승인 게이트
+        runCheckpoint: async (missionId, req) =>
+          createMissionCheckpoint({
+            id: `checkpoint_${missionId}_${Date.now()}`,
+            missionId,
+            workerId: req.workerId,
+            repoRoot: req.repoRoot,
+            gitRef: req.gitRef,
+            reason: req.reason,
+            allowedRepoRoots: parseAllowedRepoRoots(process.env.ORCHESTRATOR_ALLOWED_REPO_ROOTS),
+            now: () => new Date().toISOString(),
+            git: missionCheckpointGitExec,
+          }),
+        runRollback: async (missionId, req) => {
+          const stamp = new Date().toISOString();
+          // 자동 rollback 금지 — approvalId가 실제로 grant(approved)된 것이어야만 실행
+          const { approvals } = await listApprovalsFromPersistentServerStorage(eventStorage, stamp);
+          const granted = approvals.some((approval) => approval.id === req.approvalId && approval.state === "approved");
+          if (!granted) {
+            return {
+              missionId,
+              status: "blocked",
+              reason: `approvalId '${req.approvalId}'가 승인되지 않았습니다 — rollback 거부`,
+              observed: true,
+              completedAt: stamp,
+            };
+          }
+          return executeMissionRollback({
+            missionId,
+            repoRoot: req.repoRoot,
+            targetSha: req.targetSha,
+            approvalId: req.approvalId,
+            allowedRepoRoots: parseAllowedRepoRoots(process.env.ORCHESTRATOR_ALLOWED_REPO_ROOTS),
+            now: () => new Date().toISOString(),
+            git: missionCheckpointGitExec,
+          });
+        },
       })
     ) {
       return;
