@@ -15,6 +15,7 @@ import type {
   PreviewProbeRequest,
   ServerMissionRecord,
   SkillArchiveCandidate,
+  VisualQaReport,
 } from "@ai-orchestrator/protocol";
 import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
 import { createDgxOrchestratorJsonHeaders } from "./stage31DgxAuth";
@@ -252,6 +253,26 @@ export async function stopDgxPreview({
   return requestMissionServerJson<MissionPreviewResponse>({
     method: "POST",
     path: `/missions/${encodeURIComponent(missionId)}/workspace/${encodeURIComponent(workspaceId)}/preview/stop`,
+    body: {},
+    serverBaseUrl,
+    fetchImpl,
+    timeoutMs,
+  });
+}
+
+export type MissionVisualQaResponse = { mission: ServerMissionRecord; report: VisualQaReport };
+
+/** D5b: observed preview 위에서 Visual QA 실행(없으면 409). screenshot 없으면 skipped. */
+export async function runDgxVisualQa({
+  missionId,
+  workspaceId,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 15_000,
+}: MissionServerRequestInput & { missionId: string; workspaceId: string }): Promise<MissionVisualQaResponse> {
+  return requestMissionServerJson<MissionVisualQaResponse>({
+    method: "POST",
+    path: `/missions/${encodeURIComponent(missionId)}/workspace/${encodeURIComponent(workspaceId)}/visual-qa`,
     body: {},
     serverBaseUrl,
     fetchImpl,

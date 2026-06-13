@@ -30,6 +30,7 @@ import {
   type AppWorkspaceAttachRequest,
   type AppWorkspacePreview,
   type MissionFromBlueprintRequest,
+  type VisualQaReport,
   type MissionFromTemplateRequest,
   type MissionRollbackOutcome,
   type MissionRollbackRequest,
@@ -64,6 +65,8 @@ export type MissionRouteDependencies = {
   /** D5a: preview dev 프로세스 start/stop. index.ts에서 spawn+HTTP probe로 주입. 미주입이면 501. */
   startPreview?: (input: { missionId: string; workspaceId: string; command: string; cwd: string; host: string; port: number }) => Promise<AppWorkspacePreview>;
   stopPreview?: (input: { missionId: string; workspaceId: string }) => Promise<AppWorkspacePreview>;
+  /** D5b: Visual QA 실행기(observed preview HTML/DOM 관측 → 리포트). 미주입이면 501. */
+  runVisualQa?: (input: { missionId: string; workspaceId: string; previewUrl: string }) => Promise<VisualQaReport>;
 };
 
 const MISSION_PATH = /^\/missions\/([^/]+)$/;
@@ -79,6 +82,7 @@ const MISSION_WORKSPACE_PATH = /^\/missions\/([^/]+)\/workspace$/;
 const MISSION_PREVIEW_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/preview$/;
 const MISSION_PREVIEW_START_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/preview\/start$/;
 const MISSION_PREVIEW_STOP_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/preview\/stop$/;
+const MISSION_VISUAL_QA_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/visual-qa$/;
 
 export async function handleMissionRoute({
   store,
@@ -93,6 +97,7 @@ export async function handleMissionRoute({
   probePreview,
   startPreview,
   stopPreview,
+  runVisualQa,
 }: MissionRouteDependencies): Promise<boolean> {
   if (pathname === "/missions" && method === "POST") {
     let payload: MissionCreateRequest;
@@ -553,6 +558,32 @@ export async function handleMissionRoute({
     const preview = await stopPreview({ missionId, workspaceId });
     const updated = await store.recordPreview(missionId, workspaceId, preview);
     respondJson(200, { mission: updated ?? mission, preview });
+    return true;
+  }
+
+  // D5b: Visual QA — **observed running preview가 있을 때만** 실행. 없으면 409(가짜 QA 금지).
+  const visualQaMatch = MISSION_VISUAL_QA_PATH.exec(pathname);
+  if (visualQaMatch && method === "POST") {
+    const missionId = decodeURIComponent(visualQaMatch[1]!);
+    const workspaceId = decodeURIComponent(visualQaMatch[2]!);
+    if (!runVisualQa) {
+      respondJson(501, { error: "visual_qa_not_configured" });
+      return true;
+    }
+    const mission = await store.get(missionId);
+    const workspace = mission?.workspaces?.find((ws) => ws.id === workspaceId);
+    if (!workspace) {
+      respondJson(404, { error: "workspace_not_found", missionId, workspaceId });
+      return true;
+    }
+    if (workspace.preview.status !== "running" || workspace.preview.truthStatus !== "observed") {
+      respondJson(409, { error: "preview_not_observed", message: "Visual QA는 observed running preview가 필요합니다 (먼저 /preview/start)" });
+      return true;
+    }
+    const previewUrl = workspace.preview.url ?? `http://127.0.0.1:${derivePreviewPort(workspaceId)}`;
+    const report = await runVisualQa({ missionId, workspaceId, previewUrl });
+    const updated = await store.recordVisualQa(missionId, report);
+    respondJson(200, { mission: updated ?? mission, report });
     return true;
   }
 
