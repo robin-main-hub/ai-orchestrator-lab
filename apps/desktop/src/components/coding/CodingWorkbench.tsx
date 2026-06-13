@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState , useSyncExternalStore} from "react";
-import { CircleStop, FileDiff, GitBranch, Hammer, PanelRightOpen, Plus, RotateCcw, Send, ShieldCheck, Telescope, Terminal, Trash2, XCircle } from "lucide-react";
-import type { ModelDescriptor, ProviderProfile, TmuxPaneRole } from "@ai-orchestrator/protocol";
+import type { ChangeEvent, ClipboardEvent } from "react";
+import { AlertTriangle, CircleStop, FileDiff, GitBranch, Hammer, PanelRightOpen, Paperclip, Plus, RefreshCcw, RotateCcw, Send, ShieldCheck, Telescope, Terminal, Trash2, X, XCircle } from "lucide-react";
+import type { ModelDescriptor, ProviderCompletionAttachment, ProviderProfile, TmuxPaneRole } from "@ai-orchestrator/protocol";
 import { StatusBadge } from "@/ui/status-badge";
 import {
   addUsage,
@@ -43,6 +44,12 @@ import {
 } from "../../lib/workbenchMissions";
 import { CodingThread } from "./CodingThread";
 import { humanizeCodingError } from "../../lib/codingErrorMessage";
+import { useDraftAttachments } from "../../lib/useDraftAttachments";
+import { getModelInputModalities, formatAttachmentSize } from "../../lib/helpers";
+import { maxDraftAttachments } from "../../lib/appConstants";
+import { summarizeRejectedAttachments, attachmentDeliveryNote } from "../../lib/attachmentWarnings";
+import { buildCodingAttachmentDelivery, describeCodingAttachmentDelivery } from "../../lib/codingAttachmentContext";
+import type { DraftAttachment } from "../../types";
 
 
 
@@ -98,6 +105,24 @@ export function CodingWorkbench({
 
   const active = sessions.find((session) => session.id === activeId) ?? null;
 
+  // 첨부 능력 판정의 근거가 되는 모델 modality. 카탈로그에서 현재 모델 디스크립터를
+  // 찾고, 없으면 text-only로 본다 — 모르는 모델에 이미지 지원을 가정하지 않는다(정직).
+  const activeModel = useMemo<ModelDescriptor | undefined>(() => {
+    const providerId = active?.providerProfileId;
+    const catalog = providerId ? modelCatalog[providerId] ?? [] : [];
+    return catalog.find((model) => model.id === active?.modelId);
+  }, [active?.providerProfileId, active?.modelId, modelCatalog]);
+  const modelModalities = useMemo(
+    () => (activeModel ? getModelInputModalities(activeModel) : ["text"]),
+    [activeModel],
+  );
+  const attachmentControl = useDraftAttachments({ modelModalities, maxCount: maxDraftAttachments });
+  const attachmentRejection = useMemo(
+    () => summarizeRejectedAttachments(attachmentControl.rejectedPlans),
+    [attachmentControl.rejectedPlans],
+  );
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const slashSuggestions = useMemo(() => {
     if (!draft.trim().startsWith("/")) return [];
     const needle = draft.trim().toLowerCase();
@@ -151,13 +176,16 @@ export function CodingWorkbench({
     });
   };
 
-  const runTurn = async (session: CodingSession, userText: string) => {
+  const runTurn = async (session: CodingSession, userText: string, attachments: DraftAttachment[] = []) => {
     if (!session.providerProfileId || !session.modelId) {
       setNotice("프로바이더/모델을 먼저 선택하세요 (/models)");
       return;
     }
     setRunning(true);
-    setNotice(null);
+    // 첨부 전달은 정직하게: 이미지→provider rider, 텍스트→1라운드 본문 인라인,
+    // metadata_only→미전달 명시. 전송 직후 무엇이 실제로 전달됐는지 한 줄로 알린다.
+    const attachmentDelivery = buildCodingAttachmentDelivery(attachments);
+    setNotice(describeCodingAttachmentDelivery(attachmentDelivery) ?? null);
     cancelRef.current = false;
     const now = () => new Date().toISOString();
 
@@ -223,12 +251,22 @@ export function CodingWorkbench({
       hooks: { onDelta?: (text: string) => void },
     ) => {
       requestSeq += 1;
+      // 첨부 본문/이미지는 첫 요청에만 싣는다 — tool 라운드마다 반복 주입하면 토큰이
+      // 폭증한다. 이후 라운드에는 본문 없는 짧은 ref만 남겨 모델이 첨부 존재를 기억하게 한다.
+      const attachmentContext =
+        requestSeq === 1 ? attachmentDelivery.firstRequestContext : attachmentDelivery.followupContext;
+      const outgoingMessages = attachmentContext
+        ? [...messages, { role: "system" as const, content: attachmentContext }]
+        : messages;
+      const firstRequestRiders: ProviderCompletionAttachment[] | undefined =
+        requestSeq === 1 ? attachmentDelivery.providerAttachments : undefined;
       const request = {
         id: `creq_${working.id}_${Date.now()}_${requestSeq}`,
         sessionId,
         providerProfileId: working.providerProfileId,
         modelId: working.modelId,
-        messages,
+        messages: outgoingMessages,
+        ...(firstRequestRiders && firstRequestRiders.length > 0 ? { attachments: firstRequestRiders } : {}),
         // 코드/diff가 든 답변은 길다 — 어댑터 기본 512에서 끊기지 않게 상한을 올린다
         maxOutputTokens: 8192,
         source: "desktop" as const,
@@ -458,9 +496,32 @@ export function CodingWorkbench({
     const text = draft.trim();
     if (!text || running) return;
     const session = active ?? newSession();
+    // 전송 직전 첨부 스냅샷을 잡고 비운다 — 하이드레이트된 본문/이미지가 그대로 runTurn에 전달된다.
+    const attachments = attachmentControl.attachments;
     setDraft("");
+    attachmentControl.reset();
+    // 슬래시 명령은 첨부를 사용하지 않는다(위에서 이미 비웠으므로 자연히 폐기).
     if (await handleSlash(session, text)) return;
-    await runTurn(session, text);
+    await runTurn(session, text, attachments);
+  };
+
+  const openModelPicker = () => modelSelectRef.current?.focus();
+
+  const onPickFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    attachmentControl.add(event.target.files);
+    event.target.value = "";
+  };
+
+  const onComposerPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    // Win+Shift+S 등으로 클립보드에 들어온 이미지를 붙여넣으면 첨부로 흡수.
+    // 텍스트 paste는 건드리지 않아 기존 입력 동작을 유지한다.
+    const imageFiles = Array.from(event.clipboardData?.items ?? [])
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+    if (imageFiles.length === 0) return;
+    event.preventDefault();
+    attachmentControl.add(imageFiles);
   };
 
   const onApplyEdit = async (call: ToolCall) => {
@@ -641,13 +702,82 @@ export function CodingWorkbench({
               ))}
             </ul>
           ) : null}
+          {attachmentRejection.count > 0 ? (
+            <div className="coding-attach-reject" role="status">
+              <AlertTriangle size={13} aria-hidden />
+              <div className="coding-attach-reject__body">
+                <strong>첨부 {attachmentRejection.count}개가 추가되지 않았습니다.</strong>
+                {attachmentRejection.reasons.map((reason) => (
+                  <span key={reason}>{reason}</span>
+                ))}
+              </div>
+              {attachmentRejection.showModelCta ? (
+                <button type="button" className="coding-attach-reject__cta" onClick={openModelPicker}>
+                  <RefreshCcw size={12} aria-hidden /> 모델 바꾸기
+                </button>
+              ) : null}
+              <button type="button" className="coding-attach-reject__close" onClick={attachmentControl.clearRejected} aria-label="경고 닫기">
+                <X size={12} aria-hidden />
+              </button>
+            </div>
+          ) : null}
+          {attachmentControl.attachments.length > 0 ? (
+            <ul className="coding-attach-chips">
+              {attachmentControl.attachments.map((attachment) => {
+                const note = attachmentDeliveryNote(attachment);
+                return (
+                  <li key={attachment.id} className="coding-attach-chip" title={note ?? attachment.name}>
+                    <Paperclip size={11} aria-hidden />
+                    <span className="coding-attach-chip__name">{attachment.name}</span>
+                    <span className="coding-attach-chip__size">{formatAttachmentSize(attachment.size)}</span>
+                    {note ? <AlertTriangle size={11} aria-hidden className="coding-attach-chip__warn" /> : null}
+                    <button
+                      type="button"
+                      className="coding-attach-chip__remove"
+                      onClick={() => attachmentControl.remove(attachment.id)}
+                      aria-label={`${attachment.name} 첨부 제거`}
+                    >
+                      <X size={11} aria-hidden />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
           <div className="coding-prompt__row">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              hidden
+              onChange={onPickFiles}
+              aria-hidden
+            />
+            <button
+              type="button"
+              className="coding-prompt__attach"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={running || attachmentControl.attachments.length >= maxDraftAttachments}
+              title={
+                attachmentControl.attachments.length >= maxDraftAttachments
+                  ? `첨부는 최대 ${maxDraftAttachments}개`
+                  : "파일 첨부 (이미지·문서, Win+Shift+S 캡처는 입력창에 붙여넣기)"
+              }
+              aria-label="파일 첨부"
+            >
+              <Paperclip size={15} aria-hidden />
+              <span className="coding-prompt__attach-count">
+                {attachmentControl.attachments.length}/{maxDraftAttachments}
+              </span>
+            </button>
             <textarea
               className="coding-prompt__input"
+              aria-label="코딩 지시 입력"
               placeholder={active?.agentMode === "plan" ? "플랜 모드 — 조사/계획만 합니다…" : "무엇을 만들까요? (@경로 멘션, / 명령)"}
               rows={2}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
+              onPaste={onComposerPaste}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
