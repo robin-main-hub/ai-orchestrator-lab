@@ -155,6 +155,7 @@ export function ConversationWorkbench({
   compactedVersion,
   onRollbackTurn,
   onApproveCommandPattern,
+  onStartSwarmSearch,
 }: {
   activeSessionId: string;
   /** "에이전트" 사이드 패널 모드에 주입되는 에이전트 레일 (App의 AgentsSidebar) */
@@ -243,6 +244,8 @@ export function ConversationWorkbench({
   onRollbackTurn?: (assistantMessageId: string) => void;
   /** 항목 10 — "이 명령 계열 세션 동안 허용" */
   onApproveCommandPattern?: (command: string) => void;
+  /** "+" 도구 → 스웜 서치: 입력/직전 대화를 주제로 4~16명 자동 병렬 조사 */
+  onStartSwarmSearch?: (topic: string) => void;
 }) {
   const [activeAgentDetailPanel, setActiveAgentDetailPanel] = useState<AgentDetailPanel>("none");
   const persona = agentPersona ?? (selectedAgent ? createDefaultPersonaSettings(selectedAgent) : undefined);
@@ -727,6 +730,7 @@ export function ConversationWorkbench({
         onStopTurn={onStopTurn}
         queuedMessages={queuedMessages}
         onRemoveQueuedMessage={onRemoveQueuedMessage}
+        onStartSwarmSearch={onStartSwarmSearch}
       />
         </div>
 
