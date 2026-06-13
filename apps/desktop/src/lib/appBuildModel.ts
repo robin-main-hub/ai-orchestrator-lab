@@ -71,20 +71,20 @@ export function buildFromBlueprintRequest(input: {
 }
 
 /**
- * "미션 만들기" 분기 결정(순수). 단순 → from-blueprint 요청(provenance 포함), 큰 변경 → 토론 핸드오프.
- * 토론 분기는 blueprint를 싣지 않는다 — 현재 토론 엔진은 대화에서 문제를 재도출하므로, 편집한
- * 초안이 토론으로 흘러가는 척하지 않는다(정직). 토론 결정은 이후 from-debate로 승격한다.
+ * "미션 만들기" 분기 결정(순수). 단순 → from-blueprint 요청(provenance 포함), 큰 변경 → 토론
+ * 핸드오프에 **편집한 blueprint를 실어** 보낸다(토론 런타임이 blueprintContext로 실제 검토·반박·
+ * 개선한다 — 척이 아니라 진짜 전달). sourceSessionId도 함께 넘겨 debate record/trace에 남긴다.
  */
 export type AppBuildSubmitPlan =
   | { kind: "mission"; request: MissionFromBlueprintRequest }
-  | { kind: "debate" };
+  | { kind: "debate"; blueprint: DesignBlueprintInput; sourceSessionId: string };
 
 export function appBuildSubmitPlan(input: {
   mode: AppBuildMode;
   blueprint: DesignBlueprintInput;
   sourceSessionId: string;
 }): AppBuildSubmitPlan {
-  if (input.mode === "debate") return { kind: "debate" };
+  if (input.mode === "debate") return { kind: "debate", blueprint: input.blueprint, sourceSessionId: input.sourceSessionId };
   return { kind: "mission", request: buildFromBlueprintRequest({ blueprint: input.blueprint, sourceSessionId: input.sourceSessionId }) };
 }
 

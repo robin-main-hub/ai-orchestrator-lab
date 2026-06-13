@@ -127,6 +127,7 @@ import type {
   CodingPacket,
   ConversationMessage,
   ContextPackTier,
+  DesignBlueprintInput,
   DeviceRebootRequest,
   DeviceRebootWatchdog,
   EventEnvelope,
@@ -2850,13 +2851,20 @@ export function App() {
     });
   }
 
-  async function handlePromoteToDebate() {
+  async function handlePromoteToDebate(seed?: { blueprintContext?: DesignBlueprintInput; sourceSessionId?: string }) {
+    // 앱빌더 검토 패널에서 넘어온 경우 편집 초안/출처 세션을 토론에 **실제로** 싣는다.
+    // 명령 팔레트/버튼 등 인자 없이 불릴 수도 있으므로(이벤트 객체 포함) blueprintContext가
+    // 실제 초안일 때만 사용한다 — 아니면 기존 conversation-only 동작.
+    const blueprintContext = seed && typeof seed === "object" && "blueprintContext" in seed ? seed.blueprintContext : undefined;
+    const sourceSessionId = seed && typeof seed === "object" && "sourceSessionId" in seed ? seed.sourceSessionId : undefined;
     const input = {
       messages: conversationMessages,
       agents,
       providers: providerProfiles,
       events: eventLog,
       runtime: runtimeSnapshotState,
+      blueprintContext,
+      sourceSessionId,
     };
     // Show the skeleton immediately (rounds pending) and switch to the chamber,
     // then run the REAL multi-agent engine to fill rounds with live responses.
@@ -2869,6 +2877,9 @@ export function App() {
       participantCount: skeleton.participants.length,
       roundCount: skeleton.rounds.length,
       problemLength: skeleton.problem.length,
+      // provenance — 앱빌더 초안에서 왔으면 출처 세션/초안 제목을 trace에 남긴다.
+      ...(sourceSessionId ? { sourceSessionId } : {}),
+      ...(blueprintContext ? { fromBlueprint: true, blueprintTitle: blueprintContext.title } : {}),
     });
     appendEvent("debate.round.started", {
       debateId: skeleton.id,

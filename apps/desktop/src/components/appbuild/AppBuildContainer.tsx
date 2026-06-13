@@ -41,10 +41,10 @@ export function AppBuildContainer({
   onClose: () => void;
   onCreated?: (mission: ServerMissionRecord) => void;
   /**
-   * 토론 모드에서 "토론으로 보내기" — 인자 없음. 토론 엔진은 대화에서 문제를 재도출하므로
-   * 편집한 초안을 토론으로 흘려보내는 척하지 않는다(정직). 미제공이면 토론 핸드오프 비활성.
+   * 토론 모드에서 "토론으로 보내기" — 편집한 blueprint를 실어 보낸다(토론 런타임이
+   * blueprintContext로 실제 검토·반박·개선). 미제공이면 토론 핸드오프 비활성.
    */
-  onHandoffToDebate?: () => void;
+  onHandoffToDebate?: (blueprint: DesignBlueprintInput) => void;
   fillDraft?: typeof defaultFillDraft;
   createMission?: typeof defaultCreateMission;
 }) {
@@ -86,12 +86,15 @@ export function AppBuildContainer({
         }),
         serverBaseUrl,
       });
-      // AI든 stub이든 받은 초안으로 편집 필드를 채운다. 출처는 배지로 정직히 표기.
-      setTitle(response.blueprint.title);
-      setUserIntent(response.blueprint.userIntent);
-      setScreens(response.blueprint.screens);
-      setAcceptance(response.blueprint.acceptanceCriteria.join("\n"));
-      setMode(initialAppBuildMode(response.blueprint));
+      // AI 보강이 성공했을 때만 편집 필드를 AI 초안으로 교체한다. degraded(=AI 실패→서버 stub
+      // 폴백)면 사용자가 지금까지 편집한 초안을 **보존**하고 경고 배지만 띄운다(편집 손실 방지·정직).
+      if (!response.degraded) {
+        setTitle(response.blueprint.title);
+        setUserIntent(response.blueprint.userIntent);
+        setScreens(response.blueprint.screens);
+        setAcceptance(response.blueprint.acceptanceCriteria.join("\n"));
+        setMode(initialAppBuildMode(response.blueprint));
+      }
       setBadge(draftSourceBadge({ source: response.source, degraded: response.degraded, note: response.note }));
     } catch (err) {
       setError(`AI 초안 실패: ${err instanceof Error ? err.message : String(err)}`);
@@ -104,8 +107,9 @@ export function AppBuildContainer({
     if (submitting) return;
     const plan = appBuildSubmitPlan({ mode, blueprint: currentBlueprint(), sourceSessionId: seed.sourceSessionId });
     if (plan.kind === "debate") {
-      // 큰 변경은 토론을 먼저 — 여기서 토론 LLM을 쏘지 않고 토론 화면으로 넘긴다(말잔치 자동발사 금지).
-      onHandoffToDebate?.();
+      // 큰 변경: 편집한 초안을 토론으로 실어 보낸다(여기서 LLM 자동발사 안 함 — 토론 화면의
+      // 명시적 시작이 엔진을 돌린다). 토론은 이 초안을 검토·반박·개선한다.
+      onHandoffToDebate?.(plan.blueprint);
       onClose();
       return;
     }
@@ -161,6 +165,7 @@ export function AppBuildContainer({
               <label className="block">
                 <span className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-zinc-500">제목</span>
                 <input
+                  aria-label="제목"
                   className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus-visible:border-cyan-400/50"
                   onChange={(event) => setTitle(event.target.value)}
                   value={title}
@@ -171,6 +176,7 @@ export function AppBuildContainer({
               <label className="block">
                 <span className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-zinc-500">사용자 의도 (대화 요지)</span>
                 <textarea
+                  aria-label="사용자 의도"
                   className="min-h-[64px] w-full resize-y rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-sm leading-6 text-zinc-100 outline-none focus-visible:border-cyan-400/50"
                   onChange={(event) => setUserIntent(event.target.value)}
                   value={userIntent}
@@ -264,8 +270,8 @@ export function AppBuildContainer({
                 <p className="mt-1 text-[11px] text-zinc-500">{appBuildModeCaption(currentBlueprint())}</p>
                 {mode === "debate" && onHandoffToDebate ? (
                   <p className="mt-1 text-[11px] text-zinc-500">
-                    토론은 대화를 다시 논의합니다 — 위 화면 편집은 <span className="text-zinc-300">단순 경로</span>에만 반영됩니다. 토론
-                    결정을 본 뒤 미션으로 승격하세요.
+                    <span className="text-zinc-300">편집한 이 초안</span>을 캐릭터 팀이 검토·반박·개선합니다(초안은 planned). 토론 화면에서
+                    시작하며, 결정을 본 뒤 미션으로 승격하세요.
                   </p>
                 ) : null}
                 {mode === "debate" && !onHandoffToDebate ? (

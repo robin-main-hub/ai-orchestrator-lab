@@ -6,7 +6,13 @@ import type {
   ProviderProfile,
   RuntimeSnapshot,
 } from "@ai-orchestrator/protocol";
-import { createStage3DebateSession, runStage3DebateSession } from "./stage3Runtime";
+import type { DesignBlueprintInput } from "@ai-orchestrator/protocol";
+import {
+  blueprintDebateConstraints,
+  createStage3DebateSession,
+  deriveDebateProblem,
+  runStage3DebateSession,
+} from "./stage3Runtime";
 
 const messages: ConversationMessage[] = [
   {
@@ -313,5 +319,74 @@ describe("patch 19 — 3~4턴 실토론 시뮬레이션 (fold-prior + 상호 인
     for (const round of filledRounds) {
       expect(round.status).toBe("completed");
     }
+  });
+});
+
+describe("앱빌더 → 토론 분기 (blueprintContext + sourceSessionId)", () => {
+  const blueprint: DesignBlueprintInput = {
+    title: "할 일 칸반",
+    userIntent: "카드를 컬럼으로 관리",
+    targetSurface: "new_app",
+    screens: [
+      { name: "보드", purpose: "칸반", primaryAction: "카드 추가", secondaryActions: [], dataNeeded: [], emptyState: "없음", errorState: "실패" },
+      { name: "설정", purpose: "컬럼 편집", primaryAction: "컬럼 추가", secondaryActions: [], dataNeeded: [], emptyState: "없음", errorState: "실패" },
+    ],
+    designTokens: { density: "balanced", tone: "clean_builder", motion: "subtle" },
+    acceptanceCriteria: ["드래그로 카드 이동"],
+  };
+
+  it("deriveDebateProblem: 초안이 있으면 검토·반박·개선 프레이밍, 없으면 대화 마지막 발화(회귀 없음)", () => {
+    const withBp = deriveDebateProblem({ messages, blueprintContext: blueprint });
+    expect(withBp).toContain("앱 초안 검토·반박·개선");
+    expect(withBp).toContain("할 일 칸반");
+    expect(withBp).toContain("검토·반박");
+
+    const withoutBp = deriveDebateProblem({ messages });
+    expect(withoutBp).toBe("토론으로 돌려보고 코딩 패킷으로 넘기자"); // 기존 conversation-only 동작 유지
+  });
+
+  it("blueprintDebateConstraints: 화면/수용기준을 constraints로(엔진 프롬프트 전달), 초안 없으면 빈 배열", () => {
+    const constraints = blueprintDebateConstraints(blueprint);
+    expect(constraints.some((c) => c.includes("보드"))).toBe(true);
+    expect(constraints.some((c) => c.includes("드래그로 카드 이동"))).toBe(true);
+    expect(blueprintDebateConstraints(undefined)).toEqual([]);
+  });
+
+  it("createStage3DebateSession: 초안 승격이면 problem이 초안 기반 + sourceSessionId/blueprintTitle 적재", () => {
+    const session = createStage3DebateSession({
+      messages,
+      agents,
+      providers,
+      events,
+      runtime,
+      createdAt: "2026-05-24T00:00:00.000Z",
+      blueprintContext: blueprint,
+      sourceSessionId: "session_appbuild_9",
+    });
+    expect(session.problem).toContain("할 일 칸반");
+    expect(session.sourceSessionId).toBe("session_appbuild_9"); // provenance 적재
+    expect(session.blueprintTitle).toBe("할 일 칸반");
+    expect(session.contextPreview[0]).toContain("앱 초안: 할 일 칸반");
+  });
+
+  it("createStage3DebateSession: 초안 없으면 provenance 필드 undefined(가짜 출처 안 만듦)", () => {
+    const session = createStage3DebateSession({ messages, agents, providers, events, runtime, createdAt: "2026-05-24T00:00:00.000Z" });
+    expect(session.sourceSessionId).toBeUndefined();
+    expect(session.blueprintTitle).toBeUndefined();
+  });
+
+  it("거대/악성 초안도 프롬프트를 부풀리지 못한다 — problem 2000자, constraint 항목당 300자 캡", () => {
+    const huge = "가".repeat(50_000);
+    const hostile: DesignBlueprintInput = {
+      ...blueprint,
+      title: huge,
+      userIntent: huge,
+      screens: [{ name: huge, purpose: huge, primaryAction: huge, secondaryActions: [], dataNeeded: [], emptyState: "x", errorState: "y" }],
+      acceptanceCriteria: [huge],
+    };
+    expect(deriveDebateProblem({ messages, blueprintContext: hostile }).length).toBeLessThanOrEqual(2_000);
+    const constraints = blueprintDebateConstraints(hostile);
+    expect(constraints.length).toBeLessThanOrEqual(32);
+    for (const entry of constraints) expect(entry.length).toBeLessThanOrEqual(300); // 항목당 캡(엔진이 truncate 안 함)
   });
 });
