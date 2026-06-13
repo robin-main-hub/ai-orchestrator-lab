@@ -1,0 +1,173 @@
+import { describe, expect, it } from "vitest";
+import type { EventEnvelope, VerificationReport } from "@ai-orchestrator/protocol";
+import { buildMissionIndexFromEvents } from "./missionIndex";
+import { normalizeMissionWorker, normalizeVerificationReport } from "./missionPolicy";
+import { createMissionStore, MissionEventValidationError } from "./missionStore";
+
+/** in-memory event storage — store 로직을 fs 없이 검증 */
+function memoryDeps() {
+  const events: EventEnvelope[] = [];
+  return {
+    events,
+    deps: {
+      loadEvents: async () => [...events],
+      appendEvents: async (_sessionId: string, envelopes: EventEnvelope[]) => {
+        for (const envelope of envelopes) {
+          if (!events.some((existing) => existing.id === envelope.id)) {
+            events.push(envelope);
+          }
+        }
+      },
+      now: () => "2026-06-13T00:00:00.000Z",
+    },
+  };
+}
+
+const CREATE = {
+  id: "mission_001",
+  title: "Refactor provider fallback",
+  goal: "fallback이 실제로 전환되는지 검증",
+  truthStatus: "observed" as const,
+  createdBy: "desktop",
+  workers: [
+    {
+      agentId: "agent_builder",
+      role: "builder" as const,
+      displayName: "Builder",
+      soulMode: "summary" as const,
+      configSource: "internal" as const,
+    },
+  ],
+};
+
+describe("mission store + materialized index", () => {
+  it("creates a mission and materializes it through the index", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    const created = await store.create(CREATE);
+
+    expect(created.mission.missionId).toBe("mission_001");
+    expect(created.status).toBe("running"); // worker 1명 배정됨
+    expect(created.workers).toHaveLength(1);
+    expect((await store.list()).map((m) => m.mission.missionId)).toContain("mission_001");
+  });
+
+  it("restores the same mission state from the raw event log (server-restart shape)", async () => {
+    const { deps, events } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    await store.appendEvent("mission_001", {
+      type: "mission.artifact.attached",
+      payload: {
+        artifact: {
+          id: "artifact_1",
+          missionId: "mission_001",
+          kind: "diff",
+          summary: "provider fallback diff",
+          truthStatus: "observed",
+          createdAt: "2026-06-13T00:00:01.000Z",
+        },
+      },
+    });
+
+    // 재시작 시뮬레이션: 저장된 이벤트만으로 인덱스 재구성
+    const restored = buildMissionIndexFromEvents(events);
+    expect(restored).toHaveLength(1);
+    expect(restored[0]!.workers).toHaveLength(1);
+    expect(restored[0]!.artifacts.map((a) => a.id)).toEqual(["artifact_1"]);
+  });
+
+  it("keeps the worker's Hermes slot id as continuity metadata", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    const created = await store.create({
+      ...CREATE,
+      id: "mission_hermes",
+      workers: [
+        {
+          agentId: "agent_kurumi",
+          role: "companion" as const,
+          displayName: "쿠루미",
+          personaName: "kurumi",
+          soulMode: "full" as const,
+          configSource: "markdown" as const,
+          permissionLevel: "write_files",
+          hermesSlotId: "hermes-03",
+        },
+      ],
+    });
+    expect(created.workers[0]!.capability.personaContinuity.hermes.slotId).toBe("hermes-03");
+  });
+
+  it("rejects unknown mission event types and mission.created via the append channel", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+
+    await expect(
+      store.appendEvent("mission_001", { type: "mission.created", payload: {} }),
+    ).rejects.toThrow(MissionEventValidationError);
+  });
+
+  it("returns undefined for an append to a mission that does not exist", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    expect(
+      await store.appendEvent("mission_ghost", { type: "mission.closed", payload: { status: "cancelled" } }),
+    ).toBeUndefined();
+  });
+});
+
+describe("server-side policy — payloads are not trusted", () => {
+  it("companion cannot become sandbox_build through a persistence payload", () => {
+    // 클라이언트가 capability를 뭐라고 주장하든 요청 스키마가 받지 않고,
+    // 서버가 역할에서 재계산한다 — 쿠루미는 여전히 파일 변경 불가
+    const worker = normalizeMissionWorker(
+      {
+        agentId: "agent_kurumi",
+        role: "companion",
+        displayName: "쿠루미",
+        personaName: "kurumi",
+        soulMode: "full",
+        configSource: "markdown",
+        permissionLevel: "write_files",
+      },
+      "mission_x",
+      "2026-06-13T00:00:00.000Z",
+    );
+    expect(worker.capability.mode).toBe("merge_recommend");
+    expect(worker.capability.canMutateFiles).toBe(false);
+    expect(worker.capability.personaContinuity.voice.preserveCharacterVoice).toBe(true);
+  });
+
+  it("verification cannot silently claim observed without exit-code evidence", () => {
+    const claimed: VerificationReport = {
+      id: "verify_1",
+      missionId: "mission_x",
+      verifierAgentId: "agent_verifier",
+      status: "passed",
+      checks: [
+        {
+          id: "check_1",
+          command: "pnpm test",
+          status: "passed",
+          summary: "all green (claimed)",
+          startedAt: "2026-06-13T00:00:00.000Z",
+        },
+      ],
+      artifactIds: [],
+      observed: true, // 주장
+      createdAt: "2026-06-13T00:00:00.000Z",
+    };
+    const normalized = normalizeVerificationReport(claimed);
+    expect(normalized.observedDowngraded).toBe(true);
+    expect(normalized.report.observed).toBe(false);
+
+    const withEvidence = normalizeVerificationReport({
+      ...claimed,
+      checks: [{ ...claimed.checks[0]!, exitCode: 0 }],
+    });
+    expect(withEvidence.observedDowngraded).toBe(false);
+    expect(withEvidence.report.observed).toBe(true);
+  });
+});

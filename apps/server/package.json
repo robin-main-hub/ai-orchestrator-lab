@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-orchestrator/agents": "workspace:*",
     "@ai-orchestrator/memory": "workspace:*",
     "@ai-orchestrator/protocol": "workspace:*",
     "@ai-orchestrator/providers": "workspace:*",
