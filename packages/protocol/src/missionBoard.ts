@@ -1,5 +1,7 @@
 import { z } from "zod";
+import type { MissionCheckpoint } from "./missionCheckpoint.js";
 import {
+  missionCheckpointRecordedPayloadSchema,
   missionCreatedPayloadSchema,
   missionMergeQueuedPayloadSchema,
   missionVerificationRecordedPayloadSchema,
@@ -191,11 +193,13 @@ export const missionTraceEventTypeSchema = z.enum([
   "mission.created",
   "worker.assigned",
   "worker.started",
+  "checkpoint.created",
   "sandbox.preflight",
   "sandbox.exec.started",
   "sandbox.exec.completed",
   "sandbox.exec.failed",
   "verification.recorded",
+  "error_card.recorded",
   "self_correction.started",
   "self_correction.stopped",
   "approval.required",
@@ -286,6 +290,20 @@ function verificationTraceEvent(report: VerificationReport, createdAt: string): 
   };
 }
 
+function checkpointTraceEvent(checkpoint: MissionCheckpoint): MissionTraceEvent {
+  return {
+    id: `${checkpoint.missionId}:checkpoint:${checkpoint.id}`,
+    missionId: checkpoint.missionId,
+    workerId: checkpoint.workerId,
+    type: "checkpoint.created",
+    severity: "info",
+    title: `체크포인트 · ${checkpoint.reason}`,
+    summary: `${checkpoint.gitRef} @ ${checkpoint.headSha.slice(0, 10)}`,
+    truthStatus: "observed", // 실제 git rev-parse 관측 sha
+    createdAt: checkpoint.createdAt,
+  };
+}
+
 function mergeTraceEvent(item: SequentialMergeQueueItem): MissionTraceEvent {
   const type: MissionTraceEventType =
     item.status === "merged" ? "merge.completed" : item.status === "conflict" ? "merge.conflict" : "merge.queued";
@@ -324,6 +342,7 @@ function mergeTraceEvent(item: SequentialMergeQueueItem): MissionTraceEvent {
 export function deriveMissionTrace(record: ServerMissionRecord): MissionTraceEvent[] {
   const events: MissionTraceEvent[] = [createdTraceEvent(record.mission, record.mission.createdAt)];
   for (const worker of record.workers) events.push(workerTraceEvent(worker));
+  for (const checkpoint of record.checkpoints ?? []) events.push(checkpointTraceEvent(checkpoint));
   for (const report of record.verificationReports) events.push(verificationTraceEvent(report, report.createdAt));
   for (const item of record.mergeQueueItems) events.push(mergeTraceEvent(item));
   return events.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -348,6 +367,10 @@ export function traceEventFromMissionEnvelope(envelope: {
     case "mission.worker.assigned": {
       const parsed = missionWorkerAssignedPayloadSchema.safeParse(envelope.payload);
       return parsed.success ? workerTraceEvent(parsed.data.worker) : null;
+    }
+    case "mission.checkpoint.created": {
+      const parsed = missionCheckpointRecordedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success ? checkpointTraceEvent(parsed.data.checkpoint) : null;
     }
     case "mission.verification.recorded": {
       const parsed = missionVerificationRecordedPayloadSchema.safeParse(envelope.payload);

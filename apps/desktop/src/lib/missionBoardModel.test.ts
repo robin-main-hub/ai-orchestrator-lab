@@ -70,6 +70,7 @@ function serverRecord(overrides: Partial<ServerMissionRecord["mission"]> = {}, u
     artifacts: [],
     verificationReports: [],
     mergeQueueItems: [],
+    checkpoints: [],
     updatedAt,
   };
 }

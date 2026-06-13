@@ -5281,6 +5281,27 @@ export function createServerMissionStore(storage: JsonlServerEventStorage): Miss
     onEventsCommitted: (missionId, envelopes) => {
       missionTraceBus.publish(missionId, [...envelopes]);
     },
+    // L3: verify/merge 전 자동 checkpoint. ORCHESTRATOR_ALLOWED_REPO_ROOTS가 없으면
+    // skipped(이 배포엔 미적용 — 회귀 0). 있으면 실제 git rev-parse로 observed sha를
+    // 관측해 checkpoint로 기록한다(합성 sha 금지). 자동 rollback은 절대 하지 않는다.
+    autoCheckpoint: async (missionId, reason) => {
+      const allowedRepoRoots = parseAllowedRepoRoots(process.env.ORCHESTRATOR_ALLOWED_REPO_ROOTS);
+      const repoRoot = (process.env.ORCHESTRATOR_CHECKPOINT_REPO_ROOT ?? allowedRepoRoots[0])?.trim();
+      if (!repoRoot || allowedRepoRoots.length === 0) {
+        return { status: "skipped", reason: "checkpoint repo root가 구성되지 않았습니다 (ORCHESTRATOR_ALLOWED_REPO_ROOTS 비어있음)" };
+      }
+      const result = await createMissionCheckpoint({
+        id: `checkpoint_${missionId}_${Date.now()}`,
+        missionId,
+        repoRoot,
+        gitRef: "HEAD",
+        reason,
+        allowedRepoRoots,
+        now: () => new Date().toISOString(),
+        git: missionCheckpointGitExec,
+      });
+      return result.ok ? { status: "created", checkpoint: result.checkpoint } : { status: "failed", reason: result.reason };
+    },
     // E1+L2: 검증 명령을 runner registry가 고른 sandbox에서 실행하고 종료코드를 관측한다.
     // ORCHESTRATOR_SANDBOX_RUNNER=local|docker|gvisor 정책을 따르며, docker/gVisor가
     // unavailable이면 fake fallback 없이 blocked/observed:false로 남긴다(local로 몰래

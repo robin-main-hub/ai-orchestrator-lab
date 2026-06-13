@@ -68,12 +68,16 @@ describe("runRegistryMissionVerification", () => {
   });
 
   it("docker: builds an observed report via the docker runner", async () => {
-    const dockerExec = exec({ exitCode: 0, stdout: "ok" });
+    const calls: string[] = [];
+    const dockerExec = vi.fn(async (cmd: string) => {
+      calls.push(cmd);
+      return { exitCode: 0, stdout: "ok", stderr: "", timedOut: false };
+    });
     const report = await runRegistryMissionVerification({ ...BASE, selection: { kind: "docker", image: "node:20-slim" }, localExec: throwingExec, dockerExec });
     expect(report.observed).toBe(true);
     expect(report.status).toBe("passed");
     expect(dockerExec).toHaveBeenCalledTimes(1);
-    expect((dockerExec.mock.calls[0] as unknown[])[0]).toBe("docker"); // host docker, not local fallback
+    expect(calls[0]).toBe("docker"); // host docker, not local fallback
   });
 
   it("docker missing: failed + NOT observed, never silently local", async () => {
