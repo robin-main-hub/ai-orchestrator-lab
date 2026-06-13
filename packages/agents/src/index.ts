@@ -80,6 +80,13 @@ export {
 export type {
   MissionCapabilityOptions,
 } from "./productKernelContracts.js";
+export {
+  createSandboxPlanFromCodingPacket,
+  sandboxRunModeForCapability,
+} from "./sandboxPlan.js";
+export type {
+  SandboxPlanInput,
+} from "./sandboxPlan.js";
 
 export type DebateContext = {
   sessionId: string;

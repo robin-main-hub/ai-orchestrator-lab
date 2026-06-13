@@ -135,6 +135,7 @@ docs/             # 00~45 설계 문서 (아래 주요 항목)
 44     research-swarm (Manus/Kimi식 리서치 콘솔)
 45     chat-coding-roadmap (Manus 3편 + Kimi 보고서 종합 로드맵)
 46     product-kernel-sandbox-persona (Mission/Sandbox/Verifier/Merge + Hermes persona contract)
+47     sandbox-runner-integration (SandboxRunner seam + LegacyTmuxRunner adapter)
 ```
 
 ## 실행 방법
