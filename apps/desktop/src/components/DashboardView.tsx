@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { Bot, Cpu, LayoutGrid, MessagesSquare, Radar, ShieldCheck, Swords, TerminalSquare } from "lucide-react";
+import { ArrowRight, Bot, Cpu, LayoutGrid, MessagesSquare, Radar, ShieldCheck, Swords, TerminalSquare } from "lucide-react";
 import { StatusBadge } from "@/ui/status-badge";
+import { COCKPIT_HEALTH_LABEL, type CockpitHealthRollup } from "../lib/cockpitHealthRollup";
+import type { CockpitNextActionItem } from "../lib/cockpitNextActions";
 import { loadHermesPool } from "../lib/hermesPoolStore";
 import { buildCodexDetail, type CodexDetail } from "../lib/personaCodexDetail";
 import { personaBundleMap } from "../lib/personaBundleSource";
@@ -62,6 +64,8 @@ export function DashboardView({
   runtime,
   hermesPool,
   pendingApprovals,
+  healthRollup,
+  onActivateNextAction,
   history,
   onNavigate,
   onOpenApprovalQueue,
@@ -73,6 +77,10 @@ export function DashboardView({
   runtime: RuntimeSnapshot;
   hermesPool: HermesPoolSummary;
   pendingApprovals: number;
+  /** 콕핏 L1과 공유하는 건강 롤업 — "다음 할 일 1개"를 구동(없으면 블록 생략) */
+  healthRollup?: CockpitHealthRollup;
+  /** "다음 할 일" CTA 클릭 — targetSurface별 라우팅 */
+  onActivateNextAction?: (action: CockpitNextActionItem) => void;
   history?: AutonomyRunSummary[];
   onNavigate: (target: { nav?: NavItemId; mode?: CenterMode }) => void;
   /** 승인 대기 펄스 클릭 — Control Queue 드로어 열기 */
@@ -84,8 +92,34 @@ export function DashboardView({
   const recentRuns = (history ?? []).slice(0, 4);
   const [codexDetail, setCodexDetail] = useState<CodexDetail | null>(null);
 
+  const topAction = healthRollup?.topAction;
+
   return (
     <div className="dashboard">
+      {healthRollup ? (
+        <section
+          className={`dashboard__next dashboard__next--${healthRollup.level}`}
+          aria-label="다음 할 일"
+        >
+          <div className="dashboard__next-head">
+            <span className="dashboard__next-dot" aria-hidden />
+            <span className="dashboard__next-status">{COCKPIT_HEALTH_LABEL[healthRollup.level]}</span>
+            <span className="dashboard__next-signal">{healthRollup.signalSummary}</span>
+          </div>
+          <p className="dashboard__next-headline">{healthRollup.headline}</p>
+          {topAction ? (
+            <button
+              className="dashboard__next-cta"
+              onClick={() => onActivateNextAction?.(topAction)}
+              type="button"
+            >
+              <span>{topAction.ctaLabel}</span>
+              <ArrowRight size={16} aria-hidden />
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
       <header className="dashboard__hero">
         <div>
           <p className="dashboard__eyebrow">REFLECORE ORCHESTRATOR</p>

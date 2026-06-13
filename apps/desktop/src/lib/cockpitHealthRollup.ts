@@ -1,3 +1,4 @@
+import type { OperatorCockpitSnapshot } from "@ai-orchestrator/protocol";
 import type { CockpitNextActionItem } from "./cockpitNextActions";
 
 /**
@@ -72,6 +73,25 @@ export function deriveCockpitHealthRollup(input: {
     signalSummary,
     pendingCount,
   };
+}
+
+/**
+ * snapshot + nextActions → 건강 롤업. 콕핏(L1 히어로)과 대시보드(다음 할 일)가
+ * 동일한 신호 도출을 공유하도록 매핑을 한 곳에 모은다 — 두 화면이 같은 상태에서
+ * 같은 red/yellow/green을 말하게 하는 단일 소스.
+ */
+export function deriveCockpitHealthFromSnapshot(
+  snapshot: OperatorCockpitSnapshot,
+  nextActions: ReadonlyArray<CockpitNextActionItem>,
+): CockpitHealthRollup {
+  return deriveCockpitHealthRollup({
+    blockedCount: snapshot.fleet.filter((worker) => worker.status === "blocked" || worker.status === "error").length,
+    approvalCount: snapshot.approvals.length,
+    criticalApprovalCount: snapshot.approvals.filter((approval) => approval.securityRisk === "high").length,
+    fallbackActive: snapshot.routing.fallbackStatus === "active",
+    dgxMirrorOffline: snapshot.memory.dgxMirrorHealth === "disconnected",
+    nextActions,
+  });
 }
 
 function hasPriority(actions: ReadonlyArray<CockpitNextActionItem>, priority: CockpitNextActionItem["priority"]): boolean {
