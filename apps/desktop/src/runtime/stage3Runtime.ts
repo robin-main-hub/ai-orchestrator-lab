@@ -1,5 +1,6 @@
 import type {
   AgentProfile,
+  BlueprintDebateReview,
   ConversationMessage,
   DebateRound,
   DebateRoundKind,
@@ -66,6 +67,10 @@ export type Stage3DebateSession = {
   sourceSessionId?: string;
   /** 앱빌더 초안에서 승격된 토론이면 그 초안 제목(맥락 표시용). conversation-only면 undefined. */
   blueprintTitle?: string;
+  /** 앱빌더 초안에서 승격된 토론이면 그 전체 초안(토론 종료 후 review 계산용). conversation-only면 undefined. */
+  blueprintContext?: DesignBlueprintInput;
+  /** 토론 종료 후 도출된 초안 리뷰(point 5). 모델 출력이므로 truthStatus="generated"(observed 아님). */
+  blueprintReview?: BlueprintDebateReview;
 };
 
 export type Stage3DebateInput = {
@@ -187,11 +192,13 @@ export function createStage3DebateSession({
     ],
     participants,
     rounds,
-    humanPeek: createHumanPeek(participants, rounds, events, createdAt),
+    humanPeek: createHumanPeek(participants, rounds, events, createdAt, false),
     statusHub: createStatusHub(runtime, providers, events),
     promotedAt: createdAt,
     sourceSessionId,
     blueprintTitle: blueprintContext?.title,
+    // 토론 종료 후 review 계산을 위해 전체 초안을 보존(없으면 일반 토론 — review 미생성).
+    blueprintContext,
   };
 }
 
@@ -289,10 +296,16 @@ function createHumanPeek(
   rounds: DebateRound[],
   events: EventEnvelope[],
   createdAt: string,
+  /** 실제 멀티에이전트 엔진이 돌아간 라이브 결과인가 — mock/스켈레톤이면 false. */
+  observed: boolean,
 ): HumanPeekEntry[] {
   const orchestrator = participants.find((participant) => participant.role === "orchestrator") ?? participants[0];
   const architect = participants.find((participant) => participant.role === "architect") ?? participants[1];
   const reviewer = participants.find((participant) => participant.role === "reviewer") ?? participants[2];
+
+  // 지휘자→설계자/검토자 릴레이는 실제 라이브 실행일 때만 "관측"으로 본다. mock/스켈레톤이면
+  // 아직 진짜로 일어난 일이 아니므로 pending — 가짜 observed 금지(프로젝트 핵심 원칙).
+  const relayState: HumanPeekEntry["state"] = observed ? "observed" : "pending";
 
   return [
     {
@@ -301,7 +314,7 @@ function createHumanPeek(
       actor: orchestrator?.name ?? "지휘자",
       target: architect?.name ?? "설계자",
       summary: "Debate Context를 전달하고 1차 구조 제안을 요청",
-      state: "observed",
+      state: relayState,
       createdAt,
     },
     {
@@ -310,7 +323,7 @@ function createHumanPeek(
       actor: orchestrator?.name ?? "지휘자",
       target: reviewer?.name ?? "검토자",
       summary: "리스크/누락/보안 경계 검토 요청",
-      state: "observed",
+      state: relayState,
       createdAt,
     },
     {
@@ -511,7 +524,8 @@ export async function runStage3DebateSession(
   // + 결정 노드/코딩 영향 승격: 이게 없으면 결정 준비도 게이트가 모든 실토론을 차단한다
   const linkedRounds = promoteDebateDecisions(applyDebateCrossLinks(debateResult.rounds));
   const updatedParticipants = baseSession.participants;
-  const updatedHumanPeek = createHumanPeek(updatedParticipants, linkedRounds, input.events, baseSession.promotedAt);
+  // 라이브 실행 결과 — 실제 엔진이 돌았으므로 릴레이 관측을 observed로 표기.
+  const updatedHumanPeek = createHumanPeek(updatedParticipants, linkedRounds, input.events, baseSession.promotedAt, true);
 
   return {
     ...baseSession,

@@ -29,6 +29,7 @@ import {
   runStage3DebateSession,
   type Stage3DebateSession,
 } from "./runtime/stage3Runtime";
+import { computeBlueprintReviewForSession } from "./lib/designPacketFromDebate";
 import type { CockpitDetailFocus } from "./lib/cockpitNextActions";
 import {
   createStage4AgentRun,
@@ -2891,12 +2892,34 @@ export function App() {
     try {
       const live = await runStage3DebateSession({ ...input, debateId: skeleton.id });
       live.runState = "live";
-      setDebateSession(live);
+      // point 5: 초안 출처 토론이면 종료 후 리뷰를 도출(자동 적용·미션 생성 없음 — 표시·trace용).
+      // 일반 대화 토론(blueprintContext 없음)이면 undefined → 리뷰가 붙지 않는다.
+      const blueprintReview = computeBlueprintReviewForSession({
+        ...live,
+        blueprintContext,
+        sourceSessionId,
+      });
+      const finalSession = blueprintReview ? { ...live, blueprintReview } : live;
+      setDebateSession(finalSession);
       appendEvent("debate.run.completed", {
         debateId: live.id,
         roundCount: live.rounds.length,
         utteranceCount: live.rounds.reduce((sum, round) => sum + round.utterances.length, 0),
       });
+      if (blueprintReview) {
+        // redacted summary만 — raw 초안/화면 본문은 trace에 넣지 않는다. 모델 출력이라 generated.
+        appendEvent("debate.blueprint.reviewed", {
+          debateId: live.id,
+          blueprintTitle: blueprintReview.blueprintTitle,
+          adoptedCount: blueprintReview.adopted.length,
+          rejectedCount: blueprintReview.rejected.length,
+          riskCount: blueprintReview.risks.length,
+          blueprintDeltaCount: blueprintReview.blueprintDelta.length,
+          recommendedNextAction: blueprintReview.recommendedNextAction,
+          truthStatus: blueprintReview.truthStatus,
+          redaction: "applied",
+        });
+      }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       setDebateSession((current) =>
