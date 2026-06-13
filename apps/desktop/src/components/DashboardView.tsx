@@ -91,11 +91,14 @@ export function DashboardView({
   const onlineNodes = runtime.runtimeNodes.filter((node) => node.status === "online").length;
   const recentRuns = (history ?? []).slice(0, 4);
   const [codexDetail, setCodexDetail] = useState<CodexDetail | null>(null);
+  // 도감 18장은 기본 가로 캐러셀(한 줄, 스와이프) — 관심 있을 때만 전체 그리드로 펼친다.
+  const [codexExpanded, setCodexExpanded] = useState(false);
 
   const topAction = healthRollup?.topAction;
 
   return (
     <div className="dashboard">
+      <div className="dashboard__top">
       {healthRollup ? (
         <section
           className={`dashboard__next dashboard__next--${healthRollup.level}`}
@@ -151,6 +154,30 @@ export function DashboardView({
           </button>
         </div>
       </header>
+      </div>
+
+      <section className="dashboard__section" aria-label="작전 바로가기">
+        <h2 className="dashboard__section-title">작전 개시</h2>
+        <div className="dashboard__tiles">
+          {QUICK_ACTIONS.map((action) => {
+            const Icon = ACTION_ICONS[action.icon];
+            return (
+              <button
+                className={`dashboard__tile dashboard__tile--${action.icon}`}
+                key={action.id}
+                onClick={() => onNavigate(action.target)}
+                type="button"
+              >
+                <span className="dashboard__tile-chip" aria-hidden>
+                  <Icon size={18} />
+                </span>
+                <span className="dashboard__tile-label">{action.label}</span>
+                <span className="dashboard__tile-desc">{action.description}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       <section className="dashboard__section" aria-label="페르소나 쇼케이스">
         <h2 className="dashboard__section-title">소환진 — 오늘의 파티</h2>
@@ -172,8 +199,18 @@ export function DashboardView({
       </section>
 
       <section className="dashboard__section" aria-label="캐릭터 도감">
-        <h2 className="dashboard__section-title">캐릭터 도감 — 전원 {PERSONA_CODEX.length}인</h2>
-        <div className="dashboard__codex">
+        <div className="dashboard__section-head">
+          <h2 className="dashboard__section-title">캐릭터 도감 — 전원 {PERSONA_CODEX.length}인</h2>
+          <button
+            aria-expanded={codexExpanded}
+            className="dashboard__section-toggle"
+            onClick={() => setCodexExpanded((open) => !open)}
+            type="button"
+          >
+            {codexExpanded ? "접기" : "전체 보기"}
+          </button>
+        </div>
+        <div className={`dashboard__codex ${codexExpanded ? "is-expanded" : "is-carousel"}`}>
           {PERSONA_CODEX.map((entry) => (
             <button
               className="dashboard__codex-card"
@@ -198,29 +235,6 @@ export function DashboardView({
               <span className="dashboard__codex-caption">{entry.caption}</span>
             </button>
           ))}
-        </div>
-      </section>
-
-      <section className="dashboard__section" aria-label="작전 바로가기">
-        <h2 className="dashboard__section-title">작전 개시</h2>
-        <div className="dashboard__tiles">
-          {QUICK_ACTIONS.map((action) => {
-            const Icon = ACTION_ICONS[action.icon];
-            return (
-              <button
-                className={`dashboard__tile dashboard__tile--${action.icon}`}
-                key={action.id}
-                onClick={() => onNavigate(action.target)}
-                type="button"
-              >
-                <span className="dashboard__tile-chip" aria-hidden>
-                  <Icon size={18} />
-                </span>
-                <span className="dashboard__tile-label">{action.label}</span>
-                <span className="dashboard__tile-desc">{action.description}</span>
-              </button>
-            );
-          })}
         </div>
       </section>
 

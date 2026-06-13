@@ -78,6 +78,26 @@ describe("DashboardView", () => {
     expect(html).toContain("dashboard__next--red"); // level-colored accent
   });
 
+  it("places the action tiles above the codex and ships the codex as a collapsed carousel", () => {
+    const html = renderToStaticMarkup(
+      <DashboardView
+        personas={[]}
+        runtime={runtime}
+        hermesPool={{ total: 12, bound: 0, spare: 12 }}
+        pendingApprovals={0}
+        history={[]}
+        onNavigate={vi.fn()}
+      />,
+    );
+    // 작전 개시(행동)가 도감(쇼케이스)보다 먼저 — "지금 뭘 할 수 있는가"가 첫 시야
+    expect(html.indexOf("작전 개시")).toBeLessThan(html.indexOf("캐릭터 도감"));
+    // 도감은 기본 가로 캐러셀 + 전체 보기 토글
+    expect(html).toContain("is-carousel");
+    expect(html).toContain("전체 보기");
+    // 다음 할 일 + 히어로가 한 덩어리(dashboard__top)로 묶인다
+    expect(html).toContain("dashboard__top");
+  });
+
   it("omits the 다음 할 일 block when no healthRollup is provided", () => {
     const html = renderToStaticMarkup(
       <DashboardView

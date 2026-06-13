@@ -146,6 +146,7 @@ docs/             # 00~45 설계 문서 (아래 주요 항목)
 55     nav-axis-consolidation (drop ghost coord + unify mode-owns-center sentinel + navSurface adapter)
 56     conversation-agent-rail (1-click agent rail + expression spotlight + pinned suggestion chips)
 57     approval-drawer-simplify (1-button approve + more menu, ⌘⏎/⌘⌫ hints, risky-command confirm)
+58     dashboard-codex-collapse (action tiles first + codex carousel + next/hero grouped)
 ```
 
 ## 실행 방법
