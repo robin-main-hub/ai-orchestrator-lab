@@ -14,9 +14,10 @@ import type { GithubContextAttachment, GithubPullRequestDetail } from "@ai-orche
  *    so the prompt can't silently explode or pretend to carry more than it does.
  */
 
-const MAX_EXCERPT_CHARS = 6000;
-const MAX_CONTEXT_ITEMS = 5;
-const MAX_CONTEXT_CHARS = 12000;
+// 기본값은 넉넉하게 — 호출자가 모델 인지 예산(modelContextCharBudget)을 넘겨 더 키울 수 있다.
+const MAX_EXCERPT_CHARS = 24_000;
+const MAX_CONTEXT_ITEMS = 12;
+const MAX_CONTEXT_CHARS = 48_000;
 
 /** stable dedup key — same repo + PR number never attaches twice */
 export function prContextKey(repoFullName: string, pullNumber: number): string {
