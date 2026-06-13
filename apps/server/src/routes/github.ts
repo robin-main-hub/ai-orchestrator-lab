@@ -34,6 +34,7 @@ export type GithubRouteDependencies = {
 
 const REPO_RESOURCE = /^\/integrations\/github\/repos\/([^/]+)\/([^/]+)\/(overview|pulls|issues)$/;
 const PR_DETAIL = /^\/integrations\/github\/repos\/([^/]+)\/([^/]+)\/pulls\/(\d+)$/;
+const FILE_RESOURCE = /^\/integrations\/github\/repos\/([^/]+)\/([^/]+)\/file$/;
 
 const NOT_CONFIGURED_MESSAGE = "미설정 — 서버 GITHUB_TOKEN을 설정하면 조회됩니다.";
 
@@ -95,6 +96,34 @@ export async function handleGithubRoute({
     try {
       const pullRequest = await client.getPullRequest(owner, repo, pullNumber);
       respondJson(200, { status, repo: repoLabel, outcome: "observed", observedAt: now(), pullRequest });
+    } catch (error) {
+      const mapped = outcomeForError(error);
+      respondJson(200, { status, repo: repoLabel, ...mapped });
+    }
+    return true;
+  }
+
+  const fileMatch = FILE_RESOURCE.exec(pathOnly);
+  if (fileMatch) {
+    const owner = decodeURIComponent(fileMatch[1]!);
+    const repo = decodeURIComponent(fileMatch[2]!);
+    const query = new URLSearchParams(pathname.includes("?") ? pathname.slice(pathname.indexOf("?") + 1) : "");
+    const filePath = (query.get("path") ?? "").trim();
+    const ref = query.get("ref")?.trim() || undefined;
+    const client = createClient();
+    const status = client.status();
+    const repoLabel = `${owner}/${repo}`;
+    if (!status.configured) {
+      respondJson(200, { status, repo: repoLabel, outcome: "not_configured", message: NOT_CONFIGURED_MESSAGE });
+      return true;
+    }
+    if (!filePath) {
+      respondJson(200, { status, repo: repoLabel, outcome: "github_error", message: "path 쿼리 파라미터가 필요합니다" });
+      return true;
+    }
+    try {
+      const file = await client.getFileContent(owner, repo, filePath, ref);
+      respondJson(200, { status, repo: repoLabel, outcome: "observed", observedAt: now(), file });
     } catch (error) {
       const mapped = outcomeForError(error);
       respondJson(200, { status, repo: repoLabel, ...mapped });

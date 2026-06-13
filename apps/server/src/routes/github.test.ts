@@ -31,6 +31,9 @@ function clientStub(over: Partial<GithubReadonlyClient> & { token?: string } = {
         changedFiles: 3,
         commits: 4,
       })),
+    getFileContent:
+      over.getFileContent ??
+      (async () => ({ path: "src/x.ts", size: 10, sha: "abc", htmlUrl: "u", content: "file body", truncated: false, encoding: "utf8" })),
     listIssues: over.listIssues ?? (async () => []),
   };
 }
@@ -143,6 +146,35 @@ describe("handleGithubRoute", () => {
     expect(payload.outcome).toBe("observed");
     expect(getPullRequest).toHaveBeenCalledWith("o", "r", 42);
     expect(payload.pullRequest?.number).toBe(1);
+  });
+
+  it("file 경로는 path 쿼리로 파일을 observed 반환", async () => {
+    const { respondJson, calls } = capture();
+    const getFileContent = vi.fn(async () => ({ path: "src/a.ts", size: 5, sha: "s", htmlUrl: "u", content: "hello", truncated: false, encoding: "utf8" as const }));
+    await handleGithubRoute({
+      pathname: "/integrations/github/repos/o/r/file?path=src/a.ts&ref=main",
+      method: "GET",
+      createClient: () => clientStub({ token: "ghp_x", getFileContent }),
+      respondJson,
+      now,
+    });
+    const payload = calls[0]?.payload as { outcome: string; file?: { content: string } };
+    expect(payload.outcome).toBe("observed");
+    expect(getFileContent).toHaveBeenCalledWith("o", "r", "src/a.ts", "main");
+    expect(payload.file?.content).toBe("hello");
+  });
+
+  it("file 경로에 path 쿼리가 없으면 github_error로 정직 반환", async () => {
+    const { respondJson, calls } = capture();
+    const getFileContent = vi.fn();
+    await handleGithubRoute({
+      pathname: "/integrations/github/repos/o/r/file",
+      method: "GET",
+      createClient: () => clientStub({ token: "ghp_x", getFileContent }),
+      respondJson,
+    });
+    expect((calls[0]?.payload as { outcome: string }).outcome).toBe("github_error");
+    expect(getFileContent).not.toHaveBeenCalled();
   });
 
   it("알 수 없는 github 경로는 404", async () => {

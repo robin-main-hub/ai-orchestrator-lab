@@ -127,7 +127,20 @@ export const githubConnectorStatusResponseSchema = z.object({
 });
 export type GithubConnectorStatusResponse = z.infer<typeof githubConnectorStatusResponseSchema>;
 
-/** GET /integrations/github/repos/:owner/:repo/pulls|pulls/:n|issues|overview */
+/** read-only file content — bounded text, never the raw whole file unbounded */
+export const githubFileContentSchema = z.object({
+  path: z.string(),
+  size: z.number(),
+  sha: z.string(),
+  htmlUrl: z.string(),
+  /** decoded UTF-8 text, capped — `truncated` marks when the original was longer */
+  content: z.string(),
+  truncated: z.boolean(),
+  encoding: z.literal("utf8"),
+});
+export type GithubFileContent = z.infer<typeof githubFileContentSchema>;
+
+/** GET /integrations/github/repos/:owner/:repo/pulls|pulls/:n|issues|overview|file */
 export const githubReadonlyResourceResponseSchema = z.object({
   status: githubConnectorStatusSchema,
   repo: z.string(),
@@ -141,5 +154,6 @@ export const githubReadonlyResourceResponseSchema = z.object({
   pullRequests: z.array(githubPullRequestSummarySchema).optional(),
   pullRequest: githubPullRequestDetailSchema.optional(),
   issues: z.array(githubIssueSummarySchema).optional(),
+  file: githubFileContentSchema.optional(),
 });
 export type GithubReadonlyResourceResponse = z.infer<typeof githubReadonlyResourceResponseSchema>;
