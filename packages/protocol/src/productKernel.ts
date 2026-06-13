@@ -125,6 +125,60 @@ export const sandboxSpecSchema = z.object({
 });
 export type SandboxSpec = z.infer<typeof sandboxSpecSchema>;
 
+/**
+ * Sandbox execution contract — the seam where coding execution stops depending
+ * directly on tmux semantics. A SandboxRunner (defined in the runtime layer)
+ * takes these requests; the first implementation (LegacyTmuxRunner) adapts the
+ * existing gated tmux dispatch/capture path, and docker/gvisor/remote runners
+ * can be added later behind the same shape without touching the persona or
+ * mission layers.
+ */
+export const sandboxRunModeSchema = z.enum(["read_only", "verify", "build", "merge_recommend"]);
+export type SandboxRunMode = z.infer<typeof sandboxRunModeSchema>;
+
+export const sandboxExecRequestSchema = z.object({
+  id: z.string(),
+  missionId: z.string(),
+  workerId: z.string(),
+  command: z.string(),
+  mode: sandboxRunModeSchema,
+  cwd: z.string().optional(),
+  timeoutMs: z.number().int().positive().optional(),
+  createdAt: z.string(),
+});
+export type SandboxExecRequest = z.infer<typeof sandboxExecRequestSchema>;
+
+export const sandboxPreflightResultSchema = z.object({
+  allowed: z.boolean(),
+  /** when allowed, whether the dispatch still needs a human approval (e.g. build/mutation) */
+  requiresApproval: z.boolean(),
+  reason: z.string(),
+});
+export type SandboxPreflightResult = z.infer<typeof sandboxPreflightResultSchema>;
+
+export const sandboxExecStatusSchema = z.enum(["completed", "failed", "blocked", "timeout"]);
+export type SandboxExecStatus = z.infer<typeof sandboxExecStatusSchema>;
+
+export const sandboxExecResultSchema = z.object({
+  requestId: z.string(),
+  status: sandboxExecStatusSchema,
+  /** true only when status reflects real runner output, not a simulated/theater status */
+  observed: z.boolean(),
+  stdoutPreview: z.string().optional(),
+  stderrPreview: z.string().optional(),
+  exitCode: z.number().int().optional(),
+  reason: z.string().optional(),
+  observedAt: z.string(),
+});
+export type SandboxExecResult = z.infer<typeof sandboxExecResultSchema>;
+
+export const sandboxCaptureResultSchema = z.object({
+  workerId: z.string(),
+  outputPreview: z.string(),
+  observedAt: z.string(),
+});
+export type SandboxCaptureResult = z.infer<typeof sandboxCaptureResultSchema>;
+
 export const personaIdentityFileKindSchema = z.enum(["SOUL", "AGENTS", "IDENTITY", "USER", "LOREBOOK"]);
 export type PersonaIdentityFileKind = z.infer<typeof personaIdentityFileKindSchema>;
 
