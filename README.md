@@ -136,6 +136,7 @@ docs/             # 00~45 설계 문서 (아래 주요 항목)
 45     chat-coding-roadmap (Manus 3편 + Kimi 보고서 종합 로드맵)
 46     product-kernel-sandbox-persona (Mission/Sandbox/Verifier/Merge + Hermes persona contract)
 47     sandbox-runner-integration (SandboxRunner seam + LegacyTmuxRunner adapter)
+48     mission-board-verification-merge (Mission Board hydration + verification record + merge queue)
 ```
 
 ## 실행 방법

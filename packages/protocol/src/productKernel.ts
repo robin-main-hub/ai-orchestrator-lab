@@ -414,6 +414,7 @@ export const missionEventTypeSchema = z.enum([
   "mission.worker.assigned",
   "mission.artifact.attached",
   "mission.verification.recorded",
+  "mission.merge.queued",
   "mission.closed",
 ]);
 export type MissionEventType = z.infer<typeof missionEventTypeSchema>;
@@ -484,6 +485,12 @@ export const missionVerificationRecordedPayloadSchema = z.object({
 });
 export type MissionVerificationRecordedPayload = z.infer<typeof missionVerificationRecordedPayloadSchema>;
 
+export const missionMergeQueuedPayloadSchema = z.object({
+  missionId: z.string(),
+  item: sequentialMergeQueueItemSchema,
+});
+export type MissionMergeQueuedPayload = z.infer<typeof missionMergeQueuedPayloadSchema>;
+
 export const missionClosedPayloadSchema = z.object({
   missionId: z.string(),
   status: z.enum(["merged", "failed", "cancelled"]),
@@ -506,6 +513,7 @@ export const serverMissionRecordSchema = z.object({
   workers: z.array(missionWorkerAssignmentSchema),
   artifacts: z.array(missionArtifactRefSchema),
   verificationReports: z.array(verificationReportSchema),
+  mergeQueueItems: z.array(sequentialMergeQueueItemSchema),
   updatedAt: z.string(),
 });
 export type ServerMissionRecord = z.infer<typeof serverMissionRecordSchema>;

@@ -1,6 +1,7 @@
 import {
   missionArtifactAttachedPayloadSchema,
   missionClosedPayloadSchema,
+  missionMergeQueuedPayloadSchema,
   missionVerificationRecordedPayloadSchema,
   missionWorkerAssignmentRequestSchema,
   type EventEnvelope,
@@ -160,6 +161,31 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
           }
           const normalized = normalizeVerificationReport(parsed.data.report);
           payload = { missionId, report: normalized.report, observedDowngraded: normalized.observedDowngraded };
+          break;
+        }
+        case "mission.merge.queued": {
+          const parsed = missionMergeQueuedPayloadSchema.safeParse({ missionId, ...(request.payload as object) });
+          if (!parsed.success) {
+            throw new MissionEventValidationError(`invalid merge queue payload: ${parsed.error.message}`);
+          }
+          if (parsed.data.missionId !== missionId || parsed.data.item.missionId !== missionId) {
+            throw new MissionEventValidationError("merge queue missionId mismatch");
+          }
+          // D3 불변식: 검증을 통과한(observed + passed) report가 있어야만 병합 대기열에 선다
+          const report = existing.verificationReports.find(
+            (candidate) => candidate.id === parsed.data.item.requiredVerificationReportId,
+          );
+          if (!report) {
+            throw new MissionEventValidationError(
+              `merge queue requires an existing verification report (${parsed.data.item.requiredVerificationReportId} not found)`,
+            );
+          }
+          if (report.status !== "passed" || !report.observed) {
+            throw new MissionEventValidationError(
+              `merge queue requires an observed passed verification report (got status=${report.status}, observed=${report.observed})`,
+            );
+          }
+          payload = parsed.data;
           break;
         }
         case "mission.closed": {
