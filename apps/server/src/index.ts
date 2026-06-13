@@ -6015,6 +6015,23 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       return;
     }
 
+    // D8: 컨트롤 스트립 가용성 — runner는 env에서 정직하게 파생(없으면 미노출 → blocked).
+    if (pathname === "/controls/availability" && request.method === "GET") {
+      const runners: string[] = ["local", "tmux_observation"];
+      if (process.env.ORCHESTRATOR_ENABLE_DOCKER_RUNNER === "1") runners.push("docker");
+      if (process.env.ORCHESTRATOR_ENABLE_GVISOR_RUNNER === "1") runners.push("gvisor");
+      respondJson(200, {
+        runners,
+        defaults: {
+          mode: "plan", // 안전 기본값 — 실행 아님
+          thinking: "auto",
+          toolPermission: "read_only",
+          runner: (process.env.ORCHESTRATOR_SANDBOX_RUNNER ?? "local").trim().toLowerCase() || "local",
+        },
+      });
+      return;
+    }
+
     if (pathname === "/provider-models") {
       const providerProfileId = requestUrl.searchParams.get("providerProfileId") ?? "provider_dgx02_vllm";
       respondJson(200, await createServerProviderModelDiscoveryResponse(providerProfileId));
