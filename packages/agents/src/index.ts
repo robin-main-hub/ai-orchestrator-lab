@@ -64,6 +64,22 @@ export type {
   DelegateTag,
 } from "./delegation.js";
 
+export {
+  allowedToolsForMissionMode,
+  buildPersonaContinuitySystemReminder,
+  canMissionModeMutateFiles,
+  canMissionModeRunCommands,
+  createAgentMissionCapability,
+  createHermesPersonaContinuity,
+  createMissionWorkerAssignment,
+  missionCapabilityModeForRole,
+  personaSlugForMission,
+  requiresMissionSandbox,
+} from "./productKernelContracts.js";
+export type {
+  MissionCapabilityOptions,
+} from "./productKernelContracts.js";
+
 export type DebateContext = {
   sessionId: string;
   problem: string;
