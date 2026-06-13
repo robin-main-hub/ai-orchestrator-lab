@@ -9062,6 +9062,37 @@ body:has(.app-shell.annex-focus-shell) {
   gap: 8px;
   max-width: 260px;
 }
+/* 파티 카드 = 클릭 가능한 버튼 (도감 카드와 같은 상세 모달을 연다) */
+.dashboard__party-card {
+  position: relative;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 160ms ease;
+}
+.dashboard__party-card:hover {
+  transform: translateY(-3px);
+}
+.dashboard__party-card:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 4px;
+  border-radius: 14px;
+}
+.dashboard__party-reason {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(6px);
+}
 .dashboard__party-tagline {
   font-size: 12px;
   color: var(--muted);

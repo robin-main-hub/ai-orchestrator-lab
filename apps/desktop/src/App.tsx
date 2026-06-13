@@ -277,6 +277,8 @@ import {
 } from "./seeds/conversation";
 import { DashboardView } from "./components/DashboardView";
 import { projectAutonomyRunHistory } from "./lib/autonomyRunHistory";
+import { PERSONA_CODEX } from "./lib/personaCodex";
+import { selectDailyParty } from "./lib/dailyParty";
 import { loadHermesPool, saveHermesPool } from "./lib/hermesPoolStore";
 import { acquireHermesSlot } from "./lib/hermesSlotPool";
 import { summarizeHermesPool } from "./lib/hermesSlotPool";
@@ -4780,6 +4782,20 @@ export function App() {
     () => deriveCockpitHealthFromSnapshot(cockpitSnapshot, cockpitReadiness.nextActions),
     [cockpitSnapshot, cockpitReadiness.nextActions],
   );
+  // 대시보드 "오늘의 파티" — 하드코딩 2명 대신 날짜 로테이션 + 현재 활성(Hermes 슬롯)
+  // + 최근 작전 페르소나를 앞세워 매일 바뀌게. (왜 오늘인지 reason 포함)
+  const dashboardParty = useMemo(() => {
+    const recentPersonaNames = projectAutonomyRunHistory(eventLog)
+      .map((run) => run.personaName)
+      .filter((name): name is string => Boolean(name));
+    const boundPersonaNames = loadHermesPool()
+      .slots.map((slot) => slot.persona)
+      .filter((name): name is string => Boolean(name));
+    const dateSeed = new Date().toISOString().slice(0, 10);
+    return selectDailyParty({ codex: PERSONA_CODEX, recentPersonaNames, boundPersonaNames, dateSeed, size: 3 }).map(
+      (member) => ({ ...member, avatarUrl: dashboardPersonaAvatars[member.personaName] }),
+    );
+  }, [eventLog]);
   // 대시보드의 "다음 할 일" CTA 라우팅: 승인성 신호는 제자리(드로어), 나머지는
   // 상세가 사는 콕핏으로 — 액션 동선을 한 패턴으로 묶는다.
   const handleDashboardNextAction = (action: CockpitNextActionItem) => {
@@ -4988,22 +5004,7 @@ export function App() {
 
           {activeNavItem === "dashboard" ? (
             <DashboardView
-              personas={[
-                {
-                  personaName: "kurumi",
-                  displayName: "토키사키 쿠루미",
-                  role: "companion",
-                  avatarUrl: dashboardPersonaAvatars["kurumi"],
-                  tagline: "「시간은 내가 관리할게. 오빠는 명령만 내려줘♡」",
-                },
-                {
-                  personaName: "yuno",
-                  displayName: "가사이 유노",
-                  role: "auditor",
-                  avatarUrl: dashboardPersonaAvatars["yuno"],
-                  tagline: "「오빠~♡ 다른 에이전트들, 내가 다 보고 있을게.」",
-                },
-              ]}
+              personas={dashboardParty}
               personaAvatars={dashboardPersonaAvatars}
               runtime={runtimeSnapshotState}
               hermesPool={summarizeHermesPool(loadHermesPool())}

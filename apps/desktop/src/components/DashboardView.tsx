@@ -56,6 +56,8 @@ export type DashboardPersona = {
   role: string;
   avatarUrl?: string;
   tagline: string;
+  /** 오늘 파티에 든 이유 (오늘 활성 / 최근 작전 / 오늘의 추천) */
+  reason?: string;
 };
 
 export function DashboardView({
@@ -93,6 +95,12 @@ export function DashboardView({
   const [codexDetail, setCodexDetail] = useState<CodexDetail | null>(null);
   // 도감 18장은 기본 가로 캐러셀(한 줄, 스와이프) — 관심 있을 때만 전체 그리드로 펼친다.
   const [codexExpanded, setCodexExpanded] = useState(false);
+  // 파티/도감 카드 클릭 → 같은 상세 모달(소환·대화 동선 포함)을 연다.
+  const openPersonaDetail = (personaName: string) => {
+    const entry = PERSONA_CODEX.find((candidate) => candidate.personaName === personaName);
+    if (!entry) return;
+    setCodexDetail(buildCodexDetail(entry, { bundleMap: personaBundleMap, slots: loadHermesPool().slots }));
+  };
 
   const topAction = healthRollup?.topAction;
 
@@ -184,14 +192,22 @@ export function DashboardView({
         <div className="dashboard__party">
           {personas.map((persona) => (
             <figure className="dashboard__party-member" key={persona.personaName}>
-              <PersonaCard
-                card={buildPersonaCard({
-                  personaName: persona.personaName,
-                  displayName: persona.displayName,
-                  role: persona.role as never,
-                  avatarUrl: persona.avatarUrl,
-                })}
-              />
+              <button
+                className="dashboard__party-card"
+                onClick={() => openPersonaDetail(persona.personaName)}
+                title={`${persona.displayName} 상세 보기`}
+                type="button"
+              >
+                {persona.reason ? <span className="dashboard__party-reason">{persona.reason}</span> : null}
+                <PersonaCard
+                  card={buildPersonaCard({
+                    personaName: persona.personaName,
+                    displayName: persona.displayName,
+                    role: persona.role as never,
+                    avatarUrl: persona.avatarUrl,
+                  })}
+                />
+              </button>
               <figcaption className="dashboard__party-tagline">{persona.tagline}</figcaption>
             </figure>
           ))}
