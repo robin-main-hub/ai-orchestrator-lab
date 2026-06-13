@@ -132,6 +132,7 @@ import {
   type PreviewHttpProbe,
 } from "./missions/previewProcessRunner.js";
 import { applyScaffold as applyScaffoldRunner, planScaffold as planScaffoldRunner } from "./missions/scaffoldRunner.js";
+import { createPlaywrightProbeDriver, runBrowserProbe } from "./missions/visualQaBrowserProbe.js";
 import type { LocalExecFn } from "./missions/localSandboxRunner.js";
 import {
   runRegistryMissionVerification,
@@ -6762,11 +6763,28 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         // 미연결이라 브라우저 의존 검사는 skipped로 남는다(가짜 visual pass 금지).
         runVisualQa: async ({ missionId, workspaceId, previewUrl }) => {
           const http = await fetchPreviewHtml(previewUrl);
+          // browser-tier(Playwright)는 env 플래그일 때만 시도. 미설치/실행실패면 undefined →
+          // 브라우저 검사 skipped(가짜 observed pass 금지).
+          let browser;
+          if (process.env.ORCHESTRATOR_VISUAL_QA_BROWSER === "1") {
+            const screenshotDir = join(
+              process.env.ORCHESTRATOR_VISUAL_QA_SCREENSHOT_DIR ?? join(eventStorage.storageDir, "visual-qa"),
+              workspaceId,
+            );
+            browser = await runBrowserProbe({
+              url: previewUrl,
+              screenshotDir,
+              launch: createPlaywrightProbeDriver(),
+              mkdir: async (dir) => {
+                await mkdir(dir, { recursive: true });
+              },
+            });
+          }
           return analyzeVisualQa({
             id: `visualqa_${workspaceId}_${Date.now()}`,
             missionId,
             workspaceId,
-            obs: { previewObserved: true, previewUrl, http },
+            obs: { previewObserved: true, previewUrl, http, browser },
             now: () => new Date().toISOString(),
           });
         },

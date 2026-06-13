@@ -88,7 +88,9 @@ function setupTempRepo(repo) {
     [
       'import { createServer } from "node:http";',
       "const port = Number(process.env.PORT || 0);",
-      'createServer((_req, res) => { res.writeHead(200, { "content-type": "text/html" }); res.end("<h1>smoke preview</h1>"); }).listen(port);',
+      // 일부러 결함 있는 화면: 주요 액션 없음(HTTP) + 가로 overflow div + console 에러(browser).
+      'const html = \'<!doctype html><html><head><title>smoke</title></head><body><h1>smoke preview</h1><div style="width:2000px;height:8px;background:#eee"></div><script>console.error("smoke boom")</script></body></html>\';',
+      'createServer((_req, res) => { res.writeHead(200, { "content-type": "text/html" }); res.end(html); }).listen(port);',
       "",
     ].join("\n"),
   );
@@ -168,6 +170,11 @@ async function main() {
     ORCHESTRATOR_SANDBOX_RUNNER: "local",
     ORCHESTRATOR_VERIFY_CWD: repo,
     ORCHESTRATOR_SKILL_EXPORT_DIR: skillsOut,
+    // D5b-2: browser-tier Visual QA 시도(Playwright 미설치/실행실패면 정직하게 skipped).
+    ORCHESTRATOR_VISUAL_QA_BROWSER: "1",
+    ORCHESTRATOR_VISUAL_QA_SCREENSHOT_DIR: join(base, "shots"),
+    // 캐시된 chromium이 있으면 명시(playwright 버전·브라우저 빌드 불일치 회피). 없으면 미설정 → skip.
+    ...(process.env.ORCHESTRATOR_VISUAL_QA_CHROMIUM_PATH ? { ORCHESTRATOR_VISUAL_QA_CHROMIUM_PATH: process.env.ORCHESTRATOR_VISUAL_QA_CHROMIUM_PATH } : {}),
     NODE_ENV: "test",
   };
 
@@ -212,10 +219,21 @@ async function main() {
       if (previewObserved) {
         const qa = await api("POST", `/missions/${missionId}/workspace/${workspaceId}/visual-qa`, {});
         const rep = qa.json?.report;
-        const browserSkipped = (rep?.checks ?? []).some((c) => c.kind === "overflow" && c.status === "skipped");
-        record("visual qa observed (HTML) + browser checks skipped", qa.status === 200 && rep && rep.truthStatus === "observed" && browserSkipped, true, rep ? `${rep.status}/${rep.truthStatus} 이슈 ${rep.issues?.length ?? 0}` : `status ${qa.status}`);
-        // 최소 서버는 버튼이 없어 missing_primary_action 이슈가 잡혀야 한다(실측 이슈)
+        record("visual qa observed (HTML tier)", qa.status === 200 && rep && rep.truthStatus === "observed", true, rep ? `${rep.status}/${rep.truthStatus} 이슈 ${rep.issues?.length ?? 0}` : `status ${qa.status}`);
+        // 주요 액션 없는 화면 → HTTP-tier가 missing_primary_action 이슈를 잡아야 한다(실측)
         record("design issue caught (missing primary action)", (rep?.issues ?? []).some((i) => i.kind === "missing_primary_action"), false, `${rep?.issues?.length ?? 0} issue(s)`);
+
+        // browser-tier: Playwright가 있으면 overflow/console을 observed로, 없으면 정직하게 skipped
+        const browserRan = (rep?.checks ?? []).some((c) => c.kind === "overflow" && c.status !== "skipped");
+        const kinds = (rep?.issues ?? []).map((i) => i.kind);
+        if (browserRan) {
+          const evidence = (rep?.checks ?? []).some((c) => c.kind === "screenshot" && c.evidenceRef);
+          const realIssue = kinds.includes("visual_overflow") || kinds.includes("mobile_break") || kinds.includes("console_error");
+          record("visual qa browser-tier observed (overflow/console + screenshot)", realIssue && evidence, true, kinds.join(",") || "(no issue)");
+        } else {
+          const allSkipped = (rep?.checks ?? []).filter((c) => ["overflow", "console_error", "accessibility"].includes(c.kind)).every((c) => c.status === "skipped");
+          record("visual qa browser-tier honestly skipped (no browser)", allSkipped, false, "skipped — Playwright 미설치/실행불가");
+        }
       }
 
       // 1e) preview stop — 프로세스 정리(유령 dev 서버 방지)
