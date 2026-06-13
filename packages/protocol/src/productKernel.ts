@@ -505,6 +505,20 @@ export const missionEventAppendRequestSchema = z.object({
 });
 export type MissionEventAppendRequest = z.infer<typeof missionEventAppendRequestSchema>;
 
+/** POST /missions/:missionId/verify 본문 — 서버가 실제로 실행할 검증 명령 */
+export const missionVerifyRequestSchema = z.object({
+  commands: z.array(z.string().min(1).max(2_000)).min(1).max(64),
+  verifierAgentId: z.string().max(256).optional(),
+});
+export type MissionVerifyRequest = z.infer<typeof missionVerifyRequestSchema>;
+
+/** POST /missions/:missionId/merge 본문 — 검증 통과 후 큐 항목의 머지 실행 */
+export const missionMergeRequestSchema = z.object({
+  mergeQueueItemId: z.string().min(1).max(256),
+  mergeCommitSha: z.string().max(128).optional(),
+});
+export type MissionMergeRequest = z.infer<typeof missionMergeRequestSchema>;
+
 /** Materialized view: append-only mission events에서 복원되는 현재 상태 */
 export const serverMissionRecordSchema = z.object({
   mission: missionCreatedPayloadSchema.extend({ createdAt: z.string() }),

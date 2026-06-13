@@ -4,7 +4,7 @@ import { mkdir, readFile, appendFile, stat, rename, readdir, unlink } from "node
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { dirname, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolveSwarmScriptPath, swarmScriptCwd } from "./swarmScriptPath.js";
@@ -116,6 +116,7 @@ import { RequestBodyTooLargeError, readJsonBody, readRawBody } from "./http/requ
 import { handleApprovalRoute } from "./routes/approvals.js";
 import { handleMissionRoute } from "./routes/missions.js";
 import { createMissionStore, type MissionStore } from "./missions/missionStore.js";
+import { runLocalMissionVerification } from "./missions/localSandboxRunner.js";
 import { handleTmuxRoute } from "./routes/tmux.js";
 import { acquireStorageLock } from "./storage/storageLock.js";
 import { AuthRateLimiter, resolveClientKey } from "./security/authRateLimiter.js";
@@ -5248,6 +5249,39 @@ export function createServerMissionStore(storage: JsonlServerEventStorage): Miss
           `mission events rejected: ${rejected.map((result) => `${result.eventId}:${result.status}`).join(", ")}`,
         );
       }
+    },
+    // E1: 검증 명령을 repo root에서 실제로 실행하고 종료코드를 관측한다.
+    // 보안은 LocalSandboxRunner 내부의 공유 allowlist 게이트가 책임진다 —
+    // allowlist 밖이거나 셸 메타문자가 있으면 실행 자체가 안 되고 skipped.
+    runVerification: async ({ commands, missionId, verifierAgentId, reportId }) => {
+      const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+      return runLocalMissionVerification({
+        commands,
+        missionId,
+        verifierAgentId,
+        reportId,
+        now: () => new Date().toISOString(),
+        exec: async (cmd, args) => {
+          try {
+            const { stdout, stderr } = await execFileAsync(cmd, args, {
+              cwd: repoRoot,
+              env: getFilteredSubprocessEnv({}),
+              timeout: Number(process.env.MISSION_VERIFY_TIMEOUT_MS ?? 180_000),
+              maxBuffer: 4_000_000,
+              windowsHide: true,
+            });
+            return { exitCode: 0, stdout, stderr, timedOut: false };
+          } catch (error) {
+            const e = error as { code?: number | string; killed?: boolean; signal?: string; stdout?: string; stderr?: string };
+            return {
+              exitCode: typeof e.code === "number" ? e.code : e.code ? 1 : null,
+              stdout: e.stdout ?? "",
+              stderr: e.stderr ?? "",
+              timedOut: e.killed === true || e.signal === "SIGTERM",
+            };
+          }
+        },
+      });
     },
   });
 }
