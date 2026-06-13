@@ -151,6 +151,7 @@ docs/             # 00~45 설계 문서 (아래 주요 항목)
 60     tmux-grid-inline-input (2-col pane grid + full-width detail + per-pane inline command input)
 61     nav-icon-rail (264→56px icon-only nav rail on nav-center pages; mode/⌘K already unified)
 62     micro-interactions (avatar speaking pulse on active work + queue-cleared stamp slam-in)
+63     coding-model-select-and-error (provider-filtered model dropdown + right-aligned user bubble + actionable error)
 ```
 
 ## 실행 방법

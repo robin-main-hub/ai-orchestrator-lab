@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState , useSyncExternalStore} from "react";
 import { CircleStop, FileDiff, GitBranch, Hammer, PanelRightOpen, Plus, RotateCcw, Send, ShieldCheck, Telescope, Terminal, Trash2, XCircle } from "lucide-react";
-import type { ProviderProfile, TmuxPaneRole } from "@ai-orchestrator/protocol";
+import type { ModelDescriptor, ProviderProfile, TmuxPaneRole } from "@ai-orchestrator/protocol";
 import { StatusBadge } from "@/ui/status-badge";
 import {
   addUsage,
@@ -42,6 +42,7 @@ import {
   type WorkbenchMission,
 } from "../../lib/workbenchMissions";
 import { CodingThread } from "./CodingThread";
+import { humanizeCodingError } from "../../lib/codingErrorMessage";
 
 
 
@@ -64,11 +65,14 @@ export function CodingWorkbench({
   sessionId = "session_desktop_coding",
   serverBaseUrl,
   providerProfiles = [],
+  modelCatalog = {},
   workingDir,
 }: {
   sessionId?: string;
   serverBaseUrl?: string | string[];
   providerProfiles?: ProviderProfile[];
+  /** providerProfileId → 발견된 모델 목록. 모델 입력을 텍스트가 아닌 드롭다운으로 채운다. */
+  modelCatalog?: Record<string, ModelDescriptor[]>;
   workingDir?: string;
 }) {
   const [sessions, setSessions] = useState<CodingSession[]>(() => loadCodingSessions());
@@ -85,7 +89,7 @@ export function CodingWorkbench({
   const setMissions = workbenchMissionStore.setMissions;
   const [approvalMode, setApprovalMode] = useState<AutonomyMode>("human");
   const cancelRef = useRef(false);
-  const modelSelectRef = useRef<HTMLInputElement | null>(null);
+  const modelSelectRef = useRef<HTMLSelectElement | null>(null);
   // P0-3: read/write로 본 파일 내용을 세션 동안 누적 → repo-map(자동 파일 선택) 인덱스
   const fileCacheRef = useRef<Map<string, string>>(new Map());
   // P0-3 후속: 세션 첫 턴에 전체 레포를 인덱싱한 repo-map(scripts/repo-map.mjs 출력)
@@ -535,13 +539,40 @@ export function CodingWorkbench({
           </label>
           <label>
             모델
-            <input
-              ref={modelSelectRef}
-              value={active?.modelId ?? ""}
-              onChange={(event) => active && patchSession(active.id, (current) => ({ ...current, modelId: event.target.value }))}
-              placeholder={providerProfiles.find((profile) => profile.id === active?.providerProfileId)?.defaultModel ?? "모델 ID"}
-              disabled={!active || running}
-            />
+            {(() => {
+              const providerId = active?.providerProfileId;
+              const catalog = providerId ? modelCatalog[providerId] ?? [] : [];
+              const defaultModel = providerProfiles.find((profile) => profile.id === providerId)?.defaultModel;
+              // 프로바이더 선택 시 그 프로바이더의 모델만 탑다운으로. 카탈로그가 비어도
+              // defaultModel과 현재 선택 모델은 항상 옵션으로 남겨 선택을 잃지 않는다.
+              const ids = Array.from(
+                new Set(
+                  [
+                    ...catalog.map((model) => model.id),
+                    defaultModel,
+                    active?.modelId || undefined,
+                  ].filter((value): value is string => Boolean(value)),
+                ),
+              );
+              const labelFor = (id: string) => catalog.find((model) => model.id === id)?.name ?? id;
+              return (
+                <select
+                  ref={modelSelectRef}
+                  value={active?.modelId ?? ""}
+                  onChange={(event) =>
+                    active && patchSession(active.id, (current) => ({ ...current, modelId: event.target.value }))
+                  }
+                  disabled={!active || !providerId || running}
+                >
+                  <option value="">{providerId ? "모델 선택…" : "프로바이더 먼저 선택"}</option>
+                  {ids.map((id) => (
+                    <option key={id} value={id}>
+                      {labelFor(id)}
+                    </option>
+                  ))}
+                </select>
+              );
+            })()}
           </label>
           <label>
             승인 모드
@@ -581,7 +612,9 @@ export function CodingWorkbench({
             </span>
           ) : null}
           {active?.status === "error" && active.error ? (
-            <StatusBadge variant="danger">{active.error.slice(0, 80)}</StatusBadge>
+            <StatusBadge variant="danger">
+              <span title={active.error}>{humanizeCodingError(active.error)}</span>
+            </StatusBadge>
           ) : null}
         </header>
 
