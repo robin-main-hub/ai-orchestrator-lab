@@ -5,10 +5,13 @@ import {
   buildMissionCreateFromTemplate,
   deriveMissionKanbanBoard,
   deriveMissionTrace,
+  derivePreviewPort,
   DESIGN_TEAM,
   findWorkflowTemplate,
   missingRequiredFields,
   missionFromBlueprintRequestSchema,
+  previewFromProbe,
+  previewProbeRequestSchema,
   missionCheckpointCreateRequestSchema,
   missionCreateRequestSchema,
   missionEventAppendRequestSchema,
@@ -52,6 +55,8 @@ export type MissionRouteDependencies = {
   /** checkpoint/rollback 실행기 — index.ts에서 실제 git + allowlist + 승인검증으로 주입. 미주입이면 501. */
   runCheckpoint?: (missionId: string, req: MissionCheckpointCreateRequest) => Promise<CheckpointResult>;
   runRollback?: (missionId: string, req: MissionRollbackRequest) => Promise<MissionRollbackOutcome>;
+  /** D4: preview 포트 실제 바인딩 probe(TCP). index.ts에서 net.connect로 주입. 미주입이면 501. */
+  probePreview?: (input: { host: string; port: number }) => Promise<boolean>;
 };
 
 const MISSION_PATH = /^\/missions\/([^/]+)$/;
@@ -64,6 +69,7 @@ const MISSION_ROLLBACK_PATH = /^\/missions\/([^/]+)\/rollback$/;
 const MISSION_SKILLS_PATH = /^\/missions\/([^/]+)\/skills$/;
 const MISSION_SKILL_CURATE_PATH = /^\/missions\/([^/]+)\/skills\/([^/]+)\/curate$/;
 const MISSION_WORKSPACE_PATH = /^\/missions\/([^/]+)\/workspace$/;
+const MISSION_PREVIEW_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/preview$/;
 
 export async function handleMissionRoute({
   store,
@@ -75,6 +81,7 @@ export async function handleMissionRoute({
   respondJson,
   runCheckpoint,
   runRollback,
+  probePreview,
 }: MissionRouteDependencies): Promise<boolean> {
   if (pathname === "/missions" && method === "POST") {
     let payload: MissionCreateRequest;
@@ -440,6 +447,45 @@ export async function handleMissionRoute({
       return true;
     }
     respondJson(201, { mission });
+    return true;
+  }
+
+  // D4: preview probe(probe-only) — deterministic 포트의 실제 바인딩을 관측해 기록한다.
+  // observed는 바인딩 성공 시만(가짜 running 금지). dev 서버 spawn은 호출 측/후속 책임.
+  const previewMatch = MISSION_PREVIEW_PATH.exec(pathname);
+  if (previewMatch && method === "POST") {
+    const missionId = decodeURIComponent(previewMatch[1]!);
+    const workspaceId = decodeURIComponent(previewMatch[2]!);
+    if (!probePreview) {
+      respondJson(501, { error: "preview_probe_not_configured" });
+      return true;
+    }
+    const mission = await store.get(missionId);
+    const workspace = mission?.workspaces?.find((ws) => ws.id === workspaceId);
+    if (!workspace) {
+      respondJson(404, { error: "workspace_not_found", missionId, workspaceId });
+      return true;
+    }
+    let payload;
+    try {
+      payload = previewProbeRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, { error: "invalid_preview_payload", message: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    const port = payload.port ?? derivePreviewPort(workspaceId);
+    const bound = await probePreview({ host: payload.host, port });
+    const preview = previewFromProbe({ bound, host: payload.host, port });
+    const updated = await store.recordPreview(missionId, workspaceId, preview);
+    if (!updated) {
+      respondJson(404, { error: "workspace_not_found", missionId, workspaceId });
+      return true;
+    }
+    respondJson(200, { mission: updated, preview });
     return true;
   }
 

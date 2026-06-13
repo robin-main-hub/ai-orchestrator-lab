@@ -183,6 +183,45 @@ describe("mission board routes", () => {
     expect(result().status).toBe(404);
   });
 
+  function withWorkspace(id: string, wsId: string) {
+    const r = record(id, "running");
+    (r as { workspaces: unknown[] }).workspaces = [{ id: wsId, missionId: id, preview: { status: "not_started", truthStatus: "planned" } }];
+    return r;
+  }
+
+  it("POST preview records observed running when the port is bound", async () => {
+    const recordPreview = vi.fn(async () => withWorkspace("m1", "ws1"));
+    const store = { get: async () => withWorkspace("m1", "ws1"), recordPreview } as unknown as MissionStore;
+    const probePreview = vi.fn(async () => true);
+    const { args, result } = deps(store, "/missions/m1/workspace/ws1/preview", "POST", { host: "127.0.0.1" }, { probePreview });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(200);
+    expect((result().payload as { preview: { truthStatus: string } }).preview.truthStatus).toBe("observed");
+    expect(probePreview).toHaveBeenCalled();
+  });
+
+  it("POST preview records NOT observed when the port is not bound", async () => {
+    const store = { get: async () => withWorkspace("m1", "ws1"), recordPreview: async () => withWorkspace("m1", "ws1") } as unknown as MissionStore;
+    const probePreview = vi.fn(async () => false);
+    const { args, result } = deps(store, "/missions/m1/workspace/ws1/preview", "POST", {}, { probePreview });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect((result().payload as { preview: { truthStatus: string } }).preview.truthStatus).not.toBe("observed");
+  });
+
+  it("POST preview 404s an unknown workspace", async () => {
+    const store = { get: async () => record("m1", "running") } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/m1/workspace/ghost/preview", "POST", {}, { probePreview: async () => true });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(404);
+  });
+
+  it("POST preview 501s when probe is not configured", async () => {
+    const store = { get: async () => withWorkspace("m1", "ws1") } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/m1/workspace/ws1/preview", "POST", {});
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(501);
+  });
+
   const BLUEPRINT = {
     title: "보드 개편",
     userIntent: "한눈에 보기",

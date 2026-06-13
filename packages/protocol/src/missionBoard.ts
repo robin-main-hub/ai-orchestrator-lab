@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { missionWorkspaceAttachedPayloadSchema, type AppWorkspace } from "./appWorkspace.js";
+import {
+  missionWorkspaceAttachedPayloadSchema,
+  missionWorkspacePreviewRecordedPayloadSchema,
+  type AppWorkspace,
+  type AppWorkspacePreview,
+} from "./appWorkspace.js";
 import { missionDesignBlueprintRecordedPayloadSchema, type DesignBlueprint } from "./designBlueprint.js";
 import type { MissionCheckpoint } from "./missionCheckpoint.js";
 import {
@@ -205,6 +210,7 @@ export const missionTraceEventTypeSchema = z.enum([
   "worker.started",
   "checkpoint.created",
   "workspace.attached",
+  "preview.recorded",
   "design.blueprint.recorded",
   "sandbox.preflight",
   "sandbox.exec.started",
@@ -329,6 +335,19 @@ function workspaceTraceEvent(workspace: AppWorkspace): MissionTraceEvent {
   };
 }
 
+function previewTraceEvent(missionId: string, workspaceId: string, preview: AppWorkspacePreview, createdAt: string): MissionTraceEvent {
+  return {
+    id: `${missionId}:preview:${workspaceId}:${preview.status}`,
+    missionId,
+    type: "preview.recorded",
+    severity: preview.status === "running" ? "success" : preview.status === "failed" ? "warning" : "info",
+    title: `프리뷰 · ${preview.status}`,
+    summary: preview.url ? `${preview.url} (${preview.truthStatus})` : `포트 ${preview.port ?? "?"} · ${preview.truthStatus}`,
+    truthStatus: preview.truthStatus, // running+바인딩 관측만 observed
+    createdAt,
+  };
+}
+
 function designBlueprintTraceEvent(blueprint: DesignBlueprint): MissionTraceEvent {
   return {
     id: `${blueprint.missionId}:blueprint:${blueprint.id}`,
@@ -411,7 +430,12 @@ function mergeTraceEvent(item: SequentialMergeQueueItem): MissionTraceEvent {
 export function deriveMissionTrace(record: ServerMissionRecord): MissionTraceEvent[] {
   const events: MissionTraceEvent[] = [createdTraceEvent(record.mission, record.mission.createdAt)];
   for (const worker of record.workers) events.push(workerTraceEvent(worker));
-  for (const workspace of record.workspaces ?? []) events.push(workspaceTraceEvent(workspace));
+  for (const workspace of record.workspaces ?? []) {
+    events.push(workspaceTraceEvent(workspace));
+    if (workspace.preview.status !== "not_started") {
+      events.push(previewTraceEvent(workspace.missionId, workspace.id, workspace.preview, workspace.createdAt));
+    }
+  }
   for (const blueprint of record.designBlueprints ?? []) events.push(designBlueprintTraceEvent(blueprint));
   for (const checkpoint of record.checkpoints ?? []) events.push(checkpointTraceEvent(checkpoint));
   for (const report of record.verificationReports) events.push(verificationTraceEvent(report, report.createdAt));
@@ -448,6 +472,12 @@ export function traceEventFromMissionEnvelope(envelope: {
     case "mission.workspace.attached": {
       const parsed = missionWorkspaceAttachedPayloadSchema.safeParse(envelope.payload);
       return parsed.success ? workspaceTraceEvent(parsed.data.workspace) : null;
+    }
+    case "mission.workspace.preview.recorded": {
+      const parsed = missionWorkspacePreviewRecordedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success
+        ? previewTraceEvent(parsed.data.missionId, parsed.data.workspaceId, parsed.data.preview, envelope.createdAt)
+        : null;
     }
     case "mission.design.blueprint.recorded": {
       const parsed = missionDesignBlueprintRecordedPayloadSchema.safeParse(envelope.payload);

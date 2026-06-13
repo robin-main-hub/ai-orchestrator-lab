@@ -10,6 +10,7 @@ import {
   missionVerificationRecordedPayloadSchema,
   missionWorkerAssignedPayloadSchema,
   missionWorkspaceAttachedPayloadSchema,
+  missionWorkspacePreviewRecordedPayloadSchema,
   type EventEnvelope,
   type OrchestrationMissionStatus,
   type ServerMissionRecord,
@@ -149,6 +150,19 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
       } else {
         record.workspaces.push(parsed.data.workspace);
       }
+      record.updatedAt = event.createdAt;
+      continue;
+    }
+
+    if (event.type === "mission.workspace.preview.recorded") {
+      const parsed = missionWorkspacePreviewRecordedPayloadSchema.safeParse(event.payload);
+      const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
+      const workspace = record?.workspaces.find((ws) => ws.id === parsed.data?.workspaceId);
+      if (!parsed.success || !record || !workspace) {
+        continue;
+      }
+      // 워크스페이스의 preview만 갱신(observed는 실제 바인딩 관측 시만 — payload가 정직)
+      workspace.preview = parsed.data.preview;
       record.updatedAt = event.createdAt;
       continue;
     }

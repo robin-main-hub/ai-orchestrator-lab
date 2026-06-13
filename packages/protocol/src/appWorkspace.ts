@@ -86,3 +86,46 @@ export function buildAppWorkspace(
     createdAt: opts.now(),
   };
 }
+
+// ── Preview (D4: probe-only) ─────────────────────────────────────────────────
+// Dyad식 "바로 본다"의 정직한 1차: deterministic 포트 + 실제 포트 바인딩을 **관측**한
+// 결과만 observed로 기록한다. dev 서버 spawn/lifecycle 관리는 후속(여기서는 관측만).
+
+/**
+ * workspace id로 결정되는 안정적 preview 포트(순수). 같은 워크스페이스는 항상 같은
+ * 포트를 받는다(deterministic — Dyad의 deterministic preview ports에 대응).
+ */
+export function derivePreviewPort(workspaceId: string, opts: { base?: number; span?: number } = {}): number {
+  const base = opts.base ?? 4400;
+  const span = opts.span ?? 600;
+  let hash = 0;
+  for (let i = 0; i < workspaceId.length; i += 1) {
+    hash = (hash * 31 + workspaceId.charCodeAt(i)) >>> 0;
+  }
+  return base + (hash % span);
+}
+
+export const previewProbeRequestSchema = z.object({
+  host: z.string().max(255).default("127.0.0.1"),
+  /** 미지정이면 derivePreviewPort(workspaceId) */
+  port: z.number().int().min(1).max(65_535).optional(),
+});
+export type PreviewProbeRequest = z.infer<typeof previewProbeRequestSchema>;
+
+/**
+ * 포트 probe 결과 → workspace preview. **observed는 실제 바인딩을 관측했을 때만**.
+ * 미바인딩은 failed/configured(시도했으나 서빙 안 함 — 가짜 running 금지).
+ */
+export function previewFromProbe(input: { bound: boolean; host: string; port: number }): AppWorkspacePreview {
+  if (input.bound) {
+    return { status: "running", port: input.port, url: `http://${input.host}:${input.port}`, truthStatus: "observed" };
+  }
+  return { status: "failed", port: input.port, truthStatus: "configured" };
+}
+
+export const missionWorkspacePreviewRecordedPayloadSchema = z.object({
+  missionId: z.string(),
+  workspaceId: z.string(),
+  preview: appWorkspacePreviewSchema,
+});
+export type MissionWorkspacePreviewRecordedPayload = z.infer<typeof missionWorkspacePreviewRecordedPayloadSchema>;
