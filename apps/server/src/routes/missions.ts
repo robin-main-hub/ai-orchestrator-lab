@@ -1,8 +1,10 @@
 import type { IncomingMessage } from "node:http";
 import {
   appWorkspaceAttachRequestSchema,
+  BUSINESS_DOMAIN_PACK_TEMPLATES,
   buildMissionCreateFromBlueprint,
   buildMissionCreateFromTemplate,
+  CORE_WORKFLOW_TEMPLATES,
   deriveMissionKanbanBoard,
   deriveMissionTrace,
   derivePreviewPort,
@@ -131,7 +133,12 @@ export async function handleMissionRoute({
       respondJson(400, { error: "invalid_mission_from_template_payload", message: error instanceof Error ? error.message : String(error) });
       return true;
     }
-    const template = findWorkflowTemplate(payload.templateId);
+    // 기본 registry는 코어(generic)뿐. 회사 도메인 팩은 env 플래그를 켰을 때만 합쳐진다(격리).
+    const businessPackEnabled = process.env.ORCHESTRATOR_ENABLE_DOMAIN_PACK_BUSINESS === "1";
+    const registry = businessPackEnabled
+      ? [...CORE_WORKFLOW_TEMPLATES, ...BUSINESS_DOMAIN_PACK_TEMPLATES]
+      : CORE_WORKFLOW_TEMPLATES;
+    const template = findWorkflowTemplate(payload.templateId, registry);
     if (!template) {
       respondJson(404, { error: "workflow_template_not_found", templateId: payload.templateId });
       return true;
