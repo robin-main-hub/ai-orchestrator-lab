@@ -31,6 +31,8 @@ import {
   type MissionVerifyRequest,
   type SandboxErrorCard,
   type ServerMissionRecord,
+  type ScaffoldApplyResult,
+  type ScaffoldPlan,
   type SkillArchiveCandidate,
   type VerificationReport,
   type VisualQaReport,
@@ -120,6 +122,12 @@ export type MissionStore = {
   ) => Promise<ServerMissionRecord | undefined>;
   /** D5b: Visual QA 리포트 + 디자인 이슈 기록. 미션 없으면 undefined. */
   recordVisualQa: (missionId: string, report: VisualQaReport) => Promise<ServerMissionRecord | undefined>;
+  /** D7: 스캐폴드 계획 기록(planned, 쓰기 없음). 미션 없으면 undefined. */
+  recordScaffoldPlan: (missionId: string, plan: ScaffoldPlan) => Promise<ServerMissionRecord | undefined>;
+  /** D7: 스캐폴드 적용 결과 기록(observed). plan 찾으면 record + 갱신, 아니면 undefined. */
+  recordScaffoldApply: (missionId: string, planId: string, result: ScaffoldApplyResult) => Promise<ServerMissionRecord | undefined>;
+  /** D7: 한 계획을 id로 조회(apply 라우트가 plan을 재구성하는 데 씀). */
+  getScaffoldPlan: (missionId: string, planId: string) => Promise<ScaffoldPlan | undefined>;
 };
 
 /** 머지 실행기 — repoRoot allowlist에 있으면 real git merge, 아니면 dry_run */
@@ -289,6 +297,32 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
       type: "mission.design.issue.recorded",
       payload: { missionId, issue },
       createdAt: issue.createdAt,
+      source: "server",
+      sourceTrust: "trusted",
+      redacted: true,
+    };
+  }
+
+  function scaffoldPlannedEnvelope(missionId: string, plan: ScaffoldPlan): EventEnvelope {
+    return {
+      id: `event_mission_scaffold_planned_${plan.id}`,
+      sessionId: missionId,
+      type: "mission.scaffold.planned",
+      payload: { missionId, plan },
+      createdAt: plan.createdAt,
+      source: "server",
+      sourceTrust: "trusted",
+      redacted: true,
+    };
+  }
+
+  function scaffoldAppliedEnvelope(missionId: string, planId: string, result: ScaffoldApplyResult): EventEnvelope {
+    return {
+      id: `event_mission_scaffold_applied_${planId}_${result.appliedAt}`,
+      sessionId: missionId,
+      type: "mission.scaffold.applied",
+      payload: { missionId, planId, result },
+      createdAt: result.appliedAt,
       source: "server",
       sourceTrust: "trusted",
       redacted: true,
@@ -782,6 +816,24 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
         ...report.issues.map((issue) => designIssueRecordedEnvelope(missionId, issue)),
       ]);
       return get(missionId);
+    },
+
+    async recordScaffoldPlan(missionId, plan) {
+      if (!(await get(missionId))) return undefined;
+      await commit(missionId, [scaffoldPlannedEnvelope(missionId, plan)]);
+      return get(missionId);
+    },
+
+    async recordScaffoldApply(missionId, planId, result) {
+      const existing = await get(missionId);
+      if (!existing || !existing.scaffoldPlans.some((p) => p.id === planId)) return undefined;
+      await commit(missionId, [scaffoldAppliedEnvelope(missionId, planId, result)]);
+      return get(missionId);
+    },
+
+    async getScaffoldPlan(missionId, planId) {
+      const record = await get(missionId);
+      return record?.scaffoldPlans.find((p) => p.id === planId);
     },
   };
 }

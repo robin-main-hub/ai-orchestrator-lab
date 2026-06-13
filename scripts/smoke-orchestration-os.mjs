@@ -141,10 +141,20 @@ async function main() {
 
   const base = mkdtempSync(join(process.env.SMOKE_OUT_DIR ?? tmpdir(), "smoke-orch-os-"));
   const repo = join(base, "repo");
+  const scaffoldRepo = join(base, "scaffold-repo");
   const storage = join(base, "storage");
   const skillsOut = join(base, "skills");
   mkdirSync(storage, { recursive: true });
   setupTempRepo(repo);
+  // 스캐폴드 대상은 별도 repo(merge repo를 더럽히지 않게) — checkpoint용 git init.
+  mkdirSync(scaffoldRepo, { recursive: true });
+  git(scaffoldRepo, ["init", "-q"]);
+  git(scaffoldRepo, ["config", "user.email", "smoke@local"]);
+  git(scaffoldRepo, ["config", "user.name", "smoke"]);
+  git(scaffoldRepo, ["config", "commit.gpgsign", "false"]);
+  writeFileSync(join(scaffoldRepo, ".keep"), "");
+  git(scaffoldRepo, ["add", "-A"]);
+  git(scaffoldRepo, ["commit", "-q", "-m", "init"]);
   console.log(`[smoke] temp base: ${base}`);
 
   const env = {
@@ -152,7 +162,7 @@ async function main() {
     PORT: String(PORT),
     EVENT_STORAGE_DIR: storage,
     ORCHESTRATOR_API_TOKEN: TOKEN,
-    ORCHESTRATOR_ALLOWED_REPO_ROOTS: repo,
+    ORCHESTRATOR_ALLOWED_REPO_ROOTS: `${repo},${scaffoldRepo}`,
     ORCHESTRATOR_CHECKPOINT_REPO_ROOT: repo,
     ORCHESTRATOR_ALLOWED_MERGE_TARGETS: "main",
     ORCHESTRATOR_SANDBOX_RUNNER: "local",
@@ -211,6 +221,21 @@ async function main() {
       // 1e) preview stop — 프로세스 정리(유령 dev 서버 방지)
       const stopped = await api("POST", `/missions/${missionId}/workspace/${workspaceId}/preview/stop`, {});
       record("preview stop", stopped.status === 200 && stopped.json?.preview?.status === "stopped", false, stopped.json?.preview?.status ?? `status ${stopped.status}`);
+    }
+
+    // 1f) 스캐폴드 plan/apply — 별도 scaffold repo에 react_vite_app을 실제로 기록(observed)
+    const ws2Resp = await api("POST", `/missions/${missionId}/workspace`, { repoRootRef: scaffoldRepo, appType: "react_vite", terminalMode: "build", runnerKind: "local" });
+    const ws2 = (ws2Resp.json?.mission?.workspaces ?? []).find((w) => w.repoRootRef === scaffoldRepo)?.id;
+    if (ws2) {
+      const plan = await api("POST", `/missions/${missionId}/workspace/${ws2}/scaffold/plan`, { templateId: "react_vite_app", input: { appName: "smoke-app" } });
+      const pl = plan.json?.plan;
+      record("scaffold plan (planned, no write)", plan.status === 201 && pl && pl.truthStatus === "planned" && pl.files.length > 0, true, pl ? `${pl.files.length} files, overwrite ${pl.hasOverwrites}` : `status ${plan.status}`);
+      if (pl) {
+        const applied = await api("POST", `/missions/${missionId}/scaffold/${pl.id}/apply`, { planId: pl.id });
+        const ar = applied.json?.result;
+        const wrote = existsSync(join(scaffoldRepo, "package.json")) && existsSync(join(scaffoldRepo, "src", "App.tsx"));
+        record("scaffold apply (observed, real files written)", applied.status === 200 && ar && ar.status === "applied" && ar.observed && wrote, true, ar ? `${ar.appliedPaths?.length ?? 0} files${ar.checkpointSha ? ` cp ${ar.checkpointSha.slice(0, 10)}` : ""}` : `status ${applied.status}`);
+      }
     }
 
     // 2) checkpoint(observed sha) — temp repo

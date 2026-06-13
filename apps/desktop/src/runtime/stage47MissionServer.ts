@@ -14,6 +14,9 @@ import type {
   MissionTraceEvent,
   MissionVerifyRequest,
   PreviewProbeRequest,
+  ScaffoldApplyResult,
+  ScaffoldPlan,
+  ScaffoldPlanRequest,
   ServerMissionRecord,
   SkillArchiveCandidate,
   VisualQaReport,
@@ -255,6 +258,47 @@ export async function stopDgxPreview({
     method: "POST",
     path: `/missions/${encodeURIComponent(missionId)}/workspace/${encodeURIComponent(workspaceId)}/preview/stop`,
     body: {},
+    serverBaseUrl,
+    fetchImpl,
+    timeoutMs,
+  });
+}
+
+export type MissionScaffoldPlanResponse = { mission: ServerMissionRecord; plan: ScaffoldPlan };
+export type MissionScaffoldApplyResponse = { mission?: ServerMissionRecord; result: ScaffoldApplyResult };
+
+/** D7: 스캐폴드 plan(쓰기 없음 — 무엇이 생성/덮어쓰기될지) */
+export async function planDgxScaffold({
+  missionId,
+  workspaceId,
+  request,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 8_000,
+}: MissionServerRequestInput & { missionId: string; workspaceId: string; request: ScaffoldPlanRequest }): Promise<MissionScaffoldPlanResponse> {
+  return requestMissionServerJson<MissionScaffoldPlanResponse>({
+    method: "POST",
+    path: `/missions/${encodeURIComponent(missionId)}/workspace/${encodeURIComponent(workspaceId)}/scaffold/plan`,
+    body: request,
+    serverBaseUrl,
+    fetchImpl,
+    timeoutMs,
+  });
+}
+
+/** D7: 스캐폴드 apply(실제 쓰기 — overwrite는 approvalId 필요) */
+export async function applyDgxScaffold({
+  missionId,
+  planId,
+  approvalId,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 10_000,
+}: MissionServerRequestInput & { missionId: string; planId: string; approvalId?: string }): Promise<MissionScaffoldApplyResponse> {
+  return requestMissionServerJson<MissionScaffoldApplyResponse>({
+    method: "POST",
+    path: `/missions/${encodeURIComponent(missionId)}/scaffold/${encodeURIComponent(planId)}/apply`,
+    body: { planId, approvalId },
     serverBaseUrl,
     fetchImpl,
     timeoutMs,

@@ -17,6 +17,8 @@ import {
   previewFromProbe,
   previewProbeRequestSchema,
   previewStartRequestSchema,
+  scaffoldApplyRequestSchema,
+  scaffoldPlanRequestSchema,
   missionCheckpointCreateRequestSchema,
   missionCreateRequestSchema,
   missionEventAppendRequestSchema,
@@ -34,6 +36,8 @@ import {
   type DesignTargetSurface,
   type MissionFromBlueprintRequest,
   type MissionFromDebateRequest,
+  type ScaffoldApplyResult,
+  type ScaffoldPlan,
   type VisualQaReport,
   type MissionFromTemplateRequest,
   type MissionRollbackOutcome,
@@ -71,6 +75,9 @@ export type MissionRouteDependencies = {
   stopPreview?: (input: { missionId: string; workspaceId: string }) => Promise<AppWorkspacePreview>;
   /** D5b: Visual QA 실행기(observed preview HTML/DOM 관측 → 리포트). 미주입이면 501. */
   runVisualQa?: (input: { missionId: string; workspaceId: string; previewUrl: string }) => Promise<VisualQaReport>;
+  /** D7: 스캐폴드 plan(쓰기 없음)/apply(approval/checkpoint 뒤 쓰기). 미주입이면 501. */
+  planScaffold?: (input: { missionId: string; workspaceId: string; templateId: string; input: Record<string, string | number>; repoRoot: string }) => Promise<{ ok: true; plan: ScaffoldPlan } | { ok: false; reason: string }>;
+  applyScaffold?: (input: { plan: ScaffoldPlan; approvalId?: string }) => Promise<ScaffoldApplyResult>;
 };
 
 const MISSION_PATH = /^\/missions\/([^/]+)$/;
@@ -87,6 +94,8 @@ const MISSION_PREVIEW_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/preview$
 const MISSION_PREVIEW_START_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/preview\/start$/;
 const MISSION_PREVIEW_STOP_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/preview\/stop$/;
 const MISSION_VISUAL_QA_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/visual-qa$/;
+const MISSION_SCAFFOLD_PLAN_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/scaffold\/plan$/;
+const MISSION_SCAFFOLD_APPLY_PATH = /^\/missions\/([^/]+)\/scaffold\/([^/]+)\/apply$/;
 
 export async function handleMissionRoute({
   store,
@@ -102,6 +111,8 @@ export async function handleMissionRoute({
   startPreview,
   stopPreview,
   runVisualQa,
+  planScaffold,
+  applyScaffold,
 }: MissionRouteDependencies): Promise<boolean> {
   if (pathname === "/missions" && method === "POST") {
     let payload: MissionCreateRequest;
@@ -622,6 +633,74 @@ export async function handleMissionRoute({
     const report = await runVisualQa({ missionId, workspaceId, previewUrl });
     const updated = await store.recordVisualQa(missionId, report);
     respondJson(200, { mission: updated ?? mission, report });
+    return true;
+  }
+
+  // D7: 스캐폴드 plan — 무엇이 생성/덮어쓰기될지 계산만(쓰기 없음, planned).
+  const scaffoldPlanMatch = MISSION_SCAFFOLD_PLAN_PATH.exec(pathname);
+  if (scaffoldPlanMatch && method === "POST") {
+    const missionId = decodeURIComponent(scaffoldPlanMatch[1]!);
+    const workspaceId = decodeURIComponent(scaffoldPlanMatch[2]!);
+    if (!planScaffold) {
+      respondJson(501, { error: "scaffold_not_configured" });
+      return true;
+    }
+    const mission = await store.get(missionId);
+    const workspace = mission?.workspaces?.find((ws) => ws.id === workspaceId);
+    if (!workspace) {
+      respondJson(404, { error: "workspace_not_found", missionId, workspaceId });
+      return true;
+    }
+    let payload;
+    try {
+      payload = scaffoldPlanRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, { error: "invalid_scaffold_plan_payload", message: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    const result = await planScaffold({ missionId, workspaceId, templateId: payload.templateId, input: payload.input, repoRoot: workspace.repoRootRef });
+    if (!result.ok) {
+      respondJson(409, { error: "scaffold_plan_blocked", reason: result.reason });
+      return true;
+    }
+    const updated = await store.recordScaffoldPlan(missionId, result.plan);
+    respondJson(201, { mission: updated ?? mission, plan: result.plan });
+    return true;
+  }
+
+  // D7: 스캐폴드 apply — 실제 파일 기록(observed). overwrite는 approval, 적용 전 checkpoint.
+  const scaffoldApplyMatch = MISSION_SCAFFOLD_APPLY_PATH.exec(pathname);
+  if (scaffoldApplyMatch && method === "POST") {
+    const missionId = decodeURIComponent(scaffoldApplyMatch[1]!);
+    const planId = decodeURIComponent(scaffoldApplyMatch[2]!);
+    if (!applyScaffold) {
+      respondJson(501, { error: "scaffold_not_configured" });
+      return true;
+    }
+    const plan = await store.getScaffoldPlan(missionId, planId);
+    if (!plan) {
+      respondJson(404, { error: "scaffold_plan_not_found", missionId, planId });
+      return true;
+    }
+    let payload;
+    try {
+      payload = scaffoldApplyRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, { error: "invalid_scaffold_apply_payload", message: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    const result = await applyScaffold({ plan, approvalId: payload.approvalId });
+    const updated = await store.recordScaffoldApply(missionId, planId, result);
+    const code = result.status === "applied" ? 200 : result.status === "blocked" ? 409 : 500;
+    respondJson(code, { mission: updated, result });
     return true;
   }
 

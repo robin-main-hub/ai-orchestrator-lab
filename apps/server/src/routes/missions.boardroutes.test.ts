@@ -290,6 +290,45 @@ describe("mission board routes", () => {
     expect(result().status).toBe(501);
   });
 
+  const samplePlan = { id: "sc1", missionId: "m1", workspaceId: "ws1", templateId: "react_vite_app", input: { appName: "demo" }, repoRootRef: "/repo", files: [{ path: "package.json", action: "create", bytes: 10, contentPreview: "{}" }], hasOverwrites: false, truthStatus: "planned", createdAt: "t" };
+
+  it("POST scaffold/plan returns a planned diff (no write)", async () => {
+    const planScaffold = vi.fn(async () => ({ ok: true as const, plan: samplePlan }));
+    const store = { get: async () => withWorkspace("m1", "ws1"), recordScaffoldPlan: async () => withWorkspace("m1", "ws1") } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/m1/workspace/ws1/scaffold/plan", "POST", { templateId: "react_vite_app", input: { appName: "demo" } }, { planScaffold });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(201);
+    expect((result().payload as { plan: { truthStatus: string } }).plan.truthStatus).toBe("planned");
+  });
+
+  it("POST scaffold/plan 409s when the runner blocks (e.g. repoRoot not allowlisted)", async () => {
+    const planScaffold = vi.fn(async () => ({ ok: false as const, reason: "repoRoot not allowlisted" }));
+    const store = { get: async () => withWorkspace("m1", "ws1") } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/m1/workspace/ws1/scaffold/plan", "POST", { templateId: "react_vite_app", input: {} }, { planScaffold });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(409);
+  });
+
+  it("POST scaffold/:planId/apply applies (200) and maps blocked → 409", async () => {
+    const store = { getScaffoldPlan: async () => samplePlan, recordScaffoldApply: async () => withWorkspace("m1", "ws1") } as unknown as MissionStore;
+    const applied = vi.fn(async () => ({ status: "applied", appliedPaths: ["package.json"], reason: "ok", observed: true, appliedAt: "t" }));
+    const { args, result } = deps(store, "/missions/m1/scaffold/sc1/apply", "POST", { planId: "sc1" }, { applyScaffold: applied });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(200);
+
+    const blocked = vi.fn(async () => ({ status: "blocked", appliedPaths: [], reason: "needs approval", observed: true, appliedAt: "t" }));
+    const { args: a2, result: r2 } = deps(store, "/missions/m1/scaffold/sc1/apply", "POST", { planId: "sc1" }, { applyScaffold: blocked });
+    expect(await handleMissionRoute(a2)).toBe(true);
+    expect(r2().status).toBe(409);
+  });
+
+  it("POST scaffold apply 404s an unknown plan", async () => {
+    const store = { getScaffoldPlan: async () => undefined } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/m1/scaffold/ghost/apply", "POST", { planId: "ghost" }, { applyScaffold: async () => ({}) as never });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(404);
+  });
+
   const BLUEPRINT = {
     title: "보드 개편",
     userIntent: "한눈에 보기",

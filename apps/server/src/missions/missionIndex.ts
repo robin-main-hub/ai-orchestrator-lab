@@ -5,6 +5,8 @@ import {
   missionCreatedPayloadSchema,
   missionDesignBlueprintRecordedPayloadSchema,
   missionDesignIssueRecordedPayloadSchema,
+  missionScaffoldAppliedPayloadSchema,
+  missionScaffoldPlannedPayloadSchema,
   missionVisualQaRecordedPayloadSchema,
   missionErrorCardRecordedPayloadSchema,
   missionMergeQueuedPayloadSchema,
@@ -92,6 +94,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
         designBlueprints: [],
         visualQaReports: [],
         designIssues: [],
+        scaffoldPlans: [],
         updatedAt: event.createdAt,
       });
       continue;
@@ -200,6 +203,29 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
         continue;
       }
       record.designIssues.push(parsed.data.issue);
+      record.updatedAt = event.createdAt;
+      continue;
+    }
+
+    if (event.type === "mission.scaffold.planned") {
+      const parsed = missionScaffoldPlannedPayloadSchema.safeParse(event.payload);
+      const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
+      if (!parsed.success || !record || record.scaffoldPlans.some((p) => p.id === parsed.data.plan.id)) {
+        continue;
+      }
+      record.scaffoldPlans.push(parsed.data.plan);
+      record.updatedAt = event.createdAt;
+      continue;
+    }
+
+    if (event.type === "mission.scaffold.applied") {
+      const parsed = missionScaffoldAppliedPayloadSchema.safeParse(event.payload);
+      const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
+      const plan = record?.scaffoldPlans.find((p) => p.id === parsed.data?.planId);
+      if (!parsed.success || !record || !plan) {
+        continue;
+      }
+      plan.apply = parsed.data.result; // plan에 apply 결과를 채운다(observed)
       record.updatedAt = event.createdAt;
       continue;
     }
