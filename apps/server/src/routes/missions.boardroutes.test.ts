@@ -137,18 +137,23 @@ describe("mission board routes", () => {
     expect(result().status).toBe(404);
   });
 
-  const HTV_INPUT = { productType: "x", material: "y", quantity: 1, size: "A4", color: "s", leadTime: "30d", incoterms: "FOB" };
-
-  it("POST /missions/from-template creates a mission and attaches planned artifacts", async () => {
+  it("POST /missions/from-template creates a mission from a GENERIC core template", async () => {
     const create = vi.fn(async () => record("m_tpl_1", "running"));
     const appendEvent = vi.fn(async () => record("m_tpl_1", "running"));
     const store = { create, appendEvent } as unknown as MissionStore;
-    const { args, result } = deps(store, "/missions/from-template", "POST", { templateId: "example-domain_htv_quote", missionId: "m_tpl_1", input: HTV_INPUT });
+    const { args, result } = deps(store, "/missions/from-template", "POST", { templateId: "react_vite_app", missionId: "m_tpl_1", input: { appName: "demo" } });
     expect(await handleMissionRoute(args)).toBe(true);
     expect(result().status).toBe(201);
     expect(create).toHaveBeenCalled();
     expect(appendEvent).toHaveBeenCalled(); // planned artifacts attached
     expect((result().payload as { verificationPlan: unknown[] }).verificationPlan.length).toBeGreaterThan(0);
+  });
+
+  it("POST /missions/from-template 404s a quarantined business template by default", async () => {
+    const store = {} as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/from-template", "POST", { templateId: "example-domain_htv_quote", input: {} });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(404); // 회사 도메인 팩은 기본 registry에 없음
   });
 
   it("POST /missions/from-template 404s an unknown template", async () => {
@@ -160,11 +165,11 @@ describe("mission board routes", () => {
 
   it("POST /missions/from-template 400s with the missing required fields", async () => {
     const store = {} as unknown as MissionStore;
-    const { args, result } = deps(store, "/missions/from-template", "POST", { templateId: "example-domain_htv_quote", input: { productType: "x" } });
+    const { args, result } = deps(store, "/missions/from-template", "POST", { templateId: "react_vite_app", input: {} });
     expect(await handleMissionRoute(args)).toBe(true);
     const { status, payload } = result();
     expect(status).toBe(400);
-    expect((payload as { missingFields: string[] }).missingFields).toContain("material");
+    expect((payload as { missingFields: string[] }).missingFields).toContain("appName");
   });
 
   it("POST /missions/:id/workspace attaches an app workspace", async () => {
