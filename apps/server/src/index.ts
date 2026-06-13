@@ -5321,6 +5321,9 @@ export function createServerMissionStore(storage: JsonlServerEventStorage): Miss
     // 떨어지지 않음). 명령 allowlist(safeCommandPolicy)는 각 runner 내부 게이트가 책임진다.
     runVerification: async ({ commands, missionId, verifierAgentId, verifierCapabilityMode, reportId }) => {
       const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+      // 검증을 실행할 작업 디렉터리 — 기본은 서버 repo root, ORCHESTRATOR_VERIFY_CWD로
+      // 격리된 worktree/temp repo를 가리킬 수 있다(스모크가 실제 repo를 안 건드리게).
+      const verifyCwd = process.env.ORCHESTRATOR_VERIFY_CWD?.trim() || repoRoot;
       const timeoutMs = Number(process.env.MISSION_VERIFY_TIMEOUT_MS ?? 180_000);
       const selection = selectVerificationRunner({
         requested: process.env.ORCHESTRATOR_SANDBOX_RUNNER,
@@ -5333,7 +5336,7 @@ export function createServerMissionStore(storage: JsonlServerEventStorage): Miss
       const localExec: LocalExecFn = async (cmd, args) => {
         try {
           const { stdout, stderr } = await execFileAsync(cmd, args, {
-            cwd: repoRoot,
+            cwd: verifyCwd,
             env: getFilteredSubprocessEnv({}),
             timeout: timeoutMs,
             maxBuffer: 4_000_000,
@@ -5394,7 +5397,7 @@ export function createServerMissionStore(storage: JsonlServerEventStorage): Miss
             return false;
           }
         },
-        worktreePath: repoRoot,
+        worktreePath: verifyCwd,
         timeoutMs,
         now: () => new Date().toISOString(),
       });
