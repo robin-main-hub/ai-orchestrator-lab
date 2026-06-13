@@ -1,16 +1,21 @@
 import {
+  decideSelfCorrection,
   missionArtifactAttachedPayloadSchema,
   missionClosedPayloadSchema,
   missionMergeQueuedPayloadSchema,
   missionVerificationRecordedPayloadSchema,
   missionWorkerAssignmentRequestSchema,
+  parseSandboxError,
+  sandboxErrorSignature,
   type EventEnvelope,
   type MissionCheckpoint,
   type MissionCheckpointReason,
   type MissionCreateRequest,
   type MissionEventAppendRequest,
   type MissionMergeRequest,
+  type MissionSelfCorrectionRecord,
   type MissionVerifyRequest,
+  type SandboxErrorCard,
   type ServerMissionRecord,
   type VerificationReport,
 } from "@ai-orchestrator/protocol";
@@ -54,6 +59,8 @@ export type MissionStoreDeps = {
    * 자동 rollback은 절대 하지 않는다(rollback은 별도 승인 게이트 경로).
    */
   autoCheckpoint?: (missionId: string, reason: MissionCheckpointReason) => Promise<MissionAutoCheckpointOutcome>;
+  /** L4: 에러 카드에 기록할 runner 종류 라벨(예: local/docker/gvisor). 기본 "local". */
+  verificationRunnerKind?: () => string;
 };
 
 /**
@@ -169,6 +176,99 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
       console.warn(`[mission-store] non-critical checkpoint(${reason}) failed for ${missionId}: ${outcome.reason}`);
     }
     // skipped → 이 배포엔 checkpoint가 적용되지 않음(allowlist 없음). 조용히 진행.
+  }
+
+  function errorCardEnvelope(card: SandboxErrorCard, verificationReportId: string): EventEnvelope {
+    return {
+      id: `event_mission_error_card_recorded_${card.id}`,
+      sessionId: card.missionId,
+      type: "mission.error_card.recorded",
+      payload: { missionId: card.missionId, workerId: card.workerId, verificationReportId, errorCard: card },
+      createdAt: card.createdAt,
+      source: "server",
+      sourceTrust: "trusted",
+      redacted: true,
+    };
+  }
+
+  function selfCorrectionEnvelope(record: MissionSelfCorrectionRecord, type: string): EventEnvelope {
+    return {
+      id: `event_${type.replaceAll(".", "_")}_${record.id}`,
+      sessionId: record.missionId,
+      type,
+      payload: record,
+      createdAt: record.createdAt,
+      source: "server",
+      sourceTrust: "trusted",
+      redacted: true,
+    };
+  }
+
+  /** 마지막 observed pass 시각 — self-correction 카운터를 통과 시점에 reset하기 위함. */
+  function lastObservedPassAt(record: ServerMissionRecord): string | undefined {
+    const passes = record.verificationReports
+      .filter((report) => report.observed && report.status === "passed")
+      .map((report) => report.createdAt)
+      .sort();
+    return passes.at(-1);
+  }
+
+  /**
+   * L4+L5: 검증이 실패/blocked면 (1) 결정적 파서로 구조화 에러 카드를 만들어 기록하고,
+   * (2) bounded self-correction을 **제안만** 한다(파일 변경 절대 없음). passed면 아무것도
+   * 하지 않는다 → 자동으로 루프가 reset된다.
+   */
+  async function reactToVerification(input: {
+    missionId: string;
+    existing: ServerMissionRecord; // verify 직전 스냅샷(이전 에러카드/검증 포함)
+    verifierAgentId: string;
+    verifierRole: string;
+    report: VerificationReport;
+  }): Promise<void> {
+    const { missionId, existing, report } = input;
+    if (report.status !== "failed" && report.status !== "blocked") return;
+
+    // L4 — 실패/skip check의 summary를 stderr로 모아 결정적 파서에 넣는다(raw secret 금지:
+    // summary는 이미 preview, 카드도 redacted preview만 보관).
+    const failingChecks = report.checks.filter((check) => check.status === "failed" || check.status === "skipped");
+    const stderr = failingChecks.map((check) => check.summary).join("\n");
+    const card = parseSandboxError({
+      id: `errorcard_${report.id}`,
+      missionId,
+      workerId: input.verifierAgentId,
+      runnerKind: deps.verificationRunnerKind?.() ?? "local",
+      status: report.status === "blocked" ? "blocked" : "failed",
+      stderr,
+      relatedCheckId: failingChecks[0]?.id,
+      // 실측 실행(observed)에서 난 에러만 observed, blocked(미실행)는 configured
+      truthStatus: report.observed ? "observed" : "configured",
+      now,
+    });
+    await commit(missionId, [errorCardEnvelope(card, report.id)]);
+
+    // L5 — reset-on-pass: 마지막 observed pass 이후의 에러 카드만 prior로 센다.
+    const lastPass = lastObservedPassAt(existing);
+    const priorSignatures = (existing.errorCards ?? [])
+      .filter((prior) => !lastPass || prior.createdAt > lastPass)
+      .map((prior) => sandboxErrorSignature(prior));
+    const decision = decideSelfCorrection({
+      priorErrorSignatures: priorSignatures,
+      currentErrorSignature: sandboxErrorSignature(card),
+      workerRole: input.verifierRole,
+    });
+    const correction: MissionSelfCorrectionRecord = {
+      id: `selfcorrection_${report.id}`,
+      missionId,
+      workerId: input.verifierAgentId,
+      errorCardId: card.id,
+      attempt: decision.attempt,
+      action: decision.action,
+      directive: decision.action === "retry" ? card.directive : undefined,
+      reason: decision.reason,
+      createdAt: now(),
+    };
+    const type = decision.action === "retry" ? "mission.self_correction.suggested" : "mission.self_correction.stopped";
+    await commit(missionId, [selfCorrectionEnvelope(correction, type)]);
   }
 
   async function materialize(): Promise<ServerMissionRecord[]> {
@@ -359,6 +459,14 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
           createdAt,
         }),
       ]);
+      // L4+L5: 실패면 에러 카드 + bounded self-correction 제안(제안만, 파일 변경 없음).
+      await reactToVerification({
+        missionId,
+        existing,
+        verifierAgentId: verifier.agentId,
+        verifierRole: verifier.role,
+        report: normalized.report,
+      });
       return get(missionId);
     },
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { truthStatusSchema } from "./productKernel.js";
+import { truthStatusSchema } from "./truthStatus.js";
 
 /**
  * Structured Sandbox Error Card — 터미널 raw log만 보여주지 말고, 실패를 구조화한다.
@@ -128,3 +128,15 @@ export function parseSandboxError(input: {
 export function sandboxErrorSignature(card: Pick<SandboxErrorCard, "errorClass" | "targetFile" | "targetLine" | "rootCause">): string {
   return [card.errorClass ?? "?", card.targetFile ?? "?", card.targetLine ?? "?", card.rootCause.slice(0, 80)].join("|");
 }
+
+/**
+ * mission.error_card.recorded — L4 자동 emit이 검증 실패/blocked/timeout에서 append하는
+ * 서버 전용 이벤트. 클라이언트 append 창구에는 넣지 않는다(서버만 발행).
+ */
+export const missionErrorCardRecordedPayloadSchema = z.object({
+  missionId: z.string(),
+  workerId: z.string().optional(),
+  verificationReportId: z.string().optional(),
+  errorCard: sandboxErrorCardSchema,
+});
+export type MissionErrorCardRecordedPayload = z.infer<typeof missionErrorCardRecordedPayloadSchema>;

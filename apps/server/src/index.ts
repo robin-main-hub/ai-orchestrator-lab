@@ -5302,6 +5302,8 @@ export function createServerMissionStore(storage: JsonlServerEventStorage): Miss
       });
       return result.ok ? { status: "created", checkpoint: result.checkpoint } : { status: "failed", reason: result.reason };
     },
+    // L4: 에러 카드 runner 라벨 — 선택된 sandbox runner와 일치(기본 local).
+    verificationRunnerKind: () => (process.env.ORCHESTRATOR_SANDBOX_RUNNER ?? "local").trim().toLowerCase() || "local",
     // E1+L2: 검증 명령을 runner registry가 고른 sandbox에서 실행하고 종료코드를 관측한다.
     // ORCHESTRATOR_SANDBOX_RUNNER=local|docker|gvisor 정책을 따르며, docker/gVisor가
     // unavailable이면 fake fallback 없이 blocked/observed:false로 남긴다(local로 몰래

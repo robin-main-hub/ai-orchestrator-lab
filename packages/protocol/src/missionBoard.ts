@@ -1,6 +1,14 @@
 import { z } from "zod";
 import type { MissionCheckpoint } from "./missionCheckpoint.js";
 import {
+  missionErrorCardRecordedPayloadSchema,
+  type SandboxErrorCard,
+} from "./sandboxErrorCard.js";
+import {
+  missionSelfCorrectionRecordSchema,
+  type MissionSelfCorrectionRecord,
+} from "./selfCorrection.js";
+import {
   missionCheckpointRecordedPayloadSchema,
   missionCreatedPayloadSchema,
   missionMergeQueuedPayloadSchema,
@@ -304,6 +312,37 @@ function checkpointTraceEvent(checkpoint: MissionCheckpoint): MissionTraceEvent 
   };
 }
 
+function errorCardTraceEvent(card: SandboxErrorCard): MissionTraceEvent {
+  const where = card.targetFile ? `${card.targetFile}${card.targetLine ? `:${card.targetLine}` : ""} · ` : "";
+  return {
+    id: `${card.missionId}:errorcard:${card.id}`,
+    missionId: card.missionId,
+    workerId: card.workerId,
+    type: "error_card.recorded",
+    severity: "error",
+    title: `에러 카드 · ${card.errorClass ?? card.status}`,
+    summary: `${where}${card.directive}`,
+    payloadPreview: redactTracePreview(card.rootCause),
+    truthStatus: card.truthStatus, // observed runtime error는 observed, blocked는 configured
+    createdAt: card.createdAt,
+  };
+}
+
+function selfCorrectionTraceEvent(record: MissionSelfCorrectionRecord): MissionTraceEvent {
+  const stopped = record.action !== "retry";
+  return {
+    id: `${record.missionId}:selfcorrection:${record.id}`,
+    missionId: record.missionId,
+    workerId: record.workerId,
+    type: stopped ? "self_correction.stopped" : "self_correction.started",
+    severity: stopped ? "warning" : "info",
+    title: stopped ? `자가수정 중단 (${record.action})` : `자가수정 제안 #${record.attempt}`,
+    summary: record.directive ? `${record.reason} · ${record.directive}` : record.reason,
+    truthStatus: "configured", // 제안일 뿐 — observed 아님
+    createdAt: record.createdAt,
+  };
+}
+
 function mergeTraceEvent(item: SequentialMergeQueueItem): MissionTraceEvent {
   const type: MissionTraceEventType =
     item.status === "merged" ? "merge.completed" : item.status === "conflict" ? "merge.conflict" : "merge.queued";
@@ -344,6 +383,8 @@ export function deriveMissionTrace(record: ServerMissionRecord): MissionTraceEve
   for (const worker of record.workers) events.push(workerTraceEvent(worker));
   for (const checkpoint of record.checkpoints ?? []) events.push(checkpointTraceEvent(checkpoint));
   for (const report of record.verificationReports) events.push(verificationTraceEvent(report, report.createdAt));
+  for (const card of record.errorCards ?? []) events.push(errorCardTraceEvent(card));
+  for (const correction of record.selfCorrections ?? []) events.push(selfCorrectionTraceEvent(correction));
   for (const item of record.mergeQueueItems) events.push(mergeTraceEvent(item));
   return events.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
@@ -371,6 +412,15 @@ export function traceEventFromMissionEnvelope(envelope: {
     case "mission.checkpoint.created": {
       const parsed = missionCheckpointRecordedPayloadSchema.safeParse(envelope.payload);
       return parsed.success ? checkpointTraceEvent(parsed.data.checkpoint) : null;
+    }
+    case "mission.error_card.recorded": {
+      const parsed = missionErrorCardRecordedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success ? errorCardTraceEvent(parsed.data.errorCard) : null;
+    }
+    case "mission.self_correction.suggested":
+    case "mission.self_correction.stopped": {
+      const parsed = missionSelfCorrectionRecordSchema.safeParse(envelope.payload);
+      return parsed.success ? selfCorrectionTraceEvent(parsed.data) : null;
     }
     case "mission.verification.recorded": {
       const parsed = missionVerificationRecordedPayloadSchema.safeParse(envelope.payload);

@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * Bounded self-correction — 검증 실패 → error card → directive → 재시도. 단,
  * **무한 loop 금지 / 실패를 자동 성공 처리 금지 / 같은 에러 반복 시 중단**.
@@ -55,3 +57,21 @@ export function decideSelfCorrection(input: {
   }
   return { action: "retry", attempt, reason: `수정 시도 ${attempt}/${policy.maxAttempts}` };
 }
+
+/**
+ * mission.self_correction.{suggested,stopped} 이벤트가 싣는 레코드. **제안만** 한다 —
+ * 파일 변경은 절대 하지 않는다(L5). retry는 suggested로, 그 외(중단/사람검토)는 stopped로
+ * append된다. EventStorage 단일 진실 — 미션 record에 materialize되어 trace에 표시된다.
+ */
+export const missionSelfCorrectionRecordSchema = z.object({
+  id: z.string(),
+  missionId: z.string(),
+  workerId: z.string().optional(),
+  errorCardId: z.string().optional(),
+  attempt: z.number().int(),
+  action: z.enum(["retry", "stop_same_error", "require_human", "stop_resolved"]),
+  directive: z.string().optional(),
+  reason: z.string(),
+  createdAt: z.string(),
+});
+export type MissionSelfCorrectionRecord = z.infer<typeof missionSelfCorrectionRecordSchema>;
