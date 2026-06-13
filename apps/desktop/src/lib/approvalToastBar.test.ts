@@ -26,24 +26,22 @@ describe("deriveApprovalToastItem", () => {
     ).toBeUndefined();
   });
 
-  it("실행형 디스패치가 없으면 첫 required 항목, command 없음", () => {
-    expect(deriveApprovalToastItem([makeItem()])).toEqual({
-      command: undefined,
-      sourceItemId: "source_1",
-      summary: "MiMo 호출 승인 필요",
-    });
+  it("실행형 디스패치가 없으면 첫 required 항목 (sourceItemId+summary만)", () => {
+    expect(deriveApprovalToastItem([makeItem()])).toEqual({ sourceItemId: "source_1", summary: "MiMo 호출 승인 필요" });
   });
 
-  it("replayKind=tmux_dispatch(자율실행) 승인을 우선하고 summary를 명령으로 노출", () => {
+  it("replayKind=tmux_dispatch(자율실행) 승인을 우선 — summary는 라벨, 가짜 명령(command) 안 만듦", () => {
+    // 실제 큐의 summary는 명령이 아니라 사람용 라벨이다("터미널 실행 · 사유").
     const result = deriveApprovalToastItem([
-      makeItem({ id: "a1", sourceItemId: "s1", summary: "provider 승인" }),
-      makeItem({ id: "a2", sourceItemId: "s2", summary: "pnpm test", replayKind: "tmux_dispatch" }),
+      makeItem({ id: "a1", sourceItemId: "s1", summary: "공급자 호출 · 모델 응답" }),
+      makeItem({ id: "a2", sourceItemId: "s2", summary: "터미널 실행 · 빌드 검증", replayKind: "tmux_dispatch" }),
     ]);
-    expect(result).toEqual({ command: "pnpm test", sourceItemId: "s2", summary: "pnpm test" });
+    expect(result).toEqual({ sourceItemId: "s2", summary: "터미널 실행 · 빌드 검증" });
+    expect(result).not.toHaveProperty("command"); // 정직: 큐엔 실제 명령이 없으니 command 미생성
   });
 
-  it("action=terminal_run 승인도 실행형으로 인식", () => {
-    const result = deriveApprovalToastItem([makeItem({ sourceItemId: "s3", summary: "git status", action: "terminal_run" })]);
-    expect(result?.command).toBe("git status");
+  it("action=terminal_run 승인도 실행형으로 우선 인식(라벨만)", () => {
+    const result = deriveApprovalToastItem([makeItem({ sourceItemId: "s3", summary: "terminal_run from agent", action: "terminal_run" })]);
+    expect(result).toEqual({ sourceItemId: "s3", summary: "terminal_run from agent" });
   });
 });

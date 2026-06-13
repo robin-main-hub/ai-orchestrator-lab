@@ -5,17 +5,18 @@ import type { ApprovalToastBarItem } from "../lib/approvalToastBar";
 /**
  * 승인 toast bar(제안1) — 화면 하단 고정. 승인 대기가 있을 때만 떠서 원터치로 허용/거절.
  * 전역 단일 승인 액션 표면(대시보드 hero·헤더 alert·빈대화 힌트는 이 바를 가리키기만 함).
+ *
+ * 정직성: ApprovalQueueItem엔 실제 명령 미리보기가 없어 summary(사람용 라벨)만 보여준다.
+ * "계열 허용"은 진짜 명령을 가진 StreamingDraftBubble에만 둔다(가짜 prefix 자동승인 오염 방지).
  */
 export function ApprovalToastBar({
   item,
   onApprove,
-  onApprovePattern,
   onReject,
   onOpenHistory,
 }: {
   item: ApprovalToastBarItem;
   onApprove: (sourceItemId: string) => void;
-  onApprovePattern?: (command: string) => void;
   onReject: (sourceItemId: string) => void;
   onOpenHistory?: () => void;
 }) {
@@ -34,7 +35,6 @@ export function ApprovalToastBar({
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-zinc-100">{item.summary}</p>
-        {item.command ? <p className="mt-0.5 truncate font-mono text-[11px] text-zinc-500">{item.command}</p> : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
@@ -46,21 +46,6 @@ export function ApprovalToastBar({
           <Check className="h-3.5 w-3.5" />
           허용
         </button>
-
-        {onApprovePattern && item.command ? (
-          <button
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-cyan-400/25 bg-cyan-500/10 px-3 text-xs font-semibold text-cyan-200 transition-colors hover:bg-cyan-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
-            onClick={() => {
-              onApprovePattern(item.command!);
-              onApprove(item.sourceItemId);
-            }}
-            title="이 명령 계열을 세션 동안 자동 승인"
-            type="button"
-          >
-            <Check className="h-3.5 w-3.5" />
-            계열
-          </button>
-        ) : null}
 
         <button
           className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-rose-400/25 bg-rose-500/10 px-3 text-xs font-semibold text-rose-200 transition-colors hover:bg-rose-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/50"

@@ -5461,7 +5461,6 @@ export function App() {
       <ApprovalToastBarConnector
         queue={unifiedControlQueueSnapshot.queue}
         onApprove={handleConversationApprovePermission}
-        onApprovePattern={handleApproveCommandPattern}
         onReject={handleConversationRejectPermission}
         onOpenHistory={() => setApprovalDrawerOpen(true)}
       />
