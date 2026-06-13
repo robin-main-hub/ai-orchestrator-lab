@@ -154,6 +154,7 @@ docs/             # 00~45 설계 문서 (아래 주요 항목)
 63     coding-model-select-and-error (provider-filtered model dropdown + right-aligned user bubble + actionable error)
 64     debate-scroll-and-stance-jump (min-h-0 scroll fix + clickable stance dots jump to the persuading utterance)
 65     dashboard-daily-party (date-rotated party from hermes/history signals + clickable cards + why-today reason)
+66     work-theater-overhaul (per-card stage+task display + click-to-open-agent + page purpose)
 ```
 
 ## 실행 방법
