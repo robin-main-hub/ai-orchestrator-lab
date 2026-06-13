@@ -19,6 +19,8 @@ import {
 } from "./eventLogRotation.js";
 import * as crypto from "node:crypto";
 import { connect as netConnect } from "node:net";
+import { spawn as childSpawn } from "node:child_process";
+import { get as httpGet } from "node:http";
 import type {
   AgentDelegationAuthorityLevel,
   AgentDelegationEventPayload,
@@ -120,6 +122,14 @@ import { handleApprovalRoute } from "./routes/approvals.js";
 import { handleMissionRoute } from "./routes/missions.js";
 import { createMissionStore, type MissionStore } from "./missions/missionStore.js";
 import { missionTraceBus } from "./missions/missionTraceBus.js";
+import {
+  disposeAllPreviews,
+  startPreviewProcess,
+  stopPreviewProcess,
+  type PreviewProcessRegistry,
+  type PreviewSpawnFn,
+  type PreviewHttpProbe,
+} from "./missions/previewProcessRunner.js";
 import type { LocalExecFn } from "./missions/localSandboxRunner.js";
 import {
   runRegistryMissionVerification,
@@ -248,6 +258,59 @@ const missionCheckpointGitExec: GitExecFn = async (repoRoot, args) => {
     return { exitCode: typeof e.code === "number" ? e.code : 1, stdout: e.stdout ?? "", stderr: e.stderr ?? "" };
   }
 };
+
+/**
+ * D5a preview 프로세스 — 워크스페이스당 하나의 dev 프로세스를 추적한다(프로세스 단위
+ * 상태라 module-level). 서버 종료 시 disposeAllPreviews로 유령 dev 서버를 막는다.
+ */
+const previewProcessRegistry: PreviewProcessRegistry = new Map();
+
+/** preview 명령을 셸 없이 spawn — 포트는 PORT env로 전달, stderr preview만 보관. */
+const realPreviewSpawn: PreviewSpawnFn = ({ command, argv, cwd, port }) => {
+  const child = childSpawn(command, argv, {
+    cwd,
+    env: { ...getFilteredSubprocessEnv({}), PORT: String(port) },
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stderr = "";
+  child.stderr?.on("data", (chunk) => {
+    stderr = (stderr + String(chunk)).slice(-2_000);
+  });
+  child.stdout?.on("data", () => {
+    /* drain */
+  });
+  child.on("error", () => {
+    /* spawn 실패는 onExit/probe 타임아웃으로 흡수 */
+  });
+  return {
+    kill: () => {
+      try {
+        child.kill();
+      } catch {
+        /* already gone */
+      }
+    },
+    onExit: (cb) => child.once("exit", (code) => cb(code)),
+    stderrPreview: () => stderr,
+  };
+};
+
+/** preview 포트를 HTTP GET으로 probe — 어떤 응답이든 오면 서빙 중(observed). */
+const realPreviewHttpProbe: PreviewHttpProbe = ({ host, port }) =>
+  new Promise<boolean>((resolvePromise) => {
+    const req = httpGet({ host, port, path: "/", timeout: 1_500 }, (res) => {
+      res.resume();
+      resolvePromise(true);
+    });
+    req.once("timeout", () => {
+      req.destroy();
+      resolvePromise(false);
+    });
+    req.once("error", () => resolvePromise(false));
+  });
+
+const realPreviewWait = (ms: number) => new Promise<void>((resolvePromise) => setTimeout(resolvePromise, ms));
 
 type ServerProviderProxyConfig = {
   providerProfileId: string;
@@ -6625,6 +6688,26 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
             socket.once("timeout", () => finish(false));
             socket.once("error", () => finish(false));
           }),
+        // D5a: preview dev 프로세스 start(repoRoot allowlist + preview 명령 정책 뒤) →
+        // 포트 HTTP probe 성공 시에만 observed running. 아니면 failed/configured(가짜 금지).
+        startPreview: async ({ workspaceId, command, cwd, host, port }) =>
+          startPreviewProcess({
+            workspaceId,
+            command,
+            cwd,
+            host,
+            port,
+            allowedRepoRoots: parseAllowedRepoRoots(process.env.ORCHESTRATOR_ALLOWED_REPO_ROOTS),
+            allowedPreviewPrefixes: parseAllowedRepoRoots(process.env.ORCHESTRATOR_ALLOWED_PREVIEW_COMMANDS),
+            registry: previewProcessRegistry,
+            spawn: realPreviewSpawn,
+            probe: realPreviewHttpProbe,
+            wait: realPreviewWait,
+            now: () => new Date().toISOString(),
+            readyTimeoutMs: Number(process.env.ORCHESTRATOR_PREVIEW_READY_TIMEOUT_MS ?? 15_000),
+            pollIntervalMs: 300,
+          }),
+        stopPreview: async ({ workspaceId }) => stopPreviewProcess(workspaceId, previewProcessRegistry),
       })
     ) {
       return;
@@ -6725,6 +6808,7 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
 
   server.on("close", () => {
     nonceRegistry.dispose();
+    disposeAllPreviews(previewProcessRegistry); // 유령 preview dev 서버 정리
   });
 
   server.listen(port, "0.0.0.0");

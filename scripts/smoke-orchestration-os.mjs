@@ -82,6 +82,16 @@ function setupTempRepo(repo) {
   git(repo, ["config", "user.name", "smoke"]);
   git(repo, ["config", "commit.gpgsign", "false"]);
   writeFileSync(join(repo, "a.txt"), "a\n");
+  // 최소 preview dev 서버(설치 불필요) — PORT env로 듣는다. preview observed 착지 증명용.
+  writeFileSync(
+    join(repo, "preview-server.mjs"),
+    [
+      'import { createServer } from "node:http";',
+      "const port = Number(process.env.PORT || 0);",
+      'createServer((_req, res) => { res.writeHead(200, { "content-type": "text/html" }); res.end("<h1>smoke preview</h1>"); }).listen(port);',
+      "",
+    ].join("\n"),
+  );
   git(repo, ["add", "-A"]);
   git(repo, ["commit", "-q", "-m", "init"]);
   git(repo, ["branch", "-M", "main"]);
@@ -176,11 +186,20 @@ async function main() {
     const workspaceId = (wsResp.json?.mission?.workspaces ?? [])[0]?.id;
     record("attach app workspace", wsResp.status === 201 && Boolean(workspaceId), true, workspaceId ? "ok" : `status ${wsResp.status}`);
 
-    // 1c) preview probe — dev 서버 미기동이므로 observed가 아니어야 한다(가짜 running 금지)
+    // 1c) preview probe(시작 전) — dev 서버 미기동이므로 observed가 아니어야 한다(가짜 금지)
     if (workspaceId) {
       const prev = await api("POST", `/missions/${missionId}/workspace/${workspaceId}/preview`, {});
       const pv = prev.json?.preview;
-      record("preview honest (not observed without dev server)", prev.status === 200 && pv && pv.truthStatus !== "observed", true, pv ? `${pv.status}/${pv.truthStatus}` : `status ${prev.status}`);
+      record("preview honest before start (not observed)", prev.status === 200 && pv && pv.truthStatus !== "observed", true, pv ? `${pv.status}/${pv.truthStatus}` : `status ${prev.status}`);
+
+      // 1d) preview start — 실제 dev 서버를 띄우고 포트 관측 → observed running
+      const started = await api("POST", `/missions/${missionId}/workspace/${workspaceId}/preview/start`, { command: "node preview-server.mjs" });
+      const sp = started.json?.preview;
+      record("preview start → observed running", started.status === 200 && sp && sp.status === "running" && sp.truthStatus === "observed", true, sp ? `${sp.status}/${sp.truthStatus} ${sp.url ?? ""}` : `status ${started.status}`);
+
+      // 1e) preview stop — 프로세스 정리(유령 dev 서버 방지)
+      const stopped = await api("POST", `/missions/${missionId}/workspace/${workspaceId}/preview/stop`, {});
+      record("preview stop", stopped.status === 200 && stopped.json?.preview?.status === "stopped", false, stopped.json?.preview?.status ?? `status ${stopped.status}`);
     }
 
     // 2) checkpoint(observed sha) — temp repo

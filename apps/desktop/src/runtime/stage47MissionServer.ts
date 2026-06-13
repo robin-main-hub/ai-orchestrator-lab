@@ -221,6 +221,44 @@ export async function probeDgxPreview({
   });
 }
 
+/** D5a: preview dev 프로세스 start(observed running은 실제 포트 서빙 관측 시만) */
+export async function startDgxPreview({
+  missionId,
+  workspaceId,
+  request = {},
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 30_000,
+}: MissionServerRequestInput & { missionId: string; workspaceId: string; request?: { command?: string; host?: string; port?: number } }): Promise<MissionPreviewResponse> {
+  // 서버가 dev 프로세스를 띄우고 포트가 뜰 때까지 probe하므로 타임아웃이 길다.
+  return requestMissionServerJson<MissionPreviewResponse>({
+    method: "POST",
+    path: `/missions/${encodeURIComponent(missionId)}/workspace/${encodeURIComponent(workspaceId)}/preview/start`,
+    body: request,
+    serverBaseUrl,
+    fetchImpl,
+    timeoutMs,
+  });
+}
+
+/** D5a: preview dev 프로세스 stop */
+export async function stopDgxPreview({
+  missionId,
+  workspaceId,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 5_000,
+}: MissionServerRequestInput & { missionId: string; workspaceId: string }): Promise<MissionPreviewResponse> {
+  return requestMissionServerJson<MissionPreviewResponse>({
+    method: "POST",
+    path: `/missions/${encodeURIComponent(missionId)}/workspace/${encodeURIComponent(workspaceId)}/preview/stop`,
+    body: {},
+    serverBaseUrl,
+    fetchImpl,
+    timeoutMs,
+  });
+}
+
 /** D3: 디자인 청사진 → 디자인 미션 */
 export async function createDgxMissionFromBlueprint({
   request,

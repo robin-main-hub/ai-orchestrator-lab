@@ -22,9 +22,13 @@ export const appTypeSchema = z.enum(["react_vite", "nextjs", "tauri", "unknown"]
 export type AppType = z.infer<typeof appTypeSchema>;
 
 export const appWorkspacePreviewSchema = z.object({
-  status: z.enum(["not_started", "starting", "running", "failed"]),
+  status: z.enum(["not_started", "starting", "running", "failed", "stopped", "blocked"]),
   port: z.number().int().optional(),
   url: z.string().optional(),
+  /** 실행한 preview 명령(있으면) — trace/디버깅용. */
+  command: z.string().optional(),
+  /** 실패/blocked 사유 preview(redacted). */
+  detail: z.string().optional(),
   truthStatus: truthStatusSchema,
 });
 export type AppWorkspacePreview = z.infer<typeof appWorkspacePreviewSchema>;
@@ -129,3 +133,44 @@ export const missionWorkspacePreviewRecordedPayloadSchema = z.object({
   preview: appWorkspacePreviewSchema,
 });
 export type MissionWorkspacePreviewRecordedPayload = z.infer<typeof missionWorkspacePreviewRecordedPayloadSchema>;
+
+// ── Preview start (D5a: 실제 dev 프로세스 → observed) ─────────────────────────
+
+/** preview를 실제로 띄우는 요청. command 미지정이면 appType 기본값을 쓴다. */
+export const previewStartRequestSchema = z.object({
+  command: z.string().min(1).max(400).optional(),
+  host: z.string().max(255).default("127.0.0.1"),
+  port: z.number().int().min(1).max(65_535).optional(),
+});
+export type PreviewStartRequest = z.infer<typeof previewStartRequestSchema>;
+
+/** appType별 기본 preview 명령(없으면 vite preview). 실제 실행은 서버 preview 정책 뒤. */
+export function defaultPreviewCommandForAppType(appType: AppType): string {
+  switch (appType) {
+    case "nextjs":
+      return "npm run preview";
+    case "react_vite":
+      return "vite preview";
+    case "tauri":
+    case "unknown":
+    default:
+      return "vite preview";
+  }
+}
+
+/**
+ * preview 상태 빌더(순수, 정직성 단일 지점). **running만 observed**. 실제 포트 관측
+ * 없이는 절대 observed가 아니다.
+ */
+export function previewRunning(input: { host: string; port: number; command?: string }): AppWorkspacePreview {
+  return { status: "running", port: input.port, url: `http://${input.host}:${input.port}`, command: input.command, truthStatus: "observed" };
+}
+export function previewFailed(input: { port?: number; command?: string; detail?: string }): AppWorkspacePreview {
+  return { status: "failed", port: input.port, command: input.command, detail: input.detail, truthStatus: "configured" };
+}
+export function previewBlocked(input: { command?: string; detail: string }): AppWorkspacePreview {
+  return { status: "blocked", command: input.command, detail: input.detail, truthStatus: "configured" };
+}
+export function previewStopped(input: { command?: string } = {}): AppWorkspacePreview {
+  return { status: "stopped", command: input.command, truthStatus: "configured" };
+}
