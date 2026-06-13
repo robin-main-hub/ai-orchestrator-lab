@@ -109,6 +109,58 @@ export function isExportableSkill(candidate: SkillArchiveCandidate): boolean {
   return candidate.trustStatus === "curator_approved" || candidate.trustStatus === "pinned";
 }
 
+// ── Curator queue events (L6 live wiring) ───────────────────────────────────
+// skill candidate는 mission이 아니라 memory 도메인 이벤트(memory.skill_candidate.*)로
+// EventStorage에 산다. missionIndex(mission.* 필터)를 오염시키지 않으면서 같은 단일
+// 진실(EventStorage)에 머문다.
+
+export const curatorDecisionSchema = z.enum(["approve", "reject", "pin"]);
+export type CuratorDecision = z.infer<typeof curatorDecisionSchema>;
+
+export const memorySkillCandidateCreatedPayloadSchema = z.object({
+  missionId: z.string(),
+  candidate: skillArchiveCandidateSchema,
+});
+export type MemorySkillCandidateCreatedPayload = z.infer<typeof memorySkillCandidateCreatedPayloadSchema>;
+
+export const memorySkillCandidateCuratedPayloadSchema = z.object({
+  missionId: z.string(),
+  candidateId: z.string(),
+  decision: curatorDecisionSchema,
+  trustStatus: skillTrustStatusSchema,
+});
+export type MemorySkillCandidateCuratedPayload = z.infer<typeof memorySkillCandidateCuratedPayloadSchema>;
+
+/** POST /missions/:id/skills/:candidateId/curate 본문 */
+export const skillCurateRequestSchema = z.object({ decision: curatorDecisionSchema });
+export type SkillCurateRequest = z.infer<typeof skillCurateRequestSchema>;
+
+/**
+ * created + curated 이벤트에서 현재 curator queue를 파생(순수). created가 suggested로
+ * 들어오고, curated가 trustStatus를 전이시킨다. **자동 trusted 승격 없음** — 오직
+ * curated 결정으로만 approved/pinned가 된다. 이벤트는 append 순서(시간순)로 적용.
+ */
+export function deriveSkillArchiveQueue(
+  events: ReadonlyArray<{ type: string; payload: unknown }>,
+): SkillArchiveCandidate[] {
+  const byId = new Map<string, SkillArchiveCandidate>();
+  for (const event of events) {
+    if (event.type === "memory.skill_candidate.created") {
+      const parsed = memorySkillCandidateCreatedPayloadSchema.safeParse(event.payload);
+      if (parsed.success && !byId.has(parsed.data.candidate.id)) {
+        byId.set(parsed.data.candidate.id, parsed.data.candidate);
+      }
+    } else if (event.type === "memory.skill_candidate.curated") {
+      const parsed = memorySkillCandidateCuratedPayloadSchema.safeParse(event.payload);
+      const existing = parsed.success ? byId.get(parsed.data.candidateId) : undefined;
+      if (parsed.success && existing) {
+        byId.set(parsed.data.candidateId, applyCuratorDecision(existing, parsed.data.decision));
+      }
+    }
+  }
+  return [...byId.values()];
+}
+
 /**
  * Obsidian export note — id로 결정되는 경로/내용이라 **idempotent**(같은 candidate를
  * 여러 번 export해도 같은 파일을 덮어쓸 뿐 중복 생성 없음).

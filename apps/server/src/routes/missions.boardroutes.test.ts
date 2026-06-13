@@ -111,4 +111,29 @@ describe("mission board routes", () => {
     expect(await handleMissionRoute(args)).toBe(true);
     expect(result().status).toBe(409);
   });
+
+  it("GET /missions/:id/skills returns the curator queue", async () => {
+    const store = { get: async () => record("m1", "merged"), skills: async () => [{ id: "skill_1", trustStatus: "suggested" }] } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/m1/skills", "GET");
+    expect(await handleMissionRoute(args)).toBe(true);
+    const { status, payload } = result();
+    expect(status).toBe(200);
+    expect((payload as { candidates: unknown[] }).candidates).toHaveLength(1);
+  });
+
+  it("POST /missions/:id/skills/:cid/curate applies a curator decision", async () => {
+    const curateSkill = vi.fn(async () => ({ id: "skill_1", trustStatus: "curator_approved" }));
+    const store = { get: async () => record("m1", "merged"), curateSkill } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/m1/skills/skill_1/curate", "POST", { decision: "approve" });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(200);
+    expect(curateSkill).toHaveBeenCalledWith("m1", "skill_1", "approve");
+  });
+
+  it("POST curate 404s an unknown candidate", async () => {
+    const store = { get: async () => record("m1", "merged"), curateSkill: async () => undefined } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/m1/skills/ghost/curate", "POST", { decision: "approve" });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(404);
+  });
 });

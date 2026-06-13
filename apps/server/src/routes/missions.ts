@@ -8,6 +8,7 @@ import {
   missionMergeRequestSchema,
   missionRollbackRequestSchema,
   missionVerifyRequestSchema,
+  skillCurateRequestSchema,
   type MissionCheckpointCreateRequest,
   type MissionCreateRequest,
   type MissionEventAppendRequest,
@@ -48,6 +49,8 @@ const MISSION_MERGE_PATH = /^\/missions\/([^/]+)\/merge$/;
 const MISSION_TRACE_PATH = /^\/missions\/([^/]+)\/trace$/;
 const MISSION_CHECKPOINTS_PATH = /^\/missions\/([^/]+)\/checkpoints$/;
 const MISSION_ROLLBACK_PATH = /^\/missions\/([^/]+)\/rollback$/;
+const MISSION_SKILLS_PATH = /^\/missions\/([^/]+)\/skills$/;
+const MISSION_SKILL_CURATE_PATH = /^\/missions\/([^/]+)\/skills\/([^/]+)\/curate$/;
 
 export async function handleMissionRoute({
   store,
@@ -284,6 +287,44 @@ export async function handleMissionRoute({
         message: error instanceof Error ? error.message : String(error),
       });
     }
+    return true;
+  }
+
+  // L6: skill candidate curator queue — merged 미션이 남긴 suggested 후보들(읽기).
+  const skillsMatch = MISSION_SKILLS_PATH.exec(pathname);
+  if (skillsMatch && method === "GET") {
+    const missionId = decodeURIComponent(skillsMatch[1]!);
+    const candidates = await store.skills(missionId);
+    if (!candidates) {
+      respondJson(404, { error: "mission_not_found", missionId });
+      return true;
+    }
+    respondJson(200, { candidates });
+    return true;
+  }
+
+  // L6: curator 결정(approve/reject/pin) — 승인된 것만 export. 자동 trusted 승격 없음.
+  const curateMatch = MISSION_SKILL_CURATE_PATH.exec(pathname);
+  if (curateMatch && method === "POST") {
+    const missionId = decodeURIComponent(curateMatch[1]!);
+    const candidateId = decodeURIComponent(curateMatch[2]!);
+    let payload;
+    try {
+      payload = skillCurateRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, { error: "invalid_skill_curate_payload", message: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    const updated = await store.curateSkill(missionId, candidateId, payload.decision);
+    if (!updated) {
+      respondJson(404, { error: "skill_candidate_not_found", missionId, candidateId });
+      return true;
+    }
+    respondJson(200, { candidate: updated });
     return true;
   }
 

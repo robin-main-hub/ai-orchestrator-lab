@@ -1,5 +1,9 @@
 import {
+  applyCuratorDecision,
   decideSelfCorrection,
+  deriveSkillArchiveQueue,
+  deriveSkillCandidatesFromMission,
+  isExportableSkill,
   missionArtifactAttachedPayloadSchema,
   missionClosedPayloadSchema,
   missionMergeQueuedPayloadSchema,
@@ -7,6 +11,7 @@ import {
   missionWorkerAssignmentRequestSchema,
   parseSandboxError,
   sandboxErrorSignature,
+  type CuratorDecision,
   type EventEnvelope,
   type MissionCheckpoint,
   type MissionCheckpointReason,
@@ -17,6 +22,7 @@ import {
   type MissionVerifyRequest,
   type SandboxErrorCard,
   type ServerMissionRecord,
+  type SkillArchiveCandidate,
   type VerificationReport,
 } from "@ai-orchestrator/protocol";
 import { buildMissionIndexFromEvents } from "./missionIndex.js";
@@ -61,6 +67,8 @@ export type MissionStoreDeps = {
   autoCheckpoint?: (missionId: string, reason: MissionCheckpointReason) => Promise<MissionAutoCheckpointOutcome>;
   /** L4: 에러 카드에 기록할 runner 종류 라벨(예: local/docker/gvisor). 기본 "local". */
   verificationRunnerKind?: () => string;
+  /** L6: curator 승인(approved/pinned) skill을 Obsidian 등으로 export. 미주입이면 export 생략. */
+  exportApprovedSkill?: (candidate: SkillArchiveCandidate) => Promise<void>;
 };
 
 /**
@@ -83,6 +91,10 @@ export type MissionStore = {
   verify: (missionId: string, request: MissionVerifyRequest) => Promise<ServerMissionRecord | undefined>;
   /** 검증 통과한 큐 항목의 머지를 실제 git으로 실행한다 (D4a: real sha / conflict / dry_run) */
   merge: (missionId: string, request: MissionMergeRequest) => Promise<ServerMissionRecord | undefined>;
+  /** L6: 이 미션의 skill candidate curator queue (memory.skill_candidate.* 파생). 미션 없으면 undefined. */
+  skills: (missionId: string) => Promise<SkillArchiveCandidate[] | undefined>;
+  /** L6: curator 결정(approve/reject/pin) → trustStatus 전이 + 승인 시 export. 후보 없으면 undefined. */
+  curateSkill: (missionId: string, candidateId: string, decision: CuratorDecision) => Promise<SkillArchiveCandidate | undefined>;
 };
 
 /** 머지 실행기 — repoRoot allowlist에 있으면 real git merge, 아니면 dry_run */
@@ -198,6 +210,37 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
       type,
       payload: record,
       createdAt: record.createdAt,
+      source: "server",
+      sourceTrust: "trusted",
+      redacted: true,
+    };
+  }
+
+  function skillCandidateCreatedEnvelope(missionId: string, candidate: SkillArchiveCandidate): EventEnvelope {
+    return {
+      id: `event_memory_skill_candidate_created_${candidate.id}`,
+      sessionId: missionId,
+      type: "memory.skill_candidate.created",
+      payload: { missionId, candidate },
+      createdAt: candidate.createdAt,
+      source: "server",
+      sourceTrust: "trusted",
+      redacted: true,
+    };
+  }
+
+  function skillCuratedEnvelope(
+    missionId: string,
+    candidateId: string,
+    decision: CuratorDecision,
+    trustStatus: SkillArchiveCandidate["trustStatus"],
+  ): EventEnvelope {
+    return {
+      id: `event_memory_skill_candidate_curated_${candidateId}_${decision}`,
+      sessionId: missionId,
+      type: "memory.skill_candidate.curated",
+      payload: { missionId, candidateId, decision, trustStatus },
+      createdAt: now(),
       source: "server",
       sourceTrust: "trusted",
       redacted: true,
@@ -540,7 +583,55 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
         );
       }
       await commit(missionId, envelopes);
+
+      // L6: real merge면 skill candidate(suggested)를 자동 생성해 curator queue에 넣는다.
+      // deriveSkillCandidatesFromMission은 merged 미션에서만 후보를 만든다(실패 미션은
+      // 자동 생성 0). 자동 trusted 승격은 없다 — curator가 승인해야 한다.
+      if (result.status === "merged") {
+        const mergedRecord = await get(missionId);
+        if (mergedRecord) {
+          const candidates = deriveSkillCandidatesFromMission(mergedRecord, now);
+          if (candidates.length > 0) {
+            await commit(
+              missionId,
+              candidates.map((candidate) => skillCandidateCreatedEnvelope(missionId, candidate)),
+            );
+          }
+        }
+      }
       return get(missionId);
+    },
+
+    async skills(missionId) {
+      if (!(await get(missionId))) return undefined;
+      const events = await deps.loadEvents();
+      const memoryEvents = events.filter(
+        (event) => event.sessionId === missionId && event.type.startsWith("memory.skill_candidate."),
+      );
+      return deriveSkillArchiveQueue(memoryEvents);
+    },
+
+    async curateSkill(missionId, candidateId, decision) {
+      if (!(await get(missionId))) return undefined;
+      const events = await deps.loadEvents();
+      const memoryEvents = events.filter(
+        (event) => event.sessionId === missionId && event.type.startsWith("memory.skill_candidate."),
+      );
+      const candidate = deriveSkillArchiveQueue(memoryEvents).find((entry) => entry.id === candidateId);
+      if (!candidate) return undefined;
+      const updated = applyCuratorDecision(candidate, decision);
+      await commit(missionId, [skillCuratedEnvelope(missionId, candidateId, decision, updated.trustStatus)]);
+      // 승인(approved/pinned)된 것만 export — curator 승인 없이는 절대 export 안 함.
+      if (isExportableSkill(updated) && deps.exportApprovedSkill) {
+        try {
+          await deps.exportApprovedSkill(updated);
+        } catch (error) {
+          console.warn(
+            `[mission-store] skill export failed for ${candidateId}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+      return updated;
     },
   };
 }
