@@ -135,6 +135,21 @@ export function ConfigLibraryPanel({
           <div className="config-file-editor">
             <div className="config-editor-toolbar">
               <span>{kindLabels[selectedConfigFile.kind]}</span>
+              {/* 정직성: 이 패널은 앱 내장 라이브러리 — 위 경로는 논리적 표시일 뿐 디스크의 실제
+                  파일을 읽거나 쓰지 않는다. 시드/예시를 실제 파일처럼 보이지 않게 명시. */}
+              <span
+                title="이 항목은 앱 내장 라이브러리입니다. 위 경로는 논리적 표시이며 디스크의 실제 파일을 읽거나 쓰지 않습니다. 저장은 이벤트 기록만 남깁니다(파일 미반영)."
+                style={{
+                  fontSize: "10px",
+                  color: "#fbbf24",
+                  border: "1px solid currentColor",
+                  borderRadius: "999px",
+                  padding: "1px 7px",
+                  opacity: 0.9,
+                }}
+              >
+                앱 내장 · 디스크 미반영
+              </span>
               <button
                 className="rail-icon-button"
                 onClick={() => onDuplicateConfigFile(selectedConfigFile.id)}
@@ -237,7 +252,12 @@ export function ConfigLibraryPanel({
             </label>
             <div className="config-save-note">
               <Save size={13} />
-              <span>저장은 Event Storage 이벤트로 남기고, 불러오기/다운로드는 로컬 Markdown 파일로 바로 처리합니다.</span>
+              <span>
+                이 본문은 앱 내장 예시·라이브러리 항목이며, 위 경로(<code>{selectedConfigFile.path}</code>)는 논리적
+                표시일 뿐 디스크의 실제 파일을 읽거나 쓰지 않습니다. <strong>저장은 Event Storage 이벤트로만 남고
+                파일에는 반영되지 않습니다</strong>(새로고침 시 초기값으로 복원). 실제 파일은 불러오기/다운로드로
+                로컬 Markdown과 주고받습니다.
+              </span>
             </div>
           </div>
         ) : null}
