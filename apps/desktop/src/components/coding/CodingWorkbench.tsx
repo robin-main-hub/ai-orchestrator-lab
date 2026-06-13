@@ -53,7 +53,7 @@ import { summarizeRejectedAttachments, attachmentDeliveryNote } from "../../lib/
 import { buildCodingAttachmentDelivery, describeCodingAttachmentDelivery } from "../../lib/codingAttachmentContext";
 import type { DraftAttachment } from "../../types";
 import { fetchGithubPullRequest } from "../../lib/githubConnector";
-import { buildPrContextAttachment, upsertContextAttachment } from "../../lib/githubContext";
+import { attachmentFromObservedResult, upsertContextAttachment } from "../../lib/githubContext";
 import { assembleCodingRequestMessages, buildGithubContextTracePayload } from "../../lib/codingRequestAssembly";
 import { codingInjectionBudgets } from "../../lib/contextBudget";
 import {
@@ -586,17 +586,16 @@ export function CodingWorkbench({
       return;
     }
     const result = await fetchGithubPullRequest(serverBaseUrl, owner, repo, pullNumber);
-    if (result.outcome !== "observed" || !result.data) {
-      setNotice(`GitHub 컨텍스트 추가 실패: ${result.message ?? result.outcome}`);
-      return;
-    }
-    const attachment = buildPrContextAttachment({
-      detail: result.data,
-      repoFullName: `${owner}/${repo}`,
-      observedAt: result.observedAt ?? new Date().toISOString(),
+    // observed 게이트 — 실제 200 재읽기일 때만 attachment를 만든다(아니면 null → 미attach).
+    const attachment = attachmentFromObservedResult(result, `${owner}/${repo}`, {
+      fallbackObservedAt: new Date().toISOString(),
       // PR 본문 발췌도 모델 예산에 맞춰 넉넉히(단일 PR이 컨텍스트를 독점하지 않게 절반까지).
       maxExcerptChars: injectionBudgets.prExcerptCharBudget,
     });
+    if (!attachment) {
+      setNotice(`GitHub 컨텍스트 추가 실패: ${result.message ?? result.outcome}`);
+      return;
+    }
     patchSession(session.id, (current) => ({
       ...current,
       githubContext: upsertContextAttachment(current.githubContext ?? [], attachment),
