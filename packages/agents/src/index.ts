@@ -72,6 +72,7 @@ export {
   createAgentMissionCapability,
   createHermesPersonaContinuity,
   createMissionWorkerAssignment,
+  missionCapabilitiesForProfiles,
   missionCapabilityModeForRole,
   personaSlugForMission,
   requiresMissionSandbox,

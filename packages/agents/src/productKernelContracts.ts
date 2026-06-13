@@ -341,3 +341,18 @@ export function buildPersonaContinuitySystemReminder(capability: MissionWorkerCa
       : "- Do not claim command execution. Ask a sandbox-capable worker when execution is needed.",
   ].join("\n");
 }
+
+/**
+ * 기존 워크스페이스 프로필(예: defaultAgentProfiles, 또는 사용자가 구성한
+ * AgentProfile 배열)을 한 번에 Mission capability로 변환하는 진입점.
+ *
+ * 새 계약을 평행 레이어로 두지 않고 "기존 프로필 위에 얹는" 첫 배선 지점이다 —
+ * server/UI는 이미 들고 있는 프로필을 그대로 넘겨 capability/sandbox/persona
+ * 경계를 얻는다. 순수 함수라 입력 프로필에만 의존하고 모듈 순환을 만들지 않는다.
+ */
+export function missionCapabilitiesForProfiles(
+  profiles: ReadonlyArray<AgentProfile>,
+  options: MissionCapabilityOptions = {},
+): MissionWorkerCapability[] {
+  return profiles.filter((profile) => profile.enabled).map((profile) => createAgentMissionCapability(profile, options));
+}
