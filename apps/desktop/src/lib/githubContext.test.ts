@@ -48,6 +48,13 @@ describe("buildPrContextAttachment — 결정적 observed excerpt", () => {
     expect(att.truncated).toBe(true);
     expect(att.observedExcerpt.length).toBeLessThan(big.length);
   });
+
+  it("기본 발췌 한도는 넉넉(24K) — 20K 본문은 잘리지 않는다(과도 클램프 방지)", () => {
+    const body = "y".repeat(20_000);
+    const att = buildPrContextAttachment({ detail: detail({ body }), repoFullName: "o/r", observedAt: "t" });
+    expect(att.truncated).toBe(false);
+    expect(att.observedExcerpt).toContain(body);
+  });
 });
 
 describe("upsert/remove/isContextAttached — idempotent", () => {

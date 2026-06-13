@@ -22,8 +22,11 @@ import type { ConversationAttachment, ProviderCompletionAttachment } from "@ai-o
  *     again.
  */
 
+// 기본값은 넉넉하게 — 호출자가 모델 인지 예산(modelContextCharBudget)을 넘겨 더 키울 수 있다.
 /** prompt budget per inlined text attachment — read-time already caps at 64K */
-const INLINE_CHAR_LIMIT = 12_000;
+const DEFAULT_INLINE_CHAR_LIMIT = 24_000;
+/** total inlined-body budget across attachments — keep one system message under the provider 200K cap */
+const DEFAULT_TOTAL_CHAR_BUDGET = 140_000;
 /** at most this many attachments are described/inlined into one request */
 const MAX_DESCRIBED = 6;
 
@@ -66,7 +69,11 @@ function attachmentText(attachment: ConversationAttachment): string {
  */
 export function buildCodingAttachmentDelivery(
   attachments: ReadonlyArray<ConversationAttachment>,
+  opts?: { inlineCharLimit?: number; totalCharBudget?: number },
 ): CodingAttachmentDelivery {
+  const perItemLimit = Math.max(1_000, opts?.inlineCharLimit ?? DEFAULT_INLINE_CHAR_LIMIT);
+  const totalBudget = Math.max(perItemLimit, opts?.totalCharBudget ?? DEFAULT_TOTAL_CHAR_BUDGET);
+  let inlinedChars = 0;
   const empty: CodingAttachmentDelivery = {
     providerAttachments: undefined,
     firstRequestContext: undefined,
@@ -104,8 +111,11 @@ export function buildCodingAttachmentDelivery(
     const body = attachmentText(attachment);
     if (body.trim()) {
       texts += 1;
-      const overBudget = body.length > INLINE_CHAR_LIMIT;
-      const inlined = overBudget ? body.slice(0, INLINE_CHAR_LIMIT) : body;
+      // 남은 총 예산과 항목 한도 중 작은 쪽까지만 인라인 — 한 메시지가 provider 한도를 넘지 않게.
+      const limit = Math.min(perItemLimit, Math.max(0, totalBudget - inlinedChars));
+      const overBudget = body.length > limit;
+      const inlined = overBudget ? body.slice(0, limit) : body;
+      inlinedChars += inlined.length;
       const truncationNote = attachment.truncated === true || overBudget ? " (일부만 — 원본이 더 김)" : "";
       bodyBlocks.push(
         [`--- 첨부 본문: ${name}${truncationNote} ---`, sanitizeInline(inlined), "--- 첨부 본문 끝 ---"].join("\n"),
