@@ -112,6 +112,25 @@ describe("DashboardView", () => {
     expect(html).not.toContain("dashboard__next");
   });
 
+  it("renders party cards as clickable buttons with a why-today reason badge", () => {
+    const html = renderToStaticMarkup(
+      <DashboardView
+        personas={[
+          { personaName: "kurumi", displayName: "토키사키 쿠루미", role: "companion", tagline: "본체", reason: "오늘 활성" },
+        ]}
+        runtime={runtime}
+        hermesPool={{ total: 12, bound: 1, spare: 11 }}
+        pendingApprovals={0}
+        history={[]}
+        onNavigate={vi.fn()}
+      />,
+    );
+    expect(html).toContain("dashboard__party-card");
+    expect(html).toContain("dashboard__party-reason");
+    expect(html).toContain("오늘 활성");
+    expect(html).toContain("토키사키 쿠루미 상세 보기"); // button title → opens detail modal
+  });
+
   it("omits the recent-runs section when there is no history", () => {
     const html = renderToStaticMarkup(
       <DashboardView
