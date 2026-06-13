@@ -51,9 +51,55 @@ describe("ControlQueueDrawer", () => {
     expect(html).toContain("승인 대기 1건");
     expect(html).toContain("질문·수정·위임으로 흐름 정리");
     expect(html).toContain("터미널 실행 승인 필요");
-    expect(html).toContain("6개 동작 · 작업 항목 연결됨");
+    // 푸터에 키보드 단축키가 보인다 (이미 있던 ⌘⏎/⌘⌫를 드로어 안에서 시각화)
+    expect(html).toContain("첫 항목 승인");
+    expect(html).toContain("⌘⏎");
+    expect(html).toContain("⌘⌫");
     expect(html).not.toContain("비활성화됨");
     expect(html).not.toContain("Control Queue");
+  });
+
+  it("기본은 승인 한 버튼 + 더보기로 접혀 있다 (액션 피로 완화)", () => {
+    const html = renderToStaticMarkup(
+      <ControlQueueDrawer
+        onAsk={vi.fn()}
+        onApprove={vi.fn()}
+        onBlock={vi.fn()}
+        onClose={vi.fn()}
+        onDelegate={vi.fn()}
+        onEdit={vi.fn()}
+        onReject={vi.fn()}
+        open
+        snapshot={snapshot}
+      />,
+    );
+    // 접힌 카드: 더보기 토글이 있고, 펼침 상태의 "접기"는 없다
+    expect(html).toContain("더보기");
+    expect(html).not.toContain("접기");
+    // 첫 항목 승인 버튼에 ⌘⏎ 힌트가 붙는다
+    expect(html).toContain("⌘⏎");
+  });
+
+  it("신뢰할 수 없는 출처(untrusted)는 위험 표시 — 일반 명령과 다른 UI", () => {
+    const riskySnapshot: PermissionMatrixSnapshot = {
+      ...snapshot,
+      queue: [{ ...approval, sourceTrust: "untrusted" }],
+    };
+    const html = renderToStaticMarkup(
+      <ControlQueueDrawer
+        onAsk={vi.fn()}
+        onApprove={vi.fn()}
+        onBlock={vi.fn()}
+        onClose={vi.fn()}
+        onDelegate={vi.fn()}
+        onEdit={vi.fn()}
+        onReject={vi.fn()}
+        open
+        snapshot={riskySnapshot}
+      />,
+    );
+    expect(html).toContain("위험");
+    expect(html).toContain("border-destructive/60");
   });
 
   it("승인 직후 재전송이 막히면 그 이유를 드로어 안에서 바로 보여준다", () => {

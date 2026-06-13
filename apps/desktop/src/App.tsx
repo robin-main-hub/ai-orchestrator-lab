@@ -4273,6 +4273,7 @@ export function App() {
     },
     onStop: () => setAgentActivityById({}),
     onApprove: () => handleResolveNextPermission("approved"),
+    onReject: () => handleResolveNextPermission("rejected"),
     onEscape: () => {
       if (cheatSheetOpen) setCheatSheetOpen(false);
       else if (commandPaletteOpen) setCommandPaletteOpen(false);
