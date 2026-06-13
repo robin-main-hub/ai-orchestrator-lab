@@ -74,6 +74,7 @@ function serverRecord(overrides: Partial<ServerMissionRecord["mission"]> = {}, u
     errorCards: [],
     selfCorrections: [],
     workspaces: [],
+    designBlueprints: [],
     updatedAt,
   };
 }

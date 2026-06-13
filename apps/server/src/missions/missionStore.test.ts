@@ -718,3 +718,37 @@ describe("app workspace (D2)", () => {
     expect(await store.attachWorkspace("ghost", { repoRootRef: "/repo", appType: "unknown", terminalMode: "read_only", runnerKind: "local" })).toBeUndefined();
   });
 });
+
+describe("design blueprint (D3)", () => {
+  const blueprintInput = {
+    title: "콕핏 정리",
+    userIntent: "정보 과부하 줄이기",
+    targetSurface: "cockpit" as const,
+    screens: [
+      { name: "히어로", purpose: "건강 신호", primaryAction: "다음 액션", secondaryActions: [], dataNeeded: ["health"], emptyState: "데이터 없음", errorState: "실패" },
+    ],
+    designTokens: { density: "compact" as const, tone: "cyber_glass" as const, motion: "subtle" as const },
+    acceptanceCriteria: ["red/yellow/green 단일 신호"],
+  };
+
+  it("records a blueprint + planned artifacts on a mission, survives restart", async () => {
+    const { deps, events } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    const result = await store.attachDesignBlueprint("mission_001", blueprintInput);
+    expect(result?.blueprint.screens[0]!.id).toContain("screen_1");
+    expect(result?.mission.designBlueprints).toHaveLength(1);
+    // 화면(1) + 수용기준(1) = 2 planned 아티팩트
+    expect(result?.mission.artifacts).toHaveLength(2);
+    expect(result?.mission.artifacts.every((a) => a.truthStatus === "planned")).toBe(true);
+
+    const restored = buildMissionIndexFromEvents(events);
+    expect(restored[0]!.designBlueprints).toHaveLength(1);
+  });
+
+  it("returns undefined for an unknown mission", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    expect(await store.attachDesignBlueprint("ghost", blueprintInput)).toBeUndefined();
+  });
+});
