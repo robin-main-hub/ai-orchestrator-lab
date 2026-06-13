@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  AlertTriangle,
   Check,
   Clock3,
   Edit3,
   Forward,
   HelpCircle,
+  MoreHorizontal,
   ShieldCheck,
   ShieldOff,
   X,
@@ -24,6 +26,7 @@ import {
   controlQueueStateLabel,
   type ControlQueueLaneId,
 } from "@/lib/controlQueuePresentation";
+import { isRiskyApprovalItem } from "../lib/controlQueueRisk";
 import { tmuxRedispatchOutcomeLabel } from "../lib/railStatusLabels";
 import type { TmuxRedispatchOutcome } from "./OperationsRailPanel";
 import { Button } from "@/ui/button";
@@ -296,9 +299,10 @@ export function ControlQueueDrawer({
             </span>
           </div>
         ) : (
-          pendingItems.map((item) => (
+          pendingItems.map((item, index) => (
             <QueueCard
               activeLane={activeLane}
+              isFirst={index === 0}
               item={item}
               key={item.id}
               onAsk={onAsk}
@@ -312,14 +316,15 @@ export function ControlQueueDrawer({
         )}
       </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-[10px] text-muted-foreground">
-        <span className="font-mono">
-          {LANES.length}개 동작 · 작업 항목 연결됨
+      {/* Footer — 키보드 단축키를 드로어 안에서 보이게 */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-border px-3 py-2 text-[10px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <FooterKbd>⌘⏎</FooterKbd> 첫 항목 승인
+          <FooterKbd>⌘⌫</FooterKbd> 거절
         </span>
-        <kbd className="rounded border border-border bg-card/60 px-1 py-0 font-mono">
-          esc
-        </kbd>
+        <span className="inline-flex items-center gap-1.5">
+          <FooterKbd>esc</FooterKbd> 닫기
+        </span>
       </div>
     </aside>
   );
@@ -399,6 +404,7 @@ function LaneChip({
 
 function QueueCard({
   activeLane,
+  isFirst = false,
   item,
   onAsk,
   onApprove,
@@ -408,6 +414,8 @@ function QueueCard({
   onReject,
 }: {
   activeLane: LaneId | "all";
+  /** 큐의 첫 항목인가 — ⌘⏎/⌘⌫ 키보드 경로가 이 항목을 처리하므로 힌트를 보여준다 */
+  isFirst?: boolean;
   item: ApprovalQueueItem;
   onAsk: (item: ApprovalQueueItem) => void;
   onApprove: (sourceItemId: string) => void;
@@ -416,7 +424,13 @@ function QueueCard({
   onEdit: (item: ApprovalQueueItem) => void;
   onReject: (sourceItemId: string) => void;
 }) {
+  // 액션 피로 완화: 기본은 "승인" 하나만 크게, 나머지 5개는 "더보기"로 접는다.
+  const [expanded, setExpanded] = useState(false);
+  // 위험 명령은 한 번 더 확인 — 일반 승인과 같은 한 번 클릭으로 통과시키지 않는다.
+  const [confirming, setConfirming] = useState(false);
+  const risky = isRiskyApprovalItem(item);
   const showAction = (lane: LaneId) => activeLane === "all" || activeLane === lane;
+  const collapsed = activeLane === "all" && !expanded;
   const metaItems = controlQueueMetaItems(item);
   const reasonMeta = metaItems.find((meta) => meta.label === "사유");
   const compactMeta = metaItems.filter((meta) => meta.label !== "사유");
@@ -425,9 +439,11 @@ function QueueCard({
     <div
       className={cn(
         "flex flex-col gap-1.5 rounded-md border bg-card/40 p-2",
-        item.state === "required"
-          ? "border-warning/50"
-          : "border-border",
+        risky
+          ? "border-destructive/60 bg-destructive/[0.04]"
+          : item.state === "required"
+            ? "border-warning/50"
+            : "border-border",
       )}
     >
       {/* Header */}
@@ -438,9 +454,17 @@ function QueueCard({
             {sanitizeControlQueueText(item.requestedBy)}
           </span>
         </div>
-        <StatusBadge variant="warning" size="sm" className="font-mono uppercase shrink-0">
-          {controlQueueStateLabel(item.state)}
-        </StatusBadge>
+        <div className="flex shrink-0 items-center gap-1">
+          {risky ? (
+            <StatusBadge variant="danger" size="sm" className="gap-1 font-mono uppercase">
+              <AlertTriangle className="h-3 w-3" />
+              위험
+            </StatusBadge>
+          ) : null}
+          <StatusBadge variant="warning" size="sm" className="font-mono uppercase">
+            {controlQueueStateLabel(item.state)}
+          </StatusBadge>
+        </div>
       </div>
 
       {/* Summary */}
@@ -473,55 +497,129 @@ function QueueCard({
         {sanitizeControlQueueText(item.sourceItemId)}
       </p>
 
-      {/* 6 lane actions inline. 모든 lane은 WorkItem/Draft/Handoff 흐름으로 연결된다. */}
-      <div className={cn("grid gap-1 pt-1", activeLane === "all" ? "grid-cols-3" : "grid-cols-1")}>
-        {showAction("approve") ? (
-          <ActionButton
-            icon={<Check className="h-3 w-3 size-3" />}
-            label={controlQueueLaneLabel("approve")}
-            onClick={() => onApprove(item.sourceItemId)}
-            tone="primary"
-          />
-        ) : null}
-        {showAction("ask") ? (
-          <ActionButton
-            icon={<HelpCircle className="h-3 w-3 size-3" />}
-            label={controlQueueLaneLabel("ask")}
-            onClick={() => onAsk(item)}
-          />
-        ) : null}
-        {showAction("edit") ? (
-          <ActionButton
-            icon={<Edit3 className="h-3 w-3 size-3" />}
-            label={controlQueueLaneLabel("edit")}
-            onClick={() => onEdit(item)}
-          />
-        ) : null}
-        {showAction("delegate") ? (
-          <ActionButton
-            icon={<Forward className="h-3 w-3 size-3" />}
-            label={controlQueueLaneLabel("delegate")}
-            onClick={() => onDelegate(item)}
-          />
-        ) : null}
-        {showAction("block") ? (
-          <ActionButton
-            icon={<ShieldOff className="h-3 w-3 size-3" />}
-            label={controlQueueLaneLabel("block")}
-            onClick={() => onBlock(item)}
-            tone="destructive"
-          />
-        ) : null}
-        {showAction("archive") ? (
-          <ActionButton
-            icon={<XCircle className="h-3 w-3 size-3" />}
-            label={controlQueueLaneLabel("archive")}
-            onClick={() => onReject(item.sourceItemId)}
-            tone="destructive"
-          />
-        ) : null}
-      </div>
+      {/* 액션. 기본(collapsed)은 승인 한 버튼 + 더보기. 펼치거나 특정 lane 필터 시 6개 전부. */}
+      {collapsed ? (
+        <div className="flex flex-col gap-1 pt-1">
+          {confirming ? (
+            <div className="flex items-stretch gap-1">
+              <Button
+                className="h-8 flex-1 justify-center gap-1.5 text-[11px]"
+                onClick={() => {
+                  onApprove(item.sourceItemId);
+                  setConfirming(false);
+                }}
+                title="위험 명령을 정말 실행합니다"
+                type="button"
+                variant="destructive"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                정말 실행?
+              </Button>
+              <Button
+                className="h-8 justify-center px-3 text-[11px]"
+                onClick={() => setConfirming(false)}
+                type="button"
+                variant="outline"
+              >
+                취소
+              </Button>
+            </div>
+          ) : (
+            <Button
+              className="h-8 w-full justify-center gap-1.5 text-[11px]"
+              onClick={() => (risky ? setConfirming(true) : onApprove(item.sourceItemId))}
+              title={risky ? "위험 명령 — 한 번 더 확인합니다" : controlQueueActionFeedback("approve")}
+              type="button"
+              variant={risky ? "destructive" : "default"}
+            >
+              <Check className="h-3.5 w-3.5" />
+              {controlQueueLaneLabel("approve")}
+              {isFirst ? (
+                <kbd className="ml-0.5 rounded border border-white/20 bg-black/20 px-1 text-[8px] font-mono leading-tight opacity-80">
+                  ⌘⏎
+                </kbd>
+              ) : null}
+            </Button>
+          )}
+          <button
+            aria-expanded={false}
+            className="inline-flex items-center justify-center gap-1 rounded-md border border-border bg-card/40 py-1 text-[10px] text-muted-foreground transition-colors hover:border-primary/45 hover:text-foreground"
+            onClick={() => setExpanded(true)}
+            title="질문·수정·위임·차단·보관"
+            type="button"
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+            더보기
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className={cn("grid gap-1 pt-1", activeLane === "all" ? "grid-cols-3" : "grid-cols-1")}>
+            {showAction("approve") ? (
+              <ActionButton
+                icon={<Check className="h-3 w-3 size-3" />}
+                label={controlQueueLaneLabel("approve")}
+                onClick={() => onApprove(item.sourceItemId)}
+                tone="primary"
+              />
+            ) : null}
+            {showAction("ask") ? (
+              <ActionButton
+                icon={<HelpCircle className="h-3 w-3 size-3" />}
+                label={controlQueueLaneLabel("ask")}
+                onClick={() => onAsk(item)}
+              />
+            ) : null}
+            {showAction("edit") ? (
+              <ActionButton
+                icon={<Edit3 className="h-3 w-3 size-3" />}
+                label={controlQueueLaneLabel("edit")}
+                onClick={() => onEdit(item)}
+              />
+            ) : null}
+            {showAction("delegate") ? (
+              <ActionButton
+                icon={<Forward className="h-3 w-3 size-3" />}
+                label={controlQueueLaneLabel("delegate")}
+                onClick={() => onDelegate(item)}
+              />
+            ) : null}
+            {showAction("block") ? (
+              <ActionButton
+                icon={<ShieldOff className="h-3 w-3 size-3" />}
+                label={controlQueueLaneLabel("block")}
+                onClick={() => onBlock(item)}
+                tone="destructive"
+              />
+            ) : null}
+            {showAction("archive") ? (
+              <ActionButton
+                icon={<XCircle className="h-3 w-3 size-3" />}
+                label={controlQueueLaneLabel("archive")}
+                onClick={() => onReject(item.sourceItemId)}
+                tone="destructive"
+              />
+            ) : null}
+          </div>
+          {activeLane === "all" ? (
+            <button
+              aria-expanded
+              className="inline-flex items-center justify-center gap-1 rounded-md py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setExpanded(false)}
+              type="button"
+            >
+              접기
+            </button>
+          ) : null}
+        </>
+      )}
     </div>
+  );
+}
+
+function FooterKbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="rounded border border-border bg-card/60 px-1 py-0 font-mono text-[9px]">{children}</kbd>
   );
 }
 

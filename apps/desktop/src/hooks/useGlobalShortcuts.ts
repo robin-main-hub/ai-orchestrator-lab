@@ -38,6 +38,7 @@ export type GlobalShortcutHandlers = {
   onInvokeOrchestrator?: () => void;
   onStop?: () => void;
   onApprove?: () => void;
+  onReject?: () => void;
   onEscape?: () => void;
   onHelp?: () => void;
 };
@@ -116,6 +117,15 @@ export function useGlobalShortcuts(handlers: GlobalShortcutHandlers) {
           if (!inEditable) {
             e.preventDefault();
             handlers.onApprove?.();
+            return;
+          }
+        }
+        if (key === "backspace") {
+          // ⌘⌫ — reject the first pending item (mirror of ⌘⏎ approve). Skip in
+          // editable areas where Backspace deletes text.
+          if (!inEditable) {
+            e.preventDefault();
+            handlers.onReject?.();
             return;
           }
         }
