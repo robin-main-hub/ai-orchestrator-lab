@@ -150,6 +150,7 @@ docs/             # 00~45 설계 문서 (아래 주요 항목)
 59     cockpit-tile-shrink-deck-merge (compact glance tiles + NextActionStrip folded into command deck)
 60     tmux-grid-inline-input (2-col pane grid + full-width detail + per-pane inline command input)
 61     nav-icon-rail (264→56px icon-only nav rail on nav-center pages; mode/⌘K already unified)
+62     micro-interactions (avatar speaking pulse on active work + queue-cleared stamp slam-in)
 ```
 
 ## 실행 방법

@@ -102,6 +102,31 @@ describe("ControlQueueDrawer", () => {
     expect(html).toContain("border-destructive/60");
   });
 
+  it("큐를 비우면 처리 완료 도장(slam-in)을 찍어 보여준다", () => {
+    const clearedSnapshot: PermissionMatrixSnapshot = {
+      ...snapshot,
+      // 대기(required) 0건이지만 처리된(approved) 항목이 큐에 남아 resolvedCount > 0
+      queue: [{ ...approval, id: "resolved_1", sourceItemId: "resolved_1", state: "approved" }],
+      summary: { ...snapshot.summary, pending: 0, approved: 3 },
+    };
+    const html = renderToStaticMarkup(
+      <ControlQueueDrawer
+        onAsk={vi.fn()}
+        onApprove={vi.fn()}
+        onBlock={vi.fn()}
+        onClose={vi.fn()}
+        onDelegate={vi.fn()}
+        onEdit={vi.fn()}
+        onReject={vi.fn()}
+        open
+        snapshot={clearedSnapshot}
+      />,
+    );
+    expect(html).toContain("대기 중인 항목 없음");
+    expect(html).toContain("result-stamp");
+    expect(html).toContain("처리 완료");
+  });
+
   it("승인 직후 재전송이 막히면 그 이유를 드로어 안에서 바로 보여준다", () => {
     // 승인 클릭 → 서버 게이트(blocked)인데 드로어에 아무것도 안 떠서
     // "승인했는데 아무 일도 안 일어남"으로 보이던 회귀 케이스
