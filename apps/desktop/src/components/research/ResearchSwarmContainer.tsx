@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleStop, Download, FlaskConical, Play, Plus, Trash2 } from "lucide-react";
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
 import { StatusBadge } from "@/ui/status-badge";
@@ -51,10 +51,13 @@ export function ResearchSwarmContainer({
   sessionId = "session_desktop_research",
   serverBaseUrl,
   providerProfiles = [],
+  seed,
 }: {
   sessionId?: string;
   serverBaseUrl?: string | string[];
   providerProfiles?: ProviderProfile[];
+  /** 대화창 "스웜 서치"에서 넘어온 자동 편성 — 주제 + 동적 4~16명 요원 프리필 */
+  seed?: { id: string; topic: string; drafts: Array<{ personaName: string; displayName: string; task: string }> };
 }) {
   const [topic, setTopic] = useState("");
   const [drafts, setDrafts] = useState<Draft[]>(() =>
@@ -72,6 +75,23 @@ export function ResearchSwarmContainer({
   const [notice, setNotice] = useState<string | null>(null);
   const cancelRef = useRef(false);
   const notesRef = useRef<Map<string, { agentName: string; task: string; path: string; content: string }>>(new Map());
+
+  // 대화창 "스웜 서치" 자동 편성을 받으면 주제 + 요원 명단을 프리필한다(새 seed.id마다 1회).
+  const appliedSeedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!seed || appliedSeedRef.current === seed.id) return;
+    appliedSeedRef.current = seed.id;
+    setTopic(seed.topic);
+    setDrafts(
+      seed.drafts.map((draft, index) => ({
+        id: `seed_${index}`,
+        personaName: draft.personaName,
+        displayName: draft.displayName,
+        task: draft.task,
+      })),
+    );
+    setNotice(`대화에서 「${seed.topic}」 주제로 ${seed.drafts.length}명 요원을 자동 편성했습니다. 스웜 배치로 시작하세요.`);
+  }, [seed]);
 
   const viewing = swarm?.agents.find((run) => run.id === swarm.viewingAgentId) ?? null;
   const viewingIndex = swarm ? swarm.agents.findIndex((run) => run.id === swarm.viewingAgentId) + 1 : 0;
