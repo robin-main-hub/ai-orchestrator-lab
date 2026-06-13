@@ -1,10 +1,14 @@
 import type {
   GithubConnectorStatus,
+  GithubFileContent,
   GithubIssueSummary,
   GithubPullRequestDetail,
   GithubPullRequestSummary,
   GithubRepoSummary,
 } from "@ai-orchestrator/protocol";
+
+/** bounded file-read excerpt — never return the whole raw file unbounded */
+const MAX_FILE_CHARS = 24_000;
 
 /**
  * Read-only GitHub connector — server-side. The token lives ONLY here (server
@@ -70,6 +74,7 @@ export type GithubReadonlyClient = {
   getRepoOverview(owner: string, repo: string): Promise<GithubRepoSummary>;
   listPullRequests(owner: string, repo: string, opts?: { state?: "open" | "closed" | "all"; perPage?: number }): Promise<GithubPullRequestSummary[]>;
   getPullRequest(owner: string, repo: string, pullNumber: number): Promise<GithubPullRequestDetail>;
+  getFileContent(owner: string, repo: string, path: string, ref?: string): Promise<GithubFileContent>;
   listIssues(owner: string, repo: string, opts?: { state?: "open" | "closed" | "all"; perPage?: number }): Promise<GithubIssueSummary[]>;
 };
 
@@ -157,6 +162,42 @@ export function createGithubReadonlyClient(options: GithubReadonlyClientOptions 
         deletions: numberOrNull(pr.deletions),
         changedFiles: numberOrNull(pr.changed_files),
         commits: numberOrNull(pr.commits),
+      };
+    },
+
+    async getFileContent(owner, repo, path, ref) {
+      const encodedPath = path
+        .split("/")
+        .filter((segment) => segment.length > 0)
+        .map((segment) => encodeURIComponent(segment))
+        .join("/");
+      const refQuery = ref ? `?ref=${encodeURIComponent(ref)}` : "";
+      const raw = await getJson(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodedPath}${refQuery}`,
+      );
+      if (Array.isArray(raw)) {
+        throw new GithubReadonlyError("경로가 파일이 아니라 디렉터리입니다", 422);
+      }
+      const record = raw as Record<string, unknown>;
+      const encoding = String(record.encoding ?? "");
+      const rawContent = typeof record.content === "string" ? record.content : "";
+      let text = "";
+      if (encoding === "base64" && rawContent) {
+        try {
+          text = Buffer.from(rawContent.replace(/\n/g, ""), "base64").toString("utf8");
+        } catch {
+          text = "";
+        }
+      }
+      const truncated = text.length > MAX_FILE_CHARS;
+      return {
+        path: String(record.path ?? path),
+        size: Number(record.size ?? 0),
+        sha: String(record.sha ?? ""),
+        htmlUrl: String(record.html_url ?? ""),
+        content: truncated ? text.slice(0, MAX_FILE_CHARS) : text,
+        truncated,
+        encoding: "utf8",
       };
     },
 

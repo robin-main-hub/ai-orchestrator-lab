@@ -13,12 +13,36 @@ export type SwarmToolDef = {
   description: string;
   inputSchema: Record<string, unknown>;
   method: "GET" | "POST";
-  path: string;
+  /** static path, or a builder for GET resources whose path/query come from args */
+  path: string | ((args: Record<string, unknown>) => string);
   /** request body from the tool arguments (POST only) */
   body?: (args: Record<string, unknown>) => unknown;
 };
 
 const passthrough = (args: Record<string, unknown>) => args;
+
+// ── GitHub read-only path helpers — validate + encode args to forward to the
+//    existing /integrations/github routes. No new GitHub client; the MCP layer
+//    only standardizes access and the token stays in the server env. ──────────
+function ghSegment(value: unknown, label: string): string {
+  const raw = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9._-]+$/.test(raw)) {
+    throw new Error(`invalid github ${label} (allowed: A-Za-z0-9._-)`);
+  }
+  return encodeURIComponent(raw);
+}
+function ghState(value: unknown): string {
+  const raw = String(value ?? "open");
+  return raw === "closed" || raw === "all" ? `?state=${raw}` : "";
+}
+function ghNumber(value: unknown): string {
+  const num = Number(value);
+  if (!Number.isInteger(num) || num <= 0) throw new Error("invalid github PR number");
+  return String(num);
+}
+function ghRepoBase(args: Record<string, unknown>): string {
+  return `/integrations/github/repos/${ghSegment(args.owner, "owner")}/${ghSegment(args.repo, "repo")}`;
+}
 
 export const SWARM_TOOLS: ReadonlyArray<SwarmToolDef> = [
   {
@@ -117,6 +141,71 @@ export const SWARM_TOOLS: ReadonlyArray<SwarmToolDef> = [
       },
     },
   },
+  // ── GitHub read-only tools (D3) — forward to the existing /integrations/github
+  //    routes. Read-only by construction: GET only, no write surface. The result
+  //    is whatever the route returns (honest `outcome` + bounded/redacted data);
+  //    the agent reads it, but the MCP layer does NOT auto-attach it to any
+  //    mission/coding context (that stays an explicit user action). ────────────
+  {
+    name: "github_status",
+    description:
+      "GitHub read-only connector status (configured/tokenPresent). Never returns the token. No GitHub call when unconfigured.",
+    method: "GET",
+    path: "/integrations/github/status",
+    inputSchema: { type: "object", additionalProperties: false, properties: {} },
+  },
+  {
+    name: "github_pr_list",
+    description:
+      "List a repo's pull requests (read-only). Returns bounded summaries with an honest outcome (observed/not_configured/permission_denied/connection_failed).",
+    method: "GET",
+    path: (args) => `${ghRepoBase(args)}/pulls${ghState(args.state)}`,
+    inputSchema: {
+      type: "object",
+      required: ["owner", "repo"],
+      additionalProperties: false,
+      properties: {
+        owner: { type: "string" },
+        repo: { type: "string" },
+        state: { type: "string", enum: ["open", "closed", "all"], default: "open" },
+      },
+    },
+  },
+  {
+    name: "github_pr_read",
+    description: "Read one pull request's detail (read-only, observed). Body is a bounded excerpt, not the raw unbounded payload.",
+    method: "GET",
+    path: (args) => `${ghRepoBase(args)}/pulls/${ghNumber(args.number)}`,
+    inputSchema: {
+      type: "object",
+      required: ["owner", "repo", "number"],
+      additionalProperties: false,
+      properties: {
+        owner: { type: "string" },
+        repo: { type: "string" },
+        number: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "github_file_read",
+    description: "Read a file's text content (read-only, observed). Returns bounded UTF-8 text with a `truncated` flag — never the whole raw file unbounded.",
+    method: "GET",
+    path: (args) =>
+      `${ghRepoBase(args)}/file?path=${encodeURIComponent(String(args.path ?? ""))}` +
+      (args.ref ? `&ref=${encodeURIComponent(String(args.ref))}` : ""),
+    inputSchema: {
+      type: "object",
+      required: ["owner", "repo", "path"],
+      additionalProperties: false,
+      properties: {
+        owner: { type: "string" },
+        repo: { type: "string" },
+        path: { type: "string", description: "file path within the repo, e.g. src/index.ts" },
+        ref: { type: "string", description: "branch/tag/sha (optional)" },
+      },
+    },
+  },
 ];
 
 export type SwarmToolDeps = {
@@ -144,10 +233,13 @@ export async function callSwarmTool(
     throw new Error(`unknown swarm tool: ${name}`);
   }
   const fetchImpl = deps.fetchImpl ?? fetch;
-  const url = `${deps.baseUrl.replace(/\/$/, "")}${tool.path}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), deps.timeoutMs ?? 8_000);
   try {
+    // build the path inside try so an invalid GET arg (bad owner/repo) becomes a
+    // clean, redacted error result instead of throwing out of the tool call.
+    const path = typeof tool.path === "function" ? tool.path(args) : tool.path;
+    const url = `${deps.baseUrl.replace(/\/$/, "")}${path}`;
     const response = await fetchImpl(url, {
       method: tool.method,
       headers: {
