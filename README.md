@@ -134,6 +134,7 @@ docs/             # 00~45 설계 문서 (아래 주요 항목)
 43     chat-coding-research (opencode 내부 + 터미널 에이전트 논문 정독)
 44     research-swarm (Manus/Kimi식 리서치 콘솔)
 45     chat-coding-roadmap (Manus 3편 + Kimi 보고서 종합 로드맵)
+46     product-kernel-sandbox-persona (Mission/Sandbox/Verifier/Merge + Hermes persona contract)
 ```
 
 ## 실행 방법
