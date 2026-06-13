@@ -100,11 +100,20 @@ describe("GitHub read-only MCP tools (D3)", () => {
     expect(names).toEqual(expect.arrayContaining(["github_status", "github_pr_list", "github_pr_read", "github_file_read"]));
   });
 
-  it("모든 GitHub 도구는 GET이고 write 도구가 없다(읽기 전용)", () => {
+  it("읽기 도구는 GET only(D3) — write는 comment_plan/comment_execute만(W1)", () => {
     const gh = SWARM_TOOLS.filter((t) => t.name.startsWith("github_"));
-    expect(gh.length).toBeGreaterThanOrEqual(4);
-    expect(gh.every((t) => t.method === "GET")).toBe(true);
-    expect(SWARM_TOOLS.some((t) => /github_(create|comment|merge|commit|push|write|update|delete)/.test(t.name))).toBe(false);
+    expect(gh.length).toBeGreaterThanOrEqual(6);
+    // read-only는 GET만 — github_status / pr_list / pr_read / file_read
+    const readOnly = gh.filter((t) => !t.name.startsWith("github_comment_"));
+    expect(readOnly.every((t) => t.method === "GET")).toBe(true);
+    // write는 comment_plan/comment_execute 두 개만(branch/commit/file_create/pr_create/merge 금지)
+    const writeNames = gh.filter((t) => t.method === "POST").map((t) => t.name);
+    expect(writeNames.sort()).toEqual(["github_comment_execute", "github_comment_plan"]);
+    expect(
+      SWARM_TOOLS.some((t) =>
+        /github_(branch|merge|commit|push|file_(create|write|update|delete)|pr_create|comment_(update|delete))/.test(t.name),
+      ),
+    ).toBe(false);
   });
 
   it("github_pr_list는 기존 /integrations/github 라우트로 GET forward(새 client 없음)", async () => {
@@ -126,6 +135,52 @@ describe("GitHub read-only MCP tools (D3)", () => {
     const fetchImpl = okFetch();
     await callSwarmTool("github_file_read", { owner: "o", repo: "r", path: "src/a.ts" }, { ...deps, fetchImpl: fetchImpl as never });
     expect(fetchImpl.mock.calls[0]![0]).toBe("http://127.0.0.1:4317/integrations/github/repos/o/r/file?path=src%2Fa.ts");
+  });
+
+  it("github_comment_plan + github_comment_execute 도구가 노출되고 둘 다 POST forwarder", () => {
+    const planTool = SWARM_TOOLS.find((t) => t.name === "github_comment_plan");
+    const executeTool = SWARM_TOOLS.find((t) => t.name === "github_comment_execute");
+    expect(planTool?.method).toBe("POST");
+    expect(executeTool?.method).toBe("POST");
+    // MCP는 게이트 우회 통로가 아니다 — github_comment_create_direct 같은 우회 도구 금지
+    expect(SWARM_TOOLS.some((t) => /github.*(direct|raw|skip|bypass)/.test(t.name))).toBe(false);
+    // write 가능한 다른 github 도구는 만들지 않는다(branch/commit/file_create/pr_create/merge)
+    expect(
+      SWARM_TOOLS.some((t) =>
+        /github_(branch|commit|file_(create|write|update|delete)|pr_create|merge|comment_(update|delete))/.test(t.name),
+      ),
+    ).toBe(false);
+  });
+
+  it("github_comment_plan은 /integrations/github/write/comment/plan으로 body 그대로 forward", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => "{}" });
+    await callSwarmTool(
+      "github_comment_plan",
+      { repoFullName: "robin/lab", number: 7, targetKind: "pull_request", body: "리뷰 확인" },
+      { ...deps, fetchImpl: fetchImpl as never },
+    );
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe("http://127.0.0.1:4317/integrations/github/write/comment/plan");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      repoFullName: "robin/lab", number: 7, targetKind: "pull_request", body: "리뷰 확인",
+    });
+  });
+
+  it("github_comment_execute는 /integrations/github/write/comment/execute로 forward — 직접 GitHub 호출 없음", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => "{}" });
+    await callSwarmTool(
+      "github_comment_execute",
+      { planId: "gcwp_1", bodySha256: "sha", autoExecuteArmed: true, armedAt: "2026-06-14T00:00:00.000Z" },
+      { ...deps, fetchImpl: fetchImpl as never },
+    );
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe("http://127.0.0.1:4317/integrations/github/write/comment/execute");
+    expect(init.method).toBe("POST");
+    // 페이로드는 그대로 forward — MCP가 가공/우회하지 않는다.
+    expect(JSON.parse(init.body as string)).toMatchObject({ planId: "gcwp_1", bodySha256: "sha" });
+    // MCP는 직접 GitHub API에 가지 않는다 — orchestrator URL만 호출.
+    expect(String(url)).not.toContain("api.github.com");
   });
 
   it("잘못된 owner/repo는 fetch 없이 깨끗한 에러(path injection 방지)", async () => {

@@ -205,6 +205,38 @@ describe("W1 — POST /integrations/github/write/comment/execute", () => {
     expect(postIssueComment).toHaveBeenCalledTimes(1);
   });
 
+  it("armedAt이 30분 이상 과거면 blocked(armed_expired) — 서버가 독립적으로 TTL 강제", async () => {
+    const { planStore, plan } = await planFirst("stale");
+    const { respondJson, calls } = capture();
+    const postIssueComment = vi.fn();
+    // armed가 5시간 전 — 클라가 잊고 켜둔 상태가 외부 게시로 이어지지 않게 서버가 거절.
+    const NOW_REF = "2026-06-14T06:00:00.000Z";
+    await handleGithubRoute({
+      pathname: "/integrations/github/write/comment/execute", method: "POST",
+      createClient: () => clientStub({ token: "ghp_x", postIssueComment }),
+      respondJson, now: () => NOW_REF, request: stubRequest,
+      readJsonBody: async () => ({ planId: plan.id, bodySha256: plan.bodySha256, autoExecuteArmed: true, armedAt: "2026-06-14T00:00:00.000Z" }),
+      planStore, writeRepoAllowlist: ["robin/lab"], verifyApproval: async () => false,
+    });
+    expect(calls[0]?.payload.outcome).toBe("blocked");
+    expect(postIssueComment).not.toHaveBeenCalled();
+  });
+
+  it("armedAt이 미래면 blocked(시계 왜곡/위조 차단)", async () => {
+    const { planStore, plan } = await planFirst("future");
+    const { respondJson, calls } = capture();
+    const postIssueComment = vi.fn();
+    await handleGithubRoute({
+      pathname: "/integrations/github/write/comment/execute", method: "POST",
+      createClient: () => clientStub({ token: "ghp_x", postIssueComment }),
+      respondJson, now: NOW, request: stubRequest,
+      readJsonBody: async () => ({ planId: plan.id, bodySha256: plan.bodySha256, autoExecuteArmed: true, armedAt: "2026-12-31T23:59:59.000Z" }),
+      planStore, writeRepoAllowlist: ["robin/lab"], verifyApproval: async () => false,
+    });
+    expect(calls[0]?.payload.outcome).toBe("blocked");
+    expect(postIssueComment).not.toHaveBeenCalled();
+  });
+
   it("autoExecuteArmed=true + armedAt 유효 + sha 일치면 observed", async () => {
     const { planStore, plan } = await planFirst("hello");
     const { respondJson, calls } = capture();

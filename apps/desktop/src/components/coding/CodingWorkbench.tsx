@@ -1114,6 +1114,7 @@ export function CodingWorkbench({
             attachedContext={active?.githubContext}
             onAttach={attachGithubContext}
             onDetach={detachGithubContext}
+            onContextEvent={onContextEvent}
           />
         </aside>
       ) : (
