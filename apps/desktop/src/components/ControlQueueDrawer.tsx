@@ -27,6 +27,7 @@ import {
   type ControlQueueLaneId,
 } from "@/lib/controlQueuePresentation";
 import { isRiskyApprovalItem } from "../lib/controlQueueRisk";
+import { partitionSafeSubset } from "../lib/approvalCommandEvidence";
 import { tmuxRedispatchOutcomeLabel } from "../lib/railStatusLabels";
 import type { TmuxRedispatchOutcome } from "./OperationsRailPanel";
 import { Button } from "@/ui/button";
@@ -64,6 +65,11 @@ export type ControlQueueDrawerProps = {
   snapshot: PermissionMatrixSnapshot;
   /** 승인 직후 tmux 재전송 결과 — 승인을 누른 바로 그 자리에서 blocked/실패 사유를 보여준다 */
   redispatchOutcomes?: TmuxRedispatchOutcome[];
+  /**
+   * 안전 검증 항목 일괄 승인. 지정 시 한 번에 처리(단일 trace 가능), 미지정 시 각 항목을
+   * 기존 onApprove로 fan-out한다(각 승인이 이미 개별 trace를 남김).
+   */
+  onBulkApproveSafe?: (sourceItemIds: string[]) => void;
 };
 
 type LaneId = ControlQueueLaneId;
@@ -101,13 +107,25 @@ export function ControlQueueDrawer({
   open,
   snapshot,
   redispatchOutcomes = [],
+  onBulkApproveSafe,
 }: ControlQueueDrawerProps) {
   const [activeLane, setActiveLane] = useState<LaneId | "all">("all");
+  const [bulkConfirming, setBulkConfirming] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
 
   const pendingItems = snapshot.queue.filter((item) => item.state === "required");
   const resolvedCount = snapshot.queue.length - pendingItems.length;
+  // 안전 검증 항목(진짜 명령 + safeCommandPolicy 허용 계열)만 일괄 승인 대상. 나머지는 제외.
+  const safeSubset = partitionSafeSubset(snapshot.queue);
+
+  const runBulkApproveSafe = () => {
+    const ids = safeSubset.approvable.map((item) => item.sourceItemId);
+    if (ids.length === 0) return;
+    if (onBulkApproveSafe) onBulkApproveSafe(ids);
+    else ids.forEach((id) => onApprove(id));
+    setBulkConfirming(false);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -283,6 +301,53 @@ export function ControlQueueDrawer({
           />
         ))}
       </div>
+
+      {/* 안전 검증 항목 일괄 승인 — "모두 승인"이 아니라 안전 계열만. 제외 개수도 함께 보여준다. */}
+      {safeSubset.approvable.length > 0 ? (
+        <div aria-label="안전 검증 항목 일괄 승인" className="flex items-center gap-2 border-b border-border bg-emerald-500/[0.06] px-3 py-2">
+          <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-300" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-foreground">안전 검증 항목 승인</p>
+            <p className="text-[10px] text-muted-foreground">
+              대상 {safeSubset.approvable.length}개
+              {safeSubset.excluded.length > 0 ? ` · 제외 ${safeSubset.excluded.length}개(명령 없음·위험·비실행)` : ""}
+            </p>
+          </div>
+          {bulkConfirming ? (
+            <div className="flex shrink-0 items-stretch gap-1">
+              <Button
+                className="h-7 justify-center gap-1 px-2.5 text-[10px]"
+                onClick={runBulkApproveSafe}
+                title="안전 계열 명령만 일괄 승인합니다"
+                type="button"
+                variant="default"
+              >
+                <Check className="h-3 w-3" />
+                {safeSubset.approvable.length}개 승인
+              </Button>
+              <Button
+                className="h-7 justify-center px-2.5 text-[10px]"
+                onClick={() => setBulkConfirming(false)}
+                type="button"
+                variant="outline"
+              >
+                취소
+              </Button>
+            </div>
+          ) : (
+            <Button
+              className="h-7 shrink-0 justify-center gap-1 px-2.5 text-[10px]"
+              onClick={() => setBulkConfirming(true)}
+              title="진짜 명령이 있고 safeCommandPolicy 허용 계열인 항목만 대상입니다"
+              type="button"
+              variant="outline"
+            >
+              <ShieldCheck className="h-3 w-3" />
+              안전 항목 승인
+            </Button>
+          )}
+        </div>
+      ) : null}
 
       {/* Queue list */}
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
