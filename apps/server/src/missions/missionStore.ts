@@ -16,6 +16,7 @@ import {
   sandboxErrorSignature,
   type AppWorkspace,
   type AppWorkspaceAttachRequest,
+  type AppWorkspacePreview,
   type CuratorDecision,
   type DesignBlueprint,
   type DesignBlueprintInput,
@@ -110,6 +111,12 @@ export type MissionStore = {
     missionId: string,
     blueprint: DesignBlueprintInput,
   ) => Promise<{ mission: ServerMissionRecord; blueprint: DesignBlueprint } | undefined>;
+  /** D4: 워크스페이스 preview 상태를 기록(probe 결과). 미션/워크스페이스 없으면 undefined. */
+  recordPreview: (
+    missionId: string,
+    workspaceId: string,
+    preview: AppWorkspacePreview,
+  ) => Promise<ServerMissionRecord | undefined>;
 };
 
 /** 머지 실행기 — repoRoot allowlist에 있으면 real git merge, 아니면 dry_run */
@@ -238,6 +245,21 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
       type: "mission.workspace.attached",
       payload: { missionId, workspace },
       createdAt: workspace.createdAt,
+      source: "server",
+      sourceTrust: "trusted",
+      redacted: true,
+    };
+  }
+
+  let previewSeq = 0;
+  function workspacePreviewEnvelope(missionId: string, workspaceId: string, preview: AppWorkspacePreview): EventEnvelope {
+    // preview는 같은 워크스페이스에 여러 번 갱신되므로 seq로 유니크 id를 만든다(dedup 회피).
+    return {
+      id: `event_mission_workspace_preview_${workspaceId}_${previewSeq++}`,
+      sessionId: missionId,
+      type: "mission.workspace.preview.recorded",
+      payload: { missionId, workspaceId, preview },
+      createdAt: now(),
       source: "server",
       sourceTrust: "trusted",
       redacted: true,
@@ -714,6 +736,13 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
       ]);
       const mission = await get(missionId);
       return mission ? { mission, blueprint } : undefined;
+    },
+
+    async recordPreview(missionId, workspaceId, preview) {
+      const existing = await get(missionId);
+      if (!existing || !existing.workspaces.some((ws) => ws.id === workspaceId)) return undefined;
+      await commit(missionId, [workspacePreviewEnvelope(missionId, workspaceId, preview)]);
+      return get(missionId);
     },
   };
 }
