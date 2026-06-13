@@ -5024,6 +5024,7 @@ export function App() {
                 seedPacket: codingPacketState,
               }}
               parallelProps={{ seedPersonaName: summonSeedPersona ?? undefined }}
+              boardProps={{ packet: codingPacketState }}
             />
           ) : activeNavItem === "theater" ? (
             <SummonTheater

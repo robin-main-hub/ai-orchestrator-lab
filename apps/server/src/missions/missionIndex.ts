@@ -2,6 +2,7 @@ import {
   missionArtifactAttachedPayloadSchema,
   missionClosedPayloadSchema,
   missionCreatedPayloadSchema,
+  missionMergeQueuedPayloadSchema,
   missionVerificationRecordedPayloadSchema,
   missionWorkerAssignedPayloadSchema,
   type EventEnvelope,
@@ -61,6 +62,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
         workers: [],
         artifacts: [],
         verificationReports: [],
+        mergeQueueItems: [],
         updatedAt: event.createdAt,
       });
       continue;
@@ -95,6 +97,17 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
         continue;
       }
       record.verificationReports.push(parsed.data.report);
+      record.updatedAt = event.createdAt;
+      continue;
+    }
+
+    if (event.type === "mission.merge.queued") {
+      const parsed = missionMergeQueuedPayloadSchema.safeParse(event.payload);
+      const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
+      if (!parsed.success || !record || record.mergeQueueItems.some((item) => item.id === parsed.data.item.id)) {
+        continue;
+      }
+      record.mergeQueueItems.push(parsed.data.item);
       record.updatedAt = event.createdAt;
       continue;
     }

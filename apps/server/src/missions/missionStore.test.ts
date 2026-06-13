@@ -118,6 +118,83 @@ describe("mission store + materialized index", () => {
   });
 });
 
+describe("merge queue — only verified results may queue (D3)", () => {
+  const passedReport = {
+    report: {
+      id: "verify_pass",
+      missionId: "mission_001",
+      verifierAgentId: "agent_verifier",
+      status: "passed" as const,
+      checks: [
+        {
+          id: "check_1",
+          command: "pnpm test",
+          status: "passed" as const,
+          exitCode: 0,
+          summary: "green",
+          startedAt: "2026-06-13T00:00:00.000Z",
+        },
+      ],
+      artifactIds: [],
+      observed: true,
+      createdAt: "2026-06-13T00:00:00.000Z",
+    },
+  };
+  const queueItem = (reportId: string) => ({
+    item: {
+      id: "merge_1",
+      missionId: "mission_001",
+      branchName: "agent/mission_001",
+      status: "queued" as const,
+      requiredVerificationReportId: reportId,
+      reason: "verification passed",
+      queuedAt: "2026-06-13T00:00:02.000Z",
+    },
+  });
+
+  it("queues a merge when an observed passed report exists", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    await store.appendEvent("mission_001", { type: "mission.verification.recorded", payload: passedReport });
+
+    const updated = await store.appendEvent("mission_001", {
+      type: "mission.merge.queued",
+      payload: queueItem("verify_pass"),
+    });
+    expect(updated?.mergeQueueItems.map((item) => item.id)).toEqual(["merge_1"]);
+  });
+
+  it("rejects queueing without a verification report", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    await expect(
+      store.appendEvent("mission_001", { type: "mission.merge.queued", payload: queueItem("verify_missing") }),
+    ).rejects.toThrow(MissionEventValidationError);
+  });
+
+  it("rejects queueing on a failed or unobserved report", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    // observed 주장이지만 exit code 증거가 없어 서버가 강등하는 report
+    await store.appendEvent("mission_001", {
+      type: "mission.verification.recorded",
+      payload: {
+        report: {
+          ...passedReport.report,
+          id: "verify_claimed",
+          checks: [{ ...passedReport.report.checks[0]!, exitCode: undefined }],
+        },
+      },
+    });
+    await expect(
+      store.appendEvent("mission_001", { type: "mission.merge.queued", payload: queueItem("verify_claimed") }),
+    ).rejects.toThrow(/observed passed/);
+  });
+});
+
 describe("server-side policy — payloads are not trusted", () => {
   it("companion cannot become sandbox_build through a persistence payload", () => {
     // 클라이언트가 capability를 뭐라고 주장하든 요청 스키마가 받지 않고,
