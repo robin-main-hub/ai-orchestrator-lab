@@ -182,6 +182,8 @@ import { createOrchestrationMaturityReport } from "./lib/orchestrationMaturity";
 import { createExperienceRoadmap } from "./lib/orchestrationExperienceRoadmap";
 import { createOrchestrationOsDebateSession } from "./lib/orchestrationOsDebate";
 import { deriveCockpitNextActions } from "./lib/cockpitNextActions";
+import type { CockpitNextActionItem } from "./lib/cockpitNextActions";
+import { deriveCockpitHealthFromSnapshot } from "./lib/cockpitHealthRollup";
 import { resolveExternalIngressTargetAgentId } from "./lib/externalIngressRouting";
 import {
   createAgentChannelMemoryScope,
@@ -4765,6 +4767,25 @@ export function App() {
     workItems,
   ]);
 
+  // 대시보드 "다음 할 일 1개" — 콕핏 L1과 동일한 단일 소스(snapshot+nextActions)에서
+  // red/yellow/green + 가장 긴급한 액션 하나를 도출한다.
+  const dashboardHealthRollup = useMemo(
+    () => deriveCockpitHealthFromSnapshot(cockpitSnapshot, cockpitReadiness.nextActions),
+    [cockpitSnapshot, cockpitReadiness.nextActions],
+  );
+  // 대시보드의 "다음 할 일" CTA 라우팅: 승인성 신호는 제자리(드로어), 나머지는
+  // 상세가 사는 콕핏으로 — 액션 동선을 한 패턴으로 묶는다.
+  const handleDashboardNextAction = (action: CockpitNextActionItem) => {
+    if (action.targetSurface === "approvals" || action.targetSurface === "control_queue") {
+      setApprovalDrawerOpen(true);
+      return;
+    }
+    setMode("cockpit");
+    setActiveNavItem("none");
+    setProviderRegistrationOpen(false);
+    setAdminRailOpen(false);
+  };
+
   const navCenterActive =
     activeNavItem === "dashboard" ||
     activeNavItem === "sessions" ||
@@ -4983,6 +5004,8 @@ export function App() {
               runtime={runtimeSnapshotState}
               hermesPool={summarizeHermesPool(loadHermesPool())}
               pendingApprovals={permissionSnapshot.summary.pending}
+              healthRollup={dashboardHealthRollup}
+              onActivateNextAction={handleDashboardNextAction}
               history={projectAutonomyRunHistory(eventLog)}
               onNavigate={(target) => {
                 if (target.mode) {

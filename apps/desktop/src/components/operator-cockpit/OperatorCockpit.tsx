@@ -28,7 +28,7 @@ import type { WorkTraceSearchItem } from "../../lib/workTraceSearch";
 import { ApprovalEvidenceCard } from "./ApprovalEvidenceCard";
 import { Badge } from "./Badge";
 import { CockpitHealthHero } from "./CockpitHealthHero";
-import { deriveCockpitHealthRollup } from "../../lib/cockpitHealthRollup";
+import { deriveCockpitHealthFromSnapshot } from "../../lib/cockpitHealthRollup";
 import { DispatchHistoryCard } from "./DispatchHistoryCard";
 import { ExperienceRoadmapCard } from "./ExperienceRoadmapCard";
 import { HandoffCard } from "./HandoffCard";
@@ -111,15 +111,8 @@ export function OperatorCockpit({
         workTraceItems: readiness.workTraceItems,
       })
     : [];
-  // L1 건강 롤업 — 전체 신호 한 줄 + 가장 긴급한 액션 하나
-  const healthRollup = deriveCockpitHealthRollup({
-    blockedCount,
-    approvalCount,
-    criticalApprovalCount,
-    fallbackActive: snapshot.routing.fallbackStatus === "active",
-    dgxMirrorOffline: snapshot.memory.dgxMirrorHealth === "disconnected",
-    nextActions: readiness?.nextActions ?? [],
-  });
+  // L1 건강 롤업 — 전체 신호 한 줄 + 가장 긴급한 액션 하나 (대시보드와 공유하는 단일 소스)
+  const healthRollup = deriveCockpitHealthFromSnapshot(snapshot, readiness?.nextActions ?? []);
   const handleNextAction = (action: CockpitNextActionItem) => {
     if (action.targetSurface === "approvals" && onPreviewEvidence) {
       onPreviewEvidence();
