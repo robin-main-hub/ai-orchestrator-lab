@@ -1,4 +1,4 @@
-import { Check, ShieldAlert, X } from "lucide-react";
+import { Check, ShieldAlert, ShieldCheck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ApprovalToastBarItem } from "../lib/approvalToastBar";
 
@@ -6,8 +6,10 @@ import type { ApprovalToastBarItem } from "../lib/approvalToastBar";
  * 승인 toast bar(제안1) — 화면 하단 고정. 승인 대기가 있을 때만 떠서 원터치로 허용/거절.
  * 전역 단일 승인 액션 표면(대시보드 hero·헤더 alert·빈대화 힌트는 이 바를 가리키기만 함).
  *
- * 정직성: ApprovalQueueItem엔 실제 명령 미리보기가 없어 summary(사람용 라벨)만 보여준다.
- * "계열 허용"은 진짜 명령을 가진 StreamingDraftBubble에만 둔다(가짜 prefix 자동승인 오염 방지).
+ * 정직성: summary는 사람용 라벨이다. 실제 명령(commandPreview)이 있을 때만 모노스페이스로
+ * 보여주고, safeCommandPolicy 허용 계열이면 "안전 계열" 배지를 읽기 전용으로 단다. 요약에서
+ * 명령을 합성하지 않는다. 자동승인(계열 허용) 액션은 여기 두지 않는다 — 안전 계열 일괄 승인은
+ * 별도 표면(작업 C)에서 명시적으로 처리한다.
  */
 export function ApprovalToastBar({
   item,
@@ -35,6 +37,22 @@ export function ApprovalToastBar({
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-zinc-100">{item.summary}</p>
+        {item.commandPreview ? (
+          <div className="mt-1 flex items-center gap-1.5">
+            <code className="min-w-0 flex-1 truncate rounded bg-black/40 px-1.5 py-0.5 font-mono text-[11px] text-zinc-300" title={item.commandPreview}>
+              {item.commandPreview}
+            </code>
+            {item.safeFamily ? (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300"
+                title="safeCommandPolicy 허용 계열 (읽기 전용 표시)"
+              >
+                <ShieldCheck className="h-3 w-3" />
+                안전 계열
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">

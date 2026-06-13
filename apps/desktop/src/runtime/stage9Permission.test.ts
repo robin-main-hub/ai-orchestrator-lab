@@ -46,6 +46,7 @@ const terminalSlots: TerminalSlot[] = [
     label: "DGX Remote",
     status: "pending_approval",
     permissionState: "required",
+    lastCommandPreview: "pnpm -w test",
   },
 ];
 
@@ -106,6 +107,39 @@ describe("stage9 permission matrix", () => {
     expect(snapshot.items.some((item) => item.actor === "external_channel" && item.sourceTrust === "untrusted")).toBe(true);
     expect(snapshot.items.some((item) => item.action === "remote_workspace")).toBe(true);
     expect(nextRequiredPermission(snapshot)?.state).toBe("required");
+  });
+
+  it("터미널 슬롯의 실제 lastCommandPreview만 commandPreview로 싣고, 명령 없는 항목엔 비워 둔다(정직)", () => {
+    const snapshot = createStage9PermissionSnapshot({
+      sessionId: "session_desktop_cmd",
+      externalApprovals: [],
+      terminalSlots,
+      agentRun,
+      runtime,
+      mobilePolicy,
+      providerReadiness: {
+        id: "provider_readiness_mimo",
+        providerProfileId: "provider_mimo",
+        status: "needs_approval",
+        executionMode: "remote",
+        modelCount: 1,
+        secretAvailability: "available",
+        canRunCompletion: false,
+        canUseAutomaticMemory: false,
+        reason: "원격 호출 승인 필요",
+        warnings: [],
+        createdAt,
+      },
+      createdAt,
+    });
+
+    const terminalItem = snapshot.queue.find((item) => item.sourceItemId === "permission_terminal_slot_dgx");
+    expect(terminalItem?.commandPreview).toBe("pnpm -w test");
+
+    // provider 항목은 명령이 없으니 commandPreview를 합성하지 않는다
+    const providerItem = snapshot.queue.find((item) => item.sourceItemId === "permission_provider_provider_mimo");
+    expect(providerItem).toBeDefined();
+    expect(providerItem?.commandPreview).toBeUndefined();
   });
 
   it("applies operator approval decisions without removing denied mobile boundaries", () => {
