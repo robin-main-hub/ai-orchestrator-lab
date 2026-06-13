@@ -507,3 +507,103 @@ describe("auto checkpoint hooks (L3)", () => {
     expect(merged?.checkpoints).toHaveLength(0);
   });
 });
+
+describe("error card + bounded self-correction (L4/L5)", () => {
+  const VERIFIER = { agentId: "agent_verifier", role: "verifier" as const, displayName: "V", soulMode: "summary" as const, configSource: "internal" as const };
+  const TS_FAIL = "exit 2 · src/x.ts(10,5): error TS2532: Object is possibly 'undefined'.";
+
+  function clocked() {
+    const events: EventEnvelope[] = [];
+    let t = 0;
+    const now = () => `2026-06-13T00:00:${String(t++).padStart(2, "0")}.000Z`;
+    let n = 0;
+    return {
+      events,
+      base: {
+        loadEvents: async () => [...events],
+        appendEvents: async (_s: string, envs: EventEnvelope[]) => {
+          for (const e of envs) if (!events.some((x) => x.id === e.id)) events.push(e);
+        },
+        now,
+        nextNonce: () => `n${n++}`,
+      },
+      now,
+    };
+  }
+
+  const failingRun = (now: () => string) => async (input: { reportId: string; missionId: string; verifierAgentId: string }): Promise<VerificationReport> => ({
+    id: input.reportId,
+    missionId: input.missionId,
+    verifierAgentId: input.verifierAgentId,
+    status: "failed",
+    checks: [{ id: "c1", command: "pnpm typecheck", status: "failed", exitCode: 2, summary: TS_FAIL, startedAt: "t" }],
+    artifactIds: [],
+    observed: true,
+    createdAt: now(),
+  });
+  const passingRun = (now: () => string) => async (input: { reportId: string; missionId: string; verifierAgentId: string }): Promise<VerificationReport> => ({
+    id: input.reportId,
+    missionId: input.missionId,
+    verifierAgentId: input.verifierAgentId,
+    status: "passed",
+    checks: [{ id: "c1", command: "pnpm typecheck", status: "passed", exitCode: 0, summary: "ok", startedAt: "t" }],
+    artifactIds: [],
+    observed: true,
+    createdAt: now(),
+  });
+
+  it("emits a deterministic error card + a retry suggestion on a failed verification", async () => {
+    const { base, now } = clocked();
+    const store = createMissionStore({ ...base, runVerification: failingRun(now) });
+    await store.create({ ...CREATE, workers: [VERIFIER] });
+    const updated = await store.verify("mission_001", { commands: ["pnpm typecheck"] });
+    expect(updated?.errorCards).toHaveLength(1);
+    expect(updated?.errorCards[0]!.errorClass).toBe("TS2532");
+    expect(updated?.errorCards[0]!.targetFile).toBe("src/x.ts");
+    expect(updated?.errorCards[0]!.truthStatus).toBe("observed"); // 실측 실행 에러
+    expect(updated?.selfCorrections).toHaveLength(1);
+    expect(updated?.selfCorrections[0]!.action).toBe("retry");
+    expect(updated?.selfCorrections[0]!.directive).toBeTruthy();
+    expect(updated?.selfCorrections[0]!.attempt).toBe(1);
+  });
+
+  it("does NOT emit error cards or self-corrections on a passed verification", async () => {
+    const { base, now } = clocked();
+    const store = createMissionStore({ ...base, runVerification: passingRun(now) });
+    await store.create({ ...CREATE, workers: [VERIFIER] });
+    const updated = await store.verify("mission_001", { commands: ["pnpm typecheck"] });
+    expect(updated?.errorCards).toHaveLength(0);
+    expect(updated?.selfCorrections).toHaveLength(0);
+  });
+
+  it("stops self-correction when the same error repeats (no infinite loop, no file mutation)", async () => {
+    const { base, now } = clocked();
+    const store = createMissionStore({ ...base, runVerification: failingRun(now) });
+    await store.create({ ...CREATE, workers: [VERIFIER] });
+    await store.verify("mission_001", { commands: ["pnpm typecheck"] });
+    const second = await store.verify("mission_001", { commands: ["pnpm typecheck"] });
+    expect(second?.selfCorrections).toHaveLength(2);
+    expect(second?.selfCorrections[1]!.action).toBe("stop_same_error");
+    // 제안만 — 파일 변경 아티팩트는 없다
+    expect(second?.artifacts).toHaveLength(0);
+  });
+
+  it("resets the self-correction loop after a passing verification", async () => {
+    const { base, now } = clocked();
+    let mode: "fail" | "pass" = "fail";
+    const store = createMissionStore({
+      ...base,
+      runVerification: async (input) => (mode === "fail" ? failingRun(now)(input) : passingRun(now)(input)),
+    });
+    await store.create({ ...CREATE, workers: [VERIFIER] });
+    mode = "fail";
+    await store.verify("mission_001", { commands: ["pnpm typecheck"] });
+    mode = "pass";
+    await store.verify("mission_001", { commands: ["pnpm typecheck"] });
+    mode = "fail";
+    const last = await store.verify("mission_001", { commands: ["pnpm typecheck"] });
+    const corrections = last?.selfCorrections ?? [];
+    expect(corrections.at(-1)!.action).toBe("retry"); // 같은 에러여도 통과로 리셋됨
+    expect(corrections.at(-1)!.attempt).toBe(1);
+  });
+});
