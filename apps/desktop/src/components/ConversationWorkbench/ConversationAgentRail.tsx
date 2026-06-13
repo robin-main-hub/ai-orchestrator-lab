@@ -1,6 +1,7 @@
 import type { AgentActivityStatus, AgentVisualSettings, WorkbenchAgent } from "../../types";
 import { agentInitialsForDisplay, agentPrimaryDisplayName } from "../../lib/agentDisplay";
 import {
+  isSpeakingActivity,
   resolveAgentExpressionPortrait,
   resolveAgentIdentityAvatar,
 } from "../../lib/conversationAgentPortrait";
@@ -107,10 +108,13 @@ export function ConversationAgentSpotlight({
 }) {
   if (!agent) return null;
   const portrait = resolveAgentExpressionPortrait(agent, { activity, visuals });
+  const speaking = isSpeakingActivity(activity);
   const attention = activity === "waiting_approval" ? "border-amber-400/40" : activity === "error" ? "border-rose-400/40" : "border-zinc-800/60";
   return (
     <div className={`flex shrink-0 items-center gap-3 border-b bg-zinc-950/70 px-4 py-2 ${attention}`}>
-      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-violet-600/10 ring-1 ring-white/5">
+      <div
+        className={`flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-violet-600/10 ring-1 ring-white/5 ${speaking ? "conversation-speaking" : ""}`}
+      >
         {portrait ? (
           <img alt={displayName} className="h-full w-full object-cover" src={portrait} />
         ) : (
