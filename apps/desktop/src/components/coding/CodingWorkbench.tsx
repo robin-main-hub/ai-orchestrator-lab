@@ -55,7 +55,7 @@ import type { DraftAttachment } from "../../types";
 import { fetchGithubPullRequest } from "../../lib/githubConnector";
 import { buildPrContextAttachment, upsertContextAttachment } from "../../lib/githubContext";
 import { assembleCodingRequestMessages, buildGithubContextTracePayload } from "../../lib/codingRequestAssembly";
-import { modelContextCharBudget } from "../../lib/contextBudget";
+import { codingInjectionBudgets } from "../../lib/contextBudget";
 
 
 
@@ -127,7 +127,7 @@ export function CodingWorkbench({
   );
   // 입력 컨텍스트 예산은 모델 컨텍스트 윈도우에 비례 — 큰 모델은 크게, 모델 미상이면 넉넉한 floor.
   // 작은 하드 클램프로 코딩하는 사람을 답답하게 하지 않는다.
-  const contextCharBudget = useMemo(() => modelContextCharBudget(activeModel), [activeModel]);
+  const injectionBudgets = useMemo(() => codingInjectionBudgets(activeModel), [activeModel]);
   const attachmentControl = useDraftAttachments({ modelModalities, maxCount: maxDraftAttachments });
   const attachmentRejection = useMemo(
     () => summarizeRejectedAttachments(attachmentControl.rejectedPlans),
@@ -196,7 +196,7 @@ export function CodingWorkbench({
     setRunning(true);
     // 첨부 전달은 정직하게: 이미지→provider rider, 텍스트→1라운드 본문 인라인,
     // metadata_only→미전달 명시. 전송 직후 무엇이 실제로 전달됐는지 한 줄로 알린다.
-    const attachmentDelivery = buildCodingAttachmentDelivery(attachments, { totalCharBudget: contextCharBudget });
+    const attachmentDelivery = buildCodingAttachmentDelivery(attachments, { totalCharBudget: injectionBudgets.totalCharBudget });
     setNotice(describeCodingAttachmentDelivery(attachmentDelivery) ?? null);
     cancelRef.current = false;
     const now = () => new Date().toISOString();
@@ -272,7 +272,7 @@ export function CodingWorkbench({
         attachmentFirstContext: attachmentDelivery.firstRequestContext,
         attachmentFollowupContext: attachmentDelivery.followupContext,
         githubContext: working.githubContext,
-        githubContextOpts: { maxChars: contextCharBudget },
+        githubContextOpts: { maxChars: injectionBudgets.totalCharBudget },
       });
       const firstRequestRiders: ProviderCompletionAttachment[] | undefined =
         requestSeq === 1 ? attachmentDelivery.providerAttachments : undefined;
@@ -558,7 +558,7 @@ export function CodingWorkbench({
       repoFullName: `${owner}/${repo}`,
       observedAt: result.observedAt ?? new Date().toISOString(),
       // PR 본문 발췌도 모델 예산에 맞춰 넉넉히(단일 PR이 컨텍스트를 독점하지 않게 절반까지).
-      maxExcerptChars: Math.max(8_000, Math.floor(contextCharBudget / 2)),
+      maxExcerptChars: injectionBudgets.prExcerptCharBudget,
     });
     patchSession(session.id, (current) => ({
       ...current,

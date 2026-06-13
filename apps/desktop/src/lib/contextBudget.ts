@@ -38,3 +38,20 @@ export function modelContextCharBudget(
   const budget = Math.round(contextWindow * fraction * CHARS_PER_TOKEN);
   return Math.min(cap, Math.max(0, budget));
 }
+
+/**
+ * The exact char budgets the coding workbench injects with, derived from the
+ * selected model. Extracted so the injection smoke can exercise the real path
+ * (CodingWorkbench uses this for attachment delivery, PR excerpts, and the
+ * GitHub context block).
+ */
+export function codingInjectionBudgets(model?: Pick<ModelDescriptor, "contextWindow"> | undefined): {
+  /** total injected-context char budget (attachments + GitHub block) */
+  totalCharBudget: number;
+  /** per-PR excerpt cap — at most half the total so one PR can't monopolize context */
+  prExcerptCharBudget: number;
+} {
+  const totalCharBudget = modelContextCharBudget(model);
+  const prExcerptCharBudget = Math.max(8_000, Math.floor(totalCharBudget / 2));
+  return { totalCharBudget, prExcerptCharBudget };
+}
