@@ -72,6 +72,8 @@ export const missionFromBlueprintRequestSchema = z.object({
   blueprint: designBlueprintInputSchema,
   missionId: z.string().min(1).max(128).optional(),
   createdBy: z.string().max(64).optional(),
+  /** 대화→앱빌더 출처 세션 (provenance) — 미션·trace에 실린다 */
+  sourceSessionId: z.string().min(1).max(128).optional(),
 });
 export type MissionFromBlueprintRequest = z.infer<typeof missionFromBlueprintRequestSchema>;
 

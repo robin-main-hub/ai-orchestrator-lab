@@ -198,6 +198,41 @@ async function main() {
     const workerRoles = (created.json?.mission?.workers ?? []).map((w) => w.role);
     record("create mission from generic template", created.status === 201 && workerRoles.includes("verifier"), true, `roles ${workerRoles.join(",")}`);
 
+    // 1a2) 3순위: 대화 → blueprint-draft(결정적 stub, AI off) → from-blueprint(sourceSessionId provenance) → trace
+    const draftResp = await api("POST", "/missions/blueprint-draft", {
+      messages: [
+        { role: "user", content: "할 일 칸반 앱을 만들어줘" },
+        { role: "assistant", content: "컬럼은 할 일/진행/완료 3개로 할까요?" },
+      ],
+      draft: "할 일 칸반 앱",
+      sessionId: "smoke_session_appbuild",
+      // useAi 생략 → stub-only(LLM 미연결 hermetic 환경에서도 정직하게 동작)
+    });
+    const draftBlueprint = draftResp.json?.blueprint;
+    const draftOk =
+      draftResp.status === 200 &&
+      draftResp.json?.source === "stub" &&
+      draftResp.json?.degraded === false &&
+      Array.isArray(draftBlueprint?.screens) &&
+      draftBlueprint.screens.length >= 1;
+    record("blueprint-draft 결정적 stub (AI off)", Boolean(draftOk), true, draftResp.json ? `source ${draftResp.json.source} · 화면 ${draftBlueprint?.screens?.length}` : `status ${draftResp.status}`);
+
+    const appbuildMissionId = `mission_appbuild_${Date.now()}`;
+    if (draftOk) {
+      const fromBp = await api("POST", "/missions/from-blueprint", {
+        blueprint: draftBlueprint,
+        missionId: appbuildMissionId,
+        createdBy: "appbuild",
+        sourceSessionId: "smoke_session_appbuild",
+      });
+      record("from-blueprint with provenance (201)", fromBp.status === 201, true, `status ${fromBp.status}`);
+
+      const bpTrace = await api("GET", `/missions/${appbuildMissionId}/trace`);
+      const createdEvent = (bpTrace.json?.trace ?? []).find((e) => e.type === "mission.created");
+      const provenanceSurfaced = bpTrace.status === 200 && createdEvent && String(createdEvent.summary).includes("smoke_session_appbuild");
+      record("trace surfaces sourceSessionId provenance", Boolean(provenanceSurfaced), true, createdEvent ? String(createdEvent.summary).slice(0, 70) : "no created event");
+    }
+
     // 1b) AppWorkspace 붙이기(코딩/디자인 작업공간)
     const wsResp = await api("POST", `/missions/${missionId}/workspace`, { repoRootRef: repo, appType: "react_vite", terminalMode: "read_only", runnerKind: "local" });
     const workspaceId = (wsResp.json?.mission?.workspaces ?? [])[0]?.id;

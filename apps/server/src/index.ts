@@ -86,6 +86,7 @@ import {
   codingPacketSchema,
   deriveMissionTrace,
   eventSyncPushRequestSchema,
+  designBlueprintInputSchema,
   parseAgentDelegationEventPayload,
   parseTerminalCommandEventPayload,
   providerCompletionRequestSchema,
@@ -4675,6 +4676,15 @@ export async function createDgxProviderCompletionStreamResponse(
   );
 }
 
+/** LLM content에서 첫 JSON 객체만 뽑는다(코드펜스/잡설 제거). 없으면 null. */
+function extractJsonObject(text: string): string | null {
+  const fenced = text.replace(/```(?:json)?/gi, "");
+  const start = fenced.indexOf("{");
+  const end = fenced.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  return fenced.slice(start, end + 1);
+}
+
 export async function createDgxProviderCompletionResponse(
   request: ProviderCompletionRequest,
   options: DgxProviderCompletionOptions = {},
@@ -6839,6 +6849,53 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
             },
             now: () => new Date().toISOString(),
           });
+        },
+        // 3순위: "AI로 초안 채우기" — 단발 LLM(비스트리밍)으로 대화를 DesignBlueprintInput으로 보강.
+        // 어떤 실패(호출 실패·빈응답·JSON 파싱 실패·스키마 무효)든 null → 라우터가 결정적 stub으로 폴백.
+        // provider/model은 클라이언트가 지정(인프라 하드코딩 안 함). 4~16 LLM 자동 발사 아님 — 정확히 1콜.
+        enrichBlueprintWithAi: async ({ messages, draft, targetSurface, sessionId, providerProfileId, modelId, baseline }) => {
+          try {
+            const transcript = messages
+              .filter((message) => message.content.trim().length > 0)
+              .slice(-12)
+              .map((message) => `${message.role}: ${message.content.trim().slice(0, 1_500)}`)
+              .join("\n");
+            const prompt = [
+              "너는 제품 디자이너다. 아래 대화를 바탕으로 앱 화면 설계 초안(JSON)을 만든다.",
+              "반드시 아래 TypeScript 타입과 정확히 일치하는 JSON 객체 하나만 출력한다(코드펜스/설명 금지):",
+              "{ title: string; userIntent: string; targetSurface: " +
+                '"conversation"|"dashboard"|"mission_board"|"cockpit"|"theater"|"settings"|"new_app";' +
+                " screens: { name: string; purpose: string; primaryAction: string; secondaryActions: string[]; dataNeeded: string[]; emptyState: string; errorState: string }[];" +
+                ' designTokens: { density: "compact"|"balanced"|"spacious"; tone: "cyber_glass"|"clean_builder"|"anime_os"|"minimal"; motion: "none"|"subtle"|"expressive" };' +
+                " acceptanceCriteria: string[] }",
+              `targetSurface 기본값은 "${targetSurface ?? "new_app"}". 화면은 1~5개로 구체화하고, 각 화면의 빈/오류 상태와 주요 액션을 채운다.`,
+              draft ? `사용자 현재 입력: ${draft.slice(0, 1_000)}` : "",
+              `기준 초안(title/intent 시드): ${JSON.stringify({ title: baseline.title, userIntent: baseline.userIntent })}`,
+              "대화:",
+              transcript,
+            ]
+              .filter(Boolean)
+              .join("\n");
+            const completionRequest = providerCompletionRequestSchema.parse({
+              id: `blueprint_draft_${sessionId}_${Date.now()}`,
+              sessionId,
+              providerProfileId,
+              modelId,
+              messages: [{ role: "user", content: prompt }],
+              source: "agent",
+              routePreference: "server_proxy",
+              createdAt: new Date().toISOString(),
+            });
+            const completion = await createDgxProviderCompletionResponse(completionRequest);
+            if (completion.status !== "succeeded" || !completion.content) return null;
+            // 구조화 출력 헬퍼가 없으므로 content를 직접 파싱·검증한다(모델을 신뢰하지 않음).
+            const jsonText = extractJsonObject(completion.content);
+            if (!jsonText) return null;
+            const parsed = designBlueprintInputSchema.safeParse(JSON.parse(jsonText));
+            return parsed.success ? parsed.data : null;
+          } catch {
+            return null; // 어떤 예외든 stub 폴백(정직)
+          }
         },
       })
     ) {

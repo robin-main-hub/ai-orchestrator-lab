@@ -1,6 +1,8 @@
 import type {
   AppWorkspaceAttachRequest,
   AppWorkspacePreview,
+  ConversationBlueprintDraftRequest,
+  ConversationBlueprintDraftResponse,
   CuratorDecision,
   MissionCheckpoint,
   MissionCheckpointCreateRequest,
@@ -323,6 +325,20 @@ export async function runDgxVisualQa({
     fetchImpl,
     timeoutMs,
   });
+}
+
+/**
+ * 3순위: 대화 → DesignBlueprintInput 초안(검토 패널용). 미션을 만들지 않는다.
+ * useAi=false(기본)면 결정적 stub만. useAi+provider/model이면 단발 LLM 보강(실패 시 stub 폴백).
+ * AI 보강은 LLM 1콜이라 타임아웃을 길게(120s) 둔다.
+ */
+export async function createDgxBlueprintDraft({
+  request,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 120_000,
+}: MissionServerRequestInput & { request: ConversationBlueprintDraftRequest }): Promise<ConversationBlueprintDraftResponse> {
+  return requestMissionServerJson<ConversationBlueprintDraftResponse>({ method: "POST", path: "/missions/blueprint-draft", body: request, serverBaseUrl, fetchImpl, timeoutMs });
 }
 
 /** D3: 디자인 청사진 → 디자인 미션 */

@@ -4,6 +4,7 @@ export * from "./productKernel.js";
 export * from "./appWorkspace.js";
 export * from "./designBlueprint.js";
 export * from "./designMission.js";
+export * from "./conversationBlueprint.js";
 export * from "./debateBridge.js";
 export * from "./visualQa.js";
 export * from "./scaffold.js";

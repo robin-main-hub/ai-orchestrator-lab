@@ -278,16 +278,23 @@ function verificationSeverity(status: "pending" | "passed" | "failed" | "blocked
 // 절대 어긋나지 않게 한다.
 
 function createdTraceEvent(
-  mission: { missionId: string; title: string; truthStatus: TruthStatus },
+  mission: { missionId: string; title: string; truthStatus: TruthStatus; sourceSessionId?: string; debateId?: string; codingPacketId?: string },
   createdAt: string,
 ): MissionTraceEvent {
+  // 출처(provenance)를 trace summary에 정직하게 노출 — 어느 세션/토론/패킷에서 왔는지.
+  // 이전엔 record/응답엔 저장돼도 trace엔 안 보였다(=관측 불가). 있는 것만 덧붙인다.
+  const lineage: string[] = [];
+  if (mission.sourceSessionId) lineage.push(`출처 세션 ${mission.sourceSessionId}`);
+  if (mission.debateId) lineage.push(`출처 토론 ${mission.debateId}`);
+  if (mission.codingPacketId) lineage.push(`출처 패킷 ${mission.codingPacketId}`);
+  const summary = lineage.length ? `${mission.title} · ${lineage.join(" · ")}` : mission.title;
   return {
     id: `${mission.missionId}:created`,
     missionId: mission.missionId,
     type: "mission.created",
     severity: "info",
     title: "미션 생성",
-    summary: mission.title,
+    summary,
     truthStatus: mission.truthStatus,
     createdAt,
   };

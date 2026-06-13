@@ -8,6 +8,9 @@ import type {
   ProviderProfile,
   ProviderRuntimeReadiness,
 } from "@ai-orchestrator/protocol";
+import { buildBlueprintInputFromConversation } from "@ai-orchestrator/protocol";
+import { AppBuildContainer } from "../appbuild/AppBuildContainer";
+import type { AppBuildSeed } from "../../lib/appBuildModel";
 import { Activity, Archive, ChevronDown, Cpu, Database, FileText, GitFork, Package, Play, Smartphone, Sparkles, Swords, Wrench } from "lucide-react";
 import type { AgentChannelMemoryScope } from "../../lib/agentConversationChannels";
 import type { ControlQueueContinuitySummary } from "../../lib/controlQueueContinuity";
@@ -370,6 +373,22 @@ export function ConversationWorkbench({
   // Codex식 확장 패널 — 대화를 가리지 않는 우측 분할
   const [sidePanelMode, setSidePanelMode] = useState<ChatSidePanelMode>("none");
   const backgroundAssignmentCount = Object.keys(delegationAssignmentsByAgentId ?? {}).length;
+  // 3순위: "앱 빌드" 검토 패널 시드 — 컴포저 "+"에서 대화를 결정적 stub 초안으로 만들어 연다.
+  // 새 fetch·새 nav 없음. seed가 있으면 오버레이를 띄운다(자동 LLM 발사 없음).
+  const [appBuildSeed, setAppBuildSeed] = useState<(AppBuildSeed & { key: number }) | null>(null);
+  const startAppBuild = (draft: string) => {
+    const blueprint = buildBlueprintInputFromConversation({
+      messages: messages.map((message) => ({ role: message.role, content: message.content })),
+      draft: draft.trim() || undefined,
+    });
+    setAppBuildSeed({
+      key: messages.length,
+      blueprint,
+      sourceSessionId: activeSessionId,
+      messages: messages.map((message) => ({ role: message.role, content: message.content })),
+      draft: draft.trim() || undefined,
+    });
+  };
 
   const applyPromptSuggestion = (prompt: string) => {
     onDraftMessageChange(prompt);
@@ -731,8 +750,20 @@ export function ConversationWorkbench({
         queuedMessages={queuedMessages}
         onRemoveQueuedMessage={onRemoveQueuedMessage}
         onStartSwarmSearch={onStartSwarmSearch}
+        onStartAppBuild={startAppBuild}
       />
         </div>
+
+        {/* 3순위: 앱 빌드 검토 패널 — seed가 있을 때만. key로 새 진입마다 깨끗이 remount. */}
+        {appBuildSeed ? (
+          <AppBuildContainer
+            key={appBuildSeed.key}
+            seed={appBuildSeed}
+            model={selectedModel ? { id: selectedModel.id, providerProfileId: selectedModel.providerProfileId } : undefined}
+            onClose={() => setAppBuildSeed(null)}
+            onHandoffToDebate={onPromoteToDebate}
+          />
+        ) : null}
 
         <ChatSidePanel mode={sidePanelMode} onClose={() => setSidePanelMode("none")}>
           {sidePanelMode === "background" ? (
