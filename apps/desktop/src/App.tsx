@@ -298,6 +298,7 @@ import { BackupRailMenu } from "./components/BackupRailMenu";
 import { ChannelRailPanel } from "./components/ChannelRailPanel";
 import { CodingPacketPanel } from "./components/CodingPacketPanel";
 import { CheatSheetOverlay } from "./components/CheatSheetOverlay";
+import { ApprovalToastBarConnector } from "./components/ApprovalToastBarConnector";
 import { CommandPalette, type CommandEntry } from "./components/CommandPalette";
 import { ConfigLibraryPanel } from "./components/ConfigLibraryPanel";
 import { ConversationWorkbench } from "./components/ConversationWorkbench";
@@ -5455,6 +5456,14 @@ export function App() {
       <CheatSheetOverlay
         onClose={() => setCheatSheetOpen(false)}
         open={cheatSheetOpen}
+      />
+      {/* 제안1: 전역 단일 승인 액션 표면 — 대기 승인이 있을 때만 하단에 떠서 원터치 허용/거절 */}
+      <ApprovalToastBarConnector
+        queue={unifiedControlQueueSnapshot.queue}
+        onApprove={handleConversationApprovePermission}
+        onApprovePattern={handleApproveCommandPattern}
+        onReject={handleConversationRejectPermission}
+        onOpenHistory={() => setApprovalDrawerOpen(true)}
       />
     </div>
   );

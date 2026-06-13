@@ -12,6 +12,8 @@ import type {
 import { buildBlueprintInputFromConversation } from "@ai-orchestrator/protocol";
 import { AppBuildContainer } from "../appbuild/AppBuildContainer";
 import type { AppBuildSeed } from "../../lib/appBuildModel";
+import { shouldShowUsageHud } from "../../lib/usageHudVisibility";
+import { deriveEmptyConversationHint } from "../../lib/emptyConversationHint";
 import { Activity, Archive, ChevronDown, Cpu, Database, FileText, GitFork, Package, Play, Smartphone, Sparkles, Swords, Wrench } from "lucide-react";
 import type { AgentChannelMemoryScope } from "../../lib/agentConversationChannels";
 import type { ControlQueueContinuitySummary } from "../../lib/controlQueueContinuity";
@@ -282,6 +284,14 @@ export function ConversationWorkbench({
   });
   const selectedAgentActivity = selectedAgent ? agentActivityById?.[selectedAgent.id] ?? "idle" : "idle";
   const selectedAgentState = mapConversationAgentState(selectedAgentActivity);
+  // 제안7: 빈 대화 화면 맥락 힌트 — 승인은 toast 바를 가리키기만(액션 중복 금지).
+  const emptyConversationHint = deriveEmptyConversationHint({
+    agentName: selectedAgent?.name ?? "봇",
+    hasMemoryRecords: memoryRecordCount > 0,
+    pendingApprovalCount: permissionSnapshot.queue.length,
+    providerReady: providerReadiness.canRunCompletion,
+    selectedAgentActivity,
+  });
   const selectedAgentThinkingIndicator = resolveAgentThinkingIndicator(selectedAgent?.id, agentActivityById);
   const selectedAgentInitials = selectedAgent ? agentInitialsForDisplay(selectedAgent) : "AI";
   const selectedAgentSubtitle = selectedAgent ? agentSecondaryDisplayLabel(selectedAgent) : "대기";
@@ -539,7 +549,14 @@ export function ConversationWorkbench({
               </button>
             </div>
           ) : null}
-          {usageSummary && usageSummary.turns > 0 ? (
+          {/* 제안4: HUD는 턴 진행 중이거나 컨텍스트 80%+ 경고일 때만 — 평상시 시각 노이즈 제거 */}
+          {usageSummary &&
+          shouldShowUsageHud({
+            activity: selectedAgentActivity,
+            contextPercent: contextUsagePercent(usageSummary.lastInputTokens, selectedModel?.contextWindow),
+            now: Date.now(),
+            turns: usageSummary.turns,
+          }) ? (
             <UsageHudChip
               compactedVersion={compactedVersion}
               contextWindow={selectedModel?.contextWindow}
@@ -713,6 +730,7 @@ export function ConversationWorkbench({
       />
       <MessageThread
         agentChatContinuity={agentChatContinuity}
+        emptyHint={emptyConversationHint}
         messages={messages}
         selectedAgent={selectedAgent}
         workbenchVisibility={workbenchVisibility}
