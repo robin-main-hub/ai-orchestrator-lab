@@ -365,8 +365,9 @@ export function TmuxSwarmBoard({
 
       {commandCenter ? <TmuxCommandCenter summary={commandCenter} /> : null}
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="w-[380px] shrink-0 overflow-y-auto border-r border-zinc-800/60 p-3 max-lg:w-[320px] max-md:hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {/* pane 목록 — 2열 그리드(압축). 각 카드에 인라인 명령 입력 포함 */}
+        <div className="grid shrink-0 grid-cols-2 gap-2 overflow-y-auto p-3 max-md:grid-cols-1">
           {visiblePanes.map((pane) => (
             <TmuxFleetRow
               key={pane.id}
@@ -378,11 +379,17 @@ export function TmuxSwarmBoard({
               }}
               isSelected={selectedPane?.roleKey === pane.roleKey}
               onSelect={() => setSelectedRole(pane.roleKey)}
+              busy={busyByRole[pane.roleKey]}
+              commandDraft={commandDrafts[pane.roleKey] ?? defaultTmuxCommandForRole(pane.roleKey)}
+              onCommandDraftChange={(value) => updateCommandDraft(pane.roleKey, value)}
+              onCapture={() => void handleCapturePane(pane)}
+              onDispatch={() => void handleDispatchPane(pane)}
             />
           ))}
-        </aside>
+        </div>
 
-        <div className="min-w-0 flex-1 overflow-hidden">
+        {/* 선택 pane 상세 — 그리드 아래 풀와이드(VSCode 터미널 패턴). 입력은 카드에 있으므로 끔 */}
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-zinc-800/60">
           {selectedPane ? (
             <TmuxPaneDetail
               busy={busyByRole[selectedPane.roleKey]}
@@ -401,10 +408,11 @@ export function TmuxSwarmBoard({
                   statuses[selectedPane.roleKey] ??
                   (selectedPane.agent ? agentActivityById[selectedPane.agent.id] ?? selectedPane.state : selectedPane.state),
               }}
+              showComposer={false}
               timelineBlocks={timelineBlocks[selectedPane.roleKey] ?? []}
             />
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-zinc-500">왼쪽에서 작업창을 선택하세요</div>
+            <div className="flex h-full items-center justify-center text-sm text-zinc-500">위에서 작업창을 선택하세요</div>
           )}
         </div>
       </div>
@@ -575,42 +583,84 @@ function TmuxFleetRow({
   pane,
   isSelected,
   onSelect,
+  busy,
+  commandDraft,
+  onCommandDraftChange,
+  onCapture,
+  onDispatch,
 }: {
   pane: TmuxPaneDefinition;
   isSelected: boolean;
   onSelect: () => void;
+  busy?: PaneBusyState;
+  commandDraft: string;
+  onCommandDraftChange: (value: string) => void;
+  onCapture: () => void;
+  onDispatch: () => void;
 }) {
   const state = mapTmuxPaneStateToAgentState(pane.state);
   const initials = pane.agent ? getInitials(pane.agent.name) : getInitials(pane.title);
   const surfaceLabel = formatTmuxPaneSurfaceLabel(pane.id);
+  const codex = codexByPaneRole()[pane.roleKey] ?? [];
 
   return (
-    <button
-      className={`mb-1.5 flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
-        isSelected
-          ? "border-amber-500/40 bg-amber-500/[0.06]"
-          : "border-transparent hover:border-zinc-800 hover:bg-zinc-900/50"
+    <div
+      className={`flex flex-col gap-2 rounded-lg border px-3 py-2.5 transition-colors ${
+        isSelected ? "border-amber-500/40 bg-amber-500/[0.06]" : "border-zinc-800/70 hover:border-zinc-700"
       }`}
-      onClick={onSelect}
-      type="button"
     >
-      <AgentPortrait avatarUrl={panePortraitUrl(pane)} initials={initials} state={state} size="sm" tintClassName="bg-zinc-800 text-zinc-300" />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-zinc-100">{pane.title}</span>
-          <span className="shrink-0 text-[10px] text-zinc-600">· {surfaceLabel}</span>
-        </div>
-        <p className="truncate text-xs text-zinc-500">
-          {pane.agent?.name ?? tmuxPaneRoleLabel(pane.roleKey)} · {pane.role}
-        </p>
-        {(codexByPaneRole()[pane.roleKey] ?? []).length > 0 ? (
-          <p className="truncate text-[10px] text-violet-300/80">
-            ★ {(codexByPaneRole()[pane.roleKey] ?? []).map((entry) => entry.displayName).join(" · ")}
+      <button className="flex w-full items-center gap-3 text-left" onClick={onSelect} type="button">
+        <AgentPortrait avatarUrl={panePortraitUrl(pane)} initials={initials} state={state} size="sm" tintClassName="bg-zinc-800 text-zinc-300" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-medium text-zinc-100">{pane.title}</span>
+            <span className="shrink-0 text-[10px] text-zinc-600">· {surfaceLabel}</span>
+          </div>
+          <p className="truncate text-xs text-zinc-500">
+            {pane.agent?.name ?? tmuxPaneRoleLabel(pane.roleKey)} · {pane.role}
           </p>
-        ) : null}
+          {codex.length > 0 ? (
+            <p className="truncate text-[10px] text-violet-300/80">
+              ★ {codex.map((entry) => entry.displayName).join(" · ")}
+            </p>
+          ) : null}
+        </div>
+        <AgentStatePill state={state} />
+      </button>
+      {/* pane별 인라인 명령 입력 — pane을 전환해도 입력 컨텍스트가 끊기지 않는다 */}
+      <div className="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/70 px-2 py-1 focus-within:border-amber-500/40">
+        <Terminal className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+        <input
+          aria-label={`${pane.title} 명령 입력`}
+          className="min-w-0 flex-1 bg-transparent font-mono text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+          onChange={(event) => onCommandDraftChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !busy && commandDraft.trim()) onDispatch();
+          }}
+          placeholder={`${surfaceLabel}에 명령...`}
+          type="text"
+          value={commandDraft}
+        />
+        <button
+          aria-label={`${pane.title} 작업창 읽기`}
+          className="shrink-0 rounded p-1 text-zinc-400 transition-colors hover:text-zinc-100 disabled:opacity-40"
+          disabled={Boolean(busy)}
+          onClick={onCapture}
+          type="button"
+        >
+          <Eye className="h-3.5 w-3.5" />
+        </button>
+        <button
+          aria-label={`${pane.title} 명령 전송`}
+          className="shrink-0 rounded bg-amber-600 p-1 text-white transition-colors hover:bg-amber-700 disabled:opacity-40"
+          disabled={Boolean(busy) || !commandDraft.trim()}
+          onClick={onDispatch}
+          type="button"
+        >
+          <Send className="h-3.5 w-3.5" />
+        </button>
       </div>
-      <AgentStatePill state={state} />
-    </button>
+    </div>
   );
 }
 
@@ -623,6 +673,7 @@ function TmuxPaneDetail({
   onDispatch,
   onReject,
   pane,
+  showComposer = true,
   timelineBlocks,
 }: {
   busy?: PaneBusyState;
@@ -633,6 +684,8 @@ function TmuxPaneDetail({
   onDispatch: () => void;
   onReject: () => void;
   pane: TmuxPaneDefinition;
+  /** 입력은 각 pane 카드로 옮겨졌으므로, 풀와이드 상세에서는 기본 끔(중복 방지) */
+  showComposer?: boolean;
   timelineBlocks: TerminalTimelineBlock[];
 }) {
   const state = mapTmuxPaneStateToAgentState(pane.state);
@@ -717,6 +770,7 @@ function TmuxPaneDetail({
         </div>
       </div>
 
+      {showComposer ? (
       <div className="shrink-0 border-t border-zinc-800/60 p-4">
         <div className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-2 focus-within:border-amber-500/40">
           <Terminal className="h-4 w-4 shrink-0 text-zinc-500" />
@@ -743,6 +797,7 @@ function TmuxPaneDetail({
         </div>
         <p className="mt-1.5 px-1 text-[10px] text-zinc-500">승인 게이트 준비됨 · 실제 전송은 승인 이후에만 실행됩니다.</p>
       </div>
+      ) : null}
     </div>
   );
 }
