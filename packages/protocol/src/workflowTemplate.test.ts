@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  BUSINESS_DOMAIN_PACK_TEMPLATES,
   buildMissionCreateFromTemplate,
   CORE_HERMES_ORG,
   CORE_WORKFLOW_TEMPLATES,
@@ -46,20 +45,13 @@ describe("core workflow templates (Generic App/Design Builder)", () => {
   });
 });
 
-describe("business domain pack is quarantined (optional, not core default)", () => {
-  it("business templates are NOT in the core registry", () => {
-    const coreIds = CORE_WORKFLOW_TEMPLATES.map((t) => t.id);
-    for (const t of BUSINESS_DOMAIN_PACK_TEMPLATES) {
-      expect(coreIds).not.toContain(t.id);
-    }
-  });
-
-  it("default findWorkflowTemplate cannot reach business templates; an explicit merged registry can", () => {
-    expect(findWorkflowTemplate("example-domain_htv_quote")).toBeUndefined(); // 기본(코어)에서 안 보임
+describe("business templates are removed from the product", () => {
+  it("the EXAMPLE_DOMAIN business templates are no longer reachable by any id", () => {
+    expect(findWorkflowTemplate("example-domain_htv_quote")).toBeUndefined();
+    expect(findWorkflowTemplate("example-domain_material_research")).toBeUndefined();
+    expect(findWorkflowTemplate("example-domain_sample_request")).toBeUndefined();
+    // 코어 generic 템플릿만 남음
     expect(findWorkflowTemplate("react_vite_app")?.title).toBe("React + Vite 앱");
-    // 팩을 명시적으로 합친 registry에서만 보인다(서버가 env 플래그로 합침)
-    const merged = [...CORE_WORKFLOW_TEMPLATES, ...BUSINESS_DOMAIN_PACK_TEMPLATES];
-    expect(findWorkflowTemplate("example-domain_htv_quote", merged)?.title).toBe("HTV 견적");
   });
 });
 
