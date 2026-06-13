@@ -114,6 +114,8 @@ import { sseSessionRegistry } from "./events/sseSession.js";
 import { createCorsHeaders } from "./http/cors.js";
 import { RequestBodyTooLargeError, readJsonBody, readRawBody } from "./http/requestBody.js";
 import { handleApprovalRoute } from "./routes/approvals.js";
+import { handleMissionRoute } from "./routes/missions.js";
+import { createMissionStore, type MissionStore } from "./missions/missionStore.js";
 import { handleTmuxRoute } from "./routes/tmux.js";
 import { acquireStorageLock } from "./storage/storageLock.js";
 import { AuthRateLimiter, resolveClientKey } from "./security/authRateLimiter.js";
@@ -5210,6 +5212,46 @@ export async function pushEventsToPersistentServerStorage(
   });
 }
 
+/**
+ * Mission store를 기존 Event Storage 위에 조립한다. 미션은 append-only
+ * mission.* 이벤트로만 저장되고(events.jsonl + 회전 세그먼트), 읽기는
+ * materialized view 재구성이다 — 서버 재시작 후에도 GET /missions가 살아난다.
+ */
+export function createServerMissionStore(storage: JsonlServerEventStorage): MissionStore {
+  return createMissionStore({
+    loadEvents: async () => {
+      const state = await storage.statePromise;
+      return [...state.eventsById.values()];
+    },
+    appendEvents: async (sessionId, envelopes) => {
+      const first = envelopes[0];
+      if (!first) {
+        return;
+      }
+      const response = await pushEventsToPersistentServerStorage(
+        {
+          id: `sync_missions_${first.id}`,
+          clientId: "server_missions",
+          sessionId,
+          events: envelopes,
+          idempotencyKey: `server_missions:${sessionId}:${first.id}`,
+          createdAt: first.createdAt,
+        },
+        storage,
+        first.createdAt,
+      );
+      const rejected = response.results.filter(
+        (result) => result.status !== "accepted" && result.status !== "duplicate",
+      );
+      if (rejected.length > 0) {
+        throw new Error(
+          `mission events rejected: ${rejected.map((result) => `${result.eventId}:${result.status}`).join(", ")}`,
+        );
+      }
+    },
+  });
+}
+
 export async function pullEventsFromPersistentServerStorage(
   sessionId: string,
   storage: JsonlServerEventStorage,
@@ -5477,6 +5519,7 @@ export class NonceRegistry {
 
 export function startServer(port = Number(process.env.PORT ?? 4317)) {
   const eventStorage = createJsonlServerEventStorage();
+  const missionStore = createServerMissionStore(eventStorage);
 
   // Advisory single-writer guard: two servers sharing one EVENT_STORAGE_DIR
   // interleave JSONL writes and corrupt approval state. Warn (or refuse, when
@@ -6320,6 +6363,21 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         parseCaptureRequest: parseServerTmuxCaptureRequest,
         recordCapture: recordServerTmuxCaptureToPersistentServerStorage,
         captureStatusCode: (result) => (result.status === "failed" ? 502 : 202),
+        respondJson,
+      })
+    ) {
+      return;
+    }
+
+    if (
+      await handleMissionRoute({
+        store: missionStore,
+        request,
+        pathname,
+        method: request.method,
+        readJsonBody,
+        isRequestBodyTooLargeError: (error): error is RequestBodyTooLargeError =>
+          error instanceof RequestBodyTooLargeError,
         respondJson,
       })
     ) {

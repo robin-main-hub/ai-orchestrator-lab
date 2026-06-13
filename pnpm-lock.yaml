@@ -148,6 +148,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@ai-orchestrator/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
       '@ai-orchestrator/memory':
         specifier: workspace:*
         version: link:../../packages/memory
