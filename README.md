@@ -162,6 +162,7 @@ docs/             # 00~45 설계 문서 (아래 주요 항목)
 71     error-card-self-correction-confidence (deterministic error parser + bounded self-correction + source-split confidence) [PR5]
 72     skill-archive-curator (merged-mission skill candidates → curator promotion → idempotent obsidian export) [PR6]
 73     giolite-workflow-templates (HTV quote/material research/sample request templates + 4-6 core hermes org) [PR7]
+74     pwa-shell (manifest + minimal read-only-offline service worker + install meta) [PR8]
 ```
 
 ## 실행 방법
