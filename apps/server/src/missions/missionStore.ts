@@ -36,6 +36,8 @@ export type MissionStoreDeps = {
   }) => Promise<VerificationReport>;
   /** 단조 증가 nonce 생성 (reportId/merge 등 유니크 id용; 테스트 결정성 위해 주입) */
   nextNonce?: () => string;
+  /** 큐 항목을 실제 git merge로 실행 (없으면 머지 자체가 not configured) */
+  runMerge?: MissionMergeExecutor;
 };
 
 export type MissionStore = {
@@ -45,9 +47,21 @@ export type MissionStore = {
   appendEvent: (missionId: string, request: MissionEventAppendRequest) => Promise<ServerMissionRecord | undefined>;
   /** 미션의 검증 명령을 서버에서 실행하고 결과를 기록 (E1: 진짜 observed) */
   verify: (missionId: string, request: MissionVerifyRequest) => Promise<ServerMissionRecord | undefined>;
-  /** 검증 통과한 큐 항목의 머지를 실행하고 미션을 닫는다 (E2) */
+  /** 검증 통과한 큐 항목의 머지를 실제 git으로 실행한다 (D4a: real sha / conflict / dry_run) */
   merge: (missionId: string, request: MissionMergeRequest) => Promise<ServerMissionRecord | undefined>;
 };
+
+/** 머지 실행기 — repoRoot allowlist에 있으면 real git merge, 아니면 dry_run */
+export type MissionMergeExecutor = (input: {
+  item: import("@ai-orchestrator/protocol").SequentialMergeQueueItem;
+  missionTitle: string;
+}) => Promise<{
+  status: "merged" | "conflict" | "blocked" | "failed" | "dry_run";
+  mergeCommitSha?: string;
+  reason: string;
+  conflictFiles: string[];
+  completedAt: string;
+}>;
 
 export class MissionEventValidationError extends Error {}
 
@@ -274,7 +288,7 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
       if (!queueItem) {
         throw new MissionEventValidationError(`merge queue item not found: ${request.mergeQueueItemId}`);
       }
-      // E2 불변식: 큐 항목이 가리키는 검증이 여전히 observed+passed여야 머지 실행
+      // 불변식: 큐 항목이 가리키는 검증이 여전히 observed+passed여야 머지 실행
       const report = existing.verificationReports.find((r) => r.id === queueItem.requiredVerificationReportId);
       if (!report || report.status !== "passed" || !report.observed) {
         throw new MissionEventValidationError(
@@ -284,35 +298,53 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
       if (queueItem.status === "merged") {
         return existing; // 멱등: 이미 머지됨
       }
+      if (!deps.runMerge) {
+        throw new MissionEventValidationError("merge runner not configured on this server");
+      }
 
+      // D4a: 실제 git merge 실행. mergeCommitSha는 클라이언트가 보낸 값이 아니라
+      // runner가 git rev-parse HEAD로 관측한 real sha만 저장한다 (합성값 금지).
+      const result = await deps.runMerge({ item: queueItem, missionTitle: existing.mission.title });
       const createdAt = now();
-      const seq = existing.workers.length + existing.artifacts.length + existing.verificationReports.length + existing.mergeQueueItems.length + 1;
-      // 큐 항목을 merged로 재기록(누적 머지) + 미션 닫기. 실제 git merge는 worktree
-      // 인프라(다음 단계) 전까지 상태 전이로 — mergeCommitSha는 제공되면 보존.
-      await deps.appendEvents(missionId, [
+      const baseSeq =
+        existing.workers.length +
+        existing.artifacts.length +
+        existing.verificationReports.length +
+        existing.mergeQueueItems.length +
+        1;
+
+      const updatedItem = {
+        ...queueItem,
+        status: result.status,
+        mergeCommitSha: result.mergeCommitSha,
+        conflictFiles: result.conflictFiles,
+        reason: result.reason,
+        completedAt: result.completedAt,
+      };
+
+      const envelopes: EventEnvelope[] = [
         envelope({
           missionId,
           type: "mission.merge.queued",
-          payload: {
+          payload: { missionId, item: updatedItem },
+          seq: baseSeq,
+          createdAt,
+        }),
+      ];
+      // merged일 때만 미션을 닫는다. conflict/blocked/failed/dry_run은 미션을
+      // merged로 닫지 않는다 (가짜 성공 방지 — 사용자가 다시 판단).
+      if (result.status === "merged") {
+        envelopes.push(
+          envelope({
             missionId,
-            item: {
-              ...queueItem,
-              status: "merged",
-              mergeCommitSha: request.mergeCommitSha ?? queueItem.mergeCommitSha,
-              completedAt: createdAt,
-            },
-          },
-          seq,
-          createdAt,
-        }),
-        envelope({
-          missionId,
-          type: "mission.closed",
-          payload: { missionId, status: "merged", reason: `merged via queue item ${queueItem.id}` },
-          seq: seq + 1,
-          createdAt,
-        }),
-      ]);
+            type: "mission.closed",
+            payload: { missionId, status: "merged", reason: `merged via queue item ${queueItem.id} (${result.mergeCommitSha})` },
+            seq: baseSeq + 1,
+            createdAt,
+          }),
+        );
+      }
+      await deps.appendEvents(missionId, envelopes);
       return get(missionId);
     },
   };

@@ -77,7 +77,7 @@ export function MissionBoardPanel({
       {snapshot.items.length === 0 ? (
         <p className="mission-board-empty">
           {snapshot.serverReachable
-            ? "저장된 미션이 없습니다. 토론에서 패킷을 만들어 미션으로 승격하세요."
+            ? "저장된 미션이 없습니다. 패킷을 만든 뒤 위 '패킷→미션 생성'으로 승격하세요. (실제 페르소나 실행은 자율·병렬 탭, 미션 보드는 서버에 영속되는 검증·머지 기록입니다.)"
             : "서버 미연결 — 로컬 임시 미션도 없습니다."}
         </p>
       ) : (
@@ -121,18 +121,34 @@ export function MissionBoardPanel({
                   {" · merge queue "}
                   {item.mergeQueueCount}
                 </p>
+                {/* 검증 실패 사유 — 무엇이 왜 깨졌는지 카드에서 바로 보이게 */}
+                {item.latestVerification?.status === "failed" && item.latestVerification.failedCheck ? (
+                  <p className="mission-board-fail">검증 실패: {item.latestVerification.failedCheck} — 명령을 고치고 다시 검증하세요</p>
+                ) : null}
+                {/* 머지 결과 정직 표시 — merged sha / conflict / dry_run */}
+                {item.latestMerge ? (
+                  <p className="mission-board-mergestate">
+                    {item.latestMerge.status === "merged"
+                      ? `머지됨 · ${item.latestMerge.sha?.slice(0, 10) ?? "sha 없음"}`
+                      : item.latestMerge.status === "conflict"
+                        ? `머지 충돌 · ${item.latestMerge.conflictCount}개 파일 (abort됨 — 미션 미완료)`
+                        : item.latestMerge.status === "dry_run"
+                          ? "dry_run · 실제 머지 안 함 (repoRoot가 서버 allowlist에 없음)"
+                          : `머지 ${item.latestMerge.status}`}
+                  </p>
+                ) : null}
                 {(verifiable || queueable || mergeable) && (
                   <div className="mission-board-actions">
                     {verifiable ? (
                       verifyAvailable ? (
                         <button
                           className="rail-icon-button mission-board-verify"
-                          disabled={busyMissionId === item.missionId}
+                          disabled={Boolean(busyMissionId)}
                           onClick={() => onVerify?.(item)}
                           type="button"
                         >
                           <ShieldCheck size={13} />
-                          {busyMissionId === item.missionId && busyKind === "verify" ? "검증 중…" : "검증 실행"}
+                          {busyMissionId === item.missionId && busyKind === "verify" ? "검증 중… (최대 3분)" : "검증 실행"}
                         </button>
                       ) : (
                         <span className="mission-board-hint">검증 명령 없음 — 패킷의 검증 계획이 필요합니다</span>
@@ -152,7 +168,7 @@ export function MissionBoardPanel({
                     {mergeable ? (
                       <button
                         className="rail-icon-button mission-board-merge"
-                        disabled={busyMissionId === item.missionId}
+                        disabled={Boolean(busyMissionId)}
                         onClick={() => onMerge?.(item)}
                         type="button"
                       >
@@ -160,8 +176,19 @@ export function MissionBoardPanel({
                         {busyMissionId === item.missionId && busyKind === "merge" ? "머지 중…" : "머지 실행"}
                       </button>
                     ) : null}
+                    {Boolean(busyMissionId) && busyMissionId !== item.missionId ? (
+                      <span className="mission-board-hint">다른 미션 작업 중 — 잠시 후 다시 시도하세요</span>
+                    ) : null}
                   </div>
                 )}
+                {/* 액션이 하나도 없는 server 미션엔 그 사유를 표시 (죽은 카드 방지) */}
+                {item.source === "server_observed" && !verifiable && !queueable && !mergeable ? (
+                  <p className="mission-board-hint">
+                    {item.workers.some((w) => w.capabilityMode === "sandbox_verify")
+                      ? "검증 후 병합 대기열·머지가 열립니다"
+                      : "검증 가능한 워커(verifier/reviewer)가 없습니다"}
+                  </p>
+                ) : null}
               </li>
             );
           })}

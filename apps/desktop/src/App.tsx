@@ -274,7 +274,8 @@ import {
 } from "./seeds/conversation";
 import { DashboardView } from "./components/DashboardView";
 import { projectAutonomyRunHistory } from "./lib/autonomyRunHistory";
-import { loadHermesPool } from "./lib/hermesPoolStore";
+import { loadHermesPool, saveHermesPool } from "./lib/hermesPoolStore";
+import { acquireHermesSlot } from "./lib/hermesSlotPool";
 import { summarizeHermesPool } from "./lib/hermesSlotPool";
 import { personaAvatars as dashboardPersonaAvatars } from "./lib/personaAvatarSource";
 import { ControlQueueDrawer } from "./components/ControlQueueDrawer";
@@ -5024,7 +5025,33 @@ export function App() {
                 seedPacket: codingPacketState,
               }}
               parallelProps={{ seedPersonaName: summonSeedPersona ?? undefined }}
-              boardProps={{ packet: codingPacketState }}
+              boardProps={{
+                packet: codingPacketState,
+                sourceSessionId: activeSessionId,
+                debateId: debateSession.id,
+                // 미션 워커를 실제 페르소나 + 점유한 Hermes 슬롯으로 구성한다.
+                // 익명 역할 하드코딩 대신 사용자가 키운 캐릭터가 일하게.
+                buildWorkers: () => {
+                  let pool = loadHermesPool();
+                  const workers = (["architect", "builder", "verifier"] as const).map((role) => {
+                    const agent = agents.find((candidate) => candidate.enabled && candidate.role === role);
+                    const slug = agent?.personaName ?? role;
+                    const acquisition = acquireHermesSlot(pool, slug);
+                    pool = acquisition.pool;
+                    return {
+                      agentId: agent?.id ?? `agent_${role}`,
+                      role,
+                      displayName: agent ? agentPrimaryDisplayName(agent) : role,
+                      personaName: agent?.personaName,
+                      soulMode: agent?.soulMode ?? ("summary" as const),
+                      configSource: agent?.configSource ?? ("internal" as const),
+                      hermesSlotId: acquisition.slot.id,
+                    };
+                  });
+                  saveHermesPool(pool);
+                  return workers;
+                },
+              }}
             />
           ) : activeNavItem === "theater" ? (
             <SummonTheater

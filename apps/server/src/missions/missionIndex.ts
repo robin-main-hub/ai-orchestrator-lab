@@ -34,6 +34,20 @@ function sortByCreatedAt(events: ReadonlyArray<EventEnvelope>): EventEnvelope[] 
  *   최신 verification passed → ready_to_merge / failed → verifying 유지
  *   mission.closed → 그 상태가 최종 (merged/failed/cancelled)
  */
+/**
+ * 미션 레벨 truthStatus도 검증과 같은 정직성 정책을 따른다:
+ *   - observed passed verification이 있으면 "observed"
+ *   - 없는데 created가 "observed"를 주장했으면 "configured"로 강등(가짜 green 방지)
+ *   - 그 외엔 created 값(planned/configured/simulated) 유지
+ */
+function deriveTruthStatus(record: ServerMissionRecord): ServerMissionRecord["truthStatus"] {
+  const hasObservedPass = record.verificationReports.some((r) => r.observed && r.status === "passed");
+  if (hasObservedPass) {
+    return "observed";
+  }
+  return record.truthStatus === "observed" ? "configured" : record.truthStatus;
+}
+
 function deriveStatus(record: ServerMissionRecord, closedStatus?: "merged" | "failed" | "cancelled"): OrchestrationMissionStatus {
   if (closedStatus) {
     return closedStatus;
@@ -130,6 +144,10 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
   }
 
   return [...records.values()]
-    .map((record) => ({ ...record, status: deriveStatus(record, closedBy.get(record.mission.missionId)) }))
+    .map((record) => ({
+      ...record,
+      status: deriveStatus(record, closedBy.get(record.mission.missionId)),
+      truthStatus: deriveTruthStatus(record),
+    }))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
