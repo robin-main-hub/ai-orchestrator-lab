@@ -1,7 +1,8 @@
-import type { LoadedPersona } from "@ai-orchestrator/agents";
-import type { AgentSession, CodingPacket, TerminalHostKind } from "@ai-orchestrator/protocol";
+import { sandboxRunModeForCapability, type LoadedPersona } from "@ai-orchestrator/agents";
+import type { AgentSession, CodingPacket, MissionWorkerCapability, TerminalHostKind } from "@ai-orchestrator/protocol";
 import { createAutoApproveStrategy } from "./autoApproveStrategy";
 import type { ClosedLoopEffects } from "./closedLoopController";
+import { createSandboxGatedEffects } from "./legacyTmuxRunner";
 import {
   createClosedLoopEffects,
   pollForApprovalDecision,
@@ -128,6 +129,12 @@ export function createAutonomyEffectsFactory(input: {
   extraSafePrefixes?: ReadonlyArray<string>;
   logger?: (message: string) => void;
   onStep?: ClosedLoopEffects["onStep"];
+  /**
+   * When provided, every dispatch is routed through the SandboxRunner preflight
+   * (capability + safe-command gate) before reaching tmux. Opt-in: without a
+   * capability the autonomy loop keeps its existing un-gated effects.
+   */
+  capability?: MissionWorkerCapability;
 }): (session: AgentSession) => ClosedLoopEffects {
   const server = input.server ?? {};
   const runId = input.runId ?? "run";
@@ -146,7 +153,7 @@ export function createAutonomyEffectsFactory(input: {
     // source ids) across iterations and captures within this run. Including
     // session.id in the prefix keeps ids distinct across parallel missions.
     let seq = 0;
-    return createClosedLoopEffects({
+    const base = createClosedLoopEffects({
       sessionId: session.sessionId,
       role: session.role,
       paneId: session.paneId,
@@ -163,6 +170,17 @@ export function createAutonomyEffectsFactory(input: {
       dispatchClient: input.clients?.dispatchClient,
       captureClient: input.clients?.captureClient,
       replayClient: input.clients?.replayClient,
+    });
+
+    if (!input.capability) {
+      return base;
+    }
+    return createSandboxGatedEffects({
+      effects: base,
+      capability: input.capability,
+      runMode: sandboxRunModeForCapability(input.capability.mode),
+      missionId: runId,
+      now,
     });
   };
 }

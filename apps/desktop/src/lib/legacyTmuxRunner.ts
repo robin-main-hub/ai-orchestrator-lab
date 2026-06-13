@@ -4,6 +4,7 @@ import type {
   SandboxExecRequest,
   SandboxExecResult,
   SandboxPreflightResult,
+  SandboxRunMode,
 } from "@ai-orchestrator/protocol";
 import type { ClosedLoopEffects } from "./closedLoopController";
 import { isAutoApprovableCommand } from "./safeCommandPolicy";
@@ -94,4 +95,47 @@ export function createLegacyTmuxRunner(deps: LegacyTmuxRunnerDeps): SandboxRunne
   }
 
   return { kind: "legacy_tmux", preflight, exec, capture };
+}
+
+/**
+ * Wrap a worker's ClosedLoopEffects so every dispatch passes the SandboxRunner
+ * preflight first. This is how the runner actually lands in the live autonomy
+ * loop: capture/escalate/onStep pass through unchanged, but `dispatch` is
+ * routed through LegacyTmuxRunner.exec — a blocked preflight throws (the loop
+ * then escalates), and a passing one delegates to the original dispatch.
+ *
+ * Capability-free callers keep the un-gated effects, so this is opt-in and the
+ * existing autonomy behavior is unchanged unless a capability is supplied.
+ */
+export function createSandboxGatedEffects(deps: {
+  effects: ClosedLoopEffects;
+  capability: MissionWorkerCapability;
+  runMode: SandboxRunMode;
+  missionId?: string;
+  now?: () => string;
+}): ClosedLoopEffects {
+  const now = deps.now ?? (() => new Date().toISOString());
+  const runner = createLegacyTmuxRunner({ capability: deps.capability, effects: deps.effects, now });
+  const missionId = deps.missionId ?? "autonomy";
+  let seq = 0;
+
+  return {
+    capture: deps.effects.capture,
+    escalate: deps.effects.escalate,
+    onStep: deps.effects.onStep,
+    dispatch: async (command, context) => {
+      const request: SandboxExecRequest = {
+        id: `gated_${missionId}_${seq++}_${context.stepIndex}`,
+        missionId,
+        workerId: deps.capability.agentId,
+        command,
+        mode: deps.runMode,
+        createdAt: now(),
+      };
+      const result = await runner.exec(request);
+      if (result.status !== "completed") {
+        throw new Error(`sandbox ${result.status}: ${result.reason ?? "preflight gate"}`);
+      }
+    },
+  };
 }
