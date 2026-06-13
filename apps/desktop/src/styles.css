@@ -319,6 +319,29 @@ button {
   overflow: hidden;
 }
 
+/* ── 설정파일 탭에서 좌측 레일을 아이콘 전용 좁은 폭으로 유지 ──
+ * 사용자 의도: 좁은 아이콘 레일이 모든 탭의 기본 — 설정파일 클릭 시 레일이
+ * 갑자기 넓어지며 한글 라벨이 노출되는 회귀를 차단한다. compact 모드에서는
+ * 라벨/섹션 헤더/오른쪽 ChevronRight를 숨기고 아이콘만 가운데 정렬. */
+.left-rail.compact {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+.left-rail.compact .nav-section__label,
+.left-rail.compact .nav-item > span {
+  display: none;
+}
+.left-rail.compact .nav-item {
+  justify-content: center;
+  padding: 8px;
+}
+.left-rail.compact .nav-item svg:last-child {
+  display: none;
+}
+.app-shell.compact-rail-shell {
+  grid-template-columns: 60px minmax(0, 1fr) 280px;
+}
+
 .right-rail {
   grid-column: 3;
   grid-row: 1 / 4;
@@ -546,8 +569,9 @@ button {
   grid-row: 1;
   align-self: center;
   color: var(--text);
-  font-size: 10.5px;
-  line-height: 1.15;
+  /* 한글 음절은 자모 3개가 겹치므로 10.5px에서는 식별이 어렵다 — 12px로 상향. */
+  font-size: 12px;
+  line-height: 1.2;
   overflow-wrap: anywhere;
 }
 
@@ -557,8 +581,9 @@ button {
   align-self: start;
   margin-top: 0;
   color: var(--subtle);
-  font-size: 8.5px;
-  line-height: 1.2;
+  /* 8.5px에서는 한글 자모가 픽셀 그리드에 뭉개져 가독성이 0이 된다. 11px가 최소선. */
+  font-size: 11px;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
