@@ -309,6 +309,58 @@ describe("OperatorCockpit", () => {
     expect(html).toContain("승인 대기 열기");
     expect(html).toContain("성과 장부 열기");
     expect(html).toContain("워커 함대 보기");
+    // 병합 후: NextActionStrip이 작전 지휘판 안으로 흡수돼 "지금 할 일"이 지휘판 영역에 있다
+    expect(html).toContain("지금 할 일");
+    const deckIdx = html.indexOf("작전 지휘판");
+    const actionIdx = html.indexOf("지금 할 일");
+    expect(actionIdx).toBeGreaterThan(deckIdx);
+  });
+
+  it("다음 할 일을 한 군데서만 말한다 — 지휘판의 중복 nextAction 제목(h2)을 제거했다", () => {
+    const html = renderToStaticMarkup(
+      <OperatorCockpit
+        defaultDetailsOpen
+        readiness={{
+          diagnostics: createSettingsDiagnostics({
+            agentCount: 1,
+            enabledProviderCount: 1,
+            memoryAdapterStatus: "ready",
+            providerSmokeReadyCount: 1,
+            runtimeStatus: "online",
+            workerCount: 1,
+          }),
+          maturity: createOrchestrationMaturityReport({
+            attachments: { acceptedTypeCount: 2, hasProcessingPipeline: true, pendingCount: 0 },
+            controlQueue: { connectedLaneCount: 6, pendingApprovalCount: 1, workItemProjectionCount: 1 },
+            debate: { codingImpactCount: 1, decisionCount: 1, hasCodingPacketProjection: true, readinessState: "ready" },
+            e2e: { desktopTestCount: 357, hasProviderSmokeHarness: true, hasVisualSmokeChecklist: true },
+            memory: { agentInstallCount: 1, curatorCandidateCount: 1, installedAgentCount: 1, promotedCount: 1 },
+            onboarding: { blockingCheckCount: 0, passedCheckCount: 1, totalCheckCount: 1 },
+            provider: { assignedAgentCount: 1, fallbackReadyCount: 1, profileCount: 1, smokeReadyCount: 1 },
+            receipts: { receiptCount: 1, searchableCount: 1, unsafeReceiptCount: 0 },
+            tmux: { hasRecoveryPlan: true, paneCount: 1, timelineBlockCount: 1 },
+          }),
+          nextActions: [
+            {
+              ctaLabel: "승인 대기열 보기",
+              id: "approval_unique_label",
+              label: "유일라벨_다음할일_X",
+              priority: "high",
+              source: "approval",
+              targetSurface: "approvals",
+            },
+          ],
+          smokePlan: createProductionSmokePlan({ includeLiveProvider: false, includeVisual: true }),
+          workTraceItems: [workTraceItem],
+        }}
+        snapshot={snapshot}
+      />,
+    );
+    // 지금 할 일(NextActionStrip)은 살아있다
+    expect(html).toContain("지금 할 일");
+    expect(html).toContain("유일라벨_다음할일_X");
+    // 병합 전 지휘판이 nextAction을 그대로 반복하던 h2(text-balance text-lg ...)는 사라졌다
+    expect(html).not.toContain("text-balance text-lg font-semibold tracking-tight");
   });
 
   it("기본 세부 정보가 열린 상태에서는 다음 행동 목적지 안내를 표시하지 않는다", () => {

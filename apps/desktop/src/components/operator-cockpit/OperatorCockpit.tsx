@@ -346,7 +346,8 @@ export function OperatorCockpit({
             approvalCount={approvalCount}
             blockedCount={blockedCount}
             memoryHealthLabel={mirrorHealthLabel(snapshot.memory.dgxMirrorHealth)}
-            nextActionLabel={readiness?.nextActions?.[0]?.label}
+            nextActions={readiness?.nextActions ?? []}
+            onActivateNextAction={handleNextAction}
             onOpenApprovals={openApprovals}
             onOpenFleet={openFleet}
             onOpenMemory={openMemoryPanel}
@@ -355,10 +356,6 @@ export function OperatorCockpit({
             receiptCount={readiness?.workTraceItems?.length ?? 0}
             workingCount={workingCount}
           />
-
-          {readiness?.nextActions?.length ? (
-            <NextActionStrip actions={readiness.nextActions} onActivate={handleNextAction} />
-          ) : null}
 
           {primaryActionableHandoff && onApproveHandoff ? (
             <PendingHandoffStrip handoff={primaryActionableHandoff} onApprove={onApproveHandoff} />
@@ -467,7 +464,8 @@ function MissionCommandDeck({
   approvalCount,
   blockedCount,
   memoryHealthLabel,
-  nextActionLabel,
+  nextActions,
+  onActivateNextAction,
   onOpenApprovals,
   onOpenFleet,
   onOpenMemory,
@@ -479,7 +477,9 @@ function MissionCommandDeck({
   approvalCount: number;
   blockedCount: number;
   memoryHealthLabel: string;
-  nextActionLabel?: string;
+  /** "지금 할 일" — NextActionStrip을 이 지휘판 좌측으로 흡수(다음 할 일을 한 군데서만 말한다) */
+  nextActions: CockpitNextActionItem[];
+  onActivateNextAction: (action: CockpitNextActionItem) => void;
   onOpenApprovals: () => void;
   onOpenFleet: () => void;
   onOpenMemory: () => void;
@@ -495,7 +495,7 @@ function MissionCommandDeck({
     >
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.9fr)]">
         <div className="border-b border-white/10 p-4 lg:border-b-0 lg:border-r">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-300/25 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold text-cyan-100">
               <Monitor className="h-3 w-3" />
               작전 지휘판
@@ -504,13 +504,14 @@ function MissionCommandDeck({
               작업 흐름
             </span>
           </div>
-          <h2 className="mt-3 text-balance text-lg font-semibold tracking-tight text-zinc-50">
-            {nextActionLabel ?? "지금은 관제판을 기준으로 다음 작업을 고르면 됩니다."}
-          </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">
-            승인, 워커 움직임, 기억 상태, 성과 장부를 한 줄 흐름으로 묶어 보여줍니다.
-            메인 화면은 행동 판단에 필요한 신호만 남기고, 세부 로그는 작전 세부 정보로 보냅니다.
-          </p>
+          {/* "지금 할 일" — NextActionStrip을 지휘판 안으로 흡수해 다음 할 일을 한 군데서만 말한다 */}
+          {nextActions.length ? (
+            <NextActionStrip actions={nextActions} onActivate={onActivateNextAction} />
+          ) : (
+            <p className="text-sm leading-6 text-zinc-400">
+              지금은 처리할 다음 작업이 없습니다. 승인·워커·기억·성과 신호를 오른쪽에서 확인하세요.
+            </p>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-2 p-3">
           <MissionMetric
@@ -782,19 +783,19 @@ function GlanceTile({
 
   return (
     <button
-      className={`group rounded-xl border p-3 text-left backdrop-blur-xl transition-colors hover:border-cyan-300/35 hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50 ${toneClass}`}
+      className={`group rounded-lg border px-3 py-2 text-left backdrop-blur-xl transition-colors hover:border-cyan-300/35 hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50 ${toneClass}`}
       onClick={onClick}
+      title={actionLabel}
       type="button"
     >
-      <div className="flex items-center justify-between text-zinc-500">
+      <div className="flex items-center justify-between gap-2 text-zinc-500">
         <span className="text-[10px] font-medium uppercase tracking-wider">{label}</span>
-        {icon}
+        <span className="opacity-70 transition-colors group-hover:text-cyan-100">{icon}</span>
       </div>
-      <div className="mt-2 truncate text-lg font-semibold text-zinc-100">{value}</div>
-      <p className="mt-0.5 truncate text-[11px] text-zinc-500">{hint}</p>
-      <span className="mt-2 inline-flex text-[10px] font-semibold text-cyan-100/70 transition-colors group-hover:text-cyan-100">
-        {actionLabel}
-      </span>
+      <div className="mt-1 flex min-w-0 items-baseline gap-1.5">
+        <span className="truncate text-base font-semibold text-zinc-100">{value}</span>
+        <span className="truncate text-[10px] text-zinc-500">{hint}</span>
+      </div>
     </button>
   );
 }
