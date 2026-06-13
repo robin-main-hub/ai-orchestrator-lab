@@ -1,4 +1,8 @@
 import type {
+  GithubCommentWriteExecuteRequest,
+  GithubCommentWriteExecuteResponse,
+  GithubCommentWritePlanRequest,
+  GithubCommentWritePlanResponse,
   GithubConnectorStatus,
   GithubIssueSummary,
   GithubPullRequestDetail,
@@ -149,4 +153,48 @@ export function githubConnectorChipLabel(view: GithubConnectorView): GithubConne
     return { text: "GitHub 읽기전용: 연결됨", tone: "configured", title: view.status.note };
   }
   return { text: "GitHub 읽기전용: 미설정", tone: "idle", title: view.status.note };
+}
+
+// ── W1b: comment write client helpers (서버 라우트만 호출 — 직접 GitHub 호출 없음) ──
+
+/**
+ * 브라우저용 sha256 — Web Crypto API. 서버의 createHash sha256과 결과가 같다.
+ * preview 일치 확인뿐 아니라 서버에 보내는 bodySha256 (execute의 무결성 키)에 쓴다.
+ */
+export async function sha256Hex(text: string): Promise<string> {
+  const buffer = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function postJson<TIn, TOut>(
+  serverBaseUrl: string | string[] | undefined,
+  path: string,
+  body: TIn,
+  fetchImpl: typeof fetch,
+): Promise<TOut> {
+  const base = resolveServerBaseUrl(serverBaseUrl);
+  if (!base) throw new Error("서버 미연결 — 코딩 서버 주소가 없습니다.");
+  const response = await fetchImpl(`${base.replace(/\/$/, "")}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return (await response.json()) as TOut;
+}
+
+export function postGithubCommentPlan(
+  serverBaseUrl: string | string[] | undefined,
+  request: GithubCommentWritePlanRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubCommentWritePlanResponse> {
+  return postJson(serverBaseUrl, "/integrations/github/write/comment/plan", request, fetchImpl);
+}
+
+export function postGithubCommentExecute(
+  serverBaseUrl: string | string[] | undefined,
+  request: GithubCommentWriteExecuteRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubCommentWriteExecuteResponse> {
+  return postJson(serverBaseUrl, "/integrations/github/write/comment/execute", request, fetchImpl);
 }

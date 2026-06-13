@@ -227,10 +227,21 @@ async function handleCommentWriteExecute(deps: GithubRouteDependencies): Promise
     authReason = authorized ? "approval_granted" : "approval_not_granted";
   }
   if (!authorized && payload.autoExecuteArmed === true && payload.armedAt) {
-    // armed는 클라이언트 표식이라 plan TTL 내에서만 신뢰한다(이후 시간 경과면 거절).
+    // armed는 클라이언트 표식 — 서버가 독립적으로 freshness를 강제한다.
+    // (1) armedAt이 과거여야 함(미래는 시계 왜곡/위조 가능성),
+    // (2) "지금"으로부터 ARMED_TTL_MS 이내,
+    // (3) plan 생성 시각 이전(같은 armed 표식이 만료 후 새 plan을 무한정 권한 부여 못 하게).
+    const ARMED_TTL_MS = 30 * 60 * 1000;
     const armedMs = Date.parse(payload.armedAt);
-    const planExpiresMs = Date.parse(record.plan.expiresAt);
-    if (Number.isFinite(armedMs) && armedMs <= planExpiresMs) {
+    const nowMs = Date.parse(deps.now?.() ?? new Date().toISOString());
+    const planCreatedMs = Date.parse(record.plan.createdAt);
+    if (
+      Number.isFinite(armedMs) &&
+      Number.isFinite(nowMs) &&
+      armedMs <= nowMs &&
+      nowMs - armedMs <= ARMED_TTL_MS &&
+      (!Number.isFinite(planCreatedMs) || armedMs <= planCreatedMs + ARMED_TTL_MS)
+    ) {
       authorized = true;
       authReason = "auto_execute_armed";
     } else {
