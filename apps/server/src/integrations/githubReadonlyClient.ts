@@ -76,6 +76,12 @@ export type GithubReadonlyClient = {
   getPullRequest(owner: string, repo: string, pullNumber: number): Promise<GithubPullRequestDetail>;
   getFileContent(owner: string, repo: string, path: string, ref?: string): Promise<GithubFileContent>;
   listIssues(owner: string, repo: string, opts?: { state?: "open" | "closed" | "all"; perPage?: number }): Promise<GithubIssueSummary[]>;
+  /**
+   * W1 — comment write의 단 하나 허용된 POST. token은 read와 동일(분리하지 않음).
+   * 안전 게이트(allowlist/sha/secret-scan/body-cap)는 호출 전에 반드시 통과해야 한다.
+   * GitHub 응답이 201일 때만 `{ id, html_url }` 반환; 그 외는 GithubReadonlyError로 던진다.
+   */
+  postIssueComment(owner: string, repo: string, number: number, body: string): Promise<{ id: number; htmlUrl: string }>;
 };
 
 export function createGithubReadonlyClient(options: GithubReadonlyClientOptions = {}): GithubReadonlyClient {
@@ -163,6 +169,35 @@ export function createGithubReadonlyClient(options: GithubReadonlyClientOptions 
         changedFiles: numberOrNull(pr.changed_files),
         commits: numberOrNull(pr.commits),
       };
+    },
+
+    async postIssueComment(owner, repo, number, body) {
+      if (!token) throw new GithubNotConfiguredError();
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${encodeURIComponent(String(number))}/comments`,
+          {
+            method: "POST",
+            headers: {
+              accept: "application/vnd.github+json",
+              authorization: `Bearer ${token}`,
+              "x-github-api-version": "2022-11-28",
+              "user-agent": "ai-orchestrator-lab-comment-write",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ body }),
+          },
+        );
+      } catch (error) {
+        throw new GithubReadonlyError(scrub(error instanceof Error ? error.message : String(error), token), 0);
+      }
+      if (response.status !== 201) {
+        const text = await response.text().catch(() => "");
+        throw new GithubReadonlyError(scrub(`GitHub ${response.status}: ${text.slice(0, 200)}`, token), response.status);
+      }
+      const raw = (await response.json()) as Record<string, unknown>;
+      return { id: Number(raw.id ?? 0), htmlUrl: String(raw.html_url ?? "") };
     },
 
     async getFileContent(owner, repo, path, ref) {

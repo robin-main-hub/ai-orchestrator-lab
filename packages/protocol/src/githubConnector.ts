@@ -140,6 +140,113 @@ export const githubFileContentSchema = z.object({
 });
 export type GithubFileContent = z.infer<typeof githubFileContentSchema>;
 
+// ──────────────────────────────────────────────────────────────────────────────
+// W1: GitHub comment write (PR/Issue comment create — only write surface)
+// 사용자 수정 조건: MCP execute 포함, GITHUB_TOKEN 단일, comment-execute는 1회 armed 후 가능.
+// 양보 불가 안전선:
+//   - repo allowlist 통과
+//   - body length 캡 + bodySha256 무결성
+//   - secret 스캔(API 키·토큰 패턴 발견 시 차단)
+//   - approval-or-armed (둘 중 하나는 반드시)
+//   - kind는 comment_create만
+//   - token scope 미추정(GitHub 403 → permission_denied)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/** plan/execute에서 표현 가능한 결과 — observed는 GitHub HTTP 200/201 실응답만. */
+export const githubCommentWriteOutcomeSchema = z.enum([
+  "observed",
+  "planned",
+  "approval_required",
+  "blocked",
+  "not_configured",
+  "permission_denied",
+  "connection_failed",
+  "github_error",
+]);
+export type GithubCommentWriteOutcome = z.infer<typeof githubCommentWriteOutcomeSchema>;
+
+/** comment write에서 단 하나 허용되는 action(다른 write 액션 절대 추가 금지). */
+export const githubCommentWriteActionSchema = z.literal("comment_create");
+export type GithubCommentWriteAction = z.infer<typeof githubCommentWriteActionSchema>;
+
+/** plan 요청(서버는 GITHUB_TOKEN으로 target 존재만 확인 — 실제 게시 없음). */
+export const githubCommentWritePlanRequestSchema = z.object({
+  action: githubCommentWriteActionSchema.default("comment_create"),
+  repoFullName: z
+    .string()
+    .min(3)
+    .max(140)
+    // 안전선: 단순 정규식 — 실제 검증은 서버가 allowlist까지 본다.
+    .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, "owner/repo 형식이 필요합니다"),
+  number: z.number().int().positive(),
+  /** "issue" | "pull_request" — GitHub API는 둘 다 동일 endpoint(issues/:n/comments)를 쓴다. */
+  targetKind: z.enum(["issue", "pull_request"]),
+  body: z.string().min(1).max(16_000),
+});
+export type GithubCommentWritePlanRequest = z.infer<typeof githubCommentWritePlanRequestSchema>;
+
+/** plan 자체는 외부 GitHub에 흔적을 남기지 않는다. status는 plan 라이프사이클을 표현. */
+export const githubCommentWritePlanSchema = z.object({
+  id: z.string(),
+  action: githubCommentWriteActionSchema,
+  repoFullName: z.string(),
+  number: z.number().int().positive(),
+  targetKind: z.enum(["issue", "pull_request"]),
+  bodyPreview: z.string(),
+  bodySha256: z.string(),
+  bodyLength: z.number().int().nonnegative(),
+  targetUrl: z.string(),
+  /** plan 라이프사이클 — created/blocked는 실제 게시 단계가 아니라 execute에서만 갈 수 있음 */
+  status: z.enum([
+    "planned",
+    "approval_required",
+    "blocked",
+    "auto_execute_armed",
+    "executing",
+    "created",
+    "failed",
+  ]),
+  /** plan 단계는 항상 planned(외부 흔적 없음) — observed는 execute 성공일 때만. */
+  truthStatus: z.enum(["planned", "observed", "configured"]),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  approvalId: z.string().optional(),
+  /** 막혔다면 그 이유(allowlist/secret/길이/미설정 등). */
+  blockedReason: z.string().optional(),
+});
+export type GithubCommentWritePlan = z.infer<typeof githubCommentWritePlanSchema>;
+
+export const githubCommentWritePlanResponseSchema = z.object({
+  outcome: githubCommentWriteOutcomeSchema,
+  plan: githubCommentWritePlanSchema.optional(),
+  /** outcome이 not_configured/permission_denied/connection_failed/blocked일 때의 안내 */
+  message: z.string().optional(),
+});
+export type GithubCommentWritePlanResponse = z.infer<typeof githubCommentWritePlanResponseSchema>;
+
+/** execute 요청 — planId + 서버가 가진 sha와 일치해야 함(replay payload 변조 방지). */
+export const githubCommentWriteExecuteRequestSchema = z.object({
+  planId: z.string(),
+  bodySha256: z.string(),
+  /** approval-or-armed: 둘 중 하나가 반드시 통과 — 둘 다 없으면 blocked. */
+  approvalId: z.string().optional(),
+  /** 사용자가 명시 armed한 자동실행 세션이면 true(서버는 armedAt까지 추가 검증). */
+  autoExecuteArmed: z.boolean().optional(),
+  armedAt: z.string().optional(),
+});
+export type GithubCommentWriteExecuteRequest = z.infer<typeof githubCommentWriteExecuteRequestSchema>;
+
+export const githubCommentWriteExecuteResponseSchema = z.object({
+  outcome: githubCommentWriteOutcomeSchema,
+  planId: z.string(),
+  commentId: z.number().optional(),
+  htmlUrl: z.string().optional(),
+  observedAt: z.string().optional(),
+  message: z.string().optional(),
+  truthStatus: z.enum(["planned", "observed", "configured"]),
+});
+export type GithubCommentWriteExecuteResponse = z.infer<typeof githubCommentWriteExecuteResponseSchema>;
+
 /** GET /integrations/github/repos/:owner/:repo/pulls|pulls/:n|issues|overview|file */
 export const githubReadonlyResourceResponseSchema = z.object({
   status: githubConnectorStatusSchema,

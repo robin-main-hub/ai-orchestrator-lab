@@ -124,6 +124,12 @@ import { handleApprovalRoute } from "./routes/approvals.js";
 import { handleMissionRoute } from "./routes/missions.js";
 import { handleGithubRoute } from "./routes/github.js";
 import { createGithubReadonlyClient } from "./integrations/githubReadonlyClient.js";
+import { parseRepoAllowlist } from "./integrations/githubCommentWriteGuards.js";
+import { createGithubCommentWritePlanStore } from "./integrations/githubCommentWritePlanStore.js";
+
+// W1: GitHub comment write plan store — process scope, in-memory, 10분 TTL.
+// 영속화하지 않는 이유: plan은 작업 의도일 뿐 진실(observed)이 아님. 재시작 후엔 다시 plan.
+const githubCommentWritePlanStoreInstance = createGithubCommentWritePlanStore();
 import { createMissionStore, type MissionStore } from "./missions/missionStore.js";
 import { missionTraceBus } from "./missions/missionTraceBus.js";
 import {
@@ -6694,9 +6700,17 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       await handleGithubRoute({
         pathname,
         method: request.method,
-        // 토큰은 서버 env에만 — 클라이언트로 전달되지 않는다. 읽기 전용 커넥터.
+        // 토큰은 서버 env에만 — 클라이언트로 전달되지 않는다. read/write 토큰 단일(W1).
         createClient: () => createGithubReadonlyClient({ token: process.env.GITHUB_TOKEN }),
         respondJson,
+        request,
+        readJsonBody,
+        planStore: githubCommentWritePlanStoreInstance,
+        writeRepoAllowlist: parseRepoAllowlist(process.env.GITHUB_WRITE_REPO_ALLOWLIST),
+        verifyApproval: async (approvalId) => {
+          const { approvals } = await listApprovalsFromPersistentServerStorage(eventStorage, new Date().toISOString());
+          return approvals.some((approval) => approval.id === approvalId && approval.state === "approved");
+        },
       })
     ) {
       return;
