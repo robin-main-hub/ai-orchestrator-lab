@@ -23,14 +23,24 @@ import {
   type GithubBranchCreatePlanStore,
 } from "../integrations/githubBranchCreatePlanStore.js";
 import {
+  contentSha256,
+  evaluateFileChangeGate,
+} from "../integrations/githubFileChangeWriteGuards.js";
+import type { GithubFileChangePlanStore } from "../integrations/githubFileChangePlanStore.js";
+import { generateUnifiedDiff } from "../integrations/githubFileDiff.js";
+import {
   githubBranchCreateExecuteRequestSchema,
   githubBranchCreatePlanRequestSchema,
   githubCommentWriteExecuteRequestSchema,
   githubCommentWritePlanRequestSchema,
+  githubFileChangePlanRequestSchema,
   type GithubBranchCreateOutcome,
   type GithubBranchCreatePlan,
   type GithubCommentWriteOutcome,
   type GithubCommentWritePlan,
+  type GithubFileChangeOperation,
+  type GithubFileChangeOutcome,
+  type GithubFileChangePlan,
   type GithubResourceOutcome,
 } from "@ai-orchestrator/protocol";
 import type { IncomingMessage } from "node:http";
@@ -67,6 +77,8 @@ export type GithubRouteDependencies = {
   planStore?: GithubCommentWritePlanStore;
   /** in-process branch create plan store(W2) — W1과 별도 인스턴스. */
   branchPlanStore?: GithubBranchCreatePlanStore;
+  /** in-process file change plan store(W3a) — W1/W2와 별도 인스턴스. */
+  fileChangePlanStore?: GithubFileChangePlanStore;
   /** GITHUB_WRITE_REPO_ALLOWLIST 파싱 결과 — 없으면 write disabled. */
   writeRepoAllowlist?: ReadonlyArray<string>;
   /**
@@ -113,11 +125,15 @@ const COMMENT_EXECUTE_PATH = "/integrations/github/write/comment/execute";
 const BRANCH_PLAN_PATH = "/integrations/github/write/branch/plan";
 const BRANCH_EXECUTE_PATH = "/integrations/github/write/branch/execute";
 
+// W3a file change plan 경로 — plan only. execute(W3b)는 별도 phase에서 별도 path.
+const FILE_PLAN_PATH = "/integrations/github/write/file/plan";
+
 /** comment write 결과 — readonly outcome enum과 호환(observed 외에 planned/approval_required/blocked 추가) */
 function writeOutcomeForError(error: unknown): { outcome: GithubCommentWriteOutcome; message: string } {
   const mapped = outcomeForError(error);
   // GithubResourceOutcome → GithubCommentWriteOutcome 매핑(공통 항목 그대로).
-  return { outcome: mapped.outcome as GithubCommentWriteOutcome, message: mapped.message };
+  // W2/W3a와 동일하게 route-level token scrub 적용(defense-in-depth — client scrub 실패 시 보장).
+  return { outcome: mapped.outcome as GithubCommentWriteOutcome, message: scrubServerToken(mapped.message) };
 }
 
 async function handleCommentWritePlan(deps: GithubRouteDependencies): Promise<boolean> {
@@ -568,6 +584,174 @@ async function handleBranchCreateExecute(deps: GithubRouteDependencies): Promise
   return true;
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// W3a file change plan handler — GitHub로 보내는 mutation은 절대 없다.
+// 흐름:
+//   1) token/payload 검증, 정적 게이트(allowlist/branch/path/length/binary/secret) 통과
+//   2) GitHub로 branch ref read → ref 존재 + sha 관측
+//   3) GitHub로 file GET → 있으면 operation=update + baseFileSha+baseContent 관측, 없으면 operation=create
+//   4) base 콘텐츠 텍스트성/길이 가드(W3a는 텍스트 파일만)
+//   5) no-op 검사(base == new면 차단)
+//   6) baseFileSha 클라이언트 hint와 서버 관측 sha 비교(있는 경우 미일치 차단 — 낙관적 동시성)
+//   7) unified diff 생성(bounded) + diffStat 계산
+//   8) plan 저장, 응답
+//
+//   - GitHub PUT/DELETE/commit/PR/branch 생성 호출 없음
+//   - newContent는 응답 plan에 포함하지 않는다(클라이언트가 이미 갖고 있는 본문이며,
+//     서버는 sha로만 무결성 보장)
+// ──────────────────────────────────────────────────────────────────────────────
+
+function fileChangeOutcomeForError(error: unknown): { outcome: GithubFileChangeOutcome; message: string } {
+  const mapped = outcomeForError(error);
+  return {
+    outcome: mapped.outcome as GithubFileChangeOutcome,
+    message: scrubServerToken(mapped.message),
+  };
+}
+
+async function handleFileChangePlan(deps: GithubRouteDependencies): Promise<boolean> {
+  const { respondJson, createClient, readJsonBody, request, writeRepoAllowlist, fileChangePlanStore } = deps;
+  if (!readJsonBody || !request || !fileChangePlanStore) {
+    respondJson(500, { outcome: "github_error", message: "W3a dependencies not wired" });
+    return true;
+  }
+  const status = createClient().status();
+  if (!status.tokenPresent) {
+    respondJson(200, { outcome: "not_configured", message: "GITHUB_TOKEN이 설정되지 않아 write가 비활성화되어 있습니다" });
+    return true;
+  }
+  let payload;
+  try {
+    payload = githubFileChangePlanRequestSchema.parse(await readJsonBody(request));
+  } catch (error) {
+    respondJson(400, { outcome: "blocked", message: error instanceof Error ? error.message : "잘못된 plan 요청" });
+    return true;
+  }
+  const allowlist = writeRepoAllowlist ?? [];
+  const gate = evaluateFileChangeGate({
+    repoFullName: payload.repoFullName,
+    branchName: payload.branchName,
+    path: payload.path,
+    newContent: payload.newContent,
+    allowlist,
+    tokenPresent: true,
+  });
+  if (gate.kind === "blocked") {
+    respondJson(200, { outcome: "blocked", message: gate.reason });
+    return true;
+  }
+  const [owner, repo] = gate.repoFullName.split("/") as [string, string];
+  // 1) target branch 존재 + sha 관측. 없으면 정직하게 거절.
+  try {
+    await createClient().getRefSha(owner, repo, gate.branchName);
+  } catch (error) {
+    if (error instanceof GithubReadonlyError && error.status === 404) {
+      respondJson(200, {
+        outcome: "blocked",
+        message: `target branch '${gate.branchName}'이(가) ${gate.repoFullName}에 없습니다 — W2로 먼저 만들고 다시 시도하세요`,
+      });
+      return true;
+    }
+    const mapped = fileChangeOutcomeForError(error);
+    respondJson(200, mapped);
+    return true;
+  }
+  // 2) 파일 GET. 있으면 update + base sha/content 관측, 없으면 create.
+  let operation: GithubFileChangeOperation = "create";
+  let baseFileSha: string | undefined = undefined;
+  let baseContent = "";
+  let baseContentSha256: string | undefined = undefined;
+  try {
+    const file = await createClient().getFileContent(owner, repo, gate.path, gate.branchName);
+    if (file.truncated) {
+      respondJson(200, {
+        outcome: "blocked",
+        message: `대상 파일 '${gate.path}'이(가) GitHub read에서 truncated로 반환됐습니다(너무 큼) — W3a에서 다루지 않습니다`,
+      });
+      return true;
+    }
+    // base 콘텐츠도 길이/binary 가드를 통과해야 안전하게 diff/compare 가능.
+    // (NUL 포함 file은 GitHub Contents API에서도 비정상 — W3a는 텍스트만)
+    if (file.content.includes("\0")) {
+      respondJson(200, {
+        outcome: "blocked",
+        message: `대상 파일 '${gate.path}'이(가) binary로 판단됩니다 — W3a는 텍스트만 다룹니다`,
+      });
+      return true;
+    }
+    operation = "update";
+    baseFileSha = file.sha;
+    baseContent = file.content;
+    baseContentSha256 = contentSha256(file.content);
+  } catch (error) {
+    if (error instanceof GithubReadonlyError && error.status === 404) {
+      operation = "create";
+      baseFileSha = undefined;
+      baseContent = "";
+      baseContentSha256 = undefined;
+    } else {
+      const mapped = fileChangeOutcomeForError(error);
+      respondJson(200, mapped);
+      return true;
+    }
+  }
+  // 3) baseFileSha 힌트와 서버 관측 sha 비교 — 클라이언트가 다른 base를 봤다면 차단.
+  if (payload.baseFileSha && operation === "update" && baseFileSha !== payload.baseFileSha) {
+    respondJson(200, {
+      outcome: "blocked",
+      message: `baseFileSha 불일치 — 클라이언트가 본 base sha(${payload.baseFileSha})와 서버 관측 sha(${baseFileSha ?? "n/a"})가 다릅니다`,
+    });
+    return true;
+  }
+  if (payload.baseFileSha && operation === "create") {
+    respondJson(200, {
+      outcome: "blocked",
+      message: `baseFileSha를 보냈지만 대상 파일이 ${gate.repoFullName}#${gate.branchName}:${gate.path}에 존재하지 않습니다 — create 요청과 모순`,
+    });
+    return true;
+  }
+  // 4) no-op 차단 — 승인 큐를 빈 변경으로 어지럽히지 않는다.
+  if (baseContent === payload.newContent) {
+    respondJson(200, {
+      outcome: "blocked",
+      message: "newContent가 base와 동일합니다(no-op) — 변경할 내용이 없습니다",
+    });
+    return true;
+  }
+  // 5) bounded unified diff 생성.
+  const oldLabel = operation === "update" ? `a/${gate.path}` : `/dev/null`;
+  const newLabel = `b/${gate.path}`;
+  const { diff, truncated, additions, deletions } = generateUnifiedDiff(baseContent, payload.newContent, oldLabel, newLabel);
+  // diff가 생성됐는데 additions+deletions가 0인 경우(전부 truncated)는 no-op 케이스에서 이미 걸렀어야 함.
+  // 그래도 안전선 — diff 본문이 너무 큰 경우 truncated만 표시하고 진행.
+
+  const nowIso = deps.now?.() ?? new Date().toISOString();
+  const planId = `gfcp_${randomUUID()}`;
+  const expiresAt = new Date(Date.parse(nowIso) + 10 * 60 * 1000).toISOString();
+  const plan: GithubFileChangePlan = {
+    id: planId,
+    repoFullName: gate.repoFullName,
+    branchName: gate.branchName,
+    branchRef: gate.branchRef,
+    path: gate.path,
+    operation,
+    baseFileSha,
+    baseContentSha256,
+    newContentSha256: gate.newContentSha256,
+    newContentLength: gate.newContentBytes,
+    diffPreview: diff,
+    diffTruncated: truncated,
+    diffStat: { additions, deletions },
+    status: "approval_required",
+    truthStatus: "planned",
+    createdAt: nowIso,
+    expiresAt,
+  };
+  fileChangePlanStore.put({ plan, newContent: payload.newContent, baseContent });
+  respondJson(200, { outcome: "planned", plan });
+  return true;
+}
+
 export async function handleGithubRoute({
   pathname,
   method,
@@ -578,25 +762,27 @@ export async function handleGithubRoute({
   readJsonBody,
   planStore,
   branchPlanStore,
+  fileChangePlanStore,
   writeRepoAllowlist,
   verifyApproval,
 }: GithubRouteDependencies): Promise<boolean> {
   if (!pathname.startsWith("/integrations/github/")) return false;
   const pathPrefixOnly = pathname.split("?")[0] ?? pathname;
+  const commonDeps = { pathname, method, createClient, respondJson, now, request, readJsonBody, planStore, branchPlanStore, fileChangePlanStore, writeRepoAllowlist, verifyApproval };
   // W1 comment write — 메서드 인지(POST). 다른 readonly 경로는 그대로 GET만.
   if (pathPrefixOnly === COMMENT_PLAN_PATH) {
     if ((method ?? "GET") !== "POST") {
       respondJson(405, { error: "method_not_allowed", message: "comment plan은 POST만 허용됩니다" });
       return true;
     }
-    return handleCommentWritePlan({ pathname, method, createClient, respondJson, now, request, readJsonBody, planStore, branchPlanStore, writeRepoAllowlist, verifyApproval });
+    return handleCommentWritePlan(commonDeps);
   }
   if (pathPrefixOnly === COMMENT_EXECUTE_PATH) {
     if ((method ?? "GET") !== "POST") {
       respondJson(405, { error: "method_not_allowed", message: "comment execute는 POST만 허용됩니다" });
       return true;
     }
-    return handleCommentWriteExecute({ pathname, method, createClient, respondJson, now, request, readJsonBody, planStore, branchPlanStore, writeRepoAllowlist, verifyApproval });
+    return handleCommentWriteExecute(commonDeps);
   }
   // W2 branch create — POST only.
   if (pathPrefixOnly === BRANCH_PLAN_PATH) {
@@ -604,14 +790,22 @@ export async function handleGithubRoute({
       respondJson(405, { error: "method_not_allowed", message: "branch plan은 POST만 허용됩니다" });
       return true;
     }
-    return handleBranchCreatePlan({ pathname, method, createClient, respondJson, now, request, readJsonBody, planStore, branchPlanStore, writeRepoAllowlist, verifyApproval });
+    return handleBranchCreatePlan(commonDeps);
   }
   if (pathPrefixOnly === BRANCH_EXECUTE_PATH) {
     if ((method ?? "GET") !== "POST") {
       respondJson(405, { error: "method_not_allowed", message: "branch execute는 POST만 허용됩니다" });
       return true;
     }
-    return handleBranchCreateExecute({ pathname, method, createClient, respondJson, now, request, readJsonBody, planStore, branchPlanStore, writeRepoAllowlist, verifyApproval });
+    return handleBranchCreateExecute(commonDeps);
+  }
+  // W3a file change plan — POST only(no execute path yet, W3b에서 추가).
+  if (pathPrefixOnly === FILE_PLAN_PATH) {
+    if ((method ?? "GET") !== "POST") {
+      respondJson(405, { error: "method_not_allowed", message: "file change plan은 POST만 허용됩니다" });
+      return true;
+    }
+    return handleFileChangePlan(commonDeps);
   }
   if ((method ?? "GET") !== "GET") {
     // 그 외 read-only 경로는 비-GET 거절(기존 동작 유지).
