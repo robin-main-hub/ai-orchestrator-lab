@@ -502,6 +502,10 @@ export type AgentStancePoint = {
   roundKind: DebateRoundKind;
   tag: DebateTag;
   polarity: StancePolarity;
+  /** 이 입장 점을 만든 발언 — UI에서 점을 클릭해 그 발언으로 점프하게 한다 */
+  utteranceId: string;
+  /** 직전 결정적 입장에서 극성이 뒤집힌 지점(설득/전향이 일어난 발언) */
+  changed: boolean;
 };
 
 export type AgentStanceTrajectory = {
@@ -530,6 +534,8 @@ export function deriveStanceTrajectories(rounds: DebateRound[]): AgentStanceTraj
         roundKind: round.kind,
         tag,
         polarity: tagPolarity(tag),
+        utteranceId: utterance.id,
+        changed: false,
       };
       const existing = byAgent.get(utterance.agentId);
       if (existing) existing.push(point);
@@ -543,7 +549,9 @@ export function deriveStanceTrajectories(rounds: DebateRound[]): AgentStanceTraj
     let lastDecisive: StancePolarity | null = null;
     for (const point of points) {
       if (point.polarity === "neutral") continue;
-      if (lastDecisive !== null && lastDecisive !== point.polarity) changeCount += 1;
+      const flipped = lastDecisive !== null && lastDecisive !== point.polarity;
+      point.changed = flipped;
+      if (flipped) changeCount += 1;
       lastDecisive = point.polarity;
     }
     const finalPolarity = lastDecisive ?? "neutral";

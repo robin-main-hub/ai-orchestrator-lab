@@ -83,7 +83,7 @@ export function Stage3DebateTable({
   return (
     <section
       aria-label={debateChamberCopy.kicker}
-      className="flex h-full flex-col bg-transparent text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50"
+      className="flex h-full min-h-0 flex-col bg-transparent text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50"
       data-focus-id="debate-table-container"
       tabIndex={-1}
     >
@@ -195,7 +195,7 @@ export function Stage3DebateTable({
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-4 py-6 md:px-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-6">
         <div className="mx-auto max-w-4xl">
           {utterances.length > 0 ? (
             <ol aria-label={debateChamberCopy.timelineLabel} className="relative space-y-3">
@@ -203,7 +203,8 @@ export function Stage3DebateTable({
               {utterances.map((utterance, index) => (
                 <li
                   aria-label={`${stanceConfig[resolveStance(utterance)].label}: ${utterance.agentName}`}
-                  className="relative pl-8"
+                  className="relative scroll-mt-4 rounded-xl pl-8"
+                  id={`debate-utterance-${utterance.id}`}
                   key={utterance.id}
                 >
                   <div className="absolute left-[18px] top-6 h-2 w-2 rounded-full bg-zinc-600 ring-4 ring-zinc-950" />
@@ -703,17 +704,22 @@ function StanceTrajectoryStrip({ session }: { session: Stage3DebateSession }) {
             <span className="text-[11px] font-medium text-zinc-200">{nameOf(trajectory.agentId)}</span>
             <span className="flex items-center gap-0.5">
               {trajectory.points.map((point, index) => (
-                <span
+                <button
+                  aria-label={`${nameOf(trajectory.agentId)}의 ${point.roundKind} 발언으로 이동${point.changed ? " (입장 전환)" : ""}`}
                   className={cn(
-                    "h-2 w-2 rounded-full",
+                    "h-2.5 w-2.5 rounded-full transition-transform hover:scale-125 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60",
                     point.polarity === "support"
                       ? "bg-emerald-400"
                       : point.polarity === "oppose"
                         ? "bg-rose-400"
                         : "bg-zinc-600",
+                    // 입장이 뒤집힌 지점은 링으로 강조 — "여기서 설득됐다"를 한눈에
+                    point.changed && "ring-2 ring-amber-300/80 ring-offset-1 ring-offset-zinc-950",
                   )}
                   key={index}
-                  title={`${point.roundKind}: ${point.tag}`}
+                  onClick={() => scrollToDebateUtterance(point.utteranceId)}
+                  title={`${point.roundKind}: ${point.tag}${point.changed ? " · 입장 전환 — 클릭해 발언 보기" : " · 클릭해 발언 보기"}`}
+                  type="button"
                 />
               ))}
             </span>
@@ -721,8 +727,20 @@ function StanceTrajectoryStrip({ session }: { session: Stage3DebateSession }) {
           </div>
         ))}
       </div>
+      <p className="mt-2 text-[10px] text-zinc-500">
+        점을 클릭하면 그 발언으로 이동합니다 · <span className="text-amber-300/90">◎ 노란 링</span>은 입장이 뒤집힌(설득된) 발언
+      </p>
     </div>
   );
+}
+
+/** 입장 점 클릭 → 해당 발언으로 스크롤 + 잠깐 강조. "어떤 발언으로 설득됐나"를 직접 본다. */
+function scrollToDebateUtterance(utteranceId: string) {
+  const el = document.getElementById(`debate-utterance-${utteranceId}`);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.add("debate-utterance--flash");
+  window.setTimeout(() => el.classList.remove("debate-utterance--flash"), 1600);
 }
 
 function ChairmanDecisionCard({ session }: { session: Stage3DebateSession }) {
