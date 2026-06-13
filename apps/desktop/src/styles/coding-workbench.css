@@ -751,6 +751,52 @@
 .coding-github-pr-detail__src a {
   color: color-mix(in srgb, var(--cyan) 80%, #fff);
 }
+.coding-github-pr-detail__attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  border: 1px solid color-mix(in srgb, var(--cyan) 45%, var(--line));
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 4px 9px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.coding-github-pr-detail__attach:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--cyan) 70%, var(--line));
+}
+.coding-github-pr-detail__attach:disabled {
+  opacity: 0.6;
+  cursor: default;
+  color: #6ee7b7;
+}
+.coding-github-pr-attached {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.coding-github-pr-attached__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #34d399 40%, var(--line));
+  background: color-mix(in srgb, #34d399 10%, transparent);
+  font-size: 10.5px;
+  color: #6ee7b7;
+}
+.coding-github-pr-attached__chip button {
+  display: inline-flex;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
 
 /* the workbench owns the full center height */
 .nav-center-shell .center-board:has(.coding-workbench) {

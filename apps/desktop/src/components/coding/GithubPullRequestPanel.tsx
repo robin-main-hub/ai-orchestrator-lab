@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { GitMerge, Github, RefreshCw } from "lucide-react";
-import type { GithubPullRequestDetail, GithubPullRequestSummary } from "@ai-orchestrator/protocol";
+import { Check, GitMerge, Github, Plus, RefreshCw, X } from "lucide-react";
+import type { GithubContextAttachment, GithubPullRequestDetail, GithubPullRequestSummary } from "@ai-orchestrator/protocol";
 import { StatusBadge } from "@/ui/status-badge";
 import {
   fetchGithubConnectorStatus,
@@ -11,6 +11,7 @@ import {
   type GithubConnectorView,
   type GithubResourceResult,
 } from "../../lib/githubConnector";
+import { isContextAttached, prContextKey } from "../../lib/githubContext";
 
 /**
  * D1 — GitHub read-only PR 표면. 코딩 워크벤치에서 PR 목록/상세를 "읽기 전용"으로 본다.
@@ -41,7 +42,21 @@ function ConnectorBadge({ view }: { view: GithubConnectorView }) {
   );
 }
 
-export function GithubPullRequestPanel({ serverBaseUrl, defaultRepo = "" }: { serverBaseUrl?: string | string[]; defaultRepo?: string }) {
+export function GithubPullRequestPanel({
+  serverBaseUrl,
+  defaultRepo = "",
+  attachedContext,
+  onAttach,
+  onDetach,
+}: {
+  serverBaseUrl?: string | string[];
+  defaultRepo?: string;
+  /** GitHub context already attached to the active coding session (D2) */
+  attachedContext?: GithubContextAttachment[];
+  /** attach the selected PR — the workbench re-reads it server-side to confirm observed */
+  onAttach?: (owner: string, repo: string, pullNumber: number) => void;
+  onDetach?: (id: string) => void;
+}) {
   const [connector, setConnector] = useState<GithubConnectorView>({ state: "unknown" });
   const [repoInput, setRepoInput] = useState(defaultRepo);
   const [listResult, setListResult] = useState<GithubResourceResult<GithubPullRequestSummary[]> | null>(null);
@@ -124,8 +139,31 @@ export function GithubPullRequestPanel({ serverBaseUrl, defaultRepo = "" }: { se
             </button>
           </div>
 
+          {attachedContext && attachedContext.length > 0 ? (
+            <div className="coding-github-pr-attached" aria-label="첨부된 GitHub 컨텍스트">
+              <span className="coding-github-pr__msg">첨부된 컨텍스트 {attachedContext.length}</span>
+              {attachedContext.map((item) => (
+                <span key={item.id} className="coding-github-pr-attached__chip" title={`${item.title} · 관측 ${item.observedAt}`}>
+                  {item.repoFullName}#{item.number}
+                  {onDetach ? (
+                    <button type="button" onClick={() => onDetach(item.id)} aria-label={`${item.repoFullName}#${item.number} 컨텍스트 제거`}>
+                      <X size={10} aria-hidden />
+                    </button>
+                  ) : null}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
           {listResult ? <PullRequestList result={listResult} selected={selected} onSelect={openDetail} /> : null}
-          {detail ? <PullRequestDetailView result={detail} /> : null}
+          {detail ? (
+            <PullRequestDetailView
+              result={detail}
+              repo={parseRepo(repoInput)}
+              attachedContext={attachedContext}
+              onAttach={onAttach}
+            />
+          ) : null}
         </>
       )}
     </section>
@@ -203,9 +241,20 @@ function PullRequestList({
   );
 }
 
-function PullRequestDetailView({ result }: { result: GithubResourceResult<GithubPullRequestDetail> }) {
+function PullRequestDetailView({
+  result,
+  repo,
+  attachedContext,
+  onAttach,
+}: {
+  result: GithubResourceResult<GithubPullRequestDetail>;
+  repo?: { owner: string; repo: string };
+  attachedContext?: GithubContextAttachment[];
+  onAttach?: (owner: string, repo: string, pullNumber: number) => void;
+}) {
   if (result.outcome !== "observed" || !result.data) return <OutcomeLine outcome={result.outcome} message={result.message} />;
   const pr = result.data;
+  const attached = repo ? isContextAttached(attachedContext, prContextKey(`${repo.owner}/${repo.repo}`, pr.number)) : false;
   return (
     <div className="coding-github-pr-detail">
       <div className="coding-github-pr-detail__head">
@@ -216,6 +265,18 @@ function PullRequestDetailView({ result }: { result: GithubResourceResult<Github
           {pr.merged ? "merged" : pr.draft ? "draft" : pr.state}
         </StatusBadge>
       </div>
+      {repo && onAttach ? (
+        <button
+          type="button"
+          className="coding-github-pr-detail__attach"
+          onClick={() => onAttach(repo.owner, repo.repo, pr.number)}
+          disabled={attached}
+          title={attached ? "이미 이 세션 컨텍스트에 추가됨" : "이 PR을 코딩 컨텍스트에 추가(서버가 다시 읽어 확인)"}
+        >
+          {attached ? <Check size={12} aria-hidden /> : <Plus size={12} aria-hidden />}
+          {attached ? "컨텍스트에 추가됨" : "컨텍스트에 추가"}
+        </button>
+      ) : null}
       <p className="coding-github-pr-detail__refs">
         {pr.baseRef} ← {pr.headRef} · {pr.author}
         {pr.additions !== null && pr.deletions !== null ? ` · +${pr.additions} / -${pr.deletions}` : ""}

@@ -89,6 +89,38 @@ export const githubResourceOutcomeSchema = z.enum([
 ]);
 export type GithubResourceOutcome = z.infer<typeof githubResourceOutcomeSchema>;
 
+/**
+ * A user-selected, read-only GitHub item attached to a coding/mission context.
+ * Attachments are NEVER auto-created — the user explicitly attaches one. The
+ * body is a bounded, deterministic excerpt of the real GitHub response (no LLM
+ * summary), so `truthStatus` is always "observed" and `summarySource` records
+ * exactly where the text came from (github_observed for D2; model_generated /
+ * user_edited reserved for later).
+ */
+export const githubContextSourceKindSchema = z.enum(["pull_request", "issue", "file", "code_search_result"]);
+export type GithubContextSourceKind = z.infer<typeof githubContextSourceKindSchema>;
+
+export const githubContextAttachmentSchema = z.object({
+  /** stable dedup key — same repo+kind+number/path never attaches twice */
+  id: z.string(),
+  kind: githubContextSourceKindSchema,
+  repoFullName: z.string(),
+  number: z.number().optional(),
+  path: z.string().optional(),
+  title: z.string(),
+  url: z.string(),
+  /** when the underlying GitHub data was actually observed (server re-read) */
+  observedAt: z.string(),
+  truthStatus: z.literal("observed"),
+  /** bounded excerpt straight from the GitHub response — no model rewriting */
+  observedExcerpt: z.string(),
+  /** true when the excerpt was cut to fit the budget */
+  truncated: z.boolean(),
+  summarySource: z.enum(["github_observed", "model_generated", "user_edited"]),
+  source: z.literal("github_api"),
+});
+export type GithubContextAttachment = z.infer<typeof githubContextAttachmentSchema>;
+
 /** GET /integrations/github/status */
 export const githubConnectorStatusResponseSchema = z.object({
   status: githubConnectorStatusSchema,

@@ -52,6 +52,9 @@ import { maxDraftAttachments } from "../../lib/appConstants";
 import { summarizeRejectedAttachments, attachmentDeliveryNote } from "../../lib/attachmentWarnings";
 import { buildCodingAttachmentDelivery, describeCodingAttachmentDelivery } from "../../lib/codingAttachmentContext";
 import type { DraftAttachment } from "../../types";
+import { fetchGithubPullRequest } from "../../lib/githubConnector";
+import { buildGithubContextPrompt, buildPrContextAttachment, isContextAttached, upsertContextAttachment } from "../../lib/githubContext";
+import type { GithubContextAttachment } from "@ai-orchestrator/protocol";
 
 
 
@@ -76,6 +79,7 @@ export function CodingWorkbench({
   providerProfiles = [],
   modelCatalog = {},
   workingDir,
+  onContextEvent,
 }: {
   sessionId?: string;
   serverBaseUrl?: string | string[];
@@ -83,6 +87,8 @@ export function CodingWorkbench({
   /** providerProfileId → 발견된 모델 목록. 모델 입력을 텍스트가 아닌 드롭다운으로 채운다. */
   modelCatalog?: Record<string, ModelDescriptor[]>;
   workingDir?: string;
+  /** redacted trace emit for GitHub context attach (D2) — wired to EventStorage */
+  onContextEvent?: (type: string, payload: Record<string, unknown>) => void;
 }) {
   const [sessions, setSessions] = useState<CodingSession[]>(() => loadCodingSessions());
   const [activeId, setActiveId] = useState<string | null>(() => loadCodingSessions()[0]?.id ?? null);
@@ -257,9 +263,13 @@ export function CodingWorkbench({
       // 폭증한다. 이후 라운드에는 본문 없는 짧은 ref만 남겨 모델이 첨부 존재를 기억하게 한다.
       const attachmentContext =
         requestSeq === 1 ? attachmentDelivery.firstRequestContext : attachmentDelivery.followupContext;
-      const outgoingMessages = attachmentContext
-        ? [...messages, { role: "system" as const, content: attachmentContext }]
-        : messages;
+      // GitHub 컨텍스트(사용자 선택)도 첫 요청에만 주입 — 본문 반복 주입으로 토큰 폭증 방지.
+      const githubContext = requestSeq === 1 ? buildGithubContextPrompt(working.githubContext) : undefined;
+      const extraSystem = [attachmentContext, githubContext].filter((value): value is string => Boolean(value));
+      const outgoingMessages =
+        extraSystem.length > 0
+          ? [...messages, ...extraSystem.map((content) => ({ role: "system" as const, content }))]
+          : messages;
       const firstRequestRiders: ProviderCompletionAttachment[] | undefined =
         requestSeq === 1 ? attachmentDelivery.providerAttachments : undefined;
       const request = {
@@ -524,6 +534,49 @@ export function CodingWorkbench({
     if (imageFiles.length === 0) return;
     event.preventDefault();
     attachmentControl.add(imageFiles);
+  };
+
+  // D2: 사용자가 명시적으로 선택한 PR만 코딩 컨텍스트에 붙인다(자동 주입 아님).
+  // 추가 시 서버가 PR을 다시 GET해 observed를 재확인 — 클라이언트가 들고 있던 내용을 믿지 않는다.
+  const attachGithubContext = async (owner: string, repo: string, pullNumber: number) => {
+    const session = active;
+    if (!session) {
+      setNotice("먼저 코딩 세션을 선택하세요");
+      return;
+    }
+    const result = await fetchGithubPullRequest(serverBaseUrl, owner, repo, pullNumber);
+    if (result.outcome !== "observed" || !result.data) {
+      setNotice(`GitHub 컨텍스트 추가 실패: ${result.message ?? result.outcome}`);
+      return;
+    }
+    const attachment = buildPrContextAttachment({
+      detail: result.data,
+      repoFullName: `${owner}/${repo}`,
+      observedAt: result.observedAt ?? new Date().toISOString(),
+    });
+    patchSession(session.id, (current) => ({
+      ...current,
+      githubContext: upsertContextAttachment(current.githubContext ?? [], attachment),
+    }));
+    setNotice(`GitHub PR #${pullNumber} 컨텍스트 추가됨 (관측 ${attachment.observedAt})`);
+    // redacted trace — 본문 excerpt는 제외, 참조/메타만 남긴다(private raw body 미저장).
+    onContextEvent?.("coding.github.context.attached", {
+      repoFullName: attachment.repoFullName,
+      number: attachment.number,
+      title: attachment.title,
+      url: attachment.url,
+      observedAt: attachment.observedAt,
+      truncated: attachment.truncated,
+      truthStatus: attachment.truthStatus,
+    });
+  };
+
+  const detachGithubContext = (id: string) => {
+    if (!active) return;
+    patchSession(active.id, (current) => ({
+      ...current,
+      githubContext: (current.githubContext ?? []).filter((item) => item.id !== id),
+    }));
   };
 
   const onApplyEdit = async (call: ToolCall) => {
@@ -858,7 +911,12 @@ export function CodingWorkbench({
               ))}
             </ul>
           )}
-          <GithubPullRequestPanel serverBaseUrl={serverBaseUrl} />
+          <GithubPullRequestPanel
+            serverBaseUrl={serverBaseUrl}
+            attachedContext={active?.githubContext}
+            onAttach={attachGithubContext}
+            onDetach={detachGithubContext}
+          />
         </aside>
       ) : (
         <button className="coding-mission-board-toggle" onClick={() => setMissionPanelOpen(true)} type="button">
