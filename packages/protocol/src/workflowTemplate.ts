@@ -15,7 +15,7 @@ import {
  * builder만 sandbox_build, verifier는 검증만·write 금지).
  */
 
-export const workflowDomainSchema = z.enum(["coding", "sales", "research", "sample", "claim"]);
+export const workflowDomainSchema = z.enum(["coding", "design", "sales", "research", "sample", "claim"]);
 export type WorkflowDomain = z.infer<typeof workflowDomainSchema>;
 
 export const workflowInputFieldSchema = z.object({
@@ -47,67 +47,111 @@ const field = (key: string, label: string, type: WorkflowInputField["type"] = "t
   options: undefined,
 });
 
-/** 템플릿 1 — HTV 견적 워크플로우 */
-export const EXAMPLE_DOMAIN_HTV_QUOTE_TEMPLATE: WorkflowTemplate = {
-  id: "example-domain_htv_quote",
-  title: "HTV 견적",
-  domain: "sales",
-  inputFields: [
-    field("productType", "제품 종류"),
-    field("material", "소재"),
-    field("quantity", "수량", "number"),
-    field("size", "사이즈"),
-    field("color", "색상"),
-    field("leadTime", "납기"),
-    field("incoterms", "인코텀"),
-    field("customerRequest", "고객 요청 원문", "textarea", false),
-  ],
-  defaultAgents: ["orchestrator", "negotiator", "risk_officer", "reviewer"],
-  missionPlan: ["요청 파싱·결측 정보 확인", "원가·견적 산출", "리스크·납기 점검", "견적 표·메일 초안 작성"],
-  verificationPlan: ["견적 표 항목 누락 없음", "수량·단가 합계 검산"],
-  outputArtifacts: ["견적 표", "확인 질문", "외부 발송 메일 초안", "내부 Slack 요청문"],
+// ── Core templates: Generic App / Design Builder (회사 도메인 없음) ───────────
+// 제품 코어 기본값. 모두 코딩/디자인 generic — 회사명/업무 문자열 0. 권한은 capability가
+// 결정하므로 새 AgentRole을 만들지 않고 기존 역할만 쓴다.
+
+export const TEMPLATE_REACT_VITE_APP: WorkflowTemplate = {
+  id: "react_vite_app",
+  title: "React + Vite 앱",
+  domain: "coding",
+  inputFields: [field("appName", "앱 이름"), field("description", "한 줄 설명", "textarea", false)],
+  defaultAgents: ["architect", "builder", "verifier"],
+  missionPlan: ["구조 설계·스캐폴드", "컴포넌트 구현", "타입체크·빌드 검증"],
+  verificationPlan: ["pnpm typecheck", "pnpm build"],
+  outputArtifacts: ["Vite 스캐폴드", "App.tsx", "README"],
 };
 
-/** 템플릿 2 — 반사소재 시장조사 */
-export const EXAMPLE_DOMAIN_MATERIAL_RESEARCH_TEMPLATE: WorkflowTemplate = {
-  id: "example-domain_material_research",
-  title: "반사소재 시장조사",
-  domain: "research",
-  inputFields: [
-    field("market", "국가/시장"),
-    field("productCategory", "제품군"),
-    field("competitors", "경쟁사", "textarea", false),
-    field("objective", "조사 목적", "textarea"),
-  ],
-  defaultAgents: ["researcher", "domain_expert", "risk_officer", "mediator"],
-  missionPlan: ["광역 탐색·출처 수집", "도메인 심층·경쟁사 비교", "리스크·가격/스펙 점검", "종합·영업 액션 제안"],
-  verificationPlan: ["출처 신뢰도 점검", "가격/스펙 수치 교차 확인"],
-  outputArtifacts: ["시장 요약", "경쟁사 비교", "가격/스펙 체크리스트", "영업 액션 제안"],
+export const TEMPLATE_DASHBOARD_SCREEN: WorkflowTemplate = {
+  id: "dashboard_screen",
+  title: "대시보드 화면",
+  domain: "design",
+  inputFields: [field("title", "화면 제목"), field("metrics", "핵심 지표", "textarea", false)],
+  defaultAgents: ["architect", "builder", "reviewer"],
+  missionPlan: ["정보 위계·레이아웃", "카드/차트 구현", "빈 화면·오류 상태"],
+  verificationPlan: ["pnpm typecheck", "반응형·overflow 점검"],
+  outputArtifacts: ["대시보드 화면", "빈 상태", "오류 상태"],
 };
 
-/** 템플릿 3 — 샘플 요청 */
-export const EXAMPLE_DOMAIN_SAMPLE_REQUEST_TEMPLATE: WorkflowTemplate = {
-  id: "example-domain_sample_request",
-  title: "샘플 요청",
-  domain: "sample",
-  inputFields: [
-    field("account", "거래처"),
-    field("item", "아이템"),
-    field("sampleQuantity", "샘플 수량", "number"),
-    field("spec", "요구 스펙", "textarea"),
-    field("leadTime", "납기"),
-    field("shipping", "배송 방식"),
-  ],
-  defaultAgents: ["orchestrator", "reviewer"],
-  missionPlan: ["요청 정보 확인·결측 점검", "샘플 요청서 작성", "내부 공유·스레드 생성"],
-  verificationPlan: ["요청서 필수 항목 누락 없음"],
-  outputArtifacts: ["샘플 요청서", "Slack 메시지", "진행 스레드", "누락 정보 체크"],
+export const TEMPLATE_CHAT_WORKSPACE: WorkflowTemplate = {
+  id: "chat_workspace",
+  title: "채팅 워크스페이스",
+  domain: "coding",
+  inputFields: [field("title", "워크스페이스 제목")],
+  defaultAgents: ["builder", "reviewer", "verifier"],
+  missionPlan: ["메시지 리스트·컴포저", "스크롤·상태 관리", "타입체크 검증"],
+  verificationPlan: ["pnpm typecheck"],
+  outputArtifacts: ["채팅 뷰", "컴포저", "빈 상태"],
 };
 
-export const EXAMPLE_DOMAIN_WORKFLOW_TEMPLATES: ReadonlyArray<WorkflowTemplate> = [
-  EXAMPLE_DOMAIN_HTV_QUOTE_TEMPLATE,
-  EXAMPLE_DOMAIN_MATERIAL_RESEARCH_TEMPLATE,
-  EXAMPLE_DOMAIN_SAMPLE_REQUEST_TEMPLATE,
+export const TEMPLATE_MISSION_BOARD: WorkflowTemplate = {
+  id: "mission_board",
+  title: "미션 보드",
+  domain: "design",
+  inputFields: [field("title", "보드 제목")],
+  defaultAgents: ["architect", "builder", "reviewer"],
+  missionPlan: ["컬럼 구조", "카드·상태 칩", "동선·빈/오류 상태"],
+  verificationPlan: ["pnpm typecheck", "키보드 동선 점검"],
+  outputArtifacts: ["보드 화면", "카드", "빈 상태"],
+};
+
+export const TEMPLATE_SETTINGS_PAGE: WorkflowTemplate = {
+  id: "settings_page",
+  title: "설정 페이지",
+  domain: "design",
+  inputFields: [field("title", "페이지 제목")],
+  defaultAgents: ["builder", "auditor", "verifier"],
+  missionPlan: ["폼 구조", "구현", "접근성·검증(키보드·대비·aria)"],
+  verificationPlan: ["pnpm typecheck", "접근성 점검"],
+  outputArtifacts: ["설정 폼", "오류 상태", "접근성 노트"],
+};
+
+export const TEMPLATE_LANDING_PAGE: WorkflowTemplate = {
+  id: "landing_page",
+  title: "랜딩 페이지",
+  domain: "design",
+  inputFields: [field("title", "제품/프로젝트 이름"), field("valueProp", "핵심 가치", "textarea", false)],
+  defaultAgents: ["architect", "builder", "reviewer"],
+  missionPlan: ["섹션 구조·히어로", "구현", "반응형·동선 검토"],
+  verificationPlan: ["pnpm typecheck", "반응형 점검"],
+  outputArtifacts: ["랜딩 화면", "히어로", "CTA"],
+};
+
+export const TEMPLATE_KANBAN_BOARD: WorkflowTemplate = {
+  id: "kanban_board",
+  title: "칸반 보드",
+  domain: "coding",
+  inputFields: [field("title", "보드 제목")],
+  defaultAgents: ["architect", "builder", "verifier"],
+  missionPlan: ["컬럼·카드 모델", "드래그/상태 관리", "타입체크 검증"],
+  verificationPlan: ["pnpm typecheck"],
+  outputArtifacts: ["칸반 화면", "카드", "빈 상태"],
+};
+
+export const TEMPLATE_DESIGN_SYSTEM_STARTER: WorkflowTemplate = {
+  id: "design_system_starter",
+  title: "디자인 시스템 스타터",
+  domain: "design",
+  inputFields: [field("name", "시스템 이름"), field("tone", "톤", "text", false)],
+  defaultAgents: ["architect", "builder", "auditor"],
+  missionPlan: ["토큰(색/타이포/간격)", "기본 컴포넌트", "대비·접근성 점검"],
+  verificationPlan: ["pnpm typecheck", "대비·접근성 점검"],
+  outputArtifacts: ["디자인 토큰", "기본 컴포넌트", "접근성 노트"],
+};
+
+/**
+ * 코어 기본 registry — Generic App/Design Builder 템플릿만. 회사/업무 도메인 팩은
+ * 여기에 없다(domainPacks/businessTemplates.ts에 격리, env 플래그로만 노출).
+ */
+export const CORE_WORKFLOW_TEMPLATES: ReadonlyArray<WorkflowTemplate> = [
+  TEMPLATE_REACT_VITE_APP,
+  TEMPLATE_DASHBOARD_SCREEN,
+  TEMPLATE_CHAT_WORKSPACE,
+  TEMPLATE_MISSION_BOARD,
+  TEMPLATE_SETTINGS_PAGE,
+  TEMPLATE_LANDING_PAGE,
+  TEMPLATE_KANBAN_BOARD,
+  TEMPLATE_DESIGN_SYSTEM_STARTER,
 ];
 
 // ── 핵심 페르소나 조직 (4~6명) ───────────────────────────────────────────────
@@ -151,8 +195,15 @@ export const missionFromTemplateRequestSchema = z.object({
 });
 export type MissionFromTemplateRequest = z.infer<typeof missionFromTemplateRequestSchema>;
 
-export function findWorkflowTemplate(templateId: string): WorkflowTemplate | undefined {
-  return EXAMPLE_DOMAIN_WORKFLOW_TEMPLATES.find((template) => template.id === templateId);
+/**
+ * 템플릿 조회 — 기본 registry는 코어(generic)뿐. 회사/업무 도메인 팩은 호출 측이
+ * 명시적으로 합친 registry를 넘길 때만 보인다(env 플래그 게이트 → 격리).
+ */
+export function findWorkflowTemplate(
+  templateId: string,
+  registry: ReadonlyArray<WorkflowTemplate> = CORE_WORKFLOW_TEMPLATES,
+): WorkflowTemplate | undefined {
+  return registry.find((template) => template.id === templateId);
 }
 
 /** 누락된 필수 입력 필드 키들(빈 문자열도 누락으로 본다). */
@@ -171,9 +222,9 @@ export function missingRequiredFields(
 
 const ROLE_LABEL: Partial<Record<MissionAgentRole, string>> = {
   orchestrator: "지휘자",
-  negotiator: "협상·견적",
-  risk_officer: "리스크",
+  architect: "설계자",
   reviewer: "검토자",
+  auditor: "접근성 감사",
   researcher: "리서처",
   domain_expert: "도메인 전문가",
   mediator: "조율자",
@@ -182,6 +233,9 @@ const ROLE_LABEL: Partial<Record<MissionAgentRole, string>> = {
   companion: "동행자",
   external: "외부 업무",
   memory_curator: "기억 관리자",
+  // 회사 도메인 팩 전용 라벨(격리됨, 팩 활성 시에만 사용)
+  negotiator: "협상·견적",
+  risk_officer: "리스크",
 };
 
 /**

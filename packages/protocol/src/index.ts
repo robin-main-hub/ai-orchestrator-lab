@@ -12,6 +12,8 @@ export * from "./selfCorrection.js";
 export * from "./confidenceSignal.js";
 export * from "./skillArchive.js";
 export * from "./workflowTemplate.js";
+// 회사 업무 도메인 팩 — optional, 코어 기본값 아님(env 플래그로만 노출). 격리 유지.
+export * from "./domainPacks/businessTemplates.js";
 
 export const runtimeStatusSchema = z.enum(["online", "degraded", "offline", "syncing"]);
 export type RuntimeStatus = z.infer<typeof runtimeStatusSchema>;

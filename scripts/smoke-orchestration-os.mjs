@@ -158,19 +158,30 @@ async function main() {
   try {
     record("health", await waitForHealth(), true, BASE_URL);
 
-    // 1) mission 생성 (verifier + builder)
-    const created = await api("POST", "/missions", {
-      id: missionId,
-      title: "스모크 미션",
-      goal: "Orchestration OS 풀루프 스모크",
-      truthStatus: "planned",
-      createdBy: "smoke",
-      workers: [
-        { agentId: "smoke_verifier", role: "verifier", displayName: "검증자" },
-        { agentId: "smoke_builder", role: "builder", displayName: "빌더" },
-      ],
+    // 0) 회사 도메인 팩은 코어에서 격리됨 — 기본 registry에서 안 보여야 한다(404)
+    const quarantined = await api("POST", "/missions/from-template", { templateId: "example-domain_htv_quote", input: {} });
+    record("business template quarantined (404 by default)", quarantined.status === 404, true, `status ${quarantined.status}`);
+
+    // 1) generic app build mission — react_vite_app 템플릿(회사 도메인 0)
+    const created = await api("POST", "/missions/from-template", {
+      templateId: "react_vite_app",
+      missionId,
+      input: { appName: "smoke-app", description: "generic app build smoke" },
     });
-    record("create mission", created.status === 201, true, `status ${created.status}`);
+    const workerRoles = (created.json?.mission?.workers ?? []).map((w) => w.role);
+    record("create mission from generic template", created.status === 201 && workerRoles.includes("verifier"), true, `roles ${workerRoles.join(",")}`);
+
+    // 1b) AppWorkspace 붙이기(코딩/디자인 작업공간)
+    const wsResp = await api("POST", `/missions/${missionId}/workspace`, { repoRootRef: repo, appType: "react_vite", terminalMode: "read_only", runnerKind: "local" });
+    const workspaceId = (wsResp.json?.mission?.workspaces ?? [])[0]?.id;
+    record("attach app workspace", wsResp.status === 201 && Boolean(workspaceId), true, workspaceId ? "ok" : `status ${wsResp.status}`);
+
+    // 1c) preview probe — dev 서버 미기동이므로 observed가 아니어야 한다(가짜 running 금지)
+    if (workspaceId) {
+      const prev = await api("POST", `/missions/${missionId}/workspace/${workspaceId}/preview`, {});
+      const pv = prev.json?.preview;
+      record("preview honest (not observed without dev server)", prev.status === 200 && pv && pv.truthStatus !== "observed", true, pv ? `${pv.status}/${pv.truthStatus}` : `status ${prev.status}`);
+    }
 
     // 2) checkpoint(observed sha) — temp repo
     const cp = await api("POST", `/missions/${missionId}/checkpoints`, { repoRoot: repo, gitRef: "HEAD", reason: "manual" });
