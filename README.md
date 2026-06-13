@@ -159,6 +159,7 @@ docs/             # 00~45 설계 문서 (아래 주요 항목)
 68     mission-kanban-and-trace (server-derived Kanban columns + live trace, no new storage) [Orchestration OS PR1]
 69     mission-checkpoint-rollback (git checkpoint sha + approval-gated reset --hard rollback) [Orchestration OS PR2]
 70     docker-gvisor-sandbox-runner (hardened docker run builder + gVisor runtime gate, observed exit codes) [PR3+PR4]
+71     error-card-self-correction-confidence (deterministic error parser + bounded self-correction + source-split confidence) [PR5]
 ```
 
 ## 실행 방법
