@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import type { WorkbenchAgent, PendingProviderRetry, AgentVisualSettings, AgentActivityStatus } from "../../types";
 import type { AgentChatContinuitySummary } from "../../lib/agentChatContinuity";
+import type { EmptyConversationHint } from "../../lib/emptyConversationHint";
 import { resolveAgentThinkingIndicator } from "../../lib/agentThinkingIndicator";
 import {
   formatAttachmentSize,
@@ -49,6 +50,7 @@ export type DelegationPreviewItem = {
 
 export function MessageThread({
   agentChatContinuity,
+  emptyHint,
   messages,
   selectedAgent,
   workbenchVisibility,
@@ -64,6 +66,8 @@ export function MessageThread({
   onApproveCommandPattern,
 }: {
   agentChatContinuity: AgentChatContinuitySummary;
+  /** 제안7 — 빈 대화 맥락 힌트(공급자/승인/기억 상태에 따른 다음 행동) */
+  emptyHint?: EmptyConversationHint;
   messages: ConversationMessage[];
   selectedAgent?: WorkbenchAgent;
   workbenchVisibility: {
@@ -131,6 +135,7 @@ export function MessageThread({
                 resolvePersonaPortraitUrl(selectedAgent?.personaName, selectedAgent?.role)
               }
               agentName={selectedAgent?.name}
+              hint={emptyHint}
               summary={agentChatContinuity}
             />
           ) : (
@@ -461,10 +466,12 @@ function EmptyConversation({
   summary,
   portraitUrl,
   agentName,
+  hint,
 }: {
   summary: AgentChatContinuitySummary;
   portraitUrl?: string;
   agentName?: string;
+  hint?: EmptyConversationHint;
 }) {
   return (
     <div className="flex min-h-[360px] flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/[0.03] px-6 py-16 text-center shadow-2xl shadow-black/30 backdrop-blur-xl">
@@ -479,7 +486,27 @@ function EmptyConversation({
           <Sparkles className="h-6 w-6 text-cyan-300" />
         </div>
       )}
-      <h3 className="mt-5 text-base font-semibold text-zinc-100">
+      {/* 제안7: 맥락 힌트 — 공급자/승인/기억 상태에 따른 "지금 먼저 할 것" */}
+      {hint ? (
+        <div
+          className={`mt-5 flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] ${
+            hint.tone === "amber"
+              ? "border-amber-400/30 bg-amber-500/10 text-amber-200"
+              : hint.tone === "cyan"
+                ? "border-cyan-400/25 bg-cyan-500/10 text-cyan-200"
+                : "border-white/10 bg-white/5 text-zinc-300"
+          }`}
+          role="status"
+        >
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              hint.tone === "amber" ? "bg-amber-400" : hint.tone === "cyan" ? "bg-cyan-400" : "bg-zinc-500"
+            }`}
+          />
+          {hint.suggestion}
+        </div>
+      ) : null}
+      <h3 className={`${hint ? "mt-3" : "mt-5"} text-base font-semibold text-zinc-100`}>
         {summary.title}
       </h3>
       <p className="mt-2 max-w-sm text-xs leading-relaxed text-zinc-500">
