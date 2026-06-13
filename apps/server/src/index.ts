@@ -79,6 +79,7 @@ import {
   approvalDecisionRequestSchema,
   approvalRequestSchema,
   codingPacketSchema,
+  deriveMissionTrace,
   eventSyncPushRequestSchema,
   parseAgentDelegationEventPayload,
   parseTerminalCommandEventPayload,
@@ -116,6 +117,7 @@ import { RequestBodyTooLargeError, readJsonBody, readRawBody } from "./http/requ
 import { handleApprovalRoute } from "./routes/approvals.js";
 import { handleMissionRoute } from "./routes/missions.js";
 import { createMissionStore, type MissionStore } from "./missions/missionStore.js";
+import { missionTraceBus } from "./missions/missionTraceBus.js";
 import { runLocalMissionVerification } from "./missions/localSandboxRunner.js";
 import { executeMerge, parseAllowedRepoRoots, type GitExecFn } from "./missions/gitWorktreeMergeRunner.js";
 import { createMissionCheckpoint, executeMissionRollback } from "./missions/gitCheckpointRunner.js";
@@ -5270,6 +5272,11 @@ export function createServerMissionStore(storage: JsonlServerEventStorage): Miss
         );
       }
     },
+    // L1: append 직후 미션 trace를 그 미션을 구독 중인 SSE 스트림에만 push한다.
+    // 새 저장소 없음 — traceEventFromMissionEnvelope로 EventStorage에서 파생.
+    onEventsCommitted: (missionId, envelopes) => {
+      missionTraceBus.publish(missionId, [...envelopes]);
+    },
     // E1: 검증 명령을 repo root에서 실제로 실행하고 종료코드를 관측한다.
     // 보안은 LocalSandboxRunner 내부의 공유 allowlist 게이트가 책임진다 —
     // allowlist 밖이거나 셸 메타문자가 있으면 실행 자체가 안 되고 skipped.
@@ -6576,6 +6583,33 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         heartbeatPayload: () => createDgxHeartbeat(),
       });
       session.start();
+      return;
+    }
+
+    // L1: 한 미션의 라이브 trace 스트림(SSE). 초기 스냅샷(현재 redacted trace) 후
+    // mission.* 이벤트가 커밋될 때마다 증분 trace를 push한다. /trace(GET)와 같은
+    // 소스(EventStorage 파생)를 쓴다. raw command/log/secret은 싣지 않는다.
+    const traceStreamMatch = /^\/missions\/([^/]+)\/trace\/stream$/.exec(pathname);
+    if (traceStreamMatch && request.method === "GET") {
+      const missionId = decodeURIComponent(traceStreamMatch[1]!);
+      const record = await missionStore.get(missionId);
+      if (!record) {
+        respondJson(404, { error: "mission_not_found", missionId });
+        return;
+      }
+      const session = sseSessionRegistry.createSession({
+        request,
+        response,
+        headers: corsHeaders,
+        heartbeatPayload: () => ({ type: "heartbeat", missionId, at: new Date().toISOString() }),
+      });
+      session.start();
+      // 초기 스냅샷 — 재연결/늦은 구독자도 현재 상태를 곧바로 본다.
+      session.writeEvent("mission.trace.snapshot", deriveMissionTrace(record));
+      missionTraceBus.subscribe(missionId, session);
+      // 세션 종료 시 구독 해제(메모리/유령 구독 방지).
+      request.once("close", () => missionTraceBus.unsubscribe(missionId, session));
+      request.once("aborted", () => missionTraceBus.unsubscribe(missionId, session));
       return;
     }
 

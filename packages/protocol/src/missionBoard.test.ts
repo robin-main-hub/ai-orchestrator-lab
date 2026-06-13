@@ -6,7 +6,9 @@ import {
   deriveMissionTrace,
   kanbanColumnForMissionStatus,
   redactTracePreview,
+  traceEventFromMissionEnvelope,
 } from "./missionBoard.js";
+import { toMissionRuntimeBusEvent } from "./missionRuntimeBus.js";
 
 function record(overrides: Partial<ServerMissionRecord> = {}): ServerMissionRecord {
   return {
@@ -119,5 +121,97 @@ describe("redactTracePreview", () => {
     expect(redactTracePreview("token sk-abcdefgh12345678 end")).toContain("[redacted]");
     expect(redactTracePreview("x".repeat(500))!.length).toBeLessThanOrEqual(240);
     expect(redactTracePreview(undefined)).toBeUndefined();
+  });
+});
+
+describe("traceEventFromMissionEnvelope", () => {
+  it("maps a created envelope to the same shape as the snapshot builder", () => {
+    const event = traceEventFromMissionEnvelope({
+      type: "mission.created",
+      createdAt: "2026-06-13T00:00:00.000Z",
+      payload: {
+        missionId: "mission_1",
+        title: "테트리스 구현",
+        goal: "g",
+        truthStatus: "planned",
+        createdBy: "kurumi",
+      },
+    });
+    expect(event).not.toBeNull();
+    expect(event!.type).toBe("mission.created");
+    expect(event!.summary).toBe("테트리스 구현");
+    expect(event!.id).toBe("mission_1:created");
+  });
+
+  it("keeps observed honesty + redacts preview for verification envelopes", () => {
+    const event = traceEventFromMissionEnvelope({
+      type: "mission.verification.recorded",
+      createdAt: "2026-06-13T00:20:00.000Z",
+      payload: {
+        missionId: "mission_1",
+        observedDowngraded: false,
+        report: {
+          id: "v1",
+          missionId: "mission_1",
+          verifierAgentId: "agent_verifier",
+          status: "failed",
+          checks: [
+            { id: "c1", command: "tsc", status: "failed", summary: "leak sk-abcdefgh12345678 here", startedAt: "t" },
+          ],
+          artifactIds: [],
+          observed: false,
+          createdAt: "2026-06-13T00:20:00.000Z",
+        },
+      },
+    });
+    expect(event!.type).toBe("verification.recorded");
+    expect(event!.severity).toBe("error");
+    expect(event!.truthStatus).toBe("simulated"); // observed:false → not dressed up
+    expect(event!.payloadPreview).toContain("[redacted]"); // no raw secret on the wire
+  });
+
+  it("exposes real merge sha as observed for merge.queued(merged) envelopes", () => {
+    const event = traceEventFromMissionEnvelope({
+      type: "mission.merge.queued",
+      createdAt: "2026-06-13T02:00:00.000Z",
+      payload: {
+        missionId: "mission_1",
+        item: {
+          id: "m1",
+          missionId: "mission_1",
+          branchName: "agent/mission_1",
+          status: "merged",
+          requiredVerificationReportId: "v1",
+          mergeCommitSha: "abc1234567def",
+          conflictFiles: [],
+          reason: "ok",
+          queuedAt: "2026-06-13T02:00:00.000Z",
+        },
+      },
+    });
+    expect(event!.type).toBe("merge.completed");
+    expect(event!.truthStatus).toBe("observed");
+  });
+
+  it("returns null for unmapped / broken payloads (mission.closed, garbage)", () => {
+    expect(traceEventFromMissionEnvelope({ type: "mission.closed", createdAt: "t", payload: { missionId: "m" } })).toBeNull();
+    expect(traceEventFromMissionEnvelope({ type: "mission.created", createdAt: "t", payload: { nope: 1 } })).toBeNull();
+    expect(traceEventFromMissionEnvelope({ type: "events.other", createdAt: "t", payload: {} })).toBeNull();
+  });
+});
+
+describe("toMissionRuntimeBusEvent", () => {
+  it("projects a trace event to the compact bus event (no preview/secret)", () => {
+    const [created] = deriveMissionTrace(record());
+    const bus = toMissionRuntimeBusEvent(created!);
+    expect(bus).toEqual({
+      missionId: created!.missionId,
+      traceEventId: created!.id,
+      eventType: created!.type,
+      severity: created!.severity,
+      truthStatus: created!.truthStatus,
+      createdAt: created!.createdAt,
+    });
+    expect(Object.keys(bus)).not.toContain("payloadPreview");
   });
 });
