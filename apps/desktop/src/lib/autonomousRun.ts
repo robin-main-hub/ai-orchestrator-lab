@@ -1,6 +1,8 @@
 import { sandboxRunModeForCapability, type LoadedPersona } from "@ai-orchestrator/agents";
 import type { AgentSession, CodingPacket, MissionWorkerCapability, TerminalHostKind } from "@ai-orchestrator/protocol";
-import { createAutoApproveStrategy } from "./autoApproveStrategy";
+import { createAutoApproveAllStrategy, createAutoApproveStrategy } from "./autoApproveStrategy";
+import { createPatternApprovalStrategy } from "./sessionPatternApproval";
+import { grantDgxApproval } from "../runtime/stage34ApprovalServer";
 import type { ClosedLoopEffects } from "./closedLoopController";
 import { createSandboxGatedEffects } from "./legacyTmuxRunner";
 import {
@@ -52,7 +54,13 @@ export type AutonomyClientOverrides = Partial<{
   fetchQueue: Parameters<typeof pollForApprovalDecision>[0]["fetchQueue"];
 }>;
 
-/** Build the approval strategy for a mode: mode-A poll, optionally fronted by mode-B auto-approve. */
+/**
+ * Build the approval strategy for a mode, composing (inner → outer):
+ *   human poll  ←  pattern (remembered prefixes)  ←  auto_safe  ←  full-auto
+ * Each layer auto-grants what it can and defers everything else inward, so a
+ * dangerous command falls through every auto layer to the human poll — no auto
+ * mode ever overrides the dangerous-command gate.
+ */
 export function createApprovalStrategy(
   mode: AutonomyMode,
   config: AutonomyServerConfig & {
@@ -61,6 +69,10 @@ export function createApprovalStrategy(
     pollTimeoutMs?: number;
     safePrefixes?: ReadonlyArray<string>;
     extraSafePrefixes?: ReadonlyArray<string>;
+    /** 사용자가 "이 계열 항상 허용"으로 기억시킨 prefix 목록(세션 영속). 위험 명령은 여전히 게이트. */
+    getApprovedPrefixes?: () => ReadonlyArray<string>;
+    /** 전체 자동(full-auto) — DANGEROUS_PATTERN 제외 전부 자동 승인. 사용자가 명시적으로 켠다. */
+    autoApproveAll?: boolean;
     logger?: (message: string) => void;
   } = {},
 ): ApprovalStrategy {
@@ -74,9 +86,30 @@ export function createApprovalStrategy(
       timeoutMs: config.pollTimeoutMs,
     });
 
+  const grantFn = config.clients?.grant ?? grantDgxApproval;
+  let strategy: ApprovalStrategy = humanFallback;
+
+  // 기억된 계열(prefix) 자동 승인 — 위험 명령은 matchesApprovedPrefix가 거부한다.
+  if (config.getApprovedPrefixes) {
+    const base = strategy;
+    strategy = createPatternApprovalStrategy({
+      base,
+      getApprovedPrefixes: config.getApprovedPrefixes,
+      grant: async (sourceItemId, ctx) => {
+        const result = await grantFn({
+          request: { sourceItemId, actor: "agent", reason: `pattern auto-approve: "${ctx.prefix}"` },
+          serverBaseUrl: config.serverBaseUrl,
+          fetchImpl: config.fetchImpl,
+        });
+        return "status" in result && result.status === "approved";
+      },
+      logger: config.logger,
+    });
+  }
+
   if (mode === "auto_safe") {
-    return createAutoApproveStrategy({
-      fallback: humanFallback,
+    strategy = createAutoApproveStrategy({
+      fallback: strategy,
       grant: config.clients?.grant,
       serverBaseUrl: config.serverBaseUrl,
       fetchImpl: config.fetchImpl,
@@ -85,7 +118,18 @@ export function createApprovalStrategy(
       logger: config.logger,
     });
   }
-  return humanFallback;
+
+  if (config.autoApproveAll) {
+    strategy = createAutoApproveAllStrategy({
+      fallback: strategy,
+      grant: config.clients?.grant,
+      serverBaseUrl: config.serverBaseUrl,
+      fetchImpl: config.fetchImpl,
+      logger: config.logger,
+    });
+  }
+
+  return strategy;
 }
 
 export type RunAutonomousPersonaTaskInput = {

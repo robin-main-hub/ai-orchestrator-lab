@@ -34,7 +34,23 @@ import { loadCodingSessions, saveCodingSessions } from "../../lib/codingChatStor
 import { createGatedToolExecutor, runCodingTurn, toolToCommand } from "../../lib/codingTurnRunner";
 import { workspaceChangeLedger } from "../../lib/workspaceChangeLedger";
 import { buildRepoMap } from "../../lib/repoMap";
-import { createApprovalStrategy, type AutonomyMode } from "../../lib/autonomousRun";
+import { createApprovalStrategy } from "../../lib/autonomousRun";
+import {
+  CODING_APPROVAL_MODES,
+  CODING_APPROVAL_MODE_STORAGE_KEY,
+  CODING_APPROVED_PREFIXES_STORAGE_KEY,
+  CODING_AUTO_APPROVAL_ARMED_STORAGE_KEY,
+  CODING_AUTO_APPROVAL_WARNING,
+  addApprovedPrefix,
+  approvedPrefixCandidate,
+  codingApprovalConfig,
+  isAutoMode,
+  parseStoredApprovalMode,
+  parseStoredApprovedPrefixes,
+  removeApprovedPrefix,
+  shouldShowAutoApprovalWarning,
+  type CodingApprovalMode,
+} from "../../lib/codingAutoApproval";
 import { createClosedLoopEffects } from "../../lib/closedLoopRuntime";
 import {
   createMission,
@@ -109,7 +125,50 @@ export function CodingWorkbench({
     workbenchMissionStore.getSnapshot,
   );
   const setMissions = workbenchMissionStore.setMissions;
-  const [approvalMode, setApprovalMode] = useState<AutonomyMode>("human");
+  // 자동승인 — 4단계 모드(manual/auto_safe/session_allow/guided_auto). 기본 manual.
+  // 자동 모드는 사용자가 명시적으로 켜야만 동작하며, 처음 켤 때 위험 경고 확인을 받는다.
+  const [approvalMode, setApprovalMode] = useState<CodingApprovalMode>(() => {
+    try {
+      return parseStoredApprovalMode(window.localStorage.getItem(CODING_APPROVAL_MODE_STORAGE_KEY));
+    } catch {
+      return "manual";
+    }
+  });
+  const [approvedPrefixes, setApprovedPrefixes] = useState<string[]>(() => {
+    try {
+      return parseStoredApprovedPrefixes(window.localStorage.getItem(CODING_APPROVED_PREFIXES_STORAGE_KEY));
+    } catch {
+      return [];
+    }
+  });
+  const [prefixDraft, setPrefixDraft] = useState("");
+  // 사용자가 자동승인을 처음 켤 때 위험 경고를 1회 확인 — 확인하면 시각을 기억(armed).
+  const [autoApprovalArmedAt, setAutoApprovalArmedAt] = useState<string | null>(() => {
+    try {
+      return window.localStorage.getItem(CODING_AUTO_APPROVAL_ARMED_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
+  // 모드 변경 시 경고가 필요하면 dialog로 띄울 모드(확인 대기).
+  const [pendingModeIntent, setPendingModeIntent] = useState<CodingApprovalMode | null>(null);
+  // 전략이 항상 최신 허용 목록을 읽도록 ref로 미러링(클로저 stale 방지).
+  const approvedPrefixesRef = useRef<string[]>(approvedPrefixes);
+  useEffect(() => {
+    approvedPrefixesRef.current = approvedPrefixes;
+    try {
+      window.localStorage.setItem(CODING_APPROVED_PREFIXES_STORAGE_KEY, JSON.stringify(approvedPrefixes));
+    } catch {
+      // storage 불가 — 세션 내 유지
+    }
+  }, [approvedPrefixes]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CODING_APPROVAL_MODE_STORAGE_KEY, approvalMode);
+    } catch {
+      // storage 불가 — 세션 내 유지
+    }
+  }, [approvalMode]);
   const cancelRef = useRef(false);
   const modelSelectRef = useRef<HTMLSelectElement | null>(null);
   // P0-3: read/write로 본 파일 내용을 세션 동안 누적 → repo-map(자동 파일 선택) 인덱스
@@ -212,7 +271,14 @@ export function CodingWorkbench({
 
   // ── gated tool effects, one lane per workbench session ──────────────────
   const buildEffects = (session: CodingSession) => {
-    const strategy = createApprovalStrategy(approvalMode, { serverBaseUrl });
+    // 등급형 자동승인 + 기억된 계열 prefix. 위험 명령은 어떤 모드에서도 자동 승인되지 않는다.
+    const { autonomyMode, autoApproveAll, patternPrefixesEnabled } = codingApprovalConfig(approvalMode);
+    const strategy = createApprovalStrategy(autonomyMode, {
+      serverBaseUrl,
+      autoApproveAll,
+      // 기억된 계열은 session_allow / guided_auto에서만 적용된다(나머지 모드는 prefix 무시).
+      getApprovedPrefixes: patternPrefixesEnabled ? () => approvedPrefixesRef.current : undefined,
+    });
     let seq = 0;
     return createClosedLoopEffects({
       sessionId,
@@ -560,6 +626,33 @@ export function CodingWorkbench({
 
   const openModelPicker = () => modelSelectRef.current?.focus();
 
+  // 자동승인 모드 변경 인텐트 — 자동 모드를 처음 켜는 경우 위험 경고 확인을 받는다.
+  // manual로 돌아가는 건 즉시 적용(안전 방향), 위험을 키울 때만 게이트.
+  const requestApprovalModeChange = (nextMode: CodingApprovalMode) => {
+    if (nextMode === approvalMode) return;
+    if (shouldShowAutoApprovalWarning(nextMode, autoApprovalArmedAt)) {
+      setPendingModeIntent(nextMode);
+      return;
+    }
+    setApprovalMode(nextMode);
+  };
+  const confirmAutoApprovalArm = () => {
+    if (!pendingModeIntent) return;
+    const now = new Date().toISOString();
+    setAutoApprovalArmedAt(now);
+    try {
+      window.localStorage.setItem(CODING_AUTO_APPROVAL_ARMED_STORAGE_KEY, now);
+    } catch {
+      // storage 불가 — 세션 내 유지
+    }
+    onContextEvent?.("coding.auto_approval.armed", { mode: pendingModeIntent, armedAt: now });
+    setApprovalMode(pendingModeIntent);
+    setPendingModeIntent(null);
+  };
+  const cancelAutoApprovalIntent = () => setPendingModeIntent(null);
+
+  const prefixCandidate = approvedPrefixCandidate(prefixDraft);
+
   const onPickFiles = (event: ChangeEvent<HTMLInputElement>) => {
     attachmentControl.add(event.target.files);
     event.target.value = "";
@@ -728,13 +821,66 @@ export function CodingWorkbench({
             승인 모드
             <select
               value={approvalMode}
-              onChange={(event) => setApprovalMode(event.target.value as AutonomyMode)}
+              onChange={(event) => requestApprovalModeChange(event.target.value as CodingApprovalMode)}
               disabled={running}
+              title={CODING_APPROVAL_MODES.find((mode) => mode.id === approvalMode)?.hint}
             >
-              <option value="human">사람 승인</option>
-              <option value="auto_safe">safe 자동승인</option>
+              {CODING_APPROVAL_MODES.map((mode) => (
+                <option key={mode.id} value={mode.id}>
+                  {mode.label}
+                </option>
+              ))}
             </select>
+            <span className="coding-approval__hint">{CODING_APPROVAL_MODES.find((mode) => mode.id === approvalMode)?.hint}</span>
           </label>
+          {(approvalMode === "session_allow" || approvalMode === "guided_auto") ? (
+            <div className="coding-approval__prefixes" aria-label="세션 자동승인 계열">
+              <div className="coding-approval__prefixes-head">
+                <span>이번 세션 동안 허용된 계열</span>
+                {approvedPrefixes.length > 0 ? (
+                  <button type="button" onClick={() => setApprovedPrefixes([])} title="모두 제거">
+                    비우기
+                  </button>
+                ) : null}
+              </div>
+              {approvedPrefixes.length === 0 ? (
+                <p className="coding-approval__empty">아직 없음 — 명령을 입력해 추가하세요(예: <code>pnpm test</code>).</p>
+              ) : (
+                <ul className="coding-approval__prefix-list">
+                  {approvedPrefixes.map((prefix) => (
+                    <li key={prefix}>
+                      <code>{prefix}</code>
+                      <button type="button" onClick={() => setApprovedPrefixes((list) => removeApprovedPrefix(list, prefix))} aria-label={`${prefix} 제거`}>
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="coding-approval__prefix-add">
+                <input
+                  value={prefixDraft}
+                  onChange={(event) => setPrefixDraft(event.target.value)}
+                  placeholder='추가할 명령 (예: "pnpm test")'
+                  aria-label="자동승인 계열 추가"
+                />
+                <button
+                  type="button"
+                  disabled={!prefixCandidate.canAdd}
+                  onClick={() => {
+                    setApprovedPrefixes((list) => addApprovedPrefix(list, prefixDraft));
+                    setPrefixDraft("");
+                  }}
+                  title={prefixCandidate.canAdd ? `계열 "${prefixCandidate.prefix}" 추가` : prefixCandidate.blockedReason}
+                >
+                  추가
+                </button>
+              </div>
+              {prefixDraft.trim() && !prefixCandidate.canAdd ? (
+                <p className="coding-approval__warn">{prefixCandidate.blockedReason}</p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </aside>
 
@@ -975,6 +1121,30 @@ export function CodingWorkbench({
           <PanelRightOpen size={14} aria-hidden /> Missions
         </button>
       )}
+      {pendingModeIntent ? (
+        <div className="coding-auto-approval-dialog" role="dialog" aria-modal="true" aria-labelledby="coding-auto-approval-dialog-title">
+          <div className="coding-auto-approval-dialog__card">
+            <h2 id="coding-auto-approval-dialog-title">
+              <AlertTriangle size={16} aria-hidden /> 자동승인 활성화
+            </h2>
+            <p className="coding-auto-approval-dialog__mode">
+              모드: <strong>{CODING_APPROVAL_MODES.find((mode) => mode.id === pendingModeIntent)?.label}</strong>
+            </p>
+            <p className="coding-auto-approval-dialog__warning">{CODING_AUTO_APPROVAL_WARNING}</p>
+            <p className="coding-auto-approval-dialog__note">
+              위험 명령(rm·git push·sudo·shell 메타문자 등)은 자동 승인되지 않습니다. 자동 승인된 명령은 추적 로그에 남습니다.
+            </p>
+            <div className="coding-auto-approval-dialog__actions">
+              <button type="button" onClick={cancelAutoApprovalIntent}>
+                취소
+              </button>
+              <button type="button" className="coding-auto-approval-dialog__confirm" onClick={confirmAutoApprovalArm}>
+                이해했고 활성화
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
