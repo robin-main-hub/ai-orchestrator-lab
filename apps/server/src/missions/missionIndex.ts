@@ -1,5 +1,6 @@
 import {
   missionArtifactAttachedPayloadSchema,
+  missionCheckpointRecordedPayloadSchema,
   missionClosedPayloadSchema,
   missionCreatedPayloadSchema,
   missionMergeQueuedPayloadSchema,
@@ -77,6 +78,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
         artifacts: [],
         verificationReports: [],
         mergeQueueItems: [],
+        checkpoints: [],
         updatedAt: event.createdAt,
       });
       continue;
@@ -111,6 +113,17 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
         continue;
       }
       record.verificationReports.push(parsed.data.report);
+      record.updatedAt = event.createdAt;
+      continue;
+    }
+
+    if (event.type === "mission.checkpoint.created") {
+      const parsed = missionCheckpointRecordedPayloadSchema.safeParse(event.payload);
+      const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
+      if (!parsed.success || !record || record.checkpoints.some((cp) => cp.id === parsed.data.checkpoint.id)) {
+        continue;
+      }
+      record.checkpoints.push(parsed.data.checkpoint);
       record.updatedAt = event.createdAt;
       continue;
     }

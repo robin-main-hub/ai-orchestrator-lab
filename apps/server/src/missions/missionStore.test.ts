@@ -410,3 +410,100 @@ describe("server-side policy — payloads are not trusted", () => {
     expect(withEvidence.report.observed).toBe(true);
   });
 });
+
+describe("auto checkpoint hooks (L3)", () => {
+  const VERIFIER = { agentId: "agent_verifier", role: "verifier" as const, displayName: "Verifier", soulMode: "summary" as const, configSource: "internal" as const };
+  const checkpoint = (reason: string) => ({
+    status: "created" as const,
+    checkpoint: {
+      id: `cp_${reason}`,
+      missionId: "mission_001",
+      repoRootRef: "/repo",
+      gitRef: "HEAD",
+      headSha: "abc1234def567890",
+      reason: reason as never,
+      createdAt: "2026-06-13T00:00:00.500Z",
+      truthStatus: "observed" as const,
+    },
+  });
+  const passedRun = ({ reportId, missionId, verifierAgentId }: { reportId: string; missionId: string; verifierAgentId: string }): VerificationReport => ({
+    id: reportId,
+    missionId,
+    verifierAgentId,
+    status: "passed",
+    checks: [{ id: "c1", command: "pnpm test", status: "passed", exitCode: 0, summary: "ok", startedAt: "2026-06-13T00:00:00.000Z" }],
+    artifactIds: [],
+    observed: true,
+    createdAt: "2026-06-13T00:00:01.000Z",
+  });
+
+  it("records an observed before_verification checkpoint ahead of verify", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore({
+      ...deps,
+      runVerification: async (input) => passedRun(input),
+      autoCheckpoint: async (_missionId, reason) => checkpoint(reason),
+      nextNonce: () => "n1",
+    });
+    await store.create({ ...CREATE, workers: [VERIFIER] });
+    const updated = await store.verify("mission_001", { commands: ["pnpm test"] });
+    expect(updated?.checkpoints).toHaveLength(1);
+    expect(updated?.checkpoints[0]!.reason).toBe("before_verification");
+    expect(updated?.checkpoints[0]!.truthStatus).toBe("observed");
+    expect(updated?.verificationReports).toHaveLength(1);
+  });
+
+  it("a failed (non-critical) checkpoint does NOT block verification", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore({
+      ...deps,
+      runVerification: async (input) => passedRun(input),
+      autoCheckpoint: async () => ({ status: "failed", reason: "git rev-parse failed" }),
+      nextNonce: () => "n1",
+    });
+    await store.create({ ...CREATE, workers: [VERIFIER] });
+    const updated = await store.verify("mission_001", { commands: ["pnpm test"] });
+    expect(updated?.checkpoints).toHaveLength(0);
+    expect(updated?.verificationReports).toHaveLength(1); // 검증은 진행됨
+  });
+
+  async function seedQueuedFor(autoCheckpoint: Parameters<typeof createMissionStore>[0]["autoCheckpoint"]) {
+    const { deps } = memoryDeps();
+    const store = createMissionStore({
+      ...deps,
+      autoCheckpoint,
+      runMerge: async () => ({
+        status: "merged" as const,
+        mergeCommitSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        reason: "merged",
+        conflictFiles: [],
+        completedAt: "2026-06-13T00:00:02.000Z",
+      }),
+    });
+    await store.create(CREATE);
+    await store.appendEvent("mission_001", {
+      type: "mission.verification.recorded",
+      payload: { report: passedRun({ reportId: "verify_pass", missionId: "mission_001", verifierAgentId: "agent_verifier" }) },
+    });
+    await store.appendEvent("mission_001", {
+      type: "mission.merge.queued",
+      payload: { item: { id: "merge_1", missionId: "mission_001", branchName: "agent/mission_001", status: "queued", requiredVerificationReportId: "verify_pass", reason: "verified", queuedAt: "2026-06-13T00:00:01.500Z" } },
+    });
+    return store;
+  }
+
+  it("a critical before_merge checkpoint failure BLOCKS the merge (no unrecoverable merge)", async () => {
+    const store = await seedQueuedFor(async () => ({ status: "failed", reason: "worktree dirty" }));
+    await expect(store.merge("mission_001", { mergeQueueItemId: "merge_1" })).rejects.toThrow(/checkpoint\(before_merge\)/);
+    // 머지가 실행되지 않았다 — 미션은 merged로 닫히지 않음
+    const record = await store.get("mission_001");
+    expect(record?.status).not.toBe("merged");
+  });
+
+  it("a skipped checkpoint (deployment without allowlist) lets the merge proceed", async () => {
+    const store = await seedQueuedFor(async () => ({ status: "skipped", reason: "no allowlist" }));
+    const merged = await store.merge("mission_001", { mergeQueueItemId: "merge_1" });
+    expect(merged?.status).toBe("merged");
+    expect(merged?.checkpoints).toHaveLength(0);
+  });
+});
