@@ -53,8 +53,8 @@ import { summarizeRejectedAttachments, attachmentDeliveryNote } from "../../lib/
 import { buildCodingAttachmentDelivery, describeCodingAttachmentDelivery } from "../../lib/codingAttachmentContext";
 import type { DraftAttachment } from "../../types";
 import { fetchGithubPullRequest } from "../../lib/githubConnector";
-import { buildGithubContextPrompt, buildPrContextAttachment, isContextAttached, upsertContextAttachment } from "../../lib/githubContext";
-import type { GithubContextAttachment } from "@ai-orchestrator/protocol";
+import { buildPrContextAttachment, upsertContextAttachment } from "../../lib/githubContext";
+import { assembleCodingRequestMessages, buildGithubContextTracePayload } from "../../lib/codingRequestAssembly";
 
 
 
@@ -261,15 +261,14 @@ export function CodingWorkbench({
       requestSeq += 1;
       // 첨부 본문/이미지는 첫 요청에만 싣는다 — tool 라운드마다 반복 주입하면 토큰이
       // 폭증한다. 이후 라운드에는 본문 없는 짧은 ref만 남겨 모델이 첨부 존재를 기억하게 한다.
-      const attachmentContext =
-        requestSeq === 1 ? attachmentDelivery.firstRequestContext : attachmentDelivery.followupContext;
-      // GitHub 컨텍스트(사용자 선택)도 첫 요청에만 주입 — 본문 반복 주입으로 토큰 폭증 방지.
-      const githubContext = requestSeq === 1 ? buildGithubContextPrompt(working.githubContext) : undefined;
-      const extraSystem = [attachmentContext, githubContext].filter((value): value is string => Boolean(value));
-      const outgoingMessages =
-        extraSystem.length > 0
-          ? [...messages, ...extraSystem.map((content) => ({ role: "system" as const, content }))]
-          : messages;
+      // 첨부 본문 + GitHub 컨텍스트는 첫 요청에만, 이후 라운드는 짧은 ref만 — 토큰 폭증 방지.
+      const outgoingMessages = assembleCodingRequestMessages({
+        messages,
+        requestSeq,
+        attachmentFirstContext: attachmentDelivery.firstRequestContext,
+        attachmentFollowupContext: attachmentDelivery.followupContext,
+        githubContext: working.githubContext,
+      });
       const firstRequestRiders: ProviderCompletionAttachment[] | undefined =
         requestSeq === 1 ? attachmentDelivery.providerAttachments : undefined;
       const request = {
@@ -559,16 +558,8 @@ export function CodingWorkbench({
       githubContext: upsertContextAttachment(current.githubContext ?? [], attachment),
     }));
     setNotice(`GitHub PR #${pullNumber} 컨텍스트 추가됨 (관측 ${attachment.observedAt})`);
-    // redacted trace — 본문 excerpt는 제외, 참조/메타만 남긴다(private raw body 미저장).
-    onContextEvent?.("coding.github.context.attached", {
-      repoFullName: attachment.repoFullName,
-      number: attachment.number,
-      title: attachment.title,
-      url: attachment.url,
-      observedAt: attachment.observedAt,
-      truncated: attachment.truncated,
-      truthStatus: attachment.truthStatus,
-    });
+    // redacted trace — 본문 excerpt·토큰·헤더 제외, 참조/메타만(private raw body 미저장).
+    onContextEvent?.("coding.github.context.attached", buildGithubContextTracePayload(attachment));
   };
 
   const detachGithubContext = (id: string) => {
