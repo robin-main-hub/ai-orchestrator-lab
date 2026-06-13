@@ -8202,6 +8202,22 @@ body:has(.app-shell.annex-focus-shell) {
     transform: rotate(-8deg) scale(1);
   }
 }
+/* 대화 스포트라이트 — 에이전트가 능동 작업(말하는 중)일 때 부드러운 펄스로 생동감 */
+.conversation-speaking {
+  animation: conversation-speaking 1.6s ease-in-out infinite;
+}
+@keyframes conversation-speaking {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(167, 139, 250, 0);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(167, 139, 250, 0.22);
+    transform: scale(1.03);
+  }
+}
+
 .glitch-hover:hover:not(:disabled) {
   animation: glitch-shift 0.28s steps(2) 1;
 }
@@ -8219,6 +8235,7 @@ body:has(.app-shell.annex-focus-shell) {
 @media (prefers-reduced-motion: reduce) {
   .result-stamp,
   .glitch-hover:hover,
+  .conversation-speaking,
   .autonomy-hud-beacon,
   .autonomy-hud .hud-complete,
   .autonomy-hud .hud-escalate_approval {

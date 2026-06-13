@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   expressionForActivity,
+  isSpeakingActivity,
   personaSlugForAgent,
   resolveAgentExpressionPortrait,
   resolveAgentIdentityAvatar,
@@ -26,6 +27,20 @@ describe("expressionForActivity", () => {
   it("defaults to neutral for idle/unknown", () => {
     expect(expressionForActivity("idle")).toBe("neutral");
     expect(expressionForActivity(undefined)).toBe("neutral");
+  });
+});
+
+describe("isSpeakingActivity", () => {
+  it("is true while the agent is actively working", () => {
+    for (const a of ["responding", "preparing", "tooling", "capturing", "dispatching", "testing"] as const) {
+      expect(isSpeakingActivity(a)).toBe(true);
+    }
+  });
+  it("is false for idle / waiting / error / unknown", () => {
+    expect(isSpeakingActivity("idle")).toBe(false);
+    expect(isSpeakingActivity("waiting_approval")).toBe(false);
+    expect(isSpeakingActivity("error")).toBe(false);
+    expect(isSpeakingActivity(undefined)).toBe(false);
   });
 });
 

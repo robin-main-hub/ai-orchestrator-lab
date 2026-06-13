@@ -67,4 +67,15 @@ describe("ConversationAgentSpotlight", () => {
       ),
     ).toBe("");
   });
+
+  it("pulses the portrait while the agent is actively working, not when idle", () => {
+    const speaking = renderToStaticMarkup(
+      <ConversationAgentSpotlight activity="responding" agent={agent("orchestrator")} displayName="마키마" workStatusLabel="응답 중" />,
+    );
+    expect(speaking).toContain("conversation-speaking");
+    const idle = renderToStaticMarkup(
+      <ConversationAgentSpotlight activity="idle" agent={agent("orchestrator")} displayName="마키마" workStatusLabel="대기" />,
+    );
+    expect(idle).not.toContain("conversation-speaking");
+  });
 });

@@ -39,6 +39,24 @@ export function expressionForActivity(activity: AgentActivityStatus | undefined)
 }
 
 /**
+ * 에이전트가 "말하는 중"(능동 작업)인가 — 응답/도구/전달/검증 등. 승인 대기·에러·idle은
+ * 제외. 아바타 speaking 펄스 애니메이션을 줄지 결정한다(캐릭터 OS 생동감).
+ */
+export function isSpeakingActivity(activity: AgentActivityStatus | undefined): boolean {
+  switch (activity) {
+    case "responding":
+    case "preparing":
+    case "tooling":
+    case "capturing":
+    case "dispatching":
+    case "testing":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
  * 스포트라이트(상단 크게)용: 활동 상태에 맞는 표정 스프라이트를 우선한다 — 감정 표현이
  * 목적이므로 정적 업로드 아바타보다 표정을 앞에 둔다. 표정/아바타 모두 없으면 undefined.
  */

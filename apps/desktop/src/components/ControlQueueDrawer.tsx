@@ -288,10 +288,13 @@ export function ControlQueueDrawer({
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
         {pendingItems.length === 0 ? (
           <div className="flex flex-col items-start gap-2 rounded-md border border-border bg-card/40 p-4">
-            <Check className="h-4 w-4 text-success" />
-            <span className="text-sm font-medium text-foreground">
-              대기 중인 항목 없음
-            </span>
+            <div className="flex items-center gap-2">
+              <Check className="h-4 w-4 text-success" />
+              <span className="text-sm font-medium text-foreground">대기 중인 항목 없음</span>
+              {resolvedCount > 0 ? (
+                <span className="result-stamp result-stamp-success text-[10px]">처리 완료</span>
+              ) : null}
+            </div>
             <span className="text-xs text-muted-foreground">
               {resolvedCount > 0
                 ? `${resolvedCount}개 항목은 이미 처리됐습니다.`
