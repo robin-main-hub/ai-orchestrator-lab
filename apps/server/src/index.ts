@@ -2284,7 +2284,7 @@ export function evaluateServerTmuxDispatchPermission(
     approvalState: "required",
     decision: "approval_required",
     requestedLevels,
-    reason: "tmux dispatch requires explicit approval before send-keys can run",
+    reason: "tmux 디스패치는 send-keys 실행 전 명시적 승인이 필요합니다",
   };
 }
 

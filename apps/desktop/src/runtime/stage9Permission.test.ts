@@ -265,7 +265,7 @@ describe("stage9 permission matrix", () => {
         sourceTrust: "limited",
       }),
     );
-    expect(result.item.reason).toContain("requires approval");
+    expect(result.item.reason).toContain("승인이 필요");
   });
 
   it("denies dangerous mobile actions in the common permission gate", () => {
@@ -299,7 +299,7 @@ describe("stage9 permission matrix", () => {
     });
 
     expect(result.requiresApproval).toBe(true);
-    expect(result.item.reason).toContain("exceeds budget");
+    expect(result.item.reason).toContain("예산");
     expect(result.queueItem?.costEstimateTokens).toBe(120_000);
   });
 
