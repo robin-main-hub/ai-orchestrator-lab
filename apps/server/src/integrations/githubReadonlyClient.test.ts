@@ -94,4 +94,56 @@ describe("createGithubReadonlyClient — 읽기 전용 조회", () => {
     const client = createGithubReadonlyClient({ token: "ghp_x", fetchImpl });
     await expect(client.listIssues("o", "r")).rejects.toBeInstanceOf(GithubReadonlyError);
   });
+
+  it("getPullRequest는 본문/ref/diff stat을 상세로 매핑한다", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        number: 42,
+        title: "feat",
+        state: "open",
+        user: { login: "robin" },
+        draft: false,
+        html_url: "u",
+        created_at: "c",
+        updated_at: "u2",
+        body: "설명",
+        base: { ref: "main" },
+        head: { ref: "feat-x" },
+        merged: false,
+        additions: 10,
+        deletions: 3,
+        changed_files: 2,
+        commits: 4,
+      }),
+    );
+    const client = createGithubReadonlyClient({ token: "ghp_x", fetchImpl });
+    expect(await client.getPullRequest("o", "r", 42)).toEqual({
+      number: 42,
+      title: "feat",
+      state: "open",
+      author: "robin",
+      draft: false,
+      htmlUrl: "u",
+      createdAt: "c",
+      updatedAt: "u2",
+      body: "설명",
+      baseRef: "main",
+      headRef: "feat-x",
+      merged: false,
+      additions: 10,
+      deletions: 3,
+      changedFiles: 2,
+      commits: 4,
+    });
+  });
+
+  it("getPullRequest의 누락 diff stat은 null로 둔다(0으로 위장 금지)", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ number: 7, title: "t", state: "open", user: { login: "a" }, body: "", base: { ref: "main" }, head: { ref: "x" } }),
+    );
+    const client = createGithubReadonlyClient({ token: "ghp_x", fetchImpl });
+    const pr = await client.getPullRequest("o", "r", 7);
+    expect(pr.additions).toBeNull();
+    expect(pr.changedFiles).toBeNull();
+  });
 });

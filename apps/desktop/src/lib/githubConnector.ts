@@ -1,7 +1,10 @@
 import type {
   GithubConnectorStatus,
   GithubIssueSummary,
+  GithubPullRequestDetail,
   GithubPullRequestSummary,
+  GithubReadonlyResourceResponse,
+  GithubResourceOutcome,
 } from "@ai-orchestrator/protocol";
 
 /**
@@ -39,38 +42,97 @@ export async function fetchGithubConnectorStatus(
   }
 }
 
-export async function fetchGithubPullRequests(
+/**
+ * Honest result of a read-only resource fetch. `data` is present ONLY when
+ * `outcome === "observed"` (real HTTP 200). Every other outcome carries a
+ * message and no data, so callers must distinguish 미설정 / 권한 부족 / 연결 실패
+ * instead of treating an empty list as "no results".
+ */
+export type GithubResourceResult<T> = {
+  outcome: GithubResourceOutcome;
+  data?: T;
+  message?: string;
+  observedAt?: string;
+};
+
+async function fetchGithubResource<T>(
   serverBaseUrl: string | string[] | undefined,
-  owner: string,
-  repo: string,
-  fetchImpl: typeof fetch = fetch,
-): Promise<GithubPullRequestSummary[]> {
+  path: string,
+  pick: (payload: GithubReadonlyResourceResponse) => T | undefined,
+  fetchImpl: typeof fetch,
+): Promise<GithubResourceResult<T>> {
   const base = resolveServerBaseUrl(serverBaseUrl);
-  if (!base) return [];
-  const response = await fetchImpl(
-    `${base.replace(/\/$/, "")}/integrations/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`,
-    { method: "GET" },
-  );
-  if (!response.ok) return [];
-  const payload = (await response.json()) as { pullRequests?: GithubPullRequestSummary[] };
-  return payload.pullRequests ?? [];
+  if (!base) return { outcome: "connection_failed", message: "서버 미연결 — 코딩 서버 주소가 없습니다." };
+  try {
+    const response = await fetchImpl(`${base.replace(/\/$/, "")}${path}`, { method: "GET" });
+    if (!response.ok) return { outcome: "github_error", message: `HTTP ${response.status}` };
+    const payload = (await response.json()) as GithubReadonlyResourceResponse;
+    return { outcome: payload.outcome, data: pick(payload), message: payload.message, observedAt: payload.observedAt };
+  } catch (error) {
+    return { outcome: "connection_failed", message: error instanceof Error ? error.message : String(error) };
+  }
 }
 
-export async function fetchGithubIssues(
+export function fetchGithubPullRequests(
   serverBaseUrl: string | string[] | undefined,
   owner: string,
   repo: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<GithubIssueSummary[]> {
-  const base = resolveServerBaseUrl(serverBaseUrl);
-  if (!base) return [];
-  const response = await fetchImpl(
-    `${base.replace(/\/$/, "")}/integrations/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`,
-    { method: "GET" },
+): Promise<GithubResourceResult<GithubPullRequestSummary[]>> {
+  return fetchGithubResource(
+    serverBaseUrl,
+    `/integrations/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`,
+    (payload) => payload.pullRequests,
+    fetchImpl,
   );
-  if (!response.ok) return [];
-  const payload = (await response.json()) as { issues?: GithubIssueSummary[] };
-  return payload.issues ?? [];
+}
+
+export function fetchGithubPullRequest(
+  serverBaseUrl: string | string[] | undefined,
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubResourceResult<GithubPullRequestDetail>> {
+  return fetchGithubResource(
+    serverBaseUrl,
+    `/integrations/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${encodeURIComponent(String(pullNumber))}`,
+    (payload) => payload.pullRequest,
+    fetchImpl,
+  );
+}
+
+export function fetchGithubIssues(
+  serverBaseUrl: string | string[] | undefined,
+  owner: string,
+  repo: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubResourceResult<GithubIssueSummary[]>> {
+  return fetchGithubResource(
+    serverBaseUrl,
+    `/integrations/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`,
+    (payload) => payload.issues,
+    fetchImpl,
+  );
+}
+
+/** badge label/variant for an honest fetch outcome (StatusBadge variants) */
+export function githubOutcomeLabel(outcome: GithubResourceOutcome): {
+  text: string;
+  variant: "success" | "warning" | "danger" | "muted";
+} {
+  switch (outcome) {
+    case "observed":
+      return { text: "관측됨", variant: "success" };
+    case "not_configured":
+      return { text: "미설정", variant: "muted" };
+    case "permission_denied":
+      return { text: "권한 부족", variant: "warning" };
+    case "connection_failed":
+      return { text: "연결 실패", variant: "danger" };
+    case "github_error":
+      return { text: "GitHub 오류", variant: "danger" };
+  }
 }
 
 export type GithubConnectorChipLabel = { text: string; tone: "configured" | "idle" | "error"; title: string };

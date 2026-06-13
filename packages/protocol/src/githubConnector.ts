@@ -60,18 +60,54 @@ export const githubIssueSummarySchema = z.object({
 });
 export type GithubIssueSummary = z.infer<typeof githubIssueSummarySchema>;
 
+export const githubPullRequestDetailSchema = githubPullRequestSummarySchema.extend({
+  /** PR description body (may be empty) */
+  body: z.string(),
+  baseRef: z.string(),
+  headRef: z.string(),
+  merged: z.boolean(),
+  additions: z.number().nullable(),
+  deletions: z.number().nullable(),
+  changedFiles: z.number().nullable(),
+  commits: z.number().nullable(),
+});
+export type GithubPullRequestDetail = z.infer<typeof githubPullRequestDetailSchema>;
+
+/**
+ * Honest outcome of a read-only resource fetch. Only `observed` means the data
+ * came from a real GitHub HTTP 200 — it must never be assigned to cached,
+ * missing, or failed data (TruthStatus "가짜 observed 금지"). The rest name the
+ * exact reason there is no data, so the UI can show 미설정 / 권한 부족 / 연결 실패
+ * distinctly instead of an empty list that looks like "no PRs".
+ */
+export const githubResourceOutcomeSchema = z.enum([
+  "observed",
+  "not_configured",
+  "permission_denied",
+  "connection_failed",
+  "github_error",
+]);
+export type GithubResourceOutcome = z.infer<typeof githubResourceOutcomeSchema>;
+
 /** GET /integrations/github/status */
 export const githubConnectorStatusResponseSchema = z.object({
   status: githubConnectorStatusSchema,
 });
 export type GithubConnectorStatusResponse = z.infer<typeof githubConnectorStatusResponseSchema>;
 
-/** GET /integrations/github/repos/:owner/:repo/pulls|issues|overview */
+/** GET /integrations/github/repos/:owner/:repo/pulls|pulls/:n|issues|overview */
 export const githubReadonlyResourceResponseSchema = z.object({
   status: githubConnectorStatusSchema,
   repo: z.string(),
+  /** honest fetch outcome — only "observed" carries real data */
+  outcome: githubResourceOutcomeSchema,
+  /** ISO timestamp when the data was actually observed (present only when outcome="observed") */
+  observedAt: z.string().optional(),
+  /** human note for non-observed outcomes (미설정 / 권한 부족 / 연결 실패) */
+  message: z.string().optional(),
   overview: githubRepoSummarySchema.optional(),
   pullRequests: z.array(githubPullRequestSummarySchema).optional(),
+  pullRequest: githubPullRequestDetailSchema.optional(),
   issues: z.array(githubIssueSummarySchema).optional(),
 });
 export type GithubReadonlyResourceResponse = z.infer<typeof githubReadonlyResourceResponseSchema>;
