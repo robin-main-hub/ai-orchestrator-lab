@@ -144,6 +144,7 @@ docs/             # 00~45 설계 문서 (아래 주요 항목)
 53     action-flow-consistency (single openControlQueue entry + unified approval badge count)
 54     spacing-density-pass (4px spacing + type-scale tokens, densest legacy panels first)
 55     nav-axis-consolidation (drop ghost coord + unify mode-owns-center sentinel + navSurface adapter)
+56     conversation-agent-rail (1-click agent rail + expression spotlight + pinned suggestion chips)
 ```
 
 ## 실행 방법
