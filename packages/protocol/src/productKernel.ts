@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { missionCheckpointSchema } from "./missionCheckpoint.js";
+import { sandboxErrorCardSchema } from "./sandboxErrorCard.js";
+import { missionSelfCorrectionRecordSchema } from "./selfCorrection.js";
+import { truthStatusSchema, type TruthStatus } from "./truthStatus.js";
 
 /**
  * Product-kernel contracts for closing the gap between "character chat" and
@@ -12,8 +15,9 @@ import { missionCheckpointSchema } from "./missionCheckpoint.js";
  *   those boundaries instead of being stripped for safety theater.
  */
 
-export const truthStatusSchema = z.enum(["observed", "configured", "planned", "simulated"]);
-export type TruthStatus = z.infer<typeof truthStatusSchema>;
+// truthStatusSchema는 ./truthStatus.js로 분리(순환 방지). 기존 import 호환 위해 re-export.
+export { truthStatusSchema };
+export type { TruthStatus };
 
 export const missionAgentRoleSchema = z.enum([
   "orchestrator",
@@ -567,6 +571,10 @@ export const serverMissionRecordSchema = z.object({
   mergeQueueItems: z.array(sequentialMergeQueueItemSchema),
   /** L3: verify/merge 전 자동 생성된 checkpoint들 (observed HEAD sha) */
   checkpoints: z.array(missionCheckpointSchema).default([]),
+  /** L4: 검증 실패에서 결정적 파서가 만든 구조화 에러 카드들 */
+  errorCards: z.array(sandboxErrorCardSchema).default([]),
+  /** L5: 에러 카드에 대한 bounded self-correction 제안/중단 기록(제안만, 파일 변경 없음) */
+  selfCorrections: z.array(missionSelfCorrectionRecordSchema).default([]),
   updatedAt: z.string(),
 });
 export type ServerMissionRecord = z.infer<typeof serverMissionRecordSchema>;

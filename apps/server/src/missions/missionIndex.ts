@@ -3,7 +3,9 @@ import {
   missionCheckpointRecordedPayloadSchema,
   missionClosedPayloadSchema,
   missionCreatedPayloadSchema,
+  missionErrorCardRecordedPayloadSchema,
   missionMergeQueuedPayloadSchema,
+  missionSelfCorrectionRecordSchema,
   missionVerificationRecordedPayloadSchema,
   missionWorkerAssignedPayloadSchema,
   type EventEnvelope,
@@ -79,6 +81,8 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
         verificationReports: [],
         mergeQueueItems: [],
         checkpoints: [],
+        errorCards: [],
+        selfCorrections: [],
         updatedAt: event.createdAt,
       });
       continue;
@@ -124,6 +128,28 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
         continue;
       }
       record.checkpoints.push(parsed.data.checkpoint);
+      record.updatedAt = event.createdAt;
+      continue;
+    }
+
+    if (event.type === "mission.error_card.recorded") {
+      const parsed = missionErrorCardRecordedPayloadSchema.safeParse(event.payload);
+      const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
+      if (!parsed.success || !record || record.errorCards.some((card) => card.id === parsed.data.errorCard.id)) {
+        continue;
+      }
+      record.errorCards.push(parsed.data.errorCard);
+      record.updatedAt = event.createdAt;
+      continue;
+    }
+
+    if (event.type === "mission.self_correction.suggested" || event.type === "mission.self_correction.stopped") {
+      const parsed = missionSelfCorrectionRecordSchema.safeParse(event.payload);
+      const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
+      if (!parsed.success || !record || record.selfCorrections.some((entry) => entry.id === parsed.data.id)) {
+        continue;
+      }
+      record.selfCorrections.push(parsed.data);
       record.updatedAt = event.createdAt;
       continue;
     }
