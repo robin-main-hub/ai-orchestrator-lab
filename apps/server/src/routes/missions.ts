@@ -1,17 +1,23 @@
 import type { IncomingMessage } from "node:http";
 import {
+  buildMissionCreateFromTemplate,
   deriveMissionKanbanBoard,
   deriveMissionTrace,
+  findWorkflowTemplate,
+  missingRequiredFields,
   missionCheckpointCreateRequestSchema,
   missionCreateRequestSchema,
   missionEventAppendRequestSchema,
+  missionFromTemplateRequestSchema,
   missionMergeRequestSchema,
   missionRollbackRequestSchema,
   missionVerifyRequestSchema,
+  plannedArtifactsFromTemplate,
   skillCurateRequestSchema,
   type MissionCheckpointCreateRequest,
   type MissionCreateRequest,
   type MissionEventAppendRequest,
+  type MissionFromTemplateRequest,
   type MissionRollbackOutcome,
   type MissionRollbackRequest,
   type ServerMissionRecord,
@@ -94,6 +100,51 @@ export async function handleMissionRoute({
   if (pathname === "/missions" && method === "GET") {
     const missions: ServerMissionRecord[] = await store.list();
     respondJson(200, { missions });
+    return true;
+  }
+
+  // L7: 업무 템플릿 → 실제 Mission. 필수 입력 누락은 400(필드 목록), 미지정 템플릿은 404.
+  // 산출물은 planned 아티팩트(초안 예정)로만 붙인다 — 외부 발송 없음.
+  if (pathname === "/missions/from-template" && method === "POST") {
+    let payload: MissionFromTemplateRequest;
+    try {
+      payload = missionFromTemplateRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, { error: "invalid_mission_from_template_payload", message: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    const template = findWorkflowTemplate(payload.templateId);
+    if (!template) {
+      respondJson(404, { error: "workflow_template_not_found", templateId: payload.templateId });
+      return true;
+    }
+    const missing = missingRequiredFields(template, payload.input);
+    if (missing.length > 0) {
+      respondJson(400, { error: "missing_required_fields", missingFields: missing });
+      return true;
+    }
+    const missionId = payload.missionId ?? `mission_tpl_${template.id}_${Date.now()}`;
+    const now = () => new Date().toISOString();
+    try {
+      let mission = await store.create(buildMissionCreateFromTemplate(template, payload.input, { missionId, createdBy: payload.createdBy }));
+      const plannedArtifacts = plannedArtifactsFromTemplate(template, missionId, now);
+      for (const artifact of plannedArtifacts) {
+        const updated = await store.appendEvent(missionId, { type: "mission.artifact.attached", payload: { artifact } });
+        if (updated) mission = updated;
+      }
+      respondJson(201, {
+        mission,
+        plannedArtifacts,
+        missionPlan: template.missionPlan,
+        verificationPlan: template.verificationPlan,
+      });
+    } catch (error) {
+      respondJson(500, { error: "mission_from_template_failed", message: error instanceof Error ? error.message : String(error) });
+    }
     return true;
   }
 

@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { missionAgentRoleSchema, type MissionAgentRole } from "./productKernel.js";
+import {
+  missionAgentRoleSchema,
+  type MissionAgentRole,
+  type MissionCreateRequest,
+  type MissionWorkerAssignmentRequest,
+} from "./productKernel.js";
 
 /**
  * Workflow Templates — 이 시스템이 코딩만 하는 게 아니라 회사 업무(GIOLITE 영업/조사/
@@ -132,3 +137,114 @@ export const CORE_HERMES_ORG: ReadonlyArray<HermesOrgMember> = [
   { slot: "sales_ops", role: "external", characterDirection: "GIO — 회사 업무", function: "견적, 샘플, 거래처 대응", writePolicy: "research" },
   { slot: "memory_curator", role: "memory_curator", characterDirection: "기억 관리자", function: "skill archive, prune, Obsidian export", writePolicy: "memory_curate" },
 ];
+
+// ── Template → Mission (L7 live wiring) ──────────────────────────────────────
+// 업무 템플릿을 "문서 생성"이 아니라 실제 Mission으로 만든다. 외부 발송은 절대 하지
+// 않고 산출물은 planned draft로만 남긴다(truthStatus: planned).
+
+export const missionFromTemplateRequestSchema = z.object({
+  templateId: z.string().min(1).max(128),
+  input: z.record(z.string(), z.union([z.string(), z.number()])).default({}),
+  /** 서버가 안 주면 호출 측이 생성 */
+  missionId: z.string().min(1).max(128).optional(),
+  createdBy: z.string().max(64).optional(),
+});
+export type MissionFromTemplateRequest = z.infer<typeof missionFromTemplateRequestSchema>;
+
+export function findWorkflowTemplate(templateId: string): WorkflowTemplate | undefined {
+  return GIOLITE_WORKFLOW_TEMPLATES.find((template) => template.id === templateId);
+}
+
+/** 누락된 필수 입력 필드 키들(빈 문자열도 누락으로 본다). */
+export function missingRequiredFields(
+  template: WorkflowTemplate,
+  input: Record<string, string | number>,
+): string[] {
+  return template.inputFields
+    .filter((field_) => field_.required)
+    .filter((field_) => {
+      const value = input[field_.key];
+      return value === undefined || (typeof value === "string" && value.trim() === "");
+    })
+    .map((field_) => field_.key);
+}
+
+const ROLE_LABEL: Partial<Record<MissionAgentRole, string>> = {
+  orchestrator: "지휘자",
+  negotiator: "협상·견적",
+  risk_officer: "리스크",
+  reviewer: "검토자",
+  researcher: "리서처",
+  domain_expert: "도메인 전문가",
+  mediator: "조율자",
+  builder: "빌더",
+  verifier: "검증자",
+  companion: "동행자",
+  external: "외부 업무",
+  memory_curator: "기억 관리자",
+};
+
+/**
+ * 템플릿 + 입력 → MissionCreateRequest. defaultAgents를 워커로, missionPlan/
+ * verificationPlan/outputArtifacts를 goal에 정직하게 풀어쓴다. capability는 서버가
+ * 역할에서 재계산하므로 여기서는 프로필 사실만 싣는다.
+ */
+export function buildMissionCreateFromTemplate(
+  template: WorkflowTemplate,
+  input: Record<string, string | number>,
+  opts: { missionId: string; createdBy?: string },
+): MissionCreateRequest {
+  const workers: MissionWorkerAssignmentRequest[] = template.defaultAgents.map((role, index) => ({
+    agentId: `${template.id}_${role}_${index + 1}`,
+    role,
+    displayName: ROLE_LABEL[role] ?? role,
+    soulMode: "summary",
+    configSource: "internal",
+  }));
+  const summaryLine = template.inputFields
+    .map((field_) => {
+      const value = input[field_.key];
+      return value === undefined || value === "" ? null : `${field_.label}: ${value}`;
+    })
+    .filter((line): line is string => line !== null)
+    .join(" · ");
+  const title = `${template.title}${summaryLine ? ` — ${summaryLine}` : ""}`.slice(0, 300);
+  const goal = [
+    `[${template.title}] 워크플로우 미션`,
+    summaryLine ? `입력 — ${summaryLine}` : "",
+    `계획 — ${template.missionPlan.join(" → ")}`,
+    `검증 — ${template.verificationPlan.join(", ")}`,
+    `산출물(초안) — ${template.outputArtifacts.join(", ")}`,
+    "외부 발송 금지 — draft만 생성한다.",
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, 4_000);
+  return {
+    id: opts.missionId,
+    title,
+    goal,
+    truthStatus: "planned",
+    createdBy: opts.createdBy ?? "workflow_template",
+    workers,
+  };
+}
+
+/**
+ * 템플릿의 outputArtifacts를 planned 아티팩트 참조로 만든다(전부 truthStatus: planned —
+ * 실제 산출물이 아니라 "만들 예정"). 외부 발송 없음 — draft만.
+ */
+export function plannedArtifactsFromTemplate(
+  template: WorkflowTemplate,
+  missionId: string,
+  now: () => string,
+): Array<{ id: string; missionId: string; kind: "markdown_report"; summary: string; truthStatus: "planned"; createdAt: string }> {
+  return template.outputArtifacts.map((name, index) => ({
+    id: `artifact_${missionId}_plan_${index + 1}`,
+    missionId,
+    kind: "markdown_report" as const,
+    summary: `${name} (초안 예정)`,
+    truthStatus: "planned" as const,
+    createdAt: now(),
+  }));
+}

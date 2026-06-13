@@ -136,4 +136,34 @@ describe("mission board routes", () => {
     expect(await handleMissionRoute(args)).toBe(true);
     expect(result().status).toBe(404);
   });
+
+  const HTV_INPUT = { productType: "x", material: "y", quantity: 1, size: "A4", color: "s", leadTime: "30d", incoterms: "FOB" };
+
+  it("POST /missions/from-template creates a mission and attaches planned artifacts", async () => {
+    const create = vi.fn(async () => record("m_tpl_1", "running"));
+    const appendEvent = vi.fn(async () => record("m_tpl_1", "running"));
+    const store = { create, appendEvent } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/from-template", "POST", { templateId: "giolite_htv_quote", missionId: "m_tpl_1", input: HTV_INPUT });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(201);
+    expect(create).toHaveBeenCalled();
+    expect(appendEvent).toHaveBeenCalled(); // planned artifacts attached
+    expect((result().payload as { verificationPlan: unknown[] }).verificationPlan.length).toBeGreaterThan(0);
+  });
+
+  it("POST /missions/from-template 404s an unknown template", async () => {
+    const store = {} as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/from-template", "POST", { templateId: "nope", input: {} });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(404);
+  });
+
+  it("POST /missions/from-template 400s with the missing required fields", async () => {
+    const store = {} as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/from-template", "POST", { templateId: "giolite_htv_quote", input: { productType: "x" } });
+    expect(await handleMissionRoute(args)).toBe(true);
+    const { status, payload } = result();
+    expect(status).toBe(400);
+    expect((payload as { missingFields: string[] }).missingFields).toContain("material");
+  });
 });
