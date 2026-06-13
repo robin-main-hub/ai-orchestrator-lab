@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { missionWorkspaceAttachedPayloadSchema, type AppWorkspace } from "./appWorkspace.js";
 import type { MissionCheckpoint } from "./missionCheckpoint.js";
 import {
   missionErrorCardRecordedPayloadSchema,
@@ -202,6 +203,7 @@ export const missionTraceEventTypeSchema = z.enum([
   "worker.assigned",
   "worker.started",
   "checkpoint.created",
+  "workspace.attached",
   "sandbox.preflight",
   "sandbox.exec.started",
   "sandbox.exec.completed",
@@ -312,6 +314,19 @@ function checkpointTraceEvent(checkpoint: MissionCheckpoint): MissionTraceEvent 
   };
 }
 
+function workspaceTraceEvent(workspace: AppWorkspace): MissionTraceEvent {
+  return {
+    id: `${workspace.missionId}:workspace:${workspace.id}`,
+    missionId: workspace.missionId,
+    type: "workspace.attached",
+    severity: "info",
+    title: `작업공간 · ${workspace.appType}`,
+    summary: `${workspace.repoRootRef}${workspace.worktreeRef ? ` · ${workspace.worktreeRef}` : ""} · preview ${workspace.preview.status}`,
+    truthStatus: workspace.preview.truthStatus, // preview observed는 실제 포트 관측 시만
+    createdAt: workspace.createdAt,
+  };
+}
+
 function errorCardTraceEvent(card: SandboxErrorCard): MissionTraceEvent {
   const where = card.targetFile ? `${card.targetFile}${card.targetLine ? `:${card.targetLine}` : ""} · ` : "";
   return {
@@ -381,6 +396,7 @@ function mergeTraceEvent(item: SequentialMergeQueueItem): MissionTraceEvent {
 export function deriveMissionTrace(record: ServerMissionRecord): MissionTraceEvent[] {
   const events: MissionTraceEvent[] = [createdTraceEvent(record.mission, record.mission.createdAt)];
   for (const worker of record.workers) events.push(workerTraceEvent(worker));
+  for (const workspace of record.workspaces ?? []) events.push(workspaceTraceEvent(workspace));
   for (const checkpoint of record.checkpoints ?? []) events.push(checkpointTraceEvent(checkpoint));
   for (const report of record.verificationReports) events.push(verificationTraceEvent(report, report.createdAt));
   for (const card of record.errorCards ?? []) events.push(errorCardTraceEvent(card));
@@ -412,6 +428,10 @@ export function traceEventFromMissionEnvelope(envelope: {
     case "mission.checkpoint.created": {
       const parsed = missionCheckpointRecordedPayloadSchema.safeParse(envelope.payload);
       return parsed.success ? checkpointTraceEvent(parsed.data.checkpoint) : null;
+    }
+    case "mission.workspace.attached": {
+      const parsed = missionWorkspaceAttachedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success ? workspaceTraceEvent(parsed.data.workspace) : null;
     }
     case "mission.error_card.recorded": {
       const parsed = missionErrorCardRecordedPayloadSchema.safeParse(envelope.payload);

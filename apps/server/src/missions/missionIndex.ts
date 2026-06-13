@@ -8,6 +8,7 @@ import {
   missionSelfCorrectionRecordSchema,
   missionVerificationRecordedPayloadSchema,
   missionWorkerAssignedPayloadSchema,
+  missionWorkspaceAttachedPayloadSchema,
   type EventEnvelope,
   type OrchestrationMissionStatus,
   type ServerMissionRecord,
@@ -83,6 +84,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
         checkpoints: [],
         errorCards: [],
         selfCorrections: [],
+        workspaces: [],
         updatedAt: event.createdAt,
       });
       continue;
@@ -128,6 +130,23 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
         continue;
       }
       record.checkpoints.push(parsed.data.checkpoint);
+      record.updatedAt = event.createdAt;
+      continue;
+    }
+
+    if (event.type === "mission.workspace.attached") {
+      const parsed = missionWorkspaceAttachedPayloadSchema.safeParse(event.payload);
+      const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
+      if (!parsed.success || !record) {
+        continue;
+      }
+      // upsert by id — preview/files 상태 갱신 이벤트가 같은 id를 덮어쓴다(latest wins)
+      const index = record.workspaces.findIndex((ws) => ws.id === parsed.data.workspace.id);
+      if (index >= 0) {
+        record.workspaces[index] = parsed.data.workspace;
+      } else {
+        record.workspaces.push(parsed.data.workspace);
+      }
       record.updatedAt = event.createdAt;
       continue;
     }

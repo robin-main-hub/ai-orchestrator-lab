@@ -1,5 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import {
+  appWorkspaceAttachRequestSchema,
   buildMissionCreateFromTemplate,
   deriveMissionKanbanBoard,
   deriveMissionTrace,
@@ -17,6 +18,7 @@ import {
   type MissionCheckpointCreateRequest,
   type MissionCreateRequest,
   type MissionEventAppendRequest,
+  type AppWorkspaceAttachRequest,
   type MissionFromTemplateRequest,
   type MissionRollbackOutcome,
   type MissionRollbackRequest,
@@ -57,6 +59,7 @@ const MISSION_CHECKPOINTS_PATH = /^\/missions\/([^/]+)\/checkpoints$/;
 const MISSION_ROLLBACK_PATH = /^\/missions\/([^/]+)\/rollback$/;
 const MISSION_SKILLS_PATH = /^\/missions\/([^/]+)\/skills$/;
 const MISSION_SKILL_CURATE_PATH = /^\/missions\/([^/]+)\/skills\/([^/]+)\/curate$/;
+const MISSION_WORKSPACE_PATH = /^\/missions\/([^/]+)\/workspace$/;
 
 export async function handleMissionRoute({
   store,
@@ -376,6 +379,30 @@ export async function handleMissionRoute({
       return true;
     }
     respondJson(200, { candidate: updated });
+    return true;
+  }
+
+  // D2: Mission에 App Workspace 붙이기(코딩/디자인 작업공간). preview는 아직 미시작(planned).
+  const workspaceMatch = MISSION_WORKSPACE_PATH.exec(pathname);
+  if (workspaceMatch && method === "POST") {
+    const missionId = decodeURIComponent(workspaceMatch[1]!);
+    let payload: AppWorkspaceAttachRequest;
+    try {
+      payload = appWorkspaceAttachRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, { error: "invalid_workspace_payload", message: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    const mission = await store.attachWorkspace(missionId, payload);
+    if (!mission) {
+      respondJson(404, { error: "mission_not_found", missionId });
+      return true;
+    }
+    respondJson(201, { mission });
     return true;
   }
 

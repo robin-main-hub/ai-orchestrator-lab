@@ -696,3 +696,25 @@ describe("skill archive candidates + curator (L6)", () => {
     expect(await store.curateSkill("mission_001", "skill_ghost", "approve")).toBeUndefined();
   });
 });
+
+describe("app workspace (D2)", () => {
+  it("attaches a workspace to a mission, materialized + survives restart", async () => {
+    const { deps, events } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    const updated = await store.attachWorkspace("mission_001", { repoRootRef: "/repo", appType: "react_vite", terminalMode: "read_only", runnerKind: "local" });
+    expect(updated?.workspaces).toHaveLength(1);
+    expect(updated?.workspaces[0]!.appType).toBe("react_vite");
+    expect(updated?.workspaces[0]!.preview.truthStatus).toBe("planned"); // 시작 전 observed 아님
+
+    // 재시작 시뮬레이션 — 이벤트만으로 복원
+    const restored = buildMissionIndexFromEvents(events);
+    expect(restored[0]!.workspaces).toHaveLength(1);
+  });
+
+  it("returns undefined for an unknown mission", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    expect(await store.attachWorkspace("ghost", { repoRootRef: "/repo", appType: "unknown", terminalMode: "read_only", runnerKind: "local" })).toBeUndefined();
+  });
+});

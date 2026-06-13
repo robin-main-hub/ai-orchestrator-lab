@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { appWorkspaceSchema } from "./appWorkspace.js";
 import { missionCheckpointSchema } from "./missionCheckpoint.js";
 import { sandboxErrorCardSchema } from "./sandboxErrorCard.js";
 import { missionSelfCorrectionRecordSchema } from "./selfCorrection.js";
@@ -575,6 +576,8 @@ export const serverMissionRecordSchema = z.object({
   errorCards: z.array(sandboxErrorCardSchema).default([]),
   /** L5: 에러 카드에 대한 bounded self-correction 제안/중단 기록(제안만, 파일 변경 없음) */
   selfCorrections: z.array(missionSelfCorrectionRecordSchema).default([]),
+  /** D2: Mission에 붙은 App Workspace들(코딩/디자인 작업공간; preview/terminal 메타) */
+  workspaces: z.array(appWorkspaceSchema).default([]),
   updatedAt: z.string(),
 });
 export type ServerMissionRecord = z.infer<typeof serverMissionRecordSchema>;
