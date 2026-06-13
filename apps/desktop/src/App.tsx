@@ -5441,6 +5441,15 @@ export function App() {
         onAsk={handleControlQueueAsk}
         onApprove={(sourceItemId) => handleResolveUnifiedControlQueueItem(sourceItemId, "approved")}
         onBlock={handleControlQueueBlock}
+        onBulkApproveSafe={(sourceItemIds) => {
+          // 안전 검증 항목 일괄 승인 — 단일 trace 기록 후 기존 항목별 처리로 fan-out
+          appendEvent("control_queue.safe_subset.bulk_approved", {
+            count: sourceItemIds.length,
+            sourceItemIds,
+            note: "safeCommandPolicy 허용 계열 + 실제 명령 항목만 일괄 승인 (안전 항목만)",
+          });
+          sourceItemIds.forEach((sourceItemId) => handleResolveUnifiedControlQueueItem(sourceItemId, "approved"));
+        }}
         onClose={() => setApprovalDrawerOpen(false)}
         onDelegate={handleControlQueueDelegate}
         onEdit={handleControlQueueEdit}
