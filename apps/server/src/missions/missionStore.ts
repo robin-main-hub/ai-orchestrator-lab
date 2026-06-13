@@ -4,7 +4,9 @@ import {
   decideSelfCorrection,
   deriveSkillArchiveQueue,
   deriveSkillCandidatesFromMission,
+  finalizeDesignBlueprint,
   isExportableSkill,
+  plannedArtifactsFromBlueprint,
   missionArtifactAttachedPayloadSchema,
   missionClosedPayloadSchema,
   missionMergeQueuedPayloadSchema,
@@ -15,7 +17,10 @@ import {
   type AppWorkspace,
   type AppWorkspaceAttachRequest,
   type CuratorDecision,
+  type DesignBlueprint,
+  type DesignBlueprintInput,
   type EventEnvelope,
+  type MissionArtifactRef,
   type MissionCheckpoint,
   type MissionCheckpointReason,
   type MissionCreateRequest,
@@ -100,6 +105,11 @@ export type MissionStore = {
   curateSkill: (missionId: string, candidateId: string, decision: CuratorDecision) => Promise<SkillArchiveCandidate | undefined>;
   /** D2: Mission에 App Workspace를 붙인다(코딩/디자인 작업공간). 미션 없으면 undefined. */
   attachWorkspace: (missionId: string, request: AppWorkspaceAttachRequest) => Promise<ServerMissionRecord | undefined>;
+  /** D3: 디자인 청사진을 미션에 기록(화면→planned 아티팩트). 미션 없으면 undefined. */
+  attachDesignBlueprint: (
+    missionId: string,
+    blueprint: DesignBlueprintInput,
+  ) => Promise<{ mission: ServerMissionRecord; blueprint: DesignBlueprint } | undefined>;
 };
 
 /** 머지 실행기 — repoRoot allowlist에 있으면 real git merge, 아니면 dry_run */
@@ -228,6 +238,32 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
       type: "mission.workspace.attached",
       payload: { missionId, workspace },
       createdAt: workspace.createdAt,
+      source: "server",
+      sourceTrust: "trusted",
+      redacted: true,
+    };
+  }
+
+  function designBlueprintRecordedEnvelope(missionId: string, blueprint: DesignBlueprint): EventEnvelope {
+    return {
+      id: `event_mission_design_blueprint_recorded_${blueprint.id}`,
+      sessionId: missionId,
+      type: "mission.design.blueprint.recorded",
+      payload: { missionId, blueprint },
+      createdAt: blueprint.createdAt,
+      source: "server",
+      sourceTrust: "trusted",
+      redacted: true,
+    };
+  }
+
+  function plannedArtifactEnvelope(missionId: string, artifact: MissionArtifactRef): EventEnvelope {
+    return {
+      id: `event_mission_artifact_attached_${artifact.id}`,
+      sessionId: missionId,
+      type: "mission.artifact.attached",
+      payload: { missionId, artifact },
+      createdAt: artifact.createdAt,
       source: "server",
       sourceTrust: "trusted",
       redacted: true,
@@ -661,6 +697,23 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
       });
       await commit(missionId, [workspaceAttachedEnvelope(missionId, workspace)]);
       return get(missionId);
+    },
+
+    async attachDesignBlueprint(missionId, blueprintInput) {
+      if (!(await get(missionId))) return undefined;
+      const blueprint = finalizeDesignBlueprint(blueprintInput, {
+        id: `blueprint_${missionId}_${nextNonce()}`,
+        missionId,
+        now,
+      });
+      // 청사진 이벤트 + 화면/수용기준 planned 아티팩트(초안 예정 — 외부 발송 없음)
+      const artifacts = plannedArtifactsFromBlueprint(blueprint, missionId, now);
+      await commit(missionId, [
+        designBlueprintRecordedEnvelope(missionId, blueprint),
+        ...artifacts.map((artifact) => plannedArtifactEnvelope(missionId, artifact)),
+      ]);
+      const mission = await get(missionId);
+      return mission ? { mission, blueprint } : undefined;
     },
   };
 }

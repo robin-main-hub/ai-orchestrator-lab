@@ -182,4 +182,31 @@ describe("mission board routes", () => {
     expect(await handleMissionRoute(args)).toBe(true);
     expect(result().status).toBe(404);
   });
+
+  const BLUEPRINT = {
+    title: "보드 개편",
+    userIntent: "한눈에 보기",
+    targetSurface: "mission_board",
+    screens: [{ name: "보드", purpose: "현황", primaryAction: "열기", emptyState: "없음", errorState: "실패" }],
+    designTokens: { density: "balanced", tone: "clean_builder", motion: "subtle" },
+  };
+
+  it("POST /missions/from-blueprint creates a design mission", async () => {
+    const create = vi.fn(async () => record("m_design_1", "running"));
+    const attachDesignBlueprint = vi.fn(async () => ({ mission: record("m_design_1", "running"), blueprint: { acceptanceCriteria: [] } }));
+    const store = { create, attachDesignBlueprint } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/from-blueprint", "POST", { blueprint: BLUEPRINT, missionId: "m_design_1" });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(201);
+    expect(create).toHaveBeenCalled();
+    expect(attachDesignBlueprint).toHaveBeenCalled();
+    expect((result().payload as { designTeam: unknown[] }).designTeam.length).toBeGreaterThan(0);
+  });
+
+  it("POST /missions/from-blueprint 400s with no screens", async () => {
+    const store = {} as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/from-blueprint", "POST", { blueprint: { ...BLUEPRINT, screens: [] } });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(400);
+  });
 });

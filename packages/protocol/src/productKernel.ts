@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { appWorkspaceSchema } from "./appWorkspace.js";
+import { designBlueprintSchema } from "./designBlueprint.js";
 import { missionCheckpointSchema } from "./missionCheckpoint.js";
 import { sandboxErrorCardSchema } from "./sandboxErrorCard.js";
 import { missionSelfCorrectionRecordSchema } from "./selfCorrection.js";
@@ -578,6 +579,8 @@ export const serverMissionRecordSchema = z.object({
   selfCorrections: z.array(missionSelfCorrectionRecordSchema).default([]),
   /** D2: Mission에 붙은 App Workspace들(코딩/디자인 작업공간; preview/terminal 메타) */
   workspaces: z.array(appWorkspaceSchema).default([]),
+  /** D3: 디자인 미션의 구조화된 청사진들(화면/토큰/수용기준) */
+  designBlueprints: z.array(designBlueprintSchema).default([]),
   updatedAt: z.string(),
 });
 export type ServerMissionRecord = z.infer<typeof serverMissionRecordSchema>;
