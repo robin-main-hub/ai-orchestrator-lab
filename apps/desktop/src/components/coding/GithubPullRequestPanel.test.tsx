@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { GithubConnectorStatus } from "@ai-orchestrator/protocol";
+import type { GithubConnectorStatus, GithubContextAttachment } from "@ai-orchestrator/protocol";
 import { GithubPullRequestPanel } from "./GithubPullRequestPanel";
+import { prContextKey } from "../../lib/githubContext";
 
 afterEach(() => {
   cleanup();
@@ -106,5 +107,74 @@ describe("GithubPullRequestPanel (jsdom) — 정직 read-only 표면", () => {
     await screen.findByLabelText("저장소 (owner/repo)");
     const buttonNames = screen.getAllByRole("button").map((b) => b.textContent ?? "");
     expect(buttonNames.some((name) => /머지|merge|commit|push|생성|create|닫기 PR/i.test(name))).toBe(false);
+  });
+
+  const prRoutes = {
+    status: status(true),
+    pulls: {
+      outcome: "observed",
+      pullRequests: [{ number: 7, title: "honest PR", state: "open", author: "robin", draft: false, htmlUrl: "u", createdAt: "c", updatedAt: "u" }],
+    },
+    detail: {
+      outcome: "observed",
+      observedAt: "2026-06-13T00:00:00.000Z",
+      pullRequest: {
+        number: 7,
+        title: "honest PR",
+        state: "open",
+        author: "robin",
+        draft: false,
+        htmlUrl: "u",
+        createdAt: "c",
+        updatedAt: "u",
+        body: "PR 본문 내용",
+        baseRef: "main",
+        headRef: "feat",
+        merged: false,
+        additions: 5,
+        deletions: 1,
+        changedFiles: 2,
+        commits: 3,
+      },
+    },
+  };
+
+  it("PR 상세에서 '컨텍스트에 추가' → onAttach(owner, repo, number)", async () => {
+    stubFetch(prRoutes);
+    const onAttach = vi.fn();
+    render(<GithubPullRequestPanel serverBaseUrl="http://x" onAttach={onAttach} />);
+    fireEvent.change(await screen.findByLabelText("저장소 (owner/repo)"), { target: { value: "robin/repo" } });
+    fireEvent.click(screen.getByRole("button", { name: /PR 불러오기/ }));
+    fireEvent.click(await screen.findByText("honest PR"));
+    await screen.findByText("PR 본문 내용");
+    fireEvent.click(screen.getByRole("button", { name: /컨텍스트에 추가/ }));
+    expect(onAttach).toHaveBeenCalledWith("robin", "repo", 7);
+  });
+
+  it("이미 첨부된 PR은 '추가됨'으로 비활성 (중복 방지)", async () => {
+    stubFetch(prRoutes);
+    const attached: GithubContextAttachment[] = [
+      {
+        id: prContextKey("robin/repo", 7),
+        kind: "pull_request",
+        repoFullName: "robin/repo",
+        number: 7,
+        title: "honest PR",
+        url: "u",
+        observedAt: "2026-06-13T00:00:00.000Z",
+        truthStatus: "observed",
+        observedExcerpt: "x",
+        truncated: false,
+        summarySource: "github_observed",
+        source: "github_api",
+      },
+    ];
+    const onAttach = vi.fn();
+    render(<GithubPullRequestPanel serverBaseUrl="http://x" onAttach={onAttach} attachedContext={attached} />);
+    fireEvent.change(await screen.findByLabelText("저장소 (owner/repo)"), { target: { value: "robin/repo" } });
+    fireEvent.click(screen.getByRole("button", { name: /PR 불러오기/ }));
+    fireEvent.click(await screen.findByText("honest PR"));
+    const addedButton = await screen.findByRole("button", { name: /컨텍스트에 추가됨/ });
+    expect((addedButton as HTMLButtonElement).disabled).toBe(true);
   });
 });

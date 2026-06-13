@@ -5121,7 +5121,12 @@ export function App() {
               })}
             />
           ) : activeNavItem === "coding" ? (
-            <CodingWorkbench modelCatalog={modelCatalog} providerProfiles={providerProfiles} />
+            <CodingWorkbench
+              modelCatalog={modelCatalog}
+              providerProfiles={providerProfiles}
+              serverBaseUrl={resolveDgxServerBaseUrls(undefined)[0] ?? DEFAULT_DGX_SERVER_BASE_URL}
+              onContextEvent={(type, payload) => appendEvent(type, payload)}
+            />
           ) : activeNavItem === "research" ? (
             <ResearchSwarmContainer providerProfiles={providerProfiles} seed={swarmSeed ?? undefined} />
           ) : activeNavItem === "sessions" ? (
