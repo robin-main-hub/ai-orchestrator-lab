@@ -9441,6 +9441,98 @@ body:has(.app-shell.annex-focus-shell) {
   color: var(--muted);
 }
 
+/* Mission Workspace 상세 (D2~D8 차원 펼치기) — 읽기 전용 드릴다운 */
+.mission-board-detail {
+  margin-top: 2px;
+}
+.mission-board-detail-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.mission-board-detail-toggle:hover {
+  color: var(--text);
+}
+.mission-board-detail-counts {
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+  opacity: 0.8;
+}
+.mission-workspace-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 96%, black);
+}
+.mission-workspace-row {
+  display: flex;
+  gap: 8px;
+  font-size: 11.5px;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.mission-workspace-row-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 84px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.mission-workspace-row-body {
+  color: var(--text);
+  opacity: 0.9;
+  flex: 1;
+  min-width: 0;
+}
+.mission-workspace-url {
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+  color: var(--accent, var(--text));
+}
+.mission-workspace-issues,
+.mission-workspace-errors,
+.mission-workspace-corrections {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mission-workspace-issue,
+.mission-workspace-error,
+.mission-workspace-correction {
+  font-size: 11.5px;
+  color: var(--text);
+  opacity: 0.9;
+}
+.mission-workspace-issue-fix {
+  color: var(--muted);
+}
+.mission-workspace-evidence {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--muted);
+}
+.mission-workspace-error,
+.mission-workspace-correction {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
 /* auto_safe에서 자동승인 안 될 검증 단계를 입력 시점에 경고 */
 .autonomy-step-warning {
   margin: 4px 0 0;

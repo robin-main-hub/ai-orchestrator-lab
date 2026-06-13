@@ -1,12 +1,39 @@
-import { ClipboardList, GitMerge, Plus, RefreshCw, Rocket, ShieldCheck } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  ClipboardList,
+  GitMerge,
+  Monitor,
+  Plus,
+  RefreshCw,
+  Rocket,
+  ShieldCheck,
+  Sparkles,
+  Wrench,
+} from "lucide-react";
 import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import {
+  DESIGN_ISSUE_KIND_LABEL,
   MISSION_SOURCE_LABEL,
   MISSION_STATUS_LABEL,
   MISSION_TRUTH_LABEL,
+  PREVIEW_STATUS_LABEL,
+  VISUAL_QA_STATUS_LABEL,
   type MissionBoardItem,
   type MissionBoardSnapshot,
 } from "../lib/missionBoardModel";
+
+/** 카드에 펼쳐 보일 D2~D8 차원이 하나라도 있는지 — 없으면 "상세" 토글을 숨긴다(죽은 토글 방지). */
+function hasWorkspaceDetail(item: MissionBoardItem): boolean {
+  return Boolean(
+    item.workspace ||
+      item.latestVisualQa ||
+      item.designIssues.length > 0 ||
+      item.errorCards.length > 0 ||
+      item.selfCorrections.length > 0,
+  );
+}
 
 /**
  * Mission Board — 서버 event storage에서 복원된 미션과 로컬 임시 항목을 한
@@ -26,6 +53,8 @@ export function MissionBoardPanel({
   onQueueMerge,
   onMerge,
   verifyAvailable,
+  expandedMissionId,
+  onToggleDetail,
 }: {
   snapshot: MissionBoardSnapshot;
   loading?: boolean;
@@ -48,6 +77,10 @@ export function MissionBoardPanel({
   onMerge?: (item: MissionBoardItem) => void;
   /** 검증 명령 소스(CodingPacket)가 준비됐는지 — 없으면 버튼 대신 사유 표시 */
   verifyAvailable?: boolean;
+  /** 펼쳐진 미션 id — Workspace/Preview/VisualQA/ErrorCard 상세를 보여줄 카드 */
+  expandedMissionId?: string;
+  /** 제공 시 detail이 있는 카드에 "상세" 토글 노출 */
+  onToggleDetail?: (item: MissionBoardItem) => void;
 }) {
   return (
     <section className="mini-panel mission-board-panel">
@@ -189,6 +222,23 @@ export function MissionBoardPanel({
                       : "검증 가능한 워커(verifier/reviewer)가 없습니다"}
                   </p>
                 ) : null}
+                {/* D2~D8 차원(Workspace/Preview/VisualQA/ErrorCard/SelfCorrection) — 펼쳐서 관측 */}
+                {onToggleDetail && hasWorkspaceDetail(item) ? (
+                  <div className="mission-board-detail">
+                    <button
+                      className="mission-board-detail-toggle"
+                      onClick={() => onToggleDetail(item)}
+                      type="button"
+                      aria-expanded={expandedMissionId === item.missionId}
+                    >
+                      {expandedMissionId === item.missionId ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                      <Monitor size={13} />
+                      Workspace 상세
+                      <span className="mission-board-detail-counts">{detailCountLabel(item)}</span>
+                    </button>
+                    {expandedMissionId === item.missionId ? <MissionWorkspaceDetail item={item} /> : null}
+                  </div>
+                ) : null}
               </li>
             );
           })}
@@ -214,4 +264,142 @@ function statusVariant(status: MissionBoardItem["status"]): StatusBadgeVariant {
     default:
       return "muted";
   }
+}
+
+/** 펼치기 전에 한눈에 — 어떤 차원이 몇 개 있는지(가짜 0 표시 안 함). */
+function detailCountLabel(item: MissionBoardItem): string {
+  const parts: string[] = [];
+  if (item.workspaceCount > 0) parts.push(`workspace ${item.workspaceCount}`);
+  if (item.designIssues.length > 0) parts.push(`design ${item.designIssues.length}`);
+  if (item.errorCards.length > 0) parts.push(`error ${item.errorCards.length}`);
+  if (item.selfCorrections.length > 0) parts.push(`자가수정 ${item.selfCorrections.length}`);
+  return parts.join(" · ");
+}
+
+function previewVariant(status: string): StatusBadgeVariant {
+  switch (status) {
+    case "running":
+      return "success";
+    case "failed":
+    case "blocked":
+      return "danger";
+    case "starting":
+      return "primary";
+    default:
+      return "muted";
+  }
+}
+
+function qaVariant(status: "passed" | "warning" | "failed" | "blocked"): StatusBadgeVariant {
+  switch (status) {
+    case "passed":
+      return "success";
+    case "warning":
+      return "warning";
+    case "failed":
+      return "danger";
+    default:
+      return "muted";
+  }
+}
+
+function severityVariant(severity: "low" | "medium" | "high"): StatusBadgeVariant {
+  return severity === "high" ? "danger" : severity === "medium" ? "warning" : "muted";
+}
+
+/**
+ * Mission Workspace 상세 — 서버에 이미 있는 D2~D8 차원을 **읽기 전용**으로 펼쳐 보인다.
+ * 새 fetch·새 상태 없음(보드 snapshot에서 파생). preview url은 observed running일 때만,
+ * 디자인 이슈/에러 카드는 관측분만 — 화면에 안 본 걸 지어내지 않는다.
+ */
+function MissionWorkspaceDetail({ item }: { item: MissionBoardItem }) {
+  return (
+    <div className="mission-workspace-detail">
+      {/* AppWorkspace + preview (D2/D4/D5a) */}
+      {item.workspace ? (
+        <div className="mission-workspace-row">
+          <span className="mission-workspace-row-label">
+            <Monitor size={12} /> Workspace
+          </span>
+          <span className="mission-workspace-row-body">
+            {item.workspace.name} <em>({item.workspace.appType})</em>
+            {" · preview "}
+            <StatusBadge size="sm" variant={previewVariant(item.workspace.previewStatus)}>
+              {PREVIEW_STATUS_LABEL[item.workspace.previewStatus] ?? item.workspace.previewStatus}
+            </StatusBadge>{" "}
+            <span className="mission-board-truth">{item.workspace.previewTruth}</span>
+            {item.workspace.previewUrl ? (
+              <span className="mission-workspace-url"> {item.workspace.previewUrl}</span>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
+
+      {/* Visual QA 종합 (D5b) */}
+      {item.latestVisualQa ? (
+        <div className="mission-workspace-row">
+          <span className="mission-workspace-row-label">
+            <Sparkles size={12} /> Visual QA
+          </span>
+          <span className="mission-workspace-row-body">
+            <StatusBadge size="sm" variant={qaVariant(item.latestVisualQa.status)}>
+              {VISUAL_QA_STATUS_LABEL[item.latestVisualQa.status]}
+            </StatusBadge>{" "}
+            <span className="mission-board-truth">{item.latestVisualQa.truthStatus}</span>
+            {item.latestVisualQa.issueCount > 0 ? ` · 이슈 ${item.latestVisualQa.issueCount}건` : " · 이슈 없음"}
+          </span>
+        </div>
+      ) : null}
+
+      {/* DesignIssueCard 목록 (D5b) — observed 관측분만 */}
+      {item.designIssues.length > 0 ? (
+        <ul className="mission-workspace-issues">
+          {item.designIssues.map((issue) => (
+            <li key={issue.id} className="mission-workspace-issue">
+              <StatusBadge size="sm" variant={severityVariant(issue.severity)}>
+                {DESIGN_ISSUE_KIND_LABEL[issue.kind] ?? issue.kind}
+              </StatusBadge>{" "}
+              {issue.summary}
+              <span className="mission-workspace-issue-fix"> → {issue.recommendation}</span>
+              {issue.evidenceRef ? <span className="mission-workspace-evidence"> · 증거 {shorten(issue.evidenceRef)}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {/* ErrorCard (L4) → SelfCorrection (L5) */}
+      {item.errorCards.length > 0 ? (
+        <ul className="mission-workspace-errors">
+          {item.errorCards.map((card) => (
+            <li key={card.id} className="mission-workspace-error">
+              <span className="mission-workspace-row-label">
+                <AlertTriangle size={12} /> {card.status}
+              </span>
+              <span className="mission-workspace-row-body">
+                {card.rootCause}
+                {card.targetFile ? <em> ({card.targetFile})</em> : null}
+                <span className="mission-workspace-issue-fix"> → {card.directive}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {item.selfCorrections.length > 0 ? (
+        <ul className="mission-workspace-corrections">
+          {item.selfCorrections.map((correction) => (
+            <li key={correction.id} className="mission-workspace-correction">
+              <span className="mission-workspace-row-label">
+                <Wrench size={12} /> 시도 {correction.attempt} · {correction.action}
+              </span>
+              <span className="mission-workspace-row-body">{correction.reason}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function shorten(ref: string, max = 36): string {
+  return ref.length > max ? `…${ref.slice(ref.length - max + 1)}` : ref;
 }

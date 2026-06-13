@@ -57,6 +57,8 @@ export function MissionBoardContainer({
   const [busyKind, setBusyKind] = useState<"verify" | "queue" | "merge" | undefined>();
   const [creating, setCreating] = useState(false);
   const [notice, setNotice] = useState<string | undefined>();
+  // 펼쳐진 미션(Workspace/Preview/VisualQA 상세) — 한 번에 하나만, 로컬 UI 상태일 뿐
+  const [expandedMissionId, setExpandedMissionId] = useState<string | undefined>();
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -247,6 +249,10 @@ export function MissionBoardContainer({
       onQueueMerge={(item) => void onQueueMerge(item)}
       onMerge={(item) => void onMerge(item)}
       verifyAvailable={verificationCommands.length > 0}
+      expandedMissionId={expandedMissionId}
+      onToggleDetail={(item) =>
+        setExpandedMissionId((current) => (current === item.missionId ? undefined : item.missionId))
+      }
     />
   );
 }
