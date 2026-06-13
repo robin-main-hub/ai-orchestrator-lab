@@ -131,6 +131,7 @@ import {
   type PreviewSpawnFn,
   type PreviewHttpProbe,
 } from "./missions/previewProcessRunner.js";
+import { applyScaffold as applyScaffoldRunner, planScaffold as planScaffoldRunner } from "./missions/scaffoldRunner.js";
 import type { LocalExecFn } from "./missions/localSandboxRunner.js";
 import {
   runRegistryMissionVerification,
@@ -6749,6 +6750,58 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
             missionId,
             workspaceId,
             obs: { previewObserved: true, previewUrl, http },
+            now: () => new Date().toISOString(),
+          });
+        },
+        // D7: 스캐폴드 plan(쓰기 없음). repoRoot allowlist 게이트는 runner가 한다.
+        planScaffold: async ({ missionId, workspaceId, templateId, input, repoRoot }) =>
+          planScaffoldRunner({
+            id: `scaffold_${workspaceId}_${Date.now()}`,
+            missionId,
+            workspaceId,
+            templateId,
+            templateInput: input,
+            repoRoot,
+            allowedRepoRoots: parseAllowedRepoRoots(process.env.ORCHESTRATOR_ALLOWED_REPO_ROOTS),
+            fileExists: async (absPath) => {
+              try {
+                await stat(absPath);
+                return true;
+              } catch {
+                return false;
+              }
+            },
+            now: () => new Date().toISOString(),
+          }),
+        // D7: 스캐폴드 apply — overwrite는 grant된 approvalId일 때만, 적용 전 checkpoint.
+        applyScaffold: async ({ plan, approvalId }) => {
+          let approvedOverwrite = false;
+          if (approvalId) {
+            const stamp = new Date().toISOString();
+            const { approvals } = await listApprovalsFromPersistentServerStorage(eventStorage, stamp);
+            approvedOverwrite = approvals.some((approval) => approval.id === approvalId && approval.state === "approved");
+          }
+          return applyScaffoldRunner({
+            plan,
+            allowedRepoRoots: parseAllowedRepoRoots(process.env.ORCHESTRATOR_ALLOWED_REPO_ROOTS),
+            approvedOverwrite,
+            writeFile: (absPath, content) => writeFile(absPath, content, "utf8"),
+            mkdir: async (absDir) => {
+              await mkdir(absDir, { recursive: true });
+            },
+            checkpoint: async () => {
+              const cp = await createMissionCheckpoint({
+                id: `checkpoint_${plan.missionId}_${Date.now()}`,
+                missionId: plan.missionId,
+                repoRoot: plan.repoRootRef,
+                gitRef: "HEAD",
+                reason: "before_write",
+                allowedRepoRoots: parseAllowedRepoRoots(process.env.ORCHESTRATOR_ALLOWED_REPO_ROOTS),
+                now: () => new Date().toISOString(),
+                git: missionCheckpointGitExec,
+              });
+              return cp.ok ? cp.checkpoint.headSha : undefined;
+            },
             now: () => new Date().toISOString(),
           });
         },
