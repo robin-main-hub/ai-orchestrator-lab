@@ -203,7 +203,7 @@ button {
 
 .left-rail,
 .right-rail {
-  padding: 10px;
+  padding: var(--space-3);
   overflow: auto;
 }
 
@@ -221,8 +221,8 @@ button {
   grid-row: 2;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto clamp(138px, 16vh, 168px);
-  gap: 8px;
-  padding: 10px;
+  gap: var(--space-2);
+  padding: var(--space-3);
   overflow: hidden;
   background:
     linear-gradient(90deg, rgba(99, 210, 189, 0.04), transparent 34%),
@@ -584,7 +584,7 @@ button {
 
 .mini-panel {
   margin-top: 0;
-  padding: 10px;
+  padding: var(--space-3);
 }
 
 .legacy-runtime-panel {
@@ -593,17 +593,17 @@ button {
 
 .mini-panel header {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
   color: var(--amber);
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 
 .rail-panel {
   display: grid;
-  gap: 10px;
+  gap: var(--space-3);
   margin-top: 0;
-  padding: 10px;
+  padding: var(--space-3);
 }
 
 .rail-panel header {
@@ -7990,8 +7990,8 @@ body:has(.app-shell.annex-focus-shell) {
 
 .persona-card {
   border-radius: 12px;
-  padding: 10px 12px;
-  margin: 8px 0;
+  padding: var(--space-3);
+  margin: var(--space-3) 0;
   border: 1.5px solid rgba(255, 255, 255, 0.12);
   background: rgba(20, 20, 40, 0.55);
 }
@@ -8031,8 +8031,8 @@ body:has(.app-shell.annex-focus-shell) {
 }
 .persona-card-stats {
   display: flex;
-  gap: 12px;
-  margin-top: 8px;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
 }
 .persona-card-stat {
   display: flex;
@@ -9272,20 +9272,20 @@ body:has(.app-shell.annex-focus-shell) {
 }
 .mission-board-list {
   list-style: none;
-  margin: 12px 0 0;
+  margin: var(--space-3) 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
 }
 .mission-board-card {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: color-mix(in srgb, var(--panel) 92%, black);
-  padding: 10px 12px;
+  padding: var(--space-3) var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
 }
 .mission-board-card-head {
   display: flex;
@@ -9294,7 +9294,8 @@ body:has(.app-shell.annex-focus-shell) {
   flex-wrap: wrap;
 }
 .mission-board-card-head strong {
-  font-size: 13px;
+  font-size: var(--fs-label);
+  font-weight: 600;
 }
 .mission-board-truth {
   margin-left: auto;
@@ -9307,7 +9308,7 @@ body:has(.app-shell.annex-focus-shell) {
 }
 .mission-board-goal {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-body);
   color: var(--text);
   opacity: 0.85;
 }
