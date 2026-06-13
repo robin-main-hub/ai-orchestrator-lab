@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export * from "./productKernel.js";
 export * from "./missionBoard.js";
+export * from "./missionCheckpoint.js";
 
 export const runtimeStatusSchema = z.enum(["online", "degraded", "offline", "syncing"]);
 export type RuntimeStatus = z.infer<typeof runtimeStatusSchema>;

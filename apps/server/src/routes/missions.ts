@@ -2,14 +2,20 @@ import type { IncomingMessage } from "node:http";
 import {
   deriveMissionKanbanBoard,
   deriveMissionTrace,
+  missionCheckpointCreateRequestSchema,
   missionCreateRequestSchema,
   missionEventAppendRequestSchema,
   missionMergeRequestSchema,
+  missionRollbackRequestSchema,
   missionVerifyRequestSchema,
+  type MissionCheckpointCreateRequest,
   type MissionCreateRequest,
   type MissionEventAppendRequest,
+  type MissionRollbackOutcome,
+  type MissionRollbackRequest,
   type ServerMissionRecord,
 } from "@ai-orchestrator/protocol";
+import type { CheckpointResult } from "../missions/gitCheckpointRunner.js";
 import { MissionEventValidationError, type MissionStore } from "../missions/missionStore.js";
 
 /**
@@ -30,6 +36,9 @@ export type MissionRouteDependencies = {
   readJsonBody: (request: IncomingMessage) => Promise<unknown>;
   isRequestBodyTooLargeError: (error: unknown) => error is { limit: number };
   respondJson: (statusCode: number, payload: unknown) => void;
+  /** checkpoint/rollback 실행기 — index.ts에서 실제 git + allowlist + 승인검증으로 주입. 미주입이면 501. */
+  runCheckpoint?: (missionId: string, req: MissionCheckpointCreateRequest) => Promise<CheckpointResult>;
+  runRollback?: (missionId: string, req: MissionRollbackRequest) => Promise<MissionRollbackOutcome>;
 };
 
 const MISSION_PATH = /^\/missions\/([^/]+)$/;
@@ -37,6 +46,8 @@ const MISSION_EVENTS_PATH = /^\/missions\/([^/]+)\/events$/;
 const MISSION_VERIFY_PATH = /^\/missions\/([^/]+)\/verify$/;
 const MISSION_MERGE_PATH = /^\/missions\/([^/]+)\/merge$/;
 const MISSION_TRACE_PATH = /^\/missions\/([^/]+)\/trace$/;
+const MISSION_CHECKPOINTS_PATH = /^\/missions\/([^/]+)\/checkpoints$/;
+const MISSION_ROLLBACK_PATH = /^\/missions\/([^/]+)\/rollback$/;
 
 export async function handleMissionRoute({
   store,
@@ -46,6 +57,8 @@ export async function handleMissionRoute({
   readJsonBody,
   isRequestBodyTooLargeError,
   respondJson,
+  runCheckpoint,
+  runRollback,
 }: MissionRouteDependencies): Promise<boolean> {
   if (pathname === "/missions" && method === "POST") {
     let payload: MissionCreateRequest;
@@ -173,6 +186,67 @@ export async function handleMissionRoute({
         message: error instanceof Error ? error.message : String(error),
       });
     }
+    return true;
+  }
+
+  // 작업 전 snapshot — 현재 sha를 관측해 checkpoint로 보관(reset 안 함)
+  const checkpointMatch = MISSION_CHECKPOINTS_PATH.exec(pathname);
+  if (checkpointMatch && method === "POST") {
+    const missionId = decodeURIComponent(checkpointMatch[1]!);
+    if (!runCheckpoint) {
+      respondJson(501, { error: "checkpoint_not_configured" });
+      return true;
+    }
+    if (!(await store.get(missionId))) {
+      respondJson(404, { error: "mission_not_found", missionId });
+      return true;
+    }
+    let payload: MissionCheckpointCreateRequest;
+    try {
+      payload = missionCheckpointCreateRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, { error: "invalid_checkpoint_payload", message: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    const result = await runCheckpoint(missionId, payload);
+    if (!result.ok) {
+      respondJson(409, { error: "checkpoint_blocked", reason: result.reason });
+      return true;
+    }
+    respondJson(201, { checkpoint: result.checkpoint });
+    return true;
+  }
+
+  // rollback — grant된 approvalId가 있을 때만 reset --hard(자동 rollback 금지)
+  const rollbackMatch = MISSION_ROLLBACK_PATH.exec(pathname);
+  if (rollbackMatch && method === "POST") {
+    const missionId = decodeURIComponent(rollbackMatch[1]!);
+    if (!runRollback) {
+      respondJson(501, { error: "rollback_not_configured" });
+      return true;
+    }
+    if (!(await store.get(missionId))) {
+      respondJson(404, { error: "mission_not_found", missionId });
+      return true;
+    }
+    let payload: MissionRollbackRequest;
+    try {
+      payload = missionRollbackRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, { error: "invalid_rollback_payload", message: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    const outcome = await runRollback(missionId, payload);
+    const code = outcome.status === "completed" ? 200 : outcome.status === "blocked" ? 409 : 500;
+    respondJson(code, { outcome });
     return true;
   }
 
