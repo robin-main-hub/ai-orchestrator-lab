@@ -271,6 +271,30 @@ export const SWARM_TOOLS: ReadonlyArray<SwarmToolDef> = [
       },
     },
   },
+  // ── GitHub W3a file change plan (plan ONLY at this phase) ──────────────────
+  // execute(W3b)는 별도. 이 도구는 절대 GitHub mutation을 일으키지 않는다 —
+  // 서버가 read만으로 plan을 만들고, baseFileSha/baseContentSha256/newContentSha256과
+  // bounded unified diff를 응답에 돌려준다.
+  {
+    name: "github_file_change_plan",
+    description:
+      "Create a file change PLAN (no GitHub PUT/POST/DELETE). Server validates allowlist + target branch policy (agent/*, work/*, user/*, mission/* prefix only) + path policy (.env / .github/workflows / *.pem / *.key / lock files / build outputs blocked) + size + binary + secret scan + no-op check. Server reads the current file from GitHub and returns a bounded unified diff preview. Result is approval_required or blocked. Actual file update is a separate, future-phase step.",
+    method: "POST",
+    path: "/integrations/github/write/file/plan",
+    body: passthrough,
+    inputSchema: {
+      type: "object",
+      required: ["repoFullName", "branchName", "path", "newContent"],
+      additionalProperties: true,
+      properties: {
+        repoFullName: { type: "string", description: 'GitHub repository, e.g. "owner/repo"' },
+        branchName: { type: "string", description: 'target branch (no refs/heads/) — must start with agent/, work/, user/, or mission/' },
+        path: { type: "string", description: 'repo-root-relative path. no leading /, no ../, no \\\\' },
+        newContent: { type: "string", description: 'UTF-8 text. binary/NUL blocked. server caps size.' },
+        baseFileSha: { type: "string", description: 'optional: the file blob sha you saw — server rejects on mismatch (optimistic concurrency)' },
+      },
+    },
+  },
 ];
 
 export type SwarmToolDeps = {

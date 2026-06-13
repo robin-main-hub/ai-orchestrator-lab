@@ -342,6 +342,111 @@ export const githubBranchCreateExecuteResponseSchema = z.object({
 });
 export type GithubBranchCreateExecuteResponse = z.infer<typeof githubBranchCreateExecuteResponseSchema>;
 
+// ──────────────────────────────────────────────────────────────────────────────
+// W3a: GitHub file change plan / diff preview. write 표면 세 번째.
+// 이 단계에서는 **GitHub에 어떤 mutation도 보내지 않는다**:
+//   - PUT contents, DELETE contents, commit 생성, PR 생성, branch 생성 모두 금지.
+//   - 오직 GET(파일/브랜치 ref read)만으로 plan + diff preview를 만든다.
+// 따라서 truthStatus는 항상 planned. observed는 base file read에 한해 별도로
+// 사실 그대로 기록된다(plan 자체가 observed가 되지는 않는다).
+//
+// 안전선(plan 단계만):
+//   - repo allowlist (W1과 동일 env)
+//   - branch policy: target branch는 W2와 동일 prefix(agent/work/user/mission/) 외 금지
+//   - path policy: traversal/absolute/null-byte/.env/.github/workflows/*.pem/*.key 등 위험 path 차단
+//   - large/binary guard: 텍스트가 아니거나 한도 초과면 차단(diff 안전성 + 비밀 false-negative 방지)
+//   - secret scan: 새 콘텐츠에서 토큰/키 패턴 발견 시 차단(W1 scanner 재사용)
+//   - no-op: oldContent === newContent 이면 차단(승인 큐 노이즈 방지)
+//   - GitHub PUT 0, DELETE 0
+//
+// 사용자 계약:
+//   - approval required (armed 없음 — W2와 동일한 보수 정책)
+//   - MCP는 plan tool만(github_file_change_plan). execute는 W3b에서 분리.
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const githubFileChangeOperationSchema = z.enum(["create", "update"]);
+export type GithubFileChangeOperation = z.infer<typeof githubFileChangeOperationSchema>;
+
+export const githubFileChangeOutcomeSchema = z.enum([
+  "observed",
+  "planned",
+  "approval_required",
+  "blocked",
+  "not_configured",
+  "permission_denied",
+  "connection_failed",
+  "github_error",
+]);
+export type GithubFileChangeOutcome = z.infer<typeof githubFileChangeOutcomeSchema>;
+
+/**
+ * plan 요청. 새 콘텐츠는 utf-8 문자열로만 받는다(base64/binary는 차단).
+ * baseFileSha는 옵션: 클라이언트가 base sha를 알고 있다면 plan 시점 GitHub read와 비교해
+ * 미일치 시 즉시 차단(낙관적 동시성 제어). 모르면 서버가 read한 sha로 채워서 응답.
+ */
+export const githubFileChangePlanRequestSchema = z.object({
+  repoFullName: z
+    .string()
+    .min(3).max(140)
+    .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, "owner/repo 형식이 필요합니다"),
+  /** 변경이 들어갈 브랜치 — W2 정책 prefix만 통과(보호 브랜치 거부). */
+  branchName: z.string().min(1).max(120),
+  /** 저장소 루트 기준 경로. traversal/absolute/null byte 거부. */
+  path: z.string().min(1).max(512),
+  /** 새 내용(텍스트). binary/대용량은 서버가 거부. */
+  newContent: z.string(),
+  /** 클라이언트가 본 적 있는 base file sha (없으면 서버가 read해 채움) */
+  baseFileSha: z.string().optional(),
+});
+export type GithubFileChangePlanRequest = z.infer<typeof githubFileChangePlanRequestSchema>;
+
+/**
+ * 결정된 plan 한 건. 단일 파일만 다룬다(multi-file은 W3a 범위 밖).
+ * baseContent는 본문에 넣지 않는다(긴 파일 송신 회피 + 토큰/비밀이 base에 들어 있을 경우 노출 방지).
+ */
+export const githubFileChangePlanSchema = z.object({
+  id: z.string(),
+  repoFullName: z.string(),
+  branchName: z.string(),
+  branchRef: z.string(), // refs/heads/<branchName>
+  path: z.string(),
+  operation: githubFileChangeOperationSchema,
+  /** plan 시점에 GitHub read에서 관측한 파일 blob sha(create면 undefined). */
+  baseFileSha: z.string().optional(),
+  /** base 파일 내용의 sha256(존재할 때만) — 클라이언트가 동일 base를 봤는지 확인용. */
+  baseContentSha256: z.string().optional(),
+  /** 새 콘텐츠의 sha256 — execute에서 replay 변조 차단 키. */
+  newContentSha256: z.string(),
+  /** 새 콘텐츠 길이(bytes/utf-8). */
+  newContentLength: z.number().int().nonnegative(),
+  /** unified diff(bounded). 'truncated' 표식은 길이 초과로 잘렸음을 의미. */
+  diffPreview: z.string(),
+  diffTruncated: z.boolean(),
+  diffStat: z.object({
+    additions: z.number().int().nonnegative(),
+    deletions: z.number().int().nonnegative(),
+  }),
+  status: z.enum([
+    "planned",
+    "approval_required",
+    "blocked",
+    "failed",
+  ]),
+  truthStatus: z.enum(["planned", "observed", "configured"]),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  approvalId: z.string().optional(),
+  blockedReason: z.string().optional(),
+});
+export type GithubFileChangePlan = z.infer<typeof githubFileChangePlanSchema>;
+
+export const githubFileChangePlanResponseSchema = z.object({
+  outcome: githubFileChangeOutcomeSchema,
+  plan: githubFileChangePlanSchema.optional(),
+  message: z.string().optional(),
+});
+export type GithubFileChangePlanResponse = z.infer<typeof githubFileChangePlanResponseSchema>;
+
 /** GET /integrations/github/repos/:owner/:repo/pulls|pulls/:n|issues|overview|file */
 export const githubReadonlyResourceResponseSchema = z.object({
   status: githubConnectorStatusSchema,
