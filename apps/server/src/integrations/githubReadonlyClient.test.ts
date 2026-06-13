@@ -146,4 +146,29 @@ describe("createGithubReadonlyClient — 읽기 전용 조회", () => {
     expect(pr.additions).toBeNull();
     expect(pr.changedFiles).toBeNull();
   });
+
+  it("getFileContent는 base64를 UTF-8로 디코드해 반환", async () => {
+    const content = Buffer.from("console.log('hi')\n", "utf8").toString("base64");
+    const fetchImpl = vi.fn(async () => jsonResponse({ path: "src/a.ts", size: 18, sha: "abc", html_url: "u", content, encoding: "base64" }));
+    const client = createGithubReadonlyClient({ token: "ghp_x", fetchImpl });
+    const file = await client.getFileContent("o", "r", "src/a.ts");
+    expect(file.content).toBe("console.log('hi')\n");
+    expect(file.truncated).toBe(false);
+    expect(file.encoding).toBe("utf8");
+  });
+
+  it("getFileContent는 큰 파일을 24K로 자르고 truncated=true (raw 전체 미반환)", async () => {
+    const big = Buffer.from("z".repeat(40_000), "utf8").toString("base64");
+    const fetchImpl = vi.fn(async () => jsonResponse({ path: "big.txt", size: 40_000, sha: "s", html_url: "u", content: big, encoding: "base64" }));
+    const client = createGithubReadonlyClient({ token: "ghp_x", fetchImpl });
+    const file = await client.getFileContent("o", "r", "big.txt");
+    expect(file.truncated).toBe(true);
+    expect(file.content.length).toBe(24_000);
+  });
+
+  it("getFileContent는 디렉터리(배열 응답)면 에러", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse([{ name: "a" }, { name: "b" }]));
+    const client = createGithubReadonlyClient({ token: "ghp_x", fetchImpl });
+    await expect(client.getFileContent("o", "r", "src")).rejects.toBeInstanceOf(GithubReadonlyError);
+  });
 });
