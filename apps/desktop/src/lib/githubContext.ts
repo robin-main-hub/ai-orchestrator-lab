@@ -56,6 +56,28 @@ export function buildPrContextAttachment(input: {
   };
 }
 
+/**
+ * The observed gate: turn a server fetch RESULT into an attachment ONLY when it
+ * is genuinely `observed` (a real HTTP 200 re-read). Any other outcome
+ * (not_configured / permission_denied / connection_failed / github_error)
+ * returns null — nothing is attached, so a non-observed result can never be
+ * injected. The `data`/`observedAt` shape is structural so the desktop
+ * GithubResourceResult<GithubPullRequestDetail> is accepted without coupling.
+ */
+export function attachmentFromObservedResult(
+  result: { outcome: string; data?: GithubPullRequestDetail; observedAt?: string },
+  repoFullName: string,
+  opts: { fallbackObservedAt: string; maxExcerptChars?: number },
+): GithubContextAttachment | null {
+  if (result.outcome !== "observed" || !result.data) return null;
+  return buildPrContextAttachment({
+    detail: result.data,
+    repoFullName,
+    observedAt: result.observedAt ?? opts.fallbackObservedAt,
+    maxExcerptChars: opts.maxExcerptChars,
+  });
+}
+
 /** idempotent attach — same id replaces in place (refreshes observedAt), never duplicates */
 export function upsertContextAttachment(
   existing: ReadonlyArray<GithubContextAttachment>,
