@@ -333,10 +333,29 @@ export const sequentialMergeQueueItemSchema = z.object({
   id: z.string(),
   missionId: z.string(),
   branchName: z.string(),
-  status: z.enum(["queued", "waiting_approval", "merging", "merged", "rejected", "failed"]),
+  status: z.enum([
+    "queued",
+    "waiting_approval",
+    "merging",
+    "merged",
+    "conflict",
+    "blocked",
+    "dry_run",
+    "rejected",
+    "failed",
+  ]),
   requiredVerificationReportId: z.string(),
   approvalId: z.string().optional(),
+  /** real merge commit sha — git rev-parse HEAD 결과만. 합성값 금지 */
   mergeCommitSha: z.string().optional(),
+  /** 머지할 소스 브랜치 (예: agent/mission_xxx) */
+  sourceBranch: z.string().optional(),
+  /** 머지 대상 브랜치 (allowlist로 제한) */
+  targetBranch: z.string().optional(),
+  /** 실제 git merge를 수행할 repo root (서버 allowlist에 있어야 실행, 없으면 dry_run) */
+  repoRoot: z.string().optional(),
+  /** conflict 상태일 때 충돌 파일 목록 */
+  conflictFiles: z.array(z.string()).default([]),
   reason: z.string(),
   queuedAt: z.string(),
   completedAt: z.string().optional(),
@@ -445,7 +464,10 @@ export const missionCreateRequestSchema = z.object({
   sourceSessionId: z.string().max(256).optional(),
   codingPacketId: z.string().max(256).optional(),
   debateId: z.string().max(256).optional(),
-  truthStatus: truthStatusSchema.default("observed"),
+  // 막 만든 미션은 실측 0건이므로 planned가 기본. observed 격상은 서버가
+  // observed passed verification을 보고서야 부여한다(클라이언트가 신뢰등급을
+  // 주장하지 못하게).
+  truthStatus: truthStatusSchema.default("planned"),
   createdBy: z.string().max(64).default("desktop"),
   workers: z.array(missionWorkerAssignmentRequestSchema).max(32).default([]),
 });
@@ -512,10 +534,13 @@ export const missionVerifyRequestSchema = z.object({
 });
 export type MissionVerifyRequest = z.infer<typeof missionVerifyRequestSchema>;
 
-/** POST /missions/:missionId/merge 본문 — 검증 통과 후 큐 항목의 머지 실행 */
+/**
+ * POST /missions/:missionId/merge 본문 — 검증 통과 후 큐 항목의 머지 실행.
+ * mergeCommitSha는 받지 않는다: 서버 runner가 git rev-parse HEAD로 관측한
+ * 실제 sha만 저장한다(클라이언트가 합성 sha를 주입할 수 없다).
+ */
 export const missionMergeRequestSchema = z.object({
   mergeQueueItemId: z.string().min(1).max(256),
-  mergeCommitSha: z.string().max(128).optional(),
 });
 export type MissionMergeRequest = z.infer<typeof missionMergeRequestSchema>;
 

@@ -35,7 +35,9 @@ export type MissionBoardItem = {
   verificationCount: number;
   mergeQueueCount: number;
   /** 최신 검증 결과 한 줄 (없으면 undefined) */
-  latestVerification?: { id: string; status: string; observed: boolean };
+  latestVerification?: { id: string; status: string; observed: boolean; failedCheck?: string };
+  /** 최신 머지 큐 항목 상태 (없으면 undefined) — merged sha / conflict / dry_run 정직 표시 */
+  latestMerge?: { id: string; status: string; sha?: string; conflictCount: number };
   updatedAt: string;
 };
 
@@ -48,6 +50,11 @@ export type MissionBoardSnapshot = {
 
 export function mapServerMissionToBoardItem(record: ServerMissionRecord): MissionBoardItem {
   const latestReport = record.verificationReports.at(-1);
+  const latestMergeItem = record.mergeQueueItems.at(-1);
+  const failedCheck =
+    latestReport && latestReport.status === "failed"
+      ? latestReport.checks.find((check) => check.status === "failed")
+      : undefined;
   return {
     missionId: record.mission.missionId,
     title: record.mission.title,
@@ -67,7 +74,20 @@ export function mapServerMissionToBoardItem(record: ServerMissionRecord): Missio
     verificationCount: record.verificationReports.length,
     mergeQueueCount: record.mergeQueueItems.length,
     latestVerification: latestReport
-      ? { id: latestReport.id, status: latestReport.status, observed: latestReport.observed }
+      ? {
+          id: latestReport.id,
+          status: latestReport.status,
+          observed: latestReport.observed,
+          failedCheck: failedCheck ? `${failedCheck.command} → ${failedCheck.summary}`.slice(0, 160) : undefined,
+        }
+      : undefined,
+    latestMerge: latestMergeItem
+      ? {
+          id: latestMergeItem.id,
+          status: latestMergeItem.status,
+          sha: latestMergeItem.mergeCommitSha,
+          conflictCount: latestMergeItem.conflictFiles.length,
+        }
       : undefined,
     updatedAt: record.updatedAt,
   };
