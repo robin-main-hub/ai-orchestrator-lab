@@ -225,17 +225,11 @@ const ROLE_LABEL: Partial<Record<MissionAgentRole, string>> = {
   architect: "설계자",
   reviewer: "검토자",
   auditor: "접근성 감사",
-  researcher: "리서처",
-  domain_expert: "도메인 전문가",
   mediator: "조율자",
   builder: "빌더",
   verifier: "검증자",
   companion: "동행자",
-  external: "외부 업무",
   memory_curator: "기억 관리자",
-  // 회사 도메인 팩 전용 라벨(격리됨, 팩 활성 시에만 사용)
-  negotiator: "협상·견적",
-  risk_officer: "리스크",
 };
 
 /**

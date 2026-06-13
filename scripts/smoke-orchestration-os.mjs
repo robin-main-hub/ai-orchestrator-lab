@@ -158,9 +158,9 @@ async function main() {
   try {
     record("health", await waitForHealth(), true, BASE_URL);
 
-    // 0) 회사 도메인 팩은 코어에서 격리됨 — 기본 registry에서 안 보여야 한다(404)
-    const quarantined = await api("POST", "/missions/from-template", { templateId: "giolite_htv_quote", input: {} });
-    record("business template quarantined (404 by default)", quarantined.status === 404, true, `status ${quarantined.status}`);
+    // 0) 회사 도메인 템플릿은 제품에서 제거됨 — 어떤 id로도 안 보여야 한다(404)
+    const removed = await api("POST", "/missions/from-template", { templateId: "giolite_htv_quote", input: {} });
+    record("business template removed (404)", removed.status === 404, true, `status ${removed.status}`);
 
     // 1) generic app build mission — react_vite_app 템플릿(회사 도메인 0)
     const created = await api("POST", "/missions/from-template", {
