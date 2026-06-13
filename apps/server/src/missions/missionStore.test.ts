@@ -741,6 +741,33 @@ describe("app workspace (D2)", () => {
     await store.create(CREATE);
     expect(await store.recordPreview("mission_001", "ws_ghost", { status: "running", port: 1, truthStatus: "observed" })).toBeUndefined();
   });
+
+  it("records a visual QA report + its design issues (D5b), survives restart", async () => {
+    const { deps, events } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    const report = {
+      id: "vq1",
+      missionId: "mission_001",
+      workspaceId: "ws1",
+      previewUrl: "http://127.0.0.1:4401",
+      checks: [{ id: "c1", kind: "missing_primary_action", status: "failed" as const, summary: "no button" }],
+      issues: [
+        { id: "vq1_missing_primary_action", missionId: "mission_001", workspaceId: "ws1", kind: "missing_primary_action" as const, severity: "medium" as const, summary: "no primary action", recommendation: "add a button", truthStatus: "observed" as const, createdAt: "t" },
+      ],
+      status: "failed" as const,
+      truthStatus: "observed" as const,
+      createdAt: "t",
+    };
+    const updated = await store.recordVisualQa("mission_001", report);
+    expect(updated?.visualQaReports).toHaveLength(1);
+    expect(updated?.designIssues).toHaveLength(1);
+    expect(updated?.designIssues[0]!.kind).toBe("missing_primary_action");
+
+    const restored = buildMissionIndexFromEvents(events);
+    expect(restored[0]!.visualQaReports).toHaveLength(1);
+    expect(restored[0]!.designIssues).toHaveLength(1);
+  });
 });
 
 describe("design blueprint (D3)", () => {

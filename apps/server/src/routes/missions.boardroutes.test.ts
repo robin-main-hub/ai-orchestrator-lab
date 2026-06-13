@@ -261,6 +261,35 @@ describe("mission board routes", () => {
     expect(stopPreview).toHaveBeenCalled();
   });
 
+  function withObservedPreview(id: string, wsId: string) {
+    const r = record(id, "running");
+    (r as { workspaces: unknown[] }).workspaces = [{ id: wsId, missionId: id, preview: { status: "running", port: 4401, url: "http://127.0.0.1:4401", truthStatus: "observed" } }];
+    return r;
+  }
+
+  it("POST visual-qa runs when the preview is observed running", async () => {
+    const store = { get: async () => withObservedPreview("m1", "ws1"), recordVisualQa: async () => withObservedPreview("m1", "ws1") } as unknown as MissionStore;
+    const runVisualQa = vi.fn(async () => ({ id: "vq1", missionId: "m1", workspaceId: "ws1", previewUrl: "http://127.0.0.1:4401", checks: [], issues: [], status: "warning", truthStatus: "observed", createdAt: "t" }));
+    const { args, result } = deps(store, "/missions/m1/workspace/ws1/visual-qa", "POST", {}, { runVisualQa });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(200);
+    expect(runVisualQa).toHaveBeenCalled();
+  });
+
+  it("POST visual-qa 409s when preview is NOT observed (no fake QA)", async () => {
+    const store = { get: async () => withWorkspace("m1", "ws1") } as unknown as MissionStore; // preview not_started
+    const { args, result } = deps(store, "/missions/m1/workspace/ws1/visual-qa", "POST", {}, { runVisualQa: async () => ({}) as never });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(409);
+  });
+
+  it("POST visual-qa 501s when not configured", async () => {
+    const store = { get: async () => withObservedPreview("m1", "ws1") } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/m1/workspace/ws1/visual-qa", "POST", {});
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(501);
+  });
+
   const BLUEPRINT = {
     title: "보드 개편",
     userIntent: "한눈에 보기",

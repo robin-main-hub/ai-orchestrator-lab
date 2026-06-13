@@ -6,6 +6,12 @@ import {
   type AppWorkspacePreview,
 } from "./appWorkspace.js";
 import { missionDesignBlueprintRecordedPayloadSchema, type DesignBlueprint } from "./designBlueprint.js";
+import {
+  missionDesignIssueRecordedPayloadSchema,
+  missionVisualQaRecordedPayloadSchema,
+  type DesignIssueCard,
+  type VisualQaReport,
+} from "./visualQa.js";
 import type { MissionCheckpoint } from "./missionCheckpoint.js";
 import {
   missionErrorCardRecordedPayloadSchema,
@@ -212,6 +218,8 @@ export const missionTraceEventTypeSchema = z.enum([
   "workspace.attached",
   "preview.recorded",
   "design.blueprint.recorded",
+  "visual_qa.recorded",
+  "design.issue.recorded",
   "sandbox.preflight",
   "sandbox.exec.started",
   "sandbox.exec.completed",
@@ -348,6 +356,32 @@ function previewTraceEvent(missionId: string, workspaceId: string, preview: AppW
   };
 }
 
+function visualQaTraceEvent(report: VisualQaReport): MissionTraceEvent {
+  return {
+    id: `${report.missionId}:visualqa:${report.id}`,
+    missionId: report.missionId,
+    type: "visual_qa.recorded",
+    severity: report.status === "failed" ? "error" : report.status === "warning" || report.status === "blocked" ? "warning" : "success",
+    title: `비주얼 QA · ${report.status}`,
+    summary: `${report.checks.length}개 검사 · 이슈 ${report.issues.length} · ${report.truthStatus === "observed" ? "실측" : "미관측"}`,
+    truthStatus: report.truthStatus, // 실제 관측 항목 있을 때만 observed
+    createdAt: report.createdAt,
+  };
+}
+
+function designIssueTraceEvent(issue: DesignIssueCard): MissionTraceEvent {
+  return {
+    id: `${issue.missionId}:issue:${issue.id}`,
+    missionId: issue.missionId,
+    type: "design.issue.recorded",
+    severity: issue.severity === "high" ? "error" : "warning",
+    title: `디자인 이슈 · ${issue.kind}`,
+    summary: `${issue.summary} → ${issue.recommendation}`,
+    truthStatus: issue.truthStatus,
+    createdAt: issue.createdAt,
+  };
+}
+
 function designBlueprintTraceEvent(blueprint: DesignBlueprint): MissionTraceEvent {
   return {
     id: `${blueprint.missionId}:blueprint:${blueprint.id}`,
@@ -437,6 +471,8 @@ export function deriveMissionTrace(record: ServerMissionRecord): MissionTraceEve
     }
   }
   for (const blueprint of record.designBlueprints ?? []) events.push(designBlueprintTraceEvent(blueprint));
+  for (const report of record.visualQaReports ?? []) events.push(visualQaTraceEvent(report));
+  for (const issue of record.designIssues ?? []) events.push(designIssueTraceEvent(issue));
   for (const checkpoint of record.checkpoints ?? []) events.push(checkpointTraceEvent(checkpoint));
   for (const report of record.verificationReports) events.push(verificationTraceEvent(report, report.createdAt));
   for (const card of record.errorCards ?? []) events.push(errorCardTraceEvent(card));
@@ -482,6 +518,14 @@ export function traceEventFromMissionEnvelope(envelope: {
     case "mission.design.blueprint.recorded": {
       const parsed = missionDesignBlueprintRecordedPayloadSchema.safeParse(envelope.payload);
       return parsed.success ? designBlueprintTraceEvent(parsed.data.blueprint) : null;
+    }
+    case "mission.visual_qa.recorded": {
+      const parsed = missionVisualQaRecordedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success ? visualQaTraceEvent(parsed.data.report) : null;
+    }
+    case "mission.design.issue.recorded": {
+      const parsed = missionDesignIssueRecordedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success ? designIssueTraceEvent(parsed.data.issue) : null;
     }
     case "mission.error_card.recorded": {
       const parsed = missionErrorCardRecordedPayloadSchema.safeParse(envelope.payload);

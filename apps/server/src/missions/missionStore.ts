@@ -33,6 +33,7 @@ import {
   type ServerMissionRecord,
   type SkillArchiveCandidate,
   type VerificationReport,
+  type VisualQaReport,
 } from "@ai-orchestrator/protocol";
 import { buildMissionIndexFromEvents } from "./missionIndex.js";
 import { normalizeMissionWorker, normalizeVerificationReport } from "./missionPolicy.js";
@@ -117,6 +118,8 @@ export type MissionStore = {
     workspaceId: string,
     preview: AppWorkspacePreview,
   ) => Promise<ServerMissionRecord | undefined>;
+  /** D5b: Visual QA 리포트 + 디자인 이슈 기록. 미션 없으면 undefined. */
+  recordVisualQa: (missionId: string, report: VisualQaReport) => Promise<ServerMissionRecord | undefined>;
 };
 
 /** 머지 실행기 — repoRoot allowlist에 있으면 real git merge, 아니면 dry_run */
@@ -260,6 +263,32 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
       type: "mission.workspace.preview.recorded",
       payload: { missionId, workspaceId, preview },
       createdAt: now(),
+      source: "server",
+      sourceTrust: "trusted",
+      redacted: true,
+    };
+  }
+
+  function visualQaRecordedEnvelope(missionId: string, report: VisualQaReport): EventEnvelope {
+    return {
+      id: `event_mission_visual_qa_recorded_${report.id}`,
+      sessionId: missionId,
+      type: "mission.visual_qa.recorded",
+      payload: { missionId, report },
+      createdAt: report.createdAt,
+      source: "server",
+      sourceTrust: "trusted",
+      redacted: true,
+    };
+  }
+
+  function designIssueRecordedEnvelope(missionId: string, issue: VisualQaReport["issues"][number]): EventEnvelope {
+    return {
+      id: `event_mission_design_issue_recorded_${issue.id}`,
+      sessionId: missionId,
+      type: "mission.design.issue.recorded",
+      payload: { missionId, issue },
+      createdAt: issue.createdAt,
       source: "server",
       sourceTrust: "trusted",
       redacted: true,
@@ -742,6 +771,16 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
       const existing = await get(missionId);
       if (!existing || !existing.workspaces.some((ws) => ws.id === workspaceId)) return undefined;
       await commit(missionId, [workspacePreviewEnvelope(missionId, workspaceId, preview)]);
+      return get(missionId);
+    },
+
+    async recordVisualQa(missionId, report) {
+      if (!(await get(missionId))) return undefined;
+      // 리포트 + 이슈를 각각 별도 이벤트로 — snapshot/stream trace가 일치한다.
+      await commit(missionId, [
+        visualQaRecordedEnvelope(missionId, report),
+        ...report.issues.map((issue) => designIssueRecordedEnvelope(missionId, issue)),
+      ]);
       return get(missionId);
     },
   };
