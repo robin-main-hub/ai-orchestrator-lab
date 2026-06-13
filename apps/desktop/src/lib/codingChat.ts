@@ -16,6 +16,7 @@ import {
   shouldWithholdCondensation,
   type CondenserTurn,
 } from "./conversationCondenser";
+import type { GithubContextAttachment } from "@ai-orchestrator/protocol";
 
 export type CodingToolName = "bash" | "read" | "grep" | "glob" | "write" | "edit" | "todo";
 
@@ -73,6 +74,8 @@ export type CodingSession = {
   error?: string;
   /** summary inserted by /compact, prepended to the provider payload */
   compactedSummary?: string;
+  /** user-attached, read-only GitHub context (D2) — injected into the first request only */
+  githubContext?: GithubContextAttachment[];
 };
 
 export function createCodingSession(input: {
