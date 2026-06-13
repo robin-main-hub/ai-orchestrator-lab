@@ -1,8 +1,11 @@
 import type { IncomingMessage } from "node:http";
 import {
   appWorkspaceAttachRequestSchema,
+  buildBlueprintInputFromConversation,
   buildMissionCreateFromBlueprint,
   buildMissionCreateFromTemplate,
+  conversationBlueprintDraftRequestSchema,
+  conversationBlueprintDraftResponseSchema,
   CORE_WORKFLOW_TEMPLATES,
   debateDecisionToBlueprintInput,
   defaultPreviewCommandForAppType,
@@ -33,6 +36,8 @@ import {
   type MissionEventAppendRequest,
   type AppWorkspaceAttachRequest,
   type AppWorkspacePreview,
+  type ConversationBlueprintDraftRequest,
+  type DesignBlueprintInput,
   type DesignTargetSurface,
   type MissionFromBlueprintRequest,
   type MissionFromDebateRequest,
@@ -78,6 +83,21 @@ export type MissionRouteDependencies = {
   /** D7: 스캐폴드 plan(쓰기 없음)/apply(approval/checkpoint 뒤 쓰기). 미주입이면 501. */
   planScaffold?: (input: { missionId: string; workspaceId: string; templateId: string; input: Record<string, string | number>; repoRoot: string }) => Promise<{ ok: true; plan: ScaffoldPlan } | { ok: false; reason: string }>;
   applyScaffold?: (input: { plan: ScaffoldPlan; approvalId?: string }) => Promise<ScaffoldApplyResult>;
+  /**
+   * 3순위: "AI로 초안 채우기" — 단발 LLM으로 대화를 DesignBlueprintInput으로 보강한다.
+   * index.ts에서 createDgxProviderCompletionResponse + JSON parse/validate로 주입. 어떤 이유로든
+   * 실패(호출 실패·빈응답·JSON 파싱 실패·스키마 무효)면 **null**을 돌려 결정적 stub으로 폴백시킨다.
+   * 미주입이면 AI 경로 자체가 비활성(stub-only). baseline은 결정적 stub(프롬프트 시드).
+   */
+  enrichBlueprintWithAi?: (input: {
+    messages: ConversationBlueprintDraftRequest["messages"];
+    draft?: string;
+    targetSurface?: DesignTargetSurface;
+    sessionId: string;
+    providerProfileId: string;
+    modelId: string;
+    baseline: DesignBlueprintInput;
+  }) => Promise<DesignBlueprintInput | null>;
 };
 
 const MISSION_PATH = /^\/missions\/([^/]+)$/;
@@ -113,6 +133,7 @@ export async function handleMissionRoute({
   runVisualQa,
   planScaffold,
   applyScaffold,
+  enrichBlueprintWithAi,
 }: MissionRouteDependencies): Promise<boolean> {
   if (pathname === "/missions" && method === "POST") {
     let payload: MissionCreateRequest;
@@ -214,6 +235,66 @@ export async function handleMissionRoute({
     return true;
   }
 
+  // 3순위: 대화 → DesignBlueprintInput 초안(검토 패널용). 미션을 만들지 않는다 — 초안만 돌려준다.
+  // 항상 결정적 stub을 먼저 만들고(안전망), useAi+provider/model이 있고 AI 보강기가 주입돼 있으면
+  // 단발 LLM으로 보강을 시도한다. 실패하면 stub으로 폴백(200, source:"stub", degraded:true).
+  // 정직성: AI 실패는 5xx가 아니라 200+stub — 패널은 항상 쓸 수 있는 초안을 받는다.
+  if (pathname === "/missions/blueprint-draft" && method === "POST") {
+    let payload: ConversationBlueprintDraftRequest;
+    try {
+      payload = conversationBlueprintDraftRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, { error: "invalid_blueprint_draft_payload", message: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    const stub = buildBlueprintInputFromConversation({
+      messages: payload.messages,
+      draft: payload.draft,
+      targetSurface: payload.targetSurface,
+    });
+    const wantsAi = payload.useAi && Boolean(payload.providerProfileId) && Boolean(payload.modelId);
+    if (wantsAi && enrichBlueprintWithAi) {
+      let ai: DesignBlueprintInput | null = null;
+      try {
+        ai = await enrichBlueprintWithAi({
+          messages: payload.messages,
+          draft: payload.draft,
+          targetSurface: payload.targetSurface,
+          sessionId: payload.sessionId,
+          providerProfileId: payload.providerProfileId!,
+          modelId: payload.modelId!,
+          baseline: stub,
+        });
+      } catch {
+        ai = null; // 어떤 실패든 stub으로 폴백(정직)
+      }
+      respondJson(
+        200,
+        conversationBlueprintDraftResponseSchema.parse(
+          ai
+            ? { blueprint: ai, source: "ai", degraded: false }
+            : { blueprint: stub, source: "stub", degraded: true, note: "AI 초안 생성 실패 — 결정적 초안으로 대체했습니다" },
+        ),
+      );
+      return true;
+    }
+    // AI를 원했지만 provider/model 미지정 또는 보강기 미주입이면 정직하게 stub(degraded로 표기).
+    const degraded = payload.useAi === true;
+    respondJson(
+      200,
+      conversationBlueprintDraftResponseSchema.parse(
+        degraded
+          ? { blueprint: stub, source: "stub", degraded: true, note: "AI 경로 미가용(모델/프로바이더 미지정 또는 미연결) — 결정적 초안" }
+          : { blueprint: stub, source: "stub", degraded: false },
+      ),
+    );
+    return true;
+  }
+
   // D3: 디자인 청사진 → 실제 디자인 Mission(DESIGN_TEAM 배정 + 화면 planned 아티팩트).
   if (pathname === "/missions/from-blueprint" && method === "POST") {
     let payload: MissionFromBlueprintRequest;
@@ -229,7 +310,8 @@ export async function handleMissionRoute({
     }
     const missionId = payload.missionId ?? `mission_design_${Date.now()}`;
     try {
-      await store.create(buildMissionCreateFromBlueprint(payload.blueprint, { missionId, createdBy: payload.createdBy }));
+      // sourceSessionId(대화→앱빌더 출처)를 미션·trace로 전달 — provenance.
+      await store.create(buildMissionCreateFromBlueprint(payload.blueprint, { missionId, createdBy: payload.createdBy, sourceSessionId: payload.sourceSessionId }));
       const result = await store.attachDesignBlueprint(missionId, payload.blueprint);
       if (!result) {
         respondJson(500, { error: "mission_from_blueprint_failed", message: "blueprint attach did not materialize" });
