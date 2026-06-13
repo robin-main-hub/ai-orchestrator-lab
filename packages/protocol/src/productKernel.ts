@@ -403,3 +403,109 @@ export const missionKernelContractSchema = z.object({
   createdAt: z.string(),
 });
 export type MissionKernelContract = z.infer<typeof missionKernelContractSchema>;
+
+/**
+ * Mission persistence — missions live as append-only events on the server's
+ * existing Event Storage (JSONL + rotation), and the current state is a
+ * materialized view rebuilt from those events. No second database.
+ */
+export const missionEventTypeSchema = z.enum([
+  "mission.created",
+  "mission.worker.assigned",
+  "mission.artifact.attached",
+  "mission.verification.recorded",
+  "mission.closed",
+]);
+export type MissionEventType = z.infer<typeof missionEventTypeSchema>;
+
+/**
+ * Worker assignment as a CLIENT REQUEST: profile facts only. The capability is
+ * deliberately NOT accepted from the wire — the server recomputes it from the
+ * role (createAgentMissionCapability), so a payload cannot smuggle
+ * canMutateFiles=true onto a companion.
+ */
+export const missionWorkerAssignmentRequestSchema = z.object({
+  agentId: z.string().min(1).max(256),
+  role: missionAgentRoleSchema,
+  displayName: z.string().min(1).max(128),
+  personaName: z.string().max(128).optional(),
+  soulMode: z.enum(["full", "summary", "retrieved", "off"]).default("summary"),
+  configSource: z.enum(["internal", "markdown", "off"]).default("internal"),
+  permissionLevel: z.string().max(64).optional(),
+  /** B 단계 연결: 워커가 점유한 실제 Hermes 슬롯 id (예: "hermes-03") */
+  hermesSlotId: z.string().max(64).optional(),
+});
+export type MissionWorkerAssignmentRequest = z.infer<typeof missionWorkerAssignmentRequestSchema>;
+
+export const missionCreateRequestSchema = z.object({
+  id: z.string().min(1).max(128),
+  title: z.string().min(1).max(300),
+  goal: z.string().min(1).max(4_000),
+  sourceSessionId: z.string().max(256).optional(),
+  codingPacketId: z.string().max(256).optional(),
+  debateId: z.string().max(256).optional(),
+  truthStatus: truthStatusSchema.default("observed"),
+  createdBy: z.string().max(64).default("desktop"),
+  workers: z.array(missionWorkerAssignmentRequestSchema).max(32).default([]),
+});
+export type MissionCreateRequest = z.infer<typeof missionCreateRequestSchema>;
+
+export const missionCreatedPayloadSchema = z.object({
+  missionId: z.string(),
+  title: z.string(),
+  goal: z.string(),
+  sourceSessionId: z.string().optional(),
+  codingPacketId: z.string().optional(),
+  debateId: z.string().optional(),
+  truthStatus: truthStatusSchema,
+  createdBy: z.string(),
+});
+export type MissionCreatedPayload = z.infer<typeof missionCreatedPayloadSchema>;
+
+export const missionWorkerAssignedPayloadSchema = z.object({
+  missionId: z.string(),
+  worker: missionWorkerAssignmentSchema,
+  /** 클라이언트 payload가 capability를 실어 보냈다가 서버 재계산으로 대체된 경우 */
+  capabilityRecomputed: z.boolean().default(true),
+});
+export type MissionWorkerAssignedPayload = z.infer<typeof missionWorkerAssignedPayloadSchema>;
+
+export const missionArtifactAttachedPayloadSchema = z.object({
+  missionId: z.string(),
+  artifact: missionArtifactRefSchema,
+});
+export type MissionArtifactAttachedPayload = z.infer<typeof missionArtifactAttachedPayloadSchema>;
+
+export const missionVerificationRecordedPayloadSchema = z.object({
+  missionId: z.string(),
+  report: verificationReportSchema,
+  /** observed 주장에 실측 근거(exit code)가 없어 서버가 강등했는지 */
+  observedDowngraded: z.boolean().default(false),
+});
+export type MissionVerificationRecordedPayload = z.infer<typeof missionVerificationRecordedPayloadSchema>;
+
+export const missionClosedPayloadSchema = z.object({
+  missionId: z.string(),
+  status: z.enum(["merged", "failed", "cancelled"]),
+  reason: z.string().max(2_000).optional(),
+});
+export type MissionClosedPayload = z.infer<typeof missionClosedPayloadSchema>;
+
+/** POST /missions/:missionId/events 본문 — route 폭발 대신 단일 append 창구 */
+export const missionEventAppendRequestSchema = z.object({
+  type: missionEventTypeSchema,
+  payload: z.unknown(),
+});
+export type MissionEventAppendRequest = z.infer<typeof missionEventAppendRequestSchema>;
+
+/** Materialized view: append-only mission events에서 복원되는 현재 상태 */
+export const serverMissionRecordSchema = z.object({
+  mission: missionCreatedPayloadSchema.extend({ createdAt: z.string() }),
+  status: orchestrationMissionStatusSchema,
+  truthStatus: truthStatusSchema,
+  workers: z.array(missionWorkerAssignmentSchema),
+  artifacts: z.array(missionArtifactRefSchema),
+  verificationReports: z.array(verificationReportSchema),
+  updatedAt: z.string(),
+});
+export type ServerMissionRecord = z.infer<typeof serverMissionRecordSchema>;
