@@ -607,3 +607,92 @@ describe("error card + bounded self-correction (L4/L5)", () => {
     expect(corrections.at(-1)!.attempt).toBe(1);
   });
 });
+
+describe("skill archive candidates + curator (L6)", () => {
+  const passedReport = {
+    report: {
+      id: "verify_pass",
+      missionId: "mission_001",
+      verifierAgentId: "agent_verifier",
+      status: "passed" as const,
+      checks: [{ id: "c1", command: "pnpm test", status: "passed" as const, exitCode: 0, summary: "ok", startedAt: "2026-06-13T00:00:00.000Z" }],
+      artifactIds: [],
+      observed: true,
+      createdAt: "2026-06-13T00:00:00.000Z",
+    },
+  };
+  const queueItem = {
+    item: {
+      id: "merge_1",
+      missionId: "mission_001",
+      branchName: "agent/mission_001",
+      status: "queued" as const,
+      requiredVerificationReportId: "verify_pass",
+      reason: "verified",
+      queuedAt: "2026-06-13T00:00:01.000Z",
+    },
+  };
+
+  async function mergedStore(exportApprovedSkill?: (c: { id: string }) => Promise<void>) {
+    const { deps } = memoryDeps();
+    const store = createMissionStore({
+      ...deps,
+      exportApprovedSkill: exportApprovedSkill as never,
+      runMerge: async () => ({
+        status: "merged" as const,
+        mergeCommitSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        reason: "merged",
+        conflictFiles: [],
+        completedAt: "2026-06-13T00:00:02.000Z",
+      }),
+    });
+    await store.create(CREATE);
+    await store.appendEvent("mission_001", { type: "mission.verification.recorded", payload: passedReport });
+    await store.appendEvent("mission_001", { type: "mission.merge.queued", payload: queueItem });
+    await store.merge("mission_001", { mergeQueueItemId: "merge_1" });
+    return store;
+  }
+
+  it("a merged mission auto-creates suggested skill candidate(s)", async () => {
+    const store = await mergedStore();
+    const candidates = (await store.skills("mission_001"))!;
+    expect(candidates.length).toBeGreaterThan(0);
+    expect(candidates.every((c) => c.trustStatus === "suggested")).toBe(true); // 자동 trusted 승격 없음
+  });
+
+  it("a non-merged mission auto-creates NOTHING (failed missions never seed trusted skills)", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    expect(await store.skills("mission_001")).toEqual([]);
+  });
+
+  it("curator approve → curator_approved + exports; the queue reflects the promotion", async () => {
+    const exported: string[] = [];
+    const store = await mergedStore(async (c) => {
+      exported.push(c.id);
+    });
+    const id = (await store.skills("mission_001"))![0]!.id;
+    const updated = await store.curateSkill("mission_001", id, "approve");
+    expect(updated?.trustStatus).toBe("curator_approved");
+    expect(exported).toContain(id);
+    const after = (await store.skills("mission_001"))!;
+    expect(after.find((c) => c.id === id)?.trustStatus).toBe("curator_approved");
+  });
+
+  it("curator reject → rejected and does NOT export", async () => {
+    const exported: string[] = [];
+    const store = await mergedStore(async (c) => {
+      exported.push(c.id);
+    });
+    const id = (await store.skills("mission_001"))![0]!.id;
+    const updated = await store.curateSkill("mission_001", id, "reject");
+    expect(updated?.trustStatus).toBe("rejected");
+    expect(exported).toHaveLength(0);
+  });
+
+  it("curating an unknown candidate returns undefined", async () => {
+    const store = await mergedStore();
+    expect(await store.curateSkill("mission_001", "skill_ghost", "approve")).toBeUndefined();
+  });
+});
