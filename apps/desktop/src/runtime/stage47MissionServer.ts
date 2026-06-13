@@ -355,6 +355,20 @@ export async function createDgxMissionFromTemplate({
   return requestMissionServerJson<MissionResponse>({ method: "POST", path: "/missions/from-template", body: request, serverBaseUrl, fetchImpl, timeoutMs });
 }
 
+export type ControlAvailabilityResponse = {
+  runners: string[];
+  defaults: { mode: string; thinking: string; toolPermission: string; runner: string };
+};
+
+/** D8: 컨트롤 스트립 가용성(runner는 서버 env에서 정직하게 파생 — 없으면 미노출). */
+export async function fetchDgxControlAvailability({
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 3_000,
+}: MissionServerRequestInput = {}): Promise<ControlAvailabilityResponse> {
+  return requestMissionServerJson<ControlAvailabilityResponse>({ method: "GET", path: "/controls/availability", serverBaseUrl, fetchImpl, timeoutMs });
+}
+
 /** L3/PR2: 수동 checkpoint(observed sha) */
 export async function createDgxMissionCheckpoint({
   missionId,
