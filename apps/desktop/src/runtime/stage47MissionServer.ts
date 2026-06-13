@@ -1,9 +1,20 @@
 import type {
+  AppWorkspaceAttachRequest,
+  AppWorkspacePreview,
+  CuratorDecision,
+  MissionCheckpoint,
+  MissionCheckpointCreateRequest,
   MissionCreateRequest,
   MissionEventAppendRequest,
+  MissionFromBlueprintRequest,
+  MissionFromTemplateRequest,
+  MissionKanbanBoard,
   MissionMergeRequest,
+  MissionTraceEvent,
   MissionVerifyRequest,
+  PreviewProbeRequest,
   ServerMissionRecord,
+  SkillArchiveCandidate,
 } from "@ai-orchestrator/protocol";
 import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
 import { createDgxOrchestratorJsonHeaders } from "./stage31DgxAuth";
@@ -120,6 +131,125 @@ export async function mergeDgxMission({
     fetchImpl,
     timeoutMs,
   });
+}
+
+// ── Coding/Design OS surfacing (live server engines → desktop client seam) ───
+// 감사(docs/85)에서 데스크톱이 소비 안 하던 live 엔드포인트들의 클라이언트 래퍼.
+// UI 대수술 없이 소비 seam만 — 패널은 후속.
+
+export type MissionKanbanResponse = { board: MissionKanbanBoard };
+export type MissionTraceResponse = { trace: MissionTraceEvent[] };
+export type MissionSkillsResponse = { candidates: SkillArchiveCandidate[] };
+export type MissionSkillCurateResponse = { candidate: SkillArchiveCandidate };
+export type MissionPreviewResponse = { mission: ServerMissionRecord; preview: AppWorkspacePreview };
+
+/** L1/PR1: Kanban 보드(materialized missions → 컬럼) */
+export async function fetchDgxMissionKanban({
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 3_000,
+}: MissionServerRequestInput = {}): Promise<MissionKanbanResponse> {
+  return requestMissionServerJson<MissionKanbanResponse>({ method: "GET", path: "/missions/kanban", serverBaseUrl, fetchImpl, timeoutMs });
+}
+
+/** L1/PR1: 한 미션의 redacted 라이프사이클 trace(폴링) */
+export async function fetchDgxMissionTrace({
+  missionId,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 3_000,
+}: MissionServerRequestInput & { missionId: string }): Promise<MissionTraceResponse> {
+  return requestMissionServerJson<MissionTraceResponse>({ method: "GET", path: `/missions/${encodeURIComponent(missionId)}/trace`, serverBaseUrl, fetchImpl, timeoutMs });
+}
+
+/** L6: skill candidate curator queue */
+export async function fetchDgxMissionSkills({
+  missionId,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 3_000,
+}: MissionServerRequestInput & { missionId: string }): Promise<MissionSkillsResponse> {
+  return requestMissionServerJson<MissionSkillsResponse>({ method: "GET", path: `/missions/${encodeURIComponent(missionId)}/skills`, serverBaseUrl, fetchImpl, timeoutMs });
+}
+
+/** L6: curator 결정(approve/reject/pin) */
+export async function curateDgxMissionSkill({
+  missionId,
+  candidateId,
+  decision,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 5_000,
+}: MissionServerRequestInput & { missionId: string; candidateId: string; decision: CuratorDecision }): Promise<MissionSkillCurateResponse> {
+  return requestMissionServerJson<MissionSkillCurateResponse>({
+    method: "POST",
+    path: `/missions/${encodeURIComponent(missionId)}/skills/${encodeURIComponent(candidateId)}/curate`,
+    body: { decision },
+    serverBaseUrl,
+    fetchImpl,
+    timeoutMs,
+  });
+}
+
+/** D2: App Workspace 붙이기 */
+export async function attachDgxWorkspace({
+  missionId,
+  request,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 5_000,
+}: MissionServerRequestInput & { missionId: string; request: AppWorkspaceAttachRequest }): Promise<MissionResponse> {
+  return requestMissionServerJson<MissionResponse>({ method: "POST", path: `/missions/${encodeURIComponent(missionId)}/workspace`, body: request, serverBaseUrl, fetchImpl, timeoutMs });
+}
+
+/** D4: preview 포트 probe(observed는 실제 바인딩 시만) */
+export async function probeDgxPreview({
+  missionId,
+  workspaceId,
+  request = {},
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 5_000,
+}: MissionServerRequestInput & { missionId: string; workspaceId: string; request?: Partial<PreviewProbeRequest> }): Promise<MissionPreviewResponse> {
+  return requestMissionServerJson<MissionPreviewResponse>({
+    method: "POST",
+    path: `/missions/${encodeURIComponent(missionId)}/workspace/${encodeURIComponent(workspaceId)}/preview`,
+    body: request,
+    serverBaseUrl,
+    fetchImpl,
+    timeoutMs,
+  });
+}
+
+/** D3: 디자인 청사진 → 디자인 미션 */
+export async function createDgxMissionFromBlueprint({
+  request,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 8_000,
+}: MissionServerRequestInput & { request: MissionFromBlueprintRequest }): Promise<MissionResponse> {
+  return requestMissionServerJson<MissionResponse>({ method: "POST", path: "/missions/from-blueprint", body: request, serverBaseUrl, fetchImpl, timeoutMs });
+}
+
+/** L7: 템플릿 → 미션(현재는 보류 도메인이지만 seam은 둠) */
+export async function createDgxMissionFromTemplate({
+  request,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 8_000,
+}: MissionServerRequestInput & { request: MissionFromTemplateRequest }): Promise<MissionResponse> {
+  return requestMissionServerJson<MissionResponse>({ method: "POST", path: "/missions/from-template", body: request, serverBaseUrl, fetchImpl, timeoutMs });
+}
+
+/** L3/PR2: 수동 checkpoint(observed sha) */
+export async function createDgxMissionCheckpoint({
+  missionId,
+  request,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 8_000,
+}: MissionServerRequestInput & { missionId: string; request: MissionCheckpointCreateRequest }): Promise<{ checkpoint: MissionCheckpoint }> {
+  return requestMissionServerJson<{ checkpoint: MissionCheckpoint }>({ method: "POST", path: `/missions/${encodeURIComponent(missionId)}/checkpoints`, body: request, serverBaseUrl, fetchImpl, timeoutMs });
 }
 
 async function requestMissionServerJson<TResponse>({
