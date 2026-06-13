@@ -3382,7 +3382,7 @@ describe("HTTP request limits", () => {
             action: "terminal_run",
             replayEndpoint: "/tmux/dispatch",
             replayKind: "tmux_dispatch",
-            reason: "tmux dispatch requires explicit approval before send-keys can run",
+            reason: "tmux 디스패치는 send-keys 실행 전 명시적 승인이 필요합니다",
             sourceItemId: "tmux_dispatch_http_test",
             sourceTrust: "trusted",
           },

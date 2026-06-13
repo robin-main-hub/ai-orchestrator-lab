@@ -17,6 +17,19 @@ import type {
   ApprovalReplayKind,
 } from "@ai-orchestrator/protocol";
 import type { Stage4AgentRun, Stage4RunStep } from "./stage4Runtime";
+import { controlQueueActionLabel } from "../lib/controlQueuePresentation";
+
+/** 승인 주체(actor)를 한국어로 — toast/카드 summary용. */
+const ACTOR_LABEL_KO: Record<string, string> = {
+  agent: "에이전트",
+  user: "사용자",
+  external_channel: "외부 채널",
+  mobile: "모바일",
+  server: "서버",
+};
+function actorLabelKo(actor: string): string {
+  return ACTOR_LABEL_KO[actor] ?? actor;
+}
 
 export type Stage9PermissionInput = {
   sessionId: string;
@@ -180,10 +193,10 @@ function createExternalApprovalItem(
     decision: decisionFromActionAndState(action, state),
     reason:
       action === "unknown_external_effect"
-        ? "unknown external effect is denied by default"
+        ? "알 수 없는 외부 효과는 기본 차단됩니다"
         : state === "approved"
-          ? "external request approved by operator"
-          : "external request waits behind approval gate",
+          ? "외부 요청이 운영자 승인됨"
+          : "외부 요청이 승인 게이트에서 대기 중입니다",
     createdAt,
   };
 }
@@ -215,9 +228,9 @@ function createProviderReadinessItem(
     decision: decisionFromState(requestedState),
     reason:
       readiness.status === "ready"
-        ? "provider is ready for completion"
+        ? "공급자가 응답 준비됨"
         : readiness.status === "needs_approval"
-          ? "provider requires explicit approval before completion"
+          ? "공급자는 응답 전 명시적 승인이 필요합니다"
           : readiness.reason,
     createdAt,
   };
@@ -246,8 +259,8 @@ function createTerminalSlotItem(
     decision: decisionFromState(state),
     reason:
       state === "not_required"
-        ? "local idle slot is display-only"
-        : "terminal command preview requires explicit operator approval",
+        ? "로컬 유휴 슬롯 — 표시 전용"
+        : "터미널 명령 미리보기는 운영자의 명시적 승인이 필요합니다",
     createdAt,
   };
 }
@@ -277,10 +290,10 @@ function createRunStepItem(
     decision: decisionFromState(state),
     reason:
       state === "approved"
-        ? `approved; DGX status is ${runtime.dgxStatus}`
+        ? `승인됨 · DGX 상태 ${runtime.dgxStatus}`
         : step.permissionState === "required"
-          ? "coding handoff can change files or run commands, so it stays gated"
-          : "planning and review steps are read-only",
+          ? "코딩 핸드오프는 파일 변경·명령 실행이 가능해 승인을 받습니다"
+          : "계획·검토 단계는 읽기 전용입니다",
     createdAt,
   };
 }
@@ -302,7 +315,7 @@ function createMobilePolicyItems(
       requestedLevels: ["read_only"],
       state: mobilePolicy.canApprove ? "not_required" : "rejected",
       decision: mobilePolicy.canApprove ? "allow" : "deny",
-      reason: mobilePolicy.canApprove ? "phone can approve, stop, and retry" : "mobile approval disabled",
+      reason: mobilePolicy.canApprove ? "휴대폰에서 승인·중지·재시도 가능" : "모바일 승인 비활성",
       createdAt,
     },
     {
@@ -316,7 +329,7 @@ function createMobilePolicyItems(
       requestedLevels: ["run_safe_commands"],
       state: mobilePolicy.canTypeTerminal ? "required" : "rejected",
       decision: mobilePolicy.canTypeTerminal ? "approval_required" : "deny",
-      reason: mobilePolicy.canTypeTerminal ? "mobile terminal would still need approval" : "phone cannot type terminal commands",
+      reason: mobilePolicy.canTypeTerminal ? "모바일 터미널도 승인이 필요합니다" : "휴대폰에서는 터미널 명령을 입력할 수 없습니다",
       createdAt,
     },
     {
@@ -330,7 +343,7 @@ function createMobilePolicyItems(
       requestedLevels: ["secret_access"],
       state: mobilePolicy.canViewSecrets ? "required" : "rejected",
       decision: mobilePolicy.canViewSecrets ? "approval_required" : "deny",
-      reason: mobilePolicy.canViewSecrets ? "secret access would be escalated" : "phone cannot view raw secrets",
+      reason: mobilePolicy.canViewSecrets ? "비밀 접근은 권한 상승이 필요합니다" : "휴대폰에서는 원본 비밀을 볼 수 없습니다",
       createdAt,
     },
   ];
@@ -340,7 +353,7 @@ function createQueueItem(item: PermissionMatrixItem): ApprovalQueueItem {
   return {
     id: `queue_${item.id}`,
     sourceItemId: item.id,
-    summary: `${item.action} from ${item.actor}`,
+    summary: `${controlQueueActionLabel(item.action)} 승인 요청 · ${actorLabelKo(item.actor)}`,
     requestedBy: item.actor,
     action: item.action,
     reason: item.reason,
@@ -430,26 +443,26 @@ function defaultGateReason({
   "actor" | "sourceTrust" | "action" | "requestedLevels" | "costEstimateTokens" | "maxAllowedTokens"
 > & { state: ApprovalState }) {
   if (action === "unknown_external_effect") {
-    return "unknown external effect is denied by default";
+    return "알 수 없는 외부 효과는 기본 차단됩니다";
   }
 
   if (typeof costEstimateTokens === "number" && typeof maxAllowedTokens === "number" && costEstimateTokens > maxAllowedTokens) {
-    return `estimated token cost ${costEstimateTokens} exceeds budget ${maxAllowedTokens}`;
+    return `예상 토큰 비용 ${costEstimateTokens}이(가) 예산 ${maxAllowedTokens}을(를) 초과합니다`;
   }
 
   if (actor === "mobile" && state === "rejected") {
-    return "mobile cannot perform secret or dangerous terminal actions";
+    return "모바일에서는 비밀·위험 터미널 작업을 할 수 없습니다";
   }
 
   if (actor === "external_channel" && sourceTrust === "untrusted") {
-    return "untrusted external source must pass explicit approval";
+    return "신뢰되지 않은 외부 출처는 명시적 승인을 거쳐야 합니다";
   }
 
   if (state === "required") {
-    return `action ${action} requires approval for ${requestedLevels.join(", ") || "policy review"}`;
+    return `${controlQueueActionLabel(action)} 작업은 ${requestedLevels.join(", ") || "정책 검토"} 권한 승인이 필요합니다`;
   }
 
-  return "permission gate allows this action";
+  return "권한 게이트가 이 작업을 허용합니다";
 }
 
 function decisionFromActionAndState(action: PermissionAction, state: ApprovalState): PermissionDecision {
