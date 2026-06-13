@@ -4,6 +4,7 @@ import {
   buildMissionCreateFromBlueprint,
   buildMissionCreateFromTemplate,
   CORE_WORKFLOW_TEMPLATES,
+  defaultPreviewCommandForAppType,
   deriveMissionKanbanBoard,
   deriveMissionTrace,
   derivePreviewPort,
@@ -13,6 +14,7 @@ import {
   missionFromBlueprintRequestSchema,
   previewFromProbe,
   previewProbeRequestSchema,
+  previewStartRequestSchema,
   missionCheckpointCreateRequestSchema,
   missionCreateRequestSchema,
   missionEventAppendRequestSchema,
@@ -26,6 +28,7 @@ import {
   type MissionCreateRequest,
   type MissionEventAppendRequest,
   type AppWorkspaceAttachRequest,
+  type AppWorkspacePreview,
   type MissionFromBlueprintRequest,
   type MissionFromTemplateRequest,
   type MissionRollbackOutcome,
@@ -58,6 +61,9 @@ export type MissionRouteDependencies = {
   runRollback?: (missionId: string, req: MissionRollbackRequest) => Promise<MissionRollbackOutcome>;
   /** D4: preview 포트 실제 바인딩 probe(TCP). index.ts에서 net.connect로 주입. 미주입이면 501. */
   probePreview?: (input: { host: string; port: number }) => Promise<boolean>;
+  /** D5a: preview dev 프로세스 start/stop. index.ts에서 spawn+HTTP probe로 주입. 미주입이면 501. */
+  startPreview?: (input: { missionId: string; workspaceId: string; command: string; cwd: string; host: string; port: number }) => Promise<AppWorkspacePreview>;
+  stopPreview?: (input: { missionId: string; workspaceId: string }) => Promise<AppWorkspacePreview>;
 };
 
 const MISSION_PATH = /^\/missions\/([^/]+)$/;
@@ -71,6 +77,8 @@ const MISSION_SKILLS_PATH = /^\/missions\/([^/]+)\/skills$/;
 const MISSION_SKILL_CURATE_PATH = /^\/missions\/([^/]+)\/skills\/([^/]+)\/curate$/;
 const MISSION_WORKSPACE_PATH = /^\/missions\/([^/]+)\/workspace$/;
 const MISSION_PREVIEW_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/preview$/;
+const MISSION_PREVIEW_START_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/preview\/start$/;
+const MISSION_PREVIEW_STOP_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/preview\/stop$/;
 
 export async function handleMissionRoute({
   store,
@@ -83,6 +91,8 @@ export async function handleMissionRoute({
   runCheckpoint,
   runRollback,
   probePreview,
+  startPreview,
+  stopPreview,
 }: MissionRouteDependencies): Promise<boolean> {
   if (pathname === "/missions" && method === "POST") {
     let payload: MissionCreateRequest;
@@ -488,6 +498,61 @@ export async function handleMissionRoute({
       return true;
     }
     respondJson(200, { mission: updated, preview });
+    return true;
+  }
+
+  // D5a: preview dev 프로세스 start — 실제로 띄우고 포트 관측 성공 시에만 observed running.
+  const previewStartMatch = MISSION_PREVIEW_START_PATH.exec(pathname);
+  if (previewStartMatch && method === "POST") {
+    const missionId = decodeURIComponent(previewStartMatch[1]!);
+    const workspaceId = decodeURIComponent(previewStartMatch[2]!);
+    if (!startPreview) {
+      respondJson(501, { error: "preview_start_not_configured" });
+      return true;
+    }
+    const mission = await store.get(missionId);
+    const workspace = mission?.workspaces?.find((ws) => ws.id === workspaceId);
+    if (!workspace) {
+      respondJson(404, { error: "workspace_not_found", missionId, workspaceId });
+      return true;
+    }
+    let payload;
+    try {
+      payload = previewStartRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, { error: "invalid_preview_start_payload", message: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    const command = payload.command ?? defaultPreviewCommandForAppType(workspace.appType);
+    const port = payload.port ?? derivePreviewPort(workspaceId);
+    const preview = await startPreview({ missionId, workspaceId, command, cwd: workspace.repoRootRef, host: payload.host, port });
+    const updated = await store.recordPreview(missionId, workspaceId, preview);
+    respondJson(200, { mission: updated ?? mission, preview });
+    return true;
+  }
+
+  // D5a: preview 프로세스 stop(멱등).
+  const previewStopMatch = MISSION_PREVIEW_STOP_PATH.exec(pathname);
+  if (previewStopMatch && method === "POST") {
+    const missionId = decodeURIComponent(previewStopMatch[1]!);
+    const workspaceId = decodeURIComponent(previewStopMatch[2]!);
+    if (!stopPreview) {
+      respondJson(501, { error: "preview_stop_not_configured" });
+      return true;
+    }
+    const mission = await store.get(missionId);
+    const workspace = mission?.workspaces?.find((ws) => ws.id === workspaceId);
+    if (!workspace) {
+      respondJson(404, { error: "workspace_not_found", missionId, workspaceId });
+      return true;
+    }
+    const preview = await stopPreview({ missionId, workspaceId });
+    const updated = await store.recordPreview(missionId, workspaceId, preview);
+    respondJson(200, { mission: updated ?? mission, preview });
     return true;
   }
 

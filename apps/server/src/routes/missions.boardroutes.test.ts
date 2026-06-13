@@ -227,6 +227,40 @@ describe("mission board routes", () => {
     expect(result().status).toBe(501);
   });
 
+  it("POST preview/start records observed running when the dev process serves", async () => {
+    const store = { get: async () => withWorkspace("m1", "ws1"), recordPreview: async () => withWorkspace("m1", "ws1") } as unknown as MissionStore;
+    const startPreview = vi.fn(async () => ({ status: "running", port: 4401, url: "http://127.0.0.1:4401", truthStatus: "observed" }));
+    const { args, result } = deps(store, "/missions/m1/workspace/ws1/preview/start", "POST", { command: "vite preview" }, { startPreview });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(200);
+    expect((result().payload as { preview: { truthStatus: string } }).preview.truthStatus).toBe("observed");
+    expect(startPreview).toHaveBeenCalled();
+  });
+
+  it("POST preview/start 501s when not configured", async () => {
+    const store = { get: async () => withWorkspace("m1", "ws1") } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/m1/workspace/ws1/preview/start", "POST", {});
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(501);
+  });
+
+  it("POST preview/start 404s an unknown workspace", async () => {
+    const store = { get: async () => record("m1", "running") } as unknown as MissionStore;
+    const { args, result } = deps(store, "/missions/m1/workspace/ghost/preview/start", "POST", {}, { startPreview: async () => ({ status: "running", truthStatus: "observed" }) });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(404);
+  });
+
+  it("POST preview/stop records stopped", async () => {
+    const store = { get: async () => withWorkspace("m1", "ws1"), recordPreview: async () => withWorkspace("m1", "ws1") } as unknown as MissionStore;
+    const stopPreview = vi.fn(async () => ({ status: "stopped", truthStatus: "configured" }));
+    const { args, result } = deps(store, "/missions/m1/workspace/ws1/preview/stop", "POST", {}, { stopPreview });
+    expect(await handleMissionRoute(args)).toBe(true);
+    expect(result().status).toBe(200);
+    expect((result().payload as { preview: { status: string } }).preview.status).toBe("stopped");
+    expect(stopPreview).toHaveBeenCalled();
+  });
+
   const BLUEPRINT = {
     title: "보드 개편",
     userIntent: "한눈에 보기",
