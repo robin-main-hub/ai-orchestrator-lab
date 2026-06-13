@@ -54,6 +54,9 @@ function clientStub(
     getFileContent: over.getFileContent ?? (async () => ({ path: "x", size: 0, sha: "s", htmlUrl: "u", content: "", truncated: false, encoding: "utf8" })),
     listIssues: over.listIssues ?? (async () => []),
     postIssueComment: over.postIssueComment ?? (async () => ({ id: 999, htmlUrl: `https://github.com/${REPO}/pull/7#issuecomment-999` })),
+    getRefSha: over.getRefSha ?? (async () => "stub-sha"),
+    createBranchRef:
+      over.createBranchRef ?? (async (_o, _r, ref, sha) => ({ ref, sha, htmlUrl: `https://github.com/${REPO}/tree/stub` })),
   };
 }
 

@@ -126,10 +126,13 @@ import { handleGithubRoute } from "./routes/github.js";
 import { createGithubReadonlyClient } from "./integrations/githubReadonlyClient.js";
 import { parseRepoAllowlist } from "./integrations/githubCommentWriteGuards.js";
 import { createGithubCommentWritePlanStore } from "./integrations/githubCommentWritePlanStore.js";
+import { createGithubBranchCreatePlanStore } from "./integrations/githubBranchCreatePlanStore.js";
 
 // W1: GitHub comment write plan store — process scope, in-memory, 10분 TTL.
 // 영속화하지 않는 이유: plan은 작업 의도일 뿐 진실(observed)이 아님. 재시작 후엔 다시 plan.
 const githubCommentWritePlanStoreInstance = createGithubCommentWritePlanStore();
+// W2: branch create plan store — 같은 이유로 in-memory. W1과 독립 인스턴스.
+const githubBranchCreatePlanStoreInstance = createGithubBranchCreatePlanStore();
 import { createMissionStore, type MissionStore } from "./missions/missionStore.js";
 import { missionTraceBus } from "./missions/missionTraceBus.js";
 import {
@@ -6706,6 +6709,7 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         request,
         readJsonBody,
         planStore: githubCommentWritePlanStoreInstance,
+        branchPlanStore: githubBranchCreatePlanStoreInstance,
         writeRepoAllowlist: parseRepoAllowlist(process.env.GITHUB_WRITE_REPO_ALLOWLIST),
         verifyApproval: async (approvalId) => {
           const { approvals } = await listApprovalsFromPersistentServerStorage(eventStorage, new Date().toISOString());
