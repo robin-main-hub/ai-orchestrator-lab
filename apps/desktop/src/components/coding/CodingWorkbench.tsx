@@ -43,6 +43,7 @@ import {
   type WorkbenchMission,
 } from "../../lib/workbenchMissions";
 import { CodingThread } from "./CodingThread";
+import { GithubConnectorChip } from "./GithubConnectorChip";
 import { humanizeCodingError } from "../../lib/codingErrorMessage";
 import { useDraftAttachments } from "../../lib/useDraftAttachments";
 import { getModelInputModalities, formatAttachmentSize } from "../../lib/helpers";
@@ -809,6 +810,7 @@ export function CodingWorkbench({
             <div>
               <p>Mission Board</p>
               <span>worktree · tmux · diff · approval fallback</span>
+              <GithubConnectorChip serverBaseUrl={serverBaseUrl} />
             </div>
             <button onClick={() => setMissionPanelOpen(false)} type="button" aria-label="Mission Board 닫기">
               <XCircle size={14} aria-hidden />

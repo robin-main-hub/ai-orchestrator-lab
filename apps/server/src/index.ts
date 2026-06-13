@@ -122,6 +122,8 @@ import { createCorsHeaders } from "./http/cors.js";
 import { RequestBodyTooLargeError, readJsonBody, readRawBody } from "./http/requestBody.js";
 import { handleApprovalRoute } from "./routes/approvals.js";
 import { handleMissionRoute } from "./routes/missions.js";
+import { handleGithubRoute } from "./routes/github.js";
+import { createGithubReadonlyClient } from "./integrations/githubReadonlyClient.js";
 import { createMissionStore, type MissionStore } from "./missions/missionStore.js";
 import { missionTraceBus } from "./missions/missionTraceBus.js";
 import {
@@ -6682,6 +6684,18 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         parseCaptureRequest: parseServerTmuxCaptureRequest,
         recordCapture: recordServerTmuxCaptureToPersistentServerStorage,
         captureStatusCode: (result) => (result.status === "failed" ? 502 : 202),
+        respondJson,
+      })
+    ) {
+      return;
+    }
+
+    if (
+      await handleGithubRoute({
+        pathname,
+        method: request.method,
+        // 토큰은 서버 env에만 — 클라이언트로 전달되지 않는다. 읽기 전용 커넥터.
+        createClient: () => createGithubReadonlyClient({ token: process.env.GITHUB_TOKEN }),
         respondJson,
       })
     ) {

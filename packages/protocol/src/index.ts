@@ -7,6 +7,7 @@ export * from "./designMission.js";
 export * from "./conversationBlueprint.js";
 export * from "./debateBridge.js";
 export * from "./visualQa.js";
+export * from "./githubConnector.js";
 export * from "./scaffold.js";
 export * from "./controlStrip.js";
 export * from "./missionBoard.js";
