@@ -32,6 +32,7 @@ import type { Stage3DebateSession } from "../runtime/stage3Runtime";
 import type { Stage3DebateUtteranceView } from "../types";
 import { resolvePersonaPortraitUrl } from "../lib/personaPortrait";
 import { PublicWorkTracePanel } from "./PublicWorkTracePanel";
+import { VerticalSplitResizer } from "./VerticalSplitResizer";
 
 type Stance = DebateStance;
 
@@ -87,7 +88,9 @@ export function Stage3DebateTable({
       data-focus-id="debate-table-container"
       tabIndex={-1}
     >
-      <header className="shrink-0 border-b border-zinc-800/60 bg-zinc-900/30 px-4 py-4 md:px-6">
+      {/* 상단(헤더+의장결정+라운드탭) / 하단(발언 타임라인)을 드래그로 비율 조절. footer는 항상 고정 */}
+      <VerticalSplitResizer className="min-h-0 flex-1" storageKey="ai-orchestrator.debate-split.v1">
+      <header className="border-b border-zinc-800/60 bg-zinc-900/30 px-4 py-4 md:px-6">
         <div className="mx-auto max-w-4xl">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -195,7 +198,7 @@ export function Stage3DebateTable({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-6">
+      <div className="px-4 py-6 md:px-6">
         <div className="mx-auto max-w-4xl">
           {utterances.length > 0 ? (
             <ol aria-label={debateChamberCopy.timelineLabel} className="relative space-y-3">
@@ -226,6 +229,7 @@ export function Stage3DebateTable({
           ) : null}
         </div>
       </div>
+      </VerticalSplitResizer>
 
       <footer className="shrink-0 border-t border-zinc-900/70 bg-zinc-950/30 px-4 py-2 md:px-6">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">

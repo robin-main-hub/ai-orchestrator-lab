@@ -14,7 +14,8 @@ import { AppBuildContainer } from "../appbuild/AppBuildContainer";
 import type { AppBuildSeed } from "../../lib/appBuildModel";
 import { shouldShowUsageHud } from "../../lib/usageHudVisibility";
 import { deriveEmptyConversationHint } from "../../lib/emptyConversationHint";
-import { Activity, Archive, ChevronDown, Cpu, Database, FileText, GitFork, Package, Play, Smartphone, Sparkles, Swords, Wrench } from "lucide-react";
+import { deriveConversationHeaderAlert } from "../../lib/conversationHeaderAlert";
+import { Activity, ChevronDown, Cpu, Database, FileText, GitFork, Package, Play, Smartphone, Sparkles, Swords, Wrench } from "lucide-react";
 import type { AgentChannelMemoryScope } from "../../lib/agentConversationChannels";
 import type { ControlQueueContinuitySummary } from "../../lib/controlQueueContinuity";
 import {
@@ -29,7 +30,6 @@ import {
   agentSecondaryDisplayLabel,
 } from "../../lib/agentDisplay";
 import { createAgentChatContinuitySummary } from "../../lib/agentChatContinuity";
-import { createAgentChannelHeaderMemoryLabel } from "../../lib/agentChannelStatus";
 import { createAgentConversationPromptSuggestions } from "../../lib/agentConversationPrompts";
 import { getAgentToolBadgeLabels, getAgentToolProfileSummary } from "../../lib/agentToolProfiles";
 import { selectAgentRuntimeConfigFiles } from "../../lib/agentRuntimeConfig";
@@ -292,6 +292,12 @@ export function ConversationWorkbench({
     providerReady: providerReadiness.canRunCompletion,
     selectedAgentActivity,
   });
+  // 제안3(안전판): "상태 요약" Popover 대신, 문제 있을 때만 헤더 아래 1줄 경고 배너.
+  const conversationHeaderAlert = deriveConversationHeaderAlert({
+    pendingApprovalCount: permissionSnapshot.queue.length,
+    providerReadinessStatus: providerReadiness.status,
+    selectedAgentActivity,
+  });
   const selectedAgentThinkingIndicator = resolveAgentThinkingIndicator(selectedAgent?.id, agentActivityById);
   const selectedAgentInitials = selectedAgent ? agentInitialsForDisplay(selectedAgent) : "AI";
   const selectedAgentSubtitle = selectedAgent ? agentSecondaryDisplayLabel(selectedAgent) : "대기";
@@ -340,7 +346,6 @@ export function ConversationWorkbench({
     .filter((file) => file.kind === "skill")
     .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
     .map((file) => file.label);
-  const headerMemoryLabel = createAgentChannelHeaderMemoryLabel(memoryScope);
   const personaSoulApplied = Boolean(persona?.soulMdPath || persona?.soulSummary);
   const personaAgentsMdApplied = Boolean(persona?.agentsMdPath || persona?.agentsInstruction);
   const pendingRetryAgent = pendingProviderRetry?.agentId
@@ -497,35 +502,7 @@ export function ConversationWorkbench({
           </PopoverContent>
         </Popover>
 
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              aria-label="대화 상태 요약 보기"
-              className="hidden h-8 gap-1.5 rounded-full border border-zinc-800/80 bg-zinc-900/70 px-2 text-[11px] text-zinc-400 hover:border-cyan-500/30 hover:text-cyan-100 sm:inline-flex"
-              size="sm"
-              variant="ghost"
-            >
-              <Database className="h-3.5 w-3.5 text-cyan-400" />
-              상태 요약
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-72 border-zinc-800 bg-zinc-900/95 p-3 text-zinc-100 backdrop-blur-xl">
-            <div className="space-y-2 text-xs">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">대화 연속성</p>
-              <ConversationMetaRow icon={Database} label="이전 대화" value="이어받음" />
-              {controlQueueContinuity?.hasItems ? (
-                <ConversationMetaRow icon={Archive} label="큐 연속성" value={controlQueueContinuity.label} />
-              ) : null}
-              {agentToolRuntimeLabel ? (
-                <ConversationMetaRow icon={Wrench} label="도구 상태" value={agentToolRuntimeLabel} />
-              ) : null}
-              {headerMemoryLabel ? (
-                <ConversationMetaRow icon={Sparkles} label="기억 상태" value={headerMemoryLabel} />
-              ) : null}
-            </div>
-          </PopoverContent>
-        </Popover>
-
+        {/* 제안3(안전판): "상태 요약" Popover 제거 → 문제 있을 때만 헤더 아래 1줄 배너로 대체 */}
         <div className="flex shrink-0 items-center gap-1">
           {onChangeViewMode ? (
             <div className="mr-1 hidden items-center rounded-lg border border-white/10 bg-white/[0.03] p-0.5 md:inline-flex">
@@ -609,6 +586,21 @@ export function ConversationWorkbench({
           />
         </div>
       </header>
+
+      {/* 제안3(안전판): 문제가 있을 때만 헤더 아래 1줄 경고 배너(공급자/승인/오류). 평상시 숨김. */}
+      {conversationHeaderAlert ? (
+        <div
+          className={`flex shrink-0 items-center gap-2 border-b px-4 py-1.5 text-[11px] ${
+            conversationHeaderAlert.tone === "rose"
+              ? "border-rose-500/20 bg-rose-500/[0.06] text-rose-200"
+              : "border-amber-500/20 bg-amber-500/[0.06] text-amber-200"
+          }`}
+          role="status"
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${conversationHeaderAlert.tone === "rose" ? "bg-rose-400" : "bg-amber-400"}`} />
+          {conversationHeaderAlert.label}
+        </div>
+      ) : null}
 
       {viewMode === "agents" && selectedAgent && toolProfileSummary ? (
         <>
