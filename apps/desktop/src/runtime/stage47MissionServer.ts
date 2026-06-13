@@ -1,6 +1,8 @@
 import type {
   MissionCreateRequest,
   MissionEventAppendRequest,
+  MissionMergeRequest,
+  MissionVerifyRequest,
   ServerMissionRecord,
 } from "@ai-orchestrator/protocol";
 import { resolveDgxServerBaseUrls } from "./stage30DgxEndpoints";
@@ -78,6 +80,41 @@ export async function appendDgxMissionEvent({
   return requestMissionServerJson<MissionResponse>({
     method: "POST",
     path: `/missions/${encodeURIComponent(missionId)}/events`,
+    body: request,
+    serverBaseUrl,
+    fetchImpl,
+    timeoutMs,
+  });
+}
+
+export async function verifyDgxMission({
+  missionId,
+  request,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 200_000,
+}: MissionServerRequestInput & { missionId: string; request: MissionVerifyRequest }): Promise<MissionResponse> {
+  // 서버가 실제 검증 명령을 실행하므로 타임아웃이 길다 (pnpm test 등)
+  return requestMissionServerJson<MissionResponse>({
+    method: "POST",
+    path: `/missions/${encodeURIComponent(missionId)}/verify`,
+    body: request,
+    serverBaseUrl,
+    fetchImpl,
+    timeoutMs,
+  });
+}
+
+export async function mergeDgxMission({
+  missionId,
+  request,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 10_000,
+}: MissionServerRequestInput & { missionId: string; request: MissionMergeRequest }): Promise<MissionResponse> {
+  return requestMissionServerJson<MissionResponse>({
+    method: "POST",
+    path: `/missions/${encodeURIComponent(missionId)}/merge`,
     body: request,
     serverBaseUrl,
     fetchImpl,

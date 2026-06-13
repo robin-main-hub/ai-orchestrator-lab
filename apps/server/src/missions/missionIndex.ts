@@ -104,10 +104,16 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
     if (event.type === "mission.merge.queued") {
       const parsed = missionMergeQueuedPayloadSchema.safeParse(event.payload);
       const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
-      if (!parsed.success || !record || record.mergeQueueItems.some((item) => item.id === parsed.data.item.id)) {
+      if (!parsed.success || !record) {
         continue;
       }
-      record.mergeQueueItems.push(parsed.data.item);
+      // upsert: 같은 큐 항목 id는 갱신(queued → merged 전이 반영), 새 항목은 추가
+      const existingIndex = record.mergeQueueItems.findIndex((item) => item.id === parsed.data.item.id);
+      if (existingIndex >= 0) {
+        record.mergeQueueItems[existingIndex] = parsed.data.item;
+      } else {
+        record.mergeQueueItems.push(parsed.data.item);
+      }
       record.updatedAt = event.createdAt;
       continue;
     }

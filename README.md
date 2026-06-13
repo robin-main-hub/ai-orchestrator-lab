@@ -137,6 +137,7 @@ docs/             # 00~45 설계 문서 (아래 주요 항목)
 46     product-kernel-sandbox-persona (Mission/Sandbox/Verifier/Merge + Hermes persona contract)
 47     sandbox-runner-integration (SandboxRunner seam + LegacyTmuxRunner adapter)
 48     mission-board-verification-merge (Mission Board hydration + verification record + merge queue)
+49     mission-full-loop-production (server verification runner + merge execution + UI full loop)
 ```
 
 ## 실행 방법

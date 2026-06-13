@@ -7,7 +7,10 @@ import {
   type EventEnvelope,
   type MissionCreateRequest,
   type MissionEventAppendRequest,
+  type MissionMergeRequest,
+  type MissionVerifyRequest,
   type ServerMissionRecord,
+  type VerificationReport,
 } from "@ai-orchestrator/protocol";
 import { buildMissionIndexFromEvents } from "./missionIndex.js";
 import { normalizeMissionWorker, normalizeVerificationReport } from "./missionPolicy.js";
@@ -24,6 +27,15 @@ export type MissionStoreDeps = {
   /** envelopes를 event storage에 append (dedup/idempotency는 storage가 보장) */
   appendEvents: (sessionId: string, envelopes: EventEnvelope[]) => Promise<void>;
   now?: () => string;
+  /** 검증 명령을 실제로 실행해 observed VerificationReport를 만든다 (LocalSandboxRunner) */
+  runVerification?: (input: {
+    commands: ReadonlyArray<string>;
+    missionId: string;
+    verifierAgentId: string;
+    reportId: string;
+  }) => Promise<VerificationReport>;
+  /** 단조 증가 nonce 생성 (reportId/merge 등 유니크 id용; 테스트 결정성 위해 주입) */
+  nextNonce?: () => string;
 };
 
 export type MissionStore = {
@@ -31,6 +43,10 @@ export type MissionStore = {
   list: () => Promise<ServerMissionRecord[]>;
   get: (missionId: string) => Promise<ServerMissionRecord | undefined>;
   appendEvent: (missionId: string, request: MissionEventAppendRequest) => Promise<ServerMissionRecord | undefined>;
+  /** 미션의 검증 명령을 서버에서 실행하고 결과를 기록 (E1: 진짜 observed) */
+  verify: (missionId: string, request: MissionVerifyRequest) => Promise<ServerMissionRecord | undefined>;
+  /** 검증 통과한 큐 항목의 머지를 실행하고 미션을 닫는다 (E2) */
+  merge: (missionId: string, request: MissionMergeRequest) => Promise<ServerMissionRecord | undefined>;
 };
 
 export class MissionEventValidationError extends Error {}
@@ -57,6 +73,8 @@ function envelope(input: {
 
 export function createMissionStore(deps: MissionStoreDeps): MissionStore {
   const now = deps.now ?? (() => new Date().toISOString());
+  let nonceCounter = 0;
+  const nextNonce = deps.nextNonce ?? (() => `${nonceCounter++}`);
 
   async function materialize(): Promise<ServerMissionRecord[]> {
     return buildMissionIndexFromEvents(await deps.loadEvents());
@@ -205,6 +223,95 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
 
       await deps.appendEvents(missionId, [
         envelope({ missionId, type: request.type, payload, seq, createdAt }),
+      ]);
+      return get(missionId);
+    },
+
+    async verify(missionId, request) {
+      const existing = await get(missionId);
+      if (!existing) {
+        return undefined;
+      }
+      if (!deps.runVerification) {
+        throw new MissionEventValidationError("verification runner not configured on this server");
+      }
+      // verifier 우선순위: 명시 id → sandbox_verify 워커 → (없으면 거부)
+      const verifier =
+        (request.verifierAgentId && existing.workers.find((w) => w.agentId === request.verifierAgentId)) ||
+        existing.workers.find((w) => w.capability.mode === "sandbox_verify");
+      if (!verifier) {
+        throw new MissionEventValidationError("no sandbox_verify worker available to run verification");
+      }
+
+      const report = await deps.runVerification({
+        commands: request.commands,
+        missionId,
+        verifierAgentId: verifier.agentId,
+        reportId: `verify_${missionId}_${nextNonce()}`,
+      });
+      // 같은 정직성 정책을 한 번 더 통과 (LocalSandboxRunner가 이미 정직하지만 이중 방어)
+      const normalized = normalizeVerificationReport(report);
+      const createdAt = now();
+      const seq = existing.workers.length + existing.artifacts.length + existing.verificationReports.length + 1;
+      await deps.appendEvents(missionId, [
+        envelope({
+          missionId,
+          type: "mission.verification.recorded",
+          payload: { missionId, report: normalized.report, observedDowngraded: normalized.observedDowngraded },
+          seq,
+          createdAt,
+        }),
+      ]);
+      return get(missionId);
+    },
+
+    async merge(missionId, request) {
+      const existing = await get(missionId);
+      if (!existing) {
+        return undefined;
+      }
+      const queueItem = existing.mergeQueueItems.find((item) => item.id === request.mergeQueueItemId);
+      if (!queueItem) {
+        throw new MissionEventValidationError(`merge queue item not found: ${request.mergeQueueItemId}`);
+      }
+      // E2 불변식: 큐 항목이 가리키는 검증이 여전히 observed+passed여야 머지 실행
+      const report = existing.verificationReports.find((r) => r.id === queueItem.requiredVerificationReportId);
+      if (!report || report.status !== "passed" || !report.observed) {
+        throw new MissionEventValidationError(
+          "merge requires the queued item's verification to be observed and passed",
+        );
+      }
+      if (queueItem.status === "merged") {
+        return existing; // 멱등: 이미 머지됨
+      }
+
+      const createdAt = now();
+      const seq = existing.workers.length + existing.artifacts.length + existing.verificationReports.length + existing.mergeQueueItems.length + 1;
+      // 큐 항목을 merged로 재기록(누적 머지) + 미션 닫기. 실제 git merge는 worktree
+      // 인프라(다음 단계) 전까지 상태 전이로 — mergeCommitSha는 제공되면 보존.
+      await deps.appendEvents(missionId, [
+        envelope({
+          missionId,
+          type: "mission.merge.queued",
+          payload: {
+            missionId,
+            item: {
+              ...queueItem,
+              status: "merged",
+              mergeCommitSha: request.mergeCommitSha ?? queueItem.mergeCommitSha,
+              completedAt: createdAt,
+            },
+          },
+          seq,
+          createdAt,
+        }),
+        envelope({
+          missionId,
+          type: "mission.closed",
+          payload: { missionId, status: "merged", reason: `merged via queue item ${queueItem.id}` },
+          seq: seq + 1,
+          createdAt,
+        }),
       ]);
       return get(missionId);
     },

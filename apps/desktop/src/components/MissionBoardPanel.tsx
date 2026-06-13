@@ -1,4 +1,4 @@
-import { ClipboardList, GitMerge, RefreshCw, ShieldCheck } from "lucide-react";
+import { ClipboardList, GitMerge, Plus, RefreshCw, Rocket, ShieldCheck } from "lucide-react";
 import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import {
   MISSION_SOURCE_LABEL,
@@ -16,27 +16,36 @@ import {
 export function MissionBoardPanel({
   snapshot,
   loading,
-  verifyingMissionId,
-  queueingMissionId,
+  creating,
+  busyMissionId,
+  busyKind,
   notice,
   onRefresh,
+  onCreateMission,
   onVerify,
   onQueueMerge,
+  onMerge,
   verifyAvailable,
 }: {
   snapshot: MissionBoardSnapshot;
   loading?: boolean;
-  /** 검증 실행 중인 미션 id (버튼 스피너/비활성용) */
-  verifyingMissionId?: string;
-  /** 머지 큐 등록 중인 미션 id */
-  queueingMissionId?: string;
+  /** 미션 생성 중 */
+  creating?: boolean;
+  /** 동작 진행 중인 미션 id */
+  busyMissionId?: string;
+  /** 진행 중인 동작 종류 */
+  busyKind?: "verify" | "queue" | "merge";
   /** 마지막 동작 결과 안내 한 줄 */
   notice?: string;
   onRefresh: () => void;
+  /** 제공 시 헤더에 "패킷→미션 생성" 버튼 노출 */
+  onCreateMission?: () => void;
   /** 제공 시 검증 가능 미션 카드에 "검증 실행" 버튼 노출 */
   onVerify?: (item: MissionBoardItem) => void;
   /** 제공 시 observed+passed 검증이 있는 카드에 "병합 대기열" 버튼 노출 */
   onQueueMerge?: (item: MissionBoardItem) => void;
+  /** 제공 시 머지 대기열 항목이 있는 카드에 "머지 실행" 버튼 노출 */
+  onMerge?: (item: MissionBoardItem) => void;
   /** 검증 명령 소스(CodingPacket)가 준비됐는지 — 없으면 버튼 대신 사유 표시 */
   verifyAvailable?: boolean;
 }) {
@@ -48,6 +57,12 @@ export function MissionBoardPanel({
         <StatusBadge size="sm" variant={snapshot.serverReachable ? "success" : "warning"}>
           {snapshot.serverReachable ? "DGX 연결됨" : "서버 미연결"}
         </StatusBadge>
+        {onCreateMission ? (
+          <button className="rail-icon-button mission-board-create" disabled={creating} onClick={onCreateMission} type="button">
+            <Plus size={13} />
+            {creating ? "생성 중…" : "패킷→미션 생성"}
+          </button>
+        ) : null}
         <button className="rail-icon-button mission-board-refresh" disabled={loading} onClick={onRefresh} type="button">
           <RefreshCw size={13} />
           {loading ? "불러오는 중…" : "새로고침"}
@@ -71,13 +86,13 @@ export function MissionBoardPanel({
             const verifiable = Boolean(
               onVerify && item.source === "server_observed" && item.workers.some((w) => w.capabilityMode === "sandbox_verify"),
             );
-            const queueable = Boolean(
-              onQueueMerge &&
-                item.source === "server_observed" &&
+            const verified = Boolean(
+              item.source === "server_observed" &&
                 item.latestVerification?.observed &&
-                item.latestVerification.status === "passed" &&
-                item.mergeQueueCount === 0,
+                item.latestVerification.status === "passed",
             );
+            const queueable = Boolean(onQueueMerge && verified && item.mergeQueueCount === 0);
+            const mergeable = Boolean(onMerge && verified && item.mergeQueueCount > 0 && item.status !== "merged");
             return (
               <li className="mission-board-card" key={`${item.source}:${item.missionId}`}>
                 <div className="mission-board-card-head">
@@ -106,18 +121,18 @@ export function MissionBoardPanel({
                   {" · merge queue "}
                   {item.mergeQueueCount}
                 </p>
-                {(verifiable || queueable) && (
+                {(verifiable || queueable || mergeable) && (
                   <div className="mission-board-actions">
                     {verifiable ? (
                       verifyAvailable ? (
                         <button
                           className="rail-icon-button mission-board-verify"
-                          disabled={verifyingMissionId === item.missionId}
+                          disabled={busyMissionId === item.missionId}
                           onClick={() => onVerify?.(item)}
                           type="button"
                         >
                           <ShieldCheck size={13} />
-                          {verifyingMissionId === item.missionId ? "검증 중…" : "검증 실행"}
+                          {busyMissionId === item.missionId && busyKind === "verify" ? "검증 중…" : "검증 실행"}
                         </button>
                       ) : (
                         <span className="mission-board-hint">검증 명령 없음 — 패킷의 검증 계획이 필요합니다</span>
@@ -126,12 +141,23 @@ export function MissionBoardPanel({
                     {queueable ? (
                       <button
                         className="rail-icon-button mission-board-queue"
-                        disabled={queueingMissionId === item.missionId}
+                        disabled={busyMissionId === item.missionId}
                         onClick={() => onQueueMerge?.(item)}
                         type="button"
                       >
                         <GitMerge size={13} />
-                        {queueingMissionId === item.missionId ? "등록 중…" : "병합 대기열 등록"}
+                        {busyMissionId === item.missionId && busyKind === "queue" ? "등록 중…" : "병합 대기열 등록"}
+                      </button>
+                    ) : null}
+                    {mergeable ? (
+                      <button
+                        className="rail-icon-button mission-board-merge"
+                        disabled={busyMissionId === item.missionId}
+                        onClick={() => onMerge?.(item)}
+                        type="button"
+                      >
+                        <Rocket size={13} />
+                        {busyMissionId === item.missionId && busyKind === "merge" ? "머지 중…" : "머지 실행"}
                       </button>
                     ) : null}
                   </div>
