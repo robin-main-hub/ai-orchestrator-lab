@@ -43,3 +43,26 @@ export function isSafeSubsetApprovable(item: ApprovalQueueItem): boolean {
   const evidence = deriveApprovalEvidence(item);
   return evidence.kind === "command" && evidence.safe.allowed;
 }
+
+export type SafeSubsetPartition = {
+  /** required items that are safe to auto-approve in bulk (real safe command) */
+  approvable: ApprovalQueueItem[];
+  /** required items deliberately left out (no command, unsafe command, or non-command effect) */
+  excluded: ApprovalQueueItem[];
+};
+
+/**
+ * Splits the pending (required) queue into the safe-subset bulk-approve target
+ * and everything excluded. This is the data the "안전 검증 항목 승인" affordance
+ * shows as "대상 N · 제외 M". Resolved (non-required) items are ignored entirely
+ * so the counts reflect only what an operator could act on right now.
+ */
+export function partitionSafeSubset(queue: ReadonlyArray<ApprovalQueueItem>): SafeSubsetPartition {
+  const pending = queue.filter((item) => item.state === "required");
+  const approvable: ApprovalQueueItem[] = [];
+  const excluded: ApprovalQueueItem[] = [];
+  for (const item of pending) {
+    (isSafeSubsetApprovable(item) ? approvable : excluded).push(item);
+  }
+  return { approvable, excluded };
+}

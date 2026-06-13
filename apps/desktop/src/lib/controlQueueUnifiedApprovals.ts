@@ -52,12 +52,25 @@ export function parseUnifiedControlQueueSourceItemId(sourceItemId: string): Unif
   };
 }
 
+/**
+ * Pulls the redaction-safe command preview out of a replay payload. The queue
+ * is an honesty surface, so we use ONLY `redactedCommandPreview` (secrets already
+ * masked) — never the raw `commandPreview` — to avoid leaking a token in an arg.
+ * Absent/blank ⇒ undefined (no command shown), never synthesized from the reason.
+ */
+function redactedCommandPreviewFromReplay(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+  const value = (payload as Record<string, unknown>).redactedCommandPreview;
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
 function createServerApprovalQueueItems(approvals: ApprovalRequest[]): ApprovalQueueItem[] {
   return approvals
     .filter((approval) => approval.state === "required")
     .map((approval) => ({
       action: approval.action,
       costEstimateTokens: approval.costEstimateTokens,
+      commandPreview: redactedCommandPreviewFromReplay(approval.replay?.payload),
       createdAt: approval.createdAt,
       expiresAt: approval.expiresAt,
       id: `queue_${approval.id}`,

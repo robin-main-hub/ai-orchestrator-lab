@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ApprovalQueueItem } from "@ai-orchestrator/protocol";
-import { deriveApprovalEvidence, isSafeSubsetApprovable } from "./approvalCommandEvidence";
+import { deriveApprovalEvidence, isSafeSubsetApprovable, partitionSafeSubset } from "./approvalCommandEvidence";
 
 function item(overrides: Partial<ApprovalQueueItem> = {}): ApprovalQueueItem {
   return {
@@ -62,5 +62,33 @@ describe("isSafeSubsetApprovable — 작업 C 게이트", () => {
     expect(isSafeSubsetApprovable(item({ action: "provider_completion", costEstimateTokens: 10 }))).toBe(false);
     expect(isSafeSubsetApprovable(item({ action: "git_push" }))).toBe(false);
     expect(isSafeSubsetApprovable(item({ action: "secret_view" }))).toBe(false);
+  });
+});
+
+describe("partitionSafeSubset — 일괄 승인 대상/제외 분리", () => {
+  it("required 중 안전 명령만 approvable, 나머지는 excluded", () => {
+    const queue = [
+      item({ id: "q1", sourceItemId: "s1", action: "terminal_run", commandPreview: "git status" }), // 안전
+      item({ id: "q2", sourceItemId: "s2", action: "terminal_run", commandPreview: "rm -rf node_modules" }), // 위험
+      item({ id: "q3", sourceItemId: "s3", action: "provider_completion", costEstimateTokens: 50 }), // 명령 없음
+      item({ id: "q4", sourceItemId: "s4", action: "secret_view" }), // 비실행
+    ];
+    const { approvable, excluded } = partitionSafeSubset(queue);
+    expect(approvable.map((i) => i.sourceItemId)).toEqual(["s1"]);
+    expect(excluded.map((i) => i.sourceItemId)).toEqual(["s2", "s3", "s4"]);
+  });
+
+  it("resolved(required 아님) 항목은 양쪽 모두에서 제외(현재 처리 가능한 것만 셈)", () => {
+    const queue = [
+      item({ id: "q1", sourceItemId: "s1", state: "approved", action: "terminal_run", commandPreview: "ls" }),
+      item({ id: "q2", sourceItemId: "s2", state: "required", action: "terminal_run", commandPreview: "ls" }),
+    ];
+    const { approvable, excluded } = partitionSafeSubset(queue);
+    expect(approvable.map((i) => i.sourceItemId)).toEqual(["s2"]);
+    expect(excluded).toHaveLength(0);
+  });
+
+  it("안전 항목이 없으면 approvable 비어 있음", () => {
+    expect(partitionSafeSubset([item({ action: "provider_completion", costEstimateTokens: 10 })]).approvable).toHaveLength(0);
   });
 });

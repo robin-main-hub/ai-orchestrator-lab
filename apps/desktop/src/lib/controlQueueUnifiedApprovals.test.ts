@@ -81,6 +81,50 @@ describe("createUnifiedControlQueueSnapshot", () => {
     });
   });
 
+  it("tmux 디스패치 승인의 redactedCommandPreview를 commandPreview로 노출(원본 commandPreview는 무시 — 비밀 누출 방지)", () => {
+    const tmuxApproval: ApprovalRequest = {
+      ...serverApproval,
+      id: "approval_tmux",
+      action: "terminal_run",
+      sourceItemId: "permission_server_tmux",
+      reason: "tmux 명령 승인",
+      replay: {
+        endpoint: "/approvals/replay",
+        kind: "tmux_dispatch",
+        method: "POST",
+        payload: { commandPreview: "echo $SECRET_TOKEN", redactedCommandPreview: "echo ‹redacted›" },
+      },
+    };
+    const unified = createUnifiedControlQueueSnapshot({
+      approvalServerSnapshot: { approvals: [tmuxApproval], queue: [] },
+      permissionSnapshot,
+    });
+    const item = unified.queue.find((entry) => entry.sourceItemId === "server:approval_tmux");
+    expect(item?.commandPreview).toBe("echo ‹redacted›");
+    // 원본(미마스킹) 명령은 절대 노출하지 않는다
+    expect(item?.commandPreview).not.toContain("SECRET_TOKEN");
+  });
+
+  it("redactedCommandPreview가 없으면 commandPreview를 비운다(원본 commandPreview로 폴백 안 함)", () => {
+    const rawOnly: ApprovalRequest = {
+      ...serverApproval,
+      id: "approval_rawonly",
+      action: "terminal_run",
+      sourceItemId: "permission_server_rawonly",
+      replay: {
+        endpoint: "/approvals/replay",
+        kind: "tmux_dispatch",
+        method: "POST",
+        payload: { commandPreview: "ls -la" },
+      },
+    };
+    const unified = createUnifiedControlQueueSnapshot({
+      approvalServerSnapshot: { approvals: [rawOnly], queue: [] },
+      permissionSnapshot,
+    });
+    expect(unified.queue.find((entry) => entry.sourceItemId === "server:approval_rawonly")?.commandPreview).toBeUndefined();
+  });
+
   it("server sourceItemId를 approvalId로 안전하게 역해석한다", () => {
     expect(parseUnifiedControlQueueSourceItemId("server:approval_server_provider")).toEqual({
       approvalId: "approval_server_provider",
