@@ -27,6 +27,8 @@ import {
 import type { WorkTraceSearchItem } from "../../lib/workTraceSearch";
 import { ApprovalEvidenceCard } from "./ApprovalEvidenceCard";
 import { Badge } from "./Badge";
+import { CockpitHealthHero } from "./CockpitHealthHero";
+import { deriveCockpitHealthRollup } from "../../lib/cockpitHealthRollup";
 import { DispatchHistoryCard } from "./DispatchHistoryCard";
 import { ExperienceRoadmapCard } from "./ExperienceRoadmapCard";
 import { HandoffCard } from "./HandoffCard";
@@ -75,10 +77,14 @@ export function OperatorCockpit({
 }) {
   const [showDetails, setShowDetails] = useState(defaultDetailsOpen);
   const [detailFocus, setDetailFocus] = useState<CockpitDetailFocus | undefined>();
+  // L2(전체 현황) 펼침 — 기본은 L1 히어로만 보여 정보 과부하를 막는다.
+  // 팔레트 deep-link(initialFocus)나 기존 defaultDetailsOpen이면 자동 펼침.
+  const [expanded, setExpanded] = useState(defaultDetailsOpen);
   useEffect(() => {
     if (!initialFocus) return;
     setDetailFocus(initialFocus);
     setShowDetails(true);
+    setExpanded(true);
     const surfaceId = initialFocus.surface === "diagnostics" ? "maturity" : initialFocus.surface;
     const id = `cockpit-section-${surfaceId}`;
     window.requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -105,6 +111,15 @@ export function OperatorCockpit({
         workTraceItems: readiness.workTraceItems,
       })
     : [];
+  // L1 건강 롤업 — 전체 신호 한 줄 + 가장 긴급한 액션 하나
+  const healthRollup = deriveCockpitHealthRollup({
+    blockedCount,
+    approvalCount,
+    criticalApprovalCount,
+    fallbackActive: snapshot.routing.fallbackStatus === "active",
+    dgxMirrorOffline: snapshot.memory.dgxMirrorHealth === "disconnected",
+    nextActions: readiness?.nextActions ?? [],
+  });
   const handleNextAction = (action: CockpitNextActionItem) => {
     if (action.targetSurface === "approvals" && onPreviewEvidence) {
       onPreviewEvidence();
@@ -284,6 +299,17 @@ export function OperatorCockpit({
 
       <div className="relative z-[1] flex-1 overflow-y-auto p-4">
         <div className="space-y-4">
+          {/* L1 — 첫 눈 건강 히어로. 기본은 이것만 보인다 (정보 과부하 해소). */}
+          <CockpitHealthHero
+            rollup={healthRollup}
+            expanded={expanded}
+            onToggleExpand={() => setExpanded((current) => !current)}
+            onActivateTopAction={handleNextAction}
+          />
+
+          {/* L2 — 전체 현황. 펼쳐야 보인다. */}
+          {expanded ? (
+          <>
           <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             <GlanceTile
               icon={<Users className="h-4 w-4" />}
@@ -436,6 +462,8 @@ export function OperatorCockpit({
               </div>
             ) : null}
           </div>
+          </>
+          ) : null}
         </div>
       </div>
     </div>
