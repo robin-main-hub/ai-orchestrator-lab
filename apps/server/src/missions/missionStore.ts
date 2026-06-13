@@ -26,6 +26,12 @@ export type MissionStoreDeps = {
   loadEvents: () => Promise<ReadonlyArray<EventEnvelope>>;
   /** envelopes를 event storage에 append (dedup/idempotency는 storage가 보장) */
   appendEvents: (sessionId: string, envelopes: EventEnvelope[]) => Promise<void>;
+  /**
+   * append 성공 직후 호출되는 관측 훅(L1). 여기서 미션 trace를 SSE로 broadcast한다.
+   * 부수효과는 관측 전용 — 여기서 새 이벤트를 append하면 안 된다(루프 방지). 실패해도
+   * append 자체는 이미 커밋됐으므로 store는 무시하고 진행(broadcast best-effort).
+   */
+  onEventsCommitted?: (missionId: string, envelopes: ReadonlyArray<EventEnvelope>) => void | Promise<void>;
   now?: () => string;
   /** 검증 명령을 실제로 실행해 observed VerificationReport를 만든다 (LocalSandboxRunner) */
   runVerification?: (input: {
@@ -90,6 +96,25 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
   let nonceCounter = 0;
   const nextNonce = deps.nextNonce ?? (() => `${nonceCounter++}`);
 
+  /**
+   * 단일 append 창구 — storage에 커밋한 뒤 관측 훅(broadcast)을 친다. 모든 미션
+   * 이벤트(create/append/verify/merge 및 후속 error-card/self-correction)가 이 경로를
+   * 지나므로 trace 스트림이 한 곳에서 일관되게 흐른다. 훅 실패는 삼키되 로그만 남긴다.
+   */
+  async function commit(missionId: string, envelopes: EventEnvelope[]): Promise<void> {
+    if (envelopes.length === 0) return;
+    await deps.appendEvents(missionId, envelopes);
+    if (deps.onEventsCommitted) {
+      try {
+        await deps.onEventsCommitted(missionId, envelopes);
+      } catch (error) {
+        console.warn(
+          `[mission-store] onEventsCommitted hook failed for ${missionId}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+  }
+
   async function materialize(): Promise<ServerMissionRecord[]> {
     return buildMissionIndexFromEvents(await deps.loadEvents());
   }
@@ -136,7 +161,7 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
           }),
         ),
       ];
-      await deps.appendEvents(request.id, envelopes);
+      await commit(request.id, envelopes);
       const record = await get(request.id);
       if (!record) {
         throw new Error(`mission ${request.id} did not materialize after create`);
@@ -235,9 +260,7 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
           throw new MissionEventValidationError(`unknown mission event type: ${String(request.type)}`);
       }
 
-      await deps.appendEvents(missionId, [
-        envelope({ missionId, type: request.type, payload, seq, createdAt }),
-      ]);
+      await commit(missionId, [envelope({ missionId, type: request.type, payload, seq, createdAt })]);
       return get(missionId);
     },
 
@@ -267,7 +290,7 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
       const normalized = normalizeVerificationReport(report);
       const createdAt = now();
       const seq = existing.workers.length + existing.artifacts.length + existing.verificationReports.length + 1;
-      await deps.appendEvents(missionId, [
+      await commit(missionId, [
         envelope({
           missionId,
           type: "mission.verification.recorded",
@@ -344,7 +367,7 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
           }),
         );
       }
-      await deps.appendEvents(missionId, envelopes);
+      await commit(missionId, envelopes);
       return get(missionId);
     },
   };
