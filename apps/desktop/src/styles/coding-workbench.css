@@ -427,6 +427,36 @@
   outline: none;
   border-color: color-mix(in srgb, var(--cyan) 55%, var(--line));
 }
+.coding-prompt__input {
+  resize: none;
+}
+/* 입력창 상하 리사이저 — 경계를 드래그(또는 ↑↓)해 입력창 높이 조절. 토론 리사이저와 동일 결. */
+.coding-prompt__resizer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 12px;
+  margin-bottom: 2px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: row-resize;
+  touch-action: none;
+  outline: none;
+}
+.coding-prompt__resizer-grip {
+  width: 38px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  transition: background 140ms ease, width 140ms ease;
+}
+.coding-prompt__resizer:hover .coding-prompt__resizer-grip,
+.coding-prompt__resizer:focus-visible .coding-prompt__resizer-grip {
+  width: 52px;
+  background: color-mix(in srgb, var(--cyan) 70%, transparent);
+}
 .coding-prompt__send,
 .coding-prompt__stop {
   display: inline-flex;

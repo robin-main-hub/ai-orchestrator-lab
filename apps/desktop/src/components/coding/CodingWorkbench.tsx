@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState , useSyncExternalStore} from "react";
-import type { ChangeEvent, ClipboardEvent } from "react";
+import type { ChangeEvent, ClipboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { AlertTriangle, CircleStop, FileDiff, GitBranch, Hammer, PanelRightOpen, Paperclip, Plus, RefreshCcw, RotateCcw, Send, ShieldCheck, Telescope, Terminal, Trash2, X, XCircle } from "lucide-react";
 import type { ModelDescriptor, ProviderCompletionAttachment, ProviderProfile, TmuxPaneRole } from "@ai-orchestrator/protocol";
 import { StatusBadge } from "@/ui/status-badge";
@@ -56,6 +56,12 @@ import { fetchGithubPullRequest } from "../../lib/githubConnector";
 import { buildPrContextAttachment, upsertContextAttachment } from "../../lib/githubContext";
 import { assembleCodingRequestMessages, buildGithubContextTracePayload } from "../../lib/codingRequestAssembly";
 import { codingInjectionBudgets } from "../../lib/contextBudget";
+import {
+  COMPOSER_INPUT_HEIGHT_STORAGE_KEY,
+  composerHeightAfterKey,
+  composerHeightFromDrag,
+  parseStoredComposerHeight,
+} from "../../lib/composerResize";
 
 
 
@@ -129,6 +135,37 @@ export function CodingWorkbench({
   // 작은 하드 클램프로 코딩하는 사람을 답답하게 하지 않는다.
   const injectionBudgets = useMemo(() => codingInjectionBudgets(activeModel), [activeModel]);
   const attachmentControl = useDraftAttachments({ modelModalities, maxCount: maxDraftAttachments });
+  // 입력창 상하 리사이저 — 경계를 드래그해 textarea 높이를 키운다(긴 입력). localStorage 저장.
+  const [composerHeight, setComposerHeight] = useState<number>(() => {
+    try {
+      return parseStoredComposerHeight(window.localStorage.getItem(COMPOSER_INPUT_HEIGHT_STORAGE_KEY));
+    } catch {
+      return parseStoredComposerHeight(undefined);
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(COMPOSER_INPUT_HEIGHT_STORAGE_KEY, String(composerHeight));
+    } catch {
+      // storage 불가 환경 — 세션 내에서만 유지
+    }
+  }, [composerHeight]);
+  const onComposerResizePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = composerHeight;
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // 합성 이벤트 — window 리스너로 대체
+    }
+    const onMove = (moveEvent: globalThis.PointerEvent) =>
+      setComposerHeight(composerHeightFromDrag(startHeight, startY, moveEvent.clientY));
+    const onUp = () => window.removeEventListener("pointermove", onMove);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+    window.addEventListener("pointercancel", onUp, { once: true });
+  };
   const attachmentRejection = useMemo(
     () => summarizeRejectedAttachments(attachmentControl.rejectedPlans),
     [attachmentControl.rejectedPlans],
@@ -743,6 +780,24 @@ export function CodingWorkbench({
         {notice ? <p className="coding-notice">{notice}</p> : null}
 
         <footer className="coding-prompt">
+          <button
+            type="button"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="입력창 크기 조절"
+            className="coding-prompt__resizer"
+            title="드래그해서 입력창 높이 조절 (↑/↓)"
+            onPointerDown={onComposerResizePointerDown}
+            onKeyDown={(event) => {
+              const next = composerHeightAfterKey(composerHeight, event.key, event.shiftKey);
+              if (next !== undefined) {
+                event.preventDefault();
+                setComposerHeight(next);
+              }
+            }}
+          >
+            <span className="coding-prompt__resizer-grip" aria-hidden />
+          </button>
           {slashSuggestions.length > 0 ? (
             <ul className="coding-slash">
               {slashSuggestions.map((command) => (
@@ -827,7 +882,7 @@ export function CodingWorkbench({
               className="coding-prompt__input"
               aria-label="코딩 지시 입력"
               placeholder={active?.agentMode === "plan" ? "플랜 모드 — 조사/계획만 합니다…" : "무엇을 만들까요? (@경로 멘션, / 명령)"}
-              rows={2}
+              style={{ height: composerHeight }}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               onPaste={onComposerPaste}
