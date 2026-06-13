@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { missionCheckpointSchema } from "./missionCheckpoint.js";
 
 /**
  * Product-kernel contracts for closing the gap between "character chat" and
@@ -520,6 +521,17 @@ export const missionClosedPayloadSchema = z.object({
 });
 export type MissionClosedPayload = z.infer<typeof missionClosedPayloadSchema>;
 
+/**
+ * mission.checkpoint.created — L3 자동 checkpoint hook이 append하는 서버 전용 이벤트.
+ * 클라이언트 append 창구(missionEventTypeSchema)에는 일부러 넣지 않는다(서버만 발행).
+ * checkpoint.headSha는 실제 git rev-parse 관측값(truthStatus: observed).
+ */
+export const missionCheckpointRecordedPayloadSchema = z.object({
+  missionId: z.string(),
+  checkpoint: missionCheckpointSchema,
+});
+export type MissionCheckpointRecordedPayload = z.infer<typeof missionCheckpointRecordedPayloadSchema>;
+
 /** POST /missions/:missionId/events 본문 — route 폭발 대신 단일 append 창구 */
 export const missionEventAppendRequestSchema = z.object({
   type: missionEventTypeSchema,
@@ -553,6 +565,8 @@ export const serverMissionRecordSchema = z.object({
   artifacts: z.array(missionArtifactRefSchema),
   verificationReports: z.array(verificationReportSchema),
   mergeQueueItems: z.array(sequentialMergeQueueItemSchema),
+  /** L3: verify/merge 전 자동 생성된 checkpoint들 (observed HEAD sha) */
+  checkpoints: z.array(missionCheckpointSchema).default([]),
   updatedAt: z.string(),
 });
 export type ServerMissionRecord = z.infer<typeof serverMissionRecordSchema>;

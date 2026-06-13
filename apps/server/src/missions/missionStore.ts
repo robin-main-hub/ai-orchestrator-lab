@@ -5,6 +5,8 @@ import {
   missionVerificationRecordedPayloadSchema,
   missionWorkerAssignmentRequestSchema,
   type EventEnvelope,
+  type MissionCheckpoint,
+  type MissionCheckpointReason,
   type MissionCreateRequest,
   type MissionEventAppendRequest,
   type MissionMergeRequest,
@@ -46,7 +48,24 @@ export type MissionStoreDeps = {
   nextNonce?: () => string;
   /** 큐 항목을 실제 git merge로 실행 (없으면 머지 자체가 not configured) */
   runMerge?: MissionMergeExecutor;
+  /**
+   * L3: verify/merge 전 자동 checkpoint 생성기. 미주입이거나 "skipped"면 checkpoint
+   * 없이 진행한다(이 배포에 repoRoot allowlist가 없으면 checkpoint 미적용 — 회귀 0).
+   * 자동 rollback은 절대 하지 않는다(rollback은 별도 승인 게이트 경로).
+   */
+  autoCheckpoint?: (missionId: string, reason: MissionCheckpointReason) => Promise<MissionAutoCheckpointOutcome>;
 };
+
+/**
+ * 자동 checkpoint 결과:
+ *   - created: 실제 sha를 관측해 checkpoint 생성 → 이벤트로 기록
+ *   - skipped: 이 배포에 적용 불가(allowlist 없음 등) → 조용히 진행
+ *   - failed:  적용 대상인데 git 실패 → 정책에 따라(merge=critical) 차단/경고
+ */
+export type MissionAutoCheckpointOutcome =
+  | { status: "created"; checkpoint: MissionCheckpoint }
+  | { status: "skipped"; reason: string }
+  | { status: "failed"; reason: string };
 
 export type MissionStore = {
   create: (request: MissionCreateRequest) => Promise<ServerMissionRecord>;
@@ -115,6 +134,41 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
         );
       }
     }
+  }
+
+  /** checkpoint.id가 전역 유니크하므로 그것을 envelope id로 써서 dedup을 보장한다. */
+  function checkpointEnvelope(checkpoint: MissionCheckpoint): EventEnvelope {
+    return {
+      id: `event_mission_checkpoint_created_${checkpoint.id}`,
+      sessionId: checkpoint.missionId,
+      type: "mission.checkpoint.created",
+      payload: { missionId: checkpoint.missionId, checkpoint },
+      createdAt: checkpoint.createdAt,
+      source: "server",
+      sourceTrust: "trusted",
+      redacted: true,
+    };
+  }
+
+  /**
+   * L3: verify/merge 전 자동 checkpoint. created면 이벤트로 기록(observed sha),
+   * skipped면 조용히 진행, failed면 정책에 따라 — critical(merge)은 작업 중단,
+   * 비critical(verify)은 경고 후 진행. 자동 rollback은 절대 하지 않는다.
+   */
+  async function runAutoCheckpoint(missionId: string, reason: MissionCheckpointReason, critical: boolean): Promise<void> {
+    if (!deps.autoCheckpoint) return;
+    const outcome = await deps.autoCheckpoint(missionId, reason);
+    if (outcome.status === "created") {
+      await commit(missionId, [checkpointEnvelope(outcome.checkpoint)]);
+      return;
+    }
+    if (outcome.status === "failed") {
+      if (critical) {
+        throw new MissionEventValidationError(`checkpoint(${reason}) 실패로 작업을 중단합니다: ${outcome.reason}`);
+      }
+      console.warn(`[mission-store] non-critical checkpoint(${reason}) failed for ${missionId}: ${outcome.reason}`);
+    }
+    // skipped → 이 배포엔 checkpoint가 적용되지 않음(allowlist 없음). 조용히 진행.
   }
 
   async function materialize(): Promise<ServerMissionRecord[]> {
@@ -282,6 +336,9 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
         throw new MissionEventValidationError("no sandbox_verify worker available to run verification");
       }
 
+      // L3: 검증 전 자동 checkpoint(비critical — 실패해도 검증은 진행).
+      await runAutoCheckpoint(missionId, "before_verification", false);
+
       const report = await deps.runVerification({
         commands: request.commands,
         missionId,
@@ -327,6 +384,10 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
       if (!deps.runMerge) {
         throw new MissionEventValidationError("merge runner not configured on this server");
       }
+
+      // L3: 머지 전 자동 checkpoint(critical — 적용 대상인데 실패하면 머지를 중단해
+      // 되돌릴 지점 없는 머지를 막는다). skipped(미적용 배포)면 그대로 진행.
+      await runAutoCheckpoint(missionId, "before_merge", true);
 
       // D4a: 실제 git merge 실행. mergeCommitSha는 클라이언트가 보낸 값이 아니라
       // runner가 git rev-parse HEAD로 관측한 real sha만 저장한다 (합성값 금지).
