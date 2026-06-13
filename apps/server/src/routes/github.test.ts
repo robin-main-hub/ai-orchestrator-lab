@@ -1,14 +1,36 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GithubReadonlyClient } from "../integrations/githubReadonlyClient";
-import { githubConnectorStatus } from "../integrations/githubReadonlyClient";
+import { GithubReadonlyError, githubConnectorStatus } from "../integrations/githubReadonlyClient";
 import { handleGithubRoute } from "./github";
 
 function clientStub(over: Partial<GithubReadonlyClient> & { token?: string } = {}): GithubReadonlyClient {
   const token = over.token;
   return {
     status: () => githubConnectorStatus(token),
-    getRepoOverview: over.getRepoOverview ?? (async () => ({ fullName: "o/r", description: null, defaultBranch: "main", openIssues: 0, stars: 0, private: false, htmlUrl: "" })),
+    getRepoOverview:
+      over.getRepoOverview ??
+      (async () => ({ fullName: "o/r", description: null, defaultBranch: "main", openIssues: 0, stars: 0, private: false, htmlUrl: "" })),
     listPullRequests: over.listPullRequests ?? (async () => []),
+    getPullRequest:
+      over.getPullRequest ??
+      (async () => ({
+        number: 1,
+        title: "t",
+        state: "open",
+        author: "a",
+        draft: false,
+        htmlUrl: "u",
+        createdAt: "c",
+        updatedAt: "u",
+        body: "b",
+        baseRef: "main",
+        headRef: "feat",
+        merged: false,
+        additions: 1,
+        deletions: 2,
+        changedFiles: 3,
+        commits: 4,
+      })),
     listIssues: over.listIssues ?? (async () => []),
   };
 }
@@ -17,6 +39,8 @@ function capture() {
   const calls: Array<{ status: number; payload: unknown }> = [];
   return { calls, respondJson: (status: number, payload: unknown) => calls.push({ status, payload }) };
 }
+
+const now = () => "2026-06-13T00:00:00.000Z";
 
 describe("handleGithubRoute", () => {
   it("github 경로가 아니면 처리하지 않는다(false)", async () => {
@@ -40,7 +64,7 @@ describe("handleGithubRoute", () => {
     expect(JSON.stringify(calls[0]?.payload)).not.toContain("ghp_secret");
   });
 
-  it("미설정이면 리소스 호출도 200 + 미설정 안내(가짜 연결 금지)", async () => {
+  it("미설정이면 리소스 호출도 outcome=not_configured + GitHub 호출 안 함", async () => {
     const { respondJson, calls } = capture();
     const listPullRequests = vi.fn();
     await handleGithubRoute({
@@ -49,12 +73,11 @@ describe("handleGithubRoute", () => {
       createClient: () => clientStub({ token: undefined, listPullRequests }),
       respondJson,
     });
-    expect(calls[0]?.status).toBe(200);
-    expect(JSON.stringify(calls[0]?.payload)).toContain("미설정");
-    expect(listPullRequests).not.toHaveBeenCalled(); // 미설정이면 실제 호출 안 함
+    expect((calls[0]?.payload as { outcome: string }).outcome).toBe("not_configured");
+    expect(listPullRequests).not.toHaveBeenCalled();
   });
 
-  it("설정되어 있으면 pulls를 조회해 반환한다", async () => {
+  it("설정되어 있으면 pulls를 outcome=observed + observedAt로 반환", async () => {
     const { respondJson, calls } = capture();
     const listPullRequests = vi.fn(async () => [
       { number: 1, title: "t", state: "open", author: "a", draft: false, htmlUrl: "u", createdAt: "c", updatedAt: "u" },
@@ -64,10 +87,62 @@ describe("handleGithubRoute", () => {
       method: "GET",
       createClient: () => clientStub({ token: "ghp_x", listPullRequests }),
       respondJson,
+      now,
     });
-    expect(calls[0]?.status).toBe(200);
-    expect((calls[0]?.payload as { pullRequests: unknown[] }).pullRequests).toHaveLength(1);
-    expect(listPullRequests).toHaveBeenCalledWith("o", "r", { state: "open" });
+    const payload = calls[0]?.payload as { outcome: string; observedAt?: string; pullRequests: unknown[] };
+    expect(payload.outcome).toBe("observed");
+    expect(payload.observedAt).toBe(now());
+    expect(payload.pullRequests).toHaveLength(1);
+  });
+
+  it("401/403은 outcome=permission_denied (빈 목록 아님)", async () => {
+    const { respondJson, calls } = capture();
+    await handleGithubRoute({
+      pathname: "/integrations/github/repos/o/r/pulls",
+      method: "GET",
+      createClient: () =>
+        clientStub({
+          token: "ghp_x",
+          listPullRequests: async () => {
+            throw new GithubReadonlyError("forbidden", 403);
+          },
+        }),
+      respondJson,
+    });
+    expect((calls[0]?.payload as { outcome: string }).outcome).toBe("permission_denied");
+  });
+
+  it("네트워크(status 0)는 outcome=connection_failed", async () => {
+    const { respondJson, calls } = capture();
+    await handleGithubRoute({
+      pathname: "/integrations/github/repos/o/r/issues",
+      method: "GET",
+      createClient: () =>
+        clientStub({
+          token: "ghp_x",
+          listIssues: async () => {
+            throw new GithubReadonlyError("network", 0);
+          },
+        }),
+      respondJson,
+    });
+    expect((calls[0]?.payload as { outcome: string }).outcome).toBe("connection_failed");
+  });
+
+  it("PR 상세 경로는 pullRequest + observed로 반환", async () => {
+    const { respondJson, calls } = capture();
+    const getPullRequest = vi.fn(clientStub({ token: "ghp_x" }).getPullRequest);
+    await handleGithubRoute({
+      pathname: "/integrations/github/repos/o/r/pulls/42",
+      method: "GET",
+      createClient: () => clientStub({ token: "ghp_x", getPullRequest }),
+      respondJson,
+      now,
+    });
+    const payload = calls[0]?.payload as { outcome: string; pullRequest?: { number: number } };
+    expect(payload.outcome).toBe("observed");
+    expect(getPullRequest).toHaveBeenCalledWith("o", "r", 42);
+    expect(payload.pullRequest?.number).toBe(1);
   });
 
   it("알 수 없는 github 경로는 404", async () => {
