@@ -184,6 +184,7 @@ import { createOrchestrationOsDebateSession } from "./lib/orchestrationOsDebate"
 import { deriveCockpitNextActions } from "./lib/cockpitNextActions";
 import type { CockpitNextActionItem } from "./lib/cockpitNextActions";
 import { deriveCockpitHealthFromSnapshot } from "./lib/cockpitHealthRollup";
+import { isNavCenterActive, MODE_OWNS_CENTER_NAV } from "./lib/navSurface";
 import { resolveExternalIngressTargetAgentId } from "./lib/externalIngressRouting";
 import {
   createAgentChannelMemoryScope,
@@ -4786,23 +4787,14 @@ export function App() {
       return;
     }
     setMode("cockpit");
-    setActiveNavItem("none");
+    setActiveNavItem(MODE_OWNS_CENTER_NAV);
     setProviderRegistrationOpen(false);
     setAdminRailOpen(false);
   };
 
-  const navCenterActive =
-    activeNavItem === "dashboard" ||
-    activeNavItem === "sessions" ||
-    activeNavItem === "projects" ||
-    activeNavItem === "providers" ||
-    activeNavItem === "channels" ||
-    activeNavItem === "backup" ||
-    activeNavItem === "run" ||
-    activeNavItem === "theater" ||
-    activeNavItem === "coding" ||
-    activeNavItem === "research" ||
-    activeNavItem === "runtime";
+  // 단일 좌표 판정 — '중앙을 점유하는 nav 목록'은 lib/navSurface로 추출(유령 좌표
+  // "runtime" 제거 포함). 두 useState(mode/activeNavItem)는 유지하되 판정은 한 곳에서.
+  const navCenterActive = isNavCenterActive(activeNavItem);
   const shellVisibility = getConversationShellVisibility({
     configLibraryActive,
     mode,
@@ -4826,7 +4818,11 @@ export function App() {
     }
     previousModeRef.current = mode;
     if (navCenterActive) {
-      setActiveNavItem("sessions");
+      // mode가 중앙을 가져가므로 nav를 비운다("none"). 이전엔 여기서 "sessions"로
+      // 떨궈 — 주석의 의도("mode에 중앙을 넘긴다")와 달리 nav(sessions 페이지)를
+      // 유지해, 팔레트로 mode 전환 시 엉뚱하게 세션 페이지가 뜨곤 했다. onChangeMode
+      // (탭 클릭)와 같은 센티넬로 통일해 동선이 갈리지 않게 한다.
+      setActiveNavItem(MODE_OWNS_CENTER_NAV);
       setProviderRegistrationOpen(false);
       // the admin rail was opened to navigate here — close it so focused
       // surfaces (토론/Tmux/콕핏) get their full-bleed stage back
@@ -4889,9 +4885,10 @@ export function App() {
         onChangeMode={(nextMode) => {
           setMode(nextMode);
           // a top-bar tab always claims the center — leave any nav-owned view,
-          // even when the mode value itself is unchanged
+          // even when the mode value itself is unchanged (same sentinel as the
+          // mode-change effect so the two enforcement sites never drift)
           if (navCenterActive) {
-            setActiveNavItem("none");
+            setActiveNavItem(MODE_OWNS_CENTER_NAV);
             setProviderRegistrationOpen(false);
             setAdminRailOpen(false);
           }
