@@ -33,11 +33,13 @@ export type MissionStoreDeps = {
    */
   onEventsCommitted?: (missionId: string, envelopes: ReadonlyArray<EventEnvelope>) => void | Promise<void>;
   now?: () => string;
-  /** 검증 명령을 실제로 실행해 observed VerificationReport를 만든다 (LocalSandboxRunner) */
+  /** 검증 명령을 실제로 실행해 observed VerificationReport를 만든다 (runner registry: local/docker/gVisor) */
   runVerification?: (input: {
     commands: ReadonlyArray<string>;
     missionId: string;
     verifierAgentId: string;
+    /** 서버가 재계산한 verifier capability mode — registry의 capability 게이트 입력 */
+    verifierCapabilityMode: string;
     reportId: string;
   }) => Promise<VerificationReport>;
   /** 단조 증가 nonce 생성 (reportId/merge 등 유니크 id용; 테스트 결정성 위해 주입) */
@@ -284,6 +286,7 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
         commands: request.commands,
         missionId,
         verifierAgentId: verifier.agentId,
+        verifierCapabilityMode: verifier.capability.mode,
         reportId: `verify_${missionId}_${nextNonce()}`,
       });
       // 같은 정직성 정책을 한 번 더 통과 (LocalSandboxRunner가 이미 정직하지만 이중 방어)

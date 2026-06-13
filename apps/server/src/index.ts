@@ -118,7 +118,11 @@ import { handleApprovalRoute } from "./routes/approvals.js";
 import { handleMissionRoute } from "./routes/missions.js";
 import { createMissionStore, type MissionStore } from "./missions/missionStore.js";
 import { missionTraceBus } from "./missions/missionTraceBus.js";
-import { runLocalMissionVerification } from "./missions/localSandboxRunner.js";
+import type { LocalExecFn } from "./missions/localSandboxRunner.js";
+import {
+  runRegistryMissionVerification,
+  selectVerificationRunner,
+} from "./missions/verificationRunnerRegistry.js";
 import { executeMerge, parseAllowedRepoRoots, type GitExecFn } from "./missions/gitWorktreeMergeRunner.js";
 import { createMissionCheckpoint, executeMissionRollback } from "./missions/gitCheckpointRunner.js";
 import { handleTmuxRoute } from "./routes/tmux.js";
@@ -5277,37 +5281,88 @@ export function createServerMissionStore(storage: JsonlServerEventStorage): Miss
     onEventsCommitted: (missionId, envelopes) => {
       missionTraceBus.publish(missionId, [...envelopes]);
     },
-    // E1: 검증 명령을 repo root에서 실제로 실행하고 종료코드를 관측한다.
-    // 보안은 LocalSandboxRunner 내부의 공유 allowlist 게이트가 책임진다 —
-    // allowlist 밖이거나 셸 메타문자가 있으면 실행 자체가 안 되고 skipped.
-    runVerification: async ({ commands, missionId, verifierAgentId, reportId }) => {
+    // E1+L2: 검증 명령을 runner registry가 고른 sandbox에서 실행하고 종료코드를 관측한다.
+    // ORCHESTRATOR_SANDBOX_RUNNER=local|docker|gvisor 정책을 따르며, docker/gVisor가
+    // unavailable이면 fake fallback 없이 blocked/observed:false로 남긴다(local로 몰래
+    // 떨어지지 않음). 명령 allowlist(safeCommandPolicy)는 각 runner 내부 게이트가 책임진다.
+    runVerification: async ({ commands, missionId, verifierAgentId, verifierCapabilityMode, reportId }) => {
       const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-      return runLocalMissionVerification({
+      const timeoutMs = Number(process.env.MISSION_VERIFY_TIMEOUT_MS ?? 180_000);
+      const selection = selectVerificationRunner({
+        requested: process.env.ORCHESTRATOR_SANDBOX_RUNNER,
+        dockerEnabled: process.env.ORCHESTRATOR_ENABLE_DOCKER_RUNNER === "1",
+        gvisorEnabled: process.env.ORCHESTRATOR_ENABLE_GVISOR_RUNNER === "1",
+        image: process.env.ORCHESTRATOR_SANDBOX_IMAGE,
+        allowedImages: parseAllowedRepoRoots(process.env.ORCHESTRATOR_ALLOWED_DOCKER_IMAGES),
+      });
+      // 호스트에서 명령을 직접 실행 (local runner). 셸 없이 execFile.
+      const localExec: LocalExecFn = async (cmd, args) => {
+        try {
+          const { stdout, stderr } = await execFileAsync(cmd, args, {
+            cwd: repoRoot,
+            env: getFilteredSubprocessEnv({}),
+            timeout: timeoutMs,
+            maxBuffer: 4_000_000,
+            windowsHide: true,
+          });
+          return { exitCode: 0, stdout, stderr, timedOut: false };
+        } catch (error) {
+          const e = error as { code?: number | string; killed?: boolean; signal?: string; stdout?: string; stderr?: string };
+          return {
+            exitCode: typeof e.code === "number" ? e.code : e.code ? 1 : null,
+            stdout: e.stdout ?? "",
+            stderr: e.stderr ?? "",
+            timedOut: e.killed === true || e.signal === "SIGTERM",
+          };
+        }
+      };
+      // `docker` 바이너리 실행기 (docker/gVisor runner). docker가 없으면 throw → runner가
+      // 정직하게 failed/observed:false로 떨어진다(local fallback 없음).
+      const dockerExec: LocalExecFn = async (cmd, args) => {
+        try {
+          const { stdout, stderr } = await execFileAsync(cmd, args, {
+            env: getFilteredSubprocessEnv({}),
+            timeout: timeoutMs,
+            maxBuffer: 4_000_000,
+            windowsHide: true,
+          });
+          return { exitCode: 0, stdout, stderr, timedOut: false };
+        } catch (error) {
+          const e = error as { code?: number | string; killed?: boolean; signal?: string; stdout?: string; stderr?: string };
+          return {
+            exitCode: typeof e.code === "number" ? e.code : e.code ? 1 : null,
+            stdout: e.stdout ?? "",
+            stderr: e.stderr ?? "",
+            timedOut: e.killed === true || e.signal === "SIGTERM",
+          };
+        }
+      };
+      return runRegistryMissionVerification({
+        selection,
         commands,
         missionId,
         verifierAgentId,
+        verifierCapabilityMode,
         reportId,
-        now: () => new Date().toISOString(),
-        exec: async (cmd, args) => {
+        localExec,
+        dockerExec,
+        // runsc(gVisor) 프로브 — `docker info`의 Runtimes에 runsc가 있으면 사용 가능.
+        // docker 자체가 없으면 false → gVisor runner가 blocked로 떨어진다(가짜 gVisor 금지).
+        probeRunsc: async () => {
           try {
-            const { stdout, stderr } = await execFileAsync(cmd, args, {
-              cwd: repoRoot,
-              env: getFilteredSubprocessEnv({}),
-              timeout: Number(process.env.MISSION_VERIFY_TIMEOUT_MS ?? 180_000),
-              maxBuffer: 4_000_000,
-              windowsHide: true,
-            });
-            return { exitCode: 0, stdout, stderr, timedOut: false };
-          } catch (error) {
-            const e = error as { code?: number | string; killed?: boolean; signal?: string; stdout?: string; stderr?: string };
-            return {
-              exitCode: typeof e.code === "number" ? e.code : e.code ? 1 : null,
-              stdout: e.stdout ?? "",
-              stderr: e.stderr ?? "",
-              timedOut: e.killed === true || e.signal === "SIGTERM",
-            };
+            const { stdout } = await execFileAsync(
+              "docker",
+              ["info", "--format", "{{json .Runtimes}}"],
+              { env: getFilteredSubprocessEnv({}), timeout: 10_000, maxBuffer: 1_000_000, windowsHide: true },
+            );
+            return /runsc/.test(stdout);
+          } catch {
+            return false;
           }
         },
+        worktreePath: repoRoot,
+        timeoutMs,
+        now: () => new Date().toISOString(),
       });
     },
     // D4a: 실제 git merge. repoRoot는 ORCHESTRATOR_ALLOWED_REPO_ROOTS에 명시된
