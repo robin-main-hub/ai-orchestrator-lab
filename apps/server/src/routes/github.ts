@@ -16,8 +16,19 @@ import {
   type GithubCommentWritePlanStore,
 } from "../integrations/githubCommentWritePlanStore.js";
 import {
+  evaluateBranchCreateGate,
+} from "../integrations/githubBranchWriteGuards.js";
+import {
+  getBranchObservedFor,
+  type GithubBranchCreatePlanStore,
+} from "../integrations/githubBranchCreatePlanStore.js";
+import {
+  githubBranchCreateExecuteRequestSchema,
+  githubBranchCreatePlanRequestSchema,
   githubCommentWriteExecuteRequestSchema,
   githubCommentWritePlanRequestSchema,
+  type GithubBranchCreateOutcome,
+  type GithubBranchCreatePlan,
   type GithubCommentWriteOutcome,
   type GithubCommentWritePlan,
   type GithubResourceOutcome,
@@ -54,6 +65,8 @@ export type GithubRouteDependencies = {
   readJsonBody?: (request: IncomingMessage) => Promise<unknown>;
   /** in-process plan store(W1) — 단일 인스턴스를 인덱스에서 만들어 주입. */
   planStore?: GithubCommentWritePlanStore;
+  /** in-process branch create plan store(W2) — W1과 별도 인스턴스. */
+  branchPlanStore?: GithubBranchCreatePlanStore;
   /** GITHUB_WRITE_REPO_ALLOWLIST 파싱 결과 — 없으면 write disabled. */
   writeRepoAllowlist?: ReadonlyArray<string>;
   /**
@@ -95,6 +108,10 @@ function outcomeForError(error: unknown): { outcome: GithubResourceOutcome; mess
 // W1 comment write 경로 — execute는 별도의 명시 게이트(armed-or-approval)를 통과해야 한다.
 const COMMENT_PLAN_PATH = "/integrations/github/write/comment/plan";
 const COMMENT_EXECUTE_PATH = "/integrations/github/write/comment/execute";
+
+// W2 branch create 경로 — execute는 approval 전용(armed 없음).
+const BRANCH_PLAN_PATH = "/integrations/github/write/branch/plan";
+const BRANCH_EXECUTE_PATH = "/integrations/github/write/branch/execute";
 
 /** comment write 결과 — readonly outcome enum과 호환(observed 외에 planned/approval_required/blocked 추가) */
 function writeOutcomeForError(error: unknown): { outcome: GithubCommentWriteOutcome; message: string } {
@@ -301,6 +318,256 @@ async function handleCommentWriteExecute(deps: GithubRouteDependencies): Promise
   return true;
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// W2 branch create handlers
+// 안전선 요약(comment write와의 차이도 함께):
+//   - branch name policy 통과(agent/* work/* 등) — 보호 브랜치 직접 생성 금지
+//   - sourceRef preflight: GitHub GET으로 sha를 observed로 못 박는다
+//   - target ref 존재 여부 preflight: 이미 있으면 already_exists로 정직 반환(POST 금지)
+//   - approval **only**: comment의 armed 경로를 W2는 의도적으로 제공하지 않는다
+//   - sourceSha integrity 3중 확인: plan 저장 sha == execute payload sha == execute 시점 재GET sha
+//   - tryClaim 동기 점유 + observedCache 멱등(동일 plan 재실행 시 1회만 POST)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 방어선 — 호출자에게 보내는 message에서 process.env.GITHUB_TOKEN을 한 번 더 제거한다.
+ * (readonlyClient는 자체 scrub을 갖지만 모든 throw 경로를 보장하지 않으므로 route 측에서도
+ *  defense-in-depth 적용. write 표면 전반에 공통 적용 가능하도록 분리.)
+ */
+function scrubServerToken(message: string): string {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token || token.length < 8) return message;
+  return message.split(token).join("<redacted-token>");
+}
+
+function branchOutcomeForError(error: unknown): { outcome: GithubBranchCreateOutcome; message: string } {
+  const mapped = outcomeForError(error);
+  return {
+    outcome: mapped.outcome as GithubBranchCreateOutcome,
+    message: scrubServerToken(mapped.message),
+  };
+}
+
+async function handleBranchCreatePlan(deps: GithubRouteDependencies): Promise<boolean> {
+  const { respondJson, createClient, readJsonBody, request, writeRepoAllowlist, branchPlanStore } = deps;
+  if (!readJsonBody || !request || !branchPlanStore) {
+    respondJson(500, { outcome: "github_error", message: "W2 dependencies not wired" });
+    return true;
+  }
+  const status = createClient().status();
+  if (!status.tokenPresent) {
+    respondJson(200, { outcome: "not_configured", message: "GITHUB_TOKEN이 설정되지 않아 write가 비활성화되어 있습니다" });
+    return true;
+  }
+  let payload;
+  try {
+    payload = githubBranchCreatePlanRequestSchema.parse(await readJsonBody(request));
+  } catch (error) {
+    respondJson(400, { outcome: "blocked", message: error instanceof Error ? error.message : "잘못된 plan 요청" });
+    return true;
+  }
+  const allowlist = writeRepoAllowlist ?? [];
+  const gate = evaluateBranchCreateGate({
+    repoFullName: payload.repoFullName,
+    sourceRef: payload.sourceRef,
+    newBranchName: payload.newBranchName,
+    allowlist,
+    tokenPresent: true,
+  });
+  if (gate.kind === "blocked") {
+    respondJson(200, { outcome: "blocked", message: gate.reason });
+    return true;
+  }
+  const [owner, repo] = payload.repoFullName.split("/") as [string, string];
+  // 1) source ref 존재 확인 + sha 확정. 없으면 정직하게 알려준다.
+  let sourceSha: string;
+  try {
+    sourceSha = await createClient().getRefSha(owner, repo, gate.sourceRef);
+  } catch (error) {
+    const mapped = branchOutcomeForError(error);
+    respondJson(200, mapped);
+    return true;
+  }
+  // 2) target ref가 이미 있으면 overwrite 금지 — plan 단계에서 already_exists로 끝낸다.
+  const newRefName = gate.ref.replace(/^refs\/heads\//, "");
+  try {
+    await createClient().getRefSha(owner, repo, newRefName);
+    respondJson(200, {
+      outcome: "already_exists",
+      message: `${payload.repoFullName}#${newRefName} 브랜치가 이미 존재합니다(덮어쓰기 금지)`,
+    });
+    return true;
+  } catch (error) {
+    // 404는 정상(없어서 만들 수 있음). 그 외 오류는 정직 반환.
+    if (error instanceof GithubReadonlyError && error.status === 404) {
+      // good — 새로 만들 수 있다.
+    } else {
+      const mapped = branchOutcomeForError(error);
+      respondJson(200, mapped);
+      return true;
+    }
+  }
+  const nowIso = deps.now?.() ?? new Date().toISOString();
+  const planId = `gbcp_${randomUUID()}`;
+  const expiresAt = new Date(Date.parse(nowIso) + 10 * 60 * 1000).toISOString();
+  const plan: GithubBranchCreatePlan = {
+    id: planId,
+    repoFullName: payload.repoFullName,
+    sourceRef: gate.sourceRef,
+    sourceSha,
+    newBranchName: newRefName,
+    newRef: gate.ref,
+    status: "approval_required",
+    truthStatus: "planned",
+    createdAt: nowIso,
+    expiresAt,
+  };
+  branchPlanStore.put({ plan, sourceSha });
+  respondJson(200, { outcome: "planned", plan });
+  return true;
+}
+
+async function handleBranchCreateExecute(deps: GithubRouteDependencies): Promise<boolean> {
+  const { respondJson, createClient, readJsonBody, request, branchPlanStore, writeRepoAllowlist, verifyApproval } = deps;
+  if (!readJsonBody || !request || !branchPlanStore) {
+    respondJson(500, { outcome: "github_error", message: "W2 dependencies not wired" });
+    return true;
+  }
+  let payload;
+  try {
+    payload = githubBranchCreateExecuteRequestSchema.parse(await readJsonBody(request));
+  } catch (error) {
+    respondJson(400, { outcome: "blocked", message: error instanceof Error ? error.message : "잘못된 execute 요청" });
+    return true;
+  }
+  const record = branchPlanStore.get(payload.planId);
+  if (!record) {
+    respondJson(200, { outcome: "blocked", planId: payload.planId, truthStatus: "planned", message: "plan을 찾을 수 없거나 만료됨" });
+    return true;
+  }
+  // 멱등성 — 이미 created면 동일 결과 반환(중복 POST 금지).
+  const observed = getBranchObservedFor(payload.planId);
+  if (observed) {
+    respondJson(200, {
+      outcome: "observed",
+      planId: payload.planId,
+      ref: observed.ref,
+      sha: observed.sha,
+      htmlUrl: observed.htmlUrl,
+      observedAt: observed.observedAt,
+      truthStatus: "observed",
+    });
+    return true;
+  }
+  // sourceSha 무결성(1차) — plan과 client payload가 일치해야 함.
+  if (record.sourceSha !== payload.sourceSha) {
+    respondJson(200, { outcome: "blocked", planId: payload.planId, truthStatus: "planned", message: "sourceSha 불일치 — plan source가 변조되었거나 다른 sha입니다" });
+    return true;
+  }
+  // 게이트 재평가 — 시간 경과 후 환경 변경(allowlist 등) 대응.
+  const status = createClient().status();
+  const gate = evaluateBranchCreateGate({
+    repoFullName: record.plan.repoFullName,
+    sourceRef: record.plan.sourceRef,
+    newBranchName: record.plan.newBranchName,
+    allowlist: writeRepoAllowlist ?? [],
+    tokenPresent: status.tokenPresent,
+  });
+  if (gate.kind === "blocked") {
+    respondJson(200, { outcome: "blocked", planId: payload.planId, truthStatus: "planned", message: gate.reason });
+    return true;
+  }
+  // W2는 approval **only** — armed 경로 없음. approvalId 없거나 verify 실패면 blocked.
+  if (!payload.approvalId || !verifyApproval) {
+    respondJson(200, { outcome: "approval_required", planId: payload.planId, truthStatus: "planned", message: "approval이 필요합니다" });
+    return true;
+  }
+  const authorized = await verifyApproval(payload.approvalId);
+  if (!authorized) {
+    respondJson(200, { outcome: "blocked", planId: payload.planId, truthStatus: "planned", message: "approval이 승인되지 않았습니다" });
+    return true;
+  }
+  const [owner, repo] = record.plan.repoFullName.split("/") as [string, string];
+  // sourceSha 무결성(2차) — execute 시점 GitHub에서 다시 GET. plan 이후 force-push 등으로
+  // sha가 바뀌었다면 "내가 plan한 그 sha"가 아니므로 정직하게 막는다.
+  let freshSourceSha: string;
+  try {
+    freshSourceSha = await createClient().getRefSha(owner, repo, record.plan.sourceRef);
+  } catch (error) {
+    const mapped = branchOutcomeForError(error);
+    respondJson(200, { ...mapped, planId: record.plan.id, truthStatus: "planned" });
+    return true;
+  }
+  if (freshSourceSha !== record.sourceSha) {
+    respondJson(200, {
+      outcome: "blocked",
+      planId: record.plan.id,
+      truthStatus: "planned",
+      message: `sourceRef '${record.plan.sourceRef}'의 sha가 plan 시점 이후 변경되었습니다 — 다시 plan을 만드세요`,
+    });
+    return true;
+  }
+  // target ref 존재 재확인 — plan 이후 누군가가 같은 이름을 만들었다면 overwrite 금지.
+  try {
+    await createClient().getRefSha(owner, repo, record.plan.newBranchName);
+    // 200 OK가 떨어졌다는 건 이미 존재한다는 뜻.
+    respondJson(200, {
+      outcome: "already_exists",
+      planId: record.plan.id,
+      truthStatus: "planned",
+      message: `${record.plan.repoFullName}#${record.plan.newBranchName} 브랜치가 plan 이후 생성되었습니다`,
+    });
+    return true;
+  } catch (error) {
+    if (error instanceof GithubReadonlyError && error.status === 404) {
+      // good — 없으니 만들 수 있다.
+    } else {
+      const mapped = branchOutcomeForError(error);
+      respondJson(200, { ...mapped, planId: record.plan.id, truthStatus: "planned" });
+      return true;
+    }
+  }
+  // 동시 execute 경쟁 차단 — POST 직전 동기 점유.
+  if (!branchPlanStore.tryClaim(record.plan.id)) {
+    respondJson(200, { outcome: "blocked", planId: record.plan.id, truthStatus: "planned", message: "동일 plan이 이미 실행 중입니다" });
+    return true;
+  }
+  try {
+    const observation = await createClient().createBranchRef(owner, repo, record.plan.newRef, record.sourceSha);
+    const observedAt = deps.now?.() ?? new Date().toISOString();
+    branchPlanStore.markCreated(record.plan.id, {
+      ref: observation.ref,
+      sha: observation.sha,
+      htmlUrl: observation.htmlUrl,
+      observedAt,
+    });
+    respondJson(200, {
+      outcome: "observed",
+      planId: record.plan.id,
+      ref: observation.ref,
+      sha: observation.sha,
+      htmlUrl: observation.htmlUrl,
+      observedAt,
+      truthStatus: "observed",
+    });
+  } catch (error) {
+    branchPlanStore.release(record.plan.id);
+    // GitHub 422는 일반적으로 "Reference already exists" — already_exists로 매핑.
+    if (error instanceof GithubReadonlyError && error.status === 422) {
+      respondJson(200, {
+        outcome: "already_exists",
+        planId: record.plan.id,
+        truthStatus: "planned",
+        message: "GitHub: 동일 이름의 ref가 이미 존재합니다",
+      });
+      return true;
+    }
+    const mapped = branchOutcomeForError(error);
+    respondJson(200, { ...mapped, planId: record.plan.id, truthStatus: "planned" });
+  }
+  return true;
+}
+
 export async function handleGithubRoute({
   pathname,
   method,
@@ -310,6 +577,7 @@ export async function handleGithubRoute({
   request,
   readJsonBody,
   planStore,
+  branchPlanStore,
   writeRepoAllowlist,
   verifyApproval,
 }: GithubRouteDependencies): Promise<boolean> {
@@ -321,14 +589,29 @@ export async function handleGithubRoute({
       respondJson(405, { error: "method_not_allowed", message: "comment plan은 POST만 허용됩니다" });
       return true;
     }
-    return handleCommentWritePlan({ pathname, method, createClient, respondJson, now, request, readJsonBody, planStore, writeRepoAllowlist, verifyApproval });
+    return handleCommentWritePlan({ pathname, method, createClient, respondJson, now, request, readJsonBody, planStore, branchPlanStore, writeRepoAllowlist, verifyApproval });
   }
   if (pathPrefixOnly === COMMENT_EXECUTE_PATH) {
     if ((method ?? "GET") !== "POST") {
       respondJson(405, { error: "method_not_allowed", message: "comment execute는 POST만 허용됩니다" });
       return true;
     }
-    return handleCommentWriteExecute({ pathname, method, createClient, respondJson, now, request, readJsonBody, planStore, writeRepoAllowlist, verifyApproval });
+    return handleCommentWriteExecute({ pathname, method, createClient, respondJson, now, request, readJsonBody, planStore, branchPlanStore, writeRepoAllowlist, verifyApproval });
+  }
+  // W2 branch create — POST only.
+  if (pathPrefixOnly === BRANCH_PLAN_PATH) {
+    if ((method ?? "GET") !== "POST") {
+      respondJson(405, { error: "method_not_allowed", message: "branch plan은 POST만 허용됩니다" });
+      return true;
+    }
+    return handleBranchCreatePlan({ pathname, method, createClient, respondJson, now, request, readJsonBody, planStore, branchPlanStore, writeRepoAllowlist, verifyApproval });
+  }
+  if (pathPrefixOnly === BRANCH_EXECUTE_PATH) {
+    if ((method ?? "GET") !== "POST") {
+      respondJson(405, { error: "method_not_allowed", message: "branch execute는 POST만 허용됩니다" });
+      return true;
+    }
+    return handleBranchCreateExecute({ pathname, method, createClient, respondJson, now, request, readJsonBody, planStore, branchPlanStore, writeRepoAllowlist, verifyApproval });
   }
   if ((method ?? "GET") !== "GET") {
     // 그 외 read-only 경로는 비-GET 거절(기존 동작 유지).

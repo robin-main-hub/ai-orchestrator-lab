@@ -36,6 +36,9 @@ function clientStub(over: Partial<GithubReadonlyClient> & { token?: string } = {
       (async () => ({ path: "src/x.ts", size: 10, sha: "abc", htmlUrl: "u", content: "file body", truncated: false, encoding: "utf8" })),
     listIssues: over.listIssues ?? (async () => []),
     postIssueComment: over.postIssueComment ?? (async () => ({ id: 1, htmlUrl: "https://github.com/o/r/issues/1#issuecomment-1" })),
+    getRefSha: over.getRefSha ?? (async () => "stub-sha"),
+    createBranchRef:
+      over.createBranchRef ?? (async (_o, _r, ref, sha) => ({ ref, sha, htmlUrl: "https://github.com/o/r/tree/stub" })),
   };
 }
 

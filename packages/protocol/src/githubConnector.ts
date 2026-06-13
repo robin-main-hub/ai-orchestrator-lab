@@ -247,6 +247,101 @@ export const githubCommentWriteExecuteResponseSchema = z.object({
 });
 export type GithubCommentWriteExecuteResponse = z.infer<typeof githubCommentWriteExecuteResponseSchema>;
 
+// ──────────────────────────────────────────────────────────────────────────────
+// W2: GitHub branch create (refs/heads/<name>). 두 번째 write 표면.
+// 안전선은 W1의 plan/execute 패턴 그대로:
+//   - repo allowlist · GITHUB_TOKEN · target preflight · tryClaim · idempotency
+// + branch 전용:
+//   - branch name policy(agent/*, work/* prefix만, main/master/develop/release/hotfix 차단,
+//     refs/* 직접 입력 금지, unsafe chars 차단)
+//   - sourceSha integrity(plan에서 GitHub로 GET, execute에서 동일 sha 재확인)
+//   - target ref already-exists 차단(같은 이름 brane overwrite 금지)
+// + 사용자 계약 차이:
+//   - W2는 **approval required**만 — branch armed 없음. comment armed와 섞지 않는다.
+//   - MCP는 plan tool만. execute tool은 W2b로 분리.
+// ──────────────────────────────────────────────────────────────────────────────
+
+/** branch create plan 라이프사이클 — refs 변경이라 outcome enum도 W1과 동일. */
+export const githubBranchCreateOutcomeSchema = z.enum([
+  "observed",
+  "planned",
+  "approval_required",
+  "blocked",
+  "already_exists",
+  "not_configured",
+  "permission_denied",
+  "connection_failed",
+  "github_error",
+]);
+export type GithubBranchCreateOutcome = z.infer<typeof githubBranchCreateOutcomeSchema>;
+
+export const githubBranchCreatePlanRequestSchema = z.object({
+  repoFullName: z
+    .string()
+    .min(3).max(140)
+    .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, "owner/repo 형식이 필요합니다"),
+  /** 베이스가 될 ref — 예: "main", "develop". refs/heads/...는 받지 않는다(서버가 정규화). */
+  sourceRef: z.string().min(1).max(256),
+  /**
+   * 새 브랜치 이름 — agent/* 또는 work/* prefix만 허용. main/master/develop/release/hotfix
+   * 직접 생성 금지. refs/* 직접 입력 금지. 특수문자/공백/.. 차단(slugify는 서버에서).
+   */
+  newBranchName: z.string().min(1).max(120),
+});
+export type GithubBranchCreatePlanRequest = z.infer<typeof githubBranchCreatePlanRequestSchema>;
+
+export const githubBranchCreatePlanSchema = z.object({
+  id: z.string(),
+  repoFullName: z.string(),
+  sourceRef: z.string(),
+  /** plan 시점에 서버가 GitHub에서 observed한 source ref sha — execute가 무결성 키로 사용. */
+  sourceSha: z.string(),
+  newBranchName: z.string(),
+  newRef: z.string(), // 항상 "refs/heads/<name>"
+  status: z.enum([
+    "planned",
+    "approval_required",
+    "blocked",
+    "executing",
+    "created",
+    "failed",
+  ]),
+  truthStatus: z.enum(["planned", "observed", "configured"]),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  approvalId: z.string().optional(),
+  blockedReason: z.string().optional(),
+});
+export type GithubBranchCreatePlan = z.infer<typeof githubBranchCreatePlanSchema>;
+
+export const githubBranchCreatePlanResponseSchema = z.object({
+  outcome: githubBranchCreateOutcomeSchema,
+  plan: githubBranchCreatePlanSchema.optional(),
+  message: z.string().optional(),
+});
+export type GithubBranchCreatePlanResponse = z.infer<typeof githubBranchCreatePlanResponseSchema>;
+
+export const githubBranchCreateExecuteRequestSchema = z.object({
+  planId: z.string(),
+  /** sourceSha는 plan과 동일해야 함 — 무결성 키. */
+  sourceSha: z.string(),
+  /** comment write와 달리 W2는 approval만(armed 없음). */
+  approvalId: z.string(),
+});
+export type GithubBranchCreateExecuteRequest = z.infer<typeof githubBranchCreateExecuteRequestSchema>;
+
+export const githubBranchCreateExecuteResponseSchema = z.object({
+  outcome: githubBranchCreateOutcomeSchema,
+  planId: z.string(),
+  ref: z.string().optional(),
+  sha: z.string().optional(),
+  htmlUrl: z.string().optional(),
+  observedAt: z.string().optional(),
+  message: z.string().optional(),
+  truthStatus: z.enum(["planned", "observed", "configured"]),
+});
+export type GithubBranchCreateExecuteResponse = z.infer<typeof githubBranchCreateExecuteResponseSchema>;
+
 /** GET /integrations/github/repos/:owner/:repo/pulls|pulls/:n|issues|overview|file */
 export const githubReadonlyResourceResponseSchema = z.object({
   status: githubConnectorStatusSchema,

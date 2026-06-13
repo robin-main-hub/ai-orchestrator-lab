@@ -249,6 +249,28 @@ export const SWARM_TOOLS: ReadonlyArray<SwarmToolDef> = [
       },
     },
   },
+  // ── GitHub W2 branch create (plan ONLY at this phase) ──────────────────────
+  // execute는 W2b에서 별도 도구로 분리. plan만 노출해도 정직성이 깨지지 않는다 —
+  // execute는 어차피 approval 게이트(armed 없음)를 통과해야 하고, 서버가 단독으로
+  // GitHub POST를 호출한다.
+  {
+    name: "github_branch_plan",
+    description:
+      "Create a branch create PLAN (no GitHub POST). Server validates allowlist + branch name policy (agent/*, work/*, user/*, mission/* prefix only; main/master/develop/release/hotfix blocked) + sourceRef existence + target ref absence. Result is approval_required or blocked or already_exists. Actual creation goes through approval and a separate execute step.",
+    method: "POST",
+    path: "/integrations/github/write/branch/plan",
+    body: passthrough,
+    inputSchema: {
+      type: "object",
+      required: ["repoFullName", "sourceRef", "newBranchName"],
+      additionalProperties: true,
+      properties: {
+        repoFullName: { type: "string", description: 'GitHub repository, e.g. "owner/repo"' },
+        sourceRef: { type: "string", description: 'source branch — "main", "develop", etc. refs/heads/* form is normalized.' },
+        newBranchName: { type: "string", description: 'new branch name without refs/heads/ — must start with agent/, work/, user/, or mission/' },
+      },
+    },
+  },
 ];
 
 export type SwarmToolDeps = {

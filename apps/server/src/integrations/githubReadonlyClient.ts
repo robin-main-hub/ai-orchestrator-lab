@@ -82,6 +82,23 @@ export type GithubReadonlyClient = {
    * GitHub 응답이 201일 때만 `{ id, html_url }` 반환; 그 외는 GithubReadonlyError로 던진다.
    */
   postIssueComment(owner: string, repo: string, number: number, body: string): Promise<{ id: number; htmlUrl: string }>;
+  /**
+   * W2 — source ref의 현재 sha를 GET. 존재하지 않으면 GithubReadonlyError(404).
+   * plan에서 sha를 observed로 못 박아 두고, execute에서 같은 sha를 재확인해
+   * "내가 plan한 source가 그 사이 바뀌었는지"를 정직하게 막는다.
+   */
+  getRefSha(owner: string, repo: string, ref: string): Promise<string>;
+  /**
+   * W2 — POST /repos/:owner/:repo/git/refs로 새 branch 생성.
+   * 응답이 201일 때만 `{ ref, sha, html_url }` 반환. 422(already exists 등)는
+   * 호출자가 outcome=already_exists로 매핑한다.
+   */
+  createBranchRef(
+    owner: string,
+    repo: string,
+    refName: string,
+    sha: string,
+  ): Promise<{ ref: string; sha: string; htmlUrl: string }>;
 };
 
 export function createGithubReadonlyClient(options: GithubReadonlyClientOptions = {}): GithubReadonlyClient {
@@ -198,6 +215,51 @@ export function createGithubReadonlyClient(options: GithubReadonlyClientOptions 
       }
       const raw = (await response.json()) as Record<string, unknown>;
       return { id: Number(raw.id ?? 0), htmlUrl: String(raw.html_url ?? "") };
+    },
+
+    async getRefSha(owner, repo, ref) {
+      if (!token) throw new GithubNotConfiguredError();
+      // GitHub git/refs/heads/<name> — branch만 다룬다.
+      const raw = (await getJson(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/refs/heads/${encodeURIComponent(ref)}`,
+      )) as Record<string, unknown>;
+      const sha = (raw.object as Record<string, unknown> | undefined)?.sha;
+      if (typeof sha !== "string" || !sha) {
+        throw new GithubReadonlyError("source ref에 sha가 없습니다", 422);
+      }
+      return sha;
+    },
+
+    async createBranchRef(owner, repo, refName, sha) {
+      if (!token) throw new GithubNotConfiguredError();
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/refs`,
+          {
+            method: "POST",
+            headers: {
+              accept: "application/vnd.github+json",
+              authorization: `Bearer ${token}`,
+              "x-github-api-version": "2022-11-28",
+              "user-agent": "ai-orchestrator-lab-branch-write",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ ref: refName, sha }),
+          },
+        );
+      } catch (error) {
+        throw new GithubReadonlyError(scrub(error instanceof Error ? error.message : String(error), token), 0);
+      }
+      if (response.status !== 201) {
+        const text = await response.text().catch(() => "");
+        throw new GithubReadonlyError(scrub(`GitHub ${response.status}: ${text.slice(0, 200)}`, token), response.status);
+      }
+      const raw = (await response.json()) as Record<string, unknown>;
+      const respRef = String(raw.ref ?? refName);
+      const objSha = String((raw.object as Record<string, unknown> | undefined)?.sha ?? sha);
+      const htmlUrl = `https://github.com/${owner}/${repo}/tree/${respRef.replace(/^refs\/heads\//, "")}`;
+      return { ref: respRef, sha: objSha, htmlUrl };
     },
 
     async getFileContent(owner, repo, path, ref) {
