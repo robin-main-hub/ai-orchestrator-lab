@@ -556,4 +556,177 @@ describe("VisualQaCard — vertical slice", () => {
     // diff 패널 노출 X.
     expect(screen.queryByTestId("visual-qa-verify-diff-mvf2")).toBeNull();
   });
+
+  it("(#pure evidence) computePublishReadiness — 보수적 결정", async () => {
+    const { computePublishReadiness, extractScreenshotRef, extractConsoleSummary } = await import("../lib/visualEvidence");
+
+    // preview 없음 → blocked
+    expect(computePublishReadiness({}).readiness).toBe("blocked");
+    // preview 있고 report 없음 → blocked
+    expect(computePublishReadiness({ previewUrl: "http://x" }).readiness).toBe("blocked");
+    // report.status=blocked → blocked
+    const blockedReport = makeReport({ status: "blocked", issues: [] });
+    expect(computePublishReadiness({ previewUrl: "http://x", report: blockedReport }).readiness).toBe("blocked");
+    // verifyFailedStep=preview → blocked
+    expect(computePublishReadiness({ previewUrl: "http://x", verifyFailedStep: "preview" }).readiness).toBe("blocked");
+
+    // passed report + no diff → ready
+    const passed = makeReport({ status: "passed", issues: [] });
+    expect(computePublishReadiness({ previewUrl: "http://x", report: passed }).readiness).toBe("ready");
+
+    // failed report + no diff → needs_fix
+    const failed = makeReport({
+      status: "failed",
+      issues: [{ id: "i", missionId: "m", workspaceId: "w", kind: "visual_overflow", severity: "high", summary: "x", recommendation: "r", truthStatus: "observed", createdAt: "t" }] as any,
+    });
+    expect(computePublishReadiness({ previewUrl: "http://x", report: failed }).readiness).toBe("needs_fix");
+
+    // diff with new=0 + remaining=0 → ready
+    expect(
+      computePublishReadiness({
+        previewUrl: "http://x",
+        report: failed,
+        diff: { status: "passed", resolved: [], remaining: [], newIssues: [], counts: { before: 1, after: 0, resolved: 1, remaining: 0, new: 0 }, summary: "" },
+      }).readiness,
+    ).toBe("ready");
+
+    // diff with new>0 → needs_fix
+    expect(
+      computePublishReadiness({
+        previewUrl: "http://x",
+        report: failed,
+        diff: { status: "regressed", resolved: [], remaining: [], newIssues: [], counts: { before: 1, after: 2, resolved: 0, remaining: 1, new: 1 }, summary: "" },
+      }).readiness,
+    ).toBe("needs_fix");
+
+    // screenshot extractor: evidenceRef에 image 패턴 있으면 추출, 없으면 undefined
+    const withScreenshot = makeReport({
+      status: "passed",
+      issues: [],
+      checks: [{ id: "c1", kind: "browser", status: "passed", summary: "ok", evidenceRef: "/snap/qa_1.png" }],
+    });
+    expect(extractScreenshotRef(withScreenshot)?.ref).toBe("/snap/qa_1.png");
+    expect(extractScreenshotRef(withScreenshot)?.source).toBe("check");
+    expect(extractScreenshotRef(makeReport({ status: "passed", issues: [] }))).toBeUndefined();
+
+    // console summary는 최대 3개 + severity high 우선.
+    const consoleReport = makeReport({
+      status: "failed",
+      issues: [
+        { id: "a", missionId: "m", workspaceId: "w", kind: "console_error", severity: "low",    summary: "low err", recommendation: "", truthStatus: "observed", createdAt: "t" },
+        { id: "b", missionId: "m", workspaceId: "w", kind: "console_error", severity: "high",   summary: "high err", recommendation: "", truthStatus: "observed", createdAt: "t" },
+        { id: "c", missionId: "m", workspaceId: "w", kind: "console_error", severity: "medium", summary: "med err", recommendation: "", truthStatus: "observed", createdAt: "t" },
+        { id: "d", missionId: "m", workspaceId: "w", kind: "console_error", severity: "high",   summary: "high err 2", recommendation: "", truthStatus: "observed", createdAt: "t" },
+      ] as any,
+    });
+    const cs = extractConsoleSummary(consoleReport);
+    expect(cs.total).toBe(4);
+    expect(cs.preview.length).toBe(3);
+    expect(cs.preview[0].severity).toBe("high");
+  });
+
+  it("(#vertical evidence) preview observed + QA passed → Evidence Card에 'Publish 진행 가능' + screenshot 없음 안내", async () => {
+    const report = makeReport({ status: "passed", truthStatus: "observed", issues: [] });
+    const { fetchImpl } = makeFetch(report);
+    const onContextEvent = vi.fn();
+    render(
+      <VisualQaCard
+        missionId="mev_ready"
+        workspaceId="ws_1"
+        previewUrl="http://127.0.0.1:4567"
+        serverBaseUrl="http://x"
+        fetchImpl={fetchImpl as unknown as typeof fetch}
+        onContextEvent={onContextEvent}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("visual-qa-run-mev_ready"));
+    await waitFor(() => screen.getByTestId("visual-qa-status-mev_ready"));
+    // Evidence Card readiness = ready, 'Publish로 진행' CTA 보임, screenshot 없음 안내.
+    expect(screen.getByTestId("visual-evidence-mev_ready").getAttribute("data-readiness")).toBe("ready");
+    expect(screen.getByTestId("visual-evidence-readiness-mev_ready").textContent).toContain("Publish 진행 가능");
+    expect(screen.getByTestId("visual-evidence-screenshot-none-mev_ready").textContent).toContain("screenshot 없음");
+    const cta = screen.getByTestId("visual-evidence-publish-ready-cta-mev_ready");
+    fireEvent.click(cta);
+    const types = onContextEvent.mock.calls.map((c) => c[0] as string);
+    expect(types).toContain("mission.visual_evidence.publish_ready_clicked");
+  });
+
+  it("(#vertical evidence) QA failed → Evidence Card에 needs_fix CTA + 컨솔 요약 3개 cap", async () => {
+    const report = makeReport({
+      status: "failed",
+      truthStatus: "observed",
+      issues: [
+        { id: "v1", missionId: "m", workspaceId: "w", kind: "visual_overflow", severity: "high", summary: "Overflow", recommendation: "r", truthStatus: "observed", createdAt: "t" },
+        { id: "c1", missionId: "m", workspaceId: "w", kind: "console_error", severity: "high", summary: "Uncaught A", recommendation: "", truthStatus: "observed", createdAt: "t" },
+        { id: "c2", missionId: "m", workspaceId: "w", kind: "console_error", severity: "high", summary: "Uncaught B", recommendation: "", truthStatus: "observed", createdAt: "t" },
+        { id: "c3", missionId: "m", workspaceId: "w", kind: "console_error", severity: "medium", summary: "Uncaught C", recommendation: "", truthStatus: "observed", createdAt: "t" },
+        { id: "c4", missionId: "m", workspaceId: "w", kind: "console_error", severity: "low", summary: "Uncaught D", recommendation: "", truthStatus: "observed", createdAt: "t" },
+      ] as any,
+    });
+    const { fetchImpl } = makeFetch(report);
+    render(
+      <VisualQaCard
+        missionId="mev_fix"
+        workspaceId="ws_1"
+        previewUrl="http://127.0.0.1:4567"
+        serverBaseUrl="http://x"
+        fetchImpl={fetchImpl as unknown as typeof fetch}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("visual-qa-run-mev_fix"));
+    await waitFor(() => screen.getByTestId("visual-qa-status-mev_fix"));
+    expect(screen.getByTestId("visual-evidence-mev_fix").getAttribute("data-readiness")).toBe("needs_fix");
+    expect(screen.getByTestId("visual-evidence-readiness-mev_fix").textContent).toContain("추가 수정 필요");
+    expect(screen.getByTestId("visual-evidence-needs-fix-cta-mev_fix")).toBeTruthy();
+    // console preview는 4개 중 3개만 — high 우선.
+    const consoleBox = screen.getByTestId("visual-evidence-console-mev_fix");
+    expect(consoleBox.textContent).toContain("총 4건");
+    expect(consoleBox.textContent).toContain("미리보기 3건");
+    expect(consoleBox.textContent).toContain("Uncaught A");
+    expect(consoleBox.textContent).toContain("Uncaught B");
+    // 최저 우선순위는 cap에서 잘림(Uncaught D).
+    expect(consoleBox.textContent).not.toContain("Uncaught D");
+  });
+
+  it("(#vertical evidence) preview URL 없음 → blocked + 'Preview/QA 재실행 필요' CTA + preview 없음 안내", () => {
+    render(
+      <VisualQaCard
+        missionId="mev_block"
+        workspaceId="ws_1"
+        // previewUrl 의도적으로 미주입
+        serverBaseUrl="http://x"
+      />,
+    );
+    expect(screen.getByTestId("visual-evidence-mev_block").getAttribute("data-readiness")).toBe("blocked");
+    expect(screen.getByTestId("visual-evidence-readiness-mev_block").textContent).toContain("검증 차단");
+    expect(screen.getByTestId("visual-evidence-blocked-cta-mev_block")).toBeTruthy();
+    expect(screen.getByTestId("visual-evidence-preview-none-mev_block").textContent).toContain("Preview 실행이 필요");
+  });
+
+  it("(#vertical evidence) screenshot evidenceRef 있는 report → Evidence Card에 참조 표시(fake 이미지 X)", async () => {
+    const report = makeReport({
+      status: "passed",
+      truthStatus: "observed",
+      issues: [],
+      checks: [
+        { id: "c1", kind: "browser", status: "passed", summary: "screenshot captured", evidenceRef: "visual-qa/abc/snap.png" },
+      ],
+    });
+    const { fetchImpl } = makeFetch(report);
+    render(
+      <VisualQaCard
+        missionId="mev_snap"
+        workspaceId="ws_1"
+        previewUrl="http://127.0.0.1:4567"
+        serverBaseUrl="http://x"
+        fetchImpl={fetchImpl as unknown as typeof fetch}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("visual-qa-run-mev_snap"));
+    await waitFor(() => screen.getByTestId("visual-qa-status-mev_snap"));
+    const snap = screen.getByTestId("visual-evidence-screenshot-mev_snap");
+    expect(snap.textContent).toContain("visual-qa/abc/snap.png");
+    // fake img element 없음 — 참조 텍스트만.
+    expect(snap.querySelector("img")).toBeNull();
+  });
 });
