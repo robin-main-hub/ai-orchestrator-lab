@@ -130,6 +130,18 @@ export type GithubReadonlyClient = {
     changedFiles: number;
     files: Array<{ filename: string; status: string; additions: number; deletions: number }>;
   }>;
+  /**
+   * W4b — POST /repos/:o/:r/pulls. same-repo PR만 생성한다(head는 branch 이름만,
+   * owner:branch 형태의 fork는 호출자가 막는다). 응답 201일 때만
+   * `{ pullNumber, htmlUrl, headSha }` 반환.
+   * 422(already exists / invalid head 등)와 403(권한)은 호출자가 outcome으로 매핑한다.
+   * draft/reviewers/assignees/labels/auto-merge 같은 부가 옵션은 의도적으로 받지 않는다.
+   */
+  createPullRequest(
+    owner: string,
+    repo: string,
+    params: { title: string; body: string; base: string; head: string },
+  ): Promise<{ pullNumber: number; htmlUrl: string; headSha: string }>;
 };
 
 export function createGithubReadonlyClient(options: GithubReadonlyClientOptions = {}): GithubReadonlyClient {
@@ -317,6 +329,51 @@ export function createGithubReadonlyClient(options: GithubReadonlyClientOptions 
         changedFiles: files.length,
         files,
       };
+    },
+
+    async createPullRequest(owner, repo, params) {
+      if (!token) throw new GithubNotConfiguredError();
+      const body = {
+        title: params.title,
+        body: params.body,
+        base: params.base,
+        head: params.head,
+        // draft/maintainer_can_modify/reviewers 등은 의도적으로 보내지 않는다.
+      };
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`,
+          {
+            method: "POST",
+            headers: {
+              accept: "application/vnd.github+json",
+              authorization: `Bearer ${token}`,
+              "x-github-api-version": "2022-11-28",
+              "user-agent": "ai-orchestrator-lab-pr-write",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(body),
+          },
+        );
+      } catch (error) {
+        throw new GithubReadonlyError(scrub(error instanceof Error ? error.message : String(error), token), 0);
+      }
+      if (response.status !== 201) {
+        const text = await response.text().catch(() => "");
+        throw new GithubReadonlyError(scrub(`GitHub ${response.status}: ${text.slice(0, 200)}`, token), response.status);
+      }
+      const raw = (await response.json()) as Record<string, unknown>;
+      const pullNumber = typeof raw.number === "number" ? raw.number : 0;
+      const htmlUrl = typeof raw.html_url === "string"
+        ? raw.html_url
+        : `https://github.com/${owner}/${repo}/pull/${pullNumber}`;
+      const head = raw.head as Record<string, unknown> | undefined;
+      const headSha = typeof head?.sha === "string" ? head.sha : "";
+      if (!pullNumber || !headSha) {
+        throw new GithubReadonlyError("GitHub POST /pulls 응답에 number 또는 head.sha가 없습니다", 502);
+      }
+      return { pullNumber, htmlUrl, headSha };
     },
 
     async putFileContents(owner, repo, path, params) {
