@@ -58,6 +58,7 @@ export function PreviewRunCard({
   fetchImpl,
   onContextEvent,
   onPreviewObserved,
+  onIframeAnnotate,
 }: {
   missionId: string;
   /** scaffold/latest에서 받은 파일이 있는지(없으면 CTA disabled). */
@@ -67,6 +68,8 @@ export function PreviewRunCard({
   onContextEvent?: (type: string, payload: Record<string, unknown>) => void;
   /** observed 분기에서만 호출 — App.tsx의 activePreviewRef state 갱신용. */
   onPreviewObserved?: (ref: ActivePreviewRef) => void;
+  /** OSS-H7 P2: inline iframe 위 주석 모드 클릭 좌표. 미제공이면 주석 토글 자체 노출 X. */
+  onIframeAnnotate?: (point: { xPct: number; yPct: number }) => void;
 }) {
   const [result, setResult] = useState<ResultState>({ kind: "idle" });
   /** "수정안 만들기"를 한 번 눌렀는지 표시 — 한 번 누르면 "초안 생성 예정" 상태로 잠깐 잠근다.
@@ -266,7 +269,11 @@ export function PreviewRunCard({
           </button>
           {iframeOpen ? (
             <div className="mission-preview-run__iframe-wrap mt-1">
-              <PreviewIframe url={result.url} testIdPrefix={`run-${missionId}`} />
+              <PreviewIframe
+                url={result.url}
+                testIdPrefix={`run-${missionId}`}
+                onAnnotate={onIframeAnnotate}
+              />
             </div>
           ) : null}
         </>

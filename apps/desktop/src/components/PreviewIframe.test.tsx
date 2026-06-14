@@ -52,4 +52,32 @@ describe("PreviewIframe — sandbox + 정직성", () => {
     fireEvent.click(screen.getByTestId("preview-iframe-reload-m5"));
     expect(screen.getByTestId("preview-iframe-m5").getAttribute("data-state")).toBe("loading");
   });
+
+  it("(F6 — H7) onAnnotate 미제공 → 주석 모드 토글 자체 노출 X", () => {
+    render(<PreviewIframe url="http://x/" testIdPrefix="m6" />);
+    expect(screen.queryByTestId("preview-iframe-annotate-toggle-m6")).toBeNull();
+  });
+
+  it("(F7 — H7) onAnnotate 제공 → 토글 노출, 기본 비활성(overlay 없음)", () => {
+    render(<PreviewIframe url="http://x/" testIdPrefix="m7" onAnnotate={vi.fn()} />);
+    const toggle = screen.getByTestId("preview-iframe-annotate-toggle-m7");
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(screen.queryByTestId("preview-iframe-annotate-overlay-m7")).toBeNull();
+  });
+
+  it("(F8 — H7) 토글 켬 → overlay 마운트, 클릭 → onAnnotate(xPct,yPct) + 모드 자동 해제", () => {
+    const onAnnotate = vi.fn();
+    render(<PreviewIframe url="http://x/" testIdPrefix="m8" onAnnotate={onAnnotate} />);
+    fireEvent.click(screen.getByTestId("preview-iframe-annotate-toggle-m8"));
+    const overlay = screen.getByTestId("preview-iframe-annotate-overlay-m8");
+    expect(overlay).toBeTruthy();
+    // bounding rect stub: jsdom은 0×0 — 직접 mock해 비율 계산 검증.
+    overlay.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 1000, height: 500, right: 1000, bottom: 500, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    fireEvent.click(overlay, { clientX: 234, clientY: 70 });
+    expect(onAnnotate).toHaveBeenCalledTimes(1);
+    expect(onAnnotate).toHaveBeenCalledWith({ xPct: 23.4, yPct: 14 });
+    // 모드 자동 해제 → overlay 제거
+    expect(screen.queryByTestId("preview-iframe-annotate-overlay-m8")).toBeNull();
+  });
 });

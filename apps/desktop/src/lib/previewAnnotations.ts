@@ -13,6 +13,12 @@ import type { TurboEditPromptIssue } from "./turboEditPrompt";
  *   - 자동 적용 0 — 이 모듈은 표현만 만들고 적용/생성은 호출자가.
  */
 
+export type PreviewAnnotationCoords = {
+  /** iframe 폭 기준 0~100 — bounding rect 비율. cross-origin 안전(오버레이 클릭에서만 추출). */
+  xPct: number;
+  yPct: number;
+};
+
 export type PreviewAnnotation = {
   id: string;
   /** 사용자가 본 것에 대한 한 줄 설명. 필수. */
@@ -21,15 +27,23 @@ export type PreviewAnnotation = {
   positionHint?: string;
   /** 어떤 파일이라고 생각하는지 — scaffold 파일 path 중 선택(또는 자유). */
   targetFile?: string;
+  /** iframe 좌표(있을 때만) — H7 PreviewIframe overlay 클릭에서 채워짐. */
+  coords?: PreviewAnnotationCoords;
   /** ISO timestamp — 정렬/표시용. */
   createdAt: string;
 };
+
+function clampPct(v: number): number {
+  if (Number.isNaN(v)) return 0;
+  return Math.max(0, Math.min(100, Math.round(v * 10) / 10));
+}
 
 export function makeAnnotation(input: {
   id: string;
   description: string;
   positionHint?: string;
   targetFile?: string;
+  coords?: PreviewAnnotationCoords;
   createdAt: string;
 }): PreviewAnnotation {
   return {
@@ -37,6 +51,9 @@ export function makeAnnotation(input: {
     description: input.description.trim(),
     positionHint: input.positionHint?.trim() || undefined,
     targetFile: input.targetFile?.trim() || undefined,
+    coords: input.coords
+      ? { xPct: clampPct(input.coords.xPct), yPct: clampPct(input.coords.yPct) }
+      : undefined,
     createdAt: input.createdAt,
   };
 }
@@ -71,9 +88,11 @@ export function annotationsToTurboEditIssues(
   return list
     .filter((a) => a.description.length > 0)
     .map((a) => {
-      const summary = a.positionHint
-        ? `[${a.positionHint}] ${a.description}`
-        : a.description;
+      // 좌표는 prefix에 합쳐 prompt에서 한 줄로 보이게. positionHint와 둘 다 있으면 같이.
+      const tagParts: string[] = [];
+      if (a.positionHint) tagParts.push(a.positionHint);
+      if (a.coords) tagParts.push(`좌표 ${a.coords.xPct}% / ${a.coords.yPct}%`);
+      const summary = tagParts.length > 0 ? `[${tagParts.join(" · ")}] ${a.description}` : a.description;
       const recommendation = a.targetFile
         ? `${a.targetFile} 근처를 살펴 사용자가 짚은 문제를 좁게 고치세요. 정확한 위치 모르면 블록 만들지 마세요.`
         : `사용자가 짚은 문제를 정확한 위치를 모를 때는 블록 만들지 마세요.`;
