@@ -1,16 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CodingPacket,
   MissionCreateRequest,
   MissionWorkerAssignmentRequest,
+  MissionScaffoldLatestResponse,
 } from "@ai-orchestrator/protocol";
 import { mergeMissionBoard, type MissionBoardItem, type MissionBoardSnapshot } from "../lib/missionBoardModel";
 import {
   createDgxMission,
   fetchDgxMissions,
+  fetchMissionScaffoldLatest,
   mergeDgxMission,
   verifyDgxMission,
 } from "../runtime/stage47MissionServer";
+import type { MissionScaffoldFile } from "../lib/missionPublishPrefill";
+import { publishEnvironmentWithScaffolds } from "../lib/publishEnvironmentWithScaffolds";
 import { MissionBoardPanel, type MissionPublishEnvironment } from "./MissionBoardPanel";
 
 /**
@@ -62,6 +66,42 @@ export function MissionBoardContainer({
   const [notice, setNotice] = useState<string | undefined>();
   // 펼쳐진 미션(Workspace/Preview/VisualQA 상세) — 한 번에 하나만, 로컬 UI 상태일 뿐
   const [expandedMissionId, setExpandedMissionId] = useState<string | undefined>();
+
+  /**
+   * Publish Flow file prefill용 scaffold 파일 캐시.
+   *   - 사용자가 미션을 펼치면(Workspace 상세 토글) 그 미션의 scaffold latest를 한 번 lazy fetch.
+   *   - 이 캐시는 publishEnvironment.getScaffoldFiles로 노출되어 builtinMissionPrefill이
+   *     첫 안전 파일을 자동으로 채우게 한다.
+   *   - 동일 mission을 다시 펼쳐도 재호출하지 않는다(idempotent read이지만 네트워크 절약).
+   *   - 실패하면 캐시에 빈 배열을 두지 않는다(다음 재시도 가능) — undefined 유지.
+   */
+  const [scaffoldCacheByMission, setScaffoldCacheByMission] = useState<Record<string, ReadonlyArray<MissionScaffoldFile>>>({});
+  const scaffoldFetchInFlight = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!expandedMissionId) return;
+    if (scaffoldCacheByMission[expandedMissionId]) return; // 캐시 hit
+    if (scaffoldFetchInFlight.current.has(expandedMissionId)) return; // 중복 fetch 방지
+    const missionId = expandedMissionId;
+    scaffoldFetchInFlight.current.add(missionId);
+    void (async () => {
+      try {
+        const response: MissionScaffoldLatestResponse = await fetchMissionScaffoldLatest({ missionId, serverBaseUrl });
+        // 서버가 status="found" 또는 "partial"이면 files가 채워져 있다. "not_found"면 files=[].
+        // 추측 금지: 응답에 있는 것만 캐시에 둔다(스킵 목록은 사용자에게 따로 보여줄 수 있게 builtin에서 처리).
+        const files: MissionScaffoldFile[] = response.files.map((file) => ({
+          path: file.path,
+          newContent: file.content,
+          operation: "create" as const,
+        }));
+        setScaffoldCacheByMission((prev) => ({ ...prev, [missionId]: files }));
+      } catch {
+        // 실패 시 캐시에 두지 않음 — 다음 펼치기에 재시도. publish CTA를 막지 않는다.
+      } finally {
+        scaffoldFetchInFlight.current.delete(missionId);
+      }
+    })();
+  }, [expandedMissionId, scaffoldCacheByMission, serverBaseUrl]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -238,6 +278,12 @@ export function MissionBoardContainer({
     [withBusy, serverBaseUrl],
   );
 
+  // 부모가 준 publishEnvironment + 컨테이너 scaffold 캐시 합성 — 순수 함수에 위임.
+  const mergedPublishEnvironment = useMemo<MissionPublishEnvironment | undefined>(
+    () => publishEnvironmentWithScaffolds(publishEnvironment, scaffoldCacheByMission),
+    [publishEnvironment, scaffoldCacheByMission],
+  );
+
   return (
     <MissionBoardPanel
       snapshot={snapshot}
@@ -256,7 +302,7 @@ export function MissionBoardContainer({
       onToggleDetail={(item) =>
         setExpandedMissionId((current) => (current === item.missionId ? undefined : item.missionId))
       }
-      publishEnvironment={publishEnvironment}
+      publishEnvironment={mergedPublishEnvironment}
     />
   );
 }
