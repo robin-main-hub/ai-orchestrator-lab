@@ -1,7 +1,12 @@
 import { useState } from "react";
-import { Play, ExternalLink, RotateCw } from "lucide-react";
+import { Play, ExternalLink, RotateCw, Wrench } from "lucide-react";
 import type { MissionPreviewRunScaffoldResponse } from "@ai-orchestrator/protocol";
 import { runDgxMissionPreviewScaffold } from "../runtime/stage47MissionServer";
+import {
+  buildPreviewRevisionHint,
+  PREVIEW_REVISION_HINT_KIND_LABEL,
+  type PreviewRevisionHint,
+} from "../lib/previewRevisionHint";
 
 /**
  * Preview Run vertical 카드 — Mission Workspace 상세에서 한 번의 클릭으로
@@ -20,11 +25,11 @@ type ResultState =
   | { kind: "idle" }
   | { kind: "running" }
   | { kind: "observed"; url: string; repoRoot: string; fileCount: number }
-  | { kind: "preview_not_running"; status: string; truthStatus: string; detail?: string; repoRoot?: string; fileCount?: number }
+  | { kind: "preview_not_running"; status: string; truthStatus: string; detail?: string; repoRoot?: string; fileCount?: number; hint?: PreviewRevisionHint }
   | { kind: "no_scaffold"; message: string }
   | { kind: "not_configured"; message: string }
-  | { kind: "materialize_failed"; message: string; repoRoot?: string }
-  | { kind: "error"; message: string };
+  | { kind: "materialize_failed"; message: string; repoRoot?: string; hint?: PreviewRevisionHint }
+  | { kind: "error"; message: string; hint?: PreviewRevisionHint };
 
 const STATUS_LABEL: Record<string, string> = {
   observed: "실행 중",
@@ -50,12 +55,16 @@ export function PreviewRunCard({
   onContextEvent?: (type: string, payload: Record<string, unknown>) => void;
 }) {
   const [result, setResult] = useState<ResultState>({ kind: "idle" });
+  /** "수정안 만들기"를 한 번 눌렀는지 표시 — 한 번 누르면 "초안 생성 예정" 상태로 잠깐 잠근다.
+   *  이번 vertical에서는 자동 수정/자동 scaffold refresh를 하지 않는다(trace만 발생). */
+  const [revisionRequested, setRevisionRequested] = useState(false);
   const busy = result.kind === "running";
   const canRun = hasScaffoldFiles && !busy;
 
   const run = async () => {
     if (!canRun) return;
     setResult({ kind: "running" });
+    setRevisionRequested(false); // 새 실행 시 이전 hint 요청은 초기화.
     onContextEvent?.("mission.preview.run-scaffold.requested", {
       missionId,
       ts: new Date().toISOString(),
@@ -97,6 +106,11 @@ export function PreviewRunCard({
       return;
     }
     if (res.outcome === "preview_not_running") {
+      const hint = buildPreviewRevisionHint({
+        outcome: "preview_not_running",
+        preview: res.preview,
+        message: res.message,
+      });
       setResult({
         kind: "preview_not_running",
         status: res.preview?.status ?? "unknown",
@@ -104,6 +118,7 @@ export function PreviewRunCard({
         detail: res.preview?.detail,
         repoRoot: res.repoRoot,
         fileCount: res.materializedFileCount,
+        hint,
       });
       onContextEvent?.("mission.preview.run-scaffold.failed", {
         missionId,
@@ -122,7 +137,8 @@ export function PreviewRunCard({
       return;
     }
     if (res.outcome === "materialize_failed") {
-      setResult({ kind: "materialize_failed", message: res.message ?? "파일 풀기 실패", repoRoot: res.repoRoot });
+      const hint = buildPreviewRevisionHint({ outcome: "materialize_failed", message: res.message });
+      setResult({ kind: "materialize_failed", message: res.message ?? "파일 풀기 실패", repoRoot: res.repoRoot, hint });
       onContextEvent?.("mission.preview.run-scaffold.failed", {
         missionId,
         summary: res.message ?? "materialize_failed",
@@ -130,8 +146,30 @@ export function PreviewRunCard({
       });
       return;
     }
-    setResult({ kind: "error", message: res.message ?? res.outcome });
+    const hint = buildPreviewRevisionHint({ outcome: "error", message: res.message });
+    setResult({ kind: "error", message: res.message ?? res.outcome, hint });
   };
+
+  /** "수정안 만들기" — trace만 발생. 자동 수정/자동 scaffold refresh는 이번 vertical 범위 밖. */
+  const onRequestRevision = () => {
+    if (revisionRequested) return;
+    const hint = "hint" in result ? result.hint : undefined;
+    if (!hint) return;
+    setRevisionRequested(true);
+    onContextEvent?.("mission.preview.revision_hint.requested", {
+      missionId,
+      kind: hint.kind,
+      summary: hint.summary,
+      stepCount: hint.steps.length,
+      ts: new Date().toISOString(),
+    });
+  };
+
+  /** 현재 result에서 hint를 꺼낸다(없으면 undefined). */
+  const currentHint: PreviewRevisionHint | undefined =
+    result.kind === "preview_not_running" || result.kind === "materialize_failed" || result.kind === "error"
+      ? result.hint
+      : undefined;
 
   const ctaLabel = result.kind === "idle"
     ? "Preview 실행"
@@ -221,6 +259,44 @@ export function PreviewRunCard({
         >
           {result.message}
         </p>
+      ) : null}
+
+      {/* Preview revision hint — 분류 가능한 실패에서만 보임. fake observed fix 금지: 안내만. */}
+      {currentHint ? (
+        <div
+          className="mission-preview-run__hint"
+          data-testid={`mission-preview-run-hint-${missionId}`}
+          data-hint-kind={currentHint.kind}
+        >
+          <div className="mission-preview-run__hint-head">
+            <Wrench size={12} />
+            <strong data-testid={`mission-preview-run-hint-kind-${missionId}`}>
+              {PREVIEW_REVISION_HINT_KIND_LABEL[currentHint.kind]}
+            </strong>
+            <span className="mission-preview-run__hint-summary">{currentHint.summary}</span>
+          </div>
+          <ul className="mission-preview-run__hint-steps">
+            {currentHint.steps.map((step, idx) => (
+              <li key={idx}>{step}</li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={onRequestRevision}
+            disabled={revisionRequested}
+            data-testid={`mission-preview-run-hint-cta-${missionId}`}
+            className={
+              revisionRequested
+                ? "mission-preview-run__hint-cta mission-preview-run__hint-cta--requested"
+                : "mission-preview-run__hint-cta"
+            }
+            title={revisionRequested
+              ? "수정안 초안 생성 예정(이번 vertical에서는 자동 수정/자동 scaffold refresh를 하지 않습니다)"
+              : "수정 후보 초안을 만들기 위한 trace를 남깁니다. 자동 수정은 하지 않습니다."}
+          >
+            {revisionRequested ? "수정안 초안 생성 예정" : "수정안 만들기"}
+          </button>
+        </div>
       ) : null}
     </div>
   );
