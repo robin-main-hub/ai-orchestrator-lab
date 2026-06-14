@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -24,6 +24,9 @@ import { GithubPublishPanel } from "./coding/GithubPublishPanel";
 import { MultiFilePlanCard } from "./publish/MultiFilePlanCard";
 import { PreviewRunCard } from "./PreviewRunCard";
 import { VisualQaCard } from "./VisualQaCard";
+import { MissionWorkspaceStatusBar } from "./MissionWorkspaceStatusBar";
+import type { VisualQaReport } from "@ai-orchestrator/protocol";
+import type { VisualQaDiff } from "../lib/visualQaDiff";
 import {
   builtinMissionPrefill,
   computeNextPublishStep,
@@ -389,6 +392,14 @@ function MissionWorkspaceDetail({
   // (publishEnvironment가 없으면 CTA 자체를 그리지 않아 부모가 opt-in한 경우에만 노출.)
   const [publishOpen, setPublishOpen] = useState(false);
   /**
+   * 직전 Visual QA + verify 결과를 StatusBar 계산기에 흘리기 위한 가벼운 mirror.
+   * VisualQaCard가 onReport/onVerify로 알린다. 자동 실행 0 — 단순 상태 표시용.
+   */
+  const [latestQaReport, setLatestQaReport] = useState<VisualQaReport | undefined>(undefined);
+  const [latestVerifyDiff, setLatestVerifyDiff] = useState<VisualQaDiff | undefined>(undefined);
+  const [latestVerifyFailedStep, setLatestVerifyFailedStep] = useState<"preview" | "qa" | undefined>(undefined);
+  const [fixApplied, setFixApplied] = useState(false);
+  /**
    * "다음 할 일" CTA가 어떤 step을 가리키는지 — 사용자가 CTA를 누르면 publishOpen=true가 되고
    * 마운트 직후 그 step section으로 scrollIntoView 한다. 사용자가 그냥 GitHub로 내보내기 토글로
    * 열면 undefined로 두어 첫 step부터 보인다(자동 스크롤 없음).
@@ -413,6 +424,63 @@ function MissionWorkspaceDetail({
     });
     return () => window.cancelAnimationFrame(handle);
   }, [publishOpen, targetStep, item.missionId]);
+
+  /** scaffold 파일이 한 개 이상 있는지 — StatusBar phase 계산에 필요. */
+  const hasScaffoldFiles = (publishEnvironment?.getScaffoldFiles?.(item)?.length ?? 0) > 0;
+
+  /**
+   * Evidence readiness → next action 라우터.
+   *   - publish: publishOpen=true + 다음 paint에 publish-multifile-card로 scrollIntoView/focus.
+   *   - fix: visual-qa-patch / draft / draft-cta 중 첫 매칭으로 scroll/focus.
+   *   - preview: mission-preview-run-{id} 카드로 scroll/focus.
+   *   - qa: visual-qa-run-{id} CTA로 scroll/focus.
+   * 자동 실행 0 — 이동/강조만. trace는 호출자 측 onContextEvent에서 이미 발생.
+   */
+  const onNavigate = useCallback((target: "publish" | "fix" | "preview" | "qa") => {
+    if (target === "publish") {
+      if (!publishOpen) setPublishOpen(true);
+      // mount/페인트 후 scroll. requestAnimationFrame 두 번으로 안전.
+      const scrollToPublish = () => {
+        const el =
+          document.querySelector<HTMLElement>(`#mission-publish-${item.missionId} [data-testid="publish-multifile-card"]`)
+          ?? document.getElementById(`mission-publish-${item.missionId}`);
+        el?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+        if (el && typeof (el as HTMLElement).focus === "function") (el as HTMLElement).focus();
+      };
+      if (typeof window !== "undefined" && window.requestAnimationFrame) {
+        window.requestAnimationFrame(() => window.requestAnimationFrame(scrollToPublish));
+      } else {
+        scrollToPublish();
+      }
+      return;
+    }
+    let el: HTMLElement | null = null;
+    if (target === "fix") {
+      el =
+        document.querySelector<HTMLElement>(`[data-testid="visual-qa-patch-${item.missionId}"]`)
+        ?? document.querySelector<HTMLElement>(`[data-testid="visual-qa-draft-${item.missionId}"]`)
+        ?? document.querySelector<HTMLElement>(`[data-testid="visual-qa-draft-cta-${item.missionId}"]`);
+    } else if (target === "preview") {
+      el = document.querySelector<HTMLElement>(`[data-testid="mission-preview-run-${item.missionId}"]`);
+    } else if (target === "qa") {
+      el = document.querySelector<HTMLElement>(`[data-testid="visual-qa-run-${item.missionId}"]`);
+    }
+    el?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    if (el && typeof el.focus === "function") el.focus();
+  }, [publishOpen, item.missionId]);
+
+  /** VisualQaCard가 상태 변화를 mirror하는 단일 콜백. read-only — 자동 실행 0. */
+  const onVisualQaStateChange = useCallback((s: {
+    qaReport?: VisualQaReport;
+    verifyDiff?: VisualQaDiff;
+    verifyFailedStep?: "preview" | "qa";
+    fixApplied?: boolean;
+  }) => {
+    setLatestQaReport(s.qaReport);
+    setLatestVerifyDiff(s.verifyDiff);
+    setLatestVerifyFailedStep(s.verifyFailedStep);
+    setFixApplied(!!s.fixApplied);
+  }, []);
   // CTA polish — scaffold 유무에 따른 정직한 신호:
   //   - ready    : safeCount > 0 → "1개 자동 채움 준비"(실제 prefill은 항상 첫 안전 파일 1개)
   //   - blocked  : skipped > 0, safeCount == 0 → "모두 가드에 막힘 — 직접 입력 필요"
@@ -461,6 +529,18 @@ function MissionWorkspaceDetail({
         </div>
       ) : null}
 
+      {/* Mission Workspace 상단 한 줄 상태 + 다음 행동 라우터. 자동 실행 0 — 이동/강조만. */}
+      <MissionWorkspaceStatusBar
+        missionId={item.missionId}
+        hasScaffoldFiles={hasScaffoldFiles}
+        previewObserved={!!item.workspace?.previewUrl}
+        qaReport={latestQaReport}
+        fixApplied={fixApplied}
+        verifyDiff={latestVerifyDiff}
+        verifyFailedStep={latestVerifyFailedStep}
+        onNavigate={onNavigate}
+      />
+
       {/* Preview Run vertical CTA — scaffold가 있으면 한 번 클릭으로 materialize+preview 실행.
           fake preview URL 금지: 서버가 observed로 반환할 때만 링크가 살아난다. */}
       <PreviewRunCard
@@ -474,7 +554,9 @@ function MissionWorkspaceDetail({
       />
 
       {/* Visual QA vertical — preview observed running일 때만 CTA 활성. issues_found/failed면
-          "수정안 초안 만들기" + 파일별 patch preview + 적용 CTA. 자동 파일 수정/자동 PR 0. */}
+          "수정안 초안 만들기" + 파일별 patch preview + 적용 CTA. 자동 파일 수정/자동 PR 0.
+          내부에 mount된 VisualEvidenceCard의 readiness CTA가 onNavigate를 통해 Mission Workspace
+          행동(publish/fix/preview/qa)으로 라우팅된다. */}
       <VisualQaCard
         missionId={item.missionId}
         workspaceId={item.workspace?.id}
@@ -487,6 +569,8 @@ function MissionWorkspaceDetail({
           publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
         }
         onRefreshScaffold={publishEnvironment?.refreshScaffold}
+        onNavigate={onNavigate}
+        onStateChange={onVisualQaStateChange}
       />
 
       {/* Visual QA 종합 (D5b) */}
