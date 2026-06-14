@@ -43,6 +43,8 @@ export function SearchReplaceEditCard({
   files,
   onApply,
   onContextEvent,
+  text: textProp,
+  onTextChange,
 }: {
   missionId: string;
   /** 현재 scaffold 파일. undefined면 카드는 disabled 상태. */
@@ -53,8 +55,16 @@ export function SearchReplaceEditCard({
     MissionScaffoldOverlayResponse | void
   >;
   onContextEvent?: (type: string, payload: Record<string, unknown>) => void;
+  /** controlled-text 모드(부모가 text를 쥐고 외부에서 주입 — 예: Turbo Edits Draft). */
+  text?: string;
+  onTextChange?: (next: string) => void;
 }) {
-  const [text, setText] = useState("");
+  const [internalText, setInternalText] = useState("");
+  const text = textProp ?? internalText;
+  const setText = (next: string) => {
+    if (onTextChange) onTextChange(next);
+    if (textProp === undefined) setInternalText(next);
+  };
   const [submitting, setSubmitting] = useState(false);
   const [lastOutcome, setLastOutcome] = useState<
     | { kind: "applied"; recorded: number }
