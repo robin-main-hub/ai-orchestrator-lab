@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import { GithubPublishPanel } from "./coding/GithubPublishPanel";
+import { MultiFilePlanCard } from "./publish/MultiFilePlanCard";
 import {
   builtinMissionPrefill,
   computeNextPublishStep,
@@ -592,6 +593,24 @@ function MissionWorkspaceDetail({
                 }
                 fetchImpl={publishEnvironment.fetchImpl}
               />
+              {/* W5a: Multi-file plan(client-side aggregation). publishOpen일 때만 마운트.
+                   scaffold 파일이 있을 때만 자체 노출 — execute는 W5b로 별도. */}
+              {(() => {
+                const scaffoldFiles = publishEnvironment.getScaffoldFiles?.(item);
+                if (!scaffoldFiles || scaffoldFiles.length === 0) return null;
+                return (
+                  <MultiFilePlanCard
+                    item={item}
+                    files={scaffoldFiles}
+                    defaultRepoFullName={publishEnvironment.defaultRepoFullName}
+                    serverBaseUrl={publishEnvironment.serverBaseUrl}
+                    fetchImpl={publishEnvironment.fetchImpl}
+                    onContextEvent={(type, payload) =>
+                      publishEnvironment.onContextEvent?.(type, { ...payload, missionId: item.missionId })
+                    }
+                  />
+                );
+              })()}
             </div>
           ) : null}
         </div>
