@@ -17,6 +17,7 @@
     "@ai-orchestrator/memory": "workspace:*",
     "@ai-orchestrator/protocol": "workspace:*",
     "@ai-orchestrator/providers": "workspace:*",
+    "@octokit/request": "^10.0.10",
     "zod": "^3.25.76"
   },
   "optionalDependencies": {
