@@ -97,7 +97,7 @@ describe("GET /missions/:id/scaffold/latest", () => {
     expect(payload.message).toContain("등록된 scaffold plan이 없습니다");
   });
 
-  it("(#3) plan 1개(react_vite_app) → status=found, 5개 파일 모두 안전 + planId 반환", async () => {
+  it("(#3) plan 1개(react_vite_app) → status=found, 6개 파일 모두 안전 + planId 반환", async () => {
     const plan = makePlan({ id: "plan_v1" });
     const store = fakeStore([record("mission_a", [plan])]);
     const { status, payload } = await callRoute(store, "mission_a");
@@ -106,7 +106,7 @@ describe("GET /missions/:id/scaffold/latest", () => {
     expect(payload.planId).toBe("plan_v1");
     expect(payload.truthStatus).toBe("planned");
     expect(payload.files.map((file: { path: string }) => file.path).sort()).toEqual(
-      ["README.md", "index.html", "package.json", "src/App.tsx", "src/main.tsx"].sort(),
+      ["README.md", "index.html", "package.json", "src/App.tsx", "src/main.tsx", "src/styles.css"].sort(),
     );
     // 모든 파일 source는 scaffold_plan, createdAt은 plan의 그것을 따른다.
     for (const file of payload.files) {

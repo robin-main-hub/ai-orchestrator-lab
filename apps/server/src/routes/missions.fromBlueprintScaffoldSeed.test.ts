@@ -123,7 +123,7 @@ describe("from-blueprint → seed scaffold → GET /missions/:id/scaffold/latest
     expect(rec.scaffoldPlans[0]!.workspaceId).toBe(`workspace_seed_${missionId}`);
   });
 
-  it("(#2) 같은 미션에 대해 scaffold/latest GET이 status='found' + react_vite_app 파일들 반환", async () => {
+  it("(#2) 같은 미션에 대해 scaffold/latest GET이 status='found' + react_vite_app 파일 6종 반환", async () => {
     const store = statefulStore();
     const missionId = "mission_seed_smoke_2";
     await callRoute(store, "/missions/from-blueprint", "POST", { blueprint: BLUEPRINT, missionId }).promise;
@@ -133,9 +133,9 @@ describe("from-blueprint → seed scaffold → GET /missions/:id/scaffold/latest
     const { status, payload } = read();
     expect(status).toBe(200);
     expect(payload.status).toBe("found");
-    // react_vite_app 템플릿의 표준 파일 5종이 모두 들어 있고 prefill에서 사용 가능
+    // react_vite_app 템플릿: package.json, index.html, src/main.tsx, src/App.tsx, src/styles.css, README.md.
     const paths = payload.files.map((f: { path: string }) => f.path).sort();
-    expect(paths).toEqual(["README.md", "index.html", "package.json", "src/App.tsx", "src/main.tsx"].sort());
+    expect(paths).toEqual(["README.md", "index.html", "package.json", "src/App.tsx", "src/main.tsx", "src/styles.css"].sort());
     // 모든 파일 content가 0보다 길고 source는 scaffold_plan
     for (const file of payload.files) {
       expect(file.content.length).toBeGreaterThan(0);
@@ -169,6 +169,100 @@ describe("from-blueprint → seed scaffold → GET /missions/:id/scaffold/latest
     const rec = store.records.get(missionId)!;
     expect(rec.scaffoldPlans.length).toBe(1);
     expect(rec.scaffoldPlans[0]!.id).toBe(`plan_${missionId}_seed`);
+  });
+
+  it("(#5 vertical) Blueprint-aware: 의도+화면+수용기준이 App.tsx/README/styles.css에 실제 반영", async () => {
+    // 사용자 요구의 핵심: scaffoldForTemplate가 placeholder("시작하기")만 찍던 시절을 벗어나,
+    // Blueprint의 userIntent/screens/acceptanceCriteria가 실제 다중 파일에 들어가야 한다.
+    // 이 smoke는 다음 vertical을 한 줄로 검증:
+    //   POST /missions/from-blueprint(blueprint with intent/screens/criteria)
+    //   → GET /missions/:id/scaffold/latest
+    //   → App.tsx에 userIntent + 각 screen.name/purpose/primaryAction이 들어 있다
+    //   → README.md에 userIntent + screens 리스트 + acceptanceCriteria 체크리스트 들어 있다
+    //   → styles.css는 카드형 레이아웃을 위한 .app-screens/.screen-card 클래스를 가진다
+    //   → MultiFilePlanCard가 받을 6개 파일이 모두 채워져 있다 (안전 파일 자동 prefill 대상).
+    const RICH_BLUEPRINT: DesignBlueprintInput = {
+      title: "Tasks Board",
+      userIntent: "오늘 해야 할 일을 한 화면에서 관리한다",
+      targetSurface: "new_app",
+      screens: [
+        {
+          name: "오늘 할 일",
+          purpose: "오늘 완료해야 할 작업을 모은다",
+          primaryAction: "새 작업 추가",
+          secondaryActions: [],
+          dataNeeded: [],
+          emptyState: "할 일이 없습니다",
+          errorState: "불러오기 실패",
+        },
+        {
+          name: "완료된 작업",
+          purpose: "최근 완료한 작업을 모아본다",
+          primaryAction: "최근 7일 보기",
+          secondaryActions: [],
+          dataNeeded: [],
+          emptyState: "완료된 작업이 없습니다",
+          errorState: "불러오기 실패",
+        },
+      ],
+      designTokens: { density: "balanced", tone: "clean_builder", motion: "subtle" },
+      acceptanceCriteria: [
+        "할 일 추가가 즉시 화면에 반영된다",
+        "완료한 작업은 별도 섹션으로 이동한다",
+      ],
+    };
+
+    const store = statefulStore();
+    const missionId = "mission_vertical_smoke";
+    const createCall = callRoute(store, "/missions/from-blueprint", "POST", {
+      blueprint: RICH_BLUEPRINT,
+      missionId,
+    });
+    expect(await createCall.promise).toBe(true);
+    expect(createCall.read().status).toBe(201);
+
+    const latestCall = callRoute(store, `/missions/${missionId}/scaffold/latest`, "GET");
+    expect(await latestCall.promise).toBe(true);
+    const { status, payload } = latestCall.read();
+    expect(status).toBe(200);
+    expect(payload.status).toBe("found");
+    const fileOf = (path: string) =>
+      payload.files.find((f: { path: string; content: string }) => f.path === path);
+
+    // 6개 파일 모두 존재(MultiFilePlanCard prefill target).
+    expect(payload.files.length).toBe(6);
+    for (const expected of ["package.json", "index.html", "src/main.tsx", "src/App.tsx", "src/styles.css", "README.md"]) {
+      expect(fileOf(expected)).toBeTruthy();
+    }
+
+    // App.tsx — intent header + 각 screen이 카드형으로 들어간다.
+    const appTsx = fileOf("src/App.tsx").content as string;
+    expect(appTsx).toContain('import "./styles.css"');
+    expect(appTsx).toContain("app-hero");
+    expect(appTsx).toContain("오늘 해야 할 일을 한 화면에서 관리한다"); // userIntent
+    expect(appTsx).toContain("오늘 할 일"); // screen 1 name
+    expect(appTsx).toContain("오늘 완료해야 할 작업을 모은다"); // screen 1 purpose
+    expect(appTsx).toContain("새 작업 추가"); // screen 1 primaryAction
+    expect(appTsx).toContain("완료된 작업"); // screen 2 name
+    expect(appTsx).toContain("최근 7일 보기"); // screen 2 primaryAction
+    expect(appTsx).toContain("screen-card");
+
+    // README.md — intent + screens 목록 + criteria 체크리스트.
+    const readme = fileOf("README.md").content as string;
+    expect(readme).toContain("## 의도");
+    expect(readme).toContain("오늘 해야 할 일을 한 화면에서 관리한다");
+    expect(readme).toContain("## 화면");
+    expect(readme).toContain("오늘 할 일");
+    expect(readme).toContain("완료된 작업");
+    expect(readme).toContain("## 수용 기준");
+    expect(readme).toContain("- [ ] 할 일 추가가 즉시 화면에 반영된다");
+    expect(readme).toContain("- [ ] 완료한 작업은 별도 섹션으로 이동한다");
+
+    // styles.css — 카드 레이아웃을 위한 최소 클래스.
+    const styles = fileOf("src/styles.css").content as string;
+    expect(styles).toContain(".app-shell");
+    expect(styles).toContain(".app-screens");
+    expect(styles).toContain(".screen-card");
   });
 
   it("(#4) seed 실패는 mission 생성을 막지 않는다 — recordScaffoldPlan이 throw해도 201", async () => {

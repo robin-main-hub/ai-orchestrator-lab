@@ -6,6 +6,7 @@ import {
   buildMissionCreateFromTemplate,
   buildScaffoldPlan,
   scaffoldForTemplate,
+  encodeBlueprintToScaffoldInput,
   conversationBlueprintDraftRequestSchema,
   conversationBlueprintDraftResponseSchema,
   CORE_WORKFLOW_TEMPLATES,
@@ -136,12 +137,25 @@ const MISSION_SCAFFOLD_LATEST_PATH = /^\/missions\/([^/]+)\/scaffold\/latest$/;
 async function seedBlueprintScaffold(input: {
   store: MissionStore;
   missionId: string;
-  blueprintTitle: string;
+  blueprint: DesignBlueprintInput;
   now: () => string;
 }): Promise<void> {
   try {
     const templateId = "react_vite_app";
-    const templateInput = { appName: input.blueprintTitle || "app" };
+    // Blueprint의 의도/화면/수용기준을 scaffold에 동승시킨다 — encodeBlueprintToScaffoldInput으로
+    // JSON 인코딩해서 templateInput에 실으면 scaffoldForTemplate가 decode 후 App.tsx/README에 반영.
+    const templateInput: Record<string, string | number> = {
+      appName: input.blueprint.title || "app",
+      ...encodeBlueprintToScaffoldInput({
+        userIntent: input.blueprint.userIntent ?? "",
+        screens: (input.blueprint.screens ?? []).map((s) => ({
+          name: s.name,
+          purpose: s.purpose,
+          primaryAction: s.primaryAction,
+        })),
+        acceptanceCriteria: input.blueprint.acceptanceCriteria ?? [],
+      }),
+    };
     const scaffold = scaffoldForTemplate(templateId, templateInput);
     if (scaffold.length === 0) return;
     const plan = buildScaffoldPlan({
@@ -363,7 +377,7 @@ export async function handleMissionRoute({
         return true;
       }
       // Publish Flow file prefill을 위해 seed scaffold를 자동으로 남긴다(placeholder workspace).
-      await seedBlueprintScaffold({ store, missionId, blueprintTitle: payload.blueprint.title, now: now ?? (() => new Date().toISOString()) });
+      await seedBlueprintScaffold({ store, missionId, blueprint: payload.blueprint, now: now ?? (() => new Date().toISOString()) });
       respondJson(201, {
         mission: result.mission,
         blueprint: result.blueprint,
@@ -404,7 +418,7 @@ export async function handleMissionRoute({
         return true;
       }
       // from-blueprint와 동일 — Publish Flow file prefill용 seed scaffold.
-      await seedBlueprintScaffold({ store, missionId, blueprintTitle: blueprintInput.title, now: now ?? (() => new Date().toISOString()) });
+      await seedBlueprintScaffold({ store, missionId, blueprint: blueprintInput, now: now ?? (() => new Date().toISOString()) });
       respondJson(201, { mission: result.mission, blueprint: result.blueprint, debatePacket: payload.packet });
     } catch (error) {
       respondJson(500, { error: "mission_from_debate_failed", message: error instanceof Error ? error.message : String(error) });
