@@ -37,6 +37,7 @@ export function MissionBoardContainer({
   codingPacketId,
   debateId,
   publishEnvironment,
+  refreshScaffoldHandleRef,
 }: {
   serverBaseUrl?: string | string[];
   /** 검증 명령 소스 + 미션 생성 시드 — 현재 CodingPacket */
@@ -56,6 +57,14 @@ export function MissionBoardContainer({
   debateId?: string;
   /** opt-in: 제공 시 Workspace 상세에 "GitHub로 내보내기" CTA(GithubPublishPanel) 노출 */
   publishEnvironment?: MissionPublishEnvironment;
+  /**
+   * 부모(App.tsx)가 ref로 받아 외부에서 scaffold 캐시 invalidate를 트리거할 수 있게 한다.
+   * 사용 예: BlueprintReviewCard의 "수정안으로 스캐폴드 다시 생성" 클릭 → 부모가
+   *         ref.current(missionId)를 호출 → Container가 같은 함수를 통해 캐시 무효화 →
+   *         useEffect 재호출 → 새 scaffold/latest 조회 → Publish prefill 갱신.
+   * 자동 실행 없음 — 부모가 명시적으로 호출할 때만 동작.
+   */
+  refreshScaffoldHandleRef?: React.MutableRefObject<((missionId: string) => void) | null>;
 }) {
   const [snapshot, setSnapshot] = useState<MissionBoardSnapshot>(() =>
     mergeMissionBoard({ serverRecords: undefined, localItems, serverError: "아직 불러오지 않음" }),
@@ -288,6 +297,30 @@ export function MissionBoardContainer({
   const [publishHistoryByMission, setPublishHistoryByMission] = useState<Record<string, PublishHistoryByStep>>({});
 
   /**
+   * scaffold 캐시 무효화의 기본 함수 — 부모(App.tsx)가 ref로 받아 외부에서 호출할 수도 있고,
+   * mergedPublishEnvironment.refreshScaffold default로도 쓰인다. 동일 함수 한 번 정의.
+   */
+  const defaultRefreshScaffold = useCallback((missionId: string) => {
+    setScaffoldCacheByMission((prev) => {
+      if (!(missionId in prev)) return prev;
+      const next = { ...prev };
+      delete next[missionId];
+      return next;
+    });
+  }, []);
+
+  // 부모가 refreshScaffoldHandleRef를 줬다면 internal 함수를 노출(외부에서 직접 호출 가능).
+  useEffect(() => {
+    if (refreshScaffoldHandleRef) {
+      refreshScaffoldHandleRef.current = defaultRefreshScaffold;
+      return () => {
+        refreshScaffoldHandleRef.current = null;
+      };
+    }
+    return undefined;
+  }, [refreshScaffoldHandleRef, defaultRefreshScaffold]);
+
+  /**
    * 부모가 준 publishEnvironment + 컨테이너 scaffold 캐시 + publish history 합성.
    * 추가로 onContextEvent를 감싸 github.publish.*를 누적한 뒤 부모에게도 forward.
    * refreshScaffold는 사용자가 "수정안으로 스캐폴드 다시 생성"을 누른 직후 prefill 갱신용.
@@ -298,25 +331,14 @@ export function MissionBoardContainer({
     return {
       ...withScaffolds,
       getPublishHistory: withScaffolds.getPublishHistory ?? ((item) => publishHistoryByMission[item.missionId]),
-      refreshScaffold:
-        withScaffolds.refreshScaffold ??
-        ((missionId: string) => {
-          // 캐시에서 해당 missionId 항목 삭제 → useEffect deps 변경 → 다시 fetch.
-          // 추측 금지: 응답이 올 때까지 prefill은 비어 있게 둠(이전 값 재사용 X).
-          setScaffoldCacheByMission((prev) => {
-            if (!(missionId in prev)) return prev;
-            const next = { ...prev };
-            delete next[missionId];
-            return next;
-          });
-        }),
+      refreshScaffold: withScaffolds.refreshScaffold ?? defaultRefreshScaffold,
       onContextEvent: (type, payload) => {
         // 순수 함수에 위임 — 파싱/누적 규칙은 lib에 단언적으로 단위 테스트됨.
         setPublishHistoryByMission((prev) => accumulatePublishHistory(prev, type, payload));
         withScaffolds.onContextEvent?.(type, payload);
       },
     };
-  }, [publishEnvironment, scaffoldCacheByMission, publishHistoryByMission]);
+  }, [publishEnvironment, scaffoldCacheByMission, publishHistoryByMission, defaultRefreshScaffold]);
 
   return (
     <MissionBoardPanel

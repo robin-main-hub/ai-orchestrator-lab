@@ -130,6 +130,7 @@ import type {
   ContextPackTier,
   BlueprintRevisionDraft,
   DesignBlueprintInput,
+  ServerMissionRecord,
   DeviceRebootRequest,
   DeviceRebootWatchdog,
   EventEnvelope,
@@ -717,6 +718,19 @@ export function App() {
   const [appliedBlueprintRevisionByDebateId, setAppliedBlueprintRevisionByDebateId] = useState<
     Record<string, { draft: BlueprintRevisionDraft; appliedAt: string }>
   >({});
+  /**
+   * sourceSessionId(앱 빌더 진입 세션) → 생성된 missionId 매핑.
+   *   - AppBuildContainer의 onCreated 콜백에서 채워진다.
+   *   - debate session에 동일 sourceSessionId가 있으면 토론↔미션 매핑이 성립.
+   *   - 영속화 없음(세션 메모리). 페이지 새로고침 시 비워짐 — 추측 금지.
+   */
+  const [missionIdBySourceSessionId, setMissionIdBySourceSessionId] = useState<Record<string, string>>({});
+  /**
+   * MissionBoardContainer가 노출하는 scaffold 캐시 invalidate 함수에 대한 외부 핸들.
+   * BlueprintReviewCard의 "수정안으로 스캐폴드 다시 생성" 클릭 → handler가 이 ref로 invalidate
+   * 호출 → Container의 useEffect가 새 scaffold/latest를 조회. 자동 GitHub write 없음.
+   */
+  const refreshScaffoldHandleRef = useRef<((missionId: string) => void) | null>(null);
   const [debateSession, setDebateSession] = useState<Stage3DebateSession>(() =>
     resolveInitialDebateSession({
       sample: sampleDebateSession,
@@ -2972,6 +2986,52 @@ export function App() {
    *   - trace event는 redacted summary만(raw 본문/transcript는 절대 trace에 넣지 않음).
    *   - truthStatus는 항상 planned(observed 아님).
    */
+  /**
+   * AppBuildContainer가 from-blueprint 미션을 만든 직후 호출.
+   *   - sourceSessionId가 있으면 missionIdBySourceSessionId 매핑에 저장.
+   *   - 이후 동일 sourceSessionId로 시작한 debate가 있으면 Stage3DebateTable의
+   *     onScaffoldRefresh가 이 매핑으로 missionId를 찾아 refreshScaffold를 호출.
+   *   - 자동 실행 없음 — 단순 매핑 저장.
+   */
+  const handleAppBuildMissionCreated = useCallback(
+    (mission: ServerMissionRecord, sourceSessionId?: string) => {
+      if (!sourceSessionId) return;
+      setMissionIdBySourceSessionId((prev) => ({
+        ...prev,
+        [sourceSessionId]: mission.mission.missionId,
+      }));
+      appendEvent("appbuild.mission.linked", {
+        sourceSessionId,
+        missionId: mission.mission.missionId,
+        // mission.title은 trace에 짧게만(추측/raw 본문 금지).
+        title: mission.mission.title.slice(0, 200),
+      });
+    },
+    [appendEvent],
+  );
+
+  /**
+   * 사용자가 BlueprintReviewCard에서 "수정안으로 스캐폴드 다시 생성"을 누르면 호출.
+   *   - debateSession.sourceSessionId로 missionIdBySourceSessionId에서 missionId 조회.
+   *   - 매핑 없으면 noop(BlueprintReviewCard CTA는 미배선 — 그래도 안전선).
+   *   - 매핑 있으면 refreshScaffoldHandleRef.current(missionId) 호출 →
+   *     MissionBoardContainer가 캐시 invalidate → 새 scaffold/latest 조회.
+   *   - GitHub write, Mission 자동 생성, scaffold apply는 절대 자동 실행하지 않는다.
+   *   - redacted trace event(missionId만) 남긴다.
+   */
+  const handleRequestScaffoldRefreshFromDebate = useCallback(() => {
+    const sourceSessionId = debateSession.sourceSessionId;
+    if (!sourceSessionId) return;
+    const missionId = missionIdBySourceSessionId[sourceSessionId];
+    if (!missionId) return;
+    refreshScaffoldHandleRef.current?.(missionId);
+    appendEvent("appbuild.scaffold.refresh.requested", {
+      debateId: debateSession.id,
+      sourceSessionId,
+      missionId,
+    });
+  }, [debateSession.sourceSessionId, debateSession.id, missionIdBySourceSessionId, appendEvent]);
+
   const handleApplyBlueprintRevision = useCallback(
     (draft: BlueprintRevisionDraft) => {
       const debateId = debateSession.id;
@@ -5151,6 +5211,7 @@ export function App() {
                 packet: codingPacketState,
                 sourceSessionId: activeSessionId,
                 debateId: debateSession.id,
+                refreshScaffoldHandleRef,
                 /**
                  * GitHub Publish 표면(opt-in) — Workspace 상세에 "GitHub로 내보내기" CTA를 노출한다.
                  *
@@ -5355,6 +5416,7 @@ export function App() {
               onProgressDelegationAssignment={handleProgressMakimaDelegationAssignment}
               onImportExternalIngress={handleImportExternalIngress}
               onPromoteToDebate={handlePromoteToDebate}
+              onAppBuildMissionCreated={handleAppBuildMissionCreated}
               onRejectPermission={handleConversationRejectPermission}
               onRemoveDraftAttachment={handleRemoveDraftAttachment}
               onSelectAgent={setSelectedAgentId}
@@ -5411,9 +5473,15 @@ export function App() {
                 const when = entry.appliedAt.slice(0, 16).replace("T", " ");
                 return `초안에 적용됨 · Mission 자동 생성 없음 · 새 결정 ${entry.draft.addedCriteria.length}, 위험 ${entry.draft.riskNotes.length} · ${when}`;
               })()}
-              /* onScaffoldRefresh: 현재 debateId↔missionId 매핑이 App.tsx state에 없으므로
-                  미배선(CTA 미노출). 추후 작업: AppBuild의 last-created-mission-by-debate 추적
-                  후 publishEnvironment.refreshScaffold(missionId) 연결. 자동 실행 X. */
+              /* onScaffoldRefresh: debate의 sourceSessionId로 missionIdBySourceSessionId 조회.
+                  매핑이 있을 때만 CTA를 노출한다(부재 시 미노출 — 추측 금지). 클릭 시 ref 기반으로
+                  Container의 scaffold 캐시를 invalidate → Publish prefill 자동 갱신. GitHub write 0. */
+              onScaffoldRefresh={
+                debateSession.sourceSessionId &&
+                missionIdBySourceSessionId[debateSession.sourceSessionId]
+                  ? handleRequestScaffoldRefreshFromDebate
+                  : undefined
+              }
             />
           ) : mode === "tmux" ? (
             <TmuxSwarmBoard

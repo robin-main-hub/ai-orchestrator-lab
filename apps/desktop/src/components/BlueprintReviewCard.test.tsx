@@ -99,6 +99,29 @@ describe("BlueprintReviewCard — Revision Draft UI", () => {
     expect(screen.queryByTestId("blueprint-scaffold-refresh")).toBeNull();
   });
 
+  it("(#11 scaffold refresh round-trip) onScaffoldRefresh가 missionId 기반 refresh 호출을 부모로 전달(App.tsx 실제 wiring 시뮬레이션)", () => {
+    // 부모의 refreshScaffold 함수 — Container에서 받은 ref.current
+    const refreshScaffold = vi.fn();
+    const KNOWN_MISSION_ID = "mission_linked_1";
+    function Harness() {
+      // App.tsx 패턴: missionId가 있을 때만 onScaffoldRefresh를 전달
+      const handleScaffoldRefresh = () => {
+        refreshScaffold(KNOWN_MISSION_ID);
+      };
+      return (
+        <BlueprintReviewCard
+          review={REVIEW}
+          onApplyRevision={vi.fn()}
+          onScaffoldRefresh={handleScaffoldRefresh}
+        />
+      );
+    }
+    render(<Harness />);
+    fireEvent.click(screen.getByTestId("blueprint-scaffold-refresh"));
+    expect(refreshScaffold).toHaveBeenCalledTimes(1);
+    expect(refreshScaffold).toHaveBeenCalledWith(KNOWN_MISSION_ID);
+  });
+
   it("(#10 round-trip) 부모 state controller로 적용 → appliedNotice 표시(App.tsx 실제 wiring 시뮬레이션)", () => {
     function Harness() {
       const [notice, setNotice] = useState<string | undefined>();
