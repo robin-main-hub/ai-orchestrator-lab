@@ -5110,6 +5110,25 @@ export function App() {
                 packet: codingPacketState,
                 sourceSessionId: activeSessionId,
                 debateId: debateSession.id,
+                /**
+                 * GitHub Publish 표면(opt-in) — Workspace 상세에 "GitHub로 내보내기" CTA를 노출한다.
+                 *
+                 * 정직성:
+                 *  - serverBaseUrl만 넘기고, getScaffoldFiles는 의도적으로 미배선:
+                 *    현재 desktop은 mission별 scaffold plan content를 client state로 유지하지 않는다.
+                 *    추측 금지 — file path/content를 서버에서 다시 읽거나 AppBuild 흐름에서
+                 *    실제 ScaffoldFile[]을 캐시한 다음에야 여기에 연결한다.
+                 *  - resolvePrefill 미지정 → builtinMissionPrefill이 mission.title/goal/missionId로
+                 *    branch/PR draft만 채운다. file 필드는 비워둠(prefill ≠ execute).
+                 *  - onContextEvent로 trace를 EventStorage에 적재해 mission provenance 보존.
+                 */
+                publishEnvironment: {
+                  serverBaseUrl: resolveDgxServerBaseUrls(undefined)[0] ?? DEFAULT_DGX_SERVER_BASE_URL,
+                  onContextEvent: (type, payload) => appendEvent(type, payload),
+                  // TODO(W3a-followup): scaffold plan content fetch + cache가 들어오면
+                  //   getScaffoldFiles: (item) => scaffoldFilesByMissionId.get(item.missionId)
+                  // 형태로 연결. 그 전까지는 file 필드를 비워두는 것이 정직(추측 금지).
+                },
                 // 미션 워커를 실제 페르소나 + 점유한 Hermes 슬롯으로 구성한다.
                 // 익명 역할 하드코딩 대신 사용자가 키운 캐릭터가 일하게.
                 buildWorkers: () => {
