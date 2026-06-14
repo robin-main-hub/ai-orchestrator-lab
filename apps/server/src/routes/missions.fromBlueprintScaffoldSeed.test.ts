@@ -24,10 +24,20 @@ const BLUEPRINT: DesignBlueprintInput = {
   title: "내 작업 보드",
   userIntent: "한눈에 보기",
   targetSurface: "mission_board",
-  screens: [{ name: "보드", purpose: "현황 확인", primaryAction: "열기", emptyState: "없음", errorState: "실패" }],
+  screens: [
+    {
+      name: "보드",
+      purpose: "현황 확인",
+      primaryAction: "열기",
+      secondaryActions: [],
+      dataNeeded: [],
+      emptyState: "없음",
+      errorState: "실패",
+    },
+  ],
   designTokens: { density: "balanced", tone: "clean_builder", motion: "subtle" },
   acceptanceCriteria: [],
-} as DesignBlueprintInput;
+};
 
 function emptyRecord(missionId: string): ServerMissionRecord {
   return {
