@@ -659,7 +659,14 @@ function PublishFlowSummary({
       {hasAny
         ? steps.map((step) => {
             const entry = history![step];
-            const Icon = step === "branch" ? GitBranch : step === "file" ? FileEdit : GitPullRequest;
+            const StepIcon = step === "branch" ? GitBranch : step === "file" ? FileEdit : GitPullRequest;
+            // 상태별 보조 아이콘 — observed면 체크, blocked/failed면 경고. 다른 상태는 무.
+            const StatusIcon =
+              entry && (entry.status === "observed" || entry.status === "already_exists")
+                ? CheckCircle2
+                : entry && (entry.status === "blocked" || entry.status === "failed")
+                  ? AlertTriangle
+                  : null;
             return (
               <div
                 key={step}
@@ -669,15 +676,30 @@ function PublishFlowSummary({
                 data-status={entry?.status ?? "not_started"}
               >
                 <span className="mission-workspace-row-label">
-                  <Icon size={12} /> Publish {PUBLISH_STEP_LABEL[step]}
+                  <StepIcon size={12} /> Publish {PUBLISH_STEP_LABEL[step]}
                 </span>
                 <span className="mission-workspace-row-body">
                   {entry ? (
                     <>
+                      {StatusIcon ? <StatusIcon size={12} aria-hidden /> : null}{" "}
                       <StatusBadge size="sm" variant={publishStatusVariant(entry.status)}>
                         {PUBLISH_STATUS_LABEL[entry.status] ?? entry.status}
                       </StatusBadge>{" "}
-                      {entry.summary ? <span className="mission-workspace-url">{entry.summary}</span> : null}
+                      {/* observed + htmlUrl이면 GitHub로 직접 이동하는 링크, 아니면 summary 텍스트만. */}
+                      {entry.htmlUrl &&
+                      (entry.status === "observed" || entry.status === "already_exists") ? (
+                        <a
+                          href={entry.htmlUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mission-workspace-url"
+                          data-testid={`mission-publish-link-${step}`}
+                        >
+                          {entry.summary || entry.htmlUrl}
+                        </a>
+                      ) : entry.summary ? (
+                        <span className="mission-workspace-url">{entry.summary}</span>
+                      ) : null}
                     </>
                   ) : (
                     <StatusBadge size="sm" variant="muted">
@@ -689,16 +711,29 @@ function PublishFlowSummary({
             );
           })
         : null}
-      {/* "다음 할 일" CTA — done이면 완주 표식, 아니면 해당 step으로 점프 버튼. */}
+      {/* "다음 할 일" CTA — done이면 완주 표식(+ PR URL 직접 이동 링크), 아니면 step CTA. */}
       {nextAction ? (
         nextAction.kind === "done" ? (
-          <div
-            className="mission-workspace-publish-next mission-workspace-publish-next--done"
-            data-testid="mission-workspace-publish-next"
-            data-kind="done"
-          >
-            <CheckCircle2 size={13} /> {nextAction.label}
-          </div>
+          history?.pr?.htmlUrl ? (
+            <a
+              href={history.pr.htmlUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mission-workspace-publish-next mission-workspace-publish-next--done"
+              data-testid="mission-workspace-publish-next"
+              data-kind="done"
+            >
+              <CheckCircle2 size={13} /> {nextAction.label} — PR 열기
+            </a>
+          ) : (
+            <div
+              className="mission-workspace-publish-next mission-workspace-publish-next--done"
+              data-testid="mission-workspace-publish-next"
+              data-kind="done"
+            >
+              <CheckCircle2 size={13} /> {nextAction.label}
+            </div>
+          )
         ) : (
           <button
             type="button"

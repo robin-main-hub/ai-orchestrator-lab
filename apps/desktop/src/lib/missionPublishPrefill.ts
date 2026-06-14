@@ -210,6 +210,11 @@ export type PublishHistoryEntry = {
   summary: string;
   /** ISO 시각 — trace event ts 그대로. */
   ts: string;
+  /**
+   * GitHub HTML URL(observed 단계의 경우). pr.observed의 PR 페이지, file.observed의 blob 페이지 등.
+   * 사용자가 trace에 의도적으로 노출시킬 때만 채워지며, https://github.com/ 으로 시작하는 값만 신뢰.
+   */
+  htmlUrl?: string;
 };
 
 /** 단계별 latest entry. branch/file/pr 각각 마지막 trace만 보관(단계 재시도해도 최신만 노출). */
@@ -251,7 +256,10 @@ export function parsePublishTrace(
   const safePayload = payload ?? undefined;
   const summary = typeof safePayload?.summary === "string" ? safePayload.summary : "";
   const ts = typeof safePayload?.ts === "string" ? safePayload.ts : new Date().toISOString();
-  return { step: step as PublishStep, status: status as PublishStepStatus, summary, ts };
+  // htmlUrl은 payload에 있을 때만, 그리고 github.com 호스트만 신뢰(prefix 가드).
+  const rawUrl = typeof safePayload?.htmlUrl === "string" ? safePayload.htmlUrl : undefined;
+  const htmlUrl = rawUrl && rawUrl.startsWith("https://github.com/") ? rawUrl : undefined;
+  return { step: step as PublishStep, status: status as PublishStepStatus, summary, ts, htmlUrl };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
