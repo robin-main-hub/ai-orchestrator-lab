@@ -17,6 +17,7 @@ function ann(over: Partial<PreviewAnnotation> = {}): PreviewAnnotation {
     description: over.description ?? "헤더 글씨 작다",
     positionHint: over.positionHint,
     targetFile: over.targetFile,
+    coords: over.coords,
     createdAt: over.createdAt ?? "2026-06-15T00:00:00Z",
   };
 }
@@ -121,6 +122,63 @@ describe("PreviewAnnotatePanel — OSS-H7 text-only annotator", () => {
     fireEvent.click(screen.getByTestId("preview-annotate-remove-n6-x1"));
     const next = onChange.mock.calls[0]![0] as PreviewAnnotation[];
     expect(next.map((a) => a.id)).toEqual(["x2"]);
+  });
+
+  it("(N8 — H7 P2) pendingCoords 들어옴 → 알림 박스 노출 + add 시 annotation에 coords 합쳐짐", () => {
+    const onChange = vi.fn();
+    const onClearPendingCoords = vi.fn();
+    render(
+      <PreviewAnnotatePanel
+        missionId="n8"
+        files={undefined}
+        annotations={[]}
+        onChange={onChange}
+        pendingCoords={{ xPct: 23.4, yPct: 14.1 }}
+        onClearPendingCoords={onClearPendingCoords}
+      />,
+    );
+    const pending = screen.getByTestId("preview-annotate-pending-coords-n8");
+    expect(pending.textContent).toContain("23.4");
+    expect(pending.textContent).toContain("14.1");
+    fireEvent.change(screen.getByTestId("preview-annotate-description-n8"), {
+      target: { value: "여기 글씨가 작다" },
+    });
+    fireEvent.click(screen.getByTestId("preview-annotate-add-n8"));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const next = onChange.mock.calls[0]![0] as PreviewAnnotation[];
+    expect(next).toHaveLength(1);
+    expect(next[0]!.coords).toEqual({ xPct: 23.4, yPct: 14.1 });
+    expect(onClearPendingCoords).toHaveBeenCalled();
+  });
+
+  it("(N9 — H7 P2) '버리기' → onClearPendingCoords 호출", () => {
+    const onClearPendingCoords = vi.fn();
+    render(
+      <PreviewAnnotatePanel
+        missionId="n9"
+        files={undefined}
+        annotations={[]}
+        onChange={vi.fn()}
+        pendingCoords={{ xPct: 10, yPct: 20 }}
+        onClearPendingCoords={onClearPendingCoords}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("preview-annotate-discard-coords-n9"));
+    expect(onClearPendingCoords).toHaveBeenCalledTimes(1);
+  });
+
+  it("(N10 — H7 P2) coords 있는 기존 annotation은 리스트에 좌표 배지 표시", () => {
+    render(
+      <PreviewAnnotatePanel
+        missionId="n10"
+        files={undefined}
+        annotations={[ann({ id: "x1", coords: { xPct: 80, yPct: 5 } })]}
+        onChange={vi.fn()}
+      />,
+    );
+    const badge = screen.getByTestId("preview-annotate-item-coords-n10-x1");
+    expect(badge.textContent).toContain("80");
+    expect(badge.textContent).toContain("5");
   });
 
   it("(N7) shadcn primitive 사용 확인", () => {

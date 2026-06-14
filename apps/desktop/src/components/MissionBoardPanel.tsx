@@ -539,6 +539,10 @@ function MissionWorkspaceDetail({
     () => annotationsToTurboEditIssues(previewAnnotations),
     [previewAnnotations],
   );
+  // OSS-H7 P2 — PreviewIframe 주석 모드 click → pendingCoords로 stash → Annotate Panel에서 description 입력 후 합쳐 저장.
+  const [pendingAnnotationCoords, setPendingAnnotationCoords] = useState<
+    { xPct: number; yPct: number } | undefined
+  >(undefined);
   return (
     <div className="mission-workspace-detail">
       {/* AppWorkspace + preview (D2/D4/D5a) */}
@@ -609,8 +613,8 @@ function MissionWorkspaceDetail({
         files={publishEnvironment?.getScaffoldFiles?.(item)}
       />
 
-      {/* Preview Annotator (OSS-H7) — 외부 preview에서 본 문제를 텍스트로 기록 → Turbo Edits로 흐름.
-          iframe 임베드 0(X-Frame-Options 회피), 자동 selector/좌표 캡처 0(가짜 dom 정보 X). */}
+      {/* Preview Annotator (OSS-H7 P1+P2) — 텍스트 주석 + iframe 좌표 캡처.
+          좌표는 PreviewRunCard 안 PreviewIframe overlay에서 들어와 pendingAnnotationCoords로 stash. */}
       <PreviewAnnotatePanel
         missionId={item.missionId}
         files={publishEnvironment?.getScaffoldFiles?.(item)}
@@ -619,6 +623,8 @@ function MissionWorkspaceDetail({
         onContextEvent={(type, payload) =>
           publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
         }
+        pendingCoords={pendingAnnotationCoords}
+        onClearPendingCoords={() => setPendingAnnotationCoords(undefined)}
       />
 
       {/* Turbo Edits Draft (OSS-H5/H6/H7) — LLM이 SEARCH/REPLACE 블록을 만들도록 prompt를 빌드.
@@ -675,6 +681,15 @@ function MissionWorkspaceDetail({
           publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
         }
         onPreviewObserved={publishEnvironment?.onPreviewObserved}
+        onIframeAnnotate={(point) => {
+          setPendingAnnotationCoords(point);
+          publishEnvironment?.onContextEvent?.("mission.preview_annotation.coords_captured", {
+            missionId: item.missionId,
+            xPct: point.xPct,
+            yPct: point.yPct,
+            ts: new Date().toISOString(),
+          });
+        }}
       />
 
       {/* Visual QA vertical — preview observed running일 때만 CTA 활성. issues_found/failed면

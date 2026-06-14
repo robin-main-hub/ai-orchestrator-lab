@@ -1,11 +1,12 @@
-import { useState } from "react";
-import { MapPin, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { MapPin, Plus, Trash2, Crosshair } from "lucide-react";
 import type { MissionScaffoldFile } from "../lib/missionPublishPrefill";
 import {
   addAnnotation,
   makeAnnotation,
   removeAnnotation,
   type PreviewAnnotation,
+  type PreviewAnnotationCoords,
 } from "../lib/previewAnnotations";
 import { Card, CardHeader, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
@@ -28,6 +29,8 @@ export function PreviewAnnotatePanel({
   annotations,
   onChange,
   onContextEvent,
+  pendingCoords,
+  onClearPendingCoords,
 }: {
   missionId: string;
   /** scaffold 파일 — targetFile 드롭다운에 사용. undefined면 자유 입력만. */
@@ -35,10 +38,29 @@ export function PreviewAnnotatePanel({
   annotations: ReadonlyArray<PreviewAnnotation>;
   onChange: (next: ReadonlyArray<PreviewAnnotation>) => void;
   onContextEvent?: (type: string, payload: Record<string, unknown>) => void;
+  /** OSS-H7 P2: PreviewIframe 주석 모드 클릭에서 들어온 좌표. add 시 새 annotation에 합쳐진다. */
+  pendingCoords?: PreviewAnnotationCoords;
+  /** 좌표를 사용했거나 사용자가 명시적으로 버린 경우 부모에 알림. */
+  onClearPendingCoords?: () => void;
 }) {
   const [draftDescription, setDraftDescription] = useState("");
   const [draftPosition, setDraftPosition] = useState("");
   const [draftFile, setDraftFile] = useState<string>("");
+
+  // 좌표가 새로 들어오면 설명 입력에 포커스를 유도(스크롤·focus). 자동 추가 X — 사용자 description 입력 기다림.
+  useEffect(() => {
+    if (!pendingCoords) return;
+    const el = document.querySelector<HTMLInputElement>(
+      `[data-testid="preview-annotate-description-${missionId}"]`,
+    );
+    if (el) {
+      el.focus({ preventScroll: false });
+      // scrollIntoView는 jsdom에 없음 — runtime 환경에서만 호출.
+      if (typeof el.scrollIntoView === "function") {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+  }, [pendingCoords, missionId]);
 
   const onAdd = () => {
     const description = draftDescription.trim();
@@ -48,6 +70,7 @@ export function PreviewAnnotatePanel({
       description,
       positionHint: draftPosition.trim() || undefined,
       targetFile: draftFile.trim() || undefined,
+      coords: pendingCoords,
       createdAt: new Date().toISOString(),
     });
     onChange(addAnnotation(annotations, annotation));
@@ -55,12 +78,22 @@ export function PreviewAnnotatePanel({
       missionId,
       hasPosition: !!annotation.positionHint,
       hasTargetFile: !!annotation.targetFile,
+      hasCoords: !!annotation.coords,
       total: annotations.length + 1,
       ts: annotation.createdAt,
     });
     setDraftDescription("");
     setDraftPosition("");
     setDraftFile("");
+    onClearPendingCoords?.();
+  };
+
+  const onDiscardCoords = () => {
+    onClearPendingCoords?.();
+    onContextEvent?.("mission.preview_annotation.coords_discarded", {
+      missionId,
+      ts: new Date().toISOString(),
+    });
   };
 
   const onRemove = (id: string) => {
@@ -91,6 +124,28 @@ export function PreviewAnnotatePanel({
       </CardHeader>
 
       <CardContent className="space-y-2">
+        {/* pending coords 알림 — iframe 클릭에서 좌표가 들어옴 */}
+        {pendingCoords ? (
+          <div
+            className="flex items-center gap-2 rounded-md border border-violet-400/40 bg-violet-500/15 px-2 py-1 text-xs text-violet-100"
+            data-testid={`preview-annotate-pending-coords-${missionId}`}
+          >
+            <Crosshair size={11} />
+            <span>
+              좌표 {pendingCoords.xPct}% / {pendingCoords.yPct}% 캡처됨 — 설명을 입력하고 추가하세요.
+            </span>
+            <button
+              type="button"
+              onClick={onDiscardCoords}
+              className="ml-auto text-violet-200 hover:text-white"
+              data-testid={`preview-annotate-discard-coords-${missionId}`}
+              aria-label="좌표 버리기"
+            >
+              버리기
+            </button>
+          </div>
+        ) : null}
+
         {/* 입력 폼 */}
         <div className="space-y-1">
           <input
@@ -171,6 +226,15 @@ export function PreviewAnnotatePanel({
                     {a.positionHint ? (
                       <Badge variant="outline" className="mr-1">
                         {a.positionHint}
+                      </Badge>
+                    ) : null}
+                    {a.coords ? (
+                      <Badge
+                        variant="secondary"
+                        className="mr-1"
+                        data-testid={`preview-annotate-item-coords-${missionId}-${a.id}`}
+                      >
+                        <Crosshair size={9} className="inline" /> {a.coords.xPct}% / {a.coords.yPct}%
                       </Badge>
                     ) : null}
                     <span>{a.description}</span>
