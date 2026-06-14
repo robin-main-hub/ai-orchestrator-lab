@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Play, ExternalLink, RotateCw, Wrench } from "lucide-react";
+import { Play, ExternalLink, RotateCw, Wrench, ChevronDown, ChevronRight } from "lucide-react";
 import type { MissionPreviewRunScaffoldResponse } from "@ai-orchestrator/protocol";
 import { runDgxMissionPreviewScaffold } from "../runtime/stage47MissionServer";
 import {
@@ -7,6 +7,7 @@ import {
   PREVIEW_REVISION_HINT_KIND_LABEL,
   type PreviewRevisionHint,
 } from "../lib/previewRevisionHint";
+import { PreviewIframe } from "./PreviewIframe";
 
 /**
  * Preview Run vertical 카드 — Mission Workspace 상세에서 한 번의 클릭으로
@@ -58,6 +59,8 @@ export function PreviewRunCard({
   /** "수정안 만들기"를 한 번 눌렀는지 표시 — 한 번 누르면 "초안 생성 예정" 상태로 잠깐 잠근다.
    *  이번 vertical에서는 자동 수정/자동 scaffold refresh를 하지 않는다(trace만 발생). */
   const [revisionRequested, setRevisionRequested] = useState(false);
+  /** iframe 펼치기 상태 — observed일 때만 의미 있음. 기본 닫힘(load 비용 회피, X-Frame-Options 차단 시 짜증 회피). */
+  const [iframeOpen, setIframeOpen] = useState(false);
   const busy = result.kind === "running";
   const canRun = hasScaffoldFiles && !busy;
 
@@ -210,18 +213,42 @@ export function PreviewRunCard({
       </div>
 
       {result.kind === "observed" ? (
-        <p className="mission-preview-run__detail mission-preview-run__detail--ok">
-          {result.fileCount}개 파일 → <code>{result.repoRoot}</code>{" "}
-          <a
-            href={result.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid={`mission-preview-run-link-${missionId}`}
-            className="mission-preview-run__link"
+        <>
+          <p className="mission-preview-run__detail mission-preview-run__detail--ok">
+            {result.fileCount}개 파일 → <code>{result.repoRoot}</code>{" "}
+            <a
+              href={result.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid={`mission-preview-run-link-${missionId}`}
+              className="mission-preview-run__link"
+            >
+              {result.url} <ExternalLink size={10} />
+            </a>
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setIframeOpen((v) => !v);
+              onContextEvent?.("mission.preview.iframe_toggled", {
+                missionId,
+                next: !iframeOpen,
+                ts: new Date().toISOString(),
+              });
+            }}
+            className="mission-preview-run__iframe-toggle inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-100"
+            data-testid={`mission-preview-run-iframe-toggle-${missionId}`}
+            aria-expanded={iframeOpen}
           >
-            {result.url} <ExternalLink size={10} />
-          </a>
-        </p>
+            {iframeOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}{" "}
+            {iframeOpen ? "미리보기 접기" : "미리보기 펼치기"}
+          </button>
+          {iframeOpen ? (
+            <div className="mission-preview-run__iframe-wrap mt-1">
+              <PreviewIframe url={result.url} testIdPrefix={`run-${missionId}`} />
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       {result.kind === "preview_not_running" ? (
