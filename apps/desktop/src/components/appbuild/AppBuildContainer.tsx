@@ -155,11 +155,17 @@ export function AppBuildContainer({
         ) : (
           <>
             <div className="flex-1 space-y-4 overflow-y-auto p-4">
-              {/* 정직성 안내 */}
-              <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] leading-snug text-zinc-400">
-                {badge.detail ? `${badge.detail} · ` : ""}이 초안은 <span className="text-zinc-200">planned</span> 상태입니다 — 미션
-                생성 후 preview/검증을 통과해야 observed가 됩니다. 출처 세션: <span className="font-mono text-zinc-300">{seed.sourceSessionId}</span>
-              </p>
+              {/* 정직성 안내 — 이 화면이 "초안 검토"라는 사실을 분명히. provenance는 분리해서 작게. */}
+              <div className="space-y-1">
+                <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] leading-snug text-zinc-400">
+                  {badge.detail ? `${badge.detail} · ` : ""}이 화면은 <span className="text-zinc-200">앱 빌드 초안</span>입니다 —
+                  아직 미션이 만들어지지 않았고 상태는 <span className="text-zinc-200">planned</span>입니다. 미션 생성 후 preview/검증을
+                  통과해야 observed가 됩니다.
+                </p>
+                <p className="px-1 text-[10px] text-zinc-500" data-testid="appbuild-provenance">
+                  출처 세션: <span className="font-mono text-zinc-400">{seed.sourceSessionId}</span>
+                </p>
+              </div>
 
               {/* title */}
               <label className="block">
@@ -302,11 +308,11 @@ export function AppBuildContainer({
               >
                 {mode === "debate" ? (
                   <>
-                    <ArrowRight className="h-4 w-4" /> 토론으로 보내기
+                    <ArrowRight className="h-4 w-4" /> 이 초안을 토론으로 보내기
                   </>
                 ) : (
                   <>
-                    <Rocket className="h-4 w-4" /> {submitting ? "생성 중…" : "미션 만들기"}
+                    <Rocket className="h-4 w-4" /> {submitting ? "생성 중…" : "이 초안으로 미션 만들기"}
                   </>
                 )}
               </button>
