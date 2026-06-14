@@ -1,10 +1,22 @@
 import type {
+  GithubBranchCreateExecuteRequest,
+  GithubBranchCreateExecuteResponse,
+  GithubBranchCreatePlanRequest,
+  GithubBranchCreatePlanResponse,
   GithubCommentWriteExecuteRequest,
   GithubCommentWriteExecuteResponse,
   GithubCommentWritePlanRequest,
   GithubCommentWritePlanResponse,
   GithubConnectorStatus,
+  GithubFileChangeExecuteRequest,
+  GithubFileChangeExecuteResponse,
+  GithubFileChangePlanRequest,
+  GithubFileChangePlanResponse,
   GithubIssueSummary,
+  GithubPullRequestCreateExecuteRequest,
+  GithubPullRequestCreateExecuteResponse,
+  GithubPullRequestCreatePlanRequest,
+  GithubPullRequestCreatePlanResponse,
   GithubPullRequestDetail,
   GithubPullRequestSummary,
   GithubReadonlyResourceResponse,
@@ -197,4 +209,55 @@ export function postGithubCommentExecute(
   fetchImpl: typeof fetch = fetch,
 ): Promise<GithubCommentWriteExecuteResponse> {
   return postJson(serverBaseUrl, "/integrations/github/write/comment/execute", request, fetchImpl);
+}
+
+// ── W2/W3/W4 client helpers — Publish Panel이 단일 흐름으로 쓰는 진입점들 ──
+// 모든 호출은 서버 라우트를 forwarder처럼 호출만 한다. token/header는 서버 env에만.
+
+export function postGithubBranchPlan(
+  serverBaseUrl: string | string[] | undefined,
+  request: GithubBranchCreatePlanRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubBranchCreatePlanResponse> {
+  return postJson(serverBaseUrl, "/integrations/github/write/branch/plan", request, fetchImpl);
+}
+
+export function postGithubBranchExecute(
+  serverBaseUrl: string | string[] | undefined,
+  request: GithubBranchCreateExecuteRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubBranchCreateExecuteResponse> {
+  return postJson(serverBaseUrl, "/integrations/github/write/branch/execute", request, fetchImpl);
+}
+
+export function postGithubFileChangePlan(
+  serverBaseUrl: string | string[] | undefined,
+  request: GithubFileChangePlanRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubFileChangePlanResponse> {
+  return postJson(serverBaseUrl, "/integrations/github/write/file/plan", request, fetchImpl);
+}
+
+export function postGithubFileChangeExecute(
+  serverBaseUrl: string | string[] | undefined,
+  request: GithubFileChangeExecuteRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubFileChangeExecuteResponse> {
+  return postJson(serverBaseUrl, "/integrations/github/write/file/execute", request, fetchImpl);
+}
+
+export function postGithubPullRequestPlan(
+  serverBaseUrl: string | string[] | undefined,
+  request: GithubPullRequestCreatePlanRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubPullRequestCreatePlanResponse> {
+  return postJson(serverBaseUrl, "/integrations/github/write/pr/plan", request, fetchImpl);
+}
+
+export function postGithubPullRequestExecute(
+  serverBaseUrl: string | string[] | undefined,
+  request: GithubPullRequestCreateExecuteRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubPullRequestCreateExecuteResponse> {
+  return postJson(serverBaseUrl, "/integrations/github/write/pr/execute", request, fetchImpl);
 }
