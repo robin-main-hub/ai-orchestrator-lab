@@ -442,7 +442,8 @@ describe("W5c PR title/body update", () => {
       { repoFullName: REPO, pullNumber: 42, newTitle: NEW_TITLE }, // body는 변경하지 않음
     );
     const plan = planCalls[0]!.payload.plan;
-    const updatePullRequest = vi.fn(async () => ({
+    type UpdateArgs = { title?: string; body?: string };
+    const updatePullRequest = vi.fn(async (_o: string, _r: string, _n: number, _p: UpdateArgs) => ({
       pullNumber: 42, htmlUrl: "u", title: NEW_TITLE, body: CURRENT_BODY, updatedAt: "u",
     }));
     await executeRequest(
@@ -457,7 +458,7 @@ describe("W5c PR title/body update", () => {
       { updatePullRequest },
     );
     expect(updatePullRequest).toHaveBeenCalledTimes(1);
-    const args = updatePullRequest.mock.calls[0]![3];
+    const args = updatePullRequest.mock.calls[0]![3] as UpdateArgs;
     expect(args).toEqual({ title: NEW_TITLE, body: undefined });
     // draft/state/base/labels/assignees 등 절대 못 들어옴 — 인터페이스가 이미 막아둠.
     expect("draft" in args).toBe(false);

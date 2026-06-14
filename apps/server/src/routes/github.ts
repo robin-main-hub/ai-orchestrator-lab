@@ -49,6 +49,15 @@ import {
   type GithubPullRequestUpdatePlanStore,
 } from "../integrations/githubPullRequestUpdatePlanStore.js";
 import {
+  computeLabelDiff,
+  evaluatePrLabelsUpdateGate,
+  hashLabelSet,
+} from "../integrations/githubPullRequestLabelsUpdateGuards.js";
+import {
+  getPullRequestLabelsObservedFor,
+  type GithubPullRequestLabelsUpdatePlanStore,
+} from "../integrations/githubPullRequestLabelsUpdatePlanStore.js";
+import {
   githubBranchCreateExecuteRequestSchema,
   githubBranchCreatePlanRequestSchema,
   githubCommentWriteExecuteRequestSchema,
@@ -60,6 +69,8 @@ import {
   githubPullRequestCreatePlanRequestSchema,
   githubPullRequestUpdateExecuteRequestSchema,
   githubPullRequestUpdatePlanRequestSchema,
+  githubPullRequestLabelsUpdateExecuteRequestSchema,
+  githubPullRequestLabelsUpdatePlanRequestSchema,
   type GithubBranchCreateOutcome,
   type GithubBranchCreatePlan,
   type GithubCommentWriteOutcome,
@@ -112,6 +123,8 @@ export type GithubRouteDependencies = {
   prPlanStore?: GithubPullRequestCreatePlanStore;
   /** in-process PR title/body update plan store(W5c). */
   prUpdatePlanStore?: GithubPullRequestUpdatePlanStore;
+  /** in-process PR labels update plan store(W5d-Phase-1). */
+  prLabelsUpdatePlanStore?: GithubPullRequestLabelsUpdatePlanStore;
   /** GITHUB_WRITE_REPO_ALLOWLIST 파싱 결과 — 없으면 write disabled. */
   writeRepoAllowlist?: ReadonlyArray<string>;
   /** GITHUB_PR_BASE_ALLOWLIST 파싱 결과 — 비어 있으면 기본 main/develop. */
@@ -178,6 +191,10 @@ const PR_EXECUTE_PATH = "/integrations/github/write/pr/execute";
 // W5c PR title/body update 경로 — approval-only. draft/state/base/labels/assignees 전부 제외.
 const PR_UPDATE_PLAN_PATH = "/integrations/github/write/pr/update/plan";
 const PR_UPDATE_EXECUTE_PATH = "/integrations/github/write/pr/update/execute";
+
+// W5d Phase 1 — PR labels add/remove. assignees는 Phase 2(별도 경로).
+const PR_LABELS_PLAN_PATH = "/integrations/github/write/pr/labels/plan";
+const PR_LABELS_EXECUTE_PATH = "/integrations/github/write/pr/labels/execute";
 
 const PR_UPDATE_PLAN_TTL_MS = 10 * 60 * 1000;
 
@@ -1575,6 +1592,289 @@ async function handlePrUpdateExecute(deps: GithubRouteDependencies): Promise<boo
   return true;
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// W5d Phase 1 — PR labels add/remove plan / execute.
+//
+// 좁은 범위:
+//   - labels add/remove만(assignees는 Phase 2).
+//   - same-repo, open PR only(closed/merged면 plan에서 차단).
+//   - approval ONLY(armed 없음).
+//   - 1차 무결성: client expectedCurrentLabelsHash == plan-store.
+//   - 2차 무결성: execute 직전 GitHub에서 labels 재조회 → plan 시점 hash와 일치.
+//   - GitHub PUT /issues/:n/labels로 final desired set을 한 번에 적용(atomic).
+//   - no-op(actuallyAdded.length==0 && actuallyRemoved.length==0) 차단.
+// ──────────────────────────────────────────────────────────────────────────────
+
+async function handlePrLabelsUpdatePlan(deps: GithubRouteDependencies): Promise<boolean> {
+  const { respondJson, createClient, readJsonBody, request, writeRepoAllowlist, prLabelsUpdatePlanStore, now } = deps;
+  if (!readJsonBody || !request || !prLabelsUpdatePlanStore) {
+    respondJson(500, { outcome: "github_error", message: "W5d dependencies not wired" });
+    return true;
+  }
+  let payload;
+  try {
+    payload = githubPullRequestLabelsUpdatePlanRequestSchema.parse(await readJsonBody(request));
+  } catch (error) {
+    respondJson(400, { outcome: "blocked", message: error instanceof Error ? error.message : "잘못된 plan 요청" });
+    return true;
+  }
+  const client = createClient();
+  const status = client.status();
+  if (!status.tokenPresent) {
+    respondJson(200, { outcome: "not_configured", message: "GITHUB_TOKEN이 설정되지 않았습니다 — write가 비활성화되어 있습니다" });
+    return true;
+  }
+  const gate = evaluatePrLabelsUpdateGate({
+    repoFullName: payload.repoFullName,
+    pullNumber: payload.pullNumber,
+    addLabels: payload.addLabels,
+    removeLabels: payload.removeLabels,
+    allowlist: writeRepoAllowlist ?? [],
+    tokenPresent: status.tokenPresent,
+  });
+  if (gate.kind === "blocked") {
+    respondJson(200, { outcome: "blocked", message: gate.message });
+    return true;
+  }
+  const [owner, repo] = payload.repoFullName.split("/") as [string, string];
+  // PR이 open인지 먼저 확인.
+  let pr;
+  try {
+    pr = await client.getPullRequest(owner, repo, payload.pullNumber);
+  } catch (error) {
+    if (error instanceof GithubNotConfiguredError) {
+      respondJson(200, { outcome: "not_configured", message: "GITHUB_TOKEN이 설정되지 않았습니다" });
+      return true;
+    }
+    if (error instanceof GithubReadonlyError) {
+      if (error.status === 404) {
+        respondJson(200, { outcome: "blocked", message: `PR #${payload.pullNumber}을(를) 찾을 수 없습니다` });
+        return true;
+      }
+      if (error.status === 401 || error.status === 403) {
+        respondJson(200, { outcome: "permission_denied", message: error.message });
+        return true;
+      }
+      respondJson(200, { outcome: "github_error", message: error.message });
+      return true;
+    }
+    respondJson(200, { outcome: "connection_failed", message: error instanceof Error ? error.message : "unknown" });
+    return true;
+  }
+  if (pr.state !== "open" || pr.merged) {
+    respondJson(200, {
+      outcome: "blocked",
+      message: `PR #${payload.pullNumber}은(는) ${pr.merged ? "merged" : pr.state} 상태입니다 — open PR만 labels update 가능`,
+    });
+    return true;
+  }
+  if (!client.listIssueLabels) {
+    respondJson(200, { outcome: "not_configured", message: "GitHub client에 listIssueLabels 미구현" });
+    return true;
+  }
+  let currentLabels: string[];
+  try {
+    currentLabels = await client.listIssueLabels(owner, repo, payload.pullNumber);
+  } catch (error) {
+    if (error instanceof GithubReadonlyError) {
+      respondJson(200, { outcome: "github_error", message: error.message });
+      return true;
+    }
+    respondJson(200, { outcome: "connection_failed", message: error instanceof Error ? error.message : "unknown" });
+    return true;
+  }
+  const diff = computeLabelDiff(currentLabels, gate.addLabels, gate.removeLabels);
+  if (diff.actuallyAdded.length === 0 && diff.actuallyRemoved.length === 0) {
+    respondJson(200, {
+      outcome: "no_op",
+      message: "이미 원하는 상태입니다 — add/remove 모두 noop입니다",
+    });
+    return true;
+  }
+  const observedAt = now?.() ?? new Date().toISOString();
+  const expiresAt = new Date(Date.parse(observedAt) + PR_UPDATE_PLAN_TTL_MS).toISOString();
+  const planId = `pr-labels-${randomUUID()}`;
+  const currentSorted = [...currentLabels].sort();
+  const plan = {
+    id: planId,
+    repoFullName: payload.repoFullName,
+    pullNumber: payload.pullNumber,
+    currentLabels: currentSorted,
+    currentLabelsHash: hashLabelSet(currentSorted),
+    finalLabels: diff.finalLabels,
+    changeSummary: {
+      actuallyAdded: diff.actuallyAdded,
+      actuallyRemoved: diff.actuallyRemoved,
+      noopAdd: diff.noopAdd,
+      noopRemove: diff.noopRemove,
+    },
+    status: "approval_required" as const,
+    truthStatus: "planned" as const,
+    createdAt: observedAt,
+    expiresAt,
+  };
+  prLabelsUpdatePlanStore.put({
+    plan,
+    addLabels: gate.addLabels,
+    removeLabels: gate.removeLabels,
+  });
+  respondJson(200, { outcome: "planned", plan });
+  return true;
+}
+
+async function handlePrLabelsUpdateExecute(deps: GithubRouteDependencies): Promise<boolean> {
+  const { respondJson, createClient, readJsonBody, request, writeRepoAllowlist, prLabelsUpdatePlanStore, verifyApproval, now } = deps;
+  if (!readJsonBody || !request || !prLabelsUpdatePlanStore) {
+    respondJson(500, { outcome: "github_error", message: "W5d dependencies not wired" });
+    return true;
+  }
+  let payload;
+  try {
+    payload = githubPullRequestLabelsUpdateExecuteRequestSchema.parse(await readJsonBody(request));
+  } catch (error) {
+    respondJson(400, { outcome: "blocked", message: error instanceof Error ? error.message : "잘못된 execute 요청" });
+    return true;
+  }
+  const record = prLabelsUpdatePlanStore.get(payload.planId);
+  if (!record) {
+    respondJson(200, { outcome: "blocked", planId: payload.planId, truthStatus: "planned", message: "plan을 찾을 수 없거나 만료됨" });
+    return true;
+  }
+  // 멱등성 — 이미 적용된 plan이면 같은 결과.
+  const observed = getPullRequestLabelsObservedFor(payload.planId);
+  if (observed) {
+    respondJson(200, {
+      outcome: "observed",
+      planId: payload.planId,
+      pullNumber: observed.pullNumber,
+      htmlUrl: observed.htmlUrl,
+      appliedLabels: [...observed.appliedLabels],
+      observedAt: observed.observedAt,
+      truthStatus: "observed",
+    });
+    return true;
+  }
+  // 1차 무결성: 같은 base 의도인지(client expectedCurrentLabelsHash가 plan 저장 hash와 동일).
+  if (payload.expectedCurrentLabelsHash !== record.plan.currentLabelsHash) {
+    respondJson(200, {
+      outcome: "blocked", planId: payload.planId, truthStatus: "planned",
+      reason: "toctou_labels_mismatch",
+      message: "expectedCurrentLabelsHash가 plan 기록과 다릅니다 — plan과 다른 base 의도",
+    });
+    return true;
+  }
+  if (!payload.approvalId || !verifyApproval) {
+    respondJson(200, { outcome: "approval_required", planId: payload.planId, truthStatus: "planned", message: "approval이 필요합니다" });
+    return true;
+  }
+  const authorized = await verifyApproval(payload.approvalId);
+  if (!authorized) {
+    respondJson(200, { outcome: "blocked", planId: payload.planId, truthStatus: "planned", message: "approval이 승인되지 않았습니다" });
+    return true;
+  }
+  const client = createClient();
+  const status = client.status();
+  // 게이트 재평가(allowlist 변경 대응).
+  const reGate = evaluatePrLabelsUpdateGate({
+    repoFullName: record.plan.repoFullName,
+    pullNumber: record.plan.pullNumber,
+    addLabels: record.addLabels,
+    removeLabels: record.removeLabels,
+    allowlist: writeRepoAllowlist ?? [],
+    tokenPresent: status.tokenPresent,
+  });
+  if (reGate.kind === "blocked") {
+    respondJson(200, { outcome: "blocked", planId: payload.planId, truthStatus: "planned", reason: reGate.reason === "allowlist" ? "allowlist" : "secret_suspect", message: reGate.message });
+    return true;
+  }
+  // 2차 TOCTOU — execute 시점 GitHub에서 labels 재조회.
+  const [owner, repo] = record.plan.repoFullName.split("/") as [string, string];
+  let pr;
+  try {
+    pr = await client.getPullRequest(owner, repo, record.plan.pullNumber);
+  } catch (error) {
+    if (error instanceof GithubReadonlyError) {
+      if (error.status === 404) {
+        respondJson(200, { outcome: "blocked", planId: payload.planId, truthStatus: "planned", reason: "pr_not_found", message: `PR #${record.plan.pullNumber}이(가) plan 이후 사라졌습니다` });
+        return true;
+      }
+      if (error.status === 401 || error.status === 403) {
+        respondJson(200, { outcome: "permission_denied", planId: payload.planId, truthStatus: "planned", reason: "permission_denied", message: error.message });
+        return true;
+      }
+      respondJson(200, { outcome: "github_error", planId: payload.planId, truthStatus: "planned", reason: "github_error", message: error.message });
+      return true;
+    }
+    respondJson(200, { outcome: "connection_failed", planId: payload.planId, truthStatus: "planned", reason: "connection_failed", message: error instanceof Error ? error.message : "unknown" });
+    return true;
+  }
+  if (pr.state !== "open" || pr.merged) {
+    respondJson(200, {
+      outcome: "blocked", planId: payload.planId, truthStatus: "planned", reason: "pr_closed",
+      message: `PR #${record.plan.pullNumber}이(가) plan 이후 ${pr.merged ? "merged" : pr.state} 상태로 바뀌었습니다`,
+    });
+    return true;
+  }
+  if (!client.listIssueLabels || !client.replaceIssueLabels) {
+    respondJson(200, { outcome: "not_configured", planId: payload.planId, truthStatus: "planned", message: "GitHub client에 listIssueLabels/replaceIssueLabels 미구현" });
+    return true;
+  }
+  let freshCurrent: string[];
+  try {
+    freshCurrent = await client.listIssueLabels(owner, repo, record.plan.pullNumber);
+  } catch (error) {
+    respondJson(200, { outcome: "github_error", planId: payload.planId, truthStatus: "planned", reason: "github_error", message: error instanceof Error ? error.message : "unknown" });
+    return true;
+  }
+  const freshHash = hashLabelSet(freshCurrent);
+  if (freshHash !== record.plan.currentLabelsHash) {
+    respondJson(200, {
+      outcome: "blocked", planId: payload.planId, truthStatus: "planned", reason: "toctou_labels_mismatch",
+      message: "labels가 plan 시점 이후 누군가 다른 값으로 바꿨습니다 — 다시 plan부터",
+    });
+    return true;
+  }
+  if (!prLabelsUpdatePlanStore.tryClaim(record.plan.id)) {
+    respondJson(200, { outcome: "blocked", planId: record.plan.id, truthStatus: "planned", message: "동일 plan이 이미 실행 중입니다" });
+    return true;
+  }
+  try {
+    const result = await client.replaceIssueLabels(owner, repo, record.plan.pullNumber, record.plan.finalLabels);
+    const observedAt = now?.() ?? new Date().toISOString();
+    const htmlUrl = pr.htmlUrl ?? `https://github.com/${owner}/${repo}/pull/${record.plan.pullNumber}`;
+    const appliedSorted = [...result.labels].sort();
+    prLabelsUpdatePlanStore.markUpdated(record.plan.id, {
+      pullNumber: record.plan.pullNumber,
+      htmlUrl,
+      appliedLabels: appliedSorted,
+      observedAt,
+    });
+    respondJson(200, {
+      outcome: "observed",
+      planId: record.plan.id,
+      pullNumber: record.plan.pullNumber,
+      htmlUrl,
+      appliedLabels: appliedSorted,
+      observedAt,
+      truthStatus: "observed",
+    });
+  } catch (error) {
+    prLabelsUpdatePlanStore.release(record.plan.id);
+    if (error instanceof GithubReadonlyError) {
+      if (error.status === 404) {
+        respondJson(200, { outcome: "blocked", planId: payload.planId, truthStatus: "planned", reason: "pr_not_found", message: error.message });
+      } else if (error.status === 401 || error.status === 403) {
+        respondJson(200, { outcome: "permission_denied", planId: payload.planId, truthStatus: "planned", reason: "permission_denied", message: error.message });
+      } else {
+        respondJson(200, { outcome: "github_error", planId: payload.planId, truthStatus: "planned", reason: "github_error", message: error.message });
+      }
+    } else {
+      respondJson(200, { outcome: "connection_failed", planId: payload.planId, truthStatus: "planned", reason: "connection_failed", message: error instanceof Error ? error.message : "unknown" });
+    }
+  }
+  return true;
+}
+
 async function handlePrCreateExecute(deps: GithubRouteDependencies): Promise<boolean> {
   const { respondJson, createClient, readJsonBody, request, writeRepoAllowlist, prBaseAllowlist, prPlanStore, verifyApproval } = deps;
   if (!readJsonBody || !request || !prPlanStore) {
@@ -1773,6 +2073,7 @@ export async function handleGithubRoute({
   fileChangePlanStore,
   prPlanStore,
   prUpdatePlanStore,
+  prLabelsUpdatePlanStore,
   writeRepoAllowlist,
   prBaseAllowlist,
   verifyApproval,
@@ -1780,7 +2081,7 @@ export async function handleGithubRoute({
 }: GithubRouteDependencies): Promise<boolean> {
   if (!pathname.startsWith("/integrations/github/")) return false;
   const pathPrefixOnly = pathname.split("?")[0] ?? pathname;
-  const commonDeps = { pathname, method, createClient, respondJson, now, request, readJsonBody, planStore, branchPlanStore, fileChangePlanStore, prPlanStore, prUpdatePlanStore, writeRepoAllowlist, prBaseAllowlist, verifyApproval, protectedBranches };
+  const commonDeps = { pathname, method, createClient, respondJson, now, request, readJsonBody, planStore, branchPlanStore, fileChangePlanStore, prPlanStore, prUpdatePlanStore, prLabelsUpdatePlanStore, writeRepoAllowlist, prBaseAllowlist, verifyApproval, protectedBranches };
   // W1 comment write — 메서드 인지(POST). 다른 readonly 경로는 그대로 GET만.
   if (pathPrefixOnly === COMMENT_PLAN_PATH) {
     if ((method ?? "GET") !== "POST") {
@@ -1866,6 +2167,22 @@ export async function handleGithubRoute({
       return true;
     }
     return handlePrUpdateExecute(commonDeps);
+  }
+  // W5d Phase 1 — PR labels update plan — POST only.
+  if (pathPrefixOnly === PR_LABELS_PLAN_PATH) {
+    if ((method ?? "GET") !== "POST") {
+      respondJson(405, { error: "method_not_allowed", message: "PR labels plan은 POST만 허용됩니다" });
+      return true;
+    }
+    return handlePrLabelsUpdatePlan(commonDeps);
+  }
+  // W5d Phase 1 — PR labels update execute — POST only.
+  if (pathPrefixOnly === PR_LABELS_EXECUTE_PATH) {
+    if ((method ?? "GET") !== "POST") {
+      respondJson(405, { error: "method_not_allowed", message: "PR labels execute는 POST만 허용됩니다" });
+      return true;
+    }
+    return handlePrLabelsUpdateExecute(commonDeps);
   }
   if ((method ?? "GET") !== "GET") {
     // 그 외 read-only 경로는 비-GET 거절(기존 동작 유지).

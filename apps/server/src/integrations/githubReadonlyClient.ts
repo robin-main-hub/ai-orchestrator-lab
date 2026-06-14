@@ -154,6 +154,21 @@ export type GithubReadonlyClient = {
     params: { title?: string; body?: string },
   ): Promise<{ pullNumber: number; htmlUrl: string; title: string; body: string; updatedAt: string }>;
   /**
+   * W5d — GET /repos/:o/:r/issues/:n/labels. PR(=issue)에 붙은 label 이름 목록.
+   * 응답 200일 때만 string[] 반환. 404는 호출자가 outcome으로 매핑.
+   */
+  listIssueLabels?(owner: string, repo: string, issueNumber: number): Promise<string[]>;
+  /**
+   * W5d — PUT /repos/:o/:r/issues/:n/labels. final desired set을 한 번에 적용(atomic).
+   * 응답 200일 때만 적용 후 string[] 반환. draft/state/title/body 등은 받지 않음.
+   */
+  replaceIssueLabels?(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    labels: ReadonlyArray<string>,
+  ): Promise<{ labels: string[] }>;
+  /**
    * W5b — GET /repos/:o/:r/git/commits/:sha. commit object의 tree.sha를 반환한다.
    * multi-file atomic commit의 base_tree로 사용된다.
    */
@@ -471,6 +486,53 @@ export function createGithubReadonlyClient(options: GithubReadonlyClientOptions 
       const bodyText = typeof raw.body === "string" ? raw.body : "";
       const updatedAt = typeof raw.updated_at === "string" ? raw.updated_at : "";
       return { pullNumber: num, htmlUrl, title, body: bodyText, updatedAt };
+    },
+
+    async listIssueLabels(owner, repo, issueNumber) {
+      const raw = await getJson(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${encodeURIComponent(String(issueNumber))}/labels`,
+      );
+      const arr = Array.isArray(raw) ? raw : [];
+      return arr
+        .map((entry) => {
+          const name = (entry as Record<string, unknown>)?.name;
+          return typeof name === "string" ? name : "";
+        })
+        .filter((name): name is string => name.length > 0);
+    },
+
+    async replaceIssueLabels(owner, repo, issueNumber, labels) {
+      if (!token) throw new GithubNotConfiguredError();
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${encodeURIComponent(String(issueNumber))}/labels`,
+          {
+            method: "PUT",
+            headers: {
+              accept: "application/vnd.github+json",
+              authorization: `Bearer ${token}`,
+              "x-github-api-version": "2022-11-28",
+              "user-agent": "ai-orchestrator-lab-pr-labels",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ labels }),
+          },
+        );
+      } catch (error) {
+        throw new GithubReadonlyError(scrub(error instanceof Error ? error.message : String(error), token), 0);
+      }
+      if (response.status !== 200) {
+        const text = await response.text().catch(() => "");
+        throw new GithubReadonlyError(scrub(`GitHub ${response.status}: ${text.slice(0, 200)}`, token), response.status);
+      }
+      const raw = (await response.json()) as Array<Record<string, unknown>>;
+      const arr = Array.isArray(raw) ? raw : [];
+      const applied = arr
+        .map((entry) => (typeof entry.name === "string" ? entry.name : ""))
+        .filter((name): name is string => name.length > 0)
+        .sort();
+      return { labels: applied };
     },
 
     // W5b — Git Data API: getCommitTreeSha / createBlob / createTree / createCommit / updateRefSha.
