@@ -128,6 +128,7 @@ import type {
   CodingPacket,
   ConversationMessage,
   ContextPackTier,
+  BlueprintRevisionDraft,
   DesignBlueprintInput,
   DeviceRebootRequest,
   DeviceRebootWatchdog,
@@ -708,6 +709,14 @@ export function App() {
   }
 
   const [cockpitFocus, setCockpitFocus] = useState<CockpitDetailFocus | undefined>();
+  /**
+   * Blueprint Revision applied 기록(debateId 별). 사용자가 BlueprintReviewCard에서
+   * "수정안 적용"을 누른 시점의 draft + appliedAt만 저장한다(영속화 없음 — 세션 메모리).
+   * Mission/scaffold/GitHub write는 절대 자동 실행하지 않는다(state 변경뿐).
+   */
+  const [appliedBlueprintRevisionByDebateId, setAppliedBlueprintRevisionByDebateId] = useState<
+    Record<string, { draft: BlueprintRevisionDraft; appliedAt: string }>
+  >({});
   const [debateSession, setDebateSession] = useState<Stage3DebateSession>(() =>
     resolveInitialDebateSession({
       sample: sampleDebateSession,
@@ -2952,6 +2961,38 @@ export function App() {
       source: "command_palette",
     });
   }
+
+  /**
+   * Blueprint Revision Apply (point 5 후속) — 사용자가 "수정안 적용"을 누르면 호출.
+   * 정직성:
+   *   - DesignBlueprint draft는 자동으로 덮어쓰지 않는다 — applied revision을 별도 state에
+   *     기록(debateId 별). 추후 사용자가 AppBuild를 다시 열 때 baseline에 반영 여부 선택 가능.
+   *   - Mission/scaffold/GitHub write는 절대 자동 실행하지 않는다(이 핸들러는 state 업데이트
+   *     + appendEvent만).
+   *   - trace event는 redacted summary만(raw 본문/transcript는 절대 trace에 넣지 않음).
+   *   - truthStatus는 항상 planned(observed 아님).
+   */
+  const handleApplyBlueprintRevision = useCallback(
+    (draft: BlueprintRevisionDraft) => {
+      const debateId = debateSession.id;
+      const appliedAt = new Date().toISOString();
+      setAppliedBlueprintRevisionByDebateId((prev) => ({
+        ...prev,
+        [debateId]: { draft, appliedAt },
+      }));
+      appendEvent("appbuild.blueprint.revision.applied", {
+        debateId,
+        blueprintTitle: draft.title.slice(0, 200),
+        addedCriteriaCount: draft.addedCriteria.length,
+        riskNotesCount: draft.riskNotes.length,
+        truthStatus: draft.truthStatus, // "planned"
+        appliedAt,
+        // raw 본문 redacted — addedCriteria 텍스트 자체는 trace에 넣지 않는다.
+        redaction: "applied",
+      });
+    },
+    [debateSession.id, appendEvent],
+  );
 
   function handleSelectDebateUtterance(utterance: Stage3DebateUtteranceView) {
     const agent = agents.find((candidate) => candidate.id === utterance.agentId);
@@ -5362,6 +5403,17 @@ export function App() {
               onSelectUtterance={handleSelectDebateUtterance}
               session={debateSession}
               agentVisualsById={agentVisualsById}
+              blueprintBaseline={debateSession.blueprintContext}
+              onApplyBlueprintRevision={handleApplyBlueprintRevision}
+              blueprintAppliedNotice={(() => {
+                const entry = appliedBlueprintRevisionByDebateId[debateSession.id];
+                if (!entry) return undefined;
+                const when = entry.appliedAt.slice(0, 16).replace("T", " ");
+                return `초안에 적용됨 · Mission 자동 생성 없음 · 새 결정 ${entry.draft.addedCriteria.length}, 위험 ${entry.draft.riskNotes.length} · ${when}`;
+              })()}
+              /* onScaffoldRefresh: 현재 debateId↔missionId 매핑이 App.tsx state에 없으므로
+                  미배선(CTA 미노출). 추후 작업: AppBuild의 last-created-mission-by-debate 추적
+                  후 publishEnvironment.refreshScaffold(missionId) 연결. 자동 실행 X. */
             />
           ) : mode === "tmux" ? (
             <TmuxSwarmBoard
