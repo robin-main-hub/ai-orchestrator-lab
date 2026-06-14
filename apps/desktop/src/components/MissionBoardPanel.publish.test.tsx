@@ -152,6 +152,74 @@ describe("MissionBoardPanel — Publish Panel mount in Workspace detail", () => 
     expect(onContextEvent.mock.calls.find((c) => c[0] === "mission.publish.closed")).toBeTruthy();
   });
 
+  it("기본 prefill: Mission title/goal/missionId → Publish Panel 입력 필드에 들어간다", () => {
+    const env: MissionPublishEnvironment = {
+      serverBaseUrl: "http://127.0.0.1:4317",
+      defaultRepoFullName: "robin/lab",
+      onContextEvent: vi.fn(),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+    };
+    render(
+      <MissionBoardPanel
+        snapshot={snapshotOf([itemWithWorkspace("mission_prefill_xyz")])}
+        onRefresh={() => {}}
+        expandedMissionId="mission_prefill_xyz"
+        onToggleDetail={() => {}}
+        publishEnvironment={env}
+      />,
+    );
+    const publishSection = screen.getByTestId("mission-workspace-publish-section");
+    fireEvent.click(within(publishSection).getByRole("button", { name: /GitHub로 내보내기/ }));
+
+    const panel = within(publishSection).getByTestId("github-publish-panel");
+    // Step 1: branch — agent/mission-<slug> 프리필
+    const branchStep = within(panel).getByTestId("publish-step-branch");
+    const newBranchInput = within(branchStep).getByLabelText("new branch name") as HTMLInputElement;
+    expect(newBranchInput.value).toMatch(/^agent\/mission-/);
+    // Step 3: PR title — mission.title 프리필, base = main
+    const prStep = within(panel).getByTestId("publish-step-pr");
+    const prTitleInput = within(prStep).getByLabelText("pr title") as HTMLInputElement;
+    expect(prTitleInput.value).toBe("App Builder result"); // itemWithWorkspace 의 title
+    const prBaseInput = within(prStep).getByLabelText("pr base branch") as HTMLInputElement;
+    expect(prBaseInput.value).toBe("main");
+    // PR body는 provenance(missionId)를 포함
+    const prBodyInput = within(prStep).getByLabelText("pr body") as HTMLTextAreaElement;
+    expect(prBodyInput.value).toContain("mission_prefill_xyz");
+    expect(prBodyInput.value).toMatch(/draft/i);
+  });
+
+  it("custom resolvePrefill override 지원 — builtin 대신 호출자가 직접 결정", () => {
+    const env: MissionPublishEnvironment = {
+      serverBaseUrl: "http://127.0.0.1:4317",
+      defaultRepoFullName: "robin/lab",
+      onContextEvent: vi.fn(),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      resolvePrefill: (item) => ({
+        newBranchName: `custom/${item.missionId.slice(-4)}`,
+        prTitle: `Custom: ${item.title}`,
+        prBase: "develop",
+        // sourceRef, body는 미지정 — panel은 기본값 사용
+      }),
+    };
+    render(
+      <MissionBoardPanel
+        snapshot={snapshotOf([itemWithWorkspace("mission_zzzz9999")])}
+        onRefresh={() => {}}
+        expandedMissionId="mission_zzzz9999"
+        onToggleDetail={() => {}}
+        publishEnvironment={env}
+      />,
+    );
+    const publishSection = screen.getByTestId("mission-workspace-publish-section");
+    fireEvent.click(within(publishSection).getByRole("button", { name: /GitHub로 내보내기/ }));
+    const panel = within(publishSection).getByTestId("github-publish-panel");
+    const branchStep = within(panel).getByTestId("publish-step-branch");
+    expect((within(branchStep).getByLabelText("new branch name") as HTMLInputElement).value).toBe("custom/9999");
+    const prStep = within(panel).getByTestId("publish-step-pr");
+    expect((within(prStep).getByLabelText("pr title") as HTMLInputElement).value).toBe("Custom: App Builder result");
+    expect((within(prStep).getByLabelText("pr base branch") as HTMLInputElement).value).toBe("develop");
+  });
+
   it("CTA는 다른 위험 액션 버튼을 추가하지 않는다(merge/review/labels 자동 노출 회귀 차단)", () => {
     const env: MissionPublishEnvironment = {
       serverBaseUrl: "http://127.0.0.1:4317",
