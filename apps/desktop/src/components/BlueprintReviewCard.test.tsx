@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { BlueprintDebateReview, BlueprintRevisionDraft } from "@ai-orchestrator/protocol";
@@ -96,5 +97,32 @@ describe("BlueprintReviewCard — Revision Draft UI", () => {
   it("(#9 scaffold refresh 미배선) onScaffoldRefresh 없으면 CTA 자체 부재", () => {
     render(<BlueprintReviewCard review={REVIEW} onApplyRevision={vi.fn()} />);
     expect(screen.queryByTestId("blueprint-scaffold-refresh")).toBeNull();
+  });
+
+  it("(#10 round-trip) 부모 state controller로 적용 → appliedNotice 표시(App.tsx 실제 wiring 시뮬레이션)", () => {
+    function Harness() {
+      const [notice, setNotice] = useState<string | undefined>();
+      const handleApply = (draft: BlueprintRevisionDraft) => {
+        // App.tsx의 handleApplyBlueprintRevision과 동일 형태로 notice 구성
+        setNotice(
+          `초안에 적용됨 · Mission 자동 생성 없음 · 새 결정 ${draft.addedCriteria.length}, 위험 ${draft.riskNotes.length}`,
+        );
+      };
+      return (
+        <BlueprintReviewCard
+          review={REVIEW}
+          onApplyRevision={handleApply}
+          appliedNotice={notice}
+        />
+      );
+    }
+    render(<Harness />);
+    // 클릭 전 노티 없음
+    expect(screen.queryByTestId("blueprint-revision-applied-notice")).toBeNull();
+    // 적용 클릭 → 부모 state 업데이트 → 노티 표시
+    fireEvent.click(screen.getByTestId("blueprint-revision-apply"));
+    const notice = screen.getByTestId("blueprint-revision-applied-notice");
+    expect(notice.textContent).toContain("초안에 적용됨");
+    expect(notice.textContent).toContain("Mission 자동 생성 없음");
   });
 });
