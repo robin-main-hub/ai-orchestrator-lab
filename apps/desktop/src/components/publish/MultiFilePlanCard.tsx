@@ -7,7 +7,10 @@ import {
   SCAFFOLD_FILE_BYTE_MAX,
   type ScaffoldGateReason,
 } from "../../lib/missionPublishPrefill";
-import { postGithubFileChangePlan } from "../../lib/githubConnector";
+import {
+  postGithubFileChangePlan,
+  postGithubMultiFileCommitExecute,
+} from "../../lib/githubConnector";
 import { StatusBadge } from "@/ui/status-badge";
 
 /**
@@ -109,6 +112,18 @@ export function MultiFilePlanCard({
   const [results, setResults] = useState<Record<string, PerFileResult>>({});
   const [busy, setBusy] = useState(false);
   const [globalError, setGlobalError] = useState<string | undefined>();
+  // W5b execute inputs
+  const [expectedHeadSha, setExpectedHeadSha] = useState("");
+  const [commitMessage, setCommitMessage] = useState("");
+  const [approvalId, setApprovalId] = useState("");
+  const [executeBusy, setExecuteBusy] = useState(false);
+  const [executeResult, setExecuteResult] = useState<
+    | { kind: "idle" }
+    | { kind: "observed"; commitSha: string; htmlUrl?: string; fileCount: number }
+    | { kind: "head_mismatch"; message: string }
+    | { kind: "blocked"; reason?: string; message: string }
+    | { kind: "failed"; message: string }
+  >({ kind: "idle" });
 
   const selectedFiles = fileEvaluations.filter(
     (row) => row.safe && selected.has(row.file.path),
@@ -193,6 +208,102 @@ export function MultiFilePlanCard({
       }
     } finally {
       setBusy(false);
+    }
+  };
+
+  // 모든 선택 파일이 planned인지 — execute 진입 조건.
+  const allPlanned =
+    selectedFiles.length > 0 &&
+    selectedFiles.every((row) => results[row.file.path]?.kind === "planned");
+  const canExecute =
+    !executeBusy &&
+    allPlanned &&
+    !!repoFullName.trim() &&
+    !!branchName.trim() &&
+    /^[a-f0-9]{40}$/.test(expectedHeadSha) &&
+    commitMessage.trim().length > 0 &&
+    approvalId.trim().length > 0;
+
+  const onExecuteAtomic = async () => {
+    if (!canExecute) return;
+    setExecuteBusy(true);
+    setExecuteResult({ kind: "idle" });
+    onContextEvent?.("github.publish.multifile.commit.requested", {
+      missionId: item.missionId,
+      repoFullName,
+      branchName,
+      count: selectedFiles.length,
+      totalBytes,
+      ts: new Date().toISOString(),
+    });
+    try {
+      const res = await postGithubMultiFileCommitExecute(
+        serverBaseUrl,
+        {
+          repoFullName,
+          branchName,
+          expectedHeadSha,
+          message: commitMessage,
+          files: selectedFiles.map((row) => ({
+            path: row.file.path,
+            newContent: row.file.newContent,
+          })),
+          approvalId,
+        },
+        fetchImpl ?? fetch,
+      );
+      if (res.outcome === "observed" && res.commitSha) {
+        setExecuteResult({
+          kind: "observed",
+          commitSha: res.commitSha,
+          htmlUrl: res.htmlUrl,
+          fileCount: res.fileCount ?? selectedFiles.length,
+        });
+        onContextEvent?.("github.publish.multifile.commit.observed", {
+          missionId: item.missionId,
+          repoFullName,
+          branchName,
+          commitSha: res.commitSha,
+          htmlUrl: res.htmlUrl,
+          fileCount: res.fileCount ?? selectedFiles.length,
+          totalBytes,
+          ts: new Date().toISOString(),
+        });
+      } else if (res.outcome === "head_mismatch") {
+        setExecuteResult({ kind: "head_mismatch", message: res.message ?? "branch HEAD가 변경됨" });
+        onContextEvent?.("github.publish.multifile.commit.blocked", {
+          missionId: item.missionId,
+          reason: "head_mismatch",
+          summary: res.message ?? "branch HEAD changed",
+          ts: new Date().toISOString(),
+        });
+      } else if (res.outcome === "blocked" || res.outcome === "approval_required") {
+        setExecuteResult({ kind: "blocked", reason: res.reason, message: res.message ?? res.outcome });
+        onContextEvent?.("github.publish.multifile.commit.blocked", {
+          missionId: item.missionId,
+          reason: res.reason ?? res.outcome,
+          summary: res.message ?? "",
+          ts: new Date().toISOString(),
+        });
+      } else {
+        setExecuteResult({ kind: "failed", message: res.message ?? res.outcome });
+        onContextEvent?.("github.publish.multifile.commit.failed", {
+          missionId: item.missionId,
+          reason: res.reason ?? res.outcome,
+          summary: res.message ?? "",
+          ts: new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "unknown";
+      setExecuteResult({ kind: "failed", message });
+      onContextEvent?.("github.publish.multifile.commit.failed", {
+        missionId: item.missionId,
+        summary: message,
+        ts: new Date().toISOString(),
+      });
+    } finally {
+      setExecuteBusy(false);
     }
   };
 
@@ -320,6 +431,88 @@ export function MultiFilePlanCard({
       >
         {busy ? "Plan 진행 중…" : `선택한 ${selectedFiles.length}개 plan`}
       </button>
+
+      {/* W5b: atomic execute. 모든 선택 파일이 planned일 때만 입력/버튼 활성화. */}
+      <div
+        className="mt-3 border-t border-cyan-300/10 pt-2"
+        data-testid="publish-multifile-execute-area"
+        data-state={executeResult.kind}
+      >
+        <p className="mb-1 text-[10.5px] uppercase tracking-wider text-cyan-200">
+          atomic commit (W5b) — 하나의 커밋으로 적용. 중간 파일만 적용되지 않습니다.
+        </p>
+        <div className="mb-2 flex flex-wrap gap-2">
+          <input
+            aria-label="multifile expectedHeadSha"
+            placeholder="expectedHeadSha (40-hex)"
+            value={expectedHeadSha}
+            onChange={(e) => setExpectedHeadSha(e.target.value.toLowerCase())}
+            disabled={executeBusy}
+            className="w-72 rounded border border-white/10 bg-black/30 px-2 py-1 font-mono text-[11px]"
+          />
+          <input
+            aria-label="multifile commit message"
+            placeholder="commit message"
+            value={commitMessage}
+            onChange={(e) => setCommitMessage(e.target.value)}
+            disabled={executeBusy}
+            className="w-72 rounded border border-white/10 bg-black/30 px-2 py-1 text-xs"
+          />
+          <input
+            aria-label="multifile approval ID"
+            placeholder="approval ID"
+            value={approvalId}
+            onChange={(e) => setApprovalId(e.target.value)}
+            disabled={executeBusy}
+            className="w-48 rounded border border-white/10 bg-black/30 px-2 py-1 text-xs"
+          />
+        </div>
+        <button
+          type="button"
+          disabled={!canExecute}
+          onClick={onExecuteAtomic}
+          data-testid="publish-multifile-execute"
+          className={
+            canExecute
+              ? "rounded border border-rose-300/40 px-2 py-1 text-[11px] font-medium uppercase text-rose-200 hover:bg-rose-300/10"
+              : "rounded border border-white/10 px-2 py-1 text-[11px] font-medium uppercase text-zinc-500 cursor-not-allowed"
+          }
+        >
+          {executeBusy
+            ? "Atomic commit 진행 중…"
+            : allPlanned
+              ? `선택한 ${selectedFiles.length}개 atomic commit 실행`
+              : "모든 선택 파일이 planned 상태일 때만 실행 가능"}
+        </button>
+        {executeResult.kind === "observed" ? (
+          <p className="mt-2 text-[11px] text-emerald-200" data-testid="publish-multifile-execute-observed">
+            ✓ commit {executeResult.commitSha.slice(0, 7)} — {executeResult.fileCount}개 파일 적용{" "}
+            {executeResult.htmlUrl ? (
+              <a
+                href={executeResult.htmlUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-emerald-100"
+                data-testid="publish-multifile-execute-link"
+              >
+                GitHub에서 보기
+              </a>
+            ) : null}
+          </p>
+        ) : executeResult.kind === "head_mismatch" ? (
+          <p className="mt-2 text-[11px] text-amber-300" data-testid="publish-multifile-execute-head-mismatch">
+            ⚠ branch head가 변경됨 — 다시 plan부터: {executeResult.message}
+          </p>
+        ) : executeResult.kind === "blocked" ? (
+          <p className="mt-2 text-[11px] text-rose-300" data-testid="publish-multifile-execute-blocked">
+            ✗ 차단: {executeResult.reason ?? "blocked"} — {executeResult.message}
+          </p>
+        ) : executeResult.kind === "failed" ? (
+          <p className="mt-2 text-[11px] text-rose-300" data-testid="publish-multifile-execute-failed">
+            ✗ 실패: {executeResult.message}
+          </p>
+        ) : null}
+      </div>
     </article>
   );
 }
