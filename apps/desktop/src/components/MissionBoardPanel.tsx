@@ -22,6 +22,7 @@ import {
 import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import { GithubPublishPanel } from "./coding/GithubPublishPanel";
 import { MultiFilePlanCard } from "./publish/MultiFilePlanCard";
+import { PreviewRunCard } from "./PreviewRunCard";
 import {
   builtinMissionPrefill,
   computeNextPublishStep,
@@ -458,6 +459,18 @@ function MissionWorkspaceDetail({
           </span>
         </div>
       ) : null}
+
+      {/* Preview Run vertical CTA — scaffold가 있으면 한 번 클릭으로 materialize+preview 실행.
+          fake preview URL 금지: 서버가 observed로 반환할 때만 링크가 살아난다. */}
+      <PreviewRunCard
+        missionId={item.missionId}
+        hasScaffoldFiles={(publishEnvironment?.getScaffoldFiles?.(item)?.length ?? 0) > 0}
+        serverBaseUrl={publishEnvironment?.serverBaseUrl}
+        fetchImpl={publishEnvironment?.fetchImpl}
+        onContextEvent={(type, payload) =>
+          publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
+        }
+      />
 
       {/* Visual QA 종합 (D5b) */}
       {item.latestVisualQa ? (
