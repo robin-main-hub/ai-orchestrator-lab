@@ -130,6 +130,7 @@ import { createGithubBranchCreatePlanStore } from "./integrations/githubBranchCr
 import { createGithubFileChangePlanStore } from "./integrations/githubFileChangePlanStore.js";
 import { createGithubPullRequestCreatePlanStore } from "./integrations/githubPullRequestCreatePlanStore.js";
 import { createGithubPullRequestUpdatePlanStore } from "./integrations/githubPullRequestUpdatePlanStore.js";
+import { createGithubPullRequestLabelsUpdatePlanStore } from "./integrations/githubPullRequestLabelsUpdatePlanStore.js";
 import { parsePrBaseAllowlist } from "./integrations/githubPullRequestWriteGuards.js";
 
 // W1: GitHub comment write plan store — process scope, in-memory, 10분 TTL.
@@ -144,6 +145,8 @@ const githubFileChangePlanStoreInstance = createGithubFileChangePlanStore();
 const githubPullRequestCreatePlanStoreInstance = createGithubPullRequestCreatePlanStore();
 // W5c: PR title/body update plan store — PR create와 별도 인스턴스(섞이지 않도록).
 const githubPullRequestUpdatePlanStoreInstance = createGithubPullRequestUpdatePlanStore();
+// W5d-Phase-1: PR labels update plan store — title/body와도 분리(섞이지 않도록).
+const githubPullRequestLabelsUpdatePlanStoreInstance = createGithubPullRequestLabelsUpdatePlanStore();
 import { createMissionStore, type MissionStore } from "./missions/missionStore.js";
 import { missionTraceBus } from "./missions/missionTraceBus.js";
 import {
@@ -6724,6 +6727,7 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         fileChangePlanStore: githubFileChangePlanStoreInstance,
         prPlanStore: githubPullRequestCreatePlanStoreInstance,
         prUpdatePlanStore: githubPullRequestUpdatePlanStoreInstance,
+        prLabelsUpdatePlanStore: githubPullRequestLabelsUpdatePlanStoreInstance,
         writeRepoAllowlist: parseRepoAllowlist(process.env.GITHUB_WRITE_REPO_ALLOWLIST),
         prBaseAllowlist: parsePrBaseAllowlist(process.env.GITHUB_PR_BASE_ALLOWLIST),
         verifyApproval: async (approvalId) => {

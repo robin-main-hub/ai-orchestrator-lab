@@ -875,3 +875,130 @@ export const githubPullRequestUpdateExecuteResponseSchema = z.object({
   truthStatus: z.enum(["planned", "observed", "configured"]),
 });
 export type GithubPullRequestUpdateExecuteResponse = z.infer<typeof githubPullRequestUpdateExecuteResponseSchema>;
+
+// ──────────────────────────────────────────────────────────────────────────────
+// W5d-Phase-1: PR labels add/remove.
+//
+// 좁은 범위(사용자 확정):
+//   - labels add/remove만. (assignees는 Phase 2, milestone/project는 영구 제외)
+//   - same-repo, open PR only(closed/merged면 plan 단계에서 차단).
+//   - approval ONLY(armed 없음 — labels는 외부 가시성 큼).
+//   - 1차 무결성: client payload의 expectedCurrentLabelsHash가 plan 시점 hash와 일치.
+//   - 2차 무결성: execute 직전 GitHub에서 labels 재조회 → plan 시점 hash와 같아야 함(TOCTOU).
+//   - GitHub PUT /issues/:n/labels로 final desired set을 한 번에 보낸다(atomic).
+//   - max add/remove 각 20개, label 이름 50자 이내.
+//   - secret 패턴/공백/제어문자 차단.
+//
+// 금지(W5d Phase 1에서 절대 안 들어옴):
+//   - merge / close / review submit / branch delete / milestone / project / draft toggle
+//   - assignees(Phase 2)
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const githubPullRequestLabelsUpdateOutcomeSchema = z.enum([
+  "observed",
+  "planned",
+  "approval_required",
+  "blocked",
+  "no_op",
+  "not_configured",
+  "permission_denied",
+  "connection_failed",
+  "github_error",
+]);
+export type GithubPullRequestLabelsUpdateOutcome = z.infer<typeof githubPullRequestLabelsUpdateOutcomeSchema>;
+
+export const GITHUB_PR_LABELS_MAX_CHANGE = 20;
+export const GITHUB_PR_LABEL_NAME_MAX = 50;
+
+/** label 이름: 빈 문자열 금지, 50자 이내, 줄바꿈/제어문자 금지, 양 끝 공백 trim. */
+const labelNameSchema = z
+  .string()
+  .min(1)
+  .max(GITHUB_PR_LABEL_NAME_MAX)
+  .regex(/^[^ -]+$/u, "label 이름에 제어문자가 있습니다");
+
+export const githubPullRequestLabelsUpdatePlanRequestSchema = z.object({
+  repoFullName: z
+    .string()
+    .min(3).max(140)
+    .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, "owner/repo 형식이 필요합니다"),
+  pullNumber: z.number().int().positive(),
+  /** 추가할 label 이름들(중복 허용 안 함, 이미 있는 label은 noop으로 표시). */
+  addLabels: z.array(labelNameSchema).max(GITHUB_PR_LABELS_MAX_CHANGE).default([]),
+  /** 제거할 label 이름들(없는 label은 noop으로 표시). */
+  removeLabels: z.array(labelNameSchema).max(GITHUB_PR_LABELS_MAX_CHANGE).default([]),
+});
+export type GithubPullRequestLabelsUpdatePlanRequest = z.infer<typeof githubPullRequestLabelsUpdatePlanRequestSchema>;
+
+export const githubPullRequestLabelsUpdatePlanSchema = z.object({
+  id: z.string(),
+  repoFullName: z.string(),
+  pullNumber: z.number().int().positive(),
+  /** plan 시점 GitHub에 붙어있던 label 이름들(정렬됨). */
+  currentLabels: z.array(z.string()),
+  /** plan 시점 hash(정렬된 currentLabels의 sha256). TOCTOU 검사 키. */
+  currentLabelsHash: z.string(),
+  /** 실제로 PUT으로 바꿀 final desired set(정렬됨). */
+  finalLabels: z.array(z.string()),
+  /** 변경 통계 — UI/trace 요약용. */
+  changeSummary: z.object({
+    /** 새로 추가될 라벨(현재 미존재 + add에 들어있음). */
+    actuallyAdded: z.array(z.string()),
+    /** 실제로 제거될 라벨(현재 존재 + remove에 들어있음). */
+    actuallyRemoved: z.array(z.string()),
+    /** add 요청에 들어있지만 이미 붙어있어 무의미한 것. */
+    noopAdd: z.array(z.string()),
+    /** remove 요청에 들어있지만 안 붙어있어 무의미한 것. */
+    noopRemove: z.array(z.string()),
+  }),
+  status: z.enum(["planned", "approval_required", "blocked", "no_op", "failed"]),
+  truthStatus: z.enum(["planned", "observed", "configured"]),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  approvalId: z.string().optional(),
+  blockedReason: z.string().optional(),
+});
+export type GithubPullRequestLabelsUpdatePlan = z.infer<typeof githubPullRequestLabelsUpdatePlanSchema>;
+
+export const githubPullRequestLabelsUpdatePlanResponseSchema = z.object({
+  outcome: githubPullRequestLabelsUpdateOutcomeSchema,
+  plan: githubPullRequestLabelsUpdatePlanSchema.optional(),
+  message: z.string().optional(),
+});
+export type GithubPullRequestLabelsUpdatePlanResponse = z.infer<typeof githubPullRequestLabelsUpdatePlanResponseSchema>;
+
+export const githubPullRequestLabelsUpdateExecuteRequestSchema = z.object({
+  planId: z.string(),
+  /** plan 시점 currentLabelsHash — execute가 같은 base를 의도하는지 1차 확인. */
+  expectedCurrentLabelsHash: z.string(),
+  approvalId: z.string(),
+});
+export type GithubPullRequestLabelsUpdateExecuteRequest = z.infer<typeof githubPullRequestLabelsUpdateExecuteRequestSchema>;
+
+export const githubPullRequestLabelsUpdateExecuteResponseSchema = z.object({
+  outcome: githubPullRequestLabelsUpdateOutcomeSchema,
+  planId: z.string(),
+  pullNumber: z.number().int().positive().optional(),
+  htmlUrl: z.string().optional(),
+  /** 적용 후 GitHub가 돌려준 최종 label 이름들(정렬됨). */
+  appliedLabels: z.array(z.string()).optional(),
+  observedAt: z.string().optional(),
+  reason: z
+    .enum([
+      "no_op",
+      "labels_too_many",
+      "label_too_long",
+      "secret_suspect",
+      "pr_closed",
+      "pr_not_found",
+      "toctou_labels_mismatch",
+      "allowlist",
+      "permission_denied",
+      "github_error",
+      "connection_failed",
+    ])
+    .optional(),
+  message: z.string().optional(),
+  truthStatus: z.enum(["planned", "observed", "configured"]),
+});
+export type GithubPullRequestLabelsUpdateExecuteResponse = z.infer<typeof githubPullRequestLabelsUpdateExecuteResponseSchema>;
