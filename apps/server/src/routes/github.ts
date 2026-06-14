@@ -32,7 +32,10 @@ import {
 } from "../integrations/githubFileChangePlanStore.js";
 import { generateUnifiedDiff } from "../integrations/githubFileDiff.js";
 import { evaluatePrCreateGate } from "../integrations/githubPullRequestWriteGuards.js";
-import type { GithubPullRequestCreatePlanStore } from "../integrations/githubPullRequestCreatePlanStore.js";
+import {
+  getPullRequestObservedFor,
+  type GithubPullRequestCreatePlanStore,
+} from "../integrations/githubPullRequestCreatePlanStore.js";
 import {
   githubBranchCreateExecuteRequestSchema,
   githubBranchCreatePlanRequestSchema,
@@ -40,6 +43,7 @@ import {
   githubCommentWritePlanRequestSchema,
   githubFileChangeExecuteRequestSchema,
   githubFileChangePlanRequestSchema,
+  githubPullRequestCreateExecuteRequestSchema,
   githubPullRequestCreatePlanRequestSchema,
   type GithubBranchCreateOutcome,
   type GithubBranchCreatePlan,
@@ -145,8 +149,11 @@ const FILE_PLAN_PATH = "/integrations/github/write/file/plan";
 // W3b file change execute — approval-only. armed 없음.
 const FILE_EXECUTE_PATH = "/integrations/github/write/file/execute";
 
-// W4a PR create plan 경로 — plan only. execute(W4b)는 별도 phase.
+// W4a PR create plan 경로 — plan only.
 const PR_PLAN_PATH = "/integrations/github/write/pr/plan";
+
+// W4b PR create execute 경로 — approval-only. MCP execute tool은 추가하지 않음(서버 단독).
+const PR_EXECUTE_PATH = "/integrations/github/write/pr/execute";
 
 /** compare summary의 파일 미리보기 캡 — 응답/트레이스 비대 방지. */
 const PR_COMPARE_FILES_PREVIEW_MAX = 50;
@@ -1057,9 +1064,10 @@ async function handlePrCreatePlan(deps: GithubRouteDependencies): Promise<boolea
     return true;
   }
   const [owner, repo] = gate.repoFullName.split("/") as [string, string];
-  // head ref 존재 확인 — 없으면 PR을 만들 수 없으므로 즉시 차단.
+  // head ref 존재 확인 + sha 관측 — W4b가 plan 이후 변경(force-push 등)을 감지하도록 저장.
+  let headSha: string;
   try {
-    await createClient().getRefSha(owner, repo, gate.headBranch);
+    headSha = await createClient().getRefSha(owner, repo, gate.headBranch);
   } catch (error) {
     if (error instanceof GithubReadonlyError && error.status === 404) {
       respondJson(200, {
@@ -1072,9 +1080,10 @@ async function handlePrCreatePlan(deps: GithubRouteDependencies): Promise<boolea
     respondJson(200, mapped);
     return true;
   }
-  // base ref 존재 확인.
+  // base ref 존재 확인 + sha 관측 — 같은 이유.
+  let baseSha: string;
   try {
-    await createClient().getRefSha(owner, repo, gate.baseBranch);
+    baseSha = await createClient().getRefSha(owner, repo, gate.baseBranch);
   } catch (error) {
     if (error instanceof GithubReadonlyError && error.status === 404) {
       respondJson(200, { outcome: "blocked", message: `base branch '${gate.baseBranch}'이(가) ${gate.repoFullName}에 없습니다` });
@@ -1118,6 +1127,8 @@ async function handlePrCreatePlan(deps: GithubRouteDependencies): Promise<boolea
     repoFullName: gate.repoFullName,
     baseBranch: gate.baseBranch,
     headBranch: gate.headBranch,
+    baseSha,
+    headSha,
     title: gate.title,
     bodyPreview: gate.bodyPreview,
     titleSha256: gate.titleSha256,
@@ -1138,6 +1149,209 @@ async function handlePrCreatePlan(deps: GithubRouteDependencies): Promise<boolea
   };
   prPlanStore.put({ plan, title: gate.title, body: payload.body });
   respondJson(200, { outcome: "planned", plan });
+  return true;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// W4b PR create execute handler — GitHub POST /pulls를 호출하는 유일한 경로.
+// 흐름:
+//   1) zod parse → record 조회 → observedCache(멱등) 검사
+//   2) 1차 무결성: client titleSha256/bodySha256 == plan
+//   3) approval 검증
+//   4) 게이트 재평가(allowlist/base/head/title/body/secret)
+//   5) base/head ref 재GET → plan.baseSha/headSha와 비교(plan 이후 변경 차단)
+//   6) compareBranches 재실행 → aheadBy>0 + changedFiles>0 유지 확인
+//   7) tryClaim 동기 점유
+//   8) createPullRequest 호출, 201만 observed
+//   9) markCreated, 응답
+//
+//   - 422(이미 존재) → already_exists
+//   - 403(권한) → permission_denied(W1/W2와 동일 매핑)
+//   - same-repo only: head는 branch 이름 그대로 보냄(owner:branch fork 형태 미사용)
+// ──────────────────────────────────────────────────────────────────────────────
+
+async function handlePrCreateExecute(deps: GithubRouteDependencies): Promise<boolean> {
+  const { respondJson, createClient, readJsonBody, request, writeRepoAllowlist, prBaseAllowlist, prPlanStore, verifyApproval } = deps;
+  if (!readJsonBody || !request || !prPlanStore) {
+    respondJson(500, { outcome: "github_error", message: "W4b dependencies not wired" });
+    return true;
+  }
+  let payload;
+  try {
+    payload = githubPullRequestCreateExecuteRequestSchema.parse(await readJsonBody(request));
+  } catch (error) {
+    respondJson(400, { outcome: "blocked", message: error instanceof Error ? error.message : "잘못된 execute 요청" });
+    return true;
+  }
+  const record = prPlanStore.get(payload.planId);
+  if (!record) {
+    respondJson(200, { outcome: "blocked", planId: payload.planId, truthStatus: "planned", message: "plan을 찾을 수 없거나 만료됨" });
+    return true;
+  }
+  // 멱등성 — 이미 PR이 생성된 plan이면 같은 결과 반환.
+  const observed = getPullRequestObservedFor(payload.planId);
+  if (observed) {
+    respondJson(200, {
+      outcome: "observed",
+      planId: payload.planId,
+      pullNumber: observed.pullNumber,
+      htmlUrl: observed.htmlUrl,
+      headSha: observed.headSha,
+      observedAt: observed.observedAt,
+      truthStatus: "observed",
+    });
+    return true;
+  }
+  // 1차 무결성: title/body sha가 plan과 일치해야 함.
+  if (payload.titleSha256 !== record.plan.titleSha256) {
+    respondJson(200, {
+      outcome: "blocked", planId: payload.planId, truthStatus: "planned",
+      message: "titleSha256 불일치 — plan과 다른 title을 PR로 만들려고 합니다",
+    });
+    return true;
+  }
+  if (payload.bodySha256 !== record.plan.bodySha256) {
+    respondJson(200, {
+      outcome: "blocked", planId: payload.planId, truthStatus: "planned",
+      message: "bodySha256 불일치 — plan과 다른 body를 PR로 만들려고 합니다",
+    });
+    return true;
+  }
+  // approval — armed 없음.
+  if (!payload.approvalId || !verifyApproval) {
+    respondJson(200, { outcome: "approval_required", planId: payload.planId, truthStatus: "planned", message: "approval이 필요합니다" });
+    return true;
+  }
+  const authorized = await verifyApproval(payload.approvalId);
+  if (!authorized) {
+    respondJson(200, { outcome: "blocked", planId: payload.planId, truthStatus: "planned", message: "approval이 승인되지 않았습니다" });
+    return true;
+  }
+  // 게이트 재평가 — 시간 경과 후 env(allowlist) 변경 대응.
+  const status = createClient().status();
+  const gate = evaluatePrCreateGate({
+    repoFullName: record.plan.repoFullName,
+    baseBranch: record.plan.baseBranch,
+    headBranch: record.plan.headBranch,
+    title: record.title,
+    body: record.body,
+    allowlist: writeRepoAllowlist ?? [],
+    baseAllowlist: prBaseAllowlist ?? [],
+    tokenPresent: status.tokenPresent,
+  });
+  if (gate.kind === "blocked") {
+    respondJson(200, { outcome: "blocked", planId: payload.planId, truthStatus: "planned", message: gate.reason });
+    return true;
+  }
+  const [owner, repo] = record.plan.repoFullName.split("/") as [string, string];
+  // 2차 무결성 — head ref 재GET, plan.headSha와 일치해야 함(force-push 감지).
+  let freshHeadSha: string;
+  try {
+    freshHeadSha = await createClient().getRefSha(owner, repo, record.plan.headBranch);
+  } catch (error) {
+    if (error instanceof GithubReadonlyError && error.status === 404) {
+      respondJson(200, {
+        outcome: "blocked", planId: payload.planId, truthStatus: "planned",
+        message: `head branch '${record.plan.headBranch}'이(가) plan 이후 사라졌습니다`,
+      });
+      return true;
+    }
+    const mapped = prCreateOutcomeForError(error);
+    respondJson(200, { ...mapped, planId: record.plan.id, truthStatus: "planned" });
+    return true;
+  }
+  if (freshHeadSha !== record.plan.headSha) {
+    respondJson(200, {
+      outcome: "blocked", planId: payload.planId, truthStatus: "planned",
+      message: `head branch '${record.plan.headBranch}'의 sha가 plan 시점 이후 변경됐습니다(plan ${record.plan.headSha} → 현재 ${freshHeadSha})`,
+    });
+    return true;
+  }
+  // base ref 재GET, plan.baseSha와 일치해야 함.
+  let freshBaseSha: string;
+  try {
+    freshBaseSha = await createClient().getRefSha(owner, repo, record.plan.baseBranch);
+  } catch (error) {
+    if (error instanceof GithubReadonlyError && error.status === 404) {
+      respondJson(200, {
+        outcome: "blocked", planId: payload.planId, truthStatus: "planned",
+        message: `base branch '${record.plan.baseBranch}'이(가) plan 이후 사라졌습니다`,
+      });
+      return true;
+    }
+    const mapped = prCreateOutcomeForError(error);
+    respondJson(200, { ...mapped, planId: record.plan.id, truthStatus: "planned" });
+    return true;
+  }
+  if (freshBaseSha !== record.plan.baseSha) {
+    respondJson(200, {
+      outcome: "blocked", planId: payload.planId, truthStatus: "planned",
+      message: `base branch '${record.plan.baseBranch}'의 sha가 plan 시점 이후 변경됐습니다(plan ${record.plan.baseSha} → 현재 ${freshBaseSha})`,
+    });
+    return true;
+  }
+  // 3차 무결성 — compare 재실행. aheadBy>0 + changedFiles>0 유지 확인.
+  let freshCompare;
+  try {
+    freshCompare = await createClient().compareBranches(owner, repo, record.plan.baseBranch, record.plan.headBranch);
+  } catch (error) {
+    const mapped = prCreateOutcomeForError(error);
+    respondJson(200, { ...mapped, planId: record.plan.id, truthStatus: "planned" });
+    return true;
+  }
+  if (freshCompare.aheadBy <= 0 || freshCompare.changedFiles <= 0) {
+    respondJson(200, {
+      outcome: "blocked", planId: payload.planId, truthStatus: "planned",
+      message: `execute 시점 compare가 no-op이 됐습니다(aheadBy=${freshCompare.aheadBy}, changedFiles=${freshCompare.changedFiles}) — 다시 plan부터`,
+    });
+    return true;
+  }
+  // 동시 execute 차단 — POST 직전 동기 점유.
+  if (!prPlanStore.tryClaim(record.plan.id)) {
+    respondJson(200, { outcome: "blocked", planId: record.plan.id, truthStatus: "planned", message: "동일 plan이 이미 실행 중입니다" });
+    return true;
+  }
+  try {
+    const result = await createClient().createPullRequest(owner, repo, {
+      title: record.title,
+      body: record.body,
+      base: record.plan.baseBranch,
+      head: record.plan.headBranch, // same-repo: owner:branch 형태 아님.
+    });
+    const observedAt = deps.now?.() ?? new Date().toISOString();
+    prPlanStore.markCreated(record.plan.id, {
+      pullNumber: result.pullNumber,
+      htmlUrl: result.htmlUrl,
+      headSha: result.headSha,
+      observedAt,
+    });
+    respondJson(200, {
+      outcome: "observed",
+      planId: record.plan.id,
+      pullNumber: result.pullNumber,
+      htmlUrl: result.htmlUrl,
+      headSha: result.headSha,
+      observedAt,
+      truthStatus: "observed",
+    });
+  } catch (error) {
+    prPlanStore.release(record.plan.id);
+    if (error instanceof GithubReadonlyError) {
+      // 422: 보통 "A pull request already exists for ..." 같은 케이스.
+      if (error.status === 422) {
+        respondJson(200, {
+          outcome: "already_exists",
+          planId: record.plan.id,
+          truthStatus: "planned",
+          message: "GitHub: 이미 같은 head로 열린 PR이 있거나 처리 불가(422)",
+        });
+        return true;
+      }
+      // 403: outcomeForError가 permission_denied로 매핑 — 그대로 사용.
+    }
+    const mapped = prCreateOutcomeForError(error);
+    respondJson(200, { ...mapped, planId: record.plan.id, truthStatus: "planned" });
+  }
   return true;
 }
 
@@ -1206,13 +1420,21 @@ export async function handleGithubRoute({
     }
     return handleFileChangeExecute(commonDeps);
   }
-  // W4a PR create plan — POST only. execute(W4b)는 별도 phase, 라우트도 추가하지 않는다.
+  // W4a PR create plan — POST only.
   if (pathPrefixOnly === PR_PLAN_PATH) {
     if ((method ?? "GET") !== "POST") {
       respondJson(405, { error: "method_not_allowed", message: "PR create plan은 POST만 허용됩니다" });
       return true;
     }
     return handlePrCreatePlan(commonDeps);
+  }
+  // W4b PR create execute — POST only. MCP execute tool은 의도적으로 추가하지 않음.
+  if (pathPrefixOnly === PR_EXECUTE_PATH) {
+    if ((method ?? "GET") !== "POST") {
+      respondJson(405, { error: "method_not_allowed", message: "PR create execute는 POST만 허용됩니다" });
+      return true;
+    }
+    return handlePrCreateExecute(commonDeps);
   }
   if ((method ?? "GET") !== "GET") {
     // 그 외 read-only 경로는 비-GET 거절(기존 동작 유지).

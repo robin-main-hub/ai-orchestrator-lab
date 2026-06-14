@@ -64,6 +64,9 @@ function clientStub(over: Partial<GithubReadonlyClient> & { token?: string } = {
         changedFiles: 1,
         files: [{ filename: "src/x.ts", status: "modified", additions: 5, deletions: 2 }],
       })),
+    createPullRequest:
+      over.createPullRequest ??
+      (async () => ({ pullNumber: 1, htmlUrl: "u", headSha: "stub-head" })),
   };
 }
 
@@ -279,10 +282,11 @@ describe("W4a PR create plan — 적대적 체크리스트", () => {
   });
 });
 
-describe("W4a — execute route는 추가되지 않았다(plan only)", () => {
-  it("/integrations/github/write/pr/execute로 POST 보내도 plan 핸들러가 받지 않는다(write 라우트 없음)", async () => {
+// W4b 추가 이후: pr/execute 라우트가 W4b 핸들러로 들어간다 — plan 없는 빈 payload는 zod 400 blocked.
+describe("W4a → W4b: pr/execute 경로는 W4b 핸들러가 받는다(빈 payload는 zod 거부)", () => {
+  it("/integrations/github/write/pr/execute로 빈 POST → zod 400 blocked(MCP execute tool은 별도)", async () => {
     const cap = capture();
-    const handled = await handleGithubRoute({
+    await handleGithubRoute({
       pathname: "/integrations/github/write/pr/execute",
       method: "POST",
       createClient: () => clientStub({ token: TOKEN }),
@@ -292,11 +296,7 @@ describe("W4a — execute route는 추가되지 않았다(plan only)", () => {
       writeRepoAllowlist: ALLOW, prBaseAllowlist: BASE_ALLOW,
       verifyApproval: async () => true,
     });
-    // /integrations/github/로 시작해 handleGithubRoute가 받지만, pr/execute라우트는 없음.
-    // → 알 수 없는 path/method는 read-only catch-all로 가서 405(method_not_allowed) 또는 404.
-    // 핵심: PR plan으로 fallback되어 처리되면 안 된다(outcome=planned가 절대 나오면 안 됨).
-    expect(handled).toBe(true);
-    expect([404, 405]).toContain(cap.calls[0]!.status);
-    expect(cap.calls[0]!.payload.outcome).toBeUndefined();
+    expect(cap.calls[0]!.status).toBe(400);
+    expect(cap.calls[0]!.payload.outcome).toBe("blocked");
   });
 });
