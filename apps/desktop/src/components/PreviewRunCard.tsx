@@ -41,12 +41,23 @@ const STATUS_LABEL: Record<string, string> = {
   error: "오류",
 };
 
+/**
+ * observed preview의 마지막 확인 — App.tsx까지 lift해서 ChatSidePanel "미리보기" 탭에
+ * 같은 URL을 임베드한다. preview_not_running / error 분기에서는 절대 호출하지 않는다(가짜 URL 갱신 금지).
+ */
+export type ActivePreviewRef = {
+  missionId: string;
+  url: string;
+  observedAt: string;
+};
+
 export function PreviewRunCard({
   missionId,
   hasScaffoldFiles,
   serverBaseUrl,
   fetchImpl,
   onContextEvent,
+  onPreviewObserved,
 }: {
   missionId: string;
   /** scaffold/latest에서 받은 파일이 있는지(없으면 CTA disabled). */
@@ -54,6 +65,8 @@ export function PreviewRunCard({
   serverBaseUrl?: string | string[];
   fetchImpl?: typeof fetch;
   onContextEvent?: (type: string, payload: Record<string, unknown>) => void;
+  /** observed 분기에서만 호출 — App.tsx의 activePreviewRef state 갱신용. */
+  onPreviewObserved?: (ref: ActivePreviewRef) => void;
 }) {
   const [result, setResult] = useState<ResultState>({ kind: "idle" });
   /** "수정안 만들기"를 한 번 눌렀는지 표시 — 한 번 누르면 "초안 생성 예정" 상태로 잠깐 잠근다.
@@ -92,6 +105,7 @@ export function PreviewRunCard({
 
   const handleResponse = (res: MissionPreviewRunScaffoldResponse) => {
     if (res.outcome === "observed" && res.preview?.url) {
+      const observedAt = new Date().toISOString();
       setResult({
         kind: "observed",
         url: res.preview.url,
@@ -104,7 +118,14 @@ export function PreviewRunCard({
         repoRoot: res.repoRoot,
         fileCount: res.materializedFileCount,
         port: res.preview.port,
-        ts: new Date().toISOString(),
+        ts: observedAt,
+      });
+      // App.tsx까지 lift — ChatSidePanel "미리보기" 탭이 같은 URL을 임베드할 수 있게.
+      // observed 분기에서만 호출. 다른 outcome에서는 절대 갱신하지 않는다(정직성).
+      onPreviewObserved?.({
+        missionId,
+        url: res.preview.url,
+        observedAt,
       });
       return;
     }
