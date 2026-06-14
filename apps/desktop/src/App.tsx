@@ -327,6 +327,8 @@ import { useMemoryController } from "./hooks/useMemoryController";
 import { createAuthBinding, useProviderRegistryController } from "./hooks/useProviderRegistryController";
 import { useWorkItemsController } from "./hooks/useWorkItemsController";
 import { applyAgentProviderAssignment } from "./lib/agentProviderAssignment";
+import { createTurboEditGenerator } from "./lib/turboEditGenerator";
+import { requestCompletion } from "./lib/codingAgentClient";
 import { parseStoredAgentProfiles, parseStoredSelectedAgentId } from "./lib/agentProfilePersistence";
 import { getRestoreFocusSelector, type FocusHistory } from "./lib/focusRestoration";
 import {
@@ -5230,6 +5232,30 @@ export function App() {
                   // TODO(W3a-followup): scaffold plan content fetch + cache가 들어오면
                   //   getScaffoldFiles: (item) => scaffoldFilesByMissionId.get(item.missionId)
                   // 형태로 연결. 그 전까지는 file 필드를 비워두는 것이 정직(추측 금지).
+                  // OSS-H6 — Turbo Edits in-app generator. selectedProvider/selectedModel이
+                  // 둘 다 있을 때만 enable. 없으면 undefined를 반환해 카드가 "provider 미설정"으로 표시.
+                  // 자동 overlay/Preview 0 — generator는 텍스트만 반환한다.
+                  getTurboEditGenerator: (item) => {
+                    const profileId = selectedProvider?.id;
+                    const modelId = selectedModel?.id;
+                    if (!profileId || !modelId) return undefined;
+                    const serverBaseUrl =
+                      resolveDgxServerBaseUrls(undefined)[0] ?? DEFAULT_DGX_SERVER_BASE_URL;
+                    return {
+                      generator: createTurboEditGenerator({
+                        providerProfileId: profileId,
+                        modelId,
+                        missionId: item.missionId,
+                        serverBaseUrl,
+                        requestCompletion: (request, opts) =>
+                          requestCompletion(request, {
+                            serverBaseUrl: opts?.serverBaseUrl ?? serverBaseUrl,
+                            fetchImpl: opts?.fetchImpl,
+                          }),
+                      }),
+                      providerLabel: `${selectedProvider?.name ?? profileId} · ${modelId}`,
+                    };
+                  },
                 },
                 // 미션 워커를 실제 페르소나 + 점유한 Hermes 슬롯으로 구성한다.
                 // 익명 역할 하드코딩 대신 사용자가 키운 캐릭터가 일하게.
