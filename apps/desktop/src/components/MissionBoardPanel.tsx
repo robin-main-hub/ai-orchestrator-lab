@@ -91,6 +91,13 @@ export type MissionPublishEnvironment = {
    * 영속화 없음: 페이지 새로고침 시 빈 상태로 시작(정직성).
    */
   getPublishHistory?: (item: MissionBoardItem) => PublishHistoryByStep | undefined;
+  /**
+   * Publish Panel prefill을 새 scaffold로 갱신하고 싶을 때 호출한다.
+   *   - missionId 별 scaffold 캐시를 무효화 → useEffect가 fetchMissionScaffoldLatest 재호출.
+   *   - GitHub write 호출 없음. Mission/file 자동 실행 없음.
+   *   - 사용자가 "수정안으로 스캐폴드 다시 생성"을 누른 직후 같은 mission의 prefill을 갱신할 때 사용.
+   */
+  refreshScaffold?: (missionId: string) => void;
 };
 
 export function MissionBoardPanel({
