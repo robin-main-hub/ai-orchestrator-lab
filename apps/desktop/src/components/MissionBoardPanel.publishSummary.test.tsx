@@ -63,20 +63,20 @@ function envWithHistory(history?: PublishHistoryByStep): MissionPublishEnvironme
 }
 
 describe("MissionBoardPanel — PublishFlowSummary", () => {
-  it("(#1) getPublishHistory 미배선 → 요약 섹션 미노출", () => {
+  it("(#1) publishEnvironment 자체가 미배선 → 요약 섹션 미노출", () => {
     render(
       <MissionBoardPanel
         snapshot={snapshotOf([itemWithWorkspace()])}
         onRefresh={() => {}}
         expandedMissionId="mission_summary_1"
         onToggleDetail={() => {}}
-        publishEnvironment={envWithHistory(undefined)}
+        publishEnvironment={undefined}
       />,
     );
     expect(screen.queryByTestId("mission-workspace-publish-summary")).toBeNull();
   });
 
-  it("(#2) getPublishHistory가 빈 객체를 반환 → 요약 섹션 미노출", () => {
+  it("(#2) publishEnvironment는 있지만 history 없음 → 단계 행은 미노출, 'start_step branch' CTA만 노출", () => {
     render(
       <MissionBoardPanel
         snapshot={snapshotOf([itemWithWorkspace()])}
@@ -86,7 +86,15 @@ describe("MissionBoardPanel — PublishFlowSummary", () => {
         publishEnvironment={envWithHistory({})}
       />,
     );
-    expect(screen.queryByTestId("mission-workspace-publish-summary")).toBeNull();
+    // 섹션 자체는 노출(다음 할 일 CTA 때문)
+    const section = screen.getByTestId("mission-workspace-publish-summary");
+    // 단계 행은 그리지 않음(빈 공간 방지)
+    expect(within(section).queryByTestId("mission-publish-row-branch")).toBeNull();
+    // CTA는 첫 단계(branch start)를 가리킨다
+    const cta = within(section).getByTestId("mission-workspace-publish-next");
+    expect(cta.getAttribute("data-kind")).toBe("start_step");
+    expect(cta.getAttribute("data-step")).toBe("branch");
+    expect(cta.textContent).toContain("브랜치 준비");
   });
 
   it("(#3) branch만 있는 history → 섹션 노출, branch 행에 planned, file/pr은 '아직 진행 없음'", () => {

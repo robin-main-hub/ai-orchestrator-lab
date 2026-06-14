@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { accumulatePublishHistory, parsePublishTrace } from "./missionPublishPrefill";
+import { accumulatePublishHistory, computeNextPublishStep, parsePublishTrace } from "./missionPublishPrefill";
+import type { PublishHistoryByStep } from "./missionPublishPrefill";
 
 describe("parsePublishTrace — github.publish.{step}.{status} → PublishHistoryEntry", () => {
   it("정상: branch.planned → step/status 추출", () => {
@@ -135,5 +136,119 @@ describe("accumulatePublishHistory — github.publish.* trace 누적 규칙", ()
     const prev = {};
     const next = accumulatePublishHistory(prev, "github.publish.branch.planned", null);
     expect(next).toBe(prev);
+  });
+});
+
+describe("computeNextPublishStep — 'GitHub PR 완주' 다음 할 일 결정", () => {
+  const T = "2026-06-14T12:00:00.000Z";
+
+  it("(#1) history undefined → 첫 단계(branch) start_step", () => {
+    const r = computeNextPublishStep(undefined);
+    expect(r.kind).toBe("start_step");
+    if (r.kind !== "start_step") throw new Error("unreachable");
+    expect(r.step).toBe("branch");
+    expect(r.label).toBe("브랜치 준비");
+  });
+
+  it("(#2) 빈 객체 → branch start_step", () => {
+    const r = computeNextPublishStep({});
+    expect(r.kind).toBe("start_step");
+    if (r.kind !== "start_step") throw new Error("unreachable");
+    expect(r.step).toBe("branch");
+  });
+
+  it("(#3) branch planned → branch continue_step(execute 준비)", () => {
+    const h: PublishHistoryByStep = { branch: { step: "branch", status: "planned", summary: "agent/x", ts: T } };
+    const r = computeNextPublishStep(h);
+    expect(r.kind).toBe("continue_step");
+    if (r.kind !== "continue_step") throw new Error("unreachable");
+    expect(r.step).toBe("branch");
+    expect(r.label).toBe("브랜치 실행 준비됨");
+  });
+
+  it("(#4) branch observed → file start_step(다음 단계로 이동)", () => {
+    const h: PublishHistoryByStep = { branch: { step: "branch", status: "observed", summary: "agent/x@abc", ts: T } };
+    const r = computeNextPublishStep(h);
+    expect(r.kind).toBe("start_step");
+    if (r.kind !== "start_step") throw new Error("unreachable");
+    expect(r.step).toBe("file");
+  });
+
+  it("(#5) branch observed + file blocked → file retry_step(절대 PR로 추측 X)", () => {
+    const h: PublishHistoryByStep = {
+      branch: { step: "branch", status: "observed", summary: "ok", ts: T },
+      file: { step: "file", status: "blocked", summary: "needs approval", ts: T },
+    };
+    const r = computeNextPublishStep(h);
+    expect(r.kind).toBe("retry_step");
+    if (r.kind !== "retry_step") throw new Error("unreachable");
+    expect(r.step).toBe("file");
+    expect(r.reason).toBe("needs approval");
+  });
+
+  it("(#6) branch observed + file already_exists → pr start_step", () => {
+    const h: PublishHistoryByStep = {
+      branch: { step: "branch", status: "observed", summary: "", ts: T },
+      file: { step: "file", status: "already_exists", summary: "", ts: T },
+    };
+    const r = computeNextPublishStep(h);
+    expect(r.kind).toBe("start_step");
+    if (r.kind !== "start_step") throw new Error("unreachable");
+    expect(r.step).toBe("pr");
+  });
+
+  it("(#7) 모두 observed → done", () => {
+    const h: PublishHistoryByStep = {
+      branch: { step: "branch", status: "observed", summary: "", ts: T },
+      file: { step: "file", status: "observed", summary: "", ts: T },
+      pr: { step: "pr", status: "observed", summary: "", ts: T },
+    };
+    const r = computeNextPublishStep(h);
+    expect(r.kind).toBe("done");
+    expect(r.label).toBe("GitHub PR 완주됨");
+  });
+
+  it("(#8) branch failed(첫 단계 실패) → branch retry_step + reason 전달", () => {
+    const h: PublishHistoryByStep = {
+      branch: { step: "branch", status: "failed", summary: "rate limited", ts: T },
+    };
+    const r = computeNextPublishStep(h);
+    expect(r.kind).toBe("retry_step");
+    if (r.kind !== "retry_step") throw new Error("unreachable");
+    expect(r.step).toBe("branch");
+    expect(r.reason).toBe("rate limited");
+  });
+
+  it("(#9) branch approval_required → continue_step(같은 step)", () => {
+    const h: PublishHistoryByStep = {
+      branch: { step: "branch", status: "approval_required", summary: "appr 필요", ts: T },
+    };
+    const r = computeNextPublishStep(h);
+    expect(r.kind).toBe("continue_step");
+    if (r.kind !== "continue_step") throw new Error("unreachable");
+    expect(r.step).toBe("branch");
+  });
+
+  it("(#10) PR observed지만 file blocked → file retry(PR observed 무시하지 않음 → 정직하게 막힌 단계 표시)", () => {
+    // 비상식적 상태(PR이 file 전에 observed)지만, 단계 순서 가드 정직성 — file로 retry 안내.
+    const h: PublishHistoryByStep = {
+      branch: { step: "branch", status: "observed", summary: "", ts: T },
+      file: { step: "file", status: "blocked", summary: "stuck", ts: T },
+      pr: { step: "pr", status: "observed", summary: "url", ts: T },
+    };
+    const r = computeNextPublishStep(h);
+    expect(r.kind).toBe("retry_step");
+    if (r.kind !== "retry_step") throw new Error("unreachable");
+    expect(r.step).toBe("file");
+  });
+
+  it("(#11) blocked 단계의 reason이 비어 있으면 status 문자열로 fallback(거짓말 없음)", () => {
+    const h: PublishHistoryByStep = {
+      branch: { step: "branch", status: "blocked", summary: "", ts: T },
+    };
+    const r = computeNextPublishStep(h);
+    expect(r.kind).toBe("retry_step");
+    if (r.kind !== "retry_step") throw new Error("unreachable");
+    expect(r.reason).toBe("blocked");
   });
 });
