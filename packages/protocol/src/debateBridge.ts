@@ -112,6 +112,55 @@ export function deriveBlueprintDebateReview(
 }
 
 /**
+ * Blueprint Revision Draft — review를 baseline blueprint에 적용한 수정안 초안(순수).
+ *
+ * 정직성:
+ *   - 모델 출력 기반이므로 truthStatus는 "planned"(observed 아님 — 아직 사용자 적용 전 draft).
+ *   - 자동 적용 절대 없음 — 호출자가 "수정안 적용" 클릭 시점에 사용한다.
+ *   - baseline이 없으면 review 정보만으로 부분 draft(title은 review.blueprintTitle 사용).
+ *   - blueprintDelta는 baseline.acceptanceCriteria에 없던 채택 결정만(중복 제거).
+ *   - risks는 "미해결: <q>" 형태로 acceptanceCriteria에 추가(사용자가 추후 처리).
+ *   - acceptanceCriteria 최대 64개로 잘림(기존 schema 한도와 동일).
+ *
+ * 사용자 UX:
+ *   - 부모 컴포넌트가 review를 받아 buildBlueprintRevisionDraft(review, baseline?)으로 draft 생성.
+ *   - 화면에 added/risks를 보여주고, 사용자가 "적용" 누를 때만 baseline 자리에 overwrite.
+ */
+export type BlueprintRevisionDraft = {
+  /** 적용 시 사용할 새 title(없으면 review.blueprintTitle). */
+  title: string;
+  /** 적용 시 새 acceptanceCriteria 전체(baseline + addedCriteria + riskNotes, 64개 제한). */
+  acceptanceCriteria: ReadonlyArray<string>;
+  /** UI에 'baseline에 없던 새 결정' 시각화용. */
+  addedCriteria: ReadonlyArray<string>;
+  /** UI에 '미해결 위험' 시각화용("미해결: ..." prefix 포함). */
+  riskNotes: ReadonlyArray<string>;
+  /** 추측 금지: 변경 사항이 0이면 noop=true(UI는 "수정안 없음" 안내). */
+  noop: boolean;
+  truthStatus: "planned";
+};
+
+export function buildBlueprintRevisionDraft(
+  review: BlueprintDebateReview,
+  baseline?: Pick<DesignBlueprintInput, "title" | "acceptanceCriteria">,
+): BlueprintRevisionDraft {
+  const base = baseline?.acceptanceCriteria ?? [];
+  const baseSet = new Set(base.map((c) => c.trim().toLowerCase()));
+  const addedCriteria = review.blueprintDelta.filter((d) => !baseSet.has(d.trim().toLowerCase()));
+  const riskNotes = review.risks.map((r) => `미해결: ${r}`);
+  const acceptanceCriteria = [...base, ...addedCriteria, ...riskNotes].slice(0, 64);
+  const noop = addedCriteria.length === 0 && riskNotes.length === 0;
+  return {
+    title: baseline?.title ?? review.blueprintTitle,
+    acceptanceCriteria,
+    addedCriteria,
+    riskNotes,
+    noop,
+    truthStatus: "planned",
+  };
+}
+
+/**
  * 토론 결정 패킷 → DesignBlueprint 입력(순수). adoptedDecisions가 없으면 null(승격 불가).
  * 토론 출력은 고수준이라 화면은 **초안 1개**로 합성된다(이후 디자인 미션에서 구체화).
  */

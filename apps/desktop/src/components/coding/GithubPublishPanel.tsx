@@ -77,6 +77,8 @@ type TraceEvent = {
     | "failed";
   /** 짧은 사람용 텍스트 — 토큰/헤더/긴 본문은 절대 들어오지 않게 호출부에서 가공한다. */
   summary: string;
+  /** observed 단계에 한해 GitHub HTML URL(branch/file blob/PR 페이지). https://github.com/ prefix만 신뢰됨. */
+  htmlUrl?: string;
 };
 
 /**
@@ -246,6 +248,7 @@ export function GithubPublishPanel({
         status: event.event,
         summary: event.summary,
         ts: event.ts,
+        ...(event.htmlUrl ? { htmlUrl: event.htmlUrl } : {}),
       });
     },
     [onContextEvent],
@@ -306,7 +309,7 @@ export function GithubPublishPanel({
           observed: { ref: res.ref!, sha: res.sha!, htmlUrl: res.htmlUrl ?? "" },
           message: undefined,
         }));
-        emit({ ts: isoNow(), step: "branch", event: "observed", summary: `${res.ref}@${res.sha.slice(0, 7)}` });
+        emit({ ts: isoNow(), step: "branch", event: "observed", summary: `${res.ref}@${res.sha.slice(0, 7)}`, htmlUrl: res.htmlUrl });
       } else {
         setBranch((prev) => ({ ...prev, status, message: res.message }));
         emit({ ts: isoNow(), step: "branch", event: status === "already_exists" ? "already_exists" : status === "blocked" ? "blocked" : "failed", summary: res.message ?? res.outcome });
@@ -394,7 +397,7 @@ export function GithubPublishPanel({
           observed: { commitSha: res.commitSha!, blobSha: res.blobSha!, htmlUrl: res.htmlUrl ?? "" },
           message: undefined,
         }));
-        emit({ ts: isoNow(), step: "file", event: "observed", summary: `commit ${res.commitSha.slice(0, 7)}` });
+        emit({ ts: isoNow(), step: "file", event: "observed", summary: `commit ${res.commitSha.slice(0, 7)}`, htmlUrl: res.htmlUrl });
       } else {
         setFile((prev) => ({ ...prev, status, message: res.message }));
         emit({ ts: isoNow(), step: "file", event: status === "already_exists" ? "already_exists" : status === "blocked" ? "blocked" : "failed", summary: res.message ?? res.outcome });
@@ -470,7 +473,7 @@ export function GithubPublishPanel({
           observed: { pullNumber: res.pullNumber!, htmlUrl: res.htmlUrl ?? "", headSha: res.headSha ?? "" },
           message: undefined,
         }));
-        emit({ ts: isoNow(), step: "pr", event: "observed", summary: `PR #${res.pullNumber}` });
+        emit({ ts: isoNow(), step: "pr", event: "observed", summary: `PR #${res.pullNumber}`, htmlUrl: res.htmlUrl });
       } else {
         setPr((prev) => ({ ...prev, status, message: res.message }));
         emit({ ts: isoNow(), step: "pr", event: status === "already_exists" ? "already_exists" : status === "blocked" ? "blocked" : "failed", summary: res.message ?? res.outcome });
