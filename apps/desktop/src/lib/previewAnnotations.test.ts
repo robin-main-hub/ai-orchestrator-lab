@@ -13,6 +13,7 @@ function ann(over: Partial<PreviewAnnotation> = {}): PreviewAnnotation {
     description: over.description ?? "헤더 텍스트가 작다",
     positionHint: over.positionHint,
     targetFile: over.targetFile,
+    coords: over.coords,
     createdAt: over.createdAt ?? "2026-06-15T00:00:00Z",
   });
 }
@@ -111,5 +112,51 @@ describe("annotationsToTurboEditIssues", () => {
   it("(I6) targetFile 없어도 recommendation에 '추측 금지' 문구는 들어간다", () => {
     const issues = annotationsToTurboEditIssues([ann({ id: "a1" })]);
     expect(issues[0]!.recommendation).toContain("블록 만들지");
+  });
+
+  it("(I7 — H7) coords만 있음 → summary에 '좌표 X% / Y%' 표시", () => {
+    const issues = annotationsToTurboEditIssues([
+      ann({ id: "a1", description: "글씨 작다", coords: { xPct: 23.4, yPct: 14.1 } }),
+    ]);
+    expect(issues[0]!.summary).toBe("[좌표 23.4% / 14.1%] 글씨 작다");
+  });
+
+  it("(I8 — H7) positionHint와 coords 동시 → 둘 다 prefix(·로 구분)", () => {
+    const issues = annotationsToTurboEditIssues([
+      ann({
+        id: "a1",
+        description: "primary action 약함",
+        positionHint: "헤더 오른쪽",
+        coords: { xPct: 80, yPct: 5 },
+      }),
+    ]);
+    expect(issues[0]!.summary).toBe("[헤더 오른쪽 · 좌표 80% / 5%] primary action 약함");
+  });
+});
+
+describe("makeAnnotation — coords (H7)", () => {
+  it("(C1) coords 범위 밖 → 0~100으로 clamp + 소수점 1자리로 반올림", () => {
+    const a = makeAnnotation({
+      id: "x",
+      description: "d",
+      coords: { xPct: -5, yPct: 123.456 },
+      createdAt: "t",
+    });
+    expect(a.coords).toEqual({ xPct: 0, yPct: 100 });
+  });
+
+  it("(C2) coords 정상값은 1자리로 반올림 보존", () => {
+    const a = makeAnnotation({
+      id: "x",
+      description: "d",
+      coords: { xPct: 23.456, yPct: 14.12 },
+      createdAt: "t",
+    });
+    expect(a.coords).toEqual({ xPct: 23.5, yPct: 14.1 });
+  });
+
+  it("(C3) coords 미제공 → undefined 보존(가짜 0,0 생성 X)", () => {
+    const a = makeAnnotation({ id: "x", description: "d", createdAt: "t" });
+    expect(a.coords).toBeUndefined();
   });
 });
