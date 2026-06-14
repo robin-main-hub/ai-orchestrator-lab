@@ -271,8 +271,12 @@ export const missionScaffoldLatestSafeFileSchema = z.object({
   path: z.string(),
   /** UTF-8 텍스트 — bounded(서버 가드 통과분만). 추측 금지: scaffoldForTemplate 재생성 결과 그대로. */
   content: z.string(),
-  /** 어떤 출처에서 왔는지 표시 — 사용자가 "정말 plan에서 온 거구나"를 알 수 있게. */
-  source: z.enum(["scaffold_plan"]),
+  /**
+   * 어떤 출처에서 왔는지 표시 — 사용자가 "정말 plan에서 온 거구나"를 알 수 있게.
+   *  - scaffold_plan: blueprint→scaffoldForTemplate 결정적 재생성.
+   *  - scaffold_overlay: 사용자 확정 patch가 base를 덮어쓴 결과(AppFix 적용 등).
+   */
+  source: z.enum(["scaffold_plan", "scaffold_overlay"]),
   /** 해당 scaffold plan record의 createdAt(plan 시점 — observed 시점이 아님). */
   createdAt: z.string(),
 });
@@ -313,3 +317,62 @@ export const missionScaffoldLatestResponseSchema = z.object({
   message: z.string().optional(),
 });
 export type MissionScaffoldLatestResponse = z.infer<typeof missionScaffoldLatestResponseSchema>;
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Scaffold Overlay — Visual QA의 AppFix patch처럼 사용자가 확정한 파일 단위 덮어쓰기.
+// 정직성:
+//   - overlay는 base scaffoldForTemplate 출력 위에 path 단위로 덮어쓴다(merge가 아니라 replace).
+//   - overlay 적용은 사용자가 명시 클릭한 경우만(자동 X). source는 trace에서 출처를 구분.
+//   - 가드(binary/too_large/secret_suspect)는 overlay 파일에도 동일 적용 — overlay라고 면제 X.
+//   - overlay에 path가 들어 있으면 같은 path의 base는 응답에서 사라지고 overlay가 보인다.
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const scaffoldOverlayFileSchema = z.object({
+  path: z.string().min(1).max(512),
+  /** 새 파일 content(UTF-8). 가드는 latestResponse 빌더에서 다시 본다. */
+  content: z.string().max(256 * 1024),
+});
+export type ScaffoldOverlayFile = z.infer<typeof scaffoldOverlayFileSchema>;
+
+export const scaffoldOverlaySourceSchema = z.enum([
+  /** Visual QA의 AppFix 초안에서 사용자가 적용 클릭. */
+  "appfix",
+  /** 그 외 사용자 직접 입력(향후 확장). */
+  "manual",
+]);
+export type ScaffoldOverlaySource = z.infer<typeof scaffoldOverlaySourceSchema>;
+
+export const scaffoldOverlaySchema = z.object({
+  id: z.string(),
+  missionId: z.string(),
+  source: scaffoldOverlaySourceSchema,
+  files: z.array(scaffoldOverlayFileSchema).min(1).max(32),
+  /** Visual QA report id 또는 사람용 사유. trace/감사용. */
+  evidenceRef: z.string().optional(),
+  truthStatus: truthStatusSchema,
+  createdAt: z.string(),
+});
+export type ScaffoldOverlay = z.infer<typeof scaffoldOverlaySchema>;
+
+export const missionScaffoldOverlayRecordedPayloadSchema = z.object({
+  missionId: z.string(),
+  overlay: scaffoldOverlaySchema,
+});
+export type MissionScaffoldOverlayRecordedPayload = z.infer<typeof missionScaffoldOverlayRecordedPayloadSchema>;
+
+export const missionScaffoldOverlayRequestSchema = z.object({
+  source: scaffoldOverlaySourceSchema.default("appfix"),
+  files: z.array(scaffoldOverlayFileSchema).min(1).max(32),
+  evidenceRef: z.string().max(256).optional(),
+});
+export type MissionScaffoldOverlayRequest = z.infer<typeof missionScaffoldOverlayRequestSchema>;
+
+export const missionScaffoldOverlayResponseSchema = z.object({
+  /** 성공 시 overlay record. 실패 시 reason. */
+  outcome: z.enum(["recorded", "blocked", "mission_not_found"]),
+  overlay: scaffoldOverlaySchema.optional(),
+  /** 가드에 걸린 파일 목록(있을 때만). */
+  skipped: z.array(missionScaffoldLatestSkippedSchema).optional(),
+  message: z.string().optional(),
+});
+export type MissionScaffoldOverlayResponse = z.infer<typeof missionScaffoldOverlayResponseSchema>;

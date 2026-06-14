@@ -1,15 +1,18 @@
-import { useState } from "react";
-import { Eye, AlertTriangle, FileEdit, Sparkles } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Eye, AlertTriangle, FileEdit, Sparkles, Check, RefreshCw } from "lucide-react";
 import type {
   DesignIssueCard,
   DesignIssueKind,
+  MissionScaffoldLatestSafeFile,
   VisualQaReport,
 } from "@ai-orchestrator/protocol";
-import { runDgxVisualQa } from "../runtime/stage47MissionServer";
+import { postDgxMissionScaffoldOverlay, runDgxVisualQa } from "../runtime/stage47MissionServer";
 import {
   buildAppFixDraftFromVisualQa,
+  buildAppFixPatches,
   DESIGN_ISSUE_KIND_LABEL,
   type AppFixDraft,
+  type AppFixPatch,
 } from "../lib/appFixDraft";
 import type { MissionVisualQaSummary } from "../lib/missionBoardModel";
 
@@ -59,9 +62,11 @@ export function VisualQaCard({
   workspaceId,
   previewUrl,
   latestSummary,
+  currentScaffoldFiles,
   serverBaseUrl,
   fetchImpl,
   onContextEvent,
+  onRefreshScaffold,
 }: {
   missionId: string;
   workspaceId?: string;
@@ -69,15 +74,47 @@ export function VisualQaCard({
   previewUrl?: string;
   /** 보드에 이미 기록된 직전 Visual QA 요약(서버 사이드). 없으면 첫 실행 전 상태. */
   latestSummary?: MissionVisualQaSummary;
+  /** scaffold/latest로 받은 현재 파일들 — AppFix patch 미리보기 계산에 사용. */
+  currentScaffoldFiles?: ReadonlyArray<Pick<MissionScaffoldLatestSafeFile, "path" | "content">>;
   serverBaseUrl?: string | string[];
   fetchImpl?: typeof fetch;
   onContextEvent?: (type: string, payload: Record<string, unknown>) => void;
+  /** overlay 적용 후 scaffold/latest 캐시를 무효화시킬 콜백(있으면 호출). */
+  onRefreshScaffold?: (missionId: string) => void;
 }) {
   const [run, setRun] = useState<RunState>({ kind: "idle" });
   /** 사용자가 "수정안 초안 만들기"를 눌렀는지(한 번 누르면 trace + 패널 열림). */
   const [draft, setDraft] = useState<AppFixDraft | undefined>(undefined);
+  /** 사용자가 파일별로 적용 포함/제외할 선택 — 기본은 patch.applied=true인 파일만 on. */
+  const [includeByFile, setIncludeByFile] = useState<Record<string, boolean>>({});
+  type ApplyState =
+    | { kind: "idle" }
+    | { kind: "running" }
+    | { kind: "recorded"; appliedPaths: string[] }
+    | { kind: "error"; message: string };
+  const [applyState, setApplyState] = useState<ApplyState>({ kind: "idle" });
   const busy = run.kind === "running";
   const canRun = !!previewUrl && !!workspaceId && !busy;
+
+  /** draft + current files → patches. memo로 캐시. */
+  const patches: AppFixPatch[] = useMemo(() => {
+    if (!draft || draft.status !== "has_fixes") return [];
+    return buildAppFixPatches(draft, currentScaffoldFiles ?? []);
+  }, [draft, currentScaffoldFiles]);
+
+  /** 사용자가 처음 draft를 만든 직후 패치 가능한 파일만 자동 선택. */
+  const ensureDefaultSelection = (next: AppFixPatch[]) => {
+    setIncludeByFile((prev) => {
+      const merged = { ...prev };
+      for (const p of next) {
+        if (!(p.file in merged)) merged[p.file] = p.applied;
+      }
+      return merged;
+    });
+  };
+
+  const includedCount = patches.filter((p) => includeByFile[p.file] && p.applied).length;
+  const canApply = applyState.kind === "idle" && includedCount > 0 && !!workspaceId;
 
   const onRunQa = async () => {
     if (!canRun) return;
@@ -122,6 +159,10 @@ export function VisualQaCard({
     if (run.kind !== "report") return;
     const fix = buildAppFixDraftFromVisualQa(run.report);
     setDraft(fix);
+    setApplyState({ kind: "idle" });
+    // 초기 선택을 즉시 계산 — useEffect를 안 쓰는 이유는 patch 계산이 useMemo로 동기이기 때문.
+    const nextPatches = fix.status === "has_fixes" ? buildAppFixPatches(fix, currentScaffoldFiles ?? []) : [];
+    ensureDefaultSelection(nextPatches);
     onContextEvent?.("mission.visual_qa.revision_draft.requested", {
       missionId,
       workspaceId,
@@ -131,6 +172,56 @@ export function VisualQaCard({
       unmappedIssues: fix.counts.unmappedIssues,
       ts: new Date().toISOString(),
     });
+  };
+
+  const onToggleInclude = (file: string) => {
+    setIncludeByFile((prev) => ({ ...prev, [file]: !prev[file] }));
+  };
+
+  /** 사용자 명시 클릭으로만 호출 — scaffold overlay POST. 자동 적용 X. */
+  const onApplySelected = async () => {
+    if (!canApply) return;
+    const selected = patches.filter((p) => includeByFile[p.file] && p.applied);
+    if (selected.length === 0) return;
+    setApplyState({ kind: "running" });
+    onContextEvent?.("appfix.patch.requested", {
+      missionId,
+      workspaceId,
+      fileCount: selected.length,
+      paths: selected.map((p) => p.file),
+      ts: new Date().toISOString(),
+    });
+    try {
+      const res = await postDgxMissionScaffoldOverlay({
+        missionId,
+        request: {
+          source: "appfix",
+          files: selected.map((p) => ({ path: p.file, content: p.newContent })),
+          evidenceRef: run.kind === "report" ? run.report.id : undefined,
+        },
+        serverBaseUrl,
+        fetchImpl,
+      });
+      if (res.outcome === "recorded") {
+        const appliedPaths = selected.map((p) => p.file);
+        setApplyState({ kind: "recorded", appliedPaths });
+        onContextEvent?.("appfix.patch.applied", {
+          missionId,
+          workspaceId,
+          fileCount: appliedPaths.length,
+          paths: appliedPaths,
+          overlayId: res.overlay?.id,
+          ts: new Date().toISOString(),
+        });
+        // scaffold/latest 캐시 invalidate(있을 때만 — 자동 실행 X).
+        onRefreshScaffold?.(missionId);
+      } else {
+        setApplyState({ kind: "error", message: res.message ?? res.outcome });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "unknown";
+      setApplyState({ kind: "error", message });
+    }
   };
 
   const report = run.kind === "report" ? run.report : undefined;
@@ -289,6 +380,93 @@ export function VisualQaCard({
                   </li>
                 ))}
               </ul>
+            </div>
+          ) : null}
+
+          {/* Patch preview + 적용 CTA — 결정적 규칙으로 만든 patch만 보여주고, 사용자가 파일별로 선택. */}
+          {patches.length > 0 ? (
+            <div className="visual-qa__patch" data-testid={`visual-qa-patch-${missionId}`}>
+              <div className="visual-qa__patch-head">
+                <FileEdit size={12} /> <strong>파일별 수정 patch 미리보기</strong>
+                <span className="visual-qa__patch-summary">
+                  {patches.filter((p) => p.applied).length}/{patches.length}개 자동 적용 가능 · 선택 {includedCount}
+                </span>
+              </div>
+              <ul className="visual-qa__patch-files">
+                {patches.map((p) => {
+                  const id = `visual-qa-patch-${missionId}-${p.file}`;
+                  const isChecked = !!includeByFile[p.file] && p.applied;
+                  return (
+                    <li key={p.file} data-testid={id} data-applied={p.applied ? "true" : "false"}>
+                      <label className="visual-qa__patch-label">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={!p.applied || applyState.kind === "running" || applyState.kind === "recorded"}
+                          onChange={() => onToggleInclude(p.file)}
+                          data-testid={`${id}-include`}
+                          aria-label={`include patch for ${p.file}`}
+                        />
+                        <code>{p.file}</code>
+                        <span className="visual-qa__patch-kinds">
+                          {p.kindHints.map((k) => DESIGN_ISSUE_KIND_LABEL[k] ?? k).join(" · ")}
+                        </span>
+                        <span className={p.applied ? "visual-qa__patch-note visual-qa__patch-note--ok" : "visual-qa__patch-note visual-qa__patch-note--skip"}>
+                          {p.applied ? p.note : `미적용 — ${p.note}`}
+                        </span>
+                      </label>
+                      {p.applied ? (
+                        <details className="visual-qa__patch-diff" data-testid={`${id}-diff`}>
+                          <summary>변경 요약 보기</summary>
+                          <p className="visual-qa__patch-rule-summary">{p.note}</p>
+                          <p className="visual-qa__patch-size">
+                            크기: {p.oldContent.length} → {p.newContent.length} chars
+                          </p>
+                        </details>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="visual-qa__patch-actions">
+                <button
+                  type="button"
+                  onClick={onApplySelected}
+                  disabled={!canApply}
+                  data-testid={`visual-qa-patch-apply-${missionId}`}
+                  className={canApply ? "visual-qa__patch-apply" : "visual-qa__patch-apply visual-qa__patch-apply--disabled"}
+                  title={
+                    applyState.kind === "recorded"
+                      ? "이미 적용됨 — Preview를 다시 실행해 결과를 확인하세요."
+                      : applyState.kind === "running"
+                        ? "적용 중…"
+                        : includedCount === 0
+                          ? "선택된 파일이 없습니다."
+                          : `선택한 ${includedCount}개 파일을 scaffold overlay로 저장합니다 (GitHub 전송 X, 자동 PR X).`
+                  }
+                >
+                  {applyState.kind === "running"
+                    ? "적용 중…"
+                    : applyState.kind === "recorded"
+                      ? "수정안 적용됨"
+                      : `선택한 ${includedCount}개 수정 적용`}
+                </button>
+                {applyState.kind === "recorded" ? (
+                  <span className="visual-qa__patch-applied" data-testid={`visual-qa-patch-applied-${missionId}`}>
+                    <Check size={12} /> 수정안 적용됨 · preview 재실행 필요 ({applyState.appliedPaths.length}개 파일)
+                  </span>
+                ) : null}
+                {applyState.kind === "recorded" ? (
+                  <span className="visual-qa__patch-rerun-hint" data-testid={`visual-qa-patch-rerun-hint-${missionId}`}>
+                    <RefreshCw size={12} /> Mission Workspace의 "Preview 실행"을 다시 눌러 변경을 확인하세요.
+                  </span>
+                ) : null}
+                {applyState.kind === "error" ? (
+                  <span className="visual-qa__patch-error" data-testid={`visual-qa-patch-error-${missionId}`}>
+                    적용 실패 — {applyState.message}
+                  </span>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </div>
