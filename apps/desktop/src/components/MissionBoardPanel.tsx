@@ -29,6 +29,8 @@ import { AppBuildProgressRail } from "./AppBuildProgressRail";
 import { MissionWorkspaceSummary } from "./MissionWorkspaceSummary";
 import { GeneratedFilesPanel } from "./GeneratedFilesPanel";
 import { SearchReplaceEditCard } from "./SearchReplaceEditCard";
+import { TurboEditDraftCard } from "./TurboEditDraftCard";
+import { buildAppFixDraftFromVisualQa } from "../lib/appFixDraft";
 import { postDgxMissionScaffoldOverlay } from "../runtime/stage47MissionServer";
 import type { VisualQaReport } from "@ai-orchestrator/protocol";
 import type { VisualQaDiff } from "../lib/visualQaDiff";
@@ -502,6 +504,15 @@ function MissionWorkspaceDetail({
     : scaffoldEval.safeCount > 0
       ? "ready"
       : "blocked";
+
+  // Turbo Edits → SearchReplaceEditCard 다리. text 상태를 부모가 들고 있다가
+  // Turbo Edits Draft가 "초안으로 보내기" 클릭 시 textarea에 주입.
+  const [searchReplaceText, setSearchReplaceText] = useState("");
+  // AppFixDraft는 latestQaReport에서 결정적으로 빌드(추가 호출 0).
+  const appFixDraftForTurbo = useMemo(
+    () => (latestQaReport ? buildAppFixDraftFromVisualQa(latestQaReport) : undefined),
+    [latestQaReport],
+  );
   return (
     <div className="mission-workspace-detail">
       {/* AppWorkspace + preview (D2/D4/D5a) */}
@@ -572,11 +583,27 @@ function MissionWorkspaceDetail({
         files={publishEnvironment?.getScaffoldFiles?.(item)}
       />
 
+      {/* Turbo Edits Draft (OSS-H5) — LLM이 SEARCH/REPLACE 블록을 만들도록 prompt를 빌드.
+          LLM 호출은 사용자가 외부에서 — 응답 paste → validate → SearchReplaceEditCard로 주입. */}
+      <TurboEditDraftCard
+        missionId={item.missionId}
+        appName={item.title}
+        files={publishEnvironment?.getScaffoldFiles?.(item)}
+        appFixDraft={appFixDraftForTurbo}
+        onSendDraft={setSearchReplaceText}
+        onContextEvent={(type, payload) =>
+          publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
+        }
+      />
+
       {/* Search/Replace Edit (OSS-H4) — Aider 스타일 좁은 편집을 그대로 ScaffoldOverlay로.
-          자동 실행 0: 사용자가 Apply 클릭한 경우에만 scaffold/overlay POST. */}
+          자동 실행 0: 사용자가 Apply 클릭한 경우에만 scaffold/overlay POST.
+          text는 부모가 들고 — Turbo Edits Draft에서 주입될 수 있게(controlled). */}
       <SearchReplaceEditCard
         missionId={item.missionId}
         files={publishEnvironment?.getScaffoldFiles?.(item)}
+        text={searchReplaceText}
+        onTextChange={setSearchReplaceText}
         onApply={async (overlayFiles) => {
           return await postDgxMissionScaffoldOverlay({
             missionId: item.missionId,
