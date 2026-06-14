@@ -42,8 +42,8 @@ export interface GithubGitDataClient {
     repo: string,
     input: { message: string; treeSha: string; parentShas: string[] },
   ): Promise<{ sha: string; htmlUrl?: string }>;
-  /** force=false 강제. 409/422는 호출자가 head_mismatch로 매핑. */
-  updateRef(
+  /** force=false 강제. 409/422는 호출자가 head_mismatch로 매핑(GithubGitDataConflictError). */
+  updateRefSha(
     owner: string,
     repo: string,
     branch: string,
@@ -51,12 +51,10 @@ export interface GithubGitDataClient {
   ): Promise<{ ref: string; sha: string }>;
 }
 
-export class GithubGitDataConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "GithubGitDataConflictError";
-  }
-}
+// 클라이언트의 conflict error를 재사용(단일 진실 소스).
+import { GithubGitDataConflictError } from "./githubReadonlyClient.js";
+export { GithubGitDataConflictError };
+
 export class GithubGitDataPermissionError extends Error {
   constructor(message: string) {
     super(message);
@@ -287,7 +285,7 @@ export async function runMultiFileCommitExecute(
   }
   // (9) updateRef(force=false). 409/422 → head_mismatch(다른 클라이언트가 그 사이 push).
   try {
-    await deps.client.updateRef(owner, repo, request.branchName, newCommit.sha);
+    await deps.client.updateRefSha(owner, repo, request.branchName, newCommit.sha);
   } catch (error) {
     if (error instanceof GithubGitDataConflictError) {
       return {

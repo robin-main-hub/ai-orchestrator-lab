@@ -13,6 +13,8 @@ import type {
   GithubFileChangePlanRequest,
   GithubFileChangePlanResponse,
   GithubIssueSummary,
+  GithubMultiFileCommitExecuteRequest,
+  GithubMultiFileCommitExecuteResponse,
   GithubPullRequestCreateExecuteRequest,
   GithubPullRequestCreateExecuteResponse,
   GithubPullRequestCreatePlanRequest,
@@ -244,6 +246,18 @@ export function postGithubFileChangeExecute(
   fetchImpl: typeof fetch = fetch,
 ): Promise<GithubFileChangeExecuteResponse> {
   return postJson(serverBaseUrl, "/integrations/github/write/file/execute", request, fetchImpl);
+}
+
+/**
+ * W5b — Multi-file atomic commit execute. 서버가 blob → tree → commit → ref(force=false)로
+ * 처리한다. 클라이언트는 단순 transport — 가드는 서버가 다시 검증한다.
+ */
+export function postGithubMultiFileCommitExecute(
+  serverBaseUrl: string | string[] | undefined,
+  request: GithubMultiFileCommitExecuteRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubMultiFileCommitExecuteResponse> {
+  return postJson(serverBaseUrl, "/integrations/github/write/multifile/commit/execute", request, fetchImpl);
 }
 
 export function postGithubPullRequestPlan(
