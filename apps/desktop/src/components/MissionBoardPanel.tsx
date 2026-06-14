@@ -27,6 +27,7 @@ import { VisualQaCard } from "./VisualQaCard";
 import { MissionWorkspaceStatusBar } from "./MissionWorkspaceStatusBar";
 import { AppBuildProgressRail } from "./AppBuildProgressRail";
 import { MissionWorkspaceSummary } from "./MissionWorkspaceSummary";
+import { GeneratedFilesPanel } from "./GeneratedFilesPanel";
 import type { VisualQaReport } from "@ai-orchestrator/protocol";
 import type { VisualQaDiff } from "../lib/visualQaDiff";
 import {
@@ -560,6 +561,13 @@ function MissionWorkspaceDetail({
         verifyDiff={latestVerifyDiff}
         verifyFailedStep={latestVerifyFailedStep}
         onNavigate={onNavigate}
+      />
+
+      {/* Generated Files Inspector — "이 앱이 어떤 파일들로 구성되어 있는지" 트리+내용으로 검토.
+          read-only — 편집/실행 0. scaffold/latest 캐시 재사용(별도 fetch 0). */}
+      <GeneratedFilesPanel
+        missionId={item.missionId}
+        files={publishEnvironment?.getScaffoldFiles?.(item)}
       />
 
       {/* Preview Run vertical CTA — scaffold가 있으면 한 번 클릭으로 materialize+preview 실행.
