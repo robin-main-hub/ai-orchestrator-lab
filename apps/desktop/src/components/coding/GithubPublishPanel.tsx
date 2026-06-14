@@ -93,6 +93,11 @@ export type GithubPublishPanelInitial = {
   filePath?: string;
   /** Step 2 첫 파일 새 콘텐츠. */
   fileNewContent?: string;
+  /**
+   * Step 2 파일 단계 위에 보여줄 한 줄 notice(다중 scaffold 중 1개만 채웠음 / 전체 스킵 등).
+   * UI 정직성을 위해 prefill 출처/한계를 사용자가 볼 수 있게 한다.
+   */
+  fileNotice?: string;
   /** Step 3 PR base(예: "main"). */
   prBase?: string;
   /** Step 3 PR 제목 draft. */
@@ -314,7 +319,12 @@ export function GithubPublishPanel({
   }, [branch.plan, branchApprovalId, emit, fetcher, serverBaseUrl]);
 
   // ── File plan/execute ─────────────────────────────────────────────────────
-  const fileBranchName = branch.plan?.newBranchName ?? branch.observed?.ref.replace(/^refs\/heads\//, "");
+  // 사용자가 아직 branch plan을 만들지 않았어도(prefill 또는 입력한) newBranchName이 있으면
+  // file 콘텐츠를 미리 준비할 수 있게 한다. 실제 file plan/execute는 서버가 branch 존재를
+  // observed로 확인해야 통과하므로, UX의 입력 가시성 ↔ 서버 게이트 분리.
+  const fileBranchName = branch.plan?.newBranchName
+    ?? branch.observed?.ref.replace(/^refs\/heads\//, "")
+    ?? (newBranchName.trim() || undefined);
   const onFilePlan = useCallback(async () => {
     if (!repoFullName.trim() || !fileBranchName || !filePath.trim() || fileNewContent.length === 0) {
       setFile({ status: "blocked", message: "branch 생성 후 path / newContent가 모두 필요합니다" });
@@ -564,6 +574,14 @@ export function GithubPublishPanel({
             <span className="ml-auto text-[11px] text-zinc-400">commit {file.observed.commitSha.slice(0, 7)}</span>
           ) : null}
         </div>
+        {initial?.fileNotice ? (
+          <p
+            className="mb-2 rounded border border-amber-300/20 bg-amber-300/[0.06] px-2 py-1 text-[10.5px] text-amber-200"
+            data-testid="publish-file-notice"
+          >
+            {initial.fileNotice}
+          </p>
+        ) : null}
         {!fileBranchName ? (
           <p className="text-[11px] text-amber-300">먼저 Step 1에서 branch를 만든 뒤 진행하세요.</p>
         ) : (

@@ -220,6 +220,87 @@ describe("MissionBoardPanel — Publish Panel mount in Workspace detail", () => 
     expect((within(prStep).getByLabelText("pr base branch") as HTMLInputElement).value).toBe("develop");
   });
 
+  it("getScaffoldFiles로 안전한 파일이 주어지면 file path/content가 prefill되고 notice가 보인다", () => {
+    const env: MissionPublishEnvironment = {
+      serverBaseUrl: "http://127.0.0.1:4317",
+      defaultRepoFullName: "robin/lab",
+      onContextEvent: vi.fn(),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      getScaffoldFiles: () => [
+        { path: "src/util.ts", newContent: "export const v = 2;\n", operation: "create" },
+        { path: "secret.env", newContent: "TOKEN=ghp_abcdefghij1234567890abcd" }, // 시크릿 의심 — 스킵
+      ],
+    };
+    render(
+      <MissionBoardPanel
+        snapshot={snapshotOf([itemWithWorkspace()])}
+        onRefresh={() => {}}
+        expandedMissionId="mission_publish_1"
+        onToggleDetail={() => {}}
+        publishEnvironment={env}
+      />,
+    );
+    const publishSection = screen.getByTestId("mission-workspace-publish-section");
+    fireEvent.click(within(publishSection).getByRole("button", { name: /GitHub로 내보내기/ }));
+    const panel = within(publishSection).getByTestId("github-publish-panel");
+    const fileStep = within(panel).getByTestId("publish-step-file");
+    expect((within(fileStep).getByLabelText("file path") as HTMLInputElement).value).toBe("src/util.ts");
+    expect((within(fileStep).getByLabelText("file new content") as HTMLTextAreaElement).value).toContain("export const v = 2;");
+    // notice: 2개 중 1개만 자동 채움 + 시크릿 스킵
+    const notice = within(fileStep).getByTestId("publish-file-notice");
+    expect(notice.textContent).toMatch(/scaffold 2개 중 1개/);
+    expect(notice.textContent).toMatch(/시크릿/);
+  });
+
+  it("scaffold 전부가 위험하면 file 필드는 비고 notice만 표시(추측 금지)", () => {
+    const env: MissionPublishEnvironment = {
+      serverBaseUrl: "http://127.0.0.1:4317",
+      defaultRepoFullName: "robin/lab",
+      onContextEvent: vi.fn(),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      getScaffoldFiles: () => [
+        { path: "key.pem", newContent: "-----BEGIN PRIVATE KEY-----\nXYZ" },
+      ],
+    };
+    render(
+      <MissionBoardPanel
+        snapshot={snapshotOf([itemWithWorkspace()])}
+        onRefresh={() => {}}
+        expandedMissionId="mission_publish_1"
+        onToggleDetail={() => {}}
+        publishEnvironment={env}
+      />,
+    );
+    const publishSection = screen.getByTestId("mission-workspace-publish-section");
+    fireEvent.click(within(publishSection).getByRole("button", { name: /GitHub로 내보내기/ }));
+    const panel = within(publishSection).getByTestId("github-publish-panel");
+    const fileStep = within(panel).getByTestId("publish-step-file");
+    expect((within(fileStep).getByLabelText("file path") as HTMLInputElement).value).toBe("");
+    expect(within(fileStep).getByTestId("publish-file-notice").textContent).toMatch(/모두 가드에 막혀/);
+  });
+
+  it("publishEnvironment 주면 CTA 옆에 보조 텍스트(단계별 승인 안내)가 보인다", () => {
+    const env: MissionPublishEnvironment = {
+      serverBaseUrl: "http://127.0.0.1:4317",
+      defaultRepoFullName: "robin/lab",
+      onContextEvent: vi.fn(),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+    };
+    render(
+      <MissionBoardPanel
+        snapshot={snapshotOf([itemWithWorkspace()])}
+        onRefresh={() => {}}
+        expandedMissionId="mission_publish_1"
+        onToggleDetail={() => {}}
+        publishEnvironment={env}
+      />,
+    );
+    const publishSection = screen.getByTestId("mission-workspace-publish-section");
+    // 보조 텍스트는 접힘 상태에서도 보인다(사용자가 클릭 전에 의도를 알 수 있게).
+    expect(publishSection.textContent).toContain("단계별 승인");
+    expect(publishSection.textContent).toContain("merge/review/label/assignee 없음");
+  });
+
   it("CTA는 다른 위험 액션 버튼을 추가하지 않는다(merge/review/labels 자동 노출 회귀 차단)", () => {
     const env: MissionPublishEnvironment = {
       serverBaseUrl: "http://127.0.0.1:4317",
