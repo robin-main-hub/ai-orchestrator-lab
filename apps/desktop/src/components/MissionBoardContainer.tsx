@@ -11,7 +11,7 @@ import {
   mergeDgxMission,
   verifyDgxMission,
 } from "../runtime/stage47MissionServer";
-import { MissionBoardPanel } from "./MissionBoardPanel";
+import { MissionBoardPanel, type MissionPublishEnvironment } from "./MissionBoardPanel";
 
 /**
  * Mission Board 컨테이너 — 풀 루프 글루:
@@ -31,6 +31,7 @@ export function MissionBoardContainer({
   sourceSessionId,
   codingPacketId,
   debateId,
+  publishEnvironment,
 }: {
   serverBaseUrl?: string | string[];
   /** 검증 명령 소스 + 미션 생성 시드 — 현재 CodingPacket */
@@ -48,6 +49,8 @@ export function MissionBoardContainer({
   sourceSessionId?: string;
   codingPacketId?: string;
   debateId?: string;
+  /** opt-in: 제공 시 Workspace 상세에 "GitHub로 내보내기" CTA(GithubPublishPanel) 노출 */
+  publishEnvironment?: MissionPublishEnvironment;
 }) {
   const [snapshot, setSnapshot] = useState<MissionBoardSnapshot>(() =>
     mergeMissionBoard({ serverRecords: undefined, localItems, serverError: "아직 불러오지 않음" }),
@@ -253,6 +256,7 @@ export function MissionBoardContainer({
       onToggleDetail={(item) =>
         setExpandedMissionId((current) => (current === item.missionId ? undefined : item.missionId))
       }
+      publishEnvironment={publishEnvironment}
     />
   );
 }

@@ -1,8 +1,10 @@
+import { useState } from "react";
 import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
   ClipboardList,
+  Github,
   GitMerge,
   Monitor,
   Plus,
@@ -13,6 +15,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
+import { GithubPublishPanel } from "./coding/GithubPublishPanel";
 import {
   DESIGN_ISSUE_KIND_LABEL,
   MISSION_SOURCE_LABEL,
@@ -40,6 +43,21 @@ function hasWorkspaceDetail(item: MissionBoardItem): boolean {
  * 보드로 보여주는 프레젠테이션 패널. 원칙: 멋있게 보이되 거짓말하지 않는다 —
  * 모든 카드에 출처(DGX 저장됨/로컬 임시)와 truth status가 그대로 드러난다.
  */
+/**
+ * GitHub Publish 통합 환경 — Workspace 상세 안의 "GitHub로 내보내기" CTA가 가리키는 진입점.
+ * 부모(App)에서 직접 채워 넣지 않으면 CTA 자체가 표시되지 않는다(opt-in).
+ *  - serverBaseUrl: 코딩 서버 주소(/integrations/github/write/* 라우트가 있는 곳)
+ *  - defaultRepoFullName: Mission이 어떤 repo로 publish될지 사전 추측(틀려도 사용자가 수정)
+ *  - onContextEvent: panel이 emit하는 trace를 Mission trace에 적재
+ *  - fetchImpl: 테스트에서 fetch 주입
+ */
+export type MissionPublishEnvironment = {
+  serverBaseUrl?: string | string[];
+  defaultRepoFullName?: string;
+  onContextEvent?: (type: string, payload: Record<string, unknown>) => void;
+  fetchImpl?: typeof fetch;
+};
+
 export function MissionBoardPanel({
   snapshot,
   loading,
@@ -55,6 +73,7 @@ export function MissionBoardPanel({
   verifyAvailable,
   expandedMissionId,
   onToggleDetail,
+  publishEnvironment,
 }: {
   snapshot: MissionBoardSnapshot;
   loading?: boolean;
@@ -81,6 +100,8 @@ export function MissionBoardPanel({
   expandedMissionId?: string;
   /** 제공 시 detail이 있는 카드에 "상세" 토글 노출 */
   onToggleDetail?: (item: MissionBoardItem) => void;
+  /** 제공 시 Workspace 상세에 "GitHub로 내보내기" CTA + GithubPublishPanel을 노출(접힘 기본). */
+  publishEnvironment?: MissionPublishEnvironment;
 }) {
   return (
     <section className="mini-panel mission-board-panel">
@@ -236,7 +257,7 @@ export function MissionBoardPanel({
                       Workspace 상세
                       <span className="mission-board-detail-counts">{detailCountLabel(item)}</span>
                     </button>
-                    {expandedMissionId === item.missionId ? <MissionWorkspaceDetail item={item} /> : null}
+                    {expandedMissionId === item.missionId ? <MissionWorkspaceDetail item={item} publishEnvironment={publishEnvironment} /> : null}
                   </div>
                 ) : null}
               </li>
@@ -312,7 +333,16 @@ function severityVariant(severity: "low" | "medium" | "high"): StatusBadgeVarian
  * 새 fetch·새 상태 없음(보드 snapshot에서 파생). preview url은 observed running일 때만,
  * 디자인 이슈/에러 카드는 관측분만 — 화면에 안 본 걸 지어내지 않는다.
  */
-function MissionWorkspaceDetail({ item }: { item: MissionBoardItem }) {
+function MissionWorkspaceDetail({
+  item,
+  publishEnvironment,
+}: {
+  item: MissionBoardItem;
+  publishEnvironment?: MissionPublishEnvironment;
+}) {
+  // 기본 접힘 — 사용자 명시 클릭으로만 GithubPublishPanel을 마운트한다.
+  // (publishEnvironment가 없으면 CTA 자체를 그리지 않아 부모가 opt-in한 경우에만 노출.)
+  const [publishOpen, setPublishOpen] = useState(false);
   return (
     <div className="mission-workspace-detail">
       {/* AppWorkspace + preview (D2/D4/D5a) */}
@@ -395,6 +425,44 @@ function MissionWorkspaceDetail({ item }: { item: MissionBoardItem }) {
             </li>
           ))}
         </ul>
+      ) : null}
+
+      {/* GitHub로 내보내기 — opt-in CTA. 부모가 publishEnvironment를 줘야 보인다. */}
+      {publishEnvironment ? (
+        <div className="mission-workspace-publish" data-testid="mission-workspace-publish-section">
+          <button
+            type="button"
+            className="mission-workspace-publish-toggle rail-icon-button"
+            aria-expanded={publishOpen}
+            aria-controls={`mission-publish-${item.missionId}`}
+            onClick={() => {
+              const next = !publishOpen;
+              setPublishOpen(next);
+              publishEnvironment.onContextEvent?.(
+                next ? "mission.publish.opened" : "mission.publish.closed",
+                { missionId: item.missionId, ts: new Date().toISOString() },
+              );
+            }}
+          >
+            <Github size={13} />
+            {publishOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            GitHub로 내보내기
+            <span className="mission-board-truth">planned</span>
+          </button>
+          {publishOpen ? (
+            <div id={`mission-publish-${item.missionId}`} className="mission-workspace-publish-body">
+              <GithubPublishPanel
+                serverBaseUrl={publishEnvironment.serverBaseUrl}
+                defaultRepoFullName={publishEnvironment.defaultRepoFullName}
+                onContextEvent={(type, payload) =>
+                  // Mission 컨텍스트(missionId)를 trace event에 자동 첨부 — provenance.
+                  publishEnvironment.onContextEvent?.(type, { ...payload, missionId: item.missionId })
+                }
+                fetchImpl={publishEnvironment.fetchImpl}
+              />
+            </div>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
