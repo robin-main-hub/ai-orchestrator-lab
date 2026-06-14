@@ -111,6 +111,12 @@ export type MissionPublishEnvironment = {
     providerLabel?: string;
   } | undefined;
   /**
+   * PreviewRunCard가 observed preview URL을 받으면 부모로 lift — App.tsx의 activePreviewRef state
+   * 갱신을 거쳐 ChatSidePanel "미리보기" 탭에 같은 URL이 임베드된다.
+   * preview_not_running / error 분기에서는 절대 호출되지 않는다(정직성).
+   */
+  onPreviewObserved?: (ref: { missionId: string; url: string; observedAt: string }) => void;
+  /**
    * 현재 세션에서 누적된 publish flow trace의 단계별 latest entry. branch/file/pr 각각 최신 1건.
    * 컨테이너가 onContextEvent에서 github.publish.*를 가로채 누적한 결과를 노출한다.
    * 영속화 없음: 페이지 새로고침 시 빈 상태로 시작(정직성).
@@ -658,7 +664,8 @@ function MissionWorkspaceDetail({
       />
 
       {/* Preview Run vertical CTA — scaffold가 있으면 한 번 클릭으로 materialize+preview 실행.
-          fake preview URL 금지: 서버가 observed로 반환할 때만 링크가 살아난다. */}
+          fake preview URL 금지: 서버가 observed로 반환할 때만 링크가 살아난다.
+          observed면 App.tsx의 activePreviewRef로 lift → ChatSidePanel "미리보기" 탭과 공유. */}
       <PreviewRunCard
         missionId={item.missionId}
         hasScaffoldFiles={(publishEnvironment?.getScaffoldFiles?.(item)?.length ?? 0) > 0}
@@ -667,6 +674,7 @@ function MissionWorkspaceDetail({
         onContextEvent={(type, payload) =>
           publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
         }
+        onPreviewObserved={publishEnvironment?.onPreviewObserved}
       />
 
       {/* Visual QA vertical — preview observed running일 때만 CTA 활성. issues_found/failed면
