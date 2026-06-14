@@ -301,6 +301,72 @@ describe("MissionBoardPanel — Publish Panel mount in Workspace detail", () => 
     expect(publishSection.textContent).toContain("merge/review/label/assignee 없음");
   });
 
+  it("(App.tsx 현 상태) getScaffoldFiles 미배선이면 file 필드는 비고, 그래도 fetch 0 — branch/PR prefill만", () => {
+    // App.tsx는 현재 publishEnvironment에 serverBaseUrl + onContextEvent만 넘기고,
+    // getScaffoldFiles는 의도적으로 미배선이다(추측 금지). 이 회귀 가드.
+    const fetchImpl = vi.fn(); // 호출되면 안 됨.
+    const env: MissionPublishEnvironment = {
+      serverBaseUrl: "http://127.0.0.1:4317",
+      defaultRepoFullName: "robin/lab",
+      onContextEvent: vi.fn(),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      // getScaffoldFiles: 의도적 미배선 — App.tsx 현 상태 미러
+    };
+    render(
+      <MissionBoardPanel
+        snapshot={snapshotOf([itemWithWorkspace()])}
+        onRefresh={() => {}}
+        expandedMissionId="mission_publish_1"
+        onToggleDetail={() => {}}
+        publishEnvironment={env}
+      />,
+    );
+    const publishSection = screen.getByTestId("mission-workspace-publish-section");
+    fireEvent.click(within(publishSection).getByRole("button", { name: /GitHub로 내보내기/ }));
+    const panel = within(publishSection).getByTestId("github-publish-panel");
+
+    // file 필드는 비어 있어야 함(scaffold 없음 → 추측 금지)
+    const fileStep = within(panel).getByTestId("publish-step-file");
+    expect((within(fileStep).getByLabelText("file path") as HTMLInputElement).value).toBe("");
+    expect((within(fileStep).getByLabelText("file new content") as HTMLTextAreaElement).value).toBe("");
+    // fileNotice도 없음(scaffoldFiles 자체가 undefined이면 notice도 안 만든다)
+    expect(within(fileStep).queryByTestId("publish-file-notice")).toBeNull();
+
+    // branch/PR prefill은 그대로 — 사용자에게 즉시 값 제공
+    const branchStep = within(panel).getByTestId("publish-step-branch");
+    expect((within(branchStep).getByLabelText("new branch name") as HTMLInputElement).value).toMatch(/^agent\/mission-/);
+    const prStep = within(panel).getByTestId("publish-step-pr");
+    expect((within(prStep).getByLabelText("pr title") as HTMLInputElement).value).toBe("App Builder result");
+
+    // 핵심: prefill 단계에서 GitHub write route fetch가 절대 발생하지 않는다.
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("(빈 배열도 무탈) getScaffoldFiles가 [] 반환해도 file 필드 비움 + notice 없음", () => {
+    const env: MissionPublishEnvironment = {
+      serverBaseUrl: "http://127.0.0.1:4317",
+      defaultRepoFullName: "robin/lab",
+      onContextEvent: vi.fn(),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      getScaffoldFiles: () => [],
+    };
+    render(
+      <MissionBoardPanel
+        snapshot={snapshotOf([itemWithWorkspace()])}
+        onRefresh={() => {}}
+        expandedMissionId="mission_publish_1"
+        onToggleDetail={() => {}}
+        publishEnvironment={env}
+      />,
+    );
+    const publishSection = screen.getByTestId("mission-workspace-publish-section");
+    fireEvent.click(within(publishSection).getByRole("button", { name: /GitHub로 내보내기/ }));
+    const panel = within(publishSection).getByTestId("github-publish-panel");
+    const fileStep = within(panel).getByTestId("publish-step-file");
+    expect((within(fileStep).getByLabelText("file path") as HTMLInputElement).value).toBe("");
+    expect(within(fileStep).queryByTestId("publish-file-notice")).toBeNull();
+  });
+
   it("CTA는 다른 위험 액션 버튼을 추가하지 않는다(merge/review/labels 자동 노출 회귀 차단)", () => {
     const env: MissionPublishEnvironment = {
       serverBaseUrl: "http://127.0.0.1:4317",
