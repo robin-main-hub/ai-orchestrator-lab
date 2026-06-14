@@ -68,6 +68,15 @@ describe("parsePublishTrace — github.publish.{step}.{status} → PublishHistor
     expect(parsePublishTrace("github.publish.branch.", { ts: "t" })).toBeUndefined();
   });
 
+  it("htmlUrl은 https://github.com/ 시작할 때만 캡쳐(다른 호스트 거부)", () => {
+    const ok = parsePublishTrace("github.publish.pr.observed", { ts: "t", htmlUrl: "https://github.com/robin/lab/pull/1" });
+    expect(ok?.htmlUrl).toBe("https://github.com/robin/lab/pull/1");
+    const evil = parsePublishTrace("github.publish.pr.observed", { ts: "t", htmlUrl: "https://evil.example/x" });
+    expect(evil?.htmlUrl).toBeUndefined();
+    const empty = parsePublishTrace("github.publish.pr.observed", { ts: "t" });
+    expect(empty?.htmlUrl).toBeUndefined();
+  });
+
   it("ts 기본값은 ISO 형식 문자열(typeof string + ISO 패턴)", () => {
     const entry = parsePublishTrace("github.publish.branch.planned", { summary: "x" });
     expect(typeof entry?.ts).toBe("string");

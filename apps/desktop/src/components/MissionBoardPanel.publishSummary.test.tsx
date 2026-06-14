@@ -169,6 +169,60 @@ describe("MissionBoardPanel — PublishFlowSummary", () => {
     expect(section.textContent).toContain("승인 필요");
   });
 
+  it("(#7 polish observed link) observed entry에 htmlUrl이 있으면 행이 GitHub 링크로 렌더된다", () => {
+    const history: PublishHistoryByStep = {
+      branch: {
+        step: "branch",
+        status: "observed",
+        summary: "refs/heads/agent/x@abc1234",
+        ts: "t",
+        htmlUrl: "https://github.com/robin/lab/tree/agent/x",
+      },
+    };
+    render(
+      <MissionBoardPanel
+        snapshot={snapshotOf([itemWithWorkspace()])}
+        onRefresh={() => {}}
+        expandedMissionId="mission_summary_1"
+        onToggleDetail={() => {}}
+        publishEnvironment={envWithHistory(history)}
+      />,
+    );
+    const link = screen.getByTestId("mission-publish-link-branch") as HTMLAnchorElement;
+    expect(link.href).toBe("https://github.com/robin/lab/tree/agent/x");
+    expect(link.target).toBe("_blank");
+    expect(link.rel).toContain("noopener");
+  });
+
+  it("(#8 polish done link) 모든 단계 observed + pr.htmlUrl이면 done CTA가 PR로 가는 anchor", () => {
+    const history: PublishHistoryByStep = {
+      branch: { step: "branch", status: "observed", summary: "", ts: "t" },
+      file: { step: "file", status: "observed", summary: "", ts: "t" },
+      pr: {
+        step: "pr",
+        status: "observed",
+        summary: "PR #7",
+        ts: "t",
+        htmlUrl: "https://github.com/robin/lab/pull/7",
+      },
+    };
+    render(
+      <MissionBoardPanel
+        snapshot={snapshotOf([itemWithWorkspace()])}
+        onRefresh={() => {}}
+        expandedMissionId="mission_summary_1"
+        onToggleDetail={() => {}}
+        publishEnvironment={envWithHistory(history)}
+      />,
+    );
+    const cta = screen.getByTestId("mission-workspace-publish-next") as HTMLAnchorElement;
+    expect(cta.getAttribute("data-kind")).toBe("done");
+    // done은 button이 아닌 a 태그
+    expect(cta.tagName.toLowerCase()).toBe("a");
+    expect(cta.href).toBe("https://github.com/robin/lab/pull/7");
+    expect(cta.textContent).toContain("PR 열기");
+  });
+
   it("(#6 회귀) 요약 섹션이 있어도 merge/review/label/assignee/delete branch 행은 절대 없음", () => {
     const history: PublishHistoryByStep = {
       branch: { step: "branch", status: "observed", summary: "ok", ts: "t" },

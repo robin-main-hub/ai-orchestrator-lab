@@ -13,7 +13,15 @@ import {
   Scale,
   XCircle,
 } from "lucide-react";
-import type { AgentProfile, BlueprintDebateReview, DebateTag, DebateUtterance } from "@ai-orchestrator/protocol";
+import type {
+  AgentProfile,
+  BlueprintDebateReview,
+  BlueprintRevisionDraft,
+  DebateTag,
+  DebateUtterance,
+  DesignBlueprintInput,
+} from "@ai-orchestrator/protocol";
+import { buildBlueprintRevisionDraft } from "@ai-orchestrator/protocol";
 import { defaultAgentProfiles, deriveStanceTrajectories, synthesizeChairmanDecision, type ChairmanDecision } from "@ai-orchestrator/agents";
 import { cn } from "@/lib/utils";
 import { agentRoleLabel } from "../lib/helpers";
@@ -827,15 +835,31 @@ function ChairmanDecisionCard({ session }: { session: Stage3DebateSession }) {
 
 /**
  * point 5 — 초안에서 승격된 토론이 끝나면, 캐릭터 토론 결과를 원본 초안에 대한 리뷰로 보여준다.
- * 모델 출력이므로 generated(observed 아님). 자동 적용 없음 — 표시 + 추천만.
+ * 모델 출력이므로 generated(observed 아님). 자동 적용 없음 — 표시 + 추천 + (옵션) 수정안 draft.
+ *
+ * Revision Draft:
+ *   - baseline이 주어지면 buildBlueprintRevisionDraft로 수정안 draft 미리 계산.
+ *   - "수정안 보기" 토글 → addedCriteria/riskNotes 펼침(자동 적용 X).
+ *   - "수정안 적용" 버튼 → onApplyRevision(draft) 콜백. 부모가 baseline 자리에 덮어쓸지 결정.
+ *   - noop이면 적용 버튼 비활성화(거짓 변경 알림 금지).
  */
-function BlueprintReviewCard({ review }: { review: BlueprintDebateReview }) {
+export function BlueprintReviewCard({
+  review,
+  baseline,
+  onApplyRevision,
+}: {
+  review: BlueprintDebateReview;
+  baseline?: Pick<DesignBlueprintInput, "title" | "acceptanceCriteria">;
+  onApplyRevision?: (draft: BlueprintRevisionDraft) => void;
+}) {
   const action =
     review.recommendedNextAction === "promote_to_mission"
       ? { label: "미션으로 승격 추천", tone: "text-emerald-300" }
       : review.recommendedNextAction === "revise_blueprint"
         ? { label: "초안 수정 후 진행 추천", tone: "text-amber-300" }
         : { label: "사용자 확인 필요", tone: "text-rose-300" };
+  const revisionDraft = useMemo(() => buildBlueprintRevisionDraft(review, baseline), [review, baseline]);
+  const [revisionOpen, setRevisionOpen] = useState(false);
   return (
     <section className="mt-3 rounded-2xl border border-cyan-300/20 bg-cyan-500/[0.05] p-4" aria-label="토론 초안 리뷰">
       <div className="flex items-center gap-2">
@@ -862,6 +886,70 @@ function BlueprintReviewCard({ review }: { review: BlueprintDebateReview }) {
       ) : null}
       {review.risks.length > 0 ? (
         <p className="mt-2 text-[11px] text-rose-300/80">위험: {review.risks.slice(0, 3).join(" · ")}</p>
+      ) : null}
+      {/* Revision Draft 표시 — 부모가 onApplyRevision을 주지 않으면 buttons 노출 안 함(읽기 전용). */}
+      {onApplyRevision ? (
+        <div className="mt-3 border-t border-cyan-300/10 pt-2" data-testid="blueprint-revision-area">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
+            <button
+              type="button"
+              className="rounded border border-cyan-300/30 px-2 py-0.5 text-[10.5px] font-medium uppercase text-cyan-200 hover:bg-cyan-300/10"
+              onClick={() => setRevisionOpen((v) => !v)}
+              data-testid="blueprint-revision-toggle"
+              aria-expanded={revisionOpen}
+            >
+              수정안 {revisionOpen ? "접기" : "보기"}
+            </button>
+            <button
+              type="button"
+              disabled={revisionDraft.noop}
+              className={cn(
+                "rounded px-2 py-0.5 text-[10.5px] font-medium uppercase",
+                revisionDraft.noop
+                  ? "border border-white/10 text-zinc-500 cursor-not-allowed"
+                  : "border border-emerald-300/40 text-emerald-200 hover:bg-emerald-300/10",
+              )}
+              onClick={() => onApplyRevision(revisionDraft)}
+              data-testid="blueprint-revision-apply"
+              title={revisionDraft.noop ? "변경 사항 없음" : "초안에 적용 — Mission 자동 생성은 안 함"}
+            >
+              수정안 적용
+            </button>
+            <span className="text-[10.5px] text-zinc-500" data-testid="blueprint-revision-truthstatus">
+              draft · planned(observed 아님)
+            </span>
+          </div>
+          {revisionOpen ? (
+            <div className="mt-2 space-y-2 text-[11.5px]" data-testid="blueprint-revision-detail">
+              {revisionDraft.noop ? (
+                <p className="text-zinc-400">변경 사항 없음 — 초안 그대로 진행하거나 토론을 다시 진행하세요.</p>
+              ) : (
+                <>
+                  {revisionDraft.addedCriteria.length > 0 ? (
+                    <div>
+                      <p className="text-[10.5px] uppercase tracking-wider text-emerald-300/80">새 결정 {revisionDraft.addedCriteria.length}</p>
+                      <ul className="mt-1 space-y-0.5">
+                        {revisionDraft.addedCriteria.slice(0, 6).map((c, i) => (
+                          <li className="text-zinc-300" key={i}>+ {c}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {revisionDraft.riskNotes.length > 0 ? (
+                    <div>
+                      <p className="text-[10.5px] uppercase tracking-wider text-rose-300/80">위험 노트 {revisionDraft.riskNotes.length}</p>
+                      <ul className="mt-1 space-y-0.5">
+                        {revisionDraft.riskNotes.slice(0, 4).map((r, i) => (
+                          <li className="text-rose-200/90" key={i}>· {r}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </div>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );
