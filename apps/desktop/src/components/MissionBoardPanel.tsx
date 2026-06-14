@@ -474,17 +474,19 @@ function MissionWorkspaceDetail({
       />
 
       {/* Visual QA vertical — preview observed running일 때만 CTA 활성. issues_found/failed면
-          "수정안 초안 만들기" CTA를 노출. 자동 파일 수정/PR/scaffold refresh 0. */}
+          "수정안 초안 만들기" + 파일별 patch preview + 적용 CTA. 자동 파일 수정/자동 PR 0. */}
       <VisualQaCard
         missionId={item.missionId}
         workspaceId={item.workspace?.id}
         previewUrl={item.workspace?.previewUrl}
         latestSummary={item.latestVisualQa}
+        currentScaffoldFiles={publishEnvironment?.getScaffoldFiles?.(item)?.map((f) => ({ path: f.path, content: f.newContent }))}
         serverBaseUrl={publishEnvironment?.serverBaseUrl}
         fetchImpl={publishEnvironment?.fetchImpl}
         onContextEvent={(type, payload) =>
           publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
         }
+        onRefreshScaffold={publishEnvironment?.refreshScaffold}
       />
 
       {/* Visual QA 종합 (D5b) */}

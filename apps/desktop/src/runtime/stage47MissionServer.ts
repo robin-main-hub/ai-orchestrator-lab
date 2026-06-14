@@ -17,6 +17,8 @@ import type {
   MissionVerifyRequest,
   PreviewProbeRequest,
   MissionScaffoldLatestResponse,
+  MissionScaffoldOverlayResponse,
+  MissionScaffoldOverlayRequest,
   MissionPreviewRunScaffoldResponse,
   ScaffoldApplyResult,
   ScaffoldPlan,
@@ -303,6 +305,27 @@ export async function fetchMissionScaffoldLatest({
   return requestMissionServerJson<MissionScaffoldLatestResponse>({
     method: "GET",
     path: `/missions/${encodeURIComponent(missionId)}/scaffold/latest`,
+    serverBaseUrl,
+    fetchImpl,
+    timeoutMs,
+  });
+}
+
+/**
+ * AppFix overlay — Visual QA의 수정안을 사용자가 명시 클릭으로 적용. scaffold/latest가 새 파일을
+ * 반환하게 만든다(GitHub write 0). 자동 적용 0 — 호출은 사용자 클릭 한 번에서만.
+ */
+export async function postDgxMissionScaffoldOverlay({
+  missionId,
+  request,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 15_000,
+}: MissionServerRequestInput & { missionId: string; request: MissionScaffoldOverlayRequest }): Promise<MissionScaffoldOverlayResponse> {
+  return requestMissionServerJson<MissionScaffoldOverlayResponse>({
+    method: "POST",
+    path: `/missions/${encodeURIComponent(missionId)}/scaffold/overlay`,
+    body: request,
     serverBaseUrl,
     fetchImpl,
     timeoutMs,
