@@ -28,6 +28,8 @@ import { MissionWorkspaceStatusBar } from "./MissionWorkspaceStatusBar";
 import { AppBuildProgressRail } from "./AppBuildProgressRail";
 import { MissionWorkspaceSummary } from "./MissionWorkspaceSummary";
 import { GeneratedFilesPanel } from "./GeneratedFilesPanel";
+import { SearchReplaceEditCard } from "./SearchReplaceEditCard";
+import { postDgxMissionScaffoldOverlay } from "../runtime/stage47MissionServer";
 import type { VisualQaReport } from "@ai-orchestrator/protocol";
 import type { VisualQaDiff } from "../lib/visualQaDiff";
 import {
@@ -568,6 +570,27 @@ function MissionWorkspaceDetail({
       <GeneratedFilesPanel
         missionId={item.missionId}
         files={publishEnvironment?.getScaffoldFiles?.(item)}
+      />
+
+      {/* Search/Replace Edit (OSS-H4) — Aider 스타일 좁은 편집을 그대로 ScaffoldOverlay로.
+          자동 실행 0: 사용자가 Apply 클릭한 경우에만 scaffold/overlay POST. */}
+      <SearchReplaceEditCard
+        missionId={item.missionId}
+        files={publishEnvironment?.getScaffoldFiles?.(item)}
+        onApply={async (overlayFiles) => {
+          return await postDgxMissionScaffoldOverlay({
+            missionId: item.missionId,
+            request: {
+              source: "manual",
+              files: overlayFiles.map((f) => ({ path: f.path, content: f.content })),
+            },
+            serverBaseUrl: publishEnvironment?.serverBaseUrl,
+            fetchImpl: publishEnvironment?.fetchImpl,
+          });
+        }}
+        onContextEvent={(type, payload) =>
+          publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
+        }
       />
 
       {/* Preview Run vertical CTA — scaffold가 있으면 한 번 클릭으로 materialize+preview 실행.
