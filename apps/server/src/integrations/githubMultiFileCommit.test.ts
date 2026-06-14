@@ -27,7 +27,7 @@ function makeClient(overrides: Partial<GithubGitDataClient> = {}): GithubGitData
     createBlob: vi.fn(async () => ({ sha: "blob_sha" })),
     createTree: vi.fn(async () => ({ sha: "new_tree_sha" })),
     createCommit: vi.fn(async () => ({ sha: "c".repeat(40), htmlUrl: "https://github.com/robin/lab/commit/cccc" })),
-    updateRef: vi.fn(async () => ({ ref: "refs/heads/agent/feature", sha: "c".repeat(40) })),
+    updateRefSha: vi.fn(async () => ({ ref: "refs/heads/agent/feature", sha: "c".repeat(40) })),
     ...overrides,
   };
 }
@@ -76,7 +76,7 @@ describe("runMultiFileCommitExecute — W5b atomic commit", () => {
     expect(client.createBlob).toHaveBeenCalledTimes(2);
     expect(client.createTree).toHaveBeenCalledTimes(1);
     expect(client.createCommit).toHaveBeenCalledTimes(1);
-    expect(client.updateRef).toHaveBeenCalledTimes(1);
+    expect(client.updateRefSha).toHaveBeenCalledTimes(1);
   });
 
   it("(#2) expectedHeadSha 불일치 → blob 만들기 전에 head_mismatch", async () => {
@@ -89,13 +89,13 @@ describe("runMultiFileCommitExecute — W5b atomic commit", () => {
     expect(client.createBlob).not.toHaveBeenCalled();
     expect(client.createTree).not.toHaveBeenCalled();
     expect(client.createCommit).not.toHaveBeenCalled();
-    expect(client.updateRef).not.toHaveBeenCalled();
+    expect(client.updateRefSha).not.toHaveBeenCalled();
   });
 
   it("(#3) ref update 409(GithubGitDataConflictError) → head_mismatch(부분 적용 0)", async () => {
     const client = makeClient({
-      updateRef: vi.fn(async () => {
-        throw new GithubGitDataConflictError("ref가 그 사이 다른 sha로 이동했습니다(force=false 거부)");
+      updateRefSha: vi.fn(async () => {
+        throw new GithubGitDataConflictError("ref가 그 사이 다른 sha로 이동했습니다(force=false 거부)", 409);
       }),
     });
     const res = await runMultiFileCommitExecute(request(), deps({ client }));
@@ -188,7 +188,7 @@ describe("runMultiFileCommitExecute — W5b atomic commit", () => {
     expect(res.commitSha).toBeUndefined();
     expect(client.createBlob).toHaveBeenCalledTimes(2);
     expect(client.createCommit).not.toHaveBeenCalled();
-    expect(client.updateRef).not.toHaveBeenCalled();
+    expect(client.updateRefSha).not.toHaveBeenCalled();
   });
 
   it("(#8 approval) approval 거부 → approval_required, GitHub API 0회", async () => {

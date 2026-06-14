@@ -142,7 +142,53 @@ export type GithubReadonlyClient = {
     repo: string,
     params: { title: string; body: string; base: string; head: string },
   ): Promise<{ pullNumber: number; htmlUrl: string; headSha: string }>;
+  /**
+   * W5b — GET /repos/:o/:r/git/commits/:sha. commit object의 tree.sha를 반환한다.
+   * multi-file atomic commit의 base_tree로 사용된다.
+   */
+  getCommitTreeSha?(owner: string, repo: string, commitSha: string): Promise<string>;
+  /**
+   * W5b — POST /repos/:o/:r/git/blobs. UTF-8 content를 base64로 인코딩해 blob 생성.
+   * 응답 201일 때만 `{ sha }` 반환. 그 외는 throw.
+   */
+  createBlob?(owner: string, repo: string, content: string): Promise<{ sha: string }>;
+  /**
+   * W5b — POST /repos/:o/:r/git/trees. base_tree 위에 entries(파일 mode/type/sha)를
+   * 얹어 새 tree 객체 생성. 응답 201일 때만 `{ sha }`.
+   */
+  createTree?(
+    owner: string,
+    repo: string,
+    input: { baseTreeSha: string; entries: Array<{ path: string; mode: "100644"; type: "blob"; sha: string }> },
+  ): Promise<{ sha: string }>;
+  /**
+   * W5b — POST /repos/:o/:r/git/commits. tree+parent로 새 commit 생성.
+   * 응답 201일 때만 `{ sha, htmlUrl? }`.
+   */
+  createCommit?(
+    owner: string,
+    repo: string,
+    input: { message: string; treeSha: string; parentShas: string[] },
+  ): Promise<{ sha: string; htmlUrl?: string }>;
+  /**
+   * W5b — PATCH /repos/:o/:r/git/refs/heads/:branch with force=false.
+   * 응답 200이면 `{ ref, sha }`. 409/422는 GithubGitDataConflictError로 던진다(head_mismatch).
+   */
+  updateRefSha?(
+    owner: string,
+    repo: string,
+    branch: string,
+    sha: string,
+  ): Promise<{ ref: string; sha: string }>;
 };
+
+/** Git Data API ref update 409/422 — head_mismatch 시그널. */
+export class GithubGitDataConflictError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "GithubGitDataConflictError";
+  }
+}
 
 export function createGithubReadonlyClient(options: GithubReadonlyClientOptions = {}): GithubReadonlyClient {
   const token = options.token?.trim() || undefined;
@@ -374,6 +420,155 @@ export function createGithubReadonlyClient(options: GithubReadonlyClientOptions 
         throw new GithubReadonlyError("GitHub POST /pulls 응답에 number 또는 head.sha가 없습니다", 502);
       }
       return { pullNumber, htmlUrl, headSha };
+    },
+
+    // W5b — Git Data API: getCommitTreeSha / createBlob / createTree / createCommit / updateRefSha.
+    async getCommitTreeSha(owner, repo, commitSha) {
+      const raw = await getJson(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/commits/${encodeURIComponent(commitSha)}`,
+      );
+      const tree = (raw as Record<string, unknown>).tree as Record<string, unknown> | undefined;
+      const sha = typeof tree?.sha === "string" ? tree.sha : "";
+      if (!sha) throw new GithubReadonlyError("commit 객체에서 tree.sha를 찾지 못했습니다", 502);
+      return sha;
+    },
+
+    async createBlob(owner, repo, content) {
+      if (!token) throw new GithubNotConfiguredError();
+      const base64 = Buffer.from(content, "utf8").toString("base64");
+      const body = { content: base64, encoding: "base64" };
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/blobs`,
+          {
+            method: "POST",
+            headers: {
+              accept: "application/vnd.github+json",
+              authorization: `Bearer ${token}`,
+              "x-github-api-version": "2022-11-28",
+              "user-agent": "ai-orchestrator-lab-multifile",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(body),
+          },
+        );
+      } catch (error) {
+        throw new GithubReadonlyError(scrub(error instanceof Error ? error.message : String(error), token), 0);
+      }
+      if (response.status !== 201) {
+        const text = await response.text().catch(() => "");
+        throw new GithubReadonlyError(scrub(`GitHub blob ${response.status}: ${text.slice(0, 200)}`, token), response.status);
+      }
+      const raw = (await response.json()) as Record<string, unknown>;
+      const sha = typeof raw.sha === "string" ? raw.sha : "";
+      if (!sha) throw new GithubReadonlyError("blob 응답에 sha 없음", 502);
+      return { sha };
+    },
+
+    async createTree(owner, repo, input) {
+      if (!token) throw new GithubNotConfiguredError();
+      const body = {
+        base_tree: input.baseTreeSha,
+        tree: input.entries.map((e) => ({ path: e.path, mode: e.mode, type: e.type, sha: e.sha })),
+      };
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees`,
+          {
+            method: "POST",
+            headers: {
+              accept: "application/vnd.github+json",
+              authorization: `Bearer ${token}`,
+              "x-github-api-version": "2022-11-28",
+              "user-agent": "ai-orchestrator-lab-multifile",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(body),
+          },
+        );
+      } catch (error) {
+        throw new GithubReadonlyError(scrub(error instanceof Error ? error.message : String(error), token), 0);
+      }
+      if (response.status !== 201) {
+        const text = await response.text().catch(() => "");
+        throw new GithubReadonlyError(scrub(`GitHub tree ${response.status}: ${text.slice(0, 200)}`, token), response.status);
+      }
+      const raw = (await response.json()) as Record<string, unknown>;
+      const sha = typeof raw.sha === "string" ? raw.sha : "";
+      if (!sha) throw new GithubReadonlyError("tree 응답에 sha 없음", 502);
+      return { sha };
+    },
+
+    async createCommit(owner, repo, input) {
+      if (!token) throw new GithubNotConfiguredError();
+      const body = { message: input.message, tree: input.treeSha, parents: input.parentShas };
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/commits`,
+          {
+            method: "POST",
+            headers: {
+              accept: "application/vnd.github+json",
+              authorization: `Bearer ${token}`,
+              "x-github-api-version": "2022-11-28",
+              "user-agent": "ai-orchestrator-lab-multifile",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(body),
+          },
+        );
+      } catch (error) {
+        throw new GithubReadonlyError(scrub(error instanceof Error ? error.message : String(error), token), 0);
+      }
+      if (response.status !== 201) {
+        const text = await response.text().catch(() => "");
+        throw new GithubReadonlyError(scrub(`GitHub commit ${response.status}: ${text.slice(0, 200)}`, token), response.status);
+      }
+      const raw = (await response.json()) as Record<string, unknown>;
+      const sha = typeof raw.sha === "string" ? raw.sha : "";
+      const htmlUrl = typeof raw.html_url === "string" ? raw.html_url : `https://github.com/${owner}/${repo}/commit/${sha}`;
+      if (!sha) throw new GithubReadonlyError("commit 응답에 sha 없음", 502);
+      return { sha, htmlUrl };
+    },
+
+    async updateRefSha(owner, repo, branch, sha) {
+      if (!token) throw new GithubNotConfiguredError();
+      const body = { sha, force: false };
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/refs/heads/${encodeURIComponent(branch)}`,
+          {
+            method: "PATCH",
+            headers: {
+              accept: "application/vnd.github+json",
+              authorization: `Bearer ${token}`,
+              "x-github-api-version": "2022-11-28",
+              "user-agent": "ai-orchestrator-lab-multifile",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(body),
+          },
+        );
+      } catch (error) {
+        throw new GithubReadonlyError(scrub(error instanceof Error ? error.message : String(error), token), 0);
+      }
+      if (response.status === 409 || response.status === 422) {
+        const text = await response.text().catch(() => "");
+        throw new GithubGitDataConflictError(scrub(`ref update conflict ${response.status}: ${text.slice(0, 200)}`, token), response.status);
+      }
+      if (response.status !== 200) {
+        const text = await response.text().catch(() => "");
+        throw new GithubReadonlyError(scrub(`GitHub ref ${response.status}: ${text.slice(0, 200)}`, token), response.status);
+      }
+      const raw = (await response.json()) as Record<string, unknown>;
+      const ref = typeof raw.ref === "string" ? raw.ref : `refs/heads/${branch}`;
+      const obj = raw.object as Record<string, unknown> | undefined;
+      const newSha = typeof obj?.sha === "string" ? obj.sha : sha;
+      return { ref, sha: newSha };
     },
 
     async putFileContents(owner, repo, path, params) {

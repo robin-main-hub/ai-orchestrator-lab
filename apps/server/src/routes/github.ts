@@ -33,6 +33,10 @@ import {
 import { generateUnifiedDiff } from "../integrations/githubFileDiff.js";
 import { evaluatePrCreateGate } from "../integrations/githubPullRequestWriteGuards.js";
 import {
+  runMultiFileCommitExecute,
+  type GithubGitDataClient,
+} from "../integrations/githubMultiFileCommit.js";
+import {
   getPullRequestObservedFor,
   type GithubPullRequestCreatePlanStore,
 } from "../integrations/githubPullRequestCreatePlanStore.js";
@@ -43,6 +47,7 @@ import {
   githubCommentWritePlanRequestSchema,
   githubFileChangeExecuteRequestSchema,
   githubFileChangePlanRequestSchema,
+  githubMultiFileCommitExecuteRequestSchema,
   githubPullRequestCreateExecuteRequestSchema,
   githubPullRequestCreatePlanRequestSchema,
   type GithubBranchCreateOutcome,
@@ -105,6 +110,8 @@ export type GithubRouteDependencies = {
    * 통과시킨다(클라이언트만 표식). 둘 다 없거나 미일치면 blocked.
    */
   verifyApproval?: (approvalId: string) => Promise<boolean>;
+  /** W5b — main/master 등 직접 commit 금지할 보호 브랜치(env GITHUB_PROTECTED_BRANCHES 기반, 기본 ['main','master']). */
+  protectedBranches?: ReadonlyArray<string>;
 };
 
 const REPO_RESOURCE = /^\/integrations\/github\/repos\/([^/]+)\/([^/]+)\/(overview|pulls|issues)$/;
@@ -148,6 +155,7 @@ const FILE_PLAN_PATH = "/integrations/github/write/file/plan";
 
 // W3b file change execute — approval-only. armed 없음.
 const FILE_EXECUTE_PATH = "/integrations/github/write/file/execute";
+const MULTIFILE_COMMIT_EXECUTE_PATH = "/integrations/github/write/multifile/commit/execute";
 
 // W4a PR create plan 경로 — plan only.
 const PR_PLAN_PATH = "/integrations/github/write/pr/plan";
@@ -1170,6 +1178,63 @@ async function handlePrCreatePlan(deps: GithubRouteDependencies): Promise<boolea
 //   - same-repo only: head는 branch 이름 그대로 보냄(owner:branch fork 형태 미사용)
 // ──────────────────────────────────────────────────────────────────────────────
 
+// ──────────────────────────────────────────────────────────────────────────────
+// W5b: Multi-file atomic commit execute (Git Data API). 모든 가드는 runner가 재검증.
+// 라우트 핸들러는 schema parse + client adapter만 만들고 runner에게 위임한다.
+//
+// 보호 정책(설계 컨트랙트):
+//   - sequential Contents API PUT 절대 금지(runner가 강제).
+//   - atomic blob → tree → commit → ref(force=false) 만 사용.
+//   - 응답에 raw newContent 포함 X. trace/log에도 포함 X.
+//   - merge/review/label/assignee/branch delete 절대 X.
+// ──────────────────────────────────────────────────────────────────────────────
+
+async function handleMultiFileCommitExecute(deps: GithubRouteDependencies): Promise<boolean> {
+  const { respondJson, createClient, readJsonBody, request, writeRepoAllowlist, verifyApproval, now, protectedBranches } = deps;
+  if (!readJsonBody || !request) {
+    respondJson(500, { outcome: "github_error", message: "W5b dependencies not wired" });
+    return true;
+  }
+  let payload;
+  try {
+    payload = githubMultiFileCommitExecuteRequestSchema.parse(await readJsonBody(request));
+  } catch (error) {
+    respondJson(400, { outcome: "blocked", truthStatus: "planned", message: error instanceof Error ? error.message : "잘못된 execute 요청" });
+    return true;
+  }
+  if (!verifyApproval) {
+    respondJson(500, { outcome: "github_error", message: "approval 검증기가 주입되지 않았습니다" });
+    return true;
+  }
+  // GithubReadonlyClient의 W5b 메서드 5개를 GithubGitDataClient interface로 어댑팅.
+  const client = createClient();
+  if (!client.getCommitTreeSha || !client.createBlob || !client.createTree || !client.createCommit || !client.updateRefSha) {
+    respondJson(200, {
+      outcome: "not_configured",
+      truthStatus: "planned",
+      message: "GitHub Git Data API 미지원(GITHUB_TOKEN 또는 client 구현 누락)",
+    });
+    return true;
+  }
+  const gitDataClient: GithubGitDataClient = {
+    getRefSha: (o, r, b) => client.getRefSha(o, r, b),
+    getCommitTreeSha: client.getCommitTreeSha.bind(client),
+    createBlob: client.createBlob.bind(client),
+    createTree: client.createTree.bind(client),
+    createCommit: client.createCommit.bind(client),
+    updateRefSha: client.updateRefSha.bind(client),
+  };
+  const response = await runMultiFileCommitExecute(payload, {
+    client: gitDataClient,
+    verifyApproval,
+    writeRepoAllowlist: writeRepoAllowlist ?? [],
+    protectedBranches: protectedBranches ?? ["main", "master"],
+    now: now ?? (() => new Date().toISOString()),
+  });
+  respondJson(200, response);
+  return true;
+}
+
 async function handlePrCreateExecute(deps: GithubRouteDependencies): Promise<boolean> {
   const { respondJson, createClient, readJsonBody, request, writeRepoAllowlist, prBaseAllowlist, prPlanStore, verifyApproval } = deps;
   if (!readJsonBody || !request || !prPlanStore) {
@@ -1419,6 +1484,14 @@ export async function handleGithubRoute({
       return true;
     }
     return handleFileChangeExecute(commonDeps);
+  }
+  // W5b multi-file atomic commit execute — POST only.
+  if (pathPrefixOnly === MULTIFILE_COMMIT_EXECUTE_PATH) {
+    if ((method ?? "GET") !== "POST") {
+      respondJson(405, { error: "method_not_allowed", message: "multi-file commit execute는 POST만 허용됩니다" });
+      return true;
+    }
+    return handleMultiFileCommitExecute(commonDeps);
   }
   // W4a PR create plan — POST only.
   if (pathPrefixOnly === PR_PLAN_PATH) {
