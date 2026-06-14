@@ -31,6 +31,8 @@ import {
   type GithubFileChangePlanStore,
 } from "../integrations/githubFileChangePlanStore.js";
 import { generateUnifiedDiff } from "../integrations/githubFileDiff.js";
+import { evaluatePrCreateGate } from "../integrations/githubPullRequestWriteGuards.js";
+import type { GithubPullRequestCreatePlanStore } from "../integrations/githubPullRequestCreatePlanStore.js";
 import {
   githubBranchCreateExecuteRequestSchema,
   githubBranchCreatePlanRequestSchema,
@@ -38,6 +40,7 @@ import {
   githubCommentWritePlanRequestSchema,
   githubFileChangeExecuteRequestSchema,
   githubFileChangePlanRequestSchema,
+  githubPullRequestCreatePlanRequestSchema,
   type GithubBranchCreateOutcome,
   type GithubBranchCreatePlan,
   type GithubCommentWriteOutcome,
@@ -45,6 +48,9 @@ import {
   type GithubFileChangeOperation,
   type GithubFileChangeOutcome,
   type GithubFileChangePlan,
+  type GithubPullRequestCompareFile,
+  type GithubPullRequestCreateOutcome,
+  type GithubPullRequestCreatePlan,
   type GithubResourceOutcome,
 } from "@ai-orchestrator/protocol";
 import type { IncomingMessage } from "node:http";
@@ -83,8 +89,12 @@ export type GithubRouteDependencies = {
   branchPlanStore?: GithubBranchCreatePlanStore;
   /** in-process file change plan store(W3a) — W1/W2와 별도 인스턴스. */
   fileChangePlanStore?: GithubFileChangePlanStore;
+  /** in-process PR create plan store(W4a). */
+  prPlanStore?: GithubPullRequestCreatePlanStore;
   /** GITHUB_WRITE_REPO_ALLOWLIST 파싱 결과 — 없으면 write disabled. */
   writeRepoAllowlist?: ReadonlyArray<string>;
+  /** GITHUB_PR_BASE_ALLOWLIST 파싱 결과 — 비어 있으면 기본 main/develop. */
+  prBaseAllowlist?: ReadonlyArray<string>;
   /**
    * W1 approval-or-armed 검증. approval은 서버 측 store(approval 이벤트 소스)에서 verify되며,
    * armed는 클라이언트가 보낸 armedAt을 신뢰하되 plan TTL 내 + autoExecuteArmed===true일 때만
@@ -134,6 +144,12 @@ const FILE_PLAN_PATH = "/integrations/github/write/file/plan";
 
 // W3b file change execute — approval-only. armed 없음.
 const FILE_EXECUTE_PATH = "/integrations/github/write/file/execute";
+
+// W4a PR create plan 경로 — plan only. execute(W4b)는 별도 phase.
+const PR_PLAN_PATH = "/integrations/github/write/pr/plan";
+
+/** compare summary의 파일 미리보기 캡 — 응답/트레이스 비대 방지. */
+const PR_COMPARE_FILES_PREVIEW_MAX = 50;
 
 /** comment write 결과 — readonly outcome enum과 호환(observed 외에 planned/approval_required/blocked 추가) */
 function writeOutcomeForError(error: unknown): { outcome: GithubCommentWriteOutcome; message: string } {
@@ -989,6 +1005,142 @@ async function handleFileChangeExecute(deps: GithubRouteDependencies): Promise<b
   return true;
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// W4a PR create plan handler — GitHub POST /pulls는 절대 호출하지 않는다.
+// 흐름:
+//   1) zod parse → 정적 게이트(allowlist/base/head/title/body/secret) 통과
+//   2) head ref read → 존재 확인
+//   3) base ref read → 존재 확인
+//   4) compare base...head GET → aheadBy/changedFiles 관측
+//   5) no-op 체크: aheadBy=0 또는 changedFiles=0 이면 blocked
+//   6) plan 저장, 응답
+//
+//   - GitHub POST/PUT/DELETE는 절대 없음(read만)
+//   - filesPreview는 PR_COMPARE_FILES_PREVIEW_MAX로 잘라 truncated 표식
+// ──────────────────────────────────────────────────────────────────────────────
+
+function prCreateOutcomeForError(error: unknown): { outcome: GithubPullRequestCreateOutcome; message: string } {
+  const mapped = outcomeForError(error);
+  return { outcome: mapped.outcome as GithubPullRequestCreateOutcome, message: scrubServerToken(mapped.message) };
+}
+
+async function handlePrCreatePlan(deps: GithubRouteDependencies): Promise<boolean> {
+  const { respondJson, createClient, readJsonBody, request, writeRepoAllowlist, prBaseAllowlist, prPlanStore } = deps;
+  if (!readJsonBody || !request || !prPlanStore) {
+    respondJson(500, { outcome: "github_error", message: "W4a dependencies not wired" });
+    return true;
+  }
+  const status = createClient().status();
+  if (!status.tokenPresent) {
+    respondJson(200, { outcome: "not_configured", message: "GITHUB_TOKEN이 설정되지 않아 write가 비활성화되어 있습니다" });
+    return true;
+  }
+  let payload;
+  try {
+    payload = githubPullRequestCreatePlanRequestSchema.parse(await readJsonBody(request));
+  } catch (error) {
+    respondJson(400, { outcome: "blocked", message: error instanceof Error ? error.message : "잘못된 plan 요청" });
+    return true;
+  }
+  const gate = evaluatePrCreateGate({
+    repoFullName: payload.repoFullName,
+    baseBranch: payload.baseBranch,
+    headBranch: payload.headBranch,
+    title: payload.title,
+    body: payload.body,
+    allowlist: writeRepoAllowlist ?? [],
+    baseAllowlist: prBaseAllowlist ?? [],
+    tokenPresent: true,
+  });
+  if (gate.kind === "blocked") {
+    respondJson(200, { outcome: "blocked", message: gate.reason });
+    return true;
+  }
+  const [owner, repo] = gate.repoFullName.split("/") as [string, string];
+  // head ref 존재 확인 — 없으면 PR을 만들 수 없으므로 즉시 차단.
+  try {
+    await createClient().getRefSha(owner, repo, gate.headBranch);
+  } catch (error) {
+    if (error instanceof GithubReadonlyError && error.status === 404) {
+      respondJson(200, {
+        outcome: "blocked",
+        message: `head branch '${gate.headBranch}'이(가) ${gate.repoFullName}에 없습니다 — W2로 먼저 만들고 다시 시도하세요`,
+      });
+      return true;
+    }
+    const mapped = prCreateOutcomeForError(error);
+    respondJson(200, mapped);
+    return true;
+  }
+  // base ref 존재 확인.
+  try {
+    await createClient().getRefSha(owner, repo, gate.baseBranch);
+  } catch (error) {
+    if (error instanceof GithubReadonlyError && error.status === 404) {
+      respondJson(200, { outcome: "blocked", message: `base branch '${gate.baseBranch}'이(가) ${gate.repoFullName}에 없습니다` });
+      return true;
+    }
+    const mapped = prCreateOutcomeForError(error);
+    respondJson(200, mapped);
+    return true;
+  }
+  // compare base...head — aheadBy/changedFiles/commits/files 관측.
+  let compareRaw;
+  try {
+    compareRaw = await createClient().compareBranches(owner, repo, gate.baseBranch, gate.headBranch);
+  } catch (error) {
+    const mapped = prCreateOutcomeForError(error);
+    respondJson(200, mapped);
+    return true;
+  }
+  if (compareRaw.aheadBy <= 0 || compareRaw.changedFiles <= 0) {
+    respondJson(200, {
+      outcome: "blocked",
+      message: `head가 base 대비 변경이 없습니다(aheadBy=${compareRaw.aheadBy}, changedFiles=${compareRaw.changedFiles}) — no-op PR 차단`,
+    });
+    return true;
+  }
+  const trimmedFiles: GithubPullRequestCompareFile[] = compareRaw.files
+    .slice(0, PR_COMPARE_FILES_PREVIEW_MAX)
+    .map((file) => ({
+      filename: file.filename,
+      status: file.status,
+      additions: file.additions,
+      deletions: file.deletions,
+    }));
+  const truncated = compareRaw.files.length > PR_COMPARE_FILES_PREVIEW_MAX;
+
+  const nowIso = deps.now?.() ?? new Date().toISOString();
+  const planId = `gprp_${randomUUID()}`;
+  const expiresAt = new Date(Date.parse(nowIso) + 10 * 60 * 1000).toISOString();
+  const plan: GithubPullRequestCreatePlan = {
+    id: planId,
+    repoFullName: gate.repoFullName,
+    baseBranch: gate.baseBranch,
+    headBranch: gate.headBranch,
+    title: gate.title,
+    bodyPreview: gate.bodyPreview,
+    titleSha256: gate.titleSha256,
+    bodySha256: gate.bodySha256,
+    bodyLength: gate.bodyLength,
+    compare: {
+      aheadBy: compareRaw.aheadBy,
+      behindBy: compareRaw.behindBy,
+      changedFiles: compareRaw.changedFiles,
+      commits: compareRaw.totalCommits,
+      filesPreview: trimmedFiles,
+      truncated,
+    },
+    status: "approval_required",
+    truthStatus: "planned",
+    createdAt: nowIso,
+    expiresAt,
+  };
+  prPlanStore.put({ plan, title: gate.title, body: payload.body });
+  respondJson(200, { outcome: "planned", plan });
+  return true;
+}
+
 export async function handleGithubRoute({
   pathname,
   method,
@@ -1000,12 +1152,14 @@ export async function handleGithubRoute({
   planStore,
   branchPlanStore,
   fileChangePlanStore,
+  prPlanStore,
   writeRepoAllowlist,
+  prBaseAllowlist,
   verifyApproval,
 }: GithubRouteDependencies): Promise<boolean> {
   if (!pathname.startsWith("/integrations/github/")) return false;
   const pathPrefixOnly = pathname.split("?")[0] ?? pathname;
-  const commonDeps = { pathname, method, createClient, respondJson, now, request, readJsonBody, planStore, branchPlanStore, fileChangePlanStore, writeRepoAllowlist, verifyApproval };
+  const commonDeps = { pathname, method, createClient, respondJson, now, request, readJsonBody, planStore, branchPlanStore, fileChangePlanStore, prPlanStore, writeRepoAllowlist, prBaseAllowlist, verifyApproval };
   // W1 comment write — 메서드 인지(POST). 다른 readonly 경로는 그대로 GET만.
   if (pathPrefixOnly === COMMENT_PLAN_PATH) {
     if ((method ?? "GET") !== "POST") {
@@ -1051,6 +1205,14 @@ export async function handleGithubRoute({
       return true;
     }
     return handleFileChangeExecute(commonDeps);
+  }
+  // W4a PR create plan — POST only. execute(W4b)는 별도 phase, 라우트도 추가하지 않는다.
+  if (pathPrefixOnly === PR_PLAN_PATH) {
+    if ((method ?? "GET") !== "POST") {
+      respondJson(405, { error: "method_not_allowed", message: "PR create plan은 POST만 허용됩니다" });
+      return true;
+    }
+    return handlePrCreatePlan(commonDeps);
   }
   if ((method ?? "GET") !== "GET") {
     // 그 외 read-only 경로는 비-GET 거절(기존 동작 유지).

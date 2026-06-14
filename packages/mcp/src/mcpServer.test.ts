@@ -100,24 +100,25 @@ describe("GitHub read-only MCP tools (D3)", () => {
     expect(names).toEqual(expect.arrayContaining(["github_status", "github_pr_list", "github_pr_read", "github_file_read"]));
   });
 
-  it("읽기 도구는 GET only(D3) — write는 comment_plan/comment_execute(W1) + branch_plan(W2) + file_change_plan(W3a)만", () => {
+  it("읽기 도구는 GET only(D3) — write는 comment_plan/comment_execute(W1) + branch_plan(W2) + file_change_plan(W3a) + pr_plan(W4a)만", () => {
     const gh = SWARM_TOOLS.filter((t) => t.name.startsWith("github_"));
-    expect(gh.length).toBeGreaterThanOrEqual(8);
+    expect(gh.length).toBeGreaterThanOrEqual(9);
     // read-only는 GET만 — github_status / pr_list / pr_read / file_read
-    const readOnly = gh.filter((t) => !/^github_(comment_|branch_|file_change_)/.test(t.name));
+    const readOnly = gh.filter((t) => !/^github_(comment_|branch_|file_change_|pr_plan)/.test(t.name));
     expect(readOnly.every((t) => t.method === "GET")).toBe(true);
-    // write는 comment_plan/comment_execute + branch_plan + file_change_plan 네 개만.
-    // 명시 차단: file_change_execute(W3b 분리), branch_execute(W2b), commit/PR/merge 등은 절대 추가 금지.
+    // write는 comment_plan/comment_execute + branch_plan + file_change_plan + pr_plan 다섯 개만.
+    // 명시 차단: pr_create_execute는 W4b로 분리, file_change_execute는 W3b, branch_execute는 W2b.
     const writeNames = gh.filter((t) => t.method === "POST").map((t) => t.name);
     expect(writeNames.sort()).toEqual([
       "github_branch_plan",
       "github_comment_execute",
       "github_comment_plan",
       "github_file_change_plan",
+      "github_pr_plan",
     ]);
     expect(
       SWARM_TOOLS.some((t) =>
-        /github_(branch_execute|branch_delete|file_change_execute|file_change_force|merge|commit|push|file_(create|write|update|delete)|pr_create|comment_(update|delete))/.test(t.name),
+        /github_(branch_execute|branch_delete|file_change_execute|file_change_force|pr_create|pr_create_execute|pr_execute|pr_merge|merge|commit|push|file_(create|write|update|delete)|comment_(update|delete))/.test(t.name),
       ),
     ).toBe(false);
   });

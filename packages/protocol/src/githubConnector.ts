@@ -484,6 +484,107 @@ export const githubFileChangeExecuteResponseSchema = z.object({
 });
 export type GithubFileChangeExecuteResponse = z.infer<typeof githubFileChangeExecuteResponseSchema>;
 
+// ──────────────────────────────────────────────────────────────────────────────
+// W4a: GitHub PR create plan / preview. 네 번째 write 표면.
+// 이 단계에서는 **GitHub POST /pulls를 호출하지 않는다**:
+//   - PR 생성 0, comment 작성 0, merge 0, branch update 0, file update 0.
+//   - GET base/head ref + GET compare base...head만으로 plan + preview를 만든다.
+// truthStatus는 항상 planned. observed로 표시되는 부분은 base/head/compare read에 한정되며,
+// plan 자체가 observed가 되지는 않는다.
+//
+// 안전선(plan 단계만):
+//   - repo allowlist 재사용(W1 env GITHUB_WRITE_REPO_ALLOWLIST)
+//   - base branch allowlist(env GITHUB_PR_BASE_ALLOWLIST, 기본 main/develop)
+//   - head branch policy 재사용(W2 — agent/work/user/mission/ prefix만)
+//   - base != head, head/base 모두 존재 필수
+//   - compare aheadBy=0 또는 changedFiles=0 → blocked(no-op PR 차단)
+//   - title<=160, body<=16000
+//   - title/body secret scan 재사용(W1 scanner)
+//
+// 사용자 계약:
+//   - approval required(armed 없음 — W2/W3과 동일 보수)
+//   - MCP는 plan tool만(github_pr_plan). github_pr_create_execute는 추가하지 않음.
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const githubPullRequestCreateOutcomeSchema = z.enum([
+  "observed",
+  "planned",
+  "approval_required",
+  "blocked",
+  "not_configured",
+  "permission_denied",
+  "connection_failed",
+  "github_error",
+]);
+export type GithubPullRequestCreateOutcome = z.infer<typeof githubPullRequestCreateOutcomeSchema>;
+
+export const githubPullRequestCreatePlanRequestSchema = z.object({
+  repoFullName: z
+    .string()
+    .min(3).max(140)
+    .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, "owner/repo 형식이 필요합니다"),
+  /** PR이 머지될 base branch. main/develop 같은 보호 브랜치 — 단, GITHUB_PR_BASE_ALLOWLIST 통과 필요. */
+  baseBranch: z.string().min(1).max(120),
+  /** PR의 head — 변경이 든 작업 가지. W2 prefix(agent/work/user/mission/)만 허용. */
+  headBranch: z.string().min(1).max(120),
+  /** PR 제목. */
+  title: z.string().min(1).max(160),
+  /** PR 본문(빈 문자열 허용 — GitHub PR도 body 빈 상태로 만들 수 있음). */
+  body: z.string().max(16_000),
+});
+export type GithubPullRequestCreatePlanRequest = z.infer<typeof githubPullRequestCreatePlanRequestSchema>;
+
+/** compare summary의 파일 항목(파일 목록이 너무 길면 호출자가 잘라낸다). */
+export const githubPullRequestCompareFileSchema = z.object({
+  filename: z.string(),
+  /** GitHub compare가 돌려주는 상태(added/modified/removed/renamed 등) */
+  status: z.string(),
+  additions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+});
+export type GithubPullRequestCompareFile = z.infer<typeof githubPullRequestCompareFileSchema>;
+
+export const githubPullRequestCompareSummarySchema = z.object({
+  aheadBy: z.number().int().nonnegative(),
+  behindBy: z.number().int().nonnegative(),
+  changedFiles: z.number().int().nonnegative(),
+  commits: z.number().int().nonnegative(),
+  /** 미리보기용 파일 목록 — truncated=true이면 일부만 들어있음. */
+  filesPreview: z.array(githubPullRequestCompareFileSchema),
+  truncated: z.boolean(),
+});
+export type GithubPullRequestCompareSummary = z.infer<typeof githubPullRequestCompareSummarySchema>;
+
+export const githubPullRequestCreatePlanSchema = z.object({
+  id: z.string(),
+  repoFullName: z.string(),
+  baseBranch: z.string(),
+  headBranch: z.string(),
+  /** plan에 저장된 title — 응답에 그대로 노출(160자 캡). */
+  title: z.string(),
+  /** preview는 본문의 앞부분만 노출(긴 본문 전체를 응답/트레이스에 흘리지 않음). */
+  bodyPreview: z.string(),
+  titleSha256: z.string(),
+  bodySha256: z.string(),
+  /** 원본 body의 utf-8 byte 길이. */
+  bodyLength: z.number().int().nonnegative(),
+  compare: githubPullRequestCompareSummarySchema,
+  status: z.enum(["planned", "approval_required", "blocked", "failed"]),
+  truthStatus: z.enum(["planned", "observed", "configured"]),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  approvalId: z.string().optional(),
+  blockedReason: z.string().optional(),
+});
+export type GithubPullRequestCreatePlan = z.infer<typeof githubPullRequestCreatePlanSchema>;
+
+export const githubPullRequestCreatePlanResponseSchema = z.object({
+  outcome: githubPullRequestCreateOutcomeSchema,
+  plan: githubPullRequestCreatePlanSchema.optional(),
+  message: z.string().optional(),
+});
+export type GithubPullRequestCreatePlanResponse = z.infer<typeof githubPullRequestCreatePlanResponseSchema>;
+
 /** GET /integrations/github/repos/:owner/:repo/pulls|pulls/:n|issues|overview|file */
 export const githubReadonlyResourceResponseSchema = z.object({
   status: githubConnectorStatusSchema,

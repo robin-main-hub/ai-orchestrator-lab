@@ -56,6 +56,9 @@ function stubClient(over: Partial<GithubReadonlyClient> & { token?: string } = {
     putFileContents:
       over.putFileContents ??
       (async () => ({ commitSha: "stub-commit", blobSha: "stub-blob", htmlUrl: "u" })),
+    compareBranches:
+      over.compareBranches ??
+      (async () => ({ aheadBy: 1, behindBy: 0, totalCommits: 1, changedFiles: 1, files: [{ filename: "x", status: "modified", additions: 1, deletions: 0 }] })),
   };
 }
 
