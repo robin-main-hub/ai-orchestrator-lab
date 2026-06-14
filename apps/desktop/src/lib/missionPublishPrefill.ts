@@ -187,3 +187,87 @@ export type MissionPublishPrefillResolver = (
   item: MissionBoardItem,
   scaffoldFiles?: ReadonlyArray<MissionScaffoldFile>,
 ) => GithubPublishPanelInitial | undefined;
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Publish history — Mission Workspace에 "GitHub로 어디까지 나갔는지" 한눈 요약.
+// trace event(github.publish.{step}.{status})를 단계별 latest entry로 누적.
+// 정직성: 보여줄 수 있는 건 'GithubPublishPanel.emit가 발행한 trace만'. 영속화 없음(세션 메모리).
+// ──────────────────────────────────────────────────────────────────────────────
+
+export type PublishStep = "branch" | "file" | "pr";
+export type PublishStepStatus =
+  | "planned"
+  | "observed"
+  | "blocked"
+  | "failed"
+  | "already_exists"
+  | "approval_required";
+
+export type PublishHistoryEntry = {
+  step: PublishStep;
+  status: PublishStepStatus;
+  /** GithubPublishPanel.emit의 summary 그대로(짧은 한 줄). */
+  summary: string;
+  /** ISO 시각 — trace event ts 그대로. */
+  ts: string;
+};
+
+/** 단계별 latest entry. branch/file/pr 각각 마지막 trace만 보관(단계 재시도해도 최신만 노출). */
+export type PublishHistoryByStep = {
+  branch?: PublishHistoryEntry;
+  file?: PublishHistoryEntry;
+  pr?: PublishHistoryEntry;
+};
+
+const STEP_SET = new Set<PublishStep>(["branch", "file", "pr"]);
+const STATUS_SET = new Set<PublishStepStatus>([
+  "planned",
+  "observed",
+  "blocked",
+  "failed",
+  "already_exists",
+  "approval_required",
+]);
+
+/**
+ * "github.publish.{step}.{status}" trace event를 PublishHistoryEntry로 파싱.
+ *
+ * 순수 함수: 외부 호출 0, 부수효과 0, 같은 입력 → 같은 출력(단, ts 미제공 시 new Date 한 번 호출).
+ *
+ * 알 수 없는 step/status, 또는 prefix가 "github.publish."가 아닐 때는 undefined(추측 금지).
+ * type이 정확히 "github.publish.{step}.{status}"이 아니면(점 4개 초과 등) 거부.
+ */
+export function parsePublishTrace(
+  type: string,
+  payload: Record<string, unknown> | null | undefined,
+): PublishHistoryEntry | undefined {
+  if (!type || !type.startsWith("github.publish.")) return undefined;
+  const parts = type.split(".");
+  if (parts.length !== 4) return undefined; // 정확히 4 토큰만 허용 — 확장 prefix 거부
+  const [, , step, status] = parts;
+  if (!step || !status) return undefined;
+  if (!STEP_SET.has(step as PublishStep)) return undefined;
+  if (!STATUS_SET.has(status as PublishStepStatus)) return undefined;
+  const safePayload = payload ?? undefined;
+  const summary = typeof safePayload?.summary === "string" ? safePayload.summary : "";
+  const ts = typeof safePayload?.ts === "string" ? safePayload.ts : new Date().toISOString();
+  return { step: step as PublishStep, status: status as PublishStepStatus, summary, ts };
+}
+
+/**
+ * publishHistoryByMission 상태에 새 trace를 누적한다.
+ *   - parsePublishTrace로 파싱 실패 또는 missionId 누락 → prev를 그대로 반환(no-op).
+ *   - 같은 mission/step 재시도 시 새 entry로 덮어쓴다(최신만 유지).
+ * 순수 함수 — Container useState updater 안에서 그대로 사용한다.
+ */
+export function accumulatePublishHistory(
+  prev: Readonly<Record<string, PublishHistoryByStep>>,
+  type: string,
+  payload: Record<string, unknown> | null | undefined,
+): Record<string, PublishHistoryByStep> {
+  const parsed = parsePublishTrace(type, payload);
+  const missionId = typeof payload?.missionId === "string" ? payload.missionId : undefined;
+  if (!parsed || !missionId) return prev as Record<string, PublishHistoryByStep>;
+  const existing = prev[missionId] ?? {};
+  return { ...prev, [missionId]: { ...existing, [parsed.step]: parsed } };
+}

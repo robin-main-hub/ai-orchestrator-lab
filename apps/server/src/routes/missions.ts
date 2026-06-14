@@ -4,6 +4,8 @@ import {
   buildBlueprintInputFromConversation,
   buildMissionCreateFromBlueprint,
   buildMissionCreateFromTemplate,
+  buildScaffoldPlan,
+  scaffoldForTemplate,
   conversationBlueprintDraftRequestSchema,
   conversationBlueprintDraftResponseSchema,
   CORE_WORKFLOW_TEMPLATES,
@@ -99,6 +101,8 @@ export type MissionRouteDependencies = {
     modelId: string;
     baseline: DesignBlueprintInput;
   }) => Promise<DesignBlueprintInput | null>;
+  /** seed scaffold createdAt 등에 쓰는 시계. 미주입이면 Date 기반 기본. */
+  now?: () => string;
 };
 
 const MISSION_PATH = /^\/missions\/([^/]+)$/;
@@ -119,6 +123,44 @@ const MISSION_SCAFFOLD_PLAN_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/sc
 const MISSION_SCAFFOLD_APPLY_PATH = /^\/missions\/([^/]+)\/scaffold\/([^/]+)\/apply$/;
 const MISSION_SCAFFOLD_LATEST_PATH = /^\/missions\/([^/]+)\/scaffold\/latest$/;
 
+/** App Builder의 모든 blueprint 미션이 Publish Flow file prefill을 가질 수 있도록
+ *  생성 직후 seed scaffold plan을 자동으로 남긴다.
+ *
+ *  정직성:
+ *    - workspaceId/repoRootRef는 placeholder("<from-blueprint-seed>" 등) — 실제 fs apply는 아님.
+ *      Publish Flow는 path+content만 읽으므로 placeholder가 노출돼도 위험 없음.
+ *      추후 사용자가 workspace를 attach하고 명시적 scaffold/plan을 만들면 그게 latest로 덮인다.
+ *    - templateId는 react_vite_app 고정(현 시점 generic 기본). blueprint에서 파생 로직은 별도 작업.
+ *    - 실패해도 미션 생성은 막지 않는다(scaffold seed는 prefill 편의, 미션 본 흐름의 필수가 아님).
+ */
+async function seedBlueprintScaffold(input: {
+  store: MissionStore;
+  missionId: string;
+  blueprintTitle: string;
+  now: () => string;
+}): Promise<void> {
+  try {
+    const templateId = "react_vite_app";
+    const templateInput = { appName: input.blueprintTitle || "app" };
+    const scaffold = scaffoldForTemplate(templateId, templateInput);
+    if (scaffold.length === 0) return;
+    const plan = buildScaffoldPlan({
+      id: `plan_${input.missionId}_seed`,
+      missionId: input.missionId,
+      workspaceId: `workspace_seed_${input.missionId}`,
+      templateId,
+      templateInput,
+      repoRootRef: "<from-blueprint-seed>",
+      scaffold,
+      existingPaths: new Set(),
+      now: input.now,
+    });
+    await input.store.recordScaffoldPlan(input.missionId, plan);
+  } catch {
+    // 미션 본 흐름을 막지 않는다 — seed는 편의 기능.
+  }
+}
+
 export async function handleMissionRoute({
   store,
   request,
@@ -136,6 +178,7 @@ export async function handleMissionRoute({
   planScaffold,
   applyScaffold,
   enrichBlueprintWithAi,
+  now,
 }: MissionRouteDependencies): Promise<boolean> {
   if (pathname === "/missions" && method === "POST") {
     let payload: MissionCreateRequest;
@@ -319,6 +362,8 @@ export async function handleMissionRoute({
         respondJson(500, { error: "mission_from_blueprint_failed", message: "blueprint attach did not materialize" });
         return true;
       }
+      // Publish Flow file prefill을 위해 seed scaffold를 자동으로 남긴다(placeholder workspace).
+      await seedBlueprintScaffold({ store, missionId, blueprintTitle: payload.blueprint.title, now: now ?? (() => new Date().toISOString()) });
       respondJson(201, {
         mission: result.mission,
         blueprint: result.blueprint,
@@ -358,6 +403,8 @@ export async function handleMissionRoute({
         respondJson(500, { error: "mission_from_debate_failed", message: "blueprint attach did not materialize" });
         return true;
       }
+      // from-blueprint와 동일 — Publish Flow file prefill용 seed scaffold.
+      await seedBlueprintScaffold({ store, missionId, blueprintTitle: blueprintInput.title, now: now ?? (() => new Date().toISOString()) });
       respondJson(201, { mission: result.mission, blueprint: result.blueprint, debatePacket: payload.packet });
     } catch (error) {
       respondJson(500, { error: "mission_from_debate_failed", message: error instanceof Error ? error.message : String(error) });
