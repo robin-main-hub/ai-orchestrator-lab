@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Wand2, Copy, ClipboardPaste, ArrowDownToLine, CircleCheck, CircleAlert } from "lucide-react";
+import { Wand2, Copy, ClipboardPaste, ArrowDownToLine, CircleCheck, CircleAlert, Sparkles } from "lucide-react";
 import type { AppFixDraft } from "../lib/appFixDraft";
 import type { MissionScaffoldFile } from "../lib/missionPublishPrefill";
 import {
@@ -7,6 +7,7 @@ import {
   validateTurboEditOutput,
   type TurboEditPromptIssue,
 } from "../lib/turboEditPrompt";
+import type { TurboEditGenerator, TurboEditGenerationResult } from "../lib/turboEditGenerator";
 import { Card, CardHeader, CardContent, CardFooter } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -36,6 +37,8 @@ export function TurboEditDraftCard({
   extraIssues,
   onSendDraft,
   onContextEvent,
+  onGenerate,
+  providerLabel,
 }: {
   missionId: string;
   appName?: string;
@@ -45,6 +48,11 @@ export function TurboEditDraftCard({
   /** "초안으로 보내기" 클릭 — 부모(MissionBoardPanel)가 SearchReplaceEditCard text로 주입. */
   onSendDraft: (text: string) => void;
   onContextEvent?: (type: string, payload: Record<string, unknown>) => void;
+  /** OSS-H6: in-app provider 호출. 부모가 active provider/model로 만든 generator를 주입.
+   *  undefined면 카드는 외부 LLM 복붙 경로만 노출(가짜 버튼 X). */
+  onGenerate?: TurboEditGenerator;
+  /** "AI 수정 초안 생성" 버튼 옆에 표시할 provider/model 라벨(있을 때만). */
+  providerLabel?: string;
 }) {
   const [selectedPaths, setSelectedPaths] = useState<ReadonlyArray<string>>(() => {
     // 기본 선택: appFixDraft.fileSuggestions의 파일들 + scaffold 첫 3개.
@@ -55,6 +63,11 @@ export function TurboEditDraftCard({
   const [userInstruction, setUserInstruction] = useState("");
   const [pasted, setPasted] = useState("");
   const [copyAt, setCopyAt] = useState<number | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [lastGenerationKind, setLastGenerationKind] = useState<
+    "idle" | "ok_injected" | "ok_invalid" | "no_edits" | "failed"
+  >("idle");
 
   const prompt = useMemo(() => {
     if (!files) return null;
@@ -104,6 +117,67 @@ export function TurboEditDraftCard({
       filePaths: validation.filePaths,
       ts: new Date().toISOString(),
     });
+  };
+
+  const onClickGenerate = async () => {
+    if (!onGenerate || !prompt || prompt.empty || generating) return;
+    setGenerating(true);
+    setGenerationError(null);
+    setLastGenerationKind("idle");
+    onContextEvent?.("mission.turbo_edits.generate_clicked", {
+      missionId,
+      promptBytes: prompt.userPrompt.length,
+      includedFiles: prompt.includedFiles.length,
+      ts: new Date().toISOString(),
+    });
+    let result: TurboEditGenerationResult;
+    try {
+      result = await onGenerate({
+        systemPrompt: prompt.systemPrompt,
+        userPrompt: prompt.userPrompt,
+      });
+    } catch (e) {
+      // generator는 보통 throw하지 않지만(자체적으로 reason으로 변환), 그래도 가드.
+      const reason = e instanceof Error ? e.message : String(e);
+      setGenerationError(reason);
+      setLastGenerationKind("failed");
+      setGenerating(false);
+      return;
+    }
+    if (!result.ok) {
+      setGenerationError(result.reason);
+      setLastGenerationKind("failed");
+      setGenerating(false);
+      return;
+    }
+    // 응답 텍스트를 paste 영역에 채워 — useMemo가 자동 validate.
+    setPasted(result.text);
+    // 검증 — valid면 SearchReplaceEditCard로 자동 주입(루프 단축).
+    const v = validateTurboEditOutput(result.text);
+    if (v.ok && !v.noConfidentEdits) {
+      onSendDraft(result.text);
+      setLastGenerationKind("ok_injected");
+      onContextEvent?.("mission.turbo_edits.generate_injected", {
+        missionId,
+        blockCount: v.blockCount,
+        filePaths: v.filePaths,
+        ts: new Date().toISOString(),
+      });
+    } else if (v.ok && v.noConfidentEdits) {
+      setLastGenerationKind("no_edits");
+      onContextEvent?.("mission.turbo_edits.generate_no_edits", {
+        missionId,
+        ts: new Date().toISOString(),
+      });
+    } else {
+      setLastGenerationKind("ok_invalid");
+      onContextEvent?.("mission.turbo_edits.generate_invalid", {
+        missionId,
+        reason: v.reason,
+        ts: new Date().toISOString(),
+      });
+    }
+    setGenerating(false);
   };
 
   if (!files) {
@@ -247,7 +321,68 @@ export function TurboEditDraftCard({
         </div>
       </CardContent>
 
-      <CardFooter className="flex items-center gap-2">
+      <CardFooter className="flex items-center gap-2 flex-wrap">
+        {/* OSS-H6: in-app provider 생성 — onGenerate 주입된 경우만 노출. */}
+        {onGenerate ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={onClickGenerate}
+            disabled={!prompt || prompt.empty || generating}
+            data-testid={`turbo-edits-generate-${missionId}`}
+          >
+            <Sparkles size={11} /> {generating ? "생성 중..." : "AI 수정 초안 생성"}
+          </Button>
+        ) : (
+          <span
+            className="text-xs text-muted-foreground"
+            data-testid={`turbo-edits-generate-unavailable-${missionId}`}
+          >
+            provider 미설정 — 위 "프롬프트 복사"로 외부 LLM 경로를 쓰세요
+          </span>
+        )}
+        {providerLabel && onGenerate ? (
+          <span
+            className="text-xs text-muted-foreground"
+            data-testid={`turbo-edits-provider-label-${missionId}`}
+          >
+            {providerLabel}
+          </span>
+        ) : null}
+        {lastGenerationKind === "ok_injected" ? (
+          <span
+            className="text-xs text-emerald-400"
+            data-testid={`turbo-edits-generate-injected-${missionId}`}
+          >
+            <CircleCheck size={10} className="inline" /> 자동 주입됨 — 아래에서 검토하고 Apply
+          </span>
+        ) : null}
+        {lastGenerationKind === "ok_invalid" ? (
+          <span
+            className="text-xs text-red-400"
+            data-testid={`turbo-edits-generate-invalid-${missionId}`}
+          >
+            <CircleAlert size={10} className="inline" /> 응답이 유효한 SEARCH/REPLACE 형식이 아님 — 직접 수정 필요
+          </span>
+        ) : null}
+        {lastGenerationKind === "no_edits" ? (
+          <span
+            className="text-xs text-amber-400"
+            data-testid={`turbo-edits-generate-no-edits-${missionId}`}
+          >
+            모델이 NO_CONFIDENT_EDITS로 답함 — 안전한 수정안을 못 만듦
+          </span>
+        ) : null}
+        {lastGenerationKind === "failed" && generationError ? (
+          <span
+            className="text-xs text-red-400"
+            data-testid={`turbo-edits-generate-failed-${missionId}`}
+          >
+            생성 실패: {generationError}
+          </span>
+        ) : null}
+
         <Button
           type="button"
           size="sm"

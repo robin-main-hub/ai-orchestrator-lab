@@ -31,6 +31,7 @@ import { GeneratedFilesPanel } from "./GeneratedFilesPanel";
 import { SearchReplaceEditCard } from "./SearchReplaceEditCard";
 import { TurboEditDraftCard } from "./TurboEditDraftCard";
 import { buildAppFixDraftFromVisualQa } from "../lib/appFixDraft";
+import type { TurboEditGenerator } from "../lib/turboEditGenerator";
 import { postDgxMissionScaffoldOverlay } from "../runtime/stage47MissionServer";
 import type { VisualQaReport } from "@ai-orchestrator/protocol";
 import type { VisualQaDiff } from "../lib/visualQaDiff";
@@ -98,6 +99,15 @@ export type MissionPublishEnvironment = {
    * binary/대용량/시크릿 의심은 builtinMissionPrefill이 자동으로 거른다.
    */
   getScaffoldFiles?: (item: MissionBoardItem) => ReadonlyArray<MissionScaffoldFile> | undefined;
+  /**
+   * OSS-H6 — Turbo Edits "AI 수정 초안 생성"용 in-app generator. App.tsx가 active provider/model을
+   * 알고 있고 requestCompletion 경로가 살아있을 때만 제공한다. 미제공이면 카드는 외부 LLM 복붙 경로만 노출.
+   * 자동 overlay/Preview 0 — generator는 텍스트만 반환.
+   */
+  getTurboEditGenerator?: (item: MissionBoardItem) => {
+    generator: TurboEditGenerator;
+    providerLabel?: string;
+  } | undefined;
   /**
    * 현재 세션에서 누적된 publish flow trace의 단계별 latest entry. branch/file/pr 각각 최신 1건.
    * 컨테이너가 onContextEvent에서 github.publish.*를 가로채 누적한 결과를 노출한다.
@@ -583,8 +593,9 @@ function MissionWorkspaceDetail({
         files={publishEnvironment?.getScaffoldFiles?.(item)}
       />
 
-      {/* Turbo Edits Draft (OSS-H5) — LLM이 SEARCH/REPLACE 블록을 만들도록 prompt를 빌드.
-          LLM 호출은 사용자가 외부에서 — 응답 paste → validate → SearchReplaceEditCard로 주입. */}
+      {/* Turbo Edits Draft (OSS-H5/H6) — LLM이 SEARCH/REPLACE 블록을 만들도록 prompt를 빌드.
+          H6: onGenerate가 주입되면 앱 안에서 provider 호출까지 가능(외부 LLM 복붙 경로는 유지).
+          자동 overlay/Preview 0 — 응답 valid면 SearchReplaceEditCard에만 자동 주입. */}
       <TurboEditDraftCard
         missionId={item.missionId}
         appName={item.title}
@@ -594,6 +605,8 @@ function MissionWorkspaceDetail({
         onContextEvent={(type, payload) =>
           publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
         }
+        onGenerate={publishEnvironment?.getTurboEditGenerator?.(item)?.generator}
+        providerLabel={publishEnvironment?.getTurboEditGenerator?.(item)?.providerLabel}
       />
 
       {/* Search/Replace Edit (OSS-H4) — Aider 스타일 좁은 편집을 그대로 ScaffoldOverlay로.

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { TurboEditDraftCard } from "./TurboEditDraftCard";
 import type { AppFixDraft } from "../lib/appFixDraft";
 import type { MissionScaffoldFile } from "../lib/missionPublishPrefill";
+import type { TurboEditGenerator } from "../lib/turboEditGenerator";
 
 afterEach(() => cleanup());
 
@@ -139,7 +140,128 @@ describe("TurboEditDraftCard — OSS-H5 producer surface", () => {
     expect(body.textContent ?? "").not.toContain("ghp_AAAAAAAAAAAAAAAAAAAAAAAAAA");
   });
 
-  it("(T8) shadcn primitive 사용 확인", () => {
+  it("(T8 — H6) onGenerate 미주입 → '생성' 버튼 없음 + provider 미설정 안내", () => {
+    render(
+      <TurboEditDraftCard
+        missionId="th8"
+        files={[file("src/App.tsx", "x")]}
+        onSendDraft={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("turbo-edits-generate-th8")).toBeNull();
+    expect(screen.getByTestId("turbo-edits-generate-unavailable-th8")).toBeTruthy();
+  });
+
+  it("(T9 — H6) onGenerate 주입 + valid 응답 → paste 채움 + onSendDraft 자동 호출 + 자동 주입 라벨", async () => {
+    const onSendDraft = vi.fn();
+    const generate = vi.fn<TurboEditGenerator>(async () => ({
+      ok: true,
+      text: VALID_OUTPUT,
+    }));
+    render(
+      <TurboEditDraftCard
+        missionId="th9"
+        files={[file("src/App.tsx", "hello\n")]}
+        appFixDraft={APP_FIX_DRAFT}
+        onSendDraft={onSendDraft}
+        onGenerate={generate}
+        providerLabel="anthropic · claude-x"
+      />,
+    );
+    fireEvent.change(screen.getByTestId("turbo-edits-instruction-th9"), {
+      target: { value: "헤더 크게" },
+    });
+    expect(screen.getByTestId("turbo-edits-provider-label-th9").textContent).toContain("anthropic");
+    fireEvent.click(screen.getByTestId("turbo-edits-generate-th9"));
+    await waitFor(() => {
+      expect(generate).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("turbo-edits-generate-injected-th9")).toBeTruthy();
+    });
+    expect(onSendDraft).toHaveBeenCalledWith(VALID_OUTPUT);
+    // paste 영역에도 채워졌는지(자동 validate가 ok로 표시)
+    expect((screen.getByTestId("turbo-edits-paste-th9") as HTMLTextAreaElement).value).toContain(
+      "<<<<<<< SEARCH",
+    );
+  });
+
+  it("(T10 — H6) generator가 ok=false → 'failed' 라벨 + onSendDraft 호출 0", async () => {
+    const onSendDraft = vi.fn();
+    const generate = vi.fn<TurboEditGenerator>(async () => ({
+      ok: false,
+      reason: "rate_limit",
+    }));
+    render(
+      <TurboEditDraftCard
+        missionId="th10"
+        files={[file("src/App.tsx", "x")]}
+        onSendDraft={onSendDraft}
+        onGenerate={generate}
+      />,
+    );
+    fireEvent.change(screen.getByTestId("turbo-edits-instruction-th10"), {
+      target: { value: "x" },
+    });
+    fireEvent.click(screen.getByTestId("turbo-edits-generate-th10"));
+    await waitFor(() => {
+      expect(screen.getByTestId("turbo-edits-generate-failed-th10").textContent).toContain("rate_limit");
+    });
+    expect(onSendDraft).not.toHaveBeenCalled();
+  });
+
+  it("(T11 — H6) generator 응답이 valid SEARCH/REPLACE가 아님 → 'invalid' 라벨 + 자동 주입 X", async () => {
+    const onSendDraft = vi.fn();
+    const generate = vi.fn<TurboEditGenerator>(async () => ({
+      ok: true,
+      text: "just chat, no markers",
+    }));
+    render(
+      <TurboEditDraftCard
+        missionId="th11"
+        files={[file("src/App.tsx", "x")]}
+        onSendDraft={onSendDraft}
+        onGenerate={generate}
+      />,
+    );
+    fireEvent.change(screen.getByTestId("turbo-edits-instruction-th11"), {
+      target: { value: "x" },
+    });
+    fireEvent.click(screen.getByTestId("turbo-edits-generate-th11"));
+    await waitFor(() => {
+      expect(screen.getByTestId("turbo-edits-generate-invalid-th11")).toBeTruthy();
+    });
+    expect(onSendDraft).not.toHaveBeenCalled();
+    // paste에는 응답이 채워져 사용자가 직접 손볼 수 있음
+    expect((screen.getByTestId("turbo-edits-paste-th11") as HTMLTextAreaElement).value)
+      .toContain("just chat");
+  });
+
+  it("(T12 — H6) generator 응답이 NO_CONFIDENT_EDITS → 'no edits' 라벨 + 자동 주입 X", async () => {
+    const onSendDraft = vi.fn();
+    const generate = vi.fn<TurboEditGenerator>(async () => ({
+      ok: true,
+      text: "NO_CONFIDENT_EDITS\n",
+    }));
+    render(
+      <TurboEditDraftCard
+        missionId="th12"
+        files={[file("src/App.tsx", "x")]}
+        onSendDraft={onSendDraft}
+        onGenerate={generate}
+      />,
+    );
+    fireEvent.change(screen.getByTestId("turbo-edits-instruction-th12"), {
+      target: { value: "x" },
+    });
+    fireEvent.click(screen.getByTestId("turbo-edits-generate-th12"));
+    await waitFor(() => {
+      expect(screen.getByTestId("turbo-edits-generate-no-edits-th12")).toBeTruthy();
+    });
+    expect(onSendDraft).not.toHaveBeenCalled();
+  });
+
+  it("(T13) shadcn primitive 사용 확인", () => {
     const { container } = render(
       <TurboEditDraftCard
         missionId="t8"
