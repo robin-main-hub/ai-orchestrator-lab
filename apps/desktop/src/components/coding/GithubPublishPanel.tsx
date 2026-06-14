@@ -15,6 +15,7 @@ import {
   sha256Hex,
 } from "../../lib/githubConnector";
 import { PullRequestUpdateCard } from "../publish/PullRequestUpdateCard";
+import { PullRequestLabelsUpdateCard } from "../publish/PullRequestLabelsUpdateCard";
 
 /**
  * GitHub Publish Panel — W1~W4 write 표면을 한 화면에서 안전하게 진행한다.
@@ -281,6 +282,23 @@ export function GithubPublishPanel({
       } else if (type === "github.publish.pr.update.failed") {
         const summary = typeof payload.summary === "string" ? payload.summary : "failed";
         emit({ ts, step: "pr", event: "failed", summary: `PR update failed — ${summary}` });
+      } else if (type === "github.publish.pr.labels.observed") {
+        const num = typeof payload.pullNumber === "number" ? payload.pullNumber : undefined;
+        const appliedCount = typeof payload.appliedCount === "number" ? payload.appliedCount : 0;
+        const htmlUrl = typeof payload.htmlUrl === "string" ? payload.htmlUrl : undefined;
+        emit({
+          ts,
+          step: "pr",
+          event: "observed",
+          summary: `PR #${num ?? "?"} labels: ${appliedCount}개`,
+          htmlUrl,
+        });
+      } else if (type === "github.publish.pr.labels.blocked") {
+        const summary = typeof payload.summary === "string" ? payload.summary : "blocked";
+        emit({ ts, step: "pr", event: "blocked", summary: `PR labels blocked — ${summary}` });
+      } else if (type === "github.publish.pr.labels.failed") {
+        const summary = typeof payload.summary === "string" ? payload.summary : "failed";
+        emit({ ts, step: "pr", event: "failed", summary: `PR labels failed — ${summary}` });
       }
     },
     [emit, onContextEvent],
@@ -769,6 +787,16 @@ export function GithubPublishPanel({
         defaultPullNumber={pr.observed?.pullNumber}
         defaultCurrentTitle={pr.observed ? prTitle : undefined}
         defaultCurrentBody={pr.observed ? prBody : undefined}
+        serverBaseUrl={serverBaseUrl}
+        fetchImpl={fetchImpl}
+        onContextEvent={onPrUpdateContextEvent}
+      />
+
+      {/* W5d Phase 1 — PR labels. PR observed면 그 PR#로 prefill. assignees는 Phase 2. */}
+      <PullRequestLabelsUpdateCard
+        key={pr.observed?.pullNumber ? `pr-labels-${pr.observed.pullNumber}` : "pr-labels-unobserved"}
+        defaultRepoFullName={repoFullName.trim() || undefined}
+        defaultPullNumber={pr.observed?.pullNumber}
         serverBaseUrl={serverBaseUrl}
         fetchImpl={fetchImpl}
         onContextEvent={onPrUpdateContextEvent}

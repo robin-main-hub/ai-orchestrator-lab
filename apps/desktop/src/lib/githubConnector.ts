@@ -25,6 +25,10 @@ import type {
   GithubPullRequestUpdateExecuteResponse,
   GithubPullRequestUpdatePlanRequest,
   GithubPullRequestUpdatePlanResponse,
+  GithubPullRequestLabelsUpdateExecuteRequest,
+  GithubPullRequestLabelsUpdateExecuteResponse,
+  GithubPullRequestLabelsUpdatePlanRequest,
+  GithubPullRequestLabelsUpdatePlanResponse,
   GithubReadonlyResourceResponse,
   GithubResourceOutcome,
 } from "@ai-orchestrator/protocol";
@@ -301,4 +305,27 @@ export function postGithubPullRequestUpdateExecute(
   fetchImpl: typeof fetch = fetch,
 ): Promise<GithubPullRequestUpdateExecuteResponse> {
   return postJson(serverBaseUrl, "/integrations/github/write/pr/update/execute", request, fetchImpl);
+}
+
+/**
+ * W5d Phase 1 — PR labels add/remove plan. 서버가 현재 labels read + diff 계산 + 무결성 hash까지.
+ */
+export function postGithubPullRequestLabelsUpdatePlan(
+  serverBaseUrl: string | string[] | undefined,
+  request: GithubPullRequestLabelsUpdatePlanRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubPullRequestLabelsUpdatePlanResponse> {
+  return postJson(serverBaseUrl, "/integrations/github/write/pr/labels/plan", request, fetchImpl);
+}
+
+/**
+ * W5d Phase 1 — PR labels update execute. approvalId 필수, TOCTOU 검증은 서버가 다시.
+ * GitHub PUT /issues/:n/labels로 final desired set을 atomic하게 적용.
+ */
+export function postGithubPullRequestLabelsUpdateExecute(
+  serverBaseUrl: string | string[] | undefined,
+  request: GithubPullRequestLabelsUpdateExecuteRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubPullRequestLabelsUpdateExecuteResponse> {
+  return postJson(serverBaseUrl, "/integrations/github/write/pr/labels/execute", request, fetchImpl);
 }
