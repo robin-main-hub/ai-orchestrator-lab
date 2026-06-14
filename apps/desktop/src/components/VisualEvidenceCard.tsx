@@ -34,6 +34,7 @@ export function VisualEvidenceCard({
   latestDiff,
   verifyFailedStep,
   onContextEvent,
+  onNavigate,
 }: {
   missionId: string;
   previewUrl?: string;
@@ -41,6 +42,8 @@ export function VisualEvidenceCard({
   latestDiff?: VisualQaDiff;
   verifyFailedStep?: "preview" | "qa";
   onContextEvent?: (type: string, payload: Record<string, unknown>) => void;
+  /** readiness CTA를 누르면 어디로 이동시킬지 — 자동 실행 X, 이동/강조만. */
+  onNavigate?: (target: "publish" | "fix" | "preview" | "qa") => void;
 }) {
   const evidence: VisualEvidence = buildVisualEvidence({
     previewUrl,
@@ -57,6 +60,7 @@ export function VisualEvidenceCard({
       summary: evidence.summary,
       ts: new Date().toISOString(),
     });
+    onNavigate?.("publish");
   };
   const onAddressFixes = () => {
     onContextEvent?.("mission.visual_evidence.needs_fix_clicked", {
@@ -65,6 +69,7 @@ export function VisualEvidenceCard({
       newIssues: evidence.diff?.counts.new ?? 0,
       ts: new Date().toISOString(),
     });
+    onNavigate?.("fix");
   };
   const onRerunRequired = () => {
     onContextEvent?.("mission.visual_evidence.blocked_clicked", {
@@ -73,6 +78,8 @@ export function VisualEvidenceCard({
       qaStatus: latestReport?.status,
       ts: new Date().toISOString(),
     });
+    // verify의 어떤 단계가 실패했는지에 따라 preview/qa로 갈라준다. 그 외는 preview.
+    onNavigate?.(verifyFailedStep === "qa" ? "qa" : "preview");
   };
 
   return (

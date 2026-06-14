@@ -622,7 +622,7 @@ describe("VisualQaCard — vertical slice", () => {
     const cs = extractConsoleSummary(consoleReport);
     expect(cs.total).toBe(4);
     expect(cs.preview.length).toBe(3);
-    expect(cs.preview[0].severity).toBe("high");
+    expect(cs.preview[0]!.severity).toBe("high");
   });
 
   it("(#vertical evidence) preview observed + QA passed → Evidence Card에 'Publish 진행 가능' + screenshot 없음 안내", async () => {
@@ -701,6 +701,70 @@ describe("VisualQaCard — vertical slice", () => {
     expect(screen.getByTestId("visual-evidence-readiness-mev_block").textContent).toContain("검증 차단");
     expect(screen.getByTestId("visual-evidence-blocked-cta-mev_block")).toBeTruthy();
     expect(screen.getByTestId("visual-evidence-preview-none-mev_block").textContent).toContain("Preview 실행이 필요");
+  });
+
+  it("(#vertical router) Evidence CTA → onNavigate target 라우팅 + onStateChange로 status mirror", async () => {
+    // case A) passed → ready → onNavigate("publish")
+    const passed = makeReport({ status: "passed", truthStatus: "observed", issues: [] });
+    const { fetchImpl } = makeFetch(passed);
+    const navigateA = vi.fn();
+    const stateChangeA = vi.fn();
+    render(
+      <VisualQaCard
+        missionId="mr_a"
+        workspaceId="ws_1"
+        previewUrl="http://x"
+        serverBaseUrl="http://x"
+        fetchImpl={fetchImpl as unknown as typeof fetch}
+        onNavigate={navigateA}
+        onStateChange={stateChangeA}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("visual-qa-run-mr_a"));
+    await waitFor(() => screen.getByTestId("visual-qa-status-mr_a"));
+    fireEvent.click(screen.getByTestId("visual-evidence-publish-ready-cta-mr_a"));
+    expect(navigateA).toHaveBeenCalledWith("publish");
+    // onStateChange가 report 받음.
+    expect(stateChangeA).toHaveBeenCalled();
+    const lastStateA = stateChangeA.mock.calls.at(-1)![0];
+    expect(lastStateA.qaReport?.status).toBe("passed");
+    cleanup();
+
+    // case B) failed → needs_fix → onNavigate("fix")
+    const failed = makeReport({
+      status: "failed", truthStatus: "observed",
+      issues: [{ id: "v", missionId: "m", workspaceId: "w", kind: "visual_overflow", severity: "high", summary: "x", recommendation: "r", truthStatus: "observed", createdAt: "t" }] as any,
+    });
+    const { fetchImpl: fetchImplB } = makeFetch(failed);
+    const navigateB = vi.fn();
+    render(
+      <VisualQaCard
+        missionId="mr_b"
+        workspaceId="ws_1"
+        previewUrl="http://x"
+        serverBaseUrl="http://x"
+        fetchImpl={fetchImplB as unknown as typeof fetch}
+        onNavigate={navigateB}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("visual-qa-run-mr_b"));
+    await waitFor(() => screen.getByTestId("visual-qa-status-mr_b"));
+    fireEvent.click(screen.getByTestId("visual-evidence-needs-fix-cta-mr_b"));
+    expect(navigateB).toHaveBeenCalledWith("fix");
+    cleanup();
+
+    // case C) blocked(previewUrl 없음) → onNavigate("preview")
+    const navigateC = vi.fn();
+    render(
+      <VisualQaCard
+        missionId="mr_c"
+        workspaceId="ws_1"
+        serverBaseUrl="http://x"
+        onNavigate={navigateC}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("visual-evidence-blocked-cta-mr_c"));
+    expect(navigateC).toHaveBeenCalledWith("preview");
   });
 
   it("(#vertical evidence) screenshot evidenceRef 있는 report → Evidence Card에 참조 표시(fake 이미지 X)", async () => {

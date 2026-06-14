@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Eye, AlertTriangle, FileEdit, Sparkles, Check, RefreshCw, ShieldCheck } from "lucide-react";
 import type {
   DesignIssueCard,
@@ -73,6 +73,8 @@ export function VisualQaCard({
   fetchImpl,
   onContextEvent,
   onRefreshScaffold,
+  onNavigate,
+  onStateChange,
 }: {
   missionId: string;
   workspaceId?: string;
@@ -87,6 +89,15 @@ export function VisualQaCard({
   onContextEvent?: (type: string, payload: Record<string, unknown>) => void;
   /** overlay 적용 후 scaffold/latest 캐시를 무효화시킬 콜백(있으면 호출). */
   onRefreshScaffold?: (missionId: string) => void;
+  /** Evidence readiness CTA가 가야 할 target — Mission Workspace의 Router가 처리. */
+  onNavigate?: (target: "publish" | "fix" | "preview" | "qa") => void;
+  /** 카드 내부 상태 변화를 부모(StatusBar 계산용)에 알린다. 자동 실행 0 — read-only mirror. */
+  onStateChange?: (state: {
+    qaReport?: VisualQaReport;
+    verifyDiff?: VisualQaDiff;
+    verifyFailedStep?: "preview" | "qa";
+    fixApplied?: boolean;
+  }) => void;
 }) {
   const [run, setRun] = useState<RunState>({ kind: "idle" });
   /** 사용자가 "수정안 초안 만들기"를 눌렀는지(한 번 누르면 trace + 패널 열림). */
@@ -325,6 +336,17 @@ export function VisualQaCard({
     : verify.kind === "qa_failed"
       ? ("qa" as const)
       : undefined;
+
+  /** 상태 mirror — 부모(StatusBar)에 변화가 있을 때만 알린다. 자동 실행 0. */
+  useEffect(() => {
+    if (!onStateChange) return;
+    onStateChange({
+      qaReport: verify.kind === "diff" ? verify.afterReport : run.kind === "report" ? run.report : undefined,
+      verifyDiff: verify.kind === "diff" ? verify.diff : undefined,
+      verifyFailedStep,
+      fixApplied: applyState.kind === "recorded",
+    });
+  }, [onStateChange, run, verify, applyState, verifyFailedStep]);
   /** Evidence Card에 보여줄 최신 report — verify 후의 결과가 우선. */
   const evidenceReport = verify.kind === "diff" ? verify.afterReport : run.kind === "report" ? run.report : undefined;
   const evidenceDiff = verify.kind === "diff" ? verify.diff : undefined;
@@ -343,6 +365,7 @@ export function VisualQaCard({
         latestDiff={evidenceDiff}
         verifyFailedStep={verifyFailedStep}
         onContextEvent={onContextEvent}
+        onNavigate={onNavigate}
       />
 
       <div className="visual-qa__head">
