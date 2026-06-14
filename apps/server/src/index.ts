@@ -110,13 +110,13 @@ import {
   MementoMcpAdapter,
   LocalHeuristicAdapter,
   withTrustEnforcement,
-  DgxSimpleMemMemoryAdapter,
-} from "@ai-orchestrator/memory";
+  SimpleMemAdapter,
+} from "@ai-orchestrator/simplememo";
 import type {
   MemoryAdapter,
   MemoryAdapterContext,
   MemoryAdapterKind,
-} from "@ai-orchestrator/memory";
+} from "@ai-orchestrator/simplememo";
 import type { LlmAdapter } from "@ai-orchestrator/providers";
 import { sseSessionRegistry } from "./events/sseSession.js";
 import { createCorsHeaders } from "./http/cors.js";
@@ -5880,7 +5880,7 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       policy: (process.env.MEMENTO_POLICY ?? "local_cache") as any,
     });
   } else if (memoryAdapterKind === "dgx_simplemem") {
-    rawMemoryAdapter = new (DgxSimpleMemMemoryAdapter as any)({
+    rawMemoryAdapter = new (SimpleMemAdapter as any)({
       profileId: "server_dgx_simplemem",
     });
   } else {

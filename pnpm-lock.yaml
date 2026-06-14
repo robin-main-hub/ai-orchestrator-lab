@@ -23,15 +23,15 @@ importers:
       '@ai-orchestrator/agents':
         specifier: workspace:*
         version: link:../../packages/agents
-      '@ai-orchestrator/memory':
-        specifier: workspace:*
-        version: link:../../packages/memory
       '@ai-orchestrator/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
       '@ai-orchestrator/providers':
         specifier: workspace:*
         version: link:../../packages/providers
+      '@ai-orchestrator/simplememo':
+        specifier: workspace:*
+        version: link:../../packages/memory
       '@fontsource/inter':
         specifier: ^5.2.5
         version: 5.2.8
@@ -160,15 +160,15 @@ importers:
       '@ai-orchestrator/agents':
         specifier: workspace:*
         version: link:../../packages/agents
-      '@ai-orchestrator/memory':
-        specifier: workspace:*
-        version: link:../../packages/memory
       '@ai-orchestrator/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
       '@ai-orchestrator/providers':
         specifier: workspace:*
         version: link:../../packages/providers
+      '@ai-orchestrator/simplememo':
+        specifier: workspace:*
+        version: link:../../packages/memory
       '@octokit/request':
         specifier: ^10.0.10
         version: 10.0.10

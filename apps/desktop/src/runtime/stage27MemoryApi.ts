@@ -13,7 +13,7 @@ import type {
   MemoryAdapter,
   MemoryAdapterContext,
   MemoryAdapterKind,
-} from "@ai-orchestrator/memory";
+} from "@ai-orchestrator/simplememo";
 import {
   activateMemoryRecord,
   createStage6MemoryInspector,

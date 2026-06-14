@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MemoryRecord } from "@ai-orchestrator/protocol";
-import { MemoryAdapterError, MockMemoryAdapter, withTrustEnforcement } from ".";
+import { MemoryAdapterError, MockAdapter, withTrustEnforcement } from ".";
 
 const createdAt = "2026-05-25T00:00:00.000Z";
 
@@ -28,9 +28,9 @@ const allowContext = {
   now: () => createdAt,
 };
 
-describe("MockMemoryAdapter", () => {
+describe("MockAdapter", () => {
   it("recalls trusted records and filters untrusted records by default", async () => {
-    const adapter = new MockMemoryAdapter({
+    const adapter = new MockAdapter({
       records: [
         record(),
         record({
@@ -53,7 +53,7 @@ describe("MockMemoryAdapter", () => {
 
   it("emits archival write intent when remembering", async () => {
     const events: string[] = [];
-    const adapter = new MockMemoryAdapter({ createdAt });
+    const adapter = new MockAdapter({ createdAt });
 
     const remembered = await adapter.remember(
       {
@@ -80,7 +80,7 @@ describe("MockMemoryAdapter", () => {
 
 describe("withTrustEnforcement", () => {
   it("blocks memory calls unless the permission decision allows them", async () => {
-    const adapter = withTrustEnforcement(new MockMemoryAdapter({ records: [record()], createdAt }));
+    const adapter = withTrustEnforcement(new MockAdapter({ records: [record()], createdAt }));
 
     await expect(
       adapter.recall(
@@ -96,7 +96,7 @@ describe("withTrustEnforcement", () => {
   });
 
   it("blocks untrusted writers before they become canonical memory", async () => {
-    const adapter = withTrustEnforcement(new MockMemoryAdapter({ createdAt }));
+    const adapter = withTrustEnforcement(new MockAdapter({ createdAt }));
 
     await expect(
       adapter.remember(
