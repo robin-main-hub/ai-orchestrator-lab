@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   ChevronDown,
@@ -18,6 +18,7 @@ import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import { GithubPublishPanel } from "./coding/GithubPublishPanel";
 import {
   builtinMissionPrefill,
+  pickFirstSafeScaffoldFile,
   type MissionPublishPrefillResolver,
   type MissionScaffoldFile,
 } from "../lib/missionPublishPrefill";
@@ -362,6 +363,22 @@ function MissionWorkspaceDetail({
   // 기본 접힘 — 사용자 명시 클릭으로만 GithubPublishPanel을 마운트한다.
   // (publishEnvironment가 없으면 CTA 자체를 그리지 않아 부모가 opt-in한 경우에만 노출.)
   const [publishOpen, setPublishOpen] = useState(false);
+  // CTA polish — scaffold 유무에 따른 정직한 신호:
+  //   - ready    : safeCount > 0 → "1개 자동 채움 준비"(실제 prefill은 항상 첫 안전 파일 1개)
+  //   - blocked  : skipped > 0, safeCount == 0 → "모두 가드에 막힘 — 직접 입력 필요"
+  //   - none     : 캐시 미스 또는 빈 배열 → 기본 보조 문구
+  // useMemo로 매 렌더 재계산 방지(큰 scaffold 응답에서 가드 평가가 반복되지 않게).
+  const scaffoldEval = useMemo(() => {
+    if (!publishEnvironment) return undefined;
+    const files = publishEnvironment.getScaffoldFiles?.(item);
+    if (!files || files.length === 0) return undefined;
+    return pickFirstSafeScaffoldFile(files);
+  }, [publishEnvironment, item]);
+  const scaffoldMode: "ready" | "blocked" | "none" = !scaffoldEval
+    ? "none"
+    : scaffoldEval.safeCount > 0
+      ? "ready"
+      : "blocked";
   return (
     <div className="mission-workspace-detail">
       {/* AppWorkspace + preview (D2/D4/D5a) */}
@@ -468,9 +485,28 @@ function MissionWorkspaceDetail({
             GitHub로 내보내기
             <span className="mission-board-truth">planned</span>
           </button>
-          {/* 보조 텍스트(접힘 상태에서도 보임) — 사용자에게 단계별 승인임을 명시. */}
-          <p className="mission-workspace-publish-hint">
-            브랜치 생성 · 파일 변경 · PR 생성을 단계별 승인으로 진행합니다. (merge/review/label/assignee 없음)
+          {/* 보조 텍스트(접힘 상태에서도 보임) — 사용자에게 단계별 승인임을 명시.
+              scaffoldMode에 따라 정직한 추가 신호를 한 줄로 노출(추측 없음). */}
+          <p
+            className="mission-workspace-publish-hint"
+            data-scaffold={scaffoldMode}
+            data-testid="mission-workspace-publish-hint"
+          >
+            {scaffoldMode === "ready" ? (
+              <>
+                scaffold {scaffoldEval!.total}개 중 1개 자동 채움 준비됨 — 나머지는 별도 plan.
+                (merge/review/label/assignee 없음)
+              </>
+            ) : scaffoldMode === "blocked" ? (
+              <>
+                scaffold {scaffoldEval!.total}개 모두 가드(binary/대용량/시크릿)에 막혀 자동 채움 없음 —
+                파일 경로/내용은 직접 입력 필요. (merge/review/label/assignee 없음)
+              </>
+            ) : (
+              <>
+                브랜치 생성 · 파일 변경 · PR 생성을 단계별 승인으로 진행합니다. (merge/review/label/assignee 없음)
+              </>
+            )}
           </p>
           {publishOpen ? (
             <div id={`mission-publish-${item.missionId}`} className="mission-workspace-publish-body">
