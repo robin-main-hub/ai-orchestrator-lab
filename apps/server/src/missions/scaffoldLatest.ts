@@ -4,6 +4,7 @@ import {
   type MissionScaffoldLatestSafeFile,
   type MissionScaffoldLatestSkipped,
   type ScaffoldFile,
+  type ScaffoldOverlay,
   type ScaffoldPlan,
 } from "@ai-orchestrator/protocol";
 
@@ -103,9 +104,28 @@ export function materializeScaffoldLatestFromPlan(plan: ScaffoldPlan): {
  *  - 일부 파일만 통과하면 status="partial"
  *  - 모두 통과하면 status="found"
  */
+/**
+ * overlay 파일 1건이 base의 같은 path를 덮어쓸 자격이 있는지 가드 후 결정. overlay라고 면제 X.
+ * 차단되면 skipped에 path+reason을 남기고 새 파일은 들이지 않는다.
+ */
+function checkOverlayFile(
+  path: string,
+  content: string,
+): { ok: true } | { ok: false; reason: MissionScaffoldLatestSkipped["reason"] } {
+  if (!content) return { ok: false, reason: "missing_content" };
+  if (content.includes("\0")) return { ok: false, reason: "binary" };
+  if (utf8ByteLength(content) > FILE_BYTE_MAX) return { ok: false, reason: "too_large" };
+  if (SECRET_PATTERNS.some((p) => p.test(content))) return { ok: false, reason: "secret_suspect" };
+  // path가 base에 있을 때만 덮어쓴다는 정책: base에 없는 path는 응답에서 추가하지 않는다(현재 결정).
+  void path;
+  return { ok: true };
+}
+
 export function buildMissionScaffoldLatestResponse(input: {
   missionId: string;
   plans: ReadonlyArray<ScaffoldPlan>;
+  /** 사용자 확정 patch들(시간순). 같은 path가 여러 overlay에 있으면 마지막 overlay가 이긴다. */
+  overlays?: ReadonlyArray<ScaffoldOverlay>;
 }): MissionScaffoldLatestResponse {
   const latest = pickLatestScaffoldPlan(input.plans);
   if (!latest) {
@@ -118,9 +138,31 @@ export function buildMissionScaffoldLatestResponse(input: {
       message: "이 mission에 등록된 scaffold plan이 없습니다",
     };
   }
-  const { files, skipped } = materializeScaffoldLatestFromPlan(latest);
+  const base = materializeScaffoldLatestFromPlan(latest);
+  // 같은 path에 대해 마지막 overlay 한 건만 효력 — Map으로 자연스럽게.
+  const overlayByPath = new Map<string, { content: string; createdAt: string }>();
+  const overlaySkipped: MissionScaffoldLatestSkipped[] = [];
+  for (const overlay of input.overlays ?? []) {
+    for (const file of overlay.files) {
+      const path = (file.path ?? "").trim();
+      if (!path) continue;
+      const guard = checkOverlayFile(path, file.content ?? "");
+      if (!guard.ok) {
+        overlaySkipped.push({ path, reason: guard.reason });
+        continue;
+      }
+      overlayByPath.set(path, { content: file.content, createdAt: overlay.createdAt });
+    }
+  }
+  // base 파일 위에 overlay를 덮어쓴다. base에 없는 overlay path는 들이지 않는다(정책 — 위 코멘트 참고).
+  const merged: MissionScaffoldLatestSafeFile[] = base.files.map((f) => {
+    const ov = overlayByPath.get(f.path);
+    if (!ov) return f;
+    return { path: f.path, content: ov.content, source: "scaffold_overlay", createdAt: ov.createdAt };
+  });
+  const skipped: MissionScaffoldLatestSkipped[] = [...base.skipped, ...overlaySkipped];
   let status: MissionScaffoldLatestResponse["status"];
-  if (files.length === 0) {
+  if (merged.length === 0) {
     status = "not_found";
   } else if (skipped.length > 0) {
     status = "partial";
@@ -131,7 +173,7 @@ export function buildMissionScaffoldLatestResponse(input: {
     missionId: input.missionId,
     status,
     truthStatus: latest.truthStatus,
-    files,
+    files: merged,
     skipped,
     planId: latest.id,
     message: status === "not_found"

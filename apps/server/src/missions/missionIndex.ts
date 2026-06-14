@@ -6,6 +6,7 @@ import {
   missionDesignBlueprintRecordedPayloadSchema,
   missionDesignIssueRecordedPayloadSchema,
   missionScaffoldAppliedPayloadSchema,
+  missionScaffoldOverlayRecordedPayloadSchema,
   missionScaffoldPlannedPayloadSchema,
   missionVisualQaRecordedPayloadSchema,
   missionErrorCardRecordedPayloadSchema,
@@ -95,6 +96,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
         visualQaReports: [],
         designIssues: [],
         scaffoldPlans: [],
+        scaffoldOverlays: [],
         updatedAt: event.createdAt,
       });
       continue;
@@ -226,6 +228,17 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
         continue;
       }
       plan.apply = parsed.data.result; // plan에 apply 결과를 채운다(observed)
+      record.updatedAt = event.createdAt;
+      continue;
+    }
+
+    if (event.type === "mission.scaffold.overlay.recorded") {
+      const parsed = missionScaffoldOverlayRecordedPayloadSchema.safeParse(event.payload);
+      const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
+      if (!parsed.success || !record) continue;
+      // 같은 id 중복은 무시(idempotent).
+      if (record.scaffoldOverlays.some((o) => o.id === parsed.data.overlay.id)) continue;
+      record.scaffoldOverlays.push(parsed.data.overlay);
       record.updatedAt = event.createdAt;
       continue;
     }

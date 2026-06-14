@@ -1,4 +1,5 @@
 import type { IncomingMessage } from "node:http";
+import { randomUUID } from "node:crypto";
 import {
   appWorkspaceAttachRequestSchema,
   buildBlueprintInputFromConversation,
@@ -24,6 +25,7 @@ import {
   previewProbeRequestSchema,
   previewStartRequestSchema,
   missionPreviewRunScaffoldRequestSchema,
+  missionScaffoldOverlayRequestSchema,
   scaffoldApplyRequestSchema,
   scaffoldPlanRequestSchema,
   missionCheckpointCreateRequestSchema,
@@ -134,6 +136,8 @@ const MISSION_SCAFFOLD_APPLY_PATH = /^\/missions\/([^/]+)\/scaffold\/([^/]+)\/ap
 const MISSION_SCAFFOLD_LATEST_PATH = /^\/missions\/([^/]+)\/scaffold\/latest$/;
 /** Preview Run vertical — scaffold/latest 파일을 디렉터리로 풀고 preview를 띄우는 단일 진입. */
 const MISSION_PREVIEW_RUN_SCAFFOLD_PATH = /^\/missions\/([^/]+)\/preview\/run-scaffold$/;
+/** AppFix overlay — Visual QA의 수정안을 사용자가 확정해서 scaffold 위에 덮어쓰는 단일 진입. */
+const MISSION_SCAFFOLD_OVERLAY_PATH = /^\/missions\/([^/]+)\/scaffold\/overlay$/;
 
 /** App Builder의 모든 blueprint 미션이 Publish Flow file prefill을 가질 수 있도록
  *  생성 직후 seed scaffold plan을 자동으로 남긴다.
@@ -894,7 +898,7 @@ export async function handleMissionRoute({
       return true;
     }
     // 1) scaffold/latest 재현 — 가짜 file 만들지 않는다. seed plan이라도 path+content가 재현 가능.
-    const latest = buildMissionScaffoldLatestResponse({ missionId, plans: mission.scaffoldPlans ?? [] });
+    const latest = buildMissionScaffoldLatestResponse({ missionId, plans: mission.scaffoldPlans ?? [], overlays: mission.scaffoldOverlays ?? [] });
     if (latest.status !== "found" || latest.files.length === 0) {
       respondJson(200, { outcome: "no_scaffold", message: latest.message ?? "scaffold/latest에 안전한 파일이 없습니다" });
       return true;
@@ -953,6 +957,52 @@ export async function handleMissionRoute({
     return true;
   }
 
+  // AppFix overlay — Visual QA의 수정안을 사용자가 확정해서 scaffold 위에 덮어쓰는 단일 진입.
+  // 정직성:
+  //   - 같은 path여러 overlay는 마지막이 이긴다(scaffoldLatest 빌더의 정책 그대로).
+  //   - overlay 파일도 binary/too_large/secret_suspect 가드를 거치며, 위반은 skipped로 알린다.
+  //   - 사용자 명시 클릭만 — 자동 적용/자동 PR/GitHub write 0.
+  const scaffoldOverlayMatch = MISSION_SCAFFOLD_OVERLAY_PATH.exec(pathname);
+  if (scaffoldOverlayMatch && method === "POST") {
+    const missionId = decodeURIComponent(scaffoldOverlayMatch[1]!);
+    const mission = await store.get(missionId);
+    if (!mission) {
+      respondJson(404, { outcome: "mission_not_found", message: `mission ${missionId} not found` });
+      return true;
+    }
+    let payload;
+    try {
+      payload = missionScaffoldOverlayRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, { outcome: "blocked", message: error instanceof Error ? error.message : "잘못된 overlay 요청" });
+      return true;
+    }
+    const nowFn = now ?? (() => new Date().toISOString());
+    const overlay = {
+      id: `overlay_${missionId}_${randomUUID()}`,
+      missionId,
+      source: payload.source,
+      files: payload.files,
+      evidenceRef: payload.evidenceRef,
+      truthStatus: "planned" as const,
+      createdAt: nowFn(),
+    };
+    await store.recordScaffoldOverlay(missionId, overlay);
+    // 가드 결과(skipped)는 GET scaffold/latest에서 자연스럽게 노출되므로 응답에 함께 미리보기로 싣는다.
+    const after = await store.get(missionId);
+    const latest = buildMissionScaffoldLatestResponse({
+      missionId,
+      plans: after?.scaffoldPlans ?? [],
+      overlays: after?.scaffoldOverlays ?? [],
+    });
+    respondJson(200, { outcome: "recorded", overlay, skipped: latest.skipped });
+    return true;
+  }
+
   // Publish Flow file prefill — mission의 최신 scaffold plan에서 path+content를 재생성해
   // 안전 가드를 통과한 파일만 노출. GitHub에는 쓰지 않으며, plan의 truthStatus를 그대로 반영한다.
   // (W3a/W3b/W4 write 라우트와 분리 — 이건 read-only materialization.)
@@ -967,6 +1017,7 @@ export async function handleMissionRoute({
     const response = buildMissionScaffoldLatestResponse({
       missionId,
       plans: mission.scaffoldPlans ?? [],
+      overlays: mission.scaffoldOverlays ?? [],
     });
     respondJson(200, response);
     return true;

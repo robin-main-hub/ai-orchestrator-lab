@@ -133,8 +133,8 @@ describe("VisualQaCard — vertical slice", () => {
     expect(screen.getByTestId(`visual-qa-draft-file-mission_x-src/styles.css`)).toBeTruthy();
     expect(screen.getByTestId(`visual-qa-draft-file-mission_x-src/main.tsx`)).toBeTruthy();
     expect(screen.getByTestId(`visual-qa-draft-file-mission_x-src/App.tsx`)).toBeTruthy();
-    // 자동 파일 수정/scaffold refresh/PR 같은 위험 UI 부재.
-    for (const danger of [/적용/i, /apply/i, /refresh/i, /push/i, /merge/i, /create pr/i, /commit/i]) {
+    // 자동 scaffold refresh/PR 같은 위험 UI 부재. (사용자 명시 patch 적용 버튼은 vertical에서 별도 검증.)
+    for (const danger of [/refresh/i, /push/i, /merge/i, /create pr/i, /commit/i]) {
       expect(screen.queryByRole("button", { name: danger })).toBeNull();
     }
     // trace
@@ -196,5 +196,149 @@ describe("VisualQaCard — vertical slice", () => {
   it("(#pure) status=passed → no_issues, status=blocked → blocked", () => {
     expect(buildAppFixDraftFromVisualQa(makeReport({ status: "passed" })).status).toBe("no_issues");
     expect(buildAppFixDraftFromVisualQa(makeReport({ status: "blocked" })).status).toBe("blocked");
+  });
+
+  it("(#vertical) issues_found → AppFixDraft → patch preview → include/exclude → 적용 → overlay POST → 적용됨 표시", async () => {
+    const report = makeReport({
+      status: "failed",
+      issues: [
+        {
+          id: "i_overflow", missionId: "mission_apply", workspaceId: "ws_1",
+          kind: "visual_overflow", severity: "high",
+          summary: ".app-screens 가로 스크롤",
+          recommendation: "minmax 줄이기",
+          truthStatus: "observed", createdAt: "t",
+        },
+        {
+          id: "i_a11y", missionId: "mission_apply", workspaceId: "ws_1",
+          kind: "accessibility", severity: "medium",
+          summary: "버튼 aria-label 없음",
+          recommendation: "aria-label 추가",
+          truthStatus: "observed", createdAt: "t",
+        },
+        {
+          id: "i_console", missionId: "mission_apply", workspaceId: "ws_1",
+          kind: "console_error", severity: "high",
+          summary: "Uncaught Error",
+          recommendation: "main.tsx 확인",
+          truthStatus: "observed", createdAt: "t",
+        },
+      ],
+    });
+    // 현재 scaffold 파일 — Blueprint-aware scaffold가 만드는 표준 form.
+    const currentFiles = [
+      {
+        path: "src/styles.css",
+        content: `.app-screens {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));\n  gap: 1rem;\n}\n\n.screen-card {\n  background: #181b22;\n  padding: 1.25rem;\n}\n\n.screen-card__action {\n  padding: 0.5rem 0.85rem;\n}\n`,
+      },
+      {
+        path: "src/App.tsx",
+        content: `import "./styles.css";\nexport function App() {\n  return (\n    <main className="app-shell">\n      <button type="button" className="screen-card__action">새 작업 추가</button>\n    </main>\n  );\n}\n`,
+      },
+      {
+        path: "src/main.tsx",
+        content: `import { createRoot } from "react-dom/client";\nimport { App } from "./App";\ncreateRoot(document.getElementById("root")!).render(<App />);\n`,
+      },
+    ];
+    const calls: Array<{ url: string; body: any }> = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const body = init?.body ? JSON.parse(init.body as string) : undefined;
+      calls.push({ url, body });
+      if (url.endsWith(`/missions/mission_apply/workspace/ws_1/visual-qa`)) {
+        return new Response(JSON.stringify({ mission: {}, report }), { status: 200 });
+      }
+      if (url.endsWith(`/missions/mission_apply/scaffold/overlay`)) {
+        return new Response(JSON.stringify({
+          outcome: "recorded",
+          overlay: {
+            id: "overlay_1",
+            missionId: "mission_apply",
+            source: "appfix",
+            files: body.files,
+            truthStatus: "planned",
+            createdAt: "2026-06-14T13:00:00.000Z",
+          },
+          skipped: [],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    const onContextEvent = vi.fn();
+    const onRefreshScaffold = vi.fn();
+    render(
+      <VisualQaCard
+        missionId="mission_apply"
+        workspaceId="ws_1"
+        previewUrl="http://127.0.0.1:4567"
+        currentScaffoldFiles={currentFiles}
+        serverBaseUrl="http://x"
+        fetchImpl={fetchImpl as unknown as typeof fetch}
+        onContextEvent={onContextEvent}
+        onRefreshScaffold={onRefreshScaffold}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("visual-qa-run-mission_apply"));
+    await waitFor(() => screen.getByTestId("visual-qa-status-mission_apply"));
+    fireEvent.click(screen.getByTestId("visual-qa-draft-cta-mission_apply"));
+    await waitFor(() => screen.getByTestId("visual-qa-patch-mission_apply"));
+
+    // 3개 파일 patch 표시(styles.css/App.tsx/main.tsx). styles.css와 App.tsx는 applied=true,
+    // main.tsx(console_error)는 applied=false(자동 규칙 없음 — 정직 표시).
+    const stylesPatch = screen.getByTestId("visual-qa-patch-mission_apply-src/styles.css");
+    expect(stylesPatch.getAttribute("data-applied")).toBe("true");
+    const appPatch = screen.getByTestId("visual-qa-patch-mission_apply-src/App.tsx");
+    expect(appPatch.getAttribute("data-applied")).toBe("true");
+    const mainPatch = screen.getByTestId("visual-qa-patch-mission_apply-src/main.tsx");
+    expect(mainPatch.getAttribute("data-applied")).toBe("false");
+
+    // 기본 선택: applied=true인 styles.css/App.tsx 자동 체크. main.tsx는 disabled.
+    const stylesCheck = screen.getByTestId(`visual-qa-patch-mission_apply-src/styles.css-include`) as HTMLInputElement;
+    const appCheck = screen.getByTestId(`visual-qa-patch-mission_apply-src/App.tsx-include`) as HTMLInputElement;
+    const mainCheck = screen.getByTestId(`visual-qa-patch-mission_apply-src/main.tsx-include`) as HTMLInputElement;
+    expect(stylesCheck.checked).toBe(true);
+    expect(appCheck.checked).toBe(true);
+    expect(mainCheck.checked).toBe(false);
+    expect(mainCheck.disabled).toBe(true);
+
+    // exclude 하나 → 적용 카운트 1로.
+    fireEvent.click(stylesCheck);
+    expect((screen.getByTestId("visual-qa-patch-apply-mission_apply") as HTMLButtonElement).textContent).toMatch(/선택한 1개/);
+    // 다시 include.
+    fireEvent.click(stylesCheck);
+
+    // 적용 클릭.
+    fireEvent.click(screen.getByTestId("visual-qa-patch-apply-mission_apply"));
+    await waitFor(() => {
+      const overlayCall = calls.find((c) => c.url.endsWith("/scaffold/overlay"));
+      expect(overlayCall).toBeTruthy();
+      expect(overlayCall!.body.source).toBe("appfix");
+      expect(overlayCall!.body.files.length).toBe(2);
+      const paths = (overlayCall!.body.files as Array<{ path: string }>).map((f) => f.path).sort();
+      expect(paths).toEqual(["src/App.tsx", "src/styles.css"]);
+      // styles.css 새 content에는 minmax(200px가 들어가 있어야 한다(visual_overflow rule).
+      const stylesContent = (overlayCall!.body.files as Array<{ path: string; content: string }>).find((f) => f.path === "src/styles.css")!.content;
+      expect(stylesContent).toContain("minmax(200px, 1fr)");
+      // App.tsx 새 content에는 aria-label이 들어가 있어야 한다(accessibility rule).
+      const appContent = (overlayCall!.body.files as Array<{ path: string; content: string }>).find((f) => f.path === "src/App.tsx")!.content;
+      expect(appContent).toContain('aria-label="새 작업 추가"');
+    });
+
+    // 적용 후 상태 표시 + scaffold refresh + Preview rerun 안내.
+    await waitFor(() => {
+      expect(screen.getByTestId("visual-qa-patch-applied-mission_apply").textContent).toContain("수정안 적용됨");
+      expect(screen.getByTestId("visual-qa-patch-rerun-hint-mission_apply").textContent).toContain("Preview 실행");
+    });
+    expect(onRefreshScaffold).toHaveBeenCalledWith("mission_apply");
+
+    // trace appfix.patch.applied 발생, paths 포함.
+    const appliedTrace = onContextEvent.mock.calls.find((c) => c[0] === "appfix.patch.applied");
+    expect(appliedTrace).toBeTruthy();
+    expect((appliedTrace![1] as any).paths.sort()).toEqual(["src/App.tsx", "src/styles.css"]);
+
+    // 위험 UI 부재(GitHub write/PR 관련 버튼 — 이 카드 안에는 절대 없음).
+    for (const danger of [/create pr/i, /push/i, /merge/i, /commit/i, /branch/i, /github/i]) {
+      expect(screen.queryByRole("button", { name: danger })).toBeNull();
+    }
   });
 });

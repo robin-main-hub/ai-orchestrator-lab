@@ -32,6 +32,7 @@ import {
   type SandboxErrorCard,
   type ServerMissionRecord,
   type ScaffoldApplyResult,
+  type ScaffoldOverlay,
   type ScaffoldPlan,
   type SkillArchiveCandidate,
   type VerificationReport,
@@ -124,6 +125,8 @@ export type MissionStore = {
   recordVisualQa: (missionId: string, report: VisualQaReport) => Promise<ServerMissionRecord | undefined>;
   /** D7: 스캐폴드 계획 기록(planned, 쓰기 없음). 미션 없으면 undefined. */
   recordScaffoldPlan: (missionId: string, plan: ScaffoldPlan) => Promise<ServerMissionRecord | undefined>;
+  /** AppFix: 사용자 확정 patch들. 같은 path 추가 overlay는 마지막이 이긴다. */
+  recordScaffoldOverlay: (missionId: string, overlay: ScaffoldOverlay) => Promise<ServerMissionRecord | undefined>;
   /** D7: 스캐폴드 적용 결과 기록(observed). plan 찾으면 record + 갱신, 아니면 undefined. */
   recordScaffoldApply: (missionId: string, planId: string, result: ScaffoldApplyResult) => Promise<ServerMissionRecord | undefined>;
   /** D7: 한 계획을 id로 조회(apply 라우트가 plan을 재구성하는 데 씀). */
@@ -323,6 +326,19 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
       type: "mission.scaffold.applied",
       payload: { missionId, planId, result },
       createdAt: result.appliedAt,
+      source: "server",
+      sourceTrust: "trusted",
+      redacted: true,
+    };
+  }
+
+  function scaffoldOverlayRecordedEnvelope(missionId: string, overlay: ScaffoldOverlay): EventEnvelope {
+    return {
+      id: `event_mission_scaffold_overlay_recorded_${overlay.id}`,
+      sessionId: missionId,
+      type: "mission.scaffold.overlay.recorded",
+      payload: { missionId, overlay },
+      createdAt: overlay.createdAt,
       source: "server",
       sourceTrust: "trusted",
       redacted: true,
@@ -821,6 +837,12 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
     async recordScaffoldPlan(missionId, plan) {
       if (!(await get(missionId))) return undefined;
       await commit(missionId, [scaffoldPlannedEnvelope(missionId, plan)]);
+      return get(missionId);
+    },
+
+    async recordScaffoldOverlay(missionId, overlay) {
+      if (!(await get(missionId))) return undefined;
+      await commit(missionId, [scaffoldOverlayRecordedEnvelope(missionId, overlay)]);
       return get(missionId);
     },
 

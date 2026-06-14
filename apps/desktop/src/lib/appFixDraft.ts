@@ -1,4 +1,4 @@
-import type { VisualQaReport, DesignIssueCard, DesignIssueKind } from "@ai-orchestrator/protocol";
+import type { VisualQaReport, DesignIssueCard, DesignIssueKind, MissionScaffoldLatestSafeFile } from "@ai-orchestrator/protocol";
 
 /**
  * Preview → Visual QA → Revision Draft vertical의 결정적 마지막 한 조각.
@@ -201,4 +201,198 @@ export function buildAppFixDraftFromVisualQa(report: VisualQaReport): AppFixDraf
       suggestionGroups: fileSuggestions.length,
     },
   };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// AppFix Patch — Visual QA AppFix 초안의 다음 단계.
+//
+// 사용자가 "수정안 적용" 버튼을 누르기 전에 파일별로 어떤 변경이 생길지 보여줄 수 있도록
+// 현재 scaffold 파일 content + draft를 받아 결정적 patch를 만든다. LLM 0/네트워크 0.
+//
+// 정직성:
+//   - rule이 없는 kind는 applied=false + note로 정직 표시(추측 금지).
+//   - rule이 매칭되지 않으면 applied=false(예: styles.css에 .app-screens가 없는 경우).
+//   - "full file rewrite처럼 보여도 preview에 변경 요약을 보여준다" → summary에 어떤 줄/규칙이
+//     매치됐는지 적는다.
+// ──────────────────────────────────────────────────────────────────────────────
+
+export type AppFixPatch = {
+  /** 대상 파일 경로(scaffold/latest의 path 그대로). */
+  file: string;
+  /** 이 patch가 처리하려는 issue kinds. */
+  kindHints: DesignIssueKind[];
+  /** patch 적용 전 원본(scaffold/latest의 content). */
+  oldContent: string;
+  /** patch 적용 후 새 content. applied=false면 oldContent와 동일. */
+  newContent: string;
+  /** rule이 실제로 매치돼 새 content가 만들어졌는지. */
+  applied: boolean;
+  /** 변경 요약 또는 적용 불가 사유(한 줄). */
+  note: string;
+};
+
+/** 안전한 regex replace 한 번씩 — 결과/적용여부/사유를 모은다. */
+function tryApplyRule(
+  content: string,
+  rules: ReadonlyArray<{
+    pattern: RegExp;
+    replacement: string;
+    label: string;
+  }>,
+): { content: string; appliedNotes: string[] } {
+  let cur = content;
+  const notes: string[] = [];
+  for (const rule of rules) {
+    if (rule.pattern.test(cur)) {
+      cur = cur.replace(rule.pattern, rule.replacement);
+      notes.push(rule.label);
+    }
+  }
+  return { content: cur, appliedNotes: notes };
+}
+
+/** styles.css에 mobile-break 미디어 쿼리가 없으면 추가. 있으면 noop. */
+function ensureMobileMediaQuery(content: string): { content: string; changed: boolean } {
+  if (/@media[^{]+max-width:\s*640px[^{]+\.app-screens/i.test(content)) {
+    return { content, changed: false };
+  }
+  const block = `\n@media (max-width: 640px) {\n  .app-screens { grid-template-columns: 1fr; }\n  .app-shell { padding: 1.5rem 1rem; }\n}\n`;
+  return { content: content.trimEnd() + "\n" + block, changed: true };
+}
+
+/** App.tsx의 .screen-card__action 버튼에 aria-label이 없으면 primaryAction 텍스트로 추가. */
+function ensureAriaLabelOnScreenAction(content: string): { content: string; changed: boolean } {
+  // 이미 aria-label이 있으면 noop.
+  if (/className="screen-card__action"[^>]*aria-label=/.test(content) || /aria-label=[^>]*className="screen-card__action"/.test(content)) {
+    return { content, changed: false };
+  }
+  // scaffold가 만든 패턴: `>${jsxText(s.primaryAction || "시작")}</button>` 가 같은 라인에 따라옴.
+  // 안전한 단일 매치 — 같은 라인에 className="screen-card__action"와 버튼 텍스트가 같이 있음.
+  const pattern = /(<button[^>]*?className="screen-card__action"[^>]*?>)([^<]*?)(<\/button>)/g;
+  if (!pattern.test(content)) return { content, changed: false };
+  pattern.lastIndex = 0;
+  const next = content.replace(pattern, (_m, open, text, close) => {
+    if (open.includes("aria-label=")) return _m;
+    // 버튼 텍스트가 비어 있으면 "시작" fallback.
+    const label = (text ?? "").trim() || "시작";
+    // 안전 따옴표 제거.
+    const safeLabel = label.replace(/"/g, "&quot;");
+    const newOpen = open.replace(/>$/, ` aria-label="${safeLabel}">`);
+    return `${newOpen}${text}${close}`;
+  });
+  return { content: next, changed: next !== content };
+}
+
+/**
+ * 한 파일에 들어갈 patch — kindHints가 가리키는 규칙들을 결정적으로 적용한다.
+ * 매칭이 없거나 규칙이 없는 kind만 모이면 applied=false + 사유.
+ */
+function applyPatchForFile(file: string, oldContent: string, kindHints: ReadonlyArray<DesignIssueKind>): AppFixPatch {
+  if (oldContent === "") {
+    return { file, kindHints: [...kindHints], oldContent, newContent: oldContent, applied: false, note: "원본 파일 content가 비어 있어 patch를 적용하지 않았습니다." };
+  }
+  let cur = oldContent;
+  const notes: string[] = [];
+
+  if (file === "src/styles.css") {
+    // visual_overflow → grid minmax 축소 + .screen-card padding 축소.
+    if (kindHints.includes("visual_overflow")) {
+      const r = tryApplyRule(cur, [
+        {
+          pattern: /grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(240px,\s*1fr\)\);/,
+          replacement: "grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));",
+          label: "visual_overflow: .app-screens minmax 240px→200px",
+        },
+        {
+          pattern: /\.screen-card\s*\{[^}]*?padding:\s*1\.25rem;/,
+          replacement: (match: string) => match.replace(/padding:\s*1\.25rem;/, "padding: 1rem;") as never,
+        } as never,
+      ]);
+      cur = r.content;
+      notes.push(...r.appliedNotes);
+      if (/padding:\s*1\.25rem;/.test(cur)) {
+        cur = cur.replace(/(\.screen-card\s*\{[^}]*?)padding:\s*1\.25rem;/, "$1padding: 1rem;");
+        notes.push("visual_overflow: .screen-card padding 1.25rem→1rem");
+      }
+    }
+    // mobile_break → 미디어 쿼리 추가.
+    if (kindHints.includes("mobile_break")) {
+      const m = ensureMobileMediaQuery(cur);
+      cur = m.content;
+      if (m.changed) notes.push("mobile_break: @media (max-width:640px) 추가 — .app-screens 1열");
+    }
+    // click_target → .screen-card__action padding/최소 크기.
+    if (kindHints.includes("click_target")) {
+      const before = cur;
+      cur = cur.replace(
+        /\.screen-card__action\s*\{([^}]*?)padding:\s*0\.5rem\s+0\.85rem;([^}]*?)\}/,
+        ".screen-card__action {$1padding: 0.75rem 1rem; min-height: 44px; min-width: 44px;$2}",
+      );
+      if (cur !== before) notes.push("click_target: .screen-card__action padding/min-size 44px");
+    }
+    // contrast → 텍스트 색상 강도 보강.
+    if (kindHints.includes("contrast")) {
+      const r = tryApplyRule(cur, [
+        { pattern: /\.app-hero__intent\s*\{[^}]*?color:\s*#aab0bc;/, replacement: (m: string) => m.replace("#aab0bc", "#d6dae3") as never } as never,
+        { pattern: /\.screen-card__purpose\s*\{[^}]*?color:\s*#aab0bc;/, replacement: (m: string) => m.replace("#aab0bc", "#c8ccd6") as never } as never,
+      ]);
+      // 위 callback replace는 RegExp.replace로 다시 처리.
+      const before = cur;
+      cur = cur.replace(/(\.app-hero__intent\s*\{[^}]*?color:\s*)#aab0bc;/, "$1#d6dae3;");
+      cur = cur.replace(/(\.screen-card__purpose\s*\{[^}]*?color:\s*)#aab0bc;/, "$1#c8ccd6;");
+      if (cur !== before) notes.push("contrast: intent/purpose 텍스트 색상 강화");
+      void r;
+    }
+  } else if (file === "src/App.tsx") {
+    if (kindHints.includes("accessibility")) {
+      const m = ensureAriaLabelOnScreenAction(cur);
+      cur = m.content;
+      if (m.changed) notes.push("accessibility: .screen-card__action 버튼에 aria-label 자동 추가");
+    }
+    if (kindHints.includes("hierarchy") || kindHints.includes("missing_primary_action")) {
+      // 구조 자체는 scaffold가 이미 hero h1 + card h2를 정직하게 내고 있으므로 추가 변경 없이
+      // 미적용으로 노출 — 추측 금지.
+    }
+  } else if (file === "src/main.tsx") {
+    // console_error는 원인을 안 보고 자동 수정하지 않는다(잘못된 변경이 더 큰 사고). 미적용.
+  }
+
+  const applied = notes.length > 0 && cur !== oldContent;
+  return {
+    file,
+    kindHints: [...kindHints],
+    oldContent,
+    newContent: applied ? cur : oldContent,
+    applied,
+    note: applied ? notes.join(" · ") : "이 파일에는 자동 적용 가능한 규칙이 없습니다 — 직접 수정 필요.",
+  };
+}
+
+/**
+ * Draft + 현재 scaffold 파일들을 받아 file별 patch를 만든다. 같은 file이 draft에 없으면 patch도 없음.
+ * scaffold/latest가 reply한 path만 patch 대상이 된다(가짜 path 만들지 않는다).
+ */
+export function buildAppFixPatches(
+  draft: AppFixDraft,
+  currentFiles: ReadonlyArray<Pick<MissionScaffoldLatestSafeFile, "path" | "content">>,
+): AppFixPatch[] {
+  if (draft.status !== "has_fixes" || draft.fileSuggestions.length === 0) return [];
+  const contentByPath = new Map(currentFiles.map((f) => [f.path, f.content]));
+  const patches: AppFixPatch[] = [];
+  for (const s of draft.fileSuggestions) {
+    const current = contentByPath.get(s.file);
+    if (current === undefined) {
+      patches.push({
+        file: s.file,
+        kindHints: [...s.kindHints],
+        oldContent: "",
+        newContent: "",
+        applied: false,
+        note: "현재 scaffold/latest 응답에 이 파일이 없어 patch를 만들 수 없습니다.",
+      });
+      continue;
+    }
+    patches.push(applyPatchForFile(s.file, current, s.kindHints));
+  }
+  return patches;
 }
