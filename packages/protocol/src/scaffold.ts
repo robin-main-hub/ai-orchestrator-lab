@@ -156,3 +156,61 @@ export const scaffoldApplyRequestSchema = z.object({
   approvalId: z.string().max(256).optional(),
 });
 export type ScaffoldApplyRequest = z.infer<typeof scaffoldApplyRequestSchema>;
+
+// ──────────────────────────────────────────────────────────────────────────────
+// GET /missions/:id/scaffold/latest — Publish Flow prefill의 truth source.
+// 정직성:
+//   - status="found"는 mission record에 plan이 있고 그 templateId+input으로
+//     scaffoldForTemplate을 재호출해서 path+content가 실제로 재현된 경우만.
+//   - "not_found"는 mission은 존재하지만 scaffold plan이 없는 경우.
+//   - "partial"은 일부 파일이 가드(binary/too_large/secret_suspect/missing_content)에
+//     걸려 제외된 경우(safeFiles + skipped 둘 다 채워짐).
+//   - truthStatus는 plan의 그것을 따른다("planned"가 일반적; GitHub에 쓰인 결과는 아님).
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const missionScaffoldLatestSafeFileSchema = z.object({
+  path: z.string(),
+  /** UTF-8 텍스트 — bounded(서버 가드 통과분만). 추측 금지: scaffoldForTemplate 재생성 결과 그대로. */
+  content: z.string(),
+  /** 어떤 출처에서 왔는지 표시 — 사용자가 "정말 plan에서 온 거구나"를 알 수 있게. */
+  source: z.enum(["scaffold_plan"]),
+  /** 해당 scaffold plan record의 createdAt(plan 시점 — observed 시점이 아님). */
+  createdAt: z.string(),
+});
+export type MissionScaffoldLatestSafeFile = z.infer<typeof missionScaffoldLatestSafeFileSchema>;
+
+export const missionScaffoldLatestSkippedReasonSchema = z.enum([
+  /** plan에서 path만 있고 본문 재생성이 빈 문자열 — 정직하게 제외. */
+  "missing_content",
+  /** NUL byte 포함 — binary로 간주, 텍스트 PR로 못 보냄. */
+  "binary",
+  /** 256 KiB 이상 — W3a 한도와 동일, 분할 plan 필요. */
+  "too_large",
+  /** ghp_ / sk-ant- / PEM 등 — 외부 GitHub로 절대 보내면 안 됨. */
+  "secret_suspect",
+  /** templateId가 지원되지 않거나 input이 비정상 — scaffoldForTemplate가 빈 배열. */
+  "unsupported",
+]);
+export type MissionScaffoldLatestSkippedReason = z.infer<typeof missionScaffoldLatestSkippedReasonSchema>;
+
+export const missionScaffoldLatestSkippedSchema = z.object({
+  /** path를 알 수 있는 경우 표시(unsupported 같은 경우 비어 있을 수 있음). */
+  path: z.string().optional(),
+  reason: missionScaffoldLatestSkippedReasonSchema,
+});
+export type MissionScaffoldLatestSkipped = z.infer<typeof missionScaffoldLatestSkippedSchema>;
+
+export const missionScaffoldLatestResponseSchema = z.object({
+  missionId: z.string(),
+  status: z.enum(["found", "not_found", "partial", "blocked"]),
+  truthStatus: truthStatusSchema,
+  /** 가드 통과한 안전 파일들(빈 배열 가능). */
+  files: z.array(missionScaffoldLatestSafeFileSchema),
+  /** 가드에 걸려 제외된 항목들 — 사용자가 "왜 빠졌는지" 알 수 있게. */
+  skipped: z.array(missionScaffoldLatestSkippedSchema),
+  /** plan이 여러 개면 어떤 plan을 골랐는지(보통 가장 마지막). */
+  planId: z.string().optional(),
+  /** 진단용 메시지(예: "mission not found", "scaffold plan 없음"). */
+  message: z.string().optional(),
+});
+export type MissionScaffoldLatestResponse = z.infer<typeof missionScaffoldLatestResponseSchema>;

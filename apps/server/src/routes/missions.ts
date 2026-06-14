@@ -51,6 +51,7 @@ import {
 } from "@ai-orchestrator/protocol";
 import type { CheckpointResult } from "../missions/gitCheckpointRunner.js";
 import { MissionEventValidationError, type MissionStore } from "../missions/missionStore.js";
+import { buildMissionScaffoldLatestResponse } from "../missions/scaffoldLatest.js";
 
 /**
  * Mission routes — 기존 tmux/approval route와 같은 DI 관용구.
@@ -116,6 +117,7 @@ const MISSION_PREVIEW_STOP_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/pre
 const MISSION_VISUAL_QA_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/visual-qa$/;
 const MISSION_SCAFFOLD_PLAN_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/scaffold\/plan$/;
 const MISSION_SCAFFOLD_APPLY_PATH = /^\/missions\/([^/]+)\/scaffold\/([^/]+)\/apply$/;
+const MISSION_SCAFFOLD_LATEST_PATH = /^\/missions\/([^/]+)\/scaffold\/latest$/;
 
 export async function handleMissionRoute({
   store,
@@ -783,6 +785,25 @@ export async function handleMissionRoute({
     const updated = await store.recordScaffoldApply(missionId, planId, result);
     const code = result.status === "applied" ? 200 : result.status === "blocked" ? 409 : 500;
     respondJson(code, { mission: updated, result });
+    return true;
+  }
+
+  // Publish Flow file prefill — mission의 최신 scaffold plan에서 path+content를 재생성해
+  // 안전 가드를 통과한 파일만 노출. GitHub에는 쓰지 않으며, plan의 truthStatus를 그대로 반영한다.
+  // (W3a/W3b/W4 write 라우트와 분리 — 이건 read-only materialization.)
+  const scaffoldLatestMatch = MISSION_SCAFFOLD_LATEST_PATH.exec(pathname);
+  if (scaffoldLatestMatch && method === "GET") {
+    const missionId = decodeURIComponent(scaffoldLatestMatch[1]!);
+    const mission = await store.get(missionId);
+    if (!mission) {
+      respondJson(404, { error: "mission_not_found", missionId });
+      return true;
+    }
+    const response = buildMissionScaffoldLatestResponse({
+      missionId,
+      plans: mission.scaffoldPlans ?? [],
+    });
+    respondJson(200, response);
     return true;
   }
 
