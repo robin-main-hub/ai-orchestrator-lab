@@ -32,6 +32,8 @@ import { SearchReplaceEditCard } from "./SearchReplaceEditCard";
 import { TurboEditDraftCard } from "./TurboEditDraftCard";
 import { buildAppFixDraftFromVisualQa } from "../lib/appFixDraft";
 import type { TurboEditGenerator } from "../lib/turboEditGenerator";
+import { PreviewAnnotatePanel } from "./PreviewAnnotatePanel";
+import { annotationsToTurboEditIssues, type PreviewAnnotation } from "../lib/previewAnnotations";
 import { postDgxMissionScaffoldOverlay } from "../runtime/stage47MissionServer";
 import type { VisualQaReport } from "@ai-orchestrator/protocol";
 import type { VisualQaDiff } from "../lib/visualQaDiff";
@@ -523,6 +525,14 @@ function MissionWorkspaceDetail({
     () => (latestQaReport ? buildAppFixDraftFromVisualQa(latestQaReport) : undefined),
     [latestQaReport],
   );
+
+  // OSS-H7 — preview annotations 상태. PreviewAnnotatePanel이 add/remove하고
+  // TurboEditDraftCard로는 extraIssues로 흘려보낸다. 자동 적용 0.
+  const [previewAnnotations, setPreviewAnnotations] = useState<ReadonlyArray<PreviewAnnotation>>([]);
+  const annotationIssues = useMemo(
+    () => annotationsToTurboEditIssues(previewAnnotations),
+    [previewAnnotations],
+  );
   return (
     <div className="mission-workspace-detail">
       {/* AppWorkspace + preview (D2/D4/D5a) */}
@@ -593,14 +603,28 @@ function MissionWorkspaceDetail({
         files={publishEnvironment?.getScaffoldFiles?.(item)}
       />
 
-      {/* Turbo Edits Draft (OSS-H5/H6) — LLM이 SEARCH/REPLACE 블록을 만들도록 prompt를 빌드.
+      {/* Preview Annotator (OSS-H7) — 외부 preview에서 본 문제를 텍스트로 기록 → Turbo Edits로 흐름.
+          iframe 임베드 0(X-Frame-Options 회피), 자동 selector/좌표 캡처 0(가짜 dom 정보 X). */}
+      <PreviewAnnotatePanel
+        missionId={item.missionId}
+        files={publishEnvironment?.getScaffoldFiles?.(item)}
+        annotations={previewAnnotations}
+        onChange={setPreviewAnnotations}
+        onContextEvent={(type, payload) =>
+          publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
+        }
+      />
+
+      {/* Turbo Edits Draft (OSS-H5/H6/H7) — LLM이 SEARCH/REPLACE 블록을 만들도록 prompt를 빌드.
           H6: onGenerate가 주입되면 앱 안에서 provider 호출까지 가능(외부 LLM 복붙 경로는 유지).
+          H7: PreviewAnnotatePanel의 annotation들이 extraIssues로 합류.
           자동 overlay/Preview 0 — 응답 valid면 SearchReplaceEditCard에만 자동 주입. */}
       <TurboEditDraftCard
         missionId={item.missionId}
         appName={item.title}
         files={publishEnvironment?.getScaffoldFiles?.(item)}
         appFixDraft={appFixDraftForTurbo}
+        extraIssues={annotationIssues.length > 0 ? annotationIssues : undefined}
         onSendDraft={setSearchReplaceText}
         onContextEvent={(type, payload) =>
           publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
