@@ -295,6 +295,29 @@ export const SWARM_TOOLS: ReadonlyArray<SwarmToolDef> = [
       },
     },
   },
+  // ── GitHub W4a PR create plan (plan ONLY at this phase) ────────────────────
+  // GitHub POST /pulls는 절대 호출하지 않는다. 서버가 base/head/compare를 read해서
+  // 변경 요약을 evidence로 만든다. execute(W4b)는 별도 phase에서 분리.
+  {
+    name: "github_pr_plan",
+    description:
+      "Create a pull-request PLAN (no GitHub POST /pulls). Server validates allowlist + base branch allowlist (default main/develop, configurable via GITHUB_PR_BASE_ALLOWLIST) + head branch policy (agent/*, work/*, user/*, mission/* prefix only) + base != head + title/body length and secret scan, then reads compare base...head and returns a bounded files preview. Result is approval_required or blocked or already_exists. Actual PR creation is a separate, future-phase step.",
+    method: "POST",
+    path: "/integrations/github/write/pr/plan",
+    body: passthrough,
+    inputSchema: {
+      type: "object",
+      required: ["repoFullName", "baseBranch", "headBranch", "title", "body"],
+      additionalProperties: true,
+      properties: {
+        repoFullName: { type: "string", description: 'GitHub repository, e.g. "owner/repo"' },
+        baseBranch: { type: "string", description: 'PR base — must be allowed by GITHUB_PR_BASE_ALLOWLIST (default main/develop)' },
+        headBranch: { type: "string", description: 'PR head — must start with agent/, work/, user/, or mission/' },
+        title: { type: "string", description: 'PR title (max 160 chars, secret-scanned)' },
+        body: { type: "string", description: 'PR body (max 16000 chars, secret-scanned). Empty string allowed.' },
+      },
+    },
+  },
 ];
 
 export type SwarmToolDeps = {

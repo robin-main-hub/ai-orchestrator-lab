@@ -26,6 +26,9 @@ function clientStub(over: Partial<GithubReadonlyClient> & { token?: string } = {
     putFileContents:
       over.putFileContents ??
       (async () => ({ commitSha: "stub-commit", blobSha: "stub-blob", htmlUrl: "u" })),
+    compareBranches:
+      over.compareBranches ??
+      (async () => ({ aheadBy: 1, behindBy: 0, totalCommits: 1, changedFiles: 1, files: [{ filename: "x", status: "modified", additions: 1, deletions: 0 }] })),
   };
 }
 
@@ -35,7 +38,9 @@ function capture() {
 }
 
 const stubRequest = {} as IncomingMessage;
-const NOW = () => "2026-06-14T00:00:00.000Z";
+// 노트: plan store TTL은 실시간 Date.now()로 prune된다. NOW를 너무 이른 시각으로 두면
+// 실제 wall clock이 expiresAt(NOW+10분)을 지나가서 plan이 즉시 만료된다. 12:00 UTC로 둔다.
+const NOW = () => "2026-06-14T12:00:00.000Z";
 
 describe("W1 — POST /integrations/github/write/comment/plan", () => {
   it("token 없으면 not_configured (GitHub 호출 없음)", async () => {

@@ -113,6 +113,23 @@ export type GithubReadonlyClient = {
     path: string,
     params: { branch: string; content: string; message: string; sha?: string },
   ): Promise<{ commitSha: string; blobSha: string; htmlUrl: string }>;
+  /**
+   * W4a — GET /repos/:o/:r/compare/:base...:head. PR plan 단계에서 head가 base 대비
+   * 얼마나 앞섰는지(aheadBy/behindBy/changedFiles/commits/files)를 관측한다.
+   * read-only — 어떤 외부 흔적도 남기지 않는다. 호출자가 filesPreview를 잘라낸다.
+   */
+  compareBranches(
+    owner: string,
+    repo: string,
+    base: string,
+    head: string,
+  ): Promise<{
+    aheadBy: number;
+    behindBy: number;
+    totalCommits: number;
+    changedFiles: number;
+    files: Array<{ filename: string; status: string; additions: number; deletions: number }>;
+  }>;
 };
 
 export function createGithubReadonlyClient(options: GithubReadonlyClientOptions = {}): GithubReadonlyClient {
@@ -274,6 +291,32 @@ export function createGithubReadonlyClient(options: GithubReadonlyClientOptions 
       const objSha = String((raw.object as Record<string, unknown> | undefined)?.sha ?? sha);
       const htmlUrl = `https://github.com/${owner}/${repo}/tree/${respRef.replace(/^refs\/heads\//, "")}`;
       return { ref: respRef, sha: objSha, htmlUrl };
+    },
+
+    async compareBranches(owner, repo, base, head) {
+      if (!token) throw new GithubNotConfiguredError();
+      // base...head는 GitHub compare endpoint. base/head를 URL component로 안전 인코딩.
+      // refs/heads/* 같은 정규화는 호출자가 미리 정리해야 한다.
+      const raw = (await getJson(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
+      )) as Record<string, unknown>;
+      const aheadBy = typeof raw.ahead_by === "number" ? raw.ahead_by : 0;
+      const behindBy = typeof raw.behind_by === "number" ? raw.behind_by : 0;
+      const totalCommits = typeof raw.total_commits === "number" ? raw.total_commits : 0;
+      const rawFiles = Array.isArray(raw.files) ? (raw.files as Array<Record<string, unknown>>) : [];
+      const files = rawFiles.map((entry) => ({
+        filename: typeof entry.filename === "string" ? entry.filename : "",
+        status: typeof entry.status === "string" ? entry.status : "modified",
+        additions: typeof entry.additions === "number" ? entry.additions : 0,
+        deletions: typeof entry.deletions === "number" ? entry.deletions : 0,
+      }));
+      return {
+        aheadBy,
+        behindBy,
+        totalCommits,
+        changedFiles: files.length,
+        files,
+      };
     },
 
     async putFileContents(owner, repo, path, params) {

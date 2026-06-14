@@ -128,6 +128,8 @@ import { parseRepoAllowlist } from "./integrations/githubCommentWriteGuards.js";
 import { createGithubCommentWritePlanStore } from "./integrations/githubCommentWritePlanStore.js";
 import { createGithubBranchCreatePlanStore } from "./integrations/githubBranchCreatePlanStore.js";
 import { createGithubFileChangePlanStore } from "./integrations/githubFileChangePlanStore.js";
+import { createGithubPullRequestCreatePlanStore } from "./integrations/githubPullRequestCreatePlanStore.js";
+import { parsePrBaseAllowlist } from "./integrations/githubPullRequestWriteGuards.js";
 
 // W1: GitHub comment write plan store — process scope, in-memory, 10분 TTL.
 // 영속화하지 않는 이유: plan은 작업 의도일 뿐 진실(observed)이 아님. 재시작 후엔 다시 plan.
@@ -137,6 +139,8 @@ const githubBranchCreatePlanStoreInstance = createGithubBranchCreatePlanStore();
 // W3a: file change plan store — 같은 이유로 in-memory. 세 스토어를 분리하는 이유는
 // 한 표면의 비정상 상태가 다른 표면에 영향을 주지 않게 격리하기 위함.
 const githubFileChangePlanStoreInstance = createGithubFileChangePlanStore();
+// W4a: PR create plan store — 동일 패턴. 네 표면을 독립 격리.
+const githubPullRequestCreatePlanStoreInstance = createGithubPullRequestCreatePlanStore();
 import { createMissionStore, type MissionStore } from "./missions/missionStore.js";
 import { missionTraceBus } from "./missions/missionTraceBus.js";
 import {
@@ -6715,7 +6719,9 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         planStore: githubCommentWritePlanStoreInstance,
         branchPlanStore: githubBranchCreatePlanStoreInstance,
         fileChangePlanStore: githubFileChangePlanStoreInstance,
+        prPlanStore: githubPullRequestCreatePlanStoreInstance,
         writeRepoAllowlist: parseRepoAllowlist(process.env.GITHUB_WRITE_REPO_ALLOWLIST),
+        prBaseAllowlist: parsePrBaseAllowlist(process.env.GITHUB_PR_BASE_ALLOWLIST),
         verifyApproval: async (approvalId) => {
           const { approvals } = await listApprovalsFromPersistentServerStorage(eventStorage, new Date().toISOString());
           return approvals.some((approval) => approval.id === approvalId && approval.state === "approved");
