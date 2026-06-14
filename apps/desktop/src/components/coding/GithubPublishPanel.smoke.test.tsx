@@ -225,6 +225,122 @@ describe("GithubPublishPanel — branch → file → PR end-to-end smoke", () =>
     for (const call of calls) {
       expect(JSON.stringify(call.body ?? {})).not.toContain(TOKEN);
     }
+
+    // 11) W5c PR title/body update 카드가 PR observed 후 prefill로 보인다.
+    const updateCard = screen.getByTestId("publish-pr-update-card");
+    expect(updateCard).toBeTruthy();
+    // PR number prefill — input value가 PR observed의 number.
+    expect((within(updateCard).getByLabelText("pr-update pull number") as HTMLInputElement).value).toBe("4242");
+    expect((within(updateCard).getByLabelText("pr-update repo") as HTMLInputElement).value).toBe("robin/lab");
+    expect((within(updateCard).getByLabelText("pr-update new title") as HTMLInputElement).value).toBe("Add publish smoke");
+    expect((within(updateCard).getByLabelText("pr-update new body") as HTMLTextAreaElement).value).toBe("End-to-end publish");
+  });
+
+  it("(W5c mount) PR observed 없으면 PR update 카드는 보이되 prefill 비어 있음(사용자가 직접 PR# 입력)", () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({}), { status: 200 }));
+    render(
+      <GithubPublishPanel
+        serverBaseUrl="http://127.0.0.1:4317"
+        defaultRepoFullName="robin/lab"
+        defaultSourceRef="main"
+        fetchImpl={fetchImpl as unknown as typeof fetch}
+      />,
+    );
+    const updateCard = screen.getByTestId("publish-pr-update-card");
+    expect(updateCard).toBeTruthy();
+    expect((within(updateCard).getByLabelText("pr-update pull number") as HTMLInputElement).value).toBe("");
+    // repo는 패널 defaultRepoFullName이 카드에도 흘러가 prefill됨(편의).
+    expect((within(updateCard).getByLabelText("pr-update repo") as HTMLInputElement).value).toBe("robin/lab");
+    expect((within(updateCard).getByLabelText("pr-update new title") as HTMLInputElement).value).toBe("");
+    expect((within(updateCard).getByLabelText("pr-update new body") as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("(W5c mount) update Plan → Execute success → 부모 onContextEvent에 pr.update.observed + 패널 inline trace에 'PR #N updated' 한 줄", async () => {
+    // 이 테스트는 W4b 단계를 거치지 않고 W5c 흐름만 검증한다.
+    const updateCalls: Array<{ url: string; body: any }> = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const body = init?.body ? JSON.parse(init.body as string) : undefined;
+      updateCalls.push({ url, body });
+      if (url.endsWith("/integrations/github/write/pr/update/plan")) {
+        return new Response(JSON.stringify({
+          outcome: "planned",
+          plan: {
+            id: "pr-update-mount-1",
+            repoFullName: "robin/lab",
+            pullNumber: 99,
+            currentTitle: "old",
+            currentTitleSha256: "cur-t-sha",
+            currentBodySha256: "cur-b-sha",
+            currentBodyLength: 3,
+            newTitle: "Cleaned up title",
+            newTitleSha256: "new-t-sha",
+            newBodyExcerpt: undefined,
+            newBodySha256: undefined,
+            newBodyLength: undefined,
+            changeSummary: { titleChanged: true, bodyChanged: false, bodyDelta: 0 },
+            status: "approval_required",
+            truthStatus: "planned",
+            createdAt: "2026-06-14T12:00:00.000Z",
+            expiresAt: "2026-06-14T12:10:00.000Z",
+          },
+        }), { status: 200 });
+      }
+      if (url.endsWith("/integrations/github/write/pr/update/execute")) {
+        return new Response(JSON.stringify({
+          outcome: "observed",
+          planId: "pr-update-mount-1",
+          pullNumber: 99,
+          htmlUrl: "https://github.com/robin/lab/pull/99",
+          title: "Cleaned up title",
+          bodyLength: 3,
+          bodySha256: "cur-b-sha",
+          updatedAt: "2026-06-14T13:00:00.000Z",
+          truthStatus: "observed",
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    const onContextEvent = vi.fn();
+    render(
+      <GithubPublishPanel
+        serverBaseUrl="http://127.0.0.1:4317"
+        defaultRepoFullName="robin/lab"
+        defaultSourceRef="main"
+        onContextEvent={onContextEvent}
+        fetchImpl={fetchImpl as unknown as typeof fetch}
+      />,
+    );
+    const updateCard = screen.getByTestId("publish-pr-update-card");
+    fireEvent.change(within(updateCard).getByLabelText("pr-update pull number"), { target: { value: "99" } });
+    fireEvent.change(within(updateCard).getByLabelText("pr-update new title"), { target: { value: "Cleaned up title" } });
+    fireEvent.click(within(updateCard).getByTestId("publish-pr-update-plan"));
+    await waitFor(() => expect(updateCalls.filter((c) => c.url.endsWith("/pr/update/plan")).length).toBe(1));
+    // approval + execute
+    fireEvent.change(within(updateCard).getByLabelText("pr-update approval ID"), { target: { value: "appr-mount" } });
+    fireEvent.click(within(updateCard).getByTestId("publish-pr-update-execute"));
+    await waitFor(() => expect(updateCalls.filter((c) => c.url.endsWith("/pr/update/execute")).length).toBe(1));
+    await waitFor(() => {
+      expect(within(updateCard).getByTestId("publish-pr-update-observed").textContent).toContain("PR #99");
+    });
+
+    // 부모로 pr.update.observed forward
+    const observedFwd = onContextEvent.mock.calls.find(
+      (c) => c[0] === "github.publish.pr.update.observed",
+    );
+    expect(observedFwd).toBeTruthy();
+    const tracePayload = JSON.stringify(observedFwd?.[1] ?? {});
+    expect(tracePayload).toContain("pullNumber");
+    expect(tracePayload).toContain("bodyLength");
+    // body raw 본문 누설 X(서버가 안 보내고 클라이언트도 trace에 raw body를 넣지 않음).
+    expect(tracePayload).not.toContain('"body"');
+    expect(tracePayload).not.toContain('"newBody"');
+
+    // 패널 inline trace에 "PR #99 updated" 항목 존재
+    await waitFor(() => {
+      const traceSection = screen.getByTestId("publish-step-trace");
+      expect(traceSection.textContent).toContain("PR #99 updated");
+    });
   });
 });
 

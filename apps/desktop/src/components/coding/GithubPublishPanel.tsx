@@ -14,6 +14,7 @@ import {
   postGithubPullRequestPlan,
   sha256Hex,
 } from "../../lib/githubConnector";
+import { PullRequestUpdateCard } from "../publish/PullRequestUpdateCard";
 
 /**
  * GitHub Publish Panel — W1~W4 write 표면을 한 화면에서 안전하게 진행한다.
@@ -252,6 +253,37 @@ export function GithubPublishPanel({
       });
     },
     [onContextEvent],
+  );
+
+  /**
+   * W5c PR update 카드의 trace를 받아서: (1) 부모 onContextEvent로 그대로 forward(타입 보존),
+   * (2) 패널 내 inline trace 리스트에 pr step의 요약 한 줄을 푸시. raw body 본문이 들어오면
+   * 그대로 추가하지 않고 길이/sha만 살린다(클라이언트 측에서도 body raw를 trace에 안 남긴다).
+   */
+  const onPrUpdateContextEvent = useCallback(
+    (type: string, payload: Record<string, unknown>) => {
+      onContextEvent?.(type, payload);
+      const ts = typeof payload.ts === "string" ? payload.ts : isoNow();
+      if (type === "github.publish.pr.update.observed") {
+        const num = typeof payload.pullNumber === "number" ? payload.pullNumber : undefined;
+        const bodyLength = typeof payload.bodyLength === "number" ? `body ${payload.bodyLength}B` : "";
+        const htmlUrl = typeof payload.htmlUrl === "string" ? payload.htmlUrl : undefined;
+        emit({
+          ts,
+          step: "pr",
+          event: "observed",
+          summary: `PR #${num ?? "?"} updated ${bodyLength}`.trim(),
+          htmlUrl,
+        });
+      } else if (type === "github.publish.pr.update.blocked") {
+        const summary = typeof payload.summary === "string" ? payload.summary : "blocked";
+        emit({ ts, step: "pr", event: "blocked", summary: `PR update blocked — ${summary}` });
+      } else if (type === "github.publish.pr.update.failed") {
+        const summary = typeof payload.summary === "string" ? payload.summary : "failed";
+        emit({ ts, step: "pr", event: "failed", summary: `PR update failed — ${summary}` });
+      }
+    },
+    [emit, onContextEvent],
   );
 
   const branchIsObserved = branch.status === "observed";
@@ -727,6 +759,20 @@ export function GithubPublishPanel({
           </p>
         ) : null}
       </article>
+
+      {/* W5c — PR title/body update. PR observed이면 방금 만든 PR을, 아니면 사용자가 PR# 직접 입력.
+          key를 pr.observed.pullNumber에 묶어 PR observed가 들어오는 시점에 prefill을 한 번 다시 적용한다
+          (useState 초기값은 첫 mount에만 잡히므로 key 변경으로 remount). */}
+      <PullRequestUpdateCard
+        key={pr.observed?.pullNumber ? `pr-${pr.observed.pullNumber}` : "pr-unobserved"}
+        defaultRepoFullName={repoFullName.trim() || undefined}
+        defaultPullNumber={pr.observed?.pullNumber}
+        defaultCurrentTitle={pr.observed ? prTitle : undefined}
+        defaultCurrentBody={pr.observed ? prBody : undefined}
+        serverBaseUrl={serverBaseUrl}
+        fetchImpl={fetchImpl}
+        onContextEvent={onPrUpdateContextEvent}
+      />
 
       {/* Step 4 — Trace */}
       <article aria-label="Step 4: Trace" data-testid="publish-step-trace" className="rounded-xl border border-white/5 bg-black/20 p-3">
