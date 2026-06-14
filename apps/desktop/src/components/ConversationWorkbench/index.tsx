@@ -8,6 +8,7 @@ import type {
   PermissionMatrixSnapshot,
   ProviderProfile,
   ProviderRuntimeReadiness,
+  ServerMissionRecord,
 } from "@ai-orchestrator/protocol";
 import { buildBlueprintInputFromConversation } from "@ai-orchestrator/protocol";
 import { AppBuildContainer } from "../appbuild/AppBuildContainer";
@@ -125,6 +126,7 @@ export function ConversationWorkbench({
   onProgressDelegationAssignment,
   onImportExternalIngress,
   onPromoteToDebate,
+  onAppBuildMissionCreated,
   onRejectPermission,
   onRemoveDraftAttachment,
   onSelectAgent,
@@ -203,6 +205,11 @@ export function ConversationWorkbench({
   onImportExternalIngress: () => void;
   /** 토론 승격. 앱빌더 검토 패널에서 넘어오면 편집 초안/출처 세션을 실어 보낸다(인자 없으면 대화 기반). */
   onPromoteToDebate: (seed?: { blueprintContext?: DesignBlueprintInput; sourceSessionId?: string }) => void;
+  /**
+   * AppBuildContainer가 from-blueprint 미션을 만든 직후 호출 — 부모(App.tsx)가 missionId를
+   * sourceSessionId 등으로 매핑해 추후 scaffold refresh 등에 사용. 자동 실행은 없음.
+   */
+  onAppBuildMissionCreated?: (mission: ServerMissionRecord, sourceSessionId?: string) => void;
   onRejectPermission: (sourceItemId: string) => void;
   onRemoveDraftAttachment: (attachmentId: string) => void;
   onSelectAgent: (agentId: string) => void;
@@ -780,6 +787,7 @@ export function ConversationWorkbench({
             model={selectedModel ? { id: selectedModel.id, providerProfileId: selectedModel.providerProfileId } : undefined}
             onClose={() => setAppBuildSeed(null)}
             onHandoffToDebate={(blueprint) => onPromoteToDebate({ blueprintContext: blueprint, sourceSessionId: activeSessionId })}
+            onCreated={(mission) => onAppBuildMissionCreated?.(mission, appBuildSeed.sourceSessionId)}
           />
         ) : null}
 
