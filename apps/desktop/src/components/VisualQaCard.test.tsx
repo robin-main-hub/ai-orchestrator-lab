@@ -341,4 +341,219 @@ describe("VisualQaCard — vertical slice", () => {
       expect(screen.queryByRole("button", { name: danger })).toBeNull();
     }
   });
+
+  it("(#pure verify) buildVisualQaDiff — passed/improved/no_change/regressed/blocked 결정적", async () => {
+    const { buildVisualQaDiff } = await import("../lib/visualQaDiff");
+    const base = makeReport({
+      status: "failed",
+      issues: [
+        { id: "a", missionId: "m", workspaceId: "w", kind: "visual_overflow", severity: "high", summary: "Overflow X", recommendation: "r", truthStatus: "observed", createdAt: "t" },
+        { id: "b", missionId: "m", workspaceId: "w", kind: "accessibility",  severity: "low",  summary: "aria missing", recommendation: "r", truthStatus: "observed", createdAt: "t" },
+      ] as any,
+    });
+    // 1) passed — after에 issue 없음.
+    const passed = makeReport({ status: "passed", issues: [] });
+    const dp = buildVisualQaDiff(base, passed);
+    expect(dp.status).toBe("passed");
+    expect(dp.counts.resolved).toBe(2);
+    expect(dp.counts.remaining).toBe(0);
+    expect(dp.counts.new).toBe(0);
+
+    // 2) improved — overflow 해결, accessibility 남음.
+    const improved = makeReport({
+      status: "warning",
+      issues: [
+        { id: "b2", missionId: "m", workspaceId: "w", kind: "accessibility", severity: "low", summary: "aria missing", recommendation: "r", truthStatus: "observed", createdAt: "t" },
+      ] as any,
+    });
+    const di = buildVisualQaDiff(base, improved);
+    expect(di.status).toBe("improved");
+    expect(di.counts.resolved).toBe(1);
+    expect(di.counts.remaining).toBe(1);
+    expect(di.counts.new).toBe(0);
+
+    // 3) no_change — 같은 두 issue.
+    const same = makeReport({
+      status: "failed",
+      issues: [
+        { id: "a2", missionId: "m", workspaceId: "w", kind: "visual_overflow", severity: "high", summary: "Overflow X", recommendation: "r", truthStatus: "observed", createdAt: "t" },
+        { id: "b2", missionId: "m", workspaceId: "w", kind: "accessibility",  severity: "low",  summary: "aria missing", recommendation: "r", truthStatus: "observed", createdAt: "t" },
+      ] as any,
+    });
+    const dn = buildVisualQaDiff(base, same);
+    expect(dn.status).toBe("no_change");
+    expect(dn.counts.resolved).toBe(0);
+    expect(dn.counts.remaining).toBe(2);
+
+    // 4) regressed — overflow 해결됐지만 새 console_error 생김.
+    const regressed = makeReport({
+      status: "failed",
+      issues: [
+        { id: "b3", missionId: "m", workspaceId: "w", kind: "accessibility", severity: "low", summary: "aria missing", recommendation: "r", truthStatus: "observed", createdAt: "t" },
+        { id: "n1", missionId: "m", workspaceId: "w", kind: "console_error", severity: "high", summary: "Uncaught", recommendation: "r", truthStatus: "observed", createdAt: "t" },
+      ] as any,
+    });
+    const dr = buildVisualQaDiff(base, regressed);
+    expect(dr.status).toBe("regressed");
+    expect(dr.counts.new).toBe(1);
+
+    // 5) blocked — observed preview 없음 → 비교 의미 없음.
+    const blocked = makeReport({ status: "blocked", issues: [] });
+    expect(buildVisualQaDiff(base, blocked).status).toBe("blocked");
+    expect(buildVisualQaDiff(blocked, base).status).toBe("blocked");
+  });
+
+  it("(#vertical verify) apply → '수정 검증 실행' → preview rerun + QA rerun → diff 패널 + trace", async () => {
+    const initialReport = makeReport({
+      status: "failed",
+      issues: [
+        { id: "i1", missionId: "mvf", workspaceId: "ws_a", kind: "visual_overflow", severity: "high", summary: "Overflow X", recommendation: "r", truthStatus: "observed", createdAt: "t" },
+        { id: "i2", missionId: "mvf", workspaceId: "ws_a", kind: "accessibility",  severity: "low",  summary: "aria missing", recommendation: "r", truthStatus: "observed", createdAt: "t" },
+      ] as any,
+    });
+    const afterReport = makeReport({
+      missionId: "mvf",
+      workspaceId: "ws_b",
+      status: "warning",
+      issues: [
+        // visual_overflow 사라짐. accessibility 남음.
+        { id: "j1", missionId: "mvf", workspaceId: "ws_b", kind: "accessibility", severity: "low", summary: "aria missing", recommendation: "r", truthStatus: "observed", createdAt: "t" },
+      ] as any,
+    });
+    const calls: Array<{ url: string; body: any }> = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const body = init?.body ? JSON.parse(init.body as string) : undefined;
+      calls.push({ url, body });
+      if (url.endsWith(`/missions/mvf/workspace/ws_a/visual-qa`)) {
+        return new Response(JSON.stringify({ mission: {}, report: initialReport }), { status: 200 });
+      }
+      if (url.endsWith(`/missions/mvf/scaffold/overlay`)) {
+        return new Response(JSON.stringify({
+          outcome: "recorded",
+          overlay: { id: "ov1", missionId: "mvf", source: "appfix", files: body.files, truthStatus: "planned", createdAt: "t" },
+          skipped: [],
+        }), { status: 200 });
+      }
+      if (url.endsWith(`/missions/mvf/preview/run-scaffold`)) {
+        return new Response(JSON.stringify({
+          outcome: "observed",
+          repoRoot: "/tmp/x",
+          materializedFileCount: 6,
+          workspaceId: "ws_b",
+          preview: { status: "running", url: "http://127.0.0.1:4568", port: 4568, truthStatus: "observed" },
+        }), { status: 200 });
+      }
+      if (url.endsWith(`/missions/mvf/workspace/ws_b/visual-qa`)) {
+        return new Response(JSON.stringify({ mission: {}, report: afterReport }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    const onContextEvent = vi.fn();
+    const currentFiles = [
+      { path: "src/styles.css", content: `.app-screens { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); } .screen-card { padding: 1.25rem; } .screen-card__action { padding: 0.5rem 0.85rem; }` },
+      { path: "src/App.tsx",    content: `import "./styles.css"; export function App() { return (<main><button className="screen-card__action">시작</button></main>); }` },
+    ];
+    render(
+      <VisualQaCard
+        missionId="mvf"
+        workspaceId="ws_a"
+        previewUrl="http://127.0.0.1:4567"
+        currentScaffoldFiles={currentFiles}
+        serverBaseUrl="http://x"
+        fetchImpl={fetchImpl as unknown as typeof fetch}
+        onContextEvent={onContextEvent}
+      />,
+    );
+    // 1) QA 실행 → failed.
+    fireEvent.click(screen.getByTestId("visual-qa-run-mvf"));
+    await waitFor(() => screen.getByTestId("visual-qa-status-mvf"));
+    // 2) 초안 생성.
+    fireEvent.click(screen.getByTestId("visual-qa-draft-cta-mvf"));
+    await waitFor(() => screen.getByTestId("visual-qa-patch-mvf"));
+    // 3) 적용.
+    fireEvent.click(screen.getByTestId("visual-qa-patch-apply-mvf"));
+    await waitFor(() => screen.getByTestId("visual-qa-patch-applied-mvf"));
+    // 4) 수정 검증 실행 CTA 활성.
+    const verifyCta = screen.getByTestId("visual-qa-verify-cta-mvf") as HTMLButtonElement;
+    expect(verifyCta.disabled).toBe(false);
+    fireEvent.click(verifyCta);
+
+    await waitFor(() => {
+      const previewCall = calls.find((c) => c.url.endsWith("/missions/mvf/preview/run-scaffold"));
+      expect(previewCall).toBeTruthy();
+      const reRunQaCall = calls.find((c) => c.url.endsWith("/missions/mvf/workspace/ws_b/visual-qa"));
+      expect(reRunQaCall).toBeTruthy();
+    });
+    // 5) Diff 패널 표시.
+    await waitFor(() => {
+      const status = screen.getByTestId("visual-qa-verify-status-mvf");
+      expect(status.textContent).toMatch(/개선됨|추가 수정 필요/);
+      const counts = screen.getByTestId("visual-qa-verify-counts-mvf");
+      expect(counts.textContent).toContain("해결 1");
+      expect(counts.textContent).toContain("남음 1");
+      expect(counts.textContent).toContain("새로 0");
+    });
+    // 해결됨/남음 리스트.
+    expect(screen.getByTestId("visual-qa-verify-resolved-mvf").textContent).toContain("Overflow X");
+    expect(screen.getByTestId("visual-qa-verify-remaining-mvf").textContent).toContain("aria missing");
+
+    // trace 검증.
+    const types = onContextEvent.mock.calls.map((c) => c[0] as string);
+    expect(types).toContain("mission.fix_verification.requested");
+    expect(types).toContain("mission.fix_verification.observed");
+    const observedTrace = onContextEvent.mock.calls.find((c) => c[0] === "mission.fix_verification.observed");
+    expect((observedTrace![1] as any).diffStatus).toBe("improved");
+    expect((observedTrace![1] as any).resolved).toBe(1);
+    expect((observedTrace![1] as any).remaining).toBe(1);
+  });
+
+  it("(#verify failure) preview rerun 실패 → Visual QA rerun 안 함 + preview_failed 표시", async () => {
+    const initialReport = makeReport({
+      status: "failed",
+      issues: [
+        { id: "i1", missionId: "mvf2", workspaceId: "ws_a", kind: "visual_overflow", severity: "high", summary: "X", recommendation: "r", truthStatus: "observed", createdAt: "t" },
+      ] as any,
+    });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.endsWith(`/missions/mvf2/workspace/ws_a/visual-qa`)) {
+        return new Response(JSON.stringify({ mission: {}, report: initialReport }), { status: 200 });
+      }
+      if (url.endsWith(`/missions/mvf2/scaffold/overlay`)) {
+        return new Response(JSON.stringify({ outcome: "recorded", overlay: { id: "ov2", missionId: "mvf2", source: "appfix", files: [], truthStatus: "planned", createdAt: "t" }, skipped: [] }), { status: 200 });
+      }
+      if (url.endsWith(`/missions/mvf2/preview/run-scaffold`)) {
+        return new Response(JSON.stringify({ outcome: "preview_not_running", preview: { status: "failed", truthStatus: "configured", detail: "spawn ENOENT" } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    const currentFiles = [
+      { path: "src/styles.css", content: `.app-screens { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }` },
+    ];
+    render(
+      <VisualQaCard
+        missionId="mvf2"
+        workspaceId="ws_a"
+        previewUrl="http://127.0.0.1:4567"
+        currentScaffoldFiles={currentFiles}
+        serverBaseUrl="http://x"
+        fetchImpl={fetchImpl as unknown as typeof fetch}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("visual-qa-run-mvf2"));
+    await waitFor(() => screen.getByTestId("visual-qa-status-mvf2"));
+    fireEvent.click(screen.getByTestId("visual-qa-draft-cta-mvf2"));
+    await waitFor(() => screen.getByTestId("visual-qa-patch-mvf2"));
+    fireEvent.click(screen.getByTestId("visual-qa-patch-apply-mvf2"));
+    await waitFor(() => screen.getByTestId("visual-qa-patch-applied-mvf2"));
+    fireEvent.click(screen.getByTestId("visual-qa-verify-cta-mvf2"));
+    await waitFor(() => {
+      expect(screen.getByTestId("visual-qa-verify-preview-failed-mvf2").textContent).toContain("preview 재실행 실패");
+    });
+    // qa 재실행 안 함 — qa_failed 노출 X.
+    expect(screen.queryByTestId("visual-qa-verify-qa-failed-mvf2")).toBeNull();
+    // diff 패널 노출 X.
+    expect(screen.queryByTestId("visual-qa-verify-diff-mvf2")).toBeNull();
+  });
 });
