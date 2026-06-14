@@ -143,6 +143,17 @@ export type GithubReadonlyClient = {
     params: { title: string; body: string; base: string; head: string },
   ): Promise<{ pullNumber: number; htmlUrl: string; headSha: string }>;
   /**
+   * W5c — PATCH /repos/:o/:r/pulls/:n. title/body만 갱신한다. draft/state/base/labels
+   * 등은 받지 않음. 응답 200일 때만 `{ pullNumber, htmlUrl, title, body, updatedAt }`.
+   * 404/422/403은 호출자가 outcome으로 매핑한다.
+   */
+  updatePullRequest?(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    params: { title?: string; body?: string },
+  ): Promise<{ pullNumber: number; htmlUrl: string; title: string; body: string; updatedAt: string }>;
+  /**
    * W5b — GET /repos/:o/:r/git/commits/:sha. commit object의 tree.sha를 반환한다.
    * multi-file atomic commit의 base_tree로 사용된다.
    */
@@ -420,6 +431,46 @@ export function createGithubReadonlyClient(options: GithubReadonlyClientOptions 
         throw new GithubReadonlyError("GitHub POST /pulls 응답에 number 또는 head.sha가 없습니다", 502);
       }
       return { pullNumber, htmlUrl, headSha };
+    },
+
+    async updatePullRequest(owner, repo, pullNumber, params) {
+      if (!token) throw new GithubNotConfiguredError();
+      // 받은 키만 PATCH 본문에 싣는다. undefined는 의도적으로 누락.
+      const body: Record<string, string> = {};
+      if (params.title !== undefined) body.title = params.title;
+      if (params.body !== undefined) body.body = params.body;
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${encodeURIComponent(String(pullNumber))}`,
+          {
+            method: "PATCH",
+            headers: {
+              accept: "application/vnd.github+json",
+              authorization: `Bearer ${token}`,
+              "x-github-api-version": "2022-11-28",
+              "user-agent": "ai-orchestrator-lab-pr-update",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(body),
+          },
+        );
+      } catch (error) {
+        throw new GithubReadonlyError(scrub(error instanceof Error ? error.message : String(error), token), 0);
+      }
+      if (response.status !== 200) {
+        const text = await response.text().catch(() => "");
+        throw new GithubReadonlyError(scrub(`GitHub ${response.status}: ${text.slice(0, 200)}`, token), response.status);
+      }
+      const raw = (await response.json()) as Record<string, unknown>;
+      const num = typeof raw.number === "number" ? raw.number : pullNumber;
+      const htmlUrl = typeof raw.html_url === "string"
+        ? raw.html_url
+        : `https://github.com/${owner}/${repo}/pull/${num}`;
+      const title = typeof raw.title === "string" ? raw.title : "";
+      const bodyText = typeof raw.body === "string" ? raw.body : "";
+      const updatedAt = typeof raw.updated_at === "string" ? raw.updated_at : "";
+      return { pullNumber: num, htmlUrl, title, body: bodyText, updatedAt };
     },
 
     // W5b — Git Data API: getCommitTreeSha / createBlob / createTree / createCommit / updateRefSha.

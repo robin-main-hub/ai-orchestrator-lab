@@ -742,3 +742,136 @@ export const githubMultiFileCommitExecuteResponseSchema = z.object({
   truthStatus: z.enum(["planned", "observed", "configured"]),
 });
 export type GithubMultiFileCommitExecuteResponse = z.infer<typeof githubMultiFileCommitExecuteResponseSchema>;
+
+// ──────────────────────────────────────────────────────────────────────────────
+// W5c: PR title/body update.
+//
+// 좁은 범위:
+//   - title/body만 PATCH한다(draft toggle/close/base 변경/labels/assignees는 제외).
+//   - same-repo, open-only PR(closed/merged면 차단).
+//   - approval ONLY(armed 없음 — PR 본문은 외부 흔적이 큼).
+//   - 1차 무결성: client payload의 expectedCurrentTitleSha256/bodySha256가
+//     plan-store와 일치해야 함(plan과 같은 base를 의도하는지).
+//   - 2차 무결성: execute 직전 PR re-read하여 GitHub 현재 title/body가
+//     plan.currentTitleSha256/currentBodySha256와 같아야 함(TOCTOU).
+//   - no-op(새 title==현재 + 새 body==현재) 차단.
+//   - title<=160 / body<=16000.
+//   - title/body secret scan 재사용.
+//   - 본문 raw 전체는 응답/트레이스에 흘리지 않는다(length/sha/excerpt만).
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const githubPullRequestUpdateOutcomeSchema = z.enum([
+  "observed",
+  "planned",
+  "approval_required",
+  "blocked",
+  "no_op",
+  "not_configured",
+  "permission_denied",
+  "connection_failed",
+  "github_error",
+]);
+export type GithubPullRequestUpdateOutcome = z.infer<typeof githubPullRequestUpdateOutcomeSchema>;
+
+export const GITHUB_PR_UPDATE_TITLE_MAX = 160;
+export const GITHUB_PR_UPDATE_BODY_MAX = 16_000;
+export const GITHUB_PR_UPDATE_BODY_EXCERPT_MAX = 240;
+
+export const githubPullRequestUpdatePlanRequestSchema = z.object({
+  repoFullName: z
+    .string()
+    .min(3).max(140)
+    .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, "owner/repo 형식이 필요합니다"),
+  /** open PR 번호. 양의 정수. closed/merged면 plan이 blocked 반환. */
+  pullNumber: z.number().int().positive(),
+  /** 변경 의도가 있을 때만 채운다. undefined면 그 필드는 건드리지 않는다. */
+  newTitle: z.string().min(1).max(GITHUB_PR_UPDATE_TITLE_MAX).optional(),
+  /** 빈 문자열은 본문 비우기로 간주(GitHub PR도 body 빈 상태 허용). */
+  newBody: z.string().max(GITHUB_PR_UPDATE_BODY_MAX).optional(),
+});
+export type GithubPullRequestUpdatePlanRequest = z.infer<typeof githubPullRequestUpdatePlanRequestSchema>;
+
+export const githubPullRequestUpdatePlanSchema = z.object({
+  id: z.string(),
+  repoFullName: z.string(),
+  pullNumber: z.number().int().positive(),
+  /** plan 시점 GitHub에서 관측한 현재 title. */
+  currentTitle: z.string(),
+  /** plan 시점 GitHub에서 관측한 현재 body의 sha256(전체 본문 자체는 노출하지 않음). */
+  currentTitleSha256: z.string(),
+  currentBodySha256: z.string(),
+  currentBodyLength: z.number().int().nonnegative(),
+  /** 새 title(변경 안 함이면 undefined). */
+  newTitle: z.string().optional(),
+  newTitleSha256: z.string().optional(),
+  /** 새 body(변경 안 함이면 undefined). preview만 — raw body 전체는 안 노출. */
+  newBodyExcerpt: z.string().optional(),
+  newBodySha256: z.string().optional(),
+  newBodyLength: z.number().int().nonnegative().optional(),
+  /** 변경 항목 요약. title only / body only / both. */
+  changeSummary: z.object({
+    titleChanged: z.boolean(),
+    bodyChanged: z.boolean(),
+    bodyDelta: z.number().int(),
+  }),
+  status: z.enum(["planned", "approval_required", "blocked", "no_op", "failed"]),
+  truthStatus: z.enum(["planned", "observed", "configured"]),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  approvalId: z.string().optional(),
+  blockedReason: z.string().optional(),
+});
+export type GithubPullRequestUpdatePlan = z.infer<typeof githubPullRequestUpdatePlanSchema>;
+
+export const githubPullRequestUpdatePlanResponseSchema = z.object({
+  outcome: githubPullRequestUpdateOutcomeSchema,
+  plan: githubPullRequestUpdatePlanSchema.optional(),
+  message: z.string().optional(),
+});
+export type GithubPullRequestUpdatePlanResponse = z.infer<typeof githubPullRequestUpdatePlanResponseSchema>;
+
+export const githubPullRequestUpdateExecuteRequestSchema = z.object({
+  planId: z.string(),
+  /** plan에 저장된 현재 title/body sha — execute가 같은 base를 의도하는지 1차 확인. */
+  expectedCurrentTitleSha256: z.string(),
+  expectedCurrentBodySha256: z.string(),
+  /** plan이 의도한 새 title/body sha. plan에 newTitle이 없으면 호출자도 보내지 않음. */
+  newTitleSha256: z.string().optional(),
+  newBodySha256: z.string().optional(),
+  approvalId: z.string(),
+});
+export type GithubPullRequestUpdateExecuteRequest = z.infer<typeof githubPullRequestUpdateExecuteRequestSchema>;
+
+export const githubPullRequestUpdateExecuteResponseSchema = z.object({
+  outcome: githubPullRequestUpdateOutcomeSchema,
+  planId: z.string(),
+  pullNumber: z.number().int().positive().optional(),
+  htmlUrl: z.string().optional(),
+  /** observed 시점 GitHub 응답의 title(변경 적용 후). */
+  title: z.string().optional(),
+  /** observed 시점 GitHub 응답의 body 길이/sha — raw 본문은 응답에 싣지 않음. */
+  bodyLength: z.number().int().nonnegative().optional(),
+  bodySha256: z.string().optional(),
+  /** GitHub updated_at. */
+  updatedAt: z.string().optional(),
+  observedAt: z.string().optional(),
+  reason: z
+    .enum([
+      "no_op",
+      "title_too_long",
+      "body_too_long",
+      "secret_suspect",
+      "pr_closed",
+      "pr_not_found",
+      "toctou_title_mismatch",
+      "toctou_body_mismatch",
+      "allowlist",
+      "permission_denied",
+      "github_error",
+      "connection_failed",
+    ])
+    .optional(),
+  message: z.string().optional(),
+  truthStatus: z.enum(["planned", "observed", "configured"]),
+});
+export type GithubPullRequestUpdateExecuteResponse = z.infer<typeof githubPullRequestUpdateExecuteResponseSchema>;

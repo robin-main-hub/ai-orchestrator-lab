@@ -21,6 +21,10 @@ import type {
   GithubPullRequestCreatePlanResponse,
   GithubPullRequestDetail,
   GithubPullRequestSummary,
+  GithubPullRequestUpdateExecuteRequest,
+  GithubPullRequestUpdateExecuteResponse,
+  GithubPullRequestUpdatePlanRequest,
+  GithubPullRequestUpdatePlanResponse,
   GithubReadonlyResourceResponse,
   GithubResourceOutcome,
 } from "@ai-orchestrator/protocol";
@@ -274,4 +278,27 @@ export function postGithubPullRequestExecute(
   fetchImpl: typeof fetch = fetch,
 ): Promise<GithubPullRequestCreateExecuteResponse> {
   return postJson(serverBaseUrl, "/integrations/github/write/pr/execute", request, fetchImpl);
+}
+
+/**
+ * W5c — PR title/body update plan. 서버가 PR을 read하고 diff sha를 계산해 plan 응답으로
+ * 돌려준다. 본문 raw는 서버에 저장되며 응답에는 excerpt만 노출.
+ */
+export function postGithubPullRequestUpdatePlan(
+  serverBaseUrl: string | string[] | undefined,
+  request: GithubPullRequestUpdatePlanRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubPullRequestUpdatePlanResponse> {
+  return postJson(serverBaseUrl, "/integrations/github/write/pr/update/plan", request, fetchImpl);
+}
+
+/**
+ * W5c — PR title/body update execute. approvalId 필수, TOCTOU 검증은 서버가 다시 수행.
+ */
+export function postGithubPullRequestUpdateExecute(
+  serverBaseUrl: string | string[] | undefined,
+  request: GithubPullRequestUpdateExecuteRequest,
+  fetchImpl: typeof fetch = fetch,
+): Promise<GithubPullRequestUpdateExecuteResponse> {
+  return postJson(serverBaseUrl, "/integrations/github/write/pr/update/execute", request, fetchImpl);
 }
