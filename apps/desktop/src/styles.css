@@ -9489,6 +9489,29 @@ body:has(.app-shell.annex-focus-shell) {
   font-size: 10.5px;
   opacity: 0.8;
 }
+/* Publish Panel CTA — Mission Workspace 상세 안에서 접힘 상태로 시작.
+   기본은 작고 평범하게, 사용자가 명시 클릭으로만 펼치도록. */
+.mission-workspace-publish {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.06);
+}
+.mission-workspace-publish-toggle {
+  align-self: flex-start;
+  font-size: 11px;
+}
+.mission-workspace-publish-hint {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.mission-workspace-publish-body {
+  margin-top: 4px;
+}
+
 .mission-workspace-detail {
   display: flex;
   flex-direction: column;
