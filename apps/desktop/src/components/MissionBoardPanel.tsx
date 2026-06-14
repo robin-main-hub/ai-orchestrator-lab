@@ -19,6 +19,7 @@ import { GithubPublishPanel } from "./coding/GithubPublishPanel";
 import {
   builtinMissionPrefill,
   type MissionPublishPrefillResolver,
+  type MissionScaffoldFile,
 } from "../lib/missionPublishPrefill";
 import {
   DESIGN_ISSUE_KIND_LABEL,
@@ -68,6 +69,12 @@ export type MissionPublishEnvironment = {
    * 정직성: prefill은 "draft/planned" 값일 뿐, 자동 실행하지 않는다.
    */
   resolvePrefill?: MissionPublishPrefillResolver;
+  /**
+   * App Builder가 만든 scaffold/file change artifact 목록을 반환한다.
+   * 없으면 publish panel은 file path/content를 비워둔다(추측 금지).
+   * binary/대용량/시크릿 의심은 builtinMissionPrefill이 자동으로 거른다.
+   */
+  getScaffoldFiles?: (item: MissionBoardItem) => ReadonlyArray<MissionScaffoldFile> | undefined;
 };
 
 export function MissionBoardPanel({
@@ -461,13 +468,20 @@ function MissionWorkspaceDetail({
             GitHub로 내보내기
             <span className="mission-board-truth">planned</span>
           </button>
+          {/* 보조 텍스트(접힘 상태에서도 보임) — 사용자에게 단계별 승인임을 명시. */}
+          <p className="mission-workspace-publish-hint">
+            브랜치 생성 · 파일 변경 · PR 생성을 단계별 승인으로 진행합니다. (merge/review/label/assignee 없음)
+          </p>
           {publishOpen ? (
             <div id={`mission-publish-${item.missionId}`} className="mission-workspace-publish-body">
               <GithubPublishPanel
                 key={item.missionId}
                 serverBaseUrl={publishEnvironment.serverBaseUrl}
                 defaultRepoFullName={publishEnvironment.defaultRepoFullName}
-                initial={(publishEnvironment.resolvePrefill ?? builtinMissionPrefill)(item)}
+                initial={(publishEnvironment.resolvePrefill ?? builtinMissionPrefill)(
+                  item,
+                  publishEnvironment.getScaffoldFiles?.(item),
+                )}
                 onContextEvent={(type, payload) =>
                   // Mission 컨텍스트(missionId)를 trace event에 자동 첨부 — provenance.
                   publishEnvironment.onContextEvent?.(type, { ...payload, missionId: item.missionId })

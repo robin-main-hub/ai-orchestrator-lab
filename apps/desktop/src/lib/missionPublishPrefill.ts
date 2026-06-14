@@ -9,8 +9,10 @@ import type { GithubPublishPanelInitial } from "../components/coding/GithubPubli
  *   - branch name은 missionId를 안전 슬러그로 변환해서 W2 prefix `agent/mission-<slug>`로.
  *     (사용자가 수정 가능 — 자동 실행은 절대 일어나지 않음, prefill ≠ execute.)
  *   - PR title은 mission.title 그대로(160자 캡 안에서). PR body는 mission.goal + provenance 한 줄.
- *   - repo / file 콘텐츠는 호출자가 별도로 (App.tsx에서 워크스페이스 메타로) 채워야 한다 —
- *     MissionBoardItem 스키마에 scaffold 파일 목록이 노출되어 있지 않기 때문(W5에서 확장 가능).
+ *   - file path/content는 호출자가 scaffoldFiles로 명시적으로 넘긴 경우에만 자동 채움.
+ *     binary/large/secret-suspect는 모두 스킵하고, 다중 파일이면 첫 안전 파일만 + 명시 notice.
+ *     (Mission scaffold 메타가 MissionBoardItem 스키마에 노출되어 있지 않아도, 호출자가
+ *      getScaffoldFiles로 제공하면 prefill이 작동한다.)
  */
 
 const SLUG_SAFE = /[^a-z0-9-]/g;
@@ -31,6 +33,118 @@ function buildPrBody(item: MissionBoardItem): string {
   return lines.join("\n");
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Scaffold file 가드 — prefill 단계의 첫 안전선(server의 W3a guard가 두 번째).
+// ──────────────────────────────────────────────────────────────────────────────
+
+export type MissionScaffoldFile = {
+  /** repo-root-relative path(예: "src/util.ts"). 비어 있으면 자동 스킵. */
+  path: string;
+  /** UTF-8 텍스트 — binary 파일은 호출자가 미리 거르거나 NUL을 포함시켜 스킵되게 한다. */
+  newContent: string;
+  /** create / update 표시. UI 라벨에 사용(미제공 시 비표시). */
+  operation?: "create" | "update";
+};
+
+/** W3a와 동일한 256 KiB. 이 한도를 넘으면 prefill 스킵(서버도 동일 한도로 차단). */
+export const SCAFFOLD_FILE_BYTE_MAX = 256 * 1024;
+
+/**
+ * 클라이언트 측 보조 secret scan — 서버의 W1 scanner가 항상 진실의 원본이지만,
+ * prefill 단계에서 명백한 비밀이 들어가지 않도록 첫 필터를 둔다.
+ * (가짜 양성보다 가짜 음성을 더 두려워한다 — 모호하면 스킵.)
+ */
+const CLIENT_SECRET_PATTERNS: ReadonlyArray<RegExp> = [
+  /\bghp_[A-Za-z0-9]{20,}\b/,
+  /\bgho_[A-Za-z0-9]{20,}\b/,
+  /\bghs_[A-Za-z0-9]{20,}\b/,
+  /\bghu_[A-Za-z0-9]{20,}\b/,
+  /\bghr_[A-Za-z0-9]{20,}\b/,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bsk-ant-[A-Za-z0-9_-]{20,}\b/,
+  /\bsk-[A-Za-z0-9]{40,}\b/,
+  /\bxox[abposr]-[A-Za-z0-9-]{10,}\b/,
+  /\bAIza[0-9A-Za-z_-]{30,}\b/,
+  /\bAuthorization\s*:\s*Bearer\s+\S+/i,
+  /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/,
+];
+
+/** utf-8 byte length — 브라우저에서 `Buffer` 없이도 정확. */
+function utf8ByteLength(text: string): number {
+  return new TextEncoder().encode(text).byteLength;
+}
+
+export type ScaffoldGateReason = "empty_path" | "binary" | "too_large" | "secret_suspect";
+
+export type ScaffoldGateResult =
+  | { ok: true; file: MissionScaffoldFile }
+  | { ok: false; reason: ScaffoldGateReason };
+
+/** 단일 파일이 prefill에 안전한지 결정적 검사 — 외부 호출 0. */
+export function evaluateScaffoldFile(file: MissionScaffoldFile): ScaffoldGateResult {
+  if (!file.path || !file.path.trim()) return { ok: false, reason: "empty_path" };
+  if (file.newContent.includes("\0")) return { ok: false, reason: "binary" };
+  if (utf8ByteLength(file.newContent) > SCAFFOLD_FILE_BYTE_MAX) return { ok: false, reason: "too_large" };
+  if (CLIENT_SECRET_PATTERNS.some((pattern) => pattern.test(file.newContent))) {
+    return { ok: false, reason: "secret_suspect" };
+  }
+  return { ok: true, file };
+}
+
+export type ScaffoldPickResult = {
+  /** 안전 가드를 통과해서 prefill에 쓸 파일(없으면 undefined). */
+  pick?: MissionScaffoldFile;
+  /** 전체 scaffold 파일 개수. */
+  total: number;
+  /** 가드 통과한 파일 개수(첫 통과 파일을 pick으로 노출). */
+  safeCount: number;
+  /** 스킵된 사유별 카운트(UI에서 "스캔된 N개 — 1개 사용" 같은 메시지 만들 때 쓰기 좋음). */
+  skipped: Record<ScaffoldGateReason, number>;
+};
+
+/**
+ * 안전 가드를 통과한 첫 파일을 선택. 다중 파일이면 사용자가 나머지를 별도 plan으로 진행해야 함.
+ * 정직성: 추측 금지 — 입력이 비어 있으면 pick은 undefined.
+ */
+export function pickFirstSafeScaffoldFile(files: ReadonlyArray<MissionScaffoldFile>): ScaffoldPickResult {
+  const result: ScaffoldPickResult = {
+    total: files.length,
+    safeCount: 0,
+    skipped: { empty_path: 0, binary: 0, too_large: 0, secret_suspect: 0 },
+  };
+  for (const file of files) {
+    const gate = evaluateScaffoldFile(file);
+    if (gate.ok) {
+      result.safeCount += 1;
+      if (!result.pick) result.pick = gate.file;
+    } else {
+      result.skipped[gate.reason] += 1;
+    }
+  }
+  return result;
+}
+
+/** 명시 notice 한 줄 — 사용자가 "여러 파일 중 첫 파일" 상황을 알 수 있게. */
+function buildFileNotice(pick: ScaffoldPickResult): string | undefined {
+  if (!pick.pick) {
+    if (pick.total === 0) return undefined;
+    // 모든 파일이 스킵된 경우 — 사용자가 손으로 입력해야 한다는 신호.
+    const skippedTotal = Object.values(pick.skipped).reduce((sum, count) => sum + count, 0);
+    return `scaffold ${pick.total}개 모두 가드에 막혀 자동 채움 없음 (${skippedTotal}개 스킵 — binary/대용량/시크릿 의심)`;
+  }
+  if (pick.total === 1) {
+    return `scaffold 1개 — 그대로 채움(검토 후 plan)`;
+  }
+  // 다중 파일 — 첫 안전 파일만 보이고 나머지는 별도 plan으로 진행.
+  const skippedBits: string[] = [];
+  if (pick.skipped.binary > 0) skippedBits.push(`${pick.skipped.binary} binary`);
+  if (pick.skipped.too_large > 0) skippedBits.push(`${pick.skipped.too_large} 대용량`);
+  if (pick.skipped.secret_suspect > 0) skippedBits.push(`${pick.skipped.secret_suspect} 시크릿 의심`);
+  if (pick.skipped.empty_path > 0) skippedBits.push(`${pick.skipped.empty_path} 빈 경로`);
+  const skippedNote = skippedBits.length > 0 ? ` · 스킵 ${skippedBits.join(", ")}` : "";
+  return `scaffold ${pick.total}개 중 1개 자동 채움 — 나머지는 별도 plan${skippedNote}`;
+}
+
 /**
  * 기본 prefill resolver — Mission 메타로부터 안전한 첫 초기값을 만든다.
  * 호출자(MissionBoardPanel)가 별도 resolver를 안 주면 이걸 사용한다.
@@ -40,20 +154,36 @@ function buildPrBody(item: MissionBoardItem): string {
  *   - prBase: "main"
  *   - prTitle: mission.title(160자 캡)
  *   - prBody: mission.goal + provenance
- *   - filePath / fileNewContent / sourceRef는 호출자가 override 가능
+ *   - filePath / fileNewContent: scaffoldFiles가 있을 때만 가드 통과한 첫 안전 파일에서 가져옴.
+ *     없으면 undefined로 비움(사용자가 직접 입력) — 추측 금지.
+ *   - fileNotice: 다중 파일/전체 스킵 상황을 명시 텍스트로.
  */
-export function builtinMissionPrefill(item: MissionBoardItem): GithubPublishPanelInitial {
+export function builtinMissionPrefill(
+  item: MissionBoardItem,
+  scaffoldFiles?: ReadonlyArray<MissionScaffoldFile>,
+): GithubPublishPanelInitial {
   const slug = shortSlug(item.missionId);
   const titleCapped = item.title ? item.title.slice(0, 160) : "";
-  return {
+  const initial: GithubPublishPanelInitial = {
     sourceRef: "main",
     newBranchName: `agent/mission-${slug}`,
     prBase: "main",
     prTitle: titleCapped,
     prBody: buildPrBody(item),
-    // filePath/fileNewContent는 의도적으로 비워둠 — Mission scaffold 노출은 W5 확장.
   };
+  if (scaffoldFiles && scaffoldFiles.length > 0) {
+    const pick = pickFirstSafeScaffoldFile(scaffoldFiles);
+    if (pick.pick) {
+      initial.filePath = pick.pick.path;
+      initial.fileNewContent = pick.pick.newContent;
+    }
+    initial.fileNotice = buildFileNotice(pick);
+  }
+  return initial;
 }
 
 /** 호출자 측 resolver 시그니처(MissionPublishEnvironment에서 사용). */
-export type MissionPublishPrefillResolver = (item: MissionBoardItem) => GithubPublishPanelInitial | undefined;
+export type MissionPublishPrefillResolver = (
+  item: MissionBoardItem,
+  scaffoldFiles?: ReadonlyArray<MissionScaffoldFile>,
+) => GithubPublishPanelInitial | undefined;
