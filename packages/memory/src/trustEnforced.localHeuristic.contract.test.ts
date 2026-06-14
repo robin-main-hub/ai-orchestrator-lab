@@ -4,7 +4,7 @@ import { withTrustEnforcement } from "./trustEnforcedAdapter.js";
 import { STANDARD_CONTRACT_CASES, makeContractCtx } from "./contractTestFixtures.js";
 
 /**
- * `withTrustEnforcement` was only contract-tested against MockMemoryAdapter.
+ * `withTrustEnforcement` was only contract-tested against MockAdapter.
  * Real adapters should also satisfy the standard contract when wrapped
  * in trust enforcement (with a permitted ctx). Catches regressions where
  * trust wrapping accidentally drops a method or mutates ctx in a way

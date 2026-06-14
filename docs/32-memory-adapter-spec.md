@@ -1,5 +1,10 @@
 # Memory Adapter Spec
 
+> **2026-06-15 rename**: 패키지 이름은 `@ai-orchestrator/simplememo` (이전 `@ai-orchestrator/memory`),
+> 클래스는 `SimpleMemAdapter` (이전 `DgxSimpleMemMemoryAdapter`), `MockAdapter` (이전 `MockMemoryAdapter`).
+> 본문은 spec 작성 당시 이름 그대로 둠(역사적 정확성). 코드 작업할 땐 새 이름 사용.
+> 관련 커밋: `cf3f6d6`.
+
 `MemoryAPI` (개념: docs/05, 로컬 구현: docs/18, DGX-02 authority + SimpleMem 배치: docs/28) 의 후속 단계. 추상 인터페이스가 LocalHeuristic / MementoMcp / DgxSimpleMem 3개 backend 를 일관된 contract 로 받도록 어댑터 계층을 명세한다. `LlmAdapter` (docs/24) 가 5개 provider 를 받는 패턴을 memory 쪽에도 동일하게 적용.
 
 관련 문서: [`05-memory-memento.md`](05-memory-memento.md) (개념), [`13-event-store-permission-redaction.md`](13-event-store-permission-redaction.md) (Event Store + redaction), [`18-memento-mcp-structure-check.md`](18-memento-mcp-structure-check.md) (현재 구현 gap), [`24-provider-adapters.md`](24-provider-adapters.md) (LlmAdapter 패턴), [`28-simplemem-continuity-memory.md`](28-simplemem-continuity-memory.md) (DGX authority + PR-M0~M3 계획), [`29-permission-engine-spec.md`](29-permission-engine-spec.md) (F7 redaction pipeline), [`agents/memory_curator/`](../agents/memory_curator/) (페르소나).
