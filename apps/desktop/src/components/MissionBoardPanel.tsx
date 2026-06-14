@@ -17,6 +17,10 @@ import {
 import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import { GithubPublishPanel } from "./coding/GithubPublishPanel";
 import {
+  builtinMissionPrefill,
+  type MissionPublishPrefillResolver,
+} from "../lib/missionPublishPrefill";
+import {
   DESIGN_ISSUE_KIND_LABEL,
   MISSION_SOURCE_LABEL,
   MISSION_STATUS_LABEL,
@@ -56,6 +60,14 @@ export type MissionPublishEnvironment = {
   defaultRepoFullName?: string;
   onContextEvent?: (type: string, payload: Record<string, unknown>) => void;
   fetchImpl?: typeof fetch;
+  /**
+   * Mission 컨텍스트를 Publish Panel 입력 필드로 변환하는 resolver.
+   * 주지 않으면 builtinMissionPrefill(mission.title/goal/missionId 기반)이 적용된다.
+   * 호출자가 scaffold 파일/repo 매핑을 알고 있다면 직접 override 권장.
+   *
+   * 정직성: prefill은 "draft/planned" 값일 뿐, 자동 실행하지 않는다.
+   */
+  resolvePrefill?: MissionPublishPrefillResolver;
 };
 
 export function MissionBoardPanel({
@@ -452,8 +464,10 @@ function MissionWorkspaceDetail({
           {publishOpen ? (
             <div id={`mission-publish-${item.missionId}`} className="mission-workspace-publish-body">
               <GithubPublishPanel
+                key={item.missionId}
                 serverBaseUrl={publishEnvironment.serverBaseUrl}
                 defaultRepoFullName={publishEnvironment.defaultRepoFullName}
+                initial={(publishEnvironment.resolvePrefill ?? builtinMissionPrefill)(item)}
                 onContextEvent={(type, payload) =>
                   // Mission 컨텍스트(missionId)를 trace event에 자동 첨부 — provenance.
                   publishEnvironment.onContextEvent?.(type, { ...payload, missionId: item.missionId })

@@ -79,10 +79,34 @@ type TraceEvent = {
   summary: string;
 };
 
+/**
+ * Mission/AppBuild 프리필 — Publish Panel 입력 필드에 초기값으로 들어간다.
+ * 모두 옵션이고, 사용자가 panel 내부에서 자유롭게 수정할 수 있다.
+ * 자동 실행은 절대 일어나지 않는다(prefill ≠ execute).
+ */
+export type GithubPublishPanelInitial = {
+  /** Step 1 source ref(예: "main"). */
+  sourceRef?: string;
+  /** Step 1 새 branch 이름 candidate(예: "agent/mission-12ab"). */
+  newBranchName?: string;
+  /** Step 2 첫 파일 path(예: "src/util.ts"). */
+  filePath?: string;
+  /** Step 2 첫 파일 새 콘텐츠. */
+  fileNewContent?: string;
+  /** Step 3 PR base(예: "main"). */
+  prBase?: string;
+  /** Step 3 PR 제목 draft. */
+  prTitle?: string;
+  /** Step 3 PR 본문 draft(provenance/체크리스트 포함 가능). */
+  prBody?: string;
+};
+
 export type GithubPublishPanelProps = {
   serverBaseUrl?: string | string[];
   defaultRepoFullName?: string;
   defaultSourceRef?: string;
+  /** 부모(Mission/AppBuild)에서 입력 필드들을 사전 채움. 사용자는 수정 가능. */
+  initial?: GithubPublishPanelInitial;
   /** 부모(코딩 워크벤치)에서 trace를 EventStorage에 적재할 수 있게 emit한다. */
   onContextEvent?: (type: string, payload: Record<string, unknown>) => void;
   /** 테스트에서 fetch를 주입하기 위한 hook. 기본은 window.fetch. */
@@ -184,25 +208,26 @@ export function GithubPublishPanel({
   serverBaseUrl,
   defaultRepoFullName = "",
   defaultSourceRef = "main",
+  initial,
   onContextEvent,
   fetchImpl,
 }: GithubPublishPanelProps) {
   const fetcher = useMemo(() => fetchImpl ?? fetch, [fetchImpl]);
   const [repoFullName, setRepoFullName] = useState(defaultRepoFullName);
   // ── Step 1: Branch ────────────────────────────────────────────────────────
-  const [sourceRef, setSourceRef] = useState(defaultSourceRef);
-  const [newBranchName, setNewBranchName] = useState("");
+  const [sourceRef, setSourceRef] = useState(initial?.sourceRef ?? defaultSourceRef);
+  const [newBranchName, setNewBranchName] = useState(initial?.newBranchName ?? "");
   const [branchApprovalId, setBranchApprovalId] = useState("");
   const [branch, setBranch] = useState<BranchView>({ status: "idle" });
   // ── Step 2: File change ───────────────────────────────────────────────────
-  const [filePath, setFilePath] = useState("");
-  const [fileNewContent, setFileNewContent] = useState("");
+  const [filePath, setFilePath] = useState(initial?.filePath ?? "");
+  const [fileNewContent, setFileNewContent] = useState(initial?.fileNewContent ?? "");
   const [fileApprovalId, setFileApprovalId] = useState("");
   const [file, setFile] = useState<FileView>({ status: "idle" });
   // ── Step 3: PR ────────────────────────────────────────────────────────────
-  const [prBase, setPrBase] = useState("main");
-  const [prTitle, setPrTitle] = useState("");
-  const [prBody, setPrBody] = useState("");
+  const [prBase, setPrBase] = useState(initial?.prBase ?? "main");
+  const [prTitle, setPrTitle] = useState(initial?.prTitle ?? "");
+  const [prBody, setPrBody] = useState(initial?.prBody ?? "");
   const [prApprovalId, setPrApprovalId] = useState("");
   const [pr, setPr] = useState<PrView>({ status: "idle" });
   // ── Step 4: Trace ─────────────────────────────────────────────────────────
