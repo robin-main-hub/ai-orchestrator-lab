@@ -1,12 +1,16 @@
 import { useState, useMemo } from "react";
-import { Eye, AlertTriangle, FileEdit, Sparkles, Check, RefreshCw } from "lucide-react";
+import { Eye, AlertTriangle, FileEdit, Sparkles, Check, RefreshCw, ShieldCheck } from "lucide-react";
 import type {
   DesignIssueCard,
   DesignIssueKind,
   MissionScaffoldLatestSafeFile,
   VisualQaReport,
 } from "@ai-orchestrator/protocol";
-import { postDgxMissionScaffoldOverlay, runDgxVisualQa } from "../runtime/stage47MissionServer";
+import {
+  postDgxMissionScaffoldOverlay,
+  runDgxMissionPreviewScaffold,
+  runDgxVisualQa,
+} from "../runtime/stage47MissionServer";
 import {
   buildAppFixDraftFromVisualQa,
   buildAppFixPatches,
@@ -14,6 +18,7 @@ import {
   type AppFixDraft,
   type AppFixPatch,
 } from "../lib/appFixDraft";
+import { buildVisualQaDiff, type VisualQaDiff } from "../lib/visualQaDiff";
 import type { MissionVisualQaSummary } from "../lib/missionBoardModel";
 
 /**
@@ -93,6 +98,15 @@ export function VisualQaCard({
     | { kind: "recorded"; appliedPaths: string[] }
     | { kind: "error"; message: string };
   const [applyState, setApplyState] = useState<ApplyState>({ kind: "idle" });
+  /** Fix Verification Loop: 적용 직전 시점의 report를 baseline으로 잡아 둔다. */
+  const [baselineReport, setBaselineReport] = useState<VisualQaReport | undefined>(undefined);
+  type VerifyState =
+    | { kind: "idle" }
+    | { kind: "running"; step: "preview" | "qa" }
+    | { kind: "preview_failed"; message: string }
+    | { kind: "qa_failed"; message: string }
+    | { kind: "diff"; diff: VisualQaDiff; afterReport: VisualQaReport };
+  const [verify, setVerify] = useState<VerifyState>({ kind: "idle" });
   const busy = run.kind === "running";
   const canRun = !!previewUrl && !!workspaceId && !busy;
 
@@ -205,6 +219,9 @@ export function VisualQaCard({
       if (res.outcome === "recorded") {
         const appliedPaths = selected.map((p) => p.file);
         setApplyState({ kind: "recorded", appliedPaths });
+        // 적용 직전 report를 baseline으로 — 이후 "수정 검증"이 before로 사용.
+        if (run.kind === "report") setBaselineReport(run.report);
+        setVerify({ kind: "idle" });
         onContextEvent?.("appfix.patch.applied", {
           missionId,
           workspaceId,
@@ -221,6 +238,76 @@ export function VisualQaCard({
     } catch (err) {
       const message = err instanceof Error ? err.message : "unknown";
       setApplyState({ kind: "error", message });
+    }
+  };
+
+  /**
+   * Fix Verification Loop — patch 적용 후 사용자 클릭에서만 실행:
+   *   1) /preview/run-scaffold(overlay 반영본으로 다시 띄움) → observed 아니면 preview_failed.
+   *   2) 새 workspaceId로 /visual-qa rerun → 실패 시 qa_failed.
+   *   3) baselineReport vs 새 report → buildVisualQaDiff → "diff" 패널 표시.
+   * GitHub write/자동 patch/자동 publish 0.
+   */
+  const canVerify = applyState.kind === "recorded" && verify.kind !== "running" && !!baselineReport;
+  const onVerifyFix = async () => {
+    if (!canVerify || !baselineReport) return;
+    setVerify({ kind: "running", step: "preview" });
+    onContextEvent?.("mission.fix_verification.requested", {
+      missionId,
+      workspaceId,
+      baselineReportId: baselineReport.id,
+      ts: new Date().toISOString(),
+    });
+    let newWorkspaceId: string | undefined;
+    try {
+      const previewRes = await runDgxMissionPreviewScaffold({
+        missionId,
+        serverBaseUrl,
+        fetchImpl,
+        body: { host: "127.0.0.1" },
+      });
+      if (previewRes.outcome !== "observed" || !previewRes.workspaceId) {
+        const message = previewRes.message ?? `preview ${previewRes.outcome}`;
+        setVerify({ kind: "preview_failed", message });
+        onContextEvent?.("mission.fix_verification.failed", {
+          missionId, step: "preview", reason: previewRes.outcome, summary: message, ts: new Date().toISOString(),
+        });
+        return;
+      }
+      newWorkspaceId = previewRes.workspaceId;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "unknown";
+      setVerify({ kind: "preview_failed", message });
+      onContextEvent?.("mission.fix_verification.failed", { missionId, step: "preview", summary: message, ts: new Date().toISOString() });
+      return;
+    }
+    setVerify({ kind: "running", step: "qa" });
+    try {
+      const qaRes = await runDgxVisualQa({
+        missionId,
+        workspaceId: newWorkspaceId,
+        serverBaseUrl,
+        fetchImpl,
+      });
+      const diff = buildVisualQaDiff(baselineReport, qaRes.report);
+      setVerify({ kind: "diff", diff, afterReport: qaRes.report });
+      // 새 후속 단계에서 또 적용한다면, 다음 baseline은 이 새 report.
+      setRun({ kind: "report", report: qaRes.report });
+      onContextEvent?.("mission.fix_verification.observed", {
+        missionId,
+        workspaceId: newWorkspaceId,
+        diffStatus: diff.status,
+        resolved: diff.counts.resolved,
+        remaining: diff.counts.remaining,
+        new: diff.counts.new,
+        before: diff.counts.before,
+        after: diff.counts.after,
+        ts: new Date().toISOString(),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "unknown";
+      setVerify({ kind: "qa_failed", message });
+      onContextEvent?.("mission.fix_verification.failed", { missionId, step: "qa", summary: message, ts: new Date().toISOString() });
     }
   };
 
@@ -467,6 +554,115 @@ export function VisualQaCard({
                   </span>
                 ) : null}
               </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Fix Verification Loop — patch 적용 후만 CTA 표시. preview rerun → Visual QA rerun → before/after diff. */}
+      {applyState.kind === "recorded" && baselineReport ? (
+        <div className="visual-qa__verify" data-testid={`visual-qa-verify-${missionId}`} data-state={verify.kind}>
+          <div className="visual-qa__verify-head">
+            <ShieldCheck size={12} />
+            <strong>수정 검증</strong>
+            <button
+              type="button"
+              onClick={onVerifyFix}
+              disabled={!canVerify}
+              data-testid={`visual-qa-verify-cta-${missionId}`}
+              className={canVerify ? "visual-qa__verify-cta" : "visual-qa__verify-cta visual-qa__verify-cta--disabled"}
+              title={
+                verify.kind === "running"
+                  ? "preview 재실행 → Visual QA 재실행 → before/after 비교"
+                  : "scaffold overlay를 반영한 preview를 다시 띄우고 Visual QA를 재실행해 issue가 줄었는지 확인합니다. GitHub 전송/PR/자동 수정 없음."
+              }
+            >
+              {verify.kind === "running" && verify.step === "preview"
+                ? "preview 다시 띄우는 중…"
+                : verify.kind === "running" && verify.step === "qa"
+                  ? "Visual QA 재실행 중…"
+                  : "수정 검증 실행"}
+            </button>
+          </div>
+
+          {verify.kind === "preview_failed" ? (
+            <p className="visual-qa__verify-error" data-testid={`visual-qa-verify-preview-failed-${missionId}`}>
+              preview 재실행 실패 — {verify.message} (Visual QA 재실행은 시도하지 않았습니다)
+            </p>
+          ) : null}
+
+          {verify.kind === "qa_failed" ? (
+            <p className="visual-qa__verify-error" data-testid={`visual-qa-verify-qa-failed-${missionId}`}>
+              Visual QA 재실행 실패 — {verify.message}
+            </p>
+          ) : null}
+
+          {verify.kind === "diff" ? (
+            <div className="visual-qa__verify-diff" data-status={verify.diff.status} data-testid={`visual-qa-verify-diff-${missionId}`}>
+              <div className="visual-qa__verify-summary">
+                <span
+                  className={`visual-qa__verify-badge visual-qa__verify-badge--${verify.diff.status}`}
+                  data-testid={`visual-qa-verify-status-${missionId}`}
+                >
+                  {verify.diff.status === "passed"
+                    ? "수정 검증 통과"
+                    : verify.diff.status === "improved"
+                      ? "개선됨 · 추가 수정 필요"
+                      : verify.diff.status === "regressed"
+                        ? "악화 · 추가 수정 필요"
+                        : verify.diff.status === "no_change"
+                          ? "변화 없음 · 추가 수정 필요"
+                          : "비교 불가"}
+                </span>
+                <span className="visual-qa__verify-counts" data-testid={`visual-qa-verify-counts-${missionId}`}>
+                  before {verify.diff.counts.before} → after {verify.diff.counts.after} · 해결 {verify.diff.counts.resolved} · 남음 {verify.diff.counts.remaining} · 새로 {verify.diff.counts.new}
+                </span>
+              </div>
+              {verify.diff.resolved.length > 0 ? (
+                <details className="visual-qa__verify-section" data-testid={`visual-qa-verify-resolved-${missionId}`}>
+                  <summary>해결됨 ({verify.diff.resolved.length})</summary>
+                  <ul>
+                    {verify.diff.resolved.slice(0, 10).map((i) => (
+                      <li key={i.id}>
+                        <span>[{DESIGN_ISSUE_KIND_LABEL[i.kind as DesignIssueKind] ?? i.kind}]</span>{" "}
+                        <span>{i.summary}</span>
+                      </li>
+                    ))}
+                    {verify.diff.resolved.length > 10 ? <li>… 외 {verify.diff.resolved.length - 10}건</li> : null}
+                  </ul>
+                </details>
+              ) : null}
+              {verify.diff.remaining.length > 0 ? (
+                <details className="visual-qa__verify-section" data-testid={`visual-qa-verify-remaining-${missionId}`} open>
+                  <summary>아직 남음 ({verify.diff.remaining.length})</summary>
+                  <ul>
+                    {verify.diff.remaining.slice(0, 10).map((i) => (
+                      <li key={i.id}>
+                        <span>[{DESIGN_ISSUE_KIND_LABEL[i.kind as DesignIssueKind] ?? i.kind}]</span>{" "}
+                        <span>{i.summary}</span>
+                      </li>
+                    ))}
+                    {verify.diff.remaining.length > 10 ? <li>… 외 {verify.diff.remaining.length - 10}건</li> : null}
+                  </ul>
+                </details>
+              ) : null}
+              {verify.diff.newIssues.length > 0 ? (
+                <details className="visual-qa__verify-section" data-testid={`visual-qa-verify-new-${missionId}`} open>
+                  <summary>새로 생김 ({verify.diff.newIssues.length})</summary>
+                  <ul>
+                    {verify.diff.newIssues.slice(0, 10).map((i) => (
+                      <li key={i.id}>
+                        <span>[{DESIGN_ISSUE_KIND_LABEL[i.kind as DesignIssueKind] ?? i.kind}]</span>{" "}
+                        <span>{i.summary}</span>
+                      </li>
+                    ))}
+                    {verify.diff.newIssues.length > 10 ? <li>… 외 {verify.diff.newIssues.length - 10}건</li> : null}
+                  </ul>
+                </details>
+              ) : null}
+              <p className="visual-qa__verify-notice">
+                자동 GitHub write/자동 patch 추가 적용 0. 남은 이슈는 다시 "수정안 초안 만들기"로 시작하세요.
+              </p>
             </div>
           ) : null}
         </div>
