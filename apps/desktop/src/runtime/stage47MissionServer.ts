@@ -16,6 +16,7 @@ import type {
   MissionTraceEvent,
   MissionVerifyRequest,
   PreviewProbeRequest,
+  MissionScaffoldLatestResponse,
   ScaffoldApplyResult,
   ScaffoldPlan,
   ScaffoldPlanRequest,
@@ -282,6 +283,25 @@ export async function planDgxScaffold({
     method: "POST",
     path: `/missions/${encodeURIComponent(missionId)}/workspace/${encodeURIComponent(workspaceId)}/scaffold/plan`,
     body: request,
+    serverBaseUrl,
+    fetchImpl,
+    timeoutMs,
+  });
+}
+
+/**
+ * Publish Flow file prefill을 위한 read-only fetcher. 서버가 mission의 가장 최근 scaffold plan에서
+ * 결정적으로 path+content를 재생성해서 안전 파일만 반환한다. GitHub에는 쓰지 않는다.
+ */
+export async function fetchMissionScaffoldLatest({
+  missionId,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 8_000,
+}: MissionServerRequestInput & { missionId: string }): Promise<MissionScaffoldLatestResponse> {
+  return requestMissionServerJson<MissionScaffoldLatestResponse>({
+    method: "GET",
+    path: `/missions/${encodeURIComponent(missionId)}/scaffold/latest`,
     serverBaseUrl,
     fetchImpl,
     timeoutMs,
