@@ -38,9 +38,9 @@ describe("materializeScaffoldLatestFromPlan — react_vite_app", () => {
   it("정상 templateId+input → 모든 파일 path+content 있음, skipped 0", () => {
     const result = materializeScaffoldLatestFromPlan(makePlan());
     expect(result.files.length).toBeGreaterThan(0);
-    // react_vite 템플릿은 package.json, index.html, src/main.tsx, src/App.tsx, README.md 5개.
+    // react_vite 템플릿: package.json, index.html, src/main.tsx, src/App.tsx, src/styles.css, README.md.
     expect(result.files.map((file) => file.path).sort()).toEqual(
-      ["README.md", "index.html", "package.json", "src/App.tsx", "src/main.tsx"].sort(),
+      ["README.md", "index.html", "package.json", "src/App.tsx", "src/main.tsx", "src/styles.css"].sort(),
     );
     expect(result.skipped).toEqual([]);
     // 모든 file source는 "scaffold_plan", createdAt은 plan의 그것을 따른다.

@@ -442,8 +442,18 @@ function MissionWorkspaceDetail({
               {PREVIEW_STATUS_LABEL[item.workspace.previewStatus] ?? item.workspace.previewStatus}
             </StatusBadge>{" "}
             <span className="mission-board-truth">{item.workspace.previewTruth}</span>
+            {/* preview URL은 실제 observed가 있을 때만 클릭 가능 링크로 노출. 없으면 fake 텍스트 X. */}
             {item.workspace.previewUrl ? (
-              <span className="mission-workspace-url"> {item.workspace.previewUrl}</span>
+              <a
+                href={item.workspace.previewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid={`mission-workspace-preview-link-${item.missionId}`}
+                className="mission-workspace-url"
+                title="새 창에서 preview 열기"
+              >
+                {item.workspace.previewUrl}
+              </a>
             ) : null}
           </span>
         </div>
