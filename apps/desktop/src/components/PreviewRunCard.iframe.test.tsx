@@ -78,6 +78,55 @@ describe("PreviewRunCard — observed 후 inline iframe 토글 (OSS-H8 iframe)",
     expect(screen.queryByTestId("mission-preview-run-iframe-toggle-m3")).toBeNull();
   });
 
+  it("(I5) observed → onPreviewObserved 콜백이 missionId/url/observedAt로 호출(앱 lift)", async () => {
+    const fetchImpl = makeFetch(OBSERVED_RES);
+    const onPreviewObserved = vi.fn();
+    render(
+      <PreviewRunCard
+        missionId="m5"
+        hasScaffoldFiles={true}
+        fetchImpl={fetchImpl as unknown as typeof fetch}
+        serverBaseUrl="http://localhost"
+        onPreviewObserved={onPreviewObserved}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("mission-preview-run-cta-m5"));
+    await waitFor(() => {
+      expect(onPreviewObserved).toHaveBeenCalledTimes(1);
+    });
+    const ref = onPreviewObserved.mock.calls[0]![0] as { missionId: string; url: string; observedAt: string };
+    expect(ref.missionId).toBe("m5");
+    expect(ref.url).toBe("http://127.0.0.1:5050/");
+    expect(typeof ref.observedAt).toBe("string");
+    expect(ref.observedAt.length).toBeGreaterThan(0);
+  });
+
+  it("(I6) preview_not_running → onPreviewObserved 호출되지 X(fake URL 갱신 금지)", async () => {
+    const fetchImpl = makeFetch({
+      outcome: "preview_not_running",
+      repoRoot: "/tmp/x",
+      materializedFileCount: 5,
+      workspaceId: "ws_x",
+      preview: { status: "failed", port: 0, url: undefined, truthStatus: "planned", detail: "vite crashed" },
+    });
+    const onPreviewObserved = vi.fn();
+    render(
+      <PreviewRunCard
+        missionId="m6"
+        hasScaffoldFiles={true}
+        fetchImpl={fetchImpl as unknown as typeof fetch}
+        serverBaseUrl="http://localhost"
+        onPreviewObserved={onPreviewObserved}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("mission-preview-run-cta-m6"));
+    await waitFor(() => {
+      expect(screen.getByTestId("mission-preview-run-m6").getAttribute("data-state"))
+        .toBe("preview_not_running");
+    });
+    expect(onPreviewObserved).not.toHaveBeenCalled();
+  });
+
   it("(I4) 토글 클릭 → onContextEvent로 트레이스 발생", async () => {
     const fetchImpl = makeFetch(OBSERVED_RES);
     const onContextEvent = vi.fn();

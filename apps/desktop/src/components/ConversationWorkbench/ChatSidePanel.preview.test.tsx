@@ -25,3 +25,31 @@ describe("ChatSidePanel — 미리보기(preview) 탭 살리기", () => {
     expect(text).toContain("X-Frame-Options");
   });
 });
+
+describe("ChatSidePanel preview wiring (Conversation 통합 smoke)", () => {
+  it("(W1) previewUrl 있을 때만 PreviewIframe 마운트, 없으면 stub 안내", async () => {
+    const { ChatSidePanel } = await import("./ChatSidePanel");
+    const { PreviewIframe } = await import("../PreviewIframe");
+    function Harness({ url }: { url?: string }) {
+      return (
+        <ChatSidePanel mode="preview" onClose={() => {}}>
+          {url ? (
+            <div data-testid="chat-side-panel-preview-iframe-wrap">
+              <PreviewIframe url={url} testIdPrefix="chat-side" />
+            </div>
+          ) : (
+            <ChatSidePanelStub mode="preview" />
+          )}
+        </ChatSidePanel>
+      );
+    }
+    const { rerender } = render(<Harness />);
+    expect(screen.queryByTestId("chat-side-panel-preview-iframe-wrap")).toBeNull();
+    expect(document.body.textContent ?? "").toContain("Mission Workspace");
+    rerender(<Harness url="http://127.0.0.1:5050/" />);
+    expect(screen.getByTestId("chat-side-panel-preview-iframe-wrap")).toBeTruthy();
+    const frame = screen.getByTestId("preview-iframe-frame-chat-side") as HTMLIFrameElement;
+    expect(frame.getAttribute("src")).toBe("http://127.0.0.1:5050/");
+    expect(frame.getAttribute("sandbox")).toBe("allow-scripts allow-same-origin allow-forms");
+  });
+});

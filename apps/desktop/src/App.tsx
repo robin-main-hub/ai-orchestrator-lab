@@ -370,6 +370,14 @@ export function App() {
   // 대화창 "스웜 서치" → 리서치 뷰 자동 편성 시드 (주제 + 동적 4~16 요원)
   const [swarmSeed, setSwarmSeed] = useState<{ id: string; topic: string; drafts: SwarmDraft[] } | null>(null);
   const [conversationViewMode, setConversationViewMode] = useState<"chat" | "agents">("chat");
+  /**
+   * 가장 최근 observed Preview의 missionId/url/observedAt. PreviewRunCard가 observed 분기에서
+   * publishEnvironment.onPreviewObserved → 여기로 lift. ChatSidePanel "미리보기" 탭이 이 URL을
+   * 임베드한다. fake URL 0 — observed 분기에서만 갱신되고 preview_not_running/error는 건드리지 않는다.
+   */
+  const [activePreviewRef, setActivePreviewRef] = useState<
+    { missionId: string; url: string; observedAt: string } | undefined
+  >(undefined);
   const [annexInitialTab, setAnnexInitialTab] = useState<"status" | "memory" | "queue">("status");
   const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -5229,6 +5237,9 @@ export function App() {
                 publishEnvironment: {
                   serverBaseUrl: resolveDgxServerBaseUrls(undefined)[0] ?? DEFAULT_DGX_SERVER_BASE_URL,
                   onContextEvent: (type, payload) => appendEvent(type, payload),
+                  // PreviewRunCard observed → 최신 ref만 보관. observed 분기에서만 호출되므로
+                  // preview_not_running/error로 인해 기존 URL이 가짜로 덮어쓰이지 않는다.
+                  onPreviewObserved: (ref) => setActivePreviewRef(ref),
                   // TODO(W3a-followup): scaffold plan content fetch + cache가 들어오면
                   //   getScaffoldFiles: (item) => scaffoldFilesByMissionId.get(item.missionId)
                   // 형태로 연결. 그 전까지는 file 필드를 비워두는 것이 정직(추측 금지).
@@ -5483,6 +5494,7 @@ export function App() {
               onRollbackTurn={handleRollbackConversationTurn}
               onApproveCommandPattern={handleApproveCommandPattern}
               onStartSwarmSearch={handleStartSwarmSearch}
+              previewUrl={activePreviewRef?.url}
             />
           ) : mode === "debate" ? (
             <Stage3DebateTable
