@@ -12,7 +12,7 @@ import {
   terminalCommandEventTypeSchema,
 } from "@ai-orchestrator/protocol";
 import type { MemoryInput, MemoryRecord } from "@ai-orchestrator/protocol";
-import { MemoryAdapterError, type MemoryAdapter, type MemoryAdapterContext } from "@ai-orchestrator/memory";
+import { MemoryAdapterError, type MemoryAdapter, type MemoryAdapterContext } from "@ai-orchestrator/simplememo";
 import type { ServerAgentDelegationExecuteRequest } from "./index";
 import {
   NonceRegistry,

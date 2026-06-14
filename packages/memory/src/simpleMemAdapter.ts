@@ -37,14 +37,14 @@ function scoreRecord(record: MemoryRecord, queryTokens: string[]): number {
 }
 
 // ---------------------------------------------------------------------------
-// DgxSimpleMemMemoryAdapter
+// SimpleMemAdapter
 // Derived index memory adapter. Because it is derived, mutating actions like
 // remember, pin, forget, and activate are asynchronously promoted by curator
 // processes. Thus, calling these mutating methods immediately throws a
 // "promotion_pending" MemoryAdapterError while appending request events to the event store.
 // ---------------------------------------------------------------------------
 
-export class DgxSimpleMemMemoryAdapter implements MemoryAdapter {
+export class SimpleMemAdapter implements MemoryAdapter {
   readonly kind: MemoryAdapterKind = "dgx_simplemem";
   readonly profileId: string;
 

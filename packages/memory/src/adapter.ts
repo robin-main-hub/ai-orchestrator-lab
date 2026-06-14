@@ -115,4 +115,4 @@ export class MemoryApiAdapter implements MemoryAdapter {
   }
 }
 
-export { DgxSimpleMemMemoryAdapter } from "./dgxSimpleMemAdapter.js";
+export { SimpleMemAdapter } from "./simpleMemAdapter.js";

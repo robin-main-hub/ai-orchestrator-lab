@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MockMemoryAdapter, withTrustEnforcement, type MemoryAdapter, type MemoryAdapterContext } from "@ai-orchestrator/memory";
+import { MockAdapter, withTrustEnforcement, type MemoryAdapter, type MemoryAdapterContext } from "@ai-orchestrator/simplememo";
 import { createSeedMemoryRecords } from "./stage6Memory";
 import { createAdapterBackedMementoMemoryApi, createLocalMementoMemoryApi } from "./stage27MemoryApi";
 
@@ -78,7 +78,7 @@ describe("stage27 local memento memory api", () => {
 
 describe("stage27 adapter-backed memento memory api", () => {
   it("uses Korean reflect fallback copy when the adapter has no reflect method", async () => {
-    const base = new MockMemoryAdapter({
+    const base = new MockAdapter({
       profileId: "evolvememento_mock",
       records: createSeedMemoryRecords(createdAt),
       createdAt,
@@ -108,7 +108,7 @@ describe("stage27 adapter-backed memento memory api", () => {
 
   it("can route Memento calls through the shared MemoryAdapter boundary", async () => {
     const api = createAdapterBackedMementoMemoryApi({
-      adapter: new MockMemoryAdapter({
+      adapter: new MockAdapter({
         profileId: "evolvememento_mock",
         records: createSeedMemoryRecords(createdAt),
         createdAt,
@@ -137,7 +137,7 @@ describe("stage27 adapter-backed memento memory api", () => {
 
   it("passes operation scope through every adapter-backed memory context", async () => {
     const contexts: unknown[] = [];
-    const adapter = new MockMemoryAdapter({
+    const adapter = new MockAdapter({
       profileId: "evolvememento_mock",
       records: createSeedMemoryRecords(createdAt),
       createdAt,
@@ -172,7 +172,7 @@ describe("stage27 adapter-backed memento memory api", () => {
 
   it("passes appendEvent through mutating adapter-backed memory contexts", async () => {
     const appendedEvents: unknown[] = [];
-    const adapter: MemoryAdapter = new MockMemoryAdapter({
+    const adapter: MemoryAdapter = new MockAdapter({
       profileId: "evolvememento_mock",
       records: createSeedMemoryRecords(createdAt),
       createdAt,
@@ -244,7 +244,7 @@ describe("stage27 adapter-backed memento memory api", () => {
 
   it("preserves permission and trust gates from the shared memory adapter", async () => {
     const api = createAdapterBackedMementoMemoryApi({
-      adapter: withTrustEnforcement(new MockMemoryAdapter({ records: createSeedMemoryRecords(createdAt), createdAt })),
+      adapter: withTrustEnforcement(new MockAdapter({ records: createSeedMemoryRecords(createdAt), createdAt })),
       context: {
         callerTrustLevel: "untrusted",
         permissionDecision: "allow",

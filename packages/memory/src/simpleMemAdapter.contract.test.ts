@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { DgxSimpleMemMemoryAdapter } from "./dgxSimpleMemAdapter.js";
+import { SimpleMemAdapter } from "./simpleMemAdapter.js";
 import { withTrustEnforcement } from "./trustEnforcedAdapter.js";
 import { makeContractCtx } from "./contractTestFixtures.js";
 import { MemoryAdapterError } from "./errors.js";
 import type { EventEnvelope, MemoryRecord } from "@ai-orchestrator/protocol";
 
-describe("DgxSimpleMemMemoryAdapter — contract & behavior", () => {
+describe("SimpleMemAdapter — contract & behavior", () => {
   const seed: MemoryRecord = {
     id: "dgx_seed_001",
     layer: "episode",
@@ -21,7 +21,7 @@ describe("DgxSimpleMemMemoryAdapter — contract & behavior", () => {
 
   it("should recall from seed records", async () => {
     const events: EventEnvelope<any>[] = [];
-    const adapter = new DgxSimpleMemMemoryAdapter({ seedRecords: [seed] });
+    const adapter = new SimpleMemAdapter({ seedRecords: [seed] });
     const ctx = makeContractCtx({
       appendEvent: async (ev) => {
         events.push(ev);
@@ -39,7 +39,7 @@ describe("DgxSimpleMemMemoryAdapter — contract & behavior", () => {
 
   it("appends operation scope metadata when provided by the caller", async () => {
     const events: EventEnvelope<any>[] = [];
-    const adapter = new DgxSimpleMemMemoryAdapter({ seedRecords: [seed] });
+    const adapter = new SimpleMemAdapter({ seedRecords: [seed] });
     const ctx = makeContractCtx({
       operationScope: {
         agentId: "agent_orchestrator",
@@ -60,7 +60,7 @@ describe("DgxSimpleMemMemoryAdapter — contract & behavior", () => {
 
   it("remember() throws promotion_pending and appends memory.archival_write.requested event", async () => {
     const events: EventEnvelope<any>[] = [];
-    const adapter = new DgxSimpleMemMemoryAdapter();
+    const adapter = new SimpleMemAdapter();
     const ctx = makeContractCtx({
       appendEvent: async (ev) => {
         events.push(ev);
@@ -90,7 +90,7 @@ describe("DgxSimpleMemMemoryAdapter — contract & behavior", () => {
 
   it("pin() throws promotion_pending and appends memory.pin.requested event", async () => {
     const events: EventEnvelope<any>[] = [];
-    const adapter = new DgxSimpleMemMemoryAdapter();
+    const adapter = new SimpleMemAdapter();
     const ctx = makeContractCtx({
       appendEvent: async (ev) => {
         events.push(ev);
@@ -111,7 +111,7 @@ describe("DgxSimpleMemMemoryAdapter — contract & behavior", () => {
 
   it("forget() throws promotion_pending and appends memory.forget.requested event", async () => {
     const events: EventEnvelope<any>[] = [];
-    const adapter = new DgxSimpleMemMemoryAdapter();
+    const adapter = new SimpleMemAdapter();
     const ctx = makeContractCtx({
       appendEvent: async (ev) => {
         events.push(ev);
@@ -132,7 +132,7 @@ describe("DgxSimpleMemMemoryAdapter — contract & behavior", () => {
 
   it("activateMemories() throws promotion_pending and appends memory.activate.requested event", async () => {
     const events: EventEnvelope<any>[] = [];
-    const adapter = new DgxSimpleMemMemoryAdapter();
+    const adapter = new SimpleMemAdapter();
     const ctx = makeContractCtx({
       appendEvent: async (ev) => {
         events.push(ev);
@@ -151,7 +151,7 @@ describe("DgxSimpleMemMemoryAdapter — contract & behavior", () => {
 
   it("createRelations() successfully returns relations and appends memory.relation.created event", async () => {
     const events: EventEnvelope<any>[] = [];
-    const adapter = new DgxSimpleMemMemoryAdapter();
+    const adapter = new SimpleMemAdapter();
     const ctx = makeContractCtx({
       appendEvent: async (ev) => {
         events.push(ev);
@@ -170,7 +170,7 @@ describe("DgxSimpleMemMemoryAdapter — contract & behavior", () => {
   });
 
   it("memoryContext() returns correct packet format", async () => {
-    const adapter = new DgxSimpleMemMemoryAdapter({ seedRecords: [seed] });
+    const adapter = new SimpleMemAdapter({ seedRecords: [seed] });
     const ctx = makeContractCtx();
 
     const packet = await adapter.memoryContext({ query: "apple" }, ctx);
@@ -179,7 +179,7 @@ describe("DgxSimpleMemMemoryAdapter — contract & behavior", () => {
   });
 
   it("stats() returns correct counts", async () => {
-    const adapter = new DgxSimpleMemMemoryAdapter({ seedRecords: [seed] });
+    const adapter = new SimpleMemAdapter({ seedRecords: [seed] });
     const stats = await adapter.stats();
     expect(stats.totalRecords).toBe(1);
     expect(stats.pinnedRecords).toBe(0);
@@ -187,7 +187,7 @@ describe("DgxSimpleMemMemoryAdapter — contract & behavior", () => {
 
   it("reflect() appends reflect event and returns summary", async () => {
     const events: EventEnvelope<any>[] = [];
-    const adapter = new DgxSimpleMemMemoryAdapter({ seedRecords: [seed] });
+    const adapter = new SimpleMemAdapter({ seedRecords: [seed] });
     const ctx = makeContractCtx({
       appendEvent: async (ev) => {
         events.push(ev);
@@ -201,9 +201,9 @@ describe("DgxSimpleMemMemoryAdapter — contract & behavior", () => {
   });
 });
 
-describe("withTrustEnforcement(DgxSimpleMemMemoryAdapter) — integration", () => {
+describe("withTrustEnforcement(SimpleMemAdapter) — integration", () => {
   it("blocks operation when permissionDecision is not allowed", async () => {
-    const adapter = withTrustEnforcement(new DgxSimpleMemMemoryAdapter());
+    const adapter = withTrustEnforcement(new SimpleMemAdapter());
     const ctx = makeContractCtx({ permissionDecision: "deny" });
 
     await expect(
@@ -223,7 +223,7 @@ describe("withTrustEnforcement(DgxSimpleMemMemoryAdapter) — integration", () =
   });
 
   it("transparently propagates promotion_pending when permitted", async () => {
-    const adapter = withTrustEnforcement(new DgxSimpleMemMemoryAdapter());
+    const adapter = withTrustEnforcement(new SimpleMemAdapter());
     const ctx = makeContractCtx({ permissionDecision: "allow" });
 
     await expect(
