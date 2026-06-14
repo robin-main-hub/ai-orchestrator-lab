@@ -25,6 +25,8 @@ import { MultiFilePlanCard } from "./publish/MultiFilePlanCard";
 import { PreviewRunCard } from "./PreviewRunCard";
 import { VisualQaCard } from "./VisualQaCard";
 import { MissionWorkspaceStatusBar } from "./MissionWorkspaceStatusBar";
+import { AppBuildProgressRail } from "./AppBuildProgressRail";
+import { MissionWorkspaceSummary } from "./MissionWorkspaceSummary";
 import type { VisualQaReport } from "@ai-orchestrator/protocol";
 import type { VisualQaDiff } from "../lib/visualQaDiff";
 import {
@@ -529,7 +531,26 @@ function MissionWorkspaceDetail({
         </div>
       ) : null}
 
-      {/* Mission Workspace 상단 한 줄 상태 + 다음 행동 라우터. 자동 실행 0 — 이동/강조만. */}
+      {/* Mission Workspace 헤더 — 전체 흐름(ProgressRail) → 요약(Summary) → 다음 액션(StatusBar). */}
+      <AppBuildProgressRail
+        missionId={item.missionId}
+        missionExists={true /* 이 패널은 mission item 단위이므로 missionExists=true. */}
+        hasScaffoldFiles={hasScaffoldFiles}
+        previewObserved={!!item.workspace?.previewUrl}
+        qaReport={latestQaReport ? { status: latestQaReport.status, issueCount: latestQaReport.issues.length } : undefined}
+        fixApplied={fixApplied}
+        verifyDiff={latestVerifyDiff ? { status: latestVerifyDiff.status } : undefined}
+        verifyFailedStep={latestVerifyFailedStep}
+      />
+      <MissionWorkspaceSummary
+        missionId={item.missionId}
+        title={item.title}
+        previewUrl={item.workspace?.previewUrl}
+        qaReport={latestQaReport}
+        fixApplied={fixApplied}
+        verifyDiff={latestVerifyDiff}
+        verifyFailedStep={latestVerifyFailedStep}
+      />
       <MissionWorkspaceStatusBar
         missionId={item.missionId}
         hasScaffoldFiles={hasScaffoldFiles}
