@@ -4,8 +4,11 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardList,
+  FileEdit,
+  GitBranch,
   Github,
   GitMerge,
+  GitPullRequest,
   Monitor,
   Plus,
   RefreshCw,
@@ -21,6 +24,7 @@ import {
   pickFirstSafeScaffoldFile,
   type MissionPublishPrefillResolver,
   type MissionScaffoldFile,
+  type PublishHistoryByStep,
 } from "../lib/missionPublishPrefill";
 import {
   DESIGN_ISSUE_KIND_LABEL,
@@ -76,6 +80,12 @@ export type MissionPublishEnvironment = {
    * binary/대용량/시크릿 의심은 builtinMissionPrefill이 자동으로 거른다.
    */
   getScaffoldFiles?: (item: MissionBoardItem) => ReadonlyArray<MissionScaffoldFile> | undefined;
+  /**
+   * 현재 세션에서 누적된 publish flow trace의 단계별 latest entry. branch/file/pr 각각 최신 1건.
+   * 컨테이너가 onContextEvent에서 github.publish.*를 가로채 누적한 결과를 노출한다.
+   * 영속화 없음: 페이지 새로고침 시 빈 상태로 시작(정직성).
+   */
+  getPublishHistory?: (item: MissionBoardItem) => PublishHistoryByStep | undefined;
 };
 
 export function MissionBoardPanel({
@@ -463,6 +473,14 @@ function MissionWorkspaceDetail({
         </ul>
       ) : null}
 
+      {/* Publish Flow 상태 요약 — 현재 세션의 github.publish.* trace를 단계별 latest로.
+          publishEnvironment가 있고 getPublishHistory가 어떤 step이든 갖고 있을 때만 노출. */}
+      {publishEnvironment ? (
+        <PublishFlowSummary
+          history={publishEnvironment.getPublishHistory?.(item)}
+        />
+      ) : null}
+
       {/* GitHub로 내보내기 — opt-in CTA. 부모가 publishEnvironment를 줘야 보인다. */}
       {publishEnvironment ? (
         <div className="mission-workspace-publish" data-testid="mission-workspace-publish-section">
@@ -534,4 +552,86 @@ function MissionWorkspaceDetail({
 
 function shorten(ref: string, max = 36): string {
   return ref.length > max ? `…${ref.slice(ref.length - max + 1)}` : ref;
+}
+
+const PUBLISH_STEP_LABEL: Record<"branch" | "file" | "pr", string> = {
+  branch: "Branch",
+  file: "File",
+  pr: "PR",
+};
+
+const PUBLISH_STATUS_LABEL: Record<string, string> = {
+  planned: "계획됨",
+  observed: "관측 완료",
+  blocked: "차단됨",
+  failed: "실패",
+  already_exists: "이미 존재",
+  approval_required: "승인 필요",
+};
+
+function publishStatusVariant(status: string): StatusBadgeVariant {
+  switch (status) {
+    case "observed":
+    case "already_exists":
+      return "success";
+    case "planned":
+    case "approval_required":
+      return "primary";
+    case "blocked":
+    case "failed":
+      return "danger";
+    default:
+      return "muted";
+  }
+}
+
+/**
+ * Mission Workspace 안의 Publish Flow 상태 한눈 요약.
+ *   - 현재 세션의 github.publish.* trace 기반(영속화 없음 — 새로고침 시 초기화, 정직 표기).
+ *   - Branch / File / PR 단계 각각 latest 상태만(재시도 시 최신만 노출).
+ *   - history가 비어 있으면 섹션 자체를 그리지 않는다(빈 공간 방지).
+ *   - summary 텍스트는 GithubPublishPanel.emit이 만든 짧은 한 줄을 그대로 보여준다(추측 0).
+ */
+function PublishFlowSummary({ history }: { history?: PublishHistoryByStep }) {
+  const steps: Array<"branch" | "file" | "pr"> = ["branch", "file", "pr"];
+  const hasAny = history && steps.some((s) => history[s]);
+  if (!hasAny || !history) return null;
+  return (
+    <div
+      className="mission-workspace-publish-summary"
+      data-testid="mission-workspace-publish-summary"
+    >
+      {steps.map((step) => {
+        const entry = history[step];
+        const Icon = step === "branch" ? GitBranch : step === "file" ? FileEdit : GitPullRequest;
+        return (
+          <div
+            key={step}
+            className="mission-workspace-row"
+            data-testid={`mission-publish-row-${step}`}
+            data-step={step}
+            data-status={entry?.status ?? "not_started"}
+          >
+            <span className="mission-workspace-row-label">
+              <Icon size={12} /> Publish {PUBLISH_STEP_LABEL[step]}
+            </span>
+            <span className="mission-workspace-row-body">
+              {entry ? (
+                <>
+                  <StatusBadge size="sm" variant={publishStatusVariant(entry.status)}>
+                    {PUBLISH_STATUS_LABEL[entry.status] ?? entry.status}
+                  </StatusBadge>{" "}
+                  {entry.summary ? <span className="mission-workspace-url">{entry.summary}</span> : null}
+                </>
+              ) : (
+                <StatusBadge size="sm" variant="muted">
+                  아직 진행 없음
+                </StatusBadge>
+              )}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }

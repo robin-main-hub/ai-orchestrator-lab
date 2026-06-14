@@ -13,7 +13,8 @@ import {
   mergeDgxMission,
   verifyDgxMission,
 } from "../runtime/stage47MissionServer";
-import type { MissionScaffoldFile } from "../lib/missionPublishPrefill";
+import type { MissionScaffoldFile, PublishHistoryByStep } from "../lib/missionPublishPrefill";
+import { accumulatePublishHistory } from "../lib/missionPublishPrefill";
 import { publishEnvironmentWithScaffolds } from "../lib/publishEnvironmentWithScaffolds";
 import { MissionBoardPanel, type MissionPublishEnvironment } from "./MissionBoardPanel";
 
@@ -278,11 +279,31 @@ export function MissionBoardContainer({
     [withBusy, serverBaseUrl],
   );
 
-  // 부모가 준 publishEnvironment + 컨테이너 scaffold 캐시 합성 — 순수 함수에 위임.
-  const mergedPublishEnvironment = useMemo<MissionPublishEnvironment | undefined>(
-    () => publishEnvironmentWithScaffolds(publishEnvironment, scaffoldCacheByMission),
-    [publishEnvironment, scaffoldCacheByMission],
-  );
+  /**
+   * Publish flow 단계별 latest entry를 미션 단위로 누적한다.
+   *   - GithubPublishPanel.emit이 발행한 trace event를 onContextEvent에서 가로채 파싱.
+   *   - branch/file/pr 각각 최신 1건만 보관(재시도 시 최신만 표면).
+   *   - 영속화 없음(세션 메모리). 새로고침 시 초기화 — 정직성.
+   */
+  const [publishHistoryByMission, setPublishHistoryByMission] = useState<Record<string, PublishHistoryByStep>>({});
+
+  /**
+   * 부모가 준 publishEnvironment + 컨테이너 scaffold 캐시 + publish history 합성.
+   * 추가로 onContextEvent를 감싸 github.publish.*를 누적한 뒤 부모에게도 forward.
+   */
+  const mergedPublishEnvironment = useMemo<MissionPublishEnvironment | undefined>(() => {
+    const withScaffolds = publishEnvironmentWithScaffolds(publishEnvironment, scaffoldCacheByMission);
+    if (!withScaffolds) return undefined;
+    return {
+      ...withScaffolds,
+      getPublishHistory: withScaffolds.getPublishHistory ?? ((item) => publishHistoryByMission[item.missionId]),
+      onContextEvent: (type, payload) => {
+        // 순수 함수에 위임 — 파싱/누적 규칙은 lib에 단언적으로 단위 테스트됨.
+        setPublishHistoryByMission((prev) => accumulatePublishHistory(prev, type, payload));
+        withScaffolds.onContextEvent?.(type, payload);
+      },
+    };
+  }, [publishEnvironment, scaffoldCacheByMission, publishHistoryByMission]);
 
   return (
     <MissionBoardPanel
