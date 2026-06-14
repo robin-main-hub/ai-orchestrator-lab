@@ -645,3 +645,100 @@ export const githubReadonlyResourceResponseSchema = z.object({
   file: githubFileContentSchema.optional(),
 });
 export type GithubReadonlyResourceResponse = z.infer<typeof githubReadonlyResourceResponseSchema>;
+
+// ──────────────────────────────────────────────────────────────────────────────
+// W5b: Multi-file atomic commit execute (Git Data API).
+//
+// 사용자 컨트랙트(요약):
+//   - sequential Contents API PUT 금지. 반드시 Git Data API atomic 흐름:
+//     ref HEAD 조회 → expectedHeadSha 일치 확인 → current commit/tree 조회 →
+//     파일마다 blob 생성 → base_tree 기반 tree 생성 → commit 생성 →
+//     ref update with force=false.
+//   - 부분 성공으로 표시하지 않는다(commit이 만들어지고 ref update가 성공할 때만 observed).
+//   - server-side 가드 전면 재검증(클라이언트 가드는 UI 편의일 뿐):
+//     path traversal/absolute/NUL, high-risk path(.github/workflows, env/secrets/PEM/key),
+//     binary(NUL), too_large(256KiB/file, 512KiB total),
+//     secret_suspect(W1 scanner 재사용), repo allowlist, branch protection(W2).
+//   - delete/rename/symlink/submodule 절대 금지.
+//   - force=false 강제 — branch head가 변하면 head_mismatch로 실패.
+//   - approval 필수(armed 없음).
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const githubMultiFileCommitOutcomeSchema = z.enum([
+  "observed",          // atomic commit + ref update 성공
+  "approval_required", // approval 검증 실패 또는 미지정
+  "blocked",           // 가드/정책 거부(secret/binary/large/unsafe path/allowlist/...)
+  "head_mismatch",     // expectedHeadSha != 실제 HEAD, 또는 ref update 409/422
+  "failed",            // 외부 GitHub 호출 실패(연결/권한/예외)
+  "not_configured",
+  "permission_denied",
+  "connection_failed",
+  "github_error",
+]);
+export type GithubMultiFileCommitOutcome = z.infer<typeof githubMultiFileCommitOutcomeSchema>;
+
+export const githubMultiFileCommitFileSchema = z.object({
+  /** repo-root 기준 path. traversal/absolute/NUL 거부, .github/workflows·env·secrets·pem·key 거부. */
+  path: z.string().min(1).max(512),
+  /** UTF-8 텍스트. binary(NUL)/256KiB 초과/secret_suspect는 서버가 거부. */
+  newContent: z.string(),
+});
+
+/** 첫 버전 한도(설계 명시). 클라이언트도 같은 한도로 보낸다. */
+export const GITHUB_MULTIFILE_COMMIT_MAX_FILES = 10;
+export const GITHUB_MULTIFILE_COMMIT_PER_FILE_BYTES_MAX = 256 * 1024;
+export const GITHUB_MULTIFILE_COMMIT_TOTAL_BYTES_MAX = 512 * 1024;
+
+export const githubMultiFileCommitExecuteRequestSchema = z.object({
+  repoFullName: z
+    .string()
+    .min(3).max(140)
+    .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, "owner/repo 형식이 필요합니다"),
+  /** 변경이 적용되는 브랜치. W2 정책 prefix만 통과. */
+  branchName: z.string().min(1).max(120),
+  /**
+   * 클라이언트가 plan 시점에 본 branch HEAD sha. 서버 execute 시점에 실제 HEAD와
+   * 불일치하면 head_mismatch로 즉시 실패(낙관적 동시성).
+   */
+  expectedHeadSha: z.string().regex(/^[a-f0-9]{40}$/, "expectedHeadSha는 40-hex"),
+  /** commit message. 서버가 한도/공백 검증. raw transcript/비밀 절대 금지. */
+  message: z.string().min(1).max(2000),
+  files: z
+    .array(githubMultiFileCommitFileSchema)
+    .min(1)
+    .max(GITHUB_MULTIFILE_COMMIT_MAX_FILES),
+  /** approval 필수. */
+  approvalId: z.string(),
+});
+export type GithubMultiFileCommitExecuteRequest = z.infer<typeof githubMultiFileCommitExecuteRequestSchema>;
+
+export const githubMultiFileCommitExecuteResponseSchema = z.object({
+  outcome: githubMultiFileCommitOutcomeSchema,
+  /** observed일 때만 채워짐. */
+  commitSha: z.string().optional(),
+  treeSha: z.string().optional(),
+  htmlUrl: z.string().optional(),
+  fileCount: z.number().int().nonnegative().optional(),
+  totalBytes: z.number().int().nonnegative().optional(),
+  observedAt: z.string().optional(),
+  /** blocked/failed/head_mismatch 시 사용자가 볼 짧은 사유. */
+  message: z.string().optional(),
+  /** blocked일 때 머신용 reason — UI가 매핑 가능. */
+  reason: z
+    .enum([
+      "head_mismatch",
+      "unsafe_path",
+      "binary",
+      "too_large",
+      "secret_suspect",
+      "duplicate_path",
+      "allowlist",
+      "branch_protection",
+      "permission_denied",
+      "github_error",
+      "connection_failed",
+    ])
+    .optional(),
+  truthStatus: z.enum(["planned", "observed", "configured"]),
+});
+export type GithubMultiFileCommitExecuteResponse = z.infer<typeof githubMultiFileCommitExecuteResponseSchema>;
