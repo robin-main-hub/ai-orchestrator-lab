@@ -290,6 +290,7 @@ export function MissionBoardContainer({
   /**
    * 부모가 준 publishEnvironment + 컨테이너 scaffold 캐시 + publish history 합성.
    * 추가로 onContextEvent를 감싸 github.publish.*를 누적한 뒤 부모에게도 forward.
+   * refreshScaffold는 사용자가 "수정안으로 스캐폴드 다시 생성"을 누른 직후 prefill 갱신용.
    */
   const mergedPublishEnvironment = useMemo<MissionPublishEnvironment | undefined>(() => {
     const withScaffolds = publishEnvironmentWithScaffolds(publishEnvironment, scaffoldCacheByMission);
@@ -297,6 +298,18 @@ export function MissionBoardContainer({
     return {
       ...withScaffolds,
       getPublishHistory: withScaffolds.getPublishHistory ?? ((item) => publishHistoryByMission[item.missionId]),
+      refreshScaffold:
+        withScaffolds.refreshScaffold ??
+        ((missionId: string) => {
+          // 캐시에서 해당 missionId 항목 삭제 → useEffect deps 변경 → 다시 fetch.
+          // 추측 금지: 응답이 올 때까지 prefill은 비어 있게 둠(이전 값 재사용 X).
+          setScaffoldCacheByMission((prev) => {
+            if (!(missionId in prev)) return prev;
+            const next = { ...prev };
+            delete next[missionId];
+            return next;
+          });
+        }),
       onContextEvent: (type, payload) => {
         // 순수 함수에 위임 — 파싱/누적 규칙은 lib에 단언적으로 단위 테스트됨.
         setPublishHistoryByMission((prev) => accumulatePublishHistory(prev, type, payload));

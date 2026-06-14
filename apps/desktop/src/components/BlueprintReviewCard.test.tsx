@@ -70,4 +70,31 @@ describe("BlueprintReviewCard — Revision Draft UI", () => {
     expect(screen.queryByRole("button", { name: /^review submit/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /^label/i })).toBeNull();
   });
+
+  it("(#7 applied notice) appliedNotice 전달되면 emerald 라벨로 표시(부모 투명성)", () => {
+    render(
+      <BlueprintReviewCard
+        review={REVIEW}
+        onApplyRevision={vi.fn()}
+        appliedNotice="초안에 적용됨 · Mission 자동 생성 없음 · 2026-06-14 12:00"
+      />,
+    );
+    const notice = screen.getByTestId("blueprint-revision-applied-notice");
+    expect(notice.textContent).toContain("초안에 적용됨");
+    expect(notice.textContent).toContain("Mission 자동 생성 없음");
+  });
+
+  it("(#8 scaffold refresh CTA) onScaffoldRefresh 배선되면 CTA 노출, 클릭 시 콜백 호출", () => {
+    const onRefresh = vi.fn();
+    render(<BlueprintReviewCard review={REVIEW} onApplyRevision={vi.fn()} onScaffoldRefresh={onRefresh} />);
+    const cta = screen.getByTestId("blueprint-scaffold-refresh");
+    expect(cta.textContent).toContain("수정안으로 스캐폴드 다시 생성");
+    fireEvent.click(cta);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("(#9 scaffold refresh 미배선) onScaffoldRefresh 없으면 CTA 자체 부재", () => {
+    render(<BlueprintReviewCard review={REVIEW} onApplyRevision={vi.fn()} />);
+    expect(screen.queryByTestId("blueprint-scaffold-refresh")).toBeNull();
+  });
 });

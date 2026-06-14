@@ -58,12 +58,24 @@ export function Stage3DebateTable({
   onOpenAnnex,
   onSelectUtterance,
   session,
+  blueprintBaseline,
+  onApplyBlueprintRevision,
+  onScaffoldRefresh,
+  blueprintAppliedNotice,
 }: {
   onCreateCodingPacket: () => void;
   onOpenAnnex?: () => void;
   onSelectUtterance?: (utterance: Stage3DebateUtteranceView) => void;
   session: Stage3DebateSession;
   agentVisualsById?: Record<string, { avatarDataUrl?: string }>;
+  /** AppBuild의 현재 baseline blueprint(있으면 BlueprintReviewCard가 revision draft 미리 계산). */
+  blueprintBaseline?: Pick<DesignBlueprintInput, "title" | "acceptanceCriteria">;
+  /** 사용자가 "수정안 적용" 누르면 호출 — 부모(App.tsx)가 AppBuild draft state에 반영. */
+  onApplyBlueprintRevision?: (draft: BlueprintRevisionDraft) => void;
+  /** "수정안으로 스캐폴드 다시 생성" CTA(부모가 mission 컨텍스트 알 때만 노출). */
+  onScaffoldRefresh?: () => void;
+  /** 적용 후 "초안에 적용됨" 알림 텍스트 — 부모가 set/clear. */
+  blueprintAppliedNotice?: string;
 }) {
   const [activeRoundIndex, setActiveRoundIndex] = useState(() => resolveDefaultRoundIndex(session));
 
@@ -171,7 +183,15 @@ export function Stage3DebateTable({
           />
 
           <ChairmanDecisionCard session={session} />
-          {session.blueprintReview ? <BlueprintReviewCard review={session.blueprintReview} /> : null}
+          {session.blueprintReview ? (
+            <BlueprintReviewCard
+              review={session.blueprintReview}
+              baseline={blueprintBaseline}
+              onApplyRevision={onApplyBlueprintRevision}
+              onScaffoldRefresh={onScaffoldRefresh}
+              appliedNotice={blueprintAppliedNotice}
+            />
+          ) : null}
           <StanceTrajectoryStrip session={session} />
 
           <div className="mt-4 flex items-center gap-1 overflow-x-auto pb-1">
@@ -847,10 +867,22 @@ export function BlueprintReviewCard({
   review,
   baseline,
   onApplyRevision,
+  onScaffoldRefresh,
+  appliedNotice,
 }: {
   review: BlueprintDebateReview;
   baseline?: Pick<DesignBlueprintInput, "title" | "acceptanceCriteria">;
   onApplyRevision?: (draft: BlueprintRevisionDraft) => void;
+  /**
+   * "수정안으로 스캐폴드 다시 생성" CTA — onApplyRevision 적용 이후 부모가 콜백을 주입해 노출.
+   * scaffold plan만 생성, GitHub write 절대 없음. 호출자가 결정.
+   */
+  onScaffoldRefresh?: () => void;
+  /**
+   * 부모가 적용 후 표시할 한 줄 안내(예: "초안에 적용됨 · Mission 자동 생성 없음 · 2026-06-14 12:00").
+   * 부모가 set하면 UI 상단에 emerald 라벨로 노출 — 사용자가 모르게 덮어쓰기 금지(투명성).
+   */
+  appliedNotice?: string;
 }) {
   const action =
     review.recommendedNextAction === "promote_to_mission"
@@ -890,6 +922,14 @@ export function BlueprintReviewCard({
       {/* Revision Draft 표시 — 부모가 onApplyRevision을 주지 않으면 buttons 노출 안 함(읽기 전용). */}
       {onApplyRevision ? (
         <div className="mt-3 border-t border-cyan-300/10 pt-2" data-testid="blueprint-revision-area">
+          {appliedNotice ? (
+            <p
+              className="mb-2 rounded border border-emerald-300/30 bg-emerald-500/[0.07] px-2 py-1 text-[11px] text-emerald-200"
+              data-testid="blueprint-revision-applied-notice"
+            >
+              ✓ {appliedNotice}
+            </p>
+          ) : null}
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
             <button
               type="button"
@@ -915,6 +955,19 @@ export function BlueprintReviewCard({
             >
               수정안 적용
             </button>
+            {/* "스캐폴드 다시 생성" CTA — 부모가 onScaffoldRefresh를 주입한 경우에만(적용 이후 시점).
+                  scaffold plan만 생성, GitHub write/실행 없음. */}
+            {onScaffoldRefresh ? (
+              <button
+                type="button"
+                className="rounded border border-amber-300/40 px-2 py-0.5 text-[10.5px] font-medium uppercase text-amber-200 hover:bg-amber-300/10"
+                onClick={onScaffoldRefresh}
+                data-testid="blueprint-scaffold-refresh"
+                title="현재 초안 기준으로 scaffold plan 다시 생성 — GitHub로는 보내지 않음"
+              >
+                수정안으로 스캐폴드 다시 생성
+              </button>
+            ) : null}
             <span className="text-[10.5px] text-zinc-500" data-testid="blueprint-revision-truthstatus">
               draft · planned(observed 아님)
             </span>
