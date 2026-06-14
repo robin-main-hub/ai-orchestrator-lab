@@ -17,6 +17,7 @@ import type {
   MissionVerifyRequest,
   PreviewProbeRequest,
   MissionScaffoldLatestResponse,
+  MissionPreviewRunScaffoldResponse,
   ScaffoldApplyResult,
   ScaffoldPlan,
   ScaffoldPlanRequest,
@@ -302,6 +303,30 @@ export async function fetchMissionScaffoldLatest({
   return requestMissionServerJson<MissionScaffoldLatestResponse>({
     method: "GET",
     path: `/missions/${encodeURIComponent(missionId)}/scaffold/latest`,
+    serverBaseUrl,
+    fetchImpl,
+    timeoutMs,
+  });
+}
+
+/**
+ * Preview Run vertical — scaffold/latest 파일을 임시 디렉터리에 풀고 preview를 띄우는 단일 진입.
+ * 자동 실행 절대 없음(사용자 클릭만). 실패는 outcome으로 정직하게 전달.
+ */
+export async function runDgxMissionPreviewScaffold({
+  missionId,
+  serverBaseUrl,
+  fetchImpl = fetch,
+  timeoutMs = 30_000,
+  body = {},
+}: MissionServerRequestInput & {
+  missionId: string;
+  body?: { command?: string; host?: string; port?: number; repoRootOverride?: string };
+}): Promise<MissionPreviewRunScaffoldResponse> {
+  return requestMissionServerJson<MissionPreviewRunScaffoldResponse>({
+    method: "POST",
+    path: `/missions/${encodeURIComponent(missionId)}/preview/run-scaffold`,
+    body,
     serverBaseUrl,
     fetchImpl,
     timeoutMs,

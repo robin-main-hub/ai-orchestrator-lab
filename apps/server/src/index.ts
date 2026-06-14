@@ -4,6 +4,7 @@ import { mkdir, readFile, appendFile, stat, rename, readdir, unlink, writeFile }
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -6900,6 +6901,31 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
             },
             now: () => new Date().toISOString(),
           });
+        },
+        // Preview Run vertical: scaffold/latest 안전 파일들을 임시 디렉터리로 풀어 Preview를 띄울 수 있게 한다.
+        // 정직성:
+        //   - missionId 정규화(허용 charset 외 모두 _) — 임의 missionId가 절대경로/디렉터리 traversal로
+        //     번지지 않게.
+        //   - 파일 path는 traversal/절대경로 검사를 한 번 더(scaffoldForTemplate가 안전한 path만 내지만
+        //     IO 직전 1차 가드는 유지).
+        resolvePreviewRepoRoot: ({ missionId }) => {
+          const safe = (missionId ?? "").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 64) || "unknown";
+          return join(tmpdir(), "ai-orchestrator-preview", safe);
+        },
+        materializeScaffoldFiles: async ({ repoRoot, files }) => {
+          await mkdir(repoRoot, { recursive: true });
+          let written = 0;
+          for (const file of files) {
+            if (typeof file.path !== "string" || !file.path) continue;
+            // 절대경로/traversal 차단.
+            if (file.path.startsWith("/") || file.path.startsWith("\\")) continue;
+            if (file.path.includes("..")) continue;
+            const absPath = join(repoRoot, file.path);
+            await mkdir(dirname(absPath), { recursive: true });
+            await writeFile(absPath, file.content, "utf8");
+            written += 1;
+          }
+          return { written };
         },
         // 3순위: "AI로 초안 채우기" — 단발 LLM(비스트리밍)으로 대화를 DesignBlueprintInput으로 보강.
         // 어떤 실패(호출 실패·빈응답·JSON 파싱 실패·스키마 무효)든 null → 라우터가 결정적 stub으로 폴백.

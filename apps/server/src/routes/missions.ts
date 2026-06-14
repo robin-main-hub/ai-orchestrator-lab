@@ -23,6 +23,7 @@ import {
   previewFromProbe,
   previewProbeRequestSchema,
   previewStartRequestSchema,
+  missionPreviewRunScaffoldRequestSchema,
   scaffoldApplyRequestSchema,
   scaffoldPlanRequestSchema,
   missionCheckpointCreateRequestSchema,
@@ -88,6 +89,14 @@ export type MissionRouteDependencies = {
   planScaffold?: (input: { missionId: string; workspaceId: string; templateId: string; input: Record<string, string | number>; repoRoot: string }) => Promise<{ ok: true; plan: ScaffoldPlan } | { ok: false; reason: string }>;
   applyScaffold?: (input: { plan: ScaffoldPlan; approvalId?: string }) => Promise<ScaffoldApplyResult>;
   /**
+   * Preview Run vertical: scaffold/latest 안전 파일들을 디렉터리에 write한다(DI).
+   * 호출자는 path traversal/디렉터리 정책을 책임진다. 테스트에서는 가짜 writer를 주입.
+   * 성공 시 written 파일 수. 실패 시 throw.
+   */
+  materializeScaffoldFiles?: (input: { repoRoot: string; files: ReadonlyArray<{ path: string; content: string }> }) => Promise<{ written: number }>;
+  /** 서버가 결정하는 preview 디렉터리 — 미션마다 결정적이거나 안전한 tmp. 미주입이면 501. */
+  resolvePreviewRepoRoot?: (input: { missionId: string }) => string;
+  /**
    * 3순위: "AI로 초안 채우기" — 단발 LLM으로 대화를 DesignBlueprintInput으로 보강한다.
    * index.ts에서 createDgxProviderCompletionResponse + JSON parse/validate로 주입. 어떤 이유로든
    * 실패(호출 실패·빈응답·JSON 파싱 실패·스키마 무효)면 **null**을 돌려 결정적 stub으로 폴백시킨다.
@@ -123,6 +132,8 @@ const MISSION_VISUAL_QA_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/visual
 const MISSION_SCAFFOLD_PLAN_PATH = /^\/missions\/([^/]+)\/workspace\/([^/]+)\/scaffold\/plan$/;
 const MISSION_SCAFFOLD_APPLY_PATH = /^\/missions\/([^/]+)\/scaffold\/([^/]+)\/apply$/;
 const MISSION_SCAFFOLD_LATEST_PATH = /^\/missions\/([^/]+)\/scaffold\/latest$/;
+/** Preview Run vertical — scaffold/latest 파일을 디렉터리로 풀고 preview를 띄우는 단일 진입. */
+const MISSION_PREVIEW_RUN_SCAFFOLD_PATH = /^\/missions\/([^/]+)\/preview\/run-scaffold$/;
 
 /** App Builder의 모든 blueprint 미션이 Publish Flow file prefill을 가질 수 있도록
  *  생성 직후 seed scaffold plan을 자동으로 남긴다.
@@ -191,6 +202,8 @@ export async function handleMissionRoute({
   runVisualQa,
   planScaffold,
   applyScaffold,
+  materializeScaffoldFiles,
+  resolvePreviewRepoRoot,
   enrichBlueprintWithAi,
   now,
 }: MissionRouteDependencies): Promise<boolean> {
@@ -846,6 +859,97 @@ export async function handleMissionRoute({
     const updated = await store.recordScaffoldApply(missionId, planId, result);
     const code = result.status === "applied" ? 200 : result.status === "blocked" ? 409 : 500;
     respondJson(code, { mission: updated, result });
+    return true;
+  }
+
+  // Preview Run vertical(D5a 위 단일 오케스트레이션):
+  //   scaffold/latest 안전 파일 → fs materialize → workspace attach → startPreview.
+  //   사용자는 Mission Workspace의 "Preview 실행" CTA 한 번만 누른다.
+  //   정직성:
+  //     - scaffold가 "found"이고 files.length>0일 때만 진행. 그 외는 outcome="no_scaffold".
+  //     - materialize/startPreview DI가 미주입이면 outcome="not_configured"(501은 아님 —
+  //       UI가 다음 단계를 안내할 수 있게 200으로 outcome으로 흘림).
+  //     - startPreview의 결과는 그대로 응답에 담는다(가짜 running 표시 X — 실패면 preview_not_running).
+  const previewRunScaffoldMatch = MISSION_PREVIEW_RUN_SCAFFOLD_PATH.exec(pathname);
+  if (previewRunScaffoldMatch && method === "POST") {
+    const missionId = decodeURIComponent(previewRunScaffoldMatch[1]!);
+    const mission = await store.get(missionId);
+    if (!mission) {
+      respondJson(404, { error: "mission_not_found", missionId });
+      return true;
+    }
+    if (!materializeScaffoldFiles || !startPreview || !resolvePreviewRepoRoot) {
+      respondJson(200, { outcome: "not_configured", message: "preview run-scaffold 의존성(materializeScaffoldFiles/startPreview/resolvePreviewRepoRoot)이 주입되지 않았습니다" });
+      return true;
+    }
+    let payload;
+    try {
+      payload = missionPreviewRunScaffoldRequestSchema.parse(await readJsonBody(request));
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) {
+        respondJson(413, { error: "payload_too_large", limit: error.limit });
+        return true;
+      }
+      respondJson(400, { error: "invalid_preview_run_scaffold_payload", message: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    // 1) scaffold/latest 재현 — 가짜 file 만들지 않는다. seed plan이라도 path+content가 재현 가능.
+    const latest = buildMissionScaffoldLatestResponse({ missionId, plans: mission.scaffoldPlans ?? [] });
+    if (latest.status !== "found" || latest.files.length === 0) {
+      respondJson(200, { outcome: "no_scaffold", message: latest.message ?? "scaffold/latest에 안전한 파일이 없습니다" });
+      return true;
+    }
+    // 2) materialize — DI에 위임(테스트에선 가짜 writer). 실패는 outcome으로 전달.
+    const repoRoot = payload.repoRootOverride ?? resolvePreviewRepoRoot({ missionId });
+    let written = 0;
+    try {
+      const result = await materializeScaffoldFiles({
+        repoRoot,
+        files: latest.files.map((f) => ({ path: f.path, content: f.content })),
+      });
+      written = result.written;
+    } catch (error) {
+      respondJson(200, { outcome: "materialize_failed", repoRoot, message: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    // 3) workspace attach — 기존 store API를 그대로 쓰면 mission record가 갱신된다(보드 자동 반영).
+    const updatedAfterAttach = await store.attachWorkspace(missionId, {
+      repoRootRef: repoRoot,
+      appType: "react_vite",
+      terminalMode: "read_only",
+      runnerKind: "local",
+    });
+    const lastWorkspace = updatedAfterAttach?.workspaces?.at(-1);
+    if (!lastWorkspace) {
+      respondJson(200, { outcome: "materialize_failed", repoRoot, materializedFileCount: written, message: "workspace attach 결과를 읽지 못했습니다" });
+      return true;
+    }
+    // 4) preview start — host shell 없이 기존 startPreview DI. 실패는 startPreview가 failed/blocked로 반환.
+    const command = payload.command ?? defaultPreviewCommandForAppType(lastWorkspace.appType);
+    const port = payload.port ?? derivePreviewPort(lastWorkspace.id);
+    const preview = await startPreview({
+      missionId,
+      workspaceId: lastWorkspace.id,
+      command,
+      cwd: repoRoot,
+      host: payload.host,
+      port,
+    });
+    // 결과를 mission record에도 반영(보드/preview row가 자동으로 새 status 표시).
+    await store.recordPreview(missionId, lastWorkspace.id, preview);
+    const outcome = preview.status === "running" && preview.truthStatus === "observed"
+      ? "observed" as const
+      : "preview_not_running" as const;
+    respondJson(200, {
+      outcome,
+      repoRoot,
+      materializedFileCount: written,
+      workspaceId: lastWorkspace.id,
+      preview,
+      message: outcome === "observed"
+        ? `${written}개 파일을 ${repoRoot}에 풀고 preview 관측됨`
+        : `${written}개 파일을 ${repoRoot}에 풀었으나 preview 관측 안 됨(${preview.status}/${preview.truthStatus})`,
+    });
     return true;
   }
 

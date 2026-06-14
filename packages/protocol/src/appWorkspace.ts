@@ -144,6 +144,57 @@ export const previewStartRequestSchema = z.object({
 });
 export type PreviewStartRequest = z.infer<typeof previewStartRequestSchema>;
 
+/**
+ * Preview Run vertical: scaffold/latest 파일을 임시 디렉터리에 materialize한 뒤 attachWorkspace +
+ * startPreview를 한 번에 묶는 orchestration 요청. 사용자는 Mission Workspace에서 "Preview 실행"
+ * CTA 한 번만 누른다.
+ *
+ * 정직성:
+ *   - scaffold/latest가 "found"가 아니면 blocked(가짜 진행 X).
+ *   - host shell 직결 X — 명령은 기존 preview policy(prefix allowlist) 통과해야 함.
+ *   - preview observed는 startPreview의 probe 성공 시에만(이 schema에는 결과만 실린다).
+ *   - repoRootOverride는 옵션 — 미지정이면 서버가 결정(현재 정책: deterministic tmpdir 기반).
+ */
+export const missionPreviewRunScaffoldRequestSchema = z.object({
+  command: z.string().min(1).max(400).optional(),
+  host: z.string().max(255).default("127.0.0.1"),
+  port: z.number().int().min(1).max(65_535).optional(),
+  /** 미지정이면 서버 디폴트(tmp 기반 안전 디렉터리). */
+  repoRootOverride: z.string().min(1).max(1024).optional(),
+});
+export type MissionPreviewRunScaffoldRequest = z.infer<typeof missionPreviewRunScaffoldRequestSchema>;
+
+export const missionPreviewRunScaffoldOutcomeSchema = z.enum([
+  /** scaffold materialize + startPreview observed running. */
+  "observed",
+  /** scaffold materialize는 됐지만 startPreview가 running이 아닌 상태(failed/blocked 등). */
+  "preview_not_running",
+  /** scaffold/latest가 비었거나 not_found — Preview 실행 자체가 불가능. */
+  "no_scaffold",
+  /** materialize 자체가 막힘(repoRoot 정책/IO 실패). */
+  "materialize_failed",
+  /** 미션 미존재. */
+  "mission_not_found",
+  /** DI 미주입(서버 설정 누락). */
+  "not_configured",
+]);
+export type MissionPreviewRunScaffoldOutcome = z.infer<typeof missionPreviewRunScaffoldOutcomeSchema>;
+
+export const missionPreviewRunScaffoldResponseSchema = z.object({
+  outcome: missionPreviewRunScaffoldOutcomeSchema,
+  /** materialize한 디렉터리 절대경로(observed 또는 preview_not_running일 때만). */
+  repoRoot: z.string().optional(),
+  /** materialize에 성공한 파일 수. */
+  materializedFileCount: z.number().int().nonnegative().optional(),
+  /** attach 된 workspace id(있을 때만). */
+  workspaceId: z.string().optional(),
+  /** startPreview 결과(있을 때만 — 가짜 running 표시 X, observed/failed 그대로). */
+  preview: appWorkspacePreviewSchema.optional(),
+  /** 사람용 짧은 메시지(blocked 사유, materialize 실패 사유 등). */
+  message: z.string().optional(),
+});
+export type MissionPreviewRunScaffoldResponse = z.infer<typeof missionPreviewRunScaffoldResponseSchema>;
+
 /** appType별 기본 preview 명령(없으면 vite preview). 실제 실행은 서버 preview 정책 뒤. */
 export function defaultPreviewCommandForAppType(appType: AppType): string {
   switch (appType) {
