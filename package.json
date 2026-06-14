@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "pnpm --filter @ai-orchestrator/desktop dev",
     "build": "pnpm -r --sort build",
-    "typecheck": "pnpm --filter @ai-orchestrator/protocol build && pnpm --filter @ai-orchestrator/providers build && pnpm --filter @ai-orchestrator/memory build && pnpm --filter @ai-orchestrator/agents build && pnpm --filter @ai-orchestrator/server typecheck && pnpm --filter @ai-orchestrator/desktop typecheck",
+    "typecheck": "pnpm --filter @ai-orchestrator/protocol build && pnpm --filter @ai-orchestrator/providers build && pnpm --filter @ai-orchestrator/simplememo build && pnpm --filter @ai-orchestrator/agents build && pnpm --filter @ai-orchestrator/server typecheck && pnpm --filter @ai-orchestrator/desktop typecheck",
     "test": "pnpm build && pnpm -r --if-present test",
     "lint": "pnpm typecheck",
     "clean": "node scripts/clean-workspace.mjs",

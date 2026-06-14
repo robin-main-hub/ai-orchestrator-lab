@@ -11,19 +11,19 @@ import type {
 import type { MemoryAdapter, MemoryAdapterContext } from "./adapter";
 import { MemoryAdapterError } from "./errors.js";
 
-export type MockMemoryAdapterOptions = {
+export type MockAdapterOptions = {
   profileId?: string;
   records?: MemoryRecord[];
   createdAt?: string;
 };
 
-export class MockMemoryAdapter implements MemoryAdapter {
+export class MockAdapter implements MemoryAdapter {
   readonly profileId: string;
   readonly kind = "mock" as const;
   private records: MemoryRecord[];
   private readonly createdAt: string;
 
-  constructor(options: MockMemoryAdapterOptions = {}) {
+  constructor(options: MockAdapterOptions = {}) {
     this.profileId = options.profileId ?? "mock_memory";
     this.records = [...(options.records ?? [])];
     this.createdAt = options.createdAt ?? "2026-05-25T00:00:00.000Z";

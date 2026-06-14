@@ -9,7 +9,7 @@ import type {
   ProviderProfile,
   Reflection,
 } from "@ai-orchestrator/protocol";
-import { DgxSimpleMemMemoryAdapter, isMemoryAdapterError } from "@ai-orchestrator/memory";
+import { SimpleMemAdapter, isMemoryAdapterError } from "@ai-orchestrator/simplememo";
 import {
   activateMemoryRecord,
   createStage6MemoryInspector,
@@ -84,7 +84,7 @@ export function useMemoryController({
 
   const memoryAdapter = useMemo(
     () =>
-      new DgxSimpleMemMemoryAdapter({
+      new SimpleMemAdapter({
         profileId: memoryAdapterProfileId,
         seedRecords: initialMemoryRecords,
       }),
@@ -441,7 +441,7 @@ export function useMemoryController({
       currentScope: memoryScope,
       targetScope,
       recallRecords: async (scope) => {
-        const scopedAdapter = new DgxSimpleMemMemoryAdapter({
+        const scopedAdapter = new SimpleMemAdapter({
           profileId: `desktop_dgx_simplemem_${scope.recallTraceId}`,
           seedRecords: initialMemoryRecords,
         });
@@ -484,7 +484,7 @@ export function useMemoryController({
   }
 
   function createScopedMemoryApi(scope: AgentChannelMemoryScope) {
-    const scopedAdapter = new DgxSimpleMemMemoryAdapter({
+    const scopedAdapter = new SimpleMemAdapter({
       profileId: `desktop_dgx_simplemem_${scope.recallTraceId}`,
       seedRecords: initialMemoryRecords,
     });
