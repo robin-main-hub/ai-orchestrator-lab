@@ -560,6 +560,10 @@ export const githubPullRequestCreatePlanSchema = z.object({
   repoFullName: z.string(),
   baseBranch: z.string(),
   headBranch: z.string(),
+  /** plan 시점 GitHub에서 관측한 base ref sha — W4b execute에서 무결성 키로 재확인. */
+  baseSha: z.string(),
+  /** plan 시점 GitHub에서 관측한 head ref sha — W4b execute에서 무결성 키로 재확인. */
+  headSha: z.string(),
   /** plan에 저장된 title — 응답에 그대로 노출(160자 캡). */
   title: z.string(),
   /** preview는 본문의 앞부분만 노출(긴 본문 전체를 응답/트레이스에 흘리지 않음). */
@@ -584,6 +588,45 @@ export const githubPullRequestCreatePlanResponseSchema = z.object({
   message: z.string().optional(),
 });
 export type GithubPullRequestCreatePlanResponse = z.infer<typeof githubPullRequestCreatePlanResponseSchema>;
+
+// ──────────────────────────────────────────────────────────────────────────────
+// W4b: PR create execute. 다섯 번째이자 GitHub write 표면의 마지막 핵심 동작.
+// 사용자 contract:
+//   - approval ONLY(armed 없음 — PR 생성은 외부 흔적이 큼)
+//   - 1차 무결성: client payload titleSha256/bodySha256 == plan-store
+//   - 2차 무결성: base/head ref 재GET sha == plan.baseSha/headSha
+//   - 3차 무결성: compare 재실행해 aheadBy>0 + changedFiles>0 유지
+//   - tryClaim 동기 점유 + observedCache 멱등(중복 execute → POST /pulls 1회만)
+//   - GitHub 422 → already_exists 매핑(같은 head로 이미 PR이 있는 경우)
+//   - GitHub 403 → permission_denied 매핑
+//   - same-repo only(fork PR 미지원), draft 미지원, reviewers/assignees/labels/auto-merge 미지원
+//   - MCP execute tool 추가 금지 — 서버 단독
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const githubPullRequestCreateExecuteRequestSchema = z.object({
+  planId: z.string(),
+  /** plan에 기록된 title sha — execute가 같은 title을 의도하는지 1차 확인. */
+  titleSha256: z.string(),
+  /** plan에 기록된 body sha — execute가 같은 body를 의도하는지 1차 확인. */
+  bodySha256: z.string(),
+  /** approval-only — armed 없음. */
+  approvalId: z.string(),
+});
+export type GithubPullRequestCreateExecuteRequest = z.infer<typeof githubPullRequestCreateExecuteRequestSchema>;
+
+export const githubPullRequestCreateExecuteResponseSchema = z.object({
+  outcome: githubPullRequestCreateOutcomeSchema,
+  planId: z.string(),
+  /** POST /pulls 성공 시 PR number. */
+  pullNumber: z.number().int().positive().optional(),
+  htmlUrl: z.string().optional(),
+  /** PR이 가리키는 head commit sha(GitHub 응답의 head.sha). */
+  headSha: z.string().optional(),
+  observedAt: z.string().optional(),
+  message: z.string().optional(),
+  truthStatus: z.enum(["planned", "observed", "configured"]),
+});
+export type GithubPullRequestCreateExecuteResponse = z.infer<typeof githubPullRequestCreateExecuteResponseSchema>;
 
 /** GET /integrations/github/repos/:owner/:repo/pulls|pulls/:n|issues|overview|file */
 export const githubReadonlyResourceResponseSchema = z.object({

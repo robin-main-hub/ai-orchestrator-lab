@@ -54,6 +54,9 @@ function clientStub(over: Partial<GithubReadonlyClient> & { token?: string } = {
           { filename: "src/bar.ts", status: "added", additions: 12, deletions: 0 },
         ],
       })),
+    createPullRequest:
+      over.createPullRequest ??
+      (async () => ({ pullNumber: 1, htmlUrl: "u", headSha: "stub-head" })),
   };
 }
 

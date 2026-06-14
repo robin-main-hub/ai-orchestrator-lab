@@ -59,6 +59,9 @@ function stubClient(over: Partial<GithubReadonlyClient> & { token?: string } = {
     compareBranches:
       over.compareBranches ??
       (async () => ({ aheadBy: 1, behindBy: 0, totalCommits: 1, changedFiles: 1, files: [{ filename: "x", status: "modified", additions: 1, deletions: 0 }] })),
+    createPullRequest:
+      over.createPullRequest ??
+      (async () => ({ pullNumber: 1, htmlUrl: "u", headSha: "stub-head" })),
   };
 }
 
