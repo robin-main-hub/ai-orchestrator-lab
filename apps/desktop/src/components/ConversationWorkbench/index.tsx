@@ -57,6 +57,7 @@ import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { AgentPortrait, type AgentState } from "../shared/AgentActivity";
 import { AgentConfigDrawer } from "../AgentConfigDrawer";
+import { PreviewIframe } from "../PreviewIframe";
 import { AgentConversationFlowPanel } from "./AgentConversationFlowPanel";
 import { AgentHermesControlCard } from "./AgentHermesControlCard";
 import { LiveTerminalPanel } from "./LiveTerminalPanel";
@@ -166,6 +167,7 @@ export function ConversationWorkbench({
   onRollbackTurn,
   onApproveCommandPattern,
   onStartSwarmSearch,
+  previewUrl,
 }: {
   activeSessionId: string;
   /** "에이전트" 사이드 패널 모드에 주입되는 에이전트 레일 (App의 AgentsSidebar) */
@@ -264,6 +266,9 @@ export function ConversationWorkbench({
   onApproveCommandPattern?: (command: string) => void;
   /** "+" 도구 → 스웜 서치: 입력/직전 대화를 주제로 4~16명 자동 병렬 조사 */
   onStartSwarmSearch?: (topic: string) => void;
+  /** ChatSidePanel "미리보기" 탭에서 임베드할 preview URL. observed Preview가 있을 때만 부모가 전달.
+   *  undefined면 탭은 정직한 안내(stub)만 표시. 자동 실행 X. */
+  previewUrl?: string;
 }) {
   const [activeAgentDetailPanel, setActiveAgentDetailPanel] = useState<AgentDetailPanel>("none");
   const persona = agentPersona ?? (selectedAgent ? createDefaultPersonaSettings(selectedAgent) : undefined);
@@ -792,6 +797,15 @@ export function ConversationWorkbench({
         ) : null}
 
         <ChatSidePanel mode={sidePanelMode} onClose={() => setSidePanelMode("none")}>
+          {sidePanelMode === "preview" ? (
+            previewUrl ? (
+              <div className="p-2" data-testid="chat-side-panel-preview-iframe-wrap">
+                <PreviewIframe url={previewUrl} testIdPrefix="chat-side" height={520} />
+              </div>
+            ) : (
+              <ChatSidePanelStub mode="preview" />
+            )
+          ) : null}
           {sidePanelMode === "background" ? (
             <>
               <ForkConversationButton
