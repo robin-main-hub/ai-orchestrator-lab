@@ -20,6 +20,7 @@ import {
 } from "../lib/appFixDraft";
 import { buildVisualQaDiff, type VisualQaDiff } from "../lib/visualQaDiff";
 import type { MissionVisualQaSummary } from "../lib/missionBoardModel";
+import { VisualEvidenceCard } from "./VisualEvidenceCard";
 
 /**
  * Preview → Visual QA → Revision Draft vertical 카드.
@@ -318,12 +319,32 @@ export function VisualQaCard({
   const otherIssues = report ? report.issues.filter((i) => i.kind !== "console_error") : [];
   const showDraftCta = report && (report.status === "warning" || report.status === "failed");
 
+  /** verify 단계가 실패했으면 어떤 단계인지 — VisualEvidenceCard에 readiness 계산용. */
+  const verifyFailedStep = verify.kind === "preview_failed"
+    ? ("preview" as const)
+    : verify.kind === "qa_failed"
+      ? ("qa" as const)
+      : undefined;
+  /** Evidence Card에 보여줄 최신 report — verify 후의 결과가 우선. */
+  const evidenceReport = verify.kind === "diff" ? verify.afterReport : run.kind === "report" ? run.report : undefined;
+  const evidenceDiff = verify.kind === "diff" ? verify.diff : undefined;
+
   return (
     <div
       className="visual-qa"
       data-testid={`visual-qa-${missionId}`}
       data-state={run.kind}
     >
+      {/* Visual Evidence Card — preview/QA/delta/console/screenshot/readiness를 한 화면에. */}
+      <VisualEvidenceCard
+        missionId={missionId}
+        previewUrl={previewUrl}
+        latestReport={evidenceReport}
+        latestDiff={evidenceDiff}
+        verifyFailedStep={verifyFailedStep}
+        onContextEvent={onContextEvent}
+      />
+
       <div className="visual-qa__head">
         <button
           type="button"
