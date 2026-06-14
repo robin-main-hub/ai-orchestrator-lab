@@ -23,6 +23,7 @@ import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import { GithubPublishPanel } from "./coding/GithubPublishPanel";
 import { MultiFilePlanCard } from "./publish/MultiFilePlanCard";
 import { PreviewRunCard } from "./PreviewRunCard";
+import { VisualQaCard } from "./VisualQaCard";
 import {
   builtinMissionPrefill,
   computeNextPublishStep,
@@ -465,6 +466,20 @@ function MissionWorkspaceDetail({
       <PreviewRunCard
         missionId={item.missionId}
         hasScaffoldFiles={(publishEnvironment?.getScaffoldFiles?.(item)?.length ?? 0) > 0}
+        serverBaseUrl={publishEnvironment?.serverBaseUrl}
+        fetchImpl={publishEnvironment?.fetchImpl}
+        onContextEvent={(type, payload) =>
+          publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
+        }
+      />
+
+      {/* Visual QA vertical — preview observed running일 때만 CTA 활성. issues_found/failed면
+          "수정안 초안 만들기" CTA를 노출. 자동 파일 수정/PR/scaffold refresh 0. */}
+      <VisualQaCard
+        missionId={item.missionId}
+        workspaceId={item.workspace?.id}
+        previewUrl={item.workspace?.previewUrl}
+        latestSummary={item.latestVisualQa}
         serverBaseUrl={publishEnvironment?.serverBaseUrl}
         fetchImpl={publishEnvironment?.fetchImpl}
         onContextEvent={(type, payload) =>
