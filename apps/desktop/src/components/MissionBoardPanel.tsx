@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   ClipboardList,
@@ -21,10 +23,13 @@ import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import { GithubPublishPanel } from "./coding/GithubPublishPanel";
 import {
   builtinMissionPrefill,
+  computeNextPublishStep,
   pickFirstSafeScaffoldFile,
   type MissionPublishPrefillResolver,
   type MissionScaffoldFile,
   type PublishHistoryByStep,
+  type PublishNextAction,
+  type PublishStep,
 } from "../lib/missionPublishPrefill";
 import {
   DESIGN_ISSUE_KIND_LABEL,
@@ -373,6 +378,31 @@ function MissionWorkspaceDetail({
   // 기본 접힘 — 사용자 명시 클릭으로만 GithubPublishPanel을 마운트한다.
   // (publishEnvironment가 없으면 CTA 자체를 그리지 않아 부모가 opt-in한 경우에만 노출.)
   const [publishOpen, setPublishOpen] = useState(false);
+  /**
+   * "다음 할 일" CTA가 어떤 step을 가리키는지 — 사용자가 CTA를 누르면 publishOpen=true가 되고
+   * 마운트 직후 그 step section으로 scrollIntoView 한다. 사용자가 그냥 GitHub로 내보내기 토글로
+   * 열면 undefined로 두어 첫 step부터 보인다(자동 스크롤 없음).
+   */
+  const [targetStep, setTargetStep] = useState<PublishStep | undefined>();
+  // Publish Flow 다음 할 일 — history에서 계산. publishEnvironment 없으면 undefined.
+  const publishHistory = publishEnvironment?.getPublishHistory?.(item);
+  const nextPublishAction: PublishNextAction | undefined = useMemo(
+    () => (publishEnvironment ? computeNextPublishStep(publishHistory) : undefined),
+    [publishEnvironment, publishHistory],
+  );
+
+  // publishOpen + targetStep 조합이 set되면 다음 paint 후 해당 step section을 화면에 스크롤.
+  // 같은 mission에서만 동작하도록 mission-publish-<id> 컨테이너 안에서 querySelector.
+  useEffect(() => {
+    if (!publishOpen || !targetStep) return;
+    const id = `mission-publish-${item.missionId}`;
+    const handle = window.requestAnimationFrame(() => {
+      const root = document.getElementById(id);
+      const section = root?.querySelector<HTMLElement>(`[data-testid="publish-step-${targetStep}"]`);
+      section?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => window.cancelAnimationFrame(handle);
+  }, [publishOpen, targetStep, item.missionId]);
   // CTA polish — scaffold 유무에 따른 정직한 신호:
   //   - ready    : safeCount > 0 → "1개 자동 채움 준비"(실제 prefill은 항상 첫 안전 파일 1개)
   //   - blocked  : skipped > 0, safeCount == 0 → "모두 가드에 막힘 — 직접 입력 필요"
@@ -473,11 +503,24 @@ function MissionWorkspaceDetail({
         </ul>
       ) : null}
 
-      {/* Publish Flow 상태 요약 — 현재 세션의 github.publish.* trace를 단계별 latest로.
-          publishEnvironment가 있고 getPublishHistory가 어떤 step이든 갖고 있을 때만 노출. */}
+      {/* Publish Flow 상태 요약 + "다음 할 일" CTA — 현재 세션의 github.publish.* trace 기반.
+          CTA를 누르면 publishOpen=true + targetStep 으로 해당 step section에 자동 스크롤. */}
       {publishEnvironment ? (
         <PublishFlowSummary
-          history={publishEnvironment.getPublishHistory?.(item)}
+          history={publishHistory}
+          nextAction={nextPublishAction}
+          onActivateNext={(step) => {
+            setTargetStep(step);
+            if (!publishOpen) {
+              setPublishOpen(true);
+              publishEnvironment.onContextEvent?.("mission.publish.opened", {
+                missionId: item.missionId,
+                ts: new Date().toISOString(),
+                via: "next_action_cta",
+                targetStep: step,
+              });
+            }
+          }}
         />
       ) : null}
 
@@ -586,52 +629,93 @@ function publishStatusVariant(status: string): StatusBadgeVariant {
 }
 
 /**
- * Mission Workspace 안의 Publish Flow 상태 한눈 요약.
+ * Mission Workspace 안의 Publish Flow 상태 한눈 요약 + "다음 할 일" CTA.
  *   - 현재 세션의 github.publish.* trace 기반(영속화 없음 — 새로고침 시 초기화, 정직 표기).
  *   - Branch / File / PR 단계 각각 latest 상태만(재시도 시 최신만 노출).
- *   - history가 비어 있으면 섹션 자체를 그리지 않는다(빈 공간 방지).
- *   - summary 텍스트는 GithubPublishPanel.emit이 만든 짧은 한 줄을 그대로 보여준다(추측 0).
+ *   - history가 비어 있고 nextAction이 'start_step branch'면 처음 진입을 안내하는 CTA를 보여준다.
+ *   - history에 단계가 하나라도 있으면 상태 행을 그린다.
+ *   - 추측 금지: summary 텍스트는 GithubPublishPanel.emit이 만든 짧은 한 줄을 그대로 보여준다.
+ *   - 위험 액션(merge/review/label/...)은 절대 노출하지 않는다 — 단계는 항상 branch/file/pr 3개.
  */
-function PublishFlowSummary({ history }: { history?: PublishHistoryByStep }) {
-  const steps: Array<"branch" | "file" | "pr"> = ["branch", "file", "pr"];
-  const hasAny = history && steps.some((s) => history[s]);
-  if (!hasAny || !history) return null;
+function PublishFlowSummary({
+  history,
+  nextAction,
+  onActivateNext,
+}: {
+  history?: PublishHistoryByStep;
+  nextAction?: PublishNextAction;
+  onActivateNext?: (step: PublishStep) => void;
+}) {
+  const steps: ReadonlyArray<PublishStep> = ["branch", "file", "pr"];
+  const hasAny = !!history && steps.some((s) => history[s]);
+  // history도 nextAction도 없으면 그릴 게 없다.
+  if (!hasAny && !nextAction) return null;
   return (
     <div
       className="mission-workspace-publish-summary"
       data-testid="mission-workspace-publish-summary"
     >
-      {steps.map((step) => {
-        const entry = history[step];
-        const Icon = step === "branch" ? GitBranch : step === "file" ? FileEdit : GitPullRequest;
-        return (
+      {/* 단계별 상태 행 — history가 있을 때만(빈 공간 방지). */}
+      {hasAny
+        ? steps.map((step) => {
+            const entry = history![step];
+            const Icon = step === "branch" ? GitBranch : step === "file" ? FileEdit : GitPullRequest;
+            return (
+              <div
+                key={step}
+                className="mission-workspace-row"
+                data-testid={`mission-publish-row-${step}`}
+                data-step={step}
+                data-status={entry?.status ?? "not_started"}
+              >
+                <span className="mission-workspace-row-label">
+                  <Icon size={12} /> Publish {PUBLISH_STEP_LABEL[step]}
+                </span>
+                <span className="mission-workspace-row-body">
+                  {entry ? (
+                    <>
+                      <StatusBadge size="sm" variant={publishStatusVariant(entry.status)}>
+                        {PUBLISH_STATUS_LABEL[entry.status] ?? entry.status}
+                      </StatusBadge>{" "}
+                      {entry.summary ? <span className="mission-workspace-url">{entry.summary}</span> : null}
+                    </>
+                  ) : (
+                    <StatusBadge size="sm" variant="muted">
+                      아직 진행 없음
+                    </StatusBadge>
+                  )}
+                </span>
+              </div>
+            );
+          })
+        : null}
+      {/* "다음 할 일" CTA — done이면 완주 표식, 아니면 해당 step으로 점프 버튼. */}
+      {nextAction ? (
+        nextAction.kind === "done" ? (
           <div
-            key={step}
-            className="mission-workspace-row"
-            data-testid={`mission-publish-row-${step}`}
-            data-step={step}
-            data-status={entry?.status ?? "not_started"}
+            className="mission-workspace-publish-next mission-workspace-publish-next--done"
+            data-testid="mission-workspace-publish-next"
+            data-kind="done"
           >
-            <span className="mission-workspace-row-label">
-              <Icon size={12} /> Publish {PUBLISH_STEP_LABEL[step]}
-            </span>
-            <span className="mission-workspace-row-body">
-              {entry ? (
-                <>
-                  <StatusBadge size="sm" variant={publishStatusVariant(entry.status)}>
-                    {PUBLISH_STATUS_LABEL[entry.status] ?? entry.status}
-                  </StatusBadge>{" "}
-                  {entry.summary ? <span className="mission-workspace-url">{entry.summary}</span> : null}
-                </>
-              ) : (
-                <StatusBadge size="sm" variant="muted">
-                  아직 진행 없음
-                </StatusBadge>
-              )}
-            </span>
+            <CheckCircle2 size={13} /> {nextAction.label}
           </div>
-        );
-      })}
+        ) : (
+          <button
+            type="button"
+            className="mission-workspace-publish-next-cta"
+            data-testid="mission-workspace-publish-next"
+            data-kind={nextAction.kind}
+            data-step={nextAction.step}
+            onClick={() => onActivateNext?.(nextAction.step)}
+          >
+            <span>다음: {nextAction.label}</span>
+            {nextAction.kind === "retry_step" ? (
+              <span className="mission-workspace-publish-next-reason"> — {nextAction.reason}</span>
+            ) : null}
+            <ArrowRight size={13} />
+          </button>
+        )
+      ) : null}
     </div>
   );
 }

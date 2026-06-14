@@ -254,6 +254,75 @@ export function parsePublishTrace(
   return { step: step as PublishStep, status: status as PublishStepStatus, summary, ts };
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// computeNextPublishStep — "다음 할 일 1개" 결정 로직. 정직성:
+//   - 단계 순서는 항상 branch → file → pr (의존성).
+//   - blocked/failed인 단계는 retry_step(같은 단계 재시도). 자동으로 다음 단계 추천 절대 금지.
+//   - planned/approval_required 단계는 continue_step(execute 준비됨). 같은 단계.
+//   - observed/already_exists는 통과 → 다음 단계.
+//   - 모두 통과 → done.
+//   - history 자체가 비어 있으면 첫 단계 start_step.
+// ──────────────────────────────────────────────────────────────────────────────
+
+export type PublishNextAction =
+  | { kind: "start_step"; step: PublishStep; label: string }
+  | { kind: "retry_step"; step: PublishStep; label: string; reason: string }
+  | { kind: "continue_step"; step: PublishStep; label: string }
+  | { kind: "done"; label: string };
+
+const NEXT_LABEL_START: Record<PublishStep, string> = {
+  branch: "브랜치 준비",
+  file: "파일 변경 준비",
+  pr: "PR 준비",
+};
+
+const NEXT_LABEL_CONTINUE: Record<PublishStep, string> = {
+  branch: "브랜치 실행 준비됨",
+  file: "파일 변경 실행 준비됨",
+  pr: "PR 실행 준비됨",
+};
+
+const NEXT_LABEL_RETRY: Record<PublishStep, string> = {
+  branch: "브랜치 재시도",
+  file: "파일 변경 재시도",
+  pr: "PR 재시도",
+};
+
+const STEP_ORDER: ReadonlyArray<PublishStep> = ["branch", "file", "pr"];
+
+const PASSING_STATUSES: ReadonlyArray<PublishStepStatus> = ["observed", "already_exists"];
+const RETRY_STATUSES: ReadonlyArray<PublishStepStatus> = ["blocked", "failed"];
+const CONTINUE_STATUSES: ReadonlyArray<PublishStepStatus> = ["planned", "approval_required"];
+
+/**
+ * Branch/File/PR history에서 사용자가 지금 해야 할 1개 행동을 결정한다.
+ * undefined가 아닌 entry가 없으면 첫 단계부터 시작.
+ */
+export function computeNextPublishStep(
+  history: Readonly<PublishHistoryByStep> | undefined,
+): PublishNextAction {
+  const h = history ?? {};
+  for (const step of STEP_ORDER) {
+    const entry = h[step];
+    if (!entry) return { kind: "start_step", step, label: NEXT_LABEL_START[step] };
+    if (RETRY_STATUSES.includes(entry.status)) {
+      return {
+        kind: "retry_step",
+        step,
+        label: NEXT_LABEL_RETRY[step],
+        reason: entry.summary || entry.status,
+      };
+    }
+    if (CONTINUE_STATUSES.includes(entry.status)) {
+      return { kind: "continue_step", step, label: NEXT_LABEL_CONTINUE[step] };
+    }
+    if (PASSING_STATUSES.includes(entry.status)) continue;
+    // 알 수 없는 상태 — 정직하게 start_step으로 fallback(추측 금지하면서도 next CTA는 줘야).
+    return { kind: "start_step", step, label: NEXT_LABEL_START[step] };
+  }
+  return { kind: "done", label: "GitHub PR 완주됨" };
+}
+
 /**
  * publishHistoryByMission 상태에 새 trace를 누적한다.
  *   - parsePublishTrace로 파싱 실패 또는 missionId 누락 → prev를 그대로 반환(no-op).
