@@ -18,6 +18,7 @@ import { accumulatePublishHistory } from "../lib/missionPublishPrefill";
 import { publishEnvironmentWithScaffolds } from "../lib/publishEnvironmentWithScaffolds";
 import { MissionBoardPanel, type MissionPublishEnvironment } from "./MissionBoardPanel";
 import type { ActivePreviewRef } from "../lib/activePreviewRef";
+import type { PreviewAnnotationDraft } from "../lib/previewAnnotations";
 
 /**
  * Mission Board 컨테이너 — 풀 루프 글루:
@@ -40,6 +41,7 @@ export function MissionBoardContainer({
   publishEnvironment,
   refreshScaffoldHandleRef,
   onPreviewObserved,
+  previewAnnotationDraft,
 }: {
   serverBaseUrl?: string | string[];
   /** 검증 명령 소스 + 미션 생성 시드 — 현재 CodingPacket */
@@ -69,6 +71,8 @@ export function MissionBoardContainer({
   refreshScaffoldHandleRef?: React.MutableRefObject<((missionId: string) => void) | null>;
   /** observed preview URL을 App까지 올린다. preview_not_running/materialize_failed/error에서는 호출되지 않는다. */
   onPreviewObserved?: (ref: ActivePreviewRef) => void;
+  /** ChatSidePanel에서 Turbo Edits로 보낸 최신 좌표 annotation draft. */
+  previewAnnotationDraft?: PreviewAnnotationDraft | null;
 }) {
   const [snapshot, setSnapshot] = useState<MissionBoardSnapshot>(() =>
     mergeMissionBoard({ serverRecords: undefined, localItems, serverError: "아직 불러오지 않음" }),
@@ -364,6 +368,7 @@ export function MissionBoardContainer({
       }
       publishEnvironment={mergedPublishEnvironment}
       onPreviewObserved={onPreviewObserved}
+      previewAnnotationDraft={previewAnnotationDraft}
     />
   );
 }

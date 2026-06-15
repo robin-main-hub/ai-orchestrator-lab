@@ -338,6 +338,7 @@ import {
 } from "./lib/makimaDelegation";
 import { readJsonState, writeJsonState } from "./lib/persistentJsonState";
 import type { ActivePreviewRef } from "./lib/activePreviewRef";
+import type { PreviewAnnotationDraft } from "./lib/previewAnnotations";
 import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbenchDerived";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 import { SummonTheater } from "./components/SummonTheater";
@@ -734,6 +735,7 @@ export function App() {
    *   - 영속화 없음(세션 메모리). 페이지 새로고침 시 비워짐 — 추측 금지.
    */
   const [missionIdBySourceSessionId, setMissionIdBySourceSessionId] = useState<Record<string, string>>({});
+  const [previewAnnotationDraft, setPreviewAnnotationDraft] = useState<PreviewAnnotationDraft | null>(null);
   /**
    * MissionBoardContainer가 노출하는 scaffold 캐시 invalidate 함수에 대한 외부 핸들.
    * BlueprintReviewCard의 "수정안으로 스캐폴드 다시 생성" 클릭 → handler가 이 ref로 invalidate
@@ -3012,6 +3014,21 @@ export function App() {
     });
   }, [appendEvent]);
 
+  const handlePreviewAnnotationDraft = useCallback((draft: PreviewAnnotationDraft) => {
+    setPreviewAnnotationDraft(draft);
+    appendEvent("mission.preview_annotation.sent_to_turbo", {
+      missionId: draft.missionId,
+      annotationId: draft.annotation.id,
+      summary: draft.annotation.description,
+      url: draft.annotation.viewportClick?.url,
+      percentX: draft.annotation.viewportClick?.percentX,
+      percentY: draft.annotation.viewportClick?.percentY,
+      selector: "unknown",
+      selectorReason: "iframe_boundary",
+      sentAt: draft.sentAt,
+    });
+  }, [appendEvent]);
+
   const handleAppBuildMissionCreated = useCallback(
     (mission: ServerMissionRecord, sourceSessionId?: string) => {
       if (!sourceSessionId) return;
@@ -5232,6 +5249,7 @@ export function App() {
                 debateId: debateSession.id,
                 refreshScaffoldHandleRef,
                 onPreviewObserved: handlePreviewObserved,
+                previewAnnotationDraft,
                 /**
                  * GitHub Publish 표면(opt-in) — Workspace 상세에 "GitHub로 내보내기" CTA를 노출한다.
                  *
@@ -5506,6 +5524,7 @@ export function App() {
               onStartSwarmSearch={handleStartSwarmSearch}
               previewUrl={activePreviewRef?.url}
               previewMeta={activePreviewRef ? { missionId: activePreviewRef.missionId, observedAt: activePreviewRef.observedAt } : undefined}
+              onSendPreviewAnnotation={handlePreviewAnnotationDraft}
             />
           ) : mode === "debate" ? (
             <Stage3DebateTable

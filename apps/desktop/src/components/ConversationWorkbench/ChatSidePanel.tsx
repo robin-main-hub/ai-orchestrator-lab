@@ -23,6 +23,12 @@ import {
   parseStoredPanelWidth,
 } from "../../lib/chatSidePanelWidth";
 import type { ActivePreviewRef } from "../../lib/activePreviewRef";
+import {
+  formatPreviewViewportClickForPrompt,
+  makePreviewViewportAnnotation,
+  type PreviewAnnotationDraft,
+  type PreviewViewportClick,
+} from "../../lib/previewAnnotations";
 import { PreviewIframe } from "../PreviewIframe";
 
 /**
@@ -258,13 +264,26 @@ export function ChatSidePanelStub({ mode }: { mode: ChatSidePanelMode }) {
 export function ChatSidePanelPreviewContent({
   previewUrl,
   previewMeta,
+  onSendPreviewAnnotation,
 }: {
   previewUrl?: string;
   previewMeta?: Pick<ActivePreviewRef, "missionId" | "observedAt">;
+  onSendPreviewAnnotation?: (draft: PreviewAnnotationDraft) => void;
 }) {
+  const [capturedClick, setCapturedClick] = useState<PreviewViewportClick | null>(null);
+
   if (!previewUrl) {
     return <ChatSidePanelStub mode="preview" />;
   }
+
+  const annotation = capturedClick
+    ? makePreviewViewportAnnotation({
+      id: `preview_click_${capturedClick.capturedAt.replace(/[^0-9]/g, "")}`,
+      click: capturedClick,
+    })
+    : null;
+
+  const sendDisabled = !annotation || !previewMeta?.missionId || !onSendPreviewAnnotation;
 
   return (
     <div className="p-2" data-testid="chat-side-panel-preview-iframe-wrap">
@@ -276,7 +295,46 @@ export function ChatSidePanelPreviewContent({
         {previewMeta?.missionId ? <> · {previewMeta.missionId}</> : null}
         {previewMeta?.observedAt ? <> · {previewMeta.observedAt.slice(0, 16).replace("T", " ")}</> : null}
       </div>
-      <PreviewIframe url={previewUrl} testIdPrefix="chat-side" height={520} />
+      <PreviewIframe
+        url={previewUrl}
+        testIdPrefix="chat-side"
+        height={520}
+        onViewportClick={setCapturedClick}
+      />
+      {capturedClick && annotation ? (
+        <div
+          className="mt-2 rounded-md border border-sky-400/25 bg-sky-500/10 p-2 text-xs text-zinc-200"
+          data-testid="chat-side-panel-preview-annotation"
+        >
+          <div className="font-medium text-sky-100">
+            {formatPreviewViewportClickForPrompt(capturedClick)}
+          </div>
+          <div className="mt-1 text-zinc-400">
+            x {capturedClick.x}px · y {capturedClick.y}px · viewport {capturedClick.viewportWidth}x{capturedClick.viewportHeight}
+          </div>
+          <div className="mt-1 text-amber-300">
+            DOM selector unknown due to iframe boundary
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mt-2"
+            disabled={sendDisabled}
+            data-testid="chat-side-panel-preview-send-annotation"
+            onClick={() => {
+              if (!annotation || !previewMeta?.missionId || !onSendPreviewAnnotation) return;
+              onSendPreviewAnnotation({
+                missionId: previewMeta.missionId,
+                annotation,
+                sentAt: new Date().toISOString(),
+              });
+            }}
+          >
+            Turbo Edits에 보내기
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
