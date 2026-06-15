@@ -49,7 +49,7 @@ import {
 import { postDgxMissionScaffoldOverlay } from "../runtime/stage47MissionServer";
 import type { VisualQaReport } from "@ai-orchestrator/protocol";
 import type { VisualQaDiff } from "../lib/visualQaDiff";
-import type { ActivePreviewRef } from "../lib/activePreviewRef";
+import { resolvePreviewRef, type ActivePreviewRef, type ActivePreviewRefMap } from "../lib/activePreviewRef";
 import { MissionRecordSync } from "./MissionRecordSync";
 import type { ProjectRecordController } from "../hooks/useProjectRecordController";
 import { useProjectRecordSync } from "../hooks/useProjectRecordSync";
@@ -166,7 +166,7 @@ export function MissionBoardPanel({
   onPreviewObserved,
   previewAnnotationDraft,
   projectRecordController,
-  activePreviewRef,
+  activePreviewRefByMissionId,
   publishHistoryByMission,
 }: {
   snapshot: MissionBoardSnapshot;
@@ -203,7 +203,7 @@ export function MissionBoardPanel({
   /** OSS-H10 — ProjectRecord index에 missionId별 상태를 영속화하는 controller. 없으면 sync 0(기본 동작 그대로). */
   projectRecordController?: ProjectRecordController;
   /** App.tsx가 들고 있는 가장 최근 observed preview ref. 다른 미션이면 sync는 무시. */
-  activePreviewRef?: ActivePreviewRef | null;
+  activePreviewRefByMissionId?: ActivePreviewRefMap;
   /** Container가 누적한 단계별 publish history(missionId → branch/file/pr latest). hasDraft 판정용. */
   publishHistoryByMission?: Record<string, PublishHistoryByStep>;
 }) {
@@ -376,7 +376,7 @@ export function MissionBoardPanel({
                   <MissionRecordSync
                     controller={projectRecordController}
                     item={item}
-                    activePreviewRef={activePreviewRef ?? null}
+                    activePreviewRef={resolvePreviewRef(activePreviewRefByMissionId ?? {}, item.missionId) ?? null}
                     publishHistory={publishHistoryByMission?.[item.missionId]}
                     scaffoldFileCount={publishEnvironment?.getScaffoldFiles?.(item)?.length}
                   />
