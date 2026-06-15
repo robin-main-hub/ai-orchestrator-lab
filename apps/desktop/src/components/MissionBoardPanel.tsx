@@ -37,6 +37,7 @@ import { annotationsToTurboEditIssues, type PreviewAnnotation } from "../lib/pre
 import { postDgxMissionScaffoldOverlay } from "../runtime/stage47MissionServer";
 import type { VisualQaReport } from "@ai-orchestrator/protocol";
 import type { VisualQaDiff } from "../lib/visualQaDiff";
+import type { ActivePreviewRef } from "../lib/activePreviewRef";
 import {
   builtinMissionPrefill,
   computeNextPublishStep,
@@ -147,6 +148,7 @@ export function MissionBoardPanel({
   expandedMissionId,
   onToggleDetail,
   publishEnvironment,
+  onPreviewObserved,
 }: {
   snapshot: MissionBoardSnapshot;
   loading?: boolean;
@@ -175,6 +177,8 @@ export function MissionBoardPanel({
   onToggleDetail?: (item: MissionBoardItem) => void;
   /** 제공 시 Workspace 상세에 "GitHub로 내보내기" CTA + GithubPublishPanel을 노출(접힘 기본). */
   publishEnvironment?: MissionPublishEnvironment;
+  /** PreviewRunCard가 observed URL을 받았을 때 부모(App)까지 전달한다. 실패 outcome은 호출하지 않는다. */
+  onPreviewObserved?: (ref: ActivePreviewRef) => void;
 }) {
   return (
     <section className="mini-panel mission-board-panel">
@@ -330,7 +334,13 @@ export function MissionBoardPanel({
                       Workspace 상세
                       <span className="mission-board-detail-counts">{detailCountLabel(item)}</span>
                     </button>
-                    {expandedMissionId === item.missionId ? <MissionWorkspaceDetail item={item} publishEnvironment={publishEnvironment} /> : null}
+                    {expandedMissionId === item.missionId ? (
+                      <MissionWorkspaceDetail
+                        item={item}
+                        publishEnvironment={publishEnvironment}
+                        onPreviewObserved={onPreviewObserved}
+                      />
+                    ) : null}
                   </div>
                 ) : null}
               </li>
@@ -409,9 +419,11 @@ function severityVariant(severity: "low" | "medium" | "high"): StatusBadgeVarian
 function MissionWorkspaceDetail({
   item,
   publishEnvironment,
+  onPreviewObserved,
 }: {
   item: MissionBoardItem;
   publishEnvironment?: MissionPublishEnvironment;
+  onPreviewObserved?: (ref: ActivePreviewRef) => void;
 }) {
   // 기본 접힘 — 사용자 명시 클릭으로만 GithubPublishPanel을 마운트한다.
   // (publishEnvironment가 없으면 CTA 자체를 그리지 않아 부모가 opt-in한 경우에만 노출.)
@@ -677,6 +689,7 @@ function MissionWorkspaceDetail({
         hasScaffoldFiles={(publishEnvironment?.getScaffoldFiles?.(item)?.length ?? 0) > 0}
         serverBaseUrl={publishEnvironment?.serverBaseUrl}
         fetchImpl={publishEnvironment?.fetchImpl}
+        onPreviewObserved={onPreviewObserved}
         onContextEvent={(type, payload) =>
           publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
         }

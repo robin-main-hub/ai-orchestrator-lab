@@ -22,6 +22,8 @@ import {
   panelWidthFromPointerX,
   parseStoredPanelWidth,
 } from "../../lib/chatSidePanelWidth";
+import type { ActivePreviewRef } from "../../lib/activePreviewRef";
+import { PreviewIframe } from "../PreviewIframe";
 
 /**
  * Codex식 확장 패널 — 대화를 가리지 않는 우측 분할 패널.
@@ -249,6 +251,32 @@ export function ChatSidePanelStub({ mode }: { mode: ChatSidePanelMode }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
       <p className="text-[12.5px] leading-relaxed text-zinc-500">{guide[mode] ?? "준비 중입니다."}</p>
+    </div>
+  );
+}
+
+export function ChatSidePanelPreviewContent({
+  previewUrl,
+  previewMeta,
+}: {
+  previewUrl?: string;
+  previewMeta?: Pick<ActivePreviewRef, "missionId" | "observedAt">;
+}) {
+  if (!previewUrl) {
+    return <ChatSidePanelStub mode="preview" />;
+  }
+
+  return (
+    <div className="p-2" data-testid="chat-side-panel-preview-iframe-wrap">
+      <div
+        className="mb-2 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-zinc-400"
+        data-testid="chat-side-panel-preview-meta"
+      >
+        마지막 observed preview
+        {previewMeta?.missionId ? <> · {previewMeta.missionId}</> : null}
+        {previewMeta?.observedAt ? <> · {previewMeta.observedAt.slice(0, 16).replace("T", " ")}</> : null}
+      </div>
+      <PreviewIframe url={previewUrl} testIdPrefix="chat-side" height={520} />
     </div>
   );
 }

@@ -17,6 +17,7 @@ import type { MissionScaffoldFile, PublishHistoryByStep } from "../lib/missionPu
 import { accumulatePublishHistory } from "../lib/missionPublishPrefill";
 import { publishEnvironmentWithScaffolds } from "../lib/publishEnvironmentWithScaffolds";
 import { MissionBoardPanel, type MissionPublishEnvironment } from "./MissionBoardPanel";
+import type { ActivePreviewRef } from "../lib/activePreviewRef";
 
 /**
  * Mission Board 컨테이너 — 풀 루프 글루:
@@ -38,6 +39,7 @@ export function MissionBoardContainer({
   debateId,
   publishEnvironment,
   refreshScaffoldHandleRef,
+  onPreviewObserved,
 }: {
   serverBaseUrl?: string | string[];
   /** 검증 명령 소스 + 미션 생성 시드 — 현재 CodingPacket */
@@ -65,6 +67,8 @@ export function MissionBoardContainer({
    * 자동 실행 없음 — 부모가 명시적으로 호출할 때만 동작.
    */
   refreshScaffoldHandleRef?: React.MutableRefObject<((missionId: string) => void) | null>;
+  /** observed preview URL을 App까지 올린다. preview_not_running/materialize_failed/error에서는 호출되지 않는다. */
+  onPreviewObserved?: (ref: ActivePreviewRef) => void;
 }) {
   const [snapshot, setSnapshot] = useState<MissionBoardSnapshot>(() =>
     mergeMissionBoard({ serverRecords: undefined, localItems, serverError: "아직 불러오지 않음" }),
@@ -359,6 +363,7 @@ export function MissionBoardContainer({
         setExpandedMissionId((current) => (current === item.missionId ? undefined : item.missionId))
       }
       publishEnvironment={mergedPublishEnvironment}
+      onPreviewObserved={onPreviewObserved}
     />
   );
 }
