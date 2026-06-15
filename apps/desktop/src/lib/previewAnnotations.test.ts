@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   addAnnotation,
   annotationsToTurboEditIssues,
+  formatPreviewViewportClickForPrompt,
   makeAnnotation,
+  makePreviewViewportAnnotation,
   removeAnnotation,
   type PreviewAnnotation,
 } from "./previewAnnotations";
@@ -131,6 +133,28 @@ describe("annotationsToTurboEditIssues", () => {
       }),
     ]);
     expect(issues[0]!.summary).toBe("[헤더 오른쪽 · 좌표 80% / 5%] primary action 약함");
+  });
+
+  it("(I9) viewport click annotation은 좌표/URL만 prompt context로 내보내고 selector unknown을 명시한다", () => {
+    const annotation = makePreviewViewportAnnotation({
+      id: "click1",
+      click: {
+        url: "http://127.0.0.1:5173/",
+        x: 43,
+        y: 62,
+        percentX: 43,
+        percentY: 62,
+        viewportWidth: 100,
+        viewportHeight: 100,
+        capturedAt: "2026-06-15T00:00:00.000Z",
+      },
+    });
+    const issues = annotationsToTurboEditIssues([annotation]);
+    expect(formatPreviewViewportClickForPrompt(annotation.viewportClick!)).toBe(
+      "User clicked preview at 43% x, 62% y on http://127.0.0.1:5173/",
+    );
+    expect(issues[0]!.summary).toBe("User clicked preview at 43% x, 62% y on http://127.0.0.1:5173/");
+    expect(issues[0]!.recommendation).toContain("DOM selector unknown due to iframe boundary");
   });
 });
 

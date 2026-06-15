@@ -7,6 +7,7 @@ import {
   PREVIEW_REVISION_HINT_KIND_LABEL,
   type PreviewRevisionHint,
 } from "../lib/previewRevisionHint";
+import type { ActivePreviewRef } from "../lib/activePreviewRef";
 import { PreviewIframe } from "./PreviewIframe";
 
 /**
@@ -39,16 +40,6 @@ const STATUS_LABEL: Record<string, string> = {
   not_configured: "서버 미설정",
   materialize_failed: "파일 풀기 실패",
   error: "오류",
-};
-
-/**
- * observed preview의 마지막 확인 — App.tsx까지 lift해서 ChatSidePanel "미리보기" 탭에
- * 같은 URL을 임베드한다. preview_not_running / error 분기에서는 절대 호출하지 않는다(가짜 URL 갱신 금지).
- */
-export type ActivePreviewRef = {
-  missionId: string;
-  url: string;
-  observedAt: string;
 };
 
 export function PreviewRunCard({
@@ -115,6 +106,7 @@ export function PreviewRunCard({
         repoRoot: res.repoRoot ?? "",
         fileCount: res.materializedFileCount ?? 0,
       });
+      onPreviewObserved?.({ missionId, url: res.preview.url, observedAt });
       onContextEvent?.("mission.preview.run-scaffold.observed", {
         missionId,
         url: res.preview.url,
@@ -122,13 +114,6 @@ export function PreviewRunCard({
         fileCount: res.materializedFileCount,
         port: res.preview.port,
         ts: observedAt,
-      });
-      // App.tsx까지 lift — ChatSidePanel "미리보기" 탭이 같은 URL을 임베드할 수 있게.
-      // observed 분기에서만 호출. 다른 outcome에서는 절대 갱신하지 않는다(정직성).
-      onPreviewObserved?.({
-        missionId,
-        url: res.preview.url,
-        observedAt,
       });
       return;
     }
