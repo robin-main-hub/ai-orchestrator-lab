@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { useProjectRecordController } from "./useProjectRecordController";
@@ -228,8 +229,11 @@ describe("useProjectRecordController", () => {
 
   it("records are sorted by updatedAt descending", () => {
     const storage = new MemoryStorage();
+    // Hoist the clock outside renderHook — the counter must keep advancing across
+    // re-renders, otherwise each render resets to t=0 and updatedAt ordering is lost.
+    const clock = makeClock("2026-06-15T01:00:00.000Z");
     const { result } = renderHook(() =>
-      useProjectRecordController({ now: makeClock("2026-06-15T01:00:00.000Z"), storage }),
+      useProjectRecordController({ now: clock, storage }),
     );
 
     act(() => {
