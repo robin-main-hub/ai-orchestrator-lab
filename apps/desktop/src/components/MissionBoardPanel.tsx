@@ -49,6 +49,9 @@ import { postDgxMissionScaffoldOverlay } from "../runtime/stage47MissionServer";
 import type { VisualQaReport } from "@ai-orchestrator/protocol";
 import type { VisualQaDiff } from "../lib/visualQaDiff";
 import type { ActivePreviewRef } from "../lib/activePreviewRef";
+import { MissionRecordSync } from "./MissionRecordSync";
+import type { ProjectRecordController } from "../hooks/useProjectRecordController";
+import { useProjectRecordSync } from "../hooks/useProjectRecordSync";
 import {
   builtinMissionPrefill,
   computeNextPublishStep,
@@ -161,6 +164,9 @@ export function MissionBoardPanel({
   publishEnvironment,
   onPreviewObserved,
   previewAnnotationDraft,
+  projectRecordController,
+  activePreviewRef,
+  publishHistoryByMission,
 }: {
   snapshot: MissionBoardSnapshot;
   loading?: boolean;
@@ -193,6 +199,12 @@ export function MissionBoardPanel({
   onPreviewObserved?: (ref: ActivePreviewRef) => void;
   /** ChatSidePanel preview 좌표 annotation을 Workspace Turbo prompt에 합류시킨다. */
   previewAnnotationDraft?: PreviewAnnotationDraft | null;
+  /** OSS-H10 — ProjectRecord index에 missionId별 상태를 영속화하는 controller. 없으면 sync 0(기본 동작 그대로). */
+  projectRecordController?: ProjectRecordController;
+  /** App.tsx가 들고 있는 가장 최근 observed preview ref. 다른 미션이면 sync는 무시. */
+  activePreviewRef?: ActivePreviewRef | null;
+  /** Container가 누적한 단계별 publish history(missionId → branch/file/pr latest). hasDraft 판정용. */
+  publishHistoryByMission?: Record<string, PublishHistoryByStep>;
 }) {
   return (
     <section className="mini-panel mission-board-panel">
@@ -354,9 +366,19 @@ export function MissionBoardPanel({
                         publishEnvironment={publishEnvironment}
                         onPreviewObserved={onPreviewObserved}
                         previewAnnotationDraft={previewAnnotationDraft}
+                        projectRecordController={projectRecordController}
                       />
                     ) : null}
                   </div>
+                ) : null}
+                {projectRecordController ? (
+                  <MissionRecordSync
+                    controller={projectRecordController}
+                    item={item}
+                    activePreviewRef={activePreviewRef ?? null}
+                    publishHistory={publishHistoryByMission?.[item.missionId]}
+                    scaffoldFileCount={publishEnvironment?.getScaffoldFiles?.(item)?.length}
+                  />
                 ) : null}
               </li>
             );
@@ -436,11 +458,13 @@ function MissionWorkspaceDetail({
   publishEnvironment,
   onPreviewObserved,
   previewAnnotationDraft,
+  projectRecordController,
 }: {
   item: MissionBoardItem;
   publishEnvironment?: MissionPublishEnvironment;
   onPreviewObserved?: (ref: ActivePreviewRef) => void;
   previewAnnotationDraft?: PreviewAnnotationDraft | null;
+  projectRecordController?: ProjectRecordController;
 }) {
   // 기본 접힘 — 사용자 명시 클릭으로만 GithubPublishPanel을 마운트한다.
   // (publishEnvironment가 없으면 CTA 자체를 그리지 않아 부모가 opt-in한 경우에만 노출.)
@@ -575,6 +599,15 @@ function MissionWorkspaceDetail({
     () => buildEditTimeline(editHistoryEvents),
     [editHistoryEvents],
   );
+  // OSS-H10 — MWD가 펼쳐졌을 때만 editTimeline raw items를 ProjectRecord로 흘린다.
+  // controller가 없으면 noopController가 흡수해서 부수효과 0.
+  useProjectRecordSync({
+    controller: projectRecordController ?? noopProjectRecordController,
+    missionId: item.missionId,
+    title: item.title,
+    goal: item.goal,
+    editTimelineItems: editTimeline,
+  });
   // AppFixDraft는 latestQaReport에서 결정적으로 빌드(추가 호출 0).
   const appFixDraftForTurbo = useMemo(
     () => (latestQaReport ? buildAppFixDraftFromVisualQa(latestQaReport) : undefined),
@@ -1119,3 +1152,24 @@ function PublishFlowSummary({
     </div>
   );
 }
+
+// OSS-H10 — controller 미제공 시 사용하는 noop singleton. 같은 reference를 돌려줘
+// useProjectRecordSync 의존성 비교가 안정적이게 유지한다. 부수효과 0.
+const noopProjectRecordController: ProjectRecordController = {
+  records: [],
+  find: () => undefined,
+  ensureRecord: () => ({
+    missionId: "",
+    title: "",
+    scaffold: "unknown",
+    editTimeline: { totalEvents: 0, hasRestorablePatch: false },
+    createdAt: "",
+    updatedAt: "",
+  }),
+  recordPreview: () => {},
+  recordVisualQa: () => {},
+  recordScaffold: () => {},
+  recordEditTimeline: () => {},
+  recordPublishStatus: () => {},
+  remove: () => {},
+};

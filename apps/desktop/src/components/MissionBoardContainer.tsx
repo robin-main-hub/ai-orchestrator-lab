@@ -19,6 +19,8 @@ import { publishEnvironmentWithScaffolds } from "../lib/publishEnvironmentWithSc
 import { MissionBoardPanel, type MissionPublishEnvironment } from "./MissionBoardPanel";
 import type { ActivePreviewRef } from "../lib/activePreviewRef";
 import type { PreviewAnnotationDraft } from "../lib/previewAnnotations";
+import { RecentProjectsPanel } from "./RecentProjectsPanel";
+import type { ProjectRecordController } from "../hooks/useProjectRecordController";
 
 /**
  * Mission Board 컨테이너 — 풀 루프 글루:
@@ -42,6 +44,10 @@ export function MissionBoardContainer({
   refreshScaffoldHandleRef,
   onPreviewObserved,
   previewAnnotationDraft,
+  projectRecordController,
+  activePreviewRef,
+  pendingResumeMissionId,
+  onResumeConsumed,
 }: {
   serverBaseUrl?: string | string[];
   /** 검증 명령 소스 + 미션 생성 시드 — 현재 CodingPacket */
@@ -73,6 +79,14 @@ export function MissionBoardContainer({
   onPreviewObserved?: (ref: ActivePreviewRef) => void;
   /** ChatSidePanel에서 Turbo Edits로 보낸 최신 좌표 annotation draft. */
   previewAnnotationDraft?: PreviewAnnotationDraft | null;
+  /** OSS-H10 — App이 들고 있는 ProjectRecord controller. 없으면 RecentProjectsPanel/sync 모두 비활성. */
+  projectRecordController?: ProjectRecordController;
+  /** App이 들고 있는 가장 최근 observed preview ref. MissionRecordSync가 자기 mission이면 흘려보냄. */
+  activePreviewRef?: ActivePreviewRef | null;
+  /** RecentProjectsPanel "이어서" 클릭으로 들어온 mission id. 받으면 해당 detail을 펼치고 소비 알림. */
+  pendingResumeMissionId?: string | null;
+  /** pendingResumeMissionId 소비 완료를 부모에게 알린다(중복 expand 방지). */
+  onResumeConsumed?: () => void;
 }) {
   const [snapshot, setSnapshot] = useState<MissionBoardSnapshot>(() =>
     mergeMissionBoard({ serverRecords: undefined, localItems, serverError: "아직 불러오지 않음" }),
@@ -348,8 +362,33 @@ export function MissionBoardContainer({
     };
   }, [publishEnvironment, scaffoldCacheByMission, publishHistoryByMission, defaultRefreshScaffold]);
 
+  // OSS-H10 — RecentProjectsPanel "이어서" 클릭 시 해당 mission detail을 펼친다.
+  // 자동 rerun 0: 단지 expandedMissionId만 setting. preview/QA/provider/overlay/publish 자동 호출 금지.
+  useEffect(() => {
+    if (!pendingResumeMissionId) return;
+    setExpandedMissionId(pendingResumeMissionId);
+    onResumeConsumed?.();
+  }, [pendingResumeMissionId, onResumeConsumed]);
+
+  // OSS-H10 — Resume handler: 같은 컨테이너가 RecentProjectsPanel을 마운트하므로
+  // 외부 라우팅 없이 직접 expandedMissionId만 갱신. 가짜 자동 실행 절대 없음.
+  const handleResumeProject = useCallback(
+    (missionId: string) => {
+      setExpandedMissionId(missionId);
+    },
+    [setExpandedMissionId],
+  );
+
   return (
-    <MissionBoardPanel
+    <div className="mission-board-container">
+      {projectRecordController ? (
+        <RecentProjectsPanel
+          records={projectRecordController.records}
+          onSelectProject={handleResumeProject}
+          onRemoveProject={projectRecordController.remove}
+        />
+      ) : null}
+      <MissionBoardPanel
       snapshot={snapshot}
       loading={loading}
       creating={creating}
@@ -369,6 +408,10 @@ export function MissionBoardContainer({
       publishEnvironment={mergedPublishEnvironment}
       onPreviewObserved={onPreviewObserved}
       previewAnnotationDraft={previewAnnotationDraft}
-    />
+      projectRecordController={projectRecordController}
+      activePreviewRef={activePreviewRef}
+      publishHistoryByMission={publishHistoryByMission}
+      />
+    </div>
   );
 }
