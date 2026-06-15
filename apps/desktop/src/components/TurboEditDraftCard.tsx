@@ -48,8 +48,8 @@ export function TurboEditDraftCard({
   /** "초안으로 보내기" 클릭 — 부모(MissionBoardPanel)가 SearchReplaceEditCard text로 주입. */
   onSendDraft: (text: string) => void;
   onContextEvent?: (type: string, payload: Record<string, unknown>) => void;
-  /** OSS-H6: in-app provider 호출. 부모가 active provider/model로 만든 generator를 주입.
-   *  undefined면 카드는 외부 LLM 복붙 경로만 노출(가짜 버튼 X). */
+  /** H8: in-app provider 호출. 부모가 active provider/model로 만든 generator를 주입.
+   *  undefined면 disabled 버튼과 외부 LLM 복붙 안내를 노출한다. */
   onGenerate?: TurboEditGenerator;
   /** "AI 수정 초안 생성" 버튼 옆에 표시할 provider/model 라벨(있을 때만). */
   providerLabel?: string;
@@ -322,7 +322,7 @@ export function TurboEditDraftCard({
       </CardContent>
 
       <CardFooter className="flex items-center gap-2 flex-wrap">
-        {/* OSS-H6: in-app provider 생성 — onGenerate 주입된 경우만 노출. */}
+        {/* H8: in-app provider 생성. 자동 적용/preview rerun 없이 textarea 주입까지만. */}
         {onGenerate ? (
           <Button
             type="button"
@@ -330,17 +330,30 @@ export function TurboEditDraftCard({
             variant="secondary"
             onClick={onClickGenerate}
             disabled={!prompt || prompt.empty || generating}
+            data-state={generating ? "generating" : "ready"}
             data-testid={`turbo-edits-generate-${missionId}`}
           >
             <Sparkles size={11} /> {generating ? "생성 중..." : "AI 수정 초안 생성"}
           </Button>
         ) : (
-          <span
-            className="text-xs text-muted-foreground"
-            data-testid={`turbo-edits-generate-unavailable-${missionId}`}
-          >
-            provider 미설정 — 위 "프롬프트 복사"로 외부 LLM 경로를 쓰세요
-          </span>
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled
+              data-state="unavailable"
+              data-testid={`turbo-edits-generate-${missionId}`}
+            >
+              <Sparkles size={11} /> AI 수정 초안 생성
+            </Button>
+            <span
+              className="text-xs text-muted-foreground"
+              data-testid={`turbo-edits-generate-unavailable-${missionId}`}
+            >
+              provider/model 미설정 — 위 "프롬프트 복사"로 외부 LLM 경로를 쓰세요
+            </span>
+          </>
         )}
         {providerLabel && onGenerate ? (
           <span

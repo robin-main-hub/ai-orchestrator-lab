@@ -570,6 +570,10 @@ function MissionWorkspaceDetail({
   const [pendingAnnotationCoords, setPendingAnnotationCoords] = useState<
     { xPct: number; yPct: number } | undefined
   >(undefined);
+  const turboEditGeneratorHandle = useMemo(
+    () => publishEnvironment?.getTurboEditGenerator?.(item),
+    [publishEnvironment, item],
+  );
   return (
     <div className="mission-workspace-detail">
       {/* AppWorkspace + preview (D2/D4/D5a) */}
@@ -657,7 +661,7 @@ function MissionWorkspaceDetail({
       />
 
       {/* Turbo Edits Draft (OSS-H5/H6/H7) — LLM이 SEARCH/REPLACE 블록을 만들도록 prompt를 빌드.
-          H6: onGenerate가 주입되면 앱 안에서 provider 호출까지 가능(외부 LLM 복붙 경로는 유지).
+          H8: onGenerate가 주입되면 앱 안에서 provider 호출까지 가능(외부 LLM 복붙 경로는 유지).
           H7: PreviewAnnotatePanel의 annotation들이 extraIssues로 합류.
           자동 overlay/Preview 0 — 응답 valid면 SearchReplaceEditCard에만 자동 주입. */}
       <TurboEditDraftCard
@@ -670,8 +674,8 @@ function MissionWorkspaceDetail({
         onContextEvent={(type, payload) =>
           publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
         }
-        onGenerate={publishEnvironment?.getTurboEditGenerator?.(item)?.generator}
-        providerLabel={publishEnvironment?.getTurboEditGenerator?.(item)?.providerLabel}
+        onGenerate={turboEditGeneratorHandle?.generator}
+        providerLabel={turboEditGeneratorHandle?.providerLabel}
       />
 
       {/* Search/Replace Edit (OSS-H4) — Aider 스타일 좁은 편집을 그대로 ScaffoldOverlay로.
