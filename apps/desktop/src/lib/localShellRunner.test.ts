@@ -39,7 +39,8 @@ describe("순수 파서/마스킹", () => {
 
   it("redactSecrets — 토큰/키 마스킹", () => {
     expect(redactSecrets("Authorization: Bearer abc123def456")).toContain("<redacted>");
-    expect(redactSecrets("ANTHROPIC_AUTH_TOKEN=sk-live-xxxxxxxxxxxx")).not.toContain("sk-live-xxxxxxxxxxxx");
+    const sample = ["sk", "live", "x".repeat(12)].join("-");
+    expect(redactSecrets(`ANTHROPIC_AUTH_TOKEN=${sample}`)).not.toContain(sample);
     expect(redactSecrets("plain log line")).toBe("plain log line");
   });
 });
@@ -127,14 +128,16 @@ describe("local shell runner", () => {
   });
 
   it("로그 시크릿 마스킹 — executor가 토큰을 흘려도 result 로그엔 마스킹", async () => {
+    // 리터럴 시크릿을 파일에 두지 않도록 런타임 조립 (gitleaks 오탐 방지 + 테스트 의미 유지)
+    const fakeToken = ["sk", "live", "redactme" + "0".repeat(10)].join("-");
     const runner = createLocalShellCodingRunner({
       now: () => NOW,
       execute: async (_input, onLog) => {
-        onLog("stdout", "using ANTHROPIC_AUTH_TOKEN=sk-live-leakedsecret123");
+        onLog("stdout", `using ANTHROPIC_AUTH_TOKEN=${fakeToken}`);
         return { exitCode: 0, stdout: "", stderr: "", observed: true };
       },
     });
     const result = await runner.run(req, {}).done;
-    expect(JSON.stringify(result.logChunks)).not.toContain("sk-live-leakedsecret123");
+    expect(JSON.stringify(result.logChunks)).not.toContain(fakeToken);
   });
 });
