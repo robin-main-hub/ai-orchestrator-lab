@@ -57,13 +57,13 @@ import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { AgentPortrait, type AgentState } from "../shared/AgentActivity";
 import { AgentConfigDrawer } from "../AgentConfigDrawer";
-import { PreviewIframe } from "../PreviewIframe";
 import { AgentConversationFlowPanel } from "./AgentConversationFlowPanel";
 import { AgentHermesControlCard } from "./AgentHermesControlCard";
 import { LiveTerminalPanel } from "./LiveTerminalPanel";
 import {
   ChatSidePanel,
   ChatSidePanelMenu,
+  ChatSidePanelPreviewContent,
   ChatSidePanelStub,
   type ChatSidePanelMode,
 } from "./ChatSidePanel";
@@ -78,6 +78,7 @@ import { WorkTheater } from "./WorkTheater";
 import { WorkspaceDiffPanel, WorkspaceFilesPanel } from "./WorkspaceChangesPanel";
 import { buildForkBrief, forkMissionFromConversation } from "../../lib/conversationFork";
 import { workbenchMissionStore } from "../../lib/workbenchMissions";
+import type { ActivePreviewRef } from "../../lib/activePreviewRef";
 import {
   contextUsagePercent,
   estimateCostUsd,
@@ -168,6 +169,7 @@ export function ConversationWorkbench({
   onApproveCommandPattern,
   onStartSwarmSearch,
   previewUrl,
+  previewMeta,
 }: {
   activeSessionId: string;
   /** "에이전트" 사이드 패널 모드에 주입되는 에이전트 레일 (App의 AgentsSidebar) */
@@ -269,6 +271,8 @@ export function ConversationWorkbench({
   /** ChatSidePanel "미리보기" 탭에서 임베드할 preview URL. observed Preview가 있을 때만 부모가 전달.
    *  undefined면 탭은 정직한 안내(stub)만 표시. 자동 실행 X. */
   previewUrl?: string;
+  /** 마지막 observed preview의 출처. URL 없는 실패 outcome은 이 값으로 승격하지 않는다. */
+  previewMeta?: Pick<ActivePreviewRef, "missionId" | "observedAt">;
 }) {
   const [activeAgentDetailPanel, setActiveAgentDetailPanel] = useState<AgentDetailPanel>("none");
   const persona = agentPersona ?? (selectedAgent ? createDefaultPersonaSettings(selectedAgent) : undefined);
@@ -798,13 +802,7 @@ export function ConversationWorkbench({
 
         <ChatSidePanel mode={sidePanelMode} onClose={() => setSidePanelMode("none")}>
           {sidePanelMode === "preview" ? (
-            previewUrl ? (
-              <div className="p-2" data-testid="chat-side-panel-preview-iframe-wrap">
-                <PreviewIframe url={previewUrl} testIdPrefix="chat-side" height={520} />
-              </div>
-            ) : (
-              <ChatSidePanelStub mode="preview" />
-            )
+            <ChatSidePanelPreviewContent previewUrl={previewUrl} previewMeta={previewMeta} />
           ) : null}
           {sidePanelMode === "background" ? (
             <>

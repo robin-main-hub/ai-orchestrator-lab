@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { ChatSidePanelMenu, ChatSidePanelStub, type ChatSidePanelMode } from "./ChatSidePanel";
+import {
+  ChatSidePanelMenu,
+  ChatSidePanelPreviewContent,
+  ChatSidePanelStub,
+  type ChatSidePanelMode,
+} from "./ChatSidePanel";
 
 afterEach(() => cleanup());
 
@@ -23,6 +28,26 @@ describe("ChatSidePanel — 미리보기(preview) 탭 살리기", () => {
     const text = document.body.textContent ?? "";
     expect(text).toContain("Mission Workspace");
     expect(text).toContain("X-Frame-Options");
+  });
+
+  it("(C3) previewUrl이 있으면 실제 PreviewIframe과 마지막 observed 메타를 렌더", () => {
+    render(
+      <ChatSidePanelPreviewContent
+        previewUrl="http://127.0.0.1:5173/"
+        previewMeta={{ missionId: "mission_preview", observedAt: "2026-06-15T00:00:00.000Z" }}
+      />,
+    );
+
+    expect(screen.getByTestId("chat-side-panel-preview-meta").textContent).toContain("mission_preview");
+    expect(screen.getByTestId("preview-iframe-chat-side")).toBeTruthy();
+    expect((screen.getByTestId("preview-iframe-frame-chat-side") as HTMLIFrameElement).src).toBe("http://127.0.0.1:5173/");
+  });
+
+  it("(C4) previewUrl이 없으면 기존 정직 stub을 유지", () => {
+    render(<ChatSidePanelPreviewContent />);
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Mission Workspace");
+    expect(screen.queryByTestId("preview-iframe-chat-side")).toBeNull();
   });
 });
 
