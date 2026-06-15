@@ -339,6 +339,7 @@ import {
 import { readJsonState, writeJsonState } from "./lib/persistentJsonState";
 import type { ActivePreviewRef } from "./lib/activePreviewRef";
 import type { PreviewAnnotationDraft } from "./lib/previewAnnotations";
+import { useProjectRecordController } from "./hooks/useProjectRecordController";
 import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbenchDerived";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 import { SummonTheater } from "./components/SummonTheater";
@@ -736,6 +737,11 @@ export function App() {
    */
   const [missionIdBySourceSessionId, setMissionIdBySourceSessionId] = useState<Record<string, string>>({});
   const [previewAnnotationDraft, setPreviewAnnotationDraft] = useState<PreviewAnnotationDraft | null>(null);
+  // OSS-H10 — ProjectRecord 영속화 layer. 단일 호출. RunWorkspace.boardProps로 내려보낸다.
+  // 자동 rerun/provider 호출/GitHub write 0 — 단지 mission state를 missionId별로 영속화하고 RecentProjectsPanel에 노출.
+  const projectRecordController = useProjectRecordController();
+  // RecentProjectsPanel "이어서" 클릭 target. MissionBoardContainer가 펼친 뒤 onResumeConsumed로 비운다.
+  const [pendingResumeMissionId, setPendingResumeMissionId] = useState<string | null>(null);
   /**
    * MissionBoardContainer가 노출하는 scaffold 캐시 invalidate 함수에 대한 외부 핸들.
    * BlueprintReviewCard의 "수정안으로 스캐폴드 다시 생성" 클릭 → handler가 이 ref로 invalidate
@@ -5250,6 +5256,10 @@ export function App() {
                 refreshScaffoldHandleRef,
                 onPreviewObserved: handlePreviewObserved,
                 previewAnnotationDraft,
+                projectRecordController,
+                activePreviewRef,
+                pendingResumeMissionId,
+                onResumeConsumed: () => setPendingResumeMissionId(null),
                 /**
                  * GitHub Publish 표면(opt-in) — Workspace 상세에 "GitHub로 내보내기" CTA를 노출한다.
                  *
