@@ -15,6 +15,8 @@ import {
   type CodingRunnerState,
   type CodingRunnerTool,
 } from "../../lib/codingRunner";
+import { createLocalShellCodingRunner } from "../../lib/localShellRunner";
+import { createServerShellExecutor } from "../../lib/serverShellExecutor";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,18 +42,28 @@ export function CodingRunnerCard({
   defaultPrompt,
   allowedTools = ["read", "grep", "glob", "edit", "test"],
   runner,
+  sessionId,
+  serverBaseUrl,
 }: {
   missionId: string;
   repoRoot?: string;
   defaultPrompt?: string;
   allowedTools?: CodingRunnerTool[];
-  /** 주입 안 하면 mock runner — 진짜 OpenCode runner는 같은 인터페이스로 교체 */
+  /** 주입 안 하면 kind 토글(mock/local) — 진짜 OpenCode runner도 같은 인터페이스로 교체 */
   runner?: CodingRunner;
+  /** local 실행을 dgx-02 게이트로 보낼 때 필요 */
+  sessionId?: string;
+  serverBaseUrl?: string | string[];
 }) {
   const [prompt, setPrompt] = useState(defaultPrompt ?? "");
+  const [kind, setKind] = useState<"mock" | "local">("mock");
   const [state, setState] = useState<CodingRunnerState>(initialRunnerState);
   const handleRef = useRef<CodingRunHandle | null>(null);
-  const activeRunner = runner ?? createMockCodingRunner();
+  const activeRunner =
+    runner ??
+    (kind === "local" && sessionId
+      ? createLocalShellCodingRunner({ execute: createServerShellExecutor({ serverBaseUrl, sessionId }) })
+      : createMockCodingRunner());
 
   const canRun = state.status !== "running" && prompt.trim().length > 0 && Boolean(repoRoot);
   const mutating = isMutatingRun(allowedTools);
@@ -87,6 +99,30 @@ export function CodingRunnerCard({
             {repoRoot ? `${activeRunner.label} · ${repoRoot}` : "repo 워크스페이스 미연결"}
           </p>
         </div>
+        {!runner ? (
+          <div className="mr-1 hidden items-center rounded-lg border border-white/10 bg-white/[0.03] p-0.5 sm:inline-flex">
+            <button
+              aria-pressed={kind === "mock"}
+              className={cn("rounded-md px-2 py-0.5 text-[10px] font-medium", kind === "mock" ? "bg-cyan-400/15 text-cyan-100" : "text-zinc-500 hover:text-zinc-200")}
+              disabled={state.status === "running"}
+              onClick={() => setKind("mock")}
+              title="시뮬레이션 — 실제 실행 없음"
+              type="button"
+            >
+              mock
+            </button>
+            <button
+              aria-pressed={kind === "local"}
+              className={cn("rounded-md px-2 py-0.5 text-[10px] font-medium", kind === "local" ? "bg-cyan-400/15 text-cyan-100" : "text-zinc-500 hover:text-zinc-200")}
+              disabled={state.status === "running" || !sessionId}
+              onClick={() => setKind("local")}
+              title={sessionId ? "local shell — preset 진단 명령을 dgx-02 게이트로 실행" : "세션 필요"}
+              type="button"
+            >
+              local
+            </button>
+          </div>
+        ) : null}
         <StatusBadge size="sm" variant={badge.variant}>{badge.label}</StatusBadge>
       </header>
 
@@ -95,7 +131,7 @@ export function CodingRunnerCard({
           className="min-h-[40px] min-w-0 flex-1 resize-none rounded-lg border border-white/10 bg-black/40 px-2.5 py-1.5 text-[12px] text-zinc-100 outline-none focus-visible:border-cyan-400/40"
           disabled={state.status === "running"}
           onChange={(event) => setPrompt(event.target.value)}
-          placeholder={repoRoot ? "이 repo에서 코딩 에이전트에게 시킬 일…" : "프리뷰가 관측된 미션에서만 실행 가능"}
+          placeholder={!repoRoot ? "프리뷰가 관측된 미션에서만 실행 가능" : kind === "local" ? "local: preset 진단(status/diff/typecheck)을 실행 — 프롬프트는 의도 메모" : "이 repo에서 코딩 에이전트에게 시킬 일…"}
           rows={2}
           value={prompt}
         />
