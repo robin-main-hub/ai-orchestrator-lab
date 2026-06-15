@@ -29,6 +29,8 @@ export type MissionWorkspaceSummary = {
   id: string;
   name: string;
   appType: string;
+  /** 코딩 runner 대상 repo 루트 (있을 때만) */
+  repoRootRef?: string;
   /** preview 라이프사이클 — not_started/starting/running/failed/stopped/blocked */
   previewStatus: string;
   /** observed running일 때만 채워짐 */
@@ -161,6 +163,7 @@ export function mapServerMissionToBoardItem(record: ServerMissionRecord): Missio
           id: latestWorkspace.id,
           // AppWorkspace엔 별도 name이 없다 — repo 경로의 마지막 조각을 라벨로(worktree 우선)
           name: workspaceLabel(latestWorkspace.worktreeRef ?? latestWorkspace.repoRootRef),
+          repoRootRef: latestWorkspace.repoRootRef,
           appType: latestWorkspace.appType,
           previewStatus: latestWorkspace.preview.status,
           // url은 observed running일 때만 있다 — 없으면 표시하지 않음(가짜 링크 금지)
