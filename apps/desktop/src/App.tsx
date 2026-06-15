@@ -337,6 +337,8 @@ import {
   type MakimaDelegationCard,
 } from "./lib/makimaDelegation";
 import { readJsonState, writeJsonState } from "./lib/persistentJsonState";
+import type { ActivePreviewRef } from "./lib/activePreviewRef";
+import type { PreviewAnnotationDraft } from "./lib/previewAnnotations";
 import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbenchDerived";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 import { SummonTheater } from "./components/SummonTheater";
@@ -375,9 +377,7 @@ export function App() {
    * publishEnvironment.onPreviewObserved → 여기로 lift. ChatSidePanel "미리보기" 탭이 이 URL을
    * 임베드한다. fake URL 0 — observed 분기에서만 갱신되고 preview_not_running/error는 건드리지 않는다.
    */
-  const [activePreviewRef, setActivePreviewRef] = useState<
-    { missionId: string; url: string; observedAt: string } | undefined
-  >(undefined);
+  const [activePreviewRef, setActivePreviewRef] = useState<ActivePreviewRef | undefined>(undefined);
   const [annexInitialTab, setAnnexInitialTab] = useState<"status" | "memory" | "queue">("status");
   const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -735,6 +735,7 @@ export function App() {
    *   - 영속화 없음(세션 메모리). 페이지 새로고침 시 비워짐 — 추측 금지.
    */
   const [missionIdBySourceSessionId, setMissionIdBySourceSessionId] = useState<Record<string, string>>({});
+  const [previewAnnotationDraft, setPreviewAnnotationDraft] = useState<PreviewAnnotationDraft | null>(null);
   /**
    * MissionBoardContainer가 노출하는 scaffold 캐시 invalidate 함수에 대한 외부 핸들.
    * BlueprintReviewCard의 "수정안으로 스캐폴드 다시 생성" 클릭 → handler가 이 ref로 invalidate
@@ -3003,6 +3004,31 @@ export function App() {
    *     onScaffoldRefresh가 이 매핑으로 missionId를 찾아 refreshScaffold를 호출.
    *   - 자동 실행 없음 — 단순 매핑 저장.
    */
+  const handlePreviewObserved = useCallback((ref: ActivePreviewRef) => {
+    setActivePreviewRef(ref);
+    appendEvent("mission.preview.active_ref.observed", {
+      missionId: ref.missionId,
+      url: ref.url,
+      observedAt: ref.observedAt,
+      truthStatus: "observed",
+    });
+  }, [appendEvent]);
+
+  const handlePreviewAnnotationDraft = useCallback((draft: PreviewAnnotationDraft) => {
+    setPreviewAnnotationDraft(draft);
+    appendEvent("mission.preview_annotation.sent_to_turbo", {
+      missionId: draft.missionId,
+      annotationId: draft.annotation.id,
+      summary: draft.annotation.description,
+      url: draft.annotation.viewportClick?.url,
+      percentX: draft.annotation.viewportClick?.percentX,
+      percentY: draft.annotation.viewportClick?.percentY,
+      selector: "unknown",
+      selectorReason: "iframe_boundary",
+      sentAt: draft.sentAt,
+    });
+  }, [appendEvent]);
+
   const handleAppBuildMissionCreated = useCallback(
     (mission: ServerMissionRecord, sourceSessionId?: string) => {
       if (!sourceSessionId) return;
@@ -5222,6 +5248,8 @@ export function App() {
                 sourceSessionId: activeSessionId,
                 debateId: debateSession.id,
                 refreshScaffoldHandleRef,
+                onPreviewObserved: handlePreviewObserved,
+                previewAnnotationDraft,
                 /**
                  * GitHub Publish 표면(opt-in) — Workspace 상세에 "GitHub로 내보내기" CTA를 노출한다.
                  *
@@ -5495,6 +5523,8 @@ export function App() {
               onApproveCommandPattern={handleApproveCommandPattern}
               onStartSwarmSearch={handleStartSwarmSearch}
               previewUrl={activePreviewRef?.url}
+              previewMeta={activePreviewRef ? { missionId: activePreviewRef.missionId, observedAt: activePreviewRef.observedAt } : undefined}
+              onSendPreviewAnnotation={handlePreviewAnnotationDraft}
             />
           ) : mode === "debate" ? (
             <Stage3DebateTable

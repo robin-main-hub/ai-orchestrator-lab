@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { ExternalLink, RotateCw, MousePointerClick, MousePointer } from "lucide-react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { Crosshair, ExternalLink, RotateCw, MousePointerClick, MousePointer } from "lucide-react";
+import type { PreviewViewportClick } from "../lib/previewAnnotations";
 
 /**
  * Preview iframe — observed preview URL을 우리 UI 안에 안전하게 박는다.
@@ -13,6 +14,11 @@ import { ExternalLink, RotateCw, MousePointerClick, MousePointer } from "lucide-
  *   - 자동 reload / 자동 navigation 0 — refresh 버튼은 사용자 클릭 시에만.
  *
  * 가짜 성공 표시 0 — load 실패와 "빈 페이지" 사이를 사용자가 구분할 수 있게.
+ *
+ * 주석/선택 모드 — cross-origin 경계 때문에 둘 다 viewport 좌표-only.
+ *   - onAnnotate: {xPct, yPct} — main에서 들어온 inline 주석 모드(PreviewRunCard 경로).
+ *   - onViewportClick: PreviewViewportClick — ChatSidePanel 경로(rich shape, DOM selector unknown).
+ *   양쪽 다 DOM 접근 0(cross-origin 안전).
  */
 
 const DEFAULT_LOAD_TIMEOUT_MS = 4000;
@@ -23,6 +29,7 @@ export function PreviewIframe({
   height = 480,
   loadTimeoutMs = DEFAULT_LOAD_TIMEOUT_MS,
   onAnnotate,
+  onViewportClick,
 }: {
   url: string;
   /** 호출자별 unique 접두어. "preview-iframe-{prefix}-..." 로 testid 생성. */
@@ -33,6 +40,9 @@ export function PreviewIframe({
   loadTimeoutMs?: number;
   /** OSS-H7: 주석 모드 활성 시 클릭 좌표(0~100%) callback. 미제공이면 토글 자체가 노출 X. */
   onAnnotate?: (point: { xPct: number; yPct: number }) => void;
+  /** 선택 모드에서 iframe viewport 위를 클릭했을 때 좌표-only annotation을 만든다.
+   *  DOM selector/text는 cross-origin 경계 때문에 unknown으로 둔다. */
+  onViewportClick?: (click: PreviewViewportClick) => void;
 }) {
   const ref = useRef<HTMLIFrameElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -40,6 +50,7 @@ export function PreviewIframe({
   const [timedOut, setTimedOut] = useState(false);
   const [version, setVersion] = useState(0);
   const [annotateMode, setAnnotateMode] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
 
   useEffect(() => {
     setLoaded(false);
@@ -66,16 +77,52 @@ export function PreviewIframe({
     setAnnotateMode(false); // 한 번 클릭하면 모드 해제 — 부모가 description 입력으로 유도하게.
   };
 
+  const onSelectionLayerClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (!selectionMode || !onViewportClick) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const width = rect.width || 1;
+    const heightPx = rect.height || 1;
+    const x = Math.min(Math.max(event.clientX - rect.left, 0), width);
+    const y = Math.min(Math.max(event.clientY - rect.top, 0), heightPx);
+    const round = (value: number) => Number(value.toFixed(2));
+    onViewportClick({
+      url,
+      x: round(x),
+      y: round(y),
+      percentX: round((x / width) * 100),
+      percentY: round((y / heightPx) * 100),
+      viewportWidth: round(width),
+      viewportHeight: round(heightPx),
+      capturedAt: new Date().toISOString(),
+    });
+  };
+
   return (
     <div
       className="preview-iframe"
       data-testid={`preview-iframe-${testIdPrefix}`}
       data-state={loaded ? "loaded" : timedOut ? "timed_out" : "loading"}
+      data-selection-mode={selectionMode ? "on" : "off"}
     >
       <div className="preview-iframe__head flex items-center gap-2 text-xs">
         <code className="text-muted-foreground" data-testid={`preview-iframe-url-${testIdPrefix}`}>
           {url}
         </code>
+        {onViewportClick ? (
+          <button
+            type="button"
+            onClick={() => setSelectionMode((v) => !v)}
+            className={
+              selectionMode
+                ? "inline-flex items-center gap-1 rounded-md border border-sky-400/60 bg-sky-500/15 px-2 py-0.5 text-sky-200"
+                : "inline-flex items-center gap-1 rounded-md border bg-input/40 px-2 py-0.5 hover:bg-input"
+            }
+            data-testid={`preview-iframe-selection-toggle-${testIdPrefix}`}
+            aria-pressed={selectionMode}
+          >
+            <Crosshair size={10} /> 선택 모드
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={onReload}
@@ -113,38 +160,52 @@ export function PreviewIframe({
         ) : null}
       </div>
 
-      <div className="preview-iframe__frame-wrap" style={{ position: "relative" }}>
-      <iframe
-        key={version}
-        ref={ref}
-        src={url}
-        title={`Preview ${testIdPrefix}`}
-        sandbox="allow-scripts allow-same-origin allow-forms"
-        referrerPolicy="no-referrer"
-        loading="lazy"
-        style={{ width: "100%", height: `${height}px`, border: 0, background: "#0a0a0b" }}
-        data-testid={`preview-iframe-frame-${testIdPrefix}`}
-        onLoad={() => {
-          setLoaded(true);
-          setTimedOut(false);
-        }}
-      />
-      {/* 주석 모드 overlay — pointer-events:auto가 iframe 클릭을 가로채 좌표 캡처 (DOM 접근 0). */}
-      {onAnnotate && annotateMode ? (
-        <div
-          ref={overlayRef}
-          onClick={onOverlayClick}
-          data-testid={`preview-iframe-annotate-overlay-${testIdPrefix}`}
-          aria-label="주석 모드 — iframe 위에서 클릭"
-          style={{
-            position: "absolute",
-            inset: 0,
-            cursor: "crosshair",
-            background: "rgba(167, 139, 250, 0.06)",
-            border: "1px dashed rgba(167, 139, 250, 0.45)",
+      <div className="preview-iframe__stage relative" style={{ position: "relative", height: `${height}px` }}>
+        <iframe
+          key={version}
+          ref={ref}
+          src={url}
+          title={`Preview ${testIdPrefix}`}
+          sandbox="allow-scripts allow-same-origin allow-forms"
+          referrerPolicy="no-referrer"
+          loading="lazy"
+          style={{ width: "100%", height: "100%", border: 0, background: "#0a0a0b" }}
+          data-testid={`preview-iframe-frame-${testIdPrefix}`}
+          onLoad={() => {
+            setLoaded(true);
+            setTimedOut(false);
           }}
         />
-      ) : null}
+        {/* 주석 모드 overlay (main inline) — pointer-events:auto가 iframe 클릭을 가로채 좌표 캡처(DOM 접근 0). */}
+        {onAnnotate && annotateMode ? (
+          <div
+            ref={overlayRef}
+            onClick={onOverlayClick}
+            data-testid={`preview-iframe-annotate-overlay-${testIdPrefix}`}
+            aria-label="주석 모드 — iframe 위에서 클릭"
+            style={{
+              position: "absolute",
+              inset: 0,
+              cursor: "crosshair",
+              background: "rgba(167, 139, 250, 0.06)",
+              border: "1px dashed rgba(167, 139, 250, 0.45)",
+            }}
+          />
+        ) : null}
+        {/* 선택 모드 layer (#514 ChatSidePanel) — selectionMode일 때만 클릭을 받는다(rich PreviewViewportClick). */}
+        {onViewportClick ? (
+          <div
+            aria-hidden="true"
+            className={
+              selectionMode
+                ? "absolute inset-0 cursor-crosshair bg-sky-500/10 ring-1 ring-inset ring-sky-400/30"
+                : "absolute inset-0"
+            }
+            style={{ pointerEvents: selectionMode ? "auto" : "none" }}
+            data-testid={`preview-iframe-selection-layer-${testIdPrefix}`}
+            onClick={onSelectionLayerClick}
+          />
+        ) : null}
       </div>
 
       {timedOut && !loaded ? (

@@ -54,22 +54,22 @@ describe("PreviewIframe — sandbox + 정직성", () => {
   });
 
   it("(F6 — H7) onAnnotate 미제공 → 주석 모드 토글 자체 노출 X", () => {
-    render(<PreviewIframe url="http://x/" testIdPrefix="m6" />);
-    expect(screen.queryByTestId("preview-iframe-annotate-toggle-m6")).toBeNull();
+    render(<PreviewIframe url="http://x/" testIdPrefix="m6anno" />);
+    expect(screen.queryByTestId("preview-iframe-annotate-toggle-m6anno")).toBeNull();
   });
 
   it("(F7 — H7) onAnnotate 제공 → 토글 노출, 기본 비활성(overlay 없음)", () => {
-    render(<PreviewIframe url="http://x/" testIdPrefix="m7" onAnnotate={vi.fn()} />);
-    const toggle = screen.getByTestId("preview-iframe-annotate-toggle-m7");
+    render(<PreviewIframe url="http://x/" testIdPrefix="m7anno" onAnnotate={vi.fn()} />);
+    const toggle = screen.getByTestId("preview-iframe-annotate-toggle-m7anno");
     expect(toggle.getAttribute("aria-pressed")).toBe("false");
-    expect(screen.queryByTestId("preview-iframe-annotate-overlay-m7")).toBeNull();
+    expect(screen.queryByTestId("preview-iframe-annotate-overlay-m7anno")).toBeNull();
   });
 
   it("(F8 — H7) 토글 켬 → overlay 마운트, 클릭 → onAnnotate(xPct,yPct) + 모드 자동 해제", () => {
     const onAnnotate = vi.fn();
-    render(<PreviewIframe url="http://x/" testIdPrefix="m8" onAnnotate={onAnnotate} />);
-    fireEvent.click(screen.getByTestId("preview-iframe-annotate-toggle-m8"));
-    const overlay = screen.getByTestId("preview-iframe-annotate-overlay-m8");
+    render(<PreviewIframe url="http://x/" testIdPrefix="m8anno" onAnnotate={onAnnotate} />);
+    fireEvent.click(screen.getByTestId("preview-iframe-annotate-toggle-m8anno"));
+    const overlay = screen.getByTestId("preview-iframe-annotate-overlay-m8anno");
     expect(overlay).toBeTruthy();
     // bounding rect stub: jsdom은 0×0 — 직접 mock해 비율 계산 검증.
     overlay.getBoundingClientRect = () =>
@@ -78,6 +78,42 @@ describe("PreviewIframe — sandbox + 정직성", () => {
     expect(onAnnotate).toHaveBeenCalledTimes(1);
     expect(onAnnotate).toHaveBeenCalledWith({ xPct: 23.4, yPct: 14 });
     // 모드 자동 해제 → overlay 제거
-    expect(screen.queryByTestId("preview-iframe-annotate-overlay-m8")).toBeNull();
+    expect(screen.queryByTestId("preview-iframe-annotate-overlay-m8anno")).toBeNull();
+  });
+
+  it("(F9) 선택 모드 off에서는 iframe 위 클릭을 좌표 annotation으로 캡처하지 않는다", () => {
+    const onViewportClick = vi.fn();
+    render(<PreviewIframe url="http://x/" testIdPrefix="m9view" onViewportClick={onViewportClick} />);
+    const layer = screen.getByTestId("preview-iframe-selection-layer-m9view");
+    Object.defineProperty(layer, "getBoundingClientRect", {
+      value: () => ({ left: 10, top: 20, width: 100, height: 100, right: 110, bottom: 120 }),
+    });
+
+    fireEvent.click(layer, { clientX: 53, clientY: 82 });
+
+    expect(onViewportClick).not.toHaveBeenCalled();
+  });
+
+  it("(F10) 선택 모드 on에서는 iframe viewport 기준 좌표와 percent를 캡처한다", () => {
+    const onViewportClick = vi.fn();
+    render(<PreviewIframe url="http://x/" testIdPrefix="m10view" onViewportClick={onViewportClick} />);
+    fireEvent.click(screen.getByTestId("preview-iframe-selection-toggle-m10view"));
+    const layer = screen.getByTestId("preview-iframe-selection-layer-m10view");
+    Object.defineProperty(layer, "getBoundingClientRect", {
+      value: () => ({ left: 10, top: 20, width: 100, height: 100, right: 110, bottom: 120 }),
+    });
+
+    fireEvent.click(layer, { clientX: 53, clientY: 82 });
+
+    expect(onViewportClick).toHaveBeenCalledWith({
+      url: "http://x/",
+      x: 43,
+      y: 62,
+      percentX: 43,
+      percentY: 62,
+      viewportWidth: 100,
+      viewportHeight: 100,
+      capturedAt: expect.any(String),
+    });
   });
 });
