@@ -1,8 +1,10 @@
-import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { RecentProjectsPanel } from "./RecentProjectsPanel";
 import { createProjectRecord, type ProjectRecord } from "../lib/projectRecord";
+
+afterEach(() => cleanup());
 
 const NOW_A = "2026-06-15T01:00:00.000Z";
 const NOW_B = "2026-06-15T02:00:00.000Z";
@@ -17,8 +19,8 @@ function makeRecord(missionId: string, overrides: Partial<ProjectRecord> = {}): 
 describe("RecentProjectsPanel", () => {
   it("shows the empty state when there are no records", () => {
     render(<RecentProjectsPanel records={[]} onSelectProject={vi.fn()} />);
-    expect(screen.getByTestId("recent-projects-empty")).toBeInTheDocument();
-    expect(screen.queryByTestId("recent-projects-list")).not.toBeInTheDocument();
+    expect(screen.getByTestId("recent-projects-empty")).toBeTruthy();
+    expect(screen.queryByTestId("recent-projects-list")).toBeNull();
   });
 
   it("renders one card per record with the title and updatedAt timestamp", () => {
@@ -28,10 +30,10 @@ describe("RecentProjectsPanel", () => {
     ];
     render(<RecentProjectsPanel records={records} onSelectProject={vi.fn()} />);
 
-    expect(screen.getByText("Alpha")).toBeInTheDocument();
-    expect(screen.getByText("Beta")).toBeInTheDocument();
+    expect(screen.getByText("Alpha")).toBeTruthy();
+    expect(screen.getByText("Beta")).toBeTruthy();
     const alpha = screen.getByTestId("recent-projects-item-m1");
-    expect(within(alpha).getByText(NOW_B)).toBeInTheDocument();
+    expect(within(alpha).getByText(NOW_B)).toBeTruthy();
   });
 
   it("renders the observed preview URL only when truth === observed", () => {
@@ -48,11 +50,11 @@ describe("RecentProjectsPanel", () => {
     ];
     render(<RecentProjectsPanel records={records} onSelectProject={vi.fn()} />);
 
-    expect(screen.getByText("http://127.0.0.1:5174/")).toBeInTheDocument();
+    expect(screen.getByText("http://127.0.0.1:5174/")).toBeTruthy();
     const stale = screen.getByTestId("recent-projects-preview-stale");
-    expect(within(stale).getByText(/preview stale/)).toBeInTheDocument();
+    expect(within(stale).getByText(/preview stale/)).toBeTruthy();
     const missing = screen.getByTestId("recent-projects-preview-missing-truth");
-    expect(within(missing).getByText("no observed preview")).toBeInTheDocument();
+    expect(within(missing).getByText("no observed preview")).toBeTruthy();
   });
 
   it("shows scaffold + visual QA + publish badges with status enums", () => {
@@ -65,15 +67,15 @@ describe("RecentProjectsPanel", () => {
     ];
     render(<RecentProjectsPanel records={records} onSelectProject={vi.fn()} />);
 
-    expect(screen.getByTestId("recent-projects-scaffold-m1")).toHaveTextContent("scaffold ready");
-    expect(screen.getByTestId("recent-projects-qa-m1")).toHaveTextContent("QA passed");
-    expect(screen.getByTestId("recent-projects-publish-m1")).toHaveTextContent("PR #515");
+    expect(screen.getByTestId("recent-projects-scaffold-m1").textContent).toContain("scaffold ready");
+    expect(screen.getByTestId("recent-projects-qa-m1").textContent).toContain("QA passed");
+    expect(screen.getByTestId("recent-projects-publish-m1").textContent).toContain("PR #515");
   });
 
   it("hides publish badge when hasDraft is false / undefined", () => {
     const records = [makeRecord("m1")];
     render(<RecentProjectsPanel records={records} onSelectProject={vi.fn()} />);
-    expect(screen.queryByTestId("recent-projects-publish-m1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("recent-projects-publish-m1")).toBeNull();
   });
 
   it("shows the edit timeline count + last source/status enum strings", () => {
@@ -91,25 +93,24 @@ describe("RecentProjectsPanel", () => {
     render(<RecentProjectsPanel records={records} onSelectProject={vi.fn()} />);
 
     const timeline = screen.getByTestId("recent-projects-timeline-m1");
-    expect(within(timeline).getByText(/4개 edit/)).toBeInTheDocument();
-    expect(within(timeline).getByText(/last: search_replace/)).toBeInTheDocument();
-    expect(within(timeline).getByText(/applied/)).toBeInTheDocument();
-    expect(screen.getByTestId("recent-projects-restorable-m1")).toHaveTextContent("restorable patch");
+    expect(timeline.textContent).toContain("4개 edit");
+    expect(timeline.textContent).toContain("last: search_replace");
+    expect(timeline.textContent).toContain("applied");
+    expect(screen.getByTestId("recent-projects-restorable-m1").textContent).toContain("restorable patch");
   });
 
   it("hides restorable patch badge when hasRestorablePatch is false", () => {
     const records = [makeRecord("m1")];
     render(<RecentProjectsPanel records={records} onSelectProject={vi.fn()} />);
-    expect(screen.queryByTestId("recent-projects-restorable-m1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("recent-projects-restorable-m1")).toBeNull();
   });
 
-  it("calls onSelectProject with missionId when 이어서 is clicked", async () => {
-    const user = userEvent.setup();
+  it("calls onSelectProject with missionId when 이어서 is clicked", () => {
     const onSelect = vi.fn();
     const records = [makeRecord("m1")];
     render(<RecentProjectsPanel records={records} onSelectProject={onSelect} />);
 
-    await user.click(screen.getByTestId("recent-projects-resume-m1"));
+    fireEvent.click(screen.getByTestId("recent-projects-resume-m1"));
     expect(onSelect).toHaveBeenCalledWith("m1");
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
@@ -117,23 +118,22 @@ describe("RecentProjectsPanel", () => {
   it("renders remove button only when onRemoveProject is provided", () => {
     const records = [makeRecord("m1")];
     const { rerender } = render(<RecentProjectsPanel records={records} onSelectProject={vi.fn()} />);
-    expect(screen.queryByTestId("recent-projects-remove-m1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("recent-projects-remove-m1")).toBeNull();
 
     rerender(
       <RecentProjectsPanel records={records} onSelectProject={vi.fn()} onRemoveProject={vi.fn()} />,
     );
-    expect(screen.getByTestId("recent-projects-remove-m1")).toBeInTheDocument();
+    expect(screen.getByTestId("recent-projects-remove-m1")).toBeTruthy();
   });
 
-  it("calls onRemoveProject with missionId when 삭제 is clicked", async () => {
-    const user = userEvent.setup();
+  it("calls onRemoveProject with missionId when 삭제 is clicked", () => {
     const onRemove = vi.fn();
     const records = [makeRecord("m1")];
     render(
       <RecentProjectsPanel records={records} onSelectProject={vi.fn()} onRemoveProject={onRemove} />,
     );
 
-    await user.click(screen.getByTestId("recent-projects-remove-m1"));
+    fireEvent.click(screen.getByTestId("recent-projects-remove-m1"));
     expect(onRemove).toHaveBeenCalledWith("m1");
   });
 
@@ -166,7 +166,7 @@ describe("RecentProjectsPanel", () => {
         onSelectProject={vi.fn()}
       />,
     );
-    expect(screen.getByText("3개")).toBeInTheDocument();
+    expect(screen.getByText("3개")).toBeTruthy();
     expect(screen.getByTestId("recent-projects-panel").getAttribute("data-count")).toBe("3");
   });
 });
