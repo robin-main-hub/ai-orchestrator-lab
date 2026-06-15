@@ -223,7 +223,7 @@ describe("useProjectRecordController", () => {
     act(() => {
       result.current.remove("m1");
     });
-    expect(result.current.records.map((r) => r.missionId)).toEqual(["m2"]);
+    expect(result.current.records.map((r: { missionId: string }) => r.missionId)).toEqual(["m2"]);
   });
 
   it("records are sorted by updatedAt descending", () => {
