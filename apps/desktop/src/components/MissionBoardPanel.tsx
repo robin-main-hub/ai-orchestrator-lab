@@ -23,6 +23,7 @@ import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import { GithubPublishPanel } from "./coding/GithubPublishPanel";
 import { MultiFilePlanCard } from "./publish/MultiFilePlanCard";
 import { PreviewRunCard } from "./PreviewRunCard";
+import { CodingRunnerCard } from "./appbuild/CodingRunnerCard";
 import { VisualQaCard } from "./VisualQaCard";
 import { MissionWorkspaceStatusBar } from "./MissionWorkspaceStatusBar";
 import { AppBuildProgressRail } from "./AppBuildProgressRail";
@@ -801,6 +802,14 @@ function MissionWorkspaceDetail({
             ts: new Date().toISOString(),
           });
         }}
+      />
+
+      {/* H8 Coding Runner — OpenCode 스타일 코딩 run을 워크스페이스에서 직접 (mock 기본).
+          변경 *제안*만 — 적용/커밋/PR은 별도 승인. repo 워크스페이스가 있을 때만 의미. */}
+      <CodingRunnerCard
+        missionId={item.missionId}
+        repoRoot={item.workspace?.repoRootRef}
+        defaultPrompt={item.goal}
       />
 
       {/* Visual QA vertical — preview observed running일 때만 CTA 활성. issues_found/failed면
