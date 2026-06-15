@@ -163,7 +163,7 @@ describe("useProjectRecordSync", () => {
     const { rerender } = renderHook(
       (props: { scaffold?: "available" | "missing" | "stale" | "unknown" }) =>
         useProjectRecordSync({ controller, missionId: "m1", title: "x", scaffold: props.scaffold }),
-      { initialProps: { scaffold: "unknown" as const } },
+      { initialProps: { scaffold: "unknown" as "available" | "missing" | "stale" | "unknown" } },
     );
     expect(controller.__calls.recordScaffold).toHaveLength(1);
 
