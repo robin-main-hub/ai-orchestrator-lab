@@ -810,6 +810,8 @@ function MissionWorkspaceDetail({
         missionId={item.missionId}
         repoRoot={item.workspace?.repoRootRef}
         defaultPrompt={item.goal}
+        sessionId={item.missionId}
+        serverBaseUrl={publishEnvironment?.serverBaseUrl}
       />
 
       {/* Visual QA vertical — preview observed running일 때만 CTA 활성. issues_found/failed면
