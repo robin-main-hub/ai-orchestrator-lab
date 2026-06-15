@@ -13,7 +13,7 @@ function makeItem(overrides: Partial<MissionBoardItem> = {}): MissionBoardItem {
     title: "Alpha App",
     goal: "build a small dashboard",
     status: "planned",
-    truthStatus: "unobserved",
+    truthStatus: "planned",
     source: "server_observed",
     workers: [],
     artifactCount: 0,
