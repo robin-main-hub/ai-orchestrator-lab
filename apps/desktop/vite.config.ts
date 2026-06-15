@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
@@ -13,6 +14,9 @@ export default defineConfig({
   // glob needed) and emits the CSS layer the new `@theme inline` syntax
   // in tokens.css expects.
   plugins: [react(), tailwindcss()],
+  test: {
+    setupFiles: ["./src/test/setupDomStorage.ts"],
+  },
   server: {
     proxy: {
       "/mimo-token-anthropic": {
