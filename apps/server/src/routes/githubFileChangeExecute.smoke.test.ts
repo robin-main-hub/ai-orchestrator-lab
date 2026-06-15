@@ -60,7 +60,7 @@ function capture() {
 
 describe("W3b smoke — file change execute end-to-end (mock GitHub)", () => {
   it("✓ plan(update) → approval execute → observed → duplicate idempotent, token leak 없음", async () => {
-    const fileChangePlanStore = createGithubFileChangePlanStore();
+    const fileChangePlanStore = createGithubFileChangePlanStore({ nowMs: () => Date.parse(NOW_REF) });
     const BASE_CONTENT = "export const v = 1;\n";
     const NEW_CONTENT = "export const v = 2;\n";
     const BASE_SHA = "SMOKE_BASE_SHA";

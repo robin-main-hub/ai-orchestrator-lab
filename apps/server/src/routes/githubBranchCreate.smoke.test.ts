@@ -72,7 +72,7 @@ function capture() {
 
 describe("W2 smoke — branch create end-to-end (mock GitHub)", () => {
   it("✓ 정상 경로: plan → approval execute → observed → duplicate idempotent, 부정 분기 한꺼번에", async () => {
-    const branchPlanStore = createGithubBranchCreatePlanStore();
+    const branchPlanStore = createGithubBranchCreatePlanStore({ nowMs: () => Date.parse(NOW_REF) });
     const createBranchRef = vi.fn(async () => ({
       ref: "refs/heads/agent/feature-x",
       sha: RESULT_SHA,
@@ -177,7 +177,7 @@ describe("W2 smoke — branch create end-to-end (mock GitHub)", () => {
     const getRefSha = vi.fn();
     const baseDeps = {
       createClient: () => stubClient({ token: TOKEN, getRefSha, createBranchRef }),
-      now: NOW, request: stubRequest, branchPlanStore: createGithubBranchCreatePlanStore(),
+      now: NOW, request: stubRequest, branchPlanStore: createGithubBranchCreatePlanStore({ nowMs: () => Date.parse(NOW_REF) }),
       writeRepoAllowlist: ALLOW, verifyApproval: async () => true,
     };
     for (const bad of ["main", "develop", "release/x", "refs/heads/x", "random-feature", "agent/foo;rm -rf"]) {
@@ -205,7 +205,7 @@ describe("W2 smoke — branch create end-to-end (mock GitHub)", () => {
       method: "POST",
       createClient: () => stubClient({ token: TOKEN, getRefSha, createBranchRef }),
       respondJson: cap.respondJson,
-      now: NOW, request: stubRequest, branchPlanStore: createGithubBranchCreatePlanStore(),
+      now: NOW, request: stubRequest, branchPlanStore: createGithubBranchCreatePlanStore({ nowMs: () => Date.parse(NOW_REF) }),
       writeRepoAllowlist: ALLOW, verifyApproval: async () => true,
       readJsonBody: async () => ({ repoFullName: REPO, sourceRef: "main", newBranchName: "agent/feature-x" }),
     });

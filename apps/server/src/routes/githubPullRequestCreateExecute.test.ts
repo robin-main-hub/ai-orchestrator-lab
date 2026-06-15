@@ -87,7 +87,7 @@ async function makePlan(opts: {
   getRefSha?: GithubReadonlyClient["getRefSha"];
   compareBranches?: GithubReadonlyClient["compareBranches"];
 }) {
-  const store = opts.store ?? createGithubPullRequestCreatePlanStore();
+  const store = opts.store ?? createGithubPullRequestCreatePlanStore({ nowMs: () => Date.parse(NOW_REF) });
   const planCap = capture();
   await handleGithubRoute({
     pathname: "/integrations/github/write/pr/plan",
@@ -152,7 +152,7 @@ describe("W4b PR create execute — 적대적 체크리스트", () => {
   it("(#1) plan 없으면 blocked", async () => {
     const createPullRequest = vi.fn();
     const result = await execute({
-      store: createGithubPullRequestCreatePlanStore(),
+      store: createGithubPullRequestCreatePlanStore({ nowMs: () => Date.parse(NOW_REF) }),
       planId: "gprp_nonexistent", titleSha256: "x", bodySha256: "y",
       approvalId: "appr_OK", createPullRequest,
     });
@@ -375,7 +375,7 @@ describe("W4b — MCP execute tool은 추가되지 않음(서버 단독)", () =>
       createClient: () => clientStub({ token: TOKEN }),
       respondJson: cap.respondJson, now: NOW, request: stubRequest,
       readJsonBody: async () => ({}),
-      prPlanStore: createGithubPullRequestCreatePlanStore(),
+      prPlanStore: createGithubPullRequestCreatePlanStore({ nowMs: () => Date.parse(NOW_REF) }),
       writeRepoAllowlist: ALLOW, prBaseAllowlist: BASE_ALLOW,
       verifyApproval: async () => true,
     });

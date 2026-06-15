@@ -74,7 +74,7 @@ async function planFirst(over: {
   token?: string | null; // null/undefined-as-explicit-no-token: caller must pass `null` to disable.
   allow?: ReadonlyArray<string>;
 }) {
-  const branchPlanStore = createGithubBranchCreatePlanStore();
+  const branchPlanStore = createGithubBranchCreatePlanStore({ nowMs: () => Date.parse(NOW_REF) });
   const { respondJson, calls } = capture();
   // `null`이면 명시적으로 "토큰 없음", `undefined`이면 기본 TOKEN 사용. (=== TOKEN 회피)
   const resolvedToken = over.token === null ? undefined : over.token ?? TOKEN;
