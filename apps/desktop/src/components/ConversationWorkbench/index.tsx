@@ -79,6 +79,7 @@ import { WorkspaceDiffPanel, WorkspaceFilesPanel } from "./WorkspaceChangesPanel
 import { buildForkBrief, forkMissionFromConversation } from "../../lib/conversationFork";
 import { workbenchMissionStore } from "../../lib/workbenchMissions";
 import type { ActivePreviewRef } from "../../lib/activePreviewRef";
+import type { PreviewAnnotationDraft } from "../../lib/previewAnnotations";
 import {
   contextUsagePercent,
   estimateCostUsd,
@@ -170,6 +171,7 @@ export function ConversationWorkbench({
   onStartSwarmSearch,
   previewUrl,
   previewMeta,
+  onSendPreviewAnnotation,
 }: {
   activeSessionId: string;
   /** "에이전트" 사이드 패널 모드에 주입되는 에이전트 레일 (App의 AgentsSidebar) */
@@ -273,6 +275,8 @@ export function ConversationWorkbench({
   previewUrl?: string;
   /** 마지막 observed preview의 출처. URL 없는 실패 outcome은 이 값으로 승격하지 않는다. */
   previewMeta?: Pick<ActivePreviewRef, "missionId" | "observedAt">;
+  /** ChatSidePanel preview 좌표 annotation을 Mission Workspace Turbo prompt로 보내기 위해 부모(App)로 올린다. */
+  onSendPreviewAnnotation?: (draft: PreviewAnnotationDraft) => void;
 }) {
   const [activeAgentDetailPanel, setActiveAgentDetailPanel] = useState<AgentDetailPanel>("none");
   const persona = agentPersona ?? (selectedAgent ? createDefaultPersonaSettings(selectedAgent) : undefined);
@@ -802,7 +806,11 @@ export function ConversationWorkbench({
 
         <ChatSidePanel mode={sidePanelMode} onClose={() => setSidePanelMode("none")}>
           {sidePanelMode === "preview" ? (
-            <ChatSidePanelPreviewContent previewUrl={previewUrl} previewMeta={previewMeta} />
+            <ChatSidePanelPreviewContent
+              previewUrl={previewUrl}
+              previewMeta={previewMeta}
+              onSendPreviewAnnotation={onSendPreviewAnnotation}
+            />
           ) : null}
           {sidePanelMode === "background" ? (
             <>

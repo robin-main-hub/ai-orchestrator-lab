@@ -33,7 +33,12 @@ import { TurboEditDraftCard } from "./TurboEditDraftCard";
 import { buildAppFixDraftFromVisualQa } from "../lib/appFixDraft";
 import type { TurboEditGenerator } from "../lib/turboEditGenerator";
 import { PreviewAnnotatePanel } from "./PreviewAnnotatePanel";
-import { annotationsToTurboEditIssues, type PreviewAnnotation } from "../lib/previewAnnotations";
+import {
+  addAnnotation,
+  annotationsToTurboEditIssues,
+  type PreviewAnnotation,
+  type PreviewAnnotationDraft,
+} from "../lib/previewAnnotations";
 import { postDgxMissionScaffoldOverlay } from "../runtime/stage47MissionServer";
 import type { VisualQaReport } from "@ai-orchestrator/protocol";
 import type { VisualQaDiff } from "../lib/visualQaDiff";
@@ -149,6 +154,7 @@ export function MissionBoardPanel({
   onToggleDetail,
   publishEnvironment,
   onPreviewObserved,
+  previewAnnotationDraft,
 }: {
   snapshot: MissionBoardSnapshot;
   loading?: boolean;
@@ -179,6 +185,8 @@ export function MissionBoardPanel({
   publishEnvironment?: MissionPublishEnvironment;
   /** PreviewRunCard가 observed URL을 받았을 때 부모(App)까지 전달한다. 실패 outcome은 호출하지 않는다. */
   onPreviewObserved?: (ref: ActivePreviewRef) => void;
+  /** ChatSidePanel preview 좌표 annotation을 Workspace Turbo prompt에 합류시킨다. */
+  previewAnnotationDraft?: PreviewAnnotationDraft | null;
 }) {
   return (
     <section className="mini-panel mission-board-panel">
@@ -339,6 +347,7 @@ export function MissionBoardPanel({
                         item={item}
                         publishEnvironment={publishEnvironment}
                         onPreviewObserved={onPreviewObserved}
+                        previewAnnotationDraft={previewAnnotationDraft}
                       />
                     ) : null}
                   </div>
@@ -420,10 +429,12 @@ function MissionWorkspaceDetail({
   item,
   publishEnvironment,
   onPreviewObserved,
+  previewAnnotationDraft,
 }: {
   item: MissionBoardItem;
   publishEnvironment?: MissionPublishEnvironment;
   onPreviewObserved?: (ref: ActivePreviewRef) => void;
+  previewAnnotationDraft?: PreviewAnnotationDraft | null;
 }) {
   // 기본 접힘 — 사용자 명시 클릭으로만 GithubPublishPanel을 마운트한다.
   // (publishEnvironment가 없으면 CTA 자체를 그리지 않아 부모가 opt-in한 경우에만 노출.)
@@ -547,6 +558,10 @@ function MissionWorkspaceDetail({
   // OSS-H7 — preview annotations 상태. PreviewAnnotatePanel이 add/remove하고
   // TurboEditDraftCard로는 extraIssues로 흘려보낸다. 자동 적용 0.
   const [previewAnnotations, setPreviewAnnotations] = useState<ReadonlyArray<PreviewAnnotation>>([]);
+  useEffect(() => {
+    if (!previewAnnotationDraft || previewAnnotationDraft.missionId !== item.missionId) return;
+    setPreviewAnnotations((prev) => addAnnotation(prev, previewAnnotationDraft.annotation));
+  }, [previewAnnotationDraft, item.missionId]);
   const annotationIssues = useMemo(
     () => annotationsToTurboEditIssues(previewAnnotations),
     [previewAnnotations],
@@ -625,8 +640,10 @@ function MissionWorkspaceDetail({
         files={publishEnvironment?.getScaffoldFiles?.(item)}
       />
 
-      {/* Preview Annotator (OSS-H7 P1+P2) — 텍스트 주석 + iframe 좌표 캡처.
-          좌표는 PreviewRunCard 안 PreviewIframe overlay에서 들어와 pendingAnnotationCoords로 stash. */}
+      {/* Preview Annotator (OSS-H7) — 텍스트 주석 + iframe 좌표.
+          PreviewRunCard PreviewIframe overlay 좌표는 pendingAnnotationCoords로 stash,
+          ChatSidePanel iframe viewport 좌표는 previewAnnotationDraft로 합류 — 둘 다 같은 extraIssues 경로.
+          iframe 내부 DOM selector/text는 cross-origin 경계 때문에 unknown으로 둔다(가짜 dom 정보 X). */}
       <PreviewAnnotatePanel
         missionId={item.missionId}
         files={publishEnvironment?.getScaffoldFiles?.(item)}

@@ -49,6 +49,45 @@ describe("ChatSidePanel — 미리보기(preview) 탭 살리기", () => {
     expect(text).toContain("Mission Workspace");
     expect(screen.queryByTestId("preview-iframe-chat-side")).toBeNull();
   });
+
+  it("(C5) 선택 모드에서 캡처한 좌표 annotation을 표시하고 Turbo Edits로 보낸다", () => {
+    const onSendPreviewAnnotation = vi.fn();
+    render(
+      <ChatSidePanelPreviewContent
+        previewUrl="http://127.0.0.1:5173/"
+        previewMeta={{ missionId: "mission_preview", observedAt: "2026-06-15T00:00:00.000Z" }}
+        onSendPreviewAnnotation={onSendPreviewAnnotation}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("preview-iframe-selection-toggle-chat-side"));
+    const layer = screen.getByTestId("preview-iframe-selection-layer-chat-side");
+    Object.defineProperty(layer, "getBoundingClientRect", {
+      value: () => ({ left: 10, top: 20, width: 100, height: 100, right: 110, bottom: 120 }),
+    });
+    fireEvent.click(layer, { clientX: 53, clientY: 82 });
+
+    const annotation = screen.getByTestId("chat-side-panel-preview-annotation");
+    expect(annotation.textContent).toContain("43% x, 62% y");
+    expect(annotation.textContent).toContain("DOM selector unknown due to iframe boundary");
+
+    fireEvent.click(screen.getByTestId("chat-side-panel-preview-send-annotation"));
+
+    expect(onSendPreviewAnnotation).toHaveBeenCalledWith({
+      missionId: "mission_preview",
+      sentAt: expect.any(String),
+      annotation: expect.objectContaining({
+        description: "User clicked preview at 43% x, 62% y on http://127.0.0.1:5173/",
+        viewportClick: expect.objectContaining({
+          url: "http://127.0.0.1:5173/",
+          x: 43,
+          y: 62,
+          percentX: 43,
+          percentY: 62,
+        }),
+      }),
+    });
+  });
 });
 
 describe("ChatSidePanel preview wiring (Conversation 통합 smoke)", () => {
