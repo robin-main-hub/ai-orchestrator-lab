@@ -31,7 +31,7 @@ importers:
         version: link:../../packages/providers
       '@ai-orchestrator/simplememo':
         specifier: workspace:*
-        version: link:../../packages/memory
+        version: link:../../packages/simplememo
       '@fontsource/inter':
         specifier: ^5.2.5
         version: 5.2.8
@@ -168,7 +168,7 @@ importers:
         version: link:../../packages/providers
       '@ai-orchestrator/simplememo':
         specifier: workspace:*
-        version: link:../../packages/memory
+        version: link:../../packages/simplememo
       '@octokit/request':
         specifier: ^10.0.10
         version: 10.0.10
@@ -188,12 +188,6 @@ importers:
 
   packages/mcp: {}
 
-  packages/memory:
-    dependencies:
-      '@ai-orchestrator/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-
   packages/protocol:
     dependencies:
       zod:
@@ -201,6 +195,12 @@ importers:
         version: 3.25.76
 
   packages/providers:
+    dependencies:
+      '@ai-orchestrator/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
+  packages/simplememo:
     dependencies:
       '@ai-orchestrator/protocol':
         specifier: workspace:*
