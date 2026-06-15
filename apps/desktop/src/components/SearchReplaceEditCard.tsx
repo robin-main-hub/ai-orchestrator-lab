@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   FilePlus2,
@@ -78,6 +78,32 @@ export function SearchReplaceEditCard({
     if (!text.trim()) return null;
     return buildSearchReplaceOverlayPlan(files, text);
   }, [files, text]);
+  const lastPreviewEventSignature = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!plan || !text.trim()) return;
+    const appliedBlocks = plan.blocks.filter((b) => b.kind === "applied" || b.kind === "created").length;
+    const failedBlocks = plan.blocks.filter((b) => b.kind === "failed" || b.kind === "error").length;
+    const paths = plan.overlayFiles.map((file) => file.path);
+    const signature = JSON.stringify({
+      text,
+      appliedBlocks,
+      failedBlocks,
+      paths,
+      gate: plan.skippedByGate.length,
+    });
+    if (lastPreviewEventSignature.current === signature) return;
+    lastPreviewEventSignature.current = signature;
+    onContextEvent?.("mission.search_replace.preview_created", {
+      missionId,
+      paths,
+      fileCount: paths.length,
+      appliedBlocks,
+      failedBlocks,
+      skippedByGate: plan.skippedByGate.length,
+      ts: new Date().toISOString(),
+    });
+  }, [missionId, onContextEvent, plan, text]);
 
   const canApply = !!plan && plan.overlayFiles.length > 0 && !submitting;
 

@@ -28,10 +28,16 @@ import { MissionWorkspaceStatusBar } from "./MissionWorkspaceStatusBar";
 import { AppBuildProgressRail } from "./AppBuildProgressRail";
 import { MissionWorkspaceSummary } from "./MissionWorkspaceSummary";
 import { GeneratedFilesPanel } from "./GeneratedFilesPanel";
+import { EditTimelineCard } from "./EditTimelineCard";
 import { SearchReplaceEditCard } from "./SearchReplaceEditCard";
 import { TurboEditDraftCard } from "./TurboEditDraftCard";
 import { buildAppFixDraftFromVisualQa } from "../lib/appFixDraft";
 import type { TurboEditGenerator } from "../lib/turboEditGenerator";
+import {
+  buildEditTimeline,
+  editHistoryEventFromContext,
+  type EditHistoryEvent,
+} from "../lib/editTimeline";
 import { PreviewAnnotatePanel } from "./PreviewAnnotatePanel";
 import {
   addAnnotation,
@@ -549,6 +555,26 @@ function MissionWorkspaceDetail({
   // Turbo Edits → SearchReplaceEditCard 다리. text 상태를 부모가 들고 있다가
   // Turbo Edits Draft가 "초안으로 보내기" 클릭 시 textarea에 주입.
   const [searchReplaceText, setSearchReplaceText] = useState("");
+  // H9 — edit loop event mirror. 서버 route 없이 Mission Workspace 세션 안에서만 보관한다.
+  const [editHistoryEvents, setEditHistoryEvents] = useState<ReadonlyArray<EditHistoryEvent>>([]);
+  const appendEditHistoryEvent = useCallback((event: EditHistoryEvent) => {
+    setEditHistoryEvents((prev) => {
+      const id = prev.some((existing) => existing.id === event.id)
+        ? `${event.id}-${prev.length + 1}`
+        : event.id;
+      return [...prev, { ...event, id }];
+    });
+  }, []);
+  const emitWorkspaceContextEvent = useCallback((type: string, payload: Record<string, unknown>) => {
+    const enriched = { ...payload, missionId: item.missionId };
+    publishEnvironment?.onContextEvent?.(type, enriched);
+    const editEvent = editHistoryEventFromContext(type, enriched);
+    if (editEvent) appendEditHistoryEvent(editEvent);
+  }, [appendEditHistoryEvent, item.missionId, publishEnvironment]);
+  const editTimeline = useMemo(
+    () => buildEditTimeline(editHistoryEvents),
+    [editHistoryEvents],
+  );
   // AppFixDraft는 latestQaReport에서 결정적으로 빌드(추가 호출 0).
   const appFixDraftForTurbo = useMemo(
     () => (latestQaReport ? buildAppFixDraftFromVisualQa(latestQaReport) : undefined),
@@ -560,8 +586,18 @@ function MissionWorkspaceDetail({
   const [previewAnnotations, setPreviewAnnotations] = useState<ReadonlyArray<PreviewAnnotation>>([]);
   useEffect(() => {
     if (!previewAnnotationDraft || previewAnnotationDraft.missionId !== item.missionId) return;
-    setPreviewAnnotations((prev) => addAnnotation(prev, previewAnnotationDraft.annotation));
-  }, [previewAnnotationDraft, item.missionId]);
+    const annotation = previewAnnotationDraft.annotation;
+    setPreviewAnnotations((prev) => addAnnotation(prev, annotation));
+    appendEditHistoryEvent({
+      id: `preview-annotation-${annotation.id}`,
+      kind: "preview_annotation_captured",
+      source: "preview",
+      status: "captured",
+      timestamp: annotation.viewportClick?.capturedAt ?? annotation.createdAt ?? previewAnnotationDraft.sentAt,
+      affectedFiles: annotation.targetFile ? [annotation.targetFile] : [],
+      summary: annotation.description,
+    });
+  }, [appendEditHistoryEvent, previewAnnotationDraft, item.missionId]);
   const annotationIssues = useMemo(
     () => annotationsToTurboEditIssues(previewAnnotations),
     [previewAnnotations],
@@ -653,9 +689,7 @@ function MissionWorkspaceDetail({
         files={publishEnvironment?.getScaffoldFiles?.(item)}
         annotations={previewAnnotations}
         onChange={setPreviewAnnotations}
-        onContextEvent={(type, payload) =>
-          publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
-        }
+        onContextEvent={emitWorkspaceContextEvent}
         pendingCoords={pendingAnnotationCoords}
         onClearPendingCoords={() => setPendingAnnotationCoords(undefined)}
       />
@@ -671,9 +705,7 @@ function MissionWorkspaceDetail({
         appFixDraft={appFixDraftForTurbo}
         extraIssues={annotationIssues.length > 0 ? annotationIssues : undefined}
         onSendDraft={setSearchReplaceText}
-        onContextEvent={(type, payload) =>
-          publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
-        }
+        onContextEvent={emitWorkspaceContextEvent}
         onGenerate={turboEditGeneratorHandle?.generator}
         providerLabel={turboEditGeneratorHandle?.providerLabel}
       />
@@ -687,7 +719,7 @@ function MissionWorkspaceDetail({
         text={searchReplaceText}
         onTextChange={setSearchReplaceText}
         onApply={async (overlayFiles) => {
-          return await postDgxMissionScaffoldOverlay({
+          const response = await postDgxMissionScaffoldOverlay({
             missionId: item.missionId,
             request: {
               source: "manual",
@@ -696,10 +728,26 @@ function MissionWorkspaceDetail({
             serverBaseUrl: publishEnvironment?.serverBaseUrl,
             fetchImpl: publishEnvironment?.fetchImpl,
           });
+          if (response.outcome === "recorded") {
+            const paths = overlayFiles.map((file) => file.path);
+            emitWorkspaceContextEvent("mission.search_replace.applied", {
+              paths,
+              fileCount: paths.length,
+              overlayId: response.overlay?.id,
+              patchText: searchReplaceText,
+              ts: new Date().toISOString(),
+            });
+            publishEnvironment?.refreshScaffold?.(item.missionId);
+          }
+          return response;
         }}
-        onContextEvent={(type, payload) =>
-          publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
-        }
+        onContextEvent={emitWorkspaceContextEvent}
+      />
+
+      <EditTimelineCard
+        missionId={item.missionId}
+        items={editTimeline}
+        onRestorePatch={setSearchReplaceText}
       />
 
       {/* Preview Run vertical CTA — scaffold가 있으면 한 번 클릭으로 materialize+preview 실행.
@@ -711,14 +759,10 @@ function MissionWorkspaceDetail({
         serverBaseUrl={publishEnvironment?.serverBaseUrl}
         fetchImpl={publishEnvironment?.fetchImpl}
         onPreviewObserved={onPreviewObserved}
-        onContextEvent={(type, payload) =>
-          publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
-        }
-        onPreviewObserved={publishEnvironment?.onPreviewObserved}
+        onContextEvent={emitWorkspaceContextEvent}
         onIframeAnnotate={(point) => {
           setPendingAnnotationCoords(point);
-          publishEnvironment?.onContextEvent?.("mission.preview_annotation.coords_captured", {
-            missionId: item.missionId,
+          emitWorkspaceContextEvent("mission.preview_annotation.coords_captured", {
             xPct: point.xPct,
             yPct: point.yPct,
             ts: new Date().toISOString(),
@@ -738,9 +782,7 @@ function MissionWorkspaceDetail({
         currentScaffoldFiles={publishEnvironment?.getScaffoldFiles?.(item)?.map((f) => ({ path: f.path, content: f.newContent }))}
         serverBaseUrl={publishEnvironment?.serverBaseUrl}
         fetchImpl={publishEnvironment?.fetchImpl}
-        onContextEvent={(type, payload) =>
-          publishEnvironment?.onContextEvent?.(type, { ...payload, missionId: item.missionId })
-        }
+        onContextEvent={emitWorkspaceContextEvent}
         onRefreshScaffold={publishEnvironment?.refreshScaffold}
         onNavigate={onNavigate}
         onStateChange={onVisualQaStateChange}
