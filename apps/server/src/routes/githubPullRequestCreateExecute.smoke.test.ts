@@ -73,7 +73,7 @@ function capture() {
 
 describe("W4b smoke — PR create execute end-to-end (mock GitHub)", () => {
   it("✓ plan → approval execute → observed → duplicate idempotent, mutation 1회, token leak 없음", async () => {
-    const prPlanStore = createGithubPullRequestCreatePlanStore();
+    const prPlanStore = createGithubPullRequestCreatePlanStore({ nowMs: () => Date.parse(NOW_REF) });
     const createPullRequest = vi.fn(async () => ({
       pullNumber: 4242,
       htmlUrl: `https://github.com/${REPO}/pull/4242`,
