@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { CircleStop, FileDiff, Play, TerminalSquare } from "lucide-react";
+import { CircleStop, FileDiff, GitPullRequestArrow, Play, TerminalSquare } from "lucide-react";
 import { StatusBadge, type StatusBadgeVariant } from "@/ui/status-badge";
 import {
   appendRunnerLog,
@@ -19,6 +19,7 @@ import { createLocalShellCodingRunner } from "../../lib/localShellRunner";
 import { createServerShellExecutor } from "../../lib/serverShellExecutor";
 import { createOpenCodeRunner } from "../../lib/openCodeRunner";
 import { createServerOpenCodeExecutor } from "../../lib/serverOpenCodeExecutor";
+import { buildRunnerPatchHandoff, summarizePatchHandoff, type RunnerPatchHandoff } from "../../lib/runnerPatchHandoff";
 import { cn } from "@/lib/utils";
 
 /** opencode runner 기본 모델 (provider/model) */
@@ -49,16 +50,19 @@ export function CodingRunnerCard({
   runner,
   sessionId,
   serverBaseUrl,
+  onHandoff,
 }: {
   missionId: string;
   repoRoot?: string;
   defaultPrompt?: string;
   allowedTools?: CodingRunnerTool[];
-  /** 주입 안 하면 kind 토글(mock/local) — 진짜 OpenCode runner도 같은 인터페이스로 교체 */
+  /** 주입 안 하면 kind 토글(mock/local/opencode) — 진짜 OpenCode runner도 같은 인터페이스로 교체 */
   runner?: CodingRunner;
   /** local 실행을 dgx-02 게이트로 보낼 때 필요 */
   sessionId?: string;
   serverBaseUrl?: string | string[];
+  /** H8c — 변경 제안을 구조화 patch handoff로 승인 단계에 넘김(카드는 적용 안 함) */
+  onHandoff?: (handoff: RunnerPatchHandoff) => void;
 }) {
   const [prompt, setPrompt] = useState(defaultPrompt ?? "");
   const [kind, setKind] = useState<"mock" | "local" | "opencode">("mock");
@@ -93,6 +97,10 @@ export function CodingRunnerCard({
 
   const result = state.result;
   const badge = STATUS_BADGE[state.status];
+  // H8c — 변경 제안이 있으면 patch handoff를 미리 만들어 둔다(순수). 적용은 onHandoff 콜백이
+  // 받아 승인 단계로 — 이 카드는 절대 직접 적용/커밋/PR 하지 않는다.
+  const handoff =
+    result && onHandoff ? buildRunnerPatchHandoff(result, { missionId, repoRoot: repoRoot ?? "", runnerId: activeRunner.id }) : null;
 
   return (
     <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
@@ -211,6 +219,22 @@ export function CodingRunnerCard({
             ) : null}
             {!result.observed ? <span className="text-[10px] text-zinc-600">시뮬레이션 (미관측)</span> : null}
           </div>
+
+          {handoff && result.changedFiles.length > 0 ? (
+            <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-1.5">
+              <GitPullRequestArrow className="h-3.5 w-3.5 shrink-0 text-cyan-300/70" />
+              <span className="min-w-0 flex-1 truncate text-[10.5px] text-zinc-400">{summarizePatchHandoff(handoff)}</span>
+              <button
+                className="shrink-0 rounded-md border border-cyan-300/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={!handoff.applicable}
+                onClick={() => onHandoff?.(handoff)}
+                title={handoff.applicable ? "변경 제안을 승인 큐로 보냅니다 (적용은 승인 후)" : summarizePatchHandoff(handoff)}
+                type="button"
+              >
+                승인 큐로
+              </button>
+            </div>
+          ) : null}
 
           {result.changedFiles.length > 0 ? (
             <ul className="space-y-0.5">
