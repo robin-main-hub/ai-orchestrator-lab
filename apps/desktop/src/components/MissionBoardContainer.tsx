@@ -17,7 +17,7 @@ import type { MissionScaffoldFile, PublishHistoryByStep } from "../lib/missionPu
 import { accumulatePublishHistory } from "../lib/missionPublishPrefill";
 import { publishEnvironmentWithScaffolds } from "../lib/publishEnvironmentWithScaffolds";
 import { MissionBoardPanel, type MissionPublishEnvironment } from "./MissionBoardPanel";
-import type { ActivePreviewRef } from "../lib/activePreviewRef";
+import type { ActivePreviewRef, ActivePreviewRefMap } from "../lib/activePreviewRef";
 import type { PreviewAnnotationDraft } from "../lib/previewAnnotations";
 import { RecentProjectsPanel } from "./RecentProjectsPanel";
 import type { ProjectRecordController } from "../hooks/useProjectRecordController";
@@ -45,7 +45,7 @@ export function MissionBoardContainer({
   onPreviewObserved,
   previewAnnotationDraft,
   projectRecordController,
-  activePreviewRef,
+  activePreviewRefByMissionId,
   pendingResumeMissionId,
   onResumeConsumed,
 }: {
@@ -82,7 +82,7 @@ export function MissionBoardContainer({
   /** OSS-H10 — App이 들고 있는 ProjectRecord controller. 없으면 RecentProjectsPanel/sync 모두 비활성. */
   projectRecordController?: ProjectRecordController;
   /** App이 들고 있는 가장 최근 observed preview ref. MissionRecordSync가 자기 mission이면 흘려보냄. */
-  activePreviewRef?: ActivePreviewRef | null;
+  activePreviewRefByMissionId?: ActivePreviewRefMap;
   /** RecentProjectsPanel "이어서" 클릭으로 들어온 mission id. 받으면 해당 detail을 펼치고 소비 알림. */
   pendingResumeMissionId?: string | null;
   /** pendingResumeMissionId 소비 완료를 부모에게 알린다(중복 expand 방지). */
@@ -409,7 +409,7 @@ export function MissionBoardContainer({
       onPreviewObserved={onPreviewObserved}
       previewAnnotationDraft={previewAnnotationDraft}
       projectRecordController={projectRecordController}
-      activePreviewRef={activePreviewRef}
+      activePreviewRefByMissionId={activePreviewRefByMissionId}
       publishHistoryByMission={publishHistoryByMission}
       />
     </div>
