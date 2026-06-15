@@ -17,7 +17,12 @@ import {
 } from "../../lib/codingRunner";
 import { createLocalShellCodingRunner } from "../../lib/localShellRunner";
 import { createServerShellExecutor } from "../../lib/serverShellExecutor";
+import { createOpenCodeRunner } from "../../lib/openCodeRunner";
+import { createServerOpenCodeExecutor } from "../../lib/serverOpenCodeExecutor";
 import { cn } from "@/lib/utils";
+
+/** opencode runner 기본 모델 (provider/model) */
+const OPENCODE_MODEL = "anthropic/claude-sonnet-4-6";
 
 /**
  * H8 — Mission Workspace의 "Coding Runner" 섹션.
@@ -56,14 +61,16 @@ export function CodingRunnerCard({
   serverBaseUrl?: string | string[];
 }) {
   const [prompt, setPrompt] = useState(defaultPrompt ?? "");
-  const [kind, setKind] = useState<"mock" | "local">("mock");
+  const [kind, setKind] = useState<"mock" | "local" | "opencode">("mock");
   const [state, setState] = useState<CodingRunnerState>(initialRunnerState);
   const handleRef = useRef<CodingRunHandle | null>(null);
   const activeRunner =
     runner ??
     (kind === "local" && sessionId
       ? createLocalShellCodingRunner({ execute: createServerShellExecutor({ serverBaseUrl, sessionId }) })
-      : createMockCodingRunner());
+      : kind === "opencode" && sessionId
+        ? createOpenCodeRunner({ execute: createServerOpenCodeExecutor({ serverBaseUrl, sessionId }), model: OPENCODE_MODEL })
+        : createMockCodingRunner());
 
   const canRun = state.status !== "running" && prompt.trim().length > 0 && Boolean(repoRoot);
   const mutating = isMutatingRun(allowedTools);
@@ -120,6 +127,16 @@ export function CodingRunnerCard({
               type="button"
             >
               local
+            </button>
+            <button
+              aria-pressed={kind === "opencode"}
+              className={cn("rounded-md px-2 py-0.5 text-[10px] font-medium", kind === "opencode" ? "bg-cyan-400/15 text-cyan-100" : "text-zinc-500 hover:text-zinc-200")}
+              disabled={state.status === "running" || !sessionId}
+              onClick={() => setKind("opencode")}
+              title={sessionId ? "opencode — 읽기전용 코딩 에이전트를 dgx-02 게이트로 실행" : "세션 필요"}
+              type="button"
+            >
+              opencode
             </button>
           </div>
         ) : null}
