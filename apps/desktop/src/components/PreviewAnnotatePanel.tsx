@@ -76,6 +76,9 @@ export function PreviewAnnotatePanel({
     onChange(addAnnotation(annotations, annotation));
     onContextEvent?.("mission.preview_annotation.added", {
       missionId,
+      id: annotation.id,
+      summary: annotation.description,
+      targetFile: annotation.targetFile,
       hasPosition: !!annotation.positionHint,
       hasTargetFile: !!annotation.targetFile,
       hasCoords: !!annotation.coords,

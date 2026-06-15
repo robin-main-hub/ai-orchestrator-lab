@@ -140,7 +140,7 @@ describe("TurboEditDraftCard — OSS-H5 producer surface", () => {
     expect(body.textContent ?? "").not.toContain("ghp_AAAAAAAAAAAAAAAAAAAAAAAAAA");
   });
 
-  it("(T8 — H6) onGenerate 미주입 → '생성' 버튼 없음 + provider 미설정 안내", () => {
+  it("(T8 — H8) onGenerate 미주입 → 'AI 수정 초안 생성' 버튼 disabled + provider 미설정 안내", () => {
     render(
       <TurboEditDraftCard
         missionId="th8"
@@ -148,8 +148,10 @@ describe("TurboEditDraftCard — OSS-H5 producer surface", () => {
         onSendDraft={vi.fn()}
       />,
     );
-    expect(screen.queryByTestId("turbo-edits-generate-th8")).toBeNull();
-    expect(screen.getByTestId("turbo-edits-generate-unavailable-th8")).toBeTruthy();
+    expect((screen.getByTestId("turbo-edits-generate-th8") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId("turbo-edits-generate-unavailable-th8").textContent).toContain(
+      "provider/model 미설정",
+    );
   });
 
   it("(T9 — H6) onGenerate 주입 + valid 응답 → paste 채움 + onSendDraft 자동 호출 + 자동 주입 라벨", async () => {

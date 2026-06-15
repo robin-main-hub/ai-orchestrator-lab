@@ -64,6 +64,38 @@ describe("PreviewRunCard", () => {
     expect(types).toContain("mission.preview.run-scaffold.observed");
   });
 
+  it("(#1b) observed + URL이면 부모 preview observed callback을 missionId/url/observedAt으로 호출", async () => {
+    const { fetchImpl } = makeFetch({
+      outcome: "observed",
+      repoRoot: "/tmp/preview/mission_cb",
+      materializedFileCount: 2,
+      workspaceId: "ws_mission_cb_1",
+      preview: { status: "running", port: 5050, url: "http://127.0.0.1:5050", truthStatus: "observed" },
+    });
+    const onPreviewObserved = vi.fn();
+    render(
+      <PreviewRunCard
+        missionId="mission_cb"
+        hasScaffoldFiles
+        serverBaseUrl="http://127.0.0.1:4317"
+        fetchImpl={fetchImpl as unknown as typeof fetch}
+        onPreviewObserved={onPreviewObserved}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("mission-preview-run-cta-mission_cb"));
+
+    await waitFor(() => {
+      expect(onPreviewObserved).toHaveBeenCalledTimes(1);
+      expect(onPreviewObserved).toHaveBeenCalledWith({
+        missionId: "mission_cb",
+        url: "http://127.0.0.1:5050",
+        observedAt: expect.any(String),
+      });
+    });
+    expect(Number.isNaN(Date.parse(onPreviewObserved.mock.calls[0]![0].observedAt))).toBe(false);
+  });
+
   it("(#2) scaffold 없음 → CTA disabled, 클릭으로도 호출 안 됨", () => {
     const { fetchImpl, calls } = makeFetch({ outcome: "no_scaffold" });
     render(
@@ -88,12 +120,14 @@ describe("PreviewRunCard", () => {
       workspaceId: "ws_z",
       preview: { status: "failed", port: 4567, command: "pnpm dev", detail: "spawn ENOENT", truthStatus: "configured" },
     });
+    const onPreviewObserved = vi.fn();
     render(
       <PreviewRunCard
         missionId="mission_z"
         hasScaffoldFiles
         serverBaseUrl="http://127.0.0.1:4317"
         fetchImpl={fetchImpl as unknown as typeof fetch}
+        onPreviewObserved={onPreviewObserved}
       />,
     );
     fireEvent.click(screen.getByTestId("mission-preview-run-cta-mission_z"));
@@ -104,6 +138,7 @@ describe("PreviewRunCard", () => {
     });
     // 가짜 URL 노출 금지.
     expect(screen.queryByTestId("mission-preview-run-link-mission_z")).toBeNull();
+    expect(onPreviewObserved).not.toHaveBeenCalled();
   });
 
   it("(#5 hint) preview_not_running + ENOENT → install_dependency 힌트 노출 + CTA trace", async () => {
