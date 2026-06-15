@@ -337,7 +337,7 @@ import {
   type MakimaDelegationCard,
 } from "./lib/makimaDelegation";
 import { readJsonState, writeJsonState } from "./lib/persistentJsonState";
-import type { ActivePreviewRef } from "./lib/activePreviewRef";
+import { putPreviewRef, resolvePreviewRef, type ActivePreviewRef, type ActivePreviewRefMap } from "./lib/activePreviewRef";
 import type { PreviewAnnotationDraft } from "./lib/previewAnnotations";
 import { useProjectRecordController } from "./hooks/useProjectRecordController";
 import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbenchDerived";
@@ -378,7 +378,7 @@ export function App() {
    * publishEnvironment.onPreviewObserved → 여기로 lift. ChatSidePanel "미리보기" 탭이 이 URL을
    * 임베드한다. fake URL 0 — observed 분기에서만 갱신되고 preview_not_running/error는 건드리지 않는다.
    */
-  const [activePreviewRef, setActivePreviewRef] = useState<ActivePreviewRef | undefined>(undefined);
+  const [activePreviewRefByMissionId, setActivePreviewRefByMissionId] = useState<ActivePreviewRefMap>({});
   const [annexInitialTab, setAnnexInitialTab] = useState<"status" | "memory" | "queue">("status");
   const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -736,6 +736,12 @@ export function App() {
    *   - 영속화 없음(세션 메모리). 페이지 새로고침 시 비워짐 — 추측 금지.
    */
   const [missionIdBySourceSessionId, setMissionIdBySourceSessionId] = useState<Record<string, string>>({});
+  // 현재 대화 세션에서 생성된 미션의 observed preview만 ChatSidePanel "미리보기"에 노출 —
+  // 다른 미션의 stale URL이 새지 않도록 missionId 키로만 resolve (핸드오프 지적 사항).
+  const currentMissionPreviewRef = resolvePreviewRef(
+    activePreviewRefByMissionId,
+    missionIdBySourceSessionId[activeSessionId],
+  );
   const [previewAnnotationDraft, setPreviewAnnotationDraft] = useState<PreviewAnnotationDraft | null>(null);
   // OSS-H10 — ProjectRecord 영속화 layer. 단일 호출. RunWorkspace.boardProps로 내려보낸다.
   // 자동 rerun/provider 호출/GitHub write 0 — 단지 mission state를 missionId별로 영속화하고 RecentProjectsPanel에 노출.
@@ -3011,7 +3017,7 @@ export function App() {
    *   - 자동 실행 없음 — 단순 매핑 저장.
    */
   const handlePreviewObserved = useCallback((ref: ActivePreviewRef) => {
-    setActivePreviewRef(ref);
+    setActivePreviewRefByMissionId((prev) => putPreviewRef(prev, ref));
     appendEvent("mission.preview.active_ref.observed", {
       missionId: ref.missionId,
       url: ref.url,
@@ -5257,7 +5263,7 @@ export function App() {
                 onPreviewObserved: handlePreviewObserved,
                 previewAnnotationDraft,
                 projectRecordController,
-                activePreviewRef,
+                activePreviewRefByMissionId,
                 pendingResumeMissionId,
                 onResumeConsumed: () => setPendingResumeMissionId(null),
                 /**
@@ -5277,7 +5283,7 @@ export function App() {
                   onContextEvent: (type, payload) => appendEvent(type, payload),
                   // PreviewRunCard observed → 최신 ref만 보관. observed 분기에서만 호출되므로
                   // preview_not_running/error로 인해 기존 URL이 가짜로 덮어쓰이지 않는다.
-                  onPreviewObserved: (ref) => setActivePreviewRef(ref),
+                  onPreviewObserved: (ref) => setActivePreviewRefByMissionId((prev) => putPreviewRef(prev, ref)),
                   // TODO(W3a-followup): scaffold plan content fetch + cache가 들어오면
                   //   getScaffoldFiles: (item) => scaffoldFilesByMissionId.get(item.missionId)
                   // 형태로 연결. 그 전까지는 file 필드를 비워두는 것이 정직(추측 금지).
@@ -5532,8 +5538,8 @@ export function App() {
               onRollbackTurn={handleRollbackConversationTurn}
               onApproveCommandPattern={handleApproveCommandPattern}
               onStartSwarmSearch={handleStartSwarmSearch}
-              previewUrl={activePreviewRef?.url}
-              previewMeta={activePreviewRef ? { missionId: activePreviewRef.missionId, observedAt: activePreviewRef.observedAt } : undefined}
+              previewUrl={currentMissionPreviewRef?.url}
+              previewMeta={currentMissionPreviewRef ? { missionId: currentMissionPreviewRef.missionId, observedAt: currentMissionPreviewRef.observedAt } : undefined}
               onSendPreviewAnnotation={handlePreviewAnnotationDraft}
             />
           ) : mode === "debate" ? (
