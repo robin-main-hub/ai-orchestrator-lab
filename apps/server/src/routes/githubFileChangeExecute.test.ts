@@ -80,7 +80,7 @@ async function makePlan(opts: {
   store?: GithubFileChangePlanStore;
   putFileContents?: GithubReadonlyClient["putFileContents"];
 }) {
-  const store = opts.store ?? createGithubFileChangePlanStore();
+  const store = opts.store ?? createGithubFileChangePlanStore({ nowMs: () => Date.parse(NOW_REF) });
   const branchName = opts.branchName ?? "agent/feature-x";
   const path = opts.path ?? "src/x.ts";
   const baseFileSha = opts.baseFileSha ?? "BASE_SHA";
@@ -148,7 +148,7 @@ async function execute(opts: {
 
 describe("W3b file change execute — 적대적 체크리스트", () => {
   it("(#1) plan 없으면 blocked", async () => {
-    const store = createGithubFileChangePlanStore();
+    const store = createGithubFileChangePlanStore({ nowMs: () => Date.parse(NOW_REF) });
     const putFileContents = vi.fn();
     const result = await execute({
       store,
@@ -417,7 +417,7 @@ describe("W3b — MCP execute tool은 추가되지 않았다(서버 단독)", ()
       createClient: () => clientStub({ token: TOKEN }),
       respondJson: cap.respondJson, now: NOW, request: stubRequest,
       readJsonBody: async () => ({}),
-      fileChangePlanStore: createGithubFileChangePlanStore(),
+      fileChangePlanStore: createGithubFileChangePlanStore({ nowMs: () => Date.parse(NOW_REF) }),
       writeRepoAllowlist: ALLOW, verifyApproval: async () => true,
     });
     expect(cap.calls[0]!.status).toBe(405);

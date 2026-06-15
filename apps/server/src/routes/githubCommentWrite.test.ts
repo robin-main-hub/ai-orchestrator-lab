@@ -48,7 +48,7 @@ const NOW = () => "2026-06-14T12:00:00.000Z";
 describe("W1 — POST /integrations/github/write/comment/plan", () => {
   it("token 없으면 not_configured (GitHub 호출 없음)", async () => {
     const { respondJson, calls } = capture();
-    const planStore = createGithubCommentWritePlanStore();
+    const planStore = createGithubCommentWritePlanStore({ nowMs: () => Date.parse(NOW()) });
     const postIssueComment = vi.fn();
     const getPullRequest = vi.fn();
     await handleGithubRoute({
@@ -78,7 +78,7 @@ describe("W1 — POST /integrations/github/write/comment/plan", () => {
       now: NOW,
       request: stubRequest,
       readJsonBody: async () => ({ repoFullName: "robin/lab", number: 7, targetKind: "pull_request", body: "hi" }),
-      planStore: createGithubCommentWritePlanStore(),
+      planStore: createGithubCommentWritePlanStore({ nowMs: () => Date.parse(NOW()) }),
       writeRepoAllowlist: [],
       verifyApproval: async () => false,
     });
@@ -94,7 +94,7 @@ describe("W1 — POST /integrations/github/write/comment/plan", () => {
       createClient: () => clientStub({ token: "ghp_x" }),
       respondJson, now: NOW, request: stubRequest,
       readJsonBody: async () => ({ repoFullName: "evil/repo", number: 7, targetKind: "pull_request", body: "hi" }),
-      planStore: createGithubCommentWritePlanStore(),
+      planStore: createGithubCommentWritePlanStore({ nowMs: () => Date.parse(NOW()) }),
       writeRepoAllowlist: ["robin/lab"],
       verifyApproval: async () => false,
     });
@@ -110,7 +110,7 @@ describe("W1 — POST /integrations/github/write/comment/plan", () => {
       createClient: () => clientStub({ token: "ghp_x", postIssueComment }),
       respondJson, now: NOW, request: stubRequest,
       readJsonBody: async () => ({ repoFullName: "robin/lab", number: 7, targetKind: "pull_request", body: "리뷰 의도 확인했습니다." }),
-      planStore: createGithubCommentWritePlanStore(),
+      planStore: createGithubCommentWritePlanStore({ nowMs: () => Date.parse(NOW()) }),
       writeRepoAllowlist: ["robin/lab"],
       verifyApproval: async () => false,
     });
@@ -129,7 +129,7 @@ describe("W1 — POST /integrations/github/write/comment/plan", () => {
       createClient: () => clientStub({ token: "ghp_x" }),
       respondJson, now: NOW, request: stubRequest,
       readJsonBody: async () => ({ repoFullName: "robin/lab", number: 7, targetKind: "pull_request", body: "디버그 토큰 ghp_1234567890abcdefghijabcdef" }),
-      planStore: createGithubCommentWritePlanStore(),
+      planStore: createGithubCommentWritePlanStore({ nowMs: () => Date.parse(NOW()) }),
       writeRepoAllowlist: ["robin/lab"],
       verifyApproval: async () => false,
     });
@@ -144,7 +144,7 @@ describe("W1 — POST /integrations/github/write/comment/plan", () => {
       createClient: () => clientStub({ token: "ghp_x" }),
       respondJson, now: NOW, request: stubRequest,
       readJsonBody: async () => ({}),
-      planStore: createGithubCommentWritePlanStore(),
+      planStore: createGithubCommentWritePlanStore({ nowMs: () => Date.parse(NOW()) }),
       writeRepoAllowlist: ["robin/lab"],
       verifyApproval: async () => false,
     });
@@ -154,7 +154,7 @@ describe("W1 — POST /integrations/github/write/comment/plan", () => {
 
 describe("W1 — POST /integrations/github/write/comment/execute", () => {
   async function planFirst(body: string) {
-    const planStore = createGithubCommentWritePlanStore();
+    const planStore = createGithubCommentWritePlanStore({ nowMs: () => Date.parse(NOW()) });
     const { calls } = capture();
     const respondJson = (status: number, payload: unknown) => calls.push({ status, payload });
     await handleGithubRoute({
@@ -366,7 +366,7 @@ describe("W1 — POST /integrations/github/write/comment/execute", () => {
       createClient: () => clientStub({ token: "ghp_x" }),
       respondJson, now: NOW, request: stubRequest,
       readJsonBody: async () => ({ planId: "gcwp_nope", bodySha256: "x", autoExecuteArmed: true, armedAt: NOW() }),
-      planStore: createGithubCommentWritePlanStore(), writeRepoAllowlist: ["robin/lab"],
+      planStore: createGithubCommentWritePlanStore({ nowMs: () => Date.parse(NOW()) }), writeRepoAllowlist: ["robin/lab"],
       verifyApproval: async () => true,
     });
     expect(calls[0]?.payload.outcome).toBe("blocked");

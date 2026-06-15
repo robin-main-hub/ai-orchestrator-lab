@@ -82,7 +82,7 @@ function isoFromMsAgo(ms: number, ref = "2026-06-14T12:00:00.000Z"): string {
 
 describe("W1c smoke — GitHub comment write full path (mock GitHub)", () => {
   it("✓ 정상 경로: plan(POST 0) → armed → execute(201) → observed → duplicate idempotent", async () => {
-    const planStore = createGithubCommentWritePlanStore();
+    const planStore = createGithubCommentWritePlanStore({ nowMs: () => Date.parse("2026-06-14T12:00:00.000Z") });
     const postIssueComment = vi.fn(async () => ({ id: 7777, htmlUrl: `https://github.com/${REPO}/pull/7#issuecomment-7777` }));
     const getPullRequest = vi.fn(clientStub({ token: SECRET_TOKEN }).getPullRequest);
     const NOW_REF = "2026-06-14T12:00:00.000Z";
@@ -155,7 +155,7 @@ describe("W1c smoke — GitHub comment write full path (mock GitHub)", () => {
 
   // ── 모든 부정 경로를 한 묶음으로 — 각각이 distinct outcome으로 구분돼야 함 ──
   it("✗ token 없음 → not_configured (GitHub 호출 0)", async () => {
-    const planStore = createGithubCommentWritePlanStore();
+    const planStore = createGithubCommentWritePlanStore({ nowMs: () => Date.parse("2026-06-14T12:00:00.000Z") });
     const postIssueComment = vi.fn();
     const cap = capture();
     await handleGithubRoute({
@@ -171,7 +171,7 @@ describe("W1c smoke — GitHub comment write full path (mock GitHub)", () => {
   });
 
   it("✗ allowlist 빈/repo 미일치 → blocked", async () => {
-    const planStore = createGithubCommentWritePlanStore();
+    const planStore = createGithubCommentWritePlanStore({ nowMs: () => Date.parse("2026-06-14T12:00:00.000Z") });
     const cap1 = capture();
     await handleGithubRoute({
       pathname: "/integrations/github/write/comment/plan", method: "POST",
@@ -199,7 +199,7 @@ describe("W1c smoke — GitHub comment write full path (mock GitHub)", () => {
       pathname: "/integrations/github/write/comment/plan", method: "POST",
       createClient: () => clientStub({ token: SECRET_TOKEN }),
       respondJson: cap.respondJson, now: () => "2026-06-14T00:00:00.000Z",
-      request: stubRequest, planStore: createGithubCommentWritePlanStore(),
+      request: stubRequest, planStore: createGithubCommentWritePlanStore({ nowMs: () => Date.parse("2026-06-14T12:00:00.000Z") }),
       writeRepoAllowlist: ALLOWLIST, verifyApproval: async () => false,
       readJsonBody: async () => ({
         repoFullName: REPO, number: 7, targetKind: "pull_request",
@@ -211,7 +211,7 @@ describe("W1c smoke — GitHub comment write full path (mock GitHub)", () => {
   });
 
   it("✗ bodySha mismatch → execute blocked(replay 변조 차단)", async () => {
-    const planStore = createGithubCommentWritePlanStore();
+    const planStore = createGithubCommentWritePlanStore({ nowMs: () => Date.parse("2026-06-14T12:00:00.000Z") });
     const postIssueComment = vi.fn();
     const NOW = () => "2026-06-14T12:00:00.000Z";
     const baseDeps = {
@@ -241,7 +241,7 @@ describe("W1c smoke — GitHub comment write full path (mock GitHub)", () => {
   });
 
   it("✗ approval도 armed도 없으면 execute blocked", async () => {
-    const planStore = createGithubCommentWritePlanStore();
+    const planStore = createGithubCommentWritePlanStore({ nowMs: () => Date.parse("2026-06-14T12:00:00.000Z") });
     const postIssueComment = vi.fn();
     const NOW = () => "2026-06-14T12:00:00.000Z";
     const baseDeps = {
@@ -270,7 +270,7 @@ describe("W1c smoke — GitHub comment write full path (mock GitHub)", () => {
   });
 
   it("✗ stale armedAt(5시간 전) → blocked, 미래 armedAt → blocked", async () => {
-    const planStore = createGithubCommentWritePlanStore();
+    const planStore = createGithubCommentWritePlanStore({ nowMs: () => Date.parse("2026-06-14T12:00:00.000Z") });
     const postIssueComment = vi.fn();
     const NOW_REF = "2026-06-14T12:00:00.000Z";
     const baseDeps = {
@@ -314,7 +314,7 @@ describe("W1c smoke — GitHub comment write full path (mock GitHub)", () => {
   });
 
   it("✗ GitHub 403 → permission_denied(write 권한 미추정)", async () => {
-    const planStore = createGithubCommentWritePlanStore();
+    const planStore = createGithubCommentWritePlanStore({ nowMs: () => Date.parse("2026-06-14T12:00:00.000Z") });
     const NOW = () => "2026-06-14T12:00:00.000Z";
     const planCap = capture();
     await handleGithubRoute({
@@ -354,7 +354,7 @@ describe("W1c smoke — GitHub comment write full path (mock GitHub)", () => {
     await handleGithubRoute({
       pathname: "/integrations/github/write/comment/execute", method: "POST",
       respondJson: cap.respondJson, now: () => "2026-06-14T00:00:00.000Z",
-      request: stubRequest, planStore: createGithubCommentWritePlanStore(),
+      request: stubRequest, planStore: createGithubCommentWritePlanStore({ nowMs: () => Date.parse("2026-06-14T12:00:00.000Z") }),
       createClient: () => clientStub({ token: SECRET_TOKEN }),
       writeRepoAllowlist: ALLOWLIST, verifyApproval: async () => true,
       readJsonBody: async () => ({
