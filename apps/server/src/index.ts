@@ -173,6 +173,7 @@ import { AuthRateLimiter, resolveClientKey } from "./security/authRateLimiter.js
 import { timingSafeStringEqual } from "./security/timingSafeCompare.js";
 import { createSecurityHeaders } from "./http/securityHeaders.js";
 import { handleVerifyPacketRoute } from "./routes/verifyPacket.js";
+import { handleLearningGatePreviewRoute } from "./routes/learningGatePreview.js";
 export { pickAllowedOrigin, resolveAllowedOrigins } from "./http/cors.js";
 
 export type ServerCapability =
@@ -6640,6 +6641,18 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         readJsonBody,
         isRequestBodyTooLargeError: (error): error is RequestBodyTooLargeError =>
           error instanceof RequestBodyTooLargeError,
+        respondJson,
+      })
+    ) {
+      return;
+    }
+
+    if (
+      await handleLearningGatePreviewRoute({
+        request,
+        pathname,
+        method: request.method,
+        searchParams: requestUrl.searchParams,
         respondJson,
       })
     ) {
