@@ -93,6 +93,67 @@ export type AssistantInboxProps = {
   lastUpdateSource?: string;
 };
 
+/**
+ * LINE B — read-only work-queue lane. Generic OS items only (no domain). Lanes
+ * are a derived VIEW over the same items already on screen — never a new data
+ * source, never a fake-live row. Empty lanes are honest.
+ */
+export type WorkLane = {
+  id: string;
+  title: string;
+  count: number;
+  items: ReadonlyArray<string>;
+  emptyHint: string;
+};
+
+/** Bucket the on-screen items into priority lanes. Pure; no side effect. */
+export function buildWorkLanes({
+  evidence = [],
+  learningLoops = [],
+  memoryCandidates = [],
+  manifestEntries = [],
+}: Pick<
+  AssistantInboxProps,
+  "evidence" | "learningLoops" | "memoryCandidates" | "manifestEntries"
+>): WorkLane[] {
+  const cap = (xs: ReadonlyArray<string>) => xs.slice(0, 3);
+  const blockedEvidence = evidence.filter((e) => e.verdict === "blocked");
+  const blockedManifest = manifestEntries.filter((m) => m.loadable === false);
+  const runner = evidence.filter((e) => e.id.startsWith("runner-gate-"));
+  return [
+    // No real time bucket is wired yet → honest empty, not a fabricated "today".
+    { id: "today", title: "Today", count: 0, items: [], emptyHint: "시간 버킷 미배선 — today 신호 없음" },
+    {
+      id: "waiting",
+      title: "Waiting",
+      count: memoryCandidates.length,
+      items: cap(memoryCandidates.map((m) => m.title)),
+      emptyHint: "대기 중 후보 없음",
+    },
+    {
+      id: "blocked",
+      title: "Blocked",
+      count: blockedEvidence.length + blockedManifest.length,
+      items: cap([...blockedEvidence.map((e) => e.title), ...blockedManifest.map((m) => m.name)]),
+      emptyHint: "차단된 항목 없음",
+    },
+    {
+      id: "learning",
+      title: "Learning",
+      count: learningLoops.length,
+      items: cap(learningLoops.map((l) => l.title)),
+      emptyHint: "learning loop 없음",
+    },
+    {
+      id: "runner",
+      title: "Runner",
+      count: runner.length,
+      items: cap(runner.map((e) => e.title)),
+      emptyHint: "runner 신호 없음",
+    },
+  ];
+}
+
 function Section({
   id,
   title,
@@ -330,6 +391,53 @@ function LiveEmptyHero() {
   );
 }
 
+/** LINE B — the priority lane rail. Read-only, no buttons; honest empty lanes. */
+function WorkLaneRail({ lanes }: { lanes: ReadonlyArray<WorkLane> }) {
+  return (
+    <div
+      className="mb-3 grid grid-cols-2 gap-1.5 px-4 sm:grid-cols-3 lg:grid-cols-5"
+      data-testid="work-lane-rail"
+      role="list"
+      aria-label="Work queue lanes"
+    >
+      {lanes.map((lane) => (
+        <div
+          key={lane.id}
+          role="listitem"
+          data-testid={`work-lane-${lane.id}`}
+          data-count={lane.count}
+          className="rounded-md border border-white/[0.08] bg-white/[0.02] px-2 py-1.5"
+        >
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {lane.title}
+            </span>
+            <span className="ml-auto rounded bg-white/[0.08] px-1 text-[10px] tabular-nums text-zinc-300">
+              {lane.count}
+            </span>
+          </div>
+          {lane.count === 0 ? (
+            <p
+              className="mt-1 text-[10px] leading-snug text-muted-foreground/50"
+              data-testid={`work-lane-empty-${lane.id}`}
+            >
+              {lane.emptyHint}
+            </p>
+          ) : (
+            <ul className="mt-1 space-y-0.5">
+              {lane.items.map((t, i) => (
+                <li key={i} className="truncate text-[10px] text-zinc-400">
+                  {t}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function AssistantInbox({
   evidence = [],
   learningLoops = [],
@@ -369,6 +477,7 @@ export function AssistantInbox({
   // LINE A — severity rollups from the rendered evidence (works in LIVE+PREVIEW).
   const blockedCount = evidence.filter((e) => e.verdict === "blocked").length;
   const warningCount = evidence.filter((e) => e.verdict === "warning").length;
+  const workLanes = buildWorkLanes({ evidence, learningLoops, memoryCandidates, manifestEntries });
   // LIVE-sparse = LIVE with nothing live beyond the gate. Drives the polished
   // "No live data yet" hero so the first impression reads intentional.
   const liveSparse =
@@ -429,6 +538,7 @@ export function AssistantInbox({
       />
       {mode === "preview" ? <PreviewBanner /> : null}
       {liveSparse ? <LiveEmptyHero /> : null}
+      <WorkLaneRail lanes={workLanes} />
       <CardContent className="grid grid-cols-1 gap-3 px-4 lg:grid-cols-2">
         <Section
           id="evidence"
