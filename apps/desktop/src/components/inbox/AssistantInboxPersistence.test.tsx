@@ -28,7 +28,7 @@ describe("Batch 8 — LINE A: inbox view-mode persistence", () => {
   });
 
   it("falls back to LIVE (live wired) when the stored seat is invalid or disabled", () => {
-    localStorage.setItem(KEY, JSON.stringify("replay")); // disabled seat → invalid
+    localStorage.setItem(KEY, JSON.stringify("sandbox")); // disabled seat → invalid
     render(<AssistantInboxContainer live={{}} persistViewMode />);
     expect(viewMode()).toBe("live");
     cleanup();
