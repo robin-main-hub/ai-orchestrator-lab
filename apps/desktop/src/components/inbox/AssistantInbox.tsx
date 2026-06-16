@@ -9,6 +9,7 @@ import {
   RuntimeManifestPreviewCard,
   type ManifestEntry,
 } from "./RuntimeManifestPreviewCard";
+import { classifyEvent, type EventCategory } from "../../lib/eventClassification";
 
 /**
  * LINE F / H / N — Assistant Inbox / command center.
@@ -102,11 +103,14 @@ export type AssistantInboxProps = {
  * are a derived VIEW over the same items already on screen — never a new data
  * source, never a fake-live row. Empty lanes are honest.
  */
+/** A single lane row — a generic label with an optional semantic category badge. */
+export type WorkLaneItem = { label: string; category?: EventCategory };
+
 export type WorkLane = {
   id: string;
   title: string;
   count: number;
-  items: ReadonlyArray<string>;
+  items: ReadonlyArray<WorkLaneItem>;
   emptyHint: string;
 };
 
@@ -152,7 +156,11 @@ export function buildWorkLanes(
   >,
   timed?: { events?: ReadonlyArray<TimedEventInput>; nowMs?: number },
 ): WorkLane[] {
-  const cap = (xs: ReadonlyArray<string>) => xs.slice(0, 3);
+  const cap = (xs: ReadonlyArray<WorkLaneItem>) => xs.slice(0, 3);
+  const plain = (xs: ReadonlyArray<string>): WorkLaneItem[] => xs.map((label) => ({ label }));
+  // LINE B — today/recent rows carry a semantic category badge from the classifier.
+  const typed = (xs: ReadonlyArray<string>): WorkLaneItem[] =>
+    xs.map((label) => ({ label, category: classifyEvent(label) }));
   const blockedEvidence = evidence.filter((e) => e.verdict === "blocked");
   const blockedManifest = manifestEntries.filter((m) => m.loadable === false);
   const runner = evidence.filter((e) => e.id.startsWith("runner-gate-"));
@@ -162,42 +170,42 @@ export function buildWorkLanes(
       id: "today",
       title: "Today",
       count: today.length,
-      items: cap(today),
+      items: cap(typed(today)),
       emptyHint: "오늘 이벤트 없음",
     },
     {
       id: "recent",
       title: "Recent",
       count: recent.length,
-      items: cap(recent),
+      items: cap(typed(recent)),
       emptyHint: "최근 7일 이벤트 없음",
     },
     {
       id: "waiting",
       title: "Waiting",
       count: memoryCandidates.length,
-      items: cap(memoryCandidates.map((m) => m.title)),
+      items: cap(plain(memoryCandidates.map((m) => m.title))),
       emptyHint: "대기 중 후보 없음",
     },
     {
       id: "blocked",
       title: "Blocked",
       count: blockedEvidence.length + blockedManifest.length,
-      items: cap([...blockedEvidence.map((e) => e.title), ...blockedManifest.map((m) => m.name)]),
+      items: cap(plain([...blockedEvidence.map((e) => e.title), ...blockedManifest.map((m) => m.name)])),
       emptyHint: "차단된 항목 없음",
     },
     {
       id: "learning",
       title: "Learning",
       count: learningLoops.length,
-      items: cap(learningLoops.map((l) => l.title)),
+      items: cap(plain(learningLoops.map((l) => l.title))),
       emptyHint: "learning loop 없음",
     },
     {
       id: "runner",
       title: "Runner",
       count: runner.length,
-      items: cap(runner.map((e) => e.title)),
+      items: cap(plain(runner.map((e) => e.title))),
       emptyHint: "runner 신호 없음",
     },
   ];
@@ -506,9 +514,22 @@ function WorkLaneRail({ lanes }: { lanes: ReadonlyArray<WorkLane> }) {
             </p>
           ) : (
             <ul className="mt-1 space-y-0.5">
-              {lane.items.map((t, i) => (
-                <li key={i} className="truncate text-[10px] text-zinc-400">
-                  {t}
+              {lane.items.map((item, i) => (
+                <li
+                  key={i}
+                  data-testid={`work-lane-item-${lane.id}-${i}`}
+                  className="flex items-center gap-1 text-[10px] text-zinc-400"
+                >
+                  <span className="truncate">{item.label}</span>
+                  {item.category ? (
+                    <span
+                      className="ml-auto shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase tracking-wide text-muted-foreground"
+                      data-testid={`work-lane-category-${lane.id}-${i}`}
+                      data-category={item.category}
+                    >
+                      {item.category}
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>
