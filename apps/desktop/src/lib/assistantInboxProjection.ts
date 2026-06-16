@@ -457,6 +457,17 @@ export type AssistantInboxLiveInput = {
    * as an honest "events N" signal in the command strip. Absent/0 → no-live-data.
    */
   eventLogCount?: number;
+  /**
+   * Batch 8 LINE B — real event-log entries for the time-bucketed Today/Recent
+   * lanes. Read-only; only id/type/createdAt are used. Absent → honest empty.
+   */
+  recentEvents?: ReadonlyArray<{ id: string; type: string; createdAt: string }>;
+  /**
+   * Batch 8 LINE B — injected "now" (ms) for deterministic time bucketing. The
+   * App passes Date.now(); pure code never calls Date.now itself. Absent → no
+   * bucketing (Today/Recent honest empty).
+   */
+  nowMs?: number;
   /** Real learning-loop events (e.g. App eventLog). Filtered to learning types. */
   learningEvents?: ReadonlyArray<{ type: string; payload: unknown }>;
   /** Real persisted project records (H10 useProjectRecordController.records). */

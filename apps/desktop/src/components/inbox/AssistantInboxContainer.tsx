@@ -97,6 +97,9 @@ export function AssistantInboxContainer({
           eventCount: live?.eventLogCount,
           recordCount: live?.projectRecords?.length,
           lastUpdateSource: live?.eventLogCount ? "eventLog" : "no live data",
+          // Batch 8 LINE B — real timed events feed the Today/Recent lanes.
+          recentEvents: live?.recentEvents,
+          nowMs: live?.nowMs,
         }
       : mode === "preview"
         ? { lastUpdateSource: "fixture" }
