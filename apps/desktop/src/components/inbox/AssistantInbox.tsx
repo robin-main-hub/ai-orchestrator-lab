@@ -1,6 +1,7 @@
 import { Inbox } from "lucide-react";
 import { Card, CardContent, CardHeader } from "../ui/card";
 import { Badge } from "../ui/badge";
+import { SourceBadge } from "./StatusBadge";
 import { EvidenceCard, type EvidenceItem } from "./EvidenceCard";
 import { LearningLoopCard, type LearningLoopItem } from "./LearningLoopCard";
 import { MemoryCandidateCard, type MemoryCandidateItem } from "./MemoryCandidateCard";
@@ -10,7 +11,7 @@ import {
 } from "./RuntimeManifestPreviewCard";
 
 /**
- * LINE F / H — Assistant Inbox / command center.
+ * LINE F / H / N — Assistant Inbox / command center.
  *
  * A dense, dark, read-only command-center shell. It composes the four
  * card surfaces (evidence / learning loop / memory candidates / runtime
@@ -25,6 +26,10 @@ import {
  *   - "live"    → real, observed app state.
  *   - "empty"   → no live data yet, honest empty hint (never faked).
  *   - "example" → clearly-labeled 예시(fixture); never presented as live.
+ *
+ * LINE N tightens the command-center density: a single shared SourceBadge
+ * (live/empty/example) and StatusBadge (PASS/WARNING/BLOCKED) language across
+ * all cards, compact section headers with counts, and scannable spacing.
  */
 
 /** Per-section data provenance — drives the source badge + empty handling. */
@@ -46,30 +51,6 @@ export type AssistantInboxProps = {
   sources?: AssistantInboxSources;
 };
 
-const SOURCE_LABEL: Record<InboxSectionSource, string> = {
-  live: "live",
-  empty: "no live data",
-  example: "예시(fixture)",
-};
-
-function sourceVariant(source: InboxSectionSource) {
-  if (source === "live") return "default" as const;
-  if (source === "example") return "outline" as const;
-  return "secondary" as const;
-}
-
-function SourceBadge({ id, source }: { id: string; source: InboxSectionSource }) {
-  return (
-    <Badge
-      variant={sourceVariant(source)}
-      data-testid={`assistant-inbox-source-${id}`}
-      data-source={source}
-    >
-      {SOURCE_LABEL[source]}
-    </Badge>
-  );
-}
-
 function Section({
   id,
   title,
@@ -87,19 +68,21 @@ function Section({
 }) {
   return (
     <section
-      className="space-y-1.5"
+      className="space-y-1.5 rounded-lg border border-white/5 bg-white/[0.015] p-2.5"
       data-testid={`assistant-inbox-section-${id}`}
       data-count={count}
       data-source={source}
     >
       <div className="flex items-center gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           {title}
         </h3>
         <Badge variant="outline" data-testid={`assistant-inbox-section-count-${id}`}>
           {count}
         </Badge>
-        <SourceBadge id={id} source={source} />
+        <span className="ml-auto">
+          <SourceBadge id={id} source={source} />
+        </span>
       </div>
       {count === 0 ? (
         <p
@@ -130,6 +113,9 @@ export function AssistantInbox({
   const learningSource = sources?.learning ?? "example";
   const memorySource = sources?.memory ?? "example";
   const manifestSource = sources?.manifest ?? "example";
+  const liveCount = [evidenceSource, learningSource, memorySource, manifestSource].filter(
+    (s) => s === "live",
+  ).length;
   const hasExample =
     evidenceSource === "example" ||
     learningSource === "example" ||
@@ -140,6 +126,7 @@ export function AssistantInbox({
       className="border-white/10 bg-black/40 py-4"
       data-testid="assistant-inbox"
       data-total={total}
+      data-live-sections={liveCount}
       data-has-example={hasExample ? "true" : "false"}
     >
       <CardHeader className="px-4">
@@ -148,6 +135,13 @@ export function AssistantInbox({
           <span className="text-sm font-semibold">Assistant Inbox</span>
           <Badge variant="secondary" data-testid="assistant-inbox-total">
             {total}
+          </Badge>
+          <Badge
+            variant="outline"
+            data-testid="assistant-inbox-live-count"
+            data-live-sections={liveCount}
+          >
+            {liveCount}/4 live
           </Badge>
           <span className="text-[11px] text-muted-foreground">
             read-only · 자동 실행/승인 없음
@@ -162,7 +156,7 @@ export function AssistantInbox({
           ) : null}
         </div>
       </CardHeader>
-      <CardContent className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-2">
+      <CardContent className="grid grid-cols-1 gap-3 px-4 lg:grid-cols-2">
         <Section
           id="evidence"
           title="Evidence"

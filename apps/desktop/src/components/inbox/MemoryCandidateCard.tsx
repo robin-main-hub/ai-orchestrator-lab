@@ -3,12 +3,16 @@ import { Card, CardContent, CardHeader } from "../ui/card";
 import { Badge } from "../ui/badge";
 
 /**
- * LINE F — Memory candidate card.
+ * LINE F / N — Memory candidate card.
  *
  * Read-only, presentational. A suggested memory shows its lifecycle
  * status (suggested → written → eval), its origin, and an honest
  * `observed` flag. A non-observed candidate NEVER shows a write/enable
  * affordance — we don't fabricate that something landed.
+ *
+ * LINE N: tightened to a single dense header row; the observed flag uses the
+ * shared destructive/outline language so "not observed" reads consistently
+ * with BLOCKED elsewhere.
  */
 
 export type MemoryStatus = "suggested" | "written" | "eval";
@@ -45,16 +49,16 @@ function statusVariant(status: MemoryStatus) {
 export function MemoryCandidateCard({ item }: { item: MemoryCandidateItem }) {
   return (
     <Card
-      className="gap-2 border-white/10 bg-white/[0.02] py-3"
+      className="gap-1.5 border-white/10 bg-white/[0.02] py-2.5"
       data-testid={`memory-candidate-card-${item.id}`}
       data-status={item.status}
       data-origin={item.origin}
       data-observed={item.observed ? "true" : "false"}
     >
       <CardHeader className="px-3">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           <Brain className="h-3.5 w-3.5 text-emerald-300/80" />
-          <span className="text-sm font-semibold">{item.title}</span>
+          <span className="truncate text-sm font-semibold">{item.title}</span>
           <Badge
             variant={statusVariant(item.status)}
             data-testid={`memory-status-${item.id}`}
@@ -85,13 +89,13 @@ export function MemoryCandidateCard({ item }: { item: MemoryCandidateItem }) {
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="px-3">
-        {item.note ? (
+      {item.note ? (
+        <CardContent className="px-3">
           <p className="text-xs text-muted-foreground" data-testid={`memory-note-${item.id}`}>
             {item.note}
           </p>
-        ) : null}
-      </CardContent>
+        </CardContent>
+      ) : null}
     </Card>
   );
 }
