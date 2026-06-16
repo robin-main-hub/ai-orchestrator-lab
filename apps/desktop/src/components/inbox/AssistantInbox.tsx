@@ -77,6 +77,17 @@ export const INBOX_VIEW_MODES: ReadonlyArray<{
   { value: "sandbox", label: "SANDBOX", enabled: false },
 ];
 
+/**
+ * Batch 11 LINE C — a one-shot view command from the Command Palette. App bumps
+ * `nonce` per dispatch; the container/inbox apply it (mode / focus / category /
+ * clear) via effect. View-only — it only sets view state, never an action.
+ */
+export type InboxCommand = {
+  kind: "mode" | "focus" | "category" | "clear";
+  value?: string;
+  nonce: number;
+};
+
 export type AssistantInboxProps = {
   evidence?: ReadonlyArray<EvidenceItem>;
   learningLoops?: ReadonlyArray<LearningLoopItem>;
@@ -110,6 +121,8 @@ export type AssistantInboxProps = {
    * the real app turns it on. Local UI preference only — no server/data write.
    */
   persistFilters?: boolean;
+  /** Batch 11 LINE C — one-shot view command from the Command Palette (view-only). */
+  command?: InboxCommand;
 };
 
 /**
@@ -891,6 +904,7 @@ export function AssistantInbox({
   recentEvents,
   nowMs,
   persistFilters = false,
+  command,
 }: AssistantInboxProps) {
   const total =
     evidence.length + learningLoops.length + memoryCandidates.length + manifestEntries.length;
@@ -966,6 +980,19 @@ export function AssistantInbox({
   useEffect(() => {
     if (persistFilters) writeJsonState(INBOX_FILTERS_KEY, { focus, category, query });
   }, [persistFilters, focus, category, query]);
+  // Batch 11 LINE C — apply a one-shot view command from the palette (view-only;
+  // mode commands are handled by the container which owns the seat).
+  useEffect(() => {
+    if (!command) return;
+    if (command.kind === "focus" && command.value) setFocus(command.value as InboxFocus);
+    else if (command.kind === "category" && command.value)
+      setCategory(command.value as "all" | EventCategory);
+    else if (command.kind === "clear") {
+      setQuery("");
+      setCategory("all");
+      setFocus("all");
+    }
+  }, [command]);
   return (
     <Card
       className="border-white/10 bg-black/40 py-3"
