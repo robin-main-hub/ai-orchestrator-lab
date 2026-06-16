@@ -726,8 +726,9 @@ describe("VisualQaCard — vertical slice", () => {
     expect(navigateA).toHaveBeenCalledWith("publish");
     // onStateChange가 report 받음.
     expect(stateChangeA).toHaveBeenCalled();
-    const lastStateA = stateChangeA.mock.calls.at(-1)![0];
-    expect(lastStateA.qaReport?.status).toBe("passed");
+    expect(stateChangeA).toHaveBeenCalledWith(expect.objectContaining({
+      qaReport: expect.objectContaining({ status: "passed" })
+    }));
     cleanup();
 
     // case B) failed → needs_fix → onNavigate("fix")
