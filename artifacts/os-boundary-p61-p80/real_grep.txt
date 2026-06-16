@@ -1,0 +1,43 @@
+packages/providers/src/node/cliSubprocessEnv.ts:7:    "USERPROFILE",
+packages/simplememo/src/batchRemember.ts:18: *   - runtime activation / SimpleMem 서버 연동 / ERP bridge / orchestrator wiring 0.
+packages/simplememo/src/adapter.ts:57: * Optional batch-remember capability (ERP evidence ingest path, #538).
+packages/simplememo/src/adapter.ts:88:  /** Optional batch write (ERP evidence ingest). Callers must guard for undefined. */
+packages/simplememo/src/evidenceBridge.ts:11: * D — 승인된 ERP/CRM evidence → batchRemember.
+packages/simplememo/src/evidenceBridge.ts:13: * ERP/CRM 워크플로에서 사람이 승인(approved/published)한 evidence를 B2(#534)의
+packages/simplememo/src/evidenceBridge.ts:15: * 순수 변환 + 명시적 writer 주입. 이 모듈은 입구일 뿐 ERP DB를 건드리거나 외부/
+packages/simplememo/src/evidenceBridge.ts:26: *   - runtime activation / ERP DB mutation / external send / customer send 0.
+packages/simplememo/src/evidenceBridge.ts:75:    // 승인됐어도 ERP evidence는 curator/eval 전 — 절대 trusted로 올리지 않는다.
+packages/protocol/src/scaffold.test.ts:14:    for (const banned of ["giolite", "GIOLITE", "HTV", "견적"]) expect(blob).not.toContain(banned);
+packages/protocol/src/workflowTemplate.test.ts:39:    for (const banned of ["giolite", "GIOLITE", "HTV", "견적", "샘플", "거래처"]) {
+packages/protocol/src/workflowTemplate.test.ts:49:  it("the GIOLITE business templates are no longer reachable by any id", () => {
+packages/protocol/src/githubConnector.ts:778:export const GITHUB_PR_UPDATE_BODY_EXCERPT_MAX = 240;
+packages/protocol/src/index.ts:245:  // R3.2 expansion — gap analysis flagged these as needed for ERP /
+packages/protocol/src/index.ts:488:  "customer_inquiry",
+packages/protocol/src/index.ts:1373:  "customer_reply",
+packages/protocol/src/workflowTemplate.ts:10: * Workflow Templates — 이 시스템이 코딩만 하는 게 아니라 회사 업무(GIOLITE 영업/조사/
+packages/protocol/src/workflowTemplate.ts:181:  { slot: "sales_ops", role: "external", characterDirection: "GIO — 회사 업무", function: "견적, 샘플, 거래처 대응", writePolicy: "research" },
+apps/desktop/src/runtime/stage9Permission.ts:510:  if (/(customer|고객|문의|cs|reply|답변|응답|channeltalk|채널톡)/i.test(summary)) {
+apps/desktop/src/runtime/stage9Permission.ts:511:    return "customer_reply";
+apps/desktop/src/runtime/stage9Permission.test.ts:184:  it("requires approval for customer replies and email sends from external channels", () => {
+apps/desktop/src/runtime/stage9Permission.test.ts:189:          id: "approval_customer_reply",
+apps/desktop/src/runtime/stage9Permission.test.ts:190:          ingressEventId: "ingress_customer_reply",
+apps/desktop/src/runtime/stage9Permission.test.ts:192:          summary: "send customer reply about refund policy",
+apps/desktop/src/runtime/stage9Permission.test.ts:201:          summary: "email the customer a status update",
+apps/desktop/src/runtime/stage9Permission.test.ts:215:    expect(actions).toContain("customer_reply");
+apps/desktop/src/runtime/stage9Permission.test.ts:217:    expect(snapshot.items.find((item) => item.action === "customer_reply")?.decision).toBe("approval_required");
+apps/desktop/src/lib/githubContext.ts:18:const MAX_EXCERPT_CHARS = 24_000;
+apps/desktop/src/lib/githubContext.ts:34:  const limit = input.maxExcerptChars ?? MAX_EXCERPT_CHARS;
+apps/desktop/src/lib/turboEditPrompt.ts:19:export const DEFAULT_MAX_EXCERPT_BYTES = 12_000;
+apps/desktop/src/lib/turboEditPrompt.ts:155:  const maxBytes = input.maxExcerptBytes ?? DEFAULT_MAX_EXCERPT_BYTES;
+apps/desktop/src/lib/permissionApprovalLedger.ts:138:    customer_reply: "고객 답변",
+apps/desktop/src/lib/turboEditPrompt.test.ts:2:import { buildTurboEditPrompt, validateTurboEditOutput, DEFAULT_MAX_EXCERPT_BYTES } from "./turboEditPrompt";
+apps/desktop/src/lib/turboEditPrompt.test.ts:146:    expect(DEFAULT_MAX_EXCERPT_BYTES).toBe(12_000);
+apps/desktop/src/lib/controlQueuePresentation.ts:55:  customer_reply: "고객 답변",
+apps/desktop/src/lib/permissionApprovalLedger.test.ts:31:      action: "customer_reply",
+apps/server/src/evidence/evidenceIngest.ts:5: * Maps an EvidenceRef (from the ERP Evidence Hub) to a MemoryInput payload.
+apps/server/src/evidence/evidenceIngest.ts:22: * When an EvidenceLink is approved in the ERP, we trigger an async batchRemember job.
+apps/server/src/integrations/githubPullRequestUpdateGuards.ts:21:export const PR_UPDATE_BODY_EXCERPT_MAX = 240;
+apps/server/src/integrations/githubPullRequestUpdateGuards.ts:53:  if (trimmed.length <= PR_UPDATE_BODY_EXCERPT_MAX) return trimmed;
+apps/server/src/integrations/githubPullRequestUpdateGuards.ts:54:  return `${trimmed.slice(0, PR_UPDATE_BODY_EXCERPT_MAX)}…`;
+apps/server/src/routes/autorunSafety.ts:315:    "USERPROFILE",
+apps/mobile/src/seeds.ts:136:    title: "GIO-WIKI v4 Step 2 진입 조건",

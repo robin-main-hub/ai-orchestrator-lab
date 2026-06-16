@@ -507,8 +507,8 @@ function actionFromExternalApproval(approval: ExternalApprovalItem): PermissionA
     return "email_send";
   }
 
-  if (/(customer|고객|문의|cs|reply|답변|응답|channeltalk|채널톡)/i.test(summary)) {
-    return "customer_reply";
+  if (/(external|고객|문의|cs|reply|답변|응답|channeltalk|채널톡)/i.test(summary)) {
+    return "external_reply";
   }
 
   if (/(slack|external|message|dm|카톡|외부 인입|메시지)/i.test(summary)) {

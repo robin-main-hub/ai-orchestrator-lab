@@ -181,15 +181,15 @@ describe("stage9 permission matrix", () => {
     expect(approvedSnapshot.queue.length).toBe(pendingSnapshot.queue.length - 1);
   });
 
-  it("requires approval for customer replies and email sends from external channels", () => {
+  it("requires approval for external replies and email sends from external channels", () => {
     const snapshot = createStage9PermissionSnapshot({
       sessionId: "session_desktop_001",
       externalApprovals: [
         {
-          id: "approval_customer_reply",
-          ingressEventId: "ingress_customer_reply",
-          channel: "webhook",
-          summary: "send customer reply about refund policy",
+          id: "approval_external_reply",
+          ingressEventId: "ingress_external_reply",
+          channel: "external_legacy",
+          summary: "send external reply about refund policy",
           permissions: [],
           state: "required",
           createdAt,
@@ -198,7 +198,7 @@ describe("stage9 permission matrix", () => {
           id: "approval_email_send",
           ingressEventId: "ingress_email_send",
           channel: "api",
-          summary: "email the customer a status update",
+          summary: "email the external client a status update",
           permissions: [],
           state: "required",
           createdAt,
@@ -212,9 +212,9 @@ describe("stage9 permission matrix", () => {
     });
 
     const actions = snapshot.items.map((item) => item.action);
-    expect(actions).toContain("customer_reply");
+    expect(actions).toContain("external_reply");
     expect(actions).toContain("email_send");
-    expect(snapshot.items.find((item) => item.action === "customer_reply")?.decision).toBe("approval_required");
+    expect(snapshot.items.find((item) => item.action === "external_reply")?.decision).toBe("approval_required");
     expect(snapshot.items.find((item) => item.action === "email_send")?.decision).toBe("approval_required");
   });
 
