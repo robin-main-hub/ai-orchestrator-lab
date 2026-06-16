@@ -189,3 +189,19 @@ Regression checklist:
 - [ ] **No side-effect controls** — no approve/send/run/apply/dispatch; no server
       call; REPLAY stays read-only; PREVIEW fixture stays labeled; LIVE gets no
       preview data.
+
+## 11. Batch 11 — saved views / persistence / command palette
+
+Batch 11 added view presets, active-view persistence, and Command Palette hooks.
+Tick on each future preview:
+
+- [ ] **Presets** — picking My Desk / Today / Blocked / Failures / Runner /
+      Learning applies its filter combo; Replay jumps to the REPLAY seat.
+- [ ] **Persistence** — with persistence on, the active view (focus/category/
+      search) is remembered across reloads; an invalid stored view falls back to
+      defaults; local pref only (no server write).
+- [ ] **Command Palette** — "Assistant Inbox 열기 / REPLAY 좌석 / Failures 필터 /
+      Blocked 보기 / 필터 초기화" each change the view only (nav/mode/filter), never
+      execute an action.
+- [ ] **Still view-only** — no side-effect controls; zero `<button>` (search =
+      input, presets/filters = radios); REPLAY read-only; LIVE gets no preview data.
