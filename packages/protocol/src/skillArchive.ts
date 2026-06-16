@@ -27,6 +27,15 @@ export type SkillArchiveSource = z.infer<typeof skillArchiveSourceSchema>;
 export const skillTrustStatusSchema = z.enum(["suggested", "curator_approved", "rejected", "pinned"]);
 export type SkillTrustStatus = z.infer<typeof skillTrustStatusSchema>;
 
+export const skillActivationStatusSchema = z.enum([
+  "inactive",
+  "eval_pending",
+  "eval_passed",
+  "active",
+  "quarantined",
+]);
+export type SkillActivationStatus = z.infer<typeof skillActivationStatusSchema>;
+
 export const skillArchiveCandidateSchema = z.object({
   id: z.string(),
   missionId: z.string(),
@@ -39,6 +48,12 @@ export const skillArchiveCandidateSchema = z.object({
   confidence: z.enum(["low", "medium", "high"]),
   trustStatus: skillTrustStatusSchema,
   createdAt: z.string(),
+  // New activation properties
+  activationStatus: skillActivationStatusSchema.default("inactive"),
+  evalRunId: z.string().optional(),
+  evalWaiverReason: z.string().optional(),
+  activationScope: z.string().optional(),
+  quarantineReason: z.string().optional(),
 });
 export type SkillArchiveCandidate = z.infer<typeof skillArchiveCandidateSchema>;
 
@@ -69,6 +84,7 @@ export function deriveSkillCandidatesFromMission(record: ServerMissionRecord, no
     confidence: "medium",
     trustStatus: "suggested",
     createdAt: now(),
+    activationStatus: "inactive",
   });
 
   // 실패했다가 통과한 검증이 있으면 — "이렇게 고쳤다"가 재사용 가치 높은 fix
@@ -88,10 +104,87 @@ export function deriveSkillCandidatesFromMission(record: ServerMissionRecord, no
       confidence: "high",
       trustStatus: "suggested",
       createdAt: now(),
+      activationStatus: "inactive",
     });
   }
 
   return candidates;
+}
+
+export function isSkillEvalEligible(candidate: SkillArchiveCandidate): boolean {
+  return (
+    (candidate.trustStatus === "curator_approved" || candidate.trustStatus === "pinned") &&
+    candidate.activationStatus === "inactive"
+  );
+}
+
+export function markSkillEvalPassed(
+  candidate: SkillArchiveCandidate,
+  evalRunId: string,
+): SkillArchiveCandidate {
+  return {
+    ...candidate,
+    activationStatus: "eval_passed",
+    evalRunId,
+  };
+}
+
+export function activateSkill(
+  candidate: SkillArchiveCandidate,
+  activationScope?: string,
+): SkillArchiveCandidate {
+  if (!candidate.evalRunId && !candidate.evalWaiverReason) {
+    throw new Error("Cannot activate skill without evalRunId or evalWaiverReason");
+  }
+  if (candidate.evalWaiverReason !== undefined && candidate.evalWaiverReason.trim() === "") {
+    throw new Error("Activation waiver requires a non-empty reason");
+  }
+  return {
+    ...candidate,
+    activationStatus: "active",
+    activationScope: activationScope ?? candidate.activationScope,
+  };
+}
+
+export function quarantineSkill(
+  candidate: SkillArchiveCandidate,
+  reason: string,
+): SkillArchiveCandidate {
+  if (!reason || reason.trim() === "") {
+    throw new Error("Quarantine requires a non-empty reason");
+  }
+  return {
+    ...candidate,
+    activationStatus: "quarantined",
+    quarantineReason: reason,
+  };
+}
+
+export function isRuntimeLoadableSkill(candidate: SkillArchiveCandidate): boolean {
+  if (candidate.trustStatus !== "curator_approved" && candidate.trustStatus !== "pinned") {
+    return false;
+  }
+  if (candidate.activationStatus !== "active") {
+    return false;
+  }
+  const hasValidEval = !!candidate.evalRunId;
+  const hasValidWaiver = !!candidate.evalWaiverReason && candidate.evalWaiverReason.trim() !== "";
+  return hasValidEval || hasValidWaiver;
+}
+
+export function buildSkillRuntimeManifest(
+  candidates: SkillArchiveCandidate[],
+  scope?: string,
+): SkillArchiveCandidate[] {
+  return candidates.filter((candidate) => {
+    if (!isRuntimeLoadableSkill(candidate)) {
+      return false;
+    }
+    if (scope !== undefined && candidate.activationScope !== undefined) {
+      return candidate.activationScope === scope;
+    }
+    return true;
+  });
 }
 
 /** curator 결정 → trustStatus 전이. 승인/핀만 trusted, 거절은 rejected. */
