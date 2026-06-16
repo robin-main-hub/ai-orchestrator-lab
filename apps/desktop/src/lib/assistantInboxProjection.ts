@@ -461,7 +461,7 @@ export type AssistantInboxLiveInput = {
    * Batch 8 LINE B — real event-log entries for the time-bucketed Today/Recent
    * lanes. Read-only; only id/type/createdAt are used. Absent → honest empty.
    */
-  recentEvents?: ReadonlyArray<{ id: string; type: string; createdAt: string }>;
+  recentEvents?: ReadonlyArray<{ id: string; type: string; createdAt: string; source?: string }>;
   /**
    * Batch 8 LINE B — injected "now" (ms) for deterministic time bucketing. The
    * App passes Date.now(); pure code never calls Date.now itself. Absent → no
