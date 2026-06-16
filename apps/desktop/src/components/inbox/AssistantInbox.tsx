@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Inbox } from "lucide-react";
 import { Card, CardContent, CardHeader } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -483,7 +483,8 @@ function PreviewScenarioLegend() {
 }
 
 /** LINE B — the priority lane rail. Read-only, no buttons; honest empty lanes. */
-function WorkLaneRail({ lanes }: { lanes: ReadonlyArray<WorkLane> }) {
+function WorkLaneRail({ lanes, query = "" }: { lanes: ReadonlyArray<WorkLane>; query?: string }) {
+  const q = query.trim().toLowerCase();
   return (
     <div
       className="mb-3 grid grid-cols-2 gap-1.5 px-4 sm:grid-cols-3 lg:grid-cols-5"
@@ -491,12 +492,17 @@ function WorkLaneRail({ lanes }: { lanes: ReadonlyArray<WorkLane> }) {
       role="list"
       aria-label="Work queue lanes"
     >
-      {lanes.map((lane) => (
+      {lanes.map((lane) => {
+        // LINE A — search filters the visible lane rows (label match). With no
+        // query the lane keeps its real count; honest empty when nothing matches.
+        const items = q ? lane.items.filter((i) => i.label.toLowerCase().includes(q)) : lane.items;
+        const count = q ? items.length : lane.count;
+        return (
         <div
           key={lane.id}
           role="listitem"
           data-testid={`work-lane-${lane.id}`}
-          data-count={lane.count}
+          data-count={count}
           className="rounded-md border border-white/[0.08] bg-white/[0.02] px-2 py-1.5"
         >
           <div className="flex items-center gap-1.5">
@@ -504,19 +510,19 @@ function WorkLaneRail({ lanes }: { lanes: ReadonlyArray<WorkLane> }) {
               {lane.title}
             </span>
             <span className="ml-auto rounded bg-white/[0.08] px-1 text-[10px] tabular-nums text-zinc-300">
-              {lane.count}
+              {count}
             </span>
           </div>
-          {lane.count === 0 ? (
+          {count === 0 ? (
             <p
               className="mt-1 text-[10px] leading-snug text-muted-foreground/50"
               data-testid={`work-lane-empty-${lane.id}`}
             >
-              {lane.emptyHint}
+              {q ? "검색 결과 없음" : lane.emptyHint}
             </p>
           ) : (
             <ul className="mt-1 space-y-0.5">
-              {lane.items.map((item, i) => (
+              {items.map((item, i) => (
                 <li
                   key={i}
                   data-testid={`work-lane-item-${lane.id}-${i}`}
@@ -537,7 +543,8 @@ function WorkLaneRail({ lanes }: { lanes: ReadonlyArray<WorkLane> }) {
             </ul>
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -571,13 +578,26 @@ const REPLAY_FILTERS: ReadonlyArray<"all" | EventCategory> = [
   "system",
 ];
 
-function ReplayDeck({ events }: { events: ReadonlyArray<TimedEventInput> }) {
+function ReplayDeck({
+  events,
+  query = "",
+}: {
+  events: ReadonlyArray<TimedEventInput>;
+  query?: string;
+}) {
   // LINE C — local UI filter only. Never mutates the events, never calls a server.
   const [filter, setFilter] = useState<"all" | EventCategory>("all");
   // LINE D — rows are read-only WorkItem-lite (category/source/observed). LINE C
   // filter is view-only over the projection; never mutates the underlying events.
   const items = projectWorkItemsLite(events);
-  const matched = filter === "all" ? items : items.filter((w) => w.category === filter);
+  const byCategory = filter === "all" ? items : items.filter((w) => w.category === filter);
+  // Batch 10 LINE A — search narrows the (already category-filtered) rows. View-only.
+  const q = query.trim().toLowerCase();
+  const matched = q
+    ? byCategory.filter((w) =>
+        `${w.title} ${w.category} ${w.source}`.toLowerCase().includes(q),
+      )
+    : byCategory;
   const recent = matched.slice(0, 20);
   return (
     <div className="px-4 pb-1" data-testid="replay-deck" data-count={recent.length} data-filter={filter}>
@@ -715,6 +735,18 @@ export function AssistantInbox({
     learningLoops.length === 0 &&
     memoryCandidates.length === 0 &&
     manifestEntries.length === 0;
+  // Batch 10 LINE A/D — local search (view-only). "/" focuses it, Esc clears it.
+  // Never a side-effect control: it only narrows what is shown, writes nothing.
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const onInboxKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "/" && document.activeElement !== searchRef.current) {
+      e.preventDefault();
+      searchRef.current?.focus();
+    } else if (e.key === "Escape" && query) {
+      setQuery("");
+    }
+  };
   return (
     <Card
       className="border-white/10 bg-black/40 py-3"
@@ -723,6 +755,8 @@ export function AssistantInbox({
       data-live-sections={liveCount}
       data-has-example={hasExample ? "true" : "false"}
       data-view-mode={mode}
+      data-query={query}
+      onKeyDown={onInboxKeyDown}
     >
       <CardHeader className="px-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -766,14 +800,26 @@ export function AssistantInbox({
         lastUpdateSource={lastUpdateSource}
         generatedAt={generatedAt}
       />
+      <div className="px-4 pb-2">
+        <input
+          ref={searchRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="검색 — 큐 / REPLAY 행 필터 ( / 포커스 · Esc 지움 · read-only )"
+          aria-label="Assistant Inbox 검색"
+          data-testid="inbox-search"
+          className="w-full rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-zinc-200 placeholder:text-muted-foreground/40 focus:border-cyan-400/40 focus:outline-none"
+        />
+      </div>
       {mode === "replay" ? (
-        <ReplayDeck events={recentEvents ?? []} />
+        <ReplayDeck events={recentEvents ?? []} query={query} />
       ) : (
         <>
           {mode === "preview" ? <PreviewBanner /> : null}
           {mode === "preview" ? <PreviewScenarioLegend /> : null}
           {liveSparse ? <LiveEmptyHero /> : null}
-          <WorkLaneRail lanes={workLanes} />
+          <WorkLaneRail lanes={workLanes} query={query} />
           <CardContent className="grid grid-cols-1 gap-2.5 px-4 lg:grid-cols-2 lg:gap-2.5 xl:gap-3">
         <Section
           id="evidence"
