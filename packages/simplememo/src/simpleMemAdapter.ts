@@ -8,7 +8,7 @@ import type {
   RecallResult,
   Reflection,
 } from "@ai-orchestrator/protocol";
-import type { MemoryAdapter, MemoryAdapterContext, MemoryAdapterKind, MemoryBatchJob, MemoryBatchRememberOptions, MemoryBatchRememberResult } from "./adapter.js";
+import type { MemoryAdapter, MemoryAdapterContext, MemoryAdapterKind } from "./adapter.js";
 import { MemoryAdapterError } from "./errors.js";
 
 // ---------------------------------------------------------------------------
@@ -48,78 +48,36 @@ export class SimpleMemAdapter implements MemoryAdapter {
   readonly kind: MemoryAdapterKind = "dgx_simplemem";
   readonly profileId: string;
 
-  readonly forceHnsw: boolean;
-  readonly hnswSupported: boolean;
-  readonly hnswObserved: boolean;
-  readonly scanBatchSize: number;
-
   private records = new Map<string, MemoryRecord>();
   private _relations: MemoryRelation[] = [];
   private _seq = 0;
 
-  constructor(options: {
-    profileId?: string;
-    seedRecords?: MemoryRecord[];
-    forceHnsw?: boolean;
-    hnswSupported?: boolean;
-    hnswObserved?: boolean;
-    scanBatchSize?: number;
-  } = {}) {
+  constructor(options: { profileId?: string; seedRecords?: MemoryRecord[] } = {}) {
     this.profileId = options.profileId ?? "dgx_simplemem";
     if (options.seedRecords) {
       for (const r of options.seedRecords) {
         this.records.set(r.id, r);
       }
     }
-    this.forceHnsw = options.forceHnsw ?? (typeof process !== "undefined" && process.env.SIMPLEMEM_FORCE_HNSW === "true");
-    this.hnswSupported = options.hnswSupported ?? false;
-    this.hnswObserved = options.hnswObserved ?? false;
-    this.scanBatchSize = options.scanBatchSize ?? 10;
   }
 
   async recall(query: RecallQuery, ctx: MemoryAdapterContext): Promise<RecallResult[]> {
     const queryTokens = tokenize(query.query);
-    const allRecords = Array.from(this.records.values());
-    const startTime = Date.now();
-    let rounds = 0;
-    const scannedRecords: typeof allRecords = [];
-    let hitCap = false;
-
-    for (let i = 0; i < allRecords.length; i += this.scanBatchSize) {
-      rounds++;
-      if (rounds > 20) {
-        hitCap = true;
-        break;
-      }
-      if (Date.now() - startTime > 300) {
-        hitCap = true;
-        break;
-      }
-      const chunk = allRecords.slice(i, i + this.scanBatchSize);
-      scannedRecords.push(...chunk);
-    }
-
-    const filtered = scannedRecords.filter((r) => {
-      if (r.tombstonedAt) return false;
-      if (query.layers && !query.layers.includes(r.layer)) return false;
-      if (query.scopes && r.scope && !query.scopes.includes(r.scope)) return false;
-      if (query.kinds && !query.kinds.includes(r.kind ?? "context")) return false;
-      if (!query.includeUntrusted && r.trustLevel === "untrusted") return false;
-      return true;
-    });
-
-    let warning: string | undefined;
-    if (hitCap) {
-      warning = `warning: Scan cap reached. Processed ${rounds} rounds in ${Date.now() - startTime}ms. Returning partial results.`;
-    }
-
-    const candidates = filtered
+    const candidates = Array.from(this.records.values())
+      .filter((r) => {
+        if (r.tombstonedAt) return false;
+        if (query.layers && !query.layers.includes(r.layer)) return false;
+        if (query.scopes && r.scope && !query.scopes.includes(r.scope)) return false;
+        if (query.kinds && !query.kinds.includes(r.kind ?? "context")) return false;
+        if (!query.includeUntrusted && r.trustLevel === "untrusted") return false;
+        return true;
+      })
       .map((record): RecallResult => ({
         record,
         score: scoreRecord(record, queryTokens),
         usedInDecision: false,
         activationState: record.activationState,
-        reason: (queryTokens.length > 0 ? "token overlap" : "available fallback memory") + (warning ? ` (${warning})` : ""),
+        reason: queryTokens.length > 0 ? "token overlap" : "available fallback memory",
       }))
       .filter((res) => res.score > 0 || queryTokens.length === 0)
       .sort((a, b) => b.score - a.score)
@@ -135,8 +93,7 @@ export class SimpleMemAdapter implements MemoryAdapter {
         operation: "recall",
         recordIds: candidates.map((r) => r.record.id),
         operationScope: ctx.operationScope,
-        ...(warning ? { warning } : {}),
-      } as any,
+      },
       createdAt: now,
       source: "agent",
       sourceTrust: "trusted",
@@ -169,159 +126,6 @@ export class SimpleMemAdapter implements MemoryAdapter {
     );
   }
 
-  async batchRemember(
-    inputs: MemoryInput[],
-    ctx: MemoryAdapterContext,
-    options?: MemoryBatchRememberOptions,
-  ): Promise<MemoryBatchRememberResult> {
-    const now = ctx.now?.() ?? new Date().toISOString();
-    const jobId = `job_${stableId(inputs.map(i => i.title).join(","), String(this._seq++))}`;
-    const idempotencyKey = options?.idempotencyKey ?? `idemp_${stableId(inputs.map(i => i.title + i.content).join("|"), "idemp")}`;
-
-    // 1. memory.batch.accepted
-    await ctx.appendEvent?.({
-      id: `${jobId}_accepted`,
-      sessionId: "dgx_simplemem",
-      type: "memory.batch.accepted" as any,
-      payload: {
-        kind: "memory_batch_accepted",
-        jobId,
-        idempotencyKey,
-        acceptedCount: inputs.length,
-        rejectedCount: 0,
-      },
-      createdAt: now,
-      source: "agent",
-      sourceTrust: "trusted",
-      redacted: false,
-    });
-
-    // 2. memory.batch.started
-    await ctx.appendEvent?.({
-      id: `${jobId}_started`,
-      sessionId: "dgx_simplemem",
-      type: "memory.batch.started" as any,
-      payload: {
-        kind: "memory_batch_started",
-        jobId,
-        idempotencyKey,
-        acceptedCount: inputs.length,
-        rejectedCount: 0,
-      },
-      createdAt: now,
-      source: "agent",
-      sourceTrust: "trusted",
-      redacted: false,
-    });
-
-    let accepted = 0;
-    let rejected = 0;
-    const errors: Array<{ itemIndex: number; error: string }> = [];
-    const records: MemoryRecord[] = [];
-    const itemResults: Array<{
-      inputId?: string;
-      recordId?: string;
-      status: "written" | "rejected" | "failed" | "skipped";
-      reason?: string;
-    }> = [];
-
-    // Process inputs
-    for (let i = 0; i < inputs.length; i++) {
-      const input = inputs[i]!;
-      if (!input.title || input.title.trim() === "" || !input.content || input.content.trim() === "" || input.title === "fail-me") {
-        rejected++;
-        errors.push({ itemIndex: i, error: `Invalid input: title='${input.title}', content='${input.content}'` });
-        itemResults.push({
-          inputId: (input as any).inputId,
-          status: "rejected",
-          reason: `Invalid input: title='${input.title}', content='${input.content}'`,
-        });
-      } else {
-        accepted++;
-        const recordId = `dgx_${stableId(`${input.title}:${input.content}`, String(this._seq++))}`;
-        const newRecord: MemoryRecord = {
-          id: recordId,
-          layer: input.layer,
-          scope: input.scope,
-          kind: input.kind ?? "context",
-          title: input.title,
-          content: input.content,
-          tags: input.tags,
-          sourceChannel: input.sourceChannel,
-          trustLevel: input.trustLevel,
-          createdAt: now,
-          pinned: false,
-          activationState: "active",
-        };
-        this.records.set(recordId, newRecord);
-        records.push(newRecord);
-        itemResults.push({
-          inputId: (input as any).inputId,
-          recordId,
-          status: "written",
-        });
-      }
-    }
-
-    const status = accepted === 0 ? "failed" : rejected === 0 ? "completed" : "partial";
-    const eventType = `memory.batch.${status}` as any;
-    const kind = `memory_batch_${status}` as any;
-
-    // 3. memory.batch.finished / status event
-    await ctx.appendEvent?.({
-      id: `${jobId}_finished`,
-      sessionId: "dgx_simplemem",
-      type: eventType,
-      payload: {
-        kind,
-        jobId,
-        idempotencyKey,
-        acceptedCount: accepted,
-        rejectedCount: rejected,
-        errors,
-      },
-      createdAt: now,
-      source: "agent",
-      sourceTrust: "trusted",
-      redacted: false,
-    });
-
-    const batchJob: MemoryBatchJob = {
-      jobId,
-      idempotencyKey,
-      source: options?.source ?? "manual",
-      status: status === "completed" ? "completed" : status === "failed" ? "failed" : "partial",
-      accepted,
-      rejected,
-      written: accepted,
-      failed: rejected,
-      itemResults: itemResults.map(r => ({
-        inputId: r.inputId,
-        recordId: r.recordId,
-        status: r.status === "written" ? "written" : r.status === "rejected" ? "rejected" : "failed",
-        reason: r.reason,
-      })),
-      async: !!options?.async,
-      createdAt: now,
-      completedAt: now,
-    };
-
-    if (options?.async) {
-      return {
-        async: true,
-        job: batchJob,
-      };
-    } else {
-      return {
-        async: false,
-        records,
-        accepted,
-        rejected,
-        itemResults,
-      };
-    }
-  }
-
   async memoryContext(query: RecallQuery, ctx: MemoryAdapterContext): Promise<MemoryContextPacket> {
     const results = await this.recall(query, ctx);
     const now = ctx.now?.() ?? new Date().toISOString();
@@ -348,17 +152,6 @@ export class SimpleMemAdapter implements MemoryAdapter {
 
   async stats(_ctx?: MemoryAdapterContext): Promise<MemoryStats> {
     const active = Array.from(this.records.values()).filter((r) => !r.tombstonedAt);
-    let hnswStatus: "configured" | "blocked" | "active";
-    if (this.forceHnsw) {
-      if (this.hnswSupported) {
-        hnswStatus = "active";
-      } else {
-        hnswStatus = "blocked";
-      }
-    } else {
-      hnswStatus = "configured";
-    }
-
     return {
       totalRecords: active.length,
       activeRecords: active.filter((r) => r.activationState === "active").length,
@@ -369,9 +162,7 @@ export class SimpleMemAdapter implements MemoryAdapter {
       contradictionCandidates: 0,
       staleCandidates: 0,
       health: "good",
-      hnswStatus,
-      hnswObserved: this.hnswObserved,
-    } as any;
+    };
   }
 
   async pin(recordId: string, ctx: MemoryAdapterContext): Promise<void> {

@@ -3,10 +3,7 @@ export type {
   MemoryAdapterContext,
   MemoryAdapterKind,
   MemoryEventPayload,
-  MemoryBatchJob,
-  MemoryBatchRememberOptions,
-  MemoryBatchRememberResult,
-} from "./adapter.js";
+} from "./adapter";
 export { MemoryApiAdapter } from "./adapter.js";
 export {
   isMemoryAdapterError,
@@ -25,3 +22,36 @@ export { MementoMcpAdapter } from "./mementoAdapter.js";
 export type { MementoMcpAdapterOptions, MementoPolicy, RecallSource, RecallTrace } from "./mementoAdapter.js";
 export { LocalHeuristicAdapter } from "./localHeuristicAdapter.js";
 export { SimpleMemAdapter } from "./simpleMemAdapter.js";
+
+export {
+  createBatchRememberAdapter,
+  planBatchRemember,
+  deriveBatchCandidateId,
+  DEFAULT_BATCH_REMEMBER_CONFIG,
+} from "./batchRemember.js";
+export type {
+  BatchRememberAdapter,
+  BatchRememberCandidate,
+  BatchRememberConfig,
+  BatchRememberMode,
+  BatchRememberOrigin,
+  BatchRememberInitialTrust,
+  BatchRememberResult,
+  BatchCandidateResult,
+  BatchCandidateOutcome,
+} from "./batchRemember.js";
+
+export { executeLocalBatchWrite } from "./batchRemember.js";
+export type {
+  LocalSimpleMemoWriter,
+  LocalSimpleMemoWriteResult,
+  LocalBatchWriteResult,
+  LocalBatchWriteCandidateResult,
+  LocalBatchWriteStatus,
+} from "./batchRemember.js";
+
+export {
+  buildBatchRememberCandidatesFromLearning,
+  distilledCandidateToMemoryInput,
+  executeLearningBatchRemember,
+} from "./learningBatchRemember.js";
