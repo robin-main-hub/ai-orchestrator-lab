@@ -78,3 +78,34 @@ component also has an example mode (no `live` prop) where every section is label
 - Substitute verification: jsdom + Testing-Library tests (inbox + projection) green,
   plus a clean `build` and `typecheck`.
 - This checklist enables a human to perform LINE M (the real browser preview).
+
+## 6. Batch 6 — owner preview findings + regression checklist
+
+The real browser preview **WAS run** during Batch 6 (locally on the owner's
+Windows desktop, vite dev on `127.0.0.1:5173`). Findings:
+
+1. **PREVIEW passes** the command-center feel — dense, badged, clearly
+   예시(fixture) with a persistent watermark.
+2. **LIVE was visually too empty** → Batch 6 LINE U/V added a status strip
+   (`mode · items · live X/4 · empty Y/4 · gate`), a polished
+   `작전 대기 중 · No live data yet` hero (only when sparse), and intentional
+   empty rows that say what will populate each section.
+3. **The bottom approval toast** (`ApprovalToastBar`, `fixed bottom-4`) overlapped
+   the inbox's lower cards → Batch 6 LINE W reserves bottom safe-area on the
+   `command_center` page (`padding-bottom`) so content scrolls clear. The toast
+   and approval flow are unchanged.
+
+### Batch 6 regression checklist (tick on each future preview)
+
+- [ ] **LIVE sparse looks intentional** — status strip + "No live data yet" hero,
+      not a dead screen.
+- [ ] **Empty sections explain themselves** — each says what will populate it;
+      never shows fixture text in LIVE.
+- [ ] **PREVIEW still clearly fake** — persistent watermark banner + every section
+      labeled 예시(fixture).
+- [ ] **No toast overlap** — the last inbox card scrolls clear of the bottom
+      approval toast.
+- [ ] **Mode switch works** — LIVE/PREVIEW toggle; REPLAY/SANDBOX disabled
+      placeholders.
+- [ ] **No live/fixture leakage** — switching LIVE↔PREVIEW never mixes data.
+- [ ] **Still read-only** — no enable/approve/run buttons in the inbox.
