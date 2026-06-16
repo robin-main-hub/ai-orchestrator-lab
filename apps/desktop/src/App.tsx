@@ -303,6 +303,7 @@ import { CodingPacketPanel } from "./components/CodingPacketPanel";
 import { CheatSheetOverlay } from "./components/CheatSheetOverlay";
 import { ApprovalToastBarConnector } from "./components/ApprovalToastBarConnector";
 import { CommandPalette, type CommandEntry } from "./components/CommandPalette";
+import { AssistantInboxContainer } from "./components/inbox/AssistantInboxContainer";
 import { ConfigLibraryPanel } from "./components/ConfigLibraryPanel";
 import { ConversationWorkbench } from "./components/ConversationWorkbench";
 import { DebateAnnexPage } from "./components/debate-chamber/DebateAnnexPage";
@@ -5448,6 +5449,8 @@ export function App() {
               snapshot={backupSnapshot}
             />
           </div>
+          ) : activeNavItem === "command_center" ? (
+            <AssistantInboxContainer />
           ) : configLibraryActive ? (
             <ConfigLibraryPanel
               configFiles={agentConfigFiles}

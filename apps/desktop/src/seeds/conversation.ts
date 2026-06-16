@@ -4,6 +4,7 @@ import {
   Code2,
   FlaskConical,
   FileText,
+  Inbox,
   KeyRound,
   LayoutDashboard,
   LayoutGrid,
@@ -112,6 +113,7 @@ export const navSections: NavSection[] = [
       { id: "config_files", label: "설정파일", icon: FileText },
       { id: "channels", label: "채널", icon: RadioTower },
       { id: "backup", label: "백업", icon: Archive },
+      { id: "command_center", label: "어시스턴트 인박스", icon: Inbox },
     ],
   },
 ];
