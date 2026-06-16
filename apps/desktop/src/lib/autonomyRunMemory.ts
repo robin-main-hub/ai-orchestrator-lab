@@ -3,7 +3,8 @@ import { sanitizePublicText } from "./publicRedaction";
 import { loopStatusLabel } from "./autonomyRunForm";
 import type { LoopStatus } from "./closedLoopController";
 import { createMemoryCuratorCandidate, type MemoryCuratorCandidate } from "./memoryCuratorApproval";
-
+import { type SkillArchiveCandidate, isRuntimeLoadableSkill } from "@ai-orchestrator/protocol";
+import type { AgentConfigFile } from "../types";
 /**
  * Turn a finished autonomous run into a long-term memory candidate, so the
  * system can remember what it executed (subject to the same curator approval as
@@ -82,4 +83,25 @@ function uniqueWords(value: string): string[] {
         .filter((word) => word.length > 1),
     ),
   );
+}
+
+/**
+ * Enforces that skills loaded during agent runtime must satisfy the isRuntimeLoadableSkill() contract.
+ * Converts valid SkillArchiveCandidates into AgentConfigFile (kind: "skill") for the runtime.
+ */
+export function loadRuntimeSkills(candidates: SkillArchiveCandidate[]): AgentConfigFile[] {
+  return candidates
+    .filter(isRuntimeLoadableSkill)
+    .map((candidate) => ({
+      id: `config_skill_learned_${candidate.id}`,
+      kind: "skill",
+      scope: "global",
+      path: `agents/skills/${candidate.id}.md`,
+      label: candidate.title,
+      body: candidate.summary + (candidate.reusablePrompt ? `\n\n${candidate.reusablePrompt}` : ""),
+      linkedAgentIds: [], // Skills might be globally applicable or need specific linking logic
+      tags: ["learned_skill", candidate.source],
+      version: 1,
+      updatedAt: candidate.createdAt,
+    }));
 }

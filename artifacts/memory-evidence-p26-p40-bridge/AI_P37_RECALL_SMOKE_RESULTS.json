@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "recallTests": [
+    {
+      "query": "price list",
+      "matches": 1,
+      "details": "slack-105: 태평양물산 TP price list"
+    },
+    {
+      "query": "payment",
+      "matches": 1,
+      "details": "email-201: Pradeep payment confirmation for invoice 123"
+    }
+  ]
+}

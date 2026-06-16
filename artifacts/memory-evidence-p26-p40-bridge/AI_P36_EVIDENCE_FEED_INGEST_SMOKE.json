@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "feedVersion": "1.0",
+  "totalIngested": 2,
+  "ingestedSample": [
+    {
+      "id": "gio_ev_slack-105_2026-06-16T10:20:00.000Z",
+      "layer": "project_memory",
+      "trustBoundary": "external_unverified",
+      "truthStatus": "not_erp_truth",
+      "contentSnippet": "태평양물산 TP price list"
+    },
+    {
+      "id": "gio_ev_email-201_2026-06-16T11:00:00.000Z",
+      "layer": "project_memory",
+      "trustBoundary": "external_unverified",
+      "truthStatus": "not_erp_truth",
+      "contentSnippet": "Pradeep payment confirmation for invoice 123"
+    }
+  ]
+}
