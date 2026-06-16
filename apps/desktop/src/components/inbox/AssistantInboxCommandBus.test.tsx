@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 
 afterEach(() => cleanup());
@@ -45,5 +45,18 @@ describe("Batch 11 — LINE C: command-bus (palette → inbox view, view-only)",
       <AssistantInboxContainer live={live} command={{ kind: "focus", value: "blocked", nonce: 1 }} />,
     );
     expect(container.querySelectorAll("button").length).toBe(0);
+  });
+
+  it("re-applies the SAME command when re-issued (nonce bump → effect re-runs)", () => {
+    const { rerender } = render(<AssistantInboxContainer live={live} />);
+    // First issue: focus blocked
+    rerender(<AssistantInboxContainer live={live} command={{ kind: "focus", value: "blocked", nonce: 1 }} />);
+    expect(q("work-lane-today")).toBeNull();
+    // User manually returns to all
+    fireEvent.click(screen.getByTestId("inbox-focus-all"));
+    expect(q("work-lane-today")).toBeTruthy();
+    // Re-issue the SAME command (same kind/value, fresh nonce) → re-applies
+    rerender(<AssistantInboxContainer live={live} command={{ kind: "focus", value: "blocked", nonce: 2 }} />);
+    expect(q("work-lane-today")).toBeNull();
   });
 });
