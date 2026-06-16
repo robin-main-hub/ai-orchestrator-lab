@@ -1,14 +1,19 @@
 import { Repeat, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader } from "../ui/card";
 import { Badge } from "../ui/badge";
+import { StatusBadge } from "./StatusBadge";
 
 /**
- * LINE F — Learning loop card.
+ * LINE F / N — Learning loop card.
  *
  * Read-only, presentational. Renders a learning loop's stage and where
  * it sits on the progression:
  *   failed → investigating → hypothesis_recorded → verified → distilled → consulted
  * with `rejected` as a terminal (off-track) stage. No actions.
+ *
+ * LINE N adds command-center density: a unified status badge (PASS/WARNING/
+ * BLOCKED kind) plus compact, scannable fidelity counters (hypotheses /
+ * verified / rejected) projected from the real loop record. No paragraphs.
  */
 
 export type LearningLoopStage =
@@ -27,6 +32,12 @@ export type LearningLoopItem = {
   stage: LearningLoopStage;
   /** Optional compact note. */
   note?: string;
+  /** LINE O fidelity — recorded hypotheses count (real loop record). */
+  hypothesisCount?: number;
+  /** LINE O fidelity — verified hypotheses count. */
+  verifiedCount?: number;
+  /** LINE O fidelity — rejected hypotheses count. */
+  rejectedCount?: number;
 };
 
 /** Happy-path progression (rejected is terminal, off this track). */
@@ -44,11 +55,12 @@ const STAGE_LABEL: Record<LearningLoopStage, string> = {
   rejected: "rejected",
 };
 
-function stageVariant(stage: LearningLoopStage) {
-  if (stage === "rejected" || stage === "failed") return "destructive" as const;
+/** Map a loop stage to a unified PASS/WARNING/BLOCKED status kind. */
+function stageStatus(stage: LearningLoopStage) {
+  if (stage === "rejected" || stage === "failed") return "blocked" as const;
   if (stage === "verified" || stage === "distilled" || stage === "consulted")
-    return "default" as const;
-  return "outline" as const;
+    return "pass" as const;
+  return "warning" as const;
 }
 
 export function LearningLoopCard({ item }: { item: LearningLoopItem }) {
@@ -56,24 +68,44 @@ export function LearningLoopCard({ item }: { item: LearningLoopItem }) {
   const activeIndex = LEARNING_LOOP_PROGRESSION.indexOf(
     item.stage as Exclude<LearningLoopStage, "rejected">,
   );
+  const hyp = item.hypothesisCount ?? 0;
+  const ver = item.verifiedCount ?? 0;
+  const rej = item.rejectedCount ?? 0;
+  const hasCounters = hyp + ver + rej > 0;
   return (
     <Card
-      className="gap-2 border-white/10 bg-white/[0.02] py-3"
+      className="gap-1.5 border-white/10 bg-white/[0.02] py-2.5"
       data-testid={`learning-loop-card-${item.id}`}
       data-stage={item.stage}
       data-terminal={terminalRejected ? "rejected" : "active"}
     >
       <CardHeader className="px-3">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           <Repeat className="h-3.5 w-3.5 text-violet-300/80" />
-          <span className="text-sm font-semibold">{item.title}</span>
-          <Badge
-            variant={stageVariant(item.stage)}
+          <span className="truncate text-sm font-semibold">{item.title}</span>
+          <StatusBadge
+            kind={stageStatus(item.stage)}
+            label={STAGE_LABEL[item.stage]}
             data-testid={`learning-loop-stage-${item.id}`}
             data-stage={item.stage}
-          >
-            {STAGE_LABEL[item.stage]}
-          </Badge>
+          />
+          {hasCounters ? (
+            <span
+              className="ml-auto inline-flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground"
+              data-testid={`learning-loop-counters-${item.id}`}
+              data-hypotheses={hyp}
+              data-verified={ver}
+              data-rejected={rej}
+            >
+              <span title="hypotheses">H{hyp}</span>
+              <span className="text-emerald-300/80" title="verified">
+                ✓{ver}
+              </span>
+              <span className="text-rose-300/80" title="rejected">
+                ✕{rej}
+              </span>
+            </span>
+          ) : null}
         </div>
       </CardHeader>
       <CardContent className="px-3">
