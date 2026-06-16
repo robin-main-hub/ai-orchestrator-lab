@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   EVIDENCE_FIXTURE,
+  LEARNING_EVENT_FIXTURE,
   buildAssistantInboxProps,
+  buildAssistantInboxLiveProps,
+  filterLearningEvents,
   projectEvidenceItems,
   projectLearningLoopItems,
   projectManifestEntries,
   projectMemoryCandidateItems,
+  projectMemoryCandidatesFromProjectRecords,
   projectRunnerGateEvidence,
   projectRunnerGateStatus,
 } from "./assistantInboxProjection";
@@ -96,5 +100,78 @@ describe("assistantInboxProjection — compose", () => {
       JSON.stringify(buildAssistantInboxProps()),
     );
     expect(EVIDENCE_FIXTURE.length).toBe(3);
+  });
+});
+
+
+describe("assistantInboxProjection — LINE H honest live vs empty", () => {
+  it("fixture compose labels every section as example", () => {
+    const props = buildAssistantInboxProps();
+    expect(props.sources.evidence).toBe("example");
+    expect(props.sources.learning).toBe("example");
+    expect(props.sources.memory).toBe("example");
+    expect(props.sources.manifest).toBe("example");
+  });
+
+  it("live compose with empty input → honest empty states (only runner gate live)", () => {
+    const props = buildAssistantInboxLiveProps({});
+    // runner gate is the single live evidence row.
+    expect(props.evidence.length).toBe(1);
+    expect(props.evidence[0]!.id.startsWith("runner-gate-")).toBe(true);
+    expect(props.evidence[0]!.observed).toBe(false);
+    expect(props.sources.evidence).toBe("live");
+    // no live data for the rest → empty + honest source.
+    expect(props.learningLoops.length).toBe(0);
+    expect(props.memoryCandidates.length).toBe(0);
+    expect(props.manifestEntries.length).toBe(0);
+    expect(props.sources.learning).toBe("empty");
+    expect(props.sources.memory).toBe("empty");
+    expect(props.sources.manifest).toBe("empty");
+  });
+
+  it("live compose projects real learning events + project records as live", () => {
+    const props = buildAssistantInboxLiveProps({
+      learningEvents: LEARNING_EVENT_FIXTURE,
+      projectRecords: [
+        { missionId: "m-1", title: "real one" },
+        { missionId: "m-2", title: "real two" },
+      ],
+    });
+    expect(props.learningLoops.length).toBe(2);
+    expect(props.sources.learning).toBe("live");
+    expect(props.memoryCandidates.length).toBe(2);
+    expect(props.sources.memory).toBe("live");
+    // honest: project-record memory candidates are never auto-written.
+    for (const m of props.memoryCandidates) {
+      expect(m.status).toBe("suggested");
+      expect(m.observed).toBe(false);
+    }
+  });
+
+  it("filterLearningEvents drops non-learning events", () => {
+    const mixed = [
+      ...LEARNING_EVENT_FIXTURE,
+      { type: "conversation.message.created", payload: {} },
+      { type: "provider.completion.requested", payload: {} },
+    ];
+    const filtered = filterLearningEvents(mixed);
+    expect(filtered.length).toBe(LEARNING_EVENT_FIXTURE.length);
+  });
+
+  it("includeEvidenceExample labels evidence section example (never live)", () => {
+    const props = buildAssistantInboxLiveProps({ includeEvidenceExample: true });
+    expect(props.sources.evidence).toBe("example");
+    // example evidence rows are prefixed and distinct from the live gate row.
+    expect(props.evidence.some((e) => e.id.startsWith("example-"))).toBe(true);
+  });
+
+  it("projectMemoryCandidatesFromProjectRecords is honest (suggested, not observed)", () => {
+    const items = projectMemoryCandidatesFromProjectRecords([
+      { missionId: "x", title: "t" },
+    ]);
+    expect(items.length).toBe(1);
+    expect(items[0]!.status).toBe("suggested");
+    expect(items[0]!.observed).toBe(false);
+    expect(items[0]!.id).toBe("project-x");
   });
 });
