@@ -301,16 +301,38 @@ export function projectEvidenceItems(
 
 const LOOP_STAGE_FALLBACK: Record<string, LearningLoopStage> = {};
 
-/** Learning loop card items, projected from deriveLearningLoopState. */
+/**
+ * Learning loop card items, projected from deriveLearningLoopState.
+ *
+ * LINE O — surfaces richer real fidelity from each loop record: the recorded
+ * hypothesis count, verified/rejected splits, and a compact note that prefers
+ * the investigation note but falls back to a derived stage summary. This stays
+ * pure and honest: counts come straight off the derived record (no invention).
+ */
 export function projectLearningLoopItems(
   events: ReadonlyArray<{ type: string; payload: unknown }> = LEARNING_EVENT_FIXTURE,
 ): LearningLoopItem[] {
-  return deriveLearningLoopState(events).map((record) => ({
-    id: record.loopId,
-    title: record.failure?.summary ?? record.loopId,
-    stage: (LOOP_STAGE_FALLBACK[record.stage] ?? record.stage) as LearningLoopStage,
-    note: record.investigation?.notes,
-  }));
+  return deriveLearningLoopState(events).map((record) => {
+    const hypothesisCount = record.hypotheses.length;
+    const verifiedCount = record.verifiedHypothesisIds.length;
+    const rejectedCount = record.rejectedHypothesisIds.length;
+    const note =
+      record.investigation?.notes ??
+      (verifiedCount > 0
+        ? `${verifiedCount} verified / ${hypothesisCount} hypotheses`
+        : rejectedCount > 0
+          ? `${rejectedCount} rejected / ${hypothesisCount} hypotheses`
+          : undefined);
+    return {
+      id: record.loopId,
+      title: record.failure?.summary ?? record.loopId,
+      stage: (LOOP_STAGE_FALLBACK[record.stage] ?? record.stage) as LearningLoopStage,
+      note,
+      hypothesisCount,
+      verifiedCount,
+      rejectedCount,
+    };
+  });
 }
 
 /** Memory candidate items, projected from the evidence-bridge candidates. */
@@ -480,7 +502,31 @@ export function projectMemoryCandidatesFromProjectRecords(
     origin: "learning_loop",
     // resume store is a passive snapshot — nothing written to memory → honest false.
     observed: false,
+    // LINE O — finer live note: make the suggested/observed split explicit so a
+    // viewer sees this is a candidate, not a committed write. Honest, no fake.
+    note: "suggested from resume snapshot · not written (observed:false)",
   }));
+}
+
+/**
+ * LINE O — compact live-fidelity summary for the learning section. Pure: counts
+ * loops by their terminal status off the real derived records. Returned for
+ * callers/tests that want a one-line live signal without re-deriving.
+ */
+export function summarizeLearningLive(
+  events: ReadonlyArray<{ type: string; payload: unknown }>,
+): { total: number; verified: number; rejected: number; active: number } {
+  const records = deriveLearningLoopState(filterLearningEvents(events));
+  let verified = 0;
+  let rejected = 0;
+  let active = 0;
+  for (const r of records) {
+    if (r.stage === "rejected") rejected += 1;
+    else if (r.stage === "verified" || r.stage === "distilled" || r.stage === "consulted")
+      verified += 1;
+    else active += 1;
+  }
+  return { total: records.length, verified, rejected, active };
 }
 
 /**
