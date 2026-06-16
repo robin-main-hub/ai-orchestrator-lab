@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Inbox } from "lucide-react";
 import { Card, CardContent, CardHeader } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -12,6 +12,7 @@ import {
 } from "./RuntimeManifestPreviewCard";
 import { classifyEvent, EVENT_CATEGORIES, type EventCategory } from "../../lib/eventClassification";
 import { projectWorkItemsLite } from "../../lib/workItemLite";
+import { readJsonState, writeJsonState } from "../../lib/persistentJsonState";
 
 /**
  * LINE F / H / N — Assistant Inbox / command center.
@@ -103,6 +104,12 @@ export type AssistantInboxProps = {
   recentEvents?: ReadonlyArray<TimedEventInput>;
   /** Batch 8 LINE B — injected now (ms) for deterministic time bucketing. */
   nowMs?: number;
+  /**
+   * Batch 11 LINE B — remember the active view (focus/category/query) across
+   * mounts in localStorage. Off by default (isolated renders stay deterministic);
+   * the real app turns it on. Local UI preference only — no server/data write.
+   */
+  persistFilters?: boolean;
 };
 
 /**
@@ -742,6 +749,23 @@ export function activeViewPreset(
   );
 }
 
+/** Batch 11 LINE B — persisted active filter combo (local UI pref; no data write). */
+const INBOX_FILTERS_KEY = "ai-orchestrator.inbox-view-filters.v1";
+type StoredFilters = { focus: InboxFocus; category: "all" | EventCategory; query: string };
+function readStoredFilters(): StoredFilters | null {
+  return readJsonState<StoredFilters | null>(INBOX_FILTERS_KEY, null, (v) => {
+    if (!v || typeof v !== "object") return null;
+    const o = v as Record<string, unknown>;
+    const { focus, category, query } = o;
+    const focusOk =
+      typeof focus === "string" && INBOX_FOCUSES.includes(focus as InboxFocus) && focus !== "replay";
+    const catOk =
+      typeof category === "string" && CATEGORY_OPTIONS.includes(category as "all" | EventCategory);
+    if (!focusOk || !catOk || typeof query !== "string") return null;
+    return { focus: focus as InboxFocus, category: category as "all" | EventCategory, query };
+  });
+}
+
 /**
  * LINE B/C — read-only filter bar. A focus strip narrows which region is shown
  * (today/blocked lanes, warnings cards) and "replay" jumps to the REPLAY seat; a
@@ -866,6 +890,7 @@ export function AssistantInbox({
   lastUpdateSource,
   recentEvents,
   nowMs,
+  persistFilters = false,
 }: AssistantInboxProps) {
   const total =
     evidence.length + learningLoops.length + memoryCandidates.length + manifestEntries.length;
@@ -904,14 +929,14 @@ export function AssistantInbox({
     learningLoops.length === 0 &&
     memoryCandidates.length === 0 &&
     manifestEntries.length === 0;
-  // Batch 10 LINE A/D — local search (view-only). "/" focuses it, Esc clears it.
-  // Never a side-effect control: it only narrows what is shown, writes nothing.
-  const [query, setQuery] = useState("");
+  // Batch 10 A/D + Batch 11 B — view-only search/focus/category. With
+  // persistFilters on, the active view is restored from (and saved to) a local
+  // UI preference; "/" focuses search, Esc clears it. Nothing writes data/server.
+  const [storedFilters] = useState(() => (persistFilters ? readStoredFilters() : null));
+  const [query, setQuery] = useState(storedFilters?.query ?? "");
   const searchRef = useRef<HTMLInputElement>(null);
-  // Batch 10 LINE B/C — view-only focus + category. Focus narrows the region;
-  // "replay" is a shortcut to the REPLAY seat. Category refines the event lanes.
-  const [focus, setFocus] = useState<InboxFocus>("all");
-  const [category, setCategory] = useState<"all" | EventCategory>("all");
+  const [focus, setFocus] = useState<InboxFocus>(storedFilters?.focus ?? "all");
+  const [category, setCategory] = useState<"all" | EventCategory>(storedFilters?.category ?? "all");
   const onFocusPick = (f: InboxFocus) => {
     if (f === "replay") onModeChange?.("replay");
     else setFocus(f);
@@ -937,6 +962,10 @@ export function AssistantInbox({
       setQuery("");
     }
   };
+  // Batch 11 LINE B — persist the active view as a local UI preference only.
+  useEffect(() => {
+    if (persistFilters) writeJsonState(INBOX_FILTERS_KEY, { focus, category, query });
+  }, [persistFilters, focus, category, query]);
   return (
     <Card
       className="border-white/10 bg-black/40 py-3"
