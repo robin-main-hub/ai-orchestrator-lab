@@ -7,13 +7,14 @@ import { MemoryAdapterContext, MemoryAdapter } from "@ai-orchestrator/simplememo
 export function candidateToMemoryInput(candidate: DistilledLearningCandidate): MemoryInput {
   return {
     title: candidate.title,
-    content: `Rule: ${candidate.rule}\n${candidate.reusablePrompt ? `Prompt: ${candidate.reusablePrompt}` : ""}`,
-    layer: "episode", // or appropriate layer depending on target
+    content: `Lesson: ${candidate.lesson}`,
+    layer: "reflection",
     scope: "global",
-    kind: candidate.target === "skill" ? "learning" : candidate.target === "workflow_template" ? "workflow" : "context",
+    kind: "learning",
+    // distilled candidates are always born "suggested" (never auto-trusted)
     trustLevel: candidate.trustStatus === "suggested" ? "untrusted" : "trusted",
     sourceChannel: "desktop",
-    tags: ["learning_loop", candidate.target],
+    tags: ["learning_loop"],
   };
 }
 
