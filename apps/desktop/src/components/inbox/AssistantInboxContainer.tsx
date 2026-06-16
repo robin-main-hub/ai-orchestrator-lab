@@ -52,9 +52,22 @@ export function AssistantInboxContainer({ live }: AssistantInboxContainerProps =
     return buildAssistantInboxLiveProps({});
   }, [mode, live]);
 
+  // LINE A/C — strip extras. LIVE surfaces real event-log/record counts and an
+  // honest source label; PREVIEW marks the source as fixture; placeholders none.
+  const stripExtras =
+    mode === "live"
+      ? {
+          eventCount: live?.eventLogCount,
+          recordCount: live?.projectRecords?.length,
+          lastUpdateSource: live?.eventLogCount ? "eventLog" : "no live data",
+        }
+      : mode === "preview"
+        ? { lastUpdateSource: "fixture" }
+        : {};
+
   return (
     <div className="nav-center-page" data-page="command_center" data-safe-bottom="true">
-      <AssistantInbox {...props} mode={mode} onModeChange={setMode} />
+      <AssistantInbox {...props} {...stripExtras} mode={mode} onModeChange={setMode} />
     </div>
   );
 }

@@ -5481,6 +5481,8 @@ export function App() {
                 learningEvents: eventLog,
                 // Real persisted project records (H10). Empty → honest empty.
                 projectRecords: projectRecordController.records,
+                // LINE C — total real event-log size for the live command strip.
+                eventLogCount: eventLog.length,
               }}
             />
           ) : configLibraryActive ? (
