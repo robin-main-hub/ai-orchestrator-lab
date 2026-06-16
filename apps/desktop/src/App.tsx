@@ -5450,7 +5450,19 @@ export function App() {
             />
           </div>
           ) : activeNavItem === "command_center" ? (
-            <AssistantInboxContainer />
+            <AssistantInboxContainer
+              live={{
+                // Honest LIVE wiring (LINE H): real app state only. dgx gate
+                // stays DISABLED by default → observed:false rendered honestly.
+                runnerGateMode: "dgx_disabled",
+                // Real event log — filtered to learning-loop events inside the
+                // projection. Server auto-emit is OFF, so this is usually empty
+                // → honest empty state (not a fixture).
+                learningEvents: eventLog,
+                // Real persisted project records (H10). Empty → honest empty.
+                projectRecords: projectRecordController.records,
+              }}
+            />
           ) : configLibraryActive ? (
             <ConfigLibraryPanel
               configFiles={agentConfigFiles}
