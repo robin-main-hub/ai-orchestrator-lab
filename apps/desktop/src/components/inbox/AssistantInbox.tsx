@@ -391,6 +391,38 @@ function LiveEmptyHero() {
   );
 }
 
+/**
+ * LINE E — preview scenario legend. Names the scenario matrix the fixture deck
+ * demonstrates so PREVIEW reads as an intentional design deck, not random demo
+ * data. Shown only in PREVIEW; purely presentational (still clearly example).
+ */
+const PREVIEW_SCENARIOS = [
+  "PASS",
+  "WARNING",
+  "BLOCKED",
+  "not observed",
+  "eval failed",
+  "quarantined",
+  "verified",
+  "rejected",
+] as const;
+
+function PreviewScenarioLegend() {
+  return (
+    <div
+      className="mx-4 mb-2 flex flex-wrap items-center gap-1 text-[10px] text-amber-200/70"
+      data-testid="assistant-inbox-preview-scenarios"
+    >
+      <span className="font-semibold uppercase tracking-wider text-amber-200/90">시나리오 덱</span>
+      {PREVIEW_SCENARIOS.map((s) => (
+        <span key={s} className="rounded bg-amber-400/10 px-1 py-0.5">
+          {s}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /** LINE B — the priority lane rail. Read-only, no buttons; honest empty lanes. */
 function WorkLaneRail({ lanes }: { lanes: ReadonlyArray<WorkLane> }) {
   return (
@@ -537,6 +569,7 @@ export function AssistantInbox({
         generatedAt={generatedAt}
       />
       {mode === "preview" ? <PreviewBanner /> : null}
+      {mode === "preview" ? <PreviewScenarioLegend /> : null}
       {liveSparse ? <LiveEmptyHero /> : null}
       <WorkLaneRail lanes={workLanes} />
       <CardContent className="grid grid-cols-1 gap-3 px-4 lg:grid-cols-2">
