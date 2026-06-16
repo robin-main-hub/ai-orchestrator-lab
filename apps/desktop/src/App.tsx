@@ -5484,6 +5484,8 @@ export function App() {
                 // LINE C — total real event-log size for the live command strip.
                 eventLogCount: eventLog.length,
               }}
+              // LINE A (Batch 8) — remember the last seat (local UI pref only).
+              persistViewMode
             />
           ) : configLibraryActive ? (
             <ConfigLibraryPanel
