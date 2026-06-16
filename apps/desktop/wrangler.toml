@@ -1,0 +1,5 @@
+# Cloudflare Pages — ai-orchestrator-lab desktop (static Vite SPA).
+# Deploy via: pnpm --filter @ai-orchestrator/desktop build && wrangler pages deploy dist
+name = "ai-orchestrator-lab"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-06-16"
