@@ -7,9 +7,8 @@ import type {
   RecallQuery,
   RecallResult,
   Reflection,
-  MemoryBatchRememberOptions,
 } from "@ai-orchestrator/protocol";
-import type { MemoryAdapter, MemoryAdapterContext, MemoryBatchRememberResult } from "./adapter";
+import type { MemoryAdapter, MemoryAdapterContext } from "./adapter";
 import { MemoryAdapterError } from "./errors.js";
 
 export type TrustPolicy = {
@@ -43,18 +42,6 @@ export function withTrustEnforcement(inner: MemoryAdapter, policy: TrustPolicy =
         throw fail(ctx, new MemoryAdapterError("trust_violation", "Untrusted memories require curator promotion."));
       }
       return inner.remember(input, ctx);
-    },
-    async batchRemember(inputs, ctx, options) {
-      assertPermission(ctx, resolvedPolicy, "batchRemember");
-      if (
-        (ctx.callerTrustLevel === "untrusted" || inputs.some((input) => input.trustLevel === "untrusted")) &&
-        !resolvedPolicy.allowUntrustedWrite
-      ) {
-        throw fail(ctx, new MemoryAdapterError("trust_violation", "Untrusted memories require curator promotion."));
-      }
-      return inner.batchRemember
-        ? inner.batchRemember(inputs, ctx, options)
-        : fallbackBatchRemember(inner, inputs, ctx, options);
     },
     async memoryContext(query, ctx) {
       assertPermission(ctx, resolvedPolicy, "memoryContext");
@@ -99,78 +86,6 @@ function assertPermission(ctx: MemoryAdapterContext, policy: Required<TrustPolic
 function fail(ctx: MemoryAdapterContext, error: MemoryAdapterError): MemoryAdapterError {
   ctx.onAdapterError?.(error);
   return error;
-}
-
-async function fallbackBatchRemember(
-  inner: MemoryAdapter,
-  inputs: MemoryInput[],
-  ctx: MemoryAdapterContext,
-  options?: MemoryBatchRememberOptions,
-): Promise<MemoryBatchRememberResult> {
-  const records: MemoryRecord[] = [];
-  const itemResults: Array<{
-    inputId?: string;
-    recordId?: string;
-    status: "written" | "rejected" | "failed" | "skipped";
-    reason?: string;
-  }> = [];
-  let accepted = 0;
-  let rejected = 0;
-
-  for (let i = 0; i < inputs.length; i++) {
-    const input = inputs[i]!;
-    try {
-      const rec = await inner.remember(input, ctx);
-      records.push(rec);
-      accepted++;
-      itemResults.push({
-        inputId: (input as any).inputId,
-        recordId: rec.id,
-        status: "written",
-      });
-    } catch (err: any) {
-      rejected++;
-      itemResults.push({
-        inputId: (input as any).inputId,
-        status: "failed",
-        reason: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
-  if (options?.async) {
-    const jobId = `job_fallback_${Date.now()}`;
-    return {
-      async: true,
-      job: {
-        jobId,
-        idempotencyKey: options?.idempotencyKey ?? `idemp_${jobId}`,
-        source: options?.source ?? "manual",
-        status: accepted === 0 ? "failed" : rejected === 0 ? "completed" : "partial",
-        accepted,
-        rejected,
-        written: accepted,
-        failed: rejected,
-        itemResults: itemResults.map((r) => ({
-          inputId: r.inputId,
-          recordId: r.recordId,
-          status: r.status === "written" ? ("written" as const) : r.status === "rejected" ? ("rejected" as const) : ("failed" as const),
-          reason: r.reason,
-        })),
-        async: true,
-        createdAt: new Date().toISOString(),
-        completedAt: new Date().toISOString(),
-      },
-    };
-  }
-
-  return {
-    async: false,
-    records,
-    accepted,
-    rejected,
-    itemResults,
-  };
 }
 
 export type TrustEnforcedAdapterSurface = Pick<

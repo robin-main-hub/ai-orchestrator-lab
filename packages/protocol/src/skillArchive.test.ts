@@ -6,12 +6,6 @@ import {
   deriveSkillArchiveQueue,
   deriveSkillCandidatesFromMission,
   isExportableSkill,
-  isSkillEvalEligible,
-  markSkillEvalPassed,
-  activateSkill,
-  quarantineSkill,
-  isRuntimeLoadableSkill,
-  buildSkillRuntimeManifest,
   type SkillArchiveCandidate,
 } from "./skillArchive.js";
 
@@ -111,91 +105,233 @@ describe("deriveSkillArchiveQueue", () => {
   });
 });
 
-describe("skill runtime activation contract", () => {
-  const nowStr = () => "2026-06-16T12:00:00.000Z";
-  const getCandidate = (): SkillArchiveCandidate => {
-    return {
-      id: "skill-1",
-      missionId: "mission-1",
-      source: "merge_pattern",
-      title: "Test Skill",
-      summary: "Summary",
-      triggerPatterns: [],
-      relatedFiles: [],
-      confidence: "high",
-      trustStatus: "suggested",
-      createdAt: nowStr(),
-      activationStatus: "inactive",
-    };
+// ─────────────────────────────────────────────────────────────────────────────
+// L8 PR 3 — Skill Runtime Activation Contract tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+import {
+  activateSkill,
+  buildSkillRuntimeManifest,
+  initialSkillActivation,
+  isSkillEvalEligible,
+  isSkillRuntimeLoadable,
+  markSkillEvalPassed,
+  markSkillEvalPending,
+  quarantineSkill,
+  type SkillActivationStatus,
+  type SkillRuntimeActivationRecord,
+  type SkillTrustStatus,
+} from "./skillArchive.js";
+
+const T = () => "2026-06-16T00:00:00.000Z";
+
+function cand(id: string, trustStatus: SkillTrustStatus): SkillArchiveCandidate {
+  return {
+    id,
+    missionId: "m1",
+    source: "merge_pattern",
+    title: `skill ${id}`,
+    summary: "…",
+    triggerPatterns: [],
+    relatedFiles: [],
+    confidence: "medium",
+    trustStatus,
+    createdAt: "2026-06-16T00:00:00.000Z",
   };
+}
 
-  it("isSkillEvalEligible only for approved/pinned and inactive", () => {
-    const candidate = getCandidate();
-    expect(isSkillEvalEligible(candidate)).toBe(false); // suggested is not eligible
+function activation(
+  candidateId: string,
+  activationStatus: SkillActivationStatus,
+  over: Partial<SkillRuntimeActivationRecord> = {},
+): SkillRuntimeActivationRecord {
+  return { candidateId, activationStatus, ...over };
+}
 
-    const approved = applyCuratorDecision(candidate, "approve");
-    expect(isSkillEvalEligible(approved)).toBe(true); // approved and inactive is eligible
-
-    const evaluated = markSkillEvalPassed(approved, "eval-run-1");
-    expect(isSkillEvalEligible(evaluated)).toBe(false); // evaluated (eval_passed) is not eligible
-  });
-
-  it("markSkillEvalPassed updates status and evalRunId", () => {
-    const candidate = applyCuratorDecision(getCandidate(), "approve");
-    const updated = markSkillEvalPassed(candidate, "run-101");
-    expect(updated.activationStatus).toBe("eval_passed");
-    expect(updated.evalRunId).toBe("run-101");
-  });
-
-  it("activateSkill requires evalRunId or evalWaiverReason", () => {
-    const candidate = applyCuratorDecision(getCandidate(), "approve");
-    expect(() => activateSkill(candidate)).toThrow("Cannot activate skill without evalRunId or evalWaiverReason");
-
-    const withEval = markSkillEvalPassed(candidate, "run-101");
-    const activated = activateSkill(withEval, "custom-scope");
-    expect(activated.activationStatus).toBe("active");
-    expect(activated.activationScope).toBe("custom-scope");
-
-    const withWaiver = { ...candidate, evalWaiverReason: "Manual verification performed" };
-    const activatedWaiver = activateSkill(withWaiver);
-    expect(activatedWaiver.activationStatus).toBe("active");
-  });
-
-  it("quarantineSkill sets status and reason", () => {
-    const candidate = getCandidate();
-    const quarantined = quarantineSkill(candidate, "Violated safety guidelines");
-    expect(quarantined.activationStatus).toBe("quarantined");
-    expect(quarantined.quarantineReason).toBe("Violated safety guidelines");
-  });
-
-  it("isRuntimeLoadableSkill enforces strict gating", () => {
-    const candidate = getCandidate();
-    expect(isRuntimeLoadableSkill(candidate)).toBe(false); // suggested, inactive
-
-    const approved = applyCuratorDecision(candidate, "approve");
-    expect(isRuntimeLoadableSkill(approved)).toBe(false); // approved, inactive
-
-    const withEval = markSkillEvalPassed(approved, "run-101");
-    expect(isRuntimeLoadableSkill(withEval)).toBe(false); // approved, eval_passed (not yet active)
-
-    const active = activateSkill(withEval);
-    expect(isRuntimeLoadableSkill(active)).toBe(true); // approved, active, evalRunId present
-
-    const quarantined = quarantineSkill(active, "Broken");
-    expect(isRuntimeLoadableSkill(quarantined)).toBe(false); // quarantined is not loadable
-  });
-
-  it("buildSkillRuntimeManifest filters correctly", () => {
-    const s1 = { ...applyCuratorDecision(getCandidate(), "approve"), id: "s1", evalRunId: "run-1", activationStatus: "active" as const, activationScope: "global" };
-    const s2 = { ...applyCuratorDecision(getCandidate(), "approve"), id: "s2", evalRunId: "run-2", activationStatus: "active" as const, activationScope: "local" };
-    const s3 = { ...getCandidate(), id: "s3" }; // suggested
-
-    const manifestGlobal = buildSkillRuntimeManifest([s1, s2, s3], "global");
-    expect(manifestGlobal).toHaveLength(1);
-    expect(manifestGlobal[0]!.id).toBe("s1");
-
-    const manifestAll = buildSkillRuntimeManifest([s1, s2, s3]);
-    expect(manifestAll).toHaveLength(2);
+describe("SkillActivationStatus is a separate axis from MemoryRecord.activationState", () => {
+  it("(S1) does not reuse memory activation; skill statuses include eval_pending/eval_passed", () => {
+    const a = initialSkillActivation("s1");
+    expect(a.activationStatus).toBe("inactive");
+    // eval_pending / eval_passed 는 skill 전용 — memory activationState에는 없는 값
+    const pending = markSkillEvalPending(a, T);
+    expect(pending.activationStatus).toBe("eval_pending");
+    const passed = markSkillEvalPassed(pending, "evalrun_1", T);
+    expect(passed.activationStatus).toBe("eval_passed");
+    expect(passed.evalRunId).toBe("evalrun_1");
   });
 });
 
+describe("isSkillRuntimeLoadable — the contract", () => {
+  it("(S2) curator_approved + active + evalRunId → loadable", () => {
+    const v = isSkillRuntimeLoadable(cand("s", "curator_approved"), activation("s", "active", { evalRunId: "e1" }));
+    expect(v.loadable).toBe(true);
+    expect(v.reasons).toEqual([]);
+    expect(v.waived).toBe(false);
+  });
+
+  it("(S3) pinned + active + evalRunId → loadable", () => {
+    const v = isSkillRuntimeLoadable(cand("s", "pinned"), activation("s", "active", { evalRunId: "e1" }));
+    expect(v.loadable).toBe(true);
+  });
+
+  it("(S4) pinned + active WITHOUT evalRunId or waiver → NOT loadable (pinned does not bypass eval)", () => {
+    const v = isSkillRuntimeLoadable(cand("s", "pinned"), activation("s", "active"));
+    expect(v.loadable).toBe(false);
+    expect(v.reasons).toContain("no_eval_basis");
+  });
+
+  it("(S5) pinned + active + evalWaiverReason → loadable but waived=true", () => {
+    const v = isSkillRuntimeLoadable(
+      cand("s", "pinned"),
+      activation("s", "active", { evalWaiverReason: "trusted bootstrap skill" }),
+    );
+    expect(v.loadable).toBe(true);
+    expect(v.waived).toBe(true);
+  });
+
+  it("(S6) suggested + active + evalRunId → NOT loadable (not trusted)", () => {
+    const v = isSkillRuntimeLoadable(cand("s", "suggested"), activation("s", "active", { evalRunId: "e1" }));
+    expect(v.loadable).toBe(false);
+    expect(v.reasons).toContain("not_trusted");
+  });
+
+  it("(S7) rejected → never loadable", () => {
+    const v = isSkillRuntimeLoadable(cand("s", "rejected"), activation("s", "active", { evalRunId: "e1" }));
+    expect(v.loadable).toBe(false);
+    expect(v.reasons).toContain("not_trusted");
+  });
+
+  it("(S8) inactive/eval_pending/eval_passed are not loadable unless active", () => {
+    for (const status of ["inactive", "eval_pending", "eval_passed"] as const) {
+      const v = isSkillRuntimeLoadable(cand("s", "curator_approved"), activation("s", status, { evalRunId: "e1" }));
+      expect(v.loadable).toBe(false);
+      expect(v.reasons).toContain("not_active");
+    }
+  });
+
+  it("(S9) quarantined always blocks even if pinned + evalRunId", () => {
+    const v = isSkillRuntimeLoadable(
+      cand("s", "pinned"),
+      activation("s", "quarantined", { evalRunId: "e1" }),
+    );
+    expect(v.loadable).toBe(false);
+    expect(v.reasons).toEqual(["quarantined"]);
+  });
+});
+
+describe("transition functions", () => {
+  it("(S10) eval eligibility requires curator_approved/pinned and not quarantined", () => {
+    expect(isSkillEvalEligible(cand("s", "curator_approved"), activation("s", "inactive"))).toBe(true);
+    expect(isSkillEvalEligible(cand("s", "pinned"), activation("s", "inactive"))).toBe(true);
+    expect(isSkillEvalEligible(cand("s", "suggested"), activation("s", "inactive"))).toBe(false);
+    expect(isSkillEvalEligible(cand("s", "rejected"), activation("s", "inactive"))).toBe(false);
+    expect(isSkillEvalEligible(cand("s", "pinned"), activation("s", "quarantined"))).toBe(false);
+  });
+
+  it("(S11) activateSkill requires eval_passed + eval basis; otherwise no-op", () => {
+    // eval_passed + evalRunId → active
+    const passed = activation("s", "eval_passed", { evalRunId: "e1" });
+    const activated = activateSkill(passed, { now: T });
+    expect(activated.activationStatus).toBe("active");
+    expect(activated.activatedAt).toBe(T());
+
+    // eval_passed but no eval basis → no-op
+    const noBasis = activation("s", "eval_passed");
+    expect(activateSkill(noBasis, { now: T }).activationStatus).toBe("eval_passed");
+
+    // not eval_passed → no-op even with evalRunId
+    const inactive = activation("s", "inactive", { evalRunId: "e1" });
+    expect(activateSkill(inactive, { now: T }).activationStatus).toBe("inactive");
+  });
+
+  it("(S12) activateSkill with waiver reason activates without evalRunId", () => {
+    const passed = activation("s", "eval_passed");
+    const activated = activateSkill(passed, { evalWaiverReason: "bootstrap", now: T });
+    expect(activated.activationStatus).toBe("active");
+    expect(activated.evalWaiverReason).toBe("bootstrap");
+  });
+
+  it("(S13) quarantine blocks further transitions", () => {
+    const q = quarantineSkill(activation("s", "eval_passed", { evalRunId: "e1" }), "leaked secret", T);
+    expect(q.activationStatus).toBe("quarantined");
+    expect(q.quarantinedReason).toBe("leaked secret");
+    // pending/passed/activate are all no-ops from quarantine
+    expect(markSkillEvalPending(q, T).activationStatus).toBe("quarantined");
+    expect(markSkillEvalPassed(q, "e2", T).activationStatus).toBe("quarantined");
+    expect(activateSkill(q, { now: T }).activationStatus).toBe("quarantined");
+  });
+});
+
+describe("buildSkillRuntimeManifest — deterministic", () => {
+  const candidates = [
+    cand("c_loadable", "curator_approved"),
+    cand("a_pinned_waived", "pinned"),
+    cand("b_blocked", "suggested"),
+    cand("d_quarantined", "pinned"),
+  ];
+  const activations = [
+    activation("c_loadable", "active", { evalRunId: "e1" }),
+    activation("a_pinned_waived", "active", { evalWaiverReason: "bootstrap" }),
+    activation("b_blocked", "active", { evalRunId: "e2" }), // suggested → blocked
+    activation("d_quarantined", "quarantined", { evalRunId: "e3" }),
+  ];
+
+  it("(S14) loadable set + blocked set with reasons", () => {
+    const manifest = buildSkillRuntimeManifest({ candidates, activations });
+    expect(manifest.loadable.map((e) => e.candidateId)).toEqual(["a_pinned_waived", "c_loadable"]);
+    // a_pinned_waived marked waived
+    expect(manifest.loadable.find((e) => e.candidateId === "a_pinned_waived")?.waived).toBe(true);
+    expect(manifest.loadable.find((e) => e.candidateId === "c_loadable")?.waived).toBe(false);
+    // blocked sorted by candidateId
+    expect(manifest.blocked.map((b) => b.candidateId)).toEqual(["b_blocked", "d_quarantined"]);
+    expect(manifest.blocked.find((b) => b.candidateId === "b_blocked")?.reasons).toContain("not_trusted");
+    expect(manifest.blocked.find((b) => b.candidateId === "d_quarantined")?.reasons).toEqual(["quarantined"]);
+  });
+
+  it("(S15) deterministic — identical input (any order) → identical output", () => {
+    const m1 = buildSkillRuntimeManifest({ candidates, activations });
+    const m2 = buildSkillRuntimeManifest({
+      candidates: [...candidates].reverse(),
+      activations: [...activations].reverse(),
+    });
+    expect(m1).toEqual(m2);
+  });
+
+  it("(S16) missing activation record → treated inactive → blocked(not_active)", () => {
+    const manifest = buildSkillRuntimeManifest({
+      candidates: [cand("x", "curator_approved")],
+      activations: [],
+    });
+    expect(manifest.loadable).toEqual([]);
+    expect(manifest.blocked[0]?.reasons).toContain("not_active");
+  });
+
+  it("(S17) duplicate candidate ids handled deterministically (first kept)", () => {
+    const dupCandidates = [cand("dup", "curator_approved"), cand("dup", "rejected")];
+    const manifest = buildSkillRuntimeManifest({
+      candidates: dupCandidates,
+      activations: [activation("dup", "active", { evalRunId: "e1" })],
+    });
+    // only one entry total across loadable+blocked
+    expect(manifest.loadable.length + manifest.blocked.length).toBe(1);
+  });
+
+  it("(S18) scope filter: activationScope mismatch excluded from loadable", () => {
+    const manifest = buildSkillRuntimeManifest({
+      candidates: [cand("g", "curator_approved"), cand("p", "curator_approved")],
+      activations: [
+        activation("g", "active", { evalRunId: "e1" }), // no scope → allowed everywhere
+        activation("p", "active", { evalRunId: "e2", activationScope: "project:other" }),
+      ],
+      scope: "project:mine",
+    });
+    expect(manifest.loadable.map((e) => e.candidateId)).toEqual(["g"]);
+    expect(manifest.blocked.map((b) => b.candidateId)).toEqual(["p"]);
+  });
+
+  it("(S19) empty input → empty manifest", () => {
+    const manifest = buildSkillRuntimeManifest({ candidates: [], activations: [] });
+    expect(manifest.loadable).toEqual([]);
+    expect(manifest.blocked).toEqual([]);
+  });
+});
