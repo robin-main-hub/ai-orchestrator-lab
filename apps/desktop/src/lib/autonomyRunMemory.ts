@@ -3,7 +3,11 @@ import { sanitizePublicText } from "./publicRedaction";
 import { loopStatusLabel } from "./autonomyRunForm";
 import type { LoopStatus } from "./closedLoopController";
 import { createMemoryCuratorCandidate, type MemoryCuratorCandidate } from "./memoryCuratorApproval";
-import { type SkillArchiveCandidate, isRuntimeLoadableSkill } from "@ai-orchestrator/protocol";
+import {
+  type SkillArchiveCandidate,
+  type SkillRuntimeActivationRecord,
+  buildSkillRuntimeManifest,
+} from "@ai-orchestrator/protocol";
 import type { AgentConfigFile } from "../types";
 /**
  * Turn a finished autonomous run into a long-term memory candidate, so the
@@ -89,9 +93,17 @@ function uniqueWords(value: string): string[] {
  * Enforces that skills loaded during agent runtime must satisfy the isRuntimeLoadableSkill() contract.
  * Converts valid SkillArchiveCandidates into AgentConfigFile (kind: "skill") for the runtime.
  */
-export function loadRuntimeSkills(candidates: SkillArchiveCandidate[]): AgentConfigFile[] {
+export function loadRuntimeSkills(
+  candidates: SkillArchiveCandidate[],
+  activations: SkillRuntimeActivationRecord[] = [],
+): AgentConfigFile[] {
+  // Runtime loadability requires the activation contract (L8 PR3): curator_approved/pinned
+  // + active + eval basis, not quarantined. Candidate trustStatus alone is insufficient.
+  const loadableIds = new Set(
+    buildSkillRuntimeManifest({ candidates, activations }).loadable.map((e) => e.candidateId),
+  );
   return candidates
-    .filter(isRuntimeLoadableSkill)
+    .filter((candidate) => loadableIds.has(candidate.id))
     .map((candidate) => ({
       id: `config_skill_learned_${candidate.id}`,
       kind: "skill",
