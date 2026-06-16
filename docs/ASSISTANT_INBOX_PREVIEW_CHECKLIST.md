@@ -109,3 +109,22 @@ Windows desktop, vite dev on `127.0.0.1:5173`). Findings:
       placeholders.
 - [ ] **No live/fixture leakage** — switching LIVE↔PREVIEW never mixes data.
 - [ ] **Still read-only** — no enable/approve/run buttons in the inbox.
+
+## 7. Batch 7 — OS-desk regression checklist
+
+Batch 7 turned the inbox into a usable OS desk (command strip, work-queue lanes,
+preview scenario deck, density pass). Tick on each future preview:
+
+- [ ] **Command strip honest** — `mode · items · live X/4 · empty Y/4 · N blocked ·
+      N warn · gate` reads correctly in LIVE and PREVIEW; in LIVE the `events`/
+      `records`/`src` chips reflect real state (or "no live data"), never fabricated.
+- [ ] **Work-queue lanes** — Today / Waiting / Blocked / Learning / Runner render
+      read-only; counts match the cards; empty lanes are honest (Today stays empty
+      until a real time bucket is wired); no buttons.
+- [ ] **Preview scenario deck** — the scenario legend shows in PREVIEW only; the
+      deck demonstrates PASS/WARNING/BLOCKED/not-observed/eval-failed/quarantined/
+      verified/rejected; switching to LIVE removes the legend and all scenario data.
+- [ ] **Density** — ops-desk feel: tight padding, 2-col on wide, section-header
+      rules, no large dead whitespace; still no action buttons.
+- [ ] **No leakage / honesty preserved** — LIVE never shows fixture rows; no fake
+      live; no new write/activation/runtime-load paths.
