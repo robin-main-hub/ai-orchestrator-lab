@@ -133,7 +133,7 @@ export const seedMemory: MobileMemoryItem[] = [
   },
   {
     id: "mem_002",
-    title: "GIO-WIKI v4 Step 2 진입 조건",
+    title: "DOMAIN-WIKI v4 Step 2 진입 조건",
     excerpt: "Step 1 완료. 미팅 transcript는 정식 source pack으로 다룬다.",
     trustLevel: "trusted",
     sourceChannel: "desktop",
