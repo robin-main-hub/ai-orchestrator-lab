@@ -424,7 +424,7 @@ export function projectRunnerGateEvidence(mode: RunnerGateMode = "dgx_disabled")
  * "example" (예시/fixture) so it is never mistaken for live OS state. For honest
  * live wiring use `buildAssistantInboxLiveProps`.
  */
-export function buildAssistantInboxProps(): Required<Omit<AssistantInboxProps, "sources" | "mode" | "onModeChange" | "generatedAt">> & {
+export function buildAssistantInboxProps(): Required<Pick<AssistantInboxProps, "evidence" | "learningLoops" | "memoryCandidates" | "manifestEntries">> & {
   sources: Required<AssistantInboxSources>;
 } {
   return {
@@ -452,6 +452,11 @@ export type AssistantInboxLiveInput = {
   runnerGateMode?: RunnerGateMode;
   dgxExecutionEnabled?: boolean;
   executorPresent?: boolean;
+  /**
+   * LINE C — total real event-log size (all events, not just learning). Surfaced
+   * as an honest "events N" signal in the command strip. Absent/0 → no-live-data.
+   */
+  eventLogCount?: number;
   /** Real learning-loop events (e.g. App eventLog). Filtered to learning types. */
   learningEvents?: ReadonlyArray<{ type: string; payload: unknown }>;
   /** Real persisted project records (H10 useProjectRecordController.records). */
@@ -537,7 +542,7 @@ export function summarizeLearningLive(
  */
 export function buildAssistantInboxLiveProps(
   input: AssistantInboxLiveInput = {},
-): Required<Omit<AssistantInboxProps, "sources" | "mode" | "onModeChange" | "generatedAt">> & {
+): Required<Pick<AssistantInboxProps, "evidence" | "learningLoops" | "memoryCandidates" | "manifestEntries">> & {
   sources: Required<AssistantInboxSources>;
 } {
   // Runner gate is ALWAYS real/live: it's a derived honest fact (dgx disabled
