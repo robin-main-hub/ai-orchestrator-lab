@@ -103,7 +103,16 @@ export function AssistantInboxContainer({
         }
       : mode === "preview"
         ? { lastUpdateSource: "fixture" }
-        : {};
+        : mode === "replay"
+          ? {
+              // LINE C — replay reads the real eventLog read-only; surface its size
+              // and feed the deck. No write/append/activation/server.
+              eventCount: live?.recentEvents?.length,
+              lastUpdateSource: "replay (read-only)",
+              recentEvents: live?.recentEvents,
+              nowMs: live?.nowMs,
+            }
+          : {};
 
   return (
     <div className="nav-center-page" data-page="command_center" data-safe-bottom="true">
