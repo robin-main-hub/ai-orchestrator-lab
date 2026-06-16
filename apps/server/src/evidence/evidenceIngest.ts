@@ -2,7 +2,7 @@ import { EvidenceRef, MemoryInput } from "@ai-orchestrator/protocol";
 import { MemoryAdapterContext, MemoryAdapter } from "@ai-orchestrator/simplememo";
 
 /**
- * Maps an EvidenceRef (from the ERP Evidence Hub) to a MemoryInput payload.
+ * Maps an EvidenceRef (from the Domain Evidence Hub) to a MemoryInput payload.
  */
 export function evidenceToMemoryInput(evidence: EvidenceRef): MemoryInput {
   return {
@@ -19,7 +19,7 @@ export function evidenceToMemoryInput(evidence: EvidenceRef): MemoryInput {
 
 /**
  * Publisher for approved EvidenceLinks.
- * When an EvidenceLink is approved in the ERP, we trigger an async batchRemember job.
+ * When an EvidenceLink is approved in the source system, we trigger an async batchRemember job.
  */
 export async function publishApprovedEvidence(
   evidenceList: EvidenceRef[],
@@ -34,7 +34,7 @@ export async function publishApprovedEvidence(
 
   const result = await adapter.batchRemember(inputs, ctx, {
     async: true,
-    source: "erp_evidence",
+    source: "generic_evidence",
   });
 
   if (result.async === true) {
