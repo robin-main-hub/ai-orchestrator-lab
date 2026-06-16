@@ -20,8 +20,19 @@
 - **C** 팔레트 → 인박스 **command-bus**: App이 nonce'd `command` prop을 컨테이너에 내려보냄. 컨테이너는 좌석을 소유하므로 mode 명령(REPLAY) 적용, 필터 명령(focus/category/clear)은 인박스가 effect로 적용. **전체 상태 리프트 없이** view-only. 팔레트 명령 5종: Inbox 열기 / REPLAY 좌석 / Failures 필터 / Blocked 보기 / 필터 초기화.
 - **D** 본 문서 + 체크리스트.
 
+## Command Palette 경계 (명시)
+```text
+Command Palette is allowed to control Assistant Inbox view state
+(mode / focus / category / search / clear).
+Command Palette must NOT trigger send / write / run / apply / dispatch / approve actions.
+This is still read-only command-center control, not automation.
+```
+**반복 명령 안전성**: `InboxCommand`는 디스패치마다 `nonce`가 증가하는 새 객체로 발행되고, 적용 effect의 dep는 명령 객체 자체이므로 — 같은 명령(예: "Blocked 보기")을 연속 실행해도 매번 재적용된다(동일 값/참조로 인한 effect 미발화 없음). 회귀 테스트로 고정.
+
 ## 검증
-- 신규 테스트: A +4, B +3, C +4 = **+11**. **전체 desktop 스위트 2008 green** · root typecheck·build·secret green(4 PR CI). 기본 프리셋=My Desk(all/all)·persist off → 기존 테스트 무영향. command-bus는 컨테이너 레벨 단위테스트로 검증(App 팔레트 배선은 `run()`→`goInboxCommand`→state, trivial).
+- 신규 테스트: A +4, B +3, C +4, D +1(반복-명령 회귀) = **+12**. **전체 desktop 스위트 2008+ green** · root typecheck·build·secret green(CI).
+- 기본 프리셋=My Desk(all/all)·persist off → 기존 테스트 무영향.
+- **정직 한계**: command-bus는 컨테이너 레벨 단위테스트로 검증(명령 prop 전달·mode/focus/category/clear 적용·반복 재실행). **App의 Command Palette UI 배선(엔트리 5종 등록 + 실제 팔레트 클릭→prop)은 단위 수준에서만 검증**했고, 실제 팔레트 UI 실측(⌘K 열기→선택→반영)은 headless 제약으로 추후 오너 프리뷰로 확인.
 
 ## 안전 불변식 (0 유지)
 ```text
