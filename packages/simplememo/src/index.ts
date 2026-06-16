@@ -49,3 +49,9 @@ export type {
   LocalBatchWriteCandidateResult,
   LocalBatchWriteStatus,
 } from "./batchRemember.js";
+
+export {
+  buildBatchRememberCandidatesFromLearning,
+  distilledCandidateToMemoryInput,
+  executeLearningBatchRemember,
+} from "./learningBatchRemember.js";
