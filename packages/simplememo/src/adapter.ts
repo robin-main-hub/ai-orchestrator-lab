@@ -11,7 +11,10 @@ import type {
   RecallQuery,
   RecallResult,
   Reflection,
+  MemoryBatchJob,
+  MemoryBatchRememberOptions,
 } from "@ai-orchestrator/protocol";
+export type { MemoryBatchJob, MemoryBatchRememberOptions };
 import type { MemoryAdapterError } from "./errors";
 
 export type MemoryAdapterKind = "local_heuristic" | "memento_mcp" | "dgx_simplemem" | "mock";
@@ -23,6 +26,24 @@ export type MemoryOperationScope = {
   namespace: string;
   recallTraceId: string;
 };
+
+export type MemoryBatchRememberResult =
+  | {
+      async: false;
+      records: MemoryRecord[];
+      accepted: number;
+      rejected: number;
+      itemResults: Array<{
+        inputId?: string;
+        recordId?: string;
+        status: "written" | "rejected" | "failed" | "skipped";
+        reason?: string;
+      }>;
+    }
+  | {
+      async: true;
+      job: MemoryBatchJob;
+    };
 
 export type MemoryEventPayload =
   | {
@@ -40,6 +61,15 @@ export type MemoryEventPayload =
       operation: string;
       recordIds?: string[];
       operationScope?: MemoryOperationScope;
+      warning?: string;
+    }
+  | {
+      kind: "memory_batch_accepted" | "memory_batch_started" | "memory_batch_completed" | "memory_batch_failed" | "memory_batch_partial";
+      jobId: string;
+      idempotencyKey: string;
+      acceptedCount: number;
+      rejectedCount: number;
+      errors?: Array<{ itemIndex: number; error: string }>;
     };
 
 export type MemoryAdapterContext = {
@@ -58,6 +88,11 @@ export interface MemoryAdapter {
   readonly kind: MemoryAdapterKind;
   recall(query: RecallQuery, ctx: MemoryAdapterContext): Promise<RecallResult[]>;
   remember(input: MemoryInput, ctx: MemoryAdapterContext): Promise<MemoryRecord>;
+  batchRemember?(
+    inputs: MemoryInput[],
+    ctx: MemoryAdapterContext,
+    options?: MemoryBatchRememberOptions,
+  ): Promise<MemoryBatchRememberResult>;
   memoryContext(query: RecallQuery, ctx: MemoryAdapterContext): Promise<MemoryContextPacket>;
   stats(ctx: MemoryAdapterContext): Promise<MemoryStats>;
   pin(recordId: string, ctx: MemoryAdapterContext): Promise<void>;
@@ -69,6 +104,11 @@ export interface MemoryAdapter {
 
 export class MemoryApiAdapter implements MemoryAdapter {
   readonly kind: MemoryAdapterKind;
+  batchRemember?: (
+    inputs: MemoryInput[],
+    ctx: MemoryAdapterContext,
+    options?: MemoryBatchRememberOptions,
+  ) => Promise<MemoryBatchRememberResult>;
 
   constructor(
     readonly profileId: string,
@@ -76,6 +116,11 @@ export class MemoryApiAdapter implements MemoryAdapter {
     kind: MemoryAdapterKind = "local_heuristic",
   ) {
     this.kind = kind;
+    if ((this.api as any).batchRemember) {
+      this.batchRemember = async (inputs, ctx, options) => {
+        return (this.api as any).batchRemember(inputs, options);
+      };
+    }
   }
 
   recall(query: RecallQuery): Promise<RecallResult[]> {

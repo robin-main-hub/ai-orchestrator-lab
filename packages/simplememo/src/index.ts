@@ -3,7 +3,10 @@ export type {
   MemoryAdapterContext,
   MemoryAdapterKind,
   MemoryEventPayload,
-} from "./adapter";
+  MemoryBatchJob,
+  MemoryBatchRememberOptions,
+  MemoryBatchRememberResult,
+} from "./adapter.js";
 export { MemoryApiAdapter } from "./adapter.js";
 export {
   isMemoryAdapterError,
