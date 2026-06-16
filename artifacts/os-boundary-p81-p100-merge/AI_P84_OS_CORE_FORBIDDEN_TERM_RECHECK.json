@@ -1,0 +1,37 @@
+[
+  {
+    "file": "packages/providers/src/node/cliSubprocessEnv.ts",
+    "match": "USERPROFILE",
+    "classification": "false_positive"
+  },
+  {
+    "file": "packages/simplememo/src/contractTestFixtures.ts",
+    "match": "factory",
+    "classification": "false_positive"
+  },
+  {
+    "file": "packages/protocol/src/scaffold.test.ts",
+    "match": "example-domain",
+    "classification": "allowed_example_fixture"
+  },
+  {
+    "file": "packages/protocol/src/workflowTemplate.test.ts",
+    "match": "EXAMPLE_DOMAIN",
+    "classification": "allowed_example_fixture"
+  },
+  {
+    "file": "packages/protocol/src/githubConnector.ts",
+    "match": "EXCERPT",
+    "classification": "false_positive"
+  },
+  {
+    "file": "apps/desktop/src/lib/personaTaskRunner.test.ts",
+    "match": "factory",
+    "classification": "false_positive"
+  },
+  {
+    "file": "apps/server/src/evidence/evidenceIngest.ts",
+    "match": "Domain Evidence Hub",
+    "classification": "generic"
+  }
+]

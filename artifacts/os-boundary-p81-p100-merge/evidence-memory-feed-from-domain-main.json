@@ -1,0 +1,58 @@
+{
+  "feedVersion": "1.0",
+  "generatedAt": "2026-06-16T06:26:55.279Z",
+  "sourceSystem": "example-erp",
+  "sourceModule": "evidence-hub",
+  "items": [
+    {
+      "sourceRef": "slack-105",
+      "entityRef": "TP-DOMESTIC",
+      "evidenceType": "quote",
+      "idempotencyKey": "gio_ev_slack-105_2026-06-16T10:20:00.000Z",
+      "snippet": "태평양물산 TP price list",
+      "createdAt": "2026-06-16T10:20:00.000Z",
+      "redaction": {
+        "applied": true,
+        "rulesTriggered": [
+          "CAPPED_LENGTH",
+          "PII_STRIP"
+        ]
+      },
+      "memoryLayer": "project_memory",
+      "trustBoundary": "external_unverified",
+      "approvalStatus": "not_erp_truth",
+      "domainTags": [
+        "bpCode:TP-DOMESTIC",
+        "division:DOMESTIC",
+        "severity:high",
+        "actionType:prepare_quote",
+        "sourceType:slack"
+      ]
+    },
+    {
+      "sourceRef": "email-201",
+      "entityRef": "RAJCO",
+      "evidenceType": "payment",
+      "idempotencyKey": "gio_ev_email-201_2026-06-16T11:00:00.000Z",
+      "snippet": "Pradeep payment confirmation for invoice 123",
+      "createdAt": "2026-06-16T11:00:00.000Z",
+      "redaction": {
+        "applied": true,
+        "rulesTriggered": [
+          "CAPPED_LENGTH",
+          "PII_STRIP"
+        ]
+      },
+      "memoryLayer": "project_memory",
+      "trustBoundary": "external_unverified",
+      "approvalStatus": "not_erp_truth",
+      "domainTags": [
+        "bpCode:RAJCO",
+        "division:EXPORT",
+        "severity:medium",
+        "actionType:check_payment",
+        "sourceType:email"
+      ]
+    }
+  ]
+}

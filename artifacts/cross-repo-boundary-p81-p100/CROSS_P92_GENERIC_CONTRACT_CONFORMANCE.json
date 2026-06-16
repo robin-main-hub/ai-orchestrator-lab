@@ -1,0 +1,17 @@
+{
+  "conformance": "PASS",
+  "fields_verified": [
+    "sourceRef",
+    "entityRef",
+    "evidenceType",
+    "idempotencyKey",
+    "snippet",
+    "redaction",
+    "domainTags",
+    "trustBoundary",
+    "approvalStatus",
+    "memoryLayer"
+  ],
+  "erp_contamination": false,
+  "plugin_isolation": true
+}

@@ -1,0 +1,31 @@
+packages/providers/src/node/cliSubprocessEnv.ts:7:    "USERPROFILE",
+packages/simplememo/src/contractTestFixtures.ts:13:// Context factory
+packages/protocol/src/scaffold.test.ts:14:    for (const banned of ["example-domain", "EXAMPLE_DOMAIN", "HTV", "견적"]) expect(blob).not.toContain(banned);
+packages/protocol/src/workflowTemplate.test.ts:39:    for (const banned of ["example-domain", "EXAMPLE_DOMAIN", "HTV", "견적", "샘플", "거래처"]) {
+packages/protocol/src/workflowTemplate.test.ts:49:  it("the EXAMPLE_DOMAIN business templates are no longer reachable by any id", () => {
+packages/protocol/src/githubConnector.ts:778:export const GITHUB_PR_UPDATE_BODY_EXCERPT_MAX = 240;
+apps/desktop/src/lib/githubContext.ts:18:const MAX_EXCERPT_CHARS = 24_000;
+apps/desktop/src/lib/githubContext.ts:34:  const limit = input.maxExcerptChars ?? MAX_EXCERPT_CHARS;
+apps/desktop/src/lib/turboEditPrompt.ts:19:export const DEFAULT_MAX_EXCERPT_BYTES = 12_000;
+apps/desktop/src/lib/turboEditPrompt.ts:155:  const maxBytes = input.maxExcerptBytes ?? DEFAULT_MAX_EXCERPT_BYTES;
+apps/desktop/src/lib/turboEditPrompt.test.ts:2:import { buildTurboEditPrompt, validateTurboEditOutput, DEFAULT_MAX_EXCERPT_BYTES } from "./turboEditPrompt";
+apps/desktop/src/lib/turboEditPrompt.test.ts:146:    expect(DEFAULT_MAX_EXCERPT_BYTES).toBe(12_000);
+apps/desktop/src/lib/autonomousRun.ts:161: * Build the per-session closed-loop effects factory for an autonomy run: a
+apps/desktop/src/lib/parallelAutonomy.ts:32: * effects factory. So it is verified here with faked clients.
+apps/desktop/src/lib/parallelAutonomy.ts:110:      // Each mission gets its own effects factory so the onStep observer and the
+apps/desktop/src/lib/personaTaskRunner.test.ts:33:  factory: (session: AgentSession) => ClosedLoopEffects;
+apps/desktop/src/lib/personaTaskRunner.test.ts:40:  const factory = () => ({
+apps/desktop/src/lib/personaTaskRunner.test.ts:49:  return { factory, dispatched, escalations };
+apps/desktop/src/lib/personaTaskRunner.test.ts:56:    const { factory, dispatched } = fakeEffects(["All tests passed", "12 passed, 0 failed"]);
+apps/desktop/src/lib/personaTaskRunner.test.ts:63:      createEffects: factory,
+apps/desktop/src/lib/personaTaskRunner.test.ts:79:    const { factory } = fakeEffects(["All tests passed"]);
+apps/desktop/src/lib/personaTaskRunner.test.ts:86:      createEffects: factory,
+apps/desktop/src/lib/personaTaskRunner.test.ts:99:      createEffects: fakeEffects(["Allow edit? (y/n)"]).factory, // needs_approval -> awaiting_human, pane retained
+apps/desktop/src/lib/personaTaskRunner.test.ts:111:      createEffects: fakeEffects(["ok"]).factory,
+apps/desktop/src/lib/personaTaskRunner.test.ts:139:    const { factory } = fakeEffects(["I am blocked: missing the API spec"]);
+apps/desktop/src/lib/personaTaskRunner.test.ts:146:      createEffects: factory,
+apps/server/src/evidence/evidenceIngest.ts:5: * Maps an EvidenceRef (from the Domain Evidence Hub) to a MemoryInput payload.
+apps/server/src/integrations/githubPullRequestUpdateGuards.ts:21:export const PR_UPDATE_BODY_EXCERPT_MAX = 240;
+apps/server/src/integrations/githubPullRequestUpdateGuards.ts:53:  if (trimmed.length <= PR_UPDATE_BODY_EXCERPT_MAX) return trimmed;
+apps/server/src/integrations/githubPullRequestUpdateGuards.ts:54:  return `${trimmed.slice(0, PR_UPDATE_BODY_EXCERPT_MAX)}…`;
+apps/server/src/routes/autorunSafety.ts:315:    "USERPROFILE",
