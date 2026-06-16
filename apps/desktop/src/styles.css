@@ -10274,3 +10274,10 @@ body:has(.app-shell.annex-focus-shell) {
   grid-template-columns: minmax(0, 1fr);
   max-width: 920px;
 }
+/* Batch 6 LINE W — the global approval toast (ApprovalToastBar) is fixed at
+   bottom-4 (~96px tall) and was hiding the Assistant Inbox's lower cards.
+   Reserve bottom safe-area on the command center page so its content always
+   scrolls clear of the toast. Layout only — the toast/approval flow is untouched. */
+.nav-center-page[data-page="command_center"] {
+  padding-bottom: 132px;
+}
