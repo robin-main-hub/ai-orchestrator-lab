@@ -40,3 +40,12 @@ export type {
   BatchCandidateResult,
   BatchCandidateOutcome,
 } from "./batchRemember.js";
+
+export { executeLocalBatchWrite } from "./batchRemember.js";
+export type {
+  LocalSimpleMemoWriter,
+  LocalSimpleMemoWriteResult,
+  LocalBatchWriteResult,
+  LocalBatchWriteCandidateResult,
+  LocalBatchWriteStatus,
+} from "./batchRemember.js";
