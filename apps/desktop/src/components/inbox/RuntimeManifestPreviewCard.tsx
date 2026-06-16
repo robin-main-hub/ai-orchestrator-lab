@@ -1,14 +1,20 @@
-import { Package, CheckCircle2, Ban, AlertTriangle } from "lucide-react";
+import { Package, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader } from "../ui/card";
 import { Badge } from "../ui/badge";
+import { StatusBadge } from "./StatusBadge";
 
 /**
- * LINE F — Runtime manifest preview card.
+ * LINE F / N — Runtime manifest preview card.
  *
  * Read-only, presentational. Shows which skill entries would be
  * loadable vs blocked in a runtime manifest, with the blocking reason.
  * A blocked entry NEVER renders an enable button — this is a preview
  * of what the runtime would do, not a control to override it.
+ *
+ * LINE N: each entry's loadable/blocked pill now uses the shared StatusBadge
+ * (loadable → PASS-style, blocked → BLOCKED-style) so manifest rows share the
+ * exact iconography + variants as the other cards. The header keeps explicit
+ * loadable/blocked counts for the command-center density.
  */
 
 export type ManifestBlockReason =
@@ -47,14 +53,14 @@ export function RuntimeManifestPreviewCard({
   const blockedCount = entries.length - loadableCount;
   return (
     <Card
-      className="gap-2 border-white/10 bg-white/[0.02] py-3"
+      className="gap-1.5 border-white/10 bg-white/[0.02] py-2.5"
       data-testid="runtime-manifest-card"
       data-count={entries.length}
       data-loadable={loadableCount}
       data-blocked={blockedCount}
     >
       <CardHeader className="px-3">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           <Package className="h-3.5 w-3.5 text-amber-300/80" />
           <span className="text-sm font-semibold">{title}</span>
           <Badge variant="default" data-testid="runtime-manifest-loadable-total">
@@ -75,23 +81,17 @@ export function RuntimeManifestPreviewCard({
             {entries.map((entry) => (
               <li
                 key={entry.id}
-                className="flex flex-wrap items-center gap-2 rounded border border-white/5 bg-background/40 px-2 py-1 text-xs"
+                className="flex flex-wrap items-center gap-1.5 rounded border border-white/5 bg-background/40 px-2 py-1 text-xs"
                 data-testid={`runtime-manifest-entry-${entry.id}`}
                 data-loadable={entry.loadable ? "true" : "false"}
                 data-reason={entry.loadable ? "" : (entry.reason ?? "")}
               >
-                <Badge
-                  variant={entry.loadable ? "default" : "destructive"}
+                <StatusBadge
+                  kind={entry.loadable ? "pass" : "blocked"}
+                  label={entry.loadable ? "loadable" : "blocked"}
                   data-testid={`runtime-manifest-state-${entry.id}`}
                   data-loadable={entry.loadable ? "true" : "false"}
-                >
-                  {entry.loadable ? (
-                    <CheckCircle2 className="mr-1 inline h-3 w-3" />
-                  ) : (
-                    <Ban className="mr-1 inline h-3 w-3" />
-                  )}
-                  {entry.loadable ? "loadable" : "blocked"}
-                </Badge>
+                />
                 <code className="rounded bg-background/70 px-1">{entry.name}</code>
                 {!entry.loadable && entry.reason ? (
                   <span

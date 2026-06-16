@@ -1,14 +1,18 @@
-import { FileSearch, ShieldCheck, ShieldAlert, ShieldX, Link2 } from "lucide-react";
+import { FileSearch, Link2 } from "lucide-react";
 import { Card, CardContent, CardHeader } from "../ui/card";
 import { Badge } from "../ui/badge";
+import { StatusBadge } from "./StatusBadge";
 
 /**
- * LINE F — Evidence card.
+ * LINE F / N — Evidence card.
  *
  * Read-only, presentational. Shows a single evidence item with its
  * verdict (pass/warning/blocked) and compact source footnotes (refs
  * stay visible but small). NEVER renders an enable/approve action for
  * a blocked item — evidence is observation, not a command surface.
+ *
+ * LINE N: verdict badge now uses the shared StatusBadge so PASS/WARNING/
+ * BLOCKED iconography + variants match every other card.
  */
 
 export type EvidenceVerdict = "pass" | "warning" | "blocked";
@@ -35,46 +39,25 @@ export type EvidenceItem = {
   observed?: boolean;
 };
 
-const VERDICT_LABEL: Record<EvidenceVerdict, string> = {
-  pass: "PASS",
-  warning: "WARNING",
-  blocked: "BLOCKED",
-};
-
-function verdictVariant(v: EvidenceVerdict) {
-  if (v === "pass") return "default" as const;
-  if (v === "warning") return "outline" as const;
-  return "destructive" as const;
-}
-
 export function EvidenceCard({ item }: { item: EvidenceItem }) {
   const refs = item.refs ?? [];
   const observed = item.observed !== false;
   return (
     <Card
-      className="gap-2 border-white/10 bg-white/[0.02] py-3"
+      className="gap-1.5 border-white/10 bg-white/[0.02] py-2.5"
       data-testid={`evidence-card-${item.id}`}
       data-verdict={item.verdict}
       data-observed={observed ? "true" : "false"}
     >
       <CardHeader className="px-3">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           <FileSearch className="h-3.5 w-3.5 text-cyan-300/80" />
-          <span className="text-sm font-semibold">{item.title}</span>
-          <Badge
-            variant={verdictVariant(item.verdict)}
+          <span className="truncate text-sm font-semibold">{item.title}</span>
+          <StatusBadge
+            kind={item.verdict}
             data-testid={`evidence-verdict-${item.id}`}
             data-verdict={item.verdict}
-          >
-            {item.verdict === "pass" ? (
-              <ShieldCheck className="mr-1 inline h-3 w-3" />
-            ) : item.verdict === "warning" ? (
-              <ShieldAlert className="mr-1 inline h-3 w-3" />
-            ) : (
-              <ShieldX className="mr-1 inline h-3 w-3" />
-            )}
-            {VERDICT_LABEL[item.verdict]}
-          </Badge>
+          />
           {!observed ? (
             <Badge
               variant="outline"
