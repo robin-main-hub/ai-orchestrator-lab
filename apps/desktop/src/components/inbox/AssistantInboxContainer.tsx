@@ -53,7 +53,7 @@ export function AssistantInboxContainer({ live }: AssistantInboxContainerProps =
   }, [mode, live]);
 
   return (
-    <div className="nav-center-page" data-page="command_center">
+    <div className="nav-center-page" data-page="command_center" data-safe-bottom="true">
       <AssistantInbox {...props} mode={mode} onModeChange={setMode} />
     </div>
   );
