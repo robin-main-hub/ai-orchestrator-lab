@@ -85,6 +85,12 @@ export type AssistantInboxProps = {
    * projection). Absent → the strip simply omits the timestamp chip.
    */
   generatedAt?: string;
+  /** LINE A/C — real event-log size; shown as "events N" when provided (LIVE). */
+  eventCount?: number;
+  /** LINE A/C — real project-record count; shown as "records N" when provided. */
+  recordCount?: number;
+  /** LINE A/C — honest label for where the live data came from (e.g. "eventLog"). */
+  lastUpdateSource?: string;
 };
 
 function Section({
@@ -247,16 +253,26 @@ function StatusStrip({
   total,
   liveSections,
   emptySections,
+  blocked,
+  warnings,
   gateLabel,
   gateKind,
+  eventCount,
+  recordCount,
+  lastUpdateSource,
   generatedAt,
 }: {
   mode: InboxViewMode;
   total: number;
   liveSections: number;
   emptySections: number;
+  blocked: number;
+  warnings: number;
   gateLabel: string | null;
   gateKind: string | null;
+  eventCount?: number;
+  recordCount?: number;
+  lastUpdateSource?: string;
   generatedAt?: string;
 }) {
   return (
@@ -267,13 +283,26 @@ function StatusStrip({
       data-total={total}
       data-live-sections={liveSections}
       data-empty-sections={emptySections}
+      data-blocked={blocked}
+      data-warnings={warnings}
       data-gate={gateKind ?? "none"}
     >
       <StatChip>{mode.toUpperCase()}</StatChip>
       <StatChip>{total} items</StatChip>
       <StatChip>{liveSections}/4 live</StatChip>
       <StatChip>{emptySections}/4 empty</StatChip>
+      <StatChip testid="assistant-inbox-stat-blocked">{blocked} blocked</StatChip>
+      <StatChip testid="assistant-inbox-stat-warnings">{warnings} warn</StatChip>
       {gateLabel ? <StatChip>gate · {gateLabel}</StatChip> : null}
+      {typeof eventCount === "number" ? (
+        <StatChip testid="assistant-inbox-stat-events">{eventCount} events</StatChip>
+      ) : null}
+      {typeof recordCount === "number" ? (
+        <StatChip testid="assistant-inbox-stat-records">{recordCount} records</StatChip>
+      ) : null}
+      {lastUpdateSource ? (
+        <StatChip testid="assistant-inbox-update-source">src · {lastUpdateSource}</StatChip>
+      ) : null}
       {generatedAt ? (
         <StatChip testid="assistant-inbox-generated-at">updated {generatedAt}</StatChip>
       ) : null}
@@ -310,6 +339,9 @@ export function AssistantInbox({
   mode = "live",
   onModeChange,
   generatedAt,
+  eventCount,
+  recordCount,
+  lastUpdateSource,
 }: AssistantInboxProps) {
   const total =
     evidence.length + learningLoops.length + memoryCandidates.length + manifestEntries.length;
@@ -334,6 +366,9 @@ export function AssistantInbox({
   const gateItem = evidence.find((e) => e.id.startsWith("runner-gate-"));
   const gateKind = gateItem ? gateItem.verdict : null;
   const gateLabel = gateItem ? (gateItem.verdict === "pass" ? "active" : "disabled") : null;
+  // LINE A — severity rollups from the rendered evidence (works in LIVE+PREVIEW).
+  const blockedCount = evidence.filter((e) => e.verdict === "blocked").length;
+  const warningCount = evidence.filter((e) => e.verdict === "warning").length;
   // LIVE-sparse = LIVE with nothing live beyond the gate. Drives the polished
   // "No live data yet" hero so the first impression reads intentional.
   const liveSparse =
@@ -383,8 +418,13 @@ export function AssistantInbox({
         total={total}
         liveSections={liveCount}
         emptySections={emptyCount}
+        blocked={blockedCount}
+        warnings={warningCount}
         gateLabel={gateLabel}
         gateKind={gateKind}
+        eventCount={eventCount}
+        recordCount={recordCount}
+        lastUpdateSource={lastUpdateSource}
         generatedAt={generatedAt}
       />
       {mode === "preview" ? <PreviewBanner /> : null}
