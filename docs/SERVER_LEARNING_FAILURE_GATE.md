@@ -66,6 +66,10 @@ if (decision.append) {
 
 ## 소유 / 활성화 권한
 
+> LINE P: owner/enablement 계약(WHO/WHEN + audit event shape + 전환 조건)은
+> [`LEARNING_FAILURE_ENABLEMENT_CONTRACT.md`](./LEARNING_FAILURE_ENABLEMENT_CONTRACT.md)에서
+> 정식화한다. 기본 disabled는 owner의 명시적 flip + audit 전까지 유지되며 자동 flip 경로는 없다.
+
 - 활성화 결정 owner: AI Orchestrator Lab 유지보수자(설정 주입 + route 연결 PR 승인).
 - 기본값은 `enabled: false`. 켜려면 (a) owner가 설정에서 enabled를 켜고,
   (b) 별도 PR로 위 seam의 route 단계를 명시적으로 연결해야 한다.
