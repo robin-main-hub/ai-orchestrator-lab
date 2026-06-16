@@ -56,7 +56,7 @@ export type AssistantInboxSources = {
  */
 export type InboxViewMode = "live" | "preview" | "replay" | "sandbox";
 
-/** The four seats. REPLAY/SANDBOX are disabled placeholders this batch. */
+/** The four seats. SANDBOX stays a disabled placeholder (action-risk → deferred). */
 export const INBOX_VIEW_MODES: ReadonlyArray<{
   value: InboxViewMode;
   label: string;
@@ -64,7 +64,7 @@ export const INBOX_VIEW_MODES: ReadonlyArray<{
 }> = [
   { value: "live", label: "LIVE", enabled: true },
   { value: "preview", label: "PREVIEW", enabled: true },
-  { value: "replay", label: "REPLAY", enabled: false },
+  { value: "replay", label: "REPLAY", enabled: true },
   { value: "sandbox", label: "SANDBOX", enabled: false },
 ];
 
@@ -519,6 +519,61 @@ function WorkLaneRail({ lanes }: { lanes: ReadonlyArray<WorkLane> }) {
   );
 }
 
+/**
+ * LINE C — recent eventLog entries for the REPLAY deck, newest first, capped.
+ * Pure read-only projection: never mutates, never calls Date.now / a server.
+ */
+export function projectReplayEvents(
+  events: ReadonlyArray<TimedEventInput> = [],
+  limit = 20,
+): TimedEventInput[] {
+  return [...events]
+    .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0))
+    .slice(0, limit);
+}
+
+/**
+ * LINE C — REPLAY deck. A read-only playback of recent event-log entries (type +
+ * timestamp). No action buttons, no server call, no write/append/activation. If
+ * the event log is empty, an honest empty replay state.
+ */
+function ReplayDeck({ events }: { events: ReadonlyArray<TimedEventInput> }) {
+  const recent = projectReplayEvents(events, 20);
+  return (
+    <div className="px-4 pb-1" data-testid="replay-deck" data-count={recent.length}>
+      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-cyan-200/80">
+        REPLAY · 과거 eventLog (read-only)
+      </p>
+      {recent.length === 0 ? (
+        <div
+          className="rounded-md border border-dashed border-white/10 bg-white/[0.012] px-2.5 py-2"
+          data-testid="replay-deck-empty"
+        >
+          <p className="text-[11px] text-muted-foreground/70">재생할 eventLog 없음</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground/50">
+            실제 이벤트가 쌓이면 최근 항목부터 여기서 재생됩니다 · 읽기 전용
+          </p>
+        </div>
+      ) : (
+        <ol className="space-y-0.5">
+          {recent.map((e, i) => (
+            <li
+              key={e.id}
+              data-testid={`replay-deck-item-${i}`}
+              className="flex items-center gap-2 rounded border border-white/[0.06] bg-white/[0.02] px-2 py-1"
+            >
+              <span className="truncate text-[11px] text-zinc-300">{e.type}</span>
+              <span className="ml-auto shrink-0 text-[10px] tabular-nums text-muted-foreground/60">
+                {e.createdAt}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 export function AssistantInbox({
   evidence = [],
   learningLoops = [],
@@ -622,11 +677,15 @@ export function AssistantInbox({
         lastUpdateSource={lastUpdateSource}
         generatedAt={generatedAt}
       />
-      {mode === "preview" ? <PreviewBanner /> : null}
-      {mode === "preview" ? <PreviewScenarioLegend /> : null}
-      {liveSparse ? <LiveEmptyHero /> : null}
-      <WorkLaneRail lanes={workLanes} />
-      <CardContent className="grid grid-cols-1 gap-2.5 px-4 lg:grid-cols-2 lg:gap-2.5 xl:gap-3">
+      {mode === "replay" ? (
+        <ReplayDeck events={recentEvents ?? []} />
+      ) : (
+        <>
+          {mode === "preview" ? <PreviewBanner /> : null}
+          {mode === "preview" ? <PreviewScenarioLegend /> : null}
+          {liveSparse ? <LiveEmptyHero /> : null}
+          <WorkLaneRail lanes={workLanes} />
+          <CardContent className="grid grid-cols-1 gap-2.5 px-4 lg:grid-cols-2 lg:gap-2.5 xl:gap-3">
         <Section
           id="evidence"
           title="Evidence"
@@ -676,7 +735,9 @@ export function AssistantInbox({
         >
           <RuntimeManifestPreviewCard entries={manifestEntries} />
         </Section>
-      </CardContent>
+          </CardContent>
+        </>
+      )}
     </Card>
   );
 }
