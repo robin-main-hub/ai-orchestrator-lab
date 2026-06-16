@@ -302,6 +302,7 @@ import { ChannelRailPanel } from "./components/ChannelRailPanel";
 import { CodingPacketPanel } from "./components/CodingPacketPanel";
 import { CheatSheetOverlay } from "./components/CheatSheetOverlay";
 import { ApprovalToastBarConnector } from "./components/ApprovalToastBarConnector";
+import { resolvePersonaPortraitUrl } from "./lib/personaPortrait";
 import { CommandPalette, type CommandEntry } from "./components/CommandPalette";
 import { AssistantInboxContainer } from "./components/inbox/AssistantInboxContainer";
 import { ConfigLibraryPanel } from "./components/ConfigLibraryPanel";
@@ -785,6 +786,25 @@ export function App() {
     [agentSettingsAgentId, agents],
   );
   const selectedAgentPersona = selectedAgent ? agentPersonaById[selectedAgent.id] : undefined;
+  // 승인 toast 동료감(companion): 큐 항목엔 페르소나가 없으므로(requestedBy=actor enum뿐)
+  // 세션의 활성 에이전트 신원을 best-effort로 넘긴다. 아바타는 사용자 업로드 우선, 없으면
+  // 번들 캐릭터 초상화(personaName->role)로 폴백. 신원을 모르면 바가 actor 라벨로 정직 폴백한다.
+  const approvalToastRequester = useMemo(
+    () =>
+      selectedAgent
+        ? {
+            activeAgent: {
+              name: selectedAgent.personaName ?? selectedAgent.name,
+              role: selectedAgent.role,
+              model: selectedAgent.modelId,
+              avatarUrl:
+                agentVisualsById[selectedAgent.id]?.avatarDataUrl ??
+                resolvePersonaPortraitUrl(selectedAgent.personaName, selectedAgent.role),
+            },
+          }
+        : undefined,
+    [agentVisualsById, selectedAgent],
+  );
   const {
     adoptedBranchSummaries,
     branchExperiments,
@@ -5739,6 +5759,7 @@ export function App() {
       {/* 제안1: 전역 단일 승인 액션 표면 — 대기 승인이 있을 때만 하단에 떠서 원터치 허용/거절 */}
       <ApprovalToastBarConnector
         queue={unifiedControlQueueSnapshot.queue}
+        requester={approvalToastRequester}
         onApprove={handleConversationApprovePermission}
         onReject={handleConversationRejectPermission}
         onOpenHistory={() => setApprovalDrawerOpen(true)}
