@@ -5483,6 +5483,10 @@ export function App() {
                 projectRecords: projectRecordController.records,
                 // LINE C — total real event-log size for the live command strip.
                 eventLogCount: eventLog.length,
+                // LINE B (Batch 8) — real events + injected now for Today/Recent
+                // lanes. Date.now() is injected HERE (not in the pure projection).
+                recentEvents: eventLog,
+                nowMs: Date.now(),
               }}
               // LINE A (Batch 8) — remember the last seat (local UI pref only).
               persistViewMode
