@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
-    "generate:sample-debate": "vite-node scripts/generateSampleDebate.ts"
+    "generate:sample-debate": "vite-node scripts/generateSampleDebate.ts",
+    "deploy:pages": "pnpm run build && npx wrangler pages deploy dist --project-name=ai-orchestrator-lab"
   },
   "dependencies": {
     "@ai-orchestrator/agents": "workspace:*",
