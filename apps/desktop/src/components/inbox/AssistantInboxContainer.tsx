@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { AssistantInbox } from "./AssistantInbox";
+import { useMemo, useState } from "react";
+import { AssistantInbox, type InboxViewMode } from "./AssistantInbox";
 import {
   buildAssistantInboxProps,
   buildAssistantInboxLiveProps,
@@ -33,13 +33,28 @@ export type AssistantInboxContainerProps = {
 };
 
 export function AssistantInboxContainer({ live }: AssistantInboxContainerProps = {}) {
-  const props = useMemo(
-    () => (live === undefined ? buildAssistantInboxProps() : buildAssistantInboxLiveProps(live)),
-    [live],
-  );
+  // Default seat: LIVE when real app state is wired (the real app always passes
+  // `live`, so the command center opens LIVE). It falls back to PREVIEW only in
+  // isolation/demo, where there is no live data to honestly show. The seat is
+  // pure UI state — switching it never writes anywhere.
+  const [mode, setMode] = useState<InboxViewMode>(live === undefined ? "preview" : "live");
+
+  // DATA-PLANE SEPARATION (Batch 5 LINE S): each seat reads ONE projection and
+  // never the other. liveProjection (buildAssistantInboxLiveProps) and
+  // previewProjection (buildAssistantInboxProps) are distinct, pure functions;
+  // PREVIEW never receives `live`, LIVE never receives fixtures. So no fixture
+  // can leak into a live card and vice versa.
+  const props = useMemo(() => {
+    if (mode === "preview") return buildAssistantInboxProps();
+    if (mode === "live") return buildAssistantInboxLiveProps(live ?? {});
+    // REPLAY / SANDBOX are disabled placeholders this batch — render an honest
+    // empty live frame (no fixtures) until their real sources are wired.
+    return buildAssistantInboxLiveProps({});
+  }, [mode, live]);
+
   return (
     <div className="nav-center-page" data-page="command_center">
-      <AssistantInbox {...props} />
+      <AssistantInbox {...props} mode={mode} onModeChange={setMode} />
     </div>
   );
 }
