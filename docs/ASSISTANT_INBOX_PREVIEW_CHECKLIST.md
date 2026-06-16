@@ -128,3 +128,21 @@ preview scenario deck, density pass). Tick on each future preview:
       rules, no large dead whitespace; still no action buttons.
 - [ ] **No leakage / honesty preserved** — LIVE never shows fixture rows; no fake
       live; no new write/activation/runtime-load paths.
+
+## 8. Batch 8 — persistence / replay / today regression checklist
+
+Batch 8 added seat persistence, Today/Recent time lanes, a REPLAY shell, and
+scroll stability. Tick on each future preview:
+
+- [ ] **Seat remembered** — switching LIVE/PREVIEW/REPLAY and reloading restores
+      the last seat; an invalid/disabled stored seat (e.g. sandbox) falls back to
+      LIVE; this is a local pref only (no server write).
+- [ ] **Today/Recent honest** — the Today/Recent lanes fill from the real eventLog
+      (today vs last-7-days); empty when there are no qualifying events; never
+      fabricated, generic labels only.
+- [ ] **REPLAY read-only** — REPLAY plays recent eventLog entries (newest first,
+      type + timestamp), honest empty when the log is empty; no action buttons, no
+      writes; SANDBOX stays a disabled placeholder.
+- [ ] **Scroll stable** — narrow / short viewport scrolls the command center
+      cleanly (no window bounce); the last card clears the fixed approval toast;
+      wide desktop keeps the 2-column layout.
