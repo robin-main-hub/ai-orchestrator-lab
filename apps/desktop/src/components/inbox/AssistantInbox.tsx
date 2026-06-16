@@ -79,6 +79,12 @@ export type AssistantInboxProps = {
   mode?: InboxViewMode;
   /** Notified when the viewer picks a seat. Only ever sets view state upstream. */
   onModeChange?: (mode: InboxViewMode) => void;
+  /**
+   * Optional, already-formatted "generated/updated" label, passed in from real
+   * state. Shown only when provided — never fabricated (no Date.now in the pure
+   * projection). Absent → the strip simply omits the timestamp chip.
+   */
+  generatedAt?: string;
 };
 
 function Section({
@@ -86,6 +92,7 @@ function Section({
   title,
   count,
   emptyHint,
+  emptyDetail,
   source,
   children,
 }: {
@@ -93,6 +100,8 @@ function Section({
   title: string;
   count: number;
   emptyHint: string;
+  /** LINE V — one honest line on what will populate this section later. */
+  emptyDetail?: string;
   source: InboxSectionSource;
   children: React.ReactNode;
 }) {
@@ -115,12 +124,19 @@ function Section({
         </span>
       </div>
       {count === 0 ? (
-        <p
-          className="text-[11px] text-muted-foreground/70"
+        // LINE V — intentional empty: a compact dashed ghost row (clearly NOT a
+        // card, no fake/fixture data) that explains why it's empty + what fills
+        // it later, so a sparse LIVE surface reads as "waiting", not "broken".
+        <div
+          className="rounded-md border border-dashed border-white/10 bg-white/[0.012] px-2.5 py-2"
           data-testid={`assistant-inbox-section-empty-${id}`}
+          data-empty="true"
         >
-          {emptyHint}
-        </p>
+          <p className="text-[11px] font-medium text-muted-foreground/80">{emptyHint}</p>
+          {emptyDetail ? (
+            <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground/55">{emptyDetail}</p>
+          ) : null}
+        </div>
       ) : (
         <div className="space-y-1.5">{children}</div>
       )}
@@ -197,10 +213,90 @@ function PreviewBanner() {
     <div
       role="note"
       data-testid="assistant-inbox-preview-banner"
-      className="mx-4 mb-2 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-[11px] text-amber-200"
+      className="mx-4 mb-2 rounded-md border border-l-[3px] border-amber-400/30 border-l-amber-400/80 bg-amber-400/10 px-3 py-1.5 text-[11px] text-amber-200"
     >
+      <span className="mr-1 rounded bg-amber-400/20 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+        Preview
+      </span>
       <span className="font-semibold">PREVIEW MODE</span> — 예시(fixture) 데이터입니다 · 실제
       업무/실제 이벤트가 아닙니다 · 모든 액션은 비활성화되어 있습니다
+    </div>
+  );
+}
+
+/** A compact command-center stat pill. Presentational, no action. */
+function StatChip({ children, testid }: { children: React.ReactNode; testid?: string }) {
+  return (
+    <span
+      data-testid={testid}
+      className="inline-flex items-center rounded border border-white/10 bg-white/[0.03] px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+    >
+      {children}
+    </span>
+  );
+}
+
+/**
+ * LINE U — command-center status strip. Honest counts derived ONLY from the
+ * props already on screen (mode, section provenance, runner gate); fabricates
+ * nothing and makes no call. Gives even a sparse LIVE surface an "ops desk"
+ * read instead of dead space.
+ */
+function StatusStrip({
+  mode,
+  total,
+  liveSections,
+  emptySections,
+  gateLabel,
+  gateKind,
+  generatedAt,
+}: {
+  mode: InboxViewMode;
+  total: number;
+  liveSections: number;
+  emptySections: number;
+  gateLabel: string | null;
+  gateKind: string | null;
+  generatedAt?: string;
+}) {
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1.5 px-4 pb-2"
+      data-testid="assistant-inbox-status-strip"
+      data-mode={mode}
+      data-total={total}
+      data-live-sections={liveSections}
+      data-empty-sections={emptySections}
+      data-gate={gateKind ?? "none"}
+    >
+      <StatChip>{mode.toUpperCase()}</StatChip>
+      <StatChip>{total} items</StatChip>
+      <StatChip>{liveSections}/4 live</StatChip>
+      <StatChip>{emptySections}/4 empty</StatChip>
+      {gateLabel ? <StatChip>gate · {gateLabel}</StatChip> : null}
+      {generatedAt ? (
+        <StatChip testid="assistant-inbox-generated-at">updated {generatedAt}</StatChip>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * LINE U/V — polished LIVE empty hero. Shown only when LIVE has no live data
+ * beyond the runner gate, so the empty state reads as intentional ("waiting"),
+ * never broken. Honest: states that only the gate is observed.
+ */
+function LiveEmptyHero() {
+  return (
+    <div
+      className="mx-4 mb-2 rounded-lg border border-cyan-400/15 bg-cyan-400/[0.04] px-3 py-2.5"
+      data-testid="assistant-inbox-live-empty-hero"
+    >
+      <p className="text-[12px] font-semibold text-cyan-200/90">작전 대기 중 · No live data yet</p>
+      <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground/75">
+        runner gate만 관측됨. learning loop · memory candidate · runtime manifest는 실제 이벤트가
+        들어오면 여기 채워집니다.
+      </p>
     </div>
   );
 }
@@ -213,6 +309,7 @@ export function AssistantInbox({
   sources,
   mode = "live",
   onModeChange,
+  generatedAt,
 }: AssistantInboxProps) {
   const total =
     evidence.length + learningLoops.length + memoryCandidates.length + manifestEntries.length;
@@ -230,6 +327,20 @@ export function AssistantInbox({
     learningSource === "example" ||
     memorySource === "example" ||
     manifestSource === "example";
+  const emptyCount = [evidenceSource, learningSource, memorySource, manifestSource].filter(
+    (s) => s === "empty",
+  ).length;
+  // Runner gate is the always-present derived fact; surface its honest state.
+  const gateItem = evidence.find((e) => e.id.startsWith("runner-gate-"));
+  const gateKind = gateItem ? gateItem.verdict : null;
+  const gateLabel = gateItem ? (gateItem.verdict === "pass" ? "active" : "disabled") : null;
+  // LIVE-sparse = LIVE with nothing live beyond the gate. Drives the polished
+  // "No live data yet" hero so the first impression reads intentional.
+  const liveSparse =
+    mode === "live" &&
+    learningLoops.length === 0 &&
+    memoryCandidates.length === 0 &&
+    manifestEntries.length === 0;
   return (
     <Card
       className="border-white/10 bg-black/40 py-4"
@@ -267,13 +378,24 @@ export function AssistantInbox({
         </div>
       </CardHeader>
       <ModeSwitch mode={mode} onModeChange={onModeChange} />
+      <StatusStrip
+        mode={mode}
+        total={total}
+        liveSections={liveCount}
+        emptySections={emptyCount}
+        gateLabel={gateLabel}
+        gateKind={gateKind}
+        generatedAt={generatedAt}
+      />
       {mode === "preview" ? <PreviewBanner /> : null}
+      {liveSparse ? <LiveEmptyHero /> : null}
       <CardContent className="grid grid-cols-1 gap-3 px-4 lg:grid-cols-2">
         <Section
           id="evidence"
           title="Evidence"
           count={evidence.length}
-          emptyHint="아직 관측된 evidence 없음 (OS core에는 도메인 evidence 없음)"
+          emptyHint="아직 관측된 evidence 없음"
+          emptyDetail="OS core엔 도메인 evidence가 없음 · runner gate·검증 결과가 관측되면 표시"
           source={evidenceSource}
         >
           {evidence.map((item) => (
@@ -286,6 +408,7 @@ export function AssistantInbox({
           title="Learning Loops"
           count={learningLoops.length}
           emptyHint="아직 관측된 learning loop 없음"
+          emptyDetail="learning loop 이벤트가 들어오면 가설→검증→증류 단계로 표시"
           source={learningSource}
         >
           {learningLoops.map((item) => (
@@ -298,6 +421,7 @@ export function AssistantInbox({
           title="Memory Candidates"
           count={memoryCandidates.length}
           emptyHint="아직 memory candidate 없음"
+          emptyDetail="project record가 생기면 memory candidate(suggested·observed:false)로 표시"
           source={memorySource}
         >
           {memoryCandidates.map((item) => (
@@ -310,6 +434,7 @@ export function AssistantInbox({
           title="Runtime Manifest Preview"
           count={manifestEntries.length}
           emptyHint="아직 manifest 항목 없음"
+          emptyDetail="skill 후보가 활성화 평가(eval)되면 loadable/blocked로 표시"
           source={manifestSource}
         >
           <RuntimeManifestPreviewCard entries={manifestEntries} />

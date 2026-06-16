@@ -424,7 +424,7 @@ export function projectRunnerGateEvidence(mode: RunnerGateMode = "dgx_disabled")
  * "example" (예시/fixture) so it is never mistaken for live OS state. For honest
  * live wiring use `buildAssistantInboxLiveProps`.
  */
-export function buildAssistantInboxProps(): Required<Omit<AssistantInboxProps, "sources" | "mode" | "onModeChange">> & {
+export function buildAssistantInboxProps(): Required<Omit<AssistantInboxProps, "sources" | "mode" | "onModeChange" | "generatedAt">> & {
   sources: Required<AssistantInboxSources>;
 } {
   return {
@@ -537,7 +537,7 @@ export function summarizeLearningLive(
  */
 export function buildAssistantInboxLiveProps(
   input: AssistantInboxLiveInput = {},
-): Required<Omit<AssistantInboxProps, "sources" | "mode" | "onModeChange">> & {
+): Required<Omit<AssistantInboxProps, "sources" | "mode" | "onModeChange" | "generatedAt">> & {
   sources: Required<AssistantInboxSources>;
 } {
   // Runner gate is ALWAYS real/live: it's a derived honest fact (dgx disabled
