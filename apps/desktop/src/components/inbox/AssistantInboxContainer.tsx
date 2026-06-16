@@ -1,10 +1,25 @@
-import { useMemo, useState } from "react";
-import { AssistantInbox, type InboxViewMode } from "./AssistantInbox";
+import { useEffect, useMemo, useState } from "react";
+import { AssistantInbox, INBOX_VIEW_MODES, type InboxViewMode } from "./AssistantInbox";
 import {
   buildAssistantInboxProps,
   buildAssistantInboxLiveProps,
   type AssistantInboxLiveInput,
 } from "../../lib/assistantInboxProjection";
+import { readJsonState, writeJsonState } from "../../lib/persistentJsonState";
+
+/** LINE A — local UI preference key for the remembered seat (no server write). */
+const INBOX_VIEW_MODE_KEY = "ai-orchestrator.inbox-view-mode.v1";
+
+/** Read a remembered seat — only an ENABLED mode counts; else null (→ default). */
+function readStoredViewMode(): InboxViewMode | null {
+  const stored = readJsonState<string | null>(INBOX_VIEW_MODE_KEY, null, (v) =>
+    typeof v === "string" ? v : null,
+  );
+  if (stored && INBOX_VIEW_MODES.some((m) => m.value === stored && m.enabled)) {
+    return stored as InboxViewMode;
+  }
+  return null;
+}
 
 /**
  * LINE B/C/H — Assistant Inbox container.
@@ -30,14 +45,36 @@ export type AssistantInboxContainerProps = {
    * mode. Absence keeps the legacy fixture/example composition.
    */
   live?: AssistantInboxLiveInput;
+  /**
+   * LINE A — remember the last seat across mounts in localStorage. Local UI
+   * preference ONLY (no server / EventStorage write). Off by default so isolated
+   * renders stay deterministic; the real app turns it on.
+   */
+  persistViewMode?: boolean;
 };
 
-export function AssistantInboxContainer({ live }: AssistantInboxContainerProps = {}) {
+export function AssistantInboxContainer({
+  live,
+  persistViewMode = false,
+}: AssistantInboxContainerProps = {}) {
   // Default seat: LIVE when real app state is wired (the real app always passes
   // `live`, so the command center opens LIVE). It falls back to PREVIEW only in
   // isolation/demo, where there is no live data to honestly show. The seat is
-  // pure UI state — switching it never writes anywhere.
-  const [mode, setMode] = useState<InboxViewMode>(live === undefined ? "preview" : "live");
+  // pure UI state — switching it never writes anywhere (except the local pref).
+  const [mode, setMode] = useState<InboxViewMode>(() => {
+    if (persistViewMode) {
+      const stored = readStoredViewMode();
+      if (stored) return stored; // remembered enabled seat wins
+    }
+    // No (valid) stored seat → default. Real app (live wired) opens LIVE;
+    // isolation/demo opens PREVIEW. Invalid/disabled stored values fall through here.
+    return live === undefined ? "preview" : "live";
+  });
+
+  // Persist the seat as a local UI preference only when explicitly enabled.
+  useEffect(() => {
+    if (persistViewMode) writeJsonState(INBOX_VIEW_MODE_KEY, mode);
+  }, [persistViewMode, mode]);
 
   // DATA-PLANE SEPARATION (Batch 5 LINE S): each seat reads ONE projection and
   // never the other. liveProjection (buildAssistantInboxLiveProps) and
