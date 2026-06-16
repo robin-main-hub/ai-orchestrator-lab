@@ -1,0 +1,212 @@
+[
+  {
+    "file": "packages/providers/src/node/cliSubprocessEnv.ts",
+    "line": 7,
+    "match": "USERPROFILE",
+    "classification": "false_positive",
+    "reason": "Matches 'ERP' within USERPROFILE."
+  },
+  {
+    "file": "packages/simplememo/src/batchRemember.ts",
+    "line": 18,
+    "match": "ERP bridge",
+    "classification": "must_refactor",
+    "reason": "Explicit ERP domain reference."
+  },
+  {
+    "file": "packages/simplememo/src/adapter.ts",
+    "line": 57,
+    "match": "ERP evidence ingest path",
+    "classification": "must_refactor",
+    "reason": "Explicit ERP domain reference."
+  },
+  {
+    "file": "packages/simplememo/src/adapter.ts",
+    "line": 88,
+    "match": "ERP evidence ingest",
+    "classification": "must_refactor",
+    "reason": "Explicit ERP domain reference."
+  },
+  {
+    "file": "packages/simplememo/src/evidenceBridge.ts",
+    "line": 11,
+    "match": "ERP/CRM",
+    "classification": "must_refactor",
+    "reason": "Explicit ERP domain reference."
+  },
+  {
+    "file": "packages/simplememo/src/evidenceBridge.ts",
+    "line": 13,
+    "match": "ERP/CRM",
+    "classification": "must_refactor",
+    "reason": "Explicit ERP domain reference."
+  },
+  {
+    "file": "packages/simplememo/src/evidenceBridge.ts",
+    "line": 15,
+    "match": "ERP DB",
+    "classification": "must_refactor",
+    "reason": "Explicit ERP domain reference."
+  },
+  {
+    "file": "packages/simplememo/src/evidenceBridge.ts",
+    "line": 26,
+    "match": "ERP DB",
+    "classification": "must_refactor",
+    "reason": "Explicit ERP domain reference."
+  },
+  {
+    "file": "packages/simplememo/src/evidenceBridge.ts",
+    "line": 75,
+    "match": "ERP evidence",
+    "classification": "must_refactor",
+    "reason": "Explicit ERP domain reference."
+  },
+  {
+    "file": "packages/protocol/src/scaffold.test.ts",
+    "line": 14,
+    "match": "example-domain",
+    "classification": "allowed_example_fixture",
+    "reason": "Asserting absence of banned word example-domain."
+  },
+  {
+    "file": "packages/protocol/src/workflowTemplate.test.ts",
+    "line": 39,
+    "match": "example-domain",
+    "classification": "allowed_example_fixture",
+    "reason": "Asserting absence of banned word example-domain."
+  },
+  {
+    "file": "packages/protocol/src/workflowTemplate.test.ts",
+    "line": 49,
+    "match": "EXAMPLE_DOMAIN",
+    "classification": "allowed_example_fixture",
+    "reason": "Testing cleanup of EXAMPLE_DOMAIN specific templates."
+  },
+  {
+    "file": "packages/protocol/src/githubConnector.ts",
+    "line": 778,
+    "match": "EXCERPT",
+    "classification": "false_positive",
+    "reason": "Matches 'ERP' within EXCERPT."
+  },
+  {
+    "file": "packages/protocol/src/index.ts",
+    "line": 245,
+    "match": "ERP",
+    "classification": "must_refactor",
+    "reason": "Domain reference."
+  },
+  {
+    "file": "packages/protocol/src/index.ts",
+    "line": 488,
+    "match": "customer_inquiry",
+    "classification": "must_refactor",
+    "reason": "customer is forbidden in OS core, change to client/user."
+  },
+  {
+    "file": "packages/protocol/src/index.ts",
+    "line": 1373,
+    "match": "customer_reply",
+    "classification": "must_refactor",
+    "reason": "customer is forbidden in OS core, change to external_reply."
+  },
+  {
+    "file": "packages/protocol/src/workflowTemplate.ts",
+    "line": 10,
+    "match": "EXAMPLE_DOMAIN",
+    "classification": "must_refactor",
+    "reason": "EXAMPLE_DOMAIN reference in comment."
+  },
+  {
+    "file": "packages/protocol/src/workflowTemplate.ts",
+    "line": 181,
+    "match": "domain",
+    "classification": "must_refactor",
+    "reason": "domain reference in workflowTemplate slot."
+  },
+  {
+    "file": "apps/desktop/src/runtime/stage9Permission.ts",
+    "line": 510,
+    "match": "customer",
+    "classification": "must_refactor",
+    "reason": "customer term used in regex."
+  },
+  {
+    "file": "apps/desktop/src/runtime/stage9Permission.ts",
+    "line": 511,
+    "match": "customer_reply",
+    "classification": "must_refactor",
+    "reason": "customer_reply action returned."
+  },
+  {
+    "file": "apps/desktop/src/runtime/stage9Permission.test.ts",
+    "line": 184,
+    "match": "customer",
+    "classification": "must_refactor",
+    "reason": "Update to generic term."
+  },
+  {
+    "file": "apps/desktop/src/lib/githubContext.ts",
+    "line": 18,
+    "match": "EXCERPT",
+    "classification": "false_positive",
+    "reason": "Matches 'ERP'."
+  },
+  {
+    "file": "apps/desktop/src/lib/turboEditPrompt.ts",
+    "line": 19,
+    "match": "EXCERPT",
+    "classification": "false_positive",
+    "reason": "Matches 'ERP'."
+  },
+  {
+    "file": "apps/desktop/src/lib/permissionApprovalLedger.ts",
+    "line": 138,
+    "match": "customer_reply",
+    "classification": "must_refactor",
+    "reason": "Domain term in ledger."
+  },
+  {
+    "file": "apps/desktop/src/lib/controlQueuePresentation.ts",
+    "line": 55,
+    "match": "customer_reply",
+    "classification": "must_refactor",
+    "reason": "Domain term."
+  },
+  {
+    "file": "apps/server/src/evidence/evidenceIngest.ts",
+    "line": 5,
+    "match": "ERP",
+    "classification": "must_refactor",
+    "reason": "Domain term in comment."
+  },
+  {
+    "file": "apps/server/src/evidence/evidenceIngest.ts",
+    "line": 22,
+    "match": "ERP",
+    "classification": "must_refactor",
+    "reason": "Domain term in comment."
+  },
+  {
+    "file": "apps/server/src/integrations/githubPullRequestUpdateGuards.ts",
+    "line": 21,
+    "match": "EXCERPT",
+    "classification": "false_positive",
+    "reason": "Matches 'ERP'."
+  },
+  {
+    "file": "apps/server/src/routes/autorunSafety.ts",
+    "line": 315,
+    "match": "USERPROFILE",
+    "classification": "false_positive",
+    "reason": "Matches 'ERP'."
+  },
+  {
+    "file": "apps/mobile/src/seeds.ts",
+    "line": 136,
+    "match": "DOMAIN-WIKI",
+    "classification": "must_refactor",
+    "reason": "domain reference in mobile seeds."
+  }
+]

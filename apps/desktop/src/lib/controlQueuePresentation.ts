@@ -52,7 +52,7 @@ const actionLabels: Partial<Record<PermissionAction, string>> = {
   calendar_create: "일정 생성",
   contract_review: "계약 검토",
   conversation_reply: "대화 응답",
-  customer_reply: "고객 답변",
+  external_reply: "외부 답변",
   deploy: "배포",
   device_reboot: "장비 재시작",
   document_share: "문서 공유",

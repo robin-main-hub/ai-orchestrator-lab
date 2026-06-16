@@ -28,7 +28,7 @@ const snapshot: PermissionMatrixSnapshot = {
       actor: "external_channel",
       channel: "api",
       sourceTrust: "untrusted",
-      action: "customer_reply",
+      action: "external_reply",
       requestedLevels: ["read_only"],
       state: "rejected",
       decision: "deny",
