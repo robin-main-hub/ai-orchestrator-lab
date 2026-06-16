@@ -116,7 +116,13 @@ export function AssistantInboxContainer({
 
   return (
     <div className="nav-center-page" data-page="command_center" data-safe-bottom="true">
-      <AssistantInbox {...props} {...stripExtras} mode={mode} onModeChange={setMode} />
+      <AssistantInbox
+        {...props}
+        {...stripExtras}
+        mode={mode}
+        onModeChange={setMode}
+        persistFilters={persistViewMode}
+      />
     </div>
   );
 }
