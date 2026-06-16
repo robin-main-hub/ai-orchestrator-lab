@@ -46,6 +46,13 @@ type ProviderRegistryControllerInput = {
   selectedAgent?: WorkbenchAgent;
 };
 
+/**
+ * mimo는 목업 provider라 실 토큰이 필요 없다. env(VITE_MIMO_*)가 비어 있을 때
+ * 기본으로 주입하는 mock credential — 배포된 정적 사이트에서 provider 미설정으로
+ * 비어 보이지 않고 곧바로 테스트 가능하게 한다.
+ */
+export const MIMO_MOCK_DEFAULT_TOKEN = "mimo-mock-token";
+
 export function createAuthBinding(provider?: ProviderProfile): WorkbenchAgent["authBinding"] {
   if (!provider) {
     return {
@@ -77,7 +84,9 @@ export function useProviderRegistryController({
       ? {}
       : readProviderDefaultCredentials({
           fallbackCredentials: createMimoTokenPlanDefaultCredentials(
-            import.meta.env.VITE_MIMO_TOKEN_PLAN_API_KEY ?? import.meta.env.VITE_MIMO_API_KEY,
+            // mimo는 목업(server-proxy) provider — env 토큰이 없으면 mock 토큰을 기본 주입해
+            // 배포 사이트가 별도 설정 없이 mimo-ready로 뜨게 한다. 실 env 값이 있으면 그게 우선.
+            import.meta.env.VITE_MIMO_TOKEN_PLAN_API_KEY ?? import.meta.env.VITE_MIMO_API_KEY ?? MIMO_MOCK_DEFAULT_TOKEN,
           ),
           legacySessionStorage: window.sessionStorage,
           persistentStorage: window.localStorage,
