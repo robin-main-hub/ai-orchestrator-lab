@@ -55,3 +55,10 @@ export {
   distilledCandidateToMemoryInput,
   executeLearningBatchRemember,
 } from "./learningBatchRemember.js";
+
+export {
+  buildBatchRememberCandidatesFromEvidence,
+  evidenceToMemoryInput,
+  executeEvidenceBatchRemember,
+} from "./evidenceBridge.js";
+export type { ApprovedEvidence, ApprovedEvidenceStatus } from "./evidenceBridge.js";
