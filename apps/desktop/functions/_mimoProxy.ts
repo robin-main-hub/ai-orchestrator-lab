@@ -1,32 +1,49 @@
 /**
- * Cloudflare Pages Function — mimo token-plan proxy.
+ * Cloudflare Pages Function — mimo proxy.
  *
  * Reproduces the vite dev-server proxy (apps/desktop/vite.config.ts → server.proxy)
- * in the deployed static environment. Without this, the SPA's `/mimo-token-*`
- * requests fall through to the SPA index.html and fail (unauthorized / no response).
+ * in the deployed static environment. Without this, the SPA`s `/mimo-token-*`
+ * requests fall through to the SPA index.html and fail.
  *
- * Route map (matches vite rewrite):
- *   /mimo-token-openai/*    → https://token-plan-sgp.xiaomimimo.com/v1/*
- *   /mimo-token-anthropic/* → https://token-plan-sgp.xiaomimimo.com/anthropic/*
+ * Route map:
+ *   /mimo-token-openai/*    → ${UPSTREAM}/v1/*        (Authorization: Bearer <key>)
+ *   /mimo-token-anthropic/* → ${UPSTREAM}/anthropic/* (x-api-key: <key>)
  *
- * The client adapter attaches its own auth header (Authorization: Bearer / x-api-key);
- * this proxy forwards method, headers, and body unchanged to the upstream. It performs
- * no auth itself and stores nothing.
+ * Auth is injected SERVER-SIDE from the `MIMO_API_KEY` environment secret, so the
+ * real key never reaches the browser, the JS bundle, or git. The owner sets
+ * `MIMO_API_KEY` (and optionally `MIMO_UPSTREAM`) in the Cloudflare Pages project
+ * environment; it is never committed. Whatever auth header the client sends is a
+ * non-secret readiness sentinel and gets overwritten here.
  */
 
-const UPSTREAM = "https://token-plan-sgp.xiaomimimo.com";
+const DEFAULT_UPSTREAM = "https://api.xiaomimimo.com";
 
-type ProxyConfig = { prefix: string; upstreamBase: string };
+type AuthStyle = "bearer" | "x-api-key";
+type ProxyConfig = { prefix: string; upstreamBase: string; authStyle: AuthStyle };
+type ProxyEnv = { MIMO_API_KEY?: string; MIMO_UPSTREAM?: string };
 
-export async function proxyMimo(request: Request, config: ProxyConfig): Promise<Response> {
+export async function proxyMimo(request: Request, env: ProxyEnv, config: ProxyConfig): Promise<Response> {
+  const upstream = (env.MIMO_UPSTREAM ?? DEFAULT_UPSTREAM).replace(/\/+$/, "");
   const url = new URL(request.url);
   // strip the route prefix, map to the upstream base segment, preserve the rest + query.
   const rest = url.pathname.slice(config.prefix.length); // includes leading "/" or ""
-  const target = `${UPSTREAM}${config.upstreamBase}${rest}${url.search}`;
+  const target = `${upstream}${config.upstreamBase}${rest}${url.search}`;
 
   // Forward headers as-is except Host (let fetch set it for the upstream).
   const headers = new Headers(request.headers);
   headers.delete("host");
+
+  // Inject auth server-side from the env secret. Never forward a client key to
+  // the real upstream — the client only sends a non-secret readiness sentinel.
+  const key = env.MIMO_API_KEY?.trim();
+  if (key) {
+    if (config.authStyle === "bearer") {
+      headers.set("authorization", `Bearer ${key}`);
+    } else {
+      headers.set("x-api-key", key);
+      headers.delete("authorization");
+    }
+  }
 
   const init: RequestInit = {
     method: request.method,
