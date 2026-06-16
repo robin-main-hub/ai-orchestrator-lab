@@ -709,6 +709,40 @@ const INBOX_FOCUSES: ReadonlyArray<InboxFocus> = ["all", "today", "blocked", "wa
 const CATEGORY_OPTIONS: ReadonlyArray<"all" | EventCategory> = ["all", ...EVENT_CATEGORIES];
 
 /**
+ * Batch 11 LINE A — built-in Saved Views. Each is a view-only filter combo
+ * (focus + category + query). Picking one applies the combo; it is pure view
+ * state — never a saved action, never a write to data/server.
+ */
+export type ViewPreset = {
+  id: string;
+  label: string;
+  focus: InboxFocus;
+  category: "all" | EventCategory;
+  query: string;
+};
+export const VIEW_PRESETS: ReadonlyArray<ViewPreset> = [
+  { id: "my-desk", label: "My Desk", focus: "all", category: "all", query: "" },
+  { id: "today", label: "Today", focus: "today", category: "all", query: "" },
+  { id: "blocked", label: "Blocked", focus: "blocked", category: "all", query: "" },
+  { id: "failures", label: "Failures", focus: "all", category: "failure", query: "" },
+  { id: "runner", label: "Runner", focus: "all", category: "runner", query: "" },
+  { id: "learning", label: "Learning", focus: "all", category: "learning", query: "" },
+  { id: "replay", label: "Replay", focus: "replay", category: "all", query: "" },
+];
+
+/** The preset whose combo matches the current view, if any (for highlight). */
+export function activeViewPreset(
+  focus: InboxFocus,
+  category: "all" | EventCategory,
+  query: string,
+): ViewPreset | undefined {
+  const q = query.trim();
+  return VIEW_PRESETS.find(
+    (p) => p.focus === focus && p.category === category && p.query === q && p.id !== "replay",
+  );
+}
+
+/**
  * LINE B/C — read-only filter bar. A focus strip narrows which region is shown
  * (today/blocked lanes, warnings cards) and "replay" jumps to the REPLAY seat; a
  * category strip refines the event-derived Today/Recent lanes. Radios only — view
@@ -719,11 +753,15 @@ function InboxFilterBar({
   onFocus,
   category,
   onCategory,
+  query = "",
+  onPreset,
 }: {
   focus: InboxFocus;
   onFocus: (f: InboxFocus) => void;
   category: "all" | EventCategory;
   onCategory: (c: "all" | EventCategory) => void;
+  query?: string;
+  onPreset: (p: ViewPreset) => void;
 }) {
   const chip = (active: boolean) =>
     [
@@ -732,8 +770,34 @@ function InboxFilterBar({
         ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-200"
         : "border-white/10 text-muted-foreground hover:border-white/20",
     ].join(" ");
+  const activePreset = activeViewPreset(focus, category, query);
   return (
     <div className="space-y-1 px-4 pb-2">
+      <div
+        role="radiogroup"
+        aria-label="Saved views"
+        data-testid="inbox-views"
+        data-active-view={activePreset?.id ?? ""}
+        className="flex flex-wrap gap-1"
+      >
+        {VIEW_PRESETS.map((p) => {
+          const active = activePreset?.id === p.id;
+          return (
+            <label key={p.id} data-active={active ? "true" : "false"} className={chip(active)}>
+              <input
+                type="radio"
+                name="inbox-view-preset"
+                className="sr-only"
+                data-testid={`inbox-view-${p.id}`}
+                data-active={active ? "true" : "false"}
+                checked={active}
+                onChange={() => onPreset(p)}
+              />
+              {p.label}
+            </label>
+          );
+        })}
+      </div>
       <div
         role="radiogroup"
         aria-label="Focus view"
@@ -852,6 +916,12 @@ export function AssistantInbox({
     if (f === "replay") onModeChange?.("replay");
     else setFocus(f);
   };
+  // Batch 11 LINE A — apply a saved view (view-only filter combo).
+  const onPreset = (p: ViewPreset) => {
+    setQuery(p.query);
+    setCategory(p.category);
+    onFocusPick(p.focus);
+  };
   const visibleLanes =
     focus === "today"
       ? workLanes.filter((l) => l.id === "today" || l.id === "recent")
@@ -938,6 +1008,8 @@ export function AssistantInbox({
           onFocus={onFocusPick}
           category={category}
           onCategory={setCategory}
+          query={query}
+          onPreset={onPreset}
         />
       ) : null}
       {mode === "replay" ? (
