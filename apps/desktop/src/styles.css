@@ -9264,6 +9264,11 @@ body:has(.app-shell.annex-focus-shell) {
   grid-row: 2;
   display: block;
   overflow-y: auto;
+  /* Batch 8 LINE D — this IS the nav-center scroll container (bounded to the
+     shell's 1fr center row). min-height:0 lets it shrink+scroll on short windows;
+     overscroll-behavior:contain stops scroll-chaining the whole window. */
+  min-height: 0;
+  overscroll-behavior: contain;
   padding: 0;
   background: transparent;
   border-right: 0;
@@ -10280,4 +10285,6 @@ body:has(.app-shell.annex-focus-shell) {
    scrolls clear of the toast. Layout only — the toast/approval flow is untouched. */
 .nav-center-page[data-page="command_center"] {
   padding-bottom: 132px;
+  /* Batch 8 LINE D — keep anchored/programmatic scrolls clear of the toast too. */
+  scroll-padding-bottom: 140px;
 }
