@@ -57,3 +57,19 @@ SPA 라우팅은 `_redirects`가 처리하므로 추가 설정 불필요.
   배포 후 화면이 안 바뀌면 hard refresh / SW unregister 확인.
 - desktop은 백엔드 없이도 뜨지만, provider/server 호출이 필요한 기능은 동작하지 않는다.
   Assistant Inbox 같은 read-only 화면 확인용으로 적합.
+
+## mimo token-plan proxy (Pages Functions)
+
+The desktop SPA routes mimo provider calls to `/mimo-token-openai/*` and
+`/mimo-token-anthropic/*` (see `stage12DgxProvider.ts`). In vite dev these are
+handled by `server.proxy`; in the static Pages deploy they are handled by
+**Pages Functions** under `apps/desktop/functions/`:
+
+- `functions/mimo-token-openai/[[path]].ts`    → upstream `/v1/*`
+- `functions/mimo-token-anthropic/[[path]].ts` → upstream `/anthropic/*`
+- `functions/_mimoProxy.ts` — shared forwarder (method/headers/body passthrough)
+
+Upstream: `https://token-plan-sgp.xiaomimimo.com`. The client adapter supplies its
+own auth header; the proxy forwards it untouched and stores nothing. This makes
+mimo (mimo-v2.5-pro) the working default provider on the deployed site without a
+dev server. Pages auto-detects `functions/` relative to the build output dir.
