@@ -8,11 +8,11 @@ import {
 } from "./batchRemember.js";
 
 /**
- * D — 승인된 ERP/CRM evidence → batchRemember.
+ * D — 승인된 Domain evidence → batchRemember.
  *
- * ERP/CRM 워크플로에서 사람이 승인(approved/published)한 evidence를 B2(#534)의
+ * Domain 워크플로에서 사람이 승인(approved/published)한 evidence를 B2(#534)의
  * local write 경로로 흘려보내는 다리. C2(learningBatchRemember)와 같은 모양:
- * 순수 변환 + 명시적 writer 주입. 이 모듈은 입구일 뿐 ERP DB를 건드리거나 외부/
+ * 순수 변환 + 명시적 writer 주입. 이 모듈은 입구일 뿐 Source DB를 건드리거나 외부/
  * 고객에게 무언가를 보내지 않는다.
  *
  * 불변선 (이 bridge가 강제):
@@ -23,7 +23,7 @@ import {
  *   - source refs(sourceEventIds 또는 evidenceRefs) 없는 evidence는 드롭
  *     → batchRemember가 다시 한 번 reject.
  *   - writer 미주입이면 observed:false, 가짜 성공 0 (B2가 강제).
- *   - runtime activation / ERP DB mutation / external send / customer send 0.
+ *   - runtime activation / Source DB mutation / external send / client send 0.
  *   - 결정론적 — 같은 입력은 같은 candidate/derivedId.
  */
 
@@ -72,7 +72,7 @@ export function evidenceToMemoryInput(evidence: ApprovedEvidence): MemoryInput {
     title: evidence.title,
     content,
     sourceChannel: "agent",
-    // 승인됐어도 ERP evidence는 curator/eval 전 — 절대 trusted로 올리지 않는다.
+    // 승인됐어도 Domain evidence는 curator/eval 전 — 절대 trusted로 올리지 않는다.
     trustLevel: "limited",
   };
 }

@@ -54,7 +54,7 @@ export type MemoryAdapterContext = {
 };
 
 /**
- * Optional batch-remember capability (ERP evidence ingest path, #538).
+ * Optional batch-remember capability (generic evidence ingest path, #538).
  * Adapters that do not implement it leave the method undefined; callers must guard.
  * async:true returns a job ledger handle; async:false returns written records.
  */
@@ -85,7 +85,7 @@ export interface MemoryAdapter {
   activateMemories(recordIds: string[], ctx: MemoryAdapterContext): Promise<void>;
   createRelations(recordIds: string[], ctx: MemoryAdapterContext): Promise<MemoryRelation[]>;
   reflect?(sessionId: string, ctx: MemoryAdapterContext): Promise<Reflection>;
-  /** Optional batch write (ERP evidence ingest). Callers must guard for undefined. */
+  /** Optional batch write (generic evidence ingest). Callers must guard for undefined. */
   batchRemember?(
     inputs: MemoryInput[],
     ctx: MemoryAdapterContext,

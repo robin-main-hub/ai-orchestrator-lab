@@ -242,8 +242,8 @@ export const agentRoleSchema = z.enum([
   "executor",
   "external",
   "auditor",
-  // R3.2 expansion — gap analysis flagged these as needed for ERP /
-  // B2B intelligence / sales-context workflows. All additive: each
+  // R3.2 expansion — gap analysis flagged these as needed for generic
+  // intelligence / domain-context workflows. All additive: each
   // existing profile keeps its current role; new roles unlock new
   // defaultAgentProfile entries.
   "researcher",       // active external info gathering, trust-classified output
@@ -485,7 +485,7 @@ export const workLaneSchema = z.enum([
 export type WorkLane = z.infer<typeof workLaneSchema>;
 
 export const workItemKindSchema = z.enum([
-  "customer_inquiry",
+  "external_inquiry",
   "quote_request",
   "price_nego",
   "lead_time",
@@ -1370,7 +1370,7 @@ export const permissionActionSchema = z.enum([
   "secret_view",
   "mobile_approval",
   "email_send",
-  "customer_reply",
+  "external_reply",
   "external_message_send",
   "document_share",
   "calendar_create",

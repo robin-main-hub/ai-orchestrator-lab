@@ -15,7 +15,7 @@ import type { MemoryInput } from "@ai-orchestrator/protocol";
  *   - 빈 content는 거부.
  *   - maxBatchSize(scan cap) 초과분은 skip + warning.
  *   - HNSW/index는 기본 off, soft RRF cutoff는 안전 기본값.
- *   - runtime activation / SimpleMem 서버 연동 / ERP bridge / orchestrator wiring 0.
+ *   - runtime activation / SimpleMem 서버 연동 / domain bridge / orchestrator wiring 0.
  */
 
 export type BatchRememberOrigin = "learning_loop" | "evidence_bridge" | "manual" | "test_fixture";
