@@ -3,9 +3,36 @@
  * ============================================================ */
 .coding-workbench {
   display: grid;
-  grid-template-columns: 252px minmax(0, 1fr);
+  /* 사이드바 폭은 인라인 스타일(gridTemplateColumns)이 구동 — 핸들 미장착 폴백만 유지 */
+  grid-template-columns: var(--coding-sidebar-w, 252px) 6px minmax(0, 1fr);
   height: 100%;
   min-height: 0;
+}
+/* 사이드바 좌우 리사이저 — aside↔section 경계를 드래그(또는 ←/→)해 폭 조절. composer 리사이저와 동일 결. */
+.coding-sidebar-resizer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 6px;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.coding-sidebar-resizer__grip {
+  width: 3px;
+  height: 38px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  transition: background 140ms ease, height 140ms ease;
+}
+.coding-sidebar-resizer:hover .coding-sidebar-resizer__grip,
+.coding-sidebar-resizer:focus-visible .coding-sidebar-resizer__grip {
+  height: 52px;
+  background: color-mix(in srgb, var(--cyan) 70%, transparent);
 }
 .coding-sidebar {
   display: flex;
