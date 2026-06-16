@@ -78,6 +78,12 @@ import {
   composerHeightFromDrag,
   parseStoredComposerHeight,
 } from "../../lib/composerResize";
+import {
+  SIDEBAR_WIDTH_STORAGE_KEY,
+  parseStoredSidebarWidth,
+  sidebarWidthAfterKey,
+  sidebarWidthFromPointerX,
+} from "../../lib/sidebarResize";
 
 
 
@@ -220,6 +226,37 @@ export function CodingWorkbench({
     }
     const onMove = (moveEvent: globalThis.PointerEvent) =>
       setComposerHeight(composerHeightFromDrag(startHeight, startY, moveEvent.clientY));
+    const onUp = () => window.removeEventListener("pointermove", onMove);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+    window.addEventListener("pointercancel", onUp, { once: true });
+  };
+  // 사이드바 좌우 리사이저 — aside↔section 경계를 드래그해 사이드바 폭을 조절한다. localStorage 저장.
+  const workbenchRef = useRef<HTMLDivElement | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      return parseStoredSidebarWidth(window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY));
+    } catch {
+      return parseStoredSidebarWidth(undefined);
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
+    } catch {
+      // storage 불가 환경 — 세션 내에서만 유지
+    }
+  }, [sidebarWidth]);
+  const onSidebarResizePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const containerLeft = workbenchRef.current?.getBoundingClientRect().left ?? 0;
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // 합성 이벤트 — window 리스너로 대체
+    }
+    const onMove = (moveEvent: globalThis.PointerEvent) =>
+      setSidebarWidth(sidebarWidthFromPointerX(containerLeft, moveEvent.clientX));
     const onUp = () => window.removeEventListener("pointermove", onMove);
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp, { once: true });
@@ -732,7 +769,11 @@ export function CodingWorkbench({
   };
 
   return (
-    <div className="coding-workbench">
+    <div
+      className="coding-workbench"
+      ref={workbenchRef}
+      style={{ gridTemplateColumns: `${sidebarWidth}px 6px minmax(0, 1fr)` }}
+    >
       <aside className="coding-sidebar">
         <button className="coding-sidebar__new" onClick={newSession} type="button">
           <Plus size={14} aria-hidden /> 새 세션
@@ -883,6 +924,25 @@ export function CodingWorkbench({
           ) : null}
         </div>
       </aside>
+
+      <button
+        type="button"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="사이드바 폭 조절"
+        className="coding-sidebar-resizer"
+        title="드래그해서 사이드바 폭 조절 (←/→)"
+        onPointerDown={onSidebarResizePointerDown}
+        onKeyDown={(event) => {
+          const next = sidebarWidthAfterKey(sidebarWidth, event.key, event.shiftKey);
+          if (next !== undefined) {
+            event.preventDefault();
+            setSidebarWidth(next);
+          }
+        }}
+      >
+        <span className="coding-sidebar-resizer__grip" aria-hidden />
+      </button>
 
       <section className="coding-main">
         <header className="coding-main__bar">
