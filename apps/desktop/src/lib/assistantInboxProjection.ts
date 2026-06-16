@@ -19,15 +19,28 @@ import type { EvidenceItem, EvidenceVerdict } from "../components/inbox/Evidence
 import type { LearningLoopItem, LearningLoopStage } from "../components/inbox/LearningLoopCard";
 import type { MemoryCandidateItem } from "../components/inbox/MemoryCandidateCard";
 import type { ManifestEntry, ManifestBlockReason } from "../components/inbox/RuntimeManifestPreviewCard";
-import type { AssistantInboxProps } from "../components/inbox/AssistantInbox";
+import type {
+  AssistantInboxProps,
+  AssistantInboxSources,
+  InboxSectionSource,
+} from "../components/inbox/AssistantInbox";
 
 /**
- * LINE C — Assistant Inbox projection / adapter.
+ * LINE C / H — Assistant Inbox projection / adapter.
  *
  * Turns GENERIC OS-core sources (evidenceBridge / learningLoop /
  * learningRuntimeManifest / runnerGateStatus) plus NEUTRAL fixtures into the
  * presentational props the AssistantInbox shell consumes. This is the only
  * wiring layer; the inbox itself stays dumb.
+ *
+ * LINE H adds an HONEST live-vs-example separation:
+ *   - `buildAssistantInboxLiveProps` projects from REAL app state where it
+ *     safely exists (real learning events, real ProjectRecords, real runner
+ *     gate config). When a source has no live data it returns an HONEST EMPTY
+ *     STATE (source "empty") instead of inventing fixtures.
+ *   - `buildAssistantInboxProps` keeps the legacy fixture composition but every
+ *     section is now explicitly labeled source "example" (예시/fixture) so it is
+ *     never mistaken for live OS state.
  *
  * Invariants this module honors (mirrors the OS-core invariants):
  *   - generic only — no ERP/domain/customer terms. fixtures use example-system /
@@ -36,6 +49,7 @@ import type { AssistantInboxProps } from "../components/inbox/AssistantInbox";
  *   - blocked/unsafe items carry NO enable/approve affordance (the cards enforce
  *     this; we never project one).
  *   - observed:false is projected honestly (no fake pass).
+ *   - fixtures are labeled "example"; live is labeled "live"; empty is honest.
  */
 
 // ── neutral fixtures (generic only) ───────────────────────────────────────────
@@ -383,12 +397,160 @@ export function projectRunnerGateEvidence(mode: RunnerGateMode = "dgx_disabled")
  * Compose the full AssistantInbox props from generic sources + neutral fixtures.
  * Pure — no callback, no external call. The runner-gate fact is prepended to the
  * evidence column so the gate's honest (default-disabled) state is visible.
+ *
+ * NOTE: this is the FIXTURE composition. Every section is labeled source
+ * "example" (예시/fixture) so it is never mistaken for live OS state. For honest
+ * live wiring use `buildAssistantInboxLiveProps`.
  */
-export function buildAssistantInboxProps(): Required<AssistantInboxProps> {
+export function buildAssistantInboxProps(): Required<Omit<AssistantInboxProps, "sources">> & {
+  sources: Required<AssistantInboxSources>;
+} {
   return {
     evidence: [projectRunnerGateEvidence(), ...projectEvidenceItems()],
     learningLoops: projectLearningLoopItems(),
     memoryCandidates: projectMemoryCandidateItems(),
     manifestEntries: projectManifestEntries(),
+    sources: {
+      evidence: "example",
+      learning: "example",
+      memory: "example",
+      manifest: "example",
+    },
+  };
+}
+
+// ── LINE H — honest LIVE projection ──────────────────────────────────────────
+
+/**
+ * Real, observed app inputs. All optional — a missing/empty input yields an
+ * HONEST EMPTY STATE for that section (never a fixture).
+ */
+export type AssistantInboxLiveInput = {
+  /** Real runner gate config. dgx stays DISABLED by default; observed honest. */
+  runnerGateMode?: RunnerGateMode;
+  dgxExecutionEnabled?: boolean;
+  executorPresent?: boolean;
+  /** Real learning-loop events (e.g. App eventLog). Filtered to learning types. */
+  learningEvents?: ReadonlyArray<{ type: string; payload: unknown }>;
+  /** Real persisted project records (H10 useProjectRecordController.records). */
+  projectRecords?: ReadonlyArray<{
+    missionId: string;
+    title: string;
+  }>;
+  /**
+   * Real runtime-manifest inputs (skill activation / eval state). Only projected
+   * when candidates are present; otherwise honest empty.
+   */
+  manifest?: {
+    candidates?: ReadonlyArray<SkillArchiveCandidate>;
+    activations?: ReadonlyArray<SkillRuntimeActivationRecord>;
+    evalReportsByRunId?: Record<string, MemoryEvalReport>;
+  };
+  /**
+   * Optional clearly-labeled evidence EXAMPLE. When true the evidence section
+   * shows the fixture rows explicitly labeled source "example". Default false →
+   * honest empty (OS core has no real domain evidence). NEVER shown as live.
+   */
+  includeEvidenceExample?: boolean;
+};
+
+const LEARNING_EVENT_TYPE_SET: ReadonlySet<string> = new Set<string>(
+  Object.values(LEARNING_EVENT_TYPES),
+);
+
+/** Keep only learning-loop relevant events from a generic app event log. */
+export function filterLearningEvents(
+  events: ReadonlyArray<{ type: string; payload: unknown }>,
+): Array<{ type: string; payload: unknown }> {
+  return events.filter((e) => LEARNING_EVENT_TYPE_SET.has(e.type));
+}
+
+/**
+ * Project real project records into read-only memory candidate rows.
+ * Honest: status stays "suggested" (resume store never auto-writes memory) and
+ * observed:false (no memory writer is wired). origin reflects the resume store.
+ */
+export function projectMemoryCandidatesFromProjectRecords(
+  records: ReadonlyArray<{ missionId: string; title: string }>,
+): MemoryCandidateItem[] {
+  return records.map((record) => ({
+    id: `project-${record.missionId}`,
+    title: record.title,
+    status: "suggested",
+    origin: "learning_loop",
+    // resume store is a passive snapshot — nothing written to memory → honest false.
+    observed: false,
+  }));
+}
+
+/**
+ * Honest live composition. Each section is projected from real inputs when they
+ * exist; otherwise it returns an empty array with source "empty" (honest empty
+ * state). The evidence section is empty by default (OS core has no real domain
+ * evidence) unless `includeEvidenceExample` opts into a labeled "example".
+ */
+export function buildAssistantInboxLiveProps(
+  input: AssistantInboxLiveInput = {},
+): Required<Omit<AssistantInboxProps, "sources">> & {
+  sources: Required<AssistantInboxSources>;
+} {
+  // Runner gate is ALWAYS real/live: it's a derived honest fact (dgx disabled
+  // → observed:false). It anchors the evidence column.
+  const gateEvidence = deriveRunnerGateStatus({
+    mode: input.runnerGateMode ?? "dgx_disabled",
+    dgxExecutionEnabled: input.dgxExecutionEnabled,
+    executorPresent: input.executorPresent,
+  });
+  const runnerRow: EvidenceItem = {
+    id: `runner-gate-${gateEvidence.mode}`,
+    title: `runner gate · ${gateEvidence.mode}`,
+    verdict: gateEvidence.observed ? "pass" : "blocked",
+    summary: gateEvidence.reason,
+    observed: gateEvidence.observed,
+    refs: [],
+  };
+
+  // Evidence: runner gate (live) + optional labeled example. OS core has no real
+  // domain evidence, so anything beyond the gate is an explicit example.
+  const exampleEvidence = input.includeEvidenceExample
+    ? projectEvidenceItems().map((e) => ({ ...e, id: `example-${e.id}` }))
+    : [];
+  const evidence: EvidenceItem[] = [runnerRow, ...exampleEvidence];
+  const evidenceSource: InboxSectionSource = input.includeEvidenceExample ? "example" : "live";
+
+  // Learning loops: real events only (server auto-emit is OFF → usually none).
+  const learningEvents = filterLearningEvents(input.learningEvents ?? []);
+  const learningLoops = learningEvents.length > 0 ? projectLearningLoopItems(learningEvents) : [];
+  const learningSource: InboxSectionSource = learningLoops.length > 0 ? "live" : "empty";
+
+  // Memory candidates: from real persisted project records (H10), else empty.
+  const projectRecords = input.projectRecords ?? [];
+  const memoryCandidates =
+    projectRecords.length > 0 ? projectMemoryCandidatesFromProjectRecords(projectRecords) : [];
+  const memorySource: InboxSectionSource = memoryCandidates.length > 0 ? "live" : "empty";
+
+  // Runtime manifest: only when real candidates are present; else empty.
+  const manifestCandidates = input.manifest?.candidates ?? [];
+  const manifestEntries =
+    manifestCandidates.length > 0
+      ? projectManifestEntries({
+          candidates: manifestCandidates,
+          activations: input.manifest?.activations,
+          evalReportsByRunId: input.manifest?.evalReportsByRunId,
+        })
+      : [];
+  const manifestSource: InboxSectionSource = manifestEntries.length > 0 ? "live" : "empty";
+
+  return {
+    evidence,
+    learningLoops,
+    memoryCandidates,
+    manifestEntries,
+    sources: {
+      evidence: evidenceSource,
+      learning: learningSource,
+      memory: memorySource,
+      manifest: manifestSource,
+    },
   };
 }
