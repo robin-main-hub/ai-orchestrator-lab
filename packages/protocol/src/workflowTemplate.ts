@@ -7,7 +7,7 @@ import {
 } from "./productKernel.js";
 
 /**
- * Workflow Templates — 이 시스템이 코딩만 하는 게 아니라 회사 업무(EXAMPLE_DOMAIN 영업/조사/
+ * Workflow Templates — 이 시스템이 코딩만 하는 게 아니라 회사 업무(Domain 영업/조사/
  * 샘플)에도 바로 쓰이게 하는 데이터 프리셋. UI가 아니라 protocol 데이터로 먼저 정의한다.
  *
  * 핵심 페르소나 조직도 147명이 아니라 **4~6명**으로 시작한다. 권한은 캐릭터가 아니라
@@ -178,7 +178,7 @@ export const CORE_HERMES_ORG: ReadonlyArray<HermesOrgMember> = [
   { slot: "builder", role: "builder", characterDirection: "치노 — 빠른 구현", function: "sandbox_build, patch 작성", writePolicy: "sandbox_build_only" },
   { slot: "verifier", role: "verifier", characterDirection: "리제 — 냉정한 감사", function: "sandbox_verify, edge case, error card", writePolicy: "verify_no_write" },
   { slot: "mediator", role: "mediator", characterDirection: "코코아 — 조율자", function: "충돌 정리, final decision", writePolicy: "merge_recommend" },
-  { slot: "sales_ops", role: "external", characterDirection: "domain — 회사 업무", function: "견적, 샘플, 거래처 대응", writePolicy: "research" },
+  { slot: "sales_ops", role: "external", characterDirection: "Domain — 회사 업무", function: "견적, 샘플, 거래처 대응", writePolicy: "research" },
   { slot: "memory_curator", role: "memory_curator", characterDirection: "기억 관리자", function: "skill archive, prune, Obsidian export", writePolicy: "memory_curate" },
 ];
 

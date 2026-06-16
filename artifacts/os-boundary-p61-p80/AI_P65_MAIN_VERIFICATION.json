@@ -1,0 +1,28 @@
+{
+  "phase": "os-boundary-generic-evidence-ingress",
+  "verification": {
+    "typecheck": "PASS",
+    "tests": "PASS",
+    "totalTestsPassed": 1879,
+    "frameworksTested": ["protocol", "simplememo", "agents", "server", "desktop", "mobile"],
+    "timestamp": "2026-06-16T06:07:04Z"
+  },
+  "assertions": [
+    {
+      "check": "No ERP or EXAMPLE_DOMAIN references in simplememo",
+      "status": "PASS"
+    },
+    {
+      "check": "No 'customer_reply' in desktop stage9 permissions",
+      "status": "PASS"
+    },
+    {
+      "check": "Generic evidence ingress correctly bound to server",
+      "status": "PASS"
+    },
+    {
+      "check": "EXAMPLE_DOMAIN plugin logic moved to examples",
+      "status": "PASS"
+    }
+  ]
+}
