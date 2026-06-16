@@ -174,12 +174,12 @@ function Section({
 }) {
   return (
     <section
-      className="space-y-1.5 rounded-lg border border-white/5 bg-white/[0.015] p-2.5"
+      className="space-y-1.5 rounded-lg border border-white/5 bg-white/[0.02] p-2"
       data-testid={`assistant-inbox-section-${id}`}
       data-count={count}
       data-source={source}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 border-b border-white/5 pb-1.5">
         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           {title}
         </h3>
@@ -519,7 +519,7 @@ export function AssistantInbox({
     manifestEntries.length === 0;
   return (
     <Card
-      className="border-white/10 bg-black/40 py-4"
+      className="border-white/10 bg-black/40 py-3"
       data-testid="assistant-inbox"
       data-total={total}
       data-live-sections={liveCount}
@@ -572,7 +572,7 @@ export function AssistantInbox({
       {mode === "preview" ? <PreviewScenarioLegend /> : null}
       {liveSparse ? <LiveEmptyHero /> : null}
       <WorkLaneRail lanes={workLanes} />
-      <CardContent className="grid grid-cols-1 gap-3 px-4 lg:grid-cols-2">
+      <CardContent className="grid grid-cols-1 gap-2.5 px-4 lg:grid-cols-2 lg:gap-2.5 xl:gap-3">
         <Section
           id="evidence"
           title="Evidence"
