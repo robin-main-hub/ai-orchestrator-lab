@@ -24,6 +24,8 @@ import { GithubPublishPanel } from "./coding/GithubPublishPanel";
 import { MultiFilePlanCard } from "./publish/MultiFilePlanCard";
 import { PreviewRunCard } from "./PreviewRunCard";
 import { CodingRunnerCard } from "./appbuild/CodingRunnerCard";
+import { useRunnerPatchApprovalQueueController } from "../hooks/useRunnerPatchApprovalQueueController";
+import { RunnerPatchApprovalPanel } from "./RunnerPatchApprovalPanel";
 import { VisualQaCard } from "./VisualQaCard";
 import { MissionWorkspaceStatusBar } from "./MissionWorkspaceStatusBar";
 import { AppBuildProgressRail } from "./AppBuildProgressRail";
@@ -470,6 +472,9 @@ function MissionWorkspaceDetail({
   // 기본 접힘 — 사용자 명시 클릭으로만 GithubPublishPanel을 마운트한다.
   // (publishEnvironment가 없으면 CTA 자체를 그리지 않아 부모가 opt-in한 경우에만 노출.)
   const [publishOpen, setPublishOpen] = useState(false);
+  // H8e — per-mission runner-patch approval queue (client-side, server route 0).
+  // CodingRunnerCard.onHandoff가 enqueue, 같은 detail 안 RunnerPatchApprovalPanel이 결재 UI.
+  const patchApprovalController = useRunnerPatchApprovalQueueController();
   /**
    * 직전 Visual QA + verify 결과를 StatusBar 계산기에 흘리기 위한 가벼운 mirror.
    * VisualQaCard가 onReport/onVerify로 알린다. 자동 실행 0 — 단순 상태 표시용.
@@ -812,6 +817,23 @@ function MissionWorkspaceDetail({
         defaultPrompt={item.goal}
         sessionId={item.missionId}
         serverBaseUrl={publishEnvironment?.serverBaseUrl}
+        onHandoff={(handoff) =>
+          patchApprovalController.enqueue({
+            handoff,
+            result: { testResult: handoff.testResult },
+            // H8d 정책: desktop 워크스페이스이므로 apps/desktop/** 안만 허용.
+            // 다른 mission이 다른 repo를 가리키더라도 OpenCode가 임의로 다른 영역을 건드리는 것은 막는다.
+            pathPolicy: { allow: ["apps/desktop/", "packages/"] },
+          })
+        }
+      />
+
+      {/* H8e — Runner Patch 결재함. 위 CodingRunnerCard.onHandoff가 큐에 넣고, 사용자가
+          여기서 승인/거절. 승인은 "다음 적용 단계 후보"로 상태만 표시 — apply 호출 0. */}
+      <RunnerPatchApprovalPanel
+        items={patchApprovalController.items}
+        onApprove={(id) => patchApprovalController.approve(id)}
+        onReject={(id, reason) => patchApprovalController.reject(id, reason)}
       />
 
       {/* Visual QA vertical — preview observed running일 때만 CTA 활성. issues_found/failed면
