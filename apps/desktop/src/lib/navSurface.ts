@@ -22,6 +22,7 @@ export const NAV_CENTER_ITEMS = [
   "theater",
   "coding",
   "research",
+  "command_center",
 ] as const satisfies readonly NavItemId[];
 
 export type NavCenterItem = (typeof NAV_CENTER_ITEMS)[number];
