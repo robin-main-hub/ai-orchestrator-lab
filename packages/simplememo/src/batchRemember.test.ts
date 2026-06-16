@@ -179,3 +179,199 @@ describe("adapter modes", () => {
     expect(res.effectiveConfig.mode).toBe("mock");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// B2 — local SimpleMemo batch write tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+import {
+  executeLocalBatchWrite,
+  type LocalSimpleMemoWriter,
+  type LocalSimpleMemoWriteResult,
+} from "./batchRemember.js";
+
+/** 호출 추적 + 결정론적 결과를 주는 mock writer. */
+function makeWriter(
+  behavior: (input: MemoryInput, candidateId: string) => LocalSimpleMemoWriteResult,
+): LocalSimpleMemoWriter & { calls: Array<{ candidateId: string }> } {
+  const calls: Array<{ candidateId: string }> = [];
+  return {
+    calls,
+    async remember(input, candidateId) {
+      calls.push({ candidateId });
+      return behavior(input, candidateId);
+    },
+  };
+}
+
+const okWriter = () =>
+  makeWriter((_input, candidateId) => ({ ok: true, memoryId: `stored_${candidateId}` }));
+
+describe("executeLocalBatchWrite — writer injection safety", () => {
+  it("(B2-1) no writer → observed:false, accepted downgraded to skipped(local_writer_missing)", async () => {
+    const res = await executeLocalBatchWrite({ candidates: [candidate()] });
+    expect(res.observed).toBe(false);
+    expect(res.writtenCount).toBe(0);
+    expect(res.skippedCount).toBe(1);
+    expect(res.results[0]!.writeStatus).toBe("skipped");
+    expect(res.results[0]!.reason).toBe("local_writer_missing");
+    expect(res.blockers).toContain("local_writer_missing");
+  });
+
+  it("(B2-2) with writer → only accepted candidate written, observed:true", async () => {
+    const writer = okWriter();
+    const res = await executeLocalBatchWrite({ candidates: [candidate()], writer });
+    expect(res.observed).toBe(true);
+    expect(res.writtenCount).toBe(1);
+    expect(res.results[0]!.writeStatus).toBe("written");
+    expect(res.results[0]!.writeObserved).toBe(true);
+    expect(res.results[0]!.writtenId).toBe(`stored_${res.results[0]!.derivedId}`);
+    expect(writer.calls).toHaveLength(1);
+  });
+});
+
+describe("executeLocalBatchWrite — rejected/skipped never call writer", () => {
+  it("(B2-3) rejected candidate (no source refs) does not call writer", async () => {
+    const writer = okWriter();
+    const res = await executeLocalBatchWrite({
+      candidates: [candidate({ sourceEventIds: [], evidenceRefs: [] })],
+      writer,
+    });
+    expect(writer.calls).toHaveLength(0);
+    expect(res.rejectedCount).toBe(1);
+    expect(res.results[0]!.writeStatus).toBe("rejected");
+    expect(res.results[0]!.reason).toBe("no_source_refs");
+  });
+
+  it("(B2-4) empty content rejected, writer not called", async () => {
+    const writer = okWriter();
+    const res = await executeLocalBatchWrite({
+      candidates: [candidate({ input: input({ content: "   " }) })],
+      writer,
+    });
+    expect(writer.calls).toHaveLength(0);
+    expect(res.results[0]!.writeStatus).toBe("rejected");
+    expect(res.results[0]!.reason).toBe("empty_content");
+  });
+
+  it("(B2-5) candidates over maxBatchSize are skipped, writer not called for them", async () => {
+    const writer = okWriter();
+    const many = Array.from({ length: 4 }, (_, i) =>
+      candidate({ clientRef: `c${i}`, input: input({ content: `lesson ${i}` }) }),
+    );
+    const res = await executeLocalBatchWrite({ candidates: many, writer, config: { maxBatchSize: 2 } });
+    expect(writer.calls).toHaveLength(2); // only the first 2 accepted
+    expect(res.writtenCount).toBe(2);
+    expect(res.skippedCount).toBe(2);
+    expect(res.results.filter((r) => r.writeStatus === "skipped" && r.reason === "max_batch_size_exceeded")).toHaveLength(2);
+  });
+});
+
+describe("executeLocalBatchWrite — partial failure honesty", () => {
+  it("(B2-6) one writer failure does not mark whole batch successful", async () => {
+    const writer = makeWriter((_input, candidateId) =>
+      candidateId.includes("fail")
+        ? { ok: false, errorCode: "disk_full", reason: "no space" }
+        : { ok: true, memoryId: `stored_${candidateId}` },
+    );
+    // craft two candidates: one whose derived id contains a marker is hard; instead use content
+    const good = candidate({ clientRef: "good", input: input({ content: "good lesson" }) });
+    const bad = candidate({ clientRef: "bad", input: input({ content: "bad lesson" }) });
+    // make the writer fail for the bad one by content match
+    const writer2 = makeWriter((inp) =>
+      inp.content.includes("bad")
+        ? { ok: false, errorCode: "disk_full", reason: "no space" }
+        : { ok: true, memoryId: "stored_ok" },
+    );
+    const res = await executeLocalBatchWrite({ candidates: [good, bad], writer: writer2 });
+    expect(res.writtenCount).toBe(1);
+    expect(res.failedCount).toBe(1);
+    // observed true because at least one real write succeeded, but failure surfaced
+    expect(res.observed).toBe(true);
+    const failed = res.results.find((r) => r.writeStatus === "failed");
+    expect(failed?.errorCode).toBe("disk_full");
+    expect(failed?.writeObserved).toBe(false);
+    void writer;
+    void good;
+    void bad;
+  });
+
+  it("(B2-7) writer that throws is isolated to that candidate (batch does not crash)", async () => {
+    const writer = makeWriter((inp) => {
+      if (inp.content.includes("boom")) throw new Error("ConnectionError");
+      return { ok: true, memoryId: "ok" };
+    });
+    const res = await executeLocalBatchWrite({
+      candidates: [
+        candidate({ input: input({ content: "fine" }) }),
+        candidate({ input: input({ content: "boom" }) }),
+      ],
+      writer,
+    });
+    expect(res.writtenCount).toBe(1);
+    expect(res.failedCount).toBe(1);
+    const failed = res.results.find((r) => r.writeStatus === "failed");
+    expect(failed?.errorCode).toBe("writer_threw");
+  });
+
+  it("(B2-8) all writers fail → observed:false, writtenCount 0", async () => {
+    const writer = makeWriter(() => ({ ok: false, errorCode: "rejected_by_backend" }));
+    const res = await executeLocalBatchWrite({ candidates: [candidate()], writer });
+    expect(res.observed).toBe(false);
+    expect(res.writtenCount).toBe(0);
+    expect(res.failedCount).toBe(1);
+  });
+});
+
+describe("executeLocalBatchWrite — determinism + no promotion + safety", () => {
+  it("(B2-9) deterministic ids stable across runs", async () => {
+    const writer1 = okWriter();
+    const writer2 = okWriter();
+    const cs = [candidate({ clientRef: "a" }), candidate({ clientRef: "b", input: input({ content: "b" }) })];
+    const r1 = await executeLocalBatchWrite({ candidates: cs, writer: writer1 });
+    const r2 = await executeLocalBatchWrite({ candidates: cs, writer: writer2 });
+    expect(r1.results.map((r) => r.derivedId)).toEqual(r2.results.map((r) => r.derivedId));
+  });
+
+  it("(B2-10) result has no trust/activation promotion fields", async () => {
+    const res = await executeLocalBatchWrite({ candidates: [candidate()], writer: okWriter() });
+    const r = res.results[0]! as Record<string, unknown>;
+    expect(r).not.toHaveProperty("trustStatus");
+    expect(r).not.toHaveProperty("activationStatus");
+    expect(r).not.toHaveProperty("trusted");
+    expect(r).not.toHaveProperty("active");
+  });
+
+  it("(B2-11) HNSW stays off by default; forceHnsw warns but never enables index", async () => {
+    const res = await executeLocalBatchWrite({
+      candidates: [candidate()],
+      writer: okWriter(),
+      config: { forceHnsw: true },
+    });
+    expect(res.effectiveConfig.forceHnsw).toBe(true); // honestly reported
+    expect(res.warnings.some((w) => w.toLowerCase().includes("hnsw"))).toBe(true);
+    // no field claims an index was built
+    expect(res as Record<string, unknown>).not.toHaveProperty("indexBuilt");
+  });
+
+  it("(B2-12) writer receives the deterministic candidateId as idempotency key", async () => {
+    const seen: string[] = [];
+    const writer: LocalSimpleMemoWriter = {
+      async remember(_input, candidateId) {
+        seen.push(candidateId);
+        return { ok: true, memoryId: candidateId };
+      },
+    };
+    const res = await executeLocalBatchWrite({ candidates: [candidate()], writer });
+    expect(seen[0]).toBe(res.results[0]!.derivedId);
+  });
+
+  it("(B2-13) empty batch → zero counts, observed:false, no writer calls", async () => {
+    const writer = okWriter();
+    const res = await executeLocalBatchWrite({ candidates: [], writer });
+    expect(res.observed).toBe(false);
+    expect(res.writtenCount).toBe(0);
+    expect(res.results).toEqual([]);
+    expect(writer.calls).toHaveLength(0);
+  });
+});

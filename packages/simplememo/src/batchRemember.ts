@@ -267,3 +267,151 @@ export function createBatchRememberAdapter(config: BatchRememberConfig = {}): Ba
       return new MockBatchRememberAdapter(config);
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// B2 — local SimpleMemo batch write implementation.
+//
+// B1의 sync batchRemember(plan-only)는 그대로 둔다. B2는 그 입구 뒤에 **주입된 local
+// writer**를 통해 accepted candidate를 실제로 write하는 async 경로를 *추가*한다.
+//
+// 안전선:
+//   - writer가 명시적으로 주입되지 않으면 절대 성공 처리하지 않는다(observed:false,
+//     accepted → skipped(local_writer_missing)).
+//   - planBatchRemember가 accepted로 판정한 candidate만 writer를 호출한다.
+//     rejected/skipped는 writer 호출 0.
+//   - writeObserved:true는 writer가 실제로 ok를 돌려줬을 때만.
+//   - 한 candidate의 writer 실패가 배치 전체를 성공으로 만들지 않는다(partial 정직 표기).
+//   - B1의 결정론적 id(deriveBatchCandidateId)는 그대로 유지.
+//   - 자동 trusted/active 승격 0, runtime activation 0, 숨은 백그라운드 0.
+//   - HNSW 기본 off 유지(B2도 index를 켜지 않는다), maxBatchSize/empty/no-refs 가드 유지.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type LocalSimpleMemoWriteResult =
+  | { ok: true; memoryId?: string }
+  | { ok: false; errorCode?: string; reason?: string };
+
+/**
+ * 주입형 local writer. 실제 저장 부수효과는 전부 여기서만 일어난다.
+ * candidateId는 B1 파생 id — writer가 멱등 키로 쓸 수 있게 넘긴다.
+ */
+export interface LocalSimpleMemoWriter {
+  remember(input: MemoryInput, candidateId: string): Promise<LocalSimpleMemoWriteResult>;
+}
+
+export type LocalBatchWriteStatus = "written" | "skipped" | "rejected" | "failed";
+
+export type LocalBatchWriteCandidateResult = {
+  derivedId: string;
+  clientRef?: string;
+  origin: BatchRememberOrigin;
+  writeStatus: LocalBatchWriteStatus;
+  /** writer가 실제 ok를 돌려줬을 때만 true */
+  writeObserved: boolean;
+  /** writer가 돌려준 저장 id(있을 때만) */
+  writtenId?: string;
+  errorCode?: string;
+  reason?: string;
+};
+
+export type LocalBatchWriteResult = {
+  mode: "local_simplememo";
+  /** writer 존재 + 최소 1건 실제 write 성공일 때만 true(가짜 성공 금지) */
+  observed: boolean;
+  writtenCount: number;
+  failedCount: number;
+  skippedCount: number;
+  rejectedCount: number;
+  results: LocalBatchWriteCandidateResult[];
+  warnings: string[];
+  blockers: string[];
+  effectiveConfig: Required<BatchRememberConfig>;
+};
+
+/**
+ * B1 입구 뒤에서 local writer로 실제 write를 수행하는 async 경로.
+ *
+ *   planBatchRemember(accepted only) → writer.remember(sequential) → per-candidate 결과
+ *
+ * writer 미주입이면 accepted를 skipped(local_writer_missing)로 강등하고 observed:false.
+ * writer 주입이면 accepted만 순차 write(결정론적 순서). 실패는 candidate 단위로 격리.
+ */
+export async function executeLocalBatchWrite(args: {
+  candidates: ReadonlyArray<BatchRememberCandidate>;
+  writer?: LocalSimpleMemoWriter;
+  config?: BatchRememberConfig;
+}): Promise<LocalBatchWriteResult> {
+  // mode는 local_simplememo로 고정해 effectiveConfig 정직 표기.
+  const plan = planBatchRemember(args.candidates, { ...args.config, mode: "local_simplememo" });
+  const warnings = [...plan.warnings];
+  const blockers: string[] = [];
+  const results: LocalBatchWriteCandidateResult[] = [];
+
+  const writer = args.writer;
+  if (!writer) blockers.push("local_writer_missing");
+
+  for (const planned of plan.results) {
+    const base = { derivedId: planned.derivedId, clientRef: planned.clientRef, origin: planned.origin };
+
+    if (planned.outcome === "rejected") {
+      results.push({ ...base, writeStatus: "rejected", writeObserved: false, reason: planned.reason });
+      continue;
+    }
+    if (planned.outcome === "skipped") {
+      results.push({ ...base, writeStatus: "skipped", writeObserved: false, reason: planned.reason });
+      continue;
+    }
+    // accepted
+    if (!writer) {
+      // writer 없음 — 절대 성공 처리하지 않는다.
+      results.push({ ...base, writeStatus: "skipped", writeObserved: false, reason: "local_writer_missing" });
+      continue;
+    }
+    // accepted candidate의 input을 찾는다(파생 id로 매칭).
+    const candidate = args.candidates.find((c) => deriveBatchCandidateId(c) === planned.derivedId);
+    if (!candidate) {
+      // 이론상 도달 불가(plan은 candidates에서 파생). 방어적으로 failed 처리.
+      results.push({ ...base, writeStatus: "failed", writeObserved: false, errorCode: "candidate_not_found" });
+      continue;
+    }
+    try {
+      const write = await writer.remember(candidate.input, planned.derivedId);
+      if (write.ok) {
+        results.push({ ...base, writeStatus: "written", writeObserved: true, writtenId: write.memoryId });
+      } else {
+        results.push({
+          ...base,
+          writeStatus: "failed",
+          writeObserved: false,
+          errorCode: write.errorCode ?? "writer_failed",
+          reason: write.reason,
+        });
+      }
+    } catch (err) {
+      results.push({
+        ...base,
+        writeStatus: "failed",
+        writeObserved: false,
+        errorCode: "writer_threw",
+        reason: err instanceof Error ? err.name : "unknown",
+      });
+    }
+  }
+
+  const writtenCount = results.filter((r) => r.writeStatus === "written").length;
+  const failedCount = results.filter((r) => r.writeStatus === "failed").length;
+  const skippedCount = results.filter((r) => r.writeStatus === "skipped").length;
+  const rejectedCount = results.filter((r) => r.writeStatus === "rejected").length;
+
+  return {
+    mode: "local_simplememo",
+    observed: Boolean(writer) && writtenCount > 0,
+    writtenCount,
+    failedCount,
+    skippedCount,
+    rejectedCount,
+    results,
+    warnings,
+    blockers,
+    effectiveConfig: plan.effectiveConfig,
+  };
+}
