@@ -19,8 +19,16 @@ describe("Batch 7 — LINE B: work-queue lanes (pure bucketing)", () => {
   it("buckets the fixture composition into Today/Waiting/Blocked/Learning/Runner", () => {
     const lanes = buildWorkLanes(buildAssistantInboxProps());
     const by = Object.fromEntries(lanes.map((l) => [l.id, l]));
-    expect(lanes.map((l) => l.id)).toEqual(["today", "waiting", "blocked", "learning", "runner"]);
-    expect(by.today!.count).toBe(0); // no time bucket wired → honest empty
+    expect(lanes.map((l) => l.id)).toEqual([
+      "today",
+      "recent",
+      "waiting",
+      "blocked",
+      "learning",
+      "runner",
+    ]);
+    expect(by.today!.count).toBe(0); // no timed events passed → honest empty
+    expect(by.recent!.count).toBe(0);
     expect(by.waiting!.count).toBe(2); // memory candidates
     expect(by.blocked!.count).toBe(3); // runner gate (blocked) + 2 blocked manifest entries
     expect(by.learning!.count).toBe(2);

@@ -91,6 +91,10 @@ export type AssistantInboxProps = {
   recordCount?: number;
   /** LINE A/C — honest label for where the live data came from (e.g. "eventLog"). */
   lastUpdateSource?: string;
+  /** Batch 8 LINE B — real event-log entries for the Today/Recent lanes (read-only). */
+  recentEvents?: ReadonlyArray<TimedEventInput>;
+  /** Batch 8 LINE B — injected now (ms) for deterministic time bucketing. */
+  nowMs?: number;
 };
 
 /**
@@ -106,23 +110,68 @@ export type WorkLane = {
   emptyHint: string;
 };
 
-/** Bucket the on-screen items into priority lanes. Pure; no side effect. */
-export function buildWorkLanes({
-  evidence = [],
-  learningLoops = [],
-  memoryCandidates = [],
-  manifestEntries = [],
-}: Pick<
-  AssistantInboxProps,
-  "evidence" | "learningLoops" | "memoryCandidates" | "manifestEntries"
->): WorkLane[] {
+/** Batch 8 LINE B — an event-log entry placed into a time bucket. */
+export type TimedEventInput = { id: string; type: string; createdAt: string };
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Bucket real event-log entries into today / recent using an INJECTED now (ms) —
+ * pure, deterministic, never calls Date.now. "today" = on/after the start of
+ * now's UTC day; "recent" = within 7 days before that. Item labels are the
+ * generic event type (no domain). Honest-empty buckets when nothing qualifies.
+ */
+export function bucketEventsByTime(
+  events: ReadonlyArray<TimedEventInput> = [],
+  nowMs?: number,
+): { today: string[]; recent: string[] } {
+  if (typeof nowMs !== "number" || !Number.isFinite(nowMs)) return { today: [], recent: [] };
+  const startOfDay = nowMs - (((nowMs % DAY_MS) + DAY_MS) % DAY_MS);
+  const recentFloor = startOfDay - 7 * DAY_MS;
+  const today: string[] = [];
+  const recent: string[] = [];
+  for (const e of events) {
+    const at = Date.parse(e.createdAt);
+    if (Number.isNaN(at)) continue;
+    if (at >= startOfDay) today.push(e.type);
+    else if (at >= recentFloor) recent.push(e.type);
+  }
+  return { today, recent };
+}
+
+/** Bucket the on-screen items (+ optional timed events) into priority lanes. Pure. */
+export function buildWorkLanes(
+  {
+    evidence = [],
+    learningLoops = [],
+    memoryCandidates = [],
+    manifestEntries = [],
+  }: Pick<
+    AssistantInboxProps,
+    "evidence" | "learningLoops" | "memoryCandidates" | "manifestEntries"
+  >,
+  timed?: { events?: ReadonlyArray<TimedEventInput>; nowMs?: number },
+): WorkLane[] {
   const cap = (xs: ReadonlyArray<string>) => xs.slice(0, 3);
   const blockedEvidence = evidence.filter((e) => e.verdict === "blocked");
   const blockedManifest = manifestEntries.filter((m) => m.loadable === false);
   const runner = evidence.filter((e) => e.id.startsWith("runner-gate-"));
+  const { today, recent } = bucketEventsByTime(timed?.events, timed?.nowMs);
   return [
-    // No real time bucket is wired yet → honest empty, not a fabricated "today".
-    { id: "today", title: "Today", count: 0, items: [], emptyHint: "시간 버킷 미배선 — today 신호 없음" },
+    {
+      id: "today",
+      title: "Today",
+      count: today.length,
+      items: cap(today),
+      emptyHint: "오늘 이벤트 없음",
+    },
+    {
+      id: "recent",
+      title: "Recent",
+      count: recent.length,
+      items: cap(recent),
+      emptyHint: "최근 7일 이벤트 없음",
+    },
     {
       id: "waiting",
       title: "Waiting",
@@ -482,6 +531,8 @@ export function AssistantInbox({
   eventCount,
   recordCount,
   lastUpdateSource,
+  recentEvents,
+  nowMs,
 }: AssistantInboxProps) {
   const total =
     evidence.length + learningLoops.length + memoryCandidates.length + manifestEntries.length;
@@ -509,7 +560,10 @@ export function AssistantInbox({
   // LINE A — severity rollups from the rendered evidence (works in LIVE+PREVIEW).
   const blockedCount = evidence.filter((e) => e.verdict === "blocked").length;
   const warningCount = evidence.filter((e) => e.verdict === "warning").length;
-  const workLanes = buildWorkLanes({ evidence, learningLoops, memoryCandidates, manifestEntries });
+  const workLanes = buildWorkLanes(
+    { evidence, learningLoops, memoryCandidates, manifestEntries },
+    { events: recentEvents, nowMs },
+  );
   // LIVE-sparse = LIVE with nothing live beyond the gate. Drives the polished
   // "No live data yet" hero so the first impression reads intentional.
   const liveSparse =
