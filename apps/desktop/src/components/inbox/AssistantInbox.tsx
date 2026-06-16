@@ -11,6 +11,7 @@ import {
   type ManifestEntry,
 } from "./RuntimeManifestPreviewCard";
 import { classifyEvent, type EventCategory } from "../../lib/eventClassification";
+import { projectWorkItemsLite } from "../../lib/workItemLite";
 
 /**
  * LINE F / H / N — Assistant Inbox / command center.
@@ -115,8 +116,8 @@ export type WorkLane = {
   emptyHint: string;
 };
 
-/** Batch 8 LINE B — an event-log entry placed into a time bucket. */
-export type TimedEventInput = { id: string; type: string; createdAt: string };
+/** Batch 8 LINE B — an event-log entry placed into a time bucket. (source: Batch 9 D) */
+export type TimedEventInput = { id: string; type: string; createdAt: string; source?: string };
 
 const DAY_MS = 86_400_000;
 
@@ -573,9 +574,11 @@ const REPLAY_FILTERS: ReadonlyArray<"all" | EventCategory> = [
 function ReplayDeck({ events }: { events: ReadonlyArray<TimedEventInput> }) {
   // LINE C — local UI filter only. Never mutates the events, never calls a server.
   const [filter, setFilter] = useState<"all" | EventCategory>("all");
-  const matched =
-    filter === "all" ? events : events.filter((e) => classifyEvent(e.type) === filter);
-  const recent = projectReplayEvents(matched, 20);
+  // LINE D — rows are read-only WorkItem-lite (category/source/observed). LINE C
+  // filter is view-only over the projection; never mutates the underlying events.
+  const items = projectWorkItemsLite(events);
+  const matched = filter === "all" ? items : items.filter((w) => w.category === filter);
+  const recent = matched.slice(0, 20);
   return (
     <div className="px-4 pb-1" data-testid="replay-deck" data-count={recent.length} data-filter={filter}>
       <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-cyan-200/80">
@@ -629,28 +632,31 @@ function ReplayDeck({ events }: { events: ReadonlyArray<TimedEventInput> }) {
         </div>
       ) : (
         <ol className="space-y-0.5">
-          {recent.map((e, i) => {
-            const category = classifyEvent(e.type);
-            return (
-              <li
-                key={e.id}
-                data-testid={`replay-deck-item-${i}`}
-                className="flex items-center gap-2 rounded border border-white/[0.06] bg-white/[0.02] px-2 py-1"
+          {recent.map((w, i) => (
+            <li
+              key={w.id}
+              data-testid={`replay-deck-item-${i}`}
+              className="flex items-center gap-2 rounded border border-white/[0.06] bg-white/[0.02] px-2 py-1"
+            >
+              <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-300">{w.title}</span>
+              <span
+                className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase tracking-wide text-muted-foreground"
+                data-testid={`replay-deck-category-${i}`}
+                data-category={w.category}
               >
-                <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-300">{e.type}</span>
-                <span
-                  className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase tracking-wide text-muted-foreground"
-                  data-testid={`replay-deck-category-${i}`}
-                  data-category={category}
-                >
-                  {category}
-                </span>
-                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/60">
-                  {e.createdAt}
-                </span>
-              </li>
-            );
-          })}
+                {w.category}
+              </span>
+              <span
+                className="shrink-0 text-[9px] text-muted-foreground/45"
+                data-testid={`replay-deck-source-${i}`}
+              >
+                {w.source}
+              </span>
+              <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/60">
+                {w.createdAt}
+              </span>
+            </li>
+          ))}
         </ol>
       )}
     </div>

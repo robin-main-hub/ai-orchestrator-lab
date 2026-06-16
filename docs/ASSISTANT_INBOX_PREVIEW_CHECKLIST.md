@@ -146,3 +146,18 @@ scroll stability. Tick on each future preview:
 - [ ] **Scroll stable** — narrow / short viewport scrolls the command center
       cleanly (no window bounce); the last card clears the fixed approval toast;
       wide desktop keeps the 2-column layout.
+
+## 9. Batch 9 — semantic work desk regression checklist
+
+Batch 9 classified generic events into readable categories and surfaced them.
+Tick on each future preview:
+
+- [ ] **Category badges** — Today/Recent rows show a generic category badge
+      (failure/learning/runner/approval/memory/project/system); never a domain term.
+- [ ] **REPLAY filters** — the all/failure/learning/runner/memory/approval/system
+      filter narrows the replay read-only; switching back to "all" restores the full
+      set (no mutation); a category with no events shows an honest empty replay.
+- [ ] **WorkItem-lite rows** — replay rows show title + category + source; events
+      read observed, project records read suggested/not-observed; nothing fabricated.
+- [ ] **Honesty preserved** — no fake live, no new write/activation, no domain
+      logic; classification is best-effort and "unknown" stays unknown.
