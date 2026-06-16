@@ -20,7 +20,8 @@ export * from "./skillArchive.js";
 export * from "./workflowTemplate.js";
 export * from "./learningLoop.js";
 export * from "./memoryEval.js";
-export * from "./memoryBatch.js";
+export * from "./learningLoopWiring.js";
+export * from "./learningRuntimeManifest.js";
 
 export const runtimeStatusSchema = z.enum(["online", "degraded", "offline", "syncing"]);
 export type RuntimeStatus = z.infer<typeof runtimeStatusSchema>;
