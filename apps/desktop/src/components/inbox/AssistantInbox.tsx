@@ -10,7 +10,7 @@ import {
   RuntimeManifestPreviewCard,
   type ManifestEntry,
 } from "./RuntimeManifestPreviewCard";
-import { classifyEvent, type EventCategory } from "../../lib/eventClassification";
+import { classifyEvent, EVENT_CATEGORIES, type EventCategory } from "../../lib/eventClassification";
 import { projectWorkItemsLite } from "../../lib/workItemLite";
 
 /**
@@ -483,7 +483,15 @@ function PreviewScenarioLegend() {
 }
 
 /** LINE B — the priority lane rail. Read-only, no buttons; honest empty lanes. */
-function WorkLaneRail({ lanes, query = "" }: { lanes: ReadonlyArray<WorkLane>; query?: string }) {
+function WorkLaneRail({
+  lanes,
+  query = "",
+  category = "all",
+}: {
+  lanes: ReadonlyArray<WorkLane>;
+  query?: string;
+  category?: "all" | EventCategory;
+}) {
   const q = query.trim().toLowerCase();
   return (
     <div
@@ -493,10 +501,17 @@ function WorkLaneRail({ lanes, query = "" }: { lanes: ReadonlyArray<WorkLane>; q
       aria-label="Work queue lanes"
     >
       {lanes.map((lane) => {
-        // LINE A — search filters the visible lane rows (label match). With no
-        // query the lane keeps its real count; honest empty when nothing matches.
-        const items = q ? lane.items.filter((i) => i.label.toLowerCase().includes(q)) : lane.items;
-        const count = q ? items.length : lane.count;
+        // LINE B — category refines only the event-derived lanes (today/recent),
+        // whose items carry a classified category; the typed lanes are untouched.
+        const eventLane = lane.id === "today" || lane.id === "recent";
+        const catFiltered =
+          category !== "all" && eventLane
+            ? lane.items.filter((i) => i.category === category)
+            : lane.items;
+        // LINE A — search filters the visible lane rows (label match).
+        const items = q ? catFiltered.filter((i) => i.label.toLowerCase().includes(q)) : catFiltered;
+        const filtering = q.length > 0 || (category !== "all" && eventLane);
+        const count = filtering ? items.length : lane.count;
         return (
         <div
           key={lane.id}
@@ -518,7 +533,7 @@ function WorkLaneRail({ lanes, query = "" }: { lanes: ReadonlyArray<WorkLane>; q
               className="mt-1 text-[10px] leading-snug text-muted-foreground/50"
               data-testid={`work-lane-empty-${lane.id}`}
             >
-              {q ? "검색 결과 없음" : lane.emptyHint}
+              {q ? "검색 결과 없음" : filtering ? "필터 결과 없음" : lane.emptyHint}
             </p>
           ) : (
             <ul className="mt-1 space-y-0.5">
@@ -683,6 +698,91 @@ function ReplayDeck({
   );
 }
 
+/** Batch 10 LINE C — view-only focus presets (region visibility; no actions). */
+export type InboxFocus = "all" | "today" | "blocked" | "warnings" | "replay";
+const INBOX_FOCUSES: ReadonlyArray<InboxFocus> = ["all", "today", "blocked", "warnings", "replay"];
+const CATEGORY_OPTIONS: ReadonlyArray<"all" | EventCategory> = ["all", ...EVENT_CATEGORIES];
+
+/**
+ * LINE B/C — read-only filter bar. A focus strip narrows which region is shown
+ * (today/blocked lanes, warnings cards) and "replay" jumps to the REPLAY seat; a
+ * category strip refines the event-derived Today/Recent lanes. Radios only — view
+ * state, never a side-effect action control (no approve/run/send/write).
+ */
+function InboxFilterBar({
+  focus,
+  onFocus,
+  category,
+  onCategory,
+}: {
+  focus: InboxFocus;
+  onFocus: (f: InboxFocus) => void;
+  category: "all" | EventCategory;
+  onCategory: (c: "all" | EventCategory) => void;
+}) {
+  const chip = (active: boolean) =>
+    [
+      "inline-flex cursor-pointer items-center rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide transition-colors",
+      active
+        ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-200"
+        : "border-white/10 text-muted-foreground hover:border-white/20",
+    ].join(" ");
+  return (
+    <div className="space-y-1 px-4 pb-2">
+      <div
+        role="radiogroup"
+        aria-label="Focus view"
+        data-testid="inbox-focus"
+        data-focus={focus}
+        className="flex flex-wrap gap-1"
+      >
+        {INBOX_FOCUSES.map((f) => {
+          const active = f === focus;
+          return (
+            <label key={f} data-active={active ? "true" : "false"} className={chip(active)}>
+              <input
+                type="radio"
+                name="inbox-focus"
+                className="sr-only"
+                data-testid={`inbox-focus-${f}`}
+                data-active={active ? "true" : "false"}
+                checked={active}
+                onChange={() => onFocus(f)}
+              />
+              {f}
+            </label>
+          );
+        })}
+      </div>
+      <div
+        role="radiogroup"
+        aria-label="Category filter"
+        data-testid="inbox-category"
+        data-category={category}
+        className="flex flex-wrap gap-1"
+      >
+        {CATEGORY_OPTIONS.map((c) => {
+          const active = c === category;
+          return (
+            <label key={c} data-active={active ? "true" : "false"} className={chip(active)}>
+              <input
+                type="radio"
+                name="inbox-category"
+                className="sr-only"
+                data-testid={`inbox-category-${c}`}
+                data-active={active ? "true" : "false"}
+                checked={active}
+                onChange={() => onCategory(c)}
+              />
+              {c}
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function AssistantInbox({
   evidence = [],
   learningLoops = [],
@@ -739,6 +839,21 @@ export function AssistantInbox({
   // Never a side-effect control: it only narrows what is shown, writes nothing.
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  // Batch 10 LINE B/C — view-only focus + category. Focus narrows the region;
+  // "replay" is a shortcut to the REPLAY seat. Category refines the event lanes.
+  const [focus, setFocus] = useState<InboxFocus>("all");
+  const [category, setCategory] = useState<"all" | EventCategory>("all");
+  const onFocusPick = (f: InboxFocus) => {
+    if (f === "replay") onModeChange?.("replay");
+    else setFocus(f);
+  };
+  const visibleLanes =
+    focus === "today"
+      ? workLanes.filter((l) => l.id === "today" || l.id === "recent")
+      : focus === "blocked"
+        ? workLanes.filter((l) => l.id === "blocked")
+        : workLanes;
+  const showCards = focus === "all" || focus === "warnings";
   const onInboxKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "/" && document.activeElement !== searchRef.current) {
       e.preventDefault();
@@ -812,6 +927,14 @@ export function AssistantInbox({
           className="w-full rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-zinc-200 placeholder:text-muted-foreground/40 focus:border-cyan-400/40 focus:outline-none"
         />
       </div>
+      {mode !== "replay" ? (
+        <InboxFilterBar
+          focus={focus}
+          onFocus={onFocusPick}
+          category={category}
+          onCategory={setCategory}
+        />
+      ) : null}
       {mode === "replay" ? (
         <ReplayDeck events={recentEvents ?? []} query={query} />
       ) : (
@@ -819,7 +942,10 @@ export function AssistantInbox({
           {mode === "preview" ? <PreviewBanner /> : null}
           {mode === "preview" ? <PreviewScenarioLegend /> : null}
           {liveSparse ? <LiveEmptyHero /> : null}
-          <WorkLaneRail lanes={workLanes} query={query} />
+          {focus !== "warnings" ? (
+            <WorkLaneRail lanes={visibleLanes} query={query} category={category} />
+          ) : null}
+          {showCards ? (
           <CardContent className="grid grid-cols-1 gap-2.5 px-4 lg:grid-cols-2 lg:gap-2.5 xl:gap-3">
         <Section
           id="evidence"
@@ -871,6 +997,7 @@ export function AssistantInbox({
           <RuntimeManifestPreviewCard entries={manifestEntries} />
         </Section>
           </CardContent>
+          ) : null}
         </>
       )}
     </Card>
