@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { AssistantInbox, INBOX_VIEW_MODES, type InboxViewMode } from "./AssistantInbox";
+import {
+  AssistantInbox,
+  INBOX_VIEW_MODES,
+  type InboxViewMode,
+  type InboxCommand,
+} from "./AssistantInbox";
 import {
   buildAssistantInboxProps,
   buildAssistantInboxLiveProps,
@@ -51,11 +56,14 @@ export type AssistantInboxContainerProps = {
    * renders stay deterministic; the real app turns it on.
    */
   persistViewMode?: boolean;
+  /** Batch 11 LINE C — one-shot view command from the Command Palette (view-only). */
+  command?: InboxCommand;
 };
 
 export function AssistantInboxContainer({
   live,
   persistViewMode = false,
+  command,
 }: AssistantInboxContainerProps = {}) {
   // Default seat: LIVE when real app state is wired (the real app always passes
   // `live`, so the command center opens LIVE). It falls back to PREVIEW only in
@@ -75,6 +83,12 @@ export function AssistantInboxContainer({
   useEffect(() => {
     if (persistViewMode) writeJsonState(INBOX_VIEW_MODE_KEY, mode);
   }, [persistViewMode, mode]);
+
+  // Batch 11 LINE C — the container owns the seat, so it applies mode commands
+  // from the palette (e.g. "Switch to REPLAY"); filter commands flow to the inbox.
+  useEffect(() => {
+    if (command?.kind === "mode" && command.value) setMode(command.value as InboxViewMode);
+  }, [command]);
 
   // DATA-PLANE SEPARATION (Batch 5 LINE S): each seat reads ONE projection and
   // never the other. liveProjection (buildAssistantInboxLiveProps) and
@@ -122,6 +136,7 @@ export function AssistantInboxContainer({
         mode={mode}
         onModeChange={setMode}
         persistFilters={persistViewMode}
+        command={command}
       />
     </div>
   );
