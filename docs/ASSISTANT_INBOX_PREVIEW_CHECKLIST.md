@@ -161,3 +161,31 @@ Tick on each future preview:
       read observed, project records read suggested/not-observed; nothing fabricated.
 - [ ] **Honesty preserved** — no fake live, no new write/activation, no domain
       logic; classification is best-effort and "unknown" stays unknown.
+
+## 10. Batch 10 — search / filter / focus (+ interaction philosophy)
+
+**Interaction philosophy shift (Batch 10):** the old "zero buttons / no
+interaction" rule becomes **"no side-effect action controls."** A command-center
+desk needs to search, filter, switch mode, and focus — those are fine. What stays
+forbidden is anything that *does* something.
+
+- **Allowed** (view-only): search input · radio · select · mode switch · local
+  view filter · keyboard focus/clear.
+- **Forbidden** (side-effect): approve · send · write · run · apply · dispatch ·
+  external call · server append · memory activation.
+- The inbox still ships zero `<button>` (search = input, filters = radios). If a
+  `<button>` is ever added it must be proven a view toggle by test, and the
+  forbidden action words must not appear as control text.
+
+Regression checklist:
+
+- [ ] **Search** filters visible queue/replay rows; `Esc` clears search only; `/`
+      focuses search only.
+- [ ] **Category filter** changes visible rows only (refines event lanes); typed
+      lanes untouched; no mutation.
+- [ ] **Focus** changes visible sections only — today/blocked narrow lanes,
+      warnings shows cards, replay jumps to the REPLAY seat.
+- [ ] **Honest empty** — "검색 결과 없음 / 필터 결과 없음" (never a dead screen).
+- [ ] **No side-effect controls** — no approve/send/run/apply/dispatch; no server
+      call; REPLAY stays read-only; PREVIEW fixture stays labeled; LIVE gets no
+      preview data.

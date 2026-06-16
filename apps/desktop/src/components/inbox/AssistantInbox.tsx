@@ -16,12 +16,17 @@ import { projectWorkItemsLite } from "../../lib/workItemLite";
 /**
  * LINE F / H / N — Assistant Inbox / command center.
  *
- * A dense, dark, read-only command-center shell. It composes the four
- * card surfaces (evidence / learning loop / memory candidates / runtime
- * manifest preview) into labelled sections. Everything is presentational:
- * the inbox accepts arrays of items and renders them. It NEVER fires a
- * callback on mount and exposes no enable/approve affordance — it is a
- * read surface, not a control panel.
+ * A dense, dark command-center shell. It composes the four card surfaces
+ * (evidence / learning loop / memory candidates / runtime manifest preview)
+ * into labelled sections, with view controls (mode switch, search, category /
+ * focus filters) on top.
+ *
+ * INTERACTION PHILOSOPHY (Batch 10): "no side-effect action controls" — NOT
+ * "zero interaction". View-only controls are allowed (search input, radios,
+ * mode/focus switches, keyboard focus/clear); anything with a side effect is
+ * forbidden (approve / send / write / run / apply / dispatch / server call /
+ * activation). It still fires no callback on mount and ships zero <button>
+ * (search = input, filters = radios) — it reads and narrows, it never executes.
  *
  * LINE H adds an explicit per-section DATA SOURCE label so a viewer can
  * never confuse "live" (observed real app state) with "예시(fixture)"
