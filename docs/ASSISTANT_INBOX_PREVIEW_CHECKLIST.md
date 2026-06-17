@@ -223,3 +223,17 @@ forbidden. Tick on each future preview:
       save/delete from the palette); repeated apply of the same view re-applies.
 - [ ] **Honesty** — invalid saved views ignored; empty list → no palette entries;
       preview→LIVE no fixture leak; no ERP/domain/domain terms.
+
+## 13. Batch 13 — palette E2E + real OS lane source
+
+Batch 13 closed the ⌘K honesty gap (integration tests) and drew lanes from real
+classified event-log activity. Owner preview checks:
+
+- [ ] **Real ⌘K** — open the palette, the inbox preset + saved-view entries show;
+      selecting one changes mode/focus/category/search; "인박스 뷰 적용: <name>"
+      reads as a local view command (no side effect); repeated apply re-applies.
+- [ ] **Lane source** — Blocked/Runner/Learning/Waiting reflect real event-log
+      activity (failure/runner/learning/approval) with category badges; no events →
+      honest empty; LIVE shows no fixture rows.
+- [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
+      approves/dispatches; saved views & view state stay local; SANDBOX inert.
