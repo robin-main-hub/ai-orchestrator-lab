@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { activeViewPreset, VIEW_PRESETS } from "./AssistantInbox";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 
@@ -44,6 +45,6 @@ describe("Batch 11 — LINE A: saved view presets (view-only)", () => {
 
   it("adds no side-effect action control (no buttons)", () => {
     const { container } = render(<AssistantInboxContainer live={{ recentEvents: EVENTS, nowMs: NOW }} />);
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
   });
 });

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 
 afterEach(() => cleanup());
@@ -48,7 +49,7 @@ describe("Batch 10 — LINE A/D: local inbox search (view-only)", () => {
 
   it("adds no side-effect action control (no buttons; no approve/run/send text)", () => {
     const { container } = render(<AssistantInboxContainer live={{ recentEvents: EVENTS, nowMs: NOW }} />);
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
     const text = (container.textContent ?? "").toLowerCase();
     for (const banned of ["approve", "enable", "run ", "send", "apply", "dispatch"]) {
       expect(text.includes(banned)).toBe(false);

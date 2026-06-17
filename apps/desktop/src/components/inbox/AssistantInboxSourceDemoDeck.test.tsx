@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 import type { WorkItemLiteProviderResult } from "../../lib/plugins/pluginWorkItemSource";
 
@@ -51,7 +52,7 @@ describe("Batch 15 LINE C — PREVIEW demo deck", () => {
       expect(screen.getByTestId(`source-demo-option-${k}`)).toBeTruthy();
     }
     // it is a radio group, not buttons
-    expect(deck.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(deck);
     expect(deck.querySelectorAll('input[type="radio"]').length).toBe(5);
   });
 

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 
 afterEach(() => cleanup());
@@ -46,6 +47,6 @@ describe("Batch 9 — LINE C: REPLAY read-only category filters", () => {
     for (const f of ["all", "failure", "learning", "runner", "memory", "approval", "system"]) {
       expect(screen.getByTestId(`replay-filter-${f}`)).toBeTruthy();
     }
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
   });
 });

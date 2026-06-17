@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 
 afterEach(() => cleanup());
@@ -26,7 +27,7 @@ describe("Batch 15 LINE E — source detail drawer (zero-button, view-only)", ()
   it("is closed at mount and adds no <button> (preserves button-free scans)", () => {
     const { container } = render(<AssistantInboxContainer />);
     expect(screen.queryByTestId("source-detail-drawer")).toBeNull();
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
   });
 
   it("clicking a source row opens the drawer with read-only typed fields", () => {
@@ -40,7 +41,7 @@ describe("Batch 15 LINE E — source detail drawer (zero-button, view-only)", ()
     expect(screen.getByTestId("source-detail-field-health").textContent).toContain("connected");
     expect(screen.getByTestId("source-detail-field-observed")).toBeTruthy();
     // open drawer has NO <button> and no action words
-    expect(drawer.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(drawer);
     const text = (drawer.textContent ?? "").toLowerCase();
     for (const w of ["approve", "enable", "run ", "send", "sync", "dispatch", "apply"]) {
       expect(text.includes(w)).toBe(false);

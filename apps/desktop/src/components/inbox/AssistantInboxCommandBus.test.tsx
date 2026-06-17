@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 
 afterEach(() => cleanup());
@@ -44,7 +45,7 @@ describe("Batch 11 — LINE C: command-bus (palette → inbox view, view-only)",
     const { container } = render(
       <AssistantInboxContainer live={live} command={{ kind: "focus", value: "blocked", nonce: 1 }} />,
     );
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
   });
 
   it("applyView command sets mode + focus + category + search atomically", () => {

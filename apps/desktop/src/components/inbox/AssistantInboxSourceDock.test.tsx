@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 import type { WorkItemLiteProviderResult } from "../../lib/plugins/pluginWorkItemSource";
 
@@ -116,7 +117,7 @@ describe("Batch 15 LINE A/B — still display-only + generic", () => {
   it("the Source Dock card has no buttons and no domain terms", () => {
     render(<AssistantInboxContainer />);
     const card = screen.getByTestId("plugin-sources");
-    expect(card.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(card);
     const text = (card.textContent ?? "").toLowerCase();
     for (const term of FORBIDDEN) {
       expect(text.includes(term)).toBe(false);

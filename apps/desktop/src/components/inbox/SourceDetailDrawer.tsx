@@ -104,6 +104,7 @@ export function SourceDetailDrawer({
           role="button"
           tabIndex={0}
           aria-label="닫기"
+          data-action-scope="local-detail"
           data-testid="source-detail-close"
           onClick={onClose}
           onKeyDown={(e) => {

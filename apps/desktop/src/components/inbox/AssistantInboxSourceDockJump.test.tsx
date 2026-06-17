@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 import { buildInboxPaletteCommands } from "../../lib/inboxPaletteCommands";
 import type { WorkItemLiteProviderResult } from "../../lib/plugins/pluginWorkItemSource";
@@ -53,7 +54,7 @@ describe("Batch 15 LINE D — jump scrolls/focuses the dock (view-only)", () => 
     // it stays in PREVIEW (jump never changes the seat): demo deck only shows in preview
     expect(screen.getByTestId("source-demo-deck")).toBeTruthy();
     // no new buttons introduced by the jump
-    expect(screen.getByTestId("assistant-inbox").querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(screen.getByTestId("assistant-inbox"));
   });
 
   it("is an honest no-op when the LIVE dock is empty (no dock, no scroll, no throw)", () => {
