@@ -27,7 +27,11 @@ import type { PluginEvidenceCandidate } from "../../lib/plugins/pluginEvidenceSo
 import type { PluginSourceHealth } from "../../lib/plugins/pluginManifest";
 import { SOURCE_SCENARIO_KEYS, type SourceScenarioKey } from "../../lib/plugins/examplePluginSource";
 import { SourceDetailDrawer, type SourceDetailItem } from "./SourceDetailDrawer";
-import type { PatchCandidate, PatchSafetyStatus } from "../../lib/plugins/patchCandidateSource";
+import {
+  summarizePatchCandidates,
+  type PatchCandidate,
+  type PatchSafetyStatus,
+} from "../../lib/plugins/patchCandidateSource";
 import { readJsonState, writeJsonState } from "../../lib/persistentJsonState";
 import {
   readUserViews,
@@ -442,6 +446,7 @@ const DECK_HINTS: Record<string, string> = {
   learning: "러닝 카테고리",
   replay: "리플레이 좌석",
   "source-dock": "외부 소스 갑판으로 이동 · 화면 이동만",
+  "patch-candidates": "패치 후보로 이동 · 화면 이동만 · 적용 없음",
   clear: "검색/필터 초기화",
 };
 
@@ -456,11 +461,13 @@ function CommandDeck({
   activeViewId,
   onPreset,
   onSourceDock,
+  onPatchCandidates,
   onClear,
 }: {
   activeViewId?: string;
   onPreset: (p: ViewPreset) => void;
   onSourceDock: () => void;
+  onPatchCandidates: () => void;
   onClear: () => void;
 }) {
   const base =
@@ -497,6 +504,16 @@ function CommandDeck({
         className={`${base} ${tone(false)}`}
       >
         Source Dock
+      </button>
+      <button
+        type="button"
+        data-testid="command-deck-patch-candidates"
+        data-action-scope="local-view"
+        title={DECK_HINTS["patch-candidates"]}
+        onClick={onPatchCandidates}
+        className={`${base} ${tone(false)}`}
+      >
+        Patch Candidates
       </button>
       <button
         type="button"
@@ -1610,16 +1627,122 @@ function patchDetailItem(c: PatchCandidate): SourceDetailItem {
  * preview, never an action. Blocked candidates stay inspectable. Returns null when
  * empty (honest empty in LIVE).
  */
+/** Batch 17 LINE D — local view filter over the patch lane (display-only). */
+export type PatchLaneFilter = "all" | "blocked" | "warning" | "runner";
+
+/** Batch 17 LINE E — read-only comparison strip (pure summarize, no model/runner). */
+function PatchComparisonStrip({ candidates }: { candidates: ReadonlyArray<PatchCandidate> }) {
+  const s = summarizePatchCandidates(candidates);
+  return (
+    <div
+      data-testid="patch-comparison-strip"
+      className="mb-2 flex flex-wrap items-center gap-1 text-[9px] uppercase tracking-wider"
+    >
+      <span
+        data-testid="patch-cmp-count"
+        data-count={s.count}
+        className="rounded border border-white/10 bg-white/[0.03] px-1 tabular-nums text-muted-foreground"
+      >
+        candidates {s.count}
+      </span>
+      {s.safest ? (
+        <span
+          data-testid="patch-cmp-safest"
+          data-safest={s.safest}
+          className="rounded border border-emerald-400/30 bg-emerald-400/10 px-1 text-emerald-200"
+        >
+          safest {s.safest}
+        </span>
+      ) : null}
+      <span
+        data-testid="patch-cmp-blocked"
+        data-count={s.blocked}
+        className="rounded border border-rose-400/30 bg-rose-400/10 px-1 tabular-nums text-rose-200"
+      >
+        blocked {s.blocked}
+      </span>
+      <span
+        data-testid="patch-cmp-warning"
+        data-count={s.warning}
+        className="rounded border border-amber-400/30 bg-amber-400/10 px-1 tabular-nums text-amber-200"
+      >
+        warning {s.warning}
+      </span>
+      {typeof s.overlapCount === "number" ? (
+        <span
+          data-testid="patch-cmp-overlap"
+          data-count={s.overlapCount}
+          className="rounded border border-white/10 bg-white/[0.03] px-1 tabular-nums text-muted-foreground"
+        >
+          overlap {s.overlapCount}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Batch 17 LINE D — patch lane quick filters (local-view buttons, view-only). */
+function PatchLaneControls({
+  filter,
+  onChange,
+}: {
+  filter: PatchLaneFilter;
+  onChange: (f: PatchLaneFilter) => void;
+}) {
+  const base = "rounded border px-1.5 py-0.5 text-[10px] tracking-wide transition-colors";
+  const tone = (active: boolean) =>
+    active
+      ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+      : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-200";
+  const opts: ReadonlyArray<{ key: PatchLaneFilter; label: string; title: string }> = [
+    { key: "all", label: "All", title: "모든 후보" },
+    { key: "blocked", label: "Blocked", title: "막힌 후보만" },
+    { key: "warning", label: "Warning", title: "경고 후보만" },
+    { key: "runner", label: "Runner", title: "러너 출력 후보만" },
+  ];
+  return (
+    <div data-testid="patch-lane-controls" className="mb-1.5 flex flex-wrap items-center gap-1">
+      {opts.map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          data-testid={`patch-ctl-${o.key}`}
+          data-action-scope="local-view"
+          data-active={filter === o.key}
+          title={o.title}
+          onClick={() => onChange(o.key)}
+          className={`${base} ${tone(filter === o.key)}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function PatchCandidatesCard({
   candidates = [],
   cardRef,
   onSelect,
+  filter = "all",
+  onFilter,
 }: {
   candidates?: ReadonlyArray<PatchCandidate>;
   cardRef?: RefObject<HTMLDivElement | null>;
   onSelect?: (item: SourceDetailItem) => void;
+  filter?: PatchLaneFilter;
+  onFilter?: (f: PatchLaneFilter) => void;
 }) {
   if (candidates.length === 0) return null;
+  // Filters narrow the LISTED candidates only; the comparison strip reflects the
+  // FULL set (overview) — pure presentation, no data mutation.
+  const shown = candidates.filter((c) =>
+    filter === "all"
+      ? true
+      : filter === "runner"
+        ? c.source === "runner"
+        : c.safetyStatus === filter,
+  );
   return (
     <div
       ref={cardRef}
@@ -1630,8 +1753,10 @@ function PatchCandidatesCard({
       <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         Patch Candidate Lane · read-only · preview only
       </p>
+      {candidates.length > 1 ? <PatchComparisonStrip candidates={candidates} /> : null}
+      {onFilter ? <PatchLaneControls filter={filter} onChange={onFilter} /> : null}
       <ul className="space-y-1">
-        {candidates.map((c) => (
+        {shown.map((c) => (
           <li
             key={c.id}
             data-testid={`patch-candidate-${c.candidateId}`}
@@ -1756,11 +1881,15 @@ export function AssistantInbox({
   const searchRef = useRef<HTMLInputElement>(null);
   // Batch 15 LINE D — scroll/focus target for the "Source Dock 열기" palette jump.
   const sourceDockRef = useRef<HTMLDivElement>(null);
+  // Batch 17 LINE D — scroll/focus target for the "Patch Candidates 열기" jump.
+  const patchCandidatesRef = useRef<HTMLDivElement>(null);
   // Batch 15 LINE E — locally-selected Source Dock row for the read-only drawer.
   const [selectedDetail, setSelectedDetail] = useState<SourceDetailItem | null>(null);
   const closeDetail = useCallback(() => setSelectedDetail(null), []);
   // Batch 16 LINE C — local Source Dock view filter (display-only).
   const [dockView, setDockView] = useState<SourceDockView>(DEFAULT_DOCK_VIEW);
+  // Batch 17 LINE D — local patch lane filter (display-only).
+  const [patchFilter, setPatchFilter] = useState<PatchLaneFilter>("all");
   const [focus, setFocus] = useState<InboxFocus>(storedFilters?.focus ?? "all");
   const [category, setCategory] = useState<"all" | EventCategory>(storedFilters?.category ?? "all");
   const onFocusPick = (f: InboxFocus) => {
@@ -1778,6 +1907,11 @@ export function AssistantInbox({
   const jumpToSourceDock = useCallback(() => {
     sourceDockRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     sourceDockRef.current?.focus();
+  }, []);
+  // Batch 17 LINE D — view/focus only jump to the Patch Candidate lane.
+  const jumpToPatchCandidates = useCallback(() => {
+    patchCandidatesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    patchCandidatesRef.current?.focus();
   }, []);
   const clearFilters = useCallback(() => {
     setQuery("");
@@ -1854,9 +1988,10 @@ export function AssistantInbox({
   // ONLY — no mode change, no filter change, no data action. When the dock is
   // empty (LIVE with no input) the ref is null and this is an honest no-op.
   useEffect(() => {
-    if (command?.kind !== "focusSection" || command.value !== "source-dock") return;
-    jumpToSourceDock();
-  }, [command, jumpToSourceDock]);
+    if (command?.kind !== "focusSection") return;
+    if (command.value === "source-dock") jumpToSourceDock();
+    else if (command.value === "patch-candidates") jumpToPatchCandidates();
+  }, [command, jumpToSourceDock, jumpToPatchCandidates]);
   // Batch 16 LINE A — Operator Console derivations (all from props already on
   // screen; zero server call, zero write). Active view label, a terse filter
   // summary, source-health counts, and the read-only replay item count.
@@ -1940,6 +2075,7 @@ export function AssistantInbox({
         activeViewId={activeView?.id}
         onPreset={onPreset}
         onSourceDock={jumpToSourceDock}
+        onPatchCandidates={jumpToPatchCandidates}
         onClear={clearFilters}
       />
       <div className="px-4 pb-2">
@@ -1995,7 +2131,13 @@ export function AssistantInbox({
             onSelect={setSelectedDetail}
             view={dockView}
           />
-          <PatchCandidatesCard candidates={patchCandidates} onSelect={setSelectedDetail} />
+          <PatchCandidatesCard
+            candidates={patchCandidates}
+            cardRef={patchCandidatesRef}
+            onSelect={setSelectedDetail}
+            filter={patchFilter}
+            onFilter={setPatchFilter}
+          />
           <SourceDetailDrawer item={selectedDetail} onClose={closeDetail} />
           {showCards ? (
           <CardContent className="grid grid-cols-1 gap-2.5 px-4 lg:grid-cols-2 lg:gap-2.5 xl:gap-3">
