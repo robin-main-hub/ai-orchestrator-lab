@@ -11,6 +11,11 @@ import {
   type AssistantInboxLiveInput,
 } from "../../lib/assistantInboxProjection";
 import { readJsonState, writeJsonState } from "../../lib/persistentJsonState";
+import {
+  EXAMPLE_PLUGIN_SOURCES,
+  EXAMPLE_PLUGIN_EVIDENCE,
+} from "../../lib/plugins/examplePluginSource";
+import { projectPluginEvidenceCandidates } from "../../lib/plugins/pluginEvidenceSource";
 
 /** LINE A — local UI preference key for the remembered seat (no server write). */
 const INBOX_VIEW_MODE_KEY = "ai-orchestrator.inbox-view-mode.v1";
@@ -129,11 +134,37 @@ export function AssistantInboxContainer({
             }
           : {};
 
+  // Batch 14 LINE D/E — generic Plugin Sources surface (read-only, display-only).
+  //   PREVIEW: shows clearly-labeled EXAMPLE plugin fixtures so the seat is a
+  //            VISIBLE vertical slice (not just types). Never live, never written.
+  //   LIVE:    shows ONLY real plugin input from `live`; absent → honest empty
+  //            (no fixture leaks into a live seat).
+  //   REPLAY/SANDBOX: no plugin section (honest empty placeholder seats).
+  // projectPluginEvidenceCandidates is pure (no execution / import / network):
+  // approved/published → suggested(observed:false); draft is dropped; trust never
+  // escalates to trusted/active.
+  const pluginExtras = useMemo(() => {
+    if (mode === "preview") {
+      return {
+        pluginSources: EXAMPLE_PLUGIN_SOURCES,
+        pluginEvidence: projectPluginEvidenceCandidates(EXAMPLE_PLUGIN_EVIDENCE),
+      };
+    }
+    if (mode === "live") {
+      return {
+        pluginSources: live?.pluginSources,
+        pluginEvidence: projectPluginEvidenceCandidates(live?.pluginEvidence ?? []),
+      };
+    }
+    return { pluginSources: undefined, pluginEvidence: undefined };
+  }, [mode, live]);
+
   return (
     <div className="nav-center-page" data-page="command_center" data-safe-bottom="true">
       <AssistantInbox
         {...props}
         {...stripExtras}
+        {...pluginExtras}
         mode={mode}
         onModeChange={setMode}
         persistFilters={persistViewMode}
