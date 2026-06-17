@@ -477,6 +477,12 @@ export type AssistantInboxLiveInput = {
   >;
   /** Batch 14 LINE D — generic plugin evidence (read-only ingress). */
   pluginEvidence?: ReadonlyArray<import("./plugins/pluginEvidenceSource").PluginEvidence>;
+  /**
+   * Batch 17 LINE A — generic read-only patch candidates for the Patch Candidate
+   * Speed Lane. Absent → honest empty (no lane). Display/preview only — never
+   * applied/committed/dispatched; the inbox holds no runner-execution coupling.
+   */
+  patchCandidates?: ReadonlyArray<import("./plugins/patchCandidateSource").PatchCandidateInput>;
   /** Real learning-loop events (e.g. App eventLog). Filtered to learning types. */
   learningEvents?: ReadonlyArray<{ type: string; payload: unknown }>;
   /** Real persisted project records (H10 useProjectRecordController.records). */

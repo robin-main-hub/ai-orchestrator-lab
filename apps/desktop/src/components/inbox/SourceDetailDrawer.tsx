@@ -1,11 +1,17 @@
 import { useEffect, useRef } from "react";
 import type { PluginSourceHealth } from "../../lib/plugins/pluginManifest";
+import type {
+  PatchCandidateSource,
+  PatchFilePreview,
+  PatchSafetyStatus,
+  PatchVerificationStatus,
+} from "../../lib/plugins/patchCandidateSource";
 
 /**
- * Batch 15 LINE E — read-only detail for a clicked Source Dock row. A typed,
- * primitive-only view of a source row or an evidence candidate. There is NO
- * free-form metadata bag on the plugin contract, so "raw metadata" is exactly
- * these whitelisted generic fields — never a spread of an arbitrary object.
+ * Batch 15 LINE E (+ Batch 17 LINE B/C) — read-only detail for a clicked inbox
+ * row. A typed, primitive-only view of a source row, an evidence candidate, or a
+ * patch candidate. There is NO free-form metadata bag — "raw metadata" is exactly
+ * these whitelisted generic fields, never a spread of an arbitrary object.
  */
 export type SourceDetailItem =
   | {
@@ -27,6 +33,28 @@ export type SourceDetailItem =
       status: "suggested";
       observed: false;
       trust: string;
+    }
+  | {
+      kind: "patch";
+      candidateId: string;
+      runnerId: string;
+      missionId: string;
+      title: string;
+      changedFileCount: number;
+      additions: number;
+      deletions: number;
+      safetyStatus: PatchSafetyStatus;
+      verificationStatus: PatchVerificationStatus;
+      source: PatchCandidateSource;
+      observed: boolean;
+      safetyBlockers: ReadonlyArray<string>;
+      safetyWarnings: ReadonlyArray<string>;
+      secretFindingCount: number;
+      pathPolicyStatus?: PatchSafetyStatus;
+      claimedTests?: { ran: boolean; passed: number; failed: number };
+      actualTests?: { status: PatchVerificationStatus; summary?: string };
+      evidenceRefs: ReadonlyArray<string>;
+      files: ReadonlyArray<PatchFilePreview>;
     };
 
 type DetailField = [string, string];
@@ -39,6 +67,62 @@ type DetailSection = { id: string; label: string; fields: DetailField[] };
  * Metadata section holds only known generic leftovers (currently none).
  */
 function sectionsFor(item: SourceDetailItem): DetailSection[] {
+  if (item.kind === "patch") {
+    const safety: DetailField[] = [["safetyStatus", item.safetyStatus]];
+    if (item.safetyBlockers.length > 0) safety.push(["blockers", item.safetyBlockers.join(", ")]);
+    if (item.safetyWarnings.length > 0) safety.push(["warnings", item.safetyWarnings.join(", ")]);
+    safety.push(["secretFindings", String(item.secretFindingCount)]);
+    if (item.pathPolicyStatus) safety.push(["pathPolicy", item.pathPolicyStatus]);
+    const verification: DetailField[] = [["verificationStatus", item.verificationStatus]];
+    if (item.claimedTests) {
+      verification.push([
+        "claimedTests",
+        `${item.claimedTests.ran ? "ran" : "not_run"} · ${item.claimedTests.passed} passed / ${item.claimedTests.failed} failed`,
+      ]);
+    }
+    if (item.actualTests) {
+      verification.push([
+        "actualTests",
+        item.actualTests.summary
+          ? `${item.actualTests.status} · ${item.actualTests.summary}`
+          : item.actualTests.status,
+      ]);
+    }
+    const sections: DetailSection[] = [
+      {
+        id: "identity",
+        label: "Identity",
+        fields: [
+          ["candidateId", item.candidateId],
+          ["runnerId", item.runnerId],
+          ["missionId", item.missionId],
+        ],
+      },
+      {
+        id: "stats",
+        label: "Stats",
+        fields: [
+          ["changedFileCount", String(item.changedFileCount)],
+          ["additions", String(item.additions)],
+          ["deletions", String(item.deletions)],
+          ["source", item.source],
+          ["observed", String(item.observed)],
+        ],
+      },
+      { id: "safety", label: "Safety", fields: safety },
+      { id: "verification", label: "Verification", fields: verification },
+      ...(item.evidenceRefs.length > 0
+        ? [
+            {
+              id: "evidence",
+              label: "Evidence",
+              fields: [["evidenceRefs", item.evidenceRefs.join(", ")]] as DetailField[],
+            },
+          ]
+        : []),
+    ];
+    return sections.filter((s) => s.fields.length > 0);
+  }
   const identity: DetailField[] = [
     ["pluginId", item.pluginId],
     ["sourceRef", item.sourceRef],
@@ -176,6 +260,44 @@ export function SourceDetailDrawer({
           </section>
         ))}
       </div>
+      {item.kind === "patch" && item.files.length > 0 ? (
+        <div className="mt-2" data-testid="patch-diff-preview">
+          <p className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/45">
+            Diff Preview · diff preview only
+          </p>
+          <ul className="space-y-1">
+            {item.files.map((f, i) => (
+              <li
+                key={`${f.path}-${i}`}
+                data-testid={`patch-diff-file-${i}`}
+                data-change={f.change}
+                className="rounded border border-white/[0.06] bg-white/[0.02] px-1.5 py-1 text-[10px]"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="min-w-0 flex-1 truncate text-zinc-300">{f.path}</span>
+                  <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
+                    {f.change}
+                  </span>
+                  {f.risk ? (
+                    <span
+                      className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground"
+                      data-testid={`patch-diff-risk-${i}`}
+                      data-risk={f.risk}
+                    >
+                      {f.risk}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-0.5 flex items-center gap-1.5 text-[9px] text-muted-foreground/60">
+                  <span className="tabular-nums text-emerald-300/70">+{f.additions}</span>
+                  <span className="tabular-nums text-rose-300/70">-{f.deletions}</span>
+                  {f.hunkSummary ? <span className="min-w-0 truncate">{f.hunkSummary}</span> : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <p className="mt-2 text-[9px] text-muted-foreground/45">view-only · no action</p>
     </aside>
   );

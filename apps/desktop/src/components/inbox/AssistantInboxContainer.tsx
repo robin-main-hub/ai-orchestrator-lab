@@ -16,6 +16,8 @@ import {
   type SourceScenarioKey,
 } from "../../lib/plugins/examplePluginSource";
 import { projectPluginEvidenceCandidates } from "../../lib/plugins/pluginEvidenceSource";
+import { projectPatchCandidates } from "../../lib/plugins/patchCandidateSource";
+import { EXAMPLE_PATCH_CANDIDATES } from "../../lib/plugins/examplePatchCandidate";
 
 /** LINE A — local UI preference key for the remembered seat (no server write). */
 const INBOX_VIEW_MODE_KEY = "ai-orchestrator.inbox-view-mode.v1";
@@ -168,12 +170,22 @@ export function AssistantInboxContainer({
     return { pluginSources: undefined, pluginEvidence: undefined };
   }, [mode, live, sourceScenario]);
 
+  // Batch 17 LINE A — Patch Candidate lane. PREVIEW shows clearly-labeled EXAMPLE
+  // candidates; LIVE shows only real input (no fixture leak); REPLAY/SANDBOX none.
+  // projectPatchCandidates is pure — read-only, never applies/dispatches.
+  const patchExtras = useMemo(() => {
+    if (mode === "preview") return { patchCandidates: projectPatchCandidates(EXAMPLE_PATCH_CANDIDATES) };
+    if (mode === "live") return { patchCandidates: projectPatchCandidates(live?.patchCandidates ?? []) };
+    return { patchCandidates: undefined };
+  }, [mode, live]);
+
   return (
     <div className="nav-center-page" data-page="command_center" data-safe-bottom="true">
       <AssistantInbox
         {...props}
         {...stripExtras}
         {...pluginExtras}
+        {...patchExtras}
         mode={mode}
         onModeChange={setMode}
         persistFilters={persistViewMode}
