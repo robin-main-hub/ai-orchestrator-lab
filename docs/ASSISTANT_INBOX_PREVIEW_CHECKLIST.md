@@ -238,6 +238,26 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## 24. Batch 24 — Evidence Draft / Footnote Surface
+
+Batch 24 added a PREVIEW-only Evidence Draft card: a read-only draft of claims,
+each backed by numbered evidence footnotes with a freshness verdict, plus a
+missing-info/ask slot. Owner checks:
+
+- [ ] **Draft + footnote markers** — the Evidence Draft card shows the draft
+      title and claims with superscript `[n]` footnote markers; unbacked claims
+      show a "needs source" tag instead of a marker.
+- [ ] **Numbered footnotes + freshness chips** — the footnotes table lists each
+      ref (`source-001`…) with a freshness chip: fresh / aging / stale / unknown.
+      A stale footnote present → the header shows an "N stale" warning chip.
+- [ ] **Missing info / ask slot** — the unbacked claim (`claim-4`) appears under
+      "missing info · ask" with a generic ask prompt — no approve/send affordance.
+- [ ] **PREVIEW-only / no leak** — the draft card appears only in PREVIEW; LIVE
+      never shows it.
+- [ ] **Read-only / generic** — display-only (no buttons), generic names only,
+      pure projection (deterministic chips from an injected reference time),
+      passes assertNoSideEffectActionControls + assertNoForbiddenActionText.
+
 ## 23. Batch 23 — Generic Source Pack Demo
 
 Batch 23 added a PREVIEW-only demo of a bundled source pack feeding the OS. Owner
