@@ -460,6 +460,10 @@ function StatusStrip({
   recordCount,
   lastUpdateSource,
   generatedAt,
+  activeViewLabel,
+  filterSummary,
+  srcHealth,
+  replayCount,
 }: {
   mode: InboxViewMode;
   total: number;
@@ -473,6 +477,14 @@ function StatusStrip({
   recordCount?: number;
   lastUpdateSource?: string;
   generatedAt?: string;
+  /** Batch 16 LINE A — active saved-view/preset label (or "custom"). */
+  activeViewLabel?: string;
+  /** Batch 16 LINE A — compact search/filter state summary. */
+  filterSummary?: string;
+  /** Batch 16 LINE A — source health counts (only when ≥1 source present). */
+  srcHealth?: { connected: number; stale: number; error: number };
+  /** Batch 16 LINE A — replay item count (read-only eventLog size). */
+  replayCount?: number;
 }) {
   return (
     <div
@@ -487,12 +499,30 @@ function StatusStrip({
       data-gate={gateKind ?? "none"}
     >
       <StatChip>{mode.toUpperCase()}</StatChip>
+      {activeViewLabel ? (
+        <StatChip testid="assistant-inbox-stat-view">view · {activeViewLabel}</StatChip>
+      ) : null}
+      {filterSummary ? (
+        <StatChip testid="assistant-inbox-stat-filter">filter · {filterSummary}</StatChip>
+      ) : null}
       <StatChip>{total} items</StatChip>
       <StatChip>{liveSections}/4 live</StatChip>
       <StatChip>{emptySections}/4 empty</StatChip>
       <StatChip testid="assistant-inbox-stat-blocked">{blocked} blocked</StatChip>
       <StatChip testid="assistant-inbox-stat-warnings">{warnings} warn</StatChip>
       {gateLabel ? <StatChip>gate · {gateLabel}</StatChip> : null}
+      {srcHealth ? (
+        <>
+          <StatChip testid="assistant-inbox-stat-src-connected">
+            src ✓{srcHealth.connected}
+          </StatChip>
+          <StatChip testid="assistant-inbox-stat-src-stale">~{srcHealth.stale}</StatChip>
+          <StatChip testid="assistant-inbox-stat-src-error">!{srcHealth.error}</StatChip>
+        </>
+      ) : null}
+      {typeof replayCount === "number" ? (
+        <StatChip testid="assistant-inbox-stat-replay">{replayCount} replay</StatChip>
+      ) : null}
       {typeof eventCount === "number" ? (
         <StatChip testid="assistant-inbox-stat-events">{eventCount} events</StatChip>
       ) : null}
@@ -1513,6 +1543,18 @@ export function AssistantInbox({
     sourceDockRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     sourceDockRef.current?.focus();
   }, [command]);
+  // Batch 16 LINE A — Operator Console derivations (all from props already on
+  // screen; zero server call, zero write). Active view label, a terse filter
+  // summary, source-health counts, and the read-only replay item count.
+  const activeViewLabel = activeViewPreset(focus, category, query)?.label ?? "custom";
+  const filterParts: string[] = [];
+  if (query.trim()) filterParts.push(`q:${query.trim()}`);
+  if (category !== "all") filterParts.push(`cat:${category}`);
+  if (focus !== "all") filterParts.push(`focus:${focus}`);
+  const filterSummary = filterParts.length > 0 ? filterParts.join(" · ") : "none";
+  const consoleSrcSummary = summarizeSourceHealth(pluginSources ?? [], pluginEvidence ?? []);
+  const hasSources = (pluginSources?.length ?? 0) > 0;
+  const replayCount = recentEvents?.length;
   return (
     <Card
       className="border-white/10 bg-black/40 py-3"
@@ -1565,6 +1607,18 @@ export function AssistantInbox({
         recordCount={recordCount}
         lastUpdateSource={lastUpdateSource}
         generatedAt={generatedAt}
+        activeViewLabel={activeViewLabel}
+        filterSummary={filterSummary}
+        srcHealth={
+          hasSources
+            ? {
+                connected: consoleSrcSummary.connected,
+                stale: consoleSrcSummary.stale,
+                error: consoleSrcSummary.error,
+              }
+            : undefined
+        }
+        replayCount={replayCount}
       />
       <div className="px-4 pb-2">
         <input
