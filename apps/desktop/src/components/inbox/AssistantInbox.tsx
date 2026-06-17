@@ -18,6 +18,7 @@ import {
 } from "../../lib/plugins/pluginWorkItemSource";
 import type { PluginEvidenceCandidate } from "../../lib/plugins/pluginEvidenceSource";
 import type { PluginSourceHealth } from "../../lib/plugins/pluginManifest";
+import { SOURCE_SCENARIO_KEYS, type SourceScenarioKey } from "../../lib/plugins/examplePluginSource";
 import { readJsonState, writeJsonState } from "../../lib/persistentJsonState";
 import {
   readUserViews,
@@ -152,6 +153,10 @@ export type AssistantInboxProps = {
   pluginSources?: ReadonlyArray<WorkItemLiteProviderResult>;
   /** Batch 14 LINE D — generic plugin evidence candidates (read-only). */
   pluginEvidence?: ReadonlyArray<PluginEvidenceCandidate>;
+  /** Batch 15 LINE C — PREVIEW-only Source Dock demo scenario (view state only). */
+  sourceScenario?: SourceScenarioKey;
+  /** Batch 15 LINE C — PREVIEW-only scenario change handler (local UI state). */
+  onSourceScenarioChange?: (key: SourceScenarioKey) => void;
 };
 
 /**
@@ -1245,6 +1250,51 @@ function PluginSourcesCard({
   );
 }
 
+/**
+ * Batch 15 LINE C — PREVIEW-only demo deck: a radio-group scenario switch (NOT
+ * buttons) that flips the Source Dock between generic external-source health
+ * states. Rendered only in the PREVIEW seat; never affects the LIVE data plane.
+ */
+function SourceDemoDeck({
+  scenario,
+  onChange,
+}: {
+  scenario: SourceScenarioKey;
+  onChange: (key: SourceScenarioKey) => void;
+}) {
+  return (
+    <div data-testid="source-demo-deck" className="mx-4 mb-1.5 flex flex-wrap items-center gap-1">
+      <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-200/70">
+        demo deck · PREVIEW
+      </span>
+      {SOURCE_SCENARIO_KEYS.map((k) => {
+        const active = k === scenario;
+        return (
+          <label
+            key={k}
+            data-testid={`source-demo-option-${k}`}
+            data-active={active}
+            className={`cursor-pointer rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
+              active
+                ? "border-amber-400/40 bg-amber-400/10 text-amber-100"
+                : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-300"
+            }`}
+          >
+            <input
+              type="radio"
+              name="source-demo-scenario"
+              className="sr-only"
+              checked={active}
+              onChange={() => onChange(k)}
+            />
+            {k}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 export function AssistantInbox({
   evidence = [],
   learningLoops = [],
@@ -1263,6 +1313,8 @@ export function AssistantInbox({
   command,
   pluginSources,
   pluginEvidence,
+  sourceScenario,
+  onSourceScenarioChange,
 }: AssistantInboxProps) {
   const total =
     evidence.length + learningLoops.length + memoryCandidates.length + manifestEntries.length;
@@ -1477,6 +1529,9 @@ export function AssistantInbox({
           {liveSparse ? <LiveEmptyHero /> : null}
           {focus !== "warnings" ? (
             <WorkLaneRail lanes={visibleLanes} query={query} category={category} />
+          ) : null}
+          {mode === "preview" && onSourceScenarioChange ? (
+            <SourceDemoDeck scenario={sourceScenario ?? "mixed"} onChange={onSourceScenarioChange} />
           ) : null}
           <PluginSourcesCard sources={pluginSources} evidence={pluginEvidence} />
           {showCards ? (
