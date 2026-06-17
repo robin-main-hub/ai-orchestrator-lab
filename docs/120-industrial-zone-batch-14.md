@@ -21,7 +21,7 @@ plugin은 OS의 generic interface(manifest / WorkItemLite provider / evidence pr
 - **E (배선 + 테스트)** — container가 좌석별로 분리: PREVIEW → example fixture(명시적 예시, live 아님), LIVE → 실제 `live.pluginSources/pluginEvidence`만(없으면 섹션 자체가 안 뜸 = honest empty), REPLAY/SANDBOX → 없음. 8개 테스트로 표시/행/evidence/비활성 처리/draft 미승격/표시전용/도메인 용어 0/PREVIEW→LIVE 누수 0 단언.
 
 ## 핵심 설계 결정
-- **OS core 무오염**: OS core(projection/inbox)는 plugin **generic interface에만** 의존. 도메인 plugin이 OS generic interface에 의존하는 방향이지, 반대가 아님. 그래서 Batch 15(example-domain-plugin), Batch 16(GIOLITE ERP plugin)은 OS 코드 변경 없이 example/플러그인 쪽에서만 붙는다.
+- **OS core 무오염**: OS core(projection/inbox)는 plugin **generic interface에만** 의존. 도메인 plugin이 OS generic interface에 의존하는 방향이지, 반대가 아님. 외부 도메인 결합은 OS 코드 변경 없이 generic interface 위의 plugin example로만 붙는다 — OS docs/roadmap은 특정 외부 도메인/업무 앱을 milestone으로 명명하지 않는다(외부 소스 레이어는 **Generic External Source Layer / Source Dock**로만 유지).
 - **벽돌 아니라 방**: 사용자 지적("타입이 생겼다"는 성공 기준 아님)을 반영해 PR2를 protocol brick으로 더 쌓는 대신 **세로로 보이는 슬라이스**(#595)로 만들었다 — 인박스에 실제로 보이는 Plugin Sources 카드.
 - **가시성 vs 정직**: PREVIEW에서만 example가 보이고(분명히 예시), LIVE는 진짜 입력이 없으면 아무것도 안 보인다. fixture가 live 좌석으로 새지 않는다.
 
@@ -49,6 +49,11 @@ SANDBOX 실행 0
 
 ## 미접촉 / 다음 후보
 - 실제 브라우저에서 PREVIEW Plugin Sources 카드 육안 확인(오너 프리뷰).
-- **Batch 15 후보**: example-domain-plugin 예제 팩(generic interface 위에 도메인 plugin이 어떻게 붙는지 example로만 — OS core 무변경).
-- **Batch 16 후보**: GIOLITE ERP plugin(여전히 plugin 쪽에서만; OS core 무오염 유지).
-- **SANDBOX shell은 plugin framework 뒤**(action-risk) — 계속 보류.
+
+### OS 로드맵 (generic only)
+외부 소스 레이어는 **Generic External Source Layer / Source Dock**로만 유지한다. OS 로드맵은 특정 외부 도메인/업무 앱을 future OS milestone으로 명명하지 않는다 — OS는 OS, 외부 소스 레이어는 generic.
+
+- **Batch 15 — Source Dock V2 / External Source Deck**: Source Dock을 더 멋있게(visual polish), source health 한눈에, PREVIEW에서 source를 바꿔보는 데모 덱(External Source Demo Pack), Command Palette → Source Dock 점프, plugin source row 클릭 → detail drawer. "더 빠르고 더 재밌게."
+- **Batch 16 — Operator Console / Command Deck**: 오퍼레이터 콘솔 / 커맨드 덱 속도 레이어(Operator Console Speed Layer).
+- **Batch 17 — Sandbox Proposal Shell**: action-risk라 plugin framework 뒤로 미뤄둔 SANDBOX 제안 셸(제안만, 실행은 그 다음).
+- **Batch 18 — Patch Candidate Speed Lane**: 패치 후보 스피드 레인.
