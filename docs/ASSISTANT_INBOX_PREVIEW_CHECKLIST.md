@@ -238,6 +238,28 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## 18. Batch 18 — LIVE Patch Candidate Wiring
+
+Batch 18 maps real H8 runner patch handoffs into the Patch Candidate lane as
+read-only LIVE candidates. Owner preview checks:
+
+- [ ] **Live candidate appears when provided** — when the app passes mapped patch
+      candidates (from `RunnerPatchHandoff` + `RunnerPatchSafetyReport`), the lane
+      shows them with safety / verification / source / observed / file counts.
+- [ ] **Honest empty when none** — with no patch candidates the lane is absent
+      (no fabricated rows); the per-mission approval queues aren't unified to an
+      app feed yet, so LIVE is honest-empty for now.
+- [ ] **Blocked candidates inspectable** — a blocked candidate is tinted blocked,
+      opens its detail drawer, but exposes NO apply / commit / dispatch control.
+- [ ] **Claimed vs actual verification visible** — the row + detail drawer show
+      verification status (claimed / actual / not_run); a missing safety report
+      shows as `warning`, never `pass`.
+- [ ] **Health summary strip** — total · pass · warn · blocked · observed ·
+      not-observed · no-actual · claimed counts; display-only.
+- [ ] **No apply/commit/PR controls anywhere** — the mapper is read-only
+      (type-only imports, no runner execution path); raw diff text is never shown
+      (only counts/flags); generic only.
+
 ## 17. Batch 17 — Patch Candidate Speed Lane
 
 Batch 17 exposed the existing runner patch/diff handoff as a fast, read-only patch
