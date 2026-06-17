@@ -97,3 +97,40 @@ describe("Batch 15 LINE E — source detail drawer (zero-button, view-only)", ()
     expect(screen.queryByTestId("source-detail-drawer")).toBeNull();
   });
 });
+
+// Batch 16 LINE D — detail drawer polish: grouped operator-room sections, full
+// sourceRef, and the close affordance now carries the local-detail scope.
+describe("Batch 16 LINE D — drawer sections + scope", () => {
+  it("groups source fields into Identity / Health / Source / Observed sections", () => {
+    render(<AssistantInboxContainer />);
+    fireEvent.click(screen.getByTestId("plugin-row-example-plugin-0"));
+    const identity = screen.getByTestId("source-detail-section-identity");
+    expect(identity.querySelector('[data-field="pluginId"]')).toBeTruthy();
+    expect(identity.querySelector('[data-field="sourceRef"]')).toBeTruthy();
+    expect(screen.getByTestId("source-detail-section-health")).toBeTruthy();
+    expect(screen.getByTestId("source-detail-section-source")).toBeTruthy();
+    expect(screen.getByTestId("source-detail-section-observed")).toBeTruthy();
+    // all original field testids still present (contract preserved)
+    for (const k of ["pluginId", "sourceRef", "category", "health", "observed"]) {
+      expect(screen.getByTestId(`source-detail-field-${k}`)).toBeTruthy();
+    }
+  });
+
+  it("evidence drawer groups into Identity / Evidence·Trust / Observed", () => {
+    render(<AssistantInboxContainer />);
+    fireEvent.click(screen.getByTestId("plugin-evidence-0"));
+    expect(screen.getByTestId("source-detail-section-evidence")).toBeTruthy();
+    expect(screen.getByTestId("source-detail-field-trust")).toBeTruthy();
+    expect(screen.queryByTestId("source-detail-section-health")).toBeNull();
+  });
+
+  it("renders the full sourceRef (not truncated) and the close is a local-detail control", () => {
+    render(<AssistantInboxContainer />);
+    fireEvent.click(screen.getByTestId("plugin-row-example-plugin-0"));
+    expect(screen.getByTestId("source-detail-field-sourceRef").textContent).toContain("source-001");
+    const close = screen.getByTestId("source-detail-close");
+    expect(close.getAttribute("data-action-scope")).toBe("local-detail");
+    // the whole open drawer still satisfies the invariant (role=button close is scoped)
+    assertNoSideEffectActionControls(screen.getByTestId("source-detail-drawer"));
+  });
+});
