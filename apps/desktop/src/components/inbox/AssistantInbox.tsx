@@ -1631,6 +1631,36 @@ function patchDetailItem(c: PatchCandidate): SourceDetailItem {
 export type PatchLaneFilter = "all" | "blocked" | "warning" | "runner";
 
 /** Batch 17 LINE E — read-only comparison strip (pure summarize, no model/runner). */
+/** Batch 18 LINE C — patch lane health/summary strip (display-only, shown ≥1). */
+function PatchSummaryStrip({ candidates }: { candidates: ReadonlyArray<PatchCandidate> }) {
+  const s = summarizePatchCandidates(candidates);
+  const chip = (testid: string, label: string, count: number, tone: string) => (
+    <span
+      data-testid={testid}
+      data-count={count}
+      className={`rounded px-1 tabular-nums ${tone}`}
+    >
+      {label} {count}
+    </span>
+  );
+  return (
+    <div
+      data-testid="patch-summary-strip"
+      className="mb-2 flex flex-wrap items-center gap-1 text-[9px] uppercase tracking-wider"
+    >
+      {chip("patch-sum-total", "total", s.count, "border border-white/10 bg-white/[0.03] text-muted-foreground")}
+      {chip("patch-sum-pass", "pass", s.pass, "border border-emerald-400/30 bg-emerald-400/10 text-emerald-200")}
+      {chip("patch-sum-warning", "warn", s.warning, "border border-amber-400/30 bg-amber-400/10 text-amber-200")}
+      {chip("patch-sum-blocked", "blocked", s.blocked, "border border-rose-400/30 bg-rose-400/10 text-rose-200")}
+      <span className="mx-0.5 text-muted-foreground/30">·</span>
+      {chip("patch-sum-observed", "obs", s.observed, "border border-white/10 bg-white/[0.03] text-muted-foreground")}
+      {chip("patch-sum-not-observed", "not-obs", s.notObserved, "border border-white/10 bg-white/[0.03] text-muted-foreground/70")}
+      {chip("patch-sum-no-actual", "no-actual", s.verificationNotRun, "border border-white/10 bg-white/[0.03] text-muted-foreground/70")}
+      {chip("patch-sum-claimed", "claimed", s.claimedTestsPresent, "border border-white/10 bg-white/[0.03] text-muted-foreground")}
+    </div>
+  );
+}
+
 function PatchComparisonStrip({ candidates }: { candidates: ReadonlyArray<PatchCandidate> }) {
   const s = summarizePatchCandidates(candidates);
   return (
@@ -1753,6 +1783,7 @@ function PatchCandidatesCard({
       <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         Patch Candidate Lane · read-only · preview only
       </p>
+      <PatchSummaryStrip candidates={candidates} />
       {candidates.length > 1 ? <PatchComparisonStrip candidates={candidates} /> : null}
       {onFilter ? <PatchLaneControls filter={filter} onChange={onFilter} /> : null}
       <ul className="space-y-1">
