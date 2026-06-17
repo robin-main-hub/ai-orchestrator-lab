@@ -306,6 +306,7 @@ import { resolvePersonaPortraitUrl } from "./lib/personaPortrait";
 import { CommandPalette, type CommandEntry } from "./components/CommandPalette";
 import { AssistantInboxContainer } from "./components/inbox/AssistantInboxContainer";
 import type { InboxCommand } from "./components/inbox/AssistantInbox";
+import { buildInboxPaletteCommands } from "./lib/inboxPaletteCommands";
 import { ConfigLibraryPanel } from "./components/ConfigLibraryPanel";
 import { ConversationWorkbench } from "./components/ConversationWorkbench";
 import { DebateAnnexPage } from "./components/debate-chamber/DebateAnnexPage";
@@ -4273,41 +4274,11 @@ export function App() {
   }
 
   const paletteCommands: CommandEntry[] = [
-    {
-      id: "inbox.goto",
-      verb: "이동",
-      label: "Assistant Inbox 열기",
-      hint: "작전극장 / command center",
-      run: () => setActiveNavItem("command_center"),
-    },
-    {
-      id: "inbox.replay",
-      verb: "전환",
-      label: "REPLAY 좌석",
-      hint: "Assistant Inbox 과거 eventLog 재생(read-only)",
-      run: () => goInboxCommand("mode", "replay"),
-    },
-    {
-      id: "inbox.failures",
-      verb: "필터",
-      label: "Failures 필터",
-      hint: "Assistant Inbox 카테고리=failure",
-      run: () => goInboxCommand("category", "failure"),
-    },
-    {
-      id: "inbox.blocked",
-      verb: "포커스",
-      label: "Blocked 보기",
-      hint: "Assistant Inbox 포커스=blocked",
-      run: () => goInboxCommand("focus", "blocked"),
-    },
-    {
-      id: "inbox.clear",
-      verb: "초기화",
-      label: "Inbox 필터 초기화",
-      hint: "검색/카테고리/포커스 모두 해제",
-      run: () => goInboxCommand("clear"),
-    },
+    // Batch 12 LINE A — inbox view commands from a pure, unit-tested builder.
+    ...buildInboxPaletteCommands({
+      goInbox: () => setActiveNavItem("command_center"),
+      dispatch: goInboxCommand,
+    }),
     {
       id: "switch.conversation",
       verb: "전환",
