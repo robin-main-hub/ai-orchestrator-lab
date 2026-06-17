@@ -238,6 +238,34 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## 16. Batch 16 — Operator Console / Command Deck
+
+Batch 16 turned the inbox into an operator cockpit and flipped the interaction
+invariant from "zero `<button>`" to **"no side-effect action control"**. Owner
+preview checks:
+
+- [ ] **Operator Console (3-second read)** — the top strip shows seat · active view ·
+      filter summary · source health (✓/~/!) · blocked · warn · gate · replay count;
+      everything reflects real on-screen state, never fabricated; LIVE-empty shows
+      no source-health chips.
+- [ ] **Command Deck** — a row of buttons (My Desk / Today / Blocked / Failures /
+      Runner / Learning / Replay / Source Dock / Clear Filters); each changes the
+      view/seat only; the active preset is highlighted; Source Dock scrolls without
+      changing the seat; Clear Filters returns to My Desk.
+- [ ] **Source Dock quick controls** — Jump / Alerts (stale·error only) / Sources /
+      Evidence / All narrow what the dock lists; the health strip still shows the
+      full overview; nothing syncs/refreshes/runs.
+- [ ] **Detail drawer sections** — the drawer reads as Identity / Health / Source /
+      Evidence·Trust / Observed; sourceRef shows in full; Esc and ✕ close it.
+- [ ] **Interaction invariant (the headline)** — every interactive control carries
+      an allowed `data-action-scope` (local-view / local-preference / local-detail)
+      and no side-effect action word (send/approve/run/sync/dispatch/write/…). Real
+      `<button>`s are allowed; what's forbidden is a control that *does* something to
+      the OS. New controls must pass `assertNoSideEffectActionControls` — no more
+      `role=button` hacks needed.
+- [ ] **Generic / no domain roadmap** — all labels generic; no ERP/domain/domain
+      vocabulary; no company/domain/ERP future-milestone wording.
+
 ## 15. Batch 15 — Source Dock V2 / External Source Deck
 
 Batch 15 grew the Batch 14 plugin-source card into a real OS surface: the Source
@@ -261,10 +289,10 @@ checks:
 - [ ] **Row → detail drawer** — clicking a source/evidence row opens a local
       read-only drawer (pluginId/sourceRef/status/health/category/observed, or
       trust for evidence); Esc and the ✕ close it; **zero action buttons**.
-- [ ] **Zero-button preserved (load-bearing)** — rows and the drawer close are
-      `role="button"` divs + Esc, **NOT `<button>`** and **NOT Radix Sheet/Dialog**.
-      Do not "fix" these into real `<button>`s — that would break 18+ button-free
-      tests and the no-side-effect-control philosophy.
+- [ ] **Interaction scope (updated in Batch 16)** — rows and the drawer close stay
+      `role="button"` divs + Esc (now `data-action-scope="local-detail"`). As of
+      Batch 16 the rule is **"no side-effect action control"** (not "zero button"):
+      real `<button>`s are fine when scoped local-view/preference/detail. See §16.
 - [ ] **Generic / no domain roadmap** — every label/fixture/field is generic
       (example-plugin, external-source, source-00x, entity-001); no ERP/domain/domain
       vocabulary and no company/domain/ERP future-milestone wording.
