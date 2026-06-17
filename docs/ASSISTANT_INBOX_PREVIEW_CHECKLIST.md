@@ -205,3 +205,21 @@ Tick on each future preview:
       execute an action.
 - [ ] **Still view-only** — no side-effect controls; zero `<button>` (search =
       input, presets/filters = radios); REPLAY read-only; LIVE gets no preview data.
+
+## 12. Batch 12 — user saved views + palette apply
+
+Batch 12 added user-defined saved views and palette apply. Interaction rule
+refined: **local preference actions** (save/delete/apply view locally) are
+allowed; **OS actions** (send/approve/write/append/run/apply patch/dispatch) are
+forbidden. Tick on each future preview:
+
+- [ ] **Manager gated** — the Saved View Manager appears only with persistence on;
+      the default read-only inbox is unchanged (no buttons).
+- [ ] **Local-preference labelled** — save / apply / delete carry
+      `data-action-scope="local-preference"` and read "로컬 전용"; no OS-action words.
+- [ ] **Save / apply / delete** — save current view by name (localStorage), apply
+      restores mode+focus+category+search, delete removes it; no server / EventStorage write.
+- [ ] **Palette apply** — saved views appear in ⌘K and apply local view only (no
+      save/delete from the palette); repeated apply of the same view re-applies.
+- [ ] **Honesty** — invalid saved views ignored; empty list → no palette entries;
+      preview→LIVE no fixture leak; no ERP/GIO/domain terms.
