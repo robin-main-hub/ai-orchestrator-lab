@@ -78,8 +78,8 @@ export function buildInboxPaletteCommands(
     ...userViews.map((v) => ({
       id: `inbox.view.${v.id}`,
       verb: "뷰",
-      label: `뷰: ${v.name}`,
-      hint: "저장된 뷰 적용 (로컬)",
+      label: `인박스 뷰 적용: ${v.name}`,
+      hint: "로컬 저장 뷰 · 부작용 없음",
       run: () => h.applyView(v),
     })),
   ];
