@@ -54,6 +54,25 @@ describe("Batch 12 — LINE B/C: user saved view manager (local UI pref)", () =>
     expect(q("saved-view-keep-me")).toBeTruthy();
   });
 
+  it("every manager button is a local-preference control (no side-effect action)", () => {
+    const { container } = render(<AssistantInboxContainer live={live} persistViewMode />);
+    fireEvent.click(screen.getByTestId("inbox-focus-blocked"));
+    saveCurrentAs("v1");
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.length).toBeGreaterThan(0);
+    expect(
+      buttons.every((b) => b.getAttribute("data-action-scope") === "local-preference"),
+    ).toBe(true);
+  });
+
+  it("a saved PREVIEW view never leaks fixtures into LIVE", () => {
+    render(<AssistantInboxContainer live={live} persistViewMode />);
+    fireEvent.click(screen.getByTestId("inbox-mode-option-preview"));
+    saveCurrentAs("preview-view");
+    fireEvent.click(screen.getByTestId("inbox-mode-option-live"));
+    expect(q("evidence-card-evidence-001")).toBeNull(); // no fixture in LIVE
+  });
+
   it("manager controls carry no OS side-effect action words", () => {
     const { container } = render(<AssistantInboxContainer live={live} persistViewMode />);
     const text = (container.textContent ?? "").toLowerCase();

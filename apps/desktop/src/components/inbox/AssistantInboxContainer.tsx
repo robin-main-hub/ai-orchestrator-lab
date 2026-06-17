@@ -88,6 +88,7 @@ export function AssistantInboxContainer({
   // from the palette (e.g. "Switch to REPLAY"); filter commands flow to the inbox.
   useEffect(() => {
     if (command?.kind === "mode" && command.value) setMode(command.value as InboxViewMode);
+    else if (command?.kind === "applyView" && command.view) setMode(command.view.mode);
   }, [command]);
 
   // DATA-PLANE SEPARATION (Batch 5 LINE S): each seat reads ONE projection and
