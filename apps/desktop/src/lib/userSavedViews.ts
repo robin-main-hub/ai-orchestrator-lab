@@ -1,5 +1,9 @@
 import { readJsonState, writeJsonState } from "./persistentJsonState";
-import type { InboxViewMode, InboxFocus } from "../components/inbox/AssistantInbox";
+import type {
+  InboxViewMode,
+  InboxFocus,
+  InboxCommand,
+} from "../components/inbox/AssistantInbox";
 import type { EventCategory } from "./eventClassification";
 
 /**
@@ -16,6 +20,8 @@ export type UserSavedView = {
   focus: InboxFocus;
   category: "all" | EventCategory;
   search: string;
+  /** Forward-compat marker; missing is treated as 1, other versions ignored. */
+  schemaVersion?: 1;
 };
 
 const KEY = "ai-orchestrator.inbox-saved-views.v1";
@@ -51,8 +57,31 @@ export function isValidUserView(v: unknown): v is UserSavedView {
     FOCUSES.includes(o.focus) &&
     typeof o.category === "string" &&
     CATS.includes(o.category) &&
-    typeof o.search === "string"
+    typeof o.search === "string" &&
+    (o.schemaVersion === undefined || o.schemaVersion === 1)
   );
+}
+
+/** Sanitize a display name (trim + cap length). Pure. */
+export function sanitizeSavedViewName(name: string): string {
+  return name.trim().replace(/\s+/g, " ").slice(0, 48);
+}
+
+/**
+ * Convert a saved view into a one-shot view command payload (nonce-less). The
+ * caller (App) attaches the incrementing nonce. View-only — applying it sets
+ * mode/focus/category/search, never an OS action.
+ */
+export function applyUserSavedInboxView(view: UserSavedView): Omit<InboxCommand, "nonce"> {
+  return {
+    kind: "applyView",
+    view: {
+      mode: view.mode,
+      focus: view.focus,
+      category: view.category,
+      search: view.search,
+    },
+  };
 }
 
 export function readUserViews(): UserSavedView[] {
