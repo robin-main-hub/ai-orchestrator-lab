@@ -74,6 +74,15 @@ export function buildInboxPaletteCommands(
       hint: "검색/카테고리/포커스 해제",
       run: () => h.dispatch("clear"),
     },
+    // Batch 15 LINE D — jump to the Source Dock (외부 소스 갑판). View/move only:
+    // scrolls + focuses the dock section; never syncs/runs/dispatches a source.
+    {
+      id: "inbox.sourceDock",
+      verb: "이동",
+      label: "Source Dock 열기",
+      hint: "외부 소스 보기 · 화면 이동만",
+      run: () => h.dispatch("focusSection", "source-dock"),
+    },
     // Batch 12 LINE D — user saved views as palette commands (view-only apply).
     ...userViews.map((v) => ({
       id: `inbox.view.${v.id}`,
