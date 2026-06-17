@@ -429,6 +429,86 @@ function PreviewBanner() {
   );
 }
 
+/** Batch 16 LINE B — short hints for the Command Deck buttons (tooltip text). */
+const DECK_HINTS: Record<string, string> = {
+  "my-desk": "전체 보기 · 필터 해제",
+  today: "오늘 레인",
+  blocked: "막힌 항목",
+  failures: "실패 카테고리",
+  runner: "러너 카테고리",
+  learning: "러닝 카테고리",
+  replay: "리플레이 좌석",
+  "source-dock": "외부 소스 갑판으로 이동 · 화면 이동만",
+  clear: "검색/필터 초기화",
+};
+
+/**
+ * Batch 16 LINE B — Command Deck: a visible deck of LOCAL VIEW controls for fast
+ * operation. These ARE real <button>s (data-action-scope="local-view") — the
+ * upgraded invariant allows local view controls; the enemy is a side-effect OS
+ * action. Each button is a thin wrapper over the existing onPreset / jump / clear
+ * handlers — it changes view/seat state only, never sends/writes/runs anything.
+ */
+function CommandDeck({
+  activeViewId,
+  onPreset,
+  onSourceDock,
+  onClear,
+}: {
+  activeViewId?: string;
+  onPreset: (p: ViewPreset) => void;
+  onSourceDock: () => void;
+  onClear: () => void;
+}) {
+  const base =
+    "rounded border px-1.5 py-0.5 text-[10px] font-medium tracking-wide transition-colors";
+  const tone = (active: boolean) =>
+    active
+      ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+      : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-200";
+  return (
+    <div data-testid="command-deck" className="flex flex-wrap items-center gap-1 px-4 pb-2">
+      <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-cyan-200/60">
+        deck
+      </span>
+      {VIEW_PRESETS.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          data-testid={`command-deck-${p.id}`}
+          data-action-scope="local-view"
+          data-active={p.id === activeViewId}
+          title={DECK_HINTS[p.id]}
+          onClick={() => onPreset(p)}
+          className={`${base} ${tone(p.id === activeViewId)}`}
+        >
+          {p.label}
+        </button>
+      ))}
+      <button
+        type="button"
+        data-testid="command-deck-source-dock"
+        data-action-scope="local-view"
+        title={DECK_HINTS["source-dock"]}
+        onClick={onSourceDock}
+        className={`${base} ${tone(false)}`}
+      >
+        Source Dock
+      </button>
+      <button
+        type="button"
+        data-testid="command-deck-clear"
+        data-action-scope="local-view"
+        title={DECK_HINTS.clear}
+        onClick={onClear}
+        className={`${base} ${tone(false)}`}
+      >
+        Clear Filters
+      </button>
+    </div>
+  );
+}
+
 /** A compact command-center stat pill. Presentational, no action. */
 function StatChip({ children, testid }: { children: React.ReactNode; testid?: string }) {
   return (
@@ -1469,6 +1549,17 @@ export function AssistantInbox({
     setCategory(p.category);
     onFocusPick(p.focus);
   };
+  // Batch 16 LINE B — shared local-view callbacks for the Command Deck (also used
+  // by the Batch 15 palette jump effect). View/focus only — no data action.
+  const jumpToSourceDock = useCallback(() => {
+    sourceDockRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    sourceDockRef.current?.focus();
+  }, []);
+  const clearFilters = useCallback(() => {
+    setQuery("");
+    setCategory("all");
+    setFocus("all");
+  }, []);
   // Batch 12 LINE B/C — user-defined saved views (local UI preference only).
   const [userViews, setUserViews] = useState<UserSavedView[]>(() =>
     persistFilters ? readUserViews() : [],
@@ -1540,13 +1631,13 @@ export function AssistantInbox({
   // empty (LIVE with no input) the ref is null and this is an honest no-op.
   useEffect(() => {
     if (command?.kind !== "focusSection" || command.value !== "source-dock") return;
-    sourceDockRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    sourceDockRef.current?.focus();
-  }, [command]);
+    jumpToSourceDock();
+  }, [command, jumpToSourceDock]);
   // Batch 16 LINE A — Operator Console derivations (all from props already on
   // screen; zero server call, zero write). Active view label, a terse filter
   // summary, source-health counts, and the read-only replay item count.
-  const activeViewLabel = activeViewPreset(focus, category, query)?.label ?? "custom";
+  const activeView = activeViewPreset(focus, category, query);
+  const activeViewLabel = activeView?.label ?? "custom";
   const filterParts: string[] = [];
   if (query.trim()) filterParts.push(`q:${query.trim()}`);
   if (category !== "all") filterParts.push(`cat:${category}`);
@@ -1619,6 +1710,12 @@ export function AssistantInbox({
             : undefined
         }
         replayCount={replayCount}
+      />
+      <CommandDeck
+        activeViewId={activeView?.id}
+        onPreset={onPreset}
+        onSourceDock={jumpToSourceDock}
+        onClear={clearFilters}
       />
       <div className="px-4 pb-2">
         <input
