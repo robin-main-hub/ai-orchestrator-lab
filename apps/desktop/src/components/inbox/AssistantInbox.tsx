@@ -28,8 +28,10 @@ import type { PluginSourceHealth } from "../../lib/plugins/pluginManifest";
 import { SOURCE_SCENARIO_KEYS, type SourceScenarioKey } from "../../lib/plugins/examplePluginSource";
 import { SourceDetailDrawer, type SourceDetailItem } from "./SourceDetailDrawer";
 import {
+  buildPatchCompareBoard,
   summarizePatchCandidates,
   type PatchCandidate,
+  type PatchLaneKey,
   type PatchSafetyStatus,
 } from "../../lib/plugins/patchCandidateSource";
 import { readJsonState, writeJsonState } from "../../lib/persistentJsonState";
@@ -1756,6 +1758,106 @@ function PatchLaneControls({
   );
 }
 
+/** Batch 20 LINE D — lane tone for the compare board. */
+const LANE_TONE: Record<PatchLaneKey, string> = {
+  safe: "border-emerald-400/30 bg-emerald-400/[0.06] text-emerald-200",
+  watch: "border-amber-400/30 bg-amber-400/[0.06] text-amber-200",
+  risk: "border-rose-400/30 bg-rose-400/[0.06] text-rose-200",
+};
+
+/**
+ * Batch 20 LINE D — read-only compare board: safe/watch/risk lanes (sorted by
+ * churn = fastest to review first), a file-overlap heatmap, verification-delta
+ * (claimed vs actual) flags, and safety-reason chips. Display-only, zero controls.
+ */
+function PatchCompareBoardView({ candidates }: { candidates: ReadonlyArray<PatchCandidate> }) {
+  const board = buildPatchCompareBoard(candidates);
+  const deltaOf = (id: string) => board.deltas.find((d) => d.candidateId === id);
+  return (
+    <div
+      data-testid="patch-compare-board"
+      className="mb-2 rounded-md border border-white/[0.06] bg-white/[0.015] p-2"
+    >
+      <p className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-cyan-200/60">
+        compare · read-only
+      </p>
+      <div className="grid grid-cols-3 gap-1.5">
+        {(["safe", "watch", "risk"] as PatchLaneKey[]).map((lane) => (
+          <div
+            key={lane}
+            data-testid={`patch-lane-${lane}`}
+            data-count={board.lanes[lane].length}
+            className={`rounded border px-1 py-1 ${LANE_TONE[lane]}`}
+          >
+            <p className="mb-0.5 text-[9px] uppercase tracking-wide">
+              {lane} {board.lanes[lane].length}
+            </p>
+            <ul className="space-y-0.5">
+              {board.lanes[lane].map((c) => {
+                const d = deltaOf(c.candidateId);
+                return (
+                  <li
+                    key={c.id}
+                    data-testid={`patch-lane-${lane}-${c.candidateId}`}
+                    className="flex flex-wrap items-center gap-1 text-[9px] text-zinc-300"
+                  >
+                    <span className="font-medium">{c.candidateId}</span>
+                    <span className="tabular-nums text-muted-foreground/60">
+                      +{c.additions}/-{c.deletions}
+                    </span>
+                    {d?.mismatch ? (
+                      <span
+                        data-testid={`patch-delta-mismatch-${c.candidateId}`}
+                        className="rounded bg-amber-400/15 px-1 text-amber-200/80"
+                        title="claimed clean · actual unconfirmed"
+                      >
+                        ⚠ verify
+                      </span>
+                    ) : null}
+                    {c.safetyBlockers.slice(0, 2).map((b, i) => (
+                      <span key={`b${i}`} className="rounded bg-rose-400/10 px-1 text-rose-200/70">
+                        {b}
+                      </span>
+                    ))}
+                    {c.safetyWarnings.slice(0, 1).map((w, i) => (
+                      <span key={`w${i}`} className="rounded bg-amber-400/10 px-1 text-amber-200/70">
+                        {w}
+                      </span>
+                    ))}
+                  </li>
+                );
+              })}
+              {board.lanes[lane].length === 0 ? (
+                <li className="text-[9px] text-muted-foreground/40">—</li>
+              ) : null}
+            </ul>
+          </div>
+        ))}
+      </div>
+      {board.heatmap.length > 0 ? (
+        <div data-testid="patch-heatmap" className="mt-1.5 flex flex-wrap items-center gap-1">
+          <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50">files</span>
+          {board.heatmap.map((h) => (
+            <span
+              key={h.path}
+              data-testid={`patch-heat-${h.path}`}
+              data-count={h.count}
+              data-overlap={h.count >= 2}
+              className={`rounded px-1 text-[9px] tabular-nums ${
+                h.count >= 2
+                  ? "border border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+                  : "border border-white/10 bg-white/[0.03] text-muted-foreground/70"
+              }`}
+            >
+              {h.path} ×{h.count}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function PatchCandidatesCard({
   candidates = [],
   cardRef,
@@ -1769,6 +1871,8 @@ function PatchCandidatesCard({
   filter?: PatchLaneFilter;
   onFilter?: (f: PatchLaneFilter) => void;
 }) {
+  // Batch 20 — local-view compare board toggle (display-only).
+  const [compareOpen, setCompareOpen] = useState(false);
   if (candidates.length === 0) return null;
   // Filters narrow the LISTED candidates only; the comparison strip reflects the
   // FULL set (overview) — pure presentation, no data mutation.
@@ -1792,6 +1896,24 @@ function PatchCandidatesCard({
       <PatchSummaryStrip candidates={candidates} />
       {candidates.length > 1 ? <PatchComparisonStrip candidates={candidates} /> : null}
       {onFilter ? <PatchLaneControls filter={filter} onChange={onFilter} /> : null}
+      {candidates.length > 1 ? (
+        <button
+          type="button"
+          data-testid="patch-compare-toggle"
+          data-action-scope="local-view"
+          data-active={compareOpen}
+          title="후보 비교 보드 · 보기 전용"
+          onClick={() => setCompareOpen((v) => !v)}
+          className={`mb-1.5 rounded border px-1.5 py-0.5 text-[10px] tracking-wide transition-colors ${
+            compareOpen
+              ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+              : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-200"
+          }`}
+        >
+          Compare {compareOpen ? "▾" : "▸"}
+        </button>
+      ) : null}
+      {compareOpen && candidates.length > 1 ? <PatchCompareBoardView candidates={candidates} /> : null}
       <ul className="space-y-1">
         {shown.map((c) => (
           <li
