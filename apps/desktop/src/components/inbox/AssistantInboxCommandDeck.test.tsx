@@ -25,18 +25,19 @@ const DECK_IDS = [
   "learning",
   "replay",
   "source-dock",
+  "patch-candidates",
   "clear",
 ];
 
 describe("Batch 16 LINE B — Command Deck", () => {
-  it("renders nine local-view buttons, each scoped local-view", () => {
+  it("renders all local-view deck buttons, each scoped local-view", () => {
     render(<AssistantInboxContainer />);
     const deck = screen.getByTestId("command-deck");
     for (const id of DECK_IDS) {
       expect(screen.getByTestId(`command-deck-${id}`)).toBeTruthy();
     }
     const controls = collectActionControls(deck);
-    expect(controls.length).toBe(9);
+    expect(controls.length).toBe(DECK_IDS.length);
     expect(controls.every((b) => b.getAttribute("data-action-scope") === "local-view")).toBe(true);
   });
 
