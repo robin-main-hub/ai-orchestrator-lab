@@ -12,6 +12,12 @@ import {
 } from "./RuntimeManifestPreviewCard";
 import { classifyEvent, EVENT_CATEGORIES, type EventCategory } from "../../lib/eventClassification";
 import { projectWorkItemsLite } from "../../lib/workItemLite";
+import {
+  projectPluginWorkItems,
+  type WorkItemLiteProviderResult,
+} from "../../lib/plugins/pluginWorkItemSource";
+import type { PluginEvidenceCandidate } from "../../lib/plugins/pluginEvidenceSource";
+import type { PluginSourceHealth } from "../../lib/plugins/pluginManifest";
 import { readJsonState, writeJsonState } from "../../lib/persistentJsonState";
 import {
   readUserViews,
@@ -142,6 +148,10 @@ export type AssistantInboxProps = {
   persistFilters?: boolean;
   /** Batch 11 LINE C — one-shot view command from the Command Palette (view-only). */
   command?: InboxCommand;
+  /** Batch 14 LINE D/E — generic plugin source results (read-only display). */
+  pluginSources?: ReadonlyArray<WorkItemLiteProviderResult>;
+  /** Batch 14 LINE D — generic plugin evidence candidates (read-only). */
+  pluginEvidence?: ReadonlyArray<PluginEvidenceCandidate>;
 };
 
 /**
@@ -1013,6 +1023,127 @@ function SavedViewManager({
   );
 }
 
+/**
+ * Batch 14 LINE D/E — read-only Plugin Sources surface: per-plugin source health,
+ * the plugin-provided WorkItemLite rows, and approved/published plugin evidence
+ * candidates. Display only — no buttons, no reconnect/sync, no execution. Generic.
+ */
+const PLUGIN_HEALTH_LABEL: Record<PluginSourceHealth, string> = {
+  connected: "connected",
+  disabled: "disabled",
+  stale: "stale",
+  error: "error",
+  unknown: "unknown",
+};
+
+function PluginSourcesCard({
+  sources = [],
+  evidence = [],
+}: {
+  sources?: ReadonlyArray<WorkItemLiteProviderResult>;
+  evidence?: ReadonlyArray<PluginEvidenceCandidate>;
+}) {
+  if (sources.length === 0 && evidence.length === 0) return null;
+  return (
+    <div
+      className="mx-4 mb-2 rounded-lg border border-white/[0.08] bg-white/[0.02] p-2.5"
+      data-testid="plugin-sources"
+    >
+      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Plugin Sources · read-only
+      </p>
+      <div className="space-y-1.5">
+        {sources.map((s) => {
+          const rows = projectPluginWorkItems([s]);
+          return (
+            <div
+              key={s.pluginId}
+              data-testid={`plugin-source-${s.pluginId}`}
+              data-status={s.status}
+              data-health={s.health}
+              className="rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-1.5"
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-medium text-zinc-300">{s.pluginId}</span>
+                <span
+                  className="rounded bg-white/[0.06] px-1 text-[9px] uppercase tracking-wide text-muted-foreground"
+                  data-testid={`plugin-health-${s.pluginId}`}
+                  data-health={s.health}
+                >
+                  {PLUGIN_HEALTH_LABEL[s.health]}
+                </span>
+                {s.generatedAt ? (
+                  <span className="ml-auto text-[9px] tabular-nums text-muted-foreground/55">
+                    updated {s.generatedAt}
+                  </span>
+                ) : null}
+              </div>
+              {rows.length > 0 ? (
+                <ul className="mt-1 space-y-0.5">
+                  {rows.map((r, i) => (
+                    <li
+                      key={r.id}
+                      data-testid={`plugin-row-${s.pluginId}-${i}`}
+                      className="flex items-center gap-1.5 text-[10px] text-zinc-400"
+                    >
+                      <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
+                        plugin
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                      <span
+                        className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground"
+                        data-category={r.category}
+                      >
+                        {r.category}
+                      </span>
+                      <span className="shrink-0 text-[9px] text-muted-foreground/55">
+                        obs:{r.observed ? "true" : "false"}
+                      </span>
+                      <span className="shrink-0 text-[9px] text-muted-foreground/45">{r.sourceRef}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : s.status !== "active" ? (
+                <p
+                  className="mt-1 text-[10px] text-muted-foreground/50"
+                  data-testid={`plugin-source-inactive-${s.pluginId}`}
+                >
+                  비활성 소스 — 행 없음
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+      {evidence.length > 0 ? (
+        <div className="mt-2" data-testid="plugin-evidence">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+            Plugin Evidence
+          </p>
+          <ul className="space-y-0.5">
+            {evidence.map((e, i) => (
+              <li
+                key={e.id}
+                data-testid={`plugin-evidence-${i}`}
+                className="flex items-center gap-1.5 text-[10px] text-zinc-400"
+              >
+                <span className="shrink-0 rounded bg-amber-400/10 px-1 text-[9px] uppercase text-amber-200/70">
+                  evidence
+                </span>
+                <span className="min-w-0 flex-1 truncate">{e.title}</span>
+                <span className="shrink-0 text-[9px] text-muted-foreground/60" data-trust={e.trust}>
+                  trust:{e.trust}
+                </span>
+                <span className="shrink-0 text-[9px] text-muted-foreground/45">{e.pluginId}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function AssistantInbox({
   evidence = [],
   learningLoops = [],
@@ -1029,6 +1160,8 @@ export function AssistantInbox({
   nowMs,
   persistFilters = false,
   command,
+  pluginSources,
+  pluginEvidence,
 }: AssistantInboxProps) {
   const total =
     evidence.length + learningLoops.length + memoryCandidates.length + manifestEntries.length;
@@ -1244,6 +1377,7 @@ export function AssistantInbox({
           {focus !== "warnings" ? (
             <WorkLaneRail lanes={visibleLanes} query={query} category={category} />
           ) : null}
+          <PluginSourcesCard sources={pluginSources} evidence={pluginEvidence} />
           {showCards ? (
           <CardContent className="grid grid-cols-1 gap-2.5 px-4 lg:grid-cols-2 lg:gap-2.5 xl:gap-3">
         <Section

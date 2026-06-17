@@ -468,6 +468,15 @@ export type AssistantInboxLiveInput = {
    * bucketing (Today/Recent honest empty).
    */
   nowMs?: number;
+  /**
+   * Batch 14 LINE D — generic plugin source results (read-only). Absent → honest
+   * empty (no plugin section). Never executes/loads a plugin.
+   */
+  pluginSources?: ReadonlyArray<
+    import("./plugins/pluginWorkItemSource").WorkItemLiteProviderResult
+  >;
+  /** Batch 14 LINE D — generic plugin evidence (read-only ingress). */
+  pluginEvidence?: ReadonlyArray<import("./plugins/pluginEvidenceSource").PluginEvidence>;
   /** Real learning-loop events (e.g. App eventLog). Filtered to learning types. */
   learningEvents?: ReadonlyArray<{ type: string; payload: unknown }>;
   /** Real persisted project records (H10 useProjectRecordController.records). */
