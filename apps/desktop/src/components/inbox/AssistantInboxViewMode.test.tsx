@@ -23,7 +23,7 @@ describe("Batch 5 — Command Center view mode (LIVE / PREVIEW / REPLAY / SANDBO
     expect(screen.queryByTestId("assistant-inbox-preview-banner")).toBeNull();
   });
 
-  it("renders all four seats; LIVE/PREVIEW/REPLAY enabled, SANDBOX disabled placeholder", () => {
+  it("renders all four seats; all enabled (SANDBOX is now a proposal-only seat)", () => {
     render(<AssistantInboxContainer live={{}} />);
     expect(INBOX_VIEW_MODES.map((m) => m.value)).toEqual([
       "live",
@@ -34,7 +34,7 @@ describe("Batch 5 — Command Center view mode (LIVE / PREVIEW / REPLAY / SANDBO
     expect(radio("live").disabled).toBe(false);
     expect(radio("preview").disabled).toBe(false);
     expect(radio("replay").disabled).toBe(false); // enabled in Batch 8 LINE C
-    expect(radio("sandbox").disabled).toBe(true); // still deferred (action-risk)
+    expect(radio("sandbox").disabled).toBe(false); // Batch 22 — read-only proposal shell
   });
 
   it("PREVIEW is an explicit opt-in and shows a persistent watermark banner", () => {
@@ -122,9 +122,9 @@ describe("Batch 5 — Command Center view mode (LIVE / PREVIEW / REPLAY / SANDBO
     fireEvent.click(screen.getByTestId("inbox-mode-option-replay"));
     expect(onModeChange).toHaveBeenCalledWith("replay");
 
-    // SANDBOX stays a disabled placeholder → never fires.
+    // SANDBOX is now an enabled proposal-only seat (Batch 22) → it fires.
     fireEvent.click(screen.getByTestId("inbox-mode-option-sandbox"));
-    expect(onModeChange).not.toHaveBeenCalledWith("sandbox");
+    expect(onModeChange).toHaveBeenCalledWith("sandbox");
   });
 
   it("opens in PREVIEW in isolation (no live state wired → fixture, nothing faked as live)", () => {

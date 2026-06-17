@@ -21,6 +21,11 @@ import { classifyEvent, EVENT_CATEGORIES, type EventCategory } from "../../lib/e
 import { projectWorkItemsLite } from "../../lib/workItemLite";
 import { buildReplayTimeline, type ReplayTimelineItem } from "../../lib/replayTimeline";
 import {
+  EXAMPLE_SANDBOX_PROPOSALS,
+  type SandboxOutcome,
+  type SandboxProposal,
+} from "../../lib/sandboxProposal";
+import {
   projectPluginWorkItems,
   type WorkItemLiteProviderResult,
 } from "../../lib/plugins/pluginWorkItemSource";
@@ -106,7 +111,7 @@ export const INBOX_VIEW_MODES: ReadonlyArray<{
   { value: "live", label: "LIVE", enabled: true },
   { value: "preview", label: "PREVIEW", enabled: true },
   { value: "replay", label: "REPLAY", enabled: true },
-  { value: "sandbox", label: "SANDBOX", enabled: false },
+  { value: "sandbox", label: "SANDBOX", enabled: true },
 ];
 
 /**
@@ -892,6 +897,82 @@ const REPLAY_FILTERS: ReadonlyArray<"all" | EventCategory> = [
   "approval",
   "system",
 ];
+
+/** Batch 22 LINE F — simulated-outcome tone for sandbox proposals. */
+const SANDBOX_OUTCOME_TONE: Record<SandboxOutcome, string> = {
+  "simulated-pass": "border border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
+  "simulated-warning": "border border-amber-400/30 bg-amber-400/10 text-amber-200",
+  "simulated-blocked": "border border-rose-400/30 bg-rose-400/10 text-rose-200",
+};
+
+/**
+ * Batch 22 LINE F — Sandbox Proposal Shell: a read-only "proposal only" surface for
+ * the SANDBOX seat. Scenario proposal cards with a dry-run badge, simulated-outcome
+ * label, and proposed steps — plus a persistent "proposal only · no execution"
+ * watermark. ZERO execution / dispatch / write / runner call. Display-only.
+ */
+function SandboxProposalDeck({
+  proposals = EXAMPLE_SANDBOX_PROPOSALS,
+}: {
+  proposals?: ReadonlyArray<SandboxProposal>;
+}) {
+  return (
+    <div className="px-4 pb-1" data-testid="sandbox-proposal-deck" data-count={proposals.length}>
+      <div
+        data-testid="sandbox-watermark"
+        className="mb-2 rounded-md border border-l-[3px] border-violet-400/30 border-l-violet-400/80 bg-violet-400/10 px-3 py-1.5 text-[11px] text-violet-200"
+      >
+        <span className="mr-1 rounded bg-violet-400/20 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+          Sandbox
+        </span>
+        <span className="font-semibold">PROPOSAL ONLY</span> — 시뮬레이션 미리보기입니다 · 실행/적용/전송
+        없음 · 모든 결과는 가상(simulated)입니다
+      </div>
+      <ul className="space-y-1.5">
+        {proposals.map((p) => (
+          <li
+            key={p.id}
+            data-testid={`sandbox-proposal-${p.id}`}
+            data-outcome={p.outcome}
+            className="rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-1.5"
+          >
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-medium text-zinc-300">{p.title}</span>
+              <span
+                data-testid={`sandbox-dryrun-${p.id}`}
+                className="rounded bg-white/[0.06] px-1 text-[9px] uppercase tracking-wide text-muted-foreground/70"
+              >
+                dry-run
+              </span>
+              <span
+                data-testid={`sandbox-outcome-${p.id}`}
+                data-outcome={p.outcome}
+                className={`rounded px-1 text-[9px] uppercase tracking-wide ${SANDBOX_OUTCOME_TONE[p.outcome]}`}
+              >
+                {p.outcome}
+              </span>
+            </div>
+            <p className="mt-0.5 text-[10px] text-muted-foreground/70">{p.scenario}</p>
+            {p.steps.length > 0 ? (
+              <ol className="mt-1 space-y-0.5">
+                {p.steps.map((s, i) => (
+                  <li
+                    key={i}
+                    className="flex items-center gap-1.5 text-[10px] text-zinc-400"
+                  >
+                    <span className="shrink-0 tabular-nums text-muted-foreground/45">{i + 1}.</span>
+                    <span className="min-w-0 flex-1 truncate">{s}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+            <p className="mt-1 text-[9px] text-muted-foreground/45">{p.note}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 /**
  * Batch 21 LINE E — REPLAY timeline V2. Read-only, operation-theater feel:
@@ -2436,6 +2517,8 @@ export function AssistantInbox({
       ) : null}
       {mode === "replay" ? (
         <ReplayDeck events={recentEvents ?? []} query={query} />
+      ) : mode === "sandbox" ? (
+        <SandboxProposalDeck />
       ) : (
         <>
           {mode === "preview" ? <PreviewBanner /> : null}
