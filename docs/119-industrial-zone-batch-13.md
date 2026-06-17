@@ -41,4 +41,4 @@ Command Palette = local view 제어만 · Saved Views = local preference만 · S
 ## 미접촉 / 다음 후보
 - 실제 브라우저 ⌘K e2e 실측(오너 프리뷰).
 - approval/control queue를 인박스 live source로 read-only 배선(현재 eventLog 분류까지).
-- **Batch 14 후보**: Generic Plugin Source(plugin manifest + evidence/workitem provider, ERP/GIO는 plugin example로만 — OS core 무오염). **SANDBOX shell은 그 뒤**(action-risk).
+- **Batch 14 후보**: Generic Plugin Source(plugin manifest + evidence/workitem provider; 도메인 결합은 generic interface 위 plugin example로만 — OS core 무오염). **SANDBOX shell은 그 뒤**(action-risk).
