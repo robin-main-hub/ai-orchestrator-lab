@@ -238,6 +238,37 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## 15. Batch 15 — Source Dock V2 / External Source Deck
+
+Batch 15 grew the Batch 14 plugin-source card into a real OS surface: the Source
+Dock. Visual upgrade + health strip, a PREVIEW demo deck, a palette jump, and a
+local row→detail drawer — all read-only, generic, zero side effect. Owner preview
+checks:
+
+- [ ] **Source Dock visual** — the card reads "Source Dock · External Source Deck";
+      each health state has a distinct tone (connected=emerald, stale=amber,
+      error=rose, disabled=muted, unknown=slate); per-source row-count chip is right.
+- [ ] **Health strip** — the at-a-glance strip shows connected/stale/error/disabled/
+      unknown counts + active-only total rows + evidence count; LIVE with no plugin
+      input shows **no dock and no strip** (honest empty, never an all-zero strip).
+- [ ] **PREVIEW demo deck** — a PREVIEW-only radio switch (mixed/healthy/stale/error/
+      disabled) flips the dock between generic source states; selecting `error`/
+      `disabled` shows the right tone and no rows; the deck **never appears in LIVE**
+      and never injects fixtures into the live seat.
+- [ ] **Palette jump** — ⌘K "Source Dock 열기" (hint "외부 소스 보기 · 화면 이동만")
+      scrolls/focuses the dock; it changes **nothing else** (no mode/filter/data);
+      on an empty LIVE dock it is a silent no-op.
+- [ ] **Row → detail drawer** — clicking a source/evidence row opens a local
+      read-only drawer (pluginId/sourceRef/status/health/category/observed, or
+      trust for evidence); Esc and the ✕ close it; **zero action buttons**.
+- [ ] **Zero-button preserved (load-bearing)** — rows and the drawer close are
+      `role="button"` divs + Esc, **NOT `<button>`** and **NOT Radix Sheet/Dialog**.
+      Do not "fix" these into real `<button>`s — that would break 18+ button-free
+      tests and the no-side-effect-control philosophy.
+- [ ] **Generic / no domain roadmap** — every label/fixture/field is generic
+      (example-plugin, external-source, source-00x, entity-001); no ERP/GIO/domain
+      vocabulary and no company/domain/ERP future-milestone wording.
+
 ## 14. Batch 14 — generic plugin source framework (+ visible slice)
 
 Batch 14 let external/generic plugins feed the OS via generic provider contracts
