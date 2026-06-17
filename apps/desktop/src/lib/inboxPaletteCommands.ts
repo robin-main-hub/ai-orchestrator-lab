@@ -1,5 +1,6 @@
 import type { CommandEntry } from "../components/CommandPalette";
 import type { InboxCommand } from "../components/inbox/AssistantInbox";
+import type { UserSavedView } from "./userSavedViews";
 
 /**
  * Batch 12 LINE A — pure builder for the Assistant Inbox's Command Palette
@@ -14,9 +15,14 @@ export type InboxPaletteHandlers = {
   goInbox: () => void;
   /** Navigate to the inbox AND push a one-shot view command (nav + command). */
   dispatch: (kind: InboxCommand["kind"], value?: string) => void;
+  /** Navigate to the inbox AND apply a user saved view (view-only). */
+  applyView: (view: UserSavedView) => void;
 };
 
-export function buildInboxPaletteCommands(h: InboxPaletteHandlers): CommandEntry[] {
+export function buildInboxPaletteCommands(
+  h: InboxPaletteHandlers,
+  userViews: ReadonlyArray<UserSavedView> = [],
+): CommandEntry[] {
   return [
     {
       id: "inbox.goto",
@@ -68,5 +74,13 @@ export function buildInboxPaletteCommands(h: InboxPaletteHandlers): CommandEntry
       hint: "검색/카테고리/포커스 해제",
       run: () => h.dispatch("clear"),
     },
+    // Batch 12 LINE D — user saved views as palette commands (view-only apply).
+    ...userViews.map((v) => ({
+      id: `inbox.view.${v.id}`,
+      verb: "뷰",
+      label: `뷰: ${v.name}`,
+      hint: "저장된 뷰 적용 (로컬)",
+      run: () => h.applyView(v),
+    })),
   ];
 }

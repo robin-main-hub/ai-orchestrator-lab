@@ -2,7 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import { buildInboxPaletteCommands } from "./inboxPaletteCommands";
 
 describe("Batch 12 — LINE A: inbox Command Palette builder (view-only)", () => {
-  const handlers = () => ({ goInbox: vi.fn(), dispatch: vi.fn() });
+  const handlers = () => ({ goInbox: vi.fn(), dispatch: vi.fn(), applyView: vi.fn() });
+  const sampleView = {
+    id: "my-desk",
+    name: "My Desk",
+    mode: "preview" as const,
+    focus: "today" as const,
+    category: "runner" as const,
+    search: "gate",
+  };
   const byId = (cmds: ReturnType<typeof buildInboxPaletteCommands>, id: string) =>
     cmds.find((c) => c.id === id)!;
 
@@ -42,6 +50,17 @@ describe("Batch 12 — LINE A: inbox Command Palette builder (view-only)", () =>
       "inbox.failures",
       "inbox.clear",
     ]);
+  });
+
+  it("appends a view-only command per user saved view (Batch 12 LINE D)", () => {
+    const h = handlers();
+    const cmds = buildInboxPaletteCommands(h, [sampleView]);
+    const entry = cmds.find((c) => c.id === "inbox.view.my-desk")!;
+    expect(entry.label).toContain("My Desk");
+    entry.run();
+    expect(h.applyView).toHaveBeenCalledWith(sampleView);
+    // no user views → only the base set
+    expect(buildInboxPaletteCommands(h).some((c) => c.id.startsWith("inbox.view."))).toBe(false);
   });
 
   it("labels carry no side-effect action words", () => {

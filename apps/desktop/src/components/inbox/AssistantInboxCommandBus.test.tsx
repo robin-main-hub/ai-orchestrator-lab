@@ -47,6 +47,23 @@ describe("Batch 11 — LINE C: command-bus (palette → inbox view, view-only)",
     expect(container.querySelectorAll("button").length).toBe(0);
   });
 
+  it("applyView command sets mode + focus + category + search atomically", () => {
+    const { rerender } = render(<AssistantInboxContainer live={live} />);
+    rerender(
+      <AssistantInboxContainer
+        live={live}
+        command={{
+          kind: "applyView",
+          view: { mode: "preview", focus: "all", category: "runner", search: "gate" },
+          nonce: 1,
+        }}
+      />,
+    );
+    expect(viewMode()).toBe("preview"); // container applied mode
+    expect((screen.getByTestId("inbox-category-runner") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByTestId("inbox-search") as HTMLInputElement).value).toBe("gate");
+  });
+
   it("re-applies the SAME command when re-issued (nonce bump → effect re-runs)", () => {
     const { rerender } = render(<AssistantInboxContainer live={live} />);
     // First issue: focus blocked
