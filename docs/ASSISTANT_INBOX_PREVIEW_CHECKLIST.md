@@ -238,6 +238,34 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## 17. Batch 17 — Patch Candidate Speed Lane
+
+Batch 17 exposed the existing runner patch/diff handoff as a fast, read-only patch
+candidate review surface — no apply/commit/PR. Owner preview checks:
+
+- [ ] **Patch lane visible** — a "Patch Candidate Lane · read-only · preview only"
+      card shows each candidate's id / runner / mission / changed-file count /
+      +adds −dels / safety (pass·warning·blocked toned) / verification (claimed·
+      actual·not_run) / source (runner·handoff) / observed.
+- [ ] **Blocked candidate inspectable, never appliable** — a blocked candidate is
+      tinted blocked and still opens its detail drawer, but exposes NO apply /
+      commit / stage / dispatch control anywhere.
+- [ ] **Detail drawer** — clicking a candidate opens a local read-only drawer with
+      Identity / Stats / Safety / Verification / Evidence sections; Esc and ✕ close.
+- [ ] **Diff preview** — compact per-file blocks show path / change / risk / +adds
+      −dels / a short hunk summary and a static "diff preview only" label; no raw
+      diff dump, no copy/apply/stage button.
+- [ ] **Comparison strip** — with >1 candidate, a strip shows count / safest /
+      blocked / warning / files-touched overlap (display-only).
+- [ ] **Jump + filters** — ⌘K "Patch Candidates 열기 · 적용 없음" and the deck
+      button scroll to the lane (view/move only, no seat change); All / Blocked /
+      Warning / Runner filters narrow the listed candidates only.
+- [ ] **No side-effect / generic** — every control carries an allowed
+      data-action-scope (rows = local-detail, filters/deck = local-view); the lane
+      passes assertNoSideEffectActionControls; no apply/commit/dispatch text; all
+      ids/paths generic; PREVIEW fixtures never appear in LIVE; LIVE-empty shows no
+      lane.
+
 ## 16. Batch 16 — Operator Console / Command Deck
 
 Batch 16 turned the inbox into an operator cockpit and flipped the interaction
