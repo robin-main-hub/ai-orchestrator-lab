@@ -140,8 +140,15 @@ const VERIFY_RANK: Record<PatchVerificationStatus, number> = { actual: 0, claime
 export type PatchCandidateSummary = {
   count: number;
   safest?: string;
+  pass: number;
   blocked: number;
   warning: number;
+  observed: number;
+  notObserved: number;
+  /** candidates whose verification is still not_run (actual not seen). */
+  verificationNotRun: number;
+  /** candidates where the runner claims tests ran. */
+  claimedTestsPresent: number;
   filesTouched: ReadonlyArray<string>;
   overlapCount?: number;
 };
@@ -186,8 +193,13 @@ export function summarizePatchCandidates(
   return {
     count: rows.length,
     safest,
+    pass: rows.filter((r) => r.safetyStatus === "pass").length,
     blocked,
     warning,
+    observed: rows.filter((r) => r.observed).length,
+    notObserved: rows.filter((r) => !r.observed).length,
+    verificationNotRun: rows.filter((r) => r.verificationStatus === "not_run").length,
+    claimedTestsPresent: rows.filter((r) => r.claimedTests?.ran === true).length,
     filesTouched: [...allPaths],
     overlapCount,
   };
