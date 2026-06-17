@@ -27,6 +27,7 @@ import type { PluginEvidenceCandidate } from "../../lib/plugins/pluginEvidenceSo
 import type { PluginSourceHealth } from "../../lib/plugins/pluginManifest";
 import { SOURCE_SCENARIO_KEYS, type SourceScenarioKey } from "../../lib/plugins/examplePluginSource";
 import { SourceDetailDrawer, type SourceDetailItem } from "./SourceDetailDrawer";
+import type { PatchCandidate, PatchSafetyStatus } from "../../lib/plugins/patchCandidateSource";
 import { readJsonState, writeJsonState } from "../../lib/persistentJsonState";
 import {
   readUserViews,
@@ -165,6 +166,8 @@ export type AssistantInboxProps = {
   sourceScenario?: SourceScenarioKey;
   /** Batch 15 LINE C — PREVIEW-only scenario change handler (local UI state). */
   onSourceScenarioChange?: (key: SourceScenarioKey) => void;
+  /** Batch 17 LINE A — generic read-only patch candidates (Patch Candidate lane). */
+  patchCandidates?: ReadonlyArray<PatchCandidate>;
 };
 
 /**
@@ -1565,6 +1568,127 @@ function SourceDemoDeck({
   );
 }
 
+/** Batch 17 LINE A — per-safety visual tone for the patch candidate badge. */
+const SAFETY_TONE: Record<PatchSafetyStatus, string> = {
+  pass: "border border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
+  warning: "border border-amber-400/30 bg-amber-400/10 text-amber-200",
+  blocked: "border border-rose-400/30 bg-rose-400/10 text-rose-200",
+};
+
+/** Build the read-only detail-drawer item for a patch candidate (LINE B). */
+function patchDetailItem(c: PatchCandidate): SourceDetailItem {
+  return {
+    kind: "patch",
+    candidateId: c.candidateId,
+    runnerId: c.runnerId,
+    missionId: c.missionId,
+    title: `${c.candidateId} · ${c.changedFileCount} files`,
+    changedFileCount: c.changedFileCount,
+    additions: c.additions,
+    deletions: c.deletions,
+    safetyStatus: c.safetyStatus,
+    verificationStatus: c.verificationStatus,
+    source: c.source,
+    observed: c.observed,
+    safetyBlockers: c.safetyBlockers,
+    safetyWarnings: c.safetyWarnings,
+    secretFindingCount: c.secretFindingCount,
+    pathPolicyStatus: c.pathPolicyStatus,
+    claimedTests: c.claimedTests,
+    actualTests: c.actualTests,
+    evidenceRefs: c.evidenceRefs,
+    files: c.files,
+  };
+}
+
+/**
+ * Batch 17 LINE A — Patch Candidate Speed Lane: a fast, READ-ONLY review surface
+ * for runner patch/diff handoff candidates. Each row shows id / runner / mission /
+ * changed-file count / additions·deletions / safety / verification / source /
+ * observed, and is clickable ONLY to open the read-only detail drawer (LINE B).
+ * There is NO apply / commit / dispatch control anywhere — a candidate is a
+ * preview, never an action. Blocked candidates stay inspectable. Returns null when
+ * empty (honest empty in LIVE).
+ */
+function PatchCandidatesCard({
+  candidates = [],
+  cardRef,
+  onSelect,
+}: {
+  candidates?: ReadonlyArray<PatchCandidate>;
+  cardRef?: RefObject<HTMLDivElement | null>;
+  onSelect?: (item: SourceDetailItem) => void;
+}) {
+  if (candidates.length === 0) return null;
+  return (
+    <div
+      ref={cardRef}
+      tabIndex={-1}
+      data-testid="patch-candidate-lane"
+      className="mx-4 mb-2 rounded-lg border border-white/[0.08] bg-white/[0.02] p-2.5 outline-none focus-visible:ring-1 focus-visible:ring-cyan-400/40"
+    >
+      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Patch Candidate Lane · read-only · preview only
+      </p>
+      <ul className="space-y-1">
+        {candidates.map((c) => (
+          <li
+            key={c.id}
+            data-testid={`patch-candidate-${c.candidateId}`}
+            data-safety={c.safetyStatus}
+            data-blocked={c.safetyStatus === "blocked"}
+            className={`rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-1.5 ${
+              onSelect ? "cursor-pointer hover:bg-white/[0.04]" : ""
+            }`}
+            {...(onSelect ? rowActivation(() => onSelect(patchDetailItem(c))) : {})}
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-medium text-zinc-300">{c.candidateId}</span>
+              <span
+                className={`rounded px-1 text-[9px] uppercase tracking-wide ${SAFETY_TONE[c.safetyStatus]}`}
+                data-testid={`patch-safety-${c.candidateId}`}
+                data-safety={c.safetyStatus}
+              >
+                {c.safetyStatus}
+              </span>
+              <span
+                className="rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground"
+                data-testid={`patch-verify-${c.candidateId}`}
+                data-verification={c.verificationStatus}
+              >
+                {c.verificationStatus}
+              </span>
+              <span
+                className="rounded bg-white/[0.05] px-1 text-[9px] uppercase text-muted-foreground/70"
+                data-source={c.source}
+              >
+                {c.source}
+              </span>
+              <span className="ml-auto text-[9px] tabular-nums text-muted-foreground/55">
+                obs:{c.observed ? "true" : "false"}
+              </span>
+            </div>
+            <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-zinc-400">
+              <span className="min-w-0 truncate text-muted-foreground/60">
+                {c.runnerId} · {c.missionId}
+              </span>
+              <span
+                className="ml-auto shrink-0 tabular-nums"
+                data-testid={`patch-files-${c.candidateId}`}
+                data-count={c.changedFileCount}
+              >
+                {c.changedFileCount} files
+              </span>
+              <span className="shrink-0 tabular-nums text-emerald-300/70">+{c.additions}</span>
+              <span className="shrink-0 tabular-nums text-rose-300/70">-{c.deletions}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function AssistantInbox({
   evidence = [],
   learningLoops = [],
@@ -1585,6 +1709,7 @@ export function AssistantInbox({
   pluginEvidence,
   sourceScenario,
   onSourceScenarioChange,
+  patchCandidates,
 }: AssistantInboxProps) {
   const total =
     evidence.length + learningLoops.length + memoryCandidates.length + manifestEntries.length;
@@ -1870,6 +1995,7 @@ export function AssistantInbox({
             onSelect={setSelectedDetail}
             view={dockView}
           />
+          <PatchCandidatesCard candidates={patchCandidates} onSelect={setSelectedDetail} />
           <SourceDetailDrawer item={selectedDetail} onClose={closeDetail} />
           {showCards ? (
           <CardContent className="grid grid-cols-1 gap-2.5 px-4 lg:grid-cols-2 lg:gap-2.5 xl:gap-3">
