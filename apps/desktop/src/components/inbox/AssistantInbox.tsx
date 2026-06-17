@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { Inbox } from "lucide-react";
 import { Card, CardContent, CardHeader } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -19,6 +26,7 @@ import {
 import type { PluginEvidenceCandidate } from "../../lib/plugins/pluginEvidenceSource";
 import type { PluginSourceHealth } from "../../lib/plugins/pluginManifest";
 import { SOURCE_SCENARIO_KEYS, type SourceScenarioKey } from "../../lib/plugins/examplePluginSource";
+import { SourceDetailDrawer, type SourceDetailItem } from "./SourceDetailDrawer";
 import { readJsonState, writeJsonState } from "../../lib/persistentJsonState";
 import {
   readUserViews,
@@ -1133,14 +1141,31 @@ function SourceHealthStrip({ summary }: { summary: SourceHealthSummary }) {
  * approved plugin-evidence candidates. Display-only — no buttons, no sync/run/write.
  * Returns null when there is nothing to show (honest empty in LIVE).
  */
+/** Make a non-button element behave like one (Enter/Space activate). */
+function rowActivation(run: () => void) {
+  return {
+    role: "button" as const,
+    tabIndex: 0,
+    onClick: run,
+    onKeyDown: (e: ReactKeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        run();
+      }
+    },
+  };
+}
+
 function PluginSourcesCard({
   sources = [],
   evidence = [],
   cardRef,
+  onSelect,
 }: {
   sources?: ReadonlyArray<WorkItemLiteProviderResult>;
   evidence?: ReadonlyArray<PluginEvidenceCandidate>;
   cardRef?: RefObject<HTMLDivElement | null>;
+  onSelect?: (item: SourceDetailItem) => void;
 }) {
   if (sources.length === 0 && evidence.length === 0) return null;
   const summary = summarizeSourceHealth(sources, evidence);
@@ -1194,7 +1219,24 @@ function PluginSourcesCard({
                     <li
                       key={r.id}
                       data-testid={`plugin-row-${s.pluginId}-${i}`}
-                      className="flex items-center gap-1.5 text-[10px] text-zinc-400"
+                      className={`flex items-center gap-1.5 text-[10px] text-zinc-400 ${
+                        onSelect ? "cursor-pointer rounded hover:bg-white/[0.04]" : ""
+                      }`}
+                      {...(onSelect
+                        ? rowActivation(() =>
+                            onSelect({
+                              kind: "source",
+                              pluginId: r.pluginId,
+                              sourceRef: r.sourceRef,
+                              title: r.title,
+                              category: r.category,
+                              status: r.status,
+                              observed: r.observed,
+                              health: s.health,
+                              generatedAt: s.generatedAt,
+                            }),
+                          )
+                        : {})}
                     >
                       <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
                         plugin
@@ -1235,7 +1277,22 @@ function PluginSourcesCard({
               <li
                 key={e.id}
                 data-testid={`plugin-evidence-${i}`}
-                className="flex items-center gap-1.5 text-[10px] text-zinc-400"
+                className={`flex items-center gap-1.5 text-[10px] text-zinc-400 ${
+                  onSelect ? "cursor-pointer rounded hover:bg-white/[0.04]" : ""
+                }`}
+                {...(onSelect
+                  ? rowActivation(() =>
+                      onSelect({
+                        kind: "evidence",
+                        pluginId: e.pluginId,
+                        sourceRef: e.sourceRef,
+                        title: e.title,
+                        status: e.status,
+                        observed: e.observed,
+                        trust: e.trust,
+                      }),
+                    )
+                  : {})}
               >
                 <span className="shrink-0 rounded bg-amber-400/10 px-1 text-[9px] uppercase text-amber-200/70">
                   evidence
@@ -1365,6 +1422,9 @@ export function AssistantInbox({
   const searchRef = useRef<HTMLInputElement>(null);
   // Batch 15 LINE D — scroll/focus target for the "Source Dock 열기" palette jump.
   const sourceDockRef = useRef<HTMLDivElement>(null);
+  // Batch 15 LINE E — locally-selected Source Dock row for the read-only drawer.
+  const [selectedDetail, setSelectedDetail] = useState<SourceDetailItem | null>(null);
+  const closeDetail = useCallback(() => setSelectedDetail(null), []);
   const [focus, setFocus] = useState<InboxFocus>(storedFilters?.focus ?? "all");
   const [category, setCategory] = useState<"all" | EventCategory>(storedFilters?.category ?? "all");
   const onFocusPick = (f: InboxFocus) => {
@@ -1547,7 +1607,13 @@ export function AssistantInbox({
           {mode === "preview" && onSourceScenarioChange ? (
             <SourceDemoDeck scenario={sourceScenario ?? "mixed"} onChange={onSourceScenarioChange} />
           ) : null}
-          <PluginSourcesCard sources={pluginSources} evidence={pluginEvidence} cardRef={sourceDockRef} />
+          <PluginSourcesCard
+            sources={pluginSources}
+            evidence={pluginEvidence}
+            cardRef={sourceDockRef}
+            onSelect={setSelectedDetail}
+          />
+          <SourceDetailDrawer item={selectedDetail} onClose={closeDetail} />
           {showCards ? (
           <CardContent className="grid grid-cols-1 gap-2.5 px-4 lg:grid-cols-2 lg:gap-2.5 xl:gap-3">
         <Section
