@@ -55,10 +55,12 @@ describe("Batch 12 — LINE B/C: user saved view manager (local UI pref)", () =>
   });
 
   it("every manager button is a local-preference control (no side-effect action)", () => {
-    const { container } = render(<AssistantInboxContainer live={live} persistViewMode />);
+    render(<AssistantInboxContainer live={live} persistViewMode />);
     fireEvent.click(screen.getByTestId("inbox-focus-blocked"));
     saveCurrentAs("v1");
-    const buttons = [...container.querySelectorAll("button")];
+    // Scope to the saved-view manager — the always-on Command Deck adds local-view
+    // buttons elsewhere; the manager's own controls must all be local-preference.
+    const buttons = [...screen.getByTestId("saved-view-manager").querySelectorAll("button")];
     expect(buttons.length).toBeGreaterThan(0);
     expect(
       buttons.every((b) => b.getAttribute("data-action-scope") === "local-preference"),
