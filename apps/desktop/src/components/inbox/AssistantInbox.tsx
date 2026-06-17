@@ -25,6 +25,7 @@ import {
   type SandboxOutcome,
   type SandboxProposal,
 } from "../../lib/sandboxProposal";
+import { EXAMPLE_SOURCE_PACK, projectSourcePack } from "../../lib/plugins/exampleSourcePack";
 import {
   projectPluginWorkItems,
   type WorkItemLiteProviderResult,
@@ -897,6 +898,93 @@ const REPLAY_FILTERS: ReadonlyArray<"all" | EventCategory> = [
   "approval",
   "system",
 ];
+
+/**
+ * Batch 23 LINE G — Generic Source Pack demo (PREVIEW-only). Shows how a bundled
+ * source pack feeds the OS: its declarative manifest (name/version/kind +
+ * capability chips), its projected WorkItemLite rows, and an evidence candidate —
+ * all read-only, no execution / remote loading. Generic only; never live.
+ */
+function SourcePackCard() {
+  const pack = projectSourcePack(EXAMPLE_SOURCE_PACK);
+  return (
+    <div
+      data-testid="source-pack-card"
+      className="mx-4 mb-2 rounded-lg border border-violet-400/20 bg-violet-400/[0.03] p-2.5"
+    >
+      <div className="mb-1.5 flex flex-wrap items-center gap-1.5" data-testid="source-pack-manifest">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-violet-200/80">
+          Source Pack
+        </span>
+        <span className="text-[11px] font-medium text-zinc-300">{pack.manifest.name}</span>
+        <span className="rounded bg-white/[0.06] px-1 text-[9px] tabular-nums text-muted-foreground/70">
+          v{pack.manifest.version}
+        </span>
+        <span
+          className="rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70"
+          data-testid="source-pack-kind"
+          data-kind={pack.manifest.sourceKind}
+        >
+          {pack.manifest.sourceKind}
+        </span>
+        <span className="ml-auto text-[9px] uppercase tracking-wider text-muted-foreground/45">
+          declarative · read-only
+        </span>
+      </div>
+      <div className="mb-1.5 flex flex-wrap gap-1">
+        {pack.capabilities.map((cap) => (
+          <span
+            key={cap}
+            data-testid={`source-pack-cap-${cap}`}
+            className="rounded border border-violet-400/25 bg-violet-400/[0.06] px-1 text-[9px] uppercase tracking-wide text-violet-200/80"
+          >
+            {cap}
+          </span>
+        ))}
+      </div>
+      <ul className="space-y-0.5">
+        {pack.rows.map((r, i) => (
+          <li
+            key={r.id}
+            data-testid={`source-pack-row-${i}`}
+            className="flex items-center gap-1.5 text-[10px] text-zinc-400"
+          >
+            <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
+              plugin
+            </span>
+            <span className="min-w-0 flex-1 truncate">{r.title}</span>
+            <span
+              className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground"
+              data-category={r.category}
+            >
+              {r.category}
+            </span>
+            <span className="shrink-0 text-[9px] text-muted-foreground/45">{r.sourceRef}</span>
+          </li>
+        ))}
+      </ul>
+      {pack.evidence.length > 0 ? (
+        <ul className="mt-1 space-y-0.5" data-testid="source-pack-evidence">
+          {pack.evidence.map((e, i) => (
+            <li
+              key={e.id}
+              data-testid={`source-pack-evidence-${i}`}
+              className="flex items-center gap-1.5 text-[10px] text-zinc-400"
+            >
+              <span className="shrink-0 rounded bg-amber-400/10 px-1 text-[9px] uppercase text-amber-200/70">
+                evidence
+              </span>
+              <span className="min-w-0 flex-1 truncate">{e.title}</span>
+              <span className="shrink-0 text-[9px] text-muted-foreground/60" data-trust={e.trust}>
+                trust:{e.trust}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
 /** Batch 22 LINE F — simulated-outcome tone for sandbox proposals. */
 const SANDBOX_OUTCOME_TONE: Record<SandboxOutcome, string> = {
@@ -2530,6 +2618,7 @@ export function AssistantInbox({
           {mode === "preview" && onSourceScenarioChange ? (
             <SourceDemoDeck scenario={sourceScenario ?? "mixed"} onChange={onSourceScenarioChange} />
           ) : null}
+          {mode === "preview" ? <SourcePackCard /> : null}
           {hasDock ? (
             <SourceDockQuickControls view={dockView} onChange={setDockView} onJump={jumpToSourceDock} />
           ) : null}
