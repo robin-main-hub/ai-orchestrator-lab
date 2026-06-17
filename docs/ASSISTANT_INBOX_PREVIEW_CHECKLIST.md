@@ -238,6 +238,22 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## 20. Batch 20 — Patch Candidate Comparison V2
+
+Batch 20 added a read-only compare board for patch candidates. Owner checks:
+
+- [ ] **Compare toggle** — with ≥2 candidates a "Compare" toggle (view-only) opens
+      a read-only board; closed by default.
+- [ ] **Risk lanes** — candidates bucket into safe / watch / risk, each sorted so
+      the smallest (fastest to review) change is first.
+- [ ] **File-overlap heatmap** — files touched by multiple candidates are
+      highlighted as overlap; counts are correct.
+- [ ] **Verification delta** — a ⚠ verify flag appears when a runner claims a clean
+      pass but actual verification is unconfirmed.
+- [ ] **Safety reason chips** — blocked/warning reasons show as chips per candidate.
+- [ ] **Read-only** — the board has no buttons; no apply/commit/dispatch; generic
+      only; passes assertNoSideEffectActionControls.
+
 ## 19. Batch 19 — Operator Console Speed Polish
 
 Batch 19 added view-only keyboard accelerators + at-a-glance status. Owner checks:
