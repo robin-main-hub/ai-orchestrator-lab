@@ -237,3 +237,26 @@ classified event-log activity. Owner preview checks:
       honest empty; LIVE shows no fixture rows.
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
+
+## 14. Batch 14 — generic plugin source framework (+ visible slice)
+
+Batch 14 let external/generic plugins feed the OS via generic provider contracts
+(manifest / WorkItemLite / evidence) WITHOUT contaminating OS core, and surfaced
+them as a real **Plugin Sources** card in the inbox. Owner preview checks:
+
+- [ ] **Plugin Sources card (PREVIEW)** — the PREVIEW seat shows a "Plugin Sources ·
+      read-only" card: each example source (example-plugin / external-source /
+      disabled-plugin) renders a health row (status + health badge), its plugin
+      WorkItemLite rows (`plugin` badge + category + sourceRef), and an approved
+      plugin-evidence candidate with a trust label.
+- [ ] **Disabled / active-stale honesty** — the disabled provider shows but
+      contributes **no rows** (marked "비활성 소스 — 행 없음"); an active-but-stale
+      source still lists its rows (health does not gate rows, status does).
+- [ ] **Evidence honesty** — only approved/published evidence appears as a
+      `suggested` candidate; the draft is not promoted; trust never reads
+      "trusted"/"active".
+- [ ] **LIVE honest empty + no leak** — in LIVE with no real plugin input the
+      Plugin Sources card is **absent** (not a fixture); the PREVIEW example
+      sources never appear in a LIVE seat.
+- [ ] **Display-only / generic** — no buttons in the plugin surface; no
+      ERP/GIO/domain terms anywhere; no plugin run/import/remote-load affordance.
