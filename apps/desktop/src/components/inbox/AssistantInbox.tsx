@@ -646,6 +646,7 @@ function StatusStrip({
   filterSummary,
   srcHealth,
   replayCount,
+  patchCount,
 }: {
   mode: InboxViewMode;
   total: number;
@@ -667,6 +668,8 @@ function StatusStrip({
   srcHealth?: { connected: number; stale: number; error: number };
   /** Batch 16 LINE A — replay item count (read-only eventLog size). */
   replayCount?: number;
+  /** Batch 19 — patch candidate count at-a-glance (read-only). */
+  patchCount?: number;
 }) {
   return (
     <div
@@ -704,6 +707,9 @@ function StatusStrip({
       ) : null}
       {typeof replayCount === "number" ? (
         <StatChip testid="assistant-inbox-stat-replay">{replayCount} replay</StatChip>
+      ) : null}
+      {typeof patchCount === "number" && patchCount > 0 ? (
+        <StatChip testid="assistant-inbox-stat-patch">{patchCount} patch</StatChip>
       ) : null}
       {typeof eventCount === "number" ? (
         <StatChip testid="assistant-inbox-stat-events">{eventCount} events</StatChip>
@@ -1986,11 +1992,33 @@ export function AssistantInbox({
         : workLanes;
   const showCards = focus === "all" || focus === "warnings";
   const onInboxKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "/" && document.activeElement !== searchRef.current) {
+    const el = document.activeElement as HTMLElement | null;
+    const typing =
+      !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+    if (e.key === "/" && el !== searchRef.current) {
       e.preventDefault();
       searchRef.current?.focus();
-    } else if (e.key === "Escape" && query) {
+      return;
+    }
+    if (e.key === "Escape" && query) {
       setQuery("");
+      return;
+    }
+    // Batch 19 — single-key local-view accelerators (view/focus ONLY, no side
+    // effect). Suppressed while typing or with a modifier held.
+    if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "s") {
+      e.preventDefault();
+      jumpToSourceDock();
+    } else if (e.key === "p") {
+      e.preventDefault();
+      jumpToPatchCandidates();
+    } else if (e.key === "b") {
+      e.preventDefault();
+      onFocusPick("blocked");
+    } else if (e.key === "c") {
+      e.preventDefault();
+      clearFilters();
     }
   };
   // Batch 11 LINE B — persist the active view as a local UI preference only.
@@ -2101,6 +2129,7 @@ export function AssistantInbox({
             : undefined
         }
         replayCount={replayCount}
+        patchCount={patchCandidates?.length}
       />
       <CommandDeck
         activeViewId={activeView?.id}
@@ -2109,6 +2138,27 @@ export function AssistantInbox({
         onPatchCandidates={jumpToPatchCandidates}
         onClear={clearFilters}
       />
+      {/* Batch 19 — local-view keyboard accelerators (discoverability + at-a-glance). */}
+      <div
+        data-testid="inbox-shortcuts-hint"
+        className="flex flex-wrap items-center gap-2 px-4 pb-2 text-[9px] uppercase tracking-wider text-muted-foreground/45"
+      >
+        <span>
+          <kbd className="text-cyan-200/60">s</kbd> 소스독
+        </span>
+        <span>
+          <kbd className="text-cyan-200/60">p</kbd> 패치
+        </span>
+        <span>
+          <kbd className="text-cyan-200/60">b</kbd> 막힌
+        </span>
+        <span>
+          <kbd className="text-cyan-200/60">c</kbd> 초기화
+        </span>
+        <span>
+          <kbd className="text-cyan-200/60">/</kbd> 검색
+        </span>
+      </div>
       <div className="px-4 pb-2">
         <input
           ref={searchRef}
