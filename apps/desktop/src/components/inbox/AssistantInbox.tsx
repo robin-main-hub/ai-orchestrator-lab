@@ -211,6 +211,15 @@ export function buildWorkLanes(
   const blockedManifest = manifestEntries.filter((m) => m.loadable === false);
   const runner = evidence.filter((e) => e.id.startsWith("runner-gate-"));
   const { today, recent } = bucketEventsByTime(timed?.events, timed?.nowMs);
+  // Batch 13 LINE B/C — draw real event-log activity into the semantic lanes by
+  // classified category, so lanes reflect actual OS state (not just card items).
+  const events = timed?.events ?? [];
+  const eventTypesIn = (cat: EventCategory) =>
+    events.filter((e) => classifyEvent(e.type) === cat).map((e) => e.type);
+  const failureEvents = eventTypesIn("failure");
+  const runnerEvents = eventTypesIn("runner");
+  const learningEvents = eventTypesIn("learning");
+  const approvalEvents = eventTypesIn("approval");
   return [
     {
       id: "today",
@@ -229,29 +238,32 @@ export function buildWorkLanes(
     {
       id: "waiting",
       title: "Waiting",
-      count: memoryCandidates.length,
-      items: cap(plain(memoryCandidates.map((m) => m.title))),
+      count: memoryCandidates.length + approvalEvents.length,
+      items: cap([...plain(memoryCandidates.map((m) => m.title)), ...typed(approvalEvents)]),
       emptyHint: "대기 중 후보 없음",
     },
     {
       id: "blocked",
       title: "Blocked",
-      count: blockedEvidence.length + blockedManifest.length,
-      items: cap(plain([...blockedEvidence.map((e) => e.title), ...blockedManifest.map((m) => m.name)])),
+      count: blockedEvidence.length + blockedManifest.length + failureEvents.length,
+      items: cap([
+        ...plain([...blockedEvidence.map((e) => e.title), ...blockedManifest.map((m) => m.name)]),
+        ...typed(failureEvents),
+      ]),
       emptyHint: "차단된 항목 없음",
     },
     {
       id: "learning",
       title: "Learning",
-      count: learningLoops.length,
-      items: cap(plain(learningLoops.map((l) => l.title))),
+      count: learningLoops.length + learningEvents.length,
+      items: cap([...plain(learningLoops.map((l) => l.title)), ...typed(learningEvents)]),
       emptyHint: "learning loop 없음",
     },
     {
       id: "runner",
       title: "Runner",
-      count: runner.length,
-      items: cap(plain(runner.map((e) => e.title))),
+      count: runner.length + runnerEvents.length,
+      items: cap([...plain(runner.map((e) => e.title)), ...typed(runnerEvents)]),
       emptyHint: "runner 신호 없음",
     },
   ];
