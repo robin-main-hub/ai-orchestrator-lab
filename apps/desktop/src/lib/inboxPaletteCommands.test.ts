@@ -49,6 +49,7 @@ describe("Batch 12 — LINE A: inbox Command Palette builder (view-only)", () =>
       "inbox.runner",
       "inbox.failures",
       "inbox.clear",
+      "inbox.sourceDock",
     ]);
   });
 

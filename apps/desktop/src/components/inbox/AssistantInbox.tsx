@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { Inbox } from "lucide-react";
 import { Card, CardContent, CardHeader } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -107,7 +107,7 @@ export type InboxViewSnapshot = {
 };
 
 export type InboxCommand = {
-  kind: "mode" | "focus" | "category" | "clear" | "applyView";
+  kind: "mode" | "focus" | "category" | "clear" | "applyView" | "focusSection";
   value?: string;
   /** Present for kind "applyView" — the whole view to apply at once. */
   view?: InboxViewSnapshot;
@@ -1136,15 +1136,19 @@ function SourceHealthStrip({ summary }: { summary: SourceHealthSummary }) {
 function PluginSourcesCard({
   sources = [],
   evidence = [],
+  cardRef,
 }: {
   sources?: ReadonlyArray<WorkItemLiteProviderResult>;
   evidence?: ReadonlyArray<PluginEvidenceCandidate>;
+  cardRef?: RefObject<HTMLDivElement | null>;
 }) {
   if (sources.length === 0 && evidence.length === 0) return null;
   const summary = summarizeSourceHealth(sources, evidence);
   return (
     <div
-      className="mx-4 mb-2 rounded-lg border border-white/[0.08] bg-white/[0.02] p-2.5"
+      ref={cardRef}
+      tabIndex={-1}
+      className="mx-4 mb-2 rounded-lg border border-white/[0.08] bg-white/[0.02] p-2.5 outline-none focus-visible:ring-1 focus-visible:ring-cyan-400/40"
       data-testid="plugin-sources"
     >
       <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -1359,6 +1363,8 @@ export function AssistantInbox({
   const [storedFilters] = useState(() => (persistFilters ? readStoredFilters() : null));
   const [query, setQuery] = useState(storedFilters?.query ?? "");
   const searchRef = useRef<HTMLInputElement>(null);
+  // Batch 15 LINE D — scroll/focus target for the "Source Dock 열기" palette jump.
+  const sourceDockRef = useRef<HTMLDivElement>(null);
   const [focus, setFocus] = useState<InboxFocus>(storedFilters?.focus ?? "all");
   const [category, setCategory] = useState<"all" | EventCategory>(storedFilters?.category ?? "all");
   const onFocusPick = (f: InboxFocus) => {
@@ -1436,6 +1442,14 @@ export function AssistantInbox({
       setCategory(command.view.category);
       setQuery(command.view.search);
     }
+  }, [command]);
+  // Batch 15 LINE D — "Source Dock 열기" jump: scroll + focus the dock. View/focus
+  // ONLY — no mode change, no filter change, no data action. When the dock is
+  // empty (LIVE with no input) the ref is null and this is an honest no-op.
+  useEffect(() => {
+    if (command?.kind !== "focusSection" || command.value !== "source-dock") return;
+    sourceDockRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    sourceDockRef.current?.focus();
   }, [command]);
   return (
     <Card
@@ -1533,7 +1547,7 @@ export function AssistantInbox({
           {mode === "preview" && onSourceScenarioChange ? (
             <SourceDemoDeck scenario={sourceScenario ?? "mixed"} onChange={onSourceScenarioChange} />
           ) : null}
-          <PluginSourcesCard sources={pluginSources} evidence={pluginEvidence} />
+          <PluginSourcesCard sources={pluginSources} evidence={pluginEvidence} cardRef={sourceDockRef} />
           {showCards ? (
           <CardContent className="grid grid-cols-1 gap-2.5 px-4 lg:grid-cols-2 lg:gap-2.5 xl:gap-3">
         <Section
