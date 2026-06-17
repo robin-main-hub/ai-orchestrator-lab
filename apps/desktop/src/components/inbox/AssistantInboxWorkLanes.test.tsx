@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { buildWorkLanes } from "./AssistantInbox";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 import {
@@ -61,7 +62,7 @@ describe("Batch 7 — LINE B: lane rail render", () => {
     expect(laneCount("blocked")).toBe("1");
     expect(laneCount("learning")).toBe("0");
     expect(screen.getByTestId("work-lane-empty-learning")).toBeTruthy();
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
   });
 
   it("reflects the preview fixture set when switched to PREVIEW", () => {

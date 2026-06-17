@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 import type { WorkItemLiteProviderResult } from "../../lib/plugins/pluginWorkItemSource";
 import type { PluginEvidence } from "../../lib/plugins/pluginEvidenceSource";
@@ -80,7 +81,7 @@ describe("Batch 14 — Plugin Sources visible slice (PREVIEW example fixtures)",
   it("the plugin surface is display-only: no buttons, no domain terms", () => {
     render(<AssistantInboxContainer />);
     const card = screen.getByTestId("plugin-sources");
-    expect(card.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(card);
     // scan only the plugin card text — the rest of the inbox is guarded elsewhere
     // and a whole-container scan trips on innocent substrings (e.g. "gio" ⊂ "region").
     const text = (card.textContent ?? "").toLowerCase();
@@ -166,7 +167,7 @@ describe("Batch 14 — Plugin Sources LIVE seat (honest, no fixture leak)", () =
         <AssistantInboxContainer live={{ pluginSources: [liveSource] }} />
       </div>,
     );
-    expect(screen.getByTestId("plugin-sources").querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(screen.getByTestId("plugin-sources"));
     expect(spy).not.toHaveBeenCalled();
   });
 });

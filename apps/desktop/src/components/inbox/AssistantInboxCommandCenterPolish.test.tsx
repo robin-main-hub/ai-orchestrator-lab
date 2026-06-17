@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { AssistantInbox } from "./AssistantInbox";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 import { LEARNING_EVENT_FIXTURE } from "../../lib/assistantInboxProjection";
@@ -48,7 +49,7 @@ describe("Batch 6 — LINE U: LIVE command-center status strip", () => {
 
   it("status strip / hero add no buttons (read-only invariant holds)", () => {
     const { container } = render(<AssistantInboxContainer live={{}} />);
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
   });
 });
 

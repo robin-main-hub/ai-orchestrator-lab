@@ -1141,11 +1141,13 @@ function SourceHealthStrip({ summary }: { summary: SourceHealthSummary }) {
  * approved plugin-evidence candidates. Display-only — no buttons, no sync/run/write.
  * Returns null when there is nothing to show (honest empty in LIVE).
  */
-/** Make a non-button element behave like one (Enter/Space activate). */
+/** Make a non-button element behave like one (Enter/Space activate). Batch 16:
+ *  tagged local-detail — opening a read-only drawer is a view action, no side effect. */
 function rowActivation(run: () => void) {
   return {
     role: "button" as const,
     tabIndex: 0,
+    "data-action-scope": "local-detail",
     onClick: run,
     onKeyDown: (e: ReactKeyboardEvent) => {
       if (e.key === "Enter" || e.key === " ") {
