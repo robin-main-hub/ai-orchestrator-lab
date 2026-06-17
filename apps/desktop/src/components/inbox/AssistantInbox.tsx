@@ -13,6 +13,14 @@ import {
 import { classifyEvent, EVENT_CATEGORIES, type EventCategory } from "../../lib/eventClassification";
 import { projectWorkItemsLite } from "../../lib/workItemLite";
 import { readJsonState, writeJsonState } from "../../lib/persistentJsonState";
+import {
+  readUserViews,
+  writeUserViews,
+  upsertUserView,
+  removeUserView,
+  slugifyViewName,
+  type UserSavedView,
+} from "../../lib/userSavedViews";
 
 /**
  * LINE F / H / N — Assistant Inbox / command center.
@@ -889,6 +897,96 @@ function InboxFilterBar({
   );
 }
 
+/**
+ * Batch 12 LINE C — user Saved View manager. save / apply / delete are LOCAL UI
+ * PREFERENCE actions (localStorage only), clearly labeled local — never an OS
+ * action (no send/approve/write-memory/append-event/run/dispatch). Buttons here
+ * are allowed under the "no side-effect action control" rule.
+ */
+function SavedViewManager({
+  views,
+  onSave,
+  onApply,
+  onDelete,
+}: {
+  views: ReadonlyArray<UserSavedView>;
+  onSave: (name: string) => void;
+  onApply: (v: UserSavedView) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const trySave = () => {
+    const n = name.trim();
+    if (n) {
+      onSave(n);
+      setName("");
+    }
+  };
+  return (
+    <div className="px-4 pb-2" data-testid="saved-view-manager">
+      <div className="mb-1 flex items-center gap-1.5">
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") trySave();
+          }}
+          placeholder="현재 뷰 저장 (이름)"
+          aria-label="현재 뷰를 로컬에 저장"
+          data-testid="saved-view-name"
+          className="min-w-0 flex-1 rounded border border-white/10 bg-white/[0.03] px-1.5 py-0.5 text-[10px] text-zinc-200 placeholder:text-muted-foreground/40 focus:border-cyan-400/40 focus:outline-none"
+        />
+        <button
+          type="button"
+          data-testid="saved-view-save"
+          onClick={trySave}
+          className="shrink-0 rounded border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-400/20"
+        >
+          뷰 저장
+        </button>
+        <span className="shrink-0 text-[9px] uppercase tracking-wide text-muted-foreground/50">
+          로컬 전용 · local
+        </span>
+      </div>
+      {views.length > 0 ? (
+        <div role="list" data-testid="saved-view-list" className="flex flex-wrap gap-1">
+          {views.map((v) => (
+            <span
+              key={v.id}
+              role="listitem"
+              data-testid={`saved-view-${v.id}`}
+              className="inline-flex items-center gap-0.5 rounded border border-white/10 bg-white/[0.03] pl-1.5 text-[10px] text-zinc-300"
+            >
+              <button
+                type="button"
+                data-testid={`saved-view-apply-${v.id}`}
+                onClick={() => onApply(v)}
+                className="py-0.5 hover:text-cyan-200"
+              >
+                {v.name}
+              </button>
+              <button
+                type="button"
+                data-testid={`saved-view-delete-${v.id}`}
+                onClick={() => onDelete(v.id)}
+                aria-label={`${v.name} 삭제 (로컬)`}
+                className="px-1 py-0.5 text-muted-foreground/60 hover:text-rose-300"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p data-testid="saved-view-empty" className="text-[10px] text-muted-foreground/50">
+          저장된 뷰 없음 — 현재 필터 조합을 이름 붙여 로컬에 저장
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function AssistantInbox({
   evidence = [],
   learningLoops = [],
@@ -960,6 +1058,33 @@ export function AssistantInbox({
     setQuery(p.query);
     setCategory(p.category);
     onFocusPick(p.focus);
+  };
+  // Batch 12 LINE B/C — user-defined saved views (local UI preference only).
+  const [userViews, setUserViews] = useState<UserSavedView[]>(() =>
+    persistFilters ? readUserViews() : [],
+  );
+  const onSaveView = (name: string) => {
+    const next = upsertUserView(userViews, {
+      id: slugifyViewName(name),
+      name,
+      mode,
+      focus,
+      category,
+      search: query,
+    });
+    setUserViews(next);
+    writeUserViews(next);
+  };
+  const onApplyView = (v: UserSavedView) => {
+    onModeChange?.(v.mode);
+    setFocus(v.focus);
+    setCategory(v.category);
+    setQuery(v.search);
+  };
+  const onDeleteView = (id: string) => {
+    const next = removeUserView(userViews, id);
+    setUserViews(next);
+    writeUserViews(next);
   };
   const visibleLanes =
     focus === "today"
@@ -1066,6 +1191,14 @@ export function AssistantInbox({
           onCategory={setCategory}
           query={query}
           onPreset={onPreset}
+        />
+      ) : null}
+      {mode !== "replay" && persistFilters ? (
+        <SavedViewManager
+          views={userViews}
+          onSave={onSaveView}
+          onApply={onApplyView}
+          onDelete={onDeleteView}
         />
       ) : null}
       {mode === "replay" ? (
