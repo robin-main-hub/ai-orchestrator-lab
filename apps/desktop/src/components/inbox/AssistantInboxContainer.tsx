@@ -12,8 +12,8 @@ import {
 } from "../../lib/assistantInboxProjection";
 import { readJsonState, writeJsonState } from "../../lib/persistentJsonState";
 import {
-  EXAMPLE_PLUGIN_SOURCES,
-  EXAMPLE_PLUGIN_EVIDENCE,
+  EXAMPLE_SOURCE_SCENARIOS,
+  type SourceScenarioKey,
 } from "../../lib/plugins/examplePluginSource";
 import { projectPluginEvidenceCandidates } from "../../lib/plugins/pluginEvidenceSource";
 
@@ -84,6 +84,11 @@ export function AssistantInboxContainer({
     return live === undefined ? "preview" : "live";
   });
 
+  // Batch 15 LINE C — PREVIEW-only demo scenario. Pure local UI state; it only
+  // selects which generic EXAMPLE fixture deck the PREVIEW seat shows. It never
+  // touches LIVE (the pluginExtras LIVE branch ignores it).
+  const [sourceScenario, setSourceScenario] = useState<SourceScenarioKey>("mixed");
+
   // Persist the seat as a local UI preference only when explicitly enabled.
   useEffect(() => {
     if (persistViewMode) writeJsonState(INBOX_VIEW_MODE_KEY, mode);
@@ -145,19 +150,23 @@ export function AssistantInboxContainer({
   // escalates to trusted/active.
   const pluginExtras = useMemo(() => {
     if (mode === "preview") {
+      // PREVIEW routes through the selected generic demo scenario (LINE C). Still
+      // a clearly-labeled EXAMPLE — never live, never written.
+      const deck = EXAMPLE_SOURCE_SCENARIOS[sourceScenario];
       return {
-        pluginSources: EXAMPLE_PLUGIN_SOURCES,
-        pluginEvidence: projectPluginEvidenceCandidates(EXAMPLE_PLUGIN_EVIDENCE),
+        pluginSources: deck.sources,
+        pluginEvidence: projectPluginEvidenceCandidates(deck.evidence),
       };
     }
     if (mode === "live") {
+      // LIVE ignores the scenario entirely — only real input, no fixture leak.
       return {
         pluginSources: live?.pluginSources,
         pluginEvidence: projectPluginEvidenceCandidates(live?.pluginEvidence ?? []),
       };
     }
     return { pluginSources: undefined, pluginEvidence: undefined };
-  }, [mode, live]);
+  }, [mode, live, sourceScenario]);
 
   return (
     <div className="nav-center-page" data-page="command_center" data-safe-bottom="true">
@@ -169,6 +178,8 @@ export function AssistantInboxContainer({
         onModeChange={setMode}
         persistFilters={persistViewMode}
         command={command}
+        sourceScenario={sourceScenario}
+        onSourceScenarioChange={setSourceScenario}
       />
     </div>
   );
