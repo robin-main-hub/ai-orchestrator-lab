@@ -238,6 +238,22 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## 22. Batch 22 — Sandbox Proposal Shell
+
+Batch 22 turned the disabled SANDBOX seat into a read-only "proposal only" surface.
+Owner checks:
+
+- [ ] **SANDBOX selectable** — the seat is enabled in the mode switch (no longer a
+      disabled placeholder).
+- [ ] **Proposal-only watermark** — a persistent "PROPOSAL ONLY · no execution"
+      banner is shown in the sandbox seat.
+- [ ] **Scenario cards** — each proposal shows a dry-run badge, a simulated-outcome
+      label (pass/warning/blocked tone), and proposed steps.
+- [ ] **Read-only** — no apply/commit/dispatch/run controls anywhere; normal
+      live/preview cards do not appear in the sandbox body; generic only; passes
+      assertNoSideEffectActionControls.
+- [ ] **Honest** — every outcome is labelled simulated; nothing is executed.
+
 ## 21. Batch 21 — Replay Timeline V2
 
 Batch 21 turned REPLAY into a time-clustered, read-only operation-theater replay.
