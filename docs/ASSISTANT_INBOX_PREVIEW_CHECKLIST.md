@@ -238,6 +238,22 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## 21. Batch 21 — Replay Timeline V2
+
+Batch 21 turned REPLAY into a time-clustered, read-only operation-theater replay.
+Owner checks:
+
+- [ ] **List/Timeline toggle** — REPLAY shows a list by default; a view-only toggle
+      switches to the timeline.
+- [ ] **Time clusters** — events group into clusters by time proximity (newest
+      cluster first), each with a span, event count, and category chips.
+- [ ] **Scrubber** — a local scrubber steps the active cluster (view state only);
+      the active cluster expands its items.
+- [ ] **Filter integration** — the category filter + search narrow the timeline to
+      the same set as the list.
+- [ ] **Read-only** — no EventStorage mutation, no server write; the scrubber/toggle
+      are local-view; passes assertNoSideEffectActionControls.
+
 ## 20. Batch 20 — Patch Candidate Comparison V2
 
 Batch 20 added a read-only compare board for patch candidates. Owner checks:
