@@ -238,6 +238,23 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## 25. Batch 25 — Command Palette Power Pass
+
+Batch 25 expanded the inbox command palette with more local-view jump targets and
+keyboard accelerators. Owner checks:
+
+- [ ] **New palette commands** — the command palette lists "Operator Console 열기",
+      "SANDBOX 좌석", and "Evidence Draft 열기" alongside the existing Source Dock /
+      Patch Candidates / Replay / clear / saved-view entries.
+- [ ] **Jumps scroll/focus** — running "Operator Console 열기" scrolls to the status
+      strip; "Evidence Draft 열기" scrolls to the Evidence Draft card (PREVIEW).
+- [ ] **Keyboard accelerators** — with the inbox focused (not typing), `o` jumps to
+      the Operator Console, `e` to the Evidence Draft; the shortcuts hint shows both.
+- [ ] **Honest no-op** — "Evidence Draft 열기" in LIVE does nothing (the card is
+      PREVIEW-only) — no scroll, no error.
+- [ ] **View-only / generic** — no command sends/writes/runs/approves/dispatches;
+      labels carry no side-effect words; passes the palette forbidden-label test.
+
 ## 24. Batch 24 — Evidence Draft / Footnote Surface
 
 Batch 24 added a PREVIEW-only Evidence Draft card: a read-only draft of claims,
