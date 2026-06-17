@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildPatchCompareBoard,
+  patchLaneOf,
   projectPatchCandidates,
   summarizePatchCandidates,
   type PatchCandidateInput,
@@ -109,5 +111,77 @@ describe("Batch 17 — summarizePatchCandidates (pure comparison)", () => {
     const s = summarizePatchCandidates(rows);
     expect(s.overlapCount).toBe(1); // src/shared.ts touched by both
     expect(s.filesTouched).toContain("src/shared.ts");
+  });
+});
+
+describe("Batch 20 — buildPatchCompareBoard (pure compare board)", () => {
+  it("buckets candidates into safe / watch / risk lanes", () => {
+    const rows = projectPatchCandidates([
+      input({ candidateId: "p-safe", safetyStatus: "pass", observed: true }),
+      input({ candidateId: "p-watch", safetyStatus: "warning", observed: true }),
+      input({ candidateId: "p-blocked", safetyStatus: "blocked", observed: true }),
+      input({ candidateId: "p-unobs", safetyStatus: "pass", observed: false }),
+    ]);
+    const board = buildPatchCompareBoard(rows);
+    expect(board.lanes.safe.map((c) => c.candidateId)).toEqual(["p-safe"]);
+    expect(board.lanes.watch.map((c) => c.candidateId)).toEqual(["p-watch"]);
+    // blocked AND unobserved both land in risk
+    expect(board.lanes.risk.map((c) => c.candidateId).sort()).toEqual(["p-blocked", "p-unobs"]);
+    expect(patchLaneOf(rows[0]!)).toBe("safe");
+  });
+
+  it("sorts each lane by churn ascending (fastest to review first)", () => {
+    const rows = projectPatchCandidates([
+      input({ candidateId: "big", additions: 90, deletions: 20 }),
+      input({ candidateId: "small", additions: 3, deletions: 1 }),
+    ]);
+    const board = buildPatchCompareBoard(rows);
+    expect(board.lanes.safe.map((c) => c.candidateId)).toEqual(["small", "big"]);
+  });
+
+  it("builds a file-overlap heatmap (count desc, ≥2 = overlap)", () => {
+    const rows = projectPatchCandidates([
+      input({
+        candidateId: "a",
+        files: [
+          { path: "src/shared.ts", change: "modified", additions: 1, deletions: 0 },
+          { path: "src/a.ts", change: "modified", additions: 1, deletions: 0 },
+        ],
+      }),
+      input({
+        candidateId: "b",
+        files: [{ path: "src/shared.ts", change: "modified", additions: 1, deletions: 0 }],
+      }),
+    ]);
+    const board = buildPatchCompareBoard(rows);
+    expect(board.heatmap[0]).toEqual({ path: "src/shared.ts", count: 2 });
+    expect(board.heatmap.find((h) => h.path === "src/a.ts")?.count).toBe(1);
+  });
+
+  it("flags a claimed-clean / actual-unconfirmed verification mismatch", () => {
+    const rows = projectPatchCandidates([
+      input({
+        candidateId: "claims-clean",
+        claimedTests: { ran: true, passed: 9, failed: 0 },
+        actualTests: { status: "not_run" },
+      }),
+      input({
+        candidateId: "confirmed",
+        claimedTests: { ran: true, passed: 9, failed: 0 },
+        actualTests: { status: "actual", summary: "9 passed" },
+      }),
+    ]);
+    const board = buildPatchCompareBoard(rows);
+    const d = (id: string) => board.deltas.find((x) => x.candidateId === id)!;
+    expect(d("claims-clean").mismatch).toBe(true);
+    expect(d("confirmed").mismatch).toBe(false);
+    expect(d("confirmed").actual).toBe("actual");
+  });
+
+  it("is empty-safe (no rows → empty lanes/heatmap/deltas)", () => {
+    const board = buildPatchCompareBoard([]);
+    expect(board.lanes).toEqual({ safe: [], watch: [], risk: [] });
+    expect(board.heatmap).toEqual([]);
+    expect(board.deltas).toEqual([]);
   });
 });

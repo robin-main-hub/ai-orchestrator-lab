@@ -204,3 +204,68 @@ export function summarizePatchCandidates(
     overlapCount,
   };
 }
+
+// ── Batch 20 LINE D — read-only compare board ──────────────────────────────────
+
+export type PatchLaneKey = "safe" | "watch" | "risk";
+
+export type PatchVerificationDelta = {
+  candidateId: string;
+  claimed: string; // e.g. "ran 8/0" or "not_run"
+  actual: string; // e.g. "actual" | "not_run"
+  /** runner claims a clean pass but actual verification did not confirm it. */
+  mismatch: boolean;
+};
+
+export type PatchCompareBoard = {
+  /** candidates bucketed by risk lane, each sorted by churn asc (smaller = faster to review). */
+  lanes: Record<PatchLaneKey, PatchCandidate[]>;
+  /** files touched across candidates, count desc then path; count ≥ 2 = overlap. */
+  heatmap: ReadonlyArray<{ path: string; count: number }>;
+  /** per-candidate claimed-vs-actual verification delta. */
+  deltas: ReadonlyArray<PatchVerificationDelta>;
+};
+
+/** Risk lane for a candidate: blocked/unobserved → risk, warning → watch, else safe. */
+export function patchLaneOf(c: PatchCandidate): PatchLaneKey {
+  if (c.safetyStatus === "blocked" || !c.observed) return "risk";
+  if (c.safetyStatus === "warning") return "watch";
+  return "safe";
+}
+
+const churn = (c: PatchCandidate): number => c.additions + c.deletions;
+
+/**
+ * Batch 20 LINE D — pure compare board over already-projected candidates. No
+ * model/runner call, no I/O, no Date.now. Lanes by risk (sorted by churn asc so
+ * the fastest-to-review sits first), a file-overlap heatmap, and claimed-vs-actual
+ * verification deltas. Read-only; never applies/commits anything.
+ */
+export function buildPatchCompareBoard(rows: ReadonlyArray<PatchCandidate> = []): PatchCompareBoard {
+  const lanes: Record<PatchLaneKey, PatchCandidate[]> = { safe: [], watch: [], risk: [] };
+  for (const r of rows) lanes[patchLaneOf(r)].push(r);
+  for (const key of Object.keys(lanes) as PatchLaneKey[]) {
+    lanes[key].sort((a, b) => churn(a) - churn(b) || a.candidateId.localeCompare(b.candidateId));
+  }
+
+  const counts = new Map<string, number>();
+  for (const r of rows) {
+    for (const p of new Set(r.files.map((f) => f.path))) counts.set(p, (counts.get(p) ?? 0) + 1);
+  }
+  const heatmap = [...counts.entries()]
+    .map(([path, count]) => ({ path, count }))
+    .sort((a, b) => b.count - a.count || a.path.localeCompare(b.path));
+
+  const deltas: PatchVerificationDelta[] = rows.map((r) => {
+    const claimed = r.claimedTests?.ran
+      ? `ran ${r.claimedTests.passed}/${r.claimedTests.failed}`
+      : "not_run";
+    const actual = r.actualTests?.status ?? "not_run";
+    const claimedClean = r.claimedTests?.ran === true && (r.claimedTests?.failed ?? 0) === 0;
+    // mismatch: runner claims a clean pass but actual verification never confirmed it.
+    const mismatch = claimedClean && actual !== "actual";
+    return { candidateId: r.candidateId, claimed, actual, mismatch };
+  });
+
+  return { lanes, heatmap, deltas };
+}
