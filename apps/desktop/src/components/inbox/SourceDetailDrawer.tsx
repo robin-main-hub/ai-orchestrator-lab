@@ -29,27 +29,57 @@ export type SourceDetailItem =
       trust: string;
     };
 
-function fieldsFor(item: SourceDetailItem): ReadonlyArray<[string, string]> {
-  const out: Array<[string, string]> = [
+type DetailField = [string, string];
+type DetailSection = { id: string; label: string; fields: DetailField[] };
+
+/**
+ * Batch 16 LINE D — group the (typed, primitive-only) fields into operator-room
+ * sections. Every field keeps its `source-detail-field-{k}` testid; empty
+ * sections are dropped. No free-form metadata bag exists on the contract, so the
+ * Metadata section holds only known generic leftovers (currently none).
+ */
+function sectionsFor(item: SourceDetailItem): DetailSection[] {
+  const identity: DetailField[] = [
     ["pluginId", item.pluginId],
     ["sourceRef", item.sourceRef],
   ];
   if (item.kind === "source") {
-    out.push(
-      ["category", item.category],
-      ["status", item.status],
-      ["health", item.health],
-      ["observed", String(item.observed)],
-    );
-    if (item.generatedAt) out.push(["generatedAt", item.generatedAt]);
-  } else {
-    out.push(
-      ["status", item.status],
-      ["trust", item.trust],
-      ["observed", String(item.observed)],
-    );
+    const sections: DetailSection[] = [
+      { id: "identity", label: "Identity", fields: identity },
+      {
+        id: "health",
+        label: "Health",
+        fields: [
+          ["health", item.health],
+          ["status", item.status],
+        ],
+      },
+      {
+        id: "source",
+        label: "Source",
+        fields: [
+          ["category", item.category],
+          ...(item.generatedAt ? ([["generatedAt", item.generatedAt]] as DetailField[]) : []),
+        ],
+      },
+      { id: "observed", label: "Observed", fields: [["observed", String(item.observed)]] },
+      { id: "metadata", label: "Metadata", fields: [] },
+    ];
+    return sections.filter((s) => s.fields.length > 0);
   }
-  return out;
+  const sections: DetailSection[] = [
+    { id: "identity", label: "Identity", fields: identity },
+    {
+      id: "evidence",
+      label: "Evidence · Trust",
+      fields: [
+        ["status", item.status],
+        ["trust", item.trust],
+      ],
+    },
+    { id: "observed", label: "Observed", fields: [["observed", String(item.observed)]] },
+  ];
+  return sections.filter((s) => s.fields.length > 0);
 }
 
 /**
@@ -118,22 +148,34 @@ export function SourceDetailDrawer({
           ✕
         </div>
       </div>
-      <p className="mb-2 truncate text-[12px] font-medium text-zinc-200" data-testid="source-detail-title">
+      <p
+        className="mb-2 break-words text-[12px] font-medium text-zinc-200"
+        data-testid="source-detail-title"
+      >
         {item.title}
       </p>
-      <dl className="space-y-1">
-        {fieldsFor(item).map(([k, v]) => (
-          <div
-            key={k}
-            data-testid={`source-detail-field-${k}`}
-            data-field={k}
-            className="flex items-center justify-between gap-2 text-[10px]"
-          >
-            <dt className="uppercase tracking-wide text-muted-foreground/60">{k}</dt>
-            <dd className="min-w-0 truncate text-right text-zinc-300">{v}</dd>
-          </div>
+      <div className="space-y-2">
+        {sectionsFor(item).map((section) => (
+          <section key={section.id} data-testid={`source-detail-section-${section.id}`}>
+            <p className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/45">
+              {section.label}
+            </p>
+            <dl className="space-y-0.5">
+              {section.fields.map(([k, v]) => (
+                <div
+                  key={k}
+                  data-testid={`source-detail-field-${k}`}
+                  data-field={k}
+                  className="flex items-start justify-between gap-2 text-[10px]"
+                >
+                  <dt className="shrink-0 uppercase tracking-wide text-muted-foreground/60">{k}</dt>
+                  <dd className="min-w-0 break-all text-right text-zinc-300">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
         ))}
-      </dl>
+      </div>
       <p className="mt-2 text-[9px] text-muted-foreground/45">view-only · no action</p>
     </aside>
   );
