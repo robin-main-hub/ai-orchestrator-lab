@@ -19,6 +19,7 @@ import {
 } from "./RuntimeManifestPreviewCard";
 import { classifyEvent, EVENT_CATEGORIES, type EventCategory } from "../../lib/eventClassification";
 import { projectWorkItemsLite } from "../../lib/workItemLite";
+import { buildReplayTimeline, type ReplayTimelineItem } from "../../lib/replayTimeline";
 import {
   projectPluginWorkItems,
   type WorkItemLiteProviderResult,
@@ -892,6 +893,103 @@ const REPLAY_FILTERS: ReadonlyArray<"all" | EventCategory> = [
   "system",
 ];
 
+/**
+ * Batch 21 LINE E — REPLAY timeline V2. Read-only, operation-theater feel:
+ * time-clustered events, a local scrubber to step clusters, per-cluster category
+ * breakdown. View-only — no EventStorage mutation, no server write, no action.
+ */
+function ReplayTimeline({ items }: { items: ReadonlyArray<ReplayTimelineItem> }) {
+  const clusters = buildReplayTimeline(items);
+  const [active, setActive] = useState(0);
+  if (clusters.length === 0) {
+    return (
+      <div
+        data-testid="replay-timeline-empty"
+        className="rounded-md border border-dashed border-white/10 bg-white/[0.012] px-2.5 py-2 text-[11px] text-muted-foreground/70"
+      >
+        타임라인에 표시할 이벤트 없음 · 읽기 전용
+      </div>
+    );
+  }
+  const idx = Math.min(active, clusters.length - 1);
+  return (
+    <div data-testid="replay-timeline" data-clusters={clusters.length}>
+      {clusters.length > 1 ? (
+        <div className="mb-1.5 flex items-center gap-2">
+          <span
+            data-testid="replay-scrubber-pos"
+            className="shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground/60 tabular-nums"
+          >
+            cluster {idx + 1}/{clusters.length}
+          </span>
+          <input
+            type="range"
+            data-testid="replay-scrubber"
+            data-action-scope="local-view"
+            aria-label="replay timeline scrubber"
+            min={0}
+            max={clusters.length - 1}
+            value={idx}
+            onChange={(e) => setActive(Number(e.target.value))}
+            className="h-1 flex-1 cursor-pointer accent-cyan-400"
+          />
+        </div>
+      ) : null}
+      <ol className="space-y-1">
+        {clusters.map((c, i) => (
+          <li
+            key={c.id}
+            data-testid={`replay-cluster-${i}`}
+            data-active={i === idx ? "true" : "false"}
+            data-count={c.count}
+            className={`rounded border px-2 py-1 ${
+              i === idx
+                ? "border-cyan-400/40 bg-cyan-400/[0.06]"
+                : "border-white/[0.06] bg-white/[0.02]"
+            }`}
+          >
+            <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+              <span className="tabular-nums text-muted-foreground/60">
+                {c.startAt} – {c.endAt}
+              </span>
+              <span className="ml-auto rounded bg-white/[0.06] px-1 text-[9px] tabular-nums text-muted-foreground">
+                {c.count} events
+              </span>
+              {Object.entries(c.categories).map(([cat, n]) => (
+                <span
+                  key={cat}
+                  data-category={cat}
+                  className="rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70"
+                >
+                  {cat} {n}
+                </span>
+              ))}
+            </div>
+            {i === idx ? (
+              <ul className="mt-1 space-y-0.5" data-testid={`replay-cluster-items-${i}`}>
+                {c.items.map((it) => (
+                  <li key={it.id} className="flex items-center gap-2 text-[10px] text-zinc-400">
+                    <span className="min-w-0 flex-1 truncate">{it.title}</span>
+                    <span
+                      data-category={it.category}
+                      className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground"
+                    >
+                      {it.category}
+                    </span>
+                    <span className="shrink-0 tabular-nums text-[9px] text-muted-foreground/55">
+                      {it.createdAt}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function ReplayDeck({
   events,
   query = "",
@@ -901,6 +999,8 @@ function ReplayDeck({
 }) {
   // LINE C — local UI filter only. Never mutates the events, never calls a server.
   const [filter, setFilter] = useState<"all" | EventCategory>("all");
+  // Batch 21 — local-view list/timeline toggle (default list keeps existing replay UX).
+  const [view, setView] = useState<"list" | "timeline">("list");
   // LINE D — rows are read-only WorkItem-lite (category/source/observed). LINE C
   // filter is view-only over the projection; never mutates the underlying events.
   const items = projectWorkItemsLite(events);
@@ -915,9 +1015,30 @@ function ReplayDeck({
   const recent = matched.slice(0, 20);
   return (
     <div className="px-4 pb-1" data-testid="replay-deck" data-count={recent.length} data-filter={filter}>
-      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-cyan-200/80">
-        REPLAY · 과거 eventLog (read-only)
-      </p>
+      <div className="mb-1.5 flex items-center gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-200/80">
+          REPLAY · 과거 eventLog (read-only)
+        </p>
+        <div className="ml-auto flex gap-1" data-testid="replay-view-toggle">
+          {(["list", "timeline"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              data-testid={`replay-view-${v}`}
+              data-action-scope="local-view"
+              data-active={view === v}
+              onClick={() => setView(v)}
+              className={`rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wide transition-colors ${
+                view === v
+                  ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+                  : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-200"
+              }`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+      </div>
       <div
         role="radiogroup"
         aria-label="Replay category filter"
@@ -952,7 +1073,9 @@ function ReplayDeck({
           );
         })}
       </div>
-      {recent.length === 0 ? (
+      {view === "timeline" ? (
+        <ReplayTimeline items={matched.slice(0, 50)} />
+      ) : recent.length === 0 ? (
         <div
           className="rounded-md border border-dashed border-white/10 bg-white/[0.012] px-2.5 py-2"
           data-testid="replay-deck-empty"
