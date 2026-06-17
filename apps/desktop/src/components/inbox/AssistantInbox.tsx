@@ -462,6 +462,8 @@ const DECK_HINTS: Record<string, string> = {
   replay: "리플레이 좌석",
   "source-dock": "외부 소스 갑판으로 이동 · 화면 이동만",
   "patch-candidates": "패치 후보로 이동 · 화면 이동만 · 적용 없음",
+  "operator-console": "오퍼레이터 콘솔로 이동 · 화면 이동만",
+  "evidence-draft": "Evidence Draft로 이동 · 화면 이동만 · PREVIEW 전용",
   clear: "검색/필터 초기화",
 };
 
@@ -662,6 +664,7 @@ function StatusStrip({
   srcHealth,
   replayCount,
   patchCount,
+  cardRef,
 }: {
   mode: InboxViewMode;
   total: number;
@@ -685,10 +688,14 @@ function StatusStrip({
   replayCount?: number;
   /** Batch 19 — patch candidate count at-a-glance (read-only). */
   patchCount?: number;
+  /** Batch 25 LINE J — scroll/focus target for the "Operator Console" palette jump. */
+  cardRef?: React.Ref<HTMLDivElement>;
 }) {
   return (
     <div
-      className="flex flex-wrap items-center gap-1.5 px-4 pb-2"
+      ref={cardRef}
+      tabIndex={-1}
+      className="flex flex-wrap items-center gap-1.5 px-4 pb-2 outline-none"
       data-testid="assistant-inbox-status-strip"
       data-mode={mode}
       data-total={total}
@@ -1009,12 +1016,14 @@ const FRESHNESS_TONE: Record<Freshness, string> = {
  * unbacked claim. Display-only — no buttons, no external send, no approve
  * bureaucracy. Projection is pure (fixed example time → deterministic chips).
  */
-function EvidenceDraftCard() {
+function EvidenceDraftCard({ cardRef }: { cardRef?: React.Ref<HTMLDivElement> }) {
   const draft = projectEvidenceDraft(EXAMPLE_EVIDENCE_DRAFT, EXAMPLE_DRAFT_NOW_MS);
   return (
     <div
+      ref={cardRef}
+      tabIndex={-1}
       data-testid="evidence-draft-card"
-      className="mx-4 mb-2 rounded-lg border border-cyan-400/20 bg-cyan-400/[0.03] p-2.5"
+      className="mx-4 mb-2 rounded-lg border border-cyan-400/20 bg-cyan-400/[0.03] p-2.5 outline-none"
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-cyan-200/80">
@@ -2462,6 +2471,9 @@ export function AssistantInbox({
   const sourceDockRef = useRef<HTMLDivElement>(null);
   // Batch 17 LINE D — scroll/focus target for the "Patch Candidates 열기" jump.
   const patchCandidatesRef = useRef<HTMLDivElement>(null);
+  // Batch 25 LINE J — scroll/focus targets for the Operator Console + Evidence Draft jumps.
+  const operatorConsoleRef = useRef<HTMLDivElement>(null);
+  const evidenceDraftRef = useRef<HTMLDivElement>(null);
   // Batch 15 LINE E — locally-selected Source Dock row for the read-only drawer.
   const [selectedDetail, setSelectedDetail] = useState<SourceDetailItem | null>(null);
   const closeDetail = useCallback(() => setSelectedDetail(null), []);
@@ -2491,6 +2503,15 @@ export function AssistantInbox({
   const jumpToPatchCandidates = useCallback(() => {
     patchCandidatesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     patchCandidatesRef.current?.focus();
+  }, []);
+  // Batch 25 LINE J — view/focus only jumps to the Operator Console + Evidence Draft.
+  const jumpToOperatorConsole = useCallback(() => {
+    operatorConsoleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    operatorConsoleRef.current?.focus();
+  }, []);
+  const jumpToEvidenceDraft = useCallback(() => {
+    evidenceDraftRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    evidenceDraftRef.current?.focus();
   }, []);
   const clearFilters = useCallback(() => {
     setQuery("");
@@ -2561,6 +2582,12 @@ export function AssistantInbox({
     } else if (e.key === "c") {
       e.preventDefault();
       clearFilters();
+    } else if (e.key === "o") {
+      e.preventDefault();
+      jumpToOperatorConsole();
+    } else if (e.key === "e") {
+      e.preventDefault();
+      jumpToEvidenceDraft();
     }
   };
   // Batch 11 LINE B — persist the active view as a local UI preference only.
@@ -2592,7 +2619,9 @@ export function AssistantInbox({
     if (command?.kind !== "focusSection") return;
     if (command.value === "source-dock") jumpToSourceDock();
     else if (command.value === "patch-candidates") jumpToPatchCandidates();
-  }, [command, jumpToSourceDock, jumpToPatchCandidates]);
+    else if (command.value === "operator-console") jumpToOperatorConsole();
+    else if (command.value === "evidence-draft") jumpToEvidenceDraft();
+  }, [command, jumpToSourceDock, jumpToPatchCandidates, jumpToOperatorConsole, jumpToEvidenceDraft]);
   // Batch 16 LINE A — Operator Console derivations (all from props already on
   // screen; zero server call, zero write). Active view label, a terse filter
   // summary, source-health counts, and the read-only replay item count.
@@ -2672,6 +2701,7 @@ export function AssistantInbox({
         }
         replayCount={replayCount}
         patchCount={patchCandidates?.length}
+        cardRef={operatorConsoleRef}
       />
       <CommandDeck
         activeViewId={activeView?.id}
@@ -2696,6 +2726,12 @@ export function AssistantInbox({
         </span>
         <span>
           <kbd className="text-cyan-200/60">c</kbd> 초기화
+        </span>
+        <span>
+          <kbd className="text-cyan-200/60">o</kbd> 콘솔
+        </span>
+        <span>
+          <kbd className="text-cyan-200/60">e</kbd> Evidence
         </span>
         <span>
           <kbd className="text-cyan-200/60">/</kbd> 검색
@@ -2747,7 +2783,7 @@ export function AssistantInbox({
             <SourceDemoDeck scenario={sourceScenario ?? "mixed"} onChange={onSourceScenarioChange} />
           ) : null}
           {mode === "preview" ? <SourcePackCard /> : null}
-          {mode === "preview" ? <EvidenceDraftCard /> : null}
+          {mode === "preview" ? <EvidenceDraftCard cardRef={evidenceDraftRef} /> : null}
           {hasDock ? (
             <SourceDockQuickControls view={dockView} onChange={setDockView} onJump={jumpToSourceDock} />
           ) : null}

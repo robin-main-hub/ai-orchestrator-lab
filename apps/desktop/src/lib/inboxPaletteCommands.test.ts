@@ -36,6 +36,18 @@ describe("Batch 12 — LINE A: inbox Command Palette builder (view-only)", () =>
     expect(h.dispatch).toHaveBeenLastCalledWith("category", "failure");
     byId(cmds, "inbox.clear").run();
     expect(h.dispatch).toHaveBeenLastCalledWith("clear");
+
+    // Batch 25 LINE J — new local-view jumps (focusSection / seat switch only)
+    byId(cmds, "inbox.sourceDock").run();
+    expect(h.dispatch).toHaveBeenLastCalledWith("focusSection", "source-dock");
+    byId(cmds, "inbox.patchCandidates").run();
+    expect(h.dispatch).toHaveBeenLastCalledWith("focusSection", "patch-candidates");
+    byId(cmds, "inbox.operatorConsole").run();
+    expect(h.dispatch).toHaveBeenLastCalledWith("focusSection", "operator-console");
+    byId(cmds, "inbox.evidenceDraft").run();
+    expect(h.dispatch).toHaveBeenLastCalledWith("focusSection", "evidence-draft");
+    byId(cmds, "inbox.sandbox").run();
+    expect(h.dispatch).toHaveBeenLastCalledWith("mode", "sandbox");
   });
 
   it("covers the required command set with stable ids", () => {
@@ -51,6 +63,9 @@ describe("Batch 12 — LINE A: inbox Command Palette builder (view-only)", () =>
       "inbox.clear",
       "inbox.sourceDock",
       "inbox.patchCandidates",
+      "inbox.operatorConsole",
+      "inbox.sandbox",
+      "inbox.evidenceDraft",
     ]);
   });
 
@@ -65,9 +80,21 @@ describe("Batch 12 — LINE A: inbox Command Palette builder (view-only)", () =>
     expect(buildInboxPaletteCommands(h).some((c) => c.id.startsWith("inbox.view."))).toBe(false);
   });
 
-  it("labels carry no side-effect action words", () => {
-    const blob = JSON.stringify(buildInboxPaletteCommands(handlers())).toLowerCase();
-    for (const banned of ["approve", "send", "dispatch", "run tool", "apply ", "write"]) {
+  it("labels carry no side-effect action words (incl. the new Batch 25 jumps)", () => {
+    const cmds = buildInboxPaletteCommands(handlers(), [sampleView]);
+    const blob = JSON.stringify(cmds).toLowerCase();
+    for (const banned of [
+      "approve",
+      "send",
+      "dispatch",
+      "run tool",
+      "apply ",
+      "write",
+      "execute",
+      "commit",
+      "sync",
+      "refresh",
+    ]) {
       expect(blob.includes(banned)).toBe(false);
     }
   });

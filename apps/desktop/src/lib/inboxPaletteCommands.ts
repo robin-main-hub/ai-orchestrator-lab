@@ -92,6 +92,33 @@ export function buildInboxPaletteCommands(
       hint: "패치 후보 보기 · 적용 없음",
       run: () => h.dispatch("focusSection", "patch-candidates"),
     },
+    // Batch 25 LINE J — jump to the Operator Console (status strip). View/move only:
+    // scrolls + focuses the console region; never reads/writes a server.
+    {
+      id: "inbox.operatorConsole",
+      verb: "이동",
+      label: "Operator Console 열기",
+      hint: "오퍼레이터 콘솔 보기 · 화면 이동만",
+      run: () => h.dispatch("focusSection", "operator-console"),
+    },
+    // Batch 25 LINE J — jump to the SANDBOX seat (proposal-only shell). Seat switch
+    // only — the sandbox itself never executes / dispatches anything.
+    {
+      id: "inbox.sandbox",
+      verb: "전환",
+      label: "SANDBOX 좌석",
+      hint: "제안 전용 시나리오 · 실행 없음",
+      run: () => h.dispatch("mode", "sandbox"),
+    },
+    // Batch 25 LINE J — jump to the Evidence Draft card (PREVIEW-only footnote
+    // surface). View/move only: scrolls + focuses the draft; never sends/asks externally.
+    {
+      id: "inbox.evidenceDraft",
+      verb: "이동",
+      label: "Evidence Draft 열기",
+      hint: "근거 footnote 초안 보기 · PREVIEW 전용",
+      run: () => h.dispatch("focusSection", "evidence-draft"),
+    },
     // Batch 12 LINE D — user saved views as palette commands (view-only apply).
     ...userViews.map((v) => ({
       id: `inbox.view.${v.id}`,
