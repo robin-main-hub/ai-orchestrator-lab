@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 import { LEARNING_EVENT_FIXTURE } from "../../lib/assistantInboxProjection";
 
@@ -99,7 +100,7 @@ describe("AssistantInboxContainer — LINE H honest live vs empty vs example", (
         />
       </div>,
     );
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
     const text = (container.textContent ?? "").toLowerCase();
     expect(/approve/.test(text)).toBe(false);
     expect(/enable/.test(text)).toBe(false);

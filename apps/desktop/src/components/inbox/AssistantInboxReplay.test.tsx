@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { projectReplayEvents } from "./AssistantInbox";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 
@@ -33,7 +34,7 @@ describe("Batch 8 — LINE C: REPLAY mode shell", () => {
     expect(screen.getByTestId("replay-deck-item-0").textContent).toContain("mission.updated"); // newest first
     // replay replaces the card grid; it is a read-only playback
     expect(screen.queryByTestId("assistant-inbox-section-evidence")).toBeNull();
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
   });
 
   it("shows an honest empty replay state when the event log is empty", () => {
