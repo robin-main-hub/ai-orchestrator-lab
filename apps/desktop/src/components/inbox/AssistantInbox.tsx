@@ -509,6 +509,88 @@ function CommandDeck({
   );
 }
 
+/**
+ * Batch 16 LINE C — Source Dock quick controls: local-view buttons that narrow
+ * what the dock LISTS (jump / alerts-only / sources-only / evidence-only / all).
+ * Pure view state — never mutates the underlying source/evidence data, never
+ * syncs/refreshes/runs anything.
+ */
+function SourceDockQuickControls({
+  view,
+  onChange,
+  onJump,
+}: {
+  view: SourceDockView;
+  onChange: (v: SourceDockView) => void;
+  onJump: () => void;
+}) {
+  const base = "rounded border px-1.5 py-0.5 text-[10px] tracking-wide transition-colors";
+  const tone = (active: boolean) =>
+    active
+      ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+      : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-200";
+  return (
+    <div data-testid="source-dock-controls" className="mx-4 mb-1 flex flex-wrap items-center gap-1">
+      <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+        dock
+      </span>
+      <button
+        type="button"
+        data-testid="dock-ctl-jump"
+        data-action-scope="local-view"
+        title="Source Dock로 이동 · 화면 이동만"
+        onClick={onJump}
+        className={`${base} ${tone(false)}`}
+      >
+        Jump
+      </button>
+      <button
+        type="button"
+        data-testid="dock-ctl-alerts"
+        data-action-scope="local-view"
+        data-active={view.alerts}
+        title="stale·error 소스만"
+        onClick={() => onChange({ ...view, alerts: !view.alerts })}
+        className={`${base} ${tone(view.alerts)}`}
+      >
+        Alerts
+      </button>
+      <button
+        type="button"
+        data-testid="dock-ctl-sources"
+        data-action-scope="local-view"
+        data-active={view.show === "sources"}
+        title="소스만 보기"
+        onClick={() => onChange({ ...view, show: view.show === "sources" ? "all" : "sources" })}
+        className={`${base} ${tone(view.show === "sources")}`}
+      >
+        Sources
+      </button>
+      <button
+        type="button"
+        data-testid="dock-ctl-evidence"
+        data-action-scope="local-view"
+        data-active={view.show === "evidence"}
+        title="evidence만 보기"
+        onClick={() => onChange({ ...view, show: view.show === "evidence" ? "all" : "evidence" })}
+        className={`${base} ${tone(view.show === "evidence")}`}
+      >
+        Evidence
+      </button>
+      <button
+        type="button"
+        data-testid="dock-ctl-all"
+        data-action-scope="local-view"
+        title="필터 해제"
+        onClick={() => onChange({ alerts: false, show: "all" })}
+        className={`${base} ${tone(false)}`}
+      >
+        All
+      </button>
+    </div>
+  );
+}
+
 /** A compact command-center stat pill. Presentational, no action. */
 function StatChip({ children, testid }: { children: React.ReactNode; testid?: string }) {
   return (
@@ -1268,19 +1350,32 @@ function rowActivation(run: () => void) {
   };
 }
 
+/** Batch 16 LINE C — local view state for the Source Dock quick controls. */
+export type SourceDockView = { alerts: boolean; show: "all" | "sources" | "evidence" };
+const DEFAULT_DOCK_VIEW: SourceDockView = { alerts: false, show: "all" };
+
 function PluginSourcesCard({
   sources = [],
   evidence = [],
   cardRef,
   onSelect,
+  view = DEFAULT_DOCK_VIEW,
 }: {
   sources?: ReadonlyArray<WorkItemLiteProviderResult>;
   evidence?: ReadonlyArray<PluginEvidenceCandidate>;
   cardRef?: RefObject<HTMLDivElement | null>;
   onSelect?: (item: SourceDetailItem) => void;
+  view?: SourceDockView;
 }) {
   if (sources.length === 0 && evidence.length === 0) return null;
+  // Health summary always reflects the FULL set (overview); the quick-control
+  // filters only narrow what is LISTED below — pure presentation, no mutation.
   const summary = summarizeSourceHealth(sources, evidence);
+  const shownSources = view.alerts
+    ? sources.filter((s) => s.health === "stale" || s.health === "error")
+    : sources;
+  const showSourceList = view.show !== "evidence";
+  const showEvidenceList = view.show !== "sources" && evidence.length > 0;
   return (
     <div
       ref={cardRef}
@@ -1292,8 +1387,9 @@ function PluginSourcesCard({
         Source Dock · External Source Deck · read-only
       </p>
       <SourceHealthStrip summary={summary} />
+      {showSourceList ? (
       <div className="space-y-1.5">
-        {sources.map((s) => {
+        {shownSources.map((s) => {
           const rows = projectPluginWorkItems([s]);
           return (
             <div
@@ -1379,7 +1475,8 @@ function PluginSourcesCard({
           );
         })}
       </div>
-      {evidence.length > 0 ? (
+      ) : null}
+      {showEvidenceList ? (
         <div className="mt-2" data-testid="plugin-evidence">
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
             Source Evidence
@@ -1537,6 +1634,8 @@ export function AssistantInbox({
   // Batch 15 LINE E — locally-selected Source Dock row for the read-only drawer.
   const [selectedDetail, setSelectedDetail] = useState<SourceDetailItem | null>(null);
   const closeDetail = useCallback(() => setSelectedDetail(null), []);
+  // Batch 16 LINE C — local Source Dock view filter (display-only).
+  const [dockView, setDockView] = useState<SourceDockView>(DEFAULT_DOCK_VIEW);
   const [focus, setFocus] = useState<InboxFocus>(storedFilters?.focus ?? "all");
   const [category, setCategory] = useState<"all" | EventCategory>(storedFilters?.category ?? "all");
   const onFocusPick = (f: InboxFocus) => {
@@ -1645,6 +1744,7 @@ export function AssistantInbox({
   const filterSummary = filterParts.length > 0 ? filterParts.join(" · ") : "none";
   const consoleSrcSummary = summarizeSourceHealth(pluginSources ?? [], pluginEvidence ?? []);
   const hasSources = (pluginSources?.length ?? 0) > 0;
+  const hasDock = hasSources || (pluginEvidence?.length ?? 0) > 0;
   const replayCount = recentEvents?.length;
   return (
     <Card
@@ -1760,11 +1860,15 @@ export function AssistantInbox({
           {mode === "preview" && onSourceScenarioChange ? (
             <SourceDemoDeck scenario={sourceScenario ?? "mixed"} onChange={onSourceScenarioChange} />
           ) : null}
+          {hasDock ? (
+            <SourceDockQuickControls view={dockView} onChange={setDockView} onJump={jumpToSourceDock} />
+          ) : null}
           <PluginSourcesCard
             sources={pluginSources}
             evidence={pluginEvidence}
             cardRef={sourceDockRef}
             onSelect={setSelectedDetail}
+            view={dockView}
           />
           <SourceDetailDrawer item={selectedDetail} onClose={closeDetail} />
           {showCards ? (
