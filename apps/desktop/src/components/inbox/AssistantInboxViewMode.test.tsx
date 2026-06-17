@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { AssistantInbox, INBOX_VIEW_MODES } from "./AssistantInbox";
@@ -97,7 +98,7 @@ describe("Batch 5 — Command Center view mode (LIVE / PREVIEW / REPLAY / SANDBO
         <AssistantInboxContainer live={{}} />
       </div>,
     );
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
     const text = (container.textContent ?? "").toLowerCase();
     expect(/approve/.test(text)).toBe(false);
     expect(/enable/.test(text)).toBe(false);
@@ -107,7 +108,7 @@ describe("Batch 5 — Command Center view mode (LIVE / PREVIEW / REPLAY / SANDBO
   it("stays button-free in PREVIEW too (no action buttons in preview)", () => {
     const { container } = render(<AssistantInboxContainer live={{}} />);
     fireEvent.click(radio("preview"));
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
   });
 
   it("onModeChange reports the chosen seat (UI state only); disabled seats never fire", () => {

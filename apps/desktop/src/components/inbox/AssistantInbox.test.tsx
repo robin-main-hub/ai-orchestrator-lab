@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { AssistantInbox } from "./AssistantInbox";
 import { EvidenceCard, type EvidenceItem } from "./EvidenceCard";
 import { LearningLoopCard, type LearningLoopItem } from "./LearningLoopCard";
@@ -94,7 +95,7 @@ describe("AssistantInbox shell", () => {
       />,
     );
     // no buttons at all in this presentational surface
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
     const text = container.textContent ?? "";
     expect(/approve/i.test(text)).toBe(false);
     expect(/enable/i.test(text)).toBe(false);
@@ -202,7 +203,7 @@ describe("RuntimeManifestPreviewCard", () => {
       "quarantined",
     );
     // blocked entries never get an enable/approve button
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
   });
 
   it("shows evalWarned badge on a loadable-but-warned entry", () => {

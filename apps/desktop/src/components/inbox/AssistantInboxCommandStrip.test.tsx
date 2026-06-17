@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 
 afterEach(() => cleanup());
@@ -45,6 +46,6 @@ describe("Batch 7 — LINE A/C: command strip severity + live event summary", ()
 
   it("the strip adds no buttons", () => {
     const { container } = render(<AssistantInboxContainer live={{ eventLogCount: 3 }} />);
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
   });
 });

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 
 afterEach(() => cleanup());
@@ -16,7 +17,7 @@ describe("Batch 6 — LINE W: approval toast / inbox layout collision", () => {
 
   it("adds no approval action paths to the inbox (layout-only change)", () => {
     const { container } = render(<AssistantInboxContainer live={{}} />);
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
     const text = (screen.getByTestId("assistant-inbox").textContent ?? "").toLowerCase();
     expect(/approve/.test(text)).toBe(false);
     expect(/enable/.test(text)).toBe(false);

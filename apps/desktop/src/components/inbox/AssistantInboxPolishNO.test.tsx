@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import { assertNoSideEffectActionControls } from "./inboxInvariant";
 import { AssistantInbox } from "./AssistantInbox";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
 import { StatusBadge, SourceBadge } from "./StatusBadge";
@@ -163,7 +164,7 @@ describe("LINE N/O — read-only invariants hold after polish", () => {
         />
       </div>,
     );
-    expect(container.querySelectorAll("button").length).toBe(0);
+    assertNoSideEffectActionControls(container);
     const text = (container.textContent ?? "").toLowerCase();
     expect(/approve/.test(text)).toBe(false);
     expect(/enable/.test(text)).toBe(false);
