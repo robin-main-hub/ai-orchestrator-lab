@@ -238,6 +238,22 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## 23. Batch 23 — Generic Source Pack Demo
+
+Batch 23 added a PREVIEW-only demo of a bundled source pack feeding the OS. Owner
+checks:
+
+- [ ] **Manifest visible** — the Source Pack card shows the declarative manifest:
+      name, version, source kind, and capability chips (inbox_source_provider /
+      workitem_lite_provider / evidence_provider).
+- [ ] **Pack rows + evidence** — the pack's projected WorkItemLite rows and an
+      evidence candidate render under the manifest.
+- [ ] **PREVIEW-only / no leak** — the pack card appears only in PREVIEW; LIVE never
+      shows it.
+- [ ] **Domain-independent / read-only** — generic names only; `sourceKind: static`
+      (no remote loading); no buttons; no execution/sync/write; passes
+      assertNoSideEffectActionControls.
+
 ## 22. Batch 22 — Sandbox Proposal Shell
 
 Batch 22 turned the disabled SANDBOX seat into a read-only "proposal only" surface.
