@@ -33,6 +33,13 @@ import {
   type Freshness,
 } from "../../lib/evidenceDraft";
 import {
+  TONE,
+  CHIP_BASE,
+  EMPTY_STATE,
+  SECTION_CARD,
+  SECTION_HEADER,
+} from "../../lib/inboxStyleTokens";
+import {
   projectPluginWorkItems,
   type WorkItemLiteProviderResult,
 } from "../../lib/plugins/pluginWorkItemSource";
@@ -334,15 +341,13 @@ function Section({
 }) {
   return (
     <section
-      className="space-y-1.5 rounded-lg border border-white/5 bg-white/[0.02] p-2"
+      className={SECTION_CARD}
       data-testid={`assistant-inbox-section-${id}`}
       data-count={count}
       data-source={source}
     >
       <div className="flex items-center gap-2 border-b border-white/5 pb-1.5">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          {title}
-        </h3>
+        <h3 className={SECTION_HEADER}>{title}</h3>
         <Badge variant="outline" data-testid={`assistant-inbox-section-count-${id}`}>
           {count}
         </Badge>
@@ -355,7 +360,7 @@ function Section({
         // card, no fake/fixture data) that explains why it's empty + what fills
         // it later, so a sparse LIVE surface reads as "waiting", not "broken".
         <div
-          className="rounded-md border border-dashed border-white/10 bg-white/[0.012] px-2.5 py-2"
+          className={EMPTY_STATE}
           data-testid={`assistant-inbox-section-empty-${id}`}
           data-empty="true"
         >
@@ -631,10 +636,7 @@ function SourceDockQuickControls({
 /** A compact command-center stat pill. Presentational, no action. */
 function StatChip({ children, testid }: { children: React.ReactNode; testid?: string }) {
   return (
-    <span
-      data-testid={testid}
-      className="inline-flex items-center rounded border border-white/10 bg-white/[0.03] px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
-    >
+    <span data-testid={testid} className={`${CHIP_BASE} ${TONE.neutral}`}>
       {children}
     </span>
   );
@@ -1001,10 +1003,10 @@ function SourcePackCard() {
 
 /** Batch 24 LINE H — freshness verdict → chip tone (read-only, display-only). */
 const FRESHNESS_TONE: Record<Freshness, string> = {
-  fresh: "border border-emerald-400/30 bg-emerald-400/10 text-emerald-200/90",
-  aging: "border border-amber-400/30 bg-amber-400/10 text-amber-200/90",
-  stale: "border border-rose-400/30 bg-rose-400/10 text-rose-200/90",
-  unknown: "border border-white/15 bg-white/[0.04] text-muted-foreground/70",
+  fresh: TONE.good,
+  aging: TONE.warn,
+  stale: TONE.bad,
+  unknown: TONE.muted,
 };
 
 /**
@@ -1036,7 +1038,7 @@ function EvidenceDraftCard({ cardRef }: { cardRef?: React.Ref<HTMLDivElement> })
           <span
             data-testid="evidence-draft-stale-count"
             data-stale-count={draft.staleCount}
-            className="rounded border border-rose-400/30 bg-rose-400/10 px-1 text-[9px] uppercase tracking-wide text-rose-200/90"
+            className={`rounded px-1 text-[9px] uppercase tracking-wide ${TONE.bad}`}
           >
             {draft.staleCount} stale
           </span>
@@ -1125,9 +1127,9 @@ function EvidenceDraftCard({ cardRef }: { cardRef?: React.Ref<HTMLDivElement> })
 
 /** Batch 22 LINE F — simulated-outcome tone for sandbox proposals. */
 const SANDBOX_OUTCOME_TONE: Record<SandboxOutcome, string> = {
-  "simulated-pass": "border border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
-  "simulated-warning": "border border-amber-400/30 bg-amber-400/10 text-amber-200",
-  "simulated-blocked": "border border-rose-400/30 bg-rose-400/10 text-rose-200",
+  "simulated-pass": TONE.good,
+  "simulated-warning": TONE.warn,
+  "simulated-blocked": TONE.bad,
 };
 
 /**
@@ -1703,9 +1705,9 @@ const PLUGIN_HEALTH_LABEL: Record<PluginSourceHealth, string> = {
  * Display-only colour; the `data-health` attribute (read by tests) is unchanged.
  */
 const HEALTH_TONE: Record<PluginSourceHealth, string> = {
-  connected: "border border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
-  stale: "border border-amber-400/30 bg-amber-400/10 text-amber-200",
-  error: "border border-rose-400/30 bg-rose-400/10 text-rose-200",
+  connected: TONE.good,
+  stale: TONE.warn,
+  error: TONE.bad,
   disabled: "border border-white/10 bg-white/[0.04] text-muted-foreground/60",
   unknown: "border border-slate-400/20 bg-slate-400/10 text-slate-300/80",
 };
@@ -2024,9 +2026,9 @@ function SourceDemoDeck({
 
 /** Batch 17 LINE A — per-safety visual tone for the patch candidate badge. */
 const SAFETY_TONE: Record<PatchSafetyStatus, string> = {
-  pass: "border border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
-  warning: "border border-amber-400/30 bg-amber-400/10 text-amber-200",
-  blocked: "border border-rose-400/30 bg-rose-400/10 text-rose-200",
+  pass: TONE.good,
+  warning: TONE.warn,
+  blocked: TONE.bad,
 };
 
 /** Build the read-only detail-drawer item for a patch candidate (LINE B). */
@@ -2085,12 +2087,12 @@ function PatchSummaryStrip({ candidates }: { candidates: ReadonlyArray<PatchCand
       data-testid="patch-summary-strip"
       className="mb-2 flex flex-wrap items-center gap-1 text-[9px] uppercase tracking-wider"
     >
-      {chip("patch-sum-total", "total", s.count, "border border-white/10 bg-white/[0.03] text-muted-foreground")}
-      {chip("patch-sum-pass", "pass", s.pass, "border border-emerald-400/30 bg-emerald-400/10 text-emerald-200")}
-      {chip("patch-sum-warning", "warn", s.warning, "border border-amber-400/30 bg-amber-400/10 text-amber-200")}
-      {chip("patch-sum-blocked", "blocked", s.blocked, "border border-rose-400/30 bg-rose-400/10 text-rose-200")}
+      {chip("patch-sum-total", "total", s.count, TONE.neutral)}
+      {chip("patch-sum-pass", "pass", s.pass, TONE.good)}
+      {chip("patch-sum-warning", "warn", s.warning, TONE.warn)}
+      {chip("patch-sum-blocked", "blocked", s.blocked, TONE.bad)}
       <span className="mx-0.5 text-muted-foreground/30">·</span>
-      {chip("patch-sum-observed", "obs", s.observed, "border border-white/10 bg-white/[0.03] text-muted-foreground")}
+      {chip("patch-sum-observed", "obs", s.observed, TONE.neutral)}
       {chip("patch-sum-not-observed", "not-obs", s.notObserved, "border border-white/10 bg-white/[0.03] text-muted-foreground/70")}
       {chip("patch-sum-no-actual", "no-actual", s.verificationNotRun, "border border-white/10 bg-white/[0.03] text-muted-foreground/70")}
       {chip("patch-sum-claimed", "claimed", s.claimedTestsPresent, "border border-white/10 bg-white/[0.03] text-muted-foreground")}
