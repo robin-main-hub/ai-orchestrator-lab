@@ -67,9 +67,14 @@ describe("Batch 17 LINE A — patch candidate lane", () => {
     const lane = screen.getByTestId("patch-candidate-lane");
     assertNoSideEffectActionControls(lane);
     assertNoForbiddenActionText(lane);
-    // every interactive control in the lane is a local-detail row activation (no apply button)
+    // every interactive control is a local view/detail control (rows = local-detail,
+    // quick filters = local-view) — never a side-effect apply/commit/dispatch.
     const controls = collectActionControls(lane);
     expect(controls.length).toBeGreaterThan(0);
-    expect(controls.every((c) => c.getAttribute("data-action-scope") === "local-detail")).toBe(true);
+    expect(
+      controls.every((c) =>
+        ["local-detail", "local-view"].includes(c.getAttribute("data-action-scope") ?? ""),
+      ),
+    ).toBe(true);
   });
 });
