@@ -238,6 +238,21 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## 19. Batch 19 — Operator Console Speed Polish
+
+Batch 19 added view-only keyboard accelerators + at-a-glance status. Owner checks:
+
+- [ ] **Keyboard accelerators** — `s` jumps to Source Dock, `p` to Patch Candidates
+      (scroll + focus, seat unchanged), `b` focuses Blocked, `c` clears filters;
+      `/` focuses search, `Esc` clears it.
+- [ ] **Suppressed while typing** — pressing the letters inside the search box (or
+      with a modifier held) does NOT trigger an accelerator.
+- [ ] **Shortcuts hint** — the key hint row is visible/discoverable and has no buttons.
+- [ ] **Patch-count chip** — the Operator Console shows `N patch` when candidates
+      exist, and nothing on a LIVE-empty desk.
+- [ ] **No side-effect controls** — every accelerator is a local view/focus/filter;
+      no apply/commit/dispatch; the surface passes assertNoSideEffectActionControls.
+
 ## 18. Batch 18 — LIVE Patch Candidate Wiring
 
 Batch 18 maps real H8 runner patch handoffs into the Patch Candidate lane as
