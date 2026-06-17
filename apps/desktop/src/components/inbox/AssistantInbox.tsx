@@ -27,6 +27,12 @@ import {
 } from "../../lib/sandboxProposal";
 import { EXAMPLE_SOURCE_PACK, projectSourcePack } from "../../lib/plugins/exampleSourcePack";
 import {
+  EXAMPLE_EVIDENCE_DRAFT,
+  EXAMPLE_DRAFT_NOW_MS,
+  projectEvidenceDraft,
+  type Freshness,
+} from "../../lib/evidenceDraft";
+import {
   projectPluginWorkItems,
   type WorkItemLiteProviderResult,
 } from "../../lib/plugins/pluginWorkItemSource";
@@ -981,6 +987,128 @@ function SourcePackCard() {
             </li>
           ))}
         </ul>
+      ) : null}
+    </div>
+  );
+}
+
+/** Batch 24 LINE H — freshness verdict → chip tone (read-only, display-only). */
+const FRESHNESS_TONE: Record<Freshness, string> = {
+  fresh: "border border-emerald-400/30 bg-emerald-400/10 text-emerald-200/90",
+  aging: "border border-amber-400/30 bg-amber-400/10 text-amber-200/90",
+  stale: "border border-rose-400/30 bg-rose-400/10 text-rose-200/90",
+  unknown: "border border-white/15 bg-white/[0.04] text-muted-foreground/70",
+};
+
+/**
+ * Batch 24 LINE H — Evidence Draft / Footnote Surface (PREVIEW-only).
+ *
+ * A generic "trustworthy assistant" draft: claims with superscript footnote
+ * markers, a numbered footnotes table where each ref carries a freshness chip
+ * (fresh / aging / stale / unknown), and a "missing info / ask" slot for any
+ * unbacked claim. Display-only — no buttons, no external send, no approve
+ * bureaucracy. Projection is pure (fixed example time → deterministic chips).
+ */
+function EvidenceDraftCard() {
+  const draft = projectEvidenceDraft(EXAMPLE_EVIDENCE_DRAFT, EXAMPLE_DRAFT_NOW_MS);
+  return (
+    <div
+      data-testid="evidence-draft-card"
+      className="mx-4 mb-2 rounded-lg border border-cyan-400/20 bg-cyan-400/[0.03] p-2.5"
+    >
+      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-cyan-200/80">
+          Evidence Draft
+        </span>
+        <span className="text-[11px] font-medium text-zinc-300" data-testid="evidence-draft-title">
+          {draft.title}
+        </span>
+        {draft.staleCount > 0 ? (
+          <span
+            data-testid="evidence-draft-stale-count"
+            data-stale-count={draft.staleCount}
+            className="rounded border border-rose-400/30 bg-rose-400/10 px-1 text-[9px] uppercase tracking-wide text-rose-200/90"
+          >
+            {draft.staleCount} stale
+          </span>
+        ) : null}
+        <span className="ml-auto text-[9px] uppercase tracking-wider text-muted-foreground/45">
+          footnoted · read-only
+        </span>
+      </div>
+
+      {/* draft body: claims with footnote markers */}
+      <ul className="space-y-0.5" data-testid="evidence-draft-claims">
+        {draft.claims.map((c) => (
+          <li
+            key={c.id}
+            data-testid={`evidence-draft-claim-${c.id}`}
+            data-supported={c.supported ? "true" : "false"}
+            className="flex items-start gap-1.5 text-[11px] text-zinc-300"
+          >
+            <span className="min-w-0 flex-1">{c.text}</span>
+            {c.footnotes.length > 0 ? (
+              <sup className="shrink-0 text-[9px] tabular-nums text-cyan-300/80">
+                {c.footnotes.map((n) => `[${n}]`).join("")}
+              </sup>
+            ) : (
+              <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase tracking-wide text-muted-foreground/60">
+                needs source
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      {/* numbered footnotes with freshness chips */}
+      <ol className="mt-1.5 space-y-0.5 border-t border-white/5 pt-1.5" data-testid="evidence-draft-footnotes">
+        {draft.footnotes.map((f) => (
+          <li
+            key={f.n}
+            data-testid={`evidence-draft-footnote-${f.n}`}
+            className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
+          >
+            <span className="shrink-0 tabular-nums text-cyan-300/70">[{f.n}]</span>
+            <code className="shrink-0 rounded bg-background/70 px-1">{f.refId}</code>
+            <span className="min-w-0 flex-1 truncate">
+              {f.label}
+              {f.locator ? <span className="opacity-70"> · {f.locator}</span> : null}
+            </span>
+            <span
+              data-testid={`evidence-draft-freshness-${f.n}`}
+              data-freshness={f.freshness}
+              className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${FRESHNESS_TONE[f.freshness]}`}
+            >
+              {f.freshness}
+              {f.ageHours != null ? <span className="ml-0.5 opacity-70 tabular-nums">{f.ageHours}h</span> : null}
+            </span>
+          </li>
+        ))}
+      </ol>
+
+      {/* missing info / ask slot — unbacked claims, no side-effect control */}
+      {draft.missing.length > 0 ? (
+        <div
+          data-testid="evidence-draft-missing"
+          data-missing-count={draft.missing.length}
+          className="mt-1.5 rounded border border-dashed border-amber-400/25 bg-amber-400/[0.04] p-1.5"
+        >
+          <div className="mb-0.5 text-[9px] uppercase tracking-wider text-amber-200/70">
+            missing info · ask
+          </div>
+          <ul className="space-y-0.5">
+            {draft.missing.map((m) => (
+              <li
+                key={m.claimId}
+                data-testid={`evidence-draft-ask-${m.claimId}`}
+                className="text-[10px] text-amber-100/70"
+              >
+                <span className="text-zinc-300">{m.text}</span>
+                <span className="opacity-70"> — {m.ask}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
     </div>
   );
@@ -2619,6 +2747,7 @@ export function AssistantInbox({
             <SourceDemoDeck scenario={sourceScenario ?? "mixed"} onChange={onSourceScenarioChange} />
           ) : null}
           {mode === "preview" ? <SourcePackCard /> : null}
+          {mode === "preview" ? <EvidenceDraftCard /> : null}
           {hasDock ? (
             <SourceDockQuickControls view={dockView} onChange={setDockView} onJump={jumpToSourceDock} />
           ) : null}
