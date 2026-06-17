@@ -86,6 +86,7 @@ import {
 } from "./lib/conversationUsage";
 import { createPatternApprovalStrategy, extractCommandPrefix } from "./lib/sessionPatternApproval";
 import { DANGEROUS_PATTERN } from "./lib/safeCommandPolicy";
+import { patchCandidatesFromApprovalItems } from "./lib/patchHandoffToCandidate";
 import {
   CONVERSATION_SLASH_HELP,
   parseConversationSlashCommand,
@@ -5515,6 +5516,13 @@ export function App() {
                 // lanes. Date.now() is injected HERE (not in the pure projection).
                 recentEvents: eventLog,
                 nowMs: Date.now(),
+                // Batch 18 LINE B — LIVE Patch Candidate seam. Real H8 runner patch
+                // handoffs map to read-only candidates via patchCandidatesFromApprovalItems.
+                // The runner-patch approval queues live per-mission (MissionWorkspaceDetail)
+                // and are not yet unified into an app-level feed, so this is honest-empty
+                // for now; wiring a real source is swapping the [] for those queue items.
+                // No fetch / server call / EventStorage write / runner dispatch.
+                patchCandidates: patchCandidatesFromApprovalItems([]),
               }}
               // LINE A (Batch 8) — remember the last seat (local UI pref only).
               persistViewMode
