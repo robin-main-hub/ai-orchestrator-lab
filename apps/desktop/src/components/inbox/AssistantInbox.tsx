@@ -19,6 +19,7 @@ import {
   upsertUserView,
   removeUserView,
   slugifyViewName,
+  sanitizeSavedViewName,
   type UserSavedView,
 } from "../../lib/userSavedViews";
 
@@ -90,9 +91,19 @@ export const INBOX_VIEW_MODES: ReadonlyArray<{
  * `nonce` per dispatch; the container/inbox apply it (mode / focus / category /
  * clear) via effect. View-only — it only sets view state, never an action.
  */
+/** A full local view snapshot — applied atomically (e.g. a saved view). */
+export type InboxViewSnapshot = {
+  mode: InboxViewMode;
+  focus: InboxFocus;
+  category: "all" | EventCategory;
+  search: string;
+};
+
 export type InboxCommand = {
-  kind: "mode" | "focus" | "category" | "clear";
+  kind: "mode" | "focus" | "category" | "clear" | "applyView";
   value?: string;
+  /** Present for kind "applyView" — the whole view to apply at once. */
+  view?: InboxViewSnapshot;
   nonce: number;
 };
 
@@ -940,6 +951,7 @@ function SavedViewManager({
         <button
           type="button"
           data-testid="saved-view-save"
+          data-action-scope="local-preference"
           onClick={trySave}
           className="shrink-0 rounded border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-400/20"
         >
@@ -961,6 +973,7 @@ function SavedViewManager({
               <button
                 type="button"
                 data-testid={`saved-view-apply-${v.id}`}
+                data-action-scope="local-preference"
                 onClick={() => onApply(v)}
                 className="py-0.5 hover:text-cyan-200"
               >
@@ -969,6 +982,7 @@ function SavedViewManager({
               <button
                 type="button"
                 data-testid={`saved-view-delete-${v.id}`}
+                data-action-scope="local-preference"
                 onClick={() => onDelete(v.id)}
                 aria-label={`${v.name} 삭제 (로컬)`}
                 className="px-1 py-0.5 text-muted-foreground/60 hover:text-rose-300"
@@ -1063,7 +1077,8 @@ export function AssistantInbox({
   const [userViews, setUserViews] = useState<UserSavedView[]>(() =>
     persistFilters ? readUserViews() : [],
   );
-  const onSaveView = (name: string) => {
+  const onSaveView = (rawName: string) => {
+    const name = sanitizeSavedViewName(rawName);
     const next = upsertUserView(userViews, {
       id: slugifyViewName(name),
       name,
@@ -1071,6 +1086,7 @@ export function AssistantInbox({
       focus,
       category,
       search: query,
+      schemaVersion: 1,
     });
     setUserViews(next);
     writeUserViews(next);
@@ -1116,6 +1132,11 @@ export function AssistantInbox({
       setQuery("");
       setCategory("all");
       setFocus("all");
+    } else if (command.kind === "applyView" && command.view) {
+      // mode is applied by the container; the inbox applies the filter combo.
+      setFocus(command.view.focus);
+      setCategory(command.view.category);
+      setQuery(command.view.search);
     }
   }, [command]);
   return (

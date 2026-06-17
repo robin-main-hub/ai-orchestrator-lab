@@ -307,6 +307,11 @@ import { CommandPalette, type CommandEntry } from "./components/CommandPalette";
 import { AssistantInboxContainer } from "./components/inbox/AssistantInboxContainer";
 import type { InboxCommand } from "./components/inbox/AssistantInbox";
 import { buildInboxPaletteCommands } from "./lib/inboxPaletteCommands";
+import {
+  readUserViews,
+  applyUserSavedInboxView,
+  type UserSavedView,
+} from "./lib/userSavedViews";
 import { ConfigLibraryPanel } from "./components/ConfigLibraryPanel";
 import { ConversationWorkbench } from "./components/ConversationWorkbench";
 import { DebateAnnexPage } from "./components/debate-chamber/DebateAnnexPage";
@@ -392,6 +397,11 @@ export function App() {
   const goInboxCommand = (kind: InboxCommand["kind"], value?: string) => {
     setActiveNavItem("command_center");
     setInboxCommand((prev) => ({ kind, value, nonce: (prev?.nonce ?? 0) + 1 }));
+  };
+  // Batch 12 LINE D — apply a user saved view from the palette (view-only).
+  const applyInboxView = (v: UserSavedView) => {
+    setActiveNavItem("command_center");
+    setInboxCommand((prev) => ({ ...applyUserSavedInboxView(v), nonce: (prev?.nonce ?? 0) + 1 }));
   };
   const [cheatSheetOpen, setCheatSheetOpen] = useState(false);
   const [agents, setAgents] = useState<WorkbenchAgent[]>(() =>
@@ -4275,10 +4285,14 @@ export function App() {
 
   const paletteCommands: CommandEntry[] = [
     // Batch 12 LINE A — inbox view commands from a pure, unit-tested builder.
-    ...buildInboxPaletteCommands({
-      goInbox: () => setActiveNavItem("command_center"),
-      dispatch: goInboxCommand,
-    }),
+    ...buildInboxPaletteCommands(
+      {
+        goInbox: () => setActiveNavItem("command_center"),
+        dispatch: goInboxCommand,
+        applyView: applyInboxView,
+      },
+      readUserViews(),
+    ),
     {
       id: "switch.conversation",
       verb: "전환",

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   isValidUserView,
   readUserViews,
@@ -58,5 +60,25 @@ describe("Batch 12 — LINE B: user saved views (local UI pref, pure)", () => {
     );
     expect(readUserViews().map((v) => v.id)).toEqual(["ok"]);
     expect(isValidUserView({ name: "n" })).toBe(false);
+  });
+
+  it("the model imports no writer / runner / EventStorage / server / approval seam", () => {
+    const rel = "src/lib/userSavedViews.ts";
+    const path =
+      [resolve(process.cwd(), rel), resolve(process.cwd(), "apps/desktop", rel)].find((p) =>
+        existsSync(p),
+      ) ?? resolve(process.cwd(), rel);
+    const src = readFileSync(path, "utf8");
+    for (const banned of [
+      "executeLocalBatchWrite",
+      "createLocalClientEventCache",
+      "stage29LocalEventStore",
+      "stage34ApprovalServer",
+      "grantDgxApproval",
+      "codingRunner",
+      "routes/github",
+    ]) {
+      expect(src.includes(banned)).toBe(false);
+    }
   });
 });
