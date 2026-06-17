@@ -83,6 +83,15 @@ export function buildInboxPaletteCommands(
       hint: "외부 소스 보기 · 화면 이동만",
       run: () => h.dispatch("focusSection", "source-dock"),
     },
+    // Batch 17 LINE D — jump to the Patch Candidate lane. View/move only:
+    // scrolls + focuses the lane; never applies/commits/dispatches a patch.
+    {
+      id: "inbox.patchCandidates",
+      verb: "이동",
+      label: "Patch Candidates 열기",
+      hint: "패치 후보 보기 · 적용 없음",
+      run: () => h.dispatch("focusSection", "patch-candidates"),
+    },
     // Batch 12 LINE D — user saved views as palette commands (view-only apply).
     ...userViews.map((v) => ({
       id: `inbox.view.${v.id}`,
