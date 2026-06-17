@@ -1036,6 +1036,98 @@ const PLUGIN_HEALTH_LABEL: Record<PluginSourceHealth, string> = {
   unknown: "unknown",
 };
 
+/**
+ * Batch 15 LINE A — per-health visual tone for the Source Dock health badge.
+ * Display-only colour; the `data-health` attribute (read by tests) is unchanged.
+ */
+const HEALTH_TONE: Record<PluginSourceHealth, string> = {
+  connected: "border border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
+  stale: "border border-amber-400/30 bg-amber-400/10 text-amber-200",
+  error: "border border-rose-400/30 bg-rose-400/10 text-rose-200",
+  disabled: "border border-white/10 bg-white/[0.04] text-muted-foreground/60",
+  unknown: "border border-slate-400/20 bg-slate-400/10 text-slate-300/80",
+};
+
+/** Health buckets, in display order, for the at-a-glance strip. */
+const HEALTH_ORDER: ReadonlyArray<PluginSourceHealth> = [
+  "connected",
+  "stale",
+  "error",
+  "disabled",
+  "unknown",
+];
+
+type SourceHealthSummary = Record<PluginSourceHealth, number> & {
+  totalRows: number;
+  evidenceCount: number;
+};
+
+/**
+ * Batch 15 LINE B — pure health summary for the Source Dock. Counts each health
+ * bucket, the active-only projected row total (so disabled sources contribute 0
+ * rows, matching the dock body), and the evidence-candidate count. No Date.now /
+ * I/O / side effect.
+ */
+function summarizeSourceHealth(
+  sources: ReadonlyArray<WorkItemLiteProviderResult>,
+  evidence: ReadonlyArray<PluginEvidenceCandidate>,
+): SourceHealthSummary {
+  const bucket = (h: PluginSourceHealth) => sources.filter((s) => s.health === h).length;
+  return {
+    connected: bucket("connected"),
+    stale: bucket("stale"),
+    error: bucket("error"),
+    disabled: bucket("disabled"),
+    unknown: bucket("unknown"),
+    totalRows: projectPluginWorkItems(sources).length,
+    evidenceCount: evidence.length,
+  };
+}
+
+/** Batch 15 LINE B — compact health-count summary strip (display-only). */
+function SourceHealthStrip({ summary }: { summary: SourceHealthSummary }) {
+  return (
+    <div
+      data-testid="source-health-strip"
+      className="mb-2 flex flex-wrap items-center gap-1 text-[9px] uppercase tracking-wider"
+    >
+      {HEALTH_ORDER.map((h) => (
+        <span
+          key={h}
+          data-testid={`source-health-count-${h}`}
+          data-health={h}
+          data-count={summary[h]}
+          className={`rounded px-1 tabular-nums ${HEALTH_TONE[h]}`}
+        >
+          {h} {summary[h]}
+        </span>
+      ))}
+      <span className="mx-0.5 text-muted-foreground/30">·</span>
+      <span
+        data-testid="source-health-total-rows"
+        data-count={summary.totalRows}
+        className="rounded border border-white/10 bg-white/[0.03] px-1 tabular-nums text-muted-foreground"
+      >
+        rows {summary.totalRows}
+      </span>
+      <span
+        data-testid="source-health-evidence-count"
+        data-count={summary.evidenceCount}
+        className="rounded border border-amber-400/20 bg-amber-400/[0.06] px-1 tabular-nums text-amber-200/70"
+      >
+        evidence {summary.evidenceCount}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Batch 14 LINE D/E → Batch 15 LINE A/B — the Source Dock (External Source Deck):
+ * a read-only surface for generic external sources. Per-source health (toned
+ * badge), an at-a-glance health-count strip, the projected WorkItemLite rows, and
+ * approved plugin-evidence candidates. Display-only — no buttons, no sync/run/write.
+ * Returns null when there is nothing to show (honest empty in LIVE).
+ */
 function PluginSourcesCard({
   sources = [],
   evidence = [],
@@ -1044,14 +1136,16 @@ function PluginSourcesCard({
   evidence?: ReadonlyArray<PluginEvidenceCandidate>;
 }) {
   if (sources.length === 0 && evidence.length === 0) return null;
+  const summary = summarizeSourceHealth(sources, evidence);
   return (
     <div
       className="mx-4 mb-2 rounded-lg border border-white/[0.08] bg-white/[0.02] p-2.5"
       data-testid="plugin-sources"
     >
       <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Plugin Sources · read-only
+        Source Dock · External Source Deck · read-only
       </p>
+      <SourceHealthStrip summary={summary} />
       <div className="space-y-1.5">
         {sources.map((s) => {
           const rows = projectPluginWorkItems([s]);
@@ -1066,11 +1160,18 @@ function PluginSourcesCard({
               <div className="flex items-center gap-1.5">
                 <span className="text-[11px] font-medium text-zinc-300">{s.pluginId}</span>
                 <span
-                  className="rounded bg-white/[0.06] px-1 text-[9px] uppercase tracking-wide text-muted-foreground"
+                  className={`rounded px-1 text-[9px] uppercase tracking-wide ${HEALTH_TONE[s.health]}`}
                   data-testid={`plugin-health-${s.pluginId}`}
                   data-health={s.health}
                 >
                   {PLUGIN_HEALTH_LABEL[s.health]}
+                </span>
+                <span
+                  className="rounded bg-white/[0.05] px-1 text-[9px] tabular-nums text-muted-foreground/60"
+                  data-testid={`plugin-source-rowcount-${s.pluginId}`}
+                  data-count={rows.length}
+                >
+                  {rows.length} rows
                 </span>
                 {s.generatedAt ? (
                   <span className="ml-auto text-[9px] tabular-nums text-muted-foreground/55">
@@ -1118,7 +1219,7 @@ function PluginSourcesCard({
       {evidence.length > 0 ? (
         <div className="mt-2" data-testid="plugin-evidence">
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
-            Plugin Evidence
+            Source Evidence
           </p>
           <ul className="space-y-0.5">
             {evidence.map((e, i) => (
