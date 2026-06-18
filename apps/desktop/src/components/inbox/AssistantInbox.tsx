@@ -41,6 +41,12 @@ import {
 } from "../../lib/inboxStyleTokens";
 import { INBOX_VOCAB } from "../../lib/inboxVocabulary";
 import {
+  summarizeRunnerTheater,
+  type RunnerTheaterRow,
+  type RunnerLane,
+  type HeartbeatLiveness,
+} from "../../lib/runnerTheater";
+import {
   projectPluginWorkItems,
   type WorkItemLiteProviderResult,
 } from "../../lib/plugins/pluginWorkItemSource";
@@ -195,6 +201,12 @@ export type AssistantInboxProps = {
   onSourceScenarioChange?: (key: SourceScenarioKey) => void;
   /** Batch 17 LINE A — generic read-only patch candidates (Patch Candidate lane). */
   patchCandidates?: ReadonlyArray<PatchCandidate>;
+  /**
+   * Engine E2 — read-only runner theater rows (real mission/runner state).
+   * Present (even empty) → the Runner Theater card renders (honest-empty when
+   * none). Absent → no card (REPLAY/SANDBOX). Display-only; never dispatches.
+   */
+  runnerTheater?: ReadonlyArray<RunnerTheaterRow>;
 };
 
 /**
@@ -1122,6 +1134,136 @@ function EvidenceDraftCard({ cardRef }: { cardRef?: React.Ref<HTMLDivElement> })
           </ul>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Engine E2 — runner lane → tone + label (read-only, display-only). */
+const RUNNER_LANE_TONE: Record<RunnerLane, string> = {
+  active: TONE.good,
+  attention: TONE.warn,
+  idle: TONE.neutral,
+  done: TONE.info,
+};
+const RUNNER_LANE_LABEL: Record<RunnerLane, string> = {
+  active: "active",
+  attention: "attention",
+  idle: "idle",
+  done: "done",
+};
+const RUNNER_LIVENESS_TONE: Record<HeartbeatLiveness, string> = {
+  live: TONE.good,
+  idle: TONE.warn,
+  stale: TONE.bad,
+  unknown: TONE.muted,
+};
+const RUNNER_LANE_ORDER: ReadonlyArray<RunnerLane> = ["active", "attention", "idle", "done"];
+
+/**
+ * Engine E2 — Runner Theater: a read-only operations theater over REAL runner /
+ * mission state. Shows which runners are active / need attention / idle / done,
+ * each with a heartbeat liveness chip, latest output, event + artifact counts.
+ * Display-only — no dispatch, no start, no execute, no write. Honest empty when
+ * no runner sessions are observed.
+ */
+function RunnerTheaterCard({ rows }: { rows: ReadonlyArray<RunnerTheaterRow> }) {
+  const summary = summarizeRunnerTheater(rows);
+  return (
+    <div
+      data-testid="runner-theater-card"
+      data-total={summary.total}
+      className="mx-4 mb-2 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.02] p-2.5"
+    >
+      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-200/80">
+          Runner Theater
+        </span>
+        <span data-testid="runner-theater-active" className={`${CHIP_BASE} ${TONE.good}`}>
+          {summary.active} active
+        </span>
+        {summary.attention > 0 ? (
+          <span data-testid="runner-theater-attention" className={`${CHIP_BASE} ${TONE.warn}`}>
+            {summary.attention} attention
+          </span>
+        ) : null}
+        {summary.stalledActive > 0 ? (
+          <span
+            data-testid="runner-theater-stalled"
+            data-stalled={summary.stalledActive}
+            className={`${CHIP_BASE} ${TONE.bad}`}
+          >
+            {summary.stalledActive} stalled
+          </span>
+        ) : null}
+        <span className="ml-auto text-[9px] uppercase tracking-wider text-muted-foreground/45">
+          observed · read-only
+        </span>
+      </div>
+
+      {rows.length === 0 ? (
+        <div
+          className={EMPTY_STATE}
+          data-testid="runner-theater-empty"
+          data-empty="true"
+        >
+          <p className="text-[11px] font-medium text-muted-foreground/80">관측된 runner 세션 없음</p>
+          <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground/55">
+            runner/미션이 시작되면 여기 표시 · 표시 전용 · 관측만
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {RUNNER_LANE_ORDER.filter((lane) => rows.some((r) => r.lane === lane)).map((lane) => (
+            <div key={lane} data-testid={`runner-theater-lane-${lane}`}>
+              <div className="mb-0.5 flex items-center gap-1">
+                <span
+                  className={`rounded px-1 text-[9px] uppercase tracking-wide ${RUNNER_LANE_TONE[lane]}`}
+                >
+                  {RUNNER_LANE_LABEL[lane]}
+                </span>
+              </div>
+              <ul className="space-y-0.5">
+                {rows
+                  .filter((r) => r.lane === lane)
+                  .map((r) => (
+                    <li
+                      key={r.id}
+                      data-testid={`runner-theater-row-${r.id}`}
+                      data-lane={r.lane}
+                      data-liveness={r.liveness}
+                      className="flex items-center gap-1.5 text-[10px] text-zinc-300"
+                    >
+                      <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
+                        {r.role}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                      {r.eventCount > 0 ? (
+                        <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
+                          {r.eventCount}ev
+                        </span>
+                      ) : null}
+                      {r.artifactCount > 0 ? (
+                        <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
+                          {r.artifactCount}art
+                        </span>
+                      ) : null}
+                      <span
+                        data-testid={`runner-theater-liveness-${r.id}`}
+                        data-liveness={r.liveness}
+                        className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${RUNNER_LIVENESS_TONE[r.liveness]}`}
+                      >
+                        {r.liveness}
+                        {r.ageMinutes != null ? (
+                          <span className="ml-0.5 opacity-70 tabular-nums">{r.ageMinutes}m</span>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2429,6 +2571,7 @@ export function AssistantInbox({
   sourceScenario,
   onSourceScenarioChange,
   patchCandidates,
+  runnerTheater,
 }: AssistantInboxProps) {
   const total =
     evidence.length + learningLoops.length + memoryCandidates.length + manifestEntries.length;
@@ -2785,6 +2928,7 @@ export function AssistantInbox({
           {focus !== "warnings" ? (
             <WorkLaneRail lanes={visibleLanes} query={query} category={category} />
           ) : null}
+          {runnerTheater ? <RunnerTheaterCard rows={runnerTheater} /> : null}
           {mode === "preview" && onSourceScenarioChange ? (
             <SourceDemoDeck scenario={sourceScenario ?? "mixed"} onChange={onSourceScenarioChange} />
           ) : null}
