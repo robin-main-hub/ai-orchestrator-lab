@@ -65,6 +65,38 @@ export type WorkItemCandidateOperations = {
   groups: WorkItemCandidateOperationsGroups;
 };
 
+export type WorkItemCandidateBoardLaneFilter = "all" | WorkItemCandidateLane;
+export type WorkItemCandidateBoardRiskFilter = "all" | WorkItemRisk;
+export type WorkItemCandidateBoardKindFilter = "all" | WorkItemCandidateKind;
+export type WorkItemCandidateBoardRefFilter = "all" | "present";
+export type WorkItemCandidateBoardScopeFilter = "all" | "attention" | "ready" | "linked";
+export type WorkItemCandidateBoardSortMode = "priority" | "title" | "createdAt";
+
+export type WorkItemCandidateBoardFilters = {
+  lane?: WorkItemCandidateBoardLaneFilter;
+  risk?: WorkItemCandidateBoardRiskFilter;
+  kind?: WorkItemCandidateBoardKindFilter;
+  sourceRefs?: WorkItemCandidateBoardRefFilter;
+  evidenceRefs?: WorkItemCandidateBoardRefFilter;
+  scope?: WorkItemCandidateBoardScopeFilter;
+  query?: string;
+  sort?: WorkItemCandidateBoardSortMode;
+};
+
+export type WorkItemCandidateBoardCounts = {
+  byLane: Record<WorkItemCandidateLane, number>;
+  byRisk: Record<WorkItemRisk, number>;
+  byKind: Record<WorkItemCandidateKind, number>;
+  sourceRefCount: number;
+  evidenceRefCount: number;
+};
+
+export type WorkItemCandidateBoardProjection = {
+  counts: WorkItemCandidateBoardCounts;
+  visibleRows: WorkItemCandidateOperationRow[];
+  attentionRows: WorkItemCandidateOperationRow[];
+};
+
 const RISK_ORDER: Record<WorkItemRisk, number> = { high: 0, medium: 1, low: 2 };
 const READINESS_ORDER: Record<WorkItemCandidateReadinessState, number> = {
   blocked: 0,
@@ -150,6 +182,104 @@ function sortRows(rows: WorkItemCandidateOperationRow[]): WorkItemCandidateOpera
     if (createdDiff !== 0) return createdDiff;
     return a.id.localeCompare(b.id);
   });
+}
+
+function matchesBoardScope(
+  row: WorkItemCandidateOperationRow,
+  scope: WorkItemCandidateBoardScopeFilter = "all",
+): boolean {
+  if (scope === "all") return true;
+  if (scope === "attention") {
+    return row.readiness.readiness === "blocked" || row.readiness.readiness === "needs-evidence";
+  }
+  if (scope === "ready") return row.readiness.readiness === "ready";
+  return row.hasLinkedDraftClaims;
+}
+
+function matchesBoardQuery(row: WorkItemCandidate, rawQuery = ""): boolean {
+  const q = rawQuery.trim().toLowerCase();
+  if (!q) return true;
+  return [
+    row.id,
+    row.title,
+    row.kind,
+    row.lane,
+    row.status,
+    row.risk,
+    row.reason,
+    ...row.sourceRefs,
+    ...row.evidenceRefs,
+  ]
+    .join(" ")
+    .toLowerCase()
+    .includes(q);
+}
+
+function sortBoardRows(
+  rows: ReadonlyArray<WorkItemCandidateOperationRow>,
+  sortMode: WorkItemCandidateBoardSortMode = "priority",
+): WorkItemCandidateOperationRow[] {
+  if (sortMode === "priority") return [...rows];
+  return [...rows].sort((a, b) => {
+    if (sortMode === "title") {
+      const titleDiff = a.candidate.title.localeCompare(b.candidate.title);
+      if (titleDiff !== 0) return titleDiff;
+      return a.id.localeCompare(b.id);
+    }
+    const createdDiff = createdAtMs(b.candidate) - createdAtMs(a.candidate);
+    if (createdDiff !== 0) return createdDiff;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+function buildBoardCounts(operations: WorkItemCandidateOperations): WorkItemCandidateBoardCounts {
+  return {
+    byLane: {
+      now: operations.groups.byLane.now.length,
+      soon: operations.groups.byLane.soon.length,
+      watch: operations.groups.byLane.watch.length,
+    },
+    byRisk: {
+      high: operations.groups.byRisk.high.length,
+      medium: operations.groups.byRisk.medium.length,
+      low: operations.groups.byRisk.low.length,
+    },
+    byKind: {
+      patch: operations.groups.byKind.patch.length,
+      runner: operations.groups.byKind.runner.length,
+      evidence: operations.groups.byKind.evidence.length,
+      memory: operations.groups.byKind.memory.length,
+      source: operations.groups.byKind.source.length,
+    },
+    sourceRefCount: operations.summary.withSourceRefs,
+    evidenceRefCount: operations.summary.withEvidenceRefs,
+  };
+}
+
+export function buildWorkItemCandidateBoardProjection(
+  operations: WorkItemCandidateOperations,
+  filters: WorkItemCandidateBoardFilters = {},
+): WorkItemCandidateBoardProjection {
+  const visibleRows = sortBoardRows(
+    operations.rows.filter((row) => {
+      const candidate = row.candidate;
+      return (
+        (filters.lane == null || filters.lane === "all" || candidate.lane === filters.lane) &&
+        (filters.risk == null || filters.risk === "all" || candidate.risk === filters.risk) &&
+        (filters.kind == null || filters.kind === "all" || candidate.kind === filters.kind) &&
+        (filters.sourceRefs == null || filters.sourceRefs === "all" || row.hasSourceRefs) &&
+        (filters.evidenceRefs == null || filters.evidenceRefs === "all" || row.hasEvidenceRefs) &&
+        matchesBoardScope(row, filters.scope) &&
+        matchesBoardQuery(candidate, filters.query)
+      );
+    }),
+    filters.sort,
+  );
+  return {
+    counts: buildBoardCounts(operations),
+    visibleRows,
+    attentionRows: visibleRows.filter((row) => matchesBoardScope(row, "attention")),
+  };
 }
 
 export function buildWorkItemCandidateOperations(
