@@ -1,0 +1,259 @@
+import {
+  CHIP_BASE,
+  TONE,
+} from "../../lib/inboxStyleTokens";
+import type { WorkItemCandidateNextStepPreview } from "../../lib/workItemCandidateNextStepPreview";
+import type {
+  WorkItemCandidateConfidenceBand,
+  WorkItemCandidateReadiness,
+  WorkItemCandidateReadinessState,
+} from "../../lib/workItemCandidateReadiness";
+import type {
+  WorkItemCandidateTrace,
+  WorkItemCandidateTraceEvent,
+  WorkItemCandidateTraceEventKind,
+} from "../../lib/workItemCandidateTrace";
+
+const WIC_UNKNOWN = "none / unknown";
+
+const WIC_READINESS_TONE: Record<WorkItemCandidateReadinessState, string> = {
+  ready: TONE.good,
+  "needs-evidence": TONE.warn,
+  blocked: TONE.bad,
+  "needs-review": TONE.info,
+  unknown: TONE.muted,
+};
+
+const WIC_CONFIDENCE_TONE: Record<WorkItemCandidateConfidenceBand, string> = {
+  high: TONE.good,
+  medium: TONE.info,
+  low: TONE.warn,
+  unknown: TONE.muted,
+};
+
+const WIC_TRACE_TONE: Record<WorkItemCandidateTraceEventKind, string> = {
+  patch: TONE.warn,
+  runner: TONE.bad,
+  memory: TONE.info,
+  source: TONE.neutral,
+  evidence: TONE.good,
+  draft: TONE.info,
+  readiness: TONE.good,
+  "next-step": TONE.warn,
+  unknown: TONE.muted,
+};
+
+function wicRefs(refs: ReadonlyArray<string>): string {
+  return refs.length > 0 ? refs.join(", ") : WIC_UNKNOWN;
+}
+
+export function WorkItemCandidateNextStepPreviewCard({
+  preview,
+  readiness,
+}: {
+  preview: WorkItemCandidateNextStepPreview;
+  readiness?: WorkItemCandidateReadiness;
+}) {
+  return (
+    <section
+      data-testid="wic-next-step-preview"
+      data-risk={preview.risk}
+      className="mt-2 rounded-md border border-cyan-400/15 bg-cyan-400/[0.04] p-2"
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-cyan-200/70">
+          Next-step preview
+        </p>
+        <span className="rounded bg-cyan-300/10 px-1.5 py-0.5 text-[9px] uppercase text-cyan-100/80">
+          {preview.label}
+        </span>
+      </div>
+      <div className="space-y-1 text-[10px] text-zinc-300">
+        <p data-testid="wic-next-step-candidate" className="break-all">
+          {preview.candidateId} · {preview.title}
+        </p>
+        <p data-testid="wic-next-step-state" className="text-muted-foreground">
+          {preview.lane} · {preview.status} · {preview.risk}
+        </p>
+        <p data-testid="wic-next-step-reason" className="break-all text-muted-foreground">
+          reason · {preview.reason}
+        </p>
+        <dl className="space-y-0.5">
+          <div className="flex items-start justify-between gap-2">
+            <dt className="shrink-0 text-muted-foreground/60">source refs</dt>
+            <dd data-testid="wic-next-step-sourceRefs" className="min-w-0 break-all text-right">
+              {wicRefs(preview.availableSourceRefs)}
+            </dd>
+          </div>
+          <div className="flex items-start justify-between gap-2">
+            <dt className="shrink-0 text-muted-foreground/60">evidence refs</dt>
+            <dd data-testid="wic-next-step-evidenceRefs" className="min-w-0 break-all text-right">
+              {wicRefs(preview.availableEvidenceRefs)}
+            </dd>
+          </div>
+          <div className="flex items-start justify-between gap-2">
+            <dt className="shrink-0 text-muted-foreground/60">missing source</dt>
+            <dd data-testid="wic-next-step-missingSource" className="min-w-0 break-all text-right">
+              {preview.missingSourceRefs.length > 0
+                ? preview.missingSourceRefs.join(", ")
+                : WIC_UNKNOWN}
+            </dd>
+          </div>
+          <div className="flex items-start justify-between gap-2">
+            <dt className="shrink-0 text-muted-foreground/60">missing evidence</dt>
+            <dd data-testid="wic-next-step-missingEvidence" className="min-w-0 break-all text-right">
+              {preview.missingEvidenceRefs.length > 0
+                ? preview.missingEvidenceRefs.join(", ")
+                : WIC_UNKNOWN}
+            </dd>
+          </div>
+        </dl>
+        <div data-testid="wic-next-step-draftClaims" className="break-all text-muted-foreground">
+          draft claims ·{" "}
+          {preview.relatedDraftClaims.length > 0
+            ? preview.relatedDraftClaims.join(", ")
+            : "no linked draft claims"}
+        </div>
+        <div data-testid="wic-next-step-draftFootnotes" className="space-y-0.5 text-muted-foreground">
+          {preview.relatedDraftFootnotes.length > 0 ? (
+            preview.relatedDraftFootnotes.map((ref) => (
+              <div key={`${ref.footnote}-${ref.refId}`} className="flex items-center gap-1.5">
+                <span className="shrink-0 tabular-nums text-cyan-300/70">[{ref.footnote}]</span>
+                <code className="shrink-0 rounded bg-background/70 px-1">{ref.refId}</code>
+                <span className="min-w-0 flex-1 truncate">{ref.label}</span>
+              </div>
+            ))
+          ) : (
+            <span>no linked draft footnotes</span>
+          )}
+        </div>
+        <div data-testid="wic-next-step-riskNotes" className="break-all text-muted-foreground">
+          risk notes · {preview.riskNotes.join(", ")}
+        </div>
+        {readiness ? (
+          <div data-testid="wic-next-step-readiness" className="break-all text-muted-foreground">
+            readiness · {readiness.readiness} · confidence · {readiness.confidence}
+          </div>
+        ) : null}
+        <div data-testid="wic-next-step-operator-note" className="break-all text-cyan-100/75">
+          {preview.suggestedOperatorNote}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function WorkItemCandidateReadinessSection({
+  readiness,
+}: {
+  readiness: WorkItemCandidateReadiness;
+}) {
+  return (
+    <section
+      data-testid="wic-readiness-section"
+      data-readiness={readiness.readiness}
+      data-confidence={readiness.confidence}
+      className="mt-2 rounded-md border border-emerald-400/15 bg-emerald-400/[0.04] p-2"
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-emerald-200/70">
+          Readiness / confidence
+        </p>
+        <span className="rounded bg-emerald-300/10 px-1.5 py-0.5 text-[9px] uppercase text-emerald-100/80">
+          {readiness.label}
+        </span>
+      </div>
+      <div className="space-y-1 text-[10px] text-zinc-300">
+        <div data-testid="wic-readiness-state" className="flex flex-wrap items-center gap-1">
+          <span className={`${CHIP_BASE} ${WIC_READINESS_TONE[readiness.readiness]}`}>
+            {readiness.readiness}
+          </span>
+          <span className={`${CHIP_BASE} ${WIC_CONFIDENCE_TONE[readiness.confidence]}`}>
+            confidence · {readiness.confidence}
+          </span>
+        </div>
+        <div data-testid="wic-readiness-reasons" className="break-all text-muted-foreground">
+          reasons · {readiness.reasons.join(", ")}
+        </div>
+        <div data-testid="wic-readiness-missing-source" className="break-all text-muted-foreground">
+          missing source · {readiness.missingSourceRefs.length > 0 ? readiness.missingSourceRefs.join(", ") : WIC_UNKNOWN}
+        </div>
+        <div data-testid="wic-readiness-missing-evidence" className="break-all text-muted-foreground">
+          missing evidence · {readiness.missingEvidenceRefs.length > 0 ? readiness.missingEvidenceRefs.join(", ") : WIC_UNKNOWN}
+        </div>
+        <div data-testid="wic-readiness-risk-blockers" className="break-all text-muted-foreground">
+          risk blockers · {readiness.riskBlockers.length > 0 ? readiness.riskBlockers.join(", ") : WIC_UNKNOWN}
+        </div>
+        <div data-testid="wic-readiness-target" className="break-all text-emerald-100/75">
+          {readiness.suggestedNextInspectionTarget}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WorkItemCandidateTraceRow({ event }: { event: WorkItemCandidateTraceEvent }) {
+  return (
+    <li
+      data-testid={`wic-trace-event-${event.kind}-${event.id}`}
+      data-kind={event.kind}
+      className="rounded border border-white/[0.06] bg-white/[0.025] p-1.5 text-[10px] text-zinc-300"
+    >
+      <div className="mb-0.5 flex flex-wrap items-center gap-1">
+        <span className={`${CHIP_BASE} ${WIC_TRACE_TONE[event.kind]}`}>{event.kind}</span>
+        <span className="rounded bg-white/[0.04] px-1 text-[9px] uppercase text-muted-foreground/65">
+          {event.timeLabel}
+        </span>
+        {event.refStatus ? (
+          <span className="rounded bg-white/[0.04] px-1 text-[9px] uppercase text-muted-foreground/65">
+            {event.refStatus}
+          </span>
+        ) : null}
+      </div>
+      <div className="break-all text-zinc-200">{event.label}</div>
+      {event.ref ? (
+        <div className="break-all text-muted-foreground">
+          ref · <code className="rounded bg-background/70 px-1">{event.ref}</code>
+        </div>
+      ) : null}
+      {event.readiness || event.confidence ? (
+        <div className="break-all text-muted-foreground">
+          {event.readiness ? `readiness · ${event.readiness}` : null}
+          {event.confidence ? ` · confidence · ${event.confidence}` : null}
+        </div>
+      ) : null}
+      {event.details.length > 0 ? (
+        <div className="break-all text-muted-foreground">details · {event.details.join(", ")}</div>
+      ) : null}
+    </li>
+  );
+}
+
+export function WorkItemCandidateTraceTimeline({ trace }: { trace: WorkItemCandidateTrace }) {
+  return (
+    <section
+      data-testid="wic-trace-timeline"
+      data-empty={trace.empty ? "true" : "false"}
+      className="mt-2 rounded-md border border-amber-300/15 bg-amber-300/[0.035] p-2"
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-amber-100/75">
+          Trace timeline
+        </p>
+        <span className="rounded bg-amber-300/10 px-1.5 py-0.5 text-[9px] uppercase text-amber-100/75">
+          {trace.label}
+        </span>
+      </div>
+      {trace.empty ? (
+        <p data-testid="wic-trace-empty" className="mb-1 text-[10px] text-muted-foreground/70">
+          no source/evidence trace refs yet · {trace.missing.join(", ")}
+        </p>
+      ) : null}
+      <ol className="space-y-1">
+        {trace.events.map((event) => (
+          <WorkItemCandidateTraceRow key={event.id} event={event} />
+        ))}
+      </ol>
+    </section>
+  );
+}
