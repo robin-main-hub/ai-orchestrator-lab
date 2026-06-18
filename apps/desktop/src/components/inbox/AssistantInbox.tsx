@@ -60,6 +60,12 @@ import {
   type WorkItemCandidateNextStepPreview,
 } from "../../lib/workItemCandidateNextStepPreview";
 import {
+  buildWorkItemCandidateReadiness,
+  type WorkItemCandidateReadiness,
+  type WorkItemCandidateConfidenceBand,
+  type WorkItemCandidateReadinessState,
+} from "../../lib/workItemCandidateReadiness";
+import {
   projectPluginWorkItems,
   type WorkItemLiteProviderResult,
 } from "../../lib/plugins/pluginWorkItemSource";
@@ -1477,6 +1483,19 @@ const WIC_KINDS: ReadonlyArray<WorkItemCandidateKind> = [
   "source",
 ];
 const WIC_RISKS: ReadonlyArray<WorkItemRisk> = ["high", "medium", "low"];
+const WIC_READINESS_TONE: Record<WorkItemCandidateReadinessState, string> = {
+  ready: TONE.good,
+  "needs-evidence": TONE.warn,
+  blocked: TONE.bad,
+  "needs-review": TONE.info,
+  unknown: TONE.muted,
+};
+const WIC_CONFIDENCE_TONE: Record<WorkItemCandidateConfidenceBand, string> = {
+  high: TONE.good,
+  medium: TONE.info,
+  low: TONE.warn,
+  unknown: TONE.muted,
+};
 type WicLaneFilter = "all" | WorkItemCandidateLane;
 type WicRiskFilter = "all" | WorkItemRisk;
 type WicKindFilter = "all" | WorkItemCandidateKind;
@@ -1501,6 +1520,34 @@ function wicMatchesQuery(row: WorkItemCandidate, rawQuery: string): boolean {
     .includes(q);
 }
 
+function buildWicReadiness(
+  row: WorkItemCandidate,
+  link?: CandidateDraftEvidenceLink,
+): WorkItemCandidateReadiness {
+  const preview = buildWorkItemCandidateNextStepPreview(row, link);
+  return buildWorkItemCandidateReadiness(row, preview, link);
+}
+
+function WorkItemCandidateReadinessChip({
+  row,
+  readiness,
+}: {
+  row: WorkItemCandidate;
+  readiness: WorkItemCandidateReadiness;
+}) {
+  return (
+    <span
+      data-testid={`wic-readiness-chip-${row.id}`}
+      data-readiness={readiness.readiness}
+      data-confidence={readiness.confidence}
+      className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${WIC_READINESS_TONE[readiness.readiness]}`}
+      title={`confidence · ${readiness.confidence}`}
+    >
+      {readiness.readiness}
+    </span>
+  );
+}
+
 /**
  * Engine E5 — WorkItem Candidates: the read-only CENTRAL AXIS over the OS's
  * signals (patch / runner / evidence / memory / source). Each row is a
@@ -1514,10 +1561,12 @@ function WorkItemCandidatesCard({
   rows,
   onSelect,
   cardRef,
+  workItemLinks,
 }: {
   rows: ReadonlyArray<WorkItemCandidate>;
   onSelect?: (row: WorkItemCandidate) => void;
   cardRef?: RefObject<HTMLDivElement | null>;
+  workItemLinks?: WorkItemEvidenceDraftLinks;
 }) {
   const [laneFilter, setLaneFilter] = useState<WicLaneFilter>("all");
   const [riskFilter, setRiskFilter] = useState<WicRiskFilter>("all");
@@ -1803,37 +1852,41 @@ function WorkItemCandidatesCard({
               <ul className="space-y-0.5">
                 {visibleRows
                   .filter((r) => r.lane === lane)
-                  .map((r) => (
-                    <li
-                      key={r.id}
-                      data-testid={`wic-row-${r.id}`}
-                      data-kind={r.kind}
-                      data-lane={r.lane}
-                      data-risk={r.risk}
-                      data-status={r.status}
-                      className={`flex items-center gap-1.5 text-[10px] text-zinc-300 ${
-                        onSelect ? "cursor-pointer rounded px-1 py-0.5 hover:bg-white/[0.04]" : ""
-                      }`}
-                      {...(onSelect ? rowActivation(() => onSelect(r)) : {})}
-                    >
-                      <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
-                        {r.kind}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate" title={r.reason}>
-                        {r.title}
-                      </span>
-                      {r.evidenceRefs.length > 0 ? (
-                        <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
-                          {r.evidenceRefs.length}ev
-                        </span>
-                      ) : null}
-                      <span
-                        className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${WIC_RISK_TONE[r.risk] ?? TONE.muted}`}
+                  .map((r) => {
+                    const readiness = buildWicReadiness(r, workItemLinks?.byCandidateId[r.id]);
+                    return (
+                      <li
+                        key={r.id}
+                        data-testid={`wic-row-${r.id}`}
+                        data-kind={r.kind}
+                        data-lane={r.lane}
+                        data-risk={r.risk}
+                        data-status={r.status}
+                        className={`flex items-center gap-1.5 text-[10px] text-zinc-300 ${
+                          onSelect ? "cursor-pointer rounded px-1 py-0.5 hover:bg-white/[0.04]" : ""
+                        }`}
+                        {...(onSelect ? rowActivation(() => onSelect(r)) : {})}
                       >
-                        {r.risk}
-                      </span>
-                    </li>
-                  ))}
+                        <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
+                          {r.kind}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate" title={r.reason}>
+                          {r.title}
+                        </span>
+                        {r.evidenceRefs.length > 0 ? (
+                          <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
+                            {r.evidenceRefs.length}ev
+                          </span>
+                        ) : null}
+                        <WorkItemCandidateReadinessChip row={r} readiness={readiness} />
+                        <span
+                          className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${WIC_RISK_TONE[r.risk] ?? TONE.muted}`}
+                        >
+                          {r.risk}
+                        </span>
+                      </li>
+                    );
+                  })}
               </ul>
             </div>
           ))}
@@ -1971,8 +2024,10 @@ function WorkItemCandidateDraftEvidenceLinks({
 
 function WorkItemCandidateNextStepPreviewCard({
   preview,
+  readiness,
 }: {
   preview: WorkItemCandidateNextStepPreview;
+  readiness?: WorkItemCandidateReadiness;
 }) {
   return (
     <section
@@ -2050,8 +2105,62 @@ function WorkItemCandidateNextStepPreviewCard({
         <div data-testid="wic-next-step-riskNotes" className="break-all text-muted-foreground">
           risk notes · {preview.riskNotes.join(", ")}
         </div>
+        {readiness ? (
+          <div data-testid="wic-next-step-readiness" className="break-all text-muted-foreground">
+            readiness · {readiness.readiness} · confidence · {readiness.confidence}
+          </div>
+        ) : null}
         <div data-testid="wic-next-step-operator-note" className="break-all text-cyan-100/75">
           {preview.suggestedOperatorNote}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WorkItemCandidateReadinessSection({
+  readiness,
+}: {
+  readiness: WorkItemCandidateReadiness;
+}) {
+  return (
+    <section
+      data-testid="wic-readiness-section"
+      data-readiness={readiness.readiness}
+      data-confidence={readiness.confidence}
+      className="mt-2 rounded-md border border-emerald-400/15 bg-emerald-400/[0.04] p-2"
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-emerald-200/70">
+          Readiness / confidence
+        </p>
+        <span className="rounded bg-emerald-300/10 px-1.5 py-0.5 text-[9px] uppercase text-emerald-100/80">
+          {readiness.label}
+        </span>
+      </div>
+      <div className="space-y-1 text-[10px] text-zinc-300">
+        <div data-testid="wic-readiness-state" className="flex flex-wrap items-center gap-1">
+          <span className={`${CHIP_BASE} ${WIC_READINESS_TONE[readiness.readiness]}`}>
+            {readiness.readiness}
+          </span>
+          <span className={`${CHIP_BASE} ${WIC_CONFIDENCE_TONE[readiness.confidence]}`}>
+            confidence · {readiness.confidence}
+          </span>
+        </div>
+        <div data-testid="wic-readiness-reasons" className="break-all text-muted-foreground">
+          reasons · {readiness.reasons.join(", ")}
+        </div>
+        <div data-testid="wic-readiness-missing-source" className="break-all text-muted-foreground">
+          missing source · {readiness.missingSourceRefs.length > 0 ? readiness.missingSourceRefs.join(", ") : WIC_UNKNOWN}
+        </div>
+        <div data-testid="wic-readiness-missing-evidence" className="break-all text-muted-foreground">
+          missing evidence · {readiness.missingEvidenceRefs.length > 0 ? readiness.missingEvidenceRefs.join(", ") : WIC_UNKNOWN}
+        </div>
+        <div data-testid="wic-readiness-risk-blockers" className="break-all text-muted-foreground">
+          risk blockers · {readiness.riskBlockers.length > 0 ? readiness.riskBlockers.join(", ") : WIC_UNKNOWN}
+        </div>
+        <div data-testid="wic-readiness-target" className="break-all text-emerald-100/75">
+          {readiness.suggestedNextInspectionTarget}
         </div>
       </div>
     </section>
@@ -2086,6 +2195,7 @@ function WorkItemCandidateDetailDrawer({
   if (!item) return null;
 
   const nextStepPreview = buildWorkItemCandidateNextStepPreview(item, draftLink);
+  const readiness = buildWorkItemCandidateReadiness(item, nextStepPreview, draftLink);
   const fields: WorkItemCandidateDetailField[] = [
     ["id", item.id],
     ["title", item.title],
@@ -2140,7 +2250,8 @@ function WorkItemCandidateDetailDrawer({
       </dl>
       <WorkItemCandidateLinkGraph item={item} />
       <WorkItemCandidateDraftEvidenceLinks link={draftLink} />
-      <WorkItemCandidateNextStepPreviewCard preview={nextStepPreview} />
+      <WorkItemCandidateReadinessSection readiness={readiness} />
+      <WorkItemCandidateNextStepPreviewCard preview={nextStepPreview} readiness={readiness} />
     </aside>
   );
 }
@@ -3836,6 +3947,7 @@ export function AssistantInbox({
               rows={workItemCandidates}
               onSelect={setSelectedWorkItemCandidate}
               cardRef={workItemCandidatesRef}
+              workItemLinks={workItemEvidenceLinks}
             />
           ) : null}
           {runnerTheater ? <RunnerTheaterCard rows={runnerTheater} /> : null}
