@@ -496,6 +496,13 @@ export type AssistantInboxLiveInput = {
    * so this stays absent in the real app until a draft source is wired.
    */
   evidenceDraft?: import("./evidenceDraft").EvidenceDraftInput;
+  /**
+   * Engine E5 — explicitly-supplied read-only WorkItem CANDIDATE inputs, merged
+   * with candidates DERIVED from the live surfaces. Candidate-only; nothing is
+   * created/committed/appended/written. Absent → candidates derive purely from
+   * live signals (honest empty when none).
+   */
+  workItemCandidates?: ReadonlyArray<import("./workItemCandidate").WorkItemCandidateInput>;
   /** Real learning-loop events (e.g. App eventLog). Filtered to learning types. */
   learningEvents?: ReadonlyArray<{ type: string; payload: unknown }>;
   /** Real persisted project records (H10 useProjectRecordController.records). */
