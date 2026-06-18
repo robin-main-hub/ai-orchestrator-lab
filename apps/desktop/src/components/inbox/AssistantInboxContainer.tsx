@@ -25,6 +25,11 @@ import {
   EXAMPLE_RUNNER_SESSIONS,
   EXAMPLE_RUNNER_NOW_MS,
 } from "../../lib/runnerTheater";
+import {
+  projectEvidenceDraft,
+  EXAMPLE_EVIDENCE_DRAFT,
+  EXAMPLE_DRAFT_NOW_MS,
+} from "../../lib/evidenceDraft";
 
 /** LINE A — local UI preference key for the remembered seat (no server write). */
 const INBOX_VIEW_MODE_KEY = "ai-orchestrator.inbox-view-mode.v1";
@@ -201,6 +206,23 @@ export function AssistantInboxContainer({
     return { runnerTheater: undefined };
   }, [mode, live]);
 
+  // Engine E4A — Evidence Draft LIVE input seam. PREVIEW projects the clearly-
+  // labeled EXAMPLE draft (fixed now → deterministic chips); LIVE projects ONLY a
+  // real draft passed via live.evidenceDraft (absent → no card, honest empty; no
+  // fixture leak); REPLAY/SANDBOX → no card. projectEvidenceDraft is pure/read-only
+  // — no producer, no external send, no write. nowMs is injected.
+  const evidenceDraftExtras = useMemo(() => {
+    if (mode === "preview")
+      return { evidenceDraft: projectEvidenceDraft(EXAMPLE_EVIDENCE_DRAFT, EXAMPLE_DRAFT_NOW_MS) };
+    if (mode === "live")
+      return {
+        evidenceDraft: live?.evidenceDraft
+          ? projectEvidenceDraft(live.evidenceDraft, live.nowMs ?? EXAMPLE_DRAFT_NOW_MS)
+          : undefined,
+      };
+    return { evidenceDraft: undefined };
+  }, [mode, live]);
+
   // Engine E3 — Learning & Memory console roll-up. Reuses the projected learning
   // loops + memory candidates already in `props` (PREVIEW=fixture / LIVE=real) and
   // the eval reports (PREVIEW fixture; LIVE = real manifest eval, honest-empty when
@@ -228,6 +250,7 @@ export function AssistantInboxContainer({
         {...patchExtras}
         {...runnerExtras}
         {...learningMemoryExtras}
+        {...evidenceDraftExtras}
         mode={mode}
         onModeChange={setMode}
         persistFilters={persistViewMode}
