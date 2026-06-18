@@ -60,6 +60,7 @@ import {
   type WorkItemCandidateBoardRiskFilter,
   type WorkItemCandidateOperationRow,
 } from "../../lib/workItemCandidateOperations";
+import { buildWorkItemCandidateSignalSummaryFromOperation } from "../../lib/workItemCandidateSignals";
 import {
   linkWorkItemCandidatesToEvidenceDraft,
   type WorkItemEvidenceDraftLinks,
@@ -78,6 +79,7 @@ import type { PluginSourceHealth } from "../../lib/plugins/pluginManifest";
 import { SOURCE_SCENARIO_KEYS, type SourceScenarioKey } from "../../lib/plugins/examplePluginSource";
 import { SourceDetailDrawer, type SourceDetailItem } from "./SourceDetailDrawer";
 import { WorkItemCandidateDetailDrawer } from "./WorkItemCandidateDetailDrawer";
+import { WorkItemCandidateSignalChips } from "./WorkItemCandidateSignalChips";
 import {
   buildPatchCompareBoard,
   summarizePatchCandidates,
@@ -1611,6 +1613,7 @@ function WorkItemCandidatesCard({
     <ul className="space-y-0.5">
       {operationRows.map((operationRow) => {
         const r = operationRow.candidate;
+        const signalSummary = buildWorkItemCandidateSignalSummaryFromOperation(operationRow);
         return (
           <li
             key={r.id}
@@ -1630,6 +1633,7 @@ function WorkItemCandidatesCard({
             <span className="min-w-0 flex-1 truncate" title={r.reason}>
               {r.title}
             </span>
+            <WorkItemCandidateSignalChips candidateId={r.id} chips={signalSummary.chips} />
             {operationRow.hasLinkedDraftClaims ? (
               <span className="shrink-0 rounded bg-sky-400/10 px-1 text-[9px] uppercase text-sky-100/80">
                 draft ref

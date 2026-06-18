@@ -14,12 +14,14 @@ import {
   type WorkItemCandidateReadiness,
 } from "../../lib/workItemCandidateReadiness";
 import { buildWorkItemCandidateTrace } from "../../lib/workItemCandidateTrace";
+import { buildWorkItemCandidateSignalSummary } from "../../lib/workItemCandidateSignals";
 import type { CandidateDraftEvidenceLink } from "../../lib/workItemEvidenceLinks";
 import {
   WorkItemCandidateNextStepPreviewCard,
   WorkItemCandidateReadinessSection,
   WorkItemCandidateTraceTimeline,
 } from "./WorkItemCandidateDetailSections";
+import { WorkItemCandidateSignalSummarySection } from "./WorkItemCandidateSignalChips";
 
 const WIC_UNKNOWN = "none / unknown";
 
@@ -334,6 +336,12 @@ export function WorkItemCandidateDetailDrawer({
   const nextStepPreview = buildWorkItemCandidateNextStepPreview(item, draftLink);
   const readiness = buildWorkItemCandidateReadiness(item, nextStepPreview, draftLink);
   const trace = buildWorkItemCandidateTrace(item, { draftLink, nextStepPreview, readiness });
+  const signalSummary = buildWorkItemCandidateSignalSummary({
+    candidate: item,
+    link: draftLink,
+    nextStepPreview,
+    readiness,
+  });
   const fields: WorkItemCandidateDetailField[] = [
     ["id", item.id],
     ["title", item.title],
@@ -417,6 +425,7 @@ export function WorkItemCandidateDetailDrawer({
             <WorkItemCandidateDetailRow key={k} k={k} v={v} />
           ))}
         </dl>
+        <WorkItemCandidateSignalSummarySection summary={signalSummary} />
       </section>
       <section data-testid="wic-detail-panel-map" data-active={activeTab === "map" ? "true" : "false"}>
         <WorkItemCandidateLinkGraph item={item} />
