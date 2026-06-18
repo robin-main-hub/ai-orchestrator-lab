@@ -13,6 +13,7 @@ import type {
   WorkItemCandidateTraceEvent,
   WorkItemCandidateTraceEventKind,
 } from "../../lib/workItemCandidateTrace";
+import type { WorkItemCandidatePatchCandidateLink } from "../../lib/workItemCandidatePatchSignals";
 import type { WorkItemCandidateRunnerCandidateLink } from "../../lib/workItemCandidateRunnerSignals";
 
 const WIC_UNKNOWN = "none / unknown";
@@ -312,6 +313,69 @@ export function WorkItemCandidateRunnerSignalsSection({
               {signal.branch ? (
                 <div className="break-all text-muted-foreground">branch ref · {signal.branch}</div>
               ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+export function WorkItemCandidatePatchSignalsSection({
+  link,
+}: {
+  link?: WorkItemCandidatePatchCandidateLink;
+}) {
+  const signals = link?.signals ?? [];
+  return (
+    <section
+      data-testid="wic-patch-signals-section"
+      data-count={signals.length}
+      className="mt-2 rounded-md border border-amber-400/15 bg-amber-400/[0.035] p-2"
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-amber-200/70">
+          Patch Signals
+        </p>
+        <span className="rounded bg-amber-300/10 px-1.5 py-0.5 text-[9px] uppercase text-amber-100/75">
+          local detail
+        </span>
+      </div>
+      {signals.length === 0 ? (
+        <p data-testid="wic-patch-signals-empty" className="text-[10px] text-muted-foreground/70">
+          {link?.unresolvedRefs.length
+            ? `patch refs unresolved · ${link.unresolvedRefs.join(", ")}`
+            : "no matching patch signals"}
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {signals.map((signal) => (
+            <li
+              key={signal.id}
+              data-testid={`wic-patch-signal-${signal.patchCandidateId}-${signal.signal}`}
+              data-verification={signal.verificationStatus}
+              className="rounded border border-white/[0.06] bg-white/[0.025] p-1.5 text-[10px] text-zinc-300"
+            >
+              <div className="mb-0.5 flex flex-wrap items-center gap-1">
+                <span className={`${CHIP_BASE} ${signal.signal === "patch-blocked" ? TONE.bad : TONE.warn}`}>
+                  {signal.signal}
+                </span>
+                <span className={`${CHIP_BASE} ${TONE.muted}`}>{signal.refStatus}</span>
+              </div>
+              <div className="break-all text-muted-foreground">
+                patch candidate · <code className="rounded bg-background/70 px-1">{signal.patchCandidateId}</code>
+              </div>
+              <div className="break-all text-muted-foreground">
+                runner id · <code className="rounded bg-background/70 px-1">{signal.runnerId}</code>
+              </div>
+              <div className="break-all text-muted-foreground">
+                mission id · <code className="rounded bg-background/70 px-1">{signal.missionId}</code>
+              </div>
+              <div className="break-all text-muted-foreground">
+                {signal.safetyStatus} ·{" "}
+                {signal.verificationStatus === "not_run" ? "verification pending" : signal.verificationStatus} ·{" "}
+                {signal.changedFileCount} files
+              </div>
             </li>
           ))}
         </ul>
