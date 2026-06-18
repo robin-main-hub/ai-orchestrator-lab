@@ -238,6 +238,28 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## E12. Engine — WorkItem Candidate Source Trace Timeline
+
+Engine batch E12 (PR #652, merge commit `74080c7`) made WorkItemCandidates show
+a read-only source trace timeline without creating committed work. Owner checks:
+
+- [ ] **Trace helper** — `buildWorkItemCandidateTrace` builds ordered trace
+      events from candidate reason, source refs, evidence refs, linked draft refs,
+      readiness, and next-step preview context.
+- [ ] **Trace tab** — opening a WorkItemCandidate detail drawer shows a local-detail
+      `Trace` tab with a `Trace timeline` section.
+- [ ] **Time honesty** — known timestamps sort chronologically; missing timestamps
+      show `time unknown` and use deterministic fallback order.
+- [ ] **Ref honesty** — source/evidence/draft refs render as string refs only and
+      unresolved refs are labeled `ref only · unresolved`.
+- [ ] **Empty state** — candidates with no source/evidence refs show honest
+      `source refs unknown` / `evidence refs unknown` state.
+- [ ] **PREVIEW/LIVE honesty** — PREVIEW can show fixture trace refs, but LIVE
+      derives only from live candidate/context inputs and receives no fixture refs.
+- [ ] **Read-only** — no create / launch / commit lifecycle, no write/append/send/
+      dispatch/apply controls, no lifecycle transition, no object resolution
+      beyond existing refs.
+
 ## E11. Engine — WorkItem Candidate Operations Room
 
 Engine batch E11 (PR #648, merge commit `6d7f7d8`; PR #649, merge commit
