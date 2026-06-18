@@ -43,13 +43,13 @@ import {
 } from "../../lib/runnerTheater";
 import type { LearningMemoryConsole } from "../../lib/learningMemoryConsole";
 import {
-  summarizeWorkItemCandidates,
   WORK_ITEM_LANES,
   type WorkItemCandidate,
   type WorkItemCandidateKind,
   type WorkItemCandidateLane,
   type WorkItemRisk,
 } from "../../lib/workItemCandidate";
+import { buildWorkItemCandidateOperations } from "../../lib/workItemCandidateOperations";
 import {
   linkWorkItemCandidatesToEvidenceDraft,
   type CandidateDraftEvidenceLink,
@@ -1520,14 +1520,6 @@ function wicMatchesQuery(row: WorkItemCandidate, rawQuery: string): boolean {
     .includes(q);
 }
 
-function buildWicReadiness(
-  row: WorkItemCandidate,
-  link?: CandidateDraftEvidenceLink,
-): WorkItemCandidateReadiness {
-  const preview = buildWorkItemCandidateNextStepPreview(row, link);
-  return buildWorkItemCandidateReadiness(row, preview, link);
-}
-
 function WorkItemCandidateReadinessChip({
   row,
   readiness,
@@ -1574,34 +1566,39 @@ function WorkItemCandidatesCard({
   const [sourceRefFilter, setSourceRefFilter] = useState<WicRefFilter>("all");
   const [evidenceRefFilter, setEvidenceRefFilter] = useState<WicRefFilter>("all");
   const [candidateQuery, setCandidateQuery] = useState("");
-  const summary = summarizeWorkItemCandidates(rows);
+  const operations = buildWorkItemCandidateOperations(rows, workItemLinks);
+  const summary = operations.summary;
   const laneCounts: Record<WorkItemCandidateLane, number> = {
-    now: rows.filter((r) => r.lane === "now").length,
-    soon: rows.filter((r) => r.lane === "soon").length,
-    watch: rows.filter((r) => r.lane === "watch").length,
+    now: operations.groups.byLane.now.length,
+    soon: operations.groups.byLane.soon.length,
+    watch: operations.groups.byLane.watch.length,
   };
   const riskCounts: Record<WorkItemRisk, number> = {
-    high: rows.filter((r) => r.risk === "high").length,
-    medium: rows.filter((r) => r.risk === "medium").length,
-    low: rows.filter((r) => r.risk === "low").length,
+    high: operations.groups.byRisk.high.length,
+    medium: operations.groups.byRisk.medium.length,
+    low: operations.groups.byRisk.low.length,
   };
   const kindCounts: Record<WorkItemCandidateKind, number> = {
-    patch: rows.filter((r) => r.kind === "patch").length,
-    runner: rows.filter((r) => r.kind === "runner").length,
-    evidence: rows.filter((r) => r.kind === "evidence").length,
-    memory: rows.filter((r) => r.kind === "memory").length,
-    source: rows.filter((r) => r.kind === "source").length,
+    patch: operations.groups.byKind.patch.length,
+    runner: operations.groups.byKind.runner.length,
+    evidence: operations.groups.byKind.evidence.length,
+    memory: operations.groups.byKind.memory.length,
+    source: operations.groups.byKind.source.length,
   };
-  const sourceRefCount = rows.filter((r) => r.sourceRefs.length > 0).length;
-  const evidenceRefCount = rows.filter((r) => r.evidenceRefs.length > 0).length;
-  const visibleRows = rows.filter(
-    (r) =>
+  const sourceRefCount = summary.withSourceRefs;
+  const evidenceRefCount = summary.withEvidenceRefs;
+  const visibleOperationRows = operations.rows.filter(({ candidate: r }) => {
+    return (
       (laneFilter === "all" || r.lane === laneFilter) &&
       (riskFilter === "all" || r.risk === riskFilter) &&
       (kindFilter === "all" || r.kind === kindFilter) &&
       (sourceRefFilter === "all" || r.sourceRefs.length > 0) &&
       (evidenceRefFilter === "all" || r.evidenceRefs.length > 0) &&
-      wicMatchesQuery(r, candidateQuery),
+      wicMatchesQuery(r, candidateQuery)
+    );
+  });
+  const attentionOperationRows = visibleOperationRows.filter((row) =>
+    row.readiness.readiness === "blocked" || row.readiness.readiness === "needs-evidence",
   );
   const buttonBase =
     "rounded border px-1.5 py-0.5 text-[10px] font-medium transition-colors";
@@ -1637,7 +1634,7 @@ function WorkItemCandidatesCard({
       tabIndex={-1}
       data-testid="work-item-candidates-card"
       data-total={summary.total}
-      data-visible={visibleRows.length}
+      data-visible={visibleOperationRows.length}
       className="mx-4 mb-2 rounded-lg border border-sky-400/20 bg-sky-400/[0.03] p-2.5"
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
@@ -1705,6 +1702,72 @@ function WorkItemCandidatesCard({
             className={`${CHIP_BASE} ${TONE.muted}`}
           >
             {evidenceRefCount} evidence refs
+          </span>
+        </div>
+      </div>
+
+      <div
+        data-testid="wic-operations-summary"
+        data-total={summary.total}
+        className="mb-2 space-y-1 rounded-md border border-sky-400/15 bg-sky-400/[0.03] p-1.5"
+      >
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-sky-200/70">
+            operations
+          </span>
+          {(["ready", "needs-evidence", "blocked", "needs-review", "unknown"] as const).map((readiness) => (
+            <span
+              key={readiness}
+              data-testid={`wic-ops-summary-${readiness}`}
+              data-count={summary[readiness]}
+              className={`${CHIP_BASE} ${WIC_READINESS_TONE[readiness]}`}
+            >
+              {summary[readiness]} {readiness}
+            </span>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          <span
+            data-testid="wic-ops-summary-confidence-high"
+            data-count={summary.confidenceHigh}
+            className={`${CHIP_BASE} ${WIC_CONFIDENCE_TONE.high}`}
+          >
+            {summary.confidenceHigh} high confidence
+          </span>
+          <span
+            data-testid="wic-ops-summary-confidence-medium"
+            data-count={summary.confidenceMedium}
+            className={`${CHIP_BASE} ${WIC_CONFIDENCE_TONE.medium}`}
+          >
+            {summary.confidenceMedium} medium confidence
+          </span>
+          <span
+            data-testid="wic-ops-summary-confidence-low"
+            data-count={summary.confidenceLow}
+            className={`${CHIP_BASE} ${WIC_CONFIDENCE_TONE.low}`}
+          >
+            {summary.confidenceLow} low confidence
+          </span>
+          <span
+            data-testid="wic-ops-summary-confidence-unknown"
+            data-count={summary.confidenceUnknown}
+            className={`${CHIP_BASE} ${WIC_CONFIDENCE_TONE.unknown}`}
+          >
+            {summary.confidenceUnknown} unknown confidence
+          </span>
+          <span
+            data-testid="wic-ops-summary-linked-draft"
+            data-count={summary.withLinkedDraftClaims}
+            className={`${CHIP_BASE} ${TONE.info}`}
+          >
+            {summary.withLinkedDraftClaims} draft links
+          </span>
+          <span
+            data-testid="wic-ops-summary-next-blockers"
+            data-count={summary.withNextStepBlockers}
+            className={`${CHIP_BASE} ${TONE.warn}`}
+          >
+            {summary.withNextStepBlockers} preview gaps
           </span>
         </div>
       </div>
@@ -1828,7 +1891,7 @@ function WorkItemCandidatesCard({
               className="w-full rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-zinc-200 placeholder:text-muted-foreground/40 focus:border-sky-400/40 focus:outline-none"
             />
           </div>
-          {visibleRows.length === 0 ? (
+          {visibleOperationRows.length === 0 ? (
             <div
               className={EMPTY_STATE}
               data-testid="work-item-candidates-filter-empty"
@@ -1842,54 +1905,110 @@ function WorkItemCandidatesCard({
               </p>
             </div>
           ) : null}
-          {WORK_ITEM_LANES.filter((lane) => visibleRows.some((r) => r.lane === lane)).map((lane) => (
-            <div key={lane} data-testid={`wic-lane-${lane}`}>
-              <div className="mb-0.5">
-                <span className={`rounded px-1 text-[9px] uppercase tracking-wide ${WIC_LANE_TONE[lane]}`}>
-                  {WIC_LANE_LABEL[lane]}
+          {WORK_ITEM_LANES.filter((lane) =>
+            visibleOperationRows.some((row) => row.candidate.lane === lane),
+          ).map((lane) => (
+            <div
+              key={lane}
+              data-testid={`wic-ops-group-${lane}`}
+              className="rounded-md border border-white/[0.06] bg-white/[0.015] p-1.5"
+            >
+              <div data-testid={`wic-lane-${lane}`}>
+                <div className="mb-0.5 flex items-center gap-1">
+                  <span className={`rounded px-1 text-[9px] uppercase tracking-wide ${WIC_LANE_TONE[lane]}`}>
+                    {WIC_LANE_LABEL[lane]}
+                  </span>
+                  <span className="text-[9px] text-muted-foreground/45">
+                    {visibleOperationRows.filter((row) => row.candidate.lane === lane).length} candidates
+                  </span>
+                </div>
+                <ul className="space-y-0.5">
+                  {visibleOperationRows
+                    .filter((row) => row.candidate.lane === lane)
+                    .map((operationRow) => {
+                      const r = operationRow.candidate;
+                      return (
+                        <li
+                          key={r.id}
+                          data-testid={`wic-row-${r.id}`}
+                          data-kind={r.kind}
+                          data-lane={r.lane}
+                          data-risk={r.risk}
+                          data-status={r.status}
+                          className={`flex items-center gap-1.5 text-[10px] text-zinc-300 ${
+                            onSelect ? "cursor-pointer rounded px-1 py-0.5 hover:bg-white/[0.04]" : ""
+                          }`}
+                          {...(onSelect ? rowActivation(() => onSelect(r)) : {})}
+                        >
+                          <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
+                            {r.kind}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate" title={r.reason}>
+                            {r.title}
+                          </span>
+                          {operationRow.hasLinkedDraftClaims ? (
+                            <span className="shrink-0 rounded bg-sky-400/10 px-1 text-[9px] uppercase text-sky-100/80">
+                              draft ref
+                            </span>
+                          ) : null}
+                          {r.evidenceRefs.length > 0 ? (
+                            <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
+                              {r.evidenceRefs.length}ev
+                            </span>
+                          ) : null}
+                          <WorkItemCandidateReadinessChip row={r} readiness={operationRow.readiness} />
+                          <span
+                            className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${WIC_RISK_TONE[r.risk] ?? TONE.muted}`}
+                          >
+                            {r.risk}
+                          </span>
+                        </li>
+                      );
+                    })}
+                </ul>
+              </div>
+            </div>
+          ))}
+          {attentionOperationRows.length > 0 ? (
+            <div
+              data-testid="wic-ops-group-blocked-needs-evidence"
+              className="rounded-md border border-amber-300/15 bg-amber-300/[0.025] p-1.5"
+            >
+              <div className="mb-0.5 flex items-center gap-1">
+                <span className={`rounded px-1 text-[9px] uppercase tracking-wide ${TONE.warn}`}>
+                  blocked / needs evidence
+                </span>
+                <span className="text-[9px] text-muted-foreground/45">
+                  {attentionOperationRows.length} candidates
                 </span>
               </div>
               <ul className="space-y-0.5">
-                {visibleRows
-                  .filter((r) => r.lane === lane)
-                  .map((r) => {
-                    const readiness = buildWicReadiness(r, workItemLinks?.byCandidateId[r.id]);
-                    return (
-                      <li
-                        key={r.id}
-                        data-testid={`wic-row-${r.id}`}
-                        data-kind={r.kind}
-                        data-lane={r.lane}
-                        data-risk={r.risk}
-                        data-status={r.status}
-                        className={`flex items-center gap-1.5 text-[10px] text-zinc-300 ${
-                          onSelect ? "cursor-pointer rounded px-1 py-0.5 hover:bg-white/[0.04]" : ""
-                        }`}
-                        {...(onSelect ? rowActivation(() => onSelect(r)) : {})}
+                {attentionOperationRows.map((operationRow) => {
+                  const r = operationRow.candidate;
+                  return (
+                    <li
+                      key={`attention-${r.id}`}
+                      data-testid={`wic-ops-attention-row-${r.id}`}
+                      data-readiness={operationRow.readiness.readiness}
+                      className="flex items-center gap-1.5 rounded bg-white/[0.02] px-1 py-0.5 text-[10px] text-zinc-300"
+                    >
+                      <span className="min-w-0 flex-1 truncate" title={r.reason}>
+                        {r.title}
+                      </span>
+                      <span
+                        className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${WIC_READINESS_TONE[operationRow.readiness.readiness]}`}
                       >
-                        <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
-                          {r.kind}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate" title={r.reason}>
-                          {r.title}
-                        </span>
-                        {r.evidenceRefs.length > 0 ? (
-                          <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
-                            {r.evidenceRefs.length}ev
-                          </span>
-                        ) : null}
-                        <WorkItemCandidateReadinessChip row={r} readiness={readiness} />
-                        <span
-                          className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${WIC_RISK_TONE[r.risk] ?? TONE.muted}`}
-                        >
-                          {r.risk}
-                        </span>
-                      </li>
-                    );
-                  })}
+                        {operationRow.readiness.readiness}
+                      </span>
+                      <span className="shrink-0 text-[9px] text-muted-foreground/55">
+                        {operationRow.hasEvidenceRefs ? `${r.evidenceRefs.length}ev` : "no evidence refs"}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
-          ))}
+          ) : null}
         </div>
       )}
     </div>
