@@ -238,6 +238,25 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## E7. Engine — WorkItem Candidate Board / Triage View
+
+Engine batch E7 made WorkItemCandidates faster to triage locally without creating
+committed work. Owner checks:
+
+- [ ] **Board summary** — card shows total plus counts by lane(now/soon/watch),
+      risk(high/medium/low), kind(patch/runner/evidence/memory/source), sourceRefs,
+      and evidenceRefs.
+- [ ] **Local filters** — lane/risk/kind/source-ref/evidence-ref filters narrow
+      the visible candidates only; filters are scoped `data-action-scope="local-view"`.
+- [ ] **Local search** — candidate search narrows by title, reason, id, status,
+      risk, kind, lane, and string refs; empty filtered result is honest.
+- [ ] **Command jump** — Command Deck / Command Palette shows `WorkItem Candidates 열기`
+      with hint `작업 후보 보기 · 확정 없음`; it scrolls/focuses the board only.
+- [ ] **E6 still works** — filtered rows still open the read-only local detail
+      drawer and ref-only link graph.
+- [ ] **Candidate-only** — no create / launch / commit lifecycle, no write/append/
+      send/dispatch/apply controls, PREVIEW/LIVE separation unchanged.
+
 ## E6. Engine — WorkItem Candidate Detail / Link Graph
 
 Engine batch E6 made WorkItemCandidate rows inspectable without creating committed work. Owner checks:
