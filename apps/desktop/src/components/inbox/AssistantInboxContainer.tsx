@@ -18,6 +18,11 @@ import {
 import { projectPluginEvidenceCandidates } from "../../lib/plugins/pluginEvidenceSource";
 import { projectPatchCandidates } from "../../lib/plugins/patchCandidateSource";
 import { EXAMPLE_PATCH_CANDIDATES } from "../../lib/plugins/examplePatchCandidate";
+import {
+  projectRunnerTheater,
+  EXAMPLE_RUNNER_SESSIONS,
+  EXAMPLE_RUNNER_NOW_MS,
+} from "../../lib/runnerTheater";
 
 /** LINE A — local UI preference key for the remembered seat (no server write). */
 const INBOX_VIEW_MODE_KEY = "ai-orchestrator.inbox-view-mode.v1";
@@ -179,6 +184,21 @@ export function AssistantInboxContainer({
     return { patchCandidates: undefined };
   }, [mode, live]);
 
+  // Engine E2 — Runner Theater. PREVIEW shows clearly-labeled EXAMPLE runner
+  // sessions (fixed now → deterministic liveness); LIVE projects ONLY real
+  // workbenchMissionStore snapshot passed via live.runnerSessions (honest empty
+  // when none); REPLAY/SANDBOX none. projectRunnerTheater is pure/read-only —
+  // never starts/dispatches a runner; nowMs is injected (no Date.now here).
+  const runnerExtras = useMemo(() => {
+    if (mode === "preview")
+      return { runnerTheater: projectRunnerTheater(EXAMPLE_RUNNER_SESSIONS, EXAMPLE_RUNNER_NOW_MS) };
+    if (mode === "live")
+      return {
+        runnerTheater: projectRunnerTheater(live?.runnerSessions ?? [], live?.nowMs ?? EXAMPLE_RUNNER_NOW_MS),
+      };
+    return { runnerTheater: undefined };
+  }, [mode, live]);
+
   return (
     <div className="nav-center-page" data-page="command_center" data-safe-bottom="true">
       <AssistantInbox
@@ -186,6 +206,7 @@ export function AssistantInboxContainer({
         {...stripExtras}
         {...pluginExtras}
         {...patchExtras}
+        {...runnerExtras}
         mode={mode}
         onModeChange={setMode}
         persistFilters={persistViewMode}
