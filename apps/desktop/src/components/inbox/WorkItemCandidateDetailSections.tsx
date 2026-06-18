@@ -13,6 +13,7 @@ import type {
   WorkItemCandidateTraceEvent,
   WorkItemCandidateTraceEventKind,
 } from "../../lib/workItemCandidateTrace";
+import type { WorkItemCandidateLearningMemoryCandidateLink } from "../../lib/workItemCandidateLearningMemorySignals";
 import type { WorkItemCandidatePatchCandidateLink } from "../../lib/workItemCandidatePatchSignals";
 import type { WorkItemCandidateRunnerCandidateLink } from "../../lib/workItemCandidateRunnerSignals";
 
@@ -375,6 +376,80 @@ export function WorkItemCandidatePatchSignalsSection({
                 {signal.safetyStatus} ·{" "}
                 {signal.verificationStatus === "not_run" ? "verification pending" : signal.verificationStatus} ·{" "}
                 {signal.changedFileCount} files
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+export function WorkItemCandidateLearningMemorySignalsSection({
+  link,
+}: {
+  link?: WorkItemCandidateLearningMemoryCandidateLink;
+}) {
+  const signals = link?.signals ?? [];
+  return (
+    <section
+      data-testid="wic-learning-memory-signals-section"
+      data-count={signals.length}
+      className="mt-2 rounded-md border border-violet-400/15 bg-violet-400/[0.035] p-2"
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-violet-200/70">
+          Learning/Memory Signals
+        </p>
+        <span className="rounded bg-violet-300/10 px-1.5 py-0.5 text-[9px] uppercase text-violet-100/75">
+          aggregate only
+        </span>
+      </div>
+      {signals.length === 0 ? (
+        <p
+          data-testid="wic-learning-memory-signals-empty"
+          className="text-[10px] text-muted-foreground/70"
+        >
+          {link?.unresolvedRefs.length
+            ? `learning/memory refs unresolved · ${link.unresolvedRefs.join(", ")}`
+            : "no matching learning/memory signals"}
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {signals.map((signal) => (
+            <li
+              key={signal.id}
+              data-testid={`wic-learning-memory-signal-${signal.signal}`}
+              className="rounded border border-white/[0.06] bg-white/[0.025] p-1.5 text-[10px] text-zinc-300"
+            >
+              <div className="mb-0.5 flex flex-wrap items-center gap-1">
+                <span
+                  className={`${CHIP_BASE} ${
+                    signal.signal === "memory-warning" ||
+                    signal.signal === "stale-memory" ||
+                    signal.signal === "contradicted-memory"
+                      ? TONE.warn
+                      : signal.signal === "missing-memory-context"
+                        ? TONE.muted
+                        : TONE.info
+                  }`}
+                >
+                  {signal.signal}
+                </span>
+                <span className={`${CHIP_BASE} ${TONE.muted}`}>{signal.refStatus}</span>
+              </div>
+              <div className="break-all text-zinc-200">{signal.reason}</div>
+              {signal.warning ? (
+                <div className="break-all text-muted-foreground">warning · {signal.warning}</div>
+              ) : null}
+              {signal.ref ? (
+                <div className="break-all text-muted-foreground">
+                  ref · <code className="rounded bg-background/70 px-1">{signal.ref}</code>
+                </div>
+              ) : null}
+              <div className="break-all text-muted-foreground">
+                {signal.learningLoops} learning loops · {signal.memoryCandidates} memory candidates ·{" "}
+                {signal.evalReports} eval reports
               </div>
             </li>
           ))}
