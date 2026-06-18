@@ -18,10 +18,12 @@ import { buildWorkItemCandidateSignalSummary } from "../../lib/workItemCandidate
 import type { CandidateDraftEvidenceLink } from "../../lib/workItemEvidenceLinks";
 import {
   WorkItemCandidateNextStepPreviewCard,
+  WorkItemCandidatePatchSignalsSection,
   WorkItemCandidateReadinessSection,
   WorkItemCandidateRunnerSignalsSection,
   WorkItemCandidateTraceTimeline,
 } from "./WorkItemCandidateDetailSections";
+import type { WorkItemCandidatePatchCandidateLink } from "../../lib/workItemCandidatePatchSignals";
 import type { WorkItemCandidateRunnerCandidateLink } from "../../lib/workItemCandidateRunnerSignals";
 import { WorkItemCandidateSignalSummarySection } from "./WorkItemCandidateSignalChips";
 
@@ -308,11 +310,13 @@ export function WorkItemCandidateDetailDrawer({
   onClose,
   draftLink,
   runnerLink,
+  patchLink,
 }: {
   item: WorkItemCandidate | null;
   onClose: () => void;
   draftLink?: CandidateDraftEvidenceLink;
   runnerLink?: WorkItemCandidateRunnerCandidateLink;
+  patchLink?: WorkItemCandidatePatchCandidateLink;
 }) {
   const ref = useRef<HTMLElement>(null);
   const [activeTab, setActiveTab] = useState<WicDetailTab>("overview");
@@ -431,6 +435,7 @@ export function WorkItemCandidateDetailDrawer({
         </dl>
         <WorkItemCandidateSignalSummarySection summary={signalSummary} />
         <WorkItemCandidateRunnerSignalsSection link={runnerLink} />
+        <WorkItemCandidatePatchSignalsSection link={patchLink} />
       </section>
       <section data-testid="wic-detail-panel-map" data-active={activeTab === "map" ? "true" : "false"}>
         <WorkItemCandidateLinkGraph item={item} />
