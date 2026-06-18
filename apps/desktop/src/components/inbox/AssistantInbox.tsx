@@ -69,6 +69,12 @@ import {
   type WorkItemCandidateReadinessState,
 } from "../../lib/workItemCandidateReadiness";
 import {
+  buildWorkItemCandidateTrace,
+  type WorkItemCandidateTrace,
+  type WorkItemCandidateTraceEvent,
+  type WorkItemCandidateTraceEventKind,
+} from "../../lib/workItemCandidateTrace";
+import {
   projectPluginWorkItems,
   type WorkItemLiteProviderResult,
 } from "../../lib/plugins/pluginWorkItemSource";
@@ -2195,13 +2201,14 @@ function WorkItemCandidatesCard({
 const WIC_UNKNOWN = "none / unknown";
 
 type WorkItemCandidateDetailField = [string, string];
-type WicDetailTab = "overview" | "map" | "readiness" | "preview";
+type WicDetailTab = "overview" | "map" | "readiness" | "preview" | "trace";
 
 const WIC_DETAIL_TABS: ReadonlyArray<{ id: WicDetailTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "map", label: "Map" },
   { id: "readiness", label: "Readiness" },
   { id: "preview", label: "Preview" },
+  { id: "trace", label: "Trace" },
 ];
 
 function wicValue(value: string | undefined): string {
@@ -2614,6 +2621,84 @@ function WorkItemCandidateReadinessSection({
   );
 }
 
+const WIC_TRACE_TONE: Record<WorkItemCandidateTraceEventKind, string> = {
+  patch: TONE.warn,
+  runner: TONE.bad,
+  memory: TONE.info,
+  source: TONE.neutral,
+  evidence: TONE.good,
+  draft: TONE.info,
+  readiness: TONE.good,
+  "next-step": TONE.warn,
+  unknown: TONE.muted,
+};
+
+function WorkItemCandidateTraceRow({ event }: { event: WorkItemCandidateTraceEvent }) {
+  return (
+    <li
+      data-testid={`wic-trace-event-${event.kind}-${event.id}`}
+      data-kind={event.kind}
+      className="rounded border border-white/[0.06] bg-white/[0.025] p-1.5 text-[10px] text-zinc-300"
+    >
+      <div className="mb-0.5 flex flex-wrap items-center gap-1">
+        <span className={`${CHIP_BASE} ${WIC_TRACE_TONE[event.kind]}`}>{event.kind}</span>
+        <span className="rounded bg-white/[0.04] px-1 text-[9px] uppercase text-muted-foreground/65">
+          {event.timeLabel}
+        </span>
+        {event.refStatus ? (
+          <span className="rounded bg-white/[0.04] px-1 text-[9px] uppercase text-muted-foreground/65">
+            {event.refStatus}
+          </span>
+        ) : null}
+      </div>
+      <div className="break-all text-zinc-200">{event.label}</div>
+      {event.ref ? (
+        <div className="break-all text-muted-foreground">
+          ref · <code className="rounded bg-background/70 px-1">{event.ref}</code>
+        </div>
+      ) : null}
+      {event.readiness || event.confidence ? (
+        <div className="break-all text-muted-foreground">
+          {event.readiness ? `readiness · ${event.readiness}` : null}
+          {event.confidence ? ` · confidence · ${event.confidence}` : null}
+        </div>
+      ) : null}
+      {event.details.length > 0 ? (
+        <div className="break-all text-muted-foreground">details · {event.details.join(", ")}</div>
+      ) : null}
+    </li>
+  );
+}
+
+function WorkItemCandidateTraceTimeline({ trace }: { trace: WorkItemCandidateTrace }) {
+  return (
+    <section
+      data-testid="wic-trace-timeline"
+      data-empty={trace.empty ? "true" : "false"}
+      className="mt-2 rounded-md border border-amber-300/15 bg-amber-300/[0.035] p-2"
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-amber-100/75">
+          Trace timeline
+        </p>
+        <span className="rounded bg-amber-300/10 px-1.5 py-0.5 text-[9px] uppercase text-amber-100/75">
+          {trace.label}
+        </span>
+      </div>
+      {trace.empty ? (
+        <p data-testid="wic-trace-empty" className="mb-1 text-[10px] text-muted-foreground/70">
+          no source/evidence trace refs yet · {trace.missing.join(", ")}
+        </p>
+      ) : null}
+      <ol className="space-y-1">
+        {trace.events.map((event) => (
+          <WorkItemCandidateTraceRow key={event.id} event={event} />
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function WorkItemCandidateDetailDrawer({
   item,
   onClose,
@@ -2648,6 +2733,7 @@ function WorkItemCandidateDetailDrawer({
 
   const nextStepPreview = buildWorkItemCandidateNextStepPreview(item, draftLink);
   const readiness = buildWorkItemCandidateReadiness(item, nextStepPreview, draftLink);
+  const trace = buildWorkItemCandidateTrace(item, { draftLink, nextStepPreview, readiness });
   const fields: WorkItemCandidateDetailField[] = [
     ["id", item.id],
     ["title", item.title],
@@ -2700,7 +2786,7 @@ function WorkItemCandidateDetailDrawer({
         aria-label="work item candidate detail sections"
         data-testid="wic-detail-tabs"
         data-active-tab={activeTab}
-        className="mb-2 grid grid-cols-4 gap-1"
+        className="mb-2 grid grid-cols-5 gap-1"
       >
         {WIC_DETAIL_TABS.map((tab) => {
           const active = activeTab === tab.id;
@@ -2747,6 +2833,9 @@ function WorkItemCandidateDetailDrawer({
       </section>
       <section data-testid="wic-detail-panel-preview" data-active={activeTab === "preview" ? "true" : "false"}>
         <WorkItemCandidateNextStepPreviewCard preview={nextStepPreview} readiness={readiness} />
+      </section>
+      <section data-testid="wic-detail-panel-trace" data-active={activeTab === "trace" ? "true" : "false"}>
+        <WorkItemCandidateTraceTimeline trace={trace} />
       </section>
     </aside>
   );
