@@ -5,11 +5,14 @@ SESSION_NAME="${AI_SWARM_SESSION:-ai-swarm}"
 STATE_DIR="${AI_SWARM_STATE_DIR:-.ai-swarm}"
 ENV_FILE="${STATE_DIR}/${SESSION_NAME}.env"
 LINES="${AI_SWARM_CAPTURE_LINES:-120}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/swarm-io-common.sh
+source "${SCRIPT_DIR}/swarm-io-common.sh"
 
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/swarm-capture.sh <role> [--lines N]
+  scripts/swarm-capture.sh <role> [--lines N] [--require-marker MARKER] [--since-marker MARKER]
 
 Roles:
   discussion
@@ -25,9 +28,12 @@ Roles:
 
 Captures pane output read-only and redacts obvious secrets before printing.
 This helper does not send keys or execute commands.
+When a marker is required but absent, it fails as stale or marker missing.
 USAGE
 }
 
+require_marker=""
+since_marker=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --lines)
@@ -37,6 +43,42 @@ while [[ $# -gt 0 ]]; do
       ;;
     --lines=*)
       LINES="${1#--lines=}"
+      shift
+      ;;
+    --require-marker)
+      shift
+      require_marker="${1:-}"
+      if [[ -z "$require_marker" ]]; then
+        echo "--require-marker requires a marker value." >&2
+        exit 2
+      fi
+      shift || true
+      ;;
+    --require-marker=*)
+      require_marker="${1#--require-marker=}"
+      if [[ -z "$require_marker" ]]; then
+        echo "--require-marker requires a marker value." >&2
+        exit 2
+      fi
+      shift
+      ;;
+    --since-marker)
+      shift
+      since_marker="${1:-}"
+      if [[ -z "$since_marker" ]]; then
+        echo "--since-marker requires a marker value." >&2
+        exit 2
+      fi
+      require_marker="$since_marker"
+      shift || true
+      ;;
+    --since-marker=*)
+      since_marker="${1#--since-marker=}"
+      if [[ -z "$since_marker" ]]; then
+        echo "--since-marker requires a marker value." >&2
+        exit 2
+      fi
+      require_marker="$since_marker"
       shift
       ;;
     -h|--help)
@@ -66,38 +108,32 @@ if ! [[ "$LINES" =~ ^[0-9]+$ ]] || (( LINES < 1 || LINES > 2000 )); then
   exit 2
 fi
 
-if ! command -v tmux >/dev/null 2>&1; then
-  echo "tmux is not installed or not on PATH." >&2
-  exit 127
+if [[ -z "$require_marker" && -n "$since_marker" ]]; then
+  require_marker="$since_marker"
 fi
 
-if [[ ! -f "$ENV_FILE" ]]; then
-  echo "Missing swarm env file: $ENV_FILE" >&2
-  echo "Run scripts/setup-agent-swarm.sh first." >&2
-  exit 1
-fi
-
-# shellcheck disable=SC1090
-source "$ENV_FILE"
+require_tmux
+acquire_lock
+load_swarm_env
 
 role_key="$(printf '%s' "$role" | tr '[:lower:]' '[:upper:]')"
 pane_var="AI_SWARM_PANE_${role_key}"
 pane_id="${!pane_var:-}"
 
-if [[ -z "$pane_id" ]]; then
-  echo "Unknown role or missing pane id: $role" >&2
-  usage >&2
-  exit 2
+require_live_session
+require_live_pane "$role" "$pane_id"
+
+capture_output="$(tmux capture-pane -p -t "$pane_id" -S "-${LINES}")"
+
+if [[ -n "$require_marker" ]]; then
+  if ! grep -Fq -- "$require_marker" <<< "$capture_output"; then
+    echo "stale or marker missing: ${require_marker}" >&2
+    exit 4
+  fi
 fi
 
-if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-  echo "tmux session '$SESSION_NAME' is not running." >&2
-  exit 1
+if [[ -n "$since_marker" ]]; then
+  capture_output="$(awk -v marker="$since_marker" 'seen || index($0, marker) { seen=1; print }' <<< "$capture_output")"
 fi
 
-tmux capture-pane -p -t "$pane_id" -S "-${LINES}" |
-  sed -E \
-    -e 's/sk-[A-Za-z0-9_-]{8,}/[REDACTED:api_key]/g' \
-    -e 's/Bearer[[:space:]]+[A-Za-z0-9._~+\/=-]+/[REDACTED:bearer_token]/g' \
-    -e 's/(ANTHROPIC_AUTH_TOKEN|OPENAI_API_KEY|AUTH_TOKEN|API_KEY|SECRET|TOKEN)=([^[:space:]]+)/\1=[REDACTED:secret]/g' \
-    -e 's/-----BEGIN [A-Z ]*PRIVATE KEY-----/[REDACTED:private_key]/g'
+printf '%s\n' "$capture_output" | redact_swarm_output
