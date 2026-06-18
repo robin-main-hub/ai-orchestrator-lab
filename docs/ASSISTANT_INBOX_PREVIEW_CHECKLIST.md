@@ -238,6 +238,39 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## E13-E15. Engine — WorkItem Candidate Consolidation + Operator Review
+
+Engine batches E13-E15 (PR #654, merge commit `71ce8d0`; PR #655, merge commit
+`48d2a6c`; PR #656, merge commit `8508bb4`; PR #657, merge commit `b2a679a`)
+consolidated the WorkItemCandidate axis and added a read-only operator review
+surface without creating committed work. Owner checks:
+
+- [ ] **Detail extraction intact** — opening a WorkItemCandidate detail drawer still
+      shows the Overview / Map / Readiness / Preview / Trace sections from the
+      extracted drawer/section components.
+- [ ] **Board projection intact** — lane/risk/kind/ref/search/scope/sort filters
+      still narrow candidate rows locally and summary counts remain honest.
+- [ ] **Signal chips** — candidate rows show compact source/evidence/draft/
+      preview/risk/readiness signal chips where the existing refs/context support
+      them.
+- [ ] **Signal detail** — candidate detail shows a signal origin summary without
+      claiming string refs are resolved objects.
+- [ ] **Operator review panel** — the Work Item Candidates card shows
+      `operator review` counts for ready, needs evidence, blocked, missing refs,
+      trace unknown, and confidence bands.
+- [ ] **Review filters** — Operator Review buttons narrow rows locally only; ready
+      and missing-ref filters should visibly change the row list when sample/live
+      candidates support those states.
+- [ ] **Review jump** — Command Deck `Candidate Review` and Command Palette
+      `Candidate Review 열기` scroll/focus the review panel only.
+- [ ] **Focused review commands** — palette entries for ready / missing evidence /
+      blocked review set the local review filter without changing lifecycle state.
+- [ ] **PREVIEW/LIVE honesty** — PREVIEW can show fixture candidates; LIVE derives
+      review state only from live `workItemCandidates` plus existing links/context.
+- [ ] **Candidate-only** — no create / launch / commit lifecycle, no write/append/
+      send/dispatch/apply controls, no EventStorage/server mutation, no object
+      resolution beyond existing refs.
+
 ## E12. Engine — WorkItem Candidate Source Trace Timeline
 
 Engine batch E12 (PR #652, merge commit `74080c7`) made WorkItemCandidates show
