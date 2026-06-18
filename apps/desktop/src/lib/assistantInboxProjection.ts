@@ -483,6 +483,12 @@ export type AssistantInboxLiveInput = {
    * applied/committed/dispatched; the inbox holds no runner-execution coupling.
    */
   patchCandidates?: ReadonlyArray<import("./plugins/patchCandidateSource").PatchCandidateInput>;
+  /**
+   * Engine E2 — real runner/mission sessions (workbenchMissionStore snapshot) for
+   * the read-only Runner Theater. Structural subset of WorkbenchMission. Absent →
+   * honest empty (no runner sessions observed). Read-only; never starts/dispatches.
+   */
+  runnerSessions?: ReadonlyArray<import("./runnerTheater").RunnerSessionInput>;
   /** Real learning-loop events (e.g. App eventLog). Filtered to learning types. */
   learningEvents?: ReadonlyArray<{ type: string; payload: unknown }>;
   /** Real persisted project records (H10 useProjectRecordController.records). */

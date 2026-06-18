@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   Brain,
   ChevronRight,
@@ -768,6 +768,13 @@ export function App() {
   // OSS-H10 — ProjectRecord 영속화 layer. 단일 호출. RunWorkspace.boardProps로 내려보낸다.
   // 자동 rerun/provider 호출/GitHub write 0 — 단지 mission state를 missionId별로 영속화하고 RecentProjectsPanel에 노출.
   const projectRecordController = useProjectRecordController();
+  // Engine E2 — read-only subscription to the shared mission store, feeding the
+  // Assistant Inbox Runner Theater. getSnapshot only; no mutation, no dispatch.
+  const runnerSessionsSnapshot = useSyncExternalStore(
+    workbenchMissionStore.subscribe,
+    workbenchMissionStore.getSnapshot,
+    workbenchMissionStore.getSnapshot,
+  );
   // RecentProjectsPanel "이어서" 클릭 target. MissionBoardContainer가 펼친 뒤 onResumeConsumed로 비운다.
   const [pendingResumeMissionId, setPendingResumeMissionId] = useState<string | null>(null);
   /**
@@ -5523,6 +5530,10 @@ export function App() {
                 // for now; wiring a real source is swapping the [] for those queue items.
                 // No fetch / server call / EventStorage write / runner dispatch.
                 patchCandidates: patchCandidatesFromApprovalItems([]),
+                // Engine E2 — real runner/mission sessions (shared store snapshot)
+                // for the read-only Runner Theater. Read-only; no dispatch/start/
+                // write. Empty store → honest "no runner sessions observed".
+                runnerSessions: runnerSessionsSnapshot,
               }}
               // LINE A (Batch 8) — remember the last seat (local UI pref only).
               persistViewMode
