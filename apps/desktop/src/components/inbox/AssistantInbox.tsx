@@ -60,6 +60,11 @@ import {
   type WorkItemCandidateBoardRiskFilter,
   type WorkItemCandidateOperationRow,
 } from "../../lib/workItemCandidateOperations";
+import {
+  buildWorkItemCandidateOperatorReview,
+  type WorkItemCandidateOperatorReview,
+  type WorkItemCandidateOperatorReviewFilter,
+} from "../../lib/workItemCandidateOperatorReview";
 import { buildWorkItemCandidateSignalSummaryFromOperation } from "../../lib/workItemCandidateSignals";
 import {
   linkWorkItemCandidatesToEvidenceDraft,
@@ -525,6 +530,7 @@ const DECK_HINTS: Record<string, string> = {
   "source-dock": "외부 소스 갑판으로 이동 · 화면 이동만",
   "patch-candidates": "패치 후보로 이동 · 화면 이동만 · 적용 없음",
   "work-item-candidates": "작업 후보 보기 · 확정 없음",
+  "candidate-review": "Candidate Review로 이동 · 화면 이동만 · 확정 없음",
   "operator-console": "오퍼레이터 콘솔로 이동 · 화면 이동만",
   "evidence-draft": "Evidence Draft로 이동 · 화면 이동만 · PREVIEW 전용",
   clear: "검색/필터 초기화",
@@ -543,6 +549,7 @@ function CommandDeck({
   onSourceDock,
   onPatchCandidates,
   onWorkItemCandidates,
+  onCandidateReview,
   onClear,
 }: {
   activeViewId?: string;
@@ -550,6 +557,7 @@ function CommandDeck({
   onSourceDock: () => void;
   onPatchCandidates: () => void;
   onWorkItemCandidates: () => void;
+  onCandidateReview: () => void;
   onClear: () => void;
 }) {
   const base =
@@ -606,6 +614,16 @@ function CommandDeck({
         className={`${base} ${tone(false)}`}
       >
         WorkItem Candidates
+      </button>
+      <button
+        type="button"
+        data-testid="command-deck-candidate-review"
+        data-action-scope="local-view"
+        title={DECK_HINTS["candidate-review"]}
+        onClick={onCandidateReview}
+        className={`${base} ${tone(false)}`}
+      >
+        Candidate Review
       </button>
       <button
         type="button"
@@ -1533,6 +1551,152 @@ function WorkItemCandidateReadinessChip({
   );
 }
 
+function reviewFilterFromCommand(
+  command?: InboxCommand,
+): WorkItemCandidateOperatorReviewFilter | null {
+  if (command?.kind !== "focusSection") return null;
+  if (command.value === "work-item-candidate-review") return "all";
+  if (command.value === "work-item-candidate-review-ready") return "ready";
+  if (command.value === "work-item-candidate-review-needs-evidence") return "needs-evidence";
+  if (command.value === "work-item-candidate-review-blocked") return "blocked";
+  if (command.value === "work-item-candidate-review-missing-refs") return "missing-refs";
+  return null;
+}
+
+function WorkItemCandidateOperatorReviewPanel({
+  review,
+  panelRef,
+  onFilter,
+}: {
+  review: WorkItemCandidateOperatorReview;
+  panelRef?: RefObject<HTMLDivElement | null>;
+  onFilter: (filter: WorkItemCandidateOperatorReviewFilter) => void;
+}) {
+  const buttonBase =
+    "rounded border px-1.5 py-0.5 text-[10px] font-medium transition-colors";
+  const buttonTone = (active: boolean) =>
+    active
+      ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-100"
+      : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-200";
+  const CountChip = ({
+    testId,
+    count,
+    label,
+    tone = TONE.muted,
+  }: {
+    testId: string;
+    count: number;
+    label: string;
+    tone?: string;
+  }) => (
+    <span data-testid={testId} data-count={count} className={`${CHIP_BASE} ${tone}`}>
+      {count} {label}
+    </span>
+  );
+  const FilterButton = ({
+    testId,
+    filter,
+    children,
+  }: {
+    testId: string;
+    filter: WorkItemCandidateOperatorReviewFilter;
+    children: React.ReactNode;
+  }) => (
+    <button
+      type="button"
+      data-testid={testId}
+      data-action-scope="local-view"
+      data-active={review.activeFilter === filter ? "true" : "false"}
+      onClick={() => onFilter(filter)}
+      className={`${buttonBase} ${buttonTone(review.activeFilter === filter)}`}
+    >
+      {children}
+    </button>
+  );
+
+  return (
+    <div
+      ref={panelRef}
+      tabIndex={-1}
+      data-testid="wic-operator-review"
+      data-total={review.counts.total}
+      data-filter={review.activeFilter}
+      className="mb-2 space-y-1 rounded-md border border-emerald-400/15 bg-emerald-400/[0.025] p-1.5"
+    >
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-200/70">
+          operator review
+        </span>
+        <CountChip testId="wic-review-count-ready" count={review.counts.ready} label="ready" tone={TONE.good} />
+        <CountChip
+          testId="wic-review-count-needs-evidence"
+          count={review.counts.needsEvidence}
+          label="needs evidence"
+          tone={TONE.warn}
+        />
+        <CountChip testId="wic-review-count-blocked" count={review.counts.blocked} label="blocked" tone={TONE.bad} />
+        <CountChip
+          testId="wic-review-count-missing-refs"
+          count={review.counts.missingRefs}
+          label="missing refs"
+          tone={TONE.warn}
+        />
+        <CountChip
+          testId="wic-review-count-stale-unknown-trace"
+          count={review.counts.staleOrUnknownTrace}
+          label="trace unknown"
+          tone={TONE.muted}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-1">
+        <span
+          data-testid="wic-review-count-high-confidence"
+          data-count={review.counts.confidenceHigh}
+          className={`${CHIP_BASE} ${TONE.good}`}
+        >
+          {review.counts.confidenceHigh} high confidence
+        </span>
+        <span
+          data-testid="wic-review-count-low-confidence"
+          data-count={review.counts.confidenceLow}
+          className={`${CHIP_BASE} ${TONE.warn}`}
+        >
+          {review.counts.confidenceLow} low confidence
+        </span>
+        <span className="ml-auto text-[9px] uppercase tracking-wider text-muted-foreground/45">
+          local review only · lifecycle 없음
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1">
+        <FilterButton testId="wic-review-filter-all" filter="all">
+          All
+        </FilterButton>
+        <FilterButton testId="wic-review-filter-ready" filter="ready">
+          Ready
+        </FilterButton>
+        <FilterButton testId="wic-review-filter-needs-evidence" filter="needs-evidence">
+          Needs Evidence
+        </FilterButton>
+        <FilterButton testId="wic-review-filter-blocked" filter="blocked">
+          Blocked
+        </FilterButton>
+        <FilterButton testId="wic-review-filter-missing-refs" filter="missing-refs">
+          Missing Refs
+        </FilterButton>
+        <FilterButton testId="wic-review-filter-stale-unknown-trace" filter="stale-unknown-trace">
+          Trace Unknown
+        </FilterButton>
+        <FilterButton testId="wic-review-filter-high-confidence" filter="high-confidence">
+          High Confidence
+        </FilterButton>
+        <FilterButton testId="wic-review-filter-low-confidence" filter="low-confidence">
+          Low Confidence
+        </FilterButton>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Engine E5 — WorkItem Candidates: the read-only CENTRAL AXIS over the OS's
  * signals (patch / runner / evidence / memory / source). Each row is a
@@ -1546,11 +1710,15 @@ function WorkItemCandidatesCard({
   rows,
   onSelect,
   cardRef,
+  reviewRef,
+  reviewCommand,
   workItemLinks,
 }: {
   rows: ReadonlyArray<WorkItemCandidate>;
   onSelect?: (row: WorkItemCandidate) => void;
   cardRef?: RefObject<HTMLDivElement | null>;
+  reviewRef?: RefObject<HTMLDivElement | null>;
+  reviewCommand?: InboxCommand;
   workItemLinks?: WorkItemEvidenceDraftLinks;
 }) {
   const [laneFilter, setLaneFilter] = useState<WorkItemCandidateBoardLaneFilter>("all");
@@ -1562,9 +1730,18 @@ function WorkItemCandidatesCard({
   const [scopeFilter, setScopeFilter] = useState<WorkItemCandidateBoardScopeFilter>("all");
   const [groupMode, setGroupMode] = useState<WicGroupMode>("lane");
   const [sortMode, setSortMode] = useState<WorkItemCandidateBoardSortMode>("priority");
+  const [reviewFilter, setReviewFilter] = useState<WorkItemCandidateOperatorReviewFilter>(
+    () => reviewFilterFromCommand(reviewCommand) ?? "all",
+  );
+  useEffect(() => {
+    const next = reviewFilterFromCommand(reviewCommand);
+    if (next) setReviewFilter(next);
+  }, [reviewCommand]);
   const operations = buildWorkItemCandidateOperations(rows, workItemLinks);
+  const operatorReview = buildWorkItemCandidateOperatorReview(operations, reviewFilter);
   const summary = operations.summary;
-  const boardProjection = buildWorkItemCandidateBoardProjection(operations, {
+  const reviewScopedOperations = { ...operations, rows: operatorReview.rows };
+  const boardProjection = buildWorkItemCandidateBoardProjection(reviewScopedOperations, {
     lane: laneFilter,
     risk: riskFilter,
     kind: kindFilter,
@@ -1737,6 +1914,7 @@ function WorkItemCandidatesCard({
       data-scope={scopeFilter}
       data-group-mode={groupMode}
       data-sort-mode={sortMode}
+      data-review-filter={reviewFilter}
       className="mx-4 mb-2 rounded-lg border border-sky-400/20 bg-sky-400/[0.03] p-2.5"
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
@@ -1807,6 +1985,12 @@ function WorkItemCandidatesCard({
           </span>
         </div>
       </div>
+
+      <WorkItemCandidateOperatorReviewPanel
+        review={operatorReview}
+        panelRef={reviewRef}
+        onFilter={setReviewFilter}
+      />
 
       <div
         data-testid="wic-operations-summary"
@@ -3478,6 +3662,8 @@ export function AssistantInbox({
   const patchCandidatesRef = useRef<HTMLDivElement>(null);
   // Engine E7 — scroll/focus target for the WorkItem Candidate board jump.
   const workItemCandidatesRef = useRef<HTMLDivElement>(null);
+  // Engine E15 — scroll/focus target for the read-only candidate operator review.
+  const workItemCandidateReviewRef = useRef<HTMLDivElement>(null);
   // Batch 25 LINE J — scroll/focus targets for the Operator Console + Evidence Draft jumps.
   const operatorConsoleRef = useRef<HTMLDivElement>(null);
   const evidenceDraftRef = useRef<HTMLDivElement>(null);
@@ -3518,6 +3704,10 @@ export function AssistantInbox({
   const jumpToWorkItemCandidates = useCallback(() => {
     workItemCandidatesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     workItemCandidatesRef.current?.focus();
+  }, []);
+  const jumpToWorkItemCandidateReview = useCallback(() => {
+    workItemCandidateReviewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    workItemCandidateReviewRef.current?.focus();
   }, []);
   // Batch 25 LINE J — view/focus only jumps to the Operator Console + Evidence Draft.
   const jumpToOperatorConsole = useCallback(() => {
@@ -3638,6 +3828,7 @@ export function AssistantInbox({
     if (command.value === "source-dock") jumpToSourceDock();
     else if (command.value === "patch-candidates") jumpToPatchCandidates();
     else if (command.value === "work-item-candidates") jumpToWorkItemCandidates();
+    else if (command.value?.startsWith("work-item-candidate-review")) jumpToWorkItemCandidateReview();
     else if (command.value === "operator-console") jumpToOperatorConsole();
     else if (command.value === "evidence-draft") jumpToEvidenceDraft();
   }, [
@@ -3645,6 +3836,7 @@ export function AssistantInbox({
     jumpToSourceDock,
     jumpToPatchCandidates,
     jumpToWorkItemCandidates,
+    jumpToWorkItemCandidateReview,
     jumpToOperatorConsole,
     jumpToEvidenceDraft,
   ]);
@@ -3739,6 +3931,7 @@ export function AssistantInbox({
         onSourceDock={jumpToSourceDock}
         onPatchCandidates={jumpToPatchCandidates}
         onWorkItemCandidates={jumpToWorkItemCandidates}
+        onCandidateReview={jumpToWorkItemCandidateReview}
         onClear={clearFilters}
       />
       {/* Batch 19 — local-view keyboard accelerators (discoverability + at-a-glance). */}
@@ -3818,6 +4011,8 @@ export function AssistantInbox({
               rows={workItemCandidates}
               onSelect={setSelectedWorkItemCandidate}
               cardRef={workItemCandidatesRef}
+              reviewRef={workItemCandidateReviewRef}
+              reviewCommand={command}
               workItemLinks={workItemEvidenceLinks}
             />
           ) : null}

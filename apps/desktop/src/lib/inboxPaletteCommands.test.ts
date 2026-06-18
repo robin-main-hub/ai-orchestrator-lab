@@ -44,6 +44,14 @@ describe("Batch 12 — LINE A: inbox Command Palette builder (view-only)", () =>
     expect(h.dispatch).toHaveBeenLastCalledWith("focusSection", "patch-candidates");
     byId(cmds, "inbox.workItemCandidates").run();
     expect(h.dispatch).toHaveBeenLastCalledWith("focusSection", "work-item-candidates");
+    byId(cmds, "inbox.candidateReview").run();
+    expect(h.dispatch).toHaveBeenLastCalledWith("focusSection", "work-item-candidate-review");
+    byId(cmds, "inbox.candidateReviewReady").run();
+    expect(h.dispatch).toHaveBeenLastCalledWith("focusSection", "work-item-candidate-review-ready");
+    byId(cmds, "inbox.candidateReviewMissingEvidence").run();
+    expect(h.dispatch).toHaveBeenLastCalledWith("focusSection", "work-item-candidate-review-needs-evidence");
+    byId(cmds, "inbox.candidateReviewBlocked").run();
+    expect(h.dispatch).toHaveBeenLastCalledWith("focusSection", "work-item-candidate-review-blocked");
     byId(cmds, "inbox.operatorConsole").run();
     expect(h.dispatch).toHaveBeenLastCalledWith("focusSection", "operator-console");
     byId(cmds, "inbox.evidenceDraft").run();
@@ -66,6 +74,10 @@ describe("Batch 12 — LINE A: inbox Command Palette builder (view-only)", () =>
       "inbox.sourceDock",
       "inbox.patchCandidates",
       "inbox.workItemCandidates",
+      "inbox.candidateReview",
+      "inbox.candidateReviewReady",
+      "inbox.candidateReviewMissingEvidence",
+      "inbox.candidateReviewBlocked",
       "inbox.operatorConsole",
       "inbox.sandbox",
       "inbox.evidenceDraft",

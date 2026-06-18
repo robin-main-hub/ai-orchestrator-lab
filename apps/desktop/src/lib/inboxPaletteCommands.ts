@@ -99,6 +99,34 @@ export function buildInboxPaletteCommands(
       hint: "작업 후보 보기 · 확정 없음",
       run: () => h.dispatch("focusSection", "work-item-candidates"),
     },
+    {
+      id: "inbox.candidateReview",
+      verb: "이동",
+      label: "Candidate Review 열기",
+      hint: "후보 리뷰 보기 · 확정 없음",
+      run: () => h.dispatch("focusSection", "work-item-candidate-review"),
+    },
+    {
+      id: "inbox.candidateReviewReady",
+      verb: "보기",
+      label: "Ready Candidates 보기",
+      hint: "준비 후보 보기 · 확정 없음",
+      run: () => h.dispatch("focusSection", "work-item-candidate-review-ready"),
+    },
+    {
+      id: "inbox.candidateReviewMissingEvidence",
+      verb: "보기",
+      label: "Missing Evidence 보기",
+      hint: "근거 부족 후보 보기 · 확정 없음",
+      run: () => h.dispatch("focusSection", "work-item-candidate-review-needs-evidence"),
+    },
+    {
+      id: "inbox.candidateReviewBlocked",
+      verb: "보기",
+      label: "Blocked Candidates 보기",
+      hint: "막힌 후보 보기 · 확정 없음",
+      run: () => h.dispatch("focusSection", "work-item-candidate-review-blocked"),
+    },
     // Batch 25 LINE J — jump to the Operator Console (status strip). View/move only:
     // scrolls + focuses the console region; never reads/writes a server.
     {
