@@ -56,6 +56,10 @@ import {
   type WorkItemEvidenceDraftLinks,
 } from "../../lib/workItemEvidenceLinks";
 import {
+  buildWorkItemCandidateNextStepPreview,
+  type WorkItemCandidateNextStepPreview,
+} from "../../lib/workItemCandidateNextStepPreview";
+import {
   projectPluginWorkItems,
   type WorkItemLiteProviderResult,
 } from "../../lib/plugins/pluginWorkItemSource";
@@ -1965,6 +1969,95 @@ function WorkItemCandidateDraftEvidenceLinks({
   );
 }
 
+function WorkItemCandidateNextStepPreviewCard({
+  preview,
+}: {
+  preview: WorkItemCandidateNextStepPreview;
+}) {
+  return (
+    <section
+      data-testid="wic-next-step-preview"
+      data-risk={preview.risk}
+      className="mt-2 rounded-md border border-cyan-400/15 bg-cyan-400/[0.04] p-2"
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-cyan-200/70">
+          Next-step preview
+        </p>
+        <span className="rounded bg-cyan-300/10 px-1.5 py-0.5 text-[9px] uppercase text-cyan-100/80">
+          {preview.label}
+        </span>
+      </div>
+      <div className="space-y-1 text-[10px] text-zinc-300">
+        <p data-testid="wic-next-step-candidate" className="break-all">
+          {preview.candidateId} · {preview.title}
+        </p>
+        <p data-testid="wic-next-step-state" className="text-muted-foreground">
+          {preview.lane} · {preview.status} · {preview.risk}
+        </p>
+        <p data-testid="wic-next-step-reason" className="break-all text-muted-foreground">
+          reason · {preview.reason}
+        </p>
+        <dl className="space-y-0.5">
+          <div className="flex items-start justify-between gap-2">
+            <dt className="shrink-0 text-muted-foreground/60">source refs</dt>
+            <dd data-testid="wic-next-step-sourceRefs" className="min-w-0 break-all text-right">
+              {wicRefs(preview.availableSourceRefs)}
+            </dd>
+          </div>
+          <div className="flex items-start justify-between gap-2">
+            <dt className="shrink-0 text-muted-foreground/60">evidence refs</dt>
+            <dd data-testid="wic-next-step-evidenceRefs" className="min-w-0 break-all text-right">
+              {wicRefs(preview.availableEvidenceRefs)}
+            </dd>
+          </div>
+          <div className="flex items-start justify-between gap-2">
+            <dt className="shrink-0 text-muted-foreground/60">missing source</dt>
+            <dd data-testid="wic-next-step-missingSource" className="min-w-0 break-all text-right">
+              {preview.missingSourceRefs.length > 0
+                ? preview.missingSourceRefs.join(", ")
+                : WIC_UNKNOWN}
+            </dd>
+          </div>
+          <div className="flex items-start justify-between gap-2">
+            <dt className="shrink-0 text-muted-foreground/60">missing evidence</dt>
+            <dd data-testid="wic-next-step-missingEvidence" className="min-w-0 break-all text-right">
+              {preview.missingEvidenceRefs.length > 0
+                ? preview.missingEvidenceRefs.join(", ")
+                : WIC_UNKNOWN}
+            </dd>
+          </div>
+        </dl>
+        <div data-testid="wic-next-step-draftClaims" className="break-all text-muted-foreground">
+          draft claims ·{" "}
+          {preview.relatedDraftClaims.length > 0
+            ? preview.relatedDraftClaims.join(", ")
+            : "no linked draft claims"}
+        </div>
+        <div data-testid="wic-next-step-draftFootnotes" className="space-y-0.5 text-muted-foreground">
+          {preview.relatedDraftFootnotes.length > 0 ? (
+            preview.relatedDraftFootnotes.map((ref) => (
+              <div key={`${ref.footnote}-${ref.refId}`} className="flex items-center gap-1.5">
+                <span className="shrink-0 tabular-nums text-cyan-300/70">[{ref.footnote}]</span>
+                <code className="shrink-0 rounded bg-background/70 px-1">{ref.refId}</code>
+                <span className="min-w-0 flex-1 truncate">{ref.label}</span>
+              </div>
+            ))
+          ) : (
+            <span>no linked draft footnotes</span>
+          )}
+        </div>
+        <div data-testid="wic-next-step-riskNotes" className="break-all text-muted-foreground">
+          risk notes · {preview.riskNotes.join(", ")}
+        </div>
+        <div data-testid="wic-next-step-operator-note" className="break-all text-cyan-100/75">
+          {preview.suggestedOperatorNote}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function WorkItemCandidateDetailDrawer({
   item,
   onClose,
@@ -1992,6 +2085,7 @@ function WorkItemCandidateDetailDrawer({
 
   if (!item) return null;
 
+  const nextStepPreview = buildWorkItemCandidateNextStepPreview(item, draftLink);
   const fields: WorkItemCandidateDetailField[] = [
     ["id", item.id],
     ["title", item.title],
@@ -2046,6 +2140,7 @@ function WorkItemCandidateDetailDrawer({
       </dl>
       <WorkItemCandidateLinkGraph item={item} />
       <WorkItemCandidateDraftEvidenceLinks link={draftLink} />
+      <WorkItemCandidateNextStepPreviewCard preview={nextStepPreview} />
     </aside>
   );
 }
