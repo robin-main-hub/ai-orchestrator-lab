@@ -51,6 +51,11 @@ import {
   type WorkItemRisk,
 } from "../../lib/workItemCandidate";
 import {
+  linkWorkItemCandidatesToEvidenceDraft,
+  type CandidateDraftEvidenceLink,
+  type WorkItemEvidenceDraftLinks,
+} from "../../lib/workItemEvidenceLinks";
+import {
   projectPluginWorkItems,
   type WorkItemLiteProviderResult,
 } from "../../lib/plugins/pluginWorkItemSource";
@@ -1073,9 +1078,11 @@ const FRESHNESS_TONE: Record<Freshness, string> = {
 function EvidenceDraftCard({
   draft,
   cardRef,
+  workItemLinks,
 }: {
   draft: EvidenceDraft;
   cardRef?: React.Ref<HTMLDivElement>;
+  workItemLinks?: WorkItemEvidenceDraftLinks;
 }) {
   return (
     <div
@@ -1098,6 +1105,15 @@ function EvidenceDraftCard({
             className={`rounded px-1 text-[9px] uppercase tracking-wide ${TONE.bad}`}
           >
             {draft.staleCount} stale
+          </span>
+        ) : null}
+        {workItemLinks && workItemLinks.relatedCandidateCount > 0 ? (
+          <span
+            data-testid="evidence-draft-related-candidate-count"
+            data-count={workItemLinks.relatedCandidateCount}
+            className={`rounded px-1 text-[9px] uppercase tracking-wide ${TONE.info}`}
+          >
+            {workItemLinks.relatedCandidateCount} related candidates
           </span>
         ) : null}
         <span className="ml-auto text-[9px] uppercase tracking-wider text-muted-foreground/45">
@@ -1130,28 +1146,41 @@ function EvidenceDraftCard({
 
       {/* numbered footnotes with freshness chips */}
       <ol className="mt-1.5 space-y-0.5 border-t border-white/5 pt-1.5" data-testid="evidence-draft-footnotes">
-        {draft.footnotes.map((f) => (
-          <li
-            key={f.n}
-            data-testid={`evidence-draft-footnote-${f.n}`}
-            className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
-          >
-            <span className="shrink-0 tabular-nums text-cyan-300/70">[{f.n}]</span>
-            <code className="shrink-0 rounded bg-background/70 px-1">{f.refId}</code>
-            <span className="min-w-0 flex-1 truncate">
-              {f.label}
-              {f.locator ? <span className="opacity-70"> · {f.locator}</span> : null}
-            </span>
-            <span
-              data-testid={`evidence-draft-freshness-${f.n}`}
-              data-freshness={f.freshness}
-              className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${FRESHNESS_TONE[f.freshness]}`}
+        {draft.footnotes.map((f) => {
+          const related = workItemLinks?.byFootnoteRef[f.refId];
+          return (
+            <li
+              key={f.n}
+              data-testid={`evidence-draft-footnote-${f.n}`}
+              className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
             >
-              {f.freshness}
-              {f.ageHours != null ? <span className="ml-0.5 opacity-70 tabular-nums">{f.ageHours}h</span> : null}
-            </span>
-          </li>
-        ))}
+              <span className="shrink-0 tabular-nums text-cyan-300/70">[{f.n}]</span>
+              <code className="shrink-0 rounded bg-background/70 px-1">{f.refId}</code>
+              <span className="min-w-0 flex-1 truncate">
+                {f.label}
+                {f.locator ? <span className="opacity-70"> · {f.locator}</span> : null}
+              </span>
+              {related && related.candidateIds.length > 0 ? (
+                <span
+                  data-testid={`evidence-draft-footnote-related-${f.n}`}
+                  data-count={related.candidateIds.length}
+                  className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${TONE.info}`}
+                >
+                  {related.candidateIds.length} candidate
+                  {related.candidateIds.length === 1 ? "" : "s"}
+                </span>
+              ) : null}
+              <span
+                data-testid={`evidence-draft-freshness-${f.n}`}
+                data-freshness={f.freshness}
+                className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${FRESHNESS_TONE[f.freshness]}`}
+              >
+                {f.freshness}
+                {f.ageHours != null ? <span className="ml-0.5 opacity-70 tabular-nums">{f.ageHours}h</span> : null}
+              </span>
+            </li>
+          );
+        })}
       </ol>
 
       {/* missing info / ask slot — unbacked claims, no side-effect control */}
@@ -1892,12 +1921,58 @@ function WorkItemCandidateLinkGraph({ item }: { item: WorkItemCandidate }) {
   );
 }
 
+function WorkItemCandidateDraftEvidenceLinks({
+  link,
+}: {
+  link?: CandidateDraftEvidenceLink;
+}) {
+  const matchedRefs = link?.matchedRefs ?? [];
+  return (
+    <section
+      data-testid="wic-draft-cross-links"
+      data-count={matchedRefs.length}
+      className="mt-2 rounded-md border border-white/[0.08] bg-white/[0.02] p-2"
+    >
+      <p className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/45">
+        Evidence Draft refs · read-only
+      </p>
+      {matchedRefs.length === 0 ? (
+        <p
+          data-testid="wic-draft-cross-link-empty"
+          className="text-[10px] text-muted-foreground/65"
+        >
+          no matching draft evidence
+        </p>
+      ) : (
+        <ul className="space-y-0.5">
+          {matchedRefs.map((ref) => (
+            <li
+              key={ref.refId}
+              data-testid={`wic-draft-cross-link-${ref.refId}`}
+              className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
+            >
+              <span className="shrink-0 tabular-nums text-cyan-300/70">[{ref.footnote}]</span>
+              <code className="shrink-0 rounded bg-background/70 px-1">{ref.refId}</code>
+              <span className="min-w-0 flex-1 truncate">{ref.label}</span>
+              <span className="shrink-0 rounded bg-white/[0.05] px-1 text-[9px] uppercase">
+                {ref.claimIds.length > 0 ? ref.claimIds.join(", ") : "claim unknown"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function WorkItemCandidateDetailDrawer({
   item,
   onClose,
+  draftLink,
 }: {
   item: WorkItemCandidate | null;
   onClose: () => void;
+  draftLink?: CandidateDraftEvidenceLink;
 }) {
   const ref = useRef<HTMLElement>(null);
 
@@ -1970,6 +2045,7 @@ function WorkItemCandidateDetailDrawer({
         ))}
       </dl>
       <WorkItemCandidateLinkGraph item={item} />
+      <WorkItemCandidateDraftEvidenceLinks link={draftLink} />
     </aside>
   );
 }
@@ -3512,6 +3588,10 @@ export function AssistantInbox({
   const hasSources = (pluginSources?.length ?? 0) > 0;
   const hasDock = hasSources || (pluginEvidence?.length ?? 0) > 0;
   const replayCount = recentEvents?.length;
+  const workItemEvidenceLinks = linkWorkItemCandidatesToEvidenceDraft(
+    workItemCandidates ?? [],
+    evidenceDraft,
+  );
   return (
     <Card
       className="border-white/10 bg-black/40 py-3"
@@ -3669,7 +3749,13 @@ export function AssistantInbox({
             <SourceDemoDeck scenario={sourceScenario ?? "mixed"} onChange={onSourceScenarioChange} />
           ) : null}
           {mode === "preview" ? <SourcePackCard /> : null}
-          {evidenceDraft ? <EvidenceDraftCard draft={evidenceDraft} cardRef={evidenceDraftRef} /> : null}
+          {evidenceDraft ? (
+            <EvidenceDraftCard
+              draft={evidenceDraft}
+              cardRef={evidenceDraftRef}
+              workItemLinks={workItemEvidenceLinks}
+            />
+          ) : null}
           {hasDock ? (
             <SourceDockQuickControls view={dockView} onChange={setDockView} onJump={jumpToSourceDock} />
           ) : null}
@@ -3691,6 +3777,11 @@ export function AssistantInbox({
           <WorkItemCandidateDetailDrawer
             item={selectedWorkItemCandidate}
             onClose={closeWorkItemCandidateDetail}
+            draftLink={
+              selectedWorkItemCandidate
+                ? workItemEvidenceLinks.byCandidateId[selectedWorkItemCandidate.id]
+                : undefined
+            }
           />
           {showCards ? (
           <CardContent className="grid grid-cols-1 gap-2.5 px-4 lg:grid-cols-2 lg:gap-2.5 xl:gap-3">
