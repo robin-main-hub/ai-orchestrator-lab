@@ -50,7 +50,14 @@ import {
   type WorkItemRisk,
 } from "../../lib/workItemCandidate";
 import {
+  buildWorkItemCandidateBoardProjection,
   buildWorkItemCandidateOperations,
+  type WorkItemCandidateBoardKindFilter,
+  type WorkItemCandidateBoardLaneFilter,
+  type WorkItemCandidateBoardRefFilter,
+  type WorkItemCandidateBoardScopeFilter,
+  type WorkItemCandidateBoardSortMode,
+  type WorkItemCandidateBoardRiskFilter,
   type WorkItemCandidateOperationRow,
 } from "../../lib/workItemCandidateOperations";
 import {
@@ -1494,13 +1501,7 @@ const WIC_CONFIDENCE_TONE: Record<WorkItemCandidateConfidenceBand, string> = {
   low: TONE.warn,
   unknown: TONE.muted,
 };
-type WicLaneFilter = "all" | WorkItemCandidateLane;
-type WicRiskFilter = "all" | WorkItemRisk;
-type WicKindFilter = "all" | WorkItemCandidateKind;
-type WicRefFilter = "all" | "present";
-type WicScopeFilter = "all" | "attention" | "ready" | "linked";
 type WicGroupMode = "lane" | "readiness" | "risk";
-type WicSortMode = "priority" | "title" | "createdAt";
 
 const WIC_READINESS_ORDER: ReadonlyArray<WorkItemCandidateReadinessState> = [
   "blocked",
@@ -1509,57 +1510,6 @@ const WIC_READINESS_ORDER: ReadonlyArray<WorkItemCandidateReadinessState> = [
   "ready",
   "unknown",
 ];
-
-function wicCreatedAtMs(row: WorkItemCandidate): number {
-  if (!row.createdAt) return Number.NEGATIVE_INFINITY;
-  const ms = Date.parse(row.createdAt);
-  return Number.isFinite(ms) ? ms : Number.NEGATIVE_INFINITY;
-}
-
-function wicMatchesScope(row: WorkItemCandidateOperationRow, scope: WicScopeFilter): boolean {
-  if (scope === "all") return true;
-  if (scope === "attention") {
-    return row.readiness.readiness === "blocked" || row.readiness.readiness === "needs-evidence";
-  }
-  if (scope === "ready") return row.readiness.readiness === "ready";
-  return row.hasLinkedDraftClaims;
-}
-
-function sortWicOperationRows(
-  rows: ReadonlyArray<WorkItemCandidateOperationRow>,
-  sortMode: WicSortMode,
-): WorkItemCandidateOperationRow[] {
-  if (sortMode === "priority") return [...rows];
-  return [...rows].sort((a, b) => {
-    if (sortMode === "title") {
-      const titleDiff = a.candidate.title.localeCompare(b.candidate.title);
-      if (titleDiff !== 0) return titleDiff;
-      return a.id.localeCompare(b.id);
-    }
-    const createdDiff = wicCreatedAtMs(b.candidate) - wicCreatedAtMs(a.candidate);
-    if (createdDiff !== 0) return createdDiff;
-    return a.id.localeCompare(b.id);
-  });
-}
-
-function wicMatchesQuery(row: WorkItemCandidate, rawQuery: string): boolean {
-  const q = rawQuery.trim().toLowerCase();
-  if (!q) return true;
-  return [
-    row.id,
-    row.title,
-    row.kind,
-    row.lane,
-    row.status,
-    row.risk,
-    row.reason,
-    ...row.sourceRefs,
-    ...row.evidenceRefs,
-  ]
-    .join(" ")
-    .toLowerCase()
-    .includes(q);
-}
 
 function WorkItemCandidateReadinessChip({
   row,
@@ -1601,54 +1551,34 @@ function WorkItemCandidatesCard({
   cardRef?: RefObject<HTMLDivElement | null>;
   workItemLinks?: WorkItemEvidenceDraftLinks;
 }) {
-  const [laneFilter, setLaneFilter] = useState<WicLaneFilter>("all");
-  const [riskFilter, setRiskFilter] = useState<WicRiskFilter>("all");
-  const [kindFilter, setKindFilter] = useState<WicKindFilter>("all");
-  const [sourceRefFilter, setSourceRefFilter] = useState<WicRefFilter>("all");
-  const [evidenceRefFilter, setEvidenceRefFilter] = useState<WicRefFilter>("all");
+  const [laneFilter, setLaneFilter] = useState<WorkItemCandidateBoardLaneFilter>("all");
+  const [riskFilter, setRiskFilter] = useState<WorkItemCandidateBoardRiskFilter>("all");
+  const [kindFilter, setKindFilter] = useState<WorkItemCandidateBoardKindFilter>("all");
+  const [sourceRefFilter, setSourceRefFilter] = useState<WorkItemCandidateBoardRefFilter>("all");
+  const [evidenceRefFilter, setEvidenceRefFilter] = useState<WorkItemCandidateBoardRefFilter>("all");
   const [candidateQuery, setCandidateQuery] = useState("");
-  const [scopeFilter, setScopeFilter] = useState<WicScopeFilter>("all");
+  const [scopeFilter, setScopeFilter] = useState<WorkItemCandidateBoardScopeFilter>("all");
   const [groupMode, setGroupMode] = useState<WicGroupMode>("lane");
-  const [sortMode, setSortMode] = useState<WicSortMode>("priority");
+  const [sortMode, setSortMode] = useState<WorkItemCandidateBoardSortMode>("priority");
   const operations = buildWorkItemCandidateOperations(rows, workItemLinks);
   const summary = operations.summary;
-  const laneCounts: Record<WorkItemCandidateLane, number> = {
-    now: operations.groups.byLane.now.length,
-    soon: operations.groups.byLane.soon.length,
-    watch: operations.groups.byLane.watch.length,
-  };
-  const riskCounts: Record<WorkItemRisk, number> = {
-    high: operations.groups.byRisk.high.length,
-    medium: operations.groups.byRisk.medium.length,
-    low: operations.groups.byRisk.low.length,
-  };
-  const kindCounts: Record<WorkItemCandidateKind, number> = {
-    patch: operations.groups.byKind.patch.length,
-    runner: operations.groups.byKind.runner.length,
-    evidence: operations.groups.byKind.evidence.length,
-    memory: operations.groups.byKind.memory.length,
-    source: operations.groups.byKind.source.length,
-  };
-  const sourceRefCount = summary.withSourceRefs;
-  const evidenceRefCount = summary.withEvidenceRefs;
-  const visibleOperationRows = sortWicOperationRows(
-    operations.rows.filter((row) => {
-      const r = row.candidate;
-      return (
-        (laneFilter === "all" || r.lane === laneFilter) &&
-        (riskFilter === "all" || r.risk === riskFilter) &&
-        (kindFilter === "all" || r.kind === kindFilter) &&
-        (sourceRefFilter === "all" || r.sourceRefs.length > 0) &&
-        (evidenceRefFilter === "all" || r.evidenceRefs.length > 0) &&
-        wicMatchesScope(row, scopeFilter) &&
-        wicMatchesQuery(r, candidateQuery)
-      );
-    }),
-    sortMode,
-  );
-  const attentionOperationRows = visibleOperationRows.filter((row) =>
-    row.readiness.readiness === "blocked" || row.readiness.readiness === "needs-evidence",
-  );
+  const boardProjection = buildWorkItemCandidateBoardProjection(operations, {
+    lane: laneFilter,
+    risk: riskFilter,
+    kind: kindFilter,
+    sourceRefs: sourceRefFilter,
+    evidenceRefs: evidenceRefFilter,
+    scope: scopeFilter,
+    query: candidateQuery,
+    sort: sortMode,
+  });
+  const laneCounts = boardProjection.counts.byLane;
+  const riskCounts = boardProjection.counts.byRisk;
+  const kindCounts = boardProjection.counts.byKind;
+  const sourceRefCount = boardProjection.counts.sourceRefCount;
+  const evidenceRefCount = boardProjection.counts.evidenceRefCount;
+  const visibleOperationRows = boardProjection.visibleRows;
+  const attentionOperationRows = boardProjection.attentionRows;
   const buttonBase =
     "rounded border px-1.5 py-0.5 text-[10px] font-medium transition-colors";
   const buttonTone = (active: boolean) =>
