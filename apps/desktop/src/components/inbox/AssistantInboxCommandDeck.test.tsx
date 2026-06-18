@@ -27,6 +27,7 @@ const DECK_IDS = [
   "source-dock",
   "patch-candidates",
   "work-item-candidates",
+  "candidate-review",
   "clear",
 ];
 
