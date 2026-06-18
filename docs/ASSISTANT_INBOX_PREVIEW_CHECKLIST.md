@@ -238,6 +238,33 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## E11. Engine — WorkItem Candidate Operations Room
+
+Engine batch E11 (PR #648, merge commit `6d7f7d8`; PR #649, merge commit
+`a0cc7d9`; PR #650, merge commit `b4dccd9`) made WorkItemCandidates operate
+as a read-only candidate operations room without creating committed work. Owner
+checks:
+
+- [ ] **Operations projection** — board summary shows readiness/confidence,
+      source/evidence ref presence, linked draft refs, and preview gaps from
+      `buildWorkItemCandidateOperations`.
+- [ ] **Board grouping** — lane groups still render by default, the attention
+      group highlights `blocked` / `needs-evidence`, and PREVIEW/LIVE stay
+      separated with honest empty states.
+- [ ] **Detail tabs** — candidate detail drawer has local-detail tabs
+      (Overview / Map / Readiness / Preview) and existing E6-E10 sections remain
+      inspectable.
+- [ ] **Relationship map V2** — map shows candidate hub, string source/evidence
+      refs, matching draft claim refs, readiness, and preview gaps; unresolved or
+      missing refs are labeled honestly.
+- [ ] **Operations controls** — scope/group/sort controls are local-view only and
+      narrow/reorder visible candidates without changing underlying summary data.
+- [ ] **Jumps** — Command Deck / Command Palette `WorkItem Candidates 열기` still
+      scrolls/focuses the board only; keyboard `w` also jumps to the board.
+- [ ] **Read-only** — no create / launch / commit lifecycle, no write/append/send/
+      dispatch/apply controls, no lifecycle transition, no object resolution
+      beyond existing refs.
+
 ## E10. Engine — WorkItem Candidate Readiness / Confidence
 
 Engine batch E10 (PR #646, merge commit `cd68dbc`) made WorkItemCandidates show
