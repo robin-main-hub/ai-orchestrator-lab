@@ -43,6 +43,12 @@ import {
 } from "../../lib/runnerTheater";
 import type { LearningMemoryConsole } from "../../lib/learningMemoryConsole";
 import {
+  summarizeWorkItemCandidates,
+  WORK_ITEM_LANES,
+  type WorkItemCandidate,
+  type WorkItemCandidateLane,
+} from "../../lib/workItemCandidate";
+import {
   projectPluginWorkItems,
   type WorkItemLiteProviderResult,
 } from "../../lib/plugins/pluginWorkItemSource";
@@ -215,6 +221,12 @@ export type AssistantInboxProps = {
    * Absent → no card. Display-only; no external send / write / approve.
    */
   evidenceDraft?: EvidenceDraft;
+  /**
+   * Engine E5 — read-only WorkItem CANDIDATES (the central axis over all signals).
+   * Present (even empty) → the card renders (honest-empty when none). Absent →
+   * no card. Candidate-only, display-only — never committed work, no create action.
+   */
+  workItemCandidates?: ReadonlyArray<WorkItemCandidate>;
 };
 
 /**
@@ -1387,6 +1399,114 @@ function LearningMemoryConsoleCard({ console: c }: { console: LearningMemoryCons
               ) : null}
             </div>
           ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Engine E5 — lane / risk tone (read-only, display-only). */
+const WIC_LANE_TONE: Record<WorkItemCandidateLane, string> = {
+  now: TONE.bad,
+  soon: TONE.warn,
+  watch: TONE.neutral,
+};
+const WIC_LANE_LABEL: Record<WorkItemCandidateLane, string> = {
+  now: "now",
+  soon: "soon",
+  watch: "watch",
+};
+const WIC_RISK_TONE: Record<string, string> = {
+  high: TONE.bad,
+  medium: TONE.warn,
+  low: TONE.muted,
+};
+
+/**
+ * Engine E5 — WorkItem Candidates: the read-only CENTRAL AXIS over the OS's
+ * signals (patch / runner / evidence / memory / source). Each row is a
+ * candidate-only object — "the OS sees this as possible work" — NOT committed
+ * work. Display-only: no create / launch / commit action, no buttons. Grouped by
+ * urgency lane (now / soon / watch) with a kind badge + risk chip. Honest empty
+ * when no signal looks like work.
+ */
+function WorkItemCandidatesCard({ rows }: { rows: ReadonlyArray<WorkItemCandidate> }) {
+  const summary = summarizeWorkItemCandidates(rows);
+  return (
+    <div
+      data-testid="work-item-candidates-card"
+      data-total={summary.total}
+      className="mx-4 mb-2 rounded-lg border border-sky-400/20 bg-sky-400/[0.03] p-2.5"
+    >
+      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-sky-200/80">
+          Work Item Candidates
+        </span>
+        {summary.now > 0 ? (
+          <span data-testid="wic-now" className={`${CHIP_BASE} ${TONE.bad}`}>
+            {summary.now} now
+          </span>
+        ) : null}
+        {summary.soon > 0 ? (
+          <span data-testid="wic-soon" className={`${CHIP_BASE} ${TONE.warn}`}>
+            {summary.soon} soon
+          </span>
+        ) : null}
+        <span className="ml-auto text-[9px] uppercase tracking-wider text-muted-foreground/45">
+          candidate · read-only · not committed
+        </span>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className={EMPTY_STATE} data-testid="work-item-candidates-empty" data-empty="true">
+          <p className="text-[11px] font-medium text-muted-foreground/80">작업 후보 신호 없음</p>
+          <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground/55">
+            patch·runner·evidence·memory·source 신호가 관측되면 후보로 표시 · 표시 전용 · 확정 작업 아님
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {WORK_ITEM_LANES.filter((lane) => rows.some((r) => r.lane === lane)).map((lane) => (
+            <div key={lane} data-testid={`wic-lane-${lane}`}>
+              <div className="mb-0.5">
+                <span className={`rounded px-1 text-[9px] uppercase tracking-wide ${WIC_LANE_TONE[lane]}`}>
+                  {WIC_LANE_LABEL[lane]}
+                </span>
+              </div>
+              <ul className="space-y-0.5">
+                {rows
+                  .filter((r) => r.lane === lane)
+                  .map((r) => (
+                    <li
+                      key={r.id}
+                      data-testid={`wic-row-${r.id}`}
+                      data-kind={r.kind}
+                      data-lane={r.lane}
+                      data-risk={r.risk}
+                      data-status={r.status}
+                      className="flex items-center gap-1.5 text-[10px] text-zinc-300"
+                    >
+                      <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
+                        {r.kind}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate" title={r.reason}>
+                        {r.title}
+                      </span>
+                      {r.evidenceRefs.length > 0 ? (
+                        <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
+                          {r.evidenceRefs.length}ev
+                        </span>
+                      ) : null}
+                      <span
+                        className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${WIC_RISK_TONE[r.risk] ?? TONE.muted}`}
+                      >
+                        {r.risk}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -2699,6 +2819,7 @@ export function AssistantInbox({
   runnerTheater,
   learningMemory,
   evidenceDraft,
+  workItemCandidates,
 }: AssistantInboxProps) {
   const total =
     evidence.length + learningLoops.length + memoryCandidates.length + manifestEntries.length;
@@ -3055,6 +3176,7 @@ export function AssistantInbox({
           {focus !== "warnings" ? (
             <WorkLaneRail lanes={visibleLanes} query={query} category={category} />
           ) : null}
+          {workItemCandidates ? <WorkItemCandidatesCard rows={workItemCandidates} /> : null}
           {runnerTheater ? <RunnerTheaterCard rows={runnerTheater} /> : null}
           {learningMemory ? <LearningMemoryConsoleCard console={learningMemory} /> : null}
           {mode === "preview" && onSourceScenarioChange ? (

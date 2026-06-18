@@ -30,6 +30,7 @@ import {
   EXAMPLE_EVIDENCE_DRAFT,
   EXAMPLE_DRAFT_NOW_MS,
 } from "../../lib/evidenceDraft";
+import { deriveWorkItemCandidates } from "../../lib/workItemCandidate";
 
 /** LINE A — local UI preference key for the remembered seat (no server write). */
 const INBOX_VIEW_MODE_KEY = "ai-orchestrator.inbox-view-mode.v1";
@@ -241,6 +242,30 @@ export function AssistantInboxContainer({
     };
   }, [mode, props, live]);
 
+  // Engine E5 — WorkItem Candidates: the read-only CENTRAL AXIS. Derives
+  // candidate-only objects from the already-projected surfaces (patch / runner /
+  // evidence / memory / source health), plus any explicitly-passed LIVE candidate
+  // inputs. Pure: deriveWorkItemCandidates creates NOTHING — no append/write/
+  // commit/dispatch. PREVIEW reflects the example signals; LIVE reflects only real
+  // signals + explicit inputs (honest empty when none). REPLAY/SANDBOX → no card.
+  const workItemExtras = useMemo(() => {
+    if (mode !== "preview" && mode !== "live") return { workItemCandidates: undefined };
+    const sourceHealth = (pluginExtras.pluginSources ?? []).map((s) => ({
+      pluginId: s.pluginId,
+      health: s.health,
+    }));
+    return {
+      workItemCandidates: deriveWorkItemCandidates({
+        patchCandidates: patchExtras.patchCandidates,
+        runnerTheater: runnerExtras.runnerTheater,
+        evidenceDraft: evidenceDraftExtras.evidenceDraft,
+        learningMemory: learningMemoryExtras.learningMemory,
+        sourceHealth,
+        extra: mode === "live" ? live?.workItemCandidates : undefined,
+      }),
+    };
+  }, [mode, pluginExtras, patchExtras, runnerExtras, evidenceDraftExtras, learningMemoryExtras, live]);
+
   return (
     <div className="nav-center-page" data-page="command_center" data-safe-bottom="true">
       <AssistantInbox
@@ -251,6 +276,7 @@ export function AssistantInboxContainer({
         {...runnerExtras}
         {...learningMemoryExtras}
         {...evidenceDraftExtras}
+        {...workItemExtras}
         mode={mode}
         onModeChange={setMode}
         persistFilters={persistViewMode}
