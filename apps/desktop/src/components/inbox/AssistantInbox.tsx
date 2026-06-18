@@ -49,7 +49,10 @@ import {
   type WorkItemCandidateLane,
   type WorkItemRisk,
 } from "../../lib/workItemCandidate";
-import { buildWorkItemCandidateOperations } from "../../lib/workItemCandidateOperations";
+import {
+  buildWorkItemCandidateOperations,
+  type WorkItemCandidateOperationRow,
+} from "../../lib/workItemCandidateOperations";
 import {
   linkWorkItemCandidatesToEvidenceDraft,
   type CandidateDraftEvidenceLink,
@@ -1500,6 +1503,49 @@ type WicLaneFilter = "all" | WorkItemCandidateLane;
 type WicRiskFilter = "all" | WorkItemRisk;
 type WicKindFilter = "all" | WorkItemCandidateKind;
 type WicRefFilter = "all" | "present";
+type WicScopeFilter = "all" | "attention" | "ready" | "linked";
+type WicGroupMode = "lane" | "readiness" | "risk";
+type WicSortMode = "priority" | "title" | "createdAt";
+
+const WIC_READINESS_ORDER: ReadonlyArray<WorkItemCandidateReadinessState> = [
+  "blocked",
+  "needs-evidence",
+  "needs-review",
+  "ready",
+  "unknown",
+];
+
+function wicCreatedAtMs(row: WorkItemCandidate): number {
+  if (!row.createdAt) return Number.NEGATIVE_INFINITY;
+  const ms = Date.parse(row.createdAt);
+  return Number.isFinite(ms) ? ms : Number.NEGATIVE_INFINITY;
+}
+
+function wicMatchesScope(row: WorkItemCandidateOperationRow, scope: WicScopeFilter): boolean {
+  if (scope === "all") return true;
+  if (scope === "attention") {
+    return row.readiness.readiness === "blocked" || row.readiness.readiness === "needs-evidence";
+  }
+  if (scope === "ready") return row.readiness.readiness === "ready";
+  return row.hasLinkedDraftClaims;
+}
+
+function sortWicOperationRows(
+  rows: ReadonlyArray<WorkItemCandidateOperationRow>,
+  sortMode: WicSortMode,
+): WorkItemCandidateOperationRow[] {
+  if (sortMode === "priority") return [...rows];
+  return [...rows].sort((a, b) => {
+    if (sortMode === "title") {
+      const titleDiff = a.candidate.title.localeCompare(b.candidate.title);
+      if (titleDiff !== 0) return titleDiff;
+      return a.id.localeCompare(b.id);
+    }
+    const createdDiff = wicCreatedAtMs(b.candidate) - wicCreatedAtMs(a.candidate);
+    if (createdDiff !== 0) return createdDiff;
+    return a.id.localeCompare(b.id);
+  });
+}
 
 function wicMatchesQuery(row: WorkItemCandidate, rawQuery: string): boolean {
   const q = rawQuery.trim().toLowerCase();
@@ -1566,6 +1612,9 @@ function WorkItemCandidatesCard({
   const [sourceRefFilter, setSourceRefFilter] = useState<WicRefFilter>("all");
   const [evidenceRefFilter, setEvidenceRefFilter] = useState<WicRefFilter>("all");
   const [candidateQuery, setCandidateQuery] = useState("");
+  const [scopeFilter, setScopeFilter] = useState<WicScopeFilter>("all");
+  const [groupMode, setGroupMode] = useState<WicGroupMode>("lane");
+  const [sortMode, setSortMode] = useState<WicSortMode>("priority");
   const operations = buildWorkItemCandidateOperations(rows, workItemLinks);
   const summary = operations.summary;
   const laneCounts: Record<WorkItemCandidateLane, number> = {
@@ -1587,16 +1636,21 @@ function WorkItemCandidatesCard({
   };
   const sourceRefCount = summary.withSourceRefs;
   const evidenceRefCount = summary.withEvidenceRefs;
-  const visibleOperationRows = operations.rows.filter(({ candidate: r }) => {
-    return (
-      (laneFilter === "all" || r.lane === laneFilter) &&
-      (riskFilter === "all" || r.risk === riskFilter) &&
-      (kindFilter === "all" || r.kind === kindFilter) &&
-      (sourceRefFilter === "all" || r.sourceRefs.length > 0) &&
-      (evidenceRefFilter === "all" || r.evidenceRefs.length > 0) &&
-      wicMatchesQuery(r, candidateQuery)
-    );
-  });
+  const visibleOperationRows = sortWicOperationRows(
+    operations.rows.filter((row) => {
+      const r = row.candidate;
+      return (
+        (laneFilter === "all" || r.lane === laneFilter) &&
+        (riskFilter === "all" || r.risk === riskFilter) &&
+        (kindFilter === "all" || r.kind === kindFilter) &&
+        (sourceRefFilter === "all" || r.sourceRefs.length > 0) &&
+        (evidenceRefFilter === "all" || r.evidenceRefs.length > 0) &&
+        wicMatchesScope(row, scopeFilter) &&
+        wicMatchesQuery(r, candidateQuery)
+      );
+    }),
+    sortMode,
+  );
   const attentionOperationRows = visibleOperationRows.filter((row) =>
     row.readiness.readiness === "blocked" || row.readiness.readiness === "needs-evidence",
   );
@@ -1628,6 +1682,122 @@ function WorkItemCandidatesCard({
       {children}
     </button>
   );
+  const renderOperationRows = (operationRows: ReadonlyArray<WorkItemCandidateOperationRow>) => (
+    <ul className="space-y-0.5">
+      {operationRows.map((operationRow) => {
+        const r = operationRow.candidate;
+        return (
+          <li
+            key={r.id}
+            data-testid={`wic-row-${r.id}`}
+            data-kind={r.kind}
+            data-lane={r.lane}
+            data-risk={r.risk}
+            data-status={r.status}
+            className={`flex items-center gap-1.5 text-[10px] text-zinc-300 ${
+              onSelect ? "cursor-pointer rounded px-1 py-0.5 hover:bg-white/[0.04]" : ""
+            }`}
+            {...(onSelect ? rowActivation(() => onSelect(r)) : {})}
+          >
+            <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
+              {r.kind}
+            </span>
+            <span className="min-w-0 flex-1 truncate" title={r.reason}>
+              {r.title}
+            </span>
+            {operationRow.hasLinkedDraftClaims ? (
+              <span className="shrink-0 rounded bg-sky-400/10 px-1 text-[9px] uppercase text-sky-100/80">
+                draft ref
+              </span>
+            ) : null}
+            {r.evidenceRefs.length > 0 ? (
+              <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
+                {r.evidenceRefs.length}ev
+              </span>
+            ) : null}
+            <WorkItemCandidateReadinessChip row={r} readiness={operationRow.readiness} />
+            <span
+              className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${WIC_RISK_TONE[r.risk] ?? TONE.muted}`}
+            >
+              {r.risk}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+  const renderLaneGroups = () =>
+    WORK_ITEM_LANES.filter((lane) =>
+      visibleOperationRows.some((row) => row.candidate.lane === lane),
+    ).map((lane) => {
+      const groupRows = visibleOperationRows.filter((row) => row.candidate.lane === lane);
+      return (
+        <div
+          key={lane}
+          data-testid={`wic-ops-group-${lane}`}
+          className="rounded-md border border-white/[0.06] bg-white/[0.015] p-1.5"
+        >
+          <div data-testid={`wic-lane-${lane}`}>
+            <div className="mb-0.5 flex items-center gap-1">
+              <span className={`rounded px-1 text-[9px] uppercase tracking-wide ${WIC_LANE_TONE[lane]}`}>
+                {WIC_LANE_LABEL[lane]}
+              </span>
+              <span className="text-[9px] text-muted-foreground/45">
+                {groupRows.length} candidates
+              </span>
+            </div>
+            {renderOperationRows(groupRows)}
+          </div>
+        </div>
+      );
+    });
+  const renderDynamicGroups = () => {
+    if (groupMode === "readiness") {
+      return WIC_READINESS_ORDER.filter((readiness) =>
+        visibleOperationRows.some((row) => row.readiness.readiness === readiness),
+      ).map((readiness) => {
+        const groupRows = visibleOperationRows.filter((row) => row.readiness.readiness === readiness);
+        return (
+          <div
+            key={readiness}
+            data-testid={`wic-ops-dynamic-group-${readiness}`}
+            className="rounded-md border border-white/[0.06] bg-white/[0.015] p-1.5"
+          >
+            <div className="mb-0.5 flex items-center gap-1">
+              <span className={`rounded px-1 text-[9px] uppercase tracking-wide ${WIC_READINESS_TONE[readiness]}`}>
+                {readiness}
+              </span>
+              <span className="text-[9px] text-muted-foreground/45">{groupRows.length} candidates</span>
+            </div>
+            {renderOperationRows(groupRows)}
+          </div>
+        );
+      });
+    }
+    if (groupMode === "risk") {
+      return WIC_RISKS.filter((risk) =>
+        visibleOperationRows.some((row) => row.candidate.risk === risk),
+      ).map((risk) => {
+        const groupRows = visibleOperationRows.filter((row) => row.candidate.risk === risk);
+        return (
+          <div
+            key={risk}
+            data-testid={`wic-ops-dynamic-group-risk-${risk}`}
+            className="rounded-md border border-white/[0.06] bg-white/[0.015] p-1.5"
+          >
+            <div className="mb-0.5 flex items-center gap-1">
+              <span className={`rounded px-1 text-[9px] uppercase tracking-wide ${WIC_RISK_TONE[risk]}`}>
+                {risk}
+              </span>
+              <span className="text-[9px] text-muted-foreground/45">{groupRows.length} candidates</span>
+            </div>
+            {renderOperationRows(groupRows)}
+          </div>
+        );
+      });
+    }
+    return renderLaneGroups();
+  };
   return (
     <div
       ref={cardRef}
@@ -1635,6 +1805,9 @@ function WorkItemCandidatesCard({
       data-testid="work-item-candidates-card"
       data-total={summary.total}
       data-visible={visibleOperationRows.length}
+      data-scope={scopeFilter}
+      data-group-mode={groupMode}
+      data-sort-mode={sortMode}
       className="mx-4 mb-2 rounded-lg border border-sky-400/20 bg-sky-400/[0.03] p-2.5"
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
@@ -1772,6 +1945,73 @@ function WorkItemCandidatesCard({
         </div>
       </div>
 
+      <div
+        data-testid="wic-ops-controls"
+        data-scope={scopeFilter}
+        data-group-mode={groupMode}
+        data-sort-mode={sortMode}
+        className="mb-2 space-y-1 rounded-md border border-white/[0.06] bg-black/10 p-1.5"
+      >
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+            scope
+          </span>
+          {([
+            ["all", "All"],
+            ["attention", "Attention"],
+            ["ready", "Ready"],
+            ["linked", "Linked refs"],
+          ] as const).map(([scope, label]) => (
+            <FilterButton
+              key={scope}
+              testId={`wic-ops-scope-${scope}`}
+              active={scopeFilter === scope}
+              onClick={() => setScopeFilter(scope)}
+            >
+              {label}
+            </FilterButton>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+            group
+          </span>
+          {([
+            ["lane", "Lane"],
+            ["readiness", "Readiness"],
+            ["risk", "Risk"],
+          ] as const).map(([group, label]) => (
+            <FilterButton
+              key={group}
+              testId={`wic-ops-groupby-${group}`}
+              active={groupMode === group}
+              onClick={() => setGroupMode(group)}
+            >
+              {label}
+            </FilterButton>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+            sort
+          </span>
+          {([
+            ["priority", "Priority"],
+            ["title", "Title"],
+            ["createdAt", "Newest"],
+          ] as const).map(([sort, label]) => (
+            <FilterButton
+              key={sort}
+              testId={`wic-ops-sort-${sort}`}
+              active={sortMode === sort}
+              onClick={() => setSortMode(sort)}
+            >
+              {label}
+            </FilterButton>
+          ))}
+        </div>
+      </div>
+
       {rows.length === 0 ? (
         <div className={EMPTY_STATE} data-testid="work-item-candidates-empty" data-empty="true">
           <p className="text-[11px] font-medium text-muted-foreground/80">작업 후보 신호 없음</p>
@@ -1905,70 +2145,7 @@ function WorkItemCandidatesCard({
               </p>
             </div>
           ) : null}
-          {WORK_ITEM_LANES.filter((lane) =>
-            visibleOperationRows.some((row) => row.candidate.lane === lane),
-          ).map((lane) => (
-            <div
-              key={lane}
-              data-testid={`wic-ops-group-${lane}`}
-              className="rounded-md border border-white/[0.06] bg-white/[0.015] p-1.5"
-            >
-              <div data-testid={`wic-lane-${lane}`}>
-                <div className="mb-0.5 flex items-center gap-1">
-                  <span className={`rounded px-1 text-[9px] uppercase tracking-wide ${WIC_LANE_TONE[lane]}`}>
-                    {WIC_LANE_LABEL[lane]}
-                  </span>
-                  <span className="text-[9px] text-muted-foreground/45">
-                    {visibleOperationRows.filter((row) => row.candidate.lane === lane).length} candidates
-                  </span>
-                </div>
-                <ul className="space-y-0.5">
-                  {visibleOperationRows
-                    .filter((row) => row.candidate.lane === lane)
-                    .map((operationRow) => {
-                      const r = operationRow.candidate;
-                      return (
-                        <li
-                          key={r.id}
-                          data-testid={`wic-row-${r.id}`}
-                          data-kind={r.kind}
-                          data-lane={r.lane}
-                          data-risk={r.risk}
-                          data-status={r.status}
-                          className={`flex items-center gap-1.5 text-[10px] text-zinc-300 ${
-                            onSelect ? "cursor-pointer rounded px-1 py-0.5 hover:bg-white/[0.04]" : ""
-                          }`}
-                          {...(onSelect ? rowActivation(() => onSelect(r)) : {})}
-                        >
-                          <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
-                            {r.kind}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate" title={r.reason}>
-                            {r.title}
-                          </span>
-                          {operationRow.hasLinkedDraftClaims ? (
-                            <span className="shrink-0 rounded bg-sky-400/10 px-1 text-[9px] uppercase text-sky-100/80">
-                              draft ref
-                            </span>
-                          ) : null}
-                          {r.evidenceRefs.length > 0 ? (
-                            <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
-                              {r.evidenceRefs.length}ev
-                            </span>
-                          ) : null}
-                          <WorkItemCandidateReadinessChip row={r} readiness={operationRow.readiness} />
-                          <span
-                            className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${WIC_RISK_TONE[r.risk] ?? TONE.muted}`}
-                          >
-                            {r.risk}
-                          </span>
-                        </li>
-                      );
-                    })}
-                </ul>
-              </div>
-            </div>
-          ))}
+          {renderDynamicGroups()}
           {attentionOperationRows.length > 0 ? (
             <div
               data-testid="wic-ops-group-blocked-needs-evidence"
@@ -4045,6 +4222,9 @@ export function AssistantInbox({
     } else if (e.key === "p") {
       e.preventDefault();
       jumpToPatchCandidates();
+    } else if (e.key === "w") {
+      e.preventDefault();
+      jumpToWorkItemCandidates();
     } else if (e.key === "b") {
       e.preventDefault();
       onFocusPick("blocked");
@@ -4202,6 +4382,9 @@ export function AssistantInbox({
         </span>
         <span>
           <kbd className="text-cyan-200/60">p</kbd> 패치
+        </span>
+        <span>
+          <kbd className="text-cyan-200/60">w</kbd> 후보
         </span>
         <span>
           <kbd className="text-cyan-200/60">b</kbd> 막힌
