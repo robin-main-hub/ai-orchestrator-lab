@@ -238,6 +238,25 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## E9. Engine — WorkItem Candidate Next-Step Preview
+
+Engine batch E9 (PR #644, merge commit `0fa9982`) made WorkItemCandidates
+preview their possible next-step context without creating committed work. Owner
+checks:
+
+- [ ] **Next-step preview** — opening a WorkItemCandidate detail drawer shows a
+      `Next-step preview` section.
+- [ ] **Preview labels** — the section clearly says `preview only`,
+      `not committed`, and `no lifecycle transition`.
+- [ ] **Refs shown honestly** — available source/evidence refs appear as string
+      refs only; missing refs show honest unknown/missing states.
+- [ ] **Draft links reused** — when E8 cross-links exist, related draft claims and
+      footnotes appear in the preview; absent links show honest empty states.
+- [ ] **PREVIEW/LIVE honesty** — PREVIEW fixtures can show example refs, but LIVE
+      derives only from live candidate/draft inputs and receives no fixture refs.
+- [ ] **Read-only** — no create / launch / commit lifecycle, no write/append/send/
+      dispatch/apply controls, no lifecycle transition.
+
 ## E8. Engine — WorkItem Candidate / Evidence Draft Cross-Link
 
 Engine batch E8 connected WorkItemCandidate and Evidence Draft surfaces through
