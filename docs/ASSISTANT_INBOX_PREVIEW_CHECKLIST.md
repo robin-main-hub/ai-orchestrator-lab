@@ -238,6 +238,35 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## E16-E19. Engine — Candidate Signal Integration
+
+Engine batches E16-E19 (PR #659, merge commit `9da4924`; PR #660, merge commit
+`b947999`; PR #661, merge commit `41d7c6f`; PR #662, merge commit `bcacaff`)
+connected WorkItemCandidates to Runner Theater, Patch Candidate, and
+Learning/Memory signals through read-only refs and local navigation. Owner checks:
+
+- [ ] **Runner linkage** — candidate rows/details show runner-linked signal chips
+      when existing runner/mission refs overlap; unresolved runner refs stay honest
+      and Runner Theater shows related candidate counts only.
+- [ ] **Patch linkage** — candidate rows/details show patch signal chips, safety
+      status, verification status, and existing changed-file counts without
+      exposing apply/commit/PR controls.
+- [ ] **Learning/Memory linkage** — candidate rows/details show aggregate
+      learning/memory signal chips and warnings; the console can show related
+      candidate counts without claiming individual memory object resolution.
+- [ ] **Signal filters** — WorkItem Candidate board signal filters (`all`, `any`,
+      `runner`, `patch`, `memory`) narrow visible rows locally only.
+- [ ] **Signal commands** — Command Palette/Deck entries for `Candidate Signals
+      열기`, `Runner-linked Candidates 보기`, `Patch-linked Candidates 보기`, and
+      `Memory-linked Candidates 보기` scroll/focus the candidate board and apply
+      local signal filters only.
+- [ ] **PREVIEW/LIVE honesty** — PREVIEW can use fixtures; LIVE derives only from
+      live candidate/runner/patch/learning-memory inputs and shows honest empty
+      states when links are absent.
+- [ ] **Read-only** — no create / launch / commit lifecycle, no write/append/send/
+      dispatch/apply controls, no EventStorage/server mutation, no memory write,
+      no remote plugin loading, and no object resolution beyond existing refs.
+
 ## E13-E15. Engine — WorkItem Candidate Consolidation + Operator Review
 
 Engine batches E13-E15 (PR #654, merge commit `71ce8d0`; PR #655, merge commit
