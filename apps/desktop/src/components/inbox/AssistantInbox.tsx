@@ -65,6 +65,10 @@ import {
   type WorkItemCandidateOperatorReview,
   type WorkItemCandidateOperatorReviewFilter,
 } from "../../lib/workItemCandidateOperatorReview";
+import {
+  linkCandidatesToRunnerSignals,
+  type WorkItemCandidateRunnerSignalLinks,
+} from "../../lib/workItemCandidateRunnerSignals";
 import { buildWorkItemCandidateSignalSummaryFromOperation } from "../../lib/workItemCandidateSignals";
 import {
   linkWorkItemCandidatesToEvidenceDraft,
@@ -1274,7 +1278,13 @@ const RUNNER_LANE_ORDER: ReadonlyArray<RunnerLane> = ["active", "attention", "id
  * Display-only — no dispatch, no start, no execute, no write. Honest empty when
  * no runner sessions are observed.
  */
-function RunnerTheaterCard({ rows }: { rows: ReadonlyArray<RunnerTheaterRow> }) {
+function RunnerTheaterCard({
+  rows,
+  candidateLinks,
+}: {
+  rows: ReadonlyArray<RunnerTheaterRow>;
+  candidateLinks?: WorkItemCandidateRunnerSignalLinks;
+}) {
   const summary = summarizeRunnerTheater(rows);
   return (
     <div
@@ -1333,40 +1343,52 @@ function RunnerTheaterCard({ rows }: { rows: ReadonlyArray<RunnerTheaterRow> }) 
               <ul className="space-y-0.5">
                 {rows
                   .filter((r) => r.lane === lane)
-                  .map((r) => (
-                    <li
-                      key={r.id}
-                      data-testid={`runner-theater-row-${r.id}`}
-                      data-lane={r.lane}
-                      data-liveness={r.liveness}
-                      className="flex items-center gap-1.5 text-[10px] text-zinc-300"
-                    >
-                      <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
-                        {r.role}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate">{r.title}</span>
-                      {r.eventCount > 0 ? (
-                        <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
-                          {r.eventCount}ev
-                        </span>
-                      ) : null}
-                      {r.artifactCount > 0 ? (
-                        <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
-                          {r.artifactCount}art
-                        </span>
-                      ) : null}
-                      <span
-                        data-testid={`runner-theater-liveness-${r.id}`}
+                  .map((r) => {
+                    const linkedCandidateCount =
+                      candidateLinks?.byRunnerId[r.id]?.candidateIds.length ?? 0;
+                    return (
+                      <li
+                        key={r.id}
+                        data-testid={`runner-theater-row-${r.id}`}
+                        data-lane={r.lane}
                         data-liveness={r.liveness}
-                        className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${RUNNER_LIVENESS_TONE[r.liveness]}`}
+                        className="flex items-center gap-1.5 text-[10px] text-zinc-300"
                       >
-                        {r.liveness}
-                        {r.ageMinutes != null ? (
-                          <span className="ml-0.5 opacity-70 tabular-nums">{r.ageMinutes}m</span>
+                        <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
+                          {r.role}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                        {linkedCandidateCount > 0 ? (
+                          <span
+                            data-testid={`runner-candidate-count-${r.id}`}
+                            className={`${CHIP_BASE} ${TONE.info}`}
+                          >
+                            {linkedCandidateCount} candidate
+                          </span>
                         ) : null}
-                      </span>
-                    </li>
-                  ))}
+                        {r.eventCount > 0 ? (
+                          <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
+                            {r.eventCount}ev
+                          </span>
+                        ) : null}
+                        {r.artifactCount > 0 ? (
+                          <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
+                            {r.artifactCount}art
+                          </span>
+                        ) : null}
+                        <span
+                          data-testid={`runner-theater-liveness-${r.id}`}
+                          data-liveness={r.liveness}
+                          className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${RUNNER_LIVENESS_TONE[r.liveness]}`}
+                        >
+                          {r.liveness}
+                          {r.ageMinutes != null ? (
+                            <span className="ml-0.5 opacity-70 tabular-nums">{r.ageMinutes}m</span>
+                          ) : null}
+                        </span>
+                      </li>
+                    );
+                  })}
               </ul>
             </div>
           ))}
@@ -1713,6 +1735,7 @@ function WorkItemCandidatesCard({
   reviewRef,
   reviewCommand,
   workItemLinks,
+  runnerSignalLinks,
 }: {
   rows: ReadonlyArray<WorkItemCandidate>;
   onSelect?: (row: WorkItemCandidate) => void;
@@ -1720,6 +1743,7 @@ function WorkItemCandidatesCard({
   reviewRef?: RefObject<HTMLDivElement | null>;
   reviewCommand?: InboxCommand;
   workItemLinks?: WorkItemEvidenceDraftLinks;
+  runnerSignalLinks?: WorkItemCandidateRunnerSignalLinks;
 }) {
   const [laneFilter, setLaneFilter] = useState<WorkItemCandidateBoardLaneFilter>("all");
   const [riskFilter, setRiskFilter] = useState<WorkItemCandidateBoardRiskFilter>("all");
@@ -1791,6 +1815,7 @@ function WorkItemCandidatesCard({
       {operationRows.map((operationRow) => {
         const r = operationRow.candidate;
         const signalSummary = buildWorkItemCandidateSignalSummaryFromOperation(operationRow);
+        const runnerSignal = runnerSignalLinks?.byCandidateId[r.id]?.signals[0];
         return (
           <li
             key={r.id}
@@ -1811,6 +1836,15 @@ function WorkItemCandidatesCard({
               {r.title}
             </span>
             <WorkItemCandidateSignalChips candidateId={r.id} chips={signalSummary.chips} />
+            {runnerSignal ? (
+              <span
+                data-testid={`wic-runner-signal-chip-${r.id}`}
+                data-runner-signal={runnerSignal.signal}
+                className={`${CHIP_BASE} ${runnerSignal.signal === "runner-stalled" ? TONE.bad : TONE.info}`}
+              >
+                {runnerSignal.signal}
+              </span>
+            ) : null}
             {operationRow.hasLinkedDraftClaims ? (
               <span className="shrink-0 rounded bg-sky-400/10 px-1 text-[9px] uppercase text-sky-100/80">
                 draft ref
@@ -3858,6 +3892,10 @@ export function AssistantInbox({
     workItemCandidates ?? [],
     evidenceDraft,
   );
+  const workItemRunnerSignalLinks = linkCandidatesToRunnerSignals(
+    workItemCandidates ?? [],
+    runnerTheater ?? [],
+  );
   return (
     <Card
       className="border-white/10 bg-black/40 py-3"
@@ -4014,9 +4052,12 @@ export function AssistantInbox({
               reviewRef={workItemCandidateReviewRef}
               reviewCommand={command}
               workItemLinks={workItemEvidenceLinks}
+              runnerSignalLinks={workItemRunnerSignalLinks}
             />
           ) : null}
-          {runnerTheater ? <RunnerTheaterCard rows={runnerTheater} /> : null}
+          {runnerTheater ? (
+            <RunnerTheaterCard rows={runnerTheater} candidateLinks={workItemRunnerSignalLinks} />
+          ) : null}
           {learningMemory ? <LearningMemoryConsoleCard console={learningMemory} /> : null}
           {mode === "preview" && onSourceScenarioChange ? (
             <SourceDemoDeck scenario={sourceScenario ?? "mixed"} onChange={onSourceScenarioChange} />
@@ -4053,6 +4094,11 @@ export function AssistantInbox({
             draftLink={
               selectedWorkItemCandidate
                 ? workItemEvidenceLinks.byCandidateId[selectedWorkItemCandidate.id]
+                : undefined
+            }
+            runnerLink={
+              selectedWorkItemCandidate
+                ? workItemRunnerSignalLinks.byCandidateId[selectedWorkItemCandidate.id]
                 : undefined
             }
           />
