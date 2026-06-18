@@ -39,6 +39,7 @@ import {
   SECTION_CARD,
   SECTION_HEADER,
 } from "../../lib/inboxStyleTokens";
+import { INBOX_VOCAB } from "../../lib/inboxVocabulary";
 import {
   projectPluginWorkItems,
   type WorkItemLiteProviderResult,
@@ -2321,8 +2322,11 @@ function PatchCandidatesCard({
       data-testid="patch-candidate-lane"
       className="mx-4 mb-2 rounded-lg border border-white/[0.08] bg-white/[0.02] p-2.5 outline-none focus-visible:ring-1 focus-visible:ring-cyan-400/40"
     >
-      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Patch Candidate Lane · read-only · preview only
+      <p
+        className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+        data-testid="patch-lane-caption"
+      >
+        {INBOX_VOCAB.patchLaneCaption}
       </p>
       <PatchSummaryStrip candidates={candidates} />
       {candidates.length > 1 ? <PatchComparisonStrip candidates={candidates} /> : null}
@@ -2663,8 +2667,8 @@ export function AssistantInbox({
           >
             {liveCount}/4 live
           </Badge>
-          <span className="text-[11px] text-muted-foreground">
-            read-only · 자동 실행/승인 없음
+          <span className="text-[11px] text-muted-foreground" data-testid="assistant-inbox-readonly-note">
+            {INBOX_VOCAB.readOnlyNote}
           </span>
           {hasExample ? (
             <span
