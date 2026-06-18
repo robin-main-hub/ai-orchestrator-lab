@@ -26,6 +26,7 @@ const DECK_IDS = [
   "replay",
   "source-dock",
   "patch-candidates",
+  "work-item-candidates",
   "clear",
 ];
 
