@@ -598,6 +598,26 @@ Owner checks:
       assertNoSideEffectActionControls.
 - [ ] **Honest** — every outcome is labelled simulated; nothing is executed.
 
+## P0 — Swarm IO Race Guard / Stale Capture Hardening
+
+P0 hardened the local tmux swarm send/capture boundary. Owner checks:
+
+- [ ] **Locking** — setup/send/capture serialize through a portable mkdir lock
+      under `.ai-swarm/locks/`; lock contention fails loudly instead of racing.
+- [ ] **Session identity** — the env file session must match the requested
+      `AI_SWARM_SESSION`; mismatches fail before send/capture.
+- [ ] **Pane liveness** — send/capture validate the stored pane id still exists and
+      belongs to the expected session; stale pane ids fail loudly.
+- [ ] **Markers** — send emits a non-secret `AI_SWARM_MARKER` by default and stores
+      only marker/session/role/pane/time metadata, never command text.
+- [ ] **Fresh capture** — capture supports `--require-marker` and `--since-marker`;
+      missing markers are reported as stale/missing, and missing option values fail.
+- [ ] **Safety boundary** — no agent behavior rewrite, no runner dispatch, no server
+      write, no EventStorage append, no DB migration, no destructive tmux kill beyond
+      the existing setup `--reset` path.
+- [ ] **Verification note** — PR #666 merged at `7cb44d8`; GitHub Actions passed
+      after rerun, while Vercel remained externally rate-limited.
+
 ## 21. Batch 21 — Replay Timeline V2
 
 Batch 21 turned REPLAY into a time-clustered, read-only operation-theater replay.
