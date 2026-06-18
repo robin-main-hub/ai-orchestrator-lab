@@ -2,7 +2,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { AssistantInboxContainer } from "./AssistantInboxContainer";
-import { assertNoSideEffectActionControls, assertNoForbiddenActionText } from "./inboxInvariant";
+import {
+  assertNoSideEffectActionControls,
+  assertNoForbiddenActionText,
+  collectActionControls,
+} from "./inboxInvariant";
 import type { RunnerSessionInput } from "../../lib/runnerTheater";
 import type { WorkItemCandidateInput } from "../../lib/workItemCandidate";
 
@@ -62,12 +66,14 @@ describe("E5 — WorkItem Candidates card", () => {
     expect(screen.queryByTestId("wic-row-wic-runner-example-1")).toBeNull();
   });
 
-  it("is candidate-only and read-only: no buttons, no side-effect/domain text", () => {
+  it("is candidate-only and read-only: only local-view/local-detail controls, no side-effect/domain text", () => {
     render(<AssistantInboxContainer />);
     const card = screen.getByTestId("work-item-candidates-card");
-    expect(card.querySelectorAll("button").length).toBe(0);
     expect(card.textContent).toContain("not committed");
     assertNoSideEffectActionControls(card);
     assertNoForbiddenActionText(card);
+    for (const control of collectActionControls(card)) {
+      expect(["local-view", "local-detail"]).toContain(control.getAttribute("data-action-scope"));
+    }
   });
 });
