@@ -17,12 +17,14 @@ import { buildWorkItemCandidateTrace } from "../../lib/workItemCandidateTrace";
 import { buildWorkItemCandidateSignalSummary } from "../../lib/workItemCandidateSignals";
 import type { CandidateDraftEvidenceLink } from "../../lib/workItemEvidenceLinks";
 import {
+  WorkItemCandidateLearningMemorySignalsSection,
   WorkItemCandidateNextStepPreviewCard,
   WorkItemCandidatePatchSignalsSection,
   WorkItemCandidateReadinessSection,
   WorkItemCandidateRunnerSignalsSection,
   WorkItemCandidateTraceTimeline,
 } from "./WorkItemCandidateDetailSections";
+import type { WorkItemCandidateLearningMemoryCandidateLink } from "../../lib/workItemCandidateLearningMemorySignals";
 import type { WorkItemCandidatePatchCandidateLink } from "../../lib/workItemCandidatePatchSignals";
 import type { WorkItemCandidateRunnerCandidateLink } from "../../lib/workItemCandidateRunnerSignals";
 import { WorkItemCandidateSignalSummarySection } from "./WorkItemCandidateSignalChips";
@@ -311,12 +313,14 @@ export function WorkItemCandidateDetailDrawer({
   draftLink,
   runnerLink,
   patchLink,
+  learningMemoryLink,
 }: {
   item: WorkItemCandidate | null;
   onClose: () => void;
   draftLink?: CandidateDraftEvidenceLink;
   runnerLink?: WorkItemCandidateRunnerCandidateLink;
   patchLink?: WorkItemCandidatePatchCandidateLink;
+  learningMemoryLink?: WorkItemCandidateLearningMemoryCandidateLink;
 }) {
   const ref = useRef<HTMLElement>(null);
   const [activeTab, setActiveTab] = useState<WicDetailTab>("overview");
@@ -436,6 +440,7 @@ export function WorkItemCandidateDetailDrawer({
         <WorkItemCandidateSignalSummarySection summary={signalSummary} />
         <WorkItemCandidateRunnerSignalsSection link={runnerLink} />
         <WorkItemCandidatePatchSignalsSection link={patchLink} />
+        <WorkItemCandidateLearningMemorySignalsSection link={learningMemoryLink} />
       </section>
       <section data-testid="wic-detail-panel-map" data-active={activeTab === "map" ? "true" : "false"}>
         <WorkItemCandidateLinkGraph item={item} />
