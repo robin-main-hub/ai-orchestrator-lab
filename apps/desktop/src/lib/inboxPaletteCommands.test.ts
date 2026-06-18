@@ -42,6 +42,8 @@ describe("Batch 12 — LINE A: inbox Command Palette builder (view-only)", () =>
     expect(h.dispatch).toHaveBeenLastCalledWith("focusSection", "source-dock");
     byId(cmds, "inbox.patchCandidates").run();
     expect(h.dispatch).toHaveBeenLastCalledWith("focusSection", "patch-candidates");
+    byId(cmds, "inbox.workItemCandidates").run();
+    expect(h.dispatch).toHaveBeenLastCalledWith("focusSection", "work-item-candidates");
     byId(cmds, "inbox.operatorConsole").run();
     expect(h.dispatch).toHaveBeenLastCalledWith("focusSection", "operator-console");
     byId(cmds, "inbox.evidenceDraft").run();
@@ -63,6 +65,7 @@ describe("Batch 12 — LINE A: inbox Command Palette builder (view-only)", () =>
       "inbox.clear",
       "inbox.sourceDock",
       "inbox.patchCandidates",
+      "inbox.workItemCandidates",
       "inbox.operatorConsole",
       "inbox.sandbox",
       "inbox.evidenceDraft",
