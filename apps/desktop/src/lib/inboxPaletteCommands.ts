@@ -92,6 +92,13 @@ export function buildInboxPaletteCommands(
       hint: "패치 후보 보기 · 적용 없음",
       run: () => h.dispatch("focusSection", "patch-candidates"),
     },
+    {
+      id: "inbox.workItemCandidates",
+      verb: "이동",
+      label: "WorkItem Candidates 열기",
+      hint: "작업 후보 보기 · 확정 없음",
+      run: () => h.dispatch("focusSection", "work-item-candidates"),
+    },
     // Batch 25 LINE J — jump to the Operator Console (status strip). View/move only:
     // scrolls + focuses the console region; never reads/writes a server.
     {
