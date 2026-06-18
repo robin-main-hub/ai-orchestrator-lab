@@ -238,6 +238,25 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## E2. Engine — Runner Theater (read-only, LIVE-wired)
+
+Engine batch E2 added a read-only operations theater over REAL runner/mission
+state (the shared `workbenchMissionStore`). Owner checks:
+
+- [ ] **Runner Theater visible** — the inbox shows a "Runner Theater" card with
+      runners grouped by lane (active / attention / idle / done) and an
+      active/attention summary.
+- [ ] **Heartbeat liveness** — each runner row carries a liveness chip
+      (live / idle / stale / unknown); a running runner with a stale heartbeat
+      raises the header "stalled" warning.
+- [ ] **LIVE from real state** — when a mission exists in the coding workbench /
+      conversation-fork store, it appears in the inbox LIVE Runner Theater;
+      starting/stopping a runner there updates the card (read-only subscription).
+- [ ] **Honest empty** — with no missions, the card shows "관측된 runner 세션 없음"
+      (not a fixture); PREVIEW example runners never leak into LIVE.
+- [ ] **Read-only / generic** — display-only (no buttons), no dispatch/start/write,
+      no fabricated diff stats, generic names; passes the no-side-effect invariant.
+
 ## 26. Batch 26 — Visual Style Pass
 
 Batch 26 unified the inbox's status chips + section shells into a shared style
