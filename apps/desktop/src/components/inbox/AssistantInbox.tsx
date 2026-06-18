@@ -69,6 +69,11 @@ import {
   linkCandidatesToRunnerSignals,
   type WorkItemCandidateRunnerSignalLinks,
 } from "../../lib/workItemCandidateRunnerSignals";
+import {
+  linkCandidatesToPatchSignals,
+  type WorkItemCandidatePatchSignalKind,
+  type WorkItemCandidatePatchSignalLinks,
+} from "../../lib/workItemCandidatePatchSignals";
 import { buildWorkItemCandidateSignalSummaryFromOperation } from "../../lib/workItemCandidateSignals";
 import {
   linkWorkItemCandidatesToEvidenceDraft,
@@ -1719,6 +1724,13 @@ function WorkItemCandidateOperatorReviewPanel({
   );
 }
 
+function patchSignalTone(signal: WorkItemCandidatePatchSignalKind): string {
+  if (signal === "patch-blocked") return TONE.bad;
+  if (signal === "patch-warning" || signal === "diff-preview-available") return TONE.warn;
+  if (signal === "patch-pass") return TONE.good;
+  return TONE.info;
+}
+
 /**
  * Engine E5 — WorkItem Candidates: the read-only CENTRAL AXIS over the OS's
  * signals (patch / runner / evidence / memory / source). Each row is a
@@ -1736,6 +1748,7 @@ function WorkItemCandidatesCard({
   reviewCommand,
   workItemLinks,
   runnerSignalLinks,
+  patchSignalLinks,
 }: {
   rows: ReadonlyArray<WorkItemCandidate>;
   onSelect?: (row: WorkItemCandidate) => void;
@@ -1744,6 +1757,7 @@ function WorkItemCandidatesCard({
   reviewCommand?: InboxCommand;
   workItemLinks?: WorkItemEvidenceDraftLinks;
   runnerSignalLinks?: WorkItemCandidateRunnerSignalLinks;
+  patchSignalLinks?: WorkItemCandidatePatchSignalLinks;
 }) {
   const [laneFilter, setLaneFilter] = useState<WorkItemCandidateBoardLaneFilter>("all");
   const [riskFilter, setRiskFilter] = useState<WorkItemCandidateBoardRiskFilter>("all");
@@ -1816,6 +1830,7 @@ function WorkItemCandidatesCard({
         const r = operationRow.candidate;
         const signalSummary = buildWorkItemCandidateSignalSummaryFromOperation(operationRow);
         const runnerSignal = runnerSignalLinks?.byCandidateId[r.id]?.signals[0];
+        const patchSignal = patchSignalLinks?.byCandidateId[r.id]?.signals[0];
         return (
           <li
             key={r.id}
@@ -1843,6 +1858,15 @@ function WorkItemCandidatesCard({
                 className={`${CHIP_BASE} ${runnerSignal.signal === "runner-stalled" ? TONE.bad : TONE.info}`}
               >
                 {runnerSignal.signal}
+              </span>
+            ) : null}
+            {patchSignal ? (
+              <span
+                data-testid={`wic-patch-signal-chip-${r.id}`}
+                data-patch-signal={patchSignal.signal}
+                className={`${CHIP_BASE} ${patchSignalTone(patchSignal.signal)}`}
+              >
+                {patchSignal.signal}
               </span>
             ) : null}
             {operationRow.hasLinkedDraftClaims ? (
@@ -3509,12 +3533,14 @@ function PatchCandidatesCard({
   onSelect,
   filter = "all",
   onFilter,
+  candidateLinks,
 }: {
   candidates?: ReadonlyArray<PatchCandidate>;
   cardRef?: RefObject<HTMLDivElement | null>;
   onSelect?: (item: SourceDetailItem) => void;
   filter?: PatchLaneFilter;
   onFilter?: (f: PatchLaneFilter) => void;
+  candidateLinks?: WorkItemCandidatePatchSignalLinks;
 }) {
   // Batch 20 — local-view compare board toggle (display-only).
   const [compareOpen, setCompareOpen] = useState(false);
@@ -3563,59 +3589,72 @@ function PatchCandidatesCard({
       ) : null}
       {compareOpen && candidates.length > 1 ? <PatchCompareBoardView candidates={candidates} /> : null}
       <ul className="space-y-1">
-        {shown.map((c) => (
-          <li
-            key={c.id}
-            data-testid={`patch-candidate-${c.candidateId}`}
-            data-safety={c.safetyStatus}
-            data-blocked={c.safetyStatus === "blocked"}
-            className={`rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-1.5 ${
-              onSelect ? "cursor-pointer hover:bg-white/[0.04]" : ""
-            }`}
-            {...(onSelect ? rowActivation(() => onSelect(patchDetailItem(c))) : {})}
-          >
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-medium text-zinc-300">{c.candidateId}</span>
-              <span
-                className={`rounded px-1 text-[9px] uppercase tracking-wide ${SAFETY_TONE[c.safetyStatus]}`}
-                data-testid={`patch-safety-${c.candidateId}`}
-                data-safety={c.safetyStatus}
-              >
-                {c.safetyStatus}
-              </span>
-              <span
-                className="rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground"
-                data-testid={`patch-verify-${c.candidateId}`}
-                data-verification={c.verificationStatus}
-              >
-                {c.verificationStatus}
-              </span>
-              <span
-                className="rounded bg-white/[0.05] px-1 text-[9px] uppercase text-muted-foreground/70"
-                data-source={c.source}
-              >
-                {c.source}
-              </span>
-              <span className="ml-auto text-[9px] tabular-nums text-muted-foreground/55">
-                obs:{c.observed ? "true" : "false"}
-              </span>
-            </div>
-            <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-zinc-400">
-              <span className="min-w-0 truncate text-muted-foreground/60">
-                {c.runnerId} · {c.missionId}
-              </span>
-              <span
-                className="ml-auto shrink-0 tabular-nums"
-                data-testid={`patch-files-${c.candidateId}`}
-                data-count={c.changedFileCount}
-              >
-                {c.changedFileCount} files
-              </span>
-              <span className="shrink-0 tabular-nums text-emerald-300/70">+{c.additions}</span>
-              <span className="shrink-0 tabular-nums text-rose-300/70">-{c.deletions}</span>
-            </div>
-          </li>
-        ))}
+        {shown.map((c) => {
+          const linkedCandidateCount =
+            candidateLinks?.byPatchCandidateId[c.candidateId]?.candidateIds.length ?? 0;
+          return (
+            <li
+              key={c.id}
+              data-testid={`patch-candidate-${c.candidateId}`}
+              data-safety={c.safetyStatus}
+              data-blocked={c.safetyStatus === "blocked"}
+              className={`rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-1.5 ${
+                onSelect ? "cursor-pointer hover:bg-white/[0.04]" : ""
+              }`}
+              {...(onSelect ? rowActivation(() => onSelect(patchDetailItem(c))) : {})}
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-medium text-zinc-300">{c.candidateId}</span>
+                <span
+                  className={`rounded px-1 text-[9px] uppercase tracking-wide ${SAFETY_TONE[c.safetyStatus]}`}
+                  data-testid={`patch-safety-${c.candidateId}`}
+                  data-safety={c.safetyStatus}
+                >
+                  {c.safetyStatus}
+                </span>
+                <span
+                  className="rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground"
+                  data-testid={`patch-verify-${c.candidateId}`}
+                  data-verification={c.verificationStatus}
+                >
+                  {c.verificationStatus}
+                </span>
+                <span
+                  className="rounded bg-white/[0.05] px-1 text-[9px] uppercase text-muted-foreground/70"
+                  data-source={c.source}
+                >
+                  {c.source}
+                </span>
+                {linkedCandidateCount > 0 ? (
+                  <span
+                    data-testid={`patch-candidate-workitem-count-${c.candidateId}`}
+                    data-count={linkedCandidateCount}
+                    className={`${CHIP_BASE} ${TONE.info}`}
+                  >
+                    {linkedCandidateCount} candidate
+                  </span>
+                ) : null}
+                <span className="ml-auto text-[9px] tabular-nums text-muted-foreground/55">
+                  obs:{c.observed ? "true" : "false"}
+                </span>
+              </div>
+              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-zinc-400">
+                <span className="min-w-0 truncate text-muted-foreground/60">
+                  {c.runnerId} · {c.missionId}
+                </span>
+                <span
+                  className="ml-auto shrink-0 tabular-nums"
+                  data-testid={`patch-files-${c.candidateId}`}
+                  data-count={c.changedFileCount}
+                >
+                  {c.changedFileCount} files
+                </span>
+                <span className="shrink-0 tabular-nums text-emerald-300/70">+{c.additions}</span>
+                <span className="shrink-0 tabular-nums text-rose-300/70">-{c.deletions}</span>
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -3896,6 +3935,10 @@ export function AssistantInbox({
     workItemCandidates ?? [],
     runnerTheater ?? [],
   );
+  const workItemPatchSignalLinks = linkCandidatesToPatchSignals(
+    workItemCandidates ?? [],
+    patchCandidates ?? [],
+  );
   return (
     <Card
       className="border-white/10 bg-black/40 py-3"
@@ -4053,6 +4096,7 @@ export function AssistantInbox({
               reviewCommand={command}
               workItemLinks={workItemEvidenceLinks}
               runnerSignalLinks={workItemRunnerSignalLinks}
+              patchSignalLinks={workItemPatchSignalLinks}
             />
           ) : null}
           {runnerTheater ? (
@@ -4086,6 +4130,7 @@ export function AssistantInbox({
             onSelect={setSelectedDetail}
             filter={patchFilter}
             onFilter={setPatchFilter}
+            candidateLinks={workItemPatchSignalLinks}
           />
           <SourceDetailDrawer item={selectedDetail} onClose={closeDetail} />
           <WorkItemCandidateDetailDrawer
@@ -4099,6 +4144,11 @@ export function AssistantInbox({
             runnerLink={
               selectedWorkItemCandidate
                 ? workItemRunnerSignalLinks.byCandidateId[selectedWorkItemCandidate.id]
+                : undefined
+            }
+            patchLink={
+              selectedWorkItemCandidate
+                ? workItemPatchSignalLinks.byCandidateId[selectedWorkItemCandidate.id]
                 : undefined
             }
           />
