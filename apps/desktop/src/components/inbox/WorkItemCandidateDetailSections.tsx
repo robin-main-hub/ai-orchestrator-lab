@@ -13,6 +13,7 @@ import type {
   WorkItemCandidateTraceEvent,
   WorkItemCandidateTraceEventKind,
 } from "../../lib/workItemCandidateTrace";
+import type { WorkItemCandidateRunnerCandidateLink } from "../../lib/workItemCandidateRunnerSignals";
 
 const WIC_UNKNOWN = "none / unknown";
 
@@ -254,6 +255,67 @@ export function WorkItemCandidateTraceTimeline({ trace }: { trace: WorkItemCandi
           <WorkItemCandidateTraceRow key={event.id} event={event} />
         ))}
       </ol>
+    </section>
+  );
+}
+
+export function WorkItemCandidateRunnerSignalsSection({
+  link,
+}: {
+  link?: WorkItemCandidateRunnerCandidateLink;
+}) {
+  const signals = link?.signals ?? [];
+  return (
+    <section
+      data-testid="wic-runner-signals-section"
+      data-count={signals.length}
+      className="mt-2 rounded-md border border-emerald-400/15 bg-emerald-400/[0.035] p-2"
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-emerald-200/70">
+          Runner Signals
+        </p>
+        <span className="rounded bg-emerald-300/10 px-1.5 py-0.5 text-[9px] uppercase text-emerald-100/75">
+          local detail
+        </span>
+      </div>
+      {signals.length === 0 ? (
+        <p data-testid="wic-runner-signals-empty" className="text-[10px] text-muted-foreground/70">
+          {link?.unresolvedRefs.length
+            ? `runner refs unresolved · ${link.unresolvedRefs.join(", ")}`
+            : "no matching runner signals"}
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {signals.map((signal) => (
+            <li
+              key={signal.id}
+              data-testid={`wic-runner-signal-${signal.runnerId}`}
+              className="rounded border border-white/[0.06] bg-white/[0.025] p-1.5 text-[10px] text-zinc-300"
+            >
+              <div className="mb-0.5 flex flex-wrap items-center gap-1">
+                <span className={`${CHIP_BASE} ${signal.signal === "runner-stalled" ? TONE.bad : TONE.info}`}>
+                  {signal.signal}
+                </span>
+                <span className={`${CHIP_BASE} ${TONE.muted}`}>{signal.refStatus}</span>
+              </div>
+              <div className="break-all text-zinc-200">{signal.title}</div>
+              <div className="break-all text-muted-foreground">
+                runner id · <code className="rounded bg-background/70 px-1">{signal.runnerId}</code>
+              </div>
+              <div className="break-all text-muted-foreground">
+                mission id · <code className="rounded bg-background/70 px-1">{signal.missionId}</code>
+              </div>
+              <div className="break-all text-muted-foreground">
+                {signal.lane} · {signal.liveness} · {signal.status}
+              </div>
+              {signal.branch ? (
+                <div className="break-all text-muted-foreground">branch ref · {signal.branch}</div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
