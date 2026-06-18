@@ -238,6 +238,26 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## E8. Engine — WorkItem Candidate / Evidence Draft Cross-Link
+
+Engine batch E8 connected WorkItemCandidate and Evidence Draft surfaces through
+read-only string refs only. Owner checks:
+
+- [ ] **Helper behavior** — `linkWorkItemCandidatesToEvidenceDraft` links candidate
+      `evidenceRefs[]` to draft footnote `refId`s only; unknown refs stay unmatched.
+- [ ] **Candidate detail links** — a candidate with overlapping evidence refs shows
+      draft footnote number, ref id, label, and claim ids in the local detail drawer.
+- [ ] **Candidate detail empty** — a candidate with no matching draft evidence shows
+      `no matching draft evidence`.
+- [ ] **Draft related candidates** — Evidence Draft header/footnotes show related
+      candidate count/chips only when refs overlap.
+- [ ] **LIVE honesty** — absent live draft or absent live candidates does not fake
+      links; LIVE links appear only when both inputs exist.
+- [ ] **PREVIEW honesty** — PREVIEW shows fixture cross-links only where fixture refs
+      overlap; no PREVIEW refs leak into LIVE.
+- [ ] **Read-only** — no create / launch / commit lifecycle, no write/append/send/
+      dispatch/apply controls, no object resolution beyond existing refs.
+
 ## E7. Engine — WorkItem Candidate Board / Triage View
 
 Engine batch E7 made WorkItemCandidates faster to triage locally without creating
