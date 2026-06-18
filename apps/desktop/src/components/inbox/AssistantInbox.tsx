@@ -41,6 +41,13 @@ import {
   type RunnerLane,
   type HeartbeatLiveness,
 } from "../../lib/runnerTheater";
+import {
+  groupMissionOperationsByState,
+  summarizeMissionOperations,
+  type MissionOperationNode,
+  type MissionOperationState,
+  type MissionOperationsMap,
+} from "../../lib/missionOperations";
 import type { LearningMemoryConsole } from "../../lib/learningMemoryConsole";
 import {
   WORK_ITEM_LANES,
@@ -270,6 +277,12 @@ export type AssistantInboxProps = {
    * no card. Candidate-only, display-only — never committed work, no create action.
    */
   workItemCandidates?: ReadonlyArray<WorkItemCandidate>;
+  /**
+   * Mission Operations Theater PR2 — read-only operation map over runner, patch,
+   * candidate, evidence, source, and memory signals. Present (even empty) means
+   * render the theater card; absent means the seat does not have theater data.
+   */
+  missionOperations?: MissionOperationsMap;
 };
 
 /**
@@ -1529,6 +1542,139 @@ function LearningMemoryConsoleCard({
         </div>
       )}
     </div>
+  );
+}
+
+const MISSION_OPERATION_STATE_LABEL: Record<MissionOperationState, string> = {
+  active: "Active",
+  attention: "Attention",
+  ready: "Ready",
+  blocked: "Blocked",
+  "evidence-missing": "Evidence Missing",
+  "memory-warning": "Memory Warning",
+  unknown: "Unknown",
+};
+
+const MISSION_OPERATION_STATE_TONE: Record<MissionOperationState, string> = {
+  active: TONE.info,
+  attention: TONE.warn,
+  ready: TONE.good,
+  blocked: TONE.bad,
+  "evidence-missing": TONE.warn,
+  "memory-warning": TONE.warn,
+  unknown: TONE.muted,
+};
+
+const MISSION_OPERATION_GROUPS: ReadonlyArray<MissionOperationState> = [
+  "active",
+  "attention",
+  "ready",
+  "blocked",
+  "evidence-missing",
+  "memory-warning",
+];
+
+function missionOperationsTestId(node: MissionOperationNode): string {
+  return `mission-operations-chip-${node.kind}-${node.ref.replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
+}
+
+function MissionOperationChip({ node }: { node: MissionOperationNode }) {
+  return (
+    <span
+      data-testid={missionOperationsTestId(node)}
+      data-kind={node.kind}
+      data-state={node.state}
+      title={node.reason}
+      className={`inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] ${MISSION_OPERATION_STATE_TONE[node.state]}`}
+    >
+      <span className="uppercase tracking-wider opacity-70">{node.kind}</span>
+      <span className="truncate">{node.ref}</span>
+    </span>
+  );
+}
+
+function MissionOperationsTheaterCard({
+  map,
+  source,
+}: {
+  map: MissionOperationsMap;
+  source: InboxSectionSource;
+}) {
+  const summary = summarizeMissionOperations(map);
+  const groups = groupMissionOperationsByState(map);
+  const hasNodes = map.nodes.length > 0;
+
+  return (
+    <section
+      className={`${SECTION_CARD} mx-4`}
+      data-testid="mission-operations-theater-card"
+      data-total={summary.totalNodes}
+      data-edges={summary.totalEdges}
+      data-unresolved={summary.unresolvedRefs}
+      data-source={source}
+    >
+      <div className="flex flex-wrap items-center gap-2 border-b border-white/5 pb-1.5">
+        <h3 className={SECTION_HEADER}>Mission Operations Theater</h3>
+        <span data-testid="mission-operations-summary-total" className={`${CHIP_BASE} ${TONE.neutral}`}>
+          {summary.totalNodes} nodes
+        </span>
+        <span data-testid="mission-operations-summary-edges" className={`${CHIP_BASE} ${TONE.muted}`}>
+          {summary.totalEdges} links
+        </span>
+        {summary.unresolvedRefs > 0 ? (
+          <span data-testid="mission-operations-summary-unresolved" className={`${CHIP_BASE} ${TONE.warn}`}>
+            {summary.unresolvedRefs} unresolved
+          </span>
+        ) : null}
+        <span className="ml-auto">
+          <SourceBadge id="mission-operations" source={source} />
+        </span>
+      </div>
+
+      {!hasNodes ? (
+        <div data-testid="mission-operations-empty" className={EMPTY_STATE}>
+          <p className="text-[11px] font-medium text-muted-foreground/80">
+            no mission operation signals yet
+          </p>
+          <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground/55">
+            runner, patch, candidate, evidence, source, and memory refs will appear here when observed
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-1.5 md:grid-cols-2 xl:grid-cols-3">
+          {MISSION_OPERATION_GROUPS.map((state) => {
+            const nodes = groups[state];
+            const renderNodes = nodes.filter((node) => node.state === state);
+            return (
+              <div
+                key={state}
+                data-testid={`mission-operations-group-${state}`}
+                data-count={renderNodes.length}
+                className="min-w-0 rounded-md border border-white/10 bg-white/[0.025] p-1.5"
+              >
+                <div className="mb-1 flex items-center gap-1">
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                    {MISSION_OPERATION_STATE_LABEL[state]}
+                  </span>
+                  <span className={`${CHIP_BASE} ${MISSION_OPERATION_STATE_TONE[state]}`}>
+                    {renderNodes.length}
+                  </span>
+                </div>
+                {renderNodes.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {renderNodes.map((node) => (
+                      <MissionOperationChip key={node.id} node={node} />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground/45">honest empty</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -3780,6 +3926,7 @@ export function AssistantInbox({
   learningMemory,
   evidenceDraft,
   workItemCandidates,
+  missionOperations,
 }: AssistantInboxProps) {
   const total =
     evidence.length + learningLoops.length + memoryCandidates.length + manifestEntries.length;
@@ -3789,6 +3936,8 @@ export function AssistantInbox({
   const learningSource = sources?.learning ?? "example";
   const memorySource = sources?.memory ?? "example";
   const manifestSource = sources?.manifest ?? "example";
+  const missionOperationsSource: InboxSectionSource =
+    mode === "preview" ? "example" : missionOperations?.nodes.length ? "live" : "empty";
   const liveCount = [evidenceSource, learningSource, memorySource, manifestSource].filter(
     (s) => s === "live",
   ).length;
@@ -4198,6 +4347,12 @@ export function AssistantInbox({
               runnerSignalLinks={workItemRunnerSignalLinks}
               patchSignalLinks={workItemPatchSignalLinks}
               learningMemorySignalLinks={workItemLearningMemorySignalLinks}
+            />
+          ) : null}
+          {missionOperations ? (
+            <MissionOperationsTheaterCard
+              map={missionOperations}
+              source={missionOperationsSource}
             />
           ) : null}
           {runnerTheater ? (
