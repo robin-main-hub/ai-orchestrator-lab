@@ -238,6 +238,25 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## E3. Engine — Learning & Memory Console (read-only)
+
+Engine batch E3 added a read-only roll-up of what the OS learned / distilled and
+its memory health, composed from the existing learning + memory + eval
+projections. Owner checks:
+
+- [ ] **Console visible** — the inbox shows a "Learning & Memory" card with a
+      learning row (loops / settled / active / rejected) and a memory row
+      (candidates / suggested / written-observed).
+- [ ] **Eval health** — when eval reports exist (PREVIEW fixture), pass/warn/fail
+      chips show; forbidden/stale/contradicted hits and eval fails surface as
+      honest flag chips at the header.
+- [ ] **Honest memory** — memory candidates read as "suggested" with "0 written
+      (observed)" until a real writer exists — never auto-promoted.
+- [ ] **LIVE real-only** — with real project records the memory count reflects
+      them; PREVIEW fixture learning/eval never leak into LIVE; empty → honest empty.
+- [ ] **Read-only / generic** — display-only (no buttons), no auto-trust / load /
+      write, generic names; passes the no-side-effect invariant.
+
 ## E2. Engine — Runner Theater (read-only, LIVE-wired)
 
 Engine batch E2 added a read-only operations theater over REAL runner/mission
