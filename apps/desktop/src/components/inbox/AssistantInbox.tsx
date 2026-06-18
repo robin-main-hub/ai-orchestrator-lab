@@ -1570,6 +1570,7 @@ const WIC_CONFIDENCE_TONE: Record<WorkItemCandidateConfidenceBand, string> = {
   unknown: TONE.muted,
 };
 type WicGroupMode = "lane" | "readiness" | "risk";
+type WicSignalFilter = "all" | "any" | "runner" | "patch" | "memory";
 
 const WIC_READINESS_ORDER: ReadonlyArray<WorkItemCandidateReadinessState> = [
   "blocked",
@@ -1608,6 +1609,15 @@ function reviewFilterFromCommand(
   if (command.value === "work-item-candidate-review-needs-evidence") return "needs-evidence";
   if (command.value === "work-item-candidate-review-blocked") return "blocked";
   if (command.value === "work-item-candidate-review-missing-refs") return "missing-refs";
+  return null;
+}
+
+function signalFilterFromCommand(command?: InboxCommand): WicSignalFilter | null {
+  if (command?.kind !== "focusSection") return null;
+  if (command.value === "work-item-candidate-signals") return "any";
+  if (command.value === "work-item-candidate-signals-runner") return "runner";
+  if (command.value === "work-item-candidate-signals-patch") return "patch";
+  if (command.value === "work-item-candidate-signals-memory") return "memory";
   return null;
 }
 
@@ -1803,9 +1813,16 @@ function WorkItemCandidatesCard({
   const [scopeFilter, setScopeFilter] = useState<WorkItemCandidateBoardScopeFilter>("all");
   const [groupMode, setGroupMode] = useState<WicGroupMode>("lane");
   const [sortMode, setSortMode] = useState<WorkItemCandidateBoardSortMode>("priority");
+  const [signalFilter, setSignalFilter] = useState<WicSignalFilter>(
+    () => signalFilterFromCommand(reviewCommand) ?? "all",
+  );
   const [reviewFilter, setReviewFilter] = useState<WorkItemCandidateOperatorReviewFilter>(
     () => reviewFilterFromCommand(reviewCommand) ?? "all",
   );
+  useEffect(() => {
+    const next = signalFilterFromCommand(reviewCommand);
+    if (next) setSignalFilter(next);
+  }, [reviewCommand]);
   useEffect(() => {
     const next = reviewFilterFromCommand(reviewCommand);
     if (next) setReviewFilter(next);
@@ -1829,8 +1846,19 @@ function WorkItemCandidatesCard({
   const kindCounts = boardProjection.counts.byKind;
   const sourceRefCount = boardProjection.counts.sourceRefCount;
   const evidenceRefCount = boardProjection.counts.evidenceRefCount;
-  const visibleOperationRows = boardProjection.visibleRows;
-  const attentionOperationRows = boardProjection.attentionRows;
+  const candidateSignalKinds = (candidateId: string) => ({
+    runner: (runnerSignalLinks?.byCandidateId[candidateId]?.signals.length ?? 0) > 0,
+    patch: (patchSignalLinks?.byCandidateId[candidateId]?.signals.length ?? 0) > 0,
+    memory: (learningMemorySignalLinks?.byCandidateId[candidateId]?.signals.length ?? 0) > 0,
+  });
+  const matchesSignalFilter = (row: WorkItemCandidateOperationRow) => {
+    if (signalFilter === "all") return true;
+    const kinds = candidateSignalKinds(row.candidate.id);
+    if (signalFilter === "any") return kinds.runner || kinds.patch || kinds.memory;
+    return kinds[signalFilter];
+  };
+  const visibleOperationRows = boardProjection.visibleRows.filter(matchesSignalFilter);
+  const attentionOperationRows = boardProjection.attentionRows.filter(matchesSignalFilter);
   const buttonBase =
     "rounded border px-1.5 py-0.5 text-[10px] font-medium transition-colors";
   const buttonTone = (active: boolean) =>
@@ -2166,6 +2194,7 @@ function WorkItemCandidatesCard({
         data-scope={scopeFilter}
         data-group-mode={groupMode}
         data-sort-mode={sortMode}
+        data-signal-filter={signalFilter}
         className="mb-2 space-y-1 rounded-md border border-white/[0.06] bg-black/10 p-1.5"
       >
         <div className="flex flex-wrap items-center gap-1">
@@ -2183,6 +2212,27 @@ function WorkItemCandidatesCard({
               testId={`wic-ops-scope-${scope}`}
               active={scopeFilter === scope}
               onClick={() => setScopeFilter(scope)}
+            >
+              {label}
+            </FilterButton>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+            signals
+          </span>
+          {([
+            ["all", "All"],
+            ["any", "Any linked"],
+            ["runner", "Runner-linked"],
+            ["patch", "Patch-linked"],
+            ["memory", "Memory-linked"],
+          ] as const).map(([filter, label]) => (
+            <FilterButton
+              key={filter}
+              testId={`wic-filter-signal-${filter}`}
+              active={signalFilter === filter}
+              onClick={() => setSignalFilter(filter)}
             >
               {label}
             </FilterButton>
@@ -3946,6 +3996,7 @@ export function AssistantInbox({
     if (command.value === "source-dock") jumpToSourceDock();
     else if (command.value === "patch-candidates") jumpToPatchCandidates();
     else if (command.value === "work-item-candidates") jumpToWorkItemCandidates();
+    else if (command.value?.startsWith("work-item-candidate-signals")) jumpToWorkItemCandidates();
     else if (command.value?.startsWith("work-item-candidate-review")) jumpToWorkItemCandidateReview();
     else if (command.value === "operator-console") jumpToOperatorConsole();
     else if (command.value === "evidence-draft") jumpToEvidenceDraft();
