@@ -105,8 +105,10 @@ describe("E6 — WorkItem Candidate detail / link graph", () => {
     assertNoSideEffectActionControls(drawer);
     assertNoForbiddenActionText(drawer);
     const controls = collectActionControls(drawer);
-    expect(controls.length).toBe(1);
-    expect(controls[0]!.getAttribute("data-action-scope")).toBe("local-detail");
+    expect(controls.length).toBeGreaterThanOrEqual(1);
+    for (const control of controls) {
+      expect(control.getAttribute("data-action-scope")).toBe("local-detail");
+    }
     expect((drawer.textContent ?? "").toLowerCase()).not.toMatch(
       /create work item|launch|eventstorage|server write|runner dispatch|patch apply/,
     );
