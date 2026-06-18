@@ -74,6 +74,11 @@ import {
   type WorkItemCandidatePatchSignalKind,
   type WorkItemCandidatePatchSignalLinks,
 } from "../../lib/workItemCandidatePatchSignals";
+import {
+  linkCandidatesToLearningMemorySignals,
+  type WorkItemCandidateLearningMemorySignalKind,
+  type WorkItemCandidateLearningMemorySignalLinks,
+} from "../../lib/workItemCandidateLearningMemorySignals";
 import { buildWorkItemCandidateSignalSummaryFromOperation } from "../../lib/workItemCandidateSignals";
 import {
   linkWorkItemCandidatesToEvidenceDraft,
@@ -1410,7 +1415,14 @@ function RunnerTheaterCard({
  * stale / contradicted hits). Display-only — no auto-trust, no load, no write.
  * Honest empty when there is no learning/memory/eval data.
  */
-function LearningMemoryConsoleCard({ console: c }: { console: LearningMemoryConsole }) {
+function LearningMemoryConsoleCard({
+  console: c,
+  candidateLinks,
+}: {
+  console: LearningMemoryConsole;
+  candidateLinks?: WorkItemCandidateLearningMemorySignalLinks;
+}) {
+  const linkedCandidateCount = candidateLinks?.console.candidateIds.length ?? 0;
   return (
     <div
       data-testid="learning-memory-console"
@@ -1421,6 +1433,15 @@ function LearningMemoryConsoleCard({ console: c }: { console: LearningMemoryCons
         <span className="text-[11px] font-semibold uppercase tracking-wider text-violet-200/80">
           Learning &amp; Memory
         </span>
+        {linkedCandidateCount > 0 ? (
+          <span
+            data-testid="lm-workitem-count"
+            data-count={linkedCandidateCount}
+            className={`${CHIP_BASE} ${TONE.info}`}
+          >
+            {linkedCandidateCount} {linkedCandidateCount === 1 ? "candidate" : "candidates"}
+          </span>
+        ) : null}
         {c.flags.map((f, i) => (
           <span
             key={i}
@@ -1731,6 +1752,18 @@ function patchSignalTone(signal: WorkItemCandidatePatchSignalKind): string {
   return TONE.info;
 }
 
+function learningMemorySignalTone(signal: WorkItemCandidateLearningMemorySignalKind): string {
+  if (
+    signal === "memory-warning" ||
+    signal === "stale-memory" ||
+    signal === "contradicted-memory"
+  ) {
+    return TONE.warn;
+  }
+  if (signal === "missing-memory-context") return TONE.muted;
+  return TONE.info;
+}
+
 /**
  * Engine E5 — WorkItem Candidates: the read-only CENTRAL AXIS over the OS's
  * signals (patch / runner / evidence / memory / source). Each row is a
@@ -1749,6 +1782,7 @@ function WorkItemCandidatesCard({
   workItemLinks,
   runnerSignalLinks,
   patchSignalLinks,
+  learningMemorySignalLinks,
 }: {
   rows: ReadonlyArray<WorkItemCandidate>;
   onSelect?: (row: WorkItemCandidate) => void;
@@ -1758,6 +1792,7 @@ function WorkItemCandidatesCard({
   workItemLinks?: WorkItemEvidenceDraftLinks;
   runnerSignalLinks?: WorkItemCandidateRunnerSignalLinks;
   patchSignalLinks?: WorkItemCandidatePatchSignalLinks;
+  learningMemorySignalLinks?: WorkItemCandidateLearningMemorySignalLinks;
 }) {
   const [laneFilter, setLaneFilter] = useState<WorkItemCandidateBoardLaneFilter>("all");
   const [riskFilter, setRiskFilter] = useState<WorkItemCandidateBoardRiskFilter>("all");
@@ -1831,6 +1866,7 @@ function WorkItemCandidatesCard({
         const signalSummary = buildWorkItemCandidateSignalSummaryFromOperation(operationRow);
         const runnerSignal = runnerSignalLinks?.byCandidateId[r.id]?.signals[0];
         const patchSignal = patchSignalLinks?.byCandidateId[r.id]?.signals[0];
+        const learningMemorySignal = learningMemorySignalLinks?.byCandidateId[r.id]?.signals[0];
         return (
           <li
             key={r.id}
@@ -1867,6 +1903,15 @@ function WorkItemCandidatesCard({
                 className={`${CHIP_BASE} ${patchSignalTone(patchSignal.signal)}`}
               >
                 {patchSignal.signal}
+              </span>
+            ) : null}
+            {learningMemorySignal ? (
+              <span
+                data-testid={`wic-learning-memory-signal-chip-${r.id}`}
+                data-learning-memory-signal={learningMemorySignal.signal}
+                className={`${CHIP_BASE} ${learningMemorySignalTone(learningMemorySignal.signal)}`}
+              >
+                {learningMemorySignal.signal}
               </span>
             ) : null}
             {operationRow.hasLinkedDraftClaims ? (
@@ -3939,6 +3984,10 @@ export function AssistantInbox({
     workItemCandidates ?? [],
     patchCandidates ?? [],
   );
+  const workItemLearningMemorySignalLinks = linkCandidatesToLearningMemorySignals(
+    workItemCandidates ?? [],
+    learningMemory,
+  );
   return (
     <Card
       className="border-white/10 bg-black/40 py-3"
@@ -4097,12 +4146,18 @@ export function AssistantInbox({
               workItemLinks={workItemEvidenceLinks}
               runnerSignalLinks={workItemRunnerSignalLinks}
               patchSignalLinks={workItemPatchSignalLinks}
+              learningMemorySignalLinks={workItemLearningMemorySignalLinks}
             />
           ) : null}
           {runnerTheater ? (
             <RunnerTheaterCard rows={runnerTheater} candidateLinks={workItemRunnerSignalLinks} />
           ) : null}
-          {learningMemory ? <LearningMemoryConsoleCard console={learningMemory} /> : null}
+          {learningMemory ? (
+            <LearningMemoryConsoleCard
+              console={learningMemory}
+              candidateLinks={workItemLearningMemorySignalLinks}
+            />
+          ) : null}
           {mode === "preview" && onSourceScenarioChange ? (
             <SourceDemoDeck scenario={sourceScenario ?? "mixed"} onChange={onSourceScenarioChange} />
           ) : null}
@@ -4149,6 +4204,11 @@ export function AssistantInbox({
             patchLink={
               selectedWorkItemCandidate
                 ? workItemPatchSignalLinks.byCandidateId[selectedWorkItemCandidate.id]
+                : undefined
+            }
+            learningMemoryLink={
+              selectedWorkItemCandidate
+                ? workItemLearningMemorySignalLinks.byCandidateId[selectedWorkItemCandidate.id]
                 : undefined
             }
           />
