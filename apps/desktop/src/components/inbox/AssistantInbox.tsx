@@ -46,7 +46,9 @@ import {
   summarizeWorkItemCandidates,
   WORK_ITEM_LANES,
   type WorkItemCandidate,
+  type WorkItemCandidateKind,
   type WorkItemCandidateLane,
+  type WorkItemRisk,
 } from "../../lib/workItemCandidate";
 import {
   projectPluginWorkItems,
@@ -500,6 +502,7 @@ const DECK_HINTS: Record<string, string> = {
   replay: "리플레이 좌석",
   "source-dock": "외부 소스 갑판으로 이동 · 화면 이동만",
   "patch-candidates": "패치 후보로 이동 · 화면 이동만 · 적용 없음",
+  "work-item-candidates": "작업 후보 보기 · 확정 없음",
   "operator-console": "오퍼레이터 콘솔로 이동 · 화면 이동만",
   "evidence-draft": "Evidence Draft로 이동 · 화면 이동만 · PREVIEW 전용",
   clear: "검색/필터 초기화",
@@ -517,12 +520,14 @@ function CommandDeck({
   onPreset,
   onSourceDock,
   onPatchCandidates,
+  onWorkItemCandidates,
   onClear,
 }: {
   activeViewId?: string;
   onPreset: (p: ViewPreset) => void;
   onSourceDock: () => void;
   onPatchCandidates: () => void;
+  onWorkItemCandidates: () => void;
   onClear: () => void;
 }) {
   const base =
@@ -569,6 +574,16 @@ function CommandDeck({
         className={`${base} ${tone(false)}`}
       >
         Patch Candidates
+      </button>
+      <button
+        type="button"
+        data-testid="command-deck-work-item-candidates"
+        data-action-scope="local-view"
+        title={DECK_HINTS["work-item-candidates"]}
+        onClick={onWorkItemCandidates}
+        className={`${base} ${tone(false)}`}
+      >
+        WorkItem Candidates
       </button>
       <button
         type="button"
@@ -1421,6 +1436,37 @@ const WIC_RISK_TONE: Record<string, string> = {
   medium: TONE.warn,
   low: TONE.muted,
 };
+const WIC_KINDS: ReadonlyArray<WorkItemCandidateKind> = [
+  "patch",
+  "runner",
+  "evidence",
+  "memory",
+  "source",
+];
+const WIC_RISKS: ReadonlyArray<WorkItemRisk> = ["high", "medium", "low"];
+type WicLaneFilter = "all" | WorkItemCandidateLane;
+type WicRiskFilter = "all" | WorkItemRisk;
+type WicKindFilter = "all" | WorkItemCandidateKind;
+type WicRefFilter = "all" | "present";
+
+function wicMatchesQuery(row: WorkItemCandidate, rawQuery: string): boolean {
+  const q = rawQuery.trim().toLowerCase();
+  if (!q) return true;
+  return [
+    row.id,
+    row.title,
+    row.kind,
+    row.lane,
+    row.status,
+    row.risk,
+    row.reason,
+    ...row.sourceRefs,
+    ...row.evidenceRefs,
+  ]
+    .join(" ")
+    .toLowerCase()
+    .includes(q);
+}
 
 /**
  * Engine E5 — WorkItem Candidates: the read-only CENTRAL AXIS over the OS's
@@ -1434,15 +1480,82 @@ const WIC_RISK_TONE: Record<string, string> = {
 function WorkItemCandidatesCard({
   rows,
   onSelect,
+  cardRef,
 }: {
   rows: ReadonlyArray<WorkItemCandidate>;
   onSelect?: (row: WorkItemCandidate) => void;
+  cardRef?: RefObject<HTMLDivElement | null>;
 }) {
+  const [laneFilter, setLaneFilter] = useState<WicLaneFilter>("all");
+  const [riskFilter, setRiskFilter] = useState<WicRiskFilter>("all");
+  const [kindFilter, setKindFilter] = useState<WicKindFilter>("all");
+  const [sourceRefFilter, setSourceRefFilter] = useState<WicRefFilter>("all");
+  const [evidenceRefFilter, setEvidenceRefFilter] = useState<WicRefFilter>("all");
+  const [candidateQuery, setCandidateQuery] = useState("");
   const summary = summarizeWorkItemCandidates(rows);
+  const laneCounts: Record<WorkItemCandidateLane, number> = {
+    now: rows.filter((r) => r.lane === "now").length,
+    soon: rows.filter((r) => r.lane === "soon").length,
+    watch: rows.filter((r) => r.lane === "watch").length,
+  };
+  const riskCounts: Record<WorkItemRisk, number> = {
+    high: rows.filter((r) => r.risk === "high").length,
+    medium: rows.filter((r) => r.risk === "medium").length,
+    low: rows.filter((r) => r.risk === "low").length,
+  };
+  const kindCounts: Record<WorkItemCandidateKind, number> = {
+    patch: rows.filter((r) => r.kind === "patch").length,
+    runner: rows.filter((r) => r.kind === "runner").length,
+    evidence: rows.filter((r) => r.kind === "evidence").length,
+    memory: rows.filter((r) => r.kind === "memory").length,
+    source: rows.filter((r) => r.kind === "source").length,
+  };
+  const sourceRefCount = rows.filter((r) => r.sourceRefs.length > 0).length;
+  const evidenceRefCount = rows.filter((r) => r.evidenceRefs.length > 0).length;
+  const visibleRows = rows.filter(
+    (r) =>
+      (laneFilter === "all" || r.lane === laneFilter) &&
+      (riskFilter === "all" || r.risk === riskFilter) &&
+      (kindFilter === "all" || r.kind === kindFilter) &&
+      (sourceRefFilter === "all" || r.sourceRefs.length > 0) &&
+      (evidenceRefFilter === "all" || r.evidenceRefs.length > 0) &&
+      wicMatchesQuery(r, candidateQuery),
+  );
+  const buttonBase =
+    "rounded border px-1.5 py-0.5 text-[10px] font-medium transition-colors";
+  const buttonTone = (active: boolean) =>
+    active
+      ? "border-sky-400/40 bg-sky-400/10 text-sky-100"
+      : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-200";
+  const FilterButton = ({
+    testId,
+    active,
+    onClick,
+    children,
+  }: {
+    testId: string;
+    active: boolean;
+    onClick: () => void;
+    children: React.ReactNode;
+  }) => (
+    <button
+      type="button"
+      data-testid={testId}
+      data-action-scope="local-view"
+      data-active={active ? "true" : "false"}
+      onClick={onClick}
+      className={`${buttonBase} ${buttonTone(active)}`}
+    >
+      {children}
+    </button>
+  );
   return (
     <div
+      ref={cardRef}
+      tabIndex={-1}
       data-testid="work-item-candidates-card"
       data-total={summary.total}
+      data-visible={visibleRows.length}
       className="mx-4 mb-2 rounded-lg border border-sky-400/20 bg-sky-400/[0.03] p-2.5"
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
@@ -1464,6 +1577,56 @@ function WorkItemCandidatesCard({
         </span>
       </div>
 
+      <div className="mb-2 space-y-1 rounded-md border border-white/[0.06] bg-white/[0.02] p-1.5">
+        <div className="flex flex-wrap items-center gap-1">
+          <span data-testid="wic-summary-total" data-count={summary.total} className={`${CHIP_BASE} ${TONE.info}`}>
+            {summary.total} total
+          </span>
+          {WORK_ITEM_LANES.map((lane) => (
+            <span
+              key={lane}
+              data-testid={`wic-summary-lane-${lane}`}
+              data-count={laneCounts[lane]}
+              className={`${CHIP_BASE} ${WIC_LANE_TONE[lane]}`}
+            >
+              {laneCounts[lane]} {lane}
+            </span>
+          ))}
+          {WIC_RISKS.map((risk) => (
+            <span
+              key={risk}
+              data-testid={`wic-summary-risk-${risk}`}
+              data-count={riskCounts[risk]}
+              className={`${CHIP_BASE} ${WIC_RISK_TONE[risk]}`}
+            >
+              {riskCounts[risk]} {risk}
+            </span>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          {WIC_KINDS.map((kind) => (
+            <span
+              key={kind}
+              data-testid={`wic-summary-kind-${kind}`}
+              data-count={kindCounts[kind]}
+              className={`${CHIP_BASE} ${TONE.neutral}`}
+            >
+              {kindCounts[kind]} {kind}
+            </span>
+          ))}
+          <span data-testid="wic-summary-sourceRefs" data-count={sourceRefCount} className={`${CHIP_BASE} ${TONE.muted}`}>
+            {sourceRefCount} source refs
+          </span>
+          <span
+            data-testid="wic-summary-evidenceRefs"
+            data-count={evidenceRefCount}
+            className={`${CHIP_BASE} ${TONE.muted}`}
+          >
+            {evidenceRefCount} evidence refs
+          </span>
+        </div>
+      </div>
+
       {rows.length === 0 ? (
         <div className={EMPTY_STATE} data-testid="work-item-candidates-empty" data-empty="true">
           <p className="text-[11px] font-medium text-muted-foreground/80">작업 후보 신호 없음</p>
@@ -1473,7 +1636,131 @@ function WorkItemCandidatesCard({
         </div>
       ) : (
         <div className="space-y-1.5">
-          {WORK_ITEM_LANES.filter((lane) => rows.some((r) => r.lane === lane)).map((lane) => (
+          <div className="space-y-1 rounded-md border border-white/[0.06] bg-black/10 p-1.5">
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                lane
+              </span>
+              <FilterButton
+                testId="wic-filter-lane-all"
+                active={laneFilter === "all"}
+                onClick={() => setLaneFilter("all")}
+              >
+                All
+              </FilterButton>
+              {WORK_ITEM_LANES.map((lane) => (
+                <FilterButton
+                  key={lane}
+                  testId={`wic-filter-lane-${lane}`}
+                  active={laneFilter === lane}
+                  onClick={() => setLaneFilter(lane)}
+                >
+                  {lane}
+                </FilterButton>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                risk
+              </span>
+              <FilterButton
+                testId="wic-filter-risk-all"
+                active={riskFilter === "all"}
+                onClick={() => setRiskFilter("all")}
+              >
+                All
+              </FilterButton>
+              {WIC_RISKS.map((risk) => (
+                <FilterButton
+                  key={risk}
+                  testId={`wic-filter-risk-${risk}`}
+                  active={riskFilter === risk}
+                  onClick={() => setRiskFilter(risk)}
+                >
+                  {risk}
+                </FilterButton>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                kind
+              </span>
+              <FilterButton
+                testId="wic-filter-kind-all"
+                active={kindFilter === "all"}
+                onClick={() => setKindFilter("all")}
+              >
+                All
+              </FilterButton>
+              {WIC_KINDS.map((kind) => (
+                <FilterButton
+                  key={kind}
+                  testId={`wic-filter-kind-${kind}`}
+                  active={kindFilter === kind}
+                  onClick={() => setKindFilter(kind)}
+                >
+                  {kind}
+                </FilterButton>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                refs
+              </span>
+              <FilterButton
+                testId="wic-filter-sourceRefs-all"
+                active={sourceRefFilter === "all"}
+                onClick={() => setSourceRefFilter("all")}
+              >
+                Any source refs
+              </FilterButton>
+              <FilterButton
+                testId="wic-filter-sourceRefs"
+                active={sourceRefFilter === "present"}
+                onClick={() => setSourceRefFilter("present")}
+              >
+                Has source refs
+              </FilterButton>
+              <FilterButton
+                testId="wic-filter-evidenceRefs-all"
+                active={evidenceRefFilter === "all"}
+                onClick={() => setEvidenceRefFilter("all")}
+              >
+                Any evidence refs
+              </FilterButton>
+              <FilterButton
+                testId="wic-filter-evidenceRefs"
+                active={evidenceRefFilter === "present"}
+                onClick={() => setEvidenceRefFilter("present")}
+              >
+                Has evidence refs
+              </FilterButton>
+            </div>
+            <input
+              type="text"
+              value={candidateQuery}
+              onChange={(e) => setCandidateQuery(e.target.value)}
+              aria-label="WorkItem Candidate search"
+              data-testid="wic-search"
+              placeholder="Search candidates by title, reason, id, or ref"
+              className="w-full rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-zinc-200 placeholder:text-muted-foreground/40 focus:border-sky-400/40 focus:outline-none"
+            />
+          </div>
+          {visibleRows.length === 0 ? (
+            <div
+              className={EMPTY_STATE}
+              data-testid="work-item-candidates-filter-empty"
+              data-empty="true"
+            >
+              <p className="text-[11px] font-medium text-muted-foreground/80">
+                matching candidate 없음
+              </p>
+              <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground/55">
+                로컬 보기 조건에 맞는 후보가 없습니다
+              </p>
+            </div>
+          ) : null}
+          {WORK_ITEM_LANES.filter((lane) => visibleRows.some((r) => r.lane === lane)).map((lane) => (
             <div key={lane} data-testid={`wic-lane-${lane}`}>
               <div className="mb-0.5">
                 <span className={`rounded px-1 text-[9px] uppercase tracking-wide ${WIC_LANE_TONE[lane]}`}>
@@ -1481,7 +1768,7 @@ function WorkItemCandidatesCard({
                 </span>
               </div>
               <ul className="space-y-0.5">
-                {rows
+                {visibleRows
                   .filter((r) => r.lane === lane)
                   .map((r) => (
                     <li
@@ -3042,6 +3329,8 @@ export function AssistantInbox({
   const sourceDockRef = useRef<HTMLDivElement>(null);
   // Batch 17 LINE D — scroll/focus target for the "Patch Candidates 열기" jump.
   const patchCandidatesRef = useRef<HTMLDivElement>(null);
+  // Engine E7 — scroll/focus target for the WorkItem Candidate board jump.
+  const workItemCandidatesRef = useRef<HTMLDivElement>(null);
   // Batch 25 LINE J — scroll/focus targets for the Operator Console + Evidence Draft jumps.
   const operatorConsoleRef = useRef<HTMLDivElement>(null);
   const evidenceDraftRef = useRef<HTMLDivElement>(null);
@@ -3077,6 +3366,11 @@ export function AssistantInbox({
   const jumpToPatchCandidates = useCallback(() => {
     patchCandidatesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     patchCandidatesRef.current?.focus();
+  }, []);
+  // Engine E7 — view/focus only jump to the read-only candidate board.
+  const jumpToWorkItemCandidates = useCallback(() => {
+    workItemCandidatesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    workItemCandidatesRef.current?.focus();
   }, []);
   // Batch 25 LINE J — view/focus only jumps to the Operator Console + Evidence Draft.
   const jumpToOperatorConsole = useCallback(() => {
@@ -3193,9 +3487,17 @@ export function AssistantInbox({
     if (command?.kind !== "focusSection") return;
     if (command.value === "source-dock") jumpToSourceDock();
     else if (command.value === "patch-candidates") jumpToPatchCandidates();
+    else if (command.value === "work-item-candidates") jumpToWorkItemCandidates();
     else if (command.value === "operator-console") jumpToOperatorConsole();
     else if (command.value === "evidence-draft") jumpToEvidenceDraft();
-  }, [command, jumpToSourceDock, jumpToPatchCandidates, jumpToOperatorConsole, jumpToEvidenceDraft]);
+  }, [
+    command,
+    jumpToSourceDock,
+    jumpToPatchCandidates,
+    jumpToWorkItemCandidates,
+    jumpToOperatorConsole,
+    jumpToEvidenceDraft,
+  ]);
   // Batch 16 LINE A — Operator Console derivations (all from props already on
   // screen; zero server call, zero write). Active view label, a terse filter
   // summary, source-health counts, and the read-only replay item count.
@@ -3282,6 +3584,7 @@ export function AssistantInbox({
         onPreset={onPreset}
         onSourceDock={jumpToSourceDock}
         onPatchCandidates={jumpToPatchCandidates}
+        onWorkItemCandidates={jumpToWorkItemCandidates}
         onClear={clearFilters}
       />
       {/* Batch 19 — local-view keyboard accelerators (discoverability + at-a-glance). */}
@@ -3354,7 +3657,11 @@ export function AssistantInbox({
             <WorkLaneRail lanes={visibleLanes} query={query} category={category} />
           ) : null}
           {workItemCandidates ? (
-            <WorkItemCandidatesCard rows={workItemCandidates} onSelect={setSelectedWorkItemCandidate} />
+            <WorkItemCandidatesCard
+              rows={workItemCandidates}
+              onSelect={setSelectedWorkItemCandidate}
+              cardRef={workItemCandidatesRef}
+            />
           ) : null}
           {runnerTheater ? <RunnerTheaterCard rows={runnerTheater} /> : null}
           {learningMemory ? <LearningMemoryConsoleCard console={learningMemory} /> : null}
