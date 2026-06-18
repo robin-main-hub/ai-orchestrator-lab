@@ -46,6 +46,7 @@ import {
   type RunnerLane,
   type HeartbeatLiveness,
 } from "../../lib/runnerTheater";
+import type { LearningMemoryConsole } from "../../lib/learningMemoryConsole";
 import {
   projectPluginWorkItems,
   type WorkItemLiteProviderResult,
@@ -207,6 +208,12 @@ export type AssistantInboxProps = {
    * none). Absent → no card (REPLAY/SANDBOX). Display-only; never dispatches.
    */
   runnerTheater?: ReadonlyArray<RunnerTheaterRow>;
+  /**
+   * Engine E3 — read-only Learning & Memory console roll-up. Present → the card
+   * renders (honest-empty when no data). Absent → no card. Display-only; never
+   * auto-trusts / loads / writes memory.
+   */
+  learningMemory?: LearningMemoryConsole;
 };
 
 /**
@@ -1262,6 +1269,114 @@ function RunnerTheaterCard({ rows }: { rows: ReadonlyArray<RunnerTheaterRow> }) 
               </ul>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Engine E3 — Learning & Memory Console: a read-only roll-up of what the OS
+ * learned (loop stages), distilled (memory candidates, honestly suggested / not
+ * written), and whether memory is healthy (eval pass/warn/fail + forbidden /
+ * stale / contradicted hits). Display-only — no auto-trust, no load, no write.
+ * Honest empty when there is no learning/memory/eval data.
+ */
+function LearningMemoryConsoleCard({ console: c }: { console: LearningMemoryConsole }) {
+  return (
+    <div
+      data-testid="learning-memory-console"
+      data-has-data={c.hasData ? "true" : "false"}
+      className="mx-4 mb-2 rounded-lg border border-violet-400/15 bg-violet-400/[0.02] p-2.5"
+    >
+      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-violet-200/80">
+          Learning &amp; Memory
+        </span>
+        {c.flags.map((f, i) => (
+          <span
+            key={i}
+            data-testid={`lm-flag-${i}`}
+            className={`${CHIP_BASE} ${TONE.warn}`}
+          >
+            {f}
+          </span>
+        ))}
+        <span className="ml-auto text-[9px] uppercase tracking-wider text-muted-foreground/45">
+          observed · read-only
+        </span>
+      </div>
+
+      {!c.hasData ? (
+        <div className={EMPTY_STATE} data-testid="learning-memory-empty" data-empty="true">
+          <p className="text-[11px] font-medium text-muted-foreground/80">관측된 learning/memory 없음</p>
+          <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground/55">
+            learning loop·memory 후보가 관측되면 표시 · 표시 전용 · 자동 신뢰/기록 안 함
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-1" data-testid="lm-learning-row">
+            <span className="w-16 shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground/55">
+              learning
+            </span>
+            <span data-testid="lm-learning-total" className={`${CHIP_BASE} ${TONE.neutral}`}>
+              {c.learning.total} loops
+            </span>
+            {c.learning.settled > 0 ? (
+              <span data-testid="lm-learning-settled" className={`${CHIP_BASE} ${TONE.good}`}>
+                {c.learning.settled} settled
+              </span>
+            ) : null}
+            {c.learning.active > 0 ? (
+              <span data-testid="lm-learning-active" className={`${CHIP_BASE} ${TONE.info}`}>
+                {c.learning.active} active
+              </span>
+            ) : null}
+            {c.learning.rejected > 0 ? (
+              <span data-testid="lm-learning-rejected" className={`${CHIP_BASE} ${TONE.bad}`}>
+                {c.learning.rejected} rejected
+              </span>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1" data-testid="lm-memory-row">
+            <span className="w-16 shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground/55">
+              memory
+            </span>
+            <span data-testid="lm-memory-total" className={`${CHIP_BASE} ${TONE.neutral}`}>
+              {c.memory.total} candidates
+            </span>
+            <span data-testid="lm-memory-suggested" className={`${CHIP_BASE} ${TONE.muted}`}>
+              {c.memory.suggested} suggested
+            </span>
+            <span className="text-[9px] text-muted-foreground/45">
+              {c.memory.observed} written (observed)
+            </span>
+          </div>
+
+          {c.evalHealth.reports > 0 ? (
+            <div className="flex flex-wrap items-center gap-1" data-testid="lm-eval-row">
+              <span className="w-16 shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground/55">
+                eval
+              </span>
+              {c.evalHealth.pass > 0 ? (
+                <span data-testid="lm-eval-pass" className={`${CHIP_BASE} ${TONE.good}`}>
+                  {c.evalHealth.pass} pass
+                </span>
+              ) : null}
+              {c.evalHealth.warning > 0 ? (
+                <span data-testid="lm-eval-warning" className={`${CHIP_BASE} ${TONE.warn}`}>
+                  {c.evalHealth.warning} warn
+                </span>
+              ) : null}
+              {c.evalHealth.fail > 0 ? (
+                <span data-testid="lm-eval-fail" className={`${CHIP_BASE} ${TONE.bad}`}>
+                  {c.evalHealth.fail} fail
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )}
     </div>
@@ -2572,6 +2687,7 @@ export function AssistantInbox({
   onSourceScenarioChange,
   patchCandidates,
   runnerTheater,
+  learningMemory,
 }: AssistantInboxProps) {
   const total =
     evidence.length + learningLoops.length + memoryCandidates.length + manifestEntries.length;
@@ -2929,6 +3045,7 @@ export function AssistantInbox({
             <WorkLaneRail lanes={visibleLanes} query={query} category={category} />
           ) : null}
           {runnerTheater ? <RunnerTheaterCard rows={runnerTheater} /> : null}
+          {learningMemory ? <LearningMemoryConsoleCard console={learningMemory} /> : null}
           {mode === "preview" && onSourceScenarioChange ? (
             <SourceDemoDeck scenario={sourceScenario ?? "mixed"} onChange={onSourceScenarioChange} />
           ) : null}

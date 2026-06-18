@@ -8,8 +8,10 @@ import {
 import {
   buildAssistantInboxProps,
   buildAssistantInboxLiveProps,
+  EVAL_REPORTS_FIXTURE,
   type AssistantInboxLiveInput,
 } from "../../lib/assistantInboxProjection";
+import { buildLearningMemoryConsole } from "../../lib/learningMemoryConsole";
 import { readJsonState, writeJsonState } from "../../lib/persistentJsonState";
 import {
   EXAMPLE_SOURCE_SCENARIOS,
@@ -199,6 +201,24 @@ export function AssistantInboxContainer({
     return { runnerTheater: undefined };
   }, [mode, live]);
 
+  // Engine E3 — Learning & Memory console roll-up. Reuses the projected learning
+  // loops + memory candidates already in `props` (PREVIEW=fixture / LIVE=real) and
+  // the eval reports (PREVIEW fixture; LIVE = real manifest eval, honest-empty when
+  // absent). Pure read-only summary — no auto-trust, no runtime load, no write.
+  // REPLAY/SANDBOX → no console (honest empty placeholder seats).
+  const learningMemoryExtras = useMemo(() => {
+    if (mode !== "preview" && mode !== "live") return { learningMemory: undefined };
+    const evalMap =
+      mode === "preview" ? EVAL_REPORTS_FIXTURE : live?.manifest?.evalReportsByRunId ?? {};
+    return {
+      learningMemory: buildLearningMemoryConsole({
+        learningLoops: props.learningLoops,
+        memoryCandidates: props.memoryCandidates,
+        evalReports: Object.values(evalMap),
+      }),
+    };
+  }, [mode, props, live]);
+
   return (
     <div className="nav-center-page" data-page="command_center" data-safe-bottom="true">
       <AssistantInbox
@@ -207,6 +227,7 @@ export function AssistantInboxContainer({
         {...pluginExtras}
         {...patchExtras}
         {...runnerExtras}
+        {...learningMemoryExtras}
         mode={mode}
         onModeChange={setMode}
         persistFilters={persistViewMode}
