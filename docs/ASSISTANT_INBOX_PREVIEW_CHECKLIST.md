@@ -238,6 +238,35 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## E5. Engine — WorkItem Candidates (candidate-only central axis)
+
+Engine batch E5 added the first central axis: a candidate-only WorkItem surface
+derived from the OS's read-only signals. Owner checks:
+
+- [ ] **Card visible** — the inbox shows a "Work Item Candidates" card grouping
+      candidates by urgency lane (now / soon / watch) with kind badge + risk chip.
+- [ ] **Central axis** — candidates derive from real signals: a blocked/warning
+      patch, an attention/stalled runner, an evidence missing-info ask, a memory
+      eval fail / hygiene flag, an error/stale source.
+- [ ] **Candidate-only** — header reads "candidate · read-only · not committed";
+      there is **no** create / launch / commit button.
+- [ ] **LIVE real-only** — with real signals (e.g. a blocked runner) a candidate
+      appears; empty → honest empty ("작업 후보 신호 없음"); PREVIEW example
+      candidates never leak into LIVE.
+- [ ] **Read-only / generic** — display-only (0 buttons), no append/write/dispatch,
+      generic names; passes the no-side-effect invariant.
+
+## E4. Engine — Evidence Draft LIVE input seam
+
+Engine batch E4A lifted the PREVIEW-only Evidence Draft to a LIVE-ready input
+seam (no producer). Owner checks:
+
+- [ ] **PREVIEW** still shows the example footnoted draft.
+- [ ] **LIVE input** — when a draft is passed via `live.evidenceDraft`, the card
+      renders its claims / numbered footnotes / freshness chips / missing-info ask.
+- [ ] **Honest empty** — LIVE with no draft shows no card (no producer exists yet).
+- [ ] **Read-only** — display-only, no send/write/approve; no PREVIEW→LIVE leak.
+
 ## E3. Engine — Learning & Memory Console (read-only)
 
 Engine batch E3 added a read-only roll-up of what the OS learned / distilled and
