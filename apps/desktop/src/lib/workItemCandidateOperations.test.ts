@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { projectWorkItemCandidates, type WorkItemCandidateInput } from "./workItemCandidate";
 import {
+  buildWorkItemCandidateBoardProjection,
   buildWorkItemCandidateOperations,
   type WorkItemCandidateOperations,
 } from "./workItemCandidateOperations";
@@ -195,5 +196,46 @@ describe("E11 — WorkItem Candidate operations projection", () => {
     expect(JSON.stringify(projection).toLowerCase()).not.toMatch(
       /create work item|launch|eventstorage|server write|runner dispatch|patch apply/,
     );
+  });
+
+  it("builds a board projection with shared counts, filters, search, and attention rows", () => {
+    const projection = buildWorkItemCandidateBoardProjection(ops(), {
+      lane: "now",
+      sourceRefs: "present",
+      query: "source",
+    });
+
+    expect(projection.counts.byLane).toMatchObject({ now: 2, soon: 1, watch: 1 });
+    expect(projection.counts.byRisk).toMatchObject({ high: 1, medium: 2, low: 1 });
+    expect(projection.counts.byKind).toMatchObject({
+      patch: 1,
+      runner: 1,
+      evidence: 1,
+      memory: 0,
+      source: 1,
+    });
+    expect(projection.counts.sourceRefCount).toBe(4);
+    expect(projection.counts.evidenceRefCount).toBe(3);
+    expect(projection.visibleRows.map((row) => row.id)).toEqual(["wic-now-missing"]);
+    expect(projection.attentionRows.map((row) => row.id)).toEqual(["wic-now-missing"]);
+  });
+
+  it("sorts board projection rows by title or newest without changing priority order by default", () => {
+    const operationProjection = ops();
+
+    expect(buildWorkItemCandidateBoardProjection(operationProjection).visibleRows.map((row) => row.id)).toEqual([
+      "wic-now-blocked",
+      "wic-now-missing",
+      "wic-soon-review",
+      "wic-watch-ready",
+    ]);
+    expect(
+      buildWorkItemCandidateBoardProjection(operationProjection, { sort: "title" }).visibleRows.map((row) => row.id),
+    ).toEqual(["wic-now-blocked", "wic-now-missing", "wic-watch-ready", "wic-soon-review"]);
+    expect(
+      buildWorkItemCandidateBoardProjection(operationProjection, { sort: "createdAt" }).visibleRows.map(
+        (row) => row.id,
+      ),
+    ).toEqual(["wic-now-missing", "wic-soon-review", "wic-watch-ready", "wic-now-blocked"]);
   });
 });
