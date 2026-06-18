@@ -26,12 +26,7 @@ import {
   type SandboxProposal,
 } from "../../lib/sandboxProposal";
 import { EXAMPLE_SOURCE_PACK, projectSourcePack } from "../../lib/plugins/exampleSourcePack";
-import {
-  EXAMPLE_EVIDENCE_DRAFT,
-  EXAMPLE_DRAFT_NOW_MS,
-  projectEvidenceDraft,
-  type Freshness,
-} from "../../lib/evidenceDraft";
+import type { Freshness, EvidenceDraft } from "../../lib/evidenceDraft";
 import {
   TONE,
   CHIP_BASE,
@@ -214,6 +209,12 @@ export type AssistantInboxProps = {
    * auto-trusts / loads / writes memory.
    */
   learningMemory?: LearningMemoryConsole;
+  /**
+   * Engine E4A — a PROJECTED evidence draft (footnoted). Present → the Evidence
+   * Draft card renders (PREVIEW=example / LIVE=real input, projected upstream).
+   * Absent → no card. Display-only; no external send / write / approve.
+   */
+  evidenceDraft?: EvidenceDraft;
 };
 
 /**
@@ -1030,16 +1031,25 @@ const FRESHNESS_TONE: Record<Freshness, string> = {
 };
 
 /**
- * Batch 24 LINE H — Evidence Draft / Footnote Surface (PREVIEW-only).
+ * Batch 24 LINE H / Engine E4A — Evidence Draft / Footnote Surface.
  *
  * A generic "trustworthy assistant" draft: claims with superscript footnote
  * markers, a numbered footnotes table where each ref carries a freshness chip
  * (fresh / aging / stale / unknown), and a "missing info / ask" slot for any
  * unbacked claim. Display-only — no buttons, no external send, no approve
- * bureaucracy. Projection is pure (fixed example time → deterministic chips).
+ * bureaucracy.
+ *
+ * E4A: renders a PROJECTED draft passed in as a prop (the container projects
+ * PREVIEW=example / LIVE=real input via the pure projectEvidenceDraft). The card
+ * no longer computes its own projection, so it can show a real LIVE draft.
  */
-function EvidenceDraftCard({ cardRef }: { cardRef?: React.Ref<HTMLDivElement> }) {
-  const draft = projectEvidenceDraft(EXAMPLE_EVIDENCE_DRAFT, EXAMPLE_DRAFT_NOW_MS);
+function EvidenceDraftCard({
+  draft,
+  cardRef,
+}: {
+  draft: EvidenceDraft;
+  cardRef?: React.Ref<HTMLDivElement>;
+}) {
   return (
     <div
       ref={cardRef}
@@ -2688,6 +2698,7 @@ export function AssistantInbox({
   patchCandidates,
   runnerTheater,
   learningMemory,
+  evidenceDraft,
 }: AssistantInboxProps) {
   const total =
     evidence.length + learningLoops.length + memoryCandidates.length + manifestEntries.length;
@@ -3050,7 +3061,7 @@ export function AssistantInbox({
             <SourceDemoDeck scenario={sourceScenario ?? "mixed"} onChange={onSourceScenarioChange} />
           ) : null}
           {mode === "preview" ? <SourcePackCard /> : null}
-          {mode === "preview" ? <EvidenceDraftCard cardRef={evidenceDraftRef} /> : null}
+          {evidenceDraft ? <EvidenceDraftCard draft={evidenceDraft} cardRef={evidenceDraftRef} /> : null}
           {hasDock ? (
             <SourceDockQuickControls view={dockView} onChange={setDockView} onJump={jumpToSourceDock} />
           ) : null}
