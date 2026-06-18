@@ -38,8 +38,8 @@ typecheck clean · build green · CI green.
 WorkItemCandidate can now be displayed and linked as a candidate-only OS object. 확정 WorkItem lifecycle(생성/commit/launch)은 아직 없다.
 
 ## 미접촉 / 다음 후보 (engine 큐 — generic only)
-- E6 BATCH F — Control Queue / Launch Key Surface: commit point + candidate→next-step state 표시, launch-key 언어.
-  외부 비가역 action 0, auto send/run/apply 0.
-- E7 Source Pack Intake V2 · E8 Patch Candidate Next-Step Preview · E9 Sandbox Proposal V2.
+- E6은 WorkItem Candidate Detail / Link Graph로 진행 완료(docs/137).
+- 다음 후보는 별도 스코프에서 재번호 지정: Control Queue / Launch Key Surface, Source Pack Intake V2,
+  Patch Candidate Next-Step Preview, Sandbox Proposal V2.
 - 보류: E1 정직한 patch feed(docs/133 — MissionBoard surgery 필요).
 - 한계: 후보는 신호의 read-only 투영일 뿐, 확정 WorkItem lifecycle 없음.
