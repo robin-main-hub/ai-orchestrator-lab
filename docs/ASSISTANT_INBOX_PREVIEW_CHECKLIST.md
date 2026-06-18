@@ -238,6 +238,22 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## E6. Engine — WorkItem Candidate Detail / Link Graph
+
+Engine batch E6 made WorkItemCandidate rows inspectable without creating committed work. Owner checks:
+
+- [ ] **Row opens detail** — click / Enter / Space on a candidate row opens a
+      local detail drawer; the row is scoped `data-action-scope="local-detail"`.
+- [ ] **Candidate fields** — drawer shows id, title, kind, lane, status, risk,
+      reason, observed, createdAt, sourceRefs, evidenceRefs.
+- [ ] **Ref-only graph** — mini graph shows candidate → sourceRefs,
+      candidate → evidenceRefs, candidate → signal(reason/kind); refs are string
+      refs only and marked unresolved.
+- [ ] **Honest empty** — missing refs / missing createdAt render as
+      `none / unknown`, never as resolved objects.
+- [ ] **Candidate-only** — display-only, no create / launch / commit lifecycle,
+      no write/append/send/dispatch/apply controls, PREVIEW/LIVE separation unchanged.
+
 ## E5. Engine — WorkItem Candidates (candidate-only central axis)
 
 Engine batch E5 added the first central axis: a candidate-only WorkItem surface
