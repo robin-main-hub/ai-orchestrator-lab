@@ -74,7 +74,7 @@ export const EXAMPLE_PATCH_CANDIDATES: ReadonlyArray<PatchCandidateInput> = [
     pathPolicyStatus: "pass",
     claimedTests: { ran: true, passed: 5, failed: 0 },
     actualTests: { status: "not_run" },
-    evidenceRefs: [],
+    evidenceRefs: ["source-001"],
   },
   {
     candidateId: "patch-003",
