@@ -238,6 +238,22 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## 26. Batch 26 — Visual Style Pass
+
+Batch 26 unified the inbox's status chips + section shells into a shared style
+token module (purely presentational). Owner checks:
+
+- [ ] **Consistent status chips** — pass/connected/fresh chips are the same green,
+      warn/aging/stale-source the same amber, blocked/error/stale the same red,
+      everywhere they appear (status strip, source dock health, patch summary,
+      sandbox outcome, evidence freshness).
+- [ ] **Freshness chips match** — the Evidence Draft freshness chips no longer look
+      slightly faded vs the rest (the old `/90` opacity was removed).
+- [ ] **Empty states read as "waiting"** — empty sections still show the compact
+      dashed ghost row (not a card, no fake data).
+- [ ] **No regressions** — all surfaces render as before; no new buttons/controls;
+      no domain terms; PREVIEW/LIVE separation unchanged.
+
 ## 25. Batch 25 — Command Palette Power Pass
 
 Batch 25 expanded the inbox command palette with more local-view jump targets and
