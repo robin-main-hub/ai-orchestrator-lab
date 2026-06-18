@@ -31,6 +31,7 @@ import {
   EXAMPLE_DRAFT_NOW_MS,
 } from "../../lib/evidenceDraft";
 import { deriveWorkItemCandidates } from "../../lib/workItemCandidate";
+import { buildMissionOperationsMap } from "../../lib/missionOperations";
 
 /** LINE A — local UI preference key for the remembered seat (no server write). */
 const INBOX_VIEW_MODE_KEY = "ai-orchestrator.inbox-view-mode.v1";
@@ -266,6 +267,28 @@ export function AssistantInboxContainer({
     };
   }, [mode, pluginExtras, patchExtras, runnerExtras, evidenceDraftExtras, learningMemoryExtras, live]);
 
+  // Mission Operations Theater PR2 — one read-only map across the already
+  // projected surfaces. PREVIEW uses only example projections; LIVE uses only
+  // real inputs already present in this container. Empty LIVE stays empty.
+  const missionOperationsExtras = useMemo(() => {
+    if (mode !== "preview" && mode !== "live") return { missionOperations: undefined };
+    const sourceHealth = (pluginExtras.pluginSources ?? []).map((s) => ({
+      pluginId: s.pluginId,
+      health: s.health,
+      generatedAt: s.generatedAt,
+    }));
+    return {
+      missionOperations: buildMissionOperationsMap({
+        runnerTheater: runnerExtras.runnerTheater,
+        patchCandidates: patchExtras.patchCandidates,
+        workItemCandidates: workItemExtras.workItemCandidates,
+        evidenceDraft: evidenceDraftExtras.evidenceDraft,
+        learningMemory: learningMemoryExtras.learningMemory,
+        sourceHealth,
+      }),
+    };
+  }, [mode, pluginExtras, patchExtras, runnerExtras, workItemExtras, evidenceDraftExtras, learningMemoryExtras]);
+
   return (
     <div className="nav-center-page" data-page="command_center" data-safe-bottom="true">
       <AssistantInbox
@@ -277,6 +300,7 @@ export function AssistantInboxContainer({
         {...learningMemoryExtras}
         {...evidenceDraftExtras}
         {...workItemExtras}
+        {...missionOperationsExtras}
         mode={mode}
         onModeChange={setMode}
         persistFilters={persistViewMode}
