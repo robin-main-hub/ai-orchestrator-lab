@@ -489,6 +489,13 @@ export type AssistantInboxLiveInput = {
    * honest empty (no runner sessions observed). Read-only; never starts/dispatches.
    */
   runnerSessions?: ReadonlyArray<import("./runnerTheater").RunnerSessionInput>;
+  /**
+   * Engine E4A — a real, generic evidence DRAFT input for the LIVE Evidence Draft
+   * surface. Absent → no card (honest empty). Projected read-only via
+   * projectEvidenceDraft; never sent / written / approved. No producer exists yet,
+   * so this stays absent in the real app until a draft source is wired.
+   */
+  evidenceDraft?: import("./evidenceDraft").EvidenceDraftInput;
   /** Real learning-loop events (e.g. App eventLog). Filtered to learning types. */
   learningEvents?: ReadonlyArray<{ type: string; payload: unknown }>;
   /** Real persisted project records (H10 useProjectRecordController.records). */
