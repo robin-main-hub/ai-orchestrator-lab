@@ -1426,11 +1426,18 @@ const WIC_RISK_TONE: Record<string, string> = {
  * Engine E5 — WorkItem Candidates: the read-only CENTRAL AXIS over the OS's
  * signals (patch / runner / evidence / memory / source). Each row is a
  * candidate-only object — "the OS sees this as possible work" — NOT committed
- * work. Display-only: no create / launch / commit action, no buttons. Grouped by
+ * work. Display-only: no create / launch / commit action; row selection is
+ * local-detail only. Grouped by
  * urgency lane (now / soon / watch) with a kind badge + risk chip. Honest empty
  * when no signal looks like work.
  */
-function WorkItemCandidatesCard({ rows }: { rows: ReadonlyArray<WorkItemCandidate> }) {
+function WorkItemCandidatesCard({
+  rows,
+  onSelect,
+}: {
+  rows: ReadonlyArray<WorkItemCandidate>;
+  onSelect?: (row: WorkItemCandidate) => void;
+}) {
   const summary = summarizeWorkItemCandidates(rows);
   return (
     <div
@@ -1484,7 +1491,10 @@ function WorkItemCandidatesCard({ rows }: { rows: ReadonlyArray<WorkItemCandidat
                       data-lane={r.lane}
                       data-risk={r.risk}
                       data-status={r.status}
-                      className="flex items-center gap-1.5 text-[10px] text-zinc-300"
+                      className={`flex items-center gap-1.5 text-[10px] text-zinc-300 ${
+                        onSelect ? "cursor-pointer rounded px-1 py-0.5 hover:bg-white/[0.04]" : ""
+                      }`}
+                      {...(onSelect ? rowActivation(() => onSelect(r)) : {})}
                     >
                       <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
                         {r.kind}
@@ -1510,6 +1520,170 @@ function WorkItemCandidatesCard({ rows }: { rows: ReadonlyArray<WorkItemCandidat
         </div>
       )}
     </div>
+  );
+}
+
+const WIC_UNKNOWN = "none / unknown";
+
+type WorkItemCandidateDetailField = [string, string];
+
+function wicValue(value: string | undefined): string {
+  return value && value.trim().length > 0 ? value : WIC_UNKNOWN;
+}
+
+function wicRefs(refs: ReadonlyArray<string>): string {
+  return refs.length > 0 ? refs.join(", ") : WIC_UNKNOWN;
+}
+
+function WorkItemCandidateDetailRow({ k, v }: { k: string; v: string }) {
+  return (
+    <div
+      data-testid={`wic-detail-field-${k}`}
+      data-field={k}
+      className="flex items-start justify-between gap-2 text-[10px]"
+    >
+      <dt className="shrink-0 uppercase tracking-wide text-muted-foreground/60">{k}</dt>
+      <dd className="min-w-0 break-all text-right text-zinc-300">{v}</dd>
+    </div>
+  );
+}
+
+function WorkItemCandidateLinkGraph({ item }: { item: WorkItemCandidate }) {
+  return (
+    <section data-testid="wic-link-graph" className="mt-2 rounded-md border border-white/[0.08] bg-white/[0.02] p-2">
+      <p className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/45">
+        Link graph · ref only
+      </p>
+      <div className="space-y-1 text-[10px] text-zinc-300">
+        <div data-testid="wic-link-node-candidate" className="rounded bg-white/[0.04] px-1.5 py-1">
+          candidate → {item.title}
+        </div>
+        <ul className="space-y-0.5">
+          {item.sourceRefs.length > 0 ? (
+            item.sourceRefs.map((ref, i) => (
+              <li
+                key={`source-${ref}-${i}`}
+                data-testid={`wic-link-source-${i}`}
+                className="flex items-center gap-1.5 text-muted-foreground"
+              >
+                <span className="text-zinc-400">candidate → sourceRef</span>
+                <span className="min-w-0 flex-1 break-all text-zinc-300">{ref}</span>
+                <span className="shrink-0 rounded bg-white/[0.05] px-1 text-[9px] uppercase">unresolved ref</span>
+              </li>
+            ))
+          ) : (
+            <li data-testid="wic-link-source-empty" className="text-muted-foreground/65">
+              candidate → sourceRefs · {WIC_UNKNOWN}
+            </li>
+          )}
+          {item.evidenceRefs.length > 0 ? (
+            item.evidenceRefs.map((ref, i) => (
+              <li
+                key={`evidence-${ref}-${i}`}
+                data-testid={`wic-link-evidence-${i}`}
+                className="flex items-center gap-1.5 text-muted-foreground"
+              >
+                <span className="text-zinc-400">candidate → evidenceRef</span>
+                <span className="min-w-0 flex-1 break-all text-zinc-300">{ref}</span>
+                <span className="shrink-0 rounded bg-white/[0.05] px-1 text-[9px] uppercase">unresolved ref</span>
+              </li>
+            ))
+          ) : (
+            <li data-testid="wic-link-evidence-empty" className="text-muted-foreground/65">
+              candidate → evidenceRefs · {WIC_UNKNOWN}
+            </li>
+          )}
+          <li data-testid="wic-link-reason" className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="text-zinc-400">candidate → signal</span>
+            <span className="min-w-0 flex-1 break-all text-zinc-300">
+              {item.kind} · {item.reason}
+            </span>
+          </li>
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+function WorkItemCandidateDetailDrawer({
+  item,
+  onClose,
+}: {
+  item: WorkItemCandidate | null;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!item) return;
+    const prev = document.activeElement as HTMLElement | null;
+    ref.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      prev?.focus?.();
+    };
+  }, [item, onClose]);
+
+  if (!item) return null;
+
+  const fields: WorkItemCandidateDetailField[] = [
+    ["id", item.id],
+    ["title", item.title],
+    ["kind", item.kind],
+    ["lane", item.lane],
+    ["status", item.status],
+    ["risk", item.risk],
+    ["reason", item.reason],
+    ["observed", String(item.observed)],
+    ["createdAt", wicValue(item.createdAt)],
+    ["sourceRefs", wicRefs(item.sourceRefs)],
+    ["evidenceRefs", wicRefs(item.evidenceRefs)],
+  ];
+
+  return (
+    <aside
+      ref={ref}
+      role="dialog"
+      aria-modal="true"
+      aria-label="work item candidate detail"
+      tabIndex={-1}
+      data-testid="work-item-candidate-detail-drawer"
+      data-kind={item.kind}
+      className="fixed right-3 top-16 z-50 w-80 rounded-lg border border-sky-400/20 bg-zinc-950/95 p-3 shadow-xl outline-none backdrop-blur"
+    >
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Work Item Candidate detail · read-only
+        </span>
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label="닫기"
+          data-action-scope="local-detail"
+          data-testid="wic-detail-close"
+          onClick={onClose}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onClose();
+            }
+          }}
+          className="cursor-pointer rounded px-1 text-xs text-muted-foreground hover:text-zinc-200"
+        >
+          x
+        </div>
+      </div>
+      <dl className="space-y-0.5">
+        {fields.map(([k, v]) => (
+          <WorkItemCandidateDetailRow key={k} k={k} v={v} />
+        ))}
+      </dl>
+      <WorkItemCandidateLinkGraph item={item} />
+    </aside>
   );
 }
 
@@ -2874,6 +3048,9 @@ export function AssistantInbox({
   // Batch 15 LINE E — locally-selected Source Dock row for the read-only drawer.
   const [selectedDetail, setSelectedDetail] = useState<SourceDetailItem | null>(null);
   const closeDetail = useCallback(() => setSelectedDetail(null), []);
+  // Engine E6 — locally-selected WorkItem Candidate row for the read-only drawer.
+  const [selectedWorkItemCandidate, setSelectedWorkItemCandidate] = useState<WorkItemCandidate | null>(null);
+  const closeWorkItemCandidateDetail = useCallback(() => setSelectedWorkItemCandidate(null), []);
   // Batch 16 LINE C — local Source Dock view filter (display-only).
   const [dockView, setDockView] = useState<SourceDockView>(DEFAULT_DOCK_VIEW);
   // Batch 17 LINE D — local patch lane filter (display-only).
@@ -3176,7 +3353,9 @@ export function AssistantInbox({
           {focus !== "warnings" ? (
             <WorkLaneRail lanes={visibleLanes} query={query} category={category} />
           ) : null}
-          {workItemCandidates ? <WorkItemCandidatesCard rows={workItemCandidates} /> : null}
+          {workItemCandidates ? (
+            <WorkItemCandidatesCard rows={workItemCandidates} onSelect={setSelectedWorkItemCandidate} />
+          ) : null}
           {runnerTheater ? <RunnerTheaterCard rows={runnerTheater} /> : null}
           {learningMemory ? <LearningMemoryConsoleCard console={learningMemory} /> : null}
           {mode === "preview" && onSourceScenarioChange ? (
@@ -3202,6 +3381,10 @@ export function AssistantInbox({
             onFilter={setPatchFilter}
           />
           <SourceDetailDrawer item={selectedDetail} onClose={closeDetail} />
+          <WorkItemCandidateDetailDrawer
+            item={selectedWorkItemCandidate}
+            onClose={closeWorkItemCandidateDetail}
+          />
           {showCards ? (
           <CardContent className="grid grid-cols-1 gap-2.5 px-4 lg:grid-cols-2 lg:gap-2.5 xl:gap-3">
         <Section
