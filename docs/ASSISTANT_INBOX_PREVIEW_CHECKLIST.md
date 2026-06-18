@@ -238,6 +238,29 @@ classified event-log activity. Owner preview checks:
 - [ ] **No side-effect command** — no palette/manager control sends/writes/runs/
       approves/dispatches; saved views & view state stay local; SANDBOX inert.
 
+## E10. Engine — WorkItem Candidate Readiness / Confidence
+
+Engine batch E10 (PR #646, merge commit `cd68dbc`) made WorkItemCandidates show
+read-only readiness/confidence without creating committed work. Owner checks:
+
+- [ ] **Board readiness chips** — WorkItem Candidate rows show readiness chips
+      (`ready`, `needs-evidence`, `blocked`, `needs-review`, or `unknown`) with a
+      confidence band.
+- [ ] **Detail readiness section** — opening a candidate detail drawer shows
+      `Readiness / confidence` with reasons, missing refs, risk blockers, and a
+      suggested next inspection target.
+- [ ] **Risk honesty** — high-risk or blocked candidates show `blocked` readiness
+      and risk blockers instead of pretending they are ready.
+- [ ] **Missing refs honesty** — missing source/evidence refs show unknown/missing
+      states and lower confidence.
+- [ ] **Next-step linkage** — E9 next-step preview can reference readiness /
+      confidence, but does not change lifecycle state.
+- [ ] **PREVIEW/LIVE honesty** — PREVIEW fixtures can show example readiness, but
+      LIVE derives only from live candidate/draft inputs and receives no fixture
+      refs.
+- [ ] **Read-only** — no create / launch / commit lifecycle, no write/append/send/
+      dispatch/apply controls, no lifecycle transition.
+
 ## E9. Engine — WorkItem Candidate Next-Step Preview
 
 Engine batch E9 (PR #644, merge commit `0fa9982`) made WorkItemCandidates
