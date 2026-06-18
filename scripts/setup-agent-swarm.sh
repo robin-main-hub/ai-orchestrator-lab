@@ -5,6 +5,9 @@ SESSION_NAME="${AI_SWARM_SESSION:-ai-swarm}"
 STATE_DIR="${AI_SWARM_STATE_DIR:-.ai-swarm}"
 ENV_FILE="${STATE_DIR}/${SESSION_NAME}.env"
 PANE_COUNT="${AI_SWARM_PANE_COUNT:-10}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/swarm-io-common.sh
+source "${SCRIPT_DIR}/swarm-io-common.sh"
 
 roles=(
   discussion
@@ -105,12 +108,10 @@ if ! [[ "$PANE_COUNT" =~ ^[0-9]+$ ]] || (( PANE_COUNT < 4 || PANE_COUNT > 10 ));
   exit 2
 fi
 
-if ! command -v tmux >/dev/null 2>&1; then
-  echo "tmux is not installed or not on PATH." >&2
-  exit 127
-fi
+require_tmux
 
 mkdir -p "$STATE_DIR"
+acquire_lock
 
 if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
   if [[ "$reset_existing" != true ]]; then
