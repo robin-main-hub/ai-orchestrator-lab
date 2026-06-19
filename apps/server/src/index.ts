@@ -5659,36 +5659,54 @@ export function pushEventsToServerStorage(
 
     const storageEvent = redactEventForServerStorage(event);
     const existingEvent = state.eventsById.get(event.id);
-    if (!existingEvent) {
-      state.revision += 1;
-      state.eventsById.set(event.id, storageEvent);
-      state.eventRevisionsById.set(event.id, state.revision);
-      const sessionEvents = state.eventsBySession.get(storageEvent.sessionId) ?? [];
-      sessionEvents.push(storageEvent.id);
-      state.eventsBySession.set(storageEvent.sessionId, sessionEvents);
-      state.lastStoredAt = now;
+    if (existingEvent) {
+      const existingRevision = state.eventRevisionsById.get(event.id) ?? state.revision;
+      if (fingerprintEvent(existingEvent) === fingerprintEvent(storageEvent)) {
+        return {
+          eventId: event.id,
+          status: "duplicate" as const,
+          serverRevision: existingRevision,
+        };
+      }
 
       return {
         eventId: event.id,
-        status: "accepted" as const,
-        serverRevision: state.revision,
-      };
-    }
-
-    const existingRevision = state.eventRevisionsById.get(event.id) ?? state.revision;
-    if (fingerprintEvent(existingEvent) === fingerprintEvent(storageEvent)) {
-      return {
-        eventId: event.id,
-        status: "duplicate" as const,
+        status: "conflict" as const,
         serverRevision: existingRevision,
+        reason: "same_event_id_different_payload",
       };
     }
+
+    const existingLogicalEvent = findExistingLogicalEvent(storageEvent, state);
+    if (existingLogicalEvent) {
+      if (fingerprintLogicalEventContent(existingLogicalEvent.event) === fingerprintLogicalEventContent(storageEvent)) {
+        return {
+          eventId: event.id,
+          status: "duplicate" as const,
+          serverRevision: existingLogicalEvent.revision,
+        };
+      }
+
+      return {
+        eventId: event.id,
+        status: "conflict" as const,
+        serverRevision: existingLogicalEvent.revision,
+        reason: "same_logical_event_different_payload",
+      };
+    }
+
+    state.revision += 1;
+    state.eventsById.set(event.id, storageEvent);
+    state.eventRevisionsById.set(event.id, state.revision);
+    const sessionEvents = state.eventsBySession.get(storageEvent.sessionId) ?? [];
+    sessionEvents.push(storageEvent.id);
+    state.eventsBySession.set(storageEvent.sessionId, sessionEvents);
+    state.lastStoredAt = now;
 
     return {
       eventId: event.id,
-      status: "conflict" as const,
-      serverRevision: existingRevision,
-      reason: "same_event_id_different_payload",
+      status: "accepted" as const,
+      serverRevision: state.revision,
     };
   });
 
@@ -5709,6 +5727,63 @@ export function pushEventsToServerStorage(
 function redactEventForServerStorage(event: EventEnvelope): EventEnvelope {
   const result = redactForServerPhase(event, "pre_store");
   return result.report.redacted ? { ...result.value, redacted: true } : result.value;
+}
+
+function findExistingLogicalEvent(
+  event: EventEnvelope,
+  state: ServerEventStorageState,
+): { event: EventEnvelope; revision: number } | undefined {
+  const logicalKey = getEventLogicalKey(event);
+  if (!logicalKey) {
+    return undefined;
+  }
+
+  for (const eventId of state.eventsBySession.get(event.sessionId) ?? []) {
+    if (eventId === event.id) {
+      continue;
+    }
+
+    const existingEvent = state.eventsById.get(eventId);
+    if (!existingEvent || getEventLogicalKey(existingEvent) !== logicalKey) {
+      continue;
+    }
+
+    return {
+      event: existingEvent,
+      revision: state.eventRevisionsById.get(existingEvent.id) ?? state.revision,
+    };
+  }
+
+  return undefined;
+}
+
+function getEventLogicalKey(event: EventEnvelope): string | undefined {
+  if (event.type !== "conversation.message.created") {
+    return undefined;
+  }
+
+  const payload = event.payload;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return undefined;
+  }
+
+  const messageId = (payload as Record<string, unknown>).messageId;
+  if (typeof messageId !== "string" || messageId.trim().length === 0) {
+    return undefined;
+  }
+
+  return `${event.sessionId}:${event.type}:${messageId.trim()}`;
+}
+
+function fingerprintLogicalEventContent(event: EventEnvelope): string {
+  return fingerprintEvent({
+    payload: event.payload,
+    redacted: event.redacted,
+    sessionId: event.sessionId,
+    source: event.source,
+    sourceTrust: event.sourceTrust,
+    type: event.type,
+  });
 }
 
 function isServerOwnedApprovalEventType(eventType: string): boolean {
