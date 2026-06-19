@@ -71,3 +71,79 @@ describe("EvolveMemento memory views", () => {
     );
   });
 });
+
+// Characterization tests for previously-uncovered memory-view branches (no
+// behavior change, no network, no secret). These pin: the lexical guard
+// returns (empty query / empty records / k<=0), the no-keyword
+// title/content/tags fallback plus the rawScore>0 drop, the lexical tie-break
+// (equal score → recordId ascending) and k slice, the metadata k<=0 guard with
+// missing persons/entities defaulting to empty and zero-intersection drop, and
+// the rrfFuse default k=60 ordering with a recordId tie-break.
+describe("memoryViews — retrieval projection characterization", () => {
+  it("returns no lexical results for empty query, empty records, or non-positive k", () => {
+    expect(lexicalView("", [record("a", { keywords: ["x"] })], 5)).toEqual([]);
+    expect(lexicalView("x", [], 5)).toEqual([]);
+    expect(lexicalView("x", [record("a", { keywords: ["x"] })], 0)).toEqual([]);
+  });
+
+  it("falls back to title/content/tags tokens when a record has no keywords and drops non-matches", () => {
+    const results = lexicalView(
+      "dgx authority",
+      [
+        record("alpha", { content: "authority note", tags: ["dgx", "server"] }),
+        record("beta", { content: "mobile backup only" }),
+      ],
+      5,
+    );
+
+    expect(results.map((result) => result.recordId)).toEqual(["alpha"]);
+    expect(results[0]?.rank).toBe(1);
+  });
+
+  it("breaks lexical score ties by recordId ascending and honors the k slice", () => {
+    const ordered = lexicalView(
+      "term",
+      [record("b-second", { keywords: ["term"] }), record("a-first", { keywords: ["term"] })],
+      5,
+    );
+    expect(ordered.map((result) => result.recordId)).toEqual(["a-first", "b-second"]);
+
+    const limited = lexicalView(
+      "term",
+      [record("b-second", { keywords: ["term"] }), record("a-first", { keywords: ["term"] })],
+      1,
+    );
+    expect(limited.map((result) => result.recordId)).toEqual(["a-first"]);
+  });
+
+  it("guards metadata on non-positive k and drops zero-intersection records with empty defaults", () => {
+    expect(
+      metadataView("q", [record("a", { persons: ["X"] })], 0, { persons: ["X"], entities: [] }),
+    ).toEqual([]);
+
+    const results = metadataView(
+      "q",
+      [record("match", { persons: ["Alice"] }), record("nomatch", {})],
+      5,
+      { persons: ["Alice"], entities: [] },
+    );
+
+    expect(results.map((result) => result.recordId)).toEqual(["match"]);
+  });
+
+  it("applies the default k=60 in RRF fusion and tie-breaks equal scores by recordId", () => {
+    const byRank = rrfFuse([
+      [{ recordId: "low", rank: 5, rawScore: 1, view: "lexical" }],
+      [{ recordId: "high", rank: 1, rawScore: 1, view: "lexical" }],
+    ]);
+    expect(byRank.map((result) => result.recordId)).toEqual(["high", "low"]);
+    expect(byRank[0]?.fusedScore).toBeCloseTo(1 / 61);
+    expect(byRank[1]?.fusedScore).toBeCloseTo(1 / 65);
+
+    const tied = rrfFuse([
+      [{ recordId: "z", rank: 1, rawScore: 1, view: "lexical" }],
+      [{ recordId: "a", rank: 1, rawScore: 1, view: "lexical" }],
+    ]);
+    expect(tied.map((result) => result.recordId)).toEqual(["a", "z"]);
+  });
+});
