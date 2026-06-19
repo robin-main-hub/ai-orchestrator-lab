@@ -598,6 +598,31 @@ Owner checks:
       assertNoSideEffectActionControls.
 - [ ] **Honest** — every outcome is labelled simulated; nothing is executed.
 
+## P2 — Offline Outbox / Conflict Resolver Audit + Guard Tests
+
+P2 hardened the reconnect/replay boundary around desktop outbox and server
+EventStorage sync. Owner checks:
+
+- [ ] **Logical duplicate guard** — `conversation.message.created` events with
+      the same `sessionId + type + payload.messageId` and same logical content are
+      returned as `duplicate` even when reconnect uses a new local `event.id`.
+- [ ] **Logical conflict surfaced** — same logical message with changed content is
+      returned as `conflict` with `same_logical_event_different_payload`, not
+      accepted as a second durable event.
+- [ ] **Durable append stays single** — persistent JSONL append stores only the
+      first accepted event for same logical replay; duplicate responses do not add
+      another durable record.
+- [ ] **Client outbox review boundary** — Stage14 treats `duplicate` as synced but
+      keeps `conflict` responses queued with a conflict-review error.
+- [ ] **Redaction continuity** — P1 server pre-store redaction and Stage29 local
+      cache redaction remain intact; sync/replay tests do not introduce raw secret
+      material.
+- [ ] **Safety boundary** — no full semantic resolver; no DB migration; no server
+      route change; no destructive cleanup; no silent drop; no runner dispatch /
+      patch apply / external send.
+- [ ] **Verification note** — PR #670 merged at `e08bc1d`; build/test, secret scan,
+      Vercel, protocol/server/desktop tests, typecheck, build, and diff check passed.
+
 ## P1 — Permission / Redaction Boundary Simulation
 
 P1 hardened the SecretRef / fallback key / EventStorage sync/outbox boundary.
