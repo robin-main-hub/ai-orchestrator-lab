@@ -180,6 +180,102 @@ describe("stage33 tmux server runtime", () => {
   });
 });
 
+// Characterization tests for previously-uncovered stage33 tmux-server transport
+// branches (no behavior change, no real network, no secret). These pin the
+// authority-adjacent remote-execution dispatch seam: a 403 is treated as a
+// permission-required body (parsed and returned, not thrown, no failover), a
+// non-403 non-ok status falls through to the next base URL, an all-endpoints-
+// failed aggregate joins each base URL's error with " | ", and the non-ok error
+// message truncates the response body to 180 chars.
+describe("stage33 tmux server — transport carve-out characterization", () => {
+  const lanBase = "http://dgx-02:4317";
+  const publicBase = "https://orchestrator.endruin.com";
+
+  it("treats a 403 as a permission-required body, returning it without failover", async () => {
+    const calls: string[] = [];
+    const result = await requestTmuxDispatch({
+      serverBaseUrl: [lanBase, publicBase],
+      request: {
+        id: "tmux_dispatch_403",
+        sessionId: "session_desktop_001",
+        role: "architect",
+        commandPreview: "pnpm typecheck",
+        dispatchMode: "execute_if_approved",
+      },
+      fetchImpl: async (url) => {
+        calls.push(String(url));
+        return jsonResponse(
+          {
+            intent: { id: "tmux_dispatch_403" },
+            permission: {
+              decision: "approval_required",
+              requestedLevels: ["run_safe_commands"],
+              reason: "tmux dispatch requires explicit approval before send-keys can run",
+            },
+            dispatch: {
+              attempted: false,
+              status: "pending_approval",
+              reason: "tmux dispatch recorded and queued for approval",
+            },
+          },
+          403,
+        );
+      },
+    });
+
+    // 403 is parsed, not thrown — the second base URL is never contacted
+    expect(calls).toEqual([`${lanBase}/tmux/dispatch`]);
+    expect(result.permission.decision).toBe("approval_required");
+    expect(result.dispatch.status).toBe("pending_approval");
+  });
+
+  it("falls through to the next base URL when the first returns a non-403 non-ok status", async () => {
+    const calls: string[] = [];
+    const result = await requestTmuxCapture({
+      serverBaseUrl: [lanBase, publicBase],
+      request: { id: "tmux_capture_500", sessionId: "session_desktop_001", role: "status" },
+      fetchImpl: async (url) => {
+        calls.push(String(url));
+        if (calls.length === 1) {
+          return jsonResponse({ error: "upstream draining" }, 503);
+        }
+        return jsonResponse({ status: "disabled", reason: "capture disabled" });
+      },
+    });
+
+    expect(calls).toEqual([`${lanBase}/tmux/capture`, `${publicBase}/tmux/capture`]);
+    expect(result.status).toBe("disabled");
+  });
+
+  it("aggregates every base URL's failure with a ' | ' separator when all endpoints fail", async () => {
+    const error = (await requestTmuxCapture({
+      serverBaseUrl: [lanBase, publicBase],
+      request: { id: "tmux_capture_all_fail", sessionId: "session_desktop_001", role: "status" },
+      fetchImpl: async () => jsonResponse({ error: "boom" }, 500),
+    }).catch((caught) => caught)) as Error;
+
+    expect(error.message).toContain(`${lanBase}:`);
+    expect(error.message).toContain(`${publicBase}:`);
+    expect(error.message).toContain(" | ");
+    expect(error.message).toContain("failed: 500");
+  });
+
+  it("truncates the response body to 180 chars in the non-ok error message", async () => {
+    // body far longer than 180 chars; the marker sits well past the cut point
+    const longBody = `${"T".repeat(250)}AFTER_CUT_MARKER`;
+    const error = (await requestTmuxCapture({
+      serverBaseUrl: [lanBase],
+      request: { id: "tmux_capture_long_err", sessionId: "session_desktop_001", role: "status" },
+      fetchImpl: async () => jsonResponse(longBody, 500),
+    }).catch((caught) => caught)) as Error;
+
+    expect(error.message).toContain("failed: 500");
+    // a long run of the leading body survives, but the post-180 marker is dropped
+    expect(error.message).toContain("T".repeat(170));
+    expect(error.message).not.toContain("AFTER_CUT_MARKER");
+  });
+});
+
 function jsonResponse(payload: unknown, status = 200): Response {
   return {
     ok: status >= 200 && status < 300,
