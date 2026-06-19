@@ -111,3 +111,69 @@ describe("stage32 DGX route diagnostics", () => {
     expect(snapshot.routes[0]?.health.status).toBe("crypto_error");
   });
 });
+
+// Characterization tests for previously-uncovered stage32 route-diagnostics
+// branches (no behavior change, no real network, no secret). These pin the
+// authority-adjacent DGX route-probe seam: the 180-char bodyPreview cap, the
+// readResponsePreview catch that yields an empty preview when text() throws,
+// secret/path redaction on the error field (not just bodyPreview), and the
+// non-Error thrown-value path that stringifies the rejection.
+describe("stage32 DGX route diagnostics — probe edge characterization", () => {
+  it("caps the redacted body preview at 180 characters", async () => {
+    const snapshot = await probeDgxProviderRoutes({
+      fetchImpl: async () => new Response("a".repeat(300), { status: 200 }),
+      serverBaseUrl: "http://dgx-02:4317",
+    });
+
+    expect(snapshot.routes[0]?.health.status).toBe("ok");
+    expect(snapshot.routes[0]?.health.bodyPreview).toBe("a".repeat(180));
+  });
+
+  it("yields an empty preview when reading the response body throws", async () => {
+    const brokenResponse = {
+      ok: true,
+      status: 200,
+      async text() {
+        throw new Error("stream broken");
+      },
+    } as unknown as Response;
+
+    const snapshot = await probeDgxProviderRoutes({
+      fetchImpl: async () => brokenResponse,
+      serverBaseUrl: "http://dgx-02:4317",
+    });
+
+    expect(snapshot.routes[0]?.health.status).toBe("ok");
+    expect(snapshot.routes[0]?.health.httpStatus).toBe(200);
+    expect(snapshot.routes[0]?.health.bodyPreview).toBe("");
+  });
+
+  it("redacts secret-like and path-like fragments inside the error field", async () => {
+    const snapshot = await probeDgxProviderRoutes({
+      fetchImpl: async () => {
+        throw new Error("connect failed using sk-route-secret-token at /Users/robin/.config/provider");
+      },
+      serverBaseUrl: "http://dgx-02:4317",
+    });
+
+    const error = snapshot.routes[0]?.health.error ?? "";
+    expect(snapshot.routes[0]?.health.status).toBe("network_error");
+    expect(error).toContain("[redacted-secret]");
+    expect(error).toContain("[redacted-path]");
+    expect(error).not.toContain("sk-route-secret-token");
+    expect(error).not.toContain("/Users/robin");
+  });
+
+  it("stringifies a non-Error rejection on the network-error path", async () => {
+    const snapshot = await probeDgxProviderRoutes({
+      fetchImpl: async () => {
+        // a thrown non-Error value (string) exercises formatRouteError's String() branch
+        throw "raw string failure";
+      },
+      serverBaseUrl: "http://dgx-02:4317",
+    });
+
+    expect(snapshot.routes[0]?.health.status).toBe("network_error");
+    expect(snapshot.routes[0]?.health.error).toBe("raw string failure");
+  });
+});
