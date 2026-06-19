@@ -60,7 +60,7 @@ export function createLocalClientEventCache(
 
   return {
     async append(event) {
-      save([{ event, projectedTo: {} }, ...load()]);
+      save([{ event: redactEventForLocalCache(event), projectedTo: {} }, ...load()]);
     },
     async listBySession(sessionId) {
       return load()
@@ -91,6 +91,69 @@ export function createLocalClientEventCache(
         ),
       );
     },
+  };
+}
+
+const LOCAL_SECRET_REDACTION = "[REDACTED:secret]";
+
+const LOCAL_SECRET_LIKE_PATTERNS: ReadonlyArray<RegExp> = [
+  /\bsk-[A-Za-z0-9_-]{16,}\b/g,
+  /\b(?:claude|anthropic|grok|xai|deepseek|ghp|gho|ghs|ghr|ghu|glpat|pat)[-_][A-Za-z0-9_-]{16,}\b/gi,
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b/gi,
+  /\b(?:API_KEY|AUTH_TOKEN|SECRET|TOKEN|PASSWORD|PRIVATE_KEY)\s*[:=]\s*[^"'\s,}]{4,}/gi,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/g,
+];
+
+const LOCAL_SENSITIVE_KEY_PATTERN =
+  /^(api[-_]?key|auth[-_]?header|authorization|bearer|cookie|password|secret|access[-_]?token|refresh[-_]?token|session[-_]?token|private[-_]?key)$/i;
+
+function redactEventForLocalCache(event: EventEnvelope): EventEnvelope {
+  const result = redactLocalUnknown(event) as { value: EventEnvelope; redacted: boolean };
+  return result.redacted ? { ...result.value, redacted: true } : result.value;
+}
+
+function redactLocalUnknown(value: unknown, keyHint?: string): { value: unknown; redacted: boolean } {
+  if (typeof value === "string") {
+    return redactLocalString(value);
+  }
+
+  if (Array.isArray(value)) {
+    let redacted = false;
+    const entries = value.map((entry) => {
+      const result = redactLocalUnknown(entry);
+      redacted ||= result.redacted;
+      return result.value;
+    });
+    return { value: entries, redacted };
+  }
+
+  if (!value || typeof value !== "object") {
+    return { value, redacted: false };
+  }
+
+  let redacted = false;
+  const entries = Object.entries(value as Record<string, unknown>).map(([key, entry]) => {
+    if (LOCAL_SENSITIVE_KEY_PATTERN.test(key) || (keyHint && LOCAL_SENSITIVE_KEY_PATTERN.test(keyHint))) {
+      redacted ||= entry !== LOCAL_SECRET_REDACTION;
+      return [key, LOCAL_SECRET_REDACTION];
+    }
+
+    const result = redactLocalUnknown(entry, key);
+    redacted ||= result.redacted;
+    return [key, result.value];
+  });
+
+  return { value: Object.fromEntries(entries), redacted };
+}
+
+function redactLocalString(value: string): { value: string; redacted: boolean } {
+  let redacted = value;
+  for (const pattern of LOCAL_SECRET_LIKE_PATTERNS) {
+    redacted = redacted.replace(pattern, LOCAL_SECRET_REDACTION);
+  }
+  return {
+    value: redacted,
+    redacted: redacted !== value,
   };
 }
 

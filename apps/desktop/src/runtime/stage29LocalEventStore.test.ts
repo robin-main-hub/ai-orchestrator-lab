@@ -67,6 +67,42 @@ describe("stage29 local client event cache", () => {
     expect(await secondStore.listUnsynced()).toHaveLength(0);
   });
 
+  it("redacts secret-like local outbox payloads before browser storage persistence", async () => {
+    const memoryStorage = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => memoryStorage.get(key) ?? null,
+      setItem: (key: string, value: string) => memoryStorage.set(key, value),
+    };
+    const event: EventEnvelope = {
+      id: "event_local_secret_redaction",
+      sessionId: "session_desktop_001",
+      type: "provider.profile.imported",
+      payload: {
+        apiKey: "fake-test-sensitive-value",
+        label: "kept provider label",
+        note: "Bearer fake-token-for-redaction",
+      },
+      createdAt: "2026-05-24T00:03:00.000Z",
+      source: "desktop",
+      sourceTrust: "trusted",
+      redacted: false,
+    };
+
+    const store = createLocalClientEventCache(storage);
+    await store.append(event);
+
+    const storedText = [...memoryStorage.values()].join("\n");
+    const unsynced = await store.listUnsynced();
+    const payload = unsynced[0]?.payload as { apiKey?: string; label?: string; note?: string } | undefined;
+
+    expect(storedText).not.toContain("fake-test-sensitive-value");
+    expect(storedText).not.toContain("fake-token-for-redaction");
+    expect(payload?.apiKey).toBe("[REDACTED:secret]");
+    expect(payload?.note).toBe("[REDACTED:secret]");
+    expect(payload?.label).toBe("kept provider label");
+    expect(unsynced[0]?.redacted).toBe(true);
+  });
+
   it("falls back to in-memory cache when browser storage quota is exhausted", async () => {
     const storage = {
       getItem: () => null,

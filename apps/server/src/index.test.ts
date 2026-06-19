@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { createHash, createHmac } from "node:crypto";
 import type { IncomingMessage } from "node:http";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -1685,6 +1685,102 @@ describe("server health placeholder", () => {
 
     expect(response.failed).toBe(1);
     expect(response.results[0]?.reason).toBe("raw_secret_pattern_detected");
+  });
+
+  it("redacts sensitive-key Event Storage payloads before durable and sync exposure", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-redaction-boundary-"));
+    try {
+      const storage = createJsonlServerEventStorage(tempDir);
+      const event = {
+        id: "event_sensitive_key_redaction",
+        sessionId: "session_redaction_boundary",
+        type: "provider.profile.imported",
+        payload: {
+          apiKey: "fake-test-sensitive-value",
+          apiKeyRef: "secret_ref_provider_key",
+          label: "kept provider label",
+          nested: {
+            authHeader: "fake-test-auth-header",
+            nonSecret: "preserve me",
+            secretRef: {
+              id: "secret_ref_nested",
+              label: "Nested key",
+              redactedPreview: "[REDACTED:secret]",
+            },
+          },
+        },
+        createdAt: "2026-05-24T00:00:00.000Z",
+        source: "desktop" as const,
+        sourceTrust: "trusted" as const,
+        redacted: false,
+      };
+
+      const response = await pushEventsToPersistentServerStorage(
+        {
+          id: "sync_request_sensitive_key_redaction",
+          clientId: "client_macbook",
+          sessionId: event.sessionId,
+          events: [event],
+          idempotencyKey: "client_macbook:session_redaction_boundary:event_sensitive_key_redaction",
+          createdAt: event.createdAt,
+        },
+        storage,
+        event.createdAt,
+      );
+      const jsonl = await readFile(storage.eventLogPath, "utf8");
+      const pulled = await pullEventsFromPersistentServerStorage(event.sessionId, storage, event.createdAt);
+      const pulledPayload = pulled.events[0]?.payload as {
+        apiKey?: string;
+        apiKeyRef?: string;
+        label?: string;
+        nested?: {
+          authHeader?: string;
+          nonSecret?: string;
+          secretRef?: { id?: string; label?: string; redactedPreview?: string };
+        };
+      } | undefined;
+
+      expect(response.accepted).toBe(1);
+      expect(jsonl).not.toContain("fake-test-sensitive-value");
+      expect(jsonl).not.toContain("fake-test-auth-header");
+      expect(jsonl).toContain("<redacted:secret_ref_only>");
+      expect(pulled.events[0]?.redacted).toBe(true);
+      expect(pulledPayload?.apiKey).toBe("<redacted:secret_ref_only>");
+      expect(pulledPayload?.apiKeyRef).toBe("secret_ref_provider_key");
+      expect(pulledPayload?.label).toBe("kept provider label");
+      expect(pulledPayload?.nested?.authHeader).toBe("<redacted:secret_ref_only>");
+      expect(pulledPayload?.nested?.nonSecret).toBe("preserve me");
+      expect(pulledPayload?.nested?.secretRef).toEqual({
+        id: "secret_ref_nested",
+        label: "Nested key",
+        redactedPreview: "[REDACTED:secret]",
+      });
+    } finally {
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps server redaction idempotent while preserving non-secret fields", () => {
+    const event = {
+      id: "event_redaction_idempotent",
+      sessionId: "session_redaction_boundary",
+      type: "provider.profile.imported",
+      payload: {
+        password: "fake-test-password",
+        label: "kept label",
+      },
+      createdAt: "2026-05-24T00:00:00.000Z",
+      source: "desktop" as const,
+      sourceTrust: "trusted" as const,
+      redacted: false,
+    };
+
+    const first = redactForServerPhase(event, "pre_store").value;
+    const second = redactForServerPhase(first, "pre_store").value;
+
+    expect(second).toEqual(first);
+    expect((second.payload as { password?: string; label?: string }).password).toBe("<redacted:secret_ref_only>");
+    expect((second.payload as { password?: string; label?: string }).label).toBe("kept label");
   });
 });
 
@@ -4597,6 +4693,49 @@ describe("HTTP request limits", () => {
   });
 
   describe("HMAC-SHA256 Request Signing Authentication", () => {
+    it("rejects fallback and example orchestrator tokens in production", async () => {
+      const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+      const previousNodeEnv = process.env.NODE_ENV;
+      const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+      const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-hmac-token-boundary-"));
+      process.env.NODE_ENV = "production";
+      process.env.EVENT_STORAGE_DIR = tempDir;
+
+      try {
+        for (const token of ["dev-orchestrator-token", "replace-with-strong-random-token"]) {
+          let server: ReturnType<typeof startServer> | undefined;
+          process.env.ORCHESTRATOR_API_TOKEN = token;
+
+          try {
+            expect(() => {
+              server = startServer(0);
+            }).toThrow(/ORCHESTRATOR_API_TOKEN/);
+          } finally {
+            if (server) {
+              await new Promise<void>((resolve) => server?.close(() => resolve()));
+            }
+          }
+        }
+      } finally {
+        if (previousToken === undefined) {
+          delete process.env.ORCHESTRATOR_API_TOKEN;
+        } else {
+          process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+        }
+        if (previousNodeEnv === undefined) {
+          delete process.env.NODE_ENV;
+        } else {
+          process.env.NODE_ENV = previousNodeEnv;
+        }
+        if (previousEventStorageDir === undefined) {
+          delete process.env.EVENT_STORAGE_DIR;
+        } else {
+          process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+        }
+        await rm(tempDir, { force: true, recursive: true });
+      }
+    });
+
     it("authorizes request with valid signature headers and rejects drift/replay/invalid signatures", async () => {
       const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
       const previousNodeEnv = process.env.NODE_ENV;
