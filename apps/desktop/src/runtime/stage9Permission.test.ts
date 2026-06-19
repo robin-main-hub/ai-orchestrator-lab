@@ -362,3 +362,115 @@ describe("stage9 permission matrix", () => {
     );
   });
 });
+
+// Characterization tests for previously-uncovered evaluatePermissionGate branches
+// (no behavior change, no network, no secret). These pin the common permission
+// gate's default-state and default-reason decision tree at the authority
+// boundary: an explicit `state` overriding the computed default, the read-only
+// not_required allow path, the unknown_external_effect deny, the untrusted
+// external-channel approval-required path, the mobile secret_access rejection,
+// and the required-reason text that joins requested levels.
+describe("stage9 permission gate — default-state & reason characterization", () => {
+  const base = {
+    sessionId: "session_gate_char",
+    subjectId: "subject_a",
+    channel: "agent" as const,
+    createdAt,
+  };
+
+  it("honors an explicit state, overriding the computed default for a privileged level", () => {
+    const result = evaluatePermissionGate({
+      ...base,
+      actor: "agent",
+      sourceTrust: "trusted",
+      action: "terminal_run",
+      requestedLevels: ["run_safe_commands"],
+      state: "approved",
+    });
+
+    expect(result.item.state).toBe("approved");
+    expect(result.allowed).toBe(true);
+    expect(result.requiresApproval).toBe(false);
+    expect(result.denied).toBe(false);
+    expect(result.queueItem).toBeUndefined();
+  });
+
+  it("allows a read-only agent action with the default not_required reason", () => {
+    const result = evaluatePermissionGate({
+      ...base,
+      actor: "agent",
+      sourceTrust: "trusted",
+      action: "conversation_reply",
+      requestedLevels: ["read_only"],
+    });
+
+    expect(result.item.state).toBe("not_required");
+    expect(result.allowed).toBe(true);
+    expect(result.queueItem).toBeUndefined();
+    expect(result.item.reason).toBe("권한 게이트가 이 작업을 허용합니다");
+  });
+
+  it("denies an unknown external effect at the gate regardless of state", () => {
+    const result = evaluatePermissionGate({
+      ...base,
+      actor: "external_channel",
+      channel: "external_legacy",
+      sourceTrust: "limited",
+      action: "unknown_external_effect",
+      requestedLevels: [],
+    });
+
+    expect(result.item.state).toBe("rejected");
+    expect(result.denied).toBe(true);
+    expect(result.queueItem).toBeUndefined();
+    expect(result.item.reason).toBe("알 수 없는 외부 효과는 기본 차단됩니다");
+  });
+
+  it("routes an untrusted external channel to approval with the untrusted-source reason", () => {
+    const result = evaluatePermissionGate({
+      ...base,
+      actor: "external_channel",
+      channel: "external_legacy",
+      sourceTrust: "untrusted",
+      action: "external_message_send",
+      requestedLevels: ["read_only"],
+    });
+
+    expect(result.item.state).toBe("required");
+    expect(result.requiresApproval).toBe(true);
+    expect(result.queueItem?.sourceItemId).toBe(result.item.id);
+    expect(result.item.reason).toBe("신뢰되지 않은 외부 출처는 명시적 승인을 거쳐야 합니다");
+  });
+
+  it("rejects mobile secret access with the mobile-boundary reason", () => {
+    const result = evaluatePermissionGate({
+      ...base,
+      actor: "mobile",
+      channel: "mobile",
+      sourceTrust: "limited",
+      action: "secret_view",
+      requestedLevels: ["secret_access"],
+    });
+
+    expect(result.item.state).toBe("rejected");
+    expect(result.denied).toBe(true);
+    expect(result.queueItem).toBeUndefined();
+    expect(result.item.reason).toBe("모바일에서는 비밀·위험 터미널 작업을 할 수 없습니다");
+  });
+
+  it("requires approval for a privileged level and names the requested levels in the reason", () => {
+    const result = evaluatePermissionGate({
+      ...base,
+      actor: "agent",
+      sourceTrust: "trusted",
+      action: "file_write",
+      requestedLevels: ["write_files"],
+    });
+
+    expect(result.item.state).toBe("required");
+    expect(result.requiresApproval).toBe(true);
+    expect(result.item.reason).toContain("write_files");
+    expect(result.item.reason).toContain("권한 승인이 필요합니다");
+    expect(result.queueItem?.permissions).toEqual(["write_files"]);
+  });
+});
