@@ -129,3 +129,79 @@ describe("projectRuntimeHealth", () => {
     expect(JSON.stringify(snapshot)).toBe(frozen);
   });
 });
+
+// Characterization tests for the previously-uncovered severity-ordering and
+// staleness-boundary branches (no behavior change). The existing suite pins the
+// G1/G2/G3 honesty guards but leaves these subtler interactions unpinned: that
+// `unknown` (severity 1) never masks a real degraded/offline fault, that the
+// stale -> degraded downgrade applies ONLY to a `healthy` rollup (an `unknown`
+// rollup stays unknown), the DEFAULT 5-minute staleness threshold and its
+// strict `>` boundary, recentError+stale reason ordering, and the dgx/local/
+// memory subsystem ordering with raw passthrough. All pure, clock injected.
+describe("runtimeHealthProjection — severity & staleness boundary characterization", () => {
+  it("does not let an unknown subsystem mask a coexisting degraded fault", () => {
+    const result = projectRuntimeHealth(
+      makeSnapshot({ dgxStatus: "weird" as RuntimeSnapshot["dgxStatus"], memorySyncStatus: "degraded" }),
+      { now: FIXED_NOW },
+    );
+
+    expect(result.level).toBe("degraded");
+    expect(result.reasons).toContain("DGX 상태 미상");
+    expect(result.reasons).toContain("기억 degraded");
+  });
+
+  it("keeps an unknown rollup unknown under staleness (downgrade only fires on healthy)", () => {
+    const result = projectRuntimeHealth(
+      makeSnapshot({ dgxStatus: "weird" as RuntimeSnapshot["dgxStatus"], updatedAt: "2026-06-18T00:00:00.000Z" }),
+      { now: FIXED_NOW, stalenessThresholdMs: 60_000 },
+    );
+
+    expect(result.stale).toBe(true);
+    expect(result.level).toBe("unknown");
+    expect(result.reasons).toContain("DGX 상태 미상");
+    expect(result.reasons).toContain("스냅샷 정보 지연(stale)");
+  });
+
+  it("uses the default 5-minute threshold to flag a snapshot just past it", () => {
+    const result = projectRuntimeHealth(
+      makeSnapshot({ updatedAt: new Date(FIXED_NOW - (5 * 60_000 + 1_000)).toISOString() }),
+      { now: FIXED_NOW },
+    );
+
+    expect(result.stale).toBe(true);
+    expect(result.level).toBe("degraded");
+  });
+
+  it("treats a snapshot exactly at the default threshold as fresh (strict > boundary)", () => {
+    const result = projectRuntimeHealth(
+      makeSnapshot({ updatedAt: new Date(FIXED_NOW - 5 * 60_000).toISOString() }),
+      { now: FIXED_NOW },
+    );
+
+    expect(result.stale).toBe(false);
+    expect(result.level).toBe("healthy");
+  });
+
+  it("orders recentError before staleness in reasons and keeps the level offline", () => {
+    const result = projectRuntimeHealth(
+      makeSnapshot({ recentError: "disk full", updatedAt: "2026-06-18T00:00:00.000Z" }),
+      { now: FIXED_NOW, stalenessThresholdMs: 60_000 },
+    );
+
+    expect(result.level).toBe("offline");
+    expect(result.stale).toBe(true);
+    expect(result.reasons).toEqual(["최근 오류 기록 있음", "스냅샷 정보 지연(stale)"]);
+  });
+
+  it("preserves dgx/local/memory subsystem order with raw passthrough and matching reason order", () => {
+    const result = projectRuntimeHealth(
+      makeSnapshot({ dgxStatus: "degraded", memorySyncStatus: "offline" }),
+      { now: FIXED_NOW },
+    );
+
+    expect(result.subsystems.map((s) => s.key)).toEqual(["dgx", "local", "memory"]);
+    expect(result.subsystems.map((s) => s.raw)).toEqual(["degraded", "online", "offline"]);
+    expect(result.reasons).toEqual(["DGX degraded", "기억 offline"]);
+    expect(result.level).toBe("offline");
+  });
+});
