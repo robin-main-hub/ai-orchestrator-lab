@@ -18,6 +18,7 @@ import { Button } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { StatusBadge } from "@/ui/status-badge";
 import { runtimeStatusLabel } from "../lib/railStatusLabels";
+import { projectRuntimeHealth } from "../lib/runtimeHealthProjection";
 import type { CenterMode } from "../types";
 
 const modeConfig: Array<{
@@ -241,6 +242,7 @@ function HealthIndicator({
   const primaryNode = snapshot.runtimeNodes.find((node) => node.isPrimary);
   const dgxLabel = primaryNode?.label ?? snapshot.syncTopology.authorityLabel ?? "DGX";
   const providerLabel = providerName || "공급자 미지정";
+  const projection = projectRuntimeHealth(snapshot, { now: Date.now() });
 
   return (
     <Popover>
@@ -275,6 +277,11 @@ function HealthIndicator({
           <StatusRow label="로컬" status={snapshot.localModelStatus} />
           <StatusRow label="기억" status={snapshot.memorySyncStatus} />
           <StatusRow label="권위 노드" status={snapshot.syncTopology.authorityLabel} />
+          {projection.stale ? (
+            <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+              <p className="text-xs text-amber-300">상태 정보가 지연되었습니다(stale) — 표시는 마지막 확인 기준입니다.</p>
+            </div>
+          ) : null}
           {snapshot.recentError ? (
             <div className="mt-2 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
               <p className="line-clamp-3 text-xs text-rose-300">{snapshot.recentError}</p>
@@ -317,14 +324,17 @@ function StatusRow({ label, status }: { label: string; status?: string }) {
   );
 }
 
-type StatusTone = "online" | "offline" | "pending" | "idle";
+type StatusTone = "online" | "degraded" | "offline" | "pending" | "idle";
 
 function statusToneFromString(status?: string): StatusTone {
   if (!status) return "idle";
   const s = status.toLowerCase();
   if (s.includes("online") || s.includes("ready") || s.includes("connected")) return "online";
   if (s.includes("offline") || s.includes("error") || s.includes("unreachable")) return "offline";
-  if (s.includes("pending") || s.includes("preparing") || s.includes("fallback")) return "pending";
+  // RuntimeStatus "degraded" must not silently fall through to "idle".
+  if (s.includes("degraded")) return "degraded";
+  if (s.includes("pending") || s.includes("preparing") || s.includes("fallback") || s.includes("syncing"))
+    return "pending";
   return "idle";
 }
 
@@ -335,6 +345,7 @@ function statusToBadgeVariant(status?: string): "success" | "danger" | "warning"
       return "success";
     case "offline":
       return "danger";
+    case "degraded":
     case "pending":
       return "warning";
     case "idle":
@@ -344,12 +355,16 @@ function statusToBadgeVariant(status?: string): "success" | "danger" | "warning"
 }
 
 function deriveHealth(snapshot?: RuntimeSnapshot): "healthy" | "degraded" | "critical" | "unknown" {
-  if (!snapshot) return "unknown";
-  if (snapshot.recentError) return "critical";
-  const dgxTone = statusToneFromString(snapshot.dgxStatus);
-  const localTone = statusToneFromString(snapshot.localModelStatus);
-  if (dgxTone === "offline") return "degraded";
-  if (localTone === "offline") return "critical";
-  if (dgxTone === "pending" || localTone === "pending") return "degraded";
-  return "healthy";
+  const projection = projectRuntimeHealth(snapshot, { now: Date.now() });
+  switch (projection.level) {
+    case "offline":
+      return "critical";
+    case "degraded":
+      return "degraded";
+    case "unknown":
+      return "unknown";
+    case "healthy":
+    default:
+      return "healthy";
+  }
 }
