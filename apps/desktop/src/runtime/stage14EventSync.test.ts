@@ -167,3 +167,114 @@ describe("stage14 Event Storage sync", () => {
     expect(result.error).toContain("ECONNREFUSED");
   });
 });
+
+// Characterization tests for the event-sync state/request shaping invariants
+// (no behavior change, no real network). These pin previously-uncovered
+// branches: initial-state queued threshold, empty-events no-op early return,
+// request-builder defaults + multi-event idempotency key, the no-response
+// reducer branch that preserves prior server revision, and multi-endpoint
+// replica failover ordering (all via injected fetchImpl / pure functions).
+describe("stage14 sync — state/request shaping characterization", () => {
+  it("derives the initial status from the outbox threshold", () => {
+    expect(createInitialEventSyncState()).toEqual({ status: "synced", outboxCount: 0 });
+    expect(createInitialEventSyncState(0)).toEqual({ status: "synced", outboxCount: 0 });
+    expect(createInitialEventSyncState(3)).toEqual({ status: "queued", outboxCount: 3 });
+  });
+
+  it("returns a synced no-op without calling fetch when there are no events", async () => {
+    let fetchCalled = false;
+    const result = await pushEventsToDgxEventStorage({
+      events: [],
+      fetchImpl: async () => {
+        fetchCalled = true;
+        throw new Error("should not be called");
+      },
+    });
+
+    expect(fetchCalled).toBe(false);
+    expect(result.status).toBe("synced");
+    expect(result.queuedEvents).toEqual([]);
+    expect(result.syncedEventIds).toEqual([]);
+  });
+
+  it("applies client/session defaults and derives the session from the first event", () => {
+    const request = createEventSyncPushRequest({ events: [event] });
+
+    expect(request.clientId).toBe("client_macbook");
+    expect(request.sessionId).toBe("session_1");
+    expect(request.idempotencyKey).toBe("client_macbook:session_1:event_sync_1");
+  });
+
+  it("falls back to the default session and joins event ids in the idempotency key", () => {
+    const emptyRequest = createEventSyncPushRequest({ events: [] });
+    expect(emptyRequest.sessionId).toBe("session_desktop_001");
+    expect(emptyRequest.idempotencyKey).toBe("client_macbook:session_desktop_001:");
+
+    const secondEvent: EventEnvelope = { ...event, id: "event_sync_2" };
+    const multiRequest = createEventSyncPushRequest({ events: [event, secondEvent] });
+    expect(multiRequest.idempotencyKey).toBe("client_macbook:session_1:event_sync_1,event_sync_2");
+  });
+
+  it("preserves the prior server revision when a failed sync has no response", async () => {
+    const failed = await pushEventsToDgxEventStorage({
+      events: [event],
+      fetchImpl: async () => {
+        throw new Error("ECONNREFUSED");
+      },
+    });
+    const previous = {
+      status: "synced" as const,
+      outboxCount: 0,
+      serverRevision: 9,
+      lastSyncedAt: "2026-05-24T00:00:00.000Z",
+    };
+
+    const next = reduceEventSyncState(previous, failed);
+
+    expect(next.status).toBe("queued");
+    expect(next.outboxCount).toBe(1);
+    expect(next.serverRevision).toBe(9);
+    expect(next.lastSyncedAt).toBe("2026-05-24T00:00:00.000Z");
+    expect(next.lastError).toContain("ECONNREFUSED");
+  });
+
+  it("fails over to the next replica endpoint when the first is unreachable", async () => {
+    const attempted: string[] = [];
+    const result = await pushEventsToDgxEventStorage({
+      events: [event],
+      serverBaseUrl: ["http://dgx-unreachable:4317", "http://dgx-02:4317"],
+      fetchImpl: async (url) => {
+        attempted.push(String(url));
+        if (String(url).startsWith("http://dgx-unreachable")) {
+          throw new Error("ECONNREFUSED");
+        }
+        return {
+          ok: true,
+          status: 202,
+          async text() {
+            return JSON.stringify({
+              id: "event_sync_response_failover",
+              requestId: "event_sync_push_failover",
+              sessionId: "session_1",
+              serverRevision: 11,
+              accepted: 1,
+              duplicates: 0,
+              conflicts: 0,
+              failed: 0,
+              results: [{ eventId: "event_sync_1", status: "accepted", serverRevision: 11 }],
+              createdAt: event.createdAt,
+            });
+          },
+        } as Response;
+      },
+      createdAt: event.createdAt,
+    });
+
+    expect(attempted).toEqual([
+      "http://dgx-unreachable:4317/events/sync",
+      "http://dgx-02:4317/events/sync",
+    ]);
+    expect(result.status).toBe("synced");
+    expect(result.response?.serverRevision).toBe(11);
+  });
+});
