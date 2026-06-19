@@ -139,3 +139,86 @@ describe("stage29 local client event cache", () => {
     expect(snapshot.events).toHaveLength(2);
   });
 });
+
+// Characterization tests for the local cache's persistence/recovery durability
+// boundary (no behavior change, no DGX authority). These pin existing behavior
+// on previously-uncovered branches: corrupt/non-array/invalid stored-record
+// recovery (parseRecords resilience), projection-mark preservation across a
+// storage-backed reload (vs the in-memory resurrection test above), outbox
+// snapshot defaults, and outbox id-collision precedence.
+describe("stage29 local cache — persistence/recovery durability characterization", () => {
+  it("starts empty without throwing when the stored cache JSON is corrupt", async () => {
+    const storage = {
+      getItem: () => "not-json{definitely[broken",
+      setItem: () => undefined,
+    };
+    const store = createLocalClientEventCache(storage);
+
+    expect(await store.listUnsynced()).toEqual([]);
+    await expect(store.append(eventA)).resolves.toBeUndefined();
+  });
+
+  it("ignores a non-array stored cache payload", async () => {
+    const storage = {
+      getItem: () => JSON.stringify({ not: "an array" }),
+      setItem: () => undefined,
+    };
+    const store = createLocalClientEventCache(storage);
+
+    expect(await store.listBySession("session_desktop_001")).toEqual([]);
+  });
+
+  it("drops structurally-invalid stored records while keeping valid ones", async () => {
+    const storedRecords = JSON.stringify([
+      { event: eventA, projectedTo: {} },
+      { event: { id: "event_partial" }, projectedTo: {} },
+      { event: eventB, projectedTo: {} },
+      "totally-not-a-record",
+    ]);
+    const storage = {
+      getItem: () => storedRecords,
+      setItem: () => undefined,
+    };
+    const store = createLocalClientEventCache(storage);
+
+    const sessionEvents = await store.listBySession("session_desktop_001");
+    expect(sessionEvents.map((event) => event.id)).toEqual(["event_a", "event_b"]);
+  });
+
+  it("preserves the DGX projection mark when the same event is re-appended through a storage reload", async () => {
+    const memoryStorage = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => memoryStorage.get(key) ?? null,
+      setItem: (key: string, value: string) => memoryStorage.set(key, value),
+    };
+
+    const firstStore = createLocalClientEventCache(storage);
+    await firstStore.append(eventA);
+    await firstStore.markProjected(["event_a"], "dgx-02");
+
+    const secondStore = createLocalClientEventCache(storage);
+    await secondStore.append(eventA);
+
+    expect(await secondStore.listUnsynced()).toEqual([]);
+  });
+
+  it("applies client_macbook/dgx-02 defaults for an outbox snapshot", () => {
+    const snapshot = createLocalClientOutboxSnapshot([eventA]);
+
+    expect(snapshot.clientId).toBe("client_macbook");
+    expect(snapshot.projectionTarget).toBe("dgx-02");
+    expect(snapshot.events.map((event) => event.id)).toEqual(["event_a"]);
+    expect(typeof snapshot.updatedAt).toBe("string");
+    expect(Number.isNaN(Date.parse(snapshot.updatedAt))).toBe(false);
+  });
+
+  it("lets the current local outbox entry win on an id collision", () => {
+    const incoming: EventEnvelope = { ...eventA, payload: { content: "INCOMING" } };
+    const localCurrent: EventEnvelope = { ...eventA, payload: { content: "LOCAL_CURRENT" } };
+
+    const merged = mergeClientEventOutboxEvents([localCurrent], [incoming]);
+
+    expect(merged).toHaveLength(1);
+    expect((merged[0]?.payload as { content: string }).content).toBe("LOCAL_CURRENT");
+  });
+});
