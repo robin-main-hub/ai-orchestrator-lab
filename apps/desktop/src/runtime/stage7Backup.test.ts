@@ -231,3 +231,94 @@ describe("stage7 backup projections", () => {
     expect(mobileContent).toContain("\"total\": 3");
   });
 });
+
+// Characterization tests for previously-uncovered backup-projection branches
+// (no behavior change, no network, no secret). These pin: getArtifactContent's
+// empty-string returns (no id / unknown id), the offline summary counts and
+// queued remote artifacts, the offline projection-status mapping that turns
+// remote targets "pending" while preserving prior lastSyncedAt, the queue
+// reason text for offline vs local-export targets, and the deterministic
+// snapshot id derived from goal+createdAt.
+describe("stage7 backup — projection edge characterization", () => {
+  const buildSnapshot = (overrides?: Partial<RuntimeSnapshot>) =>
+    createStage7BackupSnapshot({
+      messages,
+      packet,
+      events,
+      projections,
+      runtime: overrides ? { ...runtime, ...overrides } : runtime,
+      memoryInspector,
+      createdAt,
+    });
+
+  it("returns an empty string from getArtifactContent for a missing or unknown id", () => {
+    const snapshot = buildSnapshot();
+
+    expect(getArtifactContent(snapshot)).toBe("");
+    expect(getArtifactContent(snapshot, "nope_not_an_artifact")).toBe("");
+  });
+
+  it("counts one ready and two queued artifacts when DGX-02 is offline", () => {
+    const snapshot = buildSnapshot();
+
+    expect(snapshot.summary).toEqual({ ready: 1, queued: 2, blocked: 0, redacted: 3 });
+    expect(snapshot.artifacts.find((artifact) => artifact.target === "notion")?.status).toBe("queued");
+    expect(snapshot.artifacts.find((artifact) => artifact.target === "mobile")?.status).toBe("queued");
+  });
+
+  it("maps offline remote targets to pending while preserving prior lastSyncedAt", () => {
+    const withSync: BackupProjection[] = [
+      {
+        id: "p_obs",
+        sessionId: "session_desktop_001",
+        target: "obsidian",
+        status: "pending",
+        redactionApplied: true,
+        lastSyncedAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "p_notion",
+        sessionId: "session_desktop_001",
+        target: "notion",
+        status: "pending",
+        redactionApplied: true,
+        lastSyncedAt: "2026-01-02T00:00:00.000Z",
+      },
+    ];
+    const snapshot = buildSnapshot();
+
+    const updated = applyStage7ProjectionStatuses(withSync, snapshot);
+    const obsidian = updated.find((projection) => projection.target === "obsidian");
+    const notion = updated.find((projection) => projection.target === "notion");
+
+    expect(obsidian).toMatchObject({ status: "synced", lastSyncedAt: createdAt });
+    expect(notion).toMatchObject({ status: "pending", lastSyncedAt: "2026-01-02T00:00:00.000Z" });
+  });
+
+  it("explains queued remote targets and the offline-capable local export in queue reasons", () => {
+    const snapshot = buildSnapshot();
+
+    const obsidianQueue = snapshot.queue.find((item) => item.target === "obsidian");
+    const notionQueue = snapshot.queue.find((item) => item.target === "notion");
+
+    expect(obsidianQueue?.reason).toContain("오프라인에서도 실행");
+    expect(notionQueue?.reason).toContain("대기열에 보관");
+  });
+
+  it("derives a deterministic snapshot id from goal and createdAt", () => {
+    const first = buildSnapshot();
+    const second = buildSnapshot();
+    expect(second.id).toBe(first.id);
+
+    const changed = createStage7BackupSnapshot({
+      messages,
+      packet: { ...packet, goal: "A different goal" },
+      events,
+      projections,
+      runtime,
+      memoryInspector,
+      createdAt,
+    });
+    expect(changed.id).not.toBe(first.id);
+  });
+});
