@@ -48,6 +48,8 @@ generic only
 | E2-E19 | done | WorkItemCandidate / engine read-only axis through local signal filters and command jumps. |
 | P0 | done | Swarm IO race guard / stale capture hardening. Local scripts only. |
 | P1 | done | Permission/redaction boundary simulation. Production-like example tokens rejected; EventStorage and local outbox redact secret-like payloads before durable/sync exposure. |
+| P2 | done | Offline outbox / EventStorage sync logical duplicate guard. Same logical message replay is duplicate; changed logical payload is conflict/review, not silent accepted merge. |
+| P3 | next | SSE / Agent Crash Error Boundary. |
 
 ## 검증
 - Local:
