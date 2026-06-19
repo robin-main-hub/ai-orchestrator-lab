@@ -140,6 +140,159 @@ describe("stage5 dgx bridge", () => {
   });
 });
 
+// Characterization tests for previously-uncovered stage5 dgx-bridge pure
+// branches (no behavior change, no network, no secret). These pin the
+// authority-adjacent bridge/merge seam's pure projections: the
+// createLocalRemoteResponse fallback_required branch (approved but DGX
+// offline), the createLocalHeartbeat online branch, the createCommandPreview
+// verifier-label passthrough (verifier status is passed|warning|blocked, so
+// only "passed" hits the map and warning/blocked fall through unchanged) plus
+// the zero-required-steps count, the mergeDgxRuntimeSnapshot status/recentError
+// rules when the server is not online, and the normalizeCacheClient role/outbox/
+// failurePolicy normalization for non-authority clients flowing through
+// mergeClients (desktop_pc, stateless, and compute_degraded variants), plus the
+// mergeClients/mergeRuntimeNodes append-the-unmatched behavior. Only the
+// crypto.randomUUID ids are non-deterministic and are not asserted.
+function makeClient(overrides: Partial<ClientDeviceShape> & Pick<ClientDeviceShape, "id">): ClientDeviceShape {
+  return {
+    label: overrides.id,
+    kind: "macbook",
+    status: "online",
+    syncRole: "cache_client",
+    localStore: "sqlite",
+    outboxMode: "offline_cache_outbox",
+    failurePolicy: "continue_locally",
+    outboxCount: 0,
+    ...overrides,
+  };
+}
+
+type ClientDeviceShape = RuntimeSnapshot["syncTopology"]["clients"][number];
+
+describe("stage5 dgx bridge — projection & merge characterization", () => {
+  const approvedRun: Stage4AgentRun = { ...run, status: "completed" };
+
+  it("returns fallback_required (and enables local fallback) when approved but DGX is offline", () => {
+    const bridge = createStage5DgxBridge({
+      run: approvedRun,
+      runtime,
+      approvalOverride: "approved",
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+
+    expect(bridge.response.status).toBe("fallback_required");
+    expect(bridge.response.fallbackMode).toBe("local_cli");
+    expect(bridge.response.message).toBe("DGX가 오프라인이라 실행 요청을 로컬 발신함에 보관합니다.");
+    expect(bridge.localFallbackEnabled).toBe(true);
+  });
+
+  it("reports a connected heartbeat with latency when DGX is online", () => {
+    const onlineRuntime: RuntimeSnapshot = { ...runtime, dgxStatus: "online" };
+    const bridge = createStage5DgxBridge({
+      run,
+      runtime: onlineRuntime,
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+
+    expect(bridge.heartbeat.status).toBe("connected");
+    expect(bridge.heartbeat.latencyMs).toBe(18);
+    expect(bridge.heartbeat.message).toBe("DGX 권위 노드에 연결되었습니다.");
+  });
+
+  it("passes warning/blocked verifier statuses through unchanged and counts zero required steps", () => {
+    const noApprovalRun: Stage4AgentRun = {
+      ...run,
+      steps: [{ ...run.steps[0]!, permissionState: "not_required" }],
+    };
+    const warning = createStage5DgxBridge({
+      run: { ...noApprovalRun, verifier: { ...run.verifier, status: "warning" } },
+      runtime,
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+    const blocked = createStage5DgxBridge({
+      run: { ...noApprovalRun, verifier: { ...run.verifier, status: "blocked" } },
+      runtime,
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+
+    expect(warning.request.commandPreview).toBe("run_1 실행 · 검증 warning · 승인 0건");
+    expect(blocked.request.commandPreview).toBe("run_1 실행 · 검증 blocked · 승인 0건");
+  });
+
+  it("keeps the local status and preserves recentError when the server is not online", () => {
+    const localWithError: RuntimeSnapshot = { ...runtime, recentError: "local outbox stalled" };
+    const merged = mergeDgxRuntimeSnapshot(localWithError, {
+      ...runtime,
+      status: "degraded",
+      dgxStatus: "offline",
+      updatedAt: "2026-05-24T00:05:00.000Z",
+    });
+
+    expect(merged.status).toBe("degraded");
+    expect(merged.recentError).toBe("local outbox stalled");
+    expect(merged.updatedAt).toBe("2026-05-24T00:05:00.000Z");
+  });
+
+  it("clears recentError once the server reports DGX online", () => {
+    const localWithError: RuntimeSnapshot = { ...runtime, recentError: "local outbox stalled" };
+    const merged = mergeDgxRuntimeSnapshot(localWithError, {
+      ...runtime,
+      status: "online",
+      dgxStatus: "online",
+      updatedAt: "2026-05-24T00:06:00.000Z",
+    });
+
+    expect(merged.status).toBe("online");
+    expect(merged.recentError).toBeUndefined();
+  });
+
+  it("normalizes non-authority server clients to cache_client with kind-specific failure policy", () => {
+    const merged = mergeDgxRuntimeSnapshot(runtime, {
+      ...runtime,
+      syncTopology: {
+        ...runtime.syncTopology,
+        clients: [
+          makeClient({ id: "client_home_pc", kind: "desktop_pc", outboxMode: "offline_cache_outbox" }),
+          makeClient({ id: "client_phone", kind: "mobile", outboxMode: "stateless", failurePolicy: "continue_locally" }),
+          makeClient({ id: "client_macbook", kind: "macbook", outboxMode: "offline_cache_outbox", failurePolicy: "compute_degraded" }),
+        ],
+      },
+      updatedAt: "2026-05-24T00:07:00.000Z",
+    } as RuntimeSnapshot);
+
+    const homePc = merged.syncTopology.clients.find((client) => client.id === "client_home_pc");
+    const phone = merged.syncTopology.clients.find((client) => client.id === "client_phone");
+    const macbook = merged.syncTopology.clients.find((client) => client.id === "client_macbook");
+
+    expect(homePc?.syncRole).toBe("cache_client");
+    expect(homePc?.failurePolicy).toBe("unavailable_without_dgx");
+    expect(homePc?.outboxMode).toBe("offline_cache_outbox");
+
+    expect(phone?.syncRole).toBe("cache_client");
+    expect(phone?.outboxMode).toBe("stateless");
+    expect(phone?.failurePolicy).toBe("continue_locally");
+
+    expect(macbook?.failurePolicy).toBe("compute_degraded");
+  });
+
+  it("appends local-only clients and runtime nodes that the server does not report", () => {
+    const localOnlyNode = { id: "client_phone_node", label: "Phone", role: "local" as const, status: "online" as const, isPrimary: false, models: [] };
+    const localRuntime: RuntimeSnapshot = {
+      ...runtime,
+      runtimeNodes: [runtime.runtimeNodes[0]!, localOnlyNode],
+      syncTopology: { ...runtime.syncTopology, clients: [makeClient({ id: "client_macbook" })] },
+    };
+    const merged = mergeDgxRuntimeSnapshot(localRuntime, {
+      ...runtime,
+      syncTopology: { ...runtime.syncTopology, clients: [] },
+      updatedAt: "2026-05-24T00:08:00.000Z",
+    });
+
+    expect(merged.runtimeNodes.some((node) => node.id === "client_phone_node")).toBe(true);
+    expect(merged.syncTopology.clients.some((client) => client.id === "client_macbook")).toBe(true);
+  });
+});
+
 describe("DgxConnectionStateMachine", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
