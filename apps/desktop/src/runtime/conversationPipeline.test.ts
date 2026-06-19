@@ -508,6 +508,139 @@ describe("conversation pipeline runtime helper", () => {
   });
 });
 
+// Characterization tests for previously-uncovered conversationPipeline
+// branches (no behavior change, no network, no secret). These pin the
+// authority-adjacent system-prompt assembly seam's optional injections that
+// existing tests skip: the tool-loop fence instruction (build + plan), the
+// PLAN-mode mutation-blocked notice + agentMode metadata, the condensed
+// auto-compaction summary injection (and the whitespace-only no-op), and the
+// attachment-context body branches (under-budget inline with path/url
+// redaction, over-budget truncation note, and data-url embedded-image note).
+// crypto.randomUUID system ids are pinned via systemMessageId, so nothing is
+// non-deterministic.
+describe("conversation pipeline — optional injection characterization", () => {
+  const userMessage = message("message_user_latest", "user", "다음 작업");
+  const base = {
+    agent,
+    configFiles: [] as AgentConfigFile[],
+    memory,
+    memoryScope,
+    modelId: "mimo-v2.5-pro",
+    previousMessages: [] as ConversationMessage[],
+    provider,
+    userMessage,
+  };
+
+  it("injects the tool-loop fence instruction and flips toolLoopEnabled metadata", () => {
+    const pipeline = createConversationPipelineMessages({
+      ...base,
+      systemMessageId: "message_system_tool_loop",
+      toolLoopEnabled: true,
+    });
+    const content = pipeline[0]?.content ?? "";
+    expect(content).toContain("도구 사용 (워크스페이스 작업)");
+    expect(content).toContain("```tool");
+    expect(content).not.toContain("PLAN 모드에서는");
+    expect(pipeline[0]?.metadata?.toolLoopEnabled).toBe(true);
+    expect(pipeline[0]?.metadata?.agentMode).toBe("build");
+  });
+
+  it("adds PLAN-mode restrictions to both the tool fence and the prompt body", () => {
+    const pipeline = createConversationPipelineMessages({
+      ...base,
+      systemMessageId: "message_system_plan_mode",
+      toolLoopEnabled: true,
+      agentMode: "plan",
+    });
+    const content = pipeline[0]?.content ?? "";
+    expect(content).toContain("PLAN 모드에서는 bash/write/edit가 거부되므로 read/grep/glob/todo만 제안한다.");
+    expect(content).toContain("지금은 PLAN 모드입니다");
+    expect(pipeline[0]?.metadata?.agentMode).toBe("plan");
+  });
+
+  it("injects the condensed auto-compaction summary and flags it in metadata", () => {
+    const pipeline = createConversationPipelineMessages({
+      ...base,
+      systemMessageId: "message_system_condensed",
+      condensedSummary: "오래된 다섯 턴 요약본",
+    });
+    const content = pipeline[0]?.content ?? "";
+    expect(content).toContain("이전 대화 자동 압축 요약");
+    expect(content).toContain("오래된 다섯 턴 요약본");
+    expect(pipeline[0]?.metadata?.condensedSummaryApplied).toBe(true);
+  });
+
+  it("treats a whitespace-only condensed summary as absent", () => {
+    const pipeline = createConversationPipelineMessages({
+      ...base,
+      systemMessageId: "message_system_condensed_blank",
+      condensedSummary: "   ",
+    });
+    const content = pipeline[0]?.content ?? "";
+    expect(content).not.toContain("이전 대화 자동 압축 요약");
+    expect(pipeline[0]?.metadata?.condensedSummaryApplied).toBe(false);
+  });
+
+  it("inlines an attachment text body under budget while redacting its path and urls", () => {
+    const withText = {
+      ...userMessage,
+      metadata: {
+        attachments: [
+          {
+            id: "attachment_text_1",
+            kind: "text",
+            name: "/Users/robin/private/notes.txt",
+            storage: "inline",
+            textContent: "본문 내용 — 참고 링크 https://token-plan-sgp.xiaomimimo.com/v1 끝",
+          },
+        ],
+      },
+    } satisfies ConversationMessage;
+    const pipeline = createConversationPipelineMessages({
+      ...base,
+      systemMessageId: "message_system_attach_inline",
+      userMessage: withText,
+    });
+    const content = pipeline[0]?.content ?? "";
+    expect(content).toContain("본문이 아래에 인라인됨");
+    expect(content).toContain("--- 첨부 본문:");
+    expect(content).not.toContain("/Users/robin/private/notes.txt");
+    expect(content).not.toContain("https://token-plan-sgp.xiaomimimo.com/v1");
+    expect(content).toContain("[REDACTED:url]");
+  });
+
+  it("marks an attachment body as partial once it exceeds the inline char budget", () => {
+    const huge = "가".repeat(12_001);
+    const withHuge = {
+      ...userMessage,
+      metadata: {
+        attachments: [{ id: "attachment_huge", kind: "text", name: "big.txt", storage: "inline", textContent: huge }],
+      },
+    } satisfies ConversationMessage;
+    const pipeline = createConversationPipelineMessages({
+      ...base,
+      systemMessageId: "message_system_attach_huge",
+      userMessage: withHuge,
+    });
+    expect(pipeline[0]?.content).toContain("(일부만 — 원본이 더 김)");
+  });
+
+  it("notes embedded image bytes for a data-url attachment", () => {
+    const withImage = {
+      ...userMessage,
+      metadata: {
+        attachments: [{ id: "attachment_img", kind: "image", name: "shot.png", dataUrl: "data:image/png;base64,AAAA" }],
+      },
+    } satisfies ConversationMessage;
+    const pipeline = createConversationPipelineMessages({
+      ...base,
+      systemMessageId: "message_system_attach_image",
+      userMessage: withImage,
+    });
+    expect(pipeline[0]?.content).toContain("이미지 바이트가 이 요청에 동봉됨");
+  });
+});
+
 describe("patch P3 — 불충분명세 후보 헤지 주입", () => {
   it("비슷한 점수의 서로 다른 엔티티 기억이면 되묻기 지시가 시스템 프롬프트에 들어간다", () => {
     const ambiguousMemory = {
