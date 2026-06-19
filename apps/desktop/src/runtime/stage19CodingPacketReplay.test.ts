@@ -90,3 +90,76 @@ describe("stage19 CodingPacket replay", () => {
     expect(result.packet?.goal).toBe("older valid packet");
   });
 });
+
+// Characterization tests for the CodingPacket replay projection (no behavior
+// change). These pin previously-uncovered branches: empty/non-packet inputs,
+// invalid-event precedence when every packet payload is invalid, the
+// no-packet-payload skip that does NOT mark a result invalid, and the
+// no-mutation (deterministic copy-before-sort) invariant.
+describe("stage19 replay — projection selection characterization", () => {
+  it("returns missing for an empty event list", () => {
+    expect(extractLatestCodingPacketFromEvents([])).toEqual({ status: "missing" });
+  });
+
+  it("ignores non-coding_packet event types when selecting the latest packet", () => {
+    const conversationEvent: EventEnvelope = {
+      id: "event_conversation_newer",
+      sessionId: "session_desktop_001",
+      type: "conversation.message.created",
+      payload: { content: "newer but not a packet" },
+      createdAt: "2026-05-24T00:05:00.000Z",
+      source: "desktop",
+      sourceTrust: "trusted",
+      redacted: false,
+    };
+    const packetEvent = createPacketEvent("event_packet_only", "2026-05-24T00:00:00.000Z", packet);
+
+    const result = extractLatestCodingPacketFromEvents([conversationEvent, packetEvent]);
+
+    expect(result.status).toBe("restored");
+    expect(result.eventId).toBe("event_packet_only");
+  });
+
+  it("reports the newest invalid event when every packet payload is invalid", () => {
+    const invalidOlder = createPacketEvent("event_packet_invalid_old", "2026-05-24T00:00:00.000Z", {
+      goal: packet.goal,
+    });
+    const invalidNewer = createPacketEvent("event_packet_invalid_new", "2026-05-24T00:01:00.000Z", {
+      context: ["not a goal"],
+    });
+
+    const result = extractLatestCodingPacketFromEvents([invalidOlder, invalidNewer]);
+
+    expect(result.status).toBe("invalid");
+    expect(result.eventId).toBe("event_packet_invalid_new");
+  });
+
+  it("skips a newest event that carries no packet payload and restores an older valid packet", () => {
+    const validOlder = createPacketEvent("event_packet_valid_old", "2026-05-24T00:00:00.000Z", packet);
+    const noPacketNewer: EventEnvelope = {
+      id: "event_packet_no_payload",
+      sessionId: "session_desktop_001",
+      type: "coding_packet.created",
+      payload: { goal: "display only, no packet" },
+      createdAt: "2026-05-24T00:01:00.000Z",
+      source: "desktop",
+      sourceTrust: "trusted",
+      redacted: false,
+    };
+
+    const result = extractLatestCodingPacketFromEvents([validOlder, noPacketNewer]);
+
+    expect(result.status).toBe("restored");
+    expect(result.eventId).toBe("event_packet_valid_old");
+  });
+
+  it("does not mutate the caller's event array order", () => {
+    const older = createPacketEvent("event_packet_old", "2026-05-24T00:00:00.000Z", packet);
+    const newer = createPacketEvent("event_packet_new", "2026-05-24T00:01:00.000Z", packet);
+    const input = [older, newer];
+
+    extractLatestCodingPacketFromEvents(input);
+
+    expect(input.map((event) => event.id)).toEqual(["event_packet_old", "event_packet_new"]);
+  });
+});
