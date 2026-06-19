@@ -144,6 +144,74 @@ describe("stage34 approval server runtime", () => {
   });
 });
 
+// Characterization tests for previously-uncovered stage34 approval-server
+// transport branches (no behavior change, no real network, no secret). These
+// pin the authority-adjacent approval client's failover seam: a non-ok HTTP
+// status on the first endpoint falls through to the next base URL, the non-ok
+// error message carries the status code and a body truncated to 180 chars, an
+// all-endpoints-failed aggregate joins each base URL's error with " | ", and a
+// GET queue fetch sends no request body.
+describe("stage34 approval server — transport failover characterization", () => {
+  const publicBase = "https://orchestrator.endruin.com";
+
+  it("falls through to the next base URL when the first returns a non-ok HTTP status", async () => {
+    const calls: string[] = [];
+    const response = await fetchDgxApprovalQueue({
+      serverBaseUrl: [DGX02_LAN_ORCHESTRATOR_BASE_URL, publicBase],
+      fetchImpl: async (url) => {
+        calls.push(String(url));
+        if (calls.length === 1) {
+          return new Response("upstream draining", { status: 503 });
+        }
+        return jsonResponse({ approvals: [], queue: [] });
+      },
+    });
+
+    expect(calls).toEqual([
+      `${DGX02_LAN_ORCHESTRATOR_BASE_URL}/approvals/list`,
+      `${publicBase}/approvals/list`,
+    ]);
+    expect(response.approvals).toEqual([]);
+    expect(response.queue).toEqual([]);
+  });
+
+  it("surfaces the status code and a 180-char-truncated body in the non-ok error", async () => {
+    const error = (await fetchDgxApprovalQueue({
+      serverBaseUrl: [DGX02_LAN_ORCHESTRATOR_BASE_URL],
+      fetchImpl: async () => new Response("E".repeat(300), { status: 500 }),
+    }).catch((caught) => caught)) as Error;
+
+    expect(error.message).toContain("failed: 500");
+    expect(error.message).toContain("E".repeat(180));
+    expect(error.message).not.toContain("E".repeat(181));
+  });
+
+  it("aggregates every base URL's failure with a ' | ' separator when all endpoints fail", async () => {
+    const error = (await rejectDgxApproval({
+      serverBaseUrl: [DGX02_LAN_ORCHESTRATOR_BASE_URL, publicBase],
+      request: { sourceItemId: "tmux_dispatch_1", actor: "user" },
+      fetchImpl: async () => new Response("boom", { status: 500 }),
+    }).catch((caught) => caught)) as Error;
+
+    expect(error.message).toContain(`${DGX02_LAN_ORCHESTRATOR_BASE_URL}:`);
+    expect(error.message).toContain(`${publicBase}:`);
+    expect(error.message).toContain(" | ");
+  });
+
+  it("sends no request body for the GET queue fetch", async () => {
+    let observedBody: unknown = "sentinel";
+    await fetchDgxApprovalQueue({
+      serverBaseUrl: [DGX02_LAN_ORCHESTRATOR_BASE_URL],
+      fetchImpl: async (_url, init) => {
+        observedBody = init?.body;
+        return jsonResponse({ approvals: [], queue: [] });
+      },
+    });
+
+    expect(observedBody).toBeUndefined();
+  });
+});
+
 function jsonResponse(payload: unknown) {
   return new Response(JSON.stringify(payload), { status: 200 });
 }
