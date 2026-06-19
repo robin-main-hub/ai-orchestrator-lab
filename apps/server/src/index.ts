@@ -1157,6 +1157,48 @@ export async function createServerProviderModelDiscoveryResponse(
   };
 }
 
+// Per-provider isolation for the registry aggregation. 한 provider entry build가
+// throw/reject해도 전체 registry(=/provider-registry, /cockpit/snapshot)가 통째로
+// 죽지 않도록, 실패한 provider만 degraded entry로 격리하고 나머지는 정상 노출한다.
+// builder/fallback을 주입받는 순수 함수라 가짜 builder로 격리 동작을 직접 테스트할 수 있다.
+export async function isolateProviderRegistryEntries<C>(
+  configs: readonly C[],
+  buildEntry: (config: C) => Promise<ProviderRegistryEntry>,
+  buildDegradedFallback: (config: C, error: unknown) => ProviderRegistryEntry,
+): Promise<ProviderRegistryEntry[]> {
+  const settled = await Promise.allSettled(configs.map((config) => buildEntry(config)));
+  return settled.map((result, index) =>
+    result.status === "fulfilled" ? result.value : buildDegradedFallback(configs[index]!, result.reason),
+  );
+}
+
+// 격리된 실패 provider를 위한 degraded entry. secret resolution(throw 가능한 유일한 async
+// 경로)을 건너뛰고 "missing" + "discovery-degraded" 태그로 표면화한다. raw error는 secret
+// 누출 위험이 있어 entry에 담지 않는다 — 실패 사실만 격리해서 보여준다.
+function createDegradedProviderRegistryEntry(
+  config: ServerProviderProxyConfig,
+  updatedAt: string,
+): ProviderRegistryEntry {
+  const authMode = createServerProviderRegistryAuthMode(config);
+  const tags = Array.from(new Set([...createServerProviderTags(config.providerProfileId), "discovery-degraded"]));
+  return {
+    providerProfileId: config.providerProfileId,
+    name: createServerProviderDisplayName(config.providerProfileId),
+    kind: createServerProviderKind(config),
+    baseUrl: config.baseUrl,
+    trustLevel: createServerProviderTrustLevel(config.providerProfileId),
+    tags,
+    defaultModelIds: config.defaultModelIds,
+    selectedModelId: undefined,
+    supportsModelList: Boolean(config.supportsModelList),
+    apiStyle: config.apiStyle ?? "openai_chat",
+    authMode,
+    secretAvailability: "missing",
+    modelDiscoveryEndpoint: config.supportsModelList ? `${config.baseUrl.replace(/\/$/, "")}/models` : undefined,
+    updatedAt,
+  };
+}
+
 export async function createServerProviderRegistrySnapshot(
   options: DgxProviderCompletionOptions = {},
 ): Promise<ProviderRegistrySnapshot> {
@@ -1177,8 +1219,10 @@ export async function createServerProviderRegistrySnapshot(
     modelDiscoveryEndpoint: `${(process.env.DGX02_VLLM_BASE_URL ?? DEFAULT_DGX02_VLLM_BASE_URL).replace(/\/$/, "")}/models`,
     updatedAt: createdAt,
   };
-  const proxyEntries = await Promise.all(
-    serverProviderProxyConfigs.map((config) => createServerProviderRegistryEntry(config, createdAt)),
+  const proxyEntries = await isolateProviderRegistryEntries(
+    serverProviderProxyConfigs,
+    (config) => createServerProviderRegistryEntry(config, createdAt),
+    (config) => createDegradedProviderRegistryEntry(config, createdAt),
   );
   const entries = [vllmEntry, ...proxyEntries];
 
