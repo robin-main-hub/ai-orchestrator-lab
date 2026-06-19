@@ -32,6 +32,7 @@ import {
   createServerTmuxPreflightResponse,
   createServerProviderRegistrySnapshot,
   createServerProviderModelDiscoveryResponse,
+  isolateProviderRegistryEntries,
   createRemoteRunResponse,
   decideApprovalInPersistentServerStorage,
   estimateProviderCompletionBudgetTokens,
@@ -1420,6 +1421,79 @@ describe("server health placeholder", () => {
       }
       await rm(tempRoot, { recursive: true, force: true });
     }
+  });
+
+  describe("provider registry per-provider isolation", () => {
+    type FakeConfig = { id: string; throws?: boolean };
+
+    const healthyEntry = (id: string) => ({
+      providerProfileId: id,
+      name: id,
+      kind: "openai" as const,
+      baseUrl: `https://${id}.example`,
+      trustLevel: "trusted" as const,
+      tags: ["healthy"],
+      defaultModelIds: [`${id}-model`],
+      selectedModelId: `${id}-model`,
+      supportsModelList: true,
+      apiStyle: "openai_chat" as const,
+      authMode: "api_key_required" as const,
+      secretAvailability: "available" as const,
+      updatedAt: "2026-06-19T00:00:00.000Z",
+    });
+
+    const degradedFallback = (config: FakeConfig) => ({
+      ...healthyEntry(config.id),
+      tags: ["discovery-degraded"],
+      selectedModelId: undefined,
+      secretAvailability: "missing" as const,
+    });
+
+    const buildEntry = async (config: FakeConfig) => {
+      if (config.throws) {
+        throw new Error(`provider ${config.id} discovery failed`);
+      }
+      return healthyEntry(config.id);
+    };
+
+    it("isolates one throwing provider into a degraded fallback while healthy providers pass through", async () => {
+      const entries = await isolateProviderRegistryEntries(
+        [{ id: "alpha" }, { id: "bravo", throws: true }, { id: "charlie" }],
+        buildEntry,
+        degradedFallback,
+      );
+
+      expect(entries.map((entry) => entry.providerProfileId)).toEqual(["alpha", "bravo", "charlie"]);
+      expect(entries[0]?.secretAvailability).toBe("available");
+      expect(entries[1]?.secretAvailability).toBe("missing");
+      expect(entries[1]?.tags).toContain("discovery-degraded");
+      expect(entries[2]?.secretAvailability).toBe("available");
+      // 깨진 provider의 raw error 메시지가 entry로 새지 않는다(secret 누출 방지).
+      expect(JSON.stringify(entries)).not.toContain("discovery failed");
+    });
+
+    it("returns all-degraded entries (and never rejects) when every provider throws", async () => {
+      const entries = await isolateProviderRegistryEntries(
+        [{ id: "alpha", throws: true }, { id: "bravo", throws: true }],
+        buildEntry,
+        degradedFallback,
+      );
+
+      expect(entries).toHaveLength(2);
+      expect(entries.every((entry) => entry.secretAvailability === "missing")).toBe(true);
+      expect(entries.every((entry) => entry.tags.includes("discovery-degraded"))).toBe(true);
+    });
+
+    it("passes every provider through unchanged when none throw", async () => {
+      const entries = await isolateProviderRegistryEntries(
+        [{ id: "alpha" }, { id: "bravo" }],
+        buildEntry,
+        degradedFallback,
+      );
+
+      expect(entries.every((entry) => entry.secretAvailability === "available")).toBe(true);
+      expect(entries.every((entry) => entry.tags.includes("discovery-degraded"))).toBe(false);
+    });
   });
 
   it("uses static APIFun model allowlist without calling remote /models", async () => {
