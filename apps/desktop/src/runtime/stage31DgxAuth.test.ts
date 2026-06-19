@@ -4,6 +4,7 @@ import {
   __test,
   createDgxOrchestratorAuthHeaders,
   createDgxOrchestratorJsonHeaders,
+  DgxAuthCryptoError,
   generateBrowserHmacSha256,
 } from "./stage31DgxAuth";
 
@@ -134,5 +135,110 @@ describe("DGX orchestrator desktop auth headers", () => {
       "content-type": "application/json",
       authorization: `Bearer ${DEV_TOKEN}`,
     });
+  });
+});
+
+// Characterization tests for previously-uncovered auth branches (no behavior
+// change, no real network, no secret). These pin: the token-override trim path
+// and whitespace-only fallback to the dev token, the no-target-url bearer
+// branch, the default (caller-omitted) nonce/timestamp generation path for
+// http targets, the getRandomValues nonce fallback when randomUUID is absent,
+// and the DgxAuthCryptoError throw when no secure randomness source exists.
+describe("stage31 auth — token resolution & nonce generation characterization", () => {
+  it("trims and uses an overridden token in the HTTP signature", async () => {
+    __test.setTokenOverrideForTests("  override-token-sample  ");
+    try {
+      const headers = await createDgxOrchestratorAuthHeaders(
+        "GET",
+        "/runtime",
+        "http://dgx-02:4317/runtime",
+        { nowMs: 1700000000000, nonce: "nonce-override" },
+      );
+      const expected = createHmac("sha256", "override-token-sample")
+        .update(["GET", "/runtime", expectedBodyHash(), "1700000000000", "nonce-override"].join("\n"))
+        .digest("hex");
+      expect(headers["x-dgx-signature"]).toBe(expected);
+    } finally {
+      __test.setTokenOverrideForTests("");
+    }
+  });
+
+  it("falls back to the dev token when the override is whitespace-only", async () => {
+    __test.setTokenOverrideForTests("   ");
+    try {
+      const headers = await createDgxOrchestratorAuthHeaders(
+        "GET",
+        "/runtime",
+        "http://dgx-02:4317/runtime",
+        { nowMs: 1700000000000, nonce: "nonce-blank" },
+      );
+      expect(headers["x-dgx-signature"]).toBe(
+        expectedSignature("GET", "/runtime", "1700000000000", "nonce-blank"),
+      );
+    } finally {
+      __test.setTokenOverrideForTests("");
+    }
+  });
+
+  it("returns bearer authorization when no target url is supplied", async () => {
+    const headers = await createDgxOrchestratorAuthHeaders("GET", "/runtime");
+
+    expect(headers).toEqual({ authorization: `Bearer ${DEV_TOKEN}` });
+  });
+
+  it("generates a uuid nonce and numeric timestamp by default for http targets", async () => {
+    const headers = await createDgxOrchestratorAuthHeaders(
+      "GET",
+      "/runtime",
+      "http://dgx-02:4317/runtime",
+    );
+
+    expect(headers["x-dgx-timestamp"]).toMatch(/^\d+$/);
+    expect(headers["x-dgx-nonce"]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    expect(headers["x-dgx-signature"]).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("uses the getRandomValues fallback to build a 32-hex-char nonce when randomUUID is absent", async () => {
+    const originalCrypto = globalThis.crypto;
+    Object.defineProperty(globalThis, "crypto", {
+      configurable: true,
+      value: {
+        getRandomValues(values: Uint8Array) {
+          values.fill(7);
+          return values;
+        },
+      },
+    });
+
+    try {
+      const headers = await createDgxOrchestratorAuthHeaders(
+        "GET",
+        "/runtime",
+        "http://dgx-02:4317/runtime",
+        { nowMs: 1700000000000 },
+      );
+
+      expect(headers["x-dgx-nonce"]).toBe("07".repeat(16));
+      expect(headers["x-dgx-nonce"]).toMatch(/^[a-f0-9]{32}$/);
+    } finally {
+      Object.defineProperty(globalThis, "crypto", { configurable: true, value: originalCrypto });
+    }
+  });
+
+  it("throws DgxAuthCryptoError when no secure randomness source is available", async () => {
+    const originalCrypto = globalThis.crypto;
+    Object.defineProperty(globalThis, "crypto", { configurable: true, value: {} });
+
+    try {
+      await expect(
+        createDgxOrchestratorAuthHeaders("GET", "/runtime", "http://dgx-02:4317/runtime", {
+          nowMs: 1700000000000,
+        }),
+      ).rejects.toBeInstanceOf(DgxAuthCryptoError);
+    } finally {
+      Object.defineProperty(globalThis, "crypto", { configurable: true, value: originalCrypto });
+    }
   });
 });
