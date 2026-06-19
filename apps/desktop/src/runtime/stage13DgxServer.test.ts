@@ -7,8 +7,15 @@ import {
   probeDgxOrchestratorServer,
   updateRuntimeWithFsmState,
 } from "./stage13DgxServer";
-import { DgxConnectionStateMachine } from "./stage5Runtime";
+import { DgxConnectionStateMachine, type DgxConnectionState } from "./stage5Runtime";
 import { DGX02_LAN_ORCHESTRATOR_BASE_URL } from "./stage30DgxEndpoints";
+
+function fsmStub(state: DgxConnectionState, lastError: string | null = null): DgxConnectionStateMachine {
+  return {
+    getState: () => state,
+    getLastError: () => lastError,
+  } as unknown as DgxConnectionStateMachine;
+}
 
 function expectHttpHmacHeaders(headers: Record<string, string>) {
   expect(headers.authorization).toBeUndefined();
@@ -329,6 +336,64 @@ describe("stage13 DGX server probing", () => {
     expect(updated.dgxStatus).toBe("offline");
     expect(updated.status).toBe("degraded");
     expect(updated.memorySyncStatus).toBe("degraded");
+  });
+});
+
+// Characterization tests for the FSM-state -> runtime snapshot mapping (no
+// behavior change). The existing suite only exercises the default offline
+// state; these pin the previously-uncovered online/syncing/degraded branches,
+// the WebSocket-error surfacing vs prior-error preservation, and the selective
+// node/client update (authority + dgx-02 only). A typed stub drives getState/
+// getLastError directly since updateRuntimeWithFsmState reads only those.
+describe("stage13 FSM-state runtime mapping characterization", () => {
+  it("maps an online FSM to a fully online runtime and stamps the authority client", () => {
+    const updated = updateRuntimeWithFsmState(localRuntime, fsmStub("online"), "2026-05-24T00:03:00.000Z");
+
+    expect(updated.status).toBe("online");
+    expect(updated.dgxStatus).toBe("online");
+    expect(updated.memorySyncStatus).toBe("online");
+    expect(updated.runtimeNodes.find((node) => node.id === "dgx-02")?.status).toBe("online");
+    const authorityClient = updated.syncTopology.clients.find((client) => client.id === "dgx-02");
+    expect(authorityClient?.status).toBe("online");
+    expect(authorityClient?.lastSeenAt).toBe("2026-05-24T00:03:00.000Z");
+  });
+
+  it("maps a syncing FSM to an online runtime with a syncing memory status", () => {
+    const updated = updateRuntimeWithFsmState(localRuntime, fsmStub("syncing"), "2026-05-24T00:03:00.000Z");
+
+    expect(updated.status).toBe("online");
+    expect(updated.dgxStatus).toBe("online");
+    expect(updated.memorySyncStatus).toBe("syncing");
+    expect(updated.runtimeNodes.find((node) => node.id === "dgx-02")?.status).toBe("online");
+  });
+
+  it("maps a degraded FSM to a degraded/offline runtime", () => {
+    const updated = updateRuntimeWithFsmState(localRuntime, fsmStub("degraded"), "2026-05-24T00:03:00.000Z");
+
+    expect(updated.status).toBe("degraded");
+    expect(updated.dgxStatus).toBe("offline");
+    expect(updated.memorySyncStatus).toBe("degraded");
+    expect(updated.runtimeNodes.find((node) => node.id === "dgx-02")?.status).toBe("offline");
+  });
+
+  it("surfaces the FSM last error into recentError", () => {
+    const updated = updateRuntimeWithFsmState(localRuntime, fsmStub("degraded", "socket hangup"), "2026-05-24T00:03:00.000Z");
+
+    expect(updated.recentError).toBe("dgx-02 WebSocket error: socket hangup");
+  });
+
+  it("preserves the prior recentError when the FSM has no error", () => {
+    const updated = updateRuntimeWithFsmState(localRuntime, fsmStub("online"), "2026-05-24T00:03:00.000Z");
+
+    expect(updated.recentError).toBe(localRuntime.recentError);
+  });
+
+  it("leaves non-authority cache clients untouched", () => {
+    const updated = updateRuntimeWithFsmState(localRuntime, fsmStub("online"), "2026-05-24T00:03:00.000Z");
+
+    const macbook = updated.syncTopology.clients.find((client) => client.id === "client_macbook");
+    expect(macbook).toEqual(localRuntime.syncTopology.clients.find((client) => client.id === "client_macbook"));
+    expect(macbook?.lastSeenAt).toBeUndefined();
   });
 });
 
