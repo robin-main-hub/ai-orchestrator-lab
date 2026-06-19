@@ -69,6 +69,8 @@ generic only
 | E19 | done | WorkItem Candidate cross-surface local signal filters and command jumps. |
 | P0 | done | Swarm IO race guard / stale capture hardening. Local scripts only; no agent behavior rewrite. |
 | P1 | done | Permission/redaction boundary simulation. Production-like example tokens rejected; EventStorage and local outbox redact secret-like payloads before durable/sync exposure. |
+| P2 | done | Offline outbox / EventStorage sync logical duplicate guard. Same logical message replay is duplicate; changed logical payload is conflict/review, not silent accepted merge. |
+| P3 | next | SSE / Agent Crash Error Boundary. |
 
 ## 검증
 - Local:
