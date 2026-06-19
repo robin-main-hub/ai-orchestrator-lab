@@ -127,3 +127,107 @@ describe("stage18 Event Storage replay", () => {
     expect(result.error).toContain("ECONNREFUSED");
   });
 });
+
+// Characterization tests for the deterministic replay/projection invariants
+// (no behavior change). These pin existing behavior on previously-uncovered
+// branches: non-conversation/invalid-event dropping, provenance tagging,
+// id-collision precedence + limit truncation, and incremental pull params.
+describe("stage18 replay — projection invariants characterization", () => {
+  it("drops non-conversation and structurally-invalid events without throwing", () => {
+    const nonConversation: EventEnvelope = {
+      ...userEvent,
+      id: "event_runtime_health",
+      type: "runtime.health.updated",
+      payload: { note: "ignore me" },
+      createdAt: "2026-05-24T00:00:05.000Z",
+    };
+    const missingMessageId: EventEnvelope = {
+      ...userEvent,
+      id: "event_missing_id",
+      payload: { role: "user", content: "no messageId" },
+      createdAt: "2026-05-24T00:00:06.000Z",
+    };
+    const invalidRole: EventEnvelope = {
+      ...userEvent,
+      id: "event_invalid_role",
+      payload: { messageId: "message_bad_role", role: "robot", content: "x" },
+      createdAt: "2026-05-24T00:00:07.000Z",
+    };
+
+    const messages = rebuildConversationMessagesFromEvents([
+      nonConversation,
+      missingMessageId,
+      invalidRole,
+      userEvent,
+    ]);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.id).toBe("message_user_1");
+  });
+
+  it("tags rebuilt messages with provenance and falls back to event sourceTrust", () => {
+    const [message] = rebuildConversationMessagesFromEvents([userEvent]);
+
+    expect(message?.metadata?.replayedFromEventId).toBe("event_replay_user");
+    expect(message?.metadata?.sourceTrust).toBe("trusted");
+  });
+
+  it("lets replayed events win on id collision (server replay precedence)", () => {
+    const localVersion: EventEnvelope = {
+      ...userEvent,
+      redacted: false,
+      payload: { ...(userEvent.payload as object), content: "CURRENT" },
+    };
+    const replayedVersion: EventEnvelope = {
+      ...userEvent,
+      redacted: true,
+      payload: { ...(userEvent.payload as object), content: "REPLAYED" },
+    };
+
+    const merged = mergeEventReplayLogs([localVersion], [replayedVersion]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.redacted).toBe(true);
+    expect((merged[0]?.payload as { content: string }).content).toBe("REPLAYED");
+  });
+
+  it("truncates merged logs to the limit, keeping newest first", () => {
+    const older: EventEnvelope = { ...userEvent, id: "event_older", createdAt: "2026-05-24T00:00:00.000Z" };
+    const middle: EventEnvelope = { ...userEvent, id: "event_middle", createdAt: "2026-05-24T00:00:01.000Z" };
+    const newest: EventEnvelope = { ...userEvent, id: "event_newest", createdAt: "2026-05-24T00:00:02.000Z" };
+
+    const merged = mergeEventReplayLogs([], [older, middle, newest], 2);
+
+    expect(merged.map((event) => event.id)).toEqual(["event_newest", "event_middle"]);
+  });
+
+  it("reports empty status and sends afterRevision on an incremental pull", async () => {
+    let capturedUrl = "";
+    const result = await pullAndReplayDgxEventStorage({
+      sessionId: "session_desktop_001",
+      serverBaseUrl: "http://dgx-02:4317",
+      afterRevision: 5,
+      fetchImpl: async (url) => {
+        capturedUrl = String(url);
+        return {
+          ok: true,
+          status: 200,
+          async text() {
+            return JSON.stringify({
+              sessionId: "session_desktop_001",
+              serverRevision: 5,
+              events: [],
+              createdAt: "2026-05-24T00:00:02.000Z",
+            });
+          },
+        } as Response;
+      },
+    });
+
+    expect(capturedUrl).toContain("sessionId=session_desktop_001");
+    expect(capturedUrl).toContain("afterRevision=5");
+    expect(result.status).toBe("empty");
+    expect(result.importedCount).toBe(0);
+    expect(result.messages).toEqual([]);
+  });
+});
