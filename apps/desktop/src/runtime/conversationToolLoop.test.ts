@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { ToolCall } from "../lib/codingChat";
+import type { ChatPart, ToolCall } from "../lib/codingChat";
 import type { WireMessage } from "../lib/codingTurnRunner";
-import { replyRequestsTools, runConversationToolLoop } from "./conversationToolLoop";
+import { partsToText, replyRequestsTools, runConversationToolLoop } from "./conversationToolLoop";
 
 const fence = (json: string) => "```tool\n" + json + "\n```";
 const baseMessages: WireMessage[] = [
@@ -244,5 +244,107 @@ describe("runConversationToolLoop", () => {
     });
     expect(commands).toEqual([]);
     expect(result.diagnostics).toBeUndefined();
+  });
+});
+
+// Characterization tests for previously-uncovered tool-loop branches (no
+// behavior change, no real network, no secret). These pin: the partsToText
+// helper (drop tool parts, join text with blank lines, trim), the executeTool
+// throw -> failed-tool branch surfacing the thrown message, the returned
+// status:"failed" mutating tool tagged FAILED that does NOT enable diagnostics
+// (mutating success requires "completed"), and the round>=2 system-reminder
+// injection into the fed-back payload.
+describe("conversationToolLoop — projection/error characterization", () => {
+  const fence = (json: string) => "```tool\n" + json + "\n```";
+  const baseMessages: WireMessage[] = [
+    { role: "system", content: "system prompt" },
+    { role: "user", content: "src 디렉터리 구조를 알려줘" },
+  ];
+  const makeToolId = (round: number, index: number) => `tool_${round}_${index}`;
+
+  it("joins only text parts with blank lines and trims, dropping tool parts", () => {
+    const toolCall: ToolCall = {
+      id: "call_1",
+      tool: "bash",
+      title: "ls",
+      input: { command: "ls" },
+      status: "proposed",
+    };
+    const parts: ChatPart[] = [
+      { type: "text", text: "  first  " },
+      { type: "tool", call: toolCall },
+      { type: "text", text: "second" },
+    ];
+
+    expect(partsToText(parts)).toBe("first  \n\nsecond");
+    expect(partsToText([{ type: "tool", call: toolCall }])).toBe("");
+  });
+
+  it("records a failed tool when executeTool throws and skips diagnostics", async () => {
+    const result = await runConversationToolLoop({
+      initialReply: fence('{"tool":"bash","command":"boom"}'),
+      baseMessages,
+      agentMode: "build",
+      complete: async () => ({ content: "실패를 보고합니다" }),
+      executeTool: async () => {
+        throw new Error("executor exploded");
+      },
+      makeToolId,
+      diagnosticsCommand: "tsc --noEmit",
+    });
+
+    expect(result.toolCalls[0]).toMatchObject({
+      tool: "bash",
+      status: "failed",
+      output: "executor exploded",
+      error: "executor exploded",
+    });
+    expect(result.diagnostics).toBeUndefined();
+  });
+
+  it("tags a returned failed mutating tool FAILED and does not enable diagnostics", async () => {
+    const seenPayloads: string[] = [];
+    const result = await runConversationToolLoop({
+      initialReply: fence('{"tool":"write","path":"a.ts","content":"x"}'),
+      baseMessages,
+      agentMode: "build",
+      complete: async (messages: WireMessage[]) => {
+        seenPayloads.push(messages[messages.length - 1]!.content);
+        return { content: "수정 실패를 정리합니다" };
+      },
+      executeTool: async () => ({ status: "failed", output: "disk full" }),
+      makeToolId,
+      diagnosticsCommand: "tsc --noEmit",
+    });
+
+    expect(seenPayloads[0]).toContain("[tool_result write FAILED]");
+    expect(seenPayloads[0]).toContain("disk full");
+    expect(result.diagnostics).toBeUndefined();
+  });
+
+  it("injects the original-request system reminder once the loop reaches round>=2", async () => {
+    const toolReply = fence('{"tool":"read","path":"a.txt"}');
+    const replies = [toolReply, toolReply, "정리 완료"];
+    let cursor = 0;
+    const seen: WireMessage[][] = [];
+    const result = await runConversationToolLoop({
+      initialReply: toolReply,
+      baseMessages,
+      agentMode: "build",
+      complete: async (messages: WireMessage[]) => {
+        seen.push(messages);
+        const content = replies[cursor] ?? "끝";
+        cursor += 1;
+        return { content };
+      },
+      executeTool: async () => ({ status: "completed", output: "내용" }),
+      makeToolId,
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.toolCalls).toHaveLength(3);
+    const thirdPayload = seen[2]![seen[2]!.length - 1]!.content;
+    expect(thirdPayload).toContain("[시스템 리마인더] 원래 요청");
+    expect(thirdPayload).toContain("src 디렉터리 구조를 알려줘");
   });
 });
