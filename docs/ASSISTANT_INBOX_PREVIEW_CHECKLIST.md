@@ -598,6 +598,30 @@ Owner checks:
       assertNoSideEffectActionControls.
 - [ ] **Honest** — every outcome is labelled simulated; nothing is executed.
 
+## P1 — Permission / Redaction Boundary Simulation
+
+P1 hardened the SecretRef / fallback key / EventStorage sync/outbox boundary.
+Owner checks:
+
+- [ ] **Production-like token guard** — `NODE_ENV=production` rejects
+      `dev-orchestrator-token` and `.env.example` placeholder
+      `replace-with-strong-random-token` before server startup side effects.
+- [ ] **Server pre-store redaction** — accepted EventStorage events pass
+      `pre_store` redaction before in-memory state, JSONL durable append, and
+      `/events` sync exposure.
+- [ ] **Raw secret rejection preserved** — raw secret-shaped event payloads are
+      still rejected with `raw_secret_pattern_detected`.
+- [ ] **Ref-only metadata preserved** — `apiKeyRef` / `secretRef` metadata remains
+      ref-only and is not treated as committed secret material.
+- [ ] **Desktop outbox redaction** — Stage29 local cache/outbox redacts
+      secret-like strings and sensitive-key fields before browser storage
+      persistence.
+- [ ] **Safety boundary** — no real secrets in tests; no production key generation;
+      no permission model rewrite; no DB migration; no server route change; no
+      runner dispatch / patch apply / external send.
+- [ ] **Verification note** — PR #668 merged at `ba1d8a2`; build/test, secret scan,
+      Vercel, protocol/server/desktop tests, typecheck, build, and diff check passed.
+
 ## P0 — Swarm IO Race Guard / Stale Capture Hardening
 
 P0 hardened the local tmux swarm send/capture boundary. Owner checks:
