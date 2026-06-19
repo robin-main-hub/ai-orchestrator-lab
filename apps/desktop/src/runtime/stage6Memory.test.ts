@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CodingPacket, ConversationMessage, EventEnvelope, ProviderProfile } from "@ai-orchestrator/protocol";
+import type { CodingPacket, ConversationMessage, EventEnvelope, MemoryRecord, ProviderProfile } from "@ai-orchestrator/protocol";
 import {
   activateMemoryRecord,
   createSeedMemoryRecords,
@@ -258,5 +258,156 @@ describe("stage6 memory inspector", () => {
     expect(older?.activationState).toBe("inactive");
     expect(older?.tombstonedAt).toBe("2026-05-24T00:02:00.000Z");
     expect(newer?.activationState).toBe("active");
+  });
+});
+
+// Characterization tests for previously-uncovered stage6 memory mutator and
+// reflection-worker branches (no behavior change, no network, no secret).
+// These pin: the pin/activate mutation shape plus the unknown-id no-op for all
+// three record mutators, the forget tombstone that leaves siblings untouched,
+// the reflection worker's contradiction resolution (importance picks the active
+// winner and quarantines the loser), and the worker's clean no-issue passthrough.
+describe("stage6 memory — mutators & reflection-worker characterization", () => {
+  const twoRecords: MemoryRecord[] = [
+    {
+      id: "rec_a",
+      layer: "episode",
+      scope: "session",
+      kind: "workflow",
+      title: "A",
+      content: "alpha",
+      sourceChannel: "desktop",
+      trustLevel: "trusted",
+      createdAt,
+      activationState: "suggested",
+      pinned: false,
+    },
+    {
+      id: "rec_b",
+      layer: "episode",
+      scope: "session",
+      kind: "workflow",
+      title: "B",
+      content: "bravo",
+      sourceChannel: "desktop",
+      trustLevel: "trusted",
+      createdAt,
+      activationState: "suggested",
+      pinned: false,
+    },
+  ];
+
+  it("pins and activates a matched record while leaving siblings untouched", () => {
+    const at = "2026-05-24T03:00:00.000Z";
+    const pinned = pinMemoryRecord(twoRecords, "rec_a", at);
+    const activated = activateMemoryRecord(twoRecords, "rec_a", at);
+
+    expect(pinned.find((r) => r.id === "rec_a")).toMatchObject({
+      pinned: true,
+      activationState: "active",
+      lastAccessedAt: at,
+      updatedAt: at,
+    });
+    expect(pinned.find((r) => r.id === "rec_b")).toMatchObject({ pinned: false, activationState: "suggested" });
+    expect(pinned.find((r) => r.id === "rec_b")?.updatedAt).toBeUndefined();
+
+    expect(activated.find((r) => r.id === "rec_a")).toMatchObject({
+      activationState: "active",
+      lastAccessedAt: at,
+      updatedAt: at,
+    });
+    expect(activated.find((r) => r.id === "rec_a")?.pinned).toBe(false);
+  });
+
+  it("returns the records unchanged when no id matches the mutator", () => {
+    const at = "2026-05-24T03:30:00.000Z";
+
+    expect(pinMemoryRecord(twoRecords, "missing", at).some((r) => r.pinned)).toBe(false);
+    expect(activateMemoryRecord(twoRecords, "missing", at).every((r) => r.activationState === "suggested")).toBe(true);
+    expect(forgetMemoryRecord(twoRecords, "missing", at).every((r) => !r.tombstonedAt)).toBe(true);
+  });
+
+  it("tombstones the forgotten record and leaves the other in place", () => {
+    const at = "2026-05-24T04:00:00.000Z";
+    const forgotten = forgetMemoryRecord(twoRecords, "rec_b", at);
+
+    expect(forgotten.find((r) => r.id === "rec_b")).toMatchObject({
+      activationState: "inactive",
+      tombstonedAt: at,
+    });
+    expect(forgotten.find((r) => r.id === "rec_a")).toMatchObject({
+      activationState: "suggested",
+    });
+    expect(forgotten.find((r) => r.id === "rec_a")?.tombstonedAt).toBeUndefined();
+  });
+
+  it("resolves a contradiction by importance: higher-importance wins active, loser is quarantined", async () => {
+    const now = "2026-05-24T05:00:00.000Z";
+    const contradictingRecords: MemoryRecord[] = [
+      {
+        id: "mem_conflict_block",
+        layer: "reflection",
+        scope: "project",
+        kind: "decision",
+        title: "Provider forwarding rule block",
+        content: "block deny automatic memory forwarding reseller provider policy never",
+        sourceChannel: "desktop",
+        trustLevel: "trusted",
+        createdAt: now,
+        tags: ["provider", "memory", "forwarding"],
+        activationState: "active",
+        importance: 0.8,
+        pinned: false,
+      },
+      {
+        id: "mem_conflict_allow",
+        layer: "reflection",
+        scope: "project",
+        kind: "context",
+        title: "Provider forwarding rule open",
+        content: "allow enable automatic memory forwarding reseller provider policy always auto",
+        sourceChannel: "desktop",
+        trustLevel: "trusted",
+        createdAt: now,
+        tags: ["provider", "memory", "forwarding"],
+        activationState: "suggested",
+        importance: 0.3,
+        pinned: false,
+      },
+    ];
+
+    const result = await runMemoryReflectionWorker({ records: contradictingRecords, now });
+
+    expect(result.fixedCount).toBe(1);
+    const winner = result.resolvedRecords.find((r) => r.id === "mem_conflict_block");
+    const loser = result.resolvedRecords.find((r) => r.id === "mem_conflict_allow");
+    expect(winner).toMatchObject({ activationState: "active", updatedAt: now });
+    expect(loser).toMatchObject({ activationState: "quarantined", updatedAt: now });
+  });
+
+  it("passes through cleanly with no fixes when there are no duplicate or contradiction issues", async () => {
+    const now = "2026-05-24T06:00:00.000Z";
+    const singleRecord: MemoryRecord[] = [
+      {
+        id: "mem_solo",
+        layer: "project_memory",
+        scope: "project",
+        kind: "architecture",
+        title: "Solo record",
+        content: "single trusted note with no peers",
+        sourceChannel: "desktop",
+        trustLevel: "trusted",
+        createdAt: now,
+        activationState: "active",
+        pinned: false,
+      },
+    ];
+
+    const result = await runMemoryReflectionWorker({ records: singleRecord, now });
+
+    expect(result.fixedCount).toBe(0);
+    expect(result.resolvedRecords).toHaveLength(1);
+    expect(result.resolvedRecords[0]?.activationState).toBe("active");
+    expect(result.newIssues).toHaveLength(0);
   });
 });
