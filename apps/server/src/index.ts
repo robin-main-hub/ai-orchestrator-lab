@@ -2894,7 +2894,7 @@ export async function decideApprovalInPersistentServerStorage(
       createdAt: now,
     };
     const syncResponse = pushEventsToServerStorage(syncRequest, storageState, now);
-    await appendAcceptedEventsToJsonl(syncRequest, syncResponse, storage.eventLogPath, now);
+    await appendAcceptedEventsToJsonl(syncResponse, storageState, storage.eventLogPath, now);
     const updatedApproval =
       listApprovalsFromServerStorage(storageState, now).approvals.find((candidate) => candidate.id === approval.id) ??
       approval;
@@ -5370,7 +5370,7 @@ export async function pushEventsToPersistentServerStorage(
   return enqueueStorageTask(storage, async () => {
     const state = await storage.statePromise;
     const response = pushEventsToServerStorage(request, state, now);
-    await appendAcceptedEventsToJsonl(request, response, storage.eventLogPath, now);
+    await appendAcceptedEventsToJsonl(response, state, storage.eventLogPath, now);
     return response;
   });
 }
@@ -5657,14 +5657,15 @@ export function pushEventsToServerStorage(
       };
     }
 
+    const storageEvent = redactEventForServerStorage(event);
     const existingEvent = state.eventsById.get(event.id);
     if (!existingEvent) {
       state.revision += 1;
-      state.eventsById.set(event.id, event);
+      state.eventsById.set(event.id, storageEvent);
       state.eventRevisionsById.set(event.id, state.revision);
-      const sessionEvents = state.eventsBySession.get(event.sessionId) ?? [];
-      sessionEvents.push(event.id);
-      state.eventsBySession.set(event.sessionId, sessionEvents);
+      const sessionEvents = state.eventsBySession.get(storageEvent.sessionId) ?? [];
+      sessionEvents.push(storageEvent.id);
+      state.eventsBySession.set(storageEvent.sessionId, sessionEvents);
       state.lastStoredAt = now;
 
       return {
@@ -5675,7 +5676,7 @@ export function pushEventsToServerStorage(
     }
 
     const existingRevision = state.eventRevisionsById.get(event.id) ?? state.revision;
-    if (fingerprintEvent(existingEvent) === fingerprintEvent(event)) {
+    if (fingerprintEvent(existingEvent) === fingerprintEvent(storageEvent)) {
       return {
         eventId: event.id,
         status: "duplicate" as const,
@@ -5703,6 +5704,11 @@ export function pushEventsToServerStorage(
     results,
     createdAt: now,
   };
+}
+
+function redactEventForServerStorage(event: EventEnvelope): EventEnvelope {
+  const result = redactForServerPhase(event, "pre_store");
+  return result.report.redacted ? { ...result.value, redacted: true } : result.value;
 }
 
 function isServerOwnedApprovalEventType(eventType: string): boolean {
@@ -5847,6 +5853,7 @@ export class NonceRegistry {
 }
 
 export function startServer(port = Number(process.env.PORT ?? 4317)) {
+  const apiToken = resolveOrchestratorApiToken();
   const eventStorage = createJsonlServerEventStorage();
   const missionStore = createServerMissionStore(eventStorage);
 
@@ -5896,7 +5903,6 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
   const nonceRegistry = new NonceRegistry();
   const authRateLimiter = new AuthRateLimiter();
 
-  const apiToken = resolveOrchestratorApiToken();
   const expectedAuthorization = `Bearer ${apiToken}`;
 
   const server = createServer(async (request, response) => {
@@ -7112,7 +7118,14 @@ async function fetchWithTimeout(fetchImpl: FetchLike, input: string, init: Param
 
 function resolveOrchestratorApiToken(): string {
   const fromEnv = process.env.ORCHESTRATOR_API_TOKEN?.trim();
-  if (fromEnv) return fromEnv;
+  if (fromEnv) {
+    if (process.env.NODE_ENV === "production" && isExampleOrFallbackOrchestratorApiToken(fromEnv)) {
+      throw new Error(
+        "ORCHESTRATOR_API_TOKEN must not use the dev fallback or .env.example placeholder in production.",
+      );
+    }
+    return fromEnv;
+  }
 
   if (process.env.NODE_ENV === "production") {
     throw new Error(
@@ -7128,6 +7141,10 @@ function resolveOrchestratorApiToken(): string {
   return devToken;
 }
 
+function isExampleOrFallbackOrchestratorApiToken(token: string): boolean {
+  return token === "dev-orchestrator-token" || token === "replace-with-strong-random-token";
+}
+
 export function redactInternalPathsForPublicHealth(
   snapshot: ServerEventStorageSnapshot,
 ): ServerEventStorageSnapshot {
@@ -7139,15 +7156,15 @@ export function redactInternalPathsForPublicHealth(
 }
 
 async function appendAcceptedEventsToJsonl(
-  request: EventSyncPushRequest,
   response: EventSyncPushResponse,
+  state: ServerEventStorageState,
   eventLogPath: string,
   storedAt: string,
 ) {
   const records = response.results
     .filter((result) => result.status === "accepted" && typeof result.serverRevision === "number")
     .map((result): ServerEventStorageRecord | undefined => {
-      const event = request.events.find((candidate) => candidate.id === result.eventId);
+      const event = state.eventsById.get(result.eventId);
       if (!event || typeof result.serverRevision !== "number") {
         return undefined;
       }
