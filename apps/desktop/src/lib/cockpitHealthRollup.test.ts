@@ -117,3 +117,66 @@ describe("deriveCockpitHealthFromSnapshot", () => {
     expect(deriveCockpitHealthFromSnapshot(snapshot({}), []).level).toBe("green");
   });
 });
+
+// Characterization tests for the previously-uncovered headline-fallback,
+// priority-escalation, and precedence branches (no behavior change). The
+// existing suite asserts levels and the blocked-worker headline; these pin the
+// red headline fallback when the trigger is not a blocked worker, the three
+// yellow headline branches, that a warning action alone escalates to yellow
+// while a normal action stays green yet is still surfaced as topAction, the
+// full signalSummary ordering including the DGX-mirror signal, and that red
+// wins over a coexisting yellow approval signal. All pure.
+describe("cockpitHealthRollup — headline, escalation & precedence characterization", () => {
+  it("uses the generic red headline when the red trigger is not a blocked worker and no action exists", () => {
+    const rollup = deriveCockpitHealthRollup({ ...base, criticalApprovalCount: 1 });
+    expect(rollup.level).toBe("red");
+    expect(rollup.headline).toBe("긴급 처리 필요");
+    expect(rollup.topAction).toBeUndefined();
+  });
+
+  it("uses the top action's label as the red headline when no worker is blocked", () => {
+    const rollup = deriveCockpitHealthRollup({ ...base, nextActions: [action("high")] });
+    expect(rollup.level).toBe("red");
+    expect(rollup.headline).toBe("high 액션");
+    expect(rollup.topAction?.priority).toBe("high");
+  });
+
+  it("uses the '승인 N건 대기' yellow headline when approvals are pending without an action", () => {
+    const rollup = deriveCockpitHealthRollup({ ...base, approvalCount: 2 });
+    expect(rollup.level).toBe("yellow");
+    expect(rollup.headline).toBe("승인 2건 대기");
+  });
+
+  it("uses the '확인 권장' yellow headline for an active fallback alone", () => {
+    const rollup = deriveCockpitHealthRollup({ ...base, fallbackActive: true });
+    expect(rollup.level).toBe("yellow");
+    expect(rollup.headline).toBe("확인 권장");
+  });
+
+  it("escalates to yellow on a warning-priority action alone", () => {
+    const rollup = deriveCockpitHealthRollup({ ...base, nextActions: [action("warning")] });
+    expect(rollup.level).toBe("yellow");
+    expect(rollup.headline).toBe("warning 액션");
+    expect(rollup.topAction?.priority).toBe("warning");
+  });
+
+  it("keeps a normal-priority action green but still surfaces it as topAction", () => {
+    const rollup = deriveCockpitHealthRollup({ ...base, nextActions: [action("normal")] });
+    expect(rollup.level).toBe("green");
+    expect(rollup.headline).toBe("모든 신호 정상 — 처리할 항목 없음");
+    expect(rollup.topAction?.priority).toBe("normal");
+  });
+
+  it("orders the DGX-mirror signal last in signalSummary and counts it in pendingCount", () => {
+    const rollup = deriveCockpitHealthRollup({
+      ...base,
+      blockedCount: 1,
+      approvalCount: 1,
+      fallbackActive: true,
+      dgxMirrorOffline: true,
+    });
+    expect(rollup.level).toBe("red");
+    expect(rollup.signalSummary).toBe("차단 1 · 승인 1 · 폴백 활성 · DGX 미러 오프라인");
+    expect(rollup.pendingCount).toBe(4);
+  });
+});
