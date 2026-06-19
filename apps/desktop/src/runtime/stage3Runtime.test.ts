@@ -394,3 +394,95 @@ describe("앱빌더 → 토론 분기 (blueprintContext + sourceSessionId)", () 
     for (const entry of constraints) expect(entry.length).toBeLessThanOrEqual(300); // 항목당 캡(엔진이 truncate 안 함)
   });
 });
+
+// Characterization tests for previously-uncovered stage3 debate-runtime pure
+// projections (no behavior change, no network, no secret). These pin the
+// authority-adjacent debate-promotion seam's pure side-effect-free branches:
+// deriveDebateProblem's conversation fallback (last user message reverse-find,
+// then the "Debate Mode로 승격" default when no user turn exists), its
+// blueprint accept-line omission when acceptanceCriteria is empty,
+// summarizeConversation's empty-context default surfaced via the session
+// summary, and createStatusHub's tone decision tree (dgx online→ok/offline→
+// danger/other→warn, local online→ok else warn, providers untrusted→warn,
+// events buffered→ok else warn) surfaced via createStage3DebateSession.
+// Only the crypto.randomUUID debate ids are non-deterministic and are not
+// asserted.
+describe("stage3 debate runtime — pure projection characterization", () => {
+  function statusHubOf(over: Partial<RuntimeSnapshot>, providerList = providers, eventList = events) {
+    const session = createStage3DebateSession({
+      messages,
+      agents,
+      providers: providerList,
+      events: eventList,
+      runtime: { ...runtime, ...over },
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+    return (id: string) => session.statusHub.find((item) => item.id === id);
+  }
+
+  it("returns the last user message and falls back when no user turn exists", () => {
+    const multiUser: ConversationMessage[] = [
+      { ...messages[0]!, id: "m1", content: "첫 사용자 발화" },
+      { ...messages[0]!, id: "m2", role: "assistant", content: "어시스턴트 답" },
+      { ...messages[0]!, id: "m3", content: "마지막 사용자 발화" },
+    ];
+    expect(deriveDebateProblem({ messages: multiUser })).toBe("마지막 사용자 발화");
+
+    const assistantOnly: ConversationMessage[] = [{ ...messages[0]!, role: "assistant", content: "사용자 없음" }];
+    expect(deriveDebateProblem({ messages: assistantOnly })).toBe("Conversation context를 Debate Mode로 승격");
+    expect(deriveDebateProblem({ messages: [] })).toBe("Conversation context를 Debate Mode로 승격");
+  });
+
+  it("omits the acceptance-criteria line in the blueprint problem when none are given", () => {
+    const blueprint: DesignBlueprintInput = {
+      title: "빈 수용기준 초안",
+      userIntent: "테스트",
+      targetSurface: "new_app",
+      screens: [
+        { name: "화면", purpose: "용도", primaryAction: "액션", secondaryActions: [], dataNeeded: [], emptyState: "x", errorState: "y" },
+      ],
+      designTokens: { density: "balanced", tone: "clean_builder", motion: "subtle" },
+      acceptanceCriteria: [],
+    };
+    const problem = deriveDebateProblem({ messages, blueprintContext: blueprint });
+    expect(problem).toContain("빈 수용기준 초안");
+    expect(problem).not.toContain("수용 기준:");
+  });
+
+  it("summarizes an empty conversation as the no-context default", () => {
+    const session = createStage3DebateSession({
+      messages: [],
+      agents,
+      providers,
+      events,
+      runtime,
+      createdAt: "2026-05-24T00:00:00.000Z",
+    });
+    expect(session.summary).toBe("대화 맥락 없음");
+  });
+
+  it("maps DGX status to ok/danger/warn tones", () => {
+    expect(statusHubOf({ dgxStatus: "online" })("dgx")?.tone).toBe("ok");
+    expect(statusHubOf({ dgxStatus: "offline" })("dgx")?.tone).toBe("danger");
+    expect(statusHubOf({ dgxStatus: "degraded" })("dgx")?.tone).toBe("warn");
+    expect(statusHubOf({ dgxStatus: "syncing" })("dgx")?.tone).toBe("warn");
+  });
+
+  it("maps local model status to ok only when online", () => {
+    expect(statusHubOf({ localModelStatus: "online" })("local")?.tone).toBe("ok");
+    expect(statusHubOf({ localModelStatus: "degraded" })("local")?.tone).toBe("warn");
+  });
+
+  it("warns the providers tile when any provider is untrusted, otherwise ok", () => {
+    const trustedOnly: ProviderProfile[] = [{ ...providers[0]! }];
+    expect(statusHubOf({}, trustedOnly)("providers")?.tone).toBe("ok");
+    expect(statusHubOf({}, trustedOnly)("providers")?.value).toBe("1 active / 0 risky");
+    expect(statusHubOf({}, providers)("providers")?.tone).toBe("warn");
+  });
+
+  it("warns the events tile only when no events are buffered", () => {
+    expect(statusHubOf({}, providers, events)("events")?.tone).toBe("ok");
+    expect(statusHubOf({}, providers, [])("events")?.tone).toBe("warn");
+    expect(statusHubOf({}, providers, [])("events")?.value).toBe("0 buffered");
+  });
+});
