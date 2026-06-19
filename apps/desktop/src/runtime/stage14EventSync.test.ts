@@ -77,6 +77,83 @@ describe("stage14 Event Storage sync", () => {
     expect(state.serverRevision).toBe(7);
   });
 
+  it("treats duplicate replay responses as synced outbox entries", async () => {
+    const result = await pushEventsToDgxEventStorage({
+      events: [event],
+      serverBaseUrl: "http://dgx-02:4317",
+      fetchImpl: async (url, init) => {
+        expect(url).toBe("http://dgx-02:4317/events/sync");
+        expect(init?.method).toBe("POST");
+        expect(String(init?.body)).not.toContain("raw-secret-should-not-sync");
+        return {
+          ok: true,
+          status: 202,
+          async text() {
+            return JSON.stringify({
+              id: "event_sync_response_duplicate",
+              requestId: "event_sync_push_duplicate",
+              sessionId: "session_1",
+              serverRevision: 8,
+              accepted: 0,
+              duplicates: 1,
+              conflicts: 0,
+              failed: 0,
+              results: [{ eventId: "event_sync_1", status: "duplicate", serverRevision: 8 }],
+              createdAt: event.createdAt,
+            });
+          },
+        } as Response;
+      },
+      createdAt: event.createdAt,
+    });
+
+    expect(result.status).toBe("synced");
+    expect(result.syncedEventIds).toEqual(["event_sync_1"]);
+    expect(result.queuedEvents).toHaveLength(0);
+  });
+
+  it("keeps conflicting replay responses queued for review", async () => {
+    const result = await pushEventsToDgxEventStorage({
+      events: [event],
+      serverBaseUrl: "http://dgx-02:4317",
+      fetchImpl: async () =>
+        ({
+          ok: true,
+          status: 202,
+          async text() {
+            return JSON.stringify({
+              id: "event_sync_response_conflict",
+              requestId: "event_sync_push_conflict",
+              sessionId: "session_1",
+              serverRevision: 8,
+              accepted: 0,
+              duplicates: 0,
+              conflicts: 1,
+              failed: 0,
+              results: [
+                {
+                  eventId: "event_sync_1",
+                  status: "conflict",
+                  serverRevision: 8,
+                  reason: "same_logical_event_different_payload",
+                },
+              ],
+              createdAt: event.createdAt,
+            });
+          },
+        }) as Response,
+      createdAt: event.createdAt,
+    });
+    const state = reduceEventSyncState(createInitialEventSyncState(1), result);
+
+    expect(result.status).toBe("failed");
+    expect(result.syncedEventIds).toHaveLength(0);
+    expect(result.queuedEvents.map((queuedEvent) => queuedEvent.id)).toEqual(["event_sync_1"]);
+    expect(result.error).toContain("conflict review");
+    expect(state.outboxCount).toBe(1);
+    expect(state.lastError).toContain("conflict review");
+  });
+
   it("keeps local outbox when the DGX server is unreachable", async () => {
     const result = await pushEventsToDgxEventStorage({
       events: [event],
