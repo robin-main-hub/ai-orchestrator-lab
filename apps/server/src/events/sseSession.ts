@@ -33,7 +33,8 @@ export class SseSession {
       ...this.options.headers,
     });
 
-    this.writeEvent("heartbeat", this.options.heartbeatPayload());
+    // 타이머/리스너를 먼저 건다 — 초기 heartbeat write가 죽은 소켓에서 throw→close()
+    // 되더라도 heartbeatTimer가 이미 등록돼 있어야 close()가 정리할 수 있다(타이머 누수 방지).
     this.heartbeatTimer = globalThis.setInterval(() => {
       this.writeEvent("heartbeat", this.options.heartbeatPayload());
     }, this.heartbeatMs);
@@ -42,13 +43,30 @@ export class SseSession {
     this.options.request.once("aborted", () => this.close("request_aborted"));
     this.options.response.once("close", () => this.close("response_close"));
     this.options.response.once("error", () => this.close("response_error"));
+
+    this.writeEvent("heartbeat", this.options.heartbeatPayload());
   }
 
   writeEvent(event: string, payload: unknown) {
     if (this.closed || this.options.response.writableEnded) {
       return;
     }
-    this.options.response.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
+    let frame: string;
+    try {
+      frame = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
+    } catch {
+      // 직렬화 불가 페이로드(순환 참조 등) — 이 이벤트만 건너뛴다. 연결은 유지한다.
+      // 깨진 한 이벤트가 스트림 전체를 죽이지 않게 한다.
+      return;
+    }
+    try {
+      this.options.response.write(frame);
+    } catch {
+      // 소켓이 이미 깨진 경우 response.write가 동기 throw를 낼 수 있다. 이 예외가
+      // fan-out 루프(broadcast/publish)나 커밋 경로(onEventsCommitted)로 새어나가
+      // 다른 구독자 전파를 막지 않도록, 이 세션만 닫고 예외를 삼킨다.
+      this.close("write_error");
+    }
   }
 
   close(reason = "closed") {
