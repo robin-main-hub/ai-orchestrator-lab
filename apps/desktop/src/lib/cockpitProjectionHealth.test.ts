@@ -91,3 +91,83 @@ describe("cockpit projection health labels", () => {
     ).toBe("bound");
   });
 });
+
+// Characterization tests for the previously-uncovered fallback and partial-state
+// branches (no behavior change). The existing suite exercises the all-clear,
+// all-failing, and trusted/expired paths; these pin the "오류 원문 없음" fallbacks,
+// the loaded-indicator timestamp paths, that each single subsystem trigger
+// yields exactly one indicator (never the empty-state fallback), and that
+// payload binding requires BOTH replay metadata AND trust while a future
+// expiry does not mark the payload expired. All pure, no network/secret.
+describe("cockpit projection health — fallback & partial-state characterization", () => {
+  it("falls back to '오류 원문 없음' when an event-sync failure has no recorded error", () => {
+    expect(
+      createCockpitLocalHealthIndicators({
+        dgxStatus: "online",
+        eventSyncLastError: undefined,
+        eventSyncStatus: "failed",
+        memorySyncStatus: "synced",
+      }),
+    ).toEqual(["이벤트 발신함 동기화 실패: 오류 원문 없음"]);
+  });
+
+  it("emits exactly one indicator for a single offline DGX (no empty-state fallback)", () => {
+    expect(
+      createCockpitLocalHealthIndicators({
+        dgxStatus: "offline",
+        eventSyncStatus: "idle",
+        memorySyncStatus: "synced",
+      }),
+    ).toEqual(["DGX-02 미러 노드 오프라인"]);
+  });
+
+  it("emits exactly one indicator for a single degraded memory sync", () => {
+    expect(
+      createCockpitLocalHealthIndicators({
+        dgxStatus: "online",
+        eventSyncStatus: "idle",
+        memorySyncStatus: "degraded",
+      }),
+    ).toEqual(["기억 동기화 저하"]);
+  });
+
+  it("uses the timestamp for a loaded snapshot without a provider indicator", () => {
+    expect(
+      createCockpitServerSnapshotIndicator({
+        status: "loaded",
+        timestamp: "2026-06-05T00:00:00.000Z",
+      }),
+    ).toBe("서버 스냅샷 동기화됨: 2026-06-05T00:00:00.000Z");
+  });
+
+  it("falls back to '동기화 시각 없음' for a loaded snapshot with neither provider nor timestamp", () => {
+    expect(createCockpitServerSnapshotIndicator({ status: "loaded" })).toBe(
+      "서버 스냅샷 동기화됨: 동기화 시각 없음",
+    );
+  });
+
+  it("falls back to '오류 원문 없음' for a failed snapshot with no error text", () => {
+    expect(createCockpitServerSnapshotIndicator({ status: "failed" })).toBe(
+      "서버 스냅샷 실패 · 로컬 투영 유지: 오류 원문 없음",
+    );
+  });
+
+  it("does not mark a payload bound when replay metadata is absent even if trusted", () => {
+    expect(
+      resolveCockpitPayloadBindingStatus({
+        hasReplayMetadata: false,
+        sourceTrust: "trusted",
+      }),
+    ).toBe("unbound");
+  });
+
+  it("binds a trusted replay payload whose expiry is still in the future", () => {
+    expect(
+      resolveCockpitPayloadBindingStatus({
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        hasReplayMetadata: true,
+        sourceTrust: "trusted",
+      }),
+    ).toBe("bound");
+  });
+});
