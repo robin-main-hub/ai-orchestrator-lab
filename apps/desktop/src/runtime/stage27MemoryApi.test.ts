@@ -255,3 +255,152 @@ describe("stage27 adapter-backed memento memory api", () => {
     await expect(api.recall({ query: "Event Storage" })).rejects.toThrow("Untrusted callers cannot recall memory");
   });
 });
+
+// Characterization tests for previously-uncovered stage27 memory-api branches
+// (no behavior change, no network, no secret). These pin the authority-adjacent
+// memory-store seam: the local remember()'s default scope inference (inferScope:
+// user_memory→global, episode|fragment→session, else→project) and default kind
+// fallback, the recall() query.layers filter, the forget() tombstone hiding a
+// record from recall, and the adapter-backed createContext default/override merge.
+describe("stage27 memory api — local store & context characterization", () => {
+  it("infers global scope and a context kind default when remember omits them (user_memory layer)", async () => {
+    const api = createLocalMementoMemoryApi({ records: [], createdAt });
+
+    const record = await api.remember({
+      layer: "user_memory",
+      title: "Operator preference",
+      content: "Default scope inference should map a user_memory layer to a global scope.",
+      sourceChannel: "desktop",
+      trustLevel: "trusted",
+    });
+
+    expect(record.scope).toBe("global");
+    expect(record.kind).toBe("context");
+  });
+
+  it("infers session scope for episode and fragment layers when scope is omitted", async () => {
+    const api = createLocalMementoMemoryApi({ records: [], createdAt });
+
+    const episode = await api.remember({
+      layer: "episode",
+      title: "Episode record",
+      content: "An episode layer record without an explicit scope.",
+      sourceChannel: "desktop",
+      trustLevel: "trusted",
+    });
+    const fragment = await api.remember({
+      layer: "fragment",
+      title: "Fragment record",
+      content: "A fragment layer record without an explicit scope.",
+      sourceChannel: "desktop",
+      trustLevel: "trusted",
+    });
+
+    expect(episode.scope).toBe("session");
+    expect(fragment.scope).toBe("session");
+  });
+
+  it("infers project scope for non-user/non-episode layers when scope is omitted", async () => {
+    const api = createLocalMementoMemoryApi({ records: [], createdAt });
+
+    const record = await api.remember({
+      layer: "project_memory",
+      title: "Project record",
+      content: "A project_memory layer record without an explicit scope.",
+      sourceChannel: "desktop",
+      trustLevel: "trusted",
+    });
+
+    expect(record.scope).toBe("project");
+  });
+
+  it("filters recall results by the query.layers allowlist", async () => {
+    const api = createLocalMementoMemoryApi({ records: [], createdAt });
+    const marker = "Zelkova layer filter marker phrase";
+
+    const projectRecord = await api.remember({
+      layer: "project_memory",
+      scope: "project",
+      kind: "decision",
+      title: "Project layer marker",
+      content: marker,
+      sourceChannel: "desktop",
+      trustLevel: "trusted",
+    });
+    await api.remember({
+      layer: "fragment",
+      scope: "session",
+      kind: "decision",
+      title: "Fragment layer marker",
+      content: marker,
+      sourceChannel: "desktop",
+      trustLevel: "trusted",
+    });
+
+    const projectOnly = await api.recall({ query: marker, layers: ["project_memory"] });
+
+    expect(projectOnly.some((result) => result.record.id === projectRecord.id)).toBe(true);
+    expect(projectOnly.every((result) => result.record.layer === "project_memory")).toBe(true);
+  });
+
+  it("hides a forgotten (tombstoned) record from recall while keeping it in the snapshot", async () => {
+    const api = createLocalMementoMemoryApi({ records: [], createdAt });
+    const marker = "Hornbeam forget tombstone marker phrase";
+
+    const record = await api.remember({
+      layer: "project_memory",
+      scope: "project",
+      kind: "decision",
+      title: "Forgettable record",
+      content: marker,
+      sourceChannel: "desktop",
+      trustLevel: "trusted",
+    });
+
+    await api.forget(record.id);
+
+    const results = await api.recall({ query: marker });
+    const snapshot = api.snapshot().find((candidate) => candidate.id === record.id);
+
+    expect(results.some((result) => result.record.id === record.id)).toBe(false);
+    expect(snapshot?.tombstonedAt).toBeTruthy();
+  });
+
+  it("builds the adapter context with allow/trusted defaults and a createdAt clock", async () => {
+    const captured: Array<MemoryAdapterContext | undefined> = [];
+    const adapter = new MockAdapter({ records: createSeedMemoryRecords(createdAt), createdAt });
+    const originalRecall = adapter.recall.bind(adapter);
+    adapter.recall = async (query, ctx) => {
+      captured.push(ctx);
+      return originalRecall(query, ctx);
+    };
+    const api = createAdapterBackedMementoMemoryApi({ adapter, createdAt });
+
+    await api.recall({ query: "Event Storage", limit: 1 });
+
+    expect(captured[0]?.permissionDecision).toBe("allow");
+    expect(captured[0]?.callerTrustLevel).toBe("trusted");
+    expect(captured[0]?.operationScope).toBeUndefined();
+    expect(captured[0]?.now?.()).toBe(createdAt);
+  });
+
+  it("lets an explicit context override the adapter context defaults", async () => {
+    const captured: Array<MemoryAdapterContext | undefined> = [];
+    const adapter = new MockAdapter({ records: createSeedMemoryRecords(createdAt), createdAt });
+    const originalRecall = adapter.recall.bind(adapter);
+    adapter.recall = async (query, ctx) => {
+      captured.push(ctx);
+      return originalRecall(query, ctx);
+    };
+    const api = createAdapterBackedMementoMemoryApi({
+      adapter,
+      context: { permissionDecision: "approval_required" },
+      createdAt,
+    });
+
+    await api.recall({ query: "Event Storage", limit: 1 });
+
+    expect(captured[0]?.permissionDecision).toBe("approval_required");
+    expect(captured[0]?.callerTrustLevel).toBe("trusted");
+  });
+});
