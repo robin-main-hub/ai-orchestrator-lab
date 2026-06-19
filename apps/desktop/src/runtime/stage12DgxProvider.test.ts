@@ -542,3 +542,99 @@ describe("stage12 streaming + attachment riders", () => {
     expect(request.attachments).toBeUndefined();
   });
 });
+
+// Characterization tests for previously-uncovered stage12 DGX-provider branches
+// (no behavior change, no network, no secret). These pin the authority-adjacent
+// remote-execution seam: resolveDirectProviderBaseUrl's two passthrough paths
+// (no browser origin, and a non-MiMo provider that keeps its own baseUrl), the
+// isDgxRoutedProvider falsey/vllm-routed decisions, createDgxChatMessages'
+// empty-content skip + multi system-part join + latest-8 chat-window cap (via
+// createDgxVllmRequestBody), and the permission-error constructor's approval
+// metadata extraction (present, absent, and empty-payload default).
+describe("stage12 DGX provider — routing & request-shaping characterization", () => {
+  const directProvider: ProviderProfile = {
+    id: "provider_direct_openai",
+    name: "Direct OpenAI",
+    kind: "openai",
+    baseUrl: "https://api.direct.example/v1",
+    defaultModel: "gpt-x",
+    enabled: true,
+    tags: ["openai-compatible"],
+    trustLevel: "trusted",
+  };
+
+  it("passes a provider's own baseUrl through when there is no browser origin", () => {
+    expect(resolveDirectProviderBaseUrl(directProvider, undefined)).toBe("https://api.direct.example/v1");
+    // even a MiMo provider falls back to baseUrl with no origin to anchor the same-origin proxy
+    expect(
+      resolveDirectProviderBaseUrl(
+        { ...directProvider, id: "provider_mimo_token_openai" },
+        undefined,
+      ),
+    ).toBe("https://api.direct.example/v1");
+  });
+
+  it("keeps a non-MiMo provider's baseUrl even when a browser origin is present", () => {
+    expect(resolveDirectProviderBaseUrl(directProvider, "http://127.0.0.1:5173")).toBe(
+      "https://api.direct.example/v1",
+    );
+  });
+
+  it("treats undefined and tag-less providers as not DGX-routed, but vLLM providers as routed", () => {
+    expect(isDgxRoutedProvider(undefined)).toBe(false);
+    expect(isDgxRoutedProvider({ ...directProvider, tags: ["openai-compatible"] })).toBe(false);
+    // dgx+vllm tags make the base `provider` DGX-routed via isDgxVllmProvider
+    expect(isDgxRoutedProvider(provider)).toBe(true);
+  });
+
+  it("skips empty/whitespace messages and joins multiple system parts into one leading message", () => {
+    const body = createDgxVllmRequestBody("qwen36-gio-lora-v5-prisma", [
+      { ...messages[0]!, id: "m_sys_a", role: "system", content: "First system note." },
+      { ...messages[0]!, id: "m_blank", role: "user", content: "   " },
+      { ...messages[0]!, id: "m_sys_b", role: "system", content: "Second system note." },
+      { ...messages[0]!, id: "m_real", role: "user", content: "Real question?" },
+    ]);
+
+    const systemMessages = body.messages.filter((message) => message.role === "system");
+    expect(systemMessages).toHaveLength(1);
+    expect(systemMessages[0]?.content).toContain("First system note.");
+    expect(systemMessages[0]?.content).toContain("Second system note.");
+    // the whitespace-only user turn is dropped, leaving exactly the system + one real user message
+    expect(body.messages).toHaveLength(2);
+    expect(body.messages[1]).toMatchObject({ role: "user", content: "Real question?" });
+  });
+
+  it("caps the chat window to the latest 8 turns after the system message", () => {
+    const manyTurns: ConversationMessage[] = Array.from({ length: 10 }, (_, index) => ({
+      ...messages[0]!,
+      id: `turn_${index}`,
+      role: index % 2 === 0 ? "user" : "assistant",
+      content: `turn ${index}`,
+    }));
+    const body = createDgxVllmRequestBody("qwen36-gio-lora-v5-prisma", manyTurns);
+
+    // 1 system message + the latest 8 of 10 conversation turns
+    expect(body.messages).toHaveLength(9);
+    expect(body.messages[1]).toMatchObject({ content: "turn 2" });
+    expect(body.messages[body.messages.length - 1]).toMatchObject({ content: "turn 9" });
+  });
+
+  it("extracts approval metadata from the permission-required error payload", () => {
+    const withApproval = new ProviderCompletionPermissionRequiredError("needs approval", {
+      approval: { id: "approval_x1", sourceItemId: "permission_x1" },
+    });
+    expect(withApproval.name).toBe("ProviderCompletionPermissionRequiredError");
+    expect(withApproval.message).toBe("needs approval");
+    expect(withApproval.approvalId).toBe("approval_x1");
+    expect(withApproval.sourceItemId).toBe("permission_x1");
+
+    const withoutApproval = new ProviderCompletionPermissionRequiredError("no approval block", {});
+    expect(withoutApproval.approvalId).toBeUndefined();
+    expect(withoutApproval.sourceItemId).toBeUndefined();
+
+    // default empty-payload constructor leaves both undefined
+    const defaulted = new ProviderCompletionPermissionRequiredError("default payload");
+    expect(defaulted.approvalId).toBeUndefined();
+    expect(defaulted.sourceItemId).toBeUndefined();
+  });
+});
