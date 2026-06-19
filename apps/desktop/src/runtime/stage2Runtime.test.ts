@@ -136,3 +136,81 @@ describe("stage2 runtime helpers", () => {
     await expect(store.listBySession("session_desktop_001")).resolves.toHaveLength(1);
   });
 });
+
+// Characterization tests for the redaction boundary (no behavior change).
+// These pin existing redactForEventStore / createStage2Event behavior on paths
+// the suite above did not cover: url basic-auth, generic env-var secrets,
+// nested recursion, content-independent key redaction, primitive preservation,
+// and the createStage2Event `redacted` flag.
+describe("redactForEventStore — redaction boundary characterization", () => {
+  it("strips basic-auth credentials embedded in URLs", () => {
+    const redacted = redactForEventStore({
+      note: "clone https://alice:s3cr3t@github.com/repo.git now",
+    }) as { note: string };
+
+    expect(redacted.note).toBe(
+      "clone https://[REDACTED:url_auth]@github.com/repo.git now",
+    );
+    expect(redacted.note).not.toContain("s3cr3t");
+    expect(redacted.note).not.toContain("alice");
+  });
+
+  it("redacts generic uppercase secret env assignments (not only named keys)", () => {
+    const redacted = redactForEventStore({
+      command: "export DEPLOY_TOKEN=placeholder",
+    }) as { command: string };
+
+    expect(redacted.command).toBe("export [REDACTED:env_secret]");
+    expect(redacted.command).not.toContain("placeholder");
+  });
+
+  it("recurses through nested arrays and objects, preserving structure", () => {
+    const redacted = redactForEventStore({
+      items: [{ password: "hunter2", note: "ok" }, "sk-deadbeefcafe1234"],
+    }) as { items: [{ password: string; note: string }, string] };
+
+    expect(redacted.items).toHaveLength(2);
+    expect(redacted.items[0].password).toBe("[REDACTED:secret_ref_only]");
+    expect(redacted.items[0].note).toBe("ok");
+    expect(redacted.items[1]).toBe("[REDACTED:api_key]");
+    expect(JSON.stringify(redacted)).not.toContain("hunter2");
+    expect(JSON.stringify(redacted)).not.toContain("deadbeefcafe1234");
+  });
+
+  it("redacts by sensitive key name regardless of value content", () => {
+    const redacted = redactForEventStore({
+      token: "literally-anything-even-not-secret-looking",
+    }) as { token: string };
+
+    expect(redacted.token).toBe("[REDACTED:secret_ref_only]");
+  });
+
+  it("leaves non-string primitives untouched", () => {
+    const input = { count: 42, enabled: true, missing: null, ratio: 3.14 };
+
+    expect(redactForEventStore(input)).toEqual(input);
+  });
+
+  it("flags createStage2Event payloads as redacted when a secret is present", () => {
+    const event = createStage2Event({
+      type: "conversation.message.created",
+      payload: { apiKey: "sk-deadbeefcafe1234" },
+    });
+
+    expect(event.redacted).toBe(true);
+    expect((event.payload as { apiKey: string }).apiKey).toBe(
+      "[REDACTED:secret_ref_only]",
+    );
+  });
+
+  it("does not flag createStage2Event payloads with no redactable content", () => {
+    const payload = { content: "hello world", count: 3 };
+    const event = createStage2Event({
+      type: "conversation.message.created",
+      payload,
+    });
+
+    expect(event.redacted).toBe(false);
+    expect(event.payload).toEqual(payload);
+  });
+});
