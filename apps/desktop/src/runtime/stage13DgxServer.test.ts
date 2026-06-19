@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
+import type { ProviderProfile, RuntimeSnapshot } from "@ai-orchestrator/protocol";
 import {
   fetchDgxOperatorCockpitSnapshot,
   fetchDgxProviderModelDiscovery,
@@ -394,6 +394,167 @@ describe("stage13 FSM-state runtime mapping characterization", () => {
     const macbook = updated.syncTopology.clients.find((client) => client.id === "client_macbook");
     expect(macbook).toEqual(localRuntime.syncTopology.clients.find((client) => client.id === "client_macbook"));
     expect(macbook?.lastSeenAt).toBeUndefined();
+  });
+});
+
+// Characterization tests for the previously-uncovered transport-failover and
+// projection seams of the stage13 DGX-server client (no behavior change, no
+// real network, no secret). The existing suite pins the FSM-state mapping and a
+// single happy-path probe; these pin: probeDgxOrchestratorServer continuing the
+// base-URL loop when the first endpoint throws, the all-endpoints-failed
+// aggregate joining each base URL's error with " | ", createUnreachableRuntime
+// leaving a continue_locally cache client untouched (the final `: client`
+// passthrough), provider model discovery re-throwing the underlying Error,
+// cockpit schema-validation failing over to the next base URL, and fetchJson
+// truncating a non-ok body preview to 180 chars. A multi-base array routes
+// through resolveDgxServerBaseUrls verbatim (normalized, in order).
+const BASE_1 = "http://127.0.0.1:4317";
+const BASE_2 = "http://127.0.0.1:4318";
+
+function fakeProvider(): ProviderProfile {
+  return {
+    id: "provider_failover_probe",
+    name: "Failover Probe",
+    kind: "openai",
+    enabled: true,
+    tags: ["server-proxy"],
+    trustLevel: "limited",
+  };
+}
+
+function validCockpitPayload(id: string) {
+  return {
+    id,
+    timestamp: "2026-05-24T00:01:00.000Z",
+    fleet: [{ workerId: "server-provider-registry", role: "orchestrator", status: "idle", statusRingColor: "green" }],
+    approvals: [],
+    handoffs: [],
+    memory: {
+      contextReasons: ["Server provider registry readiness"],
+      macBookAuthorityEnabled: true,
+      dgxMirrorHealth: "healthy",
+      contradictionWarnings: [],
+    },
+    routing: {
+      selectedModelId: "claude-opus-4-8",
+      fallbackStatus: "available",
+      costBadge: "high",
+      speedBadge: "average",
+      trustBadge: "limited",
+    },
+    recovery: { offlineResumeSupported: true, outboxSyncStatus: "synced", healthIndicators: ["synced"] },
+    dispatchHistory: [],
+  };
+}
+
+describe("stage13 DGX server — transport failover & projection characterization", () => {
+  it("continues to the next base URL when the first probe endpoint throws", async () => {
+    const calls: string[] = [];
+    const fetchImpl = (async (url: RequestInfo | URL) => {
+      const u = String(url);
+      calls.push(u);
+      if (u.startsWith(BASE_1)) throw new Error("base1 connection refused");
+      if (u.endsWith("/health")) {
+        return jsonResponse({
+          service: "ai-orchestrator-dgx-server",
+          status: "ok",
+          capabilities: [],
+          runtime: { ...localRuntime, dgxStatus: "online" },
+        });
+      }
+      if (u.endsWith("/heartbeat")) {
+        return jsonResponse({ nodeId: "dgx-02", status: "connected", checkedAt: "2026-05-24T00:05:00.000Z", message: "ok" });
+      }
+      return jsonResponse({
+        id: "md",
+        providerProfileId: "p",
+        status: "succeeded",
+        source: "remote_probe",
+        selectedModelId: "m",
+        redactionApplied: true,
+        warnings: [],
+        createdAt: "2026-05-24T00:05:00.000Z",
+        models: [],
+      });
+    }) as unknown as typeof fetch;
+
+    const probe = await probeDgxOrchestratorServer({
+      localRuntime,
+      serverBaseUrl: [BASE_1, BASE_2],
+      fetchImpl,
+      checkedAt: "2026-05-24T00:05:00.000Z",
+    });
+
+    expect(probe.status).toBe("online");
+    expect(probe.baseUrl).toBe(BASE_2);
+    expect(calls[0]).toBe(`${BASE_1}/health`);
+  });
+
+  it("aggregates every base URL's failure with ' | ' when the probe is fully unreachable", async () => {
+    const probe = await probeDgxOrchestratorServer({
+      localRuntime,
+      serverBaseUrl: [BASE_1, BASE_2],
+      fetchImpl: (async (url: RequestInfo | URL) => {
+        throw new Error(`down ${String(url)}`);
+      }) as unknown as typeof fetch,
+      checkedAt: "2026-05-24T00:06:00.000Z",
+    });
+
+    expect(probe.status).toBe("unreachable");
+    expect(probe.baseUrl).toBe(BASE_1);
+    expect(probe.error).toContain(BASE_1);
+    expect(probe.error).toContain(BASE_2);
+    expect(probe.error).toContain(" | ");
+    expect(probe.heartbeat.message).toContain(" | ");
+  });
+
+  it("leaves a continue_locally cache client untouched when the DGX is unreachable", async () => {
+    const probe = await probeDgxOrchestratorServer({
+      localRuntime,
+      fetchImpl: async () => {
+        throw new Error("connection refused");
+      },
+      checkedAt: "2026-05-24T00:07:00.000Z",
+    });
+
+    const macbook = probe.runtime.syncTopology.clients.find((client) => client.id === "client_macbook");
+    expect(macbook).toEqual(localRuntime.syncTopology.clients.find((client) => client.id === "client_macbook"));
+
+    const authority = probe.runtime.syncTopology.clients.find((client) => client.id === "dgx-02");
+    expect(authority?.status).toBe("offline");
+    expect(authority?.lastSeenAt).toBe("2026-05-24T00:07:00.000Z");
+  });
+
+  it("re-throws the underlying Error when provider model discovery fails", async () => {
+    await expect(
+      fetchDgxProviderModelDiscovery({
+        provider: fakeProvider(),
+        serverBaseUrl: BASE_1,
+        fetchImpl: (async () => {
+          throw new Error("discovery-down");
+        }) as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow("discovery-down");
+  });
+
+  it("fails over to the next base URL when the first cockpit payload fails schema validation", async () => {
+    const snapshot = await fetchDgxOperatorCockpitSnapshot({
+      serverBaseUrl: [BASE_1, BASE_2],
+      fetchImpl: (async (url: RequestInfo | URL) => {
+        if (String(url).startsWith(BASE_1)) return jsonResponse({ id: "malformed", timestamp: "2026-05-24T00:01:00.000Z" });
+        return jsonResponse(validCockpitPayload("server-cockpit-failover"));
+      }) as unknown as typeof fetch,
+    });
+
+    expect(snapshot.id).toBe("server-cockpit-failover");
+    expect(snapshot.routing.selectedModelId).toBe("claude-opus-4-8");
+  });
+
+  it("truncates a non-ok response body preview to 180 characters in the thrown error", async () => {
+    const fetchImpl = (async () => new Response("Z".repeat(300), { status: 500 })) as unknown as typeof fetch;
+
+    await expect(fetchDgxProviderRegistry({ serverBaseUrl: BASE_1, fetchImpl })).rejects.toThrow("Z".repeat(180));
+    await expect(fetchDgxProviderRegistry({ serverBaseUrl: BASE_1, fetchImpl })).rejects.not.toThrow("Z".repeat(181));
   });
 });
 
