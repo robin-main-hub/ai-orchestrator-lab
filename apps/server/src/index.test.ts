@@ -1657,6 +1657,131 @@ describe("server health placeholder", () => {
     }
   });
 
+  it("dedupes the same logical conversation message when reconnect uses a new local event id", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "ai-orchestrator-event-reconnect-"));
+    try {
+      const storage = createJsonlServerEventStorage(tempDir);
+      const firstEvent = {
+        id: "event_reconnect_message_first",
+        sessionId: "session_reconnect",
+        type: "conversation.message.created",
+        payload: {
+          messageId: "message_reconnect_1",
+          role: "user",
+          contentLength: 17,
+          redaction: "applied",
+        },
+        createdAt: "2026-05-24T00:00:00.000Z",
+        source: "desktop" as const,
+        sourceTrust: "trusted" as const,
+        redacted: true,
+      };
+      const replayedEvent = {
+        ...firstEvent,
+        id: "event_reconnect_message_replayed",
+        createdAt: "2026-05-24T00:00:03.000Z",
+      };
+
+      const first = await pushEventsToPersistentServerStorage(
+        {
+          id: "sync_reconnect_first",
+          clientId: "client_macbook",
+          sessionId: firstEvent.sessionId,
+          events: [firstEvent],
+          idempotencyKey: "client_macbook:session_reconnect:event_reconnect_message_first",
+          createdAt: firstEvent.createdAt,
+        },
+        storage,
+        firstEvent.createdAt,
+      );
+      const replayed = await pushEventsToPersistentServerStorage(
+        {
+          id: "sync_reconnect_replayed",
+          clientId: "client_macbook",
+          sessionId: replayedEvent.sessionId,
+          events: [replayedEvent],
+          idempotencyKey: "client_macbook:session_reconnect:event_reconnect_message_replayed",
+          createdAt: replayedEvent.createdAt,
+        },
+        storage,
+        replayedEvent.createdAt,
+      );
+      const pulled = await pullEventsFromPersistentServerStorage(firstEvent.sessionId, storage, replayedEvent.createdAt);
+      const jsonl = await readFile(storage.eventLogPath, "utf8");
+      const persistedLines = jsonl.trim().split("\n").filter(Boolean);
+
+      expect(first.accepted).toBe(1);
+      expect(replayed.accepted).toBe(0);
+      expect(replayed.duplicates).toBe(1);
+      expect(replayed.results[0]?.status).toBe("duplicate");
+      expect(pulled.events.map((event) => event.id)).toEqual([firstEvent.id]);
+      expect(persistedLines).toHaveLength(1);
+    } finally {
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("surfaces same logical conversation message conflicts instead of accepting a second local id", () => {
+    const state = createServerEventStorageState();
+    const firstEvent = {
+      id: "event_conflict_message_first",
+      sessionId: "session_reconnect_conflict",
+      type: "conversation.message.created",
+      payload: {
+        messageId: "message_reconnect_conflict",
+        role: "user",
+        contentLength: 17,
+        redaction: "applied",
+      },
+      createdAt: "2026-05-24T00:00:00.000Z",
+      source: "desktop" as const,
+      sourceTrust: "trusted" as const,
+      redacted: true,
+    };
+    const changedEvent = {
+      ...firstEvent,
+      id: "event_conflict_message_changed",
+      payload: {
+        ...firstEvent.payload,
+        contentLength: 99,
+      },
+      createdAt: "2026-05-24T00:00:04.000Z",
+    };
+
+    const first = pushEventsToServerStorage(
+      {
+        id: "sync_conflict_first",
+        clientId: "client_macbook",
+        sessionId: firstEvent.sessionId,
+        events: [firstEvent],
+        idempotencyKey: "client_macbook:session_reconnect_conflict:event_conflict_message_first",
+        createdAt: firstEvent.createdAt,
+      },
+      state,
+      firstEvent.createdAt,
+    );
+    const conflict = pushEventsToServerStorage(
+      {
+        id: "sync_conflict_changed",
+        clientId: "client_macbook",
+        sessionId: changedEvent.sessionId,
+        events: [changedEvent],
+        idempotencyKey: "client_macbook:session_reconnect_conflict:event_conflict_message_changed",
+        createdAt: changedEvent.createdAt,
+      },
+      state,
+      changedEvent.createdAt,
+    );
+    const pulled = pullEventsFromServerStorage(firstEvent.sessionId, state, changedEvent.createdAt);
+
+    expect(first.accepted).toBe(1);
+    expect(conflict.accepted).toBe(0);
+    expect(conflict.conflicts).toBe(1);
+    expect(conflict.results[0]?.status).toBe("conflict");
+    expect(conflict.results[0]?.reason).toBe("same_logical_event_different_payload");
+    expect(pulled.events.map((event) => event.id)).toEqual([firstEvent.id]);
+  });
+
   it("rejects raw secret shaped Event Storage payloads", () => {
     const state = createServerEventStorageState();
     const response = pushEventsToServerStorage(
