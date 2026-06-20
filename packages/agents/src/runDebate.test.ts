@@ -293,3 +293,56 @@ describe("withPriorRounds — 이전 라운드 발언 접기 (#2)", () => {
     expect(prompts.some((p) => p.includes("SIGNATURE_ARCH_PROPOSAL"))).toBe(true);
   });
 });
+
+// withPriorRounds' 600-char per-utterance truncation and its multi-round /
+// summary-prefix folding are unpinned (the tests above only fold a single short
+// utterance), and runDebate's consensus branch is only seen when it *fires* or
+// is *absent* — never the "option present, threaded every round, but never
+// reached" path. Pin those, self-consistent (derived from the rounds/context).
+describe("runDebate — withPriorRounds truncation/prefix + consensus-present-but-never-reached", () => {
+  const mkRound = (id: string, title: string, utterances: DebateRound["utterances"]): DebateRound =>
+    ({ id, debateId: "d1", kind: "initial_proposals", title, status: "completed", utterances } as unknown as DebateRound);
+  const mkUtt = (agentId: string, content: string) =>
+    ({ id: `u_${agentId}`, agentId, roundId: "r", content, tags: [], createdAt: NOW.toISOString() }) as unknown as DebateRound["utterances"][number];
+
+  it("folds each prior utterance truncated to (max 600) chars: 600 stays, 601 becomes slice(0,599)+…", () => {
+    const exactly600 = "a".repeat(600);
+    const over601 = "z".repeat(700);
+    const augmented = withPriorRounds(CTX, [
+      mkRound("r1", "긴 라운드", [mkUtt("agent_a", exactly600), mkUtt("agent_b", over601)]),
+    ]);
+    expect(augmented.conversationSummary).toContain(exactly600); // ==600 ⇒ not truncated
+    expect(augmented.conversationSummary).toContain(`${"z".repeat(599)}…`); // >600 ⇒ slice(0,599)+…
+    expect(augmented.conversationSummary).not.toContain("z".repeat(600)); // no 600-run survives
+  });
+
+  it("preserves the original conversationSummary as a prefix and emits a ### header per spoken round, skipping empty ones", () => {
+    const augmented = withPriorRounds(CTX, [
+      mkRound("r1", "첫 제안", [mkUtt("agent_a", "제안 하나")]),
+      mkRound("r2", "빈 라운드", []), // no utterances → not folded
+      mkRound("r3", "둘째 제안", [mkUtt("agent_b", "제안 둘")]),
+    ]);
+    expect(augmented.conversationSummary.startsWith(CTX.conversationSummary)).toBe(true);
+    expect(augmented.conversationSummary).toContain("### 첫 제안");
+    expect(augmented.conversationSummary).toContain("### 둘째 제안");
+    expect(augmented.conversationSummary).not.toContain("### 빈 라운드"); // empty round contributes no header
+  });
+
+  it("consensus option present but unreachable (alpha too high) runs all rounds: finished, not stoppedEarly, consensusReached=false, confidence 0", async () => {
+    idCounter = 0;
+    const initial = createDebateRounds("debate_no_reach");
+    const result = await runDebate({
+      debateId: "debate_no_reach",
+      context: CTX,
+      initialRounds: initial,
+      slots: [slot(profile("a_orch", "Orch", "orchestrator"), "응답 [[tag:evidence]]")],
+      engineOptions: { now: () => NOW, generateId: idGen },
+      consensus: { alpha: 99, beta: 2, similarityThreshold: 0.25 }, // alpha unreachable ⇒ never a majority
+    });
+    expect(result.finished).toBe(true);
+    expect(result.stoppedEarly).toBe(false);
+    expect(result.consensusReached).toBe(false);
+    expect(result.consensusConfidence).toBe(0); // never set ⇒ initial 0
+    expect(result.rounds.every((r) => r.status === "completed")).toBe(true);
+  });
+});
