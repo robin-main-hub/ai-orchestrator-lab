@@ -171,3 +171,43 @@ describe("workflowTemplate vocabulary + request schema + mission shaping", () =>
     expect(request.goal).toContain("외부 발송 금지 — draft만 생성한다.");
   });
 });
+
+// missingRequiredFields is the gate that decides whether a template can run, but
+// only its whitespace-missing arm is tested above ({ appName: "  " }). Its other
+// branches carry the real contract: ONLY `required` fields can block (an absent
+// optional never reports), the empty-check is string-only so a NUMBER value
+// (even 0) always counts as present, and it returns EVERY still-missing required
+// key in declaration order. Pin them on a synthetic template with mixed
+// required/optional + text/number fields (the field config is the oracle).
+describe("missingRequiredFields — required-only, string-only empty check, all keys in order", () => {
+  const tpl: WorkflowTemplate = {
+    ...TEMPLATE_REACT_VITE_APP,
+    id: "synthetic_required_tpl",
+    inputFields: [
+      { key: "name", label: "이름", type: "text", required: true, options: undefined },
+      { key: "count", label: "개수", type: "number", required: true, options: undefined },
+      { key: "note", label: "메모", type: "text", required: false, options: undefined },
+    ],
+  };
+
+  it("reports only required fields that are absent — an absent OPTIONAL never blocks", () => {
+    // name + count required and absent; note optional and absent → only required reported
+    expect(missingRequiredFields(tpl, {})).toEqual(["name", "count"]);
+    // supplying the optional only does not satisfy the required ones
+    expect(missingRequiredFields(tpl, { note: "anything" })).toEqual(["name", "count"]);
+  });
+
+  it("treats a NUMBER value (even 0) as present — the empty/trim check is string-only", () => {
+    // count=0 is present (not undefined, not a string → never trimmed to empty)
+    expect(missingRequiredFields(tpl, { name: "app", count: 0 })).toEqual([]);
+    // a non-empty string for count would also pass; whitespace string would NOT
+    expect(missingRequiredFields(tpl, { name: "app", count: "   " })).toEqual(["count"]);
+  });
+
+  it("whitespace-only and undefined both count as missing; returns keys in declaration order", () => {
+    // name whitespace (missing), count absent (missing) → both, in field order
+    expect(missingRequiredFields(tpl, { name: "  " })).toEqual(["name", "count"]);
+    // satisfy name, leave count → only count
+    expect(missingRequiredFields(tpl, { name: "app" })).toEqual(["count"]);
+  });
+});
