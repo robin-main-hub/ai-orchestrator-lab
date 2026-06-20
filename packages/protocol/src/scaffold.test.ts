@@ -79,6 +79,85 @@ describe("encodeBlueprintToScaffoldInput — blueprint round-trip", () => {
   });
 });
 
+// The generic (non-react_vite) branch of scaffoldForTemplate is only checked
+// for "a README + some src/*.tsx exists" above — its title fallback chain
+// (title → name → templateId), the PascalCase component-name derivation from
+// the templateId, and the actual stub content (h2/aria-label/주요 액션 button)
+// are all unpinned. And buildScaffoldPlan is only exercised with a pre-existing
+// path (overwrite=true); the all-create / hasOverwrites:false path, the 280-char
+// contentPreview clipping, and the utf8 byte counting never fire. Pin them,
+// self-consistent (derived from the templateId / the content we feed in).
+describe("scaffoldForTemplate — generic branch title fallback + component derivation", () => {
+  it("derives a PascalCase component from the templateId and falls back title→name→templateId", () => {
+    // neither title nor name → title IS the templateId
+    const bare = scaffoldForTemplate("kanban_board", {});
+    const comp = bare.find((f) => f.path.startsWith("src/"))!;
+    expect(comp.path).toBe("src/KanbanBoard.tsx"); // kanban_board → KanbanBoard
+    expect(comp.content).toContain("export function KanbanBoard()");
+    expect(comp.content).toContain('aria-label="kanban_board"'); // title === templateId
+    expect(comp.content).toContain("<h2>kanban_board</h2>");
+    expect(comp.content).toContain("주요 액션"); // the stub action button
+    expect(bare.find((f) => f.path === "README.md")!.content).toContain("# kanban_board");
+  });
+
+  it("uses input.name when title is absent (component still comes from the templateId, not the name)", () => {
+    const files = scaffoldForTemplate("foo_bar", { name: "이름" });
+    const comp = files.find((f) => f.path.startsWith("src/"))!;
+    expect(comp.path).toBe("src/FooBar.tsx"); // component from templateId
+    expect(comp.content).toContain("<h2>이름</h2>"); // title from input.name
+    expect(files.find((f) => f.path === "README.md")!.content).toContain("# 이름");
+  });
+});
+
+describe("buildScaffoldPlan — all-create path, preview clipping, utf8 byte counting", () => {
+  it("with no existingPaths every file is create and hasOverwrites is false", () => {
+    const plan = buildScaffoldPlan({
+      id: "sc2",
+      missionId: "m1",
+      workspaceId: "ws1",
+      templateId: "react_vite_app",
+      templateInput: {},
+      repoRootRef: "/repo",
+      scaffold: [
+        { path: "a.txt", content: "alpha" },
+        { path: "b.txt", content: "beta" },
+      ],
+      existingPaths: new Set<string>(),
+      now,
+    });
+    expect(plan.files.every((f) => f.action === "create")).toBe(true);
+    expect(plan.hasOverwrites).toBe(false);
+  });
+
+  it("clips contentPreview to 280 chars with an ellipsis only past the limit, and counts utf8 bytes", () => {
+    const long = "x".repeat(400);
+    const han = "가".repeat(10); // 10 chars, 30 utf8 bytes
+    const plan = buildScaffoldPlan({
+      id: "sc3",
+      missionId: "m1",
+      workspaceId: "ws1",
+      templateId: "react_vite_app",
+      templateInput: {},
+      repoRootRef: "/repo",
+      scaffold: [
+        { path: "long.txt", content: long },
+        { path: "han.txt", content: han },
+      ],
+      existingPaths: new Set<string>(),
+      now,
+    });
+    const longFile = plan.files.find((f) => f.path === "long.txt")!;
+    expect(longFile.contentPreview.length).toBe(280); // 279 chars + the … glyph
+    expect(longFile.contentPreview.endsWith("…")).toBe(true);
+    expect(longFile.contentPreview.slice(0, 279)).toBe(long.slice(0, 279));
+    expect(longFile.bytes).toBe(400); // ascii — one byte each
+
+    const hanFile = plan.files.find((f) => f.path === "han.txt")!;
+    expect(hanFile.contentPreview).toBe(han); // 10 ≤ 280 → verbatim, no ellipsis
+    expect(hanFile.bytes).toBe(30); // 3 utf8 bytes per hangul syllable
+  });
+});
+
 describe("buildScaffoldPlan", () => {
   it("marks create vs overwrite, stays planned, carries input for later apply", () => {
     const scaffold = scaffoldForTemplate("react_vite_app", { appName: "demo" });
