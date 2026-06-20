@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  missionClosedPayloadSchema,
   missionCreateRequestSchema,
   missionEventTypeSchema,
   missionKernelContractSchema,
+  missionMergeRequestSchema,
+  missionVerificationRecordedPayloadSchema,
+  missionVerifyRequestSchema,
   missionWorkerAssignmentRequestSchema,
+  sandboxExecResultSchema,
+  sequentialMergeQueueItemSchema,
+  verificationReportSchema,
 } from "./productKernel.js";
 
 // productKernel is all zod contracts and had no test today. Four of its schemas
@@ -108,5 +115,102 @@ describe("missionEventTypeSchema — client append channel excludes server-only 
 
   it("rejects mission.checkpoint.created — a client cannot forge a server-only checkpoint event", () => {
     expect(missionEventTypeSchema.safeParse("mission.checkpoint.created").success).toBe(false);
+  });
+});
+
+// The four suites above pin the worker-request, mission-create, kernel-contract
+// and event-channel boundaries — but the same file encodes more authority/honesty
+// invariants that stay unpinned, all in the SAME spirit (least-privilege wire,
+// no self-asserted trust, anti-fabrication, server-only observation):
+//   (5) the merge sha is never accepted from the wire — missionMergeRequest takes
+//       ONLY mergeQueueItemId; a smuggled mergeCommitSha/repoRoot is stripped (the
+//       server records the real git rev-parse HEAD, a client can't inject one).
+//   (6) the `observed` honesty flag is REQUIRED on a sandbox result and a
+//       verification report — a result cannot omit whether it reflects real runner
+//       output (no defaulting to a comfortable truth).
+//   (7) the server-side downgrade flag defaults to the honest value
+//       (observedDowngraded → false: nothing is presumed downgraded).
+//   (8) a verify request must carry ≥1 command and ≤64, each bounded — no empty or
+//       unbounded verification.
+//   (9) a close is terminal-only (merged/failed/cancelled) — a mission can't be
+//       "closed" back into running.
+//   (10) a merge-queue item leaves mergeCommitSha undefined when absent (never
+//        synthesized) and defaults conflictFiles to [].
+// Expected values are read off the schemas (self-consistent), never magic.
+describe("missionMergeRequestSchema — the merge sha is never accepted from the wire (anti-fabrication)", () => {
+  it("accepts only mergeQueueItemId and silently strips a smuggled mergeCommitSha / repoRoot", () => {
+    const parsed = missionMergeRequestSchema.parse({
+      mergeQueueItemId: "q1",
+      mergeCommitSha: "deadbeef", // not part of the shape — the server observes git rev-parse HEAD
+      repoRoot: "/etc", // also not accepted from the client
+    } as Record<string, unknown>);
+    expect(parsed).toEqual({ mergeQueueItemId: "q1" });
+    expect("mergeCommitSha" in parsed).toBe(false);
+    expect("repoRoot" in parsed).toBe(false);
+  });
+
+  it("requires a non-empty mergeQueueItemId (min 1, max 256)", () => {
+    expect(missionMergeRequestSchema.safeParse({ mergeQueueItemId: "" }).success).toBe(false);
+    expect(missionMergeRequestSchema.safeParse({ mergeQueueItemId: "x".repeat(257) }).success).toBe(false);
+    expect(missionMergeRequestSchema.safeParse({ mergeQueueItemId: "q1" }).success).toBe(true);
+  });
+});
+
+describe("productKernel — observed-honesty is required, downgrade defaults to honest", () => {
+  const execBase = { requestId: "r1", status: "completed" as const, observedAt: "2026-06-21T00:00:00.000Z" };
+  const reportBase = {
+    id: "v1",
+    missionId: "m1",
+    verifierAgentId: "agent_verifier",
+    status: "passed" as const,
+    checks: [],
+    artifactIds: [],
+    createdAt: "2026-06-21T00:00:00.000Z",
+  };
+
+  it("sandboxExecResult.observed and verificationReport.observed are REQUIRED — a result can't omit whether it's real", () => {
+    expect(sandboxExecResultSchema.safeParse(execBase).success).toBe(false); // observed missing
+    expect(sandboxExecResultSchema.safeParse({ ...execBase, observed: false }).success).toBe(true);
+    expect(verificationReportSchema.safeParse(reportBase).success).toBe(false); // observed missing
+    expect(verificationReportSchema.safeParse({ ...reportBase, observed: true }).success).toBe(true);
+  });
+
+  it("missionVerificationRecordedPayload.observedDowngraded defaults to false (nothing presumed downgraded)", () => {
+    const payload = missionVerificationRecordedPayloadSchema.parse({
+      missionId: "m1",
+      report: { ...reportBase, observed: true },
+    });
+    expect(payload.observedDowngraded).toBe(false);
+  });
+});
+
+describe("productKernel — bounded verify, terminal-only close, real-sha-only merge queue", () => {
+  it("missionVerifyRequest needs ≥1 command and ≤64, each non-empty (no empty or unbounded verification)", () => {
+    expect(missionVerifyRequestSchema.safeParse({ commands: [] }).success).toBe(false); // min 1
+    expect(missionVerifyRequestSchema.safeParse({ commands: [""] }).success).toBe(false); // each min 1
+    expect(missionVerifyRequestSchema.safeParse({ commands: Array.from({ length: 65 }, () => "x") }).success).toBe(false); // max 64
+    expect(missionVerifyRequestSchema.safeParse({ commands: ["pnpm test"] }).success).toBe(true);
+  });
+
+  it("missionClosedPayload.status is terminal-only — a mission cannot be closed back into a live state", () => {
+    for (const status of ["merged", "failed", "cancelled"]) {
+      expect(missionClosedPayloadSchema.safeParse({ missionId: "m1", status }).success).toBe(true);
+    }
+    expect(missionClosedPayloadSchema.safeParse({ missionId: "m1", status: "running" }).success).toBe(false);
+    expect(missionClosedPayloadSchema.safeParse({ missionId: "m1", status: "ready_to_merge" }).success).toBe(false);
+  });
+
+  it("sequentialMergeQueueItem leaves mergeCommitSha undefined when absent (never synthesized) and defaults conflictFiles to []", () => {
+    const item = sequentialMergeQueueItemSchema.parse({
+      id: "q1",
+      missionId: "m1",
+      branchName: "agent/mission_1",
+      status: "queued",
+      requiredVerificationReportId: "v1",
+      reason: "queued for sequential merge",
+      queuedAt: "2026-06-21T00:00:00.000Z",
+    });
+    expect(item.mergeCommitSha).toBeUndefined(); // a real sha appears only once the server observes it
+    expect(item.conflictFiles).toEqual([]);
   });
 });
