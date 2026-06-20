@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_PRESET_SEQUENCE,
+  SHELL_PRESETS,
   createLocalShellCodingRunner,
   parseDiffStat,
   parseTestResult,
   redactSecrets,
   type ShellExecOutput,
   type ShellExecutor,
+  type ShellPreset,
 } from "./localShellRunner";
 import type { CodingRunRequest, CodingRunStatus } from "./codingRunner";
 
@@ -139,5 +142,84 @@ describe("local shell runner", () => {
     });
     const result = await runner.run(req, {}).done;
     expect(JSON.stringify(result.logChunks)).not.toContain(fakeToken);
+  });
+});
+
+// Characterization tests (no behavior change) for the two previously-unasserted
+// STATIC exports of localShellRunner.ts: SHELL_PRESETS and DEFAULT_PRESET_SEQUENCE.
+// The "local shell runner" block above drives the runtime executor (run/stop/blocked/
+// mask) and the line-117 test pins the *runtime-executed* commands as side-effect-free,
+// but neither asserts the static preset TABLE itself — the source of every command the
+// runner can ever issue. This is the load-bearing safety surface:
+//   - The module's doc contract is "preset 진단 명령만 실행 (arbitrary shell 금지, 변경
+//     도구 금지) … 디스크를 바꾸지 않는다. 자동 GitHub write/PR/commit 0." That promise
+//     lives entirely in this table's shape: a FIXED keyset (no user-supplied command),
+//     every entry flagged mutating:false, and every command read-only/diagnostic.
+//   - SHELL_PRESETS must enumerate exactly the ShellPreset union (a typo'd/extra key
+//     would silently widen or narrow the menu), carry non-empty trimmed label+command,
+//     and stamp mutating:false on ALL five — the single flag the UI/runner trusts to
+//     decide a preset is safe.
+//   - Every command must be statically read-only: git status/diff are inspect-only and
+//     the three pnpm scripts are diagnostics. None may contain a mutating git verb, a
+//     destructive shell verb, an output redirect, or privilege escalation — otherwise a
+//     "diagnostic" preset could write the disk / push / commit behind the contract.
+//   - DEFAULT_PRESET_SEQUENCE is the auto-run menu: it must be non-empty, every element
+//     a real SHELL_PRESETS key, duplicate-free, and itself fully mutating:false — the
+//     out-of-box runner must never auto-issue anything outside the safe table.
+
+const ALL_SHELL_PRESETS: ShellPreset[] = ["git_status", "git_diff", "typecheck", "test", "build"];
+
+describe("SHELL_PRESETS (static safety table)", () => {
+  it("enumerates exactly the ShellPreset union", () => {
+    expect(Object.keys(SHELL_PRESETS).sort()).toEqual([...ALL_SHELL_PRESETS].sort());
+  });
+
+  it("every preset carries a non-empty trimmed label and command, and is flagged mutating:false", () => {
+    for (const key of ALL_SHELL_PRESETS) {
+      const preset = SHELL_PRESETS[key];
+      expect(preset.label.trim()).toBe(preset.label);
+      expect(preset.label.length).toBeGreaterThan(0);
+      expect(preset.command.trim()).toBe(preset.command);
+      expect(preset.command.length).toBeGreaterThan(0);
+      // the single flag the runner/UI trusts to call a preset "safe"
+      expect(preset.mutating).toBe(false);
+    }
+  });
+
+  it("every command is statically read-only — no mutating git verb, destructive shell verb, redirect, or escalation", () => {
+    // verbs/operators that would let a "diagnostic" preset change the disk or push/commit
+    const FORBIDDEN = [
+      /\bgit\s+(commit|push|add|checkout|reset|clean|rebase|merge|stash|restore|rm|mv|tag|fetch|pull|apply)\b/,
+      /\b(rm|mv|cp|tee|sudo|chmod|chown|kill|truncate|dd)\b/,
+      /\bgh\s+pr\b/,
+      />/, // output redirect (>, >>)
+    ];
+    for (const key of ALL_SHELL_PRESETS) {
+      const command = SHELL_PRESETS[key].command;
+      for (const pattern of FORBIDDEN) {
+        expect(pattern.test(command), `${key}: "${command}" matched ${pattern}`).toBe(false);
+      }
+    }
+    // positive shape: status/diff are inspect-only git; the rest are pnpm diagnostics
+    expect(SHELL_PRESETS.git_status.command).toMatch(/^git status\b/);
+    expect(SHELL_PRESETS.git_diff.command).toMatch(/\bdiff\b/);
+    for (const key of ["typecheck", "test", "build"] as const) {
+      expect(SHELL_PRESETS[key].command).toMatch(/\bpnpm\b/);
+    }
+  });
+});
+
+describe("DEFAULT_PRESET_SEQUENCE (auto-run menu)", () => {
+  it("is the exact status→diff→typecheck order", () => {
+    expect(DEFAULT_PRESET_SEQUENCE).toEqual(["git_status", "git_diff", "typecheck"]);
+  });
+
+  it("is non-empty, duplicate-free, and every element is a real mutating:false preset", () => {
+    expect(DEFAULT_PRESET_SEQUENCE.length).toBeGreaterThan(0);
+    expect(new Set(DEFAULT_PRESET_SEQUENCE).size).toBe(DEFAULT_PRESET_SEQUENCE.length);
+    for (const key of DEFAULT_PRESET_SEQUENCE) {
+      expect(ALL_SHELL_PRESETS).toContain(key);
+      expect(SHELL_PRESETS[key].mutating).toBe(false);
+    }
   });
 });
