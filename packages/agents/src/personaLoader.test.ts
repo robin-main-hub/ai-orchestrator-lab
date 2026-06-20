@@ -66,6 +66,43 @@ describe("personaNameForProfile", () => {
   });
 });
 
+// The named happy-path cases are covered above, but two branches stay unpinned
+// and both are authority-relevant: (1) personaNameForProfile only ever runs with
+// personaName UNSET (role fallback) — the R3.1 override (two profiles sharing one
+// role routed to DISTINCT persona dirs) is the whole point of the field and is
+// untested; a silent drop of the `?? profile.role` override would pass today.
+// (2) inferModeFromConfigSource's default branch: an UNRECOGNIZED configSource
+// must fall back to "off" (deny-by-default — never accidentally load markdown
+// files for a config value we don't know), but only the 3 named cases are pinned.
+describe("personaNameForProfile + inferModeFromConfigSource — identity routing & deny-by-default", () => {
+  it("an explicit personaName overrides the role directory (R3.1 multi-profile-per-role routing)", () => {
+    const base = {
+      id: "agent_skeptic_yohane",
+      name: "Yohane",
+      kind: "virtual",
+      role: "skeptic",
+      soulMode: "summary",
+      configSource: "markdown",
+      enabled: true,
+    } as const;
+    // two profiles, SAME role, DIFFERENT personaName → distinct persona dirs
+    const yohane: AgentProfile = { ...base, personaName: "yohane" };
+    const asuka: AgentProfile = { ...base, id: "agent_skeptic_asuka", personaName: "asuka" };
+    expect(personaNameForProfile(yohane)).toBe("yohane"); // override, NOT "skeptic"
+    expect(personaNameForProfile(asuka)).toBe("asuka");
+    // the override is used verbatim even when it is not itself a shipped role name
+    const exotic: AgentProfile = { ...base, personaName: "kurumi_nightcord" };
+    expect(personaNameForProfile(exotic)).toBe("kurumi_nightcord");
+  });
+
+  it("an UNRECOGNIZED configSource falls back to off (deny-by-default — never auto-loads markdown)", () => {
+    // anything outside the known enum must NOT resolve to a file-loading mode
+    expect(inferModeFromConfigSource("totally_unknown" as AgentProfile["configSource"])).toBe("off");
+    // sanity: the only value that DOES load files is the explicit "markdown"
+    expect(inferModeFromConfigSource("markdown")).toBe("soul_plus_agents");
+  });
+});
+
 describe("loadPersona", () => {
   it('mode="off" returns empty fragments and reads only SAFETY.md (universal injection)', async () => {
     const reads: string[] = [];
