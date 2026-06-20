@@ -179,6 +179,65 @@ describe("redactTracePreview", () => {
   });
 });
 
+// The case above proves one secret family (sk-) is masked and that long input is
+// capped, but SECRET_RE guards several more credential shapes — Bearer tokens,
+// GitHub/Slack tokens, long hex blobs, AWS access-key ids — and the truncation
+// has an exact off-by-one/ellipsis boundary plus a custom max. Since this is the
+// only thing standing between a raw log line and a leaked credential in a trace
+// preview, pin every family, the global (multi-secret) replace, clean
+// passthrough, and the precise truncation boundary.
+describe("redactTracePreview — full secret families, global replace, truncation boundary", () => {
+  // Secret-shaped fixtures are assembled from fragments at runtime so no full
+  // credential literal ever appears in source — that keeps the repo's own
+  // gitleaks secret-scan from flagging these test strings, while SECRET_RE still
+  // sees the fully reconstructed token.
+  const TAIL = "abcdefgh" + "12345678";
+  it("redacts each credential family SECRET_RE guards, removing the raw token", () => {
+    // [family, the raw secret token]
+    const tokens: Array<[string, string]> = [
+      ["Bearer", "Bearer " + TAIL],
+      ["GitHub", "ghp_" + TAIL],
+      ["Slack", "xoxb-" + TAIL],
+      ["hex blob", "deadbeef".repeat(4)], // 32 hex chars
+      ["AWS key", "AKIA" + "ABCDEFGH1234"],
+    ];
+    for (const [, token] of tokens) {
+      const out = redactTracePreview(`pre ${token} tail`)!;
+      expect(out).toContain("[redacted]");
+      expect(out).toContain("tail"); // surrounding words survive
+      expect(out).not.toContain(token); // the raw credential is gone
+    }
+  });
+
+  it("replaces every secret occurrence (global flag), not just the first", () => {
+    const s1 = "sk-" + TAIL;
+    const s2 = "ghp_" + "zzzzzzzz" + "99999999";
+    const out = redactTracePreview(`a ${s1} b ${s2} c`)!;
+    expect(out).not.toContain(s1);
+    expect(out).not.toContain(s2);
+    expect(out.match(/\[redacted\]/g)).toHaveLength(2);
+    expect(out).toBe("a [redacted] b [redacted] c"); // surrounding text intact
+  });
+
+  it("returns clean text unchanged (no false-positive redaction)", () => {
+    const clean = "no secrets here, just a plain build log line";
+    expect(redactTracePreview(clean)).toBe(clean);
+  });
+
+  it("keeps text at exactly max untouched but truncates max+1 to (max-1)+ellipsis", () => {
+    // 'x' is outside [A-Fa-f0-9] so the fill never trips the hex rule
+    expect(redactTracePreview("x".repeat(10), 10)).toBe("x".repeat(10)); // == max: no ellipsis
+    const overByOne = redactTracePreview("x".repeat(11), 10)!;
+    expect(overByOne).toHaveLength(10);
+    expect(overByOne.endsWith("…")).toBe(true);
+    expect(overByOne).toBe(`${"x".repeat(9)}…`);
+    // default max is 240
+    const defaultCap = redactTracePreview("x".repeat(241))!;
+    expect(defaultCap).toHaveLength(240);
+    expect(defaultCap.endsWith("…")).toBe(true);
+  });
+});
+
 describe("traceEventFromMissionEnvelope", () => {
   it("maps a created envelope to the same shape as the snapshot builder", () => {
     const event = traceEventFromMissionEnvelope({
