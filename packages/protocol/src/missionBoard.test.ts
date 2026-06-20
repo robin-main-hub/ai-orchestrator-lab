@@ -462,3 +462,73 @@ describe("kanbanColumnForMissionStatus — total over every declared status (pla
     }
   });
 });
+
+// mergeTraceEvent (missionBoard.ts:459-487, reached via the merge.queued
+// envelope and deriveMissionTrace) is the richest honesty mapper, yet the suite
+// only exercises ONE path: merged WITH a real sha → observed. Its other arms are
+// unpinned and carry the load-bearing rule: a trace event is `observed` ONLY
+// when status==merged AND a real mergeCommitSha is present. A "merged" claim with
+// NO commit sha must NOT dress up as observed — it downgrades to `planned`.
+// conflict and plain queued are `planned`; dry_run alone is `configured`. The
+// type collapses everything non-merged/conflict to merge.queued, but the TITLE
+// still distinguishes dry_run from the queue. Pin each arm (values derived from
+// the source switch — branch/sha/reason are the oracle, no magic).
+describe("mergeTraceEvent — observed needs a real sha (merged-without-sha downgrades, never faked)", () => {
+  const mergeEvent = (item: Record<string, unknown>) =>
+    traceEventFromMissionEnvelope({
+      type: "mission.merge.queued",
+      createdAt: "2026-06-13T02:00:00.000Z",
+      payload: {
+        missionId: "mission_1",
+        item: {
+          id: "m1",
+          missionId: "mission_1",
+          branchName: "agent/mission_1",
+          requiredVerificationReportId: "v1",
+          conflictFiles: [],
+          reason: "queued reason",
+          queuedAt: "2026-06-13T02:00:00.000Z",
+          ...item,
+        },
+      },
+    })!;
+
+  it("merged WITH a real sha → merge.completed, observed, summary slices the sha to 10", () => {
+    const e = mergeEvent({ status: "merged", mergeCommitSha: "abcdef1234567890" });
+    expect(e.type).toBe("merge.completed");
+    expect(e.truthStatus).toBe("observed");
+    expect(e.summary).toBe("agent/mission_1 → abcdef1234"); // sha sliced to first 10
+  });
+
+  it("merged WITHOUT a sha → still merge.completed but downgraded to planned, summary falls back to reason", () => {
+    const e = mergeEvent({ status: "merged" });
+    expect(e.type).toBe("merge.completed");
+    expect(e.truthStatus).not.toBe("observed"); // no real commit → cannot claim observed
+    expect(e.truthStatus).toBe("planned");
+    expect(e.summary).toBe("queued reason"); // no synthetic sha line invented
+  });
+
+  it("conflict → merge.conflict, error severity, planned, summary counts conflict files", () => {
+    const e = mergeEvent({ status: "conflict", conflictFiles: ["a.ts", "b.ts"] });
+    expect(e.type).toBe("merge.conflict");
+    expect(e.severity).toBe("error");
+    expect(e.truthStatus).toBe("planned");
+    expect(e.summary).toBe("2개 충돌 파일");
+  });
+
+  it("dry_run → merge.queued type but its own title, configured (a real dry-run was observed as not-applied)", () => {
+    const e = mergeEvent({ status: "dry_run" });
+    expect(e.type).toBe("merge.queued");
+    expect(e.title).toBe("머지 드라이런");
+    expect(e.truthStatus).toBe("configured");
+    expect(e.summary).toBe("queued reason");
+  });
+
+  it("plain queued → merge.queued, info severity, planned, queue title", () => {
+    const e = mergeEvent({ status: "queued" });
+    expect(e.type).toBe("merge.queued");
+    expect(e.title).toBe("머지 대기열");
+    expect(e.severity).toBe("info");
+    expect(e.truthStatus).toBe("planned");
+  });
+});
