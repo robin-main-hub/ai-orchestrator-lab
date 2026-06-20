@@ -266,3 +266,46 @@ describe("buildAgentSystemPrompt — role-policy fallback modes (getCanonicalSou
     expect(report.promptText).toContain("비밀을 노출"); // safety boundary still injected
   });
 });
+
+// Every buildAgentSystemPrompt test above leaves `options` undefined, so it only
+// ever observes safetyInjected === true and never threads PersonaPromptOptions
+// through to the assembled prompt. Two report-level branches stay unpinned: the
+// omitSafety path — where the SoulInjectionReport must stay HONEST (safetyInjected
+// flips to false and the safety body is actually withheld even though SAFETY.md
+// exists, so a debug/inspector caller can't accidentally ship a report claiming
+// safety it suppressed) — and the plain options pass-through (headerLine /
+// includeFragmentHeadings reach buildPersonaPromptFragment). Pin them, self-
+// consistent (expected text derived from the same fixtures + option flags).
+describe("buildAgentSystemPrompt — omitSafety report honesty + options pass-through", () => {
+  const SOUL = "# Soul\n나는 건축가다.";
+  const SAFETY = "# Safety\n비밀을 노출하지 말 것.";
+  const files = {
+    "agents/architect/SOUL.md": SOUL,
+    "agents/SAFETY.md": SAFETY,
+  };
+
+  it("omitSafety:true keeps the report honest — safetyInjected is false and the safety body is withheld (SAFETY.md present), character body stays", async () => {
+    const source = createInMemoryPersonaSource(files);
+    const withSafety = await buildAgentSystemPrompt(makeProfile({ soulMode: "summary" }), source);
+    const without = await buildAgentSystemPrompt(makeProfile({ soulMode: "summary" }), source, { omitSafety: true });
+
+    expect(withSafety.safetyInjected).toBe(true); // default path injects safety
+    expect(without.safetyInjected).toBe(false); // suppressed → report mirrors it, not a stale true
+    expect(without.promptText).not.toContain("비밀을 노출"); // safety body actually withheld
+    expect(without.promptText).toContain("나는 건축가다"); // character body still present
+    expect(without.estimatedTokens).toBeLessThan(withSafety.estimatedTokens); // shorter prompt → fewer tokens
+    expect(without.estimatedTokens).toBe(estimateTokens(without.promptText)); // estimate derived from the real text
+  });
+
+  it("threads PersonaPromptOptions into the assembled prompt (headerLine in, fragment headings out)", async () => {
+    const source = createInMemoryPersonaSource(files);
+    const report = await buildAgentSystemPrompt(makeProfile({ soulMode: "summary" }), source, {
+      headerLine: "[system] persona start",
+      includeFragmentHeadings: false,
+    });
+    expect(report.promptText).toContain("[system] persona start"); // headerLine flowed through
+    expect(report.promptText).not.toContain("## From agents/architect/SOUL.md"); // fragment heading suppressed
+    expect(report.promptText).toContain("나는 건축가다"); // body still present, just unheaded
+    expect(report.safetyInjected).toBe(true); // omitSafety defaulted false → safety still in
+  });
+});
