@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ServerMissionRecord } from "./productKernel.js";
+import { orchestrationMissionStatusSchema } from "./productKernel.js";
 import {
   deriveMissionKanbanBoard,
   deriveMissionKanbanCard,
@@ -396,5 +397,68 @@ describe("deriveMissionKanbanCard — uncovered merge-state arms (neutral, lates
     );
     expect(card.mergeState).toBe("merged");
     expect(card.mergeCommitSha).toBeUndefined(); // sha comes from the item only — never fabricated
+  });
+});
+
+// deriveMissionKanbanBoard sorts cards WITHIN each column by updatedAt
+// descending (missionBoard.ts:211) — newest activity on top. The board suite
+// above only ever puts ONE card in a column, so the comparator is 0-ref: a flip
+// to ascending would silently bury the latest mission at the bottom and nothing
+// would catch it. Pin the strict descending order with ≥2 cards per column, and
+// that the sort is per-column (a newer card in another column does not perturb
+// this column's order). updatedAt values are the oracle (sort key under test).
+describe("deriveMissionKanbanBoard — within-column newest-first ordering (0-ref descending sort)", () => {
+  const at = (missionId: string, status: string, updatedAt: string): ServerMissionRecord =>
+    record({
+      mission: {
+        missionId,
+        title: missionId,
+        goal: "g",
+        truthStatus: "planned",
+        createdBy: "x",
+        createdAt: "2026-06-13T00:00:00.000Z",
+      },
+      status,
+      updatedAt,
+    } as never);
+
+  it("orders cards in a column strictly by updatedAt descending — latest on top", () => {
+    const board = deriveMissionKanbanBoard([
+      at("m_old", "running", "2026-06-13T01:00:00.000Z"),
+      at("m_new", "running", "2026-06-13T03:00:00.000Z"),
+      at("m_mid", "running", "2026-06-13T02:00:00.000Z"),
+    ]);
+    const running = board.columns.find((c) => c.id === "running")!;
+    expect(running.cards.map((c) => c.missionId)).toEqual(["m_new", "m_mid", "m_old"]);
+  });
+
+  it("sorts each column independently — a newer card elsewhere does not perturb this column", () => {
+    const board = deriveMissionKanbanBoard([
+      at("r1", "running", "2026-06-13T01:00:00.000Z"),
+      at("v_latest", "verifying", "2026-06-13T09:00:00.000Z"),
+      at("r2", "running", "2026-06-13T05:00:00.000Z"),
+    ]);
+    expect(board.columns.find((c) => c.id === "running")!.cards.map((c) => c.missionId)).toEqual(["r2", "r1"]);
+    expect(board.columns.find((c) => c.id === "verifying")!.cards.map((c) => c.missionId)).toEqual(["v_latest"]);
+  });
+});
+
+// kanbanColumnForMissionStatus must be TOTAL over orchestrationMissionStatusSchema:
+// the column suite at the top tests 8 of the 9 declared statuses but omits
+// `planned`, which the switch deliberately aliases to the same `todo` column as
+// `draft` (a draft/planned pair share the backlog column). Pin that alias, and
+// that EVERY declared status maps into the column-id set with no status landing
+// outside it (self-consistency over the two schemas — no magic literals).
+describe("kanbanColumnForMissionStatus — total over every declared status (planned alias, no unmapped status)", () => {
+  it("aliases planned to the same todo backlog column as draft", () => {
+    expect(kanbanColumnForMissionStatus("planned")).toBe("todo");
+    expect(kanbanColumnForMissionStatus("planned")).toBe(kanbanColumnForMissionStatus("draft"));
+  });
+
+  it("maps every declared mission status to a valid kanban column id", () => {
+    const columns = new Set(missionKanbanColumnIdSchema.options);
+    for (const status of orchestrationMissionStatusSchema.options) {
+      expect(columns.has(kanbanColumnForMissionStatus(status))).toBe(true);
+    }
   });
 });
