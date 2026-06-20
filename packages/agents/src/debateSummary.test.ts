@@ -196,3 +196,40 @@ describe("debateSummary — running rounds, distribution math, fallbacks, trunca
     expect(summary).not.toContain("x".repeat(11)); // never the full 50-char body
   });
 });
+
+// Three boundary/guard branches stay unpinned. (1) The distribution table is
+// gated by `includeTagDistribution && allUtterances.length > 0` — every existing
+// table test toggles the FIRST operand; the SECOND (enabled but NO utterances
+// anywhere) is the honest "no data ⇒ no fabricated distribution" path and never
+// fires. (2) The overflow note is `if (overflow > 0)`, strict `>`, so a round
+// whose utterance count EXACTLY equals maxUtterancesPerRound shows every line and
+// NO "…생략" note. (3) truncate uses `<=`, so content whose length EXACTLY equals
+// the limit is rendered verbatim with no ellipsis. Pin them, self-consistent
+// (derived from the same rounds and the truncate/overflow formulas).
+describe("debateSummary — empty-data distribution guard, exact-cap overflow, exact-length truncate", () => {
+  it("omits the distribution table when enabled but no utterances exist anywhere (the && length>0 second operand)", () => {
+    // an ACTIVE but empty round → distribution enabled by default, yet allUtterances is empty
+    const rounds = [makeRound("r1", "final_decision", "빈 라운드", "completed", [])];
+    const summary = buildDebateSummary(CTX, rounds); // includeTagDistribution defaults to true
+    expect(summary).not.toContain("의견 분포"); // no data ⇒ no table, even though enabled
+    expect(summary).toContain("*발언 없음*"); // ...the active-empty round still renders its note
+  });
+
+  it("renders no overflow note when the utterance count exactly equals maxUtterancesPerRound (overflow===0)", () => {
+    const utterances = Array.from({ length: 3 }, (_, i) => makeUtterance(`agent_${i}`, `발언 ${i}`, "evidence"));
+    const rounds = [makeRound("r1", "initial_proposals", "정확히 cap", "completed", utterances)];
+    const summary = buildDebateSummary(CTX, rounds, { maxUtterancesPerRound: 3, includeTagDistribution: false });
+    expect(summary).toContain("발언 2"); // all three are shown
+    expect(summary).not.toContain("생략"); // overflow === 0 ⇒ strict > guard is false, no note
+  });
+
+  it("renders content verbatim (no ellipsis) when its length exactly equals utteranceTruncateLength (<= boundary)", () => {
+    const exact = "x".repeat(10);
+    const rounds = [
+      makeRound("r1", "problem_definition", "정확 길이", "completed", [makeUtterance("a", exact, "evidence")]),
+    ];
+    const summary = buildDebateSummary(CTX, rounds, { includeTagDistribution: false, utteranceTruncateLength: 10 });
+    expect(summary).toContain(exact); // 10 <= 10 ⇒ kept whole
+    expect(summary).not.toContain("…"); // no ellipsis anywhere (and no overflow note to introduce one)
+  });
+});
