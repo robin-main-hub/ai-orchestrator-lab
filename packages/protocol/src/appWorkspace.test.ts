@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { appWorkspaceSchema, buildAppWorkspace, derivePreviewPort, previewFromProbe } from "./appWorkspace.js";
+import {
+  appTypeSchema,
+  appWorkspacePreviewSchema,
+  appWorkspaceSchema,
+  buildAppWorkspace,
+  defaultPreviewCommandForAppType,
+  derivePreviewPort,
+  previewBlocked,
+  previewFailed,
+  previewFromProbe,
+  previewRunning,
+  previewStopped,
+} from "./appWorkspace.js";
 
 const now = () => "2026-06-13T00:00:00.000Z";
 
@@ -51,5 +63,56 @@ describe("previewFromProbe", () => {
     expect(unbound.status).toBe("failed");
     expect(unbound.truthStatus).not.toBe("observed");
     expect(unbound.url).toBeUndefined();
+  });
+});
+
+// The preview status builders are the single honesty point: "running만 observed".
+// They are 0-ref across the test tree, yet they encode the same observed-only-
+// when-actually-observed truth rule that previewFromProbe pins — so the builders
+// must hold it too (a builder that stamped a non-running state observed, or
+// minted a url for a stopped preview, would let the UI fake a live server).
+describe("preview status builders — honesty (running only is observed)", () => {
+  it("previewRunning is the ONLY observed builder, with url + port + optional command", () => {
+    const running = previewRunning({ host: "127.0.0.1", port: 4401, command: "vite preview" });
+    expect(running.status).toBe("running");
+    expect(running.truthStatus).toBe("observed");
+    expect(running.url).toBe("http://127.0.0.1:4401");
+    expect(running.port).toBe(4401);
+    expect(running.command).toBe("vite preview");
+    expect(() => appWorkspacePreviewSchema.parse(running)).not.toThrow();
+  });
+
+  it("previewFailed / previewBlocked / previewStopped are configured, never observed, never minting a url", () => {
+    const failed = previewFailed({ port: 4401, command: "vite preview", detail: "exited 1" });
+    const blocked = previewBlocked({ command: "vite preview", detail: "not in allowlist" });
+    const stopped = previewStopped({ command: "vite preview" });
+    expect(failed.status).toBe("failed");
+    expect(blocked.status).toBe("blocked");
+    expect(stopped.status).toBe("stopped");
+    for (const preview of [failed, blocked, stopped]) {
+      expect(preview.truthStatus).toBe("configured");
+      expect(preview.truthStatus).not.toBe("observed");
+      expect(preview.url).toBeUndefined();
+      expect(() => appWorkspacePreviewSchema.parse(preview)).not.toThrow();
+    }
+    // blocked/stopped carry no port; previewStopped tolerates no args at all
+    expect(blocked.port).toBeUndefined();
+    expect(stopped.port).toBeUndefined();
+    expect(previewStopped().status).toBe("stopped");
+  });
+});
+
+describe("defaultPreviewCommandForAppType", () => {
+  it("maps nextjs to its own command and everything else to vite preview", () => {
+    expect(defaultPreviewCommandForAppType("nextjs")).toBe("npm run preview");
+    expect(defaultPreviewCommandForAppType("react_vite")).toBe("vite preview");
+    expect(defaultPreviewCommandForAppType("tauri")).toBe("vite preview");
+    expect(defaultPreviewCommandForAppType("unknown")).toBe("vite preview");
+  });
+
+  it("returns a non-empty command for every declared app type (no unmapped fallthrough)", () => {
+    for (const appType of appTypeSchema.options) {
+      expect(defaultPreviewCommandForAppType(appType).length).toBeGreaterThan(0);
+    }
   });
 });
