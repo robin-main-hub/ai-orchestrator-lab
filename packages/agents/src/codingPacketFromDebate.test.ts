@@ -219,3 +219,54 @@ describe("extractCodingPacketFromDebate — running rounds, multi-tag fan-out, e
     expect(packet.verificationPlan).toEqual([]);
   });
 });
+
+// Three clearly-intended invariants stay unpinned. (1) ORDER: the seeding pass
+// (lines 73-76) runs before the round walk, so DebateContext-derived lines lead
+// each bucket — conversationSummary then userPreferences ahead of debate evidence
+// in `context`, and seeded open-questions ahead of risk notes in `reviewerNotes`;
+// existing tests only assert presence, never this seeded-before-extracted order.
+// (2) The tag-marker strip is anchored `$`, so a leading/mid `[[tag:...]]` SURVIVES
+// while only a trailing one is removed (no over-stripping). (3) The maxItemsPerField
+// cap is per-field — every cap test fills a single field, so it never proves the
+// caps are independent rather than a shared budget. Pin them, self-consistent.
+describe("extractCodingPacketFromDebate — seeded-before-extracted order, trailing-only strip, independent caps", () => {
+  it("seeds DebateContext lines AHEAD of debate-derived ones in context and reviewerNotes", () => {
+    const rounds = [
+      round("r1", "problem_definition", "completed", [
+        ut("orch", "증거 한 줄 [[tag:evidence]]", "evidence"),
+        ut("rev", "리스크 한 줄 [[tag:risk]]", "risk"),
+      ]),
+    ];
+    const packet = extractCodingPacketFromDebate(CTX, rounds);
+    // context: conversationSummary first, then each userPreference, then debate evidence last
+    expect(packet.context[0]).toBe(CTX.conversationSummary);
+    expect(packet.context[1]).toBe(`사용자 선호: ${CTX.userPreferences[0]}`);
+    expect(packet.context.at(-1)).toContain("증거 한 줄");
+    // reviewerNotes: seeded open question first, debate risk note appended after
+    expect(packet.reviewerNotes[0]).toBe(`미결 질문: ${CTX.openQuestions[0]}`);
+    expect(packet.reviewerNotes.at(-1)).toContain("리스크 한 줄");
+  });
+
+  it("strips only the TRAILING tag marker — a leading marker survives (pattern anchored at end)", () => {
+    const rounds = [
+      round("r1", "problem_definition", "completed", [
+        ut("orch", "[[tag:risk]] 시작과 끝 [[tag:agreement]]", "agreement"),
+      ]),
+    ];
+    const packet = extractCodingPacketFromDebate(CTX, rounds);
+    const decision = packet.decisions[0]!;
+    expect(decision).toContain("[[tag:risk]] 시작과 끝"); // the leading marker is NOT stripped
+    expect(decision).not.toContain("[[tag:agreement]]"); // only the trailing marker is removed
+  });
+
+  it("applies maxItemsPerField independently per field, not as a shared budget", () => {
+    const utterances = [
+      ...Array.from({ length: 3 }, (_, i) => ut(`a${i}`, `동의 ${i} [[tag:agreement]]`, "agreement")),
+      ...Array.from({ length: 3 }, (_, i) => ut(`o${i}`, `반대 ${i} [[tag:objection]]`, "objection")),
+    ];
+    const rounds = [round("r1", "problem_definition", "completed", utterances)];
+    const packet = extractCodingPacketFromDebate(CTX, rounds, { maxItemsPerField: 2 });
+    expect(packet.decisions).toHaveLength(2); // agreement field capped at 2
+    expect(packet.rejectedOptions).toHaveLength(2); // objection field independently capped at 2
+  });
+});
