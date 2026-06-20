@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createAgentChannelDetailChips, createAgentChannelStatus } from "./agentChannelStatus";
+import {
+  createAgentChannelDetailChips,
+  createAgentChannelHeaderMemoryLabel,
+  createAgentChannelStatus,
+} from "./agentChannelStatus";
+import { compactPublicText, sanitizePublicText } from "./publicRedaction";
 
 describe("createAgentChannelStatus", () => {
   it("summarizes a continuing agent channel with applied memories", () => {
@@ -126,5 +131,52 @@ describe("createAgentChannelStatus", () => {
     expect(rendered).not.toContain("provider_mimo_token_openai");
     expect(chips.every((chip) => chip.value.length <= 42)).toBe(true);
     expect(chips.find((chip) => chip.label === "공급자")?.value).toContain("MiMo V2.5 Pro");
+  });
+});
+
+// Characterization tests (no behavior change) for the previously-unasserted export
+// createAgentChannelHeaderMemoryLabel. The blocks above drive createAgentChannelStatus
+// and the detail-chip builder, but never the one-line header memory label the channel
+// header renders next to the title. Load-bearing contract:
+//   - no scope -> undefined (the header simply omits the label, never shows an empty pill);
+//   - with a scope it renders "<roomLabel> 기억", defaulting roomLabel to "전용 기억";
+//   - it runs through the SAME sanitize+compact(42) leaf the chips use, so it is
+//     redaction-safe (secret-like room labels never survive) AND length-capped at 42 —
+//     expected values are derived from the exported sanitizePublicText/compactPublicText
+//     so the test stays self-consistent with the leaf without reaching the private helper.
+describe("createAgentChannelHeaderMemoryLabel", () => {
+  const sanitizeChannelValue = (value: string) => compactPublicText(sanitizePublicText(value), 42);
+  const scope = (roomLabel?: string) => ({
+    agentId: "agent_memory_curator",
+    namespace: "agent:agent_memory_curator:session:session_main:provider:provider_mimo_token_openai",
+    providerProfileId: "provider_mimo_token_openai",
+    recallTraceId: "recall_agent_memory_curator_session_main",
+    roomId: "room_session_main_agent_memory_curator",
+    roomLabel,
+    sessionId: "session_main",
+  });
+
+  it("omits the label entirely when there is no memory scope", () => {
+    expect(createAgentChannelHeaderMemoryLabel(undefined)).toBeUndefined();
+  });
+
+  it("renders '<roomLabel> 기억' through the shared sanitize+compact leaf", () => {
+    const label = createAgentChannelHeaderMemoryLabel(scope("에이전트 전용 방"));
+    expect(label).toBe(sanitizeChannelValue("에이전트 전용 방 기억"));
+    expect(label).toContain("기억");
+  });
+
+  it("defaults a missing roomLabel to '전용 기억'", () => {
+    expect(createAgentChannelHeaderMemoryLabel(scope(undefined))).toBe(sanitizeChannelValue("전용 기억 기억"));
+  });
+
+  it("stays redaction-safe and length-capped at 42 like the chips", () => {
+    const label = createAgentChannelHeaderMemoryLabel(
+      scope("https://token-plan-sgp.xiaomimimo.com/v1 Bearer sk-secret1234567890 방"),
+    );
+    expect(label).toBeDefined();
+    expect(label!.length).toBeLessThanOrEqual(42);
+    expect(label).not.toContain("sk-secret1234567890");
+    expect(label).not.toContain("https://token-plan-sgp.xiaomimimo.com/v1");
   });
 });
