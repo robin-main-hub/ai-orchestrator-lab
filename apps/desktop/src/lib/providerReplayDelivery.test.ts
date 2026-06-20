@@ -91,3 +91,104 @@ describe("createProviderReplayConversationMessage", () => {
     );
   });
 });
+
+// Characterization tests for the previously-uncovered no-targetAgent (unguarded)
+// path, content coercion/trim, conditional attachmentProcessingPlans metadata,
+// and the memory-candidate agentId fallback (no behavior change). The existing
+// suite exercises only the WITH-targetAgent happy path; these pin: that without
+// a targetAgent the replayed content is left unguarded and agentName/guard flag
+// reflect that, that a missing provider content coerces to "" and surrounding
+// whitespace is trimmed, that attachmentProcessingPlans appear in metadata only
+// when present while an approval without sourceItemId passes undefined through,
+// and that the memory candidate falls back to pending.agentId as the speaker and
+// omits scope/recall tags when no memoryScope is supplied. All pure, no network.
+describe("providerReplayDelivery — unguarded path, coercion & memory-fallback characterization", () => {
+  const baseInput = {
+    approval: { id: "approval_provider_1", sourceItemId: "approval_provider_1" },
+    createdAt: "2026-06-05T00:00:03.000Z",
+    id: "message_agent_replay_1",
+    pending: pendingRetry,
+    result: replayResult,
+  };
+
+  it("leaves the replayed content unguarded and records no agent name without a targetAgent", () => {
+    const message = createProviderReplayConversationMessage({ ...baseInput });
+
+    expect(message.content).toBe("이름은 없다. 역할로 부르면 된다 — Orchestrator.");
+    expect(message.metadata?.identityGuardApplied).toBe(false);
+    expect(message.metadata?.agentName).toBeUndefined();
+    expect(message.metadata?.agentId).toBe("agent_orchestrator");
+    expect(message.metadata?.providerProfileId).toBe("provider_mimo_token_openai");
+    expect(message.metadata?.endpoint).toBe("http://dgx-02:4317/api/providers/complete");
+    expect(message.metadata?.route).toBe("server_proxy");
+    expect(message.metadata?.realProviderCall).toBe(true);
+    expect(message.metadata?.attachmentCount).toBe(0);
+  });
+
+  it("coerces a missing provider content to an empty string", () => {
+    const message = createProviderReplayConversationMessage({
+      ...baseInput,
+      result: { ...replayResult, content: undefined },
+    });
+    expect(message.content).toBe("");
+  });
+
+  it("trims surrounding whitespace from the replayed content", () => {
+    const message = createProviderReplayConversationMessage({
+      ...baseInput,
+      result: { ...replayResult, content: "  공백 응답  " },
+    });
+    expect(message.content).toBe("공백 응답");
+  });
+
+  it("includes attachmentProcessingPlans in metadata only when present and passes an absent sourceItemId through", () => {
+    const plans = [
+      {
+        kind: "image" as const,
+        name: "screen.png",
+        processingMode: "vision_candidate" as const,
+        size: 120_000,
+        status: "accepted" as const,
+        storage: "metadata_only" as const,
+      },
+    ];
+    const withPlans = createProviderReplayConversationMessage({
+      ...baseInput,
+      approval: { id: "approval_provider_2" },
+      pending: { ...pendingRetry, attachmentProcessingPlans: plans },
+    });
+    expect(withPlans.metadata?.attachmentProcessingPlans).toEqual(plans);
+    expect(withPlans.metadata?.replayedSourceItemId).toBeUndefined();
+
+    const withoutPlans = createProviderReplayConversationMessage({ ...baseInput });
+    expect(withoutPlans.metadata?.attachmentProcessingPlans).toBeUndefined();
+  });
+
+  it("falls back to the pending agentId as the speaker when no targetAgent is given", () => {
+    const message = createProviderReplayConversationMessage({ ...baseInput });
+    const candidate = createProviderReplayMemoryCandidate({
+      assistantMessage: message,
+      createdAt: "2026-06-05T00:00:03.000Z",
+      pending: pendingRetry,
+    });
+
+    expect(candidate.record.title).toBe("agent_orchestrator 대화 기억 후보");
+    expect(candidate.record.content).toContain("agent_orchestrator: 이름은 없다");
+    expect(candidate.record.trustLevel).toBe("limited");
+  });
+
+  it("omits scope/recall tags when no memoryScope is supplied", () => {
+    const message = createProviderReplayConversationMessage({ ...baseInput });
+    const candidate = createProviderReplayMemoryCandidate({
+      assistantMessage: message,
+      createdAt: "2026-06-05T00:00:03.000Z",
+      pending: pendingRetry,
+    });
+
+    expect(candidate.record.tags).toEqual(
+      expect.arrayContaining(["agent:agent_orchestrator", "provider:provider_mimo_token_openai"]),
+    );
+    expect((candidate.record.tags ?? []).some((tag) => tag.startsWith("recall:"))).toBe(false);
+    expect((candidate.record.tags ?? []).some((tag) => tag.startsWith("scope:"))).toBe(false);
+  });
+});
