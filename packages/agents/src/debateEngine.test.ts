@@ -8,15 +8,20 @@ import type {
   ProviderCompletionResponse,
 } from "@ai-orchestrator/protocol";
 import {
+  applyDebateCrossLinks,
   buildRoundUserPrompt,
   createDebateRounds,
+  debateHadPositionChanges,
+  deriveStanceTrajectories,
   inferUtteranceTag,
   pickAgentsForRound,
   runDebateRound,
+  tagPolarity,
   type DebateContext,
   type DebateEngineAgentSlot,
   type LlmCompletionFn,
 } from "./index";
+import type { DebateTag, DebateUtterance } from "@ai-orchestrator/protocol";
 
 function makeProfile(overrides: Partial<AgentProfile> & { role: AgentRole; id: string }): AgentProfile {
   return {
@@ -528,5 +533,167 @@ describe("runDebateRound", () => {
       options: { generateId: defaultIdSeq() },
     });
     expect(resolved).toBe(true);
+  });
+});
+
+// The four stance/cross-link pure helpers below are 0-ref in this suite:
+// tagPolarity, deriveStanceTrajectories, debateHadPositionChanges, and
+// applyDebateCrossLinks. They turn a flat utterance log into the "did anyone
+// actually change their mind?" signal (parallel-monologue detection) and wire
+// [[accept/reject/ref:X]] markers into the schema's acceptedBy/rejectedBy/
+// parentUtteranceId fields. Pin the mapping, flip-counting/neutral-skip, summary
+// text, self-citation exclusion, most-recent-first resolution, and parent-once.
+function makeUtterance(
+  overrides: Partial<DebateUtterance> & { id: string; agentId: string },
+): DebateUtterance {
+  return {
+    roundId: "round1",
+    content: "",
+    tags: ["evidence"],
+    createdAt: "2026-05-25T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function makeRound(
+  id: string,
+  utterances: DebateUtterance[],
+  overrides: Partial<DebateRound> = {},
+): DebateRound {
+  return {
+    id,
+    debateId: "debate1",
+    kind: "cross_critique",
+    title: id,
+    status: "completed",
+    utterances,
+    ...overrides,
+  };
+}
+
+describe("debateEngine — stance trajectories & cross-link markers (0-ref pure helpers)", () => {
+  it("tagPolarity maps each DebateTag to a stance: agreement→support, objection/risk→oppose, evidence/coding_impact→neutral", () => {
+    const expected: Record<DebateTag, ReturnType<typeof tagPolarity>> = {
+      agreement: "support",
+      objection: "oppose",
+      risk: "oppose",
+      evidence: "neutral",
+      coding_impact: "neutral",
+    };
+    for (const tag of Object.keys(expected) as DebateTag[]) {
+      expect(tagPolarity(tag)).toBe(expected[tag]);
+    }
+  });
+
+  it("deriveStanceTrajectories groups by agent in encounter order, skips neutral points, and counts decisive flips", () => {
+    const rounds = [
+      makeRound("r1", [
+        makeUtterance({ id: "a1", agentId: "agentA", tags: ["agreement"] }), // support
+        makeUtterance({ id: "b1", agentId: "agentB", tags: ["agreement"] }), // support
+      ]),
+      makeRound("r2", [
+        makeUtterance({ id: "a2", agentId: "agentA", tags: ["evidence"] }), // neutral → skipped
+        makeUtterance({ id: "b2", agentId: "agentB", tags: ["objection"] }), // oppose → flip
+      ]),
+      makeRound("r3", [
+        makeUtterance({ id: "a3", agentId: "agentA", tags: ["agreement"] }), // support, no flip
+      ]),
+    ];
+
+    const trajectories = deriveStanceTrajectories(rounds);
+    expect(trajectories.map((t) => t.agentId)).toEqual(["agentA", "agentB"]);
+
+    const a = trajectories[0]!;
+    expect(a.points).toHaveLength(3);
+    expect(a.points[1]!.polarity).toBe("neutral"); // the evidence point is kept but does not reset lastDecisive
+    expect(a.points.every((p) => p.changed === false)).toBe(true);
+    expect(a.changeCount).toBe(0);
+    expect(a.finalPolarity).toBe("support");
+    expect(a.summary).toBe("일관된 지지");
+
+    const b = trajectories[1]!;
+    expect(b.points[0]!.changed).toBe(false);
+    expect(b.points[1]!.changed).toBe(true); // support→oppose is the decisive flip
+    expect(b.changeCount).toBe(1);
+    expect(b.finalPolarity).toBe("oppose");
+    expect(b.summary).toBe("1회 입장 변화 → 최종 반대");
+  });
+
+  it("deriveStanceTrajectories defaults empty tags to evidence(neutral) and reports 입장 표명 없음 for all-neutral agents", () => {
+    const rounds = [
+      makeRound("r1", [
+        makeUtterance({ id: "n1", agentId: "ghost", tags: [] }), // empty → evidence default
+        makeUtterance({ id: "n2", agentId: "ghost", tags: ["coding_impact"] }), // neutral
+      ]),
+    ];
+    const t = deriveStanceTrajectories(rounds)[0]!;
+    expect(t.points[0]!.tag).toBe("evidence");
+    expect(t.points.every((p) => p.polarity === "neutral")).toBe(true);
+    expect(t.changeCount).toBe(0);
+    expect(t.finalPolarity).toBe("neutral");
+    expect(t.summary).toBe("입장 표명 없음");
+  });
+
+  it("debateHadPositionChanges is false for parallel monologue and true once any agent flips polarity", () => {
+    const stable = [
+      makeRound("r1", [
+        makeUtterance({ id: "s1", agentId: "x", tags: ["agreement"] }),
+        makeUtterance({ id: "s2", agentId: "x", tags: ["agreement"] }),
+      ]),
+    ];
+    expect(debateHadPositionChanges(stable)).toBe(false);
+
+    const flipped = [
+      makeRound("r1", [
+        makeUtterance({ id: "f1", agentId: "x", tags: ["agreement"] }),
+        makeUtterance({ id: "f2", agentId: "x", tags: ["objection"] }),
+      ]),
+    ];
+    expect(debateHadPositionChanges(flipped)).toBe(true);
+  });
+
+  it("applyDebateCrossLinks records accept/reject citers on the target, excludes self-citation, and passes unmarked utterances through by identity", () => {
+    const uPlain = makeUtterance({ id: "u_plain", agentId: "watcher", content: "마커 없음" });
+    const rounds = [
+      makeRound("r1", [makeUtterance({ id: "u_alpha", agentId: "architect_alpha", content: "초안 제시" })]),
+      makeRound("r2", [
+        makeUtterance({ id: "u_beta", agentId: "reviewer_beta", content: "[[accept:alpha]] 좋다" }),
+        makeUtterance({ id: "u_gamma", agentId: "skeptic_gamma", content: "[[reject:alpha]] 위험" }),
+        makeUtterance({ id: "u_self", agentId: "architect_alpha", content: "[[accept:alpha]] 자기인용" }),
+        uPlain,
+      ]),
+    ];
+
+    const result = applyDebateCrossLinks(rounds);
+    const byId = new Map(result.flatMap((r) => r.utterances).map((u) => [u.id, u]));
+
+    expect(byId.get("u_alpha")!.acceptedBy).toEqual(["reviewer_beta"]); // self never added
+    expect(byId.get("u_alpha")!.acceptedBy).not.toContain("architect_alpha");
+    expect(byId.get("u_alpha")!.rejectedBy).toEqual(["skeptic_gamma"]);
+    expect(byId.get("u_beta")!.parentUtteranceId).toBe("u_alpha"); // critique points back to the criticized
+    expect(byId.get("u_gamma")!.parentUtteranceId).toBe("u_alpha");
+    expect(byId.get("u_self")!.parentUtteranceId).toBeUndefined(); // self-citation resolves to nothing
+    expect(byId.get("u_plain")).toBe(uPlain); // unmarked utterance returned by reference
+  });
+
+  it("applyDebateCrossLinks resolves ref markers to the most-recent matching prior utterance and sets parentUtteranceId only once", () => {
+    const rounds = [
+      makeRound("r1", [
+        makeUtterance({ id: "uA1", agentId: "alpha_one", content: "첫번째" }),
+        makeUtterance({ id: "uA2", agentId: "alpha_two", content: "두번째" }),
+      ]),
+      makeRound("r2", [
+        makeUtterance({ id: "uRef", agentId: "ref_agent", content: "[[ref:alpha]]" }),
+        makeUtterance({ id: "uOnce", agentId: "once_agent", content: "[[ref:one]] [[ref:two]]" }),
+      ]),
+    ];
+
+    const result = applyDebateCrossLinks(rounds);
+    const byId = new Map(result.flatMap((r) => r.utterances).map((u) => [u.id, u]));
+
+    expect(byId.get("uRef")!.parentUtteranceId).toBe("uA2"); // both match "alpha"; most recent wins
+    expect(byId.get("uA2")!.acceptedBy).toBeUndefined(); // ref does not record a citer
+    expect(byId.get("uA2")!.rejectedBy).toBeUndefined();
+    expect(byId.get("uOnce")!.parentUtteranceId).toBe("uA1"); // first ref token (one) wins; second never overwrites
   });
 });
