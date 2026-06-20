@@ -25,6 +25,12 @@ import {
   githubMultiFileCommitExecuteRequestSchema,
   githubMultiFileCommitExecuteResponseSchema,
   githubMultiFileCommitOutcomeSchema,
+  githubPullRequestCompareSummarySchema,
+  githubPullRequestCreateExecuteRequestSchema,
+  githubPullRequestCreateExecuteResponseSchema,
+  githubPullRequestCreateOutcomeSchema,
+  githubPullRequestCreatePlanRequestSchema,
+  githubPullRequestCreatePlanSchema,
   githubPullRequestLabelsUpdateExecuteRequestSchema,
   githubPullRequestLabelsUpdateExecuteResponseSchema,
   githubPullRequestLabelsUpdateOutcomeSchema,
@@ -583,5 +589,125 @@ describe("githubConnector — W3b single-file change: locked verbs, 3-way sha in
       truthStatus: "observed",
     });
     expect(observed.commitSha).toBe("c0ffee"); // present only because we supplied real evidence
+  });
+});
+
+// W4 PR-create plan/execute is the final unpinned write surface — the most
+// externally-visible action (POST /pulls). Its authority invariants:
+//   - "observed" is the ONLY success outcome — no "created"/"opened"/"merged"
+//     literal the server could self-assert;
+//   - the plan request lets the body be blank ("") but never the title (1..160) —
+//     a PR must be titled;
+//   - the compare summary counts are NONNEGATIVE (the schema PERMITS aheadBy=0 /
+//     changedFiles=0) — the no-op-PR guard is a RUNTIME `blocked` status, NOT a
+//     schema rejection, so this test pins the honest fact that a 0/0 compare still
+//     PARSES and the block travels via the status enum + blockedReason channel;
+//   - the plan exposes only a bodyPreview + bodySha256 + bodyLength, never echoing
+//     the full body back (least-information-leak — a smuggled full `body` is
+//     dropped);
+//   - execute is APPROVAL-ONLY with DUAL sha integrity (titleSha256 + bodySha256
+//     both required, approvalId required, NO armed field) — a smuggled
+//     autoExecuteArmed is dropped;
+//   - a success pullNumber is a positive int, never fabricated when absent.
+// Expected values are read off the schemas (self-consistent), never magic.
+describe("githubConnector — W4 PR-create: observed-only, titled, runtime no-op block, dual-sha approval-ONLY execute", () => {
+  const planRequest = { repoFullName: "o/r", baseBranch: "main", headBranch: "agent/x", title: "t", body: "" };
+  const compare = { aheadBy: 2, behindBy: 0, changedFiles: 3, commits: 2, filesPreview: [], truncated: false };
+  const planBase = {
+    id: "pr1",
+    repoFullName: "o/r",
+    baseBranch: "main",
+    headBranch: "agent/x",
+    baseSha: "base0",
+    headSha: "head0",
+    title: "t",
+    bodyPreview: "hi",
+    titleSha256: "ts",
+    bodySha256: "bs",
+    bodyLength: 2,
+    compare,
+    status: "planned" as const,
+    truthStatus: "planned" as const,
+    createdAt: "2026-06-21T00:00:00.000Z",
+    expiresAt: "2026-06-21T00:05:00.000Z",
+  };
+
+  it("outcome enum is observed-only success (no created/opened/merged self-assertion)", () => {
+    expect(githubPullRequestCreateOutcomeSchema.options).toEqual([
+      "observed",
+      "planned",
+      "approval_required",
+      "blocked",
+      "not_configured",
+      "permission_denied",
+      "connection_failed",
+      "github_error",
+    ]);
+    for (const forged of ["created", "opened", "merged", "success", "done"]) {
+      expect(githubPullRequestCreateOutcomeSchema.options).not.toContain(forged);
+    }
+  });
+
+  it("plan request allows a blank body but never a blank title (a PR must be titled)", () => {
+    expect(githubPullRequestCreatePlanRequestSchema.safeParse(planRequest).success).toBe(true); // body "" ok
+    expect(githubPullRequestCreatePlanRequestSchema.safeParse({ ...planRequest, title: "" }).success).toBe(false);
+    expect(githubPullRequestCreatePlanRequestSchema.safeParse({ ...planRequest, title: "x".repeat(161) }).success).toBe(false);
+    expect(githubPullRequestCreatePlanRequestSchema.safeParse({ ...planRequest, body: "x".repeat(16_001) }).success).toBe(false);
+    expect(githubPullRequestCreatePlanRequestSchema.safeParse({ ...planRequest, repoFullName: "single" }).success).toBe(false);
+    expect(githubPullRequestCreatePlanRequestSchema.safeParse({ ...planRequest, headBranch: "x".repeat(121) }).success).toBe(false);
+  });
+
+  it("a 0-ahead / 0-changed compare PARSES — the no-op guard is a runtime status, not a schema rejection", () => {
+    const noop = { aheadBy: 0, behindBy: 5, changedFiles: 0, commits: 0, filesPreview: [], truncated: false };
+    expect(githubPullRequestCompareSummarySchema.safeParse(noop).success).toBe(true); // schema permits 0/0
+    // negatives / fractionals are still rejected (nonnegative ints)
+    expect(githubPullRequestCompareSummarySchema.safeParse({ ...compare, aheadBy: -1 }).success).toBe(false);
+    expect(githubPullRequestCompareSummarySchema.safeParse({ ...compare, changedFiles: 1.5 }).success).toBe(false);
+    // the runtime no-op block travels via the plan status enum + blockedReason, not a parse failure
+    const blocked = githubPullRequestCreatePlanSchema.parse({ ...planBase, compare: noop, status: "blocked", blockedReason: "no_op" });
+    expect(blocked.status).toBe("blocked");
+    expect(blocked.compare.aheadBy).toBe(0);
+  });
+
+  it("the plan exposes bodyPreview + bodySha256 + bodyLength but never echoes the full body", () => {
+    const plan = githubPullRequestCreatePlanSchema.parse({ ...planBase, body: "the full secret body text" } as Record<string, unknown>);
+    expect("body" in plan).toBe(false); // full body dropped — only the preview/sha/length survive
+    expect(plan.bodyPreview).toBe("hi");
+    expect(plan.bodySha256).toBe("bs");
+    expect(plan.bodyLength).toBe(2);
+    expect(githubPullRequestCreatePlanSchema.safeParse({ ...planBase, status: "opened" }).success).toBe(false); // closed status enum
+  });
+
+  it("execute is APPROVAL-ONLY with DUAL sha integrity — no armed field (contrast the comment execute, which keeps armed)", () => {
+    const ok = githubPullRequestCreateExecuteRequestSchema.parse({ planId: "pr1", titleSha256: "ts", bodySha256: "bs", approvalId: "ap1" });
+    expect(ok.approvalId).toBe("ap1");
+    // both sha keys are required (dual integrity)
+    expect(githubPullRequestCreateExecuteRequestSchema.safeParse({ planId: "pr1", titleSha256: "ts", approvalId: "ap1" }).success).toBe(false);
+    expect(githubPullRequestCreateExecuteRequestSchema.safeParse({ planId: "pr1", bodySha256: "bs", approvalId: "ap1" }).success).toBe(false);
+    // approval is mandatory (no approval-or-armed fallback)
+    expect(githubPullRequestCreateExecuteRequestSchema.safeParse({ planId: "pr1", titleSha256: "ts", bodySha256: "bs" }).success).toBe(false);
+    // a smuggled armed flag is dropped (the comment execute, by contrast, keeps it)
+    const file = githubPullRequestCreateExecuteRequestSchema.parse({
+      planId: "pr1",
+      titleSha256: "ts",
+      bodySha256: "bs",
+      approvalId: "ap1",
+      autoExecuteArmed: true,
+    } as Record<string, unknown>);
+    expect("autoExecuteArmed" in file).toBe(false);
+    const comment = githubCommentWriteExecuteRequestSchema.parse({ planId: "c1", bodySha256: "s", autoExecuteArmed: true });
+    expect(comment.autoExecuteArmed).toBe(true);
+  });
+
+  it("execute response: pullNumber is a positive int, never fabricated when absent; observed-only; truthStatus closed", () => {
+    const minimal = githubPullRequestCreateExecuteResponseSchema.parse({ outcome: "blocked", planId: "pr1", truthStatus: "planned" });
+    expect(minimal.pullNumber).toBeUndefined();
+    expect(minimal.htmlUrl).toBeUndefined();
+    expect(minimal.headSha).toBeUndefined();
+    expect(githubPullRequestCreateExecuteResponseSchema.safeParse({ outcome: "observed", planId: "pr1", pullNumber: 0, truthStatus: "observed" }).success).toBe(false);
+    expect(githubPullRequestCreateExecuteResponseSchema.safeParse({ outcome: "observed", planId: "pr1", pullNumber: -1, truthStatus: "observed" }).success).toBe(false);
+    expect(githubPullRequestCreateExecuteResponseSchema.safeParse({ outcome: "observed", planId: "pr1", truthStatus: "real" }).success).toBe(false);
+    const observed = githubPullRequestCreateExecuteResponseSchema.parse({ outcome: "observed", planId: "pr1", pullNumber: 42, truthStatus: "observed" });
+    expect(observed.pullNumber).toBe(42);
   });
 });
