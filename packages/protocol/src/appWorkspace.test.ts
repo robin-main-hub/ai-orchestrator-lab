@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   appTypeSchema,
+  appWorkspaceAttachRequestSchema,
   appWorkspacePreviewSchema,
   appWorkspaceSchema,
   buildAppWorkspace,
@@ -136,6 +137,44 @@ describe("derivePreviewPort — custom base/span window", () => {
     for (const id of ["ws1", "ws2", "anything", "전혀-다른-id"]) {
       expect(derivePreviewPort(id, { base: 7777, span: 1 })).toBe(7777);
     }
+  });
+});
+
+// The attach-request schema is 0-ref across the whole suite, yet its .default()
+// values are a deny-by-default / least-privilege contract: a client that OMITS
+// a field must land on the *least*-privileged option, never silently gain power.
+// The header comment ("id/createdAt/preview 기본값은 서버가 정한다 — 주장 못 함")
+// makes this a safety invariant, not a convenience. Pin the defaults, the
+// required non-empty repoRootRef bound, and that an explicit higher-privilege
+// choice is honored (defaults only FILL omissions, they never override).
+describe("appWorkspaceAttachRequestSchema — least-privilege defaults for omitted client fields", () => {
+  it("defaults every omitted optional to its least-privileged value", () => {
+    const parsed = appWorkspaceAttachRequestSchema.parse({ repoRootRef: "/repo" });
+    expect(parsed.appType).toBe("unknown"); // not a concrete framework claim
+    expect(parsed.terminalMode).toBe("read_only"); // not verify/build — least privilege
+    expect(parsed.runnerKind).toBe("local"); // the plain default runner
+    expect(parsed.worktreeRef).toBeUndefined(); // optional, no value invented
+  });
+
+  it("requires a non-empty repoRootRef within the 1..1024 bound", () => {
+    expect(() => appWorkspaceAttachRequestSchema.parse({})).toThrow(); // missing
+    expect(() => appWorkspaceAttachRequestSchema.parse({ repoRootRef: "" })).toThrow(); // min(1)
+    expect(() => appWorkspaceAttachRequestSchema.parse({ repoRootRef: "a".repeat(1025) })).toThrow(); // max(1024)
+    expect(appWorkspaceAttachRequestSchema.parse({ repoRootRef: "a".repeat(1024) }).repoRootRef.length).toBe(1024); // boundary kept
+  });
+
+  it("honors an explicit higher-privilege selection — defaults fill omissions, they do not override", () => {
+    const parsed = appWorkspaceAttachRequestSchema.parse({
+      repoRootRef: "/repo",
+      appType: "nextjs",
+      terminalMode: "build",
+      runnerKind: "docker",
+      worktreeRef: "wt/feature",
+    });
+    expect(parsed.appType).toBe("nextjs");
+    expect(parsed.terminalMode).toBe("build"); // explicit choice survives, not clamped back to read_only
+    expect(parsed.runnerKind).toBe("docker");
+    expect(parsed.worktreeRef).toBe("wt/feature");
   });
 });
 
