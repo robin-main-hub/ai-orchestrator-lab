@@ -1,11 +1,12 @@
 import { createHash, createHmac } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   __test,
   createDgxOrchestratorAuthHeaders,
   createDgxOrchestratorJsonHeaders,
   DgxAuthCryptoError,
   generateBrowserHmacSha256,
+  resolveDgxOrchestratorApiToken,
 } from "./stage31DgxAuth";
 
 const DEV_TOKEN = "dev-orchestrator-token";
@@ -240,5 +241,46 @@ describe("stage31 auth — token resolution & nonce generation characterization"
     } finally {
       Object.defineProperty(globalThis, "crypto", { configurable: true, value: originalCrypto });
     }
+  });
+});
+
+// Characterization tests (no behavior change, no real network, no secret) for
+// resolveDgxOrchestratorApiToken in ISOLATION. The auth-branches suite above only
+// exercises this resolver INDIRECTLY through createDgxOrchestratorAuthHeaders (it
+// asserts the token flows into an HMAC signature/bearer), and only ever with the
+// override set to "" (the file-wide beforeAll baseline). Two gaps remain: (1) the
+// resolver's own return contract is never pinned directly, and (2) the null-override
+// arm — `testTokenOverride ?? import.meta.env…` taking its RIGHT side — is never
+// reached, yet that is the actual PRODUCTION path (the override is only ever null
+// outside tests). The dev fallback token is a non-secret placeholder, so pinning it
+// is safe and load-bearing: it is the value every un-configured client signs with,
+// so a silent change to the fallback or the trim/blank handling would shift every
+// default DGX auth header. We reset the override to the file baseline ("") after
+// each case so the surrounding suites keep their dev-token assumption.
+describe("resolveDgxOrchestratorApiToken — token resolution contract (direct)", () => {
+  afterEach(() => __test.setTokenOverrideForTests(""));
+
+  it("null override (the production arm) resolves to the dev fallback token", () => {
+    // override null → `?? import.meta.env` right side → unset in test → "" → dev fallback.
+    // This is the only arm the indirect suite never hits (its beforeAll forces "").
+    __test.setTokenOverrideForTests(null);
+    expect(resolveDgxOrchestratorApiToken()).toBe(DEV_TOKEN);
+    // self-consistent with the bearer header the no-target-url case produces.
+    expect(DEV_TOKEN).toBe("dev-orchestrator-token");
+  });
+
+  it("empty and whitespace-only overrides both fall back to the dev token", () => {
+    __test.setTokenOverrideForTests("");
+    expect(resolveDgxOrchestratorApiToken()).toBe(DEV_TOKEN);
+    __test.setTokenOverrideForTests("   ");
+    expect(resolveDgxOrchestratorApiToken()).toBe(DEV_TOKEN);
+  });
+
+  it("a non-empty override is trimmed and returned verbatim", () => {
+    __test.setTokenOverrideForTests("  real-token-123  ");
+    expect(resolveDgxOrchestratorApiToken()).toBe("real-token-123");
+    // a clean value passes through unchanged
+    __test.setTokenOverrideForTests("tok");
+    expect(resolveDgxOrchestratorApiToken()).toBe("tok");
   });
 });
