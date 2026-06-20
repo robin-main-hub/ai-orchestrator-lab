@@ -56,3 +56,69 @@ describe("buildMissionCreateFromBlueprint", () => {
     expect(DESIGN_TEAM.length).toBeLessThanOrEqual(6);
   });
 });
+
+// The cases above pin schema-validity, the team roster, and planned truth, but
+// leave the actual assembly unpinned: the deterministic worker mapping (id/slot/
+// soulMode/configSource), the honest goal text built from intent/surface/tokens/
+// screens, the filter(Boolean) that drops an empty 수용 기준 line, the
+// createdBy fallback + debate/session provenance passthrough, and the 300/4000
+// truncation guards. Pin them, self-consistent (derived from DESIGN_TEAM/INPUT).
+describe("buildMissionCreateFromBlueprint — worker mapping, goal assembly, provenance, truncation", () => {
+  it("maps each DESIGN_TEAM member to a deterministic worker (design_<role>_<n> id, slot displayName, summary/internal)", () => {
+    const req = buildMissionCreateFromBlueprint(INPUT, { missionId: "m1" });
+    expect(req.workers).toHaveLength(DESIGN_TEAM.length);
+    req.workers.forEach((w, i) => {
+      const member = DESIGN_TEAM[i]!;
+      expect(w.agentId).toBe(`design_${member.role}_${i + 1}`);
+      expect(w.role).toBe(member.role);
+      expect(w.displayName).toBe(member.slot);
+      expect(w.soulMode).toBe("summary"); // capability decides power later, not the seed soul mode
+      expect(w.configSource).toBe("internal");
+    });
+    // agentIds are distinct so the server can address each worker unambiguously
+    expect(new Set(req.workers.map((w) => w.agentId)).size).toBe(req.workers.length);
+  });
+
+  it("assembles the goal honestly from intent/surface/tokens/screens with a no-external-send footer", () => {
+    const req = buildMissionCreateFromBlueprint(INPUT, { missionId: "m1" });
+    expect(req.goal).toContain("의도 — 진행 상황을 한눈에");
+    expect(req.goal).toContain("대상 — mission_board");
+    expect(req.goal).toContain("톤 — clean_builder · 밀도 balanced · 모션 subtle");
+    expect(req.goal).toContain("· 보드: 전체 현황 (주요액션 미션 열기)"); // screen line format
+    expect(req.goal).toContain("수용 기준 — 키보드 탐색 가능; 빈 화면 안내");
+    expect(req.goal).toContain("외부 발송 없음"); // honesty footer: draft only
+  });
+
+  it("drops the 수용 기준 line entirely when acceptanceCriteria is empty (filter(Boolean))", () => {
+    const req = buildMissionCreateFromBlueprint({ ...INPUT, acceptanceCriteria: [] }, { missionId: "m1" });
+    expect(req.goal).not.toContain("수용 기준");
+    expect(req.goal).toContain("외부 발송 없음"); // the rest of the goal is intact
+  });
+
+  it("defaults createdBy to design_blueprint and carries debate/session provenance only when given", () => {
+    const fallback = buildMissionCreateFromBlueprint(INPUT, { missionId: "m1" });
+    expect(fallback.createdBy).toBe("design_blueprint");
+    expect(fallback.debateId).toBeUndefined();
+    expect(fallback.sourceSessionId).toBeUndefined();
+
+    const traced = buildMissionCreateFromBlueprint(INPUT, {
+      missionId: "m2",
+      createdBy: "alice",
+      debateId: "debate_7",
+      sourceSessionId: "sess_9",
+    });
+    expect(traced.createdBy).toBe("alice");
+    expect(traced.debateId).toBe("debate_7");
+    expect(traced.sourceSessionId).toBe("sess_9");
+  });
+
+  it("truncates title to 300 and goal to 4000 characters so the request stays within schema bounds", () => {
+    const longTitle = buildMissionCreateFromBlueprint({ ...INPUT, title: "가".repeat(400) }, { missionId: "m1" });
+    expect(longTitle.title.length).toBe(300);
+    expect(() => missionCreateRequestSchema.parse(longTitle)).not.toThrow();
+
+    const longGoal = buildMissionCreateFromBlueprint({ ...INPUT, userIntent: "x".repeat(5_000) }, { missionId: "m1" });
+    expect(longGoal.goal.length).toBe(4_000);
+    expect(() => missionCreateRequestSchema.parse(longGoal)).not.toThrow();
+  });
+});
