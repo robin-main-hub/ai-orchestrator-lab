@@ -205,3 +205,64 @@ describe("buildAgentSystemPrompt", () => {
     ]);
   });
 });
+
+// The fallback chain is exercised above only for role=architect (→ the default
+// "summary" branch of getCanonicalSoulMode) and role=companion (→ "full"). The
+// remaining role-policy branches stay unpinned: the RETRIEVED-role set
+// (reviewer/external/auditor/researcher/domain_expert) and the EXECUTOR → "off"
+// branch. These encode a real rule — when the custom persona is missing, the
+// role's CANONICAL soul mode is adopted and that policy OVERRIDES whatever mode
+// the profile requested (a reviewer asking for "full" still collapses to
+// retrieved→soul_only; an executor asking for "full" still gets "off" with no
+// soul, even when its SOUL.md exists). Pin them, self-consistent (the canonical
+// role directory + the mode the role policy forces).
+describe("buildAgentSystemPrompt — role-policy fallback modes (getCanonicalSoulMode)", () => {
+  const SAFETY = "# Safety\n비밀을 노출하지 말 것.";
+
+  it("a reviewer's missing custom persona adopts RETRIEVED (soul_only) — role policy overrides the requested full", async () => {
+    const source = createInMemoryPersonaSource({
+      "agents/reviewer/SOUL.md": "# Reviewer Soul",
+      "agents/reviewer/AGENTS.md": "# Reviewer Rules",
+      "agents/SAFETY.md": SAFETY,
+    });
+    const report = await buildAgentSystemPrompt(
+      makeProfile({ soulMode: "full", personaName: "missing_reviewer", role: "reviewer" }),
+      source,
+    );
+    expect(report.personaName).toBe("reviewer");
+    expect(report.mode).toBe("retrieved"); // canonical role policy beats the requested "full"
+    // retrieved collapses to soul_only → SOUL injected, AGENTS withheld
+    expect(report.fragmentsInjected).toEqual(["agents/reviewer/SOUL.md"]);
+    expect(report.promptText).not.toContain("Reviewer Rules");
+  });
+
+  it("a domain_expert's missing custom persona also adopts RETRIEVED (the retrieved set is not just reviewer)", async () => {
+    const source = createInMemoryPersonaSource({
+      "agents/domain_expert/SOUL.md": "# Domain Expert Soul",
+      "agents/SAFETY.md": SAFETY,
+    });
+    const report = await buildAgentSystemPrompt(
+      makeProfile({ soulMode: "summary", personaName: "missing_de", role: "domain_expert" }),
+      source,
+    );
+    expect(report.personaName).toBe("domain_expert");
+    expect(report.mode).toBe("retrieved");
+    expect(report.fragmentsInjected).toEqual(["agents/domain_expert/SOUL.md"]);
+  });
+
+  it("an executor's canonical mode is OFF — a present SOUL.md is NOT injected (deny-by-default), safety still is", async () => {
+    const source = createInMemoryPersonaSource({
+      "agents/executor/SOUL.md": "# Executor Soul (must stay out)",
+      "agents/SAFETY.md": SAFETY,
+    });
+    const report = await buildAgentSystemPrompt(
+      makeProfile({ soulMode: "full", personaName: "missing_exec", role: "executor" }),
+      source,
+    );
+    expect(report.personaName).toBe("executor");
+    expect(report.mode).toBe("off"); // role policy forces off despite the requested "full"
+    expect(report.fragmentsInjected).toHaveLength(0); // SOUL present but withheld
+    expect(report.promptText).not.toContain("Executor Soul");
+    expect(report.promptText).toContain("비밀을 노출"); // safety boundary still injected
+  });
+});
