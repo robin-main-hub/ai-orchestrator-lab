@@ -6,6 +6,7 @@ import {
   failedAgentCount,
   finishAgent,
   markAgentRunning,
+  markSwarmOffline,
   progressDots,
   progressLabel,
   settleStep,
@@ -103,5 +104,57 @@ describe("Viewing 전환", () => {
   it("setViewing이 Agent's Computer 대상 요원을 바꾼다", () => {
     const state = setViewing(swarm(), "a3");
     expect(state.viewingAgentId).toBe("a3");
+  });
+});
+
+// Characterization tests (no behavior change) for the previously-unasserted reducer
+// markSwarmOffline — the server-unreachable kill switch. The finishAgent block above drives
+// per-agent terminal transitions, but the swarm-wide abort that flips every *in-flight*
+// agent at once was never pinned. Load-bearing safety contract:
+//   - ONLY queued/running agents flip to "offline" (statusVerb "오프라인", error=reason);
+//   - already-terminal agents (done/failed/offline) are carried over UNTOUCHED — a prior
+//     done conclusion or a failed agent's own error must NOT be overwritten by the abort
+//     reason, otherwise a dead server would retroactively rewrite real outcomes;
+//   - it is non-mutating (fresh state, source agents array untouched).
+describe("markSwarmOffline", () => {
+  it("flips only in-flight agents to offline and stamps the reason", () => {
+    const reason = "서버 연결 끊김";
+    const state = markSwarmOffline(markAgentRunning(swarm(), "a1"), reason);
+    // a1 was running, a2/a3 were queued — all three are in-flight, so all flip
+    for (const run of state.agents) {
+      expect(run.status).toBe("offline");
+      expect(run.statusVerb).toBe("오프라인");
+      expect(run.error).toBe(reason);
+    }
+  });
+
+  it("never overwrites an already-terminal agent's outcome", () => {
+    let state = markAgentRunning(swarm(), "a1");
+    state = finishAgent(state, "a1", { status: "done", conclusion: "정리 완료" });
+    state = finishAgent(state, "a2", { status: "failed", error: "원래 실패 사유" });
+    // a3 stays queued (in-flight)
+    const after = markSwarmOffline(state, "서버 다운");
+
+    const a1 = after.agents.find((run) => run.id === "a1")!;
+    const a2 = after.agents.find((run) => run.id === "a2")!;
+    const a3 = after.agents.find((run) => run.id === "a3")!;
+    // done survives untouched — abort reason does not rewrite a real conclusion
+    expect(a1.status).toBe("done");
+    expect(a1.conclusion).toBe("정리 완료");
+    // failed keeps its OWN error, not the abort reason
+    expect(a2.status).toBe("failed");
+    expect(a2.error).toBe("원래 실패 사유");
+    // only the still-in-flight agent goes offline
+    expect(a3.status).toBe("offline");
+    expect(a3.error).toBe("서버 다운");
+    expect(failedAgentCount(after)).toBe(2); // failed + offline both count
+  });
+
+  it("is non-mutating — the source state is unchanged", () => {
+    const before = markAgentRunning(swarm(), "a1");
+    const after = markSwarmOffline(before, "abort");
+    expect(after).not.toBe(before);
+    expect(before.agents.every((run) => run.status !== "offline")).toBe(true);
+    expect(before.agents.find((run) => run.id === "a1")!.status).toBe("running");
   });
 });
