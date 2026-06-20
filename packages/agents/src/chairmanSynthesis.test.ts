@@ -190,3 +190,56 @@ describe("chairmanSynthesis — vote-only routing, marker/truncate, contested-ri
     expect(out.reviewerNotes.filter((n) => n === "반려: 반려 대상")).toHaveLength(1); // deduped, not doubled
   });
 });
+
+// The suites above never exercise: the maxItems cap that bounds every output
+// list (an unbounded synthesis would let a packet grow without limit), the
+// confidence boundary at exactly 0.75 (>=0.75 ⇒ strong, inclusive) and the
+// 2-decimal rounding, or the "no-signal" route — a clean, non-empty utterance
+// with neither a routing tag nor any vote lands in NO bucket (not adopted, not
+// rejected, not risk). Pin these, self-consistent (derived from the votes/tags).
+describe("chairmanSynthesis — maxItems cap, confidence boundary/rounding, no-signal route", () => {
+  it("caps every output list at maxItems (default 6, and a custom cap)", () => {
+    const many = Array.from({ length: 8 }, (_, i) =>
+      utt({ id: `a${i}`, agentId: `m${i}`, content: `채택 ${i}`, tags: ["agreement"], acceptedBy: ["x"] }),
+    );
+    const def = synthesizeChairmanDecision(context, [round(many)]);
+    expect(def.adopted).toHaveLength(6); // default cap
+
+    const capped = synthesizeChairmanDecision(context, [round(many)], { maxItems: 2 });
+    expect(capped.adopted).toHaveLength(2);
+  });
+
+  it("consensus is strong at exactly 0.75 (inclusive boundary)", () => {
+    const decision = synthesizeChairmanDecision(context, [
+      round([
+        utt({ id: "a", agentId: "m", content: "채택", tags: ["agreement"], acceptedBy: ["x", "y", "z"] }), // accepts 3
+        utt({ id: "b", agentId: "n", content: "반려", tags: ["objection"], rejectedBy: ["w"] }), // rejects 1
+      ]),
+    ]);
+    expect(decision.confidence).toBe(0.75); // 3 / (3+1)
+    expect(decision.consensusLevel).toBe("strong"); // >= 0.75 is strong
+  });
+
+  it("rounds confidence to two decimals (2/3 → 0.67, moderate band)", () => {
+    const decision = synthesizeChairmanDecision(context, [
+      round([
+        utt({ id: "a", agentId: "m", content: "채택", tags: ["agreement"], acceptedBy: ["x", "y"] }), // accepts 2
+        utt({ id: "b", agentId: "n", content: "반려", tags: ["objection"], rejectedBy: ["z"] }), // rejects 1
+      ]),
+    ]);
+    expect(decision.confidence).toBe(0.67); // Math.round(66.67)/100
+    expect(decision.consensusLevel).toBe("moderate");
+  });
+
+  it("a clean utterance with no tag and no votes routes to nothing (no-signal deny)", () => {
+    const decision = synthesizeChairmanDecision(context, [
+      round([utt({ id: "x", agentId: "m", content: "그냥 중립 의견" })]), // no tags, no acceptedBy/rejectedBy
+    ]);
+    expect(decision.adopted).toEqual([]);
+    expect(decision.rejected).toEqual([]);
+    expect(decision.risks).toEqual([]);
+    expect(decision.contested).toEqual([]);
+    expect(decision.confidence).toBe(0.5); // total votes 0 → default
+    expect(decision.statement).toContain("합의 형성 필요"); // problem-based fallback, not the utterance
+  });
+});
