@@ -153,3 +153,69 @@ describe("extractCodingPacketFromDebate", () => {
     expect(packet.decisions.length).toBe(1);
   });
 });
+
+// The status filter is tested for completed/pending/blocked but not the OTHER
+// included status ("running"), the ut() helper only ever sets a single tag (so
+// the multi-tag fan-out branch never fires), a marker-only utterance (strips to
+// empty → dropped) is untested, and the minimal-context path (falsy
+// conversationSummary not seeded) plus the structural invariants (goal comes
+// from context.problem, filesToInspect/verificationPlan are ALWAYS []) are
+// unpinned. Pin them, self-consistent (derived from the rounds/context).
+describe("extractCodingPacketFromDebate — running rounds, multi-tag fan-out, empty/minimal edges", () => {
+  it("a RUNNING (in-progress) round's utterances are extracted, not just completed ones", () => {
+    const rounds = [
+      round("r1", "problem_definition", "running", [
+        ut("orch", "진행 중 결정 [[tag:agreement]]", "agreement"),
+      ]),
+    ];
+    const packet = extractCodingPacketFromDebate(CTX, rounds);
+    expect(packet.decisions).toHaveLength(1);
+    expect(packet.decisions[0]).toContain("진행 중 결정");
+  });
+
+  it("a single utterance with MULTIPLE tags fans into every mapped field", () => {
+    const multi: DebateUtterance = {
+      id: "u_multi",
+      agentId: "orch",
+      roundId: "r1",
+      content: "결정이자 구현 영향", // no trailing marker — same cleaned line lands in both fields
+      tags: ["agreement", "coding_impact"],
+      createdAt: "2026-05-26T09:00:00.000Z",
+    };
+    const rounds = [round("r1", "problem_definition", "completed", [multi])];
+    const packet = extractCodingPacketFromDebate(CTX, rounds);
+    expect(packet.decisions.some((d) => d.includes("결정이자 구현 영향"))).toBe(true);
+    expect(packet.implementationPlan.some((p) => p.includes("결정이자 구현 영향"))).toBe(true);
+  });
+
+  it("an utterance that is only a tag marker strips to empty and is dropped (the real one survives)", () => {
+    const rounds = [
+      round("r1", "problem_definition", "completed", [
+        ut("orch", "[[tag:agreement]]", "agreement"), // strips to "" → skipped
+        ut("arch", "진짜 결정 [[tag:agreement]]", "agreement"),
+      ]),
+    ];
+    const packet = extractCodingPacketFromDebate(CTX, rounds);
+    expect(packet.decisions).toHaveLength(1);
+    expect(packet.decisions[0]).toContain("진짜 결정");
+  });
+
+  it("minimal context: a falsy conversationSummary is not seeded; goal=problem, files/verification always []", () => {
+    const MIN: DebateContext = {
+      sessionId: "s_min",
+      problem: "문제만 있다",
+      conversationSummary: "", // falsy → not pushed into context
+      constraints: [],
+      openQuestions: [],
+      userPreferences: [],
+      memoryTraceIds: [],
+    };
+    const packet = extractCodingPacketFromDebate(MIN, []);
+    expect(packet.goal).toBe("문제만 있다"); // goal comes from context.problem, never bucketed
+    expect(packet.context).toEqual([]); // empty summary + no prefs → nothing seeded
+    expect(packet.constraints).toEqual([]);
+    expect(packet.reviewerNotes).toEqual([]);
+    expect(packet.filesToInspect).toEqual([]); // engine doesn't emit these — always []
+    expect(packet.verificationPlan).toEqual([]);
+  });
+});
