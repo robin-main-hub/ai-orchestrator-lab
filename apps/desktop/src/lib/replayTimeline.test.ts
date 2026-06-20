@@ -56,3 +56,73 @@ describe("Batch 21 — buildReplayTimeline (pure)", () => {
     expect(a).toBe(b);
   });
 });
+
+// Characterization tests for the previously-uncovered gap-boundary, bad-input,
+// id-format and internal-sort branches (no behavior change). The existing suite
+// covers basic clustering, a gap-split, a custom gapMs and empty-safety; these
+// pin the strict `>` gap boundary (an exactly-threshold gap stays in one
+// cluster), the unparseable-createdAt → epoch-0 sort-to-oldest split, the
+// `cluster-<endAt>-<count>` id format with startAt===endAt for a lone item, the
+// shuffled-input newest-first internal sort, and per-cluster category tallies
+// that stay independent across a split. All pure, no Date.now.
+describe("replayTimeline — gap-boundary, bad-input, id & sort characterization", () => {
+  it("keeps an exactly-threshold gap in one cluster but splits a just-larger gap (strict >)", () => {
+    expect(
+      buildReplayTimeline([
+        item({ id: "a", createdAt: "2026-06-18T10:00:00.000Z" }),
+        item({ id: "b", createdAt: "2026-06-18T10:30:00.000Z" }), // exactly 30 min
+      ]),
+    ).toHaveLength(1);
+    expect(
+      buildReplayTimeline([
+        item({ id: "a", createdAt: "2026-06-18T10:00:00.000Z" }),
+        item({ id: "b", createdAt: "2026-06-18T10:30:00.001Z" }), // 1 ms over
+      ]),
+    ).toHaveLength(2);
+  });
+
+  it("treats an unparseable createdAt as epoch 0, sorting it oldest and splitting it off", () => {
+    const clusters = buildReplayTimeline([
+      item({ id: "good", createdAt: "2026-06-18T10:00:00.000Z" }),
+      item({ id: "bad", createdAt: "not-a-date" }),
+    ]);
+    expect(clusters).toHaveLength(2);
+    expect(clusters[0]!.items[0]!.id).toBe("good");
+    expect(clusters[1]!.items[0]!.id).toBe("bad");
+    expect(clusters[1]!.startAt).toBe("not-a-date");
+    expect(clusters[1]!.endAt).toBe("not-a-date");
+    expect(clusters[1]!.id).toBe("cluster-not-a-date-1");
+  });
+
+  it("derives the cluster id from endAt and count, with startAt===endAt for a lone item", () => {
+    const [cluster] = buildReplayTimeline([
+      item({ id: "solo", createdAt: "2026-06-18T10:00:00.000Z", category: "memory" }),
+    ]);
+    expect(cluster!.id).toBe("cluster-2026-06-18T10:00:00.000Z-1");
+    expect(cluster!.startAt).toBe("2026-06-18T10:00:00.000Z");
+    expect(cluster!.endAt).toBe("2026-06-18T10:00:00.000Z");
+    expect(cluster!.categories).toEqual({ memory: 1 });
+  });
+
+  it("sorts shuffled input newest-first inside a single cluster", () => {
+    const [cluster] = buildReplayTimeline([
+      item({ id: "b", createdAt: "2026-06-18T10:05:00.000Z" }),
+      item({ id: "c", createdAt: "2026-06-18T10:10:00.000Z" }),
+      item({ id: "a", createdAt: "2026-06-18T10:00:00.000Z" }),
+    ]);
+    expect(cluster!.items.map((it) => it.id)).toEqual(["c", "b", "a"]);
+    expect(cluster!.endAt).toBe("2026-06-18T10:10:00.000Z");
+    expect(cluster!.startAt).toBe("2026-06-18T10:00:00.000Z");
+  });
+
+  it("tallies categories independently per cluster across a gap split", () => {
+    const clusters = buildReplayTimeline([
+      item({ id: "r1", createdAt: "2026-06-18T10:10:00.000Z", category: "runner" }),
+      item({ id: "r2", createdAt: "2026-06-18T10:05:00.000Z", category: "failure" }),
+      item({ id: "o1", createdAt: "2026-06-18T08:00:00.000Z", category: "memory" }),
+    ]);
+    expect(clusters).toHaveLength(2);
+    expect(clusters[0]!.categories).toEqual({ runner: 1, failure: 1 });
+    expect(clusters[1]!.categories).toEqual({ memory: 1 });
+  });
+});
