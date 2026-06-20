@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   blueprintDebateReviewSchema,
   buildBlueprintRevisionDraft,
+  debateDecisionKindSchema,
   debateDecisionToBlueprintInput,
   deriveBlueprintDebateReview,
+  recommendedDebateNextActionSchema,
   shouldDebateBeforeMission,
   type DebateDecisionPacket,
 } from "./debateBridge.js";
@@ -32,6 +34,37 @@ describe("shouldDebateBeforeMission", () => {
   });
 });
 
+// The debate-bridge enums are 0-ref vocab, and shouldDebateBeforeMission is the
+// gate that decides whether a change is forced through debate before it can
+// become a Mission. The existing test hits each branch in isolation but not
+// the *precedence*: a "small" scope must short-circuit to false BEFORE the
+// architecture/large checks (a small fix is never dragged into debate, even an
+// architecture-kinded one), and design defaults surfacesChanged to 1 (a
+// single-surface design skips debate). A precedence bug here would either force
+// debate on trivial fixes or — worse — let a large change skip the gate.
+describe("debateBridge vocab + shouldDebateBeforeMission precedence", () => {
+  it("pins the decision-kind and next-action enum memberships", () => {
+    expect(debateDecisionKindSchema.options).toEqual(["coding", "design", "architecture"]);
+    expect(recommendedDebateNextActionSchema.options).toEqual([
+      "promote_to_mission",
+      "revise_blueprint",
+      "ask_user",
+    ]);
+  });
+
+  it("a small scope short-circuits to false BEFORE the architecture/large checks", () => {
+    // small wins even when the kind would otherwise force debate
+    expect(shouldDebateBeforeMission({ scope: "small", kind: "architecture" })).toBe(false);
+    expect(shouldDebateBeforeMission({ scope: "small", kind: "design", surfacesChanged: 5 })).toBe(false);
+  });
+
+  it("design defaults surfacesChanged to 1 — a single-surface design skips debate", () => {
+    expect(shouldDebateBeforeMission({ kind: "design" })).toBe(false); // surfacesChanged ?? 1 → 1 < 2
+    expect(shouldDebateBeforeMission({ kind: "coding" })).toBe(false);
+    expect(shouldDebateBeforeMission({})).toBe(false); // no signal → no forced debate
+  });
+});
+
 describe("debateDecisionToBlueprintInput", () => {
   it("converts an actionable debate packet into a schema-valid blueprint input", () => {
     const input = debateDecisionToBlueprintInput(packet());
@@ -43,6 +76,23 @@ describe("debateDecisionToBlueprintInput", () => {
 
   it("returns null when the debate produced no actionable decisions (no mission promotion)", () => {
     expect(debateDecisionToBlueprintInput(packet({ adoptedDecisions: [] }))).toBeNull();
+  });
+
+  it("primary = first decision, secondaryActions = decisions 2..4 only, targetSurface overridable", () => {
+    const input = debateDecisionToBlueprintInput(
+      packet({ adoptedDecisions: ["d1", "d2", "d3", "d4", "d5"] }),
+      { targetSurface: "dashboard" },
+    )!;
+    expect(input.targetSurface).toBe("dashboard");
+    expect(input.screens[0]!.primaryAction).toBe("d1");
+    expect(input.screens[0]!.secondaryActions).toEqual(["d2", "d3", "d4"]); // slice(1,4) — caps at 3, drops d5
+  });
+
+  it("falls back to a placeholder title/purpose when the summary is empty (no blank screen)", () => {
+    const input = debateDecisionToBlueprintInput(packet({ summary: "", adoptedDecisions: ["오직 하나"] }))!;
+    expect(input.title).toBe("토론 설계안");
+    expect(input.screens[0]!.purpose).toBe("토론에서 합의된 주요 흐름");
+    expect(input.screens[0]!.secondaryActions).toEqual([]); // single decision → no secondaries
   });
 
   it("the produced blueprint promotes to a schema-valid mission carrying the debate id", () => {
