@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildLorebookFragment,
   characterBookToLorebook,
+  DEFAULT_LOREBOOK_TENANT,
   isLorebook,
   scanLorebooks,
   SHARED_LOREBOOK_TENANT,
@@ -78,6 +79,41 @@ describe("scanLorebooks", () => {
 
     const capped = scanLorebooks([book({ entries })], "DGX", { maxEntries: 1, tokenBudget: 10_000 });
     expect(capped.map((m) => m.entry.id)).toEqual(["first"]);
+  });
+});
+
+// The MULTI-TENANT test above always passes an explicit { tenantId }. The
+// isolation that matters most for leakage is the *fallback* path: when a
+// caller omits tenantId entirely, scanLorebooks falls back to
+// DEFAULT_LOREBOOK_TENANT — and that fallback must NOT become a wildcard that
+// sees every tenant's books. DEFAULT_LOREBOOK_TENANT is 0-ref across the test
+// tree, so we pin its value as a tripwire and its fallback isolation here.
+describe("scanLorebooks — default tenant fallback (DEFAULT_LOREBOOK_TENANT)", () => {
+  it("pins the default tenant id and matches the book factory's own default", () => {
+    expect(DEFAULT_LOREBOOK_TENANT).toBe("default");
+    // self-consistency: a book created with no tenant override lives in the default tenant
+    expect(book().tenantId).toBe(DEFAULT_LOREBOOK_TENANT);
+  });
+
+  it("when tenantId is omitted, sees only DEFAULT_LOREBOOK_TENANT + shared books — never another tenant's (no leakage on the fallback path)", () => {
+    const books = [
+      book({ id: "mine", tenantId: DEFAULT_LOREBOOK_TENANT, entries: [entry({ id: "d", content: "기본 테넌트" })] }),
+      book({ id: "other", tenantId: "acme", entries: [entry({ id: "o", content: "ACME 전용" })] }),
+      book({ id: "common", tenantId: SHARED_LOREBOOK_TENANT, entries: [entry({ id: "s", content: "공용 규칙" })] }),
+    ];
+    const matches = scanLorebooks(books, "DGX 점검");
+    expect(matches.map((m) => m.bookId).sort()).toEqual(["common", "mine"]);
+    expect(matches.some((m) => m.entry.content.includes("ACME"))).toBe(false);
+  });
+
+  it("the fallback is the default tenant specifically — an explicit non-default tenant cannot see default-tenant books", () => {
+    const books = [
+      book({ id: "mine", tenantId: DEFAULT_LOREBOOK_TENANT, entries: [entry({ id: "d", content: "기본 테넌트" })] }),
+    ];
+    // explicit other-tenant scan sees nothing of the default tenant
+    expect(scanLorebooks(books, "DGX", { tenantId: "acme" })).toHaveLength(0);
+    // omitted tenant (fallback) does see it
+    expect(scanLorebooks(books, "DGX").map((m) => m.bookId)).toEqual(["mine"]);
   });
 });
 
