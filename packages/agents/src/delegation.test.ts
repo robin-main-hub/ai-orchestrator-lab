@@ -599,3 +599,111 @@ describe("runCompanionTurn — follow-up turn shape", () => {
     expect(followUpUserContent).toContain("`<delegate>`");
   });
 });
+
+// parseDelegateTags is intentionally a strict mini-grammar: the `to` value must
+// be a role/persona identifier `[a-zA-Z_][a-zA-Z0-9_-]*`. The existing parse
+// tests cover simple names + malformed (no-quotes / wrong-attr) tags, but never
+// the identifier *boundary* — that hyphen/underscore/digit are allowed in
+// non-leading positions while a leading digit or empty value is rejected. That
+// boundary is the whole reason no HTML parser is needed, so pin it: a loosened
+// regex (e.g. one that accepted a leading digit or arbitrary chars) could let a
+// malformed `to=` smuggle through as a real delegation target.
+describe("parseDelegateTags — identifier grammar boundary", () => {
+  it("accepts hyphen / underscore / non-leading digit in the target identifier", () => {
+    expect(parseDelegateTags(`<delegate to="domain_expert">a</delegate>`)[0]!.target).toBe("domain_expert");
+    expect(parseDelegateTags(`<delegate to="re-search2">a</delegate>`)[0]!.target).toBe("re-search2");
+    // a single leading underscore is a legal identifier start
+    expect(parseDelegateTags(`<delegate to="_hidden">a</delegate>`)[0]!.target).toBe("_hidden");
+  });
+
+  it("rejects a leading digit or an empty target value (no match, not a silent pass-through)", () => {
+    expect(parseDelegateTags(`<delegate to="2bad">x</delegate>`)).toEqual([]); // leading digit
+    expect(parseDelegateTags(`<delegate to="">x</delegate>`)).toEqual([]); // empty value
+  });
+
+  it("a valid tag adjacent to an invalid one still extracts only the valid target", () => {
+    const tags = parseDelegateTags(
+      `<delegate to="9nope">skip</delegate><delegate to="researcher">keep</delegate>`,
+    );
+    expect(tags.map((t) => t.target)).toEqual(["researcher"]);
+  });
+});
+
+// The maxDelegatesPerTurn cap is tested at 2, but the boundary at 0 — and the
+// negative-input clamp `Math.max(0, …)` — are untested. At 0 EVERY parsed tag
+// must be recorded as blocked(max_delegates_exceeded) (audited, not silently
+// dropped) and no target adapter may be invoked, yet the caller still gets its
+// follow-up turn. A clamp regression (e.g. a negative cap wrapping to "allow
+// all") would re-open auto-delegation, so pin both.
+describe("runCompanionTurn — maxDelegatesPerTurn zero / negative clamp", () => {
+  it("maxDelegatesPerTurn=0 blocks every tag (audited) and calls no target, but still produces a final turn", async () => {
+    let targetCalled = false;
+    const target = makeSlot(
+      makeProfile({ id: "r1", role: "researcher" }),
+      async (req) => {
+        targetCalled = true;
+        return {
+          id: "x",
+          requestId: req.id,
+          providerProfileId: req.providerProfileId,
+          modelId: req.modelId,
+          route: req.routePreference,
+          status: "succeeded",
+          content: "should not run",
+          createdAt: req.createdAt,
+        };
+      },
+    );
+    const caller = makeSlot(
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
+      returningOnce(`<delegate to="researcher">a</delegate>`, `최종 답`),
+    );
+    const result = await runCompanionTurn({
+      caller,
+      context: makeContext(),
+      targets: new Map([["researcher", target]]),
+      userMessage: "x",
+      options: { maxDelegatesPerTurn: 0 },
+    });
+    expect(targetCalled).toBe(false);
+    expect(result.shortCircuited).toBe(false); // a tag WAS parsed
+    expect(result.delegations).toHaveLength(1);
+    const only = result.delegations[0]!;
+    expect(only.kind).toBe("blocked");
+    if (only.kind === "blocked") expect(only.reason).toBe("max_delegates_exceeded");
+    expect(result.finalContent).toBe("최종 답"); // follow-up turn still runs
+  });
+
+  it("a negative maxDelegatesPerTurn is clamped to 0 (never wraps open to allow-all)", async () => {
+    let targetCalled = false;
+    const target = makeSlot(
+      makeProfile({ id: "r1", role: "researcher" }),
+      async (req) => {
+        targetCalled = true;
+        return {
+          id: "x",
+          requestId: req.id,
+          providerProfileId: req.providerProfileId,
+          modelId: req.modelId,
+          route: req.routePreference,
+          status: "succeeded",
+          content: "should not run",
+          createdAt: req.createdAt,
+        };
+      },
+    );
+    const caller = makeSlot(
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
+      returningOnce(`<delegate to="researcher">a</delegate>`, `최종`),
+    );
+    const result = await runCompanionTurn({
+      caller,
+      context: makeContext(),
+      targets: new Map([["researcher", target]]),
+      userMessage: "x",
+      options: { maxDelegatesPerTurn: -5 },
+    });
+    expect(targetCalled).toBe(false);
+    expect(result.delegations[0]!.kind).toBe("blocked"); // clamped to 0 → blocked, not allowed
+  });
+});
