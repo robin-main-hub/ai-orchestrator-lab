@@ -707,3 +707,135 @@ describe("runCompanionTurn — maxDelegatesPerTurn zero / negative clamp", () =>
     expect(result.delegations[0]!.kind).toBe("blocked"); // clamped to 0 → blocked, not allowed
   });
 });
+
+// The per-tag loop in runCompanionTurn applies its gates in a FIXED order:
+//   max-cap → runtime blocked-list → self-delegation → unknown_target → policy.
+// Each gate is tested in isolation above, but the *precedence* (which gate wins
+// when several would fire) is unpinned — and precedence is load-bearing: an
+// earlier hard gate short-circuits and decides the reported reason, so a
+// reorder (e.g. resolving a target before checking the cap, or calling an
+// adapter before the self-guard) would silently change what runs. Pin the
+// ordering with cases where two gates overlap. A no-target adapter is never
+// invoked under any of these, which is the security point.
+function neverCalledSlot(id: string, role: AgentRole, flag: { called: boolean }): DebateEngineAgentSlot {
+  return makeSlot(
+    makeProfile({ id, role }),
+    async (req) => {
+      flag.called = true;
+      return {
+        id: "x",
+        requestId: req.id,
+        providerProfileId: req.providerProfileId,
+        modelId: req.modelId,
+        route: req.routePreference,
+        status: "succeeded",
+        content: "should not run",
+        createdAt: req.createdAt,
+      };
+    },
+  );
+}
+
+describe("runCompanionTurn — denial-gate precedence", () => {
+  it("runtime blocked-list wins over self-delegation (blocked check runs before the self-guard)", async () => {
+    // tag.target === caller persona AND is in the blocked list → reported as blocked, not self_delegation.
+    const caller = makeSlot(
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
+      returningOnce(`<delegate to="kurumi">do</delegate>`, `최종`),
+    );
+    const result = await runCompanionTurn({
+      caller,
+      context: makeContext(),
+      targets: new Map(),
+      userMessage: "x",
+      options: { blockedTargets: new Set(["kurumi"]) },
+    });
+    const only = result.delegations[0]!;
+    expect(only.kind).toBe("blocked");
+    if (only.kind === "blocked") expect(only.reason).toBe('target "kurumi" is in blocked list');
+  });
+
+  it("max-cap wins over unknown_target (cap check runs before slot lookup)", async () => {
+    // Past the cap AND no slot registered → max_delegates_exceeded, not unknown_target.
+    const caller = makeSlot(
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
+      returningOnce(`<delegate to="ghost">do</delegate>`, `최종`),
+    );
+    const result = await runCompanionTurn({
+      caller,
+      context: makeContext(),
+      targets: new Map(),
+      userMessage: "x",
+      options: { maxDelegatesPerTurn: 0 },
+    });
+    const only = result.delegations[0]!;
+    expect(only.kind).toBe("blocked");
+    if (only.kind === "blocked") expect(only.reason).toBe("max_delegates_exceeded");
+  });
+
+  it("self-delegation wins over slot lookup, even when the caller's own role is a registered target (no adapter call)", async () => {
+    // A slot is registered under the caller's role key, but the self-guard fires first.
+    const flag = { called: false };
+    const selfNamedSlot = neverCalledSlot("agent_companion_impostor", "companion", flag);
+    const caller = makeSlot(
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
+      returningOnce(`<delegate to="companion">do</delegate>`, `최종`),
+    );
+    const result = await runCompanionTurn({
+      caller,
+      context: makeContext(),
+      targets: new Map([["companion", selfNamedSlot]]),
+      userMessage: "x",
+    });
+    expect(result.delegations[0]!.kind).toBe("self_delegation");
+    expect(flag.called).toBe(false); // self-guard short-circuits before any adapter invocation
+  });
+});
+
+// buildSubAgentPrompt injects the completion-only safety block ONLY for targets
+// whose role requires approval (executor/external/auditor). The executor case
+// pins the block is PRESENT; the negative — that a non-side-effect target
+// (researcher) gets NO such block while still carrying the depth=1 guard and the
+// authority/target-effect header — is unpinned. That conditional injection is
+// least-privilege: the heavy "do not execute / do not access secrets" warning is
+// reserved for gated roles, not stamped onto every sub-agent prompt.
+describe("runCompanionTurn — conditional safety-prompt injection (least-privilege)", () => {
+  it("omits the completion-only safety block for a non-side-effect target but keeps the depth=1 guard + authority header", async () => {
+    let researcherRequest: ProviderCompletionRequest | undefined;
+    const researcher = makeSlot(
+      makeProfile({ id: "agent_researcher", role: "researcher" }),
+      async (req) => {
+        researcherRequest = req;
+        return {
+          id: "x",
+          requestId: req.id,
+          providerProfileId: req.providerProfileId,
+          modelId: req.modelId,
+          route: req.routePreference,
+          status: "succeeded",
+          content: "research result",
+          createdAt: req.createdAt,
+        };
+      },
+    );
+    const caller = makeSlot(
+      makeProfile({ id: "agent_kurumi", role: "companion", personaName: "kurumi" }),
+      returningOnce(`<delegate to="researcher">시장 조사</delegate>`, `최종`),
+    );
+    const result = await runCompanionTurn({
+      caller,
+      context: makeContext(),
+      targets: new Map([["researcher", researcher]]),
+      userMessage: "x",
+    });
+    expect(result.delegations[0]!.kind).toBe("succeeded");
+    const sub = researcherRequest!.messages.at(-1)!.content;
+    // always-present: authority/target-effect header + depth=1 guard
+    expect(sub).toContain("Authority: orchestrator_plus");
+    expect(sub).toContain("Target effect: completion_only");
+    expect(sub).toContain("depth=1");
+    // absent for a non-side-effect role: the heavy completion-only safety block
+    expect(sub).not.toContain("Do not execute terminal commands");
+    expect(sub).not.toContain("access secrets");
+  });
+});
