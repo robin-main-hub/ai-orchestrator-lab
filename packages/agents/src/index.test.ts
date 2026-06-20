@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { CodingPacket, DebateRound } from "@ai-orchestrator/protocol";
+import type { AgentProfile, CodingPacket, DebateRound } from "@ai-orchestrator/protocol";
 import {
   advanceDebateRound,
   assertSafeCodingPacket,
   blockDebateRound,
+  createCodingPacketDraft,
   createDebateRounds,
+  createMockUtterance,
   defaultAgentProfiles,
   getActiveDebateRound,
   validateCodingPacketSafety,
+  type DebateContext,
 } from "./index";
 
 const NULL_CHAR = String.fromCharCode(0);
@@ -329,5 +332,87 @@ describe("defaultAgentProfiles", () => {
     for (const profile of virtuals) {
       expect(profile.configSource).toBe("internal");
     }
+  });
+});
+
+// The safety suite above only ever crosses the *unsafe* side of each cap (4001
+// text, 150-entry list) and never the path-specific 512-char cap; the strict
+// `>` comparisons (so a regression to `>=` would falsely reject the exact
+// boundary) are unpinned. createCodingPacketDraft and createMockUtterance are
+// both 0-ref in the test tree. Pin them, self-consistent (derived from the
+// documented caps / the seed context).
+describe("validateCodingPacketSafety — path-length cap + strict boundary tripwires", () => {
+  it("enforces the path-specific 512-char cap (distinct from the 4000-char text cap)", () => {
+    const ok = validateCodingPacketSafety(basePacket({ filesToInspect: ["a".repeat(512)] }));
+    expect(ok.safe).toBe(true); // exactly 512 ⇒ kept
+    const tooLong = validateCodingPacketSafety(basePacket({ filesToInspect: ["a".repeat(513)] }));
+    expect(tooLong.safe).toBe(false);
+    expect(tooLong.violations.join(" ")).toMatch(/path exceeds 512/);
+    expect(tooLong.sanitized.filesToInspect).toEqual([]);
+  });
+
+  it("accepts the exact boundaries: a 100-entry list, a 4000-char text entry, a 512-char path — none trip the strict > checks", () => {
+    const hundred = Array.from({ length: 100 }, (_, i) => `file-${i}.ts`);
+    const result = validateCodingPacketSafety(
+      basePacket({
+        filesToInspect: ["a".repeat(512)],
+        implementationPlan: ["x".repeat(4000)],
+        context: hundred,
+      }),
+    );
+    expect(result.safe).toBe(true);
+    expect(result.violations).toEqual([]);
+    expect(result.sanitized.context).toHaveLength(100); // not truncated
+  });
+});
+
+describe("createCodingPacketDraft — seed packet is itself safe", () => {
+  const ctx: DebateContext = {
+    sessionId: "s_draft",
+    problem: "초기 스켈레톤을 만든다",
+    conversationSummary: "대화 요약",
+    constraints: ["protocol-first"],
+    openQuestions: [],
+    userPreferences: ["테스트 우선", "작은 PR"],
+    memoryTraceIds: [],
+  };
+
+  it("seeds goal/context/constraints from the DebateContext", () => {
+    const draft = createCodingPacketDraft(ctx);
+    expect(draft.goal).toBe("초기 스켈레톤을 만든다");
+    expect(draft.context[0]).toBe("대화 요약"); // conversationSummary first
+    expect(draft.context).toContain("사용자 선호: 테스트 우선"); // each preference prefixed
+    expect(draft.context).toContain("사용자 선호: 작은 PR");
+    expect(draft.constraints).toEqual(["protocol-first"]); // passthrough
+  });
+
+  it("produces a packet that passes the safety validator unchanged (relative paths, no traversal)", () => {
+    const result = validateCodingPacketSafety(createCodingPacketDraft(ctx));
+    expect(result.safe).toBe(true);
+    expect(result.violations).toEqual([]);
+    expect(() => assertSafeCodingPacket(createCodingPacketDraft(ctx))).not.toThrow();
+  });
+});
+
+describe("createMockUtterance", () => {
+  const agent: AgentProfile = {
+    id: "agent_mock",
+    name: "Mock",
+    kind: "virtual",
+    role: "architect",
+    soulMode: "summary",
+    configSource: "internal",
+    enabled: true,
+    permissionLevel: "read_only",
+  };
+
+  it("stamps a utterance_-prefixed id, single-tag array, and passes content/round/agent through", () => {
+    const u = createMockUtterance({ agent, roundId: "r1", content: "초안 발언", tag: "evidence" });
+    expect(u.id.startsWith("utterance_")).toBe(true);
+    expect(u.agentId).toBe("agent_mock"); // from agent.id, not the profile object
+    expect(u.roundId).toBe("r1");
+    expect(u.content).toBe("초안 발언");
+    expect(u.tags).toEqual(["evidence"]); // exactly the one tag, wrapped in an array
+    expect(() => new Date(u.createdAt).toISOString()).not.toThrow(); // ISO timestamp
   });
 });
