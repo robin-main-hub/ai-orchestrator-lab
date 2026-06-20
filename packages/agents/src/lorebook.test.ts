@@ -159,3 +159,66 @@ describe("isLorebook", () => {
     expect(isLorebook("book")).toBe(false);
   });
 });
+
+// Four branches stay unpinned and the first is a real leakage tripwire: in JS
+// "".includes("") === true, so a whitespace-only key would become a WILDCARD
+// matching every scan text if entryMatches' `if (!trimmed) continue` guard ever
+// regressed. SHARED_LOREBOOK_TENANT is 0-ref-pinned-value (only DEFAULT was
+// pinned as a tripwire), buildLorebookFragment's custom headerLine + multi-match
+// trim/join is untested, and characterBookToLorebook's undefined-entries / name-
+// override / numeric-id / comment-fallback branches are uncovered. Pin them,
+// self-consistent (derived from the entry/book/import inputs).
+describe("lorebook — blank-key non-wildcard + shared-tenant pin + render/import edges", () => {
+  it("a whitespace-only key never becomes a wildcard (empty-string includes guard)", () => {
+    const blank = book({ entries: [entry({ keys: ["   "], constant: false })] });
+    // non-empty scan text must NOT activate an entry whose only key is blank
+    expect(scanLorebooks([blank], "아무 텍스트나 들어있다")).toHaveLength(0);
+    // ...but a constant entry with blank keys still activates (constant bypasses key match)
+    const pinnedBlank = book({ entries: [entry({ keys: ["   "], constant: true })] });
+    expect(scanLorebooks([pinnedBlank], "아무 텍스트나 들어있다")).toHaveLength(1);
+  });
+
+  it("pins SHARED_LOREBOOK_TENANT and confirms a shared book reaches an explicit non-default tenant", () => {
+    expect(SHARED_LOREBOOK_TENANT).toBe("shared");
+    const shared = book({
+      id: "common",
+      tenantId: SHARED_LOREBOOK_TENANT,
+      entries: [entry({ id: "s", constant: true, keys: [], content: "공용 규칙" })],
+    });
+    // a shared (constant) book is visible to every tenant — default AND an explicit other tenant
+    expect(scanLorebooks([shared], "무관 텍스트").map((m) => m.bookId)).toEqual(["common"]);
+    expect(scanLorebooks([shared], "무관 텍스트", { tenantId: "acme" }).map((m) => m.bookId)).toEqual(["common"]);
+  });
+
+  it("buildLorebookFragment honors a custom headerLine and trims+joins multiple matches", () => {
+    const two = book({
+      entries: [
+        entry({ id: "one", insertionOrder: 0, content: "lore one\n\n\n", keys: ["DGX"] }),
+        entry({ id: "two", insertionOrder: 1, content: "  lore two  ", keys: ["DGX"] }),
+      ],
+    });
+    const fragment = buildLorebookFragment(scanLorebooks([two], "DGX 점검"), { headerLine: "# Custom World" });
+    // custom header replaces the default, each content trimmed, joined by a blank line
+    expect(fragment).toBe("# Custom World\nlore one\n\nlore two");
+  });
+
+  it("characterBookToLorebook: undefined entries → [], name/id/comment fallbacks fill in", () => {
+    // no entries key at all → empty entries; name falls back to options.id (no book.name)
+    const empty = characterBookToLorebook({}, { id: "empty_book" });
+    expect(empty.entries).toEqual([]);
+    expect(empty.name).toBe("empty_book"); // options.name ?? book.name ?? options.id
+    expect(empty.tenantId).toBe(DEFAULT_LOREBOOK_TENANT); // tenant omitted → default
+    expect(empty.description).toBeUndefined();
+
+    // explicit options.name wins over book.name; numeric entry.id → `_e<id>`; comment ?? name
+    const imported = characterBookToLorebook(
+      { name: "BookName", entries: [{ keys: ["k"], content: "c", id: 42, name: "EntryName" }] },
+      { id: "bk", name: "Override" },
+    );
+    expect(imported.name).toBe("Override");
+    expect(imported.entries[0]!.id).toBe("bk_e42"); // numeric id, not index
+    expect(imported.entries[0]!.comment).toBe("EntryName"); // comment ?? name fallback
+    expect(imported.entries[0]!.insertionOrder).toBe(0); // insertion_order ?? index
+    expect(imported.entries[0]!.caseSensitive).toBe(false); // default
+  });
+});
