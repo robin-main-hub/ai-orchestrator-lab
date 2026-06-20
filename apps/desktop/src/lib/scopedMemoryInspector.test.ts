@@ -138,3 +138,96 @@ describe("resolveScopedMemoryInspector", () => {
     expect(resolved.trace.results.map((result) => result.record.id)).not.toContain("memory_orchestrator");
   });
 });
+
+// Characterization tests for the previously-uncovered miss-when-no-current-scope,
+// namespace-key-based (not identity) reuse, and recall-rejection branches (no
+// behavior change). The existing suite proves a same-object hit and a different-
+// scope rebuild, but never exercises an undefined currentScope, never shows that
+// the reuse decision keys purely on `namespace` (ignoring roomId/roomLabel/
+// recallTraceId and object identity per createMemoryControllerScopeKey), and
+// never shows that a rejecting recall propagates. All deterministic, no network.
+describe("resolveScopedMemoryInspector — scope-key reuse & recall propagation characterization", () => {
+  function freshInspector() {
+    return createStage6MemoryInspector({
+      records: [memoryRecord("memory_orchestrator", "agent_orchestrator")],
+      messages,
+      packet,
+      events,
+      provider,
+      createdAt,
+    });
+  }
+
+  it("treats an undefined currentScope as a miss and recalls even when nothing has changed", async () => {
+    let recallCount = 0;
+    const currentInspector = freshInspector();
+
+    const resolved = await resolveScopedMemoryInspector({
+      currentInspector,
+      currentScope: undefined,
+      targetScope: orchestratorScope,
+      recallRecords: async () => {
+        recallCount++;
+        return [memoryRecord("memory_orchestrator", "agent_orchestrator")];
+      },
+      messages,
+      packet,
+      events,
+      provider,
+      createdAt,
+    });
+
+    expect(recallCount).toBe(1);
+    expect(resolved).not.toBe(currentInspector);
+  });
+
+  it("reuses the inspector on a namespace match across different scope instances and fields", async () => {
+    let recallCount = 0;
+    const currentInspector = freshInspector();
+    // Same namespace, but a different object with different roomId/roomLabel/recallTraceId.
+    const targetAlias: AgentChannelMemoryScope = {
+      ...orchestratorScope,
+      roomId: "room_alias",
+      roomLabel: "다른 라벨",
+      recallTraceId: "recall_alias",
+    };
+
+    const resolved = await resolveScopedMemoryInspector({
+      currentInspector,
+      currentScope: orchestratorScope,
+      targetScope: targetAlias,
+      recallRecords: async () => {
+        recallCount++;
+        return [memoryRecord("memory_reviewer", "agent_reviewer")];
+      },
+      messages,
+      packet,
+      events,
+      provider,
+      createdAt,
+    });
+
+    expect(resolved).toBe(currentInspector);
+    expect(recallCount).toBe(0);
+  });
+
+  it("propagates a rejecting recall instead of swallowing it", async () => {
+    const currentInspector = freshInspector();
+
+    await expect(
+      resolveScopedMemoryInspector({
+        currentInspector,
+        currentScope: orchestratorScope,
+        targetScope: reviewerScope,
+        recallRecords: async () => {
+          throw new Error("recall-down");
+        },
+        messages,
+        packet,
+        events,
+        provider,
+        createdAt,
+      }),
+    ).rejects.toThrow("recall-down");
+  });
+});
