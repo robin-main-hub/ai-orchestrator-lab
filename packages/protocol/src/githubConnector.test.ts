@@ -3,6 +3,8 @@ import {
   GITHUB_MULTIFILE_COMMIT_MAX_FILES,
   GITHUB_MULTIFILE_COMMIT_PER_FILE_BYTES_MAX,
   GITHUB_MULTIFILE_COMMIT_TOTAL_BYTES_MAX,
+  GITHUB_PR_LABELS_MAX_CHANGE,
+  GITHUB_PR_LABEL_NAME_MAX,
   githubBranchCreateExecuteRequestSchema,
   githubBranchCreateOutcomeSchema,
   githubBranchCreatePlanRequestSchema,
@@ -15,6 +17,10 @@ import {
   githubMultiFileCommitExecuteRequestSchema,
   githubMultiFileCommitExecuteResponseSchema,
   githubMultiFileCommitOutcomeSchema,
+  githubPullRequestLabelsUpdateExecuteRequestSchema,
+  githubPullRequestLabelsUpdateExecuteResponseSchema,
+  githubPullRequestLabelsUpdateOutcomeSchema,
+  githubPullRequestLabelsUpdatePlanRequestSchema,
   githubReadonlyResourceResponseSchema,
   githubResourceOutcomeSchema,
   githubPullRequestDetailSchema,
@@ -268,5 +274,93 @@ describe("githubConnector — W5b multi-file atomic commit is bounded, optimisti
       "github_error",
       "connection_failed",
     ]);
+  });
+});
+
+// The suites above cover READ, W1/W2 comment+branch, and W5b multi-file commit.
+// The narrowest write surface — W5d PR-labels add/remove — stays unpinned, and it
+// encodes the same authority/honesty spirit in its own shape:
+//   - an honest `no_op` outcome the fire-and-forget comment surface never has —
+//     the system admits "nothing changed" rather than claiming a mutation;
+//   - a TOCTOU integrity key (expectedCurrentLabelsHash): execute re-reads the
+//     live label set and refuses if it drifted from the plan;
+//   - label names are control-character-safe (a regex rejecting C0/DEL) and bounded
+//     1..50, so a newline/tab/NUL can't ride into a label;
+//   - each of add/remove is capped at 20 and DEFAULTS to [] (omission is a valid
+//     empty change set, never an implicit "touch everything");
+//   - approval-ONLY (mandatory approvalId, no armed channel);
+//   - the execute `reason` is a closed machine vocabulary including the named
+//     toctou_labels_mismatch.
+// Expected values are read off the schemas/constants (self-consistent), never magic.
+describe("githubConnector — W5d PR labels: honest no_op, TOCTOU integrity, control-char-safe bounded names", () => {
+  it("exports the label caps and defaults add/remove to [] (omitting them is a valid empty change set)", () => {
+    expect(GITHUB_PR_LABELS_MAX_CHANGE).toBe(20);
+    expect(GITHUB_PR_LABEL_NAME_MAX).toBe(50);
+    const parsed = githubPullRequestLabelsUpdatePlanRequestSchema.parse({ repoFullName: "owner/repo", pullNumber: 1 });
+    expect(parsed.addLabels).toEqual([]);
+    expect(parsed.removeLabels).toEqual([]);
+  });
+
+  it("caps each of add/remove at 20 labels (21 rejected)", () => {
+    const labels = (n: number) => Array.from({ length: n }, (_, i) => `label-${i}`);
+    const base = { repoFullName: "owner/repo", pullNumber: 1 };
+    expect(githubPullRequestLabelsUpdatePlanRequestSchema.safeParse({ ...base, addLabels: labels(GITHUB_PR_LABELS_MAX_CHANGE) }).success).toBe(true);
+    expect(githubPullRequestLabelsUpdatePlanRequestSchema.safeParse({ ...base, addLabels: labels(GITHUB_PR_LABELS_MAX_CHANGE + 1) }).success).toBe(false);
+    expect(githubPullRequestLabelsUpdatePlanRequestSchema.safeParse({ ...base, removeLabels: labels(GITHUB_PR_LABELS_MAX_CHANGE + 1) }).success).toBe(false);
+  });
+
+  it("each label name is 1..50 chars and rejects embedded control characters", () => {
+    const base = { repoFullName: "owner/repo", pullNumber: 1 };
+    const ok = (name: string) => githubPullRequestLabelsUpdatePlanRequestSchema.safeParse({ ...base, addLabels: [name] }).success;
+    expect(ok("bug")).toBe(true);
+    expect(ok("needs-review")).toBe(true);
+    expect(ok("x".repeat(GITHUB_PR_LABEL_NAME_MAX))).toBe(true); // 50 ok
+    expect(ok("x".repeat(GITHUB_PR_LABEL_NAME_MAX + 1))).toBe(false); // 51 too long
+    expect(ok("")).toBe(false); // min 1
+    expect(ok("a\nb")).toBe(false); // newline (C0 control)
+    expect(ok("a\tb")).toBe(false); // tab (C0 control)
+  });
+
+  it("execute is approval-ONLY and carries the TOCTOU integrity key (expectedCurrentLabelsHash); no armed channel", () => {
+    const valid = { planId: "p1", expectedCurrentLabelsHash: "hash_abc", approvalId: "appr_1" };
+    expect(githubPullRequestLabelsUpdateExecuteRequestSchema.safeParse(valid).success).toBe(true);
+    expect(githubPullRequestLabelsUpdateExecuteRequestSchema.safeParse({ planId: "p1", approvalId: "appr_1" }).success).toBe(false); // hash missing
+    expect(githubPullRequestLabelsUpdateExecuteRequestSchema.safeParse({ planId: "p1", expectedCurrentLabelsHash: "h" }).success).toBe(false); // approvalId missing
+    const parsed = githubPullRequestLabelsUpdateExecuteRequestSchema.parse({ ...valid, autoExecuteArmed: true } as Record<string, unknown>);
+    expect("autoExecuteArmed" in parsed).toBe(false);
+  });
+
+  it("the outcome carries an honest 'no_op' state the fire-and-forget comment outcome lacks", () => {
+    expect(githubPullRequestLabelsUpdateOutcomeSchema.options).toEqual([
+      "observed",
+      "planned",
+      "approval_required",
+      "blocked",
+      "no_op",
+      "not_configured",
+      "permission_denied",
+      "connection_failed",
+      "github_error",
+    ]);
+    expect(githubPullRequestLabelsUpdateOutcomeSchema.options).toContain("no_op");
+    expect(githubCommentWriteOutcomeSchema.options).not.toContain("no_op");
+  });
+
+  it("the execute 'reason' is a closed machine vocabulary including the named TOCTOU mismatch", () => {
+    const reasons = githubPullRequestLabelsUpdateExecuteResponseSchema.shape.reason.unwrap().options;
+    expect(reasons).toEqual([
+      "no_op",
+      "labels_too_many",
+      "label_too_long",
+      "secret_suspect",
+      "pr_closed",
+      "pr_not_found",
+      "toctou_labels_mismatch",
+      "allowlist",
+      "permission_denied",
+      "github_error",
+      "connection_failed",
+    ]);
+    expect(reasons).toContain("toctou_labels_mismatch");
   });
 });
