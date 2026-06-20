@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { resolveControlStrip, type ControlStripAvailability, type ControlStripState } from "./controlStrip.js";
+import {
+  controlModeSchema,
+  controlStripStateSchema,
+  resolveControlStrip,
+  thinkingEffortSchema,
+  toolPermissionSchema,
+  type ControlStripAvailability,
+  type ControlStripState,
+} from "./controlStrip.js";
 
 const avail: ControlStripAvailability = { models: ["claude-opus-4-8"], runners: ["local", "tmux_observation"] };
 const state = (over: Partial<ControlStripState> = {}): ControlStripState => ({
@@ -39,5 +47,52 @@ describe("resolveControlStrip — invariants", () => {
     const resolved = resolveControlStrip(state({ mode: "build", runner: "local" }), avail);
     expect(resolved.executionMode).toBe("sandboxed");
     expect(resolved.invariants.some((n) => n.includes("approval/sandbox를 우회하지 않는다"))).toBe(true);
+  });
+});
+
+// The control-strip vocabulary schemas (mode / thinking / toolPermission) and
+// the composite state schema are 0-ref across the test tree, yet they define
+// what a valid strip even is — a silent enum widening (e.g. a new permission
+// that resolveControlStrip would pass straight through to effectiveTool-
+// Permission with no escalation guard) would quietly broaden authority. Pin the
+// exact memberships and the state shape. And the resolver's "review" mode plus
+// non-read_only pass-through are untested branches: review must never execute,
+// and a higher starting permission must pass through unchanged (no escalation
+// AND no silent de-escalation).
+describe("controlStrip vocabulary schemas", () => {
+  it("pins mode / thinking / toolPermission enum memberships", () => {
+    expect(controlModeSchema.options).toEqual(["plan", "build", "review"]);
+    expect(thinkingEffortSchema.options).toEqual(["low", "medium", "high", "auto"]);
+    expect(toolPermissionSchema.options).toEqual(["read_only", "verify", "build", "approval_required"]);
+  });
+
+  it("controlStripStateSchema accepts a well-formed state and rejects bad enum / missing fields", () => {
+    const ok = controlStripStateSchema.safeParse({
+      modelId: "claude-opus-4-8",
+      mode: "build",
+      thinking: "high",
+      toolPermission: "approval_required",
+      runner: "local",
+    });
+    expect(ok.success).toBe(true);
+    // wrong mode literal
+    expect(controlStripStateSchema.safeParse({ modelId: "m", mode: "ship", thinking: "high", toolPermission: "read_only", runner: "local" }).success).toBe(false);
+    // missing runner
+    expect(controlStripStateSchema.safeParse({ modelId: "m", mode: "build", thinking: "high", toolPermission: "read_only" }).success).toBe(false);
+  });
+});
+
+describe("resolveControlStrip — review mode + permission pass-through", () => {
+  it("review mode never executes (observation/plan only), like plan", () => {
+    const resolved = resolveControlStrip(state({ mode: "review", runner: "local" }), avail);
+    expect(resolved.executionMode).toBe("none"); // review !== build → no execution
+    expect(resolved.invariants.some((n) => n.includes("review"))).toBe(true);
+  });
+
+  it("a higher starting toolPermission passes through unchanged — no escalation and no silent de-escalation", () => {
+    for (const permission of toolPermissionSchema.options) {
+      const resolved = resolveControlStrip(state({ mode: "build", toolPermission: permission, runner: "local" }), avail);
+      expect(resolved.effectiveToolPermission).toBe(permission);
+    }
   });
 });
