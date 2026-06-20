@@ -9,6 +9,7 @@ import {
   deriveWorkItemCandidates,
   summarizeWorkItemCandidates,
   EXAMPLE_WORK_ITEM_CANDIDATE_INPUTS,
+  WORK_ITEM_LANES,
   type WorkItemCandidateInput,
 } from "./workItemCandidate";
 import type { PatchCandidate } from "./plugins/patchCandidateSource";
@@ -111,5 +112,44 @@ describe("E5 — WorkItem candidate (candidate-only seed)", () => {
     expect(a).toBe(b);
     const blob = a.toLowerCase();
     for (const term of FORBIDDEN) expect(blob.includes(term)).toBe(false);
+  });
+});
+
+// Characterization tests (no behavior change) for the WORK_ITEM_LANES constant the
+// block above never imports. WORK_ITEM_LANES is the PUBLIC canonical lane-priority
+// order: it is what workItemCandidateOperations.sortRows ranks by (via
+// `WORK_ITEM_LANES.indexOf(lane)`) and what the AssistantInbox board renders/filters
+// columns from. Crucially it is defined INDEPENDENTLY of the private LANE_ORDER map
+// that projectWorkItemCandidates sorts by, so the two could silently drift — the
+// existing cases only ever assert pairwise ("now before soon"), never the full
+// three-lane order against the exported constant, and never that the public export
+// IS the order projectWorkItemCandidates actually produces. These cases pin that
+// drift-guard plus the constant↔summary lane-key agreement, all derived from the
+// constant itself (self-consistent, no hand-copied literal beyond the canonical
+// order assertion).
+describe("WORK_ITEM_LANES — canonical lane priority", () => {
+  it("is the fixed three-lane priority order now → soon → watch", () => {
+    expect(WORK_ITEM_LANES).toEqual(["now", "soon", "watch"]);
+  });
+
+  it("is exactly the order projectWorkItemCandidates emits (public const ⇄ private sort, no drift)", () => {
+    // one equal-risk candidate per lane, fed in scrambled order; only the lane axis
+    // can decide the result, so the output lane sequence must equal WORK_ITEM_LANES.
+    const scrambled: WorkItemCandidateInput[] = [
+      { id: "c-watch", title: "w", kind: "evidence", lane: "watch", status: "candidate", risk: "medium" },
+      { id: "a-now", title: "n", kind: "patch", lane: "now", status: "candidate", risk: "medium" },
+      { id: "b-soon", title: "s", kind: "runner", lane: "soon", status: "candidate", risk: "medium" },
+    ];
+    const rows = projectWorkItemCandidates(scrambled);
+    expect(rows.map((r) => r.lane)).toEqual([...WORK_ITEM_LANES]);
+  });
+
+  it("every lane is a numeric key of the summary and the lane counts sum to total", () => {
+    const rows = projectWorkItemCandidates(EXAMPLE_WORK_ITEM_CANDIDATE_INPUTS);
+    const s = summarizeWorkItemCandidates(rows);
+    // derived from the constant so a new/removed lane can't silently bypass the roll-up
+    for (const lane of WORK_ITEM_LANES) expect(typeof s[lane]).toBe("number");
+    const laneSum = WORK_ITEM_LANES.reduce((acc, lane) => acc + s[lane], 0);
+    expect(laneSum).toBe(s.total);
   });
 });
