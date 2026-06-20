@@ -102,6 +102,43 @@ describe("preview status builders — honesty (running only is observed)", () =>
   });
 });
 
+// The derivePreviewPort test above only exercises the DEFAULT window
+// (base 4400, span 600). The opts.base/opts.span overrides — the whole reason
+// the function takes a second argument — are unpinned: a custom range must keep
+// the same deterministic guarantee while staying strictly inside [base, base+span),
+// the per-workspace OFFSET (port - base) must be base-invariant (it depends only
+// on hash % span, not on where the window starts), and span=1 must collapse every
+// workspace onto base exactly (hash % 1 === 0). Pin them, self-consistent
+// (derived from the very formula under test, never magic port literals).
+describe("derivePreviewPort — custom base/span window", () => {
+  it("keeps the port strictly inside the requested [base, base+span) window, deterministically", () => {
+    const base = 9000;
+    const span = 50;
+    for (const id of ["ws1", "ws2", "alpha", "", "워크스페이스-가"]) {
+      const port = derivePreviewPort(id, { base, span });
+      expect(port).toBe(derivePreviewPort(id, { base, span })); // deterministic
+      expect(port).toBeGreaterThanOrEqual(base);
+      expect(port).toBeLessThan(base + span); // strictly inside the custom window
+    }
+  });
+
+  it("makes the per-workspace offset base-invariant — only the window start shifts", () => {
+    // offset = hash % span depends on span only, so two windows of the SAME span
+    // produce the same offset; the ports differ by exactly the base delta.
+    for (const id of ["ws1", "ws2", "alpha"]) {
+      const defaultOffset = derivePreviewPort(id) - 4400; // default span 600
+      expect(derivePreviewPort(id, { base: 20_000, span: 600 }) - 20_000).toBe(defaultOffset);
+      expect(derivePreviewPort(id, { base: 8_000, span: 600 })).toBe(8_000 + defaultOffset);
+    }
+  });
+
+  it("collapses every workspace onto base when span is 1 (hash % 1 === 0)", () => {
+    for (const id of ["ws1", "ws2", "anything", "전혀-다른-id"]) {
+      expect(derivePreviewPort(id, { base: 7777, span: 1 })).toBe(7777);
+    }
+  });
+});
+
 describe("defaultPreviewCommandForAppType", () => {
   it("maps nextjs to its own command and everything else to vite preview", () => {
     expect(defaultPreviewCommandForAppType("nextjs")).toBe("npm run preview");
