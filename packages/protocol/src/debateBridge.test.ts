@@ -132,6 +132,44 @@ describe("deriveBlueprintDebateReview (point 5)", () => {
   });
 });
 
+// Two honesty-relevant branches survive the suite above: (1) deriveBlueprint-
+// DebateReview omits sourceSessionId entirely when none is supplied (the spread
+// `...(opts.sourceSessionId ? {…} : {})`), and its blueprintDelta diff matches
+// the original acceptanceCriteria case- AND whitespace-insensitively — the
+// existing delta test only uses an exact string match, so a decision that
+// differs from a criterion only by case/padding would WRONGLY be reported as a
+// change. (2) debateDecisionToBlueprintInput's userIntent is never asserted by
+// content: it joins summary + adopted decisions with " · ", dropping an empty
+// summary via filter(Boolean), and the acceptanceCriteria fold adopted +
+// "미해결: <q>" openQuestions. Pin them, self-consistent.
+describe("debateBridge — review diff honesty + blueprint userIntent assembly", () => {
+  it("deriveBlueprintDebateReview omits sourceSessionId when none given and computes a case/space-insensitive delta", () => {
+    const review = deriveBlueprintDebateReview(
+      { title: "T", acceptanceCriteria: ["  카드는 도감 위로  ", "Keyboard Nav"] },
+      packet({ adoptedDecisions: ["카드는 도감 위로", "keyboard nav", "진짜 새 결정"] }),
+    );
+    // no opts.sourceSessionId → the key is absent entirely (not an undefined value)
+    expect("sourceSessionId" in review).toBe(false);
+    // both the padded hangul and the differently-cased English decision collapse
+    // onto existing criteria → only the genuinely new decision is a delta
+    expect(review.blueprintDelta).toEqual(["진짜 새 결정"]);
+  });
+
+  it("debateDecisionToBlueprintInput builds an honest userIntent and acceptanceCriteria from the packet", () => {
+    const input = debateDecisionToBlueprintInput(
+      packet({ summary: "요약", adoptedDecisions: ["d1", "d2"], openQuestions: ["q1"] }),
+    )!;
+    expect(input.userIntent).toBe("요약 · d1 · d2"); // summary + decisions, " · "-joined
+    expect(input.acceptanceCriteria).toEqual(["d1", "d2", "미해결: q1"]); // adopted + risk-prefixed questions
+
+    // an empty summary is dropped by filter(Boolean) — no leading " · "
+    const noSummary = debateDecisionToBlueprintInput(
+      packet({ summary: "", adoptedDecisions: ["오직"], openQuestions: [] }),
+    )!;
+    expect(noSummary.userIntent).toBe("오직");
+  });
+});
+
 describe("buildBlueprintRevisionDraft", () => {
   const baseline = { title: "건강 신호 보드", acceptanceCriteria: ["상단 신호 1개"] };
   const REVIEW_BASE = deriveBlueprintDebateReview(baseline, packet());
