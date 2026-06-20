@@ -4,6 +4,7 @@ import {
   createMockCodingRunner,
   initialRunnerState,
   isMutatingRun,
+  setRunnerStatus,
   settleRunnerState,
   startRunnerState,
   summarizeChangedFiles,
@@ -114,5 +115,47 @@ describe("mock runner — run → logs → completed", () => {
     expect(serialized).not.toContain("pull request");
     expect(serialized).not.toContain("git push");
     expect(serialized).not.toContain("/pulls");
+  });
+});
+
+// Characterization tests (no behavior change) for the previously-unasserted reducer
+// setRunnerStatus. The state-reducer block above drives start/append/settle, but never
+// the status-only transition the UI uses for non-terminal flips (e.g. marking "stopped"
+// while a stop is in flight, before the run handle settles). Load-bearing contract: it is
+// a NARROW reducer that swaps ONLY the status field — unlike settleRunnerState it does NOT
+// attach/replace a result, so any logs/result/request already on the state survive
+// untouched. It is non-mutating (returns a fresh object) and accepts every CodingRunStatus.
+describe("setRunnerStatus", () => {
+  const ALL_STATUSES: CodingRunStatus[] = ["idle", "running", "completed", "failed", "stopped"];
+
+  it("swaps only the status and preserves logs/result/request without mutating the input", () => {
+    const before = settleRunnerState(startRunnerState(initialRunnerState(), req), {
+      status: "completed",
+      logChunks: [],
+      changedFiles: [],
+      diffSummary: "",
+      testResult: { ran: true, passed: 1, failed: 0 },
+      startedAt: NOW,
+      endedAt: NOW,
+      observed: false,
+    });
+    const withLog = appendRunnerLog(before, { at: NOW, stream: "stdout", text: "tail" });
+
+    const after = setRunnerStatus(withLog, "stopped");
+    expect(after.status).toBe("stopped");
+    // status-only: every other field is carried over by identity
+    expect(after.logs).toBe(withLog.logs);
+    expect(after.result).toBe(withLog.result); // NOT cleared (unlike settle, which sets it)
+    expect(after.request).toBe(withLog.request);
+    // non-mutating: the source state is unchanged
+    expect(withLog.status).toBe("completed");
+    expect(after).not.toBe(withLog);
+  });
+
+  it("accepts every CodingRunStatus", () => {
+    const base = initialRunnerState();
+    for (const status of ALL_STATUSES) {
+      expect(setRunnerStatus(base, status).status).toBe(status);
+    }
   });
 });
