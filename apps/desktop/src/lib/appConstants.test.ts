@@ -4,6 +4,7 @@ import {
   agentProfilesStorageKey,
   agentRoleOptions,
   agentVisualStorageKey,
+  defaultObsidianVaultRoot,
   legacyProviderSessionSecretsStorageKey,
   maxDraftAttachments,
   modelWindowSize,
@@ -14,6 +15,7 @@ import {
   providerProfilesStorageKey,
   selectedAgentIdStorageKey,
 } from "./appConstants";
+import { defaultObsidianVaultRoot as backupModuleVaultRoot } from "../runtime/stage7Backup";
 
 // Characterization tests (no behavior change) for appConstants.ts, a module with
 // no test file. It is mostly literal app-wide constants, but two clusters carry
@@ -74,5 +76,29 @@ describe("appConstants", () => {
     // `now` round-trips through Date — it is a real parseable ISO instant
     expect(Number.isNaN(Date.parse(now))).toBe(false);
     expect(new Date(now).toISOString()).toBe(now);
+  });
+});
+
+// Characterization tests for defaultObsidianVaultRoot — the one appConstants
+// export the suite above leaves untouched (the header note deliberately checked
+// the vault root "only for shape, not verbatim", and the const was in fact 0-ref).
+// The load-bearing invariant is NOT the literal path but the silent-drift risk:
+// stage7Backup.ts defines its OWN second copy of defaultObsidianVaultRoot and uses
+// it as the default vault root when building Obsidian backup destinations. If the
+// two independent literals ever diverge, the app-wide constant and the backup
+// destination root would disagree with nothing to catch it. We pin that the two
+// copies stay equal, plus the shape (a non-empty, drive-rooted path with no
+// trailing separator) so it remains a valid root the destination builder can join.
+describe("appConstants — obsidian vault root cross-module consistency", () => {
+  it("matches the stage7 backup module's independent copy (drift would split the root)", () => {
+    expect(defaultObsidianVaultRoot).toBe(backupModuleVaultRoot);
+    expect(defaultObsidianVaultRoot.length).toBeGreaterThan(0);
+  });
+
+  it("is a drive-rooted path with no trailing separator", () => {
+    // drive-letter prefix (e.g. "F:/…") — a stable absolute root.
+    expect(defaultObsidianVaultRoot).toMatch(/^[A-Za-z]:\//);
+    // no trailing slash/backslash, so the destination builder's join is clean.
+    expect(/[\\/]$/.test(defaultObsidianVaultRoot)).toBe(false);
   });
 });
