@@ -9,6 +9,7 @@ import {
   parseAssistantReply,
   parseSlashCommand,
   pushCheckpoint,
+  SLASH_COMMANDS,
   sessionToMarkdown,
   setAssistantParts,
   toProviderMessages,
@@ -168,5 +169,37 @@ describe("MT-OSC 자동 응축 게이트 (shouldAutoCompact)", () => {
     let session = baseSession();
     for (let i = 0; i < 8; i += 1) session = appendUserMessage(session, { id: `m${i}`, text: `m${i}`, now: NOW });
     expect(shouldAutoCompact(session, 0, true)).toBe(true);
+  });
+});
+
+// Characterization tests (no behavior change) for the previously-unasserted export
+// SLASH_COMMANDS. The "slash commands" block above drives parseSlashCommand directly,
+// but never the catalog the command palette renders. SLASH_COMMANDS is load-bearing
+// precisely because of its coupling to the parser: it is the user-facing menu, so every
+// entry MUST be a real, parseable command — a catalog row that parsed to "unknown" would
+// render a dead menu item. Pin: each entry is a "/"-prefixed name with a non-empty
+// description, the names are distinct, and — the coupling — each name is accepted by
+// parseSlashCommand into a kind that is NOT "unknown" (and never null, since all are
+// "/"-prefixed).
+describe("SLASH_COMMANDS catalog", () => {
+  it("every entry is a slash-prefixed name with a non-empty description", () => {
+    for (const entry of SLASH_COMMANDS) {
+      expect(entry.name.startsWith("/")).toBe(true);
+      expect(entry.name.trim()).toBe(entry.name);
+      expect(entry.description.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it("lists each command exactly once (no duplicate names)", () => {
+    const names = SLASH_COMMANDS.map((entry) => entry.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("every catalog name parses to a real (non-unknown) command — the menu↔parser coupling", () => {
+    for (const entry of SLASH_COMMANDS) {
+      const parsed = parseSlashCommand(entry.name);
+      expect(parsed).not.toBeNull();
+      expect(parsed!.kind).not.toBe("unknown");
+    }
   });
 });
