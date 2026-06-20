@@ -187,4 +187,51 @@ describe("isLearningSkillLoadable — single-skill convenience", () => {
     expect(v.loadable).toBe(false);
     expect(v.reasons).toContain("eval_failed");
   });
+
+  it("(C3-15) waiver path (no evalRunId) → loadable with no reasons, not warned", () => {
+    const v = isLearningSkillLoadable(cand("s", "pinned"), activation("s", { evalWaiverReason: "bootstrap" }));
+    expect(v.loadable).toBe(true);
+    expect(v.reasons).toEqual([]);
+    expect(v.evalWarned).toBe(false); // a waiver is a clean bypass, not a warned pass
+  });
+
+  it("(C3-16) eval warning → loadable but honestly warned (evalWarned=true, no block reasons)", () => {
+    const v = isLearningSkillLoadable(
+      cand("s", "curator_approved"),
+      activation("s", { evalRunId: "e1" }),
+      evalReport("warning"),
+    );
+    expect(v.loadable).toBe(true);
+    expect(v.reasons).toEqual([]);
+    expect(v.evalWarned).toBe(true); // warning surfaces but never fakes a fail
+  });
+});
+
+// buildLearningRuntimeManifest dedupes its activations by candidateId, keeping the
+// FIRST record seen (Map.has guard, lines 75-77) — every existing C3 case feeds at
+// most one activation per candidate, so the "first wins" tie-break is unpinned. It
+// is authority-relevant: if a later duplicate activation could override the first's
+// eval gate, a passing-then-failing pair (or vice versa) would flip loadability.
+// Pin that the FIRST activation's eval run decides, deterministically, by flipping
+// only the order of two same-candidate activations whose runs disagree.
+describe("buildLearningRuntimeManifest — duplicate activation first-wins dedup", () => {
+  it("uses the FIRST activation record per candidate: pass-then-fail stays loadable", () => {
+    const m = buildLearningRuntimeManifest({
+      candidates: [cand("s", "curator_approved")],
+      activations: [activation("s", { evalRunId: "e_pass" }), activation("s", { evalRunId: "e_fail" })],
+      evalReportsByRunId: { e_pass: evalReport("pass"), e_fail: evalReport("fail") },
+    });
+    expect(m.loadable.map((e) => e.candidateId)).toEqual(["s"]);
+    expect(m.loadable[0]!.evalVerdict).toBe("pass"); // first activation's run gated it
+  });
+
+  it("the inverse order (fail-then-pass) blocks — confirming it is order, not verdict, that decides", () => {
+    const m = buildLearningRuntimeManifest({
+      candidates: [cand("s", "curator_approved")],
+      activations: [activation("s", { evalRunId: "e_fail" }), activation("s", { evalRunId: "e_pass" })],
+      evalReportsByRunId: { e_pass: evalReport("pass"), e_fail: evalReport("fail") },
+    });
+    expect(m.loadable).toEqual([]);
+    expect(m.blocked.find((b) => b.candidateId === "s")?.reasons).toContain("eval_failed");
+  });
 });
