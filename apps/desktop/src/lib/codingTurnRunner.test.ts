@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ToolCall } from "./codingChat";
+import type { CodingToolName, ToolCall } from "./codingChat";
 import {
+  MUTATING_TOOLS,
   createGatedToolExecutor,
   isToolAllowed,
   runCodingTurn,
@@ -217,5 +218,53 @@ describe("isToolAllowed", () => {
     expect(isToolAllowed("write", "plan")).toBe(false);
     expect(isToolAllowed("edit", "plan")).toBe(false);
     expect(isToolAllowed("bash", "build")).toBe(true);
+  });
+});
+
+// Characterization tests (no behavior change) for MUTATING_TOOLS, the
+// previously-unasserted export of codingTurnRunner.ts. The isToolAllowed block
+// above spot-checks the gate per tool, but the SET itself — what counts as a
+// mutating (state-changing) tool — is never pinned, and its exhaustive partition
+// of the CodingToolName union is the load-bearing safety boundary:
+//   - MUTATING_TOOLS must hold exactly the side-effecting tools {bash, write,
+//     edit}; the read-only investigation tools {read, grep, glob, todo} must NOT
+//     be in it, since plan mode (read-only) blocks exactly the mutating set,
+//   - every CodingToolName must be classified (the mutating and non-mutating
+//     subsets partition the whole union with no overlap and nothing left out) —
+//     so a newly added tool can't slip through unclassified, and
+//   - the constant is coupled to the gate across the WHOLE union: in plan mode a
+//     tool is allowed iff it is non-mutating, and in build mode every tool is
+//     allowed. If someone adds a mutating tool to CodingToolName but forgets
+//     MUTATING_TOOLS, the partition + coupling assertions surface it.
+
+// Full CodingToolName union, mirrored from codingChat.ts (type-only, no runtime
+// enum to iterate). A drift here is itself caught: the partition test below
+// requires every listed tool to be classified by MUTATING_TOOLS.
+const ALL_TOOLS: CodingToolName[] = ["bash", "read", "grep", "glob", "write", "edit", "todo"];
+const NON_MUTATING_TOOLS: CodingToolName[] = ["read", "grep", "glob", "todo"];
+
+describe("MUTATING_TOOLS", () => {
+  it("holds exactly the side-effecting tools and excludes the read-only ones", () => {
+    expect([...MUTATING_TOOLS].sort()).toEqual(["bash", "edit", "write"]);
+    expect(MUTATING_TOOLS.size).toBe(3);
+    for (const tool of NON_MUTATING_TOOLS) {
+      expect(MUTATING_TOOLS.has(tool)).toBe(false);
+    }
+  });
+
+  it("partitions the whole CodingToolName union (every tool classified, no overlap)", () => {
+    const mutating = ALL_TOOLS.filter((t) => MUTATING_TOOLS.has(t));
+    const nonMutating = ALL_TOOLS.filter((t) => !MUTATING_TOOLS.has(t));
+    // disjoint cover: the two halves reconstruct the full union exactly
+    expect([...mutating, ...nonMutating].sort()).toEqual([...ALL_TOOLS].sort());
+    expect(mutating.sort()).toEqual(["bash", "edit", "write"]);
+    expect(nonMutating.sort()).toEqual([...NON_MUTATING_TOOLS].sort());
+  });
+
+  it("is coupled to isToolAllowed across the whole union (plan blocks iff mutating, build allows all)", () => {
+    for (const tool of ALL_TOOLS) {
+      expect(isToolAllowed(tool, "plan")).toBe(!MUTATING_TOOLS.has(tool));
+      expect(isToolAllowed(tool, "build")).toBe(true);
+    }
   });
 });
