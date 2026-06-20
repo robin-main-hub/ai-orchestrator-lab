@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { AgentProfile, ConversationMessage, ProviderProfile } from "@ai-orchestrator/protocol";
 import {
+  DEFAULT_SESSION_ID,
   InMemoryEventStore,
+  appendEventToLog,
   createCodingPacketFromConversation,
   createStage2Event,
   redactForEventStore,
@@ -212,5 +214,82 @@ describe("redactForEventStore — redaction boundary characterization", () => {
 
     expect(event.redacted).toBe(false);
     expect(event.payload).toEqual(payload);
+  });
+});
+
+// Characterization tests (no behavior change, pure, no I/O) for two previously
+// unreferenced stage2 exports: appendEventToLog and DEFAULT_SESSION_ID. The suites
+// above never import either. appendEventToLog is the in-memory, newest-first event
+// LOG buffer (a display/projection cap, NOT the persistent EventStore) — its
+// `[event, ...events].slice(0, limit)` does two load-bearing things never pinned:
+// it prepends the newest event at the head and caps the buffer at `limit` (default
+// 48) by dropping the OLDEST tail, never mutating the caller's array. A regression
+// to either (append at tail, or cap from the wrong end) would silently reorder or
+// evict the wrong events in the live log view. DEFAULT_SESSION_ID is the default
+// session id; the store test above exercises it only via the hardcoded literal
+// "session_desktop_001", never tied to the const — so we pin the value AND that
+// createStage2Event's `sessionId =` default arm derives from it (and an explicit
+// sessionId overrides), so a const rename can't silently desync the default event
+// session from callers that compare against the const.
+describe("appendEventToLog — capped newest-first log buffer", () => {
+  const ev = (marker: string) =>
+    createStage2Event({ type: marker, payload: {}, createdAt: "2026-05-24T00:00:00.000Z" });
+
+  it("prepends the newest event at the head, preserving prior order", () => {
+    const e1 = ev("e1");
+    const e2 = ev("e2");
+    const e3 = ev("e3");
+    const log = appendEventToLog(appendEventToLog([e1], e2), e3);
+    expect(log.map((e) => e.type)).toEqual(["e3", "e2", "e1"]);
+  });
+
+  it("caps at the default limit of 48 by dropping the oldest tail", () => {
+    // seed 48 events oldest→newest into the buffer (each append prepends)
+    let log = [] as ReturnType<typeof appendEventToLog>;
+    for (let i = 0; i < 48; i += 1) log = appendEventToLog(log, ev(`e${i}`));
+    expect(log).toHaveLength(48);
+    expect(log[0]!.type).toBe("e47"); // newest at head
+    expect(log[47]!.type).toBe("e0"); // oldest at tail
+
+    // one more push stays at 48 and evicts the oldest (e0), newest now at head
+    const overflowed = appendEventToLog(log, ev("e48"));
+    expect(overflowed).toHaveLength(48);
+    expect(overflowed[0]!.type).toBe("e48");
+    expect(overflowed.some((e) => e.type === "e0")).toBe(false);
+    expect(overflowed[47]!.type).toBe("e1");
+  });
+
+  it("honors a custom limit and a limit of 0 yields an empty buffer", () => {
+    const e1 = ev("e1");
+    const e2 = ev("e2");
+    const e3 = ev("e3");
+    expect(appendEventToLog([e2, e1], e3, 2).map((e) => e.type)).toEqual(["e3", "e2"]);
+    expect(appendEventToLog([e1], e2, 0)).toEqual([]);
+  });
+
+  it("returns the full buffer when under the limit and never mutates the input", () => {
+    const e1 = ev("e1");
+    const e2 = ev("e2");
+    const input = [e1];
+    const out = appendEventToLog(input, e2);
+    expect(out.map((e) => e.type)).toEqual(["e2", "e1"]);
+    // pure: the caller's array is untouched
+    expect(input).toEqual([e1]);
+    expect(input).toHaveLength(1);
+  });
+});
+
+describe("DEFAULT_SESSION_ID — default session contract", () => {
+  it("is the canonical desktop session id", () => {
+    expect(DEFAULT_SESSION_ID).toBe("session_desktop_001");
+  });
+
+  it("createStage2Event's omitted sessionId defaults to the const (explicit overrides)", () => {
+    // default arm — derived from the const, not the hardcoded literal the store test uses
+    expect(createStage2Event({ type: "t", payload: {} }).sessionId).toBe(DEFAULT_SESSION_ID);
+    // an explicit sessionId takes precedence over the default
+    expect(
+      createStage2Event({ sessionId: "session_custom_42", type: "t", payload: {} }).sessionId,
+    ).toBe("session_custom_42");
   });
 });
