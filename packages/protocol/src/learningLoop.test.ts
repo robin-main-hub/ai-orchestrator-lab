@@ -3,8 +3,10 @@ import {
   canDistill,
   deriveLearningLoopById,
   deriveLearningLoopState,
+  investigatorRoleSchema,
   isObservedClaimValid,
   LEARNING_EVENT_TYPES,
+  learningLoopStageSchema,
   type DistilledLearningCandidate,
   type FailureHypothesis,
   type FailureInvestigation,
@@ -336,5 +338,62 @@ describe("guards + helpers", () => {
       { type: E.failureRecorded, payload: { failure: failure({ id: "f2", loopId: "loop_b", missionId: "m_b" }) } },
     ]);
     expect(loops.map((l) => l.loopId).sort()).toEqual(["loop_a", "loop_b"]);
+  });
+});
+
+// The reducer/helper behavior is well covered above (L1–L18), but three exported
+// vocabularies are only ever exercised implicitly: learningLoopStageSchema (the
+// 7 stages the reducer drives a loop through), investigatorRoleSchema (the
+// read-only-role gate behind invariant 2 — L5 checks "builder" is rejected
+// behaviorally but never pins WHICH roles are allowed), and LEARNING_EVENT_TYPES
+// (used as the `E` event-type keys throughout but its namespaced string values
+// are never asserted — a typo'd or renamed wire string would silently break the
+// event log without any of the L-tests noticing, since they read the same const).
+// Pin the exact memberships/values, and tie each stage/role/event back to what
+// the rest of the suite actually relies on (self-consistency, no magic drift).
+describe("learningLoop vocabulary — stage / role / event-type contracts", () => {
+  it("pins the learning-loop stage enum membership and order", () => {
+    expect(learningLoopStageSchema.options).toEqual([
+      "failed",
+      "investigating",
+      "hypothesis_recorded",
+      "verified",
+      "rejected",
+      "distilled",
+      "consulted",
+    ]);
+  });
+
+  it("every stage the happy path reaches is a member of the stage enum (no orphan stage)", () => {
+    // these are the stages asserted by L1/L2/L6/L7/L10/L11 — they must all be declared
+    for (const stage of ["failed", "hypothesis_recorded", "rejected", "distilled", "consulted"]) {
+      expect(learningLoopStageSchema.options).toContain(stage);
+    }
+  });
+
+  it("investigatorRoleSchema allows exactly the three read-only roles and rejects builder", () => {
+    expect(investigatorRoleSchema.options).toEqual(["investigator", "verifier", "reviewer"]);
+    // the role the L5 invariant-2 test relies on being rejected
+    expect(investigatorRoleSchema.safeParse("builder").success).toBe(false);
+    for (const role of investigatorRoleSchema.options) {
+      expect(investigatorRoleSchema.safeParse(role).success).toBe(true);
+    }
+  });
+
+  it("LEARNING_EVENT_TYPES pins the 8 namespaced wire strings used as the reducer's event keys", () => {
+    expect(LEARNING_EVENT_TYPES).toEqual({
+      failureRecorded: "learning.failure.recorded",
+      investigationStarted: "learning.investigation.started",
+      hypothesisRecorded: "learning.hypothesis.recorded",
+      hypothesisVerified: "learning.hypothesis.verified",
+      hypothesisRejected: "learning.hypothesis.rejected",
+      distillationCandidateCreated: "learning.distillation.candidate_created",
+      consultCompleted: "learning.consult.completed",
+      consultSkipped: "learning.consult.skipped",
+    });
+    const values = Object.values(LEARNING_EVENT_TYPES);
+    // every event type is a distinct, "learning."-namespaced string (no collisions, no stray prefix)
+    expect(new Set(values).size).toBe(values.length);
+    expect(values.every((v) => v.startsWith("learning."))).toBe(true);
   });
 });
