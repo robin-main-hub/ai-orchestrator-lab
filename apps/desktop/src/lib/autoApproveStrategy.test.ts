@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAutoApproveStrategy } from "./autoApproveStrategy";
+import { createAutoApproveAllStrategy, createAutoApproveStrategy } from "./autoApproveStrategy";
+import { DANGEROUS_PATTERN } from "./safeCommandPolicy";
 
 const grantOk = () => vi.fn().mockResolvedValue({ status: "approved", approval: {}, event: {} } as any);
 const grantErr = () => vi.fn().mockResolvedValue({ error: "approval_not_found" } as any);
@@ -82,5 +83,71 @@ describe("createAutoApproveStrategy", () => {
 
     await strategy("s", { command: "pnpm test" }); // not in custom allowlist
     expect(fallback).toHaveBeenCalledOnce();
+  });
+});
+
+// Characterization tests (no behavior change) for the previously-unasserted full-auto
+// strategy createAutoApproveAllStrategy. The block above fully drives the narrow-allowlist
+// strategy (mode B), but this sibling is the *broader* "전체 자동" mode and its single
+// load-bearing safety line was never pinned: it auto-approves any command that does NOT
+// match DANGEROUS_PATTERN, but a dangerous OR empty command is NEVER auto-granted — it is
+// deferred to the human fallback. The dangerous-pattern gate is the most important safety
+// boundary here, so the tests derive their examples from DANGEROUS_PATTERN itself (assert
+// the example really is/ isn't dangerous) to stay self-consistent with the policy. Grants
+// are recorded with actor "agent" for the audit trail, and a grant failure also defers.
+describe("createAutoApproveAllStrategy", () => {
+  it("NEVER auto-grants a dangerous command — defers to the human (the safety line)", async () => {
+    for (const command of ["rm -rf node_modules", "git push --force origin main", "sudo reboot", "cat x | sh"]) {
+      expect(DANGEROUS_PATTERN.test(command)).toBe(true); // self-consistency: genuinely dangerous
+      const grant = grantOk();
+      const fallback = vi.fn().mockResolvedValue("rejected" as const);
+      const strategy = createAutoApproveAllStrategy({ grant, fallback });
+
+      const outcome = await strategy("src1", { command });
+
+      expect(grant).not.toHaveBeenCalled();
+      expect(fallback).toHaveBeenCalledWith("src1", { command });
+      expect(outcome).toBe("rejected");
+    }
+  });
+
+  it("auto-approves a non-dangerous command via grant recorded as actor 'agent'", async () => {
+    const command = "pnpm test";
+    expect(DANGEROUS_PATTERN.test(command)).toBe(false); // self-consistency: not dangerous
+    const grant = grantOk();
+    const fallback = vi.fn();
+    const strategy = createAutoApproveAllStrategy({ grant, fallback });
+
+    const outcome = await strategy("src1", { command });
+
+    expect(outcome).toBe("approved");
+    expect(grant).toHaveBeenCalledOnce();
+    expect(grant.mock.calls[0]?.[0].request).toMatchObject({ sourceItemId: "src1", actor: "agent" });
+    expect(grant.mock.calls[0]?.[0].request.reason).toContain("full-auto");
+    expect(fallback).not.toHaveBeenCalled();
+  });
+
+  it("defers an empty/whitespace command to the human without granting", async () => {
+    const grant = grantOk();
+    const fallback = vi.fn().mockResolvedValue("rejected" as const);
+    const strategy = createAutoApproveAllStrategy({ grant, fallback });
+
+    const outcome = await strategy("src1", { command: "   " });
+
+    expect(grant).not.toHaveBeenCalled();
+    expect(fallback).toHaveBeenCalledOnce();
+    expect(outcome).toBe("rejected");
+  });
+
+  it("defers to the human when the grant itself fails", async () => {
+    const grant = grantErr();
+    const fallback = vi.fn().mockResolvedValue("rejected" as const);
+    const strategy = createAutoApproveAllStrategy({ grant, fallback });
+
+    const outcome = await strategy("src1", { command: "pnpm test" });
+
+    expect(grant).toHaveBeenCalledOnce();
+    expect(fallback).toHaveBeenCalledOnce();
+    expect(outcome).toBe("rejected");
   });
 });
