@@ -216,3 +216,54 @@ describe("characterCard — exampleDialogueAnchors literal-name match, 12-cap, r
     expect(files.agentsMd).toContain('- "위험한 이름"'); // the literal-name arm still fires after escaping
   });
 });
+
+// Three honesty-load-bearing branches stay unpinned. The "Bare" fallback test
+// only asserts the anchor + SAFETY.md lines, so it never proves: (1) Response
+// Rules sourced from post_history_instructions when system_prompt is absent (the
+// `||` second operand — the SillyTavern override/jailbreak field must flow in,
+// not be silently dropped); (2) the honest empty-field PLACEHOLDERS — a card with
+// neither description nor personality must render "(설명 없음)" / "(미정의)" and the
+// default scenario line, never fabricated prose; and (3) export-side, the
+// `## Scenario` SECTION fallback when AGENTS.md carries no `현재 상태:` line. Pin
+// them, self-consistent (derived from the hand-built card / persona files).
+describe("characterCard — response-rules source, honest empty placeholders, scenario-section export", () => {
+  it("import: post_history_instructions feeds Response Rules when system_prompt is absent (|| second operand)", () => {
+    // must be a V2 card — normalizeCharacterCard only keeps the 6 flat V1 fields, so a flat
+    // card cannot carry post_history_instructions; the V2 data wrapper preserves it.
+    const card: CharacterCardV2 = {
+      spec: "chara_card_v2",
+      spec_version: "2.0",
+      data: { name: "Jail", post_history_instructions: "스타일을 끝까지 유지하라." },
+    };
+    const files = characterCardToPersonaFiles(card);
+    expect(files.agentsMd).toContain("스타일을 끝까지 유지하라."); // post_history used as the Response Rules body
+    expect(files.agentsMd).not.toContain("SAFETY.md"); // the empty-rules fallback is NOT taken
+  });
+
+  it("import: a card with neither description nor personality renders honest placeholders, never fabricated prose", () => {
+    const files = characterCardToPersonaFiles({ name: "Empty" });
+    expect(files.soulMd).toContain("(설명 없음)"); // description || personality || placeholder
+    expect(files.agentsMd).toContain("(미정의)"); // personality || description || placeholder
+    expect(files.agentsMd).toContain("REFLECORE 오케스트레이터의 페르소나로 합류."); // no scenario → the default 현재 상태 line
+  });
+
+  it("export: scenario comes from the ## Scenario section when AGENTS.md has no 현재 상태 line", () => {
+    const agentsMd = [
+      "# AGENTS.md — Named",
+      "",
+      "## Identity",
+      "",
+      "- 본명: Named",
+      "",
+      "## Scenario",
+      "",
+      "guarding the gate",
+      "",
+      "## Core Personality",
+      "",
+      "stoic",
+    ].join("\n");
+    const card = personaFilesToCharacterCard({ personaName: "p", soulMd: "soul", agentsMd });
+    expect(card.data.scenario).toBe("guarding the gate"); // 현재 상태 missing → ## Scenario section fallback (the ?? arm)
+  });
+});
