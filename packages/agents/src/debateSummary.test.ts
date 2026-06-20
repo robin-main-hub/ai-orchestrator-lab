@@ -107,3 +107,92 @@ describe("buildDebateSummary", () => {
     expect(summary).not.toContain("의견 분포");
   });
 });
+
+// The happy cases above only ever exercise completed/pending rounds, a single
+// tag per utterance, a present conversationSummary, and never look at the
+// distribution table's zero-count omission / percentage math, the empty-tags
+// label fallback, an active-but-empty round, or truncation. Pin those branches,
+// self-consistent (expected values derived from the same rounds/context).
+describe("debateSummary — running rounds, distribution math, fallbacks, truncation", () => {
+  it("countTagDistribution fans a single multi-tag utterance into every one of its tags", () => {
+    const multi: DebateUtterance = {
+      id: "u_multi",
+      agentId: "orch",
+      roundId: "r1",
+      content: "동의이자 리스크",
+      tags: ["agreement", "risk", "coding_impact"],
+      createdAt: "2026-05-26T00:00:00.000Z",
+    };
+    const dist = countTagDistribution([multi]);
+    expect(dist.agreement).toBe(1);
+    expect(dist.risk).toBe(1);
+    expect(dist.coding_impact).toBe(1);
+    expect(dist.objection).toBe(0); // untagged on this utterance
+  });
+
+  it("a RUNNING round is active: its utterances are quoted just like a completed one", () => {
+    const rounds = [
+      makeRound("r1", "initial_proposals", "진행 중", "running", [
+        makeUtterance("agent_architect", "진행 중 발언", "evidence"),
+      ]),
+    ];
+    const summary = buildDebateSummary(CTX, rounds, { includeTagDistribution: false });
+    expect(summary).toContain("진행 중 발언"); // running ⇒ shown, not hidden behind a *status* note
+    expect(summary).not.toContain("*running*");
+  });
+
+  it("a falsy conversationSummary is not seeded as a 배경 line", () => {
+    const min: DebateContext = { ...CTX, conversationSummary: "" };
+    const summary = buildDebateSummary(min, [], { includeTagDistribution: false });
+    expect(summary).toContain("어떻게 시작할까?"); // problem still present
+    expect(summary).not.toContain("**배경:**"); // empty summary ⇒ background omitted
+  });
+
+  it("the distribution table omits zero-count tags and renders the rounded percentage", () => {
+    const rounds = [
+      makeRound("r1", "cross_critique", "분포", "completed", [
+        makeUtterance("a", "동의1", "agreement"),
+        makeUtterance("b", "동의2", "agreement"),
+        makeUtterance("c", "리스크", "risk"),
+        makeUtterance("d", "리스크2", "risk"),
+      ]),
+    ];
+    const summary = buildDebateSummary(CTX, rounds, { includeTagDistribution: true });
+    // 2 of 4 each ⇒ 50%; objection/evidence/coding_impact are 0 ⇒ no row at all
+    expect(summary).toContain("| agreement | 2 | 50% |");
+    expect(summary).toContain("| risk | 2 | 50% |");
+    expect(summary).not.toContain("| objection |");
+    expect(summary).not.toContain("| coding_impact |");
+  });
+
+  it("an utterance with no tags is labeled [evidence] via the tags[0] fallback", () => {
+    const noTag: DebateUtterance = {
+      id: "u_notag",
+      agentId: "orch",
+      roundId: "r1",
+      content: "태그 없는 발언",
+      tags: [],
+      createdAt: "2026-05-26T00:00:00.000Z",
+    };
+    const rounds = [makeRound("r1", "problem_definition", "무태그", "completed", [noTag])];
+    const summary = buildDebateSummary(CTX, rounds, { includeTagDistribution: false });
+    expect(summary).toContain("**[evidence]** `orch`: 태그 없는 발언");
+  });
+
+  it("an active round with zero utterances renders the 발언 없음 note", () => {
+    const rounds = [makeRound("r1", "final_decision", "빈 라운드", "completed", [])];
+    const summary = buildDebateSummary(CTX, rounds, { includeTagDistribution: false });
+    expect(summary).toContain("빈 라운드");
+    expect(summary).toContain("*발언 없음*");
+  });
+
+  it("over-long utterance content is truncated to (max-1) chars plus an ellipsis", () => {
+    const long = "x".repeat(50);
+    const rounds = [
+      makeRound("r1", "problem_definition", "긴 발언", "completed", [makeUtterance("a", long, "evidence")]),
+    ];
+    const summary = buildDebateSummary(CTX, rounds, { includeTagDistribution: false, utteranceTruncateLength: 10 });
+    expect(summary).toContain(`${"x".repeat(9)}…`); // slice(0, 9) + …
+    expect(summary).not.toContain("x".repeat(11)); // never the full 50-char body
+  });
+});
