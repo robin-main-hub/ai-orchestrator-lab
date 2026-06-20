@@ -70,6 +70,55 @@ describe("buildBlueprintInputFromConversation — 결정적 stub", () => {
   });
 });
 
+// The tests above pin title seeding, the single-screen honesty, length bounds
+// and schema validity, but never the *content* of userIntent — yet that is the
+// honesty-load-bearing part: userIntent must be an honest concatenation of the
+// LAST SIX user/assistant utterances (role-prefixed, empty ones dropped), with
+// system/tool turns excluded, and it must fall back to the title (never to a
+// fabricated intent) when there is no utterance. The primaryAction "주요 작업"
+// fallback and the explicit targetSurface override are likewise unpinned. Pin
+// them, self-consistent (the expected userIntent is rebuilt from the same turns).
+describe("buildBlueprintInputFromConversation — honest userIntent assembly + fallbacks", () => {
+  it("joins only the last 6 non-empty user/assistant turns, role-prefixed, excluding system/tool", () => {
+    const input = buildBlueprintInputFromConversation({
+      messages: [
+        { role: "system", content: "시스템 지시문" },
+        { role: "user", content: "첫 발화" }, // 7th-from-end among u/a → dropped by slice(-6)
+        { role: "assistant", content: "a1" },
+        { role: "user", content: "u2" },
+        { role: "assistant", content: "a2" },
+        { role: "user", content: "u3" },
+        { role: "assistant", content: "a3" },
+        { role: "tool", content: "툴 출력" },
+        { role: "user", content: "   " }, // empty after trim → excluded
+        { role: "user", content: "마지막 작업" },
+      ],
+    });
+    // exactly the last six non-empty user/assistant turns, role-prefixed, "\n"-joined
+    expect(input.userIntent).toBe(
+      ["assistant: a1", "user: u2", "assistant: a2", "user: u3", "assistant: a3", "user: 마지막 작업"].join("\n"),
+    );
+    expect(input.userIntent).not.toContain("시스템 지시문"); // system excluded
+    expect(input.userIntent).not.toContain("툴 출력"); // tool excluded
+    expect(input.userIntent).not.toContain("첫 발화"); // 7th-from-end dropped by the 6-window
+    expect(input.title).toBe("마지막 작업"); // last user message seeds the title
+  });
+
+  it("falls back userIntent→title and primaryAction→\"주요 작업\" when there is no utterance, honoring the targetSurface override", () => {
+    const input = buildBlueprintInputFromConversation({
+      messages: [
+        { role: "system", content: "s" },
+        { role: "tool", content: "t" },
+      ],
+      targetSurface: "dashboard",
+    });
+    expect(input.userIntent).toBe("새 앱 초안"); // no u/a turns → falls back to the title, never a fabricated intent
+    expect(input.title).toBe("새 앱 초안"); // no draft, no user message
+    expect(input.screens[0]!.primaryAction).toBe("주요 작업"); // draft/lastUser both empty → the constant fallback
+    expect(input.targetSurface).toBe("dashboard"); // explicit override wins over the new_app default
+  });
+});
+
 describe("conversationBlueprintDraftRequestSchema", () => {
   it("defaults useAi to false (stub-only unless explicitly opted in)", () => {
     const parsed = conversationBlueprintDraftRequestSchema.parse({
