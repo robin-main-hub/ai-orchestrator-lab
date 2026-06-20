@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ConversationAttachment } from "@ai-orchestrator/protocol";
 import {
   MAX_IMAGE_BYTES,
+  MAX_PROVIDER_ATTACHMENTS,
   MAX_TEXT_CHARS,
   extractMessageAttachments,
   isTextLikeAttachment,
@@ -108,6 +109,37 @@ describe("toProviderAttachments", () => {
     expect(toProviderAttachments([baseAttachment()])).toBeUndefined();
     expect(toProviderAttachments([])).toBeUndefined();
     expect(toProviderAttachments(undefined)).toBeUndefined();
+  });
+});
+
+// Characterization tests (no behavior change) for the previously-unasserted export
+// MAX_PROVIDER_ATTACHMENTS. The toProviderAttachments block above already asserts a
+// literal toHaveLength(6) with a hand-rolled 8-item array, but it never imports the NAMED
+// constant the function actually slices by (toProviderAttachments does .slice(0,
+// MAX_PROVIDER_ATTACHMENTS) on the content-bearing subset). Load-bearing contract: the cap
+// IS this constant, so the count of emitted provider attachments can never exceed it no
+// matter how many content-bearing inputs arrive. The expected length is driven from the
+// constant itself (not the literal 6) so the test stays self-consistent if the knob moves.
+describe("MAX_PROVIDER_ATTACHMENTS", () => {
+  it("is the documented provider attachment cap of 6", () => {
+    expect(MAX_PROVIDER_ATTACHMENTS).toBe(6);
+  });
+
+  it("is the exact slice ceiling toProviderAttachments enforces (driven from the constant)", () => {
+    const overCap = Array.from({ length: MAX_PROVIDER_ATTACHMENTS + 2 }, (_, index) =>
+      baseAttachment({ id: `att_${index}`, dataUrl: "data:image/png;base64,AA==" }),
+    );
+    expect(toProviderAttachments(overCap)).toHaveLength(MAX_PROVIDER_ATTACHMENTS);
+  });
+
+  it("does not truncate when content-bearing inputs sit at or under the cap", () => {
+    const atCap = Array.from({ length: MAX_PROVIDER_ATTACHMENTS }, (_, index) =>
+      baseAttachment({ id: `att_${index}`, dataUrl: "data:image/png;base64,AA==" }),
+    );
+    expect(toProviderAttachments(atCap)).toHaveLength(MAX_PROVIDER_ATTACHMENTS);
+
+    const underCap = atCap.slice(0, MAX_PROVIDER_ATTACHMENTS - 1);
+    expect(toProviderAttachments(underCap)).toHaveLength(MAX_PROVIDER_ATTACHMENTS - 1);
   });
 });
 
