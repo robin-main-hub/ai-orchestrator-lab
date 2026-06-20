@@ -243,3 +243,37 @@ describe("chairmanSynthesis — maxItems cap, confidence boundary/rounding, no-s
     expect(decision.statement).toContain("합의 형성 필요"); // problem-based fallback, not the utterance
   });
 });
+
+// One guard the suites above never trip: `if (!point) continue` (line 64) sits
+// BEFORE the `accepts += forCount` / `rejects += againstCount` tally. So an
+// utterance whose content cleans to the empty string — a marker-only line, or
+// pure whitespace — is dropped WHOLE: not adopted/rejected, and crucially its
+// votes never reach the confidence denominator. Every existing marker test
+// feeds content that still has a non-empty remainder after the strip; none feed
+// a line that cleans to "". Pin it, self-consistent (the votes vanish, so the
+// council reads as if it never spoke ⇒ default 0.5).
+describe("chairmanSynthesis — empty-after-clean utterance is skipped before its votes are tallied", () => {
+  it("a marker-only line with votes is dropped whole — its accepts never move the denominator", () => {
+    const decision = synthesizeChairmanDecision(context, [
+      round([
+        // strips to "" → `!point` continue fires before accepts += 2
+        utt({ id: "m", agentId: "a", content: "[[tag:agreement]]", tags: ["agreement"], acceptedBy: ["x", "y"] }),
+      ]),
+    ]);
+    expect(decision.adopted).toEqual([]); // never reached the adopted push
+    expect(decision.confidence).toBe(0.5); // its 2 accepts never entered total → total 0 → default, NOT 1
+    expect(decision.statement).toContain("합의 형성 필요"); // no adopted[0] ⇒ problem-based fallback
+  });
+
+  it("a whitespace-only line is likewise skipped, leaving a co-occurring real vote to stand alone", () => {
+    const decision = synthesizeChairmanDecision(context, [
+      round([
+        utt({ id: "blank", agentId: "a", content: "   ", rejectedBy: ["z"] }), // trims to "" → skipped before rejects += 1
+        utt({ id: "real", agentId: "b", content: "실제 채택", tags: ["agreement"], acceptedBy: ["x"] }), // the only counted vote
+      ]),
+    ]);
+    expect(decision.rejected).toEqual([]); // the blank line contributed no rejection
+    expect(decision.adopted).toEqual([{ point: "실제 채택", support: 1, by: "b" }]);
+    expect(decision.confidence).toBe(1); // 1 accept / (1 accept + 0 reject) — the blank's reject was never tallied
+  });
+});
