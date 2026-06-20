@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { AgentRole } from "@ai-orchestrator/protocol";
+import { agentRoleSchema } from "@ai-orchestrator/protocol";
 import {
   normalizeOperatorWorkerPersonaKey,
+  operatorKoreanRoleLabelByRole,
+  operatorPersonaKeyByWorkerId,
+  operatorPersonaNameByKey,
+  operatorPersonaRoleOverrideByKey,
   resolveOperatorWorkerDisplay,
 } from "./operatorWorkerDisplay";
 
@@ -69,5 +75,86 @@ describe("resolveOperatorWorkerDisplay", () => {
       portraitAgentId: "companion",
       roleLabel: "동행자 · 기본 역할",
     });
+  });
+});
+
+// Characterization tests (no behavior change) for the four previously-unasserted
+// dictionary exports the resolver above leans on. The function block pins the
+// resolution rungs through hand-picked examples, but never the tables' own validity,
+// totality, or cross-table coupling — which is what guarantees a *mapped* worker never
+// falls through to the raw-id display.
+//   - operatorKoreanRoleLabelByRole must be a TOTAL Record<AgentRole, string>: exactly
+//     the protocol's AgentRole union as keys (a missing role would render no label, an
+//     extra key would be dead), each label non-empty and distinct.
+//   - operatorPersonaKeyByWorkerId: every key is an "agent_"-prefixed worker id and
+//     every value is a persona key that EXISTS in operatorPersonaNameByKey — the
+//     coupling that makes resolveOperatorWorkerDisplay surface a real name, not the id.
+//   - operatorPersonaNameByKey: every display name non-empty; the documented alias
+//     auditor === yuno (both "가사이 유노") holds.
+//   - operatorPersonaRoleOverrideByKey: keyed only by real persona keys, non-empty
+//     detail labels, and each override actually surfaces in the resolver's detail
+//     segment (never the "기본 역할" default).
+describe("operatorKoreanRoleLabelByRole", () => {
+  const roleOptions = agentRoleSchema.options as AgentRole[];
+
+  it("is a total map over exactly the AgentRole union", () => {
+    expect(Object.keys(operatorKoreanRoleLabelByRole).sort()).toEqual([...roleOptions].sort());
+  });
+
+  it("gives every role a non-empty, distinct Korean label", () => {
+    const labels = roleOptions.map((role) => operatorKoreanRoleLabelByRole[role]);
+    for (const label of labels) {
+      expect(label.trim().length).toBeGreaterThan(0);
+    }
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+});
+
+describe("operatorPersonaKeyByWorkerId", () => {
+  it("keys are agent_-prefixed and every value resolves to a real persona name", () => {
+    for (const [workerId, personaKey] of Object.entries(operatorPersonaKeyByWorkerId)) {
+      expect(workerId.startsWith("agent_")).toBe(true);
+      // coupling: the persona key a worker maps to must have a display name
+      expect(operatorPersonaNameByKey[personaKey]).toBeDefined();
+    }
+  });
+
+  it("every mapped worker resolves through the resolver to its persona name, not the raw id", () => {
+    for (const [workerId, personaKey] of Object.entries(operatorPersonaKeyByWorkerId)) {
+      const display = resolveOperatorWorkerDisplay({ workerId, role: "companion" });
+      expect(display.portraitAgentId).toBe(personaKey);
+      expect(display.displayName).toBe(operatorPersonaNameByKey[personaKey]);
+      expect(display.displayName).not.toBe(workerId);
+    }
+  });
+});
+
+describe("operatorPersonaNameByKey", () => {
+  it("gives every persona key a non-empty display name", () => {
+    for (const name of Object.values(operatorPersonaNameByKey)) {
+      expect(name.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps the documented auditor/yuno alias", () => {
+    expect(operatorPersonaNameByKey.auditor).toBe("가사이 유노");
+    expect(operatorPersonaNameByKey.auditor).toBe(operatorPersonaNameByKey.yuno);
+  });
+});
+
+describe("operatorPersonaRoleOverrideByKey", () => {
+  it("is keyed only by real persona keys with non-empty detail labels", () => {
+    for (const [key, detail] of Object.entries(operatorPersonaRoleOverrideByKey)) {
+      expect(operatorPersonaNameByKey[key]).toBeDefined();
+      expect(detail.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it("surfaces each override in the resolver's detail segment (not the default)", () => {
+    for (const key of Object.keys(operatorPersonaRoleOverrideByKey)) {
+      const display = resolveOperatorWorkerDisplay({ workerId: key, role: "skeptic" });
+      expect(display.roleLabel.endsWith(operatorPersonaRoleOverrideByKey[key]!)).toBe(true);
+      expect(display.roleLabel).not.toContain("기본 역할");
+    }
   });
 });
