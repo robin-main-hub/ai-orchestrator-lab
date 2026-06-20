@@ -112,3 +112,75 @@ describe("isAutoApprovableCommand — allowlist override knobs", () => {
     expect(verdict.reason).toBe('matches safe prefix "only this"');
   });
 });
+
+// The cases above pin the two-stage shape and a representative set of blocked
+// tokens, but leave several DANGEROUS_PATTERN edges unpinned: the rest of the
+// shell-metacharacter char class ([;&|<>`$(){}] — only ; & | > $( were shown),
+// newline/CR *mid-command* injection (distinct from the whitespace-only "empty"
+// case, where \n is trimmed away before the gate), the regex's /i flag (mutating
+// tokens blocked regardless of case), the \s+ in git\s+push (tab/multi-space can
+// not slip a mutating git through), and the \b word-boundary precision (the gate
+// is token-level, so a benign word that merely *contains* a dangerous substring
+// is not falsely blocked, while the standalone token is). Pin them — each is an
+// injection-vector the auto-approve boundary must hold. Reason strings are the
+// impl's own constants (self-consistent), not invented.
+const SHELL_FEATURE_REASON = "command uses a shell feature or a disallowed/mutating token";
+
+describe("isAutoApprovableCommand — metachar completeness, multiline & case-insensitive token gate", () => {
+  it("blocks every remaining shell metacharacter in the char class", () => {
+    // < redirection-in, backtick substitution, {}/() expansion/grouping — the
+    // class members not already exercised by the earlier blocked[] list.
+    const metachar = [
+      "echo <in.txt", // < redirection in
+      "echo `whoami`", // backtick command substitution
+      "echo {a,b}", // brace expansion
+      "echo (sub)", // subshell grouping parens
+    ];
+    for (const command of metachar) {
+      const verdict = isAutoApprovableCommand(command);
+      expect(verdict.allowed).toBe(false);
+      expect(verdict.reason).toBe(SHELL_FEATURE_REASON);
+    }
+  });
+
+  it("blocks newline/CR mid-command (multi-line smuggle), unlike a whitespace-only empty command", () => {
+    // A newline *inside* an otherwise-allowlisted command is a chaining vector and
+    // is caught by the dangerous gate (not the empty-command branch).
+    const nl = isAutoApprovableCommand("pnpm test\nrm -rf /");
+    expect(nl.allowed).toBe(false);
+    expect(nl.reason).toBe(SHELL_FEATURE_REASON);
+
+    const cr = isAutoApprovableCommand("pnpm test\rmv a b");
+    expect(cr.allowed).toBe(false);
+    expect(cr.reason).toBe(SHELL_FEATURE_REASON);
+
+    // contrast: a command that is ONLY a newline trims to empty → different reason
+    expect(isAutoApprovableCommand("\n").reason).toBe("empty command");
+  });
+
+  it("blocks mutating tokens regardless of case (the /i flag)", () => {
+    for (const command of ["SUDO ls", "RM file", "GIT PUSH origin main", "Curl http://x"]) {
+      const verdict = isAutoApprovableCommand(command);
+      expect(verdict.allowed).toBe(false);
+      expect(verdict.reason).toBe(SHELL_FEATURE_REASON);
+    }
+  });
+
+  it("blocks git push even with tab/multiple spaces between git and push (\\s+)", () => {
+    for (const command of ["git  push origin", "git\tpush origin"]) {
+      const verdict = isAutoApprovableCommand(command);
+      expect(verdict.allowed).toBe(false);
+      expect(verdict.reason).toBe(SHELL_FEATURE_REASON);
+    }
+  });
+
+  it("is token-level, not substring: a benign word containing a dangerous substring is allowed", () => {
+    // "alarm" contains "rm" but not at word boundaries, so the \brm\b token rule
+    // does not fire; the command still passes only because "echo" is allowlisted.
+    const safeWord = isAutoApprovableCommand("echo alarm");
+    expect(safeWord.allowed).toBe(true);
+    expect(safeWord.reason).toBe('matches safe prefix "echo"');
+    // the standalone token, by contrast, IS blocked
+    expect(isAutoApprovableCommand("echo rm").reason).toBe(SHELL_FEATURE_REASON);
+  });
+});
