@@ -6,7 +6,10 @@ import {
   createPublicWorkReceiptSummary,
   createPublicTraceSafetyReport,
   createTerminalBlockPublicWorkTrace,
+  maskPublicWorkTraceForRender,
+  type PublicWorkTrace,
 } from "./publicWorkTrace";
+import { sanitizePublicText } from "./publicRedaction";
 import type { Stage3DebateUtteranceView } from "../types";
 
 describe("publicWorkTrace", () => {
@@ -534,5 +537,112 @@ describe("publicWorkTrace", () => {
     expect(visibleValues).toContain("대체 경로");
     expect(visibleValues).toContain("총 토큰 9개");
     expect(visibleValues).toContain("기억 2개 조회");
+  });
+});
+
+// Characterization tests (no behavior change) for the previously-unasserted export
+// maskPublicWorkTraceForRender. The block above drives the trace BUILDERS and the
+// safety-report / receipt-summary readers, but never the render-time masking pass —
+// the last line of defense that re-sanitizes an already-built trace right before it
+// is shown. Its load-bearing contract:
+//   - it re-applies sanitizePublicText to BOTH the label and value of every group
+//     item, so a builder that forgot to sanitize (or a hand-built trace) still gets
+//     scrubbed at render time,
+//   - it re-applies sanitizePublicText to every receipt item VALUE only — the receipt
+//     item labels and the receipt label/status are fixed enum copy and pass through
+//     untouched,
+//   - it preserves all structural identity (group id/title, item id/tone, receipt
+//     status) so masking never reshapes the trace,
+//   - a receipt-less trace stays receipt-less (the conditional spread adds no key),
+//   - it is non-mutating: the input trace is left intact and a fresh object is built.
+describe("maskPublicWorkTraceForRender", () => {
+  // a deliberately UN-sanitized trace, as if a builder leaked raw surfaces
+  const dirty: PublicWorkTrace = {
+    groups: [
+      {
+        id: "steps",
+        title: "작업 단계",
+        items: [{ id: "s1", label: "tool input dump", value: "see https://evil.example/x", tone: "info" }],
+      },
+      {
+        id: "evidence",
+        title: "검증",
+        items: [{ id: "e1", label: "경로", value: "/Users/robin/secret.txt", tone: "neutral" }],
+      },
+    ],
+    receipt: {
+      label: "에이전트 실행 영수증",
+      status: "checkpointed",
+      items: [
+        { label: "범위", value: "Bearer abc123def456ghi" },
+        { label: "마스킹", value: "적용됨" },
+      ],
+    },
+  };
+
+  it("re-sanitizes both the label and value of every group item", () => {
+    const masked = maskPublicWorkTraceForRender(dirty);
+    for (let g = 0; g < dirty.groups.length; g++) {
+      const srcGroup = dirty.groups[g]!;
+      const outGroup = masked.groups[g]!;
+      for (let i = 0; i < srcGroup.items.length; i++) {
+        const src = srcGroup.items[i]!;
+        const out = outGroup.items[i]!;
+        expect(out.label).toBe(sanitizePublicText(src.label));
+        expect(out.value).toBe(sanitizePublicText(src.value));
+      }
+    }
+    // not a no-op: the leaky surfaces were actually scrubbed
+    expect(masked.groups[0]!.items[0]!.label).not.toBe(dirty.groups[0]!.items[0]!.label);
+    expect(masked.groups[0]!.items[0]!.value).toContain("[redacted:url]");
+    expect(masked.groups[1]!.items[0]!.value).toContain("[redacted:path]");
+  });
+
+  it("preserves group/item structural identity (id, title, tone)", () => {
+    const masked = maskPublicWorkTraceForRender(dirty);
+    for (let g = 0; g < dirty.groups.length; g++) {
+      const srcGroup = dirty.groups[g]!;
+      const outGroup = masked.groups[g]!;
+      expect(outGroup.id).toBe(srcGroup.id);
+      expect(outGroup.title).toBe(srcGroup.title);
+      for (let i = 0; i < srcGroup.items.length; i++) {
+        expect(outGroup.items[i]!.id).toBe(srcGroup.items[i]!.id);
+        expect(outGroup.items[i]!.tone).toBe(srcGroup.items[i]!.tone);
+      }
+    }
+  });
+
+  it("sanitizes receipt item values only — receipt label/status and item labels pass through", () => {
+    const masked = maskPublicWorkTraceForRender(dirty);
+    expect(masked.receipt).toBeDefined();
+    const srcReceipt = dirty.receipt!;
+    const outReceipt = masked.receipt!;
+    expect(outReceipt.label).toBe(srcReceipt.label); // fixed enum copy, untouched
+    expect(outReceipt.status).toBe(srcReceipt.status);
+    for (let i = 0; i < srcReceipt.items.length; i++) {
+      const src = srcReceipt.items[i]!;
+      const out = outReceipt.items[i]!;
+      expect(out.label).toBe(src.label); // label is NOT sanitized
+      expect(out.value).toBe(sanitizePublicText(src.value)); // value IS sanitized
+    }
+    expect(outReceipt.items[0]!.value).toBe("Bearer [redacted]"); // bearer token scrubbed
+  });
+
+  it("leaves a receipt-less trace receipt-less", () => {
+    const noReceipt: PublicWorkTrace = {
+      groups: [{ id: "steps", title: "작업 단계", items: [{ id: "s1", label: "ok", value: "fine", tone: "neutral" }] }],
+    };
+    const masked = maskPublicWorkTraceForRender(noReceipt);
+    expect("receipt" in masked).toBe(false);
+    expect(masked.receipt).toBeUndefined();
+  });
+
+  it("does not mutate the input trace (builds a fresh copy)", () => {
+    const before = JSON.stringify(dirty);
+    const masked = maskPublicWorkTraceForRender(dirty);
+    expect(JSON.stringify(dirty)).toBe(before); // input untouched
+    expect(masked).not.toBe(dirty);
+    expect(masked.groups[0]).not.toBe(dirty.groups[0]);
+    expect(dirty.groups[0]!.items[0]!.value).toBe("see https://evil.example/x"); // original still raw
   });
 });
