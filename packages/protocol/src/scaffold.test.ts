@@ -179,3 +179,42 @@ describe("buildScaffoldPlan", () => {
     expect(plan.files.find((f) => f.path === "package.json")?.action).toBe("overwrite");
   });
 });
+
+// The react_vite scaffold sanitizes appName into a safe project identifier
+// (scaffold.ts:89 — replace [^a-z0-9-_] with "-", lowercase, fall back to "app").
+// Every test above feeds an already-safe lowercase name ("demo"/"todo"), so the
+// sanitizer is unpinned — yet this raw user string lands in the package.json
+// `name` and the README/HTML title, so an unsanitized space/symbol or uppercase
+// would produce a broken (or unsafe) project id. Pin: lowercasing, non-id char
+// runs → "-", digit/hyphen/underscore preserved, empty/omitted → "app", and that
+// the SAME sanitized name flows into package.json + README (no divergent copies).
+describe("scaffoldForTemplate(react_vite_app) — appName sanitized to a safe project id", () => {
+  const pkgName = (appName?: string): string => {
+    const input: Record<string, string | number> = appName === undefined ? {} : { appName };
+    const files = scaffoldForTemplate("react_vite_app", input);
+    return JSON.parse(files.find((f) => f.path === "package.json")!.content).name as string;
+  };
+
+  it("lowercases and collapses non-identifier chars to '-'", () => {
+    expect(pkgName("Demo App")).toBe("demo-app"); // space → '-', uppercase → lower
+    expect(pkgName("a@b.c")).toBe("a-b-c"); // each symbol → '-'
+    expect(pkgName("MyApp")).toBe("myapp");
+  });
+
+  it("preserves digits, hyphen and underscore (already valid id chars)", () => {
+    expect(pkgName("my_app-2")).toBe("my_app-2");
+  });
+
+  it("falls back to 'app' when appName is empty or omitted", () => {
+    expect(pkgName("")).toBe("app");
+    expect(pkgName(undefined)).toBe("app");
+  });
+
+  it("flows the SAME sanitized name into the README title (no divergent copy)", () => {
+    const files = scaffoldForTemplate("react_vite_app", { appName: "Demo App" });
+    const readme = files.find((f) => f.path === "README.md")!.content;
+    expect(readme).toContain("# demo-app"); // README header uses the sanitized name
+    const name = JSON.parse(files.find((f) => f.path === "package.json")!.content).name;
+    expect(readme.startsWith(`# ${name}`)).toBe(true); // identical to the package id
+  });
+});
