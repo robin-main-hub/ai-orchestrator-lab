@@ -136,3 +136,49 @@ describe("shouldInterrupt", () => {
     expect(shouldInterrupt({ priority: "normal" }, { speakingChars: 999 })).toBe(false);
   });
 });
+
+// The happy cases above always pass explicit alpha/beta/threshold and an
+// explicit longSpeechChars, and never feed an empty round or an empty-token
+// pair. Four default/guard branches stay unpinned: detectConsensus' empty-
+// responses early return + its DEFAULT alpha = Math.max(2, ceil(n/2)) (a lone
+// voice can never be a majority by default), textSimilarity's empty-set
+// semantics (both empty → 1 identity, one empty → 0, all-stopword → empty →
+// identity), and shouldInterrupt's DEFAULT 600-char boundary + low-never-
+// interrupts. Pin them, self-consistent (derived from the documented rules).
+describe("debateConsensus — default params + empty/guard branches", () => {
+  it("an empty round is no_majority with a fully reset next state", () => {
+    const r = detectConsensus({ responses: [] });
+    expect(r.status).toBe("no_majority");
+    expect(r.majority).toBeNull();
+    expect(r.confidence).toBe(0);
+    expect(r.next).toEqual({ majority: null, stability: 0 });
+  });
+
+  it("default alpha = Math.max(2, ceil(n/2)): a lone response can never be a majority", () => {
+    // n=1 → default alpha = max(2, ceil(0.5)=1) = 2 > 1 → no single voice is consensus
+    const lone = detectConsensus({ responses: ["캐시 도입하자"] });
+    expect(lone.status).toBe("no_majority");
+
+    // n=4 all clustering at the default 0.5 threshold → default alpha = max(2,2) = 2 met,
+    // no prior → stability 1, default beta 2 → pending (not yet consensus)
+    const four = detectConsensus({
+      responses: ["캐시 도입하자", "캐시 도입 찬성", "캐시 도입하자", "캐시 도입 찬성"],
+    });
+    expect(four.status).toBe("pending");
+    expect(four.confidence).toBe(1); // all four fall in one cluster
+    expect(four.next.stability).toBe(1);
+  });
+
+  it("textSimilarity empty-set semantics: both-empty → 1, one-empty → 0, all-stopword collapses to identity", () => {
+    expect(textSimilarity("", "")).toBe(1); // two empty token sets are trivially identical
+    expect(textSimilarity("", "캐시 도입")).toBe(0); // one side empty → zero overlap
+    // both sides reduce to the empty set (punctuation / pure stopwords) → treated identical, not 0
+    expect(textSimilarity("!!!", "그리고 the")).toBe(1);
+  });
+
+  it("shouldInterrupt default longSpeechChars is 600, and low priority never interrupts", () => {
+    expect(shouldInterrupt({ priority: "high" }, { speakingChars: 600 })).toBe(true); // boundary, default cap
+    expect(shouldInterrupt({ priority: "high" }, { speakingChars: 599 })).toBe(false);
+    expect(shouldInterrupt({ priority: "low" }, { speakingChars: 100_000 })).toBe(false);
+  });
+});
