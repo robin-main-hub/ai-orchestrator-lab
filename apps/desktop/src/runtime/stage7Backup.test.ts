@@ -4,6 +4,7 @@ import { createSeedMemoryRecords, createStage6MemoryInspector } from "./stage6Me
 import {
   applyStage7ProjectionStatuses,
   createStage7BackupSnapshot,
+  defaultObsidianVaultRoot,
   getArtifactContent,
   getObsidianArtifact,
 } from "./stage7Backup";
@@ -320,5 +321,56 @@ describe("stage7 backup — projection edge characterization", () => {
       createdAt,
     });
     expect(changed.id).not.toBe(first.id);
+  });
+});
+
+// Characterization tests (no behavior change, no fs/network) for the previously
+// untested obsidian-destination path construction: the exported default vault root
+// const and the trailing-separator normalization inside createObsidianDestination.
+// The first suite only asserts the destination CONTAINS "<sessionId>.md"; it never
+// pins the vault root, the full destination layout, that a caller-supplied
+// obsidianVaultRoot flows through, or the `vaultRoot.replace(/[\\/]$/, "")` strip
+// (which trims exactly one trailing "/" or "\\" so a configured vault path can't
+// emit a double-separator at the root seam). The destination is the on-disk write
+// target for the local Obsidian export, so a silent root rename or a normalization
+// regression would write the markdown to the wrong path while every existing
+// assertion (which only checks the filename suffix) stayed green. Expected paths are
+// composed from defaultObsidianVaultRoot + a shared layout suffix so a layout change
+// can't be hand-copied past these tests.
+describe("stage7 backup — obsidian destination path", () => {
+  const sessionId = "session_desktop_001";
+  const layoutSuffix = `/AI-Orchestrator/projects/ai-orchestrator-lab/sessions/${sessionId}.md`;
+  const destinationFor = (obsidianVaultRoot?: string) =>
+    getObsidianArtifact(
+      createStage7BackupSnapshot({
+        sessionId,
+        messages,
+        packet,
+        events,
+        projections,
+        runtime,
+        memoryInspector,
+        obsidianVaultRoot,
+        createdAt,
+      }),
+    )?.destination;
+
+  it("exposes the default vault root and builds the default destination under it", () => {
+    expect(defaultObsidianVaultRoot).toBe("F:/obsidian/ai-headquarter");
+    // absent obsidianVaultRoot → the exported const is the root, layout derived from it
+    expect(destinationFor()).toBe(`${defaultObsidianVaultRoot}${layoutSuffix}`);
+  });
+
+  it("routes a caller-supplied vault root through the same layout", () => {
+    expect(destinationFor("D:/notes")).toBe(`D:/notes${layoutSuffix}`);
+  });
+
+  it("strips exactly one trailing separator ('/' or '\\\\') so the root seam has no double", () => {
+    // trailing forward slash trimmed
+    expect(destinationFor("C:/vault/")).toBe(`C:/vault${layoutSuffix}`);
+    // trailing backslash trimmed (windows-style configured root)
+    expect(destinationFor("C:\\vault\\")).toBe(`C:\\vault${layoutSuffix}`);
+    // only ONE separator is stripped — a double trailing slash leaves one behind
+    expect(destinationFor("E:/v//")).toBe(`E:/v/${layoutSuffix}`);
   });
 });
