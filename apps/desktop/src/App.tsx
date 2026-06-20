@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   Brain,
-  ChevronRight,
   Database,
   GitBranch,
   MessageSquare,
@@ -287,7 +286,6 @@ import {
   initialAgentRun,
   initialConversationMessages,
   initialEventLog,
-  navSections,
   terminalSlots,
 } from "./seeds/conversation";
 import { DashboardView } from "./components/DashboardView";
@@ -2372,7 +2370,7 @@ export function App() {
     conversationTurnAbortRef.current = turnAbortController;
     conversationTurnCancelledRef.current = false;
     conversationTurnInFlightRef.current = true;
-    // 안전망: 어떤 단계(스트림/도구/승인 폴링/진단)에서 hang하든 턴이 영원히
+    // 안전망: 어떤 단계(스트림/도구/승인 ��링/진단)에서 hang하든 턴이 영원히
     // in-flight로 남지 않도록 하드 데드라인을 건다. 만료 시 abort → catch가
     // 부분 응답을 확정하고 finally가 inFlight를 풀어 큐가 다시 흐른다.
     const TURN_HARD_DEADLINE_MS = 8 * 60_000;
@@ -5140,7 +5138,46 @@ export function App() {
     />
   );
 
+  // 상위 5섹션 좌표 — 기존 (mode, nav, configLibrary)에서 읽기 전용으로 파생한다.
+  // 새 라우팅 상태를 만들지 않고, resolveActiveSurface(기존 판정)를 재사용한다.
+  const appLocation = resolveAppLocation({
+    activeSurface: resolveActiveSurface({ mode, activeNavItem }),
+    configLibraryActive,
+  });
+
+  // 섹션/탭 선택 → 기존 setMode / setActiveNavItem 으로 적용. 좌측 nav 클릭 및
+  // onChangeMode/mode-change effect 와 동일한 부작용(rail 닫기, 모바일 드로어 닫기,
+  // providers 진입 시 providerRegistrationOpen 동기화)을 그대로 재현한다.
+  const applyNavigationIntent = (intent: ReturnType<typeof navigationIntentForTab>) => {
+    setAdminRailOpen(false);
+    setIsMobileDrawerOpen(false);
+    if (intent.mode) {
+      // 상단축(mode)이 중앙을 가져간다 — nav는 센티넬("none")로 비운다.
+      setMode(intent.mode);
+      setActiveNavItem(MODE_OWNS_CENTER_NAV);
+      setProviderRegistrationOpen(false);
+    } else {
+      // 좌측축(nav)이 중앙을 가져간다. providers 진입은 기존 플래그도 동기화.
+      setActiveNavItem(intent.activeNavItem);
+      setProviderRegistrationOpen(intent.activeNavItem === "providers");
+    }
+  };
+
+  const handleSelectSection = (section: AppSection) => {
+    applyNavigationIntent(navigationIntentForSection(section));
+  };
+
+  const handleSelectTab = (section: AppSection, tab: SectionTab) => {
+    applyNavigationIntent(navigationIntentForTab(section, tab));
+  };
+
   return (
+    <OrchestratorShell
+      activeSection={appLocation.section}
+      activeTab={appLocation.tab}
+      onSelectSection={handleSelectSection}
+      onSelectTab={handleSelectTab}
+    >
     <div
       className={`app-shell ${navCenterActive ? "nav-center-shell" : ""} ${
         !navCenterActive && mode === "tmux" ? "tmux-focus-shell" : ""
@@ -5185,6 +5222,7 @@ export function App() {
         onProbeDgx={handleProbeDgx}
         onToggleDrawer={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
         providerName={activeProvider?.name ?? "미선택"}
+        shellMode="compact"
         snapshot={runtimeSnapshotState}
       />
       <main className="workspace-grid">
@@ -5194,55 +5232,12 @@ export function App() {
             onClick={() => setIsMobileDrawerOpen(false)}
           />
         ) : null}
-        {leftRailVisible ? (
-          <aside
-            className={`left-rail ${providerRegistrationOpen ? "provider-mode" : ""} ${isMobileDrawerOpen ? "drawer-open" : ""} ${configLibraryActive ? "compact" : ""}`}
-            aria-label="오케스트레이터 네비게이션"
-          >
-
-          <nav className="nav-stack">
-            {navSections.map((section) => (
-              <div className="nav-section" key={section.id}>
-                <p className="nav-section__label">{section.label}</p>
-                {section.items.map((item) => {
-                  const isActive = activeNavItem === item.id;
-                  return (
-                    <button
-                      aria-expanded={isActive}
-                      aria-label={item.label}
-                      className={`nav-item ${isActive ? "active" : ""}`}
-                      key={item.id}
-                      onClick={() => {
-                        setAdminRailOpen(false);
-                        setActiveNavItem(item.id);
-                        setProviderRegistrationOpen(false);
-                        setIsMobileDrawerOpen(false);
-                      }}
-                      title={`${item.label} 메뉴`}
-                      type="button"
-                    >
-                      <item.icon size={18} />
-                      <span>{item.label}</span>
-                      {isActive ? <ChevronRight size={16} /> : null}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
-
-
-
-
-
-
-
-
-
-
-
-          </aside>
-        ) : null}
+        {/*
+          레거시 left-rail(nav-stack)은 새 OrchestratorShell의 PrimaryRail로 대체됨.
+          PrimaryRail은 focus-collapse 영향 밖에서 항상 보이며 동일한 setActiveNavItem
+          /setMode 동선을 재사용한다. 모바일 드로어/provider-mode 분기는 제거(상위
+          단일 nav축으로 일원화).
+        */}
 
         <section
           className={`center-board ${mode === "tmux" ? "tmux-center-board" : ""} ${mode === "cockpit" ? "cockpit-center-board" : ""} ${mode === "annex" ? "annex-center-board" : ""} ${mode === "debate" ? "debate-center-board" : ""} ${
@@ -5832,6 +5827,7 @@ export function App() {
         onOpenHistory={() => setApprovalDrawerOpen(true)}
       />
     </div>
+    </OrchestratorShell>
   );
 }
 
