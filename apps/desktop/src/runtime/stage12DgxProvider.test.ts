@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CONVERSATION_MAX_OUTPUT_TOKENS,
   createDgxVllmRequestBody,
   createProviderCompletionProxyRequest,
   isDgxRoutedProvider,
@@ -636,5 +637,48 @@ describe("stage12 DGX provider — routing & request-shaping characterization", 
     const defaulted = new ProviderCompletionPermissionRequiredError("default payload");
     expect(defaulted.approvalId).toBeUndefined();
     expect(defaulted.sourceItemId).toBeUndefined();
+  });
+});
+
+// Characterization tests for CONVERSATION_MAX_OUTPUT_TOKENS (no behavior change,
+// no network, pure request builders). The const was previously 0-ref in tests:
+// the suite above calls createProviderCompletionProxyRequest 5× and
+// createDgxVllmRequestBody 2× but never asserts the per-turn output-token cap, so
+// nothing tied either request producer to the shared const. The const feeds THREE
+// call-sites (server-proxy maxOutputTokens, vLLM max_tokens, and the non-exported
+// direct-provider maxOutputTokens). We pin the value + its rationale (adapter
+// default 512 truncates table/code answers) and that BOTH exported producers
+// derive their cap from the const rather than a divergent hardcoded literal — a
+// regression to any one call-site would silently re-cap one route's answers.
+describe("stage12 DGX provider — conversation output-token cap", () => {
+  it("pins the per-turn output cap at 4096 (above the truncating adapter default)", () => {
+    expect(CONVERSATION_MAX_OUTPUT_TOKENS).toBe(4096);
+    // the const exists precisely because the adapter default (512) cuts answers
+    // mid-table/code, so the cap must stay well above that default.
+    expect(CONVERSATION_MAX_OUTPUT_TOKENS).toBeGreaterThan(512);
+  });
+
+  it("derives the server-proxy request maxOutputTokens from the shared const", () => {
+    const request = createProviderCompletionProxyRequest(
+      provider,
+      "qwen36-gio-lora-v5-prisma",
+      messages,
+    );
+    expect(request.maxOutputTokens).toBe(CONVERSATION_MAX_OUTPUT_TOKENS);
+  });
+
+  it("derives the vLLM request max_tokens from the same shared const", () => {
+    const body = createDgxVllmRequestBody("qwen36-gio-lora-v5-prisma", messages);
+    expect(body.max_tokens).toBe(CONVERSATION_MAX_OUTPUT_TOKENS);
+  });
+
+  it("keeps both exported request producers in agreement on the cap", () => {
+    const proxy = createProviderCompletionProxyRequest(
+      provider,
+      "qwen36-gio-lora-v5-prisma",
+      messages,
+    );
+    const vllm = createDgxVllmRequestBody("qwen36-gio-lora-v5-prisma", messages);
+    expect(proxy.maxOutputTokens).toBe(vllm.max_tokens);
   });
 });
