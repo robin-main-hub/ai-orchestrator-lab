@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildRunnerPatchHandoff,
   parseUnifiedDiffFiles,
+  PATCH_BLOCKER_REASON,
   summarizePatchHandoff,
 } from "./runnerPatchHandoff";
+import type { PatchHandoffBlocker } from "./runnerPatchHandoff";
 import type { CodingRunResult } from "./codingRunner";
 
 const ENDED = "2026-06-16T01:00:00.000Z";
@@ -115,5 +117,50 @@ describe("summarizePatchHandoff", () => {
   it("막힘 → 사유 문자열", () => {
     const handoff = buildRunnerPatchHandoff(result({ observed: false }), ctx);
     expect(summarizePatchHandoff(handoff)).toContain("미관측");
+  });
+});
+
+// Characterization tests (no behavior change) for the previously-unasserted reason map
+// PATCH_BLOCKER_REASON. The summarize block above reads this map indirectly but never pins
+// its completeness. Load-bearing contract: it is a TOTAL map over every PatchHandoffBlocker
+// the builder can emit — every emitted blocker/warning resolves to a non-empty human string,
+// so summarizePatchHandoff can never render "undefined". The emittable key set is derived
+// from buildRunnerPatchHandoff itself (a single run that trips all four hard blockers AND
+// the soft warning at once) so the coverage check stays self-consistent with the emitter.
+describe("PATCH_BLOCKER_REASON", () => {
+  // one run that trips every hard blocker (failed + unobserved + no files + empty diff)
+  // and the soft warning (failed tests) simultaneously
+  const allBlocked = buildRunnerPatchHandoff(
+    result({
+      status: "failed",
+      observed: false,
+      changedFiles: [],
+      diffSummary: "",
+      testResult: { ran: true, passed: 0, failed: 1 },
+    }),
+    ctx,
+  );
+
+  it("covers exactly the keys the builder can emit (no missing, no orphan reason)", () => {
+    const emitted = new Set<PatchHandoffBlocker>([...allBlocked.blockers, ...allBlocked.warnings]);
+    // sanity: this single run really exercises all five union members
+    expect(emitted).toEqual(
+      new Set(["run_not_completed", "not_observed", "no_changes", "empty_diff", "tests_failed"]),
+    );
+    // the map's keys match that emittable set exactly — both directions
+    expect(new Set(Object.keys(PATCH_BLOCKER_REASON))).toEqual(emitted);
+  });
+
+  it("every reason is a non-empty human string", () => {
+    for (const reason of Object.values(PATCH_BLOCKER_REASON)) {
+      expect(reason.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it("summarize resolves each emitted blocker through the map (never 'undefined')", () => {
+    const summary = summarizePatchHandoff(allBlocked);
+    // blocked summary is exactly the blockers' reasons joined — driven from the map itself
+    expect(summary).toBe(allBlocked.blockers.map((b) => PATCH_BLOCKER_REASON[b]).join(" · "));
+    expect(summary).not.toContain("undefined");
   });
 });
