@@ -7,9 +7,12 @@ import {
   missingRequiredFields,
   missionAgentRoleSchema,
   missionCreateRequestSchema,
+  missionFromTemplateRequestSchema,
   plannedArtifactsFromTemplate,
   TEMPLATE_REACT_VITE_APP,
+  workflowDomainSchema,
   workflowTemplateSchema,
+  type WorkflowTemplate,
 } from "./index.js";
 
 const now = () => "2026-06-13T00:00:00.000Z";
@@ -98,5 +101,73 @@ describe("template → mission (generic)", () => {
     expect(artifacts.length).toBe(TEMPLATE_REACT_VITE_APP.outputArtifacts.length);
     expect(artifacts.every((a) => a.truthStatus === "planned")).toBe(true);
     expect(artifacts.every((a) => a.missionId === "m_tpl_1")).toBe(true);
+  });
+});
+
+// The core templates + happy-path mission build are covered above, but three
+// surfaces stay unpinned: (1) workflowDomainSchema is the 0-ref vocabulary that
+// DECLARES the four business domains (sales/research/sample/claim) the isolation
+// contract relies on — the existing test only asserts core templates use
+// coding/design, never that the other four are even valid domains a domain-pack
+// could carry, so a silent removal of "sales" would pass today. (2) missionFrom-
+// TemplateRequestSchema (the wire contract for "run this template") defaults
+// input to {} and bounds templateId — untested. (3) buildMissionCreateFromTemplate
+// only ever runs with a single template whose roles all have a ROLE_LABEL; the
+// agentId format, the displayName fallback for an UNLABELED role, the soulMode/
+// configSource constants, and the empty-input title/goal shaping are all
+// uncovered branches. Pin them, self-consistent (derived from the template/schema).
+describe("workflowTemplate vocabulary + request schema + mission shaping", () => {
+  it("pins the workflow-domain enum: generic (coding/design) PLUS the four isolated business domains", () => {
+    expect(workflowDomainSchema.options).toEqual(["coding", "design", "sales", "research", "sample", "claim"]);
+    // the business domains are DECLARED in the vocab but MUST NOT appear in the core registry (isolation both directions)
+    const coreDomains = new Set(CORE_WORKFLOW_TEMPLATES.map((t) => t.domain));
+    for (const business of ["sales", "research", "sample", "claim"]) {
+      expect(workflowDomainSchema.options).toContain(business); // a domain pack could legally carry it
+      expect(coreDomains.has(business as never)).toBe(false); // ...but the product core never does
+    }
+  });
+
+  it("missionFromTemplateRequestSchema defaults input to {}, bounds templateId, keeps missionId optional", () => {
+    const parsed = missionFromTemplateRequestSchema.parse({ templateId: "react_vite_app" });
+    expect(parsed.input).toEqual({}); // default
+    expect(parsed.missionId).toBeUndefined(); // optional
+    // numeric AND string input values are both accepted
+    expect(missionFromTemplateRequestSchema.safeParse({ templateId: "t", input: { count: 3, name: "x" } }).success).toBe(true);
+    // empty templateId is rejected (min(1))
+    expect(missionFromTemplateRequestSchema.safeParse({ templateId: "" }).success).toBe(false);
+  });
+
+  it("buildMissionCreateFromTemplate shapes worker ids/displayNames and uses summary/internal config constants", () => {
+    const request = buildMissionCreateFromTemplate(TEMPLATE_REACT_VITE_APP, { appName: "demo" }, { missionId: "m_tpl_1" });
+    request.workers.forEach((worker, index) => {
+      // agentId = `${template.id}_${role}_${index+1}`
+      expect(worker.agentId).toBe(`react_vite_app_${worker.role}_${index + 1}`);
+      expect(worker.soulMode).toBe("summary");
+      expect(worker.configSource).toBe("internal");
+    });
+    // architect → 설계자 (ROLE_LABEL mapping, not the raw role)
+    expect(request.workers.find((w) => w.role === "architect")?.displayName).toBe("설계자");
+    expect(request.createdBy).toBe("workflow_template"); // default when not provided
+  });
+
+  it("an UNLABELED role falls back to the raw role string as displayName", () => {
+    // "external" is a valid mission role but has NO ROLE_LABEL entry → displayName === role
+    const synthetic: WorkflowTemplate = {
+      ...TEMPLATE_REACT_VITE_APP,
+      id: "synthetic_tpl",
+      defaultAgents: ["external"],
+    };
+    const request = buildMissionCreateFromTemplate(synthetic, {}, { missionId: "m_syn", createdBy: "tester" });
+    expect(request.workers[0]!.displayName).toBe("external"); // raw role fallback
+    expect(request.workers[0]!.agentId).toBe("synthetic_tpl_external_1");
+    expect(request.createdBy).toBe("tester"); // explicit createdBy wins over the default
+  });
+
+  it("empty input → title carries no ' — ' suffix and goal omits the 입력 line (no blank fields)", () => {
+    const request = buildMissionCreateFromTemplate(TEMPLATE_REACT_VITE_APP, {}, { missionId: "m_empty" });
+    expect(request.title).toBe("React + Vite 앱"); // no summary suffix
+    expect(request.goal).not.toContain("입력 —"); // no empty input line
+    expect(request.goal).toContain("계획 —"); // plan/검증/산출물 still present
+    expect(request.goal).toContain("외부 발송 금지 — draft만 생성한다.");
   });
 });
