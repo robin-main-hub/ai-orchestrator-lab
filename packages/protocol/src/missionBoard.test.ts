@@ -329,3 +329,72 @@ describe("toMissionRuntimeBusEvent", () => {
     expect(Object.keys(bus)).not.toContain("payloadPreview");
   });
 });
+
+// mergeStateFromItems (the private mapper behind card.mergeState/mergeCommitSha)
+// has five arms: merged / conflict / dry_run / default→queued / no-items→none.
+// The card suite above only exercises merged + dry_run — yet the comment on the
+// "dry_run / conflict" test OVERPROMISES conflict (it never asserts it). The
+// uncovered arms encode a single honesty rule: only a `merged` item with a real
+// mergeCommitSha may surface a sha; every other state is a neutral non-merged
+// label that NEVER resurfaces or mints a commit sha (합성값 금지). It also reads
+// the LAST queue item only, so a later state supersedes an earlier merge. Pin
+// the four uncovered arms + latest-wins + the no-synthetic-sha boundary, all
+// derived from the switch under test (no magic).
+describe("deriveMissionKanbanCard — uncovered merge-state arms (neutral, latest-wins, no synthetic sha)", () => {
+  it("no merge queue items → mergeState 'none', no sha invented", () => {
+    const card = deriveMissionKanbanCard(record());
+    expect(card.mergeState).toBe("none");
+    expect(card.mergeCommitSha).toBeUndefined();
+  });
+
+  it("conflict surfaces as 'conflict' and never carries a sha, even if a stray one is present", () => {
+    const card = deriveMissionKanbanCard(
+      record({
+        mergeQueueItems: [
+          { id: "m", branchName: "b", status: "conflict", mergeCommitSha: "deadbeef", conflictFiles: ["a.ts"], reason: "merge conflict", queuedAt: "t" },
+        ] as never,
+      }),
+    );
+    expect(card.mergeState).toBe("conflict");
+    expect(card.mergeCommitSha).toBeUndefined(); // conflict arm drops the sha — not a merge
+  });
+
+  it("every non-terminal status collapses to the neutral 'queued' bucket, never faking merged/conflict/dry_run", () => {
+    for (const status of ["queued", "waiting_approval", "merging", "blocked", "rejected", "failed"]) {
+      const card = deriveMissionKanbanCard(
+        record({
+          mergeQueueItems: [
+            { id: "m", branchName: "b", status, mergeCommitSha: "abc123", conflictFiles: [], reason: status, queuedAt: "t" },
+          ] as never,
+        }),
+      );
+      expect(card.mergeState).toBe("queued");
+      expect(card.mergeCommitSha).toBeUndefined();
+    }
+  });
+
+  it("reads the LAST queue item only — a later conflict supersedes an earlier merge, dropping its sha", () => {
+    const card = deriveMissionKanbanCard(
+      record({
+        mergeQueueItems: [
+          { id: "m1", branchName: "b", status: "merged", mergeCommitSha: "abc1234567def", conflictFiles: [], reason: "ok", queuedAt: "2026-06-13T01:00:00.000Z" },
+          { id: "m2", branchName: "b", status: "conflict", conflictFiles: ["x.ts"], reason: "re-conflict", queuedAt: "2026-06-13T02:00:00.000Z" },
+        ] as never,
+      }),
+    );
+    expect(card.mergeState).toBe("conflict"); // latest wins
+    expect(card.mergeCommitSha).toBeUndefined(); // the superseded merge sha is NOT resurfaced
+  });
+
+  it("merged without a real mergeCommitSha stays 'merged' but mints no synthetic sha", () => {
+    const card = deriveMissionKanbanCard(
+      record({
+        mergeQueueItems: [
+          { id: "m", branchName: "b", status: "merged", conflictFiles: [], reason: "ok", queuedAt: "t" },
+        ] as never,
+      }),
+    );
+    expect(card.mergeState).toBe("merged");
+    expect(card.mergeCommitSha).toBeUndefined(); // sha comes from the item only — never fabricated
+  });
+});
