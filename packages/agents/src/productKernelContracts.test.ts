@@ -10,6 +10,7 @@ import {
   createMissionWorkerAssignment,
   missionCapabilitiesForProfiles,
   missionCapabilityModeForRole,
+  personaSlugForMission,
   requiresMissionSandbox,
 } from "./productKernelContracts";
 
@@ -278,5 +279,90 @@ describe("productKernelContracts — capability notes honesty, soulMode-full ope
     );
     expect(curator.requiresSandbox).toBe(false);
     expect(curator.defaultSandboxKind).toBe("disabled"); // read-only mode pins disabled despite the override
+  });
+});
+
+// Still-unpinned reachable residuals, all in the same least-privilege / honesty
+// spirit. (1) The reminder has THREE shapes but only two are pinned: builder
+// (mutate+run, both POSITIVE lines) and architect (neither, both NEGATIVE). The
+// ASYMMETRIC verify shape — mutate=false BUT run=true — emits the "Do not mutate
+// files" negative line together with the "Commands must run through the sandbox
+// runner" positive line, a combination no prior case exercises. (2) verifier's
+// requiresHumanApprovalFor is only ever checked for builder via arrayContaining;
+// verifier gates EXACTLY ["bash"] (no write/edit — it cannot mutate). (3)
+// allowedToolsForMissionMode returns a FRESH copy ([...X]) each call, so a caller
+// mutating the result cannot poison the shared module-level tool list — a real
+// least-privilege guarantee. (4) createMissionWorkerAssignment leaves
+// sandboxId/worktreePath/branchName undefined when omitted (never synthesized) and
+// threads options into the capability. (5) personaSlugForMission directly, and (6)
+// identity files default truthStatus to "configured" with no option. Self-
+// consistent (derived from the role→mode map and the function bodies).
+describe("productKernelContracts — asymmetric reminder branch, fresh tool copies, honest optional assignment", () => {
+  function makeP(overrides: Partial<AgentProfile> & { id: string; role: AgentRole }): AgentProfile {
+    return {
+      name: overrides.id,
+      kind: "virtual",
+      soulMode: "summary",
+      configSource: "internal",
+      enabled: true,
+      permissionLevel: "read_only",
+      ...overrides,
+    };
+  }
+
+  it("the verify reminder pairs the 'do not mutate' negative line with the 'commands run through the sandbox' positive line", () => {
+    const verify = createAgentMissionCapability(makeP({ id: "v", role: "verifier" }));
+    expect(verify.canMutateFiles).toBe(false);
+    expect(verify.canRunCommands).toBe(true);
+    const reminder = buildPersonaContinuitySystemReminder(verify);
+    // mutate=false ⇒ the NEGATIVE file line, NOT the positive "File changes are allowed" line
+    expect(reminder).toContain("Do not mutate files");
+    expect(reminder).not.toContain("File changes are allowed only inside");
+    // run=true ⇒ the POSITIVE command line, NOT the negative "Do not claim command execution"
+    expect(reminder).toContain("Commands must run through the sandbox runner");
+    expect(reminder).not.toContain("Do not claim command execution");
+  });
+
+  it("verifier gates EXACTLY ['bash'] for human approval — no write/edit because it cannot mutate", () => {
+    const verify = createAgentMissionCapability(makeP({ id: "v2", role: "verifier" }));
+    expect(verify.requiresHumanApprovalFor).toEqual(["bash"]);
+    // builder, by contrast, gates write+edit+bash in declaration order
+    const builder = createAgentMissionCapability(makeP({ id: "b", role: "builder" }));
+    expect(builder.requiresHumanApprovalFor).toEqual(["write", "edit", "bash"]);
+  });
+
+  it("allowedToolsForMissionMode returns a fresh copy each call — mutating one result cannot poison the next", () => {
+    const first = allowedToolsForMissionMode("sandbox_build");
+    const second = allowedToolsForMissionMode("sandbox_build");
+    expect(first).toEqual(second);
+    expect(first).not.toBe(second); // distinct array instances, not a shared module constant
+    first.push("write"); // a caller poisoning its own copy…
+    expect(allowedToolsForMissionMode("sandbox_build")).toEqual(second); // …leaves the module list intact
+  });
+
+  it("createMissionWorkerAssignment leaves omitted sandbox/worktree/branch undefined (never synthesized) and threads options", () => {
+    const assignment = createMissionWorkerAssignment({
+      missionId: "mission_x",
+      profile: makeP({ id: "agent_b", role: "builder" }),
+      now: "2026-06-21T00:00:00.000Z",
+      options: { defaultSandboxKind: "firecracker" },
+    });
+    expect(assignment.id).toBe("worker_mission_x_agent_b");
+    expect(assignment.status).toBe("planned");
+    expect(assignment.assignedAt).toBe("2026-06-21T00:00:00.000Z");
+    expect(assignment.sandboxId).toBeUndefined(); // omitted ⇒ undefined, not a fabricated id
+    expect(assignment.worktreePath).toBeUndefined();
+    expect(assignment.branchName).toBeUndefined();
+    expect(assignment.capability.defaultSandboxKind).toBe("firecracker"); // options reached the capability
+  });
+
+  it("personaSlugForMission prefers personaName and falls back to role", () => {
+    expect(personaSlugForMission({ role: "skeptic", personaName: "yohane" })).toBe("yohane");
+    expect(personaSlugForMission({ role: "skeptic" })).toBe("skeptic");
+  });
+
+  it("identity files default truthStatus to 'configured' when no option is supplied", () => {
+    const continuity = createHermesPersonaContinuity(makeP({ id: "t0", role: "researcher" }));
+    expect(continuity.identityFiles.every((file) => file.truthStatus === "configured")).toBe(true);
   });
 });
