@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { readJsonState, writeJsonState, type JsonStorageLike } from "./persistentJsonState";
+import {
+  getBrowserLocalStorage,
+  readJsonState,
+  writeJsonState,
+  type JsonStorageLike,
+} from "./persistentJsonState";
 
 class MemoryStorage implements JsonStorageLike {
   private readonly values = new Map<string, string>();
@@ -65,5 +70,67 @@ describe("persistentJsonState", () => {
     };
 
     expect(() => writeJsonState("state", { mode: "cockpit" }, storage)).not.toThrow();
+  });
+});
+
+// Characterization tests (no behavior change) for the previously-untested SSR guard
+// `getBrowserLocalStorage` and the default-storage / missing-value EARLY-RETURN
+// branches of readJsonState/writeJsonState that the block above never exercises
+// (it always injects a concrete storage and always seeds a value). Load-bearing
+// contract: the module must be safe to import and call in a window-less runtime
+// (SSR / unit test / worker) — getBrowserLocalStorage returns undefined instead of
+// throwing on `window`, and that undefined flows through the read/write defaults so
+// a missing browser is a silent fallback/no-op, never a crash. A missing or empty
+// stored value is a plain fallback that does NOT call the parser and does NOT evict
+// (distinct from the invalid-JSON path which clears the key).
+describe("getBrowserLocalStorage / window-less defaults", () => {
+  it("no window → undefined (SSR/worker safe, never throws)", () => {
+    // this vitest runtime has no `window`, so the guard takes its undefined branch
+    expect(typeof window).toBe("undefined");
+    expect(getBrowserLocalStorage()).toBeUndefined();
+  });
+
+  it("window present → returns exactly window.localStorage (same reference)", () => {
+    const fakeLocalStorage = new MemoryStorage();
+    const had = "window" in globalThis;
+    (globalThis as { window?: unknown }).window = { localStorage: fakeLocalStorage };
+    try {
+      expect(getBrowserLocalStorage()).toBe(fakeLocalStorage);
+    } finally {
+      if (had) {
+        (globalThis as { window?: unknown }).window = undefined;
+      } else {
+        delete (globalThis as { window?: unknown }).window;
+      }
+    }
+  });
+
+  it("default storage in a window-less runtime: read falls back, write is a silent no-op", () => {
+    const thrower = () => {
+      throw new Error("parser must not run when storage is absent");
+    };
+    // omitting the storage arg defaults to getBrowserLocalStorage() === undefined
+    expect(readJsonState("any-key", "fallback", thrower)).toBe("fallback");
+    expect(() => writeJsonState("any-key", { mode: "cockpit" })).not.toThrow();
+  });
+
+  it("missing key → fallback without calling the parser and without evicting", () => {
+    const storage = new MemoryStorage();
+    storage.setItem("other", "kept");
+    const thrower = () => {
+      throw new Error("parser must not run for a missing value");
+    };
+    expect(readJsonState("absent", "fallback", thrower, storage)).toBe("fallback");
+    // unrelated keys are untouched — the early !raw return never calls removeItem
+    expect(storage.getItem("other")).toBe("kept");
+  });
+
+  it("empty-string value is treated as missing → fallback, parser skipped", () => {
+    const storage = new MemoryStorage();
+    storage.setItem("state", "");
+    const thrower = () => {
+      throw new Error("parser must not run for an empty value");
+    };
+    expect(readJsonState("state", "fallback", thrower, storage)).toBe("fallback");
   });
 });
