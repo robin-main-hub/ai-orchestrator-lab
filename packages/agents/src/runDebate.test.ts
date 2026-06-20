@@ -346,3 +346,43 @@ describe("runDebate — withPriorRounds truncation/prefix + consensus-present-bu
     expect(result.rounds.every((r) => r.status === "completed")).toBe(true);
   });
 });
+
+// One precedence combination the suites above never exercise: shouldStop (line
+// 119) is evaluated and `break`s BEFORE the consensus block (line 129). Every
+// existing shouldStop test omits `consensus`, and every consensus test omits
+// `shouldStop`, so the "both supplied, shouldStop wins" path is unpinned. It is
+// an honest ordering invariant — an explicit caller hook short-circuits the
+// heuristic auto-stop, so configuring consensus must NOT change a shouldStop
+// outcome. Pin it, self-consistent (the loop breaks via shouldStop on round 1,
+// so the consensus block never runs ⇒ consensusReached stays false, confidence 0).
+describe("runDebate — shouldStop short-circuits before the consensus block when both are supplied", () => {
+  it("stops via shouldStop on the first round even though a (would-fire) consensus option is also present", async () => {
+    idCounter = 0;
+    const conclusion = "캐시를 도입하는 것이 최선이다. 캐시 도입에 찬성한다.";
+    const initial = createDebateRounds("debate_stop_wins");
+    const result = await runDebate({
+      debateId: "debate_stop_wins",
+      context: CTX,
+      initialRounds: initial,
+      slots: [
+        slot(profile("s_orch", "지휘", "orchestrator"), conclusion),
+        slot(profile("s_arch", "시노부", "architect"), conclusion),
+        slot(profile("s_skep", "아스카", "skeptic"), conclusion),
+        slot(profile("s_build", "유이", "builder"), conclusion),
+      ],
+      engineOptions: { now: () => NOW, generateId: idGen },
+      // shouldStop fires on the very first round...
+      shouldStop: ({ completedRound }) => completedRound.kind === "problem_definition",
+      // ...and a consensus option capable of firing (beta 1) is ALSO supplied.
+      consensus: { alpha: 2, beta: 1, similarityThreshold: 0.25 },
+    });
+    expect(result.stoppedEarly).toBe(true); // stopped early...
+    expect(result.roundResults.length).toBe(1); // ...after exactly one round
+    expect(result.consensusReached).toBe(false); // shouldStop broke first ⇒ consensus block never ran
+    expect(result.consensusConfidence).toBe(0); // never set by the (skipped) consensus path
+    expect(result.finished).toBe(false); // not all rounds completed
+    const statuses = result.rounds.map((r) => r.status);
+    expect(statuses[0]).toBe("completed"); // shouldStop marks the current round completed for a coherent snapshot
+    expect(statuses.slice(1).every((s) => s === "pending")).toBe(true); // remainder left pending
+  });
+});
