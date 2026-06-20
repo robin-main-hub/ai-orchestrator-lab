@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   EVIDENCE_FIXTURE,
   LEARNING_EVENT_FIXTURE,
+  SKILL_CANDIDATE_FIXTURE,
+  SKILL_ACTIVATION_FIXTURE,
+  EVAL_REPORTS_FIXTURE,
   buildAssistantInboxProps,
   buildAssistantInboxLiveProps,
   filterLearningEvents,
@@ -116,6 +119,87 @@ describe("assistantInboxProjection — runtime manifest", () => {
     expect(byId.get("skill-003")!.reason).toBe("eval_failed");
     expect(byId.get("skill-004")!.loadable).toBe(false);
     expect(byId.get("skill-004")!.reason).toBe("quarantined");
+  });
+});
+
+// Characterization tests (no behavior change) for the three previously-unimported
+// skill-runtime fixtures — SKILL_CANDIDATE_FIXTURE / SKILL_ACTIVATION_FIXTURE /
+// EVAL_REPORTS_FIXTURE — that are the DEFAULT inputs to projectManifestEntries. The
+// "runtime manifest" suite above pins projectManifestEntries()'s four OUTPUT rows, but
+// it calls the function with no args and treats the fixtures as an opaque source: it
+// never proves the fixtures form the self-consistent 3-way scaffolding those outcomes
+// depend on. That scaffolding is load-bearing — the honest skill-loading gate only
+// produces "loadable / eval-warned / blocked-eval_failed / quarantined" because each
+// candidate is linked candidateId → activation → evalRunId → eval report, and each
+// report's verdict matches. If a fixture drifted (an activation pointing at a missing
+// run id, an orphan eval report, a verdict flipped pass↔fail) the default-args output
+// test could still pass on a now-meaningless example or fail with a confusing message.
+// We pin the wiring itself: 1:1 candidate↔activation, active activations resolve to a
+// present report (and the report keyset is EXACTLY those run ids — no orphans), the lone
+// quarantined activation carries a reason instead of an eval basis, each report's verdict
+// is internally self-describing, and feeding the fixtures EXPLICITLY reproduces the
+// default-args manifest (proving the defaults really are these fixtures, and the
+// verdict→outcome mapping the gate encodes).
+describe("skill runtime fixtures — manifest scaffolding self-consistency", () => {
+  it("every candidate has exactly one activation, keyed 1:1 by candidateId", () => {
+    const candidateIds = SKILL_CANDIDATE_FIXTURE.map((c) => c.id);
+    const activationIds = SKILL_ACTIVATION_FIXTURE.map((a) => a.candidateId);
+    expect(SKILL_ACTIVATION_FIXTURE.length).toBe(SKILL_CANDIDATE_FIXTURE.length);
+    // no candidate left unactivated, no activation dangling to a missing candidate
+    expect(activationIds.slice().sort()).toEqual(candidateIds.slice().sort());
+    // 1:1 — each candidate activated at most once
+    expect(new Set(activationIds).size).toBe(activationIds.length);
+  });
+
+  it("active activations resolve to a present eval report; the quarantined one carries a reason instead", () => {
+    const active = SKILL_ACTIVATION_FIXTURE.filter((a) => a.activationStatus === "active");
+    const quarantined = SKILL_ACTIVATION_FIXTURE.filter(
+      (a) => a.activationStatus === "quarantined",
+    );
+    for (const a of active) {
+      expect(a.evalRunId, a.candidateId).toBeTruthy();
+      expect(EVAL_REPORTS_FIXTURE[a.evalRunId!], a.evalRunId).toBeTruthy();
+    }
+    // the report keyset is EXACTLY the active run ids — no orphan reports, no missing basis
+    expect(Object.keys(EVAL_REPORTS_FIXTURE).slice().sort()).toEqual(
+      active.map((a) => a.evalRunId!).slice().sort(),
+    );
+    // the single quarantined activation has no eval basis but an explicit reason
+    expect(quarantined).toHaveLength(1);
+    expect(quarantined[0]!.evalRunId).toBeUndefined();
+    expect(quarantined[0]!.quarantinedReason).toBeTruthy();
+  });
+
+  it("each eval report is internally self-describing (verdict ⇄ recall/blockers/warnings)", () => {
+    for (const [runId, report] of Object.entries(EVAL_REPORTS_FIXTURE)) {
+      expect(report.evalCaseId).toBe(runId);
+      if (report.verdict === "pass") {
+        expect(report.recallAtK).toBe(1);
+        expect(report.blockers).toEqual([]);
+        expect(report.warnings).toEqual([]);
+      } else if (report.verdict === "warning") {
+        expect(report.warnings.length).toBeGreaterThan(0);
+        expect(report.blockers).toEqual([]);
+      } else {
+        expect(report.verdict).toBe("fail");
+        expect(report.blockers.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("feeding the fixtures explicitly reproduces the default manifest (defaults ARE these fixtures)", () => {
+    const explicit = projectManifestEntries({
+      candidates: SKILL_CANDIDATE_FIXTURE,
+      activations: SKILL_ACTIVATION_FIXTURE,
+      evalReportsByRunId: EVAL_REPORTS_FIXTURE,
+    });
+    expect(explicit).toEqual(projectManifestEntries());
+    // the verdict → outcome mapping the gate scaffolding encodes:
+    const byId = new Map(explicit.map((e) => [e.id, e]));
+    expect(byId.get("skill-001")).toMatchObject({ loadable: true, evalWarned: false }); // pass
+    expect(byId.get("skill-002")).toMatchObject({ loadable: true, evalWarned: true }); // warning
+    expect(byId.get("skill-003")).toMatchObject({ loadable: false, reason: "eval_failed" }); // fail
+    expect(byId.get("skill-004")).toMatchObject({ loadable: false, reason: "quarantined" }); // quarantined
   });
 });
 
