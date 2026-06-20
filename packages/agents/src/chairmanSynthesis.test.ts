@@ -111,3 +111,82 @@ describe("withChairmanSynthesis", () => {
     expect(notes.some((n) => n.includes("쟁점:"))).toBe(true);
   });
 });
+
+// The happy cases above only adopt/reject via the agreement/objection *tags*,
+// only ever see completed/pending rounds, never feed a [[tag:…]] marker or an
+// over-length line, and never hit the moderate band, the contested+risk skip,
+// dedupeAdopted, or the 반려 reviewer notes. Pin those branches, self-consistent
+// (expected values derived from the same utterances/votes).
+describe("chairmanSynthesis — vote-only routing, marker/truncate, contested-risk skip, dedupe, running", () => {
+  it("routes by vote balance when no tag is present and lands in the moderate band at 0.5", () => {
+    const decision = synthesizeChairmanDecision(context, [
+      round([
+        utt({ id: "a", agentId: "m", content: "투표 채택", acceptedBy: ["x"] }), // forCount 1, no tag → adopted
+        utt({ id: "b", agentId: "n", content: "투표 반려", rejectedBy: ["y"] }), // againstCount>forCount, no tag → rejected
+      ]),
+    ]);
+    expect(decision.adopted).toEqual([{ point: "투표 채택", support: 1, by: "m" }]);
+    expect(decision.rejected).toEqual(["투표 반려"]);
+    expect(decision.confidence).toBe(0.5); // accepts 1 / (1 reject) → 0.5
+    expect(decision.consensusLevel).toBe("moderate"); // >=0.5 && <0.75
+  });
+
+  it("clean strips a trailing [[tag:…]] marker and truncates over-length content to (max-1)+…", () => {
+    const long = "y".repeat(50) + " [[tag:agreement]]";
+    const decision = synthesizeChairmanDecision(
+      context,
+      [
+        round([
+          utt({ id: "m1", content: "결정입니다 [[tag:agreement]]", tags: ["agreement"], acceptedBy: ["x"] }),
+          utt({ id: "m2", content: long, tags: ["agreement"], acceptedBy: ["x"] }),
+        ]),
+      ],
+      { truncateLength: 10 },
+    );
+    expect(decision.adopted.some((p) => p.point === "결정입니다")).toBe(true); // marker gone, no leftover brackets
+    expect(decision.adopted.some((p) => p.point === `${"y".repeat(9)}…`)).toBe(true); // slice(0,9)+…
+  });
+
+  it("a contested utterance carrying a risk tag is NOT added to risks (the contested continue skips it)", () => {
+    const decision = synthesizeChairmanDecision(context, [
+      round([utt({ content: "위험한 쟁점", tags: ["risk"], acceptedBy: ["x"], rejectedBy: ["y"] })]),
+    ]);
+    expect(decision.contested).toEqual([{ point: "위험한 쟁점", for: 1, against: 1 }]);
+    expect(decision.risks).toEqual([]); // contested branch `continue`d before the risk push
+  });
+
+  it("dedupeAdopted collapses identical adopted points to a single entry", () => {
+    const decision = synthesizeChairmanDecision(context, [
+      round([
+        utt({ id: "a", agentId: "m", content: "동일 채택", tags: ["agreement"], acceptedBy: ["x", "y"] }),
+        utt({ id: "b", agentId: "n", content: "동일 채택", tags: ["agreement"], acceptedBy: ["z"] }),
+      ]),
+    ]);
+    expect(decision.adopted).toHaveLength(1);
+    expect(decision.adopted[0]).toMatchObject({ point: "동일 채택", support: 2 }); // higher-support kept after sort
+  });
+
+  it("a RUNNING round contributes utterances just like a completed one", () => {
+    const running = { ...round([utt({ content: "진행 중 채택", tags: ["agreement"], acceptedBy: ["x"] })]), status: "running" as const };
+    expect(synthesizeChairmanDecision(context, [running]).adopted).toHaveLength(1);
+  });
+
+  it("withChairmanSynthesis emits 반려 notes for rejected points and dedupes against existing notes", () => {
+    const decision = synthesizeChairmanDecision(context, [
+      round([utt({ content: "반려 대상", tags: ["objection"] })]),
+    ]);
+    const packet: CodingPacket = {
+      goal: "g",
+      context: [],
+      decisions: [],
+      rejectedOptions: [],
+      constraints: [],
+      filesToInspect: [],
+      implementationPlan: [],
+      verificationPlan: [],
+      reviewerNotes: ["반려: 반려 대상"], // pre-existing identical note
+    };
+    const out = withChairmanSynthesis(packet, decision);
+    expect(out.reviewerNotes.filter((n) => n === "반려: 반려 대상")).toHaveLength(1); // deduped, not doubled
+  });
+});
