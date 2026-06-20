@@ -416,3 +416,38 @@ describe("createMockUtterance", () => {
     expect(() => new Date(u.createdAt).toISOString()).not.toThrow(); // ISO timestamp
   });
 });
+
+// Every path-rule test above feeds the unsafe string to filesToInspect — the one
+// list routed through sanitizePathList. The complementary least-privilege fact is
+// never pinned: the OTHER eight lists go through sanitizeTextList, whose
+// isUnsafeText applies NO traversal/absolute-path rules. So a "../" or
+// "/etc/passwd" string is unsafe as a FILE PATH yet perfectly safe as PROSE — the
+// path checks are scoped to exactly where a path is consumed, not applied
+// blanket-wide (which would falsely reject legitimate prose that happens to
+// mention a path). Pin the asymmetry, self-consistent (same strings, opposite
+// verdicts depending solely on the field they land in).
+describe("validateCodingPacketSafety — path rules are scoped to filesToInspect, not text lists", () => {
+  it("permits path-shaped strings inside text lists (traversal/absolute are not prose violations)", () => {
+    const result = validateCodingPacketSafety(
+      basePacket({
+        decisions: ["../../etc/passwd 를 읽지 말 것"], // traversal substring, but it is prose
+        context: ["/etc/passwd 같은 절대경로는 금지한다"], // absolute-looking, but prose
+        reviewerNotes: ["C:\\Windows 경로를 하드코딩하지 말 것"], // windows-absolute substring, prose
+      }),
+    );
+    expect(result.safe).toBe(true); // text lists do not run path checks
+    expect(result.violations).toEqual([]);
+    expect(result.sanitized.decisions).toEqual(["../../etc/passwd 를 읽지 말 것"]); // kept verbatim
+    expect(result.sanitized.context).toEqual(["/etc/passwd 같은 절대경로는 금지한다"]);
+  });
+
+  it("rejects the very same traversal/absolute strings the instant they appear in filesToInspect", () => {
+    const traversal = validateCodingPacketSafety(basePacket({ filesToInspect: ["../../etc/passwd"] }));
+    expect(traversal.safe).toBe(false);
+    expect(traversal.violations.join(" ")).toMatch(/traversal/);
+
+    const absolute = validateCodingPacketSafety(basePacket({ filesToInspect: ["/etc/passwd"] }));
+    expect(absolute.safe).toBe(false);
+    expect(absolute.violations.join(" ")).toMatch(/absolute/);
+  });
+});
