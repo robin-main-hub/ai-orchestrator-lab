@@ -44,6 +44,7 @@ export function RuntimeStatusBar({
   onProbeDgx,
   onToggleDrawer,
   providerName,
+  shellMode = "default",
   snapshot,
 }: {
   drawerAvailable: boolean;
@@ -58,8 +59,15 @@ export function RuntimeStatusBar({
   onProbeDgx: () => void;
   onToggleDrawer: () => void;
   providerName: string;
+  /**
+   * "default" 는 기존 상단 mode 탭/모바일 mode 메뉴를 모두 보여준다.
+   * "compact" 는 새 OrchestratorShell 전용 — 상위 nav(Primary Rail/SectionTabs)가
+   * mode 전환을 소유하므로 여기서는 health · provider · ⌘K 만 노출한다(중복 nav 제거).
+   */
+  shellMode?: "default" | "compact";
   snapshot: RuntimeSnapshot;
 }) {
+  const compact = shellMode === "compact";
   const health = deriveHealth(snapshot);
   const healthLabel = {
     healthy: "모든 시스템 정상",
@@ -72,7 +80,7 @@ export function RuntimeStatusBar({
   return (
     <header className="status-bar flex h-12 shrink-0 items-center justify-between gap-4 border-b border-zinc-800/60 bg-zinc-950/90 px-4 backdrop-blur-xl">
       <div className="flex min-w-0 items-center gap-3">
-        {drawerAvailable ? (
+        {compact ? null : drawerAvailable ? (
           <Button
             aria-label="내비게이션 열기/닫기"
             className="mobile-menu-btn h-8 w-8 shrink-0 text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-100"
@@ -141,6 +149,7 @@ export function RuntimeStatusBar({
         </div>
       </div>
 
+      {compact ? null : (
       <nav className="hidden items-center gap-1 rounded-full border border-white/10 bg-black/45 p-1 shadow-[0_0_28px_rgba(0,0,0,0.35)] backdrop-blur-xl md:flex">
         {onHome ? (
           <button
@@ -189,6 +198,7 @@ export function RuntimeStatusBar({
           );
         })}
       </nav>
+      )}
 
       <div className="flex shrink-0 items-center gap-2">
         <Button

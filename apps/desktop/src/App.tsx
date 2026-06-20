@@ -189,7 +189,17 @@ import { createOrchestrationOsDebateSession } from "./lib/orchestrationOsDebate"
 import { deriveCockpitNextActions } from "./lib/cockpitNextActions";
 import type { CockpitNextActionItem } from "./lib/cockpitNextActions";
 import { deriveCockpitHealthFromSnapshot } from "./lib/cockpitHealthRollup";
-import { isNavCenterActive, MODE_OWNS_CENTER_NAV } from "./lib/navSurface";
+import {
+  isNavCenterActive,
+  MODE_OWNS_CENTER_NAV,
+  navigationIntentForSection,
+  navigationIntentForTab,
+  resolveActiveSurface,
+  resolveAppLocation,
+  type AppSection,
+  type SectionTab,
+} from "./lib/navSurface";
+import { OrchestratorShell } from "./components/shell/OrchestratorShell";
 import { resolveExternalIngressTargetAgentId } from "./lib/externalIngressRouting";
 import {
   createAgentChannelMemoryScope,
@@ -2521,7 +2531,7 @@ export function App() {
           onEvent: (event) => {
             if (event.type === "assistant_delta") reportDelta(event.text);
             if (event.type === "tool_status") {
-              // 도구 호출이 시작되는 순간부터 라이브 칩으로 버블에 쌓고, 같은 id는
+              // 도구 호출이 시작되는 순간부터 라이브 칩으로 버블에 쌓���, 같은 id는
               // 상태만 갱신한다 — 작업 끝까지 기다리지 않고 진행 과정을 그대로 본다.
               const chip = {
                 id: event.call.id,

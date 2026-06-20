@@ -1,0 +1,210 @@
+/*
+ * OrchestratorShell — 최상위 chrome.
+ *
+ * 핵심 원칙(점진 이관): 레거시 .app-shell grid는 구조를 바꾸지 않는다.
+ * center-board / right-rail / status-bar 가 `grid-column: 2`를 명시 참조하므로
+ * 컬럼 인덱스는 그대로 두고, 좌측 264px 열만 0으로 접는다(레거시 left-rail은
+ * 더 이상 렌더하지 않고 PrimaryRail이 그 역할을 외부에서 영속으로 수행).
+ */
+
+.orchestrator-shell {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 레거시 app-shell을 캔버스 안에서 100%로 채운다(원래 100vw/100vh 고정). */
+.orchestrator-canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+}
+
+.orchestrator-canvas > .app-shell {
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * 비-focus(기본) 표면에서 좌측 264px 열을 0으로 접는다. focus shell 변형
+ * (tmux/cockpit/annex/debate/conversation-v0)은 이미 단일 컬럼이라 건드리지 않는다.
+ */
+.orchestrator-canvas
+  > .app-shell:not(.tmux-focus-shell):not(.cockpit-focus-shell):not(.annex-focus-shell):not(.debate-focus-shell):not(.conversation-v0-shell) {
+  grid-template-columns: 0 minmax(0, 1fr) 280px;
+}
+
+/* ---------------- Primary Rail (2단: 섹션 아이콘 + SectionTabs) ---------------- */
+
+.primary-rail {
+  display: flex;
+  flex: 0 0 232px;
+  flex-direction: column;
+  width: 232px;
+  height: 100%;
+  padding: 12px 10px;
+  gap: 14px;
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  overflow-y: auto;
+}
+
+.primary-rail__brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 6px 8px;
+}
+
+.primary-rail__brand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--cyan) 18%, transparent);
+  color: var(--cyan);
+}
+
+.primary-rail__brand-text {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.primary-rail__sections {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.primary-rail__section {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.primary-rail__section:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+
+.primary-rail__section.active {
+  border-color: color-mix(in srgb, var(--cyan) 30%, transparent);
+  background: color-mix(in srgb, var(--cyan) 12%, transparent);
+  color: var(--text);
+}
+
+.primary-rail__section:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.primary-rail__section-label {
+  white-space: nowrap;
+}
+
+.primary-rail__tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.primary-rail__tabs-label {
+  margin: 0 0 2px;
+  padding: 0 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--subtle);
+}
+
+.section-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.section-tab {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.section-tab:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+
+.section-tab.active {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.section-tab:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+/* ---------------- Inspector(구조 슬롯, STEP 1 미사용) ---------------- */
+
+.inspector-panel {
+  flex: 0 0 320px;
+  height: 100%;
+  border-left: 1px solid var(--line);
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  overflow-y: auto;
+}
+
+/*
+ * 좁은 뷰포트: 레일 폭만 줄인다. flex 레일이라 콘텐츠를 덮지 않으며,
+ * 섹션/탭을 모두 유지해 모든 surface가 계속 도달 가능하다(reachability 보존).
+ */
+@media (max-width: 1024px) {
+  .primary-rail {
+    flex-basis: 188px;
+    width: 188px;
+    padding: 12px 8px;
+  }
+
+  .inspector-panel {
+    flex-basis: 280px;
+  }
+}
