@@ -182,3 +182,37 @@ describe("characterCard — conversion fallback branches", () => {
     expect(files.agentsMd).not.toContain("(예시 대사 없음)"); // the empty-anchor branch is NOT taken
   });
 });
+
+// Every example-dialogue test above quotes lines with the {{char}}: macro and
+// stays well under a dozen anchors, so three exampleDialogueAnchors branches
+// never fire: the SECOND filter arm that matches a line prefixed with the card's
+// LITERAL name (the common SillyTavern "Name: …" export, not the macro), the
+// slice(0,12) anchor cap, and the escapeRegExp guard that lets a regex-special
+// character name be matched LITERALLY instead of crashing the importer. Pin
+// them, self-consistent (anchors derived from the lines we feed in).
+describe("characterCard — exampleDialogueAnchors literal-name match, 12-cap, regex-special name", () => {
+  it("captures example lines prefixed with the card's literal name (not just the {{char}} macro), tolerating spaces before the colon", () => {
+    const files = characterCardToPersonaFiles({
+      name: "Rin",
+      mes_example: "Rin: 첫 대사\nRin : 띄어쓴 대사\n사용자: 무시됨",
+    });
+    expect(files.agentsMd).toContain('- "첫 대사"'); // literal-name arm, exact prefix
+    expect(files.agentsMd).toContain('- "띄어쓴 대사"'); // `\s*:` tolerates the space before the colon
+    expect(files.agentsMd).not.toContain("무시됨"); // a non-char/non-name speaker line is dropped
+  });
+
+  it("caps the anchor list at 12 via slice(0,12), dropping the overflow lines", () => {
+    const many = Array.from({ length: 15 }, (_, i) => `Cap: 대사${i}`).join("\n");
+    const files = characterCardToPersonaFiles({ name: "Cap", mes_example: many });
+    expect(files.agentsMd).toContain('- "대사11"'); // the 12th anchor (index 11) is kept
+    expect(files.agentsMd).not.toContain('- "대사12"'); // the 13th is sliced off
+    expect(files.agentsMd).not.toContain('- "대사14"');
+  });
+
+  it("matches a regex-special character name LITERALLY (escapeRegExp), capturing the anchor without throwing", () => {
+    const card = { name: "C++ {Bot}", mes_example: "C++ {Bot}: 위험한 이름" };
+    expect(() => characterCardToPersonaFiles(card)).not.toThrow(); // an unescaped name would be an invalid regex
+    const files = characterCardToPersonaFiles(card);
+    expect(files.agentsMd).toContain('- "위험한 이름"'); // the literal-name arm still fires after escaping
+  });
+});
