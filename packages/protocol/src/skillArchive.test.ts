@@ -335,3 +335,69 @@ describe("buildSkillRuntimeManifest — deterministic", () => {
     expect(manifest.blocked).toEqual([]);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Block-reason accumulation, waived precedence, and activation-basis edges.
+//
+// The S2–S19 cases pin the happy paths and single-reason blocks (always via
+// .toContain), but leave three deny-by-default *honesty* edges unpinned:
+//   (a) when several conditions fail at once, isSkillRuntimeLoadable accumulates
+//       EVERY applicable reason in a fixed order [not_trusted, not_active,
+//       no_eval_basis] — except `quarantined`, which short-circuits and SUPPRESSES
+//       all other reasons (a single hard block, not a list). That contrast is the
+//       whole point of "격리는 단독 하드 차단".
+//   (b) `waived` means "loadable purely on a waiver" — so when BOTH evalRunId and
+//       evalWaiverReason are present, the real eval run is the basis and waived is
+//       false (evalRunId wins; the waiver flag must not over-claim a waiver).
+//   (c) activateSkill's eval basis can come from the record's OWN evalWaiverReason
+//       (not just input), and activationScope passes through when input omits it.
+//   (d) quarantineSkill has no state guard — it hard-quarantines from any state.
+// Pin them, self-consistent with the source logic.
+describe("skillArchive — block-reason accumulation, waived precedence, activation basis", () => {
+  it("accumulates every applicable block reason in fixed order for a non-quarantine failure", () => {
+    // suggested (not trusted) + inactive (not active) + no eval basis → all three, in push order.
+    const v = isSkillRuntimeLoadable(cand("s", "suggested"), activation("s", "inactive"));
+    expect(v.loadable).toBe(false);
+    expect(v.reasons).toEqual(["not_trusted", "not_active", "no_eval_basis"]);
+    expect(v.waived).toBe(false);
+  });
+
+  it("quarantined short-circuits and suppresses all other honest reasons", () => {
+    // Same fully-failing candidate, but quarantined → ONLY ["quarantined"], not the 3-reason list.
+    const v = isSkillRuntimeLoadable(cand("s", "suggested"), activation("s", "quarantined"));
+    expect(v.reasons).toEqual(["quarantined"]);
+    expect(v.reasons).not.toContain("not_trusted");
+    expect(v.reasons).not.toContain("no_eval_basis");
+  });
+
+  it("evalRunId is the basis over a co-present waiver → loadable but waived=false", () => {
+    const v = isSkillRuntimeLoadable(
+      cand("s", "pinned"),
+      activation("s", "active", { evalRunId: "e1", evalWaiverReason: "also waivable" }),
+    );
+    expect(v.loadable).toBe(true);
+    expect(v.waived).toBe(false); // real eval run present ⇒ not a waiver, even though a waiver exists
+  });
+
+  it("activateSkill uses the record's own evalWaiverReason as basis and preserves activationScope", () => {
+    // eval basis comes from the existing record (no input waiver), scope passes through.
+    const passed = activation("s", "eval_passed", { evalWaiverReason: "boot", activationScope: "project:x" });
+    const activated = activateSkill(passed, { now: T });
+    expect(activated.activationStatus).toBe("active");
+    expect(activated.evalWaiverReason).toBe("boot");
+    expect(activated.activationScope).toBe("project:x"); // input omitted scope ⇒ keep existing
+    expect(activated.activatedAt).toBe(T());
+    expect(activated.updatedAt).toBe(T());
+  });
+
+  it("quarantineSkill hard-quarantines from any state (no guard), recording the reason", () => {
+    for (const status of ["inactive", "eval_pending", "active"] as const) {
+      const q = quarantineSkill(activation("s", status, { evalRunId: "e1" }), `bad: ${status}`, T);
+      expect(q.activationStatus).toBe("quarantined");
+      expect(q.quarantinedReason).toBe(`bad: ${status}`);
+      expect(q.updatedAt).toBe(T());
+      // and a quarantined record is then unconditionally non-loadable
+      expect(isSkillRuntimeLoadable(cand("s", "pinned"), q).reasons).toEqual(["quarantined"]);
+    }
+  });
+});
