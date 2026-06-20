@@ -5,6 +5,9 @@ import {
   GITHUB_MULTIFILE_COMMIT_TOTAL_BYTES_MAX,
   GITHUB_PR_LABELS_MAX_CHANGE,
   GITHUB_PR_LABEL_NAME_MAX,
+  GITHUB_PR_UPDATE_BODY_EXCERPT_MAX,
+  GITHUB_PR_UPDATE_BODY_MAX,
+  GITHUB_PR_UPDATE_TITLE_MAX,
   githubBranchCreateExecuteRequestSchema,
   githubBranchCreateOutcomeSchema,
   githubBranchCreatePlanRequestSchema,
@@ -21,6 +24,10 @@ import {
   githubPullRequestLabelsUpdateExecuteResponseSchema,
   githubPullRequestLabelsUpdateOutcomeSchema,
   githubPullRequestLabelsUpdatePlanRequestSchema,
+  githubPullRequestUpdateExecuteRequestSchema,
+  githubPullRequestUpdateExecuteResponseSchema,
+  githubPullRequestUpdateOutcomeSchema,
+  githubPullRequestUpdatePlanRequestSchema,
   githubReadonlyResourceResponseSchema,
   githubResourceOutcomeSchema,
   githubPullRequestDetailSchema,
@@ -362,5 +369,88 @@ describe("githubConnector — W5d PR labels: honest no_op, TOCTOU integrity, con
       "connection_failed",
     ]);
     expect(reasons).toContain("toctou_labels_mismatch");
+  });
+});
+
+// Sibling TOCTOU write surface — W5c PR title/body update — stays unpinned. It is
+// distinct from W5d labels in three authority-relevant ways:
+//   - PARTIAL update by least privilege: newTitle and newBody are BOTH optional, so
+//     an unstated field is left untouched (no implicit overwrite of the other);
+//   - an asymmetry that mirrors GitHub's own rule — a title can't be blanked
+//     (newTitle min 1) but a body CAN be cleared (newBody allows "");
+//   - DUAL TOCTOU integrity keys: execute must carry BOTH the current-title and
+//     current-body sha, and the reason vocabulary names title and body mismatches
+//     SEPARATELY (toctou_title_mismatch / toctou_body_mismatch).
+// Plus the shared honesty contract: an honest `no_op` outcome and approval-ONLY
+// execute. Expected values are read off the schemas/constants (self-consistent).
+describe("githubConnector — W5c PR title/body update: partial least-privilege, dual TOCTOU, honest no_op", () => {
+  it("exports the title/body caps and treats newTitle/newBody as optional partial-update fields (omitting both is valid)", () => {
+    expect(GITHUB_PR_UPDATE_TITLE_MAX).toBe(160);
+    expect(GITHUB_PR_UPDATE_BODY_MAX).toBe(16_000);
+    expect(GITHUB_PR_UPDATE_BODY_EXCERPT_MAX).toBe(240);
+    const parsed = githubPullRequestUpdatePlanRequestSchema.parse({ repoFullName: "owner/repo", pullNumber: 1 });
+    expect(parsed.newTitle).toBeUndefined(); // unstated ⇒ that field is left untouched
+    expect(parsed.newBody).toBeUndefined();
+  });
+
+  it("newTitle is 1..160 (a title can't be blanked) but newBody allows '' (clearing the body) up to 16000", () => {
+    const base = { repoFullName: "owner/repo", pullNumber: 1 };
+    expect(githubPullRequestUpdatePlanRequestSchema.safeParse({ ...base, newTitle: "" }).success).toBe(false); // min 1
+    expect(githubPullRequestUpdatePlanRequestSchema.safeParse({ ...base, newTitle: "x".repeat(GITHUB_PR_UPDATE_TITLE_MAX) }).success).toBe(true);
+    expect(githubPullRequestUpdatePlanRequestSchema.safeParse({ ...base, newTitle: "x".repeat(GITHUB_PR_UPDATE_TITLE_MAX + 1) }).success).toBe(false);
+    expect(githubPullRequestUpdatePlanRequestSchema.safeParse({ ...base, newBody: "" }).success).toBe(true); // empty body = clear, allowed
+    expect(githubPullRequestUpdatePlanRequestSchema.safeParse({ ...base, newBody: "x".repeat(GITHUB_PR_UPDATE_BODY_MAX) }).success).toBe(true);
+    expect(githubPullRequestUpdatePlanRequestSchema.safeParse({ ...base, newBody: "x".repeat(GITHUB_PR_UPDATE_BODY_MAX + 1) }).success).toBe(false);
+  });
+
+  it("requires a positive integer pullNumber and the owner/repo shape", () => {
+    expect(githubPullRequestUpdatePlanRequestSchema.safeParse({ repoFullName: "owner/repo", pullNumber: 0 }).success).toBe(false);
+    expect(githubPullRequestUpdatePlanRequestSchema.safeParse({ repoFullName: "owner/repo", pullNumber: 1.5 }).success).toBe(false);
+    expect(githubPullRequestUpdatePlanRequestSchema.safeParse({ repoFullName: "noslash", pullNumber: 1 }).success).toBe(false);
+  });
+
+  it("execute requires BOTH current title+body TOCTOU keys and is approval-ONLY (no armed channel)", () => {
+    const valid = { planId: "p1", expectedCurrentTitleSha256: "ts", expectedCurrentBodySha256: "bs", approvalId: "appr_1" };
+    expect(githubPullRequestUpdateExecuteRequestSchema.safeParse(valid).success).toBe(true);
+    expect(githubPullRequestUpdateExecuteRequestSchema.safeParse({ planId: "p1", expectedCurrentBodySha256: "bs", approvalId: "a" }).success).toBe(false); // title key missing
+    expect(githubPullRequestUpdateExecuteRequestSchema.safeParse({ planId: "p1", expectedCurrentTitleSha256: "ts", approvalId: "a" }).success).toBe(false); // body key missing
+    expect(githubPullRequestUpdateExecuteRequestSchema.safeParse({ planId: "p1", expectedCurrentTitleSha256: "ts", expectedCurrentBodySha256: "bs" }).success).toBe(false); // approvalId missing
+    const parsed = githubPullRequestUpdateExecuteRequestSchema.parse({ ...valid, autoExecuteArmed: true } as Record<string, unknown>);
+    expect("autoExecuteArmed" in parsed).toBe(false);
+  });
+
+  it("the outcome carries an honest 'no_op' state (a same-title/same-body update isn't faked as a change)", () => {
+    expect(githubPullRequestUpdateOutcomeSchema.options).toEqual([
+      "observed",
+      "planned",
+      "approval_required",
+      "blocked",
+      "no_op",
+      "not_configured",
+      "permission_denied",
+      "connection_failed",
+      "github_error",
+    ]);
+    expect(githubPullRequestUpdateOutcomeSchema.options).toContain("no_op");
+  });
+
+  it("the execute 'reason' is a closed machine vocabulary with SEPARATE title/body TOCTOU mismatch reasons", () => {
+    const reasons = githubPullRequestUpdateExecuteResponseSchema.shape.reason.unwrap().options;
+    expect(reasons).toEqual([
+      "no_op",
+      "title_too_long",
+      "body_too_long",
+      "secret_suspect",
+      "pr_closed",
+      "pr_not_found",
+      "toctou_title_mismatch",
+      "toctou_body_mismatch",
+      "allowlist",
+      "permission_denied",
+      "github_error",
+      "connection_failed",
+    ]);
+    expect(reasons).toContain("toctou_title_mismatch");
+    expect(reasons).toContain("toctou_body_mismatch");
   });
 });
