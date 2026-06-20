@@ -401,3 +401,96 @@ describe("skillArchive — block-reason accumulation, waived precedence, activat
     }
   });
 });
+
+// deriveSkillCandidatesFromMission is tested for WHICH candidates appear
+// (merge / fix / none), but the CONTENT honesty of each is unpinned. Two rules
+// matter: (1) the merge summary only shows a "branch → sha" ref when a REAL
+// mergeCommitSha exists (and prefers sourceBranch over branchName), else a
+// neutral phrase with no fabricated ref; (2) a fix candidate may only be minted
+// when the recovering pass is OBSERVED (skillArchive.ts:76) — a simulated pass
+// cannot mint a "this is how we fixed it" skill — and it carries the directive
+// verbatim as its reusablePrompt (or a neutral summary + no prompt when absent).
+describe("deriveSkillCandidatesFromMission — content honesty (merge ref needs real sha, fix needs observed pass)", () => {
+  const merge = (candidates: SkillArchiveCandidate[]) => candidates.find((c) => c.source === "merge_pattern");
+  const fix = (candidates: SkillArchiveCandidate[]) => candidates.find((c) => c.source === "verification_fix");
+
+  it("merge summary shows sourceBranch (preferred) → sha sliced to 10 when a real sha exists", () => {
+    const c = deriveSkillCandidatesFromMission(
+      record({
+        mergeQueueItems: [
+          { id: "mq", branchName: "agent/m1", sourceBranch: "feat/x", status: "merged", mergeCommitSha: "abcdef1234567890", conflictFiles: [], reason: "ok", queuedAt: "t" },
+        ] as never,
+      }),
+      now,
+    );
+    expect(merge(c)!.summary).toBe("feat/x → abcdef1234"); // sourceBranch preferred, sha → first 10
+  });
+
+  it("merge summary falls back to branchName when sourceBranch is absent (still a real sha)", () => {
+    const c = deriveSkillCandidatesFromMission(
+      record({
+        mergeQueueItems: [
+          { id: "mq", branchName: "agent/m1", status: "merged", mergeCommitSha: "abcdef1234567890", conflictFiles: [], reason: "ok", queuedAt: "t" },
+        ] as never,
+      }),
+      now,
+    );
+    expect(merge(c)!.summary).toBe("agent/m1 → abcdef1234");
+  });
+
+  it("merge summary fabricates NO ref when the merged item has no sha — neutral phrase only", () => {
+    const c = deriveSkillCandidatesFromMission(
+      record({
+        mergeQueueItems: [
+          { id: "mq", branchName: "agent/m1", sourceBranch: "feat/x", status: "merged", conflictFiles: [], reason: "ok", queuedAt: "t" },
+        ] as never,
+      }),
+      now,
+    );
+    expect(merge(c)!.summary).toBe("검증 통과 후 순차 머지");
+    expect(merge(c)!.summary).not.toContain("→"); // no fabricated branch→sha line
+  });
+
+  it("a fix candidate is minted ONLY when the recovering pass is observed — a simulated pass cannot", () => {
+    const c = deriveSkillCandidatesFromMission(
+      record({
+        verificationReports: [
+          { id: "v1", status: "failed", observed: true, checks: [], createdAt: "t" },
+          { id: "v2", status: "passed", observed: false, checks: [], createdAt: "t" }, // simulated pass
+        ] as never,
+      }),
+      now,
+    );
+    expect(fix(c)).toBeUndefined(); // no fix skill from an unobserved pass
+    expect(merge(c)).toBeDefined(); // ...but the merge candidate still stands (mission merged)
+  });
+
+  it("fix candidate carries the directive verbatim as reusablePrompt with high confidence", () => {
+    const c = deriveSkillCandidatesFromMission(
+      record({
+        verificationReports: [
+          { id: "v1", status: "failed", observed: true, checks: [], globalRevisionDirective: "guard null deref", createdAt: "t" },
+          { id: "v2", status: "passed", observed: true, checks: [], createdAt: "t" },
+        ] as never,
+      }),
+      now,
+    );
+    expect(fix(c)!.reusablePrompt).toBe("guard null deref");
+    expect(fix(c)!.summary).toBe("수정 지시: guard null deref");
+    expect(fix(c)!.confidence).toBe("high");
+  });
+
+  it("fix candidate without a directive → neutral summary and no reusablePrompt", () => {
+    const c = deriveSkillCandidatesFromMission(
+      record({
+        verificationReports: [
+          { id: "v1", status: "failed", observed: true, checks: [], createdAt: "t" },
+          { id: "v2", status: "passed", observed: true, checks: [], createdAt: "t" },
+        ] as never,
+      }),
+      now,
+    );
+    expect(fix(c)!.summary).toBe("실패한 검증을 통과로 되돌린 수정 패턴");
+    expect(fix(c)!.reusablePrompt).toBeUndefined();
+  });
+});
