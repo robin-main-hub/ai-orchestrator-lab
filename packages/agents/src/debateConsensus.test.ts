@@ -2,11 +2,50 @@ import { describe, expect, it } from "vitest";
 import {
   classifyInterruptPriority,
   clusterResponses,
+  compareTokens,
   detectConsensus,
   shouldInterrupt,
   textSimilarity,
   type ConsensusState,
 } from "./debateConsensus";
+
+// compareTokens is the 0-ref tokenization primitive underneath textSimilarity
+// (and thus clusterResponses / detectConsensus). The whole Aegean consensus
+// signal rides on its normalization rules, yet they are only exercised
+// indirectly today. Pin them directly: lowercase, split on non-alnum/hangul,
+// drop <2-char tokens, strip stopwords, and the 2-char stem for >=3-char
+// tokens that lets 조사-inflected Korean (캐시를 vs 캐시) collapse to the same
+// token. Expected sets are derived from the documented rule, not magic.
+describe("compareTokens", () => {
+  it("the 2-char stem makes a 조사-inflected phrase tokenize identically to its bare form", () => {
+    // "캐시를 도입하자" → ["캐시를"→"캐시", "도입하자"→"도입"]; "캐시 도입" → ["캐시","도입"]
+    const inflected = compareTokens("캐시를 도입하자");
+    expect(inflected).toEqual(new Set(["캐시", "도입"]));
+    expect(compareTokens("캐시 도입")).toEqual(inflected);
+  });
+
+  it("lowercases and stems English (>=3 chars) to its first two letters", () => {
+    expect(compareTokens("Cache")).toEqual(new Set(["ca"]));
+    // different surface form, same stem → collapses together
+    expect(compareTokens("Caching")).toEqual(compareTokens("Cache"));
+  });
+
+  it("drops tokens shorter than 2 chars (incl. a lone digit) and splits on punctuation", () => {
+    // "7" is length 1 → dropped; "," and "!" are split boundaries
+    expect(compareTokens("7 캐시,도입!")).toEqual(new Set(["캐시", "도입"]));
+  });
+
+  it("strips Korean and English stopwords", () => {
+    expect(compareTokens("그리고 the 캐시")).toEqual(new Set(["캐시"]));
+  });
+
+  it("dedupes via Set when stem + bare form coincide, and returns empty on no usable tokens", () => {
+    // "캐시를"→"캐시" and "캐시"→"캐시" collapse to a single entry
+    expect(compareTokens("캐시를 캐시")).toEqual(new Set(["캐시"]));
+    expect(compareTokens("")).toEqual(new Set());
+    expect(compareTokens("!!! ,,,")).toEqual(new Set());
+  });
+});
 
 describe("textSimilarity", () => {
   it("동일/유사/무관", () => {
