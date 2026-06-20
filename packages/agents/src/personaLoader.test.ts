@@ -437,6 +437,42 @@ describe("loadPersona — optional IDENTITY.md / USER.md fragments", () => {
   });
 });
 
+// Every optional-fragment test above runs in soul_plus_agents mode, so one
+// branch stays unpinned: the optional IDENTITY/USER probe is INDEPENDENT of the
+// mandatory mode — it runs for any non-off mode (soul_only / agents_only too),
+// not only the 2-file character body. The flip side is least-privilege: a file
+// that is mandatory in ANOTHER mode (AGENTS in soul_only, SOUL in agents_only)
+// is NOT silently pulled in as an optional — only IDENTITY/USER are optional, so
+// soul_only never loads AGENTS. Pin both, self-consistent (sources derived from
+// which files the fixture provides + the mode's mandatory set).
+describe("loadPersona — optional probe is mode-independent for any non-off mode", () => {
+  it("soul_only still slots IDENTITY before / USER after the single SOUL, and does NOT pull in AGENTS", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/kurumi/SOUL.md": "soul body",
+      "agents/kurumi/AGENTS.md": "agents body (not a soul_only mandatory)",
+      "agents/kurumi/IDENTITY.md": "identity body",
+      "agents/kurumi/USER.md": "user body",
+    });
+    const loaded = await loadPersona("kurumi", "soul_only", src);
+    const sources = loaded.fragments.map((f) => f.source);
+    expect(sources).toEqual(["identity", "soul", "user"]); // optionals wrap the lone mandatory SOUL
+    // AGENTS is mandatory only in other modes and is not optional → never loaded here
+    expect(loaded.fragments.some((f) => f.source === "agents")).toBe(false);
+  });
+
+  it("agents_only also picks up IDENTITY (optional probe independent of the mandatory set), without loading SOUL", async () => {
+    const src = createInMemoryPersonaSource({
+      "agents/kurumi/SOUL.md": "soul body (not an agents_only mandatory)",
+      "agents/kurumi/AGENTS.md": "agents body",
+      "agents/kurumi/IDENTITY.md": "identity body",
+    });
+    const loaded = await loadPersona("kurumi", "agents_only", src);
+    const sources = loaded.fragments.map((f) => f.source);
+    expect(sources).toEqual(["identity", "agents"]); // identity before the lone AGENTS; no USER fixture → skipped
+    expect(loaded.fragments.some((f) => f.source === "soul")).toBe(false);
+  });
+});
+
 describe("buildPersonaPromptFragment — 4-file companion (kurumi shape)", () => {
   it("renders all four fragments with their relativePath headings in order", async () => {
     const src = createInMemoryPersonaSource({
