@@ -8,7 +8,17 @@ import {
   missionVerificationRecordedPayloadSchema,
   missionVerifyRequestSchema,
   missionWorkerAssignmentRequestSchema,
+  sandboxCaptureResultSchema,
+  sandboxExecRequestSchema,
   sandboxExecResultSchema,
+  sandboxExecStatusSchema,
+  sandboxIsolationLevelSchema,
+  sandboxKindSchema,
+  sandboxNetworkPolicySchema,
+  sandboxPreflightResultSchema,
+  sandboxResourceLimitsSchema,
+  sandboxRunModeSchema,
+  sandboxWorkspacePolicySchema,
   sequentialMergeQueueItemSchema,
   verificationReportSchema,
 } from "./productKernel.js";
@@ -212,5 +222,121 @@ describe("productKernel — bounded verify, terminal-only close, real-sha-only m
     });
     expect(item.mergeCommitSha).toBeUndefined(); // a real sha appears only once the server observes it
     expect(item.conflictFiles).toEqual([]);
+  });
+});
+
+// The suites above pin the mission/merge/verify authority boundaries, plus the
+// observed-honesty flag on a sandbox *result*. But the SANDBOX CAPABILITY half of
+// productKernel — the seam where coding execution stops depending on tmux and
+// becomes an isolation-typed contract — is otherwise unpinned (sandboxExecResult
+// is the only sandbox schema touched today). These schemas encode the
+// isolation/least-privilege boundary every runner must honor:
+//   (11) deny/off ordering — sandboxKind and sandboxIsolationLevel both lead with
+//        their inert option ("disabled"/"none"): the most-isolated default sorts
+//        first, the escalating capability tiers follow.
+//   (12) network is deny-by-default DATA — allowedHosts defaults to [] (no implicit
+//        host is reachable) and a `reason` is REQUIRED (a policy can't be silent);
+//        mode is a closed {disabled,allowlist,full}.
+//   (13) no unbounded run — timeoutSeconds AND maxOutputBytes are REQUIRED positive
+//        ints (a run can't be infinite or produce unbounded output); cpu/mem/disk
+//        are optional positive caps.
+//   (14) nothing writable unless named — writablePaths/readOnlyPaths default to []
+//        and cleanup is a closed 3-value disposal enum; repoRoot is required.
+//   (15) the run mode is a closed {read_only,verify,build,merge_recommend} ladder
+//        (read_only first = least privilege); an exec request names mission+worker.
+//   (16) honest preflight + status — a preflight cannot omit allowed/requiresApproval
+//        (no defaulting to a comfortable allow), the exec status is a closed
+//        {completed,failed,blocked,timeout} (honest failure states, no bare "ok"),
+//        and a capture is observation-timestamped.
+// Expected values are read off the schemas (self-consistent), never magic.
+describe("productKernel — sandbox capability boundary: deny/off-by-default, bounded, honest", () => {
+  it("sandboxKind and sandboxIsolationLevel both lead with their inert (most-isolated) option", () => {
+    expect(sandboxKindSchema.options).toEqual([
+      "disabled",
+      "legacy_tmux",
+      "local_process",
+      "docker_rootless",
+      "docker_gvisor",
+      "firecracker",
+      "remote_codex",
+      "remote_opencode",
+    ]);
+    expect(sandboxKindSchema.options[0]).toBe("disabled"); // off is the first-listed kind
+    expect(sandboxIsolationLevelSchema.options).toEqual([
+      "none",
+      "process",
+      "container",
+      "user_space_kernel",
+      "microvm",
+      "remote_managed",
+    ]);
+    expect(sandboxIsolationLevelSchema.options[0]).toBe("none");
+  });
+
+  it("network policy is deny-by-default DATA — allowedHosts defaults to [], reason required, mode closed", () => {
+    const parsed = sandboxNetworkPolicySchema.parse({ mode: "disabled", reason: "no egress for read-only runs" });
+    expect(parsed.allowedHosts).toEqual([]); // no implicit host is reachable
+    // a policy can't be silent about WHY
+    expect(sandboxNetworkPolicySchema.safeParse({ mode: "disabled" }).success).toBe(false);
+    // mode vocabulary is closed
+    expect(sandboxNetworkPolicySchema.safeParse({ mode: "vpn", reason: "x" }).success).toBe(false);
+    for (const mode of ["disabled", "allowlist", "full"]) {
+      expect(sandboxNetworkPolicySchema.safeParse({ mode, reason: "x" }).success).toBe(true);
+    }
+  });
+
+  it("resource limits forbid an unbounded run — timeoutSeconds and maxOutputBytes are REQUIRED positive ints", () => {
+    const ok = sandboxResourceLimitsSchema.parse({ timeoutSeconds: 60, maxOutputBytes: 1_000_000 });
+    expect(ok.cpuCores).toBeUndefined(); // optional caps stay unset, not fabricated
+    expect(sandboxResourceLimitsSchema.safeParse({ maxOutputBytes: 1 }).success).toBe(false); // no timeout
+    expect(sandboxResourceLimitsSchema.safeParse({ timeoutSeconds: 1 }).success).toBe(false); // no output cap
+    expect(sandboxResourceLimitsSchema.safeParse({ timeoutSeconds: 0, maxOutputBytes: 1 }).success).toBe(false); // positive
+    expect(sandboxResourceLimitsSchema.safeParse({ timeoutSeconds: 1.5, maxOutputBytes: 1 }).success).toBe(false); // int
+    expect(sandboxResourceLimitsSchema.safeParse({ timeoutSeconds: 1, maxOutputBytes: 1, memoryMb: 1.5 }).success).toBe(false); // int cap
+    expect(sandboxResourceLimitsSchema.safeParse({ timeoutSeconds: 1, maxOutputBytes: 1, cpuCores: 0.5 }).success).toBe(true); // fractional cores allowed
+  });
+
+  it("workspace policy: nothing writable unless named (paths default []), cleanup is a closed disposal enum", () => {
+    const parsed = sandboxWorkspacePolicySchema.parse({ repoRoot: "/repo", cleanup: "destroy_on_success" });
+    expect(parsed.writablePaths).toEqual([]); // nothing is writable by default
+    expect(parsed.readOnlyPaths).toEqual([]);
+    expect(parsed.worktreePath).toBeUndefined(); // optional, not fabricated
+    expect(sandboxWorkspacePolicySchema.safeParse({ cleanup: "destroy_on_success" }).success).toBe(false); // repoRoot required
+    expect(sandboxWorkspacePolicySchema.safeParse({ repoRoot: "/repo", cleanup: "leak" }).success).toBe(false); // closed enum
+    for (const cleanup of ["destroy_on_success", "keep_on_failure", "keep_until_manual_cleanup"]) {
+      expect(sandboxWorkspacePolicySchema.safeParse({ repoRoot: "/repo", cleanup }).success).toBe(true);
+    }
+  });
+
+  it("run mode is a closed least-first ladder and an exec request names mission+worker+command", () => {
+    expect(sandboxRunModeSchema.options).toEqual(["read_only", "verify", "build", "merge_recommend"]);
+    expect(sandboxRunModeSchema.options[0]).toBe("read_only"); // least privilege leads
+    const req = sandboxExecRequestSchema.parse({
+      id: "x1",
+      missionId: "m1",
+      workerId: "w1",
+      command: "pnpm test",
+      mode: "verify",
+      createdAt: "2026-06-21T00:00:00.000Z",
+    });
+    expect(req.cwd).toBeUndefined(); // optional, not fabricated
+    expect(req.timeoutMs).toBeUndefined();
+    expect(sandboxExecRequestSchema.safeParse({ ...req, mode: "deploy" }).success).toBe(false); // not on the ladder
+    expect(sandboxExecRequestSchema.safeParse({ ...req, timeoutMs: 1.5 }).success).toBe(false); // positive int only
+  });
+
+  it("preflight cannot omit allowed/requiresApproval; exec status is closed; capture is observation-timestamped", () => {
+    // a preflight must state BOTH whether it's allowed and whether approval is still needed
+    expect(sandboxPreflightResultSchema.safeParse({ reason: "ok" }).success).toBe(false);
+    expect(sandboxPreflightResultSchema.safeParse({ allowed: true, reason: "ok" }).success).toBe(false); // requiresApproval missing
+    const pf = sandboxPreflightResultSchema.parse({ allowed: true, requiresApproval: true, reason: "build needs human approval" });
+    expect(pf.requiresApproval).toBe(true);
+    // honest failure states, no bare "ok"/"success"
+    expect(sandboxExecStatusSchema.options).toEqual(["completed", "failed", "blocked", "timeout"]);
+    expect(sandboxExecStatusSchema.options).not.toContain("ok");
+    // a capture carries the moment it was observed
+    expect(sandboxCaptureResultSchema.safeParse({ workerId: "w1", outputPreview: "x" }).success).toBe(false); // observedAt missing
+    const cap = sandboxCaptureResultSchema.parse({ workerId: "w1", outputPreview: "x", observedAt: "2026-06-21T00:00:00.000Z" });
+    expect(cap.observedAt).toBe("2026-06-21T00:00:00.000Z");
   });
 });
