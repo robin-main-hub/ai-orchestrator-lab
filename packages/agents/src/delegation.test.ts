@@ -7,6 +7,7 @@ import type {
 } from "@ai-orchestrator/protocol";
 import {
   COMPLETION_ONLY_TARGET_ROLES,
+  DEFAULT_BLOCKED_TARGETS,
   delegationAuthorityLevel,
   evaluateDelegationPolicy,
   parseDelegateTags,
@@ -146,6 +147,64 @@ describe("delegation policy", () => {
     });
     expect(decision.allowed).toBe(false);
     expect(decision.reason).toContain("orchestrator_plus");
+  });
+});
+
+// The existing "delegation policy" suite pins the role-authority gate
+// (companion→executor allowed, plain agent→executor blocked). It does NOT
+// directly characterize evaluateDelegationPolicy's *blocked-list* branch nor
+// the default deny posture. These are load-bearing: the blocked list is the
+// explicit deny knob, and DEFAULT_BLOCKED_TARGETS is the shipped default —
+// a silent change to either would re-route what delegations are permitted.
+describe("evaluateDelegationPolicy — blocked-list branch + default posture", () => {
+  it("ships an EMPTY default blocked list, so the default deny posture is role-authority, not name-blocking", () => {
+    expect(DEFAULT_BLOCKED_TARGETS.size).toBe(0);
+    // With the empty default, a plain agent delegating to a NON side-effect
+    // role is allowed — nothing is blocked purely by name out of the box.
+    const decision = evaluateDelegationPolicy({
+      caller: makeProfile({ id: "agent_builder", role: "builder" }),
+      target: makeProfile({ id: "agent_researcher", role: "researcher" }),
+      targetKey: "researcher",
+    });
+    expect(decision.allowed).toBe(true);
+    expect(decision.sideEffectsRequireApproval).toBe(false);
+    expect(decision.authorityLevel).toBe("agent");
+  });
+
+  it("blocks a target whose targetKey is in the blocked list, even for an orchestrator_plus caller (blocked list wins over authority)", () => {
+    const decision = evaluateDelegationPolicy({
+      caller: makeProfile({ id: "agent_kurumi", role: "companion" }),
+      target: makeProfile({ id: "agent_researcher", role: "researcher" }),
+      targetKey: "maomao",
+      blockedTargets: new Set(["maomao"]),
+    });
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe('target "maomao" is in blocked list');
+    // authority is still reported even on a block
+    expect(decision.authorityLevel).toBe("orchestrator_plus");
+  });
+
+  it("blocks a target whose ROLE is in the blocked list when no targetKey is supplied, citing the role", () => {
+    const decision = evaluateDelegationPolicy({
+      caller: makeProfile({ id: "agent_kurumi", role: "companion" }),
+      target: makeProfile({ id: "agent_researcher", role: "researcher" }),
+      blockedTargets: new Set(["researcher"]),
+    });
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe('target "researcher" is in blocked list');
+  });
+
+  it("runs the blocked-list check BEFORE the authority check (a blocked side-effect role reports the blocked-list reason, not the authority reason)", () => {
+    const decision = evaluateDelegationPolicy({
+      caller: makeProfile({ id: "agent_builder", role: "builder" }),
+      target: makeProfile({ id: "agent_executor", role: "executor" }),
+      targetKey: "executor",
+      blockedTargets: new Set(["executor"]),
+    });
+    expect(decision.allowed).toBe(false);
+    // both gates would deny, but the blocked-list reason takes precedence
+    expect(decision.reason).toBe('target "executor" is in blocked list');
+    expect(decision.reason).not.toContain("orchestrator_plus");
   });
 });
 
