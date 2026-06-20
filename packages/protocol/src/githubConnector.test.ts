@@ -16,7 +16,12 @@ import {
   githubCommentWriteExecuteResponseSchema,
   githubCommentWriteOutcomeSchema,
   githubCommentWritePlanRequestSchema,
+  githubFileChangeExecuteRequestSchema,
+  githubFileChangeExecuteResponseSchema,
+  githubFileChangeOperationSchema,
   githubFileChangeOutcomeSchema,
+  githubFileChangePlanRequestSchema,
+  githubFileChangePlanSchema,
   githubMultiFileCommitExecuteRequestSchema,
   githubMultiFileCommitExecuteResponseSchema,
   githubMultiFileCommitOutcomeSchema,
@@ -452,5 +457,131 @@ describe("githubConnector — W5c PR title/body update: partial least-privilege,
     ]);
     expect(reasons).toContain("toctou_title_mismatch");
     expect(reasons).toContain("toctou_body_mismatch");
+  });
+});
+
+// W3b — single-file create/update execute — is the one write surface above that
+// touches repository CONTENTS (PUT /contents), so its plan→execute contract is the
+// strictest of the family and is still entirely unpinned (the W3b schemas are only
+// referenced incidentally to contrast the multi-file outcome). The authority
+// invariants here:
+//   - operation is locked to exactly {create, update} (no delete verb exists);
+//   - "observed" is the ONLY success outcome — there is no "created"/"success"
+//     literal the server could self-assert (the comment plan *status* has "created"
+//     but the file-change OUTCOME deliberately does not);
+//   - the new content is carried as a sha256 replay-guard (newContentSha256) on BOTH
+//     the plan output and the execute input — the 3-way integrity key surfaces in
+//     the wire contract, not just server memory;
+//   - on a create, baseFileSha / baseContentSha256 stay undefined — a base blob sha
+//     is never fabricated for a file that did not exist;
+//   - execute is APPROVAL-ONLY: approvalId is REQUIRED and there is NO armed field,
+//     strictly stricter than the W1 comment execute (which accepts approval-OR-armed
+//     autoExecuteArmed) — a smuggled autoExecuteArmed is dropped by z.object;
+//   - success blob/commit shas are never fabricated when absent.
+// Expected values are read off the schemas (self-consistent), never magic.
+describe("githubConnector — W3b single-file change: locked verbs, 3-way sha integrity, approval-ONLY execute", () => {
+  const planRequest = { repoFullName: "o/r", branchName: "agent/x", path: "src/a.ts", newContent: "hello" };
+
+  it("operation is exactly {create, update} and the outcome has no bare-success literal (observed only)", () => {
+    expect(githubFileChangeOperationSchema.options).toEqual(["create", "update"]);
+    expect(githubFileChangeOutcomeSchema.options).toEqual([
+      "observed",
+      "planned",
+      "approval_required",
+      "blocked",
+      "not_configured",
+      "permission_denied",
+      "connection_failed",
+      "github_error",
+    ]);
+    // no self-assertable success word — the only success is evidence-named "observed"
+    for (const forged of ["success", "created", "done", "ok", "written"]) {
+      expect(githubFileChangeOutcomeSchema.options).not.toContain(forged);
+    }
+  });
+
+  it("plan request is owner/repo-shaped, path/branch bounded, baseFileSha optional, unknown keys stripped", () => {
+    expect(githubFileChangePlanRequestSchema.safeParse(planRequest).success).toBe(true);
+    expect(githubFileChangePlanRequestSchema.safeParse({ ...planRequest, repoFullName: "single" }).success).toBe(false);
+    expect(githubFileChangePlanRequestSchema.safeParse({ ...planRequest, path: "" }).success).toBe(false);
+    expect(githubFileChangePlanRequestSchema.safeParse({ ...planRequest, path: "x".repeat(513) }).success).toBe(false);
+    expect(githubFileChangePlanRequestSchema.safeParse({ ...planRequest, branchName: "x".repeat(121) }).success).toBe(false);
+    const parsed = githubFileChangePlanRequestSchema.parse({ ...planRequest, sourceSha: "deadbeef" } as Record<string, unknown>);
+    expect(parsed.baseFileSha).toBeUndefined(); // optional, not fabricated when omitted
+    expect("sourceSha" in parsed).toBe(false); // unknown key dropped
+  });
+
+  it("a create plan leaves baseFileSha / baseContentSha256 undefined (no fabricated base) and requires newContentSha256", () => {
+    const base = {
+      id: "fc1",
+      repoFullName: "o/r",
+      branchName: "agent/x",
+      branchRef: "refs/heads/agent/x",
+      path: "src/a.ts",
+      operation: "create" as const,
+      newContentSha256: "abc123",
+      newContentLength: 5,
+      diffPreview: "+hello",
+      diffTruncated: false,
+      diffStat: { additions: 1, deletions: 0 },
+      status: "planned" as const,
+      truthStatus: "planned" as const,
+      createdAt: "2026-06-21T00:00:00.000Z",
+      expiresAt: "2026-06-21T00:05:00.000Z",
+    };
+    const plan = githubFileChangePlanSchema.parse(base);
+    expect(plan.baseFileSha).toBeUndefined();
+    expect(plan.baseContentSha256).toBeUndefined();
+    // newContentSha256 is the replay-guard key — it cannot be omitted
+    const { newContentSha256: _drop, ...withoutSha } = base;
+    expect(githubFileChangePlanSchema.safeParse(withoutSha).success).toBe(false);
+    // diffStat counts are nonnegative ints
+    expect(githubFileChangePlanSchema.safeParse({ ...base, diffStat: { additions: -1, deletions: 0 } }).success).toBe(false);
+    // status / truthStatus are closed honesty enums
+    expect(githubFileChangePlanSchema.safeParse({ ...base, status: "created" }).success).toBe(false);
+    expect(githubFileChangePlanSchema.safeParse({ ...base, truthStatus: "verified" }).success).toBe(false);
+  });
+
+  it("the newContentSha256 integrity key appears on BOTH the plan output and the execute input (3-way)", () => {
+    // execute carries the same replay-guard key the plan produced + the planId
+    const exec = githubFileChangeExecuteRequestSchema.parse({ planId: "fc1", newContentSha256: "abc123", approvalId: "ap1" });
+    expect(exec.newContentSha256).toBe("abc123");
+    const { newContentSha256: _drop, ...withoutSha } = exec;
+    expect(githubFileChangeExecuteRequestSchema.safeParse({ ...withoutSha, planId: "fc1", approvalId: "ap1" }).success).toBe(false);
+  });
+
+  it("execute is APPROVAL-ONLY — approvalId required, no armed field (stricter than comment execute, which keeps armed)", () => {
+    // comment execute (W1) accepts an armed self-auth flag…
+    const comment = githubCommentWriteExecuteRequestSchema.parse({ planId: "c1", bodySha256: "s", autoExecuteArmed: true });
+    expect(comment.autoExecuteArmed).toBe(true);
+    // …but the file-change execute has NO armed field — a smuggled autoExecuteArmed is dropped…
+    const file = githubFileChangeExecuteRequestSchema.parse({
+      planId: "fc1",
+      newContentSha256: "abc123",
+      approvalId: "ap1",
+      autoExecuteArmed: true,
+      armedAt: "2026-06-21T00:00:00.000Z",
+    } as Record<string, unknown>);
+    expect("autoExecuteArmed" in file).toBe(false);
+    expect("armedAt" in file).toBe(false);
+    // …and approvalId is mandatory (no approval-or-armed fallback)
+    expect(githubFileChangeExecuteRequestSchema.safeParse({ planId: "fc1", newContentSha256: "abc123" }).success).toBe(false);
+  });
+
+  it("execute response never fabricates commit/blob shas when absent; truthStatus is the closed 3-value enum", () => {
+    const minimal = githubFileChangeExecuteResponseSchema.parse({ outcome: "blocked", planId: "fc1", truthStatus: "planned" });
+    expect(minimal.commitSha).toBeUndefined();
+    expect(minimal.blobSha).toBeUndefined();
+    expect(minimal.htmlUrl).toBeUndefined();
+    expect(minimal.observedAt).toBeUndefined();
+    expect(githubFileChangeExecuteResponseSchema.safeParse({ outcome: "observed", planId: "fc1", truthStatus: "real" }).success).toBe(false);
+    const observed = githubFileChangeExecuteResponseSchema.parse({
+      outcome: "observed",
+      planId: "fc1",
+      commitSha: "c0ffee",
+      blobSha: "b10b",
+      truthStatus: "observed",
+    });
+    expect(observed.commitSha).toBe("c0ffee"); // present only because we supplied real evidence
   });
 });
