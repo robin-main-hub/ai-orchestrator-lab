@@ -222,3 +222,43 @@ describe("lorebook — blank-key non-wildcard + shared-tenant pin + render/impor
     expect(imported.entries[0]!.caseSensitive).toBe(false); // default
   });
 });
+
+// The budget test ("respects insertion order, max entries, and the token
+// budget") exercises the oversized-skip via the DEFAULT estimator only, and the
+// entryMatches loop is always pinned with a single matching key. Three selection
+// internals stay unpinned: (1) the options.estimate override — 0-ref across the
+// test tree — which lets a caller swap the token-cost model, so it, not
+// estimateTokens, must gate the budget; (2) entryMatches advancing PAST a
+// non-matching key to trigger on a LATER key (the for-loop continuation, not
+// just the first key); and (3) the budget boundary — `spentTokens + cost >
+// tokenBudget` is strict `>`, so a cost EXACTLY equal to the remaining budget is
+// included, and only the next entry tips it over. Pin them self-consistently:
+// estimateTokens(t) === Math.ceil(t.length / 4), and the custom estimator's
+// output is whatever we hand it.
+describe("scanLorebooks — custom estimate, multi-key trigger, exact-budget boundary", () => {
+  it("uses options.estimate INSTEAD of estimateTokens to gate the budget", () => {
+    const tiny = book({ entries: [entry({ id: "a", content: "x", keys: ["DGX"] })] });
+    // default estimator: estimateTokens("x") = ceil(1/4) = 1 ≤ 100 → fits
+    expect(scanLorebooks([tiny], "DGX", { tokenBudget: 100 })).toHaveLength(1);
+    // custom estimator reports 1000 for the same content → blows the 100 budget → skipped
+    expect(scanLorebooks([tiny], "DGX", { tokenBudget: 100, estimate: () => 1000 })).toHaveLength(0);
+  });
+
+  it("triggers on a LATER key when an earlier key misses (entryMatches advances past the non-match)", () => {
+    const multi = book({ entries: [entry({ keys: ["맥미니", "DGX"], content: "lore", insertionOrder: 0 })] });
+    const matches = scanLorebooks([multi], "dgx 점검"); // 맥미니 misses, DGX matches case-insensitively
+    expect(matches).toHaveLength(1);
+    expect(matches[0]!.matchedKey).toBe("DGX"); // the SECOND key is the trigger, returned trimmed in original case
+  });
+
+  it("includes an entry whose cost EXACTLY equals the remaining budget (strict >, not >=)", () => {
+    const boundary = book({
+      entries: [
+        entry({ id: "exact", insertionOrder: 0, content: "x".repeat(16), keys: ["DGX"] }), // ceil(16/4)=4
+        entry({ id: "over", insertionOrder: 1, content: "yyyy", keys: ["DGX"] }), // ceil(4/4)=1 → 4+1>4 skipped
+      ],
+    });
+    // budget 4: first costs exactly 4 (0+4 > 4 is false → kept); next costs 1 (4+1 > 4 → skipped)
+    expect(scanLorebooks([boundary], "DGX", { tokenBudget: 4 }).map((m) => m.entry.id)).toEqual(["exact"]);
+  });
+});
