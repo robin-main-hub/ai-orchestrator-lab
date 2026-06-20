@@ -697,3 +697,44 @@ describe("debateEngine — stance trajectories & cross-link markers (0-ref pure 
     expect(byId.get("uOnce")!.parentUtteranceId).toBe("uA1"); // first ref token (one) wins; second never overwrites
   });
 });
+
+// The "sorting hierarchy" test above walks compareAgents steps 1 (override),
+// 3 (isDefault), 4 (isCanonical), 5 (priority) and 6 (alphabetical) — but never
+// step 2, `rolePersonaPriorities`. That tier is wired all the way through
+// pickAgentsForRound's options yet no test feeds it, so its three arms — both ids
+// in the list (return indexA-indexB), exactly one in the list (the listed id
+// wins), and neither in the list (fall through to the lower tiers) — are unpinned.
+// Pin them, self-consistent (the list is made to FIGHT the priority tier so the
+// win can only come from step 2, never from step 5).
+describe("debateEngine — pickAgentsForRound honors rolePersonaPriorities (compareAgents step 2)", () => {
+  // arch_a would win on priority (99 > 1); the rolePersonaPriorities list is the
+  // only thing that can flip the pick, so every assertion isolates step 2.
+  const archA = () => makeSlot(makeProfile({ id: "agent_arch_a", role: "architect", personaName: "a", priority: 99 }), "x");
+  const archB = () => makeSlot(makeProfile({ id: "agent_arch_b", role: "architect", personaName: "b", priority: 1 }), "x");
+
+  it("baseline (no list): the higher-priority persona wins via step 5", () => {
+    const picked = pickAgentsForRound("initial_proposals", [archA(), archB()], 1);
+    expect(picked[0]!.agent.id).toBe("agent_arch_a"); // priority 99 beats 1
+  });
+
+  it("both ids in the list: order follows the list index, overriding the priority tier", () => {
+    const picked = pickAgentsForRound("initial_proposals", [archA(), archB()], 1, {
+      rolePersonaPriorities: { architect: ["agent_arch_b", "agent_arch_a"] }, // b first
+    });
+    expect(picked[0]!.agent.id).toBe("agent_arch_b"); // index 0 < index 1 ⇒ b, despite a's higher priority
+  });
+
+  it("exactly one id in the list: the listed persona wins even with lower priority", () => {
+    const picked = pickAgentsForRound("initial_proposals", [archA(), archB()], 1, {
+      rolePersonaPriorities: { architect: ["agent_arch_b"] }, // only b listed
+    });
+    expect(picked[0]!.agent.id).toBe("agent_arch_b"); // in-list (-1) beats not-in-list, regardless of priority
+  });
+
+  it("neither id in the list: step 2 is a no-op and the pick falls through to the priority tier", () => {
+    const picked = pickAgentsForRound("initial_proposals", [archA(), archB()], 1, {
+      rolePersonaPriorities: { architect: ["agent_arch_ghost"] }, // neither real id listed
+    });
+    expect(picked[0]!.agent.id).toBe("agent_arch_a"); // both indexes -1 ⇒ fall through ⇒ priority 99 wins
+  });
+});
