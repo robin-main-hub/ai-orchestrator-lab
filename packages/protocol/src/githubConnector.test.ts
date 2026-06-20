@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  GITHUB_MULTIFILE_COMMIT_MAX_FILES,
+  GITHUB_MULTIFILE_COMMIT_PER_FILE_BYTES_MAX,
+  GITHUB_MULTIFILE_COMMIT_TOTAL_BYTES_MAX,
   githubBranchCreateExecuteRequestSchema,
   githubBranchCreateOutcomeSchema,
   githubBranchCreatePlanRequestSchema,
@@ -8,6 +11,10 @@ import {
   githubCommentWriteExecuteResponseSchema,
   githubCommentWriteOutcomeSchema,
   githubCommentWritePlanRequestSchema,
+  githubFileChangeOutcomeSchema,
+  githubMultiFileCommitExecuteRequestSchema,
+  githubMultiFileCommitExecuteResponseSchema,
+  githubMultiFileCommitOutcomeSchema,
   githubReadonlyResourceResponseSchema,
   githubResourceOutcomeSchema,
   githubPullRequestDetailSchema,
@@ -161,5 +168,105 @@ describe("githubConnector — W1/W2 write surface is a least-privilege, anti-fab
     const okBranch = { repoFullName: "owner/repo", sourceRef: "main", newBranchName: "agent/x" };
     expect(githubBranchCreatePlanRequestSchema.safeParse(okBranch).success).toBe(true);
     expect(githubBranchCreatePlanRequestSchema.safeParse({ ...okBranch, newBranchName: "x".repeat(121) }).success).toBe(false);
+  });
+});
+
+// The two suites above pin the READ surface and the W1/W2 comment/branch write
+// contract. The highest-blast-radius mutation surface — W5b multi-file ATOMIC
+// commit (Git Data API: blob→tree→commit→ref update with force=false) — is still
+// unpinned, and it carries the strongest least-privilege / anti-fabrication
+// guards in the module:
+//   - first-version HARD limits (10 files, 256KiB/file, 512KiB total) are exported
+//     constants, and the request bounds the batch to 1..MAX_FILES;
+//   - expectedHeadSha is a lowercase 40-hex sha (optimistic-concurrency integrity
+//     key) — a ref that moved out from under the plan fails as head_mismatch, never
+//     a silent force-overwrite;
+//   - the outcome is an EXECUTE-ONLY surface: it carries head_mismatch but has no
+//     "planned" (there is no preview stage), the mirror image of the single-file
+//     change outcome which has "planned" but no head_mismatch;
+//   - the blocked `reason` is a CLOSED machine vocabulary — every guard has a named
+//     reason, so a block is never laundered through a generic github_error;
+//   - it is approval-ONLY (mandatory approvalId, no armed channel to smuggle).
+// Expected values are read off the schemas/constants (self-consistent), never magic.
+describe("githubConnector — W5b multi-file atomic commit is bounded, optimistic-concurrent, and machine-honest", () => {
+  const HEX40 = "a".repeat(40);
+  const mkFiles = (n: number) => Array.from({ length: n }, (_, i) => ({ path: `f${i}.txt`, newContent: "x" }));
+  const validReq = {
+    repoFullName: "owner/repo",
+    branchName: "agent/x",
+    expectedHeadSha: HEX40,
+    message: "atomic commit",
+    files: [{ path: "src/a.ts", newContent: "x" }],
+    approvalId: "appr_1",
+  };
+
+  it("exports the first-version hard limits and bounds the file batch to 1..MAX_FILES", () => {
+    expect(GITHUB_MULTIFILE_COMMIT_MAX_FILES).toBe(10);
+    expect(GITHUB_MULTIFILE_COMMIT_PER_FILE_BYTES_MAX).toBe(256 * 1024);
+    expect(GITHUB_MULTIFILE_COMMIT_TOTAL_BYTES_MAX).toBe(512 * 1024);
+    expect(githubMultiFileCommitExecuteRequestSchema.safeParse({ ...validReq, files: mkFiles(0) }).success).toBe(false); // min 1
+    expect(githubMultiFileCommitExecuteRequestSchema.safeParse({ ...validReq, files: mkFiles(GITHUB_MULTIFILE_COMMIT_MAX_FILES) }).success).toBe(true);
+    expect(githubMultiFileCommitExecuteRequestSchema.safeParse({ ...validReq, files: mkFiles(GITHUB_MULTIFILE_COMMIT_MAX_FILES + 1) }).success).toBe(false);
+  });
+
+  it("requires expectedHeadSha to be a lowercase 40-hex sha (optimistic-concurrency integrity key)", () => {
+    expect(githubMultiFileCommitExecuteRequestSchema.safeParse(validReq).success).toBe(true);
+    for (const bad of ["a".repeat(39), "a".repeat(41), "A".repeat(40), "g".repeat(40), ""]) {
+      expect(githubMultiFileCommitExecuteRequestSchema.safeParse({ ...validReq, expectedHeadSha: bad }).success).toBe(false);
+    }
+  });
+
+  it("bounds message 1..2000, file path 1..512, branch 1..120 and the owner/repo shape", () => {
+    expect(githubMultiFileCommitExecuteRequestSchema.safeParse({ ...validReq, message: "" }).success).toBe(false);
+    expect(githubMultiFileCommitExecuteRequestSchema.safeParse({ ...validReq, message: "x".repeat(2001) }).success).toBe(false);
+    expect(githubMultiFileCommitExecuteRequestSchema.safeParse({ ...validReq, message: "x".repeat(2000) }).success).toBe(true);
+    expect(githubMultiFileCommitExecuteRequestSchema.safeParse({ ...validReq, files: [{ path: "", newContent: "x" }] }).success).toBe(false);
+    expect(githubMultiFileCommitExecuteRequestSchema.safeParse({ ...validReq, files: [{ path: "x".repeat(513), newContent: "x" }] }).success).toBe(false);
+    expect(githubMultiFileCommitExecuteRequestSchema.safeParse({ ...validReq, branchName: "x".repeat(121) }).success).toBe(false);
+    expect(githubMultiFileCommitExecuteRequestSchema.safeParse({ ...validReq, repoFullName: "noslash" }).success).toBe(false);
+  });
+
+  it("is approval-ONLY: approvalId is mandatory and there is no armed channel to smuggle", () => {
+    const { approvalId: _drop, ...withoutApproval } = validReq;
+    expect(githubMultiFileCommitExecuteRequestSchema.safeParse(withoutApproval).success).toBe(false);
+    const parsed = githubMultiFileCommitExecuteRequestSchema.parse({ ...validReq, autoExecuteArmed: true } as Record<string, unknown>);
+    expect("autoExecuteArmed" in parsed).toBe(false);
+  });
+
+  it("the outcome is an execute-only atomic surface: it carries head_mismatch but no 'planned' (mirror of single-file change)", () => {
+    expect(githubMultiFileCommitOutcomeSchema.options).toEqual([
+      "observed",
+      "approval_required",
+      "blocked",
+      "head_mismatch",
+      "failed",
+      "not_configured",
+      "permission_denied",
+      "connection_failed",
+      "github_error",
+    ]);
+    // head_mismatch (force=false optimistic concurrency) is unique to the atomic commit…
+    expect(githubMultiFileCommitOutcomeSchema.options).toContain("head_mismatch");
+    expect(githubFileChangeOutcomeSchema.options).not.toContain("head_mismatch");
+    // …and conversely the atomic surface has NO "planned" because it is execute-only (no preview stage)
+    expect(githubMultiFileCommitOutcomeSchema.options).not.toContain("planned");
+    expect(githubFileChangeOutcomeSchema.options).toContain("planned");
+  });
+
+  it("the blocked 'reason' is a closed machine vocabulary — every guard is named, no silent github_error catch-all", () => {
+    const reasons = githubMultiFileCommitExecuteResponseSchema.shape.reason.unwrap().options;
+    expect(reasons).toEqual([
+      "head_mismatch",
+      "unsafe_path",
+      "binary",
+      "too_large",
+      "secret_suspect",
+      "duplicate_path",
+      "allowlist",
+      "branch_protection",
+      "permission_denied",
+      "github_error",
+      "connection_failed",
+    ]);
   });
 });
