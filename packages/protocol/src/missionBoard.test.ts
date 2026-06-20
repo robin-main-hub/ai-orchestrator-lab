@@ -5,6 +5,9 @@ import {
   deriveMissionKanbanCard,
   deriveMissionTrace,
   kanbanColumnForMissionStatus,
+  MISSION_KANBAN_COLUMN_LABEL,
+  MISSION_KANBAN_COLUMN_ORDER,
+  missionKanbanColumnIdSchema,
   redactTracePreview,
   traceEventFromMissionEnvelope,
 } from "./missionBoard.js";
@@ -72,6 +75,58 @@ describe("deriveMissionKanbanCard", () => {
     );
     expect(dry.mergeState).toBe("dry_run");
     expect(dry.mergeCommitSha).toBeUndefined();
+  });
+});
+
+// MISSION_KANBAN_COLUMN_ORDER + MISSION_KANBAN_COLUMN_LABEL are the board's
+// display contract: ORDER is the left-to-right column sequence, LABEL the
+// Korean header for each. They are 0-ref across the test tree yet
+// deriveMissionKanbanBoard renders straight from them, so a silent reorder or a
+// missing/extra label would shift the whole board (or crash the lookup). Pin
+// them against missionKanbanColumnIdSchema.options (self-consistency: a column
+// id and only a column id). Note the deliberate divergence: the DISPLAY order
+// puts `blocked` before `archived`, while the schema *declaration* order has
+// `archived` before `blocked` — pin that the two are NOT accidentally the same
+// list (display order is curated, not the enum order).
+describe("MISSION_KANBAN_COLUMN_ORDER / _LABEL — board display contract", () => {
+  it("ORDER is the exact curated left-to-right sequence", () => {
+    expect(MISSION_KANBAN_COLUMN_ORDER).toEqual([
+      "todo",
+      "running",
+      "verifying",
+      "ready_to_merge",
+      "merged",
+      "blocked",
+      "archived",
+    ]);
+  });
+
+  it("ORDER is a permutation of every schema column id — each exactly once, no extras", () => {
+    expect([...MISSION_KANBAN_COLUMN_ORDER].sort()).toEqual([...missionKanbanColumnIdSchema.options].sort());
+    expect(new Set(MISSION_KANBAN_COLUMN_ORDER).size).toBe(MISSION_KANBAN_COLUMN_ORDER.length);
+  });
+
+  it("display ORDER is curated, NOT the schema declaration order (blocked before archived, not after)", () => {
+    expect(MISSION_KANBAN_COLUMN_ORDER).not.toEqual(missionKanbanColumnIdSchema.options);
+    const order = MISSION_KANBAN_COLUMN_ORDER;
+    expect(order.indexOf("blocked")).toBeLessThan(order.indexOf("archived"));
+    const schema = missionKanbanColumnIdSchema.options;
+    expect(schema.indexOf("archived")).toBeLessThan(schema.indexOf("blocked"));
+  });
+
+  it("LABEL has a non-empty Korean header for every column id — no missing, no extra keys", () => {
+    expect(Object.keys(MISSION_KANBAN_COLUMN_LABEL).sort()).toEqual([...missionKanbanColumnIdSchema.options].sort());
+    for (const id of missionKanbanColumnIdSchema.options) {
+      expect(MISSION_KANBAN_COLUMN_LABEL[id].length).toBeGreaterThan(0);
+    }
+  });
+
+  it("deriveMissionKanbanBoard renders columns straight from ORDER + LABEL", () => {
+    const board = deriveMissionKanbanBoard([]);
+    expect(board.columns.map((c) => c.id)).toEqual([...MISSION_KANBAN_COLUMN_ORDER]);
+    for (const column of board.columns) {
+      expect(column.label).toBe(MISSION_KANBAN_COLUMN_LABEL[column.id]);
+    }
   });
 });
 
