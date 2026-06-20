@@ -217,3 +217,66 @@ describe("productKernelContracts — read-only modes, approval gating, fallbacks
     expect(caps[0]!.mode).toBe("sandbox_build");
   });
 });
+
+// Four reachable contract details stay unpinned. (1) createCapabilityNotes' mode-
+// specific HONESTY lines — capability.notes is never asserted, yet those lines
+// ("must not write product files", "sequential merge queue owns the side effect")
+// are the human-readable side-effect boundary. (2) The fullMarkdown OR's second
+// operand: soulMode "full" ALONE (configSource NOT markdown) must force required
+// identity files — every existing case ties soulMode:full to configSource:markdown.
+// (3) The options.truthStatus override on identity files (default "configured").
+// (4) Least-privilege on the sandbox-kind override: options.defaultSandboxKind is
+// honored for a sandbox mode but CANNOT escalate a read-only mode off "disabled".
+// Pin them, self-consistent (derived from the role→mode map and the OR operands).
+describe("productKernelContracts — capability notes honesty, soulMode-full operand, option overrides", () => {
+  it("capability.notes carry the mode-specific side-effect honesty line for build/verify/merge_recommend", () => {
+    const base = [
+      "persona voice is preserved; capabilities only constrain side effects",
+    ];
+    const build = createAgentMissionCapability(makeProfile({ id: "b", role: "builder" }));
+    expect(build.notes).toContain("role builder maps to mission capability mode sandbox_build");
+    expect(build.notes).toEqual(expect.arrayContaining(base));
+    expect(build.notes).toContain("file mutation is allowed only inside the assigned sandbox/worktree");
+
+    const verify = createAgentMissionCapability(makeProfile({ id: "v", role: "verifier" }));
+    expect(verify.notes).toContain("verification may run commands, but must not write product files");
+
+    const merge = createAgentMissionCapability(makeProfile({ id: "o", role: "orchestrator" }));
+    expect(merge.notes).toContain("orchestration can recommend merge, but sequential merge queue owns the side effect");
+
+    // a read-only (plan_only) mode carries ONLY the base lines — none of the side-effect notes
+    const plan = createAgentMissionCapability(makeProfile({ id: "a", role: "architect" }));
+    expect(plan.notes).toEqual(["role architect maps to mission capability mode plan_only", ...base]);
+  });
+
+  it("soulMode 'full' ALONE (configSource not markdown) forces required identity files (the OR's second operand)", () => {
+    const full = createHermesPersonaContinuity(
+      makeProfile({ id: "f", role: "researcher", soulMode: "full", configSource: "internal" }),
+    );
+    expect(full.identityFiles.every((file) => file.required === true)).toBe(true);
+    expect(full.hermes.restorePolicy).toBe("restore_when_available"); // non-off ⇒ restore
+  });
+
+  it("honors options.truthStatus on identity files (default would be 'configured')", () => {
+    const continuity = createHermesPersonaContinuity(
+      makeProfile({ id: "t", role: "skeptic" }),
+      { truthStatus: "observed" },
+    );
+    expect(continuity.identityFiles.every((file) => file.truthStatus === "observed")).toBe(true);
+  });
+
+  it("options.defaultSandboxKind is honored for a sandbox mode but CANNOT escalate a read-only mode off 'disabled'", () => {
+    const builder = createAgentMissionCapability(
+      makeProfile({ id: "b2", role: "builder" }),
+      { defaultSandboxKind: "firecracker" },
+    );
+    expect(builder.defaultSandboxKind).toBe("firecracker"); // sandbox mode → override honored
+
+    const curator = createAgentMissionCapability(
+      makeProfile({ id: "m2", role: "memory_curator" }),
+      { defaultSandboxKind: "firecracker" },
+    );
+    expect(curator.requiresSandbox).toBe(false);
+    expect(curator.defaultSandboxKind).toBe("disabled"); // read-only mode pins disabled despite the override
+  });
+});
