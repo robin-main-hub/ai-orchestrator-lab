@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { AssistantDraft, WorkItem, WorkItemHandoff } from "@ai-orchestrator/protocol";
-import { classifyWorkItemLane, deriveWorkQueueBoard, formatWorkItemAge } from "./workItemBoard";
+import {
+  classifyWorkItemLane,
+  deriveWorkQueueBoard,
+  formatWorkItemAge,
+  WORK_QUEUE_LANES,
+} from "./workItemBoard";
 
 const createdAt = "2026-06-05T08:00:00.000Z";
 
@@ -112,5 +117,93 @@ describe("workItemBoard", () => {
 
   it("age label은 깨진 날짜를 안전하게 처리한다", () => {
     expect(formatWorkItemAge("not-a-date").ageLabel).toBe("시간 미상");
+  });
+});
+
+// Characterization tests (no behavior change) for board invariants the block above
+// leaves unpinned: the WORK_QUEUE_LANES constant itself (ordering + labels), the
+// PRECEDENCE inside classifyWorkItemLane when several conditions hold at once (the
+// existing cases each trip exactly one branch, never the overlap), and the stale
+// boundaries / clamping of formatWorkItemAge (only the invalid-date and one "5시간"
+// value were asserted before). Load-bearing contract: the board always renders all
+// five lanes in the documented fixed order even when empty, lane classification is
+// a strict first-match cascade blocked → ask → approve → auto → check, and age
+// staleness flips at exactly 30분 / 4시간 / 1일 with future timestamps clamped to 0.
+describe("workItemBoard invariants", () => {
+  it("WORK_QUEUE_LANES is the fixed operator ordering with Korean labels", () => {
+    expect(WORK_QUEUE_LANES.map((lane) => lane.id)).toEqual([
+      "auto",
+      "check",
+      "ask",
+      "approve",
+      "blocked",
+    ]);
+    expect(WORK_QUEUE_LANES.map((lane) => lane.label)).toEqual(["자동", "검토", "질문", "승인", "차단"]);
+  });
+
+  it("deriveWorkQueueBoard always emits all five lanes in WORK_QUEUE_LANES order, even empty", () => {
+    const board = deriveWorkQueueBoard({ drafts: [], handoffs: [], items: [] });
+    // derived straight from the constant so the board can never silently drop/reorder a lane
+    expect(board.lanes.map((lane) => ({ id: lane.id, label: lane.label }))).toEqual(
+      WORK_QUEUE_LANES.map((lane) => ({ id: lane.id, label: lane.label })),
+    );
+    expect(board.lanes.every((lane) => lane.count === 0 && lane.items.length === 0)).toBe(true);
+    expect(board.activeCount).toBe(0);
+    expect(board.waitingInputCount).toBe(0);
+  });
+
+  it("classifyWorkItemLane is a strict first-match cascade (blocked > ask > approve)", () => {
+    const requiredMissing = [
+      { id: "m1", label: "q", reason: "r", required: true, status: "missing" as const },
+    ];
+    // blocked wins even though the required-missing-info (ask) condition is also true
+    expect(
+      classifyWorkItemLane(
+        createWorkItem({ id: "p1", lane: "ask", status: "blocked", title: "p1", missingInfo: requiredMissing }),
+      ),
+    ).toBe("blocked");
+    // ask wins over a simultaneously-true waiting_approval (ask is checked before approve)
+    expect(
+      classifyWorkItemLane(
+        createWorkItem({ id: "p2", lane: "check", status: "waiting_approval", title: "p2", missingInfo: requiredMissing }),
+      ),
+    ).toBe("ask");
+  });
+
+  it("classifyWorkItemLane honors the explicit lane override branches", () => {
+    // lane override with no corresponding status signal still routes to that lane
+    expect(classifyWorkItemLane(createWorkItem({ id: "o1", lane: "ask", status: "captured", title: "o1" }))).toBe("ask");
+    expect(classifyWorkItemLane(createWorkItem({ id: "o2", lane: "approve", status: "captured", title: "o2" }))).toBe("approve");
+    expect(classifyWorkItemLane(createWorkItem({ id: "o3", lane: "auto", status: "captured", title: "o3" }))).toBe("auto");
+  });
+
+  it("non-required missing info does NOT force the ask lane", () => {
+    expect(
+      classifyWorkItemLane(
+        createWorkItem({
+          id: "n1",
+          lane: "check",
+          status: "captured",
+          title: "n1",
+          missingInfo: [{ id: "m", label: "opt", reason: "r", required: false, status: "missing" }],
+        }),
+      ),
+    ).toBe("check");
+  });
+
+  it("formatWorkItemAge stale flips at exactly 30분 / 4시간 / 1일 and clamps future", () => {
+    const now = new Date("2026-06-05T12:00:00.000Z");
+    const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+    const MIN = 60_000;
+    const HOUR = 60 * MIN;
+
+    expect(formatWorkItemAge(ago(30_000), now)).toEqual({ ageLabel: "방금", isStale: false });
+    expect(formatWorkItemAge(ago(29 * MIN), now)).toEqual({ ageLabel: "29분", isStale: false });
+    expect(formatWorkItemAge(ago(30 * MIN), now)).toEqual({ ageLabel: "30분", isStale: true });
+    expect(formatWorkItemAge(ago(3 * HOUR + 59 * MIN), now)).toEqual({ ageLabel: "3시간", isStale: false });
+    expect(formatWorkItemAge(ago(4 * HOUR), now)).toEqual({ ageLabel: "4시간", isStale: true });
+    expect(formatWorkItemAge(ago(24 * HOUR), now)).toEqual({ ageLabel: "1일", isStale: true });
+    // a future createdAt clamps the delta to 0 → "방금", never negative
+    expect(formatWorkItemAge(ago(-5 * MIN), now)).toEqual({ ageLabel: "방금", isStale: false });
   });
 });
