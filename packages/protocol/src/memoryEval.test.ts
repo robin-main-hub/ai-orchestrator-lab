@@ -367,3 +367,68 @@ describe("determinism + batch", () => {
     expect(report.recallAtK).toBe(1);
   });
 });
+
+// The freshness reference-date precedence (lastAccessedAt > updatedAt > createdAt),
+// the unparseable-date guard (Date.parse NaN → treated as NOT stale, never a crash
+// or a false-stale), and the EMPTY-batch summary + the batch mean forbidden/stale
+// rate aggregation (M22 asserts only mean recall) are all unpinned. They are
+// honesty-load-bearing: a wrong reference date or a NaN crash could silently flip a
+// fresh memory to stale (or a stale one to fresh). Pin them, self-consistent (rates
+// computed straight from the per-case hit counts).
+describe("freshness reference precedence + NaN guard + batch aggregation", () => {
+  it("(M24) lastAccessedAt takes precedence over a stale updatedAt — a recently-touched memory is NOT stale", () => {
+    const report = evaluateMemoryRecall({
+      evalCaseId: "c24",
+      expectedMemoryIds: ["a"],
+      retrieved: [{ memoryId: "a", rank: 1 }],
+      // updatedAt is ancient, but lastAccessedAt is recent → referenceDate uses lastAccessedAt
+      recordsById: recordsById(
+        rec("a", { activationState: "active", updatedAt: "2026-01-01T00:00:00Z", lastAccessedAt: "2026-06-15T00:00:00Z" }),
+      ),
+      now: "2026-06-16T00:00:00Z",
+      staleAfterDays: 30,
+    });
+    expect(report.staleHitIds).toEqual([]); // recent lastAccessedAt wins → fresh
+    expect(report.verdict).toBe("pass");
+  });
+
+  it("(M25) an unparseable reference date is treated as NOT stale (NaN guard, no crash, no false-stale)", () => {
+    const report = evaluateMemoryRecall({
+      evalCaseId: "c25",
+      expectedMemoryIds: ["a"],
+      retrieved: [{ memoryId: "a", rank: 1 }],
+      recordsById: recordsById(rec("a", { activationState: "active", updatedAt: "not-a-real-date" })),
+      now: "2026-06-16T00:00:00Z",
+      staleAfterDays: 30,
+    });
+    expect(report.staleHitIds).toEqual([]); // Date.parse NaN → guard returns false
+    expect(report.verdict).toBe("pass");
+  });
+
+  it("(M26) empty batch → zeroed counts, mean rates 0, meanRecallAtK null", () => {
+    const { reports, summary } = evaluateMemoryRecallBatch([]);
+    expect(reports).toEqual([]);
+    expect(summary).toEqual({
+      totalCases: 0,
+      passedCases: 0,
+      warningCases: 0,
+      failedCases: 0,
+      meanRecallAtK: null, // no non-null recalls → null, not NaN
+      meanForbiddenHitRate: 0,
+      meanStaleHitRate: 0,
+    });
+  });
+
+  it("(M27) batch means the per-case forbidden/stale hit rates", () => {
+    const { summary } = evaluateMemoryRecallBatch([
+      // case A: 1 forbidden of 2 retrieved → forbiddenHitRate 0.5, staleHitRate 0
+      { evalCaseId: "A", expectedMemoryIds: ["a"], forbiddenMemoryIds: ["bad"], retrieved: [{ memoryId: "a", rank: 1 }, { memoryId: "bad", rank: 2 }] },
+      // case B: 1 inactive(stale) of 2 retrieved → staleHitRate 0.5, forbiddenHitRate 0
+      { evalCaseId: "B", expectedMemoryIds: ["a"], retrieved: [{ memoryId: "a", rank: 1 }, { memoryId: "old", rank: 2 }], recordsById: recordsById(rec("a"), rec("old", { activationState: "inactive" })) },
+    ]);
+    expect(summary.meanForbiddenHitRate).toBeCloseTo(0.25); // (0.5 + 0) / 2
+    expect(summary.meanStaleHitRate).toBeCloseTo(0.25); // (0 + 0.5) / 2
+    expect(summary.failedCases).toBe(1); // A fails on forbidden
+    expect(summary.warningCases).toBe(1); // B warns on stale
+  });
+});
