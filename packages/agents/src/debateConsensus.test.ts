@@ -182,3 +182,44 @@ describe("debateConsensus — default params + empty/guard branches", () => {
     expect(shouldInterrupt({ priority: "low" }, { speakingChars: 100_000 })).toBe(false);
   });
 });
+
+// Three branches the suites above never exercise: clusterResponses' greedy
+// anchoring (each new member is compared ONLY to the cluster's first-chosen
+// representative, which is never recomputed — so members carry their ORIGINAL
+// indices and order, and the default threshold is 0.5, not the 0.3 the happy
+// case passes); classifyInterruptPriority's PRECEDENCE when one utterance trips
+// two patterns at once (the array is scanned in order, so the higher band wins —
+// only single-band strings were tested before); and the honest-confidence
+// distinction between detectConsensus' two no_majority exits — the empty-round
+// exit reports 0, but the under-α exit reports the ACTUAL top-cluster ratio (a
+// minority is not silently flattened to 0). Self-consistent, derived from rules.
+describe("debateConsensus — greedy anchoring, interrupt precedence, honest under-α confidence", () => {
+  it("clusterResponses anchors on the first member's text, keeps original indices, and groups identical responses at the default 0.5 threshold", () => {
+    // A, B, A with A≁B: idx2 rejoins cluster 0 because it matches the ORIGINAL
+    // representative (responses[0]); cluster 0 thus owns non-contiguous [0,2].
+    const clusters = clusterResponses(["캐시 도입", "음악 공연", "캐시 도입"]); // no threshold → default 0.5
+    expect(clusters[0]!.members).toEqual([0, 2]); // original indices, not renumbered
+    expect(clusters[0]!.representative).toBe("캐시 도입"); // first member's text, never recomputed
+    expect(clusters[1]!.members).toEqual([1]);
+    expect(clusters).toHaveLength(2);
+  });
+
+  it("classifyInterruptPriority returns the highest band when an utterance matches several patterns (array-order precedence)", () => {
+    // matches normal (동의) AND critical (사실이 아니) → critical wins (scanned first)
+    expect(classifyInterruptPriority("동의하지만 그건 사실이 아니야")).toBe("critical");
+    // matches normal (동의) AND high (추가 근거) → high wins (precedes normal)
+    expect(classifyInterruptPriority("추가 근거에 동의해")).toBe("high");
+  });
+
+  it("detectConsensus' under-α no_majority reports the real top-cluster ratio, unlike the empty-round exit which reports 0", () => {
+    // three disjoint singletons, α=2 → top cluster is 1/3 of the floor, below α
+    const underAlpha = detectConsensus({ responses: ["A안", "B안", "C안"], alpha: 2, beta: 2, similarityThreshold: 0.5 });
+    expect(underAlpha.status).toBe("no_majority");
+    expect(underAlpha.majority).toBeNull();
+    expect(underAlpha.confidence).toBeCloseTo(1 / 3); // actual minority ratio, NOT flattened to 0
+    expect(underAlpha.confidence).toBeGreaterThan(0);
+    expect(underAlpha.next).toEqual({ majority: null, stability: 0 }); // counter still reset
+    // contrast: the empty-round no_majority exit reports exactly 0
+    expect(detectConsensus({ responses: [] }).confidence).toBe(0);
+  });
+});
