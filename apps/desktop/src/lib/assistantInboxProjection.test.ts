@@ -12,6 +12,7 @@ import {
   projectMemoryCandidatesFromProjectRecords,
   projectRunnerGateEvidence,
   projectRunnerGateStatus,
+  summarizeLearningLive,
 } from "./assistantInboxProjection";
 
 describe("assistantInboxProjection — evidence", () => {
@@ -42,6 +43,53 @@ describe("assistantInboxProjection — learning loops", () => {
     const byId = new Map(loops.map((l) => [l.id, l]));
     expect(byId.get("loop-001")!.stage).toBe("verified");
     expect(byId.get("loop-002")!.stage).toBe("rejected");
+  });
+});
+
+// Characterization tests (no behavior change) for the previously-unasserted projection
+// summarizeLearningLive — the one-line live signal for the learning section. The learning
+// loops block above pins projectLearningLoopItems' per-loop stage, but the count summary
+// that buckets those same records was never asserted. Load-bearing contract:
+//   - total === number of derived loop records;
+//   - a record counts as "verified" when its stage is verified|distilled|consulted (the
+//     three success terminals), "rejected" only for the rejected terminal, else "active";
+//   - it runs filterLearningEvents internally, so non-learning noise never inflates total.
+// Expected buckets are derived from projectLearningLoopItems over the SAME events so the
+// summary stays self-consistent with the stages the card projection actually surfaces.
+describe("summarizeLearningLive", () => {
+  const bucketOf = (stage: string): "verified" | "rejected" | "active" =>
+    stage === "rejected"
+      ? "rejected"
+      : stage === "verified" || stage === "distilled" || stage === "consulted"
+        ? "verified"
+        : "active";
+
+  it("returns all-zero on empty input", () => {
+    expect(summarizeLearningLive([])).toEqual({ total: 0, verified: 0, rejected: 0, active: 0 });
+  });
+
+  it("buckets each derived loop by stage, self-consistent with projectLearningLoopItems", () => {
+    const loops = projectLearningLoopItems(LEARNING_EVENT_FIXTURE);
+    const expected = { total: loops.length, verified: 0, rejected: 0, active: 0 };
+    for (const loop of loops) expected[bucketOf(loop.stage)] += 1;
+
+    expect(summarizeLearningLive(LEARNING_EVENT_FIXTURE)).toEqual(expected);
+    // fixture sanity: one success terminal + one rejected terminal, none still active
+    expect(summarizeLearningLive(LEARNING_EVENT_FIXTURE)).toEqual({
+      total: 2,
+      verified: 1,
+      rejected: 1,
+      active: 0,
+    });
+  });
+
+  it("filters non-learning noise before counting (total tracks only learning loops)", () => {
+    const noisy = [
+      { type: "unrelated.event", payload: { foo: 1 } },
+      ...LEARNING_EVENT_FIXTURE,
+      { type: "another.noise", payload: null },
+    ];
+    expect(summarizeLearningLive(noisy)).toEqual(summarizeLearningLive(LEARNING_EVENT_FIXTURE));
   });
 });
 
