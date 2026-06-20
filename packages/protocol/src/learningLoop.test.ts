@@ -397,3 +397,117 @@ describe("learningLoop vocabulary — stage / role / event-type contracts", () =
     expect(values.every((v) => v.startsWith("learning."))).toBe(true);
   });
 });
+
+// L1–L18 + the vocabulary suite cover the happy path, the six invariants and the
+// stage/role/event enums — but several *non-regression / dedup / outcome-guard*
+// arms of the reducer never fire, because every existing test applies each later
+// event exactly once and in canonical order. The uncovered branches: (L19) an
+// investigation arriving AFTER the loop already passed "failed" records itself
+// without pulling the stage back to "investigating"; (L20) a second verification
+// of an already-verified hypothesis is idempotent on verifiedHypothesisIds yet
+// still appends to the raw verifications log (id-set dedup ≠ append); (L21) a
+// verification landing AFTER "distilled" must not regress the stage to "verified";
+// (L22) the outcome guards — a "verified"-outcome payload on the rejected event,
+// and the reverse, are both dropped; (L23) a rejection landing once a sibling is
+// already verified keeps canDistill true so the loop stays out of "rejected", and
+// the rejected-id set dedups; (L24) the consult outcome guard — a "skipped"
+// payload on the completed event, and the reverse, are ignored. All expectations
+// derive from the same factories the suite already trusts (no magic drift).
+describe("deriveLearningLoopState — non-regression + dedup + outcome guards", () => {
+  it("(L19) an investigation arriving after the loop passed 'failed' records itself but does not regress the stage", () => {
+    const loop = deriveLearningLoopById(
+      [
+        { type: E.failureRecorded, payload: { failure: failure() } },
+        { type: E.hypothesisRecorded, payload: { hypothesis: hypothesis() } }, // stage → hypothesis_recorded
+        { type: E.investigationStarted, payload: { investigation: investigation() } }, // late investigation
+      ],
+      LOOP,
+    );
+    expect(loop?.investigation?.id).toBe("inv_1"); // still recorded
+    expect(loop?.stage).toBe("hypothesis_recorded"); // NOT pulled back to "investigating"
+    expect(loop?.updatedAt).toBe(investigation().startedAt); // last applied event still owns updatedAt
+  });
+
+  it("(L20) a second verification of an already-verified hypothesis dedups the id-set but still appends to the verifications log", () => {
+    const loop = deriveLearningLoopById(
+      [
+        { type: E.failureRecorded, payload: { failure: failure() } },
+        { type: E.hypothesisRecorded, payload: { hypothesis: hypothesis() } },
+        { type: E.hypothesisVerified, payload: { verification: verified() } },
+        { type: E.hypothesisVerified, payload: { verification: verified({ verifiedAt: "2026-06-16T00:05:00Z" }) } },
+      ],
+      LOOP,
+    );
+    expect(loop?.verifiedHypothesisIds).toEqual(["hyp_1"]); // deduped — counted once
+    expect(loop?.verifications).toHaveLength(2); // raw log appends both
+    expect(loop?.updatedAt).toBe("2026-06-16T00:05:00Z"); // latest verification wins
+  });
+
+  it("(L21) a verification arriving after 'distilled' does not regress the stage back to 'verified'", () => {
+    const loop = deriveLearningLoopById(
+      [
+        { type: E.failureRecorded, payload: { failure: failure() } },
+        { type: E.hypothesisRecorded, payload: { hypothesis: hypothesis() } },
+        { type: E.hypothesisVerified, payload: { verification: verified() } },
+        { type: E.distillationCandidateCreated, payload: { candidate: candidate() } }, // stage → distilled
+        { type: E.hypothesisVerified, payload: { verification: verified({ verifiedAt: "2026-06-16T00:06:00Z" }) } },
+      ],
+      LOOP,
+    );
+    expect(loop?.stage).toBe("distilled"); // not regressed
+    expect(loop?.distillation?.id).toBe("distill_1");
+  });
+
+  it("(L22) outcome guards: a 'verified'-outcome payload on the rejected event (and the reverse) is dropped", () => {
+    const loop = deriveLearningLoopById(
+      [
+        { type: E.failureRecorded, payload: { failure: failure() } },
+        { type: E.hypothesisRecorded, payload: { hypothesis: hypothesis() } },
+        // verified-outcome payload mis-routed to the rejected event → ignored
+        { type: E.hypothesisRejected, payload: { verification: verified() } },
+        // rejected-outcome payload mis-routed to the verified event → ignored
+        { type: E.hypothesisVerified, payload: { verification: rejected() } },
+      ],
+      LOOP,
+    );
+    expect(loop?.verifiedHypothesisIds).toEqual([]);
+    expect(loop?.rejectedHypothesisIds).toEqual([]);
+    expect(loop?.verifications).toEqual([]); // neither mis-routed payload reached the log
+    expect(loop?.stage).toBe("hypothesis_recorded"); // nothing advanced
+  });
+
+  it("(L23) a rejection landing after a sibling is verified keeps the loop out of 'rejected' and dedups the rejected-id set", () => {
+    const loop = deriveLearningLoopById(
+      [
+        { type: E.failureRecorded, payload: { failure: failure() } },
+        { type: E.hypothesisRecorded, payload: { hypothesis: hypothesis({ id: "hyp_1" }) } },
+        { type: E.hypothesisRecorded, payload: { hypothesis: hypothesis({ id: "hyp_2" }) } },
+        { type: E.hypothesisVerified, payload: { verification: verified({ hypothesisId: "hyp_1" }) } }, // stage → verified, canDistill true
+        { type: E.hypothesisRejected, payload: { verification: rejected({ hypothesisId: "hyp_2" }) } },
+        {
+          type: E.hypothesisRejected,
+          payload: { verification: rejected({ hypothesisId: "hyp_2", verifiedAt: "2026-06-16T00:07:00Z" }) },
+        },
+      ],
+      LOOP,
+    );
+    expect(loop?.stage).toBe("verified"); // canDistill stayed true → NOT flipped to "rejected"
+    expect(loop?.rejectedHypothesisIds).toEqual(["hyp_2"]); // deduped despite two reject events
+    expect(loop?.verifications).toHaveLength(3); // 1 verified + 2 rejected, all appended to the raw log
+  });
+
+  it("(L24) consult outcome guards: a 'skipped' payload on the completed event (and the reverse) is ignored", () => {
+    const loop = deriveLearningLoopById(
+      [
+        { type: E.failureRecorded, payload: { failure: failure() } },
+        // skipped-outcome consult (with a valid skipReason) mis-routed to the completed event → ignored
+        { type: E.consultCompleted, payload: { consult: { ...consult(), outcome: "skipped", skipReason: "n/a" } } },
+        // completed-outcome consult mis-routed to the skipped event → ignored
+        { type: E.consultSkipped, payload: { consult: { ...consult(), outcome: "completed" } } },
+      ],
+      LOOP,
+    );
+    expect(loop?.consult).toBeUndefined();
+    expect(loop?.stage).toBe("failed"); // neither mis-routed consult closed the loop
+  });
+});
