@@ -11,7 +11,10 @@ import {
   pushCheckpoint,
   SLASH_COMMANDS,
   sessionToMarkdown,
+  setAssistantDraftText,
   setAssistantParts,
+  setSessionError,
+  setSessionStatus,
   toProviderMessages,
   undoToLastCheckpoint,
   updateToolCall,
@@ -201,5 +204,68 @@ describe("SLASH_COMMANDS catalog", () => {
       expect(parsed).not.toBeNull();
       expect(parsed!.kind).not.toBe("unknown");
     }
+  });
+});
+
+// Characterization tests (no behavior change) for three previously-unasserted session
+// reducers: setSessionStatus, setSessionError, and the streaming-draft accumulator
+// setAssistantDraftText. The session-reducer block above drives messages/checkpoints, but
+// these status/draft flips were never pinned. Load-bearing contract:
+//   - setSessionStatus swaps ONLY status and bumps updatedAt (touch), non-mutating;
+//   - setSessionError FORCES status "error" regardless of the prior status and records the
+//     message — a real error must never be masked as "done";
+//   - setAssistantDraftText REPLACES the trailing text part on every stream tick (so the
+//     growing draft is one part, not N appended fragments) and — the key guard — an empty
+//     tick seeds NO empty text part; it touches only the target message id, non-mutating.
+describe("session status reducers + streaming draft", () => {
+  const LATER = "2026-06-10T01:00:00.000Z";
+  // a session carrying an in-flight assistant message ("a1") to stream into
+  const sessionWithAssistant = () =>
+    beginAssistantMessage(appendUserMessage(baseSession(), { id: "u1", text: "hi", now: NOW }), {
+      id: "a1",
+      now: NOW,
+    });
+
+  it("setSessionStatus swaps only status and bumps updatedAt, non-mutating", () => {
+    const before = sessionWithAssistant();
+    expect(before.status).toBe("thinking"); // appendUserMessage left it thinking
+    const after = setSessionStatus(before, "tooling", LATER);
+    expect(after.status).toBe("tooling");
+    expect(after.updatedAt).toBe(LATER);
+    expect(after.messages).toBe(before.messages); // unrelated fields carried by identity
+    expect(after).not.toBe(before);
+    expect(before.status).toBe("thinking"); // source unchanged
+  });
+
+  it("setSessionError forces status 'error' regardless of prior status and records the message", () => {
+    const before = setSessionStatus(sessionWithAssistant(), "done", NOW);
+    const after = setSessionError(before, "boom", LATER);
+    expect(after.status).toBe("error"); // forced, not carried over as "done"
+    expect(after.error).toBe("boom");
+    expect(after.updatedAt).toBe(LATER);
+  });
+
+  it("setAssistantDraftText replaces the trailing text part on each tick (not append)", () => {
+    let s = setAssistantDraftText(sessionWithAssistant(), { messageId: "a1", text: "he", now: LATER });
+    expect(s.messages.find((m) => m.id === "a1")!.parts).toEqual([{ type: "text", text: "he" }]);
+
+    s = setAssistantDraftText(s, { messageId: "a1", text: "hello", now: LATER });
+    // replaced in place — still a single text part, never two fragments
+    expect(s.messages.find((m) => m.id === "a1")!.parts).toEqual([{ type: "text", text: "hello" }]);
+    expect(s.updatedAt).toBe(LATER);
+  });
+
+  it("never seeds an empty trailing text part (the length>0 guard)", () => {
+    const s = setAssistantDraftText(sessionWithAssistant(), { messageId: "a1", text: "", now: LATER });
+    expect(s.messages.find((m) => m.id === "a1")!.parts).toEqual([]); // empty tick adds nothing
+  });
+
+  it("touches only the target message and does not mutate the source", () => {
+    const before = sessionWithAssistant();
+    const after = setAssistantDraftText(before, { messageId: "a1", text: "x", now: LATER });
+    // source assistant message still empty (non-mutating)
+    expect(before.messages.find((m) => m.id === "a1")!.parts).toEqual([]);
+    // sibling user message untouched
+    expect(after.messages.find((m) => m.id === "u1")).toEqual(before.messages.find((m) => m.id === "u1"));
   });
 });
