@@ -251,3 +251,57 @@ describe("workflowInputFieldSchema — leaf input contract: required key/label, 
     expect("placeholder" in stripped).toBe(false); // plain z.object strips
   });
 });
+
+// The existing template-loop tests only assert schema VALIDITY, but
+// workflowTemplateSchema declares every list as a bare z.array(...) with no
+// .min(1) — so the schema alone PERMITS an empty-shell template (no inputs, no
+// agents, no plan, no verification, no outputs) that would parse fine yet do
+// nothing and verify nothing. The honesty contract that keeps the SHIPPED catalog
+// runnable lives ABOVE the schema: every core template must actually declare all
+// five lists non-empty, and — load-bearing — must carry a real verification gate,
+// because buildMissionCreateFromTemplate writes "검증 — {verificationPlan}" into
+// the mission goal, so an empty verificationPlan would emit a mission that claims
+// a plan with no verification (a "done without checking" lie). This is the
+// schema-permissive-vs-catalog-strict seam, never pinned. Self-consistent — the
+// templates are the oracle; the consumer behavior is derived from a real
+// buildMissionCreateFromTemplate run.
+describe("CORE_WORKFLOW_TEMPLATES — shipped-catalog honesty (schema permits empty shells; the catalog forbids them)", () => {
+  it("the schema itself is permissive — an empty-shell template parses, proving validity ≠ runnable", () => {
+    const emptyShell = {
+      id: "",
+      title: "",
+      domain: "coding",
+      inputFields: [],
+      defaultAgents: [],
+      missionPlan: [],
+      verificationPlan: [],
+      outputArtifacts: [],
+    };
+    expect(workflowTemplateSchema.safeParse(emptyShell).success).toBe(true); // schema can't guarantee a runnable template
+  });
+
+  it("yet every shipped core template declares all five lists non-empty (no empty shell ships)", () => {
+    expect(CORE_WORKFLOW_TEMPLATES.length).toBeGreaterThan(0);
+    for (const t of CORE_WORKFLOW_TEMPLATES) {
+      expect(t.inputFields.length).toBeGreaterThan(0);
+      expect(t.defaultAgents.length).toBeGreaterThan(0);
+      expect(t.missionPlan.length).toBeGreaterThan(0);
+      expect(t.verificationPlan.length).toBeGreaterThan(0); // the verification gate is never empty
+      expect(t.outputArtifacts.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("every shipped template carries its verification gate into the mission goal (no done-without-checking)", () => {
+    for (const t of CORE_WORKFLOW_TEMPLATES) {
+      const goal = buildMissionCreateFromTemplate(t, {}, { missionId: "m_chk" }).goal;
+      expect(goal).toContain(`검증 — ${t.verificationPlan.join(", ")}`); // the real verification steps land in the goal
+      for (const step of t.verificationPlan) expect(goal).toContain(step);
+    }
+  });
+
+  it("every shipped template id is a stable generic snake_case key (no spaces/uppercase/domain) and unique", () => {
+    const ids = CORE_WORKFLOW_TEMPLATES.map((t) => t.id);
+    for (const id of ids) expect(id).toMatch(/^[a-z][a-z0-9_]*$/);
+    expect(new Set(ids).size).toBe(ids.length); // referencable by id with no collision
+  });
+});
