@@ -103,6 +103,22 @@ describe("evaluatePrCreateGate", () => {
     expect(evaluatePrCreateGate({ ...baseOK, body: "a".repeat(PR_BODY_MAX_CHARS + 1) }).kind).toBe("blocked");
   });
 
+  it("title에 제어문자(개행/CR/NUL/DEL)가 있으면 차단 — W5d 라벨 가드와 parity(회귀)", () => {
+    // 드리프트 버그: title은 단일 라인 필드로 plan store·응답 preview·GitHub PUT으로 흘러가는데,
+    // W5d 라벨 가드(githubPullRequestLabelsUpdateGuards)는 같은 이유로 제어문자를 막던 반면 이
+    // create 경로는 schema(bare z.string())·런타임 어디서도 막지 않아 개행 주입(로그/응답 인젝션)이
+    // 통과했다(실측 kind=ok). body는 markdown이라 개행이 정당 — title만 막는다.
+    for (const bad of ["fix\ninjected log line", "fix\rinjected", "fix\u0000nul", "fix\u007fdel", "tab\tfield"]) {
+      const v = evaluatePrCreateGate({ ...baseOK, title: bad });
+      expect(v.kind, `should block: ${JSON.stringify(bad)}`).toBe("blocked");
+      if (v.kind === "blocked") expect(v.reason).toContain("제어문자");
+    }
+    // body의 개행은 정당 — 통과해야 함(오탐 방지)
+    expect(evaluatePrCreateGate({ ...baseOK, body: "line1\nline2\n" }).kind).toBe("ok");
+    // 정상 title은 계속 통과
+    expect(evaluatePrCreateGate({ ...baseOK, title: "Add evidence cards" }).kind).toBe("ok");
+  });
+
   it("빈 body는 허용(GitHub PR도 빈 body 허용)", () => {
     expect(evaluatePrCreateGate({ ...baseOK, body: "" }).kind).toBe("ok");
   });

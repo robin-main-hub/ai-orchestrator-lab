@@ -20,6 +20,14 @@ import { evaluateBranchNamePolicy } from "./githubBranchWriteGuards.js";
 const REPO_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 /** PR base 이름에 허용되는 문자(서버 측 강제 — env가 잘못 들어와도 안전선 유지). */
 const BASE_NAME_SAFE = /^[A-Za-z0-9._/-]+$/;
+/**
+ * 제어문자(C0 0x00–0x1F, DEL 0x7F). PR title은 단일 라인 필드로 plan store·응답 preview·GitHub
+ * PUT으로 흘러가, 줄바꿈/CR/NUL이 섞이면 로그/응답 인젝션·표시 깨짐의 표면이 된다. W5d 라벨 가드
+ * (githubPullRequestLabelsUpdateGuards.CONTROL_CHAR_RE)는 같은 이유로 라벨 이름에서 이미 막는데,
+ * 동일 단일-라인 필드인 title은 schema(bare z.string())·런타임 가드 어디서도 막지 않았다(실측 ok).
+ * (body는 markdown이라 줄바꿈이 정당 — title만 막는다.)
+ */
+const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/u;
 /** 기본 base allowlist — env가 비어 있을 때만 적용. main/develop을 보수적 디폴트로. */
 const DEFAULT_BASE_ALLOWLIST: ReadonlyArray<string> = ["main", "develop"];
 
@@ -108,6 +116,9 @@ export function evaluatePrCreateGate(input: {
   if (!title) return { kind: "blocked", reason: "title이 비어 있습니다" };
   if (title.length > PR_TITLE_MAX_CHARS) {
     return { kind: "blocked", reason: `title이 너무 깁니다(최대 ${PR_TITLE_MAX_CHARS}자)` };
+  }
+  if (CONTROL_CHAR_RE.test(title)) {
+    return { kind: "blocked", reason: "title에 제어문자(줄바꿈/CR/NUL 등)가 포함되어 있습니다" };
   }
   const body = input.body ?? "";
   if (body.length > PR_BODY_MAX_CHARS) {
