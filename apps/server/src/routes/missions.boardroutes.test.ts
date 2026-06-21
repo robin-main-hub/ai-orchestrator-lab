@@ -1,8 +1,25 @@
 import type { IncomingMessage } from "node:http";
-import type { ServerMissionRecord } from "@ai-orchestrator/protocol";
+import type { EventEnvelope, ServerMissionRecord } from "@ai-orchestrator/protocol";
 import { describe, expect, it, vi } from "vitest";
-import type { MissionStore } from "../missions/missionStore.js";
+import { createMissionStore, type MissionStore } from "../missions/missionStore.js";
 import { handleMissionRoute } from "./missions.js";
+
+/** in-memory event storage so the route exercises the real appendEvent invariant, not a stub */
+function realStore() {
+  const events: EventEnvelope[] = [];
+  const store = createMissionStore({
+    loadEvents: async () => [...events],
+    appendEvents: async (_sessionId: string, envelopes: EventEnvelope[]) => {
+      for (const envelope of envelopes) {
+        if (!events.some((existing) => existing.id === envelope.id)) {
+          events.push(envelope);
+        }
+      }
+    },
+    now: () => "2026-06-13T00:00:00.000Z",
+  });
+  return { store, events };
+}
 
 function record(id: string, status: ServerMissionRecord["status"]): ServerMissionRecord {
   return {
@@ -147,6 +164,30 @@ describe("mission board routes", () => {
     expect(create).toHaveBeenCalled();
     expect(appendEvent).toHaveBeenCalled(); // planned artifacts attached
     expect((result().payload as { verificationPlan: unknown[] }).verificationPlan.length).toBeGreaterThan(0);
+  });
+
+  it("POST /missions/:id/events 400s a cross-mission artifact and leaves the event log untouched", async () => {
+    const { store, events } = realStore();
+    await store.create({
+      id: "m_evt",
+      title: "evt",
+      goal: "g",
+      truthStatus: "observed",
+      createdBy: "desktop",
+      workers: [{ agentId: "a1", role: "builder", displayName: "B", soulMode: "summary", configSource: "internal" }],
+    });
+    const before = events.length;
+    const { args, result } = deps(store, "/missions/m_evt/events", "POST", {
+      type: "mission.artifact.attached",
+      payload: {
+        artifact: { id: "art_x", missionId: "m_other", kind: "diff", summary: "cross", truthStatus: "observed", createdAt: "2026-06-13T00:00:01.000Z" },
+      },
+    });
+    expect(await handleMissionRoute(args)).toBe(true);
+    const { status, payload } = result();
+    expect(status).toBe(400);
+    expect((payload as { error: string }).error).toBe("invalid_mission_event_payload");
+    expect(events.length).toBe(before); // rejected request is not appended
   });
 
   it("POST /missions/from-template 404s a removed business template", async () => {

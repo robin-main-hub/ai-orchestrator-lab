@@ -77,6 +77,59 @@ describe("mission store + materialized index", () => {
     expect(restored[0]!.artifacts.map((a) => a.id)).toEqual(["artifact_1"]);
   });
 
+  it("appends an artifact when both the envelope and the nested artifact missionId match", async () => {
+    const { deps, events } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    const before = events.length;
+
+    await store.appendEvent("mission_001", {
+      type: "mission.artifact.attached",
+      payload: {
+        artifact: {
+          id: "artifact_match",
+          missionId: "mission_001",
+          kind: "diff",
+          summary: "in-mission diff",
+          truthStatus: "observed",
+          createdAt: "2026-06-13T00:00:01.000Z",
+        },
+      },
+    });
+
+    expect(events.length).toBe(before + 1);
+    expect(buildMissionIndexFromEvents(events)[0]!.artifacts.map((a) => a.id)).toEqual(["artifact_match"]);
+  });
+
+  it("rejects an artifact whose nested missionId targets a different mission, leaving the log and state untouched", async () => {
+    const { deps, events } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    const before = events.length;
+
+    // envelope missionId matches the route, but the nested artifact belongs to another mission
+    await expect(
+      store.appendEvent("mission_001", {
+        type: "mission.artifact.attached",
+        payload: {
+          artifact: {
+            id: "artifact_cross",
+            missionId: "mission_other",
+            kind: "diff",
+            summary: "cross-mission diff",
+            truthStatus: "observed",
+            createdAt: "2026-06-13T00:00:02.000Z",
+          },
+        },
+      }),
+    ).rejects.toThrow(MissionEventValidationError);
+
+    // the rejected request must not be appended to the raw event log
+    expect(events.length).toBe(before);
+    // and replay/materialize must not show any cross-mission artifact contamination
+    expect(buildMissionIndexFromEvents(events)[0]!.artifacts).toEqual([]);
+  });
+
   it("keeps the worker's Hermes slot id as continuity metadata", async () => {
     const { deps } = memoryDeps();
     const store = createMissionStore(deps);
