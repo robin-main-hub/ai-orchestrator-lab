@@ -153,6 +153,19 @@ export function checkContent(content: string): GuardResult {
   return { ok: true };
 }
 
+/**
+ * Commit message 가드 — secret_suspect. commit message는 file content·PR title/body·comment와
+ * 똑같이 외부(public GitHub)에 노출되는 표면인데, 이 runner는 파일 content만 scanForSecrets로
+ * 막고 message는 createCommit으로 그대로 흘려보냈다(실측 observed — 메시지에 박은 토큰이 push됨).
+ * schema 주석(raw transcript/비밀 절대 금지)이 표현하는 의도가 실제로는 강제되지 않던 드리프트.
+ * 형제 secret 표면(W1 comment·W3a content·W4a/W5c PR title/body)과 동일하게 공유 스캐너로 막는다.
+ */
+export function checkCommitMessage(message: string): GuardResult {
+  const secret = scanForSecrets(message);
+  if (!secret.ok) return block("secret_suspect", `commit message에 secret 패턴 의심(${secret.matched})`);
+  return { ok: true };
+}
+
 /** Branch 정책 — W2 prefix와 보호 브랜치 거부. */
 export function checkBranch(branchName: string, protectedBranches: ReadonlyArray<string>): GuardResult {
   if (protectedBranches.includes(branchName)) {
@@ -251,6 +264,11 @@ export async function runMultiFileCommitExecute(
   const filesGate = validateFiles(request.files);
   if (!filesGate.ok) {
     return blockedResponse(filesGate.reason, filesGate.message);
+  }
+  // (2b) commit message secret scan — message도 외부 노출 표면(file content와 동일 강도).
+  const messageGate = checkCommitMessage(request.message);
+  if (!messageGate.ok) {
+    return blockedResponse(messageGate.reason, messageGate.message);
   }
   // (3) approval
   const authorized = await deps.verifyApproval(request.approvalId);
