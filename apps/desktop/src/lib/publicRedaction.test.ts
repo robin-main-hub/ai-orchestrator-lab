@@ -37,12 +37,15 @@ describe("publicRedaction", () => {
     expect(inspectPublicText("요약 단계만 표시").isSafe).toBe(true);
   });
 
-  it("keyword 없는 bare 고신호 토큰(ghp_/github_pat_/AKIA/AIza/xox/PEM)도 마스킹·차단한다", () => {
+  it("keyword 없는 bare 고신호 토큰(ghp_/github_pat_/glpat-/AKIA/AIza/xox/PEM)도 마스킹·차단한다", () => {
     // 이전엔 URL/Bearer/sk-/KEY=value 형태만 잡아, 산문에 박힌 bare 토큰이 공개 표면으로
     // 새어나갔다(redact 누락 + inspect가 isSafe=true). gitleaks 회피로 토큰은 런타임 조합.
+    // glpat-(GitLab PAT)는 형제 redaction 게이트(W1·errors.ts)엔 있는데 이 공개-텍스트
+    // redactor만 빠져 mask·gate 둘 다 통과했다(parity 회귀).
     const tokens = {
       ghp: "ghp_" + "A".repeat(36),
       pat: "github_" + "pat_" + "11" + "B".repeat(22) + "_" + "c".repeat(40),
+      glpat: "gl" + "pat-" + "Ab3xZ9kLmNpQ7rSt2UvW",
       akia: "AKIA" + "ABCDEFGHIJKLMNOP",
       aiza: "AIza" + "d".repeat(35),
       xox: "xoxb-" + "1".repeat(12) + "-efabefabefab",
