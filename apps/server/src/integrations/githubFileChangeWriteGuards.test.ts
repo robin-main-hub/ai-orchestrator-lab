@@ -53,6 +53,24 @@ describe("evaluateFilePathPolicy", () => {
     }
   });
 
+  it("env/ 디렉터리·secrets 경로 차단 — 형제 multi-file 가드와 parity(회귀)", () => {
+    // 드리프트 버그: 형제 githubMultiFileCommit.checkPath는 막는데 이 단일파일 가드가 빠뜨려
+    // env/production.json·secrets.yaml 같은 비밀 저장 경로를 단일파일 write로는 허용했다(실측 ok:true).
+    for (const bad of [
+      "env/production.json",
+      "config/env/db.yaml",
+      "secrets.yaml",
+      "secret.json",
+      "secrets/db.txt",
+      "app/secrets/keys.json",
+    ]) {
+      expect(evaluateFilePathPolicy(bad).ok, `should reject: ${bad}`).toBe(false);
+    }
+    // 오탐 방지: 이름에 env/secret이 들어가도 segment가 아니면 통과(environment·my-secrets-doc.md)
+    expect(evaluateFilePathPolicy("src/environment.ts").ok).toBe(true);
+    expect(evaluateFilePathPolicy("docs/env-setup.md").ok).toBe(true);
+  });
+
   it("이름에 ..가 들어 있어도 segment가 아니면 통과(예: foo..bar)", () => {
     expect(evaluateFilePathPolicy("src/foo..bar.ts").ok).toBe(true);
   });
