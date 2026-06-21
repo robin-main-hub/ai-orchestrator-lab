@@ -292,6 +292,35 @@ describe("runMultiFileCommitExecute — W5b atomic commit", () => {
     expect(res.reason).toBe("branch_protection");
   });
 
+  it("(#11b refspec injection) git ref 특수문법 branchName 차단 — W2 parity(회귀)", async () => {
+    // 드리프트 버그: checkBranch가 prefix/protected만 보고 ..  //  @{  \  trailing . 같은
+    // git ref 특수문법을 놓쳐, prefix만 맞으면(agent/foo..bar 등) 그대로 getRefSha/updateRefSha의
+    // ref로 흘러가 ref 조작 표면이 됐다(실측 ALLOW). W2 evaluateBranchNamePolicy와 안전성 parity.
+    for (const branchName of [
+      "agent/foo..bar",
+      "agent/x@{0}",
+      "agent/foo\\bar",
+      "agent/a//b",
+      "agent/end.",
+      "agent/feature/", // trailing slash
+    ]) {
+      const client = makeClient();
+      const res = await runMultiFileCommitExecute(
+        request({ branchName }),
+        deps({ client, protectedBranches: ["main"] }),
+      );
+      expect(res.outcome, branchName).toBe("blocked");
+      expect(res.reason, branchName).toBe("branch_protection");
+      expect(client.getRefSha, branchName).not.toHaveBeenCalled();
+    }
+    // 정상 작업 가지(debate/ 포함)는 계속 통과 — 안전성 검증이 오탐을 만들지 않는다.
+    for (const branchName of ["agent/ok-feature", "debate/topic-1"]) {
+      const client = makeClient();
+      const res = await runMultiFileCommitExecute(request({ branchName }), deps({ client }));
+      expect(res.outcome, branchName).toBe("observed");
+    }
+  });
+
   it("(#12 duplicate path) 같은 path 2개 → blocked(duplicate_path)", async () => {
     const client = makeClient();
     const res = await runMultiFileCommitExecute(
