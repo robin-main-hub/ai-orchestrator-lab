@@ -32,6 +32,10 @@ import {
   eventSyncPushRequestSchema,
   eventSyncPushResponseSchema,
   executionSlotSchema,
+  executionRuntimeBackendSchema,
+  executionSlotStatusSchema,
+  remoteExecutionKindSchema,
+  remoteExecutionRequestSchema,
   operatorCockpitHandoffSchema,
   parseAgentDelegationEventPayload,
   projectAgentDelegationTimeline,
@@ -1609,5 +1613,106 @@ describe("index — agent-delegation authority: bounded ladder, total dispatch m
     });
     expect(succeeded.route).toBeUndefined();
     expect(succeeded.realProviderCall).toBeUndefined();
+  });
+});
+
+// EXECUTION AUTHORITY — where code may run (the runtime backend), the slot
+// lifecycle that gates it, and the remote-dispatch request — is only touched by a
+// single happy-path parse (one slot, asserting status==="placeholder"). The
+// enum memberships, the required-vs-optional contract, the binding of a slot to the
+// permission ladder + approval gate, and the remote request's structural approval
+// gate are all unpinned. A backend that grew an "ssh" rung, a slot that dropped its
+// approvalState, or a remote request with an optional gate would all pass today.
+//   (1) executionRuntimeBackend is the closed 4-set {ui_stub,tmux,local_cli,
+//       dgx_remote} where ui_stub is the inert "no real execution" default; an
+//       unknown backend is rejected. remoteExecutionKind is the closed 3-set
+//       {model_inference,workspace_run,event_sync} — only these reach a remote node.
+//   (2) executionSlotStatus is a gated lifecycle: it STARTS at placeholder
+//       (not-yet-real), carries an explicit pending_approval gate and terminal
+//       failed/blocked — no silent done/ok.
+//   (3) an executionSlot binds execution to authority — status/backend/approvalState/
+//       requestedPermissions/decisionRequired are all mandatory, requestedPermissions
+//       is drawn from the permission ladder, and commandPreview/blockedReason stay
+//       undefined when absent (never fabricated).
+//   (4) remoteExecutionRequest makes the approval gate STRUCTURAL (approvalState
+//       required, not optional), bounds commandPreview to <=10000, and requires
+//       id/runId/kind/targetNodeId — a remote dispatch cannot omit its gate.
+// Expected values are read off the schemas (self-consistent), never magic.
+describe("index — execution authority: closed backends, gated slot lifecycle, structural remote approval", () => {
+  it("(1) runtime backend is a closed 4-set (ui_stub inert) and remoteExecutionKind a closed 3-set", () => {
+    expect(executionRuntimeBackendSchema.options).toEqual(["ui_stub", "tmux", "local_cli", "dgx_remote"]);
+    expect(executionRuntimeBackendSchema.options[0]).toBe("ui_stub"); // the inert no-real-execution default
+    expect(executionRuntimeBackendSchema.safeParse("ssh").success).toBe(false);
+    expect(executionRuntimeBackendSchema.safeParse("docker").success).toBe(false);
+    expect(remoteExecutionKindSchema.options).toEqual(["model_inference", "workspace_run", "event_sync"]);
+    expect(remoteExecutionKindSchema.safeParse("shell_exec").success).toBe(false);
+  });
+
+  it("(2) executionSlotStatus is a gated lifecycle starting at placeholder with a pending_approval gate", () => {
+    expect(executionSlotStatusSchema.options).toEqual([
+      "placeholder",
+      "idle",
+      "pending_approval",
+      "running",
+      "completed",
+      "failed",
+      "blocked",
+    ]);
+    expect(executionSlotStatusSchema.options[0]).toBe("placeholder"); // not-yet-real start
+    expect(executionSlotStatusSchema.options).toContain("pending_approval"); // explicit approval gate
+    for (const terminal of ["completed", "failed", "blocked"]) {
+      expect(executionSlotStatusSchema.options).toContain(terminal);
+    }
+    for (const forged of ["done", "ok", "approved"]) {
+      expect(executionSlotStatusSchema.options).not.toContain(forged);
+    }
+  });
+
+  it("(3) an executionSlot binds execution to the permission ladder + approval gate and fabricates no preview/reason", () => {
+    const base = {
+      id: "slot1",
+      sessionId: "s1",
+      label: "Architect",
+      role: "architect" as const,
+      backend: "ui_stub" as const,
+      status: "placeholder" as const,
+      approvalState: "required" as const,
+      requestedPermissions: ["run_safe_commands"],
+      decisionRequired: true,
+      createdAt: "2026-06-21T00:00:00.000Z",
+    };
+    const parsed = executionSlotSchema.parse(base);
+    expect(parsed.commandPreview).toBeUndefined(); // optional — not fabricated
+    expect(parsed.blockedReason).toBeUndefined();
+    for (const key of ["status", "backend", "approvalState", "requestedPermissions", "decisionRequired"]) {
+      const { [key]: _omit, ...partial } = base as Record<string, unknown>;
+      expect(executionSlotSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+    // requestedPermissions is drawn from the permission ladder — an unknown grant is rejected
+    expect(executionSlotSchema.safeParse({ ...base, requestedPermissions: ["root"] }).success).toBe(false);
+    expect(executionSlotSchema.safeParse({ ...base, requestedPermissions: ["secret_access"] }).success).toBe(true);
+  });
+
+  it("(4) remoteExecutionRequest makes the approval gate structural and bounds the command preview", () => {
+    const base = {
+      id: "rex1",
+      runId: "run1",
+      kind: "workspace_run" as const,
+      targetNodeId: "dgx-02",
+      commandPreview: "pnpm test",
+      approvalState: "required" as const,
+      createdAt: "2026-06-21T00:00:00.000Z",
+    };
+    expect(remoteExecutionRequestSchema.safeParse(base).success).toBe(true);
+    // the approval gate is not optional — a remote dispatch cannot omit it
+    for (const key of ["approvalState", "kind", "targetNodeId", "runId", "id"]) {
+      const { [key]: _omit, ...partial } = base as Record<string, unknown>;
+      expect(remoteExecutionRequestSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+    // commandPreview is bounded so the operator always sees a finite, reviewable command
+    expect(remoteExecutionRequestSchema.safeParse({ ...base, commandPreview: "x".repeat(10_000) }).success).toBe(true);
+    expect(remoteExecutionRequestSchema.safeParse({ ...base, commandPreview: "x".repeat(10_001) }).success).toBe(false);
+    // kind is constrained to the closed remote-execution set
+    expect(remoteExecutionRequestSchema.safeParse({ ...base, kind: "shell_exec" }).success).toBe(false);
   });
 });
