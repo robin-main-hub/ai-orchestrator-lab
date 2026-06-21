@@ -44,6 +44,12 @@ const SECRET_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
   { name: "AWS access key", pattern: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: "Anthropic API key", pattern: /\bsk-ant-[A-Za-z0-9_-]{20,}\b/ },
   { name: "OpenAI API key", pattern: /\bsk-[A-Za-z0-9]{40,}\b/ },
+  // 모던(2024+) OpenAI 키 — sk-proj-… / sk-svcacct-… / sk-admin- 는 본문에 '-'·'_'가
+  // 섞여 위의 pure-alnum sk-{40,} 규칙으로는 run이 끊겨 전혀 안 잡힌다(실측 false-negative).
+  // H8d runner scanner는 broader sk-[...]{16,}로 이미 잡으므로 게이트 간 parity를 맞춘다.
+  // 단, 광범위한 sk-<word>- 매칭은 산문(예: "sk-learn"=scikit-learn)을 오탐하므로
+  // 문서화된 prefix(proj/svcacct/admin)로 한정 — false-positive 없이 누락만 막는다.
+  { name: "OpenAI project key (sk-proj/svcacct/admin)", pattern: /\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}/ },
   { name: "Slack token", pattern: /\bxox[abposr]-[A-Za-z0-9-]{10,}\b/ },
   { name: "Google API key", pattern: /\bAIza[0-9A-Za-z_-]{30,}\b/ },
   { name: "Authorization Bearer header", pattern: /\bAuthorization\s*:\s*Bearer\s+\S+/i },
