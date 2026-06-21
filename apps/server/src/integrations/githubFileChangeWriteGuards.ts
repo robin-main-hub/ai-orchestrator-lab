@@ -50,7 +50,13 @@ const DENIED_PATH_PATTERNS: ReadonlyArray<{ name: string; test: (path: string) =
   // 강화 방향(더 막음)이라 부작용 경로 변화 없음 — 단지 형제 가드와 동일 강도로 맞춘다.
   { name: "id_rsa*", test: (p) => /(^|\/)id_(?:rsa|ed25519|ecdsa|dsa)(\..*)?$/i.test(p) },
   { name: ".github/workflows/*", test: (p) => /(^|\/)\.github\/workflows\//i.test(p) },
-  { name: ".git/*", test: (p) => /(^|\/)\.git\//i.test(p) || p === ".git" },
+  // .git — 디렉터리(.git/…)뿐 아니라 *파일*로 존재하는 .git(submodule/worktree의 gitdir
+  // 포인터)도 막는다. 이전 규칙 `(^|/)\.git/` + `p === ".git"`는 디렉터리와 정확히 루트 .git
+  // 파일만 잡아, `submodule/.git`·`a/b/.git`처럼 nested 위치의 .git *파일*을 흘려보냈다(실측
+  // W3a ok:true vs 형제 W5b checkPath ok:false). 형제 multi-file 가드는 `(^|/)\.git(/|$)/i`로
+  // 파일/디렉터리 양쪽을 nested 포함 차단하므로 같은 정규식으로 parity. `(/|$)` 경계라
+  // .gitignore·.gitattributes·.gitkeep 같은 정당 dotfile은 계속 통과(오탐 없음).
+  { name: ".git/*", test: (p) => /(^|\/)\.git(\/|$)/i.test(p) },
   { name: "node_modules/*", test: (p) => /(^|\/)node_modules\//i.test(p) },
   { name: "dist/*", test: (p) => /(^|\/)dist\//i.test(p) },
   { name: "build/*", test: (p) => /(^|\/)build\//i.test(p) },
