@@ -66,6 +66,11 @@ const CLIENT_SECRET_PATTERNS: ReadonlyArray<RegExp> = [
   /\bAKIA[0-9A-Z]{16}\b/,
   /\bsk-ant-[A-Za-z0-9_-]{20,}\b/,
   /\bsk-[A-Za-z0-9]{40,}\b/,
+  // 모던(2024+) OpenAI 키 sk-proj-…/sk-svcacct-…/sk-admin- 는 본문에 '-'·'_'가 섞여
+  // 위 pure-alnum sk-{40,} run이 끊겨 안 잡힌다. 서버 W1 scanner와 동일한 누락이라
+  // 같은 정밀 패턴으로 parity(문서화된 prefix 한정 — 광범위 sk-<word>-는 산문
+  // "sk-learn"=scikit-learn 오탐하므로 회피).
+  /\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}/,
   /\bxox[abposr]-[A-Za-z0-9-]{10,}\b/,
   /\bAIza[0-9A-Za-z_-]{30,}\b/,
   /\bAuthorization\s*:\s*Bearer\s+\S+/i,
