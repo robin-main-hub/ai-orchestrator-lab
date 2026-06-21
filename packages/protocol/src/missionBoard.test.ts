@@ -9,6 +9,7 @@ import {
   MISSION_KANBAN_COLUMN_LABEL,
   MISSION_KANBAN_COLUMN_ORDER,
   missionKanbanColumnIdSchema,
+  missionTraceEventTypeSchema,
   redactTracePreview,
   traceEventFromMissionEnvelope,
 } from "./missionBoard.js";
@@ -530,5 +531,88 @@ describe("mergeTraceEvent — observed needs a real sha (merged-without-sha down
     expect(e.title).toBe("머지 대기열");
     expect(e.severity).toBe("info");
     expect(e.truthStatus).toBe("planned");
+  });
+});
+
+// Every test above reaches a trace event's `.type` by string literal, but the
+// enum that DEFINES the closed vocabulary of trace types —
+// missionTraceEventTypeSchema — is never asserted. It is the single source of
+// truth for "what a trace event can be", and it carries two authority facts:
+// (1) totality — it is a closed 24-member set, and every type the live-trace
+// builders actually emit (deriveMissionTrace snapshot + traceEventFromMissionEnvelope
+// stream) is a member, so no builder can smuggle a type outside the declared
+// vocabulary; (2) the trace-type surface is DISTINCT from the bus-envelope input
+// surface — the dotted envelope names the stream consumes ("mission.created" is a
+// shared spelling, but "mission.worker.assigned", "mission.workspace.preview.recorded",
+// "mission.merge.queued", "mission.closed" are bus names, NOT trace types) are
+// rejected by the enum. Pin both, self-consistent (emitted types come from real
+// builder runs; the closed set is the enum's own declared options).
+describe("missionTraceEventTypeSchema — closed trace-type totality + bus/trace surface divergence", () => {
+  it("is a closed 24-member set and accepts every type the live-trace builders actually emit", () => {
+    const CLOSED = [
+      "mission.created",
+      "worker.assigned",
+      "worker.started",
+      "checkpoint.created",
+      "workspace.attached",
+      "preview.recorded",
+      "design.blueprint.recorded",
+      "visual_qa.recorded",
+      "design.issue.recorded",
+      "scaffold.planned",
+      "scaffold.applied",
+      "sandbox.preflight",
+      "sandbox.exec.started",
+      "sandbox.exec.completed",
+      "sandbox.exec.failed",
+      "verification.recorded",
+      "error_card.recorded",
+      "self_correction.started",
+      "self_correction.stopped",
+      "approval.required",
+      "merge.queued",
+      "merge.completed",
+      "merge.conflict",
+      "zombie.detected",
+    ];
+    expect(missionTraceEventTypeSchema.options).toEqual(CLOSED); // closed totality, exact + ordered
+
+    // every type emitted by the snapshot builder over a richly-populated record is a member
+    const snapshot = deriveMissionTrace(
+      record({
+        workers: [{ id: "w1", agentId: "agent_builder", role: "builder", branchName: "agent/m1", assignedAt: "2026-06-13T00:10:00.000Z" }] as never,
+        verificationReports: [
+          { id: "v1", verifierAgentId: "agent_verifier", status: "failed", observed: false, checks: [{ status: "failed", summary: "tsc error" }], createdAt: "2026-06-13T00:20:00.000Z" },
+        ] as never,
+        mergeQueueItems: [{ id: "m", branchName: "b", status: "queued", conflictFiles: [], reason: "q", queuedAt: "2026-06-13T05:00:00.000Z" }] as never,
+      }),
+    );
+    // plus a couple of stream events from the envelope mapper
+    const streamed = [
+      traceEventFromMissionEnvelope({
+        type: "mission.merge.queued",
+        createdAt: "2026-06-13T02:00:00.000Z",
+        payload: { missionId: "mission_1", item: { id: "m1", missionId: "mission_1", branchName: "agent/mission_1", status: "merged", requiredVerificationReportId: "v1", mergeCommitSha: "abc1234567def", conflictFiles: [], reason: "ok", queuedAt: "2026-06-13T02:00:00.000Z" } },
+      })!,
+    ];
+    for (const event of [...snapshot, ...streamed]) {
+      expect(missionTraceEventTypeSchema.safeParse(event.type).success).toBe(true); // never outside the vocabulary
+    }
+  });
+
+  it("rejects bus-envelope input names — the trace-type surface is distinct from what the stream consumes", () => {
+    // these are accepted (or null-rejected) bus spellings, but they are NOT trace event types
+    for (const busName of [
+      "mission.worker.assigned",
+      "mission.workspace.preview.recorded",
+      "mission.merge.queued",
+      "mission.verification.recorded",
+      "mission.closed",
+      "events.other",
+    ]) {
+      expect(missionTraceEventTypeSchema.safeParse(busName).success).toBe(false);
+    }
+    // "mission.created" is the one shared spelling across both surfaces
+    expect(missionTraceEventTypeSchema.safeParse("mission.created").success).toBe(true);
   });
 });
