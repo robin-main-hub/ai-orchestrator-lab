@@ -122,6 +122,19 @@ describe("redactTracePreview", () => {
     expect(redactTracePreview("x".repeat(500))!.length).toBeLessThanOrEqual(240);
     expect(redactTracePreview(undefined)).toBeUndefined();
   });
+
+  it("redacts fine-grained PAT (github_pat_) — base62 body evades classic gh_ and hex rules", () => {
+    // 회귀: classic gh[pousr]_ 규칙은 github_pat_를 못 잡고, body가 base62(비-hex)면
+    // [A-Fa-f0-9]{32,} 규칙도 회피 → 평문 PAT가 trace preview에 그대로 노출됐다.
+    // 토큰을 조각조합으로 만들어 repo gitleaks 오탐을 피하면서 SECRET_RE는 전체를 본다.
+    const body = "wWxXyYzZgGhHiIjJkKlLmM"; // 22 non-hex letters
+    const tail = "nNoOpPqQrRsStTuUvVwWxXyYzZgGhHiIjJ"; // non-hex letters, no 32-hex run
+    const pat = "github_" + "pat_" + body + "_" + tail;
+    const out = redactTracePreview(`leaked ${pat} here`)!;
+    expect(out).toContain("[redacted]");
+    expect(out).toContain("here");
+    expect(out).not.toContain(pat);
+  });
 });
 
 describe("traceEventFromMissionEnvelope", () => {
