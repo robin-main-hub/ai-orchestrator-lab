@@ -29,6 +29,17 @@ describe("publicRedaction", () => {
     ).toBe("checkpoint [redacted:path] with…");
   });
 
+  it("GitLab PAT(glpat-)도 공개 표면에서 마스킹·차단한다 — 형제 redaction 게이트와 parity", () => {
+    // glpat-(GitLab PAT)는 W1 githubCommentWriteGuards·errors.ts redactor엔 있는데 이 공개-텍스트
+    // redactor만 빠져 mask·gate 둘 다 통과했다(parity 회귀). gitleaks 회피로 토큰은 런타임 조합.
+    const glpat = "gl" + "pat-" + "Ab3xZ9kLmNpQ7rSt2UvW";
+    const text = `agent note ${glpat} done`;
+    expect(sanitizePublicText(text)).not.toContain(glpat);
+    expect(inspectPublicText(text).isSafe).toBe(false);
+    // 산문에 'glpat' 단어만 있고 토큰 형태(- + 20자)가 아니면 오탐 아님.
+    expect(inspectPublicText("the glpat prefix denotes a GitLab token").isSafe).toBe(true);
+  });
+
   it("공개 렌더에 위험한 원문이 남아 있으면 보고한다", () => {
     expect(inspectPublicText("tool input: hidden").isSafe).toBe(false);
     expect(inspectPublicText("API_KEY=secret-value").isSafe).toBe(false);
