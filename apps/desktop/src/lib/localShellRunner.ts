@@ -70,7 +70,10 @@ export type LocalShellRunnerDeps = {
 const SECRET_PATTERNS: RegExp[] = [
   /\bBearer\s+[A-Za-z0-9._\-]+/gi,
   /\bsk-[A-Za-z0-9._\-]{8,}/g,
-  /\bgh[pousr]_[A-Za-z0-9]{20,}/g,
+  // classic(ghp_/gho_/ghu_/ghs_/ghr_) + fine-grained PAT(github_pat_, 2022+ 권장 형식).
+  // fine-grained는 prefix·underscore가 달라 classic 규칙으로는 안 잡힌다 — 별도 alternation으로
+  // 막지 않으면 평문 PAT가 로그/트레이스에 그대로 노출된다(마스킹 false-negative).
+  /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g,
   /\b([A-Z0-9_]*(?:API[_-]?KEY|AUTH[_-]?TOKEN|ACCESS[_-]?TOKEN|SECRET|PASSWORD|TOKEN)[A-Z0-9_]*)\s*[=:]\s*\S+/gi,
 ];
 
