@@ -237,6 +237,38 @@ describe("server verification execution (E1)", () => {
     expect(updated?.status).toBe("ready_to_merge");
   });
 
+  it("keeps a passed-but-downgraded (not observed) report out of ready_to_merge — board honesty matches merge gating", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore({
+      ...deps,
+      // status=passed지만 check에 exitCode가 없어 normalize가 observed=false로 다운그레이드한다.
+      runVerification: async ({ missionId, verifierAgentId, reportId }) => ({
+        id: reportId,
+        missionId,
+        verifierAgentId,
+        status: "passed",
+        checks: [{ id: "c0", command: "pnpm test", status: "passed" as const, summary: "claimed", startedAt: "2026-06-13T00:00:00.000Z" }],
+        artifactIds: [],
+        observed: true, // 주장만 — exitCode 없음 → 다운그레이드 대상
+        createdAt: "2026-06-13T00:00:00.000Z",
+      }),
+      nextNonce: () => "n1",
+    });
+    await store.create({ ...CREATE, workers: [{ agentId: "agent_verifier", role: "verifier", displayName: "Verifier", soulMode: "summary", configSource: "internal" }] });
+
+    const updated = await store.verify("mission_001", { commands: ["pnpm test"] });
+    expect(updated?.verificationReports[0]!.observed).toBe(false); // 다운그레이드됨
+    expect(updated?.status).toBe("verifying"); // ready_to_merge 아님 — merge D3가 거부할 상태
+    expect(updated?.truthStatus).toBe("configured"); // truthStatus도 정직하게 강등
+    // 머지 게이팅과의 일관성: 가짜 green이라 merge 큐잉 자체가 거부된다.
+    await expect(
+      store.appendEvent("mission_001", {
+        type: "mission.merge.queued",
+        payload: { item: { id: "mq_1", missionId: "mission_001", branchName: "agent/mission_001", status: "queued", requiredVerificationReportId: updated!.verificationReports[0]!.id, reason: "claimed", queuedAt: "2026-06-13T00:00:02.000Z" } },
+      }),
+    ).rejects.toThrow(MissionEventValidationError);
+  });
+
   it("rejects verify when no sandbox_verify worker exists", async () => {
     const { deps } = memoryDeps();
     const store = createMissionStore({ ...deps, runVerification: async () => ({}) as never });
