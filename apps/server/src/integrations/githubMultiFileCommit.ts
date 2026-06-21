@@ -75,6 +75,19 @@ const HIGH_RISK_PATH_PATTERNS: ReadonlyArray<RegExp> = [
   /(^|\/)secrets?(\.|\/|$)/i,
   /\.pem$/i,
   /\.key$/i,
+  // 형제 가드 githubFileChangeWriteGuards.DENIED_PATH_PATTERNS(단일파일 경로)와 parity.
+  // multi-file commit 경로가 더 약해, 단일파일 가드가 막는 git 메타데이터·SSH 키·lockfile·
+  // 산출물 디렉터리를 여기선 허용하는 드리프트가 있었다(실측 ALLOW). 같은 taxonomy로 막는다.
+  /(^|\/)\.git(\/|$)/i,                     // .git/* git 메타데이터
+  /(^|\/)id_(?:rsa|ed25519|ecdsa|dsa)(\..*)?$/i, // SSH private key
+  /(^|\/)node_modules\//i,
+  /(^|\/)dist\//i,
+  /(^|\/)build\//i,
+  /(^|\/)\.next\//i,
+  /(^|\/)coverage\//i,
+  /(^|\/)package-lock\.json$/i,
+  /(^|\/)pnpm-lock\.yaml$/i,
+  /(^|\/)yarn\.lock$/i,
 ];
 
 const ALLOWED_BRANCH_PREFIX = /^(agent|work|user|mission|debate)\//;
