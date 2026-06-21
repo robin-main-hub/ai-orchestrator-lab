@@ -50,6 +50,9 @@ import {
   githubReadonlyResourceResponseSchema,
   githubResourceOutcomeSchema,
   githubPullRequestDetailSchema,
+  githubRepoSummarySchema,
+  githubPullRequestSummarySchema,
+  githubIssueSummarySchema,
 } from "./githubConnector.js";
 
 describe("githubConnector schemas", () => {
@@ -913,5 +916,78 @@ describe("githubConnector — comment-write plan is a side-effect-free, integrit
     const withPlan = githubCommentWritePlanResponseSchema.parse({ outcome: "planned", plan, message: "ready to execute" });
     expect(withPlan.plan?.bodySha256).toBe("a".repeat(64));
     expect(withPlan.message).toBe("ready to execute");
+  });
+});
+
+// The PR DETAIL schema's nullable diff-stats are pinned (line ~58), but the three
+// base read-only summaries (repo/PR/issue) the connector returns are untouched.
+// Their authority story is the nullable-vs-required honesty distinction: a repo's
+// `description` is z.string().nullable() — the connector must explicitly report
+// null when a repo has no description; it can't silently OMIT the field (nullable
+// is not optional). Everything else in a summary is a required field with no
+// default — a read-model can't ship a half-populated row. Pin the three summary
+// spines + the null/omit distinction, self-consistent (derived from the shapes).
+describe("githubConnector — read-only summaries: required spines, nullable-is-not-optional honesty, PR≠issue shape", () => {
+  it("repo summary: description is nullable but the key is REQUIRED — the connector must say null, not omit it", () => {
+    const repo = {
+      fullName: "owner/repo",
+      description: "a generic repo",
+      defaultBranch: "main",
+      openIssues: 3,
+      stars: 0,
+      private: false,
+      htmlUrl: "https://github.com/owner/repo",
+    };
+    expect(githubRepoSummarySchema.safeParse(repo).success).toBe(true);
+    // an honestly description-less repo reports null — not "" and not an absent key
+    expect(githubRepoSummarySchema.safeParse({ ...repo, description: null }).success).toBe(true);
+    const { description: _omit, ...withoutDescription } = repo;
+    expect(githubRepoSummarySchema.safeParse(withoutDescription).success).toBe(false); // nullable ≠ optional
+    // the rest of the spine is mandatory
+    for (const key of ["fullName", "defaultBranch", "openIssues", "stars", "private", "htmlUrl"]) {
+      const { [key]: _drop, ...partial } = repo as Record<string, unknown>;
+      expect(githubRepoSummarySchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("PR summary: every field is required with no default — a read-model row is never half-populated", () => {
+    const pr = {
+      number: 7,
+      title: "Fix the parser",
+      state: "open",
+      author: "octocat",
+      draft: false,
+      htmlUrl: "https://github.com/owner/repo/pull/7",
+      createdAt: "2026-06-21T00:00:00.000Z",
+      updatedAt: "2026-06-21T00:05:00.000Z",
+    };
+    expect(githubPullRequestSummarySchema.safeParse(pr).success).toBe(true);
+    for (const key of ["number", "title", "state", "author", "draft", "htmlUrl", "createdAt", "updatedAt"]) {
+      const { [key]: _omit, ...partial } = pr as Record<string, unknown>;
+      expect(githubPullRequestSummarySchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("issue summary carries `comments` where the PR summary carries `draft` — the two read-models are not interchangeable", () => {
+    const issue = {
+      number: 11,
+      title: "Crash on empty input",
+      state: "open",
+      author: "octocat",
+      comments: 2,
+      htmlUrl: "https://github.com/owner/repo/issues/11",
+      createdAt: "2026-06-21T00:00:00.000Z",
+      updatedAt: "2026-06-21T00:05:00.000Z",
+    };
+    expect(githubIssueSummarySchema.safeParse(issue).success).toBe(true);
+    for (const key of ["number", "title", "state", "author", "comments", "htmlUrl", "createdAt", "updatedAt"]) {
+      const { [key]: _omit, ...partial } = issue as Record<string, unknown>;
+      expect(githubIssueSummarySchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+    // structural distinction: a PR summary lacks `comments`, an issue summary lacks `draft`
+    const { comments: _c, ...issueWithoutComments } = issue;
+    expect(githubIssueSummarySchema.safeParse(issueWithoutComments).success).toBe(false);
+    const prShaped = { ...issueWithoutComments, draft: false };
+    expect(githubPullRequestSummarySchema.safeParse(prShaped).success).toBe(true); // same row minus comments + draft = a valid PR
   });
 });
