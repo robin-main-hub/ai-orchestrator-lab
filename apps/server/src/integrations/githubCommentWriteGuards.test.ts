@@ -49,6 +49,17 @@ describe("scanForSecrets", () => {
     if (!verdict.ok) expect(verdict.matched).toContain("github_pat_");
   });
 
+  it("헤더 없이 노출된 bare bearer 토큰도 차단(회귀: Authorization: 접두 없으면 빠져나갔다)", () => {
+    // `Authorization: Bearer` 규칙은 헤더 형태만 잡아, 따옴표 안/설정값으로 들어온 토큰은
+    // false-negative였다. H8d는 generic Bearer로 잡는데 W1 공유 스캐너엔 없어 parity gap.
+    const jwt = "eyJhbGciOiJIUzI1NiJ9." + "a".repeat(30) + "." + "b".repeat(40);
+    const verdict = scanForSecrets(`const h = "Bearer ${jwt}";`);
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.matched).toBe("Bearer token");
+    // 짧은 토큰성 단어(예: 산문 "Bearer of news")는 8자 미만이라 오탐 아님
+    expect(scanForSecrets("the Bearer of bad news arrived")).toEqual({ ok: true });
+  });
+
   it("정상 본문은 통과", () => {
     expect(scanForSecrets("이 PR의 변경 의도를 확인했습니다. 이대로 머지 가능합니다.")).toEqual({ ok: true });
   });
