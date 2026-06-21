@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildScaffoldPlan,
   encodeBlueprintToScaffoldInput,
+  missionScaffoldLatestResponseSchema,
+  missionScaffoldLatestSafeFileSchema,
+  missionScaffoldLatestSkippedReasonSchema,
+  missionScaffoldLatestSkippedSchema,
   scaffoldForTemplate,
   scaffoldPlanSchema,
   type ScaffoldBlueprintSpec,
@@ -216,5 +220,83 @@ describe("scaffoldForTemplate(react_vite_app) — appName sanitized to a safe pr
     expect(readme).toContain("# demo-app"); // README header uses the sanitized name
     const name = JSON.parse(files.find((f) => f.path === "package.json")!.content).name;
     expect(readme.startsWith(`# ${name}`)).toBe(true); // identical to the package id
+  });
+});
+
+// GET /missions/:id/scaffold/latest is the truth source for the Publish Flow
+// prefill — the files it returns are what gets sent to external GitHub. Its
+// safety contract is deny-by-default: every plan file is classified as either a
+// SAFE file (verbatim deterministic regeneration, never guessed) or a SKIPPED
+// item carrying a CLOSED, NAMED reason — nothing is silently dropped, and the
+// secret_suspect reason exists precisely to stop a credential leaving for GitHub.
+// The four schemas in this cluster were entirely unreferenced; pin them
+// self-consistently (derived from the schema's own declared shape).
+describe("scaffold/latest — deny-by-default safe-vs-skipped file safety contract", () => {
+  it("a safe file needs all four fields and a provenance source from the closed 2-value enum", () => {
+    const ok = { path: "src/App.tsx", content: "x", source: "scaffold_plan" as const, createdAt: now() };
+    expect(missionScaffoldLatestSafeFileSchema.safeParse(ok).success).toBe(true);
+    // every field is mandatory — none may be omitted
+    for (const k of ["path", "content", "source", "createdAt"]) {
+      const { [k]: _omit, ...partial } = ok as Record<string, unknown>;
+      expect(missionScaffoldLatestSafeFileSchema.safeParse(partial).success).toBe(false);
+    }
+    // source is exactly {scaffold_plan, scaffold_overlay} — no other provenance
+    expect(missionScaffoldLatestSafeFileSchema.shape.source.options).toEqual(["scaffold_plan", "scaffold_overlay"]);
+    expect(missionScaffoldLatestSafeFileSchema.safeParse({ ...ok, source: "uploaded" }).success).toBe(false);
+    // a smuggled extra key is stripped (plain z.object)
+    const parsed = missionScaffoldLatestSafeFileSchema.parse({ ...ok, raw: "secret" });
+    expect("raw" in parsed).toBe(false);
+  });
+
+  it("the skipped-reason enum is exactly the five guard outcomes (secret_suspect among them)", () => {
+    expect(missionScaffoldLatestSkippedReasonSchema.options).toEqual([
+      "missing_content",
+      "binary",
+      "too_large",
+      "secret_suspect",
+      "unsupported",
+    ]);
+    // secret_suspect is the deny-before-external-send guard — it must be a member
+    expect(missionScaffoldLatestSkippedReasonSchema.options).toContain("secret_suspect");
+    expect(missionScaffoldLatestSkippedReasonSchema.safeParse("looks_fine").success).toBe(false);
+  });
+
+  it("a skipped item must name a reason; path is optional (e.g. unsupported has no path)", () => {
+    expect(missionScaffoldLatestSkippedSchema.safeParse({ reason: "unsupported" }).success).toBe(true);
+    const withPath = missionScaffoldLatestSkippedSchema.parse({ path: "a.bin", reason: "binary" });
+    expect(withPath.path).toBe("a.bin");
+    // reason is required — a path with no reason is not a valid skip
+    expect(missionScaffoldLatestSkippedSchema.safeParse({ path: "a.bin" }).success).toBe(false);
+  });
+
+  it("the response REQUIRES both files[] and skipped[] (no default) — the skipped list can't be omitted to hide drops", () => {
+    const base = {
+      missionId: "m1",
+      status: "partial" as const,
+      truthStatus: "planned" as const,
+      files: [{ path: "src/App.tsx", content: "x", source: "scaffold_plan" as const, createdAt: now() }],
+      skipped: [{ path: "logo.png", reason: "binary" as const }],
+    };
+    const parsed = missionScaffoldLatestResponseSchema.parse(base);
+    expect(parsed.planId).toBeUndefined(); // optional diagnostics never fabricated
+    expect(parsed.message).toBeUndefined();
+    // status is exactly the four lifecycle states
+    expect(missionScaffoldLatestResponseSchema.shape.status.options).toEqual([
+      "found",
+      "not_found",
+      "partial",
+      "blocked",
+    ]);
+    // omitting skipped[] (or files[]) fails — both arrays must be stated, even when empty
+    const { skipped: _s, ...noSkipped } = base;
+    const { files: _f, ...noFiles } = base;
+    expect(missionScaffoldLatestResponseSchema.safeParse(noSkipped).success).toBe(false);
+    expect(missionScaffoldLatestResponseSchema.safeParse(noFiles).success).toBe(false);
+    // an empty-but-present skipped list is honest and valid
+    expect(missionScaffoldLatestResponseSchema.safeParse({ ...base, skipped: [] }).success).toBe(true);
+    // transitive: a skipped entry with a reason outside the closed enum sinks the response
+    expect(
+      missionScaffoldLatestResponseSchema.safeParse({ ...base, skipped: [{ path: "a", reason: "meh" }] }).success,
+    ).toBe(false);
   });
 });
