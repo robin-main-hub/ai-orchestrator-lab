@@ -41,6 +41,14 @@ describe("scanForSecrets", () => {
     }
   });
 
+  it("세분화(fine-grained) PAT(github_pat_)도 차단 — classic prefix와 달라 별도 패턴 필요", () => {
+    // gitleaks가 PR diff에서 진짜로 보이는 credential 리터럴을 잡으므로 런타임 조합으로 회피.
+    const pat = "github_" + "pat_" + "11" + "A".repeat(22) + "_" + "b".repeat(40);
+    const verdict = scanForSecrets(`교체 토큰: ${pat} 입니다`);
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.matched).toContain("github_pat_");
+  });
+
   it("정상 본문은 통과", () => {
     expect(scanForSecrets("이 PR의 변경 의도를 확인했습니다. 이대로 머지 가능합니다.")).toEqual({ ok: true });
   });
