@@ -7,6 +7,13 @@ import {
   agentDelegationEventTypeSchema,
   agentDelegationFollowupCompletedPayloadSchema,
   agentDelegationSucceededPayloadSchema,
+  agentDelegationAuthorityLevelSchema,
+  agentDelegationCompletionRouteSchema,
+  agentDelegationBasePayloadSchema,
+  agentDelegationBlockedPayloadSchema,
+  agentDelegationSelfBlockedPayloadSchema,
+  agentDelegationUnknownTargetPayloadSchema,
+  agentDelegationEventPayloadSchemaByType,
   agentSessionSchema,
   approvalDecisionRequestSchema,
   approvalRequestSchema,
@@ -1498,5 +1505,109 @@ describe("index — provider-trust authority: default-limited trust, redacted-on
     expect(modelDescriptorSchema.safeParse({ ...base, inputModalities: ["audio"] }).success).toBe(false);
     expect(modelDescriptorSchema.safeParse({ ...base, contextWindow: 0 }).success).toBe(false); // positive int only
     expect(modelDescriptorSchema.safeParse({ ...base, contextWindow: 128_000 }).success).toBe(true);
+  });
+});
+
+// AGENT-DELEGATION is the OS's authority-propagation channel: one agent asking
+// another to act. Its happy-path payloads (detected/dispatched/succeeded/followup)
+// and the timeline projection are already exercised, but the AUTHORITY contract
+// underneath them is not: the authority-level ladder, the closed completion-route
+// vocabulary (incl the honest "mock" non-call marker), the strict no-smuggle base,
+// the fact that authority is NAMED exactly when exercised, the three DENY branches,
+// and the totality of the type->payload dispatch map. A delegation payload that
+// smuggled an extra authorityLevel key, a block with no justification, or a
+// dispatch map missing a branch would all pass today.
+//   (1) authorityLevel is a closed 3-rung ladder {agent,orchestrator,orchestrator_plus}
+//       — no admin/root/super tier — and completionRoute is the closed
+//       {server_proxy,direct_provider,local_fallback,mock} set, where "mock" is the
+//       honest "this was not a real provider call" marker.
+//   (2) every event type has a payload schema — the by-type dispatch map is TOTAL
+//       over the 9-event enum (parseAgentDelegationEventPayload can never miss).
+//   (3) the base payload is .strict() (no smuggled keys) with authorityLevel
+//       OPTIONAL — but the authority-EXERCISING events (detected/dispatched) make it
+//       REQUIRED, so authority is named exactly when it is used.
+//   (4) the three DENY branches: a block must carry a non-empty justification
+//       (reason min 1), self_blocked/unknown_target need only the target, all are
+//       strict; and a success never fabricates realProviderCall/route when absent.
+// Expected values are read off the schemas (self-consistent), never magic.
+describe("index — agent-delegation authority: bounded ladder, total dispatch map, justified denials", () => {
+  it("(1) authorityLevel is a closed 3-rung ladder and completionRoute carries the honest mock marker", () => {
+    expect(agentDelegationAuthorityLevelSchema.options).toEqual(["agent", "orchestrator", "orchestrator_plus"]);
+    for (const forged of ["admin", "root", "super", "system"]) {
+      expect(agentDelegationAuthorityLevelSchema.safeParse(forged).success).toBe(false);
+    }
+    expect(agentDelegationCompletionRouteSchema.options).toEqual([
+      "server_proxy",
+      "direct_provider",
+      "local_fallback",
+      "mock",
+    ]);
+    expect(agentDelegationCompletionRouteSchema.options).toContain("mock"); // a non-real call is nameable, not disguised
+  });
+
+  it("(2) the type->payload dispatch map is total over the 9-event enum (parse can never miss a branch)", () => {
+    const events = agentDelegationEventTypeSchema.options;
+    expect(events).toHaveLength(9);
+    // every event type resolves to a payload schema — the map keys === the enum members
+    expect(Object.keys(agentDelegationEventPayloadSchemaByType).sort()).toEqual([...events].sort());
+    for (const type of events) {
+      expect(agentDelegationEventPayloadSchemaByType[type]).toBeDefined();
+    }
+  });
+
+  it("(3) base is strict with optional authorityLevel; the authority-exercising events make it required", () => {
+    // base parses with just the source, but rejects a smuggled key (.strict())
+    expect(agentDelegationBasePayloadSchema.safeParse({ sourceAgentId: "a1" }).success).toBe(true);
+    expect(agentDelegationBasePayloadSchema.safeParse({ sourceAgentId: "a1", authorityLevel: "orchestrator" }).success).toBe(true);
+    expect(agentDelegationBasePayloadSchema.safeParse({ sourceAgentId: "a1", smuggled: "x" }).success).toBe(false);
+    expect(agentDelegationBasePayloadSchema.safeParse({ sourceAgentId: "" }).success).toBe(false); // min 1
+    // detected EXERCISES authority → authorityLevel is required there
+    const detectedBase = {
+      sourceAgentId: "a1",
+      sourceAgentName: "n",
+      sourceRole: "builder" as const,
+      targets: ["b1"],
+      count: 1,
+      depthLimit: 2,
+    };
+    expect(agentDelegationDetectedPayloadSchema.safeParse(detectedBase).success).toBe(false); // authorityLevel missing
+    expect(agentDelegationDetectedPayloadSchema.safeParse({ ...detectedBase, authorityLevel: "orchestrator" }).success).toBe(true);
+    // dispatched also requires authorityLevel
+    const dispatchBase = {
+      sourceAgentId: "a1",
+      sourceAgentName: "n",
+      targetAgentId: "b1",
+      targetAgentName: "B",
+      targetRole: "builder" as const,
+      providerProfileId: "p1",
+      modelId: "m1",
+      promptLength: 10,
+      depthLimit: 2,
+    };
+    expect(agentDelegationDispatchedPayloadSchema.safeParse(dispatchBase).success).toBe(false); // authorityLevel missing
+    expect(agentDelegationDispatchedPayloadSchema.safeParse({ ...dispatchBase, authorityLevel: "agent" }).success).toBe(true);
+  });
+
+  it("(4) deny branches require a justified target, are strict, and a success never fabricates realProviderCall/route", () => {
+    // a block must be justified — empty or missing reason is rejected; authorityLevel is NOT required to deny
+    expect(agentDelegationBlockedPayloadSchema.safeParse({ sourceAgentId: "a1", target: "b1", reason: "depth exceeded" }).success).toBe(true);
+    expect(agentDelegationBlockedPayloadSchema.safeParse({ sourceAgentId: "a1", target: "b1", reason: "" }).success).toBe(false);
+    expect(agentDelegationBlockedPayloadSchema.safeParse({ sourceAgentId: "a1", target: "b1" }).success).toBe(false); // reason missing
+    expect(agentDelegationBlockedPayloadSchema.safeParse({ sourceAgentId: "a1", target: "b1", reason: "x", smuggled: 1 }).success).toBe(false); // strict
+    // self_blocked / unknown_target need only the target
+    expect(agentDelegationSelfBlockedPayloadSchema.safeParse({ sourceAgentId: "a1", target: "a1" }).success).toBe(true);
+    expect(agentDelegationUnknownTargetPayloadSchema.safeParse({ sourceAgentId: "a1", target: "ghost" }).success).toBe(true);
+    // a success that omits route/realProviderCall leaves them undefined — never upgraded to a real call
+    const succeeded = agentDelegationSucceededPayloadSchema.parse({
+      sourceAgentId: "a1",
+      targetAgentId: "b1",
+      targetAgentName: "B",
+      targetRole: "builder",
+      providerProfileId: "p1",
+      modelId: "m1",
+      responseLength: 42,
+    });
+    expect(succeeded.route).toBeUndefined();
+    expect(succeeded.realProviderCall).toBeUndefined();
   });
 });
