@@ -16,6 +16,8 @@ import {
   githubCommentWriteExecuteResponseSchema,
   githubCommentWriteOutcomeSchema,
   githubCommentWritePlanRequestSchema,
+  githubCommentWritePlanSchema,
+  githubCommentWritePlanResponseSchema,
   githubConnectorModeSchema,
   githubConnectorStatusSchema,
   githubConnectorStatusResponseSchema,
@@ -842,5 +844,74 @@ describe("githubConnector — status gate: read_only mode lock, github identity 
     });
     expect(armed.status.configured).toBe(true);
     expect(armed.status.mode).toBe("read_only"); // still read_only even when fully configured
+  });
+});
+
+// The comment-write PLAN — the side-effect-free preview computed before any
+// execute — is unpinned (only its request/execute halves and the outcome enum
+// are tested). The plan is where the anti-fabrication contract lives: the action
+// is locked to "comment_create", the body is integrity-bound by a bodySha256
+// the later execute must match, the lifecycle status / truthStatus are closed
+// honesty enums, and number/bodyLength are bounded. Pin the plan + its response
+// envelope (a blocked outcome carries no plan). Self-consistent.
+describe("githubConnector — comment-write plan is a side-effect-free, integrity-bound, honest-lifecycle preview", () => {
+  const plan = {
+    id: "plan_1",
+    action: "comment_create" as const,
+    repoFullName: "owner/repo",
+    number: 1,
+    targetKind: "pull_request" as const,
+    bodyPreview: "LGTM",
+    bodySha256: "a".repeat(64),
+    bodyLength: 4,
+    targetUrl: "https://github.com/owner/repo/pull/1",
+    status: "planned" as const,
+    truthStatus: "planned" as const,
+    createdAt: "2026-06-21T00:00:00.000Z",
+    expiresAt: "2026-06-21T00:10:00.000Z",
+  };
+
+  it("pins the closed plan lifecycle, the 3-value truthStatus, and the issue/pull_request target kinds", () => {
+    expect(githubCommentWritePlanSchema.safeParse(plan).success).toBe(true);
+    for (const status of ["planned", "approval_required", "blocked", "auto_execute_armed", "executing", "created", "failed"]) {
+      expect(githubCommentWritePlanSchema.safeParse({ ...plan, status }).success, `${status} is a valid lifecycle state`).toBe(true);
+    }
+    expect(githubCommentWritePlanSchema.safeParse({ ...plan, status: "published" }).success).toBe(false);
+    for (const truthStatus of ["planned", "observed", "configured"]) {
+      expect(githubCommentWritePlanSchema.safeParse({ ...plan, truthStatus }).success).toBe(true);
+    }
+    expect(githubCommentWritePlanSchema.safeParse({ ...plan, truthStatus: "real" }).success).toBe(false);
+    // a plan can only target an issue or a pull request
+    expect(githubCommentWritePlanSchema.safeParse({ ...plan, targetKind: "issue" }).success).toBe(true);
+    expect(githubCommentWritePlanSchema.safeParse({ ...plan, targetKind: "discussion" }).success).toBe(false);
+  });
+
+  it("locks the action, integrity-binds the body, bounds the counters, and never fabricates approvalId/blockedReason", () => {
+    const parsed = githubCommentWritePlanSchema.parse(plan);
+    expect(parsed.approvalId).toBeUndefined();
+    expect(parsed.blockedReason).toBeUndefined();
+    // action is the single literal — a plan can't smuggle a different write verb
+    expect(githubCommentWritePlanSchema.safeParse({ ...plan, action: "comment_delete" }).success).toBe(false);
+    // number is a positive int (a real issue/PR number), bodyLength a nonnegative int
+    expect(githubCommentWritePlanSchema.safeParse({ ...plan, number: 0 }).success).toBe(false);
+    expect(githubCommentWritePlanSchema.safeParse({ ...plan, number: -1 }).success).toBe(false);
+    expect(githubCommentWritePlanSchema.safeParse({ ...plan, number: 1.5 }).success).toBe(false);
+    expect(githubCommentWritePlanSchema.safeParse({ ...plan, bodyLength: 0 }).success).toBe(true); // empty body length is allowed
+    expect(githubCommentWritePlanSchema.safeParse({ ...plan, bodyLength: -1 }).success).toBe(false);
+    // the integrity/identity spine is mandatory — bodySha256 (the replay binding) can't be dropped
+    for (const key of ["id", "action", "repoFullName", "number", "targetKind", "bodyPreview", "bodySha256", "bodyLength", "targetUrl", "status", "truthStatus", "createdAt", "expiresAt"]) {
+      const { [key]: _omit, ...partial } = plan as Record<string, unknown>;
+      expect(githubCommentWritePlanSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("the plan response requires an outcome and leaves plan/message optional — a blocked outcome carries no plan", () => {
+    // outcome alone (no plan, no message) is valid — e.g. not_configured before any plan is computed
+    expect(githubCommentWritePlanResponseSchema.safeParse({ outcome: "not_configured" }).success).toBe(true);
+    expect(githubCommentWritePlanResponseSchema.safeParse({}).success).toBe(false); // outcome is mandatory
+    expect(githubCommentWritePlanResponseSchema.safeParse({ outcome: "fabricated" }).success).toBe(false); // closed outcome set
+    const withPlan = githubCommentWritePlanResponseSchema.parse({ outcome: "planned", plan, message: "ready to execute" });
+    expect(withPlan.plan?.bodySha256).toBe("a".repeat(64));
+    expect(withPlan.message).toBe("ready to execute");
   });
 });
