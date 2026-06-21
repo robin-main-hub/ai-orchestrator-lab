@@ -16,6 +16,9 @@ import {
   githubCommentWriteExecuteResponseSchema,
   githubCommentWriteOutcomeSchema,
   githubCommentWritePlanRequestSchema,
+  githubContextAttachmentSchema,
+  githubContextSourceKindSchema,
+  githubFileContentSchema,
   githubFileChangeExecuteRequestSchema,
   githubFileChangeExecuteResponseSchema,
   githubFileChangeOperationSchema,
@@ -709,5 +712,77 @@ describe("githubConnector — W4 PR-create: observed-only, titled, runtime no-op
     expect(githubPullRequestCreateExecuteResponseSchema.safeParse({ outcome: "observed", planId: "pr1", truthStatus: "real" }).success).toBe(false);
     const observed = githubPullRequestCreateExecuteResponseSchema.parse({ outcome: "observed", planId: "pr1", pullNumber: 42, truthStatus: "observed" });
     expect(observed.pullNumber).toBe(42);
+  });
+});
+
+// The write surface (plan→execute outcomes, truthStatus) is well pinned above,
+// but the READ-ONLY context-attachment surface is untouched: the closed kind
+// vocabulary, and — critically — the two literal anti-fabrication locks. An
+// attachment's `truthStatus` is the literal "observed" and its `source` is the
+// literal "github_api": a context excerpt can NEVER claim to be model-generated
+// truth or to come from anywhere but the GitHub API. Likewise file content is
+// always literal utf8 with an honest `truncated` marker. Nothing pins that a
+// fabricated truthStatus/source, or an item inventing a number/path it doesn't
+// have, is rejected. Pin the read-only provenance contract, self-consistent.
+describe("githubConnector — read-only context attachment is an observed-only, github-sourced provenance contract", () => {
+  const attachment = {
+    id: "att_pr_1",
+    kind: "pull_request" as const,
+    repoFullName: "owner/repo",
+    title: "Fix the parser",
+    url: "https://github.com/owner/repo/pull/1",
+    observedAt: "2026-06-21T00:00:00.000Z",
+    truthStatus: "observed" as const,
+    observedExcerpt: "diff --git a/x b/x",
+    truncated: false,
+    summarySource: "github_observed" as const,
+    source: "github_api" as const,
+  };
+
+  it("pins the 4 context-source kinds and locks truthStatus/source to their single literals", () => {
+    expect(githubContextSourceKindSchema.options).toEqual(["pull_request", "issue", "file", "code_search_result"]);
+    expect(githubContextSourceKindSchema.safeParse("commit").success).toBe(false);
+    expect(githubContextAttachmentSchema.safeParse(attachment).success).toBe(true);
+    // truthStatus is the literal "observed" — an attachment can never claim model-generated truth
+    expect(githubContextAttachmentSchema.safeParse({ ...attachment, truthStatus: "planned" }).success).toBe(false);
+    expect(githubContextAttachmentSchema.safeParse({ ...attachment, truthStatus: "real" }).success).toBe(false);
+    // source is the literal "github_api" — provenance can't be forged to another origin
+    expect(githubContextAttachmentSchema.safeParse({ ...attachment, source: "model_api" }).success).toBe(false);
+    // summarySource is a closed 3-set; the excerpt's origin is explicit, not free-form
+    expect(githubContextAttachmentSchema.safeParse({ ...attachment, summarySource: "github_observed" }).success).toBe(true);
+    expect(githubContextAttachmentSchema.safeParse({ ...attachment, summarySource: "model_generated" }).success).toBe(true);
+    expect(githubContextAttachmentSchema.safeParse({ ...attachment, summarySource: "user_edited" }).success).toBe(true);
+    expect(githubContextAttachmentSchema.safeParse({ ...attachment, summarySource: "hand_waved" }).success).toBe(false);
+  });
+
+  it("an attachment needs its provenance spine and never fabricates the number/path it doesn't carry", () => {
+    const parsed = githubContextAttachmentSchema.parse(attachment);
+    // a PR attachment carries no path; a file attachment carries no number — neither is invented
+    expect(parsed.number).toBeUndefined();
+    expect(parsed.path).toBeUndefined();
+    for (const key of ["id", "kind", "repoFullName", "title", "url", "observedAt", "truthStatus", "observedExcerpt", "truncated", "summarySource", "source"]) {
+      const { [key]: _omit, ...partial } = attachment as Record<string, unknown>;
+      expect(githubContextAttachmentSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("read-only file content is always literal utf8 with an honest truncation marker and a complete spine", () => {
+    const file = {
+      path: "src/index.ts",
+      size: 2048,
+      sha: "abc123",
+      htmlUrl: "https://github.com/owner/repo/blob/main/src/index.ts",
+      content: "export const x = 1;",
+      truncated: true,
+      encoding: "utf8" as const,
+    };
+    expect(githubFileContentSchema.safeParse(file).success).toBe(true);
+    // encoding is the literal "utf8" — the connector decodes to one canonical form, never raw base64 passthrough
+    expect(githubFileContentSchema.safeParse({ ...file, encoding: "base64" }).success).toBe(false);
+    // the whole spine is mandatory — content can't ship without its sha/size/truncation honesty
+    for (const key of ["path", "size", "sha", "htmlUrl", "content", "truncated", "encoding"]) {
+      const { [key]: _omit, ...partial } = file as Record<string, unknown>;
+      expect(githubFileContentSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
   });
 });
