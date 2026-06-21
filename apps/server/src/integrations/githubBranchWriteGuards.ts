@@ -43,6 +43,19 @@ export function normalizeSourceRef(raw: string): string {
   return trimmed;
 }
 
+/**
+ * git ref 이름의 *안전 문자/문법*만 검사(prefix/protected 정책은 별도). source ref처럼
+ * 보호 브랜치(main 등)도 정당한 값이라 prefix/protected를 적용할 수 없는 자리에서, 그래도
+ * ref 조작 표면을 막기 위해 쓴다. evaluateBranchNamePolicy의 안전성 부분과 동일 강도.
+ *   - 빈 값, 선행 -·/, 후행 /·., ..  //  @{  \, 비안전 문자(공백·한글·shell 메타) 거부
+ */
+export function isSafeGitRefName(name: string): boolean {
+  if (!name) return false;
+  if (name.startsWith("-") || name.startsWith("/") || name.endsWith("/") || name.endsWith(".")) return false;
+  if (name.includes("..") || name.includes("//") || name.includes("@{") || name.includes("\\")) return false;
+  return BRANCH_SAFE_PATTERN.test(name);
+}
+
 export type BranchNamePolicyResult = { ok: true; ref: string } | { ok: false; reason: string };
 
 export function evaluateBranchNamePolicy(rawName: string): BranchNamePolicyResult {
@@ -92,6 +105,13 @@ export function evaluateBranchCreateGate(input: {
   }
   const sourceRef = normalizeSourceRef(input.sourceRef);
   if (!sourceRef) return { kind: "blocked", reason: "source ref가 비어 있거나 refs/tags 등 지원하지 않는 경로입니다" };
+  // newBranchName은 evaluateBranchNamePolicy로 ..  @{  \ 등을 거부하는데, source ref는
+  // normalizeSourceRef(prefix 제거)만 거쳐 그대로 getRefSha의 ref로 흘러가, main@{0}·main..evil·
+  // "main ; rm -rf"·한글 같은 refspec/shell 메타가 통과했다(실측 OK). source는 보호 브랜치(main 등)도
+  // 정당하므로 prefix/protected 정책은 적용하지 않고 안전 문자/문법만 동일 강도로 막는다.
+  if (!isSafeGitRefName(sourceRef)) {
+    return { kind: "blocked", reason: `source ref '${sourceRef}'에 허용되지 않는 git ref 문자/문법이 있습니다` };
+  }
   const policy = evaluateBranchNamePolicy(input.newBranchName);
   if (!policy.ok) return { kind: "blocked", reason: policy.reason };
   return { kind: "ok", sourceRef, ref: policy.ref };
