@@ -46,6 +46,14 @@ describe("순수 파서/마스킹", () => {
     expect(redactSecrets(`ANTHROPIC_AUTH_TOKEN=${sample}`)).not.toContain(sample);
     expect(redactSecrets("plain log line")).toBe("plain log line");
   });
+
+  it("redactSecrets — fine-grained PAT(github_pat_)도 마스킹(평문 로그 노출 방지)", () => {
+    // 회귀: classic gh[pousr]_ 규칙은 github_pat_를 못 잡아, 평문 PAT가 로그에 그대로 나갔다.
+    const pat = ["github", "_pat_", "11", "A".repeat(22), "_", "b".repeat(40)].join("");
+    const out = redactSecrets(`echoed token ${pat} done`);
+    expect(out).toContain("<redacted>");
+    expect(out).not.toContain(pat);
+  });
 });
 
 describe("local shell runner", () => {
