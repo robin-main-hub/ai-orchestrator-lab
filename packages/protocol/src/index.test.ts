@@ -30,6 +30,11 @@ import {
   projectAgentDelegationTimeline,
   providerCompletionRequestSchema,
   providerProfileSchema,
+  providerKindSchema,
+  providerTrustLevelSchema,
+  secretRefSchema,
+  modelDescriptorSchema,
+  modelInputModalitySchema,
   redactionRuleSchema,
   parseTerminalCommandEventPayload,
   terminalCommandIntentSchema,
@@ -1406,5 +1411,92 @@ describe("index — permission authority primitives: least-privilege ladder, thr
     // level and state must be drawn from their closed enums (a request can't claim an unknown grant/state)
     expect(permissionRequestSchema.safeParse({ ...base, level: "root" }).success).toBe(false);
     expect(permissionRequestSchema.safeParse({ ...base, state: "pending" }).success).toBe(false);
+  });
+});
+
+// The PROVIDER-TRUST / CREDENTIAL authority primitives are unpinned at the contract
+// level. One existing test round-trips a fully-specified profile (and checks the
+// redacted preview survives), but it always passes trustLevel EXPLICITLY — so the
+// load-bearing default (an undeclared provider is "limited", never "trusted") is
+// never exercised, and neither enum's membership, the secret-ref shape, nor the
+// model capability flags are pinned. A reordered trust ladder, a secretRef that
+// grew a raw `value` field, or a profile that silently defaulted to trusted would
+// all pass today.
+//   (1) providerKind is a closed 6-vocab incl the LOCAL backends (ollama/lmstudio)
+//       and the explicit `custom` escape — an unknown provider kind is rejected.
+//   (2) providerTrustLevel is a closed 3-rung ladder {trusted,limited,untrusted} —
+//       no "full"/"admin" tier above trusted.
+//   (3) providerProfile.trustLevel DEFAULTS to "limited" (deny-by-default: an
+//       undeclared provider is not trusted); id/name/kind/enabled/tags are
+//       mandatory and every credential field stays optional/undefined when absent.
+//   (4) secretRef exposes a redactedPreview only — there is no raw secret field;
+//       `transient` is a mandatory declaration and `scope` is a closed 3-enum;
+//       z.object strips any smuggled `value`/`raw` key.
+//   (5) modelDescriptor states capabilities EXPLICITLY (supportsStreaming/
+//       supportsTools required booleans), inputModalities is the closed
+//       {text,image,document} set, and contextWindow is a positive int when given.
+// Expected values are read off the schemas (self-consistent), never magic.
+describe("index — provider-trust authority: default-limited trust, redacted-only secrets, explicit model capability", () => {
+  it("(1) providerKind is a closed 6-vocab including local backends and the custom escape", () => {
+    expect(providerKindSchema.options).toEqual(["openai", "anthropic", "openrouter", "ollama", "lmstudio", "custom"]);
+    for (const local of ["ollama", "lmstudio"]) expect(providerKindSchema.options).toContain(local);
+    expect(providerKindSchema.safeParse("custom").success).toBe(true);
+    expect(providerKindSchema.safeParse("gemini").success).toBe(false); // unknown kind rejected
+  });
+
+  it("(2) providerTrustLevel is a closed 3-rung ladder with no tier above trusted", () => {
+    expect(providerTrustLevelSchema.options).toEqual(["trusted", "limited", "untrusted"]);
+    for (const forged of ["full", "admin", "root", "all"]) {
+      expect(providerTrustLevelSchema.safeParse(forged).success).toBe(false);
+    }
+  });
+
+  it("(3) providerProfile.trustLevel defaults to limited — an undeclared provider is NOT trusted", () => {
+    const base = { id: "p1", name: "n", kind: "custom" as const, enabled: true, tags: [] };
+    const parsed = providerProfileSchema.parse(base);
+    expect(parsed.trustLevel).toBe("limited"); // deny-by-default — never silently trusted
+    // credential fields are all absent → undefined, never fabricated
+    for (const cred of ["baseUrl", "secretRef", "apiKeyRef", "authHeader", "modelDiscoveryEndpoint", "defaultModel"]) {
+      expect((parsed as Record<string, unknown>)[cred]).toBeUndefined();
+    }
+    // id/name/kind/enabled/tags are mandatory
+    for (const key of ["id", "name", "kind", "enabled", "tags"]) {
+      const { [key]: _omit, ...partial } = base as Record<string, unknown>;
+      expect(providerProfileSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("(4) secretRef is redacted-only — no raw value field, transient mandatory, scope closed, extras stripped", () => {
+    const base = { id: "s1", label: "key", scope: "session" as const, redactedPreview: "sk-...42f0", transient: true };
+    const parsed = secretRefSchema.parse(base);
+    expect(parsed.redactedPreview).toBe("sk-...42f0");
+    // transient must be declared — you cannot omit whether the secret persists
+    const { transient: _t, ...withoutTransient } = base as Record<string, unknown>;
+    expect(secretRefSchema.safeParse(withoutTransient).success).toBe(false);
+    // scope is a closed 3-enum
+    expect(secretRefSchema.safeParse({ ...base, scope: "global" }).success).toBe(false);
+    for (const scope of ["session", "profile", "workspace"]) {
+      expect(secretRefSchema.safeParse({ ...base, scope }).success).toBe(true);
+    }
+    // a smuggled raw secret key is dropped — it never rides through the schema
+    const smuggled = secretRefSchema.parse({ ...base, value: "sk-live-raw-secret", raw: "sk-live-raw-secret" });
+    expect(JSON.stringify(smuggled)).not.toContain("sk-live-raw-secret");
+    expect("value" in smuggled).toBe(false);
+  });
+
+  it("(5) modelDescriptor states capabilities explicitly and constrains modalities/contextWindow", () => {
+    const base = { id: "m1", name: "n", providerProfileId: "p1", supportsStreaming: true, supportsTools: false, tags: [] };
+    const parsed = modelDescriptorSchema.parse(base);
+    expect(parsed.inputModalities).toBeUndefined(); // optional — not fabricated when absent
+    expect(parsed.contextWindow).toBeUndefined();
+    // capability booleans are required — a model can't omit whether it streams/uses tools
+    for (const key of ["supportsStreaming", "supportsTools"]) {
+      const { [key]: _omit, ...partial } = base as Record<string, unknown>;
+      expect(modelDescriptorSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+    expect(modelInputModalitySchema.options).toEqual(["text", "image", "document"]);
+    expect(modelDescriptorSchema.safeParse({ ...base, inputModalities: ["audio"] }).success).toBe(false);
+    expect(modelDescriptorSchema.safeParse({ ...base, contextWindow: 0 }).success).toBe(false); // positive int only
+    expect(modelDescriptorSchema.safeParse({ ...base, contextWindow: 128_000 }).success).toBe(true);
   });
 });
