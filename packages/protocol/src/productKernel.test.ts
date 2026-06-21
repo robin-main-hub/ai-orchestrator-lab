@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  missionAgentRoleSchema,
+  missionArtifactAttachedPayloadSchema,
+  missionCheckpointRecordedPayloadSchema,
   missionClosedPayloadSchema,
+  missionCreatedPayloadSchema,
   missionCreateRequestSchema,
   missionEventAppendRequestSchema,
   missionEventTypeSchema,
+  missionMergeQueuedPayloadSchema,
   missionWorkerAssignedPayloadSchema,
   serverMissionRecordSchema,
   missionKernelContractSchema,
@@ -1015,5 +1020,123 @@ describe("productKernel — sandbox spec is the composite isolation contract: ev
     expect(sandboxSpecSchema.safeParse({ ...validSpec, resources: { maxOutputBytes: 1 } }).success).toBe(false);
     // a fabricated isolation level the closed enum does not name
     expect(sandboxSpecSchema.safeParse({ ...validSpec, isolationLevel: "trust_me" }).success).toBe(false);
+  });
+});
+
+const missionEventPayloadTs = "2026-06-21T00:00:00.000Z";
+
+// productKernel's mission.* event payloads form the EventStorage→view seam.
+// Worth pinning across the four still-unreferenced ones plus the agent-role
+// ladder: (1) the created payload separates REQUIRED attribution (missionId/
+// title/goal/createdBy/truthStatus — every mission names its author and its
+// truth) from OPTIONAL provenance links (sourceSessionId/codingPacketId/debateId
+// — never fabricated when a mission has no upstream); (2) the artifact/merge
+// payloads EMBED their record and validate it transitively (a broken embed sinks
+// the envelope); (3) the checkpoint payload is server-only — its event type is
+// deliberately absent from the client-append window, and the embedded checkpoint
+// is truthStatus literal "observed" (you cannot record a checkpoint you did not
+// observe — a planned one is rejected); (4) the agent-role ladder is a closed
+// 17-role enum, no ad-hoc roles.
+describe("productKernel — mission.* event payloads: required attribution, transitive embeds, server-only observed checkpoint, closed role ladder", () => {
+  it("created payload requires attribution and leaves provenance links undefined when absent", () => {
+    const base = {
+      missionId: "m1",
+      title: "t",
+      goal: "g",
+      truthStatus: "planned" as const,
+      createdBy: "agent_orchestrator",
+    };
+    const parsed = missionCreatedPayloadSchema.parse(base);
+    expect(parsed.sourceSessionId).toBeUndefined();
+    expect(parsed.codingPacketId).toBeUndefined();
+    expect(parsed.debateId).toBeUndefined();
+    // createdBy and truthStatus are the non-optional attribution fields
+    const { createdBy: _c, ...noCreatedBy } = base;
+    const { truthStatus: _t, ...noTruth } = base;
+    expect(missionCreatedPayloadSchema.safeParse(noCreatedBy).success).toBe(false);
+    expect(missionCreatedPayloadSchema.safeParse(noTruth).success).toBe(false);
+    // provenance links, when supplied, are carried verbatim (not stripped)
+    const withLinks = missionCreatedPayloadSchema.parse({ ...base, sourceSessionId: "s1", debateId: "d1" });
+    expect(withLinks.sourceSessionId).toBe("s1");
+    expect(withLinks.debateId).toBe("d1");
+  });
+
+  it("artifact / merge payloads embed their record and validate transitively", () => {
+    const artifact = {
+      id: "a1",
+      missionId: "m1",
+      kind: "diff" as const,
+      summary: "s",
+      truthStatus: "observed" as const,
+      createdAt: missionEventPayloadTs,
+    };
+    expect(missionArtifactAttachedPayloadSchema.safeParse({ missionId: "m1", artifact }).success).toBe(true);
+    // a broken embed (kind outside the closed artifact-kind enum) sinks the envelope
+    expect(
+      missionArtifactAttachedPayloadSchema.safeParse({ missionId: "m1", artifact: { ...artifact, kind: "rumor" } })
+        .success,
+    ).toBe(false);
+
+    const item = {
+      id: "q1",
+      missionId: "m1",
+      branchName: "agent/m1",
+      status: "queued" as const,
+      requiredVerificationReportId: "vr1",
+      reason: "r",
+      queuedAt: missionEventPayloadTs,
+    };
+    expect(missionMergeQueuedPayloadSchema.safeParse({ missionId: "m1", item }).success).toBe(true);
+    // a broken embed (status outside the closed merge-status enum) sinks the envelope
+    expect(
+      missionMergeQueuedPayloadSchema.safeParse({ missionId: "m1", item: { ...item, status: "yolo" } }).success,
+    ).toBe(false);
+  });
+
+  it("checkpoint payload is server-only (event type absent from the client-append window) and embeds an observed-only checkpoint", () => {
+    // the client-append vocabulary deliberately excludes any checkpoint event
+    expect(missionEventTypeSchema.options).not.toContain("mission.checkpoint.created");
+    expect(missionEventTypeSchema.options.some((t) => t.includes("checkpoint"))).toBe(false);
+
+    const checkpoint = {
+      id: "c1",
+      missionId: "m1",
+      repoRootRef: "/repo",
+      gitRef: "HEAD",
+      headSha: "abc1234",
+      reason: "manual" as const,
+      createdAt: missionEventPayloadTs,
+      truthStatus: "observed" as const,
+    };
+    expect(missionCheckpointRecordedPayloadSchema.safeParse({ missionId: "m1", checkpoint }).success).toBe(true);
+    // truthStatus is a literal "observed" — a planned/simulated checkpoint is rejected (no unobserved checkpoint)
+    expect(
+      missionCheckpointRecordedPayloadSchema.safeParse({ missionId: "m1", checkpoint: { ...checkpoint, truthStatus: "planned" } })
+        .success,
+    ).toBe(false);
+  });
+
+  it("the agent-role ladder is a closed 17-role enum (no ad-hoc roles)", () => {
+    expect(missionAgentRoleSchema.options).toEqual([
+      "orchestrator",
+      "architect",
+      "builder",
+      "reviewer",
+      "skeptic",
+      "verifier",
+      "memory_curator",
+      "executor",
+      "external",
+      "auditor",
+      "researcher",
+      "negotiator",
+      "risk_officer",
+      "mediator",
+      "watchdog",
+      "domain_expert",
+      "companion",
+    ]);
+    expect(missionAgentRoleSchema.options).toHaveLength(17);
+    expect(missionAgentRoleSchema.safeParse("ceo").success).toBe(false);
   });
 });
