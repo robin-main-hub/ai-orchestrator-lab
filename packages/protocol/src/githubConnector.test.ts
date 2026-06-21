@@ -50,6 +50,8 @@ import {
   githubPullRequestUpdateExecuteResponseSchema,
   githubPullRequestUpdateOutcomeSchema,
   githubPullRequestUpdatePlanRequestSchema,
+  githubPullRequestUpdatePlanResponseSchema,
+  githubPullRequestUpdatePlanSchema,
   githubReadonlyResourceResponseSchema,
   githubResourceOutcomeSchema,
   githubPullRequestDetailSchema,
@@ -1085,5 +1087,111 @@ describe("githubConnector — W2 branch result surface: sourceSha carried forwar
     expect(withPlan.plan?.id).toBe("plan_1");
     // outcome is the one required field — an envelope with no outcome is rejected
     expect(githubBranchCreatePlanResponseSchema.safeParse({ plan: validPlan }).success).toBe(false);
+  });
+});
+
+// The W6 PR-update REQUEST side (plan request bounds, execute request dual-sha
+// integrity keys, outcome enum, execute reason vocab) is pinned above, but the
+// plan RECORD and plan-response envelope are not. The record carries the W6
+// authority/privacy spirit:
+//   - DUAL optimistic-concurrency integrity: it observes currentTitleSha256 AND
+//     currentBodySha256 at plan time, so an execute fails if EITHER drifted;
+//   - the body is NEVER carried raw — the record exposes only a sha256 + a bounded
+//     excerpt + a length, both for the current and the proposed body, so a full PR
+//     body can't leak through the plan;
+//   - the new* fields are all optional per change-intent — a title-only change leaves
+//     every body-side new field undefined (and vice-versa), never fabricated;
+//   - changeSummary is a required {titleChanged, bodyChanged, bodyDelta} triple;
+//   - status is a closed 5-state lifecycle (with the honest no_op) and truthStatus a
+//     closed 3-state honesty enum;
+//   - the plan-response envelope carries plan optionally and never fabricates message.
+// Expected values are read off the schema's own declared shape (self-consistent).
+describe("githubConnector — W6 PR-update plan record: dual-sha integrity, body-never-raw, change-intent optionals", () => {
+  const validPlan = {
+    id: "plan_1",
+    repoFullName: "owner/repo",
+    pullNumber: 1,
+    currentTitle: "old title",
+    currentTitleSha256: "t".repeat(64),
+    currentBodySha256: "b".repeat(64),
+    currentBodyLength: 120,
+    changeSummary: { titleChanged: false, bodyChanged: false, bodyDelta: 0 },
+    status: "no_op" as const,
+    truthStatus: "planned" as const,
+    createdAt: "2026-06-21T00:00:00.000Z",
+    expiresAt: "2026-06-21T01:00:00.000Z",
+  };
+
+  it("requires the dual-sha + changeSummary spine; every new*/approval/blocked field is an optional never fabricated when absent", () => {
+    const parsed = githubPullRequestUpdatePlanSchema.parse(validPlan);
+    for (const opt of [
+      "newTitle",
+      "newTitleSha256",
+      "newBodyExcerpt",
+      "newBodySha256",
+      "newBodyLength",
+      "approvalId",
+      "blockedReason",
+    ] as const) {
+      expect(parsed[opt], `${opt} stays undefined`).toBeUndefined();
+    }
+    for (const key of [
+      "id",
+      "repoFullName",
+      "pullNumber",
+      "currentTitle",
+      "currentTitleSha256",
+      "currentBodySha256",
+      "currentBodyLength",
+      "changeSummary",
+      "status",
+      "truthStatus",
+      "createdAt",
+      "expiresAt",
+    ]) {
+      const { [key]: _omit, ...partial } = validPlan as Record<string, unknown>;
+      expect(githubPullRequestUpdatePlanSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("the body is never carried raw: the record shape exposes sha256/excerpt/length digests only, no currentBody/newBody field", () => {
+    const keys = Object.keys(githubPullRequestUpdatePlanSchema.shape);
+    // the digest forms exist…
+    expect(keys).toContain("currentBodySha256");
+    expect(keys).toContain("newBodySha256");
+    expect(keys).toContain("newBodyExcerpt");
+    expect(keys).toContain("currentBodyLength");
+    // …but no raw body field can ride along
+    expect(keys).not.toContain("currentBody");
+    expect(keys).not.toContain("newBody");
+  });
+
+  it("status is a closed 5-state lifecycle (with honest no_op) and truthStatus a closed 3-state enum; changeSummary requires the full triple", () => {
+    expect(githubPullRequestUpdatePlanSchema.shape.status.options).toEqual([
+      "planned",
+      "approval_required",
+      "blocked",
+      "no_op",
+      "failed",
+    ]);
+    expect(githubPullRequestUpdatePlanSchema.shape.truthStatus.options).toEqual(["planned", "observed", "configured"]);
+    expect(githubPullRequestUpdatePlanSchema.safeParse({ ...validPlan, status: "merged" }).success).toBe(false);
+    // changeSummary is a required triple — dropping any member fails
+    for (const member of ["titleChanged", "bodyChanged", "bodyDelta"]) {
+      const { [member]: _omit, ...partialSummary } = validPlan.changeSummary as Record<string, unknown>;
+      expect(
+        githubPullRequestUpdatePlanSchema.safeParse({ ...validPlan, changeSummary: partialSummary }).success,
+        `changeSummary.${member} must be mandatory`,
+      ).toBe(false);
+    }
+  });
+
+  it("the plan-response envelope carries plan optionally (a no_op/blocked outcome may have none) and never fabricates a message", () => {
+    const bare = githubPullRequestUpdatePlanResponseSchema.parse({ outcome: "no_op" });
+    expect(bare.plan).toBeUndefined();
+    expect(bare.message).toBeUndefined();
+    const withPlan = githubPullRequestUpdatePlanResponseSchema.parse({ outcome: "planned", plan: validPlan });
+    expect(withPlan.plan?.id).toBe("plan_1");
+    expect(githubPullRequestUpdatePlanResponseSchema.safeParse({ plan: validPlan }).success).toBe(false); // outcome required
   });
 });
