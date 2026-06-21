@@ -109,6 +109,27 @@ describe("runSecretScan — added lines only (+), 컨텍스트/삭제는 무시"
     expect(labels).toContain("env_secret_assign");
   });
 
+  it("(SC3b) fine-grained PAT(github_pat_)도 github_token으로 분류 → blocked", () => {
+    // 회귀: classic 규칙 gh[pousr]_는 github_pat_를 못 잡아, fine-grained PAT가 평범한
+    // 변수 할당으로 patch에 들어오면 검출을 빠져나갔다(applicable=true 유지). alternation으로 닫음.
+    const pat = ["github", "_pat_", "11", "A".repeat(22), "_", "b".repeat(40)].join("");
+    const handoff = makeHandoff({
+      files: [
+        {
+          path: "src/cfg.ts",
+          change: "added",
+          additions: 1,
+          deletions: 0,
+          diff: ["--- /dev/null", "+++ b/src/cfg.ts", `+const cfg = "${pat}";`].join("\n"),
+        },
+      ],
+    });
+    const report = runSecretScan(handoff);
+    expect(report.status).toBe("blocked");
+    expect(report.findings.map((f) => f.pattern)).toContain("github_token");
+    expect(report.findings[0]!.redactedPreview).not.toContain("bbbb");
+  });
+
   it("(SC4) 컨텍스트 / 삭제(-) 라인에 시크릿이 있어도 무시 — patch가 *도입*하는 것만 본다", () => {
     const fakeKey = ["sk", "stale", "abcdefghijklmnop"].join("-");
     const handoff = makeHandoff({
