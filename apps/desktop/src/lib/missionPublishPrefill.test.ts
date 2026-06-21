@@ -111,6 +111,19 @@ describe("evaluateScaffoldFile — 단일 파일 안전 가드", () => {
     expect(v.ok).toBe(false);
     if (!v.ok) expect(v.reason).toBe("secret_suspect");
   });
+  it("모던 OpenAI 키(sk-proj-/sk-svcacct-/sk-admin-)도 차단 — pure-alnum sk-{40,}가 본문 '-'·'_'로 놓침", () => {
+    // 서버 W1 scanner와 동일한 false-negative(런타임 조합으로 gitleaks 회피).
+    const proj = "sk-" + "proj-" + "A".repeat(20) + "_" + "b".repeat(20) + "-" + "C".repeat(20);
+    const svc = "sk-" + "svcacct-" + "D".repeat(30) + "-" + "e".repeat(30);
+    const admin = "sk-" + "admin-" + "F".repeat(40);
+    for (const tok of [proj, svc, admin]) {
+      const v = evaluateScaffoldFile({ path: "x", newContent: `key=${tok}` });
+      expect(v.ok).toBe(false);
+      if (!v.ok) expect(v.reason).toBe("secret_suspect");
+    }
+    // 산문의 'sk-learn'(scikit-learn) 등은 오탐하지 않는다(limited prefix).
+    expect(evaluateScaffoldFile({ path: "x", newContent: "we use sk-learn-pipelines-and-transformers here" }).ok).toBe(true);
+  });
 });
 
 describe("pickFirstSafeScaffoldFile — 여러 파일에서 첫 안전 파일 선택", () => {
