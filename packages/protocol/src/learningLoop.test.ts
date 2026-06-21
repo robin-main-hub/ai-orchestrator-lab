@@ -3,10 +3,16 @@ import {
   canDistill,
   deriveLearningLoopById,
   deriveLearningLoopState,
+  distilledLearningCandidateSchema,
+  failureHypothesisSchema,
+  failureInvestigationSchema,
+  hypothesisVerificationSchema,
   investigatorRoleSchema,
   isObservedClaimValid,
   LEARNING_EVENT_TYPES,
+  learningFailureSchema,
   learningLoopStageSchema,
+  memoryConsultRecordSchema,
   type DistilledLearningCandidate,
   type FailureHypothesis,
   type FailureInvestigation,
@@ -509,5 +515,55 @@ describe("deriveLearningLoopState — non-regression + dedup + outcome guards", 
     );
     expect(loop?.consult).toBeUndefined();
     expect(loop?.stage).toBe("failed"); // neither mis-routed consult closed the loop
+  });
+});
+
+// The existing suite exercises these records through the reducer/derive helpers,
+// which build already-typed objects — so the SCHEMA-level refinement invariants
+// (the validation boundary for data arriving from EventStorage/API) stay
+// unpinned. They encode the learning loop's epistemic honesty and are worth
+// pinning directly: a failure must cite real evidence to open a loop (no guessed
+// failures), a hypothesis must reference >=1 evidence ref (no empty speculation),
+// an observed verification must carry evidence, a distilled lesson is ALWAYS born
+// "suggested" (never auto-trusted), and a skipped consult must state why. Reuse
+// the suite's own factories so the valid baseline is self-consistent.
+describe("learningLoop — schema-level epistemic-honesty refinements (the validation boundary)", () => {
+  it("a failure needs at least one evidence id (sandboxErrorCard or verificationReport) — a guessed failure can't open a loop", () => {
+    expect(learningFailureSchema.safeParse(failure()).success).toBe(true); // factory cites verificationReportId
+    expect(learningFailureSchema.safeParse(failure({ verificationReportId: undefined, sandboxErrorCardId: "ec_1" })).success).toBe(true);
+    // neither id present → refinement rejects (no ungrounded failure)
+    expect(learningFailureSchema.safeParse(failure({ verificationReportId: undefined })).success).toBe(false);
+  });
+
+  it("a hypothesis must reference >=1 evidence ref — empty speculation is rejected", () => {
+    expect(failureHypothesisSchema.safeParse(hypothesis()).success).toBe(true);
+    expect(failureHypothesisSchema.safeParse(hypothesis({ evidenceRefs: [] })).success).toBe(false);
+  });
+
+  it("a verification has a closed 3-outcome set, and an OBSERVED claim must carry evidence (invariant 6)", () => {
+    expect(hypothesisVerificationSchema.safeParse(verified()).success).toBe(true); // observed + evidence
+    expect(hypothesisVerificationSchema.safeParse(verified({ outcome: "maybe" as never })).success).toBe(false); // not in {verified,rejected,inconclusive}
+    // observed but no evidence → rejected; the same claim demoted to a non-observed truthStatus is allowed empty
+    expect(hypothesisVerificationSchema.safeParse(verified({ evidenceRefs: [] })).success).toBe(false);
+    expect(hypothesisVerificationSchema.safeParse(verified({ truthStatus: "configured", evidenceRefs: [] })).success).toBe(true);
+  });
+
+  it("a distilled candidate is ALWAYS born trustStatus='suggested' (never auto-trusted) and must cite >=1 evidence ref", () => {
+    expect(distilledLearningCandidateSchema.safeParse(candidate()).success).toBe(true);
+    // the literal forbids self-promotion to trusted/active at birth
+    expect(distilledLearningCandidateSchema.safeParse(candidate({ trustStatus: "trusted" as never })).success).toBe(false);
+    expect(distilledLearningCandidateSchema.safeParse(candidate({ trustStatus: "active" as never })).success).toBe(false);
+    expect(distilledLearningCandidateSchema.safeParse(candidate({ evidenceRefs: [] })).success).toBe(false);
+  });
+
+  it("a skipped consult must state a non-empty skipReason (invariant 5); an investigation defaults evidenceRefs to []", () => {
+    expect(memoryConsultRecordSchema.safeParse(consult()).success).toBe(true); // completed
+    expect(memoryConsultRecordSchema.safeParse(consult({ outcome: "skipped" })).success).toBe(false); // no reason
+    expect(memoryConsultRecordSchema.safeParse(consult({ outcome: "skipped", skipReason: "   " })).success).toBe(false); // whitespace-only
+    expect(memoryConsultRecordSchema.safeParse(consult({ outcome: "skipped", skipReason: "no relevant memory" })).success).toBe(true);
+    // the investigation record fills evidenceRefs→[] when omitted (honest empty observation trail)
+    const { evidenceRefs: _drop, ...noRefs } = investigation();
+    const parsed = failureInvestigationSchema.parse(noRefs);
+    expect(parsed.evidenceRefs).toEqual([]);
   });
 });
