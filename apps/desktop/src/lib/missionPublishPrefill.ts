@@ -60,6 +60,9 @@ const CLIENT_SECRET_PATTERNS: ReadonlyArray<RegExp> = [
   /\bghs_[A-Za-z0-9]{20,}\b/,
   /\bghu_[A-Za-z0-9]{20,}\b/,
   /\bghr_[A-Za-z0-9]{20,}\b/,
+  // 세분화(fine-grained) PAT(github_pat_) — 2022+ GitHub 권장 형식. prefix·underscore가
+  // classic과 달라 위 ghp_/gho_/… 규칙으로는 안 잡힌다(서버 W1 scanner와 동일한 별도 패턴).
+  /\bgithub_pat_[A-Za-z0-9_]{20,}\b/,
   /\bAKIA[0-9A-Z]{16}\b/,
   /\bsk-ant-[A-Za-z0-9_-]{20,}\b/,
   /\bsk-[A-Za-z0-9]{40,}\b/,
