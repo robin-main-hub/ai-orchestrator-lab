@@ -10,6 +10,12 @@ import {
   agentSessionSchema,
   approvalDecisionRequestSchema,
   approvalRequestSchema,
+  approvalStateSchema,
+  permissionActionSchema,
+  permissionActorSchema,
+  permissionDecisionSchema,
+  permissionLevelSchema,
+  permissionRequestSchema,
   assistantDraftSchema,
   codingPacketSchema,
   debateRoundSchema,
@@ -1302,5 +1308,103 @@ describe("protocol schemas", () => {
     );
     expect(() => approvalDecisionRequestSchema.parse({ reason: "missing target" })).toThrow();
     expect(rule.phase).toBe("pre_store");
+  });
+});
+
+// The PERMISSION-AUTHORITY enums underpinning every approval flow are themselves
+// unpinned. approvalRequest/approvalDecisionRequest are exercised above, but the
+// six primitives they compose from — the least-privilege LEVEL ladder, the
+// three-way DECISION gate, the approval STATE lifecycle, the closed ACTION
+// vocabulary with its honest unknown catch-all, the ACTOR set, and the
+// permissionRequest envelope — never have their membership or contract pinned. A
+// silent reordering, a dropped `deny`, or a smuggled super-actor would pass today.
+//   (1) permissionLevel is a closed 7-rung capability ladder — read_only is the
+//       floor and the dangerous grants (run_dangerous_commands/network_access/
+//       remote_workspace/secret_access) are SEPARATE rungs, none implied by another.
+//   (2) permissionDecision is an explicit THREE-way gate (allow / approval_required
+//       / deny) — the middle gate and an explicit deny both exist; it is not a
+//       allow/deny binary, so deny-by-default and "needs approval" are representable.
+//   (3) approvalState is a 5-state lifecycle with the not_required escape hatch and
+//       terminal rejected/expired (a request can lapse, not just be answered).
+//   (4) permissionAction is a closed vocabulary ENDING in unknown_external_effect —
+//       an unrecognized effect maps to that honest catch-all, never to a silently
+//       allowed/absent action; an arbitrary action string is rejected.
+//   (5) permissionActor is exactly {user,agent,external_channel,mobile,server} — no
+//       "root"/"anonymous"/"admin" super-actor can be named.
+//   (6) permissionRequest requires level+state+reason; expiresAt stays undefined
+//       when omitted (a TTL is never fabricated).
+// Expected values are read off the schemas (self-consistent), never magic.
+describe("index — permission authority primitives: least-privilege ladder, three-way gate, honest catch-all", () => {
+  it("(1) permissionLevel is a closed 7-rung ladder with read_only floor and separate dangerous rungs", () => {
+    expect(permissionLevelSchema.options).toEqual([
+      "read_only",
+      "write_files",
+      "run_safe_commands",
+      "run_dangerous_commands",
+      "network_access",
+      "remote_workspace",
+      "secret_access",
+    ]);
+    expect(permissionLevelSchema.options[0]).toBe("read_only"); // the floor is the least privilege
+    // each dangerous grant is its own rung — none is a superset alias of another
+    for (const danger of ["run_dangerous_commands", "network_access", "remote_workspace", "secret_access"]) {
+      expect(permissionLevelSchema.options).toContain(danger);
+    }
+    expect(permissionLevelSchema.safeParse("root").success).toBe(false);
+    expect(permissionLevelSchema.safeParse("all").success).toBe(false);
+  });
+
+  it("(2) permissionDecision is an explicit three-way gate — allow / approval_required / deny", () => {
+    expect(permissionDecisionSchema.options).toEqual(["allow", "approval_required", "deny"]);
+    expect(permissionDecisionSchema.options).toContain("deny"); // explicit deny exists (not just absence-of-allow)
+    expect(permissionDecisionSchema.options).toContain("approval_required"); // the middle gate exists
+    expect(permissionDecisionSchema.safeParse("allow_all").success).toBe(false);
+  });
+
+  it("(3) approvalState is a 5-state lifecycle with not_required escape hatch and terminal rejected/expired", () => {
+    expect(approvalStateSchema.options).toEqual(["not_required", "required", "approved", "rejected", "expired"]);
+    for (const terminal of ["approved", "rejected", "expired"]) {
+      expect(approvalStateSchema.options).toContain(terminal);
+    }
+    expect(approvalStateSchema.safeParse("pending").success).toBe(false); // not a recognized state
+  });
+
+  it("(4) permissionAction is a closed vocabulary that ENDS in the honest unknown_external_effect catch-all", () => {
+    const opts = permissionActionSchema.options;
+    expect(opts[opts.length - 1]).toBe("unknown_external_effect"); // the catch-all is the last, deliberate rung
+    expect(opts).toContain("payment_action");
+    expect(opts).toContain("secret_view");
+    expect(opts).toContain("git_push");
+    // an unrecognized effect is REJECTED at the schema — it must be mapped to the catch-all, not smuggled raw
+    expect(permissionActionSchema.safeParse("wire_transfer").success).toBe(false);
+    expect(permissionActionSchema.safeParse("unknown_external_effect").success).toBe(true);
+  });
+
+  it("(5) permissionActor names exactly five principals — no root/anonymous/admin super-actor", () => {
+    expect(permissionActorSchema.options).toEqual(["user", "agent", "external_channel", "mobile", "server"]);
+    for (const forged of ["root", "anonymous", "admin", "superuser"]) {
+      expect(permissionActorSchema.safeParse(forged).success).toBe(false);
+    }
+  });
+
+  it("(6) permissionRequest requires level+state+reason and never fabricates an expiry", () => {
+    const base = {
+      id: "pr1",
+      sessionId: "s1",
+      requestedBy: "agent_builder",
+      level: "secret_access" as const,
+      reason: "needs vault read",
+      state: "required" as const,
+      createdAt: "2026-06-21T00:00:00.000Z",
+    };
+    const parsed = permissionRequestSchema.parse(base);
+    expect(parsed.expiresAt).toBeUndefined(); // optional — no TTL invented when absent
+    for (const key of ["level", "state", "reason"]) {
+      const { [key]: _omit, ...partial } = base as Record<string, unknown>;
+      expect(permissionRequestSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+    // level and state must be drawn from their closed enums (a request can't claim an unknown grant/state)
+    expect(permissionRequestSchema.safeParse({ ...base, level: "root" }).success).toBe(false);
+    expect(permissionRequestSchema.safeParse({ ...base, state: "pending" }).success).toBe(false);
   });
 });
