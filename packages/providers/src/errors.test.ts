@@ -61,6 +61,21 @@ describe("redactSecretsForLog", () => {
     expect(out).toContain("<redacted>");
   });
 
+  it("masks fine-grained GitHub PAT and bare aws/google/slack tokens (parity with W1/H8d)", () => {
+    // gitleaks가 contiguous 리터럴을 잡으므로 런타임 조합으로 회피.
+    const pat = "github_" + "pat_" + "11" + "A".repeat(22) + "_" + "b".repeat(40);
+    const akia = "AKIA" + "ABCDEFGHIJKLMNOP";
+    const aiza = "AIza" + "d".repeat(35);
+    const xox = "xoxb-" + "1".repeat(12) + "-efabefabefab";
+    const out = redactSecretsForLog(
+      [`gh ${pat}`, `aws ${akia}`, `goog ${aiza}`, `slack ${xox}`].join("\n"),
+    );
+    for (const raw of [pat, akia, aiza, xox]) {
+      expect(out).not.toContain(raw);
+    }
+    expect(out).toContain("<redacted>");
+  });
+
   it("leaves safe text untouched", () => {
     const out = redactSecretsForLog("upstream returned 502 bad gateway, retry in 5s");
     expect(out).toBe("upstream returned 502 bad gateway, retry in 5s");
