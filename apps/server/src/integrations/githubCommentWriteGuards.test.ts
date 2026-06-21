@@ -49,6 +49,22 @@ describe("scanForSecrets", () => {
     if (!verdict.ok) expect(verdict.matched).toContain("github_pat_");
   });
 
+  it("모던 OpenAI 키(sk-proj-/sk-svcacct-/sk-admin-)도 차단 — 본문 '-'·'_'로 classic sk-{40,}가 놓침", () => {
+    // 2024+ OpenAI 키는 본문에 '-'·'_'가 섞여 pure-alnum sk-{40,} run이 끊겨 빠져나갔다(실측
+    // false-negative). H8d runner scanner는 broader sk-[...]{16,}로 이미 잡는 parity gap.
+    // gitleaks 회피 위해 토큰은 런타임 조합.
+    const proj = "sk-" + "proj-" + "A".repeat(20) + "_" + "b".repeat(20) + "-" + "C".repeat(20);
+    const svc = "sk-" + "svcacct-" + "D".repeat(30) + "-" + "e".repeat(30);
+    const admin = "sk-" + "admin-" + "F".repeat(40);
+    for (const tok of [proj, svc, admin]) {
+      const verdict = scanForSecrets(`키 교체: ${tok} 적용`);
+      expect(verdict.ok).toBe(false);
+      if (!verdict.ok) expect(verdict.matched).toContain("OpenAI project key");
+    }
+    // 산문에 흔한 'sk-learn'(scikit-learn) 등 비-키 토큰은 오탐하지 않는다(limited prefix).
+    expect(scanForSecrets("we use sk-learn-pipelines-and-transformers-extensively here")).toEqual({ ok: true });
+  });
+
   it("정상 본문은 통과", () => {
     expect(scanForSecrets("이 PR의 변경 의도를 확인했습니다. 이대로 머지 가능합니다.")).toEqual({ ok: true });
   });
