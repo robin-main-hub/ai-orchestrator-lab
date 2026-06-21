@@ -42,6 +42,15 @@ const SAFE_RELATIVE_TOKEN = /^[A-Za-z0-9@_./:=+-]+$/;
 const SECRET_LIKE_PATTERNS: ReadonlyArray<[RegExp, string]> = [
   [/\bsk-[A-Za-z0-9_-]{12,}\b/g, "sk-[REDACTED]"],
   [/\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b/gi, "Bearer [REDACTED]"],
+  // 고신호 토큰 prefix — 명령 stdout/stderr가 LLM fix 프롬프트로 외부 전송되고(verifyPacket)
+  // report 응답으로 반환되므로, W1/H8d 차단 스캐너가 비밀로 보는 형식은 여기서도 redact해야
+  // 한다. 위 sk-/Bearer/key=value 규칙은 keyword 없는 bare 토큰(git URL의 ghp_, AKIA 등)을
+  // 놓쳐 publish 표면으로 새어나갔다(실측 false-negative). redaction은 replace라 오탐 무해.
+  [/\bgh[pousr]_[A-Za-z0-9]{20,}\b/g, "[REDACTED:github_token]"],
+  [/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, "[REDACTED:github_token]"],
+  [/\bAKIA[0-9A-Z]{16}\b/g, "[REDACTED:aws_key]"],
+  [/\bAIza[0-9A-Za-z_-]{30,}/g, "[REDACTED:google_key]"],
+  [/\bxox[abposr]-[A-Za-z0-9-]{10,}/g, "[REDACTED:slack_token]"],
   [/("|')(api[_-]?key|auth[_-]?token|access[_-]?token|refresh[_-]?token|secret|password|private[_-]?key)\1\s*:\s*("|')[^"']+\3/gi, "$1$2$1: $3[REDACTED]$3"],
   [/\b(api[_-]?key|auth[_-]?token|access[_-]?token|refresh[_-]?token|secret|password|private[_-]?key)\s*[:=]\s*["']?[^"'\s,}]+/gi, "$1=[REDACTED]"],
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "[REDACTED:private_key]"],

@@ -49,4 +49,31 @@ describe("experimental autorun safety", () => {
     expect(redacted).not.toContain("super-secret-value");
     expect(redacted).not.toContain("json-secret-value");
   });
+
+  it("redacts bare high-signal token prefixes (github/aws/google/slack) with no keyword", () => {
+    // 이전엔 keyword 없는 bare 토큰(git URL의 ghp_, AKIA 등)이 redactForPublishPhase를
+    // 빠져나가 LLM fix 프롬프트·report 응답(외부 노출)으로 새어나갔다. W1/H8d 차단 스캐너가
+    // 비밀로 보는 형식은 publish 표면에서도 redact한다. gitleaks 회피로 토큰은 런타임 조합.
+    const ghp = "ghp_" + "A".repeat(36);
+    const pat = "github_" + "pat_" + "11" + "B".repeat(22) + "_" + "c".repeat(40);
+    const akia = "AKIA" + "ABCDEFGHIJKLMNOP";
+    const aiza = "AIza" + "d".repeat(35);
+    const xox = "xoxb-" + "1".repeat(12) + "-efabefabefab";
+    const redacted = redactForPublishPhase(
+      [
+        `fatal: could not read from https://${ghp}@github.com/o/r.git`,
+        `GH=${pat}`,
+        `AWS_ACCESS_KEY_ID ${akia} denied`,
+        `key ${aiza} quota`,
+        `webhook ${xox} invalid`,
+      ].join("\n"),
+    );
+    expect(redacted).toContain("[REDACTED:github_token]");
+    expect(redacted).toContain("[REDACTED:aws_key]");
+    expect(redacted).toContain("[REDACTED:google_key]");
+    expect(redacted).toContain("[REDACTED:slack_token]");
+    for (const raw of [ghp, pat, akia, aiza, xox]) {
+      expect(redacted).not.toContain(raw);
+    }
+  });
 });
