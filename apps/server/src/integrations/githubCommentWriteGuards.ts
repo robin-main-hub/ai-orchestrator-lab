@@ -47,6 +47,11 @@ const SECRET_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
   { name: "Slack token", pattern: /\bxox[abposr]-[A-Za-z0-9-]{10,}\b/ },
   { name: "Google API key", pattern: /\bAIza[0-9A-Za-z_-]{30,}\b/ },
   { name: "Authorization Bearer header", pattern: /\bAuthorization\s*:\s*Bearer\s+\S+/i },
+  // bare bearer 토큰 — "Authorization:" 헤더 형태가 아니라 따옴표 안/설정값으로 들어온
+  // `Bearer <token>`도 잡는다. 위 헤더 규칙은 `Authorization:` 접두가 있을 때만 맞아,
+  // 헤더 없이 토큰만 노출되면(예: `const h = "Bearer eyJ..."`) false-negative였다.
+  // H8d runnerPatchSafety의 bearer_token 규칙과 동일 형태 — 게이트 간 패턴 parity.
+  { name: "Bearer token", pattern: /\bBearer\s+[A-Za-z0-9._-]{8,}/ },
   // PEM/private-key 표식만 잡아도 충분
   { name: "Private key block", pattern: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/ },
 ];
