@@ -92,7 +92,10 @@ export type RunnerPatchSafetyReport = {
 const SECRET_RULES: ReadonlyArray<{ label: string; regex: RegExp }> = [
   { label: "bearer_token", regex: /\bBearer\s+[A-Za-z0-9._\-]{8,}/gi },
   { label: "openai_key", regex: /\bsk-[A-Za-z0-9._\-]{16,}/g },
-  { label: "github_token", regex: /\bgh[pousr]_[A-Za-z0-9]{20,}/g },
+  // classic(ghp_/gho_/ghu_/ghs_/ghr_) + fine-grained PAT(github_pat_, 2022+ 권장 형식).
+  // fine-grained는 prefix가 "gh_"가 아니라 "github_pat_"이고 본문에 underscore가 있어
+  // classic 규칙으로는 안 잡힌다 — 별도 alternation으로 false-negative를 막는다.
+  { label: "github_token", regex: /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g },
   { label: "aws_access_key", regex: /\bAKIA[0-9A-Z]{16}\b/g },
   // env-style assignment — KEY=value 형태. 변수 이름에 토큰/키/비번 키워드.
   {
