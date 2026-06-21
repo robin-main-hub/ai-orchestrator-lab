@@ -88,6 +88,33 @@ describe("evaluateFilePathPolicy", () => {
     // leading "./"는 정규화로 제거되므로 여전히 통과
     expect(evaluateFilePathPolicy("./src/index.ts")).toEqual({ ok: true, normalized: "src/index.ts" });
   });
+
+  it("대소문자 변형 위험 경로도 차단 — 형제 multi-file 가드(W5b)와 case-insensitive parity(회귀)", () => {
+    // 드리프트: 형제 githubMultiFileCommit.HIGH_RISK_PATH_PATTERNS는 모든 규칙이 /i인데 이
+    // 단일파일 가드의 id_rsa·.github/workflows·.git·node_modules·dist·build·.next·coverage·
+    // lockfile 규칙만 /i가 빠져, 대소문자 변형 경로가 multi-file commit으로는 막히는데(W5b
+    // ok:false) 단일파일 write로는 통과했다(실측 W3a ok:true). ID_RSA(SSH 개인키)·.GitHub/
+    // workflows(CI 트리거 표면)가 대표 위험. 같은 .env/.pem/.key 규칙은 이미 /i인데 id_rsa만
+    // 빠진 내부 비일관성도 동시 해소. 강화 방향이라 부작용 경로 변화 없음.
+    for (const bad of [
+      "ID_RSA",
+      "keys/Id_Rsa",
+      ".GitHub/workflows/evil.yml",
+      ".GIT/config",
+      "Node_Modules/x.js",
+      "Dist/app.js",
+      "Build/out.js",
+      "Coverage/lcov.info",
+      "PNPM-Lock.yaml",
+      "Yarn.Lock",
+    ]) {
+      expect(evaluateFilePathPolicy(bad).ok, `should reject: ${bad}`).toBe(false);
+    }
+    // 오탐 방지: 정당한 소스 경로는 계속 통과(키워드가 segment 일부일 뿐 위험 디렉터리/파일 아님)
+    expect(evaluateFilePathPolicy("src/distributor.ts").ok).toBe(true);
+    expect(evaluateFilePathPolicy("src/builder/index.ts").ok).toBe(true);
+    expect(evaluateFilePathPolicy("docs/coverage-notes.md").ok).toBe(true);
+  });
 });
 
 describe("evaluateNewContentSafety", () => {
