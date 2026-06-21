@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   evaluateBranchCreateGate,
   evaluateBranchNamePolicy,
+  isSafeGitRefName,
   normalizeSourceRef,
 } from "./githubBranchWriteGuards";
 
@@ -93,5 +94,39 @@ describe("evaluateBranchCreateGate", () => {
 
   it("refs/tags 같은 source ref는 blocked", () => {
     expect(evaluateBranchCreateGate({ ...ok, sourceRef: "refs/tags/v1" }).kind).toBe("blocked");
+  });
+
+  it("refspec/shell 메타가 든 source ref는 blocked — newBranchName과 안전성 parity(회귀)", () => {
+    // 드리프트 버그: newBranchName은 evaluateBranchNamePolicy로 .. @{ \ 등을 거부하는데, source
+    // ref는 normalizeSourceRef(prefix 제거)만 거쳐 그대로 getRefSha의 ref로 흘러가, refspec/shell
+    // 메타가 든 source가 통과했다(실측 ok). 보호 브랜치(main 등)는 정당한 source라 prefix/protected는
+    // 적용 안 하고 안전 문자/문법만 막는다.
+    for (const sourceRef of [
+      "main@{0}",
+      "main..evil",
+      "foo\\bar",
+      "refs/heads/main@{upstream}",
+      "main ; rm -rf",
+      "한글브랜치",
+      "feature/x//y",
+      "feature/x.",
+    ]) {
+      expect(evaluateBranchCreateGate({ ...ok, sourceRef }).kind, sourceRef).toBe("blocked");
+    }
+    // 정상 source ref(보호 브랜치 포함)는 계속 통과 — 오탐 0.
+    for (const sourceRef of ["main", "develop", "refs/heads/main", "feature/login", "agent/base"]) {
+      expect(evaluateBranchCreateGate({ ...ok, sourceRef }).kind, sourceRef).toBe("ok");
+    }
+  });
+});
+
+describe("isSafeGitRefName", () => {
+  it("안전 문자/문법만 통과(보호 브랜치 이름도 안전하면 true)", () => {
+    for (const ok of ["main", "develop", "feature/login", "agent/x", "release/1.2", "a"]) {
+      expect(isSafeGitRefName(ok), ok).toBe(true);
+    }
+    for (const bad of ["", "main@{0}", "a..b", "a//b", "a\\b", "a b", "한글", "-lead", "/lead", "trail/", "trail.", "a;rm"]) {
+      expect(isSafeGitRefName(bad), bad).toBe(false);
+    }
   });
 });
