@@ -69,8 +69,13 @@ export class GithubGitDataPermissionError extends Error {
 
 const HIGH_RISK_PATH_PATTERNS: ReadonlyArray<RegExp> = [
   /^\.github\/workflows\//i,
-  /^\.env($|\.|\/)/i,          // .env, .env.local, .env/foo
-  /\.env$/i,                    // foo.env(config.env 등)
+  // .env 일가족 — 형제 단일파일 가드(githubFileChangeWriteGuards.DENIED_PATH_PATTERNS)와 parity.
+  // 과거 이 multi-file 가드의 .env 규칙은 `^\.env…`로 *루트* dotenv만 막아, `apps/server/.env.local`
+  // 처럼 nested 위치의 dotenv(.env.<suffix>)를 흘려보냈다(실측 ALLOW). monorepo에선 패키지별
+  // `apps/x/.env.production`가 흔해 실질 노출이 컸다. (^|/) 경계로 nested까지 .env 계열 전체를 막고,
+  // 두 번째 패턴이 `production.env`처럼 segment가 `.env`로 끝나는 파일을 잡는다(점-접두/접미 양쪽).
+  /(^|\/)\.env($|\.|\/)/i,       // .env, .env.local, .env/foo, nested apps/x/.env.production
+  /(^|\/)[^/]+\.env$/i,          // production.env, config/database.env
   /(^|\/)env\//i,               // env/ 디렉터리
   /(^|\/)secrets?(\.|\/|$)/i,
   /\.pem$/i,
