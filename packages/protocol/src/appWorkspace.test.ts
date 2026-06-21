@@ -9,6 +9,8 @@ import {
   missionPreviewRunScaffoldOutcomeSchema,
   missionPreviewRunScaffoldRequestSchema,
   missionPreviewRunScaffoldResponseSchema,
+  missionWorkspaceAttachedPayloadSchema,
+  missionWorkspacePreviewRecordedPayloadSchema,
   previewProbeRequestSchema,
   previewStartRequestSchema,
   sandboxRunnerKindSchema,
@@ -317,5 +319,70 @@ describe("appWorkspace — preview-run boundary: loopback-default binds, bounded
     expect(missionPreviewRunScaffoldResponseSchema.safeParse({ outcome: "observed", materializedFileCount: -1 }).success).toBe(false);
     expect(missionPreviewRunScaffoldResponseSchema.safeParse({ outcome: "observed", materializedFileCount: 1.5 }).success).toBe(false);
     expect(missionPreviewRunScaffoldResponseSchema.safeParse({ outcome: "observed", materializedFileCount: 0 }).success).toBe(true);
+  });
+});
+
+// The two mission.workspace.* event payloads are the seam between EventStorage
+// (the source of truth) and the materialized AppWorkspace view, and they encode
+// an authority distinction worth pinning: the "attached" event EMBEDS the full
+// workspace record (transitive — a broken nested facet fails the whole envelope,
+// no half-valid workspace smuggled through an event), while the "preview
+// recorded" event REFERENCES the workspace by id and carries ONLY the preview
+// facet (it names exactly what was observed — it never re-asserts the whole
+// workspace). Both demand a missionId (deny-by-default attribution: an event with
+// no mission owner is rejected), and being plain z.objects they STRIP unknown
+// keys (a smuggled authority/source marker is dropped, never preserved).
+describe("appWorkspace — mission.workspace.* event payloads: embed-vs-reference authority + transitive validity", () => {
+  const workspace = buildAppWorkspace(
+    { repoRootRef: "/repo", appType: "react_vite", terminalMode: "read_only", runnerKind: "local" },
+    { id: "ws1", missionId: "m1", now },
+  );
+
+  it("attached payload embeds the FULL workspace, requires both fields, and validates transitively", () => {
+    expect(missionWorkspaceAttachedPayloadSchema.safeParse({ missionId: "m1", workspace }).success).toBe(true);
+    // both fields mandatory — neither missionId nor workspace may be omitted
+    expect(missionWorkspaceAttachedPayloadSchema.safeParse({ workspace }).success).toBe(false);
+    expect(missionWorkspaceAttachedPayloadSchema.safeParse({ missionId: "m1" }).success).toBe(false);
+    // transitive: a workspace whose nested preview.truthStatus is not a valid
+    // truthStatus enum value fails the whole envelope (no half-valid embed)
+    const broken = { ...workspace, preview: { ...workspace.preview, truthStatus: "rumored" } };
+    expect(missionWorkspaceAttachedPayloadSchema.safeParse({ missionId: "m1", workspace: broken }).success).toBe(false);
+  });
+
+  it("the embedded workspace keeps exactly the appWorkspace key set (envelope adds only missionId)", () => {
+    const parsed = missionWorkspaceAttachedPayloadSchema.parse({ missionId: "m1", workspace });
+    expect(Object.keys(parsed).sort()).toEqual(["missionId", "workspace"]);
+    expect(Object.keys(parsed.workspace).sort()).toEqual(Object.keys(appWorkspaceSchema.shape).sort());
+  });
+
+  it("preview-recorded payload REFERENCES by workspaceId + carries only the preview facet (no full workspace embed)", () => {
+    const preview = previewFromProbe({ bound: true, host: "127.0.0.1", port: 4400 });
+    const parsed = missionWorkspacePreviewRecordedPayloadSchema.parse({ missionId: "m1", workspaceId: "ws1", preview });
+    expect(Object.keys(parsed).sort()).toEqual(["missionId", "preview", "workspaceId"]);
+    // it does NOT carry the full workspace — only the id reference + the preview facet
+    expect("workspace" in parsed).toBe(false);
+    expect(Object.keys(parsed.preview).sort()).toEqual(Object.keys(preview).sort());
+    // all three fields mandatory
+    expect(missionWorkspacePreviewRecordedPayloadSchema.safeParse({ workspaceId: "ws1", preview }).success).toBe(false);
+    expect(missionWorkspacePreviewRecordedPayloadSchema.safeParse({ missionId: "m1", preview }).success).toBe(false);
+    expect(missionWorkspacePreviewRecordedPayloadSchema.safeParse({ missionId: "m1", workspaceId: "ws1" }).success).toBe(false);
+    // transitive on the preview facet too
+    const badPreview = { ...preview, truthStatus: "rumored" };
+    expect(
+      missionWorkspacePreviewRecordedPayloadSchema.safeParse({ missionId: "m1", workspaceId: "ws1", preview: badPreview })
+        .success,
+    ).toBe(false);
+  });
+
+  it("both payloads STRIP an unknown smuggled key (plain z.object — never preserved)", () => {
+    const a = missionWorkspaceAttachedPayloadSchema.parse({ missionId: "m1", workspace, authority: "node1" });
+    expect("authority" in a).toBe(false);
+    const r = missionWorkspacePreviewRecordedPayloadSchema.parse({
+      missionId: "m1",
+      workspaceId: "ws1",
+      preview: workspace.preview,
+      source: "smuggled",
+    });
+    expect("source" in r).toBe(false);
   });
 });
