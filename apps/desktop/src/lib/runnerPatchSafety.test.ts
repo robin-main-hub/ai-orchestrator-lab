@@ -161,6 +161,43 @@ describe("runSecretScan — added lines only (+), 컨텍스트/삭제는 무시"
     });
     expect(runSecretScan(handoff).findings).toEqual([]);
   });
+
+  it("(SC6) bare slack/google/PEM 시크릿도 분류 → blocked(회귀: W1엔 있고 H8d엔 없던 false negative)", () => {
+    // W1 공유 scanForSecrets는 잡지만 H8d SECRET_RULES엔 없어, 변수명 키워드 없이 들어온
+    // 이 3종(따옴표 안 Slack/Google 토큰, bare PEM 블록)이 env_secret_assign도 빠져나가
+    // applicable=true로 승인 큐까지 흘러갔다. fixture는 gitleaks 회피 위해 런타임 조합.
+    const slack = "xox" + "b-" + "2222222222-3333333333-" + "abcdefghijklmnop";
+    const google = "AIza" + "Sy" + "A1234567890abcdefghijklmnopqrstuv";
+    const pem = "-----BEGIN " + "PRIVATE KEY-----";
+    const handoff = makeHandoff({
+      files: [
+        {
+          path: "src/leak.ts",
+          change: "added",
+          additions: 3,
+          deletions: 0,
+          diff: [
+            "--- /dev/null",
+            "+++ b/src/leak.ts",
+            `+const s = "${slack}";`,
+            `+const g = "${google}";`,
+            `+const p = "${pem}";`,
+          ].join("\n"),
+        },
+      ],
+    });
+    const report = runSecretScan(handoff);
+    expect(report.status).toBe("blocked");
+    const labels = report.findings.map((f) => f.pattern).sort();
+    expect(labels).toContain("slack_token");
+    expect(labels).toContain("google_api_key");
+    expect(labels).toContain("private_key_block");
+    // 마스킹 — raw 토큰 본문은 노출 안 됨
+    for (const f of report.findings) {
+      expect(f.redactedPreview).toContain("<redacted>");
+    }
+    expect(report.findings.map((f) => f.redactedPreview).join("")).not.toContain("abcdefghijklmnop");
+  });
 });
 
 describe("runPathPolicy — allowlist/denylist (deny가 allow보다 강함)", () => {
