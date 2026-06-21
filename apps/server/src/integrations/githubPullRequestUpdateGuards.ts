@@ -15,6 +15,12 @@ import { isRepoAllowed, scanForSecrets } from "./githubCommentWriteGuards.js";
  */
 
 const REPO_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+/**
+ * 제어문자(C0 0x00–0x1F, DEL 0x7F). title은 단일 라인 필드로 plan store·응답 excerpt·GitHub PATCH로
+ * 흘러가, 줄바꿈/CR/NUL이 섞이면 로그/응답 인젝션·표시 깨짐 표면. W5d 라벨 가드와 W4a create 가드는
+ * 같은 이유로 막는데 이 update 경로만 빠져 있었다(실측 ok). body는 markdown이라 줄바꿈 정당 — title만 막는다.
+ */
+const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/u;
 
 export const PR_UPDATE_TITLE_MAX_CHARS = 160;
 export const PR_UPDATE_BODY_MAX_CHARS = 16_000;
@@ -39,6 +45,7 @@ export type PrUpdateGate =
 export type PrUpdateBlockReason =
   | "allowlist"
   | "title_too_long"
+  | "title_control_char"
   | "body_too_long"
   | "secret_suspect"
   | "empty_change";
@@ -83,6 +90,9 @@ export function evaluatePrUpdateGate(input: {
     }
     if (trimmed.length > PR_UPDATE_TITLE_MAX_CHARS) {
       return block("title_too_long", `title이 너무 깁니다(최대 ${PR_UPDATE_TITLE_MAX_CHARS}자)`);
+    }
+    if (CONTROL_CHAR_RE.test(trimmed)) {
+      return block("title_control_char", "title에 제어문자(줄바꿈/CR/NUL 등)가 포함되어 있습니다");
     }
     const titleSecret = scanForSecrets(trimmed);
     if (!titleSecret.ok) {
