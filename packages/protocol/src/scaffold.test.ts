@@ -6,13 +6,19 @@ import {
   missionScaffoldLatestSafeFileSchema,
   missionScaffoldLatestSkippedReasonSchema,
   missionScaffoldLatestSkippedSchema,
+  missionScaffoldAppliedPayloadSchema,
   missionScaffoldOverlayRecordedPayloadSchema,
   missionScaffoldOverlayRequestSchema,
   missionScaffoldOverlayResponseSchema,
+  missionScaffoldPlannedPayloadSchema,
+  scaffoldApplyRequestSchema,
+  scaffoldApplyResultSchema,
   scaffoldForTemplate,
   scaffoldOverlayFileSchema,
   scaffoldOverlaySchema,
   scaffoldOverlaySourceSchema,
+  scaffoldPlanFileSchema,
+  scaffoldPlanRequestSchema,
   scaffoldPlanSchema,
   type ScaffoldBlueprintSpec,
 } from "./scaffold.js";
@@ -387,5 +393,80 @@ describe("scaffold overlay — bounded privileged file replacement: record requi
       missionScaffoldOverlayRecordedPayloadSchema.safeParse({ missionId: "m1", overlay: { ...record, files: [] } })
         .success,
     ).toBe(false);
+  });
+});
+
+// The scaffold plan→apply lifecycle is the last unreferenced scaffold cluster.
+// Its authority shape: an apply RESULT carries an explicit `observed` honesty
+// flag and a closed 3-state status (no apply silently claimed); the two lifecycle
+// event payloads follow the embed-vs-reference rule seen elsewhere — the PLANNED
+// event EMBEDS the whole plan (transitive), while the APPLIED event REFERENCES
+// the plan by id and carries ONLY the new result facet (it never re-asserts the
+// whole plan); and the request schemas bound their inputs (templateId/planId
+// length caps, input defaults to {}). Pin self-consistently (derived from the
+// schema + buildScaffoldPlan output, no magic literals).
+describe("scaffold plan→apply lifecycle — observed apply result, embed-vs-reference events, bounded requests", () => {
+  const plan = buildScaffoldPlan({
+    id: "sc1",
+    missionId: "m1",
+    workspaceId: "ws1",
+    templateId: "react_vite_app",
+    templateInput: { appName: "demo" },
+    repoRootRef: "/repo",
+    scaffold: scaffoldForTemplate("react_vite_app", { appName: "demo" }),
+    existingPaths: new Set<string>(),
+    now,
+  });
+
+  it("a plan-file row needs all four fields and a create|overwrite action with an integer byte count", () => {
+    const row = { path: "a.txt", action: "create" as const, bytes: 5, contentPreview: "alpha" };
+    expect(scaffoldPlanFileSchema.safeParse(row).success).toBe(true);
+    for (const k of ["path", "action", "bytes", "contentPreview"]) {
+      const { [k]: _omit, ...partial } = row as Record<string, unknown>;
+      expect(scaffoldPlanFileSchema.safeParse(partial).success).toBe(false);
+    }
+    expect(scaffoldPlanFileSchema.shape.action.options).toEqual(["create", "overwrite"]);
+    expect(scaffoldPlanFileSchema.safeParse({ ...row, action: "delete" }).success).toBe(false);
+    expect(scaffoldPlanFileSchema.safeParse({ ...row, bytes: 1.5 }).success).toBe(false); // int only
+  });
+
+  it("the apply result carries an explicit observed flag + closed 3-state status, defaults appliedPaths to [], never fabricates checkpointSha", () => {
+    const parsed = scaffoldApplyResultSchema.parse({ status: "applied", reason: "ok", observed: true, appliedAt: now() });
+    expect(parsed.appliedPaths).toEqual([]); // honest empty default
+    expect(parsed.checkpointSha).toBeUndefined(); // optional, not fabricated
+    expect(scaffoldApplyResultSchema.shape.status.options).toEqual(["applied", "blocked", "failed"]);
+    // observed, reason and appliedAt are mandatory honesty fields
+    expect(scaffoldApplyResultSchema.safeParse({ status: "applied", reason: "ok", appliedAt: now() }).success).toBe(false);
+    expect(scaffoldApplyResultSchema.safeParse({ status: "applied", observed: true, appliedAt: now() }).success).toBe(false);
+    expect(scaffoldApplyResultSchema.safeParse({ status: "applied", reason: "ok", observed: true }).success).toBe(false);
+  });
+
+  it("planned event EMBEDS the whole plan (transitive); applied event REFERENCES planId + carries only the result", () => {
+    expect(missionScaffoldPlannedPayloadSchema.safeParse({ missionId: "m1", plan }).success).toBe(true);
+    // transitive: a plan with a broken file row sinks the planned envelope
+    const brokenPlan = { ...plan, files: [{ ...plan.files[0], action: "delete" }] };
+    expect(missionScaffoldPlannedPayloadSchema.safeParse({ missionId: "m1", plan: brokenPlan }).success).toBe(false);
+
+    const result = { status: "applied" as const, reason: "ok", observed: true, appliedAt: now() };
+    const applied = missionScaffoldAppliedPayloadSchema.parse({ missionId: "m1", planId: "sc1", result });
+    // it does NOT re-embed the whole plan — only the id reference + the result facet
+    expect(Object.keys(applied).sort()).toEqual(["missionId", "planId", "result"]);
+    expect("plan" in applied).toBe(false);
+    // transitive on the result facet too
+    expect(
+      missionScaffoldAppliedPayloadSchema.safeParse({ missionId: "m1", planId: "sc1", result: { ...result, status: "yolo" } })
+        .success,
+    ).toBe(false);
+  });
+
+  it("the plan/apply requests bound their inputs (templateId 1..128, planId 1..256, input defaults to {})", () => {
+    expect(scaffoldPlanRequestSchema.parse({ templateId: "react_vite_app" }).input).toEqual({}); // input defaulted
+    expect(scaffoldPlanRequestSchema.safeParse({ templateId: "" }).success).toBe(false); // min 1
+    expect(scaffoldPlanRequestSchema.safeParse({ templateId: "a".repeat(129) }).success).toBe(false); // max 128
+    // applyRequest: planId bounded+required; approvalId optional (overwrite-gating is server-side, not in the schema)
+    const parsed = scaffoldApplyRequestSchema.parse({ planId: "sc1" });
+    expect(parsed.approvalId).toBeUndefined();
+    expect(scaffoldApplyRequestSchema.safeParse({ planId: "" }).success).toBe(false);
+    expect(scaffoldApplyRequestSchema.safeParse({ planId: "a".repeat(257) }).success).toBe(false);
   });
 });
