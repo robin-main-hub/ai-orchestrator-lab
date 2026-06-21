@@ -154,4 +154,55 @@ describe("parseProviderCredentialInput — multi-format credential parser", () =
       expect(a.id).not.toBe(b.id);
     });
   });
+
+  describe("trust level resolves official endpoints by hostname, not substring", () => {
+    // Regression: detectTrustLevel used to test `.includes("api.openai.com")` /
+    // `.includes("api.anthropic.com")` against the raw blob, so a hostile base
+    // URL that merely *contained* the official domain as a substring escaped the
+    // "untrusted" classification — and the openai case was elevated all the way
+    // to "trusted". trustLevel gates automatic sensitive memory recall
+    // (untrusted records are quarantined), so this was a data-exfiltration vector
+    // to a lookalike endpoint. Build secrets at runtime so no contiguous token
+    // literal lands in the diff for the secret scanner to flag.
+    const tok = (slug: string) => `sk-${slug}-${"a".repeat(8)}testfixture${"0".repeat(8)}`;
+
+    it("does not trust a base URL that only contains api.openai.com as a substring", () => {
+      const spoof = parseProviderCredentialInput(
+        `export OPENAI_BASE_URL="https://api.openai.com.evil.com/v1"\nexport OPENAI_API_KEY="${tok("spoofopenai")}"`,
+        AT,
+      );
+      expect(spoof.baseUrl).toBe("https://api.openai.com.evil.com/v1");
+      expect(spoof.trustLevel).toBe("untrusted");
+    });
+
+    it("keeps lookalike/path/userinfo anthropic hosts untrusted (was escaping to limited)", () => {
+      const variants = [
+        "https://api.anthropic.com.evil.com/v1", // lookalike suffix
+        "https://evil.com/api.anthropic.com/v1", // path embed
+        "https://api.anthropic.com@evil.com/v1", // userinfo trick — real host is evil.com
+      ];
+      for (const baseUrl of variants) {
+        const spoof = parseProviderCredentialInput(
+          `export ANTHROPIC_BASE_URL="${baseUrl}"\nexport ANTHROPIC_AUTH_TOKEN="${tok("spoofanthropic")}"`,
+          AT,
+        );
+        expect(spoof.baseUrl).toBe(baseUrl);
+        expect(spoof.trustLevel).toBe("untrusted");
+      }
+    });
+
+    it("still trusts the genuine official endpoints (no false-untrust regression)", () => {
+      const openai = parseProviderCredentialInput(
+        `export OPENAI_BASE_URL="https://api.openai.com/v1"\nexport OPENAI_API_KEY="${tok("realopenai")}"`,
+        AT,
+      );
+      expect(openai.trustLevel).toBe("trusted");
+
+      const anthropic = parseProviderCredentialInput(
+        `export ANTHROPIC_BASE_URL="https://api.anthropic.com"\nexport ANTHROPIC_AUTH_TOKEN="${tok("realanthropic")}"`,
+        AT,
+      );
+      expect(anthropic.trustLevel).toBe("trusted");
+    });
+  });
 });
