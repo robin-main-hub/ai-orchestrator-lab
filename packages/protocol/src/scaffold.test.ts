@@ -6,7 +6,13 @@ import {
   missionScaffoldLatestSafeFileSchema,
   missionScaffoldLatestSkippedReasonSchema,
   missionScaffoldLatestSkippedSchema,
+  missionScaffoldOverlayRecordedPayloadSchema,
+  missionScaffoldOverlayRequestSchema,
+  missionScaffoldOverlayResponseSchema,
   scaffoldForTemplate,
+  scaffoldOverlayFileSchema,
+  scaffoldOverlaySchema,
+  scaffoldOverlaySourceSchema,
   scaffoldPlanSchema,
   type ScaffoldBlueprintSpec,
 } from "./scaffold.js";
@@ -297,6 +303,89 @@ describe("scaffold/latest — deny-by-default safe-vs-skipped file safety contra
     // transitive: a skipped entry with a reason outside the closed enum sinks the response
     expect(
       missionScaffoldLatestResponseSchema.safeParse({ ...base, skipped: [{ path: "a", reason: "meh" }] }).success,
+    ).toBe(false);
+  });
+});
+
+// Scaffold overlay = a user-CONFIRMED file replacement (Visual QA AppFix / manual
+// edit) layered over the deterministic scaffold base. It is privileged — it
+// overwrites base files that will later be published — so its contract is worth
+// pinning: each overlay file is bounded (path/content size caps), the source is a
+// closed 2-value provenance enum, the persisted RECORD must carry ≥1 file (an
+// empty overlay is meaningless → rejected) up to 32 and must state its source
+// explicitly, while the inbound REQUEST may DEFAULT source→appfix (the common
+// path) — an asymmetry that keeps the audited record honest. The response is an
+// honest 3-outcome envelope that fabricates no overlay on the non-success paths.
+// Whole cluster was unreferenced; pin self-consistently (derived from the schema).
+describe("scaffold overlay — bounded privileged file replacement: record requires source, request defaults it", () => {
+  const file = { path: "src/App.tsx", content: "x" };
+  const record = {
+    id: "ov1",
+    missionId: "m1",
+    source: "appfix" as const,
+    files: [file],
+    truthStatus: "planned" as const,
+    createdAt: now(),
+  };
+
+  it("an overlay file is bounded (path 1..512, content ≤ 256 KiB) and source is the closed {appfix, manual} enum", () => {
+    expect(scaffoldOverlayFileSchema.safeParse(file).success).toBe(true);
+    expect(scaffoldOverlayFileSchema.safeParse({ path: "", content: "x" }).success).toBe(false); // path min 1
+    expect(scaffoldOverlayFileSchema.safeParse({ path: "a".repeat(513), content: "x" }).success).toBe(false); // path max 512
+    expect(scaffoldOverlayFileSchema.safeParse({ path: "a", content: "x".repeat(256 * 1024 + 1) }).success).toBe(false);
+    expect(scaffoldOverlayFileSchema.safeParse({ path: "a", content: "x".repeat(256 * 1024) }).success).toBe(true); // exactly at the cap
+    expect(scaffoldOverlaySourceSchema.options).toEqual(["appfix", "manual"]);
+    expect(scaffoldOverlaySourceSchema.safeParse("uploaded").success).toBe(false);
+  });
+
+  it("the persisted record requires ≥1 file (caps at 32), names its source explicitly, and never fabricates evidenceRef", () => {
+    const parsed = scaffoldOverlaySchema.parse(record);
+    expect(parsed.evidenceRef).toBeUndefined(); // optional audit ref, not fabricated
+    // an empty overlay is meaningless → rejected; 32 ok, 33 over the cap
+    expect(scaffoldOverlaySchema.safeParse({ ...record, files: [] }).success).toBe(false);
+    const mk = (n: number) => Array.from({ length: n }, (_v, i) => ({ path: `f${i}`, content: "x" }));
+    expect(scaffoldOverlaySchema.safeParse({ ...record, files: mk(32) }).success).toBe(true);
+    expect(scaffoldOverlaySchema.safeParse({ ...record, files: mk(33) }).success).toBe(false);
+    // the record (unlike the request) has NO default for source — it must be stated
+    const { source: _s, ...noSource } = record;
+    expect(scaffoldOverlaySchema.safeParse(noSource).success).toBe(false);
+  });
+
+  it("the inbound request DEFAULTS source→appfix (asymmetry vs the record) and keeps the same 1..32 file bound", () => {
+    const parsed = missionScaffoldOverlayRequestSchema.parse({ files: [file] });
+    expect(parsed.source).toBe("appfix"); // defaulted, not required
+    expect(parsed.evidenceRef).toBeUndefined();
+    expect(missionScaffoldOverlayRequestSchema.safeParse({ files: [] }).success).toBe(false); // still ≥1
+    const mk = (n: number) => Array.from({ length: n }, (_v, i) => ({ path: `f${i}`, content: "x" }));
+    expect(missionScaffoldOverlayRequestSchema.safeParse({ files: mk(33) }).success).toBe(false);
+    // a manual source is still accepted explicitly
+    expect(missionScaffoldOverlayRequestSchema.parse({ source: "manual", files: [file] }).source).toBe("manual");
+  });
+
+  it("the response is an honest 3-outcome envelope: overlay only on success, nothing fabricated on blocked/not_found", () => {
+    expect(missionScaffoldOverlayResponseSchema.shape.outcome.options).toEqual([
+      "recorded",
+      "blocked",
+      "mission_not_found",
+    ]);
+    // success carries the overlay record
+    const okParsed = missionScaffoldOverlayResponseSchema.parse({ outcome: "recorded", overlay: record });
+    expect(okParsed.overlay?.id).toBe("ov1");
+    // non-success paths carry no overlay and fabricate nothing
+    const blocked = missionScaffoldOverlayResponseSchema.parse({
+      outcome: "blocked",
+      skipped: [{ path: "logo.png", reason: "binary" }],
+    });
+    expect(blocked.overlay).toBeUndefined();
+    const notFound = missionScaffoldOverlayResponseSchema.parse({ outcome: "mission_not_found" });
+    expect(notFound.overlay).toBeUndefined();
+    expect(notFound.skipped).toBeUndefined();
+    expect(notFound.message).toBeUndefined();
+    // recorded payload embeds the overlay transitively — a broken embed sinks it
+    expect(missionScaffoldOverlayRecordedPayloadSchema.safeParse({ missionId: "m1", overlay: record }).success).toBe(true);
+    expect(
+      missionScaffoldOverlayRecordedPayloadSchema.safeParse({ missionId: "m1", overlay: { ...record, files: [] } })
+        .success,
     ).toBe(false);
   });
 });
