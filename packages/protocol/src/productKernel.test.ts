@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   missionClosedPayloadSchema,
   missionCreateRequestSchema,
+  missionEventAppendRequestSchema,
   missionEventTypeSchema,
+  missionWorkerAssignedPayloadSchema,
+  serverMissionRecordSchema,
   missionKernelContractSchema,
   missionMergeRequestSchema,
   missionVerificationRecordedPayloadSchema,
@@ -823,5 +826,141 @@ describe("productKernel — mission composition root: bounded debate, gated life
     expect(orchestrationMissionSchema.safeParse(badWorker).success).toBe(false);
     // workers/artifacts may be explicitly empty
     expect(orchestrationMissionSchema.safeParse({ ...mission, workers: [], artifacts: [] }).success).toBe(true);
+  });
+});
+
+// The mission PERSISTENCE BOUNDARY is still unpinned. Missions live as append-only
+// events replayed into a materialized view — and three contracts guard that seam,
+// none of them tested yet:
+//   (a) the single APPEND WINDOW (missionEventAppendRequestSchema) constrains `type`
+//       to the 6 client event types — the server-only `mission.checkpoint.created`
+//       can't be appended through the client route — while `payload` is a deliberate
+//       z.unknown() (the envelope does NOT validate payload; the server validates it
+//       per-type). z.unknown() also makes payload OPTIONAL, and z.object strips any
+//       extra envelope keys. This is the "one route, not a route per event" design.
+//   (b) missionWorkerAssigned's `capabilityRecomputed` defaults to TRUE — an emitted
+//       assignment event self-asserts the server recomputed capability; the optimistic
+//       default is "we recomputed", never "we trusted the wire".
+//   (c) the materialized VIEW (serverMissionRecordSchema) keeps its 8 CORE fields
+//       mandatory (mission/status/truthStatus/workers/artifacts/verificationReports/
+//       mergeQueueItems/updatedAt — a rebuilt view can't silently drop its spine) and
+//       the nested mission carries createdAt, while the 9 progressive L3/L4/L5/D-series
+//       arrays all honestly default to [] (a fresh replay has no checkpoints/error
+//       cards/blueprints — empty, never fabricated content).
+// Expected values are read off the schemas (self-consistent), never magic.
+describe("productKernel — mission persistence seam: single append window, recompute-by-default, honest view defaults", () => {
+  it("(a) the append window pins `type` to the 6 client events (checkpoint excluded), takes any/absent payload, strips extras", () => {
+    for (const type of missionEventTypeSchema.options) {
+      expect(missionEventAppendRequestSchema.safeParse({ type, payload: { any: "shape" } }).success).toBe(true);
+    }
+    // server-only checkpoint event cannot be appended through the client window
+    expect(missionEventAppendRequestSchema.safeParse({ type: "mission.checkpoint.created", payload: {} }).success).toBe(false);
+    // payload is z.unknown() — any JSON value AND its absence both parse (server validates per-type, not here)
+    expect(missionEventAppendRequestSchema.safeParse({ type: "mission.created", payload: "raw-string" }).success).toBe(true);
+    expect(missionEventAppendRequestSchema.safeParse({ type: "mission.created", payload: [1, 2, 3] }).success).toBe(true);
+    expect(missionEventAppendRequestSchema.safeParse({ type: "mission.created" }).success).toBe(true); // payload optional
+    // an unknown event type is rejected, and unknown envelope keys are dropped (not preserved)
+    expect(missionEventAppendRequestSchema.safeParse({ type: "mission.deployed", payload: {} }).success).toBe(false);
+    const parsed = missionEventAppendRequestSchema.parse({ type: "mission.closed", payload: { x: 1 }, smuggled: "drop me" });
+    expect(parsed).toEqual({ type: "mission.closed", payload: { x: 1 } });
+  });
+
+  it("(b) missionWorkerAssigned.capabilityRecomputed defaults TRUE — an assignment event assumes server recompute, not wire trust", () => {
+    const persona = {
+      agentId: "a1",
+      personaSlug: "p",
+      displayName: "d",
+      role: "builder" as const,
+      soulMode: "summary" as const,
+      configSource: "internal" as const,
+      identityFiles: [],
+      hermes: { slotId: "s", sticky: false, memoryScope: "m", restorePolicy: "off" as const, promotionPolicy: "off" as const },
+      voice: {
+        preserveCharacterVoice: true,
+        allowSpeechQuirks: true,
+        allowEmotionalColor: true,
+        forbiddenSuppressionReasons: [],
+        safetyOverrideNote: "n",
+      },
+    };
+    const worker = {
+      id: "wa1",
+      missionId: "m1",
+      agentId: "a1",
+      role: "builder" as const,
+      status: "assigned" as const,
+      capability: {
+        agentId: "a1",
+        role: "builder" as const,
+        displayName: "d",
+        mode: "sandbox_build" as const,
+        allowedTools: ["write"],
+        canMutateFiles: true,
+        canRunCommands: true,
+        requiresSandbox: true,
+        defaultSandboxKind: "docker_rootless" as const,
+        requiresHumanApprovalFor: ["bash"],
+        personaContinuity: persona,
+      },
+      assignedAt: "2026-06-21T00:00:00.000Z",
+    };
+    const payload = missionWorkerAssignedPayloadSchema.parse({ missionId: "m1", worker });
+    expect(payload.capabilityRecomputed).toBe(true);
+    // it can be explicitly false (the rare "wire capability stood") but the DEFAULT is recompute
+    expect(missionWorkerAssignedPayloadSchema.parse({ missionId: "m1", worker, capabilityRecomputed: false }).capabilityRecomputed).toBe(false);
+    // the worker is mandatory — an assignment event without its worker is not representable
+    expect(missionWorkerAssignedPayloadSchema.safeParse({ missionId: "m1" }).success).toBe(false);
+  });
+
+  it("(c) the materialized view defaults its 9 progressive arrays to [] but keeps the 8 core fields mandatory", () => {
+    const core = {
+      mission: {
+        missionId: "m1",
+        title: "t",
+        goal: "g",
+        truthStatus: "planned" as const,
+        createdBy: "desktop",
+        createdAt: "2026-06-21T00:00:00.000Z",
+      },
+      status: "planned" as const,
+      truthStatus: "planned" as const,
+      workers: [],
+      artifacts: [],
+      verificationReports: [],
+      mergeQueueItems: [],
+      updatedAt: "2026-06-21T00:00:00.000Z",
+    };
+    const parsed = serverMissionRecordSchema.parse(core);
+    // a freshly-replayed record has NO progressive content — all empty, never fabricated
+    for (const arr of [
+      parsed.checkpoints,
+      parsed.errorCards,
+      parsed.selfCorrections,
+      parsed.workspaces,
+      parsed.designBlueprints,
+      parsed.visualQaReports,
+      parsed.designIssues,
+      parsed.scaffoldPlans,
+      parsed.scaffoldOverlays,
+    ]) {
+      expect(arr).toEqual([]);
+    }
+    // each of the 8 core fields is mandatory — a rebuilt view can't silently drop its spine
+    for (const key of [
+      "mission",
+      "status",
+      "truthStatus",
+      "workers",
+      "artifacts",
+      "verificationReports",
+      "mergeQueueItems",
+      "updatedAt",
+    ]) {
+      const { [key]: _omit, ...partial } = core as Record<string, unknown>;
+      expect(serverMissionRecordSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+    // the nested mission gains createdAt over the bare created-payload — omitting it fails
+    const { createdAt: _c, ...missionWithoutCreatedAt } = core.mission;
+    expect(serverMissionRecordSchema.safeParse({ ...core, mission: missionWithoutCreatedAt }).success).toBe(false);
   });
 });
