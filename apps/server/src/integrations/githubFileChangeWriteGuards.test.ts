@@ -56,6 +56,20 @@ describe("evaluateFilePathPolicy", () => {
   it("이름에 ..가 들어 있어도 segment가 아니면 통과(예: foo..bar)", () => {
     expect(evaluateFilePathPolicy("src/foo..bar.ts").ok).toBe(true);
   });
+
+  it("'.' segment 차단 — deny-list 정규화 회피 방지(회귀)", () => {
+    // git/GitHub가 '.' segment를 접어 .github/workflows/evil.yml로 쓰는데, deny-list는
+    // 연속 substring 매칭이라 .github/./workflows/...가 차단을 빠져나갔다(정규화 회피).
+    expect(evaluateFilePathPolicy(".github/./workflows/evil.yml").ok).toBe(false);
+    expect(evaluateFilePathPolicy("a/./b").ok).toBe(false);
+    expect(evaluateFilePathPolicy("a/b/.").ok).toBe(false);
+    expect(evaluateFilePathPolicy(".").ok).toBe(false);
+    // 정상 hidden 파일/디렉터리(. 으로 시작하지만 '.' segment 아님)는 계속 통과
+    expect(evaluateFilePathPolicy(".gitignore").ok).toBe(true);
+    expect(evaluateFilePathPolicy("src/.hidden/file.ts").ok).toBe(true);
+    // leading "./"는 정규화로 제거되므로 여전히 통과
+    expect(evaluateFilePathPolicy("./src/index.ts")).toEqual({ ok: true, normalized: "src/index.ts" });
+  });
 });
 
 describe("evaluateNewContentSafety", () => {
@@ -120,6 +134,8 @@ describe("evaluateFileChangeGate", () => {
     expect(evaluateFileChangeGate({ ...ok, path: ".env" }).kind).toBe("blocked");
     expect(evaluateFileChangeGate({ ...ok, path: ".github/workflows/ci.yml" }).kind).toBe("blocked");
     expect(evaluateFileChangeGate({ ...ok, path: "package-lock.json" }).kind).toBe("blocked");
+    // '.' segment로 deny-list를 회피하려는 시도도 게이트에서 차단(외부 PUT까지 도달 불가)
+    expect(evaluateFileChangeGate({ ...ok, path: ".github/./workflows/evil.yml" }).kind).toBe("blocked");
   });
 
   it("비밀 패턴 콘텐츠 차단(W1 secret scan 재사용)", () => {
