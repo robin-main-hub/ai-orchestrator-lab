@@ -183,6 +183,35 @@ describe("runMultiFileCommitExecute — W5b atomic commit", () => {
     }
   });
 
+  it("(#5c) 형제 단일파일 가드가 막는 경로(.git/·SSH 키·lockfile·산출물) parity 차단(회귀)", async () => {
+    // 드리프트 버그: multi-file commit checkPath가 githubFileChangeWriteGuards.DENIED_PATH_PATTERNS가
+    // 막는 git 메타데이터·SSH private key·lockfile·산출물 디렉터리를 허용했다(실측 ALLOW). 더 약한
+    // write 경로라 agent가 .git/config나 .ssh/id_rsa를 commit할 수 있었다. 같은 taxonomy로 막힌다.
+    for (const path of [
+      ".git/config",
+      "sub/.git/hooks/pre-commit",
+      "id_rsa",
+      ".ssh/id_ed25519",
+      "node_modules/foo/index.js",
+      "dist/bundle.js",
+      "build/out.js",
+      ".next/cache.js",
+      "coverage/lcov.info",
+      "package-lock.json",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+    ]) {
+      const client = makeClient();
+      const res = await runMultiFileCommitExecute(
+        request({ files: [{ path, newContent: "x\n" }] }),
+        deps({ client }),
+      );
+      expect(res.outcome, path).toBe("blocked");
+      expect(res.reason, path).toBe("unsafe_path");
+      expect(client.getRefSha, path).not.toHaveBeenCalled();
+    }
+  });
+
   it("(#6a) binary content(NUL) → server block, GitHub API 0회", async () => {
     const client = makeClient();
     const res = await runMultiFileCommitExecute(
