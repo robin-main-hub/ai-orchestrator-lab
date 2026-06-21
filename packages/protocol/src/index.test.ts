@@ -47,6 +47,10 @@ import {
   modelDescriptorSchema,
   modelInputModalitySchema,
   redactionRuleSchema,
+  redactionPhaseSchema,
+  redactionRuleScopeSchema,
+  eventSourceSchema,
+  sourceTrustSchema,
   parseTerminalCommandEventPayload,
   terminalCommandIntentSchema,
   terminalCommandEventTypeSchema,
@@ -1714,5 +1718,65 @@ describe("index — execution authority: closed backends, gated slot lifecycle, 
     expect(remoteExecutionRequestSchema.safeParse({ ...base, commandPreview: "x".repeat(10_001) }).success).toBe(false);
     // kind is constrained to the closed remote-execution set
     expect(remoteExecutionRequestSchema.safeParse({ ...base, kind: "shell_exec" }).success).toBe(false);
+  });
+});
+
+// INGRESS PROVENANCE + the REDACTION BOUNDARY are the OS's trust/leak frontier:
+// where an event came from, how far it is trusted, and at which boundaries data is
+// scrubbed. sourceTrust/eventSource have zero coverage; redactionRule is touched
+// once (a single parse asserting phase==="pre_store") so neither the phase/scope
+// memberships nor the rule's all-mandatory contract is pinned. A new untrusted
+// origin, a dropped redaction boundary, or a rule that silently omitted its reason
+// would all pass today.
+//   (1) eventSource is the closed 6-provenance set incl external_legacy (the
+//       imported / not-natively-trusted origin); sourceTrust is the closed 3-rung
+//       trust ladder — no "verified"/"full" tier above trusted.
+//   (2) redactionPhase pins the 5 scrub boundaries: post_receive (ingress) plus the
+//       four pre_* egress/persistence points (send/store/backup/share); redactionRuleScope
+//       pins the 5 data planes {input,output,event,backup,share}. Unknowns rejected.
+//   (3) a redactionRule fully declares itself — phase+scope drawn from the closed
+//       enums and id/name/enabled/pattern/replacement/reason ALL mandatory (a rule
+//       can't be a silent no-op: it must say what it matches, what it writes, and why).
+// Expected values are read off the schemas (self-consistent), never magic.
+describe("index — ingress provenance + redaction boundary: closed trust ladder, fully-declared scrub rules", () => {
+  it("(1) eventSource is the closed 6-provenance set and sourceTrust the closed 3-rung ladder", () => {
+    expect(eventSourceSchema.options).toEqual(["desktop", "server", "external_legacy", "mobile", "agent", "api"]);
+    expect(eventSourceSchema.options).toContain("external_legacy"); // imported / not-natively-trusted origin
+    expect(eventSourceSchema.safeParse("slack").success).toBe(false);
+    expect(sourceTrustSchema.options).toEqual(["trusted", "limited", "untrusted"]);
+    for (const forged of ["verified", "full", "admin"]) {
+      expect(sourceTrustSchema.safeParse(forged).success).toBe(false);
+    }
+  });
+
+  it("(2) redactionPhase pins the 5 scrub boundaries and redactionRuleScope the 5 data planes", () => {
+    expect(redactionPhaseSchema.options).toEqual(["pre_send", "post_receive", "pre_store", "pre_backup", "pre_share"]);
+    expect(redactionPhaseSchema.options).toContain("post_receive"); // the one ingress boundary
+    expect(redactionPhaseSchema.options.filter((p) => p.startsWith("pre_"))).toHaveLength(4); // four egress/persistence points
+    expect(redactionRuleScopeSchema.options).toEqual(["input", "output", "event", "backup", "share"]);
+    expect(redactionPhaseSchema.safeParse("post_send").success).toBe(false);
+    expect(redactionRuleScopeSchema.safeParse("memory").success).toBe(false);
+  });
+
+  it("(3) a redactionRule fully declares itself — phase+scope closed, every field mandatory", () => {
+    const base = {
+      id: "r1",
+      phase: "pre_store" as const,
+      name: "mask api keys",
+      scope: "event" as const,
+      enabled: true,
+      pattern: "sk-[a-z0-9]+",
+      replacement: "sk-***",
+      reason: "never persist raw provider keys",
+    };
+    expect(redactionRuleSchema.safeParse(base).success).toBe(true);
+    // a rule cannot be a silent no-op — pattern/replacement/reason/enabled are all required
+    for (const key of ["id", "phase", "name", "scope", "enabled", "pattern", "replacement", "reason"]) {
+      const { [key]: _omit, ...partial } = base as Record<string, unknown>;
+      expect(redactionRuleSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+    // phase/scope are drawn from the closed enums — a rule can't target an unknown boundary or plane
+    expect(redactionRuleSchema.safeParse({ ...base, phase: "post_send" }).success).toBe(false);
+    expect(redactionRuleSchema.safeParse({ ...base, scope: "memory" }).success).toBe(false);
   });
 });
