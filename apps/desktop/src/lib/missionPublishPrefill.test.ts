@@ -104,6 +104,13 @@ describe("evaluateScaffoldFile — 단일 파일 안전 가드", () => {
     expect(evaluateScaffoldFile({ path: "x", newContent: "key=sk-ant-abcdefghij1234567890abcd" }).ok).toBe(false);
     expect(evaluateScaffoldFile({ path: "x", newContent: "-----BEGIN PRIVATE KEY-----\n..." }).ok).toBe(false);
   });
+  it("fine-grained PAT(github_pat_)도 차단 — classic ghp_ 규칙으로는 못 잡는 형식", () => {
+    // gitleaks가 diff의 진짜 토큰 리터럴을 잡으므로 런타임 조합으로 회피.
+    const pat = "github_" + "pat_" + "11" + "A".repeat(22) + "_" + "b".repeat(40);
+    const v = evaluateScaffoldFile({ path: "x", newContent: `token=${pat}` });
+    expect(v.ok).toBe(false);
+    if (!v.ok) expect(v.reason).toBe("secret_suspect");
+  });
 });
 
 describe("pickFirstSafeScaffoldFile — 여러 파일에서 첫 안전 파일 선택", () => {
