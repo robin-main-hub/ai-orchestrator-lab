@@ -75,6 +75,14 @@ export function evaluateFilePathPolicy(rawPath: string): PathPolicyResult {
       return { ok: false, reason: "path에 '..' segment가 포함되어 있습니다(traversal 금지)" };
     }
   }
+  // '.' segment(예: a/./b, .github/./workflows/x.yml)도 차단. git/GitHub는 이를 정규화로
+  // 접어 실제로는 a/b·.github/workflows/x.yml을 가리키는데, deny-list는 *연속* substring을
+  // 매칭하므로 segment 사이에 '.'를 끼우면 .github/workflows/ 같은 다중-segment 차단을
+  // 회피할 수 있다(leading "./"는 위에서 이미 제거됨 — 여기 걸리는 건 interior/trailing '.').
+  // '..'·'//'와 동일한 정규화-회피 부류라 같은 강도로 막는다.
+  if (normalized.split("/").some((seg) => seg === ".")) {
+    return { ok: false, reason: "path에 '.' segment가 포함되어 있습니다(정규화 회피 금지)" };
+  }
   if (normalized.includes("//")) return { ok: false, reason: "path에 빈 segment(//)가 포함되어 있습니다" };
   if (normalized.endsWith("/")) return { ok: false, reason: "path는 디렉터리가 아니라 파일이어야 합니다" };
   for (const rule of DENIED_PATH_PATTERNS) {
