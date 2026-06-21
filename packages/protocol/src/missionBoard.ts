@@ -259,7 +259,11 @@ export type MissionTraceEvent = {
 };
 
 const SECRET_RE =
-  /(sk-[A-Za-z0-9]{8,}|Bearer\s+[A-Za-z0-9._-]{8,}|gh[pousr]_[A-Za-z0-9]{8,}|xox[baprs]-[A-Za-z0-9-]{8,}|[A-Fa-f0-9]{32,}|AKIA[0-9A-Z]{12,})/g;
+  // gh[pousr]_ = classic GitHub 토큰(ghp_/gho_/ghu_/ghs_/ghr_). github_pat_ = 2022년 이후
+  // 권장 형식인 fine-grained PAT — prefix(github_)·body underscore가 classic과 달라 위
+  // gh[pousr]_ 규칙으로는 안 잡힌다. body가 base62라 hex blob 규칙([A-Fa-f0-9]{32,})도
+  // 회피 가능 → 별도 alternation 없으면 평문 PAT가 trace preview에 그대로 노출된다.
+  /(sk-[A-Za-z0-9]{8,}|Bearer\s+[A-Za-z0-9._-]{8,}|gh[pousr]_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{8,}|[A-Fa-f0-9]{32,}|AKIA[0-9A-Z]{12,})/g;
 
 /** trace preview에서 시크릿 류를 마스킹 — raw secret/log는 절대 보관/노출하지 않는다. */
 export function redactTracePreview(text: string | undefined, max = 240): string | undefined {
