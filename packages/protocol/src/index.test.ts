@@ -31,8 +31,11 @@ import {
   evidenceRefSchema,
   eventEnvelopeSchema,
   eventStorageSessionIndexResponseSchema,
+  eventSyncStatusSchema,
+  eventSyncItemResultSchema,
   eventSyncPushRequestSchema,
   eventSyncPushResponseSchema,
+  eventSyncPullResponseSchema,
   executionSlotSchema,
   executionRuntimeBackendSchema,
   executionSlotStatusSchema,
@@ -1891,5 +1894,77 @@ describe("index — approval-replay authority: closed replay kinds, POST-only st
       method: "POST",
       payload: { runId: "r1" },
     });
+  });
+});
+
+// The pre-existing test (line ~273) parses ONE happy push request/response with
+// every counter at its all-accepted value and never inspects the reconciliation
+// authority: the closed disposition vocabulary every sync outcome must fall into,
+// the honesty of an item result (serverRevision/reason only when the server
+// actually has them), the nonnegative-int guards on the revision + the four
+// counters (a negative "accepted" or fractional revision would pass today), or
+// the pull response at all. Pin the event-sync reconciliation contract,
+// self-consistent (vocabulary/counters derived from the schemas' own shape).
+describe("index — event-sync reconciliation authority: closed dispositions, honest item results, nonnegative monotonic counters", () => {
+  it("pins the 4 sync dispositions — every reconcile outcome is accepted/duplicate/conflict/failed, nothing else", () => {
+    expect(eventSyncStatusSchema.options).toEqual(["accepted", "duplicate", "conflict", "failed"]);
+    expect(eventSyncStatusSchema.safeParse("merged").success).toBe(false);
+  });
+
+  it("an item result needs eventId + a closed-vocabulary status; serverRevision/reason are never fabricated", () => {
+    const minimal = eventSyncItemResultSchema.parse({ eventId: "e1", status: "accepted" });
+    // optional fields stay undefined — a result invents neither a revision nor a reason
+    expect(minimal.serverRevision).toBeUndefined();
+    expect(minimal.reason).toBeUndefined();
+    // eventId + status are mandatory
+    expect(eventSyncItemResultSchema.safeParse({ status: "accepted" }).success).toBe(false);
+    expect(eventSyncItemResultSchema.safeParse({ eventId: "e1" }).success).toBe(false);
+    // status must come from the closed disposition set
+    expect(eventSyncItemResultSchema.safeParse({ eventId: "e1", status: "merged" }).success).toBe(false);
+    // serverRevision, when present, is a nonnegative int — no negative/fractional revision
+    expect(eventSyncItemResultSchema.safeParse({ eventId: "e1", status: "conflict", serverRevision: -1 }).success).toBe(false);
+    expect(eventSyncItemResultSchema.safeParse({ eventId: "e1", status: "conflict", serverRevision: 1.5 }).success).toBe(false);
+    const full = eventSyncItemResultSchema.parse({ eventId: "e1", status: "conflict", serverRevision: 7, reason: "revision drift" });
+    expect(full).toEqual({ eventId: "e1", status: "conflict", serverRevision: 7, reason: "revision drift" });
+  });
+
+  it("the push response guards serverRevision and all four counters as nonnegative ints", () => {
+    const base = {
+      id: "resp_1",
+      requestId: "req_1",
+      sessionId: "session_1",
+      serverRevision: 0,
+      accepted: 0,
+      duplicates: 0,
+      conflicts: 0,
+      failed: 0,
+      results: [],
+      createdAt: "2026-06-21T00:00:00.000Z",
+    };
+    expect(eventSyncPushResponseSchema.safeParse(base).success).toBe(true); // all-zero is a legitimate empty reconcile
+    for (const counter of ["serverRevision", "accepted", "duplicates", "conflicts", "failed"]) {
+      expect(eventSyncPushResponseSchema.safeParse({ ...base, [counter]: -1 }).success, `${counter} cannot be negative`).toBe(false);
+      expect(eventSyncPushResponseSchema.safeParse({ ...base, [counter]: 1.5 }).success, `${counter} cannot be fractional`).toBe(false);
+    }
+    // the response spine is mandatory — no counter or revision may be silently dropped
+    for (const key of ["id", "requestId", "sessionId", "serverRevision", "accepted", "duplicates", "conflicts", "failed", "results", "createdAt"]) {
+      const { [key]: _omit, ...partial } = base as Record<string, unknown>;
+      expect(eventSyncPushResponseSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("the pull response carries a nonnegative server revision and an events array as its reconcile cursor", () => {
+    const base = { sessionId: "session_1", serverRevision: 0, events: [], createdAt: "2026-06-21T00:00:00.000Z" };
+    const parsed = eventSyncPullResponseSchema.parse(base);
+    expect(parsed.serverRevision).toBe(0);
+    expect(parsed.events).toEqual([]);
+    // revision is a nonnegative int — a pull cursor can't go backwards or fractional
+    expect(eventSyncPullResponseSchema.safeParse({ ...base, serverRevision: -1 }).success).toBe(false);
+    expect(eventSyncPullResponseSchema.safeParse({ ...base, serverRevision: 2.5 }).success).toBe(false);
+    // sessionId/serverRevision/events/createdAt are all mandatory
+    for (const key of ["sessionId", "serverRevision", "events", "createdAt"]) {
+      const { [key]: _omit, ...partial } = base as Record<string, unknown>;
+      expect(eventSyncPullResponseSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
   });
 });
