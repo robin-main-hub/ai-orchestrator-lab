@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildBlueprintInputFromConversation,
   conversationBlueprintDraftRequestSchema,
+  conversationBlueprintDraftResponseSchema,
   type ConversationBlueprintSource,
 } from "./conversationBlueprint.js";
 import { designBlueprintInputSchema } from "./designBlueprint.js";
@@ -126,5 +127,53 @@ describe("conversationBlueprintDraftRequestSchema", () => {
       sessionId: "s1",
     });
     expect(parsed.useAi).toBe(false);
+  });
+});
+
+// The request schema is pinned (useAi deny-by-default), but the *response*
+// schema — conversationBlueprintDraftResponseSchema — is never asserted, and it
+// carries the endpoint's epistemic-honesty contract: every draft must EMBED a
+// transitively-valid blueprint (a broken inner blueprint sinks the response, and
+// the field is required — no empty shell), must DECLARE which path produced it
+// via the closed source enum {stub,ai} (UI distinguishes "결정적 초안" vs "AI
+// 초안" — provenance can't be omitted or invented), defaults `degraded` honestly
+// to false (no draft silently claims it fell back unless it actually did), and
+// keeps `note` an optional ≤500 reason never fabricated when absent. As a plain
+// z.object it also strips smuggled keys. Pin them, self-consistent (the blueprint
+// fixture is a real buildBlueprintInputFromConversation run).
+describe("conversationBlueprintDraftResponseSchema — provenance honesty: transitive blueprint embed, closed source enum, honest degraded default, optional bounded note, no-smuggle", () => {
+  const BLUEPRINT = buildBlueprintInputFromConversation(src());
+
+  it("requires a transitively-valid embedded blueprint and a closed source enum, defaulting degraded→false with note absent", () => {
+    const resp = conversationBlueprintDraftResponseSchema.parse({ blueprint: BLUEPRINT, source: "stub" });
+    expect(resp.degraded).toBe(false); // honest default — a draft isn't "degraded" unless it says so
+    expect(resp.note).toBeUndefined(); // optional reason never fabricated when absent
+    expect(conversationBlueprintDraftResponseSchema.shape.source.options).toEqual(["stub", "ai"]); // closed provenance set
+    expect(conversationBlueprintDraftResponseSchema.safeParse({ blueprint: BLUEPRINT, source: "llm" }).success).toBe(false); // outside the set
+    expect(conversationBlueprintDraftResponseSchema.safeParse({ source: "stub" }).success).toBe(false); // blueprint required (no empty shell)
+    expect(conversationBlueprintDraftResponseSchema.safeParse({ blueprint: { ...BLUEPRINT, screens: [] }, source: "stub" }).success).toBe(
+      false,
+    ); // transitive — a blueprint with zero screens sinks the response
+  });
+
+  it("passes degraded/note through when supplied, bounds note to ≤500, and strips smuggled keys", () => {
+    const degraded = conversationBlueprintDraftResponseSchema.parse({
+      blueprint: BLUEPRINT,
+      source: "ai",
+      degraded: true,
+      note: "AI 타임아웃 → 결정적 stub으로 대체",
+    });
+    expect(degraded.source).toBe("ai");
+    expect(degraded.degraded).toBe(true);
+    expect(degraded.note).toBe("AI 타임아웃 → 결정적 stub으로 대체");
+    expect(
+      conversationBlueprintDraftResponseSchema.safeParse({ blueprint: BLUEPRINT, source: "ai", note: "z".repeat(501) }).success,
+    ).toBe(false); // note max 500
+    const stripped = conversationBlueprintDraftResponseSchema.parse({
+      blueprint: BLUEPRINT,
+      source: "stub",
+      serverAssignedId: "x",
+    } as Record<string, unknown>);
+    expect("serverAssignedId" in stripped).toBe(false); // plain z.object strips
   });
 });
