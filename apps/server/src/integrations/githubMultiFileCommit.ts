@@ -101,6 +101,14 @@ export function checkPath(path: string): GuardResult {
   if (path.includes("\0")) return block("unsafe_path", "path contains NUL");
   if (path.startsWith("/")) return block("unsafe_path", "absolute path 금지");
   if (path.includes("..")) return block("unsafe_path", "path traversal 금지");
+  // '.' segment(선행 "./" 또는 interior "/./")도 거부. git/GitHub는 '.' path 컴포넌트를
+  // 정규화로 접으므로 ".github/./workflows/x.yml"·"./.github/workflows/x.yml"이 실제로는
+  // .github/workflows/x.yml을 가리키는데, HIGH_RISK_PATH_PATTERNS의 ^\.github\/workflows\/는
+  // start-anchored라 '.'를 끼우면 회피된다(W3a #1030과 동일한 정규화-회피 부류). 확장자 '.'를
+  // 깨지 않도록 substring이 아니라 segment 단위로만 '.'를 막는다.
+  if (path.split("/").some((seg) => seg === ".")) {
+    return block("unsafe_path", "path에 '.' segment 금지(정규화 회피)");
+  }
   if (path.includes("\\")) return block("unsafe_path", "backslash 금지(forward slash만)");
   for (const pattern of HIGH_RISK_PATH_PATTERNS) {
     if (pattern.test(path)) return block("unsafe_path", `high-risk path(${pattern.source})`);
