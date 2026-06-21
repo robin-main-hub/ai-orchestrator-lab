@@ -614,13 +614,33 @@ function isHostOfDomain(host: string | undefined, domain: string): boolean {
   return host === domain || host.endsWith(`.${domain}`);
 }
 
+/**
+ * True only for loopback hosts (localhost / 127.0.0.0/8 / ::1). Used to gate the
+ * local-runtime trust of ollama/lmstudio: those kinds are detected by a substring
+ * of the raw blob, so a remote `https://ollama.evil.com` matches kind=ollama —
+ * trusting it by kind alone would over-trust a hostile remote host.
+ */
+function isLoopbackHost(host: string | undefined): boolean {
+  if (!host) return false;
+  if (host === "localhost" || host === "::1" || host === "[::1]") return true;
+  return /^127(?:\.\d{1,3}){3}$/.test(host);
+}
+
 function detectTrustLevel(providerKind: ProviderKind, baseUrl: string | undefined): ProviderTrustLevel {
   // Official-endpoint trust is decided on the parsed *hostname* of the base URL,
   // never a substring of the raw blob — otherwise a hostile lookalike host that
   // merely contains "api.openai.com"/"api.anthropic.com" would escape the
   // "untrusted" classification that quarantines it from sensitive memory recall.
   const host = parseHostname(baseUrl);
-  if (providerKind === "ollama" || providerKind === "lmstudio" || isHostOfDomain(host, "api.openai.com")) {
+  // ollama/lmstudio are local-first runtimes whose kind is inferred from a raw
+  // substring ("ollama"/"lmstudio"). Trust them only when the endpoint is absent
+  // (default local socket) or a loopback host; a remote URL that merely contains
+  // the keyword (e.g. https://ollama.evil.com) is a spoof and must fall through
+  // to the remote-untrusted path so it cannot receive sensitive memory recall.
+  if ((providerKind === "ollama" || providerKind === "lmstudio") && (!baseUrl || isLoopbackHost(host))) {
+    return "trusted";
+  }
+  if (isHostOfDomain(host, "api.openai.com")) {
     return "trusted";
   }
 
