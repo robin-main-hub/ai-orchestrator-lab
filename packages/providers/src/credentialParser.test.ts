@@ -204,5 +204,46 @@ describe("parseProviderCredentialInput — multi-format credential parser", () =
       );
       expect(anthropic.trustLevel).toBe("trusted");
     });
+
+    // Regression: detectProviderKind classifies kind=ollama/lmstudio by a raw
+    // *substring* ("ollama"/"lmstudio"), and detectTrustLevel used to return
+    // "trusted" for those kinds *unconditionally*. So a remote endpoint whose
+    // host merely contains the keyword (https://ollama.evil.com) was detected as
+    // a local runtime and elevated to "trusted" — same data-exfil class as the
+    // openai/anthropic substring spoof above (trusted profiles receive sensitive
+    // memory recall). Local-first runtimes must only be trusted on a loopback
+    // (or absent) endpoint; remote spoofs fall through to "untrusted".
+    it("does not trust a remote ollama/lmstudio endpoint that only contains the keyword in its host", () => {
+      const ollamaSpoof = parseProviderCredentialInput(
+        `export OPENAI_BASE_URL="https://ollama.evil.com/v1"\nexport OPENAI_API_KEY="${tok("spoofollama")}"`,
+        AT,
+      );
+      expect(ollamaSpoof.providerKind).toBe("ollama");
+      expect(ollamaSpoof.baseUrl).toBe("https://ollama.evil.com/v1");
+      expect(ollamaSpoof.trustLevel).toBe("untrusted");
+
+      const lmstudioSpoof = parseProviderCredentialInput(
+        `export OPENAI_BASE_URL="https://lmstudio.evil.com/v1"\nexport OPENAI_API_KEY="${tok("spooflmstudio")}"`,
+        AT,
+      );
+      expect(lmstudioSpoof.providerKind).toBe("lmstudio");
+      expect(lmstudioSpoof.trustLevel).toBe("untrusted");
+    });
+
+    it("still trusts genuine local ollama/lmstudio endpoints (loopback host)", () => {
+      const localOllama = parseProviderCredentialInput(
+        `export OPENAI_BASE_URL="http://localhost:11434/v1"\nexport OPENAI_API_KEY="ollama"`,
+        AT,
+      );
+      expect(localOllama.providerKind).toBe("ollama");
+      expect(localOllama.trustLevel).toBe("trusted");
+
+      const loopbackLmstudio = parseProviderCredentialInput(
+        `export OPENAI_BASE_URL="http://127.0.0.1:1234/v1"\nexport OPENAI_API_KEY="lmstudio"`,
+        AT,
+      );
+      expect(loopbackLmstudio.providerKind).toBe("lmstudio");
+      expect(loopbackLmstudio.trustLevel).toBe("trusted");
+    });
   });
 });
