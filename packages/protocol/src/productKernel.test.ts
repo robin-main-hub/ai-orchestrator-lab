@@ -8,6 +8,9 @@ import {
   missionVerificationRecordedPayloadSchema,
   missionVerifyRequestSchema,
   missionWorkerAssignmentRequestSchema,
+  debateControlPolicySchema,
+  orchestrationMissionSchema,
+  orchestrationMissionStatusSchema,
   missionArtifactKindSchema,
   missionArtifactRefSchema,
   missionCapabilityModeSchema,
@@ -714,5 +717,111 @@ describe("productKernel — verification evidence chain: closed artifact kinds, 
     expect(skipped.completedAt).toBeUndefined(); // a not-yet-finished check doesn't fabricate an end time
     expect(verificationCheckSchema.safeParse({ ...check, exitCode: 1.5 }).success).toBe(false); // int only
     expect(verificationCheckSchema.parse({ ...check, status: "failed", exitCode: 1 }).exitCode).toBe(1);
+  });
+});
+
+// The mission COMPOSITION ROOT — orchestrationMission and the debateControlPolicy
+// it carries — is the aggregate that binds sandbox + debate + workers + artifacts
+// into one record. Its status enum is iterated by a missionBoard mapping test, but
+// the enum membership, the debate-policy bounds, and the aggregate's own
+// composition contract are unpinned. These encode:
+//   (30) debate is BOUNDED — maxRounds is a positive int (no zero/unbounded debate)
+//        and the critic directive budget is a closed {one_global_directive,top_three,
+//        freeform}; the isolation + two exit conditions are explicit booleans.
+//   (31) the mission status is a closed lifecycle draft→…→ready_to_merge→merged with
+//        terminal failed/cancelled (a ready_to_merge gate before merged; no stray
+//        "closed"/"open"/"done").
+//   (32) the aggregate REQUIRES its nested sandbox + debatePolicy + workers[] +
+//        artifacts[] + truthStatus; the cross-reference links (sourceSessionId/
+//        codingPacketId/debateId/verificationReportId/mergeQueueItemId) stay
+//        undefined when absent — a mission never fabricates a link it doesn't have.
+//   (33) validation is TRANSITIVE — a structurally-invalid nested member (e.g. a
+//        sandbox with an out-of-vocabulary network mode, or a malformed worker)
+//        fails the whole mission parse; the root doesn't trust its parts blindly.
+// Expected values are read off the schemas (self-consistent), never magic.
+describe("productKernel — mission composition root: bounded debate, gated lifecycle, transitive validation", () => {
+  const sandbox = {
+    id: "sb1",
+    kind: "docker_rootless" as const,
+    isolationLevel: "container" as const,
+    truthStatus: "configured" as const,
+    workspace: { repoRoot: "/repo", cleanup: "destroy_on_success" as const },
+    network: { mode: "disabled" as const, reason: "no egress" },
+    resources: { timeoutSeconds: 60, maxOutputBytes: 1_000 },
+  };
+  const debatePolicy = {
+    firstRoundIsolation: true,
+    maxRounds: 3,
+    criticDirectiveLimit: "one_global_directive" as const,
+    exitWhenVerifierPasses: true,
+    exitWhenNoNewRisk: false,
+  };
+  const mission = {
+    id: "m1",
+    title: "t",
+    goal: "g",
+    status: "planned" as const,
+    sandbox,
+    debatePolicy,
+    workers: [],
+    artifacts: [],
+    truthStatus: "planned" as const,
+    createdAt: "2026-06-21T00:00:00.000Z",
+    updatedAt: "2026-06-21T00:00:00.000Z",
+  };
+
+  it("debate is bounded — maxRounds positive int, critic budget closed, isolation/exits explicit", () => {
+    const parsed = debateControlPolicySchema.parse(debatePolicy);
+    expect(parsed.notes).toEqual([]); // only notes defaults
+    expect(debateControlPolicySchema.safeParse({ ...debatePolicy, maxRounds: 0 }).success).toBe(false); // no zero-round debate
+    expect(debateControlPolicySchema.safeParse({ ...debatePolicy, maxRounds: 2.5 }).success).toBe(false); // int
+    expect(debateControlPolicySchema.safeParse({ ...debatePolicy, criticDirectiveLimit: "unlimited" }).success).toBe(false);
+    const { exitWhenVerifierPasses: _e, ...withoutExit } = debatePolicy;
+    expect(debateControlPolicySchema.safeParse(withoutExit).success).toBe(false); // exit conditions are explicit
+  });
+
+  it("the mission status is a closed gated lifecycle (ready_to_merge before merged; terminal failed/cancelled)", () => {
+    expect(orchestrationMissionStatusSchema.options).toEqual([
+      "draft",
+      "planned",
+      "running",
+      "waiting_approval",
+      "verifying",
+      "ready_to_merge",
+      "merged",
+      "failed",
+      "cancelled",
+    ]);
+    // the merge gate sits immediately before the terminal merged state
+    const opts = orchestrationMissionStatusSchema.options;
+    expect(opts.indexOf("ready_to_merge")).toBe(opts.indexOf("merged") - 1);
+    for (const stray of ["closed", "open", "done", "ok"]) {
+      expect(orchestrationMissionStatusSchema.options).not.toContain(stray);
+    }
+  });
+
+  it("the aggregate requires nested sandbox/debatePolicy/truthStatus and never fabricates absent cross-links", () => {
+    const parsed = orchestrationMissionSchema.parse(mission);
+    expect(parsed.sourceSessionId).toBeUndefined();
+    expect(parsed.codingPacketId).toBeUndefined();
+    expect(parsed.debateId).toBeUndefined();
+    expect(parsed.verificationReportId).toBeUndefined(); // no link to a report that doesn't exist yet
+    expect(parsed.mergeQueueItemId).toBeUndefined();
+    for (const key of ["sandbox", "debatePolicy", "truthStatus", "workers", "artifacts"]) {
+      const { [key]: _omit, ...partial } = mission as Record<string, unknown>;
+      expect(orchestrationMissionSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("validation is transitive — a malformed nested sandbox or worker fails the whole mission parse", () => {
+    expect(orchestrationMissionSchema.safeParse(mission).success).toBe(true);
+    // an out-of-vocabulary sandbox network mode must sink the whole aggregate
+    const badSandbox = { ...mission, sandbox: { ...sandbox, network: { mode: "vpn", reason: "x" } } };
+    expect(orchestrationMissionSchema.safeParse(badSandbox).success).toBe(false);
+    // a malformed worker entry (missing required capability) likewise fails
+    const badWorker = { ...mission, workers: [{ id: "w1", missionId: "m1", agentId: "a1", role: "builder" }] };
+    expect(orchestrationMissionSchema.safeParse(badWorker).success).toBe(false);
+    // workers/artifacts may be explicitly empty
+    expect(orchestrationMissionSchema.safeParse({ ...mission, workers: [], artifacts: [] }).success).toBe(true);
   });
 });
