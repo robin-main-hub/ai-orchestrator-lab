@@ -56,6 +56,7 @@ describe("experimental autorun safety", () => {
     // 비밀로 보는 형식은 publish 표면에서도 redact한다. gitleaks 회피로 토큰은 런타임 조합.
     const ghp = "ghp_" + "A".repeat(36);
     const pat = "github_" + "pat_" + "11" + "B".repeat(22) + "_" + "c".repeat(40);
+    const glpat = "gl" + "pat-" + "Ab3xZ9kLmNpQ7rSt2UvW";
     const akia = "AKIA" + "ABCDEFGHIJKLMNOP";
     const aiza = "AIza" + "d".repeat(35);
     const xox = "xoxb-" + "1".repeat(12) + "-efabefabefab";
@@ -63,16 +64,19 @@ describe("experimental autorun safety", () => {
       [
         `fatal: could not read from https://${ghp}@github.com/o/r.git`,
         `GH=${pat}`,
+        `remote: GitLab token ${glpat} rejected`,
         `AWS_ACCESS_KEY_ID ${akia} denied`,
         `key ${aiza} quota`,
         `webhook ${xox} invalid`,
       ].join("\n"),
     );
     expect(redacted).toContain("[REDACTED:github_token]");
+    // glpat-(GitLab PAT)도 redact — 형제 게이트(W1·errors.ts·publicRedaction)와 parity.
+    expect(redacted).toContain("[REDACTED:gitlab_token]");
     expect(redacted).toContain("[REDACTED:aws_key]");
     expect(redacted).toContain("[REDACTED:google_key]");
     expect(redacted).toContain("[REDACTED:slack_token]");
-    for (const raw of [ghp, pat, akia, aiza, xox]) {
+    for (const raw of [ghp, pat, glpat, akia, aiza, xox]) {
       expect(redacted).not.toContain(raw);
     }
   });
