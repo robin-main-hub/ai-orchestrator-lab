@@ -245,5 +245,40 @@ describe("parseProviderCredentialInput — multi-format credential parser", () =
       expect(loopbackLmstudio.providerKind).toBe("lmstudio");
       expect(loopbackLmstudio.trustLevel).toBe("trusted");
     });
+
+    // Regression: detectProviderKind classifies kind=openrouter from a raw
+    // "openrouter" substring, and detectTrustLevel returned "limited" for that
+    // kind regardless of host. "limited" is NOT quarantined by the memory-recall
+    // filter (only "untrusted" is), so a remote endpoint that merely contains
+    // "openrouter" in its host/path (https://openrouter.ai.evil.com,
+    // https://evil.com/openrouter) escaped quarantine and could receive
+    // sensitive memory recall — same trust-elevation class as the openai/
+    // anthropic/ollama spoofs above. "limited" must require the genuine
+    // openrouter.ai host (or an absent baseUrl = default socket).
+    it("does not grant 'limited' to a remote endpoint that only contains 'openrouter' as a substring", () => {
+      const lookalike = parseProviderCredentialInput(
+        `export OPENAI_BASE_URL="https://openrouter.ai.evil.com/v1"\nexport OPENAI_API_KEY="${tok("spoofor")}"`,
+        AT,
+      );
+      expect(lookalike.providerKind).toBe("openrouter");
+      expect(lookalike.baseUrl).toBe("https://openrouter.ai.evil.com/v1");
+      expect(lookalike.trustLevel).toBe("untrusted");
+
+      const pathEmbed = parseProviderCredentialInput(
+        `export OPENAI_BASE_URL="https://evil.com/openrouter/v1"\nexport OPENAI_API_KEY="${tok("spoofor2")}"`,
+        AT,
+      );
+      expect(pathEmbed.providerKind).toBe("openrouter");
+      expect(pathEmbed.trustLevel).toBe("untrusted");
+    });
+
+    it("still grants 'limited' to the genuine openrouter.ai endpoint", () => {
+      const legit = parseProviderCredentialInput(
+        `export OPENAI_BASE_URL="https://openrouter.ai/api/v1"\nexport OPENAI_API_KEY="${tok("realor")}"`,
+        AT,
+      );
+      expect(legit.providerKind).toBe("openrouter");
+      expect(legit.trustLevel).toBe("limited");
+    });
   });
 });

@@ -654,7 +654,13 @@ function detectTrustLevel(providerKind: ProviderKind, baseUrl: string | undefine
   }
 
   if (providerKind === "openrouter") {
-    return "limited";
+    // openrouter is a known remote aggregator: classify "limited" (not
+    // quarantined) only when the endpoint is the default (absent baseUrl → real
+    // openrouter.ai socket) or the genuine openrouter.ai host. A remote endpoint
+    // that merely contains "openrouter" as a substring (e.g.
+    // https://openrouter.ai.evil.com, https://evil.com/openrouter) is a spoof —
+    // it must drop to "untrusted" so it cannot receive sensitive memory recall.
+    return !baseUrl || isHostOfDomain(host, "openrouter.ai") ? "limited" : "untrusted";
   }
 
   if (baseUrl && !isHostOfDomain(host, "api.anthropic.com")) {
