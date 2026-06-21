@@ -494,3 +494,114 @@ describe("deriveSkillCandidatesFromMission — content honesty (merge ref needs 
     expect(fix(c)!.reusablePrompt).toBeUndefined();
   });
 });
+
+// Everything above drives the skillArchive helpers through TYPED objects (the
+// cand()/activation()/record() factories) — the reducers/transitions are well
+// covered, but the SCHEMAS those reducers parse with (safeParse) are never
+// asserted directly. The authority surface still unpinned:
+//  - the four closed enums (source/trust/curatorDecision/activation) — totality
+//    and the deny-by-default ORDER of the activation ladder
+//    [inactive→eval_pending→eval_passed→active→quarantined];
+//  - the candidate schema's honest array defaults (triggerPatterns/relatedFiles→[])
+//    and never-fabricated optionals (reusablePrompt);
+//  - the activation record needing only candidateId+activationStatus, with every
+//    eval/scope/trail field optional (a privilege is recorded only when observed);
+//  - embed-vs-reference across the two memory events: `created` EMBEDS the full
+//    candidate (transitive — a candidate with a bad enum sinks it), while `curated`
+//    REFERENCES by candidateId and carries only the decision+trustStatus facet;
+//  - strict no-smuggle on the curate REQUEST — the client may send only `decision`,
+//    never a pre-set trustStatus (trust is server-derived from the decision).
+import {
+  curatorDecisionSchema,
+  memorySkillCandidateCreatedPayloadSchema,
+  memorySkillCandidateCuratedPayloadSchema,
+  skillActivationStatusSchema,
+  skillArchiveCandidateSchema,
+  skillArchiveSourceSchema,
+  skillCurateRequestSchema,
+  skillRuntimeActivationRecordSchema,
+  skillTrustStatusSchema,
+} from "./skillArchive.js";
+
+describe("skillArchive — schema validation boundary: closed enums, honest defaults, embed-vs-reference, no-smuggle", () => {
+  it("pins the four closed enums incl. the deny-by-default activation ladder order", () => {
+    expect(skillArchiveSourceSchema.options).toEqual([
+      "verification_fix",
+      "successful_prompt",
+      "workflow_template",
+      "error_resolution",
+      "merge_pattern",
+    ]);
+    expect(skillTrustStatusSchema.options).toEqual(["suggested", "curator_approved", "rejected", "pinned"]);
+    expect(curatorDecisionSchema.options).toEqual(["approve", "reject", "pin"]);
+    // the ladder starts at the least privilege (inactive) and ends at the hard stop (quarantined)
+    expect(skillActivationStatusSchema.options).toEqual([
+      "inactive",
+      "eval_pending",
+      "eval_passed",
+      "active",
+      "quarantined",
+    ]);
+    expect(skillActivationStatusSchema.safeParse("trusted").success).toBe(false);
+  });
+
+  it("the candidate schema fills array defaults and never fabricates the optional reusablePrompt", () => {
+    const parsed = skillArchiveCandidateSchema.parse({
+      id: "s1",
+      missionId: "m1",
+      source: "merge_pattern",
+      title: "t",
+      summary: "…",
+      confidence: "medium",
+      trustStatus: "suggested",
+      createdAt: "2026-06-21T00:00:00.000Z",
+    });
+    expect(parsed.triggerPatterns).toEqual([]);
+    expect(parsed.relatedFiles).toEqual([]);
+    expect(parsed.reusablePrompt).toBeUndefined();
+    // confidence is a closed 3-set; an out-of-set value is rejected
+    expect(skillArchiveCandidateSchema.safeParse({ ...cand("s1", "suggested"), confidence: "certain" }).success).toBe(false);
+  });
+
+  it("the activation record needs only candidateId+activationStatus; every privilege/trail field is optional (recorded only when observed)", () => {
+    const parsed = skillRuntimeActivationRecordSchema.parse({ candidateId: "s1", activationStatus: "inactive" });
+    expect(parsed.evalRunId).toBeUndefined();
+    expect(parsed.evalWaiverReason).toBeUndefined();
+    expect(parsed.activationScope).toBeUndefined();
+    expect(parsed.activatedAt).toBeUndefined();
+    expect(parsed.quarantinedReason).toBeUndefined();
+    expect(parsed.updatedAt).toBeUndefined();
+    // missing the required status is rejected — there is no silent "inactive" default at the schema level
+    expect(skillRuntimeActivationRecordSchema.safeParse({ candidateId: "s1" }).success).toBe(false);
+  });
+
+  it("`created` EMBEDS a full candidate transitively; a candidate with a bad enum sinks the whole payload", () => {
+    const good = cand("s1", "suggested");
+    expect(memorySkillCandidateCreatedPayloadSchema.safeParse({ missionId: "m1", candidate: good }).success).toBe(true);
+    expect(
+      memorySkillCandidateCreatedPayloadSchema.safeParse({ missionId: "m1", candidate: { ...good, source: "telepathy" } }).success,
+    ).toBe(false);
+    expect(memorySkillCandidateCreatedPayloadSchema.safeParse({ candidate: good }).success).toBe(false); // missionId required
+  });
+
+  it("`curated` REFERENCES by candidateId and carries only the decision+trustStatus facet (no embedded candidate)", () => {
+    const ok = memorySkillCandidateCuratedPayloadSchema.parse({
+      missionId: "m1",
+      candidateId: "s1",
+      decision: "approve",
+      trustStatus: "curator_approved",
+      candidate: cand("s1", "pinned"), // smuggled embed is stripped — the event is a reference, not an embed
+    });
+    expect("candidate" in ok).toBe(false);
+    expect(ok).toEqual({ missionId: "m1", candidateId: "s1", decision: "approve", trustStatus: "curator_approved" });
+    expect(memorySkillCandidateCuratedPayloadSchema.safeParse({ missionId: "m1", candidateId: "s1", decision: "approve" }).success).toBe(false); // trustStatus required
+  });
+
+  it("the curate REQUEST accepts only `decision` and strips a client-supplied trustStatus (trust is server-derived)", () => {
+    const parsed = skillCurateRequestSchema.parse({ decision: "approve", trustStatus: "pinned" });
+    expect(parsed).toEqual({ decision: "approve" });
+    expect("trustStatus" in parsed).toBe(false);
+    expect(skillCurateRequestSchema.safeParse({ decision: "promote" }).success).toBe(false); // outside curatorDecision set
+    expect(skillCurateRequestSchema.safeParse({}).success).toBe(false); // decision required
+  });
+});
