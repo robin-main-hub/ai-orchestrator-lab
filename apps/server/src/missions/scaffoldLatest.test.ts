@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ScaffoldPlan } from "@ai-orchestrator/protocol";
+import type { ScaffoldOverlay, ScaffoldPlan } from "@ai-orchestrator/protocol";
 import {
   buildMissionScaffoldLatestResponse,
   materializeScaffoldLatestFromPlan,
@@ -121,5 +121,21 @@ describe("buildMissionScaffoldLatestResponse", () => {
   it("응답 message는 found/partial일 때 undefined(가짜 메시지 금지)", () => {
     const result = buildMissionScaffoldLatestResponse({ missionId, plans: [makePlan()] });
     expect(result.message).toBeUndefined();
+  });
+
+  it("overlay content의 fine-grained PAT(github_pat_)는 서버 가드가 secret_suspect로 스킵", () => {
+    // 회귀: 서버 SECRET_PATTERNS가 classic ghp_만 잡고 github_pat_를 누락하면, 권위 있는
+    // 서버 가드가 비밀 든 overlay를 안전 파일로 통과시켰다. gitleaks 회피 위해 런타임 조합.
+    const pat = "github_" + "pat_" + "11" + "A".repeat(22) + "_" + "b".repeat(40);
+    const overlay: ScaffoldOverlay = {
+      files: [{ path: "README.md", content: `# token\n${pat}\n` }],
+      createdAt: "2026-06-14T13:00:00.000Z",
+    } as unknown as ScaffoldOverlay;
+    const result = buildMissionScaffoldLatestResponse({ missionId, plans: [makePlan()], overlays: [overlay] });
+    expect(result.skipped).toContainEqual({ path: "README.md", reason: "secret_suspect" });
+    // 비밀 overlay는 base README.md를 덮어쓰지 못한다 — 원본 content 유지(PAT 미노출).
+    const readme = result.files.find((f) => f.path === "README.md");
+    expect(readme!.content).not.toContain(pat);
+    expect(readme!.source).toBe("scaffold_plan");
   });
 });
