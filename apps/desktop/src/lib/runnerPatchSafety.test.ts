@@ -221,6 +221,40 @@ describe("runPathPolicy — allowlist/denylist (deny가 allow보다 강함)", ()
       expect(report.status).toBe("pass");
     }
   });
+
+  it("(PP6) '.'/'..' segment로 deny/allow를 우회하는 정규화-회피 경로는 unsafe_path로 차단(회귀)", () => {
+    // deny ".github/workflows/" 를 startsWith로 빠져나가지만 git 적용 시 같은 파일로 접힌다.
+    const dotEvade = makeHandoff({
+      files: [{ path: ".github/./workflows/evil.yml", change: "added", additions: 1, deletions: 0 }],
+    });
+    const r1 = runPathPolicy(dotEvade, { deny: [".github/workflows/"] });
+    expect(r1.status).toBe("blocked");
+    expect(r1.violations).toEqual([{ filePath: ".github/./workflows/evil.yml", reason: "unsafe_path" }]);
+
+    // ".." 탈출 — allow "src/" 의 startsWith는 통과하지만 적용되면 repo 밖. 정책 안에 있어도 unsafe.
+    const escape = makeHandoff({
+      files: [{ path: "src/../../../etc/passwd", change: "added", additions: 1, deletions: 0 }],
+    });
+    const r2 = runPathPolicy(escape, { allow: ["src/"] });
+    expect(r2.status).toBe("blocked");
+    expect(r2.violations).toEqual([{ filePath: "src/../../../etc/passwd", reason: "unsafe_path" }]);
+
+    // 정책 미설정(allow/deny 둘 다 없음)이어도 '..' 탈출은 warning이 아니라 blocked(fail-closed).
+    const noPolicy = makeHandoff({
+      files: [{ path: "src/../.github/workflows/evil.yml", change: "added", additions: 1, deletions: 0 }],
+    });
+    const r3 = runPathPolicy(noPolicy, undefined);
+    expect(r3.status).toBe("blocked");
+    expect(r3.violations).toEqual([
+      { filePath: "src/../.github/workflows/evil.yml", reason: "unsafe_path" },
+    ]);
+
+    // 정상 hidden 파일/경로(. 으로 시작하지만 '.' segment 아님)는 계속 통과.
+    const legit = makeHandoff({
+      files: [{ path: "src/.hidden/file.ts", change: "modified", additions: 1, deletions: 0 }],
+    });
+    expect(runPathPolicy(legit, { allow: ["src/"] }).status).toBe("pass");
+  });
 });
 
 describe("buildVerificationReport — runner-claimed vs actual 분리", () => {
