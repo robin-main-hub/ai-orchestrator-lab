@@ -8,6 +8,11 @@ import {
   missionVerificationRecordedPayloadSchema,
   missionVerifyRequestSchema,
   missionWorkerAssignmentRequestSchema,
+  missionCapabilityModeSchema,
+  missionToolNameSchema,
+  missionWorkerAssignmentSchema,
+  missionWorkerCapabilitySchema,
+  missionWorkerStatusSchema,
   hermesContinuityPolicySchema,
   personaContinuitySpecSchema,
   personaIdentityFileKindSchema,
@@ -459,5 +464,163 @@ describe("productKernel — persona continuity: voice posture is explicit, never
     expect(personaContinuitySpecSchema.safeParse({ ...spec, identityFiles: [] }).success).toBe(true);
     const malformed = { kind: "SOUL", path: "SOUL.md", required: true }; // missing truthStatus
     expect(personaContinuitySpecSchema.safeParse({ ...spec, identityFiles: [malformed] }).success).toBe(false);
+  });
+});
+
+// The least-privilege WIRE REQUEST (missionWorkerAssignmentRequest) is already
+// pinned: it carries PROFILE FACTS ONLY and no capability field rides in on it.
+// Its counterpart — the full server-computed CAPABILITY RECORD and the assignment
+// that wraps it — is unpinned at the schema level. (An agents-side coverage test
+// validates the mapping BEHAVIOR over real profiles, but never pins the schema's
+// structural contract: which authority fields are mandatory, that the tool lists
+// are a closed vocabulary, the worker-status totality, or the assignment's
+// no-fabrication of optional ids.) These encode the matrix every runner reads:
+//   (21) the capability record states EVERY authority bit explicitly — the three
+//        booleans (canMutateFiles/canRunCommands/requiresSandbox), allowedTools,
+//        requiresHumanApprovalFor, defaultSandboxKind, and personaContinuity are
+//        all mandatory; only personaName is optional and notes defaults to [].
+//        Capability is never partially implied — the opposite of the bare wire req.
+//   (22) allowedTools / requiresHumanApprovalFor are typed to the CLOSED
+//        missionToolName vocabulary and mode to the CLOSED missionCapabilityMode —
+//        an unknown tool or mode can't be smuggled into the matrix.
+//   (23) defaultSandboxKind reuses the sandboxKind enum (incl the inert "disabled")
+//        — a worker's default sandbox is constrained to the same closed kinds.
+//   (24) missionWorkerStatus is a closed lifecycle with an explicit waiting_approval
+//        gate and terminal failed/cancelled (no "merged"/"done" shortcut).
+//   (25) the assignment threads the full capability (non-optional) and leaves
+//        sandboxId/worktreePath/branchName/completedAt undefined when omitted —
+//        a sandbox id or branch is never fabricated before one exists.
+// Expected values are read off the schemas (self-consistent), never magic.
+describe("productKernel — mission worker capability matrix: fully-explicit, closed-vocab, no fabricated ids", () => {
+  const persona = {
+    agentId: "a1",
+    personaSlug: "p",
+    displayName: "d",
+    role: "builder" as const,
+    soulMode: "summary" as const,
+    configSource: "internal" as const,
+    identityFiles: [],
+    hermes: { slotId: "s", sticky: false, memoryScope: "m", restorePolicy: "off" as const, promotionPolicy: "off" as const },
+    voice: {
+      preserveCharacterVoice: true,
+      allowSpeechQuirks: true,
+      allowEmotionalColor: true,
+      forbiddenSuppressionReasons: [],
+      safetyOverrideNote: "n",
+    },
+  };
+  const capability = {
+    agentId: "a1",
+    role: "builder" as const,
+    displayName: "d",
+    mode: "sandbox_build" as const,
+    allowedTools: ["write", "edit", "bash"],
+    canMutateFiles: true,
+    canRunCommands: true,
+    requiresSandbox: true,
+    defaultSandboxKind: "docker_rootless" as const,
+    requiresHumanApprovalFor: ["bash"],
+    personaContinuity: persona,
+  };
+
+  it("the capability record states every authority bit explicitly (booleans/tools/sandbox/persona mandatory)", () => {
+    const parsed = missionWorkerCapabilitySchema.parse(capability);
+    expect(parsed.notes).toEqual([]); // only notes defaults; everything else must be supplied
+    expect(parsed.personaName).toBeUndefined(); // the one optional field, not fabricated
+    for (const key of ["canMutateFiles", "canRunCommands", "requiresSandbox", "allowedTools", "requiresHumanApprovalFor", "defaultSandboxKind", "personaContinuity"]) {
+      const { [key]: _omit, ...partial } = capability as Record<string, unknown>;
+      expect(missionWorkerCapabilitySchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("allowedTools / requiresHumanApprovalFor are a closed tool vocabulary and mode is a closed mode vocabulary", () => {
+    expect(missionToolNameSchema.options).toEqual([
+      "complete",
+      "read",
+      "grep",
+      "glob",
+      "write",
+      "edit",
+      "bash",
+      "todo",
+      "diff",
+      "verify",
+      "merge_recommend",
+      "memory_recall",
+      "memory_write_request",
+      "tmux_capture",
+      "tmux_dispatch",
+    ]);
+    expect(missionCapabilityModeSchema.options).toEqual([
+      "conversation_only",
+      "plan_only",
+      "sandbox_build",
+      "sandbox_verify",
+      "merge_recommend",
+      "memory_curate",
+      "research",
+    ]);
+    expect(missionWorkerCapabilitySchema.safeParse({ ...capability, allowedTools: ["deploy"] }).success).toBe(false);
+    expect(missionWorkerCapabilitySchema.safeParse({ ...capability, requiresHumanApprovalFor: ["sudo"] }).success).toBe(false);
+    expect(missionWorkerCapabilitySchema.safeParse({ ...capability, mode: "ship_it" }).success).toBe(false);
+  });
+
+  it("defaultSandboxKind reuses the closed sandboxKind enum (incl the inert 'disabled')", () => {
+    expect(missionWorkerCapabilitySchema.safeParse({ ...capability, defaultSandboxKind: "disabled" }).success).toBe(true);
+    expect(missionWorkerCapabilitySchema.safeParse({ ...capability, defaultSandboxKind: "vm" }).success).toBe(false);
+  });
+
+  it("missionWorkerStatus is a closed lifecycle with waiting_approval + terminal failed/cancelled (no merged/done)", () => {
+    expect(missionWorkerStatusSchema.options).toEqual([
+      "planned",
+      "assigned",
+      "running",
+      "waiting_approval",
+      "verifying",
+      "completed",
+      "failed",
+      "cancelled",
+    ]);
+    for (const forged of ["merged", "done", "ready", "ok"]) {
+      expect(missionWorkerStatusSchema.options).not.toContain(forged);
+    }
+  });
+
+  it("the assignment threads the full capability and never fabricates sandboxId/worktreePath/branchName/completedAt", () => {
+    const assignment = missionWorkerAssignmentSchema.parse({
+      id: "wa1",
+      missionId: "m1",
+      agentId: "a1",
+      role: "builder",
+      status: "assigned",
+      capability,
+      assignedAt: "2026-06-21T00:00:00.000Z",
+    });
+    expect(assignment.sandboxId).toBeUndefined();
+    expect(assignment.worktreePath).toBeUndefined();
+    expect(assignment.branchName).toBeUndefined();
+    expect(assignment.completedAt).toBeUndefined();
+    // the capability matrix is non-optional — an assignment can't exist without it
+    const { capability: _c, ...withoutCapability } = {
+      id: "wa1",
+      missionId: "m1",
+      agentId: "a1",
+      role: "builder" as const,
+      status: "assigned" as const,
+      capability,
+      assignedAt: "2026-06-21T00:00:00.000Z",
+    };
+    expect(missionWorkerAssignmentSchema.safeParse(withoutCapability).success).toBe(false);
+  });
+
+  it("canMutateFiles and canRunCommands are INDEPENDENT bits — the asymmetric verify combo is representable", () => {
+    // a verifier may run commands in the sandbox yet be forbidden from mutating files
+    const verifyOnly = { ...capability, canMutateFiles: false, canRunCommands: true };
+    expect(missionWorkerCapabilitySchema.safeParse(verifyOnly).success).toBe(true);
+    // and a plan-only worker can have neither — the matrix doesn't force one to imply the other
+    const neither = { ...capability, canMutateFiles: false, canRunCommands: false };
+    expect(missionWorkerCapabilitySchema.safeParse(neither).success).toBe(true);
+    const mutateOnly = { ...capability, canMutateFiles: true, canRunCommands: false };
+    expect(missionWorkerCapabilitySchema.safeParse(mutateOnly).success).toBe(true);
   });
 });
