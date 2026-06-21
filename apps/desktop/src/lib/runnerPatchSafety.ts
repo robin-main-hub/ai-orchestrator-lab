@@ -96,6 +96,12 @@ const SECRET_RULES: ReadonlyArray<{ label: string; regex: RegExp }> = [
   // fine-grained는 prefix가 "gh_"가 아니라 "github_pat_"이고 본문에 underscore가 있어
   // classic 규칙으로는 안 잡힌다 — 별도 alternation으로 false-negative를 막는다.
   { label: "github_token", regex: /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g },
+  // GitLab PAT(glpat-) — 형제 secret 게이트(W1 githubCommentWriteGuards·providers errors.ts·
+  // desktop publicRedaction·autorun redactForPublishPhase)는 모두 glpat을 비밀로 보는데 이 patch
+  // 적용 차단기(H8d)만 빠져, GitLab 토큰이 박힌 patch가 secret scan을 pass로 통과해 적용/커밋될
+  // 수 있었다(실측 false-negative: status=pass, findings=[]). 같은 taxonomy로 parity. glpat-는
+  // 산문 오탐 사실상 0인 specific prefix.
+  { label: "gitlab_token", regex: /\bglpat-[A-Za-z0-9_-]{20,}/g },
   { label: "aws_access_key", regex: /\bAKIA[0-9A-Z]{16}\b/g },
   // 아래 3종은 W1 공유 scanForSecrets(githubCommentWriteGuards)는 잡지만 H8d 규칙엔 없어
   // patch로 들어오면 검출을 빠져나갔다(false negative). env_secret_assign은 변수명에
