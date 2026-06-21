@@ -4,7 +4,9 @@ import {
   appWorkspaceAttachRequestSchema,
   appWorkspacePreviewSchema,
   appWorkspaceSchema,
+  appWorkspaceTerminalSchema,
   buildAppWorkspace,
+  sandboxRunnerKindSchema,
   defaultPreviewCommandForAppType,
   derivePreviewPort,
   previewBlocked,
@@ -190,5 +192,48 @@ describe("defaultPreviewCommandForAppType", () => {
     for (const appType of appTypeSchema.options) {
       expect(defaultPreviewCommandForAppType(appType).length).toBeGreaterThan(0);
     }
+  });
+});
+
+// The attach-request least-privilege DEFAULTS (terminalMode→read_only, runnerKind→
+// local) are pinned above, but the two schemas that encode the sandbox boundary
+// itself — the runner-kind ladder and the persisted terminal record — are not. Per
+// the module doc, the terminal is NOT a host-shell: it is metadata sitting behind a
+// SandboxRunner/approval boundary. Pin that boundary:
+//   - sandboxRunnerKindSchema is a CLOSED 4-kind ladder (local / docker / gvisor /
+//     tmux_observation) — a terminal can't name an arbitrary "ssh"/"host" runner, and
+//     tmux_observation is the read-only observation runner, not a shell;
+//   - the persisted terminal RECORD requires runnerKind EXPLICITLY — unlike the attach
+//     request it has NO default, so a stored terminal never silently fabricates "local";
+//     its mode is the closed {read_only, verify, build} set and sessionId is optional
+//     (never invented before a session exists);
+//   - the record's `mode` draws from the IDENTICAL 3-value least-privilege vocabulary as
+//     the attach request's `terminalMode` — one shared ladder, not a divergent copy.
+// Expected values are read off the schema's own declared shape (self-consistent).
+describe("appWorkspace — sandbox runner-kind ladder + terminal boundary record (terminal is sandboxed metadata, not a host shell)", () => {
+  it("the runner-kind is a closed 4-kind sandbox ladder; an arbitrary host/ssh runner is rejected", () => {
+    expect(sandboxRunnerKindSchema.options).toEqual(["local", "docker", "gvisor", "tmux_observation"]);
+    // tmux_observation is the read-only observation runner the ladder explicitly includes
+    expect(sandboxRunnerKindSchema.options).toContain("tmux_observation");
+    for (const forged of ["ssh", "host", "bash", "remote"]) {
+      expect(sandboxRunnerKindSchema.safeParse(forged).success).toBe(false);
+    }
+  });
+
+  it("the persisted terminal record requires runnerKind explicitly (no default, unlike the attach request) and bounds mode; sessionId is optional", () => {
+    const ok = appWorkspaceTerminalSchema.parse({ runnerKind: "docker", mode: "verify" });
+    expect(ok.sessionId).toBeUndefined(); // never fabricated before a session exists
+    // runnerKind has NO default at the record level — omitting it fails (the attach request defaults it, the record does not)
+    expect(appWorkspaceTerminalSchema.safeParse({ mode: "read_only" }).success).toBe(false);
+    // mode is the closed least-privilege 3-set
+    expect(appWorkspaceTerminalSchema.shape.mode.options).toEqual(["read_only", "verify", "build"]);
+    expect(appWorkspaceTerminalSchema.safeParse({ runnerKind: "local", mode: "admin" }).success).toBe(false);
+  });
+
+  it("the terminal record's mode and the attach request's terminalMode are the SAME 3-value least-privilege ladder (no divergent copy)", () => {
+    const recordModes = appWorkspaceTerminalSchema.shape.mode.options;
+    const requestModes = appWorkspaceAttachRequestSchema.shape.terminalMode.removeDefault().options;
+    expect(recordModes).toEqual(requestModes);
+    expect(recordModes).toEqual(["read_only", "verify", "build"]);
   });
 });
