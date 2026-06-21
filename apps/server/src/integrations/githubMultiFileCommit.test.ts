@@ -172,6 +172,22 @@ describe("runMultiFileCommitExecute — W5b atomic commit", () => {
     expect(client.createCommit).not.toHaveBeenCalled();
   });
 
+  it("(#4e) commit MESSAGE의 NUL byte도 차단 — content/path NUL 가드와 parity(회귀)", async () => {
+    // 드리프트 버그: checkPath/checkContent는 NUL(\0)을 막는데(각각 unsafe_path/binary) commit
+    // message만 NUL을 통과시켜 createCommit으로 흘렸다(실측 ok). NUL은 C-string 절단·로그 인젝션
+    // 표면이고 message엔 정당한 쓰임이 없다. content NUL과 동일하게 "binary"로 막고 GitHub 0회.
+    const client = makeClient();
+    const res = await runMultiFileCommitExecute(
+      request({ message: "feat: ok\u0000hidden", files: [{ path: "src/a.ts", newContent: "export const a = 1;\n" }] }),
+      deps({ client }),
+    );
+    expect(res.outcome).toBe("blocked");
+    expect(res.reason).toBe("binary");
+    expect(res.message).toContain("NUL");
+    expect(client.getRefSha).not.toHaveBeenCalled();
+    expect(client.createCommit).not.toHaveBeenCalled();
+  });
+
   it("(#5) high-risk path(.github/workflows/) → server block, GitHub API 0회", async () => {
     const client = makeClient();
     const res = await runMultiFileCommitExecute(
