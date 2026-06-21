@@ -15,6 +15,8 @@ import {
   agentDelegationUnknownTargetPayloadSchema,
   agentDelegationEventPayloadSchemaByType,
   agentSessionSchema,
+  agentSessionStatusSchema,
+  tmuxPaneRoleSchema,
   approvalDecisionRequestSchema,
   approvalRequestSchema,
   approvalReplayKindSchema,
@@ -2094,5 +2096,70 @@ describe("index — operator-cockpit read-model authority: closed panel vocabula
       const { [key]: _omit, ...partial } = snapshot as Record<string, unknown>;
       expect(operatorCockpitSnapshotSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
     }
+  });
+});
+
+// The pre-existing test (line ~810) parses ONE happy agentSession (architect /
+// planned) only to assert role === "architect"; it never pins the closed
+// pane-role vocabulary, the closed 6-state session lifecycle, the mandatory
+// session spine, the honesty of its optionals (agentId/paneId/lastEventAt — a
+// not-yet-spawned session has no pane), or that role/backend/status each come
+// from a closed enum. A session that claimed an unknown role/backend or a
+// fabricated lifecycle state would pass today. Pin the agent-session lifecycle
+// contract, self-consistent (vocabularies derived from the schemas' own options).
+describe("index — agent-session lifecycle authority: closed pane roles, closed 6-state lifecycle, honest session spine", () => {
+  it("pins the 10 pane roles and the closed 6-state session lifecycle", () => {
+    expect(tmuxPaneRoleSchema.options).toEqual([
+      "discussion",
+      "orchestrator",
+      "status",
+      "code",
+      "architect",
+      "frontend",
+      "backend",
+      "qa",
+      "research",
+      "memory",
+    ]);
+    expect(agentSessionStatusSchema.options).toEqual(["planned", "spawned", "running", "yielded", "completed", "failed"]);
+    // strangers outside either closed vocabulary are rejected
+    expect(tmuxPaneRoleSchema.safeParse("devops").success).toBe(false);
+    expect(agentSessionStatusSchema.safeParse("paused").success).toBe(false);
+  });
+
+  it("requires the session spine and never fabricates agentId/paneId/lastEventAt for a not-yet-spawned session", () => {
+    const base = {
+      id: "agent_session_1",
+      sessionId: "session_1",
+      role: "architect" as const,
+      backend: "ui_stub" as const,
+      status: "planned" as const,
+      createdAt: "2026-06-21T00:00:00.000Z",
+    };
+    const minimal = agentSessionSchema.parse(base);
+    // a planned session has not been placed in a pane yet — these stay undefined, never invented
+    expect(minimal.agentId).toBeUndefined();
+    expect(minimal.paneId).toBeUndefined();
+    expect(minimal.lastEventAt).toBeUndefined();
+    // the identity/role/backend/status/createdAt spine is mandatory
+    for (const key of ["id", "sessionId", "role", "backend", "status", "createdAt"]) {
+      const { [key]: _omit, ...partial } = base as Record<string, unknown>;
+      expect(agentSessionSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("draws role/backend/status from closed enums — an out-of-vocabulary value is rejected", () => {
+    const base = {
+      id: "agent_session_2",
+      sessionId: "session_1",
+      role: "backend" as const,
+      backend: "tmux" as const,
+      status: "running" as const,
+      createdAt: "2026-06-21T00:00:00.000Z",
+    };
+    expect(agentSessionSchema.safeParse(base).success).toBe(true);
+    expect(agentSessionSchema.safeParse({ ...base, role: "devops" }).success).toBe(false);
+    expect(agentSessionSchema.safeParse({ ...base, backend: "kubernetes" }).success).toBe(false);
+    expect(agentSessionSchema.safeParse({ ...base, status: "paused" }).success).toBe(false);
   });
 });
