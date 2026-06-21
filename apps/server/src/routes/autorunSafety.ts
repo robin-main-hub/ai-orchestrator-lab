@@ -48,6 +48,12 @@ const SECRET_LIKE_PATTERNS: ReadonlyArray<[RegExp, string]> = [
   // 놓쳐 publish 표면으로 새어나갔다(실측 false-negative). redaction은 replace라 오탐 무해.
   [/\bgh[pousr]_[A-Za-z0-9]{20,}\b/g, "[REDACTED:github_token]"],
   [/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, "[REDACTED:github_token]"],
+  // GitLab PAT(glpat-) — 형제 redaction/차단 게이트(W1 githubCommentWriteGuards·errors.ts
+  // SECRET_LIKE_PATTERNS·desktop publicRedaction)는 모두 glpat을 비밀로 보는데 이 publish-phase
+  // redactor만 빠져, 명령 stdout/stderr에 박힌 GitLab PAT가 redact 없이 LLM fix 프롬프트·report
+  // 응답(외부 노출)으로 새어나갔다(실측 false-negative). 같은 taxonomy로 parity. glpat-는 산문
+  // 오탐이 사실상 0인 specific prefix라 redact replace로도 무해.
+  [/\bglpat-[A-Za-z0-9_-]{20,}/g, "[REDACTED:gitlab_token]"],
   [/\bAKIA[0-9A-Z]{16}\b/g, "[REDACTED:aws_key]"],
   [/\bAIza[0-9A-Za-z_-]{30,}/g, "[REDACTED:google_key]"],
   [/\bxox[abposr]-[A-Za-z0-9-]{10,}/g, "[REDACTED:slack_token]"],
