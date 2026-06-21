@@ -46,6 +46,8 @@ import {
   githubPullRequestLabelsUpdateExecuteResponseSchema,
   githubPullRequestLabelsUpdateOutcomeSchema,
   githubPullRequestLabelsUpdatePlanRequestSchema,
+  githubPullRequestLabelsUpdatePlanResponseSchema,
+  githubPullRequestLabelsUpdatePlanSchema,
   githubPullRequestUpdateExecuteRequestSchema,
   githubPullRequestUpdateExecuteResponseSchema,
   githubPullRequestUpdateOutcomeSchema,
@@ -1193,5 +1195,109 @@ describe("githubConnector — W6 PR-update plan record: dual-sha integrity, body
     const withPlan = githubPullRequestUpdatePlanResponseSchema.parse({ outcome: "planned", plan: validPlan });
     expect(withPlan.plan?.id).toBe("plan_1");
     expect(githubPullRequestUpdatePlanResponseSchema.safeParse({ plan: validPlan }).success).toBe(false); // outcome required
+  });
+});
+
+// The W5d PR-labels REQUEST side (caps, control-char-safe names, [] defaults,
+// TOCTOU hash key on the execute request) is pinned above, but the plan RECORD
+// and plan-response envelope are not. The record carries the W5d authority spirit
+// with a flavor the other plans lack — an HONEST four-way change accounting:
+//   - it threads a TOCTOU integrity key (currentLabelsHash = sha256 of the sorted
+//     observed label set), so execute refuses if the live labels drifted;
+//   - finalLabels is the actual desired set the PUT will write;
+//   - changeSummary is a REQUIRED 4-array breakdown that distinguishes a label that
+//     ACTUALLY mutates from a requested op that is a no-op — actuallyAdded /
+//     actuallyRemoved vs noopAdd (asked to add but already present) / noopRemove
+//     (asked to remove but not present). The system never claims a no-op as a change.
+//   - status is a closed 5-state lifecycle (with honest no_op) and truthStatus a
+//     closed 3-state honesty enum; approvalId/blockedReason are the only optionals;
+//   - the plan-response envelope carries plan optionally and never fabricates message.
+// Expected values are read off the schema's own declared shape (self-consistent).
+describe("githubConnector — W5d PR-labels plan record: TOCTOU hash + honest four-way no-op accounting", () => {
+  const validPlan = {
+    id: "plan_1",
+    repoFullName: "owner/repo",
+    pullNumber: 1,
+    currentLabels: ["bug", "p1"],
+    currentLabelsHash: "h".repeat(64),
+    finalLabels: ["bug", "p1"],
+    changeSummary: { actuallyAdded: [], actuallyRemoved: [], noopAdd: [], noopRemove: [] },
+    status: "no_op" as const,
+    truthStatus: "planned" as const,
+    createdAt: "2026-06-21T00:00:00.000Z",
+    expiresAt: "2026-06-21T01:00:00.000Z",
+  };
+
+  it("requires the TOCTOU hash + label-set spine; approvalId/blockedReason are the only optionals never fabricated", () => {
+    const parsed = githubPullRequestLabelsUpdatePlanSchema.parse(validPlan);
+    expect(parsed.approvalId).toBeUndefined();
+    expect(parsed.blockedReason).toBeUndefined();
+    for (const key of [
+      "id",
+      "repoFullName",
+      "pullNumber",
+      "currentLabels",
+      "currentLabelsHash",
+      "finalLabels",
+      "changeSummary",
+      "status",
+      "truthStatus",
+      "createdAt",
+      "expiresAt",
+    ]) {
+      const { [key]: _omit, ...partial } = validPlan as Record<string, unknown>;
+      expect(githubPullRequestLabelsUpdatePlanSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("changeSummary is a required four-way accounting that separates real mutations from no-ops", () => {
+    // a real add+remove with a redundant no-op of each — all four buckets populated and distinct
+    const honest = githubPullRequestLabelsUpdatePlanSchema.parse({
+      ...validPlan,
+      currentLabels: ["bug", "p1"],
+      finalLabels: ["bug", "feature"],
+      changeSummary: {
+        actuallyAdded: ["feature"], // not present before → real add
+        actuallyRemoved: ["p1"], // present before → real remove
+        noopAdd: ["bug"], // asked to add but already there → no-op
+        noopRemove: ["wontfix"], // asked to remove but absent → no-op
+      },
+      status: "planned",
+    });
+    expect(honest.changeSummary.actuallyAdded).toEqual(["feature"]);
+    expect(honest.changeSummary.noopAdd).toEqual(["bug"]);
+    // every one of the four buckets is mandatory — dropping any fails
+    for (const member of ["actuallyAdded", "actuallyRemoved", "noopAdd", "noopRemove"]) {
+      const { [member]: _omit, ...partialSummary } = validPlan.changeSummary as Record<string, unknown>;
+      expect(
+        githubPullRequestLabelsUpdatePlanSchema.safeParse({ ...validPlan, changeSummary: partialSummary }).success,
+        `changeSummary.${member} must be mandatory`,
+      ).toBe(false);
+    }
+  });
+
+  it("status is a closed 5-state lifecycle (with honest no_op) and truthStatus a closed 3-state enum", () => {
+    expect(githubPullRequestLabelsUpdatePlanSchema.shape.status.options).toEqual([
+      "planned",
+      "approval_required",
+      "blocked",
+      "no_op",
+      "failed",
+    ]);
+    expect(githubPullRequestLabelsUpdatePlanSchema.shape.truthStatus.options).toEqual([
+      "planned",
+      "observed",
+      "configured",
+    ]);
+    expect(githubPullRequestLabelsUpdatePlanSchema.safeParse({ ...validPlan, status: "labeled" }).success).toBe(false);
+  });
+
+  it("the plan-response envelope carries plan optionally (a no_op/blocked outcome may have none) and never fabricates a message", () => {
+    const bare = githubPullRequestLabelsUpdatePlanResponseSchema.parse({ outcome: "no_op" });
+    expect(bare.plan).toBeUndefined();
+    expect(bare.message).toBeUndefined();
+    const withPlan = githubPullRequestLabelsUpdatePlanResponseSchema.parse({ outcome: "planned", plan: validPlan });
+    expect(withPlan.plan?.id).toBe("plan_1");
+    expect(githubPullRequestLabelsUpdatePlanResponseSchema.safeParse({ plan: validPlan }).success).toBe(false); // outcome required
   });
 });
