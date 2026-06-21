@@ -83,6 +83,23 @@ describe("buildVisualQaDiff", () => {
     expect(diff.summary).toBe("통과 — 1개 해결, 남은 이슈 없음");
   });
 
+  it("does NOT report passed when after has zero issues but its own status is not a clean pass (fake-green guard)", () => {
+    // analyzeVisualQa downgrades an observed-but-not-clean report to warning/failed with
+    // no issue cards (e.g. empty body → empty_state warning; HTML load failure → failed).
+    // buildVisualQaDiff must respect that status instead of re-inflating it to "passed".
+    for (const afterStatus of ["warning", "failed"] as const) {
+      const diff = buildVisualQaDiff(
+        report({ status: "failed", issues: [issue({ id: "b1", kind: "contrast", summary: "x" })] }),
+        report({ status: afterStatus, issues: [] }),
+      );
+      expect(diff.status).toBe("blocked");
+      expect(diff.resolved).toHaveLength(1); // before issue still counted as resolved
+      expect(diff.remaining).toHaveLength(0);
+      expect(diff.newIssues).toHaveLength(0);
+      expect(diff.summary).toContain(`status=${afterStatus}`);
+    }
+  });
+
   it("matches issues by key so same kind+summary counts as remaining, not resolved", () => {
     const before = report({
       status: "failed",
