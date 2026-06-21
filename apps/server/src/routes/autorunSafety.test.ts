@@ -49,4 +49,14 @@ describe("experimental autorun safety", () => {
     expect(redacted).not.toContain("super-secret-value");
     expect(redacted).not.toContain("json-secret-value");
   });
+
+  it("redacts GitLab PAT (glpat-) before publish — 형제 게이트(W1·errors.ts·publicRedaction)와 parity", () => {
+    // glpat-(GitLab PAT)는 형제 redaction/차단 게이트가 모두 비밀로 보는데 이 publish-phase
+    // redactor만 빠져, 명령 stdout/stderr에 박힌 GitLab PAT가 LLM fix 프롬프트·report 응답(외부
+    // 노출)으로 새어나갔다(parity 회귀). gitleaks 회피로 토큰은 런타임 조합.
+    const glpat = "gl" + "pat-" + "Ab3xZ9kLmNpQ7rSt2UvW";
+    const redacted = redactForPublishPhase(`remote: GitLab token ${glpat} rejected`);
+    expect(redacted).toContain("[REDACTED:gitlab_token]");
+    expect(redacted).not.toContain(glpat);
+  });
 });
