@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   analyzeVisualQa,
+  designIssueCardSchema,
   designIssueKindSchema,
+  missionDesignIssueRecordedPayloadSchema,
+  missionVisualQaRecordedPayloadSchema,
+  visualQaCheckSchema,
   visualQaCheckStatusSchema,
   visualQaReportSchema,
   type VisualQaObservation,
@@ -196,5 +200,62 @@ describe("visualQa vocabulary + uncovered analyze branches", () => {
     });
     expect(report.checks.find((c) => c.kind === "empty_state")?.status).toBe("warning");
     expect(report.status).toBe("warning"); // empty body warning, nothing failed
+  });
+});
+
+// The cases above pin analyze() behavior + two enums, and parse the whole report
+// via visualQaReportSchema, but never assert the standalone card/check schemas nor
+// the two RECORDED event payloads the server writes. The authority surface still
+// unpinned: (1) the DesignIssueCard contract — a card MUST name a kind from the
+// closed set and a severity from {low,medium,high}, while targetSurface/evidenceRef
+// are optional and never fabricated when the observation didn't supply them;
+// (2) the VisualQaCheck contract — status is the closed honesty 4-set whose
+// `skipped` member is the explicit "not observed" marker (never a disguised pass),
+// evidenceRef optional; (3) the two server-only events EMBED their record
+// transitively — a card with a bad kind or a report with a bad check status sinks
+// the whole payload, and missionId is required on both. Fixtures are derived from a
+// real analyze() run (self-consistent), so the schemas are pinned against the exact
+// shapes the analyzer emits.
+describe("visualQa — card/check schema contracts + server-only recorded-event embedding (transitive honesty)", () => {
+  // a heading-less, button-less preview → analyze emits hierarchy + missing_primary_action issues,
+  // with NO targetSurface (none passed) and NO evidenceRef — the honest "optional absent" shape.
+  const REPORT = analyzeVisualQa({ ...ids, obs: { previewObserved: true, previewUrl: "http://x", http: { ok: true, status: 200, html: "<div>plain text only</div>" } } });
+  const CARD = REPORT.issues[0]!;
+  const CHECK = REPORT.checks[0]!;
+
+  it("a DesignIssueCard names a closed kind + severity and never fabricates the optional targetSurface/evidenceRef", () => {
+    expect(designIssueCardSchema.safeParse(CARD).success).toBe(true);
+    expect(CARD.targetSurface).toBeUndefined(); // none supplied → not invented
+    expect(CARD.evidenceRef).toBeUndefined();
+    expect(designIssueKindSchema.options).toContain(CARD.kind); // kind is from the closed vocabulary
+    expect(designIssueCardSchema.safeParse({ ...CARD, kind: "vibes" }).success).toBe(false); // outside the kind set
+    expect(designIssueCardSchema.safeParse({ ...CARD, severity: "critical" }).success).toBe(false); // outside {low,medium,high}
+    const { recommendation: _r, ...noRec } = CARD;
+    expect(designIssueCardSchema.safeParse(noRec).success).toBe(false); // recommendation is required (an issue must say how to fix it)
+  });
+
+  it("a VisualQaCheck status is the closed honesty 4-set; `skipped` is an explicit not-observed marker, evidenceRef optional", () => {
+    expect(visualQaCheckSchema.safeParse(CHECK).success).toBe(true);
+    expect(visualQaCheckStatusSchema.options).toEqual(["passed", "warning", "failed", "skipped"]);
+    // a load-tier skip carries no evidence — and that's honest, not a hole
+    const skipped = analyzeVisualQa({ ...ids, obs: { previewObserved: true, previewUrl: "http://x" } }).checks.find((c) => c.kind === "load")!;
+    expect(skipped.status).toBe("skipped");
+    expect(skipped.evidenceRef).toBeUndefined();
+    expect(visualQaCheckSchema.safeParse({ ...CHECK, status: "observed" }).success).toBe(false); // not in the 4-set
+    const { summary: _s, ...noSummary } = CHECK;
+    expect(visualQaCheckSchema.safeParse(noSummary).success).toBe(false); // summary required — a check must state what it found
+  });
+
+  it("the recorded VisualQA event EMBEDS the report transitively — a bad check status sinks the whole payload", () => {
+    expect(missionVisualQaRecordedPayloadSchema.safeParse({ missionId: "m1", report: REPORT }).success).toBe(true);
+    expect(missionVisualQaRecordedPayloadSchema.safeParse({ report: REPORT }).success).toBe(false); // missionId required
+    const brokenReport = { ...REPORT, checks: [{ ...CHECK, status: "observed" }] };
+    expect(missionVisualQaRecordedPayloadSchema.safeParse({ missionId: "m1", report: brokenReport }).success).toBe(false);
+  });
+
+  it("the recorded DesignIssue event EMBEDS the card transitively — a bad kind sinks the whole payload", () => {
+    expect(missionDesignIssueRecordedPayloadSchema.safeParse({ missionId: "m1", issue: CARD }).success).toBe(true);
+    expect(missionDesignIssueRecordedPayloadSchema.safeParse({ issue: CARD }).success).toBe(false); // missionId required
+    expect(missionDesignIssueRecordedPayloadSchema.safeParse({ missionId: "m1", issue: { ...CARD, kind: "vibes" } }).success).toBe(false);
   });
 });
