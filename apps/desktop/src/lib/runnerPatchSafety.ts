@@ -97,6 +97,12 @@ const SECRET_RULES: ReadonlyArray<{ label: string; regex: RegExp }> = [
   // classic 규칙으로는 안 잡힌다 — 별도 alternation으로 false-negative를 막는다.
   { label: "github_token", regex: /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g },
   { label: "aws_access_key", regex: /\bAKIA[0-9A-Z]{16}\b/g },
+  // 아래 3종은 W1 공유 scanForSecrets(githubCommentWriteGuards)는 잡지만 H8d 규칙엔 없어
+  // patch로 들어오면 검출을 빠져나갔다(false negative). env_secret_assign은 변수명에
+  // 키워드가 있을 때만 잡으므로 bare 리터럴(따옴표 안 토큰, PEM 블록 등)은 누락 → 별도 추가.
+  { label: "slack_token", regex: /\bxox[abposr]-[A-Za-z0-9-]{10,}/g },
+  { label: "google_api_key", regex: /\bAIza[0-9A-Za-z_-]{30,}/g },
+  { label: "private_key_block", regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/g },
   // env-style assignment — KEY=value 형태. 변수 이름에 토큰/키/비번 키워드.
   {
     label: "env_secret_assign",
