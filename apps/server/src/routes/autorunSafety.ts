@@ -42,6 +42,11 @@ const SAFE_RELATIVE_TOKEN = /^[A-Za-z0-9@_./:=+-]+$/;
 const SECRET_LIKE_PATTERNS: ReadonlyArray<[RegExp, string]> = [
   [/\bsk-[A-Za-z0-9_-]{12,}\b/g, "sk-[REDACTED]"],
   [/\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b/gi, "Bearer [REDACTED]"],
+  // GitLab PAT(glpat-) — 형제 redaction/차단 게이트(W1 githubCommentWriteGuards·errors.ts
+  // SECRET_LIKE_PATTERNS·desktop publicRedaction)는 모두 glpat을 비밀로 보는데 이 publish-phase
+  // redactor만 빠져, 명령 stdout/stderr에 박힌 GitLab PAT가 LLM fix 프롬프트·report 응답(외부
+  // 노출)으로 redact 없이 새어나갔다(parity 회귀). glpat-는 산문 오탐 0인 specific prefix.
+  [/\bglpat-[A-Za-z0-9_-]{20,}/g, "[REDACTED:gitlab_token]"],
   [/("|')(api[_-]?key|auth[_-]?token|access[_-]?token|refresh[_-]?token|secret|password|private[_-]?key)\1\s*:\s*("|')[^"']+\3/gi, "$1$2$1: $3[REDACTED]$3"],
   [/\b(api[_-]?key|auth[_-]?token|access[_-]?token|refresh[_-]?token|secret|password|private[_-]?key)\s*[:=]\s*["']?[^"'\s,}]+/gi, "$1=[REDACTED]"],
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "[REDACTED:private_key]"],
