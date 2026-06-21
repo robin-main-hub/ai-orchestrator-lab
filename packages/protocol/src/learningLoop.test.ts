@@ -10,7 +10,16 @@ import {
   investigatorRoleSchema,
   isObservedClaimValid,
   LEARNING_EVENT_TYPES,
+  learningConsultCompletedPayloadSchema,
+  learningConsultSkippedPayloadSchema,
+  learningDistillationCandidateCreatedPayloadSchema,
+  learningFailureRecordedPayloadSchema,
   learningFailureSchema,
+  learningHypothesisRecordedPayloadSchema,
+  learningHypothesisRejectedPayloadSchema,
+  learningHypothesisVerifiedPayloadSchema,
+  learningInvestigationStartedPayloadSchema,
+  learningLoopRecordSchema,
   learningLoopStageSchema,
   memoryConsultRecordSchema,
   type DistilledLearningCandidate,
@@ -565,5 +574,85 @@ describe("learningLoop — schema-level epistemic-honesty refinements (the valid
     const { evidenceRefs: _drop, ...noRefs } = investigation();
     const parsed = failureInvestigationSchema.parse(noRefs);
     expect(parsed.evidenceRefs).toEqual([]);
+  });
+});
+
+// The wrapper payload schemas (one per learning event) are thin single-key
+// envelopes around the record schemas pinned above. The previous describe pinned
+// the records DIRECTLY; the reducer consumes them through these envelopes via
+// safeParse. What stays unpinned: (1) that each envelope is TRANSITIVE — a broken
+// inner record (no evidence, empty speculation, observed-without-evidence,
+// auto-trusted distillation, reasonless skip) sinks the whole payload, so the
+// reducer's `if (!parsed.success) break` honestly refuses to advance; (2) that the
+// envelope REQUIRES exactly its one key and STRIPS any smuggled sibling (plain
+// z.object) — payloads can't carry side-channel authority; (3) the load-bearing
+// fact that verified/rejected payloads are STRUCTURALLY IDENTICAL (both wrap
+// hypothesisVerificationSchema) — the schema is permissive about outcome and the
+// REDUCER, not the schema, enforces verified⇒"verified"/rejected⇒"rejected"; and
+// (4) the aggregate learningLoopRecordSchema requires its four arrays (no default)
+// while keeping the lifecycle facets optional (never fabricated before observed).
+describe("learningLoop — event payload envelopes: transitive validity, no-smuggle, schema-vs-reducer authority", () => {
+  it("every envelope is transitive — a broken inner record sinks the payload (the reducer's refusal boundary)", () => {
+    expect(learningFailureRecordedPayloadSchema.safeParse({ failure: failure() }).success).toBe(true);
+    expect(learningFailureRecordedPayloadSchema.safeParse({ failure: failure({ verificationReportId: undefined }) }).success).toBe(false);
+    expect(learningHypothesisRecordedPayloadSchema.safeParse({ hypothesis: hypothesis() }).success).toBe(true);
+    expect(learningHypothesisRecordedPayloadSchema.safeParse({ hypothesis: hypothesis({ evidenceRefs: [] }) }).success).toBe(false);
+    expect(learningHypothesisVerifiedPayloadSchema.safeParse({ verification: verified({ evidenceRefs: [] }) }).success).toBe(false); // observed-without-evidence
+    expect(learningDistillationCandidateCreatedPayloadSchema.safeParse({ candidate: candidate({ trustStatus: "trusted" as never }) }).success).toBe(false);
+    expect(learningConsultSkippedPayloadSchema.safeParse({ consult: consult({ outcome: "skipped" }) }).success).toBe(false); // reasonless skip
+  });
+
+  it("each envelope REQUIRES exactly its single key — the wrong/missing key is rejected", () => {
+    expect(learningFailureRecordedPayloadSchema.safeParse({}).success).toBe(false);
+    expect(learningInvestigationStartedPayloadSchema.safeParse({}).success).toBe(false);
+    expect(learningConsultCompletedPayloadSchema.safeParse({}).success).toBe(false);
+    // a failure record placed under the wrong envelope key does not satisfy it
+    expect(learningInvestigationStartedPayloadSchema.safeParse({ failure: failure() }).success).toBe(false);
+    expect(learningInvestigationStartedPayloadSchema.safeParse({ investigation: investigation() }).success).toBe(true);
+  });
+
+  it("envelopes STRIP smuggled sibling keys (plain z.object) — no side-channel authority rides along", () => {
+    const parsed = learningFailureRecordedPayloadSchema.parse({ failure: failure(), forcedStage: "consulted", trustStatus: "trusted" });
+    expect(parsed).toEqual({ failure: failure() });
+    expect("forcedStage" in parsed).toBe(false);
+    expect("trustStatus" in parsed).toBe(false);
+  });
+
+  it("verified and rejected payloads are STRUCTURALLY identical — the schema is permissive, the reducer enforces the outcome", () => {
+    // both envelopes accept EITHER outcome — neither schema pins outcome to its own name
+    expect(learningHypothesisVerifiedPayloadSchema.safeParse({ verification: rejected() }).success).toBe(true);
+    expect(learningHypothesisRejectedPayloadSchema.safeParse({ verification: verified() }).success).toBe(true);
+    // so a verified-event carrying a rejected verification PARSES, but the reducer drops it (outcome guard),
+    // and the loop never records it as a verified hypothesis.
+    const events = [
+      { type: E.failureRecorded, payload: { failure: failure() } },
+      { type: E.hypothesisRecorded, payload: { hypothesis: hypothesis() } },
+      { type: E.hypothesisVerified, payload: { verification: rejected({ hypothesisId: hypothesis().id }) } },
+    ];
+    const loops = deriveLearningLoopState(events);
+    expect(loops[0]!.verifiedHypothesisIds).toEqual([]); // schema let it through, reducer refused
+  });
+
+  it("the aggregate record requires its four arrays (no default) but keeps lifecycle facets optional (never fabricated)", () => {
+    const minimal = {
+      loopId: LOOP,
+      missionId: MISSION,
+      stage: "failed" as const,
+      hypotheses: [],
+      verifications: [],
+      verifiedHypothesisIds: [],
+      rejectedHypothesisIds: [],
+    };
+    const parsed = learningLoopRecordSchema.parse(minimal);
+    expect(parsed.failure).toBeUndefined();
+    expect(parsed.investigation).toBeUndefined();
+    expect(parsed.distillation).toBeUndefined();
+    expect(parsed.consult).toBeUndefined();
+    expect(parsed.updatedAt).toBeUndefined();
+    // omitting a required array is rejected — there is no silent default
+    const { hypotheses: _h, ...noHyps } = minimal;
+    expect(learningLoopRecordSchema.safeParse(noHyps).success).toBe(false);
+    // and the record is transitive too — an embedded broken facet sinks it
+    expect(learningLoopRecordSchema.safeParse({ ...minimal, distillation: candidate({ evidenceRefs: [] }) }).success).toBe(false);
   });
 });
