@@ -161,6 +161,12 @@ export function checkContent(content: string): GuardResult {
  * 형제 secret 표면(W1 comment·W3a content·W4a/W5c PR title/body)과 동일하게 공유 스캐너로 막는다.
  */
 export function checkCommitMessage(message: string): GuardResult {
+  // NUL byte 거부 — checkPath/checkContent와 parity. message는 createCommit으로 외부(public
+  // GitHub)에 흘러가는 동일 표면인데, content/path는 NUL을 막으면서(각각 "binary"/"unsafe_path")
+  // message만 통과시켰다(실측 ok). NUL은 git/툴링의 C-string 절단·로그 인젝션 표면이고 commit
+  // message엔 정당한 쓰임이 없다. (\n·\t는 message 본문에 정당하므로 전체 제어문자가 아니라
+  // checkContent와 동일하게 NUL만 막는다 — 단일-라인 title 가드의 CONTROL_CHAR_RE와는 다른 축.)
+  if (message.includes("\0")) return block("binary", "commit message에 NUL byte 포함");
   const secret = scanForSecrets(message);
   if (!secret.ok) return block("secret_suspect", `commit message에 secret 패턴 의심(${secret.matched})`);
   return { ok: true };
