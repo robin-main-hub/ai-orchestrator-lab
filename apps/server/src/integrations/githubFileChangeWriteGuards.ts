@@ -48,17 +48,24 @@ const DENIED_PATH_PATTERNS: ReadonlyArray<{ name: string; test: (path: string) =
   { name: "secrets?", test: (p) => /(^|\/)secrets?(\.|\/|$)/i.test(p) },
   { name: "*.pem", test: (p) => /\.pem$/i.test(p) },
   { name: "*.key", test: (p) => /\.key$/i.test(p) },
-  { name: "id_rsa*", test: (p) => /(^|\/)id_(?:rsa|ed25519|ecdsa|dsa)(\..*)?$/.test(p) },
-  { name: ".github/workflows/*", test: (p) => /(^|\/)\.github\/workflows\//.test(p) },
-  { name: ".git/*", test: (p) => /(^|\/)\.git\//.test(p) || p === ".git" },
-  { name: "node_modules/*", test: (p) => /(^|\/)node_modules\//.test(p) },
-  { name: "dist/*", test: (p) => /(^|\/)dist\//.test(p) },
-  { name: "build/*", test: (p) => /(^|\/)build\//.test(p) },
-  { name: ".next/*", test: (p) => /(^|\/)\.next\//.test(p) },
-  { name: "coverage/*", test: (p) => /(^|\/)coverage\//.test(p) },
-  { name: "package-lock.json", test: (p) => /(^|\/)package-lock\.json$/.test(p) },
-  { name: "pnpm-lock.yaml", test: (p) => /(^|\/)pnpm-lock\.yaml$/.test(p) },
-  { name: "yarn.lock", test: (p) => /(^|\/)yarn\.lock$/.test(p) },
+  // 아래 규칙들은 형제 multi-file 가드(githubMultiFileCommit.HIGH_RISK_PATH_PATTERNS)와 같은
+  // taxonomy인데, 그쪽은 모든 규칙에 /i(case-insensitive)가 붙은 반면 이 단일파일 가드의
+  // id_rsa·.github/workflows·.git·node_modules·dist·build·.next·coverage·lockfile 규칙만 /i가
+  // 빠져 있었다. 대소문자 변형 경로(ID_RSA = SSH 개인키, .GitHub/workflows/…, .GIT/config 등)가
+  // multi-file commit으로는 막히는데 단일파일 write로는 통과하던 드리프트(실측 W3a ok:true vs
+  // W5b ok:false). 같은 .env/.pem/.key 규칙이 이미 /i인데 id_rsa만 빠진 내부 비일관성도 동시 해소.
+  // 강화 방향(더 막음)이라 부작용 경로 변화 없음 — 단지 형제 가드와 동일 강도로 맞춘다.
+  { name: "id_rsa*", test: (p) => /(^|\/)id_(?:rsa|ed25519|ecdsa|dsa)(\..*)?$/i.test(p) },
+  { name: ".github/workflows/*", test: (p) => /(^|\/)\.github\/workflows\//i.test(p) },
+  { name: ".git/*", test: (p) => /(^|\/)\.git\//i.test(p) || p === ".git" },
+  { name: "node_modules/*", test: (p) => /(^|\/)node_modules\//i.test(p) },
+  { name: "dist/*", test: (p) => /(^|\/)dist\//i.test(p) },
+  { name: "build/*", test: (p) => /(^|\/)build\//i.test(p) },
+  { name: ".next/*", test: (p) => /(^|\/)\.next\//i.test(p) },
+  { name: "coverage/*", test: (p) => /(^|\/)coverage\//i.test(p) },
+  { name: "package-lock.json", test: (p) => /(^|\/)package-lock\.json$/i.test(p) },
+  { name: "pnpm-lock.yaml", test: (p) => /(^|\/)pnpm-lock\.yaml$/i.test(p) },
+  { name: "yarn.lock", test: (p) => /(^|\/)yarn\.lock$/i.test(p) },
 ];
 
 export type PathPolicyResult = { ok: true; normalized: string } | { ok: false; reason: string };
