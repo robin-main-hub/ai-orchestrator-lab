@@ -91,6 +91,9 @@ const HIGH_RISK_PATH_PATTERNS: ReadonlyArray<RegExp> = [
 ];
 
 const ALLOWED_BRANCH_PREFIX = /^(agent|work|user|mission|debate)\//;
+// W2 evaluateBranchNamePolicy(githubBranchWriteGuards)와 동일한 git ref 안전 문자/문법 집합.
+// 영문/숫자/. _ - / 만 허용 — 한글·공백·shell 메타 차단.
+const BRANCH_NAME_SAFE = /^[A-Za-z0-9._/-]+$/;
 
 function utf8Bytes(text: string): number {
   return new TextEncoder().encode(text).byteLength;
@@ -155,6 +158,21 @@ export function checkBranch(branchName: string, protectedBranches: ReadonlyArray
       "branch_protection",
       `branch '${branchName}'는 정책 prefix(agent|work|user|mission|debate)/ 만 허용`,
     );
+  }
+  // git ref 안전성 — W2 evaluateBranchNamePolicy와 parity. 이 가드는 prefix/protected만 보고
+  // ..  //  @{  \  trailing . 같은 git ref 특수문법을 놓쳐, request.branchName이 그대로
+  // getRefSha/updateRefSha의 ref로 흘러가 ref 조작(injection) 표면이 됐다(실측 ALLOW).
+  // 허용 prefix 집합(debate/ 포함)은 그대로 두고 안전성 검증만 W2와 맞춘다.
+  if (
+    branchName.endsWith("/") ||
+    branchName.endsWith(".") ||
+    branchName.includes("..") ||
+    branchName.includes("//") ||
+    branchName.includes("@{") ||
+    branchName.includes("\\") ||
+    !BRANCH_NAME_SAFE.test(branchName)
+  ) {
+    return block("branch_protection", `branch '${branchName}' 이름에 허용되지 않는 git ref 문자/문법이 있습니다`);
   }
   return { ok: true };
 }
