@@ -6,6 +6,11 @@ import {
   appWorkspaceSchema,
   appWorkspaceTerminalSchema,
   buildAppWorkspace,
+  missionPreviewRunScaffoldOutcomeSchema,
+  missionPreviewRunScaffoldRequestSchema,
+  missionPreviewRunScaffoldResponseSchema,
+  previewProbeRequestSchema,
+  previewStartRequestSchema,
   sandboxRunnerKindSchema,
   defaultPreviewCommandForAppType,
   derivePreviewPort,
@@ -235,5 +240,82 @@ describe("appWorkspace — sandbox runner-kind ladder + terminal boundary record
     const requestModes = appWorkspaceAttachRequestSchema.shape.terminalMode.removeDefault().options;
     expect(recordModes).toEqual(requestModes);
     expect(recordModes).toEqual(["read_only", "verify", "build"]);
+  });
+});
+
+// The runner-kind/terminal boundary is pinned above; the other half of the sandbox
+// boundary — the preview-RUN requests and the orchestration outcome/response — is
+// not. Per the module doc the preview is not a host-shell escape: the command goes
+// through a server-side prefix allowlist and the bind stays loopback by default.
+// Pin that boundary and the honesty of its result:
+//   - all three preview-run requests (probe / start / run-scaffold) DEFAULT host to
+//     the loopback 127.0.0.1 (never a 0.0.0.0 wildcard exposure) and bound the port
+//     to 1..65535; the port is optional (derived from the workspace id when omitted);
+//   - the start/run requests bound the command to 1..400 and leave it OPTIONAL (the
+//     server falls back to the appType default, so an empty command can't ride in),
+//     and repoRootOverride is an optional bounded path;
+//   - the orchestration OUTCOME is a closed 6-value enum that NAMES every failure
+//     (preview_not_running / no_scaffold / materialize_failed / mission_not_found /
+//     not_configured) — there is no generic success-on-failure catch-all;
+//   - the orchestration RESPONSE fabricates nothing: repoRoot / materializedFileCount
+//     / workspaceId / preview / message are all optional and stay absent on a failure
+//     outcome, only `outcome` is required, and materializedFileCount is a nonneg int.
+// Expected values are read off the schema's own declared shape (self-consistent).
+describe("appWorkspace — preview-run boundary: loopback-default binds, bounded command, honest failure-named outcome + no-fabrication response", () => {
+  it("all three preview-run requests default host to the loopback 127.0.0.1 and bound the port to 1..65535", () => {
+    for (const reqSchema of [
+      previewProbeRequestSchema,
+      previewStartRequestSchema,
+      missionPreviewRunScaffoldRequestSchema,
+    ]) {
+      const parsed = reqSchema.parse({});
+      expect(parsed.host).toBe("127.0.0.1"); // loopback, never a 0.0.0.0 wildcard
+      expect(parsed.port).toBeUndefined(); // derived when omitted, never fabricated
+      expect(reqSchema.safeParse({ port: 0 }).success).toBe(false); // below min
+      expect(reqSchema.safeParse({ port: 65_536 }).success).toBe(false); // above max
+      expect(reqSchema.safeParse({ port: 1 }).success).toBe(true);
+      expect(reqSchema.safeParse({ port: 65_535 }).success).toBe(true);
+      expect(reqSchema.safeParse({ host: "h".repeat(256) }).success).toBe(false); // host max 255
+    }
+  });
+
+  it("the start/run requests bound the command to 1..400 and keep it optional; repoRootOverride is an optional bounded path", () => {
+    for (const reqSchema of [previewStartRequestSchema, missionPreviewRunScaffoldRequestSchema]) {
+      expect(reqSchema.safeParse({}).success).toBe(true); // command omitted → server uses appType default
+      expect(reqSchema.safeParse({ command: "" }).success).toBe(false); // min 1 — no empty command rides in
+      expect(reqSchema.safeParse({ command: "x".repeat(401) }).success).toBe(false); // max 400
+      expect(reqSchema.safeParse({ command: "x".repeat(400) }).success).toBe(true);
+    }
+    expect(missionPreviewRunScaffoldRequestSchema.safeParse({ repoRootOverride: "" }).success).toBe(false); // min 1
+    expect(missionPreviewRunScaffoldRequestSchema.safeParse({ repoRootOverride: "x".repeat(1025) }).success).toBe(false); // max 1024
+    expect(missionPreviewRunScaffoldRequestSchema.safeParse({ repoRootOverride: "/tmp/x" }).success).toBe(true);
+  });
+
+  it("the orchestration outcome is a closed enum naming every failure — no generic success-on-failure catch-all", () => {
+    expect(missionPreviewRunScaffoldOutcomeSchema.options).toEqual([
+      "observed",
+      "preview_not_running",
+      "no_scaffold",
+      "materialize_failed",
+      "mission_not_found",
+      "not_configured",
+    ]);
+    for (const forged of ["running", "success", "ok", "done"]) {
+      expect(missionPreviewRunScaffoldOutcomeSchema.safeParse(forged).success).toBe(false);
+    }
+  });
+
+  it("the orchestration response fabricates nothing: every result field is optional and absent on a failure outcome, only outcome is required", () => {
+    const failed = missionPreviewRunScaffoldResponseSchema.parse({ outcome: "no_scaffold" });
+    expect(failed.repoRoot).toBeUndefined();
+    expect(failed.materializedFileCount).toBeUndefined();
+    expect(failed.workspaceId).toBeUndefined();
+    expect(failed.preview).toBeUndefined(); // never a fabricated "running" preview on failure
+    expect(failed.message).toBeUndefined();
+    expect(missionPreviewRunScaffoldResponseSchema.safeParse({}).success).toBe(false); // outcome required
+    // materializedFileCount is a nonnegative int — never negative or fractional
+    expect(missionPreviewRunScaffoldResponseSchema.safeParse({ outcome: "observed", materializedFileCount: -1 }).success).toBe(false);
+    expect(missionPreviewRunScaffoldResponseSchema.safeParse({ outcome: "observed", materializedFileCount: 1.5 }).success).toBe(false);
+    expect(missionPreviewRunScaffoldResponseSchema.safeParse({ outcome: "observed", materializedFileCount: 0 }).success).toBe(true);
   });
 });
