@@ -38,6 +38,7 @@ import {
   sandboxPreflightResultSchema,
   sandboxResourceLimitsSchema,
   sandboxRunModeSchema,
+  sandboxSpecSchema,
   sandboxWorkspacePolicySchema,
   sequentialMergeQueueItemSchema,
   verificationReportSchema,
@@ -962,5 +963,57 @@ describe("productKernel — mission persistence seam: single append window, reco
     // the nested mission gains createdAt over the bare created-payload — omitting it fails
     const { createdAt: _c, ...missionWithoutCreatedAt } = core.mission;
     expect(serverMissionRecordSchema.safeParse({ ...core, mission: missionWithoutCreatedAt }).success).toBe(false);
+  });
+});
+
+// The five sandbox sub-policies (kind, isolation level, network, resources, workspace)
+// are each pinned individually above, but the COMPOSITE that binds them — sandboxSpec
+// — is not. The composite is where the isolation contract is actually enforced: a
+// sandbox cannot be half-specified. Pin it:
+//   - every facet is MANDATORY — id, kind, isolationLevel, truthStatus, workspace,
+//     network, resources — so you cannot construct a spec that silently omits its
+//     network policy or its resource limits (deny-by-default: no partial sandbox);
+//   - `notes` is the only field with a default ([]), and a smuggled extra key is
+//     stripped by the plain object (no side-channel into the spec);
+//   - validation is TRANSITIVE — a nested policy that is itself invalid (a network
+//     policy with no reason, a workspace policy with no repoRoot, resource limits with
+//     no timeout) fails the whole spec, so the composite can't launder a broken facet.
+// Expected values are read off the schema's own declared shape (self-consistent).
+describe("productKernel — sandbox spec is the composite isolation contract: every facet mandatory, transitively validated", () => {
+  const validSpec = {
+    id: "sbx_1",
+    kind: "disabled" as const,
+    isolationLevel: "none" as const,
+    truthStatus: "planned" as const,
+    workspace: { repoRoot: "/repo", cleanup: "destroy_on_success" as const },
+    network: { mode: "disabled" as const, reason: "no egress for read-only runs" },
+    resources: { timeoutSeconds: 60, maxOutputBytes: 1_000_000 },
+  };
+
+  it("requires every isolation facet — a spec that omits its network policy or resource limits is rejected (no partial sandbox)", () => {
+    expect(sandboxSpecSchema.safeParse(validSpec).success).toBe(true);
+    for (const key of ["id", "kind", "isolationLevel", "truthStatus", "workspace", "network", "resources"]) {
+      const { [key]: _omit, ...partial } = validSpec as Record<string, unknown>;
+      expect(sandboxSpecSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("notes is the only field with a default ([]) and an extra smuggled key is stripped (no side-channel)", () => {
+    const parsed = sandboxSpecSchema.parse(validSpec);
+    expect(parsed.notes).toEqual([]); // honest empty default, never fabricated content
+    const stripped = sandboxSpecSchema.parse({ ...validSpec, escapeHatch: true, privileged: true } as Record<string, unknown>);
+    expect("escapeHatch" in stripped).toBe(false);
+    expect("privileged" in stripped).toBe(false);
+  });
+
+  it("validation is transitive — a nested policy that is itself invalid fails the whole spec (no laundering a broken facet)", () => {
+    // network policy missing its mandatory reason
+    expect(sandboxSpecSchema.safeParse({ ...validSpec, network: { mode: "disabled" } }).success).toBe(false);
+    // workspace policy missing its mandatory repoRoot
+    expect(sandboxSpecSchema.safeParse({ ...validSpec, workspace: { cleanup: "destroy_on_success" } }).success).toBe(false);
+    // resource limits missing the mandatory timeout
+    expect(sandboxSpecSchema.safeParse({ ...validSpec, resources: { maxOutputBytes: 1 } }).success).toBe(false);
+    // a fabricated isolation level the closed enum does not name
+    expect(sandboxSpecSchema.safeParse({ ...validSpec, isolationLevel: "trust_me" }).success).toBe(false);
   });
 });
