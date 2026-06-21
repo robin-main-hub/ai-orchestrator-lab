@@ -9,8 +9,11 @@ import {
   GITHUB_PR_UPDATE_BODY_MAX,
   GITHUB_PR_UPDATE_TITLE_MAX,
   githubBranchCreateExecuteRequestSchema,
+  githubBranchCreateExecuteResponseSchema,
   githubBranchCreateOutcomeSchema,
   githubBranchCreatePlanRequestSchema,
+  githubBranchCreatePlanResponseSchema,
+  githubBranchCreatePlanSchema,
   githubCommentWriteActionSchema,
   githubCommentWriteExecuteRequestSchema,
   githubCommentWriteExecuteResponseSchema,
@@ -989,5 +992,98 @@ describe("githubConnector — read-only summaries: required spines, nullable-is-
     expect(githubIssueSummarySchema.safeParse(issueWithoutComments).success).toBe(false);
     const prShaped = { ...issueWithoutComments, draft: false };
     expect(githubPullRequestSummarySchema.safeParse(prShaped).success).toBe(true); // same row minus comments + draft = a valid PR
+  });
+});
+
+// The W2 branch-create REQUEST side and the 9-value outcome enum are pinned above,
+// but the RESULT side — the plan RECORD, the execute RESPONSE, and the plan-response
+// envelope — is not. The record/result surface carries the W2 authority spirit in a
+// mirror image of the request:
+//   - the plan RECORD threads the sourceSha optimistic-concurrency integrity key
+//     forward (plan→execute), and its newRef is the always-"refs/heads/<name>" spine;
+//     approvalId/blockedReason are the ONLY optionals — everything else is required,
+//     so a plan is never half-built;
+//   - status is a closed 6-state lifecycle and truthStatus a closed 3-state honesty
+//     enum — neither can invent a fourth member;
+//   - the execute RESULT is honest about the not-yet-observed: ref/sha/htmlUrl/
+//     observedAt are all optional and stay undefined until GitHub confirms, while
+//     outcome/planId/truthStatus are the required spine;
+//   - the plan-response envelope carries `plan` OPTIONALLY (a blocked/not_configured
+//     outcome legitimately has no plan) and never fabricates a `message`.
+// Expected values are read off the schema's own declared shape (self-consistent).
+describe("githubConnector — W2 branch result surface: sourceSha carried forward, closed lifecycles, honest-until-observed", () => {
+  const validPlan = {
+    id: "plan_1",
+    repoFullName: "owner/repo",
+    sourceRef: "main",
+    sourceSha: "a".repeat(40),
+    newBranchName: "agent/x",
+    newRef: "refs/heads/agent/x",
+    status: "planned" as const,
+    truthStatus: "planned" as const,
+    createdAt: "2026-06-21T00:00:00.000Z",
+    expiresAt: "2026-06-21T01:00:00.000Z",
+  };
+
+  it("the plan record requires the sourceSha integrity key and newRef spine; approvalId/blockedReason are the only optionals", () => {
+    const parsed = githubBranchCreatePlanSchema.parse(validPlan);
+    // the two optionals are never fabricated when absent
+    expect(parsed.approvalId).toBeUndefined();
+    expect(parsed.blockedReason).toBeUndefined();
+    // every non-optional field is mandatory — omitting any of them fails
+    for (const key of [
+      "id",
+      "repoFullName",
+      "sourceRef",
+      "sourceSha",
+      "newBranchName",
+      "newRef",
+      "status",
+      "truthStatus",
+      "createdAt",
+      "expiresAt",
+    ]) {
+      const { [key]: _omit, ...partial } = validPlan as Record<string, unknown>;
+      expect(githubBranchCreatePlanSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("branch plan status is a closed 6-state lifecycle and truthStatus a closed 3-state honesty enum", () => {
+    expect(githubBranchCreatePlanSchema.shape.status.options).toEqual([
+      "planned",
+      "approval_required",
+      "blocked",
+      "executing",
+      "created",
+      "failed",
+    ]);
+    expect(githubBranchCreatePlanSchema.shape.truthStatus.options).toEqual(["planned", "observed", "configured"]);
+    expect(githubBranchCreatePlanSchema.safeParse({ ...validPlan, status: "merged" }).success).toBe(false);
+    expect(githubBranchCreatePlanSchema.safeParse({ ...validPlan, truthStatus: "fabricated" }).success).toBe(false);
+  });
+
+  it("the execute result is honest about the not-yet-observed: ref/sha/htmlUrl/observedAt are optional, only outcome/planId/truthStatus are required", () => {
+    const minimal = { outcome: "approval_required" as const, planId: "plan_1", truthStatus: "planned" as const };
+    const parsed = githubBranchCreateExecuteResponseSchema.parse(minimal);
+    expect(parsed.ref).toBeUndefined();
+    expect(parsed.sha).toBeUndefined();
+    expect(parsed.htmlUrl).toBeUndefined();
+    expect(parsed.observedAt).toBeUndefined();
+    for (const key of ["outcome", "planId", "truthStatus"]) {
+      const { [key]: _omit, ...partial } = minimal as Record<string, unknown>;
+      expect(githubBranchCreateExecuteResponseSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+    // truthStatus shares the same closed 3-state honesty enum as the plan record
+    expect(githubBranchCreateExecuteResponseSchema.safeParse({ ...minimal, truthStatus: "fabricated" }).success).toBe(false);
+  });
+
+  it("the plan-response envelope carries plan optionally (a blocked outcome has no plan) and never fabricates a message", () => {
+    const blocked = githubBranchCreatePlanResponseSchema.parse({ outcome: "blocked" });
+    expect(blocked.plan).toBeUndefined();
+    expect(blocked.message).toBeUndefined();
+    const withPlan = githubBranchCreatePlanResponseSchema.parse({ outcome: "planned", plan: validPlan });
+    expect(withPlan.plan?.id).toBe("plan_1");
+    // outcome is the one required field — an envelope with no outcome is rejected
+    expect(githubBranchCreatePlanResponseSchema.safeParse({ plan: validPlan }).success).toBe(false);
   });
 });
