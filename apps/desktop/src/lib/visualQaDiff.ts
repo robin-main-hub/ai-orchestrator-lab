@@ -8,7 +8,8 @@ import type { DesignIssueCard, VisualQaReport } from "@ai-orchestrator/protocol"
  *   - issue가 사라졌다고 자동으로 "고쳐졌다" 표시하지 않는다 — kind+summary가 같을 때만
  *     같은 issue로 본다. 의심 매칭(summary가 다르고 kind만 같음)은 같은 것으로 묶지 않는다.
  *   - blocked report는 비교가 의미 없으므로 status="blocked".
- *   - after.status="passed" + after.issues=0 → "passed".
+ *   - after.status="passed" + after.issues=0 → "passed". after.issues=0이라도
+ *     after.status!=="passed"(load 실패·관측 없음·warning)면 "통과"로 위장하지 않고 "blocked".
  *   - new issue가 한 개라도 생기면 "regressed" — improved 표시 X(정직).
  */
 
@@ -82,8 +83,12 @@ export function buildVisualQaDiff(before: VisualQaReport, after: VisualQaReport)
   }
 
   let status: VisualQaDiffStatus;
-  if (after.issues.length === 0) status = "passed";
-  else if (newIssues.length > 0) status = "regressed";
+  if (after.issues.length === 0) {
+    // after.issues=0이라도 after report 자체가 깨끗한 observed pass가 아니면(HTML load 실패·
+    // 관측 없음·empty_state warning 등으로 status!=="passed") "통과"로 위장하지 않는다.
+    // analyzeVisualQa가 내려준 status를 존중 — 가짜 visual pass 금지(merge gating과 동일한 정직성).
+    status = after.status === "passed" ? "passed" : "blocked";
+  } else if (newIssues.length > 0) status = "regressed";
   else if (resolved.length > 0 && remaining.length > 0) status = "improved";
   else if (resolved.length === 0 && remaining.length > 0) status = "no_change";
   else status = "passed"; // resolved>0 && remaining=0 && new=0 → 모두 해결.
@@ -97,7 +102,7 @@ export function buildVisualQaDiff(before: VisualQaReport, after: VisualQaReport)
           ? `변화 없음 — ${remaining.length}개 그대로`
           : status === "regressed"
             ? `악화 — ${newIssues.length}개 새로 생김, ${remaining.length}개 남음`
-            : "비교 의미 없음";
+            : `확인 불가 — after 검증이 깨끗한 통과 상태가 아닙니다(status=${after.status}) — 재검증이 필요합니다`;
 
   return {
     status,
