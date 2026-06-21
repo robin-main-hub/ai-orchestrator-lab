@@ -42,7 +42,7 @@ function sortByCreatedAt(events: ReadonlyArray<EventEnvelope>): EventEnvelope[] 
  * 상태 유도 규칙(의도적으로 단순):
  *   created → planned
  *   worker 1+ → running
- *   최신 verification passed → ready_to_merge / failed → verifying 유지
+ *   최신 verification observed+passed → ready_to_merge / 그 외(failed·passed지만 not observed) → verifying 유지
  *   mission.closed → 그 상태가 최종 (merged/failed/cancelled)
  */
 /**
@@ -65,7 +65,9 @@ function deriveStatus(record: ServerMissionRecord, closedStatus?: "merged" | "fa
   }
   const latestReport = record.verificationReports.at(-1);
   if (latestReport) {
-    return latestReport.status === "passed" ? "ready_to_merge" : "verifying";
+    // observed passed만 ready_to_merge — observed=false(다운그레이드된 가짜 green)는
+    // merge()의 D3 불변식이 거부하므로 보드도 "verifying"으로 정직하게 유지한다.
+    return latestReport.status === "passed" && latestReport.observed ? "ready_to_merge" : "verifying";
   }
   return record.workers.length > 0 ? "running" : "planned";
 }
