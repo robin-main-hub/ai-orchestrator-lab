@@ -130,6 +130,28 @@ describe("runSecretScan — added lines only (+), 컨텍스트/삭제는 무시"
     expect(report.findings[0]!.redactedPreview).not.toContain("bbbb");
   });
 
+  it("(SC3c) GitLab PAT(glpat-)도 gitlab_token으로 분류 → blocked(형제 게이트 W1·errors.ts·publicRedaction·autorun과 parity)", () => {
+    // 회귀: glpat-(GitLab PAT)는 형제 secret 게이트엔 있는데 H8d SECRET_RULES만 빠져, GitLab
+    // 토큰이 박힌 patch가 secret scan을 pass로 통과해 적용/커밋될 수 있었다. gitleaks 회피로 런타임 조합.
+    const glpat = ["gl", "pat-", "Ab3xZ9kLmNpQ7rSt2UvW"].join("");
+    const handoff = makeHandoff({
+      files: [
+        {
+          path: "src/leak.ts",
+          change: "added",
+          additions: 1,
+          deletions: 0,
+          diff: ["--- /dev/null", "+++ b/src/leak.ts", `+const gl = "${glpat}";`].join("\n"),
+        },
+      ],
+    });
+    const report = runSecretScan(handoff);
+    expect(report.status).toBe("blocked");
+    expect(report.findings.map((f) => f.pattern)).toContain("gitlab_token");
+    expect(report.findings[0]!.redactedPreview).toContain("<redacted>");
+    expect(report.findings[0]!.redactedPreview).not.toContain("Ab3xZ9kLmNpQ7rSt2UvW");
+  });
+
   it("(SC4) 컨텍스트 / 삭제(-) 라인에 시크릿이 있어도 무시 — patch가 *도입*하는 것만 본다", () => {
     const fakeKey = ["sk", "stale", "abcdefghijklmnop"].join("-");
     const handoff = makeHandoff({
