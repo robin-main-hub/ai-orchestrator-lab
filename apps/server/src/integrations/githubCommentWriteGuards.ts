@@ -62,6 +62,18 @@ const SECRET_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
   { name: "Authorization Bearer header", pattern: /\bAuthorization\s*:\s*Bearer\s+\S+/i },
   // PEM/private-key 표식만 잡아도 충분
   { name: "Private key block", pattern: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/ },
+  // env-style 키워드 대입(KEY=value) — `PASSWORD=…`, `DB_API_KEY: …`, `AUTH_TOKEN=…`처럼
+  // 변수 이름에 비밀 키워드가 있고 값이 붙는 형태. 위 규칙들은 token *prefix*(ghp_/sk-/AKIA…)나
+  // PEM 표식만 잡아, prefix 없는 평문 비밀(예: .env의 password=…)을 통째로 흘려보냈다(실측
+  // ok:true — false-negative). 형제 차단 게이트 H8d runnerPatchSafety(env_secret_assign,
+  // patch 적용 차단)와 redactor errors.ts(SECRET_LIKE_PATTERNS)는 같은 규칙을 이미 갖는데 이
+  // master 차단 스캐너만 빠져, 같은 평문 비밀이 comment/PR title·body/commit message/file
+  // content로 외부 GitHub에 push될 수 있었다. H8d와 동일 형태로 parity를 맞춘다(블로커끼리
+  // 동일 FP 프로파일 — 이 파일 philosophy: FN을 FP보다 두려워함). `.test()` 사용이라 /g는 뺀다.
+  {
+    name: "env-style secret assignment (KEY=value)",
+    pattern: /\b[A-Za-z0-9_]*(?:API[_-]?KEY|AUTH[_-]?TOKEN|ACCESS[_-]?TOKEN|SECRET|PASSWORD|TOKEN)[A-Za-z0-9_]*\s*[=:]\s*[^\s"'`]+/i,
+  },
 ];
 
 export type SecretScanResult = { ok: true } | { ok: false; matched: string };
