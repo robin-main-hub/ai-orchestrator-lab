@@ -128,6 +128,20 @@ describe("evaluateFilePathPolicy", () => {
     expect(evaluateFilePathPolicy("src/builder/index.ts").ok).toBe(true);
     expect(evaluateFilePathPolicy("docs/coverage-notes.md").ok).toBe(true);
   });
+
+  it("파일로 존재하는 .git(nested gitdir 포인터)도 차단 — 형제 W5b와 positional parity(회귀)", () => {
+    // 드리프트: 이전 .git 규칙 `(^|/)\.git/` + `p === ".git"`는 디렉터리와 정확히 루트 .git
+    // 파일만 잡아, submodule/.git·a/b/.git처럼 nested 위치의 .git *파일*(gitdir 포인터)을
+    // 흘려보냈다(실측 W3a ok:true vs 형제 githubMultiFileCommit.checkPath ok:false). 형제는
+    // `(^|/)\.git(/|$)/i`로 파일/디렉터리 양쪽을 막으므로 같은 정규식으로 parity.
+    for (const bad of [".git", "submodule/.git", "a/b/.git", ".git/config", "vendor/.git/HEAD"]) {
+      expect(evaluateFilePathPolicy(bad).ok, `should reject: ${bad}`).toBe(false);
+    }
+    // `(/|$)` 경계라 정당 dotfile(.gitignore/.gitattributes/.gitkeep)은 계속 통과 — 오탐 없음
+    expect(evaluateFilePathPolicy(".gitignore").ok).toBe(true);
+    expect(evaluateFilePathPolicy(".gitattributes").ok).toBe(true);
+    expect(evaluateFilePathPolicy("src/.gitkeep").ok).toBe(true);
+  });
 });
 
 describe("evaluateNewContentSafety", () => {
