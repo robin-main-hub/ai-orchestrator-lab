@@ -11,6 +11,7 @@ import {
   plannedArtifactsFromTemplate,
   TEMPLATE_REACT_VITE_APP,
   workflowDomainSchema,
+  workflowInputFieldSchema,
   workflowTemplateSchema,
   type WorkflowTemplate,
 } from "./index.js";
@@ -209,5 +210,44 @@ describe("missingRequiredFields — required-only, string-only empty check, all 
     expect(missingRequiredFields(tpl, { name: "  " })).toEqual(["name", "count"]);
     // satisfy name, leave count → only count
     expect(missingRequiredFields(tpl, { name: "app" })).toEqual(["count"]);
+  });
+});
+
+// workflowTemplateSchema is parsed end-to-end above, but its LEAF —
+// workflowInputFieldSchema — is never asserted on its own, yet it is the schema
+// that defines what a runnable input field can be, and the `required` default is
+// load-bearing: missingRequiredFields only blocks on `required:true`, so a field
+// that omits `required` MUST parse to false (an undeclared field can never
+// silently block a template). Pin: required key/label, the closed 4-type enum
+// {text,number,select,textarea}, the honest required→false default, the optional
+// options never fabricated when absent, no-smuggle stripping, and that every
+// inputField the core registry actually declares is valid against this leaf
+// (self-consistent — the templates are the oracle).
+describe("workflowInputFieldSchema — leaf input contract: required key/label, closed type enum, honest required default, optional options, no-smuggle", () => {
+  const BASE = { key: "appName", label: "앱 이름", type: "text" } as const;
+
+  it("requires key/label, closes the type enum, and accepts every field the core registry declares", () => {
+    for (const template of CORE_WORKFLOW_TEMPLATES) {
+      for (const inputField of template.inputFields) {
+        expect(workflowInputFieldSchema.safeParse(inputField).success).toBe(true); // leaf agrees with the templates
+      }
+    }
+    expect(workflowInputFieldSchema.shape.type.options).toEqual(["text", "number", "select", "textarea"]); // closed type vocab
+    expect(workflowInputFieldSchema.safeParse({ ...BASE, type: "date" }).success).toBe(false); // outside the set
+    for (const field of ["key", "label", "type"] as const) {
+      const { [field]: _omit, ...without } = BASE;
+      expect(workflowInputFieldSchema.safeParse(without).success).toBe(false); // key/label/type all required
+    }
+  });
+
+  it("defaults required→false (an undeclared field never blocks), keeps options optional, passes through, and strips smuggled keys", () => {
+    const parsed = workflowInputFieldSchema.parse(BASE);
+    expect(parsed.required).toBe(false); // honest default — not required unless declared
+    expect(parsed.options).toBeUndefined(); // optional never fabricated (a text field has no options)
+    expect(workflowInputFieldSchema.parse({ ...BASE, required: true }).required).toBe(true); // passthrough
+    const select = workflowInputFieldSchema.parse({ key: "color", label: "색", type: "select", options: ["red", "blue"] });
+    expect(select.options).toEqual(["red", "blue"]); // a select legitimately carries options
+    const stripped = workflowInputFieldSchema.parse({ ...BASE, placeholder: "x" } as Record<string, unknown>);
+    expect("placeholder" in stripped).toBe(false); // plain z.object strips
   });
 });
