@@ -139,6 +139,21 @@ describe("runMultiFileCommitExecute — W5b atomic commit", () => {
     expect(client.getRefSha).not.toHaveBeenCalled();
   });
 
+  it("(#4c) fine-grained PAT(github_pat_) 내용도 secret_suspect로 차단 — 공유 스캐너 위임 회귀", async () => {
+    // 과거 버그: 이 모듈이 자체 SECRET_PATTERNS 복제본을 들고 있어 github_pat_가 누락 → commit
+    // 경로로만 fine-grained PAT가 빠져나갔다. 공유 scanForSecrets 위임으로 닫혔는지 확인.
+    // gitleaks가 diff에서 진짜 토큰 리터럴을 잡으므로 런타임 조합으로 회피.
+    const pat = "github_" + "pat_" + "11" + "A".repeat(22) + "_" + "b".repeat(40);
+    const client = makeClient();
+    const res = await runMultiFileCommitExecute(
+      request({ files: [{ path: "src/cfg.ts", newContent: `export const t = "${pat}";\n` }] }),
+      deps({ client }),
+    );
+    expect(res.outcome).toBe("blocked");
+    expect(res.reason).toBe("secret_suspect");
+    expect(client.getRefSha).not.toHaveBeenCalled();
+  });
+
   it("(#5) high-risk path(.github/workflows/) → server block, GitHub API 0회", async () => {
     const client = makeClient();
     const res = await runMultiFileCommitExecute(

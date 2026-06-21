@@ -6,6 +6,7 @@ import {
   GITHUB_MULTIFILE_COMMIT_PER_FILE_BYTES_MAX,
   GITHUB_MULTIFILE_COMMIT_TOTAL_BYTES_MAX,
 } from "@ai-orchestrator/protocol";
+import { scanForSecrets } from "./githubCommentWriteGuards.js";
 
 /**
  * W5b — Multi-file atomic commit runner.
@@ -76,21 +77,6 @@ const HIGH_RISK_PATH_PATTERNS: ReadonlyArray<RegExp> = [
   /\.key$/i,
 ];
 
-const SECRET_PATTERNS: ReadonlyArray<RegExp> = [
-  /\bghp_[A-Za-z0-9]{20,}\b/,
-  /\bgho_[A-Za-z0-9]{20,}\b/,
-  /\bghs_[A-Za-z0-9]{20,}\b/,
-  /\bghu_[A-Za-z0-9]{20,}\b/,
-  /\bghr_[A-Za-z0-9]{20,}\b/,
-  /\bAKIA[0-9A-Z]{16}\b/,
-  /\bsk-ant-[A-Za-z0-9_-]{20,}\b/,
-  /\bsk-[A-Za-z0-9]{40,}\b/,
-  /\bxox[abposr]-[A-Za-z0-9-]{10,}\b/,
-  /\bAIza[0-9A-Za-z_-]{30,}\b/,
-  /\bAuthorization\s*:\s*Bearer\s+\S+/i,
-  /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/,
-];
-
 const ALLOWED_BRANCH_PREFIX = /^(agent|work|user|mission|debate)\//;
 
 function utf8Bytes(text: string): number {
@@ -129,9 +115,12 @@ export function checkContent(content: string): GuardResult {
   if (bytes > GITHUB_MULTIFILE_COMMIT_PER_FILE_BYTES_MAX) {
     return block("too_large", `파일 단일 ${bytes}B > ${GITHUB_MULTIFILE_COMMIT_PER_FILE_BYTES_MAX}B`);
   }
-  for (const pattern of SECRET_PATTERNS) {
-    if (pattern.test(content)) return block("secret_suspect", "secret 패턴 의심");
-  }
+  // 비밀 패턴 스캔은 W1 공유 스캐너(githubCommentWriteGuards)를 단일 진실 소스로 재사용한다.
+  // 과거엔 이 모듈이 자체 SECRET_PATTERNS를 복제해 들고 있었는데, 공유 스캐너에 fine-grained
+  // PAT(github_pat_) 패턴이 추가됐을 때 이 복제본만 누락돼 commit 경로로는 비밀이 빠져나갈 수
+  // 있었다(드리프트). 공유 스캐너를 호출해 그 클래스의 false-negative를 원천 차단한다.
+  const secret = scanForSecrets(content);
+  if (!secret.ok) return block("secret_suspect", `secret 패턴 의심(${secret.matched})`);
   return { ok: true };
 }
 
