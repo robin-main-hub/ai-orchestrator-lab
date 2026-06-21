@@ -41,7 +41,7 @@ export type PathPolicyInput = {
 
 export type PathPolicyViolation = {
   filePath: string;
-  reason: "denied" | "not_in_allowlist";
+  reason: "denied" | "not_in_allowlist" | "unsafe_path";
 };
 
 export type PathPolicyReport = {
@@ -157,6 +157,20 @@ function pathMatches(filePath: string, pattern: string): boolean {
   return filePath === norm || filePath.startsWith(norm + "/");
 }
 
+/**
+ * deny/allow는 raw startsWith prefix 매칭이라 path를 정규화하지 않는다. 그래서 git/GitHub가
+ * 적용 시 접어버리는 '.'·'..' segment를 끼우면 정책을 우회할 수 있다(W3a #1030, W5b #1031과 같은 부류):
+ *   - ".github/./workflows/x" → deny ".github/workflows/" 를 startsWith로 빠져나가지만 실제로는 같은 파일
+ *   - "src/../../etc/passwd" → allow "src/" 의 startsWith는 통과하지만 적용되면 repo 밖으로 탈출
+ *   - "src/../.github/workflows/x" → deny prefix를 빠져나가 보호 디렉터리로 진입
+ * 따라서 정책 매칭 이전에 segment 단위로 '.'·'..'·절대경로·백슬래시·NUL을 unsafe로 차단한다(fail-closed).
+ */
+function hasUnsafePathSegment(filePath: string): boolean {
+  if (filePath.includes("\0") || filePath.includes("\\")) return true;
+  if (filePath.startsWith("/")) return true;
+  return filePath.split("/").some((seg) => seg === "." || seg === "..");
+}
+
 export function runPathPolicy(
   handoff: RunnerPatchHandoff,
   policy: PathPolicyInput | undefined,
@@ -166,6 +180,12 @@ export function runPathPolicy(
   const violations: PathPolicyViolation[] = [];
 
   for (const file of handoff.files) {
+    // 정책(allow/deny)을 보기 전에 정규화-회피 경로부터 차단. allow/deny가 비어 있어도(=정책 미설정)
+    // '..' 탈출/'.' 회피는 그 자체로 unsafe라 fail-closed로 막는다.
+    if (hasUnsafePathSegment(file.path)) {
+      violations.push({ filePath: file.path, reason: "unsafe_path" });
+      continue;
+    }
     if (deny.some((p) => pathMatches(file.path, p))) {
       violations.push({ filePath: file.path, reason: "denied" });
       continue;
