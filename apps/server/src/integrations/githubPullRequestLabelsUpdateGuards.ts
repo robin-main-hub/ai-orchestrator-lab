@@ -110,10 +110,13 @@ export function computeLabelDiff(
   const currentSet = new Set(currentLabels);
   const addSet = new Set(addLabels);
   const removeSet = new Set(removeLabels);
+  // 우선순위: remove가 add보다 우세하다. 같은 이름을 add+remove하면(드물지만) add는 무효(noop)로
+  // 본다 — 라벨이 현재 없을 때도 마찬가지. 이전에는 not-present + add&remove인 이름이 final에
+  // 잘못 추가되어, "제거" 의도가 외부(GitHub PUT)에 "추가"로 뒤집히는 버그가 있었다.
   const actuallyAdded: string[] = [];
   const noopAdd: string[] = [];
   for (const name of addSet) {
-    if (currentSet.has(name)) noopAdd.push(name);
+    if (currentSet.has(name) || removeSet.has(name)) noopAdd.push(name);
     else actuallyAdded.push(name);
   }
   const actuallyRemoved: string[] = [];
@@ -122,8 +125,6 @@ export function computeLabelDiff(
     if (currentSet.has(name)) actuallyRemoved.push(name);
     else noopRemove.push(name);
   }
-  // 우선순위: remove가 add보다 우세하지만 같은 이름을 add+remove하는 건 드물고
-  // 사용자가 의도했더라도 결과는 "없음"이 정직하다 — 그래서 removeSet에 있으면 final에 안 넣는다.
   const final = new Set<string>(currentLabels);
   for (const name of actuallyRemoved) final.delete(name);
   for (const name of actuallyAdded) final.add(name);
