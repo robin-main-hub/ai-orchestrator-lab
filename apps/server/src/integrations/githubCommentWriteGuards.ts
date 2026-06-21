@@ -38,6 +38,9 @@ const SECRET_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
   { name: "GitHub server-to-server (ghs_)", pattern: /\bghs_[A-Za-z0-9]{20,}\b/ },
   { name: "GitHub user-to-server (ghu_)", pattern: /\bghu_[A-Za-z0-9]{20,}\b/ },
   { name: "GitHub refresh (ghr_)", pattern: /\bghr_[A-Za-z0-9]{20,}\b/ },
+  // 세분화(fine-grained) PAT — 2022년 이후 GitHub 권장 형식. 본문은 base62 + 내부 underscore.
+  // classic ghp_/gho_/... 패턴이 prefix가 달라 못 잡으므로 별도로 추가(false negative 방지).
+  { name: "GitHub fine-grained PAT (github_pat_)", pattern: /\bgithub_pat_[A-Za-z0-9_]{20,}\b/ },
   { name: "AWS access key", pattern: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: "Anthropic API key", pattern: /\bsk-ant-[A-Za-z0-9_-]{20,}\b/ },
   { name: "OpenAI API key", pattern: /\bsk-[A-Za-z0-9]{40,}\b/ },
