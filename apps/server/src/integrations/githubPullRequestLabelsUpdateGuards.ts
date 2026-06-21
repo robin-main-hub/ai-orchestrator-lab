@@ -32,8 +32,18 @@ export type PrLabelsUpdateBlockReason =
   | "allowlist"
   | "labels_too_many"
   | "label_too_long"
+  | "label_control_char"
   | "secret_suspect"
   | "empty_change";
+
+/**
+ * 제어문자(C0 0x00–0x1F, DEL 0x7F) 검출. 라벨 이름은 GitHub PUT·plan store·preview로
+ * 흘러가므로 줄바꿈/캐리지리턴/NUL 등이 섞이면 로그/응답 인젝션·표시 깨짐의 표면이 된다.
+ * (참고: protocol labelNameSchema의 `/^[^ -]+$/u` 정규식은 주석과 달리 제어문자를 거르지 못한다 —
+ *  space/hyphen만 부정 → \n·\t·\0 등이 통과. 그 schema 수정은 별도(overseer) 사안이고,
+ *  여기 게이트는 자체 문서 계약("제어문자 없음")을 defense-in-depth로 강제한다.)
+ */
+const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/u;
 
 function block(reason: PrLabelsUpdateBlockReason, message: string): PrLabelsUpdateGate {
   return { kind: "blocked", reason, message };
@@ -76,6 +86,10 @@ export function evaluatePrLabelsUpdateGate(input: {
     }
     if (trimmed.length > PR_LABEL_NAME_MAX_CHARS) {
       return block("label_too_long", `라벨 이름이 너무 깁니다(${PR_LABEL_NAME_MAX_CHARS}자 이내): '${trimmed.slice(0, 20)}…'`);
+    }
+    // 제어문자(줄바꿈/NUL/DEL 등) 차단 — 외부 PUT·plan store·preview 인젝션 표면.
+    if (CONTROL_CHAR_RE.test(trimmed)) {
+      return block("label_control_char", "라벨 이름에 제어문자가 포함되어 있습니다");
     }
     // 라벨 이름은 외부 표면에 보이므로 secret 패턴 차단(드물지만 봇이 잘못 잡아낼 수 있음).
     const scan = scanForSecrets(trimmed);

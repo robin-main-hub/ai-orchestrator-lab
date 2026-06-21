@@ -57,6 +57,25 @@ describe("evaluatePrLabelsUpdateGate — 안전선", () => {
     });
   });
 
+  it("라벨 이름에 제어문자(줄바꿈/CR/NUL/DEL)가 있으면 label_control_char", () => {
+    // protocol labelNameSchema의 /^[^ -]+$/u 정규식은 주석과 달리 제어문자를 거르지 못해
+    // (\n·\t·\0 등 통과) 게이트까지 도달한다. 게이트가 자체 계약("제어문자 없음")을
+    // defense-in-depth로 강제하는지 회귀. 외부 PUT·plan store·preview 인젝션 표면 차단.
+    for (const bad of ["a\nb", "a\rb", "a\tb", "a\u0000b", "a\u007fb", "a\u001bb"]) {
+      expect(evaluatePrLabelsUpdateGate({ ...base, addLabels: [bad] })).toMatchObject({
+        kind: "blocked",
+        reason: "label_control_char",
+      });
+    }
+    // remove 쪽 이름도 동일하게 검사된다.
+    expect(evaluatePrLabelsUpdateGate({ ...base, addLabels: ["bug"], removeLabels: ["x\ny"] })).toMatchObject({
+      kind: "blocked",
+      reason: "label_control_char",
+    });
+    // 정상 라벨(제어문자 없음)은 계속 통과.
+    expect(evaluatePrLabelsUpdateGate({ ...base, addLabels: ["bug"] }).kind).toBe("ok");
+  });
+
   it("라벨 이름에 secret 패턴이 있으면 secret_suspect", () => {
     // 라벨 이름 cap(50자) 아래여야 secret 스캔까지 도달 — classic ghp_ 토큰(런타임 조합).
     const tok = "ghp" + "_" + "A".repeat(24);
