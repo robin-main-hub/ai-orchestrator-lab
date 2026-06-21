@@ -77,6 +77,32 @@ describe("scanForSecrets", () => {
     expect(scanForSecrets("we use sk-learn-pipelines-and-transformers-extensively here")).toEqual({ ok: true });
   });
 
+  it("env-style 키워드 대입(PASSWORD=/API_KEY:/DB_TOKEN=)도 차단 — H8d 블로커·redactor엔 있는데 master만 놓쳤다(parity 회귀)", () => {
+    // 드리프트: prefix 없는 평문 비밀(.env의 password=… 형태)은 token prefix(ghp_/sk-/AKIA)도
+    // PEM 표식도 없어 위 규칙들을 전부 빠져나갔다(실측 ok:true). 형제 차단 게이트 H8d
+    // runnerPatchSafety(env_secret_assign)와 redactor errors.ts는 같은 규칙을 이미 갖는데
+    // master 차단 스캐너만 빠져, 같은 평문 비밀이 comment/PR·commit/file로 외부 push될 수 있었다.
+    // gitleaks가 PR diff에서 contiguous한 KEY=value 리터럴을 진짜 비밀로 오탐하므로 런타임 조합.
+    const eq = "=";
+    const colon = ": ";
+    for (const sample of [
+      "PASSWORD" + eq + "hunter2secretvalue",
+      "API_KEY" + eq + "abc123def456ghi789",
+      "DB_PASSWORD" + colon + "superlongsecret",
+      "AUTH_TOKEN" + eq + "zzzz1111yyyy2222",
+      "MY_ACCESS_TOKEN" + eq + "mmmmnnnnoooo",
+      "GITHUB_API-KEY " + eq + " qqqqwwwweeee",
+    ]) {
+      const verdict = scanForSecrets(sample);
+      expect(verdict.ok, `should block: ${sample}`).toBe(false);
+      if (!verdict.ok) expect(verdict.matched).toContain("env-style");
+    }
+    // 오탐 방지: 대입(=/:)+값이 아닌 산문은 통과 — 키워드 단어만 있고 토큰 형태가 아님.
+    expect(scanForSecrets("the password is required for login")).toEqual({ ok: true });
+    expect(scanForSecrets("see the token bucket algorithm docs")).toEqual({ ok: true });
+    expect(scanForSecrets("rotate your secret regularly please")).toEqual({ ok: true });
+  });
+
   it("정상 본문은 통과", () => {
     expect(scanForSecrets("이 PR의 변경 의도를 확인했습니다. 이대로 머지 가능합니다.")).toEqual({ ok: true });
   });
