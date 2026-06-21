@@ -80,4 +80,24 @@ describe("experimental autorun safety", () => {
       expect(redacted).not.toContain(raw);
     }
   });
+
+  it("redacts prefixed env-secret assignments (SESSION_TOKEN=, DB_PASSWORD=, MY_SECRET=) — H8d/W1 parity", () => {
+    // 드리프트 버그: bare keyword 규칙은 keyword를 \b 경계에 바로 둬, `_`(word char)로 이어진
+    // 변수명(SESSION_TOKEN 등) 안엔 \b가 없어 prefixed 변수명을 통째로 놓쳤다(실측 false-negative —
+    // SESSION_TOKEN=value가 redact 없이 publish 표면으로 노출). H8d env_secret_assign·W1과 동일한
+    // [A-Za-z0-9_]* 래핑으로 parity.
+    // gitleaks 회피: name=value 리터럴을 연속으로 두지 않고 런타임에 `+`로 조합(가짜 placeholder 값).
+    const val = (a: string, b: string) => a + b;
+    const cases = [
+      { name: "SESSION_TOKEN", value: val("tok", "enplaceholder11") },
+      { name: "DB_PASSWORD", value: val("pw", "placeholder2233") },
+      { name: "MY_SECRET", value: val("placeholder", "val5566") },
+      { name: "VITE_ACCESS_TOKEN", value: val("acc", "placeholder7788") },
+    ];
+    const redacted = redactForPublishPhase(cases.map((c) => c.name + "=" + c.value).join("\n"));
+    for (const c of cases) {
+      expect(redacted).toContain(c.name + "=[REDACTED]");
+      expect(redacted).not.toContain(c.value);
+    }
+  });
 });

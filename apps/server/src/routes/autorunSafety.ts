@@ -59,6 +59,14 @@ const SECRET_LIKE_PATTERNS: ReadonlyArray<[RegExp, string]> = [
   [/\bxox[abposr]-[A-Za-z0-9-]{10,}/g, "[REDACTED:slack_token]"],
   [/("|')(api[_-]?key|auth[_-]?token|access[_-]?token|refresh[_-]?token|secret|password|private[_-]?key)\1\s*:\s*("|')[^"']+\3/gi, "$1$2$1: $3[REDACTED]$3"],
   [/\b(api[_-]?key|auth[_-]?token|access[_-]?token|refresh[_-]?token|secret|password|private[_-]?key)\s*[:=]\s*["']?[^"'\s,}]+/gi, "$1=[REDACTED]"],
+  // 위 두 규칙은 keyword를 \b 경계에 *바로* 둬, prefix/suffix가 붙은 변수명(SESSION_TOKEN=,
+  // DB_PASSWORD=, MY_SECRET=, MY_API_KEY=)을 통째로 놓쳤다(실측 false-negative — `_`가 word char라
+  // SESSION_TOKEN 안엔 \b가 없어 bare keyword 규칙이 매칭 못 함). 형제 차단 스캐너 H8d
+  // runnerPatchSafety.env_secret_assign과 W1 githubCommentWriteGuards는 둘 다 [A-Za-z0-9_]* 래핑으로
+  // prefixed 변수명을 잡는데 이 publish-phase redactor만 빠져, 명령 stdout/stderr의 `SESSION_TOKEN=…`
+  // 같은 평문 비밀이 LLM fix 프롬프트·report 응답(외부 노출)으로 새어나갔다. 같은 형태로 parity.
+  // $1=변수명 전체 → 값만 가린다. 따옴표 값은 위 60번 규칙이 처리(여긴 비-따옴표 값만).
+  [/\b([A-Za-z0-9_]*(?:API[_-]?KEY|AUTH[_-]?TOKEN|ACCESS[_-]?TOKEN|SECRET|PASSWORD|TOKEN)[A-Za-z0-9_]*)\s*[=:]\s*[^\s"'`]+/gi, "$1=[REDACTED]"],
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "[REDACTED:private_key]"],
 ];
 
