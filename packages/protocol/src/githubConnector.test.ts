@@ -16,6 +16,9 @@ import {
   githubCommentWriteExecuteResponseSchema,
   githubCommentWriteOutcomeSchema,
   githubCommentWritePlanRequestSchema,
+  githubConnectorModeSchema,
+  githubConnectorStatusSchema,
+  githubConnectorStatusResponseSchema,
   githubContextAttachmentSchema,
   githubContextSourceKindSchema,
   githubFileContentSchema,
@@ -784,5 +787,60 @@ describe("githubConnector — read-only context attachment is an observed-only, 
       const { [key]: _omit, ...partial } = file as Record<string, unknown>;
       expect(githubFileContentSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
     }
+  });
+});
+
+// The connector STATUS gate — the read-model that says whether the connector is
+// even usable — is unpinned. Its authority story is twofold: (1) the mode is the
+// literal "read_only", so the status can never advertise a write mode at the type
+// level; (2) the token lives only on the server, so the status carries booleans
+// (configured/tokenPresent) about a token but NEVER the token value. Nothing pins
+// that mode is locked, that the id is the literal "github", or that a smuggled
+// token key is stripped rather than retained. Pin the connector-status gate.
+describe("githubConnector — status gate: read_only mode lock, github identity literal, token-presence booleans never the token", () => {
+  const status = {
+    id: "github" as const,
+    name: "GitHub",
+    mode: "read_only" as const,
+    configured: false,
+    tokenPresent: false,
+    scopesNeeded: ["repo"],
+    note: "Set GITHUB_TOKEN on the server to enable read-only access.",
+  };
+
+  it("locks mode to the literal 'read_only' and the id to the literal 'github'", () => {
+    expect(githubConnectorModeSchema.safeParse("read_only").success).toBe(true);
+    // a write mode can't be claimed at the type level
+    expect(githubConnectorModeSchema.safeParse("read_write").success).toBe(false);
+    expect(githubConnectorModeSchema.safeParse("write").success).toBe(false);
+    expect(githubConnectorStatusSchema.safeParse(status).success).toBe(true);
+    expect(githubConnectorStatusSchema.safeParse({ ...status, mode: "read_write" }).success).toBe(false);
+    expect(githubConnectorStatusSchema.safeParse({ ...status, id: "gitlab" }).success).toBe(false);
+  });
+
+  it("carries token-presence as booleans and STRIPS any smuggled token value — the status never holds the secret", () => {
+    // the status reports only whether a token is present, never its value
+    const fakeToken = "ghp_" + "x".repeat(36); // assembled at runtime so secret-scan sees no literal credential
+    const parsed = githubConnectorStatusSchema.parse({ ...status, token: fakeToken, accessToken: fakeToken } as Record<string, unknown>);
+    expect("token" in parsed).toBe(false); // plain object strips the unknown key — the secret can't ride along
+    expect("accessToken" in parsed).toBe(false);
+    expect(parsed.tokenPresent).toBe(false);
+    expect(parsed.configured).toBe(false);
+    // the gate spine is mandatory — none of the configure/scope/note signals may be dropped
+    for (const key of ["id", "name", "mode", "configured", "tokenPresent", "scopesNeeded", "note"]) {
+      const { [key]: _omit, ...partial } = status as Record<string, unknown>;
+      expect(githubConnectorStatusSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("the status response simply envelopes a full status object", () => {
+    expect(githubConnectorStatusResponseSchema.safeParse({ status }).success).toBe(true);
+    // the envelope requires the status — it can't report an empty gate
+    expect(githubConnectorStatusResponseSchema.safeParse({}).success).toBe(false);
+    const armed = githubConnectorStatusResponseSchema.parse({
+      status: { ...status, configured: true, tokenPresent: true, note: "Live read-only access enabled." },
+    });
+    expect(armed.status.configured).toBe(true);
+    expect(armed.status.mode).toBe("read_only"); // still read_only even when fully configured
   });
 });
