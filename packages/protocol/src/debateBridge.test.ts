@@ -3,8 +3,10 @@ import {
   blueprintDebateReviewSchema,
   buildBlueprintRevisionDraft,
   debateDecisionKindSchema,
+  debateDecisionPacketSchema,
   debateDecisionToBlueprintInput,
   deriveBlueprintDebateReview,
+  missionFromDebateRequestSchema,
   recommendedDebateNextActionSchema,
   shouldDebateBeforeMission,
   type DebateDecisionPacket,
@@ -224,5 +226,72 @@ describe("buildBlueprintRevisionDraft", () => {
     const before = JSON.stringify(frozenBase);
     buildBlueprintRevisionDraft(REVIEW_BASE, frozenBase);
     expect(JSON.stringify(frozenBase)).toBe(before);
+  });
+});
+
+// 위 스위트들은 함수(shouldDebate/derive/build/toBlueprintInput)의 행위를 핀했지만, 다리의
+// 두 입력 스키마 자체 — debateDecisionPacketSchema와 missionFromDebateRequestSchema — 는 직접
+// 검증된 적이 없다. 아직 안 묶인 권위면: (1) 패킷은 핵심 4필드(id/debateId/kind/summary)를
+// 요구하고 결정/반려/미해결 3배열은 "정직한 빈배열"로 default([]) — 누락을 추측으로 채우지
+// 않는다; kind는 닫힌 3-enum이고, optional blueprintRef/missionDraftRef/blueprintReview는
+// 없으면 undefined로 남는다(조작 금지); blueprintReview는 transitive로 embed되어 truthStatus
+// z.literal("generated")가 아니면(가짜 관측) 패킷째 가라앉는다. (2) **schema-vs-function
+// 권위**: 스키마는 adoptedDecisions를 []로 허용(빈 결정도 *유효한* 패킷)하지만 승격 게이트는
+// 함수에 있다 — debateDecisionToBlueprintInput이 빈 결정 패킷을 null로 거부(말잔치 금지,
+// docs/85). (3) request는 packet을 요구+transitive(내부 kind가 깨지면 침몰)하고 optional
+// missionId(1..128)/createdBy(≤64)/targetSurface는 없으면 조작 안 하며, plain z.object라
+// 서버배정 키를 몰래 실으면 strip된다. 픽스처는 실제 packet()/deriveBlueprintDebateReview
+// 출력에서 derive(자기일관).
+describe("debateBridge — 입력 스키마 경계: 정직한 빈배열 default, 닫힌 kind, transitive review embed, schema-vs-function 승격 게이트, no-smuggle", () => {
+  const REVIEW = deriveBlueprintDebateReview({ title: "대시보드 개편", acceptanceCriteria: [] }, packet());
+
+  it("핵심 4필드를 요구하고 결정/반려/미해결 3배열은 default([])로 정직하게 채운다(추측 X)", () => {
+    const minimal = debateDecisionPacketSchema.parse({ id: "dp1", debateId: "d1", kind: "design", summary: "s" });
+    expect(minimal.adoptedDecisions).toEqual([]);
+    expect(minimal.rejectedOptions).toEqual([]);
+    expect(minimal.openQuestions).toEqual([]);
+    for (const field of ["id", "debateId", "kind", "summary"] as const) {
+      const { [field]: _omit, ...without } = packet();
+      expect(debateDecisionPacketSchema.safeParse(without).success).toBe(false);
+    }
+  });
+
+  it("kind는 닫힌 3-enum이고 optional ref/review는 없으면 조작하지 않는다", () => {
+    expect(debateDecisionKindSchema.options).toEqual(["coding", "design", "architecture"]);
+    expect(debateDecisionPacketSchema.safeParse({ ...packet(), kind: "marketing" }).success).toBe(false);
+    const p = debateDecisionPacketSchema.parse(packet());
+    expect(p.blueprintRef).toBeUndefined();
+    expect(p.missionDraftRef).toBeUndefined();
+    expect(p.blueprintReview).toBeUndefined();
+  });
+
+  it("blueprintReview는 transitive embed — truthStatus가 'generated'가 아니면 패킷째 가라앉는다(가짜 관측 금지)", () => {
+    const withReview = debateDecisionPacketSchema.parse({ ...packet(), blueprintReview: REVIEW });
+    expect(withReview.blueprintReview?.truthStatus).toBe("generated");
+    expect(blueprintDebateReviewSchema.safeParse(REVIEW).success).toBe(true);
+    expect(
+      debateDecisionPacketSchema.safeParse({ ...packet(), blueprintReview: { ...REVIEW, truthStatus: "observed" } }).success,
+    ).toBe(false);
+  });
+
+  it("schema-vs-function 권위: 스키마는 빈 결정 패킷을 허용하지만 승격 게이트(toBlueprintInput)가 null로 거부한다", () => {
+    const emptyDecisions = debateDecisionPacketSchema.parse({ id: "dp1", debateId: "d1", kind: "design", summary: "s" });
+    expect(emptyDecisions.adoptedDecisions).toEqual([]); // 스키마는 유효로 통과
+    expect(debateDecisionToBlueprintInput(emptyDecisions)).toBeNull(); // 함수가 거부(말잔치 금지)
+    expect(debateDecisionToBlueprintInput(packet())).not.toBeNull(); // 결정이 있으면 승격
+  });
+
+  it("request는 packet을 요구+transitive하고 optional 필드는 조작 안 하며 서버배정 키는 strip된다", () => {
+    const req = missionFromDebateRequestSchema.parse({ packet: packet() });
+    expect(req.missionId).toBeUndefined();
+    expect(req.createdBy).toBeUndefined();
+    expect(req.targetSurface).toBeUndefined();
+    expect(missionFromDebateRequestSchema.safeParse({}).success).toBe(false); // packet 필수
+    expect(missionFromDebateRequestSchema.safeParse({ packet: { ...packet(), kind: "marketing" } }).success).toBe(false); // transitive
+    expect(missionFromDebateRequestSchema.safeParse({ packet: packet(), missionId: "" }).success).toBe(false); // min 1
+    expect(missionFromDebateRequestSchema.safeParse({ packet: packet(), missionId: "m".repeat(129) }).success).toBe(false); // max 128
+    expect(missionFromDebateRequestSchema.safeParse({ packet: packet(), createdBy: "u".repeat(65) }).success).toBe(false); // max 64
+    const smuggled = missionFromDebateRequestSchema.parse({ packet: packet(), serverAssigned: "x" } as Record<string, unknown>);
+    expect("serverAssigned" in smuggled).toBe(false); // plain z.object strips
   });
 });
