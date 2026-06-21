@@ -17,6 +17,8 @@ import {
   agentSessionSchema,
   approvalDecisionRequestSchema,
   approvalRequestSchema,
+  approvalReplayKindSchema,
+  approvalReplayRequestSchema,
   approvalStateSchema,
   permissionActionSchema,
   permissionActorSchema,
@@ -1778,5 +1780,116 @@ describe("index — ingress provenance + redaction boundary: closed trust ladder
     // phase/scope are drawn from the closed enums — a rule can't target an unknown boundary or plane
     expect(redactionRuleSchema.safeParse({ ...base, phase: "post_send" }).success).toBe(false);
     expect(redactionRuleSchema.safeParse({ ...base, scope: "memory" }).success).toBe(false);
+  });
+});
+
+// The pre-existing happy-path test (line ~1297) parses ONE approvalRequest with
+// NO replay attached and never inspects the replay surface: the closed set of
+// replayable kinds, the request envelope's .strict()/POST-only/bounded-endpoint
+// guard, the convergence of authority primitives the approval is built from, or
+// the honesty of its optional fields. A replay aimed at an unknown kind, a GET
+// smuggled past the POST-only gate, an approval whose actor/channel/decision came
+// from outside its closed enum, or a fabricated ttl/replay would all pass today.
+// Pin the replay boundary + approval composition, self-consistent (kinds/enums
+// derived from the schemas' own declared options). Generic OS only.
+describe("index — approval-replay authority: closed replay kinds, POST-only strict envelope, honest composition", () => {
+  it("pins the 4 replayable kinds and the strict, POST-only, bounded replay envelope", () => {
+    expect(approvalReplayKindSchema.options).toEqual([
+      "provider_completion",
+      "agent_delegation",
+      "remote_run",
+      "tmux_dispatch",
+    ]);
+    const replay = {
+      kind: "provider_completion" as const,
+      endpoint: "/internal/replay/provider",
+      method: "POST" as const,
+      payload: { prompt: "redacted" },
+    };
+    expect(approvalReplayRequestSchema.safeParse(replay).success).toBe(true);
+    // payload is z.unknown() — optional, never fabricated when absent
+    const { payload: _omitPayload, ...withoutPayload } = replay;
+    expect(approvalReplayRequestSchema.safeParse(withoutPayload).success).toBe(true);
+    // method is POST-only — no other verb may replay a once-approved effect
+    expect(approvalReplayRequestSchema.safeParse({ ...replay, method: "GET" }).success).toBe(false);
+    // a replay can't aim at an unknown kind
+    expect(approvalReplayRequestSchema.safeParse({ ...replay, kind: "ad_hoc" }).success).toBe(false);
+    // endpoint is bounded: empty and >512 are rejected, both ends honored
+    expect(approvalReplayRequestSchema.safeParse({ ...replay, endpoint: "" }).success).toBe(false);
+    expect(approvalReplayRequestSchema.safeParse({ ...replay, endpoint: "/".padEnd(512, "x") }).success).toBe(true);
+    expect(approvalReplayRequestSchema.safeParse({ ...replay, endpoint: "/".padEnd(513, "x") }).success).toBe(false);
+    // .strict() — an unknown key cannot ride along inside the replay envelope
+    expect(approvalReplayRequestSchema.safeParse({ ...replay, headers: { auth: "x" } }).success).toBe(false);
+  });
+
+  it("composes an approval from closed authority primitives — each cross-typed field rejects an out-of-vocabulary value", () => {
+    const base = {
+      id: "approval_1",
+      sessionId: "session_1",
+      subjectId: "subject_1",
+      actor: "agent" as const,
+      channel: "agent" as const,
+      sourceTrust: "limited" as const,
+      action: "provider_completion" as const,
+      requestedLevels: ["network_access"],
+      decision: "approval_required" as const,
+      state: "required" as const,
+      reason: "needs approval",
+      createdAt: "2026-06-21T00:00:00.000Z",
+    };
+    expect(approvalRequestSchema.safeParse(base).success).toBe(true);
+    // every authority-typed field is drawn from a closed enum — a stranger value is rejected
+    expect(approvalRequestSchema.safeParse({ ...base, actor: "ghost" }).success).toBe(false);
+    expect(approvalRequestSchema.safeParse({ ...base, channel: "carrier_pigeon" }).success).toBe(false);
+    expect(approvalRequestSchema.safeParse({ ...base, sourceTrust: "absolute" }).success).toBe(false);
+    expect(approvalRequestSchema.safeParse({ ...base, action: "launch_missile" }).success).toBe(false);
+    expect(approvalRequestSchema.safeParse({ ...base, decision: "maybe" }).success).toBe(false);
+    expect(approvalRequestSchema.safeParse({ ...base, state: "limbo" }).success).toBe(false);
+    expect(approvalRequestSchema.safeParse({ ...base, requestedLevels: ["root_access"] }).success).toBe(false);
+    // the identity/justification spine is mandatory — none of it may be silently dropped
+    for (const key of ["id", "sessionId", "subjectId", "actor", "channel", "sourceTrust", "action", "decision", "state", "reason", "createdAt"]) {
+      const { [key]: _omit, ...partial } = base as Record<string, unknown>;
+      expect(approvalRequestSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("never fabricates optional fields and round-trips an attached replay with positive-int ttl", () => {
+    const base = {
+      id: "approval_2",
+      sessionId: "session_2",
+      subjectId: "subject_2",
+      actor: "user" as const,
+      channel: "desktop" as const,
+      sourceTrust: "trusted" as const,
+      action: "deploy" as const,
+      requestedLevels: ["network_access"],
+      decision: "allow" as const,
+      state: "approved" as const,
+      reason: "operator approved",
+      createdAt: "2026-06-21T00:00:00.000Z",
+    };
+    const minimal = approvalRequestSchema.parse(base);
+    // optional fields stay undefined — an approval invents neither a replay nor a budget/expiry
+    expect(minimal.replay).toBeUndefined();
+    expect(minimal.ttlSeconds).toBeUndefined();
+    expect(minimal.costEstimateTokens).toBeUndefined();
+    expect(minimal.expiresAt).toBeUndefined();
+    expect(minimal.sourceItemId).toBeUndefined();
+    // ttlSeconds is a positive int — 0 and fractions are not a window
+    expect(approvalRequestSchema.safeParse({ ...base, ttlSeconds: 0 }).success).toBe(false);
+    expect(approvalRequestSchema.safeParse({ ...base, ttlSeconds: 1.5 }).success).toBe(false);
+    // an attached replay survives the round-trip intact
+    const withReplay = approvalRequestSchema.parse({
+      ...base,
+      ttlSeconds: 600,
+      replay: { kind: "remote_run", endpoint: "/internal/replay/remote", method: "POST", payload: { runId: "r1" } },
+    });
+    expect(withReplay.ttlSeconds).toBe(600);
+    expect(withReplay.replay).toEqual({
+      kind: "remote_run",
+      endpoint: "/internal/replay/remote",
+      method: "POST",
+      payload: { runId: "r1" },
+    });
   });
 });
