@@ -49,6 +49,18 @@ describe("scanForSecrets", () => {
     if (!verdict.ok) expect(verdict.matched).toContain("github_pat_");
   });
 
+  it("GitLab PAT(glpat-)도 차단 — providers redactor는 잡는데 master 차단 스캐너는 놓쳤다(parity 회귀)", () => {
+    // 드리프트: providers errors.ts redactSecretsForLog는 glpat을 비밀로 보고 마스킹하는데,
+    // 외부 push 본문을 막는 이 master 차단 스캐너엔 glpat 규칙이 없어 통째로 흘려보냈다(실측
+    // ok:true). gitleaks 회피 위해 런타임 조합. GitLab PAT는 glpat- + 20자.
+    const glpat = "gl" + "pat-" + "Ab3xZ9kLmNpQ7rSt2UvW";
+    const verdict = scanForSecrets(`토큰 노출: ${glpat} 입니다`);
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.matched).toContain("GitLab PAT");
+    // 산문에 'glpat'라는 단어만 있고 토큰 형태(- + 20자)가 아니면 오탐 아님.
+    expect(scanForSecrets("the glpat prefix denotes a GitLab token")).toEqual({ ok: true });
+  });
+
   it("헤더 없이 노출된 bare bearer 토큰도 차단(회귀: Authorization: 접두 없으면 빠져나갔다)", () => {
     // `Authorization: Bearer` 규칙은 헤더 형태만 잡아, 따옴표 안/설정값으로 들어온 토큰은
     // false-negative였다. H8d는 generic Bearer로 잡는데 W1 공유 스캐너엔 없어 parity gap.
