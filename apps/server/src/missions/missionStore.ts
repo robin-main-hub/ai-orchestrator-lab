@@ -553,7 +553,7 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
           if (!parsed.success) {
             throw new MissionEventValidationError(`invalid artifact payload: ${parsed.error.message}`);
           }
-          if (parsed.data.missionId !== missionId) {
+          if (parsed.data.missionId !== missionId || parsed.data.artifact.missionId !== missionId) {
             throw new MissionEventValidationError("artifact missionId mismatch");
           }
           payload = parsed.data;
