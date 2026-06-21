@@ -177,7 +177,7 @@ export function parseProviderCredentialInput(
     detectPlainApiKey(raw);
   const format = detectInputFormat(raw, env, jsonEnv);
   const providerKind = detectProviderKind(raw, env, baseUrl);
-  const trustLevel = detectTrustLevel(providerKind, baseUrl, raw);
+  const trustLevel = detectTrustLevel(providerKind, baseUrl);
   const defaultModel = detectDefaultModel(providerKind, raw);
   const tags = createProviderTags(format, trustLevel, baseUrl);
 
@@ -586,9 +586,41 @@ function detectProviderKind(raw: string, env: Record<string, string>, baseUrl?: 
   return "custom";
 }
 
-function detectTrustLevel(providerKind: ProviderKind, baseUrl: string | undefined, raw: string): ProviderTrustLevel {
-  const lower = `${baseUrl ?? ""} ${raw}`.toLowerCase();
-  if (providerKind === "ollama" || providerKind === "lmstudio" || lower.includes("api.openai.com")) {
+/**
+ * Parse a base URL's hostname for trust decisions. Accepts scheme-less inputs
+ * (treated as https) and returns undefined for anything unparseable — fail
+ * closed, so a malformed endpoint is never mistaken for an official host.
+ */
+function parseHostname(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  for (const candidate of [url, `https://${url}`]) {
+    try {
+      return new URL(candidate).hostname.toLowerCase();
+    } catch {
+      // try the scheme-prefixed form next
+    }
+  }
+  return undefined;
+}
+
+/**
+ * True only when `host` IS `domain` or a real subdomain of it. Crucially this
+ * rejects lookalikes (`api.openai.com.evil.com`), path embeds
+ * (`evil.com/api.anthropic.com`) and userinfo tricks
+ * (`api.anthropic.com@evil.com`) that a raw substring match would wrongly trust.
+ */
+function isHostOfDomain(host: string | undefined, domain: string): boolean {
+  if (!host) return false;
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
+function detectTrustLevel(providerKind: ProviderKind, baseUrl: string | undefined): ProviderTrustLevel {
+  // Official-endpoint trust is decided on the parsed *hostname* of the base URL,
+  // never a substring of the raw blob — otherwise a hostile lookalike host that
+  // merely contains "api.openai.com"/"api.anthropic.com" would escape the
+  // "untrusted" classification that quarantines it from sensitive memory recall.
+  const host = parseHostname(baseUrl);
+  if (providerKind === "ollama" || providerKind === "lmstudio" || isHostOfDomain(host, "api.openai.com")) {
     return "trusted";
   }
 
@@ -596,7 +628,7 @@ function detectTrustLevel(providerKind: ProviderKind, baseUrl: string | undefine
     return "limited";
   }
 
-  if (baseUrl && !lower.includes("api.anthropic.com")) {
+  if (baseUrl && !isHostOfDomain(host, "api.anthropic.com")) {
     return "untrusted";
   }
 
