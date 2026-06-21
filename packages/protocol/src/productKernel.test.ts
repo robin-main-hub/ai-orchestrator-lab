@@ -8,11 +8,15 @@ import {
   missionVerificationRecordedPayloadSchema,
   missionVerifyRequestSchema,
   missionWorkerAssignmentRequestSchema,
+  missionArtifactKindSchema,
+  missionArtifactRefSchema,
   missionCapabilityModeSchema,
   missionToolNameSchema,
   missionWorkerAssignmentSchema,
   missionWorkerCapabilitySchema,
   missionWorkerStatusSchema,
+  verificationCheckSchema,
+  verificationCheckStatusSchema,
   hermesContinuityPolicySchema,
   personaContinuitySpecSchema,
   personaIdentityFileKindSchema,
@@ -622,5 +626,93 @@ describe("productKernel — mission worker capability matrix: fully-explicit, cl
     expect(missionWorkerCapabilitySchema.safeParse(neither).success).toBe(true);
     const mutateOnly = { ...capability, canMutateFiles: true, canRunCommands: false };
     expect(missionWorkerCapabilitySchema.safeParse(mutateOnly).success).toBe(true);
+  });
+});
+
+// verificationReport + sequentialMergeQueueItem are already pinned (observed flag,
+// real-sha-only). But the EVIDENCE CHAIN they sit on top of — the artifact ref
+// (a captured output) and the verification check (one command result that LINKS to
+// stdout/stderr artifacts rather than inlining them) — is unpinned. This chain is
+// where verification honesty is grounded: a report is only as truthful as the
+// observed artifacts and checks beneath it.
+//   (26) the artifact kind is a CLOSED evidence vocabulary (diff/patch/test_report/
+//        …/screenshot/memory_note) — no arbitrary evidence type.
+//   (27) an artifact ref carries its OWN truthStatus (it knows whether it was
+//        observed vs merely configured/planned) and a summary; id/missionId/kind
+//        are mandatory while workerAssignmentId/path/contentHash stay undefined when
+//        absent — a path or hash is never fabricated for an artifact that has none.
+//   (28) a verification check links stdout/stderr to ARTIFACT IDS, never inlines the
+//        output — a smuggled inline `stdout` string is dropped (evidence lives in
+//        the artifact store, not the check record).
+//   (29) check status is an honest 4-state (passed/failed/warning/skipped) — no bare
+//        "ok"/"success"; and exitCode is an OPTIONAL int, never defaulted to 0 (a
+//        running/skipped check must not falsely imply a clean exit).
+// Expected values are read off the schemas (self-consistent), never magic.
+describe("productKernel — verification evidence chain: closed artifact kinds, no inlined output, no fabricated exit", () => {
+  const artifact = {
+    id: "art1",
+    missionId: "m1",
+    kind: "stdout" as const,
+    summary: "build log tail",
+    truthStatus: "observed" as const,
+    createdAt: "2026-06-21T00:00:00.000Z",
+  };
+  const check = {
+    id: "vc1",
+    command: "pnpm test",
+    status: "passed" as const,
+    summary: "all green",
+    startedAt: "2026-06-21T00:00:00.000Z",
+  };
+
+  it("the artifact kind is a closed evidence vocabulary", () => {
+    expect(missionArtifactKindSchema.options).toEqual([
+      "diff",
+      "patch",
+      "test_report",
+      "verification_report",
+      "stdout",
+      "stderr",
+      "markdown_report",
+      "screenshot",
+      "memory_note",
+    ]);
+    expect(missionArtifactKindSchema.safeParse("video").success).toBe(false);
+  });
+
+  it("an artifact ref carries its own truthStatus + summary and never fabricates path/contentHash/worker links", () => {
+    const parsed = missionArtifactRefSchema.parse(artifact);
+    expect(parsed.workerAssignmentId).toBeUndefined();
+    expect(parsed.path).toBeUndefined();
+    expect(parsed.contentHash).toBeUndefined(); // no synthetic hash for an artifact that has none
+    const { summary: _s, ...withoutSummary } = artifact;
+    expect(missionArtifactRefSchema.safeParse(withoutSummary).success).toBe(false);
+    const { truthStatus: _t, ...withoutTruth } = artifact;
+    expect(missionArtifactRefSchema.safeParse(withoutTruth).success).toBe(false); // an artifact must declare its truth
+  });
+
+  it("a verification check links stdout/stderr to ARTIFACT IDS and never inlines the raw output", () => {
+    const linked = verificationCheckSchema.parse({ ...check, stdoutArtifactId: "art1", stderrArtifactId: "art2" });
+    expect(linked.stdoutArtifactId).toBe("art1");
+    // a smuggled inline stdout/stderr string is dropped — evidence lives in the artifact store
+    const smuggled = verificationCheckSchema.parse({ ...check, stdout: "secret raw output", stderr: "trace" } as Record<string, unknown>);
+    expect("stdout" in smuggled).toBe(false);
+    expect("stderr" in smuggled).toBe(false);
+    // a check must name what it ran
+    const { command: _c, ...withoutCommand } = check;
+    expect(verificationCheckSchema.safeParse(withoutCommand).success).toBe(false);
+  });
+
+  it("check status is an honest 4-state and exitCode is optional — never defaulted to a clean 0", () => {
+    expect(verificationCheckStatusSchema.options).toEqual(["passed", "failed", "warning", "skipped"]);
+    for (const forged of ["ok", "success", "green", "done"]) {
+      expect(verificationCheckStatusSchema.options).not.toContain(forged);
+    }
+    // a skipped check with no exit code stays undefined — not a misleading 0
+    const skipped = verificationCheckSchema.parse({ ...check, status: "skipped" });
+    expect(skipped.exitCode).toBeUndefined();
+    expect(skipped.completedAt).toBeUndefined(); // a not-yet-finished check doesn't fabricate an end time
+    expect(verificationCheckSchema.safeParse({ ...check, exitCode: 1.5 }).success).toBe(false); // int only
+    expect(verificationCheckSchema.parse({ ...check, status: "failed", exitCode: 1 }).exitCode).toBe(1);
   });
 });
