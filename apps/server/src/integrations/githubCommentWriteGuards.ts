@@ -41,6 +41,13 @@ const SECRET_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
   // 세분화(fine-grained) PAT — 2022년 이후 GitHub 권장 형식. 본문은 base62 + 내부 underscore.
   // classic ghp_/gho_/... 패턴이 prefix가 달라 못 잡으므로 별도로 추가(false negative 방지).
   { name: "GitHub fine-grained PAT (github_pat_)", pattern: /\bgithub_pat_[A-Za-z0-9_]{20,}\b/ },
+  // GitLab PAT — `glpat-` + 20자. providers redactor(errors.ts SECRET_LIKE_PATTERNS)는 이미
+  // glpat을 비밀로 보고 마스킹하는데, 외부로 push되는 본문을 막는 이 master *차단* 스캐너는
+  // glpat을 통째로 흘려보냈다(실측 ok:true — false-negative). 토큰 차단 게이트와 redact 게이트
+  // 사이 taxonomy drift. AWS/Slack/Google처럼 OS가 직접 쓰지 않는 서비스의 토큰도 generic하게
+  // 잡는 스캐너 성격이라(이 파일 philosophy: FN을 FP보다 두려워함) 같은 강도로 추가. glpat-는
+  // 산문 오탐이 사실상 0인 specific prefix라 named-prefix house style과도 맞는다.
+  { name: "GitLab PAT (glpat-)", pattern: /\bglpat-[A-Za-z0-9_-]{20,}\b/ },
   { name: "AWS access key", pattern: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: "Anthropic API key", pattern: /\bsk-ant-[A-Za-z0-9_-]{20,}\b/ },
   { name: "OpenAI API key", pattern: /\bsk-[A-Za-z0-9]{40,}\b/ },
