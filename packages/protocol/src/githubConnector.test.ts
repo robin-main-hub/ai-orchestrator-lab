@@ -32,15 +32,19 @@ import {
   githubFileChangeOperationSchema,
   githubFileChangeOutcomeSchema,
   githubFileChangePlanRequestSchema,
+  githubFileChangePlanResponseSchema,
   githubFileChangePlanSchema,
   githubMultiFileCommitExecuteRequestSchema,
   githubMultiFileCommitExecuteResponseSchema,
+  githubMultiFileCommitFileSchema,
   githubMultiFileCommitOutcomeSchema,
+  githubPullRequestCompareFileSchema,
   githubPullRequestCompareSummarySchema,
   githubPullRequestCreateExecuteRequestSchema,
   githubPullRequestCreateExecuteResponseSchema,
   githubPullRequestCreateOutcomeSchema,
   githubPullRequestCreatePlanRequestSchema,
+  githubPullRequestCreatePlanResponseSchema,
   githubPullRequestCreatePlanSchema,
   githubPullRequestLabelsUpdateExecuteRequestSchema,
   githubPullRequestLabelsUpdateExecuteResponseSchema,
@@ -1299,5 +1303,63 @@ describe("githubConnector — W5d PR-labels plan record: TOCTOU hash + honest fo
     const withPlan = githubPullRequestLabelsUpdatePlanResponseSchema.parse({ outcome: "planned", plan: validPlan });
     expect(withPlan.plan?.id).toBe("plan_1");
     expect(githubPullRequestLabelsUpdatePlanResponseSchema.safeParse({ plan: validPlan }).success).toBe(false); // outcome required
+  });
+});
+
+// Residual cleanup: the remaining unreferenced githubConnector exports are two
+// LEAF row schemas embedded in the bigger plans, and two plan-response ENVELOPES
+// whose sibling envelopes are already pinned. They carry the same authority/honesty
+// spirit at the smallest grain:
+//   - the multi-file-commit FILE row is a {path, newContent} pair only — path is
+//     bounded 1..512 and BOTH fields are required (no half-specified file), and the
+//     plain object STRIPS any extra key (e.g. a smuggled `mode`/`sha`), so a file row
+//     can't carry side-channel instructions into the atomic commit;
+//   - the PR-compare FILE row is a {filename, status, additions, deletions} stat line
+//     where additions/deletions are nonnegative ints (a diff stat is never negative);
+//   - the single-file-change and PR-create plan-response ENVELOPES share the exact
+//     {outcome, plan?, message?} contract every other write envelope uses — outcome
+//     required, plan absent (not fabricated) on a blocked outcome, message never
+//     invented. Pin the envelope invariant once across both.
+// Expected values are read off the schema's own declared shape (self-consistent).
+describe("githubConnector — residual: leaf file rows are strict-required, plan-response envelopes share the {outcome, plan?, message?} invariant", () => {
+  it("multi-file-commit file row: path 1..512 + newContent both required, and extra keys are stripped (no side-channel)", () => {
+    const ok = githubMultiFileCommitFileSchema.parse({ path: "src/a.ts", newContent: "x" });
+    expect(ok).toEqual({ path: "src/a.ts", newContent: "x" });
+    expect(githubMultiFileCommitFileSchema.safeParse({ path: "src/a.ts" }).success).toBe(false); // newContent missing
+    expect(githubMultiFileCommitFileSchema.safeParse({ newContent: "x" }).success).toBe(false); // path missing
+    expect(githubMultiFileCommitFileSchema.safeParse({ path: "", newContent: "x" }).success).toBe(false); // min 1
+    expect(githubMultiFileCommitFileSchema.safeParse({ path: "x".repeat(513), newContent: "x" }).success).toBe(false); // max 512
+    expect(githubMultiFileCommitFileSchema.safeParse({ path: "x".repeat(512), newContent: "x" }).success).toBe(true);
+    // a smuggled extra key (e.g. a git mode/sha override) is stripped, not carried
+    const stripped = githubMultiFileCommitFileSchema.parse({ path: "a", newContent: "x", mode: "100755", sha: "deadbeef" } as Record<string, unknown>);
+    expect("mode" in stripped).toBe(false);
+    expect("sha" in stripped).toBe(false);
+  });
+
+  it("PR-compare file row: {filename, status, additions, deletions} all required; additions/deletions are nonnegative ints", () => {
+    const row = { filename: "src/a.ts", status: "modified", additions: 3, deletions: 1 };
+    expect(githubPullRequestCompareFileSchema.parse(row)).toEqual(row);
+    for (const key of ["filename", "status", "additions", "deletions"]) {
+      const { [key]: _omit, ...partial } = row as Record<string, unknown>;
+      expect(githubPullRequestCompareFileSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+    // a diff stat is never negative or fractional
+    expect(githubPullRequestCompareFileSchema.safeParse({ ...row, additions: -1 }).success).toBe(false);
+    expect(githubPullRequestCompareFileSchema.safeParse({ ...row, deletions: 1.5 }).success).toBe(false);
+    expect(githubPullRequestCompareFileSchema.safeParse({ ...row, additions: 0, deletions: 0 }).success).toBe(true); // zero allowed
+  });
+
+  it("both the single-file-change and PR-create plan-response envelopes share the {outcome, plan?, message?} invariant", () => {
+    for (const envelope of [githubFileChangePlanResponseSchema, githubPullRequestCreatePlanResponseSchema]) {
+      // a blocked outcome legitimately carries no plan and no fabricated message
+      const blocked = envelope.parse({ outcome: "blocked" });
+      expect(blocked.plan).toBeUndefined();
+      expect(blocked.message).toBeUndefined();
+      // outcome is the one required field
+      expect(envelope.safeParse({}).success).toBe(false);
+      // both envelopes accept the same shared honesty-enum outcome on the wrapper
+      expect(envelope.safeParse({ outcome: "planned" }).success).toBe(true);
+      expect(envelope.safeParse({ outcome: "fabricated" }).success).toBe(false);
+    }
   });
 });
