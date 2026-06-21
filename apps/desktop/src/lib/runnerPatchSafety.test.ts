@@ -169,12 +169,15 @@ describe("runSecretScan — added lines only (+), 컨텍스트/삭제는 무시"
     const slack = "xox" + "b-" + "2222222222-3333333333-" + "abcdefghijklmnop";
     const google = "AIza" + "Sy" + "A1234567890abcdefghijklmnopqrstuv";
     const pem = "-----BEGIN " + "PRIVATE KEY-----";
+    // glpat-(GitLab PAT) — 형제 게이트(W1·errors.ts·publicRedaction·autorun)엔 있는데 H8d만
+    // 빠져 patch가 pass로 통과하던 false-negative. gitleaks 회피 위해 런타임 조합.
+    const glpat = "gl" + "pat-" + "Ab3xZ9kLmNpQ7rSt2UvW";
     const handoff = makeHandoff({
       files: [
         {
           path: "src/leak.ts",
           change: "added",
-          additions: 3,
+          additions: 4,
           deletions: 0,
           diff: [
             "--- /dev/null",
@@ -182,6 +185,7 @@ describe("runSecretScan — added lines only (+), 컨텍스트/삭제는 무시"
             `+const s = "${slack}";`,
             `+const g = "${google}";`,
             `+const p = "${pem}";`,
+            `+const gl = "${glpat}";`,
           ].join("\n"),
         },
       ],
@@ -192,6 +196,7 @@ describe("runSecretScan — added lines only (+), 컨텍스트/삭제는 무시"
     expect(labels).toContain("slack_token");
     expect(labels).toContain("google_api_key");
     expect(labels).toContain("private_key_block");
+    expect(labels).toContain("gitlab_token");
     // 마스킹 — raw 토큰 본문은 노출 안 됨
     for (const f of report.findings) {
       expect(f.redactedPreview).toContain("<redacted>");
