@@ -6,6 +6,11 @@
 const HIGH_SIGNAL_TOKEN_PATTERNS: ReadonlyArray<RegExp> = [
   /\bgh[pousr]_[A-Za-z0-9]{20,}/,
   /\bgithub_pat_[A-Za-z0-9_]{20,}/,
+  // GitLab PAT(glpat-) — 형제 redaction 게이트 W1 githubCommentWriteGuards·errors.ts
+  // SECRET_LIKE_PATTERNS는 이미 glpat을 비밀로 보는데 이 공개-텍스트 redactor만 빠져, glpat
+  // 토큰이 mask도 gate block도 안 되고 published/표시 표면으로 그대로 노출됐다(실측: masked
+  // 미변경 + isSafe:true). 같은 taxonomy로 parity. glpat-는 산문 오탐 사실상 0인 specific prefix.
+  /\bglpat-[A-Za-z0-9_-]{20,}/,
   /\bAKIA[0-9A-Z]{16}\b/,
   /\bAIza[0-9A-Za-z_-]{30,}/,
   /\bxox[abposr]-[A-Za-z0-9-]{10,}/,
