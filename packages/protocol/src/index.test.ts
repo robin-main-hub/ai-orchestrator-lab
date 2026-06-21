@@ -42,6 +42,14 @@ import {
   remoteExecutionKindSchema,
   remoteExecutionRequestSchema,
   operatorCockpitHandoffSchema,
+  operatorCockpitWorkerStatusSchema,
+  operatorCockpitWorkerFleetSchema,
+  operatorCockpitApprovalEvidenceSchema,
+  operatorCockpitMemoryRecallSchema,
+  operatorCockpitProviderRoutingSchema,
+  operatorCockpitRecoverySchema,
+  operatorCockpitDispatchHistorySchema,
+  operatorCockpitSnapshotSchema,
   parseAgentDelegationEventPayload,
   projectAgentDelegationTimeline,
   providerCompletionRequestSchema,
@@ -1965,6 +1973,126 @@ describe("index — event-sync reconciliation authority: closed dispositions, ho
     for (const key of ["sessionId", "serverRevision", "events", "createdAt"]) {
       const { [key]: _omit, ...partial } = base as Record<string, unknown>;
       expect(eventSyncPullResponseSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+});
+
+// The pre-existing test (line ~919) parses ONE happy operator-cockpit handoff
+// and never inspects the rest of the read-model: the worker-fleet panel's closed
+// status/ring/security vocabularies and its optional-field honesty, the
+// tamper/replay authority carried by approval-evidence + dispatch-history (the
+// tamperWarning bool and replayPayloadDigest are REQUIRED — a snapshot can't hide
+// whether a dispatch was tampered with), the closed health/badge enums on the
+// memory/routing/recovery status panels, or the snapshot composition root whose 8
+// sections are all mandatory. A read-model is an observation surface: pinning it
+// guards against a panel silently fabricating optional context or dropping a
+// tamper signal. Self-consistent (vocabularies derived from the schemas' shape).
+describe("index — operator-cockpit read-model authority: closed panel vocabularies, mandatory tamper signals, complete snapshot root", () => {
+  it("worker-fleet panel: closed status/ring/security vocabularies, only identity+status mandatory, context never fabricated", () => {
+    expect(operatorCockpitWorkerStatusSchema.options).toEqual(["idle", "working", "blocked", "waiting_approval", "error"]);
+    const base = {
+      workerId: "worker_1",
+      role: "architect" as const,
+      status: "working" as const,
+      statusRingColor: "green" as const,
+    };
+    const minimal = operatorCockpitWorkerFleetSchema.parse(base);
+    // lane/surface/worktree/branch/blockedReason/securityTier are optional — a fleet row invents no placement
+    for (const field of ["lane", "surface", "worktree", "branch", "blockedReason", "securityTier"]) {
+      expect((minimal as Record<string, unknown>)[field]).toBeUndefined();
+    }
+    // the closed ring + security-tier vocabularies reject a stranger value
+    expect(operatorCockpitWorkerFleetSchema.safeParse({ ...base, statusRingColor: "blue" }).success).toBe(false);
+    expect(operatorCockpitWorkerFleetSchema.safeParse({ ...base, status: "napping" }).success).toBe(false);
+    expect(operatorCockpitWorkerFleetSchema.safeParse({ ...base, securityTier: "vm" }).success).toBe(false);
+    expect(operatorCockpitWorkerFleetSchema.safeParse({ ...base, securityTier: "gvisor" }).success).toBe(true);
+    // identity + status spine is mandatory
+    for (const key of ["workerId", "role", "status", "statusRingColor"]) {
+      const { [key]: _omit, ...partial } = base as Record<string, unknown>;
+      expect(operatorCockpitWorkerFleetSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("approval-evidence + dispatch-history carry mandatory tamper/replay signals that cannot be silently dropped", () => {
+    const evidence = {
+      blockReason: "secret_access requires approval",
+      evidenceRefs: [],
+      payloadBindingStatus: "bound" as const,
+    };
+    expect(operatorCockpitApprovalEvidenceSchema.safeParse(evidence).success).toBe(true);
+    // payloadBindingStatus is a closed 3-set — binding can only be bound/unbound/expired
+    expect(operatorCockpitApprovalEvidenceSchema.safeParse({ ...evidence, payloadBindingStatus: "partial" }).success).toBe(false);
+    // blockReason + evidenceRefs + payloadBindingStatus are mandatory — evidence can't be a blank stub
+    for (const key of ["blockReason", "evidenceRefs", "payloadBindingStatus"]) {
+      const { [key]: _omit, ...partial } = evidence as Record<string, unknown>;
+      expect(operatorCockpitApprovalEvidenceSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+    const dispatch = {
+      dispatchId: "dispatch_1",
+      requesterAgentId: "agent_1",
+      approvalState: "approved" as const,
+      replayPayloadDigest: "sha256:abc",
+      tamperWarning: false,
+      createdAt: "2026-06-21T00:00:00.000Z",
+    };
+    expect(operatorCockpitDispatchHistorySchema.safeParse(dispatch).success).toBe(true);
+    // the tamper signal and the replay digest are REQUIRED — a history row cannot hide them
+    for (const key of ["dispatchId", "requesterAgentId", "approvalState", "replayPayloadDigest", "tamperWarning", "createdAt"]) {
+      const { [key]: _omit, ...partial } = dispatch as Record<string, unknown>;
+      expect(operatorCockpitDispatchHistorySchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+    // approvalState is the closed 5-state ladder
+    expect(operatorCockpitDispatchHistorySchema.safeParse({ ...dispatch, approvalState: "maybe" }).success).toBe(false);
+  });
+
+  it("memory/routing/recovery status panels are fully-declared with closed health/badge vocabularies", () => {
+    const memory = {
+      contextReasons: [],
+      macBookAuthorityEnabled: true,
+      dgxMirrorHealth: "healthy" as const,
+      contradictionWarnings: [],
+    };
+    expect(operatorCockpitMemoryRecallSchema.safeParse(memory).success).toBe(true);
+    expect(operatorCockpitMemoryRecallSchema.safeParse({ ...memory, dgxMirrorHealth: "unknown" }).success).toBe(false);
+    for (const key of ["contextReasons", "macBookAuthorityEnabled", "dgxMirrorHealth", "contradictionWarnings"]) {
+      const { [key]: _omit, ...partial } = memory as Record<string, unknown>;
+      expect(operatorCockpitMemoryRecallSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+    const routing = {
+      selectedModelId: "model_1",
+      fallbackStatus: "active" as const,
+      costBadge: "low" as const,
+      speedBadge: "fast" as const,
+      trustBadge: "limited" as const,
+    };
+    expect(operatorCockpitProviderRoutingSchema.safeParse(routing).success).toBe(true);
+    // every badge is a closed vocabulary; trustBadge reuses the source-trust ladder
+    expect(operatorCockpitProviderRoutingSchema.safeParse({ ...routing, fallbackStatus: "maybe" }).success).toBe(false);
+    expect(operatorCockpitProviderRoutingSchema.safeParse({ ...routing, costBadge: "free" }).success).toBe(false);
+    expect(operatorCockpitProviderRoutingSchema.safeParse({ ...routing, speedBadge: "instant" }).success).toBe(false);
+    expect(operatorCockpitProviderRoutingSchema.safeParse({ ...routing, trustBadge: "absolute" }).success).toBe(false);
+    const recovery = { offlineResumeSupported: true, outboxSyncStatus: "synced" as const, healthIndicators: [] };
+    expect(operatorCockpitRecoverySchema.safeParse(recovery).success).toBe(true);
+    expect(operatorCockpitRecoverySchema.safeParse({ ...recovery, outboxSyncStatus: "queued" }).success).toBe(false);
+  });
+
+  it("the snapshot composition root requires all 8 read-model sections — none defaults to empty", () => {
+    const snapshot = {
+      id: "snap_1",
+      timestamp: "2026-06-21T00:00:00.000Z",
+      fleet: [],
+      approvals: [],
+      handoffs: [],
+      memory: { contextReasons: [], macBookAuthorityEnabled: true, dgxMirrorHealth: "healthy", contradictionWarnings: [] },
+      routing: { selectedModelId: "m", fallbackStatus: "none", costBadge: "low", speedBadge: "fast", trustBadge: "trusted" },
+      recovery: { offlineResumeSupported: false, outboxSyncStatus: "synced", healthIndicators: [] },
+      dispatchHistory: [],
+    };
+    expect(operatorCockpitSnapshotSchema.safeParse(snapshot).success).toBe(true);
+    // every section is mandatory — a snapshot can't ship with a panel silently missing
+    for (const key of ["id", "timestamp", "fleet", "approvals", "handoffs", "memory", "routing", "recovery", "dispatchHistory"]) {
+      const { [key]: _omit, ...partial } = snapshot as Record<string, unknown>;
+      expect(operatorCockpitSnapshotSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
     }
   });
 });
