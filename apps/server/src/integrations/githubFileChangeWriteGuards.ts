@@ -32,7 +32,14 @@ export const PATH_MAX_LEN = 512;
  *   - package-lock.json, pnpm-lock.yaml, yarn.lock : LLM이 손대면 망가지기 쉬움(경고 후 별도 승인 필요한 영역이므로 W3a에서는 차단)
  */
 const DENIED_PATH_PATTERNS: ReadonlyArray<{ name: string; test: (path: string) => boolean }> = [
-  { name: ".env*", test: (p) => /(^|\/)\.env(\..+)?$/.test(p) },
+  // .env 일가족 — 형제 multi-file 가드(githubMultiFileCommit.HIGH_RISK_PATH_PATTERNS)와 parity.
+  // 과거 이 단일파일 가드의 .env 규칙은 `(^|/)\.env(\..+)?$`로, 마지막 segment가 정확히 `.env`/
+  // `.env.x`일 때만 막았다. 그래서 (1) `production.env`처럼 segment가 `.env`로 *끝나는* 파일과
+  // (2) `.env/db.txt`처럼 `.env`를 디렉터리로 쓰는 경로를 통째로 흘려보냈다(실측 ok:true). 두
+  // 패턴(점-접두 .env 계열 + *.env 접미 계열)으로 .env 계열 전체를 nested 위치 포함해 막는다.
+  // 토큰 형태가 아닌 비밀(password=…)도 막는 파일명 기반 defense-in-depth 층이라 같은 강도로.
+  { name: ".env*", test: (p) => /(^|\/)\.env($|\.|\/)/i.test(p) },
+  { name: "*.env", test: (p) => /(^|\/)[^/]+\.env$/i.test(p) },
   // env/ 디렉터리·secrets(.|/) — 형제 multi-file commit 가드(githubMultiFileCommit.checkPath)는
   // 막는데 이 단일파일 가드는 빠뜨려, env/production.json·secrets.yaml·secrets/db.txt 같은
   // 비밀 저장 경로를 단일파일 write로는 허용하던 드리프트가 있었다(실측 ok:true). 파일명 기반

@@ -71,6 +71,19 @@ describe("evaluateFilePathPolicy", () => {
     expect(evaluateFilePathPolicy("docs/env-setup.md").ok).toBe(true);
   });
 
+  it(".env 일가족(*.env 접미·.env 디렉터리) 차단 — 형제 multi-file 가드와 parity(회귀)", () => {
+    // 드리프트 버그: 이 단일파일 가드의 .env 규칙은 마지막 segment가 정확히 `.env`/`.env.x`일 때만
+    // 막아, `production.env`처럼 segment가 `.env`로 *끝나는* 파일과 `.env/db.txt`처럼 `.env`를
+    // 디렉터리로 쓰는 경로를 흘려보냈다(실측 ok:true). 형제 githubMultiFileCommit.checkPath는 이미
+    // 막던 케이스 — 같은 taxonomy로 맞춘다. .env는 token 형태 아닌 비밀(password=…)을 담아 위험.
+    for (const bad of ["production.env", "config/database.env", ".env/db.txt", "apps/server/.env.local"]) {
+      expect(evaluateFilePathPolicy(bad).ok, `should reject: ${bad}`).toBe(false);
+    }
+    // 오탐 방지: segment가 .env 계열이 아니면 통과(environment.ts·env-sample.md)
+    expect(evaluateFilePathPolicy("src/environment.ts").ok).toBe(true);
+    expect(evaluateFilePathPolicy("docs/env-sample.md").ok).toBe(true);
+  });
+
   it("이름에 ..가 들어 있어도 segment가 아니면 통과(예: foo..bar)", () => {
     expect(evaluateFilePathPolicy("src/foo..bar.ts").ok).toBe(true);
   });
