@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseSandboxError, sandboxErrorSignature } from "./sandboxErrorCard.js";
+import {
+  missionErrorCardRecordedPayloadSchema,
+  parseSandboxError,
+  sandboxErrorCardSchema,
+  sandboxErrorSignature,
+} from "./sandboxErrorCard.js";
 
 const now = () => "2026-06-13T00:00:00.000Z";
 const base = { id: "ec1", missionId: "m1", runnerKind: "docker_rootless", now };
@@ -152,5 +157,54 @@ describe("parseSandboxError — precedence, fallbacks, clipping, defaults, signa
     const differs = sandboxErrorSignature({ errorClass: "TS1", targetFile: "a.ts", targetLine: 1, rootCause: `${"y".repeat(80)}AAA` });
     expect(same).toBe(alsoSame); // differ only after char 80 ⇒ same signature
     expect(same).not.toBe(differs); // differ within first 80 ⇒ distinct
+  });
+});
+
+// Everything above pins the parser/signature behavior — the cards it RETURNS are
+// well covered, but the SCHEMAS (sandboxErrorCardSchema and the server-only
+// recorded payload) are never asserted directly. The authority surface still
+// unpinned: (1) the card closes status to {failed,timeout,blocked} and REQUIRES
+// the cause/directive/preview triad — a failure must name what broke, how to fix
+// it, and carry a (redacted) stderr preview, never an empty shell; (2) the
+// attribution/location optionals (workerId/errorClass/targetFile/targetLine/
+// relatedCheckId) are never fabricated when the parser couldn't extract them, and
+// targetLine is int-only; (3) the server-only recorded event EMBEDS the card
+// transitively (a bad status sinks the payload) and requires missionId while
+// keeping workerId/verificationReportId optional. Fixtures derive from a real
+// parseSandboxError run (self-consistent with what the parser emits).
+describe("sandboxErrorCard — schema validation boundary: closed status, required cause/fix/preview, honest optionals, server-only embed", () => {
+  const CARD = parseSandboxError({ id: "ec1", missionId: "m1", runnerKind: "docker_rootless", now, stderr: "ValueError: bad input" });
+
+  it("closes status to {failed,timeout,blocked} and REQUIRES the cause/directive/stderrPreview triad", () => {
+    expect(sandboxErrorCardSchema.safeParse(CARD).success).toBe(true);
+    expect(sandboxErrorCardSchema.safeParse({ ...CARD, status: "crashed" }).success).toBe(false); // outside the closed set
+    for (const field of ["rootCause", "directive", "stderrPreview"] as const) {
+      const { [field]: _omit, ...without } = CARD;
+      expect(sandboxErrorCardSchema.safeParse(without).success).toBe(false); // a failure can't omit cause/fix/evidence
+    }
+  });
+
+  it("never fabricates the attribution/location optionals the parser couldn't extract; targetLine is int-only", () => {
+    // a bare ValueError has no worker, no file/line, no related check — all stay undefined
+    expect(CARD.workerId).toBeUndefined();
+    expect(CARD.targetFile).toBeUndefined();
+    expect(CARD.targetLine).toBeUndefined();
+    expect(CARD.relatedCheckId).toBeUndefined();
+    expect(sandboxErrorCardSchema.safeParse(CARD).success).toBe(true); // valid with the optionals absent
+    expect(sandboxErrorCardSchema.safeParse({ ...CARD, targetLine: 12.5 }).success).toBe(false); // int only
+    expect(sandboxErrorCardSchema.safeParse({ ...CARD, targetLine: 12 }).success).toBe(true);
+  });
+
+  it("the server-only recorded event requires missionId and never fabricates the optional workerId/verificationReportId", () => {
+    const parsed = missionErrorCardRecordedPayloadSchema.parse({ missionId: "m1", errorCard: CARD });
+    expect(parsed.workerId).toBeUndefined();
+    expect(parsed.verificationReportId).toBeUndefined();
+    expect(missionErrorCardRecordedPayloadSchema.safeParse({ errorCard: CARD }).success).toBe(false); // missionId required
+  });
+
+  it("the recorded event EMBEDS the card transitively — a bad status in the embedded card sinks the whole payload", () => {
+    const ok = missionErrorCardRecordedPayloadSchema.parse({ missionId: "m1", workerId: "w1", verificationReportId: "vr1", errorCard: CARD });
+    expect(ok.workerId).toBe("w1");
+    expect(missionErrorCardRecordedPayloadSchema.safeParse({ missionId: "m1", errorCard: { ...CARD, status: "crashed" } }).success).toBe(false);
   });
 });
