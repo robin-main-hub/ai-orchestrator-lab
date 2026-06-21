@@ -8,6 +8,11 @@ import {
   missionVerificationRecordedPayloadSchema,
   missionVerifyRequestSchema,
   missionWorkerAssignmentRequestSchema,
+  hermesContinuityPolicySchema,
+  personaContinuitySpecSchema,
+  personaIdentityFileKindSchema,
+  personaIdentityFileRefSchema,
+  personaVoicePreservationSchema,
   sandboxCaptureResultSchema,
   sandboxExecRequestSchema,
   sandboxExecResultSchema,
@@ -338,5 +343,121 @@ describe("productKernel — sandbox capability boundary: deny/off-by-default, bo
     expect(sandboxCaptureResultSchema.safeParse({ workerId: "w1", outputPreview: "x" }).success).toBe(false); // observedAt missing
     const cap = sandboxCaptureResultSchema.parse({ workerId: "w1", outputPreview: "x", observedAt: "2026-06-21T00:00:00.000Z" });
     expect(cap.observedAt).toBe("2026-06-21T00:00:00.000Z");
+  });
+});
+
+// The mission/merge/verify and sandbox-capability boundaries are now pinned, but
+// the PERSONA-CONTINUITY half of productKernel — the schemas behind the kernel's
+// `preserve_character_voice_inside_capability_boundary` policy — is still unpinned.
+// These encode an unusual authority invariant: the runtime must NOT flatten a
+// character's voice merely to sound generic; safety can constrain ACTIONS but the
+// voice posture has to be stated explicitly, never silently defaulted away.
+//   (17) an identity-file ref is fully specified — kind / path / required / truth
+//        are all mandatory; `required` has NO default, so a file can't be silently
+//        optional, and the kind vocabulary is closed (SOUL/AGENTS/IDENTITY/USER/
+//        LOREBOOK).
+//   (18) the hermes continuity policy carries closed restore/promotion enums, each
+//        with an explicit "off" escape (continuity can be turned off, but only by
+//        naming it) — sticky/slotId/memoryScope are required.
+//   (19) voice preservation cannot be silently omitted — all three voice booleans,
+//        the forbiddenSuppressionReasons array, AND the safetyOverrideNote are
+//        REQUIRED (the reasons list has no default: a runtime must state, even as
+//        [], what it may not suppress).
+//   (20) the continuity spec composes those with closed soulMode/configSource enums
+//        (each with a conservative "off") and the nested voice/hermes/identityFiles
+//        are NON-OPTIONAL — character continuity is structural, not a bolt-on.
+// Expected values are read off the schemas (self-consistent), never magic.
+describe("productKernel — persona continuity: voice posture is explicit, never silently defaulted away", () => {
+  const ref = { kind: "SOUL" as const, path: "SOUL.md", required: true, truthStatus: "configured" as const };
+  const hermes = {
+    slotId: "s1",
+    sticky: true,
+    memoryScope: "mission",
+    restorePolicy: "restore_when_available" as const,
+    promotionPolicy: "curator_required" as const,
+  };
+  const voice = {
+    preserveCharacterVoice: true,
+    allowSpeechQuirks: true,
+    allowEmotionalColor: true,
+    forbiddenSuppressionReasons: [] as string[],
+    safetyOverrideNote: "safety may constrain actions, not voice",
+  };
+  const spec = {
+    agentId: "a1",
+    personaSlug: "p",
+    displayName: "친구",
+    role: "companion" as const,
+    soulMode: "summary" as const,
+    configSource: "internal" as const,
+    identityFiles: [ref],
+    hermes,
+    voice,
+  };
+
+  it("an identity-file ref is fully specified — kind/path/required/truthStatus all mandatory, kind closed", () => {
+    expect(personaIdentityFileKindSchema.options).toEqual(["SOUL", "AGENTS", "IDENTITY", "USER", "LOREBOOK"]);
+    expect(personaIdentityFileRefSchema.safeParse(ref).success).toBe(true);
+    const { required: _r, ...withoutRequired } = ref;
+    expect(personaIdentityFileRefSchema.safeParse(withoutRequired).success).toBe(false); // `required` has no default
+    const { truthStatus: _t, ...withoutTruth } = ref;
+    expect(personaIdentityFileRefSchema.safeParse(withoutTruth).success).toBe(false);
+    expect(personaIdentityFileRefSchema.safeParse({ ...ref, kind: "PROMPT" }).success).toBe(false); // closed vocabulary
+  });
+
+  it("hermes continuity exposes closed restore/promotion enums, each with an explicit 'off' escape", () => {
+    expect(hermesContinuityPolicySchema.shape.restorePolicy.options).toEqual([
+      "always_restore",
+      "restore_when_available",
+      "summary_only",
+      "off",
+    ]);
+    expect(hermesContinuityPolicySchema.shape.promotionPolicy.options).toEqual([
+      "curator_required",
+      "trusted_auto_promote",
+      "off",
+    ]);
+    expect(hermesContinuityPolicySchema.shape.restorePolicy.options).toContain("off"); // continuity is turn-off-able, by name
+    expect(hermesContinuityPolicySchema.shape.promotionPolicy.options).toContain("off");
+    expect(hermesContinuityPolicySchema.safeParse(hermes).success).toBe(true);
+    const { sticky: _s, ...withoutSticky } = hermes;
+    expect(hermesContinuityPolicySchema.safeParse(withoutSticky).success).toBe(false); // sticky required
+    expect(hermesContinuityPolicySchema.safeParse({ ...hermes, restorePolicy: "maybe" }).success).toBe(false);
+  });
+
+  it("voice preservation cannot be silently omitted — all booleans, the reasons array, and the note are REQUIRED", () => {
+    expect(personaVoicePreservationSchema.safeParse(voice).success).toBe(true);
+    // the reasons list has NO default — a runtime must state, even as [], what it may not suppress
+    const { forbiddenSuppressionReasons: _f, ...withoutReasons } = voice;
+    expect(personaVoicePreservationSchema.safeParse(withoutReasons).success).toBe(false);
+    const { safetyOverrideNote: _n, ...withoutNote } = voice;
+    expect(personaVoicePreservationSchema.safeParse(withoutNote).success).toBe(false);
+    const { preserveCharacterVoice: _p, ...withoutFlag } = voice;
+    expect(personaVoicePreservationSchema.safeParse(withoutFlag).success).toBe(false);
+    // an explicit empty reasons list is valid (stated, not defaulted)
+    expect(personaVoicePreservationSchema.parse(voice).forbiddenSuppressionReasons).toEqual([]);
+  });
+
+  it("the continuity spec has closed soulMode/configSource enums, each with a conservative 'off'", () => {
+    expect(personaContinuitySpecSchema.safeParse(spec).success).toBe(true);
+    expect(personaContinuitySpecSchema.safeParse({ ...spec, soulMode: "off" }).success).toBe(true);
+    expect(personaContinuitySpecSchema.safeParse({ ...spec, configSource: "off" }).success).toBe(true);
+    expect(personaContinuitySpecSchema.safeParse({ ...spec, soulMode: "max" }).success).toBe(false);
+    expect(personaContinuitySpecSchema.safeParse({ ...spec, configSource: "remote" }).success).toBe(false);
+  });
+
+  it("character continuity is structural — the nested voice/hermes/identityFiles are NON-OPTIONAL", () => {
+    const { voice: _v, ...withoutVoice } = spec;
+    expect(personaContinuitySpecSchema.safeParse(withoutVoice).success).toBe(false);
+    const { hermes: _h, ...withoutHermes } = spec;
+    expect(personaContinuitySpecSchema.safeParse(withoutHermes).success).toBe(false);
+    const { identityFiles: _i, ...withoutFiles } = spec;
+    expect(personaContinuitySpecSchema.safeParse(withoutFiles).success).toBe(false);
+  });
+
+  it("identityFiles may be an explicit [] but every present entry must be fully specified", () => {
+    expect(personaContinuitySpecSchema.safeParse({ ...spec, identityFiles: [] }).success).toBe(true);
+    const malformed = { kind: "SOUL", path: "SOUL.md", required: true }; // missing truthStatus
+    expect(personaContinuitySpecSchema.safeParse({ ...spec, identityFiles: [malformed] }).success).toBe(false);
   });
 });
