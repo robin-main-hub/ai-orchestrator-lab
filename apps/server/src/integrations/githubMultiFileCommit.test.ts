@@ -212,6 +212,23 @@ describe("runMultiFileCommitExecute — W5b atomic commit", () => {
     }
   });
 
+  it("(#5d) nested dotenv(.env.<suffix>)도 차단 — 형제 단일파일 가드와 .env parity(회귀)", async () => {
+    // 드리프트 버그: 이 multi-file 가드의 .env 규칙은 `^\.env…`로 *루트* dotenv만 막아,
+    // `apps/server/.env.local`·`apps/web/.env.production`처럼 nested 위치의 dotenv를 흘려보냈다
+    // (실측 ALLOW). monorepo에선 패키지별 .env가 흔해 실질 노출이 컸다. 형제 단일파일 가드
+    // githubFileChangeWriteGuards는 이미 막던 케이스 — 같은 .env taxonomy로 맞춘다.
+    for (const path of ["apps/server/.env.local", "apps/web/.env.production", "config/.env"]) {
+      const client = makeClient();
+      const res = await runMultiFileCommitExecute(
+        request({ files: [{ path, newContent: "x\n" }] }),
+        deps({ client }),
+      );
+      expect(res.outcome, path).toBe("blocked");
+      expect(res.reason, path).toBe("unsafe_path");
+      expect(client.getRefSha, path).not.toHaveBeenCalled();
+    }
+  });
+
   it("(#6a) binary content(NUL) → server block, GitHub API 0회", async () => {
     const client = makeClient();
     const res = await runMultiFileCommitExecute(
