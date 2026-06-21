@@ -33,6 +33,12 @@ export const PATH_MAX_LEN = 512;
  */
 const DENIED_PATH_PATTERNS: ReadonlyArray<{ name: string; test: (path: string) => boolean }> = [
   { name: ".env*", test: (p) => /(^|\/)\.env(\..+)?$/.test(p) },
+  // env/ 디렉터리·secrets(.|/) — 형제 multi-file commit 가드(githubMultiFileCommit.checkPath)는
+  // 막는데 이 단일파일 가드는 빠뜨려, env/production.json·secrets.yaml·secrets/db.txt 같은
+  // 비밀 저장 경로를 단일파일 write로는 허용하던 드리프트가 있었다(실측 ok:true). 파일명 기반
+  // defense-in-depth 층이라 토큰 형태가 아닌 비밀(password: …)도 막는다. 같은 taxonomy로 parity.
+  { name: "env/*", test: (p) => /(^|\/)env\//i.test(p) },
+  { name: "secrets?", test: (p) => /(^|\/)secrets?(\.|\/|$)/i.test(p) },
   { name: "*.pem", test: (p) => /\.pem$/i.test(p) },
   { name: "*.key", test: (p) => /\.key$/i.test(p) },
   { name: "id_rsa*", test: (p) => /(^|\/)id_(?:rsa|ed25519|ecdsa|dsa)(\..*)?$/.test(p) },
