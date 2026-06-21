@@ -154,6 +154,24 @@ describe("runMultiFileCommitExecute — W5b atomic commit", () => {
     expect(client.getRefSha).not.toHaveBeenCalled();
   });
 
+  it("(#4d) commit MESSAGE에 박힌 secret도 차단 — 외부 노출 표면 parity(회귀)", async () => {
+    // 드리프트 버그: runner가 파일 content는 scanForSecrets로 막는데 commit message는 그대로
+    // createCommit으로 흘려보냈다(실측 observed — 메시지에 박은 토큰이 public commit으로 push).
+    // schema 주석 "raw transcript/비밀 절대 금지" 의도가 강제되지 않던 gap. 형제 secret 표면
+    // (file content·PR title/body·comment)과 동일하게 공유 스캐너로 막는다. gitleaks 회피 위해 조합.
+    const token = "ghp_" + "a".repeat(30);
+    const client = makeClient();
+    const res = await runMultiFileCommitExecute(
+      request({ message: `chore: rotate ${token}`, files: [{ path: "src/a.ts", newContent: "export const a = 1;\n" }] }),
+      deps({ client }),
+    );
+    expect(res.outcome).toBe("blocked");
+    expect(res.reason).toBe("secret_suspect");
+    expect(res.message).toContain("commit message");
+    expect(client.getRefSha).not.toHaveBeenCalled();
+    expect(client.createCommit).not.toHaveBeenCalled();
+  });
+
   it("(#5) high-risk path(.github/workflows/) → server block, GitHub API 0회", async () => {
     const client = makeClient();
     const res = await runMultiFileCommitExecute(
