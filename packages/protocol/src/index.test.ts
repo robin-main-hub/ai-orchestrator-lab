@@ -32,6 +32,7 @@ import {
   debateRoundSchema,
   evidenceRefSchema,
   eventEnvelopeSchema,
+  eventStorageSessionIndexItemSchema,
   eventStorageSessionIndexResponseSchema,
   eventSyncStatusSchema,
   eventSyncItemResultSchema,
@@ -2161,5 +2162,66 @@ describe("index — agent-session lifecycle authority: closed pane roles, closed
     expect(agentSessionSchema.safeParse({ ...base, role: "devops" }).success).toBe(false);
     expect(agentSessionSchema.safeParse({ ...base, backend: "kubernetes" }).success).toBe(false);
     expect(agentSessionSchema.safeParse({ ...base, status: "paused" }).success).toBe(false);
+  });
+});
+
+// The pre-existing test (line ~311) parses ONE session-index response whose lone
+// item supplies EVERY optional field (title/createdByClient/first+lastEventAt/
+// lastEventType all present) and a positive eventCount — so the honest defaults
+// (a fresh, empty session has no title/first/last event to show), the
+// nonnegative-int guard on eventCount + serverRevision, and the closed-enum
+// membership of the sources/sourceTrust arrays all stay unpinned. A session
+// index is a read-model: pinning it stops an item fabricating a timestamp it
+// doesn't have or claiming an out-of-vocabulary source/trust. Self-consistent
+// (vocabularies/bounds derived from the schemas' own shape).
+describe("index — session-index read-model authority: honest item optionals, nonnegative counts, closed source/trust arrays", () => {
+  it("a session-index item needs only sessionId/eventCount/sources/sourceTrust; descriptive optionals are never fabricated", () => {
+    const minimal = {
+      sessionId: "session_1",
+      eventCount: 0,
+      sources: [],
+      sourceTrust: [],
+    };
+    const parsed = eventStorageSessionIndexItemSchema.parse(minimal);
+    // a fresh, empty session shows no title and no first/last event — these stay undefined
+    expect(parsed.title).toBeUndefined();
+    expect(parsed.createdByClient).toBeUndefined();
+    expect(parsed.firstEventAt).toBeUndefined();
+    expect(parsed.lastEventAt).toBeUndefined();
+    expect(parsed.lastEventType).toBeUndefined();
+    // the identity/count/provenance spine is mandatory
+    for (const key of ["sessionId", "eventCount", "sources", "sourceTrust"]) {
+      const { [key]: _omit, ...partial } = minimal as Record<string, unknown>;
+      expect(eventStorageSessionIndexItemSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
+  });
+
+  it("eventCount is a nonnegative int and the sources/sourceTrust arrays are drawn from the closed provenance vocabularies", () => {
+    const base = { sessionId: "session_1", eventCount: 0, sources: ["desktop"], sourceTrust: ["trusted"] };
+    expect(eventStorageSessionIndexItemSchema.safeParse(base).success).toBe(true); // 0 events is a legitimate index row
+    expect(eventStorageSessionIndexItemSchema.safeParse({ ...base, eventCount: -1 }).success).toBe(false);
+    expect(eventStorageSessionIndexItemSchema.safeParse({ ...base, eventCount: 1.5 }).success).toBe(false);
+    // every array entry must come from its closed enum — no stranger source or trust level
+    expect(eventStorageSessionIndexItemSchema.safeParse({ ...base, sources: ["carrier_pigeon"] }).success).toBe(false);
+    expect(eventStorageSessionIndexItemSchema.safeParse({ ...base, sourceTrust: ["absolute"] }).success).toBe(false);
+    // the full provenance vocabularies are accepted
+    expect(
+      eventStorageSessionIndexItemSchema.safeParse({
+        ...base,
+        sources: ["desktop", "server", "external_legacy", "mobile", "agent", "api"],
+        sourceTrust: ["trusted", "limited", "untrusted"],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("the index response guards serverRevision as a nonnegative int and requires its spine; an empty index is legitimate", () => {
+    const base = { serverRevision: 0, sessions: [], createdAt: "2026-06-21T00:00:00.000Z" };
+    expect(eventStorageSessionIndexResponseSchema.safeParse(base).success).toBe(true); // 0 sessions, revision 0
+    expect(eventStorageSessionIndexResponseSchema.safeParse({ ...base, serverRevision: -1 }).success).toBe(false);
+    expect(eventStorageSessionIndexResponseSchema.safeParse({ ...base, serverRevision: 2.5 }).success).toBe(false);
+    for (const key of ["serverRevision", "sessions", "createdAt"]) {
+      const { [key]: _omit, ...partial } = base as Record<string, unknown>;
+      expect(eventStorageSessionIndexResponseSchema.safeParse(partial).success, `${key} must be mandatory`).toBe(false);
+    }
   });
 });
