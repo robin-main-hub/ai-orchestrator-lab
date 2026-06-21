@@ -168,6 +168,21 @@ describe("runMultiFileCommitExecute — W5b atomic commit", () => {
     expect(client.getRefSha).not.toHaveBeenCalled();
   });
 
+  it("(#5b) '.' segment로 high-risk 차단 회피 시도 → server block, GitHub API 0회(회귀)", async () => {
+    // git이 '.' segment를 접어 .github/workflows/evil.yml로 쓰는데, start-anchored
+    // high-risk 패턴은 '.'를 끼운 path를 놓쳤다(정규화 회피). interior·leading 둘 다 차단.
+    for (const path of [".github/./workflows/evil.yml", "./.github/workflows/evil.yml"]) {
+      const client = makeClient();
+      const res = await runMultiFileCommitExecute(
+        request({ files: [{ path, newContent: "name: ci\n" }] }),
+        deps({ client }),
+      );
+      expect(res.outcome, path).toBe("blocked");
+      expect(res.reason, path).toBe("unsafe_path");
+      expect(client.getRefSha, path).not.toHaveBeenCalled();
+    }
+  });
+
   it("(#6a) binary content(NUL) → server block, GitHub API 0회", async () => {
     const client = makeClient();
     const res = await runMultiFileCommitExecute(
