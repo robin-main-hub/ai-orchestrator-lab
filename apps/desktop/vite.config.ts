@@ -3,10 +3,35 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "vite";
+import { defineConfig, type ProxyOptions } from "vite";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
+
+// Dev-only mimo upstream + key. Read from the dev process env (NOT VITE_*), so the
+// real key is injected by the dev server and never bundled into client JS. Mirrors
+// the Cloudflare Pages Function (apps/desktop/functions/_mimoProxy.ts).
+const MIMO_UPSTREAM = process.env.MIMO_UPSTREAM ?? "https://api.xiaomimimo.com";
+const MIMO_API_KEY = process.env.MIMO_API_KEY?.trim();
+
+function mimoProxy(prefix: string, upstreamBase: string, authStyle: "bearer" | "x-api-key"): ProxyOptions {
+  return {
+    changeOrigin: true,
+    target: MIMO_UPSTREAM,
+    rewrite: (proxyPath) => proxyPath.replace(new RegExp(`^${prefix}`), upstreamBase),
+    configure: (proxy) => {
+      proxy.on("proxyReq", (proxyReq) => {
+        if (!MIMO_API_KEY) return;
+        if (authStyle === "bearer") {
+          proxyReq.setHeader("authorization", `Bearer ${MIMO_API_KEY}`);
+        } else {
+          proxyReq.setHeader("x-api-key", MIMO_API_KEY);
+          proxyReq.removeHeader("authorization");
+        }
+      });
+    },
+  };
+}
 
 export default defineConfig({
   // Tailwind 4 has a first-party Vite plugin that replaces the legacy
@@ -19,16 +44,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/mimo-token-anthropic": {
-        changeOrigin: true,
-        rewrite: (proxyPath) => proxyPath.replace(/^\/mimo-token-anthropic/, "/anthropic"),
-        target: "https://token-plan-sgp.xiaomimimo.com",
-      },
-      "/mimo-token-openai": {
-        changeOrigin: true,
-        rewrite: (proxyPath) => proxyPath.replace(/^\/mimo-token-openai/, "/v1"),
-        target: "https://token-plan-sgp.xiaomimimo.com",
-      },
+      "/mimo-token-anthropic": mimoProxy("/mimo-token-anthropic", "/anthropic", "x-api-key"),
+      "/mimo-token-openai": mimoProxy("/mimo-token-openai", "/v1", "bearer"),
     },
   },
   resolve: {
