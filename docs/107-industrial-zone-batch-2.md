@@ -8,14 +8,14 @@ Batch 1이 만든 OS 엔진 위에서, (A) 병렬로 굳어가던 #538 중복을
 
 | PR | merge | 라인 | 내용 |
 |---|---|---|---|
-| #546 | `cb7818b` | A | OS generic evidence plugin boundary (p61-p80 audit, docs, domain 예제 분리) — 병렬 워커 |
+| #546 | `cb7818b` | A | OS generic evidence plugin boundary (p61-p80 audit, docs, domain example cleanup) — 병렬 워커 |
 | #547 | `7920ebe` | D | learning failure append gate + idempotency (disabled by default, no auto-run) |
 | #548 | `b042964` | B+C | Assistant Inbox를 app nav에 mount + 카드 5종 generic projection 연결 |
 
 ## LINE A — OS boundary / canonical cleanup (#546)
 
 - OS core에 도메인 전용 타입/import 0 확인(구조적으로 깨끗). 오염은 주석/네이밍 + #538 dead 중복뿐.
-- `smokeIngest.ts`(domain-flavored) → `smokeGenericEvidenceIngest.ts`(neutral) + `examples/example-domain-erp-plugin/`로 도메인 예제 분리.
+- `smokeIngest.ts` 계열 도메인 예제는 제거하고 `smokeGenericEvidenceIngest.ts` 방향의 neutral smoke만 유지.
 - boundary docs 4종 + p61-p80 audit/forbidden-scan 아티팩트.
 - evidenceIngest는 keep+genericize(스펙대로). **owner 메모**: evidence 경로가 server evidenceIngest + simplememo evidenceBridge 둘 공존 — 단일화 시 evidenceBridge(B/C/D canonical) 기준 권장.
 - (배치 중 내가 동일 LINE A를 중복 구현했으나 #546이 스펙에 더 충실하여 내 중복은 폐기 — 병렬 충돌, 비파괴 처리.)

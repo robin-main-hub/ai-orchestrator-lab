@@ -19,7 +19,7 @@ This refactoring aimed to enforce strict separation between the AI Orchestrator 
 
 ## Scripts Restructuring
 - The initial `smokeIngest.ts` script was refactored and renamed to `smokeGenericEvidenceIngest.ts`.
-- Created an explicit plugin demonstration script at `examples/example-domain-erp-plugin/smokeExample DomainEvidenceIngest.ts` which is fully permitted to use the targeted domain logic.
+- Removed the domain-specific demonstration script path from the public example surface; only neutral evidence-ingest smoke coverage should remain in-repo.
 
 ## Summary
 The OS core successfully delegates domain logic to plugins while maintaining generic internal boundaries.

@@ -15,7 +15,7 @@ packages/protocol/src/index.ts:245:  // R3.2 expansion — gap analysis flagged 
 packages/protocol/src/index.ts:488:  "customer_inquiry",
 packages/protocol/src/index.ts:1373:  "customer_reply",
 packages/protocol/src/workflowTemplate.ts:10: * Workflow Templates — 이 시스템이 코딩만 하는 게 아니라 회사 업무(EXAMPLE_DOMAIN 영업/조사/
-packages/protocol/src/workflowTemplate.ts:181:  { slot: "sales_ops", role: "external", characterDirection: "domain — 회사 업무", function: "견적, 샘플, 거래처 대응", writePolicy: "research" },
+packages/protocol/src/workflowTemplate.ts:181:  { slot: "sales_ops", role: "external", characterDirection: "Domain Ops", function: "견적, 샘플, 거래처 대응", writePolicy: "research" },
 apps/desktop/src/runtime/stage9Permission.ts:510:  if (/(customer|고객|문의|cs|reply|답변|응답|channeltalk|채널톡)/i.test(summary)) {
 apps/desktop/src/runtime/stage9Permission.ts:511:    return "customer_reply";
 apps/desktop/src/runtime/stage9Permission.test.ts:184:  it("requires approval for customer replies and email sends from external channels", () => {

@@ -19,7 +19,7 @@ outputArtifacts) + `WorkflowInputField`. 3개 EXAMPLE_DOMAIN 프리셋:
 
 Grok의 147 agent org는 버린다. `CORE_HERMES_ORG`(데이터): 쿠루미/Lead(companion,
 no_direct_mutation) · 치노/Builder(sandbox_build_only) · 리제/Verifier(verify_no_write)
-· 코코아/Mediator(merge_recommend) · domain/Sales(external, research) · Memory Curator
+· 코코아/Mediator(merge_recommend) · Domain Ops(external, research) · Memory Curator
 (memory_curate). **권한은 캐릭터가 아니라 role/capability/SandboxRunner가 결정** —
 companion은 write 권한이 있어도 직접 mutate 금지, builder만 sandbox_build, verifier write 금지.
 

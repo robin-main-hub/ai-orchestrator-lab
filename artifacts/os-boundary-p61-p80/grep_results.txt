@@ -1186,7 +1186,7 @@ packages/protocol/src/workflowTemplate.ts:146:export const CORE_WORKFLOW_TEMPLAT
 packages/protocol/src/workflowTemplate.ts:160:export type HermesWritePolicy =
 packages/protocol/src/workflowTemplate.ts:168:export type HermesOrgMember = {
 packages/protocol/src/workflowTemplate.ts:176:export const CORE_HERMES_ORG: ReadonlyArray<HermesOrgMember> = [
-packages/protocol/src/workflowTemplate.ts:181:  { slot: "sales_ops", role: "external", characterDirection: "domain — 회사 업무", function: "견적, 샘플, 거래처 대응", writePolicy: "research" },
+packages/protocol/src/workflowTemplate.ts:181:  { slot: "sales_ops", role: "external", characterDirection: "Domain Ops", function: "견적, 샘플, 거래처 대응", writePolicy: "research" },
 packages/protocol/src/workflowTemplate.ts:182:  { slot: "memory_curator", role: "memory_curator", characterDirection: "기억 관리자", function: "skill archive, prune, Obsidian export", writePolicy: "memory_curate" },
 packages/protocol/src/workflowTemplate.ts:189:export const missionFromTemplateRequestSchema = z.object({
 packages/protocol/src/workflowTemplate.ts:196:export type MissionFromTemplateRequest = z.infer<typeof missionFromTemplateRequestSchema>;
