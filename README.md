@@ -273,19 +273,6 @@ System
 - replay / evidence UX 강화
 - memory learning loop activation
 
-### 5. ERP / Business Plugin Track
-
-이 저장소 자체는 generic AI Orchestrator OS입니다.
-
-GIOLITE ERP, 국내/해외 영업 대시보드, Evidence Hub, Slack/Email/Notion/Drive 연결은 이 OS 위에 얹는 **도메인 플러그인 / 별도 앱 트랙**으로 취급합니다.
-
-원칙:
-
-```text
-OS core = generic
-ERP / Sales workflow = plugin or downstream app
-```
-
 ---
 
 ## 개발 원칙
@@ -296,7 +283,7 @@ ERP / Sales workflow = plugin or downstream app
 - provider secret은 절대 UI/로그/commit에 노출하지 않기
 - runtime/provider/approval/EventStorage 계약은 UI 작업 중 변경하지 않기
 - authority flip은 설계 문서 완료와 별개로 별도 승인 후 진행하기
-- generic OS core에 회사/개인/거래처 식별자를 넣지 않기
+- generic OS core에 특정 조직, 개인, 고객, 프로젝트 식별자를 넣지 않기
 
 ---
 
