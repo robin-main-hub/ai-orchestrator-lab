@@ -49,6 +49,7 @@ import "./styles/tokens.css";
 import "./styles.css";
 import "./styles/coding-workbench.css";
 import "./styles/research-swarm.css";
+import "./styles/renewal-shell.css";
 
 // PWA: 최소 service worker 등록(프로덕션 빌드에서만 — dev HMR과 충돌 방지).
 // SW는 셸 캐시 + 읽기 전용 오프라인 폴백만 한다. 실패는 조용히 무시(앱 동작 무관).

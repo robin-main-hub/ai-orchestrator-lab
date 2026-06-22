@@ -1,11 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ComponentProps,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import {
+  Archive,
   Brain,
   ChevronRight,
   Database,
   GitBranch,
   MessageSquare,
   Send,
+  ServerCog,
   ShieldCheck,
   Terminal,
 } from "lucide-react";
@@ -141,6 +153,7 @@ import type {
   ModelDiscoverySnapshot,
   OperatorCockpitSnapshot,
   OperatorCockpitWorkerStatus,
+  PermissionMatrixSnapshot,
   ProviderCompletionResponse,
   ProviderProfile,
   ReviewMode,
@@ -174,7 +187,7 @@ import {
   selectedAgentIdStorageKey,
 } from "./lib/appConstants";
 import { getConversationRailLayout } from "./lib/conversationRailLayout";
-import { getConversationShellVisibility, isFocusedV0Surface } from "./lib/conversationShellVisibility";
+import { getConversationShellVisibility } from "./lib/conversationShellVisibility";
 import { createCockpitWorkTraceSources } from "./lib/cockpitWorkTraceSources";
 import { createWorkTraceSearchIndex, type WorkTraceSearchItem } from "./lib/workTraceSearch";
 import { deriveDebateDecisionReadiness } from "./lib/debateDecisionReadiness";
@@ -190,6 +203,18 @@ import { deriveCockpitNextActions } from "./lib/cockpitNextActions";
 import type { CockpitNextActionItem } from "./lib/cockpitNextActions";
 import { deriveCockpitHealthFromSnapshot } from "./lib/cockpitHealthRollup";
 import { isNavCenterActive, MODE_OWNS_CENTER_NAV } from "./lib/navSurface";
+import {
+  appShellSections,
+  defaultAppShellTabBySection,
+  defaultAppShellTabId,
+  findAppShellSection,
+  findAppShellTab,
+  resolveAppShellTabForSurface,
+  sectionIdForAppShellTab,
+  type AppShellSectionId,
+  type AppShellTabId,
+  type AppShellVirtualSurface,
+} from "./lib/appShellIa";
 import { resolveExternalIngressTargetAgentId } from "./lib/externalIngressRouting";
 import {
   createAgentChannelMemoryScope,
@@ -281,6 +306,7 @@ import {
   terminalSlots,
 } from "./seeds/conversation";
 import { DashboardView } from "./components/DashboardView";
+import { AppShellNav } from "./components/AppShellNav";
 import { projectAutonomyRunHistory } from "./lib/autonomyRunHistory";
 import { PERSONA_CODEX } from "./lib/personaCodex";
 import { selectDailyParty } from "./lib/dailyParty";
@@ -322,7 +348,6 @@ import { OperationsRailPanel } from "./components/OperationsRailPanel";
 import { ProjectRailPanel } from "./components/ProjectRailPanel";
 import { ProviderRegistrationMenu } from "./components/ProviderRegistrationMenu";
 import { RuntimeRailPanel } from "./components/RuntimeRailPanel";
-import { RuntimeStatusBar } from "./components/RuntimeStatusBar";
 import { SessionIndexRailPanel } from "./components/SessionIndexRailPanel";
 import { Stage3DebateTable } from "./components/Stage3DebateTable";
 import { TerminalDock } from "./components/TerminalDock";
@@ -352,6 +377,7 @@ import type { PreviewAnnotationDraft } from "./lib/previewAnnotations";
 import { useProjectRecordController } from "./hooks/useProjectRecordController";
 import { createInsightFindings, createMetaOnboardingSignals } from "./lib/workbenchDerived";
 import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
+import { MissionBoardContainer } from "./components/MissionBoardContainer";
 import { SummonTheater } from "./components/SummonTheater";
 import { RunWorkspace, type RunMode } from "./components/RunWorkspace";
 import { createMakimaDelegationCards } from "./lib/makimaDelegation";
@@ -378,6 +404,8 @@ export function App() {
   });
   const [adminRailOpen, setAdminRailOpen] = useState(false);
   const [activeNavItem, setActiveNavItem] = useState<NavItemId>("dashboard");
+  const [activeShellTabId, setActiveShellTabId] = useState<AppShellTabId>(defaultAppShellTabId);
+  const [activeVirtualSurface, setActiveVirtualSurface] = useState<AppShellVirtualSurface | null>(null);
   const [summonSeedPersona, setSummonSeedPersona] = useState<string | null>(null);
   const [summonSeedMode, setSummonSeedMode] = useState<RunMode>("single");
   // 대화창 "스웜 서치" → 리서치 뷰 자동 편성 시드 (주제 + 동적 4~16 요원)
@@ -5068,19 +5096,38 @@ export function App() {
   // 단일 좌표 판정 — '중앙을 점유하는 nav 목록'은 lib/navSurface로 추출(유령 좌표
   // "runtime" 제거 포함). 두 useState(mode/activeNavItem)는 유지하되 판정은 한 곳에서.
   const navCenterActive = isNavCenterActive(activeNavItem);
-  const shellVisibility = getConversationShellVisibility({
+  const legacyShellVisibility = getConversationShellVisibility({
     configLibraryActive,
     mode,
     navCenterActive,
   });
+  const shellVisibility = {
+    ...legacyShellVisibility,
+    showCodingPacketPanel: false,
+    showEvolveMementoPanel: false,
+    showLeftRail: false,
+    showTerminalDock: false,
+    showToolbarActions: false,
+    showWorkItemHandoffPanel: false,
+  };
   const railLayout = getConversationRailLayout({
     configLibraryActive,
     mode,
   });
-  const focusedV0Surface = !configLibraryActive && !navCenterActive && isFocusedV0Surface(mode);
-  const leftRailVisible = shellVisibility.showLeftRail || providerRegistrationOpen || adminRailOpen;
+  const leftRailVisible = false;
   // 대화/agents는 풀와이드 집중 화면 유지 — 에이전트 레일은 ChatSidePanel의 "에이전트" 모드로 흡수됨
-  const rightRailVisible = !focusedV0Surface && !navCenterActive;
+  const rightRailVisible = false;
+  const activeShellTab = findAppShellTab(activeShellTabId);
+  const activeShellSection = findAppShellSection(sectionIdForAppShellTab(activeShellTab.id));
+
+  useEffect(() => {
+    const nextTabId = resolveAppShellTabForSurface({
+      activeNavItem,
+      mode,
+      virtualSurface: activeVirtualSurface,
+    });
+    setActiveShellTabId((current) => (current === nextTabId ? current : nextTabId));
+  }, [activeNavItem, activeVirtualSurface, mode]);
 
   // Switching the top-bar mode (대화/토론/Tmux/콕핏…) hands the center back to
   // that mode — leave the nav-owned center view so the tabs never look dead.
@@ -5111,6 +5158,94 @@ export function App() {
     }
   }, [isMobileDrawerOpen, leftRailVisible]);
 
+  const handleSelectAppShellTab = useCallback((tabId: AppShellTabId) => {
+    const tab = findAppShellTab(tabId);
+    setActiveShellTabId(tab.id);
+    setActiveVirtualSurface(tab.target.virtual ?? null);
+    setAdminRailOpen(false);
+    setProviderRegistrationOpen(false);
+    setIsMobileDrawerOpen(false);
+
+    if (tab.target.nav) {
+      setActiveNavItem(tab.target.nav);
+    } else {
+      setActiveNavItem(MODE_OWNS_CENTER_NAV);
+    }
+
+    if (tab.target.mode) {
+      setMode(tab.target.mode);
+    }
+
+    if (tab.id === "operations.launch") {
+      setSummonSeedMode("single");
+    }
+  }, []);
+
+  const handleSelectAppShellSection = useCallback(
+    (sectionId: AppShellSectionId) => {
+      handleSelectAppShellTab(defaultAppShellTabBySection[sectionId]);
+    },
+    [handleSelectAppShellTab],
+  );
+
+  const missionBoardProps: ComponentProps<typeof MissionBoardContainer> = {
+    packet: codingPacketState,
+    sourceSessionId: activeSessionId,
+    debateId: debateSession.id,
+    refreshScaffoldHandleRef,
+    onPreviewObserved: handlePreviewObserved,
+    previewAnnotationDraft,
+    projectRecordController,
+    activePreviewRefByMissionId,
+    pendingResumeMissionId,
+    onResumeConsumed: () => setPendingResumeMissionId(null),
+    publishEnvironment: {
+      serverBaseUrl: resolveDgxServerBaseUrls(undefined)[0] ?? DEFAULT_DGX_SERVER_BASE_URL,
+      onContextEvent: (type, payload) => appendEvent(type, payload),
+      onPreviewObserved: (ref) => setActivePreviewRefByMissionId((prev) => putPreviewRef(prev, ref)),
+      getTurboEditGenerator: (item) => {
+        const profileId = selectedProvider?.id;
+        const modelId = selectedModel?.id;
+        if (!profileId || !modelId) return undefined;
+        const serverBaseUrl = resolveDgxServerBaseUrls(undefined)[0] ?? DEFAULT_DGX_SERVER_BASE_URL;
+        return {
+          generator: createTurboEditGenerator({
+            providerProfileId: profileId,
+            modelId,
+            missionId: item.missionId,
+            serverBaseUrl,
+            requestCompletion: (request, opts) =>
+              requestCompletion(request, {
+                serverBaseUrl: opts?.serverBaseUrl ?? serverBaseUrl,
+                fetchImpl: opts?.fetchImpl,
+              }),
+          }),
+          providerLabel: `${selectedProvider?.name ?? profileId} / ${modelId}`,
+        };
+      },
+    },
+    buildWorkers: () => {
+      let pool = loadHermesPool();
+      const workers = (["architect", "builder", "verifier"] as const).map((role) => {
+        const agent = agents.find((candidate) => candidate.enabled && candidate.role === role);
+        const slug = agent?.personaName ?? role;
+        const acquisition = acquireHermesSlot(pool, slug);
+        pool = acquisition.pool;
+        return {
+          agentId: agent?.id ?? `agent_${role}`,
+          role,
+          displayName: agent ? agentPrimaryDisplayName(agent) : role,
+          personaName: agent?.personaName,
+          soulMode: agent?.soulMode ?? ("summary" as const),
+          configSource: agent?.configSource ?? ("internal" as const),
+          hermesSlotId: acquisition.slot.id,
+        };
+      });
+      saveHermesPool(pool);
+      return workers;
+    },
+  };
+
   const agentsSidebarNode = (
     <AgentsSidebar
       agents={agents}
@@ -5132,7 +5267,7 @@ export function App() {
 
   return (
     <div
-      className={`app-shell ${navCenterActive ? "nav-center-shell" : ""} ${
+      className={`app-shell os-renewal-shell ${navCenterActive ? "nav-center-shell" : ""} ${
         !navCenterActive && mode === "tmux" ? "tmux-focus-shell" : ""
       } ${
         !navCenterActive && mode === "cockpit" ? "cockpit-focus-shell" : ""
@@ -5152,30 +5287,19 @@ export function App() {
         "--conversation-right-rail-max": `${railLayout.rightRailMaxWidthPx}px`,
         "--conversation-right-rail-min": `${railLayout.rightRailMinWidthPx}px`,
         "--conversation-right-rail-width": `${railLayout.rightRailWidthPx}px`,
-      } as React.CSSProperties}
+      } as CSSProperties}
     >
-      <RuntimeStatusBar
-        drawerAvailable={leftRailVisible}
-        homeActive={activeNavItem === "dashboard"}
-        mode={mode}
-        onChangeMode={(nextMode) => {
-          setMode(nextMode);
-          // a top-bar tab always claims the center — leave any nav-owned view,
-          // even when the mode value itself is unchanged (same sentinel as the
-          // mode-change effect so the two enforcement sites never drift)
-          if (navCenterActive) {
-            setActiveNavItem(MODE_OWNS_CENTER_NAV);
-            setProviderRegistrationOpen(false);
-            setAdminRailOpen(false);
-          }
-        }}
+      <AppShellNav
+        activeSection={activeShellSection}
+        activeTab={activeShellTab}
+        pendingApprovals={unifiedControlQueueSnapshot.summary.pending}
+        providerName={activeProvider?.name ?? "local-provider"}
+        sections={appShellSections}
         onCommandPalette={() => setCommandPaletteOpen(true)}
-        onHome={() => openManagementRail("dashboard")}
-        onOpenOpsDetail={() => setMode("cockpit")}
-        onProbeDgx={handleProbeDgx}
-        onToggleDrawer={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
-        providerName={activeProvider?.name ?? "미선택"}
-        snapshot={runtimeSnapshotState}
+        onOpenQueue={openControlQueue}
+        onProbeRuntime={handleProbeDgx}
+        onSelectSection={handleSelectAppShellSection}
+        onSelectTab={handleSelectAppShellTab}
       />
       <main className="workspace-grid">
         {isMobileDrawerOpen && leftRailVisible ? (
@@ -5261,7 +5385,74 @@ export function App() {
             </div>
           ) : null}
 
-          {activeNavItem === "dashboard" ? (
+          {activeVirtualSurface === "operations_missions" || activeVirtualSurface === "library_workspaces" ? (
+            <ShellStageFrame
+              eyebrow={activeVirtualSurface === "operations_missions" ? "Operations / Missions" : "Library / Workspaces"}
+              title={activeVirtualSurface === "operations_missions" ? "Mission Board" : "Workspace Continuity"}
+              description={
+                activeVirtualSurface === "operations_missions"
+                  ? "Goal, plan, agents, execution, verification, and result stay in one real mission surface."
+                  : "Workspaces are the top-level library unit; recent project records and mission details stay live."
+              }
+            >
+              <MissionBoardContainer {...missionBoardProps} />
+            </ShellStageFrame>
+          ) : activeVirtualSurface === "operations_queue" ? (
+            <ShellQueueStage snapshot={unifiedControlQueueSnapshot} onOpenQueue={openControlQueue} />
+          ) : activeVirtualSurface === "operations_replay" ? (
+            <ShellReplayStage
+              activeSessionId={activeSessionId}
+              events={eventLog}
+              onReplay={() => void handleReplayEventStorage(activeSessionId)}
+            />
+          ) : activeVirtualSurface === "library_artifacts" ? (
+            <ShellArtifactsStage snapshot={backupSnapshot} onExport={handleExportBackupProjections} />
+          ) : activeVirtualSurface === "library_memory" ? (
+            <ShellStageFrame
+              eyebrow="Library / Memory"
+              title="Memory And Learning"
+              description="Recall, governance, activation, and human-readable continuity stay together."
+            >
+              <div className="os-two-column-stage">
+                <EvolveMementoPanel
+                  adapterStatus={adapterStatus}
+                  governanceSummary={memoryGovernanceSummary}
+                  inspector={memoryInspector}
+                  onActivate={handleActivateMemory}
+                  onForget={handleForgetMemory}
+                  onPin={handlePinMemory}
+                  onRemember={handleRememberCurrentContext}
+                />
+                <HumanPeekPanel ingressSnapshot={ingressSnapshot} />
+              </div>
+            </ShellStageFrame>
+          ) : activeVirtualSurface === "library_agents" ? (
+            <ShellStageFrame
+              eyebrow="Library / Agents"
+              title="Agent Roster"
+              description="Personas, roles, providers, models, and assignment controls remain wired to the live roster."
+            >
+              <div className="os-agent-library-stage">{agentsSidebarNode}</div>
+            </ShellStageFrame>
+          ) : activeVirtualSurface === "system_models" ? (
+            <ShellModelsStage providers={providerProfiles} modelCatalog={modelCatalog} onOpenProviders={() => handleSelectAppShellTab("system.providers")} />
+          ) : activeVirtualSurface === "system_modules" ? (
+            <ShellModulesStage onSelectTab={handleSelectAppShellTab} />
+          ) : activeVirtualSurface === "system_runtime" ? (
+            <ShellStageFrame
+              eyebrow="System / Runtime"
+              title="Runtime Machine Room"
+              description="Health, route diagnostics, reboot watch, and recovery controls are grouped without changing runtime contracts."
+            >
+              <RuntimeRailPanel
+                dgxRouteDiagnostics={dgxRouteDiagnostics}
+                onProbeDgx={handleProbeDgx}
+                onRequestReboot={handleRequestDeviceReboot}
+                rebootWatchdogs={rebootWatchdogs}
+                snapshot={runtimeSnapshotState}
+              />
+            </ShellStageFrame>
+          ) : activeNavItem === "dashboard" ? (
             <DashboardView
               personas={dashboardParty}
               personaAvatars={dashboardPersonaAvatars}
@@ -5822,6 +6013,248 @@ export function App() {
         onOpenHistory={() => setApprovalDrawerOpen(true)}
       />
     </div>
+  );
+}
+
+function ShellStageFrame({
+  actions,
+  children,
+  description,
+  eyebrow,
+  title,
+}: {
+  actions?: ReactNode;
+  children: ReactNode;
+  description: string;
+  eyebrow: string;
+  title: string;
+}) {
+  return (
+    <section className="os-stage-frame">
+      <header className="os-stage-frame__header">
+        <div>
+          <span>{eyebrow}</span>
+          <h1>{title}</h1>
+          <p>{description}</p>
+        </div>
+        {actions ? <div className="os-stage-frame__actions">{actions}</div> : null}
+      </header>
+      <div className="os-stage-frame__body">{children}</div>
+    </section>
+  );
+}
+
+function ShellQueueStage({
+  onOpenQueue,
+  snapshot,
+}: {
+  onOpenQueue: () => void;
+  snapshot: PermissionMatrixSnapshot;
+}) {
+  const pending = snapshot.queue.filter((item) => item.state === "required");
+  return (
+    <ShellStageFrame
+      eyebrow="Operations / Queue"
+      title="Control Queue"
+      description="One real approval and permission queue. The drawer remains mounted once globally; this stage is its command deck."
+      actions={
+        <button className="primary-button os-stage-action" onClick={onOpenQueue} type="button">
+          <ShieldCheck size={15} />
+          Open queue
+        </button>
+      }
+    >
+      <div className="os-metric-grid">
+        <div>
+          <span>Pending</span>
+          <strong>{snapshot.summary.pending}</strong>
+        </div>
+        <div>
+          <span>Total queue</span>
+          <strong>{snapshot.queue.length}</strong>
+        </div>
+        <div>
+          <span>Rejected</span>
+          <strong>{snapshot.summary.denied}</strong>
+        </div>
+      </div>
+      <div className="os-stage-list">
+        {pending.length === 0 ? (
+          <p className="os-empty-note">No pending approval items.</p>
+        ) : (
+          pending.slice(0, 8).map((item) => (
+            <article className="os-stage-list__item" key={item.sourceItemId ?? item.id}>
+              <div>
+                <strong>{item.summary}</strong>
+                <span>{item.reason ?? item.action}</span>
+              </div>
+              <small>{item.permissions.join(" / ")}</small>
+            </article>
+          ))
+        )}
+      </div>
+    </ShellStageFrame>
+  );
+}
+
+function ShellReplayStage({
+  activeSessionId,
+  events,
+  onReplay,
+}: {
+  activeSessionId: string;
+  events: EventEnvelope[];
+  onReplay: () => void;
+}) {
+  const recentEvents = events.slice(-10).reverse();
+  return (
+    <ShellStageFrame
+      eyebrow="Operations / Replay"
+      title="Replay Timeline"
+      description="Read-only replay context for the active session; replay actions use the existing Event Storage path."
+      actions={
+        <button className="ghost-button os-stage-action" onClick={onReplay} type="button">
+          <Database size={15} />
+          Replay session
+        </button>
+      }
+    >
+      <div className="os-replay-summary">
+        <span>Active session</span>
+        <code>{activeSessionId}</code>
+        <strong>{events.length} events</strong>
+      </div>
+      <div className="os-stage-list">
+        {recentEvents.length === 0 ? (
+          <p className="os-empty-note">No replayable events observed yet.</p>
+        ) : (
+          recentEvents.map((event, index) => (
+            <article className="os-stage-list__item" key={`${event.id ?? event.type}-${index}`}>
+              <div>
+                <strong>{event.type}</strong>
+                <span>{event.createdAt ?? "time unavailable"}</span>
+              </div>
+              <small>{event.source ?? "local"}</small>
+            </article>
+          ))
+        )}
+      </div>
+    </ShellStageFrame>
+  );
+}
+
+function ShellArtifactsStage({
+  onExport,
+  snapshot,
+}: {
+  onExport: () => void;
+  snapshot: Stage7BackupSnapshot;
+}) {
+  return (
+    <ShellStageFrame
+      eyebrow="Library / Artifacts"
+      title="Artifact Library"
+      description="Observed backup artifacts and export projections, grouped as accumulated work instead of side chrome."
+      actions={
+        <button className="ghost-button os-stage-action" onClick={onExport} type="button">
+          <Archive size={15} />
+          Export backup
+        </button>
+      }
+    >
+      <div className="os-stage-list">
+        {snapshot.artifacts.length === 0 ? (
+          <p className="os-empty-note">No artifacts observed yet.</p>
+        ) : (
+          snapshot.artifacts.map((artifact) => (
+            <article className="os-stage-list__item" key={artifact.id}>
+              <div>
+                <strong>{artifact.title}</strong>
+                <span>{artifact.target} / {artifact.format}</span>
+              </div>
+              <small>{artifact.status}</small>
+            </article>
+          ))
+        )}
+      </div>
+    </ShellStageFrame>
+  );
+}
+
+function ShellModelsStage({
+  modelCatalog,
+  onOpenProviders,
+  providers,
+}: {
+  modelCatalog: ModelCatalog;
+  onOpenProviders: () => void;
+  providers: ProviderProfile[];
+}) {
+  return (
+    <ShellStageFrame
+      eyebrow="System / Models"
+      title="Model Catalog"
+      description="Provider model discovery stays read-only here; registration and discovery actions live in Providers."
+      actions={
+        <button className="ghost-button os-stage-action" onClick={onOpenProviders} type="button">
+          <ServerCog size={15} />
+          Providers
+        </button>
+      }
+    >
+      <div className="os-model-grid">
+        {providers.length === 0 ? (
+          <p className="os-empty-note">No providers registered.</p>
+        ) : (
+          providers.map((provider) => {
+            const models = modelCatalog[provider.id] ?? [];
+            return (
+              <article className="os-model-card" key={provider.id}>
+                <div>
+                  <strong>{provider.name}</strong>
+                  <span>{provider.kind}</span>
+                </div>
+                <p>{models.length} discovered models</p>
+                <div>
+                  {models.slice(0, 5).map((model) => (
+                    <code key={model.id}>{formatModelDisplayName(model.name ?? model.id)}</code>
+                  ))}
+                  {models.length > 5 ? <code>+{models.length - 5}</code> : null}
+                </div>
+              </article>
+            );
+          })
+        )}
+      </div>
+    </ShellStageFrame>
+  );
+}
+
+function ShellModulesStage({ onSelectTab }: { onSelectTab: (tabId: AppShellTabId) => void }) {
+  const modules: Array<{ label: string; target: AppShellTabId; summary: string }> = [
+    { label: "Conversation Workbench", target: "studio.chat", summary: "Agent chat, tools, memory, and provider routing." },
+    { label: "Coding Workbench", target: "studio.code", summary: "Coding missions, patch context, and IDE-like work." },
+    { label: "Research Swarm", target: "studio.research", summary: "Multi-agent research workspace." },
+    { label: "Mission Operations", target: "operations.missions", summary: "Mission board, verification, preview, and publish flow." },
+    { label: "Memory And Learning", target: "library.memory", summary: "Governance, recall, and memento continuity." },
+    { label: "Provider Control", target: "system.providers", summary: "Provider registration and model discovery." },
+  ];
+
+  return (
+    <ShellStageFrame
+      eyebrow="System / Modules"
+      title="Module Registry"
+      description="Reachable product modules, linked to their real surfaces. No runtime module contract is changed."
+    >
+      <div className="os-module-grid">
+        {modules.map((module) => (
+          <button key={module.label} className="os-module-card" onClick={() => onSelectTab(module.target)} type="button">
+            <strong>{module.label}</strong>
+            <span>{module.summary}</span>
+          </button>
+        ))}
+      </div>
+    </ShellStageFrame>
   );
 }
 
