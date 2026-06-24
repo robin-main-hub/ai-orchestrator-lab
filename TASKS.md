@@ -9,7 +9,7 @@
 
 ## Current PR
 
-- None active. Last merged: #1061 (`d20e2a86`).
+- None active. Last merged: #1064 (`d9d12e70`).
 
 ## Completed
 
@@ -29,7 +29,7 @@
 - read-side contaminated log defense
 - merge queue requires observed + passed verification
 
-### Open PR landscape review (completed 2026-06-25)
+### PR #1062 — open PR landscape review (merged `fdd61ff8`)
 
 - `docs/handoffs/2026-06-25-open-pr-landscape.md` created
 - #793 — stale but salvageable (shell IA files unique, App.tsx massive conflict, test commits stale)
@@ -37,30 +37,51 @@
 - #561 — still valuable (tiny SummonTheater cursor fix, cherry-pick candidate)
 - #513 — already landed / superseded (main has richer productKernel.ts + runtime bridge)
 
-## Next Tasks
+### PR #1063 — onHandoff → control queue approval wiring (merged `bb5a1b20`)
 
-1. onHandoff → control queue approval wiring
+- `routeHandoffToControlQueue` adapter: RunnerPatchHandoff → ApprovalQueueItem
+- state="required" — approval mandatory before any apply
+- runner dispatch never called from handoff path
+- 8 regression tests
 
-   - Handoff should create an approval/control queue item.
-   - It must not dispatch runner execution before approval.
+### PR #1064 — opencode JSON parser contract (merged `d9d12e70`)
 
-2. opencode --format json schema
+- `parseOpenCodeJsonStream` fix: invalid JSON lines now emit error events (no silent drop)
+- `parseOpenCodeJsonOutput` classifier: discriminated union `{ ok: true, events } | { ok: false, reason, rawPreview, parseError? }`
+- 16 contract tests covering valid/invalid/partial/noise/failure/empty cases
+- Note: actual opencode --format json sample unavailable; synthetic fixtures used; contract should be strengthened when real sample is available
 
-   - Define parser contract from real output or fixture.
-   - Handle partial JSON, unknown fields, and failure output.
+### tmux send-keys runbook (completed 2026-06-25)
 
-3. ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS runbook
+- `docs/runbooks/orchestrator-enable-tmux-send-keys.md` created
+- Owner-only enable steps, validation checklist, rollback, safety boundaries
+- ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS enablement is OWNER ACTION PENDING
 
-   - Owner action only.
-   - Do not enable automatically.
-   - Document env, validation, rollback.
+## Current status
 
-4. Open PR owner actions (review only — do not merge/close)
+- Real behavior transition: COMPLETE
+- Cross-mission contamination defenses: COMPLETE
+- Mission vertical integration suite: COMPLETE
+- Open PR landscape: REVIEWED
+- onHandoff approval wiring: COMPLETE
+- opencode JSON parser contract: PINNED
+- tmux send-keys enablement: OWNER ACTION PENDING (runbook ready)
 
-   - #561: cherry-pick `1ea87bbd` onto main
-   - #562: rebase onto main, resolve vite.config.ts, verify MiMo env
-   - #793: cherry-pick `5c3e63e2`, manually re-apply App.tsx integration
-   - #513: close (superseded)
+## Owner action pending
+
+- **ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS** — runbook at `docs/runbooks/orchestrator-enable-tmux-send-keys.md`. Owner must SSH to DGX-02, edit `.env`, restart server, run validation checklist.
+- **Open PR decisions** — see landscape review (`docs/handoffs/2026-06-25-open-pr-landscape.md`):
+  - #561: cherry-pick `1ea87bbd` onto main
+  - #562: rebase onto main, resolve vite.config.ts, verify MiMo env
+  - #793: cherry-pick `5c3e63e2`, manually re-apply App.tsx integration
+  - #513: close (superseded)
+
+## Next steps
+
+No remaining AI-executable implementation tasks. Next work requires owner decision:
+- Enable tmux send-keys (runbook ready)
+- Act on stale PR landscape (4 PRs awaiting owner decision)
+- Or assign new work
 
 ## Explicitly Deprecated
 
