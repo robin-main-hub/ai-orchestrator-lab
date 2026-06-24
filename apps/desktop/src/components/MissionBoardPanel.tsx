@@ -26,6 +26,7 @@ import { PreviewRunCard } from "./PreviewRunCard";
 import { CodingRunnerCard } from "./appbuild/CodingRunnerCard";
 import { useRunnerPatchApprovalQueueController } from "../hooks/useRunnerPatchApprovalQueueController";
 import { RunnerPatchApprovalPanel } from "./RunnerPatchApprovalPanel";
+import { routeHandoffToControlQueue } from "../lib/runnerPatchToControlQueue";
 import { VisualQaCard } from "./VisualQaCard";
 import { MissionWorkspaceStatusBar } from "./MissionWorkspaceStatusBar";
 import { AppBuildProgressRail } from "./AppBuildProgressRail";
@@ -817,15 +818,16 @@ function MissionWorkspaceDetail({
         defaultPrompt={item.goal}
         sessionId={item.missionId}
         serverBaseUrl={publishEnvironment?.serverBaseUrl}
-        onHandoff={(handoff) =>
+        onHandoff={(handoff) => {
+          // H8e — patch approval queue (client-side)
           patchApprovalController.enqueue({
             handoff,
             result: { testResult: handoff.testResult },
-            // H8d 정책: desktop 워크스페이스이므로 apps/desktop/** 안만 허용.
-            // 다른 mission이 다른 repo를 가리키더라도 OpenCode가 임의로 다른 영역을 건드리는 것은 막는다.
             pathPolicy: { allow: ["apps/desktop/", "packages/"] },
-          })
-        }
+          });
+          // Route to unified control queue — runner dispatch는 승인 전 절대 실행되지 않는다
+          routeHandoffToControlQueue(handoff);
+        }}
       />
 
       {/* H8e — Runner Patch 결재함. 위 CodingRunnerCard.onHandoff가 큐에 넣고, 사용자가
