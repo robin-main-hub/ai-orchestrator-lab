@@ -9,76 +9,58 @@
 
 ## Current PR
 
-- PR #1060
-- Purpose: cross-mission contamination defense
-- Included fixes:
-  - write-side nested missionId checks
-  - read-side replay/materialization defense
-  - regression tests
-- Latest known commit: 7ff15d31
-- Baseline mentioned in handoff: main 1e70f7ae
+- None active. Last merged: #1061 (`d20e2a86`).
 
-## Completed in PR #1060
+## Completed
+
+### PR #1060 — cross-mission contamination defense (merged `e68e6b14`)
 
 - cross-mission artifact payload rejection
-- nested missionId audit
-- 13 payload schema reviewed
-- 3 write-side gaps fixed
-- 11 read-side gaps fixed
-- targeted tests: 43/43 pass
-- full server tests: 609/609 pass
-- typecheck: clean
+- nested missionId audit (13 schemas, 3 write-side gaps, 11 read-side gaps fixed)
+- TASKS.md established as source of truth
+- docs/work-board.md deprecated
+- handoff: `docs/handoffs/2026-06-25-real-behavior-mode.md`
+
+### PR #1061 — mission vertical integration suite (merged `d20e2a86`)
+
+- 6 end-to-end integration tests
+- create → artifact → verify → merge queue → reload → rebuild
+- cross-mission injection rejection (artifact/verification/merge)
+- read-side contaminated log defense
+- merge queue requires observed + passed verification
+
+### Open PR landscape review (completed 2026-06-25)
+
+- `docs/handoffs/2026-06-25-open-pr-landscape.md` created
+- #793 — stale but salvageable (shell IA files unique, App.tsx massive conflict, test commits stale)
+- #562 — still valuable (server-side mimo auth injection, security improvement, needs rebase + owner env verification)
+- #561 — still valuable (tiny SummonTheater cursor fix, cherry-pick candidate)
+- #513 — already landed / superseded (main has richer productKernel.ts + runtime bridge)
 
 ## Next Tasks
 
-1. Mission vertical integration suite
-   Flow:
-   create mission
-   → append artifact
-   → record verification
-   → queue merge
-   → reload raw events
-   → rebuild materialized mission
-
-   Required assertions:
-
-   - all nested missionId values match the route mission
-   - rejected events are not appended
-   - replay/materialization does not resurrect rejected events
-   - observed truth only follows observed evidence
-   - no cross-mission artifact/verification/merge leakage
-
-2. Open PR landscape review
-   Review only. Do not merge or close automatically.
-   PRs:
-
-   - #793 UI renewal draft
-   - #562 Mimo server-side auth injection
-   - #561 summon theater cursor fix
-   - #513 product kernel isolation draft
-
-   Classify each as:
-
-   - already landed / superseded
-   - stale but salvageable
-   - conflict / obsolete
-   - still valuable
-
-3. onHandoff → control queue approval wiring
+1. onHandoff → control queue approval wiring
 
    - Handoff should create an approval/control queue item.
    - It must not dispatch runner execution before approval.
 
-4. opencode --format json schema
+2. opencode --format json schema
 
    - Define parser contract from real output or fixture.
    - Handle partial JSON, unknown fields, and failure output.
 
-5. ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS runbook
+3. ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS runbook
 
    - Owner action only.
    - Do not enable automatically.
    - Document env, validation, rollback.
+
+4. Open PR owner actions (review only — do not merge/close)
+
+   - #561: cherry-pick `1ea87bbd` onto main
+   - #562: rebase onto main, resolve vite.config.ts, verify MiMo env
+   - #793: cherry-pick `5c3e63e2`, manually re-apply App.tsx integration
+   - #513: close (superseded)
 
 ## Explicitly Deprecated
 
