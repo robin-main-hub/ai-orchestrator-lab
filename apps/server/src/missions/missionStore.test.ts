@@ -52,6 +52,31 @@ describe("mission store + materialized index", () => {
     expect((await store.list()).map((m) => m.mission.missionId)).toContain("mission_001");
   });
 
+  it("rejects an artifact whose artifact.missionId differs from the path missionId (cross-mission injection)", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+
+    await expect(
+      store.appendEvent("mission_001", {
+        type: "mission.artifact.attached",
+        payload: {
+          artifact: {
+            id: "artifact_evil",
+            missionId: "mission_999",
+            kind: "diff",
+            summary: "cross-mission injection attempt",
+            truthStatus: "observed",
+            createdAt: "2026-06-13T00:00:01.000Z",
+          },
+        },
+      }),
+    ).rejects.toThrow("artifact missionId mismatch");
+
+    const record = await store.get("mission_001");
+    expect(record?.artifacts.map((a) => a.id)).not.toContain("artifact_evil");
+  });
+
   it("restores the same mission state from the raw event log (server-restart shape)", async () => {
     const { deps, events } = memoryDeps();
     const store = createMissionStore(deps);

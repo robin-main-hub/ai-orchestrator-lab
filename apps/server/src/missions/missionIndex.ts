@@ -116,7 +116,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
     if (event.type === "mission.artifact.attached") {
       const parsed = missionArtifactAttachedPayloadSchema.safeParse(event.payload);
       const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
-      if (!parsed.success || !record || record.artifacts.some((artifact) => artifact.id === parsed.data.artifact.id)) {
+      if (!parsed.success || !record || parsed.data.artifact.missionId !== parsed.data.missionId || record.artifacts.some((artifact) => artifact.id === parsed.data.artifact.id)) {
         continue;
       }
       record.artifacts.push(parsed.data.artifact);
