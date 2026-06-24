@@ -80,7 +80,38 @@
 
 ## 요약
 
-- 즉시 조치 가능: #561 cherry-pick (tiny, decorative)
-- owner 검증 후 조치: #562 rebase (보안 개선, MiMo env 검증 필요)
-- 대규모 수동 통합: #793 (UI shell IA, App.tsx 수동 rebase)
-- 폐기: #513 (superseded)
+- 즉시 조치 가능: #561 cherry-pick (tiny, decorative) — **DONE** (closed, reimplemented via #1066)
+- owner 검증 후 조치: #562 rebase (보안 개선, MiMo env 검증 필요) — **review packet ready**
+- 대규모 수동 통합: #793 (UI shell IA, App.tsx 수동 rebase) — **assessment below**
+- 폐기: #513 (superseded) — **CLOSED**
+
+## #793 integration difficulty assessment (2026-06-25)
+
+### Unique files (salvageable as-is)
+
+| File | Lines | Self-contained? |
+|---|---|---|
+| `apps/desktop/src/components/AppShellNav.tsx` | 192 | Yes — nav component with icons |
+| `apps/desktop/src/lib/appShellIa.ts` | 322 | Yes — shell IA types/config (section IDs, virtual surfaces, tab IDs) |
+| `apps/desktop/src/lib/appShellIa.test.ts` | 52 | Yes — test for IA config |
+| `apps/desktop/src/styles/renewal-shell.css` | 653 | Yes — CSS for renewed shell |
+
+### App.tsx integration (NOT salvageable)
+
+- #793 changes App.tsx: +4697 / −580 lines
+- Current main App.tsx: 5827 lines (already very large, 100+ commits since branch point)
+- Cherry-picking the App.tsx changes is impossible — manual re-integration required
+
+### Possible split
+
+1. **PR A (low-risk):** Cherry-pick the 4 new files only. No existing code touched. Adds the shell IA layer + components without wiring them in.
+2. **PR B (high-risk, separate):** Wire the new shell into App.tsx. Requires understanding current App.tsx structure and the intended IA. Significant UI task.
+
+### Design intent
+
+The 4 files implement a "command OS" shell IA: a navigation system with sections (command, studio, operations, library, system), virtual surfaces, and tab IDs. It's a new way to organize the app's navigation — not a visual style change.
+
+### Recommendation
+
+- PR A is safe to do anytime (adds new files, zero conflict risk)
+- PR B requires owner to decide: is the command OS shell IA still the desired direction? If yes, allocate a dedicated UI integration session. If not, close #793.
