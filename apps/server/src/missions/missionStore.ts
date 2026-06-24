@@ -826,6 +826,9 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
 
     async recordVisualQa(missionId, report) {
       if (!(await get(missionId))) return undefined;
+      if (report.missionId !== missionId || !report.issues.every((issue) => issue.missionId === missionId)) {
+        throw new MissionEventValidationError("visual QA report missionId mismatch");
+      }
       // 리포트 + 이슈를 각각 별도 이벤트로 — snapshot/stream trace가 일치한다.
       await commit(missionId, [
         visualQaRecordedEnvelope(missionId, report),
@@ -836,12 +839,18 @@ export function createMissionStore(deps: MissionStoreDeps): MissionStore {
 
     async recordScaffoldPlan(missionId, plan) {
       if (!(await get(missionId))) return undefined;
+      if (plan.missionId !== missionId) {
+        throw new MissionEventValidationError("scaffold plan missionId mismatch");
+      }
       await commit(missionId, [scaffoldPlannedEnvelope(missionId, plan)]);
       return get(missionId);
     },
 
     async recordScaffoldOverlay(missionId, overlay) {
       if (!(await get(missionId))) return undefined;
+      if (overlay.missionId !== missionId) {
+        throw new MissionEventValidationError("scaffold overlay missionId mismatch");
+      }
       await commit(missionId, [scaffoldOverlayRecordedEnvelope(missionId, overlay)]);
       return get(missionId);
     },

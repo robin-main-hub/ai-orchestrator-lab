@@ -105,7 +105,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
     if (event.type === "mission.worker.assigned") {
       const parsed = missionWorkerAssignedPayloadSchema.safeParse(event.payload);
       const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
-      if (!parsed.success || !record || record.workers.some((worker) => worker.id === parsed.data.worker.id)) {
+      if (!parsed.success || !record || parsed.data.worker.missionId !== parsed.data.missionId || record.workers.some((worker) => worker.id === parsed.data.worker.id)) {
         continue;
       }
       record.workers.push(parsed.data.worker);
@@ -127,7 +127,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
     if (event.type === "mission.verification.recorded") {
       const parsed = missionVerificationRecordedPayloadSchema.safeParse(event.payload);
       const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
-      if (!parsed.success || !record || record.verificationReports.some((report) => report.id === parsed.data.report.id)) {
+      if (!parsed.success || !record || parsed.data.report.missionId !== parsed.data.missionId || record.verificationReports.some((report) => report.id === parsed.data.report.id)) {
         continue;
       }
       record.verificationReports.push(parsed.data.report);
@@ -138,7 +138,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
     if (event.type === "mission.checkpoint.created") {
       const parsed = missionCheckpointRecordedPayloadSchema.safeParse(event.payload);
       const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
-      if (!parsed.success || !record || record.checkpoints.some((cp) => cp.id === parsed.data.checkpoint.id)) {
+      if (!parsed.success || !record || parsed.data.checkpoint.missionId !== parsed.data.missionId || record.checkpoints.some((cp) => cp.id === parsed.data.checkpoint.id)) {
         continue;
       }
       record.checkpoints.push(parsed.data.checkpoint);
@@ -149,7 +149,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
     if (event.type === "mission.workspace.attached") {
       const parsed = missionWorkspaceAttachedPayloadSchema.safeParse(event.payload);
       const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
-      if (!parsed.success || !record) {
+      if (!parsed.success || !record || parsed.data.workspace.missionId !== parsed.data.missionId) {
         continue;
       }
       // upsert by id — preview/files 상태 갱신 이벤트가 같은 id를 덮어쓴다(latest wins)
@@ -179,7 +179,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
     if (event.type === "mission.design.blueprint.recorded") {
       const parsed = missionDesignBlueprintRecordedPayloadSchema.safeParse(event.payload);
       const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
-      if (!parsed.success || !record || record.designBlueprints.some((bp) => bp.id === parsed.data.blueprint.id)) {
+      if (!parsed.success || !record || parsed.data.blueprint.missionId !== parsed.data.missionId || record.designBlueprints.some((bp) => bp.id === parsed.data.blueprint.id)) {
         continue;
       }
       record.designBlueprints.push(parsed.data.blueprint);
@@ -190,7 +190,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
     if (event.type === "mission.visual_qa.recorded") {
       const parsed = missionVisualQaRecordedPayloadSchema.safeParse(event.payload);
       const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
-      if (!parsed.success || !record || record.visualQaReports.some((r) => r.id === parsed.data.report.id)) {
+      if (!parsed.success || !record || parsed.data.report.missionId !== parsed.data.missionId || record.visualQaReports.some((r) => r.id === parsed.data.report.id)) {
         continue;
       }
       record.visualQaReports.push(parsed.data.report);
@@ -201,7 +201,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
     if (event.type === "mission.design.issue.recorded") {
       const parsed = missionDesignIssueRecordedPayloadSchema.safeParse(event.payload);
       const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
-      if (!parsed.success || !record || record.designIssues.some((i) => i.id === parsed.data.issue.id)) {
+      if (!parsed.success || !record || parsed.data.issue.missionId !== parsed.data.missionId || record.designIssues.some((i) => i.id === parsed.data.issue.id)) {
         continue;
       }
       record.designIssues.push(parsed.data.issue);
@@ -212,7 +212,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
     if (event.type === "mission.scaffold.planned") {
       const parsed = missionScaffoldPlannedPayloadSchema.safeParse(event.payload);
       const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
-      if (!parsed.success || !record || record.scaffoldPlans.some((p) => p.id === parsed.data.plan.id)) {
+      if (!parsed.success || !record || parsed.data.plan.missionId !== parsed.data.missionId || record.scaffoldPlans.some((p) => p.id === parsed.data.plan.id)) {
         continue;
       }
       record.scaffoldPlans.push(parsed.data.plan);
@@ -235,7 +235,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
     if (event.type === "mission.scaffold.overlay.recorded") {
       const parsed = missionScaffoldOverlayRecordedPayloadSchema.safeParse(event.payload);
       const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
-      if (!parsed.success || !record) continue;
+      if (!parsed.success || !record || parsed.data.overlay.missionId !== parsed.data.missionId) continue;
       // 같은 id 중복은 무시(idempotent).
       if (record.scaffoldOverlays.some((o) => o.id === parsed.data.overlay.id)) continue;
       record.scaffoldOverlays.push(parsed.data.overlay);
@@ -246,7 +246,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
     if (event.type === "mission.error_card.recorded") {
       const parsed = missionErrorCardRecordedPayloadSchema.safeParse(event.payload);
       const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
-      if (!parsed.success || !record || record.errorCards.some((card) => card.id === parsed.data.errorCard.id)) {
+      if (!parsed.success || !record || parsed.data.errorCard.missionId !== parsed.data.missionId || record.errorCards.some((card) => card.id === parsed.data.errorCard.id)) {
         continue;
       }
       record.errorCards.push(parsed.data.errorCard);
@@ -268,7 +268,7 @@ export function buildMissionIndexFromEvents(events: ReadonlyArray<EventEnvelope>
     if (event.type === "mission.merge.queued") {
       const parsed = missionMergeQueuedPayloadSchema.safeParse(event.payload);
       const record = parsed.success ? records.get(parsed.data.missionId) : undefined;
-      if (!parsed.success || !record) {
+      if (!parsed.success || !record || parsed.data.item.missionId !== parsed.data.missionId) {
         continue;
       }
       // upsert: 같은 큐 항목 id는 갱신(queued → merged 전이 반영), 새 항목은 추가
