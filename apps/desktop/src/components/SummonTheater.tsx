@@ -295,10 +295,10 @@ export function SummonTheater({
 
       <div className="mt-5 shrink-0 space-y-2.5">
         <TimelineScrubber events={events} />
-        <footer className="rounded-xl border border-white/10 bg-black/60 px-4 py-3 font-mono text-[13px]">
-          <span className="text-pink-400">&gt; </span>
-          <span className="text-zinc-200">{command.slice(2, typed + 2)}</span>
-          <span className="summon-breathe ml-0.5 inline-block h-4 w-2 translate-y-0.5 bg-violet-400" />
+        <footer className="flex items-center overflow-hidden whitespace-nowrap rounded-xl border border-white/10 bg-black/60 px-4 py-3 font-mono text-[13px]">
+          <span className="shrink-0 text-pink-400">&gt;&nbsp;</span>
+          <span className="min-w-0 truncate text-zinc-200">{command.slice(2, typed + 2)}</span>
+          <span className="summon-breathe ml-0.5 inline-block h-4 w-2 shrink-0 translate-y-0.5 bg-violet-400" aria-hidden />
         </footer>
       </div>
     </div>
