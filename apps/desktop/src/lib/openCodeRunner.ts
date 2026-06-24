@@ -108,6 +108,12 @@ export function buildOpenCodeArgv(
 /**
  * opencode `--format json`은 JSON 이벤트를 줄단위로 흘린다(정확한 스키마는 버전마다
  * 다를 수 있어 방어적으로 파싱). 알 수 없는 줄은 message로 흡수해 실제 출력을 잃지 않는다.
+ *
+ * **불변 (2026-06-25 계약 고정):**
+ * - 비-JSON 줄(사람용 헤더, 빈 줄)은 무시한다.
+ * - `{`로 시작하고 `}`로 끝나지만 JSON.parse에 실패한 줄은 **error 이벤트**로 분류한다.
+ *   (partial/truncated JSON을 조용히 무시하지 않는다 — 실패 위장 금지)
+ * - error 이벤트나 done.ok=false가 있으면 전체 출력을 실패로 분류해야 한다.
  */
 export function parseOpenCodeJsonStream(text: string): OpenCodeEvent[] {
   const events: OpenCodeEvent[] = [];
@@ -118,7 +124,12 @@ export function parseOpenCodeJsonStream(text: string): OpenCodeEvent[] {
     let obj: Record<string, unknown>;
     try {
       obj = JSON.parse(line) as Record<string, unknown>;
-    } catch {
+    } catch (parseError) {
+      // partial/truncated JSON — 조용히 무시하지 않고 error로 기록
+      events.push({
+        type: "error",
+        message: `invalid JSON line: ${parseError instanceof Error ? parseError.message : "parse error"}`,
+      });
       continue;
     }
     const type = String(obj.type ?? obj.event ?? "");
@@ -144,6 +155,67 @@ export function parseOpenCodeJsonStream(text: string): OpenCodeEvent[] {
     }
   }
   return events;
+}
+
+/** 파서 결과 — 성공/실패 discriminated union */
+export type ParseOpenCodeResult =
+  | { ok: true; events: OpenCodeEvent[] }
+  | { ok: false; reason: ParseOpenCodeFailureReason; rawPreview: string; parseError?: string };
+
+export type ParseOpenCodeFailureReason =
+  | "empty_output"
+  | "partial_or_invalid_json"
+  | "command_failure";
+
+const RAW_PREVIEW_CAP = 240;
+
+function capPreview(text: string): string {
+  return text.length > RAW_PREVIEW_CAP ? `${text.slice(0, RAW_PREVIEW_CAP)}…` : text;
+}
+
+/**
+ * opencode 출력 전체를 분류한다.
+ *
+ * - 빈 출력 → `{ ok: false, reason: "empty_output" }`
+ * - 파싱 중 error 이벤트 발생 → reason은 error 내용에 따라 `partial_or_invalid_json` 또는 `command_failure`
+ * - done.ok === false → `command_failure`
+ * - 그 외 → `{ ok: true, events }`
+ *
+ * **실패 위장 금지:** error 이벤트, done.ok=false, invalid JSON line이 있으면 ok=false.
+ */
+export function parseOpenCodeJsonOutput(text: string): ParseOpenCodeResult {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return { ok: false, reason: "empty_output", rawPreview: "" };
+  }
+  const events = parseOpenCodeJsonStream(text);
+
+  let invalidJsonLine = false;
+  let commandFailure = false;
+  let parseError: string | undefined;
+
+  for (const event of events) {
+    if (event.type === "error") {
+      if (event.message.startsWith("invalid JSON line:")) {
+        invalidJsonLine = true;
+        parseError = event.message;
+      } else {
+        commandFailure = true;
+        parseError = event.message;
+      }
+    }
+    if (event.type === "done" && !event.ok) {
+      commandFailure = true;
+    }
+  }
+
+  if (invalidJsonLine) {
+    return { ok: false, reason: "partial_or_invalid_json", rawPreview: capPreview(trimmed), parseError };
+  }
+  if (commandFailure) {
+    return { ok: false, reason: "command_failure", rawPreview: capPreview(trimmed), parseError };
+  }
+  return { ok: true, events };
 }
 
 function numberOr(value: unknown): number | undefined {

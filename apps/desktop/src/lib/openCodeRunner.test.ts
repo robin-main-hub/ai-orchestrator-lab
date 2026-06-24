@@ -3,6 +3,7 @@ import {
   buildOpenCodeArgv,
   createOpenCodeRunner,
   parseOpenCodeJsonStream,
+  parseOpenCodeJsonOutput,
   reduceOpenCodeEvents,
   safeOpenCodeTools,
   type OpenCodeEvent,
@@ -99,6 +100,152 @@ describe("순수 — --format json 스트림 파싱", () => {
     const events = parseOpenCodeJsonStream('{"type":"error","message":"boom"}\n{"event":"weird","content":"hi"}');
     expect(events[0]).toMatchObject({ type: "error", message: "boom" });
     expect(events[1]).toMatchObject({ type: "message", text: "hi" });
+  });
+});
+
+// ── opencode JSON output contract (2026-06-25) ──
+// 실제 opencode --format json 샘플이 공개되지 않은 상태에서 파서 boundary를 고정한다.
+// fixture는 opencode 문서의 이벤트 type 키워드(message/tool/file_edit/test/error/done) 기반 최소 합성.
+
+describe("parseOpenCodeJsonOutput — contract: valid inputs", () => {
+  it("A. valid minimal JSON → ok=true", () => {
+    const text = '{"type":"done","ok":true}';
+    const result = parseOpenCodeJsonOutput(text);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.events.map((e) => e.type)).toEqual(["done"]);
+    }
+  });
+
+  it("A. valid rich JSON with unknown fields → ok=true, unknown fields tolerated", () => {
+    const text = '{"type":"message","text":"hi","unknownField":42,"extra":"data"}';
+    const result = parseOpenCodeJsonOutput(text);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.events[0]).toMatchObject({ type: "message", text: "hi" });
+    }
+  });
+
+  it("B. valid JSON lines (event stream) → ok=true, all events parsed", () => {
+    const text = [
+      '{"type":"message","text":"start"}',
+      '{"type":"tool","name":"read","status":"ok"}',
+      '{"type":"file_edit","path":"src/a.ts","additions":3}',
+      '{"type":"test","passed":5,"failed":0}',
+      '{"type":"done","ok":true}',
+    ].join("\n");
+    const result = parseOpenCodeJsonOutput(text);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.events.map((e) => e.type)).toEqual(["message", "tool", "file_edit", "test", "done"]);
+    }
+  });
+
+  it("B. empty lines between JSON events are ignored", () => {
+    const text = '\n{"type":"message","text":"hi"}\n\n{"type":"done","ok":true}\n';
+    const result = parseOpenCodeJsonOutput(text);
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe("parseOpenCodeJsonOutput — contract: failure cases", () => {
+  it("C. stderr/noise mixed output — non-JSON lines ignored, JSON still parsed", () => {
+    const text = [
+      "opencode v1.2.3",
+      "Loading config...",
+      '{"type":"message","text":"analysis started"}',
+      "  some debug noise  ",
+      '{"type":"done","ok":true}',
+    ].join("\n");
+    const result = parseOpenCodeJsonOutput(text);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.events.map((e) => e.type)).toEqual(["message", "done"]);
+    }
+  });
+
+  it("D. partial/truncated JSON → ok=false, reason=partial_or_invalid_json", () => {
+    // starts with { and ends with } but invalid JSON (unquoted value)
+    const text = '{"type":"message","text":truncated}';
+    const result = parseOpenCodeJsonOutput(text);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("partial_or_invalid_json");
+      expect(result.rawPreview).toBeTruthy();
+      expect(result.parseError).toContain("invalid JSON");
+    }
+  });
+
+  it("D. JSON-looking line that fails parse → error event, not silently dropped", () => {
+    const events = parseOpenCodeJsonStream('{"type":"message","text":broken}');
+    expect(events).toHaveLength(1);
+    expect(events[0]!.type).toBe("error");
+    const errorEvent = events[0] as { type: "error"; message: string };
+    expect(errorEvent.message).toContain("invalid JSON");
+  });
+
+  it("E. command failure — error event → ok=false, reason=command_failure", () => {
+    const text = '{"type":"error","message":"model rate limited"}';
+    const result = parseOpenCodeJsonOutput(text);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("command_failure");
+      expect(result.rawPreview).toContain("rate limited");
+    }
+  });
+
+  it("E. done.ok=false → ok=false, reason=command_failure", () => {
+    const text = '{"type":"done","ok":false}';
+    const result = parseOpenCodeJsonOutput(text);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("command_failure");
+    }
+  });
+
+  it("F. empty output → ok=false, reason=empty_output", () => {
+    expect(parseOpenCodeJsonOutput("").ok).toBe(false);
+    expect(parseOpenCodeJsonOutput("   \n  \n").ok).toBe(false);
+  });
+
+  it("rawPreview is capped at 240 characters", () => {
+    // long invalid JSON that starts with { and ends with }
+    const longText = "{" + "x".repeat(300) + "}";
+    const result = parseOpenCodeJsonOutput(longText);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.rawPreview.length).toBeLessThanOrEqual(241); // 240 + ellipsis
+    }
+  });
+});
+
+describe("parseOpenCodeJsonOutput — contract: no false success", () => {
+  it("partial JSON before valid JSON → overall ok=false", () => {
+    const text = '{"type":"message","text":broken}\n{"type":"done","ok":true}';
+    const result = parseOpenCodeJsonOutput(text);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("partial_or_invalid_json");
+    }
+  });
+
+  it("error event mixed with valid events → overall ok=false", () => {
+    const text = [
+      '{"type":"message","text":"working"}',
+      '{"type":"error","message":"permission denied"}',
+      '{"type":"done","ok":true}',
+    ].join("\n");
+    const result = parseOpenCodeJsonOutput(text);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("command_failure");
+    }
+  });
+
+  it("valid events with no error/done → ok=true (success is default only without error signals)", () => {
+    const text = '{"type":"message","text":"all good"}';
+    const result = parseOpenCodeJsonOutput(text);
+    expect(result.ok).toBe(true);
   });
 });
 
