@@ -9,7 +9,7 @@
 
 ## Current PR
 
-- None active. Last merged: #1064 (`d9d12e70`).
+- None active. Last merged: #1066 (`8daed7da`).
 
 ## Completed
 
@@ -51,6 +51,29 @@
 - 16 contract tests covering valid/invalid/partial/noise/failure/empty cases
 - Note: actual opencode --format json sample unavailable; synthetic fixtures used; contract should be strengthened when real sample is available
 
+### PR #1066 — summon theater cursor fix (merged `8daed7da`)
+
+- Reimplementation of #561 on latest main
+- Footer: flex nowrap row, cursor pinned to text end, aria-hidden
+- Original #561 closed as superseded
+
+### #561 closed as superseded by #1066
+
+### #513 closed as superseded
+
+- main's `productKernel.ts` (545 lines) replaces #513's 296-line version
+- main adds `productKernelContracts.ts` (331 lines) runtime bridge — #513 never had
+- All persona-file changes already in main
+- Type vocabulary diverged (kernel*/product* → mission*/sandbox*)
+
+### #562 Mimo server-side auth injection — review packet
+
+- `docs/handoffs/2026-06-25-mimo-pr-562-review.md` created
+- Problem still exists in main: real API key in client bundle
+- #562's server-side injection is a genuine security improvement
+- Do NOT merge as-is — stale branch, unconfirmed upstream change, vite.config.ts conflict
+- Minimal salvage PR possible after owner confirms upstream choice
+
 ### tmux send-keys runbook (completed 2026-06-25)
 
 - `docs/runbooks/orchestrator-enable-tmux-send-keys.md` created
@@ -70,17 +93,18 @@
 ## Owner action pending
 
 - **ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS** — runbook at `docs/runbooks/orchestrator-enable-tmux-send-keys.md`. Owner must SSH to DGX-02, edit `.env`, restart server, run validation checklist.
-- **Open PR decisions** — see landscape review (`docs/handoffs/2026-06-25-open-pr-landscape.md`):
-  - #561: cherry-pick `1ea87bbd` onto main
-  - #562: rebase onto main, resolve vite.config.ts, verify MiMo env
-  - #793: cherry-pick `5c3e63e2`, manually re-apply App.tsx integration
-  - #513: close (superseded)
+- **#562 Mimo server-side auth injection** — review packet at `docs/handoffs/2026-06-25-mimo-pr-562-review.md`. Owner must:
+  1. Approve the security improvement (server-side key injection)
+  2. Confirm upstream: `token-plan-sgp.xiaomimimo.com` (keep) or `api.xiaomimimo.com` (switch)
+  3. After confirmation, AI can create minimal salvage PR
+- **#793 UI renewal draft** — stale but salvageable. 4 unique new files (AppShellNav, appShellIa, renewal-shell.css, appShellIa.test). App.tsx has 100+ conflicting commits. Owner must decide: cherry-pick + manual integration or defer.
 
 ## Next steps
 
-No remaining AI-executable implementation tasks. Next work requires owner decision:
+No remaining AI-executable default tasks. Next work requires owner decision:
 - Enable tmux send-keys (runbook ready)
-- Act on stale PR landscape (4 PRs awaiting owner decision)
+- #562: confirm upstream, then AI creates salvage PR
+- #793: decide integration plan or defer
 - Or assign new work
 
 ## Explicitly Deprecated
