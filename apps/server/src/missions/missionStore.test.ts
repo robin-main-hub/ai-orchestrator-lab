@@ -52,6 +52,31 @@ describe("mission store + materialized index", () => {
     expect((await store.list()).map((m) => m.mission.missionId)).toContain("mission_001");
   });
 
+  it("rejects an artifact whose artifact.missionId differs from the path missionId (cross-mission injection)", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+
+    await expect(
+      store.appendEvent("mission_001", {
+        type: "mission.artifact.attached",
+        payload: {
+          artifact: {
+            id: "artifact_evil",
+            missionId: "mission_999",
+            kind: "diff",
+            summary: "cross-mission injection attempt",
+            truthStatus: "observed",
+            createdAt: "2026-06-13T00:00:01.000Z",
+          },
+        },
+      }),
+    ).rejects.toThrow("artifact missionId mismatch");
+
+    const record = await store.get("mission_001");
+    expect(record?.artifacts.map((a) => a.id)).not.toContain("artifact_evil");
+  });
+
   it("restores the same mission state from the raw event log (server-restart shape)", async () => {
     const { deps, events } = memoryDeps();
     const store = createMissionStore(deps);
@@ -801,5 +826,78 @@ describe("design blueprint (D3)", () => {
     const { deps } = memoryDeps();
     const store = createMissionStore(deps);
     expect(await store.attachDesignBlueprint("ghost", blueprintInput)).toBeUndefined();
+  });
+});
+
+describe("nested missionId rejection — cross-mission contamination guard", () => {
+  it("recordVisualQa rejects a report whose report.missionId differs from the path missionId", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    await expect(
+      store.recordVisualQa("mission_001", {
+        id: "vq_evil",
+        missionId: "mission_999",
+        workspaceId: "ws1",
+        previewUrl: "http://127.0.0.1:4401",
+        checks: [],
+        issues: [],
+        status: "failed",
+        truthStatus: "observed",
+        createdAt: "t",
+      }),
+    ).rejects.toThrow("visual QA report missionId mismatch");
+  });
+
+  it("recordVisualQa rejects a report whose issue.missionId differs from the path missionId", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    await expect(
+      store.recordVisualQa("mission_001", {
+        id: "vq_ok",
+        missionId: "mission_001",
+        workspaceId: "ws1",
+        previewUrl: "http://127.0.0.1:4401",
+        checks: [],
+        issues: [
+          { id: "issue_evil", missionId: "mission_999", workspaceId: "ws1", kind: "missing_primary_action", severity: "medium", summary: "x", recommendation: "y", truthStatus: "observed", createdAt: "t" },
+        ],
+        status: "failed",
+        truthStatus: "observed",
+        createdAt: "t",
+      }),
+    ).rejects.toThrow("visual QA report missionId mismatch");
+  });
+
+  it("recordScaffoldPlan rejects a plan whose plan.missionId differs from the path missionId", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    await expect(
+      store.recordScaffoldPlan("mission_001", {
+        id: "plan_evil",
+        missionId: "mission_999",
+        repoRootRef: "/repo",
+        steps: [],
+        truthStatus: "planned",
+        createdAt: "t",
+      } as never),
+    ).rejects.toThrow("scaffold plan missionId mismatch");
+  });
+
+  it("recordScaffoldOverlay rejects an overlay whose overlay.missionId differs from the path missionId", async () => {
+    const { deps } = memoryDeps();
+    const store = createMissionStore(deps);
+    await store.create(CREATE);
+    await expect(
+      store.recordScaffoldOverlay("mission_001", {
+        id: "overlay_evil",
+        missionId: "mission_999",
+        planId: "plan_1",
+        truthStatus: "planned",
+        createdAt: "t",
+      } as never),
+    ).rejects.toThrow("scaffold overlay missionId mismatch");
   });
 });

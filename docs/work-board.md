@@ -1,3 +1,7 @@
+> **Deprecated:** This R5/R6-era work board is retained for history only.
+> The current source of truth is [`/TASKS.md`](../TASKS.md).
+> Do not use this file to choose new work unless an owner explicitly reopens it.
+
 # Work Board (Claude × Codex 협업 상태)
 
 ## R6 canonical update (2026-05-27 sync)
