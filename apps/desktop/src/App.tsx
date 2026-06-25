@@ -370,6 +370,7 @@ import "./styles/renewal-shell.css";
 
 const safeVirtualSurfaces: ReadonlySet<AppShellVirtualSurface> = new Set([
   "operations_queue",
+  "operations_missions",
 ]);
 
 function isTabRendered(tab: { target: { nav?: string; mode?: string; virtual?: AppShellVirtualSurface | null } }): boolean {
@@ -5109,7 +5110,14 @@ export function App() {
     const tab = findAppShellTab(tabId);
     if (tab.target.mode) setMode(tab.target.mode);
     if (tab.target.nav) setActiveNavItem(tab.target.nav);
+    // operations.launch (nav "run") starts the run workspace on its launch tab,
+    // resetting any sticky board selection left over from operations.missions.
+    if (tab.target.nav === "run") setSummonSeedMode("single");
     if (tab.target.virtual === "operations_queue") setApprovalDrawerOpen(true);
+    // operations.missions reuses the single existing RunWorkspace mission board
+    // (no duplicate store/fetch): land on the run workspace, opened on its board.
+    if (tab.target.virtual === "operations_missions") setActiveNavItem("run");
+    if (tab.target.virtual === "operations_missions") setSummonSeedMode("board");
   }, []);
 
   const handleSelectShellSection = useCallback((sectionId: AppShellSectionId) => {
@@ -5352,7 +5360,7 @@ export function App() {
             />
           ) : activeNavItem === "run" ? (
             <RunWorkspace
-              key={summonSeedPersona ?? "run"}
+              key={`${summonSeedPersona ?? "run"}:${summonSeedMode}`}
               initialMode={summonSeedMode}
               autonomyProps={{
                 seedPersonaName: summonSeedPersona ?? undefined,

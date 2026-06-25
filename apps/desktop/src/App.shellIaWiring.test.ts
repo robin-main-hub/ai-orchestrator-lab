@@ -81,9 +81,10 @@ describe("shell IA virtual surface filtering", () => {
     expect(appSource).toContain("isTabRendered");
   });
 
-  it("safeVirtualSurfaces contains only operations_queue", () => {
+  it("safeVirtualSurfaces contains operations_queue and operations_missions", () => {
     expect(appSource).toContain("safeVirtualSurfaces");
     expect(appSource).toContain('"operations_queue"');
+    expect(appSource).toContain('"operations_missions"');
   });
 
   it("operations.queue tab is rendered (safe virtual surface)", () => {
@@ -93,10 +94,11 @@ describe("shell IA virtual surface filtering", () => {
     expect(queueTab?.target.virtual).toBe("operations_queue");
   });
 
-  it("all 9 unsafe virtual surfaces are not in safeVirtualSurfaces", () => {
+  it("unsafe virtual surfaces are not in safeVirtualSurfaces", () => {
+    const safe = new Set(["operations_queue", "operations_missions"]);
     const allVirtualTabs = appShellSections.flatMap((s) => s.tabs).filter((t) => t.target.virtual);
-    const unsafeVirtuals = allVirtualTabs.filter((t) => t.target.virtual !== "operations_queue");
-    expect(unsafeVirtuals.length).toBe(10);
+    const unsafeVirtuals = allVirtualTabs.filter((t) => !safe.has(t.target.virtual as string));
+    expect(unsafeVirtuals.length).toBe(9);
     for (const tab of unsafeVirtuals) {
       expect(appSource).not.toContain(`"${tab.target.virtual}"`);
     }
@@ -181,5 +183,71 @@ describe("operations.queue virtual surface mapping", () => {
     expect(queueLine).toContain("setApprovalDrawerOpen(true)");
     expect(queueLine).not.toContain("setMode");
     expect(queueLine).not.toContain("setActiveNavItem");
+  });
+});
+
+describe("operations.missions virtual surface mapping", () => {
+  it("operations.missions is exposed as a safe virtual surface tab", () => {
+    expect(appSource).toContain('"operations_missions"');
+    const opsSection = appShellSections.find((s) => s.id === "operations");
+    const missionsTab = opsSection?.tabs.find((t) => t.id === "operations.missions");
+    expect(missionsTab).toBeDefined();
+    expect(missionsTab?.target.virtual).toBe("operations_missions");
+  });
+
+  it("selecting operations.missions routes to the existing RunWorkspace board via existing state", () => {
+    expect(appSource).toContain('tab.target.virtual === "operations_missions"');
+    const handlerBlock = appSource.match(
+      /const handleSelectShellTab = useCallback\([\s\S]*?\}, \[\]\);/,
+    )?.[0];
+    expect(handlerBlock).toBeDefined();
+    const missionLines = handlerBlock!
+      .split("\n")
+      .filter((l) => l.includes("operations_missions"));
+    // Reuses existing nav + run-mode state (no new store, no new router).
+    expect(missionLines.some((l) => l.includes('setActiveNavItem("run")'))).toBe(true);
+    expect(missionLines.some((l) => l.includes('setSummonSeedMode("board")'))).toBe(true);
+  });
+
+  it("operations.missions selection performs no fetch/dispatch/lifecycle action", () => {
+    const handlerBlock = appSource.match(
+      /const handleSelectShellTab = useCallback\([\s\S]*?\}, \[\]\);/,
+    )?.[0];
+    expect(handlerBlock).toBeDefined();
+    const missionLines = handlerBlock!
+      .split("\n")
+      .filter((l) => l.includes("operations_missions"))
+      .join("\n");
+    expect(missionLines).not.toContain("dispatch");
+    expect(missionLines).not.toContain("runner");
+    expect(missionLines).not.toContain("tmux");
+    expect(missionLines).not.toContain("fetch(");
+    expect(missionLines).not.toContain("approve");
+    expect(missionLines).not.toContain("createDgxMission");
+    expect(missionLines).not.toContain("verifyDgxMission");
+    expect(missionLines).not.toContain("mergeDgxMission");
+  });
+
+  it("reuses one RunWorkspace mission board instance (no duplicate store)", () => {
+    // The single RunWorkspace's key includes summonSeedMode so a board request
+    // re-mounts the same component into board mode — no second board/fetch/store.
+    const keyLine = appSource
+      .split("\n")
+      .find((l) => l.includes("key={") && l.includes("summonSeedPersona"));
+    expect(keyLine).toBeDefined();
+    expect(keyLine).toContain("summonSeedMode");
+    expect(appSource).toContain("initialMode={summonSeedMode}");
+    const runWorkspaceCount = (appSource.match(/<RunWorkspace/g) ?? []).length;
+    expect(runWorkspaceCount).toBe(1);
+  });
+
+  it("existing RunWorkspace mission board (boardProps) stays intact", () => {
+    expect(appSource).toContain("<RunWorkspace");
+    expect(appSource).toContain("boardProps={{");
+  });
+
+  it("operations.queue safe-surface behavior is preserved", () => {
+    expect(appSource).toContain('tab.target.virtual === "operations_queue"');
+    expect(appSource).toContain("setApprovalDrawerOpen(true)");
   });
 });
