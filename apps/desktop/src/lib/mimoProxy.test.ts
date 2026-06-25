@@ -10,8 +10,13 @@ import {
   type ProxyConfig,
   type ProxyEnv,
 } from "./mimoProxy";
+import {
+  MIMO_CREDENTIAL_ENV as CONFIG_ENV,
+  MIMO_UPSTREAM as CONFIG_UPSTREAM,
+} from "./mimoProxyConfig";
 
 const proxySource = readFileSync(fileURLToPath(new URL("./mimoProxy.ts", import.meta.url)), "utf8");
+const configSource = readFileSync(fileURLToPath(new URL("./mimoProxyConfig.ts", import.meta.url)), "utf8");
 
 const bearerConfig: ProxyConfig = {
   prefix: "/mimo-token-openai",
@@ -357,14 +362,15 @@ describe("Mimo proxy source-level contract", () => {
     expect(proxySource).not.toContain("'MIMO_API_KEY'");
   });
 
-  it("exports MIMO_CREDENTIAL_ENV constant", () => {
-    expect(proxySource).toContain("MIMO_CREDENTIAL_ENV");
-    expect(proxySource).toContain('"MIMO_TP_API_KEY"');
+  it("imports MIMO_CREDENTIAL_ENV from mimoProxyConfig", () => {
+    expect(proxySource).toContain('from "./mimoProxyConfig"');
+    expect(configSource).toContain('"MIMO_TP_API_KEY"');
+    expect(MIMO_CREDENTIAL_ENV).toBe(CONFIG_ENV);
   });
 
-  it("exports MIMO_UPSTREAM constant", () => {
-    expect(proxySource).toContain("MIMO_UPSTREAM");
-    expect(proxySource).toContain("https://token-plan-sgp.xiaomimimo.com");
+  it("imports MIMO_UPSTREAM from mimoProxyConfig", () => {
+    expect(configSource).toContain("https://token-plan-sgp.xiaomimimo.com");
+    expect(MIMO_UPSTREAM).toBe(CONFIG_UPSTREAM);
   });
 
   it("exports resolveMimoCredential", () => {
@@ -394,5 +400,23 @@ describe("Mimo proxy source-level contract", () => {
     expect(readinessFnMatch).toBeDefined();
     expect(readinessFnMatch![0]).toContain("resolveMimoCredential");
     expect(readinessFnMatch![0]).not.toContain("env.MIMO_TP_API_KEY");
+  });
+});
+
+describe("mimoProxyConfig", () => {
+  it("exports MIMO_CREDENTIAL_ENV as MIMO_TP_API_KEY", () => {
+    expect(CONFIG_ENV).toBe("MIMO_TP_API_KEY");
+  });
+
+  it("exports MIMO_UPSTREAM as token-plan-sgp.xiaomimimo.com", () => {
+    expect(CONFIG_UPSTREAM).toBe("https://token-plan-sgp.xiaomimimo.com");
+  });
+
+  it("config module has no runtime imports", () => {
+    expect(configSource).not.toMatch(/^import\s/m);
+    expect(configSource).not.toMatch(/^export\s+\{.*\}\s+from/m);
+    expect(configSource).not.toContain("require(");
+    expect(configSource).not.toContain("fetch");
+    expect(configSource).not.toContain("process.env");
   });
 });
