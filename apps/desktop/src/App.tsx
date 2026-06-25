@@ -369,6 +369,7 @@ import {
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/ui/sheet";
 import { ReadOnlyModelCatalogPanel } from "./components/ReadOnlyModelCatalogPanel";
 import { ReadOnlyMemoryLibraryPanel } from "./components/ReadOnlyMemoryLibraryPanel";
+import { ReadOnlyAgentCatalogPanel } from "./components/ReadOnlyAgentCatalogPanel";
 import "./styles/renewal-shell.css";
 
 const safeVirtualSurfaces: ReadonlySet<AppShellVirtualSurface> = new Set([
@@ -377,6 +378,7 @@ const safeVirtualSurfaces: ReadonlySet<AppShellVirtualSurface> = new Set([
   "system_runtime",
   "system_models",
   "library_memory",
+  "library_agents",
 ]);
 
 function isTabRendered(tab: { target: { nav?: string; mode?: string; virtual?: AppShellVirtualSurface | null } }): boolean {
@@ -439,6 +441,9 @@ export function App() {
   // Read-only memory library surface (library.memory shell tab). UI toggle only —
   // reuses memoryInspector + memoryRecords + governance summary; no store, no fetch.
   const [memorySurfaceOpen, setMemorySurfaceOpen] = useState(false);
+  // Read-only agent catalog surface (library.agents shell tab). UI toggle only —
+  // reuses the agents roster + agentActivityById + capability audit; no store, no fetch.
+  const [agentsSurfaceOpen, setAgentsSurfaceOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   // Batch 11 LINE C — one-shot view command pushed to the Assistant Inbox from the
   // Command Palette. View-only (mode/focus/category/clear); never an action.
@@ -5142,6 +5147,9 @@ export function App() {
     // library.memory shows the read-only memory library catalog in a sheet —
     // selection only toggles this sheet: read-only, no write/sync/eval/curation.
     if (tab.target.virtual === "library_memory") setMemorySurfaceOpen(true);
+    // library.agents shows the read-only agent catalog in a sheet — selection only
+    // toggles this sheet: no agent create / edit / delete / activate / assignment.
+    if (tab.target.virtual === "library_agents") setAgentsSurfaceOpen(true);
   }, []);
 
   const handleSelectShellSection = useCallback((sectionId: AppShellSectionId) => {
@@ -5945,6 +5953,25 @@ export function App() {
             governanceSummary={memoryGovernanceSummary}
             inspector={memoryInspector}
             records={memoryRecords}
+          />
+        </SheetContent>
+      </Sheet>
+      {/* library.agents shell surface — read-only agent catalog rendered from the
+          existing agents roster + agentActivityById + capability audit. No agent
+          create/edit/delete/activate/assign/dispatch, no prompt/persona body,
+          no credential/secret value, no fetch/store/poll. */}
+      <Sheet open={agentsSurfaceOpen} onOpenChange={setAgentsSurfaceOpen}>
+        <SheetContent side="right" className="overflow-y-auto p-4 sm:max-w-md">
+          <SheetHeader className="p-0">
+            <SheetTitle>에이전트 카탈로그</SheetTitle>
+            <SheetDescription>
+              에이전트 프로필 · 역할 · 런타임 상태 · 역량 요약 (읽기 전용)
+            </SheetDescription>
+          </SheetHeader>
+          <ReadOnlyAgentCatalogPanel
+            agents={agents}
+            activityById={agentActivityById}
+            capabilityAudit={agentRoleToolRuntimeAudit}
           />
         </SheetContent>
       </Sheet>

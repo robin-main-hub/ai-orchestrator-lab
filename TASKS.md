@@ -9,8 +9,8 @@
 
 ## Current PR
 
-- **#1075 (draft)** — expose `operations.missions` + `system.runtime` read-only shell surfaces. Branch `claude/hopeful-sagan-0rxyf3`.
-- Recent shell-IA merges: #1071 (integration plan), #1072 (AppShellNav wired into App), #1073 (`operations.queue` surface).
+- **#1081 (draft)** — expose `library.agents` read-only shell surface. Branch `claude/hopeful-sagan-0rxyf3`.
+- Recent shell-IA merges: #1072 (AppShellNav wired into App), #1073 (`operations.queue`), #1075 (`operations.missions` + `system.runtime`), #1078 (`system.models`), #1079 (`library.memory`).
 
 ## Completed
 
@@ -157,7 +157,9 @@ new store, new router, new fetch layer, or action wiring on navigation.
 - `system.models` — **COMPLETE** (#1078). Renders a small new read-only `ReadOnlyModelCatalogPanel` inside the existing `ui/Sheet`, fed by the existing **sanitized** `providerRoutingConsoleItems` projection (redacts secrets/URLs/paths upstream) + `modelCatalog`. Selection only toggles the sheet — no route change, no provider mutation, no credential entry, no secret display, no fetch/store/poll. Missing credential/readiness shown as status text; honest empty states when no providers or no models. Reusing `ProviderRegistrationMenu` directly was rejected (it is a mutation surface), so the smallest safe seam was a presentational component over the existing read-only data.
 - `library.memory` — **COMPLETE** (#1079). Renders a small new read-only `ReadOnlyMemoryLibraryPanel` inside the existing `ui/Sheet`, fed by memory read models already held in App state: `memoryGovernanceSummary` (totals / active / pinned / quarantined / tombstoned / health / scope), the `memoryInspector` distributions (`trustCounts` / `scopeCounts` / `layerCounts` / `kindCounts`, integrity candidates, write/conflict projection), and `memoryRecords` (catalog **metadata only** — title, scope, trust, layer, kind, source, timestamps, pinned/activation; **no record body content**). Selection only toggles the sheet — no memory write/sync/eval, no curator approve/reject, no agent dispatch, no fetch/store/poll. Honest empty state when no records. Reusing `EvolveMementoPanel` directly was rejected (it takes `onActivate`/`onForget`/`onPin`/`onRemember` mutation callbacks), so the smallest safe seam was a presentational component over the existing read-only models.
 
-Remaining hidden virtual surfaces (out of scope this pass — each needs a real read-only route/panel design before exposure, no safe reuse target confirmed): `operations.replay`, `library.workspaces`, `library.artifacts`, `library.agents`, `system.modules`. (`library.replay` shares the `operations_replay` id and unhides with replay.)
+- `library.agents` — **COMPLETE** (#1081). Renders a small new read-only `ReadOnlyAgentCatalogPanel` inside the existing `ui/Sheet`, fed by agent read models already held in App state: the `agents` roster (profile **metadata only** — name, kind, role, enabled, soul/config mode, provider/model binding **presence** + auth `mode`, permission tier; **no system-prompt / SOUL.md / AGENTS.md / identity body**, no credential / secret-ref / oauth-ref values), the per-agent `agentActivityById` runtime/session status map, and the sanitized `agentRoleToolRuntimeAudit` capability/tool summary. Selection only toggles the sheet — no agent create / edit / delete / activate / assignment / dispatch / session-spawn, no provider completion, no fetch/store/poll. Honest empty state when no agents; missing optional status shown as “상태 없음”, never fabricated. The `AgentProfile` schema carries no prompt/persona body, so only sanitized labels can reach the screen. Reusing `AgentsSidebar` directly was rejected (it takes `onAddAgent` / `onRemoveAgent` / `onAssignModel` / `onAssignProvider` / `onOpenAgentSettings` / `onShiftModelWindow` mutation callbacks), so the smallest safe seam was a presentational component over the existing read-only models.
+
+Remaining hidden virtual surfaces (out of scope this pass — each needs a real read-only route/panel design before exposure, no safe reuse target confirmed): `operations.replay`, `library.workspaces`, `library.artifacts`, `system.modules`. (`library.replay` shares the `operations_replay` id and unhides with replay.)
 
 ## Owner action pending
 
@@ -170,9 +172,9 @@ Remaining hidden virtual surfaces (out of scope this pass — each needs a real 
 
 ## Next steps
 
-- Review + merge #1079 (`library.memory` read-only catalog surface).
+- Review + merge #1081 (`library.agents` read-only catalog surface).
 - Owner decision: pick the next hidden virtual surface to expose. The remaining ones
-  (`operations.replay`, `library.workspaces`/`artifacts`/`agents`, `system.modules`)
+  (`operations.replay`, `library.workspaces`/`artifacts`, `system.modules`)
   have no existing read-only component to reuse, so the next step is a real read-only
   route/panel design decision, not another reuse-only PR.
 - Owner env actions still pending (see below): `MIMO_TP_API_KEY`, `ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS`.
