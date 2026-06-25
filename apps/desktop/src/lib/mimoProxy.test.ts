@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import {
   proxyMimo,
   getMimoProxyReadiness,
+  resolveMimoCredential,
+  MIMO_CREDENTIAL_ENV,
   MIMO_UPSTREAM,
   type ProxyConfig,
   type ProxyEnv,
@@ -24,7 +26,7 @@ const xApiKeyConfig: ProxyConfig = {
 };
 
 const TEST_KEY = "tp-test-secret-key-DO-NOT-LEAK";
-const envWithKey: ProxyEnv = { MIMO_TP_API_KEY: TEST_KEY };
+const envWithKey: ProxyEnv = { [MIMO_CREDENTIAL_ENV]: TEST_KEY };
 
 function makeRequest(path: string, method = "POST", body?: string): Request {
   return new Request(`https://app.example.com${path}`, {
@@ -60,22 +62,85 @@ async function responseBodyText(res: Response): Promise<string> {
   return cloned.text();
 }
 
+describe("resolveMimoCredential", () => {
+  it("returns ok:true with credential when env is present", () => {
+    const result = resolveMimoCredential({ [MIMO_CREDENTIAL_ENV]: "tp-real-key" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.credential).toBe("tp-real-key");
+      expect(result.credentialSource).toBe("env");
+      expect(result.envVar).toBe(MIMO_CREDENTIAL_ENV);
+      expect(result.upstream).toBe(MIMO_UPSTREAM);
+    }
+  });
+
+  it("returns ok:false with mimo_env_missing code when env is missing", () => {
+    const result = resolveMimoCredential({});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("mimo_env_missing");
+      expect(result.missing).toEqual([MIMO_CREDENTIAL_ENV]);
+      expect(result.upstream).toBe(MIMO_UPSTREAM);
+    }
+  });
+
+  it("returns ok:false when env is whitespace-only", () => {
+    const result = resolveMimoCredential({ [MIMO_CREDENTIAL_ENV]: "  \t " });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("mimo_env_missing");
+    }
+  });
+
+  it("trims the credential value", () => {
+    const result = resolveMimoCredential({ [MIMO_CREDENTIAL_ENV]: "  tp-real-key  " });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.credential).toBe("tp-real-key");
+    }
+  });
+
+  it("MIMO_API_KEY alone does not configure the proxy", () => {
+    const result = resolveMimoCredential({ MIMO_API_KEY: "sk-other-key" } as unknown as ProxyEnv);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.missing).toEqual([MIMO_CREDENTIAL_ENV]);
+    }
+  });
+
+  it("VITE_MIMO_API_KEY alone does not configure the proxy", () => {
+    const result = resolveMimoCredential({ VITE_MIMO_API_KEY: "vite-key" } as unknown as ProxyEnv);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.missing).toEqual([MIMO_CREDENTIAL_ENV]);
+    }
+  });
+
+  it("credential is only in the ok:true branch, not in ok:false", () => {
+    const missingResult = resolveMimoCredential({});
+    expect("credential" in missingResult).toBe(false);
+
+    const okResult = resolveMimoCredential({ [MIMO_CREDENTIAL_ENV]: "key" });
+    expect("credential" in okResult).toBe(true);
+  });
+});
+
 describe("proxyMimo", () => {
-  it("returns 502 with mimo_env_missing code when MIMO_TP_API_KEY is missing", async () => {
+  it("returns 502 with mimo_env_missing code when credential is missing", async () => {
     const fetchFn = mockFetch();
     const res = await proxyMimo(makeRequest("/mimo-token-openai/chat/completions"), {}, bearerConfig, fetchFn);
     expect(res.status).toBe(502);
     const json = await res.json();
-    expect(json.error).toBe("MIMO_TP_API_KEY not configured");
+    expect(json.error).toBe(`${MIMO_CREDENTIAL_ENV} not configured`);
     expect(json.code).toBe("mimo_env_missing");
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
-  it("returns 502 with mimo_env_missing code when MIMO_TP_API_KEY is whitespace-only", async () => {
+  it("returns 502 with mimo_env_missing code when credential is whitespace-only", async () => {
     const fetchFn = mockFetch();
     const res = await proxyMimo(
       makeRequest("/mimo-token-openai/chat/completions"),
-      { MIMO_TP_API_KEY: "   " },
+      { [MIMO_CREDENTIAL_ENV]: "   " },
       bearerConfig,
       fetchFn,
     );
@@ -224,22 +289,22 @@ describe("proxyMimo", () => {
 });
 
 describe("getMimoProxyReadiness", () => {
-  it("returns configured=true when MIMO_TP_API_KEY is present and non-empty", () => {
-    const result = getMimoProxyReadiness({ MIMO_TP_API_KEY: "tp-real-key" });
+  it("returns configured=true when credential is present", () => {
+    const result = getMimoProxyReadiness({ [MIMO_CREDENTIAL_ENV]: "tp-real-key" });
     expect(result.configured).toBe(true);
     expect(result.missing).toEqual([]);
   });
 
-  it("returns configured=false when MIMO_TP_API_KEY is missing", () => {
+  it("returns configured=false when credential is missing", () => {
     const result = getMimoProxyReadiness({});
     expect(result.configured).toBe(false);
-    expect(result.missing).toEqual(["MIMO_TP_API_KEY"]);
+    expect(result.missing).toEqual([MIMO_CREDENTIAL_ENV]);
   });
 
-  it("returns configured=false when MIMO_TP_API_KEY is whitespace-only", () => {
-    const result = getMimoProxyReadiness({ MIMO_TP_API_KEY: "  \t " });
+  it("returns configured=false when credential is whitespace-only", () => {
+    const result = getMimoProxyReadiness({ [MIMO_CREDENTIAL_ENV]: "  \t " });
     expect(result.configured).toBe(false);
-    expect(result.missing).toEqual(["MIMO_TP_API_KEY"]);
+    expect(result.missing).toEqual([MIMO_CREDENTIAL_ENV]);
   });
 
   it("returns upstream as token-plan-sgp.xiaomimimo.com", () => {
@@ -248,22 +313,32 @@ describe("getMimoProxyReadiness", () => {
     expect(result.upstream).toBe("https://token-plan-sgp.xiaomimimo.com");
   });
 
+  it("returns credentialSource and envVar metadata", () => {
+    const result = getMimoProxyReadiness({ [MIMO_CREDENTIAL_ENV]: "tp-key" });
+    expect(result.credentialSource).toBe("env");
+    expect(result.envVar).toBe(MIMO_CREDENTIAL_ENV);
+  });
+
   it("never exposes the token value in any field", () => {
-    const result = getMimoProxyReadiness({ MIMO_TP_API_KEY: "tp-super-secret-value" });
+    const result = getMimoProxyReadiness({ [MIMO_CREDENTIAL_ENV]: "tp-super-secret-value" });
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain("tp-super-secret-value");
   });
 
   it("output contains only boolean/config metadata, no raw secret", () => {
-    const result = getMimoProxyReadiness({ MIMO_TP_API_KEY: "tp-secret" });
+    const result = getMimoProxyReadiness({ [MIMO_CREDENTIAL_ENV]: "tp-secret" });
     const keys = Object.keys(result);
     expect(keys).toContain("configured");
     expect(keys).toContain("upstream");
     expect(keys).toContain("missing");
-    expect(keys).not.toContain("MIMO_TP_API_KEY");
+    expect(keys).toContain("credentialSource");
+    expect(keys).toContain("envVar");
+    expect(keys).not.toContain("credential");
     expect(keys).not.toContain("key");
     expect(keys).not.toContain("token");
+    expect(keys).not.toContain("apiKey");
     expect(keys).not.toContain("secret");
+    expect(keys).not.toContain(MIMO_CREDENTIAL_ENV);
   });
 });
 
@@ -277,8 +352,23 @@ describe("Mimo proxy source-level contract", () => {
     expect(proxySource).not.toContain("api.xiaomimimo.com");
   });
 
-  it("hardcodes upstream as token-plan-sgp.xiaomimimo.com", () => {
-    expect(proxySource).toContain('https://token-plan-sgp.xiaomimimo.com');
+  it("does not reference MIMO_API_KEY (without TP)", () => {
+    expect(proxySource).not.toContain('"MIMO_API_KEY"');
+    expect(proxySource).not.toContain("'MIMO_API_KEY'");
+  });
+
+  it("exports MIMO_CREDENTIAL_ENV constant", () => {
+    expect(proxySource).toContain("MIMO_CREDENTIAL_ENV");
+    expect(proxySource).toContain('"MIMO_TP_API_KEY"');
+  });
+
+  it("exports MIMO_UPSTREAM constant", () => {
+    expect(proxySource).toContain("MIMO_UPSTREAM");
+    expect(proxySource).toContain("https://token-plan-sgp.xiaomimimo.com");
+  });
+
+  it("exports resolveMimoCredential", () => {
+    expect(proxySource).toContain("export function resolveMimoCredential");
   });
 
   it("exports getMimoProxyReadiness", () => {
@@ -289,5 +379,20 @@ describe("Mimo proxy source-level contract", () => {
     expect(proxySource).toContain("mimo_env_missing");
     expect(proxySource).toContain("mimo_upstream_fetch_failed");
     expect(proxySource).toContain("mimo_upstream_malformed");
+  });
+
+  it("proxyMimo uses resolveMimoCredential instead of reading env directly", () => {
+    const proxyFnMatch = proxySource.match(/export async function proxyMimo[\s\S]*?^}/m);
+    expect(proxyFnMatch).toBeDefined();
+    expect(proxyFnMatch![0]).toContain("resolveMimoCredential");
+    expect(proxyFnMatch![0]).not.toContain("env.MIMO_TP_API_KEY");
+    expect(proxyFnMatch![0]).not.toContain("env[MIMO_CREDENTIAL_ENV]");
+  });
+
+  it("getMimoProxyReadiness uses resolveMimoCredential", () => {
+    const readinessFnMatch = proxySource.match(/export function getMimoProxyReadiness[\s\S]*?^}/m);
+    expect(readinessFnMatch).toBeDefined();
+    expect(readinessFnMatch![0]).toContain("resolveMimoCredential");
+    expect(readinessFnMatch![0]).not.toContain("env.MIMO_TP_API_KEY");
   });
 });

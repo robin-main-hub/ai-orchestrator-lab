@@ -97,6 +97,35 @@
 - Vite dev proxy mirrors same injection from `process.env.MIMO_TP_API_KEY`
 - Owner action: set `MIMO_TP_API_KEY` in Cloudflare Pages env + dev shell
 
+### PR #1072 — shell IA nav App.tsx wiring (merged `975dc8eb`)
+
+- AppShellNav rendered alongside RuntimeStatusBar (additive, no replacement)
+- Active tab derived from existing mode + activeNavItem
+- Virtual surfaces filtered out
+- 16 source-level smoke tests
+
+### PR #1073 — expose safe shell IA virtual surfaces (merged `17274886`)
+
+- `operations.queue` mapped to existing ControlQueueDrawer (open only, no dispatch)
+- 9 unsafe virtual surfaces kept hidden
+- 22 tests (6 new for virtual surface mapping)
+
+### PR #1074 — Mimo proxy readiness hardening (merged `e1a7f904`)
+
+- `getMimoProxyReadiness(env)` helper — returns `{ configured, upstream, missing }`, no secret
+- Machine-readable error codes: `mimo_env_missing`, `mimo_upstream_fetch_failed`, `mimo_upstream_malformed`
+- `sanitizeDetail()` redacts API key from error detail
+- 28 tests (13 new)
+
+### PR #1075 — centralize Mimo credential resolution (pending)
+
+- `MIMO_CREDENTIAL_ENV` constant + `resolveMimoCredential(env)` discriminated union
+- `proxyMimo` and `getMimoProxyReadiness` use resolver instead of reading env directly
+- `vite.config.ts` imports `MIMO_CREDENTIAL_ENV` and `MIMO_UPSTREAM` from `mimoProxy.ts`
+- Current credential source: `env:MIMO_TP_API_KEY` — this is a credential source, not a permanent API-key architecture
+- Future migration should change the credential resolver, not route logic
+- 41 tests (13 new for resolver contract)
+
 ### tmux send-keys runbook (completed 2026-06-25)
 
 - `docs/runbooks/orchestrator-enable-tmux-send-keys.md` created
@@ -112,13 +141,13 @@
 - onHandoff approval wiring: COMPLETE
 - opencode JSON parser contract: PINNED
 - tmux send-keys enablement: OWNER ACTION PENDING (runbook ready)
-- #562 Mimo server-side auth: LANDED (PR #1070) — owner env insertion pending
-- #793 shell IA layer: LANDED (PR #1069) — PR B App.tsx integration plan ready, owner seam confirmation pending
+- #562 Mimo server-side auth: LANDED (PR #1070) — credential resolution centralized (PR #1075)
+- #793 shell IA: LANDED (PR #1069, #1072, #1073) — PR B + PR C complete
 
 ## Owner action pending
 
 - **ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS** — runbook at `docs/runbooks/orchestrator-enable-tmux-send-keys.md`. Owner must SSH to DGX-02, edit `.env`, restart server, run validation checklist.
-- **MIMO_TP_API_KEY env insertion** — set in Cloudflare Pages project env (Production + Preview) + dev shell. Do NOT set `VITE_MIMO_*` anywhere.
+- **MIMO_TP_API_KEY env insertion** — set in Cloudflare Pages project env (Production + Preview) + dev shell. Do NOT set `VITE_MIMO_*` anywhere. Credential source is centralized via `MIMO_CREDENTIAL_ENV` in `src/lib/mimoProxy.ts` — future migration should change the resolver, not route logic.
 - **#793 PR B seam confirmation** — plan at `docs/handoffs/2026-06-25-pr-b-shell-ia-integration-plan.md`. Owner must confirm:
   1. Add `AppShellNav` alongside `RuntimeStatusBar` (not replacing)?
   2. Virtual surface handling: map to annex, wire specific handlers, or no-op?

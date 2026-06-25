@@ -4,11 +4,16 @@
  * Server-side auth injection: reads MIMO_TP_API_KEY from env and injects it
  * into the upstream request. The client never receives the real key.
  *
+ * Credential source is centralized via MIMO_CREDENTIAL_ENV and
+ * resolveMimoCredential(). Future migration to a different credential
+ * source should change the resolver, not route logic.
+ *
  * Route map (matches vite dev proxy rewrite):
  *   /mimo-token-openai/*    → https://token-plan-sgp.xiaomimimo.com/v1/*
  *   /mimo-token-anthropic/* → https://token-plan-sgp.xiaomimimo.com/anthropic/*
  */
 
+export const MIMO_CREDENTIAL_ENV = "MIMO_TP_API_KEY";
 export const MIMO_UPSTREAM = "https://token-plan-sgp.xiaomimimo.com";
 
 export type AuthStyle = "bearer" | "x-api-key";
@@ -20,7 +25,7 @@ export type ProxyConfig = {
 };
 
 export type ProxyEnv = {
-  MIMO_TP_API_KEY?: string;
+  [MIMO_CREDENTIAL_ENV]?: string;
 };
 
 type FetchFn = typeof fetch;
@@ -34,17 +39,52 @@ export type MimoProxyReadiness = {
   configured: boolean;
   upstream: string;
   missing: string[];
+  credentialSource: "env";
+  envVar: typeof MIMO_CREDENTIAL_ENV;
 };
 
-export function getMimoProxyReadiness(env: ProxyEnv): MimoProxyReadiness {
-  const missing: string[] = [];
-  if (!env.MIMO_TP_API_KEY?.trim()) {
-    missing.push("MIMO_TP_API_KEY");
+export type MimoCredentialResolution =
+  | {
+      ok: true;
+      credentialSource: "env";
+      envVar: typeof MIMO_CREDENTIAL_ENV;
+      upstream: typeof MIMO_UPSTREAM;
+      credential: string;
+    }
+  | {
+      ok: false;
+      code: "mimo_env_missing";
+      missing: [typeof MIMO_CREDENTIAL_ENV];
+      upstream: typeof MIMO_UPSTREAM;
+    };
+
+export function resolveMimoCredential(env: ProxyEnv): MimoCredentialResolution {
+  const raw = env[MIMO_CREDENTIAL_ENV]?.trim();
+  if (!raw) {
+    return {
+      ok: false,
+      code: "mimo_env_missing",
+      missing: [MIMO_CREDENTIAL_ENV],
+      upstream: MIMO_UPSTREAM,
+    };
   }
   return {
-    configured: missing.length === 0,
+    ok: true,
+    credentialSource: "env",
+    envVar: MIMO_CREDENTIAL_ENV,
     upstream: MIMO_UPSTREAM,
-    missing,
+    credential: raw,
+  };
+}
+
+export function getMimoProxyReadiness(env: ProxyEnv): MimoProxyReadiness {
+  const resolution = resolveMimoCredential(env);
+  return {
+    configured: resolution.ok,
+    upstream: resolution.upstream,
+    missing: resolution.ok ? [] : [...resolution.missing],
+    credentialSource: "env",
+    envVar: MIMO_CREDENTIAL_ENV,
   };
 }
 
@@ -66,14 +106,16 @@ export async function proxyMimo(
   config: ProxyConfig,
   fetchFn: FetchFn = fetch,
 ): Promise<Response> {
-  const apiKey = env.MIMO_TP_API_KEY?.trim();
-  if (!apiKey) {
-    return jsonError(502, "mimo_env_missing", "MIMO_TP_API_KEY not configured");
+  const resolution = resolveMimoCredential(env);
+  if (!resolution.ok) {
+    return jsonError(502, "mimo_env_missing", `${MIMO_CREDENTIAL_ENV} not configured`);
   }
+
+  const apiKey = resolution.credential;
 
   const url = new URL(request.url);
   const rest = url.pathname.slice(config.prefix.length);
-  const target = `${MIMO_UPSTREAM}${config.upstreamBase}${rest}${url.search}`;
+  const target = `${resolution.upstream}${config.upstreamBase}${rest}${url.search}`;
 
   const headers = new Headers(request.headers);
   headers.delete("host");
