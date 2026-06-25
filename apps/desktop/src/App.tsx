@@ -355,6 +355,29 @@ import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 import { SummonTheater } from "./components/SummonTheater";
 import { RunWorkspace, type RunMode } from "./components/RunWorkspace";
 import { createMakimaDelegationCards } from "./lib/makimaDelegation";
+import { AppShellNav } from "./components/AppShellNav";
+import {
+  appShellSections,
+  defaultAppShellTabId,
+  findAppShellTab,
+  resolveAppShellTabForSurface,
+  type AppShellSection,
+  type AppShellSectionId,
+  type AppShellTabId,
+} from "./lib/appShellIa";
+import "./styles/renewal-shell.css";
+
+const routeBackedShellSections: readonly AppShellSection[] = appShellSections.map((section) => ({
+  ...section,
+  tabs: section.tabs.filter((tab) => tab.target.nav || tab.target.mode),
+}));
+
+const routeBackedDefaultTabBySection: Record<AppShellSectionId, AppShellTabId> = Object.fromEntries(
+  appShellSections.map((section) => {
+    const first = section.tabs.find((tab) => tab.target.nav || tab.target.mode);
+    return [section.id, first?.id ?? defaultAppShellTabId];
+  }),
+) as Record<AppShellSectionId, AppShellTabId>;
 
 const CENTER_MODE_STORAGE_KEY = "ai-orchestrator.center-mode.v1";
 
@@ -5068,6 +5091,21 @@ export function App() {
   // 단일 좌표 판정 — '중앙을 점유하는 nav 목록'은 lib/navSurface로 추출(유령 좌표
   // "runtime" 제거 포함). 두 useState(mode/activeNavItem)는 유지하되 판정은 한 곳에서.
   const navCenterActive = isNavCenterActive(activeNavItem);
+
+  const activeShellTabId = resolveAppShellTabForSurface({ activeNavItem, mode });
+  const activeShellSection = routeBackedShellSections.find((s) => s.tabs.some((t) => t.id === activeShellTabId)) ?? routeBackedShellSections[0]!;
+  const activeShellTab = activeShellSection.tabs.find((t) => t.id === activeShellTabId) ?? activeShellSection.tabs[0]!;
+
+  const handleSelectShellTab = useCallback((tabId: AppShellTabId) => {
+    const tab = findAppShellTab(tabId);
+    if (tab.target.mode) setMode(tab.target.mode);
+    if (tab.target.nav) setActiveNavItem(tab.target.nav);
+  }, []);
+
+  const handleSelectShellSection = useCallback((sectionId: AppShellSectionId) => {
+    handleSelectShellTab(routeBackedDefaultTabBySection[sectionId]);
+  }, [handleSelectShellTab]);
+
   const shellVisibility = getConversationShellVisibility({
     configLibraryActive,
     mode,
@@ -5176,6 +5214,18 @@ export function App() {
         onToggleDrawer={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
         providerName={activeProvider?.name ?? "미선택"}
         snapshot={runtimeSnapshotState}
+      />
+      <AppShellNav
+        activeSection={activeShellSection}
+        activeTab={activeShellTab}
+        pendingApprovals={unifiedControlQueueSnapshot.summary.pending}
+        providerName={activeProvider?.name ?? "local-provider"}
+        sections={routeBackedShellSections}
+        onCommandPalette={() => setCommandPaletteOpen(true)}
+        onOpenQueue={() => setApprovalDrawerOpen(true)}
+        onProbeRuntime={handleProbeDgx}
+        onSelectSection={handleSelectShellSection}
+        onSelectTab={handleSelectShellTab}
       />
       <main className="workspace-grid">
         {isMobileDrawerOpen && leftRailVisible ? (
