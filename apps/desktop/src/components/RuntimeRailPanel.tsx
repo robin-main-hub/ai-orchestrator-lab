@@ -13,7 +13,9 @@ export function RuntimeRailPanel({
 }: {
   dgxRouteDiagnostics?: Stage32DgxRouteDiagnosticSnapshot;
   onProbeDgx: () => void;
-  onRequestReboot: (targetNodeId: DeviceRebootRequest["targetNodeId"]) => void;
+  /** Reboot approval request. Omit on read-only surfaces — the reboot control is
+   *  then absent (no destructive node-restart entry point). */
+  onRequestReboot?: (targetNodeId: DeviceRebootRequest["targetNodeId"]) => void;
   rebootWatchdogs: DeviceRebootWatchdog[];
   snapshot: RuntimeSnapshot;
 }) {
@@ -37,15 +39,17 @@ export function RuntimeRailPanel({
           <article className={node.id === "dgx-01" ? "locked" : ""} key={node.id}>
             <div className="rail-node-head">
               <span>{node.label}</span>
-              <button
-                aria-label={`${node.label} 재시작 승인`}
-                className="rail-icon-button is-destructive"
-                onClick={() => onRequestReboot(node.id as DeviceRebootRequest["targetNodeId"])}
-                title={`${node.label} 재시작 승인`}
-                type="button"
-              >
-                <Power size={12} />
-              </button>
+              {onRequestReboot ? (
+                <button
+                  aria-label={`${node.label} 재시작 승인`}
+                  className="rail-icon-button is-destructive"
+                  onClick={() => onRequestReboot(node.id as DeviceRebootRequest["targetNodeId"])}
+                  title={`${node.label} 재시작 승인`}
+                  type="button"
+                >
+                  <Power size={12} />
+                </button>
+              ) : null}
             </div>
             <strong>{runtimeNodeRoleLabel(node.id === "dgx-01" ? "guarded" : node.isPrimary ? "main" : node.role)}</strong>
             <StatusBadge
