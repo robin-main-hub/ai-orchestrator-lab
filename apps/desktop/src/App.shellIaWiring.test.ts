@@ -81,9 +81,10 @@ describe("shell IA virtual surface filtering", () => {
     expect(appSource).toContain("isTabRendered");
   });
 
-  it("safeVirtualSurfaces contains queue, missions, runtime, models, memory", () => {
+  it("safeVirtualSurfaces contains queue, missions, runtime, models, memory, agents", () => {
     expect(appSource).toContain("safeVirtualSurfaces");
     expect(appSource).toContain('"library_memory"');
+    expect(appSource).toContain('"library_agents"');
     expect(appSource).toContain('"operations_queue"');
     expect(appSource).toContain('"operations_missions"');
     expect(appSource).toContain('"system_models"');
@@ -104,10 +105,11 @@ describe("shell IA virtual surface filtering", () => {
       "system_runtime",
       "system_models",
       "library_memory",
+      "library_agents",
     ]);
     const allVirtualTabs = appShellSections.flatMap((s) => s.tabs).filter((t) => t.target.virtual);
     const unsafeVirtuals = allVirtualTabs.filter((t) => !safe.has(t.target.virtual as string));
-    expect(unsafeVirtuals.length).toBe(6);
+    expect(unsafeVirtuals.length).toBe(5);
     for (const tab of unsafeVirtuals) {
       expect(appSource).not.toContain(`"${tab.target.virtual}"`);
     }
@@ -414,5 +416,62 @@ describe("library.memory virtual surface mapping", () => {
     expect(appSource).toContain('tab.target.virtual === "operations_missions"');
     expect(appSource).toContain('tab.target.virtual === "system_runtime"');
     expect(appSource).toContain('tab.target.virtual === "system_models"');
+  });
+});
+
+describe("library.agents virtual surface mapping", () => {
+  it("library.agents is exposed as a safe virtual surface tab", () => {
+    expect(appSource).toContain('"library_agents"');
+    const librarySection = appShellSections.find((s) => s.id === "library");
+    const agentsTab = librarySection?.tabs.find((t) => t.id === "library.agents");
+    expect(agentsTab).toBeDefined();
+    expect(agentsTab?.target.virtual).toBe("library_agents");
+  });
+
+  it("selecting library.agents opens the read-only agent sheet (no route change)", () => {
+    expect(appSource).toContain('tab.target.virtual === "library_agents"');
+    const handlerBlock = appSource.match(
+      /const handleSelectShellTab = useCallback\([\s\S]*?\}, \[\]\);/,
+    )?.[0];
+    expect(handlerBlock).toBeDefined();
+    const line = handlerBlock!.split("\n").find((l) => l.includes('"library_agents"'));
+    expect(line).toBeDefined();
+    expect(line).toContain("setAgentsSurfaceOpen(true)");
+    expect(line).not.toContain("setMode(");
+    expect(line).not.toContain("setActiveNavItem(");
+    expect(line).not.toContain("dispatch");
+    expect(line).not.toContain("fetch(");
+    expect(line).not.toContain("tmux");
+  });
+
+  it("renders the read-only agent catalog from existing data sources", () => {
+    const sheetBlock = appSource.match(/<Sheet open=\{agentsSurfaceOpen\}[\s\S]*?<\/Sheet>/)?.[0];
+    expect(sheetBlock).toBeDefined();
+    expect(sheetBlock).toContain("<ReadOnlyAgentCatalogPanel");
+    expect(sheetBlock).toContain("agents={agents}");
+    expect(sheetBlock).toContain("activityById={agentActivityById}");
+    expect(sheetBlock).toContain("capabilityAudit={agentRoleToolRuntimeAudit}");
+  });
+
+  it("agents surface wires no create / delete / assign / dispatch / spawn handler", () => {
+    const sheetBlock = appSource.match(/<Sheet open=\{agentsSurfaceOpen\}[\s\S]*?<\/Sheet>/)?.[0];
+    expect(sheetBlock).toBeDefined();
+    expect(sheetBlock).not.toContain("onAddAgent");
+    expect(sheetBlock).not.toContain("onRemoveAgent");
+    expect(sheetBlock).not.toContain("onAssignModel");
+    expect(sheetBlock).not.toContain("onAssignProvider");
+    expect(sheetBlock).not.toContain("onOpenAgentSettings");
+    expect(sheetBlock).not.toContain("onSelectAgent");
+    // setAgentsSurfaceOpen legitimately starts with "setAgents"; assert the actual
+    // roster mutation call (with paren) is absent rather than the bare prefix.
+    expect(sheetBlock).not.toContain("setAgents(");
+  });
+
+  it("queue, missions, runtime, models, memory surfaces remain functional", () => {
+    expect(appSource).toContain('tab.target.virtual === "operations_queue"');
+    expect(appSource).toContain('tab.target.virtual === "operations_missions"');
+    expect(appSource).toContain('tab.target.virtual === "system_runtime"');
+    expect(appSource).toContain('tab.target.virtual === "system_models"');
+    expect(appSource).toContain('tab.target.virtual === "library_memory"');
   });
 });
