@@ -13,8 +13,9 @@
  *   /mimo-token-anthropic/* → https://token-plan-sgp.xiaomimimo.com/anthropic/*
  */
 
-export const MIMO_CREDENTIAL_ENV = "MIMO_TP_API_KEY";
-export const MIMO_UPSTREAM = "https://token-plan-sgp.xiaomimimo.com";
+import { MIMO_CREDENTIAL_ENV, MIMO_UPSTREAM } from "./mimoProxyConfig";
+
+export { MIMO_CREDENTIAL_ENV, MIMO_UPSTREAM };
 
 export type AuthStyle = "bearer" | "x-api-key";
 

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
-import { MIMO_CREDENTIAL_ENV, MIMO_UPSTREAM } from "./src/lib/mimoProxy";
+import { MIMO_CREDENTIAL_ENV, MIMO_UPSTREAM } from "./src/lib/mimoProxyConfig";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
