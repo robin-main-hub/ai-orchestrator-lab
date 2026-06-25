@@ -81,10 +81,11 @@ describe("shell IA virtual surface filtering", () => {
     expect(appSource).toContain("isTabRendered");
   });
 
-  it("safeVirtualSurfaces contains operations_queue, operations_missions, system_runtime", () => {
+  it("safeVirtualSurfaces contains operations_queue, operations_missions, system_runtime, system_models", () => {
     expect(appSource).toContain("safeVirtualSurfaces");
     expect(appSource).toContain('"operations_queue"');
     expect(appSource).toContain('"operations_missions"');
+    expect(appSource).toContain('"system_models"');
     expect(appSource).toContain('"system_runtime"');
   });
 
@@ -96,10 +97,10 @@ describe("shell IA virtual surface filtering", () => {
   });
 
   it("unsafe virtual surfaces are not in safeVirtualSurfaces", () => {
-    const safe = new Set(["operations_queue", "operations_missions", "system_runtime"]);
+    const safe = new Set(["operations_queue", "operations_missions", "system_runtime", "system_models"]);
     const allVirtualTabs = appShellSections.flatMap((s) => s.tabs).filter((t) => t.target.virtual);
     const unsafeVirtuals = allVirtualTabs.filter((t) => !safe.has(t.target.virtual as string));
-    expect(unsafeVirtuals.length).toBe(8);
+    expect(unsafeVirtuals.length).toBe(7);
     for (const tab of unsafeVirtuals) {
       expect(appSource).not.toContain(`"${tab.target.virtual}"`);
     }
@@ -301,5 +302,57 @@ describe("system.runtime virtual surface mapping", () => {
   it("operations.missions and operations.queue remain functional", () => {
     expect(appSource).toContain('tab.target.virtual === "operations_missions"');
     expect(appSource).toContain('tab.target.virtual === "operations_queue"');
+  });
+});
+
+describe("system.models virtual surface mapping", () => {
+  it("system.models is exposed as a safe virtual surface tab", () => {
+    expect(appSource).toContain('"system_models"');
+    const sysSection = appShellSections.find((s) => s.id === "system");
+    const modelsTab = sysSection?.tabs.find((t) => t.id === "system.models");
+    expect(modelsTab).toBeDefined();
+    expect(modelsTab?.target.virtual).toBe("system_models");
+  });
+
+  it("selecting system.models opens the read-only catalog sheet (no route change)", () => {
+    expect(appSource).toContain('tab.target.virtual === "system_models"');
+    const handlerBlock = appSource.match(
+      /const handleSelectShellTab = useCallback\([\s\S]*?\}, \[\]\);/,
+    )?.[0];
+    expect(handlerBlock).toBeDefined();
+    const line = handlerBlock!.split("\n").find((l) => l.includes("system_models"));
+    expect(line).toBeDefined();
+    expect(line).toContain("setModelsSurfaceOpen(true)");
+    // setModelsSurfaceOpen contains the substring "setMode", so assert the actual
+    // route-change calls (with paren) are absent rather than the bare prefix.
+    expect(line).not.toContain("setMode(");
+    expect(line).not.toContain("setActiveNavItem(");
+    expect(line).not.toContain("dispatch");
+    expect(line).not.toContain("fetch(");
+    expect(line).not.toContain("tmux");
+  });
+
+  it("renders the read-only model catalog from existing data sources", () => {
+    const sheetBlock = appSource.match(/<Sheet open=\{modelsSurfaceOpen\}[\s\S]*?<\/Sheet>/)?.[0];
+    expect(sheetBlock).toBeDefined();
+    expect(sheetBlock).toContain("<ReadOnlyModelCatalogPanel");
+    expect(sheetBlock).toContain("items={providerRoutingConsoleItems}");
+    expect(sheetBlock).toContain("modelCatalog={modelCatalog}");
+  });
+
+  it("models surface wires no provider mutation / credential / discovery handler", () => {
+    const sheetBlock = appSource.match(/<Sheet open=\{modelsSurfaceOpen\}[\s\S]*?<\/Sheet>/)?.[0];
+    expect(sheetBlock).toBeDefined();
+    expect(sheetBlock).not.toContain("onRegister");
+    expect(sheetBlock).not.toContain("onRemoveProvider");
+    expect(sheetBlock).not.toContain("onRenameProvider");
+    expect(sheetBlock).not.toContain("onBindDefaultCredential");
+    expect(sheetBlock).not.toContain("onDiscoverModels");
+  });
+
+  it("operations.queue, operations.missions, system.runtime remain functional", () => {
+    expect(appSource).toContain('tab.target.virtual === "operations_queue"');
+    expect(appSource).toContain('tab.target.virtual === "operations_missions"');
+    expect(appSource).toContain('tab.target.virtual === "system_runtime"');
   });
 });

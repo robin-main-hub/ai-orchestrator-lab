@@ -154,7 +154,7 @@ new store, new router, new fetch layer, or action wiring on navigation.
 - `operations.queue` — **COMPLETE** (#1073). Opens the existing `ControlQueueDrawer`; navigation performs no approval or dispatch.
 - `operations.missions` — **COMPLETE** (#1075). Routes to the single existing `RunWorkspace` mission board (board mode) via existing nav + `summonSeedMode` state. Reuses one `MissionBoardContainer` instance — no duplicate mission store, no new fetch, no mission lifecycle action on navigation.
 - `system.runtime` — **COMPLETE** (#1075). Renders the existing `RuntimeRailPanel` read-only (destructive reboot control omitted) inside the existing `ui/Sheet` primitive, from the existing `runtimeSnapshotState`. No new store/poll/fetch; no runtime start/stop/restart/health mutation.
-- `system.models` — **DEFERRED — no safe reuse seam.** There is no existing read-only model-catalog-by-provider component. `modelCatalog` (`Record<providerId, Model[]>`) is only rendered inside mutation surfaces — `ProviderRegistrationMenu` (register / discover models / bind credential / remove / rename) — or the coding model picker in `CodingWorkbench`. `ProviderRoutingCard` (cockpit) shows only the current route summary (`modelCount`), not the catalog. Exposing `system.models` read-only requires a NEW presentational catalog component (render `modelCatalog` grouped by provider) or extracting a read-only list out of `ProviderRegistrationMenu` — neither is a reuse of an existing read-only component, so it stays hidden (no plan-only PR created).
+- `system.models` — **COMPLETE** (#1078). Renders a small new read-only `ReadOnlyModelCatalogPanel` inside the existing `ui/Sheet`, fed by the existing **sanitized** `providerRoutingConsoleItems` projection (redacts secrets/URLs/paths upstream) + `modelCatalog`. Selection only toggles the sheet — no route change, no provider mutation, no credential entry, no secret display, no fetch/store/poll. Missing credential/readiness shown as status text; honest empty states when no providers or no models. Reusing `ProviderRegistrationMenu` directly was rejected (it is a mutation surface), so the smallest safe seam was a presentational component over the existing read-only data.
 
 Remaining hidden virtual surfaces (out of scope this pass — each needs a real read-only route/panel design before exposure, no safe reuse target confirmed): `operations.replay`, `library.workspaces`, `library.artifacts`, `library.memory`, `library.agents`, `system.modules`. (`library.replay` shares the `operations_replay` id and unhides with replay.)
 
@@ -169,12 +169,11 @@ Remaining hidden virtual surfaces (out of scope this pass — each needs a real 
 
 ## Next steps
 
-- Review + merge #1075 (`operations.missions` + `system.runtime` surfaces).
-- Owner decision: pick the next hidden virtual surface to expose. Each remaining one
+- Review + merge #1078 (`system.models` read-only catalog surface).
+- Owner decision: pick the next hidden virtual surface to expose. The remaining ones
   (`operations.replay`, `library.workspaces`/`artifacts`/`memory`/`agents`,
-  `system.models`/`modules`) needs a real read-only route or panel before it is safe —
-  there is no existing read-only component to reuse, so the next step is a design
-  decision, not another reuse-only PR.
+  `system.modules`) have no existing read-only component to reuse, so the next step is
+  a real read-only route/panel design decision, not another reuse-only PR.
 - Owner env actions still pending (see below): `MIMO_TP_API_KEY`, `ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS`.
 
 ## Explicitly Deprecated

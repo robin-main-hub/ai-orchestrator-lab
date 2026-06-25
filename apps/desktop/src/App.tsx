@@ -367,12 +367,14 @@ import {
   type AppShellVirtualSurface,
 } from "./lib/appShellIa";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/ui/sheet";
+import { ReadOnlyModelCatalogPanel } from "./components/ReadOnlyModelCatalogPanel";
 import "./styles/renewal-shell.css";
 
 const safeVirtualSurfaces: ReadonlySet<AppShellVirtualSurface> = new Set([
   "operations_queue",
   "operations_missions",
   "system_runtime",
+  "system_models",
 ]);
 
 function isTabRendered(tab: { target: { nav?: string; mode?: string; virtual?: AppShellVirtualSurface | null } }): boolean {
@@ -429,6 +431,9 @@ export function App() {
   // Read-only runtime status surface (system.runtime shell tab). UI toggle only —
   // not a store; reuses the existing runtimeSnapshotState / RuntimeRailPanel.
   const [runtimeSurfaceOpen, setRuntimeSurfaceOpen] = useState(false);
+  // Read-only model/provider catalog surface (system.models shell tab). UI toggle
+  // only — reuses providerRoutingConsoleItems + modelCatalog; no store, no fetch.
+  const [modelsSurfaceOpen, setModelsSurfaceOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   // Batch 11 LINE C — one-shot view command pushed to the Assistant Inbox from the
   // Command Palette. View-only (mode/focus/category/clear); never an action.
@@ -5126,6 +5131,9 @@ export function App() {
     // system.runtime shows the existing RuntimeRailPanel read-only in a sheet —
     // selection only toggles this sheet: no route change, no node restart.
     if (tab.target.virtual === "system_runtime") setRuntimeSurfaceOpen(true);
+    // system.models shows the read-only provider/model catalog in a sheet —
+    // selection only toggles this sheet: no route change, no provider mutation.
+    if (tab.target.virtual === "system_models") setModelsSurfaceOpen(true);
   }, []);
 
   const handleSelectShellSection = useCallback((sectionId: AppShellSectionId) => {
@@ -5897,6 +5905,20 @@ export function App() {
             rebootWatchdogs={rebootWatchdogs}
             snapshot={runtimeSnapshotState}
           />
+        </SheetContent>
+      </Sheet>
+      {/* system.models shell surface — read-only provider/model catalog rendered
+          from the existing providerRoutingConsoleItems projection + modelCatalog.
+          No provider mutation, no credential entry, no secret, no fetch. */}
+      <Sheet open={modelsSurfaceOpen} onOpenChange={setModelsSurfaceOpen}>
+        <SheetContent side="right" className="overflow-y-auto p-4 sm:max-w-md">
+          <SheetHeader className="p-0">
+            <SheetTitle>모델 카탈로그</SheetTitle>
+            <SheetDescription>
+              공급자별 모델 · 신뢰/준비 상태 · 라우트 (읽기 전용)
+            </SheetDescription>
+          </SheetHeader>
+          <ReadOnlyModelCatalogPanel items={providerRoutingConsoleItems} modelCatalog={modelCatalog} />
         </SheetContent>
       </Sheet>
       <CommandPalette
