@@ -93,10 +93,10 @@
 ## Owner action pending
 
 - **ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS** — runbook at `docs/runbooks/orchestrator-enable-tmux-send-keys.md`. Owner must SSH to DGX-02, edit `.env`, restart server, run validation checklist.
-- **#562 Mimo server-side auth injection** — review packet at `docs/handoffs/2026-06-25-mimo-pr-562-review.md`. Owner must:
-  1. Approve the security improvement (server-side key injection)
-  2. Confirm upstream: `token-plan-sgp.xiaomimimo.com` (keep) or `api.xiaomimimo.com` (switch)
-  3. After confirmation, AI can create minimal salvage PR
+- **#562 Mimo server-side auth injection** — salvage plan ready at `docs/handoffs/2026-06-25-mimo-pr-562-salvage-plan.md`. Owner must:
+  1. Choose upstream: Option A `token-plan-sgp.xiaomimimo.com` (recommended, no test breakage) or Option B `api.xiaomimimo.com` (requires seed/test updates)
+  2. Confirm which env var holds the real key on DGX-02: `MIMO_API_KEY` or `MIMO_TP_API_KEY`
+  3. After decision, AI creates minimal salvage PR (rewrite `_mimoProxy.ts` + route files + vite proxy + remove VITE_MIMO_* from client + unit tests)
 - **#793 UI renewal draft** — stale but salvageable. 4 unique new files (AppShellNav, appShellIa, renewal-shell.css, appShellIa.test). App.tsx has 100+ conflicting commits. Owner must decide: cherry-pick + manual integration or defer.
 
 ## Next steps
