@@ -81,8 +81,9 @@ describe("shell IA virtual surface filtering", () => {
     expect(appSource).toContain("isTabRendered");
   });
 
-  it("safeVirtualSurfaces contains operations_queue, operations_missions, system_runtime, system_models", () => {
+  it("safeVirtualSurfaces contains queue, missions, runtime, models, memory", () => {
     expect(appSource).toContain("safeVirtualSurfaces");
+    expect(appSource).toContain('"library_memory"');
     expect(appSource).toContain('"operations_queue"');
     expect(appSource).toContain('"operations_missions"');
     expect(appSource).toContain('"system_models"');
@@ -97,10 +98,16 @@ describe("shell IA virtual surface filtering", () => {
   });
 
   it("unsafe virtual surfaces are not in safeVirtualSurfaces", () => {
-    const safe = new Set(["operations_queue", "operations_missions", "system_runtime", "system_models"]);
+    const safe = new Set([
+      "operations_queue",
+      "operations_missions",
+      "system_runtime",
+      "system_models",
+      "library_memory",
+    ]);
     const allVirtualTabs = appShellSections.flatMap((s) => s.tabs).filter((t) => t.target.virtual);
     const unsafeVirtuals = allVirtualTabs.filter((t) => !safe.has(t.target.virtual as string));
-    expect(unsafeVirtuals.length).toBe(7);
+    expect(unsafeVirtuals.length).toBe(6);
     for (const tab of unsafeVirtuals) {
       expect(appSource).not.toContain(`"${tab.target.virtual}"`);
     }
@@ -354,5 +361,58 @@ describe("system.models virtual surface mapping", () => {
     expect(appSource).toContain('tab.target.virtual === "operations_queue"');
     expect(appSource).toContain('tab.target.virtual === "operations_missions"');
     expect(appSource).toContain('tab.target.virtual === "system_runtime"');
+  });
+});
+
+describe("library.memory virtual surface mapping", () => {
+  it("library.memory is exposed as a safe virtual surface tab", () => {
+    expect(appSource).toContain('"library_memory"');
+    const librarySection = appShellSections.find((s) => s.id === "library");
+    const memoryTab = librarySection?.tabs.find((t) => t.id === "library.memory");
+    expect(memoryTab).toBeDefined();
+    expect(memoryTab?.target.virtual).toBe("library_memory");
+  });
+
+  it("selecting library.memory opens the read-only memory sheet (no route change)", () => {
+    expect(appSource).toContain('tab.target.virtual === "library_memory"');
+    const handlerBlock = appSource.match(
+      /const handleSelectShellTab = useCallback\([\s\S]*?\}, \[\]\);/,
+    )?.[0];
+    expect(handlerBlock).toBeDefined();
+    const line = handlerBlock!.split("\n").find((l) => l.includes('"library_memory"'));
+    expect(line).toBeDefined();
+    expect(line).toContain("setMemorySurfaceOpen(true)");
+    expect(line).not.toContain("setMode(");
+    expect(line).not.toContain("setActiveNavItem(");
+    expect(line).not.toContain("dispatch");
+    expect(line).not.toContain("fetch(");
+    expect(line).not.toContain("tmux");
+  });
+
+  it("renders the read-only memory library from existing data sources", () => {
+    const sheetBlock = appSource.match(/<Sheet open=\{memorySurfaceOpen\}[\s\S]*?<\/Sheet>/)?.[0];
+    expect(sheetBlock).toBeDefined();
+    expect(sheetBlock).toContain("<ReadOnlyMemoryLibraryPanel");
+    expect(sheetBlock).toContain("inspector={memoryInspector}");
+    expect(sheetBlock).toContain("records={memoryRecords}");
+    expect(sheetBlock).toContain("governanceSummary={memoryGovernanceSummary}");
+  });
+
+  it("memory surface wires no write / sync / eval / curator-approval handler", () => {
+    const sheetBlock = appSource.match(/<Sheet open=\{memorySurfaceOpen\}[\s\S]*?<\/Sheet>/)?.[0];
+    expect(sheetBlock).toBeDefined();
+    expect(sheetBlock).not.toContain("onActivate");
+    expect(sheetBlock).not.toContain("onForget");
+    expect(sheetBlock).not.toContain("onPin");
+    expect(sheetBlock).not.toContain("onRemember");
+    expect(sheetBlock).not.toContain("onApprove");
+    expect(sheetBlock).not.toContain("handleQueueMemoryCuratorCandidate");
+  });
+
+  it("queue, missions, runtime, models surfaces remain functional", () => {
+    expect(appSource).toContain('tab.target.virtual === "operations_queue"');
+    expect(appSource).toContain('tab.target.virtual === "operations_missions"');
+    expect(appSource).toContain('tab.target.virtual === "system_runtime"');
+    expect(appSource).toContain('tab.target.virtual === "system_models"');
   });
 });

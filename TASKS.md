@@ -155,8 +155,9 @@ new store, new router, new fetch layer, or action wiring on navigation.
 - `operations.missions` — **COMPLETE** (#1075). Routes to the single existing `RunWorkspace` mission board (board mode) via existing nav + `summonSeedMode` state. Reuses one `MissionBoardContainer` instance — no duplicate mission store, no new fetch, no mission lifecycle action on navigation.
 - `system.runtime` — **COMPLETE** (#1075). Renders the existing `RuntimeRailPanel` read-only (destructive reboot control omitted) inside the existing `ui/Sheet` primitive, from the existing `runtimeSnapshotState`. No new store/poll/fetch; no runtime start/stop/restart/health mutation.
 - `system.models` — **COMPLETE** (#1078). Renders a small new read-only `ReadOnlyModelCatalogPanel` inside the existing `ui/Sheet`, fed by the existing **sanitized** `providerRoutingConsoleItems` projection (redacts secrets/URLs/paths upstream) + `modelCatalog`. Selection only toggles the sheet — no route change, no provider mutation, no credential entry, no secret display, no fetch/store/poll. Missing credential/readiness shown as status text; honest empty states when no providers or no models. Reusing `ProviderRegistrationMenu` directly was rejected (it is a mutation surface), so the smallest safe seam was a presentational component over the existing read-only data.
+- `library.memory` — **COMPLETE** (#1079). Renders a small new read-only `ReadOnlyMemoryLibraryPanel` inside the existing `ui/Sheet`, fed by memory read models already held in App state: `memoryGovernanceSummary` (totals / active / pinned / quarantined / tombstoned / health / scope), the `memoryInspector` distributions (`trustCounts` / `scopeCounts` / `layerCounts` / `kindCounts`, integrity candidates, write/conflict projection), and `memoryRecords` (catalog **metadata only** — title, scope, trust, layer, kind, source, timestamps, pinned/activation; **no record body content**). Selection only toggles the sheet — no memory write/sync/eval, no curator approve/reject, no agent dispatch, no fetch/store/poll. Honest empty state when no records. Reusing `EvolveMementoPanel` directly was rejected (it takes `onActivate`/`onForget`/`onPin`/`onRemember` mutation callbacks), so the smallest safe seam was a presentational component over the existing read-only models.
 
-Remaining hidden virtual surfaces (out of scope this pass — each needs a real read-only route/panel design before exposure, no safe reuse target confirmed): `operations.replay`, `library.workspaces`, `library.artifacts`, `library.memory`, `library.agents`, `system.modules`. (`library.replay` shares the `operations_replay` id and unhides with replay.)
+Remaining hidden virtual surfaces (out of scope this pass — each needs a real read-only route/panel design before exposure, no safe reuse target confirmed): `operations.replay`, `library.workspaces`, `library.artifacts`, `library.agents`, `system.modules`. (`library.replay` shares the `operations_replay` id and unhides with replay.)
 
 ## Owner action pending
 
@@ -169,11 +170,11 @@ Remaining hidden virtual surfaces (out of scope this pass — each needs a real 
 
 ## Next steps
 
-- Review + merge #1078 (`system.models` read-only catalog surface).
+- Review + merge #1079 (`library.memory` read-only catalog surface).
 - Owner decision: pick the next hidden virtual surface to expose. The remaining ones
-  (`operations.replay`, `library.workspaces`/`artifacts`/`memory`/`agents`,
-  `system.modules`) have no existing read-only component to reuse, so the next step is
-  a real read-only route/panel design decision, not another reuse-only PR.
+  (`operations.replay`, `library.workspaces`/`artifacts`/`agents`, `system.modules`)
+  have no existing read-only component to reuse, so the next step is a real read-only
+  route/panel design decision, not another reuse-only PR.
 - Owner env actions still pending (see below): `MIMO_TP_API_KEY`, `ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS`.
 
 ## Explicitly Deprecated

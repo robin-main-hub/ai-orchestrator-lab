@@ -368,6 +368,7 @@ import {
 } from "./lib/appShellIa";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/ui/sheet";
 import { ReadOnlyModelCatalogPanel } from "./components/ReadOnlyModelCatalogPanel";
+import { ReadOnlyMemoryLibraryPanel } from "./components/ReadOnlyMemoryLibraryPanel";
 import "./styles/renewal-shell.css";
 
 const safeVirtualSurfaces: ReadonlySet<AppShellVirtualSurface> = new Set([
@@ -375,6 +376,7 @@ const safeVirtualSurfaces: ReadonlySet<AppShellVirtualSurface> = new Set([
   "operations_missions",
   "system_runtime",
   "system_models",
+  "library_memory",
 ]);
 
 function isTabRendered(tab: { target: { nav?: string; mode?: string; virtual?: AppShellVirtualSurface | null } }): boolean {
@@ -434,6 +436,9 @@ export function App() {
   // Read-only model/provider catalog surface (system.models shell tab). UI toggle
   // only — reuses providerRoutingConsoleItems + modelCatalog; no store, no fetch.
   const [modelsSurfaceOpen, setModelsSurfaceOpen] = useState(false);
+  // Read-only memory library surface (library.memory shell tab). UI toggle only —
+  // reuses memoryInspector + memoryRecords + governance summary; no store, no fetch.
+  const [memorySurfaceOpen, setMemorySurfaceOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   // Batch 11 LINE C — one-shot view command pushed to the Assistant Inbox from the
   // Command Palette. View-only (mode/focus/category/clear); never an action.
@@ -5134,6 +5139,9 @@ export function App() {
     // system.models shows the read-only provider/model catalog in a sheet —
     // selection only toggles this sheet: no route change, no provider mutation.
     if (tab.target.virtual === "system_models") setModelsSurfaceOpen(true);
+    // library.memory shows the read-only memory library catalog in a sheet —
+    // selection only toggles this sheet: read-only, no write/sync/eval/curation.
+    if (tab.target.virtual === "library_memory") setMemorySurfaceOpen(true);
   }, []);
 
   const handleSelectShellSection = useCallback((sectionId: AppShellSectionId) => {
@@ -5919,6 +5927,25 @@ export function App() {
             </SheetDescription>
           </SheetHeader>
           <ReadOnlyModelCatalogPanel items={providerRoutingConsoleItems} modelCatalog={modelCatalog} />
+        </SheetContent>
+      </Sheet>
+      {/* library.memory shell surface — read-only memory library catalog rendered
+          from the existing memoryInspector + memoryRecords + governance summary.
+          No memory write/sync/eval, no curator approval, no record body content. */}
+      <Sheet open={memorySurfaceOpen} onOpenChange={setMemorySurfaceOpen}>
+        <SheetContent side="right" className="overflow-y-auto p-4 sm:max-w-md">
+          <SheetHeader className="p-0">
+            <SheetTitle>메모리 라이브러리</SheetTitle>
+            <SheetDescription>
+              메모리 거버넌스 · 분포 · 기록 메타데이터 (읽기 전용)
+            </SheetDescription>
+          </SheetHeader>
+          <ReadOnlyMemoryLibraryPanel
+            adapterStatus={adapterStatus}
+            governanceSummary={memoryGovernanceSummary}
+            inspector={memoryInspector}
+            records={memoryRecords}
+          />
         </SheetContent>
       </Sheet>
       <CommandPalette
