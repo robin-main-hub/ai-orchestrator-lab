@@ -25,11 +25,39 @@ export type ProxyEnv = {
 
 type FetchFn = typeof fetch;
 
-function jsonError(status: number, message: string, detail?: string): Response {
-  return new Response(JSON.stringify({ error: message, detail: detail ?? null }), {
+export type MimoProxyErrorCode =
+  | "mimo_env_missing"
+  | "mimo_upstream_fetch_failed"
+  | "mimo_upstream_malformed";
+
+export type MimoProxyReadiness = {
+  configured: boolean;
+  upstream: string;
+  missing: string[];
+};
+
+export function getMimoProxyReadiness(env: ProxyEnv): MimoProxyReadiness {
+  const missing: string[] = [];
+  if (!env.MIMO_TP_API_KEY?.trim()) {
+    missing.push("MIMO_TP_API_KEY");
+  }
+  return {
+    configured: missing.length === 0,
+    upstream: MIMO_UPSTREAM,
+    missing,
+  };
+}
+
+function jsonError(status: number, code: MimoProxyErrorCode, message: string, detail?: string): Response {
+  return new Response(JSON.stringify({ error: message, code, detail: detail ?? null }), {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+function sanitizeDetail(detail: string, secret: string): string {
+  if (!secret) return detail;
+  return detail.split(secret).join("[REDACTED]");
 }
 
 export async function proxyMimo(
@@ -40,7 +68,7 @@ export async function proxyMimo(
 ): Promise<Response> {
   const apiKey = env.MIMO_TP_API_KEY?.trim();
   if (!apiKey) {
-    return jsonError(502, "MIMO_TP_API_KEY not configured");
+    return jsonError(502, "mimo_env_missing", "MIMO_TP_API_KEY not configured");
   }
 
   const url = new URL(request.url);
@@ -71,11 +99,12 @@ export async function proxyMimo(
   try {
     upstreamResponse = await fetchFn(target, init);
   } catch (err) {
-    return jsonError(502, "Upstream fetch failed", err instanceof Error ? err.message : String(err));
+    const rawDetail = err instanceof Error ? err.message : String(err);
+    return jsonError(502, "mimo_upstream_fetch_failed", "Upstream fetch failed", sanitizeDetail(rawDetail, apiKey));
   }
 
   if (!upstreamResponse || upstreamResponse.status === 0) {
-    return jsonError(502, "Upstream returned malformed response");
+    return jsonError(502, "mimo_upstream_malformed", "Upstream returned malformed response");
   }
 
   const respHeaders = new Headers(upstreamResponse.headers);

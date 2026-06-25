@@ -1,2 +1,2 @@
-export { proxyMimo, MIMO_UPSTREAM } from "../src/lib/mimoProxy";
-export type { AuthStyle, ProxyConfig, ProxyEnv } from "../src/lib/mimoProxy";
+export { proxyMimo, getMimoProxyReadiness, MIMO_UPSTREAM } from "../src/lib/mimoProxy";
+export type { AuthStyle, ProxyConfig, ProxyEnv, MimoProxyReadiness, MimoProxyErrorCode } from "../src/lib/mimoProxy";

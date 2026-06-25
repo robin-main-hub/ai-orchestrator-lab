@@ -1,5 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { proxyMimo, MIMO_UPSTREAM, type ProxyConfig, type ProxyEnv } from "./mimoProxy";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import {
+  proxyMimo,
+  getMimoProxyReadiness,
+  MIMO_UPSTREAM,
+  type ProxyConfig,
+  type ProxyEnv,
+} from "./mimoProxy";
+
+const proxySource = readFileSync(fileURLToPath(new URL("./mimoProxy.ts", import.meta.url)), "utf8");
 
 const bearerConfig: ProxyConfig = {
   prefix: "/mimo-token-openai",
@@ -13,7 +23,8 @@ const xApiKeyConfig: ProxyConfig = {
   authStyle: "x-api-key",
 };
 
-const envWithKey: ProxyEnv = { MIMO_TP_API_KEY: "tp-test-secret-key" };
+const TEST_KEY = "tp-test-secret-key-DO-NOT-LEAK";
+const envWithKey: ProxyEnv = { MIMO_TP_API_KEY: TEST_KEY };
 
 function makeRequest(path: string, method = "POST", body?: string): Request {
   return new Request(`https://app.example.com${path}`, {
@@ -44,17 +55,23 @@ function mockFetch(opts?: {
   return vi.fn(async () => new Response(body, { status, headers }));
 }
 
+async function responseBodyText(res: Response): Promise<string> {
+  const cloned = res.clone();
+  return cloned.text();
+}
+
 describe("proxyMimo", () => {
-  it("returns 502 when MIMO_TP_API_KEY is missing", async () => {
+  it("returns 502 with mimo_env_missing code when MIMO_TP_API_KEY is missing", async () => {
     const fetchFn = mockFetch();
     const res = await proxyMimo(makeRequest("/mimo-token-openai/chat/completions"), {}, bearerConfig, fetchFn);
     expect(res.status).toBe(502);
     const json = await res.json();
     expect(json.error).toBe("MIMO_TP_API_KEY not configured");
+    expect(json.code).toBe("mimo_env_missing");
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
-  it("returns 502 when MIMO_TP_API_KEY is whitespace-only", async () => {
+  it("returns 502 with mimo_env_missing code when MIMO_TP_API_KEY is whitespace-only", async () => {
     const fetchFn = mockFetch();
     const res = await proxyMimo(
       makeRequest("/mimo-token-openai/chat/completions"),
@@ -63,6 +80,8 @@ describe("proxyMimo", () => {
       fetchFn,
     );
     expect(res.status).toBe(502);
+    const json = await res.json();
+    expect(json.code).toBe("mimo_env_missing");
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
@@ -72,7 +91,7 @@ describe("proxyMimo", () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
     const [url, init] = firstCall(fetchFn);
     const headers = new Headers(init.headers);
-    expect(headers.get("Authorization")).toBe(`Bearer ${envWithKey.MIMO_TP_API_KEY}`);
+    expect(headers.get("Authorization")).toBe(`Bearer ${TEST_KEY}`);
     expect(headers.has("x-api-key")).toBe(false);
   });
 
@@ -82,7 +101,7 @@ describe("proxyMimo", () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
     const [, init] = firstCall(fetchFn);
     const headers = new Headers(init.headers);
-    expect(headers.get("x-api-key")).toBe(envWithKey.MIMO_TP_API_KEY);
+    expect(headers.get("x-api-key")).toBe(TEST_KEY);
     expect(headers.has("Authorization")).toBe(false);
   });
 
@@ -100,7 +119,7 @@ describe("proxyMimo", () => {
     await proxyMimo(request, envWithKey, bearerConfig, fetchFn);
     const [, init] = firstCall(fetchFn);
     const headers = new Headers(init.headers);
-    expect(headers.get("Authorization")).toBe(`Bearer ${envWithKey.MIMO_TP_API_KEY}`);
+    expect(headers.get("Authorization")).toBe(`Bearer ${TEST_KEY}`);
     expect(headers.get("x-api-key")).toBe(null);
   });
 
@@ -133,7 +152,7 @@ describe("proxyMimo", () => {
     expect(init.method).toBe("POST");
   });
 
-  it("does not include the token in the client response", async () => {
+  it("does not include the token in the client response headers", async () => {
     const fetchFn = mockFetch({
       headers: { "content-type": "application/json", Authorization: "Bearer tp-leaked-in-response" },
     });
@@ -142,7 +161,26 @@ describe("proxyMimo", () => {
     expect(res.headers.get("x-api-key")).toBe(null);
   });
 
-  it("returns 502 when upstream fetch throws", async () => {
+  it("does not add the token to a response body that does not contain it", async () => {
+    const fetchFn = mockFetch({
+      body: '{"data":"ok","status":"healthy"}',
+    });
+    const res = await proxyMimo(makeRequest("/mimo-token-openai/chat/completions"), envWithKey, bearerConfig, fetchFn);
+    const body = await responseBodyText(res);
+    expect(body).not.toContain(TEST_KEY);
+  });
+
+  it("redacts the token from error detail if upstream error message contains it", async () => {
+    const fetchFn = vi.fn(async () => {
+      throw new Error(`connection refused for ${TEST_KEY}`);
+    });
+    const res = await proxyMimo(makeRequest("/mimo-token-openai/chat/completions"), envWithKey, bearerConfig, fetchFn);
+    const body = await responseBodyText(res);
+    expect(body).not.toContain(TEST_KEY);
+    expect(body).toContain("[REDACTED]");
+  });
+
+  it("returns 502 with mimo_upstream_fetch_failed code when upstream fetch throws", async () => {
     const fetchFn = vi.fn(async () => {
       throw new Error("ECONNRESET");
     });
@@ -150,15 +188,16 @@ describe("proxyMimo", () => {
     expect(res.status).toBe(502);
     const json = await res.json();
     expect(json.error).toBe("Upstream fetch failed");
+    expect(json.code).toBe("mimo_upstream_fetch_failed");
     expect(json.detail).toBe("ECONNRESET");
   });
 
-  it("returns 502 when upstream returns status 0", async () => {
+  it("returns 502 with mimo_upstream_malformed code when upstream returns status 0", async () => {
     const fetchFn = vi.fn(async () => ({ status: 0, body: null, headers: new Headers(), statusText: "" }) as unknown as Response);
     const res = await proxyMimo(makeRequest("/mimo-token-openai/chat/completions"), envWithKey, bearerConfig, fetchFn);
     expect(res.status).toBe(502);
     const json = await res.json();
-    expect(json.error).toBe("Upstream returned malformed response");
+    expect(json.code).toBe("mimo_upstream_malformed");
   });
 
   it("passes upstream error status through without masking as success", async () => {
@@ -181,5 +220,74 @@ describe("proxyMimo", () => {
     expect(fetchFn.mock.calls).toHaveLength(1);
     const [url] = firstCall(fetchFn);
     expect(url).toMatch(/^https:\/\/token-plan-sgp\.xiaomimimo\.com\//);
+  });
+});
+
+describe("getMimoProxyReadiness", () => {
+  it("returns configured=true when MIMO_TP_API_KEY is present and non-empty", () => {
+    const result = getMimoProxyReadiness({ MIMO_TP_API_KEY: "tp-real-key" });
+    expect(result.configured).toBe(true);
+    expect(result.missing).toEqual([]);
+  });
+
+  it("returns configured=false when MIMO_TP_API_KEY is missing", () => {
+    const result = getMimoProxyReadiness({});
+    expect(result.configured).toBe(false);
+    expect(result.missing).toEqual(["MIMO_TP_API_KEY"]);
+  });
+
+  it("returns configured=false when MIMO_TP_API_KEY is whitespace-only", () => {
+    const result = getMimoProxyReadiness({ MIMO_TP_API_KEY: "  \t " });
+    expect(result.configured).toBe(false);
+    expect(result.missing).toEqual(["MIMO_TP_API_KEY"]);
+  });
+
+  it("returns upstream as token-plan-sgp.xiaomimimo.com", () => {
+    const result = getMimoProxyReadiness({});
+    expect(result.upstream).toBe(MIMO_UPSTREAM);
+    expect(result.upstream).toBe("https://token-plan-sgp.xiaomimimo.com");
+  });
+
+  it("never exposes the token value in any field", () => {
+    const result = getMimoProxyReadiness({ MIMO_TP_API_KEY: "tp-super-secret-value" });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("tp-super-secret-value");
+  });
+
+  it("output contains only boolean/config metadata, no raw secret", () => {
+    const result = getMimoProxyReadiness({ MIMO_TP_API_KEY: "tp-secret" });
+    const keys = Object.keys(result);
+    expect(keys).toContain("configured");
+    expect(keys).toContain("upstream");
+    expect(keys).toContain("missing");
+    expect(keys).not.toContain("MIMO_TP_API_KEY");
+    expect(keys).not.toContain("key");
+    expect(keys).not.toContain("token");
+    expect(keys).not.toContain("secret");
+  });
+});
+
+describe("Mimo proxy source-level contract", () => {
+  it("does not read VITE_MIMO_* env vars", () => {
+    expect(proxySource).not.toContain("VITE_MIMO");
+    expect(proxySource).not.toContain("VITE_");
+  });
+
+  it("does not reference api.xiaomimimo.com", () => {
+    expect(proxySource).not.toContain("api.xiaomimimo.com");
+  });
+
+  it("hardcodes upstream as token-plan-sgp.xiaomimimo.com", () => {
+    expect(proxySource).toContain('https://token-plan-sgp.xiaomimimo.com');
+  });
+
+  it("exports getMimoProxyReadiness", () => {
+    expect(proxySource).toContain("export function getMimoProxyReadiness");
+  });
+
+  it("exports machine-readable error codes", () => {
+    expect(proxySource).toContain("mimo_env_missing");
+    expect(proxySource).toContain("mimo_upstream_fetch_failed");
+    expect(proxySource).toContain("mimo_upstream_malformed");
   });
 });
