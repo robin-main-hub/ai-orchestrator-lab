@@ -9,7 +9,7 @@
 
 ## Current PR
 
-- None active. Last merged: #1066 (`8daed7da`).
+- None active. Last merged: #1070 (`befca9f1`).
 
 ## Completed
 
@@ -66,13 +66,36 @@
 - All persona-file changes already in main
 - Type vocabulary diverged (kernel*/product* → mission*/sandbox*)
 
-### #562 Mimo server-side auth injection — review packet
+### PR #1067 — stale PR decisions update (merged `f3a65f63`)
 
-- `docs/handoffs/2026-06-25-mimo-pr-562-review.md` created
-- Problem still exists in main: real API key in client bundle
-- #562's server-side injection is a genuine security improvement
-- Do NOT merge as-is — stale branch, unconfirmed upstream change, vite.config.ts conflict
-- Minimal salvage PR possible after owner confirms upstream choice
+- #561 closed as superseded by #1066
+- #513 closed as superseded
+- #562 review packet: `docs/handoffs/2026-06-25-mimo-pr-562-review.md`
+- #793 integration difficulty assessment added to landscape doc
+
+### PR #1068 — #562 Mimo salvage plan (merged `0b21213e`)
+
+- `docs/handoffs/2026-06-25-mimo-pr-562-salvage-plan.md` — upstream comparison, security boundary, minimal salvage PR plan
+- Owner decisions resolved: upstream = `token-plan-sgp.xiaomimimo.com`, env = `MIMO_TP_API_KEY`
+
+### PR #1069 — shell IA layer from #793 (merged `eee07542`)
+
+- 4 new files cherry-picked from #793 commit `5c3e63e2`:
+  - `apps/desktop/src/lib/appShellIa.ts` (322 lines) — 5-section IA config
+  - `apps/desktop/src/lib/appShellIa.test.ts` (52 lines) — 5 tests
+  - `apps/desktop/src/components/AppShellNav.tsx` (192 lines) — nav component
+  - `apps/desktop/src/styles/renewal-shell.css` (653 lines) — command OS CSS
+- No existing code touched — additive only
+- PR B (App.tsx integration) plan at `docs/handoffs/2026-06-25-pr-b-shell-ia-integration-plan.md`
+
+### PR #1070 — Mimo server-side auth injection (merged `befca9f1`)
+
+- Replaces passthrough proxy with server-side `MIMO_TP_API_KEY` injection
+- Client sends `"mimo-ready"` sentinel; proxy overwrites with real key from env
+- VITE_MIMO_* env reading removed from client — no key in browser bundle
+- 15 unit tests: env missing, auth injection, client stripping, endpoint verification, upstream errors, no real network
+- Vite dev proxy mirrors same injection from `process.env.MIMO_TP_API_KEY`
+- Owner action: set `MIMO_TP_API_KEY` in Cloudflare Pages env + dev shell
 
 ### tmux send-keys runbook (completed 2026-06-25)
 
@@ -89,22 +112,21 @@
 - onHandoff approval wiring: COMPLETE
 - opencode JSON parser contract: PINNED
 - tmux send-keys enablement: OWNER ACTION PENDING (runbook ready)
+- #562 Mimo server-side auth: LANDED (PR #1070) — owner env insertion pending
+- #793 shell IA layer: LANDED (PR #1069) — PR B App.tsx integration plan ready, owner seam confirmation pending
 
 ## Owner action pending
 
 - **ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS** — runbook at `docs/runbooks/orchestrator-enable-tmux-send-keys.md`. Owner must SSH to DGX-02, edit `.env`, restart server, run validation checklist.
-- **#562 Mimo server-side auth injection** — salvage plan ready at `docs/handoffs/2026-06-25-mimo-pr-562-salvage-plan.md`. Owner must:
-  1. Choose upstream: Option A `token-plan-sgp.xiaomimimo.com` (recommended, no test breakage) or Option B `api.xiaomimimo.com` (requires seed/test updates)
-  2. Confirm which env var holds the real key on DGX-02: `MIMO_API_KEY` or `MIMO_TP_API_KEY`
-  3. After decision, AI creates minimal salvage PR (rewrite `_mimoProxy.ts` + route files + vite proxy + remove VITE_MIMO_* from client + unit tests)
-- **#793 UI renewal draft** — stale but salvageable. 4 unique new files (AppShellNav, appShellIa, renewal-shell.css, appShellIa.test). App.tsx has 100+ conflicting commits. Owner must decide: cherry-pick + manual integration or defer.
+- **MIMO_TP_API_KEY env insertion** — set in Cloudflare Pages project env (Production + Preview) + dev shell. Do NOT set `VITE_MIMO_*` anywhere.
+- **#793 PR B seam confirmation** — plan at `docs/handoffs/2026-06-25-pr-b-shell-ia-integration-plan.md`. Owner must confirm:
+  1. Add `AppShellNav` alongside `RuntimeStatusBar` (not replacing)?
+  2. Virtual surface handling: map to annex, wire specific handlers, or no-op?
+  3. `pendingApprovals` data source for AppShellNav prop?
 
 ## Next steps
 
-No remaining AI-executable default tasks. Next work requires owner decision:
-- Enable tmux send-keys (runbook ready)
-- #562: confirm upstream, then AI creates salvage PR
-- #793: decide integration plan or defer
+- #793 PR B: implement after owner confirms seam
 - Or assign new work
 
 ## Explicitly Deprecated
