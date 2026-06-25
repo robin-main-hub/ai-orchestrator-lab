@@ -364,12 +364,21 @@ import {
   type AppShellSection,
   type AppShellSectionId,
   type AppShellTabId,
+  type AppShellVirtualSurface,
 } from "./lib/appShellIa";
 import "./styles/renewal-shell.css";
 
+const safeVirtualSurfaces: ReadonlySet<AppShellVirtualSurface> = new Set([
+  "operations_queue",
+]);
+
+function isTabRendered(tab: { target: { nav?: string; mode?: string; virtual?: AppShellVirtualSurface | null } }): boolean {
+  return Boolean(tab.target.nav || tab.target.mode || (tab.target.virtual && safeVirtualSurfaces.has(tab.target.virtual)));
+}
+
 const routeBackedShellSections: readonly AppShellSection[] = appShellSections.map((section) => ({
   ...section,
-  tabs: section.tabs.filter((tab) => tab.target.nav || tab.target.mode),
+  tabs: section.tabs.filter(isTabRendered),
 }));
 
 const routeBackedDefaultTabBySection: Record<AppShellSectionId, AppShellTabId> = Object.fromEntries(
@@ -5100,6 +5109,7 @@ export function App() {
     const tab = findAppShellTab(tabId);
     if (tab.target.mode) setMode(tab.target.mode);
     if (tab.target.nav) setActiveNavItem(tab.target.nav);
+    if (tab.target.virtual === "operations_queue") setApprovalDrawerOpen(true);
   }, []);
 
   const handleSelectShellSection = useCallback((sectionId: AppShellSectionId) => {

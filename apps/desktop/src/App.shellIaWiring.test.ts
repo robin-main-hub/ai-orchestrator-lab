@@ -76,9 +76,30 @@ describe("App shell IA wiring smoke", () => {
 });
 
 describe("shell IA virtual surface filtering", () => {
-  it("routeBackedShellSections filters out virtual-only tabs", () => {
+  it("routeBackedShellSections uses isTabRendered filter", () => {
     expect(appSource).toContain("routeBackedShellSections");
-    expect(appSource).toContain('tabs: section.tabs.filter((tab) => tab.target.nav || tab.target.mode)');
+    expect(appSource).toContain("isTabRendered");
+  });
+
+  it("safeVirtualSurfaces contains only operations_queue", () => {
+    expect(appSource).toContain("safeVirtualSurfaces");
+    expect(appSource).toContain('"operations_queue"');
+  });
+
+  it("operations.queue tab is rendered (safe virtual surface)", () => {
+    const opsSection = appShellSections.find((s) => s.id === "operations");
+    const queueTab = opsSection?.tabs.find((t) => t.id === "operations.queue");
+    expect(queueTab).toBeDefined();
+    expect(queueTab?.target.virtual).toBe("operations_queue");
+  });
+
+  it("all 9 unsafe virtual surfaces are not in safeVirtualSurfaces", () => {
+    const allVirtualTabs = appShellSections.flatMap((s) => s.tabs).filter((t) => t.target.virtual);
+    const unsafeVirtuals = allVirtualTabs.filter((t) => t.target.virtual !== "operations_queue");
+    expect(unsafeVirtuals.length).toBe(10);
+    for (const tab of unsafeVirtuals) {
+      expect(appSource).not.toContain(`"${tab.target.virtual}"`);
+    }
   });
 
   it("every section has at least one route-backed tab after filtering", () => {
@@ -126,5 +147,39 @@ describe("shell IA virtual surface filtering", () => {
       expect(tab).toBeDefined();
       expect(tab?.target.virtual ?? false).toBe(false);
     }
+  });
+});
+
+describe("operations.queue virtual surface mapping", () => {
+  it("handleSelectShellTab opens approval drawer for operations_queue", () => {
+    expect(appSource).toContain('tab.target.virtual === "operations_queue"');
+    expect(appSource).toContain("setApprovalDrawerOpen(true)");
+  });
+
+  it("handleSelectShellTab does not dispatch runner for operations_queue", () => {
+    const handlerBlock = appSource.match(
+      /const handleSelectShellTab = useCallback\([\s\S]*?\}, \[\]\);/,
+    )?.[0];
+    expect(handlerBlock).toBeDefined();
+    expect(handlerBlock).not.toContain("dispatch");
+    expect(handlerBlock).not.toContain("runner");
+    expect(handlerBlock).not.toContain("tmux");
+    expect(handlerBlock).not.toContain("send-keys");
+    expect(handlerBlock).not.toContain("fetch(");
+    expect(handlerBlock).not.toContain("approve");
+  });
+
+  it("operations.queue only opens existing drawer, does not change route", () => {
+    const handlerBlock = appSource.match(
+      /const handleSelectShellTab = useCallback\([\s\S]*?\}, \[\]\);/,
+    )?.[0];
+    expect(handlerBlock).toBeDefined();
+    const queueLine = handlerBlock!
+      .split("\n")
+      .find((l) => l.includes("operations_queue"));
+    expect(queueLine).toBeDefined();
+    expect(queueLine).toContain("setApprovalDrawerOpen(true)");
+    expect(queueLine).not.toContain("setMode");
+    expect(queueLine).not.toContain("setActiveNavItem");
   });
 });
