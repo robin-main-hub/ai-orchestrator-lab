@@ -9,7 +9,8 @@
 
 ## Current PR
 
-- None active. Last merged: #1070 (`befca9f1`).
+- **#1075 (draft)** — expose `operations.missions` + `system.runtime` read-only shell surfaces. Branch `claude/hopeful-sagan-0rxyf3`.
+- Recent shell-IA merges: #1071 (integration plan), #1072 (AppShellNav wired into App), #1073 (`operations.queue` surface).
 
 ## Completed
 
@@ -115,6 +116,19 @@
 - #562 Mimo server-side auth: LANDED (PR #1070) — owner env insertion pending
 - #793 shell IA layer: LANDED (PR #1069) — PR B App.tsx integration plan ready, owner seam confirmation pending
 
+## Shell IA virtual surface exposure
+
+AppShellNav (#1072) renders only `safeVirtualSurfaces`; every other virtual tab stays
+hidden until a safe read-only reuse target exists. No surface gets a fabricated screen,
+new store, new router, new fetch layer, or action wiring on navigation.
+
+- `operations.queue` — **COMPLETE** (#1073). Opens the existing `ControlQueueDrawer`; navigation performs no approval or dispatch.
+- `operations.missions` — **COMPLETE** (#1075). Routes to the single existing `RunWorkspace` mission board (board mode) via existing nav + `summonSeedMode` state. Reuses one `MissionBoardContainer` instance — no duplicate mission store, no new fetch, no mission lifecycle action on navigation.
+- `system.runtime` — **COMPLETE** (#1075). Renders the existing `RuntimeRailPanel` read-only (destructive reboot control omitted) inside the existing `ui/Sheet` primitive, from the existing `runtimeSnapshotState`. No new store/poll/fetch; no runtime start/stop/restart/health mutation.
+- `system.models` — **DEFERRED — no safe reuse seam.** There is no existing read-only model-catalog-by-provider component. `modelCatalog` (`Record<providerId, Model[]>`) is only rendered inside mutation surfaces — `ProviderRegistrationMenu` (register / discover models / bind credential / remove / rename) — or the coding model picker in `CodingWorkbench`. `ProviderRoutingCard` (cockpit) shows only the current route summary (`modelCount`), not the catalog. Exposing `system.models` read-only requires a NEW presentational catalog component (render `modelCatalog` grouped by provider) or extracting a read-only list out of `ProviderRegistrationMenu` — neither is a reuse of an existing read-only component, so it stays hidden (no plan-only PR created).
+
+Remaining hidden virtual surfaces (out of scope this pass — each needs a real read-only route/panel design before exposure, no safe reuse target confirmed): `operations.replay`, `library.workspaces`, `library.artifacts`, `library.memory`, `library.agents`, `system.modules`. (`library.replay` shares the `operations_replay` id and unhides with replay.)
+
 ## Owner action pending
 
 - **ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS** — runbook at `docs/runbooks/orchestrator-enable-tmux-send-keys.md`. Owner must SSH to DGX-02, edit `.env`, restart server, run validation checklist.
@@ -126,8 +140,13 @@
 
 ## Next steps
 
-- #793 PR B: implement after owner confirms seam
-- Or assign new work
+- Review + merge #1075 (`operations.missions` + `system.runtime` surfaces).
+- Owner decision: pick the next hidden virtual surface to expose. Each remaining one
+  (`operations.replay`, `library.workspaces`/`artifacts`/`memory`/`agents`,
+  `system.models`/`modules`) needs a real read-only route or panel before it is safe —
+  there is no existing read-only component to reuse, so the next step is a design
+  decision, not another reuse-only PR.
+- Owner env actions still pending (see below): `MIMO_TP_API_KEY`, `ORCHESTRATOR_ENABLE_TMUX_SEND_KEYS`.
 
 ## Explicitly Deprecated
 
