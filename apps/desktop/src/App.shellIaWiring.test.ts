@@ -81,10 +81,11 @@ describe("shell IA virtual surface filtering", () => {
     expect(appSource).toContain("isTabRendered");
   });
 
-  it("safeVirtualSurfaces contains operations_queue and operations_missions", () => {
+  it("safeVirtualSurfaces contains operations_queue, operations_missions, system_runtime", () => {
     expect(appSource).toContain("safeVirtualSurfaces");
     expect(appSource).toContain('"operations_queue"');
     expect(appSource).toContain('"operations_missions"');
+    expect(appSource).toContain('"system_runtime"');
   });
 
   it("operations.queue tab is rendered (safe virtual surface)", () => {
@@ -95,10 +96,10 @@ describe("shell IA virtual surface filtering", () => {
   });
 
   it("unsafe virtual surfaces are not in safeVirtualSurfaces", () => {
-    const safe = new Set(["operations_queue", "operations_missions"]);
+    const safe = new Set(["operations_queue", "operations_missions", "system_runtime"]);
     const allVirtualTabs = appShellSections.flatMap((s) => s.tabs).filter((t) => t.target.virtual);
     const unsafeVirtuals = allVirtualTabs.filter((t) => !safe.has(t.target.virtual as string));
-    expect(unsafeVirtuals.length).toBe(9);
+    expect(unsafeVirtuals.length).toBe(8);
     for (const tab of unsafeVirtuals) {
       expect(appSource).not.toContain(`"${tab.target.virtual}"`);
     }
@@ -249,5 +250,56 @@ describe("operations.missions virtual surface mapping", () => {
   it("operations.queue safe-surface behavior is preserved", () => {
     expect(appSource).toContain('tab.target.virtual === "operations_queue"');
     expect(appSource).toContain("setApprovalDrawerOpen(true)");
+  });
+});
+
+describe("system.runtime virtual surface mapping", () => {
+  it("system.runtime is exposed as a safe virtual surface tab", () => {
+    expect(appSource).toContain('"system_runtime"');
+    const sysSection = appShellSections.find((s) => s.id === "system");
+    const runtimeTab = sysSection?.tabs.find((t) => t.id === "system.runtime");
+    expect(runtimeTab).toBeDefined();
+    expect(runtimeTab?.target.virtual).toBe("system_runtime");
+  });
+
+  it("selecting system.runtime opens the read-only runtime sheet (no route change)", () => {
+    expect(appSource).toContain('tab.target.virtual === "system_runtime"');
+    const handlerBlock = appSource.match(
+      /const handleSelectShellTab = useCallback\([\s\S]*?\}, \[\]\);/,
+    )?.[0];
+    expect(handlerBlock).toBeDefined();
+    const line = handlerBlock!.split("\n").find((l) => l.includes("system_runtime"));
+    expect(line).toBeDefined();
+    expect(line).toContain("setRuntimeSurfaceOpen(true)");
+    expect(line).not.toContain("setMode");
+    expect(line).not.toContain("setActiveNavItem");
+    expect(line).not.toContain("dispatch");
+    expect(line).not.toContain("fetch(");
+    expect(line).not.toContain("tmux");
+    expect(line).not.toContain("Reboot");
+  });
+
+  it("renders the existing RuntimeRailPanel from the existing snapshot state", () => {
+    const sheetBlock = appSource.match(/<Sheet open=\{runtimeSurfaceOpen\}[\s\S]*?<\/Sheet>/)?.[0];
+    expect(sheetBlock).toBeDefined();
+    expect(sheetBlock).toContain("<RuntimeRailPanel");
+    expect(sheetBlock).toContain("snapshot={runtimeSnapshotState}");
+  });
+
+  it("runtime surface is read-only: no reboot mutation handler wired", () => {
+    const sheetBlock = appSource.match(/<Sheet open=\{runtimeSurfaceOpen\}[\s\S]*?<\/Sheet>/)?.[0];
+    expect(sheetBlock).toBeDefined();
+    expect(sheetBlock).not.toContain("onRequestReboot");
+    expect(sheetBlock).not.toContain("handleRequestDeviceReboot");
+  });
+
+  it("existing sessions-page RuntimeRailPanel stays intact (two usages total)", () => {
+    const count = (appSource.match(/<RuntimeRailPanel/g) ?? []).length;
+    expect(count).toBe(2);
+  });
+
+  it("operations.missions and operations.queue remain functional", () => {
+    expect(appSource).toContain('tab.target.virtual === "operations_missions"');
+    expect(appSource).toContain('tab.target.virtual === "operations_queue"');
   });
 });

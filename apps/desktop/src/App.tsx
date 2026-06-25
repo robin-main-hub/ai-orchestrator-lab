@@ -366,11 +366,13 @@ import {
   type AppShellTabId,
   type AppShellVirtualSurface,
 } from "./lib/appShellIa";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/ui/sheet";
 import "./styles/renewal-shell.css";
 
 const safeVirtualSurfaces: ReadonlySet<AppShellVirtualSurface> = new Set([
   "operations_queue",
   "operations_missions",
+  "system_runtime",
 ]);
 
 function isTabRendered(tab: { target: { nav?: string; mode?: string; virtual?: AppShellVirtualSurface | null } }): boolean {
@@ -424,6 +426,9 @@ export function App() {
   const [activePreviewRefByMissionId, setActivePreviewRefByMissionId] = useState<ActivePreviewRefMap>({});
   const [annexInitialTab, setAnnexInitialTab] = useState<"status" | "memory" | "queue">("status");
   const [approvalDrawerOpen, setApprovalDrawerOpen] = useState(false);
+  // Read-only runtime status surface (system.runtime shell tab). UI toggle only —
+  // not a store; reuses the existing runtimeSnapshotState / RuntimeRailPanel.
+  const [runtimeSurfaceOpen, setRuntimeSurfaceOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   // Batch 11 LINE C — one-shot view command pushed to the Assistant Inbox from the
   // Command Palette. View-only (mode/focus/category/clear); never an action.
@@ -5115,9 +5120,12 @@ export function App() {
     if (tab.target.nav === "run") setSummonSeedMode("single");
     if (tab.target.virtual === "operations_queue") setApprovalDrawerOpen(true);
     // operations.missions reuses the single existing RunWorkspace mission board
-    // (no duplicate store/fetch): land on the run workspace, opened on its board.
+    // (one board instance only): land on the run workspace, opened on its board.
     if (tab.target.virtual === "operations_missions") setActiveNavItem("run");
     if (tab.target.virtual === "operations_missions") setSummonSeedMode("board");
+    // system.runtime shows the existing RuntimeRailPanel read-only in a sheet —
+    // selection only toggles this sheet: no route change, no node restart.
+    if (tab.target.virtual === "system_runtime") setRuntimeSurfaceOpen(true);
   }, []);
 
   const handleSelectShellSection = useCallback((sectionId: AppShellSectionId) => {
@@ -5872,6 +5880,25 @@ export function App() {
         redispatchOutcomes={tmuxRedispatchOutcomes}
         snapshot={unifiedControlQueueSnapshot}
       />
+      {/* system.runtime shell surface — existing RuntimeRailPanel rendered
+          read-only (reboot control omitted) from the existing runtime snapshot.
+          No new store / fetch loop; selection just toggles this sheet. */}
+      <Sheet open={runtimeSurfaceOpen} onOpenChange={setRuntimeSurfaceOpen}>
+        <SheetContent side="right" className="overflow-y-auto p-4 sm:max-w-md">
+          <SheetHeader className="p-0">
+            <SheetTitle>런타임 상태</SheetTitle>
+            <SheetDescription>
+              런타임 노드 · 동기화 · DGX 라우트 진단 (읽기 전용)
+            </SheetDescription>
+          </SheetHeader>
+          <RuntimeRailPanel
+            dgxRouteDiagnostics={dgxRouteDiagnostics}
+            onProbeDgx={handleProbeDgx}
+            rebootWatchdogs={rebootWatchdogs}
+            snapshot={runtimeSnapshotState}
+          />
+        </SheetContent>
+      </Sheet>
       <CommandPalette
         commands={paletteCommands}
         onClose={() => setCommandPaletteOpen(false)}
