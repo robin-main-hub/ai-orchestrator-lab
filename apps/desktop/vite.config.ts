@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
+import { MIMO_CREDENTIAL_ENV, MIMO_UPSTREAM } from "./src/lib/mimoProxy";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
@@ -12,7 +13,7 @@ function mimoAuthInjector(headerName: string, headerValue: (key: string) => stri
   return (proxy: { on: (event: string, listener: (...args: unknown[]) => void) => void }) => {
     proxy.on("proxyReq", (...args: unknown[]) => {
       const proxyReq = args[0] as { setHeader: (k: string, v: string) => void; removeHeader: (k: string) => void };
-      const key = process.env.MIMO_TP_API_KEY?.trim();
+      const key = process.env[MIMO_CREDENTIAL_ENV]?.trim();
       if (!key) return;
       proxyReq.removeHeader("authorization");
       proxyReq.removeHeader("x-api-key");
@@ -35,13 +36,13 @@ export default defineConfig({
       "/mimo-token-anthropic": {
         changeOrigin: true,
         rewrite: (proxyPath) => proxyPath.replace(/^\/mimo-token-anthropic/, "/anthropic"),
-        target: "https://token-plan-sgp.xiaomimimo.com",
+        target: MIMO_UPSTREAM,
         configure: mimoAuthInjector("x-api-key", (key) => key) as never,
       },
       "/mimo-token-openai": {
         changeOrigin: true,
         rewrite: (proxyPath) => proxyPath.replace(/^\/mimo-token-openai/, "/v1"),
-        target: "https://token-plan-sgp.xiaomimimo.com",
+        target: MIMO_UPSTREAM,
         configure: mimoAuthInjector("Authorization", (key) => `Bearer ${key}`) as never,
       },
     },
