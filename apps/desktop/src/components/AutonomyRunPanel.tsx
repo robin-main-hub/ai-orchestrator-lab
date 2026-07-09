@@ -30,7 +30,7 @@ import { PersonaCard } from "./PersonaCard";
 import { ResultStamp, stampForLoopStatus } from "./ResultStamp";
 import type { PersonaTaskOutcome } from "../lib/personaTaskRunner";
 
-const MODES: AutonomyMode[] = ["human", "auto_safe"];
+const MODES: AutonomyMode[] = ["full_auto", "auto_safe", "human"];
 
 /**
  * Presentational panel for starting an autonomous persona run. Stateless: the

@@ -84,8 +84,7 @@ import {
   shouldAutoCompactConversation,
   summarizeConversationUsage,
 } from "./lib/conversationUsage";
-import { createPatternApprovalStrategy, extractCommandPrefix } from "./lib/sessionPatternApproval";
-import { DANGEROUS_PATTERN } from "./lib/safeCommandPolicy";
+import { extractCommandPrefix } from "./lib/sessionPatternApproval";
 import { patchCandidatesFromApprovalItems } from "./lib/patchHandoffToCandidate";
 import {
   CONVERSATION_SLASH_HELP,
@@ -104,8 +103,7 @@ import { condense, renderCondensate, type Condensate, type CondenserTurn } from 
 import { buildCovenantFromPersona } from "./lib/personaCovenant";
 import { buildForkBrief, forkMissionFromConversation } from "./lib/conversationFork";
 import { workbenchMissionStore } from "./lib/workbenchMissions";
-import { createAutoApproveStrategy } from "./lib/autoApproveStrategy";
-import { createClosedLoopEffects, pollForApprovalDecision } from "./lib/closedLoopRuntime";
+import { createClosedLoopEffects } from "./lib/closedLoopRuntime";
 import { createGatedToolExecutor, type WireMessage } from "./lib/codingTurnRunner";
 import { workspaceChangeLedger } from "./lib/workspaceChangeLedger";
 import {
@@ -2455,41 +2453,10 @@ export function App() {
       // 항목 2·10·13 — 응답에 tool 펜스가 있으면 게이트 도구 루프 실행
       if (result.pipelineMessages && replyRequestsTools(reply) && !conversationTurnCancelledRef.current) {
         const turnId = crypto.randomUUID().slice(0, 8);
-        let gateSequence = 0;
-        // 인간 승인으로 넘어가는 순간: 승인 대기열을 새로고침해 인라인 카드를 띄우고,
-        // 드래프트 버블에 대기 상태를 노출한다 (안 그러면 "정체"처럼 보인다)
-        const humanWithVisibility = async (sourceItemId: string, context: { command: string }) => {
-          void handleRefreshApprovalQueue();
-          setStreamingPreview({
-            agentId: selectedAgent.id,
-            text: `${streamedSoFar.trim() ? `${streamedSoFar}\n\n` : ""}⏳ 승인 대기: ${context.command.slice(0, 120)}`,
-            pendingApproval: { sourceItemId, command: context.command },
-          });
-          return pollForApprovalDecision({ sourceItemId, timeoutMs: 300_000 });
-        };
-        const approvalStrategy = createPatternApprovalStrategy({
-          base: createAutoApproveStrategy({ fallback: humanWithVisibility }),
-          getApprovedPrefixes: () => sessionApprovedPrefixesRef.current,
-          grant: async (sourceItemId, context) => {
-            const grantResult = await grantDgxApproval({
-              request: { sourceItemId, actor: "user", reason: `세션 패턴 승인: ${context.prefix}` },
-            });
-            return "status" in grantResult && grantResult.status === "approved";
-          },
-        });
-        const effects = createClosedLoopEffects({
-          sessionId: targetSessionId,
-          role: "code",
-          paneId: "role:code",
-          awaitApprovalDecision: approvalStrategy,
-          newId: (stepIndex) => `conv_${turnId}_h${gateSequence++}_${stepIndex}`,
-          now: () => new Date().toISOString(),
-        });
-        const gatedExecutor = createGatedToolExecutor(effects);
-        // BUILD 모드 파일 도구(write/edit/read/grep/glob/todo)는 자동 승인 —
-        // 모드 토글이 곧 사용자의 사전 승인이며, 승인 기록은 서버에 그대로 남는다.
-        // 파일 쓸 때마다 사람 클릭을 기다리며 턴이 멈추던 흐름을 제거한다 (Codex 방식).
-        // bash만 safe-prefix 자동 / 위험 명령 인간 게이트를 유지한다.
+        // 완전 자동(full-auto) — 대화 도구 루프는 사람 승인을 기다리지 않는다.
+        // 모든 도구(파일 도구 + bash, 위험 명령 포함)를 서버 grant 경로로 자동 승인해 실행한다.
+        // 그랜트는 서버 /approvals/grant 를 통과해 append-only 감사에 그대로 남는다(로깅이지 게이트 아님).
+        // 유일한 사람 접점은 예산 상한과 중지 버튼뿐 — "목적만 주면 끝까지 자율완주".
         let autoGateSequence = 0;
         const autoGrantEffects = createClosedLoopEffects({
           sessionId: targetSessionId,
@@ -2558,13 +2525,10 @@ export function App() {
           },
           executeTool: async (call) => {
             workspaceChangeLedger.recordToolCall(call);
-            // 파일 도구(write/edit/read/grep/glob/todo)는 항상 자동 승인.
-            if (call.tool !== "bash") return autoGrantExecutor(call);
-            // BUILD 모드 bash: 위험 명령(rm/sudo/curl/git push 등 DANGEROUS_PATTERN)만
-            // 인간 게이트로 묻고, mkdir·tsc·ls·node 같은 일반 빌드 명령은 자동 진행한다.
+            // 완전 자동: 파일 도구든 bash(위험 명령 포함)든 카브아웃 없이 전부 자동 승인해 실행한다.
+            // 그랜트는 서버 grant 경로로 append-only 감사에 남는다. 사람 승인 대기는 없다.
             // (PLAN 모드면 bash 자체가 도구 루프 진입 전에 차단된다.)
-            const command = String((call.input as { command?: unknown }).command ?? "");
-            return DANGEROUS_PATTERN.test(command) ? gatedExecutor(call) : autoGrantExecutor(call);
+            return autoGrantExecutor(call);
           },
           makeToolId: (round, index) => `tool_${turnId}_${round}_${index}`,
           onEvent: (event) => {

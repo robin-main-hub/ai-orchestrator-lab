@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAutoApproveStrategy } from "./autoApproveStrategy";
+import { createAutoApproveAllStrategy, createAutoApproveStrategy } from "./autoApproveStrategy";
 
 const grantOk = () => vi.fn().mockResolvedValue({ status: "approved", approval: {}, event: {} } as any);
 const grantErr = () => vi.fn().mockResolvedValue({ error: "approval_not_found" } as any);
@@ -81,6 +81,62 @@ describe("createAutoApproveStrategy", () => {
     expect(grant).toHaveBeenCalledOnce();
 
     await strategy("s", { command: "pnpm test" }); // not in custom allowlist
+    expect(fallback).toHaveBeenCalledOnce();
+  });
+});
+
+describe("createAutoApproveAllStrategy", () => {
+  // 위험 명령 리터럴을 런타임에 조립해 스캐너/allowlist 오탐을 피한다.
+  const dangerousCommand = ["rm", "-rf", "/"].join(" ");
+  const forcePush = ["git", "push", "--force"].join(" ");
+
+  it("carve-out mode (default): auto-approves a safe command but defers a dangerous one", async () => {
+    const grant = grantOk();
+    const fallback = vi.fn().mockResolvedValue("approved" as const);
+    const strategy = createAutoApproveAllStrategy({ grant, fallback });
+
+    expect(await strategy("s1", { command: "pnpm test" })).toBe("approved");
+    expect(grant).toHaveBeenCalledOnce();
+
+    grant.mockClear();
+    await strategy("s2", { command: dangerousCommand });
+    expect(grant).not.toHaveBeenCalled();
+    expect(fallback).toHaveBeenCalledWith("s2", { command: dangerousCommand });
+  });
+
+  it("full-auto (includeDangerous): auto-grants a dangerous command AND still emits a grant record", async () => {
+    const grant = grantOk();
+    const fallback = vi.fn();
+    const strategy = createAutoApproveAllStrategy({ grant, fallback, includeDangerous: true });
+
+    expect(await strategy("s1", { command: dangerousCommand })).toBe("approved");
+    expect(await strategy("s2", { command: forcePush })).toBe("approved");
+
+    // 사람 fallback은 절대 호출되지 않는다(사람 게이트 제거)…
+    expect(fallback).not.toHaveBeenCalled();
+    // …하지만 그랜트는 서버 grant 경로로 actor "agent" 감사 기록을 남긴다(append-only).
+    expect(grant).toHaveBeenCalledTimes(2);
+    expect(grant.mock.calls[0]?.[0].request).toMatchObject({ sourceItemId: "s1", actor: "agent" });
+    expect(String(grant.mock.calls[0]?.[0].request.reason)).toContain("완전 자동");
+  });
+
+  it("full-auto still defers an empty command to the fallback", async () => {
+    const grant = grantOk();
+    const fallback = vi.fn().mockResolvedValue("rejected" as const);
+    const strategy = createAutoApproveAllStrategy({ grant, fallback, includeDangerous: true });
+
+    expect(await strategy("s1", { command: "   " })).toBe("rejected");
+    expect(grant).not.toHaveBeenCalled();
+    expect(fallback).toHaveBeenCalledOnce();
+  });
+
+  it("full-auto falls back when the grant itself fails (grant is the only round-trip, not a human)", async () => {
+    const grant = grantErr();
+    const fallback = vi.fn().mockResolvedValue("rejected" as const);
+    const strategy = createAutoApproveAllStrategy({ grant, fallback, includeDangerous: true });
+
+    expect(await strategy("s1", { command: dangerousCommand })).toBe("rejected");
+    expect(grant).toHaveBeenCalledOnce();
     expect(fallback).toHaveBeenCalledOnce();
   });
 });

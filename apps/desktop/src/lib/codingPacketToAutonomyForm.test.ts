@@ -21,7 +21,7 @@ describe("codingPacketToAutonomyForm", () => {
     expect(form.goal).toBe("Add a rate limiter to the ingress guard");
     expect(form.verificationStepsText).toBe("pnpm test\npnpm typecheck");
     expect(form.role).toBe("code"); // coding packets default to the code pane
-    expect(form.mode).toBe("human");
+    expect(form.mode).toBe("full_auto"); // 기본 자율성 모드 = 완전 자동(사람 승인 게이트 없음)
     expect(form.personaName).toBe("");
   });
 

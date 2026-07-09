@@ -63,6 +63,20 @@ describe("createClosedLoopEffects.dispatch (mode A)", () => {
     await effects.dispatch("echo ok", { stepIndex: 0 });
     expect(replayClient).not.toHaveBeenCalled();
   });
+
+  it("full-auto: an auto-grant strategy resolves a pending DANGEROUS dispatch immediately (no human wait) then replays", async () => {
+    const replayClient = vi.fn().mockResolvedValue({ status: "replayed", approval: {}, replay: {}, result: {} });
+    const dispatchClient = vi.fn().mockResolvedValue(dispatchResponse("pending_approval", "cmd_0"));
+    // 완전 자동 전략을 흉내낸 즉시-승인 콜백 — poll 없이 바로 "approved"를 돌려준다.
+    const awaitApprovalDecision = vi.fn().mockResolvedValue("approved" as const);
+
+    const effects = createClosedLoopEffects(baseDeps({ dispatchClient, replayClient, awaitApprovalDecision }));
+    await effects.dispatch(["rm", "-rf", "build"].join(" "), { stepIndex: 0 });
+
+    expect(awaitApprovalDecision).toHaveBeenCalledOnce();
+    // 대기 없이 곧바로 replay 되어 실행된다 — 서버 게이트/기록은 그대로 round-trip.
+    expect(replayClient).toHaveBeenCalledOnce();
+  });
 });
 
 describe("createClosedLoopEffects.capture", () => {

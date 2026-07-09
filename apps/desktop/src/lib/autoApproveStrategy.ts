@@ -70,30 +70,48 @@ export function createAutoApproveStrategy(deps: {
 }
 
 /**
- * "전체 자동" 승인 전략(full-auto, Codex full-auto / Claude Code bypass 대응) — DANGEROUS_PATTERN에
- * 걸리지 않는 명령은 전부 자동 승인하고, 위험 명령(rm/git push/sudo/force/shell 메타문자 등)은
- * 자동 승인하지 않고 fallback(사람)으로 넘긴다. 사용자가 명시적으로 켜는 모드이며, 위험 명령
- * 게이트는 절대 우회하지 않는다(가장 중요한 안전선). 그랜트는 actor "agent"로 감사에 남는다.
+ * "전체 자동" 승인 전략(full-auto, Codex full-auto / Claude Code bypass 대응).
+ *
+ * 두 갈래로 동작한다:
+ *   - 기본(`includeDangerous` 미지정/false): DANGEROUS_PATTERN에 걸리지 않는 명령만
+ *     자동 승인하고, 위험 명령(rm/git push/sudo/force/shell 메타문자 등)은 fallback으로 넘긴다.
+ *     (코딩 워크벤치 guided_auto가 쓰는 등급형 카브아웃.)
+ *   - `includeDangerous: true`("완전 자동", AutonomyMode "full_auto"): 위험 명령까지 포함해
+ *     비어 있지 않은 모든 명령을 자동 승인한다. 카브아웃 없음 — 사용자가 명시적으로 확정한
+ *     "예외 없이 전부 자동 승인" 경로다. 사람 승인 게이트는 사라지지만, 그랜트는 여전히 서버
+ *     /approvals/grant 를 통과해 actor "agent"로 append-only 감사에 남는다(로깅이지 게이트 아님).
+ *
+ * 어느 경우든 그랜트는 서버 grant 엔드포인트를 round-trip 하므로 감사 기록은 항상 남는다.
  */
 export function createAutoApproveAllStrategy(deps: {
   fallback: (sourceItemId: string, context: { command: string }) => Promise<ApprovalDecisionOutcome>;
   grant?: typeof grantDgxApproval;
   serverBaseUrl?: string | string[];
   fetchImpl?: typeof fetch;
+  /** true면 DANGEROUS_PATTERN 카브아웃을 건너뛰고 위험 명령까지 전부 자동 승인한다("완전 자동"). */
+  includeDangerous?: boolean;
   logger?: (message: string) => void;
 }): (sourceItemId: string, context: { command: string; stepIndex?: number }) => Promise<ApprovalDecisionOutcome> {
   const grant = deps.grant ?? grantDgxApproval;
   const logger = deps.logger ?? (() => {});
+  const includeDangerous = deps.includeDangerous ?? false;
 
   return async (sourceItemId, context) => {
     const command = (context.command ?? "").trim();
-    // 위험 명령은 전체자동에서도 자동 승인하지 않는다 — 사람 확인으로 넘긴다.
-    if (!command || DANGEROUS_PATTERN.test(command)) {
-      logger(`full-auto: "${command}" is dangerous/empty; deferring to human`);
+    if (!command) {
+      logger(`full-auto: empty command; deferring to fallback`);
       return deps.fallback(sourceItemId, context);
     }
+    // 카브아웃 모드에서만 위험 명령을 fallback으로 넘긴다. 완전 자동(includeDangerous)은 넘기지 않는다.
+    if (!includeDangerous && DANGEROUS_PATTERN.test(command)) {
+      logger(`full-auto: "${command}" is dangerous; deferring to human`);
+      return deps.fallback(sourceItemId, context);
+    }
+    const grantReason = includeDangerous
+      ? "full-auto: 완전 자동(위험 카브아웃 없음)"
+      : "full-auto: 위험 패턴 아님";
     const result = await grant({
-      request: { sourceItemId, actor: "agent", reason: "full-auto: 위험 패턴 아님" },
+      request: { sourceItemId, actor: "agent", reason: grantReason },
       serverBaseUrl: deps.serverBaseUrl,
       fetchImpl: deps.fetchImpl,
     });
@@ -101,8 +119,8 @@ export function createAutoApproveAllStrategy(deps: {
       logger(`full-auto: auto-approved "${command}"`);
       return "approved";
     }
-    const reason = "error" in result ? result.error : "unknown grant failure";
-    logger(`full-auto: grant failed for "${command}" (${reason}); deferring to human`);
+    const failReason = "error" in result ? result.error : "unknown grant failure";
+    logger(`full-auto: grant failed for "${command}" (${failReason}); deferring to fallback`);
     return deps.fallback(sourceItemId, context);
   };
 }
