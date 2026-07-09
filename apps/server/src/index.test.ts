@@ -39,6 +39,7 @@ import {
   refreshDiscoveredModelCacheForProvider,
   ensureDiscoveredModelAllowance,
   isServerProviderModelAllowed,
+  __resetDiscoveredModelCacheForTests,
   evaluateServerRemoteRunPermission,
   createRuntimeSnapshot,
   createServerEventStorageState,
@@ -1109,6 +1110,80 @@ describe("server health placeholder", () => {
           "some/discovered-model",
         ),
       ).toBe(false);
+    });
+
+    // BUG 2 regression: the RMAS run controller binds `complete` straight to
+    // createDgxProviderCompletionResponse and never calls the per-route
+    // ensureDiscoveredModelAllowance priming. The executor must prime the cache
+    // itself so a discovered-only model resolves on the RMAS path too.
+    it("primes the discovered-model cache from the executor path (RMAS-style direct call)", async () => {
+      // Cold cache: no per-call-site priming happened, exactly like the RMAS path.
+      __resetDiscoveredModelCacheForTests("provider_codexopen");
+
+      let discoveryProbes = 0;
+      let completionPosts = 0;
+      // A single fetch that serves BOTH GET /models (discovery, primed by the
+      // executor) and POST /responses (the codexopen Responses dialect).
+      const fetchImpl = (async (url: string, init?: { method?: string }) => {
+        if ((init?.method ?? "GET") === "GET" && url.endsWith("/models")) {
+          discoveryProbes += 1;
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({ object: "list", data: [...codexopenModelListIds, "gpt-5.3-codex-spark"].map((id) => ({ id })) }),
+          };
+        }
+        if (url.endsWith("/responses")) {
+          completionPosts += 1;
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                id: "resp_exec",
+                object: "response",
+                status: "completed",
+                model: "gpt-5.3-codex-spark",
+                output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "pong" }] }],
+                usage: { input_tokens: 5, output_tokens: 1, total_tokens: 6 },
+              }),
+          };
+        }
+        throw new Error(`unexpected fetch: ${init?.method ?? "GET"} ${url}`);
+      }) as unknown as typeof fetch;
+
+      // "gpt-5.3-codex-spark" is discovered-only (NOT in defaultModelIds). Before
+      // the fix this returned "provider model is not registered in the DGX-02
+      // proxy allowlist" on the RMAS path.
+      const response = await createDgxProviderCompletionResponse(createApprovedRequest("gpt-5.3-codex-spark"), {
+        now: "2026-07-10T00:00:00.000Z",
+        fetchImpl,
+      });
+
+      expect(discoveryProbes).toBe(1); // executor primed the cache exactly once
+      expect(completionPosts).toBe(1); // and then dispatched the Responses call
+      expect(response.status).toBe("succeeded");
+      expect(response.content).toBe("pong");
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 1, totalTokens: 6 });
+    });
+
+    it("still fails closed on the executor path when discovery does not advertise the model", async () => {
+      __resetDiscoveredModelCacheForTests("provider_codexopen");
+      const fetchImpl = (async (url: string, init?: { method?: string }) => {
+        if ((init?.method ?? "GET") === "GET" && url.endsWith("/models")) {
+          return { ok: true, status: 200, text: async () => JSON.stringify({ object: "list", data: codexopenModelListIds.map((id) => ({ id })) }) };
+        }
+        throw new Error("completion must not be dispatched for a denied model");
+      }) as unknown as typeof fetch;
+
+      const response = await createDgxProviderCompletionResponse(createApprovedRequest("made-up/not-real-model"), {
+        now: "2026-07-10T00:00:00.000Z",
+        fetchImpl,
+      });
+
+      expect(response.status).toBe("failed");
+      expect(response.error).toContain("provider model is not registered");
     });
   });
 

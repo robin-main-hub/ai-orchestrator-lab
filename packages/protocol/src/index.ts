@@ -170,7 +170,7 @@ export type ProviderRegistryEntry = {
   defaultModelIds: string[];
   selectedModelId?: string;
   supportsModelList: boolean;
-  apiStyle?: "openai_chat" | "anthropic_messages";
+  apiStyle?: "openai_chat" | "anthropic_messages" | "openai_responses";
   authMode: ProviderRegistryAuthMode;
   secretAvailability: SecretAvailability;
   secretRefPreview?: string;
