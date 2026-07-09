@@ -59,6 +59,10 @@ export function useRunningRmasRuns(options: UseRunningRmasRunsOptions = {}): Use
               label: summary.goalPreview || summary.runId,
               status: summary.status,
               kind: "rmas" as const,
+              goal: summary.goalPreview || summary.runId,
+              startedAt: summary.startedAt,
+              tokensTotal: summary.tokens.total,
+              iterations: summary.iterations,
             })),
         );
       })

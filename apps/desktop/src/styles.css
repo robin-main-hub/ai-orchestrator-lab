@@ -9348,6 +9348,319 @@ body:has(.app-shell.annex-focus-shell) {
   to { transform: rotate(360deg); }
 }
 
+/* ==========================================================================
+   홈 — 미션 컨트롤 (리디자인 S2)
+   앰비언트 아트 + 그라디언트 스크림(대비 안전) 위에 상태 스트립 / 현재 작업 /
+   해온 업무 / 빠른 시작. 텔레메트리 숫자는 mono, 라이브 상태에만 맥동.
+   ========================================================================== */
+.aol-mono {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.home {
+  position: relative;
+  min-height: 100%;
+  width: 100%;
+}
+/* 앰비언트 배경 — 홈에만. 최하층, 클릭 통과. */
+.home__ambient {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-base);
+  overflow: hidden;
+  pointer-events: none;
+}
+.home__ambient-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+/* 위 0.72 → 아래 0.94 세로 스크림 — 모든 텍스트가 WCAG AA를 통과하도록. */
+.home__ambient-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(11, 17, 32, 0.72), rgba(11, 17, 32, 0.94));
+}
+.home__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 28px 32px 44px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .home__content {
+    animation: home-fade-in 120ms ease-out both;
+  }
+}
+@keyframes home-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ① 상태 스트립 — 한 줄 */
+.home__strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 12px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(10px);
+  font-size: 12.5px;
+  color: var(--fg);
+}
+.home__strip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.home__strip-item strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--fg);
+}
+.home__strip-label {
+  color: var(--fg-muted);
+}
+.home__strip-unit {
+  color: var(--fg-muted);
+  font-size: 11.5px;
+}
+.home__strip-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+}
+.home__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--fg-muted);
+}
+.home__dot.is-online {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.home__dot.is-degraded {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 18%, transparent);
+}
+.home__dot.is-offline {
+  background: var(--destructive);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--destructive) 18%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .home__dot.is-live {
+    animation: home-dot-pulse 1.8s ease-in-out infinite;
+  }
+}
+@keyframes home-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ④ 빠른 시작 — 한 줄 3버튼 */
+.home__quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.home__quick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 100ms ease;
+}
+.home__quick-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: var(--accent-dim);
+}
+.home__quick-btn:active {
+  transform: scale(0.985);
+}
+.home__quick-btn svg {
+  color: var(--accent);
+}
+
+/* ② 현재 작업 — 히어로 */
+.dashboard__running-section {
+  gap: 12px;
+}
+.running-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 30px 24px 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  text-align: center;
+}
+.running-empty__art {
+  width: 120px;
+  height: 120px;
+  border-radius: 999px;
+  object-fit: cover;
+  opacity: 0.9;
+}
+.running-empty__title {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.running-empty__cta {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: var(--radius);
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.running-empty__cta:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.running-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.running-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  backdrop-filter: blur(10px);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .running-card {
+    animation: home-fade-in 120ms ease-out both;
+  }
+}
+.running-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.running-card__dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--fg-muted);
+}
+.running-card__dot.is-live {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .running-card__dot.is-live {
+    animation: home-dot-pulse 1.8s ease-in-out infinite;
+  }
+}
+.running-card__kind {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.running-card__status {
+  flex: 1;
+  font-size: 11.5px;
+  color: var(--fg-muted);
+}
+.running-card__stop {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid color-mix(in srgb, var(--destructive) 55%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--destructive) 14%, transparent);
+  color: var(--destructive);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.running-card__stop:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--destructive) 24%, transparent);
+}
+.running-card__stop:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.running-card__spin {
+  animation: dashboard-running-spin 0.9s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .running-card__spin {
+    animation: none;
+  }
+}
+.running-card__goal {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--fg);
+}
+.running-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.running-card__stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.running-card__stat-label {
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+.running-card__stat-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--fg);
+}
+
 /* --- nav-center shell: sidebar + single clean center surface (대시보드/작전 탭) --- */
 .app-shell.nav-center-shell {
   /* 아이콘 온리 레일 — 라벨은 호버 title 툴팁으로(나브-센터 페이지에서만 264→56px) */

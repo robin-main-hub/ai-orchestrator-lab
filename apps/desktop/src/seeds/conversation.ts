@@ -12,6 +12,7 @@ import {
   RadioTower,
   Repeat,
   Sparkles,
+  Users,
 } from "lucide-react";
 import {
   createCodingPacketDraft,
@@ -112,6 +113,7 @@ export const navSections: NavSection[] = [
     id: "system",
     label: "시스템",
     items: [
+      { id: "persona", label: "페르소나", icon: Users },
       { id: "providers", label: "프로바이더", icon: KeyRound },
       { id: "config_files", label: "설정파일", icon: FileText },
       { id: "channels", label: "채널", icon: RadioTower },
