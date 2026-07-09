@@ -55,10 +55,11 @@ export const terminalSlots: TerminalSlot[] = [
   },
   {
     id: "slot_dgx_remote",
+    // 완전 자동 모드에선 데모 시드가 가짜 "승인 대기 1건"을 만들지 않도록 idle/not_required로 둔다.
     label: "DGX Remote",
-    status: "pending_approval",
-    permissionState: "required",
-    lastCommandPreview: "remote workspace 연결 요청",
+    status: "idle",
+    permissionState: "not_required",
+    lastCommandPreview: "대기",
   },
 ];
 

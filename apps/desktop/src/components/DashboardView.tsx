@@ -150,16 +150,19 @@ export function DashboardView({
             <span className="dashboard__pulse-label">Hermes 슬롯</span>
             <strong>사용 {hermesPool.bound} · 여유 {hermesPool.spare}</strong>
           </div>
-          <button
-            className={`dashboard__pulse-item dashboard__pulse-button ${pendingApprovals > 0 ? "attention" : ""}`}
-            onClick={() => onOpenApprovalQueue?.()}
-            type="button"
-            title="승인 큐 열기"
-          >
-            <ShieldCheck size={14} aria-hidden />
-            <span className="dashboard__pulse-label">승인 대기</span>
-            <strong>{pendingApprovals}건</strong>
-          </button>
+          {/* 완전 자동 운영에선 대기 0이 정상 — 승인 대기 펄스는 실제 대기가 있을 때만 노출한다. */}
+          {pendingApprovals > 0 ? (
+            <button
+              className="dashboard__pulse-item dashboard__pulse-button attention"
+              onClick={() => onOpenApprovalQueue?.()}
+              type="button"
+              title="승인 큐 열기"
+            >
+              <ShieldCheck size={14} aria-hidden />
+              <span className="dashboard__pulse-label">승인 대기</span>
+              <strong>{pendingApprovals}건</strong>
+            </button>
+          ) : null}
         </div>
       </header>
       </div>

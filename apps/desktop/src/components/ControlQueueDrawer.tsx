@@ -235,9 +235,12 @@ export function ControlQueueDrawer({
             <Clock3 className="h-3 w-3" />
             처리 지휘판
           </span>
-          <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-muted-foreground">
-            승인 대기 {pendingItems.length}건
-          </span>
+          {/* 완전 자동에선 대기 항목이 사실상 0 — 대기 배지는 실제 대기가 있을 때만 노출한다. */}
+          {pendingItems.length > 0 ? (
+            <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-muted-foreground">
+              승인 대기 {pendingItems.length}건
+            </span>
+          ) : null}
           <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-muted-foreground">
             처리 완료 {resolvedCount}건
           </span>

@@ -23,15 +23,18 @@ import type { SummonContext, SummonInput, SummonRegistry } from "./personaSummon
  *   mode "human"     -> every dispatch waits for a human grant (poll the queue)
  *   mode "auto_safe" -> safe verification commands auto-approve (mode B),
  *                       everything else falls back to the human poll
+ *   mode "full_auto" -> 완전 자동: 위험 명령 카브아웃 없이 모든 명령을 자동 승인한다
+ *                       (사용자 확정 "예외 없이 전부 자동 승인"). 사람 승인 게이트는 사라지지만
+ *                       그랜트는 여전히 서버 grant 를 round-trip 해 append-only 감사에 남는다.
  *
  * All server I/O flows through the injected/real DGX clients; the dispatch path
- * always replays through the server gate, so neither mode bypasses
- * permission/approval/redaction. This module only wires the pieces — the
- * pieces themselves are independently tested — so it is verified here with
- * faked clients.
+ * always replays through the server gate, so no mode bypasses the server's
+ * append-only record-keeping/redaction — full_auto removes the *human*, not the
+ * server's grant round-trip. This module only wires the pieces — the pieces
+ * themselves are independently tested — so it is verified here with faked clients.
  */
 
-export type AutonomyMode = "human" | "auto_safe";
+export type AutonomyMode = "human" | "auto_safe" | "full_auto";
 
 export type ApprovalStrategy = (
   sourceItemId: string,
@@ -57,9 +60,12 @@ export type AutonomyClientOverrides = Partial<{
 /**
  * Build the approval strategy for a mode, composing (inner → outer):
  *   human poll  ←  pattern (remembered prefixes)  ←  auto_safe  ←  full-auto
- * Each layer auto-grants what it can and defers everything else inward, so a
- * dangerous command falls through every auto layer to the human poll — no auto
- * mode ever overrides the dangerous-command gate.
+ * Each layer auto-grants what it can and defers everything else inward.
+ *
+ * mode "full_auto"(또는 legacy `autoApproveAll` 플래그)는 최상위에 전체 자동 레이어를 얹는다:
+ *   - "full_auto": 위험 명령 카브아웃 없이 전부 자동 승인(사용자 확정 "예외 없이 전부").
+ *   - `autoApproveAll` 플래그(guided_auto): DANGEROUS_PATTERN만 사람으로 카브아웃하는 등급형.
+ * 어느 쪽이든 그랜트는 서버 grant 를 통과해 감사에 남는다.
  */
 export function createApprovalStrategy(
   mode: AutonomyMode,
@@ -119,12 +125,14 @@ export function createApprovalStrategy(
     });
   }
 
-  if (config.autoApproveAll) {
+  if (mode === "full_auto" || config.autoApproveAll) {
     strategy = createAutoApproveAllStrategy({
       fallback: strategy,
       grant: config.clients?.grant,
       serverBaseUrl: config.serverBaseUrl,
       fetchImpl: config.fetchImpl,
+      // "full_auto"는 위험 명령 카브아웃을 건너뛴다(완전 자동). guided_auto 플래그는 카브아웃 유지.
+      includeDangerous: mode === "full_auto",
       logger: config.logger,
     });
   }

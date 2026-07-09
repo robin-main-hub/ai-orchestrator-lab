@@ -27,7 +27,8 @@ export const DEFAULT_AUTONOMY_FORM: AutonomyRunForm = {
   role: "qa",
   goal: "",
   verificationStepsText: "",
-  mode: "human",
+  // 완전 자동이 기본 — "목적만 주면 끝까지 자율완주". 사람 승인 게이트 없음(예산상한+중지버튼만).
+  mode: "full_auto",
 };
 
 /** The pane roster the panel summons into until dynamic roles land. */
@@ -165,5 +166,13 @@ export function loopStatusBadgeVariant(status: LoopStatus): StatusBadgeVariant {
 }
 
 export function modeLabel(mode: AutonomyMode): string {
-  return mode === "auto_safe" ? "safe 자동승인" : "사람 승인";
+  switch (mode) {
+    case "full_auto":
+      return "완전 자동";
+    case "auto_safe":
+      return "safe 자동승인";
+    case "human":
+    default:
+      return "사람 승인";
+  }
 }
