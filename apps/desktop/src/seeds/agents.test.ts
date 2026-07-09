@@ -20,7 +20,7 @@ describe("seeded MiMo Token Plan bindings", () => {
   it("registers the RecursiveMAS latent-engine provider for the goal loop", () => {
     const rmas = seededProviderProfiles.find((provider) => provider.id === "provider_rmas_dgx02");
 
-    expect(rmas?.baseUrl).toBe("http://100.81.57.88:4041/v1");
+    expect(rmas?.baseUrl).toBe("http://100.71.215.84:4041/v1");
     expect(rmas?.defaultModel).toBe("rmas-sequential-light");
     expect(rmas?.trustLevel).toBe("trusted");
     expect(rmas?.secretRef).toBeUndefined();
