@@ -103,6 +103,7 @@ import {
   CodexCliOAuthAdapter,
   AnthropicAdapter,
   OpenAICompatibleAdapter,
+  OpenAiResponsesAdapter,
   type ClaudeExecRunner,
   type CodexExecRunner,
 } from "@ai-orchestrator/providers/node";
@@ -387,7 +388,7 @@ type ServerProviderProxyConfig = {
   apiKeyFileEnvName?: string;
   defaultKeyFile?: string;
   noAuth?: boolean;
-  apiStyle?: "openai_chat" | "anthropic_messages";
+  apiStyle?: "openai_chat" | "anthropic_messages" | "openai_responses";
   defaultModelIds: string[];
   supportsModelList?: boolean;
   /**
@@ -836,15 +837,21 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     supportsModelList: true,
   },
   {
-    // Local codexopen proxy (fork on :10200). No auth, OpenAI-compatible /v1.
+    // Local codexopen proxy (fork on :10200). No auth on loopback, but it does
+    // NOT serve /v1/chat/completions — its only completion route is the OpenAI
+    // Responses API (POST /v1/responses), so it uses apiStyle "openai_responses".
+    // Model discovery still uses the standard /v1/models endpoint.
     // It advertises many models across vendors (ids may contain "/", e.g.
     // "anthropic/claude-opus-4-8"), so allowDiscoveredModels lets any live-listed
     // model be selected/swapped freely instead of freezing on the static seven.
+    // For a non-loopback binding, set CODEXOPEN_API_KEY (+ flip noAuth) and the
+    // key is sent as the "x-codexopen-api-key" header (wired in the completion
+    // builders below).
     providerProfileId: "provider_codexopen",
     baseUrl: process.env.CODEXOPEN_BASE_URL ?? "http://127.0.0.1:10200/v1",
-    apiKeyEnvNames: [],
+    apiKeyEnvNames: ["CODEXOPEN_API_KEY"],
     noAuth: true,
-    apiStyle: "openai_chat",
+    apiStyle: "openai_responses",
     defaultModelIds: [
       "gpt-5.5",
       "gpt-5.4-mini",
@@ -1564,6 +1571,19 @@ type DiscoveredModelCacheEntry = { modelIds: Set<string>; expiresAt: number };
 const discoveredModelCacheByProviderId = new Map<string, DiscoveredModelCacheEntry>();
 const DISCOVERED_MODEL_CACHE_TTL_MS = 60_000;
 const DISCOVERED_MODEL_CACHE_FAILURE_TTL_MS = 5_000;
+
+/**
+ * Test-only: drop the discovered-model allowlist cache so a test can exercise
+ * a cold-cache path deterministically (the cache is module-global and shared
+ * across tests). Not used by production code.
+ */
+export function __resetDiscoveredModelCacheForTests(providerProfileId?: string): void {
+  if (providerProfileId) {
+    discoveredModelCacheByProviderId.delete(providerProfileId);
+  } else {
+    discoveredModelCacheByProviderId.clear();
+  }
+}
 
 function getCachedDiscoveredModelIds(providerProfileId: string, now = Date.now()): Set<string> | undefined {
   const cached = discoveredModelCacheByProviderId.get(providerProfileId);
@@ -4823,6 +4843,34 @@ export async function createDgxProviderCompletionStreamResponse(
     );
   }
 
+  if (config.apiStyle === "openai_responses") {
+    const authHeaderName = resolveResponsesAuthHeaderName(config);
+    const responsesAdapter: LlmAdapter = new OpenAiResponsesAdapter({
+      profileId: config.providerProfileId,
+      kind: createServerProviderKind(config),
+      baseUrl: config.baseUrl,
+      modelIds: config.defaultModelIds,
+      supportsModelList: config.supportsModelList,
+      requiresAuth: !config.noAuth,
+      defaultSystemPrompt: defaultDgxSystemPrompt,
+      maxTokens: 4096,
+      authHeaderName,
+      authHeaderValuePrefix: authHeaderName === "authorization" ? "Bearer " : "",
+      fetchImpl,
+    });
+    if (!responsesAdapter.completeStreaming) {
+      throw new Error("OpenAI Responses adapter does not support streaming");
+    }
+    return responsesAdapter.completeStreaming(
+      { ...redactedRequest, routePreference: "server_proxy" },
+      {
+        resolveSecret: async () => apiKey,
+        abortSignal: options.abortSignal,
+        timeoutMs: options.timeoutMs ?? 30_000,
+      } as any,
+    );
+  }
+
   const adapter: LlmAdapter = new OpenAICompatibleAdapter({
     profileId: config.providerProfileId,
     kind: createServerProviderKind(config),
@@ -4945,6 +4993,14 @@ export async function createServerProviderProxyCompletionResponse(
     };
   }
 
+  // Prime the discovered-model allowlist cache from inside the executor so
+  // EVERY caller benefits — the RMAS run controller binds `complete` straight
+  // to createDgxProviderCompletionResponse (which funnels here) and never hit
+  // the per-route priming that the /provider-completions handlers do. Priming
+  // here keeps the synchronous gate below fail-closed while letting a
+  // discovered-only model (e.g. gpt-5.3-codex-spark) resolve on any path.
+  await ensureDiscoveredModelAllowance(request, options);
+
   if (!isServerProviderModelAllowed(config, request.modelId)) {
     return {
       id: `provider_completion_response_${crypto.randomUUID()}`,
@@ -5052,6 +5108,16 @@ export async function createServerProviderProxyCompletionResponse(
       profileId: config.providerProfileId,
       baseUrl: config.baseUrl,
       modelIds: config.defaultModelIds,
+      requiresAuth: !config.noAuth,
+      apiKey,
+      fetchImpl,
+    });
+  }
+
+  if (config.apiStyle === "openai_responses") {
+    return createOpenAiResponsesServerCompletion({
+      request,
+      config,
       requiresAuth: !config.noAuth,
       apiKey,
       fetchImpl,
@@ -5166,6 +5232,55 @@ function createAnthropicServerCompletion(params: {
       onRawError(status, redactedSnippet) {
         if (redactedSnippet) {
           console.warn(`Anthropic adapter warning (${status}): ${redactedSnippet}`);
+        }
+      },
+    },
+  );
+}
+
+/**
+ * codexopen's Responses API expects the api key in the "x-codexopen-api-key"
+ * header (only relevant for a non-loopback binding — loopback is noAuth). Other
+ * openai_responses providers, if added later, keep the OpenAI default of
+ * "authorization: Bearer <key>".
+ */
+function resolveResponsesAuthHeaderName(config: ServerProviderProxyConfig): string {
+  return config.providerProfileId === "provider_codexopen" ? "x-codexopen-api-key" : "authorization";
+}
+
+function createOpenAiResponsesServerCompletion(params: {
+  request: ProviderCompletionRequest;
+  config: ServerProviderProxyConfig;
+  requiresAuth: boolean;
+  apiKey?: string;
+  fetchImpl: FetchLike;
+}) {
+  const authHeaderName = resolveResponsesAuthHeaderName(params.config);
+  const adapter = new OpenAiResponsesAdapter({
+    profileId: params.config.providerProfileId,
+    kind: createServerProviderKind(params.config),
+    baseUrl: params.config.baseUrl,
+    modelIds: params.config.defaultModelIds,
+    supportsModelList: params.config.supportsModelList,
+    requiresAuth: params.requiresAuth,
+    defaultSystemPrompt: defaultDgxSystemPrompt,
+    maxTokens: 4096,
+    authHeaderName,
+    authHeaderValuePrefix: authHeaderName === "authorization" ? "Bearer " : "",
+    fetchImpl: params.fetchImpl,
+  });
+
+  return adapter.complete(
+    {
+      ...params.request,
+      routePreference: "server_proxy",
+    },
+    {
+      resolveSecret: async () => params.apiKey,
+      timeoutMs: 120_000,
+      onRawError(status, redactedSnippet) {
+        if (redactedSnippet) {
+          console.warn(`OpenAI Responses adapter warning (${status}): ${redactedSnippet}`);
         }
       },
     },

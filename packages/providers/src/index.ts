@@ -34,6 +34,15 @@ export {
   type OpenAICompatibleAdapterOptions,
 } from "./openAiCompatibleAdapter.js";
 export {
+  OpenAiResponsesAdapter,
+  createResponsesRequestBody,
+  createResponsesInput,
+  parseResponsesOutputText,
+  parseResponsesUsage,
+  type OpenAiResponsesAdapterOptions,
+  type OpenAiResponsesInputMessage,
+} from "./openAiResponsesAdapter.js";
+export {
   AnthropicAdapter,
   applyAnthropicImageAttachments,
   extractAnthropicText,
