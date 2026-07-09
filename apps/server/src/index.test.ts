@@ -4725,3 +4725,71 @@ describe("HTTP request limits", () => {
     });
   });
 });
+
+describe("RMAS routes auth gate", () => {
+  it("enforces the single top-level auth gate on /rmas paths and passes authorized requests to the handler", async () => {
+    const previousToken = process.env.ORCHESTRATOR_API_TOKEN;
+    const previousEventStorageDir = process.env.EVENT_STORAGE_DIR;
+    const tempDir = await mkdtemp(join(tmpdir(), "rmas-auth-"));
+    process.env.ORCHESTRATOR_API_TOKEN = "rmas-test-token";
+    process.env.EVENT_STORAGE_DIR = tempDir;
+    const server = startServer(0);
+
+    try {
+      await new Promise<void>((resolve) => {
+        server.once("listening", resolve);
+      });
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        throw new Error("test server did not bind to a TCP port");
+      }
+      const base = `http://127.0.0.1:${address.port}`;
+
+      // Unauthenticated → 401 on every /rmas surface (same gate as /missions).
+      const noAuthPost = await fetch(`${base}/rmas/runs`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      expect(noAuthPost.status).toBe(401);
+
+      const noAuthList = await fetch(`${base}/rmas/runs`);
+      expect(noAuthList.status).toBe(401);
+
+      const noAuthStream = await fetch(`${base}/rmas/runs/anything/trace/stream`);
+      expect(noAuthStream.status).toBe(401);
+
+      // Authenticated → gate passes through to the RMAS handler.
+      const authList = await fetch(`${base}/rmas/runs`, {
+        headers: { authorization: "Bearer rmas-test-token" },
+      });
+      expect(authList.status).toBe(200);
+      const listBody = (await authList.json()) as { runs: unknown[] };
+      expect(Array.isArray(listBody.runs)).toBe(true);
+      expect(listBody.runs).toHaveLength(0);
+
+      const authMissing = await fetch(`${base}/rmas/runs/nope`, {
+        headers: { authorization: "Bearer rmas-test-token" },
+      });
+      expect(authMissing.status).toBe(404);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      if (previousToken === undefined) {
+        delete process.env.ORCHESTRATOR_API_TOKEN;
+      } else {
+        process.env.ORCHESTRATOR_API_TOKEN = previousToken;
+      }
+      if (previousEventStorageDir === undefined) {
+        delete process.env.EVENT_STORAGE_DIR;
+      } else {
+        process.env.EVENT_STORAGE_DIR = previousEventStorageDir;
+      }
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+});

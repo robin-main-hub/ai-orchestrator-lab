@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { EventEnvelope, RmasTraceEvent } from "@ai-orchestrator/protocol";
 import { RmasTraceBus } from "./rmasTraceBus";
+import { createRmasRunStore } from "./rmasRunStore";
+import { rmasRunConfigSchema } from "@ai-orchestrator/protocol";
 import type { SseSession } from "../events/sseSession.js";
 
 /** Capture writeEvent calls without fs/sockets. */
@@ -82,5 +84,42 @@ describe("RmasTraceBus", () => {
       envelope("rmas.tokens.tallied", { input: 1, output: 1, total: 2 }),
     ]);
     expect(a.writes).toHaveLength(0);
+  });
+});
+
+describe("rmas store → bus (live increment via the real commit path)", () => {
+  it("a subscribed session receives an rmas.trace increment for every committed log event", async () => {
+    const bus = new RmasTraceBus();
+    const events: EventEnvelope[] = [];
+    const store = createRmasRunStore({
+      loadEvents: async () => [...events],
+      appendEvents: async (_sessionId, envelopes) => {
+        for (const e of envelopes) if (!events.some((x) => x.id === e.id)) events.push(e);
+      },
+      onEventsCommitted: (runId, envelopes) => bus.publish(runId, [...envelopes]),
+      now: () => "2026-07-09T00:00:00.000Z",
+      generateRunId: () => "run_live",
+    });
+
+    const record = await store.create(
+      rmasRunConfigSchema.parse({
+        goal: "g",
+        pattern: "sequential",
+        agents: [{ id: "a1", name: "작업자", kind: "producer", providerProfileId: "p", modelId: "m" }],
+      }),
+    );
+
+    const a = fakeSession();
+    bus.subscribe(record.runId, a.session);
+
+    // a subsequent committed log event streams straight through to the session
+    await store.appendEvent(record.runId, {
+      type: "rmas.judge.evaluated",
+      payload: { iteration: 1, accepted: true, perCriterion: [], feedback: "ok" },
+    });
+
+    expect(a.writes).toHaveLength(1);
+    expect(a.writes[0]!.event).toBe("rmas.trace");
+    expect((a.writes[0]!.payload as RmasTraceEvent).type).toBe("rmas.judge.evaluated");
   });
 });
