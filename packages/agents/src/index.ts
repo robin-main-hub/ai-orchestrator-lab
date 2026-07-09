@@ -94,6 +94,19 @@ export {
 } from "./safeCommandPolicy.js";
 export type { SafeCommandVerdict } from "./safeCommandPolicy.js";
 
+export { RmasTokenMeter } from "./rmas/tokenMeter.js";
+export type { RmasTokenSnapshot } from "./rmas/tokenMeter.js";
+export { evaluateGoalAcceptance, parseJudgeVerdict } from "./rmas/judge.js";
+export type { EvaluateGoalAcceptanceInput, JudgeVerdict } from "./rmas/judge.js";
+export { kindToDistinctRole, STRATEGIES } from "./rmas/patterns.js";
+export type {
+  PatternIterationInput,
+  PatternIterationResult,
+  PatternStrategy,
+  RmasEmit,
+  RmasWorkingContext,
+} from "./rmas/patterns.js";
+
 export type DebateContext = {
   sessionId: string;
   problem: string;
