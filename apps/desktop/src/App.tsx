@@ -559,7 +559,15 @@ export function App() {
   const [ingressSnapshot, setIngressSnapshot] = useState<Stage8IngressSnapshot>(initialIngressSnapshot);
   const [rebootApprovals, setRebootApprovals] = useState<ExternalApprovalItem[]>([]);
   const [rebootWatchdogs, setRebootWatchdogs] = useState<DeviceRebootWatchdog[]>([]);
-  const [approvalStateByItemId, setApprovalStateByItemId] = useState<Record<string, ApprovalState>>({});
+  const [approvalStateByItemId, setApprovalStateByItemId] = useState<Record<string, ApprovalState>>({
+    // 완전 자동(full-auto) — 데모 시드 agentRun의 코딩 핸드오프 스텝(seeds → createRunSteps의
+    // step_coding_handoff, permissionState "required")을 자동 승인된 것으로 시작한다. 이렇게
+    // 두지 않으면 파생 권한 스냅샷(createStage9PermissionSnapshot → actionForRunStep=remote_workspace)이
+    // 이 스텝을 "required"로 남겨, "해온 업무" 카드에 유령 "원격 작업공간 · 승인 상태: 대기" 영수증을
+    // 만든다. 서버 승인 큐는 pending:0 — 이 대기는 파생 신호일 뿐이므로 표면화하지 않는다.
+    // (id 규약: createStage9PermissionSnapshot의 createRunStepItem → `permission_run_${step.id}`)
+    permission_run_step_coding_handoff: "approved",
+  });
   const [tmuxCommandDrafts, setTmuxCommandDrafts] = useState<Record<string, string>>({});
   const [tmuxStatuses, setTmuxStatuses] = useState<Record<string, string>>({});
   const [tmuxOutputs, setTmuxOutputs] = useState<Record<string, string>>({});

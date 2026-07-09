@@ -17,13 +17,20 @@ import { DANGEROUS_PATTERN } from "./safeCommandPolicy";
  *   - GitHub write·merge·rollback·secret_access(상위 레이어가 차단)
  *
  * 안전선:
- *   - 기본 모드는 manual. 자동승인은 명시적 opt-in 없이는 활성화되지 않는다.
+ *   - 기본 모드는 guided_auto(완전 자동, full-auto 후속). 저장된 명시 값이 있으면 그대로 존중한다.
+ *     위험 명령(DANGEROUS_PATTERN)은 어떤 모드에서도 자동 승인되지 않는다 — 기본이 자동이어도 안전선은 유지.
  *   - 자동승인을 처음 켤 때 위험 경고를 보여주고, 사용자가 확인해야만 활성화.
  *   - "이번 세션 동안" prefix는 세션 한정. project/global 영구 저장은 이번 범위 아님.
  *   - 자동 그랜트는 서버 /approvals/grant 엔드포인트를 통과해 감사 흔적을 남긴다.
  */
 
 export type CodingApprovalMode = "manual" | "auto_safe" | "session_allow" | "guided_auto";
+
+/**
+ * 저장된 값이 없을 때의 기본 모드 — full-auto 후속으로 guided_auto(위험 제외 자동).
+ * 명시적으로 저장된 값은 항상 존중한다(아래 parseStoredApprovalMode 참고).
+ */
+export const DEFAULT_CODING_APPROVAL_MODE: CodingApprovalMode = "guided_auto";
 
 export const CODING_APPROVAL_MODE_STORAGE_KEY = "ai-orchestrator.coding-approval-mode.v2";
 export const CODING_APPROVED_PREFIXES_STORAGE_KEY = "ai-orchestrator.coding-approved-prefixes.v2";
@@ -39,10 +46,10 @@ export type CodingApprovalModeMeta = {
 };
 
 export const CODING_APPROVAL_MODES: ReadonlyArray<CodingApprovalModeMeta> = [
-  { id: "manual", label: "사람 승인", hint: "모든 명령을 직접 승인 (기본)", requiresArmConfirmation: false },
+  { id: "manual", label: "사람 승인", hint: "모든 명령을 직접 승인", requiresArmConfirmation: false },
   { id: "auto_safe", label: "안전 검증 자동", hint: "읽기·검증 등 안전 명령만 자동 승인", requiresArmConfirmation: true },
   { id: "session_allow", label: "세션 계열 허용", hint: '명시 허용한 계열(예: "pnpm test")을 이번 세션 동안 자동', requiresArmConfirmation: true },
-  { id: "guided_auto", label: "자동 진행", hint: "위험 명령(rm·push·sudo 등)만 빼고 자동 — 가장 빠르고 가장 위험", requiresArmConfirmation: true },
+  { id: "guided_auto", label: "자동 진행", hint: "위험 명령(rm·push·sudo 등)만 빼고 자동 (기본)", requiresArmConfirmation: true },
 ];
 
 /** 처음 자동승인을 켤 때 보여줄 경고 — 사용자가 확인하면 일회성으로 armed로 기억된다. */
@@ -57,7 +64,8 @@ export function isCodingApprovalMode(value: unknown): value is CodingApprovalMod
 }
 
 export function parseStoredApprovalMode(raw: string | null | undefined): CodingApprovalMode {
-  return isCodingApprovalMode(raw) ? raw : "manual";
+  // 명시 저장 값은 존중, 없거나(=null) 잘못된 값은 기본(guided_auto)으로.
+  return isCodingApprovalMode(raw) ? raw : DEFAULT_CODING_APPROVAL_MODE;
 }
 
 export function isAutoMode(mode: CodingApprovalMode): boolean {

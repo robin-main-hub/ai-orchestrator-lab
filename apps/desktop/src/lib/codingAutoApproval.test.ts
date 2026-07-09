@@ -12,9 +12,15 @@ import {
 } from "./codingAutoApproval";
 
 describe("codingAutoApproval", () => {
-  it("기본값은 manual, 잘못된 값은 manual로 fallback", () => {
-    expect(parseStoredApprovalMode(null)).toBe("manual");
-    expect(parseStoredApprovalMode("nope")).toBe("manual");
+  it("기본값은 guided_auto(full-auto), 잘못된 값도 기본으로 fallback, 명시 저장 값은 존중", () => {
+    // 저장된 값이 없으면 full-auto 기본(guided_auto)
+    expect(parseStoredApprovalMode(null)).toBe("guided_auto");
+    expect(parseStoredApprovalMode(undefined)).toBe("guided_auto");
+    expect(parseStoredApprovalMode("nope")).toBe("guided_auto");
+    // 명시적으로 저장된 값은 그대로 존중(기본으로 덮어쓰지 않음)
+    expect(parseStoredApprovalMode("manual")).toBe("manual");
+    expect(parseStoredApprovalMode("auto_safe")).toBe("auto_safe");
+    expect(parseStoredApprovalMode("session_allow")).toBe("session_allow");
     expect(parseStoredApprovalMode("guided_auto")).toBe("guided_auto");
     expect(isCodingApprovalMode("auto_safe")).toBe(true);
     expect(isCodingApprovalMode("legacy")).toBe(false);
