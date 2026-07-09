@@ -1,0 +1,4 @@
+# Historical false positives (fake test fixtures already rewritten to runtime assembly).
+# Fingerprint format: <commit>:<file>:<rule>:<line>
+74414e6493a23dd55e6e0505fcecda59939c327a:packages/protocol/src/rmasRun.test.ts:generic-api-key:15
+751e304df14043330ee48ab42053a240db072981:packages/protocol/src/rmasRun.test.ts:generic-api-key:15
