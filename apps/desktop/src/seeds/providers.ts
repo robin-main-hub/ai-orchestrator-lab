@@ -158,14 +158,14 @@ export const seededProviderProfiles: ProviderProfile[] = [
   {
     ...createProviderProfile({
       id: "provider_rmas_dgx02",
-      name: "RMAS DGX-01",
+      name: "RMAS DGX-02",
       kind: "openai",
-      baseUrl: "http://100.81.57.88:4041/v1",
+      baseUrl: "http://100.71.215.84:4041/v1",
       defaultModel: "rmas-sequential-light",
       tags: ["rmas", "dgx", "latent-mas", "server-proxy", "no-auth"],
       trustLevel: "trusted",
     }),
-    modelDiscoveryEndpoint: "http://100.81.57.88:4041/v1/models",
+    modelDiscoveryEndpoint: "http://100.71.215.84:4041/v1/models",
   },
   {
     ...createProviderProfile({
