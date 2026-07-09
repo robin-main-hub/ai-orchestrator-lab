@@ -283,6 +283,7 @@ import {
   terminalSlots,
 } from "./seeds/conversation";
 import { DashboardView } from "./components/DashboardView";
+import { PersonaView } from "./components/PersonaView";
 import { projectAutonomyRunHistory } from "./lib/autonomyRunHistory";
 import { PERSONA_CODEX } from "./lib/personaCodex";
 import { selectDailyParty } from "./lib/dailyParty";
@@ -5073,12 +5074,6 @@ export function App() {
     workItems,
   ]);
 
-  // 대시보드 "다음 할 일 1개" — 콕핏 L1과 동일한 단일 소스(snapshot+nextActions)에서
-  // red/yellow/green + 가장 긴급한 액션 하나를 도출한다.
-  const dashboardHealthRollup = useMemo(
-    () => deriveCockpitHealthFromSnapshot(cockpitSnapshot, cockpitReadiness.nextActions),
-    [cockpitSnapshot, cockpitReadiness.nextActions],
-  );
   // 홈 "현재 작업 · 중지" — 서버 RMAS 실행을 폴링해 진행 중인 것만 노출/중지한다.
   // (autonomy 실행은 stop 핸들이 없어 미포함)
   const runningRmasRuns = useRunningRmasRuns({
@@ -5098,18 +5093,6 @@ export function App() {
       (member) => ({ ...member, avatarUrl: dashboardPersonaAvatars[member.personaName] }),
     );
   }, [eventLog]);
-  // 대시보드의 "다음 할 일" CTA 라우팅: 승인성 신호는 제자리(드로어), 나머지는
-  // 상세가 사는 콕핏으로 — 액션 동선을 한 패턴으로 묶는다.
-  const handleDashboardNextAction = (action: CockpitNextActionItem) => {
-    if (action.targetSurface === "approvals" || action.targetSurface === "control_queue") {
-      openControlQueue();
-      return;
-    }
-    setMode("cockpit");
-    setActiveNavItem(MODE_OWNS_CENTER_NAV);
-    setProviderRegistrationOpen(false);
-    setAdminRailOpen(false);
-  };
   // 대화창 "+" → 스웜 서치: 입력(또는 직전 대화)을 주제로 4~16명 자동 편성 후 리서치 뷰로.
   const handleStartSwarmSearch = (rawTopic: string) => {
     const fromDraft = rawTopic.trim();
@@ -5360,23 +5343,33 @@ export function App() {
 
           {activeNavItem === "dashboard" ? (
             <DashboardView
-              personas={dashboardParty}
-              personaAvatars={dashboardPersonaAvatars}
               runtime={runtimeSnapshotState}
               hermesPool={summarizeHermesPool(loadHermesPool())}
-              healthRollup={dashboardHealthRollup}
-              onActivateNextAction={handleDashboardNextAction}
               workTraceItems={cockpitReadiness.workTraceItems}
               runningWork={runningRmasRuns.items}
               onStopWork={runningRmasRuns.stop}
               stoppingWorkIds={runningRmasRuns.stoppingIds}
-              history={projectAutonomyRunHistory(eventLog)}
               onNavigate={(target) => {
                 if (target.mode) {
                   setMode(target.mode);
                 }
                 // mode만 있고 nav가 없으면 모드 화면(콕핏/토론/tmux)이 중앙을 온전히
                 // 차지하도록 nav를 비운다. (기존엔 "sessions"로 떨어져 엉뚱한 페이지가 떴음)
+                const nextNav = target.nav ?? (target.mode ? "none" : "sessions");
+                setActiveNavItem(nextNav);
+                setProviderRegistrationOpen(nextNav === "providers");
+                setAdminRailOpen(false);
+              }}
+            />
+          ) : activeNavItem === "persona" ? (
+            <PersonaView
+              personas={dashboardParty}
+              personaAvatars={dashboardPersonaAvatars}
+              history={projectAutonomyRunHistory(eventLog)}
+              onNavigate={(target) => {
+                if (target.mode) {
+                  setMode(target.mode);
+                }
                 const nextNav = target.nav ?? (target.mode ? "none" : "sessions");
                 setActiveNavItem(nextNav);
                 setProviderRegistrationOpen(nextNav === "providers");

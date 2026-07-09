@@ -70,6 +70,7 @@ export type NavItemId =
   | "coding"
   | "research"
   | "rmas"
+  | "persona"
   | "command_center";
 export type NavItem = {
   id: NavItemId;
