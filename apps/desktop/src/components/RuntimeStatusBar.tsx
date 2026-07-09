@@ -6,10 +6,8 @@ import {
   Search,
   Settings,
   Scale,
-  Sparkles,
   Terminal,
   Menu,
-  Users,
 } from "lucide-react";
 import type { ElementType } from "react";
 import type { RuntimeSnapshot } from "@ai-orchestrator/protocol";
@@ -44,6 +42,7 @@ export function RuntimeStatusBar({
   onToggleDrawer,
   providerName,
   snapshot,
+  viewTitle,
 }: {
   drawerAvailable: boolean;
   /** highlight the 홈(대시보드) pill */
@@ -58,6 +57,8 @@ export function RuntimeStatusBar({
   onToggleDrawer: () => void;
   providerName: string;
   snapshot: RuntimeSnapshot;
+  /** title of the view that currently owns the center (single-rail IA) */
+  viewTitle: string;
 }) {
   const health = deriveHealth(snapshot);
   const healthLabel = {
@@ -69,7 +70,7 @@ export function RuntimeStatusBar({
   const activeMode = mode === "annex" ? "debate" : mode;
 
   return (
-    <header className="status-bar flex h-12 shrink-0 items-center justify-between gap-4 border-b border-zinc-800/60 bg-zinc-950/90 px-4 backdrop-blur-xl">
+    <header className="status-bar flex h-14 shrink-0 items-center justify-between gap-4 border-b border-zinc-800/60 bg-zinc-950/90 px-4 backdrop-blur-xl">
       <div className="flex min-w-0 items-center gap-3">
         {drawerAvailable ? (
           <Button
@@ -125,69 +126,25 @@ export function RuntimeStatusBar({
             </PopoverContent>
           </Popover>
         )}
-        <div className="flex select-none items-center gap-2">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-violet-600/20 text-violet-300">
+        <button
+          aria-label="대시보드 홈"
+          className="flex shrink-0 select-none items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-white/[0.05]"
+          onClick={onHome}
+          title="대시보드 홈"
+          type="button"
+        >
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-300">
             <Brain className="h-4 w-4" />
-          </div>
-          <div className="hidden flex-col leading-tight sm:flex">
-            <span className="whitespace-nowrap text-[11px] font-bold tracking-tight text-zinc-100">
-              AI Orchestrator
-            </span>
-            <span className="whitespace-nowrap text-[8.5px] text-zinc-500">
-              Lab
-            </span>
-          </div>
-        </div>
+          </span>
+          <span className="hidden whitespace-nowrap text-[11px] font-semibold tracking-tight text-zinc-400 lg:inline">
+            AI Orchestrator Lab
+          </span>
+        </button>
+        <span className="hidden h-4 w-px shrink-0 bg-zinc-700/70 md:block" />
+        <h1 className="min-w-0 truncate text-sm font-semibold text-zinc-100" data-focus-id="topbar-view-title">
+          {viewTitle}
+        </h1>
       </div>
-
-      <nav className="hidden items-center gap-1 rounded-full border border-white/10 bg-black/45 p-1 shadow-[0_0_28px_rgba(0,0,0,0.35)] backdrop-blur-xl md:flex">
-        {onHome ? (
-          <button
-            aria-label="대시보드 홈"
-            className={cn(
-              "group relative flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-all",
-              homeActive
-                ? "border-cyan-300/25 bg-white/[0.08] text-zinc-50 shadow-[0_0_18px_rgba(34,211,238,0.10)]"
-                : "border-transparent text-zinc-500 hover:border-white/10 hover:bg-white/[0.04] hover:text-zinc-100",
-            )}
-            data-focus-id="mode-tab-home"
-            onClick={onHome}
-            title="대시보드"
-            type="button"
-          >
-            {homeActive ? (
-              <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.75)]" />
-            ) : null}
-            <Sparkles className={cn("h-3.5 w-3.5", homeActive ? "text-cyan-200" : "text-zinc-500 group-hover:text-zinc-300")} />
-            <span>홈</span>
-          </button>
-        ) : null}
-        {modeConfig.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeMode === item.id && !homeActive;
-          const displayLabel = item.shortLabel ?? item.label;
-          return (
-            <button
-              aria-label={`${item.label} 모드`}
-              className={cn(
-                "group relative flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-all",
-                isActive
-                  ? "border-cyan-300/25 bg-white/[0.08] text-zinc-50 shadow-[0_0_18px_rgba(34,211,238,0.10)]"
-                  : "border-transparent text-zinc-500 hover:border-white/10 hover:bg-white/[0.04] hover:text-zinc-100",
-              )}
-              data-focus-id={`mode-tab-${item.id}`}
-              key={item.id}
-              onClick={() => onChangeMode(item.id)}
-              title={item.label}
-              type="button"
-            >
-              {isActive ? <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.75)]" /> : null}
-              <Icon className={cn("h-3.5 w-3.5", isActive ? "text-cyan-200" : "text-zinc-500 group-hover:text-zinc-300")} />
-              <span>{displayLabel}</span>
-            </button>
-          );
-        })}
-      </nav>
 
       <div className="flex shrink-0 items-center gap-2">
         <Button

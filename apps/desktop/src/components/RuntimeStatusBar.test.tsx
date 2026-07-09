@@ -33,7 +33,7 @@ const snapshot: RuntimeSnapshot = {
 };
 
 describe("RuntimeStatusBar", () => {
-  it("renders Korean top-level command and health labels", () => {
+  it("renders the current view title plus Korean command and health labels", () => {
     const html = renderToStaticMarkup(
       <RuntimeStatusBar
         drawerAvailable
@@ -45,12 +45,12 @@ describe("RuntimeStatusBar", () => {
         onToggleDrawer={vi.fn()}
         providerName="MiMo"
         snapshot={snapshot}
+        viewTitle="대화"
       />,
     );
 
+    // single-rail topbar: only the current view title, no mode-pill deck
     expect(html).toContain("대화");
-    expect(html).toContain("토론");
-    expect(html).toContain("운영 관제판");
     expect(html).toContain("명령");
     expect(html).toContain("상태");
     expect(html).not.toContain("Conversation");
@@ -70,6 +70,7 @@ describe("RuntimeStatusBar", () => {
         onToggleDrawer={vi.fn()}
         providerName=""
         snapshot={snapshot}
+        viewTitle="대화"
       />,
     );
 

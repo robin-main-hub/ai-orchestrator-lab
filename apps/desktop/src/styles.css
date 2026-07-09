@@ -21,6 +21,32 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   --muted: #a1a1aa;
+
+  /* ── Redesign S1 design tokens (spec §1) — single canonical definition ──
+   * Dark cinematic "mission control" palette. Locks: one dark theme, one
+   * emerald interactive accent (former violet/amber/blue accents migrate to
+   * var(--accent)), one 12px radius. Status-semantic red/amber/green keep
+   * their own meanings. tokens.css mirrors these into the shadcn-named
+   * tokens (--background/--card/--primary/...) so both systems agree. */
+  --bg: #0b1120;
+  --surface: #0f172a;
+  --surface-2: #16203a;
+  --border: rgba(148, 163, 184, 0.14);
+  --fg: #f1f5f9;
+  --fg-muted: #94a3b8;
+  --accent: #22c55e;
+  --accent-dim: rgba(34, 197, 94, 0.14);
+  --destructive: #ef4444;
+  --warning: #f59e0b;
+  --radius: 12px;
+
+  /* Documented z-index scale (spec §3.1) — the only stacking contexts the
+   * shell relies on. Keep new overlays on one of these rungs:
+   *   base 0 · left rail 20 · topbar 30 · dialog/sheet/palette 50 */
+  --z-base: 0;
+  --z-rail: 20;
+  --z-topbar: 30;
+  --z-dialog: 50;
 }
 
 * {
@@ -50,7 +76,7 @@ body {
   min-height: 480px;
   margin: 0;
   background:
-    linear-gradient(180deg, rgba(139, 92, 246, 0.08), transparent 260px),
+    linear-gradient(180deg, var(--accent-dim), transparent 260px),
     var(--bg);
 }
 
@@ -89,7 +115,7 @@ button {
 .app-shell {
   display: grid;
   grid-template-columns: 264px minmax(0, 1fr) 280px;
-  grid-template-rows: 48px minmax(0, 1fr) 136px;
+  grid-template-rows: 56px minmax(0, 1fr) 136px;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
@@ -100,17 +126,21 @@ button {
 .app-shell.annex-focus-shell,
 .app-shell.debate-focus-shell {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 48px minmax(0, 1fr);
+  grid-template-rows: 56px minmax(0, 1fr);
 }
 
 .app-shell.conversation-v0-shell {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 48px minmax(0, 1fr);
+  grid-template-rows: 56px minmax(0, 1fr);
 }
 
+/* Documented z-index scale (spec §3.1): base 0 / rail 20 / topbar 30 /
+ * dialog 50. The topbar sits above the rail so its backdrop-blur and the
+ * view title never bleed under rail content. */
 .status-bar {
   grid-column: 2;
   grid-row: 1;
+  z-index: var(--z-topbar);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -264,6 +294,14 @@ button {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+/* Bug §3.4 — on wide screens (≈1440px) nav-owned views floated in a large
+ * dead canvas. Center their content within a readable max width via
+ * responsive side gutters, while narrower widths keep the normal padding.
+ * Focus surfaces (tmux/cockpit/debate/conversation) stay full-bleed. */
+.app-shell.nav-center-shell .center-board {
+  padding-inline: max(var(--space-3), calc((100% - 1280px) / 2));
+}
+
 .conversation-v0-shell .status-bar {
   grid-column: 1;
 }
@@ -310,6 +348,7 @@ button {
 .left-rail {
   grid-column: 1;
   grid-row: 1 / 4;
+  z-index: var(--z-rail);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -436,12 +475,12 @@ button {
   bottom: 7px;
   width: 3px;
   border-radius: 999px;
-  background: linear-gradient(180deg, #a78bfa, #7c3aed);
-  box-shadow: 0 0 10px rgba(167, 139, 250, 0.6);
+  background: linear-gradient(180deg, var(--accent), #16a34a);
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.55);
 }
 
 .nav-item.active svg:first-child {
-  color: #c4b5fd;
+  color: var(--accent);
 }
 
 .provider-registration-menu {
@@ -2124,9 +2163,9 @@ button {
 }
 
 .primary-button {
-  border-color: #826033;
-  background: #332515;
-  color: #ffe1aa;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--accent-dim);
+  color: #bbf7d0;
 }
 
 .workbench-panel {
@@ -7723,7 +7762,7 @@ button {
 
 .nav-item.active,
 .mode-switch button.active {
-  border-color: #1697ad;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   background: var(--muted);
 }
 
@@ -7760,9 +7799,9 @@ button {
 }
 
 .primary-button {
-  border-color: #1fa8c1;
-  background: var(--muted);
-  color: #dffbff;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--accent-dim);
+  color: #bbf7d0;
 }
 
 .terminal-slot,
@@ -9313,7 +9352,7 @@ body:has(.app-shell.annex-focus-shell) {
 .app-shell.nav-center-shell {
   /* 아이콘 온리 레일 — 라벨은 호버 title 툴팁으로(나브-센터 페이지에서만 264→56px) */
   grid-template-columns: 56px minmax(0, 1fr);
-  grid-template-rows: 48px minmax(0, 1fr);
+  grid-template-rows: 56px minmax(0, 1fr);
 }
 .nav-center-shell .status-bar {
   grid-column: 1 / -1;

@@ -4,10 +4,13 @@ import {
   ChevronRight,
   Database,
   GitBranch,
+  LayoutDashboard,
   MessageSquare,
+  Scale,
   Send,
   ShieldCheck,
   Terminal,
+  type LucideIcon,
 } from "lucide-react";
 import {
   createCodingPacketDraft,
@@ -275,6 +278,7 @@ import {
   initialAgentRun,
   initialConversationMessages,
   initialEventLog,
+  navItems,
   navSections,
   terminalSlots,
 } from "./seeds/conversation";
@@ -355,45 +359,39 @@ import { WorkItemHandoffPanel } from "./components/WorkItemHandoffPanel";
 import { SummonTheater } from "./components/SummonTheater";
 import { RunWorkspace, type RunMode } from "./components/RunWorkspace";
 import { createMakimaDelegationCards } from "./lib/makimaDelegation";
-import { AppShellNav } from "./components/AppShellNav";
-import {
-  appShellSections,
-  defaultAppShellTabId,
-  findAppShellTab,
-  resolveAppShellTabForSurface,
-  type AppShellSection,
-  type AppShellSectionId,
-  type AppShellTabId,
-  type AppShellVirtualSurface,
-} from "./lib/appShellIa";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/ui/sheet";
 import { ReadOnlyModelCatalogPanel } from "./components/ReadOnlyModelCatalogPanel";
 import { ReadOnlyMemoryLibraryPanel } from "./components/ReadOnlyMemoryLibraryPanel";
-import "./styles/renewal-shell.css";
 
-const safeVirtualSurfaces: ReadonlySet<AppShellVirtualSurface> = new Set([
-  "operations_queue",
-  "operations_missions",
-  "system_runtime",
-  "system_models",
-  "library_memory",
-]);
+// Redesign S1: the three-deck top navigation (Primary sections + CMD section
+// tabs, powered by AppShellNav / appShellIa) is removed. Navigation is now a
+// single left rail (nav items + center modes) plus a one-line topbar. The
+// read-only peek surfaces those top tabs used to open (models / memory /
+// runtime / mission board) are re-homed onto the command palette so nothing
+// is lost. The mode↔nav center axis (navSurface) is unchanged.
 
-function isTabRendered(tab: { target: { nav?: string; mode?: string; virtual?: AppShellVirtualSurface | null } }): boolean {
-  return Boolean(tab.target.nav || tab.target.mode || (tab.target.virtual && safeVirtualSurfaces.has(tab.target.virtual)));
-}
+/** Human titles for the center modes — shown in the topbar and left rail. */
+const CENTER_MODE_TITLES: Record<CenterMode, string> = {
+  conversation: "대화",
+  debate: "토론",
+  annex: "토론 부록",
+  tmux: "Tmux 실행",
+  cockpit: "운영 관제판",
+};
 
-const routeBackedShellSections: readonly AppShellSection[] = appShellSections.map((section) => ({
-  ...section,
-  tabs: section.tabs.filter(isTabRendered),
-}));
-
-const routeBackedDefaultTabBySection: Record<AppShellSectionId, AppShellTabId> = Object.fromEntries(
-  appShellSections.map((section) => {
-    const first = section.tabs.find((tab) => tab.target.nav || tab.target.mode);
-    return [section.id, first?.id ?? defaultAppShellTabId];
-  }),
-) as Record<AppShellSectionId, AppShellTabId>;
+/**
+ * Center modes surfaced as left-rail entries (spec §2). These re-home the
+ * mode views that used to live in the removed top tabs / status-bar pills.
+ * "annex" stays palette-only (it is a debate sub-surface, not a top-level
+ * destination). Selecting one hands the center to the mode axis
+ * (activeNavItem → "none").
+ */
+const RAIL_MODE_ITEMS: ReadonlyArray<{ mode: Exclude<CenterMode, "annex">; label: string; icon: LucideIcon }> = [
+  { mode: "conversation", label: "대화", icon: MessageSquare },
+  { mode: "debate", label: "토론", icon: Scale },
+  { mode: "cockpit", label: "관제판", icon: LayoutDashboard },
+  { mode: "tmux", label: "Tmux", icon: Terminal },
+];
 
 const CENTER_MODE_STORAGE_KEY = "ai-orchestrator.center-mode.v1";
 
@@ -4398,6 +4396,39 @@ export function App() {
       shortcut: "⌘⇧A",
       run: toggleControlQueue,
     },
+    // Read-only peek surfaces re-homed from the removed top tabs (redesign S1).
+    {
+      id: "open.mission-board",
+      verb: "열기",
+      label: "미션 보드",
+      hint: "실행 워크스페이스의 미션 보드",
+      run: () => {
+        setActiveNavItem("run");
+        setSummonSeedMode("board");
+        setProviderRegistrationOpen(false);
+      },
+    },
+    {
+      id: "open.model-catalog",
+      verb: "열기",
+      label: "모델 카탈로그",
+      hint: "프로바이더별 모델 목록 (읽기 전용)",
+      run: () => setModelsSurfaceOpen(true),
+    },
+    {
+      id: "open.memory-library",
+      verb: "열기",
+      label: "기억 라이브러리",
+      hint: "기억 거버넌스와 활성화 상태 (읽기 전용)",
+      run: () => setMemorySurfaceOpen(true),
+    },
+    {
+      id: "open.runtime-status",
+      verb: "열기",
+      label: "런타임 상태",
+      hint: "런타임 노드와 경로 진단 (읽기 전용)",
+      run: () => setRuntimeSurfaceOpen(true),
+    },
     {
       id: "open.big-rocks",
       verb: "점검",
@@ -5096,36 +5127,13 @@ export function App() {
   // "runtime" 제거 포함). 두 useState(mode/activeNavItem)는 유지하되 판정은 한 곳에서.
   const navCenterActive = isNavCenterActive(activeNavItem);
 
-  const activeShellTabId = resolveAppShellTabForSurface({ activeNavItem, mode });
-  const activeShellSection = routeBackedShellSections.find((s) => s.tabs.some((t) => t.id === activeShellTabId)) ?? routeBackedShellSections[0]!;
-  const activeShellTab = activeShellSection.tabs.find((t) => t.id === activeShellTabId) ?? activeShellSection.tabs[0]!;
-
-  const handleSelectShellTab = useCallback((tabId: AppShellTabId) => {
-    const tab = findAppShellTab(tabId);
-    if (tab.target.mode) setMode(tab.target.mode);
-    if (tab.target.nav) setActiveNavItem(tab.target.nav);
-    // operations.launch (nav "run") starts the run workspace on its launch tab,
-    // resetting any sticky board selection left over from operations.missions.
-    if (tab.target.nav === "run") setSummonSeedMode("single");
-    if (tab.target.virtual === "operations_queue") setApprovalDrawerOpen(true);
-    // operations.missions reuses the single existing RunWorkspace mission board
-    // (one board instance only): land on the run workspace, opened on its board.
-    if (tab.target.virtual === "operations_missions") setActiveNavItem("run");
-    if (tab.target.virtual === "operations_missions") setSummonSeedMode("board");
-    // system.runtime shows the existing RuntimeRailPanel read-only in a sheet —
-    // selection only toggles this sheet: no route change, no node restart.
-    if (tab.target.virtual === "system_runtime") setRuntimeSurfaceOpen(true);
-    // system.models shows the read-only provider/model catalog in a sheet —
-    // selection only toggles this sheet: no route change, no provider mutation.
-    if (tab.target.virtual === "system_models") setModelsSurfaceOpen(true);
-    // library.memory shows the read-only memory library catalog in a sheet —
-    // selection only toggles this sheet: read-only, no write/sync/eval/curation.
-    if (tab.target.virtual === "library_memory") setMemorySurfaceOpen(true);
-  }, []);
-
-  const handleSelectShellSection = useCallback((sectionId: AppShellSectionId) => {
-    handleSelectShellTab(routeBackedDefaultTabBySection[sectionId]);
-  }, [handleSelectShellTab]);
+  // Single-rail IA: the topbar shows only the current view title. Resolve it
+  // from whichever axis owns the center — a left-nav item, or a center mode.
+  const currentViewTitle = navCenterActive
+    ? navItems.find((item) => item.id === activeNavItem)?.label ?? "AI Orchestrator Lab"
+    : configLibraryActive
+      ? "설정파일"
+      : CENTER_MODE_TITLES[mode];
 
   const shellVisibility = getConversationShellVisibility({
     configLibraryActive,
@@ -5235,18 +5243,7 @@ export function App() {
         onToggleDrawer={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
         providerName={activeProvider?.name ?? "미선택"}
         snapshot={runtimeSnapshotState}
-      />
-      <AppShellNav
-        activeSection={activeShellSection}
-        activeTab={activeShellTab}
-        pendingApprovals={unifiedControlQueueSnapshot.summary.pending}
-        providerName={activeProvider?.name ?? "local-provider"}
-        sections={routeBackedShellSections}
-        onCommandPalette={() => setCommandPaletteOpen(true)}
-        onOpenQueue={() => setApprovalDrawerOpen(true)}
-        onProbeRuntime={handleProbeDgx}
-        onSelectSection={handleSelectShellSection}
-        onSelectTab={handleSelectShellTab}
+        viewTitle={currentViewTitle}
       />
       <main className="workspace-grid">
         {isMobileDrawerOpen && leftRailVisible ? (
@@ -5290,6 +5287,35 @@ export function App() {
                 })}
               </div>
             ))}
+            <div className="nav-section" key="surfaces">
+              <p className="nav-section__label">작업 화면</p>
+              {RAIL_MODE_ITEMS.map((item) => {
+                const isActive = !navCenterActive && !configLibraryActive && (mode === item.mode || (mode === "annex" && item.mode === "debate"));
+                const Icon = item.icon;
+                return (
+                  <button
+                    aria-expanded={isActive}
+                    aria-label={item.label}
+                    className={`nav-item ${isActive ? "active" : ""}`}
+                    key={item.mode}
+                    onClick={() => {
+                      setAdminRailOpen(false);
+                      setMode(item.mode);
+                      // hand the center to the mode axis (spec §2 / navSurface)
+                      setActiveNavItem(MODE_OWNS_CENTER_NAV);
+                      setProviderRegistrationOpen(false);
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    title={`${item.label} 화면`}
+                    type="button"
+                  >
+                    <Icon size={18} />
+                    <span>{item.label}</span>
+                    {isActive ? <ChevronRight size={16} /> : null}
+                  </button>
+                );
+              })}
+            </div>
           </nav>
 
 

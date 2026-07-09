@@ -44,19 +44,24 @@
    * success, amber waiting, rose blocked — the v0 status accent scale.
    * (Previous "Deep Teal" palette is recoverable from git history.)
    */
-  --background: #0a0a0b;          /* v0 oklch(0.1 0 0) — zinc-950 glass base */
-  --foreground: #fafafa;          /* v0 oklch(0.985 0 0) */
+  /* Redesign S1: page/surfaces align to the single dark cinematic palette
+   * (spec §1). Canonical spec values also live in styles.css :root; these
+   * shadcn-named tokens are kept in sync so Tailwind `bg-background`,
+   * `bg-card`, ... render the same surfaces the legacy BEM rules do. */
+  --background: #0b1120;          /* spec --bg (slate-950 family) */
+  --foreground: #f1f5f9;          /* spec --fg */
 
   /* Surface layers */
-  --card: #141417;                /* v0 oklch(0.145 0 0) — zinc-900 glass */
-  --card-foreground: #fafafa;
-  --popover: #1c1c20;
-  --popover-foreground: #fafafa;
+  --card: #0f172a;                /* spec --surface */
+  --card-foreground: #f1f5f9;
+  --popover: #16203a;             /* spec --surface-2 (elevated) */
+  --popover-foreground: #f1f5f9;
 
-  /* Primary — violet accent (v0 status scale: violet = primary) */
-  --primary: #a78bfa;             /* violet-400 */
-  --primary-foreground: #0a0a0b;
-  --primary-muted: #2dd4bf;       /* teal-400 — secondary accent */
+  /* Primary — single interactive accent (spec §1: emerald, replaces the
+   * former violet accent so buttons/tabs/focus/active states are unified). */
+  --primary: #22c55e;             /* emerald — status green, the one accent */
+  --primary-foreground: #04121a;
+  --primary-muted: #16a34a;       /* emerald-600 — pressed/secondary accent */
 
   /* Secondary */
   --secondary: #1c1c20;           /* match --popover */
@@ -73,27 +78,30 @@
    *     which resolve here.
    *   - legacy code continues to read `var(--muted)` from styles.css.
    */
-  --muted: #232328;               /* v0 oklch(0.269 0 0) surface tint */
-  --muted-foreground: #a1a1aa;    /* zinc-400 */
+  --muted: #16203a;               /* elevated surface tint */
+  --muted-foreground: #94a3b8;    /* spec --fg-muted (slate-400) */
 
-  /* Accent */
-  --accent: #1c1c20;              /* match --popover */
-  --accent-foreground: #a78bfa;   /* match --primary */
+  /* Accent — shadcn's `--accent` is a subtle HOVER SURFACE (bg-accent), NOT
+   * the brand accent. It stays a surface here; the emerald brand accent is
+   * `--primary` / spec `--accent`. @theme repoints `--color-accent` to the
+   * secondary surface so hover backgrounds never turn emerald. */
+  --accent: #16203a;              /* subtle surface (match --popover) */
+  --accent-foreground: #f1f5f9;   /* light text on the hover surface */
 
-  /* Semantic colors — v0 status scale */
-  --destructive: #fb7185;         /* rose-400 */
+  /* Semantic status colors — kept as their own meanings (spec §1 lock). */
+  --destructive: #ef4444;         /* red-500 */
   --destructive-foreground: #fef2f2;
-  --success: #34d399;             /* emerald-400 */
-  --success-foreground: #0a0a0b;
-  --warning: #fbbf24;             /* amber-400 */
-  --warning-foreground: #0a0a0b;
+  --success: #22c55e;             /* emerald — success == accent green */
+  --success-foreground: #04121a;
+  --warning: #f59e0b;             /* amber-500 (status meaning only) */
+  --warning-foreground: #04121a;
 
   /* Borders and inputs */
-  --border: rgba(255, 255, 255, 0.08);   /* v0: white-alpha glass border */
-  --border-subtle: rgba(255, 255, 255, 0.05);
-  --border-focus: #a78bfa;        /* match --primary */
-  --input: #141417;               /* match --card */
-  --ring: #a78bfa;                /* match --primary */
+  --border: rgba(148, 163, 184, 0.14);   /* spec --border (slate-400/14) */
+  --border-subtle: rgba(148, 163, 184, 0.08);
+  --border-focus: #22c55e;        /* emerald focus */
+  --input: #0f172a;               /* match --card */
+  --ring: #22c55e;                /* emerald focus ring */
 
   /* Chart colors */
   --chart-1: #5fd3e2;
@@ -103,21 +111,21 @@
   --chart-5: #a78bfa;
 
   /* Sidebar */
-  --sidebar: #101013;
-  --sidebar-foreground: #fafafa;
-  --sidebar-primary: #a78bfa;
-  --sidebar-primary-foreground: #0a0a0b;
-  --sidebar-accent: #1c1c20;
-  --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: #27272a;
-  --sidebar-ring: #a78bfa;
+  --sidebar: #0b1120;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: #22c55e;
+  --sidebar-primary-foreground: #04121a;
+  --sidebar-accent: #16203a;
+  --sidebar-accent-foreground: #f1f5f9;
+  --sidebar-border: rgba(148, 163, 184, 0.14);
+  --sidebar-ring: #22c55e;
 
   /* Custom tokens for the app */
-  --surface: #141417;
-  --surface-elevated: #1c1c20;
-  --text-primary: #fafafa;
-  --text-secondary: #a1a1aa;
-  --text-muted: #62626b;
+  --surface: #0f172a;
+  --surface-elevated: #16203a;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
 
   /* Status colors — aligned to legacy semantic colors */
   --status-online: var(--success);
@@ -162,7 +170,7 @@
   --role-expert: #22c55e;
   --role-companion: #fbbf24;
 
-  --radius: 0.5rem;
+  --radius: 12px;                 /* spec §1: single 12px radius */
 
   /* ── Spacing & type scale (density pass, docs/54) ────────────────
    * Legacy styles.css hardcoded padding/gap as bare px in ~670 places with no
@@ -236,8 +244,11 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
+  /* bg-accent / text-accent-foreground stay a subtle hover SURFACE — the
+   * emerald brand accent is `--primary` / `--accent` used directly, not via
+   * these shadcn hover utilities (redesign S1 accent unification). */
+  --color-accent: var(--secondary);
+  --color-accent-foreground: var(--secondary-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
