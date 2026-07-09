@@ -106,6 +106,8 @@ export type {
   RmasEmit,
   RmasWorkingContext,
 } from "./rmas/patterns.js";
+export { runGoalLoop } from "./rmas/goalLoop.js";
+export type { RmasLoopDeps, RmasLoopOutcome } from "./rmas/goalLoop.js";
 
 export type DebateContext = {
   sessionId: string;
