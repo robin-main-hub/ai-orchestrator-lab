@@ -818,8 +818,10 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     supportsModelList: true,
   },
   {
+    // RecursiveMAS serving migrated to dgx-01 as of 2026-07-09 (dgx-02 GPU OOM);
+    // stable providerProfileId kept to avoid localStorage/seed churn.
     providerProfileId: "provider_rmas_dgx02",
-    baseUrl: process.env.RMAS_DGX02_BASE_URL ?? "http://100.71.215.84:4041/v1",
+    baseUrl: process.env.RMAS_DGX02_BASE_URL ?? "http://100.81.57.88:4041/v1",
     apiKeyEnvNames: [],
     noAuth: true,
     apiStyle: "openai_chat",
@@ -1460,7 +1462,7 @@ function createServerProviderDisplayName(providerProfileId: string) {
     provider_mimo_token_openai: "MiMo Token Plan OpenAI",
     provider_mimo_token_anthropic: "MiMo Token Plan Anthropic",
     provider_openclaw_dgx: "DGX-02 OpenClaw vLLM",
-    provider_rmas_dgx02: "RMAS DGX-02 (latent MAS)",
+    provider_rmas_dgx02: "RMAS DGX-01 (latent MAS)",
   };
 
   return names[providerProfileId] ?? providerProfileId;
