@@ -10730,3 +10730,518 @@ body:has(.app-shell.annex-focus-shell) {
   /* Batch 8 LINE D — keep anchored/programmatic scrolls clear of the toast too. */
   scroll-padding-bottom: 140px;
 }
+
+/* ==========================================================================
+   목표 루프 — RMAS 라이브 텔레메트리 (리디자인 S3)
+   제품 센터피스. "관제실" 언어: 상태점 맥동 · 토큰 카운트업 · 라이브 피드.
+   레이아웃은 순수 CSS grid area — 헤더/레일/피드/입력바가 서로 겹칠 수 없다
+   (겹침 버그 §3.3을 구조적으로 제거). 액센트=emerald 단일, radius=12px, 숫자=mono.
+   ========================================================================== */
+
+/* 이 뷰만 풀-서피스: nav-center 보드의 1280px 중앙 거터를 해제한다. */
+.nav-center-shell .center-board:has(> .rmas) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.rmas {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "header header"
+    "rail   feed"
+    "bar    bar";
+  height: 100%;
+  min-height: 0;
+  background:
+    radial-gradient(1200px 420px at 78% -10%, var(--accent-dim), transparent 70%),
+    var(--bg);
+  color: var(--fg);
+  font-size: 13px;
+}
+
+.rmas-mono {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 헤더 + 상태 배너는 하나의 grid area("header")를 공유 — 나머지 셀(rail/feed/bar)의
+   트랙을 침범하지 않는다. */
+.rmas__top {
+  grid-area: header;
+  min-width: 0;
+}
+
+/* ── 헤더 행 (grid: 좌 패턴탭 / 우 타이머+설정 — 겹침 불가) ── */
+.rmas__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+.rmas__patterns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.rmas__patterns::-webkit-scrollbar {
+  display: none;
+}
+.rmas__pattern-tab {
+  flex: none;
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+.rmas__pattern-tab:hover:not(:disabled):not([aria-selected="true"]) {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+.rmas__pattern-tab[aria-selected="true"] {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.rmas__pattern-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.rmas__pattern-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.rmas__header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.rmas__timer {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--fg);
+}
+.rmas__timer[data-live="true"] {
+  color: var(--accent);
+}
+.rmas__gear {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  color: var(--fg);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.rmas__gear:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: var(--accent-dim);
+}
+.rmas__gear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── 상태 배너 (재접속/오류) ── */
+.rmas__notice {
+  padding: 7px 18px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--fg-muted);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+.rmas__notice[data-tone="error"] {
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 12%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--destructive) 38%, var(--border));
+}
+
+/* ── 좌측 에이전트 레일 ── */
+.rmas__rail {
+  grid-area: rail;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 14px;
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+.rmas__rail-agents {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.rmas__rail-empty {
+  margin: 0;
+  padding: 16px 4px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.rmas-agent {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+  transition: border-color 200ms ease;
+}
+.rmas-agent[data-status="thinking"] {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+}
+.rmas-agent[data-status="error"] {
+  border-color: color-mix(in srgb, var(--destructive) 42%, var(--border));
+}
+.rmas-agent__name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rmas-agent__state {
+  margin-top: 1px;
+  font-size: 10.5px;
+  color: var(--fg-muted);
+}
+.rmas-agent__provider {
+  flex: none;
+  max-width: 6.8rem;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--fg-muted);
+  font-size: 10px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 상태점: idle 회색 / thinking 에메랄드 맥동 / done 에메랄드 / error 적색 */
+.rmas-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg-muted) 55%, transparent);
+}
+.rmas-dot[data-tone="thinking"] {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.rmas-dot[data-tone="done"] {
+  background: var(--accent);
+}
+.rmas-dot[data-tone="error"] {
+  background: var(--destructive);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--destructive) 20%, transparent);
+}
+
+/* 토큰 카운터 + 패턴 설명 (레일 하단 고정) */
+.rmas__rail-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.rmas__tokens {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0;
+}
+.rmas__token {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+  text-align: center;
+}
+.rmas__token dt {
+  font-size: 9.5px;
+  color: var(--fg-muted);
+}
+.rmas__token dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--fg);
+}
+.rmas__pattern-desc {
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  color: var(--fg-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* ── 중앙 라이브 피드 ── */
+.rmas__feed {
+  grid-area: feed;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.rmas__banner {
+  margin: 14px 16px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 600;
+}
+.rmas__banner[data-tone="success"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: var(--accent-dim);
+}
+.rmas__banner[data-tone="warning"] {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 42%, var(--border));
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+.rmas__banner[data-tone="danger"] {
+  color: var(--destructive);
+  border-color: color-mix(in srgb, var(--destructive) 42%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 12%, transparent);
+}
+.rmas__final {
+  margin: 10px 0 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.rmas__feed-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+}
+.rmas__feed-empty {
+  margin: 0;
+  padding: 52px 16px;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 13px;
+}
+.rmas__feed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rmas-utterance {
+  padding: 10px 13px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+}
+.rmas-utterance[data-severity="success"] {
+  border-left-color: var(--accent);
+}
+.rmas-utterance[data-severity="warning"] {
+  border-left-color: var(--warning);
+}
+.rmas-utterance[data-severity="error"] {
+  border-left-color: var(--destructive);
+}
+.rmas-utterance__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.rmas-utterance__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.rmas-utterance__summary {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--fg-muted);
+}
+.rmas-utterance__body {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.rmas-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+}
+.rmas-divider::before,
+.rmas-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── 하단 입력 바 (풀폭) ── */
+.rmas__bar {
+  grid-area: bar;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+.rmas__goal {
+  width: 100%;
+  min-height: 74px;
+  max-height: 180px;
+  resize: vertical;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.rmas__goal::placeholder {
+  color: var(--fg-muted);
+}
+.rmas__goal:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+.rmas__goal:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.rmas__bar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.rmas__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, opacity 140ms ease;
+}
+.rmas__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.rmas__btn--run {
+  background: var(--accent);
+  color: #052e16;
+}
+.rmas__btn--run:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 88%, #fff);
+}
+.rmas__btn--run:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.rmas__btn--stop {
+  border-color: color-mix(in srgb, var(--destructive) 55%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 14%, transparent);
+  color: var(--destructive);
+}
+.rmas__btn--stop:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--destructive) 24%, transparent);
+}
+
+/* ── 텔레메트리 모션 (동기 있는 모션만, reduced-motion에서 전부 정지) ── */
+@media (prefers-reduced-motion: no-preference) {
+  .rmas-dot[data-tone="thinking"] {
+    animation: rmas-dot-pulse 1.6s ease-in-out infinite;
+  }
+  .rmas-utterance {
+    animation: rmas-feed-in 120ms ease-out both;
+  }
+  .rmas__banner {
+    animation: rmas-fade-in 200ms ease-out both;
+  }
+  .rmas__btn--run .rmas__spin {
+    animation: rmas-spin 0.9s linear infinite;
+  }
+}
+@keyframes rmas-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes rmas-feed-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes rmas-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes rmas-spin {
+  to { transform: rotate(360deg); }
+}

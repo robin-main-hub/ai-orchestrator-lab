@@ -42,22 +42,24 @@ export const PATTERN_DESCRIPTION: Record<RmasPattern, string> = {
 // ── Agent status dots ───────────────────────────────────────────────────────
 
 export type AgentDotTone = "idle" | "thinking" | "done" | "error";
-export type AgentDotMeta = { tone: AgentDotTone; className: string; label: string };
+export type AgentDotMeta = { tone: AgentDotTone; label: string };
 
-const DOT_BASE = "inline-block h-2.5 w-2.5 rounded-full";
-
-/** idle=gray, thinking=pulsing blue, done=green, error=red (Tailwind utilities). */
+/**
+ * Maps the live per-agent status to a status-dot tone + Korean label. Color is
+ * driven by CSS (`.rmas-dot[data-tone]`) so the single emerald accent stays in
+ * one place: idle=gray, thinking=pulsing emerald, done=solid emerald, error=red.
+ */
 export function agentDotMeta(status: RmasAgentLiveStatus | undefined): AgentDotMeta {
   switch (status) {
     case "thinking":
-      return { tone: "thinking", className: `${DOT_BASE} bg-sky-400 animate-pulse`, label: "생각 중" };
+      return { tone: "thinking", label: "생각 중" };
     case "done":
-      return { tone: "done", className: `${DOT_BASE} bg-emerald-500`, label: "완료" };
+      return { tone: "done", label: "완료" };
     case "error":
-      return { tone: "error", className: `${DOT_BASE} bg-red-500`, label: "오류" };
+      return { tone: "error", label: "오류" };
     case "idle":
     default:
-      return { tone: "idle", className: `${DOT_BASE} bg-muted-foreground/40`, label: "대기" };
+      return { tone: "idle", label: "대기" };
   }
 }
 
