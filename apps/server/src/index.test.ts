@@ -36,6 +36,9 @@ import {
   decideApprovalInPersistentServerStorage,
   estimateProviderCompletionBudgetTokens,
   evaluateServerProviderCompletionPermission,
+  refreshDiscoveredModelCacheForProvider,
+  ensureDiscoveredModelAllowance,
+  isServerProviderModelAllowed,
   evaluateServerRemoteRunPermission,
   createRuntimeSnapshot,
   createServerEventStorageState,
@@ -1009,6 +1012,104 @@ describe("server health placeholder", () => {
     expect(response.error).toContain("provider model is not registered");
     expect(response.runtimeHints?.retryable).toBe(false);
     expect(JSON.stringify(response)).not.toContain("sk-test-secret-from-message");
+  });
+
+  describe("codexopen allowDiscoveredModels gate", () => {
+    const codexopenModelListIds = [
+      "gpt-5.5",
+      "gpt-5.4-mini",
+      "anthropic/claude-opus-4-8",
+      "anthropic/claude-sonnet-5",
+      "umans/umans-glm-5.2",
+      "xai-1/grok-4.5",
+      "google-vertex/gemini-3.5-flash",
+    ];
+    const createCodexopenModelsFetch = (ids: string[]) =>
+      (async () =>
+        ({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ object: "list", data: ids.map((id) => ({ id })) }),
+        }) as any) as typeof fetch;
+    const createApprovedRequest = (modelId: string) => ({
+      id: `provider_completion_codexopen_${modelId.replace(/[^a-z0-9]/gi, "_")}`,
+      sessionId: "session_codexopen",
+      providerProfileId: "provider_codexopen",
+      modelId,
+      messages: [{ role: "user" as const, content: "hi" }],
+      source: "desktop" as const,
+      routePreference: "server_proxy" as const,
+      approvalState: "approved" as const,
+      createdAt: "2026-07-10T00:00:00.000Z",
+    });
+
+    it("allows a discovered (non-default) model id — including one containing a slash", async () => {
+      const allowed = await refreshDiscoveredModelCacheForProvider("provider_codexopen", {
+        fetchImpl: createCodexopenModelsFetch(codexopenModelListIds),
+      });
+      // "umans/umans-glm-5.2" is NOT in defaultModelIds but IS in the live list.
+      expect(allowed.has("umans/umans-glm-5.2")).toBe(true);
+
+      const permission = evaluateServerProviderCompletionPermission(createApprovedRequest("umans/umans-glm-5.2"));
+      expect(permission.decision).toBe("allow");
+      expect(permission.approvalState).toBe("approved");
+    });
+
+    it("denies a model id that is neither a default nor in the discovered list", async () => {
+      await refreshDiscoveredModelCacheForProvider("provider_codexopen", {
+        fetchImpl: createCodexopenModelsFetch(codexopenModelListIds),
+      });
+      const permission = evaluateServerProviderCompletionPermission(createApprovedRequest("made-up/not-real-model"));
+      expect(permission.decision).toBe("deny");
+      expect(permission.reason).toContain("provider model is not registered");
+    });
+
+    it("falls back to defaults-only (fail closed) when live discovery fails", async () => {
+      const allowed = await refreshDiscoveredModelCacheForProvider("provider_codexopen", {
+        fetchImpl: (async () => {
+          throw new Error("codexopen proxy unreachable");
+        }) as unknown as typeof fetch,
+      });
+      // a default stays allowed, but a previously-discovered non-default is now denied
+      expect(allowed.has("gpt-5.5")).toBe(true);
+      expect(allowed.has("umans/umans-glm-5.2")).toBe(false);
+      expect(isServerProviderModelAllowed(
+        // narrow lookup via public helper against the (now failed) cache
+        { providerProfileId: "provider_codexopen", baseUrl: "", apiKeyEnvNames: [], defaultModelIds: ["gpt-5.5"], allowDiscoveredModels: true, supportsModelList: true },
+        "umans/umans-glm-5.2",
+      )).toBe(false);
+
+      expect(evaluateServerProviderCompletionPermission(createApprovedRequest("gpt-5.5")).decision).toBe("allow");
+      expect(evaluateServerProviderCompletionPermission(createApprovedRequest("umans/umans-glm-5.2")).decision).toBe(
+        "deny",
+      );
+    });
+
+    it("ensureDiscoveredModelAllowance is a no-op for a default model (no probe needed)", async () => {
+      let probed = false;
+      await ensureDiscoveredModelAllowance(createApprovedRequest("gpt-5.5"), {
+        fetchImpl: (async () => {
+          probed = true;
+          throw new Error("should not probe for a default model");
+        }) as unknown as typeof fetch,
+      });
+      expect(probed).toBe(false);
+    });
+
+    it("does not weaken the gate for providers without allowDiscoveredModels", () => {
+      expect(
+        isServerProviderModelAllowed(
+          {
+            providerProfileId: "provider_apifun_claude",
+            baseUrl: "",
+            apiKeyEnvNames: [],
+            defaultModelIds: ["claude-opus-4-8"],
+            supportsModelList: true,
+          },
+          "some/discovered-model",
+        ),
+      ).toBe(false);
+    });
   });
 
   it("routes Codex OAuth completions through the CLI adapter without calling HTTP fetch", async () => {
