@@ -18,14 +18,18 @@ beforeEach(() => {
 });
 
 describe("CodingWorkbench 자동승인 (jsdom) — 옵션 명시 활성화 + 첫 켜기 경고", () => {
-  it("기본 모드는 사람 승인이며 자동승인 경고/다이얼로그가 뜨지 않는다", () => {
+  it("기본 모드는 자동 진행(guided_auto, full-auto)이며 초기 렌더에 경고 다이얼로그가 뜨지 않는다", () => {
+    // 저장된 값이 없으면 full-auto 기본(guided_auto). 기본 진입 시엔 arm 경고를 띄우지 않는다
+    // (경고는 사용자가 manual→자동으로 명시 전환할 때만).
     render(<CodingWorkbench />);
-    const select = screen.getByDisplayValue("사람 승인") as HTMLSelectElement;
-    expect(select.value).toBe("manual");
+    const select = screen.getByDisplayValue("자동 진행") as HTMLSelectElement;
+    expect(select.value).toBe("guided_auto");
     expect(screen.queryByRole("dialog", { name: /자동승인 활성화/ })).toBeNull();
   });
 
-  it("자동 모드로 바꾸면 위험 경고 다이얼로그가 뜨고, 확인 전엔 모드가 바뀌지 않는다", () => {
+  it("manual에서 자동 모드로 바꾸면 위험 경고 다이얼로그가 뜨고, 확인 전엔 모드가 바뀌지 않는다", () => {
+    // 명시 저장된 manual에서 시작(기본은 이제 guided_auto이므로 전환 플로우는 manual 시드로 검증)
+    localStorage.setItem(CODING_APPROVAL_MODE_STORAGE_KEY, "manual");
     render(<CodingWorkbench />);
     const select = screen.getByDisplayValue("사람 승인") as HTMLSelectElement;
     fireEvent.change(select, { target: { value: "auto_safe" } });
@@ -41,6 +45,7 @@ describe("CodingWorkbench 자동승인 (jsdom) — 옵션 명시 활성화 + 첫
   });
 
   it("취소하면 자동승인이 활성화되지 않고 manual 그대로", () => {
+    localStorage.setItem(CODING_APPROVAL_MODE_STORAGE_KEY, "manual");
     render(<CodingWorkbench />);
     fireEvent.change(screen.getByDisplayValue("사람 승인"), { target: { value: "guided_auto" } });
     fireEvent.click(screen.getByRole("button", { name: "취소" }));
@@ -50,6 +55,7 @@ describe("CodingWorkbench 자동승인 (jsdom) — 옵션 명시 활성화 + 첫
   });
 
   it("확인하면 ARMed 시각이 저장되고 모드가 적용된다", () => {
+    localStorage.setItem(CODING_APPROVAL_MODE_STORAGE_KEY, "manual");
     render(<CodingWorkbench />);
     fireEvent.change(screen.getByDisplayValue("사람 승인"), { target: { value: "auto_safe" } });
     fireEvent.click(screen.getByRole("button", { name: /이해했고 활성화/ }));
@@ -58,6 +64,7 @@ describe("CodingWorkbench 자동승인 (jsdom) — 옵션 명시 활성화 + 첫
   });
 
   it("이미 ARMed면 다른 자동 모드로 바꿔도 경고 다이얼로그가 다시 뜨지 않는다", () => {
+    localStorage.setItem(CODING_APPROVAL_MODE_STORAGE_KEY, "manual");
     localStorage.setItem(CODING_AUTO_APPROVAL_ARMED_STORAGE_KEY, "2026-06-14T00:00:00.000Z");
     render(<CodingWorkbench />);
     fireEvent.change(screen.getByDisplayValue("사람 승인"), { target: { value: "guided_auto" } });
