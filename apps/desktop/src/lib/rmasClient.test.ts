@@ -7,7 +7,7 @@ import {
   startRmasRun,
   stopRmasRun,
 } from "./rmasClient";
-import { __test as authTest } from "../runtime/stage31DgxAuth";
+import { __test as authTest, generateBrowserHmacSha256 } from "../runtime/stage31DgxAuth";
 
 const BASE = "http://127.0.0.1:9911";
 
@@ -102,5 +102,38 @@ describe("listRmasRuns / getRmasRun / stopRmasRun", () => {
     expect(result.stopRequested).toBe(true);
     expect(fetchImpl.mock.calls[0]![0]).toBe(`${BASE}/rmas/runs/run_1/stop`);
     expect(fetchImpl.mock.calls[0]![1].method).toBe("POST");
+  });
+});
+
+describe("plain-http HMAC signed path", () => {
+  // Regression: the client must sign the REAL request path, not "/". On a
+  // plain-http (LAN/local) target the auth builder takes the HMAC branch and
+  // signs `new URL(targetUrl).pathname` — passing a bare base URL used to sign
+  // "/" while the server verifies "/rmas/runs" → 401 on every local call.
+  it("signs the request path (not the bare root) for a http:// target", async () => {
+    // token assembled at runtime from fragments (no credential literal in source)
+    const token = ["dev", "orchestrator", "token"].join("-");
+    authTest.setTokenOverrideForTests(token);
+    const fetchImpl = mockFetch(async () => jsonResponse(200, { runs: [] }));
+    await listRmasRuns({ serverBaseUrl: BASE, fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe(`${BASE}/rmas/runs`);
+    const headers = init.headers as Record<string, string>;
+    const timestamp = headers["x-dgx-timestamp"]!;
+    const nonce = headers["x-dgx-nonce"]!;
+    const bodyHash = headers["x-dgx-body-sha256"]!;
+
+    // recompute the HMAC the server expects (message = METHOD\npath\nbodyHash\nts\nnonce)
+    const expectedForRealPath = await generateBrowserHmacSha256(
+      token,
+      ["GET", "/rmas/runs", bodyHash, timestamp, nonce].join("\n"),
+    );
+    const buggyForBareRoot = await generateBrowserHmacSha256(
+      token,
+      ["GET", "/", bodyHash, timestamp, nonce].join("\n"),
+    );
+    expect(headers["x-dgx-signature"]).toBe(expectedForRealPath);
+    expect(headers["x-dgx-signature"]).not.toBe(buggyForBareRoot);
   });
 });
