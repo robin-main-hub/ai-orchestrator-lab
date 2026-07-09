@@ -296,6 +296,7 @@ import { AutonomyRunContainer } from "./components/AutonomyRunContainer";
 import { ParallelMissionContainer } from "./components/ParallelMissionContainer";
 import { CodingWorkbench } from "./components/coding/CodingWorkbench";
 import { ResearchSwarmContainer } from "./components/research/ResearchSwarmContainer";
+import { RmasRunView } from "./components/rmas/RmasRunView";
 import { OperatorCockpit } from "./components/operator-cockpit/OperatorCockpit";
 import { AgentsSidebar } from "./components/AgentsSidebar";
 import { BackupRailMenu } from "./components/BackupRailMenu";
@@ -5506,6 +5507,13 @@ export function App() {
             />
           ) : activeNavItem === "research" ? (
             <ResearchSwarmContainer providerProfiles={providerProfiles} seed={swarmSeed ?? undefined} />
+          ) : activeNavItem === "rmas" ? (
+            <RmasRunView
+              providerProfiles={providerProfiles}
+              modelCatalog={modelCatalog}
+              serverBaseUrl={resolveDgxServerBaseUrls(undefined)[0] ?? DEFAULT_DGX_SERVER_BASE_URL}
+              onContextEvent={(type, payload) => appendEvent(type, payload)}
+            />
           ) : activeNavItem === "sessions" ? (
             <div className="nav-center-page" data-page="sessions">
             <>

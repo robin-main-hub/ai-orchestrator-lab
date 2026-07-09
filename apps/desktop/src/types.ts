@@ -69,6 +69,7 @@ export type NavItemId =
   | "theater"
   | "coding"
   | "research"
+  | "rmas"
   | "command_center";
 export type NavItem = {
   id: NavItemId;

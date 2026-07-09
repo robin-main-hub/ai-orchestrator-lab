@@ -22,6 +22,7 @@ export const NAV_CENTER_ITEMS = [
   "theater",
   "coding",
   "research",
+  "rmas",
   "command_center",
 ] as const satisfies readonly NavItemId[];
 
