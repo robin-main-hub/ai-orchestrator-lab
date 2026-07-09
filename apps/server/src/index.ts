@@ -86,6 +86,7 @@ import {
   buildObsidianSkillNote,
   codingPacketSchema,
   deriveMissionTrace,
+  deriveRmasTrace,
   eventSyncPushRequestSchema,
   designBlueprintInputSchema,
   parseAgentDelegationEventPayload,
@@ -123,6 +124,7 @@ import { createCorsHeaders } from "./http/cors.js";
 import { RequestBodyTooLargeError, readJsonBody, readRawBody } from "./http/requestBody.js";
 import { handleApprovalRoute } from "./routes/approvals.js";
 import { handleMissionRoute } from "./routes/missions.js";
+import { handleRmasRoute } from "./routes/rmas.js";
 import { handleGithubRoute } from "./routes/github.js";
 import { createGithubReadonlyClient } from "./integrations/githubReadonlyClient.js";
 import { parseRepoAllowlist } from "./integrations/githubCommentWriteGuards.js";
@@ -150,6 +152,9 @@ const githubPullRequestUpdatePlanStoreInstance = createGithubPullRequestUpdatePl
 const githubPullRequestLabelsUpdatePlanStoreInstance = createGithubPullRequestLabelsUpdatePlanStore();
 import { createMissionStore, type MissionStore } from "./missions/missionStore.js";
 import { missionTraceBus } from "./missions/missionTraceBus.js";
+import { createRmasRunStore, type RmasRunStore } from "./rmas/rmasRunStore.js";
+import { rmasTraceBus } from "./rmas/rmasTraceBus.js";
+import { createRmasRunController, type RmasRunController } from "./rmas/rmasRunController.js";
 import {
   disposeAllPreviews,
   startPreviewProcess,
@@ -5850,6 +5855,69 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
   const eventStorage = createJsonlServerEventStorage();
   const missionStore = createServerMissionStore(eventStorage);
 
+  // RMAS autonomous goal-loop stack — a thin parallel to the mission stack over
+  // the SAME EventStorage (no second store). The store persists rmas.* events;
+  // the controller owns the in-memory background loops + concurrency gate; the
+  // trace bus streams committed events to subscribed SSE sessions.
+  const rmasRunStore: RmasRunStore = createRmasRunStore({
+    loadEvents: async () => {
+      const state = await eventStorage.statePromise;
+      return [...state.eventsById.values()];
+    },
+    appendEvents: async (sessionId, envelopes) => {
+      const first = envelopes[0];
+      if (!first) {
+        return;
+      }
+      const response = await pushEventsToPersistentServerStorage(
+        {
+          id: `sync_rmas_${first.id}`,
+          clientId: "server_rmas",
+          sessionId,
+          events: envelopes,
+          idempotencyKey: `server_rmas:${sessionId}:${first.id}`,
+          createdAt: first.createdAt,
+        },
+        eventStorage,
+        first.createdAt,
+      );
+      const rejected = response.results.filter(
+        (result) => result.status !== "accepted" && result.status !== "duplicate",
+      );
+      if (rejected.length > 0) {
+        throw new Error(`rmas events rejected: ${rejected.map((result) => `${result.eventId}:${result.status}`).join(", ")}`);
+      }
+    },
+    // L1: broadcast committed rmas.* events to that run's SSE subscribers.
+    onEventsCommitted: (runId, envelopes) => {
+      rmasTraceBus.publish(runId, [...envelopes]);
+    },
+  });
+
+  // Single GPU host → default 1 concurrent run. POST /rmas/runs returns 429 when busy.
+  const rmasMaxConcurrent = Math.max(1, Number(process.env.RMAS_MAX_CONCURRENT_RUNS ?? 1) || 1);
+  const rmasController: RmasRunController = createRmasRunController({
+    // Bind the loop's completion path to the DGX proxy, threading the run's
+    // abort signal so in-flight calls cancel on stop / wall-clock.
+    complete: (request, ctx) => createDgxProviderCompletionResponse(request, { abortSignal: ctx.abortSignal }),
+    appendEvent: (runId, event) => rmasRunStore.appendEvent(runId, event),
+    maxConcurrent: rmasMaxConcurrent,
+  });
+
+  // Boot reconciliation (§1.1): any run left non-terminal by a previous process
+  // lifetime gets rmas.run.interrupted{server_restart}. We never auto-resume
+  // (resuming mid-completion risks double-spend).
+  void rmasRunStore
+    .reconcileInterrupted()
+    .then((runIds) => {
+      if (runIds.length > 0) {
+        console.info(`[orchestrator-server] reconciled ${runIds.length} interrupted RMAS run(s): ${runIds.join(", ")}`);
+      }
+    })
+    .catch((error) => {
+      console.warn(`[orchestrator-server] RMAS reconcile failed (non-fatal): ${error instanceof Error ? error.message : String(error)}`);
+    });
+
   // Advisory single-writer guard: two servers sharing one EVENT_STORAGE_DIR
   // interleave JSONL writes and corrupt approval state. Warn (or refuse, when
   // ORCHESTRATOR_STORAGE_LOCK_STRICT=1) instead of corrupting shared state.
@@ -6992,6 +7060,23 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       return;
     }
 
+    if (
+      await handleRmasRoute({
+        store: rmasRunStore,
+        controller: rmasController,
+        maxConcurrent: rmasMaxConcurrent,
+        request,
+        pathname,
+        method: request.method,
+        readJsonBody,
+        isRequestBodyTooLargeError: (error): error is RequestBodyTooLargeError =>
+          error instanceof RequestBodyTooLargeError,
+        respondJson,
+      })
+    ) {
+      return;
+    }
+
     if (pathname === "/events/sync" && request.method === "POST") {
       let payload: EventSyncPushRequest;
       try {
@@ -7079,6 +7164,33 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
       // 세션 종료 시 구독 해제(메모리/유령 구독 방지).
       request.once("close", () => missionTraceBus.unsubscribe(missionId, session));
       request.once("aborted", () => missionTraceBus.unsubscribe(missionId, session));
+      return;
+    }
+
+    // RMAS live trace stream (SSE) — mirror of the mission trace stream. Initial
+    // snapshot (current redacted trace, replayed from events → reattach works for
+    // a run started hours ago) followed by an incremental trace event per commit.
+    // Same source as GET /rmas/runs/:id (EventStorage-derived); no raw content on
+    // the wire. Sits behind the same top-level requireAuth() gate as /missions.
+    const rmasTraceStreamMatch = /^\/rmas\/runs\/([^/]+)\/trace\/stream$/.exec(pathname);
+    if (rmasTraceStreamMatch && request.method === "GET") {
+      const runId = decodeURIComponent(rmasTraceStreamMatch[1]!);
+      const record = await rmasRunStore.get(runId);
+      if (!record) {
+        respondJson(404, { error: "rmas_run_not_found", runId });
+        return;
+      }
+      const session = sseSessionRegistry.createSession({
+        request,
+        response,
+        headers: corsHeaders,
+        heartbeatPayload: () => ({ type: "heartbeat", runId, at: new Date().toISOString() }),
+      });
+      session.start();
+      session.writeEvent("rmas.trace.snapshot", deriveRmasTrace(record));
+      rmasTraceBus.subscribe(runId, session);
+      request.once("close", () => rmasTraceBus.unsubscribe(runId, session));
+      request.once("aborted", () => rmasTraceBus.unsubscribe(runId, session));
       return;
     }
 
