@@ -35,7 +35,12 @@ export async function requestCompletion(
   const body = JSON.stringify(request);
   const response = await fetchImpl(`${baseUrl}/provider-completions`, {
     method: "POST",
-    headers: await createDgxOrchestratorJsonHeaders("POST", "/provider-completions", baseUrl, { body }),
+    // targetUrl must be the FULL request URL (base+path), not the bare base:
+    // on a plain-http target the HMAC branch signs `new URL(targetUrl).pathname`,
+    // so a bare base signs "/" while the server verifies the real path → 401.
+    headers: await createDgxOrchestratorJsonHeaders("POST", "/provider-completions", `${baseUrl}/provider-completions`, {
+      body,
+    }),
     body,
   });
   const payload = (await response.json()) as ProviderCompletionResponse & { error?: string; message?: string };
@@ -105,7 +110,14 @@ export async function streamCompletion(
   try {
     response = await fetchImpl(`${baseUrl}/provider-completions/stream`, {
       method: "POST",
-      headers: await createDgxOrchestratorJsonHeaders("POST", "/provider-completions/stream", baseUrl, { body }),
+      // full request URL as targetUrl (see requestCompletion above) so the
+      // plain-http HMAC branch signs "/provider-completions/stream", not "/".
+      headers: await createDgxOrchestratorJsonHeaders(
+        "POST",
+        "/provider-completions/stream",
+        `${baseUrl}/provider-completions/stream`,
+        { body },
+      ),
       body,
       signal: connectController.signal,
     });
