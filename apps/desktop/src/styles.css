@@ -9219,6 +9219,96 @@ body:has(.app-shell.annex-focus-shell) {
   text-overflow: ellipsis;
 }
 
+/* --- 현재 작업 · 중지 (홈 전역 컨트롤) --- */
+.dashboard__running-empty {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 40%, transparent);
+  color: rgba(255, 255, 255, 0.44);
+  font-size: 12.5px;
+}
+.dashboard__running {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dashboard__running-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 60%, transparent);
+  font-size: 12.5px;
+}
+.dashboard__running-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--cyan);
+  box-shadow: 0 0 10px -2px var(--cyan);
+  animation: dashboard-running-pulse 1.6s ease-in-out infinite;
+}
+@keyframes dashboard-running-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.dashboard__running-kind {
+  flex: none;
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--cyan);
+  text-transform: uppercase;
+}
+.dashboard__running-label {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dashboard__running-status {
+  flex: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11.5px;
+}
+.dashboard__running-stop {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border: 1px solid color-mix(in srgb, var(--rose) 55%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--rose) 14%, transparent);
+  color: var(--rose);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dashboard__running-stop:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rose) 24%, transparent);
+}
+.dashboard__running-stop:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.dashboard__running-spin {
+  animation: dashboard-running-spin 0.9s linear infinite;
+}
+@keyframes dashboard-running-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* --- nav-center shell: sidebar + single clean center surface (대시보드/작전 탭) --- */
 .app-shell.nav-center-shell {
   /* 아이콘 온리 레일 — 라벨은 호버 title 툴팁으로(나브-센터 페이지에서만 264→56px) */

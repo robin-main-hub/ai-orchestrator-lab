@@ -1,8 +1,11 @@
 import { useState } from "react";
-import { ArrowRight, Bot, Cpu, LayoutGrid, MessagesSquare, Radar, ShieldCheck, Swords, TerminalSquare } from "lucide-react";
+import { ArrowRight, Bot, Cpu, LayoutGrid, MessagesSquare, Radar, Swords, TerminalSquare } from "lucide-react";
 import { StatusBadge } from "@/ui/status-badge";
 import { COCKPIT_HEALTH_LABEL, type CockpitHealthRollup } from "../lib/cockpitHealthRollup";
 import type { CockpitNextActionItem } from "../lib/cockpitNextActions";
+import type { WorkTraceSearchItem } from "../lib/workTraceSearch";
+import { WorkReceiptLedgerCard } from "./operator-cockpit/WorkReceiptLedgerCard";
+import { RunningWorkCard, type RunningWorkItem } from "./RunningWorkCard";
 import { loadHermesPool } from "../lib/hermesPoolStore";
 import { buildCodexDetail, type CodexDetail } from "../lib/personaCodexDetail";
 import { personaBundleMap } from "../lib/personaBundleSource";
@@ -65,30 +68,40 @@ export function DashboardView({
   personaAvatars = {},
   runtime,
   hermesPool,
-  pendingApprovals,
   healthRollup,
   onActivateNextAction,
   history,
   onNavigate,
-  onOpenApprovalQueue,
   onSummonPersona,
+  workTraceItems = [],
+  runningWork = [],
+  onStopWork,
+  stoppingWorkIds = [],
 }: {
   personas: DashboardPersona[];
   /** avatar url per persona slug — codex cards pick art up automatically */
   personaAvatars?: Record<string, string | undefined>;
   runtime: RuntimeSnapshot;
   hermesPool: HermesPoolSummary;
-  pendingApprovals: number;
-  /** 콕핏 L1과 공유하는 건강 롤업 — "다음 할 일 1개"를 구동(없으면 블록 생략) */
+  /**
+   * 콕핏 L1과 공유하는 건강 롤업 — "다음 할 일 1개"를 구동. 완전 자동 운영 전환 후
+   * 홈에서는 승인류 액션은 노출하지 않고, 승인이 아닌 유효한 다음 액션이 있을 때만 뜬다.
+   */
   healthRollup?: CockpitHealthRollup;
   /** "다음 할 일" CTA 클릭 — targetSurface별 라우팅 */
   onActivateNextAction?: (action: CockpitNextActionItem) => void;
   history?: AutonomyRunSummary[];
   onNavigate: (target: { nav?: NavItemId; mode?: CenterMode }) => void;
-  /** 승인 대기 펄스 클릭 — Control Queue 드로어 열기 */
-  onOpenApprovalQueue?: () => void;
   /** 도감 상세에서 "소환" — 대상 탭으로 이동하며 페르소나를 프리필 */
   onSummonPersona?: (personaName: string, target: "autonomy" | "parallel") => void;
+  /** "해온 업무" 요약에 쓰는 작업 추적 인덱스 (append-only 공개 영수증) */
+  workTraceItems?: WorkTraceSearchItem[];
+  /** 지금 진행 중인 작업 (RMAS 실행 등) */
+  runningWork?: RunningWorkItem[];
+  /** "현재 작업" 항목 중지 요청 */
+  onStopWork?: (id: string) => void;
+  /** 중지 요청이 진행 중인 항목 id */
+  stoppingWorkIds?: string[];
 }) {
   const onlineNodes = runtime.runtimeNodes.filter((node) => node.status === "online").length;
   const recentRuns = (history ?? []).slice(0, 4);
@@ -102,12 +115,19 @@ export function DashboardView({
     setCodexDetail(buildCodexDetail(entry, { bundleMap: personaBundleMap, slots: loadHermesPool().slots }));
   };
 
+  // 완전 자동 운영 전환 후 홈은 승인 attention을 노출하지 않는다.
+  // 승인류(approvals/control_queue) 다음 액션은 숨기고, 승인이 아닌 유효한
+  // 다음 액션이 있을 때만 "다음 할 일" 카드를 띄운다.
   const topAction = healthRollup?.topAction;
+  const homeAction =
+    topAction && topAction.targetSurface !== "approvals" && topAction.targetSurface !== "control_queue"
+      ? topAction
+      : undefined;
 
   return (
     <div className="dashboard">
       <div className="dashboard__top">
-      {healthRollup ? (
+      {healthRollup && homeAction ? (
         <section
           className={`dashboard__next dashboard__next--${healthRollup.level}`}
           aria-label="다음 할 일"
@@ -115,19 +135,16 @@ export function DashboardView({
           <div className="dashboard__next-head">
             <span className="dashboard__next-dot" aria-hidden />
             <span className="dashboard__next-status">{COCKPIT_HEALTH_LABEL[healthRollup.level]}</span>
-            <span className="dashboard__next-signal">{healthRollup.signalSummary}</span>
           </div>
-          <p className="dashboard__next-headline">{healthRollup.headline}</p>
-          {topAction ? (
-            <button
-              className="dashboard__next-cta"
-              onClick={() => onActivateNextAction?.(topAction)}
-              type="button"
-            >
-              <span>{topAction.ctaLabel}</span>
-              <ArrowRight size={16} aria-hidden />
-            </button>
-          ) : null}
+          <p className="dashboard__next-headline">{homeAction.label}</p>
+          <button
+            className="dashboard__next-cta"
+            onClick={() => onActivateNextAction?.(homeAction)}
+            type="button"
+          >
+            <span>{homeAction.ctaLabel}</span>
+            <ArrowRight size={16} aria-hidden />
+          </button>
         </section>
       ) : null}
 
@@ -150,21 +167,17 @@ export function DashboardView({
             <span className="dashboard__pulse-label">Hermes 슬롯</span>
             <strong>사용 {hermesPool.bound} · 여유 {hermesPool.spare}</strong>
           </div>
-          {/* 완전 자동 운영에선 대기 0이 정상 — 승인 대기 펄스는 실제 대기가 있을 때만 노출한다. */}
-          {pendingApprovals > 0 ? (
-            <button
-              className="dashboard__pulse-item dashboard__pulse-button attention"
-              onClick={() => onOpenApprovalQueue?.()}
-              type="button"
-              title="승인 큐 열기"
-            >
-              <ShieldCheck size={14} aria-hidden />
-              <span className="dashboard__pulse-label">승인 대기</span>
-              <strong>{pendingApprovals}건</strong>
-            </button>
-          ) : null}
+          {/* 완전 자동 운영 — 승인 attention 펄스는 제거(PR #1089 후속). */}
         </div>
       </header>
+
+      {/* 홈의 핵심: 지금 무엇이 돌고 있고(중지), 무엇을 해왔는가(요약). */}
+      <RunningWorkCard items={runningWork} onStop={onStopWork} stoppingIds={stoppingWorkIds} />
+
+      <section className="dashboard__section" aria-label="해온 업무">
+        <h2 className="dashboard__section-title">해온 업무</h2>
+        <WorkReceiptLedgerCard compact items={workTraceItems} />
+      </section>
       </div>
 
       <section className="dashboard__section" aria-label="작전 바로가기">
