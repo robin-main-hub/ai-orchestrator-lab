@@ -157,6 +157,18 @@ export const seededProviderProfiles: ProviderProfile[] = [
   },
   {
     ...createProviderProfile({
+      id: "provider_rmas_dgx02",
+      name: "RMAS DGX-02",
+      kind: "openai",
+      baseUrl: "http://100.71.215.84:4041/v1",
+      defaultModel: "rmas-sequential-light",
+      tags: ["rmas", "dgx", "latent-mas", "server-proxy", "no-auth"],
+      trustLevel: "trusted",
+    }),
+    modelDiscoveryEndpoint: "http://100.71.215.84:4041/v1/models",
+  },
+  {
+    ...createProviderProfile({
       id: "provider_codex_oauth",
       name: "Codex OAuth Session",
       kind: "custom",
@@ -402,6 +414,9 @@ export const seededModelCatalog: ModelCatalog = {
     "qwen36-heretic",
     "qwen36-domain-lora-v5-prisma",
   ].map((id) => createModel("provider_openclaw_dgx", id, ["openclaw", "dgx", "vllm"])),
+  provider_rmas_dgx02: [
+    createModel("provider_rmas_dgx02", "rmas-sequential-light", ["rmas", "dgx", "latent-mas"]),
+  ],
   provider_codex_oauth: [
     "codex-session",
     "codex-high",

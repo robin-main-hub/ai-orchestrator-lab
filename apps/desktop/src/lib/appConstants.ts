@@ -9,7 +9,7 @@ export const providerProfilesStorageKey = "ai-orchestrator-lab.provider-profiles
 export const legacyProviderSessionSecretsStorageKey = "ai-orchestrator-lab.provider-session-secrets.v1";
 export const providerDefaultCredentialsStorageKey = "ai-orchestrator-lab.provider-default-credentials.v1";
 export const providerProfilesSeedVersionKey = "ai-orchestrator-lab.provider-profiles.seed-version";
-export const providerProfilesSeedVersion = "2026-06-05-mimo-token-plan-all-agents";
+export const providerProfilesSeedVersion = "2026-07-09-rmas-dgx02-provider";
 export const defaultObsidianVaultRoot = "F:/obsidian/ai-headquarter";
 
 export const agentRoleOptions: WorkbenchAgent["role"][] = [

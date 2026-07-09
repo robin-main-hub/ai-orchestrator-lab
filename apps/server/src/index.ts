@@ -817,6 +817,15 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     defaultModelIds: ["qwen36-heretic", "qwen36-domain-lora-v5-prisma"],
     supportsModelList: true,
   },
+  {
+    providerProfileId: "provider_rmas_dgx02",
+    baseUrl: process.env.RMAS_DGX02_BASE_URL ?? "http://100.71.215.84:4041/v1",
+    apiKeyEnvNames: [],
+    noAuth: true,
+    apiStyle: "openai_chat",
+    defaultModelIds: ["rmas-sequential-light"],
+    supportsModelList: true,
+  },
 ];
 
 export type ServerEventStorageState = {
@@ -1451,6 +1460,7 @@ function createServerProviderDisplayName(providerProfileId: string) {
     provider_mimo_token_openai: "MiMo Token Plan OpenAI",
     provider_mimo_token_anthropic: "MiMo Token Plan Anthropic",
     provider_openclaw_dgx: "DGX-02 OpenClaw vLLM",
+    provider_rmas_dgx02: "RMAS DGX-02 (latent MAS)",
   };
 
   return names[providerProfileId] ?? providerProfileId;

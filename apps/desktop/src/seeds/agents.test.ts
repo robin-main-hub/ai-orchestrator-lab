@@ -17,6 +17,16 @@ describe("seeded MiMo Token Plan bindings", () => {
     expect(seededModelCatalog.provider_mimo_token_anthropic?.map((model) => model.id)).toContain("mimo-v2.5-pro");
   });
 
+  it("registers the RecursiveMAS latent-engine provider for the goal loop", () => {
+    const rmas = seededProviderProfiles.find((provider) => provider.id === "provider_rmas_dgx02");
+
+    expect(rmas?.baseUrl).toBe("http://100.71.215.84:4041/v1");
+    expect(rmas?.defaultModel).toBe("rmas-sequential-light");
+    expect(rmas?.trustLevel).toBe("trusted");
+    expect(rmas?.secretRef).toBeUndefined();
+    expect(seededModelCatalog.provider_rmas_dgx02?.map((model) => model.id)).toContain("rmas-sequential-light");
+  });
+
   it("does not expose mock providers or mock models in runtime seeds", () => {
     expect(seededProviderProfiles.some((provider) => provider.id === "provider_mock_local")).toBe(false);
     expect(seededProviderProfiles.some((provider) => provider.tags.includes("mock"))).toBe(false);
