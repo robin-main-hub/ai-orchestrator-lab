@@ -13,11 +13,17 @@ export function WorkReceiptLedgerCard({
   initialQuery = "",
   items,
   onOpenTrace,
+  compact = false,
+  maxItems,
 }: {
   initialKind?: WorkReceiptKindFilter;
   initialQuery?: string;
   items: WorkTraceSearchItem[];
   onOpenTrace?: (item: WorkTraceSearchItem) => void;
+  /** 홈 등 좁은 자리용 — 검색·필터·요약·푸터를 접고 최근 N건만 보여준다 */
+  compact?: boolean;
+  /** 표시할 최근 항목 수 (기본: compact=5, 그 외 8) */
+  maxItems?: number;
 }) {
   const [query, setQuery] = useState(initialQuery);
   const [kindFilter, setKindFilter] = useState<WorkReceiptKindFilter>(initialKind);
@@ -26,7 +32,7 @@ export function WorkReceiptLedgerCard({
     const queriedItems = query.trim() ? searchWorkTraceIndex(sortedItems, query) : sortedItems;
     return queriedItems.filter((item) => kindFilter === "all" || item.kind === kindFilter);
   }, [kindFilter, query, sortedItems]);
-  const recentItems = visibleItems.slice(0, 8);
+  const recentItems = visibleItems.slice(0, maxItems ?? (compact ? 5 : 8));
   const unsafeCount = items.filter((item) => !item.searchable).length;
   const searchableCount = items.length - unsafeCount;
   const sourceSummary = createReceiptSourceSummary(items);
@@ -51,16 +57,19 @@ export function WorkReceiptLedgerCard({
         </div>
       </GlassPanelHeader>
 
-      <div className="grid gap-2 border-b border-zinc-800/60 px-4 py-3 text-[11px] sm:grid-cols-3">
-        <ReceiptSummaryPill label="총" value={`${items.length}건`} />
-        <ReceiptSummaryPill label="검색" tone="safe" value={`${searchableCount}건`} />
-        <ReceiptSummaryPill label="점검" tone={unsafeCount > 0 ? "warn" : "safe"} value={`${unsafeCount}건`} />
-        <div className="min-w-0 rounded-md border border-zinc-800/70 bg-black/15 px-3 py-2 text-zinc-500 sm:col-span-3">
-          <span className="font-medium text-zinc-300">출처</span>{" "}
-          {sourceSummary.length > 0 ? sourceSummary.join(" · ") : "아직 없음"}
+      {!compact ? (
+        <div className="grid gap-2 border-b border-zinc-800/60 px-4 py-3 text-[11px] sm:grid-cols-3">
+          <ReceiptSummaryPill label="총" value={`${items.length}건`} />
+          <ReceiptSummaryPill label="검색" tone="safe" value={`${searchableCount}건`} />
+          <ReceiptSummaryPill label="점검" tone={unsafeCount > 0 ? "warn" : "safe"} value={`${unsafeCount}건`} />
+          <div className="min-w-0 rounded-md border border-zinc-800/70 bg-black/15 px-3 py-2 text-zinc-500 sm:col-span-3">
+            <span className="font-medium text-zinc-300">출처</span>{" "}
+            {sourceSummary.length > 0 ? sourceSummary.join(" · ") : "아직 없음"}
+          </div>
         </div>
-      </div>
+      ) : null}
 
+      {!compact ? (
       <div className="space-y-2 border-b border-zinc-800/60 px-4 py-3">
         <label className="flex items-center gap-2 rounded-lg border border-zinc-800/70 bg-black/20 px-3 py-2 text-xs text-zinc-400">
           <Search className="h-3.5 w-3.5 text-cyan-300" />
@@ -95,6 +104,7 @@ export function WorkReceiptLedgerCard({
           </span>
         </div>
       </div>
+      ) : null}
 
       <div className="divide-y divide-zinc-800/60">
         {recentItems.length > 0 ? (
@@ -189,20 +199,22 @@ export function WorkReceiptLedgerCard({
           </div>
         )}
       </div>
-      <div className="border-t border-zinc-800/60 px-4 py-3">
-        <a
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-cyan-200 transition-colors hover:text-cyan-100"
-          href="https://github.com/robin-main-hub/ai-orchestrator-lab/issues/251"
-          rel="noreferrer"
-          target="_blank"
-        >
-          GitHub #251 운영 장부
-          <ExternalLink className="h-3 w-3" />
-        </a>
-        <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
-          PR, 테스트, 에이전트 보고, 보정 기록은 공개 영수증과 함께 이 장부에 남깁니다.
-        </p>
-      </div>
+      {!compact ? (
+        <div className="border-t border-zinc-800/60 px-4 py-3">
+          <a
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-cyan-200 transition-colors hover:text-cyan-100"
+            href="https://github.com/robin-main-hub/ai-orchestrator-lab/issues/251"
+            rel="noreferrer"
+            target="_blank"
+          >
+            GitHub #251 운영 장부
+            <ExternalLink className="h-3 w-3" />
+          </a>
+          <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+            PR, 테스트, 에이전트 보고, 보정 기록은 공개 영수증과 함께 이 장부에 남깁니다.
+          </p>
+        </div>
+      ) : null}
     </GlassPanel>
   );
 }

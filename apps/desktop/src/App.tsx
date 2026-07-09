@@ -295,6 +295,7 @@ import { ParallelMissionContainer } from "./components/ParallelMissionContainer"
 import { CodingWorkbench } from "./components/coding/CodingWorkbench";
 import { ResearchSwarmContainer } from "./components/research/ResearchSwarmContainer";
 import { RmasRunView } from "./components/rmas/RmasRunView";
+import { useRunningRmasRuns } from "./components/rmas/useRunningRmasRuns";
 import { OperatorCockpit } from "./components/operator-cockpit/OperatorCockpit";
 import { AgentsSidebar } from "./components/AgentsSidebar";
 import { BackupRailMenu } from "./components/BackupRailMenu";
@@ -5039,6 +5040,11 @@ export function App() {
     () => deriveCockpitHealthFromSnapshot(cockpitSnapshot, cockpitReadiness.nextActions),
     [cockpitSnapshot, cockpitReadiness.nextActions],
   );
+  // 홈 "현재 작업 · 중지" — 서버 RMAS 실행을 폴링해 진행 중인 것만 노출/중지한다.
+  // (autonomy 실행은 stop 핸들이 없어 미포함)
+  const runningRmasRuns = useRunningRmasRuns({
+    serverBaseUrl: resolveDgxServerBaseUrls(undefined)[0] ?? DEFAULT_DGX_SERVER_BASE_URL,
+  });
   // 대시보드 "오늘의 파티" — 하드코딩 2명 대신 날짜 로테이션 + 현재 활성(Hermes 슬롯)
   // + 최근 작전 페르소나를 앞세워 매일 바뀌게. (왜 오늘인지 reason 포함)
   const dashboardParty = useMemo(() => {
@@ -5324,9 +5330,12 @@ export function App() {
               personaAvatars={dashboardPersonaAvatars}
               runtime={runtimeSnapshotState}
               hermesPool={summarizeHermesPool(loadHermesPool())}
-              pendingApprovals={unifiedControlQueueSnapshot.summary.pending}
               healthRollup={dashboardHealthRollup}
               onActivateNextAction={handleDashboardNextAction}
+              workTraceItems={cockpitReadiness.workTraceItems}
+              runningWork={runningRmasRuns.items}
+              onStopWork={runningRmasRuns.stop}
+              stoppingWorkIds={runningRmasRuns.stoppingIds}
               history={projectAutonomyRunHistory(eventLog)}
               onNavigate={(target) => {
                 if (target.mode) {
@@ -5339,7 +5348,6 @@ export function App() {
                 setProviderRegistrationOpen(nextNav === "providers");
                 setAdminRailOpen(false);
               }}
-              onOpenApprovalQueue={openControlQueue}
               onSummonPersona={(personaName, target) => {
                 setSummonSeedPersona(personaName);
                 setSummonSeedMode(target === "parallel" ? "parallel" : "single");
