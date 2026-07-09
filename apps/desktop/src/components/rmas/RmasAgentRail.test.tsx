@@ -28,9 +28,10 @@ describe("RmasAgentRail", () => {
     expect(html).toContain("Critic");
     // disabled slot is not rendered
     expect(html).not.toContain("Hidden");
-    // thinking dot pulses
-    expect(html).toContain("animate-pulse");
-    // token counters use full-number grouping
+    // status dots are CSS-driven by data-tone (thinking pulses via .rmas-dot[data-tone="thinking"])
+    expect(html).toContain('data-tone="thinking"');
+    expect(html).toContain('data-tone="done"');
+    // token counters use full-number grouping (count-up starts at the target on first render)
     expect(html).toContain((4600).toLocaleString());
     expect(html).toContain("입력 토큰");
     expect(html).toContain("계획자 → 비평가 → 해결사 순서로 처리");

@@ -42,7 +42,8 @@ describe("agentDotMeta", () => {
     expect(agentDotMeta("done")).toMatchObject({ tone: "done", label: "완료" });
     expect(agentDotMeta("error")).toMatchObject({ tone: "error", label: "오류" });
     expect(agentDotMeta(undefined).tone).toBe("idle");
-    expect(agentDotMeta("thinking").className).toContain("animate-pulse");
+    // color/pulse is CSS-driven off the tone (no className carried on the model)
+    expect(agentDotMeta("thinking")).not.toHaveProperty("className");
   });
 });
 

@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Settings2 } from "lucide-react";
 import type { ProviderProfile } from "@ai-orchestrator/protocol";
 import type { ModelCatalog } from "../../types";
-import { Button } from "../../ui/button";
 import { RmasAgentRail } from "./RmasAgentRail";
 import { RmasControlBar } from "./RmasControlBar";
 import { RmasLogFeed } from "./RmasLogFeed";
@@ -76,10 +75,15 @@ export function RmasRunView({
   const elapsedLabel = useMemo(() => formatElapsed(elapsedMs), [elapsedMs]);
 
   return (
-    <div className="nav-center-page flex h-full min-h-0 flex-col" data-page="rmas">
-      {/* Top bar */}
-      <div className="flex items-center gap-3 border-b border-border bg-card/40 px-3 py-2">
-        <div className="flex items-center gap-1" role="tablist" aria-label="패턴">
+    <div className="rmas" data-page="rmas">
+      {/* Header + notices share one grid area ("header") so every other cell —
+          rail / feed / bar — keeps its own track. The header itself is a 2-cell
+          grid (좌: 패턴 탭 / 우: 타이머 + 설정), so the timer/설정 can never
+          overlap the tabs or the agent cards below (structural fix for the old
+          overlap bug). */}
+      <div className="rmas__top">
+      <header className="rmas__header">
+        <div className="rmas__patterns" role="tablist" aria-label="패턴">
           {RMAS_PATTERNS.map((pattern) => {
             const active = displayPattern === pattern;
             return (
@@ -90,52 +94,43 @@ export function RmasRunView({
                 aria-selected={active}
                 disabled={running}
                 onClick={() => selectPattern(pattern)}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                  active
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                }`}
+                className="rmas__pattern-tab"
               >
                 {PATTERN_LABEL[pattern]}
               </button>
             );
           })}
         </div>
-        <div className="ml-auto flex items-center gap-3">
-          <span className="font-mono text-sm tabular-nums text-foreground" aria-label="경과 시간">
+        <div className="rmas__header-right">
+          <span className="rmas__timer rmas-mono" data-live={running} aria-label="경과 시간">
             {elapsedLabel}
           </span>
-          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setSettingsOpen(true)}>
-            <Settings2 className="h-4 w-4" />
+          <button type="button" className="rmas__gear" onClick={() => setSettingsOpen(true)}>
+            <Settings2 className="h-4 w-4" aria-hidden />
             설정
-          </Button>
+          </button>
         </div>
+      </header>
+
+        {reattaching ? <div className="rmas__notice">진행 중인 실행을 확인하는 중…</div> : null}
+        {error ? (
+          <div className="rmas__notice" data-tone="error" role="alert">
+            {error}
+          </div>
+        ) : null}
       </div>
 
-      {reattaching ? (
-        <div className="border-b border-border bg-muted/30 px-3 py-1 text-[11px] text-muted-foreground">
-          진행 중인 실행을 확인하는 중…
-        </div>
-      ) : null}
-      {error ? (
-        <div className="border-b border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs text-red-600 dark:text-red-400" role="alert">
-          {error}
-        </div>
-      ) : null}
+      {/* Body: agent rail (grid area "rail") + live feed (grid area "feed") */}
+      <RmasAgentRail
+        agents={displayAgents}
+        perAgentStatus={perAgentStatus}
+        providers={providerProfiles}
+        tokens={tokens}
+        pattern={displayPattern}
+      />
+      <RmasLogFeed trace={trace} record={record} />
 
-      {/* Body: rail + feed */}
-      <div className="flex min-h-0 flex-1">
-        <RmasAgentRail
-          agents={displayAgents}
-          perAgentStatus={perAgentStatus}
-          providers={providerProfiles}
-          tokens={tokens}
-          pattern={displayPattern}
-        />
-        <RmasLogFeed trace={trace} record={record} />
-      </div>
-
-      {/* Bottom control bar */}
+      {/* Bottom control bar (grid area "bar" — spans full width) */}
       <RmasControlBar
         goal={goal}
         onGoalChange={setGoal}
