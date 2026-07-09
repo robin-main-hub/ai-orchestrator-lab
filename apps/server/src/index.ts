@@ -390,6 +390,13 @@ type ServerProviderProxyConfig = {
   apiStyle?: "openai_chat" | "anthropic_messages";
   defaultModelIds: string[];
   supportsModelList?: boolean;
+  /**
+   * When true, a completion may target a modelId outside defaultModelIds as long
+   * as it appears in the provider's live-discovered /models list (cached with a
+   * short TTL). Only meaningful together with supportsModelList. Providers without
+   * this flag keep the strict defaultModelIds-only allowlist (fail closed).
+   */
+  allowDiscoveredModels?: boolean;
   oauthAuthFileEnvName?: string;
   defaultOAuthAuthFile?: string;
   oauthAccountLabel?: string;
@@ -827,6 +834,28 @@ const serverProviderProxyConfigs: ServerProviderProxyConfig[] = [
     apiStyle: "openai_chat",
     defaultModelIds: ["rmas-sequential-light"],
     supportsModelList: true,
+  },
+  {
+    // Local codexopen proxy (fork on :10200). No auth, OpenAI-compatible /v1.
+    // It advertises many models across vendors (ids may contain "/", e.g.
+    // "anthropic/claude-opus-4-8"), so allowDiscoveredModels lets any live-listed
+    // model be selected/swapped freely instead of freezing on the static seven.
+    providerProfileId: "provider_codexopen",
+    baseUrl: process.env.CODEXOPEN_BASE_URL ?? "http://127.0.0.1:10200/v1",
+    apiKeyEnvNames: [],
+    noAuth: true,
+    apiStyle: "openai_chat",
+    defaultModelIds: [
+      "gpt-5.5",
+      "gpt-5.4-mini",
+      "anthropic/claude-opus-4-8",
+      "anthropic/claude-sonnet-5",
+      "xiaomi/mimo-v2.5-pro",
+      "kimi/kimi-k2.7-code",
+      "google-vertex/gemini-3.5-flash",
+    ],
+    supportsModelList: true,
+    allowDiscoveredModels: true,
   },
 ];
 
@@ -1463,6 +1492,7 @@ function createServerProviderDisplayName(providerProfileId: string) {
     provider_mimo_token_anthropic: "MiMo Token Plan Anthropic",
     provider_openclaw_dgx: "DGX-02 OpenClaw vLLM",
     provider_rmas_dgx02: "RMAS DGX-02 (latent MAS)",
+    provider_codexopen: "codexopen 프록시",
   };
 
   return names[providerProfileId] ?? providerProfileId;
@@ -1529,6 +1559,103 @@ function resolveServerProviderTrustLevel(providerProfileId: string): ProviderTru
   return createServerProviderTrustLevel(providerProfileId);
 }
 
+type DiscoveredModelCacheEntry = { modelIds: Set<string>; expiresAt: number };
+
+const discoveredModelCacheByProviderId = new Map<string, DiscoveredModelCacheEntry>();
+const DISCOVERED_MODEL_CACHE_TTL_MS = 60_000;
+const DISCOVERED_MODEL_CACHE_FAILURE_TTL_MS = 5_000;
+
+function getCachedDiscoveredModelIds(providerProfileId: string, now = Date.now()): Set<string> | undefined {
+  const cached = discoveredModelCacheByProviderId.get(providerProfileId);
+  if (!cached || cached.expiresAt <= now) {
+    return undefined;
+  }
+  return cached.modelIds;
+}
+
+/**
+ * Synchronous allowlist check used by the completion gate. A modelId is allowed
+ * when it is in the static defaultModelIds, or (only when allowDiscoveredModels
+ * is set) when a fresh cached discovery snapshot advertises it. A cold or expired
+ * cache fails closed to defaults-only until refreshed out of band.
+ */
+export function isServerProviderModelAllowed(config: ServerProviderProxyConfig, modelId: string): boolean {
+  if (config.defaultModelIds.includes(modelId)) {
+    return true;
+  }
+  if (!config.allowDiscoveredModels) {
+    return false;
+  }
+  const discovered = getCachedDiscoveredModelIds(config.providerProfileId);
+  return discovered ? discovered.has(modelId) : false;
+}
+
+/**
+ * Refreshes and caches the discovered-model allowlist for an allowDiscoveredModels
+ * provider by reusing the existing model-discovery path (OpenAICompatibleAdapter
+ * discoverModels + static fallback). On any non-remote-probe result we fail closed
+ * to defaultModelIds only, with a short failure TTL so a transient outage recovers.
+ */
+export async function refreshDiscoveredModelCacheForProvider(
+  providerProfileId: string,
+  options: DgxProviderCompletionOptions = {},
+): Promise<Set<string>> {
+  const config = serverProviderProxyConfigs.find((candidate) => candidate.providerProfileId === providerProfileId);
+  if (!config || !config.allowDiscoveredModels || !config.supportsModelList) {
+    return new Set(config?.defaultModelIds ?? []);
+  }
+
+  const now = Date.now();
+  let succeeded = false;
+  let allowedIds = new Set(config.defaultModelIds);
+  try {
+    const discovery = await createServerProviderModelDiscoveryResponse(providerProfileId, options);
+    succeeded = discovery.status === "succeeded" && discovery.source === "remote_probe";
+    if (succeeded) {
+      allowedIds = new Set([...config.defaultModelIds, ...discovery.models.map((model) => model.id)]);
+    }
+  } catch {
+    // fail closed: keep defaults-only allowance on discovery failure
+    succeeded = false;
+    allowedIds = new Set(config.defaultModelIds);
+  }
+
+  discoveredModelCacheByProviderId.set(providerProfileId, {
+    modelIds: allowedIds,
+    expiresAt: now + (succeeded ? DISCOVERED_MODEL_CACHE_TTL_MS : DISCOVERED_MODEL_CACHE_FAILURE_TTL_MS),
+  });
+  return allowedIds;
+}
+
+/**
+ * Primes the discovered-model cache before a gate evaluation when the request
+ * targets a non-default model on an allowDiscoveredModels provider. Callers invoke
+ * this from their async context; the gate itself stays synchronous and only reads
+ * the cache. Discovery failures are swallowed so the gate fails closed to defaults.
+ */
+export async function ensureDiscoveredModelAllowance(
+  request: ProviderCompletionRequest,
+  options: DgxProviderCompletionOptions = {},
+): Promise<void> {
+  const config = serverProviderProxyConfigs.find(
+    (candidate) => candidate.providerProfileId === request.providerProfileId,
+  );
+  if (!config || !config.allowDiscoveredModels) {
+    return;
+  }
+  if (config.defaultModelIds.includes(request.modelId)) {
+    return;
+  }
+  if (getCachedDiscoveredModelIds(request.providerProfileId)) {
+    return;
+  }
+  try {
+    await refreshDiscoveredModelCacheForProvider(request.providerProfileId, options);
+  } catch {
+    // leave cache empty so the gate denies the non-default model (fail closed)
+  }
+}
+
 export function evaluateServerProviderCompletionPermission(
   request: ProviderCompletionRequest,
 ): ServerPermissionGateResult {
@@ -1576,7 +1703,7 @@ export function evaluateServerProviderCompletionPermission(
     };
   }
 
-  if (config && !config.defaultModelIds.includes(request.modelId)) {
+  if (config && !isServerProviderModelAllowed(config, request.modelId)) {
     return {
       action: "provider_completion",
       approvalState: "rejected",
@@ -1950,6 +2077,7 @@ async function createServerAgentDelegationCompletionWithGate(
   storage: JsonlServerEventStorage,
   replay?: ApprovalReplayRequest,
 ): Promise<ProviderCompletionResponse> {
+  await ensureDiscoveredModelAllowance(request);
   const permission = evaluateServerProviderCompletionPermission(request);
   if (permission.decision !== "allow") {
     const approval =
@@ -4817,7 +4945,7 @@ export async function createServerProviderProxyCompletionResponse(
     };
   }
 
-  if (!config.defaultModelIds.includes(request.modelId)) {
+  if (!isServerProviderModelAllowed(config, request.modelId)) {
     return {
       id: `provider_completion_response_${crypto.randomUUID()}`,
       requestId: request.id,
@@ -6182,6 +6310,7 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         });
         return;
       }
+      await ensureDiscoveredModelAllowance(payload);
       const permission = evaluateServerProviderCompletionPermission(payload);
       if (permission.decision !== "allow") {
         let approval: ApprovalRequest | undefined;
@@ -6224,6 +6353,7 @@ export function startServer(port = Number(process.env.PORT ?? 4317)) {
         });
         return;
       }
+      await ensureDiscoveredModelAllowance(payload);
       const permission = evaluateServerProviderCompletionPermission(payload);
       if (permission.decision !== "allow") {
         respondJson(403, {

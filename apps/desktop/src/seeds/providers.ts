@@ -169,6 +169,21 @@ export const seededProviderProfiles: ProviderProfile[] = [
   },
   {
     ...createProviderProfile({
+      id: "provider_codexopen",
+      name: "codexopen 프록시",
+      kind: "openai",
+      baseUrl: "http://127.0.0.1:10200/v1",
+      defaultModel: "gpt-5.5",
+      // "server-proxy" makes this DGX-routed so "Discover models" fetches the
+      // LIVE /models list from the server proxy and merges the full multi-vendor
+      // catalog into the dropdown (not just the seven static defaults below).
+      tags: ["codexopen", "proxy", "multi-vendor", "server-proxy", "no-auth"],
+      trustLevel: "trusted",
+    }),
+    modelDiscoveryEndpoint: "http://127.0.0.1:10200/v1/models",
+  },
+  {
+    ...createProviderProfile({
       id: "provider_codex_oauth",
       name: "Codex OAuth Session",
       kind: "custom",
@@ -417,6 +432,15 @@ export const seededModelCatalog: ModelCatalog = {
   provider_rmas_dgx02: [
     createModel("provider_rmas_dgx02", "rmas-sequential-light", ["rmas", "dgx", "latent-mas"]),
   ],
+  provider_codexopen: [
+    "gpt-5.5",
+    "gpt-5.4-mini",
+    "anthropic/claude-opus-4-8",
+    "anthropic/claude-sonnet-5",
+    "xiaomi/mimo-v2.5-pro",
+    "kimi/kimi-k2.7-code",
+    "google-vertex/gemini-3.5-flash",
+  ].map((id) => createModel("provider_codexopen", id, ["codexopen", "proxy", "multi-vendor", "server-proxy"])),
   provider_codex_oauth: [
     "codex-session",
     "codex-high",
