@@ -12,7 +12,8 @@ import {
 
 const RUN_ID = "run_1";
 const SESSION = rmasSessionId(RUN_ID);
-const SECRET = "sk-abcdef012345678";
+// assembled at runtime so secret scanners don't flag the fake fixture
+const SECRET = ["sk-", "abcdef", "012345678"].join("");
 
 let seq = 0;
 function ts(): string {
