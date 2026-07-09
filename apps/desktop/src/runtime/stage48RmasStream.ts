@@ -129,7 +129,10 @@ export async function openRmasTraceStream(runId: string, callbacks: RmasStreamCa
 
   let response: Response;
   try {
-    const headers = await createDgxOrchestratorAuthHeaders("GET", path, baseUrl);
+    // targetUrl must be the FULL request URL (base+path): on a plain-http target
+    // the HMAC branch signs `new URL(targetUrl).pathname`, so a bare base signs
+    // "/" while the server verifies the real path → 401 on every LAN/local call.
+    const headers = await createDgxOrchestratorAuthHeaders("GET", path, `${baseUrl}${path}`);
     response = await fetchImpl(`${baseUrl}${path}`, {
       method: "GET",
       headers: { accept: "text/event-stream", ...headers },

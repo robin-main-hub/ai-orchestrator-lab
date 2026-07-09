@@ -51,7 +51,10 @@ async function requestJson<T>(
   const headers = await createDgxOrchestratorJsonHeaders(
     method,
     path,
-    baseUrl,
+    // targetUrl must be the FULL request URL (base+path), not the bare base:
+    // on a plain-http target the HMAC branch signs `new URL(targetUrl).pathname`,
+    // so a bare base signs "/" while the server verifies the real path → 401.
+    `${baseUrl}${path}`,
     bodyText === undefined ? {} : { body: bodyText },
   );
   const response = await fetchImpl(`${baseUrl}${path}`, {

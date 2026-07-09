@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RmasTraceEvent } from "@ai-orchestrator/protocol";
 import { dispatchRmasFrame, openRmasTraceStream, parseSseFrame } from "./stage48RmasStream";
-import { __test as authTest } from "./stage31DgxAuth";
+import { __test as authTest, generateBrowserHmacSha256 } from "./stage31DgxAuth";
 
 authTest.setTokenOverrideForTests("test-token");
 
@@ -93,6 +93,56 @@ describe("openRmasTraceStream", () => {
     expect(snapshots).toHaveLength(1);
     expect(snapshots[0]!.map((event) => event.id)).toEqual(["a"]);
     expect(events.map((event) => event.id)).toEqual(["b"]);
+  });
+
+  it("signs the real stream path (not the bare root) for a http:// target", async () => {
+    // Regression: the SSE reader must sign the actual request path. On a
+    // plain-http target the HMAC branch signs `new URL(targetUrl).pathname`,
+    // so passing a bare base URL signed "/" and the server 401'd every stream.
+    const token = ["dev", "orchestrator", "token"].join("-"); // no credential literal
+    authTest.setTokenOverrideForTests(token);
+    let capturedHeaders: Record<string, string> | undefined;
+    let capturedUrl: string | undefined;
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(
+      `event: rmas.trace.snapshot\ndata: ${JSON.stringify([evt("a")])}\n\n`,
+    );
+    const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
+      capturedUrl = url;
+      capturedHeaders = init.headers as Record<string, string>;
+      let offset = 0;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (offset >= bytes.length) {
+            controller.close();
+            return;
+          }
+          controller.enqueue(bytes.slice(offset, offset + 16));
+          offset += 16;
+        },
+      });
+      return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+    }) as unknown as typeof fetch;
+
+    const base = "http://127.0.0.1:9912";
+    await openRmasTraceStream("r1", { serverBaseUrl: base, fetchImpl });
+
+    const expectedPath = "/rmas/runs/r1/trace/stream";
+    expect(capturedUrl).toBe(`${base}${expectedPath}`);
+    const headers = capturedHeaders!;
+    const timestamp = headers["x-dgx-timestamp"]!;
+    const nonce = headers["x-dgx-nonce"]!;
+    const bodyHash = headers["x-dgx-body-sha256"]!;
+    const expectedForRealPath = await generateBrowserHmacSha256(
+      token,
+      ["GET", expectedPath, bodyHash, timestamp, nonce].join("\n"),
+    );
+    const buggyForBareRoot = await generateBrowserHmacSha256(
+      token,
+      ["GET", "/", bodyHash, timestamp, nonce].join("\n"),
+    );
+    expect(headers["x-dgx-signature"]).toBe(expectedForRealPath);
+    expect(headers["x-dgx-signature"]).not.toBe(buggyForBareRoot);
   });
 
   it("reports an error (does not throw) on a non-ok response", async () => {
