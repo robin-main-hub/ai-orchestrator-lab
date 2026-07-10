@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Bot } from "lucide-react";
-import { StatusBadge } from "@/ui/status-badge";
-import { rarityBadgeVariant, rarityClassName, type PersonaCardModel } from "../lib/personaCard";
+import { rarityClassName, type PersonaCardModel } from "../lib/personaCard";
 
 /**
  * Gacha-style persona card: portrait + rarity frame (SSR gets the rainbow class
@@ -38,9 +37,9 @@ export function PersonaCard({ card, compact = false }: { card: PersonaCardModel;
           <strong>{card.displayName}</strong>
           <span className="persona-card-emblem">{card.emblem}</span>
         </div>
-        <StatusBadge size="sm" variant={rarityBadgeVariant(card.rarity)}>
+        <span className={`persona-card__rarity persona-card__rarity--${card.rarity.toLowerCase()}`}>
           {card.rarity}
-        </StatusBadge>
+        </span>
       </header>
       <div className="persona-card-stats">
         <Stat label="HP" sub="기억" value={card.hp} tone="hp" />

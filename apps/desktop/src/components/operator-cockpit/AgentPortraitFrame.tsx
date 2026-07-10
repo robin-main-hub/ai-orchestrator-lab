@@ -21,8 +21,8 @@ export function AgentPortraitFrame({
       )}
       style={{
         boxShadow: active
-          ? `0 0 18px ${glowColor}55, 0 0 34px ${glowColor}22`
-          : `0 0 14px ${glowColor}24`,
+          ? `0 0 18px color-mix(in srgb, ${glowColor} 33%, transparent), 0 0 34px color-mix(in srgb, ${glowColor} 13%, transparent)`
+          : `0 0 14px color-mix(in srgb, ${glowColor} 14%, transparent)`,
         "--agent-portrait-glow": glowColor,
       } as React.CSSProperties}
     >
