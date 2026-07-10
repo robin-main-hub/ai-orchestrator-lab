@@ -5,13 +5,13 @@ type BadgeTone = "green" | "yellow" | "red" | "gray" | "blue" | "purple" | "outl
 type BadgeSize = "xs" | "sm" | "md";
 
 const toneClasses: Record<BadgeTone, string> = {
-  green: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.08)]",
-  yellow: "border-amber-500/20 bg-amber-500/10 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.08)]",
-  red: "border-rose-500/20 bg-rose-500/10 text-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.08)]",
-  gray: "border-zinc-700/70 bg-zinc-800/50 text-zinc-400",
-  blue: "border-cyan-500/20 bg-cyan-500/10 text-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.08)]",
-  purple: "border-violet-500/20 bg-violet-500/10 text-violet-400 shadow-[0_0_12px_rgba(139,92,246,0.08)]",
-  outline: "border-zinc-700/70 bg-transparent text-zinc-500",
+  green: "border-primary/20 bg-primary/10 text-primary",
+  yellow: "border-warning/20 bg-warning/10 text-warning",
+  red: "border-destructive/20 bg-destructive/10 text-destructive",
+  gray: "border-border bg-muted/50 text-muted-foreground",
+  blue: "border-primary/20 bg-primary/10 text-primary",
+  purple: "border-primary/20 bg-primary/10 text-primary",
+  outline: "border-border bg-transparent text-muted-foreground",
 };
 
 const sizeClasses: Record<BadgeSize, string> = {

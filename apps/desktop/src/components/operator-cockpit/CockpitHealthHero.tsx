@@ -11,22 +11,22 @@ import type { CockpitNextActionItem } from "../../lib/cockpitNextActions";
  */
 const TONE = {
   red: {
-    ring: "border-red-500/40 bg-red-500/[0.07]",
-    dot: "bg-red-500/15 text-red-300 shadow-[0_0_24px_rgba(239,68,68,0.25)]",
+    ring: "border-destructive/40 bg-destructive/[0.07]",
+    dot: "bg-destructive/15 text-destructive shadow-[0_0_24px_color-mix(in_srgb,var(--destructive)_12%,transparent)]",
     icon: <CircleAlert className="h-6 w-6" />,
-    cta: "bg-red-500/15 text-red-200 hover:bg-red-500/25 border-red-500/30",
+    cta: "bg-destructive/15 text-destructive hover:bg-destructive/25 border-destructive/30",
   },
   yellow: {
-    ring: "border-amber-400/40 bg-amber-400/[0.06]",
-    dot: "bg-amber-400/15 text-amber-300 shadow-[0_0_24px_rgba(251,191,36,0.20)]",
+    ring: "border-warning/40 bg-warning/[0.06]",
+    dot: "bg-warning/15 text-warning shadow-[0_0_24px_color-mix(in_srgb,var(--warning)_12%,transparent)]",
     icon: <AlertTriangle className="h-6 w-6" />,
-    cta: "bg-amber-400/15 text-amber-100 hover:bg-amber-400/25 border-amber-400/30",
+    cta: "bg-warning/15 text-warning hover:bg-warning/25 border-warning/30",
   },
   green: {
-    ring: "border-emerald-500/30 bg-emerald-500/[0.05]",
-    dot: "bg-emerald-500/15 text-emerald-300 shadow-[0_0_24px_rgba(16,185,129,0.18)]",
+    ring: "border-primary/30 bg-primary/[0.05]",
+    dot: "bg-primary/15 text-primary shadow-[0_0_24px_var(--accent-dim)]",
     icon: <CheckCircle2 className="h-6 w-6" />,
-    cta: "bg-zinc-100/5 text-zinc-300 hover:bg-zinc-100/10 border-zinc-100/10",
+    cta: "bg-muted/50 text-muted-foreground hover:bg-muted/70 border-border",
   },
 } as const;
 
@@ -53,12 +53,12 @@ export function CockpitHealthHero({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               {COCKPIT_HEALTH_LABEL[rollup.level]}
             </span>
-            <span className="text-[11px] text-zinc-500">· {rollup.signalSummary}</span>
+            <span className="text-[11px] text-muted-foreground">· {rollup.signalSummary}</span>
           </div>
-          <h2 className="mt-0.5 truncate text-base font-semibold text-zinc-50">{rollup.headline}</h2>
+          <h2 className="mt-0.5 truncate text-base font-semibold text-foreground">{rollup.headline}</h2>
         </div>
         {rollup.topAction && onActivateTopAction ? (
           <button
@@ -72,7 +72,7 @@ export function CockpitHealthHero({
       </div>
 
       <button
-        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-800/60 bg-zinc-900/30 py-1.5 text-[12px] text-zinc-400 transition hover:text-zinc-200"
+        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-muted/30 py-1.5 text-[12px] text-muted-foreground transition hover:text-foreground"
         onClick={onToggleExpand}
         type="button"
         aria-expanded={expanded}
