@@ -124,3 +124,57 @@ export function tmuxRedispatchOutcomeLabel(status: RailTmuxRedispatchOutcomeStat
   };
   return labels[status];
 }
+
+export type RailStatusTone = "accent" | "warning" | "destructive" | "muted";
+
+/**
+ * U21 상태 톤 단일본: failed/blocked=destructive, watch/승인대기=warning,
+ * 정상=accent, 유휴=fg-muted(muted). 미상은 정직하게 muted(초록 오표기 방지).
+ * 라벨 텍스트와 별개로, 관리 묶음 상태점 data-tone 색을 산출하는 정본(MGT-2~6 소비).
+ */
+export function railStatusTone(status: string): RailStatusTone {
+  const s = status.trim().toLowerCase();
+  const destructive = new Set([
+    "failed",
+    "fail",
+    "blocked",
+    "error",
+    "errored",
+    "rejected",
+    "expired",
+    "offline",
+    "dead",
+    "down",
+  ]);
+  const warning = new Set([
+    "watch",
+    "pending_approval",
+    "needs_approval",
+    "required",
+    "credential_required",
+    "degraded",
+    "warning",
+    "review",
+    "waiting",
+  ]);
+  const accent = new Set([
+    "online",
+    "ready",
+    "synced",
+    "approved",
+    "connected",
+    "sent",
+    "done",
+    "ok",
+    "healthy",
+    "live",
+    "active",
+    "passed",
+    "deployed",
+    "recorded",
+  ]);
+  if (destructive.has(s)) return "destructive";
+  if (warning.has(s)) return "warning";
+  if (accent.has(s)) return "accent";
+  return "muted";
+}

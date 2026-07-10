@@ -71,26 +71,26 @@ export function OperationsRailPanel({
   ).length;
 
   return (
-    <section className="mini-panel rail-panel ops-rail-panel">
+    <section className="mgmt-mini-panel mgmt-panel ops-rail-panel">
       <header>
         <ShieldCheck size={16} />
         <span>운영</span>
-        <div className="rail-action-row">
-          <button className="rail-icon-button" onClick={onImportExternalIngress} aria-label="외부 인입 가져오기" title="외부 인입 가져오기" type="button">
+        <div className="mgmt-action-row">
+          <button className="mgmt-icon-button" onClick={onImportExternalIngress} aria-label="외부 인입 가져오기" title="외부 인입 가져오기" type="button">
             <Smartphone size={13} />
           </button>
-          <button className="rail-icon-button" onClick={onExportBackup} aria-label="백업 내보내기" title="백업 내보내기" type="button">
+          <button className="mgmt-icon-button" onClick={onExportBackup} aria-label="백업 내보내기" title="백업 내보내기" type="button">
             <Archive size={13} />
           </button>
-          <button className="rail-icon-button" onClick={onCheckProviderVault} aria-label="프로바이더 보관소 점검" title="프로바이더 보관소 점검" type="button">
+          <button className="mgmt-icon-button" onClick={onCheckProviderVault} aria-label="프로바이더 보관소 점검" title="프로바이더 보관소 점검" type="button">
             <KeyRound size={13} />
           </button>
-          <button className="rail-icon-button" onClick={onRefreshApprovals} aria-label="DGX 승인 새로고침" title="DGX 승인 새로고침" type="button">
+          <button className="mgmt-icon-button" onClick={onRefreshApprovals} aria-label="DGX 승인 새로고침" title="DGX 승인 새로고침" type="button">
             <RefreshCw size={13} />
           </button>
         </div>
       </header>
-      <div className="rail-stat-list">
+      <div className="mgmt-stat-list">
         <div>
           <span>권한</span>
           <strong>{permissionSnapshot.summary.pending} 로컬 / {serverPending} DGX</strong>

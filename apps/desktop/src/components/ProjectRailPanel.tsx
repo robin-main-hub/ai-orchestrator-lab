@@ -85,22 +85,22 @@ export function ProjectRailPanel({
   const displayInsightCount = insightCount > 9 ? "9+" : String(insightCount);
 
   return (
-    <section className="mini-panel rail-panel project-rail-panel flex flex-col h-full overflow-hidden">
+    <section className="mgmt-mini-panel mgmt-panel project-rail-panel flex flex-col h-full overflow-hidden">
       <header className="mb-2 shrink-0">
         <LayoutDashboard size={16} />
         <span>프로젝트</span>
-        <div className="rail-action-row">
-          <button className="rail-icon-button" onClick={onCreateCodingPacket} aria-label="코딩 패킷 생성" title="코딩 패킷 생성" type="button">
+        <div className="mgmt-action-row">
+          <button className="mgmt-icon-button" onClick={onCreateCodingPacket} aria-label="코딩 패킷 생성" title="코딩 패킷 생성" type="button">
             <Send size={13} />
           </button>
-          <button className="rail-icon-button" onClick={onCreateAgentRun} aria-label="에이전트 실행 준비" title="에이전트 실행 준비" type="button">
+          <button className="mgmt-icon-button" onClick={onCreateAgentRun} aria-label="에이전트 실행 준비" title="에이전트 실행 준비" type="button">
             <Play size={13} />
           </button>
         </div>
       </header>
 
       {/* Mini Tabs Header */}
-      <div className="rail-tabs mb-2 shrink-0">
+      <div className="mgmt-tabs mb-2 shrink-0">
         <button
           className={activeTab === "overview" ? "active" : ""}
           onClick={() => setActiveTab("overview")}
@@ -113,27 +113,27 @@ export function ProjectRailPanel({
           onClick={() => setActiveTab("run")}
           type="button"
         >
-          실행 {isRunning && <span className="tab-status-dot warning" />}
+          실행 {isRunning && <span className="mgmt-tab-status-dot warning" />}
         </button>
         <button
           className={activeTab === "insights" ? "active" : ""}
           onClick={() => setActiveTab("insights")}
           type="button"
         >
-          인사이트 {insightCount > 0 && <span className="tab-count-badge">{displayInsightCount}</span>}
+          인사이트 {insightCount > 0 && <span className="mgmt-tab-count-badge">{displayInsightCount}</span>}
         </button>
       </div>
 
       {/* Scrollable Tab Content Area */}
-      <div className="rail-tab-content flex-1 overflow-y-auto pr-0.5 space-y-2">
+      <div className="mgmt-tab-content flex-1 overflow-y-auto pr-0.5 space-y-2">
         {activeTab === "overview" && (
           <>
-            <div className="rail-hero-card">
+            <div className="mgmt-hero-card">
               <span>활성 세션</span>
               <strong>{sessionId}</strong>
               <p>{packet.goal}</p>
             </div>
-            <div className="rail-stat-list">
+            <div className="mgmt-stat-list">
               <div>
                 <span>이벤트</span>
                 <strong>{eventCount}</strong>
@@ -155,7 +155,7 @@ export function ProjectRailPanel({
                 </strong>
               </div>
             </div>
-            <div className="rail-split-list">
+            <div className="mgmt-split-list">
               <section>
                 <strong>검토 파일</strong>
                 {visibleFiles.length > 0 ? visibleFiles.map((file) => <span key={file}>{file}</span>) : <span>대상 없음</span>}
@@ -170,7 +170,7 @@ export function ProjectRailPanel({
 
         {activeTab === "run" && (
           <>
-            <div className="rail-card-list">
+            <div className="mgmt-card-list">
               {visibleSteps.length > 0 ? (
                 visibleSteps.map((step) => (
                   <article key={step.id}>
@@ -191,7 +191,7 @@ export function ProjectRailPanel({
                 <div className="text-center py-4 text-xs text-muted-foreground">에이전트 실행 단계가 없습니다.</div>
               )}
             </div>
-            <div className="rail-card-list compact">
+            <div className="mgmt-card-list compact">
               {visibleBranches.map((branch) => (
                 <article key={branch.id}>
                   <strong>{branch.title}</strong>
@@ -205,7 +205,7 @@ export function ProjectRailPanel({
         )}
 
         {activeTab === "insights" && (
-          <div className="rail-insight-list">
+          <div className="mgmt-insight-list">
             {visibleInsights.length > 0 ? (
               visibleInsights.map((finding) => (
                 <article className={finding.status} key={finding.id}>
@@ -222,7 +222,7 @@ export function ProjectRailPanel({
 
       {/* 메타 에이전트 온보딩 박스: PM 지침에 따라 패널 하단에 고정 */}
       <div className="meta-onboarding-box border-t border-border/40 pt-2 mt-2 shrink-0">
-        <button className="rail-icon-button" onClick={onRunMetaOnboarding} aria-label="메타 에이전트 온보딩" title="메타 에이전트 온보딩" type="button">
+        <button className="mgmt-icon-button" onClick={onRunMetaOnboarding} aria-label="메타 에이전트 온보딩" title="메타 에이전트 온보딩" type="button">
           <Bot size={13} />
         </button>
         <div>

@@ -26,23 +26,23 @@ export function RuntimeRailPanel({
   const activeWatchdog = rebootWatchdogs[0];
 
   return (
-    <section className="mini-panel rail-panel">
+    <section className="mgmt-mini-panel mgmt-panel">
       <header>
         <Server size={16} />
         <span>시스템</span>
-        <button className="rail-icon-button" onClick={onProbeDgx} aria-label="DGX-02 점검" title="DGX-02 점검" type="button">
+        <button className="mgmt-icon-button" onClick={onProbeDgx} aria-label="DGX-02 점검" title="DGX-02 점검" type="button">
           <RefreshCw size={13} />
         </button>
       </header>
-      <div className="rail-node-grid">
+      <div className="mgmt-node-grid">
         {snapshot.runtimeNodes.map((node) => (
           <article className={node.id === "dgx-01" ? "locked" : ""} key={node.id}>
-            <div className="rail-node-head">
+            <div className="mgmt-node-head">
               <span>{node.label}</span>
               {onRequestReboot ? (
                 <button
                   aria-label={`${node.label} 재시작 승인`}
-                  className="rail-icon-button is-destructive"
+                  className="mgmt-icon-button is-destructive"
                   onClick={() => onRequestReboot(node.id as DeviceRebootRequest["targetNodeId"])}
                   title={`${node.label} 재시작 승인`}
                   type="button"
@@ -68,7 +68,7 @@ export function RuntimeRailPanel({
           </article>
         ))}
       </div>
-      <div className="rail-stat-list">
+      <div className="mgmt-stat-list">
         <div>
           <span>권한</span>
           <strong>{snapshot.syncTopology.authorityLabel}</strong>
