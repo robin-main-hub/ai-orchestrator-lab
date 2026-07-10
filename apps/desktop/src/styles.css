@@ -12771,3 +12771,122 @@ body:has(.app-shell.annex-focus-shell) {
 .mgmt-stat-list div {
   background: var(--card);
 }
+
+/* ── VERIFY-UX: 검증 단계 칩 토글 (append-only, emerald 단일 액센트, radius 12) ──
+ * Replaces the "한 줄에 하나" textarea. Preset chips are real <button
+ * aria-pressed>, custom commands are removable chips, and a small input adds
+ * custom commands. Purely a different editor over verificationStepsText — the
+ * payload (verificationPlan) is unchanged. Scoped to .autonomy-verify-field so
+ * no unrelated element is restyled. */
+.autonomy-verify-field .autonomy-verify-hint {
+  font-size: 11px;
+  color: var(--fg-muted);
+  font-weight: 400;
+}
+
+.verify-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.verify-custom-row {
+  margin-top: 4px;
+}
+
+.verify-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  min-width: 28px;
+  padding: 4px 11px;
+  border: 1px solid var(--line-soft, var(--border));
+  border-radius: 999px;
+  background: var(--card, var(--surface-2));
+  color: var(--fg-muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+button.verify-chip:hover:not(:disabled) {
+  border-color: color-mix(in oklch, var(--color-emerald-500, #10b981) 45%, var(--line-soft, var(--border)));
+  color: var(--fg);
+}
+
+.verify-chip.is-on {
+  border-color: var(--color-emerald-500, #10b981);
+  background: color-mix(in oklch, var(--color-emerald-500, #10b981) 16%, transparent);
+  color: var(--color-emerald-500, #10b981);
+}
+
+button.verify-chip[aria-pressed="true"] {
+  font-weight: 600;
+}
+
+.verify-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.verify-chip.verify-custom {
+  padding-right: 5px;
+  cursor: default;
+}
+
+.verify-custom-label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+}
+
+.verify-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.verify-chip-remove:hover:not(:disabled) {
+  opacity: 1;
+  background: color-mix(in oklch, var(--color-emerald-500, #10b981) 24%, transparent);
+}
+
+.verify-chip-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.verify-custom-input {
+  margin-top: 6px;
+  width: 100%;
+  min-height: 28px;
+  padding: 5px 10px;
+  border: 1px dashed var(--line-soft, var(--border));
+  border-radius: 10px;
+  background: var(--card, var(--surface-2));
+  color: var(--fg);
+  font-size: 12px;
+}
+
+.verify-custom-input:focus {
+  outline: none;
+  border-style: solid;
+  border-color: var(--color-emerald-500, #10b981);
+}
+
+.verify-custom-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}

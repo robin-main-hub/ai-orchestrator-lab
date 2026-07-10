@@ -26,7 +26,9 @@ export const DEFAULT_AUTONOMY_FORM: AutonomyRunForm = {
   personaName: "",
   role: "qa",
   goal: "",
-  verificationStepsText: "",
+  // 기본 칩 = typecheck+test+build ON, lint OFF. 칩 UX가 이 문자열을 그대로
+  // 편집하므로 payload(verificationPlan)와 1:1로 일치한다.
+  verificationStepsText: "pnpm typecheck\npnpm test\npnpm build",
   // 완전 자동이 기본 — "목적만 주면 끝까지 자율완주". 사람 승인 게이트 없음(예산상한+중지버튼만).
   mode: "full_auto",
 };

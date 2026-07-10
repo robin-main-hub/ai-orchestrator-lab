@@ -49,6 +49,32 @@ describe("AutonomyRunPanel", () => {
     expect(html).toContain("qa"); // a selectable pane role
   });
 
+  it("renders the verification presets as aria-pressed chip toggles", () => {
+    const html = render();
+    // 4 preset chips are rendered by label
+    for (const label of ["typecheck", "test", "build", "lint"]) {
+      expect(html).toContain(`>${label}</button>`);
+    }
+    // aria-pressed reflects the default form (typecheck+test+build ON, lint OFF)
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain('aria-pressed="false"');
+    // exactly one preset (lint) is OFF in the default form
+    expect(html.split('aria-pressed="false"').length - 1).toBe(1);
+    expect(html.split('aria-pressed="true"').length - 1).toBe(3);
+    // the custom-add input is present
+    expect(html).toContain('placeholder="+ 직접 입력"');
+  });
+
+  it("renders a custom verification line as a removable chip", () => {
+    const html = render({
+      form: form({ verificationStepsText: "pnpm test\nmake smoke" }),
+    });
+    expect(html).toContain("make smoke");
+    expect(html).toContain('aria-label="make smoke 제거"');
+    // pnpm test still shows as an active preset chip, not a custom chip
+    expect(html).toContain('aria-pressed="true"');
+  });
+
   it("disables the run button and shows the reason when not runnable", () => {
     const html = render({ runnable: { ok: false, reason: "목표(goal)가 필요합니다" } });
     expect(html).toContain("disabled");
