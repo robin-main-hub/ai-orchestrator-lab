@@ -9510,6 +9510,37 @@ body:has(.app-shell.annex-focus-shell) {
   opacity: 0.55;
   flex-shrink: 0;
 }
+/* 페르소나 드롭다운 트리거 — 역할 pane 트리거와 같은 결(옆의 승인 모드 select 톤) */
+.persona-pane-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--panel) 88%, black);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.persona-pane-trigger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.persona-pane-trigger > span {
+  flex: 1;
+}
+.persona-pane-trigger-chevron {
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+.persona-pane-trigger-avatar,
+.persona-pane-option-avatar {
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+}
 .autonomy-run-form textarea {
   font-family: var(--font-mono, monospace);
   resize: vertical;
