@@ -1,8 +1,8 @@
 import { Check, ShieldAlert, ShieldCheck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import type { ApprovalToastBarItem, ApprovalToastRequester } from "../lib/approvalToastBar";
-import type { PermissionActor } from "@ai-orchestrator/protocol";
+import type { ApprovalToastBarItem } from "../lib/approvalToastBar";
+import { resolveIdentityInitial, resolveRequesterName } from "../lib/personaIdentity";
 
 /**
  * 승인 toast bar(제안1) — 화면 하단 고정. 승인 대기가 있을 때만 떠서 원터치로 허용/거절.
@@ -18,33 +18,6 @@ import type { PermissionActor } from "@ai-orchestrator/protocol";
  * 별도 표면(작업 C)에서 명시적으로 처리한다.
  */
 
-/** actor enum → 정직한 한국어 폴백 라벨(페르소나 신원을 모를 때). */
-function actorLabel(actor: PermissionActor): string {
-  switch (actor) {
-    case "user":
-      return "운영자";
-    case "agent":
-      return "에이전트";
-    case "external_channel":
-      return "외부 채널";
-    case "mobile":
-      return "모바일";
-    case "server":
-      return "서버";
-    default:
-      return "에이전트";
-  }
-}
-
-/** 표시 이름 결정 — 신원 있으면 그 이름, 없으면 actor enum 라벨(정직 폴백). */
-function requesterName(requester: ApprovalToastRequester): string {
-  return requester.name?.trim() || actorLabel(requester.actor);
-}
-
-function requesterInitial(name: string): string {
-  return Array.from(name.trim())[0]?.toUpperCase() ?? "?";
-}
-
 export function ApprovalToastBar({
   item,
   onApprove,
@@ -57,7 +30,7 @@ export function ApprovalToastBar({
   onOpenHistory?: () => void;
 }) {
   const requester = item.requester;
-  const name = requester ? requesterName(requester) : undefined;
+  const name = requester ? resolveRequesterName(requester) : undefined;
   const role = requester?.role?.trim() || undefined;
   const model = requester?.model?.trim() || undefined;
   const avatarUrl = requester?.avatarUrl?.trim() || undefined;
@@ -89,7 +62,7 @@ export function ApprovalToastBar({
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-400/30 bg-amber-500/15 text-sm font-semibold text-amber-200"
             data-testid="approval-toast-requester-initial"
           >
-            {requesterInitial(name ?? "?")}
+            {resolveIdentityInitial(name ?? "?")}
           </span>
         )
       ) : (
