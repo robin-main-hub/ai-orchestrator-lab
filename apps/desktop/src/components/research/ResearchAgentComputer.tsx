@@ -106,7 +106,7 @@ export function ResearchAgentComputer({
       ) : null}
       {!atLatest && onBackToLatest ? (
         <button className="research-computer__back" onClick={onBackToLatest} type="button">
-          ▷ Back to latest
+          <ChevronDown size={12} aria-hidden /> Back to latest
         </button>
       ) : null}
     </div>
