@@ -575,8 +575,7 @@ button {
 
 .provider-registration-list article {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(3, 24px);
-  grid-template-rows: auto auto;
+  grid-template-columns: minmax(0, 1fr) repeat(4, 24px);
   align-items: center;
   gap: 3px 5px;
   min-width: 0;
@@ -615,8 +614,10 @@ button {
 }
 
 .provider-registration-list span {
+  /* 각 span은 카드 전체 폭(1 / -1)을 차지한다. grid-row 를 명시하지 않아
+     자동 배치가 span 마다 새 행(2, 3, 4…)을 부여 — 두 메타 줄이 같은
+     grid-row 2 로 포개지던 겹침 버그의 근본 수정. */
   grid-column: 1 / -1;
-  grid-row: 2;
   align-self: start;
   margin-top: 0;
   color: var(--subtle);
