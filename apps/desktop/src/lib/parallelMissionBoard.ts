@@ -163,7 +163,13 @@ export function nextDraftId(prefix = "m"): string {
 }
 
 export function emptyDraft(role: TmuxPaneRole = "code"): ParallelMissionDraft {
-  return { id: nextDraftId(), personaName: "", role, goal: "", verificationStepsText: "" };
+  return {
+    id: nextDraftId(),
+    personaName: "",
+    role,
+    goal: "",
+    verificationStepsText: "pnpm typecheck\npnpm test\npnpm build",
+  };
 }
 
 export type { SummonContext };
