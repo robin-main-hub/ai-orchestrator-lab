@@ -108,10 +108,12 @@ export function summarizeTheater(rows: ReadonlyArray<TheaterRow>): {
   let done = 0;
   let blocked = 0;
   for (const row of rows) {
+    // 승인 대기 행은 "출격(deployed)"에서 제외 — 승인대기 계상과의 이중카운트 방지(§2.7).
+    const atApprove = THEATER_STAGES[row.stageIndex]?.key === "approve";
     if (row.blocked) blocked += 1;
+    if (atApprove) awaitingApproval += 1;
     if (row.stageIndex >= THEATER_STAGES.length - 1) done += 1;
-    else if (row.assigned) deployed += 1;
-    if (THEATER_STAGES[row.stageIndex]?.key === "approve") awaitingApproval += 1;
+    else if (row.assigned && !atApprove) deployed += 1;
   }
   return { deployed, awaitingApproval, done, blocked };
 }

@@ -194,6 +194,48 @@ export function frameTicksByCategory(frames: ReadonlyArray<TimelineFrame>, bucke
   }));
 }
 
+/**
+ * hero 실황 피드용 최근 N 프레임(§2.7 THR-4). 라이브면 전체의 끝 N개, 되감기면
+ * position 까지 잘라 그 시점의 끝 N개(리플레이 재현). count<=0 또는 빈 프레임이면 [].
+ * 순수 파생 — 렌더/타이머는 컴포넌트가 주입(eventTimeline.test.ts).
+ */
+export function recentFeedFrames(
+  frames: ReadonlyArray<TimelineFrame>,
+  asOf: { position: number; isLive: boolean },
+  count: number,
+): TimelineFrame[] {
+  if (count <= 0 || frames.length === 0) return [];
+  const upTo = asOf.isLive ? frames.slice() : framesUpTo(frames, asOf.position);
+  return upTo.slice(-count);
+}
+
+/**
+ * 컷인 배너 트리거 이벤트 타입인지(§2.7 THR-4). 승인 요청/승인/거부 · 임의 `*.failed` ·
+ * makima 위임 배정 생성/진행만 무대 상단 컷인으로 승격한다. 순수 분류기.
+ */
+export function isCutInEventType(type: string): boolean {
+  if (type.endsWith(".failed")) return true;
+  switch (type) {
+    case "permission.requested":
+    case "permission.approved":
+    case "permission.rejected":
+    case "makima.delegation.assignment.created":
+    case "makima.delegation.assignment.progressed":
+      return true;
+    default:
+      return false;
+  }
+}
+
+export type CutInTone = "warning" | "destructive" | "accent";
+
+/** 컷인 톤 — 승인 요청=warning / 실패·거부=destructive / 그 외=accent(§2.7). */
+export function cutInTone(type: string): CutInTone {
+  if (type === "permission.requested") return "warning";
+  if (type === "permission.rejected" || type.endsWith(".failed")) return "destructive";
+  return "accent";
+}
+
 /** 버킷 최빈 카테고리 — 동률이면 가장 이른(배열 앞) 프레임의 카테고리, 빈 버킷은 "system" */
 function dominantTickCategory(bucketFrames: ReadonlyArray<TimelineFrame>): TimelineCategory {
   if (bucketFrames.length === 0) return "system";

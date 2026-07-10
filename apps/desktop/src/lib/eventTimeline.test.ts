@@ -3,9 +3,12 @@ import type { EventEnvelope } from "@ai-orchestrator/protocol";
 import {
   buildTimelineFrames,
   clampPlayhead,
+  cutInTone,
   formatElapsed,
   frameTicksByCategory,
   framesUpTo,
+  isCutInEventType,
+  recentFeedFrames,
   resolvePlayhead,
   timelineCategory,
   timelineEventLabel,
@@ -182,5 +185,46 @@ describe("frameTicksByCategory", () => {
     // 스팬 0 → 경계는 전부 first(=0)
     expect(ticks[0]!.startMs).toBe(0);
     expect(ticks[0]!.endMs).toBe(0);
+  });
+});
+
+describe("recentFeedFrames", () => {
+  const frames = buildTimelineFrames([
+    ev("a", "session.created", "2026-06-11T00:00:00.000Z"),
+    ev("b", "message.posted", "2026-06-11T00:00:05.000Z"),
+    ev("c", "permission.requested", "2026-06-11T00:00:12.000Z"),
+    ev("d", "permission.approved", "2026-06-11T00:00:18.000Z"),
+  ]);
+
+  it("라이브면 전체의 끝 N개", () => {
+    expect(recentFeedFrames(frames, { position: 3, isLive: true }, 2).map((f) => f.id)).toEqual(["c", "d"]);
+  });
+  it("되감기면 position까지 잘라 끝 N개(리플레이 재현)", () => {
+    expect(recentFeedFrames(frames, { position: 1, isLive: false }, 8).map((f) => f.id)).toEqual(["a", "b"]);
+    expect(recentFeedFrames(frames, { position: 2, isLive: false }, 2).map((f) => f.id)).toEqual(["b", "c"]);
+  });
+  it("count<=0 또는 빈 프레임 → []", () => {
+    expect(recentFeedFrames(frames, { position: 3, isLive: true }, 0)).toEqual([]);
+    expect(recentFeedFrames([], { position: -1, isLive: true }, 8)).toEqual([]);
+  });
+});
+
+describe("isCutInEventType / cutInTone", () => {
+  it("승인·실패·위임 배정만 컷인 트리거", () => {
+    expect(isCutInEventType("permission.requested")).toBe(true);
+    expect(isCutInEventType("permission.approved")).toBe(true);
+    expect(isCutInEventType("permission.rejected")).toBe(true);
+    expect(isCutInEventType("autonomy.run.failed")).toBe(true);
+    expect(isCutInEventType("makima.delegation.assignment.created")).toBe(true);
+    expect(isCutInEventType("makima.delegation.assignment.progressed")).toBe(true);
+    expect(isCutInEventType("session.created")).toBe(false);
+    expect(isCutInEventType("message.posted")).toBe(false);
+  });
+  it("톤: 승인요청=warning / 실패·거부=destructive / 그 외=accent", () => {
+    expect(cutInTone("permission.requested")).toBe("warning");
+    expect(cutInTone("permission.rejected")).toBe("destructive");
+    expect(cutInTone("autonomy.run.failed")).toBe("destructive");
+    expect(cutInTone("permission.approved")).toBe("accent");
+    expect(cutInTone("makima.delegation.assignment.created")).toBe("accent");
   });
 });
