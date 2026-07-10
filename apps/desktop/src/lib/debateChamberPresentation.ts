@@ -1,9 +1,7 @@
 import type { AgentProfile } from "@ai-orchestrator/protocol";
-import { sanitizePublicText } from "./publicRedaction";
 
 export type DebateStance = "agree" | "disagree" | "risk" | "evidence" | "decision" | "neutral";
 export type DebateRoundStatus = "blocked" | "complete" | "completed" | "pending" | "running";
-export type AnnexTabKey = "status" | "evidence" | "agents" | "memory" | "queue" | "logs";
 
 type Tone = {
   bg: string;
@@ -19,34 +17,6 @@ export const debateChamberCopy = {
   kicker: "토론실",
   timelineLabel: "토론 타임라인",
 } as const;
-
-export const annexCopy = {
-  kicker: "토론 보조자료",
-} as const;
-
-export const annexTabPresentation: Record<AnnexTabKey, { label: string }> = {
-  agents: { label: "에이전트 흐름" },
-  evidence: { label: "근거" },
-  logs: { label: "로그" },
-  memory: { label: "기억" },
-  queue: { label: "대기열" },
-  status: { label: "상태" },
-};
-
-export function formatAnnexTabLabel(label: string, count: number): string {
-  const safeLabel = sanitizeDebateAnnexText(label.trim() || "보조자료");
-  if (!Number.isFinite(count) || count <= 0) return safeLabel;
-  return `${safeLabel} ${Math.min(Math.floor(count), 99)}`;
-}
-
-export function createAnnexTabCountSummary(counts: Record<AnnexTabKey, number>): string {
-  const order: AnnexTabKey[] = ["status", "evidence", "agents", "memory", "queue", "logs"];
-  const active = order
-    .map((key) => [key, counts[key]] as const)
-    .filter(([, count]) => count > 0)
-    .map(([key, count]) => formatAnnexTabLabel(annexTabPresentation[key].label, count));
-  return active.length > 0 ? `보조자료 ${active.join(" · ")}` : "보조자료 없음";
-}
 
 // Tone maps use the v2 token vocabulary (spec §2.2: main-surface tones → the accent
 // system; §1.1 single-accent = emerald). Each legacy literal hue maps to its semantic
@@ -100,8 +70,4 @@ export function roundStatusLabel(status: DebateRoundStatus) {
   if (status === "running") return "진행 중";
   if (status === "blocked") return "차단";
   return "대기";
-}
-
-export function sanitizeDebateAnnexText(value: string) {
-  return sanitizePublicText(value);
 }
