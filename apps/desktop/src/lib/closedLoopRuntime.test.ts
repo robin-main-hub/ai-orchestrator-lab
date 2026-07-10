@@ -145,3 +145,49 @@ describe("pollForApprovalDecision", () => {
     expect(outcome).toBe("timeout");
   });
 });
+
+describe("pollForApprovalDecision cancellation", () => {
+  it("resolves timeout immediately without fetching the queue when already aborted", async () => {
+    // The abort check sits at the top of the poll loop, before fetchQueue.
+    const controller = new AbortController();
+    controller.abort();
+    const fetchQueue = vi.fn();
+    const outcome = await pollForApprovalDecision({
+      sourceItemId: "s1",
+      fetchQueue: fetchQueue as any,
+      sleep: async () => {},
+      nowMs: () => 0,
+      signal: controller.signal,
+    });
+    expect(outcome).toBe("timeout");
+    expect(fetchQueue).not.toHaveBeenCalled();
+  });
+
+  it("wakes promptly from the wait and resolves timeout when aborted mid-sleep", async () => {
+    const controller = new AbortController();
+    const fetchQueue = vi
+      .fn()
+      .mockResolvedValue({ approvals: [{ sourceItemId: "s1", state: "required" }], queue: [] } as any);
+    // sleep never resolves on its own — it only schedules an external abort. If
+    // sleepWithAbort did not wake on the signal this poll would hang forever, so
+    // resolving proves the abort (not a timer) ends the wait. Deterministic:
+    // setTimeout(0) + a never-resolving sleep, no real long timers.
+    const sleep = vi.fn(() => {
+      setTimeout(() => controller.abort(), 0);
+      return new Promise<void>(() => {});
+    });
+
+    const outcome = await pollForApprovalDecision({
+      sourceItemId: "s1",
+      fetchQueue: fetchQueue as any,
+      sleep,
+      nowMs: () => 0,
+      timeoutMs: 120_000,
+      signal: controller.signal,
+    });
+
+    expect(outcome).toBe("timeout");
+    expect(fetchQueue).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+});

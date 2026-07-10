@@ -145,6 +145,8 @@ export function loopStatusLabel(status: LoopStatus): string {
       return "실패";
     case "awaiting_human":
       return "사람 승인 대기";
+    case "cancelled":
+      return "중지됨";
     case "running":
     default:
       return "실행 중";
@@ -159,6 +161,8 @@ export function loopStatusBadgeVariant(status: LoopStatus): StatusBadgeVariant {
       return "danger";
     case "awaiting_human":
       return "warning";
+    case "cancelled":
+      return "muted";
     case "running":
     default:
       return "primary";

@@ -21,6 +21,16 @@ export type AutonomyRunLiveState = {
   formDraft: AutonomyRunForm | null;
   /** 디스패치가 사람 승인을 기다리는 중일 때의 안내 (없으면 null) — 침묵 대기 방지 */
   approvalWaitNote: string | null;
+  /** 진행 중 실행의 id — 홈 "현재 작업" 카드 노출용 (없으면 null) */
+  runId: string | null;
+  /** 진행 중 실행의 목표문 — 홈 카드 라벨용 */
+  goal: string | null;
+  /** 실행 시작 시각(ISO) — 경과 타이머용 */
+  startedAt: string | null;
+  /** 진행 중 실행의 중지 핸들 — AbortController.abort()를 감싼다 (없으면 null) */
+  abort: (() => void) | null;
+  /** 중지 요청됨(중지 처리 중) — 홈 카드의 "중지 중" 스피너용 */
+  cancelling: boolean;
 };
 
 export type AutonomyRunStore = {
@@ -37,6 +47,11 @@ const INITIAL: AutonomyRunLiveState = {
   error: null,
   formDraft: null,
   approvalWaitNote: null,
+  runId: null,
+  goal: null,
+  startedAt: null,
+  abort: null,
+  cancelling: false,
 };
 
 /**

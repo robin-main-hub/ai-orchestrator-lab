@@ -151,6 +151,8 @@ export async function pollForApprovalDecision(input: {
   timeoutMs?: number;
   sleep?: (ms: number) => Promise<void>;
   nowMs?: () => number;
+  /** cooperative cancellation — an abort resolves the poll immediately as "timeout" */
+  signal?: AbortSignal;
 }): Promise<ApprovalDecisionOutcome> {
   const fetchQueue = input.fetchQueue ?? fetchDgxApprovalQueue;
   const intervalMs = input.intervalMs ?? 2_000;
@@ -160,6 +162,9 @@ export async function pollForApprovalDecision(input: {
 
   const startedAt = nowMs();
   for (;;) {
+    if (input.signal?.aborted) {
+      return "timeout";
+    }
     const list = await fetchQueue({ serverBaseUrl: input.serverBaseUrl, fetchImpl: input.fetchImpl });
     const approval = list.approvals.find((candidate) => candidate.sourceItemId === input.sourceItemId);
     if (approval?.state === "approved") {
@@ -171,6 +176,33 @@ export async function pollForApprovalDecision(input: {
     if (nowMs() - startedAt >= timeoutMs) {
       return "timeout";
     }
-    await sleep(intervalMs);
+    await sleepWithAbort(intervalMs, sleep, input.signal);
   }
+}
+
+/**
+ * Sleep that wakes early when the signal aborts. Respects an injected `sleep`
+ * (tests) and removes its abort listener when the sleep wins, so a long-lived
+ * signal does not accumulate listeners across poll iterations.
+ */
+async function sleepWithAbort(
+  ms: number,
+  sleep: (ms: number) => Promise<void>,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!signal) {
+    await sleep(ms);
+    return;
+  }
+  if (signal.aborted) {
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    const onAbort = () => resolve();
+    signal.addEventListener("abort", onAbort, { once: true });
+    void sleep(ms).then(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    });
+  });
 }

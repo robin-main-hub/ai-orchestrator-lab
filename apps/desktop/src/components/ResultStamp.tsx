@@ -11,6 +11,7 @@ const STATUS_STAMP: Record<LoopStatus, { label: string; tone: StampTone }> = {
   failed: { label: "失敗", tone: "danger" },
   awaiting_human: { label: "承認待", tone: "warning" },
   running: { label: "実行中", tone: "info" },
+  cancelled: { label: "中止", tone: "info" },
 };
 
 export function stampForLoopStatus(status: LoopStatus): { label: string; tone: StampTone } {

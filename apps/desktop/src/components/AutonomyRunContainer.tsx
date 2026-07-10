@@ -129,11 +129,28 @@ export function AutonomyRunContainer({
     if (running || !runnable.ok) {
       return;
     }
-    autonomyRunStore.set({ running: true, error: null, outcome: null, steps: [], approvalWaitNote: null });
-    const collected: AutonomyStepRow[] = [];
     const stamp = Date.now();
     const runId = `desktop_${stamp}`;
     const startedAt = new Date().toISOString();
+    const controller = new AbortController();
+    autonomyRunStore.set({
+      running: true,
+      error: null,
+      outcome: null,
+      steps: [],
+      approvalWaitNote: null,
+      runId,
+      goal: form.goal.trim(),
+      startedAt,
+      cancelling: false,
+      // 홈 "현재 작업" 카드의 중지 버튼이 이 핸들을 부른다 — 협조적 취소라
+      // 진행 중인 fetch 한 번은 마저 끝나고 다음 루프 경계에서 "cancelled"로 끝난다.
+      abort: () => {
+        autonomyRunStore.set({ cancelling: true });
+        controller.abort();
+      },
+    });
+    const collected: AutonomyStepRow[] = [];
     // The handoff gate may downgrade the mode (e.g. needs_review -> human).
     const effectiveForm = gate ? { ...form, mode: gate.effectiveMode } : form;
     try {
@@ -172,6 +189,8 @@ export function AutonomyRunContainer({
           autonomyRunStore.set({ approvalWaitNote: null });
         }
       };
+      // 홈 중지 버튼 → AbortController → 루프 경계에서 "cancelled"로 종료 (감사 이벤트는 그대로 기록)
+      input.signal = controller.signal;
       const result = await runAutonomousPersonaTask(input);
       autonomyRunStore.set({ outcome: result });
       if (onRegistryChange && result.ok) {
@@ -189,7 +208,7 @@ export function AutonomyRunContainer({
         };
         onRunEvents(createAutonomyRunEvents(ctx, collected, result));
       }
-      if (onRunMemory && result.ok) {
+      if (onRunMemory && result.ok && result.loopStatus !== "cancelled") {
         onRunMemory(
           createAutonomyRunMemoryCandidate({
             runId,
@@ -206,7 +225,15 @@ export function AutonomyRunContainer({
     } catch (caught) {
       autonomyRunStore.set({ error: caught instanceof Error ? caught.message : String(caught) });
     } finally {
-      autonomyRunStore.set({ running: false, approvalWaitNote: null });
+      autonomyRunStore.set({
+        running: false,
+        approvalWaitNote: null,
+        runId: null,
+        goal: null,
+        startedAt: null,
+        abort: null,
+        cancelling: false,
+      });
     }
   };
 

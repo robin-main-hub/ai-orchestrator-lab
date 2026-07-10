@@ -135,6 +135,33 @@ describe("runPersonaCodingTask", () => {
     expect(result.registry.panes.find((p) => p.paneId === "%1")?.status).toBe("free");
   });
 
+  it("resolves cancelled (not failed) and frees the pane when a dispatch throws while aborted", async () => {
+    // human 모드 중지의 실제 경로: 승인 폴이 abort로 깨어나 dispatch가 throw한다 —
+    // 취소 중의 실패는 실패가 아니라 취소다 (runClosedLoop와 동일 규칙).
+    const controller = new AbortController();
+    const abortingFactory = (): ClosedLoopEffects => ({
+      dispatch: () => {
+        controller.abort();
+        throw new Error("approval timeout for verification step -1");
+      },
+      capture: () => "",
+      escalate: () => {},
+    });
+    const result = await runPersonaCodingTask({
+      registry: roster(),
+      summon: { personaName: "makise", sessionId: "s1" },
+      persona: persona(),
+      packet: packet(["run tests"]),
+      ctx,
+      createEffects: abortingFactory,
+      signal: controller.signal,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.loopStatus).toBe("cancelled");
+    expect(result.registry.panes.find((p) => p.paneId === "%1")?.status).toBe("free");
+  });
+
   it("retains the pane when the loop ends awaiting a human", async () => {
     const { factory } = fakeEffects(["I am blocked: missing the API spec"]);
     const result = await runPersonaCodingTask({

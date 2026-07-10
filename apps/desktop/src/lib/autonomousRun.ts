@@ -80,6 +80,7 @@ export function createApprovalStrategy(
     /** 전체 자동(full-auto) — DANGEROUS_PATTERN 제외 전부 자동 승인. 사용자가 명시적으로 켠다. */
     autoApproveAll?: boolean;
     logger?: (message: string) => void;
+    signal?: AbortSignal;
   } = {},
 ): ApprovalStrategy {
   const humanFallback: ApprovalStrategy = (sourceItemId) =>
@@ -90,6 +91,7 @@ export function createApprovalStrategy(
       fetchQueue: config.clients?.fetchQueue,
       intervalMs: config.pollIntervalMs,
       timeoutMs: config.pollTimeoutMs,
+      signal: config.signal,
     });
 
   const grantFn = config.clients?.grant ?? grantDgxApproval;
@@ -163,6 +165,8 @@ export type RunAutonomousPersonaTaskInput = {
   logger?: (message: string) => void;
   /** observer invoked once per loop iteration (for a live timeline) */
   onStep?: ClosedLoopEffects["onStep"];
+  /** cooperative cancellation — aborting resolves the run with loopStatus "cancelled" (audit events still emitted by the caller) */
+  signal?: AbortSignal;
 };
 
 /**
@@ -180,6 +184,7 @@ export function createAutonomyEffectsFactory(input: {
   safePrefixes?: ReadonlyArray<string>;
   extraSafePrefixes?: ReadonlyArray<string>;
   logger?: (message: string) => void;
+  signal?: AbortSignal;
   onStep?: ClosedLoopEffects["onStep"];
   /**
    * When provided, every dispatch is routed through the SandboxRunner preflight
@@ -198,6 +203,7 @@ export function createAutonomyEffectsFactory(input: {
     safePrefixes: input.safePrefixes,
     extraSafePrefixes: input.extraSafePrefixes,
     logger: input.logger,
+    signal: input.signal,
   });
 
   return (session: AgentSession): ClosedLoopEffects => {
@@ -250,6 +256,7 @@ export async function runAutonomousPersonaTask(input: RunAutonomousPersonaTaskIn
     extraSafePrefixes: input.extraSafePrefixes,
     logger: input.logger,
     onStep: input.onStep,
+    signal: input.signal,
   });
 
   return runPersonaCodingTask({
@@ -263,6 +270,7 @@ export async function runAutonomousPersonaTask(input: RunAutonomousPersonaTaskIn
     agentSet: input.agentSet,
     worldInfo: input.worldInfo,
     maxIterations: input.maxIterations,
+    signal: input.signal,
     now,
   });
 }

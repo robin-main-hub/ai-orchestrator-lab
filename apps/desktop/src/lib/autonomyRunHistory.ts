@@ -6,7 +6,7 @@ import type { StatusBadgeVariant } from "@/ui/status-badge";
  * per-run history for an audit/replay view. Pure, so it is unit-tested.
  */
 
-export type AutonomyRunHistoryStatus = "completed" | "failed" | "awaiting_human" | "not_summoned" | "running";
+export type AutonomyRunHistoryStatus = "completed" | "failed" | "awaiting_human" | "not_summoned" | "cancelled" | "running";
 
 export type AutonomyRunSummary = {
   runId: string;
@@ -67,6 +67,8 @@ export function runHistoryStatusLabel(status: AutonomyRunHistoryStatus): string 
       return "사람 승인 대기";
     case "not_summoned":
       return "소환 불가";
+    case "cancelled":
+      return "중지됨";
     case "running":
     default:
       return "실행 중";
@@ -82,6 +84,8 @@ export function runHistoryStatusVariant(status: AutonomyRunHistoryStatus): Statu
     case "awaiting_human":
       return "warning";
     case "not_summoned":
+      return "muted";
+    case "cancelled":
       return "muted";
     case "running":
     default:

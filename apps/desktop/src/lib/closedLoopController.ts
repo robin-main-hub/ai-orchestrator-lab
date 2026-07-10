@@ -24,7 +24,7 @@ import {
  * and cannot bypass them.
  */
 
-export type LoopStatus = "running" | "completed" | "failed" | "awaiting_human";
+export type LoopStatus = "running" | "completed" | "failed" | "awaiting_human" | "cancelled";
 
 export type LoopState = {
   verificationPlan: string[];
@@ -160,6 +160,8 @@ export type RunClosedLoopInput = {
   effects: ClosedLoopEffects;
   /** hard cap on iterations so a misbehaving worker can't loop forever (default 50) */
   maxIterations?: number;
+  /** cooperative cancellation — checked at loop boundaries; aborting resolves the run as "cancelled" */
+  signal?: AbortSignal;
 };
 
 const DEFAULT_MAX_ITERATIONS = 50;
@@ -172,10 +174,15 @@ export async function runClosedLoop({
   state,
   effects,
   maxIterations = DEFAULT_MAX_ITERATIONS,
+  signal,
 }: RunClosedLoopInput): Promise<LoopState> {
   let current = state;
   if (current.status !== "running") {
     return current;
+  }
+  const cancelled = () => signal?.aborted === true;
+  if (cancelled()) {
+    return { ...current, status: "cancelled" };
   }
 
   // Kick off the first verification step.
@@ -183,10 +190,28 @@ export async function runClosedLoop({
   if (firstCommand === undefined) {
     return { ...current, status: "completed" };
   }
-  await effects.dispatch(firstCommand, { stepIndex: current.stepIndex });
+  try {
+    await effects.dispatch(firstCommand, { stepIndex: current.stepIndex });
+  } catch (error) {
+    // An effect failing while we are being cancelled is the cancel, not a failure.
+    if (cancelled()) return { ...current, status: "cancelled" };
+    throw error;
+  }
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
-    const output = await effects.capture();
+    if (cancelled()) {
+      return { ...current, status: "cancelled" };
+    }
+    let output: string;
+    try {
+      output = await effects.capture();
+    } catch (error) {
+      if (cancelled()) return { ...current, status: "cancelled" };
+      throw error;
+    }
+    if (cancelled()) {
+      return { ...current, status: "cancelled" };
+    }
     const result = reduceClosedLoop(current, output);
     current = result.state;
     if (effects.onStep) {
@@ -201,7 +226,12 @@ export async function runClosedLoop({
       return current;
     }
     if (result.decision.action === "dispatch_next" && result.nextCommand !== undefined) {
-      await effects.dispatch(result.nextCommand, { stepIndex: current.stepIndex });
+      try {
+        await effects.dispatch(result.nextCommand, { stepIndex: current.stepIndex });
+      } catch (error) {
+        if (cancelled()) return { ...current, status: "cancelled" };
+        throw error;
+      }
     }
     // await_capture: fall through and capture again.
   }
