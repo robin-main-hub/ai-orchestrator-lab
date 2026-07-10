@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Rewind, Sparkles } from "lucide-react";
+import { MessageSquare, Rewind, Sparkles } from "lucide-react";
 import type { EventEnvelope } from "@ai-orchestrator/protocol";
 import type { WorkbenchAgent } from "../types";
 import type { MakimaDelegationAssignmentView, MakimaDelegationCard } from "../lib/makimaDelegation";
@@ -75,6 +75,8 @@ type SummonEntry = {
   stageState: "blocked" | "active" | "waiting" | "done" | "idle";
   /** 무슨 일을 하는지 — 위임 카드 제목 */
   task?: string;
+  /** 임무 요약 — 위임 카드 summary(데모 파티는 없음) */
+  summary?: string;
 };
 
 /** roster 정렬 순위: blocked > waiting > active > idle > done */
@@ -149,6 +151,7 @@ function rowsToEntries(rows: TheaterRow[], agents: ReadonlyArray<WorkbenchAgent>
       stageKo: stageLabelFor(row.stageIndex),
       stageState,
       task: row.title || row.summary || undefined,
+      summary: row.summary || undefined,
     };
   });
 }
@@ -192,6 +195,8 @@ export function SummonTheater({
   agents,
   events = [],
   onOpenAgent,
+  request = "",
+  onRequestMission,
 }: {
   cards: ReadonlyArray<MakimaDelegationCard>;
   assignmentsByAgentId?: Record<string, MakimaDelegationAssignmentView>;
@@ -200,6 +205,10 @@ export function SummonTheater({
   events?: ReadonlyArray<EventEnvelope>;
   /** 배정된 에이전트 카드/주인공 클릭 → 그 에이전트 대화 열기 */
   onOpenAgent?: (agentId: string) => void;
+  /** 지휘자 최신 요청 원문 — "이번 작전" 패널 1줄 발췌 */
+  request?: string;
+  /** "지휘자에게 요청 보내기" CTA 배선(후속 슬라이스에서 App.tsx 연결) */
+  onRequestMission?: () => void;
 }) {
   const rows = useMemo(
     () =>
@@ -221,7 +230,10 @@ export function SummonTheater({
   const stageStates = useMemo(() => aggregateStageStates(rows), [rows]);
   const stageCounts = useMemo(() => stageHeadcount(rows), [rows]);
   const summary = summarizeTheater(rows);
-  const hero = entries.find((entry) => entry.active) ?? entries[0];
+  const [heroKey, setHeroKey] = useState<string | null>(null);
+  // hero = 선택 카드 우선 → 없거나 사라졌으면 첫 active → 그다음 첫 entry (폴백 체인)
+  const hero =
+    entries.find((entry) => entry.key === heroKey) ?? entries.find((entry) => entry.active) ?? entries[0];
 
   // 타자기 커맨드라인 (연출 유지 — THR-4에서 타이머 폐기→내용 변경 시 fade-in 1회로 교체 예정)
   const command = `> summon ${hero?.key ?? "kurumi"} --role ${hero?.roleLabel ?? "qa"} --mode auto_safe`;
@@ -338,7 +350,13 @@ export function SummonTheater({
           </div>
         ) : null}
         {rosterEntries.map((entry) => (
-          <SummonCard entry={entry} key={entry.key} onOpen={onOpenAgent} />
+          <SummonCard
+            entry={entry}
+            key={entry.key}
+            onOpen={onOpenAgent}
+            onSelect={(key) => setHeroKey(key)}
+            selected={hero?.key === entry.key}
+          />
         ))}
       </section>
 
@@ -384,6 +402,34 @@ export function SummonTheater({
           ) : null}
         </div>
 
+        {/* ── "이번 작전" 패널: 임무 제목·요약·지휘자 요청 발췌 (§2.7) ── */}
+        <div aria-label="이번 작전" className="theater-v2__mission">
+          {hero?.task ? (
+            <>
+              <p className="theater-v2__mission-title">{hero.task}</p>
+              {hero.summary ? <p className="theater-v2__mission-summary">{hero.summary}</p> : null}
+              {request ? (
+                <p className="theater-v2__mission-request">
+                  <span className="theater-v2__muted">지휘자 요청</span>
+                  <span className="theater-v2__mission-request-text">{request}</span>
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <div className="theater-v2__mission-empty">
+              <span aria-hidden className="theater-v2__mission-orbit" />
+              <p className="theater-v2__mission-empty-title">작전 대기 중</p>
+              <p className="theater-v2__muted text-[11px]">지휘자가 요청을 보내면 이 자리에 임무 브리핑이 열립니다.</p>
+              {/* CTA 배선은 후속 슬라이스에서 onRequestMission으로 연결(App.tsx 직렬 큐 예산 소진) */}
+              {onRequestMission ? (
+                <button className="theater-v2__mission-cta" onClick={onRequestMission} type="button">
+                  지휘자에게 요청 보내기
+                </button>
+              ) : null}
+            </div>
+          )}
+        </div>
+
         <footer className="theater-v2__ticker mt-3 flex items-center overflow-hidden whitespace-nowrap rounded-xl px-4 py-3 font-mono text-[13px]">
           <span className="theater-v2__ticker-prompt shrink-0">&gt;&nbsp;</span>
           <span className="theater-v2__ticker-text min-w-0 truncate">{command.slice(2, typed + 2)}</span>
@@ -408,72 +454,86 @@ const STAGE_STATE_LABEL: Record<SummonEntry["stageState"], string> = {
   idle: "대기",
 };
 
-function SummonCard({ entry, onOpen }: { entry: SummonEntry; onOpen?: (agentId: string) => void }) {
-  const clickable = Boolean(entry.agentId && onOpen);
+function SummonCard({
+  entry,
+  selected,
+  onSelect,
+  onOpen,
+}: {
+  entry: SummonEntry;
+  selected?: boolean;
+  onSelect?: (key: string) => void;
+  onOpen?: (agentId: string) => void;
+}) {
+  const canTalk = Boolean(entry.agentId && onOpen);
   return (
     <article
-      aria-label={clickable ? `${entry.koName}와 대화 열기 — ${entry.stageKo} 단계` : undefined}
       className={cn(
         "theater-v2__card",
         RARITY_CLASS[entry.rarity],
         entry.active && "theater-v2__card--active",
-        clickable && "theater-v2__card--clickable",
+        selected && "theater-v2__card--selected",
       )}
-      onClick={clickable ? () => onOpen?.(entry.agentId!) : undefined}
-      onKeyDown={
-        clickable
-          ? (event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                onOpen?.(entry.agentId!);
-              }
-            }
-          : undefined
-      }
-      role={clickable ? "button" : undefined}
-      tabIndex={clickable ? 0 : undefined}
-      title={clickable ? `${entry.koName}와 대화 열기` : undefined}
     >
-      {entry.portraitUrl ? (
-        <img
-          alt={entry.koName}
-          className="theater-v2__thumb h-24 w-[72px] shrink-0 rounded-xl object-cover"
-          loading="lazy"
-          src={entry.portraitUrl}
-        />
-      ) : (
-        <div className="theater-v2__thumb theater-v2__thumb--fallback flex h-24 w-[72px] shrink-0 items-center justify-center rounded-xl text-xl">
-          {entry.koName.slice(0, 1)}
-        </div>
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate text-[16px] font-bold leading-tight">{entry.jpName}</p>
-            <p className="theater-v2__muted truncate text-[11px]">{entry.koName}</p>
+      <button
+        aria-label={`${entry.koName} 주인공으로 보기`}
+        aria-pressed={selected}
+        className="theater-v2__card-body"
+        onClick={() => onSelect?.(entry.key)}
+        type="button"
+      >
+        {entry.portraitUrl ? (
+          <img
+            alt={entry.koName}
+            className="theater-v2__thumb h-24 w-[72px] shrink-0 rounded-xl object-cover"
+            loading="lazy"
+            src={entry.portraitUrl}
+          />
+        ) : (
+          <div className="theater-v2__thumb theater-v2__thumb--fallback flex h-24 w-[72px] shrink-0 items-center justify-center rounded-xl text-xl">
+            {entry.koName.slice(0, 1)}
           </div>
-          <span className="theater-v2__rarity shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold">
-            {entry.rarity}
-            {entry.rarity === "SSR" ? "★" : ""}
-          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-[16px] font-bold leading-tight">{entry.jpName}</p>
+              <p className="theater-v2__muted truncate text-[11px]">{entry.koName}</p>
+            </div>
+            <span className="theater-v2__rarity shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold">
+              {entry.rarity}
+              {entry.rarity === "SSR" ? "★" : ""}
+            </span>
+          </div>
+          <p className="theater-v2__role mt-0.5 truncate font-mono text-[11px]">{entry.roleLabel}</p>
+          {/* 지금 어느 단계에서 무슨 일을 하는지 — 작전극장의 핵심 */}
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <span
+              className={cn(
+                "theater-v2__stage-chip",
+                `theater-v2__stage-chip--${entry.stageState}`,
+                "shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold",
+              )}
+            >
+              {entry.stageKo} · {STAGE_STATE_LABEL[entry.stageState]}
+            </span>
+            {entry.task ? <span className="theater-v2__muted truncate text-[11px]">{entry.task}</span> : null}
+          </div>
+          <StatBar kind="hp" label="HP 기억" value={entry.hp} />
+          <StatBar kind="mp" label="MP 신뢰" value={entry.mp} />
         </div>
-        <p className="theater-v2__role mt-0.5 truncate font-mono text-[11px]">{entry.roleLabel}</p>
-        {/* 지금 어느 단계에서 무슨 일을 하는지 — 작전극장의 핵심 */}
-        <div className="mt-1.5 flex items-center gap-1.5">
-          <span
-            className={cn(
-              "theater-v2__stage-chip",
-              `theater-v2__stage-chip--${entry.stageState}`,
-              "shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold",
-            )}
-          >
-            {entry.stageKo} · {STAGE_STATE_LABEL[entry.stageState]}
-          </span>
-          {entry.task ? <span className="theater-v2__muted truncate text-[11px]">{entry.task}</span> : null}
-        </div>
-        <StatBar kind="hp" label="HP 기억" value={entry.hp} />
-        <StatBar kind="mp" label="MP 신뢰" value={entry.mp} />
-      </div>
+      </button>
+      {canTalk ? (
+        <button
+          aria-label={`${entry.koName}와 대화 열기`}
+          className="theater-v2__card-talk"
+          onClick={() => onOpen?.(entry.agentId!)}
+          title={`${entry.koName}와 대화 열기`}
+          type="button"
+        >
+          <MessageSquare aria-hidden className="h-4 w-4" />
+        </button>
+      ) : null}
     </article>
   );
 }

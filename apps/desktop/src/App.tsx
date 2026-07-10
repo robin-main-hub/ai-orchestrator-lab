@@ -3718,6 +3718,7 @@ export function App() {
   function handleOpenDelegatedAgentConversation(agentId: string) {
     setSelectedAgentId(agentId);
     setMode("conversation");
+    setActiveNavItem(MODE_OWNS_CENTER_NAV); // nav 해제 명시(§2.7 previousModeRef 조기 반환 회피)
     setApprovalDrawerOpen(false);
   }
 
@@ -5492,11 +5493,13 @@ export function App() {
               }}
             />
           ) : activeNavItem === "theater" ? (
+            // THR-2: request 발췌 — cards 인자와 동일 원문
             <SummonTheater
               agents={agents}
               assignmentsByAgentId={makimaDelegationAssignmentsByAgentId}
               events={eventLog}
               onOpenAgent={handleOpenDelegatedAgentConversation}
+              request={[...conversationMessages].reverse().find((message) => message.role === "user")?.content ?? ""}
               cards={createMakimaDelegationCards({
                 agents,
                 request:
