@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
 import type { ProviderProfile, RmasAgentLiveStatus, RmasAgentSlotConfig, RmasPattern } from "@ai-orchestrator/protocol";
+import { useCountUp } from "../../lib/useCountUp";
 import { agentDotMeta, formatTokenCount, PATTERN_DESCRIPTION } from "./rmasViewModel";
 
 /**
@@ -74,42 +74,3 @@ function TokenStat({ label, value }: { label: string; value: number }) {
   );
 }
 
-/**
- * Animates the displayed number toward `value` over ~420ms (cubic ease-out) so
- * token counters visibly tick up as the run streams. Honors reduced-motion (and
- * SSR / no-rAF environments) by snapping straight to the target.
- */
-function useCountUp(value: number): number {
-  const [display, setDisplay] = useState(value);
-  const fromRef = useRef(value);
-
-  useEffect(() => {
-    const from = fromRef.current;
-    const to = value;
-    fromRef.current = to;
-    if (from === to) return;
-
-    const prefersReduced =
-      typeof window !== "undefined" &&
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (prefersReduced || typeof requestAnimationFrame !== "function") {
-      setDisplay(to);
-      return;
-    }
-
-    const duration = 420;
-    const startedAt = performance.now();
-    let raf = 0;
-    const tick = (now: number) => {
-      const progress = Math.min(1, (now - startedAt) / duration);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplay(Math.round(from + (to - from) * eased));
-      if (progress < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [value]);
-
-  return display;
-}

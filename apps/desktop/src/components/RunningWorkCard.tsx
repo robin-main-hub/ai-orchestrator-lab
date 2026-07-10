@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, Square } from "lucide-react";
+import { useCountUp } from "../lib/useCountUp";
 
 /**
  * 현재 진행 중인 작업 한 건 — 홈의 "현재 작업"(페이지의 히어로)이 소비한다.
@@ -25,14 +26,6 @@ export type RunningWorkItem = {
 
 /** 홈의 빈 상태에 쓰는 오빗 링 아트 (public/brand). */
 const EMPTY_STATE_ART = `${import.meta.env.BASE_URL}brand/aol-empty-state.jpg`;
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
-}
 
 /**
  * 홈 상단의 전역 "현재 작업" 히어로. 진행 중인 작업을 라이브 텔레메트리(경과·토큰·
@@ -173,42 +166,6 @@ function formatElapsed(ms: number): string {
   const ss = total % 60;
   const pad = (n: number) => String(n).padStart(2, "0");
   return hh > 0 ? `${hh}:${pad(mm)}:${pad(ss)}` : `${pad(mm)}:${pad(ss)}`;
-}
-
-/** 값이 바뀌면 이전 값에서 짧게 카운트업. reduced-motion이면 즉시 스냅. */
-function useCountUp(target: number): number {
-  const [display, setDisplay] = useState(target);
-  const fromRef = useRef(target);
-  const rafRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (prefersReducedMotion() || typeof requestAnimationFrame !== "function") {
-      setDisplay(target);
-      fromRef.current = target;
-      return;
-    }
-    const from = fromRef.current;
-    if (from === target) return;
-    const start = performance.now();
-    const duration = 420;
-    const step = (t: number) => {
-      const progress = Math.min(1, (t - start) / duration);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplay(Math.round(from + (target - from) * eased));
-      if (progress < 1) {
-        rafRef.current = requestAnimationFrame(step);
-      } else {
-        fromRef.current = target;
-      }
-    };
-    rafRef.current = requestAnimationFrame(step);
-    return () => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-      fromRef.current = target;
-    };
-  }, [target]);
-
-  return display;
 }
 
 function kindLabel(kind: RunningWorkItem["kind"]): string {
