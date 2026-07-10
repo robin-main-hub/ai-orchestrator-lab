@@ -1,8 +1,5 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
+import { InboxDetailDrawerShell, type InboxDrawerNav } from "./InboxDetailDrawerShell";
 import { TONE } from "../../lib/inboxStyleTokens";
 import type { WorkItemCandidate } from "../../lib/workItemCandidate";
 import {
@@ -314,6 +311,7 @@ export function WorkItemCandidateDetailDrawer({
   runnerLink,
   patchLink,
   learningMemoryLink,
+  nav,
 }: {
   item: WorkItemCandidate | null;
   onClose: () => void;
@@ -321,30 +319,60 @@ export function WorkItemCandidateDetailDrawer({
   runnerLink?: WorkItemCandidateRunnerCandidateLink;
   patchLink?: WorkItemCandidatePatchCandidateLink;
   learningMemoryLink?: WorkItemCandidateLearningMemoryCandidateLink;
+  /** INB-B: prev/next over the candidate list (§6 UX-4 consecutive review). */
+  nav?: InboxDrawerNav;
 }) {
-  const ref = useRef<HTMLElement>(null);
   const [activeTab, setActiveTab] = useState<WicDetailTab>("overview");
-
-  useEffect(() => {
-    if (!item) return;
-    const prev = document.activeElement as HTMLElement | null;
-    ref.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      prev?.focus?.();
-    };
-  }, [item, onClose]);
-
+  // Reset to the first tab whenever the drawer targets a new candidate — including
+  // prev/next (↑/↓) navigation, which swaps item.id while the drawer stays open.
   useEffect(() => {
     setActiveTab("overview");
   }, [item?.id]);
 
-  if (!item) return null;
+  return (
+    <InboxDetailDrawerShell
+      open={item != null}
+      onClose={onClose}
+      testid="work-item-candidate-detail-drawer"
+      closeTestid="wic-detail-close"
+      kind={item?.kind}
+      width="w-80"
+      ariaLabel="work item candidate detail"
+      title="Work Item Candidate detail · read-only"
+      nav={nav}
+    >
+      {item ? (
+        <WorkItemCandidateDetailBody
+          item={item}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          draftLink={draftLink}
+          runnerLink={runnerLink}
+          patchLink={patchLink}
+          learningMemoryLink={learningMemoryLink}
+        />
+      ) : null}
+    </InboxDetailDrawerShell>
+  );
+}
 
+function WorkItemCandidateDetailBody({
+  item,
+  activeTab,
+  setActiveTab,
+  draftLink,
+  runnerLink,
+  patchLink,
+  learningMemoryLink,
+}: {
+  item: WorkItemCandidate;
+  activeTab: WicDetailTab;
+  setActiveTab: (tab: WicDetailTab) => void;
+  draftLink?: CandidateDraftEvidenceLink;
+  runnerLink?: WorkItemCandidateRunnerCandidateLink;
+  patchLink?: WorkItemCandidatePatchCandidateLink;
+  learningMemoryLink?: WorkItemCandidateLearningMemoryCandidateLink;
+}) {
   const nextStepPreview = buildWorkItemCandidateNextStepPreview(item, draftLink);
   const readiness = buildWorkItemCandidateReadiness(item, nextStepPreview, draftLink);
   const trace = buildWorkItemCandidateTrace(item, { draftLink, nextStepPreview, readiness });
@@ -369,38 +397,7 @@ export function WorkItemCandidateDetailDrawer({
   ];
 
   return (
-    <aside
-      ref={ref}
-      role="dialog"
-      aria-modal="true"
-      aria-label="work item candidate detail"
-      tabIndex={-1}
-      data-testid="work-item-candidate-detail-drawer"
-      data-kind={item.kind}
-      className="fixed right-3 top-16 z-50 w-80 rounded-lg border border-primary/20 bg-zinc-950/95 p-3 shadow-xl outline-none backdrop-blur"
-    >
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Work Item Candidate detail · read-only
-        </span>
-        <div
-          role="button"
-          tabIndex={0}
-          aria-label="닫기"
-          data-action-scope="local-detail"
-          data-testid="wic-detail-close"
-          onClick={onClose}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onClose();
-            }
-          }}
-          className="cursor-pointer rounded px-1 text-xs text-muted-foreground hover:text-zinc-200"
-        >
-          x
-        </div>
-      </div>
+    <>
       <div
         role="tablist"
         aria-label="work item candidate detail sections"
@@ -431,7 +428,11 @@ export function WorkItemCandidateDetailDrawer({
           );
         })}
       </div>
-      <section data-testid="wic-detail-panel-overview" data-active={activeTab === "overview" ? "true" : "false"}>
+      <section
+        data-testid="wic-detail-panel-overview"
+        data-active={activeTab === "overview" ? "true" : "false"}
+        hidden={activeTab !== "overview"}
+      >
         <dl className="space-y-0.5">
           {fields.map(([k, v]) => (
             <WorkItemCandidateDetailRow key={k} k={k} v={v} />
@@ -442,7 +443,11 @@ export function WorkItemCandidateDetailDrawer({
         <WorkItemCandidatePatchSignalsSection link={patchLink} />
         <WorkItemCandidateLearningMemorySignalsSection link={learningMemoryLink} />
       </section>
-      <section data-testid="wic-detail-panel-map" data-active={activeTab === "map" ? "true" : "false"}>
+      <section
+        data-testid="wic-detail-panel-map"
+        data-active={activeTab === "map" ? "true" : "false"}
+        hidden={activeTab !== "map"}
+      >
         <WorkItemCandidateLinkGraph item={item} />
         <WorkItemCandidateRelationshipMapV2
           item={item}
@@ -452,15 +457,27 @@ export function WorkItemCandidateDetailDrawer({
         />
         <WorkItemCandidateDraftEvidenceLinks link={draftLink} />
       </section>
-      <section data-testid="wic-detail-panel-readiness" data-active={activeTab === "readiness" ? "true" : "false"}>
+      <section
+        data-testid="wic-detail-panel-readiness"
+        data-active={activeTab === "readiness" ? "true" : "false"}
+        hidden={activeTab !== "readiness"}
+      >
         <WorkItemCandidateReadinessSection readiness={readiness} />
       </section>
-      <section data-testid="wic-detail-panel-preview" data-active={activeTab === "preview" ? "true" : "false"}>
+      <section
+        data-testid="wic-detail-panel-preview"
+        data-active={activeTab === "preview" ? "true" : "false"}
+        hidden={activeTab !== "preview"}
+      >
         <WorkItemCandidateNextStepPreviewCard preview={nextStepPreview} readiness={readiness} />
       </section>
-      <section data-testid="wic-detail-panel-trace" data-active={activeTab === "trace" ? "true" : "false"}>
+      <section
+        data-testid="wic-detail-panel-trace"
+        data-active={activeTab === "trace" ? "true" : "false"}
+        hidden={activeTab !== "trace"}
+      >
         <WorkItemCandidateTraceTimeline trace={trace} />
       </section>
-    </aside>
+    </>
   );
 }

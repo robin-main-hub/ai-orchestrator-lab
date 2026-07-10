@@ -3847,6 +3847,15 @@ export function AssistantInbox({
   // Engine E6 — locally-selected WorkItem Candidate row for the read-only drawer.
   const [selectedWorkItemCandidate, setSelectedWorkItemCandidate] = useState<WorkItemCandidate | null>(null);
   const closeWorkItemCandidateDetail = useCallback(() => setSelectedWorkItemCandidate(null), []);
+  // INB-B (U8 dialog층 동시 개방 1개) — opening one detail drawer closes the other.
+  const selectWorkItemCandidate = useCallback((candidate: WorkItemCandidate) => {
+    setSelectedDetail(null);
+    setSelectedWorkItemCandidate(candidate);
+  }, []);
+  const selectSourceDetail = useCallback((detail: SourceDetailItem) => {
+    setSelectedWorkItemCandidate(null);
+    setSelectedDetail(detail);
+  }, []);
   // Batch 16 LINE C — local Source Dock view filter (display-only).
   const [dockView, setDockView] = useState<SourceDockView>(DEFAULT_DOCK_VIEW);
   // Batch 17 LINE D — local patch lane filter (display-only).
@@ -4045,6 +4054,29 @@ export function AssistantInbox({
     workItemCandidates ?? [],
     learningMemory,
   );
+  // INB-B (§6 UX-4 / R1 대안 A) — prev/next over the FULL candidate list so ↑/↓ can
+  // review consecutive candidates (incl. any beyond the lane "더보기" cap) without
+  // the open/close round-trip. undefined when nothing is selected (no nav chrome).
+  const candidateNavList = workItemCandidates ?? [];
+  const selectedCandidateIndex = selectedWorkItemCandidate
+    ? candidateNavList.findIndex((c) => c.id === selectedWorkItemCandidate.id)
+    : -1;
+  const candidateNav =
+    selectedCandidateIndex >= 0
+      ? {
+          position: `${selectedCandidateIndex + 1} / ${candidateNavList.length}`,
+          hasPrev: selectedCandidateIndex > 0,
+          hasNext: selectedCandidateIndex < candidateNavList.length - 1,
+          onPrev: () => {
+            const prev = candidateNavList[selectedCandidateIndex - 1];
+            if (prev) setSelectedWorkItemCandidate(prev);
+          },
+          onNext: () => {
+            const next = candidateNavList[selectedCandidateIndex + 1];
+            if (next) setSelectedWorkItemCandidate(next);
+          },
+        }
+      : undefined;
   return (
     <Card
       className="border-white/10 bg-black/40 py-3"
@@ -4196,7 +4228,7 @@ export function AssistantInbox({
           {workItemCandidates ? (
             <WorkItemCandidatesCard
               rows={workItemCandidates}
-              onSelect={setSelectedWorkItemCandidate}
+              onSelect={selectWorkItemCandidate}
               cardRef={workItemCandidatesRef}
               reviewRef={workItemCandidateReviewRef}
               reviewCommand={command}
@@ -4233,13 +4265,13 @@ export function AssistantInbox({
             sources={pluginSources}
             evidence={pluginEvidence}
             cardRef={sourceDockRef}
-            onSelect={setSelectedDetail}
+            onSelect={selectSourceDetail}
             view={dockView}
           />
           <PatchCandidatesCard
             candidates={patchCandidates}
             cardRef={patchCandidatesRef}
-            onSelect={setSelectedDetail}
+            onSelect={selectSourceDetail}
             filter={patchFilter}
             onFilter={setPatchFilter}
             candidateLinks={workItemPatchSignalLinks}
@@ -4248,6 +4280,7 @@ export function AssistantInbox({
           <WorkItemCandidateDetailDrawer
             item={selectedWorkItemCandidate}
             onClose={closeWorkItemCandidateDetail}
+            nav={candidateNav}
             draftLink={
               selectedWorkItemCandidate
                 ? workItemEvidenceLinks.byCandidateId[selectedWorkItemCandidate.id]

@@ -1,5 +1,4 @@
-import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { InboxDetailDrawerShell } from "./InboxDetailDrawerShell";
 import type { PluginSourceHealth } from "../../lib/plugins/pluginManifest";
 import type {
   PatchCandidateSource,
@@ -168,12 +167,15 @@ function sectionsFor(item: SourceDetailItem): DetailSection[] {
 }
 
 /**
- * View-only side drawer. Renders null when nothing is selected (so it adds ZERO
- * DOM — and zero <button> — at mount, preserving the inbox's button-free scans).
- * The close affordance is a role="button" div (NOT a <button>), plus Esc; focus
- * is moved into the drawer on open and restored to the trigger on close.
+ * View-only side drawer (INB-B v2). Consumes the shared `InboxDetailDrawerShell`
+ * (useDialogFocus trap + Escape + focus restore + `--z-dialog` backdrop). Renders
+ * null when nothing is selected (adds ZERO DOM — and zero `<button>` — at mount,
+ * preserving the inbox's button-free scans). The close affordance stays a
+ * role="button" div (not a `<button>`). No prev/next nav: a source detail can come
+ * from several different lists (plugin sources · patch candidates), so consecutive
+ * ↑/↓ review is scoped to the work-item candidate axis (§6 UX-4).
  *
- * `onClose` MUST be stable (memoized) — the open/focus effect keys on it.
+ * `onClose` MUST be stable (memoized) — the shell's focus effect keys on it.
  */
 export function SourceDetailDrawer({
   item,
@@ -182,64 +184,30 @@ export function SourceDetailDrawer({
   item: SourceDetailItem | null;
   onClose: () => void;
 }) {
-  const ref = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    if (!item) return;
-    const prev = document.activeElement as HTMLElement | null;
-    ref.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      prev?.focus?.();
-    };
-  }, [item, onClose]);
-
-  if (!item) return null;
-
   return (
-    <aside
-      ref={ref}
-      role="dialog"
-      aria-modal="true"
-      aria-label="source detail"
-      tabIndex={-1}
-      data-testid="source-detail-drawer"
-      data-kind={item.kind}
-      className="fixed right-3 top-16 z-50 w-72 rounded-lg border border-white/15 bg-zinc-950/95 p-3 shadow-xl outline-none backdrop-blur"
+    <InboxDetailDrawerShell
+      open={item != null}
+      onClose={onClose}
+      testid="source-detail-drawer"
+      closeTestid="source-detail-close"
+      kind={item?.kind}
+      width="w-72"
+      ariaLabel="source detail"
+      title={
+        item
+          ? `${item.kind === "source" ? "Source detail" : "Source evidence detail"} · read-only`
+          : ""
+      }
     >
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
-          {item.kind === "source" ? "Source detail" : "Source evidence detail"} · read-only
-        </span>
-        <div
-          role="button"
-          tabIndex={0}
-          aria-label="닫기"
-          data-action-scope="local-detail"
-          data-testid="source-detail-close"
-          onClick={onClose}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onClose();
-            }
-          }}
-          className="flex cursor-pointer items-center rounded px-1 text-muted-foreground hover:text-zinc-200"
-        >
-          <X className="h-3.5 w-3.5" />
-        </div>
-      </div>
-      <p
-        className="mb-2 break-words text-[12px] font-medium text-zinc-200"
-        data-testid="source-detail-title"
-      >
-        {item.title}
-      </p>
-      <div className="space-y-2">
+      {item ? (
+        <>
+          <p
+            className="mb-2 break-words text-[12px] font-medium text-zinc-200"
+            data-testid="source-detail-title"
+          >
+            {item.title}
+          </p>
+          <div className="space-y-2">
         {sectionsFor(item).map((section) => (
           <section key={section.id} data-testid={`source-detail-section-${section.id}`}>
             <p className="mb-0.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/45">
@@ -298,8 +266,10 @@ export function SourceDetailDrawer({
             ))}
           </ul>
         </div>
+          ) : null}
+          <p className="mt-2 text-[12px] text-muted-foreground/45">view-only · no action</p>
+        </>
       ) : null}
-      <p className="mt-2 text-[12px] text-muted-foreground/45">view-only · no action</p>
-    </aside>
+    </InboxDetailDrawerShell>
   );
 }
