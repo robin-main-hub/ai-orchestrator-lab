@@ -5133,8 +5133,10 @@ export function App() {
   });
   const focusedV0Surface = !configLibraryActive && !navCenterActive && isFocusedV0Surface(mode);
   const leftRailVisible = shellVisibility.showLeftRail || providerRegistrationOpen || adminRailOpen;
-  // 대화/agents는 풀와이드 집중 화면 유지 — 에이전트 레일은 ChatSidePanel의 "에이전트" 모드로 흡수됨
-  const rightRailVisible = !focusedV0Surface && !navCenterActive;
+  // 대화/agents는 풀와이드 집중 화면 유지 — 에이전트 레일은 ChatSidePanel의 "에이전트" 모드로 흡수됨.
+  // config_files v2 (§0-B): 설정파일 뷰에서는 우측 에이전트 로스터 패널을 통째로 제거하고,
+  // 페르소나 프레즌스는 파일별 착용 캐릭터 칩으로만 유지한다.
+  const rightRailVisible = !focusedV0Surface && !navCenterActive && !configLibraryActive;
 
   // Switching the top-bar mode (대화/토론/Tmux/콕핏…) hands the center back to
   // that mode — leave the nav-owned center view so the tabs never look dead.
@@ -5645,6 +5647,8 @@ export function App() {
             />
           ) : configLibraryActive ? (
             <ConfigLibraryPanel
+              agents={agents}
+              agentVisualsById={agentVisualsById}
               configFiles={agentConfigFiles}
               onCreateConfigFile={handleCreateConfigFile}
               onDuplicateConfigFile={handleDuplicateConfigFile}
