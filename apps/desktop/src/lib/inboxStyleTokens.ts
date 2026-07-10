@@ -19,8 +19,9 @@ export const TONE = {
   warn: "border border-amber-400/30 bg-amber-400/10 text-amber-200",
   /** blocked / error / stale */
   bad: "border border-rose-400/30 bg-rose-400/10 text-rose-200",
-  /** informational accent (the inbox's cyan) */
-  info: "border border-cyan-400/30 bg-cyan-400/10 text-cyan-100",
+  /** informational accent — single-accent rule (§1.1): the old cyan is retired
+   * to a neutral-bright tone so emerald stays the sole accent. */
+  info: "border border-white/12 bg-white/[0.04] text-foreground",
   /** default chip tone (status strip) */
   neutral: "border border-white/10 bg-white/[0.03] text-muted-foreground",
   /** unknown / not-yet-observed */
@@ -38,10 +39,10 @@ export function toneClass(tone: StyleTone): string {
 }
 
 /** Chip layout (combine with a TONE for color): the status-strip / count chip. */
-export const CHIP_BASE = "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium";
+export const CHIP_BASE = "inline-flex items-center rounded px-1.5 py-0.5 text-[12px] font-medium";
 
 /** Small uppercase pill layout (kind / category / capability tags). */
-export const PILL_BASE = "rounded px-1 text-[9px] uppercase tracking-wide";
+export const PILL_BASE = "rounded px-1 text-[12px] uppercase tracking-wide";
 
 /** A full chip = layout + tone. Default tone is neutral (the plain status chip). */
 export function chipClass(tone: StyleTone = "neutral"): string {
@@ -61,4 +62,4 @@ export const EMPTY_STATE = "rounded-md border border-dashed border-white/10 bg-w
 
 /** Section card shell + header typography (consistent hierarchy across cards). */
 export const SECTION_CARD = "space-y-1.5 rounded-lg border border-white/5 bg-white/[0.02] p-2";
-export const SECTION_HEADER = "text-[11px] font-semibold uppercase tracking-wider text-muted-foreground";
+export const SECTION_HEADER = "text-[12px] font-semibold uppercase tracking-wider text-muted-foreground";

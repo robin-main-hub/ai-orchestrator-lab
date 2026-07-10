@@ -6,7 +6,7 @@ import {
   type RefObject,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import { Inbox } from "lucide-react";
+import { Inbox, Check, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { SourceBadge } from "./StatusBadge";
@@ -440,9 +440,9 @@ function Section({
           data-testid={`assistant-inbox-section-empty-${id}`}
           data-empty="true"
         >
-          <p className="text-[11px] font-medium text-muted-foreground/80">{emptyHint}</p>
+          <p className="text-[12px] font-medium text-muted-foreground/80">{emptyHint}</p>
           {emptyDetail ? (
-            <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground/55">{emptyDetail}</p>
+            <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground/55">{emptyDetail}</p>
           ) : null}
         </div>
       ) : (
@@ -481,9 +481,9 @@ function ModeSwitch({
             data-testid={`inbox-mode-label-${m.value}`}
             data-active={active ? "true" : "false"}
             className={[
-              "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider transition-colors",
+              "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[12px] font-semibold uppercase tracking-wider transition-colors",
               active
-                ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-200"
+                ? "border-primary/40 bg-primary/10 text-primary"
                 : "border-white/10 text-muted-foreground",
               m.enabled ? "cursor-pointer hover:border-white/20" : "cursor-not-allowed opacity-50",
             ].join(" ")}
@@ -503,7 +503,7 @@ function ModeSwitch({
             />
             {m.label}
             {m.enabled ? null : (
-              <span className="ml-1 text-[9px] normal-case opacity-70">준비 중</span>
+              <span className="ml-1 text-[12px] normal-case opacity-70">준비 중</span>
             )}
           </label>
         );
@@ -521,12 +521,12 @@ function PreviewBanner() {
     <div
       role="note"
       data-testid="assistant-inbox-preview-banner"
-      className="mx-4 mb-2 rounded-md border border-l-[3px] border-amber-400/30 border-l-amber-400/80 bg-amber-400/10 px-3 py-1.5 text-[11px] text-amber-200"
+      className="mx-4 mb-2 rounded-md border border-l-[3px] border-amber-400/30 border-l-amber-400/80 bg-amber-400/10 px-3 py-1.5 text-[12px] text-amber-200"
     >
-      <span className="mr-1 rounded bg-amber-400/20 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+      <span className="mr-1 rounded bg-amber-400/20 px-1 py-0.5 text-[12px] font-bold uppercase tracking-wider">
         Preview
       </span>
-      <span className="font-semibold">PREVIEW MODE</span> — 예시(fixture) 데이터입니다 · 실제
+      <span className="font-semibold">PREVIEW MODE</span> · 예시(fixture) 데이터입니다 · 실제
       업무/실제 이벤트가 아닙니다 · 모든 액션은 비활성화되어 있습니다
     </div>
   );
@@ -575,14 +575,14 @@ function CommandDeck({
   onClear: () => void;
 }) {
   const base =
-    "rounded border px-1.5 py-0.5 text-[10px] font-medium tracking-wide transition-colors";
+    "rounded border px-1.5 py-0.5 text-[12px] font-medium tracking-wide transition-colors";
   const tone = (active: boolean) =>
     active
-      ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+      ? "border-primary/40 bg-primary/10 text-primary"
       : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-200";
   return (
     <div data-testid="command-deck" className="flex flex-wrap items-center gap-1 px-4 pb-2">
-      <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-cyan-200/60">
+      <span className="mr-0.5 text-[12px] font-semibold uppercase tracking-wider text-primary/60">
         deck
       </span>
       {VIEW_PRESETS.map((p) => (
@@ -668,14 +668,14 @@ function SourceDockQuickControls({
   onChange: (v: SourceDockView) => void;
   onJump: () => void;
 }) {
-  const base = "rounded border px-1.5 py-0.5 text-[10px] tracking-wide transition-colors";
+  const base = "rounded border px-1.5 py-0.5 text-[12px] tracking-wide transition-colors";
   const tone = (active: boolean) =>
     active
-      ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+      ? "border-primary/40 bg-primary/10 text-primary"
       : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-200";
   return (
     <div data-testid="source-dock-controls" className="mx-4 mb-1 flex flex-wrap items-center gap-1">
-      <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+      <span className="mr-0.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/60">
         dock
       </span>
       <button
@@ -825,7 +825,8 @@ function StatusStrip({
       {srcHealth ? (
         <>
           <StatChip testid="assistant-inbox-stat-src-connected">
-            src ✓{srcHealth.connected}
+            src <Check className="inline h-3 w-3 align-text-bottom" />
+            {srcHealth.connected}
           </StatChip>
           <StatChip testid="assistant-inbox-stat-src-stale">~{srcHealth.stale}</StatChip>
           <StatChip testid="assistant-inbox-stat-src-error">!{srcHealth.error}</StatChip>
@@ -861,11 +862,11 @@ function StatusStrip({
 function LiveEmptyHero() {
   return (
     <div
-      className="mx-4 mb-2 rounded-lg border border-cyan-400/15 bg-cyan-400/[0.04] px-3 py-2.5"
+      className="mx-4 mb-2 rounded-lg border border-primary/15 bg-primary/[0.04] px-3 py-2.5"
       data-testid="assistant-inbox-live-empty-hero"
     >
-      <p className="text-[12px] font-semibold text-cyan-200/90">작전 대기 중 · No live data yet</p>
-      <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground/75">
+      <p className="text-[12px] font-semibold text-primary/90">작전 대기 중 · No live data yet</p>
+      <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground/75">
         runner gate만 관측됨. learning loop · memory candidate · runtime manifest는 실제 이벤트가
         들어오면 여기 채워집니다.
       </p>
@@ -892,7 +893,7 @@ const PREVIEW_SCENARIOS = [
 function PreviewScenarioLegend() {
   return (
     <div
-      className="mx-4 mb-2 flex flex-wrap items-center gap-1 text-[10px] text-amber-200/70"
+      className="mx-4 mb-2 flex flex-wrap items-center gap-1 text-[12px] text-amber-200/70"
       data-testid="assistant-inbox-preview-scenarios"
     >
       <span className="font-semibold uppercase tracking-wider text-amber-200/90">시나리오 덱</span>
@@ -944,16 +945,16 @@ function WorkLaneRail({
           className="rounded-md border border-white/[0.08] bg-white/[0.02] px-2 py-1.5"
         >
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
               {lane.title}
             </span>
-            <span className="ml-auto rounded bg-white/[0.08] px-1 text-[10px] tabular-nums text-zinc-300">
+            <span className="ml-auto rounded bg-white/[0.08] px-1 text-[12px] tabular-nums text-zinc-300">
               {count}
             </span>
           </div>
           {count === 0 ? (
             <p
-              className="mt-1 text-[10px] leading-snug text-muted-foreground/50"
+              className="mt-1 text-[12px] leading-snug text-muted-foreground/50"
               data-testid={`work-lane-empty-${lane.id}`}
             >
               {q ? "검색 결과 없음" : filtering ? "필터 결과 없음" : lane.emptyHint}
@@ -964,12 +965,12 @@ function WorkLaneRail({
                 <li
                   key={i}
                   data-testid={`work-lane-item-${lane.id}-${i}`}
-                  className="flex items-center gap-1 text-[10px] text-zinc-400"
+                  className="flex items-center gap-1 text-[12px] text-zinc-400"
                 >
                   <span className="truncate">{item.label}</span>
                   {item.category ? (
                     <span
-                      className="ml-auto shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase tracking-wide text-muted-foreground"
+                      className="ml-auto shrink-0 rounded bg-white/[0.06] px-1 text-[12px] uppercase tracking-wide text-muted-foreground"
                       data-testid={`work-lane-category-${lane.id}-${i}`}
                       data-category={item.category}
                     >
@@ -1027,24 +1028,24 @@ function SourcePackCard() {
   return (
     <div
       data-testid="source-pack-card"
-      className="mx-4 mb-2 rounded-lg border border-violet-400/20 bg-violet-400/[0.03] p-2.5"
+      className="mx-4 mb-2 rounded-lg border border-primary/20 bg-primary/[0.03] p-2.5"
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5" data-testid="source-pack-manifest">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-violet-200/80">
+        <span className="text-[12px] font-semibold uppercase tracking-wider text-primary/80">
           Source Pack
         </span>
-        <span className="text-[11px] font-medium text-zinc-300">{pack.manifest.name}</span>
-        <span className="rounded bg-white/[0.06] px-1 text-[9px] tabular-nums text-muted-foreground/70">
+        <span className="text-[12px] font-medium text-zinc-300">{pack.manifest.name}</span>
+        <span className="rounded bg-white/[0.06] px-1 text-[12px] tabular-nums text-muted-foreground/70">
           v{pack.manifest.version}
         </span>
         <span
-          className="rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70"
+          className="rounded bg-white/[0.06] px-1 text-[12px] uppercase text-muted-foreground/70"
           data-testid="source-pack-kind"
           data-kind={pack.manifest.sourceKind}
         >
           {pack.manifest.sourceKind}
         </span>
-        <span className="ml-auto text-[9px] uppercase tracking-wider text-muted-foreground/45">
+        <span className="ml-auto text-[12px] uppercase tracking-wider text-muted-foreground/45">
           declarative · read-only
         </span>
       </div>
@@ -1053,7 +1054,7 @@ function SourcePackCard() {
           <span
             key={cap}
             data-testid={`source-pack-cap-${cap}`}
-            className="rounded border border-violet-400/25 bg-violet-400/[0.06] px-1 text-[9px] uppercase tracking-wide text-violet-200/80"
+            className="rounded border border-primary/25 bg-primary/[0.06] px-1 text-[12px] uppercase tracking-wide text-primary/80"
           >
             {cap}
           </span>
@@ -1064,19 +1065,19 @@ function SourcePackCard() {
           <li
             key={r.id}
             data-testid={`source-pack-row-${i}`}
-            className="flex items-center gap-1.5 text-[10px] text-zinc-400"
+            className="flex items-center gap-1.5 text-[12px] text-zinc-400"
           >
-            <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
+            <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[12px] uppercase text-muted-foreground/70">
               plugin
             </span>
             <span className="min-w-0 flex-1 truncate">{r.title}</span>
             <span
-              className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground"
+              className="shrink-0 rounded bg-white/[0.06] px-1 text-[12px] uppercase text-muted-foreground"
               data-category={r.category}
             >
               {r.category}
             </span>
-            <span className="shrink-0 text-[9px] text-muted-foreground/45">{r.sourceRef}</span>
+            <span className="shrink-0 text-[12px] text-muted-foreground/45">{r.sourceRef}</span>
           </li>
         ))}
       </ul>
@@ -1086,13 +1087,13 @@ function SourcePackCard() {
             <li
               key={e.id}
               data-testid={`source-pack-evidence-${i}`}
-              className="flex items-center gap-1.5 text-[10px] text-zinc-400"
+              className="flex items-center gap-1.5 text-[12px] text-zinc-400"
             >
-              <span className="shrink-0 rounded bg-amber-400/10 px-1 text-[9px] uppercase text-amber-200/70">
+              <span className="shrink-0 rounded bg-amber-400/10 px-1 text-[12px] uppercase text-amber-200/70">
                 evidence
               </span>
               <span className="min-w-0 flex-1 truncate">{e.title}</span>
-              <span className="shrink-0 text-[9px] text-muted-foreground/60" data-trust={e.trust}>
+              <span className="shrink-0 text-[12px] text-muted-foreground/60" data-trust={e.trust}>
                 trust:{e.trust}
               </span>
             </li>
@@ -1138,20 +1139,20 @@ function EvidenceDraftCard({
       ref={cardRef}
       tabIndex={-1}
       data-testid="evidence-draft-card"
-      className="mx-4 mb-2 rounded-lg border border-cyan-400/20 bg-cyan-400/[0.03] p-2.5 outline-none"
+      className="mx-4 mb-2 rounded-lg border border-primary/20 bg-primary/[0.03] p-2.5 outline-none"
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-cyan-200/80">
+        <span className="text-[12px] font-semibold uppercase tracking-wider text-primary/80">
           Evidence Draft
         </span>
-        <span className="text-[11px] font-medium text-zinc-300" data-testid="evidence-draft-title">
+        <span className="text-[12px] font-medium text-zinc-300" data-testid="evidence-draft-title">
           {draft.title}
         </span>
         {draft.staleCount > 0 ? (
           <span
             data-testid="evidence-draft-stale-count"
             data-stale-count={draft.staleCount}
-            className={`rounded px-1 text-[9px] uppercase tracking-wide ${TONE.bad}`}
+            className={`rounded px-1 text-[12px] uppercase tracking-wide ${TONE.bad}`}
           >
             {draft.staleCount} stale
           </span>
@@ -1160,12 +1161,12 @@ function EvidenceDraftCard({
           <span
             data-testid="evidence-draft-related-candidate-count"
             data-count={workItemLinks.relatedCandidateCount}
-            className={`rounded px-1 text-[9px] uppercase tracking-wide ${TONE.info}`}
+            className={`rounded px-1 text-[12px] uppercase tracking-wide ${TONE.info}`}
           >
             {workItemLinks.relatedCandidateCount} related candidates
           </span>
         ) : null}
-        <span className="ml-auto text-[9px] uppercase tracking-wider text-muted-foreground/45">
+        <span className="ml-auto text-[12px] uppercase tracking-wider text-muted-foreground/45">
           footnoted · read-only
         </span>
       </div>
@@ -1177,15 +1178,15 @@ function EvidenceDraftCard({
             key={c.id}
             data-testid={`evidence-draft-claim-${c.id}`}
             data-supported={c.supported ? "true" : "false"}
-            className="flex items-start gap-1.5 text-[11px] text-zinc-300"
+            className="flex items-start gap-1.5 text-[12px] text-zinc-300"
           >
             <span className="min-w-0 flex-1">{c.text}</span>
             {c.footnotes.length > 0 ? (
-              <sup className="shrink-0 text-[9px] tabular-nums text-cyan-300/80">
+              <sup className="shrink-0 text-[12px] tabular-nums text-primary/80">
                 {c.footnotes.map((n) => `[${n}]`).join("")}
               </sup>
             ) : (
-              <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase tracking-wide text-muted-foreground/60">
+              <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[12px] uppercase tracking-wide text-muted-foreground/60">
                 needs source
               </span>
             )}
@@ -1201,9 +1202,9 @@ function EvidenceDraftCard({
             <li
               key={f.n}
               data-testid={`evidence-draft-footnote-${f.n}`}
-              className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
+              className="flex items-center gap-1.5 text-[12px] text-muted-foreground"
             >
-              <span className="shrink-0 tabular-nums text-cyan-300/70">[{f.n}]</span>
+              <span className="shrink-0 tabular-nums text-primary/70">[{f.n}]</span>
               <code className="shrink-0 rounded bg-background/70 px-1">{f.refId}</code>
               <span className="min-w-0 flex-1 truncate">
                 {f.label}
@@ -1213,7 +1214,7 @@ function EvidenceDraftCard({
                 <span
                   data-testid={`evidence-draft-footnote-related-${f.n}`}
                   data-count={related.candidateIds.length}
-                  className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${TONE.info}`}
+                  className={`shrink-0 rounded px-1 text-[12px] uppercase tracking-wide ${TONE.info}`}
                 >
                   {related.candidateIds.length} candidate
                   {related.candidateIds.length === 1 ? "" : "s"}
@@ -1222,7 +1223,7 @@ function EvidenceDraftCard({
               <span
                 data-testid={`evidence-draft-freshness-${f.n}`}
                 data-freshness={f.freshness}
-                className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${FRESHNESS_TONE[f.freshness]}`}
+                className={`shrink-0 rounded px-1 text-[12px] uppercase tracking-wide ${FRESHNESS_TONE[f.freshness]}`}
               >
                 {f.freshness}
                 {f.ageHours != null ? <span className="ml-0.5 opacity-70 tabular-nums">{f.ageHours}h</span> : null}
@@ -1239,7 +1240,7 @@ function EvidenceDraftCard({
           data-missing-count={draft.missing.length}
           className="mt-1.5 rounded border border-dashed border-amber-400/25 bg-amber-400/[0.04] p-1.5"
         >
-          <div className="mb-0.5 text-[9px] uppercase tracking-wider text-amber-200/70">
+          <div className="mb-0.5 text-[12px] uppercase tracking-wider text-amber-200/70">
             missing info · ask
           </div>
           <ul className="space-y-0.5">
@@ -1247,10 +1248,10 @@ function EvidenceDraftCard({
               <li
                 key={m.claimId}
                 data-testid={`evidence-draft-ask-${m.claimId}`}
-                className="text-[10px] text-amber-100/70"
+                className="text-[12px] text-amber-100/70"
               >
                 <span className="text-zinc-300">{m.text}</span>
-                <span className="opacity-70"> — {m.ask}</span>
+                <span className="opacity-70"> · {m.ask}</span>
               </li>
             ))}
           </ul>
@@ -1303,7 +1304,7 @@ function RunnerTheaterCard({
       className="mx-4 mb-2 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.02] p-2.5"
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-200/80">
+        <span className="text-[12px] font-semibold uppercase tracking-wider text-emerald-200/80">
           Runner Theater
         </span>
         <span data-testid="runner-theater-active" className={`${CHIP_BASE} ${TONE.good}`}>
@@ -1323,7 +1324,7 @@ function RunnerTheaterCard({
             {summary.stalledActive} stalled
           </span>
         ) : null}
-        <span className="ml-auto text-[9px] uppercase tracking-wider text-muted-foreground/45">
+        <span className="ml-auto text-[12px] uppercase tracking-wider text-muted-foreground/45">
           observed · read-only
         </span>
       </div>
@@ -1334,8 +1335,8 @@ function RunnerTheaterCard({
           data-testid="runner-theater-empty"
           data-empty="true"
         >
-          <p className="text-[11px] font-medium text-muted-foreground/80">관측된 runner 세션 없음</p>
-          <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground/55">
+          <p className="text-[12px] font-medium text-muted-foreground/80">관측된 runner 세션 없음</p>
+          <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground/55">
             runner/미션이 시작되면 여기 표시 · 표시 전용 · 관측만
           </p>
         </div>
@@ -1345,7 +1346,7 @@ function RunnerTheaterCard({
             <div key={lane} data-testid={`runner-theater-lane-${lane}`}>
               <div className="mb-0.5 flex items-center gap-1">
                 <span
-                  className={`rounded px-1 text-[9px] uppercase tracking-wide ${RUNNER_LANE_TONE[lane]}`}
+                  className={`rounded px-1 text-[12px] uppercase tracking-wide ${RUNNER_LANE_TONE[lane]}`}
                 >
                   {RUNNER_LANE_LABEL[lane]}
                 </span>
@@ -1362,9 +1363,9 @@ function RunnerTheaterCard({
                         data-testid={`runner-theater-row-${r.id}`}
                         data-lane={r.lane}
                         data-liveness={r.liveness}
-                        className="flex items-center gap-1.5 text-[10px] text-zinc-300"
+                        className="flex items-center gap-1.5 text-[12px] text-zinc-300"
                       >
-                        <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
+                        <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[12px] uppercase text-muted-foreground/70">
                           {r.role}
                         </span>
                         <span className="min-w-0 flex-1 truncate">{r.title}</span>
@@ -1377,19 +1378,19 @@ function RunnerTheaterCard({
                           </span>
                         ) : null}
                         {r.eventCount > 0 ? (
-                          <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
+                          <span className="shrink-0 text-[12px] text-muted-foreground/55 tabular-nums">
                             {r.eventCount}ev
                           </span>
                         ) : null}
                         {r.artifactCount > 0 ? (
-                          <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
+                          <span className="shrink-0 text-[12px] text-muted-foreground/55 tabular-nums">
                             {r.artifactCount}art
                           </span>
                         ) : null}
                         <span
                           data-testid={`runner-theater-liveness-${r.id}`}
                           data-liveness={r.liveness}
-                          className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${RUNNER_LIVENESS_TONE[r.liveness]}`}
+                          className={`shrink-0 rounded px-1 text-[12px] uppercase tracking-wide ${RUNNER_LIVENESS_TONE[r.liveness]}`}
                         >
                           {r.liveness}
                           {r.ageMinutes != null ? (
@@ -1427,10 +1428,10 @@ function LearningMemoryConsoleCard({
     <div
       data-testid="learning-memory-console"
       data-has-data={c.hasData ? "true" : "false"}
-      className="mx-4 mb-2 rounded-lg border border-violet-400/15 bg-violet-400/[0.02] p-2.5"
+      className="mx-4 mb-2 rounded-lg border border-primary/15 bg-primary/[0.02] p-2.5"
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-violet-200/80">
+        <span className="text-[12px] font-semibold uppercase tracking-wider text-primary/80">
           Learning &amp; Memory
         </span>
         {linkedCandidateCount > 0 ? (
@@ -1451,22 +1452,22 @@ function LearningMemoryConsoleCard({
             {f}
           </span>
         ))}
-        <span className="ml-auto text-[9px] uppercase tracking-wider text-muted-foreground/45">
+        <span className="ml-auto text-[12px] uppercase tracking-wider text-muted-foreground/45">
           observed · read-only
         </span>
       </div>
 
       {!c.hasData ? (
         <div className={EMPTY_STATE} data-testid="learning-memory-empty" data-empty="true">
-          <p className="text-[11px] font-medium text-muted-foreground/80">관측된 learning/memory 없음</p>
-          <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground/55">
+          <p className="text-[12px] font-medium text-muted-foreground/80">관측된 learning/memory 없음</p>
+          <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground/55">
             learning loop·memory 후보가 관측되면 표시 · 표시 전용 · 자동 신뢰/기록 안 함
           </p>
         </div>
       ) : (
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-1" data-testid="lm-learning-row">
-            <span className="w-16 shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground/55">
+            <span className="w-16 shrink-0 text-[12px] uppercase tracking-wider text-muted-foreground/55">
               learning
             </span>
             <span data-testid="lm-learning-total" className={`${CHIP_BASE} ${TONE.neutral}`}>
@@ -1490,7 +1491,7 @@ function LearningMemoryConsoleCard({
           </div>
 
           <div className="flex flex-wrap items-center gap-1" data-testid="lm-memory-row">
-            <span className="w-16 shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground/55">
+            <span className="w-16 shrink-0 text-[12px] uppercase tracking-wider text-muted-foreground/55">
               memory
             </span>
             <span data-testid="lm-memory-total" className={`${CHIP_BASE} ${TONE.neutral}`}>
@@ -1499,14 +1500,14 @@ function LearningMemoryConsoleCard({
             <span data-testid="lm-memory-suggested" className={`${CHIP_BASE} ${TONE.muted}`}>
               {c.memory.suggested} suggested
             </span>
-            <span className="text-[9px] text-muted-foreground/45">
+            <span className="text-[12px] text-muted-foreground/45">
               {c.memory.observed} written (observed)
             </span>
           </div>
 
           {c.evalHealth.reports > 0 ? (
             <div className="flex flex-wrap items-center gap-1" data-testid="lm-eval-row">
-              <span className="w-16 shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground/55">
+              <span className="w-16 shrink-0 text-[12px] uppercase tracking-wider text-muted-foreground/55">
                 eval
               </span>
               {c.evalHealth.pass > 0 ? (
@@ -1592,7 +1593,7 @@ function WorkItemCandidateReadinessChip({
       data-testid={`wic-readiness-chip-${row.id}`}
       data-readiness={readiness.readiness}
       data-confidence={readiness.confidence}
-      className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${WIC_READINESS_TONE[readiness.readiness]}`}
+      className={`shrink-0 rounded px-1 text-[12px] uppercase tracking-wide ${WIC_READINESS_TONE[readiness.readiness]}`}
       title={`confidence · ${readiness.confidence}`}
     >
       {readiness.readiness}
@@ -1631,7 +1632,7 @@ function WorkItemCandidateOperatorReviewPanel({
   onFilter: (filter: WorkItemCandidateOperatorReviewFilter) => void;
 }) {
   const buttonBase =
-    "rounded border px-1.5 py-0.5 text-[10px] font-medium transition-colors";
+    "rounded border px-1.5 py-0.5 text-[12px] font-medium transition-colors";
   const buttonTone = (active: boolean) =>
     active
       ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-100"
@@ -1682,7 +1683,7 @@ function WorkItemCandidateOperatorReviewPanel({
       className="mb-2 space-y-1 rounded-md border border-emerald-400/15 bg-emerald-400/[0.025] p-1.5"
     >
       <div className="flex flex-wrap items-center gap-1">
-        <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-200/70">
+        <span className="mr-0.5 text-[12px] font-semibold uppercase tracking-wider text-emerald-200/70">
           operator review
         </span>
         <CountChip testId="wic-review-count-ready" count={review.counts.ready} label="ready" tone={TONE.good} />
@@ -1721,7 +1722,7 @@ function WorkItemCandidateOperatorReviewPanel({
         >
           {review.counts.confidenceLow} low confidence
         </span>
-        <span className="ml-auto text-[9px] uppercase tracking-wider text-muted-foreground/45">
+        <span className="ml-auto text-[12px] uppercase tracking-wider text-muted-foreground/45">
           local review only · lifecycle 없음
         </span>
       </div>
@@ -1860,10 +1861,10 @@ function WorkItemCandidatesCard({
   const visibleOperationRows = boardProjection.visibleRows.filter(matchesSignalFilter);
   const attentionOperationRows = boardProjection.attentionRows.filter(matchesSignalFilter);
   const buttonBase =
-    "rounded border px-1.5 py-0.5 text-[10px] font-medium transition-colors";
+    "rounded border px-1.5 py-0.5 text-[12px] font-medium transition-colors";
   const buttonTone = (active: boolean) =>
     active
-      ? "border-sky-400/40 bg-sky-400/10 text-sky-100"
+      ? "border-primary/40 bg-primary/10 text-primary"
       : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-200";
   const FilterButton = ({
     testId,
@@ -1903,12 +1904,12 @@ function WorkItemCandidatesCard({
             data-lane={r.lane}
             data-risk={r.risk}
             data-status={r.status}
-            className={`flex items-center gap-1.5 text-[10px] text-zinc-300 ${
+            className={`flex items-center gap-1.5 text-[12px] text-zinc-300 ${
               onSelect ? "cursor-pointer rounded px-1 py-0.5 hover:bg-white/[0.04]" : ""
             }`}
             {...(onSelect ? rowActivation(() => onSelect(r)) : {})}
           >
-            <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
+            <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[12px] uppercase text-muted-foreground/70">
               {r.kind}
             </span>
             <span className="min-w-0 flex-1 truncate" title={r.reason}>
@@ -1943,18 +1944,18 @@ function WorkItemCandidatesCard({
               </span>
             ) : null}
             {operationRow.hasLinkedDraftClaims ? (
-              <span className="shrink-0 rounded bg-sky-400/10 px-1 text-[9px] uppercase text-sky-100/80">
+              <span className="shrink-0 rounded bg-primary/10 px-1 text-[12px] uppercase text-primary/80">
                 draft ref
               </span>
             ) : null}
             {r.evidenceRefs.length > 0 ? (
-              <span className="shrink-0 text-[9px] text-muted-foreground/55 tabular-nums">
+              <span className="shrink-0 text-[12px] text-muted-foreground/55 tabular-nums">
                 {r.evidenceRefs.length}ev
               </span>
             ) : null}
             <WorkItemCandidateReadinessChip row={r} readiness={operationRow.readiness} />
             <span
-              className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${WIC_RISK_TONE[r.risk] ?? TONE.muted}`}
+              className={`shrink-0 rounded px-1 text-[12px] uppercase tracking-wide ${WIC_RISK_TONE[r.risk] ?? TONE.muted}`}
             >
               {r.risk}
             </span>
@@ -1976,10 +1977,10 @@ function WorkItemCandidatesCard({
         >
           <div data-testid={`wic-lane-${lane}`}>
             <div className="mb-0.5 flex items-center gap-1">
-              <span className={`rounded px-1 text-[9px] uppercase tracking-wide ${WIC_LANE_TONE[lane]}`}>
+              <span className={`rounded px-1 text-[12px] uppercase tracking-wide ${WIC_LANE_TONE[lane]}`}>
                 {WIC_LANE_LABEL[lane]}
               </span>
-              <span className="text-[9px] text-muted-foreground/45">
+              <span className="text-[12px] text-muted-foreground/45">
                 {groupRows.length} candidates
               </span>
             </div>
@@ -2001,10 +2002,10 @@ function WorkItemCandidatesCard({
             className="rounded-md border border-white/[0.06] bg-white/[0.015] p-1.5"
           >
             <div className="mb-0.5 flex items-center gap-1">
-              <span className={`rounded px-1 text-[9px] uppercase tracking-wide ${WIC_READINESS_TONE[readiness]}`}>
+              <span className={`rounded px-1 text-[12px] uppercase tracking-wide ${WIC_READINESS_TONE[readiness]}`}>
                 {readiness}
               </span>
-              <span className="text-[9px] text-muted-foreground/45">{groupRows.length} candidates</span>
+              <span className="text-[12px] text-muted-foreground/45">{groupRows.length} candidates</span>
             </div>
             {renderOperationRows(groupRows)}
           </div>
@@ -2023,10 +2024,10 @@ function WorkItemCandidatesCard({
             className="rounded-md border border-white/[0.06] bg-white/[0.015] p-1.5"
           >
             <div className="mb-0.5 flex items-center gap-1">
-              <span className={`rounded px-1 text-[9px] uppercase tracking-wide ${WIC_RISK_TONE[risk]}`}>
+              <span className={`rounded px-1 text-[12px] uppercase tracking-wide ${WIC_RISK_TONE[risk]}`}>
                 {risk}
               </span>
-              <span className="text-[9px] text-muted-foreground/45">{groupRows.length} candidates</span>
+              <span className="text-[12px] text-muted-foreground/45">{groupRows.length} candidates</span>
             </div>
             {renderOperationRows(groupRows)}
           </div>
@@ -2046,10 +2047,10 @@ function WorkItemCandidatesCard({
       data-group-mode={groupMode}
       data-sort-mode={sortMode}
       data-review-filter={reviewFilter}
-      className="mx-4 mb-2 rounded-lg border border-sky-400/20 bg-sky-400/[0.03] p-2.5"
+      className="mx-4 mb-2 rounded-lg border border-primary/20 bg-primary/[0.03] p-2.5"
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-sky-200/80">
+        <span className="text-[12px] font-semibold uppercase tracking-wider text-primary/80">
           Work Item Candidates
         </span>
         {summary.now > 0 ? (
@@ -2062,7 +2063,7 @@ function WorkItemCandidatesCard({
             {summary.soon} soon
           </span>
         ) : null}
-        <span className="ml-auto text-[9px] uppercase tracking-wider text-muted-foreground/45">
+        <span className="ml-auto text-[12px] uppercase tracking-wider text-muted-foreground/45">
           candidate · read-only · not committed
         </span>
       </div>
@@ -2126,10 +2127,10 @@ function WorkItemCandidatesCard({
       <div
         data-testid="wic-operations-summary"
         data-total={summary.total}
-        className="mb-2 space-y-1 rounded-md border border-sky-400/15 bg-sky-400/[0.03] p-1.5"
+        className="mb-2 space-y-1 rounded-md border border-primary/15 bg-primary/[0.03] p-1.5"
       >
         <div className="flex flex-wrap items-center gap-1">
-          <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-sky-200/70">
+          <span className="mr-0.5 text-[12px] font-semibold uppercase tracking-wider text-primary/70">
             operations
           </span>
           {(["ready", "needs-evidence", "blocked", "needs-review", "unknown"] as const).map((readiness) => (
@@ -2198,7 +2199,7 @@ function WorkItemCandidatesCard({
         className="mb-2 space-y-1 rounded-md border border-white/[0.06] bg-black/10 p-1.5"
       >
         <div className="flex flex-wrap items-center gap-1">
-          <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          <span className="mr-0.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/60">
             scope
           </span>
           {([
@@ -2218,7 +2219,7 @@ function WorkItemCandidatesCard({
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-1">
-          <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          <span className="mr-0.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/60">
             signals
           </span>
           {([
@@ -2239,7 +2240,7 @@ function WorkItemCandidatesCard({
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-1">
-          <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          <span className="mr-0.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/60">
             group
           </span>
           {([
@@ -2258,7 +2259,7 @@ function WorkItemCandidatesCard({
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-1">
-          <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          <span className="mr-0.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/60">
             sort
           </span>
           {([
@@ -2280,8 +2281,8 @@ function WorkItemCandidatesCard({
 
       {rows.length === 0 ? (
         <div className={EMPTY_STATE} data-testid="work-item-candidates-empty" data-empty="true">
-          <p className="text-[11px] font-medium text-muted-foreground/80">작업 후보 신호 없음</p>
-          <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground/55">
+          <p className="text-[12px] font-medium text-muted-foreground/80">작업 후보 신호 없음</p>
+          <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground/55">
             patch·runner·evidence·memory·source 신호가 관측되면 후보로 표시 · 표시 전용 · 확정 작업 아님
           </p>
         </div>
@@ -2289,7 +2290,7 @@ function WorkItemCandidatesCard({
         <div className="space-y-1.5">
           <div className="space-y-1 rounded-md border border-white/[0.06] bg-black/10 p-1.5">
             <div className="flex flex-wrap items-center gap-1">
-              <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+              <span className="mr-0.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/60">
                 lane
               </span>
               <FilterButton
@@ -2311,7 +2312,7 @@ function WorkItemCandidatesCard({
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-1">
-              <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+              <span className="mr-0.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/60">
                 risk
               </span>
               <FilterButton
@@ -2333,7 +2334,7 @@ function WorkItemCandidatesCard({
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-1">
-              <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+              <span className="mr-0.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/60">
                 kind
               </span>
               <FilterButton
@@ -2355,7 +2356,7 @@ function WorkItemCandidatesCard({
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-1">
-              <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+              <span className="mr-0.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/60">
                 refs
               </span>
               <FilterButton
@@ -2394,7 +2395,7 @@ function WorkItemCandidatesCard({
               aria-label="WorkItem Candidate search"
               data-testid="wic-search"
               placeholder="Search candidates by title, reason, id, or ref"
-              className="w-full rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-zinc-200 placeholder:text-muted-foreground/40 focus:border-sky-400/40 focus:outline-none"
+              className="w-full rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[12px] text-zinc-200 placeholder:text-muted-foreground/40 focus:border-primary/40 focus:outline-none"
             />
           </div>
           {visibleOperationRows.length === 0 ? (
@@ -2403,10 +2404,10 @@ function WorkItemCandidatesCard({
               data-testid="work-item-candidates-filter-empty"
               data-empty="true"
             >
-              <p className="text-[11px] font-medium text-muted-foreground/80">
+              <p className="text-[12px] font-medium text-muted-foreground/80">
                 matching candidate 없음
               </p>
-              <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground/55">
+              <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground/55">
                 로컬 보기 조건에 맞는 후보가 없습니다
               </p>
             </div>
@@ -2418,10 +2419,10 @@ function WorkItemCandidatesCard({
               className="rounded-md border border-amber-300/15 bg-amber-300/[0.025] p-1.5"
             >
               <div className="mb-0.5 flex items-center gap-1">
-                <span className={`rounded px-1 text-[9px] uppercase tracking-wide ${TONE.warn}`}>
+                <span className={`rounded px-1 text-[12px] uppercase tracking-wide ${TONE.warn}`}>
                   blocked / needs evidence
                 </span>
-                <span className="text-[9px] text-muted-foreground/45">
+                <span className="text-[12px] text-muted-foreground/45">
                   {attentionOperationRows.length} candidates
                 </span>
               </div>
@@ -2433,17 +2434,17 @@ function WorkItemCandidatesCard({
                       key={`attention-${r.id}`}
                       data-testid={`wic-ops-attention-row-${r.id}`}
                       data-readiness={operationRow.readiness.readiness}
-                      className="flex items-center gap-1.5 rounded bg-white/[0.02] px-1 py-0.5 text-[10px] text-zinc-300"
+                      className="flex items-center gap-1.5 rounded bg-white/[0.02] px-1 py-0.5 text-[12px] text-zinc-300"
                     >
                       <span className="min-w-0 flex-1 truncate" title={r.reason}>
                         {r.title}
                       </span>
                       <span
-                        className={`shrink-0 rounded px-1 text-[9px] uppercase tracking-wide ${WIC_READINESS_TONE[operationRow.readiness.readiness]}`}
+                        className={`shrink-0 rounded px-1 text-[12px] uppercase tracking-wide ${WIC_READINESS_TONE[operationRow.readiness.readiness]}`}
                       >
                         {operationRow.readiness.readiness}
                       </span>
-                      <span className="shrink-0 text-[9px] text-muted-foreground/55">
+                      <span className="shrink-0 text-[12px] text-muted-foreground/55">
                         {operationRow.hasEvidenceRefs ? `${r.evidenceRefs.length}ev` : "no evidence refs"}
                       </span>
                     </li>
@@ -2480,12 +2481,12 @@ function SandboxProposalDeck({
     <div className="px-4 pb-1" data-testid="sandbox-proposal-deck" data-count={proposals.length}>
       <div
         data-testid="sandbox-watermark"
-        className="mb-2 rounded-md border border-l-[3px] border-violet-400/30 border-l-violet-400/80 bg-violet-400/10 px-3 py-1.5 text-[11px] text-violet-200"
+        className="mb-2 rounded-md border border-l-[3px] border-primary/30 border-l-violet-400/80 bg-primary/10 px-3 py-1.5 text-[12px] text-primary"
       >
-        <span className="mr-1 rounded bg-violet-400/20 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+        <span className="mr-1 rounded bg-primary/20 px-1 py-0.5 text-[12px] font-bold uppercase tracking-wider">
           Sandbox
         </span>
-        <span className="font-semibold">PROPOSAL ONLY</span> — 시뮬레이션 미리보기입니다 · 실행/적용/전송
+        <span className="font-semibold">PROPOSAL ONLY</span> · 시뮬레이션 미리보기입니다 · 실행/적용/전송
         없음 · 모든 결과는 가상(simulated)입니다
       </div>
       <ul className="space-y-1.5">
@@ -2497,28 +2498,28 @@ function SandboxProposalDeck({
             className="rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-1.5"
           >
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-medium text-zinc-300">{p.title}</span>
+              <span className="text-[12px] font-medium text-zinc-300">{p.title}</span>
               <span
                 data-testid={`sandbox-dryrun-${p.id}`}
-                className="rounded bg-white/[0.06] px-1 text-[9px] uppercase tracking-wide text-muted-foreground/70"
+                className="rounded bg-white/[0.06] px-1 text-[12px] uppercase tracking-wide text-muted-foreground/70"
               >
                 dry-run
               </span>
               <span
                 data-testid={`sandbox-outcome-${p.id}`}
                 data-outcome={p.outcome}
-                className={`rounded px-1 text-[9px] uppercase tracking-wide ${SANDBOX_OUTCOME_TONE[p.outcome]}`}
+                className={`rounded px-1 text-[12px] uppercase tracking-wide ${SANDBOX_OUTCOME_TONE[p.outcome]}`}
               >
                 {p.outcome}
               </span>
             </div>
-            <p className="mt-0.5 text-[10px] text-muted-foreground/70">{p.scenario}</p>
+            <p className="mt-0.5 text-[12px] text-muted-foreground/70">{p.scenario}</p>
             {p.steps.length > 0 ? (
               <ol className="mt-1 space-y-0.5">
                 {p.steps.map((s, i) => (
                   <li
                     key={i}
-                    className="flex items-center gap-1.5 text-[10px] text-zinc-400"
+                    className="flex items-center gap-1.5 text-[12px] text-zinc-400"
                   >
                     <span className="shrink-0 tabular-nums text-muted-foreground/45">{i + 1}.</span>
                     <span className="min-w-0 flex-1 truncate">{s}</span>
@@ -2526,7 +2527,7 @@ function SandboxProposalDeck({
                 ))}
               </ol>
             ) : null}
-            <p className="mt-1 text-[9px] text-muted-foreground/45">{p.note}</p>
+            <p className="mt-1 text-[12px] text-muted-foreground/45">{p.note}</p>
           </li>
         ))}
       </ul>
@@ -2546,7 +2547,7 @@ function ReplayTimeline({ items }: { items: ReadonlyArray<ReplayTimelineItem> })
     return (
       <div
         data-testid="replay-timeline-empty"
-        className="rounded-md border border-dashed border-white/10 bg-white/[0.012] px-2.5 py-2 text-[11px] text-muted-foreground/70"
+        className="rounded-md border border-dashed border-white/10 bg-white/[0.012] px-2.5 py-2 text-[12px] text-muted-foreground/70"
       >
         타임라인에 표시할 이벤트 없음 · 읽기 전용
       </div>
@@ -2559,7 +2560,7 @@ function ReplayTimeline({ items }: { items: ReadonlyArray<ReplayTimelineItem> })
         <div className="mb-1.5 flex items-center gap-2">
           <span
             data-testid="replay-scrubber-pos"
-            className="shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground/60 tabular-nums"
+            className="shrink-0 text-[12px] uppercase tracking-wider text-muted-foreground/60 tabular-nums"
           >
             cluster {idx + 1}/{clusters.length}
           </span>
@@ -2572,7 +2573,7 @@ function ReplayTimeline({ items }: { items: ReadonlyArray<ReplayTimelineItem> })
             max={clusters.length - 1}
             value={idx}
             onChange={(e) => setActive(Number(e.target.value))}
-            className="h-1 flex-1 cursor-pointer accent-cyan-400"
+            className="h-1 flex-1 cursor-pointer accent-primary"
           />
         </div>
       ) : null}
@@ -2585,22 +2586,22 @@ function ReplayTimeline({ items }: { items: ReadonlyArray<ReplayTimelineItem> })
             data-count={c.count}
             className={`rounded border px-2 py-1 ${
               i === idx
-                ? "border-cyan-400/40 bg-cyan-400/[0.06]"
+                ? "border-primary/40 bg-primary/[0.06]"
                 : "border-white/[0.06] bg-white/[0.02]"
             }`}
           >
-            <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+            <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
               <span className="tabular-nums text-muted-foreground/60">
                 {c.startAt} – {c.endAt}
               </span>
-              <span className="ml-auto rounded bg-white/[0.06] px-1 text-[9px] tabular-nums text-muted-foreground">
+              <span className="ml-auto rounded bg-white/[0.06] px-1 text-[12px] tabular-nums text-muted-foreground">
                 {c.count} events
               </span>
               {Object.entries(c.categories).map(([cat, n]) => (
                 <span
                   key={cat}
                   data-category={cat}
-                  className="rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70"
+                  className="rounded bg-white/[0.06] px-1 text-[12px] uppercase text-muted-foreground/70"
                 >
                   {cat} {n}
                 </span>
@@ -2609,15 +2610,15 @@ function ReplayTimeline({ items }: { items: ReadonlyArray<ReplayTimelineItem> })
             {i === idx ? (
               <ul className="mt-1 space-y-0.5" data-testid={`replay-cluster-items-${i}`}>
                 {c.items.map((it) => (
-                  <li key={it.id} className="flex items-center gap-2 text-[10px] text-zinc-400">
+                  <li key={it.id} className="flex items-center gap-2 text-[12px] text-zinc-400">
                     <span className="min-w-0 flex-1 truncate">{it.title}</span>
                     <span
                       data-category={it.category}
-                      className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground"
+                      className="shrink-0 rounded bg-white/[0.06] px-1 text-[12px] uppercase text-muted-foreground"
                     >
                       {it.category}
                     </span>
-                    <span className="shrink-0 tabular-nums text-[9px] text-muted-foreground/55">
+                    <span className="shrink-0 tabular-nums text-[12px] text-muted-foreground/55">
                       {it.createdAt}
                     </span>
                   </li>
@@ -2657,7 +2658,7 @@ function ReplayDeck({
   return (
     <div className="px-4 pb-1" data-testid="replay-deck" data-count={recent.length} data-filter={filter}>
       <div className="mb-1.5 flex items-center gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-200/80">
+        <p className="text-[12px] font-semibold uppercase tracking-wider text-primary/80">
           REPLAY · 과거 eventLog (read-only)
         </p>
         <div className="ml-auto flex gap-1" data-testid="replay-view-toggle">
@@ -2669,9 +2670,9 @@ function ReplayDeck({
               data-action-scope="local-view"
               data-active={view === v}
               onClick={() => setView(v)}
-              className={`rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wide transition-colors ${
+              className={`rounded border px-1.5 py-0.5 text-[12px] uppercase tracking-wide transition-colors ${
                 view === v
-                  ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+                  ? "border-primary/40 bg-primary/10 text-primary"
                   : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-200"
               }`}
             >
@@ -2694,9 +2695,9 @@ function ReplayDeck({
               data-testid={`replay-filter-label-${f}`}
               data-active={active ? "true" : "false"}
               className={[
-                "inline-flex cursor-pointer items-center rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide transition-colors",
+                "inline-flex cursor-pointer items-center rounded border px-1.5 py-0.5 text-[12px] uppercase tracking-wide transition-colors",
                 active
-                  ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-200"
+                  ? "border-primary/40 bg-primary/10 text-primary"
                   : "border-white/10 text-muted-foreground hover:border-white/20",
               ].join(" ")}
             >
@@ -2721,8 +2722,8 @@ function ReplayDeck({
           className="rounded-md border border-dashed border-white/10 bg-white/[0.012] px-2.5 py-2"
           data-testid="replay-deck-empty"
         >
-          <p className="text-[11px] text-muted-foreground/70">재생할 이벤트 없음</p>
-          <p className="mt-0.5 text-[10px] text-muted-foreground/50">
+          <p className="text-[12px] text-muted-foreground/70">재생할 이벤트 없음</p>
+          <p className="mt-0.5 text-[12px] text-muted-foreground/50">
             {filter === "all"
               ? "실제 이벤트가 쌓이면 최근 항목부터 여기서 재생됩니다 · 읽기 전용"
               : `'${filter}' 범주의 최근 이벤트 없음 · 필터를 바꿔보세요 (읽기 전용)`}
@@ -2736,21 +2737,21 @@ function ReplayDeck({
               data-testid={`replay-deck-item-${i}`}
               className="flex items-center gap-2 rounded border border-white/[0.06] bg-white/[0.02] px-2 py-1"
             >
-              <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-300">{w.title}</span>
+              <span className="min-w-0 flex-1 truncate text-[12px] text-zinc-300">{w.title}</span>
               <span
-                className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase tracking-wide text-muted-foreground"
+                className="shrink-0 rounded bg-white/[0.06] px-1 text-[12px] uppercase tracking-wide text-muted-foreground"
                 data-testid={`replay-deck-category-${i}`}
                 data-category={w.category}
               >
                 {w.category}
               </span>
               <span
-                className="shrink-0 text-[9px] text-muted-foreground/45"
+                className="shrink-0 text-[12px] text-muted-foreground/45"
                 data-testid={`replay-deck-source-${i}`}
               >
                 {w.source}
               </span>
-              <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/60">
+              <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground/60">
                 {w.createdAt}
               </span>
             </li>
@@ -2840,9 +2841,9 @@ function InboxFilterBar({
 }) {
   const chip = (active: boolean) =>
     [
-      "inline-flex cursor-pointer items-center rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide transition-colors",
+      "inline-flex cursor-pointer items-center rounded border px-1.5 py-0.5 text-[12px] uppercase tracking-wide transition-colors",
       active
-        ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-200"
+        ? "border-primary/40 bg-primary/10 text-primary"
         : "border-white/10 text-muted-foreground hover:border-white/20",
     ].join(" ");
   const activePreset = activeViewPreset(focus, category, query);
@@ -2965,18 +2966,18 @@ function SavedViewManager({
           placeholder="현재 뷰 저장 (이름)"
           aria-label="현재 뷰를 로컬에 저장"
           data-testid="saved-view-name"
-          className="min-w-0 flex-1 rounded border border-white/10 bg-white/[0.03] px-1.5 py-0.5 text-[10px] text-zinc-200 placeholder:text-muted-foreground/40 focus:border-cyan-400/40 focus:outline-none"
+          className="min-w-0 flex-1 rounded border border-white/10 bg-white/[0.03] px-1.5 py-0.5 text-[12px] text-zinc-200 placeholder:text-muted-foreground/40 focus:border-primary/40 focus:outline-none"
         />
         <button
           type="button"
           data-testid="saved-view-save"
           data-action-scope="local-preference"
           onClick={trySave}
-          className="shrink-0 rounded border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-400/20"
+          className="shrink-0 rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[12px] text-primary hover:bg-primary/20"
         >
           뷰 저장
         </button>
-        <span className="shrink-0 text-[9px] uppercase tracking-wide text-muted-foreground/50">
+        <span className="shrink-0 text-[12px] uppercase tracking-wide text-muted-foreground/50">
           로컬 전용 · local
         </span>
       </div>
@@ -2987,14 +2988,14 @@ function SavedViewManager({
               key={v.id}
               role="listitem"
               data-testid={`saved-view-${v.id}`}
-              className="inline-flex items-center gap-0.5 rounded border border-white/10 bg-white/[0.03] pl-1.5 text-[10px] text-zinc-300"
+              className="inline-flex items-center gap-0.5 rounded border border-white/10 bg-white/[0.03] pl-1.5 text-[12px] text-zinc-300"
             >
               <button
                 type="button"
                 data-testid={`saved-view-apply-${v.id}`}
                 data-action-scope="local-preference"
                 onClick={() => onApply(v)}
-                className="py-0.5 hover:text-cyan-200"
+                className="py-0.5 hover:text-primary"
               >
                 {v.name}
               </button>
@@ -3012,8 +3013,8 @@ function SavedViewManager({
           ))}
         </div>
       ) : (
-        <p data-testid="saved-view-empty" className="text-[10px] text-muted-foreground/50">
-          저장된 뷰 없음 — 현재 필터 조합을 이름 붙여 로컬에 저장
+        <p data-testid="saved-view-empty" className="text-[12px] text-muted-foreground/50">
+          저장된 뷰 없음 · 현재 필터 조합을 이름 붙여 로컬에 저장
         </p>
       )}
     </div>
@@ -3086,7 +3087,7 @@ function SourceHealthStrip({ summary }: { summary: SourceHealthSummary }) {
   return (
     <div
       data-testid="source-health-strip"
-      className="mb-2 flex flex-wrap items-center gap-1 text-[9px] uppercase tracking-wider"
+      className="mb-2 flex flex-wrap items-center gap-1 text-[12px] uppercase tracking-wider"
     >
       {HEALTH_ORDER.map((h) => (
         <span
@@ -3172,10 +3173,10 @@ function PluginSourcesCard({
     <div
       ref={cardRef}
       tabIndex={-1}
-      className="mx-4 mb-2 rounded-lg border border-white/[0.08] bg-white/[0.02] p-2.5 outline-none focus-visible:ring-1 focus-visible:ring-cyan-400/40"
+      className="mx-4 mb-2 rounded-lg border border-white/[0.08] bg-white/[0.02] p-2.5 outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
       data-testid="plugin-sources"
     >
-      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
         Source Dock · External Source Deck · read-only
       </p>
       <SourceHealthStrip summary={summary} />
@@ -3192,23 +3193,23 @@ function PluginSourcesCard({
               className="rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-1.5"
             >
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-medium text-zinc-300">{s.pluginId}</span>
+                <span className="text-[12px] font-medium text-zinc-300">{s.pluginId}</span>
                 <span
-                  className={`rounded px-1 text-[9px] uppercase tracking-wide ${HEALTH_TONE[s.health]}`}
+                  className={`rounded px-1 text-[12px] uppercase tracking-wide ${HEALTH_TONE[s.health]}`}
                   data-testid={`plugin-health-${s.pluginId}`}
                   data-health={s.health}
                 >
                   {PLUGIN_HEALTH_LABEL[s.health]}
                 </span>
                 <span
-                  className="rounded bg-white/[0.05] px-1 text-[9px] tabular-nums text-muted-foreground/60"
+                  className="rounded bg-white/[0.05] px-1 text-[12px] tabular-nums text-muted-foreground/60"
                   data-testid={`plugin-source-rowcount-${s.pluginId}`}
                   data-count={rows.length}
                 >
                   {rows.length} rows
                 </span>
                 {s.generatedAt ? (
-                  <span className="ml-auto text-[9px] tabular-nums text-muted-foreground/55">
+                  <span className="ml-auto text-[12px] tabular-nums text-muted-foreground/55">
                     updated {s.generatedAt}
                   </span>
                 ) : null}
@@ -3219,7 +3220,7 @@ function PluginSourcesCard({
                     <li
                       key={r.id}
                       data-testid={`plugin-row-${s.pluginId}-${i}`}
-                      className={`flex items-center gap-1.5 text-[10px] text-zinc-400 ${
+                      className={`flex items-center gap-1.5 text-[12px] text-zinc-400 ${
                         onSelect ? "cursor-pointer rounded hover:bg-white/[0.04]" : ""
                       }`}
                       {...(onSelect
@@ -3238,29 +3239,29 @@ function PluginSourcesCard({
                           )
                         : {})}
                     >
-                      <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
+                      <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[12px] uppercase text-muted-foreground/70">
                         plugin
                       </span>
                       <span className="min-w-0 flex-1 truncate">{r.title}</span>
                       <span
-                        className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground"
+                        className="shrink-0 rounded bg-white/[0.06] px-1 text-[12px] uppercase text-muted-foreground"
                         data-category={r.category}
                       >
                         {r.category}
                       </span>
-                      <span className="shrink-0 text-[9px] text-muted-foreground/55">
+                      <span className="shrink-0 text-[12px] text-muted-foreground/55">
                         obs:{r.observed ? "true" : "false"}
                       </span>
-                      <span className="shrink-0 text-[9px] text-muted-foreground/45">{r.sourceRef}</span>
+                      <span className="shrink-0 text-[12px] text-muted-foreground/45">{r.sourceRef}</span>
                     </li>
                   ))}
                 </ul>
               ) : s.status !== "active" ? (
                 <p
-                  className="mt-1 text-[10px] text-muted-foreground/50"
+                  className="mt-1 text-[12px] text-muted-foreground/50"
                   data-testid={`plugin-source-inactive-${s.pluginId}`}
                 >
-                  비활성 소스 — 행 없음
+                  비활성 소스 · 행 없음
                 </p>
               ) : null}
             </div>
@@ -3270,7 +3271,7 @@ function PluginSourcesCard({
       ) : null}
       {showEvidenceList ? (
         <div className="mt-2" data-testid="plugin-evidence">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+          <p className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/80">
             Source Evidence
           </p>
           <ul className="space-y-0.5">
@@ -3278,7 +3279,7 @@ function PluginSourcesCard({
               <li
                 key={e.id}
                 data-testid={`plugin-evidence-${i}`}
-                className={`flex items-center gap-1.5 text-[10px] text-zinc-400 ${
+                className={`flex items-center gap-1.5 text-[12px] text-zinc-400 ${
                   onSelect ? "cursor-pointer rounded hover:bg-white/[0.04]" : ""
                 }`}
                 {...(onSelect
@@ -3295,14 +3296,14 @@ function PluginSourcesCard({
                     )
                   : {})}
               >
-                <span className="shrink-0 rounded bg-amber-400/10 px-1 text-[9px] uppercase text-amber-200/70">
+                <span className="shrink-0 rounded bg-amber-400/10 px-1 text-[12px] uppercase text-amber-200/70">
                   evidence
                 </span>
                 <span className="min-w-0 flex-1 truncate">{e.title}</span>
-                <span className="shrink-0 text-[9px] text-muted-foreground/60" data-trust={e.trust}>
+                <span className="shrink-0 text-[12px] text-muted-foreground/60" data-trust={e.trust}>
                   trust:{e.trust}
                 </span>
-                <span className="shrink-0 text-[9px] text-muted-foreground/45">{e.pluginId}</span>
+                <span className="shrink-0 text-[12px] text-muted-foreground/45">{e.pluginId}</span>
               </li>
             ))}
           </ul>
@@ -3326,7 +3327,7 @@ function SourceDemoDeck({
 }) {
   return (
     <div data-testid="source-demo-deck" className="mx-4 mb-1.5 flex flex-wrap items-center gap-1">
-      <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-200/70">
+      <span className="mr-0.5 text-[12px] font-semibold uppercase tracking-wider text-amber-200/70">
         demo deck · PREVIEW
       </span>
       {SOURCE_SCENARIO_KEYS.map((k) => {
@@ -3336,7 +3337,7 @@ function SourceDemoDeck({
             key={k}
             data-testid={`source-demo-option-${k}`}
             data-active={active}
-            className={`cursor-pointer rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
+            className={`cursor-pointer rounded border px-1.5 py-0.5 text-[12px] uppercase tracking-wide ${
               active
                 ? "border-amber-400/40 bg-amber-400/10 text-amber-100"
                 : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-300"
@@ -3418,7 +3419,7 @@ function PatchSummaryStrip({ candidates }: { candidates: ReadonlyArray<PatchCand
   return (
     <div
       data-testid="patch-summary-strip"
-      className="mb-2 flex flex-wrap items-center gap-1 text-[9px] uppercase tracking-wider"
+      className="mb-2 flex flex-wrap items-center gap-1 text-[12px] uppercase tracking-wider"
     >
       {chip("patch-sum-total", "total", s.count, TONE.neutral)}
       {chip("patch-sum-pass", "pass", s.pass, TONE.good)}
@@ -3438,7 +3439,7 @@ function PatchComparisonStrip({ candidates }: { candidates: ReadonlyArray<PatchC
   return (
     <div
       data-testid="patch-comparison-strip"
-      className="mb-2 flex flex-wrap items-center gap-1 text-[9px] uppercase tracking-wider"
+      className="mb-2 flex flex-wrap items-center gap-1 text-[12px] uppercase tracking-wider"
     >
       <span
         data-testid="patch-cmp-count"
@@ -3491,10 +3492,10 @@ function PatchLaneControls({
   filter: PatchLaneFilter;
   onChange: (f: PatchLaneFilter) => void;
 }) {
-  const base = "rounded border px-1.5 py-0.5 text-[10px] tracking-wide transition-colors";
+  const base = "rounded border px-1.5 py-0.5 text-[12px] tracking-wide transition-colors";
   const tone = (active: boolean) =>
     active
-      ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+      ? "border-primary/40 bg-primary/10 text-primary"
       : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-200";
   const opts: ReadonlyArray<{ key: PatchLaneFilter; label: string; title: string }> = [
     { key: "all", label: "All", title: "모든 후보" },
@@ -3542,7 +3543,7 @@ function PatchCompareBoardView({ candidates }: { candidates: ReadonlyArray<Patch
       data-testid="patch-compare-board"
       className="mb-2 rounded-md border border-white/[0.06] bg-white/[0.015] p-2"
     >
-      <p className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-cyan-200/60">
+      <p className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-primary/60">
         compare · read-only
       </p>
       <div className="grid grid-cols-3 gap-1.5">
@@ -3553,7 +3554,7 @@ function PatchCompareBoardView({ candidates }: { candidates: ReadonlyArray<Patch
             data-count={board.lanes[lane].length}
             className={`rounded border px-1 py-1 ${LANE_TONE[lane]}`}
           >
-            <p className="mb-0.5 text-[9px] uppercase tracking-wide">
+            <p className="mb-0.5 text-[12px] uppercase tracking-wide">
               {lane} {board.lanes[lane].length}
             </p>
             <ul className="space-y-0.5">
@@ -3563,7 +3564,7 @@ function PatchCompareBoardView({ candidates }: { candidates: ReadonlyArray<Patch
                   <li
                     key={c.id}
                     data-testid={`patch-lane-${lane}-${c.candidateId}`}
-                    className="flex flex-wrap items-center gap-1 text-[9px] text-zinc-300"
+                    className="flex flex-wrap items-center gap-1 text-[12px] text-zinc-300"
                   >
                     <span className="font-medium">{c.candidateId}</span>
                     <span className="tabular-nums text-muted-foreground/60">
@@ -3575,7 +3576,7 @@ function PatchCompareBoardView({ candidates }: { candidates: ReadonlyArray<Patch
                         className="rounded bg-amber-400/15 px-1 text-amber-200/80"
                         title="claimed clean · actual unconfirmed"
                       >
-                        ⚠ verify
+                        <AlertTriangle className="inline h-3 w-3 align-text-bottom" /> verify
                       </span>
                     ) : null}
                     {c.safetyBlockers.slice(0, 2).map((b, i) => (
@@ -3592,7 +3593,7 @@ function PatchCompareBoardView({ candidates }: { candidates: ReadonlyArray<Patch
                 );
               })}
               {board.lanes[lane].length === 0 ? (
-                <li className="text-[9px] text-muted-foreground/40">—</li>
+                <li className="text-[12px] text-muted-foreground/60">없음</li>
               ) : null}
             </ul>
           </div>
@@ -3600,16 +3601,16 @@ function PatchCompareBoardView({ candidates }: { candidates: ReadonlyArray<Patch
       </div>
       {board.heatmap.length > 0 ? (
         <div data-testid="patch-heatmap" className="mt-1.5 flex flex-wrap items-center gap-1">
-          <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50">files</span>
+          <span className="text-[12px] uppercase tracking-wider text-muted-foreground/50">files</span>
           {board.heatmap.map((h) => (
             <span
               key={h.path}
               data-testid={`patch-heat-${h.path}`}
               data-count={h.count}
               data-overlap={h.count >= 2}
-              className={`rounded px-1 text-[9px] tabular-nums ${
+              className={`rounded px-1 text-[12px] tabular-nums ${
                 h.count >= 2
-                  ? "border border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+                  ? "border border-primary/40 bg-primary/10 text-primary"
                   : "border border-white/10 bg-white/[0.03] text-muted-foreground/70"
               }`}
             >
@@ -3654,10 +3655,10 @@ function PatchCandidatesCard({
       ref={cardRef}
       tabIndex={-1}
       data-testid="patch-candidate-lane"
-      className="mx-4 mb-2 rounded-lg border border-white/[0.08] bg-white/[0.02] p-2.5 outline-none focus-visible:ring-1 focus-visible:ring-cyan-400/40"
+      className="mx-4 mb-2 rounded-lg border border-white/[0.08] bg-white/[0.02] p-2.5 outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
     >
       <p
-        className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+        className="mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground"
         data-testid="patch-lane-caption"
       >
         {INBOX_VOCAB.patchLaneCaption}
@@ -3673,13 +3674,18 @@ function PatchCandidatesCard({
           data-active={compareOpen}
           title="후보 비교 보드 · 보기 전용"
           onClick={() => setCompareOpen((v) => !v)}
-          className={`mb-1.5 rounded border px-1.5 py-0.5 text-[10px] tracking-wide transition-colors ${
+          className={`mb-1.5 rounded border px-1.5 py-0.5 text-[12px] tracking-wide transition-colors ${
             compareOpen
-              ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
+              ? "border-primary/40 bg-primary/10 text-primary"
               : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-200"
           }`}
         >
-          Compare {compareOpen ? "▾" : "▸"}
+          Compare{" "}
+          {compareOpen ? (
+            <ChevronDown className="inline h-3 w-3 align-text-bottom" />
+          ) : (
+            <ChevronRight className="inline h-3 w-3 align-text-bottom" />
+          )}
         </button>
       ) : null}
       {compareOpen && candidates.length > 1 ? <PatchCompareBoardView candidates={candidates} /> : null}
@@ -3699,23 +3705,23 @@ function PatchCandidatesCard({
               {...(onSelect ? rowActivation(() => onSelect(patchDetailItem(c))) : {})}
             >
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-medium text-zinc-300">{c.candidateId}</span>
+                <span className="text-[12px] font-medium text-zinc-300">{c.candidateId}</span>
                 <span
-                  className={`rounded px-1 text-[9px] uppercase tracking-wide ${SAFETY_TONE[c.safetyStatus]}`}
+                  className={`rounded px-1 text-[12px] uppercase tracking-wide ${SAFETY_TONE[c.safetyStatus]}`}
                   data-testid={`patch-safety-${c.candidateId}`}
                   data-safety={c.safetyStatus}
                 >
                   {c.safetyStatus}
                 </span>
                 <span
-                  className="rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground"
+                  className="rounded bg-white/[0.06] px-1 text-[12px] uppercase text-muted-foreground"
                   data-testid={`patch-verify-${c.candidateId}`}
                   data-verification={c.verificationStatus}
                 >
                   {c.verificationStatus}
                 </span>
                 <span
-                  className="rounded bg-white/[0.05] px-1 text-[9px] uppercase text-muted-foreground/70"
+                  className="rounded bg-white/[0.05] px-1 text-[12px] uppercase text-muted-foreground/70"
                   data-source={c.source}
                 >
                   {c.source}
@@ -3729,11 +3735,11 @@ function PatchCandidatesCard({
                     {linkedCandidateCount} candidate
                   </span>
                 ) : null}
-                <span className="ml-auto text-[9px] tabular-nums text-muted-foreground/55">
+                <span className="ml-auto text-[12px] tabular-nums text-muted-foreground/55">
                   obs:{c.observed ? "true" : "false"}
                 </span>
               </div>
-              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-zinc-400">
+              <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-zinc-400">
                 <span className="min-w-0 truncate text-muted-foreground/60">
                   {c.runnerId} · {c.missionId}
                 </span>
@@ -4052,7 +4058,7 @@ export function AssistantInbox({
     >
       <CardHeader className="px-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Inbox className="h-4 w-4 text-cyan-300/80" />
+          <Inbox className="h-4 w-4 text-primary/80" />
           <span className="text-sm font-semibold">Assistant Inbox</span>
           <Badge variant="secondary" data-testid="assistant-inbox-total">
             {total}
@@ -4064,15 +4070,15 @@ export function AssistantInbox({
           >
             {liveCount}/4 live
           </Badge>
-          <span className="text-[11px] text-muted-foreground" data-testid="assistant-inbox-readonly-note">
+          <span className="text-[12px] text-muted-foreground" data-testid="assistant-inbox-readonly-note">
             {INBOX_VOCAB.readOnlyNote}
           </span>
           {hasExample ? (
             <span
-              className="text-[11px] text-amber-300/80"
+              className="text-[12px] text-amber-300/80"
               data-testid="assistant-inbox-example-notice"
             >
-              일부 섹션은 예시(fixture) — live 아님
+              일부 섹션은 예시(fixture) · live 아님
             </span>
           ) : null}
         </div>
@@ -4118,31 +4124,31 @@ export function AssistantInbox({
       {/* Batch 19 — local-view keyboard accelerators (discoverability + at-a-glance). */}
       <div
         data-testid="inbox-shortcuts-hint"
-        className="flex flex-wrap items-center gap-2 px-4 pb-2 text-[9px] uppercase tracking-wider text-muted-foreground/45"
+        className="flex flex-wrap items-center gap-2 px-4 pb-2 text-[12px] uppercase tracking-wider text-muted-foreground/45"
       >
         <span>
-          <kbd className="text-cyan-200/60">s</kbd> 소스독
+          <kbd className="text-primary/60">s</kbd> 소스독
         </span>
         <span>
-          <kbd className="text-cyan-200/60">p</kbd> 패치
+          <kbd className="text-primary/60">p</kbd> 패치
         </span>
         <span>
-          <kbd className="text-cyan-200/60">w</kbd> 후보
+          <kbd className="text-primary/60">w</kbd> 후보
         </span>
         <span>
-          <kbd className="text-cyan-200/60">b</kbd> 막힌
+          <kbd className="text-primary/60">b</kbd> 막힌
         </span>
         <span>
-          <kbd className="text-cyan-200/60">c</kbd> 초기화
+          <kbd className="text-primary/60">c</kbd> 초기화
         </span>
         <span>
-          <kbd className="text-cyan-200/60">o</kbd> 콘솔
+          <kbd className="text-primary/60">o</kbd> 콘솔
         </span>
         <span>
-          <kbd className="text-cyan-200/60">e</kbd> Evidence
+          <kbd className="text-primary/60">e</kbd> Evidence
         </span>
         <span>
-          <kbd className="text-cyan-200/60">/</kbd> 검색
+          <kbd className="text-primary/60">/</kbd> 검색
         </span>
       </div>
       <div className="px-4 pb-2">
@@ -4151,10 +4157,10 @@ export function AssistantInbox({
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="검색 — 큐 / REPLAY 행 필터 ( / 포커스 · Esc 지움 · read-only )"
+          placeholder="검색 · 큐 / REPLAY 행 필터 ( / 포커스 · Esc 지움 · read-only )"
           aria-label="Assistant Inbox 검색"
           data-testid="inbox-search"
-          className="w-full rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-zinc-200 placeholder:text-muted-foreground/40 focus:border-cyan-400/40 focus:outline-none"
+          className="w-full rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[12px] text-zinc-200 placeholder:text-muted-foreground/40 focus:border-primary/40 focus:outline-none"
         />
       </div>
       {mode !== "replay" ? (
@@ -4283,7 +4289,7 @@ export function AssistantInbox({
           title="Learning Loops"
           count={learningLoops.length}
           emptyHint="아직 관측된 learning loop 없음"
-          emptyDetail="learning loop 이벤트가 들어오면 가설→검증→증류 단계로 표시"
+          emptyDetail="learning loop 이벤트가 들어오면 가설 · 검증 · 증류 단계로 표시"
           source={learningSource}
         >
           {learningLoops.map((item) => (

@@ -55,7 +55,7 @@ function WorkItemCandidateDetailRow({ k, v }: { k: string; v: string }) {
     <div
       data-testid={`wic-detail-field-${k}`}
       data-field={k}
-      className="flex items-start justify-between gap-2 text-[10px]"
+      className="flex items-start justify-between gap-2 text-[12px]"
     >
       <dt className="shrink-0 uppercase tracking-wide text-muted-foreground/60">{k}</dt>
       <dd className="min-w-0 break-all text-right text-zinc-300">{v}</dd>
@@ -66,10 +66,10 @@ function WorkItemCandidateDetailRow({ k, v }: { k: string; v: string }) {
 function WorkItemCandidateLinkGraph({ item }: { item: WorkItemCandidate }) {
   return (
     <section data-testid="wic-link-graph" className="mt-2 rounded-md border border-white/[0.08] bg-white/[0.02] p-2">
-      <p className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/45">
+      <p className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/45">
         Link graph · ref only
       </p>
-      <div className="space-y-1 text-[10px] text-zinc-300">
+      <div className="space-y-1 text-[12px] text-zinc-300">
         <div data-testid="wic-link-node-candidate" className="rounded bg-white/[0.04] px-1.5 py-1">
           candidate → {item.title}
         </div>
@@ -83,7 +83,7 @@ function WorkItemCandidateLinkGraph({ item }: { item: WorkItemCandidate }) {
               >
                 <span className="text-zinc-400">candidate → sourceRef</span>
                 <span className="min-w-0 flex-1 break-all text-zinc-300">{ref}</span>
-                <span className="shrink-0 rounded bg-white/[0.05] px-1 text-[9px] uppercase">unresolved ref</span>
+                <span className="shrink-0 rounded bg-white/[0.05] px-1 text-[12px] uppercase">unresolved ref</span>
               </li>
             ))
           ) : (
@@ -100,7 +100,7 @@ function WorkItemCandidateLinkGraph({ item }: { item: WorkItemCandidate }) {
               >
                 <span className="text-zinc-400">candidate → evidenceRef</span>
                 <span className="min-w-0 flex-1 break-all text-zinc-300">{ref}</span>
-                <span className="shrink-0 rounded bg-white/[0.05] px-1 text-[9px] uppercase">unresolved ref</span>
+                <span className="shrink-0 rounded bg-white/[0.05] px-1 text-[12px] uppercase">unresolved ref</span>
               </li>
             ))
           ) : (
@@ -132,13 +132,13 @@ function WorkItemCandidateDraftEvidenceLinks({
       data-count={matchedRefs.length}
       className="mt-2 rounded-md border border-white/[0.08] bg-white/[0.02] p-2"
     >
-      <p className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/45">
+      <p className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/45">
         Evidence Draft refs · read-only
       </p>
       {matchedRefs.length === 0 ? (
         <p
           data-testid="wic-draft-cross-link-empty"
-          className="text-[10px] text-muted-foreground/65"
+          className="text-[12px] text-muted-foreground/65"
         >
           no matching draft evidence
         </p>
@@ -148,12 +148,12 @@ function WorkItemCandidateDraftEvidenceLinks({
             <li
               key={ref.refId}
               data-testid={`wic-draft-cross-link-${ref.refId}`}
-              className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
+              className="flex items-center gap-1.5 text-[12px] text-muted-foreground"
             >
-              <span className="shrink-0 tabular-nums text-cyan-300/70">[{ref.footnote}]</span>
+              <span className="shrink-0 tabular-nums text-primary/70">[{ref.footnote}]</span>
               <code className="shrink-0 rounded bg-background/70 px-1">{ref.refId}</code>
               <span className="min-w-0 flex-1 truncate">{ref.label}</span>
-              <span className="shrink-0 rounded bg-white/[0.05] px-1 text-[9px] uppercase">
+              <span className="shrink-0 rounded bg-white/[0.05] px-1 text-[12px] uppercase">
                 {ref.claimIds.length > 0 ? ref.claimIds.join(", ") : "claim unknown"}
               </span>
             </li>
@@ -185,23 +185,23 @@ function WorkItemCandidateRelationshipMapV2({
       data-evidence-count={item.evidenceRefs.length}
       data-draft-count={matchedRefs.length}
       data-readiness={readiness.readiness}
-      className="mt-2 rounded-md border border-fuchsia-400/15 bg-fuchsia-400/[0.035] p-2"
+      className="mt-2 rounded-md border border-primary/15 bg-primary/[0.035] p-2"
     >
       <div className="mb-1 flex items-center justify-between gap-2">
-        <p className="text-[9px] font-semibold uppercase tracking-wider text-fuchsia-200/70">
+        <p className="text-[12px] font-semibold uppercase tracking-wider text-primary/70">
           Relationship map V2 · ref only
         </p>
-        <span className="rounded bg-fuchsia-300/10 px-1.5 py-0.5 text-[9px] uppercase text-fuchsia-100/75">
+        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[12px] uppercase text-primary/75">
           local detail
         </span>
       </div>
-      <div className="space-y-1 text-[10px] text-zinc-300">
+      <div className="space-y-1 text-[12px] text-zinc-300">
         <div data-testid="wic-map-v2-candidate" className="rounded bg-white/[0.04] px-1.5 py-1">
           candidate hub · {item.id} · {item.title}
         </div>
 
         <div className="rounded border border-white/[0.06] bg-white/[0.02] p-1">
-          <p className="mb-0.5 text-[9px] uppercase tracking-wide text-muted-foreground/50">
+          <p className="mb-0.5 text-[12px] uppercase tracking-wide text-muted-foreground/50">
             source refs
           </p>
           {item.sourceRefs.length > 0 ? (
@@ -214,7 +214,7 @@ function WorkItemCandidateRelationshipMapV2({
                 >
                   <span className="text-zinc-400">candidate {">"} sourceRef</span>
                   <span className="min-w-0 flex-1 break-all text-zinc-300">{ref}</span>
-                  <span className="shrink-0 rounded bg-white/[0.05] px-1 text-[9px] uppercase">
+                  <span className="shrink-0 rounded bg-white/[0.05] px-1 text-[12px] uppercase">
                     ref only
                   </span>
                 </li>
@@ -228,7 +228,7 @@ function WorkItemCandidateRelationshipMapV2({
         </div>
 
         <div className="rounded border border-white/[0.06] bg-white/[0.02] p-1">
-          <p className="mb-0.5 text-[9px] uppercase tracking-wide text-muted-foreground/50">
+          <p className="mb-0.5 text-[12px] uppercase tracking-wide text-muted-foreground/50">
             evidence refs
           </p>
           {item.evidenceRefs.length > 0 ? (
@@ -241,7 +241,7 @@ function WorkItemCandidateRelationshipMapV2({
                 >
                   <span className="text-zinc-400">candidate {">"} evidenceRef</span>
                   <span className="min-w-0 flex-1 break-all text-zinc-300">{ref}</span>
-                  <span className="shrink-0 rounded bg-white/[0.05] px-1 text-[9px] uppercase">
+                  <span className="shrink-0 rounded bg-white/[0.05] px-1 text-[12px] uppercase">
                     ref only
                   </span>
                 </li>
@@ -255,7 +255,7 @@ function WorkItemCandidateRelationshipMapV2({
         </div>
 
         <div className="rounded border border-white/[0.06] bg-white/[0.02] p-1">
-          <p className="mb-0.5 text-[9px] uppercase tracking-wide text-muted-foreground/50">
+          <p className="mb-0.5 text-[12px] uppercase tracking-wide text-muted-foreground/50">
             draft refs
           </p>
           {matchedRefs.length > 0 ? (
@@ -266,10 +266,10 @@ function WorkItemCandidateRelationshipMapV2({
                   data-testid={`wic-map-v2-draft-${ref.refId}`}
                   className="flex items-center gap-1.5 text-muted-foreground"
                 >
-                  <span className="shrink-0 tabular-nums text-fuchsia-200/70">[{ref.footnote}]</span>
+                  <span className="shrink-0 tabular-nums text-primary/70">[{ref.footnote}]</span>
                   <code className="shrink-0 rounded bg-background/70 px-1">{ref.refId}</code>
                   <span className="min-w-0 flex-1 truncate">{ref.label}</span>
-                  <span className="shrink-0 rounded bg-white/[0.05] px-1 text-[9px] uppercase">
+                  <span className="shrink-0 rounded bg-white/[0.05] px-1 text-[12px] uppercase">
                     {ref.claimIds.length > 0 ? ref.claimIds.join(", ") : "claim unknown"}
                   </span>
                 </li>
@@ -287,7 +287,7 @@ function WorkItemCandidateRelationshipMapV2({
             data-testid="wic-map-v2-readiness"
             className="rounded border border-white/[0.06] bg-white/[0.02] p-1"
           >
-            <p className="text-[9px] uppercase tracking-wide text-muted-foreground/50">readiness</p>
+            <p className="text-[12px] uppercase tracking-wide text-muted-foreground/50">readiness</p>
             <p className="break-all text-zinc-300">
               {readiness.readiness} · confidence {readiness.confidence}
             </p>
@@ -296,7 +296,7 @@ function WorkItemCandidateRelationshipMapV2({
             data-testid="wic-map-v2-preview"
             className="rounded border border-white/[0.06] bg-white/[0.02] p-1"
           >
-            <p className="text-[9px] uppercase tracking-wide text-muted-foreground/50">preview</p>
+            <p className="text-[12px] uppercase tracking-wide text-muted-foreground/50">preview</p>
             <p className="break-all text-zinc-300">
               preview only · {previewGapCount} gaps · not committed
             </p>
@@ -377,10 +377,10 @@ export function WorkItemCandidateDetailDrawer({
       tabIndex={-1}
       data-testid="work-item-candidate-detail-drawer"
       data-kind={item.kind}
-      className="fixed right-3 top-16 z-50 w-80 rounded-lg border border-sky-400/20 bg-zinc-950/95 p-3 shadow-xl outline-none backdrop-blur"
+      className="fixed right-3 top-16 z-50 w-80 rounded-lg border border-primary/20 bg-zinc-950/95 p-3 shadow-xl outline-none backdrop-blur"
     >
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
           Work Item Candidate detail · read-only
         </span>
         <div
@@ -420,9 +420,9 @@ export function WorkItemCandidateDetailDrawer({
               data-action-scope="local-detail"
               data-active={active ? "true" : "false"}
               onClick={() => setActiveTab(tab.id)}
-              className={`rounded border px-1 py-0.5 text-[9px] uppercase tracking-wide transition-colors ${
+              className={`rounded border px-1 py-0.5 text-[12px] uppercase tracking-wide transition-colors ${
                 active
-                  ? "border-sky-400/40 bg-sky-400/10 text-sky-100"
+                  ? "border-primary/40 bg-primary/10 text-primary"
                   : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-zinc-200"
               }`}
             >

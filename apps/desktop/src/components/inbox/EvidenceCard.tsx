@@ -51,7 +51,7 @@ export function EvidenceCard({ item }: { item: EvidenceItem }) {
     >
       <CardHeader className="px-3">
         <div className="flex flex-wrap items-center gap-1.5">
-          <FileSearch className="h-3.5 w-3.5 text-cyan-300/80" />
+          <FileSearch className="h-3.5 w-3.5 text-primary/80" />
           <span className="truncate text-sm font-semibold">{item.title}</span>
           <StatusBadge
             kind={item.verdict}
@@ -76,7 +76,7 @@ export function EvidenceCard({ item }: { item: EvidenceItem }) {
           </p>
         ) : null}
         <ul
-          className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground"
+          className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-muted-foreground"
           data-testid={`evidence-refs-${item.id}`}
           data-ref-count={refs.length}
         >

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { X } from "lucide-react";
 import type { PluginSourceHealth } from "../../lib/plugins/pluginManifest";
 import type {
   PatchCandidateSource,
@@ -211,7 +212,7 @@ export function SourceDetailDrawer({
       className="fixed right-3 top-16 z-50 w-72 rounded-lg border border-white/15 bg-zinc-950/95 p-3 shadow-xl outline-none backdrop-blur"
     >
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
           {item.kind === "source" ? "Source detail" : "Source evidence detail"} · read-only
         </span>
         <div
@@ -227,9 +228,9 @@ export function SourceDetailDrawer({
               onClose();
             }
           }}
-          className="cursor-pointer rounded px-1 text-xs text-muted-foreground hover:text-zinc-200"
+          className="flex cursor-pointer items-center rounded px-1 text-muted-foreground hover:text-zinc-200"
         >
-          ✕
+          <X className="h-3.5 w-3.5" />
         </div>
       </div>
       <p
@@ -241,7 +242,7 @@ export function SourceDetailDrawer({
       <div className="space-y-2">
         {sectionsFor(item).map((section) => (
           <section key={section.id} data-testid={`source-detail-section-${section.id}`}>
-            <p className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/45">
+            <p className="mb-0.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/45">
               {section.label}
             </p>
             <dl className="space-y-0.5">
@@ -250,7 +251,7 @@ export function SourceDetailDrawer({
                   key={k}
                   data-testid={`source-detail-field-${k}`}
                   data-field={k}
-                  className="flex items-start justify-between gap-2 text-[10px]"
+                  className="flex items-start justify-between gap-2 text-[12px]"
                 >
                   <dt className="shrink-0 uppercase tracking-wide text-muted-foreground/60">{k}</dt>
                   <dd className="min-w-0 break-all text-right text-zinc-300">{v}</dd>
@@ -262,7 +263,7 @@ export function SourceDetailDrawer({
       </div>
       {item.kind === "patch" && item.files.length > 0 ? (
         <div className="mt-2" data-testid="patch-diff-preview">
-          <p className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/45">
+          <p className="mb-0.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground/45">
             Diff Preview · diff preview only
           </p>
           <ul className="space-y-1">
@@ -271,16 +272,16 @@ export function SourceDetailDrawer({
                 key={`${f.path}-${i}`}
                 data-testid={`patch-diff-file-${i}`}
                 data-change={f.change}
-                className="rounded border border-white/[0.06] bg-white/[0.02] px-1.5 py-1 text-[10px]"
+                className="rounded border border-white/[0.06] bg-white/[0.02] px-1.5 py-1 text-[12px]"
               >
                 <div className="flex items-center gap-1.5">
                   <span className="min-w-0 flex-1 truncate text-zinc-300">{f.path}</span>
-                  <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground/70">
+                  <span className="shrink-0 rounded bg-white/[0.06] px-1 text-[12px] uppercase text-muted-foreground/70">
                     {f.change}
                   </span>
                   {f.risk ? (
                     <span
-                      className="shrink-0 rounded bg-white/[0.06] px-1 text-[9px] uppercase text-muted-foreground"
+                      className="shrink-0 rounded bg-white/[0.06] px-1 text-[12px] uppercase text-muted-foreground"
                       data-testid={`patch-diff-risk-${i}`}
                       data-risk={f.risk}
                     >
@@ -288,7 +289,7 @@ export function SourceDetailDrawer({
                     </span>
                   ) : null}
                 </div>
-                <div className="mt-0.5 flex items-center gap-1.5 text-[9px] text-muted-foreground/60">
+                <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-muted-foreground/60">
                   <span className="tabular-nums text-emerald-300/70">+{f.additions}</span>
                   <span className="tabular-nums text-rose-300/70">-{f.deletions}</span>
                   {f.hunkSummary ? <span className="min-w-0 truncate">{f.hunkSummary}</span> : null}
@@ -298,7 +299,7 @@ export function SourceDetailDrawer({
           </ul>
         </div>
       ) : null}
-      <p className="mt-2 text-[9px] text-muted-foreground/45">view-only · no action</p>
+      <p className="mt-2 text-[12px] text-muted-foreground/45">view-only · no action</p>
     </aside>
   );
 }
