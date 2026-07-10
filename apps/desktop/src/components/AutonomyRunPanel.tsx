@@ -24,6 +24,7 @@ import {
 import { buildRolePaneOptions, type AutonomyRosterSummary } from "../lib/autonomyRoster";
 import type { DebateDecisionReadiness } from "../lib/debateDecisionReadiness";
 import { RolePaneSelect } from "./RolePaneSelect";
+import { PersonaPaneSelect } from "./PersonaPaneSelect";
 import { resolvePersonaSprite, type PersonaSpriteMap } from "../lib/personaAvatarBundle";
 import { buildPersonaCard } from "../lib/personaCard";
 import { PersonaCard } from "./PersonaCard";
@@ -151,21 +152,15 @@ export function AutonomyRunPanel({
       <div className="autonomy-run-form">
         <label>
           <span>페르소나</span>
-          <input
-            disabled={running}
-            list={personaOptions && personaOptions.length > 0 ? "autonomy-persona-options" : undefined}
-            onChange={(event) => onFieldChange({ personaName: event.target.value })}
-            placeholder="예: architect"
-            type="text"
+          <PersonaPaneSelect
             value={form.personaName}
+            options={personaOptions ?? []}
+            disabled={running}
+            onChange={(personaName) => onFieldChange({ personaName })}
+            resolveAvatar={(name) =>
+              resolvePersonaSprite(name, "neutral", { sprites: personaSprites, avatars: personaAvatars })
+            }
           />
-          {personaOptions && personaOptions.length > 0 ? (
-            <datalist id="autonomy-persona-options">
-              {personaOptions.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
-          ) : null}
         </label>
 
         {form.personaName.trim() ? (
