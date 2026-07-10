@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { Check, Eye, Layers, Send, Terminal, X } from "lucide-react";
+import { Check, Eye, Layers, Terminal, X } from "lucide-react";
 import type {
   ApprovalRequest,
   CodingPacket,
@@ -43,6 +43,7 @@ type TmuxPaneDefinition = {
 
 type PaneBusyState = "capture" | "dispatch";
 type TmuxOperationKind = "capture" | "dispatch";
+type CodexRoster = ReturnType<typeof codexByPaneRole>;
 
 export type TmuxApprovalQueuedInput = {
   approval: ApprovalRequest;
@@ -89,6 +90,8 @@ export function TmuxSwarmBoard({
 }) {
   const roleAgent = (role: WorkbenchAgent["role"]) => agents.find((agent) => agent.role === role);
   const recommendation = createTmuxSwarmRecommendation(packet, messages);
+  // 캐릭터↔pane 배치표는 렌더마다 불변(PERSONA_CODEX 상수 유래) — 1회만 계산해 로스터/디테일/초상 해석이 공유한다.
+  const codexRoster = useMemo(() => codexByPaneRole(), []);
   const [busyByRole, setBusyByRole] = useState<Record<string, PaneBusyState | undefined>>({});
   const [boardNotice, setBoardNotice] = useState<string>(tmuxWorkbenchCopy.gatedNotice);
   const panes = createTmuxPanes(roleAgent, recommendation);
@@ -118,9 +121,9 @@ export function TmuxSwarmBoard({
         paneTitle: selectedPane.title,
       })
     : undefined;
-  const activeCount = visiblePanes.filter((pane) => resolvePaneAgentState(pane, statuses, agentActivityById) === "working" || resolvePaneAgentState(pane, statuses, agentActivityById) === "responding").length;
-  const pendingCount = visiblePanes.filter((pane) => resolvePaneAgentState(pane, statuses, agentActivityById) === "waiting_approval").length;
-  const errorCount = visiblePanes.filter((pane) => resolvePaneAgentState(pane, statuses, agentActivityById) === "error").length;
+  // pane별 실상태를 1회만 해석한 뒤 함대 카운트를 집계한다(기존 pane당 4회 재계산 제거).
+  const paneStates = visiblePanes.map((pane) => resolvePaneAgentState(pane, statuses, agentActivityById));
+  const fleetCounts = summarizeTmuxFleetCounts(paneStates);
 
   function appendBlock(roleKey: TmuxPaneRole, block: TerminalTimelineBlock) {
     appendBlocks(roleKey, [block]);
@@ -339,9 +342,9 @@ export function TmuxSwarmBoard({
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs text-zinc-500">
-          <FleetStat dotClass="bg-emerald-500" label="작업" value={activeCount} />
-          {pendingCount > 0 ? <FleetStat dotClass="bg-amber-500 os-breathe" label="승인 대기" value={pendingCount} /> : null}
-          {errorCount > 0 ? <FleetStat dotClass="bg-rose-500" label="오류" value={errorCount} /> : null}
+          <FleetStat dotClass="bg-emerald-500" label="작업" value={fleetCounts.active} />
+          {fleetCounts.pending > 0 ? <FleetStat dotClass="bg-amber-500 os-breathe" label="승인 대기" value={fleetCounts.pending} /> : null}
+          {fleetCounts.error > 0 ? <FleetStat dotClass="bg-rose-500" label="오류" value={fleetCounts.error} /> : null}
           <span className="hidden sm:inline">{formatTmuxPaneCountLabel(visiblePanes.length)}</span>
         </div>
       </header>
@@ -375,6 +378,7 @@ export function TmuxSwarmBoard({
           {visiblePanes.map((pane) => (
             <TmuxFleetRow
               key={pane.id}
+              codexRoster={codexRoster}
               pane={{
                 ...pane,
                 state:
@@ -393,10 +397,10 @@ export function TmuxSwarmBoard({
           {selectedPane ? (
             <TmuxPaneDetail
               busy={busyByRole[selectedPane.roleKey]}
+              codexRoster={codexRoster}
               commandDraft={commandDrafts[selectedPane.roleKey] ?? defaultTmuxCommandForRole(selectedPane.roleKey)}
               lastOutput={outputs[selectedPane.roleKey]}
               onCapture={() => void handleCapturePane(selectedPane)}
-              onCommandDraftChange={(value) => updateCommandDraft(selectedPane.roleKey, value)}
               onDispatch={() => void handleDispatchPane(selectedPane)}
               onReject={() => {
                 updateCommandDraft(selectedPane.roleKey, "");
@@ -408,7 +412,6 @@ export function TmuxSwarmBoard({
                   statuses[selectedPane.roleKey] ??
                   (selectedPane.agent ? agentActivityById[selectedPane.agent.id] ?? selectedPane.state : selectedPane.state),
               }}
-              showComposer={false}
               timelineBlocks={timelineBlocks[selectedPane.roleKey] ?? []}
             />
           ) : (
@@ -565,14 +568,14 @@ function FleetStat({ dotClass, label, value }: { dotClass: string; label: string
  * 이 워크스테이션의 첫 소환 후보 순으로 아바타를 찾는다. 후보조차 없는
  * 역할 전용 pane(프론트/백엔드 등)만 이니셜로 남는다.
  */
-function panePortraitUrl(pane: TmuxPaneDefinition): string | undefined {
+function panePortraitUrl(pane: TmuxPaneDefinition, codexRoster: CodexRoster): string | undefined {
   if (pane.agent?.personaName && personaAvatars[pane.agent.personaName]) {
     return personaAvatars[pane.agent.personaName];
   }
   if (pane.agent && personaAvatars[pane.agent.role]) {
     return personaAvatars[pane.agent.role];
   }
-  for (const entry of codexByPaneRole()[pane.roleKey] ?? []) {
+  for (const entry of codexRoster[pane.roleKey] ?? []) {
     const url = personaAvatars[entry.personaName];
     if (url) return url;
   }
@@ -596,17 +599,19 @@ function TmuxFleetRow({
   isSelected,
   onSelect,
   latestOutput,
+  codexRoster,
 }: {
   pane: TmuxPaneDefinition;
   isSelected: boolean;
   onSelect: () => void;
   /** 이 워커의 마지막 작업창 출력 — "무슨 답을 했는지/결론" 요약 표시(읽기 전용) */
   latestOutput?: string;
+  codexRoster: CodexRoster;
 }) {
   const state = mapTmuxPaneStateToAgentState(pane.state);
   const initials = pane.agent ? getInitials(pane.agent.name) : getInitials(pane.title);
   const surfaceLabel = formatTmuxPaneSurfaceLabel(pane.id);
-  const codex = codexByPaneRole()[pane.roleKey] ?? [];
+  const codex = codexRoster[pane.roleKey] ?? [];
   const conclusion = latestConclusionLine(latestOutput);
 
   // 읽기 전용 관측 카드 — 클릭하면 아래 풀와이드에서 전체 출력/타임라인을 본다.
@@ -620,7 +625,7 @@ function TmuxFleetRow({
       type="button"
     >
       <div className="flex w-full items-center gap-3">
-        <AgentPortrait avatarUrl={panePortraitUrl(pane)} initials={initials} state={state} size="sm" tintClassName="bg-zinc-800 text-zinc-300" />
+        <AgentPortrait avatarUrl={panePortraitUrl(pane, codexRoster)} initials={initials} state={state} size="sm" tintClassName="bg-zinc-800 text-zinc-300" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-medium text-zinc-100">{pane.title}</span>
@@ -650,46 +655,43 @@ function TmuxFleetRow({
 
 function TmuxPaneDetail({
   busy,
+  codexRoster,
   commandDraft,
   lastOutput,
   onCapture,
-  onCommandDraftChange,
   onDispatch,
   onReject,
   pane,
-  showComposer = true,
   timelineBlocks,
 }: {
   busy?: PaneBusyState;
+  codexRoster: CodexRoster;
   commandDraft: string;
   lastOutput?: string;
   onCapture: () => void;
-  onCommandDraftChange: (value: string) => void;
   onDispatch: () => void;
   onReject: () => void;
   pane: TmuxPaneDefinition;
-  /** 입력은 각 pane 카드로 옮겨졌으므로, 풀와이드 상세에서는 기본 끔(중복 방지) */
-  showComposer?: boolean;
   timelineBlocks: TerminalTimelineBlock[];
 }) {
   const state = mapTmuxPaneStateToAgentState(pane.state);
-  const commandDisabled = false;
   const surfaceLabel = formatTmuxPaneSurfaceLabel(pane.id);
+  const summonCandidates = codexRoster[pane.roleKey] ?? [];
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex shrink-0 items-center gap-3 border-b border-zinc-800/60 px-5 py-3.5">
-        <AgentPortrait avatarUrl={panePortraitUrl(pane)} initials={pane.agent ? getInitials(pane.agent.name) : getInitials(pane.title)} state={state} size="md" tintClassName="bg-zinc-800 text-zinc-200" />
+        <AgentPortrait avatarUrl={panePortraitUrl(pane, codexRoster)} initials={pane.agent ? getInitials(pane.agent.name) : getInitials(pane.title)} state={state} size="md" tintClassName="bg-zinc-800 text-zinc-200" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h2 className="truncate text-sm font-medium text-zinc-100">{pane.title}</h2>
             <span className="text-[10px] text-zinc-600">{surfaceLabel}</span>
           </div>
           <p className="truncate text-xs text-zinc-500">{pane.agent?.name ?? "담당 에이전트 미정"} · {pane.role}</p>
-          {(codexByPaneRole()[pane.roleKey] ?? []).length > 0 ? (
+          {summonCandidates.length > 0 ? (
             <div className="mt-1 flex flex-wrap items-center gap-1">
               <span className="text-[9px] uppercase tracking-wider text-zinc-600">소환 후보</span>
-              {(codexByPaneRole()[pane.roleKey] ?? []).map((entry) => (
+              {summonCandidates.map((entry) => (
                 <span
                   className="rounded-full border border-violet-400/20 bg-violet-500/10 px-1.5 py-px text-[10px] text-violet-200"
                   key={entry.personaName}
@@ -754,43 +756,14 @@ function TmuxPaneDetail({
         </div>
       </div>
 
-      {showComposer ? (
-      <div className="shrink-0 border-t border-zinc-800/60 p-4">
-        <div className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-2 focus-within:border-amber-500/40">
-          <Terminal className="h-4 w-4 shrink-0 text-zinc-500" />
-          <input
-            aria-label={`${pane.title} 명령 미리보기`}
-            className="flex-1 bg-transparent font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
-            disabled={commandDisabled}
-            onChange={(event) => onCommandDraftChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !commandDisabled) onDispatch();
-            }}
-            placeholder={`${surfaceLabel}에 명령 보내기...`}
-            type="text"
-            value={commandDraft}
-          />
-          <Button className="h-7 gap-1.5 px-2.5 text-xs" disabled={Boolean(busy)} onClick={onCapture} size="sm" variant="ghost">
-            <Eye className="h-3.5 w-3.5" />
-            읽기
-          </Button>
-          <Button className="h-7 gap-1.5 bg-amber-600 px-2.5 text-xs hover:bg-amber-700" disabled={Boolean(busy) || commandDisabled || !commandDraft.trim()} onClick={onDispatch} size="sm">
-            <Send className="h-3.5 w-3.5" />
-            전송
-          </Button>
-        </div>
-        <p className="mt-1.5 px-1 text-[10px] text-zinc-500">승인 게이트 준비됨 · 실제 전송은 승인 이후에만 실행됩니다.</p>
+      {/* 관측 전용 — 명령 입력 없이 "읽기(새로고침)"만. 지시는 대화 탭에서. */}
+      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-zinc-800/60 px-4 py-2.5">
+        <span className="text-[11px] text-zinc-500">관측 전용 · 지시는 대화 탭에서 상대를 바꿔가며 하세요</span>
+        <Button className="h-7 gap-1.5 px-2.5 text-xs" disabled={Boolean(busy)} onClick={onCapture} size="sm" variant="ghost">
+          <Eye className="h-3.5 w-3.5" />
+          읽기 새로고침
+        </Button>
       </div>
-      ) : (
-        // 관측 전용 — 명령 입력 없이 "읽기(새로고침)"만. 지시는 대화 탭에서.
-        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-zinc-800/60 px-4 py-2.5">
-          <span className="text-[11px] text-zinc-500">관측 전용 · 지시는 대화 탭에서 상대를 바꿔가며 하세요</span>
-          <Button className="h-7 gap-1.5 px-2.5 text-xs" disabled={Boolean(busy)} onClick={onCapture} size="sm" variant="ghost">
-            <Eye className="h-3.5 w-3.5" />
-            읽기 새로고침
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
@@ -984,14 +957,53 @@ function resolvePaneAgentState(
   );
 }
 
-function mapTmuxPaneStateToAgentState(state: string): AgentState {
-  const normalized = state.toLowerCase();
+/**
+ * tmux 캡처/디스패치 라이프사이클의 정본 상태 문자열 → AgentState 정확 매칭 테이블.
+ * 핵심: `captured`(캡처 완료)는 done(=success/"완료")로, `capturing`(진행 중)은 responding으로 구분한다.
+ * 기존 `includes("captur")`는 완료와 진행을 뭉뚱그려 완료된 pane을 계속 "응답 중"으로 오분류했고,
+ * 그 결과 헤더 "작업" 카운트가 완료 pane까지 계속 집계하는 버그가 있었다(스펙 §2.4 버그 수정).
+ */
+const TMUX_STATE_TO_AGENT_STATE: Record<string, AgentState> = {
+  capturing: "responding",
+  captured: "success",
+  "capture failed": "error",
+  disabled: "idle",
+  dispatching: "responding",
+  "dispatch failed": "error",
+  recorded: "success",
+  sent: "success",
+  dry_run: "success",
+  blocked: "error",
+  pending_approval: "waiting_approval",
+};
+
+export function mapTmuxPaneStateToAgentState(state: string): AgentState {
+  const normalized = state.toLowerCase().trim();
+  const exact = TMUX_STATE_TO_AGENT_STATE[normalized];
+  if (exact) return exact;
+  // 서술형 시드 상태("chat active"·"watch only"·"guarding" 등)는 아래 휴리스틱으로 폴백한다.
   if (normalized.includes("fail") || normalized.includes("error") || normalized.includes("blocked")) return "error";
   if (normalized.includes("approval") || normalized.includes("gated") || normalized.includes("pending")) return "waiting_approval";
-  if (normalized.includes("dispatch") || normalized.includes("captur") || normalized.includes("running")) return "responding";
+  if (normalized.includes("dispatch") || normalized.includes("running")) return "responding";
   if (normalized.includes("active") || normalized.includes("guard") || normalized.includes("recommended")) return "working";
   if (normalized.includes("ready") || normalized.includes("recorded") || normalized.includes("sent")) return "success";
   return "idle";
+}
+
+/**
+ * 함대 카운트 집계: "작업"은 진행 상태(working/responding)만 센다.
+ * 완료(success/done)·유휴(idle)는 "작업"에서 제외한다(스펙 §2.4 "작업 카운트 done 제외").
+ */
+export function summarizeTmuxFleetCounts(states: AgentState[]): { active: number; pending: number; error: number } {
+  let active = 0;
+  let pending = 0;
+  let error = 0;
+  for (const state of states) {
+    if (state === "working" || state === "responding") active += 1;
+    else if (state === "waiting_approval") pending += 1;
+    else if (state === "error") error += 1;
+  }
+  return { active, pending, error };
 }
 
 function getInitials(name: string): string {
