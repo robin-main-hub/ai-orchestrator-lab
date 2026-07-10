@@ -1,4 +1,5 @@
-import { Bot, Play, Volume2 } from "lucide-react";
+import { useState } from "react";
+import { Bot, Play, Volume2, X } from "lucide-react";
 import { StatusBadge } from "@/ui/status-badge";
 import type { AutonomyMode } from "../lib/autonomousRun";
 import {
@@ -10,6 +11,14 @@ import {
   type AutonomyRunForm,
   type RunnableVerdict,
 } from "../lib/autonomyRunForm";
+import {
+  VERIFICATION_PRESETS,
+  addCustom,
+  customCommands,
+  isPresetActive,
+  removeCommand,
+  togglePreset,
+} from "../lib/autonomyVerificationChips";
 import {
   actionBadgeVariant,
   actionLabel,
@@ -100,6 +109,10 @@ export function AutonomyRunPanel({
   speakDisabledReason?: string;
 }) {
   const disabled = running || !runnable.ok;
+  // transient UI text for the custom-command add box — never part of the form
+  // payload, so the "stateless form" contract with the container is preserved.
+  const [pendingCustom, setPendingCustom] = useState("");
+  const customSteps = customCommands(form.verificationStepsText);
   const personaPortrait = resolvePersonaSprite(form.personaName.trim(), expression ?? "neutral", {
     sprites: personaSprites,
     avatars: personaAvatars,
@@ -216,14 +229,73 @@ export function AutonomyRunPanel({
           />
         </label>
 
-        <label>
-          <span>검증 단계 (한 줄에 하나)</span>
-          <textarea
+        <label className="autonomy-verify-field">
+          <span>검증 단계</span>
+          <span className="autonomy-verify-hint">실행할 검사를 켜세요</span>
+          <div className="verify-chip-row" role="group" aria-label="검증 프리셋">
+            {VERIFICATION_PRESETS.map((preset) => {
+              const active = isPresetActive(form.verificationStepsText, preset.id);
+              return (
+                <button
+                  key={preset.id}
+                  className={`verify-chip${active ? " is-on" : ""}`}
+                  type="button"
+                  aria-pressed={active}
+                  disabled={running}
+                  onClick={() =>
+                    onFieldChange({
+                      verificationStepsText: togglePreset(form.verificationStepsText, preset.id),
+                    })
+                  }
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+          {customSteps.length > 0 ? (
+            <div className="verify-chip-row verify-custom-row">
+              {customSteps.map((command) => (
+                <span key={command} className="verify-chip verify-custom is-on">
+                  <span className="verify-custom-label">{command}</span>
+                  <button
+                    className="verify-chip-remove"
+                    type="button"
+                    aria-label={`${command} 제거`}
+                    disabled={running}
+                    onClick={() =>
+                      onFieldChange({
+                        verificationStepsText: removeCommand(form.verificationStepsText, command),
+                      })
+                    }
+                  >
+                    <X size={11} aria-hidden="true" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <input
+            className="verify-custom-input"
             disabled={running}
-            onChange={(event) => onFieldChange({ verificationStepsText: event.target.value })}
-            placeholder={"pnpm test\npnpm lint"}
-            rows={4}
-            value={form.verificationStepsText}
+            onChange={(event) => setPendingCustom(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") {
+                return;
+              }
+              event.preventDefault();
+              const value = pendingCustom.trim();
+              if (!value) {
+                return;
+              }
+              onFieldChange({
+                verificationStepsText: addCustom(form.verificationStepsText, value),
+              });
+              setPendingCustom("");
+            }}
+            placeholder="+ 직접 입력"
+            type="text"
+            value={pendingCustom}
           />
           {(() => {
             const manualSteps = nonAutoApprovableSteps(form);
