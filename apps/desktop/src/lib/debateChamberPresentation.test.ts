@@ -36,6 +36,34 @@ describe("debateChamberPresentation", () => {
     }
   });
 
+  it("본 서피스 톤 맵은 v2 시맨틱 토큰만 쓰고 레거시 리터럴 색을 남기지 않는다", () => {
+    const stances = ["agree", "disagree", "risk", "evidence", "decision", "neutral"] as const;
+    const roles = [
+      "architect",
+      "builder",
+      "executor",
+      "memory_curator",
+      "orchestrator",
+      "reviewer",
+      "skeptic",
+      "verifier",
+    ] as const;
+    const bannedLiterals = ["violet", "purple", "zinc", "rose", "amber", "blue", "cyan", "sky", "teal", "fuchsia", "indigo"];
+    const tones = [
+      ...stances.map((stance) => debateStanceTone(stance)),
+      ...roles.map((role) => debateRoleTone(role)),
+      debateRoleTone("unknown-role" as never),
+    ];
+
+    for (const tone of tones) {
+      const serialized = JSON.stringify(tone);
+      for (const literal of bannedLiterals) {
+        expect(serialized).not.toContain(literal);
+      }
+      expect(serialized).toMatch(/primary|warning|destructive|muted|border/);
+    }
+  });
+
   it("Annex 탭은 보조정보를 한국어 라벨로 분리한다", () => {
     expect(annexTabPresentation.status.label).toBe("상태");
     expect(annexTabPresentation.agents.label).toBe("에이전트 흐름");
