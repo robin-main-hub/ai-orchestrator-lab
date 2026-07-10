@@ -208,7 +208,7 @@ export function ResearchSwarmContainer({
 
     if (serverDown) {
       commit(markSwarmOffline(state, "서버에 연결할 수 없습니다 (provider-completions). 서버를 켜고 다시 시도하세요."));
-      setNotice("⚠ 서버 오프라인 — completion 엔드포인트에 연결 실패. 모든 요원을 오프라인 처리했습니다.");
+      setNotice("서버 오프라인 · completion 엔드포인트에 연결 실패. 모든 요원을 오프라인 처리했습니다.");
     } else if (cancelRef.current) {
       setNotice("중단됨.");
     } else {
