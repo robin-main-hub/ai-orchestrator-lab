@@ -28,10 +28,10 @@ export function MaturityReadinessCard({
         }
       >
         <div className="flex items-center gap-2">
-          <ListChecks className="h-4 w-4 text-cyan-300" />
+          <ListChecks className="h-4 w-4 text-primary" />
           <div>
-            <h2 className="text-sm font-semibold text-zinc-100">실사용 성숙도</h2>
-            <p className="text-xs text-zinc-500">
+            <h2 className="text-sm font-semibold text-foreground">실사용 성숙도</h2>
+            <p className="text-xs text-muted-foreground">
               {maturity.readyCount} / {total} · 설정 차단 {diagnostics.blockingCount}건
             </p>
           </div>
@@ -39,9 +39,9 @@ export function MaturityReadinessCard({
       </GlassPanelHeader>
 
       <div className="grid gap-3 p-4 lg:grid-cols-3">
-        <section className="rounded-lg border border-zinc-800/60 bg-zinc-950/35 p-3">
+        <section className="rounded-lg border border-border bg-muted/35 p-3">
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-300">큰 바위 진행</span>
+            <span className="text-xs font-medium text-muted-foreground">큰 바위 진행</span>
             <Badge color={maturity.overallStatus === "ready" ? "green" : maturity.overallStatus === "blocked" ? "red" : "yellow"}>
               {maturity.overallStatus === "ready" ? "준비됨" : maturity.overallStatus === "blocked" ? "차단" : "보강 중"}
             </Badge>
@@ -58,9 +58,9 @@ export function MaturityReadinessCard({
           </div>
         </section>
 
-        <section className="rounded-lg border border-zinc-800/60 bg-zinc-950/35 p-3">
+        <section className="rounded-lg border border-border bg-muted/35 p-3">
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-300">설정 진단</span>
+            <span className="text-xs font-medium text-muted-foreground">설정 진단</span>
             <Badge color={diagnostics.status === "ready" ? "green" : diagnostics.status === "blocked" ? "red" : "yellow"}>
               {diagnostics.status === "ready" ? "통과" : diagnostics.status === "blocked" ? "차단" : "주의"}
             </Badge>
@@ -77,9 +77,9 @@ export function MaturityReadinessCard({
           </div>
         </section>
 
-        <section className="rounded-lg border border-zinc-800/60 bg-zinc-950/35 p-3">
+        <section className="rounded-lg border border-border bg-muted/35 p-3">
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-300">운영 스모크</span>
+            <span className="text-xs font-medium text-muted-foreground">운영 스모크</span>
             <Badge color="blue">{smokePlan.items.length}축</Badge>
           </div>
           <div className="space-y-2">
@@ -96,12 +96,12 @@ export function MaturityReadinessCard({
       </div>
 
       {maturity.nextActions.length > 0 || diagnostics.nextActions.length > 0 ? (
-        <div className="border-t border-zinc-800/60 px-4 py-3">
-          <p className="mb-2 text-xs font-medium text-zinc-300">다음 조치</p>
+        <div className="border-t border-border px-4 py-3">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">다음 조치</p>
           <div className="flex flex-wrap gap-2">
             {Array.from(new Set([...maturity.nextActions, ...diagnostics.nextActions])).slice(0, 6).map((action) => (
               <span
-                className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-200"
+                className="rounded-full border border-warning/20 bg-warning/10 px-2 py-1 text-[11px] text-warning"
                 key={action}
               >
                 {action}
@@ -124,14 +124,14 @@ function ReadinessRow({
   value: string;
 }) {
   const Icon = status === "pass" ? CheckCircle2 : status === "block" ? ShieldAlert : Activity;
-  const color = status === "pass" ? "text-emerald-300" : status === "block" ? "text-rose-300" : "text-amber-300";
+  const color = status === "pass" ? "text-primary" : status === "block" ? "text-destructive" : "text-warning";
 
   return (
     <div className="flex items-start gap-2">
       <Icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${color}`} />
       <div className="min-w-0">
-        <p className="truncate text-[11px] font-medium text-zinc-200">{label}</p>
-        <p className="line-clamp-2 text-[10px] text-zinc-500">{value}</p>
+        <p className="truncate text-[11px] font-medium text-foreground">{label}</p>
+        <p className="line-clamp-2 text-[10px] text-muted-foreground">{value}</p>
       </div>
     </div>
   );

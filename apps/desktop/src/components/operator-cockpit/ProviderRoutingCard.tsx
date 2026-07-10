@@ -28,7 +28,7 @@ export function ProviderRoutingCard({
 
   return (
     <GlassPanel variant="default" className="relative">
-      <div aria-hidden className="absolute left-4 top-11 h-[calc(100%-3.25rem)] w-px bg-gradient-to-b from-violet-500/50 to-transparent" />
+      <div aria-hidden className="absolute left-4 top-11 h-[calc(100%-3.25rem)] w-px bg-gradient-to-b from-primary/50 to-transparent" />
       <GlassPanelHeader
         action={
           <div className="flex items-center gap-2">
@@ -36,7 +36,7 @@ export function ProviderRoutingCard({
             {onOpen ? (
               <button
                 aria-label={operatorCockpitActionLabels.openProviderRouting}
-                className="rounded-md border border-zinc-700/70 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 transition hover:border-violet-400/60 hover:text-violet-200"
+                className="rounded-md border border-border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground transition hover:border-primary/60 hover:text-primary"
                 onClick={onOpen}
                 title={operatorCockpitActionLabels.openProviderRouting}
                 type="button"
@@ -48,21 +48,21 @@ export function ProviderRoutingCard({
         }
       >
         <div className="flex items-center gap-2">
-          <RadioTower className="h-4 w-4 text-violet-400" />
-          <h3 className="text-sm font-semibold text-zinc-100">현재 대화 경로</h3>
+          <RadioTower className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold text-foreground">현재 대화 경로</h3>
         </div>
       </GlassPanelHeader>
 
       <div className="space-y-4 p-3 pl-8">
-        <div className="rounded-lg border border-violet-500/20 bg-violet-500/10 p-3">
-          <span className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+        <div className="rounded-lg border border-primary/20 bg-primary/10 p-3">
+          <span className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             <Route className="h-3 w-3" />
             선택 에이전트 경로
           </span>
           {providerLabel ? (
-            <div className="mb-1 text-xs font-semibold text-zinc-100">{providerLabel}</div>
+            <div className="mb-1 text-xs font-semibold text-foreground">{providerLabel}</div>
           ) : null}
-          <span className="text-sm font-semibold text-violet-100">{selectedModelLabel}</span>
+          <span className="text-sm font-semibold text-primary">{selectedModelLabel}</span>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {routing.routeLabel ? <Badge color="purple" size="xs">{routing.routeLabel}</Badge> : null}
             {routing.readinessLabel ? <Badge color="blue" size="xs">{routing.readinessLabel}</Badge> : null}
@@ -110,8 +110,8 @@ function MetricBadge({
   label: string;
 }) {
   return (
-    <div className="rounded-lg border border-zinc-800/50 bg-black/20 p-2">
-      <span className="mb-1 flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider text-zinc-600">
+    <div className="rounded-lg border border-border bg-muted/40 p-2">
+      <span className="mb-1 flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
         {icon}
         {label}
       </span>

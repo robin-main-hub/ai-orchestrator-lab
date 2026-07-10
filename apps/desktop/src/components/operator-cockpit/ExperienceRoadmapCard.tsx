@@ -20,10 +20,10 @@ export function ExperienceRoadmapCard({ items }: { items: ExperienceRoadmapItem[
         }
       >
         <div className="flex items-center gap-2">
-          <Compass className="h-4 w-4 text-violet-300" />
+          <Compass className="h-4 w-4 text-primary" />
           <div>
-            <h2 className="text-sm font-semibold text-zinc-100">20개 큰 바위 로드맵</h2>
-            <p className="text-xs text-zinc-500">Kimi/Manus/v0 조사에서 가져온 성숙한 OS 기준</p>
+            <h2 className="text-sm font-semibold text-foreground">20개 큰 바위 로드맵</h2>
+            <p className="text-xs text-muted-foreground">Kimi/Manus/v0 조사에서 가져온 성숙한 OS 기준</p>
           </div>
         </div>
       </GlassPanelHeader>
@@ -42,8 +42,8 @@ function RoadmapTile({ item, index }: { item: ExperienceRoadmapItem; index: numb
     <article className={`min-w-0 rounded-lg border px-3 py-3 ${tileClassName(item.status)}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold text-zinc-500">#{String(index).padStart(2, "0")}</p>
-          <h3 className="mt-1 truncate text-[12px] font-semibold text-zinc-100" title={item.label}>
+          <p className="text-[10px] font-semibold text-muted-foreground">#{String(index).padStart(2, "0")}</p>
+          <h3 className="mt-1 truncate text-[12px] font-semibold text-foreground" title={item.label}>
             {item.label}
           </h3>
         </div>
@@ -51,7 +51,7 @@ function RoadmapTile({ item, index }: { item: ExperienceRoadmapItem; index: numb
           {sourceLabel(item.source)}
         </span>
       </div>
-      <p className="mt-2 line-clamp-2 text-[10px] leading-4 text-zinc-500">{item.detail}</p>
+      <p className="mt-2 line-clamp-2 text-[10px] leading-4 text-muted-foreground">{item.detail}</p>
       <div className="mt-3 flex items-center justify-between gap-2">
         <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${statusClassName(item.status)}`}>
           {item.status === "blocked" ? <ShieldAlert className="h-3 w-3" /> : null}
@@ -63,15 +63,15 @@ function RoadmapTile({ item, index }: { item: ExperienceRoadmapItem; index: numb
 }
 
 function tileClassName(status: ExperienceRoadmapItem["status"]) {
-  if (status === "blocked") return "border-rose-500/20 bg-rose-950/15";
-  if (status === "live") return "border-emerald-500/15 bg-emerald-500/[0.045]";
-  return "border-zinc-800/70 bg-zinc-950/35";
+  if (status === "blocked") return "border-destructive/20 bg-destructive/15";
+  if (status === "live") return "border-primary/15 bg-primary/[0.045]";
+  return "border-border bg-muted/35";
 }
 
 function statusClassName(status: ExperienceRoadmapItem["status"]) {
-  if (status === "blocked") return "bg-rose-500/10 text-rose-200";
-  if (status === "live") return "bg-emerald-500/10 text-emerald-200";
-  return "bg-amber-500/10 text-amber-200";
+  if (status === "blocked") return "bg-destructive/10 text-destructive";
+  if (status === "live") return "bg-primary/10 text-primary";
+  return "bg-warning/10 text-warning";
 }
 
 function statusLabel(status: ExperienceRoadmapItem["status"]) {
@@ -81,11 +81,11 @@ function statusLabel(status: ExperienceRoadmapItem["status"]) {
 }
 
 function sourceClassName(source: ExperienceRoadmapItem["source"]) {
-  if (source === "v0") return "border-violet-400/20 bg-violet-500/10 text-violet-200";
-  if (source === "warp") return "border-amber-400/20 bg-amber-500/10 text-amber-200";
-  if (source === "cline") return "border-rose-400/20 bg-rose-500/10 text-rose-200";
-  if (source === "linear") return "border-cyan-400/20 bg-cyan-500/10 text-cyan-200";
-  return "border-zinc-700/80 bg-zinc-900/80 text-zinc-300";
+  if (source === "v0") return "border-primary/20 bg-primary/10 text-primary";
+  if (source === "warp") return "border-warning/20 bg-warning/10 text-warning";
+  if (source === "cline") return "border-destructive/20 bg-destructive/10 text-destructive";
+  if (source === "linear") return "border-primary/20 bg-primary/10 text-primary";
+  return "border-border bg-muted/80 text-muted-foreground";
 }
 
 function sourceLabel(source: ExperienceRoadmapItem["source"]) {

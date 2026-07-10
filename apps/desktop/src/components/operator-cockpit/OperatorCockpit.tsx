@@ -233,33 +233,33 @@ export function OperatorCockpit({
   return (
     <div
       aria-label="운영자 관제판 조작 가능한 지휘 화면"
-      className="relative flex h-full min-h-0 flex-col overflow-hidden bg-transparent text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+      className="relative flex h-full min-h-0 flex-col overflow-hidden bg-transparent text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
       data-focus-id="cockpit-container"
       tabIndex={-1}
     >
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(6,182,212,0.12),transparent_32%),radial-gradient(circle_at_82%_8%,rgba(139,92,246,0.10),transparent_34%),linear-gradient(180deg,rgba(24,24,27,0.56),rgba(9,9,11,0.96))]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_420px_at_78%_-10%,var(--accent-dim),transparent)]"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.03] [background-image:linear-gradient(to_right,rgba(255,255,255,0.8)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.8)_1px,transparent_1px)] [background-size:32px_32px]"
+        className="pointer-events-none absolute inset-0 opacity-[0.03] [background-image:linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] [background-size:32px_32px]"
       />
 
-      <header className="sticky top-0 z-10 border-b border-zinc-800/60 bg-zinc-900/40 px-4 py-3 backdrop-blur-xl">
+      <header className="sticky top-0 z-10 border-b border-border bg-muted/40 px-4 py-3 backdrop-blur-xl">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-cyan-500/15 text-cyan-300 shadow-[0_0_24px_rgba(6,182,212,0.18)]">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary shadow-[0_0_24px_var(--accent-dim)]">
               <BrainCircuit className="h-5 w-5" />
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-sm font-semibold tracking-tight text-zinc-100">운영자 관제판</h1>
+                <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">운영자 관제판</h1>
                 <Badge color="outline" size="xs">
                   조작 가능한 지휘 화면
                 </Badge>
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
                   <RefreshCw className="h-3 w-3" />
                   마지막 동기화: {formatClock(snapshot.timestamp)}
@@ -375,24 +375,24 @@ export function OperatorCockpit({
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-900/30">
+          <div className="overflow-hidden rounded-lg border border-border bg-muted/30">
             <button
               className="flex w-full items-center justify-between px-4 py-3 text-left"
               onClick={() => setShowDetails((current) => !current)}
               type="button"
             >
-              <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-zinc-200">
+              <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
                 작전 세부 정보
-                <span className="truncate text-xs font-normal text-zinc-500">
+                <span className="truncate text-xs font-normal text-muted-foreground">
                   {detailFocus
                     ? `${detailFocus.label} 안내 중`
                     : "핸드오프 · 기억 · 라우팅 · 복구 · 디스패치"}
                 </span>
               </span>
-              <ChevronDown className={`h-4 w-4 text-zinc-500 transition-transform ${showDetails ? "rotate-180" : ""}`} />
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${showDetails ? "rotate-180" : ""}`} />
             </button>
             {showDetails ? (
-              <div className="border-t border-zinc-800/60 p-4">
+              <div className="border-t border-border p-4">
                 {detailFocus ? <DetailFocusBanner focus={detailFocus} /> : null}
                 <div className="grid gap-4 lg:grid-cols-12">
                   {readiness ? (
@@ -400,7 +400,7 @@ export function OperatorCockpit({
                       id="cockpit-section-maturity"
                       className={`lg:col-span-12 ${
                         detailFocus?.surface === "maturity" || detailFocus?.surface === "diagnostics"
-                          ? "rounded-xl ring-1 ring-cyan-300/35 shadow-[0_0_32px_rgba(6,182,212,0.12)]"
+                          ? "rounded-xl ring-1 ring-primary/35 shadow-[0_0_32px_var(--accent-dim)]"
                           : ""
                       }`}
                     >
@@ -421,7 +421,7 @@ export function OperatorCockpit({
                       id="cockpit-section-receipts"
                       className={`lg:col-span-12 ${
                         detailFocus?.surface === "receipts"
-                          ? "rounded-xl ring-1 ring-cyan-300/35 shadow-[0_0_32px_rgba(6,182,212,0.12)]"
+                          ? "rounded-xl ring-1 ring-primary/35 shadow-[0_0_32px_var(--accent-dim)]"
                           : ""
                       }`}
                     >
@@ -433,7 +433,7 @@ export function OperatorCockpit({
                       id="cockpit-section-handoffs"
                       className={
                         detailFocus?.surface === "handoffs"
-                          ? "rounded-xl ring-1 ring-cyan-300/35 shadow-[0_0_32px_rgba(6,182,212,0.12)]"
+                          ? "rounded-xl ring-1 ring-primary/35 shadow-[0_0_32px_var(--accent-dim)]"
                           : ""
                       }
                     >
@@ -491,16 +491,16 @@ function MissionCommandDeck({
   return (
     <section
       aria-label="작전 지휘판"
-      className="overflow-hidden rounded-xl border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(6,182,212,0.10),rgba(24,24,27,0.48)_42%,rgba(139,92,246,0.10))] shadow-[0_0_40px_rgba(6,182,212,0.10)] backdrop-blur-xl"
+      className="overflow-hidden rounded-xl border border-primary/20 bg-[linear-gradient(135deg,var(--accent-dim),transparent_42%,var(--accent-dim))] shadow-[0_0_40px_var(--accent-dim)] backdrop-blur-xl"
     >
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.9fr)]">
-        <div className="border-b border-white/10 p-4 lg:border-b-0 lg:border-r">
+        <div className="border-b border-border p-4 lg:border-b-0 lg:border-r">
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-300/25 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold text-cyan-100">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary">
               <Monitor className="h-3 w-3" />
               작전 지휘판
             </span>
-            <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-zinc-400">
+            <span className="rounded-full border border-border bg-muted/40 px-2 py-1 text-[10px] text-muted-foreground">
               작업 흐름
             </span>
           </div>
@@ -508,7 +508,7 @@ function MissionCommandDeck({
           {nextActions.length ? (
             <NextActionStrip actions={nextActions} onActivate={onActivateNextAction} />
           ) : (
-            <p className="text-sm leading-6 text-zinc-400">
+            <p className="text-sm leading-6 text-muted-foreground">
               지금은 처리할 다음 작업이 없습니다. 승인·워커·기억·성과 신호를 오른쪽에서 확인하세요.
             </p>
           )}
@@ -579,17 +579,17 @@ function MissionMetric({
   value: string;
 }) {
   const toneClass = {
-    amber: "border-amber-400/20 bg-amber-400/10 text-amber-100",
-    cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-100",
-    emerald: "border-emerald-400/20 bg-emerald-400/10 text-emerald-100",
-    rose: "border-rose-400/20 bg-rose-400/10 text-rose-100",
-    violet: "border-violet-400/20 bg-violet-400/10 text-violet-100",
-    zinc: "border-zinc-700/70 bg-zinc-950/35 text-zinc-300",
+    amber: "border-warning/20 bg-warning/10 text-warning",
+    cyan: "border-primary/20 bg-primary/10 text-primary",
+    emerald: "border-primary/20 bg-primary/10 text-primary",
+    rose: "border-destructive/20 bg-destructive/10 text-destructive",
+    violet: "border-primary/20 bg-primary/10 text-primary",
+    zinc: "border-border bg-muted/40 text-muted-foreground",
   }[tone];
 
   return (
     <button
-      className={`group min-w-0 rounded-lg border px-3 py-2 text-left transition-colors hover:border-cyan-300/35 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50 ${toneClass} ${className ?? ""}`}
+      className={`group min-w-0 rounded-lg border px-3 py-2 text-left transition-colors hover:border-primary/35 hover:bg-foreground/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${toneClass} ${className ?? ""}`}
       onClick={onClick}
       type="button"
     >
@@ -597,10 +597,10 @@ function MissionMetric({
         {icon}
         {label}
       </p>
-      <p className="mt-1 truncate text-[12px] font-semibold text-zinc-50" title={value}>
+      <p className="mt-1 truncate text-[12px] font-semibold text-foreground" title={value}>
         {value}
       </p>
-      <span className="mt-1 inline-flex text-[10px] font-semibold text-cyan-100/70 transition-colors group-hover:text-cyan-100">
+      <span className="mt-1 inline-flex text-[10px] font-semibold text-primary transition-colors group-hover:text-primary">
         {actionLabel}
       </span>
     </button>
@@ -619,12 +619,12 @@ function PendingHandoffStrip({
   return (
     <section
       aria-label="실행 슬롯 인계 승인"
-      className="rounded-lg border border-cyan-400/25 bg-cyan-400/[0.06] px-3 py-3 shadow-[0_0_28px_rgba(6,182,212,0.08)] backdrop-blur-xl"
+      className="rounded-lg border border-primary/25 bg-primary/[0.06] px-3 py-3 shadow-[0_0_28px_var(--accent-dim)] backdrop-blur-xl"
     >
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
         <div className="min-w-0">
           <div className="mb-1 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-cyan-200/80">
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-primary">
               <Handshake className="h-3 w-3" />
               실행 슬롯 대기
             </span>
@@ -632,10 +632,10 @@ function PendingHandoffStrip({
               {handoff.payloadRef?.startsWith("coding_packet://") ? "코딩 패킷" : "인계"}
             </Badge>
           </div>
-          <p className="truncate text-sm font-medium text-zinc-100">{handoff.nextAction}</p>
+          <p className="truncate text-sm font-medium text-foreground">{handoff.nextAction}</p>
         </div>
         <button
-          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-100 transition-colors hover:border-cyan-200/45 hover:bg-cyan-400/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50"
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition-colors hover:border-primary/45 hover:bg-primary/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           onClick={() => onApprove(handoff.id as string)}
           type="button"
         >
@@ -666,24 +666,24 @@ function NextActionStrip({
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
         <div className="min-w-0">
           <div className="mb-1 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               <CheckSquare className="h-3 w-3" />
               지금 할 일
             </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-semibold text-white/70">
+            <span className="rounded-full border border-border bg-foreground/[0.06] px-1.5 py-0.5 text-[9px] font-semibold text-foreground/70">
               {priorityLabel(primaryAction.priority)}
             </span>
           </div>
           <button
-            className={`group flex w-full min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 ${nextActionButtonTone(primaryAction.priority)}`}
+            className={`group flex w-full min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${nextActionButtonTone(primaryAction.priority)}`}
             onClick={() => onActivate(primaryAction)}
             type="button"
           >
             <span className="min-w-0">
-              <span className="block truncate font-semibold text-zinc-50">{primaryAction.label}</span>
-              <span className="mt-0.5 block text-[11px] text-white/55">누르면 관련 카드로 바로 안내합니다.</span>
+              <span className="block truncate font-semibold text-foreground">{primaryAction.label}</span>
+              <span className="mt-0.5 block text-[11px] text-foreground/55">누르면 관련 카드로 바로 안내합니다.</span>
             </span>
-            <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[10px] font-semibold text-white/85 transition-colors group-hover:bg-white/15">
+            <span className="shrink-0 rounded-full bg-foreground/10 px-2 py-1 text-[10px] font-semibold text-foreground/85 transition-colors group-hover:bg-foreground/15">
               {primaryAction.ctaLabel}
             </span>
           </button>
@@ -691,9 +691,9 @@ function NextActionStrip({
 
         {secondaryActions.length > 0 ? (
           <details className="group min-w-0 lg:w-64">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-zinc-800/70 bg-black/15 px-3 py-2 text-[11px] font-semibold text-zinc-300 transition-colors hover:border-zinc-700 hover:bg-black/25">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-border hover:bg-muted/60">
               <span>다른 후보 {secondaryActions.length}건</span>
-              <ChevronDown className="h-3.5 w-3.5 text-zinc-500 transition-transform group-open:rotate-180" />
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-open:rotate-180" />
             </summary>
             <div className="mt-2 space-y-1.5">
               {secondaryActions.map((action) => (
@@ -716,13 +716,13 @@ function NextActionButton({
 }) {
   return (
     <button
-      className={`flex w-full min-w-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-[11px] transition-colors hover:border-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 ${nextActionButtonTone(action.priority)}`}
+      className={`flex w-full min-w-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-[11px] transition-colors hover:border-foreground/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${nextActionButtonTone(action.priority)}`}
       onClick={() => onActivate(action)}
       type="button"
     >
       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
       <span className="min-w-0 flex-1 truncate">{action.label}</span>
-      <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white/80">
+      <span className="shrink-0 rounded-full bg-foreground/10 px-1.5 py-0.5 text-[10px] font-semibold text-foreground/80">
         {action.ctaLabel}
       </span>
     </button>
@@ -731,24 +731,24 @@ function NextActionButton({
 
 function DetailFocusBanner({ focus }: { focus: CockpitDetailFocus }) {
   return (
-    <div className="mb-3 rounded-lg border border-cyan-400/25 bg-cyan-400/[0.07] px-3 py-2 text-xs text-cyan-100 shadow-[0_0_24px_rgba(6,182,212,0.08)]">
+    <div className="mb-3 rounded-lg border border-primary/25 bg-primary/[0.07] px-3 py-2 text-xs text-primary shadow-[0_0_24px_var(--accent-dim)]">
       <span className="font-semibold">{focus.label}</span>
-      <span className="mx-2 text-cyan-300/60">/</span>
-      <span className="text-cyan-100/80">{focus.helper}</span>
+      <span className="mx-2 text-primary">/</span>
+      <span className="text-primary">{focus.helper}</span>
     </div>
   );
 }
 
 function nextActionPanelTone(priority: CockpitNextActionItem["priority"]) {
-  if (priority === "high") return "border-rose-500/25 bg-rose-950/20";
-  if (priority === "warning") return "border-amber-500/25 bg-amber-950/15";
-  return "border-cyan-500/20 bg-zinc-900/40";
+  if (priority === "high") return "border-destructive/25 bg-destructive/20";
+  if (priority === "warning") return "border-warning/25 bg-warning/15";
+  return "border-primary/20 bg-muted/40";
 }
 
 function nextActionButtonTone(priority: CockpitNextActionItem["priority"]) {
-  if (priority === "high") return "border-rose-400/25 bg-rose-500/10 text-rose-100";
-  if (priority === "warning") return "border-amber-400/25 bg-amber-500/10 text-amber-100";
-  return "border-cyan-400/20 bg-cyan-500/10 text-cyan-100";
+  if (priority === "high") return "border-destructive/25 bg-destructive/10 text-destructive";
+  if (priority === "warning") return "border-warning/25 bg-warning/10 text-warning";
+  return "border-primary/20 bg-primary/10 text-primary";
 }
 
 function priorityLabel(priority: CockpitNextActionItem["priority"]) {
@@ -775,26 +775,26 @@ function GlanceTile({
   tone: "danger" | "normal" | "success" | "warning";
 }) {
   const toneClass = {
-    danger: "border-rose-500/30 bg-rose-500/[0.06] text-rose-300",
-    normal: "border-zinc-800/60 bg-zinc-900/40 text-zinc-200",
-    success: "border-emerald-500/25 bg-emerald-500/[0.06] text-emerald-300",
-    warning: "border-amber-500/25 bg-amber-500/[0.06] text-amber-300",
+    danger: "border-destructive/30 bg-destructive/[0.06] text-destructive",
+    normal: "border-border bg-muted/40 text-muted-foreground",
+    success: "border-primary/25 bg-primary/[0.06] text-primary",
+    warning: "border-warning/25 bg-warning/[0.06] text-warning",
   }[tone];
 
   return (
     <button
-      className={`group rounded-lg border px-3 py-2 text-left backdrop-blur-xl transition-colors hover:border-cyan-300/35 hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50 ${toneClass}`}
+      className={`group rounded-lg border px-3 py-2 text-left backdrop-blur-xl transition-colors hover:border-primary/35 hover:bg-foreground/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${toneClass}`}
       onClick={onClick}
       title={actionLabel}
       type="button"
     >
-      <div className="flex items-center justify-between gap-2 text-zinc-500">
+      <div className="flex items-center justify-between gap-2 text-muted-foreground">
         <span className="text-[10px] font-medium uppercase tracking-wider">{label}</span>
-        <span className="opacity-70 transition-colors group-hover:text-cyan-100">{icon}</span>
+        <span className="opacity-70 transition-colors group-hover:text-primary">{icon}</span>
       </div>
       <div className="mt-1 flex min-w-0 items-baseline gap-1.5">
-        <span className="truncate text-base font-semibold text-zinc-100">{value}</span>
-        <span className="truncate text-[10px] text-zinc-500">{hint}</span>
+        <span className="truncate text-base font-semibold text-foreground">{value}</span>
+        <span className="truncate text-[10px] text-muted-foreground">{hint}</span>
       </div>
     </button>
   );

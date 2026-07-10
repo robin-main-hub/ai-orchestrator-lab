@@ -53,8 +53,8 @@ export function WorkerFleetCard({
         }
       >
         <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.55)]" />
-          <h3 className="text-sm font-semibold text-zinc-100">워커 함대</h3>
+          <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_14px_var(--accent-dim)]" />
+          <h3 className="text-sm font-semibold text-foreground">워커 함대</h3>
         </div>
       </GlassPanelHeader>
 
@@ -100,9 +100,9 @@ function WorkerGroup({
 }) {
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+      <div className="flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         <span>{label}</span>
-        <span className="rounded bg-zinc-800/80 px-1.5 py-0.5 text-[9px] text-zinc-500">{workers.length}</span>
+        <span className="rounded bg-muted/80 px-1.5 py-0.5 text-[9px] text-muted-foreground">{workers.length}</span>
       </div>
       <div className="space-y-2">
         {workers.map((worker) => (
@@ -139,8 +139,8 @@ function WorkerRow({
 
   return (
     <div
-      className={`group rounded-lg border bg-zinc-900/30 p-3 transition-colors hover:border-cyan-500/30 hover:bg-zinc-900/50 ${
-        isSelected ? "border-cyan-400/35 shadow-[0_0_22px_rgba(6,182,212,0.08)]" : "border-zinc-800/50"
+      className={`group rounded-lg border bg-muted/30 p-3 transition-colors hover:border-primary/30 hover:bg-muted/50 ${
+        isSelected ? "border-primary/35 shadow-[0_0_22px_var(--accent-dim)]" : "border-border"
       }`}
     >
       <div className="flex items-start gap-3">
@@ -153,7 +153,7 @@ function WorkerRow({
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-sm font-semibold text-zinc-100 group-hover:text-cyan-300">{workerDisplay.displayName}</span>
+            <span className="truncate text-sm font-semibold text-foreground group-hover:text-primary">{workerDisplay.displayName}</span>
             <Badge color="blue" size="xs">
               {workerDisplay.roleLabel}
             </Badge>
@@ -161,36 +161,36 @@ function WorkerRow({
               {workerStatusLabel(worker.status)}
             </Badge>
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-zinc-500">
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
             {worker.worktree ? (
               <span className="inline-flex min-w-0 items-center gap-1">
-                <FolderGit2 className="h-3 w-3 text-cyan-500/70" />
+                <FolderGit2 className="h-3 w-3 text-primary/70" />
                 <span className="truncate">{formatOperatorWorktreeLabel(worker.worktree)}</span>
               </span>
             ) : null}
             {worker.branch ? (
               <span className="inline-flex items-center gap-1">
-                <GitBranch className="h-3 w-3 text-emerald-500/70" />
+                <GitBranch className="h-3 w-3 text-primary/70" />
                 {worker.branch}
               </span>
             ) : null}
             <span className="inline-flex items-center gap-1">
-              <Clock3 className="h-3 w-3 text-zinc-600" />
+              <Clock3 className="h-3 w-3 text-muted-foreground" />
               실시간
             </span>
           </div>
-          <div className="mt-2 rounded-md border border-zinc-800/70 bg-black/20 px-2.5 py-2">
-            <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
-              <span className="font-semibold text-zinc-300">스킬</span>
+          <div className="mt-2 rounded-md border border-border bg-muted/40 px-2.5 py-2">
+            <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+              <span className="font-semibold text-muted-foreground">스킬</span>
               <span>{skillDisplay.label}</span>
-              <span className="rounded-full border border-zinc-700/80 px-1.5 py-0.5 text-[9px] text-zinc-400">
+              <span className="rounded-full border border-border px-1.5 py-0.5 text-[9px] text-muted-foreground">
                 {skillDisplay.boundaryLabel}
               </span>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {skillDisplay.tools.map((tool) => (
                 <span
-                  className="rounded-full border border-cyan-400/15 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-medium text-cyan-100"
+                  className="rounded-full border border-primary/15 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary"
                   key={tool}
                 >
                   {tool}
@@ -204,8 +204,8 @@ function WorkerRow({
               aria-pressed={isSelected}
               className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[10px] font-semibold transition-colors ${
                 isSelected
-                  ? "border-cyan-300/45 bg-cyan-400/15 text-cyan-100"
-                  : "border-zinc-700/70 bg-zinc-950/40 text-zinc-200 hover:border-cyan-300/35 hover:text-cyan-100"
+                  ? "border-primary/45 bg-primary/15 text-primary"
+                  : "border-border bg-muted/40 text-foreground hover:border-primary/35 hover:text-primary"
               }`}
               onClick={() => onSelectWorker(worker.workerId)}
               type="button"
@@ -216,7 +216,7 @@ function WorkerRow({
             {onOpenAgentConversation ? (
               <button
                 aria-label={`${workerDisplay.displayName} 대화 열기`}
-                className="inline-flex items-center gap-1.5 rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold text-cyan-100 transition-colors hover:border-cyan-300/45 hover:bg-cyan-400/15"
+                className="inline-flex items-center gap-1.5 rounded-md border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary transition-colors hover:border-primary/45 hover:bg-primary/15"
                 onClick={() => onOpenAgentConversation(worker.workerId)}
                 type="button"
               >
@@ -235,7 +235,7 @@ function WorkerRow({
       </div>
 
       {worker.blockedReason ? (
-        <div className="mt-3 flex items-start gap-2 rounded-md border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{worker.blockedReason}</span>
         </div>
@@ -256,11 +256,11 @@ function SelectedWorkerDetail({
   const detail = resolveOperatorWorkerDetailDisplay({ memory, routing, worker });
 
   return (
-    <section className="rounded-lg border border-cyan-400/15 bg-cyan-400/[0.035] p-3">
+    <section className="rounded-lg border border-primary/15 bg-primary/[0.035] p-3">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-200/80">선택 워커 상세</p>
-          <h4 className="mt-1 break-words text-sm font-semibold text-zinc-100">{detail.identity.displayName}</h4>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-primary/80">선택 워커 상세</p>
+          <h4 className="mt-1 break-words text-sm font-semibold text-foreground">{detail.identity.displayName}</h4>
         </div>
         <Badge color={badgeColorForStatus(worker.status)} size="xs">
           최근 상태 · {detail.recent.statusLabel}
@@ -296,7 +296,7 @@ function SelectedWorkerDetail({
       <div className="mt-2 flex flex-wrap gap-1.5">
         {detail.skills.tools.map((tool) => (
           <span
-            className="rounded-full border border-cyan-400/15 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-medium text-cyan-100"
+            className="rounded-full border border-primary/15 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary"
             key={tool}
           >
             {tool}
@@ -309,7 +309,7 @@ function SelectedWorkerDetail({
         </Badge>
         {detail.memory.reasons.map((reason) => (
           <span
-            className="rounded-full border border-zinc-700/70 bg-zinc-950/45 px-2 py-0.5 text-[10px] text-zinc-300"
+            className="rounded-full border border-border bg-muted/45 px-2 py-0.5 text-[10px] text-muted-foreground"
             key={reason}
           >
             {reason}
@@ -327,12 +327,12 @@ function SelectedWorkerDetail({
 
 function DetailTile({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-md border border-white/10 bg-zinc-950/45 px-2.5 py-2">
-      <p className="flex items-center gap-1.5 text-[9px] font-medium text-zinc-500">
-        <span className="text-cyan-200/70">{icon}</span>
+    <div className="min-w-0 rounded-md border border-border bg-muted/45 px-2.5 py-2">
+      <p className="flex items-center gap-1.5 text-[9px] font-medium text-muted-foreground">
+        <span className="text-primary/70">{icon}</span>
         {label}
       </p>
-      <p className="mt-1 break-words text-[11px] font-semibold leading-5 text-zinc-200" title={value}>
+      <p className="mt-1 break-words text-[11px] font-semibold leading-5 text-foreground" title={value}>
         {value}
       </p>
     </div>
