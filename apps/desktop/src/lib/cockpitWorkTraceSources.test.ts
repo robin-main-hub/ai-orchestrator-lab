@@ -106,7 +106,7 @@ const approvalItem: ApprovalQueueItem = {
 };
 
 describe("createCockpitWorkTraceSources", () => {
-  it("대화, 토론, tmux, 승인 공개 영수증을 최신순 Cockpit 색인 소스로 만든다", () => {
+  it("대화, 토론, tmux, 승인 공개 브리핑을 최신순 Cockpit 색인 소스로 만든다", () => {
     const sources = createCockpitWorkTraceSources({
       approvalItems: [approvalItem],
       conversationMessages: [userMessage, assistantMessage],
@@ -117,17 +117,17 @@ describe("createCockpitWorkTraceSources", () => {
     expect(sources.map((source) => source.kind)).toEqual(["approval", "tmux", "debate", "conversation", "conversation"]);
     expect(sources[0]).toMatchObject({
       id: "queue_permission_provider",
-      title: "승인 공개 영수증 · provider completion",
+      title: "승인 공개 브리핑 · provider completion",
     });
-    expect(sources[0]?.trace.receipt?.label).toBe("에이전트 실행 영수증");
+    expect(sources[0]?.trace.receipt?.label).toBe("에이전트 실행 브리핑");
     expect(sources).toContainEqual(expect.objectContaining({
       id: "msg_user_1",
-      title: "사용자 첨부 공개 영수증",
+      title: "사용자 첨부 공개 브리핑",
     }));
     expect(sources.find((source) => source.kind === "debate")).toMatchObject({
       id: "utterance_1",
-      title: "토론 공개 영수증 · 최종 결정",
+      title: "토론 공개 브리핑 · 최종 결정",
     });
-    expect(sources.find((source) => source.kind === "debate")?.trace.receipt?.label).toBe("토론 실행 영수증");
+    expect(sources.find((source) => source.kind === "debate")?.trace.receipt?.label).toBe("토론 실행 브리핑");
   });
 });

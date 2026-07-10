@@ -23,7 +23,7 @@ const trace: PublicWorkTrace = {
     },
   ],
   receipt: {
-    label: "에이전트 실행 영수증",
+    label: "에이전트 실행 브리핑",
     status: "checkpointed",
     items: [
       { label: "범위", value: "생성/메모리" },
@@ -34,7 +34,7 @@ const trace: PublicWorkTrace = {
 };
 
 describe("workTraceSearch", () => {
-  it("공개 영수증과 trace group을 검색 가능한 색인으로 만든다", () => {
+  it("공개 브리핑과 trace group을 검색 가능한 색인으로 만든다", () => {
     const index = createWorkTraceSearchIndex([
       { id: "msg_1", kind: "conversation", title: "마키마 응답", trace },
       { id: "tmux_1", kind: "tmux", title: "터미널 실행", trace: { groups: [] } },

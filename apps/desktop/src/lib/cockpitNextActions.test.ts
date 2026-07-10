@@ -86,8 +86,8 @@ describe("deriveCockpitNextActions", () => {
     });
 
     expect(actions[0]).toMatchObject({
-      ctaLabel: "영수증 점검",
-      label: "공개 영수증 마스킹 점검: 1건",
+      ctaLabel: "브리핑 점검",
+      label: "공개 브리핑 마스킹 점검: 1건",
       priority: "high",
       source: "receipt",
       targetSurface: "receipts",
@@ -181,7 +181,7 @@ describe("deriveCockpitNextActions", () => {
       {
         ctaLabel: "성숙도 보기",
         id: "default_next_big_rock",
-        label: "다음 큰 바위 선정: 성숙도와 작업 영수증을 확인",
+        label: "다음 큰 바위 선정: 성숙도와 작업 브리핑을 확인",
         priority: "normal",
         source: "maturity",
         targetSurface: "maturity",
@@ -192,16 +192,16 @@ describe("deriveCockpitNextActions", () => {
   it("세부 정보로 들어가는 다음 행동은 구체적인 카드 초점을 함께 계산한다", () => {
     expect(
       resolveCockpitDetailFocus({
-        ctaLabel: "영수증 점검",
+        ctaLabel: "브리핑 점검",
         id: "receipt_unsafe",
-        label: "공개 영수증 마스킹 점검: 1건",
+        label: "공개 브리핑 마스킹 점검: 1건",
         priority: "high",
         source: "receipt",
         targetSurface: "receipts",
       }),
     ).toEqual({
-      helper: "작업 영수증 장부에서 공개 마스킹 상태를 먼저 확인합니다.",
-      label: "작업 영수증",
+      helper: "브리핑 로그에서 공개 마스킹 상태를 먼저 확인합니다.",
+      label: "작업 브리핑",
       surface: "receipts",
     });
 

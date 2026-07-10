@@ -48,7 +48,7 @@ export function createProductionSmokePlan({
         label: "프로바이더 대체 경로와 실제 호출",
         mode: includeLiveProvider ? "live_opt_in" : "dry_run",
       },
-      { id: "receipts_search", label: "공개 영수증 검색과 마스킹", mode: "automated" },
+      { id: "receipts_search", label: "공개 브리핑 검색과 마스킹", mode: "automated" },
       { id: "attachments", label: "첨부파일 분류와 처리 계획", mode: "automated" },
       { id: "visual", label: "v0 검은 테마 시각 회귀", mode: includeVisual ? "manual" : "manual" },
     ],

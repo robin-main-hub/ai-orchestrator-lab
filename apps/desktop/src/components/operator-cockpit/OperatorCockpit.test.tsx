@@ -52,7 +52,7 @@ const workTraceItem: WorkTraceSearchItem = {
   trace: {
     groups: [],
     receipt: {
-      label: "에이전트 실행 영수증",
+      label: "에이전트 실행 브리핑",
       status: "checkpointed",
       items: [
         { label: "범위", value: "대화" },
@@ -64,7 +64,7 @@ const workTraceItem: WorkTraceSearchItem = {
 };
 
 describe("OperatorCockpit", () => {
-  it("최근 작업 영수증은 첫 화면이 아니라 세부 정보 장부로만 보낸다", () => {
+  it("최근 작업 브리핑은 첫 화면이 아니라 세부 정보 장부로만 보낸다", () => {
     const diagnostics = createSettingsDiagnostics({
       agentCount: 1,
       enabledProviderCount: 1,
@@ -136,12 +136,12 @@ describe("OperatorCockpit", () => {
     expect(collapsed).toContain("승인 대기열 보기");
     expect(collapsed).toContain("전체 현황 펼치기");
     // L2/L3 콘텐츠와 세부 더미는 접혀서 안 보인다 (첫 화면 정보 격리)
-    expect(collapsed).not.toContain("작업 영수증 장부");
+    expect(collapsed).not.toContain("브리핑 로그");
     expect(collapsed).not.toContain("대화 기억 후보");
     expect(collapsed).not.toContain("GitHub #251");
   });
 
-  it("세부 정보가 열려도 작업 영수증 장부를 한 번만 렌더링한다", () => {
+  it("세부 정보가 열려도 브리핑 로그를 한 번만 렌더링한다", () => {
     const diagnostics = createSettingsDiagnostics({
       agentCount: 1,
       enabledProviderCount: 1,
@@ -171,7 +171,7 @@ describe("OperatorCockpit", () => {
       />,
     );
 
-    expect(html.match(/aria-label="작업 영수증 장부"/g)?.length).toBe(1);
+    expect(html.match(/aria-label="브리핑 로그"/g)?.length).toBe(1);
   });
 
   it("다음 행동을 첫 화면의 지금 할 일 CTA와 접힌 후보로 렌더링한다", () => {
@@ -393,9 +393,9 @@ describe("OperatorCockpit", () => {
           maturity,
           nextActions: [
             {
-              ctaLabel: "영수증 점검",
+              ctaLabel: "브리핑 점검",
               id: "receipt_unsafe",
-              label: "공개 영수증 마스킹 점검: 1건",
+              label: "공개 브리핑 마스킹 점검: 1건",
               priority: "high",
               source: "receipt",
               targetSurface: "receipts",
@@ -408,8 +408,8 @@ describe("OperatorCockpit", () => {
       />,
     );
 
-    expect(html).toContain("작업 영수증 장부");
-    expect(html).not.toContain("작업 영수증 장부에서 공개 마스킹 상태를 먼저 확인합니다.");
+    expect(html).toContain("브리핑 로그");
+    expect(html).not.toContain("브리핑 로그에서 공개 마스킹 상태를 먼저 확인합니다.");
   });
 
   it("워커 행에서 해당 에이전트 대화방을 여는 CTA를 렌더링한다", () => {

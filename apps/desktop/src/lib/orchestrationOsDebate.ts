@@ -79,7 +79,7 @@ export function createOrchestrationOsDebateSession({
       title: "4턴 · 기억과 연속성",
       content: secondNext
         ? `"${secondNext.label}"도 함께 묶어야 합니다. 에이전트별 기억과 스킬 맥락이 이어져야 토론 결과가 다음 대화에서 살아납니다.`
-        : "토론 결과는 기억 후보와 작업 영수증에 남겨 다음 세션에서도 이어져야 합니다.",
+        : "토론 결과는 기억 후보와 작업 브리핑에 남겨 다음 세션에서도 이어져야 합니다.",
     },
     {
       decisionId: "decision_os_next_big_rock",
@@ -88,8 +88,8 @@ export function createOrchestrationOsDebateSession({
       tags: ["agreement", "coding_impact"],
       title: "5턴 · 실행 결정",
       content: primaryNext
-        ? `결정: 다음 실행은 "${primaryNext.label}"부터 진행합니다. 동시에 토론 결과를 작업 패킷과 영수증으로 남겨 OS 안에서 추적 가능하게 합니다.`
-        : "결정: 로드맵 후보 생성부터 복구하고, 그 결과를 작업 패킷과 영수증으로 남깁니다.",
+        ? `결정: 다음 실행은 "${primaryNext.label}"부터 진행합니다. 동시에 토론 결과를 작업 패킷과 브리핑으로 남겨 OS 안에서 추적 가능하게 합니다.`
+        : "결정: 로드맵 후보 생성부터 복구하고, 그 결과를 작업 패킷과 브리핑으로 남깁니다.",
     },
   ];
 

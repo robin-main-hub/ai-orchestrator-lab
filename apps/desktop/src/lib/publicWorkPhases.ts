@@ -13,7 +13,7 @@ export type PublicWorkPhase = {
 
 export const PUBLIC_WORK_PHASES = {
   commandGeneration: { id: "command_generation", label: "명령 생성" },
-  receipt: { id: "receipt", label: "작업 영수증" },
+  receipt: { id: "receipt", label: "작업 브리핑" },
   test: { id: "test", label: "테스트" },
   thinking: { id: "thinking", label: "생각" },
   toolCall: { id: "tool_call", label: "도구 호출" },

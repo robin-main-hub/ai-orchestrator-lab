@@ -564,7 +564,7 @@ export function App() {
     // 완전 자동(full-auto) — 데모 시드 agentRun의 코딩 핸드오프 스텝(seeds → createRunSteps의
     // step_coding_handoff, permissionState "required")을 자동 승인된 것으로 시작한다. 이렇게
     // 두지 않으면 파생 권한 스냅샷(createStage9PermissionSnapshot → actionForRunStep=remote_workspace)이
-    // 이 스텝을 "required"로 남겨, "해온 업무" 카드에 유령 "원격 작업공간 · 승인 상태: 대기" 영수증을
+    // 이 스텝을 "required"로 남겨, "해온 업무" 카드에 유령 "원격 작업공간 · 승인 상태: 대기" 브리핑을
     // 만든다. 서버 승인 큐는 pending:0 — 이 대기는 파생 신호일 뿐이므로 표면화하지 않는다.
     // (id 규약: createStage9PermissionSnapshot의 createRunStepItem → `permission_run_${step.id}`)
     permission_run_step_coding_handoff: "approved",
@@ -4438,17 +4438,17 @@ export function App() {
       label: "20개 큰 바위 로드맵",
       hint: "Cockpit 세부 정보에서 성숙한 OS 기준 확인",
       run: () => {
-        setCockpitFocus({ label: "다음 큰 바위", helper: "성숙도와 작업 영수증을 확인", surface: "maturity" });
+        setCockpitFocus({ label: "다음 큰 바위", helper: "성숙도와 작업 브리핑을 확인", surface: "maturity" });
         setMode("cockpit");
       },
     },
     {
       id: "open.receipts",
       verb: "점검",
-      label: "작업 영수증 장부",
+      label: "브리핑 로그",
       hint: "마스킹, 테스트, 실패 후 수정 기록 확인",
       run: () => {
-        setCockpitFocus({ label: "작업 영수증", helper: "마스킹·테스트·수정 기록", surface: "receipts" });
+        setCockpitFocus({ label: "작업 브리핑", helper: "마스킹·테스트·수정 기록", surface: "receipts" });
         setMode("cockpit");
       },
     },

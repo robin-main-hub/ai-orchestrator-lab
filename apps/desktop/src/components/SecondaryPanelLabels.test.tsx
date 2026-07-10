@@ -19,7 +19,7 @@ import {
 const packet: CodingPacket = {
   constraints: ["비밀값 원문 저장 금지"],
   context: ["대화에서 토론으로 승격"],
-  decisions: ["작업 영수증을 남긴다"],
+  decisions: ["작업 브리핑을 남긴다"],
   filesToInspect: ["apps/desktop/src/App.tsx"],
   goal: "보조 패널 한국어화",
   implementationPlan: ["라벨 정리", "테스트 추가"],

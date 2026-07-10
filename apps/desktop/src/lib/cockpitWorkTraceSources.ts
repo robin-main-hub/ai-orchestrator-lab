@@ -35,7 +35,7 @@ export function createCockpitWorkTraceSources({
       createdAt: message.createdAt,
       id: message.id,
       kind: "conversation",
-      title: "사용자 첨부 공개 영수증",
+      title: "사용자 첨부 공개 브리핑",
       trace,
     }));
 
@@ -46,7 +46,7 @@ export function createCockpitWorkTraceSources({
       createdAt: message.createdAt,
       id: message.id,
       kind: "conversation",
-      title: "에이전트 대화 공개 영수증",
+      title: "에이전트 대화 공개 브리핑",
       trace: createConversationMessagePublicWorkTrace(message),
     }));
 
@@ -65,7 +65,7 @@ export function createCockpitWorkTraceSources({
         createdAt: utterance.createdAt,
         id: utterance.id,
         kind: "debate",
-        title: `토론 공개 영수증 · ${round.title}`,
+        title: `토론 공개 브리핑 · ${round.title}`,
         trace: createDebateUtterancePublicWorkTrace(view),
       };
     });
@@ -82,7 +82,7 @@ export function createCockpitWorkTraceSources({
     createdAt: item.createdAt,
     id: item.id,
     kind: "approval",
-    title: `승인 공개 영수증 · ${approvalActionLabel(item.action ?? item.permissions[0])}`,
+    title: `승인 공개 브리핑 · ${approvalActionLabel(item.action ?? item.permissions[0])}`,
     trace: createApprovalQueuePublicWorkTrace(item),
   }));
 
@@ -139,7 +139,7 @@ function createApprovalQueuePublicWorkTrace(item: ApprovalQueueItem): PublicWork
       },
     ],
     receipt: {
-      label: "에이전트 실행 영수증",
+      label: "에이전트 실행 브리핑",
       status: item.state === "rejected" ? "blocked" : item.state === "required" ? "live" : "checkpointed",
       items: [
         { label: "범위", value: sanitizePublicText(`승인/${permissionLabel}`) },

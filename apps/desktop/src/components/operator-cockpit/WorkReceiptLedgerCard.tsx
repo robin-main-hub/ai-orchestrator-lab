@@ -38,7 +38,7 @@ export function WorkReceiptLedgerCard({
   const sourceSummary = createReceiptSourceSummary(items);
 
   return (
-    <GlassPanel ariaLabel="작업 영수증 장부">
+    <GlassPanel ariaLabel="브리핑 로그">
       <GlassPanelHeader
         action={
           <Badge color={unsafeCount > 0 ? "yellow" : "green"}>
@@ -49,7 +49,7 @@ export function WorkReceiptLedgerCard({
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-cyan-300" />
           <div>
-            <h2 className="text-sm font-semibold text-zinc-100">작업 영수증</h2>
+            <h2 className="text-sm font-semibold text-zinc-100">작업 브리핑</h2>
             <p className="text-xs text-zinc-500">
               최근 {recentItems.length}건 · 공개 요약 기록
             </p>
@@ -73,17 +73,17 @@ export function WorkReceiptLedgerCard({
       <div className="space-y-2 border-b border-zinc-800/60 px-4 py-3">
         <label className="flex items-center gap-2 rounded-lg border border-zinc-800/70 bg-black/20 px-3 py-2 text-xs text-zinc-400">
           <Search className="h-3.5 w-3.5 text-cyan-300" />
-          <span className="sr-only">작업 영수증 검색</span>
+          <span className="sr-only">작업 브리핑 검색</span>
           <input
-            aria-label="작업 영수증 검색"
+            aria-label="작업 브리핑 검색"
             className="min-w-0 flex-1 bg-transparent text-xs text-zinc-200 outline-none placeholder:text-zinc-600"
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="작업 영수증 검색"
+            placeholder="작업 브리핑 검색"
             type="search"
             value={query}
           />
         </label>
-        <div aria-label="작업 영수증 종류 필터" className="flex flex-wrap gap-1.5">
+        <div aria-label="작업 브리핑 종류 필터" className="flex flex-wrap gap-1.5">
           {(["all", "conversation", "debate", "tmux", "approval", "memory"] as const).map((kind) => (
             <button
               aria-pressed={kindFilter === kind}
@@ -195,7 +195,7 @@ export function WorkReceiptLedgerCard({
         ) : (
           <div className="flex items-center gap-2 px-4 py-4 text-xs text-zinc-500">
             <Search className="h-4 w-4" />
-            아직 표시할 공개 영수증이 없습니다.
+            아직 표시할 공개 브리핑이 없습니다.
           </div>
         )}
       </div>
@@ -211,7 +211,7 @@ export function WorkReceiptLedgerCard({
             <ExternalLink className="h-3 w-3" />
           </a>
           <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
-            PR, 테스트, 에이전트 보고, 보정 기록은 공개 영수증과 함께 이 장부에 남깁니다.
+            PR, 테스트, 에이전트 보고, 보정 기록은 공개 브리핑과 함께 이 장부에 남깁니다.
           </p>
         </div>
       ) : null}
