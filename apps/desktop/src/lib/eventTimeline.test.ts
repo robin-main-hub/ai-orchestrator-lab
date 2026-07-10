@@ -4,6 +4,7 @@ import {
   buildTimelineFrames,
   clampPlayhead,
   formatElapsed,
+  frameTicksByCategory,
   framesUpTo,
   resolvePlayhead,
   timelineCategory,
@@ -87,5 +88,99 @@ describe("formatElapsed", () => {
   it("mm:ss", () => {
     expect(formatElapsed(0)).toBe("00:00");
     expect(formatElapsed(65000)).toBe("01:05");
+  });
+});
+
+describe("frameTicksByCategory", () => {
+  const base = Date.parse("2026-06-11T00:00:00.000Z");
+  const at = (sec: number) => new Date(base + sec * 1000).toISOString();
+
+  it("빈 프레임 → []", () => {
+    expect(frameTicksByCategory([], 8)).toEqual([]);
+  });
+
+  it("buckets <= 0 → []", () => {
+    const frames = buildTimelineFrames([ev("a", "session.created", at(0))]);
+    expect(frameTicksByCategory(frames, 0)).toEqual([]);
+    expect(frameTicksByCategory(frames, -3)).toEqual([]);
+  });
+
+  it("단일 프레임 → 틱 1개, count 1", () => {
+    const frames = buildTimelineFrames([ev("a", "session.created", at(0))]);
+    const ticks = frameTicksByCategory(frames, 1);
+    expect(ticks).toHaveLength(1);
+    expect(ticks[0]!.bucket).toBe(0);
+    expect(ticks[0]!.count).toBe(1);
+    expect(ticks[0]!.dominant).toBe("session");
+  });
+
+  it("여러 프레임이 버킷에 분산 — count·dominant·경계 정확", () => {
+    // span=4000ms, buckets=2, width=2000 → b0=[0,2000), b1=[2000,4000]
+    const frames = buildTimelineFrames([
+      ev("a", "session.created", at(0)), //     e0    → b0
+      ev("b", "message.posted", at(1)), //      e1000 → b0
+      ev("c", "tmux.capture.recorded", at(2)), // e2000 → b1
+      ev("d", "permission.requested", at(3)), //  e3000 → b1
+      ev("e", "permission.approved", at(4)), //   e4000 → b1 (마지막 프레임 → 마지막 버킷)
+    ]);
+    const ticks = frameTicksByCategory(frames, 2);
+    expect(ticks).toHaveLength(2);
+    expect(ticks[0]!.count).toBe(2);
+    expect(ticks[1]!.count).toBe(3);
+    // b0: session·message 각 1 → 동률 → 가장 이른 = session
+    expect(ticks[0]!.dominant).toBe("session");
+    // b1: tmux 1, permission 2 → 최빈 permission
+    expect(ticks[1]!.dominant).toBe("permission");
+    expect(ticks[0]!.startMs).toBe(0);
+    expect(ticks[0]!.endMs).toBe(2000);
+    expect(ticks[1]!.startMs).toBe(2000);
+    expect(ticks[1]!.endMs).toBe(4000);
+  });
+
+  it("동률은 버킷 안 가장 이른 프레임의 카테고리로", () => {
+    // 한 버킷에 message·permission 각 1 → 이른 것 = message
+    const frames = buildTimelineFrames([
+      ev("a", "message.posted", at(0)),
+      ev("b", "permission.requested", at(1)),
+    ]);
+    const ticks = frameTicksByCategory(frames, 1);
+    expect(ticks).toHaveLength(1);
+    expect(ticks[0]!.count).toBe(2);
+    expect(ticks[0]!.dominant).toBe("message");
+  });
+
+  it("빈 버킷 → count 0 · dominant system", () => {
+    // 2 프레임(0s, 3s), 4 버킷: b0=1, b1·b2 빈, b3=1(마지막 프레임)
+    const frames = buildTimelineFrames([
+      ev("a", "coding_packet.created", at(0)),
+      ev("b", "memory.curated", at(3)),
+    ]);
+    const ticks = frameTicksByCategory(frames, 4);
+    expect(ticks).toHaveLength(4);
+    expect(ticks[0]!.count).toBe(1);
+    expect(ticks[0]!.dominant).toBe("coding");
+    expect(ticks[1]!.count).toBe(0);
+    expect(ticks[1]!.dominant).toBe("system");
+    expect(ticks[2]!.count).toBe(0);
+    expect(ticks[2]!.dominant).toBe("system");
+    expect(ticks[3]!.count).toBe(1);
+    expect(ticks[3]!.dominant).toBe("memory");
+  });
+
+  it("스팬 0(전 프레임 동일 시각) → 전부 버킷 0, 나머지 빈", () => {
+    const frames = buildTimelineFrames([
+      ev("x", "autonomy.run.step", at(0)),
+      ev("y", "autonomy.run.step", at(0)),
+      ev("z", "autonomy.run.step", at(0)),
+    ]);
+    const ticks = frameTicksByCategory(frames, 3);
+    expect(ticks).toHaveLength(3);
+    expect(ticks[0]!.count).toBe(3);
+    expect(ticks[0]!.dominant).toBe("run");
+    expect(ticks[1]!.count).toBe(0);
+    expect(ticks[2]!.count).toBe(0);
+    // 스팬 0 → 경계는 전부 first(=0)
+    expect(ticks[0]!.startMs).toBe(0);
+    expect(ticks[0]!.endMs).toBe(0);
   });
 });
