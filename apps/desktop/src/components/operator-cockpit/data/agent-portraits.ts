@@ -15,18 +15,21 @@ const expressions: AgentExpression[] = [
   "success",
 ];
 
+// Avatar-frame glow channel only (see styles.css `--persona-glow-*`, §6 T-13).
+// Values live as CSS variables so the glow palette is a named token channel,
+// kept separate from the single-accent UI-chrome rule. Colors unchanged.
 export const roleGlowColors: Partial<Record<AgentRole, string>> = {
-  architect: "#a78bfa",
-  auditor: "#fb7185",
-  builder: "#60a5fa",
-  companion: "#38bdf8",
-  domain_expert: "#c084fc",
-  executor: "#fbbf24",
-  memory_curator: "#c084fc",
-  orchestrator: "#22d3ee",
-  reviewer: "#fb7185",
-  skeptic: "#34d399",
-  verifier: "#a3e635",
+  architect: "var(--persona-glow-architect)",
+  auditor: "var(--persona-glow-auditor)",
+  builder: "var(--persona-glow-builder)",
+  companion: "var(--persona-glow-companion)",
+  domain_expert: "var(--persona-glow-domain_expert)",
+  executor: "var(--persona-glow-executor)",
+  memory_curator: "var(--persona-glow-memory_curator)",
+  orchestrator: "var(--persona-glow-orchestrator)",
+  reviewer: "var(--persona-glow-reviewer)",
+  skeptic: "var(--persona-glow-skeptic)",
+  verifier: "var(--persona-glow-verifier)",
 };
 
 function portraitPaths(agentId: string): Record<AgentExpression, string> {

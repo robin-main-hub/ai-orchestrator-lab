@@ -7775,8 +7775,10 @@ body:has(.app-shell.annex-focus-shell) {
   border-radius: 12px;
   padding: var(--space-3);
   margin: var(--space-3) 0;
-  border: 1.5px solid rgba(255, 255, 255, 0.12);
-  background: rgba(20, 20, 40, 0.55);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 .persona-card.compact {
   padding: 8px 10px;
@@ -7832,7 +7834,7 @@ body:has(.app-shell.annex-focus-shell) {
   flex: 1 1 auto;
   height: 5px;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--border);
   overflow: hidden;
 }
 .persona-card-stat-fill {
@@ -7841,28 +7843,25 @@ body:has(.app-shell.annex-focus-shell) {
   border-radius: 3px;
 }
 .persona-card-stat.hp .persona-card-stat-fill {
-  background: #46f0a0;
+  background: var(--accent);
 }
 .persona-card-stat.mp .persona-card-stat-fill {
-  background: #46ecff;
+  background: var(--fg-muted);
 }
 .persona-card-rarity-n {
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: var(--border);
 }
 .persona-card-rarity-r {
-  border-color: #378add;
-  box-shadow: 0 0 8px rgba(55, 138, 221, 0.35);
+  border-color: rgba(148, 163, 184, 0.35);
 }
 .persona-card-rarity-sr {
-  border-color: #9b6bff;
-  box-shadow: 0 0 10px rgba(155, 107, 255, 0.45);
+  border-width: 1.5px;
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .persona-card-rarity-ssr {
-  border: 1.5px solid transparent;
-  background:
-    linear-gradient(rgba(20, 20, 40, 0.8), rgba(20, 20, 40, 0.8)) padding-box,
-    linear-gradient(120deg, #ff4f9d, #ffd166, #46f0a0, #46ecff, #9b6bff, #ff4f9d) border-box;
-  box-shadow: 0 0 14px rgba(255, 122, 192, 0.4);
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 18px var(--accent-dim);
+  animation: persona-ssr-shimmer 3s ease-in-out infinite;
 }
 
 /* ── #6 Autonomy mission HUD ──────────────────────────────────────────── */
@@ -9896,7 +9895,7 @@ body:has(.app-shell.annex-focus-shell) {
 .codex-modal__backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: var(--z-dialog);
   display: grid;
   place-items: center;
   background: rgba(4, 4, 6, 0.72);
@@ -9909,10 +9908,10 @@ body:has(.app-shell.annex-focus-shell) {
   max-height: 86vh;
   overflow-y: auto;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 22px;
+  border-radius: 12px;
   background: rgba(10, 10, 13, 0.92);
   backdrop-filter: blur(20px);
-  box-shadow: 0 24px 80px -24px rgba(139, 92, 246, 0.35);
+  box-shadow: 0 24px 80px -24px var(--accent-dim);
   padding: 26px;
 }
 .codex-modal::before {
@@ -9923,7 +9922,7 @@ body:has(.app-shell.annex-focus-shell) {
   width: 260px;
   height: 260px;
   border-radius: 999px;
-  background: rgba(139, 92, 246, 0.18);
+  background: var(--accent-dim);
   filter: blur(80px);
   pointer-events: none;
 }
@@ -9988,7 +9987,7 @@ body:has(.app-shell.annex-focus-shell) {
 }
 .codex-modal__soul {
   border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 14px;
+  border-radius: 12px;
   background: rgba(0, 0, 0, 0.35);
   padding: 14px 16px;
 }
@@ -10001,7 +10000,7 @@ body:has(.app-shell.annex-focus-shell) {
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #c4b5fd;
+  color: var(--fg-muted);
 }
 .codex-modal__soul-text {
   margin: 0;
@@ -10023,7 +10022,7 @@ body:has(.app-shell.annex-focus-shell) {
   align-items: center;
   gap: 7px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 11px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
   font-size: 12.5px;
@@ -10035,9 +10034,8 @@ body:has(.app-shell.annex-focus-shell) {
 .codex-modal__action:hover { transform: translateY(-1px); }
 .codex-modal__action--primary {
   border: 0;
-  background: linear-gradient(120deg, #7c3aed, #8b5cf6 60%, #a78bfa);
-  color: #fff;
-  box-shadow: 0 6px 24px -8px rgba(139, 92, 246, 0.5);
+  background: var(--accent);
+  color: #052e16;
 }
 .codex-modal__hint {
   margin: 0;
@@ -10102,7 +10100,7 @@ body:has(.app-shell.annex-focus-shell) {
 /* --- 표정 갤러리 --- */
 .codex-modal__expressions {
   border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 14px;
+  border-radius: 12px;
   background: rgba(0, 0, 0, 0.35);
   padding: 14px 16px;
 }
@@ -11398,5 +11396,75 @@ body:has(.app-shell.annex-focus-shell) {
   .config-v2__icon-button,
   .config-v2__new-button {
     transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   PER-A · 페르소나 카드/프레임 토큰 (Wave 1, append-only)
+   persona-card CSS는 persona · run(single) · theater 3서피스 공유(§5.6).
+   --persona-glow-<role>: 아바타 프레임 전용 글로우 채널. UI 크롬 액센트
+   (emerald 단일) 규율과 별개이며, AgentPortraitFrame · PersonaCard ·
+   PersonaChip 아바타 링에서만 참조한다(§6 검수 T-13). agent-portraits.ts의
+   roleGlowColors 원본 색을 값 변경 없이 그대로 이관 — 색 자체 불변.
+   ════════════════════════════════════════════════════════════════════════ */
+:root {
+  --persona-glow-architect: #a78bfa;
+  --persona-glow-auditor: #fb7185;
+  --persona-glow-builder: #60a5fa;
+  --persona-glow-companion: #38bdf8;
+  --persona-glow-domain_expert: #c084fc;
+  --persona-glow-executor: #fbbf24;
+  --persona-glow-memory_curator: #c084fc;
+  --persona-glow-orchestrator: #22d3ee;
+  --persona-glow-reviewer: #fb7185;
+  --persona-glow-skeptic: #34d399;
+  --persona-glow-verifier: #a3e635;
+}
+
+/* SSR 레어도 프레임 — accent 보더 불투명도 셔머 (§3 신규 keyframe 1개 허용, 가드 필수) */
+@keyframes persona-ssr-shimmer {
+  0%,
+  100% {
+    border-color: var(--accent);
+  }
+  50% {
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+}
+
+/* 레어도 뱃지 — StatusBadge 시맨틱 차용 폐지, persona-card 전용 클래스 */
+.persona-card__rarity {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  color: var(--fg-muted);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+.persona-card__rarity--ssr {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.persona-card__rarity--sr {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.persona-card__rarity--r {
+  color: var(--fg-muted);
+  border-color: rgba(148, 163, 184, 0.35);
+}
+.persona-card__rarity--n {
+  color: var(--fg-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .persona-card-rarity-ssr {
+    animation: none;
   }
 }
