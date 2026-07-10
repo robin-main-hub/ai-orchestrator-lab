@@ -44,7 +44,7 @@ export function ProviderRegistrationMenu({
     <section className="provider-registration-menu" aria-label="공급자 등록 메뉴">
       <header>
         <span>공급자 등록</span>
-        <button aria-label="공급자 등록 메뉴 닫기" className="rail-icon-button" onClick={onClose} type="button">
+        <button aria-label="공급자 등록 메뉴 닫기" className="mgmt-icon-button" onClick={onClose} type="button">
           <ChevronLeft size={14} />
         </button>
       </header>
@@ -81,7 +81,7 @@ export function ProviderRegistrationMenu({
               </div>
               <button
                 aria-label={`${profile.name} 모델 확인`}
-                className="rail-icon-button"
+                className="mgmt-icon-button"
                 onClick={() => onDiscoverModels(profile.id)}
                 title="모델 확인"
                 type="button"
@@ -90,7 +90,7 @@ export function ProviderRegistrationMenu({
               </button>
               <button
                 aria-label={`${profile.name} 기본 API 키 연결`}
-                className="rail-icon-button"
+                className="mgmt-icon-button"
                 onClick={() => onBindDefaultCredential(profile.id)}
                 title="기본 API 키 연결"
                 type="button"
@@ -99,7 +99,7 @@ export function ProviderRegistrationMenu({
               </button>
               <button
                 aria-label={`${profile.name} 이름 변경`}
-                className="rail-icon-button"
+                className="mgmt-icon-button"
                 onClick={() => onRenameProvider(profile.id)}
                 title="공급자 이름 변경"
                 type="button"
@@ -108,7 +108,7 @@ export function ProviderRegistrationMenu({
               </button>
               <button
                 aria-label={`${profile.name} 삭제`}
-                className="rail-icon-button"
+                className="mgmt-icon-button"
                 disabled={isInUse || profiles.length <= 1}
                 onClick={() => onRemoveProvider(profile.id)}
                 title={isInUse ? "에이전트가 사용 중이라 삭제할 수 없음" : "공급자 삭제"}

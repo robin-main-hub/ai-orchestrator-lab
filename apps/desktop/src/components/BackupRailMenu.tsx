@@ -16,15 +16,15 @@ export function BackupRailMenu({
   const redactionReady = projections.every((projection) => projection.redactionApplied);
 
   return (
-    <section className="mini-panel rail-panel backup-rail-panel">
+    <section className="mgmt-mini-panel mgmt-panel backup-rail-panel">
       <header>
         <Archive size={16} />
         <span>백업</span>
-        <button className="rail-icon-button" onClick={onExportBackup} aria-label="Projection 생성" title="Projection 생성" type="button">
+        <button className="mgmt-icon-button" onClick={onExportBackup} aria-label="Projection 생성" title="Projection 생성" type="button">
           <RefreshCw size={13} />
         </button>
       </header>
-      <div className="rail-stat-list">
+      <div className="mgmt-stat-list">
         <div>
           <span>준비됨</span>
           <strong>{snapshot.summary.ready}</strong>
@@ -38,7 +38,7 @@ export function BackupRailMenu({
           <strong>{snapshot.summary.redacted}</strong>
         </div>
       </div>
-      <div className="rail-card-list compact">
+      <div className="mgmt-card-list compact">
         {projections.map((projection) => (
           <article key={projection.id}>
             <strong>{projection.target}</strong>
@@ -51,7 +51,7 @@ export function BackupRailMenu({
           </article>
         ))}
       </div>
-      <div className="rail-card-list">
+      <div className="mgmt-card-list">
         {snapshot.artifacts.map((artifact) => (
           <article className={artifact.status} key={artifact.id}>
             <strong>{artifact.title}</strong>

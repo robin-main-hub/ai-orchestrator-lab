@@ -24,15 +24,15 @@ export function ChannelRailPanel({
   ];
 
   return (
-    <section className="mini-panel rail-panel channel-rail-panel">
+    <section className="mgmt-mini-panel mgmt-panel channel-rail-panel">
       <header>
         <RadioTower size={16} />
         <span>채널</span>
-        <button className="rail-icon-button" onClick={onImportExternalIngress} aria-label="외부 인입 가져오기" title="외부 인입 가져오기" type="button">
+        <button className="mgmt-icon-button" onClick={onImportExternalIngress} aria-label="외부 인입 가져오기" title="외부 인입 가져오기" type="button">
           <Smartphone size={13} />
         </button>
       </header>
-      <div className="rail-card-list compact">
+      <div className="mgmt-card-list compact">
         {channels.map((channel) => (
           <article key={channel.label}>
             <strong>{channel.label}</strong>
@@ -44,12 +44,12 @@ export function ChannelRailPanel({
           </article>
         ))}
       </div>
-      <div className="rail-hero-card">
+      <div className="mgmt-hero-card">
         <span>인입 신뢰도</span>
         <strong>{ingressSnapshot.result.confidence} / {ingressSnapshot.result.approvalState}</strong>
         <p>{ingressSnapshot.result.reason}</p>
       </div>
-      <div className="rail-card-list">
+      <div className="mgmt-card-list">
         {visibleSteps.map((step) => (
           <article className={step.status} key={step.name}>
             <strong>{guardStepLabel(step.name)}</strong>
@@ -62,7 +62,7 @@ export function ChannelRailPanel({
           </article>
         ))}
       </div>
-      <div className="rail-stat-list">
+      <div className="mgmt-stat-list">
         <div>
           <span>승인 대기열</span>
           <strong>{permissionSnapshot.summary.pending}</strong>

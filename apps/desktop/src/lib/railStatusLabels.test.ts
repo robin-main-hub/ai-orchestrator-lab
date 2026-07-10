@@ -4,6 +4,7 @@ import {
   ingressApprovalStateLabel,
   ingressConfidenceLabel,
   providerReadinessLabel,
+  railStatusTone,
   runtimeNodeRoleLabel,
   runtimeStatusLabel,
   tmuxRedispatchOutcomeLabel,
@@ -30,5 +31,16 @@ describe("railStatusLabels", () => {
     expect(ingressConfidenceLabel("medium")).toBe("중간");
     expect(ingressApprovalStateLabel("not_required")).toBe("승인 불필요");
     expect(ingressApprovalStateLabel("required")).toBe("승인 필요");
+  });
+
+  it("maps status enums to U21 tone buckets", () => {
+    expect(railStatusTone("failed")).toBe("destructive");
+    expect(railStatusTone("blocked")).toBe("destructive");
+    expect(railStatusTone("pending_approval")).toBe("warning");
+    expect(railStatusTone("watch")).toBe("warning");
+    expect(railStatusTone("ready")).toBe("accent");
+    expect(railStatusTone("synced")).toBe("accent");
+    expect(railStatusTone("idle")).toBe("muted");
+    expect(railStatusTone("totally_unknown_value")).toBe("muted");
   });
 });
