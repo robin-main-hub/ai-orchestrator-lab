@@ -13115,3 +13115,132 @@ button.verify-chip[aria-pressed="true"] {
     opacity: 0.4;
   }
 }
+
+/* ═══ THR-2: theater 진입 동선·상호작용 (카드 형제버튼·hero 선택·이번 작전 패널) ═══ */
+.theater-v2__card--selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 22px var(--accent-dim);
+}
+.theater-v2__card-body {
+  display: flex;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  align-items: flex-start;
+  cursor: pointer;
+}
+.theater-v2__card-body:focus {
+  outline: none;
+}
+.theater-v2__card-body:focus-visible {
+  outline: none;
+  border-radius: 12px;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.theater-v2__card-talk {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.theater-v2__card-talk:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.theater-v2__card-talk:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* 이번 작전 패널 */
+.theater-v2__mission {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+.theater-v2__mission-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  line-height: 1.35;
+}
+.theater-v2__mission-summary {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--fg-muted);
+  line-height: 1.45;
+}
+.theater-v2__mission-request {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 11px;
+}
+.theater-v2__mission-request > .theater-v2__muted {
+  flex: 0 0 auto;
+}
+.theater-v2__mission-request-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+.theater-v2__mission-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px;
+  text-align: center;
+}
+.theater-v2__mission-orbit {
+  width: 120px;
+  height: 120px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: radial-gradient(circle at 50% 50%, var(--accent-dim), transparent 70%);
+}
+.theater-v2__mission-empty-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.theater-v2__mission-cta {
+  margin-top: 2px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 999px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  cursor: pointer;
+}
+.theater-v2__mission-cta:hover {
+  border-color: var(--accent);
+}
+.theater-v2__mission-cta:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
