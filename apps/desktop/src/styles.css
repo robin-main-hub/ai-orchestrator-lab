@@ -11468,3 +11468,372 @@ body:has(.app-shell.annex-focus-shell) {
     animation: none;
   }
 }
+
+/* ═══ THR-1: theater (.theater-v2) — redesign v2 Wave 1 ═══ */
+
+/* Full-bleed: theater owns the whole center canvas (U5 one-liner). */
+.nav-center-shell .center-board:has(> .theater-v2) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.theater-v2 {
+  display: grid;
+  grid-template-columns: minmax(300px, 340px) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "header header"
+    "roster stage"
+    "film film";
+  gap: 20px;
+  padding: 20px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(1200px 420px at 78% -10%, var(--accent-dim), transparent),
+    var(--bg);
+  color: var(--fg);
+}
+
+/* ── header band: 타이틀 / 6단계 트랙 / 집계 (auto | 1fr | auto) ── */
+.theater-v2__header {
+  grid-area: header;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+.theater-v2__title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.theater-v2__title-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.theater-v2__title-name {
+  display: inline-block;
+  padding-bottom: 2px;
+  border-bottom: 2px solid var(--accent);
+  color: var(--fg);
+}
+.theater-v2__title-desc {
+  margin: 2px 0 0;
+  max-width: 46ch;
+  color: var(--fg-muted);
+  line-height: 1.4;
+}
+
+.theater-v2__track {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  flex: 1 1 auto;
+}
+.theater-v2__step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+}
+.theater-v2__step + .theater-v2__step {
+  border-left: 1px solid var(--border);
+}
+.theater-v2__step-jp {
+  color: var(--fg);
+}
+.theater-v2__step-count {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent-dim);
+  color: var(--fg);
+}
+
+.theater-v2__dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--fg-muted);
+}
+.theater-v2__dot--active {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.theater-v2__dot--await {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 20%, transparent);
+}
+.theater-v2__dot--done {
+  background: var(--accent);
+}
+.theater-v2__dot--blocked {
+  background: var(--destructive);
+}
+.theater-v2__dot--pending {
+  background: var(--fg-muted);
+  opacity: 0.45;
+}
+
+.theater-v2__aggregate {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 11px;
+}
+.theater-v2__agg-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 12px;
+  color: var(--fg);
+}
+.theater-v2__agg-item + .theater-v2__agg-item {
+  border-left: 1px solid var(--border);
+}
+.theater-v2__agg-item--blocked {
+  color: var(--destructive);
+}
+.theater-v2__empty {
+  color: var(--fg-muted);
+}
+
+/* ── roster (left): 소환 카드 ── */
+.theater-v2__roster {
+  grid-area: roster;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.theater-v2__card {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  backdrop-filter: blur(6px);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.theater-v2__card--active {
+  border-color: var(--accent);
+}
+.theater-v2__card--clickable {
+  cursor: pointer;
+}
+.theater-v2__card--clickable:hover {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+/* rarity thumb ring — U4 accent 사다리 */
+.theater-v2__thumb {
+  box-shadow: 0 0 0 1px var(--border);
+}
+.theater-v2__thumb--fallback {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.theater-v2__card--ssr .theater-v2__thumb {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 18px var(--accent-dim);
+}
+.theater-v2__card--sr .theater-v2__thumb {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.theater-v2__card--r .theater-v2__thumb {
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.35);
+}
+.theater-v2__card--n .theater-v2__thumb {
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.theater-v2__rarity {
+  border: 1px solid var(--border);
+  background: var(--accent-dim);
+  color: var(--fg);
+}
+.theater-v2__role {
+  color: var(--accent);
+}
+.theater-v2__muted {
+  color: var(--fg-muted);
+}
+
+/* card stage chip — §3 status 톤 */
+.theater-v2__stage-chip {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  color: var(--fg-muted);
+}
+.theater-v2__stage-chip--blocked {
+  border-color: color-mix(in srgb, var(--destructive) 50%, transparent);
+  background: color-mix(in srgb, var(--destructive) 12%, transparent);
+  color: var(--destructive);
+}
+.theater-v2__stage-chip--active {
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.theater-v2__stage-chip--waiting {
+  border-color: color-mix(in srgb, var(--warning) 50%, transparent);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--warning);
+}
+.theater-v2__stage-chip--done {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.theater-v2__stage-chip--idle {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  color: var(--fg-muted);
+}
+
+/* StatBar (U3): HP=accent / MP=fg-muted */
+.theater-v2__statbar-track {
+  background: color-mix(in srgb, var(--fg-muted) 18%, transparent);
+}
+.theater-v2__statbar-fill--hp {
+  background: var(--accent);
+}
+.theater-v2__statbar-fill--mp {
+  background: var(--fg-muted);
+}
+
+/* ── stage (center): 召喚 리액터 + 커맨드 티커 ── */
+.theater-v2__stage {
+  grid-area: stage;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  color: var(--fg);
+}
+.theater-v2__reactor {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  aspect-ratio: 1 / 1;
+}
+.theater-v2__ring-outer {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 1px solid var(--accent-dim);
+}
+.theater-v2__ring-inner {
+  position: absolute;
+  inset: 10%;
+  border-radius: 999px;
+  border: 1px dashed var(--border);
+}
+.theater-v2__orbit {
+  display: block;
+  width: 10px;
+  height: 10px;
+  transform: rotate(45deg);
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-dim);
+}
+.theater-v2__portrait {
+  position: absolute;
+  inset: 18%;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1px solid var(--accent-dim);
+  background: var(--surface);
+  box-shadow: 0 0 60px var(--accent-dim);
+}
+.theater-v2__portrait:focus {
+  outline: none;
+}
+.theater-v2__portrait:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent), 0 0 60px var(--accent-dim);
+}
+.theater-v2__portrait:disabled {
+  cursor: default;
+}
+.theater-v2__namebadge {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--fg);
+}
+.theater-v2__namebadge-dot {
+  background: var(--accent);
+}
+
+.theater-v2__ticker {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  color: var(--fg);
+}
+.theater-v2__ticker-prompt {
+  color: var(--accent);
+}
+.theater-v2__ticker-text {
+  color: var(--fg);
+}
+.theater-v2__ticker-caret {
+  background: var(--accent);
+}
+
+/* ── film (bottom full-width): 되감기 스크러버 ── */
+.theater-v2__film {
+  grid-area: film;
+}
+
+/* ── responsive (§2.7, U7 @1024): 1열 + roster 가로 snap 스트립 ── */
+@media (max-width: 1024px) {
+  .theater-v2 {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas:
+      "header"
+      "stage"
+      "roster"
+      "film";
+  }
+  .theater-v2__roster {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+  }
+  .theater-v2__card {
+    flex: 0 0 280px;
+    width: 280px;
+    scroll-snap-align: start;
+  }
+  .theater-v2__reactor {
+    max-width: 220px;
+  }
+}
+
+/* ── reduced-motion (§6): 정적 이중 링 — spin/breathe 정지 ── */
+@media (prefers-reduced-motion: reduce) {
+  .summon-spin,
+  .summon-spin-rev,
+  .summon-breathe,
+  .summon-spin-icon {
+    animation: none !important;
+  }
+}
