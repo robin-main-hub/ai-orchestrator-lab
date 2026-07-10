@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Rewind, Sparkles } from "lucide-react";
 import type { EventEnvelope } from "@ai-orchestrator/protocol";
 import type { WorkbenchAgent } from "../types";
 import type { MakimaDelegationAssignmentView, MakimaDelegationCard } from "../lib/makimaDelegation";
 import { TimelineScrubber } from "./TimelineScrubber";
+import { buildTimelineFrames, formatElapsed } from "../lib/eventTimeline";
 import { PERSONA_CODEX } from "../lib/personaCodex";
 import { buildPersonaCard, type PersonaRarity } from "../lib/personaCard";
 import { resolvePersonaPortraitUrl } from "../lib/personaPortrait";
@@ -239,6 +240,21 @@ export function SummonTheater({
     return () => window.clearInterval(timer);
   }, [command]);
 
+  // ── THR-3: 되감기(VOD) 스크러버 배선 ──
+  // NOTE: 프레임은 스크러버 내부에서도 events로 다시 만든다(순수·결정적 → 동일 결과).
+  // 배너 라벨용으로만 여기서 한 번 더 파생(계약/onScrub 불변 유지, buildTimelineFrames는 O(n log n)로 가벼움).
+  const timelineFrames = useMemo(() => buildTimelineFrames(events), [events]);
+  const [asOf, setAsOf] = useState<{ position: number; isLive: boolean }>({ position: -1, isLive: true });
+  const [goLiveSignal, setGoLiveSignal] = useState(0);
+  // useCallback + 동일값 bail: onScrub 무한루프 방지(Finding A)
+  const handleScrub = useCallback(
+    (position: number, isLive: boolean) =>
+      setAsOf((prev) => (prev.position === position && prev.isLive === isLive ? prev : { position, isLive })),
+    [],
+  );
+  const rewound = !asOf.isLive && asOf.position >= 0 && asOf.position < timelineFrames.length;
+  const rewoundFrame = rewound ? timelineFrames[asOf.position] : undefined;
+
   return (
     <div className="theater-v2">
       {/* ── 헤더: 타이틀 / 6단계 트랙 / 집계 ── */}
@@ -293,10 +309,34 @@ export function SummonTheater({
             <span className="theater-v2__empty text-[11px]">대기 중 — 지휘자에게 요청을 보내면 무대가 가동됩니다</span>
           )}
         </div>
+
+        {rewound && rewoundFrame ? (
+          <div className="theater-v2__rewind-banner" role="status">
+            <Rewind aria-hidden className="h-3.5 w-3.5" />
+            <span>
+              <b className="aol-mono">+{formatElapsed(rewoundFrame.elapsedMs)}</b> 시점 ·{" "}
+              <span className="aol-mono">
+                {asOf.position + 1}/{timelineFrames.length}
+              </span>
+            </span>
+            <button
+              className="theater-v2__rewind-banner-golive"
+              onClick={() => setGoLiveSignal((value) => value + 1)}
+              type="button"
+            >
+              LIVE로
+            </button>
+          </div>
+        ) : null}
       </header>
 
       {/* ── roster(좌): 소환 카드 최대 6장 ── */}
-      <section aria-label="소환 카드" className="theater-v2__roster">
+      <section aria-label="소환 카드" className={cn("theater-v2__roster", rewound && "theater-v2__roster--rewound")}>
+        {rewound ? (
+          <div className="theater-v2__roster-head">
+            <span className="theater-v2__roster-badge">현재 상태</span>
+          </div>
+        ) : null}
         {rosterEntries.map((entry) => (
           <SummonCard entry={entry} key={entry.key} onOpen={onOpenAgent} />
         ))}
@@ -353,7 +393,8 @@ export function SummonTheater({
 
       {/* ── film(하단 풀폭): 되감기 스크러버 (THR-3 소유) ── */}
       <div className="theater-v2__film">
-        <TimelineScrubber events={events} />
+        {/* THR-4: hero 피드가 asOf.position으로 framesUpTo 절단 소비 */}
+        <TimelineScrubber events={events} goLiveSignal={goLiveSignal} onScrub={handleScrub} />
       </div>
     </div>
   );

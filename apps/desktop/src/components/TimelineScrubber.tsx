@@ -17,6 +17,7 @@ import {
 import type { EventEnvelope } from "@ai-orchestrator/protocol";
 import {
   buildTimelineFrames,
+  frameTicksByCategory,
   formatElapsed,
   resolvePlayhead,
   type TimelineCategory,
@@ -24,36 +25,49 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * 작업극장 3단계 — 타임라인 되감기 스크러버.
- * 세션 eventLog를 시간순 필름으로 만들어, 드래그/재생/스텝으로 "모든 작업"을
- * 영화처럼 되감는다. 위치가 바뀌면 onScrub(asOfIndex, isLive)로 알려 다른 화면이
- * 그 시점 상태를 반영할 수 있게 한다. 코어는 lib/eventTimeline.ts(테스트됨).
+ * 작업극장 3단계 — 타임라인 되감기 스크러버 v2.
+ * 세션 eventLog를 시간순 필름으로 만들어, 드래그/재생/스텝으로 "모든 작업"을 영화처럼
+ * 되감는다. 위치가 바뀌면 onScrub(asOfIndex, isLive)로 알려 다른 화면이 그 시점 상태를
+ * 반영한다. 밀도 틱 스트립은 frameTicksByCategory 순수 파생, 카테고리 구분은 색이 아니라
+ * 아이콘(단일 액센트 규율). goLiveSignal이 증가하면 끝(LIVE)으로 점프. 코어는 lib/eventTimeline.ts.
  */
 
-const CATEGORY_META: Record<TimelineCategory, { icon: typeof Bot; tone: string; dot: string }> = {
-  session: { icon: FileText, tone: "text-zinc-300", dot: "bg-zinc-400" },
-  message: { icon: Users, tone: "text-cyan-200", dot: "bg-cyan-400" },
-  delegation: { icon: Users, tone: "text-violet-200", dot: "bg-violet-400" },
-  run: { icon: Bot, tone: "text-violet-200", dot: "bg-violet-400" },
-  coding: { icon: Code2, tone: "text-teal-200", dot: "bg-teal-300" },
-  permission: { icon: ShieldCheck, tone: "text-amber-200", dot: "bg-amber-400" },
-  tmux: { icon: TerminalSquare, tone: "text-pink-200", dot: "bg-pink-400" },
-  memory: { icon: Database, tone: "text-emerald-200", dot: "bg-emerald-400" },
-  system: { icon: Radio, tone: "text-zinc-400", dot: "bg-zinc-500" },
+/** 카테고리 → lucide 아이콘 (색이 아니라 아이콘으로 구분 — 단일 액센트 규율) */
+const CATEGORY_ICON: Record<TimelineCategory, typeof Bot> = {
+  session: FileText,
+  message: Users,
+  delegation: Users,
+  run: Bot,
+  coding: Code2,
+  permission: ShieldCheck,
+  tmux: TerminalSquare,
+  memory: Database,
+  system: Radio,
 };
+
+/** 밀도 틱 버킷 수(§2.7 "밀도 틱") — 프레임 수로 클램프 */
+const TICK_BUCKETS = 32;
 
 export function TimelineScrubber({
   events,
   onScrub,
+  goLiveSignal,
 }: {
   events: ReadonlyArray<EventEnvelope>;
   /** 스크럽 위치 변경 통지 (asOfIndex = 그 시점까지 포함, isLive = 끝) */
   onScrub?: (asOfIndex: number, isLive: boolean) => void;
+  /** 증가하면 끝(LIVE)으로 점프 + 재생 정지 — 헤더 "LIVE로" 명령용 */
+  goLiveSignal?: number;
 }) {
   const frames = useMemo(() => buildTimelineFrames(events), [events]);
   const [position, setPosition] = useState<number>(() => Math.max(0, frames.length - 1));
   const [playing, setPlaying] = useState(false);
   const wasLiveRef = useRef(true);
+  const framesLenRef = useRef(frames.length);
+  framesLenRef.current = frames.length;
+
+  // 밀도 틱 — 버킷 수를 프레임 수로 클램프(빈 버킷 난립 방지)
+  const ticks = useMemo(() => frameTicksByCategory(frames, Math.min(TICK_BUCKETS, frames.length)), [frames]);
 
   // 새 이벤트가 들어오면 — live를 따라가던 중이면 끝으로 점프, 아니면 위치 유지
   useEffect(() => {
@@ -63,6 +77,13 @@ export function TimelineScrubber({
       return Math.min(current, frames.length - 1);
     });
   }, [frames.length]);
+
+  // goLiveSignal 증가 → 끝으로 점프 + 정지 (헤더 LIVE로 버튼). ref로 최신 길이 참조(스테일 클로저 회피)
+  useEffect(() => {
+    if (goLiveSignal === undefined) return;
+    setPlaying(false);
+    setPosition(Math.max(0, framesLenRef.current - 1));
+  }, [goLiveSignal]);
 
   const playhead = resolvePlayhead(frames, position);
   wasLiveRef.current = playhead.isLive;
@@ -88,87 +109,101 @@ export function TimelineScrubber({
 
   if (frames.length === 0) {
     return (
-      <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-[11px] text-zinc-500">
-        <Rewind className="h-3.5 w-3.5" />
-        아직 기록된 이벤트가 없습니다 — 작업이 시작되면 여기서 영화처럼 되감을 수 있어요.
+      <div className="theater-v2__scrub theater-v2__scrub--empty">
+        <Rewind aria-hidden className="h-3.5 w-3.5" />
+        아직 기록된 이벤트가 없습니다 · 작업이 시작되면 여기서 영화처럼 되감을 수 있어요.
       </div>
     );
   }
 
   const current = playhead.current!;
-  const meta = CATEGORY_META[current.category];
-  const Icon = meta.icon;
+  const Icon = CATEGORY_ICON[current.category];
+  const maxTickCount = ticks.reduce((max, tick) => Math.max(max, tick.count), 0);
+  const currentBucket = bucketIndexOf(frames, current.elapsedMs, ticks.length);
   const step = (delta: number) => {
     setPlaying(false);
     setPosition((value) => Math.min(Math.max(value + delta, 0), frames.length - 1));
   };
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-black/50 px-4 py-3">
-      <div className="flex items-center gap-3">
-        <button
-          aria-label="처음으로"
-          className="rounded-md p-1 text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
-          onClick={() => step(-frames.length)}
-          type="button"
-        >
+    <div className="theater-v2__scrub">
+      <div className="theater-v2__scrub-controls">
+        <button aria-label="처음으로" className="theater-v2__scrub-btn" onClick={() => step(-frames.length)} type="button">
           <SkipBack className="h-3.5 w-3.5" />
         </button>
         <button
           aria-label={playing ? "일시정지" : "재생"}
-          className="rounded-md p-1 text-zinc-100 hover:bg-white/5"
+          className="theater-v2__scrub-btn theater-v2__scrub-btn--primary"
           onClick={() => setPlaying((value) => !value)}
           type="button"
         >
           {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
         </button>
-        <button
-          aria-label="끝(LIVE)으로"
-          className="rounded-md p-1 text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
-          onClick={() => step(frames.length)}
-          type="button"
-        >
+        <button aria-label="끝(LIVE)으로" className="theater-v2__scrub-btn" onClick={() => step(frames.length)} type="button">
           <SkipForward className="h-3.5 w-3.5" />
         </button>
 
-        <input
-          aria-label="타임라인 위치"
-          className="min-w-0 flex-1 accent-violet-400"
-          max={frames.length - 1}
-          min={0}
-          onChange={(event) => {
-            setPlaying(false);
-            setPosition(Number(event.target.value));
-          }}
-          step={1}
-          type="range"
-          value={playhead.position}
-        />
+        <div className="theater-v2__scrub-rail">
+          {ticks.length > 0 ? (
+            <div aria-hidden className="theater-v2__scrub-ticks">
+              {ticks.map((tick) => (
+                <span
+                  className={cn("theater-v2__scrub-tick", tick.bucket === currentBucket && "theater-v2__scrub-tick--current")}
+                  key={tick.bucket}
+                  style={{ height: `${maxTickCount > 0 ? (tick.count / maxTickCount) * 100 : 0}%` }}
+                />
+              ))}
+            </div>
+          ) : null}
+          <input
+            aria-label="타임라인 위치"
+            className="theater-v2__scrub-range"
+            max={frames.length - 1}
+            min={0}
+            onChange={(event) => {
+              setPlaying(false);
+              setPosition(Number(event.target.value));
+            }}
+            step={1}
+            type="range"
+            value={playhead.position}
+          />
+        </div>
 
-        <span className="shrink-0 font-mono text-[11px] text-zinc-400">
+        <span className="theater-v2__scrub-count aol-mono">
           {playhead.occurred}/{frames.length}
         </span>
         {playhead.isLive ? (
-          <span className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-300/30 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> LIVE
+          <span className="theater-v2__scrub-pill theater-v2__scrub-live">
+            <span aria-hidden className="theater-v2__scrub-live-dot" /> LIVE
           </span>
         ) : (
-          <span className="flex shrink-0 items-center gap-1 rounded-full border border-amber-300/30 px-1.5 py-0.5 text-[9px] font-semibold text-amber-200">
-            <Rewind className="h-2.5 w-2.5" /> 되감기
+          <span className="theater-v2__scrub-pill theater-v2__scrub-rewind">
+            <Rewind aria-hidden className="h-2.5 w-2.5" /> 되감기
           </span>
         )}
       </div>
 
-      <div className="flex items-center gap-2.5 border-t border-white/5 pt-2">
-        <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-white/[0.04]", meta.tone)}>
+      <div className="theater-v2__scrub-frame">
+        <span className="theater-v2__scrub-frame-icon">
           <Icon className="h-3.5 w-3.5" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className={cn("truncate text-[12px] font-medium", meta.tone)}>{current.label}</p>
-          <p className="truncate font-mono text-[10px] text-zinc-600">{current.type}</p>
+          <p className="theater-v2__scrub-frame-label truncate">{current.label}</p>
+          <p className="theater-v2__scrub-frame-type aol-mono truncate">{current.type}</p>
         </div>
-        <span className="shrink-0 font-mono text-[10.5px] text-zinc-500">+{formatElapsed(current.elapsedMs)}</span>
+        <span className="theater-v2__scrub-frame-elapsed aol-mono">+{formatElapsed(current.elapsedMs)}</span>
       </div>
     </div>
   );
+}
+
+/** 현재 프레임이 속한 밀도 틱 버킷 — frameTicksByCategory와 동일한 버킷 산식(정합 보장) */
+function bucketIndexOf(frames: ReadonlyArray<{ elapsedMs: number }>, elapsedMs: number, bucketCount: number): number {
+  if (bucketCount <= 0 || frames.length === 0) return -1;
+  const first = frames[0]!.elapsedMs;
+  const last = frames[frames.length - 1]!.elapsedMs;
+  const span = last - first;
+  if (span <= 0) return 0;
+  return Math.min(bucketCount - 1, Math.max(0, Math.floor(((elapsedMs - first) / span) * bucketCount)));
 }
