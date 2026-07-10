@@ -99,7 +99,7 @@ export function resolveAgentThinkingIndicator(
       steps: [
         { label: "변경점 고정", state: "done" },
         { label: "테스트 실행", state: "active" },
-        { label: "결과 영수증 정리", state: "pending" },
+        { label: "결과 브리핑 정리", state: "pending" },
       ],
     };
   }

@@ -75,7 +75,7 @@ describe("orchestrationExperienceRoadmap", () => {
         safetyLabel: "검색 가능",
         searchable: true,
         searchText: "ok",
-        title: "영수증",
+        title: "브리핑",
         trace: { groups: [] },
       }],
     });

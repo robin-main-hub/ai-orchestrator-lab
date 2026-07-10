@@ -55,7 +55,7 @@ describe("Stage3DebateTable", () => {
     expect(html).toContain("<details");
     expect(html).toContain("검토 근거 보기");
     expect(html).toContain("공개 작업 로그");
-    expect(html).toContain("토론 실행 영수증");
+    expect(html).toContain("토론 실행 브리핑");
     expect(html).toContain("코딩 영향");
     expect(html).toContain("검토자");
     expect(html).not.toContain("Reviewer");
@@ -157,7 +157,7 @@ describe("Stage3DebateTable", () => {
     expect(html).not.toContain("검토 근거 보기");
     expect(html).not.toContain("<details");
     expect(html).not.toContain("aria-label=\"공개 작업 로그\"");
-    expect(html).not.toContain("토론 실행 영수증");
+    expect(html).not.toContain("토론 실행 브리핑");
   });
 
   it("토론 메인 상단에 결정 중심 레일을 표시한다", () => {

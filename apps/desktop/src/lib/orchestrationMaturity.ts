@@ -51,9 +51,9 @@ export const BIG_ROCK_COMPLETION_TARGETS: BigRockCompletionTarget[] = [
   },
   {
     id: "07_receipts_search",
-    label: "공개 영수증/감사 검색",
-    readyAction: "공개 영수증 검색과 마스킹 점검 통과",
-    requiredAction: "공개 영수증 검색과 렌더 직전 마스킹을 통과",
+    label: "공개 브리핑/감사 검색",
+    readyAction: "공개 브리핑 검색과 마스킹 점검 통과",
+    requiredAction: "공개 브리핑 검색과 렌더 직전 마스킹을 통과",
   },
   {
     id: "08_attachments",
@@ -238,7 +238,7 @@ function detailFor(id: BigRockId, input: OrchestrationMaturityInput): string {
     case "06_memory_curator":
       return `설치 ${input.memory.installedAgentCount}/${input.memory.agentInstallCount} · 후보 ${input.memory.curatorCandidateCount}개 · 승격 ${input.memory.promotedCount}개`;
     case "07_receipts_search":
-      return `영수증 ${input.receipts.receiptCount}개 · 검색 ${input.receipts.searchableCount}개 · 위험 ${input.receipts.unsafeReceiptCount}개`;
+      return `브리핑 ${input.receipts.receiptCount}개 · 검색 ${input.receipts.searchableCount}개 · 위험 ${input.receipts.unsafeReceiptCount}개`;
     case "08_attachments":
       return `허용 타입 ${input.attachments.acceptedTypeCount}개 · 대기 ${input.attachments.pendingCount}개`;
     case "09_onboarding":
@@ -265,7 +265,7 @@ function nextActionFor(
   input: OrchestrationMaturityInput,
 ): string {
   if (id === "07_receipts_search" && input.receipts.unsafeReceiptCount > 0) {
-    return `공개 영수증 마스킹 실패 ${input.receipts.unsafeReceiptCount}건 해결`;
+    return `공개 브리핑 마스킹 실패 ${input.receipts.unsafeReceiptCount}건 해결`;
   }
   if (id === "08_attachments" && input.attachments.pendingCount > 0) {
     return `첨부 ${input.attachments.pendingCount}개 처리 계획을 확인하고 대화에 전송`;

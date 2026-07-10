@@ -20,7 +20,7 @@ describe("PublicWorkTracePanel", () => {
         },
       ],
       receipt: {
-        label: "에이전트 실행 영수증",
+        label: "에이전트 실행 브리핑",
         status: "checkpointed",
         items: [
           { label: "범위", value: "도구" },
@@ -55,7 +55,7 @@ describe("PublicWorkTracePanel", () => {
         },
       ],
       receipt: {
-        label: "에이전트 실행 영수증",
+        label: "에이전트 실행 브리핑",
         status: "checkpointed",
         items: [
           { label: "범위", value: "https://token-plan-sgp.xiaomimimo.com/v1" },

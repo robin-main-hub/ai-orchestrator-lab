@@ -46,9 +46,9 @@ export function deriveCockpitNextActions({
     ...(unsafeReceiptCount > 0
       ? [
           {
-            ctaLabel: "영수증 점검",
+            ctaLabel: "브리핑 점검",
             id: "receipt_unsafe",
-            label: `공개 영수증 마스킹 점검: ${unsafeReceiptCount}건`,
+            label: `공개 브리핑 마스킹 점검: ${unsafeReceiptCount}건`,
             priority: "high" as const,
             source: "receipt" as const,
             targetSurface: "receipts" as const,
@@ -131,7 +131,7 @@ export function deriveCockpitNextActions({
     {
       ctaLabel: "성숙도 보기",
       id: "default_next_big_rock",
-      label: "다음 큰 바위 선정: 성숙도와 작업 영수증을 확인",
+      label: "다음 큰 바위 선정: 성숙도와 작업 브리핑을 확인",
       priority: "normal",
       source: "maturity",
       targetSurface: "maturity",
@@ -143,8 +143,8 @@ export function deriveCockpitNextActions({
 export function resolveCockpitDetailFocus(action: CockpitNextActionItem): CockpitDetailFocus | undefined {
   if (action.targetSurface === "receipts") {
     return {
-      helper: "작업 영수증 장부에서 공개 마스킹 상태를 먼저 확인합니다.",
-      label: "작업 영수증",
+      helper: "브리핑 로그에서 공개 마스킹 상태를 먼저 확인합니다.",
+      label: "작업 브리핑",
       surface: "receipts",
     };
   }

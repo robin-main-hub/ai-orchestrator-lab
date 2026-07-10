@@ -57,7 +57,7 @@ export function DashboardView({
   runtime: RuntimeSnapshot;
   hermesPool: HermesPoolSummary;
   onNavigate: (target: { nav?: NavItemId; mode?: CenterMode }) => void;
-  /** "해온 업무" 요약에 쓰는 작업 추적 인덱스 (append-only 공개 영수증) */
+  /** "해온 업무" 요약에 쓰는 작업 추적 인덱스 (append-only 공개 브리핑) */
   workTraceItems?: WorkTraceSearchItem[];
   /** 지금 진행 중인 작업 (RMAS 실행 등) */
   runningWork?: RunningWorkItem[];
@@ -118,7 +118,7 @@ export function DashboardView({
           stoppingIds={stoppingWorkIds}
         />
 
-        {/* ③ 해온 업무 — 작업 영수증 compact 최근 5 */}
+        {/* ③ 해온 업무 — 작업 브리핑 compact 최근 5 */}
         <section className="dashboard__section" aria-label="해온 업무">
           <h2 className="dashboard__section-title">해온 업무</h2>
           <WorkReceiptLedgerCard compact items={workTraceItems} />

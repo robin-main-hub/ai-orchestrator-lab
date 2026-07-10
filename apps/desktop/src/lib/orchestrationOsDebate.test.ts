@@ -107,7 +107,7 @@ const roadmap: ExperienceRoadmapItem[] = [
   {
     id: "security_masking",
     label: "렌더 직전 보안 마스킹",
-    detail: "공개 영수증에서 비밀을 가린다.",
+    detail: "공개 브리핑에서 비밀을 가린다.",
     source: "cline",
     status: "blocked",
   },

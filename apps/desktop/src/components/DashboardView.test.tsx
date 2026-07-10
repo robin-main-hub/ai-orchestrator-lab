@@ -21,14 +21,14 @@ const receiptItem: WorkTraceSearchItem = {
   createdAt: "2026-06-05T08:00:00.000Z",
   id: "utterance_1",
   kind: "debate",
-  title: "토론 공개 영수증 · 최종 결정",
+  title: "토론 공개 브리핑 · 최종 결정",
   receiptStatus: "checkpointed",
   safetyLabel: "검색 가능",
   searchable: true,
-  searchText: "토론 공개 영수증 최종 결정",
+  searchText: "토론 공개 브리핑 최종 결정",
   trace: {
     receipt: {
-      label: "토론 실행 영수증",
+      label: "토론 실행 브리핑",
       status: "checkpointed",
       items: [{ label: "마스킹", value: "적용됨" }],
     },
@@ -89,8 +89,8 @@ describe("DashboardView (mission-control home)", () => {
     );
     // 해온 업무 요약 — WorkReceiptLedgerCard 압축 모드 재사용
     expect(html).toContain("해온 업무");
-    expect(html).toContain("토론 공개 영수증 · 최종 결정");
-    expect(html).not.toContain("작업 영수증 검색");
+    expect(html).toContain("토론 공개 브리핑 · 최종 결정");
+    expect(html).not.toContain("작업 브리핑 검색");
     // 현재 작업 — 진행 중인 게 없으면 오빗 링 빈 상태 + CTA
     expect(html).toContain("현재 작업");
     expect(html).toContain("현재 작업 없음");

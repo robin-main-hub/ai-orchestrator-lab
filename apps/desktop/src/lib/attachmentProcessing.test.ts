@@ -107,7 +107,7 @@ describe("attachmentProcessing", () => {
     expect(plans[2]).toMatchObject({ reason: "파일 크기 제한 초과" });
   });
 
-  it("공개 영수증에 쓸 수 있도록 첨부 처리 계획을 압축 요약한다", () => {
+  it("공개 브리핑에 쓸 수 있도록 첨부 처리 계획을 압축 요약한다", () => {
     const plans = createAttachmentProcessingPlan({
       currentAttachmentCount: 0,
       files: [

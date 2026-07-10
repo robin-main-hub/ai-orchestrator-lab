@@ -48,7 +48,7 @@ describe("orchestrationMaturity", () => {
 
     expect(report.nextActions).toContain("작업 대기열 6개 흐름을 모두 작업 항목/핸드오프/승인 결과로 연결");
     expect(report.nextActions).toContain("토론 결정 노드에서 코딩 패킷 후보와 작업 항목을 생성");
-    expect(report.nextActions).toContain("공개 영수증 마스킹 실패 1건 해결");
+    expect(report.nextActions).toContain("공개 브리핑 마스킹 실패 1건 해결");
     expect(visibleCopy).not.toContain("Control Queue");
     expect(visibleCopy).not.toContain("WorkItem");
     expect(visibleCopy).not.toContain("Coding Packet");

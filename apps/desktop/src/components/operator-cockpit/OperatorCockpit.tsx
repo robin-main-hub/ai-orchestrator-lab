@@ -56,7 +56,7 @@ export function OperatorCockpit({
   initialFocus,
 }: {
   defaultDetailsOpen?: boolean;
-  /** 명령 팔레트가 특정 카드(성숙도/영수증/진단)로 deep-link할 때 */
+  /** 명령 팔레트가 특정 카드(성숙도/브리핑/진단)로 deep-link할 때 */
   initialFocus?: CockpitDetailFocus;
   snapshot: OperatorCockpitSnapshot;
   onPreviewEvidence?: () => void;
@@ -213,8 +213,8 @@ export function OperatorCockpit({
   };
   const openReceipts = () => {
     openDetailsWithFocus({
-      helper: "작업 영수증 장부에서 공개 마스킹 상태와 최근 성과를 확인합니다.",
-      label: "작업 영수증",
+      helper: "브리핑 로그에서 공개 마스킹 상태와 최근 성과를 확인합니다.",
+      label: "작업 브리핑",
       surface: "receipts",
     });
   };

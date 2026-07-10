@@ -24,7 +24,7 @@ export type PublicWorkTraceGroup = {
 };
 
 export type PublicWorkTraceReceipt = {
-  label: "에이전트 실행 영수증" | "토론 실행 영수증" | "터미널 실행 영수증";
+  label: "에이전트 실행 브리핑" | "토론 실행 브리핑" | "터미널 실행 브리핑";
   status: "checkpointed" | "live" | "fallback" | "blocked";
   items: Array<{
     label: "범위" | "기준점" | "마스킹" | "공개 범위";
@@ -318,7 +318,7 @@ export function createDebateUtterancePublicWorkTrace(utterance: Stage3DebateUtte
   }
 
   return toTrace(steps, commands, evidence, {
-    label: "토론 실행 영수증",
+    label: "토론 실행 브리핑",
     status: utterance.tags.includes("risk") ? "live" : "checkpointed",
     items: [
       { label: "범위", value: sanitize(`토론/${utterance.roundId}`) },
@@ -364,7 +364,7 @@ export function createTerminalBlockPublicWorkTrace(block: TerminalTimelineBlock)
     });
   }
   return toTrace(steps, commands, evidence, {
-    label: "터미널 실행 영수증",
+    label: "터미널 실행 브리핑",
     status: block.status === "failed" || block.status === "blocked" ? "blocked" : "checkpointed",
     items: [
       { label: "범위", value: sanitize(tmuxKindDisplayLabel(block.kind)) },
@@ -397,7 +397,7 @@ export function createPublicTraceSafetyReport(trace: PublicWorkTrace): PublicTra
   const blockedReasons = [...patternReasons, ...inspectPublicText(combinedText).blockedReasons];
   if (trace.groups.length > 0) {
     if (!trace.receipt) {
-      blockedReasons.push("마스킹 영수증 없음");
+      blockedReasons.push("마스킹 브리핑 없음");
     } else {
       const hasReceiptMasking = trace.receipt.items.some(
         (item) => item.label === "마스킹" && item.value.includes("적용"),
@@ -500,7 +500,7 @@ function createConversationReceipt(
   const receiptStatus = resolveConversationReceiptStatus(metadata);
 
   return {
-    label: "에이전트 실행 영수증",
+    label: "에이전트 실행 브리핑",
     status: receiptStatus,
     items: [
       { label: "범위", value: sanitize(spans.length > 0 ? spans.map(spanDisplayLabel).join("/") : "메시지") },
@@ -526,7 +526,7 @@ function resolveConversationReceiptStatus(
 
 function createFallbackConversationReceipt(message: ConversationMessage): PublicWorkTraceReceipt {
   return {
-    label: "에이전트 실행 영수증",
+    label: "에이전트 실행 브리핑",
     status: "checkpointed",
     items: [
       { label: "범위", value: "메시지" },

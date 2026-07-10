@@ -10,7 +10,7 @@ import {
 import type { Stage3DebateUtteranceView } from "../types";
 
 describe("publicWorkTrace", () => {
-  it("사용자 첨부 메시지도 처리 계획과 마스킹 영수증을 공개 로그로 요약한다", () => {
+  it("사용자 첨부 메시지도 처리 계획과 마스킹 브리핑을 공개 로그로 요약한다", () => {
     const trace = createConversationMessagePublicWorkTrace({
       id: "msg_user_attachment",
       sessionId: "session_main",
@@ -41,7 +41,7 @@ describe("publicWorkTrace", () => {
     });
 
     expect(trace.receipt).toEqual({
-      label: "에이전트 실행 영수증",
+      label: "에이전트 실행 브리핑",
       status: "checkpointed",
       items: [
         { label: "범위", value: "첨부/메시지" },
@@ -106,7 +106,7 @@ describe("publicWorkTrace", () => {
     const trace = createConversationMessagePublicWorkTrace(message);
 
     expect(trace.receipt).toEqual({
-      label: "에이전트 실행 영수증",
+      label: "에이전트 실행 브리핑",
       status: "checkpointed",
       items: [
         { label: "범위", value: "생성/도구/핸드오프/메모리" },
@@ -183,7 +183,7 @@ describe("publicWorkTrace", () => {
     );
   });
 
-  it("assistant 메시지에 복사된 첨부 계획은 사용자 첨부 준비 영수증으로 중복 계산하지 않는다", () => {
+  it("assistant 메시지에 복사된 첨부 계획은 사용자 첨부 준비 브리핑으로 중복 계산하지 않는다", () => {
     const trace = createConversationMessagePublicWorkTrace({
       id: "msg_assistant_attachment_echo",
       sessionId: "session_main",
@@ -231,7 +231,7 @@ describe("publicWorkTrace", () => {
     expect(serialized).not.toContain("provider_mock_local");
   });
 
-  it("승인 대기와 실패 대화 영수증은 저장됨이 아니라 live/blocked 상태로 남긴다", () => {
+  it("승인 대기와 실패 대화 브리핑은 저장됨이 아니라 live/blocked 상태로 남긴다", () => {
     const pendingTrace = createConversationMessagePublicWorkTrace({
       id: "message_pending_approval",
       role: "assistant",
@@ -345,7 +345,7 @@ describe("publicWorkTrace", () => {
     expect(createPublicTraceSafetyReport(trace).isSafe).toBe(true);
   });
 
-  it("공개 영수증 표시를 공통 형식으로 압축한다", () => {
+  it("공개 브리핑 표시를 공통 형식으로 압축한다", () => {
     const trace = createConversationMessagePublicWorkTrace({
       id: "msg_assistant_long",
       sessionId: "session_main",
@@ -364,7 +364,7 @@ describe("publicWorkTrace", () => {
     expect(summary).toMatchObject({
       statusLabel: "저장됨",
     });
-    expect(summary?.compactLabel).toContain("에이전트 실행 영수증");
+    expect(summary?.compactLabel).toContain("에이전트 실행 브리핑");
     expect(summary?.detailItems.find((item) => item.label === "기준점")?.value.length).toBeLessThanOrEqual(57);
   });
 
@@ -385,7 +385,7 @@ describe("publicWorkTrace", () => {
         },
       ],
       receipt: {
-        label: "에이전트 실행 영수증",
+        label: "에이전트 실행 브리핑",
         status: "checkpointed",
         items: [{ label: "마스킹", value: "확인 필요" }],
       },
@@ -407,7 +407,7 @@ describe("publicWorkTrace", () => {
     const trace = createConversationMessagePublicWorkTrace(message);
 
     expect(trace.receipt).toEqual({
-      label: "에이전트 실행 영수증",
+      label: "에이전트 실행 브리핑",
       status: "checkpointed",
       items: [
         { label: "범위", value: "메시지" },
@@ -475,7 +475,7 @@ describe("publicWorkTrace", () => {
     const trace = createTerminalBlockPublicWorkTrace(block);
 
     expect(trace.receipt).toEqual({
-      label: "터미널 실행 영수증",
+      label: "터미널 실행 브리핑",
       status: "checkpointed",
       items: [
         { label: "범위", value: "디스패치" },
