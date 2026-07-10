@@ -78,7 +78,8 @@ export function useAgentConfigFilesController({
       id: `config_${source.kind}_${Date.now()}`,
       label: `${source.label} 복사본`,
       updatedAt: new Date().toISOString(),
-      version: source.version + 1,
+      // CFG-D: 복제본은 새 파일의 v1에서 시작한다(원본 버전 계승 아님).
+      version: 1,
     };
     setAgentConfigFiles((files) => [nextFile, ...files]);
     setSelectedConfigFileId(nextFile.id);
@@ -128,12 +129,26 @@ export function useAgentConfigFilesController({
     if (!source) {
       return;
     }
+    // CFG-D: 저장 = 체크포인트 기록. 버전을 단조 증가시키고(updatedAt 동반),
+    // 이벤트는 같은 payload shape 로 새 버전을 기록한다(필드 불변, 값만 갱신).
+    const nextVersion = source.version + 1;
+    setAgentConfigFiles((files) =>
+      files.map((file) =>
+        file.id === configFileId
+          ? {
+              ...file,
+              updatedAt: new Date().toISOString(),
+              version: nextVersion,
+            }
+          : file,
+      ),
+    );
     appendEvent("agent.config_file.saved", {
       configFileId,
       kind: source.kind,
       label: source.label,
       path: source.path,
-      version: source.version,
+      version: nextVersion,
       rawSecretPersisted: false,
     });
   }

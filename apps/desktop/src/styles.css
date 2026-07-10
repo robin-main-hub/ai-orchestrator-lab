@@ -11837,3 +11837,241 @@ body:has(.app-shell.annex-focus-shell) {
     animation: none !important;
   }
 }
+
+/* === config_files v2 — PR② (CFG-C/D/E) === */
+/* 착용 편집 행·에이전트 선택 팝오버·체크포인트 피드백·빈 종류 상태·활동 피드·
+ * 팩 적용. PR① 블록과 같은 append-only 격리, emerald 단일 액센트, radius 12. */
+
+/* ── 착용 에이전트 편집 행(CFG-C) ── */
+.config-v2__wear-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+
+.config-v2__wear-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.config-v2__wear-remove:hover {
+  background: color-mix(in srgb, var(--destructive) 18%, transparent);
+  color: var(--fg);
+}
+
+/* ── 에이전트 선택 팝오버(비모달 보조 — z-rail) ── */
+.config-v2__pickwrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.config-v2__picker {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: var(--z-rail);
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  box-shadow: 0 12px 32px rgba(2, 6, 23, 0.45);
+}
+
+.config-v2__picker-option {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.config-v2__picker-option:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-dim);
+}
+
+.config-v2__picker-empty {
+  padding: 6px 8px;
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+/* ── 체크포인트 피드백(U19 success 톤) ── */
+.config-v2__notice {
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 12px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 12px;
+}
+
+/* ── 빈 종류 상태(단일 중앙 상태 — 다열 빈 껍데기 금지) ── */
+.config-v2__empty {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.config-v2__empty strong {
+  color: var(--fg);
+  font-size: 14px;
+}
+
+.config-v2__empty span {
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+.config-v2__empty-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 12px;
+  background: var(--accent-dim);
+  color: var(--fg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ── 버전(체크포인트로만 증가 — 읽기 전용 표시) ── */
+.config-v2__version {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  color: var(--fg);
+  font-size: 12px;
+}
+
+/* ── 하단 피드 영역: 활동 피드 + 팩 2열 ── */
+.config-v2__feed {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.config-v2__activity,
+.config-v2__packs-block {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+}
+
+.config-v2__activity-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.config-v2__activity-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+
+.config-v2__activity-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-v2__activity-time {
+  flex: 0 0 auto;
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
+.config-v2__activity-empty {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+/* ── 팩 카드 헤더(역할 초상 + 적용) ── */
+.config-v2__pack-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.config-v2__pack-head strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-v2__apply-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 12px;
+  background: var(--accent-dim);
+  color: var(--fg);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .config-v2__feed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 모션은 reduced-motion 이 아닐 때만 — 정지가 기본값(§1.1). */
+@media (prefers-reduced-motion: no-preference) {
+  .config-v2__wear-remove,
+  .config-v2__picker-option,
+  .config-v2__empty-cta,
+  .config-v2__apply-button {
+    transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+  }
+}
