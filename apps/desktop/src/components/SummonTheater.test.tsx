@@ -24,6 +24,28 @@ describe("SummonTheater", () => {
     expect(html).not.toContain('와 대화 열기"');
   });
 
+  it("empty state = 예비 소환수 라벨 + 정직한 빈 作戦ログ 피드(U21)", () => {
+    const html = renderToStaticMarkup(<SummonTheater agents={[]} cards={[]} events={[]} />);
+    // 데모 파티를 라이브처럼 보이게 하지 않는 muted 라벨
+    expect(html).toContain("예비 소환수");
+    // 作戦ログ 실황 피드 패널은 항상 렌더, 데이터 없으면 정직한 빈 상태
+    expect(html).toContain("作戦ログ");
+    expect(html).toContain("아직 기록된 작전 로그가 없습니다");
+  });
+
+  it("커맨드라인 = stage·task 실데이터 바인딩(타자기 폐기 → 전체 텍스트 즉시 렌더)", () => {
+    const html = renderToStaticMarkup(<SummonTheater agents={[]} cards={[]} events={[]} />);
+    // 타이머 없이 완성된 커맨드가 통째로 렌더(부분 타이핑 아님)
+    expect(html).toContain("summon");
+    expect(html).toContain("--stage");
+  });
+
+  it("U3: 기억 신호 부재·이력 표본 부족 시 StatBar에 기준치 툴팁", () => {
+    const html = renderToStaticMarkup(<SummonTheater agents={[]} cards={[]} events={[]} />);
+    // HP는 항상 tier 기본치, MP도 이력 없으면 기본치 → 출처 툴팁 노출
+    expect(html).toContain('title="기준치"');
+  });
+
   it("live card = 형제 버튼 2개(본문 선택 + 대화 아이콘, 중첩 금지) + 이번 작전 패널 실데이터", () => {
     const agents = [
       { id: "agent_kurumi", role: "verifier", personaName: "kurumi", displayName: "쿠루미" },

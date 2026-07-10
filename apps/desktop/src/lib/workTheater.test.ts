@@ -98,7 +98,39 @@ describe("summarizeTheater", () => {
     const s = summarizeTheater(rows);
     expect(s.done).toBe(1);
     expect(s.awaitingApproval).toBe(1);
-    expect(s.deployed).toBe(2); // in_progress + waiting_approval (done 제외)
+    // 출격 = in_progress 만(승인대기 행은 deployed에서 제외, done 제외) — 이중카운트 수정(§2.7)
+    expect(s.deployed).toBe(1);
     expect(THEATER_STAGES).toHaveLength(6);
+  });
+
+  it("승인 대기 행은 deployed에 계상하지 않는다(이중카운트 회귀)", () => {
+    const rows = deriveTheaterRows({
+      cards: [card("a1", "쿠", "r")],
+      assignmentsByAgentId: {
+        a1: { lane: "auto", status: "waiting_approval", workItemId: "w1" },
+      },
+      agents,
+      resolvePortrait: () => undefined,
+    });
+    const s = summarizeTheater(rows);
+    expect(s.awaitingApproval).toBe(1);
+    expect(s.deployed).toBe(0);
+    expect(s.done).toBe(0);
+    expect(s.blocked).toBe(0);
+  });
+
+  it("막힘 행은 여전히 deployed·blocked 동시 계상(막힘 계상 불변)", () => {
+    const rows = deriveTheaterRows({
+      cards: [card("a1", "쿠", "r")],
+      assignmentsByAgentId: {
+        a1: { lane: "auto", status: "blocked", workItemId: "w1" },
+      },
+      agents,
+      resolvePortrait: () => undefined,
+    });
+    const s = summarizeTheater(rows);
+    expect(s.blocked).toBe(1);
+    expect(s.deployed).toBe(1); // 실행 중 막힘 — 출격 상태 유지
+    expect(s.awaitingApproval).toBe(0);
   });
 });

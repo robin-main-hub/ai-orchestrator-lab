@@ -13244,3 +13244,302 @@ button.verify-chip[aria-pressed="true"] {
   outline: none;
   box-shadow: 0 0 0 2px var(--accent);
 }
+
+/* ═══ THR-4: 실황 시맨틱·페르소나 완성 — append-only 격리(§5.5) ═══ */
+/* 실황 자막·作戦ログ 피드·컷인 배너·종결 브리핑 카드·예비 라벨. emerald 단일 액센트,
+ * 상태 의미색(warning/destructive)만 예외, radius 12, 11px 하한. 모션은 전부
+ * @media (prefers-reduced-motion: no-preference) 가드 안(정지가 기본, reduced-motion 시 정보 손실 0). */
+
+/* ── U21 예비 소환수 라벨 ── */
+.theater-v2__roster-reserve {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  color: var(--fg-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ── 실황 자막 + 커맨드라인 fade-in(타자기 폐기) ── */
+.theater-v2__subtitle {
+  max-width: 100%;
+  padding: 0 8px;
+  color: var(--fg-muted);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.theater-v2__ticker-fade {
+  animation: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .theater-v2__ticker-fade {
+    animation: theater-v2-fade-in 200ms ease-out both;
+  }
+}
+@keyframes theater-v2-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── 作戦ログ 실황 피드 ── */
+.theater-v2__feed {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  overflow: hidden;
+}
+.theater-v2__feed-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.theater-v2__feed-head-jp {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--fg);
+}
+.theater-v2__feed-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 168px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.theater-v2__feed-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+}
+.theater-v2__feed-avatar {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--border);
+}
+.theater-v2__feed-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+  color: var(--fg-muted);
+}
+.theater-v2__feed-jp {
+  color: var(--fg);
+  font-weight: 600;
+}
+.theater-v2__feed-label {
+  flex: 1 1 auto;
+  font-size: 12px;
+  color: var(--fg);
+}
+.theater-v2__feed-time {
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+.theater-v2__feed-empty {
+  padding: 12px;
+  text-align: center;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .theater-v2__feed-row {
+    animation: theater-v2-feed-in 120ms ease-out both;
+  }
+}
+@keyframes theater-v2-feed-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── 컷인 배너(무대 상단) ── */
+.theater-v2__cutin {
+  position: sticky;
+  top: 4px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(6px);
+}
+.theater-v2__cutin--warning {
+  border-left-color: var(--warning);
+}
+.theater-v2__cutin--destructive {
+  border-left-color: var(--destructive);
+}
+.theater-v2__cutin--accent {
+  border-left-color: var(--accent);
+}
+.theater-v2__cutin-avatar {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--border);
+}
+.theater-v2__cutin-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+  color: var(--fg-muted);
+}
+.theater-v2__cutin-text {
+  flex: 1 1 auto;
+  font-size: 12px;
+  color: var(--fg);
+}
+.theater-v2__cutin-jp {
+  font-weight: 700;
+}
+.theater-v2__cutin-time {
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+/* ── 종결 브리핑 카드(무대 하단) ── */
+.theater-v2__briefing {
+  position: sticky;
+  bottom: 4px;
+  z-index: 1;
+  margin-top: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(6px);
+  overflow: hidden;
+}
+.theater-v2__briefing--blocked {
+  border-color: color-mix(in srgb, var(--destructive) 50%, transparent);
+}
+.theater-v2__briefing-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 12px;
+  background: var(--accent-dim);
+}
+.theater-v2__briefing--blocked .theater-v2__briefing-banner {
+  background: color-mix(in srgb, var(--destructive) 12%, transparent);
+}
+.theater-v2__briefing-jp {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+.theater-v2__briefing--blocked .theater-v2__briefing-jp {
+  color: var(--destructive);
+}
+.theater-v2__briefing-headline {
+  flex: 1 1 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.theater-v2__briefing-close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.theater-v2__briefing-close:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg-muted) 16%, transparent);
+}
+.theater-v2__briefing-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.theater-v2__briefing-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.theater-v2__briefing-avatar {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--border);
+}
+.theater-v2__briefing-avatar--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+.theater-v2__briefing-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+/* 컷인·브리핑 등장 모션 — feed-in 패턴 복제(transform+opacity), 가드 안에서만 */
+@media (prefers-reduced-motion: no-preference) {
+  .theater-v2-cutin-in {
+    animation: theater-v2-cutin-in 120ms ease-out both;
+  }
+}
+@keyframes theater-v2-cutin-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
